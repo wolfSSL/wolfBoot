@@ -1,0 +1,1520 @@
+/* image_validate.c
+ *
+ * Copyright (C) 2018 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+/**
+ * This file provides an interface to the boot loader.  Functions defined in
+ * this file should only be called while the boot loader is running.
+ */
+
+#include <string.h>
+#include <hal/hal_flash.h>
+#include "bootutil/bootutil.h"
+#include "bootutil/image.h"
+#include "bootutil_priv.h"
+#include "printf.h"
+
+static struct boot_loader_state boot_data;
+
+void assert(int x) 
+{
+    if(!x) 
+        while(1);
+}
+
+#if defined(WOLFBOOT_VALIDATE_SLOT0) && !defined(WOLFBOOT_OVERWRITE_ONLY)
+static int boot_status_fails = 0;
+#define BOOT_STATUS_ASSERT(x)                \
+    do {                                     \
+        if (!(x)) {                          \
+            boot_status_fails++;             \
+        }                                    \
+    } while (0)
+#else
+#define BOOT_STATUS_ASSERT(x) ASSERT(x)
+#endif
+
+struct boot_status_table {
+    /**
+     * For each field, a value of 0 means "any".
+     */
+    uint8_t bst_magic_slot0;
+    uint8_t bst_magic_scratch;
+    uint8_t bst_copy_done_slot0;
+    uint8_t bst_status_source;
+};
+
+/**
+ * This set of tables maps swap state contents to boot status location.
+ * When searching for a match, these tables must be iterated in order.
+ */
+static const struct boot_status_table boot_status_tables[] = {
+    {
+        /*           | slot-0     | scratch    |
+         * ----------+------------+------------|
+         *     magic | Good       | Any        |
+         * copy-done | 0x01       | N/A        |
+         * ----------+------------+------------'
+         * source: none                        |
+         * ------------------------------------'
+         */
+        .bst_magic_slot0 =      BOOT_MAGIC_GOOD,
+        .bst_magic_scratch =    0,
+        .bst_copy_done_slot0 =  0x01,
+        .bst_status_source =    BOOT_STATUS_SOURCE_NONE,
+    },
+
+    {
+        /*           | slot-0     | scratch    |
+         * ----------+------------+------------|
+         *     magic | Good       | Any        |
+         * copy-done | 0xff       | N/A        |
+         * ----------+------------+------------'
+         * source: slot 0                      |
+         * ------------------------------------'
+         */
+        .bst_magic_slot0 =      BOOT_MAGIC_GOOD,
+        .bst_magic_scratch =    0,
+        .bst_copy_done_slot0 =  0xff,
+        .bst_status_source =    BOOT_STATUS_SOURCE_SLOT0,
+    },
+
+    {
+        /*           | slot-0     | scratch    |
+         * ----------+------------+------------|
+         *     magic | Any        | Good       |
+         * copy-done | Any        | N/A        |
+         * ----------+------------+------------'
+         * source: scratch                     |
+         * ------------------------------------'
+         */
+        .bst_magic_slot0 =      0,
+        .bst_magic_scratch =    BOOT_MAGIC_GOOD,
+        .bst_copy_done_slot0 =  0,
+        .bst_status_source =    BOOT_STATUS_SOURCE_SCRATCH,
+    },
+
+    {
+        /*           | slot-0     | scratch    |
+         * ----------+------------+------------|
+         *     magic | Unset      | Any        |
+         * copy-done | 0xff       | N/A        |
+         * ----------+------------+------------|
+         * source: varies                      |
+         * ------------------------------------+------------------------------+
+         * This represents one of two cases:                                  |
+         * o No swaps ever (no status to read, so no harm in checking).       |
+         * o Mid-revert; status in slot 0.                                    |
+         * -------------------------------------------------------------------'
+         */
+        .bst_magic_slot0 =      BOOT_MAGIC_UNSET,
+        .bst_magic_scratch =    0,
+        .bst_copy_done_slot0 =  0xff,
+        .bst_status_source =    BOOT_STATUS_SOURCE_SLOT0,
+    },
+};
+
+#define BOOT_STATUS_TABLES_COUNT \
+    (sizeof boot_status_tables / sizeof boot_status_tables[0])
+
+#define BOOT_LOG_SWAP_STATE(area, state)                            \
+    wolfBoot_printf("%s: magic=%s, copy_done=0x%x, image_ok=0x%x",     \
+                 (area),                                            \
+                 ((state)->magic == BOOT_MAGIC_GOOD ? "good" :      \
+                  (state)->magic == BOOT_MAGIC_UNSET ? "unset" :    \
+                  "bad"),                                           \
+                 (state)->copy_done,                                \
+                 (state)->image_ok)
+
+/**
+ * Determines where in flash the most recent boot status is stored.  The boot
+ * status is necessary for completing a swap that was interrupted by a boot
+ * loader reset.
+ *
+ * @return                      A BOOT_STATUS_SOURCE_[...] code indicating where *                                  status should be read from.
+ */
+static int
+boot_status_source(void)
+{
+    const struct boot_status_table *table;
+    struct boot_swap_state state_scratch;
+    struct boot_swap_state state_slot0;
+    int rc;
+    size_t i;
+    uint8_t source;
+
+    rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_0, &state_slot0);
+    assert(rc == 0);
+
+    rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_SCRATCH, &state_scratch);
+    assert(rc == 0);
+
+    BOOT_LOG_SWAP_STATE("Image 0", &state_slot0);
+    BOOT_LOG_SWAP_STATE("Scratch", &state_scratch);
+
+    for (i = 0; i < BOOT_STATUS_TABLES_COUNT; i++) {
+        table = &boot_status_tables[i];
+
+        if ((table->bst_magic_slot0     == 0    ||
+             table->bst_magic_slot0     == state_slot0.magic)   &&
+            (table->bst_magic_scratch   == 0    ||
+             table->bst_magic_scratch   == state_scratch.magic) &&
+            (table->bst_copy_done_slot0 == 0    ||
+             table->bst_copy_done_slot0 == state_slot0.copy_done)) {
+            source = table->bst_status_source;
+            wolfBoot_printf("Boot source: %s",
+                         source == BOOT_STATUS_SOURCE_NONE ? "none" :
+                         source == BOOT_STATUS_SOURCE_SCRATCH ? "scratch" :
+                         source == BOOT_STATUS_SOURCE_SLOT0 ? "slot 0" :
+                         "BUG; can't happen");
+            return source;
+        }
+    }
+
+    wolfBoot_printf("Boot source: none");
+    return BOOT_STATUS_SOURCE_NONE;
+}
+
+/**
+ * Calculates the type of swap that just completed.
+ *
+ * This is used when a swap is interrupted by an external event. After
+ * finishing the swap operation determines what the initial request was.
+ */
+static int
+boot_previous_swap_type(void)
+{
+    int post_swap_type;
+
+    post_swap_type = boot_swap_type();
+
+    switch (post_swap_type) {
+    case BOOT_SWAP_TYPE_NONE   : return BOOT_SWAP_TYPE_PERM;
+    case BOOT_SWAP_TYPE_REVERT : return BOOT_SWAP_TYPE_TEST;
+    case BOOT_SWAP_TYPE_PANIC  : return BOOT_SWAP_TYPE_PANIC;
+    }
+
+    return BOOT_SWAP_TYPE_FAIL;
+}
+
+/*
+ * Compute the total size of the given image.  Includes the size of
+ * the TLVs.
+ */
+#if !defined(WOLFBOOT_OVERWRITE_ONLY) || defined(WOLFBOOT_OVERWRITE_ONLY_FAST)
+static int
+boot_read_image_size(int slot, struct image_header *hdr, uint32_t *size)
+{
+    const struct flash_area *fap;
+    struct image_tlv_info info;
+    int area_id;
+    int rc;
+
+    area_id = flash_area_id_from_image_slot(slot);
+    rc = flash_area_open(area_id, &fap);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = flash_area_read(fap, hdr->ih_hdr_size + hdr->ih_img_size,
+                         &info, sizeof(info));
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+    if (info.it_magic != IMAGE_TLV_INFO_MAGIC) {
+        rc = BOOT_EBADIMAGE;
+        goto done;
+    }
+    *size = hdr->ih_hdr_size + hdr->ih_img_size + info.it_tlv_tot;
+    rc = 0;
+
+done:
+    flash_area_close(fap);
+    return rc;
+}
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+
+static int
+boot_read_image_header(int slot, struct image_header *out_hdr)
+{
+    const struct flash_area *fap;
+    int area_id;
+    int rc;
+
+    area_id = flash_area_id_from_image_slot(slot);
+    rc = flash_area_open(area_id, &fap);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = flash_area_read(fap, 0, out_hdr, sizeof *out_hdr);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = 0;
+
+done:
+    flash_area_close(fap);
+    return rc;
+}
+
+static int
+boot_read_image_headers(int require_all)
+{
+    int rc;
+    int i;
+
+    for (i = 0; i < BOOT_NUM_SLOTS; i++) {
+        rc = boot_read_image_header(i, boot_img_hdr(&boot_data, i));
+        if (rc != 0) {
+            /* If `require_all` is set, fail on any single fail, otherwise
+             * if at least the first slot's header was read successfully,
+             * then the boot loader can attempt a boot.
+             *
+             * Failure to read any headers is a fatal error.
+             */
+            if (i > 0 && !require_all) {
+                return 0;
+            } else {
+                return rc;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static uint8_t
+boot_write_sz(void)
+{
+    uint8_t elem_sz;
+    uint8_t align;
+
+    /* Figure out what size to write update status update as.  The size depends
+     * on what the minimum write size is for scratch area, active image slot.
+     * We need to use the bigger of those 2 values.
+     */
+    elem_sz = flash_area_align(boot_data.imgs[0].area);
+    align = flash_area_align(boot_data.scratch_area);
+    if (align > elem_sz) {
+        elem_sz = align;
+    }
+
+    return elem_sz;
+}
+
+static int
+boot_slots_compatible(void)
+{
+    size_t num_sectors_0 = boot_img_num_sectors(&boot_data, 0);
+    size_t num_sectors_1 = boot_img_num_sectors(&boot_data, 1);
+    size_t size_0, size_1;
+    size_t i;
+
+    if (num_sectors_0 > BOOT_MAX_IMG_SECTORS || num_sectors_1 > BOOT_MAX_IMG_SECTORS) {
+        wolfBoot_printf("Cannot upgrade: more sectors than allowed");
+        return 0;
+    }
+
+    /* Ensure both image slots have identical sector layouts. */
+    if (num_sectors_0 != num_sectors_1) {
+        wolfBoot_printf("Cannot upgrade: number of sectors differ between slots");
+        return 0;
+    }
+
+    for (i = 0; i < num_sectors_0; i++) {
+        size_0 = boot_img_sector_size(&boot_data, 0, i);
+        size_1 = boot_img_sector_size(&boot_data, 1, i);
+        if (size_0 != size_1) {
+            wolfBoot_printf("Cannot upgrade: an incompatible sector was found");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * Determines the sector layout of both image slots and the scratch area.
+ * This information is necessary for calculating the number of bytes to erase
+ * and copy during an image swap.  The information collected during this
+ * function is used to populate the boot_data global.
+ */
+static int
+boot_read_sectors(void)
+{
+    int rc;
+
+    rc = boot_initialize_area(&boot_data, FLASH_AREA_IMAGE_0);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_initialize_area(&boot_data, FLASH_AREA_IMAGE_1);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    BOOT_WRITE_SZ(&boot_data) = boot_write_sz();
+
+    return 0;
+}
+
+static uint32_t
+boot_status_internal_off(int idx, int state, int elem_sz)
+{
+    int idx_sz;
+
+    idx_sz = elem_sz * BOOT_STATUS_STATE_COUNT;
+
+    return idx * idx_sz + state * elem_sz;
+}
+
+/**
+ * Reads the status of a partially-completed swap, if any.  This is necessary
+ * to recover in case the boot lodaer was reset in the middle of a swap
+ * operation.
+ */
+static int
+boot_read_status_bytes(const struct flash_area *fap, struct boot_status *bs)
+{
+    uint32_t off;
+    uint8_t status;
+    int max_entries;
+    int found;
+    int found_idx;
+    int invalid;
+    int rc;
+    int i;
+
+    off = boot_status_off(fap);
+    max_entries = boot_status_entries(fap);
+
+    found = 0;
+    found_idx = 0;
+    invalid = 0;
+    for (i = 0; i < max_entries; i++) {
+        rc = flash_area_read(fap, off + i * BOOT_WRITE_SZ(&boot_data),
+                             &status, 1);
+        if (rc != 0) {
+            return BOOT_EFLASH;
+        }
+
+        if (status == 0xff) {
+            if (found && !found_idx) {
+                found_idx = i;
+            }
+        } else if (!found) {
+            found = 1;
+        } else if (found_idx) {
+            invalid = 1;
+            break;
+        }
+    }
+
+    if (invalid) {
+        /* This means there was an error writing status on the last
+         * swap. Tell user and move on to validation!
+         */
+        wolfBoot_printf("Detected inconsistent status!");
+
+#if !defined(WOLFBOOT_VALIDATE_SLOT0)
+        /* With validation of slot0 disabled, there is no way to be sure the
+         * swapped slot0 is OK, so abort!
+         */
+        assert(0);
+#endif
+    }
+
+    if (found) {
+        if (!found_idx) {
+            found_idx = i;
+        }
+        found_idx--;
+        bs->idx = found_idx / BOOT_STATUS_STATE_COUNT;
+        bs->state = found_idx % BOOT_STATUS_STATE_COUNT;
+    }
+
+    return 0;
+}
+
+/**
+ * Reads the boot status from the flash.  The boot status contains
+ * the current state of an interrupted image copy operation.  If the boot
+ * status is not present, or it indicates that previous copy finished,
+ * there is no operation in progress.
+ */
+static int
+boot_read_status(struct boot_status *bs)
+{
+    const struct flash_area *fap;
+    int status_loc;
+    int area_id;
+    int rc;
+
+    memset(bs, 0, sizeof *bs);
+
+#ifdef WOLFBOOT_OVERWRITE_ONLY
+    /* Overwrite-only doesn't make use of the swap status area. */
+    return 0;
+#endif
+
+    status_loc = boot_status_source();
+    switch (status_loc) {
+    case BOOT_STATUS_SOURCE_NONE:
+        return 0;
+
+    case BOOT_STATUS_SOURCE_SCRATCH:
+        area_id = FLASH_AREA_IMAGE_SCRATCH;
+        break;
+
+    case BOOT_STATUS_SOURCE_SLOT0:
+        area_id = FLASH_AREA_IMAGE_0;
+        break;
+
+    default:
+        assert(0);
+        return BOOT_EBADARGS;
+    }
+
+    rc = flash_area_open(area_id, &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_read_status_bytes(fap, bs);
+
+    flash_area_close(fap);
+
+    return rc;
+}
+
+/**
+ * Writes the supplied boot status to the flash file system.  The boot status
+ * contains the current state of an in-progress image copy operation.
+ *
+ * @param bs                    The boot status to write.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+int
+boot_write_status(struct boot_status *bs)
+{
+    const struct flash_area *fap;
+    uint32_t off;
+    int area_id;
+    int rc;
+    uint8_t buf[MAX_FLASH_ALIGN];
+    uint8_t align;
+
+    /* NOTE: The first sector copied (that is the last sector on slot) contains
+     *       the trailer. Since in the last step SLOT 0 is erased, the first
+     *       two status writes go to the scratch which will be copied to SLOT 0!
+     */
+
+    if (bs->use_scratch) {
+        /* Write to scratch. */
+        area_id = FLASH_AREA_IMAGE_SCRATCH;
+    } else {
+        /* Write to slot 0. */
+        area_id = FLASH_AREA_IMAGE_0;
+    }
+
+    rc = flash_area_open(area_id, &fap);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    off = boot_status_off(fap) +
+          boot_status_internal_off(bs->idx, bs->state,
+                                   BOOT_WRITE_SZ(&boot_data));
+    align = flash_area_align(fap);
+    memset(buf, 0xFF, BOOT_MAX_ALIGN);
+    buf[0] = bs->state;
+
+    rc = flash_area_write(fap, off, buf, align);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = 0;
+
+done:
+    flash_area_close(fap);
+    return rc;
+}
+
+/*
+ * Validate image hash/signature in a slot.
+ */
+static int
+boot_image_check(struct image_header *hdr, const struct flash_area *fap)
+{
+    static uint8_t tmpbuf[BOOT_TMPBUF_SZ];
+
+    if (bootutil_img_validate(hdr, fap, tmpbuf, BOOT_TMPBUF_SZ,
+                              NULL, 0, NULL)) {
+        return BOOT_EBADIMAGE;
+    }
+    return 0;
+}
+
+static int
+split_image_check(struct image_header *app_hdr,
+                  const struct flash_area *app_fap,
+                  struct image_header *loader_hdr,
+                  const struct flash_area *loader_fap)
+{
+    static uint8_t tmpbuf[BOOT_TMPBUF_SZ];
+    uint8_t loader_hash[32];
+
+
+    if (bootutil_img_validate(loader_hdr, loader_fap, tmpbuf, BOOT_TMPBUF_SZ,
+                              NULL, 0, loader_hash)) {
+        return BOOT_EBADIMAGE;
+    }
+
+    if (bootutil_img_validate(app_hdr, app_fap, tmpbuf, BOOT_TMPBUF_SZ,
+                              loader_hash, 32, NULL)) {
+        return BOOT_EBADIMAGE;
+    }
+
+    return 0;
+}
+
+static int
+boot_validate_slot(int slot)
+{
+    const struct flash_area *fap;
+    struct image_header *hdr;
+    int rc;
+
+    hdr = boot_img_hdr(&boot_data, slot);
+    if (hdr->ih_magic == 0xffffffff || hdr->ih_flags & IMAGE_F_NON_BOOTABLE) {
+        /* No bootable image in slot; continue booting from slot 0. */
+        return -1;
+    }
+
+    rc = flash_area_open(flash_area_id_from_image_slot(slot), &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    if ((hdr->ih_magic != IMAGE_MAGIC || boot_image_check(hdr, fap) != 0)) {
+        if (slot != 0) {
+            flash_area_erase(fap, 0, fap->fa_size);
+            /* Image in slot 1 is invalid. Erase the image and
+             * continue booting from slot 0.
+             */
+        }
+        wolfBoot_printf("Image in slot %d is not valid!", slot);
+        return -1;
+    }
+
+    flash_area_close(fap);
+
+    /* Image in slot 1 is valid. */
+    return 0;
+}
+
+/**
+ * Determines which swap operation to perform, if any.  If it is determined
+ * that a swap operation is required, the image in the second slot is checked
+ * for validity.  If the image in the second slot is invalid, it is erased, and
+ * a swap type of "none" is indicated.
+ *
+ * @return                      The type of swap to perform (BOOT_SWAP_TYPE...)
+ */
+static int
+boot_validated_swap_type(void)
+{
+    int swap_type;
+
+    swap_type = boot_swap_type();
+    switch (swap_type) {
+    case BOOT_SWAP_TYPE_TEST:
+    case BOOT_SWAP_TYPE_PERM:
+    case BOOT_SWAP_TYPE_REVERT:
+        /* Boot loader wants to switch to slot 1. Ensure image is valid. */
+        if (boot_validate_slot(1) != 0) {
+            swap_type = BOOT_SWAP_TYPE_FAIL;
+        }
+    }
+
+    return swap_type;
+}
+
+/**
+ * Calculates the number of sectors the scratch area can contain.  A "last"
+ * source sector is specified because images are copied backwards in flash
+ * (final index to index number 0).
+ *
+ * @param last_sector_idx       The index of the last source sector
+ *                                  (inclusive).
+ * @param out_first_sector_idx  The index of the first source sector
+ *                                  (inclusive) gets written here.
+ *
+ * @return                      The number of bytes comprised by the
+ *                                  [first-sector, last-sector] range.
+ */
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+static uint32_t
+boot_copy_sz(int last_sector_idx, int *out_first_sector_idx)
+{
+    size_t scratch_sz;
+    uint32_t new_sz;
+    uint32_t sz;
+    int i;
+
+    sz = 0;
+
+    scratch_sz = boot_scratch_area_size(&boot_data);
+    for (i = last_sector_idx; i >= 0; i--) {
+        new_sz = sz + boot_img_sector_size(&boot_data, 0, i);
+        if (new_sz > scratch_sz) {
+            break;
+        }
+        sz = new_sz;
+    }
+
+    /* i currently refers to a sector that doesn't fit or it is -1 because all
+     * sectors have been processed.  In both cases, exclude sector i.
+     */
+    *out_first_sector_idx = i + 1;
+    return sz;
+}
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+
+/**
+ * Erases a region of flash.
+ *
+ * @param flash_area_idx        The ID of the flash area containing the region
+ *                                  to erase.
+ * @param off                   The offset within the flash area to start the
+ *                                  erase.
+ * @param sz                    The number of bytes to erase.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+static int
+boot_erase_sector(int flash_area_id, uint32_t off, uint32_t sz)
+{
+    const struct flash_area *fap;
+    int rc;
+
+    rc = flash_area_open(flash_area_id, &fap);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = flash_area_erase(fap, off, sz);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = 0;
+
+done:
+    flash_area_close(fap);
+    return rc;
+}
+
+/**
+ * Copies the contents of one flash region to another.  You must erase the
+ * destination region prior to calling this function.
+ *
+ * @param flash_area_id_src     The ID of the source flash area.
+ * @param flash_area_id_dst     The ID of the destination flash area.
+ * @param off_src               The offset within the source flash area to
+ *                                  copy from.
+ * @param off_dst               The offset within the destination flash area to
+ *                                  copy to.
+ * @param sz                    The number of bytes to copy.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+static int
+boot_copy_sector(int flash_area_id_src, int flash_area_id_dst,
+                 uint32_t off_src, uint32_t off_dst, uint32_t sz)
+{
+    const struct flash_area *fap_src;
+    const struct flash_area *fap_dst;
+    uint32_t bytes_copied;
+    int chunk_sz;
+    int rc;
+
+    static uint8_t buf[1024];
+
+    fap_src = NULL;
+    fap_dst = NULL;
+
+    rc = flash_area_open(flash_area_id_src, &fap_src);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    rc = flash_area_open(flash_area_id_dst, &fap_dst);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto done;
+    }
+
+    bytes_copied = 0;
+    while (bytes_copied < sz) {
+        if (sz - bytes_copied > sizeof buf) {
+            chunk_sz = sizeof buf;
+        } else {
+            chunk_sz = sz - bytes_copied;
+        }
+
+        rc = flash_area_read(fap_src, off_src + bytes_copied, buf, chunk_sz);
+        if (rc != 0) {
+            rc = BOOT_EFLASH;
+            goto done;
+        }
+
+        rc = flash_area_write(fap_dst, off_dst + bytes_copied, buf, chunk_sz);
+        if (rc != 0) {
+            rc = BOOT_EFLASH;
+            goto done;
+        }
+
+        bytes_copied += chunk_sz;
+    }
+
+    rc = 0;
+
+done:
+    if (fap_src) {
+        flash_area_close(fap_src);
+    }
+    if (fap_dst) {
+        flash_area_close(fap_dst);
+    }
+    return rc;
+}
+
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+static inline int
+boot_status_init_by_id(int flash_area_id, const struct boot_status *bs)
+{
+    const struct flash_area *fap;
+    struct boot_swap_state swap_state;
+    int rc;
+
+    rc = flash_area_open(flash_area_id, &fap);
+    assert(rc == 0);
+
+    rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_1, &swap_state);
+    assert(rc == 0);
+
+    if (swap_state.image_ok == BOOT_FLAG_SET) {
+        rc = boot_write_image_ok(fap);
+        assert(rc == 0);
+    }
+
+    rc = boot_write_swap_size(fap, bs->swap_size);
+    assert(rc == 0);
+
+    rc = boot_write_magic(fap);
+    assert(rc == 0);
+
+    flash_area_close(fap);
+
+    return 0;
+}
+#endif
+
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+static int
+boot_erase_last_sector_by_id(int flash_area_id)
+{
+    uint8_t slot;
+    uint32_t last_sector;
+    int rc;
+
+    switch (flash_area_id) {
+    case FLASH_AREA_IMAGE_0:
+        slot = 0;
+        break;
+    case FLASH_AREA_IMAGE_1:
+        slot = 1;
+        break;
+    default:
+        return BOOT_EFLASH;
+    }
+
+    last_sector = boot_img_num_sectors(&boot_data, slot) - 1;
+    rc = boot_erase_sector(flash_area_id,
+            boot_img_sector_off(&boot_data, slot, last_sector),
+            boot_img_sector_size(&boot_data, slot, last_sector));
+    assert(rc == 0);
+
+    return rc;
+}
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+
+/**
+ * Swaps the contents of two flash regions within the two image slots.
+ *
+ * @param idx                   The index of the first sector in the range of
+ *                                  sectors being swapped.
+ * @param sz                    The number of bytes to swap.
+ * @param bs                    The current boot status.  This struct gets
+ *                                  updated according to the outcome.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+static void
+boot_swap_sectors(int idx, uint32_t sz, struct boot_status *bs)
+{
+    const struct flash_area *fap;
+    uint32_t copy_sz;
+    uint32_t trailer_sz;
+    uint32_t img_off;
+    uint32_t scratch_trailer_off;
+    struct boot_swap_state swap_state;
+    size_t last_sector;
+    int rc;
+
+    /* Calculate offset from start of image area. */
+    img_off = boot_img_sector_off(&boot_data, 0, idx);
+
+    copy_sz = sz;
+    trailer_sz = boot_slots_trailer_sz(BOOT_WRITE_SZ(&boot_data));
+
+    /* sz in this function is always is always sized on a multiple of the
+     * sector size. The check against the start offset of the last sector
+     * is to determine if we're swapping the last sector. The last sector
+     * needs special handling because it's where the trailer lives. If we're
+     * copying it, we need to use scratch to write the trailer temporarily.
+     *
+     * NOTE: `use_scratch` is a temporary flag (never written to flash) which
+     * controls if special handling is needed (swapping last sector).
+     */
+    last_sector = boot_img_num_sectors(&boot_data, 0) - 1;
+    if (img_off + sz > boot_img_sector_off(&boot_data, 0, last_sector)) {
+        copy_sz -= trailer_sz;
+    }
+
+    bs->use_scratch = (bs->idx == 0 && copy_sz != sz);
+
+    if (bs->state == 0) {
+        rc = boot_erase_sector(FLASH_AREA_IMAGE_SCRATCH, 0, sz);
+        assert(rc == 0);
+
+        rc = boot_copy_sector(FLASH_AREA_IMAGE_1, FLASH_AREA_IMAGE_SCRATCH,
+                              img_off, 0, copy_sz);
+        assert(rc == 0);
+
+        if (bs->idx == 0) {
+            if (bs->use_scratch) {
+                boot_status_init_by_id(FLASH_AREA_IMAGE_SCRATCH, bs);
+            } else {
+                /* Prepare the status area... here it is known that the
+                 * last sector is not being used by the image data so it's
+                 * safe to erase.
+                 */
+                rc = boot_erase_last_sector_by_id(FLASH_AREA_IMAGE_0);
+                assert(rc == 0);
+
+                boot_status_init_by_id(FLASH_AREA_IMAGE_0, bs);
+            }
+        }
+
+        bs->state = 1;
+        rc = boot_write_status(bs);
+        BOOT_STATUS_ASSERT(rc == 0);
+    }
+
+    if (bs->state == 1) {
+        rc = boot_erase_sector(FLASH_AREA_IMAGE_1, img_off, sz);
+        assert(rc == 0);
+
+        rc = boot_copy_sector(FLASH_AREA_IMAGE_0, FLASH_AREA_IMAGE_1,
+                              img_off, img_off, copy_sz);
+        assert(rc == 0);
+
+        if (bs->idx == 0 && !bs->use_scratch) {
+            /* If not all sectors of the slot are being swapped,
+             * guarantee here that only slot0 will have the state.
+             */
+            rc = boot_erase_last_sector_by_id(FLASH_AREA_IMAGE_1);
+            assert(rc == 0);
+        }
+
+        bs->state = 2;
+        rc = boot_write_status(bs);
+        BOOT_STATUS_ASSERT(rc == 0);
+    }
+
+    if (bs->state == 2) {
+        rc = boot_erase_sector(FLASH_AREA_IMAGE_0, img_off, sz);
+        assert(rc == 0);
+
+        /* NOTE: also copy trailer from scratch (has status info) */
+        rc = boot_copy_sector(FLASH_AREA_IMAGE_SCRATCH, FLASH_AREA_IMAGE_0,
+                              0, img_off, copy_sz);
+        assert(rc == 0);
+
+        if (bs->use_scratch) {
+            rc = flash_area_open(FLASH_AREA_IMAGE_SCRATCH, &fap);
+            assert(rc == 0);
+
+            scratch_trailer_off = boot_status_off(fap);
+
+            flash_area_close(fap);
+
+            rc = flash_area_open(FLASH_AREA_IMAGE_0, &fap);
+            assert(rc == 0);
+
+            /* copy current status that is being maintained in scratch */
+            rc = boot_copy_sector(FLASH_AREA_IMAGE_SCRATCH, FLASH_AREA_IMAGE_0,
+                        scratch_trailer_off,
+                        img_off + copy_sz,
+                        BOOT_STATUS_STATE_COUNT * BOOT_WRITE_SZ(&boot_data));
+            BOOT_STATUS_ASSERT(rc == 0);
+
+            rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_SCRATCH,
+                                            &swap_state);
+            assert(rc == 0);
+
+            if (swap_state.image_ok == BOOT_FLAG_SET) {
+                rc = boot_write_image_ok(fap);
+                assert(rc == 0);
+            }
+
+            rc = boot_write_swap_size(fap, bs->swap_size);
+            assert(rc == 0);
+
+            rc = boot_write_magic(fap);
+            assert(rc == 0);
+
+            flash_area_close(fap);
+        }
+
+        bs->idx++;
+        bs->state = 0;
+        bs->use_scratch = 0;
+        rc = boot_write_status(bs);
+        BOOT_STATUS_ASSERT(rc == 0);
+    }
+}
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+
+/**
+ * Swaps the two images in flash.  If a prior copy operation was interrupted
+ * by a system reset, this function completes that operation.
+ *
+ * @param bs                    The current boot status.  This function reads
+ *                                  this struct to determine if it is resuming
+ *                                  an interrupted swap operation.  This
+ *                                  function writes the updated status to this
+ *                                  function on return.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+#ifdef WOLFBOOT_OVERWRITE_ONLY
+static int
+boot_copy_image(struct boot_status *bs)
+{
+    size_t sect_count;
+    size_t sect;
+    int rc;
+    size_t size;
+    size_t this_size;
+    size_t last_sector;
+
+    (void)bs;
+
+#if defined(WOLFBOOT_OVERWRITE_ONLY_FAST)
+    uint32_t src_size = 0;
+    rc = boot_read_image_size(1, boot_img_hdr(&boot_data, 1), &src_size);
+    assert(rc == 0);
+#endif
+
+    wolfBoot_printf("Image upgrade slot1 -> slot0");
+    wolfBoot_printf("Erasing slot0");
+
+    sect_count = boot_img_num_sectors(&boot_data, 0);
+    for (sect = 0, size = 0; sect < sect_count; sect++) {
+        this_size = boot_img_sector_size(&boot_data, 0, sect);
+        rc = boot_erase_sector(FLASH_AREA_IMAGE_0,
+                               size,
+                               this_size);
+        assert(rc == 0);
+
+        size += this_size;
+
+#if defined(WOLFBOOT_OVERWRITE_ONLY_FAST)
+        if (size >= src_size) {
+            break;
+        }
+#endif
+    }
+
+    wolfBoot_printf("Copying slot 1 to slot 0: 0x%lx bytes", size);
+    rc = boot_copy_sector(FLASH_AREA_IMAGE_1, FLASH_AREA_IMAGE_0,
+                          0, 0, size);
+
+    /*
+     * Erases header and trailer. The trailer is erased because when a new
+     * image is written without a trailer as is the case when using newt, the
+     * trailer that was left might trigger a new upgrade.
+     */
+    rc = boot_erase_sector(FLASH_AREA_IMAGE_1,
+                           boot_img_sector_off(&boot_data, 1, 0),
+                           boot_img_sector_size(&boot_data, 1, 0));
+    assert(rc == 0);
+    last_sector = boot_img_num_sectors(&boot_data, 1) - 1;
+    rc = boot_erase_sector(FLASH_AREA_IMAGE_1,
+                           boot_img_sector_off(&boot_data, 1, last_sector),
+                           boot_img_sector_size(&boot_data, 1, last_sector));
+    assert(rc == 0);
+
+    /* TODO: Perhaps verify slot 0's signature again? */
+
+    return 0;
+}
+#else
+static int
+boot_copy_image(struct boot_status *bs)
+{
+    uint32_t sz;
+    int first_sector_idx;
+    int last_sector_idx;
+    uint32_t swap_idx;
+    struct image_header *hdr;
+    uint32_t size;
+    uint32_t copy_size;
+    int rc;
+
+    /* FIXME: just do this if asked by user? */
+
+    size = copy_size = 0;
+
+    if (bs->idx == 0 && bs->state == 0) {
+        /*
+         * No swap ever happened, so need to find the largest image which
+         * will be used to determine the amount of sectors to swap.
+         */
+        hdr = boot_img_hdr(&boot_data, 0);
+        if (hdr->ih_magic == IMAGE_MAGIC) {
+            rc = boot_read_image_size(0, hdr, &copy_size);
+            assert(rc == 0);
+        }
+
+        hdr = boot_img_hdr(&boot_data, 1);
+        if (hdr->ih_magic == IMAGE_MAGIC) {
+            rc = boot_read_image_size(1, hdr, &size);
+            assert(rc == 0);
+        }
+
+        if (size > copy_size) {
+            copy_size = size;
+        }
+
+        bs->swap_size = copy_size;
+    } else {
+        /*
+         * If a swap was under way, the swap_size should already be present
+         * in the trailer...
+         */
+        rc = boot_read_swap_size(&bs->swap_size);
+        assert(rc == 0);
+
+        copy_size = bs->swap_size;
+    }
+
+    size = 0;
+    last_sector_idx = 0;
+    while (1) {
+        size += boot_img_sector_size(&boot_data, 0, last_sector_idx);
+        if (size >= copy_size) {
+            break;
+        }
+        last_sector_idx++;
+    }
+
+    swap_idx = 0;
+    while (last_sector_idx >= 0) {
+        sz = boot_copy_sz(last_sector_idx, &first_sector_idx);
+        if (swap_idx >= bs->idx) {
+            boot_swap_sectors(first_sector_idx, sz, bs);
+        }
+
+        last_sector_idx = first_sector_idx - 1;
+        swap_idx++;
+    }
+
+#ifdef WOLFBOOT_VALIDATE_SLOT0
+    if (boot_status_fails > 0) {
+        wolfBoot_printf("%d status write fails performing the swap", boot_status_fails);
+    }
+#endif
+
+    return 0;
+}
+#endif
+
+/**
+ * Marks the image in slot 0 as fully copied.
+ */
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+static int
+boot_set_copy_done(void)
+{
+    const struct flash_area *fap;
+    int rc;
+
+    rc = flash_area_open(FLASH_AREA_IMAGE_0, &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_write_copy_done(fap);
+    flash_area_close(fap);
+    return rc;
+}
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+
+/**
+ * Marks a reverted image in slot 0 as confirmed.  This is necessary to ensure
+ * the status bytes from the image revert operation don't get processed on a
+ * subsequent boot.
+ *
+ * NOTE: image_ok is tested before writing because if there's a valid permanent
+ * image installed on slot0 and the new image to be upgrade to has a bad sig,
+ * image_ok would be overwritten.
+ */
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+static int
+boot_set_image_ok(void)
+{
+    const struct flash_area *fap;
+    struct boot_swap_state state;
+    int rc;
+
+    rc = flash_area_open(FLASH_AREA_IMAGE_0, &fap);
+    if (rc != 0) {
+        return BOOT_EFLASH;
+    }
+
+    rc = boot_read_swap_state(fap, &state);
+    if (rc != 0) {
+        rc = BOOT_EFLASH;
+        goto out;
+    }
+
+    if (state.image_ok == BOOT_FLAG_UNSET) {
+        rc = boot_write_image_ok(fap);
+    }
+
+out:
+    flash_area_close(fap);
+    return rc;
+}
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+
+/**
+ * Performs an image swap if one is required.
+ *
+ * @param out_swap_type         On success, the type of swap performed gets
+ *                                  written here.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+static int
+boot_swap_if_needed(int *out_swap_type)
+{
+    struct boot_status bs;
+    int swap_type;
+    int rc;
+
+    /* Determine if we rebooted in the middle of an image swap
+     * operation.
+     */
+    rc = boot_read_status(&bs);
+    assert(rc == 0);
+    if (rc != 0) {
+        return rc;
+    }
+
+    /* If a partial swap was detected, complete it. */
+    if (bs.idx != 0 || bs.state != 0) {
+        rc = boot_copy_image(&bs);
+        assert(rc == 0);
+
+        /* NOTE: here we have finished a swap resume. The initial request
+         * was either a TEST or PERM swap, which now after the completed
+         * swap will be determined to be respectively REVERT (was TEST)
+         * or NONE (was PERM).
+         */
+
+        /* Extrapolate the type of the partial swap.  We need this
+         * information to know how to mark the swap complete in flash.
+         */
+        swap_type = boot_previous_swap_type();
+    } else {
+        swap_type = boot_validated_swap_type();
+        switch (swap_type) {
+        case BOOT_SWAP_TYPE_TEST:
+        case BOOT_SWAP_TYPE_PERM:
+        case BOOT_SWAP_TYPE_REVERT:
+            rc = boot_copy_image(&bs);
+            assert(rc == 0);
+            break;
+        }
+    }
+
+    *out_swap_type = swap_type;
+    return 0;
+}
+
+/**
+ * Prepares the booting process.  This function moves images around in flash as
+ * appropriate, and tells you what address to boot from.
+ *
+ * @param rsp                   On success, indicates how booting should occur.
+ *
+ * @return                      0 on success; nonzero on failure.
+ */
+int
+boot_go(struct boot_rsp *rsp)
+{
+    int swap_type;
+    size_t slot;
+    int rc;
+    int fa_id;
+    int reload_headers = 0;
+
+    /* The array of slot sectors are defined here (as opposed to file scope) so
+     * that they don't get allocated for non-boot-loader apps.  This is
+     * necessary because the gcc option "-fdata-sections" doesn't seem to have
+     * any effect in older gcc versions (e.g., 4.8.4).
+     */
+    static boot_sector_t slot0_sectors[BOOT_MAX_IMG_SECTORS];
+    static boot_sector_t slot1_sectors[BOOT_MAX_IMG_SECTORS];
+    boot_data.imgs[0].sectors = slot0_sectors;
+    boot_data.imgs[1].sectors = slot1_sectors;
+
+    /* Open boot_data image areas for the duration of this call. */
+    for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
+        fa_id = flash_area_id_from_image_slot(slot);
+        rc = flash_area_open(fa_id, &BOOT_IMG_AREA(&boot_data, slot));
+        assert(rc == 0);
+    }
+    rc = flash_area_open(FLASH_AREA_IMAGE_SCRATCH,
+                         &BOOT_SCRATCH_AREA(&boot_data));
+    assert(rc == 0);
+
+    /* Determine the sector layout of the image slots and scratch area. */
+    rc = boot_read_sectors();
+    if (rc != 0) {
+        wolfBoot_printf("Failed reading sectors; BOOT_MAX_IMG_SECTORS=%d - too small?",
+                BOOT_MAX_IMG_SECTORS);
+        goto out;
+    }
+
+    /* Attempt to read an image header from each slot. */
+    rc = boot_read_image_headers(0);
+    if (rc != 0) {
+        goto out;
+    }
+
+    /* If the image slots aren't compatible, no swap is possible.  Just boot
+     * into slot 0.
+     */
+    if (boot_slots_compatible()) {
+        rc = boot_swap_if_needed(&swap_type);
+        assert(rc == 0);
+        if (rc != 0) {
+            goto out;
+        }
+
+        /*
+         * The following states need image_ok be explicitly set after the
+         * swap was finished to avoid a new revert.
+         */
+        if (swap_type == BOOT_SWAP_TYPE_REVERT || swap_type == BOOT_SWAP_TYPE_FAIL) {
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+            rc = boot_set_image_ok();
+            if (rc != 0) {
+                swap_type = BOOT_SWAP_TYPE_PANIC;
+            }
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+        }
+    } else {
+        swap_type = BOOT_SWAP_TYPE_NONE;
+    }
+
+    switch (swap_type) {
+    case BOOT_SWAP_TYPE_NONE:
+        slot = 0;
+        break;
+
+    case BOOT_SWAP_TYPE_TEST:          /* fallthrough */
+    case BOOT_SWAP_TYPE_PERM:          /* fallthrough */
+    case BOOT_SWAP_TYPE_REVERT:
+        slot = 1;
+        reload_headers = 1;
+#ifndef WOLFBOOT_OVERWRITE_ONLY
+        rc = boot_set_copy_done();
+        if (rc != 0) {
+            swap_type = BOOT_SWAP_TYPE_PANIC;
+        }
+#endif /* !WOLFBOOT_OVERWRITE_ONLY */
+        break;
+
+    case BOOT_SWAP_TYPE_FAIL:
+        /* The image in slot 1 was invalid and is now erased.  Ensure we don't
+         * try to boot into it again on the next reboot.  Do this by pretending
+         * we just reverted back to slot 0.
+         */
+        slot = 0;
+        reload_headers = 1;
+        break;
+
+    default:
+        swap_type = BOOT_SWAP_TYPE_PANIC;
+    }
+
+    if (swap_type == BOOT_SWAP_TYPE_PANIC) {
+        wolfBoot_printf("panic!");
+        assert(0);
+
+        /* Loop forever... */
+        while (1) {}
+    }
+
+    if (reload_headers) {
+        rc = boot_read_image_headers(0);
+        if (rc != 0) {
+            goto out;
+        }
+        /* Since headers were reloaded, it can be assumed we just performed a
+         * swap or overwrite. Now the header info that should be used to
+         * provide the data for the bootstrap, which previously was at Slot 1,
+         * was updated to Slot 0.
+         */
+        slot = 0;
+    }
+
+#ifdef WOLFBOOT_VALIDATE_SLOT0
+    rc = boot_validate_slot(0);
+    ASSERT(rc == 0);
+    if (rc != 0) {
+        rc = BOOT_EBADIMAGE;
+        goto out;
+    }
+#else
+    /* Even if we're not re-validating slot 0, we could be booting
+     * onto an empty flash chip. At least do a basic sanity check that
+     * the magic number on the image is OK.
+     */
+    if (boot_data.imgs[0].hdr.ih_magic != IMAGE_MAGIC) {
+        wolfBoot_printf("bad image magic 0x%lx", (unsigned long)boot_data.imgs[0].hdr.ih_magic);
+        rc = BOOT_EBADIMAGE;
+        goto out;
+    }
+#endif
+
+    /* Always boot from the primary slot. */
+    rsp->br_flash_dev_id = boot_data.imgs[0].area->fa_device_id;
+    rsp->br_image_off = boot_img_slot_off(&boot_data, 0);
+    rsp->br_hdr = boot_img_hdr(&boot_data, slot);
+
+ out:
+    flash_area_close(BOOT_SCRATCH_AREA(&boot_data));
+    for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
+        flash_area_close(BOOT_IMG_AREA(&boot_data, BOOT_NUM_SLOTS - 1 - slot));
+    }
+    return rc;
+}
+
+int
+split_go(int loader_slot, int split_slot, void **entry)
+{
+    boot_sector_t *sectors;
+    uintptr_t entry_val;
+    int loader_flash_id;
+    int split_flash_id;
+    int rc;
+
+    static uint8_t sectors_buffer[BOOT_MAX_IMG_SECTORS * 2 * sizeof *sectors];
+    sectors = (boot_sector_t *)sectors_buffer;
+    boot_data.imgs[loader_slot].sectors = sectors + 0;
+    boot_data.imgs[split_slot].sectors = sectors + BOOT_MAX_IMG_SECTORS;
+
+    loader_flash_id = flash_area_id_from_image_slot(loader_slot);
+    rc = flash_area_open(loader_flash_id,
+                         &BOOT_IMG_AREA(&boot_data, split_slot));
+    assert(rc == 0);
+    split_flash_id = flash_area_id_from_image_slot(split_slot);
+    rc = flash_area_open(split_flash_id,
+                         &BOOT_IMG_AREA(&boot_data, split_slot));
+    assert(rc == 0);
+
+    /* Determine the sector layout of the image slots and scratch area. */
+    rc = boot_read_sectors();
+    if (rc != 0) {
+        rc = SPLIT_GO_ERR;
+        goto done;
+    }
+
+    rc = boot_read_image_headers(1);
+    if (rc != 0) {
+        goto done;
+    }
+
+    /* Don't check the bootable image flag because we could really call a
+     * bootable or non-bootable image.  Just validate that the image check
+     * passes which is distinct from the normal check.
+     */
+    rc = split_image_check(boot_img_hdr(&boot_data, split_slot),
+                           BOOT_IMG_AREA(&boot_data, split_slot),
+                           boot_img_hdr(&boot_data, loader_slot),
+                           BOOT_IMG_AREA(&boot_data, loader_slot));
+    if (rc != 0) {
+        rc = SPLIT_GO_NON_MATCHING;
+        goto done;
+    }
+
+    entry_val = boot_img_slot_off(&boot_data, split_slot) +
+                boot_img_hdr(&boot_data, split_slot)->ih_hdr_size;
+    *entry = (void *) entry_val;
+    rc = SPLIT_GO_OK;
+
+done:
+    flash_area_close(BOOT_IMG_AREA(&boot_data, split_slot));
+    flash_area_close(BOOT_IMG_AREA(&boot_data, loader_slot));
+    return rc;
+}

@@ -1,0 +1,22 @@
+wolfBoot - copyright (c) wolfSSL Inc.
+
+wolfBoot is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2, as published by
+the Free Software Foundation.
+
+wolfBoot, wolfSSL (formerly known as CyaSSL) and wolfCrypt are either licensed for use
+under the GPLv2 or a standard commercial license. For our users who cannot use
+wolfSSL under GPLv2, a commercial license to wolfBoot, wolfSSL and wolfCrypt is available.
+Please contact wolfSSL Inc. directly at:
+
+Email: licensing@wolfssl.com
+Phone: +1 425 245-8247
+
+More information can be found on the wolfSSL website at www.wolfssl.com.
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/)
+and previously released under an Open Source permissive license.
+
+Portions of this software were developed at
+Runtime Inc, copyright 2015 and previously released under an Open Source permissive license.

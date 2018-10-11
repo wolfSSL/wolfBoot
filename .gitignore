@@ -41,12 +41,20 @@
 *.su
 *.idb
 *.pdb
+*.gdb
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# automatically generated keys
+*.der
+*.pem
+
+# automatically generated source files
+src/ed25519_pub_key.c
+
+
+
+
+# tags etc.
+cscope.out
+tags
+
+
