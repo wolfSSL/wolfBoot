@@ -126,16 +126,17 @@ int flash_area_read(const struct flash_area *area, uint32_t off, void *dst,
                     uint32_t len)
 {
     int i;
+    uint8_t *src8, *dst8;
     BOOT_LOG_DBG("%s: area=%d, off=%x, len=%x",
                  __func__, area->fa_id, off, len);
     if (!area)
         return -1;
     if ((off + len) > (area->fa_size))
             return -1;
-    for (i = 0; i < len; i+=4) { 
-        uint32_t val = *((volatile uint32_t *)(area->fa_off + off + i));
-        uint32_t *dstval = (uint32_t *)((uint8_t *)dst + i);
-        *dstval = val;
+    src8 = (uint8_t *)(area->fa_off + off);
+    dst8 = (uint8_t *)dst;
+    for (i = 0; i < len; i++) { 
+        dst8[i] = src8[i];
     }
     return 0;
 }
