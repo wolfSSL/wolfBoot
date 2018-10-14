@@ -34,7 +34,7 @@
 #define GPIOD_ODR   (*(volatile uint32_t *)(GPIOD_BASE + 0x14))
 #define GPIOD_AFL   (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
 #define GPIOD_AFH   (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
-#define LED_PIN (12)
+#define LED_PIN (15)
 
 #define GPIO_OSPEED_100MHZ (0x03)
 
