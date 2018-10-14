@@ -50,7 +50,8 @@
 # automatically generated source files
 src/ed25519_pub_key.c
 
-
+# Vim swap files
+.*.swp
 
 
 # tags etc.
