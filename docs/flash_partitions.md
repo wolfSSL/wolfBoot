@@ -11,13 +11,13 @@ bootloader erases all the flash sectors before storing a firmware image.
 
 The flash memory of the target is partitioned into the following areas:
 
-    - Bootloader partition, at the beginning of the flash
-    - Primary slot (boot partition) starting at address `FLASH_AREA_IMAGE_0_OFFSET`
-    - Secondary slot (upgrade partition) starting at address `FLASH_AREA_IMAGE_1_OFFSET`
-    - Scratch space (swap partition) starting at address `FLASH_AREA_IMAGE_SCRATCH_OFFSET`
+  - Bootloader partition, at the beginning of the flash
+  - Primary slot (boot partition) starting at address `FLASH_AREA_IMAGE_0_OFFSET`
+  - Secondary slot (upgrade partition) starting at address `FLASH_AREA_IMAGE_1_OFFSET`
+  - Scratch space (swap partition) starting at address `FLASH_AREA_IMAGE_SCRATCH_OFFSET`
 
 A proper partitioning configuration must be set up for the specific use, by setting
-the values for offsets and sizes in [include/target.h](include/target.h).
+the values for offsets and sizes in [include/target.h](../include/target.h).
 
 ### Bootloader partition
 
@@ -54,7 +54,7 @@ configuration in `target.h`:
 
 which results in the following partition configuration:
 
-![example partitions](docs/png/example_partitions.png)
+![example partitions](png/example_partitions.png)
 
 This configuration demonstrates one of the possible layouts, with the slots
 aligned to the beginning of the physical sector on the flash.
@@ -62,6 +62,6 @@ aligned to the beginning of the physical sector on the flash.
 The entry point for all the runnable firmware images on this target will be `0x20100`, 
 256 Bytes after the beginning of the first flash partition. This is due to the presence
 of the firmware image header at the beginning of the partition, as explained more in details
-in [Firmware image](docs/firmware_image.md)
+in [Firmware image](firmware_image.md)
 
 

@@ -20,7 +20,7 @@ to guarantee that the entry point of the actual firmware is stored on the flash 
 a 256-Bytes aligned address. This ensures that the bootloader can relocate the vector table before
 chain-loading the firmware the interrupt continue to work properly after the boot is complete.
 
-![Image header](docs/png/image_header.png)
+![Image header](png/image_header.png)
 
 *The image header is stored at the beginning of the slot and the actual firmware image starts 256 Bytes after it*
 
@@ -35,7 +35,7 @@ respectively containing:
 
 These three fields are required by the bootloader to verify the integrity and the origin of the firmware image.
 
-![Image trailers](docs/png/image_tlv.png)
+![Image trailers](png/image_tlv.png)
 
 *The trailer of a signed firmware contains a TLV header and three TLV records that are used by the bootloader to verify the image*
 
