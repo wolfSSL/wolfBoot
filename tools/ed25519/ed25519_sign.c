@@ -27,6 +27,7 @@
 #include <wolfssl/wolfcrypt/asn_public.h>
 #include <bootutil/image.h>
 #include <sys/stat.h>    
+#include "target.h"
 
 #define IMAGE_FIRMWARE_OFFSET 256
 
@@ -140,7 +141,7 @@ int main(int argc, char *argv[])
     }
     memset(hdr, 0x00, IMAGE_FIRMWARE_OFFSET);
     hdr->ih_magic = IMAGE_MAGIC; 
-    hdr->ih_load_addr = 0x10100;
+    hdr->ih_load_addr = FLASH_AREA_IMAGE_0_OFFSET + IMAGE_FIRMWARE_OFFSET;
     hdr->ih_hdr_size = IMAGE_FIRMWARE_OFFSET;
     hdr->ih_img_size = st.st_size;
     hdr->ih_ver.iv_major = version;

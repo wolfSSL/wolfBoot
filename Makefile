@@ -6,7 +6,7 @@ LD:=$(CROSS_COMPILE)gcc
 OBJCOPY:=$(CROSS_COMPILE)objcopy
 SIZE:=$(CROSS_COMPILE)size
 BOOT_IMG?=test-app/image.bin
-BOOTLOADER_SIZE?=0x10000
+BOOT0_OFFSET?=0x20000
 SIGN?=ED25519
 TARGET?=stm32f4
 DEBUG?=0
@@ -71,7 +71,7 @@ wolfboot.bin: wolfboot.elf
 align: wolfboot-align.bin
 
 wolfboot-align.bin: wolfboot.elf
-	$(OBJCOPY) -O binary $^ $@ --pad-to=$(BOOTLOADER_SIZE) --gap-fill=255
+	$(OBJCOPY) -O binary $^ $@ --pad-to=$(BOOT0_OFFSET) --gap-fill=255
 	$(SIZE) wolfboot.elf
 
 test-app/image.bin:
