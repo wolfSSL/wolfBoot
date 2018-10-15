@@ -46,7 +46,7 @@ microcontrollers will be added later.
 Requirements:
 
    - Provide a HAL implementation for the target platform (see [Hardware Abstraction Layer](docs/HAL.md))
-   - Decide a flash partition strategy and modify `include/target.h` accordingly (see [Flash partitions](docs/flash_partitions.md)
+   - Decide a flash partition strategy and modify `include/target.h` accordingly (see [Flash partitions](docs/flash_partitions.md))
 
 The following steps are automated in the default `Makefile` target, using the baremetal test
 application as an example to create the factory image:
