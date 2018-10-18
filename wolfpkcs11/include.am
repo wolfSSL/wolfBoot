@@ -1,0 +1,10 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+#
+
+nobase_include_HEADERS+= \
+        wolfpkcs11/pkcs11.h \
+        wolfpkcs11/internal.h \
+        wolfpkcs11/visibility.h \
+        wolfpkcs11/version.h \
+        wolfpkcs11/options.h

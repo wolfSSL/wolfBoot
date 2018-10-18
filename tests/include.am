@@ -1,0 +1,15 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+
+check_PROGRAMS += tests/pkcs11test
+noinst_PROGRAMS += tests/pkcs11test
+tests_pkcs11test_SOURCES = tests/pkcs11test.c
+
+tests_pkcs11test_LDADD = -lwolfssl -ldl -lm
+
+check_PROGRAMS += tests/pkcs11mtt
+noinst_PROGRAMS += tests/pkcs11mtt
+tests_pkcs11mtt_SOURCES = tests/pkcs11mtt.c
+
+tests_pkcs11mtt_LDADD = -lwolfssl -ldl -lm
+
