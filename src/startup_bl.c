@@ -21,7 +21,6 @@
 #include "bootutil/image.h"
 #include "bootutil/bootutil.h"
 #include <stdint.h>
-#define BOOTLOADER
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
@@ -61,13 +60,12 @@ void isr_fault(void)
 
 void isr_empty(void)
 {
-    /* Ignore the event and continue */
+    /* Ignore unmapped event and continue */
 }
-
 
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 
-/* This is the main program loop for the bootloader.
+/* This is the main loop for the bootloader.
  *
  * It performs the following actions:
  *  - globally disable interrutps
@@ -82,11 +80,13 @@ void do_boot(const uint32_t *app_offset)
     const uint32_t * const app_IV = (const uint32_t *)app_offset;
     void  *app_entry;
     uint32_t app_end_stack;
+
+#ifndef NO_VTOR
     /* Disable interrupts */
     asm volatile("cpsid i");
-
     /* Update IV */
     VTOR = ((uint32_t)app_IV);
+#endif
 
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
@@ -94,6 +94,9 @@ void do_boot(const uint32_t *app_offset)
 
     /* Update stack pointer */
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
+#ifndef NO_VTOR
+    asm volatile("cpsie i");
+#endif
     /* Unconditionally jump to app_entry */
     asm volatile("mov pc, %0" ::"r"(app_entry));
 }

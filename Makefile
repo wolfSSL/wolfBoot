@@ -10,6 +10,7 @@ BOOT0_OFFSET?=0x20000
 SIGN?=ED25519
 TARGET?=stm32f4
 DEBUG?=0
+VTOR?=1
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -49,12 +50,14 @@ ifeq ($(SIGN),EC256)
   CFLAGS+=-DBOOT_SIGN_EC256
 endif
 
-
-
 ifeq ($(DEBUG),1)
     CFLAGS+=-O0 -g -ggdb3 -DDEBUG=1
 else
     CFLAGS+=-Os
+endif
+
+ifeq ($(VTOR),0)
+    CFLAGS+=-DNO_VTOR
 endif
 
 
@@ -67,6 +70,9 @@ all: factory.bin
 wolfboot.bin: wolfboot.elf
 	$(OBJCOPY) -O binary $^ $@
 	$(SIZE) wolfboot.elf
+
+wolfboot.hex: wolfboot.elf
+	$(OBJCOPY) -O ihex $^ $@
 
 align: wolfboot-align.bin
 
@@ -103,7 +109,7 @@ keys: ed25519.der
 
 	
 clean:
-	rm -f *.bin *.elf $(OBJS) wolfboot.map *.bin 
+	rm -f *.bin *.elf $(OBJS) wolfboot.map *.bin  *.hex
 	make -C test-app clean
 
 distclean: clean
