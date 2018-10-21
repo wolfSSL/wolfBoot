@@ -29,6 +29,7 @@
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/wc_encrypt.h>
 
+#include <wolfpkcs11/options.h>
 #include <wolfpkcs11/pkcs11.h>
 #include <wolfpkcs11/version.h>
 

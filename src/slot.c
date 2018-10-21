@@ -199,7 +199,9 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
 /* List of mechanism supported. */
 static CK_MECHANISM_TYPE mechanismList[] = {
 #ifndef NO_RSA
+#ifdef WOLFSSL_KEY_GEN
     CKM_RSA_PKCS_KEY_PAIR_GEN,
+#endif
     CKM_RSA_X_509,
     CKM_RSA_PKCS,
 #ifndef WC_NO_RSA_OAEP
@@ -249,7 +251,7 @@ static CK_MECHANISM_TYPE mechanismList[] = {
 };
 
 /* Count of mechanisms in list. */
-#define MECHANISM_COUNT    ((int)(sizeof(mechanismList)/sizeof(*mechanismList)))
+static int mechanismCnt = ((int)(sizeof(mechanismList)/sizeof(*mechanismList)));
 
 /**
  * Get list of supported mechanism fo for the slot.
@@ -283,13 +285,13 @@ CK_RV C_GetMechanismList(CK_SLOT_ID slotID,
         return CKR_ARGUMENTS_BAD;
 
     if (pMechanismList == NULL)
-        *pulCount = MECHANISM_COUNT;
-    else if (*pulCount < MECHANISM_COUNT)
+        *pulCount = mechanismCnt;
+    else if (*pulCount < (CK_ULONG)mechanismCnt)
         return CKR_BUFFER_TOO_SMALL;
     else {
-        for (i = 0; i < MECHANISM_COUNT; i++)
+        for (i = 0; i < mechanismCnt; i++)
             pMechanismList[i] = mechanismList[i];
-        *pulCount = MECHANISM_COUNT;
+        *pulCount = mechanismCnt;
     }
 
     return CKR_OK;

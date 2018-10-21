@@ -24,6 +24,7 @@
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/misc.h>
 
+#include <wolfpkcs11/options.h>
 #include <wolfpkcs11/pkcs11.h>
 
 #define TEST_MULTITHREADED
@@ -43,11 +44,13 @@ static int soPinLen = 8;
 byte* userPin = (byte*)"wolfpkcs11";
 int userPinLen;
 
+#if !defined(NO_RSA) || defined(HAVE_ECC) || !defined(NO_DH)
 static CK_OBJECT_CLASS pubKeyClass     = CKO_PUBLIC_KEY;
+#endif
 static CK_OBJECT_CLASS privKeyClass    = CKO_PRIVATE_KEY;
 static CK_OBJECT_CLASS secretKeyClass  = CKO_SECRET_KEY;
 
-#ifdef HAVE_ECC
+#if defined(HAVE_ECC) || !defined(NO_DH)
 static CK_BBOOL ckFalse = CK_FALSE;
 #endif
 static CK_BBOOL ckTrue  = CK_TRUE;
@@ -61,10 +64,10 @@ static CK_KEY_TYPE eccKeyType  = CKK_EC;
 #ifndef NO_DH
 static CK_KEY_TYPE dhKeyType  = CKK_DH;
 #endif
+#ifndef NO_AES
 static CK_KEY_TYPE aesKeyType  = CKK_AES;
-#ifndef NO_HMAC
-static CK_KEY_TYPE genericKeyType  = CKK_GENERIC_SECRET;
 #endif
+static CK_KEY_TYPE genericKeyType  = CKK_GENERIC_SECRET;
 
 
 static CK_RV test_session(void* args)
@@ -947,7 +950,11 @@ static CK_RV get_aes_128_key(CK_SESSION_HANDLE session, unsigned char* id,
     CK_RV ret;
     CK_ATTRIBUTE aes_key[] = {
         { CKA_CLASS,             &secretKeyClass,   sizeof(secretKeyClass)    },
+#ifndef NO_AES
         { CKA_KEY_TYPE,          &aesKeyType,       sizeof(aesKeyType)        },
+#else
+        { CKA_KEY_TYPE,          &genericKeyType,   sizeof(genericKeyType)    },
+#endif
         { CKA_ENCRYPT,           &ckTrue,           sizeof(ckTrue)            },
         { CKA_DECRYPT,           &ckTrue,           sizeof(ckTrue)            },
         { CKA_VALUE,             aes_128_key,       sizeof(aes_128_key)       },
@@ -1908,7 +1915,7 @@ static CK_RV test_derive_key(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
-    byte   out[2048/8], peer[2048/8];
+    byte   out[32], peer[32];
     word32 outSz = sizeof(out);
     CK_MECHANISM     mech;
     CK_OBJECT_HANDLE privKey = CK_INVALID_HANDLE;
@@ -2129,6 +2136,7 @@ static CK_RV gen_rsa_key(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE* pubKey,
 
     return ret;
 }
+#endif
 
 static CK_RV find_rsa_pub_key(CK_SESSION_HANDLE session,
                               CK_OBJECT_HANDLE* pubKey, unsigned char* id,
@@ -2191,7 +2199,6 @@ static CK_RV find_rsa_priv_key(CK_SESSION_HANDLE session,
 
     return ret;
 }
-#endif
 
 static CK_RV test_attributes_rsa(void* args)
 {
@@ -2690,7 +2697,6 @@ static CK_RV rsa_pss_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE priv,
     return ret;
 }
 #endif
-#endif
 
 static CK_RV test_rsa_fixed_keys_raw(void* args)
 {
@@ -3041,6 +3047,7 @@ static CK_RV test_rsa_pkcs_encdec_fail(void* args)
     return ret;
 }
 
+#ifndef WC_NO_RSA_OAEP
 static CK_RV test_rsa_pkcs_oaep_encdec_fail(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
@@ -3113,6 +3120,7 @@ static CK_RV test_rsa_pkcs_oaep_encdec_fail(void* args)
 
     return ret;
 }
+#endif
 
 static CK_RV test_rsa_pkcs_sig_fail(void* args)
 {
@@ -3167,6 +3175,7 @@ static CK_RV test_rsa_pkcs_sig_fail(void* args)
     return ret;
 }
 
+#ifdef WC_RSA_PSS
 static CK_RV test_rsa_pkcs_pss_sig_fail(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
@@ -3265,7 +3274,7 @@ static CK_RV test_rsa_pkcs_pss_sig_fail(void* args)
 
     return ret;
 }
-
+#endif
 
 #ifdef WOLFSSL_KEY_GEN
 static CK_RV test_rsa_gen_keys(void* args)
@@ -3330,6 +3339,31 @@ static CK_RV test_rsa_gen_keys_id(void* args)
     
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
+
+    return ret;
+}
+#endif
+#endif
+
+#if defined(HAVE_ECC) || !defined(NO_DH)
+static CK_RV extract_secret(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key,
+                            byte* out, word32* outSz)
+{
+    CK_RV ret = CKR_OK;
+    CK_ATTRIBUTE tmpl[] = {
+      {CKA_VALUE, NULL_PTR, 0}
+    };
+    CK_ULONG     tmplCnt = sizeof(tmpl) / sizeof(*tmpl);
+
+    ret = funcList->C_GetAttributeValue(session, key, tmpl, tmplCnt);
+    CHECK_CKR(ret, "Extract Secret - Get Length of key");
+    if (ret == CKR_OK) {
+        tmpl[0].pValue = out;
+        ret = funcList->C_GetAttributeValue(session, key, tmpl, tmplCnt);
+        CHECK_CKR(ret, "Extract Secret - Get key");
+    }
+    if (ret == CKR_OK)
+        *outSz = (word32)tmpl[0].ulValueLen;
 
     return ret;
 }
@@ -3621,28 +3655,6 @@ static CK_RV test_attributes_ecc(void* args)
         CHECK_CKR(ret, "Get Attributes EC Private Key values");
     }
     funcList->C_DestroyObject(session, priv);
-
-    return ret;
-}
-
-static CK_RV extract_secret(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key,
-                            byte* out, word32* outSz)
-{
-    CK_RV ret = CKR_OK;
-    CK_ATTRIBUTE tmpl[] = {
-      {CKA_VALUE, NULL_PTR, 0}
-    };
-    CK_ULONG     tmplCnt = sizeof(tmpl) / sizeof(*tmpl);
-
-    ret = funcList->C_GetAttributeValue(session, key, tmpl, tmplCnt);
-    CHECK_CKR(ret, "Extract Secret - Get Length of key");
-    if (ret == CKR_OK) {
-        tmpl[0].pValue = out;
-        ret = funcList->C_GetAttributeValue(session, key, tmpl, tmplCnt);
-        CHECK_CKR(ret, "Extract Secret - Get key");
-    }
-    if (ret == CKR_OK)
-        *outSz = (word32)tmpl[0].ulValueLen;
 
     return ret;
 }
@@ -5646,11 +5658,13 @@ static CK_RV test_hmac_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
     if (ret == CKR_OK)
         ret = get_aes_128_key(session, NULL, 0, &aesKey);
 
+#ifndef NO_AES
     if (ret == CKR_OK) {
         ret = funcList->C_SignInit(session, mech, aesKey);
         CHECK_CKR_FAIL(ret, CKR_KEY_TYPE_INCONSISTENT,
                                                "HMAC Sign Init wrong key type");
     }
+#endif
     if (ret == CKR_OK) {
         mech->pParameter = data;
         ret = funcList->C_SignInit(session, mech, key);
@@ -5665,11 +5679,13 @@ static CK_RV test_hmac_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
                                          "HMAC Sign Init bad parameter length");
         mech->ulParameterLen = 0;
     }
+#ifndef NO_AES
     if (ret == CKR_OK) {
         ret = funcList->C_VerifyInit(session, mech, aesKey);
         CHECK_CKR_FAIL(ret, CKR_KEY_TYPE_INCONSISTENT,
                                              "HMAC Verify Init wrong key type");
     }
+#endif
     if (ret == CKR_OK) {
         mech->pParameter = data;
         ret = funcList->C_VerifyInit(session, mech, key);
@@ -6256,9 +6272,13 @@ static TEST_FUNC testFunc[] = {
     PKCS11MTT_CASE(test_rsa_fixed_keys_store_token),
     PKCS11MTT_CASE(test_rsa_x_509_fail),
     PKCS11MTT_CASE(test_rsa_pkcs_encdec_fail),
+#ifndef WC_NO_RSA_OAEP
     PKCS11MTT_CASE(test_rsa_pkcs_oaep_encdec_fail),
+#endif
     PKCS11MTT_CASE(test_rsa_pkcs_sig_fail),
+#ifdef WC_RSA_PSS
     PKCS11MTT_CASE(test_rsa_pkcs_pss_sig_fail),
+#endif
 #ifdef WOLFSSL_KEY_GEN
     PKCS11MTT_CASE(test_rsa_gen_keys),
     PKCS11MTT_CASE(test_rsa_gen_keys_id),

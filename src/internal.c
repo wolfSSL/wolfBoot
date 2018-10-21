@@ -97,13 +97,11 @@ typedef struct WP11_Lock {
 #endif
 
 
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_AES)
 /* Symmetric key data. */
 typedef struct WP11_Data {
     byte data[WP11_MAX_SYM_KEY_SZ];    /* Key data                            */
     word32 len;                        /* Length of key data in bytes         */
 } WP11_Data;
-#endif
 
 #ifndef NO_DH
 typedef struct WP11_DhKey {
@@ -124,9 +122,7 @@ struct WP11_Object {
     #ifndef NO_DH
         WP11_DhKey dhKey;              /* DH parameters object                */
     #endif
-    #if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_AES)
         WP11_Data symmKey;             /* Symmetric key object                */
-    #endif
     } data;
     CK_KEY_TYPE type;                  /* Key type of this object             */
     word32 size;                       /* Size of the key in bits or bytes    */
@@ -1689,7 +1685,7 @@ int WP11_Session_SetPssParams(WP11_Session* session, int hashAlg, int mgf,
 #endif
 #endif
 
-#ifndef NO_RSA
+#ifndef NO_AES
 #ifdef HAVE_AES_CBC
 /**
  * Set the parameters to use for an AES-CBC operation.
@@ -2089,13 +2085,11 @@ void WP11_Object_Free(WP11_Object* object)
         wc_FreeRsaKey(&object->data.rsaKey);
 #endif
 #ifdef HAVE_ECC
-    else if (object->type == CKK_EC)
+    if (object->type == CKK_EC)
         wc_ecc_free(&object->data.ecKey);
 #endif
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_AES)
-    else if (object->type == CKK_AES || object->type == CKK_GENERIC_SECRET)
+    if (object->type == CKK_AES || object->type == CKK_GENERIC_SECRET)
         XMEMSET(object->data.symmKey.data, 0, object->data.symmKey.len);
-#endif
 
     /* Dispose of object. */
     XFREE(object, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -2376,7 +2370,6 @@ int WP11_Object_SetDhKey(WP11_Object* object, unsigned char** data,
 }
 #endif
 
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_AES)
 /**
  * Set the DH key data into the object.
  *
@@ -2432,7 +2425,6 @@ int WP11_Object_SetSecretKey(WP11_Object* object, unsigned char** data,
 
     return ret;
 }
-#endif
 
 /**
  * Set the object's class.
@@ -2853,7 +2845,6 @@ static int DhObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
 }
 #endif
 
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_AES)
 /**
  * Get a secret object's data as an attribute.
  *
@@ -2893,7 +2884,6 @@ static int SecretObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
 
     return ret;
 }
-#endif
 
 /**
  * Get the data for an attribute from the object.
@@ -3047,13 +3037,9 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
 #ifndef NO_AES
                 case CKK_AES:
 #endif
-#if defined(HAVE_ECC) || !defined(NO_DH)
                 case CKK_GENERIC_SECRET:
-#endif
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_AES)
                     ret = SecretObject_GetAttr(object, type, data, len);
                     break;
-#endif
                 default:
                     ret = NOT_AVAILABE_E;
                     break;
@@ -3326,13 +3312,8 @@ int WP11_Object_SetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
 #ifndef NO_AES
                 case CKK_AES:
 #endif
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_HMAC)
                 case CKK_GENERIC_SECRET:
-#endif
-#if !defined(NO_DH) || !defined(NO_AES) || defined(HAVE_ECC) || \
-                                                               !defined(NO_HMAC)
                     break;
-#endif
                 default:
                     ret = BAD_FUNC_ARG;
                     break;
@@ -3349,13 +3330,8 @@ int WP11_Object_SetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
 #ifndef NO_AES
                 case CKK_AES:
 #endif
-#if defined(HAVE_ECC) || !defined(NO_DH) || !defined(NO_HMAC)
                 case CKK_GENERIC_SECRET:
-#endif
-#if !defined(NO_DH) || !defined(NO_AES) || defined(HAVE_ECC) || \
-                                                               !defined(NO_HMAC)
                    break;
-#endif
                 default:
                    ret = BAD_FUNC_ARG;
                    break;

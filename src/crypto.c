@@ -70,7 +70,6 @@ static CK_ATTRIBUTE_TYPE dhKeyParams[] = {
 #define DH_KEY_PARAMS_CNT     (sizeof(dhKeyParams)/sizeof(*dhKeyParams))
 #endif
 
-#if !defined(NO_AES) || defined(HAVE_ECC) || !defined(NO_DH)
 /* Secret key data attributes. */
 static CK_ATTRIBUTE_TYPE secretKeyParams[] = {
     CKA_VALUE_LEN,
@@ -78,16 +77,15 @@ static CK_ATTRIBUTE_TYPE secretKeyParams[] = {
 };
 /* Count of secret key data attributes. */
 #define SECRET_KEY_PARAMS_CNT (sizeof(secretKeyParams)/sizeof(*secretKeyParams))
-#endif
 
 /* Identify maximum count for stack array. */
 #ifndef NO_RSA
 #define KEY_MAX_PARAMS        RSA_KEY_PARAMS_CNT
 #elif defined(HAVE_ECC)
-#define KEY_MAX_PARAMS        ECC_KEY_PARAMS_CNT
+#define KEY_MAX_PARAMS        EC_KEY_PARAMS_CNT
 #elif !defined(NO_DH)
 #define KEY_MAX_PARAMS        DH_KEY_PARAMS_CNT
-#elif !defined(NO_AES)
+#else
 #define KEY_MAX_PARAMS        SECRET_KEY_PARAMS_CNT
 #endif
 
@@ -305,15 +303,12 @@ static CK_RV SetAttributeValue(WP11_Session* session, WP11_Object* obj,
 #ifndef NO_AES
         case CKK_AES:
 #endif
-#if defined(HAVE_ECC) || !defined(NO_DH)
         case CKK_GENERIC_SECRET:
-#endif
-#if !defined(NO_AES) || defined(HAVE_ECC) || !defined(NO_DH)
             attrs = secretKeyParams;
             cnt = SECRET_KEY_PARAMS_CNT;
             break;
-#endif
         default:
+            (void)len;
             return CKR_OBJECT_HANDLE_INVALID;
    }
 
@@ -351,13 +346,9 @@ static CK_RV SetAttributeValue(WP11_Session* session, WP11_Object* obj,
 #ifndef NO_AES
         case CKK_AES:
 #endif
-#if defined(HAVE_ECC) || !defined(NO_DH)
         case CKK_GENERIC_SECRET:
-#endif
-#if !defined(NO_AES) || defined(HAVE_ECC) || !defined(NO_DH)
             ret = WP11_Object_SetSecretKey(obj, data, len);
             break;
-#endif
         default:
             break;
     }
@@ -1078,6 +1069,7 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE hSession,
     #endif
 #endif
         default:
+            (void)type;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1238,6 +1230,10 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
     #endif
 #endif
         default:
+            (void)ret;
+            (void)encDataLen;
+            (void)ulDataLen;
+            (void)pEncryptedData;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1332,6 +1328,10 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
     #endif
 #endif
         default:
+            (void)encPartLen;
+            (void)ret;
+            (void)ulPartLen;
+            (void)pEncryptedPart;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1422,6 +1422,9 @@ CK_RV C_EncryptFinal(CK_SESSION_HANDLE hSession,
     #endif
 #endif
         default:
+            (void)encPartLen;
+            (void)ret;
+            (void)pLastEncryptedPart;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1556,6 +1559,7 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE hSession,
     #endif
 #endif
         default:
+            (void)type;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1719,6 +1723,10 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
     #endif
 #endif
         default:
+            (void)decDataLen;
+            (void)ret;
+            (void)ulEncryptedDataLen;
+            (void)pData;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1810,6 +1818,10 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE hSession,
     #endif
 #endif
         default:
+            (void)decPartLen;
+            (void)ret;
+            (void)ulEncryptedPartLen;
+            (void)pPart;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -1900,6 +1912,9 @@ CK_RV C_DecryptFinal(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pLastPart,
     #endif
 #endif
         default:
+            (void)decPartLen;
+            (void)ret;
+            (void)pLastPart;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -2173,6 +2188,7 @@ CK_RV C_SignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
             break;
 #endif
         default:
+            (void)type;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -2319,6 +2335,9 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             break;
 #endif
         default:
+            (void)sigLen;
+            (void)ulDataLen;
+            (void)pSignature;
             return CKR_MECHANISM_INVALID;
     }
     if (ret < 0)
@@ -2389,6 +2408,7 @@ CK_RV C_SignUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             break;
 #endif
         default:
+            (void)ulPartLen;
             return CKR_MECHANISM_INVALID;
     }
     if (ret < 0)
@@ -2474,6 +2494,8 @@ CK_RV C_SignFinal(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pSignature,
             break;
 #endif
         default:
+            (void)sigLen;
+            (void)pSignature;
             return CKR_MECHANISM_INVALID;
     }
     if (ret < 0)
@@ -2668,6 +2690,7 @@ CK_RV C_VerifyInit(CK_SESSION_HANDLE hSession,
             break;
 #endif
         default:
+            (void)type;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -2777,6 +2800,8 @@ CK_RV C_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             break;
 #endif
         default:
+            (void)ulDataLen;
+            (void)ulSignatureLen;
             return CKR_MECHANISM_INVALID;
     }
     if (ret < 0)
@@ -2849,6 +2874,7 @@ CK_RV C_VerifyUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             break;
 #endif
         default:
+            (void)ulPartLen;
             return CKR_MECHANISM_INVALID;
     }
     if (ret < 0)
@@ -2922,6 +2948,7 @@ CK_RV C_VerifyFinal(CK_SESSION_HANDLE hSession,
             break;
 #endif
         default:
+            (void)ulSignatureLen;
             return CKR_MECHANISM_INVALID;
     }
     if (ret < 0)
@@ -3216,6 +3243,9 @@ CK_RV C_GenerateKey(CK_SESSION_HANDLE hSession,
             break;
 #endif
         default:
+            (void)key;
+            (void)ret;
+            (void)ulCount;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -3379,6 +3409,9 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
             break;
 #endif
         default:
+            (void)ret;
+            (void)ulPublicKeyAttributeCount;
+            (void)ulPrivateKeyAttributeCount;
             return CKR_MECHANISM_INVALID;
     }
 
@@ -3628,6 +3661,7 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession,
             break;
 #endif
         default:
+            (void)ulAttributeCount;
             return CKR_MECHANISM_INVALID;
     }
 
