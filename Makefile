@@ -11,6 +11,7 @@ SIGN?=ED25519
 TARGET?=stm32f4
 DEBUG?=0
 VTOR?=1
+SWAP?=1
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -60,6 +61,9 @@ ifeq ($(VTOR),0)
     CFLAGS+=-DNO_VTOR
 endif
 
+ifeq ($(SWAP),0)
+    CFLAGS+=-DWOLFBOOT_OVERWRITE_ONLY
+endif
 
 
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb -nostdlib

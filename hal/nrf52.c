@@ -54,7 +54,6 @@ static void flash_wait_complete(void)
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
-    uint32_t val;
     NVMC_CONFIG = NVMC_CONFIG_WEN;
     flash_wait_complete();
     /* Set 8-bit write */

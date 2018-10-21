@@ -75,6 +75,7 @@ static struct area_desc flash_areas[1] = {
                 .id = FLASH_AREA_IMAGE_1,
                 .num_areas = 1
             },
+#ifndef WOLFBOOT_OVERWRITE_ONLY 
             {
                 .whole = {
                     .fa_id = FLASH_AREA_IMAGE_SCRATCH,
@@ -87,6 +88,10 @@ static struct area_desc flash_areas[1] = {
             }
         },
         .num_slots = 3
+#else
+        },
+        .num_slots = 2
+#endif
     }
 } ;
 
@@ -144,7 +149,6 @@ int flash_area_read(const struct flash_area *area, uint32_t off, void *dst,
 int flash_area_write(const struct flash_area *area, uint32_t off, const void *src,
                      uint32_t len)
 {
-    uint32_t address;
     BOOT_LOG_DBG("%s: area=%d, off=%x, len=%x", __func__,
                  area->fa_id, off, len);
     hal_flash_unlock();

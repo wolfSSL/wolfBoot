@@ -4,6 +4,10 @@
 #define FLASH_DEV_NAME			"flash"
 #define FLASH_ALIGN			4
 
+/* Example flash partitioning.
+ * Ensure that your firmware entry point is
+ * at FLASH_AREA_IMAGE_0_OFFSET + 0x100
+ */
 #define FLASH_AREA_IMAGE_0_OFFSET	0x20000
 #define FLASH_AREA_IMAGE_0_SIZE		0x20000
 #define FLASH_AREA_IMAGE_1_OFFSET	0x40000
@@ -19,9 +23,7 @@
     !defined(FLASH_AREA_IMAGE_0_OFFSET) || \
     !defined(FLASH_AREA_IMAGE_0_SIZE) || \
     !defined(FLASH_AREA_IMAGE_1_OFFSET) || \
-    !defined(FLASH_AREA_IMAGE_1_SIZE) || \
-    !defined(FLASH_AREA_IMAGE_SCRATCH_OFFSET) || \
-    !defined(FLASH_AREA_IMAGE_SCRATCH_SIZE)
+    !defined(FLASH_AREA_IMAGE_1_SIZE) 
 #error "Target support is incomplete; cannot build wolfboot."
 #endif
 

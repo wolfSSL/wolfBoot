@@ -1332,9 +1332,11 @@ boot_go(struct boot_rsp *rsp)
         rc = flash_area_open(fa_id, &BOOT_IMG_AREA(&boot_data, slot));
         assert(rc == 0);
     }
+#ifndef WOLFBOOT_OVERWRITE_ONLY 
     rc = flash_area_open(FLASH_AREA_IMAGE_SCRATCH,
                          &BOOT_SCRATCH_AREA(&boot_data));
     assert(rc == 0);
+#endif
 
     /* Determine the sector layout of the image slots and scratch area. */
     rc = boot_read_sectors();
