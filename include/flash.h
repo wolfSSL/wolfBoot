@@ -25,9 +25,6 @@
 
 /**
  *
- * Provides abstraction of flash regions for type of use.
- * I.e. dude where's my image?
- *
  * System will contain a map which contains flash areas. Every
  * region will contain flash identifier, offset within flash and length.
  *
@@ -129,13 +126,6 @@ uint8_t flash_area_align(const struct flash_area *);
  */
 int flash_area_get_sectors(int fa_id, uint32_t *count,
   struct flash_sector *sectors);
-
-/*
- * Similar to flash_area_get_sectors(), but return the values in an
- * array of struct flash_area instead.
- */
-__attribute__((deprecated))
-int flash_area_to_sectors(int idx, int *cnt, struct flash_area *ret);
 
 int flash_area_id_from_image_slot(int slot);
 int flash_area_id_to_image_slot(int area_id);

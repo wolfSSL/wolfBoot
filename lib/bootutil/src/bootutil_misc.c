@@ -23,17 +23,83 @@
 #include <inttypes.h>
 #include <stddef.h>
 
-#include "sysflash/sysflash.h"
-#include "hal/hal_flash.h"
+#include "hal.h"
 #include "printf.h"
 
-#include "flash_map_backend/flash_map_backend.h"
 
 #include "bootutil/image.h"
-#include "bootutil/bootutil.h"
 #include "bootutil_priv.h"
+#include "bootutil.h"
+#include "target.h"
 
-extern void assert(int);
+struct area {
+    struct flash_area whole;
+    struct flash_area *areas;
+    uint32_t num_areas;
+    uint8_t id;
+};
+
+
+struct area_desc {
+    struct area slots[3];
+    uint32_t num_slots;
+};
+
+static struct area_desc flash_areas[1] = {
+    {
+        .slots = {
+            {
+                .whole = {
+                    .fa_id = FLASH_AREA_IMAGE_0,
+                    .fa_device_id = 0,
+                    .fa_off = FLASH_AREA_IMAGE_0_OFFSET,
+                    .fa_size = FLASH_AREA_IMAGE_0_SIZE,
+                },
+                .id = FLASH_AREA_IMAGE_0,
+                .num_areas = 1
+            }, 
+            {
+                .whole = {
+                    .fa_id = FLASH_AREA_IMAGE_1,
+                    .fa_device_id = 0,
+                    .fa_off = FLASH_AREA_IMAGE_1_OFFSET,
+                    .fa_size = FLASH_AREA_IMAGE_1_SIZE,
+                },
+                .id = FLASH_AREA_IMAGE_1,
+                .num_areas = 1
+            },
+#ifndef WOLFBOOT_OVERWRITE_ONLY 
+            {
+                .whole = {
+                    .fa_id = FLASH_AREA_IMAGE_SCRATCH,
+                    .fa_device_id = 0,
+                    .fa_off = FLASH_AREA_IMAGE_SCRATCH_OFFSET,
+                    .fa_size = FLASH_AREA_IMAGE_SCRATCH_SIZE,
+                },
+                .id = FLASH_AREA_IMAGE_SCRATCH,
+                .num_areas = 1
+            }
+        },
+        .num_slots = 3
+#else
+        },
+        .num_slots = 2
+#endif
+    }
+} ;
+
+void boot_panic(void)
+{
+    while(1)
+        ;
+}
+
+void boot_panic_unless(int x) 
+{
+    if(!x) 
+        while(1);
+}
+
 
 int boot_current_slot;
 
@@ -136,7 +202,7 @@ boot_scratch_trailer_sz(uint8_t min_write_sz)
 static uint32_t
 boot_magic_off(const struct flash_area *fap)
 {
-    assert(offsetof(struct image_trailer, magic) == 16);
+    boot_panic_unless(offsetof(struct image_trailer, magic) == 16);
     return fap->fa_size - BOOT_MAGIC_SZ;
 }
 
@@ -168,22 +234,22 @@ boot_status_off(const struct flash_area *fap)
         off_from_end = boot_slots_trailer_sz(elem_sz);
     }
 
-    assert(off_from_end <= fap->fa_size);
+    boot_panic_unless(off_from_end <= fap->fa_size);
     return fap->fa_size - off_from_end;
 }
 
 static uint32_t
 boot_copy_done_off(const struct flash_area *fap)
 {
-    assert(fap->fa_id != FLASH_AREA_IMAGE_SCRATCH);
-    assert(offsetof(struct image_trailer, copy_done) == 0);
+    boot_panic_unless(fap->fa_id != FLASH_AREA_IMAGE_SCRATCH);
+    boot_panic_unless(offsetof(struct image_trailer, copy_done) == 0);
     return fap->fa_size - BOOT_MAGIC_SZ - BOOT_MAX_ALIGN * 2;
 }
 
 static uint32_t
 boot_image_ok_off(const struct flash_area *fap)
 {
-    assert(offsetof(struct image_trailer, image_ok) == 8);
+    boot_panic_unless(offsetof(struct image_trailer, image_ok) == 8);
     return fap->fa_size - BOOT_MAGIC_SZ - BOOT_MAX_ALIGN;
 }
 
@@ -307,7 +373,7 @@ boot_read_swap_size(uint32_t *swap_size)
             goto out;
         }
 
-        assert(memcmp(magic, boot_img_magic, BOOT_MAGIC_SZ) == 0);
+        boot_panic_unless(memcmp(magic, boot_img_magic, BOOT_MAGIC_SZ) == 0);
     }
 
     off = boot_swap_size_off(fap);
@@ -358,7 +424,7 @@ boot_write_flag(int flag, const struct flash_area *fap)
     }
 
     align = flash_area_align(fap);
-    assert(align <= BOOT_MAX_ALIGN);
+    boot_panic_unless(align <= BOOT_MAX_ALIGN);
     memset(buf, 0xFF, BOOT_MAX_ALIGN);
     buf[0] = BOOT_FLAG_SET;
 
@@ -392,7 +458,7 @@ boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size)
 
     off = boot_swap_size_off(fap);
     align = flash_area_align(fap);
-    assert(align <= BOOT_MAX_ALIGN);
+    boot_panic_unless(align <= BOOT_MAX_ALIGN);
     if (align < sizeof swap_size) {
         align = sizeof swap_size;
     }
@@ -439,7 +505,7 @@ boot_swap_type(void)
                          table->swap_type == BOOT_SWAP_TYPE_PERM   ? "perm"   :
                          table->swap_type == BOOT_SWAP_TYPE_REVERT ? "revert" :
                          "BUG; can't happen");
-            assert(table->swap_type == BOOT_SWAP_TYPE_TEST ||
+            boot_panic_unless(table->swap_type == BOOT_SWAP_TYPE_TEST ||
                    table->swap_type == BOOT_SWAP_TYPE_PERM ||
                    table->swap_type == BOOT_SWAP_TYPE_REVERT);
             return table->swap_type;
@@ -494,8 +560,8 @@ boot_set_pending(int permanent)
         return rc;
 
     default:
-        /* XXX: Temporary assert. */
-        assert(0);
+        /* XXX: Temporary boot_panic_unless. */
+        boot_panic_unless(0);
         return -1;
     }
 }
@@ -557,4 +623,146 @@ boot_set_confirmed(void)
 done:
     flash_area_close(fap);
     return rc;
+}
+
+uint8_t flash_area_align(const struct flash_area *area)
+{
+    (void)area;
+    return 1;
+}
+
+int flash_area_open(uint8_t id, const struct flash_area **area)
+{
+    uint32_t i;
+
+    for (i = 0; i < flash_areas->num_slots; i++) {
+        if (flash_areas->slots[i].id == id)
+            break;
+    }
+    if (i == flash_areas->num_slots) {
+        wolfBoot_printf("Unsupported area\n");
+        boot_panic();
+    }
+
+    /* Unsure if this is right, just returning the first area. */
+    *area = &flash_areas->slots[i].whole;
+    return 0;
+}
+
+void flash_area_close(const struct flash_area *area)
+{
+    (void)area;
+}
+
+/*
+ * Read/write/erase. Offset is relative from beginning of flash area.
+ */
+int flash_area_read(const struct flash_area *area, uint32_t off, void *dst,
+                    uint32_t len)
+{
+    unsigned int i;
+    uint8_t *src8, *dst8;
+    wolfBoot_printf("%s: area=%d, off=%x, len=%x",
+                 __func__, area->fa_id, off, len);
+    if (!area)
+        return -1;
+    if ((off + len) > (area->fa_size))
+            return -1;
+    src8 = (uint8_t *)(area->fa_off + off);
+    dst8 = (uint8_t *)dst;
+    for (i = 0; i < len; i++) { 
+        dst8[i] = src8[i];
+    }
+    return 0;
+}
+
+int flash_area_write(const struct flash_area *area, uint32_t off, const void *src,
+                     uint32_t len)
+{
+    wolfBoot_printf("%s: area=%d, off=%x, len=%x", __func__,
+                 area->fa_id, off, len);
+    hal_flash_unlock();
+    hal_flash_write(area->fa_off + off, src, len);
+    hal_flash_lock();
+    return 0;
+}
+
+int flash_area_erase(const struct flash_area *area, uint32_t off, uint32_t len)
+{
+    wolfBoot_printf("%s: area=%d, off=%x, len=%x", __func__,
+                 area->fa_id, off, len);
+    hal_flash_unlock();
+    hal_flash_erase(area->fa_off + off, len);
+    hal_flash_lock();
+    return 0;
+}
+
+int flash_area_to_sectors(int idx, int *cnt, struct flash_area *ret)
+{
+    uint32_t i;
+    struct area *slot;
+
+    for (i = 0; i < flash_areas->num_slots; i++) {
+        if (flash_areas->slots[i].id == idx)
+            break;
+    }
+    if (i == flash_areas->num_slots) {
+        wolfBoot_printf("Unsupported area\n");
+        boot_panic();
+    }
+
+    slot = &flash_areas->slots[i];
+
+    if (slot->num_areas > (uint32_t)*cnt) {
+        wolfBoot_printf("Too many areas in slot\n");
+        boot_panic();
+    }
+
+    *cnt = slot->num_areas;
+    memcpy(ret, slot->areas, slot->num_areas * sizeof(struct flash_area));
+
+    return 0;
+}
+
+int flash_area_get_sectors(int fa_id, uint32_t *count,
+                           struct flash_sector *sectors)
+{
+    uint32_t i;
+    struct area *slot;
+
+    for (i = 0; i < flash_areas->num_slots; i++) {
+        if (flash_areas->slots[i].id == fa_id)
+            break;
+    }
+    if (i == flash_areas->num_slots) {
+        wolfBoot_printf("Unsupported area\n");
+        boot_panic();
+    }
+
+    slot = &flash_areas->slots[i];
+
+    if (slot->num_areas > *count) {
+        wolfBoot_printf("Too many areas in slot\n");
+        boot_panic();
+    }
+
+    for (i = 0; i < slot->num_areas; i++) {
+        sectors[i].fs_off = slot->areas[i].fa_off -
+            slot->whole.fa_off;
+        sectors[i].fs_size = slot->areas[i].fa_size;
+    }
+    *count = slot->num_areas;
+
+    return 0;
+}
+
+int flash_area_id_from_image_slot(int slot)
+{
+    return slot + FLASH_AREA_IMAGE_0;
+}
+
+uint8_t flash_area_erased_val(const struct flash_area *fap)
+{
+    (void)fap;
+    return 0xff;
 }

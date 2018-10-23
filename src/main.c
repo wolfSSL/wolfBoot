@@ -20,12 +20,11 @@
  */
 
 #include "target.h"
-#include "hal/hal_flash.h"
+#include "hal.h"
 #include "printf.h"
 
 #include "bootutil/image.h"
-#include "bootutil/bootutil.h"
-#include "flash_map_backend/flash_map_backend.h"
+#include "bootutil.h"
 
 extern void do_boot(void *);
 

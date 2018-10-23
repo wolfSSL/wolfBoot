@@ -22,7 +22,7 @@
 #ifndef __FLASH_MAP_BACKEND_H__
 #define __FLASH_MAP_BACKEND_H__
 
-#include <flash_map.h>
+#include "flash.h"
 
 
 /**

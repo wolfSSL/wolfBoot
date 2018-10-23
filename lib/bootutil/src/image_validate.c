@@ -23,13 +23,11 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include "hal/hal_flash.h"
-
-//#include <flash_map_backend/flash_map_backend.h>
+#include "hal.h"
 
 #include "bootutil/image.h"
-#include "bootutil/sha256.h"
 #include "bootutil/sign_key.h"
+#include "wolfssl/wolfcrypt/sha256.h"
 
 #include "wolfssl/ssl.h"
 
@@ -43,18 +41,18 @@ bootutil_img_hash(struct image_header *hdr, const struct flash_area *fap,
                   uint8_t *tmp_buf, uint32_t tmp_buf_sz,
                   uint8_t *hash_result, uint8_t *seed, int seed_len)
 {
-    bootutil_sha256_context sha256_ctx;
+    wc_Sha256 sha256_ctx;
     uint32_t blk_sz;
     uint32_t size;
     uint32_t off;
     int rc;
 
-    bootutil_sha256_init(&sha256_ctx);
+    wc_InitSha256(&sha256_ctx);
 
     /* in some cases (split image) the hash is seeded with data from
      * the loader image */
     if (seed && (seed_len > 0)) {
-        bootutil_sha256_update(&sha256_ctx, seed, seed_len);
+        wc_Sha256Update(&sha256_ctx, seed, seed_len);
     }
 
     /*
@@ -71,9 +69,9 @@ bootutil_img_hash(struct image_header *hdr, const struct flash_area *fap,
         if (rc) {
             return rc;
         }
-        bootutil_sha256_update(&sha256_ctx, tmp_buf, blk_sz);
+        wc_Sha256Update(&sha256_ctx, tmp_buf, blk_sz);
     }
-    bootutil_sha256_finish(&sha256_ctx, hash_result);
+    wc_Sha256Final(&sha256_ctx, hash_result);
 
     return 0;
 }
@@ -105,22 +103,22 @@ bootutil_img_hash(struct image_header *hdr, const struct flash_area *fap,
 #endif
 
 #ifdef EXPECTED_SIG_TLV
-extern void assert(int);
+extern void boot_panic_unless(int);
 static int
 bootutil_find_key(uint8_t *keyhash, uint8_t keyhash_len)
 {
-    bootutil_sha256_context sha256_ctx;
+    wc_Sha256 sha256_ctx;
     int i;
     const struct bootutil_key *key;
     uint8_t hash[32];
 
-    assert(keyhash_len <= 32);
+    boot_panic_unless(keyhash_len <= 32);
 
     for (i = 0; i < bootutil_key_cnt; i++) {
         key = &bootutil_keys[i];
-        bootutil_sha256_init(&sha256_ctx);
-        bootutil_sha256_update(&sha256_ctx, key->key, *key->len);
-        bootutil_sha256_finish(&sha256_ctx, hash);
+        wc_InitSha256(&sha256_ctx);
+        wc_Sha256Update(&sha256_ctx, key->key, *key->len);
+        wc_Sha256Final(&sha256_ctx, hash);
         if (!memcmp(hash, keyhash, keyhash_len)) {
             return i;
         }

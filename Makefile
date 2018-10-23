@@ -20,20 +20,18 @@ OBJS:= \
 ./lib/bootutil/src/loader.o \
 ./lib/bootutil/src/image_validate.o \
 ./lib/bootutil/src/bootutil_misc.o \
-./src/run.o \
 ./src/mem.o \
 ./src/keys.o \
 ./src/crypto.o \
-./src/startup_bl.o \
+./src/wolfboot.o \
 ./src/main.o \
 ./lib/wolfssl/wolfcrypt/src/sha256.o \
 ./lib/wolfssl/wolfcrypt/src/hash.o \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
 ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o 
 
-CFLAGS:=-mcpu=cortex-m3 -mthumb -Wall -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
+CFLAGS:=-mcpu=cortex-m3 -mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 	-Ilib/bootutil/include -Iinclude/ -Ilib/wolfssl -nostartfiles \
-	-DBOOT_MAX_IMG_SECTORS=256 -DWOLFBOOT_VALIDATE_SLOT0 -DWOLFBOOT_USE_FLASHAREA_GET_SECTORS \
 	-nostdlib \
 	-DWOLFSSL_USER_SETTINGS \
 	-DPLATFORM_$(TARGET)

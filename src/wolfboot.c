@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include "bootutil/image.h"
-#include "bootutil/bootutil.h"
+#include "bootutil.h"
 #include <stdint.h>
 extern unsigned int _stored_data;
 extern unsigned int _start_data;

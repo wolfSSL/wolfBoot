@@ -22,14 +22,22 @@
 #ifndef H_BOOTUTIL_PRIV_
 #define H_BOOTUTIL_PRIV_
 
-#include "sysflash/sysflash.h"
 
-#include <flash_map_backend/flash_map_backend.h>
+#include "flash_map_backend.h"
 
 #include "bootutil/image.h"
 
+#ifndef BOOT_MAX_IMG_SECTORS
+#   define BOOT_MAX_IMG_SECTORS (32)
+#endif
 
-#define ASSERT assert
+extern void boot_panic(void);
+extern void boot_panic_unless(int x);
+
+#define FLASH_AREA_IMAGE_0 1
+#define FLASH_AREA_IMAGE_1 2
+#define FLASH_AREA_IMAGE_SCRATCH 3
+
 
 struct flash_area;
 
@@ -123,11 +131,7 @@ extern const uint32_t BOOT_MAGIC_SZ;
  *
  * This can be deleted when flash_area_to_sectors() is removed.
  */
-#ifdef WOLFBOOT_USE_FLASHAREA_GET_SECTORS
 typedef struct flash_sector boot_sector_t;
-#else
-typedef struct flash_area boot_sector_t;
-#endif
 
 /** Private state maintained during boot. */
 struct boot_loader_state {
@@ -196,55 +200,6 @@ static inline size_t boot_scratch_area_size(struct boot_loader_state *state)
     return state->scratch_area->fa_size;
 }
 
-#ifndef WOLFBOOT_USE_FLASHAREA_GET_SECTORS
-
-static inline size_t
-boot_img_sector_size(struct boot_loader_state *state,
-                     size_t slot, size_t sector)
-{
-    return state->imgs[slot].sectors[sector].fa_size;
-}
-
-/*
- * Offset of the sector from the beginning of the image, NOT the flash
- * device.
- */
-static inline uint32_t
-boot_img_sector_off(struct boot_loader_state *state, size_t slot,
-                    size_t sector)
-{
-    return state->imgs[slot].sectors[sector].fa_off -
-           state->imgs[slot].sectors[0].fa_off;
-}
-
-static inline int
-boot_initialize_area(struct boot_loader_state *state, int flash_area)
-{
-    int num_sectors = BOOT_MAX_IMG_SECTORS;
-    size_t slot;
-    int rc;
-
-    switch (flash_area) {
-    case FLASH_AREA_IMAGE_0:
-        slot = 0;
-        break;
-    case FLASH_AREA_IMAGE_1:
-        slot = 1;
-        break;
-    default:
-        return BOOT_EFLASH;
-    }
-
-    rc = flash_area_to_sectors(flash_area, &num_sectors,
-                               state->imgs[slot].sectors);
-    if (rc != 0) {
-        return rc;
-    }
-    state->imgs[slot].num_sectors = (size_t)num_sectors;
-    return 0;
-}
-
-#else  /* defined(WOLFBOOT_USE_FLASHAREA_GET_SECTORS) */
 
 static inline size_t
 boot_img_sector_size(struct boot_loader_state *state,
@@ -291,8 +246,6 @@ boot_initialize_area(struct boot_loader_state *state, int flash_area)
     *out_num_sectors = num_sectors;
     return 0;
 }
-
-#endif  /* !defined(WOLFBOOT_USE_FLASHAREA_GET_SECTORS) */
 
 
 #endif
