@@ -54,11 +54,13 @@ static void flash_wait_complete(void)
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
-    NVMC_CONFIG = NVMC_CONFIG_WEN;
-    flash_wait_complete();
-    /* Set 8-bit write */
-    for (i = 0; i < len; i++) {
-        ((uint8_t *)(address))[i] = data[i];
+    int words = (len + 3) / 4;
+    uint32_t *src = (uint32_t *)data;
+    uint32_t *dst = (uint32_t *)address;
+    for (i = 0; i < words; i ++) {
+        NVMC_CONFIG = NVMC_CONFIG_WEN;
+        flash_wait_complete();
+        dst[i] = src[i];
         flash_wait_complete();
     }
     return 0;
@@ -75,16 +77,12 @@ void hal_flash_lock(void)
 
 int hal_flash_erase(uint32_t address, int len)
 {
-    int start = -1, end = -1, i;
-    uint32_t end_address = address + len;
-    start = (address / FLASH_PAGE_SIZE);
-    if (start == 0)
-        return -1;
-    end = end_address / FLASH_PAGE_SIZE;
-    NVMC_CONFIG = NVMC_CONFIG_EEN;
-    flash_wait_complete();
-    for (i = start; i <= end; i++) {
-        NVMC_ERASEPAGE = i;
+    uint32_t end = address + len;
+    uint32_t p;
+    for (p = address; p <= end; p += FLASH_PAGE_SIZE) {
+        NVMC_CONFIG = NVMC_CONFIG_EEN;
+        flash_wait_complete();
+        NVMC_ERASEPAGE = p;
         flash_wait_complete();
     }
     return 0;
