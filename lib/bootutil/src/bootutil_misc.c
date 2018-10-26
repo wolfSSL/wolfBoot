@@ -643,8 +643,6 @@ int flash_area_open(uint8_t id, const struct flash_area **area)
         wolfBoot_printf("Unsupported area\n");
         boot_panic();
     }
-
-    /* Unsure if this is right, just returning the first area. */
     *area = &flash_areas->slots[i].whole;
     return 0;
 }
@@ -718,6 +716,10 @@ int flash_area_to_sectors(int idx, int *cnt, struct flash_area *ret)
         boot_panic();
     }
 
+    if (slot->num_areas == 1) {
+        slot->areas = &slot->whole;
+    }
+
     *cnt = slot->num_areas;
     memcpy(ret, slot->areas, slot->num_areas * sizeof(struct flash_area));
 
@@ -746,13 +748,17 @@ int flash_area_get_sectors(int fa_id, uint32_t *count,
         boot_panic();
     }
 
-    for (i = 0; i < slot->num_areas; i++) {
-        sectors[i].fs_off = slot->areas[i].fa_off -
-            slot->whole.fa_off;
-        sectors[i].fs_size = slot->areas[i].fa_size;
-    }
     *count = slot->num_areas;
-
+    if (slot->num_areas == 1) {
+        sectors[0].fs_off = slot->whole.fa_off;
+        sectors[0].fs_size = slot->whole.fa_size;
+    } else {
+        for (i = 0; i < slot->num_areas; i++) {
+            sectors[i].fs_off = slot->areas[i].fa_off -
+                slot->whole.fa_off;
+            sectors[i].fs_size = slot->areas[i].fa_size;
+        }
+    }
     return 0;
 }
 

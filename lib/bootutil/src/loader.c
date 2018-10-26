@@ -155,11 +155,14 @@ boot_status_source(void)
     size_t i;
     uint8_t source;
 
+    memset(&state_scratch, 0xFF, sizeof(state_scratch));
+
     rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_0, &state_slot0);
     boot_panic_unless(rc == 0);
-
+#ifndef WOLFBOOT_OVERWRITE_ONLY
     rc = boot_read_swap_state_by_id(FLASH_AREA_IMAGE_SCRATCH, &state_scratch);
     boot_panic_unless(rc == 0);
+#endif
 
     BOOT_LOG_SWAP_STATE("Image 0", &state_slot0);
     BOOT_LOG_SWAP_STATE("Scratch", &state_scratch);
@@ -213,7 +216,6 @@ boot_previous_swap_type(void)
  * Compute the total size of the given image.  Includes the size of
  * the TLVs.
  */
-#if !defined(WOLFBOOT_OVERWRITE_ONLY) || defined(WOLFBOOT_OVERWRITE_ONLY_FAST)
 static int
 boot_read_image_size(int slot, struct image_header *hdr, uint32_t *size)
 {
@@ -246,7 +248,6 @@ done:
     flash_area_close(fap);
     return rc;
 }
-#endif /* !WOLFBOOT_OVERWRITE_ONLY */
 
 static int
 boot_read_image_header(int slot, struct image_header *out_hdr)
@@ -464,19 +465,17 @@ boot_read_status(struct boot_status *bs)
 
     memset(bs, 0, sizeof *bs);
 
-#ifdef WOLFBOOT_OVERWRITE_ONLY
-    /* Overwrite-only doesn't make use of the swap status area. */
-    return 0;
-#endif
 
     status_loc = boot_status_source();
     switch (status_loc) {
     case BOOT_STATUS_SOURCE_NONE:
         return 0;
 
+#ifndef WOLFBOOT_OVERWRITE_ONLY
     case BOOT_STATUS_SOURCE_SCRATCH:
         area_id = FLASH_AREA_IMAGE_SCRATCH;
         break;
+#endif
 
     case BOOT_STATUS_SOURCE_SLOT0:
         area_id = FLASH_AREA_IMAGE_0;
@@ -1040,11 +1039,9 @@ boot_copy_image(struct boot_status *bs)
 
     (void)bs;
 
-#if defined(WOLFBOOT_OVERWRITE_ONLY_FAST)
     uint32_t src_size = 0;
     rc = boot_read_image_size(1, boot_img_hdr(&boot_data, 1), &src_size);
     boot_panic_unless(rc == 0);
-#endif
 
     wolfBoot_printf("Image upgrade slot1 -> slot0");
     wolfBoot_printf("Erasing slot0");
@@ -1059,11 +1056,9 @@ boot_copy_image(struct boot_status *bs)
 
         size += this_size;
 
-#if defined(WOLFBOOT_OVERWRITE_ONLY_FAST)
         if (size >= src_size) {
             break;
         }
-#endif
     }
 
     wolfBoot_printf("Copying slot 1 to slot 0: 0x%lx bytes", size);
