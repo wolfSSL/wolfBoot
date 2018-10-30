@@ -177,11 +177,11 @@ int WP11_Library_Init(void);
 void WP11_Library_Final(void);
 int WP11_Library_IsInitialized(void);
 
-int WP11_SlotIdValid(int slotId);
+int WP11_SlotIdValid(CK_SLOT_ID slotId);
 
 int WP11_GetSlotList(int tokenIn, CK_SLOT_ID* slotList, CK_ULONG* count);
 
-int WP11_Slot_Get(int slotId, WP11_Slot** slot);
+int WP11_Slot_Get(CK_SLOT_ID slotId, WP11_Slot** slot);
 int WP11_Slot_OpenSession(WP11_Slot* slot, unsigned long flags, void* app,
                           CK_NOTIFY notify, CK_SESSION_HANDLE* session);
 void WP11_Slot_CloseSession(WP11_Slot* slot, WP11_Session* session);
@@ -211,10 +211,10 @@ WP11_Slot* WP11_Session_GetSlot(WP11_Session* session);
 CK_MECHANISM_TYPE WP11_Session_GetMechanism(WP11_Session* session);
 void WP11_Session_SetMechanism(WP11_Session* session,
                                CK_MECHANISM_TYPE mechanism);
-int WP11_Session_SetPssParams(WP11_Session* session, int hashAlg, int mgf,
-                              int sLen);
-int WP11_Session_SetOaepParams(WP11_Session* session, int hashAlg, int mgf,
-                               byte* label, int labelSz);
+int WP11_Session_SetPssParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
+                              CK_MECHANISM_TYPE mgf, int sLen);
+int WP11_Session_SetOaepParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
+                               CK_MECHANISM_TYPE mgf, byte* label, int labelSz);
 int WP11_Session_SetCbcParams(WP11_Session* session, unsigned char* iv, int enc,
                               WP11_Object* object);
 int WP11_Session_SetGcmParams(WP11_Session* session, unsigned char* iv,
@@ -248,7 +248,7 @@ int WP11_Object_SetDhKey(WP11_Object* object, unsigned char** data,
                          CK_ULONG* len);
 int WP11_Object_SetSecretKey(WP11_Object* object, unsigned char** data,
                              CK_ULONG* len);
-int WP11_Object_SetClass(WP11_Object* object, int objClass);
+int WP11_Object_SetClass(WP11_Object* object, CK_OBJECT_CLASS objClass);
 
 int WP11_Object_Find(WP11_Session* session, CK_OBJECT_HANDLE objHandle,
                      WP11_Object** object);

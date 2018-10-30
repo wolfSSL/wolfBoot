@@ -1017,7 +1017,7 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE hSession,
 
             ret = WP11_Session_SetOaepParams(session, params->hashAlg,
                                               params->mgf, params->pSourceData,
-                                              params->ulSourceDataLen);
+                                              (int)params->ulSourceDataLen);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_RSA_PKCS_OAEP_ENC;
@@ -1058,9 +1058,9 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE hSession,
 
             params = (CK_GCM_PARAMS*)pMechanism->pParameter;
             ret = WP11_Session_SetGcmParams(session, params->pIv,
-                                                  params->ulIvLen, params->pAAD,
-                                                  params->ulAADLen,
-                                                  params->ulTagBits);
+                                             (int)params->ulIvLen, params->pAAD,
+                                             (int)params->ulAADLen,
+                                             (int)params->ulTagBits);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_AES_GCM_ENC;
@@ -1138,7 +1138,7 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (encDataLen > (word32)*pulEncryptedDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_Rsa_PublicEncrypt(pData, ulDataLen, pEncryptedData,
+            ret = WP11_Rsa_PublicEncrypt(pData, (int)ulDataLen, pEncryptedData,
                                                  &encDataLen, obj,
                                                  WP11_Session_GetSlot(session));
             if (ret < 0)
@@ -1157,9 +1157,9 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (encDataLen > (word32)*pulEncryptedDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_RsaPkcs15_PublicEncrypt(pData, ulDataLen, pEncryptedData,
-                                                 &encDataLen, obj,
-                                                 WP11_Session_GetSlot(session));
+            ret = WP11_RsaPkcs15_PublicEncrypt(pData, (int)ulDataLen,
+                                               pEncryptedData, &encDataLen, obj,
+                                               WP11_Session_GetSlot(session));
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             *pulEncryptedDataLen = encDataLen;
@@ -1179,8 +1179,9 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (encDataLen > (word32)*pulEncryptedDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_RsaOaep_PublicEncrypt(pData, ulDataLen, pEncryptedData,
-                                                     &encDataLen, obj, session);
+            ret = WP11_RsaOaep_PublicEncrypt(pData, (int)ulDataLen,
+                                               pEncryptedData, &encDataLen, obj,
+                                               session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             *pulEncryptedDataLen = encDataLen;
@@ -1193,7 +1194,7 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_CBC_ENC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            encDataLen = ulDataLen;
+            encDataLen = (word32)ulDataLen;
             if (pEncryptedData == NULL) {
                 *pulEncryptedDataLen = encDataLen;
                 return CKR_OK;
@@ -1201,7 +1202,7 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (encDataLen > (word32)*pulEncryptedDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesCbc_Encrypt(pData, ulDataLen, pEncryptedData,
+            ret = WP11_AesCbc_Encrypt(pData, (int)ulDataLen, pEncryptedData,
                                                           &encDataLen, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
@@ -1213,7 +1214,8 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_GCM_ENC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            encDataLen = ulDataLen + WP11_AesGcm_GetTagBits(session) / 8;
+            encDataLen = (word32)ulDataLen +
+                                            WP11_AesGcm_GetTagBits(session) / 8;
             if (pEncryptedData == NULL) {
                 *pulEncryptedDataLen = encDataLen;
                 return CKR_OK;
@@ -1221,7 +1223,7 @@ CK_RV C_Encrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (encDataLen > (word32)*pulEncryptedDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesGcm_Encrypt(pData, ulDataLen, pEncryptedData,
+            ret = WP11_AesGcm_Encrypt(pData, (int)ulDataLen, pEncryptedData,
                                                      &encDataLen, obj, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
@@ -1290,7 +1292,7 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_CBC_ENC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            encPartLen = ulPartLen + WP11_AesCbc_PartLen(session);
+            encPartLen = (word32)ulPartLen + WP11_AesCbc_PartLen(session);
             encPartLen &= ~0xf;
             if (pEncryptedPart == NULL) {
                 *pulEncryptedPartLen = encPartLen;
@@ -1299,8 +1301,9 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             if (encPartLen > (word32)*pulEncryptedPartLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesCbc_EncryptUpdate(pPart, ulPartLen, pEncryptedPart,
-                                                          &encPartLen, session);
+            ret = WP11_AesCbc_EncryptUpdate(pPart, (int)ulPartLen,
+                                                    pEncryptedPart, &encPartLen,
+                                                    session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             *pulEncryptedPartLen = encPartLen;
@@ -1311,7 +1314,7 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_GCM_ENC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            encPartLen = ulPartLen;
+            encPartLen = (word32)ulPartLen;
             if (pEncryptedPart == NULL) {
                 *pulEncryptedPartLen = encPartLen;
                 return CKR_OK;
@@ -1319,8 +1322,9 @@ CK_RV C_EncryptUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             if (encPartLen > (word32)*pulEncryptedPartLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesGcm_EncryptUpdate(pPart, ulPartLen, pEncryptedPart,
-                                                     &encPartLen, obj, session);
+            ret = WP11_AesGcm_EncryptUpdate(pPart, (int)ulPartLen,
+                                               pEncryptedPart, &encPartLen, obj,
+                                               session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             *pulEncryptedPartLen = encPartLen;
@@ -1509,7 +1513,7 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE hSession,
 
             ret = WP11_Session_SetOaepParams(session, params->hashAlg,
                                                params->mgf, params->pSourceData,
-                                               params->ulSourceDataLen);
+                                               (int)params->ulSourceDataLen);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_RSA_PKCS_OAEP_DEC;
@@ -1548,9 +1552,9 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE hSession,
 
             params = (CK_GCM_PARAMS*)pMechanism->pParameter;
             ret = WP11_Session_SetGcmParams(session, params->pIv,
-                                                  params->ulIvLen, params->pAAD,
-                                                  params->ulAADLen,
-                                                  params->ulTagBits);
+                                             (int)params->ulIvLen, params->pAAD,
+                                             (int)params->ulAADLen,
+                                             (int)params->ulTagBits);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_AES_GCM_DEC;
@@ -1628,8 +1632,9 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
             if (decDataLen > (word32)*pulDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_Rsa_PrivateDecrypt(pEncryptedData, ulEncryptedDataLen,
-                                                 pData, &decDataLen, obj,
+            ret = WP11_Rsa_PrivateDecrypt(pEncryptedData,
+                                                 (int)ulEncryptedDataLen, pData,
+                                                 &decDataLen, obj,
                                                  WP11_Session_GetSlot(session));
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
@@ -1648,7 +1653,7 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
                 return CKR_BUFFER_TOO_SMALL;
 
             ret = WP11_RsaPkcs15_PrivateDecrypt(pEncryptedData,
-                                                 ulEncryptedDataLen, pData,
+                                                 (int)ulEncryptedDataLen, pData,
                                                  &decDataLen, obj,
                                                  WP11_Session_GetSlot(session));
             if (ret < 0)
@@ -1671,8 +1676,8 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
                 return CKR_BUFFER_TOO_SMALL;
 
             ret = WP11_RsaOaep_PrivateDecrypt(pEncryptedData,
-                                                     ulEncryptedDataLen, pData,
-                                                     &decDataLen, obj, session);
+                                                 (int)ulEncryptedDataLen, pData,
+                                                 &decDataLen, obj, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             *pulDataLen = decDataLen;
@@ -1685,7 +1690,7 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_CBC_DEC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            decDataLen = ulEncryptedDataLen;
+            decDataLen = (word32)ulEncryptedDataLen;
             if (pData == NULL) {
                 *pulDataLen = decDataLen;
                 return CKR_OK;
@@ -1693,7 +1698,7 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
             if (decDataLen > (word32)*pulDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesCbc_Decrypt(pEncryptedData, ulEncryptedDataLen,
+            ret = WP11_AesCbc_Decrypt(pEncryptedData, (int)ulEncryptedDataLen,
                                               pData, &decDataLen, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
@@ -1705,7 +1710,7 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_GCM_DEC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            decDataLen = ulEncryptedDataLen -
+            decDataLen = (word32)ulEncryptedDataLen -
                                             WP11_AesGcm_GetTagBits(session) / 8;
             if (pData == NULL) {
                 *pulDataLen = decDataLen;
@@ -1714,7 +1719,7 @@ CK_RV C_Decrypt(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pEncryptedData,
             if (decDataLen > (word32)*pulDataLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesGcm_Decrypt(pEncryptedData, ulEncryptedDataLen,
+            ret = WP11_AesGcm_Decrypt(pEncryptedData, (int)ulEncryptedDataLen,
                                               pData, &decDataLen, obj, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
@@ -1785,7 +1790,8 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE hSession,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_AES_CBC_DEC))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            decPartLen = ulEncryptedPartLen + WP11_AesCbc_PartLen(session);
+            decPartLen = (word32)ulEncryptedPartLen +
+                                                   WP11_AesCbc_PartLen(session);
             decPartLen &= ~0xf;
             if (pPart == NULL) {
                 *pulPartLen = decPartLen;
@@ -1794,8 +1800,9 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE hSession,
             if (decPartLen > (word32)*pulPartLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_AesCbc_DecryptUpdate(pEncryptedPart, ulEncryptedPartLen,
-                                                   pPart, &decPartLen, session);
+            ret = WP11_AesCbc_DecryptUpdate(pEncryptedPart,
+                                                 (int)ulEncryptedPartLen, pPart,
+                                                 &decPartLen, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             *pulPartLen = decPartLen;
@@ -1810,8 +1817,8 @@ CK_RV C_DecryptUpdate(CK_SESSION_HANDLE hSession,
             if (pPart == NULL)
                 return CKR_OK;
 
-            ret = WP11_AesGcm_DecryptUpdate(pEncryptedPart, ulEncryptedPartLen,
-                                                                       session);
+            ret = WP11_AesGcm_DecryptUpdate(pEncryptedPart,
+                                              (int)ulEncryptedPartLen, session);
             if (ret < 0)
                 return CKR_FUNCTION_FAILED;
             break;
@@ -2137,7 +2144,7 @@ CK_RV C_SignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
 
             params = (CK_RSA_PKCS_PSS_PARAMS*)pMechanism->pParameter;
             ret = WP11_Session_SetPssParams(session, params->hashAlg,
-                                                     params->mgf, params->sLen);
+                                                params->mgf, (int)params->sLen);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_RSA_PKCS_PSS_SIGN;
@@ -2256,8 +2263,9 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (sigLen > (word32)*pulSignatureLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_RsaPkcs15_Sign(pData, ulDataLen, pSignature, &sigLen,
-                                            obj, WP11_Session_GetSlot(session));
+            ret = WP11_RsaPkcs15_Sign(pData, (int)ulDataLen, pSignature,
+                                                 &sigLen, obj,
+                                                 WP11_Session_GetSlot(session));
             *pulSignatureLen = sigLen;
             break;
     #ifdef WC_RSA_PSS
@@ -2275,8 +2283,8 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (sigLen > (word32)*pulSignatureLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_RsaPKCSPSS_Sign(pData, ulDataLen, pSignature, &sigLen,
-                                                                  obj, session);
+            ret = WP11_RsaPKCSPSS_Sign(pData, (int)ulDataLen, pSignature,
+                                                         &sigLen, obj, session);
             *pulSignatureLen = sigLen;
             break;
     #endif
@@ -2294,7 +2302,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (sigLen > (word32)*pulSignatureLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_Ec_Sign(pData, ulDataLen, pSignature, &sigLen, obj,
+            ret = WP11_Ec_Sign(pData, (int)ulDataLen, pSignature, &sigLen, obj,
                                                  WP11_Session_GetSlot(session));
             *pulSignatureLen = sigLen;
             break;
@@ -2329,7 +2337,7 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (sigLen > (word32)*pulSignatureLen)
                 return CKR_BUFFER_TOO_SMALL;
 
-            ret = WP11_Hmac_Sign(pData, ulDataLen, pSignature, &sigLen,
+            ret = WP11_Hmac_Sign(pData, (int)ulDataLen, pSignature, &sigLen,
                                                                        session);
             *pulSignatureLen = sigLen;
             break;
@@ -2404,7 +2412,7 @@ CK_RV C_SignUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_HMAC_SIGN))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            ret = WP11_Hmac_Update(pPart, ulPartLen, session);
+            ret = WP11_Hmac_Update(pPart, (int)ulPartLen, session);
             break;
 #endif
         default:
@@ -2639,7 +2647,7 @@ CK_RV C_VerifyInit(CK_SESSION_HANDLE hSession,
 
             params = (CK_RSA_PKCS_PSS_PARAMS*)pMechanism->pParameter;
             ret = WP11_Session_SetPssParams(session, params->hashAlg,
-                                                     params->mgf, params->sLen);
+                                                params->mgf, (int)params->sLen);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_RSA_PKCS_PSS_VERIFY;
@@ -2749,8 +2757,8 @@ CK_RV C_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
                 return CKR_OPERATION_NOT_INITIALIZED;
             }
 
-            ret = WP11_RsaPkcs15_Verify(pSignature, ulSignatureLen, pData,
-                                                         ulDataLen, &stat, obj);
+            ret = WP11_RsaPkcs15_Verify(pSignature, (int)ulSignatureLen, pData,
+                                                    (int)ulDataLen, &stat, obj);
             break;
     #ifdef WC_RSA_PSS
         case CKM_RSA_PKCS_PSS:
@@ -2759,8 +2767,8 @@ CK_RV C_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
                 return CKR_OPERATION_NOT_INITIALIZED;
             }
 
-            ret = WP11_RsaPKCSPSS_Verify(pSignature, ulSignatureLen, pData,
-                                                ulDataLen, &stat, obj, session);
+            ret = WP11_RsaPKCSPSS_Verify(pSignature, (int)ulSignatureLen, pData,
+                                           (int)ulDataLen, &stat, obj, session);
             break;
     #endif
 #endif
@@ -2769,8 +2777,8 @@ CK_RV C_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_ECDSA_VERIFY))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            ret = WP11_Ec_Verify(pSignature, ulSignatureLen, pData, ulDataLen,
-                                                                    &stat, obj);
+            ret = WP11_Ec_Verify(pSignature, (int)ulSignatureLen, pData,
+                                                    (int)ulDataLen, &stat, obj);
             break;
 #endif
 #ifndef NO_HMAC
@@ -2795,8 +2803,8 @@ CK_RV C_Verify(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pData,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_HMAC_VERIFY))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            ret = WP11_Hmac_Verify(pSignature, ulSignatureLen, pData, ulDataLen,
-                                                                &stat, session);
+            ret = WP11_Hmac_Verify(pSignature, (int)ulSignatureLen, pData,
+                                                (int)ulDataLen, &stat, session);
             break;
 #endif
         default:
@@ -2870,7 +2878,7 @@ CK_RV C_VerifyUpdate(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pPart,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_HMAC_VERIFY))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            ret = WP11_Hmac_Update(pPart, ulPartLen, session);
+            ret = WP11_Hmac_Update(pPart, (int)ulPartLen, session);
             break;
 #endif
         default:
@@ -2943,7 +2951,7 @@ CK_RV C_VerifyFinal(CK_SESSION_HANDLE hSession,
             if (!WP11_Session_IsOpInitialized(session, WP11_INIT_HMAC_VERIFY))
                 return CKR_OPERATION_NOT_INITIALIZED;
 
-            ret = WP11_Hmac_VerifyFinal(pSignature, ulSignatureLen, &stat,
+            ret = WP11_Hmac_VerifyFinal(pSignature, (int)ulSignatureLen, &stat,
                                                                        session);
             break;
 #endif
@@ -3543,7 +3551,7 @@ static int SymmKeyLen(WP11_Object* obj, word32 len, word32* symmKeyLen)
     if (ret != 0)
         return ret;
 
-    valueLen = *(CK_ULONG*)data;
+    valueLen = (word32)*(CK_ULONG*)data;
 
     switch (WP11_Object_GetType(obj)) {
         case CKK_AES:
@@ -3629,13 +3637,14 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession,
             if (params->kdf != CKD_NULL)
                 return CKR_MECHANISM_PARAM_INVALID;
 
-            keyLen = params->ulPublicDataLen / 2;
+            keyLen = (word32)(params->ulPublicDataLen / 2);
             derivedKey = XMALLOC(keyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (derivedKey == NULL)
                 return CKR_DEVICE_MEMORY;
 
-            ret = WP11_EC_Derive(params->pPublicData, params->ulPublicDataLen,
-                                                       derivedKey, keyLen, obj);
+            ret = WP11_EC_Derive(params->pPublicData,
+                                       (int)params->ulPublicDataLen, derivedKey,
+                                       keyLen, obj);
             if (ret != 0)
                 rv = CKR_FUNCTION_FAILED;
             break;
@@ -3648,14 +3657,14 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession,
             if (pMechanism->ulParameterLen == 0)
                 return CKR_MECHANISM_PARAM_INVALID;
 
-            keyLen = pMechanism->ulParameterLen;
+            keyLen = (word32)pMechanism->ulParameterLen;
             derivedKey = XMALLOC(keyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (derivedKey == NULL)
                 return CKR_DEVICE_MEMORY;
 
             ret = WP11_Dh_Derive(pMechanism->pParameter,
-                                         pMechanism->ulParameterLen, derivedKey,
-                                         &keyLen, obj);
+                                    (int)pMechanism->ulParameterLen, derivedKey,
+                                    &keyLen, obj);
             if (ret != 0)
                 rv = CKR_FUNCTION_FAILED;
             break;
@@ -3723,7 +3732,7 @@ CK_RV C_SeedRandom(CK_SESSION_HANDLE hSession, CK_BYTE_PTR pSeed,
         return CKR_ARGUMENTS_BAD;
 
     slot = WP11_Session_GetSlot(session);
-    ret = WP11_Slot_SeedRandom(slot, pSeed, ulSeedLen);
+    ret = WP11_Slot_SeedRandom(slot, pSeed, (int)ulSeedLen);
     if (ret == MEMORY_E)
         return CKR_DEVICE_MEMORY;
     if (ret != 0)
@@ -3760,7 +3769,7 @@ CK_RV C_GenerateRandom(CK_SESSION_HANDLE hSession,
         return CKR_ARGUMENTS_BAD;
 
     slot = WP11_Session_GetSlot(session);
-    ret = WP11_Slot_GenerateRandom(slot, pRandomData, ulRandomLen);
+    ret = WP11_Slot_GenerateRandom(slot, pRandomData, (int)ulRandomLen);
     if (ret == MEMORY_E)
         return CKR_DEVICE_MEMORY;
     if (ret != 0)

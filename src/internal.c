@@ -64,18 +64,18 @@
 #define ASN_LONG_LENGTH                0x80
 
 /* Create a session handle from slot id and session id. */
-#define SESS_HANDLE(slot, s)           ((slot << 16) | s)
+#define SESS_HANDLE(slot, s)           (((slot) << 16) | (s))
 /* Determine slot id from session handle. */
-#define SESS_HANDLE_SLOT_ID(s)         (s >> 16)
+#define SESS_HANDLE_SLOT_ID(s)         ((CK_SLOT_ID)((s) >> 16))
 /* Determine session id from session handle. */
-#define SESS_HANDLE_SESS_ID(s)         (s & 0xffff)
+#define SESS_HANDLE_SESS_ID(s)         ((s) & 0xffff)
 
 /* Create an object handle from a onToken and object id. */
-#define OBJ_HANDLE(on, i)              ((on << 28) | i)
+#define OBJ_HANDLE(on, i)              (((on) << 28) | (i))
 /* Determine whether object is onToken from object handle. */
-#define OBJ_HANDLE_ON_TOKEN(h)         (h >> 28)
+#define OBJ_HANDLE_ON_TOKEN(h)         ((int)((h) >> 28))
 /* Determine object id from object handle. */
-#define OBJ_HANDLE_OBJ_ID(h)           (h & 0xfffffff)
+#define OBJ_HANDLE_OBJ_ID(h)           ((h) & 0xfffffff)
 
 #ifdef SINGLE_THREADED
 /* Disable locking. */
@@ -131,7 +131,7 @@ struct WP11_Object {
     WP11_Slot* slot;                   /* Slot object belongs to              */
 
     CK_OBJECT_HANDLE handle;           /* Handle of this object               */
-    int objClass;                      /* Object class                        */
+    CK_OBJECT_CLASS objClass;          /* Object class                        */
     CK_MECHANISM_TYPE keyGenMech;      /* Key Gen mechanism created with      */
     byte onToken:1;                    /* Object on token or session          */
     byte local:1;                      /* Locally created object              */
@@ -216,7 +216,7 @@ struct WP11_Session {
     unsigned char inUse;               /* Inidicates session has been opened  */
     CK_SESSION_HANDLE handle;          /* CryptoKi API session handle value   */
     CK_MECHANISM_TYPE mechanism;       /* Op that is being performed          */
-    int slotId;                        /* Id of slot that session is on       */
+    CK_SLOT_ID slotId;                 /* Id of slot that session is on       */
     WP11_Slot* slot;                   /* Slot that session is on             */
     WP11_Object* object;               /* Linked list of objects on session   */
     int objCnt;                        /* Count of objects in session         */
@@ -272,7 +272,7 @@ typedef struct WP11_Token {
 } WP11_Token;
 
 struct WP11_Slot {
-    int id;                            /* CryptoKi API slot id value          */
+    CK_SLOT_ID id;                     /* CryptoKi API slot id value          */
     WP11_Token token;                  /* Token information for slot          */
     WP11_Session* session;             /* Linked list of sessions             */
     WP11_Lock lock;                    /* Lock for access to slot info        */
@@ -455,7 +455,8 @@ static void Rng_Free(WC_RNG* rng)
  * @return  MEMORY_E when dynamic memory allocation fails.
  *          0 on success.
  */
-static int wp11_Session_New(WP11_Slot* slot, int handle, WP11_Session** session)
+static int wp11_Session_New(WP11_Slot* slot, CK_OBJECT_HANDLE handle,
+                            WP11_Session** session)
 {
     int ret = 0;
     WP11_Session* sess;
@@ -486,7 +487,7 @@ static int wp11_Session_New(WP11_Slot* slot, int handle, WP11_Session** session)
 static int wp11_Slot_AddSession(WP11_Slot* slot, WP11_Session** session)
 {
     int ret;
-    int handle;
+    CK_OBJECT_HANDLE handle;
 
     /* Calculate session handle value. */
     if (slot->session != NULL)
@@ -651,6 +652,7 @@ static int wp11_Slot_Init(WP11_Slot* slot, int id)
     int ret = 0;
     int i;
     WP11_Session* curr;
+    char label[LABEL_SZ] = { 0, };
 
     XMEMSET(slot, 0, sizeof(*slot));
     slot->id = id;
@@ -662,7 +664,7 @@ static int wp11_Slot_Init(WP11_Slot* slot, int id)
             ret = wp11_Slot_AddSession(slot, &curr);
 
         if (ret == 0) {
-            ret = wp11_Token_Init(&slot->token, "");
+            ret = wp11_Token_Init(&slot->token, label);
             slot->token.state = WP11_TOKEN_STATE_UNKNOWN;
         }
 
@@ -751,9 +753,9 @@ int WP11_Library_IsInitialized(void)
  * @return  0 when not valid.
  *          1 when is valid.
  */
-int WP11_SlotIdValid(int slotId)
+int WP11_SlotIdValid(CK_SLOT_ID slotId)
 {
-    return slotId > 0 && slotId <= slotCnt;
+    return slotId > 0 && slotId <= (CK_SLOT_ID)slotCnt;
 }
 
 /**
@@ -799,7 +801,7 @@ int WP11_GetSlotList(int tokenIn, CK_SLOT_ID* slotIdList, CK_ULONG* count)
  * @return  BAD_FUNC_ARG when the slot handle is not valid.
  *          0 on success.
  */
-int WP11_Slot_Get(int slotId, WP11_Slot** slot)
+int WP11_Slot_Get(CK_SLOT_ID slotId, WP11_Slot** slot)
 {
     int ret = 0;
 
@@ -1417,7 +1419,7 @@ int WP11_Slot_IsTokenUserPinInitialized(WP11_Slot* slot)
 int WP11_Session_Get(CK_SESSION_HANDLE sessionHandle, WP11_Session** session)
 {
     int ret = 0;
-    int slotHandle = SESS_HANDLE_SLOT_ID(sessionHandle);
+    CK_SLOT_ID slotHandle = SESS_HANDLE_SLOT_ID(sessionHandle);
     WP11_Slot* slot;
     WP11_Session *sess;
 
@@ -1546,7 +1548,8 @@ void WP11_Session_SetMechanism(WP11_Session* session,
  * @return  BAD_FUNC_ARG when the digest mechanism is not recognized.
  *          0 on success.
  */
-static int wp11_hash_type(int hashMech, enum wc_HashType *hashType)
+static int wp11_hash_type(CK_MECHANISM_TYPE hashMech,
+                          enum wc_HashType *hashType)
 {
     int ret = 0;
 
@@ -1582,7 +1585,7 @@ static int wp11_hash_type(int hashMech, enum wc_HashType *hashType)
  * @return  BAD_FUNC_ARG when the mask generation function id is not recognized.
  *          0 on success.
  */
-static int wp11_mgf(int mgfType, int *mgf)
+static int wp11_mgf(CK_MECHANISM_TYPE mgfType, int *mgf)
 {
     int ret = 0;
 
@@ -1625,8 +1628,8 @@ static int wp11_mgf(int mgfType, int *mgf)
  *          function id are not recognized.
  *          0 on succes.
  */
-int WP11_Session_SetOaepParams(WP11_Session* session, int hashAlg, int mgf,
-                               byte* label, int labelSz)
+int WP11_Session_SetOaepParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
+                               CK_MECHANISM_TYPE mgf, byte* label, int labelSz)
 {
     int ret;
     WP11_OaepParams* oaep = &session->params.oaep;
@@ -1665,8 +1668,8 @@ int WP11_Session_SetOaepParams(WP11_Session* session, int hashAlg, int mgf,
  *          function id are not recognized or salt length is too big.
  *          0 on succes.
  */
-int WP11_Session_SetPssParams(WP11_Session* session, int hashAlg, int mgf,
-                              int sLen)
+int WP11_Session_SetPssParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
+                              CK_MECHANISM_TYPE mgf, int sLen)
 {
     int ret;
     WP11_PssParams* pss = &session->params.pss;
@@ -1744,17 +1747,19 @@ int WP11_Session_SetGcmParams(WP11_Session* session, unsigned char* iv,
     if (tagBits > 128 || ivSz > WP11_MAX_GCM_NONCE_SZ)
         ret = BAD_FUNC_ARG;
 
-    XMEMSET(gcm, 0, sizeof(*gcm));
-    XMEMCPY(gcm->iv, iv, ivSz);
-    gcm->ivSz = ivSz;
-    gcm->tagBits = tagBits;
-    if (ret == 0 && aad != NULL) {
-        gcm->aad = XMALLOC(aadLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        if (gcm->aad == NULL)
-            ret = MEMORY_E;
-        if (ret == 0) {
-            XMEMCPY(gcm->aad, aad, aadLen);
-            gcm->aadSz = aadLen;
+    if (ret == 0) {
+        XMEMSET(gcm, 0, sizeof(*gcm));
+        XMEMCPY(gcm->iv, iv, ivSz);
+        gcm->ivSz = ivSz;
+        gcm->tagBits = tagBits;
+        if (aad != NULL) {
+            gcm->aad = XMALLOC(aadLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            if (gcm->aad == NULL)
+                ret = MEMORY_E;
+            if (ret == 0) {
+                XMEMCPY(gcm->aad, aad, aadLen);
+                gcm->aadSz = aadLen;
+            }
         }
     }
 
@@ -2164,24 +2169,24 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
     key = &object->data.rsaKey;
     ret = wc_InitRsaKey_ex(key, NULL, INVALID_DEVID);
     if (ret == 0) {
-        ret = SetMPI(&key->n, data[0], len[0]);
+        ret = SetMPI(&key->n, data[0], (int)len[0]);
         if (ret == 0)
-           ret = SetMPI(&key->d, data[1], len[1]);
+           ret = SetMPI(&key->d, data[1], (int)len[1]);
         if (ret == 0)
-           ret = SetMPI(&key->p, data[2], len[2]);
+           ret = SetMPI(&key->p, data[2], (int)len[2]);
         if (ret == 0)
-           ret = SetMPI(&key->q, data[3], len[3]);
+           ret = SetMPI(&key->q, data[3], (int)len[3]);
         if (ret == 0)
-           ret = SetMPI(&key->dP, data[4], len[4]);
+           ret = SetMPI(&key->dP, data[4], (int)len[4]);
         if (ret == 0)
-           ret = SetMPI(&key->dQ, data[5], len[5]);
+           ret = SetMPI(&key->dQ, data[5], (int)len[5]);
         if (ret == 0)
-           ret = SetMPI(&key->u, data[6], len[6]);
+           ret = SetMPI(&key->u, data[6], (int)len[6]);
         if (ret == 0)
-           ret = SetMPI(&key->e, data[7], len[7]);
+           ret = SetMPI(&key->e, data[7], (int)len[7]);
         if (ret == 0) {
            if (len[8] == sizeof(CK_ULONG))
-               object->size = *(CK_ULONG*)data[8];
+               object->size = (word32)*(CK_ULONG*)data[8];
            else if (len[8] != 0)
                ret = BUFFER_E;
         }
@@ -2300,17 +2305,17 @@ int WP11_Object_SetEcKey(WP11_Object* object, unsigned char** data,
     ret = wc_ecc_init_ex(key, NULL, INVALID_DEVID);
     if (ret == 0) {
         if (ret == 0 && data[0] != NULL)
-            ret = EcSetParams(key, data[0], len[0]);
+            ret = EcSetParams(key, data[0], (int)len[0]);
         if (ret == 0 && data[1] != NULL) {
             key->type = ECC_PRIVATEKEY_ONLY;
-            ret = SetMPI(&key->k, data[1], len[1]);
+            ret = SetMPI(&key->k, data[1], (int)len[1]);
         }
         if (ret == 0 && data[2] != NULL) {
             if (key->type == ECC_PRIVATEKEY_ONLY)
                 key->type = ECC_PRIVATEKEY;
             else
                 key->type = ECC_PUBLICKEY;
-            ret = EcSetPoint(key, data[2], len[2]);
+            ret = EcSetPoint(key, data[2], (int)len[2]);
         }
 
         if (ret != 0)
@@ -2349,13 +2354,14 @@ int WP11_Object_SetDhKey(WP11_Object* object, unsigned char** data,
     ret = wc_InitDhKey_ex(&key->params, NULL, INVALID_DEVID);
     if (ret == 0) {
         if (data[0] != NULL && data[1] != NULL)
-            ret = wc_DhSetKey(&key->params, data[0], len[0], data[1], len[1]);
+            ret = wc_DhSetKey(&key->params, data[0], (int)len[0], data[1],
+                                                                   (int)len[1]);
         if (ret == 0 && data[2] != NULL) {
             if (len[2] > (int)sizeof(key->key))
                 ret = BAD_FUNC_ARG;
             else {
                 XMEMCPY(key->key, data[2], len[2]);
-                key->len = len[2];
+                key->len = (word32)len[2];
             }
         }
 
@@ -2408,12 +2414,12 @@ int WP11_Object_SetSecretKey(WP11_Object* object, unsigned char** data,
     }
 #endif
     if (ret == 0 && data[0] != NULL)
-        key->len = *(CK_ULONG*)data[0];
+        key->len = (word32)*(CK_ULONG*)data[0];
 
     /* Second item is the key data. */
     if (ret == 0 && data[1] != NULL) {
         if (key->len == 0)
-            key->len = len[1];
+            key->len = (word32)len[1];
         else if (len[1] < (CK_ULONG)key->len)
             ret = BUFFER_E;
     }
@@ -2433,7 +2439,7 @@ int WP11_Object_SetSecretKey(WP11_Object* object, unsigned char** data,
  * @param  objClass  [in]  Object's class.
  * @return  0 on success.
  */
-int WP11_Object_SetClass(WP11_Object* object, int objClass)
+int WP11_Object_SetClass(WP11_Object* object, CK_OBJECT_CLASS objClass)
 {
     if (object->onToken)
         WP11_Lock_LockRW(object->lock);
@@ -3233,10 +3239,10 @@ int WP11_Object_SetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             WP11_Object_SetOpFlag(object, CKF_DERIVE, *(CK_BBOOL*)data);
             break;
         case CKA_ID:
-            ret = WP11_Object_SetKeyId(object, data, len);
+            ret = WP11_Object_SetKeyId(object, data, (int)len);
             break;
         case CKA_LABEL:
-            ret = WP11_Object_SetLabel(object, data, len);
+            ret = WP11_Object_SetLabel(object, data, (int)len);
             break;
         case CKA_PRIVATE:
             WP11_Object_SetFlag(object, WP11_FLAG_PRIVATE, *(CK_BBOOL*)data);
@@ -3271,10 +3277,10 @@ int WP11_Object_SetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             WP11_Object_SetFlag(object, WP11_FLAG_TRUSTED, *(CK_BBOOL*)data);
             break;
         case CKA_START_DATE:
-            ret = WP11_Object_SetStartDate(object, (char*)data, len);
+            ret = WP11_Object_SetStartDate(object, (char*)data, (int)len);
             break;
         case CKA_END_DATE:
-            ret = WP11_Object_SetEndDate(object, (char*)data, len);
+            ret = WP11_Object_SetEndDate(object, (char*)data, (int)len);
             break;
         case CKA_MODULUS_BITS:
         case CKA_MODULUS:
@@ -4813,7 +4819,7 @@ int WP11_AesGcm_DecryptFinal(unsigned char* dec, word32* decSz,
  * @return  BAD_FUNC_ARG when mechanism is not supported.
  *          0 on success.
  */
-static int wp11_hmac_hash_type(int hmacMech, int* hashType)
+static int wp11_hmac_hash_type(CK_MECHANISM_TYPE hmacMech, int* hashType)
 {
     int ret = 0;
 

@@ -1298,7 +1298,7 @@ static CK_RV test_attribute(void* args)
     byte retKeyData[1];
     CK_ULONG valueLen = 1;
     CK_BBOOL badBool = 2;
-    CK_DATE date = { 0, };
+    CK_DATE date = { { 0, }, { 0, }, { 0, } };
     CK_ATTRIBUTE tmpl[] = {
         { CKA_CLASS,             &privKeyClass,     sizeof(privKeyClass)      },
         { CKA_KEY_TYPE,          &genericKeyType,   sizeof(genericKeyType)    },
@@ -1598,7 +1598,7 @@ static CK_RV test_attribute_types(void* args)
 }
 
 static CK_RV get_generic_key(CK_SESSION_HANDLE session, unsigned char* data,
-                             int len, CK_BBOOL extractable,
+                             CK_ULONG len, CK_BBOOL extractable,
                              CK_OBJECT_HANDLE* key)
 {
     CK_RV ret;
@@ -3014,8 +3014,8 @@ static CK_RV test_attributes_rsa(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
-    CK_OBJECT_HANDLE pub;
-    CK_OBJECT_HANDLE priv;
+    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     unsigned char modulus[2048/8];
     unsigned char pubExp[3];
     unsigned char privExp[2048/8];
@@ -3063,7 +3063,6 @@ static CK_RV test_attributes_rsa(void* args)
         }
     }
     if (ret == CKR_OK) {
-        priv = CK_INVALID_HANDLE;
         ret = get_rsa_priv_key(session, NULL, 0, CK_FALSE, &priv);
     }
     if (ret == CKR_OK) {
@@ -3658,9 +3657,9 @@ static CK_RV test_rsa_fixed_keys_store_token(void* args)
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     unsigned char* privId = (unsigned char *)"123rsafixedpriv";
-    int privIdLen = strlen((char*)privId);
+    int privIdLen = (int)strlen((char*)privId);
     unsigned char* pubId = (unsigned char *)"123rsafixedpub";
-    int pubIdLen = strlen((char*)pubId);
+    int pubIdLen = (int)strlen((char*)pubId);
 
     ret = get_rsa_priv_key(session, privId, privIdLen, CK_FALSE, &priv);
     if (ret == CKR_OK)
@@ -3676,9 +3675,9 @@ static CK_RV test_rsa_token_keys_raw(void* args)
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     unsigned char* privId = (unsigned char *)"123rsafixedpriv";
-    int privIdLen = strlen((char*)privId);
+    int privIdLen = (int)strlen((char*)privId);
     unsigned char* pubId = (unsigned char *)"123rsafixedpub";
-    int pubIdLen = strlen((char*)pubId);
+    int pubIdLen = (int)strlen((char*)pubId);
 
     ret = find_rsa_priv_key(session, &priv, privId, privIdLen);
     if (ret == CKR_OK)
@@ -4092,7 +4091,7 @@ static CK_RV test_rsa_gen_keys_id(void* args)
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     unsigned char* id = (unsigned char *)"123rsa";
-    int idLen = strlen((char*)id);
+    int idLen = (int)strlen((char*)id);
 
     ret = gen_rsa_key(session, &pub, NULL, id, idLen);
     if (ret == CKR_OK)
@@ -4319,8 +4318,8 @@ static CK_RV test_attributes_ecc(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
-    CK_OBJECT_HANDLE pub;
-    CK_OBJECT_HANDLE priv;
+    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     unsigned char params[20];
     unsigned char point[80];
     unsigned char value[32];
@@ -4814,7 +4813,7 @@ static CK_RV test_ecc_gen_keys_id(void* args)
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     unsigned char* id = (unsigned char *)"123ecc";
-    int idLen = strlen((char*)id);
+    int idLen = (int)strlen((char*)id);
 
     ret = gen_ec_keys(session, ecc_p256_params, sizeof(ecc_p256_params), &pub,
                                                    NULL, id, idLen, NULL, 0, 0);
@@ -4835,9 +4834,9 @@ static CK_RV test_ecc_gen_keys_token(void* args)
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
     unsigned char* privId = (unsigned char *)"123eccprivtoken";
-    int privIdLen = strlen((char*)privId);
+    int privIdLen = (int)strlen((char*)privId);
     unsigned char* pubId = (unsigned char *)"123eccpubtoken";
-    int pubIdLen = strlen((char*)pubId);
+    int pubIdLen = (int)strlen((char*)pubId);
 
     ret = gen_ec_keys(session, ecc_p256_params, sizeof(ecc_p256_params), NULL,
                                    NULL, privId, privIdLen, pubId, pubIdLen, 1);
@@ -4852,9 +4851,9 @@ static CK_RV test_ecc_token_keys_ecdsa(void* args)
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     unsigned char* privId = (unsigned char *)"123eccprivtoken";
-    int privIdLen = strlen((char*)privId);
+    int privIdLen = (int)strlen((char*)privId);
     unsigned char* pubId = (unsigned char *)"123eccpubtoken";
-    int pubIdLen = strlen((char*)pubId);
+    int pubIdLen = (int)strlen((char*)pubId);
 
     ret = find_ecc_priv_key(session, &priv, privId, privIdLen);
     if (ret == CKR_OK)
@@ -5031,8 +5030,8 @@ static CK_RV test_attributes_dh(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
-    CK_OBJECT_HANDLE pub;
-    CK_OBJECT_HANDLE priv;
+    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     unsigned char prime[2048/8];
     unsigned char base[1];
     unsigned char pubValue[2048/8];
@@ -6052,7 +6051,7 @@ static CK_RV test_aes_gcm_fail(void* args)
     CK_RV ret;
     CK_OBJECT_HANDLE key;
     CK_OBJECT_HANDLE generic;
-    byte plain[32], enc[32], dec[32], iv[16];
+    byte plain[32], enc[48], dec[48], iv[12];
     CK_ULONG plainSz, encSz, decSz;
     CK_MECHANISM mech;
     CK_GCM_PARAMS gcmParams;
@@ -6863,9 +6862,12 @@ static CK_RV pkcs11_lib_init()
 static CK_RV pkcs11_init_token()
 {
     CK_RV ret;
+    unsigned char label[32];
 
-    ret = funcList->C_InitToken(slot, soPin, soPinLen,
-                                                    (unsigned char *)tokenName);
+    XMEMSET(label, ' ', sizeof(label));
+    XMEMCPY(label, tokenName, XSTRLEN(tokenName));
+
+    ret = funcList->C_InitToken(slot, soPin, soPinLen, label);
     CHECK_CKR(ret, "Init Token");
 
     return ret;
@@ -6881,7 +6883,7 @@ static void pkcs11_final(int closeDl)
 static CK_RV pkcs11_set_user_pin(int slotId)
 {
     CK_RV ret;
-    CK_SESSION_HANDLE session;
+    CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
     int flags = CKF_SERIAL_SESSION | CKF_RW_SESSION;
 
     ret = funcList->C_OpenSession(slotId, flags, NULL, NULL, &session);
@@ -7222,7 +7224,7 @@ int main(int argc, char* argv[])
                 return 1;
             }
             soPin = (byte*)*argv;
-            soPinLen = XSTRLEN((const char*)soPin);
+            soPinLen = (int)XSTRLEN((const char*)soPin);
         }
         else if (string_matches(*argv, "-userPin")) {
             argc--;
@@ -7268,7 +7270,7 @@ int main(int argc, char* argv[])
         argv++;
     }
 
-    userPinLen = XSTRLEN((const char*)userPin);
+    userPinLen = (int)XSTRLEN((const char*)userPin);
 
     rv = pkcs11_init(libName);
     if (rv == CKR_OK) {

@@ -553,12 +553,12 @@ CK_RV C_InitToken(CK_SLOT_ID slotID, CK_UTF8CHAR_PTR pPin,
     if (WP11_Slot_IsTokenInitialized(slot)) {
         if (WP11_Slot_HasSession(slot))
             return CKR_SESSION_EXISTS;
-        ret = WP11_Slot_CheckSOPin(slot, (char*)pPin, ulPinLen);
+        ret = WP11_Slot_CheckSOPin(slot, (char*)pPin, (int)ulPinLen);
         if (ret != 0)
             return CKR_PIN_INCORRECT;
     }
 
-    ret = WP11_Slot_TokenReset(slot, (char*)pPin, ulPinLen, (char*)pLabel);
+    ret = WP11_Slot_TokenReset(slot, (char*)pPin, (int)ulPinLen, (char*)pLabel);
     if (ret != 0)
         return CKR_FUNCTION_FAILED;
 
@@ -599,7 +599,7 @@ CK_RV C_InitPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pPin,
         return CKR_PIN_INCORRECT;
 
     slot = WP11_Session_GetSlot(session);
-    ret = WP11_Slot_SetUserPin(slot, (char*)pPin, ulPinLen);
+    ret = WP11_Slot_SetUserPin(slot, (char*)pPin, (int)ulPinLen);
     if (ret != 0)
         return CKR_FUNCTION_FAILED;
 
@@ -652,24 +652,24 @@ CK_RV C_SetPIN(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pOldPin,
 
     slot = WP11_Session_GetSlot(session);
     if (state == WP11_APP_STATE_RW_SO) {
-        ret = WP11_Slot_CheckSOPin(slot, (char*)pOldPin, ulOldLen);
+        ret = WP11_Slot_CheckSOPin(slot, (char*)pOldPin, (int)ulOldLen);
         if (ret == PIN_NOT_SET_E)
             return CKR_USER_PIN_NOT_INITIALIZED;
         if (ret != 0)
             return CKR_PIN_INCORRECT;
 
-        ret = WP11_Slot_SetSOPin(slot, (char*)pNewPin, ulNewLen);
+        ret = WP11_Slot_SetSOPin(slot, (char*)pNewPin, (int)ulNewLen);
         if (ret != 0)
             return CKR_FUNCTION_FAILED;
     }
     else {
-        ret = WP11_Slot_CheckUserPin(slot, (char*)pOldPin, ulOldLen);
+        ret = WP11_Slot_CheckUserPin(slot, (char*)pOldPin, (int)ulOldLen);
         if (ret == PIN_NOT_SET_E)
             return CKR_USER_PIN_NOT_INITIALIZED;
         if (ret != 0)
             return CKR_PIN_INCORRECT;
 
-        ret = WP11_Slot_SetUserPin(slot, (char*)pNewPin, ulNewLen);
+        ret = WP11_Slot_SetUserPin(slot, (char*)pNewPin, (int)ulNewLen);
         if (ret != 0)
             return CKR_FUNCTION_FAILED;
     }
@@ -908,7 +908,7 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
 
     slot = WP11_Session_GetSlot(session);
     if (userType == CKU_SO) {
-        ret = WP11_Slot_SOLogin(slot, (char*)pPin, ulPinLen);
+        ret = WP11_Slot_SOLogin(slot, (char*)pPin, (int)ulPinLen);
         if (ret == LOGGED_IN_E)
             return CKR_USER_ALREADY_LOGGED_IN;
         if (ret == READ_ONLY_E)
@@ -920,7 +920,7 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
 
     }
     else if (userType == CKU_USER) {
-        ret = WP11_Slot_UserLogin(slot, (char*)pPin, ulPinLen);
+        ret = WP11_Slot_UserLogin(slot, (char*)pPin, (int)ulPinLen);
         if (ret == LOGGED_IN_E)
             return CKR_USER_ALREADY_LOGGED_IN;
         if (ret == PIN_NOT_SET_E)

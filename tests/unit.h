@@ -215,6 +215,7 @@ static int UnlockRO()
 static void* run_test(void* args)
 {
     int ret;
+    CK_RV rv;
     TEST_FUNC* tf = (TEST_FUNC*)args;
     void* testArgs;
 
@@ -225,12 +226,12 @@ static void* run_test(void* args)
             fprintf(stderr, "Locking failed\n");
         else {
             tf->cnt = 0;
-            ret = tf->setup(tf->flags, testArgs);
-            if (ret != CKR_OK)
+            rv = tf->setup(tf->flags, testArgs);
+            if (rv != CKR_OK)
                 fprintf(stderr, "Setup failed\n");
-            if (ret == CKR_OK) {
-                while (ret == CKR_OK && !stop) {
-                    ret = tf->ret = tf->func(testArgs);
+            if (rv == CKR_OK) {
+                while (rv == CKR_OK && !stop) {
+                    rv = tf->ret = tf->func(testArgs);
                     tf->cnt++;
                 }
                 tf->teardown(tf->flags, testArgs);
