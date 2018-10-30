@@ -145,6 +145,7 @@ int main(int argc, char *argv[])
     hdr->ih_hdr_size = IMAGE_FIRMWARE_OFFSET;
     hdr->ih_img_size = st.st_size;
     hdr->ih_ver.iv_major = version;
+    hdr->ih_ver.iv_build_num = (uint32_t)(st.st_mtime);
 
     /* Sha256 */
     wc_Sha256Update(&sha, (uint8_t *)hdr, IMAGE_FIRMWARE_OFFSET);

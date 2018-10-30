@@ -772,3 +772,9 @@ uint8_t flash_area_erased_val(const struct flash_area *fap)
     (void)fap;
     return 0xff;
 }
+
+uint32_t flash_area_get_image_buildnum(const struct flash_area *fap)
+{
+    struct image_header *hdr = (struct image_header *)(fap->fa_off);
+    return hdr->ih_ver.iv_build_num;
+}

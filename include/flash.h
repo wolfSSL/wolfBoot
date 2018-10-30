@@ -130,4 +130,7 @@ int flash_area_get_sectors(int fa_id, uint32_t *count,
 int flash_area_id_from_image_slot(int slot);
 int flash_area_id_to_image_slot(int area_id);
 
+/* Get the build number of the image stored at the begining of the given flash area */
+uint32_t flash_area_get_image_buildnum(const struct flash_area *fap);
+
 #endif /* H_UTIL_FLASH_MAP_ */
