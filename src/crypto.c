@@ -24,9 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <bootutil.h>
-#include <bootutil/sign_key.h>
-#include <bootutil/image.h>
+#include <loader.h>
 #include <wolfssl/ssl.h>
 
 #if defined BOOT_SIGN_RSA

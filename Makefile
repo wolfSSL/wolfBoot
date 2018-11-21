@@ -17,14 +17,11 @@ LSCRIPT:=hal/$(TARGET).ld
 
 OBJS:= \
 ./hal/$(TARGET).o \
-./lib/bootutil/src/loader.o \
-./lib/bootutil/src/image_validate.o \
-./lib/bootutil/src/bootutil_misc.o \
+./src/loader.o \
 ./src/mem.o \
-./src/keys.o \
 ./src/crypto.o \
 ./src/wolfboot.o \
-./src/main.o \
+./src/image.o \
 ./lib/wolfssl/wolfcrypt/src/sha256.o \
 ./lib/wolfssl/wolfcrypt/src/hash.o \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -41,12 +38,12 @@ ifeq ($(SIGN),ED25519)
 	./lib/wolfssl/wolfcrypt/src/ed25519.o \
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
     ./src/ed25519_pub_key.o
-  CFLAGS+=-DBOOT_SIGN_ED25519
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519
 endif
 
 ifeq ($(SIGN),EC256)
   OBJS+= ./ext/wolfssl/wolfcrypt/src/ecc.o
-  CFLAGS+=-DBOOT_SIGN_EC256
+  CFLAGS+=-DWOLFBOOT_SIGN_EC256
 endif
 
 ifeq ($(DEBUG),1)

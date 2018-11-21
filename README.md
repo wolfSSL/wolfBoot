@@ -2,8 +2,7 @@
 wolfSSL Secure Bootloader
 
 wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers, 
-relying on wolfCrypt for firmware authentication, and a modified version of 
-[mcuboot](https://www.mcuboot.com/)'s *bootutil* library to implement firmware upgrade mechanisms.
+relying on wolfCrypt for firmware authentication, providing firmware upgrade mechanisms.
 
 Due to the minimalist design of the bootloader and the tiny HAL API, wolfBoot is completely independent
 from any OS or bare-metal application, and can be easily ported and integrated in existing embedded software
@@ -32,8 +31,9 @@ with no dynamic memory allocation mechanism or linkage to any standard C library
 
 The core application depends on the following libraries:
    - wolfCrypt, which is used to verify the Ed25519 signature of the images
-   - A modified version of mcuboot's bootutil, to handle the firmware image slots and the upgrade state-machine
    - A minimalist Hardware Abstraction Layer, with an implementation provided for the supported target, which is in charge for IAP flash access and clock setting on the specific MCU
+   - The core bootloader
+   - A small application library to interact with the bootloader
 
 The goal of this application is to perform  image verification and/or requested firmware upgrade tasks 
 before chain-loading the actual firmware from a specific location in flash.

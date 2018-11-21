@@ -4,7 +4,7 @@ In order to run wolfBoot on a target microcontroller, an implementation of the H
 must be provided.
 
 The HAL only purposes are allowing write/erase operations from the bootloader
-and the application initiating the firmware upgrade through the bootutil library, and
+and the application initiating the firmware upgrade through the application library, and
 ensuring that the MCU is running at full speed during boot, to optimize the
 verification of the signatures.
 
