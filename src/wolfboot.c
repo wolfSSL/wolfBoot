@@ -1,4 +1,4 @@
-/* startup_bl.c
+/* wolfboot.c
  *
  * Copyright (C) 2018 wolfSSL Inc.
  *
@@ -28,7 +28,8 @@ extern unsigned int _end_bss;
 
 extern uint32_t *END_STACK;
 
-void main(void);
+extern void main(void);
+
 void isr_reset(void) {
     unsigned int *src, *dst;
 

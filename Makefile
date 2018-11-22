@@ -88,7 +88,6 @@ tools/ed25519/ed25519_sign:
 ed25519.der: tools/ed25519/ed25519_sign
 	tools/ed25519/ed25519_keygen src/ed25519_pub_key.c
 
-
 factory.bin: $(BOOT_IMG) wolfboot-align.bin tools/ed25519/ed25519_sign ed25519.der
 	tools/ed25519/ed25519_sign $(BOOT_IMG) ed25519.der 1
 	cat wolfboot-align.bin $(BOOT_IMG).v1.signed > $@
