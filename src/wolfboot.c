@@ -20,6 +20,7 @@
  */
 #include <loader.h>
 #include <stdint.h>
+#include <wolfboot/wolfboot.h>
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;

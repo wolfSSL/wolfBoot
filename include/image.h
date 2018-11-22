@@ -4,10 +4,6 @@
 #include <target.h>
 #include <wolfboot/wolfboot.h>
 
-#define IMG_STATE_NEW 0xFF
-#define IMG_STATE_UPDATING 0x70
-#define IMG_STATE_TESTING 0x10
-#define IMG_STATE_SUCCESS 0x00
 
 #define SECT_FLAG_NEW 0x0F
 #define SECT_FLAG_SWAPPING 0x07

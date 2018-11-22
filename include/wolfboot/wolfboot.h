@@ -21,6 +21,11 @@
 #define PART_UPDATE 1
 #define PART_SWAP   2
 
+#define IMG_STATE_NEW 0xFF
+#define IMG_STATE_UPDATING 0x70
+#define IMG_STATE_TESTING 0x10
+#define IMG_STATE_SUCCESS 0x00
+
 void wolfBoot_erase_partition(uint8_t part);
 void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);

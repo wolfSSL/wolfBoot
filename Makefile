@@ -22,6 +22,7 @@ OBJS:= \
 ./src/crypto.o \
 ./src/wolfboot.o \
 ./src/image.o \
+./src/libwolfboot.o \
 ./lib/wolfssl/wolfcrypt/src/sha256.o \
 ./lib/wolfssl/wolfcrypt/src/hash.o \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
