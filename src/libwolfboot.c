@@ -93,8 +93,6 @@ int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag)
     uint8_t *trailer_end = get_trailer(part);
     uint32_t *magic;
     uint8_t *flags;
-    uint8_t fl_value;
-    uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
     uint8_t pos = sector >> 1;
     if (!trailer_end)
         return -1;
