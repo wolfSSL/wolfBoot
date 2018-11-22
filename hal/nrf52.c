@@ -54,14 +54,46 @@ static void flash_wait_complete(void)
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
-    int words = (len + 3) / 4;
-    uint32_t *src = (uint32_t *)data;
-    uint32_t *dst = (uint32_t *)address;
-    for (i = 0; i < words; i ++) {
+    uint8_t off = address & 0x03;
+    int words, align;
+
+    if (off != 0) {
+        uint32_t first = *((uint32_t *)(address - off));
+        uint8_t *firstbytes = (uint8_t *)(&first);
+        for (i = 0; i < 4 - off; i++) {
+            firstbytes[i + off] = data[i];
+        }
         NVMC_CONFIG = NVMC_CONFIG_WEN;
         flash_wait_complete();
-        dst[i] = src[i];
+        *((uint32_t *)(address - off)) = first;
         flash_wait_complete();
+        address += 4 - off;
+        data += off;
+    }
+    if (len > 3) {
+        uint32_t *src = (uint32_t *)data;
+        uint32_t *dst = (uint32_t *)address;
+        len -= off;
+        words = len / 4;
+        align = words * 4;
+        for (i = 0; i < words; i ++) {
+            NVMC_CONFIG = NVMC_CONFIG_WEN;
+            flash_wait_complete();
+            dst[i] = src[i];
+            flash_wait_complete();
+        }
+        if (len > align) {
+            uint32_t last = dst[words];
+            uint8_t *lastbytes = (uint8_t *)(&last);
+            for (i = off; i < 4; i++) {
+                if (i < len - align)
+                    lastbytes[3 - i] = data[align + i];
+            }
+            NVMC_CONFIG = NVMC_CONFIG_WEN;
+            flash_wait_complete();
+            dst[words] = last;
+            flash_wait_complete();
+        }
     }
     return 0;
 }

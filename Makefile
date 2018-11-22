@@ -57,11 +57,6 @@ ifeq ($(VTOR),0)
     CFLAGS+=-DNO_VTOR
 endif
 
-ifeq ($(SWAP),0)
-    CFLAGS+=-DWOLFBOOT_OVERWRITE_ONLY
-endif
-
-
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb -nostdlib
 
 all: factory.bin
