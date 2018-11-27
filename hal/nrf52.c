@@ -68,12 +68,12 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
         *((uint32_t *)(address - off)) = first;
         flash_wait_complete();
         address += 4 - off;
-        data += off;
+        data += 4 - off;
+        len -= 4 - off;
     }
     if (len > 3) {
         uint32_t *src = (uint32_t *)data;
         uint32_t *dst = (uint32_t *)address;
-        len -= off;
         words = len / 4;
         align = words * 4;
         for (i = 0; i < words; i ++) {

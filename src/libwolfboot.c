@@ -63,7 +63,7 @@ int wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag)
     magic = (uint32_t *)(trailer_end - sizeof(uint32_t));
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
         hal_flash_write((uint32_t)magic, (void *)&wolfboot_magic_trail, sizeof(uint32_t));
-    flags = (trailer_end - sizeof(uint32_t)) - pos;
+    flags = (trailer_end - sizeof(uint32_t)) - (2 + pos);
     if (sector == (pos << 1))
         fl_value = (*flags & 0xF0) | (newflag & 0x0F);
     else
@@ -78,7 +78,7 @@ int wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     uint8_t *trailer_end = get_trailer(part);
     uint32_t *magic;
     uint8_t *state;
-    if (trailer_end)
+    if (!trailer_end)
         return -1;
     magic = (uint32_t *)(trailer_end - sizeof(uint32_t));
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
@@ -99,7 +99,7 @@ int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag)
     magic = (uint32_t *)(trailer_end - sizeof(uint32_t));
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
         return -1;
-    flags = (trailer_end - sizeof(uint32_t)) - pos;
+    flags = (trailer_end - sizeof(uint32_t)) - (2 + pos);
     if (sector == (pos << 1))
         *flag = *flags & 0x0F;
     else

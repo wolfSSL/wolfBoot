@@ -32,8 +32,8 @@ static int wolfBoot_update(void)
     uint32_t sector = 0;
     uint8_t flag, st;
     struct wolfBoot_image update;
-    
-    if ((wolfBoot_open_image(&update, PART_BOOT) < 0) ||
+
+    if ((wolfBoot_open_image(&update, PART_UPDATE) < 0) ||
             (wolfBoot_verify_integrity(&update) < 0)  ||
             (wolfBoot_verify_authenticity(&update) < 0)) {
         return -1;
@@ -50,7 +50,7 @@ static int wolfBoot_update(void)
                    WOLFBOOT_PARTITION_SWAP_ADDRESS,
                    WOLFBOOT_SECTOR_SIZE);
            wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
-        } 
+        }
         if (flag == SECT_FLAG_SWAPPING) {
             uint32_t size = total_size - (sector * sector_size);
             if (size > sector_size)
@@ -95,6 +95,12 @@ static void wolfBoot_start(void)
 {
     uint8_t st;
     struct wolfBoot_image boot;
+    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
+        wolfBoot_update();
+    } else if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
+        wolfBoot_update_trigger();
+        wolfBoot_update();
+    }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
             (wolfBoot_verify_integrity(&boot) < 0)  ||
             (wolfBoot_verify_authenticity(&boot) < 0)) {
@@ -102,12 +108,6 @@ static void wolfBoot_start(void)
             while(1)
                 /* panic */;
         }
-    }
-    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
-        wolfBoot_update();
-    } else if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
-        wolfBoot_update_trigger();
-        wolfBoot_update();
     }
     do_boot((void *)boot.fw_base);
 }
