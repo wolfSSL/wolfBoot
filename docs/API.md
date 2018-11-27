@@ -32,21 +32,25 @@ and
   - `wolfBoot_update()` is used to trigger an update upon the next reboot, and it is normally used by
 an update application that has retrieved a new version of the running firmware, and has
 stored it in the UPDATE partition on the flash. This function will set the state of the UPDATE partition 
-to `ST_UPDATE`, instructing the bootloader to perform the update upon the next execution (after reboot).
+to `STATE_UPDATING`, instructing the bootloader to perform the update upon the next execution (after reboot).
 
 wolfBoot update process consist in swapping the content of the UPDATE and the BOOT partitions, using a temporary
 single-block SWAP space.
 
+### Confirm current image
+
 - `wolfBoot_success()` indicates a successful boot of a new firmware. This can be called by the application
 at any time, but it will only be effective to mark the current firmware (in the BOOT partition) with the state
-`ST_SUCCESS`, indicating that no roll-back is required. An application should typically call `wolfBoot_success()`
+`STATE_SUCCESS`, indicating that no roll-back is required. An application should typically call `wolfBoot_success()`
 only after verifying that the basic system features are up and running, including the possibility to retrieve
 a new firmware for the next upgrade.
 
-If after an upgrade wolfBoot detects that the active firmware is still in `ST_TESTING` state, it means that
+If after an upgrade wolfBoot detects that the active firmware is still in `STATE_TESTING` state, it means that
 a successful boot has not been confirmed for the application, and will attempt to revert the update by swapping 
 the two images again.
 
 For more information about the update process, see [Firmware Update](firmware_update.md)
+
+For the image format, see [Firmware Image](firmware_image.md)
 
 
