@@ -9,7 +9,7 @@ ensuring that the MCU is running at full speed during boot, to optimize the
 verification of the signatures.
 
 The implementation of the hardware-specific calls for each platform are grouped in 
-a single c file in the [hal](hal) directory.
+a single c file in the [hal](../hal) directory.
 
 The directory also contains a platform-specific linker script for each supported MCU,  
 with the same name and  the `.ld` extension. This is used to link the bootloader's 

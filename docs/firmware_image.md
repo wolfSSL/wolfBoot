@@ -6,8 +6,8 @@ WolfBoot can only chain-load and execute firmware images from a specific entry p
 which must be specified as the origin of the FLASH memory in the linker script of the embedded
 application. This correspond to the first partition in the flash memory.
 
-Multiple firmware images can be created this way, and stored in different partitions. The bootloader
-will take care of moving the selected firmware to the first boot partition before chain-loading the image.
+Multiple firmware images can be created this way, and stored in two different partitions. The bootloader
+will take care of moving the selected firmware to the first (BOOT) partition before chain-loading the image.
 
 Due to the presence of an image header, the entry point of the application has a fixed additional offset 
 of 256B from the beginning of the flash partition.
@@ -24,24 +24,48 @@ chain-loading the firmware the interrupt continue to work properly after the boo
 
 *The image header is stored at the beginning of the slot and the actual firmware image starts 256 Bytes after it*
 
+### Image header: Tags
 
-## Firmware trailer
+The **image header** is prepended with a single 4-byte magic number, followed by a 4-byte field indicating the 
+firmware image (excluding the header). All numbers in the header are stored in Little-endian format.
 
-At the end of the actual firmware image, the signing tool stores three trailer "TLV" (type-length-value) records,
-respectively containing:
-    - A hash digest of the firmware, including its firmware header, obtained using SHA-256
-    - A hash digest of the public key that can be used by the bootloader to verify the authenticity of the firmware. The key must already be stored with the bootloader, and this field is only used as sanity check.
-    - The signature obtained by signing the hash digest of the firmware with the factory private key
+The two fixed fields are followed by one or more tags. Each TAG is structured as follows:
 
-These three fields are required by the bootloader to verify the integrity and the origin of the firmware image.
+  - 1 Byte indicating the **Type**
+  - 1 Byte indicating the **size** of the tag, excluding the type and size bytes
+  - ***N*** bytes of tag content
 
-![Image trailers](png/image_tlv.png)
+With the following two exception:
+  - A '0' in the Type field indicate the end of the Tag. The rest of the header carries no more Tags. The 'end of tags' type has no **size** field.
+  - A '0xFF' in the Type field indicate a simple padding byte. The 'padding' byte has no **size** field, and the next byte should be processed as **Type** again.
 
-*The trailer of a signed firmware contains a TLV header and three TLV records that are used by the bootloader to verify the image*
+Each **Type** has a different meaning, and integrate information about the firmware. The following Tags are mandatory for validating the firmware image:
 
-## Image signing tool
+  - A 'version' Tag (type: 0x01, size: 4 Bytes) indicating the version number for the firmware stored in the image
+  - A 'timestamp' Tag (type: 0x02, size 8 Bytes) indicating the timestamp in unix seconds for the creation of the firmware
+  - A 'sha256 digest' Tag (type: 0x03, size: 32 Bytes) used for integrity check of the firmware
+  - A 'firmware signature' Tag (type: 0x20, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
 
-The image signing tool generates the header and trailers for the compiled image, and add them to the output file that can be then
-stored on the primary slot on the device.
+Optionally, a 'public key hint digest' Tag can be transmitted in the header (type: 0x10, size:32 Bytes). This Tag contains the SHA256 digest of the public key used 
+by the signing tool. The bootloader may use this field to locate the correct public key in case of multiple keys available.
+
+wolfBoot will, in all cases, refuse to boot an image that cannot be verified and authenticated using the built-in digital signature authentication mechanism.
+
+
+### Image signing tool
+
+The image signing tool generates the header with all the required Tags for the compiled image, and add them to the output file that can be then
+stored on the primary slot on the device, or transmitted later to the device through a secure channel to initiate an update.
+
+### Storing firmware image
+
+Firmware images are stored with their full header at the beginning of any of the partitions on the system.
+wolfBoot can only boot images from the BOOT partition, while keeping a second firmware image in the UPDATE partition.
+
+In order to boot a different image, wolfBoot will have to swap the content of the two images.
+
+For more information on how firmware images are stored and managed within the two partitions, see [Flash partitions](flash_partitions.md)
+
+
 
 
