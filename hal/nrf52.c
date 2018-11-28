@@ -53,46 +53,30 @@ static void flash_wait_complete(void)
 
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int i;
-    uint8_t off = address & 0x03;
-    int words, align;
+    int i = 0;
+    uint32_t *src, *dst;
 
-    if (off != 0) {
-        uint32_t first = *((uint32_t *)(address - off));
-        uint8_t *firstbytes = (uint8_t *)(&first);
-        for (i = 0; i < 4 - off; i++) {
-            firstbytes[i + off] = data[i];
-        }
-        NVMC_CONFIG = NVMC_CONFIG_WEN;
-        flash_wait_complete();
-        *((uint32_t *)(address - off)) = first;
-        flash_wait_complete();
-        address += 4 - off;
-        data += 4 - off;
-        len -= 4 - off;
-    }
-    if (len > 3) {
-        uint32_t *src = (uint32_t *)data;
-        uint32_t *dst = (uint32_t *)address;
-        words = len / 4;
-        align = words * 4;
-        for (i = 0; i < words; i ++) {
+    while (i < len) {
+        if ((len - i > 3) && ((((address + i) & 0x03) == 0)  && ((((uint32_t)data) + i) & 0x03) == 0)) {
+            src = (uint32_t *)data;
+            dst = (uint32_t *)address;
             NVMC_CONFIG = NVMC_CONFIG_WEN;
             flash_wait_complete();
-            dst[i] = src[i];
+            dst[i >> 2] = src[i >> 2];
             flash_wait_complete();
-        }
-        if (len > align) {
-            uint32_t last = dst[words];
-            uint8_t *lastbytes = (uint8_t *)(&last);
-            for (i = off; i < 4; i++) {
-                if (i < len - align)
-                    lastbytes[3 - i] = data[align + i];
-            }
+            i+=4;
+        } else {
+            uint32_t val;
+            uint8_t *vbytes = (uint8_t *)(&val);
+            int off = (address + i) - (((address + i) >> 2) << 2);
+            dst = (uint32_t *)(address - off);
+            val = dst[i >> 2];
+            vbytes[off] = data[i];
             NVMC_CONFIG = NVMC_CONFIG_WEN;
             flash_wait_complete();
-            dst[words] = last;
+            dst[i >> 2] = val;
             flash_wait_complete();
+            i++;
         }
     }
     return 0;
@@ -109,7 +93,7 @@ void hal_flash_lock(void)
 
 int hal_flash_erase(uint32_t address, int len)
 {
-    uint32_t end = address + len;
+    uint32_t end = address + len - 1;
     uint32_t p;
     for (p = address; p <= end; p += FLASH_PAGE_SIZE) {
         NVMC_CONFIG = NVMC_CONFIG_EEN;

@@ -27,21 +27,40 @@ extern void do_boot(const uint32_t *app_offset);
 
 static int wolfBoot_update(void)
 {
-    uint32_t total_size;
+    uint32_t total_size = 0;
     uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
     uint8_t flag, st;
-    struct wolfBoot_image update;
+    struct wolfBoot_image boot, update;
 
-    if ((wolfBoot_open_image(&update, PART_UPDATE) < 0) ||
-            (wolfBoot_verify_integrity(&update) < 0)  ||
-            (wolfBoot_verify_authenticity(&update) < 0)) {
+    /* Use biggest size for the swap */
+    if ((wolfBoot_open_image(&update, PART_UPDATE) == 0) && (update.fw_size + IMAGE_HEADER_SIZE) > total_size)
+            total_size = update.fw_size + IMAGE_HEADER_SIZE;
+    if ((wolfBoot_open_image(&boot, PART_BOOT) == 0) && (boot.fw_size + IMAGE_HEADER_SIZE) > total_size)
+            total_size = boot.fw_size + IMAGE_HEADER_SIZE;
+
+    if (total_size < IMAGE_HEADER_SIZE)
         return -1;
+
+    /* Check the first sector to detect interrupted update */
+    if ((wolfBoot_get_sector_flag(PART_UPDATE, 0, &flag) < 0) || (flag == SECT_FLAG_NEW))
+    {
+        /* In case this is a new update, check 
+         * integrity/authenticity of the firmware update 
+         * before starting the swap
+         */
+        if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)  
+                || (wolfBoot_verify_authenticity(&update) < 0)) {
+            return -1;
+        }
     }
 
-    total_size = update.fw_size + IMAGE_HEADER_SIZE;
     hal_flash_unlock();
 
+    /* Interruptible swap
+     * The status is saved in the sector flags of the update partition.
+     * If something goes wrong, the operation will be resumed upon reboot.
+     */
     while ((sector * sector_size) < total_size) {
         if ((wolfBoot_get_sector_flag(PART_UPDATE, sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
@@ -94,12 +113,16 @@ static int wolfBoot_update(void)
 static void wolfBoot_start(void)
 {
     uint8_t st;
-    struct wolfBoot_image boot;
+    struct wolfBoot_image boot, update;
     if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
         wolfBoot_update();
     } else if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
         wolfBoot_update_trigger();
-        wolfBoot_update();
+        if ((wolfBoot_open_image(&update, PART_UPDATE) < 0) ||
+                (wolfBoot_verify_integrity(&update) < 0)  ||
+                (wolfBoot_verify_authenticity(&update) < 0)) {
+            wolfBoot_update();
+        }
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
             (wolfBoot_verify_integrity(&boot) < 0)  ||
