@@ -118,11 +118,7 @@ static void wolfBoot_start(void)
         wolfBoot_update();
     } else if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
         wolfBoot_update_trigger();
-        if ((wolfBoot_open_image(&update, PART_UPDATE) < 0) ||
-                (wolfBoot_verify_integrity(&update) < 0)  ||
-                (wolfBoot_verify_authenticity(&update) < 0)) {
-            wolfBoot_update();
-        }
+        wolfBoot_update();
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
             (wolfBoot_verify_integrity(&boot) < 0)  ||
