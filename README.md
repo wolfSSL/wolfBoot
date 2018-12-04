@@ -77,3 +77,7 @@ For more detailed information about the firmware image format, see [Firmware ima
 
 For more detailed information about firmware update implementation, see [Firmware Update](docs/firmware_update.md)
 
+## Release Notes
+
+### v1.0 (2018-12-04)
+ * Initial release with fail-safe update, HAL support for STM32 and nRF52 
