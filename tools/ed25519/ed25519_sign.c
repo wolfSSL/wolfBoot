@@ -25,12 +25,13 @@
 #include <wolfssl/wolfcrypt/ed25519.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
-#include <bootutil/image.h>
 #include <sys/stat.h>    
+
+#define WOLFBOOT_SIGN_ED25519
+
 #include "target.h"
-
-#define IMAGE_FIRMWARE_OFFSET 256
-
+#include "image.h"
+#include "loader.h"
 
 void print_buf(uint8_t *buf, int len)
 {
@@ -70,16 +71,12 @@ int main(int argc, char *argv[])
     uint8_t signature[ED25519_SIG_SIZE];
     uint8_t *final;
     int total_size;
-    struct image_header *hdr;
-    uint8_t header_buffer[IMAGE_FIRMWARE_OFFSET];
-    struct image_tlv_info info;
-    struct image_tlv tlv;
+    uint8_t hdr[IMAGE_HEADER_SIZE];
+    uint8_t *ptr = hdr;
     struct stat st;
     int version;
     int padsize = 0;
     int i;
-
-    hdr = (struct image_header *)header_buffer;
 
     if (argc != 4 && argc!=5) {
         fprintf(stderr, "Usage: %s image key.der fw_version [padsize]\n", argv[0]);
@@ -111,6 +108,7 @@ int main(int argc, char *argv[])
         perror(signed_name);
         exit(2);
     }
+
     key_fd = open(argv[2], O_RDONLY);
     if (key_fd < 0)  {
         perror(argv[2]);
@@ -139,16 +137,27 @@ int main(int argc, char *argv[])
         perror(in_name);
         exit(2);
     }
-    memset(hdr, 0x00, IMAGE_FIRMWARE_OFFSET);
-    hdr->ih_magic = IMAGE_MAGIC; 
-    hdr->ih_load_addr = FLASH_AREA_IMAGE_0_OFFSET + IMAGE_FIRMWARE_OFFSET;
-    hdr->ih_hdr_size = IMAGE_FIRMWARE_OFFSET;
-    hdr->ih_img_size = st.st_size;
-    hdr->ih_ver.iv_major = version;
-    hdr->ih_ver.iv_build_num = (uint32_t)(st.st_mtime);
+    memset(hdr, 0xFF, IMAGE_HEADER_SIZE);
+    *((uint32_t *)ptr) = WOLFBOOT_MAGIC;
+    ptr += (sizeof(uint32_t));
+    *((uint32_t *)(ptr)) = st.st_size;
+    ptr += (sizeof(uint32_t));
+
+    ptr += (sizeof(uint16_t));
+    *(ptr++) = HDR_VERSION;
+    *(ptr++) = 4;
+    *((uint32_t *)(ptr)) = version;
+    ptr += (sizeof(uint32_t));
+    
+    ptr += (sizeof(uint16_t) + sizeof(uint32_t));
+    *(ptr++) = HDR_TIMESTAMP;
+    *(ptr++) = 8;
+    *((uint64_t *)(ptr)) = st.st_mtime;
+    ptr += sizeof(uint64_t);
+     
 
     /* Sha256 */
-    wc_Sha256Update(&sha, (uint8_t *)hdr, IMAGE_FIRMWARE_OFFSET);
+    wc_Sha256Update(&sha, hdr, ptr - hdr);
     while(1) {
         r = read(in_fd, shabuf, 32);
         if (r <= 0)
@@ -161,8 +170,32 @@ int main(int argc, char *argv[])
     wc_ed25519_sign_msg(shabuf, 32, signature, &outlen, &key);
     wc_Sha256Free(&sha);
     
+
+    *(ptr++) = HDR_SHA256;
+    *(ptr++) = SHA256_DIGEST_SIZE;
+    memcpy(ptr, shabuf, SHA256_DIGEST_SIZE);
+    ptr += SHA256_DIGEST_SIZE;
+    
+    wc_InitSha256(&keyhash);
+    wc_Sha256Update(&keyhash, inkey + ED25519_KEY_SIZE, ED25519_KEY_SIZE);
+    wc_Sha256Final(&keyhash, shabuf);
+    *(ptr++) = HDR_PUBKEY;
+    *(ptr++) = SHA256_DIGEST_SIZE;
+    memcpy(ptr, shabuf, SHA256_DIGEST_SIZE);
+    wc_Sha256Free(&keyhash);
+    ptr += SHA256_DIGEST_SIZE;
+    
+    *(ptr++) = HDR_SIGNATURE;
+    *(ptr++) = ED25519_SIG_SIZE;
+    memcpy(ptr, signature, ED25519_SIG_SIZE);
+    ptr += ED25519_SIG_SIZE;
+    *(ptr++) = HDR_END;
+
+    printf("\n\n");
+    print_buf(hdr, IMAGE_HEADER_SIZE);
+
     /* Write header */
-    write(out_fd, hdr, IMAGE_FIRMWARE_OFFSET);
+    write(out_fd, hdr, IMAGE_HEADER_SIZE);
 
     /* Write image payload */
     lseek(in_fd, 0, SEEK_SET);
@@ -176,38 +209,6 @@ int main(int argc, char *argv[])
         if (r < 32)
             break;
     }
-
-    /* TLV INFO hdr */
-    memset(&info, 0, sizeof(info));
-    info.it_magic = IMAGE_TLV_INFO_MAGIC;
-    info.it_tlv_tot = sizeof(info) + 3 * sizeof(tlv) + 2 * SHA256_DIGEST_SIZE + ED25519_SIG_SIZE;
-    write(out_fd, &info, sizeof(info));
-
-    /* TLV 0: SHA DIGEST */
-    memset(&tlv, 0, sizeof(tlv));
-    tlv.it_type = IMAGE_TLV_SHA256;
-    tlv.it_len = SHA256_DIGEST_SIZE; 
-    write(out_fd, &tlv, sizeof(tlv));
-    write(out_fd, shabuf, SHA256_DIGEST_SIZE);
-
-    /* TLV 1: KEYHASH */
-    wc_InitSha256(&keyhash);
-    wc_Sha256Update(&keyhash, inkey + ED25519_KEY_SIZE, ED25519_KEY_SIZE);
-    wc_Sha256Final(&keyhash, shabuf);
-    memset(&tlv, 0, sizeof(tlv));
-    tlv.it_type = IMAGE_TLV_KEYHASH;
-    tlv.it_len = SHA256_DIGEST_SIZE;
-    write(out_fd, &tlv, sizeof(tlv));
-    write(out_fd, shabuf, SHA256_DIGEST_SIZE);
-    wc_Sha256Free(&keyhash);
-
-    /* TLV 2: SIGNATURE */
-    memset(&tlv, 0, sizeof(tlv));
-    tlv.it_type = IMAGE_TLV_ED25519;
-    tlv.it_len = ED25519_SIG_SIZE;
-    write(out_fd, &tlv, sizeof(tlv));
-    write(out_fd, signature, ED25519_SIG_SIZE);
-    close(out_fd);
 
     /* Pad if needed */
     r = stat(signed_name, &st);

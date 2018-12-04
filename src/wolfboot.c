@@ -1,4 +1,4 @@
-/* startup_bl.c
+/* wolfboot.c
  *
  * Copyright (C) 2018 wolfSSL Inc.
  *
@@ -18,9 +18,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include "bootutil/image.h"
-#include "bootutil.h"
+#include <loader.h>
 #include <stdint.h>
+#include <wolfboot/wolfboot.h>
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
@@ -29,7 +29,8 @@ extern unsigned int _end_bss;
 
 extern uint32_t *END_STACK;
 
-void main(void);
+extern void main(void);
+
 void isr_reset(void) {
     unsigned int *src, *dst;
 
