@@ -12,6 +12,7 @@ TARGET?=stm32f4
 DEBUG?=0
 VTOR?=1
 SWAP?=1
+CORTEX_M0?=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -28,7 +29,17 @@ OBJS:= \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
 ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o 
 
-CFLAGS:=-mcpu=cortex-m3 -mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
+ifeq ($(TARGET),samr21)
+  CORTEX_M0=1
+endif
+
+ifeq ($(CORTEX_M0),1)
+  CFLAGS:=-mcpu=cortex-m0
+else
+  CFLAGS:=-mcpu=cortex-m3
+endif
+
+CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 	-Ilib/bootutil/include -Iinclude/ -Ilib/wolfssl -nostartfiles \
 	-nostdlib \
 	-DWOLFSSL_USER_SETTINGS \
