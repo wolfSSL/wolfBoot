@@ -54,7 +54,8 @@ ifeq ($(CORTEX_M0),1)
   MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
 else
   CFLAGS:=-mcpu=cortex-m3
-  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+  #MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
 endif
 
 ifeq ($(FASTMATH),1)
