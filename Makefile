@@ -14,6 +14,7 @@ DEBUG?=0
 VTOR?=1
 SWAP?=1
 CORTEX_M0?=0
+NO_ASM=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -53,9 +54,13 @@ ifeq ($(CORTEX_M0),1)
   CFLAGS:=-mcpu=cortex-m0
   MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
 else
-  CFLAGS:=-mcpu=cortex-m3
-  #MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
-  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  ifeq ($(NO_ASM),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    CFLAGS:=-mcpu=cortex-m3
+  else
+    CFLAGS:=-mcpu=cortex-m3 -DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -fomit-frame-pointer
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+  endif
 endif
 
 ifeq ($(FASTMATH),1)
