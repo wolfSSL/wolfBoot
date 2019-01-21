@@ -77,3 +77,20 @@ void main(void)
 #endif
 
 
+
+#ifdef PLATFORM_samr21
+void main(void) {
+    asm volatile ("cpsie i");
+    while(1)
+        WFI();
+}
+#endif
+
+#ifdef PLATFORM_lm3s
+void main(void) {
+    asm volatile ("cpsie i");
+    while(1)
+        WFI();
+}
+#endif
+
