@@ -32,24 +32,12 @@
 #define GPIOD_OSPD  (*(volatile uint32_t *)(GPIOD_BASE + 0x08))
 #define GPIOD_PUPD  (*(volatile uint32_t *)(GPIOD_BASE + 0x0c))
 #define GPIOD_ODR   (*(volatile uint32_t *)(GPIOD_BASE + 0x14))
+#define GPIOD_BSRR  (*(volatile uint32_t *)(GPIOD_BASE + 0x18))
 #define GPIOD_AFL   (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
 #define GPIOD_AFH   (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
 #define LED_PIN (15)
-
+#define LED_BOOT_PIN (14)
 #define GPIO_OSPEED_100MHZ (0x03)
-
-
-void led_setup(void)
-{
-    uint32_t reg;
-    AHB1_CLOCK_ER |= GPIOD_AHB1_CLOCK_ER;
-    reg = GPIOD_MODE & ~ (0x03 << (LED_PIN * 2));
-    GPIOD_MODE = reg | (1 << (LED_PIN * 2));
-
-    reg = GPIOD_PUPD & (0x03 <<  (LED_PIN * 2));
-    GPIOD_PUPD = reg | (0x02 << (LED_PIN * 2));
-}
-
 void led_pwm_setup(void)
 {
     uint32_t reg;
@@ -66,6 +54,16 @@ void led_pwm_setup(void)
     /* Alternate function: use high pin */
     reg = GPIOD_AFH & ~(0xf << ((LED_PIN - 8) * 4));
     GPIOD_AFH = reg | (0x2 << ((LED_PIN - 8) * 4));
+}
 
+void boot_led_on(void)
+{
+    uint32_t reg;
+    AHB1_CLOCK_ER |= GPIOD_AHB1_CLOCK_ER;
+    reg = GPIOD_MODE & ~(0x03 << (LED_BOOT_PIN * 2));
+    GPIOD_MODE = reg | (1 << (LED_BOOT_PIN * 2));
+    reg = GPIOD_PUPD & ~(0x03 << (LED_BOOT_PIN * 2));
+    GPIOD_PUPD = reg | (1 << (LED_BOOT_PIN * 2));
+    GPIOD_BSRR |= (1 << LED_BOOT_PIN);
 }
 

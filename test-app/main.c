@@ -30,6 +30,7 @@
 #ifdef PLATFORM_stm32f4
 
 void main(void) {
+    boot_led_on();
     flash_set_waitstates();
     clock_config();
     led_pwm_setup();
@@ -76,17 +77,7 @@ void main(void)
 
 #endif
 
-
-
 #ifdef PLATFORM_samr21
-void main(void) {
-    asm volatile ("cpsie i");
-    while(1)
-        WFI();
-}
-#endif
-
-#ifdef PLATFORM_lm3s
 void main(void) {
     asm volatile ("cpsie i");
     while(1)
