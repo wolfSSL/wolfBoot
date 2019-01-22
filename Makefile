@@ -1,6 +1,7 @@
 CROSS_COMPILE:=arm-none-eabi-
 CC:=$(CROSS_COMPILE)gcc
 LD:=$(CROSS_COMPILE)gcc
+AS:=$(CROSS_COMPILE)gcc
 
 
 OBJCOPY:=$(CROSS_COMPILE)objcopy
@@ -13,13 +14,14 @@ DEBUG?=0
 VTOR?=1
 SWAP?=1
 CORTEX_M0?=0
+NO_ASM=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
 OBJS:= \
 ./hal/$(TARGET).o \
 ./src/loader.o \
-./src/mem.o \
+./src/string.o \
 ./src/crypto.o \
 ./src/wolfboot.o \
 ./src/image.o \
@@ -29,20 +31,47 @@ OBJS:= \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
 ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o 
 
+
 ifeq ($(TARGET),samr21)
   CORTEX_M0=1
 endif
 
+ifeq ($(SIGN),ECC256)
+  KEYGEN_TOOL=tools/ecc256/ecc256_keygen
+  SIGN_TOOL=tools/ecc256/ecc256_sign
+  PRIVATE_KEY=ecc256.der
+else
+  KEYGEN_TOOL=tools/ed25519/ed25519_keygen
+  SIGN_TOOL=tools/ed25519/ed25519_sign
+  PRIVATE_KEY=ed25519.der
+endif
+
+MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
+  
+
+
 ifeq ($(CORTEX_M0),1)
   CFLAGS:=-mcpu=cortex-m0
+  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
 else
-  CFLAGS:=-mcpu=cortex-m3
+  ifeq ($(NO_ASM),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    CFLAGS:=-mcpu=cortex-m3
+  else
+    CFLAGS:=-mcpu=cortex-m3 -DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -fomit-frame-pointer
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+  endif
+endif
+
+ifeq ($(FASTMATH),1)
+  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o
+  CFLAGS+=-DUSE_FAST_MATH
 endif
 
 CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 	-Ilib/bootutil/include -Iinclude/ -Ilib/wolfssl -nostartfiles \
-	-nostdlib \
 	-DWOLFSSL_USER_SETTINGS \
+	-mthumb -mlittle-endian -mthumb-interwork \
 	-DPLATFORM_$(TARGET)
 
 ifeq ($(SIGN),ED25519)
@@ -50,12 +79,20 @@ ifeq ($(SIGN),ED25519)
 	./lib/wolfssl/wolfcrypt/src/ed25519.o \
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
     ./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib -DWOLFSSL_STATIC_MEMORY
+  LDFLAGS+=-nostdlib
 endif
 
-ifeq ($(SIGN),EC256)
-  OBJS+= ./ext/wolfssl/wolfcrypt/src/ecc.o
-  CFLAGS+=-DWOLFBOOT_SIGN_EC256
+ifeq ($(SIGN),ECC256)
+  OBJS+= \
+    $(MATH_OBJS) \
+	./lib/wolfssl/wolfcrypt/src/ecc.o \
+	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
+	./lib/wolfssl/wolfcrypt/src/memory.o \
+	./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./src/ecc256_pub_key.o \
+    ./src/xmalloc.o
+  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER
 endif
 
 ifeq ($(DEBUG),1)
@@ -68,7 +105,9 @@ ifeq ($(VTOR),0)
     CFLAGS+=-DNO_VTOR
 endif
 
-LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb -nostdlib
+LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb 
+
+ASFLAGS:=$(CFLAGS)
 
 all: factory.bin
 
@@ -92,16 +131,22 @@ test-app/image.bin:
 tools/ed25519/ed25519_sign:
 	make -C tools/ed25519
 
+tools/ecc256/ecc256_sign:
+	make -C tools/ecc256
+
 ed25519.der: tools/ed25519/ed25519_sign
 	tools/ed25519/ed25519_keygen src/ed25519_pub_key.c
 
-factory.bin: $(BOOT_IMG) wolfboot-align.bin tools/ed25519/ed25519_sign ed25519.der
-	tools/ed25519/ed25519_sign $(BOOT_IMG) ed25519.der 1
+ecc256.der: tools/ecc256/ecc256_sign
+	tools/ecc256/ecc256_keygen src/ecc256_pub_key.c
+
+factory.bin: $(BOOT_IMG) wolfboot-align.bin $(SIGN_TOOL) $(PRIVATE_KEY)
+	$(SIGN_TOOL) $(BOOT_IMG) $(PRIVATE_KEY) 1
 	cat wolfboot-align.bin $(BOOT_IMG).v1.signed > $@
 
-second.img: $(BOOT_IMG) wolfboot-align.bin tools/ed25519/ed25519_sign ed25519.der
-	tools/ed25519/ed25519_sign $(BOOT_IMG) ed25519.der 1 65536
-	tools/ed25519/ed25519_sign $(BOOT_IMG) ed25519.der 2
+second.img: $(BOOT_IMG) wolfboot-align.bin $(SIGN_TOOL) $(PRIVATE_KEY)
+	$(SIGN_TOOL) $(BOOT_IMG) $(PRIVATE_KEY) 1 65536
+	$(SIGN_TOOL) $(BOOT_IMG) $(PRIVATE_KEY) 2
 	cat wolfboot-align.bin $(BOOT_IMG).v1.signed $(BOOT_IMG).v2.signed > $@
 
 wolfboot.elf: $(OBJS) $(LSCRIPT)
@@ -110,8 +155,9 @@ wolfboot.elf: $(OBJS) $(LSCRIPT)
 
 src/ed25519_pub_key.c: ed25519.der
 
-keys: ed25519.der
+src/ecc256_pub_key.c: ecc256.der
 
+keys: $(PRIVATE_KEY)
 	
 clean:
 	rm -f *.bin *.elf $(OBJS) wolfboot.map *.bin  *.hex
@@ -119,5 +165,6 @@ clean:
 
 distclean: clean
 	make -C tools/ed25519 clean
-	rm -f *.pem *.der tags ./src/ed25519_pub_key.c
+	make -C tools/ecc256 clean
+	rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c
 

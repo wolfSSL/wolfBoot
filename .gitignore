@@ -49,6 +49,13 @@
 
 # automatically generated source files
 src/ed25519_pub_key.c
+src/ecc256_pub_key.c
+
+# keygen binaries
+tools/ed25519/ed25519_sign
+tools/ed25519/ed25519_keygen
+tools/ecc256/ecc256_sign
+tools/ecc256/ecc256_keygen
 
 # Vim swap files
 .*.swp

@@ -48,6 +48,40 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 }
 #endif
 
+#ifdef WOLFBOOT_SIGN_ECC256
+#include <wolfssl/wolfcrypt/ecc.h>
+#define ECC_KEY_SIZE  32
+#define ECC_SIG_SIZE  64 
+static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
+{
+    int ret, res;
+    mp_int r, s;
+    ecc_key ecc;
+    ret = wc_ecc_init(&ecc);
+    if (ret < 0) {
+        /* Failed to initialize key */
+        return -1;
+    }
+    /* Import public key */
+    ret = wc_ecc_import_unsigned(&ecc, KEY_BUFFER, KEY_BUFFER + 32, NULL, ECC_SECP256R1);
+    if ((ret < 0) || ecc.type != ECC_PUBLICKEY) {
+        /* Failed to import ecc key */
+        return -1;
+    }
+
+    /* Import signature into r,s */
+    mp_init(&r);
+    mp_init(&s);
+    mp_read_unsigned_bin(&r, sig, ECC_KEY_SIZE);
+    mp_read_unsigned_bin(&s, sig + ECC_KEY_SIZE, ECC_KEY_SIZE);
+    ret = wc_ecc_verify_hash_ex(&r, &s, hash, SHA256_DIGEST_SIZE, &res, &ecc);
+    if ((ret < 0) || (res == 0)) {
+        return -1;
+    }
+    return 0;
+}
+#endif
+
 
 static uint8_t get_header(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)
 {
