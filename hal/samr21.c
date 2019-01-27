@@ -166,19 +166,24 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     NVMCTRLA_REG  = (NVMCMD_PBC | NVMCMD_KEY);
     while (i < len) {
         if ((len - i > 3) && ((((address + i) & 0x03) == 0)  && ((((uint32_t)data) + i) & 0x03) == 0)) {
-            src = (uint32_t *)data;
             dst = (uint32_t *)address;
+            src = (uint32_t *)data;
             dst[i >> 2] = src[i >> 2];
             i+=4;
         } else {
             uint32_t val;
             uint8_t *vbytes = (uint8_t *)(&val);
-            int off = (address + i) - (((address + i) >> 2) << 2);
+            uint32_t off = (address % 4);
             dst = (uint32_t *)(address - off);
-            val = dst[i >> 2];
-            vbytes[off] = data[i];
-            dst[i >> 2] = val;
-            i++;
+            uint32_t dst_idx = (i + off) >> 2;
+            val = dst[dst_idx];
+            while (off < 4) {
+                if (i < len)
+                    vbytes[off++] = data[i++];
+                else
+                    off++;
+            }
+            dst[dst_idx] = val;
         }
     }
     /* Enable write protection */
