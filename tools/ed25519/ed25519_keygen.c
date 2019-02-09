@@ -27,6 +27,9 @@
 #include <wolfssl/wolfcrypt/asn_public.h>
 
 #define PEMSIZE 1024
+#ifndef WIN32
+#   define O_BINARY O_RDONLY
+#endif
 
 void print_buf(uint8_t *buf, int len)
 {
@@ -56,7 +59,7 @@ void create_pubkey_cfile(const char *fname, uint8_t *key_in)
     char buf[4192] = { };
     char keybyte[5] = {};
     int i;
-    int fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, 0660);
+    int fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0660);
     if (fd < 0) {
         perror("creating c file");
         exit(1);
@@ -124,7 +127,7 @@ int main(int argc, char *argv[])
     print_key(full);
     print_key(full + 32);
 
-    fd = open("ed25519.der", O_WRONLY|O_CREAT|O_TRUNC, 0600);
+    fd = open("ed25519.der", O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0600);
     if (fd < 0) {
         perror("exporting key (der)");
     }
@@ -133,7 +136,7 @@ int main(int argc, char *argv[])
     memset(outkey, 0, PEMSIZE);
     wc_DerToPem(priv, outlen, outkey, PEMSIZE, ED25519_TYPE);
     printf("%s\n", outkey);
-    fd = open("ed25519.pem", O_WRONLY|O_CREAT|O_TRUNC, 0600);
+    fd = open("ed25519.pem", O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0600);
     if (fd < 0) {
         perror("exporting key (pem)");
     }
@@ -149,7 +152,7 @@ int main(int argc, char *argv[])
     memset(outkey, 0, PEMSIZE);
     wc_DerToPem(pub, 32, outkey, PEMSIZE, PUBLICKEY_TYPE);
     printf("%s\n", outkey);
-    fd = open("ed25519_pub.pem", O_WRONLY|O_CREAT|O_TRUNC, 0660);
+    fd = open("ed25519_pub.pem", O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0660);
     if (fd < 0) {
         perror("creating key\n");
     }

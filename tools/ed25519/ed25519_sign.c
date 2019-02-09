@@ -19,7 +19,11 @@
  *
  */
 #include <stdint.h>
+#include <stdio.h>
 #include <fcntl.h>
+#ifndef WIN32
+#   define O_BINARY 0
+#endif
 
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/ed25519.h>
@@ -98,18 +102,18 @@ int main(int argc, char *argv[])
     strcpy(in_name, argv[1]);
     snprintf(signed_name, PATH_MAX, "%s.v%s.signed", argv[1], argv[3]);
 
-    in_fd = open(in_name, O_RDONLY);
+    in_fd = open(in_name, O_RDONLY|O_BINARY);
     if (in_fd < 0) {
         perror(in_name);
         exit(2);
     }
-    out_fd = open(signed_name, O_WRONLY|O_CREAT|O_TRUNC, 0660);
+    out_fd = open(signed_name, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0660);
     if (out_fd < 0) {
         perror(signed_name);
         exit(2);
     }
 
-    key_fd = open(argv[2], O_RDONLY);
+    key_fd = open(argv[2], O_RDONLY|O_BINARY);
     if (key_fd < 0)  {
         perror(argv[2]);
         exit(2);
@@ -195,7 +199,10 @@ int main(int argc, char *argv[])
     print_buf(hdr, IMAGE_HEADER_SIZE);
 
     /* Write header */
-    write(out_fd, hdr, IMAGE_HEADER_SIZE);
+    if (write(out_fd, hdr, IMAGE_HEADER_SIZE) != IMAGE_HEADER_SIZE) {
+        perror("write");
+        exit(1);
+    }
 
     /* Write image payload */
     lseek(in_fd, 0, SEEK_SET);
@@ -215,13 +222,14 @@ int main(int argc, char *argv[])
     if ((r == 0) && st.st_size < padsize) {
         size_t fill = padsize - st.st_size;
         uint8_t padbyte = 0xFF;
-        out_fd = open(signed_name, O_WRONLY|O_APPEND|O_EXCL);
+        out_fd = open(signed_name, O_WRONLY|O_APPEND|O_EXCL|O_BINARY);
         if (out_fd > 0) {
             while(fill--)
                 write(out_fd, &padbyte, 1);
         }
         close(out_fd);
     }
+    close(in_fd);
     exit(0);
 }
 
