@@ -14,8 +14,8 @@ void *memset(void *s, int c, size_t n)
 
 char *strcat(char *dest, const char *src)
 {
-    int i = 0;
-    int j = strlen(dest);
+    size_t i = 0;
+    size_t j = strlen(dest);
 
     for (i = 0; i < strlen(src); i++) {
         dest[j++] = src[i];
@@ -58,7 +58,7 @@ int strcasecmp(const char *s1, const char *s2)
 int strncasecmp(const char *s1, const char *s2, size_t n)
 {
     int diff = 0;
-    int i = 0;
+    size_t i = 0;
 
     while (!diff && *s1) {
         diff = (int)*s1 - (int)*s2;
@@ -76,7 +76,7 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
 
 size_t strlen(const char *s)
 {
-    int i = 0;
+    size_t i = 0;
 
     while (s[i] != 0)
         i++;
@@ -86,8 +86,8 @@ size_t strlen(const char *s)
 
 char *strncat(char *dest, const char *src, size_t n)
 {
-    int i = 0;
-    int j = strlen(dest);
+    size_t i = 0;
+    size_t j = strlen(dest);
 
     for (i = 0; i < strlen(src); i++) {
         if (j >= (n - 1)) {
@@ -118,7 +118,7 @@ int strncmp(const char *s1, const char *s2, size_t n)
 
 void *memcpy(void *dst, const void *src, size_t n)
 {
-    int i;
+    size_t i;
     const char *s = (const char *)src;
     char *d = (char *)dst;
 
@@ -131,7 +131,7 @@ void *memcpy(void *dst, const void *src, size_t n)
 
 char *strncpy(char *dst, const char *src, size_t n)
 {
-    int i;
+    size_t i;
 
     for (i = 0; i < n; i++) {
         dst[i] = src[i];
@@ -144,7 +144,7 @@ char *strncpy(char *dst, const char *src, size_t n)
 
 char *strcpy(char *dst, const char *src)
 {
-    int i = 0;
+   size_t i = 0;
 
     while(1 < 2) {
         dst[i] = src[i];
