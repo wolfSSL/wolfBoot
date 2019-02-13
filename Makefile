@@ -15,6 +15,7 @@ VTOR?=1
 SWAP?=1
 CORTEX_M0?=0
 NO_ASM=0
+EXT_FLASH=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -66,6 +67,10 @@ endif
 ifeq ($(FASTMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o
   CFLAGS+=-DUSE_FAST_MATH
+endif
+
+ifeq ($(EXT_FLASH),1)
+  CFLAGS+=-DEXT_FLASH -DPART_UPDATE_EXT
 endif
 
 CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \

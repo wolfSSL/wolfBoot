@@ -22,8 +22,25 @@
 #include <image.h>
 #include <hal.h>
 
-
 extern void do_boot(const uint32_t *app_offset);
+
+static int wolfBoot_copy(uint32_t src, uint32_t dst, uint32_t size)
+{
+    uint32_t *orig, *copy;
+    uint32_t pos = 0;
+    if (src == dst)
+        return 0;
+    if ((src & 0x03) || (dst & 0x03))
+        return -1;
+    while (pos < size) {
+        orig = (uint32_t *)(src + pos);
+        copy = (uint32_t *)(dst + pos);
+        while (*orig != *copy)
+            hal_flash_write(dst + pos, (void *)orig, sizeof(uint32_t));
+        pos += sizeof(uint32_t);
+    }
+    return pos;
+}
 
 static int wolfBoot_update(void)
 {

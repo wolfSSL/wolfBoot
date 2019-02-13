@@ -11,6 +11,33 @@
 #define SECT_FLAG_UPDATED 0x00
 
 
+#ifdef EXT_FLASH
+#   ifndef PART_UPDATE_DRIVER
+#       define PART_UPDATE_DRIVER (&internal_flash_driver)
+#   endif
+#   define flash_lock(x) (x->flash_driver.lock()) 
+#   define flash_unlock(x) (x->flash_driver.unlock())
+#   define flash_erase(x, addr, len) (x->flash_driver.erase(addr, len)
+#   define flash_write(x, addr, data, len) (x->flash_driver.write(addr, data, len)
+#   define flash_read(x, addr, data, len) (x->flash_driver.read(addr, data, len)
+#else
+#   define flash_lock(x) hal_flash_lock()
+#   define flash_unlock(x) hal_flash_unlock()
+#   define flash_erase(x, addr, len) (x->flash_driver.erase(addr, len)
+#   define flash_write(x, addr, data, len) (x->flash_driver.write(addr, data, len)
+#   define flash_read(x, addr, data, len) (memcpy(data, addr, len) - data + len)
+#endif 
+
+struct wolfBoot_flash_driver {
+    int (*write)(uint32_t address, const uint8_t *data, int len);
+    int (*read)(uint32_t address, uint8_t *data, int len);
+    int (*erase)(uint32_t address, int len);
+    void (*lock)(void);
+    void (*unlock)(void);
+};
+
+extern const struct wolfBoot_flash_driver internal_flash_driver;
+
 struct wolfBoot_image {
     uint8_t *hdr;
     uint8_t *trailer;
@@ -20,6 +47,7 @@ struct wolfBoot_image {
     uint8_t *fw_base;
     uint32_t fw_size;
     uint8_t part;
+    struct wolfBoot_flash_driver *flash_driver;
 };
 
 
@@ -30,6 +58,5 @@ int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
 int wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag);
-int wolfBoot_copy(uint32_t src, uint32_t dst, uint32_t size);
 
 #endif /* IMAGE_H */
