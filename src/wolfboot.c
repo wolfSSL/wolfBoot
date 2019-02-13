@@ -76,17 +76,17 @@ void isr_empty(void)
  *  - Call the application entry point
  *
  */
+static void  *app_entry;
+static uint32_t app_end_stack;
+
 void do_boot(const uint32_t *app_offset)
 {
-    const uint32_t * const app_IV = (const uint32_t *)app_offset;
-    void  *app_entry;
-    uint32_t app_end_stack;
 
 #ifndef NO_VTOR
     /* Disable interrupts */
     asm volatile("cpsid i");
     /* Update IV */
-    VTOR = ((uint32_t)app_IV);
+    VTOR = ((uint32_t)app_offset);
 #endif
 
     /* Get stack pointer, entry point */
