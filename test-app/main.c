@@ -26,10 +26,12 @@
 #include "system.h"
 #include "timer.h"
 #include "led.h"
+#include "wolfboot/wolfboot.h"
 
 #ifdef PLATFORM_stm32f4
 
 void main(void) {
+    uint32_t version;
     boot_led_on();
     flash_set_waitstates();
     clock_config();
@@ -43,6 +45,15 @@ void main(void) {
      * effect.
      */
     timer_init(CPU_FREQ, 1, 50);
+    version = wolfBoot_current_firmware_version();
+    if (version & 0x01) {
+        /* Odd version: unstable, trigger update */
+        if (wolfBoot_update_firmware_version() != 0)
+            wolfBoot_update_trigger();
+    } else {
+        /* Even version, stabilise */
+        wolfBoot_success();
+    }
     asm volatile ("cpsie i");
     while(1)
         WFI();

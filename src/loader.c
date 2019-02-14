@@ -24,19 +24,35 @@
 
 extern void do_boot(const uint32_t *app_offset);
 
-static int wolfBoot_copy(uint32_t src, uint32_t dst, uint32_t size)
+static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {
-    uint32_t *orig, *copy;
+    volatile uint32_t *orig, *copy;
     uint32_t pos = 0;
+    uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
+    uint32_t dst_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     if (src == dst)
         return 0;
-    if ((src & 0x03) || (dst & 0x03))
-        return -1;
-    while (pos < size) {
-        orig = (uint32_t *)(src + pos);
-        copy = (uint32_t *)(dst + pos);
-        while (*orig != *copy)
-            hal_flash_write(dst + pos, (void *)orig, sizeof(uint32_t));
+
+    if (src->part == PART_SWAP)
+        src_sector_offset = 0;
+    if (dst->part == PART_SWAP)
+        dst_sector_offset = 0;
+#ifdef EXT_FLASH
+    if (PART_IS_EXT(src)) {
+        uint32_t word;
+        wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
+        while (pos < WOLFBOOT_SECTOR_SIZE) {
+            ext_flash_read((uint32_t)(src->hdr) + src_sector_offset + pos, (void *)&word, sizeof(uint32_t)); 
+            wb_flash_write_verify_word(dst, dst_sector_offset + pos, word);
+            pos += sizeof(uint32_t);
+        }
+        return pos;
+    }
+#endif
+    wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
+    while (pos < WOLFBOOT_SECTOR_SIZE) {
+        orig = (volatile uint32_t *)(src->hdr + src_sector_offset + pos);
+        wb_flash_write_verify_word(dst, dst_sector_offset + pos, *orig);
         pos += sizeof(uint32_t);
     }
     return pos;
@@ -45,16 +61,20 @@ static int wolfBoot_copy(uint32_t src, uint32_t dst, uint32_t size)
 static int wolfBoot_update(void)
 {
     uint32_t total_size = 0;
-    uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
+    const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
     uint8_t flag, st;
-    struct wolfBoot_image boot, update;
+    struct wolfBoot_image boot, update, swap;
+
+    /* No Safety check on open: we might be in the middle of a broken update */
+    wolfBoot_open_image(&update, PART_UPDATE);
+    wolfBoot_open_image(&boot, PART_BOOT);
+    wolfBoot_open_image(&swap, PART_SWAP);
 
     /* Use biggest size for the swap */
-    if ((wolfBoot_open_image(&update, PART_UPDATE) == 0) && (update.fw_size + IMAGE_HEADER_SIZE) > total_size)
+    total_size = boot.fw_size + IMAGE_HEADER_SIZE;
+    if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
             total_size = update.fw_size + IMAGE_HEADER_SIZE;
-    if ((wolfBoot_open_image(&boot, PART_BOOT) == 0) && (boot.fw_size + IMAGE_HEADER_SIZE) > total_size)
-            total_size = boot.fw_size + IMAGE_HEADER_SIZE;
 
     if (total_size < IMAGE_HEADER_SIZE)
         return -1;
@@ -73,6 +93,9 @@ static int wolfBoot_update(void)
     }
 
     hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
 
     /* Interruptible swap
      * The status is saved in the sector flags of the update partition.
@@ -81,10 +104,7 @@ static int wolfBoot_update(void)
     while ((sector * sector_size) < total_size) {
         if ((wolfBoot_get_sector_flag(PART_UPDATE, sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
-           hal_flash_erase(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-           wolfBoot_copy(WOLFBOOT_PARTITION_UPDATE_ADDRESS + sector * sector_size,
-                   WOLFBOOT_PARTITION_SWAP_ADDRESS,
-                   WOLFBOOT_SECTOR_SIZE);
+           wolfBoot_copy_sector(&update, &swap, sector);
            wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
         }
         if (flag == SECT_FLAG_SWAPPING) {
@@ -92,11 +112,7 @@ static int wolfBoot_update(void)
             if (size > sector_size)
                 size = sector_size;
             flag = SECT_FLAG_BACKUP;
-            hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS + sector * sector_size,
-                    WOLFBOOT_SECTOR_SIZE);
-            wolfBoot_copy(WOLFBOOT_PARTITION_BOOT_ADDRESS + sector * sector_size,
-                   WOLFBOOT_PARTITION_UPDATE_ADDRESS + sector * sector_size,
-                   WOLFBOOT_SECTOR_SIZE);
+            wolfBoot_copy_sector(&boot, &update, sector);
             wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
         }
         if (flag == SECT_FLAG_BACKUP) {
@@ -104,25 +120,22 @@ static int wolfBoot_update(void)
             if (size > sector_size)
                 size = sector_size;
             flag = SECT_FLAG_UPDATED;
-            hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS + sector * sector_size,
-                    sector_size);
-            wolfBoot_copy(WOLFBOOT_PARTITION_SWAP_ADDRESS,
-                   WOLFBOOT_PARTITION_BOOT_ADDRESS + sector * sector_size,
-                   size);
+            wolfBoot_copy_sector(&swap, &boot, sector);
             wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
         }
         sector++;
     }
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
-        hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS + sector * sector_size,
-                sector_size);
-        hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS + sector * sector_size,
-                sector_size);
+        wb_flash_erase(&boot, sector * sector_size, sector_size);
+        wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
     }
-    hal_flash_erase(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
     st = IMG_STATE_TESTING;
     wolfBoot_set_partition_state(PART_BOOT, st);
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
     hal_flash_lock();
     return 0;
 }

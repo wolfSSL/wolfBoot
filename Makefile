@@ -69,15 +69,16 @@ ifeq ($(FASTMATH),1)
   CFLAGS+=-DUSE_FAST_MATH
 endif
 
-ifeq ($(EXT_FLASH),1)
-  CFLAGS+=-DEXT_FLASH -DPART_UPDATE_EXT
-endif
-
 CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 	-Ilib/bootutil/include -Iinclude/ -Ilib/wolfssl -nostartfiles \
 	-DWOLFSSL_USER_SETTINGS \
 	-mthumb -mlittle-endian -mthumb-interwork \
 	-DPLATFORM_$(TARGET)
+
+ifeq ($(EXT_FLASH),1)
+  CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
+endif
+
 
 ifeq ($(SIGN),ED25519)
   OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
@@ -131,7 +132,7 @@ wolfboot-align.bin: wolfboot.elf
 	$(SIZE) wolfboot.elf
 
 test-app/image.bin:
-	make -C test-app TARGET=$(TARGET)
+	make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH)
 
 tools/ed25519/ed25519_sign:
 	make -C tools/ed25519
@@ -165,7 +166,7 @@ src/ecc256_pub_key.c: ecc256.der
 keys: $(PRIVATE_KEY)
 	
 clean:
-	rm -f *.bin *.elf $(OBJS) wolfboot.map *.bin  *.hex
+	rm -f *.bin *.elf $(OBJS) wolfboot.map *.bin  *.hex hal/*.o
 	make -C test-app clean
 
 distclean: clean

@@ -26,6 +26,10 @@
 
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
+
+
+extern uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr);
+
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
     int ret, res;
@@ -82,6 +86,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 }
 #endif
 
+#if 0
 static uint8_t find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
@@ -101,6 +106,7 @@ static uint8_t find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr)
     *ptr = NULL;
     return 0;
 }
+#endif
 
 
 
@@ -108,15 +114,12 @@ static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t 
 
 static uint8_t get_header(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)
 {
-#if defined(PART_UPDATE_EXT) && defined(EXT_FLASH)
+#if defined(PART_UPDATE_EXT)
     if(img->part == PART_UPDATE)
         return get_header_ext(img, type, ptr);
 #endif
-    return find_header(img->hdr + IMAGE_HEADER_OFFSET, type, ptr);
+    return wolfBoot_find_header(img->hdr + IMAGE_HEADER_OFFSET, type, ptr);
 }
-
-
-
 
 static uint8_t ext_hash_block[SHA256_BLOCK_SIZE];
 
@@ -126,23 +129,55 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
         return NULL;
 #ifdef PART_UPDATE_EXT
     if (img->part == PART_UPDATE) {
-        ext_flash_read(img->fw_base + offset, ext_hash_block, SHA256_BLOCK_SIZE);
+        ext_flash_read((uint32_t)(img->fw_base) + offset, ext_hash_block, SHA256_BLOCK_SIZE);
         return ext_hash_block;
     }
 #endif
     return (uint8_t *)(img->fw_base + offset);
 }
 
+static uint8_t digest[SHA256_DIGEST_SIZE];
+static uint8_t verification[IMAGE_SIGNATURE_SIZE];
+#ifdef EXT_FLASH
+
+static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
+static int hdr_cpy_done = 0;
+
+static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
+{
+    if (!hdr_cpy_done) {
+        ext_flash_read((uint32_t)img->hdr, hdr_cpy, IMAGE_HEADER_SIZE);
+        hdr_cpy_done = 1;
+    }
+    return hdr_cpy;
+}
+
+static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)
+{
+    return wolfBoot_find_header(fetch_hdr_cpy(img) + IMAGE_HEADER_OFFSET, type, ptr);
+}
+
+#endif
+
+static uint8_t *get_img_hdr(struct wolfBoot_image *img)
+{
+#ifdef PART_UPDATE_EXT
+    if (img->part == PART_UPDATE) {
+        return fetch_hdr_cpy(img);
+    }
+#endif
+    return (uint8_t *)(img->hdr);
+}
+
 static int image_hash(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
     uint8_t stored_sha_len;
-    uint8_t *p = img->hdr;
-    uint8_t *fw_end = img->fw_base + img->fw_size;
+    uint8_t *p = get_img_hdr(img);
     int blksz;
     uint32_t position = 0;
     wc_Sha256 sha256_ctx;
-    if (!img || !img->hdr)
+    if (!img)
         return -1;
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
     if (stored_sha_len != SHA256_DIGEST_SIZE)
@@ -188,39 +223,8 @@ static void key_hash(uint8_t *hash)
     wc_Sha256Final(&sha256_ctx, hash);
 }
 
-static uint8_t digest[SHA256_DIGEST_SIZE];
-static uint8_t verification[IMAGE_SIGNATURE_SIZE];
-#ifdef EXT_FLASH
-
-static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
-static int hdr_cpy_done = 0;
-
-static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
-{
-    if (!hdr_cpy_done) {
-        ext_flash_read(img->hdr, hdr_cpy, IMAGE_HEADER_SIZE);
-        hdr_cpy_done = 1;
-    }
-    return hdr_cpy;
-}
-
-static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)
-{
-    return find_header(fetch_hdr_cpy(img) + IMAGE_HEADER_OFFSET, type, ptr);
-}
-
-#endif
 
 
-static uint8_t *get_img_hdr(struct wolfBoot_image *img)
-{
-#ifdef PART_UPDATE_EXT
-    if (img->part == PART_UPDATE) {
-        return fetch_hdr_cpy(img);
-    }
-#endif
-    return (uint8_t *)(img->hdr);
-}
 
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
@@ -230,12 +234,19 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     if (!img)
         return -1;
     memset(img, 0, sizeof(struct wolfBoot_image));
+    if (part == PART_SWAP) {
+        img->part = PART_SWAP;
+        img->hdr = (void *)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+        img->fw_base = img->hdr;
+        img->fw_size = WOLFBOOT_SECTOR_SIZE;
+        return 0;
+    }
     if (part == PART_BOOT) {
         img->hdr = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
         image = (uint8_t *)img->hdr;
     } else if (part == PART_UPDATE) {
         img->hdr = (void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-#if defined(PART_UPDATE_EXT)
+#ifdef PART_UPDATE_EXT
         image = fetch_hdr_cpy(img);
 #else
         image = (uint8_t *)img->hdr;

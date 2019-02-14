@@ -112,9 +112,9 @@
 #define FLASH_SECTOR_5 0x0020000
 #define FLASH_SECTOR_6 0x0040000
 #define FLASH_SECTOR_7 0x0060000
-#define FLASH_TOP      0x007FFFF
+#define FLASH_TOP      0x0080000
 
-const uint32_t flash_sector[8] = {
+const uint32_t flash_sector[9] = {
     FLASH_SECTOR_0, 
     FLASH_SECTOR_1, 
     FLASH_SECTOR_2, 
@@ -122,7 +122,8 @@ const uint32_t flash_sector[8] = {
     FLASH_SECTOR_4, 
     FLASH_SECTOR_5, 
     FLASH_SECTOR_6, 
-    FLASH_SECTOR_7 
+    FLASH_SECTOR_7,
+    FLASH_TOP
 };
 
 static void flash_set_waitstates(int waitstates)
@@ -194,17 +195,20 @@ void hal_flash_lock(void)
 int hal_flash_erase(uint32_t address, int len)
 {
     int start = -1, end = -1;
-    uint32_t end_address = address + len;
+    uint32_t end_address;
     int i;
+    if (len == 0)
+        return -1;
+    end_address = address + len - 1;
 
     if (address < flash_sector[0] || end_address > FLASH_TOP)
         return -1;
-    for (i = 0; i < 7; i++) 
+    for (i = 0; i < 8; i++) 
     {
         if ((address >= flash_sector[i]) && (address < flash_sector[i + 1])) {
             start = i;
         }
-        if ((end_address >= flash_sector[i]) && (address < flash_sector[i + 1])) {
+        if ((end_address >= flash_sector[i]) && (end_address < flash_sector[i + 1])) {
             end = i;
         }
         if (start > 0 && end > 0)
@@ -325,3 +329,78 @@ void hal_prepare_boot(void)
     clock_pll_off();
 }
 
+
+#ifdef EXT_FLASH
+#define SIM_ADDRESS (0x40000)
+
+int ext_flash_read(uint32_t address, uint8_t *data, int len)
+{
+    int i;
+    uint32_t val;
+    address += SIM_ADDRESS;
+    for (i = 0; i < len; i++)
+        data[i] = *((uint8_t *)(address + i));
+    return len;
+}
+
+int ext_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    int i;
+    uint32_t val;
+    address += SIM_ADDRESS;
+    flash_wait_complete();
+    clear_errors();
+    /* Set 8-bit write */
+    FLASH_CR &= (~(0x03 << 8));
+    for (i = 0; i < len; i++) {
+        FLASH_CR |= FLASH_CR_PG;
+        *((uint8_t *)(address + i)) = data[i];
+        flash_wait_complete();
+        FLASH_CR &= ~FLASH_CR_PG;
+    }
+    return 0;
+}
+
+void ext_flash_unlock(void)
+{
+    FLASH_CR |= FLASH_CR_LOCK;
+    FLASH_KEYR = FLASH_KEY1;
+    FLASH_KEYR = FLASH_KEY2;
+}
+
+void ext_flash_lock(void)
+{
+    FLASH_CR |= FLASH_CR_LOCK;
+}
+
+
+int ext_flash_erase(uint32_t address, int len)
+{
+    int start = -1, end = -1;
+    uint32_t end_address;
+    int i;
+    address += SIM_ADDRESS;
+    end_address = address + len - 1;
+
+    if (address < flash_sector[0] || end_address > FLASH_TOP)
+        return -1;
+    for (i = 0; i < 8; i++) 
+    {
+        if ((address >= flash_sector[i]) && (address < flash_sector[i + 1])) {
+            start = i;
+        }
+        if ((end_address >= flash_sector[i]) && (end_address < flash_sector[i + 1])) {
+            end = i;
+        }
+        if (start > 0 && end > 0)
+            break;
+    }
+    if (start < 0 || end < 0)
+        return -1;
+    for (i = start; i <= end; i++)
+        flash_erase_sector(i);
+    return 0;
+}
+
+
+#endif
