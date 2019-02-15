@@ -68,4 +68,51 @@ This function is called by the bootloader at a very late stage, before chain-loa
 in the next stage. This can be used to revert all the changes made to the clock settings, to ensure
 that the state of the microcontroller is restored to its original settings.
 
+### Optional support for external flash memory
+
+WolfBoot can be compiled with the makefile option `EXT_FLASH=1`. When the external flash support is
+enabled, update and swap partitions can be associated to an external memory, and will use alternative
+HAL function for read/write/erase access. 
+To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or 
+`PART_SWAP_EXT`, respectively.
+
+The following functions are used to access the external memory, and must be defined when `EXT\_FLASH` 
+is on:
+
+`int  ext_flash_write(uint32_t address, const uint8_t *data, int len)`
+
+This function provides an implementation of the flash write function, using the
+external memory's specific interface. `address` is the offset from the beginning of the
+addressable space in the device, `data` is the payload to be stored,
+and `len` is the size of the payload. `ext_flash_write` should return 0 upon success,
+or a negative value in case of failure.
+
+`int  ext_flash_read(uint32_t address, uint8_t *data, int len)`
+
+This function provides an indirect read of the external memory, using the
+driver's specific interface. `address` is the offset from the beginning of the
+addressable space in the device, `data` is a pointer where payload is stored upon a successful
+call, and `len` is the maximum size allowed for the payload. `ext_flash_read` should return 0 
+upon success, or a negative value in case of failure.
+
+`int  ext_flash_erase(uint32_t address, int len)`
+
+Called by the bootloader to erase part of the external memory.
+Erase operations must be performed via the specific interface of the target driver (e.g. SPI flash).
+`address` marks the start of the area relative to the device, that the bootloader wants to erase, 
+and `len` specifies the size of the area to be erased. This function must take into account the 
+geometry of the sectors, and erase all the sectors in between.
+
+`void ext_flash_lock(void)`
+
+If the interface of the external flash memory requires locking/unlocking, this function
+may be used to restore the flash write protection or exclude write accesses. This function is called
+by the bootloader at the end of every write and erase operations on the external device.
+
+
+`void ext_flash_unlock(void)`
+
+If the IAP interface of the external memory requires it, this function
+is called before every write and erase operations to unlock write access to the
+device. On some drivers, this function may be empty.
 
