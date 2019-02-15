@@ -19,13 +19,27 @@ For more information about flash partitions, flags and states see [Flash partiti
 libwolfboot provides low-level access interface to flash partition states. The state
 of each partition can be retrieved and altered by the application.
 
-Basic interaction from the application is provided via the two high-level function calls:
+Basic interaction from the application is provided via the following high-level function calls:
+
+`uint32_t wolfBoot_get_image_version(uint8_t part)`
 
 `void wolfBoot_update(void)`
 
+`void wolfBoot_success(void)`
+
+### Firmware version
+
+Current (boot) firmware and update firmware versions can be retrieved from the application using:
+
+`uint32_t wolfBoot_get_image_version(uint8_t part)`
+
+Or via the shortcut macros:
+
+`wolfBoot_current_firmware_version()`
+
 and
 
-`void wolfBoot_success(void)`
+`wolfBoot_update_firmware_version()`
 
 ### Trigger an update
 
