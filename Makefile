@@ -16,6 +16,7 @@ SWAP?=1
 CORTEX_M0?=0
 NO_ASM=0
 EXT_FLASH=0
+ALLOW_DOWNGRADE=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -77,6 +78,10 @@ CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-u
 
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
+endif
+
+ifeq ($(ALLOW_DOWNGRADE),1)
+  CFLAGS+=-DALLOW_DOWNGRADE
 endif
 
 

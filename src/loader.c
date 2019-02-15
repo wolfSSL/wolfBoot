@@ -82,14 +82,18 @@ static int wolfBoot_update(void)
     /* Check the first sector to detect interrupted update */
     if ((wolfBoot_get_sector_flag(PART_UPDATE, 0, &flag) < 0) || (flag == SECT_FLAG_NEW))
     {
-        /* In case this is a new update, check 
-         * integrity/authenticity of the firmware update 
+        /* In case this is a new update, do the required 
+         * checks on the firmware update 
          * before starting the swap
          */
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)  
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
         }
+#ifndef ALLOW_DOWNGRADE
+        if (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version())
+            return -1;
+#endif
     }
 
     hal_flash_unlock();
