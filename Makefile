@@ -33,10 +33,15 @@ OBJS:= \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
 ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o 
 
+## Target specific configuration
 
 ifeq ($(TARGET),samr21)
   CORTEX_M0=1
 endif
+
+
+
+## Signature
 
 ifeq ($(SIGN),ECC256)
   KEYGEN_TOOL=tools/ecc256/ecc256_keygen
@@ -117,7 +122,6 @@ ifeq ($(VTOR),0)
 endif
 
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb 
-
 ASFLAGS:=$(CFLAGS)
 
 all: factory.bin
