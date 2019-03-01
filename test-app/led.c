@@ -22,6 +22,7 @@
  */
 
 #include <stdint.h>
+#include "wolfboot/wolfboot.h"
 
 #define AHB1_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
 #define GPIOD_AHB1_CLOCK_ER (1 << 3)
@@ -59,11 +60,12 @@ void led_pwm_setup(void)
 void boot_led_on(void)
 {
     uint32_t reg;
+    uint32_t pin = LED_BOOT_PIN - 2 * (wolfBoot_current_firmware_version() & 0x01);
     AHB1_CLOCK_ER |= GPIOD_AHB1_CLOCK_ER;
-    reg = GPIOD_MODE & ~(0x03 << (LED_BOOT_PIN * 2));
-    GPIOD_MODE = reg | (1 << (LED_BOOT_PIN * 2));
-    reg = GPIOD_PUPD & ~(0x03 << (LED_BOOT_PIN * 2));
-    GPIOD_PUPD = reg | (1 << (LED_BOOT_PIN * 2));
-    GPIOD_BSRR |= (1 << LED_BOOT_PIN);
+    reg = GPIOD_MODE & ~(0x03 << (pin * 2));
+    GPIOD_MODE = reg | (1 << (pin * 2));
+    reg = GPIOD_PUPD & ~(0x03 << (pin * 2));
+    GPIOD_PUPD = reg | (1 << (pin * 2));
+    GPIOD_BSRR |= (1 << pin);
 }
 

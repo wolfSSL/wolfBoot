@@ -84,7 +84,7 @@ int pwm_init(uint32_t clock, uint32_t threshold)
     lvl = (val * threshold) / 100;
     if (lvl != 0)
         lvl--;
-    
+
     APB1_CLOCK_RST |= TIM4_APB1_CLOCK_ER_VAL;
     __asm__ volatile ("dmb");
     APB1_CLOCK_RST &= ~TIM4_APB1_CLOCK_ER_VAL;
@@ -145,7 +145,10 @@ int timer_init(uint32_t clock, uint32_t prescaler, uint32_t interval_ms)
     return 0;
 }
 
-void isr_tim2(void) 
+int update_started = 0;
+extern void uart_write(char c);
+
+void isr_tim2(void)
 {
     static volatile uint32_t tim2_ticks = 0;
     TIM2_SR &= ~TIM_SR_UIF;
@@ -157,6 +160,9 @@ void isr_tim2(void)
         pwm_init(master_clock, 10 * (16 - tim2_ticks));
     else
         pwm_init(master_clock, 10 * tim2_ticks);
+
+    if (!update_started)
+        uart_write('*');
 }
 
 

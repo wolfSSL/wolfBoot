@@ -10,6 +10,8 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
+        *(.init)
+        *(.fini)
         *(.text*)
         *(.rodata*)
         . = ALIGN(4);

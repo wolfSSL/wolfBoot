@@ -5,8 +5,8 @@ OBJS:=startup.o main.o timer.o led.o system.o ../src/libwolfboot.o ../hal/$(TARG
 TARGET?=none
 LSCRIPT:=app.ld
 OBJCOPY:=$(CROSS_COMPILE)objcopy
-CFLAGS:=-mcpu=cortex-m3 -mthumb -g -ggdb -Wall -Wno-main -Wstack-usage=200 -ffreestanding -Wno-unused -nostdlib -DPLATFORM_$(TARGET) -I../include
-LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostdlib
+CFLAGS:=-mcpu=cortex-m3 -mthumb -g -ggdb -Wall -Wno-main -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1
