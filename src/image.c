@@ -86,30 +86,6 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 }
 #endif
 
-#if 0
-static uint8_t find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr)
-{
-    uint8_t *p = haystack;
-    while (*p != 0) {
-        if (*p == HDR_PADDING) {
-            p++;
-            continue;
-        }
-        if (*p == type) {
-            p++;
-            *ptr = (p + 1);
-            return *p;
-        } 
-        p++;
-        p += (*p + 1);
-    }
-    *ptr = NULL;
-    return 0;
-}
-#endif
-
-
-
 static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr);
 
 static uint8_t get_header(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)

@@ -228,7 +228,6 @@ void wolfBoot_success(void)
     hal_flash_lock();
 }
 
-
 uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
