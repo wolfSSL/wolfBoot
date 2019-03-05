@@ -2,21 +2,21 @@ CROSS_COMPILE:=arm-none-eabi-
 CC:=$(CROSS_COMPILE)gcc
 LD:=$(CROSS_COMPILE)gcc
 AS:=$(CROSS_COMPILE)gcc
-
-
 OBJCOPY:=$(CROSS_COMPILE)objcopy
 SIZE:=$(CROSS_COMPILE)size
+BOOT0_OFFSET?=`cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | sed -e "s/.*[ ]//g"`
 BOOT_IMG?=test-app/image.bin
-BOOT0_OFFSET?=0x20000
 SIGN?=ED25519
 TARGET?=stm32f4
+KINETIS?=$(HOME)/src/FRDM-K64F/devices/MK64F12
+KINETIS_CMSIS?=$(KINETIS)/../../CMSIS
 DEBUG?=0
 VTOR?=1
 SWAP?=1
 CORTEX_M0?=0
-NO_ASM=0
-EXT_FLASH=0
-ALLOW_DOWNGRADE=0
+NO_ASM?=0
+EXT_FLASH?=0
+ALLOW_DOWNGRADE?=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -31,18 +31,14 @@ OBJS:= \
 ./lib/wolfssl/wolfcrypt/src/sha256.o \
 ./lib/wolfssl/wolfcrypt/src/hash.o \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-./lib/wolfssl/wolfcrypt/src/fe_low_mem.o 
+./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
 
 ## Target specific configuration
-
 ifeq ($(TARGET),samr21)
   CORTEX_M0=1
 endif
 
-
-
 ## Signature
-
 ifeq ($(SIGN),ECC256)
   KEYGEN_TOOL=tools/ecc256/ecc256_keygen
   SIGN_TOOL=tools/ecc256/ecc256_sign
@@ -54,8 +50,6 @@ else
 endif
 
 MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
-  
-
 
 ifeq ($(CORTEX_M0),1)
   CFLAGS:=-mcpu=cortex-m0
@@ -81,6 +75,11 @@ CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-u
 	-mthumb -mlittle-endian -mthumb-interwork \
 	-DPLATFORM_$(TARGET)
 
+ifeq ($(TARGET),kinetis)
+  CFLAGS+=-I$(KINETIS)/drivers -I$(KINETIS) -DCPU_MK64FN1M0VLL12 -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  OBJS+=$(KINETIS)/drivers/fsl_clock.o $(KINETIS)/drivers/fsl_ftfx_flash.o $(KINETIS)/drivers/fsl_ftfx_cache.o $(KINETIS)/drivers/fsl_ftfx_controller.o
+endif
+
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
 endif
@@ -89,6 +88,8 @@ ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+=-DALLOW_DOWNGRADE
 endif
 
+LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb
+ASFLAGS:=$(CFLAGS)
 
 ifeq ($(SIGN),ED25519)
   OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
@@ -121,8 +122,6 @@ ifeq ($(VTOR),0)
     CFLAGS+=-DNO_VTOR
 endif
 
-LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb 
-ASFLAGS:=$(CFLAGS)
 
 all: factory.bin
 
