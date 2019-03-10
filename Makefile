@@ -59,7 +59,7 @@ else
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
     CFLAGS:=-mcpu=cortex-m3
   else
-    CFLAGS:=-mcpu=cortex-m3 -DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -fomit-frame-pointer
+    CFLAGS:=-mcpu=cortex-m3 -D__WOLFBOOT -DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -fomit-frame-pointer
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
   endif
 endif

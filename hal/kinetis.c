@@ -25,7 +25,11 @@
 #include "fsl_flash.h"
 #include "fsl_ftfx_cache.h"
 
+static flash_config_t pflash;
+static ftfx_cache_config_t pcache;
+static int flash_init = 0;
 
+#ifdef __WOLFBOOT
 #define CPU_CORE_CLOCK             120000000U
 
 static void CLOCK_CONFIG_SetFllExtRefDiv(uint8_t frdiv)
@@ -33,9 +37,7 @@ static void CLOCK_CONFIG_SetFllExtRefDiv(uint8_t frdiv)
     MCG->C1 = ((MCG->C1 & ~MCG_C1_FRDIV_MASK) | MCG_C1_FRDIV(frdiv));
 }
 
-static flash_config_t pflash;
-static ftfx_cache_config_t pcache;
-static int flash_init = 0;
+static void do_flash_init(void);
 
 /* This are the registers for the NV flash configuration area.
  * Access these field by setting the relative flags in NV_Flash_Config.
@@ -45,7 +47,7 @@ static int flash_init = 0;
 const uint8_t __attribute__((section(".flash_config"))) NV_Flash_Config[NVTYPE_LEN] = {
     /* Backdoor comparison key (2 words) */
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    
+
     /* P-Flash protection 1 */
     0xFF, 0xFF,
     /* P-Flash protection 2 */
@@ -120,6 +122,43 @@ const osc_config_t oscConfig_BOARD_BootClockRUN =
     }
 };
 
+void hal_init(void)
+{
+    // Disable Watchdog
+    //  Write 0xC520 to watchdog unlock register
+    *((volatile unsigned short *)0x4005200E) = 0xC520;
+    //  Followed by 0xD928 to complete the unlock
+    *((volatile unsigned short *)0x4005200E) = 0xD928;
+    // Now disable watchdog via STCTRLH register
+    *((volatile unsigned short *)0x40052000) = 0x01D2u;
+
+    /* Set the system clock dividers in SIM to safe value. */
+    CLOCK_SetSimSafeDivs();
+    /* Initializes OSC0 according to board configuration. */
+    CLOCK_InitOsc0(&oscConfig_BOARD_BootClockRUN);
+    CLOCK_SetXtal0Freq(oscConfig_BOARD_BootClockRUN.freq);
+    /* Configure the Internal Reference clock (MCGIRCLK). */
+    CLOCK_SetInternalRefClkConfig(mcgConfig_BOARD_BootClockRUN.irclkEnableMode,
+            mcgConfig_BOARD_BootClockRUN.ircs,
+            mcgConfig_BOARD_BootClockRUN.fcrdiv);
+    /* Configure FLL external reference divider (FRDIV). */
+    CLOCK_CONFIG_SetFllExtRefDiv(mcgConfig_BOARD_BootClockRUN.frdiv);
+    /* Set MCG to PEE mode. */
+    CLOCK_BootToPeeMode(mcgConfig_BOARD_BootClockRUN.oscsel,
+            kMCG_PllClkSelPll0,
+            &mcgConfig_BOARD_BootClockRUN.pll0Config);
+    /* Set the clock configuration in SIM module. */
+    CLOCK_SetSimConfig(&simConfig_BOARD_BootClockRUN);
+    do_flash_init();
+}
+
+void hal_prepare_boot(void)
+{
+}
+
+
+#endif
+
 static void do_flash_init(void)
 {
     if (flash_init)
@@ -161,6 +200,7 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
             address += len_align;
         }
     }
+    FTFx_CACHE_ClearCachePrefetchSpeculation(&pcache, 1);
     return 0;
 }
 
@@ -183,33 +223,9 @@ int hal_flash_erase(uint32_t address, int len)
         len -= WOLFBOOT_SECTOR_SIZE;
         idx++;
     } while (len > 0);
+    FTFx_CACHE_ClearCachePrefetchSpeculation(&pcache, 1);
     return 0;
 }
 
-void hal_init(void)
-{
-    /* Set the system clock dividers in SIM to safe value. */
-    CLOCK_SetSimSafeDivs();
-    /* Initializes OSC0 according to board configuration. */
-    CLOCK_InitOsc0(&oscConfig_BOARD_BootClockRUN);
-    CLOCK_SetXtal0Freq(oscConfig_BOARD_BootClockRUN.freq);
-    /* Configure the Internal Reference clock (MCGIRCLK). */
-    CLOCK_SetInternalRefClkConfig(mcgConfig_BOARD_BootClockRUN.irclkEnableMode,
-            mcgConfig_BOARD_BootClockRUN.ircs,
-            mcgConfig_BOARD_BootClockRUN.fcrdiv);
-    /* Configure FLL external reference divider (FRDIV). */
-    CLOCK_CONFIG_SetFllExtRefDiv(mcgConfig_BOARD_BootClockRUN.frdiv);
-    /* Set MCG to PEE mode. */
-    CLOCK_BootToPeeMode(mcgConfig_BOARD_BootClockRUN.oscsel,
-            kMCG_PllClkSelPll0,
-            &mcgConfig_BOARD_BootClockRUN.pll0Config);
-    /* Set the clock configuration in SIM module. */
-    CLOCK_SetSimConfig(&simConfig_BOARD_BootClockRUN);
-    do_flash_init();
-}
-
-void hal_prepare_boot(void)
-{
-}
 
 
