@@ -27,7 +27,6 @@ extern void do_boot(const uint32_t *app_offset);
 #define FLASHBUFFER_SIZE 256
 static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {
-    volatile uint32_t *orig, *copy;
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
@@ -52,7 +51,7 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
 #endif
     wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
     while (pos < WOLFBOOT_SECTOR_SIZE) {
-        orig = (volatile uint32_t *)(src->hdr + src_sector_offset + pos);
+        uint8_t *orig = (uint8_t*)(src->hdr + src_sector_offset + pos);
         wb_flash_write(dst, dst_sector_offset + pos, orig, FLASHBUFFER_SIZE);
         pos += FLASHBUFFER_SIZE;
     }

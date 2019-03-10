@@ -32,8 +32,15 @@ extern uint32_t *END_STACK;
 extern void main(void);
 
 void isr_reset(void) {
-    unsigned int *src, *dst;
-
+    register unsigned int *src, *dst;
+#ifdef PLATFORM_kinetis 
+    /* Immediately disable Watchdog after boot */
+    /*  Write Keys to unlock register */
+    *((volatile unsigned short *)0x4005200E) = 0xC520;
+    *((volatile unsigned short *)0x4005200E) = 0xD928;
+    /* disable watchdog via STCTRLH register */
+    *((volatile unsigned short *)0x40052000) = 0x01D2u;
+#endif
     /* Copy the .data section from flash to RAM. */
     src = (unsigned int *) &_stored_data;
     dst = (unsigned int *) &_start_data;

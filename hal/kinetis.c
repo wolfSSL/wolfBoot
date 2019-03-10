@@ -24,10 +24,15 @@
 #include "fsl_common.h"
 #include "fsl_flash.h"
 #include "fsl_ftfx_cache.h"
+#include "fsl_sysmpu.h"
 
 static flash_config_t pflash;
 static ftfx_cache_config_t pcache;
 static int flash_init = 0;
+
+#ifndef NVM_FLASH_WRITEONCE
+#   error "wolfBoot Kinetis HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
+#endif
 
 #ifdef __WOLFBOOT
 #define CPU_CORE_CLOCK             120000000U
@@ -124,13 +129,8 @@ const osc_config_t oscConfig_BOARD_BootClockRUN =
 
 void hal_init(void)
 {
-    // Disable Watchdog
-    //  Write 0xC520 to watchdog unlock register
-    *((volatile unsigned short *)0x4005200E) = 0xC520;
-    //  Followed by 0xD928 to complete the unlock
-    *((volatile unsigned short *)0x4005200E) = 0xD928;
-    // Now disable watchdog via STCTRLH register
-    *((volatile unsigned short *)0x40052000) = 0x01D2u;
+    /* Disable MPU */
+    SYSMPU_Enable(SYSMPU, false);
 
     /* Set the system clock dividers in SIM to safe value. */
     CLOCK_SetSimSafeDivs();
@@ -175,6 +175,7 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int w = 0;
     int ret;
+    const uint8_t empty_dword[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
     do_flash_init();
 
     while (len > 0) {
@@ -186,9 +187,11 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
             memcpy(aligned_dword, address_align, 8);
             for (i = start_off; ((i < 8) && (i < len + start_off)); i++)
                 aligned_dword[i] = data[w++]; 
-            ret = FLASH_Program(&pflash, address_align, aligned_dword, 8);
-            if (ret != kStatus_FTFx_Success)
-                return -1;
+            if (memcmp(aligned_dword, empty_dword, 8) != 0) {
+                    ret = FLASH_Program(&pflash, address_align, aligned_dword, 8);
+                if (ret != kStatus_FTFx_Success)
+                    return -1;
+            }
             address += i;
             len -= i;
         } else {

@@ -35,6 +35,24 @@ uint32_t ext_cache;
 #define PART_BOOT_ENDFLAGS   ((WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
 #define PART_UPDATE_ENDFLAGS ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
 
+#ifdef NVM_FLASH_WRITEONCE
+static uint8_t NVM_CACHE[WOLFBOOT_SECTOR_SIZE];
+int hal_trailer_write(uint32_t addr, uint8_t val) {
+    uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    int ret = 0;
+    memcpy(NVM_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    if (ret != 0)
+        return ret;
+    NVM_CACHE[addr_off] = val;
+    ret = hal_flash_write(addr_align, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
+    return ret;
+}
+#else
+#   define hal_trailer_write(addr, val) hal_flash_write(addr, (void *)&val, 1)
+#endif
+
 #if defined PART_UPDATE_EXT
 static uint8_t *get_trailer_at(uint8_t part, uint32_t at)
 {
@@ -50,7 +68,7 @@ static uint8_t *get_trailer_at(uint8_t part, uint32_t at)
 static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
-        hal_flash_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
+        hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
     }
     else if (part == PART_UPDATE) {
         ext_flash_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
@@ -82,10 +100,10 @@ static uint8_t *get_trailer_at(uint8_t part, uint32_t at)
 static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
-        hal_flash_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
+        hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
     }
     else if (part == PART_UPDATE) {
-        hal_flash_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
+        hal_trailer_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
     }
 }
 

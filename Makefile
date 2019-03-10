@@ -17,6 +17,7 @@ CORTEX_M0?=0
 NO_ASM?=0
 EXT_FLASH?=0
 ALLOW_DOWNGRADE?=0
+NVM_FLASH_WRITEONCE?=0
 
 LSCRIPT:=hal/$(TARGET).ld
 
@@ -76,16 +77,20 @@ CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-u
 	-DPLATFORM_$(TARGET)
 
 ifeq ($(TARGET),kinetis)
-  CFLAGS+=-I$(KINETIS)/drivers -I$(KINETIS) -DCPU_MK64FN1M0VLL12 -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  OBJS+=$(KINETIS)/drivers/fsl_clock.o $(KINETIS)/drivers/fsl_ftfx_flash.o $(KINETIS)/drivers/fsl_ftfx_cache.o $(KINETIS)/drivers/fsl_ftfx_controller.o
+  CFLAGS+= -I$(KINETIS)/drivers -I$(KINETIS) -DCPU_MK64FN1M0VLL12 -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  OBJS+= $(KINETIS)/drivers/fsl_clock.o $(KINETIS)/drivers/fsl_ftfx_flash.o $(KINETIS)/drivers/fsl_ftfx_cache.o $(KINETIS)/drivers/fsl_ftfx_controller.o
 endif
 
 ifeq ($(EXT_FLASH),1)
-  CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
+  CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
 endif
 
 ifeq ($(ALLOW_DOWNGRADE),1)
-  CFLAGS+=-DALLOW_DOWNGRADE
+  CFLAGS+= -DALLOW_DOWNGRADE
+endif
+
+ifeq ($(NVM_FLASH_WRITEONCE),1)
+  CFLAGS+= -DNVM_FLASH_WRITEONCE
 endif
 
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -mcpu=cortex-m3 -mthumb
