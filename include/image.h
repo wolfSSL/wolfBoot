@@ -90,7 +90,6 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 # define PART_IS_EXT(x) (0)
 # define wb_flash_erase(im, of, siz)  hal_flash_erase(((uint32_t)(((im)->hdr)) + of), siz)
 # define wb_flash_write(im, of, dat, siz)  hal_flash_write(((uint32_t)((im)->hdr)) + of, dat, siz)
-# define wb_flash_write_verify_word(im, of, x) do { hal_flash_write(((uint32_t)((im)->hdr)) + of, (void *)&x, sizeof(uint32_t)); } while (*(uint32_t *)(((im)->hdr) + of) != x)
 #endif /* EXT_FLASH */
 
 #endif /* IMAGE_H */

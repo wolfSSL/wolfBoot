@@ -24,6 +24,7 @@
 
 extern void do_boot(const uint32_t *app_offset);
 
+#define FLASHBUFFER_SIZE 256
 static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {
     volatile uint32_t *orig, *copy;
@@ -39,12 +40,12 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
         dst_sector_offset = 0;
 #ifdef EXT_FLASH
     if (PART_IS_EXT(src)) {
-        uint32_t word;
+        uint8_t buffer[FLASHBUFFER_SIZE];
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE) {
-            ext_flash_read((uint32_t)(src->hdr) + src_sector_offset + pos, (void *)&word, sizeof(uint32_t)); 
-            wb_flash_write_verify_word(dst, dst_sector_offset + pos, word);
-            pos += sizeof(uint32_t);
+            ext_flash_read((uint32_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE); 
+            wb_flash_write(dst, dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
+            pos += FLASHBUFFER_SIZE;
         }
         return pos;
     }
@@ -52,8 +53,8 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
     wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
     while (pos < WOLFBOOT_SECTOR_SIZE) {
         orig = (volatile uint32_t *)(src->hdr + src_sector_offset + pos);
-        wb_flash_write_verify_word(dst, dst_sector_offset + pos, *orig);
-        pos += sizeof(uint32_t);
+        wb_flash_write(dst, dst_sector_offset + pos, orig, FLASHBUFFER_SIZE);
+        pos += FLASHBUFFER_SIZE;
     }
     return pos;
 }
