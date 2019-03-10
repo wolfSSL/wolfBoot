@@ -8,8 +8,9 @@ BOOT0_OFFSET?=`cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | sed 
 BOOT_IMG?=test-app/image.bin
 SIGN?=ED25519
 TARGET?=stm32f4
-KINETIS?=$(HOME)/src/FRDM-K64F/devices/MK64F12
-KINETIS_CMSIS?=$(KINETIS)/../../CMSIS
+KINETIS?=$(HOME)/src/FRDM-K64F
+KINETIS_DRIVERS?=$(KINETIS)/devices/MK64F12
+KINETIS_CMSIS?=$(KINETIS)/CMSIS
 DEBUG?=0
 VTOR?=1
 SWAP?=1
@@ -77,8 +78,8 @@ CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-u
 	-DPLATFORM_$(TARGET)
 
 ifeq ($(TARGET),kinetis)
-  CFLAGS+= -I$(KINETIS)/drivers -I$(KINETIS) -DCPU_MK64FN1M0VLL12 -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  OBJS+= $(KINETIS)/drivers/fsl_clock.o $(KINETIS)/drivers/fsl_ftfx_flash.o $(KINETIS)/drivers/fsl_ftfx_cache.o $(KINETIS)/drivers/fsl_ftfx_controller.o
+  CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_MK64FN1M0VLL12 -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o
 endif
 
 ifeq ($(EXT_FLASH),1)
