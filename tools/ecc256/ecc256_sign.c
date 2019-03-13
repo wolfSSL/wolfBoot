@@ -37,6 +37,8 @@
 #include "image.h"
 #include "loader.h"
 
+static uint8_t key_buffer[2 * sizeof(ecc_key)];
+
 void print_buf(uint8_t *buf, int len)
 {
     int i;
@@ -76,7 +78,7 @@ int main(int argc, char *argv[])
     char in_name[PATH_MAX];
     char signed_name[PATH_MAX];
     char *dot;
-    ecc_key key;
+    ecc_key *key = (ecc_key *)key_buffer;
     Sha256 sha;
     Sha256 keyhash;
     uint8_t shabuf[SHA256_DIGEST_SIZE];
@@ -132,17 +134,17 @@ int main(int argc, char *argv[])
         perror(argv[2]);
         exit(2);
     }
-    wc_ecc_init(&key);
+    wc_ecc_init(key);
     r = read(key_fd, inkey, 3 * ECC_KEY_SIZE);
     if (r < 0) {
         perror("read");
         exit(3);
     }
-    r = wc_ecc_import_unsigned(&key, inkey, inkey + ECC_KEY_SIZE, inkey + 2 * ECC_KEY_SIZE, ECC_SECP256R1);
+    r = wc_ecc_import_unsigned(key, inkey, inkey + ECC_KEY_SIZE, inkey + 2 * ECC_KEY_SIZE, ECC_SECP256R1);
     if (r < 0) {
         printf("Errror importing key\n");
     }
-    printf("key.type = %d\n", key.type);
+    printf("key.type = %d\n", key->type);
     close(key_fd);
 
     
@@ -183,11 +185,11 @@ int main(int argc, char *argv[])
             break;
     }
     wc_Sha256Final(&sha, shabuf);
-    if (wc_ecc_sign_hash_ex(shabuf, SHA256_DIGEST_SIZE, &rng, &key, &mpr, &mps) != MP_OKAY) {
+    if (wc_ecc_sign_hash_ex(shabuf, SHA256_DIGEST_SIZE, &rng, key, &mpr, &mps) != MP_OKAY) {
         printf("Error signing hash\n");
         exit(1);
     }
-    if (wc_ecc_verify_hash_ex(&mpr, &mps, shabuf, SHA256_DIGEST_SIZE, &res, &key) != MP_OKAY) {
+    if (wc_ecc_verify_hash_ex(&mpr, &mps, shabuf, SHA256_DIGEST_SIZE, &res, key) != MP_OKAY) {
         printf("Error verifying hash\n");
         exit(1);
     }
@@ -205,7 +207,7 @@ int main(int argc, char *argv[])
 
 #ifdef VERIFY_SIGNATURE_TEST
     {
-        ecc_key pubk;
+        ecc_key *pubk = (ecc_key *)key_buffer;
         int ret;
         int fd;
         mp_int r, s;
@@ -216,7 +218,7 @@ int main(int argc, char *argv[])
         mp_read_unsigned_bin(&r, signature, ECC_KEY_SIZE);
         mp_read_unsigned_bin(&s, signature + ECC_KEY_SIZE, ECC_KEY_SIZE);
 
-        ret = wc_ecc_init(&pubk);
+        ret = wc_ecc_init(pubk);
         if (ret < 0)
         {
             perror ("initializing ecc key");
@@ -234,13 +236,13 @@ int main(int argc, char *argv[])
             exit(2);
         }
 
-        ret = wc_ecc_import_unsigned(&pubk, pubk_buf, pubk_buf + ECC_KEY_SIZE, NULL, ECC_SECP256R1);
+        ret = wc_ecc_import_unsigned(pubk, pubk_buf, pubk_buf + ECC_KEY_SIZE, NULL, ECC_SECP256R1);
         if (ret != MP_OKAY) {
             perror ("importing public key");
             exit(2);
         }
-        printf("pubkey.type = %d\n", pubk.type);
-        ret = wc_ecc_verify_hash_ex(&r, &s, shabuf, SHA256_DIGEST_SIZE, &res, &pubk);
+        printf("pubkey.type = %d\n", pubk->type);
+        ret = wc_ecc_verify_hash_ex(&r, &s, shabuf, SHA256_DIGEST_SIZE, &res, pubk);
         if (ret != MP_OKAY) {
             printf("Verify operation failed.\n");
         } else if (res == 0) {
