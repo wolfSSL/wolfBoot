@@ -145,9 +145,6 @@ int timer_init(uint32_t clock, uint32_t prescaler, uint32_t interval_ms)
     return 0;
 }
 
-int update_started = 0;
-extern void uart_write(char c);
-
 void isr_tim2(void)
 {
     static volatile uint32_t tim2_ticks = 0;
@@ -161,8 +158,6 @@ void isr_tim2(void)
     else
         pwm_init(master_clock, 10 * tim2_ticks);
 
-    if (!update_started)
-        uart_write('*');
 }
 
 

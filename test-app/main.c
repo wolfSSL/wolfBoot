@@ -32,15 +32,14 @@
 
 #ifdef PLATFORM_stm32f4
 
-extern int update_started;
 
-#define UART3 (0x40004800)
+#define UART1 (0x40011000)
 
-#define UART3_SR       (*(volatile uint32_t *)(UART3))
-#define UART3_DR       (*(volatile uint32_t *)(UART3 + 0x04))
-#define UART3_BRR      (*(volatile uint32_t *)(UART3 + 0x08))
-#define UART3_CR1      (*(volatile uint32_t *)(UART3 + 0x0c))
-#define UART3_CR2      (*(volatile uint32_t *)(UART3 + 0x10))
+#define UART1_SR       (*(volatile uint32_t *)(UART1))
+#define UART1_DR       (*(volatile uint32_t *)(UART1 + 0x04))
+#define UART1_BRR      (*(volatile uint32_t *)(UART1 + 0x08))
+#define UART1_CR1      (*(volatile uint32_t *)(UART1 + 0x0c))
+#define UART1_CR2      (*(volatile uint32_t *)(UART1 + 0x10))
 
 #define UART_CR1_UART_ENABLE    (1 << 13)
 #define UART_CR1_SYMBOL_LEN     (1 << 12)
@@ -55,19 +54,19 @@ extern int update_started;
 
 #define CLOCK_SPEED (168000000)
 
-#define APB1_CLOCK_ER           (*(volatile uint32_t *)(0x40023840))
-#define UART3_APB1_CLOCK_ER_VAL 	(1 << 18)
+#define APB2_CLOCK_ER           (*(volatile uint32_t *)(0x40023844))
+#define UART1_APB2_CLOCK_ER (1 << 4)
 
 #define AHB1_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
-#define GPIOD_AHB1_CLOCK_ER (1 << 3)
-#define GPIOD_BASE 0x40020c00
-#define GPIOD_MODE  (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
-#define GPIOD_AFL   (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
-#define GPIOD_AFH   (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
-#define GPIO_MODE_AF (2)
-#define UART3_PIN_AF 7
-#define UART3_RX_PIN 9
-#define UART3_TX_PIN 8
+#define GPIOB_AHB1_CLOCK_ER (1 << 1)
+#define GPIOB_BASE 0x40020400
+
+#define GPIOB_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
+#define GPIOB_AFL   (*(volatile uint32_t *)(GPIOB_BASE + 0x20))
+#define GPIOB_AFH   (*(volatile uint32_t *)(GPIOB_BASE + 0x24))
+#define UART1_PIN_AF 7
+#define UART1_RX_PIN 7
+#define UART1_TX_PIN 6
 
 #define MSGSIZE 16
 #define PAGESIZE (256)
@@ -83,26 +82,26 @@ void uart_write(const char c)
 {
     uint32_t reg;
     do {
-        reg = UART3_SR;
+        reg = UART1_SR;
     } while ((reg & UART_SR_TX_EMPTY) == 0);
-    UART3_DR = c;
+    UART1_DR = c;
 }
 
 static void uart_pins_setup(void)
 {
     uint32_t reg;
-    AHB1_CLOCK_ER |= GPIOD_AHB1_CLOCK_ER;
+    AHB1_CLOCK_ER |= GPIOB_AHB1_CLOCK_ER;
     /* Set mode = AF */
-    reg = GPIOD_MODE & ~ (0x03 << (UART3_RX_PIN * 2));
-    GPIOD_MODE = reg | (2 << (UART3_RX_PIN * 2));
-    reg = GPIOD_MODE & ~ (0x03 << (UART3_TX_PIN * 2));
-    GPIOD_MODE = reg | (2 << (UART3_TX_PIN * 2));
+    reg = GPIOB_MODE & ~ (0x03 << (UART1_RX_PIN * 2));
+    GPIOB_MODE = reg | (2 << (UART1_RX_PIN * 2));
+    reg = GPIOB_MODE & ~ (0x03 << (UART1_TX_PIN * 2));
+    GPIOB_MODE = reg | (2 << (UART1_TX_PIN * 2));
 
-    /* Alternate function: use high pins (8 and 9) */
-    reg = GPIOD_AFH & ~(0xf << ((UART3_TX_PIN - 8) * 4));
-    GPIOD_AFH = reg | (UART3_PIN_AF << ((UART3_TX_PIN - 8) * 4));
-    reg = GPIOD_AFH & ~(0xf << ((UART3_RX_PIN - 8) * 4));
-    GPIOD_AFH = reg | (UART3_PIN_AF << ((UART3_RX_PIN - 8) * 4));
+    /* Alternate function: use low pins (6 and 7) */
+    reg = GPIOB_AFL & ~(0xf << ((UART1_TX_PIN) * 4));
+    GPIOB_AFL = reg | (UART1_PIN_AF << ((UART1_TX_PIN) * 4));
+    reg = GPIOB_AFL & ~(0xf << ((UART1_RX_PIN) * 4));
+    GPIOB_AFL = reg | (UART1_PIN_AF << ((UART1_RX_PIN) * 4));
 }
 
 int uart_setup(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
@@ -111,40 +110,40 @@ int uart_setup(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     /* Enable pins and configure for AF7 */
     uart_pins_setup();
     /* Turn on the device */
-    APB1_CLOCK_ER |= UART3_APB1_CLOCK_ER_VAL;
+    APB2_CLOCK_ER |= UART1_APB2_CLOCK_ER;
 
     /* Configure for TX + RX */
-    UART3_CR1 |= (UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE);
+    UART1_CR1 |= (UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE);
 
     /* Configure clock */
-    UART3_BRR =  CLOCK_SPEED / bitrate;
+    UART1_BRR =  CLOCK_SPEED / bitrate;
 
     /* Configure data bits */
     if (data == 8)
-        UART3_CR1 &= ~UART_CR1_SYMBOL_LEN;
+        UART1_CR1 &= ~UART_CR1_SYMBOL_LEN;
     else
-        UART3_CR1 |= UART_CR1_SYMBOL_LEN;
+        UART1_CR1 |= UART_CR1_SYMBOL_LEN;
 
     /* Configure parity */
     switch (parity) {
         case 'O':
-            UART3_CR1 |= UART_CR1_PARITY_ODD;
+            UART1_CR1 |= UART_CR1_PARITY_ODD;
             /* fall through to enable parity */
         case 'E':
-            UART3_CR1 |= UART_CR1_PARITY_ENABLED;
+            UART1_CR1 |= UART_CR1_PARITY_ENABLED;
             break;
         default:
-            UART3_CR1 &= ~(UART_CR1_PARITY_ENABLED | UART_CR1_PARITY_ODD);
+            UART1_CR1 &= ~(UART_CR1_PARITY_ENABLED | UART_CR1_PARITY_ODD);
     }
     /* Set stop bits */
-    reg = UART3_CR2 & ~UART_CR2_STOPBITS;
+    reg = UART1_CR2 & ~UART_CR2_STOPBITS;
     if (stop > 1)
-        UART3_CR2 = reg & (2 << 12);
+        UART1_CR2 = reg & (2 << 12);
     else
-        UART3_CR2 = reg;
+        UART1_CR2 = reg;
 
     /* Turn on uart */
-    UART3_CR1 |= UART_CR1_UART_ENABLE;
+    UART1_CR1 |= UART_CR1_UART_ENABLE;
 
     return 0;
 }
@@ -154,9 +153,9 @@ char uart_read(void)
     char c;
     volatile uint32_t reg;
     do {
-        reg = UART3_SR;
+        reg = UART1_SR;
     } while ((reg & UART_SR_RX_NOTEMPTY) == 0);
-    c = (char)(UART3_DR & 0xff);
+    c = (char)(UART1_DR & 0xff);
     return c;
 }
 
@@ -209,12 +208,16 @@ void main(void) {
     uart_setup(115200, 8, 'N', 1);
     memset(page, 0xFF, PAGESIZE);
     asm volatile ("cpsie i");
-    /* Initiate update */
 
-    //wolfBoot_success();
 
     hal_flash_unlock();
+    version = wolfBoot_current_firmware_version();
+    if ((version & 0x01) == 0)
+        wolfBoot_success();
     uart_write(START);
+    for (i = 3; i >= 0; i--) {
+        uart_write(v_array[i]);
+    }
     while (1) {
         r_total = 0;
         do {
@@ -241,7 +244,6 @@ void main(void) {
                 uart_write(START);
                 recv_seq = 0;
                 tot_len = 0;
-                update_started = 1;
                 continue;
             }
             tot_len = tlen;
