@@ -172,7 +172,6 @@ int main(int argc, char *argv[])
     }
     wc_Sha256Final(&sha, shabuf);
     wc_ed25519_sign_msg(shabuf, 32, signature, &outlen, &key);
-    wc_Sha256Free(&sha);
     
 
     *(ptr++) = HDR_SHA256;
@@ -186,7 +185,6 @@ int main(int argc, char *argv[])
     *(ptr++) = HDR_PUBKEY;
     *(ptr++) = SHA256_DIGEST_SIZE;
     memcpy(ptr, shabuf, SHA256_DIGEST_SIZE);
-    wc_Sha256Free(&keyhash);
     ptr += SHA256_DIGEST_SIZE;
     
     *(ptr++) = HDR_SIGNATURE;
