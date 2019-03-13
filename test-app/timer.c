@@ -145,6 +145,7 @@ int timer_init(uint32_t clock, uint32_t prescaler, uint32_t interval_ms)
     return 0;
 }
 
+extern volatile uint32_t time_elapsed;
 void isr_tim2(void)
 {
     static volatile uint32_t tim2_ticks = 0;
@@ -158,6 +159,7 @@ void isr_tim2(void)
     else
         pwm_init(master_clock, 10 * tim2_ticks);
 
+    time_elapsed++;
 }
 
 

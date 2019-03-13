@@ -182,6 +182,7 @@ static int check(uint8_t *pkt, int size)
     return -1;
 }
 
+volatile uint32_t time_elapsed = 0;
 void main(void) {
     uint32_t tlen = 0;
     volatile uint32_t recv_seq;
@@ -208,6 +209,9 @@ void main(void) {
     uart_setup(115200, 8, 'N', 1);
     memset(page, 0xFF, PAGESIZE);
     asm volatile ("cpsie i");
+
+    while(time_elapsed == 0)
+        WFI();
 
 
     hal_flash_unlock();

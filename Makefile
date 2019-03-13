@@ -19,7 +19,6 @@ NO_ASM?=0
 EXT_FLASH?=0
 ALLOW_DOWNGRADE?=0
 NVM_FLASH_WRITEONCE?=0
-
 LSCRIPT:=hal/$(TARGET).ld
 
 OBJS:= \
@@ -145,8 +144,11 @@ wolfboot-align.bin: wolfboot.elf
 	$(OBJCOPY) -O binary $^ $@ --pad-to=$(BOOT0_OFFSET) --gap-fill=255
 	$(SIZE) wolfboot.elf
 
+
 test-app/image.bin:
 	make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH)
+
+include tools/test.mk
 
 tools/ed25519/ed25519_sign:
 	make -C tools/ed25519
@@ -187,4 +189,6 @@ distclean: clean
 	make -C tools/ed25519 clean
 	make -C tools/ecc256 clean
 	rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c
+
+FORCE: 
 
