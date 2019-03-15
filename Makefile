@@ -4,7 +4,7 @@ LD:=$(CROSS_COMPILE)gcc
 AS:=$(CROSS_COMPILE)gcc
 OBJCOPY:=$(CROSS_COMPILE)objcopy
 SIZE:=$(CROSS_COMPILE)size
-BOOT0_OFFSET?=`cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | sed -e "s/.*[ ]//g"`
+BOOT0_OFFSET?=`cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | head -1 | sed -e "s/.*[ ]//g"`
 BOOT_IMG?=test-app/image.bin
 SIGN?=ED25519
 TARGET?=stm32f4
@@ -17,6 +17,7 @@ SWAP?=1
 CORTEX_M0?=0
 NO_ASM?=0
 EXT_FLASH?=0
+SPI_FLASH?=0
 ALLOW_DOWNGRADE?=0
 NVM_FLASH_WRITEONCE?=0
 LSCRIPT:=hal/$(TARGET).ld
@@ -71,7 +72,7 @@ ifeq ($(FASTMATH),1)
 endif
 
 CFLAGS+=-mthumb -Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
-	-Ilib/bootutil/include -Iinclude/ -Ilib/wolfssl -nostartfiles \
+	-I. -Ilib/bootutil/include -Iinclude/ -Ilib/wolfssl -nostartfiles \
 	-DWOLFSSL_USER_SETTINGS \
 	-mthumb -mlittle-endian -mthumb-interwork \
 	-DPLATFORM_$(TARGET)
@@ -81,9 +82,16 @@ ifeq ($(TARGET),kinetis)
   OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o
 endif
 
+ifeq ($(SPI_FLASH),1)
+   EXT_FLASH=1
+   CFLAGS+= -DSPI_FLASH=1
+   OBJS+= src/spi_flash.o hal/spi/spi_drv_$(TARGET).o
+endif
+
 ifeq ($(EXT_FLASH),1)
   CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
 endif
+
 
 ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+= -DALLOW_DOWNGRADE

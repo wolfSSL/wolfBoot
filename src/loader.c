@@ -18,9 +18,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include <loader.h>
-#include <image.h>
-#include <hal.h>
+#include "loader.h"
+#include "image.h"
+#include "hal.h"
+#include "spi_flash.h"
 
 extern void do_boot(const uint32_t *app_offset);
 
@@ -38,10 +39,10 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
     if (dst->part == PART_SWAP)
         dst_sector_offset = 0;
 #ifdef EXT_FLASH
-    uint8_t buffer[FLASHBUFFER_SIZE];
     if (PART_IS_EXT(src)) {
+        uint8_t buffer[FLASHBUFFER_SIZE];
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
-        while (pos < WOLFBOOT_SECTOR_SIZE) 
+        while (pos < WOLFBOOT_SECTOR_SIZE)  {
             if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
                 ext_flash_read((uint32_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE); 
                 wb_flash_write(dst, dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
@@ -176,6 +177,7 @@ static void wolfBoot_start(void)
 int main(void)
 {
     hal_init();
+    spi_flash_probe();
     wolfBoot_start();
     while(1)
         ;

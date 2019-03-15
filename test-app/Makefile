@@ -12,6 +12,10 @@ ifeq ($(EXT_FLASH),1)
   CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1
 endif
 
+ifeq ($(SPI_FLASH),1)
+  CFLAGS+=-DSPI_FLASH
+  OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
+endif
 
 image.bin: image.elf
 	$(OBJCOPY) -O binary $^ $@

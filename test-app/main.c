@@ -29,6 +29,7 @@
 #include "led.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "spi_flash.h"
 
 #ifdef PLATFORM_stm32f4
 
@@ -198,6 +199,8 @@ void main(void) {
     clock_config();
     led_pwm_setup();
     pwm_init(CPU_FREQ, 0);
+
+    spi_flash_probe();
     /* Dim the led by altering the PWM duty-cicle
      * in isr_tim2 (timer.c)
      *
