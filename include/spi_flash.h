@@ -27,11 +27,12 @@
 #ifndef SPI_FLASH_DRI_H
 #define SPI_FLASH_DRI_H
 
+#define SPI_FLASH_SECTOR_SIZE (4096)
+#define SPI_FLASH_PAGE_SIZE   (256)
+
 #ifdef SPI_FLASH
 #include <stdint.h>
 
-#define SPI_FLASH_SECTOR_SIZE (4096)
-#define SPI_FLASH_PAGE_SIZE   (256)
 
 uint16_t spi_flash_probe(void);
 void spi_flash_sector_erase(uint32_t address);

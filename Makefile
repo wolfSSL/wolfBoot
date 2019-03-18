@@ -154,7 +154,7 @@ wolfboot-align.bin: wolfboot.elf
 
 
 test-app/image.bin:
-	make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH)
+	make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH)
 
 include tools/test.mk
 

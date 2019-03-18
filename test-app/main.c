@@ -33,6 +33,12 @@
 
 #ifdef PLATFORM_stm32f4
 
+#ifdef SPI_FLASH
+extern void spi_release(void);
+#else
+#define spi_release() do{}while(0)
+#endif
+
 
 #define UART1 (0x40011000)
 
@@ -200,7 +206,6 @@ void main(void) {
     led_pwm_setup();
     pwm_init(CPU_FREQ, 0);
 
-    spi_flash_probe();
     /* Dim the led by altering the PWM duty-cicle
      * in isr_tim2 (timer.c)
      *
@@ -281,7 +286,9 @@ void main(void) {
         ack(next_seq);
         if (next_seq >= tot_len) {
             /* Update complete */
+            spi_flash_probe();
             wolfBoot_update_trigger();
+            spi_release();
             hal_flash_lock();
             break;
         }

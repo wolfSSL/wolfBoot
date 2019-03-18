@@ -44,7 +44,7 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
             if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-                ext_flash_read((uint32_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE); 
+                ext_flash_read((uint32_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
                 wb_flash_write(dst, dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
             }
             pos += FLASHBUFFER_SIZE;
@@ -87,16 +87,16 @@ static int wolfBoot_update(int fallback_allowed)
     /* Check the first sector to detect interrupted update */
     if ((wolfBoot_get_sector_flag(PART_UPDATE, 0, &flag) < 0) || (flag == SECT_FLAG_NEW))
     {
-        /* In case this is a new update, do the required 
-         * checks on the firmware update 
+        /* In case this is a new update, do the required
+         * checks on the firmware update
          * before starting the swap
          */
-        if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)  
+        if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
         }
 #ifndef ALLOW_DOWNGRADE
-        if ( !fallback_allowed && 
+        if ( !fallback_allowed &&
                 (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
             return -1;
 #endif
@@ -157,11 +157,15 @@ static void wolfBoot_start(void)
 {
     uint8_t st;
     struct wolfBoot_image boot, update;
-    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
-        wolfBoot_update(0);
-    } else if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
+    /* First, check if the BOOT partition is still in TESTING,
+     * to trigger fallback.
+     */
+    if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
         wolfBoot_update_trigger();
         wolfBoot_update(1);
+    /* Check for new updates in the UPDATE partition */
+    } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
+        wolfBoot_update(0);
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
             (wolfBoot_verify_integrity(&boot) < 0)  ||
@@ -171,6 +175,7 @@ static void wolfBoot_start(void)
                 /* panic */;
         }
     }
+    hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }
 

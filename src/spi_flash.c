@@ -150,13 +150,15 @@ static int spi_flash_write_sb(uint32_t address, const void *data, int len)
         wait_busy();
         spi_flash_read(address, &verify, 1);
         if ((verify & ~(buf[j])) == 0) {
+            if (verify != buf[j])
+                return -1;
             j++;
             len--;
             address++;
         }
         wait_busy();
     }
-    return j;
+    return 0;
 }
 
 /* --- */
