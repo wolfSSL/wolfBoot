@@ -104,25 +104,34 @@
 
 
 /* FLASH Geometry */
-#define FLASH_SECTOR_0 0x0000000
-#define FLASH_SECTOR_1 0x0004000
-#define FLASH_SECTOR_2 0x0008000
-#define FLASH_SECTOR_3 0x000C000
-#define FLASH_SECTOR_4 0x0010000
-#define FLASH_SECTOR_5 0x0020000
-#define FLASH_SECTOR_6 0x0040000
-#define FLASH_SECTOR_7 0x0060000
-#define FLASH_TOP      0x0080000
+#define FLASH_SECTOR_0  0x0000000 /* 16 Kb   */
+#define FLASH_SECTOR_1  0x0004000 /* 16 Kb   */
+#define FLASH_SECTOR_2  0x0008000 /* 16 Kb   */
+#define FLASH_SECTOR_3  0x000C000 /* 16 Kb   */
+#define FLASH_SECTOR_4  0x0010000 /* 64 Kb   */
+#define FLASH_SECTOR_5  0x0020000 /* 128 Kb  */
+#define FLASH_SECTOR_6  0x0040000 /* 128 Kb  */
+#define FLASH_SECTOR_7  0x0060000 /* 128 Kb  */
+#define FLASH_SECTOR_8  0x0080000 /* 128 Kb  */
+#define FLASH_SECTOR_9  0x00A0000 /* 128 Kb  */
+#define FLASH_SECTOR_10 0x00C0000 /* 128 Kb  */
+#define FLASH_SECTOR_11 0x00E0000 /* 128 Kb  */
+#define FLASH_TOP       0x0100000
 
-const uint32_t flash_sector[9] = {
-    FLASH_SECTOR_0, 
-    FLASH_SECTOR_1, 
-    FLASH_SECTOR_2, 
-    FLASH_SECTOR_3, 
-    FLASH_SECTOR_4, 
-    FLASH_SECTOR_5, 
-    FLASH_SECTOR_6, 
+#define FLASH_SECTORS 12
+const uint32_t flash_sector[FLASH_SECTORS + 1] = {
+    FLASH_SECTOR_0,
+    FLASH_SECTOR_1,
+    FLASH_SECTOR_2,
+    FLASH_SECTOR_3,
+    FLASH_SECTOR_4,
+    FLASH_SECTOR_5,
+    FLASH_SECTOR_6,
     FLASH_SECTOR_7,
+    FLASH_SECTOR_8,
+    FLASH_SECTOR_9,
+    FLASH_SECTOR_10,
+    FLASH_SECTOR_11,
     FLASH_TOP
 };
 
@@ -203,7 +212,7 @@ int hal_flash_erase(uint32_t address, int len)
 
     if (address < flash_sector[0] || end_address > FLASH_TOP)
         return -1;
-    for (i = 0; i < 8; i++) 
+    for (i = 0; i < FLASH_SECTORS; i++)
     {
         if ((address >= flash_sector[i]) && (address < flash_sector[i + 1])) {
             start = i;
@@ -244,7 +253,7 @@ static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
     uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, ppre1, ppre2, flash_waitstates;
-    
+
     /* Enable Power controller */
     APB1_CLOCK_ER |= PWR_APB1_CLOCK_ER_VAL;
 
@@ -256,7 +265,7 @@ static void clock_pll_on(int powersave)
     pllq = 7;
     pllr = 0;
     hpre = RCC_PRESCALER_DIV_NONE;
-    ppre1 = RCC_PRESCALER_DIV_4; 
+    ppre1 = RCC_PRESCALER_DIV_4;
     ppre2 = RCC_PRESCALER_DIV_2;
     flash_waitstates = 3;
 
@@ -297,9 +306,9 @@ static void clock_pll_on(int powersave)
     /* Set PLL config */
     reg32 = RCC_PLLCFGR;
     reg32 &= ~(PLL_FULL_MASK);
-    RCC_PLLCFGR = reg32 | RCC_PLLCFGR_PLLSRC | pllm | 
-        (plln << 6) | (((pllp >> 1) - 1) << 16) | 
-        (pllq << 24); 
+    RCC_PLLCFGR = reg32 | RCC_PLLCFGR_PLLSRC | pllm |
+        (plln << 6) | (((pllp >> 1) - 1) << 16) |
+        (pllq << 24);
     DMB();
     /* Enable PLL oscillator and wait for it to stabilize. */
     RCC_CR |= RCC_CR_PLLON;
@@ -329,7 +338,7 @@ void hal_prepare_boot(void)
 #ifdef SPI_FLASH
     spi_release();
 #endif
-    
+
     clock_pll_off();
 }
 
