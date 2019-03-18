@@ -30,11 +30,8 @@
 
 void spi_cs_off(void)
 {
-    int i;
     GPIOE_BSRR |= (1 << SPI_FLASH_PIN);
     while(!(GPIOE_ODR & (1 << SPI_FLASH_PIN)))
-        ;
-    for(i = 0; i < 168000; i++)
         ;
 }
 
