@@ -21,6 +21,9 @@ and RAM boundaries.
 The following platforms are supported in the current version:
   - STM32F4
   - nRF52
+  - Atmel samR21
+  - TI cc26x2
+  - Kinetis
 
 ## API
 
