@@ -149,12 +149,13 @@ static int image_hash(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
     uint8_t stored_sha_len;
-    uint8_t *p = get_img_hdr(img);
+    uint8_t *p;
     int blksz;
     uint32_t position = 0;
     wc_Sha256 sha256_ctx;
     if (!img)
         return -1;
+    p = get_img_hdr(img);
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
     if (stored_sha_len != SHA256_DIGEST_SIZE)
         return -1;
