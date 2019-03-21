@@ -46,6 +46,7 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
    - Decide a flash partition strategy and modify `include/target.h` accordingly (see [Flash partitions](docs/flash_partitions.md))
    - Change the entry point of the firmware image to account for bootloader presence
    - Equip the application with the [wolfBoot library](docs/API.md) to interact with the bootloader
+   - [Configure and compile](docs/compile.md) a bootable image with a single "make" command
 
 ### Examples provided
 
@@ -64,7 +65,9 @@ firmware at the specified address on the flash.
 
 The `ed25519_sign` tool transforms a bootable firmware image to comply with the firmware image format required by the bootloader.
 
-For more detailed information about the firmware image format, see [Firmware image](docs/firmware_image.md)
+For detailed information about the firmware image format, see [Firmware image](docs/firmware_image.md)
+
+For detailed information about the configuration options for the target system, see [Compiling wolfBoot](docs/compile.md)
 
 ### Upgrading the firmware
 
