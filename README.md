@@ -1,5 +1,5 @@
 # wolfBoot
-wolfSSL Secure Bootloader
+wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/))
 
 wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers, 
 relying on wolfCrypt for firmware authentication, providing firmware update mechanisms.
@@ -22,15 +22,16 @@ projects to provide a secure firmware update mechanism.
 This repository contains the following components:
    - the wolfBoot bootloader
    - Ed25519 key generator and image signing tools
+   - Ecc256 key generator and image signing tools
    - Baremetal test applications 
 
 ### wolfBoot bootloader
 
-woldBoot is a memory-safe standalone bare-metal application, designed to run on a generic microcontroller,
-with no dynamic memory allocation mechanism or linkage to any standard C library.
+wolfBoot is a memory-safe standalone bare-metal application, designed to run on a generic microcontroller,
+with no dynamic memory allocation mechanism or linkage to any standard C library besides wolfCrypt.
 
 The bootloader consists of the following components:
-   - wolfCrypt, which is used to verify the Ed25519 signature of the images
+   - wolfCrypt, which is used to verify the signature of the images
    - A minimalist Hardware Abstraction Layer, with an implementation provided for the supported target, which is in charge for IAP flash access and clock setting on the specific MCU
    - The core bootloader 
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
@@ -84,3 +85,14 @@ For more detailed information about firmware update implementation, see [Firmwar
 
 ### v1.0 (2018-12-04)
  * Initial release with fail-safe update, HAL support for STM32 and nRF52 
+
+### V1.1 (2019-03-27)
+ * Added support for ECC-256 DSA
+ * Added support for external (e.g. SPI) flash for Update/swap
+ * Anti-rollback protection via version number
+ * Hardware support
+    * Added compile options for Cortex-M0
+    * new HAL: Atmel SamR21
+    * new HAL: TI cc26x2
+    * new HAL: NXP/Freescale Kinetis SDK
+ * Improved sign/update tools compatibility (windows)
