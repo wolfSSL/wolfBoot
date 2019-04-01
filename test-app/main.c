@@ -297,7 +297,7 @@ void main(void) {
     while(1)
         ;
 }
-#endif
+#endif /** PLATFROM_stm32f4 **/
 
 #ifdef PLATFORM_nrf52
 #define GPIO_BASE (0x50000000)
@@ -332,6 +332,13 @@ void main(void) {
     asm volatile ("cpsie i");
     while(1)
         WFI();
+}
+#endif
+
+#ifdef PLATFORM_hifive1
+void main(void) {
+    while(1)
+        ;
 }
 #endif
 

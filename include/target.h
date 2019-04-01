@@ -6,7 +6,6 @@
  * Ensure that your firmware entry point is
  * at FLASH_AREA_IMAGE_0_OFFSET + 0x100
  */
-
 #   define WOLFBOOT_SECTOR_SIZE			        0x20000
 #   define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x20000
 
@@ -27,4 +26,4 @@
 #   define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x60000
 #endif
 
-#endif
+#endif /* H_TARGETS_TARGET_ */

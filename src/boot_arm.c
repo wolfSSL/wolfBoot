@@ -1,4 +1,4 @@
-/* wolfboot.c
+/* boot_arm.c 
  *
  * Copyright (C) 2018 wolfSSL Inc.
  *
@@ -108,7 +108,6 @@ void do_boot(const uint32_t *app_offset)
     /* Unconditionally jump to app_entry */
     asm volatile("mov pc, %0" ::"r"(app_entry));
 }
-
 
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =

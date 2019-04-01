@@ -1,4 +1,4 @@
-/* system.c
+/* timer.c
  *
  * Test bare-metal blinking led application
  *
@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef PLATFORM_stm32f4
 #include <stdint.h>
 #include "system.h"
 #include "led.h"
@@ -161,5 +162,4 @@ void isr_tim2(void)
 
     time_elapsed++;
 }
-
-
+#endif /** PLATFORM_stm32f4 **/

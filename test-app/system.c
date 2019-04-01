@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-
+#ifdef PLATFORM_stm32f4
 #include <stdint.h>
 #include "system.h"
 
@@ -131,3 +131,4 @@ void clock_config(void)
     RCC_CR &= ~RCC_CR_HSION;
 }
 
+#endif /** PLATFORM_stm32f4 **/

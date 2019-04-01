@@ -1,11 +1,24 @@
-CROSS_COMPILE:=arm-none-eabi-
-CC:=$(CROSS_COMPILE)gcc
-LD:=$(CROSS_COMPILE)gcc
-OBJS:=startup.o main.o timer.o led.o system.o ../src/libwolfboot.o ../hal/$(TARGET).o
 TARGET?=none
-LSCRIPT:=app.ld
-OBJCOPY:=$(CROSS_COMPILE)objcopy
-CFLAGS:=-mcpu=cortex-m3 -mthumb -g -ggdb -Wall -Wno-main -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+ARCH?=ARM
+
+CFLAGS:=-g -ggdb -Wall -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+
+APP_OBJS:=main.o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+include ../arch.mk
+
+ifeq ($(ARCH),RISCV)
+  APP_OBJS+=startup_riscv.o vector_riscv.o
+endif
+
+ifeq ($(ARCH),ARM)
+  APP_OBJS+=startup_arm.o
+endif
+
+ifeq ($(V),0)
+  Q=@
+endif
+
+LSCRIPT:=$(ARCH).ld
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
@@ -14,24 +27,29 @@ endif
 
 ifeq ($(SPI_FLASH),1)
   CFLAGS+=-DSPI_FLASH
-  OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
+  APP_OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
 endif
 
 image.bin: image.elf
-	$(OBJCOPY) -O binary $^ $@
+	@echo "\t[BIN] $@"
+	$(Q)$(OBJCOPY) -O binary $^ $@
 
-image.elf: $(OBJS) $(LSCRIPT)
-	$(LD) $(LDFLAGS) $(OBJS) -o $@
+image.elf: $(APP_OBJS) $(LSCRIPT)
+	@echo "\t[LD] $@"
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) -o $@
 
 standalone:CFLAGS+=-DPLATFORM_stm32f4
 standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map -nostdlib
 
-
 standalone: image.bin
-	
-startup.o: startup.c
 
-main.o: main.c
+%.o:%.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
+
+%.o:%.S
+	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
-	rm -f image.bin* image.elf *.o image.map tags
+	@rm -f image.bin* image.elf *.o image.map tags
