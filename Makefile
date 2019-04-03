@@ -21,6 +21,7 @@ SPI_FLASH?=0
 ALLOW_DOWNGRADE?=0
 NVM_FLASH_WRITEONCE?=0
 V?=0
+SPMATH?=1
 
 
 
@@ -46,18 +47,12 @@ include arch.mk
 
 ## DSA Settings
 
-ifeq ($(FASTMATH),1)
-  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o
-  CFLAGS+=-DUSE_FAST_MATH
-else
-  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
-endif
-
 ifeq ($(SIGN),ECC256)
   KEYGEN_TOOL=tools/ecc256/ecc256_keygen
   SIGN_TOOL=tools/ecc256/ecc256_sign
   PRIVATE_KEY=ecc256.der
   OBJS+= \
+    $(ECC_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/ecc.o \
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
@@ -65,7 +60,7 @@ ifeq ($(SIGN),ECC256)
 	./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./src/ecc256_pub_key.o \
     ./src/xmalloc.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER
+  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER $(ECC_EXTRA_CFLAGS)
 else
   KEYGEN_TOOL=tools/ed25519/ed25519_keygen
   SIGN_TOOL=tools/ed25519/ed25519_sign
@@ -146,7 +141,9 @@ wolfboot-align.bin: wolfboot.bin
 	@echo
 
 test-app/image.bin:
-	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) V=$(V)
+	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) V=$(V) \
+	KINETIS=$(KINETIS) KINETIS_CPU=$(KINETIS_CPU) KINETIS_DRIVERS=$(KINETIS_DRIVERS) \
+	KINETIS_CMSIS=$(KINETIS_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE)
 	@rm -f src/*.o hal/*.o
 
 include tools/test.mk

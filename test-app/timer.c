@@ -162,4 +162,9 @@ void isr_tim2(void)
 
     time_elapsed++;
 }
+#else
+void isr_tim2(void)
+{
+}
+
 #endif /** PLATFORM_stm32f4 **/

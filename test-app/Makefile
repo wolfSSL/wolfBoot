@@ -1,9 +1,10 @@
 TARGET?=none
 ARCH?=ARM
+KINETIS_CMSIS?=$(KINETIS)/CMSIS
 
 CFLAGS:=-g -ggdb -Wall -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
-APP_OBJS:=main.o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+APP_OBJS:=$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
 include ../arch.mk
 
 ifeq ($(ARCH),RISCV)
@@ -30,6 +31,15 @@ ifeq ($(SPI_FLASH),1)
   APP_OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
 endif
 
+ifeq ($(TARGET),kinetis)
+  CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DNVM_FLASH_WRITEONCE=1
+  APP_OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o \
+		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
+endif
+
+standalone:CFLAGS+=-DTEST_APP_STANDALONE
+standalone:LDFLAGS:=$(CFLAGS) -T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
+
 image.bin: image.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -O binary $^ $@
@@ -38,8 +48,6 @@ image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) -o $@
 
-standalone:CFLAGS+=-DPLATFORM_stm32f4
-standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map -nostdlib
 
 standalone: image.bin
 
