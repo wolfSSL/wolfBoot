@@ -37,6 +37,35 @@ ifeq ($(TARGET),kinetis)
 		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
 endif
 
+ifeq ($(TARGET),hifive1)
+  CFLAGS+=-I$(FREEDOM_E_SDK)/freedom-metal/ -D__METAL_MACHINE_HEADER=\"$(FREEDOM_E_SDK)/bsp/sifive-hifive1/metal.h\"
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/clock.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/led.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/cache.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/cpu.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/gpio.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/interrupt.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/uart.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/tty.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/spi.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/shutdown.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/timer.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,hfrosc.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,hfxosc.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,pll.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,prci.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,spi0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,uart0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,global-external-interrupts0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,local-external-interrupts0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,gpio0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,gpio-leds.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,clint0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,plic0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,cpu.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/fixed-clock.o
+endif
+
 standalone:CFLAGS+=-DTEST_APP_STANDALONE
 standalone:LDFLAGS:=$(CFLAGS) -T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
