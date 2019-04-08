@@ -44,6 +44,7 @@
 #   define USE_FAST_MATH
 #   define WOLFSSL_SHA512
 #   define NO_ASN
+#   define NO_BIG_INT
 #endif
 
 #ifdef WOLFBOOT_SIGN_ECC256
@@ -53,12 +54,19 @@
 #   define ECC_ALT_SIZE
 #   define NO_ECC_SIGN
 #   define NO_ECC_EXPORT
-#   define USE_FAST_MATH
 #   define WOLFSSL_SHA512
+# ifdef FREESCALE_USE_LTC
+#   define LTC_MAX_ECC_BITS (256)
+#   define LTC_MAX_INT_BYTES (128)
+#   define LTC_BASE ((LTC_Type *)LTC0_BASE)
+# else
+#   define NO_BIG_INT
+#   define USE_FAST_MATH
 #   define WOLFSSL_SP_SMALL
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
 #   define WOLFSSL_SP_MATH
+# endif
 #   define NO_ASN
 //#   define NO_ECC_SIGN
 #   define NO_ECC_DHE
@@ -69,5 +77,4 @@
 #	define NO_AES
 #	define NO_CMAC
 #	define NO_CODING
-#   define NO_BIG_INT
 #	define NO_RSA

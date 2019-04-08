@@ -1,7 +1,11 @@
+OUTPUT_ARCH( "riscv" )
+
+ENTRY( _reset )
+
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x00020100, LENGTH = 0x001FF00
-    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00010000
+  FLASH(rxai!w) : ORIGIN = 0x20400000, LENGTH = 512K
+  RAM(wxa!ri) : ORIGIN = 0x80000000, LENGTH = 16K
 }
 
 SECTIONS
@@ -9,9 +13,10 @@ SECTIONS
     .text :
     {
         _start_text = .;
+        KEEP(*(.init))
+        . = ORIGIN(FLASH) + 0x100;
+        _start_vector = .;
         KEEP(*(.isr_vector))
-        *(.init)
-        *(.fini)
         *(.text*)
         *(.rodata*)
         . = ALIGN(4);
@@ -22,8 +27,11 @@ SECTIONS
 
     .data : AT (_stored_data)
     {
+        . = ALIGN(4096);
         _start_data = .;
-        KEEP(*(.data*))
+        *(.data*)
+        _global_pointer = . + 0x800;
+        *(.sdata*)
         . = ALIGN(4);
         _end_data = .;
     } > RAM
@@ -37,7 +45,8 @@ SECTIONS
         _end_bss = .;
         _end = .;
     } > RAM
+
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));
+PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );

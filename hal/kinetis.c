@@ -35,7 +35,6 @@ static int flash_init = 0;
 #endif
 
 #ifdef __WOLFBOOT
-#define CPU_CORE_CLOCK             120000000U
 
 static void CLOCK_CONFIG_SetFllExtRefDiv(uint8_t frdiv)
 {
@@ -43,6 +42,13 @@ static void CLOCK_CONFIG_SetFllExtRefDiv(uint8_t frdiv)
 }
 
 static void do_flash_init(void);
+
+/* Assert hook needed by Kinetis SDK */
+void __assert_func(const char *a, int b, const char *c, const char *d)
+{
+    while(1)
+        ;
+}
 
 /* This are the registers for the NV flash configuration area.
  * Access these field by setting the relative flags in NV_Flash_Config.
@@ -68,13 +74,51 @@ const uint8_t __attribute__((section(".flash_config"))) NV_Flash_Config[NVTYPE_L
     0xFF
 };
 
-
-/* Assert hook needed by Kinetis SDK */
-void __assert_func(const char *a, int b, const char *c, const char *d)
+#if defined(CPU_MK82FN256VLL15)
+struct stage1_config
 {
-    while(1)
-        ;
-}
+    uint32_t tag;               
+    uint32_t crcStartAddress;   
+    uint32_t crcByteCount;      
+    uint32_t crcExpectedValue;  
+    uint8_t  enabledPeripherals; 
+    uint8_t  i2cSlaveAddress;    
+    uint16_t peripheralDetectionTimeoutMs; 
+    uint16_t usbVid; 
+    uint16_t usbPid; 
+    uint32_t usbStringsPointer; 
+    uint8_t  clockFlags;   
+    uint8_t  clockDivider; 
+    uint8_t  bootFlags; 
+    uint8_t  RESERVED1;
+    uint32_t mmcauConfigPointer; 
+    uint32_t keyBlobPointer;     
+    uint8_t  RESERVED2[8];
+    uint32_t qspiConfigBlockPtr; 
+    uint8_t  RESERVED3[12];
+};
+
+const struct stage1_config __attribute__((section(".stage1_config"))) 
+ NV_Stage1_Config = {
+    .tag = 0x6766636BU,                      /* Magic Number */
+    .crcStartAddress = 0xFFFFFFFFU,          /* Disable CRC check */
+    .crcByteCount = 0xFFFFFFFFU,             /* Disable CRC check */
+    .crcExpectedValue = 0xFFFFFFFFU,         /* Disable CRC check */
+    .enabledPeripherals = 0x17,              /* Enable all peripherals */
+    .i2cSlaveAddress = 0xFF,                 /* Use default I2C address */
+    .peripheralDetectionTimeoutMs = 0x01F4U, /* Use default timeout */
+    .usbVid = 0xFFFFU,                       /* Use default USB Vendor ID */
+    .usbPid = 0xFFFFU,                       /* Use default USB Product ID */
+    .usbStringsPointer = 0xFFFFFFFFU,        /* Use default USB Strings */
+    .clockFlags = 0x01,                      /* Enable High speed mode */
+    .clockDivider = 0xFF,                    /* Use clock divider 1 */
+    .bootFlags = 0x01,                       /* Enable communication with host */
+    .mmcauConfigPointer = 0xFFFFFFFFU,       /* No MMCAU configuration */
+    .keyBlobPointer = 0x000001000,           /* keyblob data is at 0x1000 */
+    .qspiConfigBlockPtr = 0xFFFFFFFFU        /* No QSPI configuration */
+};
+#endif
+
 
 #define MCG_PLL_DISABLE                                   0U  /*!< MCGPLLCLK disabled */
 #define OSC_CAP0P                                         0U  /*!< Oscillator 0pF capacitor load */
@@ -82,6 +126,10 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
 #define SIM_OSC32KSEL_RTC32KCLK_CLK                       2U  /*!< OSC32KSEL select: RTC32KCLK clock (32.768kHz) */
 #define SIM_PLLFLLSEL_IRC48MCLK_CLK                       3U  /*!< PLLFLL select: IRC48MCLK clock */
 #define SIM_PLLFLLSEL_MCGPLLCLK_CLK                       1U  /*!< PLLFLL select: MCGPLLCLK clock */
+#define SIM_CLKDIV1_RUN_MODE_MAX_CORE_DIV 1U    /*!< SIM CLKDIV1 maximum run mode core/system divider configurations */
+#define SIM_CLKDIV1_RUN_MODE_MAX_BUS_DIV 3U     /*!< SIM CLKDIV1 maximum run mode bus divider configurations */
+#define SIM_CLKDIV1_RUN_MODE_MAX_FLEXBUS_DIV 3U /*!< SIM CLKDIV1 maximum run mode flexbus divider configurations */
+#define SIM_CLKDIV1_RUN_MODE_MAX_FLASH_DIV 7U   /*!< SIM CLKDIV1 maximum run mode flash divider configurations */
 
 static void CLOCK_CONFIG_FllStableDelay(void)
 {
@@ -92,7 +140,6 @@ static void CLOCK_CONFIG_FllStableDelay(void)
     }
 }
 
-/* Clock configuration for K64F */
 const mcg_config_t mcgConfig_BOARD_BootClockRUN =
 {
     .mcgMode = kMCG_ModePEE,                  /* PEE - PLL Engaged External */
@@ -103,19 +150,34 @@ const mcg_config_t mcgConfig_BOARD_BootClockRUN =
     .drs = kMCG_DrsLow,                       /* Low frequency range */
     .dmx32 = kMCG_Dmx32Default,               /* DCO has a default range of 25% */
     .oscsel = kMCG_OscselOsc,                 /* Selects System Oscillator (OSCCLK) */
+#if defined(CPU_MK64FN1M0VLL12)
     .pll0Config =
     {
         .enableMode = MCG_PLL_DISABLE,    /* MCGPLLCLK disabled */
         .prdiv = 0x13U,                   /* PLL Reference divider: divided by 20 */
         .vdiv = 0x18U,                    /* VCO divider: multiplied by 48 */
     },
+#elif defined(CPU_MK82FN256VLL15)
+    .pll0Config =
+    {
+        .enableMode = MCG_PLL_DISABLE, /* MCGPLLCLK disabled */
+        .prdiv = 0x0U,                 /* PLL Reference divider: divided by 1 */
+        .vdiv = 0x9U,                  /* VCO divider: multiplied by 25 */
+    },
+#else
+#       error("The selected Kinetis MPU does not have a clock line configuration. Please edit hal/kinetis.c")
+#endif
+
 };
+
+#if defined(CPU_MK64FN1M0VLL12)
 const sim_clock_config_t simConfig_BOARD_BootClockRUN =
 {
     .pllFllSel = SIM_PLLFLLSEL_MCGPLLCLK_CLK, /* PLLFLL select: MCGPLLCLK clock */
     .er32kSrc = SIM_OSC32KSEL_RTC32KCLK_CLK,  /* OSC32KSEL select: RTC32KCLK clock (32.768kHz) */
     .clkdiv1 = 0x1240000U,                    /* SIM_CLKDIV1 - OUTDIV1: /1, OUTDIV2: /2, OUTDIV3: /3, OUTDIV4: /5 */
 };
+
 const osc_config_t oscConfig_BOARD_BootClockRUN =
 {
     .freq = 50000000U,                        /* Oscillator frequency: 50000000Hz */
@@ -127,13 +189,41 @@ const osc_config_t oscConfig_BOARD_BootClockRUN =
     }
 };
 
+#elif defined(CPU_MK82FN256VLL15)
+
+const sim_clock_config_t simConfig_BOARD_BootClockRUN = {
+    .pllFllSel = SIM_PLLFLLSEL_MCGPLLCLK_CLK, /* PLLFLL select: MCGPLLCLK clock */
+    .pllFllDiv = 0,                           /* PLLFLLSEL clock divider divisor: divided by 1 */
+    .pllFllFrac = 0,                          /* PLLFLLSEL clock divider fraction: multiplied by 1 */
+    .er32kSrc = SIM_OSC32KSEL_RTC32KCLK_CLK,  /* OSC32KSEL select: RTC32KCLK clock (32.768kHz) */
+    .clkdiv1 = 0x1150000U,                    /* SIM_CLKDIV1 - OUTDIV1: /1, OUTDIV2: /2, OUTDIV3: /2, OUTDIV4: /6 */
+};
+
+const osc_config_t oscConfig_BOARD_BootClockRUN = {
+    .freq = 12000000U,                /* Oscillator frequency: 12000000Hz */
+    .capLoad = (OSC_CAP0P),           /* Oscillator capacity load: 0pF */
+    .workMode = kOSC_ModeOscLowPower, /* Oscillator low power */
+    .oscerConfig = {
+        .enableMode =
+            kOSC_ErClkEnable, /* Enable external reference clock, disable external reference clock in STOP mode */
+        .erclkDiv = 0,        /* Divider for OSCERCLK: divided by 1 */
+    }
+};
+#endif
+
+
 void hal_init(void)
 {
     /* Disable MPU */
     SYSMPU_Enable(SYSMPU, false);
 
     /* Set the system clock dividers in SIM to safe value. */
+#if defined(CPU_MK64FN1M0VLL12)
     CLOCK_SetSimSafeDivs();
+#elif defined(CPU_MK82FN256VLL15)
+    CLOCK_SetOutDiv(SIM_CLKDIV1_RUN_MODE_MAX_CORE_DIV, SIM_CLKDIV1_RUN_MODE_MAX_BUS_DIV,
+                    SIM_CLKDIV1_RUN_MODE_MAX_FLEXBUS_DIV, SIM_CLKDIV1_RUN_MODE_MAX_FLASH_DIV);
+#endif
     /* Initializes OSC0 according to board configuration. */
     CLOCK_InitOsc0(&oscConfig_BOARD_BootClockRUN);
     CLOCK_SetXtal0Freq(oscConfig_BOARD_BootClockRUN.freq);
@@ -151,6 +241,45 @@ void hal_init(void)
     CLOCK_SetSimConfig(&simConfig_BOARD_BootClockRUN);
     do_flash_init();
 }
+#if 0
+void BOARD_BootClockHSRUN(void)
+{
+    /* In HSRUN mode, the maximum allowable change in frequency of the system/bus/core/flash is
+    * restricted to x2, to follow this restriction, enter HSRUN mode should follow:
+ * 1.set CLKDIV1 to safe divider value.
+    * 2.set the PLL or FLL output target frequency for HSRUN mode.
+    * 3.switch to HSRUN mode.
+    * 4.switch to HSRUN mode target requency value.
+    */
+
+    /* Set the system clock dividers in SIM to safe value. */
+    CLOCK_SetOutDiv(SIM_CLKDIV1_RUN_MODE_MAX_CORE_DIV, SIM_CLKDIV1_RUN_MODE_MAX_BUS_DIV,
+                    SIM_CLKDIV1_RUN_MODE_MAX_FLEXBUS_DIV, SIM_CLKDIV1_RUN_MODE_MAX_FLASH_DIV);
+    /* Initializes OSC0 according to board configuration. */
+    CLOCK_InitOsc0(&oscConfig_BOARD_BootClockHSRUN);
+    CLOCK_SetXtal0Freq(oscConfig_BOARD_BootClockHSRUN.freq);
+    /* Configure the Internal Reference clock (MCGIRCLK). */
+    CLOCK_SetInternalRefClkConfig(mcgConfig_BOARD_BootClockHSRUN.irclkEnableMode, mcgConfig_BOARD_BootClockHSRUN.ircs,
+                                  mcgConfig_BOARD_BootClockHSRUN.fcrdiv);
+    /* Configure FLL external reference divider (FRDIV). */
+    CLOCK_CONFIG_SetFllExtRefDiv(mcgConfig_BOARD_BootClockHSRUN.frdiv);
+    /* Set MCG to PEE mode. */
+    CLOCK_BootToPeeMode(mcgConfig_BOARD_BootClockHSRUN.oscsel, kMCG_PllClkSelPll0,
+                        &mcgConfig_BOARD_BootClockHSRUN.pll0Config);
+
+    /* Set HSRUN power mode */
+    SMC_SetPowerModeProtection(SMC, kSMC_AllowPowerModeAll);
+    SMC_SetPowerModeHsrun(SMC);
+    while (SMC_GetPowerModeState(SMC) != kSMC_PowerStateHsrun)
+    {
+    }
+
+    /* Set the clock configuration in SIM module. */
+    CLOCK_SetSimConfig(&simConfig_BOARD_BootClockHSRUN);
+    /* Set SystemCoreClock variable. */
+    SystemCoreClock = BOARD_BOOTCLOCKHSRUN_CORE_CLOCK;
+}
+#endif
 
 void hal_prepare_boot(void)
 {

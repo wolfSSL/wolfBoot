@@ -10,6 +10,11 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
+        . = 0x3c0;
+        KEEP(*(.stage1_config))
+        . = 0x400;
+        KEEP(*(.flash_config))
+        . = ALIGN(8);
         *(.text*)
         *(.rodata*)
         . = ALIGN(4);

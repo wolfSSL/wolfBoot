@@ -1,11 +1,25 @@
-CROSS_COMPILE:=arm-none-eabi-
-CC:=$(CROSS_COMPILE)gcc
-LD:=$(CROSS_COMPILE)gcc
-OBJS:=startup.o main.o timer.o led.o system.o ../src/libwolfboot.o ../hal/$(TARGET).o
 TARGET?=none
-LSCRIPT:=app.ld
-OBJCOPY:=$(CROSS_COMPILE)objcopy
-CFLAGS:=-mcpu=cortex-m3 -mthumb -g -ggdb -Wall -Wno-main -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+ARCH?=ARM
+KINETIS_CMSIS?=$(KINETIS)/CMSIS
+
+CFLAGS:=-g -ggdb -Wall -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+
+APP_OBJS:=$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+include ../arch.mk
+
+ifeq ($(ARCH),RISCV)
+  APP_OBJS+=startup_riscv.o vector_riscv.o
+endif
+
+ifeq ($(ARCH),ARM)
+  APP_OBJS+=startup_arm.o
+endif
+
+ifeq ($(V),0)
+  Q=@
+endif
+
+LSCRIPT:=$(ARCH).ld
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
@@ -14,24 +28,65 @@ endif
 
 ifeq ($(SPI_FLASH),1)
   CFLAGS+=-DSPI_FLASH
-  OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
+  APP_OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
 endif
 
+ifeq ($(TARGET),kinetis)
+  CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DNVM_FLASH_WRITEONCE=1
+  APP_OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o \
+		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
+endif
+
+ifeq ($(TARGET),hifive1)
+  CFLAGS+=-I$(FREEDOM_E_SDK)/freedom-metal/ -D__METAL_MACHINE_HEADER=\"$(FREEDOM_E_SDK)/bsp/sifive-hifive1/metal.h\"
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/clock.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/led.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/cache.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/cpu.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/gpio.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/interrupt.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/uart.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/tty.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/spi.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/shutdown.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/timer.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,hfrosc.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,hfxosc.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,pll.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,fe310-g000,prci.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,spi0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,uart0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,global-external-interrupts0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,local-external-interrupts0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,gpio0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/sifive,gpio-leds.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,clint0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,plic0.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,cpu.o
+  APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/fixed-clock.o
+endif
+
+standalone:CFLAGS+=-DTEST_APP_STANDALONE
+standalone:LDFLAGS:=$(CFLAGS) -T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
+
 image.bin: image.elf
-	$(OBJCOPY) -O binary $^ $@
+	@echo "\t[BIN] $@"
+	$(Q)$(OBJCOPY) -O binary $^ $@
 
-image.elf: $(OBJS) $(LSCRIPT)
-	$(LD) $(LDFLAGS) $(OBJS) -o $@
-
-standalone:CFLAGS+=-DPLATFORM_stm32f4
-standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map -nostdlib
+image.elf: $(APP_OBJS) $(LSCRIPT)
+	@echo "\t[LD] $@"
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) -o $@
 
 
 standalone: image.bin
-	
-startup.o: startup.c
 
-main.o: main.c
+%.o:%.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
+
+%.o:%.S
+	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
-	rm -f image.bin* image.elf *.o image.map tags
+	@rm -f image.bin* image.elf *.o image.map tags

@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef PLATFORM_stm32f4
 #include <stdint.h>
 #include "wolfboot/wolfboot.h"
 
@@ -69,3 +70,4 @@ void boot_led_on(void)
     GPIOD_BSRR |= (1 << pin);
 }
 
+#endif /** PLATFORM_stm32f4 **/
