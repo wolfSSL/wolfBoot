@@ -8,8 +8,10 @@ Cfile_Banner="/* Public-key file for wolfBoot, automatically generated. Do not e
              " * This file has been generated and contains the public key which is\n"+ \
              " * used by wolfBoot to verify the updates.\n"+ \
              " */" \
-             "\n#include <stdint.h>\n\n" + \
-             "const uint8_t ed25519_pub_key[32] = {\n" 
+             "\n#include <stdint.h>\n\n"
+
+Ed25519_pub_key_define = "const uint8_t ed25519_pub_key[32] = {\n\t"
+Ecc256_pub_key_define = "const uint8_t ecc256_pub_key[64] = {\n\t"
 
 sign="ed25519"
 
@@ -57,20 +59,21 @@ if (sign == "ed25519"):
     print("Creating file " + pubkey_cfile)
     with open(pubkey_cfile, "w") as f:
         f.write(Cfile_Banner)
+        f.write(Ed25519_pub_key_define)
         i = 0
         for c in bytes(pub[0:-1]):
             f.write("0x%02X, " % c)
             i += 1
             if (i % 8 == 0):
-                f.write('\n')
+                f.write('\n\t')
         f.write("0x%02X" % pub[-1])
         f.write("\n};\n")
         f.write("const uint32_t ed25519_pub_key_len = 32;\n")
         f.close()
 
 if (sign == "ecc256"):
-    ec = ciphers.EccPrivate.make_key(64)
-    priv = ec.encode_key()
+    ec = ciphers.EccPrivate.make_key(32)
+    qx,qy,d = ec.encode_key_raw()
     if os.path.exists(key_file):
         choice = input("** Warning: key file already exist! Are you sure you want to "+
                 "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
@@ -81,7 +84,28 @@ if (sign == "ecc256"):
     print()
     print("Creating file " + key_file)
     with open(key_file, "wb") as f:
-        f.write(priv)
+        f.write(qx)
+        f.write(qy)
+        f.write(d)
+        f.close()
+    print("Creating file " + pubkey_cfile)
+    with open(pubkey_cfile, "w") as f:
+        f.write(Cfile_Banner)
+        f.write(Ecc256_pub_key_define)
+        i = 0
+        for c in bytes(qx):
+            f.write("0x%02X, " % c)
+            i += 1
+            if (i % 8 == 0):
+                f.write('\n')
+        for c in bytes(qy[0:-1]):
+            f.write("0x%02X, " % c)
+            i += 1
+            if (i % 8 == 0):
+                f.write('\n')
+        f.write("0x%02X" % qy[-1])
+        f.write("\n};\n")
+        f.write("const uint32_t ed25519_pub_key_len = 64;\n")
         f.close()
 
 
