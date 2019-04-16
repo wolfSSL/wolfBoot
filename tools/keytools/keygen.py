@@ -1,4 +1,25 @@
 #!/usr/bin/python3
+'''
+ * keygen.py
+ *
+ * Copyright (C) 2019 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+'''
 
 import sys,os
 from wolfcrypt import ciphers
@@ -105,7 +126,7 @@ if (sign == "ecc256"):
                 f.write('\n')
         f.write("0x%02X" % qy[-1])
         f.write("\n};\n")
-        f.write("const uint32_t ed25519_pub_key_len = 64;\n")
+        f.write("const uint32_t ecc256_pub_key_len = 64;\n")
         f.close()
 
 
