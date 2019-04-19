@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include "image.h"
 
 /* Clock settings for cpu samd21g18a @ 48MHz */ 
 #define CPU_FREQ (48000000)
@@ -154,7 +155,7 @@ void hal_prepare_boot(void)
 }
 
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
     uint32_t *src, *dst;
@@ -191,17 +192,17 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
-void hal_flash_unlock(void)
+void RAMFUNCTION hal_flash_unlock(void)
 {
     PAC1_WPCLR |= (PAC_WP_NVMCTL);
 }
 
-void hal_flash_lock(void)
+void RAMFUNCTION hal_flash_lock(void)
 {
     PAC1_WPSET |= (PAC_WP_NVMCTL);
 }
 
-int hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     while (len > 0) {
         NVMCTRL_ADDR = (address >> 1); /* This register holds the address of a 16-bit row */

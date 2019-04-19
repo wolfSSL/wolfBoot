@@ -23,6 +23,7 @@ ALLOW_DOWNGRADE?=0
 NVM_FLASH_WRITEONCE?=0
 V?=0
 SPMATH?=1
+RAM_CODE?=0
 
 
 
@@ -79,6 +80,10 @@ CFLAGS+=-Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 	-I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
 	-DWOLFSSL_USER_SETTINGS \
 	-DPLATFORM_$(TARGET)
+
+ifeq ($(RAM_CODE),1)
+   CFLAGS+= -DRAM_CODE
+endif
 
 ifeq ($(SPI_FLASH),1)
    EXT_FLASH=1

@@ -25,16 +25,17 @@ SECTIONS
     } > FLASH
 
     _stored_data = .;
-
     .data : AT (_stored_data)
     {
         _start_data = .;
         KEEP(*(.data*))
         . = ALIGN(4);
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
         _end_data = .;
     } > RAM
 
-    .bss (NOLOAD) : 
+    .bss (NOLOAD) :
     {
         _start_bss = .;
         __bss_start__ = .;

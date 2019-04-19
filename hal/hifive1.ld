@@ -33,10 +33,12 @@ SECTIONS
         _global_pointer = . + 0x800;
         *(.sdata*)
         . = ALIGN(4);
+        KEEP(*(.ramcode*))
+        . = ALIGN(4);
         _end_data = .;
     } > RAM
 
-    .bss :
+    .bss (NOLOAD) :
     {
         _start_bss = .;
         *(.bss*)

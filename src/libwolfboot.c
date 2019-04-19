@@ -21,7 +21,8 @@
 #include <hal.h>
 #include <stdint.h>
 #include <inttypes.h>
-#include <wolfboot/wolfboot.h>
+#include "wolfboot/wolfboot.h"
+#include "image.h"
 
 #ifndef NULL
 #   define NULL (void *)0
@@ -37,7 +38,7 @@ uint32_t ext_cache;
 
 #ifdef NVM_FLASH_WRITEONCE
 static uint8_t NVM_CACHE[WOLFBOOT_SECTOR_SIZE];
-int hal_trailer_write(uint32_t addr, uint8_t val) {
+int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
     int ret = 0;
@@ -54,7 +55,7 @@ int hal_trailer_write(uint32_t addr, uint8_t val) {
 #endif
 
 #if defined PART_UPDATE_EXT
-static uint8_t *get_trailer_at(uint8_t part, uint32_t at)
+static uint8_t* get_trailer_at(uint8_t part, uint32_t at) 
 {
     if (part == PART_BOOT)
         return (void *)(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at));
@@ -87,7 +88,7 @@ static void set_partition_magic(uint8_t part)
 }
 
 #else
-static uint8_t *get_trailer_at(uint8_t part, uint32_t at)
+static uint8_t* get_trailer_at(uint8_t part, uint32_t at) 
 {
     if (part == PART_BOOT)
         return (void *)(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at));
@@ -97,7 +98,7 @@ static uint8_t *get_trailer_at(uint8_t part, uint32_t at)
         return NULL;
 }
 
-static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
+static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
         hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
@@ -107,7 +108,7 @@ static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
     }
 }
 
-static void set_partition_magic(uint8_t part)
+static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
     if (part == PART_BOOT) {
@@ -121,32 +122,32 @@ static void set_partition_magic(uint8_t part)
 
 
 
-static uint32_t *get_partition_magic(uint8_t part)
+static uint32_t* get_partition_magic(uint8_t part)
 {
     return (uint32_t *)get_trailer_at(part, 0);
 }
 
-static uint8_t *get_partition_state(uint8_t part)
+static uint8_t* get_partition_state(uint8_t part)
 {
     return (uint8_t *)get_trailer_at(part, 1);
 }
 
-static uint8_t *get_sector_flags(uint8_t part, uint32_t pos)
+static uint8_t* get_sector_flags(uint8_t part, uint32_t pos)
 {
     return (uint8_t *)get_trailer_at(part, 2 + pos);
 }
 
-static void set_partition_state(uint8_t part, uint8_t val)
+static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
 {
     set_trailer_at(part, 1, val);
 }
 
-static void set_sector_flags(uint8_t part, uint32_t pos, uint8_t val)
+static void RAMFUNCTION set_sector_flags(uint8_t part, uint32_t pos, uint8_t val)
 {
     set_trailer_at(part, 2 + pos, val);
 }
 
-int wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
+int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
 {
     uint32_t *magic;
     uint8_t *state;
@@ -159,7 +160,7 @@ int wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
-int wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag)
+int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag)
 {
     uint32_t *magic;
     uint8_t *flags;
@@ -207,7 +208,7 @@ int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag)
     return 0;
 }
 
-void wolfBoot_erase_partition(uint8_t part)
+void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 {
     if (part == PART_BOOT)
         hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_SIZE);
@@ -224,7 +225,7 @@ void wolfBoot_erase_partition(uint8_t part)
         hal_flash_erase(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE);
 }
 
-void wolfBoot_update_trigger(void)
+void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
 #ifdef PART_UPDATE_EXT
@@ -238,7 +239,7 @@ void wolfBoot_update_trigger(void)
 #endif
 }
 
-void wolfBoot_success(void)
+void RAMFUNCTION wolfBoot_success(void)
 {
     uint8_t st = IMG_STATE_SUCCESS;
     hal_flash_unlock();

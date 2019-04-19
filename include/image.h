@@ -3,14 +3,22 @@
 #include <stdint.h>
 #include <target.h>
 #include <wolfboot/wolfboot.h>
-#include "image.h"
+
+#if defined(__WOLFBOOT) && defined(RAM_CODE)
+#  if defined(ARCH_ARM)
+#    define RAMFUNCTION __attribute__((section(".ramcode"),long_call))
+#  else
+#    define RAMFUNCTION __attribute__((section(".ramcode")))
+#  endif
+#else
+# define RAMFUNCTION
+#endif
 
 
 #define SECT_FLAG_NEW 0x0F
 #define SECT_FLAG_SWAPPING 0x07
 #define SECT_FLAG_BACKUP 0x03
 #define SECT_FLAG_UPDATED 0x00
-
 
 
 struct wolfBoot_image {
