@@ -4,6 +4,13 @@
 
 #include <inttypes.h>
 #include "target.h"
+
+/* Architecture specific calls */
+extern void do_boot(const uint32_t *app_offset);
+extern void arch_reboot(void);
+
+
+
 void hal_init(void);
 int hal_flash_write(uint32_t address, const uint8_t *data, int len);
 int hal_flash_erase(uint32_t address, int len);

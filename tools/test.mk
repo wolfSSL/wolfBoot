@@ -1,7 +1,7 @@
 TEST_UPDATE_VERSION?=2
+WOLFBOOT_VERSION?=0
 EXPVER=tools/test-expect-version/test-expect-version
 SPI_CHIP=SST25VF080B
-
 SIGN_TOOL=/bin/false
 
 ifeq ($(SIGN),ED25519)
@@ -40,7 +40,6 @@ test-spi-off: FORCE
 	@echo "in" >/sys/class/gpio/gpio10/direction
 	@echo "in" >/sys/class/gpio/gpio11/direction
 
-
 test-update: test-app/image.bin FORCE
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-update.bin
 	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
@@ -51,6 +50,17 @@ test-update: test-app/image.bin FORCE
 	@st-flash --reset write test-update.bin 0x08040000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000)
+
+test-self-update: wolfboot.bin test-app/image.bin FORCE
+	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-self-update.bin
+	@$(SIGN_TOOL) --wolfboot-update wolfboot.bin $(PRIVATE_KEY) $(WOLFBOOT_VERSION)
+	@dd if=wolfboot_v$(WOLFBOOT_VERSION)_signed.bin of=test-self-update.bin bs=1 conv=notrunc
+	@printf "pBOOT" >> test-self-update.bin
+	@make test-reset
+	@sleep 2
+	@st-flash --reset write test-self-update.bin 0x08040000 || \
+		(make test-reset && sleep 1 && st-flash --reset write test-self-update.bin 0x08040000) || \
+		(make test-reset && sleep 1 && st-flash --reset write test-self-update.bin 0x08040000)
 
 test-update-ext: test-app/image.bin FORCE
 	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)

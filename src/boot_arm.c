@@ -1,4 +1,4 @@
-/* boot_arm.c 
+/* boot_arm.c
  *
  * Copyright (C) 2018 wolfSSL Inc.
  *
@@ -18,9 +18,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include <loader.h>
+#include "image.h"
+#include "loader.h"
 #include <stdint.h>
-#include <wolfboot/wolfboot.h>
+#include "wolfboot/wolfboot.h"
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
@@ -33,7 +34,7 @@ extern void main(void);
 
 void isr_reset(void) {
     register unsigned int *src, *dst;
-#ifdef PLATFORM_kinetis 
+#ifdef PLATFORM_kinetis
     /* Immediately disable Watchdog after boot */
     /*  Write Keys to unlock register */
     *((volatile unsigned short *)0x4005200E) = 0xC520;
@@ -85,6 +86,7 @@ void isr_empty(void)
  */
 static void  *app_entry;
 static uint32_t app_end_stack;
+
 
 void do_boot(const uint32_t *app_offset)
 {
@@ -171,3 +173,18 @@ void (* const IV[])(void) =
     isr_empty,
     isr_empty,
 };
+
+#ifdef RAM_CODE
+
+#define AIRCR *(volatile uint32_t *)(0xE000ED0C)
+#define AIRCR_VKEY (0x05FA << 16)
+#   define AIRCR_SYSRESETREQ (1 << 2)
+
+void RAMFUNCTION arch_reboot(void)
+{
+    AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
+    while(1)
+        ;
+
+}
+#endif

@@ -30,37 +30,48 @@ HDR_END         = 0x00
 HDR_VERSION     = 0x01
 HDR_TIMESTAMP   = 0x02
 HDR_SHA256      = 0x03
+HDR_IMG_TYPE    = 0x04
 HDR_PUBKEY      = 0x10
 HDR_SIGNATURE   = 0x20
 HDR_PADDING     = 0xFF
 
+
 HDR_VERSION_LEN     = 4
 HDR_TIMESTAMP_LEN   = 8
 HDR_SHA256_LEN      = 32
+HDR_IMG_TYPE_LEN    = 2
 HDR_PUBKEY_LEN      = 32
 HDR_SIGNATURE_LEN   = 64
 
+HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
+HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
+
+HDR_IMG_TYPE_WOLFBOOT     = 0x0000
+HDR_IMG_TYPE_APP          = 0x0001
+
 sign="auto"
+self_update=False
 
 argc = len(sys.argv)
 argv = sys.argv
 
-if (argc < 4) or (argc > 5):
-    print("Usage: %s [--ed25519 | --ecc256 ] image key.der fw_version\n" % sys.argv[0])
+if (argc < 4) or (argc > 6):
+    print("Usage: %s [--ed25519 | --ecc256 ] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
     sys.exit(1)
+for i in range(1, len(argv)):
+    if (argv[i] == '--ed25519'):
+        sign='ed25519'
+    elif (argv[i] == '--ecc256'):
+        sign='ecc256'
+    elif (argv[i] == '--wolfboot-update'):
+        self_update = True
+    else:
+        i-=1
+        break
 
-if argc == 5:
-    if argv[1] != '--ed25519' and argv[1] != '--ecc256':
-        print("Usage: %s [--ed25519 | --ecc256 ] image key.der fw_version\n" % sys.argv[0])
-        sys.exit(1)
-    sign=argv[1][2:]
-    image_file = argv[2]
-    key_file = argv[3]
-    fw_version = int(argv[4])
-else:
-    image_file = argv[1]
-    key_file = argv[2]
-    fw_version = int(argv[3])
+image_file = argv[i+1]
+key_file = argv[i+2]
+fw_version = int(argv[i+3])
 
 if '.' in image_file:
     tokens = image_file.split('.')
@@ -68,6 +79,11 @@ if '.' in image_file:
     output_image_file += "_v" + str(fw_version) + "_signed.bin"
 else:
     output_image_file = image_file + "_v" + str(fw_version) + "_signed.bin"
+
+if (self_update):
+    print("Update type:          wolfBoot")
+else:
+    print("Update type:          Firmware")
 
 print ("Selected cipher:      " + sign)
 print ("Private key:          " + key_file)
@@ -129,6 +145,18 @@ header += struct.pack('BB', 0xFF, 0xFF)
 # Timestamp field
 header += struct.pack('BB', HDR_TIMESTAMP, HDR_TIMESTAMP_LEN)
 header += struct.pack('<Q', int(os.path.getmtime(image_file)))
+
+# Image type field
+header += struct.pack('BB', HDR_IMG_TYPE, HDR_IMG_TYPE_LEN)
+if (sign == 'ed25519'):
+    img_type = HDR_IMG_TYPE_AUTH_ED25519
+if (sign == 'ecc256'):
+    img_type = HDR_IMG_TYPE_AUTH_ECC256
+
+if (not self_update):
+    img_type |= HDR_IMG_TYPE_APP
+
+header += struct.pack('<H', img_type)
 
 sha = hashes.Sha256.new()
 # Sha calculation

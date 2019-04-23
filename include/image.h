@@ -41,6 +41,9 @@ int wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag);
 
+/* Defined in libwolfboot */
+uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr);
+
 #ifdef EXT_FLASH
 # ifdef PART_UPDATE_EXT
 #  define UPDATE_EXT 1
