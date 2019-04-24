@@ -43,7 +43,7 @@ test-spi-off: FORCE
 
 test-update: test-app/image.bin FORCE
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-update.bin
-	@$(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-update.bin
 	@make test-reset
@@ -53,7 +53,7 @@ test-update: test-app/image.bin FORCE
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000)
 
 test-update-ext: test-app/image.bin FORCE
-	@$(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@$$(dd if=/dev/zero bs=1M count=1 | tr '\000' '\377' > test-update.rom)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.rom bs=1 count=524283 conv=notrunc
 	@printf "pBOOT" | dd of=test-update.rom obs=1 seek=524283 count=5 conv=notrunc

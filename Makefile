@@ -151,14 +151,14 @@ test-app/image.bin:
 include tools/test.mk
 
 ed25519.der:
-	@tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
+	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
 
 ecc256.der:
-	@tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
+	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
 
 factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
-	$(Q)tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+	$(Q)python3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
 	@echo "\t[MERGE] $@"
 	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 

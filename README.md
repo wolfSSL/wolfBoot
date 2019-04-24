@@ -21,8 +21,7 @@ projects to provide a secure firmware update mechanism.
 
 This repository contains the following components:
    - the wolfBoot bootloader
-   - Ed25519 key generator and image signing tools
-   - Ecc256 key generator and image signing tools
+   - key generator and image signing tools (requires python 3.x)
    - Baremetal test applications 
 
 ### wolfBoot bootloader
