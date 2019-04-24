@@ -173,7 +173,7 @@ src/ecc256_pub_key.c: ecc256.der
 keys: $(PRIVATE_KEY)
 	
 clean:
-	@find . -type f -name "*.o" | xargs -x rm -f
+	@find . -type f -name "*.o" | xargs rm -f
 	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex
 	@make -C test-app clean
 
