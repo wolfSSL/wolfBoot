@@ -53,7 +53,7 @@ test-update: test-app/image.bin FORCE
 
 test-self-update: wolfboot.bin test-app/image.bin FORCE
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-self-update.bin
-	@$(SIGN_TOOL) --wolfboot-update wolfboot.bin $(PRIVATE_KEY) $(WOLFBOOT_VERSION)
+	@python3 $(SIGN_TOOL) --wolfboot-update wolfboot.bin $(PRIVATE_KEY) $(WOLFBOOT_VERSION)
 	@dd if=wolfboot_v$(WOLFBOOT_VERSION)_signed.bin of=test-self-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-self-update.bin
 	@make test-reset
