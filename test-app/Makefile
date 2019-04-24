@@ -89,4 +89,4 @@ standalone: image.bin
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
-	@rm -f image.bin* image.elf *.o image.map tags
+	@rm -f *.bin *.elf tags *.o

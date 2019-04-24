@@ -49,8 +49,8 @@ include arch.mk
 ## DSA Settings
 
 ifeq ($(SIGN),ECC256)
-  KEYGEN_TOOL=tools/ecc256/ecc256_keygen
-  SIGN_TOOL=tools/ecc256/ecc256_sign
+  KEYGEN_OPTIONS=--ecc256
+  SIGN_OPTIONS=--ecc256
   PRIVATE_KEY=ecc256.der
   OBJS+= \
     $(ECC_EXTRA_OBJS) \
@@ -63,8 +63,8 @@ ifeq ($(SIGN),ECC256)
     ./src/xmalloc.o
   CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER $(ECC_EXTRA_CFLAGS)
 else
-  KEYGEN_TOOL=tools/ed25519/ed25519_keygen
-  SIGN_TOOL=tools/ed25519/ed25519_sign
+  KEYGEN_OPTIONS=--ed25519
+  SIGN_OPTIONS=--ed25519
   PRIVATE_KEY=ed25519.der
   OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
 	./lib/wolfssl/wolfcrypt/src/ed25519.o \
@@ -150,23 +150,17 @@ test-app/image.bin:
 
 include tools/test.mk
 
-tools/ed25519/ed25519_sign:
-	@make -C tools/ed25519
+ed25519.der:
+	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
 
-tools/ecc256/ecc256_sign:
-	@make -C tools/ecc256
+ecc256.der:
+	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
 
-ed25519.der: tools/ed25519/ed25519_sign
-	@tools/ed25519/ed25519_keygen src/ed25519_pub_key.c
-
-ecc256.der: tools/ecc256/ecc256_sign
-	@tools/ecc256/ecc256_keygen src/ecc256_pub_key.c
-
-factory.bin: $(BOOT_IMG) wolfboot-align.bin $(SIGN_TOOL) $(PRIVATE_KEY)
+factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
-	$(Q)$(SIGN_TOOL) $(BOOT_IMG) $(PRIVATE_KEY) 1 >/dev/null
+	$(Q)python3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
 	@echo "\t[MERGE] $@"
-	@cat wolfboot-align.bin $(BOOT_IMG).v1.signed > $@
+	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
 wolfboot.elf: $(OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
@@ -179,13 +173,11 @@ src/ecc256_pub_key.c: ecc256.der
 keys: $(PRIVATE_KEY)
 	
 clean:
-	@find . -type f -name "*.o" | xargs -x rm -f
+	@find . -type f -name "*.o" | xargs rm -f
 	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex
 	@make -C test-app clean
 
 distclean: clean
-	@make -C tools/ed25519 clean
-	@make -C tools/ecc256 clean
 	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c
 
 
