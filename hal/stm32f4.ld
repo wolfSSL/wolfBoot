@@ -12,16 +12,8 @@ SECTIONS
         KEEP(*(.isr_vector))
         *(.text*)
         *(.rodata*)
-        *(.init*)
-        *(.fini*)
         . = ALIGN(4);
         _end_text = .;
-    } > FLASH
-
-    .edidx :
-    {
-        . = ALIGN(4);
-        *(.ARM.exidx*)
     } > FLASH
 
     _stored_data = .;

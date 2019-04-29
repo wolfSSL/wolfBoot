@@ -26,7 +26,7 @@
 
 #ifdef RAM_CODE
 extern unsigned int _start_text;
-static volatile const uint32_t wolfboot_version = WOLFBOOT_VERSION;
+static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
 extern void (** const IV_RAM)(void);
 #endif
 

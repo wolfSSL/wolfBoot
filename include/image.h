@@ -6,9 +6,9 @@
 
 #if defined(__WOLFBOOT) && defined(RAM_CODE)
 #  if defined(ARCH_ARM)
-#    define RAMFUNCTION __attribute__((section(".ramcode"),long_call))
+#    define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
 #  else
-#    define RAMFUNCTION __attribute__((section(".ramcode")))
+#    define RAMFUNCTION __attribute__((used,section(".ramcode")))
 #  endif
 #else
 # define RAMFUNCTION
