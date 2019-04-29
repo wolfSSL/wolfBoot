@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <target.h>
+#include "image.h"
 #ifndef ARCH_RISCV
 #   error "wolfBoot hifive1 HAL: wrong architecture selected. Please compile with ARCH=RISCV."
 #endif
@@ -37,21 +38,21 @@ void hal_prepare_boot(void)
 
 #endif
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     return 0;
 }
 
-void hal_flash_unlock(void)
+void RAMFUNCTION hal_flash_unlock(void)
 {
 }
 
-void hal_flash_lock(void)
+void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
 
-int hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     return 0;
 }

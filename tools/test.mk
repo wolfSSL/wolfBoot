@@ -1,7 +1,7 @@
 TEST_UPDATE_VERSION?=2
+WOLFBOOT_VERSION?=0
 EXPVER=tools/test-expect-version/test-expect-version
 SPI_CHIP=SST25VF080B
-
 SIGN_TOOL=/bin/false
 
 ifeq ($(SIGN),ED25519)
@@ -40,7 +40,6 @@ test-spi-off: FORCE
 	@echo "in" >/sys/class/gpio/gpio10/direction
 	@echo "in" >/sys/class/gpio/gpio11/direction
 
-
 test-update: test-app/image.bin FORCE
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-update.bin
 	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
@@ -51,6 +50,23 @@ test-update: test-app/image.bin FORCE
 	@st-flash --reset write test-update.bin 0x08040000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000)
+
+test-self-update: wolfboot.bin test-app/image.bin FORCE
+	@mv $(PRIVATE_KEY) private_key.old
+	@make clean
+	@rm src/*_pub_key.c
+	@make factory.bin RAM_CODE=1 WOLFBOOT_VERSION=$(WOLFBOOT_VERSION) SIGN=$(SIGN)
+	@$(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
+		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
+		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000)
+	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-self-update.bin
+	@python3 $(SIGN_TOOL) --wolfboot-update wolfboot.bin private_key.old $(WOLFBOOT_VERSION)
+	@dd if=wolfboot_v$(WOLFBOOT_VERSION)_signed.bin of=test-self-update.bin bs=1 conv=notrunc
+	@printf "pBOOT" >> test-self-update.bin
+	@st-flash --reset write test-self-update.bin 0x08040000 || \
+		(make test-reset && sleep 1 && st-flash --reset write test-self-update.bin 0x08040000) || \
+		(make test-reset && sleep 1 && st-flash --reset write test-self-update.bin 0x08040000)
 
 test-update-ext: test-app/image.bin FORCE
 	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
@@ -201,4 +217,26 @@ test-23-rollback-SPI: $(EXPVER) FORCE
 	@make clean
 	@echo TEST PASSED
 
-test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI
+test-34-forward-self-update: $(EXPVER) FORCE
+	@echo Creating and uploading factory image...
+	@make clean
+	@make distclean
+	@make test-factory RAM_CODE=1 SIGN=$(SIGN)
+	@echo Expecting version '1'
+	@$$(test `$(EXPVER)` -eq 1)
+	@echo
+	@echo Updating keys, firmware, bootloader
+	@make test-self-update WOLFBOOT_VERSION=4 RAM_CODE=1 SIGN=$(SIGN)
+	@sleep 2
+	@$$(test `$(EXPVER)` -eq 2)
+	@make clean
+	@echo TEST PASSED
+
+test-44-forward-self-update-ECC: $(EXPVER) FORCE
+	@make test-34-forward-self-update SIGN=ECC256
+
+
+test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback \
+	test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI \
+	test-34-forward-self-update \
+	test-44-forward-self-update-ECC

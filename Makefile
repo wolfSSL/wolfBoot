@@ -21,13 +21,15 @@ EXT_FLASH?=0
 SPI_FLASH?=0
 ALLOW_DOWNGRADE?=0
 NVM_FLASH_WRITEONCE?=0
+WOLFBOOT_VERSION?=0
 V?=0
 SPMATH?=1
+RAM_CODE?=0
 
 
 
 ## Initializers
-CFLAGS:=-D__WOLFBOOT 
+CFLAGS:=-D__WOLFBOOT  -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL
 LSCRIPT:=hal/$(TARGET).ld
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles 
 OBJS:= \
@@ -79,6 +81,10 @@ CFLAGS+=-Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 	-I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
 	-DWOLFSSL_USER_SETTINGS \
 	-DPLATFORM_$(TARGET)
+
+ifeq ($(RAM_CODE),1)
+   CFLAGS+= -DRAM_CODE
+endif
 
 ifeq ($(SPI_FLASH),1)
    EXT_FLASH=1
@@ -142,7 +148,8 @@ wolfboot-align.bin: wolfboot.bin
 	@echo
 
 test-app/image.bin:
-	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) V=$(V) \
+	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
+    V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
 	KINETIS=$(KINETIS) KINETIS_CPU=$(KINETIS_CPU) KINETIS_DRIVERS=$(KINETIS_DRIVERS) \
 	KINETIS_CMSIS=$(KINETIS_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK)

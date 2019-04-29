@@ -3,14 +3,22 @@
 #include <stdint.h>
 #include <target.h>
 #include <wolfboot/wolfboot.h>
-#include "image.h"
+
+#if defined(__WOLFBOOT) && defined(RAM_CODE)
+#  if defined(ARCH_ARM)
+#    define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#  else
+#    define RAMFUNCTION __attribute__((used,section(".ramcode")))
+#  endif
+#else
+# define RAMFUNCTION
+#endif
 
 
 #define SECT_FLAG_NEW 0x0F
 #define SECT_FLAG_SWAPPING 0x07
 #define SECT_FLAG_BACKUP 0x03
 #define SECT_FLAG_UPDATED 0x00
-
 
 
 struct wolfBoot_image {
@@ -32,6 +40,9 @@ int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
 int wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag);
+
+/* Defined in libwolfboot */
+uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr);
 
 #ifdef EXT_FLASH
 # ifdef PART_UPDATE_EXT

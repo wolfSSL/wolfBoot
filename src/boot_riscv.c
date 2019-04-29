@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include "image.h"
 
 extern void trap_entry(void);
 extern void trap_exit(void);
@@ -36,6 +37,12 @@ extern uint32_t  _global_pointer;
 extern void (* const IV[])(void);
 
 extern void main(void);
+void RAMFUNCTION reloc_iv(uint32_t *address)
+{
+    asm volatile("csrw mtvec, %0":: "r"(address + 1));
+}
+
+
 void __attribute__((naked,section(".init"))) _reset(void) {
     register uint32_t *src, *dst;
     asm volatile("la gp, _global_pointer");
@@ -83,4 +90,31 @@ void isr_empty(void)
 
 }
 
+#ifdef RAM_CODE
+
+#define AON_WDOGCFG  *(volatile uint32_t *)(0x10000000UL)
+#define AON_WDOGKEY  *(volatile uint32_t *)(0x1000001CUL)
+#define AON_WDOGFEED *(volatile uint32_t *)(0x10000018UL)
+#define AON_WDOGCMP  *(volatile uint32_t *)(0x10000020UL)
+
+#define AON_WDOGKEY_VALUE       0x0051F15E
+#define AON_WDOGCFG_SCALE       0x0000000F
+#define AON_WDOGCFG_RSTEN       0x00000100
+#define AON_WDOGCFG_ZEROCMP     0x00000200
+#define AON_WDOGCFG_ENALWAYS    0x00001000
+
+
+void RAMFUNCTION arch_reboot(void)
+{
+    AON_WDOGKEY = AON_WDOGKEY_VALUE;
+    AON_WDOGCMP = 0;
+    //wdogconfig: : wdogrsten | enablealways | reset to 0 | max scale
+    AON_WDOGKEY = AON_WDOGKEY_VALUE;
+    AON_WDOGCFG |= (AON_WDOGCFG_RSTEN | AON_WDOGCFG_ENALWAYS | AON_WDOGCFG_ZEROCMP | AON_WDOGCFG_SCALE) ;
+    AON_WDOGKEY = AON_WDOGKEY_VALUE;
+    AON_WDOGFEED = 1;
+    while(1)
+        ;
+}
+#endif
 

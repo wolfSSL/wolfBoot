@@ -22,8 +22,13 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_flash.h"
+#include "wolfboot/wolfboot.h"
 
-extern void do_boot(const uint32_t *app_offset);
+#ifdef RAM_CODE
+extern unsigned int _start_text;
+static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
+extern void (** const IV_RAM)(void);
+#endif
 
 #define FLASHBUFFER_SIZE 256
 static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
@@ -87,10 +92,16 @@ static int wolfBoot_update(int fallback_allowed)
     /* Check the first sector to detect interrupted update */
     if ((wolfBoot_get_sector_flag(PART_UPDATE, 0, &flag) < 0) || (flag == SECT_FLAG_NEW))
     {
+        uint8_t *update_type;
         /* In case this is a new update, do the required
          * checks on the firmware update
          * before starting the swap
          */
+
+        if (wolfBoot_find_header(update.hdr + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &update_type) == sizeof(uint16_t)) {
+            if ((update_type[0] != HDR_IMG_TYPE_APP) || update_type[1] != (HDR_IMG_TYPE_AUTH >> 8))
+                return -1;
+        }
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
@@ -153,11 +164,89 @@ static int wolfBoot_update(int fallback_allowed)
     return 0;
 }
 
+
+#ifdef RAM_CODE
+
+static void RAMFUNCTION wolfBoot_erase_bootloader(void)
+{
+    uint32_t *start = (uint32_t *)&_start_text;
+    uint32_t len = WOLFBOOT_PARTITION_BOOT_ADDRESS - (uint32_t)start;
+    hal_flash_erase((uint32_t)start, len);
+
+}
+
+static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
+{
+    uint32_t pos = 0;
+    uint32_t src_offset = IMAGE_HEADER_SIZE;
+
+    hal_flash_unlock();
+    wolfBoot_erase_bootloader();
+#ifdef EXT_FLASH
+    while (pos < src->fw_size) {
+        if (PART_IS_EXT(src)) {
+            uint8_t buffer[FLASHBUFFER_SIZE];
+            if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
+                ext_flash_read((uint32_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
+                hal_flash_write(pos + (uint32_t)&_start_text, buffer, FLASHBUFFER_SIZE);
+            }
+            pos += FLASHBUFFER_SIZE;
+        }
+        goto lock_and_reset;
+    }
+#endif
+    while (pos < src->fw_size) {
+        if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
+            uint8_t *orig = (uint8_t*)(src->hdr + src_offset + pos);
+            hal_flash_write(pos + (uint32_t)&_start_text, orig, FLASHBUFFER_SIZE);
+        }
+        pos += FLASHBUFFER_SIZE;
+    }
+
+lock_and_reset:
+    hal_flash_lock();
+    arch_reboot();
+}
+
+static void wolfBoot_check_self_update(void)
+{
+    uint8_t st;
+    struct wolfBoot_image update;
+    uint8_t *update_type;
+    uint32_t update_version;
+
+    /* Check for self update in the UPDATE partition */
+    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING) &&
+            (wolfBoot_open_image(&update, PART_UPDATE) == 0) &&
+            (wolfBoot_find_header(update.hdr + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &update_type) == sizeof(uint16_t)) &&
+            update_type[0] == HDR_IMG_TYPE_WOLFBOOT &&
+            update_type[1] == (HDR_IMG_TYPE_AUTH >> 8)) {
+        uint32_t update_version = wolfBoot_update_firmware_version();
+        if (update_version <= wolfboot_version) {
+            hal_flash_unlock();
+            wolfBoot_erase_partition(PART_UPDATE);
+            hal_flash_lock();
+            return;
+        }
+        if (wolfBoot_verify_integrity(&update) < 0)
+            return;
+        if (wolfBoot_verify_authenticity(&update) < 0)
+            return;
+        wolfBoot_self_update(&update);
+    }
+}
+#endif /* RAM_CODE for self_update */
+
 static void wolfBoot_start(void)
 {
     uint8_t st;
     struct wolfBoot_image boot, update;
-    /* First, check if the BOOT partition is still in TESTING,
+
+#ifdef RAM_CODE
+    wolfBoot_check_self_update();
+#endif
+
+    /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
     if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {

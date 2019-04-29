@@ -18,17 +18,15 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include <image.h>
-#include <hal.h>
+#include "loader.h"
+#include "image.h"
+#include "hal.h"
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/ssl.h>
-#include <loader.h>
 
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
 
-
-extern uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr);
 
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
@@ -266,6 +264,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     uint8_t stored_signature_size;
     uint8_t *pubkey_hint;
     uint8_t pubkey_hint_size;
+    uint8_t *image_type_buf;
+    uint16_t image_type;
+    uint8_t image_type_size;
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);
     if (stored_signature_size != IMAGE_SIGNATURE_SIZE)
@@ -276,6 +277,15 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         if (memcmp(digest, pubkey_hint, SHA256_DIGEST_SIZE) != 0)
             return -1;
     }
+    image_type_size = get_header(img, HDR_IMG_TYPE, &image_type_buf);
+    if (image_type_size != sizeof(uint16_t))
+            return -1;
+    image_type = (uint16_t)(image_type_buf[0] + (image_type_buf[1] << 8));
+
+    if ((image_type & 0xFF00) != HDR_IMG_TYPE_AUTH)
+        return -1;
+
+
     if (image_hash(img, digest) != 0)
         return -1;
     if (wolfBoot_verify_signature(digest, stored_signature) != 0)

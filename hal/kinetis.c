@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <target.h>
+#include "image.h"
 #include "fsl_common.h"
 #include "fsl_flash.h"
 #include "fsl_ftfx_cache.h"
@@ -300,7 +301,7 @@ static void do_flash_init(void)
     FTFx_CACHE_ClearCachePrefetchSpeculation(&pcache, 1);
 }
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int w = 0;
     int ret;
@@ -336,16 +337,16 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
-void hal_flash_unlock(void)
+void RAMFUNCTION hal_flash_unlock(void)
 {
 }
 
-void hal_flash_lock(void)
+void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
 
-int hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int idx = 0;
     do_flash_init();

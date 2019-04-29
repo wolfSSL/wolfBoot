@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include "image.h"
 
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
@@ -45,13 +46,13 @@
 #define TASKS_HFCLKSTOP    *((volatile uint32_t *)(CLOCK_CONTROL_BASE + 0x004))
 #define TASKS_HFCLKSTARTED *((volatile uint32_t *)(CLOCK_CONTROL_BASE + 0x100))
 
-static void flash_wait_complete(void)
+static void RAMFUNCTION flash_wait_complete(void)
 {
     while (NVMC_READY == 0)
         ;
 }
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
     uint32_t *src, *dst;
@@ -82,16 +83,16 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
-void hal_flash_unlock(void)
+void RAMFUNCTION hal_flash_unlock(void)
 {
 }
 
-void hal_flash_lock(void)
+void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
 
-int hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end = address + len - 1;
     uint32_t p;

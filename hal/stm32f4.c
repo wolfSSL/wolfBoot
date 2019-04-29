@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include <image.h>
 /* STM32 F4 register configuration */
 
 /* Assembly helpers */
@@ -135,12 +136,12 @@ const uint32_t flash_sector[FLASH_SECTORS + 1] = {
     FLASH_TOP
 };
 
-static void flash_set_waitstates(int waitstates)
+static void RAMFUNCTION flash_set_waitstates(int waitstates)
 {
     FLASH_ACR |=  waitstates | FLASH_ACR_ENABLE_DATA_CACHE | FLASH_ACR_ENABLE_INST_CACHE;
 }
 
-static void flash_wait_complete(void)
+static RAMFUNCTION void flash_wait_complete(void)
 {
     while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
@@ -155,7 +156,7 @@ static void mass_erase(void)
 }
 */
 
-static void flash_erase_sector(uint32_t sec)
+static void RAMFUNCTION flash_erase_sector(uint32_t sec)
 {
     uint32_t reg = FLASH_CR & (~(FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT));
     FLASH_CR = reg | (sec & FLASH_CR_SNB_MASK) << FLASH_CR_SNB_SHIFT;
@@ -166,12 +167,12 @@ static void flash_erase_sector(uint32_t sec)
     FLASH_CR &= ~(FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT);
 }
 
-static void clear_errors(void)
+static void RAMFUNCTION clear_errors(void)
 {
     FLASH_SR |= ( FLASH_SR_PGSERR | FLASH_SR_PGPERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR | FLASH_SR_OPERR | FLASH_SR_EOP );
 }
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
     uint32_t val;
@@ -188,20 +189,20 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
-void hal_flash_unlock(void)
+void RAMFUNCTION hal_flash_unlock(void)
 {
     FLASH_CR |= FLASH_CR_LOCK;
     FLASH_KEYR = FLASH_KEY1;
     FLASH_KEYR = FLASH_KEY2;
 }
 
-void hal_flash_lock(void)
+void RAMFUNCTION hal_flash_lock(void)
 {
     FLASH_CR |= FLASH_CR_LOCK;
 }
 
 
-int hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int start = -1, end = -1;
     uint32_t end_address;
