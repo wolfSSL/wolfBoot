@@ -42,7 +42,11 @@
 #include <errno.h>
 
 #define MSGLEN      (4 + 4 + 8)
-#define PORT "/dev/ttyS0" 
+#define PORT "/dev/ttyS0"
+
+#ifndef B115200
+#define B115200 115200
+#endif
 
 void alarm_handler(int signo)
 {
