@@ -18,6 +18,10 @@ void hal_flash_unlock(void);
 void hal_flash_lock(void);
 void hal_prepare_boot(void);
 
+#ifdef DUALBANK_SWAP
+    void hal_flash_dualbank_swap(void);
+#endif
+
 #ifdef EXT_FLASH
 
 #   ifndef SPI_FLASH
@@ -45,5 +49,6 @@ void hal_prepare_boot(void);
 #   endif /* !SPI_FLASH */
 
 #endif /* EXT_FLASH */
+
     
 #endif /* H_HAL_FLASH_ */

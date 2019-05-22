@@ -25,6 +25,7 @@ WOLFBOOT_VERSION?=0
 V?=0
 SPMATH?=1
 RAM_CODE?=0
+DUALBANK_SWAP=0
 
 
 
@@ -84,6 +85,10 @@ CFLAGS+=-Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
 
 ifeq ($(RAM_CODE),1)
    CFLAGS+= -DRAM_CODE
+endif
+
+ifeq ($(DUALBANK_SWAP),1)
+   CFLAGS+= -DDUALBANK_SWAP
 endif
 
 ifeq ($(SPI_FLASH),1)

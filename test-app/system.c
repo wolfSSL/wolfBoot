@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#ifdef PLATFORM_stm32f4
+#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7)
 #include <stdint.h>
 #include "system.h"
 
@@ -57,16 +57,30 @@
 #define RCC_PRESCALER_DIV_4    9
 
 
+/* STM32F4-Discovery, 168 MHz */
+#ifdef PLATFORM_stm32f4
+#  define PLLM 8
+#  define PLLN 336
+#  define PLLP 2 
+#  define PLLQ 7
+#  define PLLR 0
+#  define TARGET_FLASH_WAITSTATES 5
+#endif
 
-#define PLLM 8
-#define PLLN 336
-#define PLLP 2 
-#define PLLQ 7
-#define PLLR 0
+/* STM32F7-Discovery, 216 MHz */
+#ifdef PLATFORM_stm32f7
+#  define PLLM 25
+#  define PLLN 432
+#  define PLLP 2
+#  define PLLQ 9
+#  define PLLR 0
+#  define TARGET_FLASH_WAITSTATES 7
+#endif
+
 
 void flash_set_waitstates(void)
 {
-    FLASH_ACR |= 5 | FLASH_ACR_ENABLE_DATA_CACHE | FLASH_ACR_ENABLE_INST_CACHE;
+    FLASH_ACR |= TARGET_FLASH_WAITSTATES | FLASH_ACR_ENABLE_DATA_CACHE | FLASH_ACR_ENABLE_INST_CACHE;
 }
 
 

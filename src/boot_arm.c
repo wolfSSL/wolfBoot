@@ -88,7 +88,7 @@ static void  *app_entry;
 static uint32_t app_end_stack;
 
 
-void do_boot(const uint32_t *app_offset)
+void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
 
 #ifndef NO_VTOR

@@ -13,7 +13,12 @@ ifeq ($(ARCH),ARM)
   CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
   LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
   OBJS+=src/boot_arm.o
-  ARCH_FLASH_OFFSET=0x0
+
+  ifeq ($(TARGET),stm32f7)
+    ARCH_FLASH_OFFSET=0x08000000
+  else
+    ARCH_FLASH_OFFSET=0x0
+  endif
 
   ## Cortex-M CPU
   ifeq ($(CORTEX_M0),1)

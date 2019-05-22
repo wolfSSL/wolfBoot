@@ -18,6 +18,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
@@ -31,6 +32,8 @@ extern void (** const IV_RAM)(void);
 #endif
 
 #define FLASHBUFFER_SIZE 256
+
+#ifndef DUALBANK_SWAP
 static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {
     uint32_t pos = 0;
@@ -164,6 +167,90 @@ static int wolfBoot_update(int fallback_allowed)
     return 0;
 }
 
+#else /* DUALBANK_SWAP */
+
+static inline void boot_panic(void)
+{
+    while(1)
+        ;
+}
+
+static void RAMFUNCTION wolfBoot_start(void)
+{
+    int ret;
+    struct wolfBoot_image fw_image, boot_image;
+    uint8_t p_state;
+    uint32_t boot_v, update_v;
+    int candidate = PART_BOOT;
+    int fallback_is_possible = 0;
+
+    /* Find the candidate */
+    boot_v = wolfBoot_current_firmware_version();
+    update_v = wolfBoot_update_firmware_version();
+
+    /* panic if no images available */
+    if ((boot_v == 0) && (update_v == 0))
+        boot_panic();
+
+    else if (boot_v == 0) /* No primary image */
+    {
+        candidate = PART_UPDATE;
+    }
+    else if ((boot_v > 0) && (update_v > 0)) {
+        fallback_is_possible = 1;
+        if (update_v > boot_v)
+            candidate = PART_UPDATE;
+    }
+
+    /* Check current status for failure (still in TESTING), and fall-back
+     * if an alternative is available
+     */
+    if (fallback_is_possible &&
+            (wolfBoot_get_partition_state(candidate, &p_state) == 0) &&
+            (p_state == IMG_STATE_TESTING))
+    {
+        candidate ^= 1; /* switch to other partition if available */
+    }
+
+    for (;;) {
+        if ((wolfBoot_open_image(&fw_image, candidate) < 0) ||
+            (wolfBoot_verify_integrity(&fw_image) < 0) ||
+            (wolfBoot_verify_authenticity(&fw_image) < 0)) {
+
+            /* panic if authentication fails and no backup */
+            if (!fallback_is_possible)
+                boot_panic();
+            else {
+                /* Invalidate failing image and switch to the
+                 * other partition
+                 */
+                fallback_is_possible = 0;
+                wolfBoot_erase_partition(candidate);
+                candidate ^= 1;
+            }
+        } else
+            break; /* candidate successfully authenticated */
+    }
+
+    /* First time we boot this update, set to TESTING to await
+     * confirmation from the system
+     */
+    if ((wolfBoot_get_partition_state(candidate, &p_state) == 0) &&
+        (p_state == IMG_STATE_UPDATING))
+    {
+        hal_flash_unlock();
+        wolfBoot_set_partition_state(candidate, IMG_STATE_TESTING);
+        hal_flash_lock();
+    }
+
+    /* Booting from update is possible via HW-assisted swap */
+    if (candidate == PART_UPDATE)
+        hal_flash_dualbank_swap();
+
+    hal_prepare_boot();
+    do_boot((void *)WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE);
+}
+#endif
 
 #ifdef RAM_CODE
 
@@ -174,6 +261,8 @@ static void RAMFUNCTION wolfBoot_erase_bootloader(void)
     hal_flash_erase((uint32_t)start, len);
 
 }
+
+#include <string.h>
 
 static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
 {
@@ -237,6 +326,7 @@ static void wolfBoot_check_self_update(void)
 }
 #endif /* RAM_CODE for self_update */
 
+#ifndef DUALBANK_SWAP
 static void wolfBoot_start(void)
 {
     uint8_t st;
@@ -267,6 +357,7 @@ static void wolfBoot_start(void)
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }
+#endif /* ifndef DUALBANK_SWAP */
 
 int main(void)
 {

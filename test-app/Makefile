@@ -20,6 +20,10 @@ ifeq ($(V),0)
 endif
 
 LSCRIPT:=$(ARCH).ld
+ifeq ($(TARGET),stm32f7)
+  LSCRIPT=ARM-stm32f7.ld
+  CFLAGS+=-DDUALBANK_SWAP
+endif
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
@@ -36,6 +40,7 @@ ifeq ($(TARGET),kinetis)
   APP_OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o \
 		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
 endif
+
 
 ifeq ($(TARGET),hifive1)
   CFLAGS+=-I$(FREEDOM_E_SDK)/freedom-metal/ -D__METAL_MACHINE_HEADER=\"$(FREEDOM_E_SDK)/bsp/sifive-hifive1/metal.h\"
