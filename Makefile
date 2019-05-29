@@ -135,7 +135,7 @@ wolfboot.hex: wolfboot.elf
 align: wolfboot-align.bin
 
 wolfboot-align.bin: wolfboot.bin
-	@cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | head -1 | sed -e "s/.*[ ]//g" > .wolfboot-offset
+	@cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | tr -d "\n\r" | sed -e "s/.*[ ]//g" > .wolfboot-offset
 	@printf "%d" `cat .wolfboot-offset` > .wolfboot-offset
 	@printf "%d" $(ARCH_FLASH_OFFSET) >.wolfboot-arch-offset
 	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` >.wolfboot-partition-size
