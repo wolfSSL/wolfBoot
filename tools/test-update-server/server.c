@@ -20,7 +20,7 @@
  *
  *=============================================================================
  *
- * OTA Upgrade mechanism implemented using DTLS 1.2
+ * OTA Upgrade mechanism implemented using UART
  *
  */
 
@@ -42,8 +42,16 @@
 #include <errno.h>
 
 #define MSGLEN      (4 + 4 + 8)
-#define PORT "/dev/ttyACM0" 
-
+#ifndef UART_DEV
+    #ifdef _MACH_
+        #define UART_DEV "/dev/usbmodem144241"
+    #else
+        #define UART_DEV "/dev/ttyACM0"
+    #endif
+#endif
+#ifndef B115200
+#define B115200 115200
+#endif
 
 static volatile int cleanup;                 /* To handle shutdown */
 union usb_ack {
@@ -52,8 +60,8 @@ union usb_ack {
 };
 
 
-static uint8_t     pktbuf[MSGLEN]; 
-static unsigned int  pktbuf_size = 0;
+static uint8_t      pktbuf[MSGLEN];
+static unsigned int pktbuf_size = 0;
 static int serialfd = -1;
 static uint32_t high_ack;
 
@@ -79,7 +87,7 @@ static int recv_ack(union usb_ack *ack)
         if (c == '#') {
             int i = 0;
             err = 0;
-            ack->offset = 0; 
+            ack->offset = 0;
             while (i < 4) {
                 res = read(serialfd, &c, 1);
                 if (res < 1) {
@@ -121,27 +129,27 @@ int main(int argc, char** argv)
     union usb_ack ack;
     struct termios tty;
     sigset(SIGALRM, alarm_handler);
-    
-
 
     if (argc != 2) {
         printf("Usage: %s firmware_filename\n", argv[0]);
         exit(1);
     }
 
+    /* open file and get size */
     ffd = open(argv[1], O_RDONLY);
     if (ffd < 0) {
         perror("opening file");
         exit(2);
     }
-
     res = fstat(ffd, &st);
     if (res != 0) {
         perror("fstat file");
         exit(2);
     }
     tot_len = st.st_size;
-    serialfd = open(PORT, O_RDWR | O_NOCTTY);
+
+    /* open UART */
+    serialfd = open(UART_DEV, O_RDWR | O_NOCTTY);
     tcgetattr(serialfd, &tty);
     cfsetospeed(&tty, B115200);
     cfsetispeed(&tty, B115200);
@@ -155,8 +163,8 @@ int main(int argc, char** argv)
     tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = 5;
     tcsetattr(serialfd, TCSANOW, &tty);
-    /* Await Start hash */
 
+    /* Wait for start hash (asterisk) */
     while (1) {
         char c;
 
@@ -172,18 +180,17 @@ int main(int argc, char** argv)
             printf("%c",c);
             fflush(stdout);
         }
-        
+
     }
     printf("Target connected.\n");
     usleep(500000);
     printf("Starting update.\n");
 
-
     do {
         uint8_t hdr[2] = { 0xA5, 0x5A};
         len = 0;
-        lseek(ffd, 0, SEEK_SET); 
-        write(serialfd, &hdr, 2); 
+        lseek(ffd, 0, SEEK_SET);
+        write(serialfd, &hdr, 2);
         write(serialfd, &tot_len, sizeof(uint32_t));
         printf("Sent image file size (%d)\n", tot_len);
         while (len < tot_len) {
@@ -201,7 +208,7 @@ int main(int argc, char** argv)
                 pktbuf_size = 0;
                 if (ack.offset != len) {
                     printf("buf rewind %u\n", ack.offset);
-                    lseek(ffd, ack.offset, SEEK_SET); 
+                    lseek(ffd, ack.offset, SEEK_SET);
                     len = ack.offset;
                 }
                 memcpy(pktbuf + 4, &len, sizeof(len));
@@ -215,7 +222,9 @@ int main(int argc, char** argv)
                 check(pktbuf);
                 write(serialfd, pktbuf, pktbuf_size);
                 len += res;
-                printf("Sent bytes: %d/%d  %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x                \r", len, tot_len, pktbuf[0], pktbuf[1], pktbuf[2], pktbuf[3], pktbuf[4], pktbuf[5], pktbuf[6], pktbuf[7]);
+
+                printf("Sent bytes: %d/%d  %02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x                \r",
+                    len, tot_len, pktbuf[0], pktbuf[1], pktbuf[2], pktbuf[3], pktbuf[4], pktbuf[5], pktbuf[6], pktbuf[7]);
 
                 fflush(stdout);
                 alarm(2);
@@ -223,17 +232,17 @@ int main(int argc, char** argv)
         }
         printf("\n\n");
     } while (0);
+
     printf("waiting for last ack...\n");
     while(!cleanup) {
         res = recv_ack(&ack);
         if ((res == 0 ) && (ack.offset == tot_len)) {
             printf("Transfer complete.\n");
             break;
-        } 
+        }
     }
     printf("All done.\n");
     close(serialfd);
 
     return 0;
 }
-

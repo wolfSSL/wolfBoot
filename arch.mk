@@ -48,7 +48,7 @@ ifeq ($(ARCH),RISCV)
   CFLAGS+=-fno-builtin-printf -DUSE_PLIC -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
   OBJS+=src/boot_riscv.o src/vector_riscv.o
-  ARCH_FLASH_OFFSET=0x20010000
+  ARCH_FLASH_OFFSET=0x20000000
 endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)

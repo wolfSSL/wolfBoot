@@ -24,21 +24,21 @@ The default wolfBoot configuration will add a second stage bootloader, leaving t
 For testing wolfBoot here are the changes required:
 
 1. Makefile arguments:
-	* ARCH?=RISCV
-	* TARGET?=hifive1
+    * ARCH=RISCV
+    * TARGET=hifive1
  
-	```
-	make ARCH=RISCV TARGET=hifive1 clean
-	make ARCH=RISCV TARGET=hifive1
-	```
+    ```
+    make ARCH=RISCV TARGET=hifive1 clean
+    make ARCH=RISCV TARGET=hifive1
+    ```
 
-	If using the `riscv64-unknown-elf-` cross compiler you can add `CROSS_COMPILE=riscv64-unknown-elf-` to your `make` or modify `arch.mk` as follows:
-	
-	```
-	 ifeq ($(ARCH),RISCV)
-	-  CROSS_COMPILE:=riscv32-unknown-elf-
-	+  CROSS_COMPILE:=riscv64-unknown-elf-
-	```
+    If using the `riscv64-unknown-elf-` cross compiler you can add `CROSS_COMPILE=riscv64-unknown-elf-` to your `make` or modify `arch.mk` as follows:
+    
+    ```
+     ifeq ($(ARCH),RISCV)
+    -  CROSS_COMPILE:=riscv32-unknown-elf-
+    +  CROSS_COMPILE:=riscv64-unknown-elf-
+    ```
 
 
 2. `include/target.h`
@@ -58,6 +58,32 @@ Application Size 0x40000 (256KB)
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x20060000
 ```
 
+### Build Options
+
+* To use ECC instead of ED25519 use make argument `SIGN=ECC256`
+* To output wolfboot as hex for loading with JLink use make argument `wolfboot.hex`
+
+### Loading
+
+Loading with JLink:
+
+```
+JLinkExe -device FE310 -if JTAG -speed 4000 -jtagconf -1,-1 -autoconnect 1
+loadfile wolfboot.hex
+reset
+```
+
+### Debugging
+
+Debugging with JLink:
+
+In one terminal:
+`JLinkGDBServer -device FE310 -port 3333`
+
+In another terminal:
+`riscv64-unknown-elf-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"`
+
+
 ## STM32-F407
 
 Example 512KB partitioning on STM32-F407
@@ -67,12 +93,12 @@ starting at address 0x20000. The flash layout is provided by the default example
 configuration in `target.h`:
 
 ```C
-#define WOLFBOOT_SECTOR_SIZE			0x20000
-#define WOLFBOOT_PARTITION_SIZE			0x20000
+#define WOLFBOOT_SECTOR_SIZE              0x20000
+#define WOLFBOOT_PARTITION_SIZE           0x20000
 
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS 0x20000
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS   0x20000
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x40000
-#define WOLFBOOT_PARTITION_SWAP_ADDRESS 0x60000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS   0x60000
 ```
 
 This results in the following partition configuration:

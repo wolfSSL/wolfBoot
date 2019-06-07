@@ -75,3 +75,5 @@ image_v1_signed.bin
 factory.bin
 wolfboot-align.bin
 wolfboot.bin
+tools/test-expect-version/test-expect-version
+tools/test-update-server/server
