@@ -1,7 +1,32 @@
+/* wolfboot.h
+ *
+ * The wolfBoot API definitions.
+ *
+ * Copyright (C) 2019 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+
 #ifndef WOLFBOOT_H
 #define WOLFBOOT_H
+
 #include <stdint.h>
-#include <target.h>
+#include "target.h"
 
 #define IMAGE_HEADER_SIZE 256
 #define IMAGE_HEADER_OFFSET (2 * sizeof(uint32_t))
@@ -44,7 +69,6 @@
 #define IMG_STATE_SUCCESS 0x00
 
 
-
 void wolfBoot_erase_partition(uint8_t part);
 void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);
@@ -52,4 +76,4 @@ uint32_t wolfBoot_get_image_version(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
 
-#endif /* IMAGE_H */
+#endif /* !WOLFBOOT_H */

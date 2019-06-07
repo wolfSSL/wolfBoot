@@ -37,7 +37,7 @@ ifeq ($(TARGET),kinetis)
 		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
 endif
 
-ifeq ($(TARGET),hifive1)
+ifeq ($(TARGET),hifive1.freedom)
   CFLAGS+=-I$(FREEDOM_E_SDK)/freedom-metal/ -D__METAL_MACHINE_HEADER=\"$(FREEDOM_E_SDK)/bsp/sifive-hifive1/metal.h\"
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/clock.o
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/led.o
@@ -64,6 +64,10 @@ ifeq ($(TARGET),hifive1)
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,plic0.o
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,cpu.o
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/fixed-clock.o
+endif
+
+ifeq ($(TARGET),hifive1)
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
 endif
 
 standalone:CFLAGS+=-DTEST_APP_STANDALONE

@@ -1,6 +1,6 @@
 /* boot_riscv.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+
 #include "image.h"
 
 extern void trap_entry(void);
@@ -37,11 +38,10 @@ extern uint32_t  _global_pointer;
 extern void (* const IV[])(void);
 
 extern void main(void);
-void RAMFUNCTION reloc_iv(uint32_t *address)
+void RAMFUNCTION reloc_iv(const uint32_t *address)
 {
     asm volatile("csrw mtvec, %0":: "r"(address + 1));
 }
-
 
 void __attribute__((naked,section(".init"))) _reset(void) {
     register uint32_t *src, *dst;
@@ -75,14 +75,8 @@ void __attribute__((naked,section(".init"))) _reset(void) {
 
 void do_boot(const uint32_t *app_offset)
 {
-
-}
-
-static uint32_t synctrap_cause = 0;
-void __attribute__((naked)) isr_synctrap(void)
-{
-    asm volatile("csrr %0,mcause" : "=r"(synctrap_cause));
-    //asm volatile("ebreak");
+    reloc_iv(app_offset);
+    asm volatile("jr %0":: "r"((uint8_t *)(app_offset)));
 }
 
 void isr_empty(void)
@@ -116,5 +110,5 @@ void RAMFUNCTION arch_reboot(void)
     while(1)
         ;
 }
-#endif
 
+#endif /* RAM_CODE */

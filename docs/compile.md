@@ -20,7 +20,7 @@ in the [hal](../hal) directory.
 
 Default option if none specified: `TARGET=stm32f4`
 
-Some platform will require extra options, specific for the architecture.
+Some platforms will require extra options, specific for the architecture.
 By default, wolfBoot is compiled for ARM Cortex-M3/4/7. To compile for Cortex-M0, use:
 
 `CORTEX_M0=1`
@@ -135,4 +135,3 @@ both `PART_UPDATE_EXT` and `PART_SWAP_EXT` are defined.
 
 When external memory is used, the HAL API must be extended to define methods to access the custom memory.
 Refer to the [HAL](HAL.md) page for the description of the `ext_flash_*` API.
-

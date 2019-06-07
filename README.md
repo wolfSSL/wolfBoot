@@ -42,6 +42,7 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
 
 ### Required steps
 
+   - See `docs/Targets.md` for reference implementation examples.
    - Provide a HAL implementation for the target platform (see [Hardware Abstraction Layer](docs/HAL.md))
    - Decide a flash partition strategy and modify `include/target.h` accordingly (see [Flash partitions](docs/flash_partitions.md))
    - Change the entry point of the firmware image to account for bootloader presence

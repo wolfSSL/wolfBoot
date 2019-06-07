@@ -42,46 +42,10 @@ firmware image. The firmware image must be linked so that its entry-point is at 
 
 ### UPDATE partition
 
-The running firmware is responsible of transferring a new firmware image through a secure channel,
+The running firmware is responsible for transferring a new firmware image through a secure channel,
 and store it in the secondary slot. If an update is initiated, the bootloader will replace or swap
 the firmware in the boot partition at the next reboot.
 
-
-
-
-
-## Example 512KB partitioning on STM32-F407
-
-The example firmware provided in the `test-app` is configured to boot from the primary partition
-starting at address 0x20000. The flash layout is provided by the default example using the following
-configuration in `target.h`:
-
-```C
-#define WOLFBOOT_SECTOR_SIZE			0x20000
-#define WOLFBOOT_PARTITION_SIZE			0x20000
-
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS 0x20000
-#define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x40000
-#define WOLFBOOT_PARTITION_SWAP_ADDRESS 0x60000
-```
-
-which results in the following partition configuration:
-
-![example partitions](png/example_partitions.png)
-
-This configuration demonstrates one of the possible layouts, with the slots
-aligned to the beginning of the physical sector on the flash.
-
-The entry point for all the runnable firmware images on this target will be `0x20100`, 
-256 Bytes after the beginning of the first flash partition. This is due to the presence
-of the firmware image header at the beginning of the partition, as explained more in details
-in [Firmware image](firmware_image.md)
-
-In this particular case, due to the flash geometry, the swap space must be as big as 64KB, to account for proper sector swapping between the two images.
-
-On other systems, the SWAP space can be as small as 512B, if multiple smaller flash blocks are used.
-
-More information about the geometry of the flash and in-application programming (IAP) can be found in the manufacturer manual of each target device.
 
 ## Partition status and sector flags
 

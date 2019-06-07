@@ -4,7 +4,7 @@
 
 WolfBoot can only chain-load and execute firmware images from a specific entry point in memory,
 which must be specified as the origin of the FLASH memory in the linker script of the embedded
-application. This correspond to the first partition in the flash memory.
+application. This corresponds to the first partition in the flash memory.
 
 Multiple firmware images can be created this way, and stored in two different partitions. The bootloader
 will take care of moving the selected firmware to the first (BOOT) partition before chain-loading the image.

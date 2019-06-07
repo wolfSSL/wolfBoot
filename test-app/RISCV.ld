@@ -4,7 +4,7 @@ ENTRY( _reset )
 
 MEMORY
 {
-  FLASH(rxai!w) : ORIGIN = 0x20404100, LENGTH = (512K - 0x4100)
+  FLASH(rxai!w) : ORIGIN = 0x20020100, LENGTH = 128K - 0x100
   RAM(wxa!ri) : ORIGIN = 0x80000000, LENGTH = 16K
 }
 
@@ -30,6 +30,8 @@ SECTIONS
     {
         . = ALIGN(4096);
         _start_data = .;
+        KEEP(*(.ramcode*))
+        . = ALIGN(4);
         *(.data*)
         _global_pointer = . + 0x800;
         *(.sdata*)

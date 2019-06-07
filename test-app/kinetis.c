@@ -1,6 +1,6 @@
-/* main.c
+/* kinetis.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -46,7 +46,7 @@
 /* This are the registers for the NV flash configuration area.
  * Access these field by setting the relative flags in NV_Flash_Config.
  */
-#define NVTYPE_LEN (16) 
+#define NVTYPE_LEN (16)
 
 const uint8_t __attribute__((section(".flash_config"))) NV_Flash_Config[NVTYPE_LEN] = {
     /* Backdoor comparison key (2 words) */
@@ -70,28 +70,28 @@ const uint8_t __attribute__((section(".flash_config"))) NV_Flash_Config[NVTYPE_L
 #if defined(CPU_MK82FN256VLL15)
 struct stage1_config
 {
-    uint32_t tag;               
-    uint32_t crcStartAddress;   
-    uint32_t crcByteCount;      
-    uint32_t crcExpectedValue;  
-    uint8_t  enabledPeripherals; 
-    uint8_t  i2cSlaveAddress;    
-    uint16_t peripheralDetectionTimeoutMs; 
-    uint16_t usbVid; 
-    uint16_t usbPid; 
-    uint32_t usbStringsPointer; 
-    uint8_t  clockFlags;   
-    uint8_t  clockDivider; 
-    uint8_t  bootFlags; 
+    uint32_t tag;
+    uint32_t crcStartAddress;
+    uint32_t crcByteCount;
+    uint32_t crcExpectedValue;
+    uint8_t  enabledPeripherals;
+    uint8_t  i2cSlaveAddress;
+    uint16_t peripheralDetectionTimeoutMs;
+    uint16_t usbVid;
+    uint16_t usbPid;
+    uint32_t usbStringsPointer;
+    uint8_t  clockFlags;
+    uint8_t  clockDivider;
+    uint8_t  bootFlags;
     uint8_t  RESERVED1;
-    uint32_t mmcauConfigPointer; 
-    uint32_t keyBlobPointer;     
+    uint32_t mmcauConfigPointer;
+    uint32_t keyBlobPointer;
     uint8_t  RESERVED2[8];
-    uint32_t qspiConfigBlockPtr; 
+    uint32_t qspiConfigBlockPtr;
     uint8_t  RESERVED3[12];
 };
 
-const struct stage1_config __attribute__((section(".stage1_config"))) 
+const struct stage1_config __attribute__((section(".stage1_config")))
  NV_Stage1_Config = {
     .tag = 0x6766636BU,                      /* Magic Number */
     .crcStartAddress = 0xFFFFFFFFU,          /* Disable CRC check */
@@ -146,4 +146,3 @@ void main(void) {
     while(1)
         __WFI();
 }
-

@@ -4,7 +4,7 @@
  * functionalities, on top of the spi_drv.h HAL.
  *
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -22,9 +22,9 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
 #include "spi_drv.h"
 #include "spi_flash.h"
-
 
 #define MDID            0x90
 #define RDSR            0x05
@@ -237,5 +237,4 @@ int spi_flash_write(uint32_t address, const void *data, int len)
     if (chip_write_mode == WB_WRITEPAGE)
         return spi_flash_write_page(address, data, len);
     return -1;
-} 
-
+}

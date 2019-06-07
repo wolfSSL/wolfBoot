@@ -1,9 +1,36 @@
+/* image.h
+ *
+ * Functions to help with wolfBoot image header
+ *
+ *
+ * Copyright (C) 2019 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
 #ifndef IMAGE_H
 #define IMAGE_H
 #include <stdint.h>
-#include <target.h>
-#include <wolfboot/wolfboot.h>
 
+#include "target.h"
+#include "wolfboot/wolfboot.h"
+
+
+#ifndef RAMFUNCTION
 #if defined(__WOLFBOOT) && defined(RAM_CODE)
 #  if defined(ARCH_ARM)
 #    define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
@@ -12,6 +39,7 @@
 #  endif
 #else
 # define RAMFUNCTION
+#endif
 #endif
 
 
@@ -78,7 +106,7 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 {
     int ret;
     volatile uint32_t copy;
-    if (PART_IS_EXT(img)) 
+    if (PART_IS_EXT(img))
     {
         ext_flash_read((uint32_t)(img->hdr) + off, (void *)&copy, sizeof(uint32_t));
         while (copy != word) {
@@ -97,10 +125,12 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 }
 
 
-#else 
+#else
+
 # define PART_IS_EXT(x) (0)
 # define wb_flash_erase(im, of, siz)  hal_flash_erase(((uint32_t)(((im)->hdr)) + of), siz)
 # define wb_flash_write(im, of, dat, siz)  hal_flash_write(((uint32_t)((im)->hdr)) + of, dat, siz)
+
 #endif /* EXT_FLASH */
 
-#endif /* IMAGE_H */
+#endif /* !IMAGE_H */

@@ -67,3 +67,11 @@ cscope.out
 tags
 
 
+image.bin
+image_v1_signed.bin
+.wolfboot-arch-offset
+.wolfboot-offset
+.wolfboot-partition-size
+factory.bin
+wolfboot-align.bin
+wolfboot.bin
