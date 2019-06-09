@@ -47,6 +47,11 @@ ifeq ($(ARCH),RISCV)
   CROSS_COMPILE:=riscv32-unknown-elf-
   CFLAGS+=-fno-builtin-printf -DUSE_PLIC -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+  
+  # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,--gc-sections
+
   OBJS+=src/boot_riscv.o src/vector_riscv.o
   ARCH_FLASH_OFFSET=0x20000000
 endif

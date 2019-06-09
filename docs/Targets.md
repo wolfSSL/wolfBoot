@@ -69,8 +69,8 @@ Loading with JLink:
 
 ```
 JLinkExe -device FE310 -if JTAG -speed 4000 -jtagconf -1,-1 -autoconnect 1
-loadfile wolfboot.hex
-reset
+loadbin factory.bin 0x20010000
+rnh
 ```
 
 ### Debugging
@@ -81,7 +81,10 @@ In one terminal:
 `JLinkGDBServer -device FE310 -port 3333`
 
 In another terminal:
+`riscv64-unknown-elf-gdb test-app/image.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"`
+or
 `riscv64-unknown-elf-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"`
+
 
 
 ## STM32-F407
