@@ -135,3 +135,23 @@ both `PART_UPDATE_EXT` and `PART_SWAP_EXT` are defined.
 
 When external memory is used, the HAL API must be extended to define methods to access the custom memory.
 Refer to the [HAL](HAL.md) page for the description of the `ext_flash_*` API.
+
+### Using Mac OS/X
+
+If you see 0xC3 0xBF (C3BF) repeated in your factory.bin then your OS is using Unicode characters.
+
+The "tr" command for assembling the 0xFF padding between `"bootloader" ... 0xFF ... "application" = factory.bin`, which requires the "C" locale.
+
+Set this in your terminal
+```
+LANG=
+LC_COLLATE="C"
+LC_CTYPE="C"
+LC_MESSAGES="C"
+LC_MONETARY="C"
+LC_NUMERIC="C"
+LC_TIME="C"
+LC_ALL=
+```
+
+Then run the normal `make` steps.

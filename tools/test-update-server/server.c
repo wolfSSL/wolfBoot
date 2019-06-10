@@ -43,8 +43,8 @@
 
 #define MSGLEN      (4 + 4 + 8)
 #ifndef UART_DEV
-    #ifdef _MACH_
-        #define UART_DEV "/dev/usbmodem144241"
+    #ifdef __MACH__
+        #define UART_DEV "/dev/cu.usbmodem1411"
     #else
         #define UART_DEV "/dev/ttyACM0"
     #endif
@@ -149,7 +149,12 @@ int main(int argc, char** argv)
     tot_len = st.st_size;
 
     /* open UART */
+    printf("Opening %s UART\n", UART_DEV);
     serialfd = open(UART_DEV, O_RDWR | O_NOCTTY);
+    if (serialfd < 0) {
+        fprintf(stderr, "failed opening serial %s\n", UART_DEV);
+        exit(2);
+    }
     tcgetattr(serialfd, &tty);
     cfsetospeed(&tty, B115200);
     cfsetispeed(&tty, B115200);

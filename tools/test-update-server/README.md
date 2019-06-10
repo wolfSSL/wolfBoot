@@ -4,4 +4,4 @@ Tool to send binary image over UART to test application.
 
 Usage:
 
-`./server ../../factory.bin`
+`./server ../../test-app/image_v1_signed.bin`
