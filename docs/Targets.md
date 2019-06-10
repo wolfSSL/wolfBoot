@@ -28,8 +28,8 @@ For testing wolfBoot here are the changes required:
     * TARGET=hifive1
  
     ```
-    make ARCH=RISCV TARGET=hifive1 clean
-    make ARCH=RISCV TARGET=hifive1
+    make ARCH=RISCV TARGET=hifive1 RAMCODE=1 clean
+    make ARCH=RISCV TARGET=hifive1 RAMCODE=1
     ```
 
     If using the `riscv64-unknown-elf-` cross compiler you can add `CROSS_COMPILE=riscv64-unknown-elf-` to your `make` or modify `arch.mk` as follows:
@@ -44,18 +44,15 @@ For testing wolfBoot here are the changes required:
 2. `include/target.h`
 
 Bootloader Size: 0x10000 (64KB)
-
-```c
-#define WOLFBOOT_SECTOR_SIZE                 0x10000
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x20010000
-```
-
 Application Size 0x40000 (256KB)
 
 ```c
+#define WOLFBOOT_SECTOR_SIZE                 0x10000
 #define WOLFBOOT_PARTITION_SIZE              0x40000
-#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x20020000
-#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x20060000
+
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x20020000
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x20060000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x20070000
 ```
 
 ### Build Options

@@ -25,49 +25,29 @@
 #ifndef H_TARGETS_TARGET_
 #define H_TARGETS_TARGET_
 
-#ifndef ARCH_FLASH_OFFSET
-    #define ARCH_FLASH_OFFSET 0x0
-#endif
-
 /* Example flash partitioning.
  * Ensure that your firmware entry point is
  * at FLASH_AREA_IMAGE_0_OFFSET + 0x100
  */
 
-#ifndef WOLFBOOT_SECTOR_SIZE
-    #define WOLFBOOT_SECTOR_SIZE                 0x20000
-#endif
-#ifndef WOLFBOOT_PARTITION_BOOT_ADDRESS
-    #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x20000
-#endif
+#define WOLFBOOT_SECTOR_SIZE                 0x20000
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x20000
 
 #ifdef EXT_FLASH
 
 /* Test configuration with 1MB external memory */
 /* (Addresses are relative to the beginning of the ext)*/
 
-#ifndef WOLFBOOT_PARTITION_SIZE
-    #define WOLFBOOT_PARTITION_SIZE              0x80000
-#endif
-#ifndef WOLFBOOT_PARTITION_UPDATE_ADDRESS
-    #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x00000
-#endif
-#ifndef WOLFBOOT_PARTITION_SWAP_ADDRESS
-    #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x80000
-#endif
+#define WOLFBOOT_PARTITION_SIZE              0x80000
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x00000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x80000
 
 #else
 
 /* Test configuration with internal memory */
-#ifndef WOLFBOOT_PARTITION_SIZE
-    #define WOLFBOOT_PARTITION_SIZE              0x20000
-#endif
-#ifndef WOLFBOOT_PARTITION_UPDATE_ADDRESS
-    #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x40000
-#endif
-#ifndef WOLFBOOT_PARTITION_SWAP_ADDRESS
-    #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x60000
-#endif
+#define WOLFBOOT_PARTITION_SIZE              0x20000
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x40000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x60000
 
 #endif
 

@@ -51,6 +51,8 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
 
 ### Examples provided
 
+Additional examples available on our GitHub wolfBoot-examples repository [here](https://github.com/wolfSSL/wolfBoot-examples).
+
 The following steps are automated in the default `Makefile` target, using the baremetal test
 application as an example to create the factory image. By running `make`, the build system will:
 
