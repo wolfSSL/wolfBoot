@@ -153,6 +153,7 @@ test-app/image.bin:
 	KINETIS_CMSIS=$(KINETIS_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK)
 	@rm -f src/*.o hal/*.o
+	@$(SIZE) test-app/image.elf
 
 include tools/test.mk
 

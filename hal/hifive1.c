@@ -58,9 +58,11 @@
 #define FESPI_TXDATA_FIFO_FULL    (1 << 31)
 #define FESPI_FMT_DIR_TX          (1 << 3)
 
-#define FESPI_CSMODE_AUTO         0
-#define FESPI_CSMODE_HOLD         2
-#define FESPI_CSMODE_OFF          3
+#define FESPI_CSMODE_AUTO         0x0UL
+#define FESPI_CSMODE_HOLD         0x2UL
+#define FESPI_CSMODE_MASK         0x3UL
+
+#define FESPI_FCTRL_MODE_SEL      0x1UL
 
 #define FESPI_FFMT_CMD_EN         0x1
 #define FESPI_FFMT_ADDR_LEN(x)    (((x) & 0x7) << 1)
@@ -84,7 +86,7 @@
 #define FESPI_PROTO_D             1 /* Dual */
 #define FESPI_PROTO_Q             2 /* Quad */
 
-
+//#define SPI_QUAD_MODE
 /* SPI Flash Commands */
 #define FESPI_READ_ID             0x9F /* Read Flash Identification */
 #define FESPI_READ_MID            0xAF /* Read Flash Identification, multi-io */
@@ -93,7 +95,11 @@
 #define FESPI_PAGE_PROGRAM        0x02 /* Page Program */
 #define FESPI_FAST_READ           0x0B /* Fast Read */
 #define FESPI_READ                0x03 /* Normal Read */
+#ifdef SPI_QUAD_MODE
 #define FESPI_ERASE_SECTOR        0x20 /* Sector Erase */
+#else
+#define FESPI_ERASE_SECTOR        0xD7 /* Sector Erase */
+#endif
 
 /* SPI flash status fields (from FESPI_READ_STATUS command) */
 #define FESPI_RX_BSY              (1 << 0)
@@ -258,41 +264,42 @@ void fespi_init(uint32_t cpu_clock, uint32_t flash_freq)
     FESPI_REG_SCKDIV |= FESPI_SCKDIV_VAL(cpu_clock, flash_freq);
 }
 
-static inline void fespi_swmode(void)
+static RAMFUNCTION void fespi_swmode(void)
 {
-    if (FESPI_REG_FCTRL & 1)
-        FESPI_REG_FCTRL &= ~1UL;
+    if (FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL)
+        FESPI_REG_FCTRL &= ~FESPI_FCTRL_MODE_SEL;
 }
 
-static inline void fespi_hwmode(void)
+static RAMFUNCTION void fespi_hwmode(void)
 {
-    if ((FESPI_REG_FCTRL & 1) == 0)
-        FESPI_REG_FCTRL |= 1;
+    if ((FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL) == 0)
+        FESPI_REG_FCTRL |= FESPI_FCTRL_MODE_SEL;
 }
 
-static inline void fespi_csmode_hold(void)
+static RAMFUNCTION void fespi_csmode_hold(void)
 {
-    uint32_t reg = FESPI_REG_CSMODE & (~ 0x03);
-    FESPI_REG_CSMODE = reg | FESPI_CSMODE_HOLD;
+    FESPI_REG_CSMODE & ~FESPI_CSMODE_MASK;
+    FESPI_REG_CSMODE |= FESPI_CSMODE_HOLD;
 }
 
-static inline void fespi_csmode_auto(void)
+static RAMFUNCTION void fespi_csmode_auto(void)
 {
-    FESPI_REG_CSMODE &= (~0x03);
+    FESPI_REG_CSMODE & ~FESPI_CSMODE_MASK;
+    FESPI_REG_CSMODE |= FESPI_CSMODE_AUTO;
 }
 
-static inline void fespi_wait_txwm(void)
+static RAMFUNCTION void fespi_wait_txwm(void)
 {
     while((FESPI_REG_IP & FESPI_IP_TXWM) == 0);
 }
 
-static inline void fespi_sw_tx(uint8_t b)
+static RAMFUNCTION void fespi_sw_tx(uint8_t b)
 {
     while((FESPI_REG_TXDATA & FESPI_TXDATA_FIFO_FULL) != 0);
     FESPI_REG_TXDATA = b;
 }
 
-static inline uint8_t fespi_sw_rx(void)
+static RAMFUNCTION uint8_t fespi_sw_rx(void)
 {
     volatile uint32_t reg;
     do {
@@ -301,7 +308,7 @@ static inline uint8_t fespi_sw_rx(void)
     return (uint8_t)(reg & 0xFF);
 }
 
-static inline void fespi_sw_setdir(int tx)
+static RAMFUNCTION void fespi_sw_setdir(int tx)
 {
     if (tx)
         FESPI_REG_FMT |= FESPI_FMT_DIR_TX;
@@ -309,14 +316,14 @@ static inline void fespi_sw_setdir(int tx)
         FESPI_REG_FMT &= ~FESPI_FMT_DIR_TX;
 }
 
-static inline void fespi_write_address(uint32_t address)
+static RAMFUNCTION void fespi_write_address(uint32_t address)
 {
     fespi_sw_tx((address & 0xFF0000) >> 16);
     fespi_sw_tx((address & 0xFF00) >> 8);
     fespi_sw_tx((address & 0xFF));
 }
 
-static inline void fespi_wait_flash_busy(void)
+static RAMFUNCTION void fespi_wait_flash_busy(void)
 {
     uint8_t rx;
     fespi_sw_setdir(FESPI_DIR_RX);

@@ -64,8 +64,8 @@ For testing wolfBoot here are the changes required:
     * TARGET=hifive1
  
     ```
-    make ARCH=RISCV TARGET=hifive1 RAMCODE=1 clean
-    make ARCH=RISCV TARGET=hifive1 RAMCODE=1
+    make ARCH=RISCV TARGET=hifive1 RAM_CODE=1 clean
+    make ARCH=RISCV TARGET=hifive1 RAM_CODE=1
     ```
 
     If using the `riscv64-unknown-elf-` cross compiler you can add `CROSS_COMPILE=riscv64-unknown-elf-` to your `make` or modify `arch.mk` as follows:
@@ -118,4 +118,8 @@ In another terminal:
 ```
 riscv64-unknown-elf-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
 add-symbol-file test-app/image.elf 0x20020100
+```
+
+```
+riscv64-unknown-elf-objdump -D test-app/image.elf
 ```

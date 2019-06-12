@@ -61,7 +61,7 @@ static int check(uint8_t *pkt, int size)
     return -1;
 }
 
-volatile void RAMFUNCTION write_page(uint32_t dst)
+static RAMFUNCTION void write_page(uint32_t dst)
 {
     hal_flash_erase(dst, PAGESIZE);
     hal_flash_write(dst, flash_page, PAGESIZE);
@@ -132,8 +132,15 @@ void main(void) {
             memcpy(&flash_page[recv_seq % PAGESIZE], msg + 8, psize);
             flash_page_idx += psize;
             if ((flash_page_idx == PAGESIZE) || (next_seq + psize >= tot_len)) {
-                uint32_t dst = (WOLFBOOT_PARTITION_UPDATE_ADDRESS + recv_seq + psize) - flash_page_idx;
+                uint32_t dst = ((WOLFBOOT_PARTITION_UPDATE_ADDRESS - 0x20000000) + recv_seq + psize) - flash_page_idx;
+            #if 1
+                /* workaround for long jump */
+                asm volatile("mv    a0, %0;" \
+                             "la    a2, write_page;" \
+                             "jalr  a2" :: "r" (dst) : "a2");
+            #else
                 write_page(dst);
+            #endif
                 memset(flash_page, 0xFF, PAGESIZE);
             }
             next_seq += psize;

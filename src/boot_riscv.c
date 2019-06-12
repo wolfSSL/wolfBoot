@@ -75,7 +75,13 @@ void __attribute__((naked,section(".init"))) _reset(void) {
 
 void do_boot(const uint32_t *app_offset)
 {
+#if 1
+    /* workaround for long jump */
+    asm volatile("la    a2, reloc_iv;" \
+                 "jalr  a2" ::: "a2");
+#else
     reloc_iv(app_offset);
+#endif
     asm volatile("jr %0":: "r"((uint8_t *)(app_offset)));
 }
 
