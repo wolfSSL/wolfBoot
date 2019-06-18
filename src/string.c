@@ -26,6 +26,11 @@
 #include <stddef.h>
 #include <string.h>
 
+int islower(int c)
+{
+    return (c >= 'a' && c <= 'z');
+}
+
 int isupper(int c)
 {
     return (c >= 'A' && c <= 'Z');
@@ -33,7 +38,17 @@ int isupper(int c)
 
 int tolower(int c)
 {
-    return isupper(c) ? (c) - 'A' + 'a' : c;
+    return isupper(c) ? c - 'A' + 'a' : c;
+}
+
+int toupper(int c)
+{
+    return islower(c) ? c - 'a' + 'A' : c;
+}
+
+int isalpha(int c)
+{
+    return (isupper(c) || islower(c));
 }
 
 void *memset(void *s, int c, size_t n)
