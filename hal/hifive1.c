@@ -426,6 +426,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         fespi_sw_tx(data[i]);
     fespi_wait_txwm();
     fespi_csmode_auto();
+    fespi_hwmode();
     return 0;
 }
 
@@ -455,5 +456,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         fespi_csmode_auto();
         fespi_wait_flash_busy();
     }
+    fespi_hwmode();
     return 0;
 }
