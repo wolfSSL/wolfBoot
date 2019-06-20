@@ -93,6 +93,7 @@
 #define FESPI_READ_STATUS         0x05 /* Read Status Register */
 #define FESPI_WRITE_ENABLE        0x06 /* Write Enable */
 #define FESPI_PAGE_PROGRAM        0x02 /* Page Program */
+#define FESPI_ROW_PROGRAM         0x62 /* Row Program */
 #define FESPI_FAST_READ           0x0B /* Fast Read */
 #define FESPI_READ                0x03 /* Normal Read */
 #ifdef SPI_QUAD_MODE
@@ -326,7 +327,6 @@ static RAMFUNCTION void fespi_write_address(uint32_t address)
 static RAMFUNCTION void fespi_wait_flash_busy(void)
 {
     uint8_t rx;
-    fespi_sw_setdir(FESPI_DIR_RX);
     fespi_csmode_hold();
     fespi_sw_tx(FESPI_READ_STATUS);
     rx = fespi_sw_rx();
@@ -335,7 +335,20 @@ static RAMFUNCTION void fespi_wait_flash_busy(void)
         rx = fespi_sw_rx();
         if ((rx & FESPI_RX_BSY) == 0) {
             fespi_csmode_auto();
-            fespi_sw_setdir(FESPI_DIR_TX);
+            return;
+        }
+    }
+}
+
+static RAMFUNCTION void fespi_wait_flash_writing(void)
+{
+    uint8_t rx;
+    fespi_sw_tx(FESPI_READ_STATUS);
+    rx = fespi_sw_rx();
+    while (1) {
+        fespi_sw_tx(0);
+        rx = fespi_sw_rx();
+        if ((rx & FESPI_RX_WE) == 0) {
             return;
         }
     }
@@ -413,20 +426,37 @@ void hal_prepare_boot(void)
 {
 }
 
+#define FLASH_PAGE_SIZE 256
+
 /* Flash functions must be relocated to RAM for execution */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
+    uint32_t off = address & 0xFF;
+    uint32_t page = address >> 8;
     fespi_wait_txwm();
     fespi_swmode();
-    fespi_wait_flash_busy();
-    fespi_sw_tx(FESPI_WRITE_ENABLE);
-    fespi_write_address(address);
-    for(i = 0; i < len; i++)
-        fespi_sw_tx(data[i]);
-    fespi_wait_txwm();
-    fespi_csmode_auto();
+
+    while ((page * FLASH_PAGE_SIZE) < (address + len)) {
+        fespi_wait_flash_busy();
+        fespi_wait_txwm();
+        fespi_sw_setdir(FESPI_DIR_TX);
+        fespi_csmode_hold();
+        fespi_sw_tx(FESPI_WRITE_ENABLE);
+        fespi_sw_tx(FESPI_PAGE_PROGRAM);
+        fespi_write_address(page << 8 + off);
+        for(i = off; i < FLASH_PAGE_SIZE; i++) {
+            fespi_sw_tx(data[i]);
+        }
+        fespi_csmode_auto();
+        fespi_sw_setdir(FESPI_DIR_RX);
+        fespi_wait_txwm();
+        page++;
+        off = 0;
+    }
+    fespi_wait_flash_writing();
     fespi_hwmode();
+
     return 0;
 }
 
@@ -446,12 +476,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     fespi_wait_txwm();
     fespi_swmode();
     fespi_wait_flash_busy();
+
     for (p = address; p <= end; p += FESPI_FLASH_SECTOR_SIZE) {
         fespi_sw_tx(FESPI_WRITE_ENABLE);
         fespi_wait_txwm();
         fespi_csmode_hold();
+        fespi_sw_setdir(FESPI_DIR_TX);
         fespi_sw_tx(FESPI_ERASE_SECTOR);
         fespi_write_address(p);
+        fespi_sw_setdir(FESPI_DIR_RX);
         fespi_wait_txwm();
         fespi_csmode_auto();
         fespi_wait_flash_busy();

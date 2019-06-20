@@ -68,6 +68,7 @@ endif
 
 ifeq ($(TARGET),hifive1)
   CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
+  APP_OBJS+=hifive1_write_page.o
 endif
 
 standalone:CFLAGS+=-DTEST_APP_STANDALONE

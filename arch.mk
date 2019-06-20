@@ -45,7 +45,7 @@ endif
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE:=riscv32-unknown-elf-
-  CFLAGS+=-fno-builtin-printf -DUSE_PLIC -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
   MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o 
   

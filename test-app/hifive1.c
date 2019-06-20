@@ -31,13 +31,14 @@ extern char uart_read(void);
 
 #define MSGSIZE 16
 #define PAGESIZE (0x1000) /* Flash sector: 4K */
-static uint8_t flash_page[PAGESIZE];
 static const char ERR='!';
 static const char START='*';
 static const char UPDATE='U';
 static const char ACK='#';
 static uint8_t msg[MSGSIZE];
 
+uint8_t flash_page[PAGESIZE];
+extern void write_page(uint32_t dst);
 static void ack(uint32_t _off)
 {
     uint8_t *off = (uint8_t *)(&_off);
@@ -59,12 +60,6 @@ static int check(uint8_t *pkt, int size)
     if (c == c_rx)
         return 0;
     return -1;
-}
-
-static RAMFUNCTION void write_page(uint32_t dst)
-{
-    hal_flash_erase(dst, PAGESIZE);
-    hal_flash_write(dst, flash_page, PAGESIZE);
 }
 
 void main(void) {
@@ -129,7 +124,7 @@ void main(void) {
         {
             int psize = r_total - 8;
             int flash_page_idx = recv_seq % PAGESIZE;
-            memcpy(&flash_page[recv_seq % PAGESIZE], msg + 8, psize);
+            memcpy(&(flash_page[recv_seq % PAGESIZE]), msg + 8, psize);
             flash_page_idx += psize;
             if ((flash_page_idx == PAGESIZE) || (next_seq + psize >= tot_len)) {
                 uint32_t dst = ((WOLFBOOT_PARTITION_UPDATE_ADDRESS - 0x20000000) + recv_seq + psize) - flash_page_idx;
