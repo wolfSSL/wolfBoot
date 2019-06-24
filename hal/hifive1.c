@@ -444,7 +444,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         fespi_csmode_hold();
         fespi_sw_tx(FESPI_WRITE_ENABLE);
         fespi_sw_tx(FESPI_PAGE_PROGRAM);
-        fespi_write_address(page << 8 + off);
+        fespi_write_address((page << 8) + off);
         for(i = off; i < FLASH_PAGE_SIZE; i++) {
             fespi_sw_tx(data[i]);
         }
