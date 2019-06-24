@@ -452,6 +452,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         fespi_sw_setdir(FESPI_DIR_RX);
         fespi_wait_txwm();
         page++;
+        data += FLASH_PAGE_SIZE;
         off = 0;
     }
     fespi_wait_flash_writing();
