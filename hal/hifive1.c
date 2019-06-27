@@ -177,7 +177,7 @@
 #define CPU_FREQ       320000000
 #endif
 #define MAX_CPU_FREQ   320000000
-#define MAX_FLASH_FREQ   2000000
+#define MAX_FLASH_FREQ  50000000
 
 /* PLL Configuration */
 /* R and Q are fixed values for this PLL code */
