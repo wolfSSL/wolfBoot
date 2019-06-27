@@ -177,7 +177,7 @@
 #define CPU_FREQ       320000000
 #endif
 #define MAX_CPU_FREQ   320000000
-#define MAX_FLASH_FREQ   5000000
+#define MAX_FLASH_FREQ   2000000
 
 /* PLL Configuration */
 /* R and Q are fixed values for this PLL code */
@@ -279,14 +279,14 @@ static RAMFUNCTION void fespi_hwmode(void)
 
 static RAMFUNCTION void fespi_csmode_hold(void)
 {
-    FESPI_REG_CSMODE & ~FESPI_CSMODE_MASK;
-    FESPI_REG_CSMODE |= FESPI_CSMODE_HOLD;
+    uint32_t reg = FESPI_REG_CSMODE & ~FESPI_CSMODE_MASK;
+    FESPI_REG_CSMODE = reg | FESPI_CSMODE_HOLD;
 }
 
 static RAMFUNCTION void fespi_csmode_auto(void)
 {
-    FESPI_REG_CSMODE & ~FESPI_CSMODE_MASK;
-    FESPI_REG_CSMODE |= FESPI_CSMODE_AUTO;
+    uint32_t reg = FESPI_REG_CSMODE & ~FESPI_CSMODE_MASK;
+    FESPI_REG_CSMODE = reg | FESPI_CSMODE_AUTO;
 }
 
 static RAMFUNCTION void fespi_wait_txwm(void)
@@ -376,7 +376,6 @@ static RAMFUNCTION void fespi_wait_flash_busy(void)
     fespi_sw_setdir(FESPI_DIR_RX);
     fespi_csmode_hold();
     fespi_sw_tx(FESPI_READ_STATUS);
-    rx = fespi_sw_rx();
     while (1) {
         fespi_sw_tx(0);
         rx = fespi_sw_rx();
@@ -446,9 +445,6 @@ void hifive1_init(uint32_t cpu_clock, uint32_t uart_baud)
     /* Reconfigure the SPI to maximum frequency */
     fespi_init(cpu_clock, MAX_FLASH_FREQ);
     
-    /* Probe the FESPI flash */
-    (void)fespi_flash_probe();
-
     /* Reconfigure the UART */
     uart_init(cpu_clock, uart_baud);
 }
@@ -469,26 +465,24 @@ void hal_prepare_boot(void)
 /* Flash functions must be relocated to RAM for execution */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int i;
+    int i, j = 0;
     uint32_t off = address & 0xFF;
     uint32_t page = address >> 8;
     FESPI_REG_TXMARK = 1;
     fespi_swmode();
     fespi_wait_flash_busy();
 
-    while ((page * FLASH_PAGE_SIZE) < (address + len)) {
+    while (j < len) {
         fespi_write_enable();
         fespi_csmode_hold();
         fespi_sw_tx(FESPI_PAGE_PROGRAM);
         fespi_wait_txwm();
         fespi_write_address((page << 8) + off);
         for(i = off; i < FLASH_PAGE_SIZE; i++) {
-            fespi_sw_tx(data[i]);
+            fespi_sw_tx(data[j++]);
         }
         fespi_csmode_auto();
-        fespi_wait_write_disabled();
         page++;
-        data += FLASH_PAGE_SIZE;
         off = 0;
     }
     fespi_hwmode();
@@ -532,8 +526,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t end = address + len - 1;
     uint32_t p;
 
-    fespi_wait_txwm();
+    
     FESPI_REG_TXMARK = 1;
+    fespi_wait_txwm();
     fespi_swmode();
     fespi_wait_flash_busy();
 
