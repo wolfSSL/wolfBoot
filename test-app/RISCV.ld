@@ -5,7 +5,7 @@ ENTRY( _reset )
 MEMORY
 {
   FLASH(rxai!w) : ORIGIN = 0x20020100, LENGTH = 256K - 0x100
-  RAM(wxa!ri) : ORIGIN = 0x80000000, LENGTH = 16K
+  RAM(wxa!ri) : ORIGIN = 0x80001000, LENGTH = 12K
 }
 
 SECTIONS
