@@ -2,9 +2,9 @@ TARGET?=none
 ARCH?=ARM
 KINETIS_CMSIS?=$(KINETIS)/CMSIS
 
-CFLAGS:=-g -ggdb -Wall -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+CFLAGS:=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
-APP_OBJS:=$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
 include ../arch.mk
 
 ifeq ($(ARCH),RISCV)
