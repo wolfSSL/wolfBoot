@@ -71,6 +71,7 @@ void alarm_handler(int signo)
     if (serialfd >= 0 && pktbuf_size > 0) {
         write(serialfd, pktbuf, pktbuf_size);
         printf("retransmitting...\n");
+        alarm(2);
     }
 }
 
@@ -106,7 +107,7 @@ static int recv_ack(union usb_ack *ack)
     }
 }
 
-static void check(uint8_t *pkt)
+static void check(uint8_t *pkt, int size)
 {
     uint16_t *c = (uint16_t *)(pkt + 2);
     int i;
@@ -114,7 +115,7 @@ static void check(uint8_t *pkt)
     *c = 0;
     pkt[0] = 0xA5;
     pkt[1] = 0x5A;
-    for (i = 0; i < 6; i++)
+    for (i = 0; i < ((size - 4) >> 1); i++)
         *c += p[i];
 }
 
@@ -224,7 +225,7 @@ int main(int argc, char** argv)
                     break;
                 }
                 pktbuf_size = res + 4 + sizeof(uint32_t);
-                check(pktbuf);
+                check(pktbuf, pktbuf_size);
                 write(serialfd, pktbuf, pktbuf_size);
                 len += res;
 
