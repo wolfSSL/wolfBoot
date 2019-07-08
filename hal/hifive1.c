@@ -28,6 +28,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 #include <target.h>
 #include "image.h"
 #ifndef ARCH_RISCV
@@ -253,7 +254,7 @@ void uart_flush(void)
     bits_per_symbol = (UART_REG_TXCTRL & (1 << 1)) ? 9 : 10;
     cycles_to_wait = bits_per_symbol * (UART_REG_DIV + 1);
     for(x = 0; x < cycles_to_wait; x++) {
-        asm("nop");
+        asm volatile ("nop");
     }
 }
 
@@ -267,14 +268,26 @@ void fespi_init(uint32_t cpu_clock, uint32_t flash_freq)
 
 static RAMFUNCTION void fespi_swmode(void)
 {
+    asm volatile("fence");
+    asm volatile("fence.i");
     if (FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL)
         FESPI_REG_FCTRL &= ~FESPI_FCTRL_MODE_SEL;
 }
 
 static RAMFUNCTION void fespi_hwmode(void)
 {
+    uint32_t x;
     if ((FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL) == 0)
         FESPI_REG_FCTRL |= FESPI_FCTRL_MODE_SEL;
+    asm volatile("fence");
+    asm volatile("fence.i");
+    /* Wait two milliseconds for the eSPI device
+     * to reboot into hw-mapped mode and link to the 
+     * instruction cache
+     */
+    for(x = 0; x < CPU_FREQ / 500; x++) {
+        asm volatile ("nop");
+    }
 }
 
 static RAMFUNCTION void fespi_csmode_hold(void)
@@ -461,25 +474,58 @@ void hal_prepare_boot(void)
 }
 
 #define FLASH_PAGE_SIZE 256
+#define FLASH_BASE 0x20000000UL
 
 /* Flash functions must be relocated to RAM for execution */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int i, j = 0;
-    uint32_t off = address & 0xFF;
-    uint32_t page = address >> 8;
-    FESPI_REG_TXMARK = 1;
-    fespi_swmode();
-    fespi_wait_flash_busy();
+    uint32_t i, j = 0;
+    uint32_t off, page; 
+    const uint8_t *src;
+    uint8_t data_copy[FLASH_PAGE_SIZE];
+    int swmode = 0;
 
-    while (j < len) {
+
+    if (address >= FLASH_BASE)
+        address -= FLASH_BASE;
+    off = address & 0xFF;
+    page = address >> 8;
+
+    while (j < (uint32_t)len) {
+        if ((off > 0) || (len < FLASH_PAGE_SIZE)) {
+            uint8_t *orig = (uint8_t *)(FLASH_BASE + (page << 8));
+            int rel_len;
+            rel_len = FLASH_PAGE_SIZE - off;
+            if (swmode) {
+                fespi_hwmode();
+                swmode = 0;
+            }
+            if (rel_len > len)
+                rel_len = len;
+            for (i = 0; i < off; i++)
+                data_copy[i] = orig[i];
+            for (i = off; i < off + rel_len; i++)
+                data_copy[i] = data[j++];
+            for (i = off + rel_len; i < FLASH_PAGE_SIZE; i++)
+                data_copy[i] = orig[i];
+            src = data_copy;
+        } else {
+            src = (data + j);
+            j += FLASH_PAGE_SIZE;
+        }
+        if (!swmode) {
+            FESPI_REG_TXMARK = 1;
+            fespi_swmode();
+            fespi_wait_flash_busy();
+            swmode++;
+        }
         fespi_write_enable();
         fespi_csmode_hold();
         fespi_sw_tx(FESPI_PAGE_PROGRAM);
         fespi_wait_txwm();
-        fespi_write_address((page << 8) + off);
-        for(i = off; i < FLASH_PAGE_SIZE; i++) {
-            fespi_sw_tx(data[j++]);
+        fespi_write_address((page << 8));
+        for(i = 0; i < FLASH_PAGE_SIZE; i++) {
+            fespi_sw_tx(src[i]);
         }
         fespi_csmode_auto();
         page++;
@@ -523,8 +569,11 @@ static uint32_t RAMFUNCTION fespi_flash_probe(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    uint32_t end = address + len - 1;
+    uint32_t end;
     uint32_t p;
+    if (address >= FLASH_BASE)
+        address -= FLASH_BASE;
+    end = address + len - 1;
 
     
     FESPI_REG_TXMARK = 1;
