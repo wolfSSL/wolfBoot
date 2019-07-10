@@ -1,6 +1,6 @@
 /**
  * RISC-V bootup
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

@@ -1,6 +1,6 @@
 /* samr21.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -22,7 +22,7 @@
 #include <stdint.h>
 #include "image.h"
 
-/* Clock settings for cpu samd21g18a @ 48MHz */ 
+/* Clock settings for cpu samd21g18a @ 48MHz */
 #define CPU_FREQ (48000000)
 #define GCLK_CTRL_RESET (1)
 #define GCLK_GENDIV_DIVSHIFT (8)
@@ -97,7 +97,7 @@
 #define PAC1_BASE             (0x41000000)
 #define PAC1_WPCLR            *((volatile uint32_t *)(PAC1_BASE)) /* Register to clear write protection (unlock flash) */
 #define PAC1_WPSET            *((volatile uint32_t *)(PAC1_BASE + 4)) /* Register to set write protection (lock flash) */
-#define PAC_WP_NVMCTL         (1 << 1) /* Bit position for NVM in WPCLR/WPSET registers */ 
+#define PAC_WP_NVMCTL         (1 << 1) /* Bit position for NVM in WPCLR/WPSET registers */
 
 
 #define GCLK_WAITBUSY() { while (GCLK_STATUS & GCLK_STATUS_SYNCBUSY) {} }
@@ -110,7 +110,7 @@ void hal_init(void)
     uint32_t i, reg;
     /* enable clocks for the power, sysctrl and gclk modules */
     APBAMASK_REG = APBAMASK_PM_EN | APBAMASK_SYSCTRL_EN | APBAMASK_GCLK_EN;
-    
+
     /* set NVM wait states */
     APBBMASK_REG |= APBBMASK_NVM_EN;
     NVMCTRLB_REG |= ((WAITSTATES & 0x0f) << 1);
@@ -126,7 +126,7 @@ void hal_init(void)
     GCLK_CTRL = GCLK_CTRL_RESET;
     GCLK_WAITBUSY();
     GCLK_GENDIV = (8 << GCLK_GENDIV_DIVSHIFT) | 1;
-    GCLK_GENCTRL = GCLK_GENCTRL_EN | GCLK_GENCTRL_SRC_OSC8M | 1; 
+    GCLK_GENCTRL = GCLK_GENCTRL_EN | GCLK_GENCTRL_SRC_OSC8M | 1;
     GCLK_CLKCTRL = (1 << GCLK_CLKCTRL_GENSHIFT) | GCLK_CLKCTRL_CLKEN | 1;
     GCLK_WAITBUSY();
     SYSCTRL_DPLLRATIO = (47);
@@ -137,7 +137,7 @@ void hal_init(void)
     GCLK_GENCTRL = GCLK_GENCTRL_EN | GCLK_GENCTRL_SRC_FDPLL;
     GCLK_WAITBUSY();
     for (i = 3; i <= 34; i++) {
-        GCLK_CLKCTRL = GCLK_CLKCTRL_GEN_CLK7 | i; 
+        GCLK_CLKCTRL = GCLK_CLKCTRL_GEN_CLK7 | i;
         GCLK_WAITBUSY();
     }
 }

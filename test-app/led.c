@@ -2,7 +2,7 @@
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -70,4 +70,4 @@ void boot_led_on(void)
     GPIOD_BSRR |= (1 << pin);
 }
 
-#endif /** PLATFORM_stm32f4 **/
+#endif /* PLATFORM_stm32f4 */

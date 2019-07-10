@@ -1,8 +1,8 @@
-/* main.c
+/* stm32f4.c
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -341,4 +341,3 @@ void main(void) {
         ;
 }
 #endif
-

@@ -4,7 +4,7 @@ ENTRY( _reset )
 
 MEMORY
 {
-  FLASH(rxai!w) : ORIGIN = 0x20400000, LENGTH = 512K
+  FLASH(rxai!w) : ORIGIN = 0x20010000, LENGTH = 64K
   RAM(wxa!ri) : ORIGIN = 0x80000000, LENGTH = 16K
 }
 
@@ -13,8 +13,8 @@ SECTIONS
     .text :
     {
         _start_text = .;
-        KEEP(*(.init))
-        . = ORIGIN(FLASH) + 0x100;
+        KEEP(*(.init)) /* Only for _reset, relocates IV to 0x200 */
+        . = ORIGIN(FLASH) + 0x200;
         _start_vector = .;
         KEEP(*(.isr_vector))
         *(.text*)
@@ -30,11 +30,12 @@ SECTIONS
     {
         . = ALIGN(4096);
         _start_data = .;
+        KEEP(*(.ramcode*))
+        . = ALIGN(4);
         *(.data*)
+        . = ALIGN(4);
         _global_pointer = . + 0x800;
         *(.sdata*)
-        . = ALIGN(4);
-        KEEP(*(.ramcode*))
         . = ALIGN(4);
         _end_data = .;
     } > RAM

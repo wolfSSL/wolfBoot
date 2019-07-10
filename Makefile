@@ -7,7 +7,6 @@
 ARCH?=ARM
 TARGET?=stm32f4
 SIGN?=ED25519
-TARGET?=stm32f4
 KINETIS?=$(HOME)/src/FRDM-K64F
 KINETIS_CPU=MK64FN1M0VLL12
 KINETIS_DRIVERS?=$(KINETIS)/devices/MK64F12
@@ -140,12 +139,12 @@ wolfboot.hex: wolfboot.elf
 align: wolfboot-align.bin
 
 wolfboot-align.bin: wolfboot.bin
-	@cat include/target.h |grep WOLFBOOT_PARTITION_BOOT_ADDRESS | head -1 | sed -e "s/.*[ ]//g" > .wolfboot-offset
+	@cat include/target.h | grep WOLFBOOT_PARTITION_BOOT_ADDRESS | tr -d "\n\r" | sed -e "s/.*[ ]//g" > .wolfboot-offset
 	@printf "%d" `cat .wolfboot-offset` > .wolfboot-offset
-	@printf "%d" $(ARCH_FLASH_OFFSET) >.wolfboot-arch-offset
-	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` >.wolfboot-partition-size
+	@printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
+	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .wolfboot-partition-size
 	@dd if=/dev/zero bs=`cat .wolfboot-partition-size` count=1 2>/dev/null | tr "\000" "\377" > $(@)
-	@rm -f .wolfboot-partition-size .wolfboot-offset .wolfboot-arch-offset
+	@#rm -f .wolfboot-partition-size .wolfboot-offset .wolfboot-arch-offset
 	@dd if=$^ of=$(@) conv=notrunc 2>/dev/null
 	@echo
 	@echo "\t[SIZE]"
@@ -159,6 +158,7 @@ test-app/image.bin:
 	KINETIS_CMSIS=$(KINETIS_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK)
 	@rm -f src/*.o hal/*.o
+	@$(SIZE) test-app/image.elf
 
 include tools/test.mk
 

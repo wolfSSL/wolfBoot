@@ -1,6 +1,6 @@
 /* boot_arm.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -18,10 +18,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
+#include <stdint.h>
+
 #include "image.h"
 #include "loader.h"
-#include <stdint.h>
 #include "wolfboot/wolfboot.h"
+
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;

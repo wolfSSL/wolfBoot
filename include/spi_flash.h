@@ -6,7 +6,7 @@
  * Compile with SPI_FLASH=1
  *
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -24,6 +24,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
 #ifndef SPI_FLASH_DRI_H
 #define SPI_FLASH_DRI_H
 
@@ -31,8 +32,8 @@
 #define SPI_FLASH_PAGE_SIZE   (256)
 
 #ifdef SPI_FLASH
-#include <stdint.h>
 
+#include <stdint.h>
 
 uint16_t spi_flash_probe(void);
 void spi_flash_sector_erase(uint32_t address);
@@ -45,4 +46,4 @@ int spi_flash_write(uint32_t address, const void *data, int len);
 
 #endif /* SPI_FLASH */
 
-#endif /* GUARD */
+#endif /* !SPI_FLASH_DRI_H */

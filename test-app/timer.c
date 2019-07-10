@@ -2,7 +2,7 @@
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -23,6 +23,7 @@
 
 #ifdef PLATFORM_stm32f4
 #include <stdint.h>
+
 #include "system.h"
 #include "led.h"
 
@@ -167,4 +168,4 @@ void isr_tim2(void)
 {
 }
 
-#endif /** PLATFORM_stm32f4 **/
+#endif /* PLATFORM_stm32f4 */

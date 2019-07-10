@@ -1,6 +1,6 @@
 /* image.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -18,15 +18,16 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
+
+#include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha256.h>
-#include <wolfssl/ssl.h>
 
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
-
 
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
@@ -48,12 +49,13 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     }
     return 0;
 }
-#endif
+#endif /* WOLFBOOT_SIGN_ED25519 */
 
 #ifdef WOLFBOOT_SIGN_ECC256
 #include <wolfssl/wolfcrypt/ecc.h>
 #define ECC_KEY_SIZE  32
-#define ECC_SIG_SIZE  64 
+#define ECC_SIG_SIZE  64
+
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
     int ret, res;
@@ -65,7 +67,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         return -1;
     }
     /* Import public key */
-    ret = wc_ecc_import_unsigned(&ecc, KEY_BUFFER, KEY_BUFFER + 32, NULL, ECC_SECP256R1);
+    ret = wc_ecc_import_unsigned(&ecc, (byte*)KEY_BUFFER, (byte*)(KEY_BUFFER + 32), NULL, ECC_SECP256R1);
     if ((ret < 0) || ecc.type != ECC_PUBLICKEY) {
         /* Failed to import ecc key */
         return -1;
@@ -82,7 +84,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     }
     return 0;
 }
-#endif
+#endif /* WOLFBOOT_SIGN_ECC256 */
 
 static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr);
 
@@ -232,9 +234,9 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     if (*magic != WOLFBOOT_MAGIC)
         return -1;
     size = (uint32_t *)(image + sizeof (uint32_t));
-    
+
     if (*size >= WOLFBOOT_PARTITION_SIZE)
-       return -1; 
+       return -1;
     img->part = part;
     img->hdr_ok = 1;
     img->fw_size = *size;
@@ -293,5 +295,3 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     img->signature_ok = 1;
     return 0;
 }
-
-

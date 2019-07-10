@@ -2,9 +2,9 @@ TARGET?=none
 ARCH?=ARM
 KINETIS_CMSIS?=$(KINETIS)/CMSIS
 
-CFLAGS:=-g -ggdb -Wall -Wstack-usage=200 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+CFLAGS:=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
-APP_OBJS:=$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
 include ../arch.mk
 
 ifeq ($(ARCH),RISCV)
@@ -41,8 +41,7 @@ ifeq ($(TARGET),kinetis)
 		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
 endif
 
-
-ifeq ($(TARGET),hifive1)
+ifeq ($(TARGET),hifive1.freedom)
   CFLAGS+=-I$(FREEDOM_E_SDK)/freedom-metal/ -D__METAL_MACHINE_HEADER=\"$(FREEDOM_E_SDK)/bsp/sifive-hifive1/metal.h\"
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/clock.o
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/led.o
@@ -69,6 +68,11 @@ ifeq ($(TARGET),hifive1)
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,plic0.o
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/riscv,cpu.o
   APP_OBJS+=$(FREEDOM_E_SDK)/freedom-metal/src/drivers/fixed-clock.o
+endif
+
+ifeq ($(TARGET),hifive1)
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
+  APP_OBJS+=hifive1_write_page.o
 endif
 
 standalone:CFLAGS+=-DTEST_APP_STANDALONE

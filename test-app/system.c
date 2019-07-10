@@ -2,7 +2,7 @@
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -77,7 +77,6 @@
 #  define TARGET_FLASH_WAITSTATES 7
 #endif
 
-
 void flash_set_waitstates(void)
 {
     FLASH_ACR |= TARGET_FLASH_WAITSTATES | FLASH_ACR_ENABLE_DATA_CACHE | FLASH_ACR_ENABLE_INST_CACHE;
@@ -123,9 +122,9 @@ void clock_config(void)
     /* Set PLL config */
     reg32 = RCC_PLLCFGR;
     reg32 &= ~(PLL_FULL_MASK);
-    RCC_PLLCFGR = reg32 | RCC_PLLCFGR_PLLSRC | PLLM | 
-        (PLLN << 6) | (((PLLP >> 1) - 1) << 16) | 
-        (PLLQ << 24); 
+    RCC_PLLCFGR = reg32 | RCC_PLLCFGR_PLLSRC | PLLM |
+        (PLLN << 6) | (((PLLP >> 1) - 1) << 16) |
+        (PLLQ << 24);
     DMB();
     /* Enable PLL oscillator and wait for it to stabilize. */
     RCC_CR |= RCC_CR_PLLON;
@@ -145,4 +144,4 @@ void clock_config(void)
     RCC_CR &= ~RCC_CR_HSION;
 }
 
-#endif /** PLATFORM_stm32f4 **/
+#endif /* PLATFORM_stm32f4 */

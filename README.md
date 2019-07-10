@@ -42,6 +42,7 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
 
 ### Required steps
 
+   - See `docs/Targets.md` for reference implementation examples.
    - Provide a HAL implementation for the target platform (see [Hardware Abstraction Layer](docs/HAL.md))
    - Decide a flash partition strategy and modify `include/target.h` accordingly (see [Flash partitions](docs/flash_partitions.md))
    - Change the entry point of the firmware image to account for bootloader presence
@@ -49,6 +50,8 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
    - [Configure and compile](docs/compile.md) a bootable image with a single "make" command
 
 ### Examples provided
+
+Additional examples available on our GitHub wolfBoot-examples repository [here](https://github.com/wolfSSL/wolfBoot-examples).
 
 The following steps are automated in the default `Makefile` target, using the baremetal test
 application as an example to create the factory image. By running `make`, the build system will:

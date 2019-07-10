@@ -1,6 +1,6 @@
 /* crypto.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -18,14 +18,17 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
 #include <assert.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <loader.h>
-#include <wolfssl/ssl.h>
+
+#include "loader.h"
+
+#include <wolfssl/wolfcrypt/settings.h>
 
 #if defined BOOT_SIGN_RSA
 #   error RSA signature not supported yet on standalone
@@ -91,4 +94,3 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
 }
 
 #endif
-

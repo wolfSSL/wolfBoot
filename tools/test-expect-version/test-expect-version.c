@@ -20,7 +20,7 @@
  *
  *=============================================================================
  *
- * OTA Upgrade mechanism implemented using DTLS 1.2
+ * Update tool to verify update version
  *
  */
 
@@ -42,8 +42,10 @@
 #include <errno.h>
 
 #define MSGLEN      (4 + 4 + 8)
-#define PORT "/dev/ttyS0"
 
+#ifndef UART_DEV
+#define UART_DEV "/dev/ttyS0"
+#endif
 #ifndef B115200
 #define B115200 115200
 #endif
@@ -53,7 +55,6 @@ void alarm_handler(int signo)
     printf("0\n");
     exit(0);
 }
-
 
 
 int main(int argc, char** argv)
@@ -71,7 +72,7 @@ int main(int argc, char** argv)
         exit(1);
     }
 
-    serialfd = open(PORT, O_RDWR | O_NOCTTY);
+    serialfd = open(UART_DEV, O_RDWR | O_NOCTTY);
     tcgetattr(serialfd, &tty);
     cfsetospeed(&tty, B115200);
     cfsetispeed(&tty, B115200);
@@ -110,4 +111,3 @@ int main(int argc, char** argv)
     close(serialfd);
     return 0;
 }
-

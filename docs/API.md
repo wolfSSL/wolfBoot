@@ -9,8 +9,8 @@ An application that requires interactions with wolfBoot must include the header 
 
 `#include <wolfboot/wolfboot.h>`
 
-Which exports the API function declarations, and the predefined values for the flags
-and the tags stored together with the firmware images in the two partitions.
+This exports the API function declarations, and the predefined values for the flags
+and tags stored together with the firmware images in the two partitions.
 
 For more information about flash partitions, flags and states see [Flash partitions](flash_partitions.md).
 
@@ -48,7 +48,7 @@ an update application that has retrieved a new version of the running firmware, 
 stored it in the UPDATE partition on the flash. This function will set the state of the UPDATE partition 
 to `STATE_UPDATING`, instructing the bootloader to perform the update upon the next execution (after reboot).
 
-wolfBoot update process consist in swapping the content of the UPDATE and the BOOT partitions, using a temporary
+wolfBoot update process swaps the contents of the UPDATE and the BOOT partitions, using a temporary
 single-block SWAP space.
 
 ### Confirm current image
@@ -59,12 +59,10 @@ at any time, but it will only be effective to mark the current firmware (in the 
 only after verifying that the basic system features are up and running, including the possibility to retrieve
 a new firmware for the next upgrade.
 
-If after an upgrade wolfBoot detects that the active firmware is still in `STATE_TESTING` state, it means that
+If after an upgrade and reboot wolfBoot detects that the active firmware is still in `STATE_TESTING` state, it means that
 a successful boot has not been confirmed for the application, and will attempt to revert the update by swapping 
 the two images again.
 
 For more information about the update process, see [Firmware Update](firmware_update.md)
 
 For the image format, see [Firmware Image](firmware_image.md)
-
-

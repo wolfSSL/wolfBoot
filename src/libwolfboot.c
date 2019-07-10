@@ -1,6 +1,6 @@
 /* libwolfboot.c
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -18,9 +18,11 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include <hal.h>
+
 #include <stdint.h>
 #include <inttypes.h>
+
+#include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 
@@ -55,7 +57,7 @@ int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
 #endif
 
 #if defined PART_UPDATE_EXT
-static uint8_t* get_trailer_at(uint8_t part, uint32_t at) 
+static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     if (part == PART_BOOT)
         return (void *)(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at));
@@ -66,7 +68,7 @@ static uint8_t* get_trailer_at(uint8_t part, uint32_t at)
         return NULL;
 }
 
-static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
+static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
         hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
@@ -76,7 +78,7 @@ static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
     }
 }
 
-static void set_partition_magic(uint8_t part)
+static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
     if (part == PART_BOOT) {
@@ -88,7 +90,7 @@ static void set_partition_magic(uint8_t part)
 }
 
 #else
-static uint8_t* get_trailer_at(uint8_t part, uint32_t at) 
+static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     if (part == PART_BOOT)
         return (void *)(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at));
@@ -122,17 +124,17 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 
 
 
-static uint32_t* get_partition_magic(uint8_t part)
+static uint32_t* RAMFUNCTION get_partition_magic(uint8_t part)
 {
     return (uint32_t *)get_trailer_at(part, 0);
 }
 
-static uint8_t* get_partition_state(uint8_t part)
+static uint8_t* RAMFUNCTION get_partition_state(uint8_t part)
 {
     return (uint8_t *)get_trailer_at(part, 1);
 }
 
-static uint8_t* get_sector_flags(uint8_t part, uint32_t pos)
+static uint8_t* RAMFUNCTION get_sector_flags(uint8_t part, uint32_t pos)
 {
     return (uint8_t *)get_trailer_at(part, 2 + pos);
 }
@@ -180,7 +182,7 @@ int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t n
     return 0;
 }
 
-int wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
+int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
 {
     uint32_t *magic;
     uint8_t *state;
@@ -259,7 +261,7 @@ uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr)
             p++;
             *ptr = (p + 1);
             return *p;
-        } 
+        }
         p++;
         p += (*p + 1);
     }
@@ -300,4 +302,3 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
     }
     return 0;
 }
-
