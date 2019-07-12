@@ -17,6 +17,15 @@ ifeq ($(ARCH),ARM)
   LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
   OBJS+=src/boot_arm.o
 
+  ## Target specific configuration
+  ifeq ($(TARGET),samr21)
+    CORTEX_M0=1
+  endif
+  
+  ifeq ($(TARGET),stm32l0)
+    CORTEX_M0=1
+  endif
+
   ## Cortex-M CPU
   ifeq ($(CORTEX_M0),1)
     CFLAGS+=-mcpu=cortex-m0
@@ -67,10 +76,6 @@ OBJCOPY:=$(CROSS_COMPILE)objcopy
 SIZE:=$(CROSS_COMPILE)size
 BOOT_IMG?=test-app/image.bin
 
-## Target specific configuration
-ifeq ($(TARGET),samr21)
-  CORTEX_M0=1
-endif
 
 ifeq ($(TARGET),kinetis)
   CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
