@@ -3,7 +3,7 @@
 This section documents the complete firmware update procedure, enabling secure boot
 for an existing embedded application.
 
-The steps to follow to complete a firmware update with wolfBoot are:
+The steps to complete a firmware update with wolfBoot are:
    - Compile the firmware with the correct entry point
    - Sign the firmware
    - Transfer the image using a secure connection, and store it to the secondary firmware slot
@@ -51,10 +51,9 @@ is responsible for pre-validating an update image and copy it to the correct add
 All the firmware images must therefore have their entry point set to the address corresponding to the beginning 
 of the **BOOT** partition, plus an offset of 256 Bytes to account for the image header.
 
-Once the firmware is compiled and linked, it must be signed using the `ed25519_sign` tool. The tool produces
+Once the firmware is compiled and linked, it must be signed using the `sign` tool. The tool produces
 a signed image that can be transferred to the target using a secure connection, using the same key corresponding
 to the public key currently used for verification.
 
 The tool also adds all the required Tags to the image header, containing the signatures and the SHA256 hash of 
 the firmware.
-

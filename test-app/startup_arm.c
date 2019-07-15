@@ -1,8 +1,8 @@
-/* startup.c
+/* startup_arm.c
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -97,7 +97,7 @@ void isr_usagefault(void)
     /* Panic. */
     while(1) ;;
 }
-        
+
 
 void isr_empty(void)
 {

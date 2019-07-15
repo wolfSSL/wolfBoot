@@ -2,7 +2,7 @@
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #ifdef PLATFORM_stm32f4
+
 #include <stdint.h>
 #include "system.h"
 
@@ -60,7 +61,7 @@
 
 #define PLLM 8
 #define PLLN 336
-#define PLLP 2 
+#define PLLP 2
 #define PLLQ 7
 #define PLLR 0
 
@@ -109,9 +110,9 @@ void clock_config(void)
     /* Set PLL config */
     reg32 = RCC_PLLCFGR;
     reg32 &= ~(PLL_FULL_MASK);
-    RCC_PLLCFGR = reg32 | RCC_PLLCFGR_PLLSRC | PLLM | 
-        (PLLN << 6) | (((PLLP >> 1) - 1) << 16) | 
-        (PLLQ << 24); 
+    RCC_PLLCFGR = reg32 | RCC_PLLCFGR_PLLSRC | PLLM |
+        (PLLN << 6) | (((PLLP >> 1) - 1) << 16) |
+        (PLLQ << 24);
     DMB();
     /* Enable PLL oscillator and wait for it to stabilize. */
     RCC_CR |= RCC_CR_PLLON;
@@ -131,4 +132,4 @@ void clock_config(void)
     RCC_CR &= ~RCC_CR_HSION;
 }
 
-#endif /** PLATFORM_stm32f4 **/
+#endif /* PLATFORM_stm32f4 */

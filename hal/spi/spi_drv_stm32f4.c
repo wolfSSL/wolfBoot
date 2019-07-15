@@ -6,7 +6,7 @@
  *
  * Pinout: see spi_drv_stm32f4.h
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -91,12 +91,12 @@ static void spi_pins_release(void)
     GPIOB_AFL &= ~(0xf << ((SPI1_CLOCK_PIN) * 4));
     GPIOB_AFL &= ~(0xf << ((SPI1_MOSI_PIN) * 4));
     GPIOB_AFL &= ~(0xf << ((SPI1_MISO_PIN) * 4));
-    
+
     /* Floating */
     GPIOB_PUPD &= ~ (0x03 << (SPI1_CLOCK_PIN * 2));
     GPIOB_PUPD &= ~ (0x03 << (SPI1_MOSI_PIN * 2));
     GPIOB_PUPD &= ~ (0x03 << (SPI1_MISO_PIN * 2));
-    
+
     /* Release CS */
     GPIOE_MODE &= ~ (0x03 << (SPI_FLASH_PIN * 2));
     GPIOE_PUPD &= ~ (0x03 <<  (SPI_FLASH_PIN * 2));

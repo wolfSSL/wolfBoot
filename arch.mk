@@ -7,13 +7,15 @@ else
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o
 endif
 
+# Default flash offset
+ARCH_FLASH_OFFSET=0x0
+
 ## ARM
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE:=arm-none-eabi-
   CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
   LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
   OBJS+=src/boot_arm.o
-  ARCH_FLASH_OFFSET=0x0
 
   ## Cortex-M CPU
   ifeq ($(CORTEX_M0),1)
@@ -43,11 +45,19 @@ endif
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE:=riscv32-unknown-elf-
-  CFLAGS+=-fno-builtin-printf -DUSE_PLIC -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o 
+  
+  # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,--gc-sections
+
   OBJS+=src/boot_riscv.o src/vector_riscv.o
-  ARCH_FLASH_OFFSET=0x20400000
+  ARCH_FLASH_OFFSET=0x20010000
 endif
+
+CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
 ## Toolchain setup
 CC=$(CROSS_COMPILE)gcc

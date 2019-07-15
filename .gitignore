@@ -36,6 +36,7 @@
 *.x86_64
 *.hex
 *.rom
+*.bin
 
 # Debug files
 *.dSYM/
@@ -66,4 +67,11 @@ tools/ecc256/ecc256_keygen
 cscope.out
 tags
 
+# Generated files using target.h
+.wolfboot-arch-offset
+.wolfboot-offset
+.wolfboot-partition-size
 
+# Test tools
+tools/test-expect-version/test-expect-version
+tools/test-update-server/server

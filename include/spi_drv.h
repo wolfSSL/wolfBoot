@@ -7,7 +7,7 @@
  *     implementing the spi_ calls below.
  *
  *
- * Copyright (C) 2018 wolfSSL Inc.
+ * Copyright (C) 2019 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -25,8 +25,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
 #ifndef SPI_DRV_H_INCLUDED
 #define SPI_DRV_H_INCLUDED
+
 #include <stdint.h>
 
 void spi_init(int polarity, int phase);
@@ -35,4 +37,4 @@ uint8_t spi_read(void);
 void spi_cs_on(void);
 void spi_cs_off(void);
 
-#endif
+#endif /* !SPI_DRV_H_INCLUDED */
