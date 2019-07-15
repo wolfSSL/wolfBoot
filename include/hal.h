@@ -40,6 +40,10 @@ void hal_flash_unlock(void);
 void hal_flash_lock(void);
 void hal_prepare_boot(void);
 
+#ifdef DUALBANK_SWAP
+    void hal_flash_dualbank_swap(void);
+#endif
+
 #ifdef EXT_FLASH
     #ifndef SPI_FLASH
         /* user supplied external flash interfaces */

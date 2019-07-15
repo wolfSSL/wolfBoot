@@ -30,6 +30,12 @@ ifeq ($(ARCH),ARM)
     CORTEX_M0=1
   endif
 
+  ifeq ($(TARGET),stm32f7)
+    ARCH_FLASH_OFFSET=0x08000000
+  else
+    ARCH_FLASH_OFFSET=0x0
+  endif
+
   ## Cortex-M CPU
   ifeq ($(CORTEX_M0),1)
     CFLAGS+=-mcpu=cortex-m0
