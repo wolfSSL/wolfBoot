@@ -69,6 +69,41 @@ Possible workarounds:
 - Compile ed25519 with debug (optimizations are disabled) : `make TARGET=stm32l0 DEBUG=1`
 - Use ECDSA instead (which is much faster) : `make TARGET=stm32l0 SIGN=ECC256`
 
+## STM32G0x0/STM32G0x1
+
+Example 128KB partitioning on STM32-G070:
+
+- Sector size: 2KB
+- Wolfboot partition size: 32KB
+- Application partition size: 45 KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x8000
+#define WOLFBOOT_PARTITION_SIZE              0xB000 /* 45 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x13000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x1E000
+```
+
+### Building
+
+Use `make TARGET=stm32l0`. The option `CORTEX_M0` is automatically selected for this target.
+The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
+multiple writes after each erase operation.
+
+Compile with:
+
+`make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
+
+#### Known issues
+
+With Ed25519 (default SIGN algorithm) it's not possible at the moment to compile wolfboot
+with optimizations, due to a GCC linker error complaining about a missing symbol `__gnu_thumb1_case_uqi`.
+
+Possible workarounds:
+- Compile ed25519 with debug (optimizations are disabled) : `make TARGET=stm32l0 DEBUG=1`
+- Use ECDSA instead (which is much faster) : `make TARGET=stm32l0 SIGN=ECC256`
+
 ## SiFive HiFive1 RISC-V
 
 ### Features
@@ -156,3 +191,6 @@ add-symbol-file test-app/image.elf 0x20020100
 ```
 riscv64-unknown-elf-objdump -D test-app/image.elf
 ```
+
+
+
