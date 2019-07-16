@@ -20,10 +20,10 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-
-#ifdef PLATFORM_stm32f4
 #include <stdint.h>
 #include "wolfboot/wolfboot.h"
+
+#ifdef PLATFORM_stm32f4
 
 #define AHB1_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
 #define GPIOD_AHB1_CLOCK_ER (1 << 3)
@@ -71,3 +71,36 @@ void boot_led_on(void)
 }
 
 #endif /* PLATFORM_stm32f4 */
+
+#ifdef PLATFORM_stm32l0
+#define LED_BOOT_PIN (5)
+
+#define RCC_IOPENR (*(volatile uint32_t *)(0x4002102C))
+#define IOPAEN (1 << 0)
+
+
+#define GPIOA_BASE 0x50000000
+#define GPIOA_MODE  (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_OTYPE (*(volatile uint32_t *)(GPIOA_BASE + 0x04))
+#define GPIOA_OSPD  (*(volatile uint32_t *)(GPIOA_BASE + 0x08))
+#define GPIOA_PUPD  (*(volatile uint32_t *)(GPIOA_BASE + 0x0c))
+#define GPIOA_ODR   (*(volatile uint32_t *)(GPIOA_BASE + 0x14))
+#define GPIOA_BSRR  (*(volatile uint32_t *)(GPIOA_BASE + 0x18))
+#define GPIOA_AFL   (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
+#define GPIOA_AFH   (*(volatile uint32_t *)(GPIOA_BASE + 0x24))
+
+
+void boot_led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_BOOT_PIN;
+    RCC_IOPENR |= IOPAEN;
+    reg = GPIOA_MODE & ~(0x03 << (pin * 2));
+    GPIOA_MODE = reg | (1 << (pin * 2));
+    reg = GPIOA_PUPD & ~(0x03 << (pin * 2));
+    GPIOA_PUPD = reg | (1 << (pin * 2));
+    GPIOA_BSRR |= (1 << pin);
+}
+
+
+#endif /* PLATFORM_stm32l0 */

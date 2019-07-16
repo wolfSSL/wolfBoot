@@ -36,6 +36,39 @@ On other systems, the SWAP space can be as small as 512B, if multiple smaller fl
 More information about the geometry of the flash and in-application programming (IAP) can be found in the manufacturer manual of each target device.
 
 
+## STM32L0x3
+
+Example 192KB partitioning on STM32-L073
+
+This device is capable of erasing single flash pages (256B each).
+
+However, we choose to use a logic sector size of 4KB for the swaps, to limit the amount of 
+writes to the swap partition.
+
+The proposed geometry in this example `target.h` uses 32KB for wolfBoot, and two
+partitions of 64KB each, leaving room for up to 8KB to use for swap (4K are being used here).
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x1000   /* 4 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x8000
+#define WOLFBOOT_PARTITION_SIZE              0x10000 /* 64 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x18000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x28000
+```
+
+### Building
+
+Use `make TARGET=stm32l0`. The option `CORTEX_M0` is automatically selected for this target.
+
+#### Known issues
+
+With Ed25519 (default SIGN algorithm) it's not possible at the moment to compile wolfboot
+with optimizations, due to a GCC linker error complaining about a missing symbol `__gnu_thumb1_case_uqi`.
+
+Possible workarounds:
+- Compile ed25519 with debug (optimizations are disabled) : `make TARGET=stm32l0 DEBUG=1`
+- Use ECDSA instead (which is much faster) : `make TARGET=stm32l0 SIGN=ECC256`
+
 ## SiFive HiFive1 RISC-V
 
 ### Features

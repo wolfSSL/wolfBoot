@@ -30,7 +30,7 @@ RAM_CODE?=0
 ## Initializers
 CFLAGS:=-D__WOLFBOOT  -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL
 LSCRIPT:=hal/$(TARGET).ld
-LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles 
+LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
 OBJS:= \
 ./hal/$(TARGET).o \
 ./src/loader.o \
