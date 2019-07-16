@@ -114,7 +114,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t *src, *dst;
     flash_clear_errors();
     FLASH_CR |= FLASH_CR_PG;
-    
+
     while (i < len) {
         flash_clear_errors();
         if ((len - i > 3) && ((((address + i) & 0x07) == 0)  && ((((uint32_t)data) + i) & 0x07) == 0)) {
@@ -141,7 +141,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             flash_wait_complete();
         }
     }
-    if ((FLASH_SR & FLASH_SR_EOP) == FLASH_SR_EOP);
+    if ((FLASH_SR & FLASH_SR_EOP) == FLASH_SR_EOP)
         FLASH_SR |= FLASH_SR_EOP;
     FLASH_CR &= ~FLASH_CR_PG;
     return 0;

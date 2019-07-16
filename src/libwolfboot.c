@@ -39,6 +39,8 @@ uint32_t ext_cache;
 #define PART_UPDATE_ENDFLAGS ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
 
 #ifdef NVM_FLASH_WRITEONCE
+#include <stddef.h>
+extern void *memcpy(void *dst, const void *src, size_t n);
 static uint8_t NVM_CACHE[WOLFBOOT_SECTOR_SIZE];
 int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
