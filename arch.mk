@@ -25,6 +25,10 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),stm32l0)
     CORTEX_M0=1
   endif
+  
+  ifeq ($(TARGET),stm32g0)
+    CORTEX_M0=1
+  endif
 
   ## Cortex-M CPU
   ifeq ($(CORTEX_M0),1)

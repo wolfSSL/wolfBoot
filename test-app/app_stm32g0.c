@@ -1,4 +1,6 @@
-/* samr21.c
+/* main.c
+ *
+ * Test bare-metal boot-led-on application
  *
  * Copyright (C) 2019 wolfSSL Inc.
  *
@@ -22,11 +24,16 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include "hal.h"
+#include "led.h"
 #include "wolfboot/wolfboot.h"
 
+#ifdef PLATFORM_stm32g0
+
 void main(void) {
-    asm volatile ("cpsie i");
+    boot_led_on();
+    /* Wait for reboot */
     while(1)
-        asm volatile("WFI");
+        ;
 }
+#endif /* PLATFORM_stm32g0 */
+

@@ -1,5 +1,7 @@
 # Targets
 
+This README describes configuration of supported targets.
+
 ## STM32-F407
 
 Example 512KB partitioning on STM32-F407
@@ -60,14 +62,31 @@ partitions of 64KB each, leaving room for up to 8KB to use for swap (4K are bein
 
 Use `make TARGET=stm32l0`. The option `CORTEX_M0` is automatically selected for this target.
 
-#### Known issues
+## STM32G0x0/STM32G0x1
 
-With Ed25519 (default SIGN algorithm) it's not possible at the moment to compile wolfboot
-with optimizations, due to a GCC linker error complaining about a missing symbol `__gnu_thumb1_case_uqi`.
+Example 128KB partitioning on STM32-G070:
 
-Possible workarounds:
-- Compile ed25519 with debug (optimizations are disabled) : `make TARGET=stm32l0 DEBUG=1`
-- Use ECDSA instead (which is much faster) : `make TARGET=stm32l0 SIGN=ECC256`
+- Sector size: 2KB
+- Wolfboot partition size: 32KB
+- Application partition size: 45 KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x8000
+#define WOLFBOOT_PARTITION_SIZE              0xB000 /* 45 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x13000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x1E000
+```
+
+### Building
+
+Use `make TARGET=stm32g0`. The option `CORTEX_M0` is automatically selected for this target.
+The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
+multiple writes after each erase operation.
+
+Compile with:
+
+`make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
 
 ## SiFive HiFive1 RISC-V
 
@@ -153,6 +172,3 @@ riscv64-unknown-elf-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target ext
 add-symbol-file test-app/image.elf 0x20020100
 ```
 
-```
-riscv64-unknown-elf-objdump -D test-app/image.elf
-```
