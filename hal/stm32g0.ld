@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x8000
-    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
+    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00008FFF
 }
 
 SECTIONS
@@ -15,11 +15,13 @@ SECTIONS
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
+
     .edidx :
     {
         . = ALIGN(4);
         *(.ARM.exidx*)
     } > FLASH
+
     _stored_data = .;
     .data : AT (_stored_data)
     {
