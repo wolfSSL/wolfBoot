@@ -28,5 +28,5 @@
 void main(void) {
     asm volatile ("cpsie i");
     while(1)
-        WFI();
+        asm volatile("WFI");
 }
