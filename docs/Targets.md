@@ -44,7 +44,7 @@ Example 192KB partitioning on STM32-L073
 
 This device is capable of erasing single flash pages (256B each).
 
-However, we choose to use a logic sector size of 4KB for the swaps, to limit the amount of 
+However, we choose to use a logic sector size of 4KB for the swaps, to limit the amount of
 writes to the swap partition.
 
 The proposed geometry in this example `target.h` uses 32KB for wolfBoot, and two
@@ -88,12 +88,39 @@ Compile with:
 
 `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
 
+## STM32WB55
+
+Example partitioning on Nucleo-68 board:
+
+- Sector size: 4KB
+- Wolfboot partition size: 32 KB
+- Applicatiobn partition size: 128 KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x1000   /* 4 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x8000
+#define WOLFBOOT_PARTITION_SIZE              0x20000 /* 128 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x28000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x48000
+```
+
+### Building
+
+Use `make TARGET=stm32wb`.
+
+The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
+multiple writes after each erase operation.
+
+Compile with:
+
+`make TARGET=stm32wb NVM_FLASH_WRITEONCE=1`
+
 ## SiFive HiFive1 RISC-V
 
 ### Features
 * E31 RISC-V 320MHz 32-bit processor
 * Onboard 16KB scratchpad RAM
-* External 4MB QSPI Flash 
+* External 4MB QSPI Flash
 
 ### Default Linker Settings
 * FLASH: Address 0x20000000, Len 0x6a120 (424 KB)
