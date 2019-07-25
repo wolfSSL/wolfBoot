@@ -136,6 +136,19 @@ both `PART_UPDATE_EXT` and `PART_SWAP_EXT` are defined.
 When external memory is used, the HAL API must be extended to define methods to access the custom memory.
 Refer to the [HAL](HAL.md) page for the description of the `ext_flash_*` API.
 
+### Executing flash access code from RAM
+
+On some platform, flash access code requires to be executed from RAM, to avoid conflict e.g. when writing
+to the same device where wolfBoot is executing, or when changing the configuration of the flash itself.
+
+To move all the code accessing the internal flash for writing, into a section in RAM, use the compile time option
+`RAM_CODE=1` (on some hardware configurations this is required for the bootloader to access the flash for writing).
+
+### Enable Dual-bank hardware-assisted swapping
+
+When supported by the target platform, hardware-assisted dual-bank swapping can be used to perform updates.
+To enable this functionality, use `DUALBANK_SWAP=1`. Currently, only STM32F76x and F77x support this feature.
+
 ### Using Mac OS/X
 
 If you see 0xC3 0xBF (C3BF) repeated in your factory.bin then your OS is using Unicode characters.
@@ -155,3 +168,4 @@ LC_ALL=
 ```
 
 Then run the normal `make` steps.
+
