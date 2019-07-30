@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x0008100, LENGTH = 0x005FFF
+    FLASH (rx) : ORIGIN = 0x0020100, LENGTH = 0x005FFF
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 16K /* Run in lowmem */
 }
 
