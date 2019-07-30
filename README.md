@@ -66,7 +66,7 @@ application as an example to create the factory image. By running `make`, the bu
 The factory image can be flashed to the target device. It contains the bootloader and the signed initial
 firmware at the specified address on the flash.
 
-The `ed25519_sign` tool transforms a bootable firmware image to comply with the firmware image format required by the bootloader.
+The `sign.py` tool transforms a bootable firmware image to comply with the firmware image format required by the bootloader.
 
 For detailed information about the firmware image format, see [Firmware image](docs/firmware_image.md)
 
@@ -75,7 +75,7 @@ For detailed information about the configuration options for the target system, 
 ### Upgrading the firmware
 
    - Compile the new firmware image, and link it so that its entry point is at the start address of the primary partition
-   - Sign the firmware using the `ed25519_sign` tool and the private key generated for the factory image
+   - Sign the firmware using the `sign.py` tool and the private key generated for the factory image
    - Transfer the image using a secure connection, and store it to the secondary firmware slot
    - Trigger the image swap using libwolfboot `wolfBoot_update()` function. See [wolfBoot library API](docs/API.md) for a description of the operation
    - Reboot to let the bootloader begin the image swap
@@ -98,3 +98,17 @@ For more detailed information about firmware update implementation, see [Firmwar
     * new HAL: TI cc26x2
     * new HAL: NXP/Freescale Kinetis SDK
  * Improved sign/update tools compatibility (windows)
+
+### V1.2 (2019-07-30)
+ * Added support for multiple architectures
+ * key generation and signing tools rewritten in python for portability
+ * Added compile-time option to move flash-writing functions to RAM
+ * Introduced the possibility for the bootloader to update itself
+ * Fixed compile issues on macOS and WSL
+ * Hardware support
+    * Added RV32 RISC-V architecture
+    * Added hardware-assisted dual-bank support on STM32F76x/77x
+    * new HAL: RV32 FE310 (SiFive HiFive-1)
+    * new HAL: STM32L0
+    * new HAL: STM32G0
+    * new HAL: STM32F7
