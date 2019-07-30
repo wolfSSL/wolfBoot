@@ -140,3 +140,34 @@ void boot_led_on(void)
 }
 
 #endif /** PLATFORM_stm32g0 **/
+
+#ifdef PLATFORM_stm32wb
+#define LED_BOOT_PIN (0)
+#define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(0x5800004C))
+#define GPIOB_AHB2_CLOCK_ER (1 << 1)
+
+#define GPIOB_BASE 0x48000400
+#define GPIOB_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
+#define GPIOB_OTYPE (*(volatile uint32_t *)(GPIOB_BASE + 0x04))
+#define GPIOB_OSPD  (*(volatile uint32_t *)(GPIOB_BASE + 0x08))
+#define GPIOB_PUPD  (*(volatile uint32_t *)(GPIOB_BASE + 0x0c))
+#define GPIOB_ODR   (*(volatile uint32_t *)(GPIOB_BASE + 0x14))
+#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
+#define GPIOB_AFL   (*(volatile uint32_t *)(GPIOB_BASE + 0x20))
+#define GPIOB_AFH   (*(volatile uint32_t *)(GPIOB_BASE + 0x24))
+
+
+void boot_led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_BOOT_PIN;
+    RCC_AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
+    reg = GPIOB_MODE & ~(0x03 << (pin * 2));
+    GPIOB_MODE = reg | (1 << (pin * 2));
+    reg = GPIOB_PUPD & ~(0x03 << (pin * 2));
+    GPIOB_PUPD = reg | (1 << (pin * 2));
+    GPIOB_BSRR |= (1 << pin);
+}
+
+
+#endif /* PLATFORM_stm32wb */
