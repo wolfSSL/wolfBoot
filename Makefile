@@ -36,7 +36,6 @@ OBJS:= \
 ./hal/$(TARGET).o \
 ./src/loader.o \
 ./src/string.o \
-./src/crypto.o \
 ./src/image.o \
 ./src/libwolfboot.o \
 ./lib/wolfssl/wolfcrypt/src/sha256.o \
