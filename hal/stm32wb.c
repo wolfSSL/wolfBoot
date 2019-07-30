@@ -76,13 +76,13 @@
 
 /*** FLASH ***/
 #define FLASH_BASE          (0x58004000)
-#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) //RM0444 - 3.7.1 - FLASH_ACR
-#define FLASH_KEY           (*(volatile uint32_t *)(FLASH_BASE + 0x08)) //RM0444 - 3.7.2 - FLASH_KEYR
-#define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) //RM0444 - 3.7.4 - FLASH_SR
-#define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x14)) //RM0444 - 3.7.5 - FLASH_CR
+#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
+#define FLASH_KEY           (*(volatile uint32_t *)(FLASH_BASE + 0x08))
+#define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x10))
+#define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x14))
 
 #define FLASHMEM_ADDRESS_SPACE (0x08000000)
-#define FLASH_PAGE_SIZE     (0x800) /* 2KB */
+#define FLASH_PAGE_SIZE     (0x1000) /* 4KB */
 
 /* Register values */
 #define FLASH_ACR_LATENCY_MASK                (0x07)
@@ -195,11 +195,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     end_address = address + len - 1;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg = FLASH_CR & (~(FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT));
-        FLASH_CR = reg | ((p >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
+        FLASH_CR = reg | ((p >> 12) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_PG;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete();
-        FLASH_CR &= ~FLASH_CR_PER;
+        FLASH_CR &= ~(FLASH_CR_PER | FLASH_CR_PG);
     }
     return 0;
 }
