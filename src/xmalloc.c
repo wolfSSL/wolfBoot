@@ -22,8 +22,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdlib.h>
 #include <stdint.h>
+
+#ifndef NULL
+#   define NULL ((void *)(0))
+#endif
 
 /* Allow one single sp_point to be allocated at one time */
 #ifdef WOLFSSL_SP_ASM
