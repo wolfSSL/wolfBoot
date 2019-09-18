@@ -89,7 +89,7 @@ static int wolfBoot_update(int fallback_allowed)
     if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
             total_size = update.fw_size + IMAGE_HEADER_SIZE;
 
-    if (total_size < IMAGE_HEADER_SIZE)
+    if (total_size <= IMAGE_HEADER_SIZE)
         return -1;
 
     /* Check the first sector to detect interrupted update */
