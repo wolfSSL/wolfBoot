@@ -73,6 +73,7 @@ void wolfBoot_erase_partition(uint8_t part);
 void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);
 uint32_t wolfBoot_get_image_version(uint8_t part);
+uint16_t wolfBoot_get_image_type(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
 

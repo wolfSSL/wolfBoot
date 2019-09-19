@@ -304,3 +304,31 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
     }
     return 0;
 }
+
+uint16_t wolfBoot_get_image_type(uint8_t part)
+{
+    uint16_t *type_field = NULL;
+    uint8_t *image = NULL;
+    uint32_t *magic = NULL;
+    if(part == PART_UPDATE) {
+#ifdef PART_UPDATE_EXT
+        ext_flash_read((uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+        hdr_cpy_done = 1;
+        image = hdr_cpy;
+#else
+        image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+#endif
+    }
+    if (part == PART_BOOT)
+        image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+
+    if (image) {
+        magic = (uint32_t *)image;
+        if (*magic != WOLFBOOT_MAGIC)
+            return 0;
+        wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field);
+        if (type_field)
+            return *type_field;
+    }
+    return 0;
+}

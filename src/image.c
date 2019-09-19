@@ -211,6 +211,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     if (!img)
         return -1;
     memset(img, 0, sizeof(struct wolfBoot_image));
+    img->part = part;
     if (part == PART_SWAP) {
         img->part = PART_SWAP;
         img->hdr = (void *)WOLFBOOT_PARTITION_SWAP_ADDRESS;
@@ -237,7 +238,6 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 
     if (*size >= WOLFBOOT_PARTITION_SIZE)
        return -1;
-    img->part = part;
     img->hdr_ok = 1;
     img->fw_size = *size;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;

@@ -89,22 +89,21 @@ static int wolfBoot_update(int fallback_allowed)
     if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
             total_size = update.fw_size + IMAGE_HEADER_SIZE;
 
-    if (total_size < IMAGE_HEADER_SIZE)
+    if (total_size <= IMAGE_HEADER_SIZE)
         return -1;
 
     /* Check the first sector to detect interrupted update */
     if ((wolfBoot_get_sector_flag(PART_UPDATE, 0, &flag) < 0) || (flag == SECT_FLAG_NEW))
     {
-        uint8_t *update_type;
+        uint16_t update_type;
         /* In case this is a new update, do the required
          * checks on the firmware update
          * before starting the swap
          */
 
-        if (wolfBoot_find_header(update.hdr + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &update_type) == sizeof(uint16_t)) {
-            if ((update_type[0] != HDR_IMG_TYPE_APP) || update_type[1] != (HDR_IMG_TYPE_AUTH >> 8))
-                return -1;
-        }
+        update_type = wolfBoot_get_image_type(PART_UPDATE);
+        if (((update_type & 0x00FF) != HDR_IMG_TYPE_APP) || ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
+            return -1;
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
@@ -307,9 +306,7 @@ static void wolfBoot_check_self_update(void)
     /* Check for self update in the UPDATE partition */
     if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING) &&
             (wolfBoot_open_image(&update, PART_UPDATE) == 0) &&
-            (wolfBoot_find_header(update.hdr + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &update_type) == sizeof(uint16_t)) &&
-            update_type[0] == HDR_IMG_TYPE_WOLFBOOT &&
-            update_type[1] == (HDR_IMG_TYPE_AUTH >> 8)) {
+            wolfBoot_get_image_type(PART_UPDATE) == (HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH)) {
         uint32_t update_version = wolfBoot_update_firmware_version();
         if (update_version <= wolfboot_version) {
             hal_flash_unlock();
