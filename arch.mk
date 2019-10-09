@@ -87,6 +87,22 @@ SIZE:=$(CROSS_COMPILE)size
 BOOT_IMG?=test-app/image.bin
 
 
+## Hardware PKA
+
+ifeq ($(TARGET),stm32wb)
+  ifneq ($(PKA),0)
+    ECC_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
+    ECC_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
+        -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
+        -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
+        -I$(STM32CUBE)/Drivers/CMSIS/Include \
+		-Ihal \
+	    -DSTM32WB55xx
+  endif
+endif
+
+
+
 ifeq ($(TARGET),kinetis)
   CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o
