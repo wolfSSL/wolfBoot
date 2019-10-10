@@ -1,3 +1,5 @@
+-include ../.config
+-include ../tools/config.mk
 TARGET?=none
 ARCH?=ARM
 KINETIS_CMSIS?=$(KINETIS)/CMSIS
@@ -19,9 +21,11 @@ ifeq ($(V),0)
   Q=@
 endif
 
-LSCRIPT:=$(ARCH).ld
+ENTRY_POINT=`cat .entry-point-address`
+LSCRIPT:=../config/target-app.ld
+LSCRIPT_TEMPLATE:=$(ARCH).ld
 ifeq ($(TARGET),stm32f7)
-  LSCRIPT=ARM-stm32f7.ld
+  LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
 endif
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
@@ -38,7 +42,7 @@ endif
 ifeq ($(TARGET),kinetis)
   CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DNVM_FLASH_WRITEONCE=1
   APP_OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o \
-		 $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
+  $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o $(KINETIS_DRIVERS)/drivers/fsl_gpio.o
 endif
 
 ifeq ($(TARGET),stm32g0)
@@ -102,4 +106,20 @@ standalone: image.bin
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
-	@rm -f *.bin *.elf tags *.o
+	@rm -f *.bin *.elf tags *.o $(LSCRIPT)
+
+$(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
+	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
+	@printf "%d" $(WOLFBOOT_PARTITION_SIZE) > .partition-size
+	@printf "%d" $(IMAGE_HEADER_SIZE) > .header-size
+	@expr `cat .wolfboot-offset` + `cat .header-size` > .entry-point
+	@printf "0x%X" `cat .entry-point` > .entry-point
+	@expr `cat .partition-size` - `cat .header-size` > .app-size
+	@printf "0x%X" `cat .app-size` > .app-size
+	@ cat $(LSCRIPT_TEMPLATE) | \
+		sed -e "s/##WOLFBOOT_TEST_APP_SIZE##/`cat .app-size`/g" | \
+		sed -e "s/##WOLFBOOT_TEST_APP_ADDRESS##/`cat .entry-point`/g" \
+		> $(@)
+	@rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
+.PHONY: FORCE clean

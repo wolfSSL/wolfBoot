@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x08020100, LENGTH = 0x001FF00
+    FLASH (rx) : ORIGIN = ##WOLFBOOT_TEST_APP_ADDRESS##, LENGTH = ##WOLFBOOT_TEST_APP_SIZE##
     RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 0x00010000
 }
 
@@ -24,6 +24,8 @@ SECTIONS
     {
         _start_data = .;
         KEEP(*(.data*))
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
     } > RAM

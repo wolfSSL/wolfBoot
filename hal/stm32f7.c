@@ -489,7 +489,9 @@ void RAMFUNCTION fork_bootloader(void)
         flash_erase_sector(i);
     hal_flash_write(WOLFBOOT_ORIG_BOOTLOADER, bootloader_copy_mem, BOOTLOADER_SIZE);
     hal_flash_lock();
-    arch_reboot();
+#ifdef __WOLFBOOT
+    //arch_reboot();
+#endif
 }
 
 

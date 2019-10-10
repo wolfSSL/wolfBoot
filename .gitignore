@@ -67,11 +67,17 @@ tools/ecc256/ecc256_keygen
 cscope.out
 tags
 
-# Generated files using target.h
+# Generated files
+.wolfboot-config
+include/target.h
 .wolfboot-arch-offset
 .wolfboot-offset
 .wolfboot-partition-size
+.bootloader-partition-size
 
 # Test tools
 tools/test-expect-version/test-expect-version
 tools/test-update-server/server
+config/*.ld
+
+
