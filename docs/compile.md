@@ -46,9 +46,9 @@ By default, wolfBoot is compiled for ARM Cortex-M3/4/7. To compile for Cortex-M0
 
 The file [include/target.h](../include/target.h) is generated according to the configured flash geometry,
 partitions size and offset of the target system. The following values must be set to provide the
-desired flash configuration, either via the command line, or using the .config file as 
+desired flash configuration, either via the command line, or using the .config file: 
 
-`WOLFBOOT_SECTOR_SIZE` 
+ - `WOLFBOOT_SECTOR_SIZE` 
 
 This variable determines the size of the physical sector on the flash memory. If areas with different
 block sizes are used for the two partitions (e.g. update partition on an external flash), this variable
@@ -57,26 +57,26 @@ should indicate the size of the biggest sector shared between the two partitions
 WolfBoot uses this value as minimum unit when swapping the firmware images in place. For this reason,
 this value is also used to set the size of the SWAP partition. 
 
-`WOLFBOOT_PARTITION_BOOT_ADDRESS`
+ - `WOLFBOOT_PARTITION_BOOT_ADDRESS`
 
 This is the start address of the boot partition, aligned to the beginning of a new flash sector.
 The application code starts after a further offset, equal to the partition header size (256B 
 for Ed25519 and ECC signature headers).
 
-`WOLFBOOT_PARTITION_UPDATE_ADDRESS`
+ - `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
 
 This is the start address of the update partition. If an external memory is used via the 
 `EXT_FLASH` option, this variable contains the offset of the update partition from the
 beginning of the external memory addressable space.
 
-`WOLFBOOT_PARTITION_SWAP_ADDRESS`
+ - `WOLFBOOT_PARTITION_SWAP_ADDRESS`
 
 The address for the swap spaced used by wolfBoot to swap the two firmware images in place,
 in order to perform a reversable update. The size of the SWAP partition is exactly one sector on the flash.
 If an external memory is used, the variable contains the offset of the SWAP area from the beginning
 of its addressable space.
 
-`WOLFBOOT_PARTITION_SIZE`
+ - `WOLFBOOT_PARTITION_SIZE`
 
 The size of the BOOT and UPDATE partition. The size is the same for both partitions.
 
