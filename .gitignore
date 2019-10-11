@@ -80,4 +80,5 @@ tools/test-expect-version/test-expect-version
 tools/test-update-server/server
 config/*.ld
 
-
+# Generated confiuguration file
+.config
