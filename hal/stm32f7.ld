@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 0x001FFE0
+    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping TCM only */
 }
 
@@ -14,6 +14,12 @@ SECTIONS
         *(.rodata*)
         . = ALIGN(4);
         _end_text = .;
+    } > FLASH
+    
+    .edidx :
+    {
+        . = ALIGN(4);
+        *(.ARM.exidx*)
     } > FLASH
 
     _stored_data = .;

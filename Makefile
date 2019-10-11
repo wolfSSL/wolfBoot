@@ -3,34 +3,13 @@
 # Configure by passing alternate values
 # via environment variables.
 #
-# Default values:
-ARCH?=ARM
-TARGET?=stm32f4
-SIGN?=ED25519
-KINETIS?=$(HOME)/src/FRDM-K64F
-KINETIS_CPU=MK64FN1M0VLL12
-KINETIS_DRIVERS?=$(KINETIS)/devices/MK64F12
-KINETIS_CMSIS?=$(KINETIS)/CMSIS
-FREEDOM_E_SDK?=$(HOME)/src/freedom-e-sdk
-DEBUG?=0
-VTOR?=1
-CORTEX_M0?=0
-NO_ASM?=0
-EXT_FLASH?=0
-SPI_FLASH?=0
-ALLOW_DOWNGRADE?=0
-NVM_FLASH_WRITEONCE?=0
-WOLFBOOT_VERSION?=0
-V?=0
-SPMATH?=1
-RAM_CODE?=0
-DUALBANK_SWAP=0
-
-
+# Configuration values: see tools/config.mk
+-include .config
+include tools/config.mk
 
 ## Initializers
 CFLAGS:=-D__WOLFBOOT  -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL
-LSCRIPT:=hal/$(TARGET).ld
+LSCRIPT:=config/target.ld
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
 OBJS:= \
 ./hal/$(TARGET).o \
@@ -42,6 +21,7 @@ OBJS:= \
 ./lib/wolfssl/wolfcrypt/src/hash.o \
 ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
 ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+
 
 ## Architecture/CPU configuration
 include arch.mk
@@ -136,26 +116,23 @@ wolfboot.hex: wolfboot.elf
 	$(Q)$(OBJCOPY) -O ihex $^ $@
 
 align: wolfboot-align.bin
-
-wolfboot-align.bin: wolfboot.bin
-	@cat include/target.h | grep WOLFBOOT_PARTITION_BOOT_ADDRESS | tr -d "\n\r" | sed -e "s/.*[ ]//g" > .wolfboot-offset
-	@printf "%d" `cat .wolfboot-offset` > .wolfboot-offset
+	
+.bootloader-partition-size:
+	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
 	@printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
-	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .wolfboot-partition-size
-	@dd if=/dev/zero bs=`cat .wolfboot-partition-size` count=1 2>/dev/null | tr "\000" "\377" > $(@)
-	@#rm -f .wolfboot-partition-size .wolfboot-offset .wolfboot-arch-offset
-	@dd if=$^ of=$(@) conv=notrunc 2>/dev/null
+	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .bootloader-partition-size
+	@rm -f .wolfboot-offset .wolfboot-arch-offset
+
+wolfboot-align.bin: .bootloader-partition-size wolfboot.bin
+	@dd if=/dev/zero bs=`cat .bootloader-partition-size` count=1 2>/dev/null | tr "\000" "\377" > $(@)
+	@dd if=wolfboot.bin of=$(@) conv=notrunc 2>/dev/null
 	@echo
 	@echo "\t[SIZE]"
 	@$(SIZE) wolfboot.elf
 	@echo
 
-test-app/image.bin:
-	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
-    V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
-	KINETIS=$(KINETIS) KINETIS_CPU=$(KINETIS_CPU) KINETIS_DRIVERS=$(KINETIS_DRIVERS) \
-	KINETIS_CMSIS=$(KINETIS_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
-	FREEDOM_E_SDK=$(FREEDOM_E_SDK)
+test-app/image.bin: wolfboot-align.bin
+	@make -C test-app
 	@rm -f src/*.o hal/*.o
 	@$(SIZE) test-app/image.elf
 
@@ -173,9 +150,14 @@ factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[MERGE] $@"
 	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
-wolfboot.elf: $(OBJS) $(LSCRIPT)
+wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) -Wl,--start-group $(OBJS) -Wl,--end-group -o $@
+
+$(LSCRIPT): hal/$(TARGET).ld .bootloader-partition-size FORCE
+	@cat hal/$(TARGET).ld | \
+		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/`cat .bootloader-partition-size`/g" \
+		> $@
 
 src/ed25519_pub_key.c: ed25519.der
 
@@ -185,12 +167,23 @@ keys: $(PRIVATE_KEY)
 	
 clean:
 	@find . -type f -name "*.o" | xargs rm -f
-	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex
+	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex config/target.ld
 	@make -C test-app clean
 
 distclean: clean
-	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c
+	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c include/target.h
 
+include/target.h: include/target.h.in FORCE
+	@cat include/target.h.in | \
+	sed -e "s/##WOLFBOOT_PARTITION_SIZE##/$(WOLFBOOT_PARTITION_SIZE)/g" | \
+	sed -e "s/##WOLFBOOT_SECTOR_SIZE##/$(WOLFBOOT_SECTOR_SIZE)/g" | \
+	sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_PARTITION_UPDATE_ADDRESS##/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_PARTITION_SWAP_ADDRESS##/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
+		> $@
+
+config: FORCE
+	make -C config
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
@@ -202,3 +195,4 @@ distclean: clean
 
 FORCE: 
 
+.PHONY: FORCE clean

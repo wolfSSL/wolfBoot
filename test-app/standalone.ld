@@ -28,6 +28,8 @@ SECTIONS
         _start_data = .;
         KEEP(*(.data*))
         . = ALIGN(4);
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
         _end_data = .;
     } > RAM
 

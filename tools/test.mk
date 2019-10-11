@@ -4,6 +4,8 @@ EXPVER=tools/test-expect-version/test-expect-version
 SPI_CHIP=SST25VF080B
 SIGN_TOOL=/bin/false
 
+SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
+
 ifeq ($(SIGN),ED25519)
   SIGN_TOOL=tools/keytools/sign.py --ed25519
 endif
@@ -177,17 +179,17 @@ test-13-rollback-ECC: $(EXPVER) FORCE
 test-21-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
 	@make test-erase-ext
 	@echo Creating and uploading factory image...
-	@make test-factory SPI_FLASH=1
+	@make test-factory $(SPI_OPTIONS)
 	@echo Expecting version '1'
 	@$$(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
-	@make test-update-ext TEST_UPDATE_VERSION=4 SPI_FLASH=1
+	@make test-update-ext TEST_UPDATE_VERSION=4 $(SPI_OPTIONS)
 	@echo Expecting version '4'
 	@$$(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
-	@make test-update-ext TEST_UPDATE_VERSION=1 SPI_FLASH=1
+	@make test-update-ext TEST_UPDATE_VERSION=1 $(SPI_OPTIONS)
 	@echo Expecting version '4'
 	@$$(test `$(EXPVER)` -eq 4)
 	@make clean
@@ -196,17 +198,17 @@ test-21-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
 test-23-rollback-SPI: $(EXPVER) FORCE
 	@make test-erase-ext
 	@echo Creating and uploading factory image...
-	@make test-factory SPI_FLASH=1
+	@make test-factory $(SPI_OPTIONS)
 	@echo Expecting version '1'
 	@$$(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
-	@make test-update-ext TEST_UPDATE_VERSION=4 SPI_FLASH=1
+	@make test-update-ext TEST_UPDATE_VERSION=4 $(SPI_OPTIONS)
 	@echo Expecting version '4'
 	@$$(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
-	@make test-update-ext TEST_UPDATE_VERSION=5 SPI_FLASH=1
+	@make test-update-ext TEST_UPDATE_VERSION=5 $(SPI_OPTIONS)
 	@echo Expecting version '5'
 	@$$(test `$(EXPVER)` -eq 5)
 	@echo
