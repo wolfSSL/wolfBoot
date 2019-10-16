@@ -117,7 +117,7 @@ wolfboot.hex: wolfboot.elf
 
 align: wolfboot-align.bin
 	
-.bootloader-partition-size:
+.bootloader-partition-size: FORCE
 	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
 	@printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
 	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .bootloader-partition-size
@@ -150,7 +150,7 @@ factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[MERGE] $@"
 	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
-wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT)
+wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) -Wl,--start-group $(OBJS) -Wl,--end-group -o $@
 
