@@ -75,6 +75,20 @@ ifeq ($(ARCH),RISCV)
   OBJS+=src/boot_riscv.o src/vector_riscv.o
   ARCH_FLASH_OFFSET=0x20010000
 endif
+  
+  
+ifeq ($(TARGET),kinetis)
+  CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o
+  ## The following lines can be used to enable HW acceleration
+  ifeq ($(KINETIS_CPU),MK82FN256VLL15)
+    ifeq ($(PKA),1)
+      ECC_EXTRA_CFLAGS+=-DFREESCALE_LTC_ECC -DFREESCALE_USE_LTC -DFREESCALE_LTC_TFM
+      ECC_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o $(KINETIS_DRIVERS)/drivers/fsl_ltc.o
+    endif
+  endif
+endif
+
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
@@ -86,16 +100,6 @@ OBJCOPY:=$(CROSS_COMPILE)objcopy
 SIZE:=$(CROSS_COMPILE)size
 BOOT_IMG?=test-app/image.bin
 
-
-ifeq ($(TARGET),kinetis)
-  CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o
-  ## The following lines can be used to enable HW acceleration
-  ##ifeq ($(KINETIS_CPU),MK82FN256VLL15)
-  ##  ECC_EXTRA_CFLAGS+=-DFREESCALE_LTC_ECC -DFREESCALE_USE_LTC
-  ##  ECC_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o $(KINETIS_DRIVERS)/drivers/fsl_ltc.o
-  ##endif
-endif
 
 ifeq ($(TARGET),stm32wb)
   ifneq ($(PKA),0)

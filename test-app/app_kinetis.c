@@ -135,6 +135,7 @@ void main(void) {
     BOARD_LED_GPIO->PDDR |= (1U << BOARD_LED_GPIO_PIN);
     GPIO_PortClear(BOARD_LED_GPIO, 1u << BOARD_LED_GPIO_PIN);
 
+#if 0
     while(1) {
         for(i = 0; i < 7200000; i++) {
 
@@ -142,6 +143,7 @@ void main(void) {
 
         GPIO_PortToggle(BOARD_LED_GPIO, 1 << BOARD_LED_GPIO_PIN);
     }
+#endif
 
     while(1)
         __WFI();

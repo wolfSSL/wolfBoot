@@ -31,7 +31,7 @@
 #define SINGLE_THREADED
 //#define WOLFSSL_SMALL_STACK
 #define WOLFCRYPT_ONLY
-#define TFM_TIMING_RESISTANT
+//#define TFM_TIMING_RESISTANT
 
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
@@ -47,25 +47,37 @@
 #ifdef WOLFBOOT_SIGN_ECC256
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
-#   define USE_FAST_MATH
+#   undef USE_FAST_MATH
 #   define FP_MAX_BITS (256 + 32)
 
+
+/* Kinetis LTC support */
 #   ifdef FREESCALE_USE_LTC
 #      define LTC_MAX_ECC_BITS (256)
 #      define LTC_MAX_INT_BYTES (128)
+#      ifndef LTC_BASE
 #      define LTC_BASE ((LTC_Type *)LTC0_BASE)
-#   else
-#      define WOLFSSL_SP
-#      define WOLFSSL_SP_SMALL
-#      define WOLFSSL_SP_MATH
-#      define SP_WORD_SIZE 32
-#      define WOLFSSL_HAVE_SP_ECC
+#      endif
 #   endif
 
+/* SP MATH */
+#   define WOLFSSL_SP
+#   define WOLFSSL_SP_MATH
+#   define WOLFSSL_SP_SMALL
+#   define SP_WORD_SIZE 32
+#   define WOLFSSL_HAVE_SP_ECC
+
+/* ECC options disabled to reduce size */
 #   define NO_ECC_SIGN
 #   define NO_ECC_EXPORT
 #   define NO_ECC_DHE
 #   define NO_ECC_KEY_EXPORT
+
+/* Curve */
+#   define NO_ECC192
+#   define NO_ECC224
+#   define HAVE_ECC256
+#   define NO_ECC384
 #endif
 
 /* Disables - For minimum wolfCrypt build */
