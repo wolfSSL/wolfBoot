@@ -20,7 +20,12 @@
  */
 
 #include <stdint.h>
-#include <image.h>
+#include "image.h"
+#ifdef WOLFSSL_STM32_PKA
+#include "stm32wbxx_hal.h"
+PKA_HandleTypeDef hpka = { };
+#endif
+
 /* STM32 WB register configuration */
 
 /* Assembly helpers */
@@ -286,6 +291,11 @@ static void clock_pll_on(void)
 void hal_init(void)
 {
     clock_pll_on();
+#ifdef WOLFSSL_STM32_PKA
+    __HAL_RCC_PKA_CLK_ENABLE();
+    hpka.Instance = PKA;
+    HAL_PKA_Init(&hpka);
+#endif
 }
 
 void hal_prepare_boot(void)
@@ -297,3 +307,26 @@ void hal_prepare_boot(void)
     clock_pll_off();
 }
 
+#ifdef WOLFSSL_STM32_PKA
+
+
+void HAL_PKA_MspInit(PKA_HandleTypeDef* hpka)
+{
+  if(hpka->Instance==PKA)
+  {
+    /* Peripheral clock enable */
+    __HAL_RCC_PKA_CLK_ENABLE();
+  }
+}
+
+/* This value is unused, the function is never called
+ * as long as the timeout is 0xFFFFFFFF.
+ * It is defined here only to avoid a compiler error
+ * for a missing symbol in hal_pka_driver.
+ */
+uint32_t HAL_GetTick(void)
+{
+    return 0;
+}
+
+#endif
