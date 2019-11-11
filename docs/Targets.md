@@ -94,7 +94,7 @@ Example partitioning on Nucleo-68 board:
 
 - Sector size: 4KB
 - Wolfboot partition size: 32 KB
-- Applicatiobn partition size: 128 KB
+- Application partition size: 128 KB
 
 ```C
 #define WOLFBOOT_SECTOR_SIZE                 0x1000   /* 4 KB */
@@ -260,7 +260,7 @@ reset
 halt
 ```
 
-OpenOCD can be either run in background (to allow remote GDB and monitor terminal connections), or 
+OpenOCD can be either run in background (to allow remote GDB and monitor terminal connections), or
 directly from command line, to execute terminal scripts.
 
 If OpenOCD is running, local TCP port 4444 can be used to access an interactive terminal prompt.
@@ -293,7 +293,7 @@ Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and
 If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
 booting.
 
-The bank-swap operation is immediate and a SWAP image is not required  in this case. Fallback mechanism can rely on 
+The bank-swap operation is immediate and a SWAP image is not required  in this case. Fallback mechanism can rely on
 a second choice (older firmware) in the other bank.
 
 
@@ -309,5 +309,3 @@ From another console, connect using gdb, e.g.:
 arm-none-eabi-gdb
 (gdb) target remote:3333
 ```
-
-
