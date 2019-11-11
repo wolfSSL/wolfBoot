@@ -30,8 +30,8 @@
 
 /* UART module */
 #define UART1_PIN_AF 7
-#define UART1_RX_PIN 10 
-#define UART1_TX_PIN 9 
+#define UART1_RX_PIN 10
+#define UART1_TX_PIN 9
 #define UART1 (0x40011000)
 #define UART1_CR1      (*(volatile uint32_t *)(UART1 + 0x00))
 #define UART1_CR2      (*(volatile uint32_t *)(UART1 + 0x04))
@@ -278,7 +278,7 @@ void uart_update_mgr(void)
 
 #define LED_BOOT_PIN (4)
 #define LED_USR_PIN (12)
-void boot_led_on(void)
+static void boot_led_on(void)
 {
     uint32_t reg;
     uint32_t pin = LED_BOOT_PIN;
@@ -290,7 +290,7 @@ void boot_led_on(void)
     GPIOD_BSRR |= (1 << pin);
 }
 
-void boot_led_off(void)
+static void boot_led_off(void)
 {
     GPIOD_BSRR |= (1 << (LED_BOOT_PIN + 16));
 }

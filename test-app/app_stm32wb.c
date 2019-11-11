@@ -29,6 +29,7 @@
 
 #ifdef PLATFORM_stm32wb
 
+volatile uint32_t time_elapsed = 0;
 void main(void) {
     boot_led_on();
     /* Wait for reboot */
@@ -36,4 +37,3 @@ void main(void) {
         ;
 }
 #endif /** PLATFROM_stm32wb **/
-
