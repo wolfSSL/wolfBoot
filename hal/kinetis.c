@@ -27,6 +27,10 @@
 #include "fsl_ftfx_cache.h"
 #include "fsl_sysmpu.h"
 
+#if defined(CPU_MK82FN256VLL15) && defined(FREESCALE_USE_LTC)
+#include <wolfssl/wolfcrypt/port/nxp/ksdk_port.h>
+#endif
+
 static flash_config_t pflash;
 static ftfx_cache_config_t pcache;
 static int flash_init = 0;
@@ -217,6 +221,9 @@ void hal_init(void)
 {
     /* Disable MPU */
     SYSMPU_Enable(SYSMPU, false);
+#if defined(CPU_MK82FN256VLL15) && defined(FREESCALE_USE_LTC)
+    ksdk_port_init();
+#endif
 
     /* Set the system clock dividers in SIM to safe value. */
 #if defined(CPU_MK64FN1M0VLL12)
