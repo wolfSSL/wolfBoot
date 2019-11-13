@@ -112,3 +112,11 @@ For more detailed information about firmware update implementation, see [Firmwar
     * new HAL: STM32L0
     * new HAL: STM32G0
     * new HAL: STM32F7
+
+### V1.3 (2019-11-13)
+ * New configuration mechanism based on `make config`, helps creating and storing target-specific configurations
+    * Configuration examples provided for a number of existing platforms
+ * fix bug in self-update mechanism when SPI flash is in use
+ * Introduced support for hardware-assisted signature verification, using public-key hardware accelerators
+    * Added support for STM32 PKA (e.g. STM32WB55)
+    * Added support for Kinetis/Freescale PKHA (e.g. Kinetis K82F)
