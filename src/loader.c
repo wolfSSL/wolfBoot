@@ -360,6 +360,9 @@ int main(void)
 {
     hal_init();
     spi_flash_probe();
+#ifdef WOLFTPM2_NO_WOLFCRYPT
+    wolfBoot_tpm2_init();
+#endif
     wolfBoot_start();
     while(1)
         ;

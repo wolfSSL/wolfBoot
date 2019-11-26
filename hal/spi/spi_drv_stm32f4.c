@@ -28,17 +28,17 @@
 #include "spi_drv.h"
 #include "spi_drv_stm32f4.h"
 
-void spi_cs_off(void)
+void spi_cs_off(int pin)
 {
-    GPIOE_BSRR |= (1 << SPI_FLASH_PIN);
-    while(!(GPIOE_ODR & (1 << SPI_FLASH_PIN)))
+    GPIOE_BSRR |= (1 << pin);
+    while(!(GPIOE_ODR & (1 << pin)))
         ;
 }
 
-void spi_cs_on(void)
+void spi_cs_on(int pin)
 {
-    GPIOE_BSRR |= (1 << (SPI_FLASH_PIN + 16));
-    while(GPIOE_ODR & (1 << SPI_FLASH_PIN))
+    GPIOE_BSRR |= (1 << (pin + 16));
+    while(GPIOE_ODR & (1 << pin))
         ;
 }
 
@@ -47,15 +47,28 @@ static void spi_flash_pin_setup(void)
 {
     uint32_t reg;
     AHB1_CLOCK_ER |= GPIOE_AHB1_CLOCK_ER;
-    reg = GPIOE_MODE & ~ (0x03 << (SPI_FLASH_PIN * 2));
-    GPIOE_MODE = reg | (1 << (SPI_FLASH_PIN * 2));
+    reg = GPIOE_MODE & ~ (0x03 << (SPI_CS_FLASH * 2));
+    GPIOE_MODE = reg | (1 << (SPI_CS_FLASH * 2));
+    reg = GPIOE_PUPD & ~(0x03 <<  (SPI_CS_FLASH * 2));
+    GPIOE_PUPD = reg | (0x01 << (SPI_CS_FLASH * 2));
+    reg = GPIOE_OSPD & ~(0x03 << (SPI_CS_FLASH * 2));
+    GPIOE_OSPD |= (0x03 << (SPI_CS_FLASH * 2));
+    spi_cs_off(SPI_CS_FLASH);
+}
 
-    reg = GPIOE_PUPD & ~(0x03 <<  (SPI_FLASH_PIN * 2));
-    GPIOE_PUPD = reg | (0x01 << (SPI_FLASH_PIN * 2));
-
-    reg = GPIOE_OSPD & ~(0x03 << (SPI_FLASH_PIN * 2));
-    GPIOE_OSPD |= (0x03 << (SPI_FLASH_PIN * 2));
-
+static void spi_tpm2_pin_setup(void)
+{
+#ifdef WOLFTPM2_NO_WOLFCRYPT
+    uint32_t reg;
+    AHB1_CLOCK_ER |= GPIOE_AHB1_CLOCK_ER;
+    reg = GPIOE_MODE & ~ (0x03 << (SPI_CS_TPM * 2));
+    GPIOE_MODE = reg | (1 << (SPI_CS_TPM * 2));
+    reg = GPIOE_PUPD & ~(0x03 <<  (SPI_CS_TPM * 2));
+    GPIOE_PUPD = reg | (0x01 << (SPI_CS_TPM * 2));
+    reg = GPIOE_OSPD & ~(0x03 << (SPI_CS_TPM * 2));
+    GPIOE_OSPD |= (0x03 << (SPI_CS_TPM * 2));
+    spi_cs_off(SPI_CS_TPM);
+#endif
 }
 
 static void spi1_pins_setup(void)
@@ -98,8 +111,8 @@ static void spi_pins_release(void)
     GPIOB_PUPD &= ~ (0x03 << (SPI1_MISO_PIN * 2));
 
     /* Release CS */
-    GPIOE_MODE &= ~ (0x03 << (SPI_FLASH_PIN * 2));
-    GPIOE_PUPD &= ~ (0x03 <<  (SPI_FLASH_PIN * 2));
+    GPIOE_MODE &= ~ (0x03 << (SPI_CS_FLASH * 2));
+    GPIOE_PUPD &= ~ (0x03 <<  (SPI_CS_TPM * 2));
 
     /* Disable GPIOB+GPIOE clock */
     AHB1_CLOCK_ER &= ~(GPIOB_AHB1_CLOCK_ER | GPIOE_AHB1_CLOCK_ER);
@@ -136,13 +149,18 @@ void spi_write(const char byte)
 
 void spi_init(int polarity, int phase)
 {
-    spi1_pins_setup();
-    spi_flash_pin_setup();
-    APB2_CLOCK_ER |= SPI1_APB2_CLOCK_ER_VAL;
-    spi1_reset();
-	SPI1_CR1 = SPI_CR1_MASTER | (5 << 3) | (polarity << 1) | (phase << 0);
-	SPI1_CR2 |= SPI_CR2_SSOE;
-    SPI1_CR1 |= SPI_CR1_SPI_EN;
+    static int initialized = 0;
+    if (!initialized) {
+        initialized++;
+        spi1_pins_setup();
+        spi_flash_pin_setup();
+        spi_tpm2_pin_setup();
+        APB2_CLOCK_ER |= SPI1_APB2_CLOCK_ER_VAL;
+        spi1_reset();
+        SPI1_CR1 = SPI_CR1_MASTER | (5 << 3) | (polarity << 1) | (phase << 0);
+        SPI1_CR2 |= SPI_CR2_SSOE;
+        SPI1_CR1 |= SPI_CR1_SPI_EN;
+    }
 }
 
 void spi_release(void)

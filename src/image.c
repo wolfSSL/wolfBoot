@@ -22,7 +22,9 @@
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
+#include "spi_drv.h"
 
+#ifndef WOLFTPM2_NO_WOLFCRYPT
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 
@@ -49,6 +51,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     }
     return 0;
 }
+
 #endif /* WOLFBOOT_SIGN_ED25519 */
 
 #ifdef WOLFBOOT_SIGN_ECC256
@@ -66,6 +69,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         /* Failed to initialize key */
         return -1;
     }
+
     /* Import public key */
     ret = wc_ecc_import_unsigned(&ecc, (byte*)KEY_BUFFER, (byte*)(KEY_BUFFER + 32), NULL, ECC_SECP256R1);
     if ((ret < 0) || ecc.type != ECC_PUBLICKEY) {
@@ -111,7 +115,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         /* Failed to import rsa key */
         return -1;
     }
-    ret = wc_RsaSSL_Verify(sig, RSA_SIG_SIZE, digest_out, RSA_SIG_SIZE, &rsa); 
+    ret = wc_RsaSSL_Verify(sig, RSA_SIG_SIZE, digest_out, RSA_SIG_SIZE, &rsa);
     if (ret == SHA256_DIGEST_SIZE) {
         if (memcmp(digest_out, hash, ret) == 0)
             return 0;
@@ -119,6 +123,18 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     return -1;
 }
 #endif /* WOLFBOOT_SIGN_RSA2048 */
+
+#else
+#include <stdlib.h>
+#include <string.h>
+#include "wolftpm/tpm2.h"
+#include "wolftpm/tpm2_wrap.h"
+static WOLFTPM2_DEV wolftpm_dev;
+
+#define SHA256_BLOCK_SIZE 16
+#define SHA256_DIGEST_SIZE 32
+
+#endif /* WOLFTPM2_NO_WOLFCRYPT */
 
 static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
 
@@ -179,6 +195,7 @@ static uint8_t *get_img_hdr(struct wolfBoot_image *img)
     return (uint8_t *)(img->hdr);
 }
 
+#ifndef WOLFTPM2_NO_WOLFCRYPT
 static int image_hash(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
@@ -234,6 +251,141 @@ static void key_hash(uint8_t *hash)
     wc_Sha256Final(&sha256_ctx, hash);
 }
 
+#else /* WOLFTPM2_NO_WOLFCRYPT */
+
+static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
+    word16 xferSz, void* userCtx)
+{
+    (void)userCtx;
+    (void)ctx;
+    word16 i;
+    spi_cs_on(SPI_CS_TPM);
+    memset(rxBuf, 0, xferSz);
+    for (i = 0; i < xferSz; i++)
+    {
+        spi_write(txBuf[i]);
+        rxBuf[i] = spi_read();
+    }
+    spi_cs_off(SPI_CS_TPM);
+    /*
+    printf("\r\nSPI TX: ");
+    printbin(txBuf, xferSz);
+    printf("SPI RX: ");
+    printbin(rxBuf, xferSz);
+    printf("\r\n");
+    */
+    return 0;
+}
+
+#define ECC_INT_SIZE 32
+static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
+{
+    int rc;
+    int curve_id = TPM_ECC_NIST_P256;
+    WOLFTPM2_KEY tpmKey;
+
+    /* Load public key into TPM */
+    rc = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, &tpmKey, TPM_ECC_NIST_P256,
+            KEY_BUFFER, ECC_INT_SIZE,
+            KEY_BUFFER + ECC_INT_SIZE, ECC_INT_SIZE);
+    if (rc < 0)
+        return -1;
+    rc = wolfTPM2_VerifyHash(&wolftpm_dev, &tpmKey, sig, 2 * ECC_INT_SIZE, hash, SHA256_DIGEST_SIZE);
+    wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
+    if (rc < 0)
+        return -1;
+    return 0;
+}
+
+int wolfBoot_tpm2_init(void)
+{
+    int rc;
+    word32 idx;
+    WOLFTPM2_CAPS caps;
+    spi_init(0,0);
+
+    /* Init the TPM2 device */
+    rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
+    if (rc != 0)  {
+        return rc;
+    }
+
+    /* Get device capabilities + options */
+    rc = wolfTPM2_GetCapabilities(&wolftpm_dev, &caps);
+    if (rc != 0)  {
+        return rc;
+    }
+    return 0;
+}
+
+
+static void key_hash(uint8_t *hashBuf)
+{
+    int blksz, rc;
+    unsigned int i = 0;
+    const char gUsageAuth[]="wolfBoot TPM Usage Auth";
+    uint32_t hashSz = SHA256_DIGEST_SIZE;
+    WOLFTPM2_HASH hash;
+    XMEMSET(&hash, 0, sizeof(hash));
+    rc = wolfTPM2_HashStart(&wolftpm_dev, &hash, TPM_ALG_SHA256,
+        (const byte*)gUsageAuth, sizeof(gUsageAuth)-1);
+    if (rc != 0)
+        return;
+    while(i < KEY_LEN)
+    {
+        blksz = SHA256_BLOCK_SIZE;
+        if ((i + blksz) > KEY_LEN)
+            blksz = KEY_LEN - i;
+        wolfTPM2_HashUpdate(&wolftpm_dev, &hash, KEY_BUFFER + i, blksz);
+        i += blksz;
+    }
+    wolfTPM2_HashFinish(&wolftpm_dev, &hash, hashBuf, &hashSz);
+}
+
+static int image_hash(struct wolfBoot_image *img, uint8_t *hashBuf)
+{
+    const char gUsageAuth[]="wolfBoot TPM Usage Auth";
+    uint8_t *stored_sha, *end_sha;
+    uint8_t stored_sha_len;
+    uint8_t *p;
+    int blksz;
+    uint32_t position = 0;
+    WOLFTPM2_HASH hash;
+    uint32_t hashSz = SHA256_DIGEST_SIZE;
+    int rc;
+    if (!img)
+        return -1;
+    p = get_img_hdr(img);
+    stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
+    if (stored_sha_len != SHA256_DIGEST_SIZE)
+        return -1;
+    XMEMSET(&hash, 0, sizeof(hash));
+    rc = wolfTPM2_HashStart(&wolftpm_dev, &hash, TPM_ALG_SHA256,
+        (const byte*)gUsageAuth, sizeof(gUsageAuth)-1);
+    if (rc != 0)
+        return -1;
+    end_sha = stored_sha - 2;
+    while (p < end_sha) {
+        blksz = SHA256_BLOCK_SIZE;
+        if (end_sha - p < blksz)
+            blksz = end_sha - p;
+        wolfTPM2_HashUpdate(&wolftpm_dev, &hash, p, blksz);
+        p += blksz;
+    }
+    do {
+        p = get_sha_block(img, position);
+        if (p == NULL)
+            break;
+        blksz = SHA256_BLOCK_SIZE;
+        if (position + blksz > img->fw_size)
+            blksz = img->fw_size - position;
+        wolfTPM2_HashUpdate(&wolftpm_dev, &hash, p, blksz);
+        position += blksz;
+    } while(position < img->fw_size);
+    return wolfTPM2_HashFinish(&wolftpm_dev, &hash, hashBuf, &hashSz);
+}
+
+#endif
 
 
 

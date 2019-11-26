@@ -17,6 +17,7 @@ OBJS:= \
 ./src/string.o \
 ./src/image.o \
 ./src/libwolfboot.o
+WOLFCRYPT_OBJS:=
 
 
 ## Architecture/CPU configuration
@@ -27,7 +28,7 @@ ifeq ($(SIGN),ECC256)
   KEYGEN_OPTIONS=--ecc256
   SIGN_OPTIONS=--ecc256
   PRIVATE_KEY=ecc256.der
-  OBJS+= \
+  WOLFCRYPT_OBJS+= \
     $(ECC_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/ecc.o \
@@ -45,7 +46,7 @@ ifeq ($(SIGN),ED25519)
   KEYGEN_OPTIONS=--ed25519
   SIGN_OPTIONS=--ed25519
   PRIVATE_KEY=ed25519.der
-  OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
+  WOLFCRYPT_OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
 	./lib/wolfssl/wolfcrypt/src/ed25519.o \
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
     ./lib/wolfssl/wolfcrypt/src/sha256.o \
@@ -63,7 +64,7 @@ ifeq ($(SIGN),RSA2048)
   SIGN_OPTIONS=--rsa2048
   PRIVATE_KEY=rsa2048.der
   IMAGE_HEADER_SIZE=512
-  OBJS+= \
+  WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/rsa.o \
@@ -93,7 +94,8 @@ endif
 ifeq ($(SPI_FLASH),1)
    EXT_FLASH=1
    CFLAGS+= -DSPI_FLASH=1
-   OBJS+= src/spi_flash.o hal/spi/spi_drv_$(TARGET).o
+   OBJS+= src/spi_flash.o
+   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(TARGET).o
 endif
 
 ifeq ($(EXT_FLASH),1)
@@ -122,6 +124,21 @@ endif
 
 ifeq ($(VTOR),0)
     CFLAGS+=-DNO_VTOR
+endif
+
+ifeq ($(WOLFTPM),1)
+OBJS += lib/wolfTPM/src/tpm2.o \
+	lib/wolfTPM/src/tpm2_packet.o \
+	lib/wolfTPM/src/tpm2_tis.o \
+	lib/wolfTPM/src/tpm2_wrap.o \
+    src/ecc256_pub_key.o \
+    hal/spi/spi_drv_$(TARGET).o
+    CFLAGS+=-DWOLFTPM_SLB9670 -DWOLFTPM2_NO_WOLFCRYPT -DSIZEOF_LONG=4 -Ilib/wolfTPM \
+			-DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
+			-DWOLFTPM_SMALL_STACK
+
+else
+    OBJS+=$(WOLFCRYPT_OBJS)
 endif
 
 ASFLAGS:=$(CFLAGS)

@@ -66,21 +66,21 @@ static void write_address(uint32_t address)
 static uint8_t read_status(void)
 {
     uint8_t status;
-    spi_cs_on();
+    spi_cs_on(SPI_CS_FLASH);
     spi_write(RDSR);
     spi_read();
     spi_write(0xFF);
     status = spi_read();
-    spi_cs_off();
+    spi_cs_off(SPI_CS_FLASH);
     return status;
 }
 
 static void spi_cmd(uint8_t cmd)
 {
-    spi_cs_on();
+    spi_cs_on(SPI_CS_FLASH);
     spi_write(cmd);
     spi_read();
-    spi_cs_off();
+    spi_cs_off(SPI_CS_FLASH);
 }
 
 static void flash_write_enable(void)
@@ -114,7 +114,7 @@ static int spi_flash_write_page(uint32_t address, const void *data, int len)
         flash_write_enable();
         wait_busy();
 
-        spi_cs_on();
+        spi_cs_on(SPI_CS_FLASH);
         spi_write(BYTE_WRITE);
         spi_read();
         write_address(address);
@@ -124,7 +124,7 @@ static int spi_flash_write_page(uint32_t address, const void *data, int len)
             spi_read();
             len--;
         } while ((address & (SPI_FLASH_PAGE_SIZE - 1)) != 0);
-        spi_cs_off();
+        spi_cs_off(SPI_CS_FLASH);
     }
     wait_busy();
     return j;
@@ -140,13 +140,13 @@ static int spi_flash_write_sb(uint32_t address, const void *data, int len)
         return -1;
     while (len > 0) {
         flash_write_enable();
-        spi_cs_on();
+        spi_cs_on(SPI_CS_FLASH);
         spi_write(BYTE_WRITE);
         spi_read();
         write_address(address);
         spi_write(buf[j]);
         spi_read();
-        spi_cs_off();
+        spi_cs_off(SPI_CS_FLASH);
         wait_busy();
         spi_flash_read(address, &verify, 1);
         if ((verify & ~(buf[j])) == 0) {
@@ -169,7 +169,7 @@ uint16_t spi_flash_probe(void)
     int i;
     spi_init(0,0);
     wait_busy();
-    spi_cs_on();
+    spi_cs_on(SPI_CS_FLASH);
     spi_write(MDID);
     b0 = spi_read();
 
@@ -178,7 +178,7 @@ uint16_t spi_flash_probe(void)
     manuf = spi_read();
     spi_write(0xFF);
     product = spi_read();
-    spi_cs_off();
+    spi_cs_off(SPI_CS_FLASH);
     if (manuf == 0xBF)
         chip_write_mode = SST_SINGLEBYTE;
     if (manuf == 0xEF)
@@ -186,12 +186,12 @@ uint16_t spi_flash_probe(void)
 
 #ifndef READONLY
     spi_cmd(EWSR);
-    spi_cs_on();
+    spi_cs_on(SPI_CS_FLASH);
     spi_write(WRSR);
     spi_read();
     spi_write(0x00);
     spi_read();
-    spi_cs_off();
+    spi_cs_off(SPI_CS_FLASH);
 #endif
     return (uint16_t)(manuf << 8 | product);
 }
@@ -204,11 +204,11 @@ void spi_flash_sector_erase(uint32_t address)
 
     wait_busy();
     flash_write_enable();
-    spi_cs_on();
+    spi_cs_on(SPI_CS_FLASH);
     spi_write(SECTOR_ERASE);
     spi_read();
     write_address(address);
-    spi_cs_off();
+    spi_cs_off(SPI_CS_FLASH);
     wait_busy();
 }
 
@@ -217,7 +217,7 @@ int spi_flash_read(uint32_t address, void *data, int len)
     uint8_t *buf = data;
     int i = 0;
     wait_busy();
-    spi_cs_on();
+    spi_cs_on(SPI_CS_FLASH);
     spi_write(BYTE_READ);
     spi_read();
     write_address(address);
@@ -226,7 +226,7 @@ int spi_flash_read(uint32_t address, void *data, int len)
         buf[i++] = spi_read();
         len--;
     }
-    spi_cs_off();
+    spi_cs_off(SPI_CS_FLASH);
     return i;
 }
 
