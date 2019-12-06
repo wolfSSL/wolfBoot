@@ -15,7 +15,6 @@ SECTIONS
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
-    
     .edidx :
     {
         . = ALIGN(4);

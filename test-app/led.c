@@ -61,7 +61,7 @@ void led_pwm_setup(void)
 void boot_led_on(void)
 {
     uint32_t reg;
-    uint32_t pin = LED_BOOT_PIN - 2 * (wolfBoot_current_firmware_version() & 0x01);
+    uint32_t pin = LED_BOOT_PIN;// - 2 * (wolfBoot_current_firmware_version() & 0x01);
     AHB1_CLOCK_ER |= GPIOD_AHB1_CLOCK_ER;
     reg = GPIOD_MODE & ~(0x03 << (pin * 2));
     GPIOD_MODE = reg | (1 << (pin * 2));

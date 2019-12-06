@@ -1,7 +1,7 @@
 # wolfBoot
 wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/))
 
-wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers, 
+wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers,
 relying on wolfCrypt for firmware authentication, providing firmware update mechanisms.
 
 Due to the minimalist design of the bootloader and the tiny HAL API, wolfBoot is completely independent
@@ -21,8 +21,8 @@ projects to provide a secure firmware update mechanism.
 
 This repository contains the following components:
    - the wolfBoot bootloader
-   - key generator and image signing tools (requires python 3.x)
-   - Baremetal test applications 
+   - key generator and image signing tools (requires python 3.x and wolfcrypt-py https://github.com/wolfSSL/wolfcrypt-py)
+   - Baremetal test applications
 
 ### wolfBoot bootloader
 
@@ -32,7 +32,7 @@ with no dynamic memory allocation mechanism or linkage to any standard C library
 The bootloader consists of the following components:
    - wolfCrypt, which is used to verify the signature of the images
    - A minimalist Hardware Abstraction Layer, with an implementation provided for the supported target, which is in charge for IAP flash access and clock setting on the specific MCU
-   - The core bootloader 
+   - The core bootloader
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
 
 Only ARM Cortex-M boot mechanism is supported at this stage. Support for more architectures and
@@ -83,10 +83,48 @@ For detailed information about the configuration options for the target system, 
 
 For more detailed information about firmware update implementation, see [Firmware Update](docs/firmware_update.md)
 
+## Troubleshooting
+
+1. Python errors when signing a key:
+
+```
+Traceback (most recent call last):
+  File "tools/keytools/keygen.py", line 135, in <module>
+    rsa = ciphers.RsaPrivate.make_key(2048)
+AttributeError: type object 'RsaPrivate' has no attribute 'make_key'
+```
+
+```
+Traceback (most recent call last):
+  File "tools/keytools/sign.py", line 189, in <module>
+    r, s = ecc.sign_raw(digest)
+AttributeError: 'EccPrivate' object has no attribute 'sign_raw'
+```
+
+You need to install the latest wolfcrypt-pi here: https://github.com/wolfSSL/wolfcrypt-py
+
+Use `pip3 install wolfcrypt`.
+Make sure the wolfSSL library has been built with:
+```sh
+
+```
+
+To install based on a local wolfSSL installation use:
+
+```sh
+cd youwolfssldir
+./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 CFLAGS="-DWOLFSSL_PUBLIC_MP"
+make
+sudo make install
+
+cd yourwolfcryptpydir
+USE_LOCAL_WOLFSSL=/usr/local pip3 install .
+```
+
 ## Release Notes
 
 ### v1.0 (2018-12-04)
- * Initial release with fail-safe update, HAL support for STM32 and nRF52 
+ * Initial release with fail-safe update, HAL support for STM32 and nRF52
 
 ### V1.1 (2019-03-27)
  * Added support for ECC-256 DSA

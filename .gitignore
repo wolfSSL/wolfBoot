@@ -52,6 +52,7 @@
 # automatically generated source files
 src/ed25519_pub_key.c
 src/ecc256_pub_key.c
+src/rsa2048_pub_key.c
 
 # keygen binaries
 tools/ed25519/ed25519_sign

@@ -1,4 +1,4 @@
-/* xmalloc.h
+/* xmalloc_ecc.c
  *
  * Implementations of minimal malloc/free
  *
