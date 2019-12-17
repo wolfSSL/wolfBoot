@@ -4,8 +4,8 @@
 /** SPI settings **/
 
 #define SPI1 (0x40013000)/* SPI1 base address */
-#define SPI_CS_FLASH 3 /* Flash CS connected to GPIOE1 */
-#define SPI_CS_TPM   1 /* TPM CS connected to GPIOE0 */
+#define SPI_CS_FLASH 1 /* Flash CS connected to GPIOE1 */
+#define SPI_CS_TPM   0 /* TPM CS connected to GPIOE0 */
 #define SPI1_PIN_AF    5 /* Alternate function for SPI pins */
 #define SPI1_CLOCK_PIN 3 /* SPI_SCK: PB3  */
 #define SPI1_MISO_PIN  4 /* SPI_MISO PB4  */
@@ -40,7 +40,7 @@
 #define SPI1_APB2_CLOCK_ER_VAL 	(1 << 12)
 
 
-#define CLOCK_SPEED (168000000) 
+#define CLOCK_SPEED (168000000)
 
 
 #define AHB1_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
