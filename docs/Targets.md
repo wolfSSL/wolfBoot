@@ -352,6 +352,8 @@ reset
 halt
 ```
 
+`openocd --file openocd.cfg`
+
 OpenOCD can be either run in background (to allow remote GDB and monitor terminal connections), or
 directly from command line, to execute terminal scripts.
 
@@ -395,9 +397,10 @@ Use the OpenOCD configuration from the previous section to run OpenOCD.
 
 From another console, connect using gdb, e.g.:
 
+Add wolfboot.elf to the make.
+
 ```
-arm-none-eabi-gdb
-(gdb) target remote:3333
+arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
 (gdb) add-symbol-file test-app/image.elf 0x08020000
 (gdb) add-symbol-file wolfboot.elf 0x08000000
 ```
