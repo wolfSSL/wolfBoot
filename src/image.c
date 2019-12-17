@@ -120,7 +120,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 }
 #endif /* WOLFBOOT_SIGN_RSA2048 */
 
-static uint8_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
+static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
 
 static uint16_t get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr)
 {

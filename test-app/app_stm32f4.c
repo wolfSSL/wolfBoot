@@ -33,13 +33,6 @@
 
 #ifdef PLATFORM_stm32f4
 
-#ifdef SPI_FLASH
-extern void spi_release(void);
-#else
-#define spi_release() do{}while(0)
-#endif
-
-
 #define UART1 (0x40011000)
 
 #define UART1_SR       (*(volatile uint32_t *)(UART1))

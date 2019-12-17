@@ -36,6 +36,8 @@
 #include <stdint.h>
 
 uint16_t spi_flash_probe(void);
+void spi_release(void);
+
 void spi_flash_sector_erase(uint32_t address);
 int spi_flash_read(uint32_t address, void *data, int len);
 int spi_flash_write(uint32_t address, const void *data, int len);
@@ -43,6 +45,7 @@ int spi_flash_write(uint32_t address, const void *data, int len);
 #else
 
 #define spi_flash_probe() do{}while(0)
+#define spi_release() do{}while(0)
 
 #endif /* SPI_FLASH */
 

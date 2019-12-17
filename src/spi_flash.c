@@ -133,7 +133,7 @@ static int spi_flash_write_page(uint32_t address, const void *data, int len)
 static int spi_flash_write_sb(uint32_t address, const void *data, int len)
 {
     const uint8_t *buf = data;
-    const uint8_t verify;
+    uint8_t verify = 0;
     int j = 0;
     wait_busy();
     if (len < 1)
