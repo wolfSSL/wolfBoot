@@ -73,7 +73,7 @@ ifeq ($(SIGN),RSA2048)
     ./src/rsa2048_pub_key.o \
 	./src/xmalloc_rsa.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
-		  -Wstack-usage=4096 -DIMAGE_HEADER_SIZE=512
+		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=512
 endif
 
 

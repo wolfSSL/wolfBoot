@@ -87,15 +87,13 @@
 #ifdef WOLFBOOT_SIGN_RSA2048
 #  define HAVE_RSA
 #  define RSA_LOW_MEM
-#  define WOLFSSL_STATIC_RSA
 #  define WOLFSSL_RSA_VERIFY_INLINE
-//#  define WOLFSSL_RSA_PUBLIC_ONLY
-//#  define WOLFSSL_RSA_VERIFY_ONLY
 #  define WOLFSSL_HAVE_SP_RSA
 #  define WOLFSSL_SP
 #  define WOLFSSL_SP_SMALL
 #  define WOLFSSL_SP_MATH
 #  define SP_WORD_SIZE 32
+#  define WOLFSSL_SP_NO_3072
 #endif
 
 /* Disables - For minimum wolfCrypt build */
