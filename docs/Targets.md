@@ -263,7 +263,7 @@ halt
 OpenOCD can be either run in background (to allow remote GDB and monitor terminal connections), or
 directly from command line, to execute terminal scripts.
 
-If OpenOCD is running, local TCP port 4444 can be used to access an interactive terminal prompt.
+If OpenOCD is running, local TCP port 4444 can be used to access an interactive terminal prompt. `telnet localhost 4444`
 
 Using the following openocd commands, the initial images for wolfBoot and the test application
 are loaded to flash in bank 0:
@@ -308,4 +308,96 @@ From another console, connect using gdb, e.g.:
 ```
 arm-none-eabi-gdb
 (gdb) target remote:3333
+```
+
+
+## STM32H7
+
+The STM32H7 flash geometry must be defined beforehand.
+
+Use the "make config" operation to generate a .config file or copy the template
+using `cp ./config/examples/stm32h7.config .config`.
+
+Example 2MB partitioning on STM32-H753:
+
+```
+WOLFBOOT_SECTOR_SIZE?=0x20000
+WOLFBOOT_PARTITION_SIZE?=0xD0000
+WOLFBOOT_PARTITION_BOOT_ADDRESS?=0x8020000
+WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x80F0000
+WOLFBOOT_PARTITION_SWAP_ADDRESS?=0x81C0000
+```
+
+### Build Options
+
+The STM32H7 build can be built using:
+
+```
+make TARGET=stm32h7 SIGN=ECC256
+```
+
+### Loading the firmware
+
+OpenOCD configuration for flashing/debugging, can be copied into `openocd.cfg` in your working directory:
+Note: May require OpenOCD 0.10.0 or greater for the STM32H7x support.
+
+```
+source [find interface/stlink.cfg]
+source [find target/stm32h7x.cfg]
+$_CHIPNAME.cpu0 configure -event reset-init {
+    mmw 0xe0042004 0x7 0x0
+}
+init
+reset
+halt
+```
+
+OpenOCD can be either run in background (to allow remote GDB and monitor terminal connections), or
+directly from command line, to execute terminal scripts.
+
+If OpenOCD is running, local TCP port 4444 can be used to access an interactive terminal prompt.
+
+Using the following openocd commands, the initial images for wolfBoot and the test application
+are loaded to flash in bank 0:
+
+```
+telnet localhost 4444
+flash write_image unlock erase wolfboot.bin 0x08000000
+flash verify_bank 0 wolfboot.bin
+flash write_image unlock erase test-app/image_v1_signed.bin 0x08020000
+flash verify_bank 0 test-app/image_v1_signed.bin 0x20000
+reset
+resume 0x08000000
+```
+
+To sign the same application image as new version (2), use the python script `sign.py` provided:
+
+```
+tools/keytools/sign.py test-app/image.bin ecc256.der 2
+```
+
+From OpenOCD, the updated image (version 2) can be flashed to the second bank:
+```
+flash write_image unlock erase test-app/image_v2_signed.bin 0x08120000
+flash verify_bank 0 test-app/image_v1_signed.bin 0x20000
+```
+
+Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and authenticate the image.
+If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
+booting.
+
+
+### Debugging
+
+Debugging with OpenOCD:
+
+Use the OpenOCD configuration from the previous section to run OpenOCD.
+
+From another console, connect using gdb, e.g.:
+
+```
+arm-none-eabi-gdb
+(gdb) target remote:3333
+(gdb) add-symbol-file test-app/image.elf 0x08020000
+(gdb) add-symbol-file wolfboot.elf 0x08000000
 ```

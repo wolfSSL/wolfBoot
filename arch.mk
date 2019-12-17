@@ -32,8 +32,10 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32f7)
     ARCH_FLASH_OFFSET=0x08000000
-  else
-    ARCH_FLASH_OFFSET=0x0
+  endif
+
+  ifeq ($(TARGET),stm32h7)
+    ARCH_FLASH_OFFSET=0x08000000
   endif
 
   ## Cortex-M CPU
