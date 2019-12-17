@@ -26,7 +26,7 @@
 #include <stdint.h>
 
 /* Allow one single sp_point to be allocated at one time */
-#define SP_DIGIT_SIZE (1800)
+#define SP_DIGIT_SIZE (1280)
 static uint8_t sp_digit[SP_DIGIT_SIZE];
 static int sp_digit_in_use = 0;
 
