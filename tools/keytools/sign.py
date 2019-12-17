@@ -45,9 +45,12 @@ HDR_SIGNATURE_LEN   = 64
 
 HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
 HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
+HDR_IMG_TYPE_AUTH_RSA2048 = 0x0300
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
 HDR_IMG_TYPE_APP          = 0x0001
+
+WOLFBOOT_HEADER_SIZE = 256
 
 sign="auto"
 self_update=False
@@ -56,13 +59,15 @@ argc = len(sys.argv)
 argv = sys.argv
 
 if (argc < 4) or (argc > 6):
-    print("Usage: %s [--ed25519 | --ecc256 ] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 ] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
     sys.exit(1)
 for i in range(1, len(argv)):
     if (argv[i] == '--ed25519'):
         sign='ed25519'
     elif (argv[i] == '--ecc256'):
         sign='ecc256'
+    elif (argv[i] == '--rsa2048'):
+        sign='rsa2048'
     elif (argv[i] == '--wolfboot-update'):
         self_update = True
     else:
@@ -93,7 +98,7 @@ print ("Output image:         " + output_image_file)
 
 ''' import (decode) private key for signing '''
 kf = open(key_file, "rb")
-wolfboot_private_key = kf.read(96)
+wolfboot_private_key = kf.read(4096)
 wolfboot_private_key_len = len(wolfboot_private_key)
 if wolfboot_private_key_len == 64:
     if (sign == 'ecc256'):
@@ -109,6 +114,11 @@ elif wolfboot_private_key_len == 96:
     if sign == 'auto':
         sign = 'ecc256'
         print("'ecc256' key autodetected.")
+elif (wolfboot_private_key_len > 128):
+    if (sign == 'auto'):
+        print("'rsa2048' key autodetected.")
+    elif (sign != 'rsa2048'):
+        print ("Error: key size too large for the selected cipher")
 else:
     print ("Error: key size does not match any cipher")
     sys.exit(2)
@@ -123,6 +133,12 @@ if sign == 'ecc256':
     ecc.decode_key_raw(wolfboot_private_key[0:31], wolfboot_private_key[32:63], wolfboot_private_key[64:])
     pubkey = wolfboot_private_key[0:64]
 
+if sign == 'rsa2048':
+    WOLFBOOT_HEADER_SIZE = 512 
+    HDR_SIGNATURE_LEN = 256
+    rsa = ciphers.RsaPrivate(wolfboot_private_key)
+    privkey,pubkey = rsa.encode_key()
+
 
 img_size = os.path.getsize(image_file)
 # Magic header (spells 'WOLF')
@@ -130,28 +146,28 @@ header = struct.pack('<L', WOLFBOOT_MAGIC)
 # Image size 
 header += struct.pack('<L', img_size)
 
-# Two pad bytes so version is aligned
-header += struct.pack('BB', 0xFF, 0xFF)
+# No pad bytes, version is aligned
 
 # Version field
-header += struct.pack('BB', HDR_VERSION, HDR_VERSION_LEN)
+header += struct.pack('<HH', HDR_VERSION, HDR_VERSION_LEN)
 header += struct.pack('<L', fw_version)
 
-# Six pad bytes so timestamp is aligned
-header += struct.pack('BB', 0xFF, 0xFF)
+# Four pad bytes, so timestamp is aligned
 header += struct.pack('BB', 0xFF, 0xFF)
 header += struct.pack('BB', 0xFF, 0xFF)
 
 # Timestamp field
-header += struct.pack('BB', HDR_TIMESTAMP, HDR_TIMESTAMP_LEN)
+header += struct.pack('<HH', HDR_TIMESTAMP, HDR_TIMESTAMP_LEN)
 header += struct.pack('<Q', int(os.path.getmtime(image_file)))
 
 # Image type field
-header += struct.pack('BB', HDR_IMG_TYPE, HDR_IMG_TYPE_LEN)
+header += struct.pack('<HH', HDR_IMG_TYPE, HDR_IMG_TYPE_LEN)
 if (sign == 'ed25519'):
     img_type = HDR_IMG_TYPE_AUTH_ED25519
 if (sign == 'ecc256'):
     img_type = HDR_IMG_TYPE_AUTH_ECC256
+if (sign == 'rsa2048'):
+    img_type = HDR_IMG_TYPE_AUTH_RSA2048
 
 if (not self_update):
     img_type |= HDR_IMG_TYPE_APP
@@ -171,32 +187,45 @@ while True:
 digest = sha.digest()
 
 # Add SHA to the header
-header += struct.pack('BB', HDR_SHA256, HDR_SHA256_LEN)
+header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
 header += digest
+#print("sha:")
+#print([hex(j) for j in digest])
 
 # pubkey SHA calculation
+#print([hex(j) for j in pubkey])
+#print(len(pubkey))
 keysha = hashes.Sha256.new()
 keysha.update(pubkey)
-header += struct.pack('BB', HDR_PUBKEY, HDR_PUBKEY_LEN)
 key_digest = keysha.digest()
+header += struct.pack('<HH', HDR_PUBKEY, HDR_PUBKEY_LEN)
 header += key_digest
+#print([hex(j) for j in key_digest])
 
 # Sign the digest
 print("Signing the firmware...")
 if (sign == 'ed25519'):
     signature = ed.sign(digest)
-else:
+elif (sign == 'ecc256'):
     r, s = ecc.sign_raw(digest)
     signature = r + s
-header += struct.pack('BB', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
+elif (sign == 'rsa2048'):
+    signature = rsa.sign(digest)
+    #plain = rsa.verify(signature)
+    #print("plain:%d " % len(plain))
+    #print([hex(j) for j in plain])
+
+header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
 header += signature
+#print ("len sig: %d\n" % len(signature))
+#print([hex(j) for j in signature])
 print ("Done.")
 
 # Create output image. Add padded header in front
 outfile = open(output_image_file, 'wb')
 outfile.write(header)
 sz = len(header)
-while sz < 256:
+while sz < WOLFBOOT_HEADER_SIZE:
     outfile.write(struct.pack('B',0xFF))
     sz += 1
 infile = open(image_file, 'rb')

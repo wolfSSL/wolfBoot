@@ -251,21 +251,21 @@ void RAMFUNCTION wolfBoot_success(void)
     hal_flash_lock();
 }
 
-uint8_t wolfBoot_find_header(uint8_t *haystack, uint8_t type, uint8_t **ptr)
+uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
-    while (*p != 0) {
+    uint16_t len;
+    while (((p[0] != 0) || (p[1] != 0)) && ((p - haystack) < IMAGE_HEADER_SIZE)) {
         if (*p == HDR_PADDING) {
             p++;
             continue;
         }
-        if (*p == type) {
-            p++;
-            *ptr = (p + 1);
-            return *p;
+        len = p[2] | (p[3] << 8);
+        if ((p[0] | (p[1] << 8)) == type) {
+            *ptr = (p + 4);
+            return len;
         }
-        p++;
-        p += (*p + 1);
+        p += 4 + len;
     }
     *ptr = NULL;
     return 0;

@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x00000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    FLASH (rx) : ORIGIN = 0x00000000, LENGTH = 0x001FFE0
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00010000
 }
 
@@ -15,18 +15,6 @@ SECTIONS
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
-    .edidx :
-    {
-        . = ALIGN(4);
-        *(.ARM.exidx*)
-    } > FLASH
-
-    .edidx :
-    {
-        . = ALIGN(4);
-        *(.ARM.exidx*)
-    } > FLASH
-
 
     _stored_data = .;
     .data : AT (_stored_data)

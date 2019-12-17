@@ -8,7 +8,7 @@
 include tools/config.mk
 
 ## Initializers
-CFLAGS:=-D__WOLFBOOT  -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
+CFLAGS:=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
 LSCRIPT:=config/target.ld
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
 OBJS:= \
@@ -16,19 +16,13 @@ OBJS:= \
 ./src/loader.o \
 ./src/string.o \
 ./src/image.o \
-./src/libwolfboot.o \
-./lib/wolfssl/wolfcrypt/src/sha256.o \
-./lib/wolfssl/wolfcrypt/src/hash.o \
-./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+./src/libwolfboot.o
 
 
 ## Architecture/CPU configuration
 include arch.mk
 
-
 ## DSA Settings
-
 ifeq ($(SIGN),ECC256)
   KEYGEN_OPTIONS=--ecc256
   SIGN_OPTIONS=--ecc256
@@ -37,26 +31,53 @@ ifeq ($(SIGN),ECC256)
     $(ECC_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/ecc.o \
-	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
 	./lib/wolfssl/wolfcrypt/src/memory.o \
 	./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/sha256.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./src/ecc256_pub_key.o \
-    ./src/xmalloc.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER $(ECC_EXTRA_CFLAGS)
-else
+    ./src/xmalloc_ecc.o
+  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER $(ECC_EXTRA_CFLAGS) \
+		  -Wstack-usage=1024
+endif
+
+ifeq ($(SIGN),ED25519)
   KEYGEN_OPTIONS=--ed25519
   SIGN_OPTIONS=--ed25519
   PRIVATE_KEY=ed25519.der
   OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
 	./lib/wolfssl/wolfcrypt/src/ed25519.o \
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
+    ./lib/wolfssl/wolfcrypt/src/sha256.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o \
+	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o \
     ./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib -DWOLFSSL_STATIC_MEMORY
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib -DWOLFSSL_STATIC_MEMORY \
+		  -Wstack-usage=1024
   LDFLAGS+=-nostdlib
 endif
 
+ifeq ($(SIGN),RSA2048)
+  KEYGEN_OPTIONS=--rsa2048
+  SIGN_OPTIONS=--rsa2048
+  PRIVATE_KEY=rsa2048.der
+  IMAGE_HEADER_SIZE=512
+  OBJS+= \
+    $(RSA_EXTRA_OBJS) \
+    $(MATH_OBJS) \
+	./lib/wolfssl/wolfcrypt/src/rsa.o \
+	./lib/wolfssl/wolfcrypt/src/sha256.o \
+	./lib/wolfssl/wolfcrypt/src/asn.o \
+	./lib/wolfssl/wolfcrypt/src/hash.o \
+    ./src/rsa2048_pub_key.o \
+	./src/xmalloc_rsa.o
+  CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
+		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=512
+endif
 
-CFLAGS+=-Wall -Wextra -Wno-main -Wstack-usage=1024 -ffreestanding -Wno-unused \
+
+CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused \
 	-I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
 	-DWOLFSSL_USER_SETTINGS \
 	-DPLATFORM_$(TARGET)
@@ -108,15 +129,15 @@ ASFLAGS:=$(CFLAGS)
 all: factory.bin
 
 wolfboot.bin: wolfboot.elf
-	@echo "\t[BIN] $@"	
+	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -O binary $^ $@
 
 wolfboot.hex: wolfboot.elf
-	@echo "\t[HEX] $@"	
+	@echo "\t[HEX] $@"
 	$(Q)$(OBJCOPY) -O ihex $^ $@
 
 align: wolfboot-align.bin
-	
+
 .bootloader-partition-size: FORCE
 	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
 	@printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
@@ -136,6 +157,15 @@ test-app/image.bin: wolfboot-align.bin
 	@rm -f src/*.o hal/*.o
 	@$(SIZE) test-app/image.elf
 
+standalone:
+	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
+    V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
+	KINETIS=$(KINETIS) KINETIS_CPU=$(KINETIS_CPU) KINETIS_DRIVERS=$(KINETIS_DRIVERS) \
+	KINETIS_CMSIS=$(KINETIS_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
+	FREEDOM_E_SDK=$(FREEDOM_E_SDK) standalone
+	$(Q)$(OBJCOPY) -O binary test-app/image.elf standalone.bin
+	@$(SIZE) test-app/image.elf
+
 include tools/test.mk
 
 ed25519.der:
@@ -143,6 +173,9 @@ ed25519.der:
 
 ecc256.der:
 	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
+
+rsa2048.der:
+	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
 
 factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
@@ -163,15 +196,17 @@ src/ed25519_pub_key.c: ed25519.der
 
 src/ecc256_pub_key.c: ecc256.der
 
+src/rsa2048_pub_key.c: rsa2048.der
+
 keys: $(PRIVATE_KEY)
-	
+
 clean:
 	@find . -type f -name "*.o" | xargs rm -f
 	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex config/target.ld
 	@make -C test-app clean
 
 distclean: clean
-	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c include/target.h
+	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c ./src/rsa2048_pub_key.c include/target.h
 
 include/target.h: include/target.h.in FORCE
 	@cat include/target.h.in | \
@@ -193,6 +228,6 @@ config: FORCE
 	@echo "\t[AS-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
-FORCE: 
+FORCE:
 
 .PHONY: FORCE clean

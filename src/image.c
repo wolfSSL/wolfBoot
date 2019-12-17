@@ -86,9 +86,43 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 }
 #endif /* WOLFBOOT_SIGN_ECC256 */
 
-static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr);
+#ifdef WOLFBOOT_SIGN_RSA2048
+#include <wolfssl/wolfcrypt/rsa.h>
+#include <wolfssl/wolfcrypt/asn_public.h>
+#define RSA_MAX_KEY_SIZE 256
+#define RSA_SIG_SIZE 256
 
-static uint8_t get_header(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)
+static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
+{
+    int ret, res = 0;
+    struct RsaKey rsa;
+    uint8_t digest_out[IMAGE_SIGNATURE_SIZE];
+    word32 in_out = 0;
+
+
+    ret = wc_InitRsaKey(&rsa, NULL);
+    if (ret < 0) {
+        /* Failed to initialize key */
+        return -1;
+    }
+    /* Import public key */
+    ret = wc_RsaPublicKeyDecode((byte*)KEY_BUFFER, &in_out, &rsa, KEY_LEN);
+    if (ret < 0) {
+        /* Failed to import rsa key */
+        return -1;
+    }
+    ret = wc_RsaSSL_Verify(sig, RSA_SIG_SIZE, digest_out, RSA_SIG_SIZE, &rsa); 
+    if (ret == SHA256_DIGEST_SIZE) {
+        if (memcmp(digest_out, hash, ret) == 0)
+            return 0;
+    }
+    return -1;
+}
+#endif /* WOLFBOOT_SIGN_RSA2048 */
+
+static uint8_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
+
+static uint16_t get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr)
 {
 #if defined(PART_UPDATE_EXT)
     if(img->part == PART_UPDATE)
@@ -128,7 +162,7 @@ static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
     return hdr_cpy;
 }
 
-static uint8_t get_header_ext(struct wolfBoot_image *img, uint8_t type, uint8_t **ptr)
+static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr)
 {
     return wolfBoot_find_header(fetch_hdr_cpy(img) + IMAGE_HEADER_OFFSET, type, ptr);
 }
@@ -148,7 +182,7 @@ static uint8_t *get_img_hdr(struct wolfBoot_image *img)
 static int image_hash(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
-    uint8_t stored_sha_len;
+    uint16_t stored_sha_len;
     uint8_t *p;
     int blksz;
     uint32_t position = 0;
@@ -160,7 +194,7 @@ static int image_hash(struct wolfBoot_image *img, uint8_t *hash)
     if (stored_sha_len != SHA256_DIGEST_SIZE)
         return -1;
     wc_InitSha256(&sha256_ctx);
-    end_sha = stored_sha - 2;
+    end_sha = stored_sha - 4;
     while (p < end_sha) {
         blksz = SHA256_BLOCK_SIZE;
         if (end_sha - p < blksz)
@@ -248,7 +282,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
-    uint8_t stored_sha_len;
+    uint16_t stored_sha_len;
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
     if (stored_sha_len != SHA256_DIGEST_SIZE)
         return -1;
@@ -263,12 +297,12 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
     uint8_t *stored_signature;
-    uint8_t stored_signature_size;
+    uint16_t stored_signature_size;
     uint8_t *pubkey_hint;
-    uint8_t pubkey_hint_size;
+    uint16_t pubkey_hint_size;
     uint8_t *image_type_buf;
     uint16_t image_type;
-    uint8_t image_type_size;
+    uint16_t image_type_size;
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);
     if (stored_signature_size != IMAGE_SIGNATURE_SIZE)
