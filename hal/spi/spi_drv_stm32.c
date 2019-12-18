@@ -60,7 +60,7 @@ static void spi_tpm2_pin_setup(void)
 {
 #ifdef WOLFTPM2_NO_WOLFCRYPT
     uint32_t reg;
-    RCC_GPIO_CLOCK_ER |= SPI_PIO_CS_EN;
+    RCC_GPIO_CLOCK_ER |= SPI_PIO_CS_CEN;
     reg = SPI_PIO_CS_MODE & ~ (0x03 << (SPI_CS_TPM * 2));
     SPI_PIO_CS_MODE = reg | (1 << (SPI_CS_TPM * 2));
     reg = SPI_PIO_CS_PUPD & ~(0x03 <<  (SPI_CS_TPM * 2));
@@ -168,4 +168,3 @@ void spi_release(void)
 	SPI1_CR1 = 0;
     spi_pins_release();
 }
-
