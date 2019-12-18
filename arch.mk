@@ -10,6 +10,9 @@ endif
 # Default flash offset
 ARCH_FLASH_OFFSET=0x0
 
+# Default SPI driver name
+SPI_TARGET=$(TARGET)
+
 ## ARM
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE:=arm-none-eabi-
@@ -32,10 +35,12 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32f7)
     ARCH_FLASH_OFFSET=0x08000000
+    SPI_TARGET=stm32
   endif
 
   ifeq ($(TARGET),stm32h7)
     ARCH_FLASH_OFFSET=0x08000000
+    SPI_TARGET=stm32
   endif
 
   ## Cortex-M CPU
@@ -102,8 +107,12 @@ OBJCOPY:=$(CROSS_COMPILE)objcopy
 SIZE:=$(CROSS_COMPILE)size
 BOOT_IMG?=test-app/image.bin
 
+ifeq ($(TARGET),stm32f4)
+  SPI_TARGET=stm32
+endif
 
 ifeq ($(TARGET),stm32wb)
+  SPI_TARGET=stm32
   ifneq ($(PKA),0)
     ECC_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
     ECC_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \

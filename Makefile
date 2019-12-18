@@ -95,7 +95,7 @@ ifeq ($(SPI_FLASH),1)
    EXT_FLASH=1
    CFLAGS+= -DSPI_FLASH=1
    OBJS+= src/spi_flash.o
-   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(TARGET).o
+   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
 
 ifeq ($(EXT_FLASH),1)
@@ -132,7 +132,7 @@ OBJS += lib/wolfTPM/src/tpm2.o \
 	lib/wolfTPM/src/tpm2_tis.o \
 	lib/wolfTPM/src/tpm2_wrap.o \
     src/ecc256_pub_key.o \
-    hal/spi/spi_drv_$(TARGET).o
+    hal/spi/spi_drv_$(SPI_TARGET).o
     CFLAGS+=-DWOLFTPM_SLB9670 -DWOLFTPM2_NO_WOLFCRYPT -DSIZEOF_LONG=4 -Ilib/wolfTPM \
 			-DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
 			-DWOLFTPM_SMALL_STACK
