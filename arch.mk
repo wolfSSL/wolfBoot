@@ -24,11 +24,11 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),samr21)
     CORTEX_M0=1
   endif
-  
+
   ifeq ($(TARGET),stm32l0)
     CORTEX_M0=1
   endif
-  
+
   ifeq ($(TARGET),stm32g0)
     CORTEX_M0=1
   endif
@@ -73,8 +73,8 @@ ifeq ($(ARCH),RISCV)
   CROSS_COMPILE:=riscv32-unknown-elf-
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
-  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o 
-  
+  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
@@ -82,16 +82,16 @@ ifeq ($(ARCH),RISCV)
   OBJS+=src/boot_riscv.o src/vector_riscv.o
   ARCH_FLASH_OFFSET=0x20010000
 endif
-  
-  
+
+
 ifeq ($(TARGET),kinetis)
   CFLAGS+= -I$(KINETIS_DRIVERS)/drivers -I$(KINETIS_DRIVERS) -DCPU_$(KINETIS_CPU) -I$(KINETIS_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   OBJS+= $(KINETIS_DRIVERS)/drivers/fsl_clock.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_flash.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_cache.o $(KINETIS_DRIVERS)/drivers/fsl_ftfx_controller.o
   ## The following lines can be used to enable HW acceleration
   ifeq ($(KINETIS_CPU),MK82FN256VLL15)
     ifeq ($(PKA),1)
-      ECC_EXTRA_CFLAGS+=-DFREESCALE_LTC_ECC -DFREESCALE_USE_LTC -DFREESCALE_LTC_TFM
-      ECC_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o $(KINETIS_DRIVERS)/drivers/fsl_ltc.o
+      PKA_EXTRA_CFLAGS+=-DFREESCALE_LTC_ECC -DFREESCALE_USE_LTC -DFREESCALE_LTC_TFM
+      PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o $(KINETIS_DRIVERS)/drivers/fsl_ltc.o
     endif
   endif
 endif
@@ -114,8 +114,8 @@ endif
 ifeq ($(TARGET),stm32wb)
   SPI_TARGET=stm32
   ifneq ($(PKA),0)
-    ECC_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
-    ECC_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
+    PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
+    PKA_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
         -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
         -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
         -I$(STM32CUBE)/Drivers/CMSIS/Include \

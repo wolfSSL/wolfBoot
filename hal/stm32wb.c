@@ -32,21 +32,24 @@ PKA_HandleTypeDef hpka = { };
 #define DMB() __asm__ volatile ("dmb")
 
 /*** RCC ***/
-
+#ifndef RCC_BASE
 #define RCC_BASE (0x58000000)
+#endif
 #define RCC_CR      (*(volatile uint32_t *)(RCC_BASE + 0x00))
 #define RCC_CFGR    (*(volatile uint32_t *)(RCC_BASE + 0x08))
 #define RCC_PLLCFGR (*(volatile uint32_t *)(RCC_BASE + 0x0C))
 
+#ifndef WOLFSSL_STM32_PKA
 #define RCC_CR_PLLRDY                (1 << 25)
 #define RCC_CR_PLLON                 (1 << 24)
-#define RCC_CR_MSIRDY                 (1 << 1)
-#define RCC_CR_MSION                  (1 << 0)
-#define RCC_CR_HSIRDY               (1 << 10)
-#define RCC_CR_HSION                (1 << 8)
-#define RCC_CR_MSIRANGE_SHIFT          4
-#define RCC_CR_MSIRANGE_MASK           (0x0F << 4)
-#define RCC_CR_MSIRANGE_6              (0x06 << 4)
+#define RCC_CR_MSIRDY                (1 << 1)
+#define RCC_CR_MSION                 (1 << 0)
+#define RCC_CR_HSIRDY                (1 << 10)
+#define RCC_CR_HSION                 (1 << 8)
+#define RCC_CR_MSIRANGE_SHIFT        4
+#define RCC_CR_MSIRANGE_6            (0x06 << 4)
+#define RCC_CR_MSIRANGE_Msk          (0x0F << 4)
+#endif /* !WOLFSSL_STM32_PKA */
 
 #define RCC_CFGR_SW_MSI               0x0
 #define RCC_CFGR_SW_PLL               0x3
@@ -78,9 +81,10 @@ PKA_HandleTypeDef hpka = { };
 
 #define RCC_PRESCALER_DIV_NONE 0
 
-
 /*** FLASH ***/
+#ifndef FLASH_BASE
 #define FLASH_BASE          (0x58004000)
+#endif
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_KEY           (*(volatile uint32_t *)(FLASH_BASE + 0x08))
 #define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x10))
@@ -92,6 +96,7 @@ PKA_HandleTypeDef hpka = { };
 /* Register values */
 #define FLASH_ACR_LATENCY_MASK                (0x07)
 
+#ifndef WOLFSSL_STM32_PKA
 #define FLASH_SR_BSY                         (1 << 16)
 #define FLASH_SR_SIZERR                       (1 << 6)
 #define FLASH_SR_PGAERR                       (1 << 5)
@@ -104,6 +109,8 @@ PKA_HandleTypeDef hpka = { };
 
 #define FLASH_CR_PER                          (1 << 1)
 #define FLASH_CR_PG                           (1 << 0)
+
+#endif /* !WOLFSSL_STM32_PKA */
 
 #define FLASH_CR_PNB_SHIFT                     3
 #define FLASH_CR_PNB_MASK                      0x3f
@@ -238,7 +245,7 @@ static void clock_pll_on(void)
     flash_set_waitstates(flash_waitstates);
 
     /* Configure + enable internal high-speed oscillator. */
-    RCC_CR = (RCC_CR & (~RCC_CR_MSIRANGE_MASK)) | RCC_CR_MSIRANGE_6;
+    RCC_CR = (RCC_CR & (~RCC_CR_MSIRANGE_Msk)) | RCC_CR_MSIRANGE_6;
     RCC_CR |= RCC_CR_MSION;
     DMB();
     while ((RCC_CR & RCC_CR_MSIRDY) == 0)
