@@ -88,6 +88,7 @@ Compile with:
 
 `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
 
+
 ## STM32WB55
 
 Example partitioning on Nucleo-68 board:
@@ -114,6 +115,30 @@ multiple writes after each erase operation.
 Compile with:
 
 `make TARGET=stm32wb NVM_FLASH_WRITEONCE=1`
+
+### Loading the firmware
+
+`openocd --file ./config/openocd/openocd_stm32wbx.cfg`
+
+```
+telnet localhost 4444
+flash write_image unlock erase wolfboot.bin 0x08000000
+flash verify_bank 0 wolfboot.bin
+flash write_image unlock erase test-app/image_v1_signed.bin 0x080008000
+flash verify_bank 0 test-app/image_v1_signed.bin 0x080008000
+reset
+```
+
+### Debugging
+
+Use `make DEBUG=1` and reload firmware.
+
+```
+arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
+(gdb) add-symbol-file test-app/image.elf 0x8000
+(gdb) add-symbol-file wolfboot.elf 0x0
+```
+
 
 ## SiFive HiFive1 RISC-V
 
@@ -367,9 +392,8 @@ telnet localhost 4444
 flash write_image unlock erase wolfboot.bin 0x08000000
 flash verify_bank 0 wolfboot.bin
 flash write_image unlock erase test-app/image_v1_signed.bin 0x08020000
-flash verify_bank 0 test-app/image_v1_signed.bin 0x20000
+flash verify_bank 0 test-app/image_v1_signed.bin 0x08020000
 reset
-resume 0x08000000
 ```
 
 To sign the same application image as new version (2), use the python script `sign.py` provided:

@@ -44,9 +44,10 @@
 #define GPIOC_BASE (0x48000800)
 #define GPIOD_BASE (0x48000C00)
 
+/* STM32WB55 NUCLEO: CN9: D13=SCK, D12=MISO, D11=MOSI, FLASHCS=D10, TPMCS=D9 */
 #define SPI_CS_GPIO GPIOA_BASE
 #define SPI_CS_FLASH 4 /* Flash CS connected to GPIOA4 */
-#define SPI_CS_TPM   0 /* TPM CS connected to GPIOA0 */
+#define SPI_CS_TPM   9 /* TPM CS connected to GPIOA9 */
 #define SPI1_PIN_AF    5 /* Alternate function for SPI pins */
 #define SPI1_CLOCK_PIN 5 /* SPI_SCK: PA5  */
 #define SPI1_MISO_PIN  6 /* SPI_MISO PA6  */

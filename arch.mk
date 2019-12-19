@@ -43,6 +43,11 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),stm32wb)
+    ARCH_FLASH_OFFSET=0x08000000
+    SPI_TARGET=stm32
+  endif
+
   ## Cortex-M CPU
   ifeq ($(CORTEX_M0),1)
     CFLAGS+=-mcpu=cortex-m0
