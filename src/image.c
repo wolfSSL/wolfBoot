@@ -346,7 +346,7 @@ static int image_hash(struct wolfBoot_image *img, uint8_t *hashBuf)
 {
     const char gUsageAuth[]="wolfBoot TPM Usage Auth";
     uint8_t *stored_sha, *end_sha;
-    uint8_t stored_sha_len;
+    uint16_t stored_sha_len;
     uint8_t *p;
     int blksz;
     uint32_t position = 0;
@@ -364,7 +364,7 @@ static int image_hash(struct wolfBoot_image *img, uint8_t *hashBuf)
         (const byte*)gUsageAuth, sizeof(gUsageAuth)-1);
     if (rc != 0)
         return -1;
-    end_sha = stored_sha - 2;
+    end_sha = stored_sha - 4;
     while (p < end_sha) {
         blksz = SHA256_BLOCK_SIZE;
         if (end_sha - p < blksz)

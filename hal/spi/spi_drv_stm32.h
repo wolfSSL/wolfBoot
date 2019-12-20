@@ -23,9 +23,7 @@
 #define GPIOD_BASE (0x40020C00)
 #define GPIOE_BASE (0x40021000)
 #define SPI_GPIO GPIOB_BASE
-#define SPI_CS_GPIO GPIOB_BASE
-#define SPI_PIO_BASE GPIOB_BASE
-#define SPI_CS_PIO_BASE GPIOE_BASE
+#define SPI_CS_GPIO GPIOE_BASE
 #define SPI_CS_FLASH 1 /* Flash CS connected to GPIOE1 */
 #define SPI_CS_TPM   0 /* TPM CS connected to GPIOE0 */
 #define SPI1_PIN_AF    5 /* Alternate function for SPI pins */

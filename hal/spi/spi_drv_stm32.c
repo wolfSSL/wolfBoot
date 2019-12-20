@@ -156,7 +156,7 @@ void spi_init(int polarity, int phase)
         APB2_CLOCK_ER |= SPI1_APB2_CLOCK_ER_VAL;
         spi1_reset();
         SPI1_CR1 = SPI_CR1_MASTER | (5 << 3) | (polarity << 1) | (phase << 0);
-        SPI1_CR2 |= SPI_CR2_SSOE;
+        SPI1_CR2 = SPI_CR2_SSOE | (0x07 << 8);
         SPI1_CR1 |= SPI_CR1_SPI_EN;
     }
 }
