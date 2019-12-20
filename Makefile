@@ -18,6 +18,7 @@ OBJS:= \
 ./src/image.o \
 ./src/libwolfboot.o
 WOLFCRYPT_OBJS:=
+PUBLIC_KEY_OBJS:=
 
 
 ## Architecture/CPU configuration
@@ -29,17 +30,16 @@ ifeq ($(SIGN),ECC256)
   SIGN_OPTIONS=--ecc256
   PRIVATE_KEY=ecc256.der
   WOLFCRYPT_OBJS+= \
-    $(ECC_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/ecc.o \
 	./lib/wolfssl/wolfcrypt/src/memory.o \
 	./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/sha256.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./src/ecc256_pub_key.o \
     ./src/xmalloc_ecc.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER $(ECC_EXTRA_CFLAGS) \
+  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER \
 		  -Wstack-usage=1024
+  PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
 
 ifeq ($(SIGN),ED25519)
@@ -52,8 +52,8 @@ ifeq ($(SIGN),ED25519)
     ./lib/wolfssl/wolfcrypt/src/sha256.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o \
-    ./src/ed25519_pub_key.o
+    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+  PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib -DWOLFSSL_STATIC_MEMORY \
 		  -Wstack-usage=1024
   LDFLAGS+=-nostdlib
@@ -71,8 +71,8 @@ ifeq ($(SIGN),RSA2048)
 	./lib/wolfssl/wolfcrypt/src/sha256.o \
 	./lib/wolfssl/wolfcrypt/src/asn.o \
 	./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./src/rsa2048_pub_key.o \
 	./src/xmalloc_rsa.o
+  PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
 		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=512
 endif
@@ -95,7 +95,7 @@ ifeq ($(SPI_FLASH),1)
    EXT_FLASH=1
    CFLAGS+= -DSPI_FLASH=1
    OBJS+= src/spi_flash.o
-   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(TARGET).o
+   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
 
 ifeq ($(EXT_FLASH),1)
@@ -126,13 +126,19 @@ ifeq ($(VTOR),0)
     CFLAGS+=-DNO_VTOR
 endif
 
+ifeq ($(PKA),1)
+  OBJS += $(PKA_EXTRA_OBJS)
+  CFLAGS+=$(PKA_EXTRA_CFLAGS)
+endif
+
+OBJS+=$(PUBLIC_KEY_OBJS)
+
 ifeq ($(WOLFTPM),1)
 OBJS += lib/wolfTPM/src/tpm2.o \
 	lib/wolfTPM/src/tpm2_packet.o \
 	lib/wolfTPM/src/tpm2_tis.o \
 	lib/wolfTPM/src/tpm2_wrap.o \
-    src/ecc256_pub_key.o \
-    hal/spi/spi_drv_$(TARGET).o
+    hal/spi/spi_drv_$(SPI_TARGET).o
     CFLAGS+=-DWOLFTPM_SLB9670 -DWOLFTPM2_NO_WOLFCRYPT -DSIZEOF_LONG=4 -Ilib/wolfTPM \
 			-DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
 			-DWOLFTPM_SMALL_STACK
@@ -140,6 +146,7 @@ OBJS += lib/wolfTPM/src/tpm2.o \
 else
     OBJS+=$(WOLFCRYPT_OBJS)
 endif
+
 
 ASFLAGS:=$(CFLAGS)
 

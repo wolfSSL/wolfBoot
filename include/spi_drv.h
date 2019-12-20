@@ -30,8 +30,9 @@
 #define SPI_DRV_H_INCLUDED
 
 #include <stdint.h>
-#ifdef PLATFORM_stm32f4
-#include "hal/spi/spi_drv_stm32f4.h"
+
+#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || defined(PLATFORM_stm32wb)
+#include "hal/spi/spi_drv_stm32.h"
 #endif
 
 void spi_init(int polarity, int phase);

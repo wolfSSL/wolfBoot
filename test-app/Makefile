@@ -40,7 +40,7 @@ endif
 
 ifeq ($(SPI_FLASH),1)
   CFLAGS+=-DSPI_FLASH
-  APP_OBJS+=../hal/spi/spi_drv_$(TARGET).o ../src/spi_flash.o
+  APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/spi_flash.o
 endif
 
 ifeq ($(TARGET),kinetis)

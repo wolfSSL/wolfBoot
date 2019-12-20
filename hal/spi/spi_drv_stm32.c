@@ -1,10 +1,10 @@
-/* spi_drv.h
+/* spi_drv_stm32.c
  *
  * Driver for the SPI back-end of the SPI_FLASH module.
  *
  * Example implementation for stm32F4, using SPI1.
  *
- * Pinout: see spi_drv_stm32f4.h
+ * Pinout: see spi_drv_stm32.h
  *
  * Copyright (C) 2019 wolfSSL Inc.
  *
@@ -26,19 +26,19 @@
  */
 #include <stdint.h>
 #include "spi_drv.h"
-#include "spi_drv_stm32f4.h"
+#include "spi_drv_stm32.h"
 
 void spi_cs_off(int pin)
 {
-    GPIOE_BSRR |= (1 << pin);
-    while(!(GPIOE_ODR & (1 << pin)))
+    SPI_PIO_CS_BSRR |= (1 << pin);
+    while(!(SPI_PIO_CS_ODR & (1 << pin)))
         ;
 }
 
 void spi_cs_on(int pin)
 {
-    GPIOE_BSRR |= (1 << (pin + 16));
-    while(GPIOE_ODR & (1 << pin))
+    SPI_PIO_CS_BSRR |= (1 << (pin + 16));
+    while(SPI_PIO_CS_ODR & (1 << pin))
         ;
 }
 
@@ -46,13 +46,13 @@ void spi_cs_on(int pin)
 static void spi_flash_pin_setup(void)
 {
     uint32_t reg;
-    AHB1_CLOCK_ER |= GPIOE_AHB1_CLOCK_ER;
-    reg = GPIOE_MODE & ~ (0x03 << (SPI_CS_FLASH * 2));
-    GPIOE_MODE = reg | (1 << (SPI_CS_FLASH * 2));
-    reg = GPIOE_PUPD & ~(0x03 <<  (SPI_CS_FLASH * 2));
-    GPIOE_PUPD = reg | (0x01 << (SPI_CS_FLASH * 2));
-    reg = GPIOE_OSPD & ~(0x03 << (SPI_CS_FLASH * 2));
-    GPIOE_OSPD |= (0x03 << (SPI_CS_FLASH * 2));
+    RCC_GPIO_CLOCK_ER |= SPI_PIO_CS_CEN;
+    reg = SPI_PIO_CS_MODE & ~ (0x03 << (SPI_CS_FLASH * 2));
+    SPI_PIO_CS_MODE = reg | (1 << (SPI_CS_FLASH * 2));
+    reg = SPI_PIO_CS_PUPD & ~(0x03 <<  (SPI_CS_FLASH * 2));
+    SPI_PIO_CS_PUPD = reg | (0x01 << (SPI_CS_FLASH * 2));
+    reg = SPI_PIO_CS_OSPD & ~(0x03 << (SPI_CS_FLASH * 2));
+    SPI_PIO_CS_OSPD |= (0x03 << (SPI_CS_FLASH * 2));
     spi_cs_off(SPI_CS_FLASH);
 }
 
@@ -60,13 +60,13 @@ static void spi_tpm2_pin_setup(void)
 {
 #ifdef WOLFTPM2_NO_WOLFCRYPT
     uint32_t reg;
-    AHB1_CLOCK_ER |= GPIOE_AHB1_CLOCK_ER;
-    reg = GPIOE_MODE & ~ (0x03 << (SPI_CS_TPM * 2));
-    GPIOE_MODE = reg | (1 << (SPI_CS_TPM * 2));
-    reg = GPIOE_PUPD & ~(0x03 <<  (SPI_CS_TPM * 2));
-    GPIOE_PUPD = reg | (0x01 << (SPI_CS_TPM * 2));
-    reg = GPIOE_OSPD & ~(0x03 << (SPI_CS_TPM * 2));
-    GPIOE_OSPD |= (0x03 << (SPI_CS_TPM * 2));
+    RCC_GPIO_CLOCK_ER |= SPI_PIO_CS_CEN;
+    reg = SPI_PIO_CS_MODE & ~ (0x03 << (SPI_CS_TPM * 2));
+    SPI_PIO_CS_MODE = reg | (1 << (SPI_CS_TPM * 2));
+    reg = SPI_PIO_CS_PUPD & ~(0x03 <<  (SPI_CS_TPM * 2));
+    SPI_PIO_CS_PUPD = reg | (0x01 << (SPI_CS_TPM * 2));
+    reg = SPI_PIO_CS_OSPD & ~(0x03 << (SPI_CS_TPM * 2));
+    SPI_PIO_CS_OSPD |= (0x03 << (SPI_CS_TPM * 2));
     spi_cs_off(SPI_CS_TPM);
 #endif
 }
@@ -74,48 +74,46 @@ static void spi_tpm2_pin_setup(void)
 static void spi1_pins_setup(void)
 {
     uint32_t reg;
-    AHB1_CLOCK_ER |= GPIOB_AHB1_CLOCK_ER;
+    RCC_GPIO_CLOCK_ER |= SPI_PIO_CEN;
     /* Set mode = AF */
-    reg = GPIOB_MODE & ~ (0x03 << (SPI1_CLOCK_PIN * 2));
-    GPIOB_MODE = reg | (2 << (SPI1_CLOCK_PIN * 2));
-    reg = GPIOB_MODE & ~ (0x03 << (SPI1_MOSI_PIN * 2));
-    GPIOB_MODE = reg | (2 << (SPI1_MOSI_PIN * 2));
-    reg = GPIOB_MODE & ~ (0x03 << (SPI1_MISO_PIN * 2));
-    GPIOB_MODE = reg | (2 << (SPI1_MISO_PIN * 2));
+    reg = SPI_PIO_MODE & ~ (0x03 << (SPI1_CLOCK_PIN * 2));
+    SPI_PIO_MODE = reg | (2 << (SPI1_CLOCK_PIN * 2));
+    reg = SPI_PIO_MODE & ~ (0x03 << (SPI1_MOSI_PIN * 2));
+    SPI_PIO_MODE = reg | (2 << (SPI1_MOSI_PIN * 2));
+    reg = SPI_PIO_MODE & ~ (0x03 << (SPI1_MISO_PIN * 2));
+    SPI_PIO_MODE = reg | (2 << (SPI1_MISO_PIN * 2));
 
     /* Alternate function: use low pins (5,6,7) */
-    reg = GPIOB_AFL & ~(0xf << ((SPI1_CLOCK_PIN) * 4));
-    GPIOB_AFL = reg | (SPI1_PIN_AF << ((SPI1_CLOCK_PIN) * 4));
-    reg = GPIOB_AFL & ~(0xf << ((SPI1_MOSI_PIN) * 4));
-    GPIOB_AFL = reg | (SPI1_PIN_AF << ((SPI1_MOSI_PIN) * 4));
-    reg = GPIOB_AFL & ~(0xf << ((SPI1_MISO_PIN) * 4));
-    GPIOB_AFL = reg | (SPI1_PIN_AF << ((SPI1_MISO_PIN) * 4));
+    reg = SPI_PIO_AFL & ~(0xf << ((SPI1_CLOCK_PIN) * 4));
+    SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_CLOCK_PIN) * 4));
+    reg = SPI_PIO_AFL & ~(0xf << ((SPI1_MOSI_PIN) * 4));
+    SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_MOSI_PIN) * 4));
+    reg = SPI_PIO_AFL & ~(0xf << ((SPI1_MISO_PIN) * 4));
+    SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_MISO_PIN) * 4));
 }
 
 static void spi_pins_release(void)
 {
     uint32_t reg;
     /* Set mode = 0 */
-    GPIOB_MODE &= ~ (0x03 << (SPI1_CLOCK_PIN * 2));
-    GPIOB_MODE &= ~ (0x03 << (SPI1_MOSI_PIN * 2));
-    GPIOB_MODE &= ~ (0x03 << (SPI1_MISO_PIN * 2));
+    SPI_PIO_MODE &= ~ (0x03 << (SPI1_CLOCK_PIN * 2));
+    SPI_PIO_MODE &= ~ (0x03 << (SPI1_MOSI_PIN * 2));
+    SPI_PIO_MODE &= ~ (0x03 << (SPI1_MISO_PIN * 2));
 
     /* Alternate function clear */
-    GPIOB_AFL &= ~(0xf << ((SPI1_CLOCK_PIN) * 4));
-    GPIOB_AFL &= ~(0xf << ((SPI1_MOSI_PIN) * 4));
-    GPIOB_AFL &= ~(0xf << ((SPI1_MISO_PIN) * 4));
+    SPI_PIO_AFL &= ~(0xf << ((SPI1_CLOCK_PIN) * 4));
+    SPI_PIO_AFL &= ~(0xf << ((SPI1_MOSI_PIN) * 4));
+    SPI_PIO_AFL &= ~(0xf << ((SPI1_MISO_PIN) * 4));
 
     /* Floating */
-    GPIOB_PUPD &= ~ (0x03 << (SPI1_CLOCK_PIN * 2));
-    GPIOB_PUPD &= ~ (0x03 << (SPI1_MOSI_PIN * 2));
-    GPIOB_PUPD &= ~ (0x03 << (SPI1_MISO_PIN * 2));
+    SPI_PIO_PUPD &= ~ (0x03 << (SPI1_CLOCK_PIN * 2));
+    SPI_PIO_PUPD &= ~ (0x03 << (SPI1_MOSI_PIN * 2));
+    SPI_PIO_PUPD &= ~ (0x03 << (SPI1_MISO_PIN * 2));
 
     /* Release CS */
-    GPIOE_MODE &= ~ (0x03 << (SPI_CS_FLASH * 2));
-    GPIOE_PUPD &= ~ (0x03 <<  (SPI_CS_TPM * 2));
+    SPI_PIO_CS_MODE &= ~ (0x03 << (SPI_CS_FLASH * 2));
+    SPI_PIO_CS_PUPD &= ~ (0x03 <<  (SPI_CS_TPM * 2));
 
-    /* Disable GPIOB+GPIOE clock */
-    AHB1_CLOCK_ER &= ~(GPIOB_AHB1_CLOCK_ER | GPIOE_AHB1_CLOCK_ER);
 }
 
 static void spi1_reset(void)
@@ -170,4 +168,3 @@ void spi_release(void)
 	SPI1_CR1 = 0;
     spi_pins_release();
 }
-
