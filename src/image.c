@@ -211,7 +211,7 @@ static int image_hash(struct wolfBoot_image *img, uint8_t *hash)
     if (stored_sha_len != SHA256_DIGEST_SIZE)
         return -1;
     wc_InitSha256(&sha256_ctx);
-    end_sha = stored_sha - 4;
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
     while (p < end_sha) {
         blksz = SHA256_BLOCK_SIZE;
         if (end_sha - p < blksz)
@@ -364,7 +364,7 @@ static int image_hash(struct wolfBoot_image *img, uint8_t *hashBuf)
         (const byte*)gUsageAuth, sizeof(gUsageAuth)-1);
     if (rc != 0)
         return -1;
-    end_sha = stored_sha - 4;
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
     while (p < end_sha) {
         blksz = SHA256_BLOCK_SIZE;
         if (end_sha - p < blksz)

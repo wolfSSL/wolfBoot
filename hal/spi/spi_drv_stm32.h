@@ -1,3 +1,20 @@
+/* spi_drv_stm32.h
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
 #ifndef SPI_DRV_STM32_H_INCLUDED
 #define SPI_DRV_STM32_H_INCLUDED
 #include <stdint.h>
@@ -13,16 +30,15 @@
 #define CEN_GPIOE (1 << 4)
 
 #ifdef PLATFORM_stm32f4
-#define APB2_CLOCK_ER           (*(volatile uint32_t *)(0x40023844))
-#define APB2_CLOCK_RST          (*(volatile uint32_t *)(0x40023824))
-#define CLOCK_SPEED (168000000)
+#define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x40023844))
+#define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x40023824))
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
 #define GPIOA_BASE (0x40020000)
 #define GPIOB_BASE (0x40020400)
 #define GPIOC_BASE (0x40020800)
 #define GPIOD_BASE (0x40020C00)
 #define GPIOE_BASE (0x40021000)
-#define SPI_GPIO GPIOB_BASE
+#define SPI_GPIO    GPIOB_BASE
 #define SPI_CS_GPIO GPIOE_BASE
 #define SPI_CS_FLASH 1 /* Flash CS connected to GPIOE1 */
 #define SPI_CS_TPM   0 /* TPM CS connected to GPIOE0 */
@@ -33,9 +49,8 @@
 #endif
 
 #ifdef PLATFORM_stm32wb
-#define APB2_CLOCK_ER           (*(volatile uint32_t *)(0x58000060))
-#define APB2_CLOCK_RST          (*(volatile uint32_t *)(0x58000040))
-#define SPI_GPIO GPIOA_BASE
+#define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x58000060))
+#define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x58000040))
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(0x5800004C))
 #define GPIOA_BASE (0x48000000)
 #define GPIOB_BASE (0x48000400)
@@ -43,6 +58,7 @@
 #define GPIOD_BASE (0x48000C00)
 
 /* STM32WB55 NUCLEO: CN9: D13=SCK, D12=MISO, D11=MOSI, FLASHCS=D10, TPMCS=D9 */
+#define SPI_GPIO    GPIOA_BASE
 #define SPI_CS_GPIO GPIOA_BASE
 #define SPI_CS_FLASH 4 /* Flash CS connected to GPIOA4 */
 #define SPI_CS_TPM   9 /* TPM CS connected to GPIOA9 */
@@ -52,7 +68,7 @@
 #define SPI1_MOSI_PIN  7 /* SPI_MOSI PA7  */
 #endif
 
-#define SPI_PIO_BASE SPI_GPIO
+#define SPI_PIO_BASE    SPI_GPIO
 #define SPI_CS_PIO_BASE SPI_CS_GPIO
 
 #if (SPI_GPIO == GPIOA_BASE)

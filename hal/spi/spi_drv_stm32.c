@@ -1,4 +1,4 @@
-/* spi_drv.h
+/* spi_drv_stm32.c
  *
  * Driver for the SPI back-end of the SPI_FLASH module.
  *
