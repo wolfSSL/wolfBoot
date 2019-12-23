@@ -87,7 +87,7 @@ int main(int argc, char** argv)
     tty.c_cc[VTIME] = 5;
     tcsetattr(serialfd, TCSANOW, &tty);
 
-    alarm(30);
+    alarm(60);
 
     while (i >= 0) {
         char c;
