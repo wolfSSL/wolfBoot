@@ -112,7 +112,7 @@ static void spi_pins_release(void)
 
     /* Release CS */
     SPI_PIO_CS_MODE &= ~ (0x03 << (SPI_CS_FLASH * 2));
-    SPI_PIO_CS_PUPD &= ~ (0x03 <<  (SPI_CS_TPM * 2));
+    SPI_PIO_CS_PUPD &= ~ (0x03 <<  (SPI_CS_FLASH * 2));
 
 }
 
