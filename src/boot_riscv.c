@@ -1,6 +1,6 @@
 /* boot_riscv.c
  *
- * Copyright (C) 2019 wolfSSL Inc.
+ * Copyright (C) 2020 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
