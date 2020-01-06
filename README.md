@@ -158,3 +158,12 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
  * Introduced support for hardware-assisted signature verification, using public-key hardware accelerators
     * Added support for STM32 PKA (e.g. STM32WB55)
     * Added support for Kinetis/Freescale PKHA (e.g. Kinetis K82F)
+
+### V1.4 (2020-01-06)
+ * TPM2.0 support
+   * Integration with wolfTPM
+   * Extended STM32 SPI driver to support dual TPM/FLASH communication
+   * Tested on STM32 with Infineon 9670
+ * RSA 2048 bit digital signature verification
+ * Hardware support
+   * New HAL: STM32H7
