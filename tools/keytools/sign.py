@@ -30,6 +30,7 @@ HDR_END         = 0x00
 HDR_VERSION     = 0x01
 HDR_TIMESTAMP   = 0x02
 HDR_SHA256      = 0x03
+HDR_SHA3_384    = 0x13
 HDR_IMG_TYPE    = 0x04
 HDR_PUBKEY      = 0x10
 HDR_SIGNATURE   = 0x20
@@ -39,8 +40,8 @@ HDR_PADDING     = 0xFF
 HDR_VERSION_LEN     = 4
 HDR_TIMESTAMP_LEN   = 8
 HDR_SHA256_LEN      = 32
+HDR_SHA3_384_LEN    = 48
 HDR_IMG_TYPE_LEN    = 2
-HDR_PUBKEY_LEN      = 32
 HDR_SIGNATURE_LEN   = 64
 
 HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
@@ -58,9 +59,10 @@ self_update=False
 
 argc = len(sys.argv)
 argv = sys.argv
+hash_algo='sha256'
 
 if (argc < 4) or (argc > 6):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
     sys.exit(1)
 for i in range(1, len(argv)):
     if (argv[i] == '--ed25519'):
@@ -71,6 +73,10 @@ for i in range(1, len(argv)):
         sign='rsa2048'
     elif (argv[i] == '--rsa4096'):
         sign='rsa4096'
+    elif (argv[i] == '--sha256'):
+        hash_algo='sha256'
+    elif (argv[i] == '--sha3'):
+        hash_algo='sha3'
     elif (argv[i] == '--wolfboot-update'):
         self_update = True
     else:
@@ -188,33 +194,66 @@ if (not self_update):
 
 header += struct.pack('<H', img_type)
 
-sha = hashes.Sha256.new()
-# Sha calculation
-sha.update(header)
-img_bin = open(image_file, 'rb')
-while True:
-    buf = img_bin.read(32)
-    if (len(buf) == 0):
-        img_bin.close()
-        break
-    sha.update(buf)
-digest = sha.digest()
+print("Calculating %s digest..." % hash_algo)
 
-# Add SHA to the header
-header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
-header += digest
-#print("sha:")
-#print([hex(j) for j in digest])
+if hash_algo == 'sha256':
+    sha = hashes.Sha256.new()
 
-# pubkey SHA calculation
-#print([hex(j) for j in pubkey])
-#print(len(pubkey))
-keysha = hashes.Sha256.new()
-keysha.update(pubkey)
-key_digest = keysha.digest()
-header += struct.pack('<HH', HDR_PUBKEY, HDR_PUBKEY_LEN)
-header += key_digest
-#print([hex(j) for j in key_digest])
+    # Sha calculation
+    sha.update(header)
+    img_bin = open(image_file, 'rb')
+    while True:
+        buf = img_bin.read(32)
+        if (len(buf) == 0):
+            img_bin.close()
+            break
+        sha.update(buf)
+    digest = sha.digest()
+
+    # Add SHA to the header
+    header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
+    header += digest
+    #print("sha:")
+    #print([hex(j) for j in digest])
+
+    # pubkey SHA calculation
+    #print([hex(j) for j in pubkey])
+    #print(len(pubkey))
+    keysha = hashes.Sha256.new()
+    keysha.update(pubkey)
+    key_digest = keysha.digest()
+    header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
+    header += key_digest
+    #print([hex(j) for j in key_digest])
+elif hash_algo == 'sha3':
+    sha = hashes.Sha3.new()
+    # Sha calculation
+    sha.update(header)
+    img_bin = open(image_file, 'rb')
+    while True:
+        buf = img_bin.read(32)
+        if (len(buf) == 0):
+            img_bin.close()
+            break
+        sha.update(buf)
+    digest = sha.digest()
+
+    # Add SHA to the header
+    header += struct.pack('<HH', HDR_SHA3_384, HDR_SHA3_384_LEN)
+    header += digest
+    #print("sha:")
+    #print([hex(j) for j in digest])
+
+    # pubkey SHA calculation
+    #print([hex(j) for j in pubkey])
+    #print(len(pubkey))
+    keysha = hashes.Sha3.new()
+    keysha.update(pubkey)
+    key_digest = keysha.digest()
+    header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA3_384_LEN)
+    header += key_digest
+    #print([hex(j) for j in key_digest])
+
 
 # Sign the digest
 print("Signing the firmware...")

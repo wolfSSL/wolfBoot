@@ -27,17 +27,17 @@ endif
 ## Architecture/CPU configuration
 include arch.mk
 
+
 ## DSA Settings
 ifeq ($(SIGN),ECC256)
-  KEYGEN_OPTIONS=--ecc256
-  SIGN_OPTIONS=--ecc256
+  KEYGEN_OPTIONS+=--ecc256
+  SIGN_OPTIONS+=--ecc256
   PRIVATE_KEY=ecc256.der
   WOLFCRYPT_OBJS+= \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/ecc.o \
 	./lib/wolfssl/wolfcrypt/src/memory.o \
 	./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/sha256.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./src/xmalloc_ecc.o
   CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER \
@@ -46,13 +46,12 @@ ifeq ($(SIGN),ECC256)
 endif
 
 ifeq ($(SIGN),ED25519)
-  KEYGEN_OPTIONS=--ed25519
-  SIGN_OPTIONS=--ed25519
+  KEYGEN_OPTIONS+=--ed25519
+  SIGN_OPTIONS+=--ed25519
   PRIVATE_KEY=ed25519.der
   WOLFCRYPT_OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
 	./lib/wolfssl/wolfcrypt/src/ed25519.o \
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
-    ./lib/wolfssl/wolfcrypt/src/sha256.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
@@ -63,15 +62,14 @@ ifeq ($(SIGN),ED25519)
 endif
 
 ifeq ($(SIGN),RSA2048)
-  KEYGEN_OPTIONS=--rsa2048
-  SIGN_OPTIONS=--rsa2048
+  KEYGEN_OPTIONS+=--rsa2048
+  SIGN_OPTIONS+=--rsa2048
   PRIVATE_KEY=rsa2048.der
   IMAGE_HEADER_SIZE=512
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/rsa.o \
-	./lib/wolfssl/wolfcrypt/src/sha256.o \
 	./lib/wolfssl/wolfcrypt/src/asn.o \
 	./lib/wolfssl/wolfcrypt/src/hash.o \
 	./src/xmalloc_rsa.o
@@ -81,15 +79,14 @@ ifeq ($(SIGN),RSA2048)
 endif
 
 ifeq ($(SIGN),RSA4096)
-  KEYGEN_OPTIONS=--rsa4096
-  SIGN_OPTIONS=--rsa4096
+  KEYGEN_OPTIONS+=--rsa4096
+  SIGN_OPTIONS+=--rsa4096
   PRIVATE_KEY=rsa4096.der
   IMAGE_HEADER_SIZE=1024
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
 	./lib/wolfssl/wolfcrypt/src/rsa.o \
-	./lib/wolfssl/wolfcrypt/src/sha256.o \
 	./lib/wolfssl/wolfcrypt/src/asn.o \
 	./lib/wolfssl/wolfcrypt/src/hash.o \
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \

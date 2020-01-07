@@ -13,6 +13,18 @@ ARCH_FLASH_OFFSET=0x0
 # Default SPI driver name
 SPI_TARGET=$(TARGET)
 
+## Hash settings
+ifeq ($(HASH),SHA256)
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
+  CFLAGS+=-DWOLFBOOT_HASH_SHA256
+endif
+
+ifeq ($(HASH),SHA3)
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
+  SIGN_OPTIONS+=--sha3
+endif
+
 ## ARM
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE:=arm-none-eabi-
