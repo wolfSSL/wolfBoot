@@ -43,6 +43,12 @@
 #   define KEY_BUFFER  rsa2048_pub_key
 #   define KEY_LEN     rsa2048_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (256)
+#elif defined(WOLFBOOT_SIGN_RSA4096)
+    extern const unsigned char rsa4096_pub_key[];
+    extern unsigned int rsa4096_pub_key_len;
+#   define KEY_BUFFER  rsa4096_pub_key
+#   define KEY_LEN     rsa4096_pub_key_len
+#   define IMAGE_SIGNATURE_SIZE (512)
 #else
 #   error "No public key available for given signing algorithm."
 #endif /* Algorithm selection */

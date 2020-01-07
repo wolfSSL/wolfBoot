@@ -34,6 +34,7 @@
 //#define TFM_TIMING_RESISTANT
 #define SIZEOF_LONG_LONG 8
 
+
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
 #   define HAVE_ED25519
@@ -95,6 +96,16 @@
 #  define WOLFSSL_SP_MATH
 #  define SP_WORD_SIZE 32
 #  define WOLFSSL_SP_NO_3072
+#endif
+
+#ifdef WOLFBOOT_SIGN_RSA4096
+#  define HAVE_RSA
+#  define RSA_LOW_MEM
+#  define WOLFSSL_RSA_VERIFY_INLINE
+#  define FP_MAX_BITS (4096 * 2)
+#  define WC_RSA_BLINDING
+#  define USE_FAST_MATH
+#  define TFM_TIMING_RESISTANT
 #endif
 
 /* Disables - For minimum wolfCrypt build */

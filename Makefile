@@ -20,6 +20,9 @@ OBJS:= \
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 
+ifeq ($(SIGN),RSA4096)
+  SPMATH=0
+endif
 
 ## Architecture/CPU configuration
 include arch.mk
@@ -75,6 +78,25 @@ ifeq ($(SIGN),RSA2048)
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
 		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=512
+endif
+
+ifeq ($(SIGN),RSA4096)
+  KEYGEN_OPTIONS=--rsa4096
+  SIGN_OPTIONS=--rsa4096
+  PRIVATE_KEY=rsa4096.der
+  IMAGE_HEADER_SIZE=1024
+  WOLFCRYPT_OBJS+= \
+    $(RSA_EXTRA_OBJS) \
+    $(MATH_OBJS) \
+	./lib/wolfssl/wolfcrypt/src/rsa.o \
+	./lib/wolfssl/wolfcrypt/src/sha256.o \
+	./lib/wolfssl/wolfcrypt/src/asn.o \
+	./lib/wolfssl/wolfcrypt/src/hash.o \
+	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+	./src/xmalloc_rsa.o
+  PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
+  CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
+		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=1024
 endif
 
 
@@ -201,6 +223,9 @@ ecc256.der:
 rsa2048.der:
 	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
 
+rsa4096.der:
+	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
+
 factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)python3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
@@ -221,6 +246,8 @@ src/ed25519_pub_key.c: ed25519.der
 src/ecc256_pub_key.c: ecc256.der
 
 src/rsa2048_pub_key.c: rsa2048.der
+
+src/rsa4096_pub_key.c: rsa4096.der
 
 keys: $(PRIVATE_KEY)
 

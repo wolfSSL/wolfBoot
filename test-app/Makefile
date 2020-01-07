@@ -8,6 +8,10 @@ ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
 endif
 
+ifeq ($(SIGN),RSA4096)
+  IMAGE_HEADER_SIZE:=1024
+endif
+
 CFLAGS:=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
 APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o

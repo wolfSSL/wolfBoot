@@ -4,7 +4,7 @@
 ifeq ($(SPMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
 else
-  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o
+  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o ./lib/wolfssl/wolfcrypt/src/tfm.o
 endif
 
 # Default flash offset

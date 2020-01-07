@@ -46,6 +46,7 @@ HDR_SIGNATURE_LEN   = 64
 HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
 HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
 HDR_IMG_TYPE_AUTH_RSA2048 = 0x0300
+HDR_IMG_TYPE_AUTH_RSA4096 = 0x0400
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
 HDR_IMG_TYPE_APP          = 0x0001
@@ -59,7 +60,7 @@ argc = len(sys.argv)
 argv = sys.argv
 
 if (argc < 4) or (argc > 6):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 ] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
     sys.exit(1)
 for i in range(1, len(argv)):
     if (argv[i] == '--ed25519'):
@@ -68,6 +69,8 @@ for i in range(1, len(argv)):
         sign='ecc256'
     elif (argv[i] == '--rsa2048'):
         sign='rsa2048'
+    elif (argv[i] == '--rsa4096'):
+        sign='rsa4096'
     elif (argv[i] == '--wolfboot-update'):
         self_update = True
     else:
@@ -114,6 +117,9 @@ elif wolfboot_private_key_len == 96:
     if sign == 'auto':
         sign = 'ecc256'
         print("'ecc256' key autodetected.")
+elif (wolfboot_private_key_len > 512):
+    if (sign == 'auto'):
+        print("'rsa4096' key autodetected.")
 elif (wolfboot_private_key_len > 128):
     if (sign == 'auto'):
         print("'rsa2048' key autodetected.")
@@ -134,8 +140,14 @@ if sign == 'ecc256':
     pubkey = wolfboot_private_key[0:64]
 
 if sign == 'rsa2048':
-    WOLFBOOT_HEADER_SIZE = 512 
+    WOLFBOOT_HEADER_SIZE = 512
     HDR_SIGNATURE_LEN = 256
+    rsa = ciphers.RsaPrivate(wolfboot_private_key)
+    privkey,pubkey = rsa.encode_key()
+
+if sign == 'rsa4096':
+    WOLFBOOT_HEADER_SIZE = 1024
+    HDR_SIGNATURE_LEN = 512
     rsa = ciphers.RsaPrivate(wolfboot_private_key)
     privkey,pubkey = rsa.encode_key()
 
@@ -143,7 +155,7 @@ if sign == 'rsa2048':
 img_size = os.path.getsize(image_file)
 # Magic header (spells 'WOLF')
 header = struct.pack('<L', WOLFBOOT_MAGIC)
-# Image size 
+# Image size
 header += struct.pack('<L', img_size)
 
 # No pad bytes, version is aligned
@@ -168,6 +180,8 @@ if (sign == 'ecc256'):
     img_type = HDR_IMG_TYPE_AUTH_ECC256
 if (sign == 'rsa2048'):
     img_type = HDR_IMG_TYPE_AUTH_RSA2048
+if (sign == 'rsa4096'):
+    img_type = HDR_IMG_TYPE_AUTH_RSA4096
 
 if (not self_update):
     img_type |= HDR_IMG_TYPE_APP
@@ -209,7 +223,7 @@ if (sign == 'ed25519'):
 elif (sign == 'ecc256'):
     r, s = ecc.sign_raw(digest)
     signature = r + s
-elif (sign == 'rsa2048'):
+elif (sign == 'rsa2048') or (sign == 'rsa4096'):
     signature = rsa.sign(digest)
     #plain = rsa.verify(signature)
     #print("plain:%d " % len(plain))
