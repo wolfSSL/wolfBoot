@@ -90,11 +90,17 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 }
 #endif /* WOLFBOOT_SIGN_ECC256 */
 
-#ifdef WOLFBOOT_SIGN_RSA2048
+#if defined(WOLFBOOT_SIGN_RSA2048) || defined (WOLFBOOT_SIGN_RSA4096)
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
-#define RSA_MAX_KEY_SIZE 256
-#define RSA_SIG_SIZE 256
+
+#ifdef WOLFBOOT_SIGN_RSA4096
+#   define RSA_MAX_KEY_SIZE 512
+#   define RSA_SIG_SIZE 512
+#else
+#   define RSA_MAX_KEY_SIZE 256
+#   define RSA_SIG_SIZE 256
+#endif
 
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
