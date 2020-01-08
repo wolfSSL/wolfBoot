@@ -11,6 +11,15 @@ endif
 ifeq ($(SIGN),RSA4096)
   IMAGE_HEADER_SIZE:=1024
 endif
+ifeq ($(HASH),SHA256)
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
+  CFLAGS+=-DWOLFBOOT_HASH_SHA256
+endif
+
+ifeq ($(HASH),SHA3_384)
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
+endif
 
 CFLAGS:=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 

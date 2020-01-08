@@ -18,6 +18,12 @@ ifeq ($(SIGN),RSA2048)
   SIGN_TOOL=tools/keytools/sign.py --rsa2048
 endif
 
+ifeq ($(HASH),SHA256)
+  SIGN_TOOL+= --sha256
+endif
+ifeq ($(HASH),SHA3)
+  SIGN_TOOL+= --sha3
+endif
 
 $(EXPVER):
 	make -C tools/test-expect-version
@@ -124,7 +130,6 @@ test-erase-ext: FORCE
 	flashrom -c $(SPI_CHIP) -p linux_spi:dev=/dev/spidev0.0 -E
 	@make test-spi-off
 	@make test-tpm-off
-
 
 test-factory: factory.bin
 	@make test-reset
@@ -287,6 +292,23 @@ test-63-rollback-TPM: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=ECC256 WOLFTPM=1
 	@make test-tpm-off
 
+test-71-forward-update-no-downgrade-RSA-4096: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=RSA4096
+
+test-73-rollback-RSA-4096: $(EXPVER) FORCE
+	@make test-03-rollback SIGN=RSA4096
+
+test-81-forward-update-no-downgrade-ED25519-SHA3: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=ED25519 HASH=SHA3
+
+test-91-forward-update-no-downgrade-ECC256-SHA3: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=ECC256 HASH=SHA3
+
+test-101-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=RSA2048 HASH=SHA3
+
+test-111-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=RSA4096 HASH=SHA3
 
 test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback \
 	test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI \
@@ -295,4 +317,10 @@ test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow
 	test-51-forward-update-no-downgrade-RSA \
 	test-53-rollback-RSA \
 	test-61-forward-update-no-downgrade-TPM \
-	test-63-rollback-TPM
+	test-63-rollback-TPM \
+	test-71-forward-update-no-downgrade-RSA-4096 \
+	test-73-rollback-RSA-4096 \
+	test-81-forward-update-no-downgrade-ED25519-SHA3 \
+	test-91-forward-update-no-downgrade-ECC256-SHA3 \
+	test-101-forward-update-no-downgrade-RSA2048-SHA3 \
+	test-111-forward-update-no-downgrade-RSA4096-SHA3

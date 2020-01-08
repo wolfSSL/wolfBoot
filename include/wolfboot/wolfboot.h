@@ -44,6 +44,7 @@
 #define HDR_IMG_TYPE    0x04
 #define HDR_PUBKEY      0x10
 #define HDR_SIGNATURE   0x20
+#define HDR_SHA3_384    0x13
 #define HDR_PADDING     0xFF
 
 #define HDR_IMG_TYPE_AUTH_ED25519 0x0100
@@ -85,5 +86,22 @@ uint32_t wolfBoot_get_image_version(uint8_t part);
 uint16_t wolfBoot_get_image_type(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
+
+
+/* Hashing function configuration */
+#define WOLFBOOT_SHA_BLOCK_SIZE (16)
+#if defined(WOLFBOOT_HASH_SHA256)
+#   define WOLFBOOT_SHA_HDR HDR_SHA256
+#   define WOLFBOOT_SHA_DIGEST_SIZE (32)
+#   define image_hash image_sha256
+#   define key_hash key_sha256
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+#   define WOLFBOOT_SHA_HDR HDR_SHA3_384
+#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+#   define image_hash image_sha3_384
+#   define key_hash key_sha3_384
+#else
+#   error "No valid hash algorithm defined!"
+#endif
 
 #endif /* !WOLFBOOT_H */

@@ -108,6 +108,10 @@
 #  define TFM_TIMING_RESISTANT
 #endif
 
+#ifdef WOLFBOOT_HASH_SHA3_384
+# define WOLFSSL_SHA3
+#endif
+
 /* Disables - For minimum wolfCrypt build */
 #define NO_AES
 #define NO_CMAC
