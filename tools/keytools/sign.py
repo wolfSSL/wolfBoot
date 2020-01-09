@@ -61,7 +61,7 @@ argc = len(sys.argv)
 argv = sys.argv
 hash_algo='sha256'
 
-if (argc < 4) or (argc > 6):
+if (argc < 4) or (argc > 7):
     print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
     sys.exit(1)
 for i in range(1, len(argv)):

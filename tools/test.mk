@@ -18,6 +18,10 @@ ifeq ($(SIGN),RSA2048)
   SIGN_TOOL=tools/keytools/sign.py --rsa2048
 endif
 
+ifeq ($(SIGN),RSA4096)
+  SIGN_TOOL=tools/keytools/sign.py --rsa4096
+endif
+
 ifeq ($(HASH),SHA256)
   SIGN_TOOL+= --sha256
 endif
@@ -43,6 +47,9 @@ testbed-off: FORCE
 	@echo "out" >/sys/class/gpio/gpio4/direction
 	@echo "1" >/sys/class/gpio/gpio4/value || true
 	@echo "Testbed off."
+
+test-reset: FORCE
+	@(sleep 1 && make testbed-off && sleep 1 && make testbed-on) &
 
 test-spi-on: FORCE
 	@make testbed-off
@@ -93,7 +100,7 @@ test-self-update: wolfboot.bin test-app/image.bin FORCE
 	@make clean
 	@rm src/*_pub_key.c
 	@make factory.bin RAM_CODE=1 WOLFBOOT_VERSION=$(WOLFBOOT_VERSION) SIGN=$(SIGN)
-	@$(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000)
@@ -107,7 +114,7 @@ test-self-update: wolfboot.bin test-app/image.bin FORCE
 
 test-update-ext: test-app/image.bin FORCE
 	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	@$$(dd if=/dev/zero bs=1M count=1 | tr '\000' '\377' > test-update.rom)
+	@(dd if=/dev/zero bs=1M count=1 | tr '\000' '\377' > test-update.rom)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.rom bs=1 count=524283 conv=notrunc
 	@printf "pBOOT" | dd of=test-update.rom obs=1 seek=524283 count=5 conv=notrunc
 	@make test-spi-on
@@ -139,10 +146,8 @@ test-factory: factory.bin
 		(make test-reset && sleep 1 && st-flash --reset write factory.bin 0x08000000))&
 
 test-resetold: FORCE
-	@$$(sleep 1 && st-info --reset) &
+	@(sleep 1 && st-info --reset) &
 
-test-reset: FORCE
-	@$$(sleep 1 && make testbed-off && sleep 1 && make testbed-on) &
 
 
 
@@ -153,17 +158,17 @@ test-01-forward-update-no-downgrade: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory
 	@echo Expecting version '1'
-	@$$(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=4
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=1
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -172,17 +177,17 @@ test-02-forward-update-allow-downgrade: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory ALLOW_DOWNGRADE=1
 	@echo Expecting version '1'
-	@$$(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=4
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=2
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 2)
+	@(test `$(EXPVER)` -eq 2)
 	@make clean
 	@echo TEST PASSED
 
@@ -191,21 +196,21 @@ test-03-rollback: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory
 	@echo Expecting version '1'
-	@$$(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=4
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=5
 	@echo Expecting version '5'
-	@$$(test `$(EXPVER)` -eq 5)
+	@(test `$(EXPVER)` -eq 5)
 	@echo
 	@echo Resetting to trigger rollback...
 	@make test-reset
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -220,17 +225,17 @@ test-21-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory $(SPI_OPTIONS)
 	@echo Expecting version '1'
-	@$$(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=4 $(SPI_OPTIONS)
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=1 $(SPI_OPTIONS)
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -239,22 +244,22 @@ test-23-rollback-SPI: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory $(SPI_OPTIONS)
 	@echo Expecting version '1'
-	@$$(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=4 $(SPI_OPTIONS)
 	@echo Expecting version '4'
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=5 $(SPI_OPTIONS)
 	@echo Expecting version '5'
-	@$$(test `$(EXPVER)` -eq 5)
+	@(test `$(EXPVER)` -eq 5)
 	@echo
 	@echo Resetting to trigger rollback...
 	@make test-reset
 	@sleep 2
-	@$$(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -264,12 +269,12 @@ test-34-forward-self-update: $(EXPVER) FORCE
 	@make distclean
 	@make test-factory RAM_CODE=1 SIGN=$(SIGN)
 	@echo Expecting version '1'
-	@$$(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER)` -eq 1)
 	@echo
 	@echo Updating keys, firmware, bootloader
 	@make test-self-update WOLFBOOT_VERSION=4 RAM_CODE=1 SIGN=$(SIGN)
 	@sleep 2
-	@$$(test `$(EXPVER)` -eq 2)
+	@(test `$(EXPVER)` -eq 2)
 	@make clean
 	@echo TEST PASSED
 
