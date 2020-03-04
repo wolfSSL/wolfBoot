@@ -26,12 +26,12 @@
 #ifndef H_USER_SETTINGS_
 #define H_USER_SETTINGS_
 
+#include <target.h>
+
 /* System */
 #define WOLFSSL_GENERAL_ALIGNMENT 4
 #define SINGLE_THREADED
-//#define WOLFSSL_SMALL_STACK
 #define WOLFCRYPT_ONLY
-//#define TFM_TIMING_RESISTANT
 #define SIZEOF_LONG_LONG 8
 
 
@@ -101,6 +101,7 @@
 #ifdef WOLFBOOT_SIGN_RSA4096
 #  define HAVE_RSA
 #  define RSA_LOW_MEM
+#  define WOLFSSL_RSA_PUBLIC_ONLY
 #  define WOLFSSL_RSA_VERIFY_INLINE
 #  define FP_MAX_BITS (4096 * 2)
 #  define WC_RSA_BLINDING
@@ -110,13 +111,16 @@
 
 #ifdef WOLFBOOT_HASH_SHA3_384
 # define WOLFSSL_SHA3
+# define NO_SHA256
 #endif
 
 /* Disables - For minimum wolfCrypt build */
 #define NO_AES
 #define NO_CMAC
+#define NO_HMAC
 #define NO_CODING
-#define NO_BIG_INT
+#define WOLFSSL_NO_PEM
+#define NO_ASN_TIME
 #define NO_RC4
 #define NO_SHA
 #define NO_DH
@@ -131,6 +135,7 @@
 #define NO_DES3
 #define NO_PWDBASED
 #define WC_NO_RNG
+#define WC_NO_HASHDRBG
 #define NO_WRITEV
 #define NO_DEV_RANDOM
 #define NO_FILESYSTEM
@@ -138,5 +143,16 @@
 #define NO_OLD_RNGNAME
 #define NO_WOLFSSL_DIR
 #define WOLFSSL_NO_SOCK
+#define WOLFSSL_IGNORE_FILE_WARN
+#define NO_ERROR_STRINGS
+
+#define BENCH_EMBEDDED
+#define NO_CRYPT_TEST
+#define NO_CRYPT_BENCHMARK
+
+#ifdef __QNX__
+#define WOLFSSL_HAVE_MIN
+#define WOLFSSL_HAVE_MAX
+#endif
 
 #endif /* !H_USER_SETTINGS_ */

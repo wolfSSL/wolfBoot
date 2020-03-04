@@ -412,6 +412,22 @@ Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and
 If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
 booting.
 
+### Debuggging
+
+Debugging with OpenOCD:
+
+Use the OpenOCD configuration from the previous section to run OpenOCD.
+
+From another console, connect using gdb, e.g.:
+
+Add wolfboot.elf to the make.
+
+```
+arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
+(gdb) add-symbol-file test-app/image.elf 0x08020000
+(gdb) add-symbol-file wolfboot.elf 0x08000000
+```
+
 
 ## LPC54606
 
@@ -440,9 +456,8 @@ r
 h
 ```
 
-### Debugging
+### Debugging with JLink
 
-Debugging with JLink:
 ```
 JLinkGDBServer -device LPC606J512 -if SWD -speed 4000 -port 3333
 ```
@@ -453,3 +468,87 @@ Then, from another console:
 arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 (gdb) add-symbol-file test-app/image.elf 0x0000a100
 ```
+
+
+## Cortex-A53 / Raspberry PI 3 (experimental)
+
+Tested using `https://github.com/raspberrypi/linux`
+
+### Compiling the kernel
+
+* Get raspberry-pi linux kernel:
+
+```
+git clone https://github.com/raspberrypi/linux linux-rpi -b rpi-4.19.y --depth=1
+```
+
+* Build kernel image:
+
+```
+cd linux-rpi
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcmrpi3_defconfig
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+* Copy Image and .dtb to the wolfboot directory
+
+```
+cp Image arch/arm64/boot/dts/broadcom/bcm2710-rpi-3-b.dtb $wolfboot_dir
+cd $wolfboot_dir
+```
+
+### Testing with qemu-system-aarch64
+
+* Build wolfboot using the example configuration (RSA4096, SHA3)
+
+```
+cp config/examples/raspi3.config .config
+make wolfboot-align.bin
+```
+
+* Sign Image and DTB (Device Tree Blob)
+```
+tools/keytools/sign.py --rsa4096 --sha3 Image rsa4096.der 1
+tools/keytools/sign.py --rsa4096 --sha3 bcm2710-rpi-3-b.dtb rsa4096.der 1
+```
+
+* Compose the image
+
+```
+cat wolfboot-align.bin Image_v1_signed.bin >wolfboot_linux_raspi.bin
+dd if=bcm2710-rpi-3-_v1_signed.bin of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
+```
+
+* Test boot using qemu
+
+```
+qemu-system-aarch64 -M raspi3 -m 512 -serial stdio -kernel wolfboot_linux_raspi.bin -append "terminal=ttyS0 rootwait" -dtb ./bcm2710-rpi-3-b.dtb -cpu cortex-a53
+```
+
+## Xilinx Zynq UltraScale+ (Aarch64)
+
+Build configuration options (``.config`):
+
+```
+TARGET=zynq
+ARCH=AARCH64
+SIGN=RSA4096
+HASH=SHA3
+```
+
+### QNX
+
+```sh
+source qnx700/qnxsdp-env.sh
+cd wolfBoot
+make clean
+make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
+```
+
+#### Debugging
+
+`qemu-system-aarch64 -M raspi3 -kernel /home/dan/src/wolfboot/factory.bin -serial stdio -gdb tcp::3333 -S`
+
+#### Signing
+
+`tools/keytools/sign.py --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin rsa4096.der 1`

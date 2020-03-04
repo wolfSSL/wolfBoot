@@ -35,6 +35,10 @@
 #include "hal/spi/spi_drv_stm32.h"
 #endif
 
+#if defined(PLATFORM_zynq)
+#include "hal/spi/spi_drv_zynq.h"
+#endif
+
 void spi_init(int polarity, int phase);
 void spi_write(const char byte);
 uint8_t spi_read(void);

@@ -62,23 +62,23 @@ key_file=sign+".der"
 print ("Selected cipher:      " + sign)
 print ("Output Private key:   " + key_file)
 print ("Output C file:        " + pubkey_cfile)
+print()
 
 if (sign == "ed25519"):
-    ed = ciphers.Ed25519Private.make_key(32)
-    priv,pub = ed.encode_key()
     if os.path.exists(key_file):
-        choice = input("** Warning: key file already exist! Are you sure you want to "+
-                "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
-        if (choice != "Yes, I am sure!"):
-            print("Operation canceled.")
-            sys.exit(2)
-
-    print()
-    print("Creating file " + key_file)
-    with open(key_file, "wb") as f:
-        f.write(priv)
-        f.write(pub)
-        f.close()
+        print("Loading exiting ED25519 Key")
+        wolfboot_key_buffer = kf.read(64)
+        ed = ciphers.Ed25519Private(key = wolfboot_key_buffer)
+    else:
+        print("Generating new ED25519 Key")
+        ed = ciphers.Ed25519Private.make_key(32)
+    priv,pub = ed.encode_key()
+    if not os.path.exists(key_file):
+        print("Creating file " + key_file)
+        with open(key_file, "wb") as f:
+            f.write(priv)
+            f.write(pub)
+            f.close()
     print("Creating file " + pubkey_cfile)
     with open(pubkey_cfile, "w") as f:
         f.write(Cfile_Banner)
@@ -95,22 +95,23 @@ if (sign == "ed25519"):
         f.close()
 
 if (sign == "ecc256"):
-    ec = ciphers.EccPrivate.make_key(32)
-    qx,qy,d = ec.encode_key_raw()
     if os.path.exists(key_file):
-        choice = input("** Warning: key file already exist! Are you sure you want to "+
-                "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
-        if (choice != "Yes, I am sure!"):
-            print("Operation canceled.")
-            sys.exit(2)
-
-    print()
-    print("Creating file " + key_file)
-    with open(key_file, "wb") as f:
-        f.write(qx)
-        f.write(qy)
-        f.write(d)
-        f.close()
+        print("Loading exiting ECC 256-bit Key")
+        kf = open(key_file, "rb")
+        wolfboot_key_buffer = kf.read(96)
+        ec = ciphers.EccPrivate()
+        ec.decode_key_raw(wolfboot_key_buffer[0:31], wolfboot_key_buffer[32:63], wolfboot_key_buffer[64:])
+    else:
+        print("Generating new ECC 256-bit Key")
+        ec = ciphers.EccPrivate.make_key(32)
+    qx,qy,d = ec.encode_key_raw()
+    if not os.path.exists(key_file):
+        print("Creating file " + key_file)
+        with open(key_file, "wb") as f:
+            f.write(qx)
+            f.write(qy)
+            f.write(d)
+            f.close()
     print("Creating file " + pubkey_cfile)
     with open(pubkey_cfile, "w") as f:
         f.write(Cfile_Banner)
@@ -132,19 +133,19 @@ if (sign == "ecc256"):
         f.close()
 
 if (sign == "rsa2048"):
-    rsa = ciphers.RsaPrivate.make_key(2048)
     if os.path.exists(key_file):
-        choice = input("** Warning: key file already exist! Are you sure you want to "+
-                "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
-        if (choice != "Yes, I am sure!"):
-            print("Operation canceled.")
-            sys.exit(2)
-    priv,pub = rsa.encode_key()
-    print()
-    print("Creating file " + key_file)
-    with open(key_file, "wb") as f:
-        f.write(priv)
-        f.close()
+        print("Loading exiting RSA 2048-bit Key")
+        kf = open(key_file, "rb")
+        wolfboot_key_buffer = kf.read(2048)
+        rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
+    else:
+        print("Generating new RSA 2048-bit Key")
+        rsa = ciphers.RsaPrivate.make_key(2048)
+    if not os.path.exists(key_file):
+        print("Creating file " + key_file)
+        with open(key_file, "wb") as f:
+            f.write(priv)
+            f.close()
     print("Creating file " + pubkey_cfile)
     with open(pubkey_cfile, "w") as f:
         f.write(Cfile_Banner)
@@ -160,19 +161,20 @@ if (sign == "rsa2048"):
         f.close()
 
 if (sign == "rsa4096"):
-    rsa = ciphers.RsaPrivate.make_key(4096)
     if os.path.exists(key_file):
-        choice = input("** Warning: key file already exist! Are you sure you want to "+
-                "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
-        if (choice != "Yes, I am sure!"):
-            print("Operation canceled.")
-            sys.exit(2)
+        print("Loading exiting RSA 4096-bit Key")
+        kf = open(key_file, "rb")
+        wolfboot_key_buffer = kf.read(4096)
+        rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
+    else:
+        print("Generating new RSA 4096-bit Key")
+        rsa = ciphers.RsaPrivate.make_key(4096)
     priv,pub = rsa.encode_key()
-    print()
-    print("Creating file " + key_file)
-    with open(key_file, "wb") as f:
-        f.write(priv)
-        f.close()
+    if not os.path.exists(key_file):
+        print("Creating file " + key_file)
+        with open(key_file, "wb") as f:
+            f.write(priv)
+            f.close()
     print("Creating file " + pubkey_cfile)
     with open(pubkey_cfile, "w") as f:
         f.write(Cfile_Banner)

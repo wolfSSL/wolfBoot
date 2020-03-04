@@ -1,5 +1,7 @@
 ## CPU Architecture selection via $ARCH
 
+UPDATE_OBJS:=./src/update_flash.o
+
 # check for FASTMATH or SP_MATH
 ifeq ($(SPMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
@@ -29,6 +31,13 @@ endif
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
 ## ARM
+ifeq ($(ARCH),AARCH64)
+  ARCH_FLASH_OFFSET=0x80000
+  CROSS_COMPILE:=aarch64-none-elf-
+  CFLAGS+=-DARCH_AARCH64 -march=armv8-a
+  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+endif
+
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE:=arm-none-eabi-
   CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
@@ -148,4 +157,14 @@ ifeq ($(TARGET),stm32wb)
 		-Ihal \
 	    -DSTM32WB55xx
   endif
+endif
+
+
+## Update mechanism
+ifeq ($(ARCH),AARCH64)
+  CFLAGS+=-DMMU
+  UPDATE_OBJS:=src/update_ram.o
+endif
+ifeq ($(DUALBANK_SWAP),1)
+  UPDATE_OBJS:=src/update_flash_hwswap.o
 endif

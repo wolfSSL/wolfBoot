@@ -48,6 +48,7 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
    - Change the entry point of the firmware image to account for bootloader presence
    - Equip the application with the [wolfBoot library](docs/API.md) to interact with the bootloader
    - [Configure and compile](docs/compile.md) a bootable image with a single "make" command
+   - For help signing firmware see [wolfBoot Signing](docs/Signing.md)
 
 ### Examples provided
 
@@ -101,23 +102,19 @@ Traceback (most recent call last):
 AttributeError: 'EccPrivate' object has no attribute 'sign_raw'
 ```
 
-You need to install the latest wolfcrypt-pi here: https://github.com/wolfSSL/wolfcrypt-py
+You need to install the latest wolfcrypt-py here: https://github.com/wolfSSL/wolfcrypt-py
 
 Use `pip3 install wolfcrypt`.
-Make sure the wolfSSL library has been built with:
-```sh
 
-```
-
-To install based on a local wolfSSL installation use:
+Or to install based on a local wolfSSL installation use:
 
 ```sh
-cd youwolfssldir
-./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 CFLAGS="-DWOLFSSL_PUBLIC_MP"
+cd wolfssl
+./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 --enable-des3 CFLAGS="-DFP_MAX_BITS=8192 -DWOLFSSL_PUBLIC_MP"
 make
 sudo make install
 
-cd yourwolfcryptpydir
+cd wolfcrypt-py
 USE_LOCAL_WOLFSSL=/usr/local pip3 install .
 ```
 

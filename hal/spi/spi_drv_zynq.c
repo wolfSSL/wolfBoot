@@ -1,7 +1,4 @@
-/* xmalloc_rsa.c
- *
- * Implementations of minimal malloc/free
- *
+/* spi_drv_zynq.c
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
@@ -20,34 +17,55 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ *
+ * Driver for the SPI back-end of the SPI_FLASH module.
+ *
+ * Example implementation for Zynq, using QSPI.
+ *
+ * Pinout: see spi_drv_zynq.h
  */
 
-#include <stdlib.h>
 #include <stdint.h>
+#include "spi_drv.h"
+#include "spi_drv_zynq.h"
 
-/* Allow one single sp_point to be allocated at one time */
-#define SP_DIGIT_SIZE (1280)
-static uint8_t sp_digit[SP_DIGIT_SIZE];
-static int sp_digit_in_use = 0;
+#ifdef SPI_FLASH
 
-static void* xmalloc_sp_digit(void)
+void spi_cs_off(int pin)
 {
-    if (sp_digit_in_use)
-            return NULL;
-    sp_digit_in_use++;
-    return sp_digit;
+    (void)pin;
+}
+
+void spi_cs_on(int pin)
+{
+    (void)pin;
+}
+
+uint8_t spi_read(void)
+{
+    return 0;
+}
+
+void spi_write(const char byte)
+{
+
 }
 
 
-void* XMALLOC(size_t n, void* heap, int type)
+void spi_init(int polarity, int phase)
 {
-    if (n == SP_DIGIT_SIZE)
-        return xmalloc_sp_digit();
-    return NULL;
+    static int initialized = 0;
+    if (!initialized) {
+        initialized++;
+
+        (void)polarity;
+        (void)phase;
+    }
 }
 
-void XFREE(void *ptr)
+void spi_release(void)
 {
-    if (ptr == sp_digit)
-        sp_digit_in_use = 0;
+
 }
+
+#endif

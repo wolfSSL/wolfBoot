@@ -1,7 +1,6 @@
-/* xmalloc_rsa.c
+/* app_zynq.c
  *
- * Implementations of minimal malloc/free
- *
+ * Test bare-metal boot application
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
@@ -24,30 +23,17 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
-/* Allow one single sp_point to be allocated at one time */
-#define SP_DIGIT_SIZE (1280)
-static uint8_t sp_digit[SP_DIGIT_SIZE];
-static int sp_digit_in_use = 0;
+#include "wolfboot/wolfboot.h"
 
-static void* xmalloc_sp_digit(void)
-{
-    if (sp_digit_in_use)
-            return NULL;
-    sp_digit_in_use++;
-    return sp_digit;
+#ifdef PLATFORM_zynq
+
+volatile uint32_t time_elapsed = 0;
+void main(void) {
+
+    /* Wait for reboot */
+    while(1)
+        ;
 }
-
-
-void* XMALLOC(size_t n, void* heap, int type)
-{
-    if (n == SP_DIGIT_SIZE)
-        return xmalloc_sp_digit();
-    return NULL;
-}
-
-void XFREE(void *ptr)
-{
-    if (ptr == sp_digit)
-        sp_digit_in_use = 0;
-}
+#endif /** PLATFORM_zynq **/

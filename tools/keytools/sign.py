@@ -56,13 +56,20 @@ WOLFBOOT_HEADER_SIZE = 256
 
 sign="auto"
 self_update=False
+sha_only=False
+manual_sign=False
+
 
 argc = len(sys.argv)
 argv = sys.argv
 hash_algo='sha256'
 
-if (argc < 4) or (argc > 7):
+if (argc < 4) or (argc > 8):
     print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
+    print("  - or - ")
+    print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n" % sys.argv[0])
+    print("  - or - ")
+    print("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
     sys.exit(1)
 for i in range(1, len(argv)):
     if (argv[i] == '--ed25519'):
@@ -79,6 +86,11 @@ for i in range(1, len(argv)):
         hash_algo='sha3'
     elif (argv[i] == '--wolfboot-update'):
         self_update = True
+    elif (argv[i] == '--sha-only'):
+        sha_only = True
+    elif (argv[i] == '--manual-sign'):
+        manual_sign = True
+
     else:
         i-=1
         break
@@ -87,46 +99,60 @@ image_file = argv[i+1]
 key_file = argv[i+2]
 fw_version = int(argv[i+3])
 
-if '.' in image_file:
-    tokens = image_file.split('.')
-    output_image_file = image_file.rstrip('.' + tokens[-1])
-    output_image_file += "_v" + str(fw_version) + "_signed.bin"
+if manual_sign:
+    signature_file = argv[i+4]
+
+if not sha_only:
+    if '.' in image_file:
+        tokens = image_file.split('.')
+        output_image_file = image_file.rstrip('.' + tokens[-1])
+        output_image_file += "_v" + str(fw_version) + "_signed.bin"
+    else:
+        output_image_file = image_file + "_v" + str(fw_version) + "_signed.bin"
 else:
-    output_image_file = image_file + "_v" + str(fw_version) + "_signed.bin"
+    if '.' in image_file:
+        tokens = image_file.split('.')
+        output_image_file = image_file.rstrip('.' + tokens[-1])
+        output_image_file += "_v" + str(fw_version) + "_digest.bin"
+    else:
+        output_image_file = image_file + "_v" + str(fw_version) + "_digest.bin"
 
 if (self_update):
     print("Update type:          wolfBoot")
 else:
     print("Update type:          Firmware")
 
-print ("Selected cipher:      " + sign)
-print ("Private key:          " + key_file)
 print ("Input image:          " + image_file)
-print ("Output image:         " + output_image_file)
 
+print ("Selected cipher:      " + sign)
+print ("Public key:           " + key_file)
 
-''' import (decode) private key for signing '''
+if not sha_only:
+    print ("Output image:         " + output_image_file)
+else:
+    print ("Output digest:        " + output_image_file)
+
 kf = open(key_file, "rb")
-wolfboot_private_key = kf.read(4096)
-wolfboot_private_key_len = len(wolfboot_private_key)
-if wolfboot_private_key_len == 64:
+wolfboot_key_buffer = kf.read(4096)
+wolfboot_key_buffer_len = len(wolfboot_key_buffer)
+if wolfboot_key_buffer_len == 64:
     if (sign == 'ecc256'):
         print("Error: key size does not match the cipher selected")
         sys.exit(1)
     if sign == 'auto':
         sign = 'ed25519'
         print("'ed25519' key autodetected.")
-elif wolfboot_private_key_len == 96:
+elif wolfboot_key_buffer_len == 96:
     if (sign == 'ed25519'):
         print("Error: key size does not match the cipher selected")
         sys.exit(1)
     if sign == 'auto':
         sign = 'ecc256'
         print("'ecc256' key autodetected.")
-elif (wolfboot_private_key_len > 512):
+elif (wolfboot_key_buffer_len > 512):
     if (sign == 'auto'):
         print("'rsa4096' key autodetected.")
-elif (wolfboot_private_key_len > 128):
+elif (wolfboot_key_buffer_len > 128):
     if (sign == 'auto'):
         print("'rsa2048' key autodetected.")
     elif (sign != 'rsa2048'):
@@ -136,26 +162,38 @@ else:
     sys.exit(2)
 
 
-if sign == 'ed25519':
-    ed = ciphers.Ed25519Private(key = wolfboot_private_key)
-    privkey, pubkey = ed.encode_key()
+if not sha_only and not manual_sign:
+    ''' import (decode) private key for signing '''
+    if sign == 'ed25519':
+        ed = ciphers.Ed25519Private(key = wolfboot_key_buffer)
+        privkey, pubkey = ed.encode_key()
 
-if sign == 'ecc256':
-    ecc = ciphers.EccPrivate()
-    ecc.decode_key_raw(wolfboot_private_key[0:31], wolfboot_private_key[32:63], wolfboot_private_key[64:])
-    pubkey = wolfboot_private_key[0:64]
+    if sign == 'ecc256':
+        ecc = ciphers.EccPrivate()
+        ecc.decode_key_raw(wolfboot_key_buffer[0:31], wolfboot_key_buffer[32:63], wolfboot_key_buffer[64:])
+        pubkey = wolfboot_key_buffer[0:64]
 
-if sign == 'rsa2048':
-    WOLFBOOT_HEADER_SIZE = 512
-    HDR_SIGNATURE_LEN = 256
-    rsa = ciphers.RsaPrivate(wolfboot_private_key)
-    privkey,pubkey = rsa.encode_key()
+    if sign == 'rsa2048':
+        WOLFBOOT_HEADER_SIZE = 512
+        HDR_SIGNATURE_LEN = 256
+        rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
+        privkey,pubkey = rsa.encode_key()
 
-if sign == 'rsa4096':
-    WOLFBOOT_HEADER_SIZE = 1024
-    HDR_SIGNATURE_LEN = 512
-    rsa = ciphers.RsaPrivate(wolfboot_private_key)
-    privkey,pubkey = rsa.encode_key()
+    if sign == 'rsa4096':
+        WOLFBOOT_HEADER_SIZE = 1024
+        HDR_SIGNATURE_LEN = 512
+        rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
+        privkey,pubkey = rsa.encode_key()
+
+else:
+    if sign == 'rsa2048':
+        WOLFBOOT_HEADER_SIZE = 512
+        HDR_SIGNATURE_LEN = 256
+    if sign == 'rsa4096':
+        WOLFBOOT_HEADER_SIZE = 1024
+        HDR_SIGNATURE_LEN = 512
+
+    pubkey = wolfboot_key_buffer
 
 
 img_size = os.path.getsize(image_file)
@@ -213,25 +251,21 @@ if hash_algo == 'sha256':
     # Add SHA to the header
     header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
     header += digest
-    #print("sha:")
-    #print([hex(j) for j in digest])
 
     # pubkey SHA calculation
-    #print([hex(j) for j in pubkey])
-    #print(len(pubkey))
     keysha = hashes.Sha256.new()
     keysha.update(pubkey)
     key_digest = keysha.digest()
     header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
     header += key_digest
-    #print([hex(j) for j in key_digest])
+    
 elif hash_algo == 'sha3':
     sha = hashes.Sha3.new()
     # Sha calculation
     sha.update(header)
     img_bin = open(image_file, 'rb')
     while True:
-        buf = img_bin.read(32)
+        buf = img_bin.read(128)
         if (len(buf) == 0):
             img_bin.close()
             break
@@ -241,36 +275,57 @@ elif hash_algo == 'sha3':
     # Add SHA to the header
     header += struct.pack('<HH', HDR_SHA3_384, HDR_SHA3_384_LEN)
     header += digest
-    #print("sha:")
-    #print([hex(j) for j in digest])
 
     # pubkey SHA calculation
-    #print([hex(j) for j in pubkey])
-    #print(len(pubkey))
     keysha = hashes.Sha3.new()
     keysha.update(pubkey)
     key_digest = keysha.digest()
     header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA3_384_LEN)
     header += key_digest
-    #print([hex(j) for j in key_digest])
 
+#print("Image Hash %d" % len(digest))
+#print([hex(j) for j in digest])
+
+#print ("Pubkey: %d" % len(pubkey))
+#print([hex(j) for j in pubkey])
+
+#print("Pubkey Hash %d" % len(key_digest))
+#print([hex(j) for j in key_digest])
+
+if sha_only:
+    outfile = open(output_image_file, 'wb')
+    outfile.write(digest)
+    outfile.close()
+    print("Digest image " + output_image_file +" successfully created.")
+    print()
+    sys.exit(0)
 
 # Sign the digest
-print("Signing the firmware...")
-if (sign == 'ed25519'):
-    signature = ed.sign(digest)
-elif (sign == 'ecc256'):
-    r, s = ecc.sign_raw(digest)
-    signature = r + s
-elif (sign == 'rsa2048') or (sign == 'rsa4096'):
-    signature = rsa.sign(digest)
-    #plain = rsa.verify(signature)
-    #print("plain:%d " % len(plain))
-    #print([hex(j) for j in plain])
+if not manual_sign:
+    print("Signing the firmware...")
+    if (sign == 'ed25519'):
+        signature = ed.sign(digest)
+    elif (sign == 'ecc256'):
+        r, s = ecc.sign_raw(digest)
+        signature = r + s
+    elif (sign == 'rsa2048') or (sign == 'rsa4096'):
+        signature = rsa.sign(digest)
+        #plain = rsa.verify(signature)
+        #print("plain:%d " % len(plain))
+        #print([hex(j) for j in plain])
+else:
+    print("Opening signature file %s" % signature_file)
+    signfile = open(signature_file, 'rb')
+    buf = signfile.read(1024)
+    signfile.close()
+    if len(buf) != HDR_SIGNATURE_LEN:
+        print("Wrong signature file size %d, expected %d" % (len(buf), HDR_SIGNATURE_LEN))
+        sys.exit(4)
+    signature = buf
 
 header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
 header += signature
-#print ("len sig: %d\n" % len(signature))
+#print ("Signature %d" % len(signature))
 #print([hex(j) for j in signature])
 print ("Done.")
 

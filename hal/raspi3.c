@@ -1,7 +1,4 @@
-/* xmalloc_rsa.c
- *
- * Implementations of minimal malloc/free
- *
+/* raspi3.c
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
@@ -22,32 +19,56 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
+#include <target.h>
+#include "image.h"
+#ifndef ARCH_AARCH64
+#   error "wolfBoot raspi3 HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
+#endif
 
-/* Allow one single sp_point to be allocated at one time */
-#define SP_DIGIT_SIZE (1280)
-static uint8_t sp_digit[SP_DIGIT_SIZE];
-static int sp_digit_in_use = 0;
 
-static void* xmalloc_sp_digit(void)
+#define CORTEXA53_0_CPU_CLK_FREQ_HZ 1099989014
+#define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
+
+
+/* QSPI functions */
+void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
 {
-    if (sp_digit_in_use)
-            return NULL;
-    sp_digit_in_use++;
-    return sp_digit;
 }
 
 
-void* XMALLOC(size_t n, void* heap, int type)
+void zynq_init(uint32_t cpu_clock)
 {
-    if (n == SP_DIGIT_SIZE)
-        return xmalloc_sp_digit();
-    return NULL;
 }
 
-void XFREE(void *ptr)
+
+
+/* public HAL functions */
+void hal_init(void)
 {
-    if (ptr == sp_digit)
-        sp_digit_in_use = 0;
+}
+
+void hal_prepare_boot(void)
+{
+}
+
+
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    return 0;
+}
+
+void RAMFUNCTION hal_flash_unlock(void)
+{
+}
+
+void RAMFUNCTION hal_flash_lock(void)
+{
+}
+
+
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+{
+    return 0;
 }

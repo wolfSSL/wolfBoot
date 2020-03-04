@@ -73,6 +73,10 @@
 #define PART_UPDATE 1
 #define PART_SWAP   2
 
+#define PART_DTS (0x10)
+#define PART_DTS_BOOT       (PART_DTS | PART_BOOT)
+#define PART_DTS_UPDATE     (PART_DTS | PART_UPDATE)
+
 #define IMG_STATE_NEW 0xFF
 #define IMG_STATE_UPDATING 0x70
 #define IMG_STATE_TESTING 0x10
@@ -87,15 +91,18 @@ uint16_t wolfBoot_get_image_type(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
 
+int wolfBoot_fallback_is_possible(void);
+int wolfBoot_dualboot_candidate(void);
 
 /* Hashing function configuration */
-#define WOLFBOOT_SHA_BLOCK_SIZE (16)
 #if defined(WOLFBOOT_HASH_SHA256)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (16)
 #   define WOLFBOOT_SHA_HDR HDR_SHA256
 #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
 #   define image_hash image_sha256
 #   define key_hash key_sha256
 #elif defined(WOLFBOOT_HASH_SHA3_384)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (128)
 #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
 #   define image_hash image_sha3_384
