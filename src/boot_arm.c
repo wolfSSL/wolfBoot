@@ -37,7 +37,7 @@ extern void main(void);
 
 void isr_reset(void) {
     register unsigned int *src, *dst;
-#ifdef PLATFORM_kinetis
+#if defined(PLATFORM_kinetis)
     /* Immediately disable Watchdog after boot */
     /*  Write Keys to unlock register */
     *((volatile unsigned short *)0x4005200E) = 0xC520;

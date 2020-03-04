@@ -413,18 +413,43 @@ If the accepted candidate image resides on BANK B (like in this case), wolfBoot 
 booting.
 
 
-### Debugging
+## LPC54606
 
-Debugging with OpenOCD:
+### Build Options
 
-Use the OpenOCD configuration from the previous section to run OpenOCD.
+The LPC54xxx build can be obtained by specifying the CPU type and the MCUXpresso SDK path at compile time.
 
-From another console, connect using gdb, e.g.:
-
-Add wolfboot.elf to the make.
+The following configuration has been tested against LPC54606J512BD208:
 
 ```
-arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
-(gdb) add-symbol-file test-app/image.elf 0x08020000
-(gdb) add-symbol-file wolfboot.elf 0x08000000
+make TARGET=lpc SIGN=ECC256 MCUXPRESSO?=/path/to/LPC54606J512/SDK
+    MCUXPRESSO_CPU?=LPC54606J512BD208 \
+    MCUXPRESSO_DRIVERS?=$(MCUXPRESSO)/devices/LPC54606 \
+    MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
+```
+
+### Loading the firmware
+
+Loading with JLink (example: LPC54606J512)
+
+```
+JLinkExe -device LPC606J512 -if SWD -speed 4000
+erase
+loadbin factory.bin 0
+r
+h
+```
+
+### Debugging
+
+Debugging with JLink:
+```
+JLinkGDBServer -device LPC606J512 -if SWD -speed 4000 -port 3333
+```
+
+Then, from another console:
+
+```
+arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
+(gdb) add-symbol-file test-app/image.elf 0x0000a100
 ```
