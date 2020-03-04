@@ -29,8 +29,8 @@
 static int flash_init = 0;
 uint32_t SystemCoreClock;
 
-#ifndef NVM_FLASH_WRITEONCE
-#   error "wolfBoot LPC HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
+#ifdef NVM_FLASH_WRITEONCE
+#   error "wolfBoot LPC HAL: WRITEONCE support detected. Please do not define NVM_FLASH_WRITEONCE on this platform."
 #endif
 
 #define BOARD_BOOTCLOCKPLL180M_CORE_CLOCK 180000000U
