@@ -113,7 +113,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t offset;
     int size;
     while (idx < len) {
-        page_address = (address + idx) / FLASH_PAGE_SIZE;
+        page_address = ((address + idx) / FLASH_PAGE_SIZE) * FLASH_PAGE_SIZE;
         offset = address - page_address;
         size = FLASH_PAGE_SIZE - offset;
         if (size > (len - idx))
