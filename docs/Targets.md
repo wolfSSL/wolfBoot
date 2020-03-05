@@ -412,7 +412,7 @@ Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and
 If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
 booting.
 
-### Debuggging
+### Debugging
 
 Debugging with OpenOCD:
 

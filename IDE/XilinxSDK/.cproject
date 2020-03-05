@@ -26,7 +26,7 @@
 								<option defaultValue="gnu.c.optimization.level.none" id="xilinx.gnu.compiler.option.optimization.level.787097006" name="Optimization Level" superClass="xilinx.gnu.compiler.option.optimization.level" valueType="enumerated"/>
 								<option id="xilinx.gnu.compiler.option.debugging.level.377817671" name="Debug Level" superClass="xilinx.gnu.compiler.option.debugging.level" value="gnu.c.debugging.level.max" valueType="enumerated"/>
 								<option id="xilinx.gnu.compiler.inferred.swplatform.includes.700669541" name="Software Platform Include Path" superClass="xilinx.gnu.compiler.inferred.swplatform.includes" valueType="includePath">
-									<listOptionValue builtIn="false" value="../../fsbl_bsp/psu_cortexa53_0/include"/>
+									<listOptionValue builtIn="false" value="../../standalone_bsp_0/psu_cortexa53_0/include"/>
 								</option>
 								<option id="xilinx.gnu.compiler.inferred.swplatform.flags.1933981667" name="Software Platform Inferred Flags" superClass="xilinx.gnu.compiler.inferred.swplatform.flags" value=" " valueType="string"/>
 								<option id="xilinx.gnu.compiler.dircategory.includes.921420610" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
@@ -52,15 +52,6 @@
 									<listOptionValue builtIn="false" value="WOLFSSL_USER_SETTINGS"/>
 									<listOptionValue builtIn="false" value="PLATFORM_zynq"/>
 									<listOptionValue builtIn="false" value="IMAGE_HEADER_SIZE=1024"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_SECTOR_SIZE=0x20000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_SIZE=0x2A00000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_BOOT_ADDRESS=0x800000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_LOAD_ADDRESS=0x10000000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x03A00000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_SWAP_ADDRESS=0x63E0000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_DTS_BOOT_ADDRESS=0x2800000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_DTS_UPDATE_ADDRESS=0x0"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_LOAD_DTS_ADDRESS=0x0"/>
 								</option>
 								<inputType id="xilinx.gnu.arm.a53.c.compiler.input.431141625" name="C source files" superClass="xilinx.gnu.arm.a53.c.compiler.input"/>
 							</tool>
@@ -75,7 +66,7 @@
 							<tool id="xilinx.gnu.arm.a53.toolchain.archiver.1127163903" name="ARM v8 archiver" superClass="xilinx.gnu.arm.a53.toolchain.archiver"/>
 							<tool id="xilinx.gnu.arm.a53.c.toolchain.linker.debug.237195607" name="ARM v8 gcc linker" superClass="xilinx.gnu.arm.a53.c.toolchain.linker.debug">
 								<option id="xilinx.gnu.linker.inferred.swplatform.lpath.85815925" name="Software Platform Library Path" superClass="xilinx.gnu.linker.inferred.swplatform.lpath" valueType="libPaths">
-									<listOptionValue builtIn="false" value="../../fsbl_bsp/psu_cortexa53_0/lib"/>
+									<listOptionValue builtIn="false" value="../../standalone_bsp_0/psu_cortexa53_0/lib"/>
 								</option>
 								<option id="xilinx.gnu.linker.inferred.swplatform.flags.27496298" name="Software Platform Inferred Flags" superClass="xilinx.gnu.linker.inferred.swplatform.flags" valueType="libs">
 									<listOptionValue builtIn="false" value="-Wl,--start-group,-lxil,-lgcc,-lc,--end-group"/>
@@ -154,15 +145,6 @@
 									<listOptionValue builtIn="false" value="WOLFSSL_USER_SETTINGS"/>
 									<listOptionValue builtIn="false" value="PLATFORM_zynq"/>
 									<listOptionValue builtIn="false" value="IMAGE_HEADER_SIZE=1024"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_SECTOR_SIZE=0x20000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_SIZE=0x2A00000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_BOOT_ADDRESS=0x800000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_LOAD_ADDRESS=0x10000000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x03A00000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_PARTITION_SWAP_ADDRESS=0x63E0000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_DTS_BOOT_ADDRESS=0x2800000"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_DTS_UPDATE_ADDRESS=0x0"/>
-									<listOptionValue builtIn="false" value="WOLFBOOT_LOAD_DTS_ADDRESS=0x0"/>
 								</option>
 								<option id="xilinx.gnu.compiler.dircategory.includes.1946921747" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../standalone_bsp_0/psu_cortexa53_0/include"/>

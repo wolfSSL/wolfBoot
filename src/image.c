@@ -548,3 +548,14 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     img->signature_ok = 1;
     return 0;
 }
+
+/* Peek at image offset and return static pointer */
+/* sz: optional and returns length of peek */
+uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, 
+    uint32_t* sz)
+{
+    uint8_t* p = get_sha_block(img, offset);
+    if (sz)
+        *sz = WOLFBOOT_SHA_BLOCK_SIZE;    
+    return p;
+}

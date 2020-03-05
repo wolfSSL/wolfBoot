@@ -53,13 +53,21 @@ void boot_entry_C(void)
  *
  */
 
+#ifdef MMU
+void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
+#else
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
+#endif
 {
     /* Set application address via x4 */
     asm volatile("mov x4, %0" : : "r"(app_offset));
 
-    /* move the dts pointer (stored in x21) to x0 (as first argument) */
-    asm volatile("mov x0, x21");
+#ifdef MMU
+    /* move the dts pointer to x0 (as first argument) */
+    asm volatile("mov x0, %0" : : "r"(dts_offset));
+#else
+    asm volatile("mov x0, xzr");
+#endif
 
     /* zero registers x1, x2, x3 */
     asm volatile("mov x3, xzr");

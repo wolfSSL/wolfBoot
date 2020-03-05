@@ -70,6 +70,8 @@ int wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag);
 
+uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32_t* sz);
+
 /* Defined in libwolfboot */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 
@@ -143,5 +145,14 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 # define wb_flash_write(im, of, dat, siz)  hal_flash_write(((uintptr_t)((im)->hdr)) + of, dat, siz)
 
 #endif /* EXT_FLASH */
+
+/* -- Image Formats -- */
+/* Legacy U-Boot Image */
+#define UBOOT_IMG_HDR_MAGIC 0x56190527UL
+#define UBOOT_IMG_HDR_SZ    64
+
+/* --- Flattened Device Tree Blob */
+#define UBOOT_FDT_MAGIC	    0xD00DFEEDUL
+
 
 #endif /* !IMAGE_H */

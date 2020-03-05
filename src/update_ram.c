@@ -41,7 +41,13 @@ void RAMFUNCTION wolfBoot_start(void)
 {
     int active;
     struct wolfBoot_image os_image;
+    uint32_t* load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
+    uint8_t* image_ptr;
     uint8_t p_state;
+#ifdef MMU
+    uint32_t* dts_address;
+#endif
+
     active = wolfBoot_dualboot_candidate();
 
     if (active < 0) /* panic if no images available */
@@ -88,15 +94,39 @@ void RAMFUNCTION wolfBoot_start(void)
         hal_flash_lock();
     }
 
+    /* Check for U-Boot Legacy format image header */
+    image_ptr = wolfBoot_peek_image(&os_image, 0, NULL);
+    if (image_ptr) {
+        if (*((uint32_t*)image_ptr) == UBOOT_IMG_HDR_MAGIC) {
+            /* Note: Could parse header and get load_address at 0x10 */
+
+            /* Skip 64 bytes (size of Legacy format image header) */
+            os_image.fw_base += UBOOT_IMG_HDR_SZ;
+            os_image.fw_size -= UBOOT_IMG_HDR_SZ;
+        }
+    }
+
 #ifdef EXT_FLASH
     /* Load image to RAM */
     if (PART_IS_EXT(&os_image)) {
         ext_flash_read((uintptr_t)os_image.fw_base, 
-                       (uint8_t*)WOLFBOOT_LOAD_ADDRESS,
+                       (uint8_t*)load_address,
                        os_image.fw_size);
     }
 #endif
 
+#ifdef MMU
+    /* Device Tree - Check */
+    dts_address = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    if (*dts_address != UBOOT_FDT_MAGIC) {
+        dts_address = NULL;
+    }
+#endif
+
     hal_prepare_boot();
-    do_boot((void *)WOLFBOOT_LOAD_ADDRESS);
+#ifdef MMU
+    do_boot((uint32_t*)load_address, (uint32_t*)dts_address);
+#else
+    do_boot((uint32_t*)load_address);
+#endif
 }

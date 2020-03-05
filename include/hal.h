@@ -29,7 +29,11 @@
 #include "target.h"
 
 /* Architecture specific calls */
+#ifdef MMU
+extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
+#else
 extern void do_boot(const uint32_t *app_offset);
+#endif
 extern void arch_reboot(void);
 
 

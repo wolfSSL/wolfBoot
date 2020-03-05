@@ -536,6 +536,7 @@ static int qspi_wait_ready(QspiDev_t* dev)
     return GQSPI_CODE_TIMEOUT;
 }
 
+#if 0
 static int qspi_flash_reset(QspiDev_t* dev)
 {
     uint8_t cmd[1];
@@ -545,6 +546,7 @@ static int qspi_flash_reset(QspiDev_t* dev)
     qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0);
     return GQSPI_CODE_SUCCESS;
 }
+#endif
 
 #if GQSPI_QSPI_MODE == GQSPI_GEN_FIFO_MODE_QSPI
 static int qspi_enter_qspi_mode(QspiDev_t* dev)
