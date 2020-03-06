@@ -453,25 +453,45 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     uint8_t *image;
     if (!img)
         return -1;
+
+#ifdef EXT_FLASH
+    hdr_cpy_done = 0; /* reset hdr "open" flag */
+#endif
+
     memset(img, 0, sizeof(struct wolfBoot_image));
     img->part = part;
     if (part == PART_SWAP) {
-        img->part = PART_SWAP;
-        img->hdr = (void *)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+        img->hdr_ok = 1;
+        img->hdr = (void*)WOLFBOOT_PARTITION_SWAP_ADDRESS;
         img->fw_base = img->hdr;
         img->fw_size = WOLFBOOT_SECTOR_SIZE;
         return 0;
     }
-    if (part == PART_BOOT) {
-        img->hdr = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    } else if (part == PART_UPDATE) {
-        img->hdr = (void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 #ifdef MMU
-    } else if (part == PART_DTS_BOOT) {
-        img->hdr = (void *)WOLFBOOT_DTS_BOOT_ADDRESS;
-    } else if (part == PART_DTS_UPDATE) {
-        img->hdr = (void *)WOLFBOOT_DTS_UPDATE_ADDRESS;
+    if (part == PART_DTS_BOOT || part == PART_DTS_UPDATE) {
+        img->hdr = (part == PART_DTS_BOOT) ? (void*)WOLFBOOT_DTS_BOOT_ADDRESS 
+                                           : (void*)WOLFBOOT_DTS_UPDATE_ADDRESS;
+        if (PART_IS_EXT(img))
+            image = fetch_hdr_cpy(img);
+        else
+            image = (uint8_t*)img->hdr;
+        if (*((uint32_t*)image) != UBOOT_FDT_MAGIC)
+            return -1;
+        img->hdr_ok = 1;
+        img->fw_base = img->hdr;
+        /* DTS data is big endian */
+        size = (uint32_t*)(image + sizeof(uint32_t));
+        img->fw_size = (((*size & 0x000000FF) << 24) |
+                        ((*size & 0x0000FF00) <<  8) |
+                        ((*size & 0x00FF0000) >>  8) |
+                        ((*size & 0xFF000000) >> 24));
+        return 0;
+    }
 #endif
+    if (part == PART_BOOT) {
+        img->hdr = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    } else if (part == PART_UPDATE) {
+        img->hdr = (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     } else
         return -1;
 

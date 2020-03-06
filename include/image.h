@@ -92,8 +92,8 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 #  define SWAP_EXT 0
 # endif
 # define PARTN_IS_EXT(pn) \
-    ((pn == PART_BOOT)?BOOT_EXT: \
-        ((pn == PART_UPDATE)?UPDATE_EXT: \
+    ((pn == PART_BOOT || pn == PART_DTS_BOOT)?BOOT_EXT: \
+        ((pn == PART_UPDATE || pn == PART_DTS_UPDATE)?UPDATE_EXT: \
             ((pn == PART_SWAP)?SWAP_EXT:0)))
 # define PART_IS_EXT(x)  PARTN_IS_EXT(((x)->part))
 #include "hal.h"
@@ -152,7 +152,7 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 #define UBOOT_IMG_HDR_SZ    64
 
 /* --- Flattened Device Tree Blob */
-#define UBOOT_FDT_MAGIC	    0xD00DFEEDUL
+#define UBOOT_FDT_MAGIC	    0xEDFE0DD0UL
 
 
 #endif /* !IMAGE_H */

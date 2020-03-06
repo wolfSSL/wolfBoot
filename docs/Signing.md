@@ -1,6 +1,8 @@
 # wolfBoot Signing
 
-Instructions for setting up Python, wolfCrypt-py module and wolfBoot for firmware signing.
+Instructions for setting up Python, wolfCrypt-py module and wolfBoot for firmware signing. 
+
+Note: There is a pure C signing tool available as well. See [C Signing Tool](#c-signing-tool) below.
 
 ## Install Python3
 
@@ -60,4 +62,12 @@ openssl rsautl -sign -keyform der -inkey rsa4096.der -in test-app/image_v1_diges
 
 # Generate final signed binary
 python3 ./tools/keytools/sign.py --rsa4096 --sha3 --manual-sign test-app/image.bin rsa4096_pub.der 1 test-app/image_v1.sig
+```
+
+## C Signing Tool
+
+A standalone C version of the signing tool is available here: `./tools/keytools/sign.c`. Build using `make keytools`
+
+```sh
+./tools/keytools/sign --rsa4096 --sha3 test-app/image.bin rsa4096.der 1
 ```

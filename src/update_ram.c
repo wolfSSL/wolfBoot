@@ -45,7 +45,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint8_t* image_ptr;
     uint8_t p_state;
 #ifdef MMU
-    uint32_t* dts_address;
+    uint32_t* dts_address = NULL;
 #endif
 
     active = wolfBoot_dualboot_candidate();
@@ -116,10 +116,18 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 
 #ifdef MMU
-    /* Device Tree - Check */
-    dts_address = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
-    if (*dts_address != UBOOT_FDT_MAGIC) {
-        dts_address = NULL;
+    /* Device Tree Blob (DTB) Handling */
+    if (wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
+        dts_address = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+
+    #ifdef EXT_FLASH
+        /* Load DTS to RAM */
+        if (PART_IS_EXT(&os_image)) {
+            ext_flash_read((uintptr_t)os_image.fw_base, 
+                        (uint8_t*)dts_address,
+                        os_image.fw_size);
+        }
+    #endif
     }
 #endif
 
