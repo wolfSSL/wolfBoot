@@ -36,6 +36,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src}&quot;"/>
 								</option>
 								<option id="xilinx.gnu.compiler.symbols.defined.980385157" name="Defined symbols (-D)" superClass="xilinx.gnu.compiler.symbols.defined" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="USE_BUILTIN_STARTUP"/>
 									<listOptionValue builtIn="false" value="DEBUG=1"/>
 									<listOptionValue builtIn="false" value="__WOLFBOOT"/>
 									<listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
@@ -94,7 +95,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/boot_aarch64_start.S|tools|test-app|src/xmalloc_ecc.c|src/vector_riscv.S|src/update_flash.c|src/update_flash_hwswap.c|src/boot_riscv.c|src/boot_arm.c|hal" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="tools|test-app|src/xmalloc_ecc.c|src/vector_riscv.S|src/update_flash.c|src/update_flash_hwswap.c|src/boot_riscv.c|src/boot_arm.c|hal" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="hal"/>
 					</sourceEntries>
 				</configuration>
@@ -130,6 +131,7 @@
 								</option>
 								<option id="xilinx.gnu.compiler.inferred.swplatform.flags.1801302027" name="Software Platform Inferred Flags" superClass="xilinx.gnu.compiler.inferred.swplatform.flags" value=" " valueType="string"/>
 								<option id="xilinx.gnu.compiler.symbols.defined.1649249146" name="Defined symbols (-D)" superClass="xilinx.gnu.compiler.symbols.defined" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="USE_BUILTIN_STARTUP"/>
 									<listOptionValue builtIn="false" value="__WOLFBOOT"/>
 									<listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
 									<listOptionValue builtIn="false" value="PART_SWAP_EXT=1"/>
@@ -190,7 +192,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/boot_aarch64_start.S|tools|test-app|src/xmalloc_ecc.c|src/vector_riscv.S|src/update_flash.c|src/update_flash_hwswap.c|src/boot_riscv.c|src/boot_arm.c|hal" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="tools|test-app|src/xmalloc_ecc.c|src/vector_riscv.S|src/update_flash.c|src/update_flash_hwswap.c|src/boot_riscv.c|src/boot_arm.c|hal" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="hal"/>
 					</sourceEntries>
 				</configuration>

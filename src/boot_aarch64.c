@@ -31,6 +31,7 @@ static volatile unsigned int cpu_id;
 extern unsigned int *END_STACK;
 
 extern void main(void);
+extern void gicv2_init_secure(void);
 
 void boot_entry_C(void) 
 {
@@ -59,20 +60,26 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 {
-    /* Set application address via x4 */
-    asm volatile("mov x4, %0" : : "r"(app_offset));
+	/* Set application address via x4 */
+	asm volatile("mov x4, %0" : : "r"(app_offset));
 
 #ifdef MMU
-    /* move the dts pointer to x0 (as first argument) */
-    asm volatile("mov x0, %0" : : "r"(dts_offset));
+	/* Move the dts pointer to x5 (as first argument) */
+	asm volatile("mov x5, %0" : : "r"(dts_offset));
 #else
-    asm volatile("mov x0, xzr");
+	asm volatile("mov x5, xzr");
 #endif
 
-    /* zero registers x1, x2, x3 */
+    /* Initialize GICv2 for Kernel */
+    gicv2_init_secure();
+
+    /* Zero registers x1, x2, x3 */
     asm volatile("mov x3, xzr");
     asm volatile("mov x2, xzr");
     asm volatile("mov x1, xzr");
+
+    /* Move the dts pointer to x0 (as first argument) */
+    asm volatile("mov x0, x5");
 
     /* Unconditionally jump to app_entry at x4 */
     asm volatile("br x4");

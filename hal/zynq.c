@@ -798,7 +798,7 @@ void hal_init(void)
     uint32_t cpu_freq = 0;
 
 #ifdef DEBUG_ZYNQ
-    xil_printf("wolfBoot Secure Boot\n");
+    xil_printf("\nwolfBoot Secure Boot\n");
 #endif
 
     asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");

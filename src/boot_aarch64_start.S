@@ -19,6 +19,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+
+#define GICD_BASE       0xF9010000
+#define GICD_CTLR       0x0000
+#define GICD_TYPER      0x0004
+#define GICD_SGIR       0x0F00
+#define GICD_IGROUPRn   0x0080
+
+#define GICC_BASE       0xF9020000
+#define GICC_PMR        0x0004
+
+#ifndef USE_BUILTIN_STARTUP
 .section ".boot"
 .global _vector_table
 _vector_table:
@@ -61,4 +72,30 @@ _vector_table:
 8:  mov sp, x1         // set stack pointer
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
+#endif /* USE_BUILTIN_STARTUP */
 
+
+/* Initialize GIC 400 (GICv2) */
+.global gicv2_init_secure
+gicv2_init_secure:
+    ldr  x0, =GICD_BASE
+    mov  w9, #0x3            /* EnableGrp0 | EnableGrp1 */
+    str  w9, [x0, GICD_CTLR] /* Secure GICD_CTLR */
+    ldr  w9, [x0, GICD_TYPER]
+    and  w10, w9, #0x1f      /* ITLinesNumber */
+    cbz  w10, 1f             /* No SPIs */
+    add  x11, x0, GICD_IGROUPRn
+    mov  w9, #~0             /* Config SPIs as Grp1 */
+    str  w9, [x11], #0x4
+0:	str  w9, [x11], #0x4
+    sub	 w10, w10, #0x1
+    cbnz w10, 0b
+
+    ldr  x1, =GICC_BASE      /* GICC_CTLR */
+    mov	 w0, #3              /* EnableGrp0 | EnableGrp1 */
+    str	 w0, [x1]
+
+    mov	 w0, #1 << 7         /* Allow NS access to GICC_PMR */
+    str	 w0, [x1, #4]        /* GICC_PMR */
+1:
+	ret
