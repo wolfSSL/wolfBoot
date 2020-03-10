@@ -22,9 +22,13 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(__QNXNTO__) && !defined(NO_QNX)
+    #define USE_QNX
+#endif
+
 #ifdef DEBUG_ZYNQ
     #include <stdio.h>
-    #ifndef __QNXNTO__
+    #ifndef USE_QNX
         #include "xil_printf.h"
     #endif
 #endif
@@ -35,7 +39,7 @@
 #   error "wolfBoot zynq HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
 
-#ifdef __QNXNTO__
+#ifdef USE_QNX
     #include <sys/siginfo.h>
     #include "xzynq_gqspi.h"
 #endif
@@ -217,7 +221,7 @@ typedef struct QspiDev {
     uint32_t bus;    /* GQSPI_GEN_FIFO_BUS_LOW, GQSPI_GEN_FIFO_BUS_UP or GQSPI_GEN_FIFO_BUS_BOTH */
     uint32_t cs;     /* GQSPI_GEN_FIFO_CS_LOWER, GQSPI_GEN_FIFO_CS_UPPER */
     uint32_t stripe; /* OFF=0 or ON=GQSPI_GEN_FIFO_STRIPE */
-#ifdef __QNXNTO__
+#ifdef USE_QNX
     xzynq_qspi_t* qnx;
 #endif
 } QspiDev_t;
@@ -228,7 +232,7 @@ static QspiDev_t mDev;
 static int test_flash(QspiDev_t* dev);
 #endif
 
-#ifdef __QNXNTO__
+#ifdef USE_QNX
 static int qspi_transfer(QspiDev_t* pDev,
     const uint8_t* cmdData, uint32_t cmdSz,
     const uint8_t* txData, uint32_t txSz,
@@ -554,7 +558,7 @@ static void qspi_dump_regs(void)
     printf("QSPIDMA_DST_CTRL2 %08x\n", QSPIDMA_DST_CTRL2);
 }
 #endif
-#endif /* __QNXNTO__ */
+#endif /* USE_QNX */
 
 static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
 {
@@ -714,7 +718,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
 
     memset(&mDev, 0, sizeof(mDev));
 
-#ifdef __QNXNTO__
+#ifdef USE_QNX
     mDev.qnx = xzynq_qspi_open();
     if (mDev.qnx == NULL) {
     #ifdef DEBUG_ZYNQ
@@ -772,7 +776,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     GQSPI_IER = GQSPI_IXR_ALL_MASK;
 
     GQSPI_EN = 1; /* Enable Device */
-#endif /* __QNXNTO__ */
+#endif /* USE_QNX */
 
     /* Issue Flash Reset Command */
     //qspi_flash_reset(&mDev);
@@ -864,7 +868,7 @@ void zynq_exit(void)
         return;
 #endif
 
-#ifdef __QNXNTO__
+#ifdef USE_QNX
     if (mDev.qnx) {
         xzynq_qspi_close(mDev.qnx);
         mDev.qnx = NULL;

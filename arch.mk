@@ -32,10 +32,10 @@ WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
 ## ARM
 ifeq ($(ARCH),AARCH64)
-  ARCH_FLASH_OFFSET=0x80000
   CROSS_COMPILE:=aarch64-none-elf-
   CFLAGS+=-DARCH_AARCH64 -march=armv8-a
   OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+  CFLAGS+=-DNO_QNX
 endif
 
 ifeq ($(ARCH),ARM)
