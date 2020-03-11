@@ -71,3 +71,16 @@ A standalone C version of the signing tool is available here: `./tools/keytools/
 ```sh
 ./tools/keytools/sign --rsa4096 --sha3 test-app/image.bin rsa4096.der 1
 ```
+
+### Windows Visual Studio
+
+Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe` tool for use on Windows.
+
+
+## Command Line Usage
+
+```
+./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version
+  - or -        ./tools/keytools/sign [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version
+  - or -        ./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig
+```
