@@ -55,6 +55,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#ifdef _WIN32
+	#define PATH_MAX 256
+#endif
+
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 
 #define HDR_VERSION     0x01

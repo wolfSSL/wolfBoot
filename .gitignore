@@ -81,3 +81,6 @@ config/*.ld
 
 # Generated confiuguration file
 .config
+.vs
+*.filters
+*.user
