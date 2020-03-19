@@ -33,7 +33,76 @@
 #ifdef RAM_CODE
 extern unsigned int _start_text;
 static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
+
+static void RAMFUNCTION wolfBoot_erase_bootloader(void)
+{
+    uint32_t *start = (uint32_t *)&_start_text;
+    uint32_t len = WOLFBOOT_PARTITION_BOOT_ADDRESS - (uint32_t)start;
+    hal_flash_erase((uint32_t)start, len);
+
+}
+
+#include <string.h>
+
+static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
+{
+    uint32_t pos = 0;
+    uint32_t src_offset = IMAGE_HEADER_SIZE;
+
+    hal_flash_unlock();
+    wolfBoot_erase_bootloader();
+#ifdef EXT_FLASH
+    while (pos < src->fw_size) {
+        if (PART_IS_EXT(src)) {
+            uint8_t buffer[FLASHBUFFER_SIZE];
+            if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
+                ext_flash_read((uint32_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
+                hal_flash_write(pos + (uint32_t)&_start_text, buffer, FLASHBUFFER_SIZE);
+            }
+            pos += FLASHBUFFER_SIZE;
+        }
+        goto lock_and_reset;
+    }
 #endif
+    while (pos < src->fw_size) {
+        if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
+            uint8_t *orig = (uint8_t*)(src->hdr + src_offset + pos);
+            hal_flash_write(pos + (uint32_t)&_start_text, orig, FLASHBUFFER_SIZE);
+        }
+        pos += FLASHBUFFER_SIZE;
+    }
+
+lock_and_reset:
+    hal_flash_lock();
+    arch_reboot();
+}
+
+void wolfBoot_check_self_update(void)
+{
+    uint8_t st;
+    struct wolfBoot_image update;
+    uint8_t *update_type;
+    uint32_t update_version;
+
+    /* Check for self update in the UPDATE partition */
+    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING) &&
+            (wolfBoot_open_image(&update, PART_UPDATE) == 0) &&
+            wolfBoot_get_image_type(PART_UPDATE) == (HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH)) {
+        uint32_t update_version = wolfBoot_update_firmware_version();
+        if (update_version <= wolfboot_version) {
+            hal_flash_unlock();
+            wolfBoot_erase_partition(PART_UPDATE);
+            hal_flash_lock();
+            return;
+        }
+        if (wolfBoot_verify_integrity(&update) < 0)
+            return;
+        if (wolfBoot_verify_authenticity(&update) < 0)
+            return;
+        wolfBoot_self_update(&update);
+    }
+}
+#endif /* RAM_CODE for self_update */
 
 static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {
