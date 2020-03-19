@@ -232,6 +232,11 @@ if (not self_update):
 
 header += struct.pack('<H', img_type)
 
+# Six pad bytes, Sha-3 requires 8-byte alignment.
+header += struct.pack('BB', 0xFF, 0xFF)
+header += struct.pack('BB', 0xFF, 0xFF)
+header += struct.pack('BB', 0xFF, 0xFF)
+
 print("Calculating %s digest..." % hash_algo)
 
 if hash_algo == 'sha256':
