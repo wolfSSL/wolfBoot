@@ -57,7 +57,7 @@ ifeq ($(SIGN),ED25519)
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib -DWOLFSSL_STATIC_MEMORY \
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib \
 		  -Wstack-usage=1024
   LDFLAGS+=-nostdlib
 endif
