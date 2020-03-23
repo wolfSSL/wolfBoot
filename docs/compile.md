@@ -150,6 +150,11 @@ To associate the update or the swap partition to an external memory, define `PAR
 `PART_SWAP_EXT`, respectively. By default, the makefile assumes that if an external memory is present,
 both `PART_UPDATE_EXT` and `PART_SWAP_EXT` are defined.
 
+If the `NO_XIP=1` makefile option is present, `PART_BOOT_EXT` is assumed too, as no execute-in-place is
+available on the system. This is typically the case of MMU system (e.g. Cortex-A) where the operating system
+image(s) are position-independent ELF images stored in a non-executable non-volatile memory, and must be
+copied in RAM to boot after verification.
+
 When external memory is used, the HAL API must be extended to define methods to access the custom memory.
 Refer to the [HAL](HAL.md) page for the description of the `ext_flash_*` API.
 

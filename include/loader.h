@@ -56,4 +56,6 @@
 #ifdef WOLFTPM2_NO_WOLFCRYPT
     int wolfBoot_tpm2_init(void);
 #endif
+
+void wolfBoot_start(void);
 #endif /* LOADER_H */

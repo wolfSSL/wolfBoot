@@ -24,6 +24,17 @@
 import sys,os
 from wolfcrypt import ciphers
 
+def usage():
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096] [ --force ] pub_key_file.c\n" % sys.argv[0])
+    parser.print_help()
+    sys.exit(1)
+
+def dupsign():
+    print("")
+    print("Error: only one algorithm must be specified.")
+    print("")
+    usage()
+
 Cfile_Banner="/* Public-key file for wolfBoot, automatically generated. Do not edit.  */\n"+ \
              "/*\n" + \
              " * This file has been generated and contains the public key which is\n"+ \
@@ -38,21 +49,44 @@ Rsa_4096_pub_key_define = "const uint8_t rsa4096_pub_key[%d] = {\n\t"
 
 sign="ed25519"
 
-argc = len(sys.argv)
-argv = sys.argv
+import argparse as ap
 
-if (argc < 2) or (argc > 3):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] pub_key_file.c\n" % sys.argv[0])
-    sys.exit(1)
+parser = ap.ArgumentParser(prog='keygen.py', description='wolfBoot key generation tool')
+parser.add_argument('--ed25519', dest='ed25519', action='store_true')
+parser.add_argument('--ecc256',  dest='ecc256', action='store_true')
+parser.add_argument('--rsa2048', dest='rsa2048', action='store_true')
+parser.add_argument('--rsa4096', dest='rsa4096', action='store_true')
+parser.add_argument('--force', dest='force', action='store_true')
+parser.add_argument('cfile')
 
-if argc == 3:
-    if argv[1] != '--ed25519' and argv[1] != '--ecc256' and argv[1] != '--rsa2048' and argv[1] != '--rsa4096':
-        print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096] pub_key_file.c\n" % sys.argv[0])
-        sys.exit(1)
-    sign=argv[1][2:]
-    pubkey_cfile = argv[2]
-else:
-    pubkey_cfile = argv[1]
+args=parser.parse_args()
+
+#print(args.ecc256)
+#sys.exit(0) #test
+
+pubkey_cfile = args.cfile
+sign=None
+force=False
+if (args.ed25519):
+    sign='ed25519'
+if (args.ecc256):
+    if sign is not None:
+        dupsign()
+    sign='ecc256'
+if (args.rsa2048):
+    if sign is not None:
+        dupsign()
+    sign='rsa2048'
+if (args.rsa4096):
+    if sign is not None:
+        dupsign()
+    sign='rsa4096'
+
+if sign is None:
+    usage()
+
+force = args.force
+
 
 if pubkey_cfile[-2:] != '.c':
     print("** Warning: generated public key cfile does not have a '.c' extension")
@@ -62,11 +96,12 @@ key_file=sign+".der"
 print ("Selected cipher:      " + sign)
 print ("Output Private key:   " + key_file)
 print ("Output C file:        " + pubkey_cfile)
+print()
 
 if (sign == "ed25519"):
     ed = ciphers.Ed25519Private.make_key(32)
     priv,pub = ed.encode_key()
-    if os.path.exists(key_file):
+    if os.path.exists(key_file) and not force:
         choice = input("** Warning: key file already exist! Are you sure you want to "+
                 "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
         if (choice != "Yes, I am sure!"):
@@ -97,7 +132,7 @@ if (sign == "ed25519"):
 if (sign == "ecc256"):
     ec = ciphers.EccPrivate.make_key(32)
     qx,qy,d = ec.encode_key_raw()
-    if os.path.exists(key_file):
+    if os.path.exists(key_file) and not force:
         choice = input("** Warning: key file already exist! Are you sure you want to "+
                 "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
         if (choice != "Yes, I am sure!"):
@@ -133,7 +168,7 @@ if (sign == "ecc256"):
 
 if (sign == "rsa2048"):
     rsa = ciphers.RsaPrivate.make_key(2048)
-    if os.path.exists(key_file):
+    if os.path.exists(key_file) and not force:
         choice = input("** Warning: key file already exist! Are you sure you want to "+
                 "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
         if (choice != "Yes, I am sure!"):
@@ -161,7 +196,7 @@ if (sign == "rsa2048"):
 
 if (sign == "rsa4096"):
     rsa = ciphers.RsaPrivate.make_key(4096)
-    if os.path.exists(key_file):
+    if os.path.exists(key_file) and not force:
         choice = input("** Warning: key file already exist! Are you sure you want to "+
                 "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
         if (choice != "Yes, I am sure!"):

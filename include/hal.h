@@ -29,7 +29,11 @@
 #include "target.h"
 
 /* Architecture specific calls */
+#ifdef MMU
+extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
+#else
 extern void do_boot(const uint32_t *app_offset);
+#endif
 extern void arch_reboot(void);
 
 
@@ -44,30 +48,28 @@ void hal_prepare_boot(void);
     void hal_flash_dualbank_swap(void);
 #endif
 
-#ifdef EXT_FLASH
-    #ifndef SPI_FLASH
-        /* user supplied external flash interfaces */
-        int  ext_flash_write(uint32_t address, const uint8_t *data, int len);
-        int  ext_flash_read(uint32_t address, uint8_t *data, int len);
-        int  ext_flash_erase(uint32_t address, int len);
-        void ext_flash_lock(void);
-        void ext_flash_unlock(void);
-    #else
-        #include "spi_flash.h"
-        #define ext_flash_lock() do{}while(0)
-        #define ext_flash_unlock() do{}while(0)
-        #define ext_flash_read spi_flash_read
-        #define ext_flash_write spi_flash_write
+#ifndef SPI_FLASH
+    /* user supplied external flash interfaces */
+    int  ext_flash_write(uintptr_t address, const uint8_t *data, int len);
+    int  ext_flash_read(uintptr_t address, uint8_t *data, int len);
+    int  ext_flash_erase(uintptr_t address, int len);
+    void ext_flash_lock(void);
+    void ext_flash_unlock(void);
+#else
+    #include "spi_flash.h"
+    #define ext_flash_lock() do{}while(0)
+    #define ext_flash_unlock() do{}while(0)
+    #define ext_flash_read spi_flash_read
+    #define ext_flash_write spi_flash_write
 
-        static int ext_flash_erase(uint32_t address, int len)
-        {
-            uint32_t end = address + len - 1;
-            uint32_t p;
-            for (p = address; p <= end; p += SPI_FLASH_SECTOR_SIZE)
-                spi_flash_sector_erase(p);
-            return 0;
-        }
-    #endif /* !SPI_FLASH */
-#endif /* EXT_FLASH */
+    static int ext_flash_erase(uintptr_t address, int len)
+    {
+        uint32_t end = address + len - 1;
+        uint32_t p;
+        for (p = address; p <= end; p += SPI_FLASH_SECTOR_SIZE)
+            spi_flash_sector_erase(p);
+        return 0;
+    }
+#endif /* !SPI_FLASH */
 
 #endif /* H_HAL_FLASH_ */

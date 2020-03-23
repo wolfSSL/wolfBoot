@@ -19,6 +19,7 @@ OBJS:= \
 ./src/libwolfboot.o
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
+UPDATE_OBJS:=
 
 ifeq ($(SIGN),RSA4096)
   SPMATH=0
@@ -56,7 +57,7 @@ ifeq ($(SIGN),ED25519)
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib -DWOLFSSL_STATIC_MEMORY \
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib \
 		  -Wstack-usage=1024
   LDFLAGS+=-nostdlib
 endif
@@ -119,6 +120,9 @@ endif
 
 ifeq ($(EXT_FLASH),1)
   CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
+  ifeq ($(NO_XIP),1)
+    CFLAGS+=-DPART_BOOT_EXT=1
+  endif
 endif
 
 ifeq ($(ALLOW_DOWNGRADE),1)
@@ -151,6 +155,7 @@ ifeq ($(PKA),1)
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
+OBJS+=$(UPDATE_OBJS)
 
 ifeq ($(WOLFTPM),1)
 OBJS += lib/wolfTPM/src/tpm2.o \
@@ -181,7 +186,7 @@ wolfboot.hex: wolfboot.elf
 
 align: wolfboot-align.bin
 
-.bootloader-partition-size: FORCE
+.bootloader-partition-size:
 	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
 	@printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
 	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .bootloader-partition-size
@@ -202,7 +207,7 @@ test-app/image.bin: wolfboot-align.bin
 
 standalone:
 	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
-    V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
+    NO_XIP=$(NO_XIP) V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
 	MCUXPRESSO=$(MCUXPRESSO) MCUXPRESSO_CPU=$(MCUXPRESSO_CPU) MCUXPRESSO_DRIVERS=$(MCUXPRESSO_DRIVERS) \
 	MCUXPRESSO_CMSIS=$(MCUXPRESSO_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK) standalone
@@ -223,9 +228,18 @@ rsa2048.der:
 rsa4096.der:
 	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
 
+keytools:
+	@make -C tools/keytools
+
 factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
+ifneq ("$(wildcard ./tools/keytools/sign)","")
+	@echo "\n./tools/keytools/sign $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1"
+	$(Q)./tools/keytools/sign $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+else
+	@echo "\npython3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1"
 	$(Q)python3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+endif
 	@echo "\t[MERGE] $@"
 	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
@@ -255,6 +269,7 @@ clean:
 
 distclean: clean
 	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c ./src/rsa2048_pub_key.c include/target.h
+	@make -C tools/keytools clean
 
 include/target.h: include/target.h.in FORCE
 	@cat include/target.h.in | \
@@ -262,7 +277,11 @@ include/target.h: include/target.h.in FORCE
 	sed -e "s/##WOLFBOOT_SECTOR_SIZE##/$(WOLFBOOT_SECTOR_SIZE)/g" | \
 	sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
 	sed -e "s/##WOLFBOOT_PARTITION_UPDATE_ADDRESS##/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
-	sed -e "s/##WOLFBOOT_PARTITION_SWAP_ADDRESS##/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
+	sed -e "s/##WOLFBOOT_PARTITION_SWAP_ADDRESS##/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_DTS_BOOT_ADDRESS##/$(WOLFBOOT_DTS_BOOT_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_DTS_UPDATE_ADDRESS##/$(WOLFBOOT_DTS_UPDATE_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_LOAD_ADDRESS##/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_LOAD_DTS_ADDRESS##/$(WOLFBOOT_LOAD_DTS_ADDRESS)/g" \
 		> $@
 
 config: FORCE

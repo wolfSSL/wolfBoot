@@ -196,7 +196,7 @@ char *strcpy(char *dst, const char *src)
 {
    size_t i = 0;
 
-    while(1 < 2) {
+    while(1) {
         dst[i] = src[i];
         if (src[i] == '\0')
             break;

@@ -1,0 +1,11 @@
+// Boot BIF example for wolfBoot with signed Hello World
+// Note: "partition_owner=uboot" prevents partition from being loaded to RAM
+the_ROM_image:
+{
+	[bootloader, destination_cpu=a53-0] zynqmp_fsbl.elf
+	[destination_cpu=pmu] pmufw.elf
+	[destination_device=pl] system.bit
+	[destination_cpu=a53-0, exception_level=el-3, trustzone] bl31.elf
+	[destination_cpu=a53-0, exception_level=el-2] wolfboot.elf
+	[destination_cpu=a53-0, offset=0x800000, partition_owner=uboot] helloworld_v1_signed.bin
+}

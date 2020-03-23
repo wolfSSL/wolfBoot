@@ -56,10 +56,7 @@ src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
 
 # keygen binaries
-tools/ed25519/ed25519_sign
-tools/ed25519/ed25519_keygen
-tools/ecc256/ecc256_sign
-tools/ecc256/ecc256_keygen
+tools/keytools/sign
 
 # Vim swap files
 .*.swp
@@ -84,3 +81,6 @@ config/*.ld
 
 # Generated confiuguration file
 .config
+.vs
+*.filters
+*.user

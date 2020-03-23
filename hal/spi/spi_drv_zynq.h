@@ -1,11 +1,4 @@
-/* xmalloc_rsa.c
- *
- * Implementations of minimal malloc/free
- *
- *
- * Copyright (C) 2020 wolfSSL Inc.
- *
- * This file is part of wolfBoot.
+/* spi_drv_zynq.h
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,32 +15,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdlib.h>
+#ifndef SPI_DRV_ZYNQ_H_INCLUDED
+#define SPI_DRV_ZYNQ_H_INCLUDED
 #include <stdint.h>
 
-/* Allow one single sp_point to be allocated at one time */
-#define SP_DIGIT_SIZE (1280)
-static uint8_t sp_digit[SP_DIGIT_SIZE];
-static int sp_digit_in_use = 0;
+#define SPI_CS_FLASH 0
 
-static void* xmalloc_sp_digit(void)
-{
-    if (sp_digit_in_use)
-            return NULL;
-    sp_digit_in_use++;
-    return sp_digit;
-}
-
-
-void* XMALLOC(size_t n, void* heap, int type)
-{
-    if (n == SP_DIGIT_SIZE)
-        return xmalloc_sp_digit();
-    return NULL;
-}
-
-void XFREE(void *ptr)
-{
-    if (ptr == sp_digit)
-        sp_digit_in_use = 0;
-}
+#endif /* !SPI_DRV_ZYNQ_H_INCLUDED */

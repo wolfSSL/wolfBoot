@@ -1,0 +1,29 @@
+// Boot BIF example with Xilinx Secure Boot authentication and wolfBoot
+the_ROM_image:
+{
+    // Boot Header Authentication Enable
+	[fsbl_config] bh_auth_enable
+
+	// Use the primary public key 0 and secondary public key id 0
+	[auth_params] ppk_select=0; spk_id=0x00000000
+
+	// primary and secondary secret (private) keys
+	[pskfile] pskf.pem
+	[sskfile] sskf.pem
+
+	[bootloader, destination_cpu=a53-0, authentication=rsa] zynqmp_fsbl.elf
+	[destination_cpu=pmu, authentication=rsa] pmufw.elf
+	[destination_device=pl, authentication=rsa] system.bit
+	[destination_cpu=a53-0, exception_level=el-3, trustzone, authentication=rsa] bl31.elf
+	[destination_cpu=a53-0, authentication=rsa, load=0x11800000] system.dtb
+
+	// ARM Device Tree (loaded to RAM at 0x11800000 by wolfBoot)
+	[ destination_cpu=a53-0, authentication=rsa, offset=0x007E0000, partition_owner=uboot] system.dtb
+
+	// Second Stage wolfBoot Bootloader (in RAM at 0x0)
+	[destination_cpu=a53-0, exception_level=el-2, authentication=rsa] wolfboot.elf
+
+	// Kernel / Application (load to RAM at 0x10000000 by wolfBoot)
+	// Using partition_owner=uboot prevents FSBL from loading to RAM
+	[destination_cpu=a53-0, offset=0x800000, partition_owner=uboot] kernel.ui
+}
