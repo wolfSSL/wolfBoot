@@ -413,7 +413,7 @@ int main(int argc, char** argv)
         &fw_version32);
 
     /* Append Four pad bytes, so timestamp is aligned */
-    header_append_u32(header, &header_idx, 0xFFFFFFFF);
+    header_idx += 4; /* memset 0xFF above handles value */
 
     /* Append Timestamp field */
     stat(image_file, &attrib);
@@ -426,6 +426,9 @@ int main(int argc, char** argv)
         image_type |= HDR_IMG_TYPE_APP;
     header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN, 
         &image_type);
+
+    /* Six pad bytes, Sha-3 requires 8-byte alignment. */
+    header_idx += 6; /* memset 0xFF above handles value */
 
     /* Calculate hashes */
     if (hash_algo == HASH_SHA256)
