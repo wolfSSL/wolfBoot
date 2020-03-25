@@ -156,7 +156,7 @@
 
 /* IOP System-level Control */
 #define IOU_SLCR_BASSE             0xFF180000
-#define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)(IOU_SLCR_BASSE + 390)))
+#define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)(IOU_SLCR_BASSE + 0x390)))
 #define IOU_TAPDLY_BYPASS_LQSPI_RX (1UL << 2) /* LQSPI Tap Delay Enable on Rx Clock signal. 0: enable. 1: disable (bypass tap delay). */
 
 
@@ -759,6 +759,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     GQSPI_CFG = reg_cfg;
 
     /* use tap delay bypass < 40MHz SPI clock */
+    IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = 0;
     QSPI_DATA_DLY_ADJ = 0;
 
@@ -888,7 +889,8 @@ void hal_init(void)
     printf("\nwolfBoot Secure Boot\n");
 #endif
 
-    asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");
+    /* This is only allowed for EL-3 */
+    //asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");
 
     zynq_init(cpu_freq);
 }
