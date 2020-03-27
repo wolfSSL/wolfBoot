@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <fileVersion>4</fileVersion>
+    <fileChecksum>2162361655</fileChecksum>
+    <configuration>
+        <name>Debug</name>
+        <outputs>
+            <file>$PROJ_DIR$\Debug\Obj\libwolfboot.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\update_flash.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\image.xcl</file>
+            <file>$PROJ_DIR$\..\..\src\image.c</file>
+            <file>$PROJ_DIR$\..\..\src\update_flash.c</file>
+            <file>$PROJ_DIR$\..\..\src\xmalloc_ecc.c</file>
+            <file>$PROJ_DIR$\Debug\Obj\image.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\libwolfboot.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\boot_arm.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\loader.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\update_flash.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\xmalloc_ecc.xcl</file>
+            <file>$PROJ_DIR$\..\..\src\boot_arm.c</file>
+            <file>$PROJ_DIR$\Debug\Obj\string.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\loader.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\xmalloc_ecc.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\string.xcl</file>
+            <file>$PROJ_DIR$\..\..\src\string.c</file>
+            <file>$PROJ_DIR$\Debug\Obj\boot_arm.xcl</file>
+            <file>$PROJ_DIR$\..\..\src\libwolfboot.c</file>
+            <file>$PROJ_DIR$\..\..\src\loader.c</file>
+            <file>$PROJ_DIR$\Debug\Obj\ecc256_pub_key.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\ecc256_pub_key.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\wolfboot.pbd</file>
+            <file>$PROJ_DIR$\..\..\hal\stm32f4.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\memory.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\ecc.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sha.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sp_int.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\wc_port.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sha256.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sp_cortexm.c</file>
+            <file>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\hash.c</file>
+            <file>$PROJ_DIR$\Debug\Exe\wolfboot.out</file>
+            <file>$PROJ_DIR$\Debug\Obj\sha256.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\hash.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\wc_port.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\ecc.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\hash.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\sp_cortexm.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\sp_int.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\ecc.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\memory.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\sha.o</file>
+            <file>$PROJ_DIR$\Debug\Obj\sp_int.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\sha256.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\wc_port.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\sp_cortexm.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\stm32f4.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\memory.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\sha.xcl</file>
+            <file>$PROJ_DIR$\Debug\Obj\stm32f4.o</file>
+            <file>$PROJ_DIR$\keys\ecc256_pub_key.c</file>
+        </outputs>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\image.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 6</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 2</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\update_flash.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 1</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 10</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\xmalloc_ecc.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 15</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 11</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\boot_arm.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 8</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 18</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\string.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 13</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 16</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\libwolfboot.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 0</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 7</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\src\loader.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 14</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 9</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\hal\stm32f4.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 51</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 48</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\memory.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 42</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 49</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\ecc.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 41</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 37</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sha.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 43</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 50</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sp_int.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 40</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 44</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\wc_port.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 36</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 46</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sha256.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 34</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 45</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sp_cortexm.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 39</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 47</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\hash.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 35</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 38</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>[ROOT_NODE]</name>
+            <outputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 33</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\keys\ecc256_pub_key.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 22</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 21</file>
+                </tool>
+            </outputs>
+        </file>
+    </configuration>
+    <configuration>
+        <name>Release</name>
+        <outputs />
+        <forcedrebuild>
+            <name>[MULTI_TOOL]</name>
+            <tool>ILINK</tool>
+        </forcedrebuild>
+    </configuration>
+</project>

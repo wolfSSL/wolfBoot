@@ -48,7 +48,7 @@
 #define SP_NORMALIZER_SIZE (128)
 
 
-static int sp_point_in_use[MAX_POINTS] = { };
+static int sp_point_in_use[MAX_POINTS] = { 0 };
 static uint8_t sp_point_buffer[MAX_POINTS][SP_POINT_SIZE];
 
 #ifdef FREESCALE_USE_LTC
