@@ -4,6 +4,17 @@ To use this example project:
 1. Copy `.cproject` and `.project` into the wolfBoot root.
 2. From the Xilinx SDK Import wolfBoot using "Import" -> "Existing Projects into Workspace".
 
+## Xilinx SDK BSP
+
+This project uses a BSP named `standalone_bsp_0`, which must be configured to use "hypervisor guest" in the BSP configuration settings. This will enable the EL-1 support required with Bl31 (ARM Trusted Firmware). The BSP generates a include/bspconfig.h, which should have these defines set:
+
+```
+#define EL1_NONSECURE 1
+#define HYP_GUEST 1
+```
+
+Note: This is a generated file from the BSP configurator tool, which is edited by opening the `system.mss` file.
+
 ## wolfBoot Configuration
 
 A build settings template for Zynq UltraScale+ can be found here `./config/examples/zynqmp.config`. This file can be copied to wolfBoot root as `.config` for building from the command line. These template settings are also in this `.cproject` as preprocessor macros. These settings are loaded into the `target.h.in` template by the wolfBoot `make`. If not using the built-in make then the following defines will need to be manually created in `target.h`:

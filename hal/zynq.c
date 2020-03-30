@@ -44,7 +44,7 @@
     #include "xzynq_gqspi.h"
 #endif
 
-#define CORTEXA53_0_CPU_CLK_FREQ_HZ 1099989014
+#define CORTEXA53_0_CPU_CLK_FREQ_HZ    1099989014
 #define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
 
 /* Generic Quad-SPI */
@@ -149,7 +149,7 @@
 #define QSPIDMA_DST_CTRL2_DEF 0x081BFFF8UL
 
 /* QSPIDMA_DST_STS */
-#define QSPIDMA_DST_STS_WTC	  0xE000U
+#define QSPIDMA_DST_STS_WTC   0xE000U
 
 /* QSPIDMA_DST_I_STS */
 #define QSPIDMA_DST_I_STS_ALL_MASK 0xFEU
@@ -185,8 +185,8 @@
 
 
 /* Flash Commands */
-#define WRITE_ENABLE_CMD	   0x06U
-#define WRITE_DISABLE_CMD	   0x04U
+#define WRITE_ENABLE_CMD       0x06U
+#define WRITE_DISABLE_CMD      0x04U
 #define READ_ID_CMD            0x9FU
 #define MULTI_IO_READ_ID_CMD   0xAFU
 #define READ_FSR_CMD           0x70U
@@ -194,16 +194,12 @@
 #define EXIT_QSPI_MODE_CMD     0xF5U
 #define ENTER_4B_ADDR_MODE_CMD 0xB7U
 #define EXIT_4B_ADDR_MODE_CMD  0xE9U
-
 #define FAST_READ_CMD          0x0BU
 #define QUAD_READ_4B_CMD       0x6CU
-
 #define PAGE_PROG_CMD          0x02U
 #define QUAD_PAGE_PROG_4B_CMD  0x34U
-
 #define SEC_ERASE_CMD          0xD8U
 #define SEC_4K_ERASE_CMD       0x20U
-
 #define RESET_ENABLE_CMD       0x66U
 #define RESET_MEMORY_CMD       0x99U
 
@@ -282,6 +278,7 @@ static int qspi_transfer(QspiDev_t* pDev,
     return GQSPI_CODE_SUCCESS;
 }
 #else
+
 static inline int qspi_isr_wait(uint32_t wait_mask, uint32_t wait_val)
 {
     uint32_t timeout = 0;
