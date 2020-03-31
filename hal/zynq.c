@@ -44,7 +44,7 @@
     #include "xzynq_gqspi.h"
 #endif
 
-#define CORTEXA53_0_CPU_CLK_FREQ_HZ 1099989014
+#define CORTEXA53_0_CPU_CLK_FREQ_HZ    1099989014
 #define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
 
 /* Generic Quad-SPI */
@@ -149,14 +149,14 @@
 #define QSPIDMA_DST_CTRL2_DEF 0x081BFFF8UL
 
 /* QSPIDMA_DST_STS */
-#define QSPIDMA_DST_STS_WTC	  0xE000U
+#define QSPIDMA_DST_STS_WTC   0xE000U
 
 /* QSPIDMA_DST_I_STS */
 #define QSPIDMA_DST_I_STS_ALL_MASK 0xFEU
 
 /* IOP System-level Control */
 #define IOU_SLCR_BASSE             0xFF180000
-#define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)(IOU_SLCR_BASSE + 390)))
+#define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)(IOU_SLCR_BASSE + 0x390)))
 #define IOU_TAPDLY_BYPASS_LQSPI_RX (1UL << 2) /* LQSPI Tap Delay Enable on Rx Clock signal. 0: enable. 1: disable (bypass tap delay). */
 
 
@@ -185,8 +185,8 @@
 
 
 /* Flash Commands */
-#define WRITE_ENABLE_CMD	   0x06U
-#define WRITE_DISABLE_CMD	   0x04U
+#define WRITE_ENABLE_CMD       0x06U
+#define WRITE_DISABLE_CMD      0x04U
 #define READ_ID_CMD            0x9FU
 #define MULTI_IO_READ_ID_CMD   0xAFU
 #define READ_FSR_CMD           0x70U
@@ -194,16 +194,12 @@
 #define EXIT_QSPI_MODE_CMD     0xF5U
 #define ENTER_4B_ADDR_MODE_CMD 0xB7U
 #define EXIT_4B_ADDR_MODE_CMD  0xE9U
-
 #define FAST_READ_CMD          0x0BU
 #define QUAD_READ_4B_CMD       0x6CU
-
 #define PAGE_PROG_CMD          0x02U
 #define QUAD_PAGE_PROG_4B_CMD  0x34U
-
 #define SEC_ERASE_CMD          0xD8U
 #define SEC_4K_ERASE_CMD       0x20U
-
 #define RESET_ENABLE_CMD       0x66U
 #define RESET_MEMORY_CMD       0x99U
 
@@ -282,6 +278,7 @@ static int qspi_transfer(QspiDev_t* pDev,
     return GQSPI_CODE_SUCCESS;
 }
 #else
+
 static inline int qspi_isr_wait(uint32_t wait_mask, uint32_t wait_val)
 {
     uint32_t timeout = 0;
@@ -759,6 +756,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     GQSPI_CFG = reg_cfg;
 
     /* use tap delay bypass < 40MHz SPI clock */
+    IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = 0;
     QSPI_DATA_DLY_ADJ = 0;
 
@@ -888,7 +886,8 @@ void hal_init(void)
     printf("\nwolfBoot Secure Boot\n");
 #endif
 
-    asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");
+    /* This is only allowed for EL-3 */
+    //asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");
 
     zynq_init(cpu_freq);
 }

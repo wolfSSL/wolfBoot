@@ -83,7 +83,7 @@ To associate the update or the swap partition to an external memory, define `PAR
 The following functions are used to access the external memory, and must be defined when `EXT\_FLASH` 
 is on:
 
-`int  ext_flash_write(uint32_t address, const uint8_t *data, int len)`
+`int  ext_flash_write(uintptr_t address, const uint8_t *data, int len)`
 
 This function provides an implementation of the flash write function, using the
 external memory's specific interface. `address` is the offset from the beginning of the
@@ -91,7 +91,7 @@ addressable space in the device, `data` is the payload to be stored,
 and `len` is the size of the payload. `ext_flash_write` should return 0 upon success,
 or a negative value in case of failure.
 
-`int  ext_flash_read(uint32_t address, uint8_t *data, int len)`
+`int  ext_flash_read(uintptr_t address, uint8_t *data, int len)`
 
 This function provides an indirect read of the external memory, using the
 driver's specific interface. `address` is the offset from the beginning of the
@@ -99,7 +99,7 @@ addressable space in the device, `data` is a pointer where payload is stored upo
 call, and `len` is the maximum size allowed for the payload. `ext_flash_read` should return 0 
 upon success, or a negative value in case of failure.
 
-`int  ext_flash_erase(uint32_t address, int len)`
+`int  ext_flash_erase(uintptr_t address, int len)`
 
 Called by the bootloader to erase part of the external memory.
 Erase operations must be performed via the specific interface of the target driver (e.g. SPI flash).

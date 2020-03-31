@@ -154,7 +154,7 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
     if (offset > img->fw_size)
         return NULL;
     if (PART_IS_EXT(img)) {
-        ext_flash_read((unsigned long)(img->fw_base) + offset, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
+        ext_flash_read((uintptr_t)(img->fw_base) + offset, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
         return ext_hash_block;
     } else
         return (uint8_t *)(img->fw_base + offset);

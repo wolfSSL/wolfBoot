@@ -345,7 +345,7 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
         if (PARTN_IS_EXT(PART_UPDATE))
         {
     #ifdef EXT_FLASH
-            ext_flash_read((uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -355,7 +355,7 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
     } else if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
     #ifdef EXT_FLASH
-            ext_flash_read((uint32_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -376,7 +376,7 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
         if (PARTN_IS_EXT(PART_UPDATE))
         {
     #ifdef EXT_FLASH
-            ext_flash_read((uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -386,7 +386,7 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
     } else if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
     #ifdef EXT_FLASH
-            ext_flash_read((uint32_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
