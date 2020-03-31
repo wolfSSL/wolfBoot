@@ -84,3 +84,8 @@ config/*.ld
 .vs
 *.filters
 *.user
+
+# IAR files not under version control
+IDE/IAR/settings
+IDE/IAR/*.ewt
+

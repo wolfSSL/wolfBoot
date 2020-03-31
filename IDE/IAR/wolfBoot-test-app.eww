@@ -3,5 +3,8 @@
     <project>
         <path>$WS_DIR$\wolfboot.ewp</path>
     </project>
+    <project>
+        <path>$WS_DIR$\wolfboot-test-app.ewp</path>
+    </project>
     <batchBuild />
 </workspace>

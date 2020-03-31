@@ -220,7 +220,6 @@
                 <debug>1</debug>
                 <option>
                     <name>CCDefines</name>
-                    <state>__WOLFBOOT</state>
                     <state>PLATFORM_stm32f4</state>
                     <state>ARCH_ARM</state>
                     <state>WOLFSSL_USER_SETTINGS</state>
@@ -289,7 +288,7 @@
                 <option>
                     <name>CCAllowList</name>
                     <version>1</version>
-                    <state>11111110</state>
+                    <state>00000000</state>
                 </option>
                 <option>
                     <name>CCDebugInfo</name>
@@ -354,8 +353,6 @@
                 <option>
                     <name>CCIncludePath2</name>
                     <state>$PROJ_DIR$\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\lib\wolfssl</state>
-                    <state>$PROJ_DIR$\..\..</state>
                 </option>
                 <option>
                     <name>CCStdIncCheck</name>
@@ -371,16 +368,16 @@
                 </option>
                 <option>
                     <name>CCOptLevel</name>
-                    <state>3</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>CCOptStrategy</name>
                     <version>0</version>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>CCOptLevelSlave</name>
-                    <state>3</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>CompilerMisraRules98</name>
@@ -443,7 +440,7 @@
                 <option>
                     <name>CCOptStrategySlave</name>
                     <version>0</version>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>CCGuardCalls</name>
@@ -663,7 +660,7 @@
                 </option>
                 <option>
                     <name>OOCOutputFile</name>
-                    <state>wolfboot.bin</state>
+                    <state>wolfboot-test-app.bin</state>
                 </option>
                 <option>
                     <name>OOCCommandLineProducer</name>
@@ -718,7 +715,7 @@
                 </option>
                 <option>
                     <name>IlinkOutputFile</name>
-                    <state>wolfboot.out</state>
+                    <state>wolfboot-test-app.out</state>
                 </option>
                 <option>
                     <name>IlinkDebugInfoEnable</name>
@@ -778,11 +775,11 @@
                 </option>
                 <option>
                     <name>IlinkIcfOverride</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>$TOOLKIT_DIR$\config\linker\ST\stm32f407xG.icf</state>
+                    <state>C:\Users\dan\wolfboot\IDE\IAR\test-app.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
@@ -937,7 +934,7 @@
                 </option>
                 <option>
                     <name>IlinkOptExceptionsAllow</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptExceptionsForce</name>
@@ -953,7 +950,7 @@
                 </option>
                 <option>
                     <name>IlinkOptUseVfe</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptForceVfe</name>
@@ -1015,7 +1012,7 @@
                 </option>
                 <option>
                     <name>IlinkTrustzoneImportLibraryOut</name>
-                    <state>wolfboot_import_lib.o</state>
+                    <state>wolfboot-test-app_import_lib.o</state>
                 </option>
                 <option>
                     <name>OILinkExtraOption</name>
@@ -2122,25 +2119,22 @@
         </settings>
     </configuration>
     <group>
-        <name>hal</name>
-        <group>
-            <name>spi</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\include\spi_drv.h</name>
-            </file>
-        </group>
+        <name>src</name>
         <file>
-            <name>$PROJ_DIR$\..\..\hal\stm32f4.c</name>
+            <name>$PROJ_DIR$\..\..\test-app\app_stm32f4.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\test-app\led.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\test-app\system.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\test-app\timer.c</name>
         </file>
     </group>
     <group>
-        <name>include</name>
-        <group>
-            <name>wolfboot</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\include\wolfboot\wolfboot.h</name>
-            </file>
-        </group>
+        <name>wolfboot</name>
         <file>
             <name>$PROJ_DIR$\..\..\include\hal.h</name>
         </file>
@@ -2148,73 +2142,13 @@
             <name>$PROJ_DIR$\..\..\include\image.h</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\include\loader.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\include\printf.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\include\target.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\include\user_settings.h</name>
-        </file>
-    </group>
-    <group>
-        <name>lib</name>
-        <group>
-            <name>wolfcrypt</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\ecc.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\hash.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\memory.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sha.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sha256.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sp_cortexm.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\sp_int.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\lib\wolfssl\wolfcrypt\src\wc_port.c</name>
-            </file>
-        </group>
-    </group>
-    <group>
-        <name>src</name>
-        <file>
-            <name>$PROJ_DIR$\..\..\src\boot_arm.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\src\ecc256_pub_key.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\src\image.c</name>
-        </file>
-        <file>
             <name>$PROJ_DIR$\..\..\src\libwolfboot.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\src\loader.c</name>
+            <name>$PROJ_DIR$\..\..\hal\stm32f4.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\src\string.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\src\update_flash.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\src\xmalloc_ecc.c</name>
+            <name>$PROJ_DIR$\..\..\include\wolfboot\wolfboot.h</name>
         </file>
     </group>
 </project>
