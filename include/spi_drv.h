@@ -32,7 +32,7 @@
 #include <stdint.h>
 #include "image.h"
 
-#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || defined(PLATFORM_stm32wb)
+#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || defined(PLATFORM_stm32wb) || defined(PLATFORM_stm32l0)
 #include "hal/spi/spi_drv_stm32.h"
 #endif
 

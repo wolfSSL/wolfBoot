@@ -46,6 +46,7 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32l0)
     CORTEX_M0=1
+	SPI_TARGET=stm32
   endif
 
   ifeq ($(TARGET),stm32g0)
