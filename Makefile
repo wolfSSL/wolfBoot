@@ -118,12 +118,23 @@ ifeq ($(SPI_FLASH),1)
    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
 
+ifeq ($(UART_FLASH),1)
+  EXT_FLASH=1
+endif
+
 ifeq ($(EXT_FLASH),1)
   CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
   ifeq ($(NO_XIP),1)
     CFLAGS+=-DPART_BOOT_EXT=1
   endif
+  ifeq ($(UART_FLASH),1)
+    CFLAGS+=-DUART_FLASH=1
+    OBJS+=src/uart_flash.o
+    WOLFCRYPT_OBJS+=hal/uart/uart_drv_$(UART_TARGET).o
+  endif
 endif
+
+
 
 ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+= -DALLOW_DOWNGRADE

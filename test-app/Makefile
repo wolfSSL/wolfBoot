@@ -16,6 +16,7 @@ ifeq ($(HASH),SHA256)
   CFLAGS+=-DWOLFBOOT_HASH_SHA256
 endif
 
+
 ifeq ($(HASH),SHA3_384)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
   CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
@@ -54,6 +55,11 @@ endif
 ifeq ($(SPI_FLASH),1)
   CFLAGS+=-DSPI_FLASH
   APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/spi_flash.o
+endif
+
+ifeq ($(UART_FLASH),1)
+  CFLAGS+=-DUART_FLASH=1
+  APP_OBJS+= ../src/uart_flash.o ../hal/uart/uart_drv_$(UART_TARGET).o
 endif
 
 ifeq ($(TARGET),kinetis)
