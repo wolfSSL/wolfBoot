@@ -174,7 +174,7 @@ int main(void)
     hal_init();
     spi_flash_probe();
 #ifdef UART_FLASH
-    uart_init((4 * 115200), 8, 'N', 1);
+    uart_init((UART_FLASH_BITRATE, 8, 'N', 1);
     uart_send_current_version();
 #endif
 #ifdef WOLFTPM2_NO_WOLFCRYPT

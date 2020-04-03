@@ -33,11 +33,12 @@
 #include <stdint.h>
 
 #ifdef UART_FLASH
-int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
-void uart_send_current_version(void);
+    #define UART_FLASH_BITRATE 460800
+    int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
+    void uart_send_current_version(void);
 #else
-#define uart_init(...) (-1)
-#define uart_send_current_version() do{}while(0)
+    #define uart_init(...) (-1)
+    #define uart_send_current_version() do{}while(0)
 #endif /* UART_FLASH */
 
 #endif /* !UART_FLASH_DRI_H */

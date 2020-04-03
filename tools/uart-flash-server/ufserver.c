@@ -47,6 +47,7 @@
 
 #define FIRMWARE_PARTITION_SIZE 0x4000
 #define SWAP_SIZE 0x4000
+#define UART_BITRATE 460800
 
 const char msgSha[]         = "Verifying SHA digest...";
 const char msgReadUpdate[]  = "Fetching update blocks ";
@@ -214,7 +215,7 @@ uint32_t fw_version(uint8_t *fw)
 
 int open_uart(const char *uart_dev)
 {
-    return serial_open(uart_dev, 4 * 115200);
+    return serial_open(uart_dev, UART_BITRATE);
 }
 
 static void send_ack(int ud)
