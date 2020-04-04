@@ -181,7 +181,7 @@ uint16_t spi_flash_probe(void)
     spi_write(0xFF);
     product = spi_read();
     spi_cs_off(SPI_CS_FLASH);
-    if (manuf == 0xBF)
+    if (manuf == 0xBF || manuf == 0xC2)
         chip_write_mode = SST_SINGLEBYTE;
     if (manuf == 0xEF)
         chip_write_mode = WB_WRITEPAGE;
