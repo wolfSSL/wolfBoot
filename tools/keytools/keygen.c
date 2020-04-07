@@ -99,6 +99,7 @@ static void fwritekey(uint8_t *key, int len, FILE *f)
 }
 
 
+#if !defined(NO_RSA) && defined(WOLFSSL_KEY_GEN)
 static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
 {
     RsaKey k;
@@ -146,7 +147,9 @@ static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
     fprintf(fpub, "const uint32_t ecc256_pub_key_len = %d;\n", publen);
     fclose(fpub);
 }
+#endif
 
+#ifdef HAVE_ECC
 #define ECC256_KEY_SIZE 32
 static void keygen_ecc256(WC_RNG *rng, char *pubkfile)
 {
@@ -202,8 +205,10 @@ static void keygen_ecc256(WC_RNG *rng, char *pubkfile)
     fprintf(fpub, "const uint32_t ecc256_pub_key_len = 64;\n");
     fclose(fpub);
 }
+#endif
 
 
+#ifdef HAVE_ED25519
 static void keygen_ed25519(WC_RNG *rng, char *pubkfile)
 {
     ed25519_key k;
@@ -241,6 +246,7 @@ static void keygen_ed25519(WC_RNG *rng, char *pubkfile)
     fprintf(fpub, "const uint32_t ed25519_pub_key_len = 32;\n");
     fclose(fpub);
 }
+#endif
 
 int main(int argc, char** argv)
 {
