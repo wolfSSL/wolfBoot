@@ -275,7 +275,7 @@ keys: $(PRIVATE_KEY)
 
 clean:
 	@find . -type f -name "*.o" | xargs rm -f
-	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex config/target.ld
+	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex config/target.ld .bootloader-partition-size
 	@make -C test-app clean
 
 distclean: clean
