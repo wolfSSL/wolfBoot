@@ -97,13 +97,15 @@ void hal_flash_lock(void)
 {
 }
 
-#include <termio.h>
 #include <fcntl.h>
 #include <err.h>
-#include <linux/serial.h>
 
 static int rate_to_constant(int baudrate) {
+#ifdef __MACH__
+#define B(x) case x: return x
+#else
 #define B(x) case x: return B##x
+#endif
     switch(baudrate) {
         B(50);     B(75);     B(110);    B(134);    B(150);
         B(200);    B(300);    B(600);    B(1200);   B(1800);
@@ -119,7 +121,6 @@ default: return 0;
 static int serial_open(const char *device, int rate)
 {
 	struct termios options;
-	struct serial_struct serinfo;
 	int fd;
 	int speed = 0;
 
@@ -129,8 +130,10 @@ static int serial_open(const char *device, int rate)
 
 	speed = rate_to_constant(rate);
 
+#ifndef __MACH__
 	if (speed == 0) {
 		/* Custom divisor */
+        struct serial_struct serinfo;
 		serinfo.reserved_char[0] = 0;
 		if (ioctl(fd, TIOCGSERIAL, &serinfo) < 0)
 			return -1;
@@ -149,6 +152,7 @@ static int serial_open(const char *device, int rate)
 			      (float)serinfo.baud_base / serinfo.custom_divisor);
 		}
 	}
+#endif
 
 	fcntl(fd, F_SETFL, 0);
 	tcgetattr(fd, &options);
