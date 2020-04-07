@@ -666,6 +666,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
+    int ret;
     uint8_t *stored_signature;
     uint16_t stored_signature_size;
     uint8_t *pubkey_hint;
@@ -694,8 +695,8 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             return -1;
         img->sha_hash = digest;
     }
-    if (wolfBoot_verify_signature(img->sha_hash, stored_signature) != 0)
-        return -1;
+    if ((ret = wolfBoot_verify_signature(img->sha_hash, stored_signature)) != 0)
+        return ret;
     img->signature_ok = 1;
     return 0;
 }
