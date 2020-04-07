@@ -41,7 +41,6 @@
 
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
-#define DEBUG_SIGNTOOL 1
 #ifdef DEBUG_SIGNTOOL
     #include <wolfssl/wolfcrypt/logging.h>
 #endif
