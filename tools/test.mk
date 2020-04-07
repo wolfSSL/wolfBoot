@@ -2,31 +2,42 @@ TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
 EXPVER=tools/test-expect-version/test-expect-version
 SPI_CHIP=SST25VF080B
-SIGN_TOOL=/bin/false
-
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
+SIGN_ARGS=
+
+ifneq ("$(wildcard ./tools/keytools/keygen)","")
+	KEYGEN_TOOL=./tools/keytools/keygen
+else
+	KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
+endif
+
+ifneq ("$(wildcard ./tools/keytools/sign)","")
+	SIGN_TOOL=./tools/keytools/sign
+else
+	SIGN_TOOL=python3 ./tools/keytools/sign.py
+endif
 
 ifeq ($(SIGN),ED25519)
-  SIGN_TOOL=tools/keytools/sign.py --ed25519
+  SIGN_ARGS+= --ed25519
 endif
 
 ifeq ($(SIGN),ECC256)
-  SIGN_TOOL=tools/keytools/sign.py --ecc256
+  SIGN_ARGS+= --ecc256
 endif
 
 ifeq ($(SIGN),RSA2048)
-  SIGN_TOOL=tools/keytools/sign.py --rsa2048
+  SIGN_ARGS+= --rsa2048
 endif
 
 ifeq ($(SIGN),RSA4096)
-  SIGN_TOOL=tools/keytools/sign.py --rsa4096
+  SIGN_ARGS+= --rsa4096
 endif
 
 ifeq ($(HASH),SHA256)
-  SIGN_TOOL+= --sha256
+  SIGN_ARGS+= --sha256
 endif
 ifeq ($(HASH),SHA3)
-  SIGN_TOOL+= --sha3
+  SIGN_ARGS+= --sha3
 endif
 
 $(EXPVER):
@@ -86,7 +97,7 @@ test-tpm-on: FORCE
 
 test-update: test-app/image.bin FORCE
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-update.bin
-	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-update.bin
 	@make test-reset
@@ -100,12 +111,12 @@ test-self-update: wolfboot.bin test-app/image.bin FORCE
 	@make clean
 	@rm src/*_pub_key.c
 	@make factory.bin RAM_CODE=1 WOLFBOOT_VERSION=$(WOLFBOOT_VERSION) SIGN=$(SIGN)
-	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000)
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-self-update.bin
-	@python3 $(SIGN_TOOL) --wolfboot-update wolfboot.bin private_key.old $(WOLFBOOT_VERSION)
+	@$(SIGN_TOOL) $(SIGN_ARGS) --wolfboot-update wolfboot.bin private_key.old $(WOLFBOOT_VERSION)
 	@dd if=wolfboot_v$(WOLFBOOT_VERSION)_signed.bin of=test-self-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-self-update.bin
 	@st-flash --reset write test-self-update.bin 0x08040000 || \
@@ -113,7 +124,7 @@ test-self-update: wolfboot.bin test-app/image.bin FORCE
 		(make test-reset && sleep 1 && st-flash --reset write test-self-update.bin 0x08040000)
 
 test-update-ext: test-app/image.bin FORCE
-	@python3 $(SIGN_TOOL) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@(dd if=/dev/zero bs=1M count=1 | tr '\000' '\377' > test-update.rom)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.rom bs=1 count=524283 conv=notrunc
 	@printf "pBOOT" | dd of=test-update.rom obs=1 seek=524283 count=5 conv=notrunc

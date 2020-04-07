@@ -57,6 +57,7 @@ src/rsa4096_pub_key.c
 
 # keygen binaries
 tools/keytools/sign
+tools/keytools/keygen
 
 # Vim swap files
 .*.swp

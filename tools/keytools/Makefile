@@ -1,6 +1,5 @@
-# wolfBoot Signing Tool
+# wolfBoot KeyGen and Signing Tool
 
-TARGET  = sign
 CC      = gcc
 WOLFDIR = ../../lib/wolfssl/
 CFLAGS  = -Wall -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR)
@@ -14,8 +13,7 @@ OPTIMIZE        = -Os
 CFLAGS+=$(OPTIMIZE)
 
 # Sources
-SRC=sign.c \
-	$(WOLFDIR)wolfcrypt/src/asn.c \
+SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/ecc.c \
 	$(WOLFDIR)wolfcrypt/src/coding.c \
 	$(WOLFDIR)wolfcrypt/src/ed25519.c \
@@ -38,15 +36,19 @@ SRC=sign.c \
 
 .PHONY: clean all
 
-all: $(TARGET)
+all: sign keygen
 
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
 
 # build template
-$(TARGET):
-	@echo "Building C signing tool"
-	@$(CC) -o $(TARGET) $(SRC) $< $(CFLAGS)
+sign:
+	@echo "Building signing tool"
+	@$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
+
+keygen:
+	@echo "Building keygen tool"
+	@$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
 
 clean:
-	rm -f $(TARGET)
+	rm -f sign keygen

@@ -51,6 +51,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #ifdef _WIN32
 #define PATH_MAX 256
@@ -158,9 +159,7 @@ static void keygen_ecc256(WC_RNG *rng, char *pubkfile)
     uint32_t qxsize = ECC256_KEY_SIZE,
              qysize = ECC256_KEY_SIZE,
              dsize = ECC256_KEY_SIZE;
-    uint8_t priv_der[ECC256_KEY_SIZE * 4];
     FILE *fpriv, *fpub;
-    uint32_t outsize = ECC256_KEY_SIZE * 4;
     char priv_fname[20] = "";
 
 
@@ -250,7 +249,6 @@ static void keygen_ed25519(WC_RNG *rng, char *pubkfile)
 
 int main(int argc, char** argv)
 {
-    int ret = 0;
     int i;
     int force = 0;
     int  keytype;

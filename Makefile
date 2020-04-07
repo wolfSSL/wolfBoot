@@ -217,29 +217,22 @@ standalone:
 include tools/test.mk
 
 ed25519.der:
-	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
-
+	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
 ecc256.der:
-	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
+	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
 
 rsa2048.der:
-	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
+	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
 
 rsa4096.der:
-	@python3 tools/keytools/keygen.py $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
+	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
 
 keytools:
 	@make -C tools/keytools
 
 factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
-ifneq ("$(wildcard ./tools/keytools/sign)","")
-	@echo "\n./tools/keytools/sign $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1"
-	$(Q)./tools/keytools/sign $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
-else
-	@echo "\npython3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1"
-	$(Q)python3 tools/keytools/sign.py $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
-endif
+	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
 	@echo "\t[MERGE] $@"
 	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
