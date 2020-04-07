@@ -779,7 +779,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>C:\Users\dan\wolfboot\IDE\IAR\test-app.icf</state>
+                    <state>$PROJ_DIR$\test-app.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
