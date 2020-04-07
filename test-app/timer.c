@@ -88,7 +88,7 @@ int pwm_init(uint32_t clock, uint32_t threshold)
         lvl--;
 
     APB1_CLOCK_RST |= TIM4_APB1_CLOCK_ER_VAL;
-    __asm__ volatile ("dmb");
+    asm volatile ("dmb");
     APB1_CLOCK_RST &= ~TIM4_APB1_CLOCK_ER_VAL;
     APB1_CLOCK_ER |= TIM4_APB1_CLOCK_ER_VAL;
 
@@ -106,7 +106,7 @@ int pwm_init(uint32_t clock, uint32_t threshold)
     TIM4_CCMR2  |= TIM_CCMR2_OC4M_PWM1;
     TIM4_CCER  |= TIM_CCER_CC4_ENABLE;
     TIM4_CR1    |= TIM_CR1_CLOCK_ENABLE | TIM_CR1_ARPE;
-    __asm__ volatile ("dmb");
+    asm volatile ("dmb");
     return 0;
 }
 
@@ -133,17 +133,17 @@ int timer_init(uint32_t clock, uint32_t prescaler, uint32_t interval_ms)
     nvic_irq_enable(NVIC_TIM2_IRQN);
     nvic_irq_setprio(NVIC_TIM2_IRQN, 0);
     APB1_CLOCK_RST |= TIM2_APB1_CLOCK_ER_VAL;
-    __asm__ volatile ("dmb");
+    asm volatile ("dmb");
     APB1_CLOCK_RST &= ~TIM2_APB1_CLOCK_ER_VAL;
     APB1_CLOCK_ER |= TIM2_APB1_CLOCK_ER_VAL;
 
     TIM2_CR1    = 0;
-    __asm__ volatile ("dmb");
+    asm volatile ("dmb");
     TIM2_PSC    = psc;
     TIM2_ARR    = val;
     TIM2_CR1    |= TIM_CR1_CLOCK_ENABLE;
     TIM2_DIER   |= TIM_DIER_UIE;
-    __asm__ volatile ("dmb");
+    asm volatile ("dmb");
     return 0;
 }
 

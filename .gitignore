@@ -57,6 +57,7 @@ src/rsa4096_pub_key.c
 
 # keygen binaries
 tools/keytools/sign
+tools/keytools/keygen
 
 # Vim swap files
 .*.swp
@@ -84,3 +85,8 @@ config/*.ld
 .vs
 *.filters
 *.user
+
+# IAR files not under version control
+IDE/IAR/settings
+IDE/IAR/*.ewt
+

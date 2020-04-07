@@ -24,7 +24,7 @@
 /* STM32 F4 register configuration */
 
 /* Assembly helpers */
-#define DMB() __asm__ volatile ("dmb")
+#define DMB() asm volatile ("dmb")
 
 /*** RCC ***/
 

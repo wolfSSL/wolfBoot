@@ -51,6 +51,7 @@ int isalpha(int c)
     return (isupper(c) || islower(c));
 }
 
+#ifndef __IAR_SYSTEMS_ICC__
 void *memset(void *s, int c, size_t n)
 {
 	unsigned char *d = (unsigned char *)s;
@@ -61,6 +62,7 @@ void *memset(void *s, int c, size_t n)
 
 	return s;
 }
+#endif /* IAR */
 
 char *strcat(char *dest, const char *src)
 {
@@ -166,6 +168,7 @@ int strncmp(const char *s1, const char *s2, size_t n)
     return diff;
 }
 
+#ifndef __IAR_SYSTEMS_ICC__
 void *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;
@@ -178,6 +181,7 @@ void *memcpy(void *dst, const void *src, size_t n)
 
     return dst;
 }
+#endif /* IAR */
 
 char *strncpy(char *dst, const char *src, size_t n)
 {
@@ -206,6 +210,7 @@ char *strcpy(char *dst, const char *src)
     return dst;
 }
 
+
 int memcmp(const void *_s1, const void *_s2, size_t n)
 {
     int diff = 0;
@@ -222,6 +227,7 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
 	return diff;
 }
 
+#ifndef __IAR_SYSTEMS_ICC__
 void *memmove(void *dst, const void *src, size_t n)
 {
     int i;
@@ -238,3 +244,4 @@ void *memmove(void *dst, const void *src, size_t n)
         return memcpy(dst, src, n);
     }
 }
+#endif

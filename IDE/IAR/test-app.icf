@@ -1,0 +1,62 @@
+/*###ICF### Section handled by ICF editor, don't touch! ****/
+/*-Editor annotation file-*/
+/* IcfEditorFile="$TOOLKIT_DIR$\config\linker\ST\IcfEditor\stm32f40x_fsmc.xml" */
+/*-Specials-*/
+define symbol __ICFEDIT_intvec_start__ = 0x08020100;
+/*-Memory Regions-*/
+define symbol __ICFEDIT_region_FLASH_start__  = 0x08020100;
+define symbol __ICFEDIT_region_FLASH_end__    = 0x0803FFFF;
+define symbol __ICFEDIT_region_FSMC11_start__ = 0x0;
+define symbol __ICFEDIT_region_FSMC11_end__   = 0x0;
+define symbol __ICFEDIT_region_FSMC12_start__ = 0x0;
+define symbol __ICFEDIT_region_FSMC12_end__   = 0x0;
+define symbol __ICFEDIT_region_FSMC13_start__ = 0x0;
+define symbol __ICFEDIT_region_FSMC13_end__   = 0x0;
+define symbol __ICFEDIT_region_FSMC14_start__ = 0x0;
+define symbol __ICFEDIT_region_FSMC14_end__   = 0x0;
+define symbol __ICFEDIT_region_NAND1_start__  = 0x0;
+define symbol __ICFEDIT_region_NAND1_end__    = 0x0;
+define symbol __ICFEDIT_region_NAND2_start__  = 0x0;
+define symbol __ICFEDIT_region_NAND2_end__    = 0x0;
+define symbol __ICFEDIT_region_PCARD_start__  = 0x0;
+define symbol __ICFEDIT_region_PCARD_end__    = 0x0;
+define symbol __ICFEDIT_region_CCRAM_start__  = 0x10000000;
+define symbol __ICFEDIT_region_CCRAM_end__    = 0x1000FFFF;
+define symbol __ICFEDIT_region_SRAM1_start__  = 0x20000000;
+define symbol __ICFEDIT_region_SRAM1_end__    = 0x2001BFFF;
+define symbol __ICFEDIT_region_SRAM2_start__  = 0x2001C000;
+define symbol __ICFEDIT_region_SRAM2_end__    = 0x2001FFFF;
+define symbol __ICFEDIT_region_BKPR_start__   = 0x40024000;
+define symbol __ICFEDIT_region_BKPR_end__     = 0x40024FFF;
+/*-Sizes-*/
+define symbol __ICFEDIT_size_cstack__ = 0x2000;
+define symbol __ICFEDIT_size_heap__   = 0x2000;
+/**** End of ICF editor section. ###ICF###*/
+
+define memory mem with size = 4G;
+define region FLASH_region  =   mem:[from __ICFEDIT_region_FLASH_start__  to __ICFEDIT_region_FLASH_end__ ];
+define region FSMC_region   =   mem:[from __ICFEDIT_region_FSMC11_start__ to __ICFEDIT_region_FSMC11_end__]
+                              | mem:[from __ICFEDIT_region_FSMC12_start__ to __ICFEDIT_region_FSMC12_end__]
+                              | mem:[from __ICFEDIT_region_FSMC13_start__ to __ICFEDIT_region_FSMC13_end__]
+                              | mem:[from __ICFEDIT_region_FSMC14_start__ to __ICFEDIT_region_FSMC14_end__];
+define region NAND_region   =   mem:[from __ICFEDIT_region_NAND1_start__  to __ICFEDIT_region_NAND1_end__ ]
+                              | mem:[from __ICFEDIT_region_NAND2_start__  to __ICFEDIT_region_NAND2_end__ ];
+define region PCARD_region  =   mem:[from __ICFEDIT_region_PCARD_start__  to __ICFEDIT_region_PCARD_end__ ];
+define region CCRAM_region  =   mem:[from __ICFEDIT_region_CCRAM_start__  to __ICFEDIT_region_CCRAM_end__ ];
+define region SRAM_region   =   mem:[from __ICFEDIT_region_SRAM1_start__  to __ICFEDIT_region_SRAM1_end__ ]
+                              | mem:[from __ICFEDIT_region_SRAM2_start__  to __ICFEDIT_region_SRAM2_end__ ];
+define region BKPR_region   =   mem:[from __ICFEDIT_region_BKPR_start__   to __ICFEDIT_region_BKPR_end__  ];
+
+define block CSTACK    with alignment = 8, size = __ICFEDIT_size_cstack__   { };
+define block HEAP      with alignment = 8, size = __ICFEDIT_size_heap__     { };
+
+initialize by copy { readwrite };
+//initialize by copy with packing = none { section __DLIB_PERTHREAD }; // Required in a multi-threaded application
+
+place at address mem:__ICFEDIT_intvec_start__ { readonly section .intvec };
+
+place in FLASH_region  { readonly };
+place in PCARD_region  { readonly section application_specific_ro };
+place in CCRAM_region  { section .ccram };
+place in SRAM_region   { readwrite, block CSTACK, block HEAP };
+place in BKPR_region   { section .backup_sram };
