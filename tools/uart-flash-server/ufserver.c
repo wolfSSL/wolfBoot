@@ -37,6 +37,11 @@
 #include <string.h>
 #include <libgen.h>
 
+#ifndef __MACH__
+#include <termio.h>
+#include <linux/serial.h>
+#endif
+
 
 #define CMD_HDR_WOLF  'W'
 #define CMD_HDR_VER   'V'
