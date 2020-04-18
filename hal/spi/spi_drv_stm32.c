@@ -90,6 +90,22 @@ static void spi1_pins_setup(void)
     SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_MOSI_PIN) * 4));
     reg = SPI_PIO_AFL & ~(0xf << ((SPI1_MISO_PIN) * 4));
     SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_MISO_PIN) * 4));
+
+#ifdef PLATFORM_stm32l0
+    reg = SPI_PIO_PUPD & ~(0x03 <<  (SPI1_CLOCK_PIN * 2));
+    SPI_PIO_PUPD = reg | (0x02 << (SPI1_CLOCK_PIN * 2));
+    reg = SPI_PIO_PUPD & ~(0x03 <<  (SPI1_MOSI_PIN * 2));
+    SPI_PIO_PUPD = reg | (0x02 << (SPI1_MOSI_PIN * 2));
+    reg = SPI_PIO_PUPD & ~(0x03 <<  (SPI1_MISO_PIN * 2));
+    SPI_PIO_PUPD = reg | (0x02 << (SPI1_MISO_PIN * 2));
+
+    reg = SPI_PIO_OSPD & ~(0x03 << (SPI1_CLOCK_PIN * 2));
+    SPI_PIO_OSPD |= (0x03 << (SPI1_CLOCK_PIN * 2));
+    reg = SPI_PIO_OSPD & ~(0x03 << (SPI1_MOSI_PIN * 2));
+    SPI_PIO_OSPD |= (0x03 << (SPI1_MOSI_PIN * 2));
+    reg = SPI_PIO_OSPD & ~(0x03 << (SPI1_MISO_PIN * 2));
+    SPI_PIO_OSPD |= (0x03 << (SPI1_MISO_PIN * 2));
+#endif
 }
 
 static void spi_pins_release(void)
