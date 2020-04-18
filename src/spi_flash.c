@@ -187,7 +187,6 @@ uint16_t spi_flash_probe(void)
         chip_write_mode = WB_WRITEPAGE;
 
 #ifndef READONLY
-    spi_cmd(EWSR);
     spi_cs_on(SPI_CS_FLASH);
     spi_write(WRSR);
     spi_read();
