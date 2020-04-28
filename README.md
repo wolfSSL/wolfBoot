@@ -164,3 +164,22 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
  * RSA 2048 bit digital signature verification
  * Hardware support
    * New HAL: STM32H7
+
+### V1.5 (2020-04-28)
+ * RSA 4096 bit digital signature verification
+ * SHA3
+ * Portable C key management tools
+ * Improved integration with Microsoft Windows
+   * Visual Studio solution for key management tools
+ * Support to compile with IAR
+   * Fixed incompatible code
+   * added IAR example project
+ * New architecture: ARMv8 (64-bit)
+   * ARM Cortex-A boot code compatible with TrustZone
+   * Linux staging and device tree support
+ * External flash abstraction
+   * remote update partition accessed via UART
+ * Hardware support
+   * New HAL: raspberry-pi
+   * New HAL: Xilinx Zynq+
+   * New HAL: NXP LPC54xx
