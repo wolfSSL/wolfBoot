@@ -26,7 +26,14 @@
 #include <stdint.h>
 
 /* Allow one single sp_point to be allocated at one time */
+#ifdef WOLFBOOT_SIGN_RSA2048
 #define SP_DIGIT_SIZE (1280)
+#endif
+
+#ifdef WOLFBOOT_SIGN_RSA4096
+#define SP_DIGIT_SIZE (3192)
+#endif
+
 static uint8_t sp_digit[SP_DIGIT_SIZE];
 static int sp_digit_in_use = 0;
 
