@@ -57,9 +57,8 @@ ifeq ($(SIGN),ED25519)
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -nostdlib \
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 \
 		  -Wstack-usage=1024
-  LDFLAGS+=-nostdlib
 endif
 
 ifeq ($(SIGN),RSA2048)
@@ -191,10 +190,6 @@ wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -O binary $^ $@
 
-wolfboot.hex: wolfboot.elf
-	@echo "\t[HEX] $@"
-	$(Q)$(OBJCOPY) -O ihex $^ $@
-
 align: wolfboot-align.bin
 
 .bootloader-partition-size:
@@ -255,6 +250,12 @@ $(LSCRIPT): hal/$(TARGET).ld .bootloader-partition-size FORCE
 	@cat hal/$(TARGET).ld | \
 		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/`cat .bootloader-partition-size`/g" \
 		> $@
+
+hex: wolfboot.hex
+
+%.hex:%.elf
+	@echo "\t[ELF2HEX] $@"
+	@$(OBJCOPY) -O ihex $^ $@
 
 src/ed25519_pub_key.c: ed25519.der
 
