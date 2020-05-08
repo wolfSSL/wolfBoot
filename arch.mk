@@ -160,7 +160,7 @@ ifeq ($(TARGET),psoc6)
 					 $(CYPRESS_PDL)/drivers/source/cy_device.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
-					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM4/system_psoc6_cm4.o \
+					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o \
 					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o
     PKA_EXTRA_CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
 		-I$(CYPRESS_PDL)/devices/psoc6/psoc63/include/ \
