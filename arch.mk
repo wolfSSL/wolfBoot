@@ -152,6 +152,7 @@ ifeq ($(TARGET),stm32wb)
 endif
 
 ifeq ($(TARGET),psoc6)
+    CORTEX_M0=1
     PKA_EXTRA_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
