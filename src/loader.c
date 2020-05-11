@@ -32,8 +32,6 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 extern void (** const IV_RAM)(void);
 #endif
 
-#define FLASHBUFFER_SIZE 256
-
 #ifndef DUALBANK_SWAP
 static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {

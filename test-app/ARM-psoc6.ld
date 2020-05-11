@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x10000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    FLASH (rx) : ORIGIN = ##WOLFBOOT_TEST_APP_ADDRESS##, LENGTH = ##WOLFBOOT_TEST_APP_SIZE##
     RAM (rwx)  : ORIGIN = 0x08000000, LENGTH = 64K
 }
 
@@ -10,7 +10,6 @@ SECTIONS
     .text :
     {
         _start_text = .;
-        __Vectors = .;
         KEEP(*(.isr_vector))
         . = ALIGN(0x400);
         *(.text*)
@@ -47,10 +46,10 @@ SECTIONS
         _end_bss = .;
         __bss_end__ = .;
         _end = .;
-        __ramVectors = .;
     } > RAM
     . = ALIGN(4);
 }
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);
-
+PROVIDE(_start_heap = _end);
+PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));

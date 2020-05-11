@@ -27,17 +27,78 @@
 
 #include "cy_flash.h"
 #include "cy_syspm.h"
+#include "cy_sysclk.h"
+#include "cy_syslib.h"
 #include "cy_ipc_drv.h"
+
+#define ROW_SIZE (0x200)
+#define CPU_FREQ (100000000)
 
 #ifndef NVM_FLASH_WRITEONCE
 #   error "wolfBoot psoc6 HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
 #endif
 
+#if (NVM_CACHE_SIZE != ROW_SIZE)
+#   error "Wrong NVM_CACHE_SIZE specified for this platform. Please set NVM_CACHE_SIZE to match ROW_SIZE"
+#endif
 
 #ifdef __WOLFBOOT
+/* Replace Cy_SysLib_DelayUs with a custom call that does not use SysTick
+ * (required by Cy_SysClk_PllEnable)
+ */
+
+#if 0
+void Cy_SysLib_DelayUs(uint16_t delay_us)
+{
+    volatile unsigned int i;
+    uint32_t cycles = ((CPU_FREQ / 1000000)) * delay_us;
+    for (i = 0; i < cycles; i++) {
+        asm volatile("nop");
+    }
+}
+#endif
+
+static const cy_stc_pll_manual_config_t srss_0_clock_0_pll_0_pllConfig =
+{
+    .feedbackDiv = 100,
+    .referenceDiv = 2,
+    .outputDiv = 4,
+    .lfMode = false,
+    .outputMode = CY_SYSCLK_FLLPLL_OUTPUT_AUTO,
+};
+
 void hal_init(void)
 {
-    /* TODO: how to set clock full speed? */
+    SystemInit();
+#if 0
+    /*Set clock path 1 source to IMO, this feeds PLL1*/
+    Cy_SysClk_ClkPathSetSource(1U, CY_SYSCLK_CLKPATH_IN_IMO);
+
+    /*Set the input for CLK_HF0 to the output of the PLL, which is on clock path 1*/
+    Cy_SysClk_ClkHfSetSource(0U, CY_SYSCLK_CLKHF_IN_CLKPATH1);
+    Cy_SysClk_ClkHfSetDivider(0U, CY_SYSCLK_CLKHF_NO_DIVIDE);
+
+    /*Set divider for CM4 clock to 0, might be able to lower this to save power if needed*/
+    Cy_SysClk_ClkFastSetDivider(0U);
+    /*Set divider for peripheral and CM0 clock to 0 - This must be 0 to get fastest clock to CM0*/
+    Cy_SysClk_ClkPeriSetDivider(0U);
+    /*Set divider for CM0 clock to 0*/
+    Cy_SysClk_ClkSlowSetDivider(0U);
+
+    /*Configure PLL for 100 MHz*/
+    if (CY_SYSCLK_SUCCESS != Cy_SysClk_PllManualConfigure(1U, &srss_0_clock_0_pll_0_pllConfig))
+    {
+        while(1)
+            ;
+    }
+    /*Enable PLL*/
+    if (CY_SYSCLK_SUCCESS != Cy_SysClk_PllEnable(1U, 10000u))
+    {
+        while(1)
+            ;
+    }
+#endif
+    Cy_Flash_Init();
 }
 
 void hal_prepare_boot(void)
@@ -47,11 +108,20 @@ void hal_prepare_boot(void)
 
 #endif
 
+
+/* Only Row-aligned writes allowed. This is guaranteed by wolfBoot if NVM_CACHE is
+ * in use (via NVM_FLASH_WRITEONCE=1), as unaligned writes become cached.
+ */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    if (len != WOLFBOOT_SECTOR_SIZE)
+    if (len < NVM_CACHE_SIZE)
         return -1;
-    Cy_Flash_WriteRow(address,(const uint32_t *) data);
+    while (len) {
+        Cy_Flash_WriteRow(address, (const uint32_t *) data);
+        len -= NVM_CACHE_SIZE;
+        if ((len > 0) && (len < NVM_CACHE_SIZE))
+            return -1;
+    }
     return 0;
 }
 
@@ -67,12 +137,16 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int start = -1, end = -1;
     uint32_t end_address;
-    uint32_t p;
+    uint32_t p = (uint32_t)address;
     if (len == 0)
         return -1;
-    end_address = address + len - 1;
-    for (p = address; p < end_address; p += WOLFBOOT_SECTOR_SIZE) {
+    end_address = address + len;
+    /* Assume NVM_CACHE_SIZE is always defined for this platform 
+     * (see #error statements above)
+     * */
+    while ((end_address - p) >= NVM_CACHE_SIZE) {
         Cy_Flash_EraseRow(p);
+        p += NVM_CACHE_SIZE;
     }
     return 0;
 }

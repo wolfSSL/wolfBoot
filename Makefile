@@ -141,6 +141,9 @@ endif
 
 ifeq ($(NVM_FLASH_WRITEONCE),1)
   CFLAGS+= -DNVM_FLASH_WRITEONCE
+  ifneq ($(NVM_CACHE_SIZE),)
+    CFLAGS+= -DNVM_CACHE_SIZE=$(NVM_CACHE_SIZE)
+  endif
 endif
 
 

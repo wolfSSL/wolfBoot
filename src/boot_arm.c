@@ -97,8 +97,12 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #ifndef NO_VTOR
     /* Disable interrupts */
     asm volatile("cpsid i");
-    /* Update IV */
-    VTOR = ((uint32_t)app_offset);
+    #ifdef PLATFORM_psoc6
+        VTOR = (((uint32_t)(app_offset)) - ARCH_FLASH_OFFSET);
+    #else
+        /* Update IV */
+        VTOR = ((uint32_t)app_offset);
+    #endif
 #endif
 
     /* Get stack pointer, entry point */
