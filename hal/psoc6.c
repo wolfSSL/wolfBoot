@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <target.h>
+#include <string.h>
 #include "image.h"
 
 #include "cy_device_headers.h"
@@ -31,8 +32,11 @@
 #include "cy_syslib.h"
 #include "cy_ipc_drv.h"
 
-#define ROW_SIZE (0x200)
+#define ROW_SIZE (0x1000)
+#define FLASH_BASE_ADDRESS (0x10000000)
 #define CPU_FREQ (100000000)
+
+uint8_t psoc6_write_buffer[ROW_SIZE];
 
 #ifndef NVM_FLASH_WRITEONCE
 #   error "wolfBoot psoc6 HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
@@ -67,10 +71,9 @@ static const cy_stc_pll_manual_config_t srss_0_clock_0_pll_0_pllConfig =
     .outputMode = CY_SYSCLK_FLLPLL_OUTPUT_AUTO,
 };
 
-void hal_init(void)
+#define MPU_CTL *((volatile uint32_t *)(0xE000ED90))
+static void hal_set_pll(void)
 {
-    SystemInit();
-#if 0
     /*Set clock path 1 source to IMO, this feeds PLL1*/
     Cy_SysClk_ClkPathSetSource(1U, CY_SYSCLK_CLKPATH_IN_IMO);
 
@@ -97,8 +100,15 @@ void hal_init(void)
         while(1)
             ;
     }
-#endif
+}
+
+void hal_init(void)
+{
+    MPU_CTL = 0;
+    //SystemInit();
+    Cy_PDL_Init(CY_DEVICE_CFG);
     Cy_Flash_Init();
+    //hal_set_pll();
 }
 
 void hal_prepare_boot(void)
@@ -114,10 +124,18 @@ void hal_prepare_boot(void)
  */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
+    const uint8_t *src = data;
     if (len < NVM_CACHE_SIZE)
         return -1;
+    if ((((uint32_t)data) & FLASH_BASE_ADDRESS) == FLASH_BASE_ADDRESS) {
+        if (len != ROW_SIZE) {
+            return -1;
+        }
+        memcpy(psoc6_write_buffer, data, len);
+        src = psoc6_write_buffer;
+    }
     while (len) {
-        Cy_Flash_WriteRow(address, (const uint32_t *) data);
+        Cy_Flash_ProgramRow(address, (const uint32_t *) src);
         len -= NVM_CACHE_SIZE;
         if ((len > 0) && (len < NVM_CACHE_SIZE))
             return -1;
