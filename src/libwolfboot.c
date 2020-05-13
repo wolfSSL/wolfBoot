@@ -39,10 +39,7 @@ uint32_t ext_cache;
 #define PART_UPDATE_ENDFLAGS ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
 
 #ifdef NVM_FLASH_WRITEONCE
-
-#ifndef NVM_CACHE_SIZE
-    #error "Please define NVM_CACHE_SIZE for this flash model"
-#endif
+#define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
 
 #include <stddef.h>
 extern void *memcpy(void *dst, const void *src, size_t n);

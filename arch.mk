@@ -165,7 +165,7 @@ ifeq ($(TARGET),psoc6)
 					 $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
 					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
 					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
-    PKA_EXTRA_CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
+    CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
 		-I$(CYPRESS_PDL)/devices/include \
 		-I$(CYPRESS_PDL)/cmsis/include \
 		-I$(CYPRESS_TARGET_LIB) \

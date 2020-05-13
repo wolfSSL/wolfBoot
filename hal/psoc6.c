@@ -44,10 +44,6 @@ uint8_t psoc6_write_buffer[ROW_SIZE];
 #   error "wolfBoot psoc6 HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
 #endif
 
-#if (NVM_CACHE_SIZE != ROW_SIZE)
-#   error "Wrong NVM_CACHE_SIZE specified for this platform. Please set NVM_CACHE_SIZE to match ROW_SIZE"
-#endif
-
 #ifdef __WOLFBOOT
 /* Replace Cy_SysLib_DelayUs with a custom call that does not use SysTick
  * (required by Cy_SysClk_PllEnable)
@@ -129,7 +125,7 @@ void hal_prepare_boot(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     const uint8_t *src = data;
-    if (len < NVM_CACHE_SIZE)
+    if (len < ROW_SIZE)
         return -1;
     if ((((uint32_t)data) & FLASH_BASE_ADDRESS) == FLASH_BASE_ADDRESS) {
         if (len != ROW_SIZE) {
@@ -140,8 +136,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     }
     while (len) {
         Cy_Flash_ProgramRow(address, (const uint32_t *) src);
-        len -= NVM_CACHE_SIZE;
-        if ((len > 0) && (len < NVM_CACHE_SIZE))
+        len -= ROW_SIZE;
+        if ((len > 0) && (len < ROW_SIZE))
             return -1;
     }
     return 0;
@@ -163,12 +159,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
     end_address = address + len;
-    /* Assume NVM_CACHE_SIZE is always defined for this platform 
-     * (see #error statements above)
-     * */
-    while ((end_address - p) >= NVM_CACHE_SIZE) {
+    while ((end_address - p) >= ROW_SIZE) {
         Cy_Flash_EraseRow(p);
-        p += NVM_CACHE_SIZE;
+        p += ROW_SIZE;
     }
     return 0;
 }

@@ -552,3 +552,87 @@ make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 #### Signing
 
 `tools/keytools/sign.py --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin rsa4096.der 1`
+
+## Cypress PSoC-62S2 (CY8CKIT-062S2)
+
+The Cypress PSoC 62S2 is a dual-core Cortex-M4 & Cortex-M0+ MCU. The secure boot process is managed by the M0+.
+WolfBoot can be compiled as second stage flash bootloader to manage application verification and firmware updates.
+
+### Building
+
+The following configuration has been tested using PSoC 62S2 Wi-Fi BT Pioneer Kit (CY8CKIT-052S2-43012).
+
+#### Target specific requirements
+
+wolfBoot uses the following components to access peripherals on the PSoC:
+
+  * [Cypress Core Library](https://github.com/cypresssemiconductorco/core-lib)
+  * [PSoC 6 Peripheral Driver Library](https://github.com/cypresssemiconductorco/psoc6pdl)
+  * [CY8CKIT-062S2-43012 BSP](https://github.com/cypresssemiconductorco/TARGET_CY8CKIT-062S2-43012)
+
+Cypress provides a [customized OpenOCD](https://github.com/cypresssemiconductorco/Openocd) for programming the flash and
+debugging.
+
+#### Build configuration
+
+The following configuration has been tested on the PSoC CY8CKIT-62S2-43012:
+
+```
+make TARGET=psoc6
+    NVM_FLASH_WRITEONCE=1
+    CYPRESS_PDL=/home/dan/src/psoc6pdl
+    CYPRESS_TARGET_LIB=/home/dan/src/TARGET_CY8CKIT-062S2-43012
+    CYPRESS_CORE_LIB=/home/dan/src/core-lib
+    WOLFBOOT_SECTOR_SIZE=4096
+```
+
+#### OpenOCD installation
+
+Compile and install the customized OpenOCD.
+
+Use the following configuration file when running `openocd` to connect to the PSoC6 board:
+
+```
+# openocd.cfg for PSoC-62S2
+
+source [find interface/kitprog3.cfg]
+transport select swd
+adapter speed 1000
+source [find target/psoc6_2m.cfg]
+init
+reset init
+```
+
+### Loading the firmware
+
+To upload `factory.bin` to the device with OpenOCD, connect the device,
+run OpenOCD with the configuration from the previous section, then connect
+to the local openOCD server running on TCP port 4444 using `telnet localhost 4444`.
+
+From the telnet console, type:
+
+`program factory.bin 0x10000000`
+
+When the transfer is finished, you can either close openOCD or start a debugging session.
+
+### Debugging
+
+Debugging with OpenOCD:
+
+Use the OpenOCD configuration from the previous sections to run OpenOCD.
+
+From another console, connect using gdb, e.g.:
+
+```
+arm-none-eabi-gdb
+(gdb) target remote:3333
+```
+
+To reset the board to start from the M0+ flash bootloader position (wolfBoot reset handler), use
+the monitor command sequence below:
+
+```
+(gdb) mon init
+(gdb) mon reset init
+(gdb) mon psoc6 reset_halt
+```
