@@ -45,21 +45,6 @@ uint8_t psoc6_write_buffer[ROW_SIZE];
 #endif
 
 #ifdef __WOLFBOOT
-/* Replace Cy_SysLib_DelayUs with a custom call that does not use SysTick
- * (required by Cy_SysClk_PllEnable)
- */
-
-#if 0
-void Cy_SysLib_DelayUs(uint16_t delay_us)
-{
-    volatile unsigned int i;
-    uint32_t cycles = ((CPU_FREQ / 1000000)) * delay_us;
-    for (i = 0; i < cycles; i++) {
-        asm volatile("nop");
-    }
-}
-#endif
-
 static const cy_stc_pll_manual_config_t srss_0_clock_0_pll_0_pllConfig =
 {
     .feedbackDiv = 100,
