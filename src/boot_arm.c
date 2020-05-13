@@ -35,7 +35,6 @@ extern uint32_t *END_STACK;
 
 extern void main(void);
 
-#if !defined(PLATFORM_psoc6)
 
 void isr_reset(void) {
     register unsigned int *src, *dst;
@@ -76,8 +75,6 @@ void isr_empty(void)
 {
     /* Ignore unmapped event and continue */
 }
-
-#endif
 
 
 /* This is the main loop for the bootloader.
@@ -125,7 +122,6 @@ typedef void(*NMIHANDLER)(void);
 #   define isr_NMI isr_empty
 #endif
 
-#ifndef PLATFORM_psoc6
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
@@ -188,7 +184,6 @@ void (* const IV[])(void) =
     isr_empty,
     isr_empty,
 };
-#endif /* ! TARGET_psoc6 */
 
 #ifdef RAM_CODE
 

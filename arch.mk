@@ -153,7 +153,6 @@ endif
 
 ifeq ($(TARGET),psoc6)
     CORTEX_M0=1
-    OBJS+=hal/psoc6_02_cm0plus.o
     PKA_EXTRA_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
