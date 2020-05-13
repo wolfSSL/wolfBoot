@@ -32,6 +32,8 @@
 #include "cy_syslib.h"
 #include "cy_ipc_drv.h"
 
+#include "psoc6_02_config.h"
+
 #define ROW_SIZE (0x1000)
 #define FLASH_BASE_ADDRESS (0x10000000)
 #define CPU_FREQ (100000000)
@@ -71,7 +73,6 @@ static const cy_stc_pll_manual_config_t srss_0_clock_0_pll_0_pllConfig =
     .outputMode = CY_SYSCLK_FLLPLL_OUTPUT_AUTO,
 };
 
-#define MPU_CTL *((volatile uint32_t *)(0xE000ED90))
 static void hal_set_pll(void)
 {
     /*Set clock path 1 source to IMO, this feeds PLL1*/
@@ -83,10 +84,15 @@ static void hal_set_pll(void)
 
     /*Set divider for CM4 clock to 0, might be able to lower this to save power if needed*/
     Cy_SysClk_ClkFastSetDivider(0U);
+
     /*Set divider for peripheral and CM0 clock to 0 - This must be 0 to get fastest clock to CM0*/
     Cy_SysClk_ClkPeriSetDivider(0U);
+
     /*Set divider for CM0 clock to 0*/
     Cy_SysClk_ClkSlowSetDivider(0U);
+
+    /*Set flash memory wait states */
+    Cy_SysLib_SetWaitStates(false, 100);
 
     /*Configure PLL for 100 MHz*/
     if (CY_SYSCLK_SUCCESS != Cy_SysClk_PllManualConfigure(1U, &srss_0_clock_0_pll_0_pllConfig))
@@ -104,11 +110,9 @@ static void hal_set_pll(void)
 
 void hal_init(void)
 {
-    MPU_CTL = 0;
-    //SystemInit();
     Cy_PDL_Init(CY_DEVICE_CFG);
     Cy_Flash_Init();
-    //hal_set_pll();
+    hal_set_pll();
 }
 
 void hal_prepare_boot(void)

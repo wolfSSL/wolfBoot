@@ -165,14 +165,15 @@ ifeq ($(TARGET),psoc6)
 					 $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
 					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
-					$(CYPRESS_TARGET_LIB)/COMPONENT_CM0P/system_psoc6_cm0plus.o
+					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
     PKA_EXTRA_CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
-		-I$(CYPRESS_PDL)/devices/psoc6/psoc63/include/ \
 		-I$(CYPRESS_PDL)/devices/include \
 		-I$(CYPRESS_PDL)/cmsis/include \
 		-I$(CYPRESS_TARGET_LIB) \
 		-I$(CYPRESS_CORE_LIB)/include \
-	    -DCY8C6248FNI_S2D43
+		-I$(CYPRESS_PDL)/devices/include/ip \
+		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
+		-DCY8C624ABZI_D44
     ARCH_FLASH_OFFSET=0x10000000
 endif
 
