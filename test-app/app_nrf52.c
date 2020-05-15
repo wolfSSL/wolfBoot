@@ -40,7 +40,8 @@ static void gpiotoggle(uint32_t pin)
 
 void main(void)
 {
-    uint32_t pin = 19;
+    //uint32_t pin = 19;
+    uint32_t pin = 6;
     int i;
     GPIO_PIN_CNF[pin] = 1; /* Output */
     while(1) {
