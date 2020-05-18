@@ -325,14 +325,9 @@ int main(int argc, char** argv)
         #ifdef HAVE_ED25519            
             ret = wc_ed25519_init(&key.ed);
             if (ret == 0) {
-                ret = wc_ed25519_import_private_only(key_buffer, key_buffer_sz, &key.ed);
-                if (ret == 0) {
-                    ret = wc_ed25519_export_public(&key.ed, key_buffer, &pubkey_sz);
-                    if (ret == 0) {
-                        pubkey = key_buffer;
-                        pubkey_sz = ED25519_PUB_KEY_SIZE;
-                    }
-                }
+                pubkey = key_buffer + ED25519_KEY_SIZE;
+                pubkey_sz = ED25519_PUB_KEY_SIZE;
+                ret = wc_ed25519_import_private_key(key_buffer, ED25519_KEY_SIZE, pubkey, pubkey_sz, &key.ed);
             }
         #endif
         }
