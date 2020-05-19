@@ -130,6 +130,7 @@ static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
         exit(4);
     }
     fwrite(priv_der, privlen, 1, fpriv);
+    fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
 
     fpub = fopen(pubkeyfile, "w");
