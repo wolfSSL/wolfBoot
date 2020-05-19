@@ -39,6 +39,10 @@
 #include "hal/spi/spi_drv_zynq.h"
 #endif
 
+#if defined(PLATFORM_nrf52)
+#include "hal/spi/spi_drv_nrf52.h"
+#endif
+
 void spi_init(int polarity, int phase);
 void spi_write(const char byte);
 uint8_t spi_read(void);

@@ -290,47 +290,5 @@ void main(void) {
     while(1)
         ;
 }
-#endif /** PLATFROM_stm32f4 **/
+#endif /** PLATFORM_stm32f4 **/
 
-#ifdef PLATFORM_nrf52
-#define GPIO_BASE (0x50000000)
-#define GPIO_OUT        *((volatile uint32_t *)(GPIO_BASE + 0x504))
-#define GPIO_OUTSET     *((volatile uint32_t *)(GPIO_BASE + 0x508))
-#define GPIO_OUTCLR     *((volatile uint32_t *)(GPIO_BASE + 0x50C))
-#define GPIO_PIN_CNF     ((volatile uint32_t *)(GPIO_BASE + 0x700)) // Array
-
-static void gpiotoggle(uint32_t pin)
-{
-    uint32_t reg_val = GPIO_OUT;
-    GPIO_OUTCLR = reg_val & (1 << pin);
-    GPIO_OUTSET = (~reg_val) & (1 << pin);
-}
-
-void main(void)
-{
-    uint32_t pin = 19;
-    int i;
-    GPIO_PIN_CNF[pin] = 1; /* Output */
-    while(1) {
-        gpiotoggle(pin);
-        for (i = 0; i < 800000; i++)  // Wait a bit.
-              asm volatile ("nop");
-    }
-}
-
-#endif
-
-#ifdef PLATFORM_samr21
-void main(void) {
-    asm volatile ("cpsie i");
-    while(1)
-        WFI();
-}
-#endif
-
-#ifdef PLATFORM_hifive1
-void main(void) {
-    while(1)
-        ;
-}
-#endif
