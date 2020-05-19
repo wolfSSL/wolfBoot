@@ -88,6 +88,7 @@ void spi_write(const char byte)
     uint32_t reg;
     SPI_EV_RDY = 0;
     SPI_TXDATA = (uint32_t)byte;
+    reg = SPI_EV_RDY;
     while (!reg)
         reg = SPI_EV_RDY;
 }
