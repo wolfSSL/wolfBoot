@@ -134,17 +134,6 @@ ifeq ($(TARGET),lpc)
   OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
 endif
 
-
-CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
-
-## Toolchain setup
-CC=$(CROSS_COMPILE)gcc
-LD=$(CROSS_COMPILE)gcc
-AS=$(CROSS_COMPILE)gcc
-OBJCOPY:=$(CROSS_COMPILE)objcopy
-SIZE:=$(CROSS_COMPILE)size
-BOOT_IMG?=test-app/image.bin
-
 ifeq ($(TARGET),stm32f4)
   SPI_TARGET=stm32
 endif
@@ -161,6 +150,42 @@ ifeq ($(TARGET),stm32wb)
 	    -DSTM32WB55xx
   endif
 endif
+
+ifeq ($(TARGET),psoc6)
+    CORTEX_M0=1
+    PKA_EXTRA_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_device.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
+					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
+					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
+    CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
+		-I$(CYPRESS_PDL)/devices/include \
+		-I$(CYPRESS_PDL)/cmsis/include \
+		-I$(CYPRESS_TARGET_LIB) \
+		-I$(CYPRESS_CORE_LIB)/include \
+		-I$(CYPRESS_PDL)/devices/include/ip \
+		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
+		-DCY8C624ABZI_D44
+    ARCH_FLASH_OFFSET=0x10000000
+endif
+
+CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
+
+## Toolchain setup
+CC=$(CROSS_COMPILE)gcc
+LD=$(CROSS_COMPILE)gcc
+AS=$(CROSS_COMPILE)gcc
+OBJCOPY:=$(CROSS_COMPILE)objcopy
+SIZE:=$(CROSS_COMPILE)size
+BOOT_IMG?=test-app/image.bin
+
 
 
 ## Update mechanism

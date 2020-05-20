@@ -34,6 +34,12 @@
 #endif
 #define IMAGE_HEADER_OFFSET (2 * sizeof(uint32_t))
 
+#ifdef NVM_FLASH_WRITEONCE
+#   define FLASHBUFFER_SIZE WOLFBOOT_SECTOR_SIZE 
+#else
+#   define FLASHBUFFER_SIZE IMAGE_HEADER_SIZE
+#endif
+
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 #define WOLFBOOT_MAGIC_TRAIL    0x544F4F42 /* BOOT */
 
@@ -110,5 +116,6 @@ int wolfBoot_dualboot_candidate(void);
 #else
 #   error "No valid hash algorithm defined!"
 #endif
+
 
 #endif /* !WOLFBOOT_H */

@@ -46,6 +46,10 @@ ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
 endif
+ifeq ($(TARGET),psoc6)
+  LSCRIPT_TEMPLATE=ARM-psoc6.ld
+endif
+
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)

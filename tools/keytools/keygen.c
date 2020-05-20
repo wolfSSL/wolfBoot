@@ -130,7 +130,6 @@ static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
         exit(4);
     }
     fwrite(priv_der, privlen, 1, fpriv);
-    fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
 
     fpub = fopen(pubkeyfile, "w");
@@ -146,7 +145,7 @@ static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
 
     fwritekey(pub_der, publen, fpub);
     fprintf(fpub, "\n};\n");
-    fprintf(fpub, "const uint32_t ecc256_pub_key_len = %d;\n", publen);
+    fprintf(fpub, "const uint32_t rsa%d_pub_key_len = %d;\n", size, publen);
     fclose(fpub);
 }
 #endif
@@ -233,6 +232,7 @@ static void keygen_ed25519(WC_RNG *rng, char *pubkfile)
         exit(3);
     }
     fwrite(priv, 32, 1, fpriv);
+    fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
     fpub = fopen(pubkfile, "w");
     if (fpub == NULL) {

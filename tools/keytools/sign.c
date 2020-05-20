@@ -126,8 +126,8 @@ int main(int argc, char** argv)
     const char* signature_file = NULL;
     char output_image_file[PATH_MAX];
     char* tmpstr;
-    const char* sign_str = NULL;
-    const char* hash_str = NULL;
+    const char* sign_str = "AUTO";
+    const char* hash_str = "SHA256";
     FILE *f, *f2;
     uint8_t* key_buffer = NULL;
     size_t   key_buffer_sz = 0;

@@ -35,6 +35,7 @@ extern uint32_t *END_STACK;
 
 extern void main(void);
 
+
 void isr_reset(void) {
     register unsigned int *src, *dst;
 #if defined(PLATFORM_kinetis)
@@ -75,7 +76,6 @@ void isr_empty(void)
     /* Ignore unmapped event and continue */
 }
 
-#define VTOR (*(volatile uint32_t *)(0xE000ED08))
 
 /* This is the main loop for the bootloader.
  *
@@ -87,6 +87,7 @@ void isr_empty(void)
  *  - Call the application entry point
  *
  */
+#define VTOR (*(volatile uint32_t *)(0xE000ED08))
 static void  *app_entry;
 static uint32_t app_end_stack;
 
@@ -114,12 +115,19 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("mov pc, %0" ::"r"(app_entry));
 }
 
+#ifdef PLATFORM_psoc6
+typedef void(*NMIHANDLER)(void);
+#   define isr_NMI (NMIHANDLER)(0x0000000D)
+#else
+#   define isr_NMI isr_empty
+#endif
+
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
 	(void (*)(void))(&END_STACK),
 	isr_reset,                   // Reset
-	isr_fault,                   // NMI
+	isr_NMI,                     // NMI
 	isr_fault,                   // HardFault
 	isr_fault,                   // MemFault
 	isr_fault,                   // BusFault

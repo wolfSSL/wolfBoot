@@ -28,7 +28,6 @@
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
 
-#define FLASHBUFFER_SIZE 256
 
 #ifdef RAM_CODE
 extern unsigned int _start_text;
