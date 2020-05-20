@@ -583,13 +583,15 @@ wolfBoot configures PLL1 to run at 100 MHz and is driving `CLK_FAST`, `CLK_PERI`
 The following configuration has been tested on the PSoC CY8CKIT-62S2-43012:
 
 ```
-make TARGET=psoc6
-    NVM_FLASH_WRITEONCE=1
-    CYPRESS_PDL=/home/dan/src/psoc6pdl
-    CYPRESS_TARGET_LIB=/home/dan/src/TARGET_CY8CKIT-062S2-43012
-    CYPRESS_CORE_LIB=/home/dan/src/core-lib
+make TARGET=psoc6 \
+    NVM_FLASH_WRITEONCE=1 \
+    CYPRESS_PDL=./lib/psoc6pdl \
+    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
+    CYPRESS_CORE_LIB=./lib/core-lib \
     WOLFBOOT_SECTOR_SIZE=4096
 ```
+
+Note: A reference `.config` can be found in `./config/examples/cypsoc6.config`.
 
 #### OpenOCD installation
 
