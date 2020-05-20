@@ -573,6 +573,11 @@ wolfBoot uses the following components to access peripherals on the PSoC:
 Cypress provides a [customized OpenOCD](https://github.com/cypresssemiconductorco/Openocd) for programming the flash and
 debugging.
 
+
+### Clock settings
+
+wolfBoot configures PLL1 to run at 100 MHz and is driving `CLK_FAST`, `CLK_PERI`, and `CLK_SLOW` at that frequency.
+
 #### Build configuration
 
 The following configuration has been tested on the PSoC CY8CKIT-62S2-43012:

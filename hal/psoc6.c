@@ -98,7 +98,6 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    /* TODO: how to restore boot-default clock speed? */
 }
 
 #endif
