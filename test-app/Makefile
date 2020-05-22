@@ -46,10 +46,6 @@ ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
 endif
-ifeq ($(TARGET),psoc6)
-  LSCRIPT_TEMPLATE=ARM-psoc6.ld
-endif
-
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
@@ -108,6 +104,22 @@ endif
 ifeq ($(TARGET),hifive1)
   CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
   APP_OBJS+=hifive1_write_page.o
+endif
+
+# $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
+
+ifeq ($(TARGET),psoc6)
+  LSCRIPT_TEMPLATE:=ARM-psoc6.ld
+  APP_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_gpio.o \
+			 $(CYPRESS_PDL)/drivers/source/cy_device.o
+    CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
+		-I$(CYPRESS_PDL)/devices/include \
+		-I$(CYPRESS_PDL)/cmsis/include \
+		-I$(CYPRESS_TARGET_LIB) \
+		-I$(CYPRESS_CORE_LIB)/include \
+		-I$(CYPRESS_PDL)/devices/include/ip \
+		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
+		-DCY8C624ABZI_D44
 endif
 
 standalone:CFLAGS+=-DTEST_APP_STANDALONE
