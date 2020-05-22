@@ -26,6 +26,15 @@
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
 //#define DEBUG_SIGNTOOL
 
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
+
 #include <wolfssl/wolfcrypt/settings.h>
 #ifndef NO_RSA
 #include <wolfssl/wolfcrypt/rsa.h>
@@ -45,15 +54,7 @@
 #include <wolfssl/wolfcrypt/logging.h>
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <limits.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <errno.h>
-
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(PATH_MAX)
 #define PATH_MAX 256
 #endif
 
@@ -252,8 +253,8 @@ int main(int argc, char** argv)
 {
     int i;
     int force = 0;
-    int  keytype;
-    const char *kfilename;
+    int  keytype = 0;
+    const char *kfilename = NULL;
     char *output_pubkey_file;
     WC_RNG rng;
     FILE *f;
