@@ -8,6 +8,7 @@
 include tools/config.mk
 
 ## Initializers
+WOLFBOOT_ROOT=$(PWD)
 CFLAGS:=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
 LSCRIPT:=config/target.ld
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
@@ -20,6 +21,7 @@ OBJS:= \
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 UPDATE_OBJS:=
+
 
 ifeq ($(SIGN),RSA4096)
   SPMATH=0
@@ -207,7 +209,7 @@ wolfboot-align.bin: .bootloader-partition-size wolfboot.bin
 	@echo
 
 test-app/image.bin: wolfboot-align.bin
-	@make -C test-app
+	@make -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
 	@rm -f src/*.o hal/*.o
 	@$(SIZE) test-app/image.elf
 
