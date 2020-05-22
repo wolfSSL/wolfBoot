@@ -110,16 +110,16 @@ endif
 
 ifeq ($(TARGET),psoc6)
   LSCRIPT_TEMPLATE:=ARM-psoc6.ld
-  APP_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_gpio.o \
-			 $(CYPRESS_PDL)/drivers/source/cy_device.o
-    CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
-		-I$(CYPRESS_PDL)/devices/include \
-		-I$(CYPRESS_PDL)/cmsis/include \
-		-I$(CYPRESS_TARGET_LIB) \
-		-I$(CYPRESS_CORE_LIB)/include \
-		-I$(CYPRESS_PDL)/devices/include/ip \
-		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
-		-DCY8C624ABZI_D44
+  APP_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_gpio.o
+  APP_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_device.o
+  CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/
+  CFLAGS+=-I$(CYPRESS_PDL)/devices/include
+  CFLAGS+=-I$(CYPRESS_PDL)/cmsis/include
+  CFLAGS+=-I$(CYPRESS_TARGET_LIB)
+  CFLAGS+=-I$(CYPRESS_CORE_LIB)/include
+  CFLAGS+=-I$(CYPRESS_PDL)/devices/include/ip
+  CFLAGS+=-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB
+  CFLAGS+=-DCY8C624ABZI_D44
 endif
 
 standalone:CFLAGS+=-DTEST_APP_STANDALONE
