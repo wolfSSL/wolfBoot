@@ -195,32 +195,32 @@ wolfboot.bin: wolfboot.elf
 align: wolfboot-align.bin
 
 .bootloader-partition-size:
-	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
-	@printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
-	@expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .bootloader-partition-size
-	@rm -f .wolfboot-offset .wolfboot-arch-offset
+	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
+	$(Q)printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
+	$(Q)expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .bootloader-partition-size
+	$(Q)rm -f .wolfboot-offset .wolfboot-arch-offset
 
 wolfboot-align.bin: .bootloader-partition-size wolfboot.bin
-	@dd if=/dev/zero bs=`cat .bootloader-partition-size` count=1 2>/dev/null | tr "\000" "\377" > $(@)
-	@dd if=wolfboot.bin of=$(@) conv=notrunc 2>/dev/null
+	$(Q)dd if=/dev/zero bs=`cat .bootloader-partition-size` count=1 2>/dev/null | tr "\000" "\377" > $(@)
+	$(Q)dd if=wolfboot.bin of=$(@) conv=notrunc 2>/dev/null
 	@echo
 	@echo "\t[SIZE]"
-	@$(SIZE) wolfboot.elf
+	$(Q)$(SIZE) wolfboot.elf
 	@echo
 
 test-app/image.bin: wolfboot-align.bin
-	@make -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
-	@rm -f src/*.o hal/*.o
-	@$(SIZE) test-app/image.elf
+	$(Q)make -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
+	$(Q)rm -f src/*.o hal/*.o
+	$(Q)$(SIZE) test-app/image.elf
 
 standalone:
-	@make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
+	$(Q)make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
     NO_XIP=$(NO_XIP) V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
 	MCUXPRESSO=$(MCUXPRESSO) MCUXPRESSO_CPU=$(MCUXPRESSO_CPU) MCUXPRESSO_DRIVERS=$(MCUXPRESSO_DRIVERS) \
 	MCUXPRESSO_CMSIS=$(MCUXPRESSO_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK) standalone
 	$(Q)$(OBJCOPY) -O binary test-app/image.elf standalone.bin
-	@$(SIZE) test-app/image.elf
+	$(Q)$(SIZE) test-app/image.elf
 
 include tools/test.mk
 
