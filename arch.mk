@@ -74,7 +74,22 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),stm32l5)       
+    CORTEX_M33=1
+    CFLAGS+=-Ihal
+  endif
+
   ## Cortex-M CPU
+  ifeq ($(CORTEX_M33),1)
+    CFLAGS+=-mcpu=cortex-m33 
+    LDFLAGS+=-mcpu=cortex-m33
+    ifeq ($(TZEN),1)
+      CFLAGS += -mcmse
+    endif    
+    ifeq ($(SPMATH),1)
+      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    endif
+  else
   ifeq ($(CORTEX_M0),1)
     CFLAGS+=-mcpu=cortex-m0
     LDFLAGS+=-mcpu=cortex-m0
@@ -97,6 +112,7 @@ ifeq ($(ARCH),ARM)
       endif
     endif
   endif
+endif
 endif
 
 ## RISCV

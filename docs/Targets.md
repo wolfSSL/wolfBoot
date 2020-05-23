@@ -2,7 +2,7 @@
 
 This README describes configuration of supported targets.
 
-## STM32-F407
+## STM32F407
 
 Example 512KB partitioning on STM32-F407
 
@@ -60,6 +60,46 @@ mon reset init
 b main
 c
 ```
+
+## STM32L5
+
+### Example Description
+
+The implementation shows how to switch from secure application to non-secure application 
+thanks to the system isolation performed to split the internal Flash and internal SRAM memories
+into two halves:
+ - the first half for the secure application
+ - the second half for the non-secure application
+
+### Hardware and Software environment
+
+- This example runs on STM32L562QEIxQ devices with security enabled (TZEN=1).
+- This example has been tested with STMicroelectronics STM32L562E-DK (MB1373)
+- User Option Bytes requirement (with STM32CubeProgrammer tool - see below for instructions)
+
+```
+TZEN = 1                            System with TrustZone-M enabled
+DBANK = 1                           Dual bank mode
+SECWM1_PSTRT=0x0  SECWM1_PEND=0x7F  All 128 pages of internal Flash Bank1 set as secure
+SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secure, hence Bank2 non-secure
+```
+
+- NOTE: STM32CubeProgrammer V2.3.0 is recommended  (v2.4.0 has a known bug for STM32L5)
+- typical path: C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin
+	
+### How to use it
+
+1. `cp ./config/examples/stm32l5.config .config`
+2. `make TZEN=1`
+3. Prepare board with option bytes configuration reported above
+    - `STM32_Programmer_CLI.exe -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
+    - `STM32_Programmer_CLI.exe -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
+4. flash wolfBoot.bin to 0xc000 0000
+    - STM32_Programmer_CLI.exe -c port=swd -d .\wolfboot.bin 0xC000000
+5. `flash .\test-app\image_v1_signed.bin to 0x8040000`
+    - `STM32_Programmer_CLI.exe -c port=swd -d .\test-app\image_v1_signed.bin 0x8040000`
+6. RED LD9 will be on
+
 
 ## STM32L0x3
 

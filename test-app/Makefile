@@ -28,8 +28,14 @@ endif
 
 CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
-APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../src/libwolfboot.o
 include ../arch.mk
+
+ifeq ($(TZEN),1)
+    APP_OBJS+=../hal/$(TARGET)_ns.o
+else
+    APP_OBJS+=../hal/$(TARGET).o
+endif
 
 ifeq ($(ARCH),RISCV)
   APP_OBJS+=startup_riscv.o vector_riscv.o
@@ -53,6 +59,10 @@ LSCRIPT_TEMPLATE:=$(ARCH).ld
 ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
+endif
+ifeq ($(TARGET),stm32l5)
+  LSCRIPT_TEMPLATE=ARM-stm32l5.ld
+  CFLAGS+=-mcpu=cortex-m33  
 endif
 LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 

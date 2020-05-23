@@ -19,7 +19,7 @@ and RAM boundaries.
 ## Supported platforms
 
 The following platforms are supported in the current version:
-  - STM32F4
+  - STM32F4, STM32L5, STM32L0, STM32F7, STM32H7, STM32G0
   - nRF52
   - Atmel samR21
   - TI cc26x2
