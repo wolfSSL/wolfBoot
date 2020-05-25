@@ -57,6 +57,7 @@ ifeq ($(SIGN),ED25519)
 	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
 	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+	./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_ED25519 \
@@ -74,6 +75,7 @@ ifeq ($(SIGN),RSA2048)
 	./lib/wolfssl/wolfcrypt/src/rsa.o \
 	./lib/wolfssl/wolfcrypt/src/asn.o \
 	./lib/wolfssl/wolfcrypt/src/hash.o \
+	./lib/wolfssl/wolfcrypt/src/wc_port.o \
 	./src/xmalloc_rsa.o
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
@@ -148,9 +150,9 @@ endif
 
 
 ifeq ($(DEBUG),1)
-    CFLAGS+=-O0 -g -ggdb3 -DDEBUG=1
+  CFLAGS+=-O0 -g -ggdb3 -DDEBUG=1
 else
-    CFLAGS+=-Os
+  CFLAGS+=-Os
 endif
 
 ifeq ($(V),0)
@@ -158,7 +160,7 @@ ifeq ($(V),0)
 endif
 
 ifeq ($(VTOR),0)
-    CFLAGS+=-DNO_VTOR
+  CFLAGS+=-DNO_VTOR
 endif
 
 ifeq ($(PKA),1)
@@ -170,18 +172,21 @@ OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(UPDATE_OBJS)
 
 ifeq ($(WOLFTPM),1)
-OBJS += lib/wolfTPM/src/tpm2.o \
-	lib/wolfTPM/src/tpm2_packet.o \
-	lib/wolfTPM/src/tpm2_tis.o \
-	lib/wolfTPM/src/tpm2_wrap.o \
+  OBJS += lib/wolfTPM/src/tpm2.o \
+    lib/wolfTPM/src/tpm2_packet.o \
+    lib/wolfTPM/src/tpm2_tis.o \
+    lib/wolfTPM/src/tpm2_wrap.o \
     hal/spi/spi_drv_$(SPI_TARGET).o
-    CFLAGS+=-DWOLFTPM_SLB9670 -DWOLFTPM2_NO_WOLFCRYPT -DSIZEOF_LONG=4 -Ilib/wolfTPM \
-			-DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
-			-DWOLFTPM_SMALL_STACK
-
-else
-    OBJS+=$(WOLFCRYPT_OBJS)
+  CFLAGS+=-DWOLFBOOT_TPM -DSIZEOF_LONG=4 -Ilib/wolfTPM \
+    -DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 \
+    -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
+    -DWOLFTPM_SMALL_STACK
+  # Chip Type: WOLFTPM_SLB9670, WOLFTPM_ST33, WOLFTPM_MCHP
+  CFLAGS+=-DWOLFTPM_SLB9670
+  # Use TPM for hashing (slow)
+  #CFLAGS+=-DWOLFBOOT_HASH_TPM
 endif
+OBJS+=$(WOLFCRYPT_OBJS)
 
 
 ASFLAGS:=$(CFLAGS)

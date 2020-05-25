@@ -58,7 +58,7 @@ static void spi_flash_pin_setup(void)
 
 static void spi_tpm2_pin_setup(void)
 {
-#ifdef WOLFTPM2_NO_WOLFCRYPT
+#ifdef WOLFBOOT_TPM
     uint32_t reg;
     RCC_GPIO_CLOCK_ER |= SPI_PIO_CS_CEN;
     reg = SPI_PIO_CS_MODE & ~ (0x03 << (SPI_CS_TPM * 2));
