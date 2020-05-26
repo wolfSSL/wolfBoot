@@ -175,7 +175,7 @@ int main(void)
     uart_init(UART_FLASH_BITRATE, 8, 'N', 1);
     uart_send_current_version();
 #endif
-#ifdef WOLFTPM2_NO_WOLFCRYPT
+#ifdef WOLFBOOT_TPM
     wolfBoot_tpm2_init();
 #endif
     wolfBoot_start();

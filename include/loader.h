@@ -53,7 +53,7 @@
 #   error "No public key available for given signing algorithm."
 #endif /* Algorithm selection */
 
-#ifdef WOLFTPM2_NO_WOLFCRYPT
+#ifdef WOLFBOOT_TPM
     int wolfBoot_tpm2_init(void);
 #endif
 
