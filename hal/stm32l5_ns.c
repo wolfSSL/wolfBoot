@@ -311,7 +311,7 @@ static void clock_pll_on(int powersave)
     PWR_CR1 |= (PWR_CR1_VOS_0 << PWR_CR1_VOS_SHIFT);
     /* Delay after setting the voltage scaling */
     reg32 = PWR_CR1;
-    while ((PWR_SR2 & PWR_SR2_VOSF) == 1) {};
+    while ((PWR_SR2 & PWR_SR2_VOSF) != 0) {};
 
     while ((RCC_CR & RCC_CR_MSIRDY) == 0) {};
     flash_waitstates = 2;
