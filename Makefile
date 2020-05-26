@@ -213,10 +213,17 @@ ifeq ($(WOLFTPM),1)
 endif
 OBJS+=$(WOLFCRYPT_OBJS)
 
+MAIN_TARGET=factory.bin
+
+ifeq ($(TARGET),stm32l5)
+    # Don't build a contiguous image
+	MAIN_TARGET:=wolfboot.bin
+endif
+
 
 ASFLAGS:=$(CFLAGS)
 
-all: factory.bin
+all: $(MAIN_TARGET)
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
