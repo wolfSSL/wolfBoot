@@ -24,9 +24,6 @@
 #include "image.h"
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
-#if defined(PLATFORM_stm32l5) && (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-#include "stm32l5_partition.h"
-#endif
 
 extern unsigned int _start_text;
 extern unsigned int _stored_data;
@@ -190,9 +187,7 @@ void isr_reset(void) {
         dst++;
     }
 
-#if defined(PLATFORM_stm32l5) && (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)  
-    TZ_SAU_Setup();  
-#else
+#if !defined(PLATFORM_stm32l5) || (__ARM_FEATURE_CMSE == 0) || (__ARM_FEATURE_CMSE != 3U)  
     mpu_init();
 #endif 
     /* Run the program! */

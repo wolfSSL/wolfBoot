@@ -520,6 +520,7 @@ static void led_unsecure()
 
 void hal_init(void)
 {
+    TZ_SAU_Setup();
     clock_pll_on(0);
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
