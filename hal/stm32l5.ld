@@ -9,7 +9,7 @@ SECTIONS
     .text :
     {
         _start_text = .;
-        KEEP(*(.isr_vector))        
+        KEEP(*(.isr_vector))
         *(.text*)
         *(.rodata*)
         . = ALIGN(8);

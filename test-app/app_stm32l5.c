@@ -50,21 +50,21 @@
 #define GPIOG_AHB2_CLOCK_ER (1 << 6)
 #define GPIOD_AHB2_CLOCK_ER (1 << 3)
 
-#define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04)) 
-#define PWR_CR2_IOSV         (1 << 9) 
+#define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
+#define PWR_CR2_IOSV         (1 << 9)
 
 static void boot_led_on(void)
 {
     uint32_t reg;
-    uint32_t pin = LED_BOOT_PIN;  
-    
-    RCC_AHB2_CLOCK_ER|= GPIOG_AHB2_CLOCK_ER;     
-    /* Delay after an RCC peripheral clock enabling */ 
-    reg = RCC_AHB2_CLOCK_ER; 
+    uint32_t pin = LED_BOOT_PIN;
+
+    RCC_AHB2_CLOCK_ER|= GPIOG_AHB2_CLOCK_ER;
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_AHB2_CLOCK_ER;
     PWR_CR2 |= PWR_CR2_IOSV;
 
     reg = GPIOG_MODER & ~(0x03 << (pin * 2));
-    GPIOG_MODER = reg | (1 << (pin * 2));    
+    GPIOG_MODER = reg | (1 << (pin * 2));
     GPIOG_PUPDR &= ~(0x03 << (pin * 2));
     GPIOG_BSRR |= (1 << (pin + 16));
 }
@@ -79,12 +79,12 @@ void usr_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_USR_PIN;
 
-    RCC_AHB2_CLOCK_ER|= GPIOD_AHB2_CLOCK_ER;     
-    /* Delay after an RCC peripheral clock enabling */ 
-    reg = RCC_AHB2_CLOCK_ER; 
-    
+    RCC_AHB2_CLOCK_ER|= GPIOD_AHB2_CLOCK_ER;
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_AHB2_CLOCK_ER;
+
     reg = GPIOD_MODER & ~(0x03 << (pin * 2));
-    GPIOD_MODER = reg | (1 << (pin * 2));    
+    GPIOD_MODER = reg | (1 << (pin * 2));
     GPIOD_PUPDR &= ~(0x03 << (pin * 2));
     GPIOD_BSRR |= (1 << (pin + 16));
 }
@@ -96,7 +96,7 @@ void usr_led_off(void)
 
 void main(void)
 {
-    hal_init();    
+    hal_init();
     boot_led_on();
     usr_led_on();
     boot_led_off();

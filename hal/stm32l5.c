@@ -20,13 +20,13 @@
  */
 
 #include <stdint.h>
-#include <image.h> 
-#include "stm32l5_partition.h" 
+#include <image.h>
+#include "stm32l5_partition.h"
 
 /* Assembly helpers */
-#define DMB() __asm__ volatile ("dmb") 
-#define ISB() __asm__ volatile ("isb") 
-#define DSB() __asm__ volatile ("dsb") 
+#define DMB() __asm__ volatile ("dmb")
+#define ISB() __asm__ volatile ("isb")
+#define DSB() __asm__ volatile ("dsb")
 
 /* STM32 L5 register configuration */
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
@@ -47,7 +47,7 @@
 #define RCC_CR_HSIRDY               (1 << 10) //RM0438 - 9.8.1
 #define RCC_CR_HSION                (1 << 8)  //RM0438 - 9.8.1
 #define RCC_CR_MSIRANGE_SHIFT       (4)  //RM0438 - 9.8.1
-#define RCC_CR_MSIRANGE_11          (11)  
+#define RCC_CR_MSIRANGE_11          (11)
 #define RCC_CR_MSIRGSEL             (1 << 3)  //RM0438 - 9.8.1
 #define RCC_CR_MSIPLLEN             (1 << 2)  //RM0438 - 9.8.1
 #define RCC_CR_MSIRDY               (1 << 1)  //RM0438 - 9.8.1
@@ -94,23 +94,23 @@
 #define RCC_PLLCFGR_PLLN_SHIFT       (8)
 #define RCC_PLLCFGR_PLLM_SHIFT       (4)
 
-#define RCC_PLLCFGR_QR_DIV_2          0x0    
-#define RCC_PLLCFGR_QR_DIV_4          0x1    
-#define RCC_PLLCFGR_QR_DIV_6          0x2    
-#define RCC_PLLCFGR_QR_DIV_8          0x3    
+#define RCC_PLLCFGR_QR_DIV_2          0x0
+#define RCC_PLLCFGR_QR_DIV_4          0x1
+#define RCC_PLLCFGR_QR_DIV_6          0x2
+#define RCC_PLLCFGR_QR_DIV_8          0x3
 
-#define RCC_PLLCFGR_P_DIV_7           0x0    
-#define RCC_PLLCFGR_P_DIV_17          0x1    
+#define RCC_PLLCFGR_P_DIV_7           0x0
+#define RCC_PLLCFGR_P_DIV_17          0x1
 
 #define RCC_PLLCKSELR_PLLSRC_NONE    0x0
 #define RCC_PLLCKSELR_PLLSRC_MSI     0x1
 #define RCC_PLLCKSELR_PLLSRC_HSI16   0x2
 #define RCC_PLLCKSELR_PLLSRC_HSE     0x3
 
-#define RCC_APB1ENR         (*(volatile uint32_t *)(RCC_BASE + 0x58))  
+#define RCC_APB1ENR         (*(volatile uint32_t *)(RCC_BASE + 0x58))
 #define RCC_APB1ENR_PWREN         (1 << 28)
 
-#define RCC_APB2ENR         (*(volatile uint32_t *)(RCC_BASE + 0x60))  
+#define RCC_APB2ENR         (*(volatile uint32_t *)(RCC_BASE + 0x60))
 #define RCC_APB2ENR_SYSCFGEN      (1 << 0)
 
 
@@ -124,20 +124,20 @@
 #define PWR_BASE            (0x40007000)   //RM0438 - Table 4
 #endif
 
-#define PWR_CR1              (*(volatile uint32_t *)(PWR_BASE + 0x00)) 
-#define PWR_CR1_VOS_SHIFT    (9) 
-#define PWR_CR1_VOS_0        (0x0) 
-#define PWR_CR1_VOS_1        (0x1) 
-#define PWR_CR1_VOS_2        (0x2) 
+#define PWR_CR1              (*(volatile uint32_t *)(PWR_BASE + 0x00))
+#define PWR_CR1_VOS_SHIFT    (9)
+#define PWR_CR1_VOS_0        (0x0)
+#define PWR_CR1_VOS_1        (0x1)
+#define PWR_CR1_VOS_2        (0x2)
 
-#define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04)) 
-#define PWR_CR2_IOSV         (1 << 9) 
-#define PWR_CR3              (*(volatile uint32_t *)(PWR_BASE + 0x08)) 
+#define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
+#define PWR_CR2_IOSV         (1 << 9)
+#define PWR_CR3              (*(volatile uint32_t *)(PWR_BASE + 0x08))
 #define PWR_CR3_UCPD_DBDIS   (1 << 14)
-#define PWR_CR4              (*(volatile uint32_t *)(PWR_BASE + 0x0C)) 
+#define PWR_CR4              (*(volatile uint32_t *)(PWR_BASE + 0x0C))
 
-#define PWR_SR1              (*(volatile uint32_t *)(PWR_BASE + 0x10)) 
-#define PWR_SR2              (*(volatile uint32_t *)(PWR_BASE + 0x14)) 
+#define PWR_SR1              (*(volatile uint32_t *)(PWR_BASE + 0x10))
+#define PWR_SR2              (*(volatile uint32_t *)(PWR_BASE + 0x14))
 #define PWR_SR2_VOSF         (1 << 10)
 
 #define SYSCFG_BASE          (0x50010000) //RM0438 - Table 4
@@ -145,7 +145,7 @@
 
 
 /*** FLASH ***/
-#define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) //RM0438 - RCC_APB2ENR - SYSCFGEN 
+#define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) //RM0438 - RCC_APB2ENR - SYSCFGEN
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 /*Secure*/
@@ -155,7 +155,7 @@
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
 
 /* Register values */
-#define FLASH_SR_EOP                        (1 << 0) 
+#define FLASH_SR_EOP                        (1 << 0)
 #define FLASH_SR_OPERR                      (1 << 1)
 #define FLASH_SR_PROGERR                    (1 << 3)
 #define FLASH_SR_WRPERR                     (1 << 4)
@@ -167,7 +167,7 @@
 #define FLASH_CR_PG                         (1 << 0)
 #define FLASH_CR_PER                        (1 << 1)
 #define FLASH_CR_MER1                       (1 << 2)
-#define FLASH_CR_PNB_SHIFT                  3 
+#define FLASH_CR_PNB_SHIFT                  3
 #define FLASH_CR_PNB_MASK                   0x7F
 #define FLASH_CR_BKER                       (1 << 11)
 #define FLASH_CR_MER2                       (1 << 15)
@@ -175,18 +175,18 @@
 #define FLASH_CR_EOPIE                      (1 << 24)
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_INV                        (1 << 29)
-#define FLASH_CR_LOCK                       (1 << 31) 
+#define FLASH_CR_LOCK                       (1 << 31)
 
 
 #else
 /*Non-Secure*/
 #define FLASH_BASE          (0x40022000)   //RM0438 - Table 4
-#define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x08)) 
-#define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20)) 
-#define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28)) 
+#define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x08))
+#define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
+#define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
 
 /* Register values */
-#define FLASH_SR_EOP                        (1 << 0) 
+#define FLASH_SR_EOP                        (1 << 0)
 #define FLASH_SR_OPERR                      (1 << 1)
 #define FLASH_SR_PROGERR                    (1 << 3)
 #define FLASH_SR_WRPERR                     (1 << 4)
@@ -199,7 +199,7 @@
 #define FLASH_CR_PG                         (1 << 0)
 #define FLASH_CR_PER                        (1 << 1)
 #define FLASH_CR_MER1                       (1 << 2)
-#define FLASH_CR_PNB_SHIFT                  3 
+#define FLASH_CR_PNB_SHIFT                  3
 #define FLASH_CR_PNB_MASK                   0x7F
 #define FLASH_CR_BKER                       (1 << 11)
 #define FLASH_CR_MER2                       (1 << 15)
@@ -209,10 +209,10 @@
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_OBL_LAUNCH                 (1 << 27)
 #define FLASH_CR_OPTLOCK                    (1 << 30)
-#define FLASH_CR_LOCK                       (1 << 31) 
+#define FLASH_CR_LOCK                       (1 << 31)
 #endif
 
-#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) 
+#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
 
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
@@ -254,41 +254,41 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 }
 
 static RAMFUNCTION void flash_wait_complete(uint8_t bank)
-{   
+{
    while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY);
-    
+
 }
 
 static void RAMFUNCTION flash_clear_errors(uint8_t bank)
-{    
+{
 
   FLASH_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR
 #if !(defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
   |
-  FLASH_SR_OPTWERR 
+  FLASH_SR_OPTWERR
 #endif
   ) ;
-    
+
 }
 
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
   int i = 0;
-  uint32_t *src, *dst;  
+  uint32_t *src, *dst;
 
-  flash_clear_errors(0);  
+  flash_clear_errors(0);
 
   src = (uint32_t *)data;
   dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
 
-  while (i < len) {    
-    FLASH_CR |= FLASH_CR_PG;            
-    dst[i >> 2] = src[i >> 2];        
+  while (i < len) {
+    FLASH_CR |= FLASH_CR_PG;
+    dst[i >> 2] = src[i >> 2];
     dst[(i >> 2) + 1] = src[(i >> 2) + 1];
     flash_wait_complete(0);
-    FLASH_CR &= ~FLASH_CR_PG;             
-    i+=8;    
+    FLASH_CR &= ~FLASH_CR_PG;
+    i+=8;
   }
 
   return 0;
@@ -321,31 +321,31 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t p;
 
     flash_clear_errors(0);
-      
+
     if (len == 0)
         return -1;
     end_address = address + len - 1;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-       // considering DBANK = 1 
+       // considering DBANK = 1
         if (p < (FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) )
         {
-          FLASH_CR &= ~FLASH_CR_BKER;  
+          FLASH_CR &= ~FLASH_CR_BKER;
         }
         if(p>=(FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) && (p <= (FLASH_TOP -FLASHMEM_ADDRESS_SPACE) ))
-        {          
-          FLASH_CR |= FLASH_CR_BKER; 
+        {
+          FLASH_CR |= FLASH_CR_BKER;
         }
 
-        uint32_t reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT)| FLASH_CR_PER));        
+        uint32_t reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT)| FLASH_CR_PER));
         FLASH_CR = reg | (((p >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
         DMB();
-        FLASH_CR |= FLASH_CR_STRT;        
+        FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete(0);
     }
-  
-   /* If the erase operation is completed, disable the associated bits */   
+
+   /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_PER ;
-   
+
   return 0;
 }
 
@@ -361,10 +361,10 @@ static void clock_pll_off(void)
 
     /* Wait for MSI clock to be selected. */
     while ((RCC_CFGR & ((1 << 1) | (1 << 0))) != RCC_CFGR_SW_MSI) {};
-    
+
     /* Turn off PLL */
     RCC_CR &= ~RCC_CR_PLLON;
-    DMB();    
+    DMB();
 }
 
 /*This implementation will setup MSI 48 MHz as PLL Source Mux, PLLCLK as System Clock Source*/
@@ -373,11 +373,11 @@ static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
     uint32_t plln, pllm, pllq, pllp, pllr, hpre, apb1pre, apb2pre , flash_waitstates;
-           
-    RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;    
-    RCC_APB1ENR |= RCC_APB1ENR_PWREN;   
+
+    RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+    RCC_APB1ENR |= RCC_APB1ENR_PWREN;
     PWR_CR3 |= PWR_CR3_UCPD_DBDIS;
-    
+
     PWR_CR1 &= ~((1 << 10) | (1 << 9));
     PWR_CR1 |= (PWR_CR1_VOS_0 << PWR_CR1_VOS_SHIFT);
     /* Delay after setting the voltage scaling */
@@ -386,27 +386,27 @@ static void clock_pll_on(int powersave)
 
     while ((RCC_CR & RCC_CR_MSIRDY) == 0) {};
     flash_waitstates = 2;
-    flash_set_waitstates(flash_waitstates); 
-        
-    RCC_CR |= RCC_CR_MSIRGSEL;    
+    flash_set_waitstates(flash_waitstates);
+
+    RCC_CR |= RCC_CR_MSIRGSEL;
 
     reg32 = RCC_CR;
     reg32 &= ~((1 << 7) | (1 << 6) | (1 << 5) | (1 << 4));
-    reg32 |= (RCC_CR_MSIRANGE_11 << RCC_CR_MSIRANGE_SHIFT);   
+    reg32 |= (RCC_CR_MSIRANGE_11 << RCC_CR_MSIRANGE_SHIFT);
     RCC_CR = reg32;
     reg32 = RCC_CR;
     DMB();
-    
+
 
     /* Select clock parameters (CPU Speed = 110 MHz) */
     pllm = 12;
     plln = 55;
-    pllp = 7;    
+    pllp = 7;
     pllq = RCC_PLLCFGR_QR_DIV_2;
     pllr = RCC_PLLCFGR_QR_DIV_2;
     hpre  = RCC_AHB_PRESCALER_DIV_NONE;
     apb1pre = RCC_APB_PRESCALER_DIV_NONE;
-    apb2pre = RCC_APB_PRESCALER_DIV_NONE;    
+    apb2pre = RCC_APB_PRESCALER_DIV_NONE;
     flash_waitstates = 5;
 
    RCC_CR &= ~RCC_CR_PLLON;
@@ -425,12 +425,12 @@ static void clock_pll_on(int powersave)
 
    RCC_CR |= RCC_CR_PLLON;
    while ((RCC_CR & RCC_CR_PLLRDY) == 0) {};
-   
+
    RCC_PLLCFGR |= RCC_PLLCFGR_PLLREN;
 
-  flash_set_waitstates(flash_waitstates); 
+  flash_set_waitstates(flash_waitstates);
 
-  /*step down HPRE before going to >80MHz*/  
+  /*step down HPRE before going to >80MHz*/
   reg32 = RCC_CFGR ;
   reg32 &= ~((1 << 7) | (1 << 6) | (1 << 5) | (1 << 4));
   reg32 |= ((RCC_AHB_PRESCALER_DIV_2) << RCC_CFGR_HPRE_SHIFT) ;
@@ -452,7 +452,7 @@ static void clock_pll_on(int powersave)
   reg32 |= ((hpre) << RCC_CFGR_HPRE_SHIFT) ;
   RCC_CFGR = reg32;
   DMB();
-  
+
   /*PRE1 and PRE2 conf*/
   reg32 = RCC_CFGR ;
   reg32 &= ~((1 << 10) | (1 << 9) | (1 << 8));
@@ -461,46 +461,46 @@ static void clock_pll_on(int powersave)
   reg32 |= ((apb2pre) << RCC_CFGR_PPRE2_SHIFT) ;
   RCC_CFGR = reg32;
   DMB();
-  
+
 }
 static void gtzc_init(void)
-{  
-  /*configure SRAM1 */       
-  SET_GTZC_MPCBBx_S_VCTR(1,0);  
-  SET_GTZC_MPCBBx_S_VCTR(1,1);  
-  SET_GTZC_MPCBBx_S_VCTR(1,2);  
-  SET_GTZC_MPCBBx_S_VCTR(1,3);  
-  SET_GTZC_MPCBBx_S_VCTR(1,4);  
-  SET_GTZC_MPCBBx_S_VCTR(1,5);  
-  SET_GTZC_MPCBBx_S_VCTR(1,6);  
-  SET_GTZC_MPCBBx_S_VCTR(1,7);  
-  SET_GTZC_MPCBBx_S_VCTR(1,8);  
-  SET_GTZC_MPCBBx_S_VCTR(1,9);  
-  SET_GTZC_MPCBBx_S_VCTR(1,10);  
-  SET_GTZC_MPCBBx_S_VCTR(1,11);  
-  SET_GTZC_MPCBBx_S_VCTR(1,12);  
-  SET_GTZC_MPCBBx_S_VCTR(1,13);  
-  SET_GTZC_MPCBBx_S_VCTR(1,14);  
-  SET_GTZC_MPCBBx_S_VCTR(1,15);  
-  SET_GTZC_MPCBBx_S_VCTR(1,16);  
-  SET_GTZC_MPCBBx_S_VCTR(1,17);  
-  SET_GTZC_MPCBBx_S_VCTR(1,18);  
-  SET_GTZC_MPCBBx_S_VCTR(1,19);  
-  SET_GTZC_MPCBBx_S_VCTR(1,20);  
-  SET_GTZC_MPCBBx_S_VCTR(1,21);  
-  SET_GTZC_MPCBBx_S_VCTR(1,22);  
-  SET_GTZC_MPCBBx_S_VCTR(1,23);   
+{
+  /*configure SRAM1 */
+  SET_GTZC_MPCBBx_S_VCTR(1,0);
+  SET_GTZC_MPCBBx_S_VCTR(1,1);
+  SET_GTZC_MPCBBx_S_VCTR(1,2);
+  SET_GTZC_MPCBBx_S_VCTR(1,3);
+  SET_GTZC_MPCBBx_S_VCTR(1,4);
+  SET_GTZC_MPCBBx_S_VCTR(1,5);
+  SET_GTZC_MPCBBx_S_VCTR(1,6);
+  SET_GTZC_MPCBBx_S_VCTR(1,7);
+  SET_GTZC_MPCBBx_S_VCTR(1,8);
+  SET_GTZC_MPCBBx_S_VCTR(1,9);
+  SET_GTZC_MPCBBx_S_VCTR(1,10);
+  SET_GTZC_MPCBBx_S_VCTR(1,11);
+  SET_GTZC_MPCBBx_S_VCTR(1,12);
+  SET_GTZC_MPCBBx_S_VCTR(1,13);
+  SET_GTZC_MPCBBx_S_VCTR(1,14);
+  SET_GTZC_MPCBBx_S_VCTR(1,15);
+  SET_GTZC_MPCBBx_S_VCTR(1,16);
+  SET_GTZC_MPCBBx_S_VCTR(1,17);
+  SET_GTZC_MPCBBx_S_VCTR(1,18);
+  SET_GTZC_MPCBBx_S_VCTR(1,19);
+  SET_GTZC_MPCBBx_S_VCTR(1,20);
+  SET_GTZC_MPCBBx_S_VCTR(1,21);
+  SET_GTZC_MPCBBx_S_VCTR(1,22);
+  SET_GTZC_MPCBBx_S_VCTR(1,23);
 
-  /*configure SRAM2 */       
-  SET_GTZC_MPCBBx_S_VCTR(2,0);  
-  SET_GTZC_MPCBBx_S_VCTR(2,1);  
-  SET_GTZC_MPCBBx_S_VCTR(2,2);  
-  SET_GTZC_MPCBBx_S_VCTR(2,3);  
-  SET_GTZC_MPCBBx_S_VCTR(2,4);  
-  SET_GTZC_MPCBBx_S_VCTR(2,5);  
-  SET_GTZC_MPCBBx_S_VCTR(2,6);  
-  SET_GTZC_MPCBBx_S_VCTR(2,7);    
-  
+  /*configure SRAM2 */
+  SET_GTZC_MPCBBx_S_VCTR(2,0);
+  SET_GTZC_MPCBBx_S_VCTR(2,1);
+  SET_GTZC_MPCBBx_S_VCTR(2,2);
+  SET_GTZC_MPCBBx_S_VCTR(2,3);
+  SET_GTZC_MPCBBx_S_VCTR(2,4);
+  SET_GTZC_MPCBBx_S_VCTR(2,5);
+  SET_GTZC_MPCBBx_S_VCTR(2,6);
+  SET_GTZC_MPCBBx_S_VCTR(2,7);
+
 }
 
 static void led_unsecure()
@@ -508,21 +508,21 @@ static void led_unsecure()
   uint32_t pin;
 
   /*Enable clock for User LED GPIOs */
-  RCC_AHB2_CLOCK_ER|= GPIOD_AHB2_CLOCK_ER;     
-  RCC_AHB2_CLOCK_ER|= GPIOG_AHB2_CLOCK_ER;  
-  PWR_CR2 |= PWR_CR2_IOSV;      
-  
-  /*Un-secure User LED GPIO pins */  
-  GPIOD_SECCFGR&=~(1<<LED_USR_PIN);         
-  GPIOG_SECCFGR&=~(1<<LED_BOOT_PIN);       
-    
+  RCC_AHB2_CLOCK_ER|= GPIOD_AHB2_CLOCK_ER;
+  RCC_AHB2_CLOCK_ER|= GPIOG_AHB2_CLOCK_ER;
+  PWR_CR2 |= PWR_CR2_IOSV;
+
+  /*Un-secure User LED GPIO pins */
+  GPIOD_SECCFGR&=~(1<<LED_USR_PIN);
+  GPIOG_SECCFGR&=~(1<<LED_BOOT_PIN);
+
 }
 
 void hal_init(void)
 {
-    clock_pll_on(0);    
+    clock_pll_on(0);
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)  
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
   /* Enable SecureFault handler (HardFault is default) */
     SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
     gtzc_init();
@@ -533,7 +533,7 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
     clock_pll_off();
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)  
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
     led_unsecure();
 #endif
 }

@@ -74,18 +74,18 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
-  ifeq ($(TARGET),stm32l5)       
+  ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
     CFLAGS+=-Ihal
   endif
 
   ## Cortex-M CPU
   ifeq ($(CORTEX_M33),1)
-    CFLAGS+=-mcpu=cortex-m33 
+    CFLAGS+=-mcpu=cortex-m33
     LDFLAGS+=-mcpu=cortex-m33
     ifeq ($(TZEN),1)
       CFLAGS += -mcmse
-    endif    
+    endif
     ifeq ($(SPMATH),1)
       MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
     endif
@@ -162,48 +162,33 @@ ifeq ($(TARGET),stm32wb)
         -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
         -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
         -I$(STM32CUBE)/Drivers/CMSIS/Include \
-		-Ihal \
-	    -DSTM32WB55xx
+        -Ihal \
+        -DSTM32WB55xx
   endif
 endif
 
 ifeq ($(TARGET),psoc6)
     CORTEX_M0=1
-    OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_device.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
-					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
-					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
-
-    PSOC6_CRYPTO_OBJS=./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v1.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw_v1.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto.o
-
+    PKA_EXTRA_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_device.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
+                     $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
+                     $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
     CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
-		-I$(CYPRESS_PDL)/devices/include \
-		-I$(CYPRESS_PDL)/cmsis/include \
-		-I$(CYPRESS_TARGET_LIB) \
-		-I$(CYPRESS_CORE_LIB)/include \
-		-I$(CYPRESS_PDL)/devices/include/ip \
-		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
-		-DCY8C624ABZI_D44
-
+        -I$(CYPRESS_PDL)/devices/include \
+        -I$(CYPRESS_PDL)/cmsis/include \
+        -I$(CYPRESS_TARGET_LIB) \
+        -I$(CYPRESS_CORE_LIB)/include \
+        -I$(CYPRESS_PDL)/devices/include/ip \
+        -I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
+        -DCY8C624ABZI_D44
     ARCH_FLASH_OFFSET=0x10000000
     ifneq ($(PSOC6_CRYPTO),0)
         CFLAGS+=-DWOLFSSL_PSOC6_CRYPTO

@@ -5,7 +5,7 @@
 #define SCB_BASE  (SCS_BASE + 0x0D00UL)
 #define SAU_BASE  (SCS_BASE + 0x0DD0UL)
 #define FPU_BASE  (SCS_BASE + 0x0F30UL)
-#define NVIC_BASE (SCS_BASE + 0x0100UL)  
+#define NVIC_BASE (SCS_BASE + 0x0100UL)
 
 #define SAU_CTRL      (*(volatile uint32_t *)(SAU_BASE + 0x00))
 #define SAU_RNR       (*(volatile uint32_t *)(SAU_BASE + 0x08))
@@ -51,7 +51,7 @@
 #define SCB_NSACR_CP10_Msk                 (1UL << SCB_NSACR_CP10_Pos)                    /*!< SCB NSACR: CP10 Mask */
 
 #define SCB_NSACR_CPn_Pos                   0U                                            /*!< SCB NSACR: CPn Position */
-#define SCB_NSACR_CPn_Msk                  (1UL /*<< SCB_NSACR_CPn_Pos*/) 
+#define SCB_NSACR_CPn_Msk                  (1UL /*<< SCB_NSACR_CPn_Pos*/)
 
 #define FPU_FPCCR_CLRONRET_Pos             28U                                            /*!< FPCCR: CLRONRET Position */
 #define FPU_FPCCR_CLRONRET_Msk             (1UL << FPU_FPCCR_CLRONRET_Pos)                /*!< FPCCR: CLRONRET bit Mask */
@@ -60,7 +60,7 @@
 #define FPU_FPCCR_CLRONRETS_Msk            (1UL << FPU_FPCCR_CLRONRETS_Pos)               /*!< FPCCR: CLRONRETS bit Mask */
 
 #define FPU_FPCCR_TS_Pos                   26U                                            /*!< FPCCR: TS Position */
-#define FPU_FPCCR_TS_Msk                   (1UL << FPU_FPCCR_TS_Pos)     
+#define FPU_FPCCR_TS_Msk                   (1UL << FPU_FPCCR_TS_Pos)
 
 /*
 //   <q> Enable SAU
@@ -313,27 +313,27 @@
 
 
 #define GTZC_MPCBB1_S_BASE        (0x50032C00)
-#define GTZC_MPCBB1_S_CR          (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x00)) 
-#define GTZC_MPCBB1_S_LCKVTR1     (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x10)) 
-#define GTZC_MPCBB1_S_LCKVTR2     (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x14)) 
-#define GTZC_MPCBB1_S_VCTR_BASE   (GTZC_MPCBB1_S_BASE + 0x100) 
+#define GTZC_MPCBB1_S_CR          (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x00))
+#define GTZC_MPCBB1_S_LCKVTR1     (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x10))
+#define GTZC_MPCBB1_S_LCKVTR2     (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x14))
+#define GTZC_MPCBB1_S_VCTR_BASE   (GTZC_MPCBB1_S_BASE + 0x100)
 
 #define GTZC_MPCBB2_S_BASE        (0x50033000)
-#define GTZC_MPCBB2_S_CR          (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x00)) 
-#define GTZC_MPCBB2_S_LCKVTR1     (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x10)) 
-#define GTZC_MPCBB2_S_LCKVTR2     (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x14)) 
-#define GTZC_MPCBB2_S_VCTR_BASE   (GTZC_MPCBB2_S_BASE + 0x100) 
+#define GTZC_MPCBB2_S_CR          (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x00))
+#define GTZC_MPCBB2_S_LCKVTR1     (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x10))
+#define GTZC_MPCBB2_S_LCKVTR2     (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x14))
+#define GTZC_MPCBB2_S_VCTR_BASE   (GTZC_MPCBB2_S_BASE + 0x100)
 
 #define SET_GTZC_MPCBBx_S_VCTR(x,n) \
-    (*((volatile uint32_t *)(GTZC_MPCBB##x##_S_VCTR_BASE ) + n ))= GTZC_MPCBB##x##_S_VCTR##n##_VAL 
+    (*((volatile uint32_t *)(GTZC_MPCBB##x##_S_VCTR_BASE ) + n ))= GTZC_MPCBB##x##_S_VCTR##n##_VAL
 
 /*SRAM1*/
-#define GTZC_MPCBB1_S_VCTR0_VAL (0xFFFFFFFF)   
-#define GTZC_MPCBB1_S_VCTR1_VAL (0xFFFFFFFF)   
-#define GTZC_MPCBB1_S_VCTR2_VAL (0xFFFFFFFF)  
-#define GTZC_MPCBB1_S_VCTR3_VAL (0xFFFFFFFF)   
-#define GTZC_MPCBB1_S_VCTR4_VAL (0xFFFFFFFF)   
-#define GTZC_MPCBB1_S_VCTR5_VAL (0xFFFFFFFF)   
+#define GTZC_MPCBB1_S_VCTR0_VAL (0xFFFFFFFF)
+#define GTZC_MPCBB1_S_VCTR1_VAL (0xFFFFFFFF)
+#define GTZC_MPCBB1_S_VCTR2_VAL (0xFFFFFFFF)
+#define GTZC_MPCBB1_S_VCTR3_VAL (0xFFFFFFFF)
+#define GTZC_MPCBB1_S_VCTR4_VAL (0xFFFFFFFF)
+#define GTZC_MPCBB1_S_VCTR5_VAL (0xFFFFFFFF)
 #define GTZC_MPCBB1_S_VCTR6_VAL (0xFFFFFFFF)
 #define GTZC_MPCBB1_S_VCTR7_VAL (0xFFFFFFFF)
 #define GTZC_MPCBB1_S_VCTR8_VAL (0xFFFFFFFF)
@@ -354,12 +354,12 @@
 #define GTZC_MPCBB1_S_VCTR23_VAL (0x00000000)
 
 /*SRAM2*/
-#define GTZC_MPCBB2_S_VCTR0_VAL (0x00000000)   
-#define GTZC_MPCBB2_S_VCTR1_VAL (0x00000000)   
-#define GTZC_MPCBB2_S_VCTR2_VAL (0x00000000)  
-#define GTZC_MPCBB2_S_VCTR3_VAL (0x00000000)   
-#define GTZC_MPCBB2_S_VCTR4_VAL (0x00000000)   
-#define GTZC_MPCBB2_S_VCTR5_VAL (0x00000000)   
+#define GTZC_MPCBB2_S_VCTR0_VAL (0x00000000)
+#define GTZC_MPCBB2_S_VCTR1_VAL (0x00000000)
+#define GTZC_MPCBB2_S_VCTR2_VAL (0x00000000)
+#define GTZC_MPCBB2_S_VCTR3_VAL (0x00000000)
+#define GTZC_MPCBB2_S_VCTR4_VAL (0x00000000)
+#define GTZC_MPCBB2_S_VCTR5_VAL (0x00000000)
 #define GTZC_MPCBB2_S_VCTR6_VAL (0x00000000)
 #define GTZC_MPCBB2_S_VCTR7_VAL (0x00000000)
 
@@ -402,7 +402,7 @@ static __inline void TZ_SAU_Setup (void)
   #if defined (SAU_INIT_REGION7) && (SAU_INIT_REGION7 == 1U)
     SAU_INIT_REGION(7);
   #endif
- 
+
     SAU_CTRL = ((SAU_INIT_CTRL_ENABLE << SAU_CTRL_ENABLE_Pos) & SAU_CTRL_ENABLE_Msk) |
                 ((SAU_INIT_CTRL_ALLNS  << SAU_CTRL_ALLNS_Pos)  & SAU_CTRL_ALLNS_Msk)   ;
 
@@ -415,7 +415,7 @@ static __inline void TZ_SAU_Setup (void)
                    ((FPU_FPCCR_TS_VAL        << FPU_FPCCR_TS_Pos       ) & FPU_FPCCR_TS_Msk       ) |
                    ((FPU_FPCCR_CLRONRETS_VAL << FPU_FPCCR_CLRONRETS_Pos) & FPU_FPCCR_CLRONRETS_Msk) |
                    ((FPU_FPCCR_CLRONRET_VAL  << FPU_FPCCR_CLRONRET_Pos ) & FPU_FPCCR_CLRONRET_Msk );
-  #endif 
+  #endif
 
 }
 

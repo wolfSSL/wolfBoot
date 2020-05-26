@@ -116,7 +116,7 @@ void (* const IV[])(void) =
 	isr_memfault,                // MemFault
 	isr_busfault,                // BusFault
 	isr_usagefault,              // UsageFault
-	0,                           // SecureFault 
+	0,                           // SecureFault
 	0,                          // reserved
 	0,                          // reserved
 	0,                          // reserved
@@ -173,7 +173,7 @@ void (* const IV[])(void) =
     isr_empty,                     // CAN2
     isr_empty,                     // Ethernet
     isr_empty,                     // Hibernate
-#elif PLATFORM_stm32l5    
+#elif PLATFORM_stm32l5
     isr_empty, //	WWDG_IRQHandler
     isr_empty, //	PVD_PVM_IRQHandler
     isr_empty, //	RTC_IRQHandler
