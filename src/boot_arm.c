@@ -117,17 +117,17 @@ static void mpu_init(void)
 
     /* Read access to address space with XN */
     mpu_setaddr(0, 0);
-    mpu_setattr(0, MPUSIZE_4G | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRO_UNO | MPU_RASR_ATTR_XN);
+    mpu_setattr(0, MPUSIZE_4G | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
 
     wolfboot_mpusize = mpusize(wolfboot_flash_size);
     if (wolfboot_mpusize == MPUSIZE_ERR)
         return;
 
-    /* Text in Read-only memory */
+    /* wolfBoot .text section in flash memory (exec OK) */
     mpu_setaddr(1, flash_base);
-    mpu_setattr(1, wolfboot_mpusize | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRO_UNO);
+    mpu_setattr(1, wolfboot_mpusize | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO);
 
-    /* Data in r/w memory */
+    /* Data in RAM */
     mpu_setaddr(2, ram_base);
 #ifdef RAM_CODE
     mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO);
