@@ -76,7 +76,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
             KEY_BUFFER + ECC_KEY_SIZE, ECC_KEY_SIZE);
     if (rc < 0)
         return -1;
-    rc = wolfTPM2_VerifyHash(&wolftpm_dev, &tpmKey, sig, IMAGE_SIGNATURE_SIZE, 
+    rc = wolfTPM2_VerifyHash(&wolftpm_dev, &tpmKey, sig, IMAGE_SIGNATURE_SIZE,
         hash, WOLFBOOT_SHA_DIGEST_SIZE);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
     if (rc < 0)
@@ -93,7 +93,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     }
 
     /* Import public key */
-    ret = wc_ecc_import_unsigned(&ecc, (byte*)KEY_BUFFER, 
+    ret = wc_ecc_import_unsigned(&ecc, (byte*)KEY_BUFFER,
         (byte*)(KEY_BUFFER + ECC_KEY_SIZE), NULL, ECC_SECP256R1);
     if ((ret < 0) || ecc.type != ECC_PUBLICKEY) {
         /* Failed to import ecc key */
@@ -135,7 +135,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     rc = wolfTPM2_LoadRsaPublicKey(&wolftpm_dev, &tpmKey, n, nSz, *((word32*)e));
     if (rc < 0)
         return -1;
-    rc = wolfTPM2_VerifyHash(&wolftpm_dev, &tpmKey, sig, IMAGE_SIGNATURE_SIZE, 
+    rc = wolfTPM2_VerifyHash(&wolftpm_dev, &tpmKey, sig, IMAGE_SIGNATURE_SIZE,
         hash, WOLFBOOT_SHA_DIGEST_SIZE);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
     return rc;
@@ -479,7 +479,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     }
 #ifdef MMU
     if (part == PART_DTS_BOOT || part == PART_DTS_UPDATE) {
-        img->hdr = (part == PART_DTS_BOOT) ? (void*)WOLFBOOT_DTS_BOOT_ADDRESS 
+        img->hdr = (part == PART_DTS_BOOT) ? (void*)WOLFBOOT_DTS_BOOT_ADDRESS
                                            : (void*)WOLFBOOT_DTS_UPDATE_ADDRESS;
         if (PART_IS_EXT(img))
             image = fetch_hdr_cpy(img);
@@ -581,11 +581,11 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 
 /* Peek at image offset and return static pointer */
 /* sz: optional and returns length of peek */
-uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, 
+uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
     uint32_t* sz)
 {
     uint8_t* p = get_sha_block(img, offset);
     if (sz)
-        *sz = WOLFBOOT_SHA_BLOCK_SIZE;    
+        *sz = WOLFBOOT_SHA_BLOCK_SIZE;
     return p;
 }
