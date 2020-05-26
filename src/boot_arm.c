@@ -38,11 +38,11 @@ extern void main(void);
 
 #ifndef WOLFBOOT_NO_MPU
 #define MPU_BASE (0xE000ED90)
-#define MPU_TYPE			*((volatile uint32_t *)(MPU_BASE + 0x00))
-#define MPU_CTRL			*((volatile uint32_t *)(MPU_BASE + 0x04))
-#define MPU_RNR				*((volatile uint32_t *)(MPU_BASE + 0x08))
-#define MPU_RBAR			*((volatile uint32_t *)(MPU_BASE + 0x0C))
-#define MPU_RASR			*((volatile uint32_t *)(MPU_BASE + 0x10))
+#define MPU_TYPE            *((volatile uint32_t *)(MPU_BASE + 0x00))
+#define MPU_CTRL            *((volatile uint32_t *)(MPU_BASE + 0x04))
+#define MPU_RNR             *((volatile uint32_t *)(MPU_BASE + 0x08))
+#define MPU_RBAR            *((volatile uint32_t *)(MPU_BASE + 0x0C))
+#define MPU_RASR            *((volatile uint32_t *)(MPU_BASE + 0x10))
 
 #define MPU_RASR_ENABLE             (1 << 0)
 #define MPU_RASR_ATTR_XN            (1 << 28)
@@ -251,19 +251,19 @@ typedef void(*NMIHANDLER)(void);
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
-	(void (*)(void))(&END_STACK),
-	isr_reset,                   // Reset
-	isr_NMI,                     // NMI
-	isr_fault,                   // HardFault
-	isr_fault,                   // MemFault
-	isr_fault,                   // BusFault
-	isr_fault,                   // UsageFault
-	0, 0, 0, 0,                  // 4x reserved
-	isr_empty,                   // SVC
-	isr_empty,                   // DebugMonitor
-	0,                           // reserved
-	isr_empty,                   // PendSV
-	isr_empty,                   // SysTick
+    (void (*)(void))(&END_STACK),
+    isr_reset,                   // Reset
+    isr_NMI,                     // NMI
+    isr_fault,                   // HardFault
+    isr_fault,                   // MemFault
+    isr_fault,                   // BusFault
+    isr_fault,                   // UsageFault
+    0, 0, 0, 0,                  // 4x reserved
+    isr_empty,                   // SVC
+    isr_empty,                   // DebugMonitor
+    0,                           // reserved
+    isr_empty,                   // PendSV
+    isr_empty,                   // SysTick
 
     isr_empty,
     isr_empty,
