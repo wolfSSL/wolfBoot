@@ -25,6 +25,7 @@
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
 
+extern unsigned int _start_text;
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
@@ -34,6 +35,130 @@ extern unsigned int _end_bss;
 extern uint32_t *END_STACK;
 
 extern void main(void);
+
+#ifndef WOLFBOOT_NO_MPU
+#define MPU_BASE (0xE000ED90)
+#define MPU_TYPE            *((volatile uint32_t *)(MPU_BASE + 0x00))
+#define MPU_CTRL            *((volatile uint32_t *)(MPU_BASE + 0x04))
+#define MPU_RNR             *((volatile uint32_t *)(MPU_BASE + 0x08))
+#define MPU_RBAR            *((volatile uint32_t *)(MPU_BASE + 0x0C))
+#define MPU_RASR            *((volatile uint32_t *)(MPU_BASE + 0x10))
+
+#define MPU_RASR_ENABLE             (1 << 0)
+#define MPU_RASR_ATTR_XN            (1 << 28)
+#define MPU_RASR_ATTR_AP            (7 << 24)
+#define MPU_RASR_ATTR_AP_PNO_UNO    (0 << 24)
+#define MPU_RASR_ATTR_AP_PRW_UNO    (1 << 24)
+#define MPU_RASR_ATTR_AP_PRW_URO    (2 << 24)
+#define MPU_RASR_ATTR_AP_PRW_URW    (3 << 24)
+#define MPU_RASR_ATTR_AP_PRO_UNO    (5 << 24)
+#define MPU_RASR_ATTR_AP_PRO_URO    (6 << 24)
+#define MPU_RASR_ATTR_TEX           (7 << 19)
+#define MPU_RASR_ATTR_S             (1 << 18)
+#define MPU_RASR_ATTR_C             (1 << 17)
+#define MPU_RASR_ATTR_B             (1 << 16)
+#define MPU_RASR_ATTR_SCB           (7 << 16)
+
+static int mpu_is_on = 0;
+
+static void mpu_setaddr(int region, uint32_t addr)
+{
+    MPU_RNR = region;
+    MPU_RBAR = addr;
+}
+
+static void mpu_setattr(int region, uint32_t attr)
+{
+    MPU_RNR = region;
+    MPU_RASR = attr;
+}
+
+static void mpu_on(void)
+{
+    if (mpu_is_on)
+        return;
+    if (MPU_TYPE == 0)
+        return;
+    MPU_CTRL = 1;
+    mpu_is_on = 1;
+}
+
+#define MPUSIZE_8K      (0x0c << 1)
+#define MPUSIZE_16K     (0x0d << 1)
+#define MPUSIZE_32K     (0x0e << 1)
+#define MPUSIZE_64K     (0x0f << 1)
+/* ... */
+#define MPUSIZE_256M    (0x1b << 1)
+#define MPUSIZE_512M    (0x1c << 1)
+#define MPUSIZE_1G      (0x1d << 1)
+#define MPUSIZE_4G      (0x1f << 1)
+#define MPUSIZE_ERR     (0xff << 1)
+static uint32_t mpusize(uint32_t size)
+{
+    if (size <= (8 * 1024))
+        return MPUSIZE_8K;
+    if (size <= (16 * 1024))
+        return MPUSIZE_16K;
+    if (size <= (32 * 1024))
+        return MPUSIZE_32K;
+    if (size <= (64 * 1024))
+        return MPUSIZE_64K;
+    return MPUSIZE_ERR;
+}
+
+static void mpu_init(void)
+{
+    uint32_t wolfboot_flash_size = (uint32_t)&_stored_data - (uint32_t)&_start_text;
+    uint32_t wolfboot_mpusize;
+    uint32_t ram_base = (uint32_t)(&_start_data);
+    uint32_t flash_base = (uint32_t)(&_start_text);
+    if (MPU_TYPE == 0)
+        return;
+
+    /* Read access to address space with XN */
+    mpu_setaddr(0, 0);
+    mpu_setattr(0, MPUSIZE_4G | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRO_UNO | MPU_RASR_ATTR_XN);
+
+    wolfboot_mpusize = mpusize(wolfboot_flash_size);
+    if (wolfboot_mpusize == MPUSIZE_ERR)
+        return;
+
+    /* Text in Read-only memory */
+    mpu_setaddr(1, flash_base);
+    mpu_setattr(1, wolfboot_mpusize | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRO_UNO);
+
+    /* Data in r/w memory */
+    mpu_setaddr(2, ram_base);
+#ifdef RAM_CODE
+    mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO);
+#else
+    mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+#endif
+
+    /* Peripherals 0x40000000:0x5FFFFFFF (512MB)*/
+    mpu_setaddr(5, 0x40000000);
+    mpu_setattr(5, MPUSIZE_512M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+
+    /* External peripherals 0xA0000000:0xCFFFFFFF (1GB)*/
+    mpu_setaddr(6, 0xA0000000);
+    mpu_setattr(6, MPUSIZE_1G | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+
+    /* System control 0xE0000000:0xEFFFFFF */
+    mpu_setaddr(7, 0xE0000000);
+    mpu_setattr(7, MPUSIZE_256M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+    mpu_on();
+
+}
+
+static void mpu_off(void)
+{
+    mpu_is_on = 0;
+    MPU_CTRL = 0;
+}
+#else /* NO MPU */
+#define mpu_init() do{}while(0)
+#define mpu_off() do{}while(0)
+#endif /* NO MPU */
 
 
 void isr_reset(void) {
@@ -62,6 +187,7 @@ void isr_reset(void) {
         dst++;
     }
 
+    mpu_init();
     /* Run the program! */
     main();
 }
@@ -94,7 +220,7 @@ static uint32_t app_end_stack;
 
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
-
+    mpu_off();
 #ifndef NO_VTOR
     /* Disable interrupts */
     asm volatile("cpsid i");
@@ -125,19 +251,19 @@ typedef void(*NMIHANDLER)(void);
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
-	(void (*)(void))(&END_STACK),
-	isr_reset,                   // Reset
-	isr_NMI,                     // NMI
-	isr_fault,                   // HardFault
-	isr_fault,                   // MemFault
-	isr_fault,                   // BusFault
-	isr_fault,                   // UsageFault
-	0, 0, 0, 0,                  // 4x reserved
-	isr_empty,                   // SVC
-	isr_empty,                   // DebugMonitor
-	0,                           // reserved
-	isr_empty,                   // PendSV
-	isr_empty,                   // SysTick
+    (void (*)(void))(&END_STACK),
+    isr_reset,                   // Reset
+    isr_NMI,                     // NMI
+    isr_fault,                   // HardFault
+    isr_fault,                   // MemFault
+    isr_fault,                   // BusFault
+    isr_fault,                   // UsageFault
+    0, 0, 0, 0,                  // 4x reserved
+    isr_empty,                   // SVC
+    isr_empty,                   // DebugMonitor
+    0,                           // reserved
+    isr_empty,                   // PendSV
+    isr_empty,                   // SysTick
 
     isr_empty,
     isr_empty,

@@ -159,6 +159,10 @@ ifeq ($(V),0)
   Q=@
 endif
 
+ifeq ($(NO_MPU),1)
+  CFLAGS+=-DWOLFBOOT_NO_MPU
+endif
+
 ifeq ($(VTOR),0)
   CFLAGS+=-DNO_VTOR
 endif
