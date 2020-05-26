@@ -217,7 +217,7 @@ MAIN_TARGET=factory.bin
 
 ifeq ($(TARGET),stm32l5)
     # Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin
+	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
 
@@ -245,7 +245,7 @@ wolfboot-align.bin: .bootloader-partition-size wolfboot.bin
 	$(Q)$(SIZE) wolfboot.elf
 	@echo
 
-test-app/image.bin: wolfboot-align.bin
+test-app/image.bin: wolfboot.bin
 	$(Q)make -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
 	$(Q)rm -f src/*.o hal/*.o
 	$(Q)$(SIZE) test-app/image.elf
@@ -274,9 +274,11 @@ rsa4096.der:
 keytools:
 	@make -C tools/keytools
 
-factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
+test-app/image_v1_signed.bin: test-app/image.bin
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+
+factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] $@"
 	$(Q)cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
