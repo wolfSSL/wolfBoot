@@ -207,7 +207,7 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
-int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag)
+int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint16_t sector, uint8_t newflag)
 {
     uint32_t *magic;
     uint8_t *flags;
@@ -238,7 +238,7 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     return 0;
 }
 
-int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag)
+int wolfBoot_get_sector_flag(uint8_t part, uint16_t sector, uint8_t *flag)
 {
     uint32_t *magic;
     uint8_t *flags;
