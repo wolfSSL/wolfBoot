@@ -31,6 +31,7 @@
 #endif
 
 uint32_t ext_cache;
+static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 
 #ifndef TRAILER_SKIP
 #   define TRAILER_SKIP 0
@@ -56,8 +57,23 @@ int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     ret = hal_flash_write(addr_align, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
     return ret;
 }
+
+int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
+{
+    uint32_t off = addr % NVM_CACHE_SIZE;
+    uint32_t base = addr - off;
+    int ret;
+    memcpy(NVM_CACHE, (void *)base, NVM_CACHE_SIZE);
+    ret = hal_flash_erase(base, WOLFBOOT_SECTOR_SIZE);
+    if (ret != 0)
+        return ret;
+    memcpy(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
+    ret = hal_flash_write(base, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
+    return ret;
+}
 #else
 #   define hal_trailer_write(addr, val) hal_flash_write(addr, (void *)&val, 1)
+#   define hal_set_partition_magic(addr) hal_flash_write(addr, (void*)&wolfboot_magic_trail, sizeof(uint32_t));
 #endif
 
 #if defined EXT_FLASH
@@ -103,19 +119,18 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
-    uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
     if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
             ext_flash_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
-            hal_flash_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+            hal_set_partition_magic(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
         }
     }
     else if (part == PART_UPDATE) {
         if (PARTN_IS_EXT(PART_UPDATE)) {
             ext_flash_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
-            hal_flash_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+            hal_set_partition_magic(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
         }
     }
 }
@@ -143,12 +158,11 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
-    uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
     if (part == PART_BOOT) {
-        hal_flash_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+        hal_set_partition_magic(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
     }
     else if (part == PART_UPDATE) {
-        hal_flash_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+        hal_set_partition_magic(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
     }
 }
 #endif /* EXT_FLASH */
@@ -193,12 +207,11 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
-int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint8_t sector, uint8_t newflag)
+int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint16_t sector, uint8_t newflag)
 {
     uint32_t *magic;
     uint8_t *flags;
     uint8_t fl_value;
-    const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
     uint8_t pos = sector >> 1;
     magic = get_partition_magic(part);
     if (*magic != wolfboot_magic_trail)
@@ -225,7 +238,7 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     return 0;
 }
 
-int wolfBoot_get_sector_flag(uint8_t part, uint8_t sector, uint8_t *flag)
+int wolfBoot_get_sector_flag(uint8_t part, uint16_t sector, uint8_t *flag)
 {
     uint32_t *magic;
     uint8_t *flags;

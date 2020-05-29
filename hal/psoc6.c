@@ -34,7 +34,7 @@
 
 #include "psoc6_02_config.h"
 
-#define ROW_SIZE (0x1000)
+#define ROW_SIZE (WOLFBOOT_SECTOR_SIZE)
 #define FLASH_BASE_ADDRESS (0x10000000)
 #define CPU_FREQ (100000000)
 
@@ -89,8 +89,14 @@ static void hal_set_pll(void)
     }
 }
 
+
+
 void hal_init(void)
 {
+#define VTOR (*(volatile uint32_t *)(0xE000ED08))
+    VTOR = FLASH_BASE_ADDRESS;
+#undef VTOR
+
     Cy_PDL_Init(CY_DEVICE_CFG);
     Cy_Flash_Init();
     hal_set_pll();
@@ -109,6 +115,7 @@ void hal_prepare_boot(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     const uint8_t *src = data;
+    int ret;
     if (len < ROW_SIZE)
         return -1;
     if ((((uint32_t)data) & FLASH_BASE_ADDRESS) == FLASH_BASE_ADDRESS) {
@@ -119,7 +126,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         src = psoc6_write_buffer;
     }
     while (len) {
-        Cy_Flash_ProgramRow(address, (const uint32_t *) src);
+        ret = Cy_Flash_ProgramRow(address, (const uint32_t *) src);
+        if (ret)
+            return ret;
         len -= ROW_SIZE;
         if ((len > 0) && (len < ROW_SIZE))
             return -1;
@@ -137,14 +146,16 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    int start = -1, end = -1;
     uint32_t end_address;
+    int ret;
     uint32_t p = (uint32_t)address;
     if (len == 0)
         return -1;
     end_address = address + len;
     while ((end_address - p) >= ROW_SIZE) {
-        Cy_Flash_EraseRow(p);
+        ret = Cy_Flash_EraseRow(p);
+        if (ret)
+            return ret;
         p += ROW_SIZE;
     }
     return 0;
