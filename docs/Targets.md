@@ -105,7 +105,7 @@ Example partitioning on Nucleo-68 board:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x48000
 ```
 
-### Building
+### STM32WB55 Building
 
 Use `make TARGET=stm32wb`.
 
@@ -116,27 +116,44 @@ Compile with:
 
 `make TARGET=stm32wb NVM_FLASH_WRITEONCE=1`
 
-### Loading the firmware
+### STM32WB55 with OpenOCD
 
 `openocd --file ./config/openocd/openocd_stm32wbx.cfg`
 
 ```
 telnet localhost 4444
-flash write_image unlock erase wolfboot.bin 0x08000000
-flash verify_bank 0 wolfboot.bin
-flash write_image unlock erase test-app/image_v1_signed.bin 0x080008000
-flash verify_bank 0 test-app/image_v1_signed.bin 0x080008000
+reset halt
+flash write_image unlock erase factory.bin 0x08000000
+flash verify_bank 0 factory.bin
 reset
 ```
 
-### Debugging
+### STM32WB55 with ST-Link
+
+```
+git clone https://github.com/stlink-org/stlink.git
+cd stlink
+cmake .
+make
+sudo make install
+```
+
+```
+st-flash write factory.bin 0x08000000
+
+# Start GDB server
+st-util -p 3333
+```
+
+### STM32WB55 Debugging
 
 Use `make DEBUG=1` and reload firmware.
 
+wolfBoot has a .gdbinit to configure
 ```
-arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
-(gdb) add-symbol-file test-app/image.elf 0x8000
-(gdb) add-symbol-file wolfboot.elf 0x0
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x08008100
+mon reset init
 ```
 
 
