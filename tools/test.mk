@@ -8,13 +8,21 @@ SIGN_ARGS=
 ifneq ("$(wildcard ./tools/keytools/keygen)","")
 	KEYGEN_TOOL=./tools/keytools/keygen
 else
-	KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
+	ifneq ("$(wildcard ./tools/keytools/keygen.exe)","")
+		KEYGEN_TOOL=./tools/keytools/keygen.exe
+	else
+		KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
+	endif
 endif
 
 ifneq ("$(wildcard ./tools/keytools/sign)","")
 	SIGN_TOOL=./tools/keytools/sign
 else
-	SIGN_TOOL=python3 ./tools/keytools/sign.py
+	ifneq ("$(wildcard ./tools/keytools/sign.exe)","")
+		SIGN_TOOL=./tools/keytools/sign.exe
+	else
+		SIGN_TOOL=python3 ./tools/keytools/sign.py
+	endif
 endif
 
 ifeq ($(SIGN),ED25519)
