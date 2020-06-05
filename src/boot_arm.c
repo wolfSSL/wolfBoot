@@ -239,8 +239,8 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("cpsid i");
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
-   asm volatile("msr msplim, %0" ::"r"(0));
-   asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
+    asm volatile("msr msplim, %0" ::"r"(0));
+    asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
     asm volatile("mov r7, %0" ::"r"(app_entry));
     asm volatile("bic.w   r7, r7, #1");
     /* Jump to non secure app_entry */
