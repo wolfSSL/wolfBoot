@@ -31,7 +31,9 @@
 #include "cy_sysclk.h"
 #include "cy_syslib.h"
 #include "cy_ipc_drv.h"
+#ifdef WOLFSSL_PSOC6_CRYPTO
 #include "wolfssl/wolfcrypt/port/cypress/psoc6_crypto.h"
+#endif
 
 #include "psoc6_02_config.h"
 
@@ -101,7 +103,9 @@ void hal_init(void)
     Cy_PDL_Init(CY_DEVICE_CFG);
     Cy_Flash_Init();
     hal_set_pll();
+#ifdef WOLFSSL_PSOC6_CRYPTO
     psoc6_crypto_port_init();
+#endif
 }
 
 void hal_prepare_boot(void)

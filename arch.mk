@@ -164,8 +164,9 @@ ifeq ($(TARGET),psoc6)
 					 $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
 					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
-					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o \
-					 ./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
+					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
+
+    PSOC6_CRYPTO_OBJS=./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
 					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
@@ -185,10 +186,16 @@ ifeq ($(TARGET),psoc6)
 		-I$(CYPRESS_CORE_LIB)/include \
 		-I$(CYPRESS_PDL)/devices/include/ip \
 		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
-		-DCY8C624ABZI_D44 \
-		-DWOLFSSL_PSOC6_CRYPTO
+		-DCY8C624ABZI_D44
+
     ARCH_FLASH_OFFSET=0x10000000
+    ifneq ($(PSOC6_CRYPTO),0)
+        CFLAGS+=-DWOLFSSL_PSOC6_CRYPTO
+        OBJS+=$(PSOC6_CRYPTO_OBJS)
+    endif
 endif
+
+
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
