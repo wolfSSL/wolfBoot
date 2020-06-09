@@ -78,6 +78,7 @@ static const char ACK='#';
 static uint8_t msg[MSGSIZE];
 
 
+
 void uart_write(const char c)
 {
     uint32_t reg;
@@ -219,6 +220,9 @@ void main(void) {
     version = wolfBoot_current_firmware_version();
     if ((version & 0x01) == 0)
         wolfBoot_success();
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key("0123456789abcdef0123456789abcdef", 32);
+#endif
     uart_write(START);
     for (i = 3; i >= 0; i--) {
         uart_write(v_array[i]);

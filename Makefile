@@ -258,6 +258,15 @@ factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[MERGE] $@"
 	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
+update.bin: $(BOOT_IMG)
+	@echo "\t[SIGN] $(BOOT_IMG)"
+	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 2
+
+update_enc.bin: $(BOOT_IMG)
+	@echo "\t[SIGN+ENC] $(BOOT_IMG)"
+	@printf "0123456789abcdef0123456789abcdef" | dd of=test_enc_key.bin
+	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) --encrypt test_enc_key.bin $(BOOT_IMG) $(PRIVATE_KEY) 2
+
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) -Wl,--start-group $(OBJS) -Wl,--end-group -o $@

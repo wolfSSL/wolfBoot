@@ -26,8 +26,16 @@
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 
-#ifdef EXT_ENCRYPTED
-#include "encrypt.h"
+#if defined(EXT_ENCRYPTED) 
+    #if defined(__WOLFBOOT)
+        #include "encrypt.h"
+    #else
+        #include <stddef.h>
+        #include <string.h>
+        #define XMEMSET memset
+        #define XMEMCPY memcpy
+        #define XMEMCMP memcmp
+    #endif
 #endif
 
 #ifndef NULL
@@ -46,15 +54,18 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #define PART_UPDATE_ENDFLAGS ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
 
 #ifdef NVM_FLASH_WRITEONCE
-
 #include <stddef.h>
-extern void *memcpy(void *dst, const void *src, size_t n);
+#include <string.h>
+#define XMEMSET memset
+#define XMEMCPY memcpy
+#define XMEMCMP memcmp
+
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE];
 int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
     int ret = 0;
-    memcpy(NVM_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    XMEMCPY(NVM_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
@@ -68,11 +79,11 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
     uint32_t off = addr % NVM_CACHE_SIZE;
     uint32_t base = addr - off;
     int ret;
-    memcpy(NVM_CACHE, (void *)base, NVM_CACHE_SIZE);
+    XMEMCPY(NVM_CACHE, (void *)base, NVM_CACHE_SIZE);
     ret = hal_flash_erase(base, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
-    memcpy(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
+    XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(base, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
     return ret;
 }
@@ -488,9 +499,6 @@ int wolfBoot_fallback_is_possible(void)
 
 #define ENCRYPT_TMP_SECRET_OFFSET (((WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + (2 + WOLFBOOT_SECTOR_SIZE) / (WOLFBOOT_PARTITION_SIZE * 8)) + ENCRYPT_KEY_SIZE)) / ENCRYPT_KEY_SIZE * ENCRYPT_KEY_SIZE)
 
-/* Buffer used for encryption/decryption */
-static ChaCha chacha;
-static int chacha_initialized = 0;
 
 #ifdef NVM_FLASH_WRITEONCE
 #define KEY_CACHE NVM_CACHE
@@ -505,14 +513,42 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k)
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
     int ret = 0;
-    memcpy(KEY_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    XMEMCPY(KEY_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
-    memcpy(KEY_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
+    XMEMCPY(KEY_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
     ret = hal_flash_write(addr_align, KEY_CACHE, WOLFBOOT_SECTOR_SIZE);
     return ret;
 }
+
+int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key, int len)
+{
+    if (len != ENCRYPT_KEY_SIZE)
+        return -1;
+    hal_set_key(key);
+    return 0;
+}
+
+int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
+{
+    uint8_t ff[ENCRYPT_KEY_SIZE];
+    int i;
+    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
+    hal_set_key(ff);
+    return 0;
+}
+
+int RAMFUNCTION wolfBoot_set_encrypt_password(const uint8_t *pwd, int len)
+{
+    /* TODO */
+    return -1;
+}
+
+#ifdef __WOLFBOOT
+
+static ChaCha chacha;
+static int chacha_initialized = 0;
 
 static int chacha_init(void)
 {
@@ -529,28 +565,6 @@ static int chacha_init(void)
     return 0;
 }
 
-int wolfBoot_set_encrypt_key(const uint8_t *key, int len)
-{
-    if (len != ENCRYPT_KEY_SIZE)
-        return -1;
-    hal_set_key(key);
-    return 0;
-}
-
-int wolfBoot_erase_encrypt_key(void)
-{
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-    int i;
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
-    hal_set_key(ff);
-    return 0;
-}
-
-int wolfBoot_set_encrypt_password(const uint8_t *pwd, int len)
-{
-    /* TODO */
-    return -1;
-}
 
 #define PART_ADDRESS(a) ((a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) && \
         (a <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))?\
@@ -628,6 +642,7 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     }
     return len;
 }
+#endif
 
 #endif /* EXT_ENCRYPTED */
 

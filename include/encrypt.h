@@ -23,6 +23,7 @@
 
 #ifndef ENCRYPT_H_INCLUDED
 #define ENCRYPT_H_INCLUDED
+#ifdef __WOLFBOOT
 #include <stdint.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha256.h>
@@ -33,12 +34,10 @@
 #include <wolfssl/wolfcrypt/chacha.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
-#define ENCRYPT_BLOCK_SIZE 16 
-#define ENCRYPT_KEY_SIZE 32 /* Chacha20-256 */
 
-int ext_flash_set_encrypt_key(const uint8_t *key, int len);
-int ext_flash_set_encrypt_password(const uint8_t *pwd, int len);
+/* Internal read/write functions (not exported in the libwolfboot API) */
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
 
+#endif /* __WOLFBOOT */
 #endif /* ENCRYPT_H_INCLUDED */

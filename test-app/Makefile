@@ -39,6 +39,10 @@ ifeq ($(V),0)
   Q=@
 endif
 
+ifeq ($(ENCRYPT),1)
+    CFLAGS+=-DEXT_ENCRYPTED=1
+endif
+
 ENTRY_POINT=`cat .entry-point-address`
 LSCRIPT:=../config/target-app.ld
 LSCRIPT_TEMPLATE:=$(ARCH).ld

@@ -118,5 +118,10 @@ int wolfBoot_dualboot_candidate(void);
 #   error "No valid hash algorithm defined!"
 #endif
 
-
+/* Encryption support */
+#define ENCRYPT_BLOCK_SIZE 16 
+#define ENCRYPT_KEY_SIZE 32 /* Chacha20-256 */
+int wolfBoot_set_encrypt_key(const uint8_t *key, int len);
+int wolfBoot_erase_encrypt_key(void);
+int wolfBoot_set_encrypt_password(const uint8_t *pwd, int len);
 #endif /* !WOLFBOOT_H */
