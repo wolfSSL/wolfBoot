@@ -78,6 +78,7 @@
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
+#define PART_NONE   0xFF
 
 #define PART_DTS (0x10)
 #define PART_DTS_BOOT       (PART_DTS | PART_BOOT)

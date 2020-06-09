@@ -98,6 +98,16 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 # define PART_IS_EXT(x)  PARTN_IS_EXT(((x)->part))
 #include "hal.h"
 
+
+#ifdef EXT_ENCRYPTED
+#include "encrypt.h"
+#define ext_flash_check_write ext_flash_encrypt_write
+#define ext_flash_check_read ext_flash_decrypt_read
+#else
+#define ext_flash_check_write ext_flash_write
+#define ext_flash_check_read ext_flash_read
+#endif
+
 static inline int wb_flash_erase(struct wolfBoot_image *img, uint32_t off, uint32_t size)
 {
     if (PART_IS_EXT(img))
@@ -109,7 +119,7 @@ static inline int wb_flash_erase(struct wolfBoot_image *img, uint32_t off, uint3
 static inline int wb_flash_write(struct wolfBoot_image *img, uint32_t off, const void *data, uint32_t size)
 {
     if (PART_IS_EXT(img))
-        return ext_flash_write((uintptr_t)(img->hdr) + off, data, size);
+        return ext_flash_check_write((uintptr_t)(img->hdr) + off, data, size);
     else
         return hal_flash_write((uintptr_t)(img->hdr) + off, data, size);
 }
@@ -120,12 +130,12 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
     volatile uint32_t copy;
     if (PART_IS_EXT(img))
     {
-        ext_flash_read((uintptr_t)(img->hdr) + off, (void *)&copy, sizeof(uint32_t));
+        ext_flash_check_read((uintptr_t)(img->hdr) + off, (void *)&copy, sizeof(uint32_t));
         while (copy != word) {
-            ret = ext_flash_write((uintptr_t)(img->hdr) + off, (void *)&word, sizeof(uint32_t));
+            ret = ext_flash_check_write((uintptr_t)(img->hdr) + off, (void *)&word, sizeof(uint32_t));
             if (ret < 0)
                 return ret;
-            ext_flash_read((uintptr_t)(img->hdr) + off, (void *)&copy, sizeof(uint32_t));
+            ext_flash_check_read((uintptr_t)(img->hdr) + off, (void *)&copy, sizeof(uint32_t));
         }
     } else {
         volatile uint32_t *pcopy = (volatile uint32_t*)(img->hdr + off);
@@ -154,5 +164,11 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 /* --- Flattened Device Tree Blob */
 #define UBOOT_FDT_MAGIC	    0xEDFE0DD0UL
 
+#ifndef EXT_ENCRYPTED
+#define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + sizeof(uint32_t) + (WOLFBOOT_PARTITION_SIZE + 1 / (WOLFBOOT_SECTOR_SIZE * 8)))) 
+#else
+#include "encrypt.h"
+#define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - ENCRYPT_TMP_SECRET_OFFSET)
+#endif
 
 #endif /* !IMAGE_H */

@@ -136,6 +136,10 @@ image.elf: $(APP_OBJS) $(LSCRIPT)
 
 standalone: image.bin
 
+../src/libwolfboot.o: ../src/libwolfboot.c FORCE
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
+
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
@@ -160,5 +164,7 @@ $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 		sed -e "s/##WOLFBOOT_TEST_APP_ADDRESS##/`cat .entry-point`/g" \
 		> $(@)
 	@rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
+FORCE:
 
 .PHONY: FORCE clean

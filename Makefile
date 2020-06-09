@@ -125,6 +125,11 @@ ifeq ($(UART_FLASH),1)
   EXT_FLASH=1
 endif
 
+ifeq ($(ENCRYPT),1)
+    CFLAGS+=-DEXT_ENCRYPTED=1
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+endif
+
 ifeq ($(EXT_FLASH),1)
   CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
   ifeq ($(NO_XIP),1)
@@ -302,6 +307,10 @@ include/target.h: include/target.h.in FORCE
 
 config: FORCE
 	make -C config
+
+../src/libwolfboot.o: ../src/libwolfboot.c FORCE
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"

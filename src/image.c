@@ -178,29 +178,28 @@ static uint16_t get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **
 }
 
 static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
-
+static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
     if (offset > img->fw_size)
         return NULL;
+#ifdef EXT_FLASH
     if (PART_IS_EXT(img)) {
-        ext_flash_read((uintptr_t)(img->fw_base) + offset, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
+        ext_flash_check_read((uintptr_t)(img->fw_base) + offset, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
         return ext_hash_block;
     } else
+#endif
         return (uint8_t *)(img->fw_base + offset);
 }
 
-static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
-
 #ifdef EXT_FLASH
-
 static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
 static int hdr_cpy_done = 0;
 
 static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
 {
     if (!hdr_cpy_done) {
-        ext_flash_read((uintptr_t)img->hdr, hdr_cpy, IMAGE_HEADER_SIZE);
+        ext_flash_check_read((uintptr_t)img->hdr, hdr_cpy, IMAGE_HEADER_SIZE);
         hdr_cpy_done = 1;
     }
     return hdr_cpy;
