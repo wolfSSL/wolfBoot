@@ -25,13 +25,22 @@
 #include <stdint.h>
 #include <string.h>
 #include "led.h"
+#include "hal.h"
 #include "wolfboot/wolfboot.h"
 
 #ifdef PLATFORM_stm32wb
+char enc_key[33] = "01234566789abcdef0123456789abcdef";
 
 volatile uint32_t time_elapsed = 0;
 void main(void) {
+    hal_init();
     boot_led_on();
+    wolfBoot_success();
+#if EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key((uint8_t *)enc_key, 32);
+#endif
+
+
     /* Wait for reboot */
     while(1)
         ;

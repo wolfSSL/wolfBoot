@@ -184,8 +184,7 @@ ifeq ($(WOLFTPM),1)
   OBJS += lib/wolfTPM/src/tpm2.o \
     lib/wolfTPM/src/tpm2_packet.o \
     lib/wolfTPM/src/tpm2_tis.o \
-    lib/wolfTPM/src/tpm2_wrap.o \
-    hal/spi/spi_drv_$(SPI_TARGET).o
+    lib/wolfTPM/src/tpm2_wrap.o
   CFLAGS+=-DWOLFBOOT_TPM -DSIZEOF_LONG=4 -Ilib/wolfTPM \
     -DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 \
     -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
@@ -194,6 +193,9 @@ ifeq ($(WOLFTPM),1)
   CFLAGS+=-DWOLFTPM_SLB9670
   # Use TPM for hashing (slow)
   #CFLAGS+=-DWOLFBOOT_HASH_TPM
+  ifneq ($(SPI_FLASH),1)
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 OBJS+=$(WOLFCRYPT_OBJS)
 

@@ -47,7 +47,7 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
         dst_sector_offset = 0;
 #ifdef EXT_FLASH
     if (PART_IS_EXT(src)) {
-        uint8_t buffer[FLASHBUFFER_SIZE];
+        static uint8_t buffer[FLASHBUFFER_SIZE];
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
             if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {

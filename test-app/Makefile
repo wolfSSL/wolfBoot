@@ -16,13 +16,17 @@ ifeq ($(HASH),SHA256)
   CFLAGS+=-DWOLFBOOT_HASH_SHA256
 endif
 
+ifeq ($(NVM_FLASH_WRITEONCE),1)
+  CFLAGS+=-DNVM_FLASH_WRITEONCE
+endif
+
 
 ifeq ($(HASH),SHA3_384)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
   CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
 endif
 
-CFLAGS:=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
 APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
 include ../arch.mk

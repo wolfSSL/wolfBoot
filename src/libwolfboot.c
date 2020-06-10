@@ -44,8 +44,9 @@
 
 #define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
 
-uint32_t ext_cache;
+static uint32_t ext_cache;
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
+
 
 #ifndef TRAILER_SKIP
 #   define TRAILER_SKIP 0
@@ -56,11 +57,8 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #ifdef NVM_FLASH_WRITEONCE
 #include <stddef.h>
 #include <string.h>
-#define XMEMSET memset
-#define XMEMCPY memcpy
-#define XMEMCMP memcmp
+static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
 
-static uint8_t NVM_CACHE[NVM_CACHE_SIZE];
 int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
@@ -497,28 +495,30 @@ int wolfBoot_fallback_is_possible(void)
 #error option EXT_ENCRYPTED requires EXT_FLASH
 #endif
 
-#define ENCRYPT_TMP_SECRET_OFFSET (((WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + (2 + WOLFBOOT_SECTOR_SIZE) / (WOLFBOOT_PARTITION_SIZE * 8)) + ENCRYPT_KEY_SIZE)) / ENCRYPT_KEY_SIZE * ENCRYPT_KEY_SIZE)
+#define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + (sizeof(uint32_t) + 1 + ((1 + WOLFBOOT_PARTITION_SIZE) / (WOLFBOOT_SECTOR_SIZE * 8)) + ENCRYPT_KEY_SIZE)))
 
 
 #ifdef NVM_FLASH_WRITEONCE
-#define KEY_CACHE NVM_CACHE
+#define ENCRYPT_CACHE NVM_CACHE
 #else
-static uint8_t KEY_CACHE[NVM_CACHE_SIZE];
+static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
 #endif
 
 
 static int RAMFUNCTION hal_set_key(const uint8_t *k)
 {
-    uint32_t addr = ENCRYPT_TMP_SECRET_OFFSET;
+    uint32_t addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
     int ret = 0;
-    XMEMCPY(KEY_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_unlock();
+    XMEMCPY(ENCRYPT_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
-    XMEMCPY(KEY_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
-    ret = hal_flash_write(addr_align, KEY_CACHE, WOLFBOOT_SECTOR_SIZE);
+    XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
+    ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_lock();
     return ret;
 }
 
@@ -566,12 +566,23 @@ static int chacha_init(void)
 }
 
 
-#define PART_ADDRESS(a) ((a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) && \
-        (a <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))?\
-        (PART_UPDATE):\
-        ((a >= WOLFBOOT_PARTITION_SWAP_ADDRESS && \
-        (a <= WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))?(PART_SWAP):\
-        PART_NONE)
+static inline uint8_t part_address(uintptr_t a)
+{
+
+    if ( 1 && 
+#if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
+        (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) && 
+#endif
+        (a <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
+        return PART_UPDATE;
+    if ( 1 && 
+#if WOLFBOOT_PARTITION_SWAP_ADDRESS != 0
+        (a >= WOLFBOOT_PARTITION_SWAP_ADDRESS) && 
+#endif
+        (a <= WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
+        return PART_SWAP;
+    return PART_NONE;
+}
 
 static uint32_t swap_counter = 0;
 
@@ -580,32 +591,54 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     uint32_t iv[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
-    uint32_t offset;
+    uint32_t row_number;
+    int sz = len;
+    uint32_t row_address = address, row_offset;
     int i;
+    uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
+    row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
+    if (row_offset != 0) {
+        row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
+        sz += ENCRYPT_BLOCK_SIZE - row_offset;
+    }
+    if (sz < ENCRYPT_BLOCK_SIZE) {
+        sz = ENCRYPT_BLOCK_SIZE;
+    }
     if (!chacha_initialized)
         if (chacha_init() < 0)
             return -1;
-    part = PART_ADDRESS(address);
+    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
+    part = part_address(address);
     switch(part) {
         case PART_UPDATE:
-            offset = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
             break;
         case PART_SWAP:
-            offset = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            iv[1] = swap_counter++;
             break;
         default:
             return -1;
     }
-    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
-    if (part == PART_SWAP)
-        iv[1] = swap_counter++;
-    for (i = 0; i < len / ENCRYPT_BLOCK_SIZE; i++) {
-        iv[0] = offset++;
+    if (sz > len) {
+        int step = ENCRYPT_BLOCK_SIZE - row_offset;
+        if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
+            return -1;
+        XMEMCPY(block + row_offset, data, step);
+        wc_Chacha_Process(&chacha, enc_block, block, ENCRYPT_BLOCK_SIZE);
+        ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        address += step;
+        data += step;
+        sz -= step;
+    }
+    for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
+        iv[0] = row_number;
         wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        wc_Chacha_Process(&chacha, block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_Process(&chacha, ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
+        row_number++;
     }
-    return ext_flash_write(address, data, len);
+    return ext_flash_write(address, ENCRYPT_CACHE, len);
 }
 
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
@@ -613,32 +646,54 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     uint32_t iv[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
-    uint32_t offset;
+    uint32_t row_number;
+    int sz = len;
+    uint32_t row_address = address, row_offset;
     int i;
+    
+    row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
+    if (row_offset != 0) {
+        row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
+        sz += ENCRYPT_BLOCK_SIZE - row_offset;
+    }
+    if (sz < ENCRYPT_BLOCK_SIZE) {
+        sz = ENCRYPT_BLOCK_SIZE;
+    }
     if (!chacha_initialized)
         if (chacha_init() < 0)
             return -1;
-    part = PART_ADDRESS(address);
+    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
+    part = part_address(row_address);
     switch(part) {
         case PART_UPDATE:
-            offset = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
             break;
         case PART_SWAP:
-            offset = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
             iv[1] = swap_counter;
             break;
         default:
             return -1;
     }
-    if (ext_flash_read(address, data, len) != len)
+    if (sz > len) {
+        uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+        int step = ENCRYPT_BLOCK_SIZE - row_offset;
+        if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
+            return -1;
+        wc_Chacha_Process(&chacha, dec_block, block, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(data, dec_block + row_offset, step);
+        address += step;
+        data += step;
+        sz -= step;
+    }
+    if (ext_flash_read(address, data, sz) != sz)
         return -1;
-    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
-    for (i = 0; i < len / ENCRYPT_BLOCK_SIZE; i++) {
-        iv[0] = offset++;
+    for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
+        iv[0] = row_number;
         wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        wc_Chacha_Process(&chacha, block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        offset++;
+        wc_Chacha_Process(&chacha, data + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
+        row_number++;
     }
     return len;
 }
