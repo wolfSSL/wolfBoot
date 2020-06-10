@@ -35,9 +35,6 @@ The bootloader consists of the following components:
    - The core bootloader
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
 
-Only ARM Cortex-M boot mechanism is supported at this stage. Support for more architectures and
-microcontrollers will be added later. Relocating the interrupt vector can be disabled if needed.
-
 ## Integrating wolfBoot in an existing project
 
 ### Required steps
