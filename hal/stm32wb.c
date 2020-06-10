@@ -109,6 +109,7 @@ PKA_HandleTypeDef hpka = { };
 
 #define FLASH_CR_PER                          (1 << 1)
 #define FLASH_CR_PG                           (1 << 0)
+#define FLASH_CR_FSTPG                        (1 << 18)
 
 #endif /* !WOLFSSL_STM32_PKA */
 
@@ -141,17 +142,20 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
     uint32_t *src, *dst;
+    uint32_t reg;
     flash_clear_errors();
-    FLASH_CR |= FLASH_CR_PG;
+    reg = FLASH_CR & (~FLASH_CR_FSTPG);
+    FLASH_CR = reg | FLASH_CR_PG;
 
     while (i < len) {
         flash_clear_errors();
         if ((len - i > 3) && ((((address + i) & 0x07) == 0)  && ((((uint32_t)data) + i) & 0x07) == 0)) {
+            uint32_t idx = i >> 2;
             src = (uint32_t *)data;
-            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
+            dst = (uint32_t *)(address);
             flash_wait_complete();
-            dst[i >> 2] = src[i >> 2];
-            dst[(i >> 2) + 1] = src[(i >> 2) + 1];
+            dst[idx] = src[idx];
+            dst[idx + 1] = src[idx + 1];
             flash_wait_complete();
             i+=8;
         } else {
@@ -204,14 +208,17 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t p;
     if (len == 0)
         return -1;
+    address -= FLASHMEM_ADDRESS_SPACE;
     end_address = address + len - 1;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-        uint32_t reg = FLASH_CR & (~(FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT));
-        FLASH_CR = reg | ((p >> 12) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_PG;
+        uint32_t reg;
+        flash_clear_errors();
+        reg = FLASH_CR & ~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_FSTPG | FLASH_CR_PG);
+        FLASH_CR = reg | ((p >> 12) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete();
-        FLASH_CR &= ~(FLASH_CR_PER | FLASH_CR_PG);
+        FLASH_CR &= ~(FLASH_CR_PER);
     }
     return 0;
 }
@@ -310,7 +317,6 @@ void hal_prepare_boot(void)
 #ifdef SPI_FLASH
     spi_release();
 #endif
-    hal_flash_lock();
     clock_pll_off();
 }
 
