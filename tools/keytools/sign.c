@@ -103,7 +103,7 @@ static void header_append_u16(uint8_t* header, uint32_t* idx, uint16_t tmp16)
     memcpy(&header[*idx], &tmp16, sizeof(tmp16));
     *idx += sizeof(tmp16);
 }
-static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag, 
+static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
     uint16_t len, void* data)
 {
     header_append_u16(header, idx, tag);
@@ -227,7 +227,7 @@ int main(int argc, char** argv)
     if (tmpstr) {
         *tmpstr = '\0'; /* null terminate at last "." */
     }
-    snprintf(output_image_file, sizeof(output_image_file), "%s_v%s_%s.bin", 
+    snprintf(output_image_file, sizeof(output_image_file), "%s_v%s_%s.bin",
         (char*)buf, fw_version, sha_only ? "digest" : "signed");
 
     printf("Update type:          %s\n", self_update ? "wolfBoot" : "Firmware");
@@ -256,14 +256,34 @@ int main(int argc, char** argv)
     }
 
     /* key type "auto" selection */
-    if (key_buffer_sz == 64) {
-        if (sign == SIGN_ECC256) {
-            printf("Error: key size does not match the cipher selected\n");
+    if (key_buffer_sz == 32) {
+        if ((sign != SIGN_ED25519) && !manual_sign && !sha_only ) {
+            printf("Error: key too short for cipher\n");
             goto exit;
         }
-        if (sign == SIGN_AUTO) {
+        if (sign == SIGN_AUTO && (manual_sign || sha_only)) {
+            printf("ed25519 public key autodetected\n");
             sign = SIGN_ED25519;
-            printf("ed25519 key autodetected\n");
+        }
+
+    }
+    else if (key_buffer_sz == 64) {
+        if (sign == SIGN_ECC256) {
+            if (!manual_sign && !sha_only) {
+                printf("Error: key size does not match the cipher selected\n");
+                goto exit;
+            } else {
+                printf("ECC256 public key detected\n");
+            }
+        }
+        if (sign == SIGN_AUTO) {
+            if (!manual_sign && !sha_only) {
+                sign = SIGN_ED25519;
+                printf("ed25519 key autodetected\n");
+            } else {
+                sign = SIGN_ECC256;
+                printf("ecc256 public key autodetected\n");
+            }
         }
     }
     else if (key_buffer_sz == 96) {
@@ -298,7 +318,7 @@ int main(int argc, char** argv)
     }
 
     /* get header and signature sizes */
-    if (sign == SIGN_ED25519) {         
+    if (sign == SIGN_ED25519) {
         header_sz = 256;
         signature_sz = 64;
     }
@@ -323,7 +343,7 @@ int main(int argc, char** argv)
     if (!sha_only && !manual_sign) {
         /* import (decode) private key for signing */
         if (sign == SIGN_ED25519) {
-        #ifdef HAVE_ED25519            
+        #ifdef HAVE_ED25519
             ret = wc_ed25519_init(&key.ed);
             if (ret == 0) {
                 pubkey = key_buffer + ED25519_KEY_SIZE;
@@ -336,7 +356,7 @@ int main(int argc, char** argv)
         #ifdef HAVE_ECC
             ret = wc_ecc_init(&key.ecc);
             if (ret == 0) {
-                ret = wc_ecc_import_unsigned(&key.ecc, &key_buffer[0], &key_buffer[32], 
+                ret = wc_ecc_import_unsigned(&key.ecc, &key_buffer[0], &key_buffer[32],
                     &key_buffer[64], ECC_SECP256R1);
                 if (ret == 0) {
                     pubkey = key_buffer; /* first 64 bytes is public porition */
@@ -405,7 +425,7 @@ int main(int argc, char** argv)
 
     /* Append Version field */
     fw_version32 = strtol(fw_version, NULL, 10);
-    header_append_tag(header, &header_idx, HDR_VERSION, HDR_VERSION_LEN, 
+    header_append_tag(header, &header_idx, HDR_VERSION, HDR_VERSION_LEN,
         &fw_version32);
 
     /* Append Four pad bytes, so timestamp is aligned */
@@ -413,14 +433,14 @@ int main(int argc, char** argv)
 
     /* Append Timestamp field */
     stat(image_file, &attrib);
-    header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN, 
+    header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
         &attrib.st_ctime);
 
     /* Append Image type field */
     image_type = (uint16_t)sign;
     if (!self_update)
         image_type |= HDR_IMG_TYPE_APP;
-    header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN, 
+    header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
         &image_type);
 
     /* Six pad bytes, Sha-3 requires 8-byte alignment. */
