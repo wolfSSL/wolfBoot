@@ -301,7 +301,7 @@ int main(int argc, char** argv)
         fclose(f);
         printf("** Warning: key file already exist! Are you sure you want to  generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ");
         fflush(stdout);
-        gets(reply);
+        scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
         if (strcmp(reply, "Yes, I am sure!") != 0) {
             printf("Operation aborted by user.");
