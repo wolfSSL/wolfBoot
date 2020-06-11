@@ -135,13 +135,27 @@ else:
 kf = open(key_file, "rb")
 wolfboot_key_buffer = kf.read(4096)
 wolfboot_key_buffer_len = len(wolfboot_key_buffer)
-if wolfboot_key_buffer_len == 64:
-    if (sign == 'ecc256'):
-        print("Error: key size does not match the cipher selected")
+if wolfboot_key_buffer_len == 32:
+    if (sign != 'ed25519' and not manual_sign and not sha_only):
+        print("Error: key too short for cipher")
         sys.exit(1)
-    if sign == 'auto':
+    elif sign == 'auto' and (manual_sign or sha_only):
         sign = 'ed25519'
-        print("'ed25519' key autodetected.")
+        print("'ed25519' public key autodetected.")
+elif wolfboot_key_buffer_len == 64:
+    if (sign == 'ecc256'):
+        if not manual_sign and not sha_only:
+            print("Error: key size does not match the cipher selected")
+            sys.exit(1)
+        else:
+            print("Ecc256 public key detected")
+    if sign == 'auto':
+        if (manual_sign or sha_only):
+            sign = 'ecc256'
+            print("'ecc256' public key autodetected.")
+        else:
+            sign = 'ed25519'
+            print("'ed25519' key autodetected.")
 elif wolfboot_key_buffer_len == 96:
     if (sign == 'ed25519'):
         print("Error: key size does not match the cipher selected")
