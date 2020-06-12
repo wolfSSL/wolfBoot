@@ -97,7 +97,8 @@ PKA_HandleTypeDef hpka = { };
 #define FLASH_ACR_LATENCY_MASK                (0x07)
 
 #ifndef WOLFSSL_STM32_PKA
-#define FLASH_SR_BSY                         (1 << 16)
+#define FLASH_SR_BSY                          (1 << 16)
+#define FLASH_SR_CFGBSY                       (1 << 18)
 #define FLASH_SR_SIZERR                       (1 << 6)
 #define FLASH_SR_PGAERR                       (1 << 5)
 #define FLASH_SR_WRPERR                       (1 << 4)
@@ -114,7 +115,7 @@ PKA_HandleTypeDef hpka = { };
 #endif /* !WOLFSSL_STM32_PKA */
 
 #define FLASH_CR_PNB_SHIFT                     3
-#define FLASH_CR_PNB_MASK                      0x3f
+#define FLASH_CR_PNB_MASK                      0xFF
 
 #define FLASH_KEY1                            (0x45670123)
 #define FLASH_KEY2                            (0xCDEF89AB)
@@ -129,7 +130,7 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 
 static RAMFUNCTION void flash_wait_complete(void)
 {
-    while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
+    while ((FLASH_SR & (FLASH_SR_BSY | FLASH_SR_CFGBSY)) != 0)
         ;
 }
 
@@ -138,11 +139,35 @@ static void RAMFUNCTION flash_clear_errors(void)
     FLASH_SR |= ( FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR |  FLASH_SR_PROGERR);
 }
 
+
+
+void RAMFUNCTION hal_flash_unlock(void)
+{
+    flash_wait_complete();
+    if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
+        FLASH_KEY = FLASH_KEY1;
+        DMB();
+        FLASH_KEY = FLASH_KEY2;
+        DMB();
+        while ((FLASH_CR & FLASH_CR_LOCK) != 0)
+            ;
+    }
+}
+
+void RAMFUNCTION hal_flash_lock(void)
+{
+    flash_wait_complete();
+    if ((FLASH_CR & FLASH_CR_LOCK) == 0)
+        FLASH_CR |= FLASH_CR_LOCK;
+}
+
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
     uint32_t *src, *dst;
+    uint32_t pdword[2] __attribute__((aligned(16)));
     uint32_t reg;
+
     flash_clear_errors();
     reg = FLASH_CR & (~FLASH_CR_FSTPG);
     FLASH_CR = reg | FLASH_CR_PG;
@@ -153,9 +178,11 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             uint32_t idx = i >> 2;
             src = (uint32_t *)data;
             dst = (uint32_t *)(address);
+            pdword[0] = src[idx];
+            pdword[1] = src[idx + 1];
             flash_wait_complete();
-            dst[idx] = src[idx];
-            dst[idx + 1] = src[idx + 1];
+            dst[idx] = pdword[0];
+            dst[idx + 1] = pdword[1];
             flash_wait_complete();
             i+=8;
         } else {
@@ -180,36 +207,16 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
-void RAMFUNCTION hal_flash_unlock(void)
-{
-    flash_wait_complete();
-    if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
-        FLASH_KEY = FLASH_KEY1;
-        DMB();
-        FLASH_KEY = FLASH_KEY2;
-        DMB();
-        while ((FLASH_CR & FLASH_CR_LOCK) != 0)
-            ;
-    }
-}
-
-void RAMFUNCTION hal_flash_lock(void)
-{
-    flash_wait_complete();
-    if ((FLASH_CR & FLASH_CR_LOCK) == 0)
-        FLASH_CR |= FLASH_CR_LOCK;
-}
-
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    int start = -1, end = -1;
     uint32_t end_address;
     uint32_t p;
     if (len == 0)
         return -1;
     address -= FLASHMEM_ADDRESS_SPACE;
     end_address = address + len - 1;
+    flash_wait_complete();
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
         flash_clear_errors();
@@ -217,6 +224,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         FLASH_CR = reg | ((p >> 12) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
+        DMB();
         flash_wait_complete();
         FLASH_CR &= ~(FLASH_CR_PER);
     }
