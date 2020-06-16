@@ -610,6 +610,14 @@ make TARGET=psoc6 \
 
 Note: A reference `.config` can be found in `./config/examples/cypsoc6.config`.
 
+Hardware acceleration is enable by default using psoc6 crypto hw support.
+
+To compile with hardware acceleration disabled, use the option
+
+``` PSOC6_CRYPTO=0 ```
+
+in your wolfBoot configuration.
+
 #### OpenOCD installation
 
 Compile and install the customized OpenOCD.
