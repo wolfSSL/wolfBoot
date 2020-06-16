@@ -27,22 +27,44 @@
 #include "led.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "update.c"
 
 #ifdef PLATFORM_stm32wb
-char enc_key[33] = "01234566789abcdef0123456789abcdef";
+char enc_key[33] = "0123456789abcdef0123456789abcdef";
 
 volatile uint32_t time_elapsed = 0;
 void main(void) {
+    uint32_t version;
+    uint32_t l = 0;
+    uint32_t updv;
     hal_init();
     boot_led_on();
-    wolfBoot_success();
-#if EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key((uint8_t *)enc_key, 32);
+#ifdef SPI_FLASH
+    spi_flash_probe();
 #endif
-
-
+    version = wolfBoot_current_firmware_version();
+    updv = wolfBoot_update_firmware_version();
+    if ((version == 1) && (updv != 8)) {
+        uint32_t sz;
+        boot_led_off();
+        ext_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
+        while (l < firmware_update_len) {
+            sz = firmware_update_len - l;
+            if (sz > WOLFBOOT_SECTOR_SIZE)
+                sz = WOLFBOOT_SECTOR_SIZE;
+            ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + l, firmware_update + l, sz);
+            l += sz;
+        }
+#if EXT_ENCRYPTED
+        wolfBoot_set_encrypt_key((uint8_t *)enc_key, 32);
+#endif
+        wolfBoot_update_trigger();
+        boot_led_on();
+    } else {
+        wolfBoot_success();
+    }
     /* Wait for reboot */
     while(1)
-        ;
+        asm volatile("wfi");
 }
 #endif /** PLATFROM_stm32wb **/

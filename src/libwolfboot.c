@@ -36,6 +36,8 @@
         #define XMEMCPY memcpy
         #define XMEMCMP memcmp
     #endif
+#else
+    #define XMEMCPY memcpy
 #endif
 
 #ifndef NULL
@@ -612,6 +614,10 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     switch(part) {
         case PART_UPDATE:
             row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            /* Do not encrypt last sector */
+            if (row_number == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+                return ext_flash_write(address, data, len);
+            }
             break;
         case PART_SWAP:
             row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
@@ -662,11 +668,15 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     if (!chacha_initialized)
         if (chacha_init() < 0)
             return -1;
-    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
     part = part_address(row_address);
+    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
     switch(part) {
         case PART_UPDATE:
             row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            /* Do not decrypt last sector */
+            if (row_number == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+                return ext_flash_read(address, data, len);
+            }
             break;
         case PART_SWAP:
             row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 

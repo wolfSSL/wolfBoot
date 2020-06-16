@@ -50,8 +50,8 @@
 #define CMD_HDR_ERASE 0x03
 #define CMD_ACK       0x06
 
-#define FIRMWARE_PARTITION_SIZE 0x4000
-#define SWAP_SIZE 0x4000
+#define FIRMWARE_PARTITION_SIZE 0x20000
+#define SWAP_SIZE 0x1000
 #define UART_BITRATE 460800
 
 const char msgSha[]         = "Verifying SHA digest...";
