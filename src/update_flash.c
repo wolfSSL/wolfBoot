@@ -51,8 +51,8 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
     hal_flash_unlock();
     wolfBoot_erase_bootloader();
 #ifdef EXT_FLASH
-    while (pos < src->fw_size) {
-        if (PART_IS_EXT(src)) {
+    if (PART_IS_EXT(src)) {
+        while (pos < src->fw_size) {
             uint8_t buffer[FLASHBUFFER_SIZE];
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
                 ext_flash_read((uintptr_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
