@@ -47,14 +47,6 @@ void main(void) {
     if ((version == 1) && (updv != 8)) {
         uint32_t sz;
         boot_led_off();
-        ext_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
-        while (l < firmware_update_len) {
-            sz = firmware_update_len - l;
-            if (sz > WOLFBOOT_SECTOR_SIZE)
-                sz = WOLFBOOT_SECTOR_SIZE;
-            ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + l, firmware_update + l, sz);
-            l += sz;
-        }
 #if EXT_ENCRYPTED
         wolfBoot_set_encrypt_key((uint8_t *)enc_key, 32);
 #endif

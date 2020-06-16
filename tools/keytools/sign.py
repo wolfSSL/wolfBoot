@@ -393,7 +393,8 @@ if (encrypt):
     enc_outfile = open(encrypted_output_image_file, 'wb')
     cha = ciphers.ChaCha(key, 32)
     while(True):
-        cha.set_iv(off)
+        iv = struct.pack('<LLLL', off, 0, 0, 0)
+        cha.set_iv(iv)
         buf = outfile.read(16)
         if len(buf) == 0:
             break

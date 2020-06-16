@@ -631,6 +631,8 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
         XMEMCPY(block + row_offset, data, step);
+        iv[0] = row_number;
+        wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
         wc_Chacha_Process(&chacha, enc_block, block, ENCRYPT_BLOCK_SIZE);
         ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         address += step;
@@ -690,6 +692,8 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         int step = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
+        iv[0] = row_number;
+        wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
         wc_Chacha_Process(&chacha, dec_block, block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(data, dec_block + row_offset, step);
         address += step;
