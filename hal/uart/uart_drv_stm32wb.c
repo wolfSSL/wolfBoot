@@ -1,10 +1,10 @@
-/* uart_drv_stm32.c
+/* uart_drv_stm32wb.c
  *
  * Driver for the back-end of the UART_FLASH module.
  *
  * Example implementation for stm32WB, using UART1.
  *
- * Pinout: RX=PD9, TX=PD8
+ * Pinout: RX=PB7, TX=PB6 (VCOM port UART1 -> STLINK USB)
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
