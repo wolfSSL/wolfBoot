@@ -239,6 +239,7 @@ standalone:
 	$(Q)$(SIZE) test-app/image.elf
 
 include tools/test.mk
+include tools/test-enc.mk
 
 ed25519.der:
 	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
