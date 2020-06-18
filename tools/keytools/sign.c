@@ -177,7 +177,7 @@ int main(int argc, char** argv)
 #endif
 
     /* Check arguments and print usage */
-    if (argc < 4 || argc > 8) {
+    if (argc < 4 || argc > 10) {
         printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
