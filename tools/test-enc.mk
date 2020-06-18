@@ -18,7 +18,7 @@ tools/uart-flash-server/ufserver: FORCE
 	@rm -f src/libwolfboot.o
 
 test-enc-update: factory.bin test-app/image.bin .config tools/uart-flash-server/ufserver FORCE
-	@echo -n "0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
+	@echo -n "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@$(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@st-flash write factory.bin 0x08000000
@@ -28,6 +28,8 @@ test-enc-update: factory.bin test-app/image.bin .config tools/uart-flash-server/
 	@sleep 5
 	@st-flash reset
 	@sleep $(TIMEOUT)
+	@st-flash reset
+	@sleep 1
 	@sudo killall ufserver
 	@st-flash read boot.bin 0x08010000 0x1000
 	@dd if=test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin of=boot_compare.bin bs=4096 count=1

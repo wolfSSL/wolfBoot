@@ -390,11 +390,11 @@ if (encrypt):
     outfile = open(output_image_file, 'rb')
     ekeyfile = open(encrypt_key_file, 'rb')
     key = ekeyfile.read(32)
+    iv_nonce = ekeyfile.read(12)
     enc_outfile = open(encrypted_output_image_file, 'wb')
     cha = ciphers.ChaCha(key, 32)
     while(True):
-        iv = struct.pack('<LLLL', off, 0, 0, 0)
-        cha.set_iv(iv)
+        cha.set_iv(iv_nonce, off)
         buf = outfile.read(16)
         if len(buf) == 0:
             break

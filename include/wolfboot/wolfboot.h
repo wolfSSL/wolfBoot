@@ -120,8 +120,9 @@ int wolfBoot_dualboot_candidate(void);
 
 /* Encryption support */
 #define ENCRYPT_BLOCK_SIZE 16 
-#define ENCRYPT_KEY_SIZE 32 /* Chacha20-256 */
-int wolfBoot_set_encrypt_key(const uint8_t *key, int len);
+#define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
+#define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+
+int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
-int wolfBoot_set_encrypt_password(const uint8_t *pwd, int len);
 #endif /* !WOLFBOOT_H */

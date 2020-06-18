@@ -497,7 +497,7 @@ int wolfBoot_fallback_is_possible(void)
 #error option EXT_ENCRYPTED requires EXT_FLASH
 #endif
 
-#define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + (sizeof(uint32_t) + 1 + ((1 + WOLFBOOT_PARTITION_SIZE) / (WOLFBOOT_SECTOR_SIZE * 8)) + ENCRYPT_KEY_SIZE)))
+#define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + (sizeof(uint32_t) + 1 + ((1 + WOLFBOOT_PARTITION_SIZE) / (WOLFBOOT_SECTOR_SIZE * 8)) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)))
 
 
 #ifdef NVM_FLASH_WRITEONCE
@@ -507,7 +507,7 @@ static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
 #endif
 
 
-static int RAMFUNCTION hal_set_key(const uint8_t *k)
+static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
     uint32_t addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
@@ -519,49 +519,48 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k)
     if (ret != 0)
         return ret;
     XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
+    XMEMCPY(ENCRYPT_CACHE + addr_off + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
     hal_flash_lock();
     return ret;
 }
 
-int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key, int len)
+int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce)
 {
-    if (len != ENCRYPT_KEY_SIZE)
-        return -1;
-    hal_set_key(key);
+    hal_set_key(key, nonce);
     return 0;
 }
 
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
-    uint8_t ff[ENCRYPT_KEY_SIZE];
+    uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
     int i;
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
-    hal_set_key(ff);
+    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
+    hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
     return 0;
-}
-
-int RAMFUNCTION wolfBoot_set_encrypt_password(const uint8_t *pwd, int len)
-{
-    /* TODO */
-    return -1;
 }
 
 #ifdef __WOLFBOOT
 
 static ChaCha chacha;
 static int chacha_initialized = 0;
+static uint8_t chacha_iv_nonce[ENCRYPT_NONCE_SIZE];
 
 static int chacha_init(void)
 {
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET);
     uint8_t ff[ENCRYPT_KEY_SIZE];
+    uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
+
+    /* Check against 'all 0xff' or 'all zero' cases */
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
         return -1;
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
+    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
         return -1;
+
+    XMEMCPY(chacha_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
     wc_Chacha_SetKey(&chacha, key, ENCRYPT_KEY_SIZE);
     chacha_initialized = 1;
     return 0;
@@ -570,7 +569,6 @@ static int chacha_init(void)
 
 static inline uint8_t part_address(uintptr_t a)
 {
-
     if ( 1 && 
 #if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
         (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) && 
@@ -590,10 +588,9 @@ static uint32_t swap_counter = 0;
 
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
-    uint32_t iv[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
+    uint32_t iv_counter;
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
-    uint32_t row_number;
     int sz = len;
     uint32_t row_address = address, row_offset;
     int i;
@@ -609,20 +606,22 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     if (!chacha_initialized)
         if (chacha_init() < 0)
             return -1;
-    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
     part = part_address(address);
     switch(part) {
         case PART_UPDATE:
-            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
             /* Do not encrypt last sector */
-            if (row_number == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
             }
             break;
         case PART_SWAP:
-            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
-            iv[1] = swap_counter++;
-            break;
+            {
+                uint32_t row_number;
+                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+                iv_counter = ((swap_counter++) << 8) + row_number;
+                break;
+            }
         default:
             return -1;
     }
@@ -631,30 +630,28 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
         XMEMCPY(block + row_offset, data, step);
-        iv[0] = row_number;
-        wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
         wc_Chacha_Process(&chacha, enc_block, block, ENCRYPT_BLOCK_SIZE);
         ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         address += step;
         data += step;
         sz -= step;
+        iv_counter++;
     }
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
-        iv[0] = row_number;
-        wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         wc_Chacha_Process(&chacha, ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
-        row_number++;
+        iv_counter++;
     }
     return ext_flash_write(address, ENCRYPT_CACHE, len);
 }
 
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
-    uint32_t iv[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
+    uint32_t iv_counter = 0;
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
-    uint32_t row_number;
     int sz = len;
     uint32_t row_address = address, row_offset;
     int i;
@@ -671,19 +668,21 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         if (chacha_init() < 0)
             return -1;
     part = part_address(row_address);
-    XMEMSET(iv, 0, ENCRYPT_BLOCK_SIZE);
     switch(part) {
         case PART_UPDATE:
-            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
             /* Do not decrypt last sector */
-            if (row_number == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
             }
             break;
         case PART_SWAP:
-            row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
-            iv[1] = swap_counter;
-            break;
+            {
+                uint32_t row_number;
+                row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+                iv_counter = (swap_counter << 8) + row_number;
+                break;
+            }
         default:
             return -1;
     }
@@ -692,22 +691,21 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         int step = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
-        iv[0] = row_number;
-        wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
         wc_Chacha_Process(&chacha, dec_block, block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(data, dec_block + row_offset, step);
         address += step;
         data += step;
         sz -= step;
+        iv_counter++;
     }
     if (ext_flash_read(address, data, sz) != sz)
         return -1;
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
-        iv[0] = row_number;
-        wc_Chacha_SetIV(&chacha, (byte *)iv, ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         wc_Chacha_Process(&chacha, data + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
-        row_number++;
+        iv_counter++;
     }
     return len;
 }

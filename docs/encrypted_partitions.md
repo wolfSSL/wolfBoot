@@ -3,7 +3,7 @@
 wolfBoot offers the possibility to encrypt the content of the entire UPDATE partition,
 by using a pre-shared symmetric key which can be temporarily stored in a safer non-volatile memory area.
 
-SWAP partition is also temporarily encrypted using the same key, so a dump of the external flash won't reveal 
+SWAP partition is also temporarily encrypted using the same key, so a dump of the external flash won't reveal
 any content of the firmware update packages.
 
 ### Rationale
@@ -30,7 +30,7 @@ Alternatively, more secure mechanisms are available to store the temporary key i
 
 The temporary key can be set at run time by the application, and will be used exactly once by the bootloader
 to verify and install the next update. The key can be for example received from a back-end during the update
-process using secure communication, and set by the application, using `libwolfboot` API, to be used by 
+process using secure communication, and set by the application, using `libwolfboot` API, to be used by
 wolfBoot upon next boot.
 
 Aside from setting the temporary key, the update mechanism remains the same for distrubuting, uploading and
@@ -44,7 +44,7 @@ to allow setting a temporary key to process the next update.
 The functions
 
 ```
-int wolfBoot_set_encrypt_key(const uint8_t *key, int len);
+int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
 ```
 
@@ -58,6 +58,52 @@ reboot.
 ### Symmetric encryption algorithm
 
 The algorithm currently used to encrypt and decrypt data in external partitions
-is Chacha20-256. The expected key to provide to `wolfBoot_set_encrypt_key()` must be exactly 32 Bytes long.
+is Chacha20-256.
+
+ - The `key` provided to `wolfBoot_set_encrypt_key()` must be exactly 32 Bytes long.
+ - The `nonce` argument must be a 96-bit (12 Bytes) randomly generated buffer, to be used as IV for encryption and decription.
+
+## Example usage
+
+### Signing and encrypting the update bundle
+
+The `sign.py` tool can sign and encrypt the image with a single command.
+The encryption secret is provided in a binary file that should contain a concatenation of
+a 32B ChaCha-256 key and a 12B nonce.
+
+In the examples provided, the test application uses the following parameters:
+
+```
+key = "0123456789abcdef0123456789abcdef"
+nonce = "0123456789ab"
+```
+
+So it is easy to prepare the encryption secret in the test scripts or from the command line using:
+
+```
+echo -n "0123456789abcdef0123456789abcdef0123456789ab" > enc_key.der
+```
+
+The `sign.py` script can now be invoked to produce a signed+encrypted image, by using the extra argument `--encrypt` followed by the
+secret file:
+
+```
+./tools/keytools/sign.py --encrypt enc_key.der test-app/image.bin ecc256.der 24
+
+```
+
+which will produce as output the file `test-app/image_v24_signed_and_encrypted.bin`, that can be transferred to the target's external device.
+
+
+### API usage in the application
+
+When transferring the image, the application can still use the libwolfboot API functions to store the encrypted firmware. When called from the application,
+the function `ext_flash_write` will store the payload unencrypted.
+
+In order to trigger an update, before calling `wolfBoot_update_trigger` it is necessary to set the temporary key used by the bootloader by calling `wolfBoot_set_encrypt_key`.
+
+An example of encrypted update trigger can be found in the [stm32wb test application source code](test-app/app_stm32wb.c).
+
+
 
 

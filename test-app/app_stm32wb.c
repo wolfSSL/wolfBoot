@@ -30,7 +30,8 @@
 #include "update.c"
 
 #ifdef PLATFORM_stm32wb
-char enc_key[33] = "0123456789abcdef0123456789abcdef";
+char enc_key[] = "0123456789abcdef0123456789abcdef" /* ChaCha key (256 bit) */
+                 "0123456789ab";                    /* IV nonce    (96 bit) */
 
 volatile uint32_t time_elapsed = 0;
 void main(void) {
@@ -48,7 +49,7 @@ void main(void) {
         uint32_t sz;
         boot_led_off();
 #if EXT_ENCRYPTED
-        wolfBoot_set_encrypt_key((uint8_t *)enc_key, 32);
+        wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
 #endif
         wolfBoot_update_trigger();
         boot_led_on();
