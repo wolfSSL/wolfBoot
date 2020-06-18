@@ -81,6 +81,11 @@ For detailed information about the configuration options for the target system, 
 
 For more detailed information about firmware update implementation, see [Firmware Update](docs/firmware_update.md)
 
+
+### Additional features
+   - [Remote external flash interface](docs/remote_flash.md)
+   - [External encrypted partitions](docs/encrypted_partitions.md)
+
 ## Troubleshooting
 
 1. Python errors when signing a key:

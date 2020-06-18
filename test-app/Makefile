@@ -16,13 +16,17 @@ ifeq ($(HASH),SHA256)
   CFLAGS+=-DWOLFBOOT_HASH_SHA256
 endif
 
+ifeq ($(NVM_FLASH_WRITEONCE),1)
+  CFLAGS+=-DNVM_FLASH_WRITEONCE
+endif
+
 
 ifeq ($(HASH),SHA3_384)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
   CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
 endif
 
-CFLAGS:=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
 APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
 include ../arch.mk
@@ -37,6 +41,10 @@ endif
 
 ifeq ($(V),0)
   Q=@
+endif
+
+ifeq ($(ENCRYPT),1)
+    CFLAGS+=-DEXT_ENCRYPTED=1
 endif
 
 ENTRY_POINT=`cat .entry-point-address`
@@ -136,6 +144,10 @@ image.elf: $(APP_OBJS) $(LSCRIPT)
 
 standalone: image.bin
 
+../src/libwolfboot.o: ../src/libwolfboot.c FORCE
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
+
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
@@ -160,5 +172,7 @@ $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 		sed -e "s/##WOLFBOOT_TEST_APP_ADDRESS##/`cat .entry-point`/g" \
 		> $(@)
 	@rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
+FORCE:
 
 .PHONY: FORCE clean

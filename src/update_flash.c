@@ -33,6 +33,11 @@
 extern unsigned int _start_text;
 static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
 
+#ifndef BUFFER_DECLARED
+#define BUFFER_DECLARED
+static uint8_t buffer[FLASHBUFFER_SIZE];
+#endif
+
 static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 {
     uint32_t *start = (uint32_t *)&_start_text;
@@ -55,7 +60,7 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         while (pos < src->fw_size) {
             uint8_t buffer[FLASHBUFFER_SIZE];
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-                ext_flash_read((uintptr_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
+                ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
                 hal_flash_write(pos + (uint32_t)&_start_text, buffer, FLASHBUFFER_SIZE);
             }
             pos += FLASHBUFFER_SIZE;
@@ -117,11 +122,14 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
         dst_sector_offset = 0;
 #ifdef EXT_FLASH
     if (PART_IS_EXT(src)) {
-        uint8_t buffer[FLASHBUFFER_SIZE];
+#ifndef BUFFER_DECLARED
+#define BUFFER_DECLARED
+        static uint8_t buffer[FLASHBUFFER_SIZE];
+#endif
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
             if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-                ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
+                ext_flash_check_read((uintptr_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
                 wb_flash_write(dst, dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
             }
             pos += FLASHBUFFER_SIZE;

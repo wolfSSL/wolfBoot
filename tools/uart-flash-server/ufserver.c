@@ -50,8 +50,8 @@
 #define CMD_HDR_ERASE 0x03
 #define CMD_ACK       0x06
 
-#define FIRMWARE_PARTITION_SIZE 0x4000
-#define SWAP_SIZE 0x4000
+#define FIRMWARE_PARTITION_SIZE 0x20000
+#define SWAP_SIZE 0x1000
 #define UART_BITRATE 460800
 
 const char msgSha[]         = "Verifying SHA digest...";
@@ -161,8 +161,8 @@ static int serial_open(const char *device, int rate)
 
 	fcntl(fd, F_SETFL, 0);
 	tcgetattr(fd, &options);
-	cfsetispeed(&options, speed ?: B460800);
-	cfsetospeed(&options, speed ?: B460800);
+	cfsetispeed(&options, speed ?: 460800);
+	cfsetospeed(&options, speed ?: 460800);
 	cfmakeraw(&options);
 	options.c_cflag |= (CLOCAL | CREAD);
 	options.c_cflag &= ~CRTSCTS;

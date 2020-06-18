@@ -125,6 +125,11 @@ ifeq ($(UART_FLASH),1)
   EXT_FLASH=1
 endif
 
+ifeq ($(ENCRYPT),1)
+    CFLAGS+=-DEXT_ENCRYPTED=1
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+endif
+
 ifeq ($(EXT_FLASH),1)
   CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
   ifeq ($(NO_XIP),1)
@@ -179,8 +184,7 @@ ifeq ($(WOLFTPM),1)
   OBJS += lib/wolfTPM/src/tpm2.o \
     lib/wolfTPM/src/tpm2_packet.o \
     lib/wolfTPM/src/tpm2_tis.o \
-    lib/wolfTPM/src/tpm2_wrap.o \
-    hal/spi/spi_drv_$(SPI_TARGET).o
+    lib/wolfTPM/src/tpm2_wrap.o
   CFLAGS+=-DWOLFBOOT_TPM -DSIZEOF_LONG=4 -Ilib/wolfTPM \
     -DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 \
     -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
@@ -189,6 +193,9 @@ ifeq ($(WOLFTPM),1)
   CFLAGS+=-DWOLFTPM_SLB9670
   # Use TPM for hashing (slow)
   #CFLAGS+=-DWOLFBOOT_HASH_TPM
+  ifneq ($(SPI_FLASH),1)
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 OBJS+=$(WOLFCRYPT_OBJS)
 
@@ -232,6 +239,7 @@ standalone:
 	$(Q)$(SIZE) test-app/image.elf
 
 include tools/test.mk
+include tools/test-enc.mk
 
 ed25519.der:
 	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
@@ -302,6 +310,10 @@ include/target.h: include/target.h.in FORCE
 
 config: FORCE
 	make -C config
+
+../src/libwolfboot.o: ../src/libwolfboot.c FORCE
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"

@@ -58,20 +58,23 @@ sign="auto"
 self_update=False
 sha_only=False
 manual_sign=False
+encrypt=False
 
 
 argc = len(sys.argv)
 argv = sys.argv
 hash_algo='sha256'
 
-if (argc < 4) or (argc > 8):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version\n" % sys.argv[0])
+if (argc < 4) or (argc > 10):
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] image key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n" % sys.argv[0])
+    print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] image pub_key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--encrypt key.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
     sys.exit(1)
-for i in range(1, len(argv)):
+
+i = 1
+while (i < len(argv)):
     if (argv[i] == '--ed25519'):
         sign='ed25519'
     elif (argv[i] == '--ecc256'):
@@ -90,10 +93,14 @@ for i in range(1, len(argv)):
         sha_only = True
     elif (argv[i] == '--manual-sign'):
         manual_sign = True
-
+    elif (argv[i] == '--encrypt'):
+        encrypt = True
+        i += 1
+        encrypt_key_file = argv[i]
     else:
         i-=1
         break
+    i += 1
 
 image_file = argv[i+1]
 key_file = argv[i+2]
@@ -117,6 +124,14 @@ else:
     else:
         output_image_file = image_file + "_v" + str(fw_version) + "_digest.bin"
 
+if encrypt:
+    if '.' in image_file:
+        tokens = image_file.split('.')
+        encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
+        encrypted_output_image_file += "_v" + str(fw_version) + "_signed_and_encrypted.bin"
+    else:
+        encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_and_encrypted.bin"
+
 if (self_update):
     print("Update type:          wolfBoot")
 else:
@@ -131,6 +146,11 @@ if not sha_only:
     print ("Output image:         " + output_image_file)
 else:
     print ("Output digest:        " + output_image_file)
+
+if not encrypt:
+    print ("Not Encrypted")
+else:
+    print ("Encrypted using:      " + encrypt_key_file)
 
 kf = open(key_file, "rb")
 wolfboot_key_buffer = kf.read(4096)
@@ -364,6 +384,27 @@ while True:
 
 infile.close()
 outfile.close()
+if (encrypt):
+    sz = 0
+    off = 0
+    outfile = open(output_image_file, 'rb')
+    ekeyfile = open(encrypt_key_file, 'rb')
+    key = ekeyfile.read(32)
+    iv_nonce = ekeyfile.read(12)
+    enc_outfile = open(encrypted_output_image_file, 'wb')
+    cha = ciphers.ChaCha(key, 32)
+    while(True):
+        cha.set_iv(iv_nonce, off)
+        buf = outfile.read(16)
+        if len(buf) == 0:
+            break
+        enc_outfile.write(cha.encrypt(buf))
+        off += 1
+    outfile.close()
+    ekeyfile.close()
+    enc_outfile.close()
+
+
 print ("Output image successfully created.")
 sys.exit(0)
 

@@ -114,6 +114,13 @@
 # define NO_SHA256
 #endif
 
+#ifdef EXT_ENCRYPTED
+#  define HAVE_CHACHA
+#  define HAVE_PWDBASED
+#else
+#  define NO_PWDBASED
+#endif
+
 /* Disables - For minimum wolfCrypt build */
 #define NO_AES
 #define NO_CMAC
@@ -133,7 +140,6 @@
 #define NO_SESSION_CACHE
 #define NO_HC128
 #define NO_DES3
-#define NO_PWDBASED
 #define WC_NO_RNG
 #define WC_NO_HASHDRBG
 #define NO_WRITEV

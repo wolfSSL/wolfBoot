@@ -26,12 +26,32 @@
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 
+#if defined(EXT_ENCRYPTED) 
+    #if defined(__WOLFBOOT)
+        #include "encrypt.h"
+    #else
+        #include <stddef.h>
+        #include <string.h>
+        #define XMEMSET memset
+        #define XMEMCPY memcpy
+        #define XMEMCMP memcmp
+    #endif
+#else
+    #define XMEMCPY memcpy
+#endif
+
 #ifndef NULL
 #   define NULL (void *)0
 #endif
 
-uint32_t ext_cache;
+#define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
+
+#ifdef EXT_FLASH
+static uint32_t ext_cache;
+#endif
+
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
+
 
 #ifndef TRAILER_SKIP
 #   define TRAILER_SKIP 0
@@ -40,16 +60,15 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #define PART_UPDATE_ENDFLAGS ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
 
 #ifdef NVM_FLASH_WRITEONCE
-#define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
-
 #include <stddef.h>
-extern void *memcpy(void *dst, const void *src, size_t n);
-static uint8_t NVM_CACHE[NVM_CACHE_SIZE];
+#include <string.h>
+static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
+
 int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
     int ret = 0;
-    memcpy(NVM_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    XMEMCPY(NVM_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
@@ -63,14 +82,15 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
     uint32_t off = addr % NVM_CACHE_SIZE;
     uint32_t base = addr - off;
     int ret;
-    memcpy(NVM_CACHE, (void *)base, NVM_CACHE_SIZE);
+    XMEMCPY(NVM_CACHE, (void *)base, NVM_CACHE_SIZE);
     ret = hal_flash_erase(base, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
-    memcpy(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
+    XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(base, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
     return ret;
 }
+
 #else
 #   define hal_trailer_write(addr, val) hal_flash_write(addr, (void *)&val, 1)
 #   define hal_set_partition_magic(addr) hal_flash_write(addr, (void*)&wolfboot_magic_trail, sizeof(uint32_t));
@@ -78,11 +98,12 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
 
 #if defined EXT_FLASH
 
+
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
-            ext_flash_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&ext_cache, sizeof(uint32_t));
+            ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&ext_cache, sizeof(uint32_t));
             return (uint8_t *)&ext_cache;
         } else {
             return (void *)(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at));
@@ -90,7 +111,7 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
     }
     else if (part == PART_UPDATE) {
         if (PARTN_IS_EXT(PART_UPDATE)) {
-            ext_flash_read(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&ext_cache, sizeof(uint32_t));
+            ext_flash_check_read(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&ext_cache, sizeof(uint32_t));
             return (uint8_t *)&ext_cache;
         } else {
             return (void *)(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at));
@@ -103,14 +124,14 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
-            ext_flash_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
+            ext_flash_check_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
         } else {
             hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
         }
     }
     else if (part == PART_UPDATE) {
         if (PARTN_IS_EXT(PART_UPDATE)) {
-            ext_flash_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
+            ext_flash_check_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
         } else {
             hal_trailer_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
         }
@@ -121,14 +142,14 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
-            ext_flash_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+            ext_flash_check_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
             hal_set_partition_magic(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
         }
     }
     else if (part == PART_UPDATE) {
         if (PARTN_IS_EXT(PART_UPDATE)) {
-            ext_flash_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+            ext_flash_check_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
             hal_set_partition_magic(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
         }
@@ -360,7 +381,7 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
         if (PARTN_IS_EXT(PART_UPDATE))
         {
     #ifdef EXT_FLASH
-            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -370,7 +391,7 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
     } else if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
     #ifdef EXT_FLASH
-            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -391,7 +412,7 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
         if (PARTN_IS_EXT(PART_UPDATE))
         {
     #ifdef EXT_FLASH
-            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -401,7 +422,7 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
     } else if (part == PART_BOOT) {
         if (PARTN_IS_EXT(PART_BOOT)) {
     #ifdef EXT_FLASH
-            ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
             hdr_cpy_done = 1;
             image = hdr_cpy;
     #endif
@@ -471,5 +492,227 @@ int wolfBoot_fallback_is_possible(void)
         return 1;
     return 0;
 }
+#endif /* ARCH_AARCH64 || DUALBANK_SWAP */
+
+#ifdef EXT_ENCRYPTED
+#include "encrypt.h"
+#ifndef EXT_FLASH
+#error option EXT_ENCRYPTED requires EXT_FLASH
 #endif
+
+#define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + (sizeof(uint32_t) + 1 + ((1 + WOLFBOOT_PARTITION_SIZE) / (WOLFBOOT_SECTOR_SIZE * 8)) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)))
+
+
+#ifdef NVM_FLASH_WRITEONCE
+#define ENCRYPT_CACHE NVM_CACHE
+#else
+static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
+#endif
+
+
+static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
+{
+    uint32_t addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    int ret = 0;
+    hal_flash_unlock();
+    XMEMCPY(ENCRYPT_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    if (ret != 0)
+        return ret;
+    XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
+    XMEMCPY(ENCRYPT_CACHE + addr_off + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
+    ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_lock();
+    return ret;
+}
+
+int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce)
+{
+    hal_set_key(key, nonce);
+    return 0;
+}
+
+int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
+{
+    uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    int i;
+    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
+    hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+    return 0;
+}
+
+#ifdef __WOLFBOOT
+
+static ChaCha chacha;
+static int chacha_initialized = 0;
+static uint8_t chacha_iv_nonce[ENCRYPT_NONCE_SIZE];
+
+static int chacha_init(void)
+{
+    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET);
+    uint8_t ff[ENCRYPT_KEY_SIZE];
+    uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
+
+    /* Check against 'all 0xff' or 'all zero' cases */
+    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
+    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
+        return -1;
+    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
+    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
+        return -1;
+
+    XMEMCPY(chacha_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
+    wc_Chacha_SetKey(&chacha, key, ENCRYPT_KEY_SIZE);
+    chacha_initialized = 1;
+    return 0;
+}
+
+
+static inline uint8_t part_address(uintptr_t a)
+{
+    if ( 1 && 
+#if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
+        (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) && 
+#endif
+        (a <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
+        return PART_UPDATE;
+    if ( 1 && 
+#if WOLFBOOT_PARTITION_SWAP_ADDRESS != 0
+        (a >= WOLFBOOT_PARTITION_SWAP_ADDRESS) && 
+#endif
+        (a <= WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
+        return PART_SWAP;
+    return PART_NONE;
+}
+
+static uint32_t swap_counter = 0;
+
+int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
+{
+    uint32_t iv_counter;
+    uint8_t block[ENCRYPT_BLOCK_SIZE];
+    uint8_t part;
+    int sz = len;
+    uint32_t row_address = address, row_offset;
+    int i;
+    uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
+    row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
+    if (row_offset != 0) {
+        row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
+        sz += ENCRYPT_BLOCK_SIZE - row_offset;
+    }
+    if (sz < ENCRYPT_BLOCK_SIZE) {
+        sz = ENCRYPT_BLOCK_SIZE;
+    }
+    if (!chacha_initialized)
+        if (chacha_init() < 0)
+            return -1;
+    part = part_address(address);
+    switch(part) {
+        case PART_UPDATE:
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            /* Do not encrypt last sector */
+            if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+                return ext_flash_write(address, data, len);
+            }
+            break;
+        case PART_SWAP:
+            {
+                uint32_t row_number;
+                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+                iv_counter = ((swap_counter++) << 8) + row_number;
+                break;
+            }
+        default:
+            return -1;
+    }
+    if (sz > len) {
+        int step = ENCRYPT_BLOCK_SIZE - row_offset;
+        if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
+            return -1;
+        XMEMCPY(block + row_offset, data, step);
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
+        wc_Chacha_Process(&chacha, enc_block, block, ENCRYPT_BLOCK_SIZE);
+        ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        address += step;
+        data += step;
+        sz -= step;
+        iv_counter++;
+    }
+    for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
+        XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_Process(&chacha, ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
+        iv_counter++;
+    }
+    return ext_flash_write(address, ENCRYPT_CACHE, len);
+}
+
+int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
+{
+    uint32_t iv_counter = 0;
+    uint8_t block[ENCRYPT_BLOCK_SIZE];
+    uint8_t part;
+    int sz = len;
+    uint32_t row_address = address, row_offset;
+    int i;
+    
+    row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
+    if (row_offset != 0) {
+        row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
+        sz += ENCRYPT_BLOCK_SIZE - row_offset;
+    }
+    if (sz < ENCRYPT_BLOCK_SIZE) {
+        sz = ENCRYPT_BLOCK_SIZE;
+    }
+    if (!chacha_initialized)
+        if (chacha_init() < 0)
+            return -1;
+    part = part_address(row_address);
+    switch(part) {
+        case PART_UPDATE:
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            /* Do not decrypt last sector */
+            if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+                return ext_flash_read(address, data, len);
+            }
+            break;
+        case PART_SWAP:
+            {
+                uint32_t row_number;
+                row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+                iv_counter = (swap_counter << 8) + row_number;
+                break;
+            }
+        default:
+            return -1;
+    }
+    if (sz > len) {
+        uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+        int step = ENCRYPT_BLOCK_SIZE - row_offset;
+        if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
+            return -1;
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
+        wc_Chacha_Process(&chacha, dec_block, block, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(data, dec_block + row_offset, step);
+        address += step;
+        data += step;
+        sz -= step;
+        iv_counter++;
+    }
+    if (ext_flash_read(address, data, sz) != sz)
+        return -1;
+    for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
+        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
+        XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
+        wc_Chacha_Process(&chacha, data + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
+        iv_counter++;
+    }
+    return len;
+}
+#endif
+
+#endif /* EXT_ENCRYPTED */
 

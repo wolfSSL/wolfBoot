@@ -16,6 +16,7 @@ CFLAGS+=$(OPTIMIZE)
 SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/ecc.c \
 	$(WOLFDIR)wolfcrypt/src/coding.c \
+	$(WOLFDIR)wolfcrypt/src/chacha.c \
 	$(WOLFDIR)wolfcrypt/src/ed25519.c \
 	$(WOLFDIR)wolfcrypt/src/fe_operations.c \
 	$(WOLFDIR)wolfcrypt/src/ge_operations.c \

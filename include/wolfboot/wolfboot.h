@@ -78,6 +78,7 @@
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
+#define PART_NONE   0xFF
 
 #define PART_DTS (0x10)
 #define PART_DTS_BOOT       (PART_DTS | PART_BOOT)
@@ -117,5 +118,11 @@ int wolfBoot_dualboot_candidate(void);
 #   error "No valid hash algorithm defined!"
 #endif
 
+/* Encryption support */
+#define ENCRYPT_BLOCK_SIZE 16 
+#define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
+#define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
 
+int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
+int wolfBoot_erase_encrypt_key(void);
 #endif /* !WOLFBOOT_H */

@@ -30,11 +30,18 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <limits.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include <wolfssl/wolfcrypt/settings.h>
+
+#ifdef HAVE_CHACHA
+#include <wolfssl/wolfcrypt/chacha.h>
+#endif
+
 #ifndef NO_RSA
     #include <wolfssl/wolfcrypt/rsa.h>
 #endif
@@ -93,6 +100,8 @@
 #define SIGN_RSA2048   HDR_IMG_TYPE_AUTH_RSA2048
 #define SIGN_RSA4096   HDR_IMG_TYPE_AUTH_RSA4096
 
+#define ENC_BLOCK_SIZE 16
+
 static void header_append_u32(uint8_t* header, uint32_t* idx, uint32_t tmp32)
 {
     memcpy(&header[*idx], &tmp32, sizeof(tmp32));
@@ -119,6 +128,7 @@ int main(int argc, char** argv)
     int self_update = 0;
     int sha_only = 0;
     int manual_sign = 0;
+    int encrypt = 0;
     int hash_algo = HASH_SHA256;
     int sign = SIGN_AUTO;
     const char* image_file = NULL;
@@ -126,10 +136,12 @@ int main(int argc, char** argv)
     const char* fw_version = NULL;
     const char* signature_file = NULL;
     char output_image_file[PATH_MAX];
+    char output_encrypted_image_file[PATH_MAX];
     char* tmpstr;
+    char *encrypt_key_file = NULL;
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
-    FILE *f, *f2;
+    FILE *f, *f2, *fek, *fef;
     uint8_t* key_buffer = NULL;
     size_t   key_buffer_sz = 0;
     uint8_t* header = NULL;
@@ -165,8 +177,8 @@ int main(int argc, char** argv)
 #endif
 
     /* Check arguments and print usage */
-    if (argc < 4 || argc > 8) {
-        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version\n", argv[0]);
+    if (argc < 4 || argc > 10) {
+        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
         printf("  - or - ");
@@ -209,8 +221,11 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--manual-sign") == 0) {
             manual_sign = 1;
         }
-        else {
-            i-=1;
+        else if (strcmp(argv[i], "--encrypt") == 0) {
+            encrypt = 1;
+            encrypt_key_file = argv[++i];
+        } else {
+            i--;
             break;
         }
     }
@@ -230,12 +245,18 @@ int main(int argc, char** argv)
     snprintf(output_image_file, sizeof(output_image_file), "%s_v%s_%s.bin",
         (char*)buf, fw_version, sha_only ? "digest" : "signed");
 
+    snprintf(output_encrypted_image_file, sizeof(output_encrypted_image_file), "%s_v%s_signed_and_encrypted.bin",
+        (char*)buf, fw_version);
+
     printf("Update type:          %s\n", self_update ? "wolfBoot" : "Firmware");
     printf("Input image:          %s\n", image_file);
     printf("Selected cipher:      %s\n", sign_str);
     printf("Selected hash  :      %s\n", hash_str);
     printf("Public key:           %s\n", key_file);
     printf("Output %6s:        %s\n",    sha_only ? "digest" : "image", output_image_file);
+    if (encrypt) {
+        printf ("Encrypted output: %s\n", output_encrypted_image_file);
+    }
 
     /* open and load key buffer */
     f = fopen(key_file, "rb");
@@ -633,13 +654,12 @@ int main(int argc, char** argv)
     }
 
     /* Create output image */
-    f = fopen(output_image_file, "wb");
+    f = fopen(output_image_file, "w+b");
     if (f == NULL) {
         printf("Open output image file %s failed\n", output_image_file);
         goto exit;
     }
     fwrite(header, header_idx, 1, f);
-
     /* Copy image to output */
     f2 = fopen(image_file, "rb");
     pos = 0;
@@ -647,15 +667,55 @@ int main(int argc, char** argv)
         read_sz = image_sz;
         if (read_sz > sizeof(buf))
             read_sz = sizeof(buf);
-        fread(buf, read_sz, 1, f2);
-        fwrite(buf, read_sz, 1, f);
+        read_sz = fread(buf, 1, read_sz, f2);
+        if ((read_sz == 0) && (feof(f2)))
+            break;
+        fwrite(buf, 1, read_sz, f);
         pos += read_sz;
     }
+
+    if (encrypt && encrypt_key_file) {
+        uint8_t key[32], iv[12];
+        uint8_t enc_buf[ENC_BLOCK_SIZE];
+        uint32_t fsize = 0;
+        ChaCha cha;
+#ifndef HAVE_CHACHA
+        fprintf(stderr, "Encryption not supported: chacha support not found in wolfssl configuration.\n");
+        exit(100);
+#endif
+        fek = fopen(encrypt_key_file, "rb");
+        if (fek == NULL) {
+            fprintf(stderr, "Open encryption key file %s: %s\n", encrypt_key_file, strerror(errno));
+            exit(1);
+        }
+        fread(key, 32, 1, fek);
+        fread(iv, 12, 1, fek);
+        fclose(fek);
+        fef = fopen(output_encrypted_image_file, "wb");
+        if (!fef) {
+            fprintf(stderr, "Open encrypted output file %s: %s\n", encrypt_key_file, strerror(errno));
+        }
+        fsize = ftell(f);
+        fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
+
+        wc_Chacha_SetKey(&cha, key, 32);
+        for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
+            int fread_retval;
+            fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
+            if ((fread_retval == 0) && feof(f)) {
+                break;
+            }
+            wc_Chacha_SetIV(&cha, iv, (pos >> 4));
+            wc_Chacha_Process(&cha, enc_buf, buf, fread_retval);
+            fwrite(enc_buf, 1, fread_retval, fef);
+        }
+        fclose(fef);
+    }
+    printf("Output image(s) successfully created.\n");
+    ret = 0;
+
     fclose(f2);
     fclose(f);
-
-    printf("Output image successfully created.\n");
-    ret = 0;
 
 exit:
     if (header)

@@ -1,6 +1,6 @@
-/* led.h
+/* encrypt.h
  *
- * Test bare-metal blinking led application
+ * Functions to encrypt/decrypt external flash content
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
@@ -21,15 +21,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef GPIO_H_INCLUDED
-#define GPIO_H_INCLUDED
+#ifndef ENCRYPT_H_INCLUDED
+#define ENCRYPT_H_INCLUDED
+#ifdef __WOLFBOOT
+#include <stdint.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha256.h>
 
-int led_setup(void);
-void led_on(void);
-void led_off(void);
-void led_toggle(void);
-void led_pwm_setup(void);
-void boot_led_on(void);
-void boot_led_off(void);
+#include "target.h"
+#include "wolfboot/wolfboot.h"
 
-#endif /* !GPIO_H_INCLUDED */
+#include <wolfssl/wolfcrypt/chacha.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
+
+
+/* Internal read/write functions (not exported in the libwolfboot API) */
+int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
+int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
+
+#endif /* __WOLFBOOT */
+#endif /* ENCRYPT_H_INCLUDED */
