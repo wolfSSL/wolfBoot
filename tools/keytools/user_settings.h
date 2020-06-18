@@ -58,6 +58,9 @@
 #define WOLFSSL_SHA3
 #undef  NO_SHA256
 
+/* Chacha stream cipher */
+#define HAVE_CHACHA
+
 /* Disables */
 #define NO_AES
 #define NO_CMAC
