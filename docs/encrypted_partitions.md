@@ -33,7 +33,7 @@ to verify and install the next update. The key can be for example received from 
 process using secure communication, and set by the application, using `libwolfboot` API, to be used by
 wolfBoot upon next boot.
 
-Aside from setting the temporary key, the update mechanism remains the same for distrubuting, uploading and
+Aside from setting the temporary key, the update mechanism remains the same for distributing, uploading and
 installing firmware updates through wolfBoot.
 
 ### Libwolfboot API
