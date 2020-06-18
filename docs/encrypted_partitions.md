@@ -52,7 +52,7 @@ can be used to set a temporary encryption key for the external partition, or era
 
 Moreover, using `libwolfboot` to access the external flash with wolfboot hal from the application will not
 use encryption. This way the received update, already encrypted at origin, can be stored in the external
-memory unchanged, and retreived in its encrypted format, e.g. to verify that the transfer has been successful before
+memory unchanged, and retrieved in its encrypted format, e.g. to verify that the transfer has been successful before
 reboot.
 
 ### Symmetric encryption algorithm
@@ -61,7 +61,7 @@ The algorithm currently used to encrypt and decrypt data in external partitions
 is Chacha20-256.
 
  - The `key` provided to `wolfBoot_set_encrypt_key()` must be exactly 32 Bytes long.
- - The `nonce` argument must be a 96-bit (12 Bytes) randomly generated buffer, to be used as IV for encryption and decription.
+ - The `nonce` argument must be a 96-bit (12 Bytes) randomly generated buffer, to be used as IV for encryption and decryption.
 
 ## Example usage
 

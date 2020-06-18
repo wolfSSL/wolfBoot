@@ -42,7 +42,7 @@ Read and write operations are simply translated into remote procedure calls via 
 the remote application and provide read and write access to actual storage elements which would only be accessible
 by the host.
 
-This means that after a successful update, a copy of the previos firmware will be stored in the remote partition to
+This means that after a successful update, a copy of the previous firmware will be stored in the remote partition to
 provide exactly the same update mechanism that is available in all the other use cases. The only difference consist
 in the way of accessing the physical storage area, but all the mechanisms at a higher level stay the same.
 
