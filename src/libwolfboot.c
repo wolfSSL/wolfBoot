@@ -46,7 +46,10 @@
 
 #define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
 
+#ifdef EXT_FLASH
 static uint32_t ext_cache;
+#endif
+
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 
 

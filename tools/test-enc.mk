@@ -1,10 +1,19 @@
 ENC_TEST_UPDATE_VERSION?=2
 KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
-SIGN_TOOL=python3 ./tools/keytools/sign.py
 SIGN_ARGS+=--ecc256 --encrypt /tmp/enc_key.der
 SIGN_ENC_ARGS+=--ecc256 --encrypt /tmp/enc_key.der
 USBTTY?=/dev/ttyACM0
 TIMEOUT?=60
+
+ifneq ("$(wildcard ./tools/keytools/sign)","")
+    SIGN_TOOL=./tools/keytools/sign
+else
+    ifneq ("$(wildcard ./tools/keytools/sign.exe)","")
+        SIGN_TOOL=./tools/keytools/sign.exe
+    else
+        SIGN_TOOL=python3 ./tools/keytools/sign.py
+    endif
+endif
 
 .config:
 	@rm -f $@

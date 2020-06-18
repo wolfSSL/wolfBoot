@@ -161,8 +161,8 @@ static int serial_open(const char *device, int rate)
 
 	fcntl(fd, F_SETFL, 0);
 	tcgetattr(fd, &options);
-	cfsetispeed(&options, speed ?: B460800);
-	cfsetospeed(&options, speed ?: B460800);
+	cfsetispeed(&options, speed ?: 460800);
+	cfsetospeed(&options, speed ?: 460800);
 	cfmakeraw(&options);
 	options.c_cflag |= (CLOCAL | CREAD);
 	options.c_cflag &= ~CRTSCTS;
