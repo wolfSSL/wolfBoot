@@ -660,7 +660,6 @@ int main(int argc, char** argv)
         goto exit;
     }
     fwrite(header, header_idx, 1, f);
-
     /* Copy image to output */
     f2 = fopen(image_file, "rb");
     pos = 0;
@@ -668,11 +667,12 @@ int main(int argc, char** argv)
         read_sz = image_sz;
         if (read_sz > sizeof(buf))
             read_sz = sizeof(buf);
-        fread(buf, read_sz, 1, f2);
-        fwrite(buf, read_sz, 1, f);
+        read_sz = fread(buf, 1, read_sz, f2);
+        if ((read_sz == 0) && (feof(f2)))
+            break;
+        fwrite(buf, 1, read_sz, f);
         pos += read_sz;
     }
-
 
     if (encrypt && encrypt_key_file) {
         uint8_t key[32], iv[12];
@@ -696,14 +696,12 @@ int main(int argc, char** argv)
             fprintf(stderr, "Open encrypted output file %s: %s\n", encrypt_key_file, strerror(errno));
         }
         fsize = ftell(f);
-        printf("size in: %d\n", fsize);
         fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
 
         wc_Chacha_SetKey(&cha, key, 32);
         for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
             int fread_retval;
             fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
-            printf("pos: %lu ret: %d\n", pos, fread_retval);
             if ((fread_retval == 0) && feof(f)) {
                 break;
             }
