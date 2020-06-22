@@ -15,17 +15,12 @@ else
     endif
 endif
 
-.config:
-	@rm -f $@
-	@echo [CONFIG]
-	@cp config/examples/stm32wb-uart-flash-encryption.config $@
-
-
 tools/uart-flash-server/ufserver: FORCE
 	@make -C `dirname $@`
 	@rm -f src/libwolfboot.o
 
-test-enc-update: factory.bin test-app/image.bin .config tools/uart-flash-server/ufserver FORCE
+test-enc-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
+	@diff .config config/examples/stm32wb-uart-flash-encryption.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-uart-flash-encryption.config to .config to run this test\n\n" && exit 1)
 	@printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@$(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
