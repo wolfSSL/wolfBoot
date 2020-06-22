@@ -1,7 +1,7 @@
 ENC_TEST_UPDATE_VERSION?=2
 KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
-SIGN_ARGS+=--ecc256 --encrypt /tmp/enc_key.der
-SIGN_ENC_ARGS+=--ecc256 --encrypt /tmp/enc_key.der
+SIGN_ARGS?=--ecc256
+SIGN_ENC_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
 USBTTY?=/dev/ttyACM0
 TIMEOUT?=60
 
