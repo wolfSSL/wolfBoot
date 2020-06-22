@@ -78,6 +78,7 @@ include/target.h
 # Test tools
 tools/test-expect-version/test-expect-version
 tools/test-update-server/server
+tools/uart-flash-server/ufserver
 config/*.ld
 
 # Generated confiuguration file
@@ -89,4 +90,3 @@ config/*.ld
 # IAR files not under version control
 IDE/IAR/settings
 IDE/IAR/*.ewt
-

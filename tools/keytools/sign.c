@@ -392,7 +392,7 @@ int main(int argc, char** argv)
                 ret = wc_ecc_import_unsigned(&key.ecc, &key_buffer[0], &key_buffer[32],
                     &key_buffer[64], ECC_SECP256R1);
                 if (ret == 0) {
-                    pubkey = key_buffer; /* first 64 bytes is public porition */
+                    pubkey = key_buffer; /* first 64 bytes is public portion */
                     pubkey_sz = 64;
                 }
             }
