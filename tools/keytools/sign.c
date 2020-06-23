@@ -37,6 +37,7 @@
 #include <sys/types.h>
 
 #include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/asn.h>
 
 #ifdef HAVE_CHACHA
 #include <wolfssl/wolfcrypt/chacha.h>
@@ -158,6 +159,7 @@ int main(int argc, char** argv)
     uint32_t idx, read_sz, pos;
     uint16_t image_type;
     uint32_t fw_version32;
+    uint32_t sign_wenc = 0;
     struct stat attrib;
     union {
 #ifdef HAVE_ED25519
@@ -178,7 +180,7 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
-        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] image key.der fw_version\n", argv[0]);
+        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
         printf("  - or - ");
@@ -196,9 +198,19 @@ int main(int argc, char** argv)
             sign = SIGN_ECC256;
             sign_str = "ECC256";
         }
+        else if (strcmp(argv[i], "--rsa2048enc") == 0) {
+            sign = SIGN_RSA2048;
+            sign_str = "RSA2048ENC";
+            sign_wenc = 1;
+        }
         else if (strcmp(argv[i], "--rsa2048") == 0) {
             sign = SIGN_RSA2048;
             sign_str = "RSA2048";
+        }
+        else if (strcmp(argv[i], "--rsa4096enc") == 0) {
+            sign = SIGN_RSA4096;
+            sign_str = "RSA4096ENC";
+            sign_wenc = 1;
         }
         else if (strcmp(argv[i], "--rsa4096") == 0) {
             sign = SIGN_RSA4096;
@@ -585,7 +597,7 @@ int main(int argc, char** argv)
     }
 
     /* Sign the digest */
-    ret = NOT_COMPILED_IN; /* default erorr */
+    ret = NOT_COMPILED_IN; /* default error */
     signature = malloc(signature_sz);
     if (signature == NULL) {
         printf("Signature malloc error!\n");
@@ -614,7 +626,20 @@ int main(int argc, char** argv)
         }
         else if (sign == SIGN_RSA2048 || sign == SIGN_RSA4096) {
         #ifndef NO_RSA
-            ret = wc_RsaSSL_Sign(digest, digest_sz, signature, signature_sz, &key.rsa, &rng);
+            uint32_t enchash_sz = digest_sz;
+            uint8_t* enchash = digest;
+            if (sign_wenc) {
+                /* add ASN.1 signature encoding */
+                int hashOID = 0;
+                if (hash_algo == HASH_SHA256)
+                    hashOID = SHA256h;
+                else if (hash_algo == HASH_SHA3)
+                    hashOID = SHA3_384h;
+                enchash_sz = wc_EncodeSignature(buf, digest, digest_sz, hashOID);
+                enchash = buf;
+            }
+            ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, signature_sz, 
+                &key.rsa, &rng);
             wc_FreeRsaKey(&key.rsa);
             if (ret > 0) {
                 signature_sz = ret;

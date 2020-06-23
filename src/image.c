@@ -115,8 +115,54 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 #endif /* WOLFBOOT_SIGN_ECC256 */
 
 #if defined(WOLFBOOT_SIGN_RSA2048) || defined (WOLFBOOT_SIGN_RSA4096)
-#include <wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/rsa.h>
+
+#ifndef NO_RSA_SIG_ENCODING /* option to reduce code size */
+static inline int DecodeAsn1Tag(const uint8_t* input, int inputSz, int* inOutIdx,
+    int* tag_len, uint8_t tag)
+{
+    if (input[*inOutIdx] != tag) {
+        return -1;
+    }
+    (*inOutIdx)++;
+    *tag_len = input[*inOutIdx];
+    (*inOutIdx)++;
+    if (*tag_len + *inOutIdx > inputSz) {
+        return -1;
+    }
+    return 0;
+}
+static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
+{
+    uint8_t* input = *pInput;
+    int idx = 0;
+    int digest_len = 0, algo_len, tot_len;
+
+    /* sequence - total size */
+    if (DecodeAsn1Tag(input, inputSz, &idx, &tot_len, 
+            ASN_SEQUENCE | ASN_CONSTRUCTED) != 0) {
+        return -1;
+    }
+
+    /* sequence - algoid */
+    if (DecodeAsn1Tag(input, inputSz, &idx, &algo_len, 
+            ASN_SEQUENCE | ASN_CONSTRUCTED) != 0) {
+        return -1;
+    }
+    idx += algo_len; /* skip algoid */
+
+    /* digest */
+    if (DecodeAsn1Tag(input, inputSz, &idx, &digest_len, 
+            ASN_OCTET_STRING) != 0) {
+        return -1;
+    }
+    /* return digest buffer pointer */
+    *pInput = &input[idx];
+    return digest_len;
+}
+#endif /* !NO_RSA_SIG_ENCODING */
+
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
 #ifdef WOLFBOOT_TPM
@@ -142,7 +188,8 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 #else
     int ret;
     struct RsaKey rsa;
-    uint8_t digest_out[IMAGE_SIGNATURE_SIZE];
+    uint8_t* digest_out = NULL;
+    uint8_t output[IMAGE_SIGNATURE_SIZE];
     word32 in_out = 0;
 
     ret = wc_InitRsaKey(&rsa, NULL);
@@ -156,10 +203,18 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         /* Failed to import rsa key */
         return -1;
     }
-    ret = wc_RsaSSL_Verify(sig, IMAGE_SIGNATURE_SIZE, digest_out, IMAGE_SIGNATURE_SIZE, &rsa);
-    if (ret == WOLFBOOT_SHA_DIGEST_SIZE) {
-        if (memcmp(digest_out, hash, ret) == 0)
-            return 0;
+    ret = wc_RsaSSL_Verify(sig, IMAGE_SIGNATURE_SIZE, output, 
+        IMAGE_SIGNATURE_SIZE, &rsa);
+    digest_out = output;
+#ifndef NO_RSA_SIG_ENCODING
+    if (ret > WOLFBOOT_SHA_DIGEST_SIZE) {
+        /* larger result indicates it might have an ASN.1 encoded header */
+        ret = RsaDecodeSignature(&digest_out, ret);
+    }
+#endif
+    if (ret == WOLFBOOT_SHA_DIGEST_SIZE && digest_out &&
+            memcmp(digest_out, hash, ret) == 0) {
+        return 0;
     }
     return -1;
 #endif /* WOLFBOOT_TPM */
