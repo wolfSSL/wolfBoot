@@ -60,11 +60,17 @@ ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
 endif
+
 ifeq ($(TARGET),stm32l5)
-  LSCRIPT_TEMPLATE=ARM-stm32l5.ld
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld
+  else
+    LSCRIPT_TEMPLATE=ARM-stm32l5.ld
+  endif
   CFLAGS+=-mcpu=cortex-m33  
+  LDFLAGS+=-mcpu=cortex-m33
 endif
-LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+LDFLAGS+=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1

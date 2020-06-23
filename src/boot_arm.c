@@ -225,26 +225,37 @@ void isr_empty(void)
 #else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #endif
+
+
 static void  *app_entry;
 static uint32_t app_end_stack;
 
 
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if defined CORTEX_M33
 
 /* Armv8 boot procedure */
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
+    /* Get stack pointer, entry point */
+    app_end_stack = (*((uint32_t *)(app_offset)));
+    app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
     /* Disable interrupts */
     asm volatile("cpsid i");
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
+    /* Jump to non secure app_entry */
     asm volatile("mov r7, %0" ::"r"(app_entry));
     asm volatile("bic.w   r7, r7, #1");
-    /* Jump to non secure app_entry */
     asm volatile("blxns   r7" );
+#else
+    asm volatile("msr msp, %0" ::"r"(app_end_stack));
+    asm volatile("mov pc, %0":: "r"(app_entry));
+#endif
+
 }
 #else
 /* Armv6/v7 */

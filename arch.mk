@@ -76,7 +76,8 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
-    CFLAGS+=-Ihal
+    CFLAGS+=-Ihal -DCORTEX_M33
+    ARCH_FLASH_OFFSET=0x08000000
   endif
 
   ## Cortex-M CPU

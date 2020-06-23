@@ -280,7 +280,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
   flash_clear_errors(0);
 
   src = (uint32_t *)data;
-  dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
+  dst = (uint32_t *)address;
 
   while (i < len) {
     FLASH_CR |= FLASH_CR_PG;
@@ -326,18 +326,22 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         return -1;
     end_address = address + len - 1;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-       // considering DBANK = 1
-        if (p < (FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) )
+        uint32_t reg;
+        uint32_t base;
+        // considering DBANK = 1
+        if (p < (FLASH_BANK2_BASE) )
         {
           FLASH_CR &= ~FLASH_CR_BKER;
+          base = FLASHMEM_ADDRESS_SPACE;
         }
-        if(p>=(FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) && (p <= (FLASH_TOP -FLASHMEM_ADDRESS_SPACE) ))
+        if(p>=(FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
           FLASH_CR |= FLASH_CR_BKER;
+          base = FLASH_BANK2_BASE;
         }
 
-        uint32_t reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT)| FLASH_CR_PER));
-        FLASH_CR = reg | (((p >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT)| FLASH_CR_PER));
+        FLASH_CR = reg | ((((p - base)  >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete(0);
