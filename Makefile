@@ -271,7 +271,7 @@ factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
 	@echo "\t[MERGE] $@"
-	@cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
+	$(Q)cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"

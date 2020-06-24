@@ -1,8 +1,8 @@
-# wolfBoot Signing
+# wolfBoot Key Tools
 
-Instructions for setting up Python, wolfCrypt-py module and wolfBoot for firmware signing. 
+Instructions for setting up Python, wolfCrypt-py module and wolfBoot for firmware signing and key generation.
 
-Note: There is a pure C signing tool available as well. See [C Signing Tool](#c-signing-tool) below.
+Note: There is a pure C version of the key tool available as well. See [C Key Tools](#c-key-tools) below.
 
 ## Install Python3
 
@@ -39,48 +39,65 @@ make config
 make
 ```
 
+## C Key Tools
+
+A standalone C version of the keygen tools is available in: `./tools/keytools`. 
+
+These can be built in `tools/keytools` using `make` or from the wolfBoot root using `make keytools`. 
+
+If the C version of the key tools exists they will be used by wolfBoot (the default is the Python scripts).
+
+### Windows Visual Studio
+
+Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe` and `keygen.exe` tools for use on Windows.
+
+
+## Command Line Usage
+
+```sh
+./tools/keytools/keygen [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ]  pub_key_file.c
+```
+
+```sh
+./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version
+  - or -        ./tools/keytools/sign [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version
+  - or -        ./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig
+```
+
 ## Signing Firmware
 
-1. Load the private key to use for signing into “./rsa4096.der”
-2. `python3 ./tools/keytools/sign.py --rsa4096 --sha3 test-app/image.bin rsa4096.der 1`
+1. Load the private key to use for signing into `./rsa2048.der`, `./rsa4096.der` or `./ed25519.der`.
+2. Run the signing tool with asymmetric algorithm, hash algorithm, file to sign, key and version.
+
+```sh
+./tools/keytools/sign --rsa2048 --sha256 test-app/image.bin rsa2048.der 1
+# OR
+python3 ./tools/keytools/sign.py --rsa2048 --sha256 test-app/image.bin rsa2048.der 1
+```
 
 Note: The last argument is the “version” number.
 
 ## Signing Firmware with External Private Key (HSM)
 
-I've tested this with separate signature and the correct public key, the two files are identical either if I do one step signing:
+Steps for manually signing firmware using an external key source.
 
 ```sh
 # Create file with Public Key
-openssl rsa -inform DER -outform DER -in rsa4096.der -out rsa4096_pub.der -pubout
+openssl rsa -inform DER -outform DER -in rsa2048.der -out rsa2048_pub.der -pubout
 
 # Generate Hash to Sign
-python3 ./tools/keytools/sign.py --rsa4096 --sha-only --sha3 test-app/image.bin rsa4096_pub.der 1
+./tools/keytools/sign            --rsa2048 --sha-only --sha256 test-app/image.bin rsa2048_pub.der 1
+# OR
+python3 ./tools/keytools/sign.py --rsa2048 --sha-only --sha256 test-app/image.bin rsa4096_pub.der 1
 
-# Example for signing
-openssl rsautl -sign -keyform der -inkey rsa4096.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
+# Sign hash Example (here is where you would use an HSM)
+openssl rsautl -sign -keyform der -inkey rsa2048.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
 
 # Generate final signed binary
-python3 ./tools/keytools/sign.py --rsa4096 --sha3 --manual-sign test-app/image.bin rsa4096_pub.der 1 test-app/image_v1.sig
-```
+./tools/keytools/sign            --rsa2048 --sha256 --manual-sign test-app/image.bin rsa2048_pub.der 1 test-app/image_v1.sig
+# OR
+python3 ./tools/keytools/sign.py --rsa2048 --sha256 --manual-sign test-app/image.bin rsa4096_pub.der 1 test-app/image_v1.sig
 
-## C Signing Tool
-
-A standalone C version of the signing tool is available here: `./tools/keytools/sign.c`. Build using `make keytools`
-
-```sh
-./tools/keytools/sign --rsa4096 --sha3 test-app/image.bin rsa4096.der 1
-```
-
-### Windows Visual Studio
-
-Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe` tool for use on Windows.
-
-
-## Command Line Usage
-
-```
-./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version
-  - or -        ./tools/keytools/sign [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version
-  - or -        ./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig
+# Combine into factory image
+cat wolfboot-align.bin test-app/image_v1_signed.bin > factory.bin
 ```
