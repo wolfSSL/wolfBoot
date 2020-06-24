@@ -48,6 +48,7 @@
 # automatically generated keys
 *.der
 *.pem
+*.sig
 
 # automatically generated source files
 src/ed25519_pub_key.c
@@ -57,11 +58,12 @@ src/rsa4096_pub_key.c
 
 # keygen binaries
 tools/keytools/sign
+tools/keytools/sign.exe
 tools/keytools/keygen
+tools/keytools/keygen.exe
 
 # Vim swap files
 .*.swp
-
 
 # tags etc.
 cscope.out
