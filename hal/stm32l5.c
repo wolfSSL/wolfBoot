@@ -38,6 +38,8 @@
 #define RCC_BASE            (0x40021000)   //RM0438 - Table 4
 #endif
 
+#define FLASH_SECURE_MMAP_BASE (0xc0000000)
+
 #define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  //RM0438 - Table 77
 #define RCC_CR_PLLRDY               (1 << 25) //RM0438 - 9.8.1
 #define RCC_CR_PLLON                (1 << 24) //RM0438 - 9.8.1
@@ -154,6 +156,10 @@
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x24))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
 
+#define FLASH_SECBB1       ((volatile uint32_t *)(FLASH_BASE + 0x80)) /* Array */
+#define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0xA0)) /* Array */
+#define FLASH_SECBB_NREGS  4    /* Array length for the two above */
+
 /* Register values */
 #define FLASH_SR_EOP                        (1 << 0)
 #define FLASH_SR_OPERR                      (1 << 1)
@@ -216,7 +222,7 @@
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
 
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
-#define FLASH_PAGE_SIZE           (0x800) /* 2KB */
+#define FLASH_PAGE_SIZE           (0x800)      /* 2KB */
 #define FLASH_BANK2_BASE          (0x08040000) /*!< Base address of Flash Bank2     */
 #define FLASH_TOP                 (0x0807FFFF) /*!< FLASH end address  */
 
@@ -255,20 +261,60 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 
 static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 {
-   while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY);
-
+    while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
+        ;
 }
 
 static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 {
 
-  FLASH_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR
+    FLASH_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR
 #if !(defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
-  |
-  FLASH_SR_OPTWERR
+            |
+            FLASH_SR_OPTWERR
 #endif
-  ) ;
+            ) ;
 
+}
+
+static void claim_nonsecure_area(uint32_t address, int len)
+{
+    int page_n, reg_idx;
+    uint32_t reg;
+    uint32_t end = address + len;
+
+
+    if (address < FLASH_BANK2_BASE)
+        return;
+    if (end > (FLASH_TOP + 1))
+        return;
+
+    flash_wait_complete(0);
+    flash_clear_errors(0);
+    while (address < end) {
+        int pos;
+        page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+        reg_idx = page_n / 32;
+        pos = page_n % 32;
+        FLASH_SECBB2[reg_idx] |= ( 1 << pos);
+        ISB();
+        /* Erase claimed non-secure page */
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
+        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER);
+        DMB();
+        FLASH_CR |= FLASH_CR_STRT;
+        ISB();
+        flash_wait_complete(0);
+        address += FLASH_PAGE_SIZE;
+    }
+    FLASH_CR &= ~FLASH_CR_PER ;
+}
+
+static void release_nonsecure_area(void)
+{
+    int i;
+    for (i = 0; i < FLASH_SECBB_NREGS; i++)
+        FLASH_SECBB2[i] = 0;
 }
 
 
@@ -276,21 +322,26 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
   int i = 0;
   uint32_t *src, *dst;
+  uint32_t dword[2];
 
   flash_clear_errors(0);
 
   src = (uint32_t *)data;
-  dst = (uint32_t *)address;
+  dst = (uint32_t *)((address - ARCH_FLASH_OFFSET) + FLASH_SECURE_MMAP_BASE);
+  claim_nonsecure_area(address, len);
 
   while (i < len) {
+    dword[0] = src[i >> 2];
+    dword[1] = src[(i >> 2) + 1];
     FLASH_CR |= FLASH_CR_PG;
-    dst[i >> 2] = src[i >> 2];
-    dst[(i >> 2) + 1] = src[(i >> 2) + 1];
+    dst[i >> 2] = dword[0];
+    dst[(i >> 2) + 1] = dword[1];
     flash_wait_complete(0);
     FLASH_CR &= ~FLASH_CR_PG;
     i+=8;
   }
 
+  release_nonsecure_area();
   return 0;
 }
 
@@ -315,15 +366,19 @@ void RAMFUNCTION hal_flash_lock(void)
         FLASH_CR |= FLASH_CR_LOCK;
 }
 
+
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end_address;
     uint32_t p;
 
     flash_clear_errors(0);
-
     if (len == 0)
         return -1;
+
+    if (address < ARCH_FLASH_OFFSET)
+        return -1;
+
     end_address = address + len - 1;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
@@ -331,16 +386,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         // considering DBANK = 1
         if (p < (FLASH_BANK2_BASE) )
         {
-          FLASH_CR &= ~FLASH_CR_BKER;
-          base = FLASHMEM_ADDRESS_SPACE;
-        }
-        if(p>=(FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
-        {
-          FLASH_CR |= FLASH_CR_BKER;
-          base = FLASH_BANK2_BASE;
+            base = FLASHMEM_ADDRESS_SPACE;
         }
 
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT)| FLASH_CR_PER));
+        if(p>=(FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        {
+            return 0; /* Skip erasing non-secure pages: will be erased upon write */
+        }
+
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER));
         FLASH_CR = reg | ((((p - base)  >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
@@ -349,6 +403,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
    /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_PER ;
+
 
   return 0;
 }
