@@ -37,6 +37,29 @@ On other systems, the SWAP space can be as small as 512B, if multiple smaller fl
 
 More information about the geometry of the flash and in-application programming (IAP) can be found in the manufacturer manual of each target device.
 
+### STM32F4 Programming
+
+```
+st-flash write factory.bin 0x08000000
+```
+
+### STM32F4 Debugging
+
+1. Start GDB server
+
+OpenOCD: `openocd --file ./config/openocd/openocd_stm32f4.cfg`
+OR
+ST-Link: `st-util -p 3333`
+
+2. Start GDB Client
+
+```sh
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x20100
+mon reset init
+b main
+c
+```
 
 ## STM32L0x3
 

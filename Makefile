@@ -38,13 +38,17 @@ ifeq ($(SIGN),ECC256)
   PRIVATE_KEY=ecc256.der
   WOLFCRYPT_OBJS+= \
     $(MATH_OBJS) \
-	./lib/wolfssl/wolfcrypt/src/ecc.o \
-	./lib/wolfssl/wolfcrypt/src/memory.o \
-	./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/ecc.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./src/xmalloc_ecc.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER \
-		  -Wstack-usage=1024
+  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER
+  ifeq ($(WOLFTPM),0)
+    CFLAGS+=-Wstack-usage=1024
+  else
+    CFLAGS+=-Wstack-usage=6680
+  endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
 
@@ -53,15 +57,14 @@ ifeq ($(SIGN),ED25519)
   SIGN_OPTIONS+=--ed25519
   PRIVATE_KEY=ed25519.der
   WOLFCRYPT_OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
-	./lib/wolfssl/wolfcrypt/src/ed25519.o \
-	./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
+    ./lib/wolfssl/wolfcrypt/src/ed25519.o \
+    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
-	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-	./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 \
-		  -Wstack-usage=1024
+  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -Wstack-usage=1024
 endif
 
 ifeq ($(SIGN),RSA2048)
@@ -72,14 +75,19 @@ ifeq ($(SIGN),RSA2048)
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
-	./lib/wolfssl/wolfcrypt/src/rsa.o \
-	./lib/wolfssl/wolfcrypt/src/asn.o \
-	./lib/wolfssl/wolfcrypt/src/hash.o \
-	./lib/wolfssl/wolfcrypt/src/wc_port.o \
-	./src/xmalloc_rsa.o
+    ./lib/wolfssl/wolfcrypt/src/rsa.o \
+    ./lib/wolfssl/wolfcrypt/src/asn.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./src/xmalloc_rsa.o
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
-		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=512
+		  -DIMAGE_HEADER_SIZE=512
+  ifeq ($(WOLFTPM),0)
+    CFLAGS+=-Wstack-usage=12288
+  else
+    CFLAGS+=-Wstack-usage=8320
+  endif
 endif
 
 ifeq ($(SIGN),RSA4096)
@@ -90,35 +98,41 @@ ifeq ($(SIGN),RSA4096)
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
-	./lib/wolfssl/wolfcrypt/src/rsa.o \
-	./lib/wolfssl/wolfcrypt/src/asn.o \
-	./lib/wolfssl/wolfcrypt/src/hash.o \
-	./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-	./src/xmalloc_rsa.o
+    ./lib/wolfssl/wolfcrypt/src/rsa.o \
+    ./lib/wolfssl/wolfcrypt/src/asn.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o \
+    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./src/xmalloc_rsa.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
-		  -Wstack-usage=12288 -DIMAGE_HEADER_SIZE=1024
+		  -DIMAGE_HEADER_SIZE=1024
+  ifeq ($(WOLFTPM),0)
+    CFLAGS+=-Wstack-usage=12288
+  else
+    CFLAGS+=-Wstack-usage=10680
+  endif
 endif
 
 
 CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused \
-	-I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
-	-DWOLFSSL_USER_SETTINGS \
-	-DPLATFORM_$(TARGET)
+  -I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
+  -DWOLFSSL_USER_SETTINGS \
+  -DPLATFORM_$(TARGET)
 
 ifeq ($(RAM_CODE),1)
-   CFLAGS+= -DRAM_CODE
+  CFLAGS+= -DRAM_CODE
 endif
 
 ifeq ($(DUALBANK_SWAP),1)
-   CFLAGS+= -DDUALBANK_SWAP
+  CFLAGS+= -DDUALBANK_SWAP
 endif
 
 ifeq ($(SPI_FLASH),1)
-   EXT_FLASH=1
-   CFLAGS+= -DSPI_FLASH=1
-   OBJS+= src/spi_flash.o
-   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  EXT_FLASH=1
+  CFLAGS+= -DSPI_FLASH=1
+  OBJS+= src/spi_flash.o
+  WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
 
 ifeq ($(UART_FLASH),1)
@@ -126,8 +140,8 @@ ifeq ($(UART_FLASH),1)
 endif
 
 ifeq ($(ENCRYPT),1)
-    CFLAGS+=-DEXT_ENCRYPTED=1
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+  CFLAGS+=-DEXT_ENCRYPTED=1
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
 endif
 
 ifeq ($(EXT_FLASH),1)
@@ -242,15 +256,13 @@ include tools/test.mk
 include tools/test-enc.mk
 
 ed25519.der:
-	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
 ecc256.der:
-	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
-
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
 rsa2048.der:
-	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
-
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
 rsa4096.der:
-	@$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
 
 keytools:
 	@make -C tools/keytools
