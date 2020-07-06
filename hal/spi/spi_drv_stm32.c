@@ -28,14 +28,14 @@
 #include "spi_drv.h"
 #include "spi_drv_stm32.h"
 
-void spi_cs_off(int pin)
+void RAMFUNCTION spi_cs_off(int pin)
 {
     SPI_PIO_CS_BSRR |= (1 << pin);
     while(!(SPI_PIO_CS_ODR & (1 << pin)))
         ;
 }
 
-void spi_cs_on(int pin)
+void RAMFUNCTION spi_cs_on(int pin)
 {
     SPI_PIO_CS_BSRR |= (1 << (pin + 16));
     while(SPI_PIO_CS_ODR & (1 << pin))
@@ -122,7 +122,7 @@ static void spi1_reset(void)
     APB2_CLOCK_RST &= ~SPI1_APB2_CLOCK_ER_VAL;
 }
 
-uint8_t spi_read(void)
+uint8_t RAMFUNCTION spi_read(void)
 {
     volatile uint32_t reg;
     do {
@@ -131,7 +131,7 @@ uint8_t spi_read(void)
     return (uint8_t)SPI1_DR;
 }
 
-void spi_write(const char byte)
+void RAMFUNCTION spi_write(const char byte)
 {
     int i;
     volatile uint32_t reg;
@@ -161,7 +161,7 @@ void spi_init(int polarity, int phase)
     }
 }
 
-void spi_release(void)
+void RAMFUNCTION spi_release(void)
 {
     spi1_reset();
 	SPI1_CR2 &= ~SPI_CR2_SSOE;
