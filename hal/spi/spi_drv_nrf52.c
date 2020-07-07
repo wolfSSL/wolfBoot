@@ -58,14 +58,14 @@
 #define M4   0x40000000  
 #define M8   0x80000000  
 
-void spi_cs_off(int pin)
+void RAMFUNCTION spi_cs_off(int pin)
 {
     GPIO_OUTSET = (1 << pin);
     while ((GPIO_OUT & (1 << pin)) == 0)
         ;
 }
 
-void spi_cs_on(int pin)
+void RAMFUNCTION spi_cs_on(int pin)
 {
     GPIO_OUTCLR = (1 << pin);
     while ((GPIO_OUT & (1 << pin)) != 0)
@@ -73,7 +73,7 @@ void spi_cs_on(int pin)
 
 }
 
-uint8_t spi_read(void)
+uint8_t RAMFUNCTION spi_read(void)
 {
     volatile uint32_t reg = SPI_EV_RDY;
     while (!reg)
@@ -83,7 +83,7 @@ uint8_t spi_read(void)
     return reg;
 }
 
-void spi_write(const char byte)
+void RAMFUNCTION spi_write(const char byte)
 {
     uint32_t reg;
     SPI_EV_RDY = 0;

@@ -53,7 +53,7 @@ static enum write_mode {
     SST_SINGLEBYTE = 0x01
 } chip_write_mode = WB_WRITEPAGE;
 
-static void write_address(uint32_t address)
+static void RAMFUNCTION write_address(uint32_t address)
 {
     spi_write((address & 0xFF0000) >> 16);
     spi_read();
@@ -63,7 +63,7 @@ static void write_address(uint32_t address)
     spi_read();
 }
 
-static uint8_t read_status(void)
+static uint8_t RAMFUNCTION read_status(void)
 {
     uint8_t status;
     spi_cs_on(SPI_CS_FLASH);
@@ -212,7 +212,7 @@ void spi_flash_sector_erase(uint32_t address)
     wait_busy();
 }
 
-int spi_flash_read(uint32_t address, void *data, int len)
+int RAMFUNCTION spi_flash_read(uint32_t address, void *data, int len)
 {
     uint8_t *buf = data;
     int i = 0;
