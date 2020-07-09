@@ -266,8 +266,18 @@ void RAMFUNCTION wolfBoot_start(void)
             (wolfBoot_verify_integrity(&boot) < 0)  ||
             (wolfBoot_verify_authenticity(&boot) < 0)) {
         if (wolfBoot_update(1) < 0) {
+            /* panic: no boot option available. */
             while(1)
-                /* panic */;
+                ;
+        } else {
+            /* Emergency update successful, try to re-open boot image */
+            if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
+                    (wolfBoot_verify_integrity(&boot) < 0)  ||
+                    (wolfBoot_verify_authenticity(&boot) < 0)) {
+                /* panic: something went wrong after the emergency update */
+                while(1)
+                    ;
+            }
         }
     }
     hal_prepare_boot();
