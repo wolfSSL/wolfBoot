@@ -345,6 +345,11 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
             p++;
             continue;
         }
+        /* Sanity check to prevent dereferencing unaligned half-words */
+        if ((((unsigned long)p) & 0x01) != 0) {
+            p++;
+            continue;
+        }
         len = p[2] | (p[3] << 8);
         if ((p[0] | (p[1] << 8)) == type) {
             *ptr = (p + 4);
@@ -368,7 +373,8 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     magic = (uint32_t *)blob;
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
-    wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_VERSION, (void *)&version_field);
+    if (wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_VERSION, (void *)&version_field) == 0)
+        return 0;
     if (version_field)
         return *version_field;
     return 0;
@@ -434,7 +440,8 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
         magic = (uint32_t *)image;
         if (*magic != WOLFBOOT_MAGIC)
             return 0;
-        wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field);
+        if (wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
+            return 0;
         if (type_field)
             return *type_field;
     }
