@@ -29,6 +29,10 @@
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
+#ifdef __ARMCC_VERSION
+#define asm __asm
+#endif
+
 
 #ifndef RAMFUNCTION
 #if defined(__WOLFBOOT) && defined(RAM_CODE)

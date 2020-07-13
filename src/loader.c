@@ -166,8 +166,11 @@ static int wolfBoot_update(int fallback_allowed)
 }
 #endif
 
-
+#ifdef __ARMCC_VERSION
 int main(void)
+#else
+void main(void)
+#endif
 {
     hal_init();
     spi_flash_probe();
@@ -181,5 +184,4 @@ int main(void)
     wolfBoot_start();
     while(1)
         ;
-    return 0;
 }

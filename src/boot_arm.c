@@ -34,7 +34,12 @@ extern unsigned int _end_bss;
 
 extern uint32_t *END_STACK;
 
+#ifndef __ARMCC_VERSION
 extern void main(void);
+#else
+extern int main(void);
+#endif
+
 
 #ifndef WOLFBOOT_NO_MPU
 #define MPU_BASE (0xE000ED90)
@@ -162,6 +167,8 @@ static void mpu_off(void)
 
 
 void isr_reset(void) {
+#ifndef __ARMCC_VERSION
+
     register unsigned int *src, *dst;
 #if defined(PLATFORM_kinetis)
     /* Immediately disable Watchdog after boot */
@@ -190,6 +197,7 @@ void isr_reset(void) {
     mpu_init();
     /* Run the program! */
     main();
+#endif
 }
 void isr_fault(void)
 {
@@ -216,6 +224,10 @@ void isr_empty(void)
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 static void  *app_entry;
 static uint32_t app_end_stack;
+
+#ifdef __ARMCC_VERSION
+#define asm __asm
+#endif
 
 
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
@@ -248,6 +260,8 @@ typedef void(*NMIHANDLER)(void);
 #   define isr_NMI isr_empty
 #endif
 
+
+#ifndef __ARMCC_VERSION
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
@@ -310,6 +324,8 @@ void (* const IV[])(void) =
     isr_empty,
     isr_empty,
 };
+
+#endif
 
 #ifdef RAM_CODE
 
