@@ -106,19 +106,19 @@ static uint8_t flash_page_cache[FLASH_PAGE_SIZE];
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int w = 0;
-    int ret;
     int idx = 0;
     uint32_t page_address;
     uint32_t offset;
     int size;
     while (idx < len) {
         page_address = ((address + idx) / FLASH_PAGE_SIZE) * FLASH_PAGE_SIZE;
-        offset = address - page_address;
+        if(address > page_address)
+            offset = address - page_address;
+        else
+            offset = 0;
         size = FLASH_PAGE_SIZE - offset;
         if (size > (len - idx))
             size = len - idx;
-
         if (size > 0) {
             memcpy(flash_page_cache, (void *)page_address, FLASH_PAGE_SIZE);
             memcpy(flash_page_cache + offset, data + idx, size);
