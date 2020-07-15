@@ -188,7 +188,7 @@ uint8_t *mmap_firmware(const char *fname)
         perror("open");
         return (void *)-1;
     }
-    if (st.st_size < FIRMWARE_PARTITION_SIZE) {
+    if (st.st_size <= FIRMWARE_PARTITION_SIZE) {
         uint8_t pad = 0xFF;
         int i;
         const char update_flags[] = "pBOOT";

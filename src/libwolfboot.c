@@ -26,7 +26,7 @@
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 
-#if defined(EXT_ENCRYPTED) 
+#if defined(EXT_ENCRYPTED)
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
     #else
@@ -572,22 +572,20 @@ static int chacha_init(void)
 
 static inline uint8_t part_address(uintptr_t a)
 {
-    if ( 1 && 
+    if ( 1 &&
 #if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
-        (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) && 
+        (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
 #endif
         (a <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
         return PART_UPDATE;
-    if ( 1 && 
+    if ( 1 &&
 #if WOLFBOOT_PARTITION_SWAP_ADDRESS != 0
-        (a >= WOLFBOOT_PARTITION_SWAP_ADDRESS) && 
+        (a >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
 #endif
         (a <= WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
         return PART_SWAP;
     return PART_NONE;
 }
-
-static uint32_t swap_counter = 0;
 
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
@@ -612,7 +610,7 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     part = part_address(address);
     switch(part) {
         case PART_UPDATE:
-            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
             /* Do not encrypt last sector */
             if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
@@ -621,8 +619,8 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         case PART_SWAP:
             {
                 uint32_t row_number;
-                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
-                iv_counter = ((swap_counter++) << 8) + row_number;
+                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE;
+                iv_counter = row_number;
                 break;
             }
         default:
@@ -658,7 +656,7 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     int sz = len;
     uint32_t row_address = address, row_offset;
     int i;
-    
+
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
         row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
@@ -673,7 +671,7 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     part = part_address(row_address);
     switch(part) {
         case PART_UPDATE:
-            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
             /* Do not decrypt last sector */
             if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
@@ -682,8 +680,8 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         case PART_SWAP:
             {
                 uint32_t row_number;
-                row_number = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE; 
-                iv_counter = (swap_counter << 8) + row_number;
+                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE;
+                iv_counter = row_number;
                 break;
             }
         default:
