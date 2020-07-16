@@ -221,6 +221,9 @@
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
 
+#define FLASH_OPTR          (*(volatile uint32_t *)(FLASH_BASE + 0x40))
+#define FLASH_OPTR_SWAP_BANK (1 << 20)
+
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
 #define FLASH_PAGE_SIZE           (0x800)      /* 2KB */
 #define FLASH_BANK2_BASE          (0x08040000) /*!< Base address of Flash Bank2     */
@@ -277,6 +280,7 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 
 }
 
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 static void claim_nonsecure_area(uint32_t address, int len)
 {
     int page_n, reg_idx;
@@ -292,9 +296,9 @@ static void claim_nonsecure_area(uint32_t address, int len)
     flash_wait_complete(0);
     flash_clear_errors(0);
     while (address < end) {
-        int pos;
         page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
         reg_idx = page_n / 32;
+        int pos;
         pos = page_n % 32;
         FLASH_SECBB2[reg_idx] |= ( 1 << pos);
         ISB();
@@ -309,13 +313,20 @@ static void claim_nonsecure_area(uint32_t address, int len)
     }
     FLASH_CR &= ~FLASH_CR_PER ;
 }
+#else
+#define claim_nonsecure_area(...) do{}while(0)
+#endif
 
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 static void release_nonsecure_area(void)
 {
     int i;
     for (i = 0; i < FLASH_SECBB_NREGS; i++)
         FLASH_SECBB2[i] = 0;
 }
+#else
+#define release_nonsecure_area(...) do{}while(0)
+#endif
 
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
@@ -383,29 +394,33 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
         uint32_t base;
+        uint32_t bker = 0;
         // considering DBANK = 1
         if (p < (FLASH_BANK2_BASE) )
         {
             base = FLASHMEM_ADDRESS_SPACE;
         }
-
-        if(p>=(FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        else if(p>=(FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
-            return 0; /* Skip erasing non-secure pages: will be erased upon write */
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+            /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
+            return 0;
+#endif
+            bker = FLASH_CR_BKER;
+            base = FLASH_BANK2_BASE;
+        } else {
+            FLASH_CR &= ~FLASH_CR_PER ;
+            return 0; /* Address out of range */
         }
-
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER));
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | bker));
         FLASH_CR = reg | ((((p - base)  >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete(0);
     }
-
    /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_PER ;
-
-
-  return 0;
+    return 0;
 }
 
 static void clock_pll_off(void)
@@ -560,6 +575,19 @@ static void gtzc_init(void)
   SET_GTZC_MPCBBx_S_VCTR(2,6);
   SET_GTZC_MPCBBx_S_VCTR(2,7);
 
+}
+
+
+#define OPTR_SWAP_BANK (1 << 20)
+
+
+void RAMFUNCTION hal_flash_dualbank_swap(void)
+{
+    uint32_t cur_opts = (FLASH_OPTR & FLASH_OPTR_SWAP_BANK) >> 20;
+    if (cur_opts)
+        FLASH_OPTR &= (~FLASH_OPTR_SWAP_BANK);
+    else
+        FLASH_OPTR |= FLASH_OPTR_SWAP_BANK;
 }
 
 static void led_unsecure()
