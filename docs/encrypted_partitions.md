@@ -102,7 +102,7 @@ the function `ext_flash_write` will store the payload unencrypted.
 
 In order to trigger an update, before calling `wolfBoot_update_trigger` it is necessary to set the temporary key used by the bootloader by calling `wolfBoot_set_encrypt_key`.
 
-An example of encrypted update trigger can be found in the [stm32wb test application source code](test-app/app_stm32wb.c).
+An example of encrypted update trigger can be found in the [stm32wb test application source code](../test-app/app_stm32wb.c).
 
 
 
