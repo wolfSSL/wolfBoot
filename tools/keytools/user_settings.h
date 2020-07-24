@@ -26,6 +26,8 @@
 #ifndef H_USER_SETTINGS_
 #define H_USER_SETTINGS_
 
+#include <stdint.h>
+
 /* System */
 #define WOLFSSL_GENERAL_ALIGNMENT 4
 #define SINGLE_THREADED

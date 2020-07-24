@@ -579,8 +579,10 @@ HASH=SHA3
 ### QNX
 
 ```sh
+cd ~
 source qnx700/qnxsdp-env.sh
 cd wolfBoot
+cp ./config/examples/zynqmp.config .config
 make clean
 make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 ```
