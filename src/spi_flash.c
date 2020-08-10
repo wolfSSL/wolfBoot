@@ -97,7 +97,8 @@ static void flash_write_disable(void)
     uint8_t status;
     spi_cmd(WRDI);
 }
-static void wait_busy(void)
+
+static void RAMFUNCTION wait_busy(void)
 {
     uint8_t status;
     do {
