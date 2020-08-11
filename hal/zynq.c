@@ -228,6 +228,66 @@ static QspiDev_t mDev;
 static int test_flash(QspiDev_t* dev);
 #endif
 
+
+#ifdef DEBUG_ZYNQ
+/* UART Support for Debugging */
+#define ZYNQMP_UART0_BASE  0xFF000000
+#define ZYNQMP_UART1_BASE  0xFF010000
+
+#define ZYNQMP_UART_CR          (*((volatile uint32_t*)(DEBUG_UART_BASE + 0x0)))
+#define ZYNQMP_UART_MR          (*((volatile uint32_t*)(DEBUG_UART_BASE + 0x4)))
+#define ZYNQMP_UART_SR          (*((volatile uint32_t*)(DEBUG_UART_BASE + 0x2C)))
+#define ZYNQMP_UART_FIFO        (*((volatile uint32_t*)(DEBUG_UART_BASE + 0x30)))
+#define ZYNQMP_UART_BR_GEN      (*((volatile uint32_t*)(DEBUG_UART_BASE + 0x18))) /* 2 - 65535: baud_sample */
+#define ZYNQMP_UART_BR_DIV      (*((volatile uint32_t*)(DEBUG_UART_BASE + 0x34))) /* 4 - 255: Baud rate */
+
+/* UART Control Registers */
+#define ZYNQMP_UART_CR_TX_EN       0x00000010  /* TX enabled */
+#define ZYNQMP_UART_CR_RX_EN       0x00000004  /* RX enabled */
+#define ZYNQMP_UART_CR_TXRST       0x00000002  /* TX logic reset */
+#define ZYNQMP_UART_CR_RXRST       0x00000001  /* RX logic reset */
+
+/* UART Mode Registers */
+#define ZYNQMP_UART_MR_PARITY_NONE 0x00000020  /* No parity */
+
+/* UART Channel Status Register (read only) */
+#define ZYNQMP_UART_SR_TXFULL   0x00000010U /* TX FIFO full */
+#define ZYNQMP_UART_SR_TXEMPTY  0x00000008U /* TX FIFO empty */
+#define ZYNQMP_UART_SR_RXFULL   0x00000004U /* RX FIFO full */
+#define ZYNQMP_UART_SR_RXEMPTY  0x00000002U /* RX FIFO empty */
+
+/* UART Configuration */
+#define UART_MASTER_CLOCK       100000000
+#define DEBUG_UART_BASE         ZYNQMP_UART1_BASE
+#define DEBUG_UART_BAUD         115200
+#define DEBUG_UART_DIV          4
+
+static void uart_init(void)
+{
+    /* Enable TX/RX and Reset */
+    ZYNQMP_UART_CR = (ZYNQMP_UART_CR_TX_EN | ZYNQMP_UART_CR_RX_EN | 
+        ZYNQMP_UART_CR_TXRST | ZYNQMP_UART_CR_RXRST);
+    /* 8-bits, no parity */
+    ZYNQMP_UART_MR = ZYNQMP_UART_MR_PARITY_NONE;
+
+    /* baud (115200) = master clk / (BR_GEN * (BR_DIV + 1)) */
+    ZYNQMP_UART_BR_DIV = DEBUG_UART_DIV;
+    ZYNQMP_UART_BR_GEN = UART_MASTER_CLOCK / DEBUG_UART_BAUD / (DEBUG_UART_DIV+1);
+}
+
+static void uart_write(const char* buf, uint32_t sz)
+{
+    uint32_t pos = 0;
+    while (sz-- > 0) {
+        while (ZYNQMP_UART_SR & ZYNQMP_UART_SR_TXFULL);
+        ZYNQMP_UART_SR = (uint32_t)buf[pos++];
+    }
+    /* Wait till TX Fifo is empty */
+    while (!(ZYNQMP_UART_SR & ZYNQMP_UART_SR_TXEMPTY));
+}
+#endif /* DEBUG_ZYNQ */
+
+
 #ifdef USE_QNX
 static int qspi_transfer(QspiDev_t* pDev,
     const uint8_t* cmdData, uint32_t cmdSz,
@@ -271,7 +331,7 @@ static int qspi_transfer(QspiDev_t* pDev,
         rxData ? &rx_buf : NULL, &cmd_buf, flags);
     if (ret < 0) {
     #ifdef DEBUG_ZYNQ
-        printf("QSPI Transfer failed! %d\n", ret);
+        xil_printf("QSPI Transfer failed! %d\n", ret);
     #endif
         return GQSPI_CODE_FAILED;
     }
@@ -298,7 +358,7 @@ static int qspi_gen_fifo_write(uint32_t reg_genfifo)
     }
 
 #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
-    printf("FifoEntry=%08x\n", reg_genfifo);
+    xil_printf("FifoEntry=%08x\n", reg_genfifo);
 #endif
     GQSPI_GEN_FIFO = reg_genfifo;
     return GQSPI_CODE_SUCCESS;
@@ -325,7 +385,7 @@ static int gspi_fifo_tx(const uint8_t* data, uint32_t sz)
         data += txSz;
 
     #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
-        printf("TXD=%08x\n", tmp32);
+        xil_printf("TXD=%08x\n", tmp32);
     #endif
         GQSPI_TXD = tmp32;
     }
@@ -346,9 +406,9 @@ static int gspi_fifo_rx(uint8_t* data, uint32_t sz, uint32_t discardSz)
         /* Read data */
         tmp32 = GQSPI_RXD;
     #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
-        printf("RXD=%08x\n", tmp32);
+        xil_printf("RXD=%08x\n", tmp32);
         if (discardSz > 0)
-        	printf("Discard %d\n", discardSz);
+        	xil_printf("Discard %d\n", discardSz);
     #endif
         if (discardSz >= GQSPI_FIFO_WORD_SZ) {
             discardSz -= GQSPI_FIFO_WORD_SZ;
@@ -518,41 +578,41 @@ static int qspi_transfer(QspiDev_t* pDev,
 static void qspi_dump_regs(void)
 {
     /* Dump Registers */
-    printf("Config %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x00)));
-    printf("ISR %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x04)));
-    printf("IER %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x08)));
-    printf("IDR %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x0C)));
-    printf("LQSPI_En %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x14)));
-    printf("Delay %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x18)));
-    printf("Slave_Idle_count %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x24)));
-    printf("TX_thres %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x28)));
-    printf("RX_thres %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x2C)));
-    printf("GPIO %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x30)));
-    printf("LPBK_DLY_ADJ %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x38)));
-    printf("LQSPI_CFG %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xA0)));
-    printf("LQSPI_STS %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xA4)));
-    printf("DUMMY_CYCLE_EN %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xC8)));
-    printf("MOD_ID %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xFC)));
-    printf("GQSPI_CFG %08x\n", GQSPI_CFG);
-    printf("GQSPI_ISR %08x\n", GQSPI_ISR);
-    printf("GQSPI_IER %08x\n", GQSPI_IER);
-    printf("GQSPI_IDR %08x\n", GQSPI_IDR);
-    printf("GQSPI_IMR %08x\n", GQSPI_IMR);
-    printf("GQSPI_En %08x\n", GQSPI_EN);
-    printf("GQSPI_TX_THRESH %08x\n", GQSPI_TX_THRESH);
-    printf("GQSPI_RX_THRESH %08x\n", GQSPI_RX_THRESH);
-    printf("GQSPI_GPIO %08x\n", GQSPI_GPIO);
-    printf("GQSPI_LPBK_DLY_ADJ %08x\n", GQSPI_LPBK_DLY_ADJ);
-    printf("GQSPI_FIFO_CTRL %08x\n", GQSPI_FIFO_CTRL);
-    printf("GQSPI_GF_THRESH %08x\n", GQSPI_GF_THRESH);
-    printf("GQSPI_POLL_CFG %08x\n", GQSPI_POLL_CFG);
-    printf("GQSPI_P_TIMEOUT %08x\n", GQSPI_P_TIMEOUT);
-    printf("QSPI_DATA_DLY_ADJ %08x\n", QSPI_DATA_DLY_ADJ);
-    printf("GQSPI_MOD_ID %08x\n", GQSPI_MOD_ID);
-    printf("QSPIDMA_DST_STS %08x\n", QSPIDMA_DST_STS);
-    printf("QSPIDMA_DST_CTRL %08x\n", QSPIDMA_DST_CTRL);
-    printf("QSPIDMA_DST_I_STS %08x\n", QSPIDMA_DST_I_STS);
-    printf("QSPIDMA_DST_CTRL2 %08x\n", QSPIDMA_DST_CTRL2);
+    xil_printf("Config %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x00)));
+    xil_printf("ISR %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x04)));
+    xil_printf("IER %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x08)));
+    xil_printf("IDR %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x0C)));
+    xil_printf("LQSPI_En %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x14)));
+    xil_printf("Delay %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x18)));
+    xil_printf("Slave_Idle_count %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x24)));
+    xil_printf("TX_thres %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x28)));
+    xil_printf("RX_thres %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x2C)));
+    xil_printf("GPIO %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x30)));
+    xil_printf("LPBK_DLY_ADJ %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x38)));
+    xil_printf("LQSPI_CFG %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xA0)));
+    xil_printf("LQSPI_STS %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xA4)));
+    xil_printf("DUMMY_CYCLE_EN %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xC8)));
+    xil_printf("MOD_ID %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xFC)));
+    xil_printf("GQSPI_CFG %08x\n", GQSPI_CFG);
+    xil_printf("GQSPI_ISR %08x\n", GQSPI_ISR);
+    xil_printf("GQSPI_IER %08x\n", GQSPI_IER);
+    xil_printf("GQSPI_IDR %08x\n", GQSPI_IDR);
+    xil_printf("GQSPI_IMR %08x\n", GQSPI_IMR);
+    xil_printf("GQSPI_En %08x\n", GQSPI_EN);
+    xil_printf("GQSPI_TX_THRESH %08x\n", GQSPI_TX_THRESH);
+    xil_printf("GQSPI_RX_THRESH %08x\n", GQSPI_RX_THRESH);
+    xil_printf("GQSPI_GPIO %08x\n", GQSPI_GPIO);
+    xil_printf("GQSPI_LPBK_DLY_ADJ %08x\n", GQSPI_LPBK_DLY_ADJ);
+    xil_printf("GQSPI_FIFO_CTRL %08x\n", GQSPI_FIFO_CTRL);
+    xil_printf("GQSPI_GF_THRESH %08x\n", GQSPI_GF_THRESH);
+    xil_printf("GQSPI_POLL_CFG %08x\n", GQSPI_POLL_CFG);
+    xil_printf("GQSPI_P_TIMEOUT %08x\n", GQSPI_P_TIMEOUT);
+    xil_printf("QSPI_DATA_DLY_ADJ %08x\n", QSPI_DATA_DLY_ADJ);
+    xil_printf("GQSPI_MOD_ID %08x\n", GQSPI_MOD_ID);
+    xil_printf("QSPIDMA_DST_STS %08x\n", QSPIDMA_DST_STS);
+    xil_printf("QSPIDMA_DST_CTRL %08x\n", QSPIDMA_DST_CTRL);
+    xil_printf("QSPIDMA_DST_I_STS %08x\n", QSPIDMA_DST_I_STS);
+    xil_printf("QSPIDMA_DST_CTRL2 %08x\n", QSPIDMA_DST_CTRL2);
 }
 #endif
 #endif /* USE_QNX */
@@ -566,7 +626,7 @@ static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
     cmd[0] = MULTI_IO_READ_ID_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, sizeof(cmd), 0);
 #ifdef DEBUG_ZYNQ
-    printf("Read FlashID %s: Ret %d, %02x %02x %02x\n",
+    xil_printf("Read FlashID %s: Ret %d, %02x %02x %02x\n",
         (dev->cs & GQSPI_GEN_FIFO_CS_LOWER) ? "Lower" : "Upper",
         ret, cmd[0],  cmd[1],  cmd[2]);
 #endif
@@ -584,7 +644,7 @@ static int qspi_write_enable(QspiDev_t* dev)
     const uint8_t cmd[1] = {WRITE_ENABLE_CMD};
     ret = qspi_transfer(&mDev, cmd, sizeof(cmd), NULL, 0, NULL, 0, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Write Enable: Ret %d\n", ret);
+    xil_printf("Write Enable: Ret %d\n", ret);
 #endif
     return ret;
 }
@@ -594,7 +654,7 @@ static int qspi_write_disable(QspiDev_t* dev)
     const uint8_t cmd[1] = {WRITE_DISABLE_CMD};
     ret = qspi_transfer(&mDev, cmd, sizeof(cmd), NULL, 0, NULL, 0, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Write Disable: Ret %d\n", ret);
+    xil_printf("Write Disable: Ret %d\n", ret);
 #endif
     return ret;
 }
@@ -608,7 +668,7 @@ static int qspi_flash_status(QspiDev_t* dev, uint8_t* status)
     cmd[0] = READ_FSR_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, 2, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Flash Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
+    xil_printf("Flash Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
 #endif
     if (ret == GQSPI_CODE_SUCCESS && status) {
         if (dev->stripe) {
@@ -634,7 +694,7 @@ static int qspi_wait_ready(QspiDev_t* dev)
     }
 
 #ifdef DEBUG_ZYNQ
-    printf("Flash Ready Timeout!\n");
+    xil_printf("Flash Ready Timeout!\n");
 #endif
 
     return GQSPI_CODE_TIMEOUT;
@@ -659,7 +719,7 @@ static int qspi_enter_qspi_mode(QspiDev_t* dev)
     const uint8_t cmd[1] = {ENTER_QSPI_MODE_CMD};
     ret = qspi_transfer(dev, cmd, sizeof(cmd), NULL, 0, NULL, 0, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Enable Quad SPI mode: Ret %d\n", ret);
+    xil_printf("Enable Quad SPI mode: Ret %d\n", ret);
 #endif
     return ret;
 }
@@ -669,7 +729,7 @@ static int qspi_exit_qspi_mode(QspiDev_t* dev)
     const uint8_t cmd[1] = {EXIT_QSPI_MODE_CMD};
     ret = qspi_transfer(dev, cmd, sizeof(cmd), NULL, 0, NULL, 0, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Disable Quad SPI mode: Ret %d\n", ret);
+    xil_printf("Disable Quad SPI mode: Ret %d\n", ret);
 #endif
     return ret;
 }
@@ -682,7 +742,7 @@ static int qspi_enter_4byte_addr(QspiDev_t* dev)
     const uint8_t cmd[1] = {ENTER_4B_ADDR_MODE_CMD};
     ret = qspi_transfer(dev, cmd, sizeof(cmd), NULL, 0, NULL, 0, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Enter 4-byte address mode: Ret %d\n", ret);
+    xil_printf("Enter 4-byte address mode: Ret %d\n", ret);
 #endif
     return ret;
 }
@@ -693,7 +753,7 @@ static int qspi_exit_4byte_addr(QspiDev_t* dev)
 
     ret = qspi_transfer(dev, cmd, sizeof(cmd), NULL, 0, NULL, 0, 0);
 #ifdef DEBUG_ZYNQ
-    printf("Exit 4-byte address mode: Ret %d\n", ret);
+    xil_printf("Exit 4-byte address mode: Ret %d\n", ret);
 #endif
     return ret;
 }
@@ -719,7 +779,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     mDev.qnx = xzynq_qspi_open();
     if (mDev.qnx == NULL) {
     #ifdef DEBUG_ZYNQ
-        printf("QSPI failed to open\n");
+        xil_printf("QSPI failed to open\n");
     #endif
         return;
     }
@@ -808,7 +868,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
             id_hi[2] != id_low[2]))
         {
         #ifdef DEBUG_ZYNQ
-            printf("Flash ID error!\n");
+            xil_printf("Flash ID error!\n");
         #endif
             continue;
         }
@@ -880,10 +940,14 @@ void zynq_exit(void)
 /* public HAL functions */
 void hal_init(void)
 {
+    const char* bootMsg = "\nwolfBoot Secure Boot\n";
     uint32_t cpu_freq = 0;
 
 #ifdef DEBUG_ZYNQ
-    printf("\nwolfBoot Secure Boot\n");
+    uart_init();
+    uart_write(bootMsg, strlen(bootMsg));
+
+    xil_printf(bootMsg);
 #endif
 
     /* This is only allowed for EL-3 */
@@ -951,7 +1015,7 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
                 (const uint8_t*)(data + (page * FLASH_PAGE_SIZE)),
                 xferSz, NULL, 0, 0);
         #ifdef DEBUG_ZYNQ
-            printf("Flash Page %d Write: Ret %d\n", page, ret);
+            xil_printf("Flash Page %d Write: Ret %d\n", page, ret);
         #endif
             if (ret != GQSPI_CODE_SUCCESS)
                 break;
@@ -988,7 +1052,7 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
     cmd[idx++] = ((address >> 0)  & 0xFF);
     ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, data, len, GQSPI_DUMMY_READ);
 #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
-    printf("Flash Read: Ret %d\r\n", ret);
+    xil_printf("Flash Read: Ret %d\r\n", ret);
 #endif
 
     return ret;
@@ -1019,7 +1083,7 @@ int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
         cmd[idx++] = ((address >> 0)  & 0xFF);
         ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0);
     #ifdef DEBUG_ZYNQ
-        printf("Flash Erase: Ret %d\n", ret);
+        xil_printf("Flash Erase: Ret %d\n", ret);
     #endif
         if (ret == GQSPI_CODE_SUCCESS) {
             ret = qspi_wait_ready(&mDev); /* Wait for not busy */
@@ -1052,7 +1116,7 @@ static int test_flash(QspiDev_t* dev)
     /* Erase sector */
     ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
 #ifdef DEBUG_ZYNQ
-    printf("Erase Sector: Ret %d\n", ret);
+    xil_printf("Erase Sector: Ret %d\n", ret);
 #endif
 
     /* Write Pages */
@@ -1061,7 +1125,7 @@ static int test_flash(QspiDev_t* dev)
     }
     ret = ext_flash_write(TEST_ADDRESS, testData, sizeof(testData));
 #ifdef DEBUG_ZYNQ
-    printf("Write Page: Ret %d\n", ret);
+    xil_printf("Write Page: Ret %d\n", ret);
 #endif
 #endif /* !TEST_FLASH_READONLY */
 
@@ -1069,20 +1133,20 @@ static int test_flash(QspiDev_t* dev)
     memset(testData, 0, sizeof(testData));
     ret = ext_flash_read(TEST_ADDRESS, testData, sizeof(testData));
 #ifdef DEBUG_ZYNQ
-    printf("Read Page: Ret %d\n", ret);
+    xil_printf("Read Page: Ret %d\n", ret);
 #endif
 
     /* Check data */
     for (i=0; i<sizeof(testData); i++) {
         if (testData[i] != (i & 0xff)) {
         #ifdef DEBUG_ZYNQ
-        	printf("Check Data @ %d failed\n", i);
+        	xil_printf("Check Data @ %d failed\n", i);
         #endif
             return GQSPI_CODE_FAILED;
         }
     }
 #ifdef DEBUG_ZYNQ
-    printf("Flash Test Passed\n");
+    xil_printf("Flash Test Passed\n");
 #endif
     return ret;
 }
