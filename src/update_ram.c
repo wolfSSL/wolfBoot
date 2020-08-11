@@ -31,7 +31,9 @@
 
 #ifdef DEBUG_ZYNQ
     #include <stdio.h>
-    #include "xil_printf.h"
+    #ifndef USE_QNX
+        #include "xil_printf.h"
+    #endif
 #endif
 
 extern void hal_flash_dualbank_swap(void);
