@@ -65,6 +65,7 @@ const char msgEraseSwap[]   = "Erase swap blocks      ";
 extern uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 
 const char blinker[]="-\\|/";
+static int valid_update = 1;
 
 void printmsg(const char *msg)
 {
@@ -178,6 +179,7 @@ uint8_t *mmap_firmware(const char *fname)
     uint8_t *base_fw;
     struct stat st;
     int fd;
+    uint32_t signature_word;
     if (stat(fname, &st) != 0) {
         perror ("stat");
         return (void *)-1;
@@ -188,18 +190,31 @@ uint8_t *mmap_firmware(const char *fname)
         perror("open");
         return (void *)-1;
     }
-    if (st.st_size <= FIRMWARE_PARTITION_SIZE) {
+    if (read(fd, &signature_word, sizeof(uint32_t)) != (sizeof(uint32_t))) {
+        perror("read");
+        return (void *)-1;
+    }
+    if ((st.st_size <= FIRMWARE_PARTITION_SIZE)) {
         uint8_t pad = 0xFF;
         int i;
-        const char update_flags[] = "pBOOT";
         int fsize = st.st_size;
-        lseek(fd, FIRMWARE_PARTITION_SIZE + SWAP_SIZE, SEEK_SET);
         lseek(fd, fsize, SEEK_SET);
-        for (i = 0; i < (FIRMWARE_PARTITION_SIZE - (fsize + 5)); i++)
+        for (i = 0; i < (FIRMWARE_PARTITION_SIZE - (fsize)); i++)
             write(fd, &pad, 1);
-        write(fd, update_flags, 5);
+        lseek(fd, FIRMWARE_PARTITION_SIZE, SEEK_SET);
         for (i = 0; i < SWAP_SIZE; i++)
             write(fd, &pad, 1);
+    }
+    if (strncmp((char *)&signature_word, "WOLF", 4) != 0) {
+        fprintf(stderr, "Warning: the binary file provided does not appear to contain a valid firmware partition file. (If the update is encrypted, this is OK)\n");
+        valid_update = 0;
+    } else {
+        int i;
+        const char update_flags[] = "pBOOT";
+        lseek(fd, FIRMWARE_PARTITION_SIZE - 5, SEEK_SET);
+        write(fd, update_flags, 5);
+        for (i = 0; i < SWAP_SIZE; i++)
+            write(fd, update_flags, 5);
     }
     base_fw = mmap(NULL, FIRMWARE_PARTITION_SIZE + SWAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (base_fw == (void *)(-1)) {
@@ -415,9 +430,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Error opening binary file '%s'.\n", argv[1]);
         exit(2);
     }
-    if (strncmp((char *)base_fw, "WOLF", 4) != 0) {
-        fprintf(stderr, "Warning: the binary file provided does not appear to contain a valid firmware partition file.\n");
-    } else {
+    if (valid_update) {
         printf("%s has a wolfboot manifest header\n", basename(argv[1]));
         base_fw_ver = fw_version(base_fw);
         printf("%s contains version %u\n", basename(argv[1]), base_fw_ver);
