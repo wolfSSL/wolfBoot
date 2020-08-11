@@ -645,7 +645,7 @@ qemu-system-aarch64 -M raspi3 -m 512 -serial stdio -kernel wolfboot_linux_raspi.
 
 ## Xilinx Zynq UltraScale+ (Aarch64)
 
-Build configuration options (``.config`):
+Build configuration options (`.config`):
 
 ```
 TARGET=zynq

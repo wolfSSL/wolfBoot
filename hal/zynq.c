@@ -228,6 +228,39 @@ static QspiDev_t mDev;
 static int test_flash(QspiDev_t* dev);
 #endif
 
+/* eFUSE support */
+#define ZYNQMP_EFUSE_BASE       0xFFCC0000
+#define ZYNQMP_EFUSE_STATUS     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x0008)))
+#define ZYNQMP_EFUSE_SEC_CTRL   (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x1058)))
+#define ZYNQMP_EFUSE_PPK0_0     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10A0)))
+#define ZYNQMP_EFUSE_PPK0_1     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10A4)))
+#define ZYNQMP_EFUSE_PPK0_2     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10A8)))
+#define ZYNQMP_EFUSE_PPK0_3     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10AC)))
+#define ZYNQMP_EFUSE_PPK0_4     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10B0)))
+#define ZYNQMP_EFUSE_PPK0_5     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10B4)))
+#define ZYNQMP_EFUSE_PPK0_6     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10B8)))
+#define ZYNQMP_EFUSE_PPK0_7     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10BC)))
+#define ZYNQMP_EFUSE_PPK0_8     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10C0)))
+#define ZYNQMP_EFUSE_PPK0_9     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10C4)))
+#define ZYNQMP_EFUSE_PPK0_10    (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10C8)))
+#define ZYNQMP_EFUSE_PPK0_11    (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10CC)))
+
+/* eFUSE STATUS Registers */
+#define ZYNQMP_EFUSE_STATUS_CACHE_DONE    (1UL << 5)
+#define ZYNQMP_EFUSE_STATUS_CACHE_LOAD    (1UL << 4)
+
+/* eFUSE SEC_CTRL Registers */
+#define ZYNQMP_EFUSE_SEC_CTRL_PPK1_INVLD  (3UL  << 30) /* Revokes PPK1 */
+#define ZYNQMP_EFUSE_SEC_CTRL_PPK1_WRLK   (1UL  << 29) /* Locks writing to PPK1 eFuses */
+#define ZYNQMP_EFUSE_SEC_CTRL_PPK0_INVLD  (3UL  << 27) /* Revokes PPK0 */
+#define ZYNQMP_EFUSE_SEC_CTRL_PPK0_WRLK   (1UL  << 26) /* Locks writing to PPK0 eFuses */
+#define ZYNQMP_EFUSE_SEC_CTRL_RSA_EN      (15UL << 11) /* Enabels RSA Authentication during boot. All boots must be authenticated */
+#define ZYNQMP_EFUSE_SEC_CTRL_SEC_LOCK    (1UL  << 10) /* Disables the reboot into JTAG mode when doing a secure lockdown. */
+#define ZYNQMP_EFUSE_SEC_CTRL_JTAG_DIS    (1UL  << 5)  /* Disables the JTAG controller. The only instructions available are BYPASS and IDCODE. */
+#define ZYNQMP_EFUSE_SEC_CTRL_ENC_ONLY    (1UL  << 2)  /* Requires all boots to be encrypted using the eFuse key. */
+#define ZYNQMP_EFUSE_SEC_CTRL_AES_WRLK    (1UL  << 1)  /* Locks writing to the AES key section of eFuse */
+#define ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK    (1UL  << 0)  /* Locks the AES key CRC check function */
+
 
 #ifdef DEBUG_ZYNQ
 /* UART Support for Debugging */
