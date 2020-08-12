@@ -36,8 +36,10 @@
         #define XMEMCPY memcpy
         #define XMEMCMP memcmp
     #endif
+    #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
 #else
     #define XMEMCPY memcpy
+    #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
 #endif
 
 #ifndef NULL
@@ -56,8 +58,8 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #ifndef TRAILER_SKIP
 #   define TRAILER_SKIP 0
 #endif
-#define PART_BOOT_ENDFLAGS   ((WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
-#define PART_UPDATE_ENDFLAGS ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) - TRAILER_SKIP)
+#define PART_BOOT_ENDFLAGS   (WOLFBOOT_PARTITION_BOOT_ADDRESS   + ENCRYPT_TMP_SECRET_OFFSET)
+#define PART_UPDATE_ENDFLAGS (WOLFBOOT_PARTITION_UPDATE_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET)
 
 #ifdef NVM_FLASH_WRITEONCE
 #include <stddef.h>
@@ -507,7 +509,6 @@ int wolfBoot_fallback_is_possible(void)
 #error option EXT_ENCRYPTED requires EXT_FLASH
 #endif
 
-#define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + (sizeof(uint32_t) + 1 + ((1 + WOLFBOOT_PARTITION_SIZE) / (WOLFBOOT_SECTOR_SIZE * 8)) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)))
 
 
 #ifdef NVM_FLASH_WRITEONCE
@@ -618,8 +619,8 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     switch(part) {
         case PART_UPDATE:
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-            /* Do not encrypt last sector */
-            if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+            /* Do not encrypt last sectors */
+            if (iv_counter >= (ENCRYPT_TMP_SECRET_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
             }
             break;
@@ -680,7 +681,7 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         case PART_UPDATE:
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
             /* Do not decrypt last sector */
-            if (iv_counter == (WOLFBOOT_PARTITION_SIZE - 1) / ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter >= (ENCRYPT_TMP_SECRET_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
             }
             break;
