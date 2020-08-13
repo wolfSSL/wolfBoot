@@ -1,4 +1,10 @@
-LDFLAGS=-lcheck -lm -pthread -lrt -lsubunit
+LDFLAGS=-lcheck -lm -pthread
+
+UNAME_S := $(shell uname -s)
+ifneq ($(UNAME_S),Darwin)
+	LDFLAGS+=-lrt -lsubunit
+endif
+
 CFLAGS=-I../../src -I../../include
 
 all: unit-parser
