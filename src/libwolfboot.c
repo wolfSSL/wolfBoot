@@ -26,6 +26,12 @@
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 
+#ifdef UNIT_TEST
+#   define unit_dbg printf
+#else
+#   define unit_dbg(...) do{}while(0)
+#endif
+
 #if defined(EXT_ENCRYPTED)
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
@@ -342,8 +348,19 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
     uint16_t len;
-    while (((p[0] != 0) || (p[1] != 0)) && ((p - haystack) < IMAGE_HEADER_SIZE)) {
+    const volatile uint8_t *max_p = (haystack - IMAGE_HEADER_OFFSET) + IMAGE_HEADER_SIZE;
+    *ptr = NULL;
+    if (p > max_p) {
+        unit_dbg("Illegal address (too high)\n");
+        return 0;
+    }
+    while ((p + 4) < max_p) {
+        if ((p[0] == 0) && (p[1] == 0)) {
+            unit_dbg("Explicit end of options reached\n");
+            break;
+        }
         if (*p == HDR_PADDING) {
+            /* Padding byte (skip one position) */
             p++;
             continue;
         }
@@ -353,13 +370,20 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
             continue;
         }
         len = p[2] | (p[3] << 8);
+        if ((4 + len) > (IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
+            unit_dbg("This field is too large (bigger than the space available in the current header)\n");
+            break;
+        }
+        if (p + 4 + len > max_p) {
+            unit_dbg("This field is too large and would overflow the image header\n");
+            break;
+        }
         if ((p[0] | (p[1] << 8)) == type) {
             *ptr = (p + 4);
             return len;
         }
         p += 4 + len;
     }
-    *ptr = NULL;
     return 0;
 }
 
