@@ -185,3 +185,28 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * New HAL: raspberry-pi
    * New HAL: Xilinx Zynq+
    * New HAL: NXP LPC54xx
+
+### V1.6 (2020-08-25)
+ * Support for encryption of external partitions
+ * Support for MPU on ARM Cortex-M platforms
+ * Support for using an RSA signature that includes ASN.1 encoded header
+ * Support for bootloader updates from external flash: SPI functions can run from RAM
+ * Added TPM RSA verify support
+ * Added option to use software SHA in combination with TPM
+ * Fix logic in emergency updates
+ * Fix loop logic in bootloader update
+ * Fix manifest header boundary checks (prevents parser overflows)
+ * Improve sanity checks for aligned fields in manifest header
+ * Add unit tests against manifest header parser
+ * Fix Ed25519 signing tool
+ * Fix RSA keygen tool
+ * wolfTPM integration: improvements and bugfixes
+ * Fix configuration and documentation for STM32WB
+ * Fix alignment of trailers in NVM_WRITEONCE mode
+ * Fix uint16_t index overflow on platforms with very small flash pages
+ * Fix for building C key tools on windows (Cygwin/MinGW/Visual Studio)
+ * Fix in LPC driver: correct page alignment in flash write
+ * Hardware support
+   * New HAL: Cypress psoc6
+   * Support for psoc6 Hardware crypto accelerator
+   * SPI driver: Nordic nRF52
