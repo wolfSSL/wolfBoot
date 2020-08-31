@@ -26,6 +26,8 @@
 #include "spi_drv.h"
 #include "spi_flash.h"
 
+#ifdef SPI_FLASH
+
 #define MDID            0x90
 #define RDSR            0x05
 #define WRSR            0x01
@@ -94,7 +96,7 @@ static void flash_write_enable(void)
 
 static void flash_write_disable(void)
 {
-    uint8_t status;
+    //uint8_t status;
     spi_cmd(WRDI);
 }
 
@@ -200,7 +202,7 @@ uint16_t spi_flash_probe(void)
 
 void spi_flash_sector_erase(uint32_t address)
 {
-    uint8_t status;
+    //uint8_t status;
     address &= (~(SPI_FLASH_SECTOR_SIZE - 1));
 
     wait_busy();
@@ -239,3 +241,5 @@ int spi_flash_write(uint32_t address, const void *data, int len)
         return spi_flash_write_page(address, data, len);
     return -1;
 }
+
+#endif /* SPI_FLASH */
