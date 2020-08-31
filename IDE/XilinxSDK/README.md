@@ -23,7 +23,7 @@ A build settings template for Zynq UltraScale+ can be found here `./config/examp
 #define WOLFBOOT_SECTOR_SIZE                 0x20000
 #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x800000
 #define WOLFBOOT_LOAD_ADDRESS                0x10000000
-#define WOLFBOOT_PARTITION_SIZE              0x2A00000 
+#define WOLFBOOT_PARTITION_SIZE              0x2A00000
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x3A00000
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x63E0000
 
