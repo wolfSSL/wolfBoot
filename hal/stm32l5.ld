@@ -15,6 +15,12 @@ SECTIONS
         . = ALIGN(8);
         _end_text = .;
     } > FLASH 
+    .edidx :
+    {
+        . = ALIGN(4);
+        *(.ARM.exidx*)
+    } > FLASH
+
 
     _stored_data = .;
     .data : AT (_stored_data)

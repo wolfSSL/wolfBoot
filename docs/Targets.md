@@ -63,7 +63,9 @@ c
 
 ## STM32L5
 
-### Example Description
+### Scenario 1: TrustZone Enabled
+
+#### Example Description
 
 The implementation shows how to switch from secure application to non-secure application
 thanks to the system isolation performed to split the internal Flash and internal SRAM memories
@@ -71,7 +73,7 @@ into two halves:
  - the first half for the secure application
  - the second half for the non-secure application
 
-### Hardware and Software environment
+#### Hardware and Software environment
 
 - This example runs on STM32L562QEIxQ devices with security enabled (TZEN=1).
 - This example has been tested with STMicroelectronics STM32L562E-DK (MB1373)
@@ -86,7 +88,7 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 
 - NOTE: STM32CubeProgrammer V2.3.0 is required  (v2.4.0 has a known bug for STM32L5)
 
-### How to use it
+#### How to use it
 
 1. `cp ./config/examples/stm32l5.config .config`
 2. `make TZEN=1`
@@ -98,6 +100,25 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 5. `flash .\test-app\image_v1_signed.bin to 0x8040000`
     - `STM32_Programmer_CLI -c port=swd -d .\test-app\image_v1_signed.bin 0x8040000`
 6. RED LD9 will be on
+
+### Scenario 2: Trustzone Disabled
+
+#### Example Description
+
+The implementation shows how to use STM32L5xx in DUAL_BANK mode, with TrustZone disabled.
+The DUAL_BANK option is only available on this target when TrustZone is disabled (TZEN = 0).
+
+The flash memory is segmented into two different banks:
+
+  - Bank 0: (0x08000000)
+  - Bank 1: (0x08040000)
+
+Bank 0 contains the bootloader at address 0x08000000, and the application at address 0x08008000.
+When a valid image is available at the same offset in Bank 1, a candidate is selected for booting between the two valid images.
+A firmware update can be uploaded at address 0x08048000.
+
+The example configuration is available in `config/examples/stm32l5-nonsecure-dualbank.config`.
+
 
 ### Debugging
 
