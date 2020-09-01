@@ -973,10 +973,10 @@ void zynq_exit(void)
 /* public HAL functions */
 void hal_init(void)
 {
-    const char* bootMsg = "\nwolfBoot Secure Boot\n";
     uint32_t cpu_freq = 0;
 
 #ifdef DEBUG_ZYNQ
+    const char* bootMsg = "\nwolfBoot Secure Boot\n";
     uart_init();
     uart_write(bootMsg, strlen(bootMsg));
 
