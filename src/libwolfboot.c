@@ -66,6 +66,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #endif
 #define PART_BOOT_ENDFLAGS   (WOLFBOOT_PARTITION_BOOT_ADDRESS   + ENCRYPT_TMP_SECRET_OFFSET)
 #define PART_UPDATE_ENDFLAGS (WOLFBOOT_PARTITION_UPDATE_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET)
+#define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - (1 + (WOLFBOOT_PARTITION_SIZE / (8 * WOLFBOOT_SECTOR_SIZE))))
 
 #ifdef NVM_FLASH_WRITEONCE
 #include <stddef.h>
@@ -644,7 +645,7 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         case PART_UPDATE:
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
             /* Do not encrypt last sectors */
-            if (iv_counter >= (ENCRYPT_TMP_SECRET_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
             }
             break;
@@ -705,7 +706,7 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         case PART_UPDATE:
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
             /* Do not decrypt last sector */
-            if (iv_counter >= (ENCRYPT_TMP_SECRET_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
             }
             break;
