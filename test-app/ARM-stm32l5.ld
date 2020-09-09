@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = ##WOLFBOOT_TEST_APP_ADDRESS##, LENGTH = ##WOLFBOOT_TEST_APP_SIZE##
-    RAM (rwx) : ORIGIN = 0x30000000, LENGTH = 16K /* Run in lowmem */
+    RAM (rwx) : ORIGIN = 0x30000000, LENGTH = 64K /* Run in lowmem */
 }
 
 SECTIONS

@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <image.h>
+#include <string.h>
 #include "stm32l5_partition.h"
 
 /* Assembly helpers */
@@ -153,6 +154,7 @@
 /*Secure*/
 #define FLASH_BASE          (0x50022000)   //RM0438 - Table 4
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x24))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
 
@@ -184,10 +186,12 @@
 #define FLASH_CR_LOCK                       (1 << 31)
 
 
+
 #else
 /*Non-Secure*/
 #define FLASH_BASE          (0x40022000)   //RM0438 - Table 4
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x08))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
 
@@ -222,15 +226,19 @@
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
 
 #define FLASH_OPTR          (*(volatile uint32_t *)(FLASH_BASE + 0x40))
+#define FLASH_OPTR_DBANK     (1 << 22)
 #define FLASH_OPTR_SWAP_BANK (1 << 20)
 
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
 #define FLASH_PAGE_SIZE           (0x800)      /* 2KB */
 #define FLASH_BANK2_BASE          (0x08040000) /*!< Base address of Flash Bank2     */
+#define BOOTLOADER_SIZE           (0x8000)
 #define FLASH_TOP                 (0x0807FFFF) /*!< FLASH end address  */
 
 #define FLASH_KEY1                            (0x45670123)
 #define FLASH_KEY2                            (0xCDEF89AB)
+#define FLASH_OPTKEY1                         (0x08192A3BU)
+#define FLASH_OPTKEY2                         (0x4C5D6E7FU)
 
 /* GPIO*/
 #define GPIOD_BASE 0x52020C00
@@ -338,7 +346,11 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
   flash_clear_errors(0);
 
   src = (uint32_t *)data;
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
   dst = (uint32_t *)((address - ARCH_FLASH_OFFSET) + FLASH_SECURE_MMAP_BASE);
+#else
+  dst = (uint32_t *)address;
+#endif
   claim_nonsecure_area(address, len);
 
   while (i < len) {
@@ -377,6 +389,29 @@ void RAMFUNCTION hal_flash_lock(void)
         FLASH_CR |= FLASH_CR_LOCK;
 }
 
+void RAMFUNCTION hal_flash_opt_unlock(void)
+{
+    flash_wait_complete(0);
+    if ((FLASH_CR & FLASH_CR_OPTLOCK) != 0) {
+        FLASH_OPTKEYR = FLASH_OPTKEY1;
+        DMB();
+        FLASH_OPTKEYR = FLASH_OPTKEY2;
+        DMB();
+        while ((FLASH_CR & FLASH_CR_LOCK) != 0)
+            ;
+    }
+
+}
+
+void RAMFUNCTION hal_flash_opt_lock(void)
+{
+    FLASH_CR |= FLASH_CR_OPTSTRT;
+    flash_wait_complete(0);
+    FLASH_CR |= FLASH_CR_OBL_LAUNCH;
+    if ((FLASH_CR & FLASH_CR_OPTLOCK) == 0)
+        FLASH_CR |= FLASH_CR_OPTLOCK;
+}
+
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
@@ -395,12 +430,10 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         uint32_t reg;
         uint32_t base;
         uint32_t bker = 0;
-        // considering DBANK = 1
-        if (p < (FLASH_BANK2_BASE) )
-        {
+        if ((((FLASH_OPTR & FLASH_OPTR_DBANK) == 0) && (p <= FLASH_TOP)) || (p < FLASH_BANK2_BASE)) {
             base = FLASHMEM_ADDRESS_SPACE;
         }
-        else if(p>=(FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        else if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
             /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
@@ -412,8 +445,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             FLASH_CR &= ~FLASH_CR_PER ;
             return 0; /* Address out of range */
         }
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | bker));
-        FLASH_CR = reg | ((((p - base)  >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BKER));
+        reg |= ((((p - base)  >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | bker );
+        FLASH_CR = reg;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete(0);
@@ -583,11 +617,16 @@ static void gtzc_init(void)
 
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
-    uint32_t cur_opts = (FLASH_OPTR & FLASH_OPTR_SWAP_BANK) >> 20;
+    uint32_t cur_opts;
+    hal_flash_unlock();
+    hal_flash_opt_unlock();
+    cur_opts = (FLASH_OPTR & FLASH_OPTR_SWAP_BANK) >> 20;
     if (cur_opts)
         FLASH_OPTR &= (~FLASH_OPTR_SWAP_BANK);
     else
         FLASH_OPTR |= FLASH_OPTR_SWAP_BANK;
+    hal_flash_opt_lock();
+    hal_flash_lock();
 }
 
 static void led_unsecure()
@@ -605,9 +644,33 @@ static void led_unsecure()
 
 }
 
+#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
+static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
+static void RAMFUNCTION fork_bootloader(void)
+{
+    uint8_t *data = (uint8_t *) FLASHMEM_ADDRESS_SPACE;
+    uint32_t dst  = FLASH_BANK2_BASE;
+    uint32_t r = 0, w = 0;
+    int i;
+
+    /* Read the wolfBoot image in RAM */
+    memcpy(bootloader_copy_mem, data, BOOTLOADER_SIZE);
+
+    /* Mass-erase */
+    hal_flash_unlock();
+    hal_flash_erase(dst, BOOTLOADER_SIZE);
+    hal_flash_write(dst, bootloader_copy_mem, BOOTLOADER_SIZE);
+    hal_flash_lock();
+}
+#endif
+
 void hal_init(void)
 {
     TZ_SAU_Setup();
+#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
+    if ((FLASH_OPTR & (FLASH_OPTR_SWAP_BANK | FLASH_OPTR_DBANK)) == FLASH_OPTR_DBANK)
+        fork_bootloader();
+#endif
     clock_pll_on(0);
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
