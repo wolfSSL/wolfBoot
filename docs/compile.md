@@ -158,6 +158,33 @@ copied in RAM to boot after verification.
 When external memory is used, the HAL API must be extended to define methods to access the custom memory.
 Refer to the [HAL](HAL.md) page for the description of the `ext_flash_*` API.
 
+#### SPI devices
+
+In combination with the `EXT_FLASH=1` configuration parameter, it is possible to use a platform-specific SPI drivers,
+e.g. to access an external SPI flash memory. By compiling wolfBoot with the makefile option `SPI_FLASH=1`, the external
+memory is directly mapped to the additional SPI layer, so the user does not have to define the `ext_flash_*` functions.
+
+SPI functions, instead, must be defined. Example SPI drivers are available for multiple platforms in the [hal/spi](../hal/spi) directory.
+
+#### UART bridge towards neighbor systems
+
+Another alternative available to map external devices consists in enabling a UART bridge towards a neighbor system.
+The neighbor system must expose a service through the UART interface that is compatible with the wolfBoot protocol.
+
+In the same way as for SPI devices, the `ext_flash_*` API is automatically defined by wolfBoot when the option `UART_FLASH=1` is used.
+
+For more details, see the manual page [Remote External flash memory support via UART](remote_flash.md)
+
+#### Encryption support for external partitions
+
+When update and swap partitions are mapped to an external device using `EXT_FLASH=1`, either in combination with `SPI_FLASH`,
+`UART_FLASH`, or any custom external mapping, it is possible to enable ChaCha20 encryption when accessing those partition from the
+bootloader. The update images must be pre-encrypted at the source using the key tools, and wolfBoot should be instructed to use a temporary
+ChaCha20 symmetric key to access the content of the updates.
+
+For more details about this optional feature, please refer to the [Encrypted external partitions](encrypted_partitions.md) manual page.
+
+
 ### Executing flash access code from RAM
 
 On some platform, flash access code requires to be executed from RAM, to avoid conflict e.g. when writing
@@ -170,6 +197,20 @@ To move all the code accessing the internal flash for writing, into a section in
 
 When supported by the target platform, hardware-assisted dual-bank swapping can be used to perform updates.
 To enable this functionality, use `DUALBANK_SWAP=1`. Currently, only STM32F76x and F77x support this feature.
+
+
+### Store UPDATE partition flags in a sector in the BOOT partition
+
+By default, wolfBoot keeps track of the status of the update procedure to the single sectors in a specific area at the end of each partition, dedicated
+to store and retrieve a set of flags associated to the partition itself.
+
+In some cases it might be helpful to store the status flags related to the UPDATE partition and its sectors in the internal flash, alongside with
+the same set of flags used for the BOOT partition. By compiling wolfBoot with the `FLAGS_HOME=1` makefile option, the flags
+associated to the UPDATE partition are stored in the BOOT partition itself.
+
+While on one hand this option slightly reduces the space available in the BOOT partition to store the firmware image, it keeps all the flags in
+the BOOT partition.
+
 
 ### Using Mac OS/X
 
