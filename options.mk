@@ -138,6 +138,9 @@ ifeq ($(NVM_FLASH_WRITEONCE),1)
   CFLAGS+= -DNVM_FLASH_WRITEONCE
 endif
 
+ifeq ($(DISABLE_BACKUP),1)
+  CFLAGS+= -DDISABLE_BACKUP
+endif
 
 
 ifeq ($(DEBUG),1)

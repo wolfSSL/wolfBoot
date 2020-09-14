@@ -120,6 +120,15 @@ stage, or on these platform that do not support interrupt vector relocation.
 To disable interrupt vector table relocation, compile with `VTOR=0`. By default, wolfBoot will relocate the
 interrupt vector by setting the offset in the vector relocation offset register (VTOR).
 
+### Disable Backup of current running firmware
+
+Optionally, it is possible to disable the backup copy of the current running firmware upon the installation of the
+update. This implies that no fall-back mechanism is protecting the target from a faulty firmware installation, but may be useful
+in some cases where it is not possible to write on the update partition from the bootloader.
+The associated compile-time option is
+
+`DISABLE_BACKUP=1`
+
 ### Enable workaround for 'write once' flash memories
 
 On some microcontrollers, the internal flash memory does not allow subsequent writes (adding zeroes) to a
