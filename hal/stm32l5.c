@@ -180,9 +180,12 @@
 #define FLASH_CR_BKER                       (1 << 11)
 #define FLASH_CR_MER2                       (1 << 15)
 #define FLASH_CR_STRT                       (1 << 16)
+#define FLASH_CR_OPTSTRT                    (1 << 17)
 #define FLASH_CR_EOPIE                      (1 << 24)
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_INV                        (1 << 29)
+#define FLASH_CR_OBL_LAUNCH                 (1 << 27)
+#define FLASH_CR_OPTLOCK                    (1 << 30)
 #define FLASH_CR_LOCK                       (1 << 31)
 
 

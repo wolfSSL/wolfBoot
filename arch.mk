@@ -18,17 +18,6 @@ SPI_TARGET=$(TARGET)
 # Default UART driver name
 UART_TARGET=$(TARGET)
 
-## Hash settings
-ifeq ($(HASH),SHA256)
-  CFLAGS+=-DWOLFBOOT_HASH_SHA256
-endif
-
-ifeq ($(HASH),SHA3)
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
-  CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
-  SIGN_OPTIONS+=--sha3
-endif
-
 # Include SHA256 module because it's implicitly needed by RSA
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
@@ -78,6 +67,11 @@ ifeq ($(ARCH),ARM)
     CORTEX_M33=1
     CFLAGS+=-Ihal -DCORTEX_M33
     ARCH_FLASH_OFFSET=0x08000000
+    ifeq ($(TZEN),1)
+      WOLFBOOT_ORIGIN=0x0C000000
+    else
+      WOLFBOOT_ORIGIN=0x08000000
+    endif
   endif
 
   ## Cortex-M CPU

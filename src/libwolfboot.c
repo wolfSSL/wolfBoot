@@ -59,14 +59,29 @@ static uint32_t ext_cache;
 #endif
 
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
-
+/* Top addresses for FLAGS field
+ *  - PART_BOOT_ENDFLAGS = top of flags for BOOT partition
+ *  - PART_UPDATE_ENDFLAGS = top of flags for UPDATE_PARTITION
+ */
 
 #ifndef TRAILER_SKIP
 #   define TRAILER_SKIP 0
 #endif
 #define PART_BOOT_ENDFLAGS   (WOLFBOOT_PARTITION_BOOT_ADDRESS   + ENCRYPT_TMP_SECRET_OFFSET)
+#define TRAILER_OVERHEAD (4 + 1 + (WOLFBOOT_PARTITION_SIZE  / (8 * WOLFBOOT_SECTOR_SIZE))) /* MAGIC + PART_FLAG (1B) + (N_SECTORS / 8) */
+#define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
+
+#define FLAGS_BOOT_EXT() PARTN_IS_EXT(PART_BOOT)
+
+#ifdef FLAGS_HOME
+/* All FLAGS live at the end of the boot partition: */
+#define PART_UPDATE_ENDFLAGS (((PART_BOOT_ENDFLAGS - TRAILER_OVERHEAD) / WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE) 
+#define FLAGS_UPDATE_EXT() PARTN_IS_EXT(PART_BOOT)
+#else
+/* FLAGS are at the end of each partition */
 #define PART_UPDATE_ENDFLAGS (WOLFBOOT_PARTITION_UPDATE_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET)
-#define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - (1 + (WOLFBOOT_PARTITION_SIZE / (8 * WOLFBOOT_SECTOR_SIZE))))
+#define FLAGS_UPDATE_EXT() PARTN_IS_EXT(PART_UPDATE)
+#endif
 
 #ifdef NVM_FLASH_WRITEONCE
 #include <stddef.h>
@@ -111,7 +126,7 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
+        if (FLAGS_BOOT_EXT()){
             ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&ext_cache, sizeof(uint32_t));
             return (uint8_t *)&ext_cache;
         } else {
@@ -119,7 +134,7 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
         }
     }
     else if (part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE)) {
+        if (FLAGS_UPDATE_EXT()) {
             ext_flash_check_read(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&ext_cache, sizeof(uint32_t));
             return (uint8_t *)&ext_cache;
         } else {
@@ -132,14 +147,14 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
+        if (FLAGS_BOOT_EXT()) {
             ext_flash_check_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
         } else {
             hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
         }
     }
     else if (part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE)) {
+        if (FLAGS_UPDATE_EXT()) {
             ext_flash_check_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), (void *)&val, 1);
         } else {
             hal_trailer_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
@@ -150,14 +165,14 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
+        if (FLAGS_BOOT_EXT()) {
             ext_flash_check_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
             hal_set_partition_magic(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
         }
     }
     else if (part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE)) {
+        if (FLAGS_UPDATE_EXT()) {
             ext_flash_check_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t), (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
             hal_set_partition_magic(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
@@ -318,7 +333,7 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
-    if (PARTN_IS_EXT(PART_UPDATE))
+    if (FLAGS_UPDATE_EXT())
     {
         ext_flash_unlock();
         wolfBoot_set_partition_state(PART_UPDATE, st);
@@ -333,7 +348,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
 void RAMFUNCTION wolfBoot_success(void)
 {
     uint8_t st = IMG_STATE_SUCCESS;
-    if (PARTN_IS_EXT(PART_BOOT))
+    if (FLAGS_BOOT_EXT())
     {
         ext_flash_unlock();
         wolfBoot_set_partition_state(PART_BOOT, st);
