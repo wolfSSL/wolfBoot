@@ -76,6 +76,25 @@ ifeq ($(TARGET),kinetis)
   $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_controller.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
 endif
 
+ifeq ($(TARGET),imx_rt)
+  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 \
+          -I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/  \
+          -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ -I$(MCUXPRESSO)/components/serial_manager \
+          -I$(MCUXPRESSO)/components/uart/ -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
+          -DPRINTF_ADVANCED_ENABLE=1 -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1
+  LDFLAGS+=-mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections -ffreestanding -fno-builtin -mthumb -mapcs -Xlinker --gc-sections -Xlinker -static -Xlinker -z -Xlinker muldefs -Xlinker -Map=output.map -static -lm -lc -lnosys
+  LSCRIPT_TEMPLATE=imx_rt.ld
+  APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+            imx_rt_board.o imx_rt_pin_mux.o imx_rt_clock_config.o $(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o \
+            $(MCUXPRESSO_DRIVERS)/utilities/str/fsl_str.o \
+             $(MCUXPRESSO)/components/uart/lpuart_adapter.o \
+            $(MCUXPRESSO)/components/serial_manager/serial_manager.o \
+            $(MCUXPRESSO)/components/lists/generic_list.o \
+            $(MCUXPRESSO)/components/serial_manager/serial_port_uart.o \
+            $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o \
+            $(MCUXPRESSO_DRIVERS)/utilities/debug_console/fsl_debug_console.o
+endif
+
 ifeq ($(TARGET),stm32g0)
   CFLAGS+=-DNVM_FLASH_WRITEONCE=1
 endif
