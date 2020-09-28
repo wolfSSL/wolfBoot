@@ -291,7 +291,7 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 
 }
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && (!defined(FLAGS_HOME) || !defined(DISABLE_BACKUP))
 static void claim_nonsecure_area(uint32_t address, int len)
 {
     int page_n, reg_idx;
@@ -349,11 +349,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
   flash_clear_errors(0);
 
   src = (uint32_t *)data;
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-  dst = (uint32_t *)((address - ARCH_FLASH_OFFSET) + FLASH_SECURE_MMAP_BASE);
-#else
   dst = (uint32_t *)address;
-#endif
   claim_nonsecure_area(address, len);
 
   while (i < len) {
