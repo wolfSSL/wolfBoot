@@ -162,43 +162,24 @@
 #define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0xA0)) /* Array */
 #define FLASH_SECBB_NREGS  4    /* Array length for the two above */
 
-/* Register values */
-#define FLASH_SR_EOP                        (1 << 0)
-#define FLASH_SR_OPERR                      (1 << 1)
-#define FLASH_SR_PROGERR                    (1 << 3)
-#define FLASH_SR_WRPERR                     (1 << 4)
-#define FLASH_SR_PGAERR                     (1 << 5)
-#define FLASH_SR_SIZERR                     (1 << 6)
-#define FLASH_SR_PGSERR                     (1 << 7)
-#define FLASH_SR_BSY                        (1 << 16)
-
-#define FLASH_CR_PG                         (1 << 0)
-#define FLASH_CR_PER                        (1 << 1)
-#define FLASH_CR_MER1                       (1 << 2)
-#define FLASH_CR_PNB_SHIFT                  3
-#define FLASH_CR_PNB_MASK                   0x7F
-#define FLASH_CR_BKER                       (1 << 11)
-#define FLASH_CR_MER2                       (1 << 15)
-#define FLASH_CR_STRT                       (1 << 16)
-#define FLASH_CR_OPTSTRT                    (1 << 17)
-#define FLASH_CR_EOPIE                      (1 << 24)
-#define FLASH_CR_ERRIE                      (1 << 25)
-#define FLASH_CR_INV                        (1 << 29)
-#define FLASH_CR_OBL_LAUNCH                 (1 << 27)
-#define FLASH_CR_OPTLOCK                    (1 << 30)
-#define FLASH_CR_LOCK                       (1 << 31)
+#define FLASH_NS_BASE          (0x40022000)   //RM0438 - Table 4
+#define FLASH_NS_KEYR        (*(volatile uint32_t *)(FLASH_NS_BASE + 0x08))
+#define FLASH_NS_OPTKEYR     (*(volatile uint32_t *)(FLASH_NS_BASE + 0x10))
+#define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
+#define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
 
 
 
 #else
-/*Non-Secure*/
+/* Non-Secure only */
 #define FLASH_BASE          (0x40022000)   //RM0438 - Table 4
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x08))
 #define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
+#endif
 
-/* Register values */
+/* Register values (for both secure and non secure registers) */
 #define FLASH_SR_EOP                        (1 << 0)
 #define FLASH_SR_OPERR                      (1 << 1)
 #define FLASH_SR_PROGERR                    (1 << 3)
@@ -221,9 +202,10 @@
 #define FLASH_CR_EOPIE                      (1 << 24)
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_OBL_LAUNCH                 (1 << 27)
+#define FLASH_CR_INV                        (1 << 29)
 #define FLASH_CR_OPTLOCK                    (1 << 30)
 #define FLASH_CR_LOCK                       (1 << 31)
-#endif
+
 
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
@@ -277,6 +259,11 @@ static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 {
     while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
+#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+    while ((FLASH_NS_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
+        ;
+#endif
+
 }
 
 static void RAMFUNCTION flash_clear_errors(uint8_t bank)
@@ -288,10 +275,33 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
             FLASH_SR_OPTWERR
 #endif
             ) ;
+#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+    FLASH_NS_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR | FLASH_SR_OPTWERR);
+#endif
 
 }
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && (!defined(FLAGS_HOME) || !defined(DISABLE_BACKUP))
+static void RAMFUNCTION hal_flash_nonsecure_unlock(void)
+{
+    flash_wait_complete(0);
+    if ((FLASH_NS_CR & FLASH_CR_LOCK) != 0) {
+        FLASH_NS_KEYR = FLASH_KEY1;
+        DMB();
+        FLASH_NS_KEYR = FLASH_KEY2;
+        DMB();
+        while ((FLASH_NS_CR & FLASH_CR_LOCK) != 0)
+            ;
+    }
+}
+
+static void RAMFUNCTION hal_flash_nonsecure_lock(void)
+{
+    flash_wait_complete(0);
+    if ((FLASH_NS_CR & FLASH_CR_LOCK) == 0)
+        FLASH_NS_CR |= FLASH_CR_LOCK;
+}
+
 static void claim_nonsecure_area(uint32_t address, int len)
 {
     int page_n, reg_idx;
@@ -311,9 +321,12 @@ static void claim_nonsecure_area(uint32_t address, int len)
         reg_idx = page_n / 32;
         int pos;
         pos = page_n % 32;
+        hal_flash_nonsecure_unlock();
         FLASH_SECBB2[reg_idx] |= ( 1 << pos);
         ISB();
-        /* Erase claimed non-secure page */
+        flash_wait_complete(0);
+        hal_flash_nonsecure_lock();
+        /* Erase claimed non-secure page, in secure mode */
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER);
         DMB();
@@ -345,27 +358,41 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
   int i = 0;
   uint32_t *src, *dst;
   uint32_t dword[2];
+  volatile uint32_t *sr, *cr;
+
+  cr = &FLASH_CR;
+  sr = &FLASH_SR;
 
   flash_clear_errors(0);
-
   src = (uint32_t *)data;
   dst = (uint32_t *)address;
-  claim_nonsecure_area(address, len);
+
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+  if (address >= FLASH_BANK2_BASE)
+      claim_nonsecure_area(address, len);
+#endif
 
   while (i < len) {
     dword[0] = src[i >> 2];
     dword[1] = src[(i >> 2) + 1];
-    FLASH_CR |= FLASH_CR_PG;
+    *cr |= FLASH_CR_PG;
     dst[i >> 2] = dword[0];
+    ISB();
     dst[(i >> 2) + 1] = dword[1];
     flash_wait_complete(0);
-    FLASH_CR &= ~FLASH_CR_PG;
+    while ((*sr & FLASH_SR_EOP) == 0)
+        ;
+    *sr |= FLASH_SR_EOP;
+    *cr &= ~FLASH_CR_PG;
     i+=8;
   }
 
   release_nonsecure_area();
   return 0;
 }
+
+
+
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
@@ -378,8 +405,9 @@ void RAMFUNCTION hal_flash_unlock(void)
         while ((FLASH_CR & FLASH_CR_LOCK) != 0)
             ;
     }
-
 }
+
+
 
 void RAMFUNCTION hal_flash_lock(void)
 {
