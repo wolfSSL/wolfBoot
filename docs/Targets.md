@@ -95,10 +95,10 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 3. Prepare board with option bytes configuration reported above
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
-4. flash wolfBoot.bin to 0xc000 0000
-    - STM32_Programmer_CLI -c port=swd -d .\wolfboot.bin 0xC000000
-5. `flash .\test-app\image_v1_signed.bin to 0x8040000`
-    - `STM32_Programmer_CLI -c port=swd -d .\test-app\image_v1_signed.bin 0x8040000`
+4. flash wolfBoot.bin to 0x0c00 0000
+    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
+5. flash .\test-app\image_v1_signed.bin to 0x0804 0000
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08040000`
 6. RED LD9 will be on
 
 ### Scenario 2: Trustzone Disabled
@@ -122,6 +122,8 @@ The example configuration is available in `config/examples/stm32l5-nonsecure-dua
 
 ### Debugging
 
+Use `make DEBUG=1` and reload firmware.
+
 - STM32CubeIDE v.1.3.0 required
 - Run the debugger via:
 
@@ -129,6 +131,12 @@ The example configuration is available in `config/examples/stm32l5-nonsecure-dua
 
 - Connect with arm-none-eabi-gdb
 
+wolfBoot has a .gdbinit to configure
+```
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf
+mon reset init
+```
 
 
 ## STM32L0x3
