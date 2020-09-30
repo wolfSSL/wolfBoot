@@ -28,8 +28,14 @@ endif
 
 CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
-APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../hal/$(TARGET).o ../src/libwolfboot.o
+APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../src/libwolfboot.o
 include ../arch.mk
+
+ifeq ($(TZEN),1)
+    APP_OBJS+=../hal/$(TARGET)_ns.o
+else
+    APP_OBJS+=../hal/$(TARGET).o
+endif
 
 ifeq ($(ARCH),RISCV)
   APP_OBJS+=startup_riscv.o vector_riscv.o
@@ -54,7 +60,17 @@ ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
 endif
-LDFLAGS:=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+
+ifeq ($(TARGET),stm32l5)
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld
+  else
+    LSCRIPT_TEMPLATE=ARM-stm32l5.ld
+  endif
+  CFLAGS+=-mcpu=cortex-m33  
+  LDFLAGS+=-mcpu=cortex-m33
+endif
+LDFLAGS+=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1

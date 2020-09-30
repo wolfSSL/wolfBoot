@@ -187,7 +187,9 @@ void isr_reset(void) {
         dst++;
     }
 
+#if !defined(PLATFORM_stm32l5) || (__ARM_FEATURE_CMSE == 0) || (__ARM_FEATURE_CMSE != 3U)  
     mpu_init();
+#endif 
     /* Run the program! */
     main();
 }
@@ -202,6 +204,11 @@ void isr_empty(void)
     /* Ignore unmapped event and continue */
 }
 
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#   define isr_securefault isr_fault
+#else
+#   define isr_securefault 0
+#endif
 
 /* This is the main loop for the bootloader.
  *
@@ -213,11 +220,45 @@ void isr_empty(void)
  *  - Call the application entry point
  *
  */
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#define VTOR (*(volatile uint32_t *)(0xE002ED08)) // SCB_NS -> VTOR
+#else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
+#endif
+
+
 static void  *app_entry;
 static uint32_t app_end_stack;
 
 
+
+#if defined CORTEX_M33
+
+/* Armv8 boot procedure */
+void RAMFUNCTION do_boot(const uint32_t *app_offset)
+{
+    /* Get stack pointer, entry point */
+    app_end_stack = (*((uint32_t *)(app_offset)));
+    app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
+    /* Disable interrupts */
+    asm volatile("cpsid i");
+    /* Update IV */
+    VTOR = ((uint32_t)app_offset);
+    asm volatile("msr msplim, %0" ::"r"(0));
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+    asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
+    /* Jump to non secure app_entry */
+    asm volatile("mov r7, %0" ::"r"(app_entry));
+    asm volatile("bic.w   r7, r7, #1");
+    asm volatile("blxns   r7" );
+#else
+    asm volatile("msr msp, %0" ::"r"(app_end_stack));
+    asm volatile("mov pc, %0":: "r"(app_entry));
+#endif
+
+}
+#else
+/* Armv6/v7 */
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
     mpu_off();
@@ -227,7 +268,6 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
 #endif
-
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
     app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
@@ -237,9 +277,11 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #ifndef NO_VTOR
     asm volatile("cpsie i");
 #endif
+
     /* Unconditionally jump to app_entry */
     asm volatile("mov pc, %0" ::"r"(app_entry));
 }
+#endif
 
 #ifdef PLATFORM_psoc6
 typedef void(*NMIHANDLER)(void);
@@ -251,20 +293,23 @@ typedef void(*NMIHANDLER)(void);
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
-    (void (*)(void))(&END_STACK),
-    isr_reset,                   // Reset
-    isr_NMI,                     // NMI
-    isr_fault,                   // HardFault
-    isr_fault,                   // MemFault
-    isr_fault,                   // BusFault
-    isr_fault,                   // UsageFault
-    0, 0, 0, 0,                  // 4x reserved
-    isr_empty,                   // SVC
-    isr_empty,                   // DebugMonitor
+	(void (*)(void))(&END_STACK),
+	isr_reset,                   // Reset
+	isr_NMI,                     // NMI
+	isr_fault,                   // HardFault
+	isr_fault,                   // MemFault
+	isr_fault,                   // BusFault
+	isr_fault,                   // UsageFault
+	isr_securefault,             // SecureFault on M23/33, reserved otherwise (0)
     0,                           // reserved
-    isr_empty,                   // PendSV
-    isr_empty,                   // SysTick
-
+    0,                           // reserved
+    0,                           // reserved
+	isr_empty,                   // SVC
+	isr_empty,                   // DebugMonitor
+	0,                           // reserved
+	isr_empty,                   // PendSV
+	isr_empty,                   // SysTick
+#ifdef PLATFORM_stm32l5   /* Fill with extra unused handlers */
     isr_empty,
     isr_empty,
     isr_empty,
@@ -309,6 +354,27 @@ void (* const IV[])(void) =
     isr_empty,
     isr_empty,
     isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+#endif
 };
 
 #ifdef RAM_CODE

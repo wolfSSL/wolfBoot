@@ -43,7 +43,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint8_t p_state;
     active = wolfBoot_dualboot_candidate();
 
-    if (active < 1) /* panic if no images available */
+    if (active < 0) /* panic if no images available */
         boot_panic();
 
     for (;;) {

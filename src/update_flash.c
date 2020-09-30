@@ -197,6 +197,7 @@ static int wolfBoot_update(int fallback_allowed)
     ext_flash_unlock();
 #endif
 
+#ifndef DISABLE_BACKUP
     /* Interruptible swap
      * The status is saved in the sector flags of the update partition.
      * If something goes wrong, the operation will be resumed upon reboot.
@@ -236,6 +237,29 @@ static int wolfBoot_update(int fallback_allowed)
     wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
     st = IMG_STATE_TESTING;
     wolfBoot_set_partition_state(PART_BOOT, st);
+#else /* DISABLE_BACKUP */
+#warning "Backup mechanism disabled! Update installation will not be interruptible"
+    /* Directly copy the content of the UPDATE partition into the BOOT partition.
+     * This mechanism is not fail-safe, and will brick your device if interrupted
+     * before the copy is finished.
+     */
+    while ((sector * sector_size) < total_size) {
+        if ((wolfBoot_get_sector_flag(PART_UPDATE, sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
+           flag = SECT_FLAG_SWAPPING;
+           wolfBoot_copy_sector(&update, &boot, sector);
+           if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+               wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
+        }
+        sector++;
+    }
+    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
+        wb_flash_erase(&boot, sector * sector_size, sector_size);
+        sector++;
+    }
+    st = IMG_STATE_SUCCESS;
+    wolfBoot_set_partition_state(PART_BOOT, st);
+#endif
+
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif

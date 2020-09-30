@@ -2,7 +2,7 @@
 
 This README describes configuration of supported targets.
 
-## STM32-F407
+## STM32F407
 
 Example 512KB partitioning on STM32-F407
 
@@ -60,6 +60,84 @@ mon reset init
 b main
 c
 ```
+
+## STM32L5
+
+### Scenario 1: TrustZone Enabled
+
+#### Example Description
+
+The implementation shows how to switch from secure application to non-secure application
+thanks to the system isolation performed to split the internal Flash and internal SRAM memories
+into two halves:
+ - the first half for the secure application
+ - the second half for the non-secure application
+
+#### Hardware and Software environment
+
+- This example runs on STM32L562QEIxQ devices with security enabled (TZEN=1).
+- This example has been tested with STMicroelectronics STM32L562E-DK (MB1373)
+- User Option Bytes requirement (with STM32CubeProgrammer tool - see below for instructions)
+
+```
+TZEN = 1                            System with TrustZone-M enabled
+DBANK = 1                           Dual bank mode
+SECWM1_PSTRT=0x0  SECWM1_PEND=0x7F  All 128 pages of internal Flash Bank1 set as secure
+SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secure, hence Bank2 non-secure
+```
+
+- NOTE: STM32CubeProgrammer V2.3.0 is required  (v2.4.0 has a known bug for STM32L5)
+
+#### How to use it
+
+1. `cp ./config/examples/stm32l5.config .config`
+2. `make TZEN=1`
+3. Prepare board with option bytes configuration reported above
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
+4. flash wolfBoot.bin to 0x0c00 0000
+    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
+5. flash .\test-app\image_v1_signed.bin to 0x0804 0000
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08040000`
+6. RED LD9 will be on
+
+### Scenario 2: Trustzone Disabled
+
+#### Example Description
+
+The implementation shows how to use STM32L5xx in DUAL_BANK mode, with TrustZone disabled.
+The DUAL_BANK option is only available on this target when TrustZone is disabled (TZEN = 0).
+
+The flash memory is segmented into two different banks:
+
+  - Bank 0: (0x08000000)
+  - Bank 1: (0x08040000)
+
+Bank 0 contains the bootloader at address 0x08000000, and the application at address 0x08008000.
+When a valid image is available at the same offset in Bank 1, a candidate is selected for booting between the two valid images.
+A firmware update can be uploaded at address 0x08048000.
+
+The example configuration is available in `config/examples/stm32l5-nonsecure-dualbank.config`.
+
+
+### Debugging
+
+Use `make DEBUG=1` and reload firmware.
+
+- STM32CubeIDE v.1.3.0 required
+- Run the debugger via:
+
+`ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333`
+
+- Connect with arm-none-eabi-gdb
+
+wolfBoot has a .gdbinit to configure
+```
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf
+mon reset init
+```
+
 
 ## STM32L0x3
 
