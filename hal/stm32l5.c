@@ -39,7 +39,7 @@
 #define RCC_BASE            (0x40021000)   //RM0438 - Table 4
 #endif
 
-#define FLASH_SECURE_MMAP_BASE (0xc0000000)
+#define FLASH_SECURE_MMAP_BASE (0x0C000000)
 
 #define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  //RM0438 - Table 77
 #define RCC_CR_PLLRDY               (1 << 25) //RM0438 - 9.8.1
@@ -370,6 +370,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
   if (address >= FLASH_BANK2_BASE)
       claim_nonsecure_area(address, len);
+  /* Convert into secure address space */
+  dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
 #endif
 
   while (i < len) {
@@ -380,9 +382,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     ISB();
     dst[(i >> 2) + 1] = dword[1];
     flash_wait_complete(0);
-    while ((*sr & FLASH_SR_EOP) == 0)
-        ;
-    *sr |= FLASH_SR_EOP;
+    if ((*sr & FLASH_SR_EOP) != 0)
+        *sr |= FLASH_SR_EOP;
     *cr &= ~FLASH_CR_PG;
     i+=8;
   }
