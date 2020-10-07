@@ -36,7 +36,11 @@
 #   define SCRATCHBOARD_SIZE (512)
 #   define SP_DIGITS_SIZE (320)
 #   define MAX_POINTS (4)
+#ifndef WC_NO_CACHE_RESISTANT
+#   define MULTIPOINT_SIZE (17)
+#else
 #   define MULTIPOINT_SIZE (16)
+#endif
 #else
 #   define SP_POINT_SIZE (244)
 #   define SCRATCHBOARD_SIZE (640)

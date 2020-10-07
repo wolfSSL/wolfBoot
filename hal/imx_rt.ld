@@ -13,8 +13,12 @@ SECTIONS
         _start_text = .;
         KEEP(*(.flash_config))
         . = ORIGIN(FLASH) + 0x1000;
+        KEEP(*(.image_vt))
+        KEEP(*(.boot_data))
+        KEEP(*(.dcd_data))
+        . = ORIGIN(FLASH) + 0x2000;
         KEEP(*(.isr_vector))
-        . = ALIGN(8);
+        . = ALIGN(0x8);
         *(.text*)
         *(.rodata*)
         *(.glue_7)               /* glue arm to thumb code */

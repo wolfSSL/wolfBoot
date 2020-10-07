@@ -128,14 +128,33 @@ endif
 
 ifeq ($(TARGET),imx_rt)
   ARCH_FLASH_OFFSET=0x60000000
-  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 \
-		  -I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
-  OBJS+= $(MCUXPRESSO)/middleware/mflash/mimxrt1062/mflash_drv.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o
+  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 \
+		  -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
+		  -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
+		  -I$(MCUXPRESSO)/components/uart/ \
+		  -I$(MCUXPRESSO)/components/flash/nor \
+		  -I$(MCUXPRESSO)/components/flash/nor/flexspi \
+		  -I$(MCUXPRESSO)/components/serial_manager/ \
+		  -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
+		  -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
+		  -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1
+  OBJS+= $(MCUXPRESSO)/middleware/mflash/mimxrt1062/mflash_drv.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o \
+		 $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
+  OBJS+= $(MCUXPRESSO_DRIVERS)/utilities/str/fsl_str.o \
+             $(MCUXPRESSO)/components/uart/lpuart_adapter.o \
+            $(MCUXPRESSO)/components/serial_manager/serial_manager.o \
+            $(MCUXPRESSO)/components/lists/generic_list.o \
+            $(MCUXPRESSO)/components/serial_manager/serial_port_uart.o \
+            $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o \
+            $(MCUXPRESSO_DRIVERS)/utilities/debug_console/fsl_debug_console.o \
+			$(MCUXPRESSO)/components/flash/nor/flexspi/fsl_flexspi_nor_flash.o \
+            $(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
+
   ifeq ($(PKA),1)
     PKA_EXTRA_OBJS+=\
      $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o \
      ./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
-    PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
+    PKA_EXTRA_CFLAGS+=-D__FLASH_BASE=$(ARCH_FLASH_OFFSET)
   endif
 endif
 
