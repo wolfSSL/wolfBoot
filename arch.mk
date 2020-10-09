@@ -138,13 +138,13 @@ ifeq ($(TARGET),imx_rt)
 		  -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
 		  -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
 		  -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
-  OBJS+= $(MCUXPRESSO)/middleware/mflash/mimxrt1062/mflash_drv.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o \
+  OBJS+= $(MCUXPRESSO)/middleware/mflash/mimxrt1062/mflash_drv.o \
 		 $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
   ifeq ($(PKA),1)
-    PKA_EXTRA_OBJS+=\
-     $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o \
-     ./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
-    PKA_EXTRA_CFLAGS+=-D__FLASH_BASE=$(ARCH_FLASH_OFFSET)
+     PKA_EXTRA_OBJS+= \
+         $(MCUXPRESSO)/devices/MIMXRT1062/drivers/fsl_dcp.o \
+         ./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
+     PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
   endif
 endif
 

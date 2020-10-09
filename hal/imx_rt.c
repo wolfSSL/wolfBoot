@@ -329,9 +329,13 @@ static void clock_init(void)
 
 
 extern void ARM_MPU_Disable(void);
+extern int wc_dcp_init(void);
 
 void hal_init(void)
 {
+#ifdef WOLFSSL_IMXRT_DCP
+    wc_dcp_init();
+#endif
     ARM_MPU_Disable();
     g_bootloaderTree = (bootloader_api_entry_t *)*(uint32_t *)0x0020001c;
     clock_init();
