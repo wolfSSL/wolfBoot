@@ -1,4 +1,4 @@
-/* wolfCrypt benchmark test application for i.MX RT1060-EVK
+/* wolfBoot test application for i.MX RT1060-EVK
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
@@ -16,133 +16,12 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-/* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-!!GlobalInfo
-product: Clocks v7.0
-processor: MIMXRT1062xxxxA
-package_id: MIMXRT1062DVL6A
-mcu_data: ksdk2_0
-processor_version: 0.7.9
-board: MIMXRT1060-EVK
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
 
 #include "clock_config.h"
 #include "fsl_iomuxc.h"
 
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
-
-/*******************************************************************************
- * Variables
- ******************************************************************************/
-/* System clock frequency. */
 extern uint32_t SystemCoreClock;
 
-/*******************************************************************************
- ************************ BOARD_InitBootClocks function ************************
- ******************************************************************************/
-void BOARD_InitBootClocks(void)
-{
-    BOARD_BootClockRUN();
-}
-
-/*******************************************************************************
- ********************** Configuration BOARD_BootClockRUN ***********************
- ******************************************************************************/
-/* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
-!!Configuration
-name: BOARD_BootClockRUN
-called_from_default_init: true
-outputs:
-- {id: AHB_CLK_ROOT.outFreq, value: 600 MHz}
-- {id: CAN_CLK_ROOT.outFreq, value: 40 MHz}
-- {id: CKIL_SYNC_CLK_ROOT.outFreq, value: 32.768 kHz}
-- {id: CLK_1M.outFreq, value: 1 MHz}
-- {id: CLK_24M.outFreq, value: 24 MHz}
-- {id: CSI_CLK_ROOT.outFreq, value: 12 MHz}
-- {id: ENET1_TX_CLK.outFreq, value: 2.4 MHz}
-- {id: ENET2_125M_CLK.outFreq, value: 1.2 MHz}
-- {id: ENET2_TX_CLK.outFreq, value: 1.2 MHz}
-- {id: ENET_125M_CLK.outFreq, value: 2.4 MHz}
-- {id: ENET_25M_REF_CLK.outFreq, value: 1.2 MHz}
-- {id: FLEXIO1_CLK_ROOT.outFreq, value: 30 MHz}
-- {id: FLEXIO2_CLK_ROOT.outFreq, value: 30 MHz}
-- {id: FLEXSPI2_CLK_ROOT.outFreq, value: 1440/11 MHz}
-- {id: FLEXSPI_CLK_ROOT.outFreq, value: 1440/11 MHz}
-- {id: GPT1_ipg_clk_highfreq.outFreq, value: 75 MHz}
-- {id: GPT2_ipg_clk_highfreq.outFreq, value: 75 MHz}
-- {id: IPG_CLK_ROOT.outFreq, value: 150 MHz}
-- {id: LCDIF_CLK_ROOT.outFreq, value: 67.5 MHz}
-- {id: LPI2C_CLK_ROOT.outFreq, value: 60 MHz}
-- {id: LPSPI_CLK_ROOT.outFreq, value: 105.6 MHz}
-- {id: LVDS1_CLK.outFreq, value: 1.2 GHz}
-- {id: MQS_MCLK.outFreq, value: 1080/17 MHz}
-- {id: PERCLK_CLK_ROOT.outFreq, value: 75 MHz}
-- {id: PLL7_MAIN_CLK.outFreq, value: 24 MHz}
-- {id: SAI1_CLK_ROOT.outFreq, value: 1080/17 MHz}
-- {id: SAI1_MCLK1.outFreq, value: 1080/17 MHz}
-- {id: SAI1_MCLK2.outFreq, value: 1080/17 MHz}
-- {id: SAI1_MCLK3.outFreq, value: 30 MHz}
-- {id: SAI2_CLK_ROOT.outFreq, value: 1080/17 MHz}
-- {id: SAI2_MCLK1.outFreq, value: 1080/17 MHz}
-- {id: SAI2_MCLK3.outFreq, value: 30 MHz}
-- {id: SAI3_CLK_ROOT.outFreq, value: 1080/17 MHz}
-- {id: SAI3_MCLK1.outFreq, value: 1080/17 MHz}
-- {id: SAI3_MCLK3.outFreq, value: 30 MHz}
-- {id: SEMC_CLK_ROOT.outFreq, value: 75 MHz}
-- {id: SPDIF0_CLK_ROOT.outFreq, value: 30 MHz}
-- {id: TRACE_CLK_ROOT.outFreq, value: 132 MHz}
-- {id: UART_CLK_ROOT.outFreq, value: 80 MHz}
-- {id: USDHC1_CLK_ROOT.outFreq, value: 198 MHz}
-- {id: USDHC2_CLK_ROOT.outFreq, value: 198 MHz}
-settings:
-- {id: CCM.AHB_PODF.scale, value: '1', locked: true}
-- {id: CCM.ARM_PODF.scale, value: '2', locked: true}
-- {id: CCM.FLEXSPI2_PODF.scale, value: '2', locked: true}
-- {id: CCM.FLEXSPI2_SEL.sel, value: CCM_ANALOG.PLL3_PFD0_CLK}
-- {id: CCM.FLEXSPI_PODF.scale, value: '2', locked: true}
-- {id: CCM.FLEXSPI_SEL.sel, value: CCM_ANALOG.PLL3_PFD0_CLK}
-- {id: CCM.LPSPI_PODF.scale, value: '5', locked: true}
-- {id: CCM.PERCLK_PODF.scale, value: '2', locked: true}
-- {id: CCM.SEMC_PODF.scale, value: '8'}
-- {id: CCM.TRACE_CLK_SEL.sel, value: CCM_ANALOG.PLL2_MAIN_CLK}
-- {id: CCM.TRACE_PODF.scale, value: '4', locked: true}
-- {id: CCM_ANALOG.PLL1_BYPASS.sel, value: CCM_ANALOG.PLL1}
-- {id: CCM_ANALOG.PLL1_PREDIV.scale, value: '1', locked: true}
-- {id: CCM_ANALOG.PLL1_VDIV.scale, value: '50', locked: true}
-- {id: CCM_ANALOG.PLL2.denom, value: '1', locked: true}
-- {id: CCM_ANALOG.PLL2.num, value: '0', locked: true}
-- {id: CCM_ANALOG.PLL2_BYPASS.sel, value: CCM_ANALOG.PLL2_OUT_CLK}
-- {id: CCM_ANALOG.PLL2_PFD0_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD0}
-- {id: CCM_ANALOG.PLL2_PFD1_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD1}
-- {id: CCM_ANALOG.PLL2_PFD2_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD2}
-- {id: CCM_ANALOG.PLL2_PFD3_BYPASS.sel, value: CCM_ANALOG.PLL2_PFD3}
-- {id: CCM_ANALOG.PLL3_BYPASS.sel, value: CCM_ANALOG.PLL3}
-- {id: CCM_ANALOG.PLL3_PFD0_BYPASS.sel, value: CCM_ANALOG.PLL3_PFD0}
-- {id: CCM_ANALOG.PLL3_PFD0_DIV.scale, value: '33', locked: true}
-- {id: CCM_ANALOG.PLL3_PFD0_MUL.scale, value: '18', locked: true}
-- {id: CCM_ANALOG.PLL3_PFD1_BYPASS.sel, value: CCM_ANALOG.PLL3_PFD1}
-- {id: CCM_ANALOG.PLL3_PFD2_BYPASS.sel, value: CCM_ANALOG.PLL3_PFD2}
-- {id: CCM_ANALOG.PLL3_PFD3_BYPASS.sel, value: CCM_ANALOG.PLL3_PFD3}
-- {id: CCM_ANALOG.PLL4.denom, value: '50'}
-- {id: CCM_ANALOG.PLL4.div, value: '47'}
-- {id: CCM_ANALOG.PLL5.denom, value: '1'}
-- {id: CCM_ANALOG.PLL5.div, value: '31', locked: true}
-- {id: CCM_ANALOG.PLL5.num, value: '0'}
-- {id: CCM_ANALOG.PLL5_BYPASS.sel, value: CCM_ANALOG.PLL5_POST_DIV}
-- {id: CCM_ANALOG.PLL5_POST_DIV.scale, value: '2'}
-- {id: CCM_ANALOG.VIDEO_DIV.scale, value: '4'}
-- {id: CCM_ANALOG_PLL_ENET_POWERDOWN_CFG, value: 'Yes'}
-- {id: CCM_ANALOG_PLL_USB1_POWER_CFG, value: 'Yes'}
-- {id: CCM_ANALOG_PLL_VIDEO_POWERDOWN_CFG, value: 'No'}
-sources:
-- {id: XTALOSC24M.RTC_OSC.outFreq, value: 32.768 kHz, enabled: true}
- * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
-
-/*******************************************************************************
- * Variables for BOARD_BootClockRUN configuration
- ******************************************************************************/
 const clock_arm_pll_config_t armPllConfig_BOARD_BootClockRUN =
     {
         .loopDivider = 100,                       /* PLL loop divider, Fout = Fin * 50 */
@@ -168,10 +47,7 @@ const clock_video_pll_config_t videoPllConfig_BOARD_BootClockRUN =
         .denominator = 1,                         /* 30 bit denominator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
         .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
     };
-/*******************************************************************************
- * Code for BOARD_BootClockRUN configuration
- ******************************************************************************/
-void BOARD_BootClockRUN(void)
+void rt1060_init_boot_clock(void)
 {
     /* Init RTC OSC clock frequency. */
     CLOCK_SetRtcXtalFreq(32768U);
@@ -235,7 +111,6 @@ void BOARD_BootClockRUN(void)
     /* In SDK projects, SDRAM (configured by SEMC) will be initialized in either debug script or dcd.
      * With this macro SKIP_SYSCLK_INIT, system pll (selected to be SEMC source clock in SDK projects) will be left unchanged.
      * Note: If another clock source is selected for SEMC, user may want to avoid changing that clock as well.*/
-#ifndef SKIP_SYSCLK_INIT
     /* Disable Semc clock gate. */
     CLOCK_DisableClock(kCLOCK_Semc);
     /* Set SEMC_PODF. */
@@ -244,7 +119,6 @@ void BOARD_BootClockRUN(void)
     CLOCK_SetMux(kCLOCK_SemcAltMux, 0);
     /* Set Semc clock source. */
     CLOCK_SetMux(kCLOCK_SemcMux, 0);
-#endif
     /* In SDK projects, external flash (configured by FLEXSPI) will be initialized by dcd.
      * With this macro XIP_EXTERNAL_FLASH, usb1 pll (selected to be FLEXSPI clock source in SDK projects) will be left unchanged.
      * Note: If another clock source is selected for FLEXSPI, user may want to avoid changing that clock as well.*/

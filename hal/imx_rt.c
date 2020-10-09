@@ -29,15 +29,11 @@
 #include "fsl_iomuxc.h"
 #include "fsl_nor_flash.h"
 #include "fsl_flexspi.h"
-//#include "evkmimxrt1060_flexspi_nor_config.h"
 #include "fsl_flexspi_nor_flash.h"
 #include "imx_rt_nor.h"
 #include "xip/fsl_flexspi_nor_boot.h"
 
-
-
 #ifdef __WOLFBOOT
-
 
 /** Built-in ROM API for bootloaders **/
 
@@ -346,7 +342,7 @@ void hal_prepare_boot(void)
 {
 }
 
-#endif
+#endif /* __WOLFBOOT */
 
 static nor_handle_t norHandle = {NULL};
 static serial_nor_config_option_t flexspi_cfg_option = {};

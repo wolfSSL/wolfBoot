@@ -87,7 +87,7 @@ ifeq ($(TARGET),imx_rt)
   LDFLAGS+=-mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections -ffreestanding -fno-builtin -mthumb -mapcs -Xlinker --gc-sections -Xlinker -static -Xlinker -z -Xlinker muldefs -Xlinker -Map=output.map -static -lm -lc -lnosys
   LSCRIPT_TEMPLATE=imx_rt.ld
   APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-            imx_rt_board.o imx_rt_pin_mux.o imx_rt_clock_config.o $(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o \
+            imx_rt_clock_config.o $(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o \
 		    $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o \
             $(MCUXPRESSO_DRIVERS)/utilities/str/fsl_str.o \
             $(MCUXPRESSO)/components/uart/lpuart_adapter.o \
