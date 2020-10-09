@@ -125,7 +125,6 @@ ifeq ($(ARCH),RISCV)
   ARCH_FLASH_OFFSET=0x20010000
 endif
 
-
 ifeq ($(TARGET),kinetis)
   CFLAGS+= -I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_flash.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_cache.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_controller.o
@@ -135,6 +134,27 @@ ifeq ($(TARGET),kinetis)
       PKA_EXTRA_CFLAGS+=-DFREESCALE_LTC_ECC -DFREESCALE_USE_LTC -DFREESCALE_LTC_TFM
       PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ltc.o
     endif
+  endif
+endif
+
+ifeq ($(TARGET),imx_rt)
+  ARCH_FLASH_OFFSET=0x60000000
+  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 \
+		  -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
+		  -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
+		  -I$(MCUXPRESSO)/components/uart/ \
+		  -I$(MCUXPRESSO)/components/flash/nor \
+		  -I$(MCUXPRESSO)/components/flash/nor/flexspi \
+		  -I$(MCUXPRESSO)/components/serial_manager/ \
+		  -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
+		  -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
+		  -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
+  OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
+  ifeq ($(PKA),1)
+     PKA_EXTRA_OBJS+= \
+         $(MCUXPRESSO)/devices/MIMXRT1062/drivers/fsl_dcp.o \
+         ./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
+     PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
   endif
 endif
 

@@ -667,7 +667,7 @@ make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 
 #### Debugging
 
-`qemu-system-aarch64 -M raspi3 -kernel /home/dan/src/wolfboot/factory.bin -serial stdio -gdb tcp::3333 -S`
+`qemu-system-aarch64 -M raspi3 -kernel /path/to/wolfboot/factory.bin -serial stdio -gdb tcp::3333 -S`
 
 #### Signing
 
@@ -728,7 +728,7 @@ Compile and install the customized OpenOCD.
 Use the following configuration file when running `openocd` to connect to the PSoC6 board:
 
 ```
-# openocd.cfg for PSoC-62S2
+### openocd.cfg for PSoC-62S2
 
 source [find interface/kitprog3.cfg]
 transport select swd
@@ -771,3 +771,23 @@ the monitor command sequence below:
 (gdb) mon reset init
 (gdb) mon psoc6 reset_halt
 ```
+
+## NXP iMX-RT1060/1062 (RT1060-EVK)
+
+The NXP iMX-RT1060 is a Cortex-M7 with a DCP coprocessor for SHA256 acceleration.
+Example configuration for this target is provided in `./config/examples/imx-rt1060.config`.
+
+### Building wolfBoot
+
+MCUXpresso SDK is required by wolfBoot to access device drivers on this platform.
+A package can be obtained from the [MCUXpresso SDK Builder](https://mcuxpresso.nxp.com/en/welcome), by selecting `EVK-MIMXRT1060` as target, and keeping the default choice of components.
+
+Set the `MCUXPRESSO` configuration variable to the path where the SDK package is extracted, then build wolfBoot normally by running `make`.
+
+wolfBoot support for iMX-RT1060 has been tested using MCUXpresso SDK version 2.8.2.
+
+DCP support (hardware acceleration for SHA256 operations) can be enabled by using PKA=1 in the configuration file.
+Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device (RT1060-EVK).
+
+
+
