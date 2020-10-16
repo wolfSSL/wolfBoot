@@ -32,6 +32,10 @@
 #   define unit_dbg(...) do{}while(0)
 #endif
 
+#ifndef TRAILER_SKIP
+#   define TRAILER_SKIP 0
+#endif
+
 #if defined(EXT_ENCRYPTED)
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
@@ -43,6 +47,7 @@
         #define XMEMCMP memcmp
     #endif
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
+    #define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET)
 #else
     #define XMEMCPY memcpy
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
@@ -64,18 +69,20 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
  *  - PART_UPDATE_ENDFLAGS = top of flags for UPDATE_PARTITION
  */
 
-#ifndef TRAILER_SKIP
-#   define TRAILER_SKIP 0
-#endif
-#define PART_BOOT_ENDFLAGS   (WOLFBOOT_PARTITION_BOOT_ADDRESS   + ENCRYPT_TMP_SECRET_OFFSET)
-#define TRAILER_OVERHEAD (4 + 1 + (WOLFBOOT_PARTITION_SIZE  / (8 * WOLFBOOT_SECTOR_SIZE))) /* MAGIC + PART_FLAG (1B) + (N_SECTORS / 8) */
-#define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
-
+#define PART_BOOT_ENDFLAGS   (WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET)
 #define FLAGS_BOOT_EXT() PARTN_IS_EXT(PART_BOOT)
 
 #ifdef FLAGS_HOME
-/* All FLAGS live at the end of the boot partition: */
-#define PART_UPDATE_ENDFLAGS (((PART_BOOT_ENDFLAGS - TRAILER_OVERHEAD) / WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE) 
+/*
+ * In FLAGS_HOME mode, all FLAGS live at the end of the boot partition:
+ *                        / -12    /-8       /-4     / END
+ *  |Sn| ... |S2|S1|S0|PU|  MAGIC  |X|X|X|PB| MAGIC |
+ *   ^--sectors   --^  ^--update           ^---boot partition
+ *      flags             partition            flag
+ *                        flag
+ *
+ * */
+#define PART_UPDATE_ENDFLAGS (PART_BOOT_ENDFLAGS - 8)
 #define FLAGS_UPDATE_EXT() PARTN_IS_EXT(PART_BOOT)
 #else
 /* FLAGS are at the end of each partition */
@@ -224,19 +231,20 @@ static uint8_t* RAMFUNCTION get_partition_state(uint8_t part)
     return (uint8_t *)get_trailer_at(part, 1);
 }
 
-static uint8_t* RAMFUNCTION get_sector_flags(uint8_t part, uint32_t pos)
-{
-    return (uint8_t *)get_trailer_at(part, 2 + pos);
-}
 
 static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
 {
     set_trailer_at(part, 1, val);
 }
 
-static void RAMFUNCTION set_sector_flags(uint8_t part, uint32_t pos, uint8_t val)
+static void RAMFUNCTION set_update_sector_flags(uint32_t pos, uint8_t val)
 {
-    set_trailer_at(part, 2 + pos, val);
+    set_trailer_at(PART_UPDATE, 2 + pos, val);
+}
+
+static uint8_t* RAMFUNCTION get_update_sector_flags(uint32_t pos)
+{
+    return (uint8_t *)get_trailer_at(PART_UPDATE, 2 + pos);
 }
 
 int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
@@ -252,22 +260,24 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
-int RAMFUNCTION wolfBoot_set_sector_flag(uint8_t part, uint16_t sector, uint8_t newflag)
+int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag)
 {
     uint32_t *magic;
     uint8_t *flags;
     uint8_t fl_value;
     uint8_t pos = sector >> 1;
-    magic = get_partition_magic(part);
+
+    magic = get_partition_magic(PART_UPDATE);
     if (*magic != wolfboot_magic_trail)
-        set_partition_magic(part);
-    flags = get_sector_flags(part, pos);
+        set_partition_magic(PART_UPDATE);
+
+    flags = get_update_sector_flags(pos);
     if (sector == (pos << 1))
         fl_value = (*flags & 0xF0) | (newflag & 0x0F);
     else
         fl_value = ((newflag & 0x0F) << 4) | (*flags & 0x0F);
     if (fl_value != *flags)
-        set_sector_flags(part, pos, fl_value);
+        set_update_sector_flags(pos, fl_value);
     return 0;
 }
 
@@ -283,15 +293,15 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     return 0;
 }
 
-int wolfBoot_get_sector_flag(uint8_t part, uint16_t sector, uint8_t *flag)
+int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag)
 {
     uint32_t *magic;
     uint8_t *flags;
     uint8_t pos = sector >> 1;
-    magic = get_partition_magic(part);
+    magic = get_partition_magic(PART_UPDATE);
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
         return -1;
-    flags = get_sector_flags(part, pos);
+    flags = get_update_sector_flags(pos);
     if (sector == (pos << 1))
         *flag = *flags & 0x0F;
     else

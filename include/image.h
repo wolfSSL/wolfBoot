@@ -65,10 +65,10 @@ struct wolfBoot_image {
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
-int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
-int wolfBoot_set_sector_flag(uint8_t part, uint16_t sector, uint8_t newflag);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
-int wolfBoot_get_sector_flag(uint8_t part, uint16_t sector, uint8_t *flag);
+int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
+int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
+int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
 
 uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32_t* sz);
 
