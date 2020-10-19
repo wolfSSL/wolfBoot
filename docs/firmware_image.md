@@ -31,8 +31,8 @@ firmware image (excluding the header). All numbers in the header are stored in L
 
 The two fixed fields are followed by one or more tags. Each TAG is structured as follows:
 
-  - 1 Byte indicating the **Type**
-  - 1 Byte indicating the **size** of the tag, excluding the type and size bytes
+  - 2 Bytes indicating the **Type**
+  - 2 Bytes indicating the **size** of the tag, excluding the type and size bytes
   - ***N*** bytes of tag content
 
 With the following two exception:
