@@ -31,20 +31,20 @@ firmware image (excluding the header). All numbers in the header are stored in L
 
 The two fixed fields are followed by one or more tags. Each TAG is structured as follows:
 
-  - 1 Byte indicating the **Type**
-  - 1 Byte indicating the **size** of the tag, excluding the type and size bytes
+  - 2 bytes indicating the **Type**
+  - 2 bytes indicating the **size** of the tag, excluding the type and size bytes
   - ***N*** bytes of tag content
 
-With the following two exception:
-  - A '0' in the Type field indicate the end of the Tag. The rest of the header carries no more Tags. The 'end of tags' type has no **size** field.
+With the following exception:
   - A '0xFF' in the Type field indicate a simple padding byte. The 'padding' byte has no **size** field, and the next byte should be processed as **Type** again.
 
 Each **Type** has a different meaning, and integrate information about the firmware. The following Tags are mandatory for validating the firmware image:
 
-  - A 'version' Tag (type: 0x01, size: 4 Bytes) indicating the version number for the firmware stored in the image
-  - A 'timestamp' Tag (type: 0x02, size 8 Bytes) indicating the timestamp in unix seconds for the creation of the firmware
-  - A 'sha256 digest' Tag (type: 0x03, size: 32 Bytes) used for integrity check of the firmware
-  - A 'firmware signature' Tag (type: 0x20, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
+  - A 'version' Tag (type: 0x0001, size: 4 Bytes) indicating the version number for the firmware stored in the image
+  - A 'timestamp' Tag (type: 0x0002, size 8 Bytes) indicating the timestamp in unix seconds for the creation of the firmware
+  - A 'sha256 digest' Tag (type: 0x0003, size: 32 Bytes) used for integrity check of the firmware
+  - A 'firmware signature' Tag (type: 0x0020, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
+  - A 'firmware type' Tag (type: 0x0030, size: 2 Bytes) used to identify the type of firmware, and the authentication mechanism in use.
 
 Optionally, a 'public key hint digest' Tag can be transmitted in the header (type: 0x10, size:32 Bytes). This Tag contains the SHA256 digest of the public key used 
 by the signing tool. The bootloader may use this field to locate the correct public key in case of multiple keys available.
