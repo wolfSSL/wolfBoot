@@ -96,6 +96,10 @@ ifeq ($(FLAGS_HOME),1)
   CFLAGS+=-DFLAGS_HOME=1
 endif
 
+ifeq ($(FLAGS_INVERT),1)
+  CFLAGS+=-DWOLFBOOT_FLAGS_INVERT=1
+endif
+
 ifeq ($(DUALBANK_SWAP),1)
   CFLAGS+=-DDUALBANK_SWAP=1
 endif

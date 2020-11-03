@@ -84,10 +84,17 @@
 #define PART_DTS_BOOT       (PART_DTS | PART_BOOT)
 #define PART_DTS_UPDATE     (PART_DTS | PART_UPDATE)
 
-#define IMG_STATE_NEW 0xFF
-#define IMG_STATE_UPDATING 0x70
-#define IMG_STATE_TESTING 0x10
-#define IMG_STATE_SUCCESS 0x00
+#ifndef WOLFBOOT_FLAGS_INVERT
+#define IMG_STATE_NEW       0xFF
+#define IMG_STATE_UPDATING  0x70
+#define IMG_STATE_TESTING   0x10
+#define IMG_STATE_SUCCESS   0x00
+#else
+#define IMG_STATE_NEW       0x00
+#define IMG_STATE_UPDATING  0x8F
+#define IMG_STATE_TESTING   0xEF
+#define IMG_STATE_SUCCESS   0xFF
+#endif
 
 
 void wolfBoot_erase_partition(uint8_t part);

@@ -42,11 +42,17 @@
 #endif
 #endif
 
-
-#define SECT_FLAG_NEW 0x0F
+#ifndef WOLFBOOT_FLAGS_INVERT
+#define SECT_FLAG_NEW      0x0F
 #define SECT_FLAG_SWAPPING 0x07
-#define SECT_FLAG_BACKUP 0x03
-#define SECT_FLAG_UPDATED 0x00
+#define SECT_FLAG_BACKUP   0x03
+#define SECT_FLAG_UPDATED  0x00
+#else
+#define SECT_FLAG_NEW       0x00
+#define SECT_FLAG_SWAPPING  0x08
+#define SECT_FLAG_BACKUP    0x0c
+#define SECT_FLAG_UPDATED   0x0f
+#endif
 
 
 struct wolfBoot_image {
@@ -165,7 +171,7 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 #define UBOOT_FDT_MAGIC	    0xEDFE0DD0UL
 
 #ifndef EXT_ENCRYPTED
-#define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + sizeof(uint32_t) + (WOLFBOOT_PARTITION_SIZE + 1 / (WOLFBOOT_SECTOR_SIZE * 8)))) 
+#define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + sizeof(uint32_t) + (WOLFBOOT_PARTITION_SIZE + 1 / (WOLFBOOT_SECTOR_SIZE * 8))))
 #else
 #include "encrypt.h"
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - ENCRYPT_TMP_SECRET_OFFSET)
