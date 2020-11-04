@@ -170,7 +170,7 @@ static int wolfBoot_update(int fallback_allowed)
         return -1;
 
     /* Check the first sector to detect interrupted update */
-    if ((wolfBoot_get_sector_flag(PART_UPDATE, 0, &flag) < 0) || (flag == SECT_FLAG_NEW))
+    if ((wolfBoot_get_update_sector_flag(0, &flag) < 0) || (flag == SECT_FLAG_NEW))
     {
         uint16_t update_type;
         /* In case this is a new update, do the required
@@ -203,11 +203,11 @@ static int wolfBoot_update(int fallback_allowed)
      * If something goes wrong, the operation will be resumed upon reboot.
      */
     while ((sector * sector_size) < total_size) {
-        if ((wolfBoot_get_sector_flag(PART_UPDATE, sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
+        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
            wolfBoot_copy_sector(&update, &swap, sector);
            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-               wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
+               wolfBoot_set_update_sector_flag(sector, flag);
         }
         if (flag == SECT_FLAG_SWAPPING) {
             uint32_t size = total_size - (sector * sector_size);
@@ -216,7 +216,7 @@ static int wolfBoot_update(int fallback_allowed)
             flag = SECT_FLAG_BACKUP;
             wolfBoot_copy_sector(&boot, &update, sector);
            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-                wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
+                wolfBoot_set_update_sector_flag(sector, flag);
         }
         if (flag == SECT_FLAG_BACKUP) {
             uint32_t size = total_size - (sector * sector_size);
@@ -225,7 +225,7 @@ static int wolfBoot_update(int fallback_allowed)
             flag = SECT_FLAG_UPDATED;
             wolfBoot_copy_sector(&swap, &boot, sector);
             if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-                wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
+                wolfBoot_set_update_sector_flag(sector, flag);
         }
         sector++;
     }
@@ -244,11 +244,11 @@ static int wolfBoot_update(int fallback_allowed)
      * before the copy is finished.
      */
     while ((sector * sector_size) < total_size) {
-        if ((wolfBoot_get_sector_flag(PART_UPDATE, sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
+        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
            wolfBoot_copy_sector(&update, &boot, sector);
            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-               wolfBoot_set_sector_flag(PART_UPDATE, sector, flag);
+               wolfBoot_set_update_sector_flag(sector, flag);
         }
         sector++;
     }

@@ -31,6 +31,7 @@
 
 void main(void) {
     boot_led_on();
+    wolfBoot_success();
     /* Wait for reboot */
     while(1)
         ;

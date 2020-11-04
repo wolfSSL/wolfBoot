@@ -42,11 +42,17 @@
 #endif
 #endif
 
-
-#define SECT_FLAG_NEW 0x0F
+#ifndef WOLFBOOT_FLAGS_INVERT
+#define SECT_FLAG_NEW      0x0F
 #define SECT_FLAG_SWAPPING 0x07
-#define SECT_FLAG_BACKUP 0x03
-#define SECT_FLAG_UPDATED 0x00
+#define SECT_FLAG_BACKUP   0x03
+#define SECT_FLAG_UPDATED  0x00
+#else
+#define SECT_FLAG_NEW       0x00
+#define SECT_FLAG_SWAPPING  0x08
+#define SECT_FLAG_BACKUP    0x0c
+#define SECT_FLAG_UPDATED   0x0f
+#endif
 
 
 struct wolfBoot_image {
@@ -65,10 +71,10 @@ struct wolfBoot_image {
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
-int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
-int wolfBoot_set_sector_flag(uint8_t part, uint16_t sector, uint8_t newflag);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
-int wolfBoot_get_sector_flag(uint8_t part, uint16_t sector, uint8_t *flag);
+int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
+int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
+int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
 
 uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32_t* sz);
 
@@ -165,7 +171,7 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 #define UBOOT_FDT_MAGIC	    0xEDFE0DD0UL
 
 #ifndef EXT_ENCRYPTED
-#define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + sizeof(uint32_t) + (WOLFBOOT_PARTITION_SIZE + 1 / (WOLFBOOT_SECTOR_SIZE * 8)))) 
+#define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP + sizeof(uint32_t) + (WOLFBOOT_PARTITION_SIZE + 1 / (WOLFBOOT_SECTOR_SIZE * 8))))
 #else
 #include "encrypt.h"
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - ENCRYPT_TMP_SECRET_OFFSET)
