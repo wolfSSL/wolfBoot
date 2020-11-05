@@ -75,6 +75,7 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/tfm.o \
     ./src/xmalloc_rsa.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
