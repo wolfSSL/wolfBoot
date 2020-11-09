@@ -162,7 +162,7 @@
 
 /* QSPI Configuration */
 #define GQSPI_CLK_FREQ_HZ      124987511
-#define GQSPI_CLK_DIV          1 /* (CLK / (2 << val) = BUS) */
+#define GQSPI_CLK_DIV          2 /* (CLK / (2 << val) = BUS) - DIV 2 = 37.5 MHz */
 #define GQSPI_CS_ASSERT_CLOCKS 5 /* CS Setup Time (tCSS) - num of clock cycles foes in IMM */
 #define GQSPI_QSPI_MODE        GQSPI_GEN_FIFO_MODE_SPI
 #define GQSPI_BUS_WIDTH        1
