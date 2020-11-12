@@ -1,6 +1,7 @@
 -include ../.config
 -include ../tools/config.mk
-include ../options.mk
+-include ../options.mk
+
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS

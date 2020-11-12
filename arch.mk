@@ -2,6 +2,10 @@
 
 UPDATE_OBJS:=./src/update_flash.o
 
+ifeq ($(SIGN),RSA4096)
+  SPMATH=0
+endif
+
 # check for FASTMATH or SP_MATH
 ifeq ($(SPMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o

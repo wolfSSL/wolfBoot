@@ -1,8 +1,4 @@
 
-ifeq ($(SIGN),RSA4096)
-  SPMATH=0
-endif
-
 ## DSA Settings
 ifeq ($(SIGN),ECC256)
   KEYGEN_OPTIONS+=--ecc256
@@ -75,7 +71,6 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/tfm.o \
     ./src/xmalloc_rsa.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
@@ -191,7 +186,6 @@ ifeq ($(WOLFTPM),1)
     WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
   endif
 endif
-OBJS+=$(WOLFCRYPT_OBJS)
 
 ## Hash settings
 ifeq ($(HASH),SHA256)
@@ -203,3 +197,5 @@ ifeq ($(HASH),SHA3)
   CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
   SIGN_OPTIONS+=--sha3
 endif
+
+OBJS+=$(WOLFCRYPT_OBJS)
