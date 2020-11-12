@@ -96,7 +96,6 @@ static void flash_write_enable(void)
 
 static void flash_write_disable(void)
 {
-    //uint8_t status;
     spi_cmd(WRDI);
 }
 
@@ -202,7 +201,6 @@ uint16_t spi_flash_probe(void)
 
 void spi_flash_sector_erase(uint32_t address)
 {
-    //uint8_t status;
     address &= (~(SPI_FLASH_SECTOR_SIZE - 1));
 
     wait_busy();

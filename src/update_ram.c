@@ -26,15 +26,9 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_flash.h"
+#include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
-
-#ifdef DEBUG_ZYNQ
-    #include <stdio.h>
-    #ifndef USE_QNX
-        #include "xil_printf.h"
-    #endif
-#endif
 
 extern void hal_flash_dualbank_swap(void);
 
@@ -46,7 +40,7 @@ static inline void boot_panic(void)
 
 void RAMFUNCTION wolfBoot_start(void)
 {
-    int active, ret[3];
+    int active, ret = 0;
     struct wolfBoot_image os_image;
     uint32_t* load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
     uint8_t* image_ptr;
@@ -57,9 +51,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
     active = wolfBoot_dualboot_candidate();
 
-#ifdef DEBUG_ZYNQ
-    xil_printf("Active Part %d\n", active);
-#endif
+    wolfBoot_printf("Active Part %d\n", active);
 
     if (active < 0) /* panic if no images available */
         boot_panic();
@@ -75,13 +67,12 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 
     for (;;) {
-        if (((ret[0] = wolfBoot_open_image(&os_image, active)) < 0) ||
-            ((ret[1] = wolfBoot_verify_integrity(&os_image)) < 0) ||
-            ((ret[2] = wolfBoot_verify_authenticity(&os_image)) < 0)) {
+        if (((ret = wolfBoot_open_image(&os_image, active)) < 0) ||
+            ((ret = wolfBoot_verify_integrity(&os_image) < 0)) ||
+            ((ret = wolfBoot_verify_authenticity(&os_image)) < 0)) {
 
-        #ifdef DEBUG_ZYNQ
-            xil_printf("Part %d: Failure: %d %d %d\n", active, ret[0], ret[1], ret[2]);
-        #endif
+        wolfBoot_printf("Failure %d: Part %d, Hdr %d, Hash %d, Sig %d\n", ret, 
+            active, os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
 
             /* panic if authentication fails and no backup */
             if (!wolfBoot_fallback_is_possible())
@@ -98,9 +89,7 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
 
-#ifdef DEBUG_ZYNQ
-    xil_printf("Firmware Valid\n");
-#endif
+    wolfBoot_printf("Firmware Valid\n");
 
 	/* First time we boot this update, set to TESTING to await
      * confirmation from the system
@@ -128,9 +117,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef EXT_FLASH
     /* Load image to RAM */
     if (PART_IS_EXT(&os_image)) {
-    #ifdef DEBUG_ZYNQ
-        xil_printf("Loading %d to RAM at %08lx\n", os_image.fw_size, load_address);
-    #endif
+        wolfBoot_printf("Loading %d to RAM at %08lx\n", os_image.fw_size, load_address);
 
         ext_flash_read((uintptr_t)os_image.fw_base, 
                        (uint8_t*)load_address,
@@ -146,9 +133,7 @@ void RAMFUNCTION wolfBoot_start(void)
     #ifdef EXT_FLASH
         /* Load DTS to RAM */
         if (PART_IS_EXT(&os_image)) {
-        #ifdef DEBUG_ZYNQ
-            xil_printf("Loading DTS %d to RAM at %08lx\n", os_image.fw_size, dts_address);
-        #endif
+            wolfBoot_printf("Loading DTS %d to RAM at %08lx\n", os_image.fw_size, dts_address);
 
             ext_flash_read((uintptr_t)os_image.fw_base, 
                         (uint8_t*)dts_address,
@@ -160,9 +145,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
     hal_prepare_boot();
 	
-#ifdef DEBUG_ZYNQ
-    xil_printf("Booting at %08lx\n", load_address);
-#endif
+    wolfBoot_printf("Booting at %08lx\n", load_address);
 
 #ifdef MMU
     do_boot((uint32_t*)load_address, (uint32_t*)dts_address);

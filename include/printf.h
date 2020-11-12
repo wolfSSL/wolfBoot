@@ -24,11 +24,20 @@
 #ifndef WOLFBOOT_PRINTF_INCLUDED
 #define WOLFBOOT_PRINTF_INCLUDED
 
-#ifdef PRINTF_ENABLED
-    /* TODO */
-#else
-#   define wolfBoot_printf(...) do{}while(0)
+#if defined(DEBUG_ZYNQ) && !defined(PRINTF_ENABLED)
+#    define PRINTF_ENABLED
+#endif
 
+#ifdef PRINTF_ENABLED
+#   include <stdio.h>
+#   if defined(DEBUG_ZYNQ) && !defined(USE_QNX)
+#       include "xil_printf.h"
+#       define wolfBoot_printf(_f_, ...) xil_printf(_f_, ##__VA_ARGS__)
+#   else
+#       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
+#   endif
+#else
+#   define wolfBoot_printf(_f_, ...) do{}while(0)
 #endif
 
 #endif /* !WOLFBOOT_PRINTF_INCLUDED */
