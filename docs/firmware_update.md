@@ -25,7 +25,7 @@ Using the [API](API.md) provided to the application, wolfBoot offers the possibi
 rollback an update.
 
 After storing the new firmware image in the UPDATE partition, the application should initiate the update by calling
-`wolfBoot_update()`. By doing so, the UPDATE partition is marked for update. Upon the next reboot, wolfBoot will:
+`wolfBoot_update_trigger()`. By doing so, the UPDATE partition is marked for update. Upon the next reboot, wolfBoot will:
   - Validate the new firmware image stored in the UPDATE partition
   - Verify the signature attached against a known public key stored in the bootloader image
   - Swap the content of the BOOT and the UPDATE partitions
