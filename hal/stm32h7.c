@@ -84,8 +84,11 @@
 #define PWR_D3CR_VOS_SCALE_1 (3)
 
 #define SYSCFG_BASE          (0x58000400) //RM0433 - Table 8
+#define SYSCFG_PMCR          (*(volatile uint32_t *)(SYSCFG_BASE + 0x04))  //RM0433 - 5.8.4
 #define SYSCFG_PWRCR         (*(volatile uint32_t *)(SYSCFG_BASE + 0x04))  //RM0433 - 5.8.4
+#define SYSCFG_UR0           (*(volatile uint32_t *)(SYSCFG_BASE + 0x300))  //RM0433 - 12.3.1.2
 #define SYSCFG_PWRCR_ODEN    (1 << 0)
+#define SYSCFG_UR0_BKS       (1 << 0)   // bank swap
 
 /*** APB PRESCALER ***/
 #define RCC_PRESCALER_DIV_NONE 0
@@ -166,54 +169,69 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
       FLASH_SR2 |= ( FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |  FLASH_SR_INCERR | FLASH_SR_OPERR |FLASH_SR_RDPERR | FLASH_SR_RDSERR | FLASH_SR_SNECCERR|FLASH_SR_DBECCERR ) ;
 }
 
+static void RAMFUNCTION flash_program_on(uint8_t bank)
+{
+    if (bank == 0) {
+        FLASH_CR1 |= FLASH_CR_PG;
+        while ((FLASH_CR1 & FLASH_CR_PG) == 0)
+            ;
+    } else {
+        FLASH_CR2 |= FLASH_CR_PG;
+        while ((FLASH_CR1 & FLASH_CR_PG) == 0)
+            ;
+    }
+}
+
+static void RAMFUNCTION flash_program_off(uint8_t bank)
+{
+    if (bank == 0) {
+        FLASH_CR1 &= ~FLASH_CR_PG;
+    } else {
+        FLASH_CR2 &= ~FLASH_CR_PG;
+    }
+}
+
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-  int i = 0, ii =0;
-  uint32_t *src, *dst, reg;
-  uint8_t bank=0;
+    int i = 0, ii =0;
+    uint32_t *src, *dst;
+    uint8_t bank=0;
 
-  flash_clear_errors(0);
-  flash_clear_errors(1);
-
-  src = (uint32_t *)data;
-  dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
-
-  while (i < len) {
-
-    if (dst < (uint32_t *)(FLASH_BANK2_BASE) )
-    {
-      bank=0;
-      FLASH_CR1 |= FLASH_CR_PG;
+    if ((address & 0x01000000) != 0) {
+        bank = 1;
     }
 
-    if( dst>=((uint32_t *)(FLASH_BANK2_BASE)) && dst <= ((uint32_t *)(FLASH_TOP)))
-    {
-      bank=1;
-      FLASH_CR2 |= FLASH_CR_PG;
+    while (i < len) {
+        flash_clear_errors(0);
+        flash_clear_errors(1);
+        flash_program_on(bank);
+        flash_wait_complete(bank);
+        if ((len - i > 32) && ((((address + i) & 0x1F) == 0)  && ((((uint32_t)data) + i) & 0x1F) == 0)) {
+            src = (uint32_t *)(data + i);
+            dst = (uint32_t *)(address + i);
+            for (ii = 0; ii < 8; ii++) {
+                dst[ii] = src[ii];
+            }
+            i+=32;
+        } else {
+            uint32_t val[8];
+            uint8_t *vbytes = (uint8_t *)(val);
+            int off = (address + i) - (((address + i) >> 5) << 5);
+            uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
+            dst = (uint32_t *)(base_addr);
+            for (ii = 0; ii < 8; ii++) {
+                val[ii] = dst[ii];
+            }
+            while ((off < 8) && (i < len))
+                vbytes[off++] = data[i++];
+            for (ii = 0; ii < 8; ii++) {
+                dst[ii] = val[ii];
+            }
+        }
+        flash_wait_complete(bank);
+        flash_program_off(bank);
     }
-
-    ISB();
-    DSB();
-    for(ii=0; ii<8;ii++)
-    {
-      *dst=*src;
-      dst++;
-      src++;
-    }
-    ISB();
-    DSB();
-
-    flash_wait_complete(bank);
-
-    if(bank==0)
-      FLASH_CR1 &= ~FLASH_CR_PG;
-    if(bank==1)
-      FLASH_CR2 &= ~FLASH_CR_PG;
-
-    i+=32;
-  }
-
-  return 0;
+    return 0;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -417,6 +435,19 @@ static void clock_pll_on(int powersave)
 
     /* Wait for PLL clock to be selected. */
     while ((RCC_CFGR & ((1 << 2) | (1 << 1) | (1 << 0))) != RCC_CFGR_SW_PLL) {};
+}
+
+void RAMFUNCTION hal_flash_dualbank_swap(void)
+{
+    hal_flash_unlock();
+    DMB();
+    ISB();
+    if (SYSCFG_UR0 & SYSCFG_UR0_BKS)
+        SYSCFG_UR0 &= ~SYSCFG_UR0_BKS;
+    else
+        SYSCFG_UR0 |= SYSCFG_UR0_BKS;
+    DMB();
+    hal_flash_lock();
 }
 
 void hal_init(void)
