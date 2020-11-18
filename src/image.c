@@ -62,6 +62,14 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 
 #ifdef WOLFBOOT_SIGN_ECC256
 #include <wolfssl/wolfcrypt/ecc.h>
+
+#ifdef HSM_ECC256
+#include "cse_constant.h"
+#include "cse_errno.h"
+#include "cse_ext_ecc_key.h"
+#include "cse_ext_ecc.h"
+#endif
+
 #define ECC_KEY_SIZE  32
 static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 {
@@ -93,6 +101,35 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     #endif
         ret = -1;
     }
+#elif defined(HSM_ECC256)
+    struct ecc_pub_key_stt pub_key;
+    struct ecc_priv_key_stt priv_key;
+    struct ecdsa_signature_stt ecdsa_sign;
+    uint32_t digest_size = 256 / 8;
+    verify_res = 1;
+
+    #define C_NIST_P_256 0x50323536U
+    (void)cse_ecc_change_curve(C_NIST_P_256);
+    /* Initializes public key */
+    pub_key.pub_key_coordX = KEY_BUFFER;
+    pub_key.pub_key_coordX_size = ECC_KEY_SIZE;
+    pub_key.pub_key_coordY = KEY_BUFFER + ECC_KEY_SIZE;
+    pub_key.pub_key_coordY_size = ECC_KEY_SIZE;
+
+    /* No Private key */
+    priv_key.priv_key = NULL;
+    priv_key.priv_key_size = 0;
+    (void)cse_ecc_load_ramkey(&pub_key, &priv_key);
+    ecdsa_sign.sigR = sig;
+    ecdsa_sign.sigR_size = ECC_KEY_SIZE;
+    ecdsa_sign.sigS = sig + ECC_KEY_SIZE;
+    ecdsa_sign.sigS_size = ECC_KEY_SIZE;
+    /* Verify digest with ECDSA */
+    (void)cse_ecc_ecdsa_digest_verify(ECC_RAM_KEY_IDX,
+				      (vuint8_t*)hash, digest_size,
+				      &ecdsa_sign, &verify_res);
+    ret = verify_res == 0 ? 0 : -1;
+    (void)cse_relax_task();
 #else
     /* wolfCrypt software ECC verify */
     mp_int r, s;
@@ -390,6 +427,48 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
         position += blksz;
     } while(position < img->fw_size);
     return wolfTPM2_HashFinish(&wolftpm_dev, &tpmHash, hash, (word32*)&hashSz);
+#elif defined(HSM_SHA256)
+    uint8_t *stored_sha, *end_sha;
+    uint16_t stored_sha_len;
+    uint8_t *p;
+    int blksz;
+    uint32_t position = 0;
+    #define HSM_HASH_CONTEXT_SIZE 128
+    uint8_t hsm_context[HSM_HASH_CONTEXT_SIZE] = {0, };
+    uint32_t hsm_context_size = HSM_HASH_CONTEXT_SIZE;
+    uint32_t digest_size = 256 / 8;
+
+    if (!img)
+        return -1;
+    p = get_img_hdr(img);
+    stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+        return -1;
+    (void)cse_hash_init(E_SHA256,
+			(uint8_t *)&hsm_context[0],
+			(uint32_t *)&hsm_context_size,
+			E_INIT_CTX,
+			NULL);
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    blksz = end_sha - p;
+    (void)cse_hash_update((uint8_t *)&hsm_context[0], p, blksz);
+    do {
+        p = get_sha_block(img, position);
+        if (p == NULL)
+            break;
+        blksz = WOLFBOOT_HSM_BUFFER_SIZE;
+        if (position + blksz > img->fw_size)
+            blksz = img->fw_size - position;
+	(void)cse_hash_update((uint8_t *)&hsm_context[0], p, blksz);
+        position += blksz;
+    } while(position < img->fw_size);
+
+    (void)cse_hash_final((uint8_t *)&hsm_context[0], hash, &digest_size);
+#ifndef HSM_ECC256
+    (void)cse_relax_task();
+#endif
+    return 0;
+
 #else
     uint8_t *stored_sha, *end_sha;
     uint16_t stored_sha_len;
