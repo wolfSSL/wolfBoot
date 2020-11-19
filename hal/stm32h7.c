@@ -222,7 +222,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             for (ii = 0; ii < 8; ii++) {
                 val[ii] = dst[ii];
             }
-            while ((off < 8) && (i < len))
+            while ((off < 32) && (i < len))
                 vbytes[off++] = data[i++];
             for (ii = 0; ii < 8; ii++) {
                 dst[ii] = val[ii];
