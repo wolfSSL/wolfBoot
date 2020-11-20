@@ -27,6 +27,7 @@
 #include <string.h>
 #include "system.h"
 #include "hal.h"
+#include "wolfboot/wolfboot.h"
 
 
 #define AHB4_CLOCK_ER (*(volatile uint32_t *)(0x580244E0))
@@ -89,6 +90,7 @@ void main(void)
     boot_led_on();
     usr_led_on();
     boot_led_off();
+    wolfBoot_update_trigger();
     while(1)
         ;
 }
