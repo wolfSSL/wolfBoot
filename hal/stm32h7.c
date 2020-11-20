@@ -99,6 +99,7 @@
 
 #define FLASH_BASE          (0x52002000)   //RM0433 - Table 8
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) //RM0433 - 3.9.1 - FLASH_ACR
+#define FLASH_OPTSR_CUR     (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
 
 /*bank 1 */
 #define FLASH_KEYR1          (*(volatile uint32_t *)(FLASH_BASE + 0x04)) //RM0433 - 3.9.2 - FLASH_KEYR 1
@@ -140,6 +141,8 @@
 #define FLASH_CR_PG                         (1 << 1)
 #define FLASH_CR2_SPSS2                     (1 << 14)
 
+#define FLASH_OPTSR_CUR_BSY                 (1 << 0)
+
 #define FLASH_CR_SNB_SHIFT                  8     //SNB bits 10:8
 #define FLASH_CR_SNB_MASK                   0x7   //SNB bits 10:8 - 3 bits
 
@@ -151,6 +154,12 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
     uint32_t reg = FLASH_ACR;
     if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates)
         FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates ;
+}
+
+static RAMFUNCTION void flash_wait_last(void)
+{
+    while((FLASH_OPTSR_CUR & FLASH_OPTSR_CUR_BSY))
+        ;
 }
 
 static RAMFUNCTION void flash_wait_complete(uint8_t bank)
@@ -202,6 +211,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     }
 
     while (i < len) {
+        flash_wait_last();
         flash_clear_errors(0);
         flash_clear_errors(1);
         flash_program_on(bank);
@@ -224,9 +234,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             }
             while ((off < 32) && (i < len))
                 vbytes[off++] = data[i++];
+            ISB();
+            DSB();
             for (ii = 0; ii < 8; ii++) {
                 dst[ii] = val[ii];
             }
+            ISB();
+            DSB();
         }
         flash_wait_complete(bank);
         flash_program_off(bank);
