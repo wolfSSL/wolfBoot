@@ -20,7 +20,8 @@
  */
 
 #include <stdint.h>
-#include <image.h>
+#include "image.h"
+#include "hal.h"
 
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
@@ -149,6 +150,28 @@
 #define FLASH_KEY1                            (0x45670123)
 #define FLASH_KEY2                            (0xCDEF89AB)
 
+
+/* STM32H7: Due to ECC functionality, it is not possible to write partition/sector
+ * flags and signature more than once. This flags_cache is used to intercept write operations and
+ * ensures that the sector is always erased before each write.
+ */
+
+#define STM32H7_SECTOR_SIZE 0x20000
+
+#if (WOLFBOOT_PARTITION_SIZE < (2 * STM32H7_SECTOR_SIZE))
+#   error "Please use a bigger WOLFBOOT_PARTITION_SIZE, since the last 128KB on each partition will be reserved for bootloader flags"
+#endif
+
+#define STM32H7_PART_BOOT_END (WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)
+#define STM32H7_PART_UPDATE_END (WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)
+#define STM32H7_WORD_SIZE (32)
+#define STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS (((STM32H7_PART_BOOT_END - 1) / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
+#define STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS (((STM32H7_PART_UPDATE_END - 1) / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
+#define STM32H7_BOOT_FLAGS_PAGE(x) ((x >= STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS) && (x < STM32H7_PART_BOOT_END))
+#define STM32H7_UPDATE_FLAGS_PAGE(x) ((x >= STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS) && (x < STM32H7_PART_UPDATE_END))
+
+static uint32_t stm32h7_cache[STM32H7_WORD_SIZE / sizeof(uint32_t)];
+
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
@@ -205,18 +228,21 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int i = 0, ii =0;
     uint32_t *src, *dst;
     uint8_t bank=0;
+    uint8_t *vbytes = (uint8_t *)(stm32h7_cache);
+    int off = (address + i) - (((address + i) >> 5) << 5);
+    uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
 
     if ((address & 0x01000000) != 0) {
         bank = 1;
     }
 
     while (i < len) {
-        flash_wait_last();
-        flash_clear_errors(0);
-        flash_clear_errors(1);
-        flash_program_on(bank);
-        flash_wait_complete(bank);
         if ((len - i > 32) && ((((address + i) & 0x1F) == 0)  && ((((uint32_t)data) + i) & 0x1F) == 0)) {
+            flash_wait_last();
+            flash_clear_errors(0);
+            flash_clear_errors(1);
+            flash_program_on(bank);
+            flash_wait_complete(bank);
             src = (uint32_t *)(data + i);
             dst = (uint32_t *)(address + i);
             for (ii = 0; ii < 8; ii++) {
@@ -224,20 +250,36 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             }
             i+=32;
         } else {
-            uint32_t val[8];
-            uint8_t *vbytes = (uint8_t *)(val);
             int off = (address + i) - (((address + i) >> 5) << 5);
             uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
             dst = (uint32_t *)(base_addr);
             for (ii = 0; ii < 8; ii++) {
-                val[ii] = dst[ii];
+                stm32h7_cache[ii] = dst[ii];
             }
-            while ((off < 32) && (i < len))
+            /* Check if flags page */
+            if (STM32H7_BOOT_FLAGS_PAGE(address)) {
+                if (base_addr != STM32H7_PART_BOOT_END - STM32H7_WORD_SIZE)
+                    return -1;
+                hal_flash_erase(STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS, STM32H7_SECTOR_SIZE);
+            } else if (STM32H7_UPDATE_FLAGS_PAGE(address)) {
+                if (base_addr != STM32H7_PART_UPDATE_END - STM32H7_WORD_SIZE)
+                    return -1;
+                hal_flash_erase(STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS, STM32H7_SECTOR_SIZE);
+            }
+            /* Replace bytes in cache */
+            while ((off < STM32H7_WORD_SIZE) && (i < len))
                 vbytes[off++] = data[i++];
+
+            /* Actual write from cache to FLASH */
+            flash_wait_last();
+            flash_clear_errors(0);
+            flash_clear_errors(1);
+            flash_program_on(bank);
+            flash_wait_complete(bank);
             ISB();
             DSB();
             for (ii = 0; ii < 8; ii++) {
-                dst[ii] = val[ii];
+                dst[ii] = stm32h7_cache[ii];
             }
             ISB();
             DSB();
@@ -289,9 +331,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     if (len == 0)
         return -1;
-    end_address = address + len - 1;
-    for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-        if (p < (FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) )
+    end_address = (address - FLASHMEM_ADDRESS_SPACE) + len - 1;
+    for (p = (address - FLASHMEM_ADDRESS_SPACE); p < end_address; p += FLASH_PAGE_SIZE) {
+        if (p < (FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE) )
         {
           uint32_t reg = FLASH_CR1 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
           FLASH_CR1 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
@@ -299,9 +341,10 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
           FLASH_CR1 |= FLASH_CR_STRT;
           flash_wait_complete(1);
         }
-        if(p>=(FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) && (p <= (FLASH_TOP -FLASHMEM_ADDRESS_SPACE) ))
+        if(p>=(FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE) && (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE) ))
         {
           uint32_t reg = FLASH_CR2 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
+          p-= (FLASH_BANK2_BASE);
           FLASH_CR2 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
           DMB();
           FLASH_CR2 |= FLASH_CR_STRT;
