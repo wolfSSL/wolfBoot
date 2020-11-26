@@ -639,7 +639,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
         return -1;
     size = (uint32_t *)(image + sizeof (uint32_t));
 
-    if (*size >= WOLFBOOT_PARTITION_SIZE)
+    if (*size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE))
        return -1;
     img->hdr_ok = 1;
     img->fw_size = *size;
