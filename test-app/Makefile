@@ -63,6 +63,10 @@ ifeq ($(TARGET),stm32f7)
   CFLAGS+=-DDUALBANK_SWAP
 endif
 
+ifeq ($(TARGET),stm32h7)
+  LSCRIPT_TEMPLATE=ARM-stm32h7.ld
+endif
+
 ifeq ($(TARGET),stm32l5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld
