@@ -553,6 +553,25 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     return 0;
 }
 
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
+static int measure_boot(uint8_t *hash)
+{
+    PCR_Extend_In pcrExtend;
+
+    /* TODO: Use DEBUG PCR16 for testing, replace with option */
+    pcrExtend.pcrHandle = 16;
+    pcrExtend.digests.count = 1;
+    pcrExtend.digests.digests[0].hashAlg = TPM_ALG_SHA256;
+    XMEMCPY(pcrExtend.digests.digests[0].digest.H,
+            hash, TPM_SHA256_DIGEST_SIZE);
+
+    if (TPM2_PCR_Extend(&pcrExtend) != TPM_RC_SUCCESS) {
+        return -1;
+    }
+    return 0;
+}
+#endif /* WOLFBOOT_MEASURED_BOOT */
+
 int wolfBoot_tpm2_init(void)
 {
     int rc;
@@ -657,6 +676,10 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
+    if (measure_boot(digest) != 0)
+        return -1;
+#endif
     if (memcmp(digest, stored_sha, stored_sha_len) != 0)
         return -1;
     img->sha_ok = 1;

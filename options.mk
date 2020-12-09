@@ -187,6 +187,10 @@ ifeq ($(WOLFTPM),1)
   endif
 endif
 
+ifeq ($(MEASURED_BOOT),1)
+ CFLAGS+=-DWOLFBOOT_MEASURED_BOOT
+endif
+
 ## Hash settings
 ifeq ($(HASH),SHA256)
   CFLAGS+=-DWOLFBOOT_HASH_SHA256
