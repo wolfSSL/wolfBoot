@@ -558,8 +558,7 @@ static int measure_boot(uint8_t *hash)
 {
     PCR_Extend_In pcrExtend;
 
-    /* TODO: Use DEBUG PCR16 for testing, replace with option */
-    pcrExtend.pcrHandle = 16;
+    pcrExtend.pcrHandle = WOLFBOOT_MEASURED_PCR_A;
     pcrExtend.digests.count = 1;
     pcrExtend.digests.digests[0].hashAlg = TPM_ALG_SHA256;
     XMEMCPY(pcrExtend.digests.digests[0].digest.H,
