@@ -556,7 +556,12 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
 static int measure_boot(uint8_t *hash)
 {
+    int rc = -1;
     PCR_Extend_In pcrExtend;
+#ifdef DEBUG
+    PCR_Read_In pcrReadCmd;
+    PCR_Read_Out pcrReadResp;
+#endif
 
     pcrExtend.pcrHandle = WOLFBOOT_MEASURED_PCR_A;
     pcrExtend.digests.count = 1;
@@ -564,10 +569,20 @@ static int measure_boot(uint8_t *hash)
     XMEMCPY(pcrExtend.digests.digests[0].digest.H,
             hash, TPM_SHA256_DIGEST_SIZE);
 
-    if (TPM2_PCR_Extend(&pcrExtend) != TPM_RC_SUCCESS) {
-        return -1;
+    rc = TPM2_PCR_Extend(&pcrExtend);
+    if (rc == TPM_RC_SUCCESS) {
+        rc = 0;
     }
-    return 0;
+
+#ifdef DEBUG
+    /* Test prcRead helps debug TPM communication and print PCR value in gdb */
+    XMEMSET(&pcrReadCmd, 0, sizeof(pcrReadCmd));
+    TPM2_SetupPCRSel(&pcrReadCmd.pcrSelectionIn, TPM_ALG_SHA256,
+                     pcrExtend.pcrHandle);
+    TPM2_PCR_Read(&pcrReadCmd, &pcrReadResp);
+#endif
+
+    return rc;
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
