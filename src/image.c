@@ -676,6 +676,11 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     if (image_hash(img, digest) != 0)
         return -1;
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
+    /*
+     * TPM measurement must be performed regardless of the
+     * verification outcome afterwards, because the purpose
+     * of a Measured Boot is to record the current boot state
+     */
     if (measure_boot(digest) != 0)
         return -1;
 #endif
