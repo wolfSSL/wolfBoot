@@ -1,3 +1,9 @@
+## Measured boot requires TPM to be present
+ifeq ($(MEASURED_BOOT),1)
+  WOLFTPM:=1
+  CFLAGS+=-DWOLFBOOT_MEASURED_BOOT
+  CFLAGS+=-DWOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)
+endif
 
 ## DSA Settings
 ifeq ($(SIGN),ECC256)
@@ -185,11 +191,6 @@ ifeq ($(WOLFTPM),1)
   ifneq ($(SPI_FLASH),1)
     WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
   endif
-endif
-
-ifeq ($(MEASURED_BOOT),1)
- CFLAGS+=-DWOLFBOOT_MEASURED_BOOT
- CFLAGS+=-DWOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)
 endif
 
 ## Hash settings
