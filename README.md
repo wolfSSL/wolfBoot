@@ -16,6 +16,8 @@ projects to provide a secure firmware update mechanism.
    - Minimalist hardware abstraction layer (HAL) interface to facilitate portability across different vendors/MCUs
    - Copy/swap images from secondary slots into the primary slots to consent firmware update operations
    - In-place chain-loading of the firmware image in the primary slot
+   - Support of Trusted Platform Module(TPM)
+   - Measured boot support, storing of the firmware image hash into a TPM Platform Configuration Register(PCR)
 
 ## Components
 
@@ -46,6 +48,7 @@ The bootloader consists of the following components:
    - Equip the application with the [wolfBoot library](docs/API.md) to interact with the bootloader
    - [Configure and compile](docs/compile.md) a bootable image with a single "make" command
    - For help signing firmware see [wolfBoot Signing](docs/Signing.md)
+   - For enabling measured boot see [wolfBoot measured boot](docs/measured_boot.md)
 
 ### Examples provided
 

@@ -1,3 +1,9 @@
+## Measured boot requires TPM to be present
+ifeq ($(MEASURED_BOOT),1)
+  WOLFTPM:=1
+  CFLAGS+=-DWOLFBOOT_MEASURED_BOOT
+  CFLAGS+=-DWOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)
+endif
 
 ## DSA Settings
 ifeq ($(SIGN),ECC256)

@@ -553,6 +553,39 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     return 0;
 }
 
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
+static int measure_boot(uint8_t *hash)
+{
+    int rc = -1;
+    PCR_Extend_In pcrExtend;
+#ifdef DEBUG
+    PCR_Read_In pcrReadCmd;
+    PCR_Read_Out pcrReadResp;
+#endif
+
+    pcrExtend.pcrHandle = WOLFBOOT_MEASURED_PCR_A;
+    pcrExtend.digests.count = 1;
+    pcrExtend.digests.digests[0].hashAlg = TPM_ALG_SHA256;
+    XMEMCPY(pcrExtend.digests.digests[0].digest.H,
+            hash, TPM_SHA256_DIGEST_SIZE);
+
+    rc = TPM2_PCR_Extend(&pcrExtend);
+    if (rc == TPM_RC_SUCCESS) {
+        rc = 0;
+    }
+
+#ifdef DEBUG
+    /* Test prcRead helps debug TPM communication and print PCR value in gdb */
+    XMEMSET(&pcrReadCmd, 0, sizeof(pcrReadCmd));
+    TPM2_SetupPCRSel(&pcrReadCmd.pcrSelectionIn, TPM_ALG_SHA256,
+                     pcrExtend.pcrHandle);
+    TPM2_PCR_Read(&pcrReadCmd, &pcrReadResp);
+#endif
+
+    return rc;
+}
+#endif /* WOLFBOOT_MEASURED_BOOT */
+
 int wolfBoot_tpm2_init(void)
 {
     int rc;
@@ -657,6 +690,15 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
+    /*
+     * TPM measurement must be performed regardless of the
+     * verification outcome afterwards, because the purpose
+     * of a Measured Boot is to record the current boot state
+     */
+    if (measure_boot(digest) != 0)
+        return -1;
+#endif
     if (memcmp(digest, stored_sha, stored_sha_len) != 0)
         return -1;
     img->sha_ok = 1;
