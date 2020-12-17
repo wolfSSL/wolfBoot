@@ -24,6 +24,11 @@
 
 #if defined(__QNXNTO__) && !defined(NO_QNX)
     #define USE_QNX
+#elif defined(USE_BUILTIN_STARTUP)
+    /* we are using Xilinx SDK to build, so use Xilinx QSPI driver */
+    #ifndef USE_XQSPIPSU
+    #define USE_XQSPIPSU
+    #endif
 #endif
 
 #include <target.h>
@@ -33,11 +38,19 @@
 #   error "wolfBoot zynq HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
 
-#ifdef USE_QNX
+
+#ifdef USE_XQSPIPSU
+    /* Xilinx BSP Driver */
+    #include "xqspipsu.h"
+    #define QSPI_DEVICE_ID		XPAR_XQSPIPSU_0_DEVICE_ID
+    #define QSPI_CLK_PRESACALE  XQSPIPSU_CLK_PRESCALE_8
+#elif defined(USE_QNX)
+    /* QNX QSPI driver */
     #include <sys/siginfo.h>
     #include "xzynq_gqspi.h"
 #endif
 
+/* QSPI bare-metal driver */
 #define CORTEXA53_0_CPU_CLK_FREQ_HZ    1099989014
 #define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
 
@@ -167,6 +180,7 @@
 #define GQSPI_TIMEOUT_TRIES    100000
 #define QSPI_FLASH_READY_TRIES 1000
 
+
 /* Flash Parameters:
  * Micron Serial NOR Flash Memory 64KB Sector Erase MT25QU01GBBB
  * Stacked device (two 512Mb die)
@@ -199,6 +213,7 @@
 
 #define FLASH_READY_MASK       0x80 /* 0=Busy, 1=Ready */
 
+
 /* Return Codes */
 #define GQSPI_CODE_SUCCESS     0
 #define GQSPI_CODE_FAILED      -100
@@ -211,7 +226,9 @@ typedef struct QspiDev {
     uint32_t bus;    /* GQSPI_GEN_FIFO_BUS_LOW, GQSPI_GEN_FIFO_BUS_UP or GQSPI_GEN_FIFO_BUS_BOTH */
     uint32_t cs;     /* GQSPI_GEN_FIFO_CS_LOWER, GQSPI_GEN_FIFO_CS_UPPER */
     uint32_t stripe; /* OFF=0 or ON=GQSPI_GEN_FIFO_STRIPE */
-#ifdef USE_QNX
+#ifdef USE_XQSPIPSU
+    XQspiPsu qspiPsuInst;
+#elif defined(USE_QNX)
     xzynq_qspi_t* qnx;
 #endif
 } QspiDev_t;
@@ -315,7 +332,88 @@ static void uart_write(const char* buf, uint32_t sz)
 #endif /* DEBUG_UART */
 
 
-#ifdef USE_QNX
+#ifdef USE_XQSPIPSU
+/* Xilinx BSP Driver */
+static int qspi_transfer(QspiDev_t* pDev,
+    const uint8_t* cmdData, uint32_t cmdSz,
+    const uint8_t* txData, uint32_t txSz,
+    uint8_t* rxData, uint32_t rxSz, uint32_t dummySz)
+{
+    int ret;
+    XQspiPsu_Msg msgs[4];
+    uint32_t msgCnt = 0, busWidth;
+
+    /* Chip Select */
+    if (pDev->cs == GQSPI_GEN_FIFO_CS_BOTH) {
+        XQspiPsu_SelectFlash(&pDev->qspiPsuInst,
+		    XQSPIPSU_SELECT_FLASH_CS_BOTH, XQSPIPSU_SELECT_FLASH_BUS_BOTH);
+    }
+    else if (pDev->cs == GQSPI_GEN_FIFO_CS_LOWER) {
+        XQspiPsu_SelectFlash(&pDev->qspiPsuInst,
+		    XQSPIPSU_SELECT_FLASH_CS_LOWER, XQSPIPSU_SELECT_FLASH_BUS_LOWER);
+    }
+    else {
+        XQspiPsu_SelectFlash(&pDev->qspiPsuInst,
+		    XQSPIPSU_SELECT_FLASH_CS_UPPER, XQSPIPSU_SELECT_FLASH_BUS_UPPER);
+    }
+
+    /* Transfer Bus Width */
+    if (pDev->mode == GQSPI_GEN_FIFO_MODE_QSPI)
+        busWidth = XQSPIPSU_SELECT_MODE_QUADSPI;
+    else if (pDev->mode == GQSPI_GEN_FIFO_MODE_DSPI)
+        busWidth = XQSPIPSU_SELECT_MODE_DUALSPI;
+    else
+        busWidth = XQSPIPSU_SELECT_MODE_SPI;
+    
+    /* Command */
+    memset(&msgs[msgCnt], 0, sizeof(XQspiPsu_Msg));
+    msgs[msgCnt].TxBfrPtr = (uint8_t*)cmdData;
+    msgs[msgCnt].ByteCount = cmdSz;
+    msgs[msgCnt].BusWidth = XQSPIPSU_SELECT_MODE_SPI;
+	msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_TX;
+    msgCnt++;
+
+    /* TX */
+    if (txData) {
+        memset(&msgs[msgCnt], 0, sizeof(XQspiPsu_Msg));
+        msgs[msgCnt].TxBfrPtr = (uint8_t*)txData;
+        msgs[msgCnt].ByteCount = txSz;
+        msgs[msgCnt].BusWidth = busWidth;
+        msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_TX;
+        if (pDev->stripe) 
+            msgs[msgCnt].Flags |= XQSPIPSU_MSG_FLAG_STRIPE;
+        msgCnt++;
+    }
+
+    /* Dummy */
+    if (dummySz > 0) {
+        memset(&msgs[msgCnt], 0, sizeof(XQspiPsu_Msg));
+        msgs[msgCnt].ByteCount = dummySz;
+        msgCnt++;
+    }
+
+    /* RX */
+    if (rxData) {
+        memset(&msgs[msgCnt], 0, sizeof(XQspiPsu_Msg));
+        msgs[msgCnt].RxBfrPtr = rxData;
+        msgs[msgCnt].ByteCount = rxSz;
+        msgs[msgCnt].BusWidth = busWidth;
+        msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_RX;
+        if (pDev->stripe) 
+            msgs[msgCnt].Flags |= XQSPIPSU_MSG_FLAG_STRIPE;
+        msgCnt++;
+    }
+
+    ret = XQspiPsu_PolledTransfer(&pDev->qspiPsuInst, msgs, msgCnt);
+    if (ret < 0) {
+        wolfBoot_printf("QSPI Transfer failed! %d\n", ret);
+        return GQSPI_CODE_FAILED;
+    }
+    return GQSPI_CODE_SUCCESS;
+}
+
+#elif defined(USE_QNX)
+/* QNX QSPI driver */
 static int qspi_transfer(QspiDev_t* pDev,
     const uint8_t* cmdData, uint32_t cmdSz,
     const uint8_t* txData, uint32_t txSz,
@@ -363,7 +461,7 @@ static int qspi_transfer(QspiDev_t* pDev,
     return GQSPI_CODE_SUCCESS;
 }
 #else
-
+/* QSPI bare-metal driver */
 static inline int qspi_isr_wait(uint32_t wait_mask, uint32_t wait_val)
 {
     uint32_t timeout = 0;
@@ -599,48 +697,7 @@ static int qspi_transfer(QspiDev_t* pDev,
     return ret;
 }
 
-#if 0
-static void qspi_dump_regs(void)
-{
-    /* Dump Registers */
-    wolfBoot_printf("Config %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x00)));
-    wolfBoot_printf("ISR %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x04)));
-    wolfBoot_printf("IER %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x08)));
-    wolfBoot_printf("IDR %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x0C)));
-    wolfBoot_printf("LQSPI_En %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x14)));
-    wolfBoot_printf("Delay %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x18)));
-    wolfBoot_printf("Slave_Idle_count %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x24)));
-    wolfBoot_printf("TX_thres %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x28)));
-    wolfBoot_printf("RX_thres %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x2C)));
-    wolfBoot_printf("GPIO %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x30)));
-    wolfBoot_printf("LPBK_DLY_ADJ %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0x38)));
-    wolfBoot_printf("LQSPI_CFG %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xA0)));
-    wolfBoot_printf("LQSPI_STS %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xA4)));
-    wolfBoot_printf("DUMMY_CYCLE_EN %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xC8)));
-    wolfBoot_printf("MOD_ID %08x\n", *((volatile uint32_t*)(QSPI_BASE + 0xFC)));
-    wolfBoot_printf("GQSPI_CFG %08x\n", GQSPI_CFG);
-    wolfBoot_printf("GQSPI_ISR %08x\n", GQSPI_ISR);
-    wolfBoot_printf("GQSPI_IER %08x\n", GQSPI_IER);
-    wolfBoot_printf("GQSPI_IDR %08x\n", GQSPI_IDR);
-    wolfBoot_printf("GQSPI_IMR %08x\n", GQSPI_IMR);
-    wolfBoot_printf("GQSPI_En %08x\n", GQSPI_EN);
-    wolfBoot_printf("GQSPI_TX_THRESH %08x\n", GQSPI_TX_THRESH);
-    wolfBoot_printf("GQSPI_RX_THRESH %08x\n", GQSPI_RX_THRESH);
-    wolfBoot_printf("GQSPI_GPIO %08x\n", GQSPI_GPIO);
-    wolfBoot_printf("GQSPI_LPBK_DLY_ADJ %08x\n", GQSPI_LPBK_DLY_ADJ);
-    wolfBoot_printf("GQSPI_FIFO_CTRL %08x\n", GQSPI_FIFO_CTRL);
-    wolfBoot_printf("GQSPI_GF_THRESH %08x\n", GQSPI_GF_THRESH);
-    wolfBoot_printf("GQSPI_POLL_CFG %08x\n", GQSPI_POLL_CFG);
-    wolfBoot_printf("GQSPI_P_TIMEOUT %08x\n", GQSPI_P_TIMEOUT);
-    wolfBoot_printf("QSPI_DATA_DLY_ADJ %08x\n", QSPI_DATA_DLY_ADJ);
-    wolfBoot_printf("GQSPI_MOD_ID %08x\n", GQSPI_MOD_ID);
-    wolfBoot_printf("QSPIDMA_DST_STS %08x\n", QSPIDMA_DST_STS);
-    wolfBoot_printf("QSPIDMA_DST_CTRL %08x\n", QSPIDMA_DST_CTRL);
-    wolfBoot_printf("QSPIDMA_DST_I_STS %08x\n", QSPIDMA_DST_I_STS);
-    wolfBoot_printf("QSPIDMA_DST_CTRL2 %08x\n", QSPIDMA_DST_CTRL2);
-}
 #endif
-#endif /* USE_QNX */
 
 static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
 {
@@ -717,18 +774,6 @@ static int qspi_wait_ready(QspiDev_t* dev)
     return GQSPI_CODE_TIMEOUT;
 }
 
-#if 0
-static int qspi_flash_reset(QspiDev_t* dev)
-{
-    uint8_t cmd[1];
-    cmd[0] = RESET_ENABLE_CMD;
-    qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0);
-    cmd[0] = RESET_MEMORY_CMD;
-    qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0);
-    return GQSPI_CODE_SUCCESS;
-}
-#endif
-
 #if GQSPI_QSPI_MODE == GQSPI_GEN_FIFO_MODE_QSPI
 static int qspi_enter_qspi_mode(QspiDev_t* dev)
 {
@@ -778,19 +823,40 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     uint8_t id_hi[4];
 #endif
     uint32_t timeout;
+#ifdef USE_XQSPIPSU
+    XQspiPsu_Config *QspiConfig;
+#endif
 
     (void)cpu_clock;
     (void)flash_freq;
 
     memset(&mDev, 0, sizeof(mDev));
 
-#ifdef USE_QNX
+#ifdef USE_XQSPIPSU
+    /* Xilinx BSP Driver */
+    QspiConfig = XQspiPsu_LookupConfig(QSPI_DEVICE_ID);
+    if (QspiConfig == NULL) {
+        wolfBoot_printf("QSPI config lookup failed\n");
+        return;
+    }
+    ret = XQspiPsu_CfgInitialize(&mDev.qspiPsuInst, QspiConfig, QspiConfig->BaseAddress);
+    if (ret != 0) {
+        wolfBoot_printf("QSPI config init failed\n");
+        return;
+    }
+    XQspiPsu_SetOptions(&mDev.qspiPsuInst, XQSPIPSU_MANUAL_START_OPTION);
+    XQspiPsu_SetClkPrescaler(&mDev.qspiPsuInst, XQSPIPSU_CLK_PRESCALE_8);
+
+#elif defined(USE_QNX)
+    /* QNX QSPI driver */
     mDev.qnx = xzynq_qspi_open();
     if (mDev.qnx == NULL) {
         wolfBoot_printf("QSPI failed to open\n");
         return;
     }
 #else
+    /* QSPI bare-metal driver */
+
     /* Disable Linear Mode in case FSBL enabled it */
     LQSPI_EN = 0;
 
@@ -842,9 +908,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
 
     GQSPI_EN = 1; /* Enable Device */
 #endif /* USE_QNX */
-
-    /* Issue Flash Reset Command */
-    //qspi_flash_reset(&mDev);
+    (void)reg_cfg;
 
     /* ------ Flash Read ID (retry) ------ */
     timeout = 0;

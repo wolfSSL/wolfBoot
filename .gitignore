@@ -61,6 +61,9 @@ tools/keytools/sign
 tools/keytools/sign.exe
 tools/keytools/keygen
 tools/keytools/keygen.exe
+tools/keytools/x64
+tools/keytools/Debug
+tools/keytools/Release
 
 # Vim swap files
 .*.swp
