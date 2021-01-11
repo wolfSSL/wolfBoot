@@ -155,6 +155,10 @@ static int wolfBoot_update(int fallback_allowed)
     uint32_t sector = 0;
     uint8_t flag, st;
     struct wolfBoot_image boot, update, swap;
+#ifdef EXT_ENCRYPTED
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint8_t nonce[ENCRYPT_NONCE_SIZE];
+#endif
 
     /* No Safety check on open: we might be in the middle of a broken update */
     wolfBoot_open_image(&update, PART_UPDATE);
@@ -195,6 +199,11 @@ static int wolfBoot_update(int fallback_allowed)
     hal_flash_unlock();
 #ifdef EXT_FLASH
     ext_flash_unlock();
+#endif
+
+/* Read encryption key/IV before starting the update */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_get_encrypt_key(key, nonce);
 #endif
 
 #ifndef DISABLE_BACKUP
@@ -264,6 +273,11 @@ static int wolfBoot_update(int fallback_allowed)
     ext_flash_lock();
 #endif
     hal_flash_lock();
+
+/* Save the encryption key after swapping */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key(key, nonce);
+#endif
     return 0;
 }
 

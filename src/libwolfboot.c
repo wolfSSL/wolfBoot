@@ -380,6 +380,9 @@ void RAMFUNCTION wolfBoot_success(void)
         wolfBoot_set_partition_state(PART_BOOT, st);
         hal_flash_lock();
     }
+#ifdef EXT_ENCRYPTED
+    wolfBoot_erase_encrypt_key();
+#endif
 }
 
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
@@ -579,7 +582,6 @@ int wolfBoot_fallback_is_possible(void)
 static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
 #endif
 
-
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
     uint32_t addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -604,12 +606,22 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonc
     return 0;
 }
 
+int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
+{
+    uint8_t *mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
+    XMEMCPY(nonce, mem + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
+    return 0;
+}
+
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
     int i;
+    uint8_t *mem = (uint8_t *)ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
-    hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+    if (XMEMCMP(mem, ff, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) != 0)
+        hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
     return 0;
 }
 
