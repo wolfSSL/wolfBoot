@@ -216,7 +216,12 @@ ifeq ($(TARGET),psoc6)
     endif
 endif
 
-
+ifeq ($(TARGET),raspi3)
+  ifeq ($(DEBUG),1)
+    CFLAGS+=-DDEBUG_RASPI
+    OBJS+=./src/kprintf.o
+  endif
+endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
