@@ -218,9 +218,13 @@ endif
 
 ifeq ($(TARGET),raspi3)
   ifeq ($(DEBUG),1)
-    CFLAGS+=-DDEBUG_RASPI
-    OBJS+=./src/kprintf.o
+    KPRINTF=1
   endif
+endif
+
+ifeq ($(KPRINTF),1)
+  CFLAGS+=-DKPRINTF_ENABLED
+  OBJS+=./src/kprintf.o
 endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)

@@ -23,10 +23,6 @@
 #include <string.h>
 #include <target.h>
 #include "image.h"
-#if defined(DEBUG_RASPI)
-#   include "printf.h"
-#   include <stdarg.h>
-#endif
 #ifndef ARCH_AARCH64
 #   error "wolfBoot raspi3 HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
@@ -46,7 +42,7 @@ void zynq_init(uint32_t cpu_clock)
 {
 }
 
-#if defined(DEBUG_RASPI)
+#if defined(KPRINTF_ENABLED)
 
 /**
  * adapted from https://github.com/bztsrc/raspi3-tutorial/tree/master/03_uart1
@@ -101,39 +97,11 @@ void debug_uart_init(void)
 /**
  * Send a character
  */
-void debug_uart_send(unsigned int c) {
+void hal_putc(char c, void *state) {
     /* wait until we can send */
     do{asm volatile("nop");}while(!(*AUX_MU_LSR&0x20));
     /* write the character to the buffer */
     *AUX_MU_IO=c;
-}
-
-/**
- * Display a string
- */
-void debug_uart_puts(char *s) {
-    while(*s) {
-        /* convert newline to carrige return + newline */
-        if(*s=='\n')
-            debug_uart_send('\r');
-        debug_uart_send(*s++);
-    }
-}
-
-#define DEBUG_OUTPUT_SIZE 1024
-
-int hal_printf(const char *format, ...)
-{
-    char output[DEBUG_OUTPUT_SIZE];
-    int ret;
-    va_list arguments;
-
-    va_start(arguments, format);
-    ret = vsnprintf(output, sizeof output, format, arguments);
-    debug_uart_puts(output);
-    va_end(arguments);
-
-    return ret;
 }
 
 #endif
@@ -141,7 +109,7 @@ int hal_printf(const char *format, ...)
 /* public HAL functions */
 void hal_init(void)
 {
-#if defined(DEBUG_RASPI)
+#if defined(KPRINTF_ENABLED)
     debug_uart_init();
 #endif
 }

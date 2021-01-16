@@ -23,7 +23,7 @@
 #include <sys/types.h>
 /* #include <stdbool.h> */
 /* #include <stdint.h> */
-/* #include "uart.h" */
+#include "hal.h"
 
 #define true 1
 #define false 0
@@ -32,16 +32,10 @@ static _Bool isdigit(unsigned char c) {
     return ((unsigned char)(c - '0') < 10);
 }
 
-/* dummy putc - replace with uart putc call in future */
-
-int putc(int c, void *stream) {
-	return 0;
-}
-
 void kprintf(const char *format, ...) {
     va_list args;
     va_start(args, format);
-    vcprintf((vcprintf_callback_t)putc, NULL, format, args);
+    vcprintf((vcprintf_callback_t)hal_putc, NULL, format, args);
     va_end(args);
 }
 

@@ -43,7 +43,7 @@ int hal_flash_erase(uint32_t address, int len);
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
 void hal_prepare_boot(void);
-int hal_printf(const char *format, ...);
+void hal_putc(char c, void *state);
 
 #ifdef DUALBANK_SWAP
     void hal_flash_dualbank_swap(void);

@@ -24,7 +24,7 @@
 #ifndef WOLFBOOT_PRINTF_INCLUDED
 #define WOLFBOOT_PRINTF_INCLUDED
 
-#if (defined(DEBUG_ZYNQ) || defined(DEBUG_RASPI)) && !defined(PRINTF_ENABLED)
+#if (defined(DEBUG_ZYNQ) || defined(KPRINTF_ENABLED)) && !defined(PRINTF_ENABLED)
 #    define PRINTF_ENABLED
 #endif
 
@@ -38,11 +38,9 @@
 #       else
 #           define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
 #       endif
-#   endif
-#
-#   if defined(DEBUG_RASPI)
-#       include "hal.h"
-#       define wolfBoot_printf(_f_, ...) hal_printf(_f_, ##__VA_ARGS__)
+#   elif defined(KPRINTF_ENABLED)
+#       include "kprintf.h"
+#       define wolfBoot_printf(_f_, ...) kprintf(_f_, ##__VA_ARGS__)
 #   endif
 #
 #else
