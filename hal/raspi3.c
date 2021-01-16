@@ -23,6 +23,7 @@
 #include <string.h>
 #include <target.h>
 #include "image.h"
+#include "printf.h"
 #ifndef ARCH_AARCH64
 #   error "wolfBoot raspi3 HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
@@ -92,6 +93,7 @@ void debug_uart_init(void)
     r=150; while(r--) { asm volatile("nop"); }
     *GPPUDCLK0 = 0;        // flush GPIO setup
     *AUX_MU_CNTL = 3;      // enable Tx, Rx
+    wolfBoot_printf("\r\nraspi3:%s() completed\r\n", __func__);
 }
 
 /**
@@ -112,6 +114,7 @@ void hal_init(void)
 #if defined(KPRINTF_ENABLED)
     debug_uart_init();
 #endif
+    wolfBoot_printf("raspi3:%s() completed\r\n", __func__);
 }
 
 void hal_prepare_boot(void)
