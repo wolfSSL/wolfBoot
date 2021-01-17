@@ -23,6 +23,7 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_drv.h"
+#include "printf.h"
 
 #include <wolfssl/wolfcrypt/settings.h>
 
@@ -635,12 +636,15 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     if (part == PART_DTS_BOOT || part == PART_DTS_UPDATE) {
         img->hdr = (part == PART_DTS_BOOT) ? (void*)WOLFBOOT_DTS_BOOT_ADDRESS
                                            : (void*)WOLFBOOT_DTS_UPDATE_ADDRESS;
+        wolfBoot_printf("%s(): looking for %s partition at %p\r\n", __func__, (part == PART_DTS_BOOT) ? "DTB boot" : "DTB update", img->hdr);
         if (PART_IS_EXT(img))
             image = fetch_hdr_cpy(img);
         else
             image = (uint8_t*)img->hdr;
-        if (*((uint32_t*)image) != UBOOT_FDT_MAGIC)
+        if (*((uint32_t*)image) != UBOOT_FDT_MAGIC) {
+            wolfBoot_printf("%s(): value 0x%08x at %p does not match expected DTB image magic 0x%08x", __func__, *((uint32_t*)image), image, UBOOT_FDT_MAGIC);
             return -1;
+        }
         img->hdr_ok = 1;
         img->fw_base = img->hdr;
         /* DTS data is big endian */
@@ -654,8 +658,10 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 #endif
     if (part == PART_BOOT) {
         img->hdr = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        wolfBoot_printf("%s(): looking for boot partition at %p\r\n", __func__, img->hdr);
     } else if (part == PART_UPDATE) {
         img->hdr = (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+        wolfBoot_printf("%s(): looking for update partition at %p\r\n", __func__, img->hdr);
     } else
         return -1;
 
@@ -668,12 +674,16 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
         image = (uint8_t *)img->hdr;
 
     magic = (uint32_t *)(image);
-    if (*magic != WOLFBOOT_MAGIC)
+    if (*magic != WOLFBOOT_MAGIC) {
+        wolfBoot_printf("%s(): value 0x%08x at %p does not match expected image magic 0x%08x", __func__, *magic, image, WOLFBOOT_MAGIC);
         return -1;
+    }
     size = (uint32_t *)(image + sizeof (uint32_t));
 
-    if (*size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE))
-       return -1;
+    if (*size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        wolfBoot_printf("%s(): image size 0x%08x exceeds max available partition space 0x%08x", __func__, *size,  (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
+        return -1;
+    }
     img->hdr_ok = 1;
     img->fw_size = *size;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
