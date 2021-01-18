@@ -152,7 +152,7 @@ void RAMFUNCTION wolfBoot_start(void)
     hal_prepare_boot();
 	
 #ifdef MMU
-    wolfBoot_printf("Booting at %p, with DTB at %p\n", load_address, dts_address);
+    wolfBoot_printf("Booting at %p, with DTB at %p\r\n", load_address, dts_address);
     do_boot((uint32_t*)load_address, (uint32_t*)dts_address);
 #else
     wolfBoot_printf("Booting at %p\r\n", load_address);

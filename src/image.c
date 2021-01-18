@@ -643,7 +643,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
         else
             image = (uint8_t*)img->hdr;
         if (*((uint32_t*)image) != UBOOT_FDT_MAGIC) {
-            wolfBoot_printf("%s(): value 0x%08x at %p does not match expected DTB image magic 0x%08lx", \
+            wolfBoot_printf("%s(): value 0x%08x at %p does not match expected DTB image magic 0x%08lx\r\n", \
                             __func__, *((uint32_t*)image), image, UBOOT_FDT_MAGIC);
             return -1;
         }
@@ -677,14 +677,14 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 
     magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC) {
-        wolfBoot_printf("%s(): value 0x%08x at %p does not match expected image magic 0x%08x", \
+        wolfBoot_printf("%s(): value 0x%08x at %p does not match expected image magic 0x%08x\r\n", \
                         __func__, *magic, image, WOLFBOOT_MAGIC);
         return -1;
     }
     size = (uint32_t *)(image + sizeof (uint32_t));
 
     if (*size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
-        wolfBoot_printf("%s(): image size 0x%08x exceeds max available partition space 0x%08x", \
+        wolfBoot_printf("%s(): image size 0x%08x exceeds max available partition space 0x%08x\r\n", \
                         __func__, *size,  (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
         return -1;
     }
