@@ -31,6 +31,7 @@ include options.mk
 CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused \
   -I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
   -DWOLFSSL_USER_SETTINGS \
+  -DWOLFTPM_USER_SETTINGS \
   -DPLATFORM_$(TARGET)
 
 MAIN_TARGET=factory.bin
