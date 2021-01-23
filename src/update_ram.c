@@ -34,7 +34,7 @@ extern void hal_flash_dualbank_swap(void);
 
 static inline void boot_panic(void)
 {
-    wolfBoot_printf("entering %s() - to die here\r\n", __func__);
+    wolfBoot_printf("%s(): entered - to die here\r\n", __func__);
     while(1)
         ;
 }
@@ -49,15 +49,15 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef MMU
     uint32_t* dts_address = NULL;
 #endif
-    wolfBoot_printf("entering %s()\r\n", __func__);
+    wolfBoot_printf("%s(): entered\r\n", __func__);
 
     active = wolfBoot_dualboot_candidate();
 
-    wolfBoot_printf("Active Part %d\r\n", active);
+    wolfBoot_printf("%s(): Active Part %d\r\n", __func__, active);
 
     if (active < 0) {
         /* panic if no images available */
-        wolfBoot_printf("no partitions found\r\n");
+        wolfBoot_printf("%s(): no partitions found\r\n", __func__);
         boot_panic();
     }
     /* Check current status for failure (image still in TESTING), and fall-back
@@ -75,12 +75,15 @@ void RAMFUNCTION wolfBoot_start(void)
             ((ret = wolfBoot_verify_integrity(&os_image) < 0)) ||
             ((ret = wolfBoot_verify_authenticity(&os_image)) < 0)) {
 
-            wolfBoot_printf("Failure %d: Part %d, Hdr %d, Hash %d, Sig %d\r\n", ret, 
-                active, os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
+            wolfBoot_printf("%s(): Failure %d: Part %d, Hdr %s, Hash %s, Sig %s\r\n",
+                 __func__, ret, active, 
+                 os_image.hdr_ok ? "ok" : "?", 
+                 os_image.sha_ok ? "ok" : "?", 
+                 os_image.signature_ok ? "ok" : "?");
 
             /* panic if authentication fails and no backup */
             if (!wolfBoot_fallback_is_possible()) {
-                wolfBoot_printf("no fallback image available\r\n");
+                wolfBoot_printf("%s(): no fallback image available\r\n", __func__);
                 boot_panic();
             }
             else {
@@ -95,7 +98,7 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
 
-    wolfBoot_printf("Firmware Valid\r\n");
+    wolfBoot_printf("%s(): Firmware Valid\r\n", __func__);
 
     /* First time we boot this update, set to TESTING to await
      * confirmation from the system
@@ -123,7 +126,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef EXT_FLASH
     /* Load image to RAM */
     if (PART_IS_EXT(&os_image)) {
-        wolfBoot_printf("Loading %d to RAM at %p\r\n", os_image.fw_size, load_address);
+        wolfBoot_printf("%s(): Loading %d to RAM at %p\r\n", __func__, os_image.fw_size, load_address);
 
         ext_flash_read((uintptr_t)os_image.fw_base, 
                        (uint8_t*)load_address,
@@ -139,7 +142,7 @@ void RAMFUNCTION wolfBoot_start(void)
     #ifdef EXT_FLASH
         /* Load DTS to RAM */
         if (PART_IS_EXT(&os_image)) {
-            wolfBoot_printf("Loading DTB %d to RAM at %p\r\n", os_image.fw_size, dts_address);
+            wolfBoot_printf("%s(): Loading DTB %d to RAM at %p\r\n", __func__, os_image.fw_size, dts_address);
 
             ext_flash_read((uintptr_t)os_image.fw_base, 
                         (uint8_t*)dts_address,
@@ -152,10 +155,10 @@ void RAMFUNCTION wolfBoot_start(void)
     hal_prepare_boot();
 	
 #ifdef MMU
-    wolfBoot_printf("Booting at %p, with DTB at %p\r\n", load_address, dts_address);
+    wolfBoot_printf("%s(): Booting at %p, with DTB at %p\r\n", __func__, load_address, dts_address);
     do_boot((uint32_t*)load_address, (uint32_t*)dts_address);
 #else
-    wolfBoot_printf("Booting at %p\r\n", load_address);
+    wolfBoot_printf("%s(): Booting at %p\r\n", __func__, load_address);
     do_boot((uint32_t*)load_address);
 #endif
 }
