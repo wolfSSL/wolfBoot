@@ -127,6 +127,10 @@
 
 /* Disables - For minimum wolfCrypt build */
 #define NO_CMAC
+#ifndef WOLFTPM
+#define NO_AES
+#define NO_HMAC
+#endif
 #define NO_CODING
 #define WOLFSSL_NO_PEM
 #define NO_ASN_TIME
