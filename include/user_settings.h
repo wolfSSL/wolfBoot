@@ -34,11 +34,6 @@
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
-/* WOLFTPM */
-#ifdef WOLFTPM
-/* Add custom user settings here */
-#endif
-
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
 #   define HAVE_ED25519
@@ -126,11 +121,12 @@
 #endif
 
 /* Disables - For minimum wolfCrypt build */
-#define NO_CMAC
-#ifndef WOLFTPM
-#define NO_AES
-#define NO_HMAC
+#ifndef WOLFBOOT_TPM
+    #define NO_AES
+    #define NO_HMAC
 #endif
+
+#define NO_CMAC
 #define NO_CODING
 #define WOLFSSL_NO_PEM
 #define NO_ASN_TIME
