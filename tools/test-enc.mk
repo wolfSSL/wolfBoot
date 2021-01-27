@@ -1,18 +1,27 @@
 ENC_TEST_UPDATE_VERSION?=2
-KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
 SIGN_ARGS?=--ecc256
 SIGN_ENC_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
 USBTTY?=/dev/ttyACM0
 TIMEOUT?=60
 
-ifneq ("$(wildcard ./tools/keytools/sign)","")
-    SIGN_TOOL=./tools/keytools/sign
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
+	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
 else
-    ifneq ("$(wildcard ./tools/keytools/sign.exe)","")
-        SIGN_TOOL=./tools/keytools/sign.exe
-    else
-        SIGN_TOOL=python3 ./tools/keytools/sign.py
-    endif
+	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
+		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
+	else
+		KEYGEN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py
+	endif
+endif
+
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
+	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
+else
+	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
+		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
+	else
+		SIGN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py
+	endif
 endif
 
 tools/uart-flash-server/ufserver: FORCE
