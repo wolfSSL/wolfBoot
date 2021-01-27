@@ -5,23 +5,23 @@ SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
 SIGN_ARGS=
 
-ifneq ("$(wildcard ./tools/keytools/keygen)","")
-	KEYGEN_TOOL=./tools/keytools/keygen
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
+	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
 else
-	ifneq ("$(wildcard ./tools/keytools/keygen.exe)","")
-		KEYGEN_TOOL=./tools/keytools/keygen.exe
+	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
+		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
 	else
-		KEYGEN_TOOL=python3 ./tools/keytools/keygen.py
+		KEYGEN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py
 	endif
 endif
 
-ifneq ("$(wildcard ./tools/keytools/sign)","")
-	SIGN_TOOL=./tools/keytools/sign
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
+	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
 else
-	ifneq ("$(wildcard ./tools/keytools/sign.exe)","")
-		SIGN_TOOL=./tools/keytools/sign.exe
+	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
+		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
 	else
-		SIGN_TOOL=python3 ./tools/keytools/sign.py
+		SIGN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py
 	endif
 endif
 

@@ -8,7 +8,7 @@
 include tools/config.mk
 
 ## Initializers
-WOLFBOOT_ROOT=$(PWD)
+WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
 LSCRIPT:=config/target.ld
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
