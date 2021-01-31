@@ -24,8 +24,8 @@ python3 ${WBDIR}/tools/keytools/sign.py --rsa4096 --sha3 20m.bin ${WBDIR}/rsa409
 echo "INFO: create a forged signature"
 
 cp 1m.bin 1m-forged.bin
-cp ${WBDIR}/rsa4096.der rsa4096-forged.der
-dd if=/dev/urandom of=rsa4096-forged.der bs=1 count=16 seek=1024 conv=notrunc
+python3 ${WBDIR}/tools/keytools/keygen.py --rsa4096 rsa4096-forged.c
+mv rsa4096.der rsa4096-forged.der
 python3 ${WBDIR}/tools/keytools/sign.py --rsa4096 --sha3 1m-forged.bin rsa4096-forged.der 1
 
 echo "INFO: tamper with signed test material"
@@ -37,25 +37,28 @@ dd if=/dev/urandom of=1m_v1_signed-but-tampered.bin bs=1 count=1 seek=10k conv=n
 
 echo "INFO: create test images"
 
-cat ${WBDIR}/wolfboot-align.bin 1m_v1_signed.bin > kernel8-without-dtb.img
+cat ${WBDIR}/wolfboot-align.bin 1m_v1_signed.bin > test-05-no-dtb-partition.img
 cat ${WBDIR}/wolfboot-align.bin 1m-forged_v1_signed.bin > kernel8-forged.img
-cp kernel8-without-dtb.img kernel8-with-dtb.img
-cp kernel8-forged.img kernel8-forged-with-dtb.img
-cp kernel8-without-dtb.img kernel8-with-dtb-tampered.img
+cat ${WBDIR}/wolfboot-align.bin 1m.bin > test-01-no-boot-partition.img
+cp test-05-no-dtb-partition.img test-07-with-signed-dtb.img
+cp test-05-no-dtb-partition.img test-08-with-raw-dtb.img
+cp kernel8-forged.img test-04-forged-boot-image-with-signed-dtb.img
+cp test-05-no-dtb-partition.img test-06-with-tampered-dtb.img
 
-cat ${WBDIR}/wolfboot-align.bin 1m_v1_signed-but-tampered.bin > kernel8-tampered-with-dtb.img
+cat ${WBDIR}/wolfboot-align.bin 1m_v1_signed-but-tampered.bin > test-03-tampered-boot-image-with-signed-dtb.img
 
 cat ${WBDIR}/wolfboot-align.bin 20m_v1_signed.bin > kernel8-oversized.img
-cp kernel8-oversized.img kernel8-oversized-with-dtb.img
+cp kernel8-oversized.img test-02-oversized-boot-image-with-signed-dtb.img
 
-dd if=tes_v1_signed.bin of=kernel8-with-dtb.img bs=1 seek=128k conv=notrunc
-dd if=tes_v1_signed.bin of=kernel8-forged-with-dtb.img bs=1 seek=128k conv=notrunc
-dd if=tes_v1_signed-but-tampered.bin of=kernel8-with-dtb-tampered.img bs=1 seek=128k conv=notrunc
-dd if=tes_v1_signed.bin of=kernel8-oversized-with-dtb.img bs=1 seek=128k conv=notrunc
+dd if=tes_v1_signed.bin of=test-07-with-signed-dtb.img bs=1 seek=128k conv=notrunc
+dd if=test.dtb of=test-08-with-raw-dtb.img bs=1 seek=128k conv=notrunc
+dd if=tes_v1_signed.bin of=test-04-forged-boot-image-with-signed-dtb.img bs=1 seek=128k conv=notrunc
+dd if=tes_v1_signed-but-tampered.bin of=test-06-with-tampered-dtb.img bs=1 seek=128k conv=notrunc
+dd if=tes_v1_signed.bin of=test-02-oversized-boot-image-with-signed-dtb.img bs=1 seek=128k conv=notrunc
 
 echo "INFO: clean-up"
 
-rm rsa4096-forged.der kernel8-forged.img kernel8-oversized.img *.bin test.dtb
+rm rsa4096-forged.* kernel8-forged.img kernel8-oversized.img *.bin test.dtb
 
 echo "INFO: Created following image test vectors, boot them for debug prints"
 cd ..
