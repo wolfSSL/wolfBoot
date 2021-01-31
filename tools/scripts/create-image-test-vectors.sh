@@ -11,7 +11,7 @@ cd image-test-vectors
 
 echo "INFO: create dummy images and download a DTB"
 
-curl -o test.dtb https://github.com/raspberrypi/firmware/blob/master/boot/bcm2710-rpi-3-b.dtb
+curl -L -o test.dtb https://github.com/raspberrypi/firmware/raw/master/boot/bcm2710-rpi-3-b.dtb
 dd bs=1m count=1 if=/dev/urandom of=1m.bin
 dd bs=20m count=1 if=/dev/urandom of=20m.bin
 
