@@ -213,3 +213,27 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * New HAL: Cypress psoc6
    * Support for psoc6 Hardware crypto accelerator
    * SPI driver: Nordic nRF52
+
+### V1.7 (2021-02-01)
+ * Added support for measured boot via TPM
+ * Support for TZEN on Cortex-m33
+ * Added option to disable backup/fallback
+ * Added option FLAGS_HOME to store UPDATE flags in the BOOT partition
+ * Zynq: added support for eFuse
+ * Zynq: improved debugging
+ * Updated user documentation
+ * Extend coverage of automatic non-regression tests running on Jenkins
+ * Fix wolfTPM integration: use custom settings
+ * Fix Fallback operations when encryption is enabled
+ * Fix DUALBANK mode on STM32L5xx
+ * Fix maximum image size check
+ * Fix in STM32H7 driver: workaround for error correction in flash writing
+ * Hardware support
+   * New ARCH: ARMv8-m (Cortex-m33)
+   * New HAL: STM32L5xx
+   * New HAL: NXP iMX-RT1060
+   * SPI driver: STM32L0x3
+   * Uart driver: STM32L0x3
+
+
+  
