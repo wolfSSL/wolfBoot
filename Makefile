@@ -135,7 +135,7 @@ clean:
 	@make -C tools/check_config clean
 
 distclean: clean
-	@rm -f *.pem *.der tags ./src/ed25519_pub_key.c ./src/ecc256_pub_key.c ./src/rsa2048_pub_key.c include/target.h
+	@rm -f *.pem *.der tags ./src/*_pub_key.c include/target.h
 	@make -C tools/keytools clean
 
 include/target.h: include/target.h.in FORCE
