@@ -4,26 +4,6 @@ SIGN_ENC_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
 USBTTY?=/dev/ttyACM0
 TIMEOUT?=60
 
-ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
-	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
-else
-	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
-		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
-	else
-		KEYGEN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py
-	endif
-endif
-
-ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
-	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
-else
-	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
-		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
-	else
-		SIGN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py
-	endif
-endif
-
 tools/uart-flash-server/ufserver: FORCE
 	@make -C `dirname $@`
 	@rm -f src/libwolfboot.o
@@ -34,18 +14,19 @@ test-enc-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@$(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@st-flash write factory.bin 0x08000000
-	@sleep 2
-	@sudo true
-	@(sudo tools/uart-flash-server/ufserver test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed_and_encrypted.bin $(USBTTY))&
-	@sleep 5
+	@sleep 10
+	@st-flash reset
+	@(tools/uart-flash-server/ufserver test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed_and_encrypted.bin $(USBTTY))&
+	@sleep 10
 	@st-flash reset
 	@sleep $(TIMEOUT)
 	@st-flash reset
 	@sleep 1
-	@sudo killall ufserver
-	@st-flash read boot.bin 0x08010000 0x1000
-	@dd if=test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin of=boot_compare.bin bs=4096 count=1
-	@diff boot.bin boot_compare.bin || (echo "TEST FAILED" && exit 1)
-	@rm boot.bin boot_compare.bin
+	@killall ufserver
+	@st-flash read boot_full.bin 0x08010000 0x8000
+	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | cut -d" " -f 1`;  \
+		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
+	@diff boot.bin test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin || (echo "TEST FAILED" && exit 1)
+	@rm boot.bin boot_full.bin
 	@echo "TEST SUCCESSFUL"
 
