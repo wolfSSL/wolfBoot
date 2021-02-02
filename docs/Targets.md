@@ -627,7 +627,6 @@ make wolfboot-align.bin
 * Sign Image
 ```
 tools/keytools/sign.py --rsa4096 --sha3 Image rsa4096.der 1
-tools/keytools/sign.py --rsa4096 --sha3 bcm2710-rpi-3-b.dtb rsa4096.der 1
 ```
 
 * Compose the image
