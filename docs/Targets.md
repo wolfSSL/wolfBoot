@@ -624,7 +624,7 @@ cp config/examples/raspi3.config .config
 make wolfboot-align.bin
 ```
 
-* Sign Image and DTB (Device Tree Blob)
+* Sign Image
 ```
 tools/keytools/sign.py --rsa4096 --sha3 Image rsa4096.der 1
 tools/keytools/sign.py --rsa4096 --sha3 bcm2710-rpi-3-b.dtb rsa4096.der 1
@@ -634,7 +634,7 @@ tools/keytools/sign.py --rsa4096 --sha3 bcm2710-rpi-3-b.dtb rsa4096.der 1
 
 ```
 cat wolfboot-align.bin Image_v1_signed.bin >wolfboot_linux_raspi.bin
-dd if=bcm2710-rpi-3-_v1_signed.bin of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
+dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
 ```
 
 * Test boot using qemu
