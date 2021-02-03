@@ -209,7 +209,7 @@ static void RAMFUNCTION flash_program_on(uint8_t bank)
             ;
     } else {
         FLASH_CR2 |= FLASH_CR_PG;
-        while ((FLASH_CR1 & FLASH_CR_PG) == 0)
+        while ((FLASH_CR2 & FLASH_CR_PG) == 0)
             ;
     }
 }
@@ -232,7 +232,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int off = (address + i) - (((address + i) >> 5) << 5);
     uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
 
-    if ((address & 0x01000000) != 0) {
+    if ((address & 0x0100000) != 0) {
         bank = 1;
     }
 
