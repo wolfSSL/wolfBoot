@@ -214,13 +214,14 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * Support for psoc6 Hardware crypto accelerator
    * SPI driver: Nordic nRF52
 
-### V1.7 (2021-02-01)
+### V1.7.1 (2021-02-03)
  * Added support for measured boot via TPM
  * Support for TZEN on Cortex-m33
  * Added option to disable backup/fallback
  * Added option FLAGS_HOME to store UPDATE flags in the BOOT partition
  * Zynq: added support for eFuse
  * Zynq: improved debugging
+ * Xilinx: support for BSP QSPI driver
  * Updated user documentation
  * Extend coverage of automatic non-regression tests running on Jenkins
  * Fix wolfTPM integration: use custom settings
