@@ -112,9 +112,10 @@
 #define FLASH_SR2            (*(volatile uint32_t *)(FLASH_BASE + 0x110)) //RM0433 - 3.9.26 - FLASH_SR 2
 #define FLASH_CR2            (*(volatile uint32_t *)(FLASH_BASE + 0x10C)) //RM0433 - 3.9.25 - FLASH_CR 2
 
-#define FLASHMEM_ADDRESS_SPACE    (0x08000000)
+#define FLASHMEM_ADDRESS_SPACE    (0x08000000UL)
 #define FLASH_PAGE_SIZE           (0x20000) /* 128KB */
 #define FLASH_BANK2_BASE          (0x08100000UL) /*!< Base address of : (up to 1 MB) Flash Bank2 accessible over AXI                          */
+#define FLASH_BANK2_BASE_REL      (FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE)
 #define FLASH_TOP                 (0x081FFFFFUL) /*!< FLASH end address  */
 
 
@@ -209,7 +210,7 @@ static void RAMFUNCTION flash_program_on(uint8_t bank)
             ;
     } else {
         FLASH_CR2 |= FLASH_CR_PG;
-        while ((FLASH_CR1 & FLASH_CR_PG) == 0)
+        while ((FLASH_CR2 & FLASH_CR_PG) == 0)
             ;
     }
 }
@@ -232,7 +233,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int off = (address + i) - (((address + i) >> 5) << 5);
     uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
 
-    if ((address & 0x01000000) != 0) {
+    if ((address & FLASH_BANK2_BASE_REL) != 0) {
         bank = 1;
     }
 
@@ -333,22 +334,22 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         return -1;
     end_address = (address - FLASHMEM_ADDRESS_SPACE) + len - 1;
     for (p = (address - FLASHMEM_ADDRESS_SPACE); p < end_address; p += FLASH_PAGE_SIZE) {
-        if (p < (FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE) )
+        if (p < FLASH_BANK2_BASE_REL)
         {
-          uint32_t reg = FLASH_CR1 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
-          FLASH_CR1 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
-          DMB();
-          FLASH_CR1 |= FLASH_CR_STRT;
-          flash_wait_complete(1);
+            uint32_t reg = FLASH_CR1 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
+            FLASH_CR1 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
+            DMB();
+            FLASH_CR1 |= FLASH_CR_STRT;
+            flash_wait_complete(1);
         }
-        if(p>=(FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE) && (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE) ))
+        if ((p>= FLASH_BANK2_BASE_REL) && (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE)))
         {
-          uint32_t reg = FLASH_CR2 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
-          p-= (FLASH_BANK2_BASE);
-          FLASH_CR2 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
-          DMB();
-          FLASH_CR2 |= FLASH_CR_STRT;
-          flash_wait_complete(2);
+            uint32_t reg = FLASH_CR2 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
+            p-= (FLASH_BANK2_BASE);
+            FLASH_CR2 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
+            DMB();
+            FLASH_CR2 |= FLASH_CR_STRT;
+            flash_wait_complete(2);
         }
     }
     return 0;
