@@ -31,7 +31,7 @@ The entry point for all the runnable firmware images on this target will be `0x2
 of the firmware image header at the beginning of the partition, as explained more in details
 in [Firmware image](firmware_image.md)
 
-In this particular case, due to the flash geometry, the swap space must be as big as 64KB, to account for proper sector swapping between the two images.
+In this particular case, due to the flash geometry, the swap space must be as big as 128KB, to account for proper sector swapping between the two images.
 
 On other systems, the SWAP space can be as small as 512B, if multiple smaller flash blocks are used.
 
