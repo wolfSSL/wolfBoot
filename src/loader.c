@@ -47,5 +47,4 @@ int main(void)
     wolfBoot_start();
     while(1)
         ;
-    return 0;
 }

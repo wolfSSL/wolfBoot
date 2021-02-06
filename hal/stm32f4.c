@@ -175,7 +175,6 @@ static void RAMFUNCTION clear_errors(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
-    uint32_t val;
     flash_wait_complete();
     clear_errors();
     /* Set 8-bit write */
@@ -191,14 +190,14 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    FLASH_CR |= FLASH_CR_LOCK;
+    FLASH_CR |= (unsigned int)FLASH_CR_LOCK;
     FLASH_KEYR = FLASH_KEY1;
     FLASH_KEYR = FLASH_KEY2;
 }
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    FLASH_CR |= FLASH_CR_LOCK;
+    FLASH_CR |= (unsigned int)FLASH_CR_LOCK;
 }
 
 
@@ -253,18 +252,16 @@ static void clock_pll_off(void)
 static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
-    uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, ppre1, ppre2, flash_waitstates;
+    uint32_t plln, pllm, pllq, pllp, hpre, ppre1, ppre2, flash_waitstates;
 
     /* Enable Power controller */
     APB1_CLOCK_ER |= PWR_APB1_CLOCK_ER_VAL;
 
     /* Select clock parameters (CPU Speed = 168MHz) */
-    cpu_freq = 168000000;
     pllm = 8;
     plln = 336;
     pllp = 2;
     pllq = 7;
-    pllr = 0;
     hpre = RCC_PRESCALER_DIV_NONE;
     ppre1 = RCC_PRESCALER_DIV_4;
     ppre2 = RCC_PRESCALER_DIV_2;

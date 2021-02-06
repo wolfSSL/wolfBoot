@@ -45,13 +45,13 @@ void led_pwm_setup(void)
     uint32_t reg;
     AHB1_CLOCK_ER |= GPIOD_AHB1_CLOCK_ER;
     reg = GPIOD_MODE & ~ (0x03 << (LED_PIN * 2));
-    GPIOD_MODE = reg | (2 << (LED_PIN * 2));
+    GPIOD_MODE = reg | (unsigned int)(2 << (LED_PIN * 2));
 
     reg = GPIOD_OSPD & ~(0x03 << (LED_PIN * 2));
-    GPIOD_OSPD = reg | (0x03 << (LED_PIN * 2));
+    GPIOD_OSPD = reg | (unsigned int)(0x03 << (LED_PIN * 2));
 
     reg = GPIOD_PUPD & ~(0x03 <<  (LED_PIN * 2));
-    GPIOD_PUPD = reg | (0x02 << (LED_PIN * 2));
+    GPIOD_PUPD = reg | (unsigned int)(0x02 << (LED_PIN * 2));
 
     /* Alternate function: use high pin */
     reg = GPIOD_AFH & ~(0xf << ((LED_PIN - 8) * 4));

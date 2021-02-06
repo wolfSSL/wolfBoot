@@ -73,7 +73,6 @@
 static uint8_t page[PAGESIZE];
 static const char ERR='!';
 static const char START='*';
-static const char UPDATE='U';
 static const char ACK='#';
 static uint8_t msg[MSGSIZE];
 

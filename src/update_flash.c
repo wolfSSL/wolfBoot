@@ -284,7 +284,7 @@ static int wolfBoot_update(int fallback_allowed)
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t st;
-    struct wolfBoot_image boot, update;
+    struct wolfBoot_image boot;
 
 #ifdef RAM_CODE
     wolfBoot_check_self_update();

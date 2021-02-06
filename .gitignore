@@ -96,3 +96,6 @@ config/*.ld
 # IAR files not under version control
 IDE/IAR/settings
 IDE/IAR/*.ewt
+IDE/IAR/*.dep
+IDE/IAR/Debug
+IDE/IAR/Release
