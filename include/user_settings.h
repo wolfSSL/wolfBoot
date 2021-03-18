@@ -69,6 +69,7 @@
 #   define WOLFSSL_SP_SMALL
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
+#   define WOLFSSL_SP_NO_MALLOC
 
 /* ECC options disabled to reduce size */
 #   define NO_ECC_SIGN
@@ -86,26 +87,33 @@
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA2048
-#  define HAVE_RSA
 #  define RSA_LOW_MEM
 #  define WOLFSSL_RSA_VERIFY_INLINE
+#  define FP_MAX_BITS (2048 * 2)
+/* sp math */
 #  define WOLFSSL_HAVE_SP_RSA
 #  define WOLFSSL_SP
 #  define WOLFSSL_SP_SMALL
 #  define WOLFSSL_SP_MATH
 #  define SP_WORD_SIZE 32
 #  define WOLFSSL_SP_NO_3072
+#  define WOLFSSL_SP_NO_MALLOC
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA4096
-#  define HAVE_RSA
 #  define RSA_LOW_MEM
-#  define WOLFSSL_RSA_PUBLIC_ONLY
 #  define WOLFSSL_RSA_VERIFY_INLINE
 #  define FP_MAX_BITS (4096 * 2)
-#  define WC_RSA_BLINDING
-#  define USE_FAST_MATH
-#  define TFM_TIMING_RESISTANT
+   /* sp math */
+#  define WOLFSSL_HAVE_SP_RSA
+#  define WOLFSSL_SP
+#  define WOLFSSL_SP_SMALL
+#  define WOLFSSL_SP_MATH
+#  define SP_WORD_SIZE 32
+#  define WOLFSSL_SP_4096
+#  define WOLFSSL_SP_NO_2048
+#  define WOLFSSL_SP_NO_3072
+#  define WOLFSSL_SP_NO_MALLOC
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA3_384

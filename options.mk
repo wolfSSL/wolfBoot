@@ -75,7 +75,6 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
     ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./src/xmalloc_rsa.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o

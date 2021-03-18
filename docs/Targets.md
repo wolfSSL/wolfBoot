@@ -179,15 +179,38 @@ Example 128KB partitioning on STM32-G070:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x1E000
 ```
 
-### Building
+### Building STM32G0
 
-Use `make TARGET=stm32g0`. The option `CORTEX_M0` is automatically selected for this target.
+Reference configuration (see `./config/examples/stm32g0.config`).
+You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32g0.config .config`.
+To build you can use `make`.
+
+The TARGET for this is `stm32g0`: `make TARGET=stm32g0`.
+The option `CORTEX_M0` is automatically selected for this target.
 The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
 multiple writes after each erase operation.
 
-Compile with:
-
+Compile requirements:
 `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
+
+### Debugging STM32G0
+
+Use `make DEBUG=1` and reload firmware.
+
+```
+st-flash write factory.bin 0x08000000
+
+# Start GDB server
+st-util -p 3333
+```
+
+wolfBoot has a .gdbinit to configure GDB
+
+```
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x08008100
+mon reset init
+```
 
 
 ## STM32WB55
