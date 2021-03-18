@@ -69,6 +69,8 @@
 #   define WOLFSSL_SP_SMALL
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
+#   define WOLFSSL_SP_NO_MALLOC
+#   define WOLFSSL_SP_NO_DYN_STACK
 
 /* ECC options disabled to reduce size */
 #   define NO_ECC_SIGN
@@ -86,44 +88,53 @@
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA2048
-#  define HAVE_RSA
-#  define RSA_LOW_MEM
-#  define WOLFSSL_RSA_VERIFY_INLINE
-#  define WOLFSSL_HAVE_SP_RSA
-#  define WOLFSSL_SP
-#  define WOLFSSL_SP_SMALL
-#  define WOLFSSL_SP_MATH
-#  define SP_WORD_SIZE 32
-#  define WOLFSSL_SP_NO_3072
+#   define RSA_LOW_MEM
+#   define WOLFSSL_RSA_VERIFY_INLINE
+#   define FP_MAX_BITS (2048 * 2)
+    /* sp math */
+#   define WOLFSSL_HAVE_SP_RSA
+#   define WOLFSSL_SP
+#   define WOLFSSL_SP_SMALL
+#   define WOLFSSL_SP_MATH
+#   define SP_WORD_SIZE 32
+#   define WOLFSSL_SP_NO_3072
+#   define WOLFSSL_SP_NO_MALLOC
+#   define WOLFSSL_SP_NO_DYN_STACK
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA4096
-#  define HAVE_RSA
-#  define RSA_LOW_MEM
-#  define WOLFSSL_RSA_PUBLIC_ONLY
-#  define WOLFSSL_RSA_VERIFY_INLINE
-#  define FP_MAX_BITS (4096 * 2)
-#  define WC_RSA_BLINDING
-#  define USE_FAST_MATH
-#  define TFM_TIMING_RESISTANT
+#   define RSA_LOW_MEM
+#   define WOLFSSL_RSA_VERIFY_INLINE
+#   define FP_MAX_BITS (4096 * 2)
+    /* sp math */
+#   define WOLFSSL_HAVE_SP_RSA
+#   define WOLFSSL_SP
+#   define WOLFSSL_SP_SMALL
+#   define WOLFSSL_SP_MATH
+#   define SP_WORD_SIZE 32
+#   define WOLFSSL_SP_4096
+#   define WOLFSSL_SP_NO_2048
+#   define WOLFSSL_SP_NO_3072
+#   define WOLFSSL_SP_NO_MALLOC
+#   define WOLFSSL_SP_NO_DYN_STACK
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA3_384
-# define WOLFSSL_SHA3
-# define NO_SHA256
+#   define WOLFSSL_SHA3
+#   define NO_SHA256
 #endif
 
 #ifdef EXT_ENCRYPTED
-#  define HAVE_CHACHA
-#  define HAVE_PWDBASED
+#   define HAVE_CHACHA
+#   define HAVE_PWDBASED
 #else
-#  define NO_PWDBASED
+#   define NO_PWDBASED
 #endif
 
 /* Disables - For minimum wolfCrypt build */
 #ifndef WOLFBOOT_TPM
-    #define NO_AES
-    #define NO_HMAC
+#   define NO_AES
+#   define NO_HMAC
 #endif
 
 #define NO_CMAC
@@ -159,8 +170,8 @@
 #define NO_CRYPT_BENCHMARK
 
 #ifdef __QNX__
-#define WOLFSSL_HAVE_MIN
-#define WOLFSSL_HAVE_MAX
+#   define WOLFSSL_HAVE_MIN
+#   define WOLFSSL_HAVE_MAX
 #endif
 
 #endif /* !H_USER_SETTINGS_ */
