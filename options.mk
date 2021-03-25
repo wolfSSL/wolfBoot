@@ -78,7 +78,7 @@ ifeq ($(SIGN),RSA4096)
   CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
 		  -DIMAGE_HEADER_SIZE=1024
   ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=12288
+    CFLAGS+=-Wstack-usage=18064
   else
     CFLAGS+=-Wstack-usage=10680
   endif
