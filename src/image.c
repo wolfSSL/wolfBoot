@@ -269,8 +269,9 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         wc_FreeRsaKey(&rsa);
         return -1;
     }
-    ret = wc_RsaSSL_Verify(sig, IMAGE_SIGNATURE_SIZE, output, output_sz, &rsa);
-    digest_out = output;
+
+    XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
+    ret = wc_RsaSSL_VerifyInline(output, IMAGE_SIGNATURE_SIZE, &digest_out, &rsa);
 #endif /* WOLFBOOT_TPM */
 
 #ifndef NO_RSA_SIG_ENCODING

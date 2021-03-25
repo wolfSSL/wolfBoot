@@ -33,6 +33,7 @@
 #define SINGLE_THREADED
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
+#define WOLFSSL_NO_MALLOC
 
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
@@ -90,6 +91,8 @@
 #ifdef WOLFBOOT_SIGN_RSA2048
 #   define RSA_LOW_MEM
 #   define WOLFSSL_RSA_VERIFY_INLINE
+#   define WOLFSSL_RSA_VERIFY_ONLY
+#   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */
 #   define WOLFSSL_HAVE_SP_RSA
@@ -105,6 +108,8 @@
 #ifdef WOLFBOOT_SIGN_RSA4096
 #   define RSA_LOW_MEM
 #   define WOLFSSL_RSA_VERIFY_INLINE
+#   define WOLFSSL_RSA_VERIFY_ONLY
+#   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (4096 * 2)
     /* sp math */
 #   define WOLFSSL_HAVE_SP_RSA
