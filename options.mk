@@ -15,11 +15,10 @@ ifeq ($(SIGN),ECC256)
     ./lib/wolfssl/wolfcrypt/src/ecc.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./src/xmalloc_ecc.o
+    ./lib/wolfssl/wolfcrypt/src/hash.o
   CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER
   ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=1024
+    CFLAGS+=-Wstack-usage=3888
   else
     CFLAGS+=-Wstack-usage=6680
   endif
@@ -52,8 +51,7 @@ ifeq ($(SIGN),RSA2048)
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
     ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./src/xmalloc_rsa.o
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
 		  -DIMAGE_HEADER_SIZE=512
@@ -75,8 +73,7 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
     ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./src/xmalloc_rsa.o
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
   CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
 		  -DIMAGE_HEADER_SIZE=1024
