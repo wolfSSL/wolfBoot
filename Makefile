@@ -47,19 +47,15 @@ all: $(MAIN_TARGET)
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) -O binary $^ $@
+	$(Q)$(OBJCOPY) -O binary --gap-fill=255 $^ $@
 
 align: wolfboot-align.bin
 
-.bootloader-partition-size:
-	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
-	$(Q)printf "%d" $(ARCH_FLASH_OFFSET) > .wolfboot-arch-offset
-	$(Q)expr `cat .wolfboot-offset` - `cat .wolfboot-arch-offset` > .bootloader-partition-size
-	$(Q)rm -f .wolfboot-offset .wolfboot-arch-offset
+BOOTLOADER_PARTITION_SIZE=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
-wolfboot-align.bin: .bootloader-partition-size wolfboot.bin
-	$(Q)dd if=/dev/zero bs=`cat .bootloader-partition-size` count=1 2>/dev/null | tr "\000" "\377" > $(@)
-	$(Q)dd if=wolfboot.bin of=$(@) conv=notrunc 2>/dev/null
+wolfboot-align.bin: wolfboot.elf
+	$(Q)$(OBJCOPY) -O binary --gap-fill=255 --pad-to=  wolfboot.elf $@
+	echo $(BOOTLOADER_PARTITION_SIZE)
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
@@ -106,9 +102,9 @@ wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) -Wl,--start-group $(OBJS) -Wl,--end-group -o $@
 
-$(LSCRIPT): hal/$(TARGET).ld .bootloader-partition-size FORCE
+$(LSCRIPT): hal/$(TARGET).ld FORCE
 	@cat hal/$(TARGET).ld | \
-		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/`cat .bootloader-partition-size`/g" | \
+		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/$(BOOTLOADER_PARTITION_SIZE)/g" | \
 		sed -e "s/##WOLFBOOT_ORIGIN##/$(WOLFBOOT_ORIGIN)/g" \
 		> $@
 
@@ -130,7 +126,7 @@ keys: $(PRIVATE_KEY)
 
 clean:
 	@find . -type f -name "*.o" | xargs rm -f
-	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex config/target.ld .bootloader-partition-size
+	@rm -f *.bin *.elf wolfboot.map *.bin  *.hex config/target.ld
 	@make -C test-app clean
 	@make -C tools/check_config clean
 
