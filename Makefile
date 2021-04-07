@@ -52,16 +52,16 @@ wolfboot.bin: wolfboot.elf
 align: wolfboot-align.bin
 
 BOOTLOADER_PARTITION_SIZE=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
+BOOT_PAD_TO_ADDR=$$(($(WOLFBOOT_START) + $(BOOTLOADER_PARTITION_SIZE)))
 
 wolfboot-align.bin: wolfboot.elf
-	$(Q)$(OBJCOPY) -O binary --gap-fill=255 --pad-to=  wolfboot.elf $@
-	echo $(BOOTLOADER_PARTITION_SIZE)
+	$(Q)$(OBJCOPY) -O binary --gap-fill=255 --pad-to=$(BOOT_PAD_TO_ADDR) wolfboot.elf $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
 	@echo
 
-test-app/image.bin: wolfboot.bin
+test-app/image.bin: wolfboot.elf
 	$(Q)make -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
 	$(Q)rm -f src/*.o hal/*.o
 	$(Q)$(SIZE) test-app/image.elf
@@ -96,7 +96,12 @@ test-app/image_v1_signed.bin: test-app/image.bin
 
 factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] $@"
-	$(Q)cat wolfboot-align.bin test-app/image_v1_signed.bin > $@
+	$(Q)$(OBJCOPY) --set-start=$(ARCH_OFFSET) \
+		--add-section .signed_image=test-app/image_v1_signed.bin \
+		--change-section-vma .signed_image=$(WOLFBOOT_PARTITION_BOOT_ADDRESS) \
+		--set-section-flags .signed_image=alloc,readonly \
+		wolfboot.elf factory.elf
+	$(Q)$(OBJCOPY) --gap-fill=255 -O binary factory.elf $@
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
