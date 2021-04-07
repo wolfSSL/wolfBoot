@@ -10,7 +10,7 @@ else
 endif
 
 # Default flash offset
-ARCH_FLASH_OFFSET=0x0
+ARCH_FLASH_OFFSET?=0x0
 
 # Default SPI driver name
 SPI_TARGET=$(TARGET)
@@ -124,6 +124,20 @@ ifeq ($(ARCH),RISCV)
 
   OBJS+=src/boot_riscv.o src/vector_riscv.o
   ARCH_FLASH_OFFSET=0x20010000
+endif
+
+# powerpc
+ifeq ($(ARCH),PPC)
+  CROSS_COMPILE:=powerpc-linux-gnu-
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles
+  LDFLAGS+=-Wl,--build-id=none
+  #MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+
+  # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,--gc-sections
+
+  OBJS+=src/boot_ppc_start.o src/boot_ppc.o
 endif
 
 ifeq ($(TARGET),kinetis)
