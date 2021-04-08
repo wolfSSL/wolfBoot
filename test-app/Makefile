@@ -180,7 +180,7 @@ standalone:LDFLAGS:=$(CFLAGS) -T standalone.ld -Wl,-gc-sections -Wl,-Map=image.m
 
 image.bin: image.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) -O binary $^ $@
+	$(Q)$(OBJCOPY) --gap-fill=255 --pad-to $$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) + $(WOLFBOOT_PARTITION_SIZE) )) -O binary $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
