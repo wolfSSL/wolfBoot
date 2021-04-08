@@ -9,7 +9,7 @@ include tools/config.mk
 
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
-CFLAGS:=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
+CFLAGS+=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
 LSCRIPT:=config/target.ld
 LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
 OBJS:= \
@@ -158,10 +158,6 @@ config: FORCE
 check_config:
 	make -C tools/check_config
 
-
-../src/libwolfboot.o: ../src/libwolfboot.c FORCE
-	@echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
