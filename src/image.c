@@ -610,6 +610,16 @@ int wolfBoot_tpm2_init(void)
 
 #endif /* WOLFBOOT_TPM */
 
+static inline uint32_t im2n(uint32_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    val = (((val & 0x000000FF) << 24) |
+           ((val & 0x0000FF00) <<  8) |
+           ((val & 0x00FF0000) >>  8) |
+           ((val & 0xFF000000) >> 24));
+#endif
+  return val;
+}
 
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
@@ -673,10 +683,10 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
         return -1;
     size = (uint32_t *)(image + sizeof (uint32_t));
 
-    if (*size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE))
+    if (im2n(*size) > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE))
        return -1;
     img->hdr_ok = 1;
-    img->fw_size = *size;
+    img->fw_size = im2n(*size);
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
     img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
     return 0;
