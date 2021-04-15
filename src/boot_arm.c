@@ -1,6 +1,6 @@
 /* boot_arm.c
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -37,6 +37,7 @@ extern uint32_t *END_STACK;
 extern void main(void);
 
 #ifndef WOLFBOOT_NO_MPU
+
 #define MPU_BASE (0xE000ED90)
 #define MPU_TYPE            *((volatile uint32_t *)(MPU_BASE + 0x00))
 #define MPU_CTRL            *((volatile uint32_t *)(MPU_BASE + 0x04))
@@ -93,6 +94,7 @@ static void mpu_on(void)
 #define MPUSIZE_1G      (0x1d << 1)
 #define MPUSIZE_4G      (0x1f << 1)
 #define MPUSIZE_ERR     (0xff << 1)
+
 static uint32_t mpusize(uint32_t size)
 {
     if (size <= (8 * 1024))
@@ -108,7 +110,8 @@ static uint32_t mpusize(uint32_t size)
 
 static void mpu_init(void)
 {
-    uint32_t wolfboot_flash_size = (uint32_t)&_stored_data - (uint32_t)&_start_text;
+    uint32_t wolfboot_flash_size = (uint32_t)&_stored_data - 
+                                   (uint32_t)&_start_text;
     uint32_t wolfboot_mpusize;
     uint32_t ram_base = (uint32_t)(&_start_data);
     uint32_t flash_base = (uint32_t)(&_start_text);
@@ -117,7 +120,8 @@ static void mpu_init(void)
 
     /* Read access to address space with XN */
     mpu_setaddr(0, 0);
-    mpu_setattr(0, MPUSIZE_4G | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+    mpu_setattr(0, MPUSIZE_4G | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | 
+        MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
 
     wolfboot_mpusize = mpusize(wolfboot_flash_size);
     if (wolfboot_mpusize == MPUSIZE_ERR)
@@ -125,29 +129,34 @@ static void mpu_init(void)
 
     /* wolfBoot .text section in flash memory (exec OK) */
     mpu_setaddr(1, flash_base);
-    mpu_setattr(1, wolfboot_mpusize | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO);
+    mpu_setattr(1, wolfboot_mpusize | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | 
+        MPU_RASR_ATTR_AP_PRW_UNO);
 
     /* Data in RAM */
     mpu_setaddr(2, ram_base);
-#ifdef RAM_CODE
-    mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO);
-#else
-    mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
-#endif
+
+    mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB | 
+        MPU_RASR_ATTR_AP_PRW_UNO
+    #ifdef RAM_CODE
+        | MPU_RASR_ATTR_XN
+    #endif
+    );
 
     /* Peripherals 0x40000000:0x5FFFFFFF (512MB)*/
     mpu_setaddr(5, 0x40000000);
-    mpu_setattr(5, MPUSIZE_512M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+    mpu_setattr(5, MPUSIZE_512M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | 
+        MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
 
     /* External peripherals 0xA0000000:0xCFFFFFFF (1GB)*/
     mpu_setaddr(6, 0xA0000000);
-    mpu_setattr(6, MPUSIZE_1G | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+    mpu_setattr(6, MPUSIZE_1G | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | 
+        MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
 
     /* System control 0xE0000000:0xEFFFFFF */
     mpu_setaddr(7, 0xE0000000);
-    mpu_setattr(7, MPUSIZE_256M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
+    mpu_setattr(7, MPUSIZE_256M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S | 
+        MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
     mpu_on();
-
 }
 
 static void mpu_off(void)
@@ -155,10 +164,10 @@ static void mpu_off(void)
     mpu_is_on = 0;
     MPU_CTRL = 0;
 }
-#else /* NO MPU */
+#else
 #define mpu_init() do{}while(0)
 #define mpu_off() do{}while(0)
-#endif /* NO MPU */
+#endif /* !WOLFBOOT_NO_MPU */
 
 
 void isr_reset(void) {
@@ -189,10 +198,12 @@ void isr_reset(void) {
 
 #if !defined(PLATFORM_stm32l5) || (__ARM_FEATURE_CMSE == 0) || (__ARM_FEATURE_CMSE != 3U)  
     mpu_init();
-#endif 
+#endif
+
     /* Run the program! */
     main();
 }
+
 void isr_fault(void)
 {
     /* Panic. */
@@ -213,7 +224,7 @@ void isr_empty(void)
 /* This is the main loop for the bootloader.
  *
  * It performs the following actions:
- *  - globally disable interrutps
+ *  - globally disable interrupts
  *  - update the Interrupt Vector using the address of the app
  *  - Set the initial stack pointer and the offset of the app
  *  - Change the stack pointer
@@ -231,12 +242,10 @@ static void  *app_entry;
 static uint32_t app_end_stack;
 
 
-
-#if defined CORTEX_M33
-
-/* Armv8 boot procedure */
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
+#if defined(CORTEX_M33) /* Armv8 boot procedure */
+
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
     app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
@@ -245,43 +254,40 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
     /* Jump to non secure app_entry */
     asm volatile("mov r7, %0" ::"r"(app_entry));
     asm volatile("bic.w   r7, r7, #1");
     asm volatile("blxns   r7" );
-#else
+#   else
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
     asm volatile("mov pc, %0":: "r"(app_entry));
-#endif
+#   endif
 
-}
-#else
-/* Armv6/v7 */
-void RAMFUNCTION do_boot(const uint32_t *app_offset)
-{
+#else /* Armv6/v7 boot procedure */
+
     mpu_off();
-#ifndef NO_VTOR
+#   ifndef NO_VTOR
     /* Disable interrupts */
     asm volatile("cpsid i");
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
-#endif
+#   endif
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
     app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
 
     /* Update stack pointer */
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
-#ifndef NO_VTOR
+#   ifndef NO_VTOR
     asm volatile("cpsie i");
-#endif
+#   endif
 
     /* Unconditionally jump to app_entry */
     asm volatile("mov pc, %0" ::"r"(app_entry));
-}
 #endif
+}
 
 #ifdef PLATFORM_psoc6
 typedef void(*NMIHANDLER)(void);
@@ -381,7 +387,7 @@ void (* const IV[])(void) =
 
 #define AIRCR *(volatile uint32_t *)(0xE000ED0C)
 #define AIRCR_VKEY (0x05FA << 16)
-#   define AIRCR_SYSRESETREQ (1 << 2)
+#define AIRCR_SYSRESETREQ (1 << 2)
 
 void RAMFUNCTION arch_reboot(void)
 {
@@ -390,4 +396,4 @@ void RAMFUNCTION arch_reboot(void)
         ;
 
 }
-#endif
+#endif /* RAM_CODE */

@@ -176,6 +176,12 @@ ifeq ($(TARGET),imx_rt)
   endif
 endif
 
+ifeq ($(TARGET),ti_hercules)
+  # HALCoGen Source and Include?
+  
+
+endif
+
 ifeq ($(TARGET),lpc)
   CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flashiap.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
