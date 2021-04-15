@@ -18,6 +18,7 @@ This README describes configuration of supported targets.
 * [STM32L5](#stm32l5)
 * [STM32L0](#stm32l0)
 * [STM32WB55](#stm32wb55)
+* [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 
 ## STM32F4
@@ -874,3 +875,7 @@ Example configuration for this target is provided in [/config/examples/t2080.con
 wolfBoot can be built with gcc powerpc tools. For example, `apt
 install gcc-powerpc-linux-gnu`. Then make will use the correct tools
 to compile.
+
+## TI Hercules TMS570LC435
+
+See [/config/examples/ti-tms570lc435.config](/config/examples/ti-tms570lc435.config) for example configuration.
