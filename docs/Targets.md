@@ -2,7 +2,25 @@
 
 This README describes configuration of supported targets.
 
-## STM32F407
+## Supported Targets
+
+* [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
+* [Cypress PSoC-6](#cypress-psoc-6)
+* [NXP LPC54xxx](#nxp-lpc54xxx)
+* [NXP iMX-RT](#nxp-imx-rt)
+* [NXP Kinetis](#nxp-kinetis)
+* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
+* [STM32F4](#stm32f4)
+* [STM32F7](#stm32f7)
+* [STM32G0](#stm32g0)
+* [STM32H7](#stm32h7)
+* [STM32L5](#stm32l5)
+* [STM32L0](#stm32l0)
+* [STM32WB55](#stm32wb55)
+* [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+
+
+## STM32F4
 
 Example 512KB partitioning on STM32-F407
 
@@ -61,6 +79,7 @@ b main
 c
 ```
 
+
 ## STM32L5
 
 ### Scenario 1: TrustZone Enabled
@@ -117,7 +136,7 @@ Bank 0 contains the bootloader at address 0x08000000, and the application at add
 When a valid image is available at the same offset in Bank 1, a candidate is selected for booting between the two valid images.
 A firmware update can be uploaded at address 0x08048000.
 
-The example configuration is available in `config/examples/stm32l5-nonsecure-dualbank.config`.
+The example configuration is available in [/config/examples/stm32l5-nonsecure-dualbank.config](/config/examples/stm32l5-nonsecure-dualbank.config).
 
 
 ### Debugging
@@ -139,7 +158,7 @@ mon reset init
 ```
 
 
-## STM32L0x3
+## STM32L0
 
 Example 192KB partitioning on STM32-L073
 
@@ -159,11 +178,14 @@ partitions of 64KB each, leaving room for up to 8KB to use for swap (4K are bein
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x28000
 ```
 
-### Building
+### STM32L0 Building
 
 Use `make TARGET=stm32l0`. The option `CORTEX_M0` is automatically selected for this target.
 
-## STM32G0x0/STM32G0x1
+
+## STM32G0
+
+Supports STM32G0x0x0/STM32G0x1.
 
 Example 128KB partitioning on STM32-G070:
 
@@ -181,7 +203,7 @@ Example 128KB partitioning on STM32-G070:
 
 ### Building STM32G0
 
-Reference configuration (see `./config/examples/stm32g0.config`).
+Reference configuration (see [/config/examples/stm32g0.config](/config/examples/stm32g0.config)).
 You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32g0.config .config`.
 To build you can use `make`.
 
@@ -302,6 +324,8 @@ Start Address: 0x20010000
 
 The default wolfBoot configuration will add a second stage bootloader, leaving the stock "double tap" bootloader as a fallback for recovery. Your production implementation should replace this and partition addresses in `target.h` will need updated, so they are `0x10000` less.
 
+To set the Freedom SDK location use `FREEDOM_E_SDK=~/src/freedom-e-sdk`.
+
 For testing wolfBoot here are the changes required:
 
 1. Makefile arguments:
@@ -366,7 +390,7 @@ add-symbol-file test-app/image.elf 0x20020100
 ```
 
 
-## STM32-F769
+## STM32F7
 
 The STM32-F76x and F77x offer dual-bank hardware-assisted swapping.
 The flash geometry must be defined beforehand, and wolfBoot can be compiled to use hardware
@@ -405,7 +429,6 @@ Dual-bank STM32F7 build can be built using:
 ```
 make TARGET=stm32f7 DUALBANK_SWAP=1 RAM_CODE=1
 ```
-
 
 ### Loading the firmware
 
@@ -462,8 +485,7 @@ booting.
 The bank-swap operation is immediate and a SWAP image is not required  in this case. Fallback mechanism can rely on
 a second choice (older firmware) in the other bank.
 
-
-### Debugging
+### STM32F7 Debugging
 
 Debugging with OpenOCD:
 
@@ -553,7 +575,7 @@ Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and
 If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
 booting.
 
-### Debugging
+### STM32H7 Debugging
 
 Debugging with OpenOCD:
 
@@ -570,7 +592,7 @@ arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-
 ```
 
 
-## LPC54606
+## NXP LPC54xxx
 
 ### Build Options
 
@@ -665,7 +687,10 @@ dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrun
 qemu-system-aarch64 -M raspi3 -m 512 -serial stdio -kernel wolfboot_linux_raspi.bin -append "terminal=ttyS0 rootwait" -dtb ./bcm2710-rpi-3-b.dtb -cpu cortex-a53
 ```
 
-## Xilinx Zynq UltraScale+ (Aarch64)
+
+## Xilinx Zynq UltraScale
+
+Xilinx UltraScale+ ZCU102 (Aarch64)
 
 Build configuration options (`.config`):
 
@@ -695,7 +720,8 @@ make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 
 `tools/keytools/sign.py --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin rsa4096.der 1`
 
-## Cypress PSoC-62S2 (CY8CKIT-062S2)
+
+## Cypress PSoC-6
 
 The Cypress PSoC 62S2 is a dual-core Cortex-M4 & Cortex-M0+ MCU. The secure boot process is managed by the M0+.
 WolfBoot can be compiled as second stage flash bootloader to manage application verification and firmware updates.
@@ -733,7 +759,7 @@ make TARGET=psoc6 \
     WOLFBOOT_SECTOR_SIZE=4096
 ```
 
-Note: A reference `.config` can be found in `./config/examples/cypsoc6.config`.
+Note: A reference `.config` can be found in [/config/examples/cypsoc6.config](/config/examples/cypsoc6.config).
 
 Hardware acceleration is enable by default using psoc6 crypto hw support.
 
@@ -794,10 +820,13 @@ the monitor command sequence below:
 (gdb) mon psoc6 reset_halt
 ```
 
-## NXP iMX-RT1060/1062 (RT1060-EVK)
+
+## NXP iMX-RT
+
+NXP RT1060/1062 (RT1060-EVK)
 
 The NXP iMX-RT1060 is a Cortex-M7 with a DCP coprocessor for SHA256 acceleration.
-Example configuration for this target is provided in `./config/examples/imx-rt1060.config`.
+Example configuration for this target is provided in [/config/examples/imx-rt1060.config](/config/examples/imx-rt1060.config).
 
 ### Building wolfBoot
 
@@ -812,4 +841,24 @@ DCP support (hardware acceleration for SHA256 operations) can be enabled by usin
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device (RT1060-EVK).
 
 
+## NXP Kinetis
 
+Supports K64 and K82 with crypto hardware acceleration.
+
+### Buld options
+
+See [/config/examples/kinetis-k82f.config](/config/examples/kinetis-k82f.config) for example configuration.
+
+The TARGET is `kinetis`. For LTC PKA support set `PKA=`.
+
+Set `MCUXPRESSO`, `MCUXPRESSO_CPU`, `MCUXPRESSO_DRIVERS` and `MCUXPRESSO_CMSIS` for MCUXpresso configuration.
+
+### Example partioning for K82
+
+```
+WOLFBOOT_PARTITION_SIZE?=0x7A000
+WOLFBOOT_SECTOR_SIZE?=0x1000
+WOLFBOOT_PARTITION_BOOT_ADDRESS?=0xA000
+WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x84000
+WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
+```
