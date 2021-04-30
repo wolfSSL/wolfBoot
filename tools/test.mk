@@ -1,6 +1,7 @@
 TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
 EXPVER=tools/test-expect-version/test-expect-version
+BINASSEMBLE=tools/bin-assemble/bin-assemble
 SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
 SIGN_ARGS=
@@ -49,7 +50,10 @@ ifeq ($(HASH),SHA3)
 endif
 
 $(EXPVER):
-	make -C tools/test-expect-version
+	$(MAKE) -C $(dir $@)
+
+$(BINASSEMBLE):
+	$(MAKE) -C $(dir $@)
 
 # Testbed actions
 #
