@@ -94,14 +94,10 @@ test-app/image_v1_signed.bin: test-app/image.bin
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
 
-factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin
+factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE)
 	@echo "\t[MERGE] $@"
-	$(Q)$(OBJCOPY) --set-start=$(ARCH_OFFSET) \
-		--add-section .signed_image=test-app/image_v1_signed.bin \
-		--change-section-vma .signed_image=$(WOLFBOOT_PARTITION_BOOT_ADDRESS) \
-		--set-section-flags .signed_image=alloc,readonly \
-		wolfboot.elf factory.elf
-	$(Q)$(OBJCOPY) --gap-fill=255 -O binary factory.elf $@
+	$(Q)$(BINASSEMBLE) $@ $(ARCH_FLASH_OFFSET) wolfboot-align.bin \
+                              $(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
