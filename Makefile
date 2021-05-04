@@ -133,7 +133,13 @@ clean:
 
 distclean: clean
 	@rm -f *.pem *.der tags ./src/*_pub_key.c include/target.h
-	@make -C tools/keytools clean
+	$(Q)$(MAKE) -C tools/keytools clean
+	$(Q)$(MAKE) -C tools/bin-assemble clean
+	$(Q)$(MAKE) -C tools/check_config clean
+	$(Q)$(MAKE) -C tools/test-expect-version clean
+	$(Q)$(MAKE) -C tools/test-update-server clean
+	$(Q)$(MAKE) -C tools/uart-flash-server clean
+	$(Q)$(MAKE) -C tools/unit-tests clean
 
 include/target.h: include/target.h.in FORCE
 	@cat include/target.h.in | \
