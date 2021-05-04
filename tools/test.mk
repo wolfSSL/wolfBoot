@@ -120,11 +120,9 @@ test-update: test-app/image.bin FORCE
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000)
 
-test-self-update: wolfboot.bin test-app/image.bin FORCE
+test-self-update: FORCE
 	@mv $(PRIVATE_KEY) private_key.old
-	@make clean
-	@rm src/*_pub_key.c
-	@make factory.bin RAM_CODE=1 WOLFBOOT_VERSION=$(WOLFBOOT_VERSION) SIGN=$(SIGN)
+	@make -b factory.bin RAM_CODE=1 WOLFBOOT_VERSION=$(WOLFBOOT_VERSION) SIGN=$(SIGN)
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
@@ -288,8 +286,6 @@ test-23-rollback-SPI: $(EXPVER) FORCE
 
 test-34-forward-self-update: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
-	@make clean
-	@make distclean
 	@make test-factory RAM_CODE=1 SIGN=$(SIGN)
 	@echo Expecting version '1'
 	@(test `$(EXPVER)` -eq 1)
@@ -297,6 +293,7 @@ test-34-forward-self-update: $(EXPVER) FORCE
 	@echo Updating keys, firmware, bootloader
 	@make test-self-update WOLFBOOT_VERSION=4 RAM_CODE=1 SIGN=$(SIGN)
 	@sleep 2
+	@echo Expecting version '2'
 	@(test `$(EXPVER)` -eq 2)
 	@make clean
 	@echo TEST PASSED

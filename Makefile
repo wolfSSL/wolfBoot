@@ -43,19 +43,14 @@ endif
 
 ASFLAGS:=$(CFLAGS)
 
+BOOTLOADER_PARTITION_SIZE=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
+BOOT_PAD_TO_ADDR=$$(($(WOLFBOOT_START) + $(BOOTLOADER_PARTITION_SIZE)))
+
 all: $(MAIN_TARGET)
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -O binary $^ $@
-
-align: wolfboot-align.bin
-
-BOOTLOADER_PARTITION_SIZE=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
-BOOT_PAD_TO_ADDR=$$(($(WOLFBOOT_START) + $(BOOTLOADER_PARTITION_SIZE)))
-
-wolfboot-align.bin: wolfboot.elf
-	$(Q)$(OBJCOPY) -O binary wolfboot.elf $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
@@ -94,9 +89,9 @@ test-app/image_v1_signed.bin: test-app/image.bin
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
 
-factory.bin: $(BOOT_IMG) wolfboot-align.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE)
+factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE)
 	@echo "\t[MERGE] $@"
-	$(Q)$(BINASSEMBLE) $@ $(ARCH_FLASH_OFFSET) wolfboot-align.bin \
+	$(Q)$(BINASSEMBLE) $@ $(ARCH_FLASH_OFFSET) wolfboot.bin \
                               $(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
