@@ -9,9 +9,10 @@ include tools/config.mk
 
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
-CFLAGS+=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
-LSCRIPT:=config/target.ld
-LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+CFLAGS:=-D"__WOLFBOOT" -D"WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL"
+LSCRIPT:=
+LDFLAGS:=
+
 OBJS:= \
 ./hal/$(TARGET).o \
 ./src/loader.o \
@@ -28,11 +29,13 @@ include arch.mk
 # Parse config options
 include options.mk
 
-CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused \
-  -I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
-  -DWOLFSSL_USER_SETTINGS \
-  -DWOLFTPM_USER_SETTINGS \
-  -DPLATFORM_$(TARGET)
+# -Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
+
+CFLAGS+= \
+  -I"." -I"include/" -I"lib/wolfssl" \
+  -D"WOLFSSL_USER_SETTINGS" \
+  -D"WOLFTPM_USER_SETTINGS" \
+  -D"PLATFORM_$(TARGET)"
 
 MAIN_TARGET=factory.bin
 
@@ -156,11 +159,11 @@ check_config:
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
+	$(Q)$(CC) $(CFLAGS) -c --output_file $@ $^
 
 %.o:%.S
 	@echo "\t[AS-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
+	$(Q)$(CC) $(CFLAGS) -c --output_file $@ $^
 
 FORCE:
 

@@ -21,6 +21,20 @@ UART_TARGET=$(TARGET)
 # Include SHA256 module because it's implicitly needed by RSA
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
+# Host OS Detection
+OS_DET=UNKNOWN
+ifeq ($(OS),Windows_NT)
+    OS_DET=WIN32
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        OS_DET=LINUX
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        OS_DET=OSX
+    endif
+endif
+
 ## ARM
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE:=aarch64-none-elf-
@@ -158,15 +172,15 @@ endif
 ifeq ($(TARGET),imx_rt)
   ARCH_FLASH_OFFSET=0x60000000
   CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 \
-		  -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
-		  -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
-		  -I$(MCUXPRESSO)/components/uart/ \
-		  -I$(MCUXPRESSO)/components/flash/nor \
-		  -I$(MCUXPRESSO)/components/flash/nor/flexspi \
-		  -I$(MCUXPRESSO)/components/serial_manager/ \
-		  -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
-		  -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
-		  -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
+      -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
+      -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
+      -I$(MCUXPRESSO)/components/uart/ \
+      -I$(MCUXPRESSO)/components/flash/nor \
+      -I$(MCUXPRESSO)/components/flash/nor/flexspi \
+      -I$(MCUXPRESSO)/components/serial_manager/ \
+      -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
+      -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
+      -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
   OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
   ifeq ($(PKA),1)
      PKA_EXTRA_OBJS+= \
@@ -176,10 +190,39 @@ ifeq ($(TARGET),imx_rt)
   endif
 endif
 
+# ARM Big Endian
+ifeq ($(ARCH),ARM_BE)
+  OBJS+=src/boot_arm.o
+endif
+
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
+  CORTEX_R5=1
+  CFLAGS+=-D"CORTEX_R5"
+
+  ifeq ($(OS_DET),WIN32)
+    CROSS_COMPILE=C:/ti/ccs1030/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/
+  else
+    ifeq ($(OS_DET),OSX)
+      CROSS_COMPILE=/Applications/ti/ccs1020/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/
+    else
+      CROSS_COMPILE=/opt/ti-cgt-arm_20.2.4.LTS/
+    endif
+  endif
+
+  CC=$(CROSS_COMPILE)bin/armcl
+  LD=$(CROSS_COMPILE)bin/armcl
+  AS=$(CROSS_COMPILE)bin/armasm
+  OBJCOPY=$(CROSS_COMPILE)bin/armobjcopy
+  SIZE=$(CROSS_COMPILE)bin/armsize
   
 
+  ARCH_FLAGS=-mv7R5 --code_state=32 --float_support=VFPv3D16 --enum_type=packed --abi=eabi --include_path="$(CROSS_COMPILE)include"
+  CFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=$(ARCH_FLAGS) --be32
+
+  LSCRIPT=hal/ti_hercules.cmd
+  OPTIMIZATION_LEVEL=2
 endif
 
 ifeq ($(TARGET),lpc)
@@ -239,12 +282,18 @@ endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
+# Setup default optimizations (for GCC)
+ifeq ($(CC),)
+  CFLAGS+=-ffunction-sections -fdata-sections
+  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+endif
+
 ## Toolchain setup
-CC=$(CROSS_COMPILE)gcc
-LD=$(CROSS_COMPILE)gcc
-AS=$(CROSS_COMPILE)gcc
-OBJCOPY:=$(CROSS_COMPILE)objcopy
-SIZE:=$(CROSS_COMPILE)size
+CC?=$(CROSS_COMPILE)gcc
+LD?=$(CROSS_COMPILE)gcc
+AS?=$(CROSS_COMPILE)gcc
+OBJCOPY?=$(CROSS_COMPILE)objcopy
+SIZE?=$(CROSS_COMPILE)size
 BOOT_IMG?=test-app/image.bin
 
 
