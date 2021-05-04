@@ -20,7 +20,7 @@ ifeq ($(SIGN),ECC256)
   ifeq ($(WOLFTPM),0)
     CFLAGS+=-Wstack-usage=3888
   else
-    CFLAGS+=-Wstack-usage=6680
+    #CFLAGS+=-Wstack-usage=6680
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
@@ -137,7 +137,7 @@ ifeq ($(ALLOW_DOWNGRADE),1)
 endif
 
 ifeq ($(NVM_FLASH_WRITEONCE),1)
-  CFLAGS+= -DNVM_FLASH_WRITEONCE
+  CFLAGS+= -D"NVM_FLASH_WRITEONCE"
 endif
 
 ifeq ($(DISABLE_BACKUP),1)
@@ -148,7 +148,11 @@ endif
 ifeq ($(DEBUG),1)
   CFLAGS+=-O0 -g -ggdb3 -DDEBUG=1
 else
-  CFLAGS+=-Os
+  ifeq ($(OPTIMIZATION_LEVEL),)
+    CFLAGS+=-Os
+  else
+    CFLAGS+=-O$(OPTIMIZATION_LEVEL)
+  endif
 endif
 
 ifeq ($(V),0)
@@ -156,7 +160,7 @@ ifeq ($(V),0)
 endif
 
 ifeq ($(NO_MPU),1)
-  CFLAGS+=-DWOLFBOOT_NO_MPU
+  CFLAGS+=-D"WOLFBOOT_NO_MPU"
 endif
 
 ifeq ($(VTOR),0)
@@ -194,7 +198,7 @@ endif
 
 ## Hash settings
 ifeq ($(HASH),SHA256)
-  CFLAGS+=-DWOLFBOOT_HASH_SHA256
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
 endif
 
 ifeq ($(HASH),SHA3)

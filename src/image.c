@@ -300,7 +300,9 @@ static uint16_t get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **
         return wolfBoot_find_header(img->hdr + IMAGE_HEADER_OFFSET, type, ptr);
 }
 
+#ifdef EXT_FLASH
 static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
+#endif
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
