@@ -1,8 +1,8 @@
 CC=gcc
-CFLAGS=-Wall -DWOLFSSL_DEBUG -DTFM_TIMING_RESISTANT -g -ggdb
+CFLAGS=-Wall -g -ggdb
 EXE=server
 
-LIBS=-lwolfssl -lpthread
+LIBS=-lpthread
 
 $(EXE): $(EXE).o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
