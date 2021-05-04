@@ -49,6 +49,9 @@
 #ifndef B115200
 #define B115200 115200
 #endif
+#ifndef TIMEOUT
+#define TIMEOUT 60
+#endif
 
 void alarm_handler(int signo)
 {
@@ -67,8 +70,8 @@ int main(int argc, char** argv)
     sigset(SIGALRM, alarm_handler);
 
 
-    if (argc != 1) {
-        printf("Usage: %s\n", argv[0]);
+    if (argc > 2) {
+        printf("Usage: %s [trigger command]\n", argv[0]);
         exit(1);
     }
 
@@ -87,16 +90,22 @@ int main(int argc, char** argv)
     tty.c_cc[VTIME] = 5;
     tcsetattr(serialfd, TCSANOW, &tty);
 
-    alarm(60);
+    alarm(TIMEOUT);
+
+    if (argc > 1) {
+        fprintf(stderr, "Executing \"%s\"\n", argv[1]);
+        system(argv[1]);
+    }
 
     while (i >= 0) {
         char c;
         res = read(serialfd, &c, 1);
-        if (res <= 0) {
+	if (res <= 0) {
             usleep(10000);
             continue;
         }
-        if (!star) {
+        fprintf(stderr, "rx: %x\n", c);
+	if (!star) {
             if (c == '*') {
                 star = 1;
                 i = 3;
@@ -108,6 +117,9 @@ int main(int argc, char** argv)
         }
     }
     printf("%d\n", ver);
+
+    fprintf(stderr, "ver: %d\n", ver);
+
     close(serialfd);
     return 0;
 }
