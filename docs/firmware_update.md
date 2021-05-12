@@ -32,6 +32,10 @@ After storing the new firmware image in the UPDATE partition, the application sh
   - Mark the new firmware in the BOOT partition as in state `STATE_TESTING`
   - Boot into the newly received firmware
 
+If the system is interrupted during the swap operation and reboots,
+wolfBoot will pick up where it left off and continue the update
+procedure.
+
 ### Successful boot
 
 Upon a successful boot, the application should inform the bootloader by calling `wolfBoot_success()`, after verifying that
@@ -40,7 +44,6 @@ the system is up and running again. This operation confirms the update to a new 
 Failing to set the BOOT partition to `STATE_SUCCESS` before the next reboot triggers a roll-back operation.
 Roll-back is initiated by the bootloader by triggering a new update, this time starting from the backup copy of the original 
 (pre-update) firmware, which is now stored in the UPDATE partition due to the swap occurring earlier.
-
 
 ### Building a new firmware image
 
@@ -57,3 +60,20 @@ to the public key currently used for verification.
 
 The tool also adds all the required Tags to the image header, containing the signatures and the SHA256 hash of 
 the firmware.
+
+## Self-update
+
+wolfBoot can update itself if `RAM_CODE` is set. This procedure
+operates almost the same as firmware update with a few key
+differences. The header of the update is marked as a bootloader
+update (use `--wolfboot-update` for the sign tools).
+
+The new signed wolfBoot image is loaded into the UPDATE parition and
+triggered the same as a firmware update. Instead of performing a swap,
+after the image is validated and signature verified, the bootloader is
+erased and the new image is written to flash. This operation is _not_
+safe from interruption. Interruption will prevent the device from
+rebooting.
+
+wolfBoot can be used to deploy new bootloader versions as well as
+update keys.
