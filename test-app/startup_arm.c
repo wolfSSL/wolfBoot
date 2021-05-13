@@ -29,15 +29,18 @@ extern unsigned int _end_bss;
 extern unsigned int _end_stack;
 extern unsigned int _start_heap;
 
-static int zeroed_variable_in_bss;
-static int initialized_variable_in_data = 42;
-
+#ifdef STM32F
 extern void isr_tim2(void);
+#endif
 
-#define STACK_PAINTING
+#ifndef STACK_PAINTING
+#define STACK_PAINTING 1
+#endif
 
 static volatile unsigned int avail_mem = 0;
+#if STACK_PAINTING
 static unsigned int sp;
+#endif
 
 extern void main(void);
 
@@ -58,7 +61,7 @@ void isr_reset(void) {
     }
 
     avail_mem = &_end_stack - &_start_heap;
-#ifdef STACK_PAINTING
+#if STACK_PAINTING
     {
         asm volatile("mrs %0, msp" : "=r"(sp));
         dst = ((unsigned int *)(&_end_stack)) - (8192 / sizeof(unsigned int)); ;
@@ -283,7 +286,7 @@ void (* const IV[])(void) =
     isr_empty, //	UCPD1_IRQHandler
     isr_empty, //	ICACHE_IRQHandler
     isr_empty, //	OTFDEC1_IRQHandler
-#else /* For STM32F4 */
+#elif STM32 /* For STM32F4 */
     isr_empty,              // NVIC_WWDG_IRQ 0
     isr_empty,              // PVD_IRQ 1
     isr_empty,              // TAMP_STAMP_IRQ 2

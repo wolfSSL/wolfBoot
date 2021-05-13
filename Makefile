@@ -10,8 +10,10 @@ include tools/config.mk
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT" -D"WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL"
-LSCRIPT:=
+LSCRIPT:=config/target.ld
 LDFLAGS:=
+LD_START_GROUP:=-Wl,--start-group
+LD_END_GROUP:=-Wl,--end-group
 
 OBJS:= \
 ./hal/$(TARGET).o \
@@ -28,8 +30,6 @@ include arch.mk
 
 # Parse config options
 include options.mk
-
-# -Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
 
 CFLAGS+= \
   -I"." -I"include/" -I"lib/wolfssl" \
@@ -98,7 +98,7 @@ factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bi
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) -Wl,--start-group $(OBJS) -Wl,--end-group -o $@
+	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
 $(LSCRIPT): hal/$(TARGET).ld FORCE
 	@cat hal/$(TARGET).ld | \
