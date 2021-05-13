@@ -21,20 +21,6 @@ UART_TARGET=$(TARGET)
 # Include SHA256 module because it's implicitly needed by RSA
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
-# Host OS Detection
-OS_DET=UNKNOWN
-ifeq ($(OS),Windows_NT)
-    OS_DET=WIN32
-else
-    UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Linux)
-        OS_DET=LINUX
-    endif
-    ifeq ($(UNAME_S),Darwin)
-        OS_DET=OSX
-    endif
-endif
-
 ## ARM
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE:=aarch64-none-elf-
@@ -193,6 +179,9 @@ endif
 # ARM Big Endian
 ifeq ($(ARCH),ARM_BE)
   OBJS+=src/boot_arm.o
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
 endif
 
 ifeq ($(TARGET),ti_hercules)
@@ -200,28 +189,25 @@ ifeq ($(TARGET),ti_hercules)
   CORTEX_R5=1
   CFLAGS+=-D"CORTEX_R5"
 
-  ifeq ($(OS_DET),WIN32)
-    CROSS_COMPILE=C:/ti/ccs1030/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/
-  else
-    ifeq ($(OS_DET),OSX)
-      CROSS_COMPILE=/Applications/ti/ccs1020/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/
-    else
-      CROSS_COMPILE=/opt/ti-cgt-arm_20.2.4.LTS/
-    endif
+  ifeq ($(CCS_ROOT),)
+    $(error "CCS_ROOT must be defined to root of tools")
   endif
+  CROSS_COMPILE=$(CCS_ROOT)/bin/
 
-  CC=$(CROSS_COMPILE)bin/armcl
-  LD=$(CROSS_COMPILE)bin/armcl
-  AS=$(CROSS_COMPILE)bin/armasm
-  OBJCOPY=$(CROSS_COMPILE)bin/armobjcopy
-  SIZE=$(CROSS_COMPILE)bin/armsize
-  
+  CC=$(CROSS_COMPILE)armcl
+  LD=$(CROSS_COMPILE)armcl
+  AS=$(CROSS_COMPILE)armasm
+  OBJCOPY=$(CROSS_COMPILE)armobjcopy
+  SIZE=$(CROSS_COMPILE)armsize
 
-  ARCH_FLAGS=-mv7R5 --code_state=32 --float_support=VFPv3D16 --enum_type=packed --abi=eabi --include_path="$(CROSS_COMPILE)include"
+  F021_DIR?=c:\\ti\\Hercules\\F021\ Flash\ API\\02.01.01
+
+  ARCH_FLAGS=-mv7R5 --code_state=32 --float_support=VFPv3D16 --enum_type=packed --abi=eabi -I"$(CCS_ROOT)/include" -I"$(F021_DIR)/include"
   CFLAGS+=$(ARCH_FLAGS)
-  LDFLAGS+=$(ARCH_FLAGS) --be32
+  LDFLAGS+=$(ARCH_FLAGS) -i"$(CCS_ROOT)/lib" -i"$(F021_DIR)" -z --be32 --map_file=wolfboot.map --reread_libs --diag_wrap=off --display_error_number --warn_sections -stack=0 -heap=0
+  LD_START_GROUP= #--start-group
+  LD_END_GROUP= -llibc.a -l"$(F021_DIR)\\F021_API_CortexR4_BE_L2FMC_V3D16.lib" $(LSCRIPT)
 
-  LSCRIPT=hal/ti_hercules.cmd
   OPTIMIZATION_LEVEL=2
 endif
 
@@ -284,6 +270,7 @@ CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
 # Setup default optimizations (for GCC)
 ifeq ($(CC),)
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
   CFLAGS+=-ffunction-sections -fdata-sections
   LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
 endif
@@ -294,9 +281,8 @@ LD?=$(CROSS_COMPILE)gcc
 AS?=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
 SIZE?=$(CROSS_COMPILE)size
+
 BOOT_IMG?=test-app/image.bin
-
-
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)
