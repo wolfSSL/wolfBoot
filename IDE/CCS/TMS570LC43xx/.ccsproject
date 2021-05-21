@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?ccsproject version="1.0"?>
+<projectOptions>
+	<ccsVersion value="10.3.0"/>
+	<deviceVariant value="Cortex R.TMS570LC43xx"/>
+	<deviceFamily value="TMS470"/>
+	<deviceEndianness value="be32"/>
+	<codegenToolVersion value="20.2.4.LTS"/>
+	<isElfFormat value="true"/>
+	<linkerCommandFile value="TMS570LC43xxFlashLnk.cmd"/>
+	<rts value="libc.a"/>
+	<createSlaveProjects value=""/>
+	<templateProperties value="id=com.ti.common.project.core.emptyProjectTemplate"/>
+	<filesToOpen value=""/>
+	<isTargetManual value="true"/>
+</projectOptions>

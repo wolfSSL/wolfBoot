@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<configurations XML_version="1.2" id="configurations_0">
+<configuration XML_version="1.2" id="Spectrum Digital XDSPRO LAN Emulator_0">
+        <instance XML_version="1.2" desc="Spectrum Digital XDSPRO LAN Emulator_0" href="connections/SDPROTRACELAN_Connection.xml" id="Spectrum Digital XDSPRO LAN Emulator_0" xml="SDPROTRACELAN_Connection.xml" xmlpath="connections"/>
+        <connection XML_version="1.2" id="Spectrum Digital XDSPRO LAN Emulator_0">
+            <instance XML_version="1.2" href="drivers/tixds560icepick_c.xml" id="drivers" xml="tixds560icepick_c.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560cs_dap.xml" id="drivers" xml="tixds560cs_dap.xml" xmlpath="drivers"/>
+            <instance XML_version="1.2" href="drivers/tixds560cortexR.xml" id="drivers" xml="tixds560cortexR.xml" xmlpath="drivers"/>
+            <property Type="stringfield" Value="192.168.2.103" id="portAddr1"/>
+            <platform XML_version="1.2" id="platform_0">
+                <instance XML_version="1.2" desc="TMS570LC43xx_0" href="devices/tms570lc43xx.xml" id="TMS570LC43xx_0" xml="tms570lc43xx.xml" xmlpath="devices"/>
+            </platform>
+        </connection>
+    </configuration>
+</configurations>
