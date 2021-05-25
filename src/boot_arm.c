@@ -239,11 +239,22 @@ void isr_empty(void)
 static void  *app_entry;
 static uint32_t app_end_stack;
 
+#if defined(CORTEX_R5)
+void do_boot_r5(void* app_entry, uint32_t app_end_stack);
+
+asm volatile("do_boot_r5:\n"
+             "  mov     sp, a2\n"
+             "  mov     pc, a1\n");
+#endif
 
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
-#if defined (CORTEX_R5)
-  /* TODO: replace with assembly call */
+#if defined(CORTEX_R5)
+  /* limitations with TI arm compiler requires assembly */
+  app_end_stack = (*((uint32_t *)(app_offset)));
+  app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
+
+  do_boot_r5(app_entry, app_end_stack);
 
 #elif defined(CORTEX_M33) /* Armv8 boot procedure */
 

@@ -31,9 +31,24 @@
 			<locationURI>WOLFBOOT_LOC/src/boot_arm.c</locationURI>
 		</link>
 		<link>
+			<name>ecc.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/ecc.c</locationURI>
+		</link>
+		<link>
+			<name>ecc256_pub_key.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/src/ecc256_pub_key.c</locationURI>
+		</link>
+		<link>
 			<name>ed25519.c</name>
 			<type>1</type>
 			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/ed25519.c</locationURI>
+		</link>
+		<link>
+			<name>ed25519_pub_key.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/src/ed25519_pub_key.c</locationURI>
 		</link>
 		<link>
 			<name>fe_low_mem.c</name>
@@ -66,6 +81,26 @@
 			<locationURI>WOLFBOOT_LOC/src/loader.c</locationURI>
 		</link>
 		<link>
+			<name>memory.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/memory.c</locationURI>
+		</link>
+		<link>
+			<name>rsa.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/rsa.c</locationURI>
+		</link>
+		<link>
+			<name>rsa2048_pub_key.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/src/rsa2048_pub_key.c</locationURI>
+		</link>
+		<link>
+			<name>rsa4096_pub_key.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/src/rsa4096_pub_key.c</locationURI>
+		</link>
+		<link>
 			<name>sha256.c</name>
 			<type>1</type>
 			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/sha256.c</locationURI>
@@ -74,6 +109,16 @@
 			<name>sha512.c</name>
 			<type>1</type>
 			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/sha512.c</locationURI>
+		</link>
+		<link>
+			<name>sp_c32.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/sp_c32.c</locationURI>
+		</link>
+		<link>
+			<name>sp_int.c</name>
+			<type>1</type>
+			<locationURI>WOLFBOOT_LOC/lib/wolfssl/wolfcrypt/src/sp_int.c</locationURI>
 		</link>
 		<link>
 			<name>string.c</name>
