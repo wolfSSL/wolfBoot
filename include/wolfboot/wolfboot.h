@@ -54,6 +54,7 @@
 #define HDR_TIMESTAMP   0x02
 #define HDR_SHA256      0x03
 #define HDR_IMG_TYPE    0x04
+#define HDR_IMG_DELTA_BASE 0x05
 #define HDR_PUBKEY      0x10
 #define HDR_SIGNATURE   0x20
 #define HDR_SHA3_384    0x13
@@ -66,6 +67,7 @@
 #define HDR_IMG_TYPE_AUTH_RSA4096 0x0400
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
+#define HDR_IMG_TYPE_DIFF         0x00D0
 
 
 #ifdef __WOLFBOOT
