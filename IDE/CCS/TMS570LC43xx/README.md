@@ -1,8 +1,8 @@
 # TMS750LC43xx
 
-#Build
+# Build
 
-# build from command line
+## Build from command line
 
 ```
 make CCS_ROOT=/c/ti/ccs1031/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS F021_DIR=/c/ti/Hercules/F021\ Flash\ API/02.01.01
@@ -65,3 +65,17 @@ c:\ti\ccs1031\ccs\ccs_base\scripting\examples\uniflash\cmdLine\uniflash.bat -ccx
 
 [dss reference](http://software-dl.ti.com/ccs/esd/documents/users_guide/sdto_dss_handbook.html)
 
+
+# Details
+
+ * R5 vector table can only be be at 0 or 0xFFFF0000
+   * A possible strategy is to have simple handlers that check
+     if a RAM overload is available. This requires shared state
+     between a bootloader and application.
+
+# Implemenation notes
+ * ASM must be self contained. See SPNU151V - ARM Optimizing C/C++ Compiler v20.2.0.LTS January 1998–Revised February 2020
+
+> The __asm statement does not provide any way to refer to local
+> variables. If your assembly code needs to refer to local variables,
+> you will need to write the entire function in assembly code.
