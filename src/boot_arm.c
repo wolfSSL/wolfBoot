@@ -202,6 +202,17 @@ void isr_reset(void) {
     main();
 }
 
+// forward to app handler
+#define ISR_FORWARDER(name, addr_low) \
+  void name(void) { asm volatile("  mov r1, #" #addr_low ";\n  movt r1, #0x0002;\n  bx r1\n"); }
+
+ISR_FORWARDER(isr_swi, 0x0108)
+ISR_FORWARDER(isr_abort_prefetch, 0x010c)
+ISR_FORWARDER(isr_abort_data, 0x0110)
+ISR_FORWARDER(isr_reserved, 0x0114)
+ISR_FORWARDER(isr_irq, 0x0118)
+ISR_FORWARDER(isr_fiq, 0x011c)
+
 void isr_fault(void)
 {
     /* Panic. */
@@ -239,22 +250,13 @@ void isr_empty(void)
 static void  *app_entry;
 static uint32_t app_end_stack;
 
-#if defined(CORTEX_R5)
-void do_boot_r5(void* app_entry, uint32_t app_end_stack);
-
-asm volatile("do_boot_r5:\n"
-             "  mov     sp, a2\n"
-             "  mov     pc, a1\n");
-#endif
 
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
 #if defined(CORTEX_R5)
   /* limitations with TI arm compiler requires assembly */
-  app_end_stack = (*((uint32_t *)(app_offset)));
-  app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
-
-  do_boot_r5(app_entry, app_end_stack);
+    asm volatile("do_boot_r5:\n"
+                 "  mov     pc, r0\n");
 
 #elif defined(CORTEX_M33) /* Armv8 boot procedure */
 
@@ -308,6 +310,22 @@ typedef void(*NMIHANDLER)(void);
 #   define isr_NMI isr_empty
 #endif
 
+#ifdef CORTEX_R5
+//__attribute__ ((section(".isr_vector")))
+asm volatile (
+"  .sect \".isr_vector\"\n"
+"resetEntry:\n"
+"  b   isr_reset\n"        // Reset
+"  b   isr_fault\n"        // Undefined
+"  b   isr_swi  \n"        // Software interrupt
+"  b   isr_abort_prefetch\n"        // Abort (Prefetch)
+"  b   isr_abort_data\n"        // Abort (Data)
+"  b   isr_reserved\n"        // Reserved
+"  b   isr_irq\n"  // IRQ
+"  b   isr_fiq\n"  // FIQ
+              );
+
+#else
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
@@ -394,6 +412,7 @@ void (* const IV[])(void) =
     isr_empty,
 #endif
 };
+#endif
 
 #ifdef RAM_CODE
 
