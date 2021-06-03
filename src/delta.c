@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include "delta.h"
 
 
 #define ESC 0x7f
@@ -24,18 +25,6 @@ struct __attribute__((packed)) block_hdr {
 
 #define BLOCK_HDR_SIZE (sizeof (struct block_hdr))
 #define MAX_SRC_SIZE (1 << 24)
-
-struct wb_patch_ctx {
-    uint8_t *src_base;
-    uint32_t src_size;
-    uint8_t *patch_base;
-    uint32_t patch_size;
-    uint32_t p_off;
-    int matching;
-    uint16_t blk_off;
-};
-
-typedef struct wb_patch_ctx WB_PATCH_CTX;
 
 int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch, uint32_t psz)
 
@@ -115,13 +104,6 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
     return dst_off;
 }
 
-struct wb_diff_ctx {
-    uint8_t *src_a;
-    uint8_t *src_b;
-    uint32_t size_a, size_b, off_b;
-};
-
-typedef struct wb_diff_ctx WB_DIFF_CTX;
 
 int wb_diff_init(WB_DIFF_CTX *ctx, uint8_t *src_a, uint32_t len_a, uint8_t *src_b, uint32_t len_b)
 {
@@ -152,7 +134,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         found = 0;
         if (p_off + BLOCK_HDR_SIZE >  len)
             return p_off;
-        while (((pa - ctx->src_a) < (ctx->size_a - BLOCK_HDR_SIZE)) && (p_off < len)) {
+        while (((uint32_t)(pa - ctx->src_a) < (ctx->size_a - BLOCK_HDR_SIZE)) && (p_off < len)) {
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
@@ -164,7 +146,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     match_len++;
                     pa++;
                     ctx->off_b++;
-                    if ((pa - ctx->src_a) >= ctx->size_a)
+                    if ((uint32_t)(pa - ctx->src_a) >= ctx->size_a)
                         break;
                 }
                 hdr.esc = ESC;
@@ -299,7 +281,7 @@ int main(int argc, char *argv[])
         }
         do {
             r = wb_diff(&dx, dest, blksz);
-            if (r < 0) 
+            if (r < 0)
                 exit(4);
             write(fd3, dest, r);
             len3 += r;

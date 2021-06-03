@@ -217,6 +217,12 @@ ifneq ($(WOLFBOOT_VERSION),0)
   endif
 endif
 
+ifeq ($(DELTA_UPDATES),1)
+  OBJS += src/delta.o
+  CFLAGS+=-DDELTA_UPDATES
+  CFLAGS+=-DDELTA_BLOCK_SIZE=$(DELTA_BLOCK_SIZE)
+endif
+
 OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(UPDATE_OBJS)
 

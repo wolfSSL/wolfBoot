@@ -27,6 +27,7 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
+#include "delta.h"
 
 
 #ifdef RAM_CODE
@@ -148,6 +149,67 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
     return pos;
 }
 
+#ifdef DELTA_UPDATES
+static uint8_t delta_blk[WOLFBOOT_SECTOR_SIZE];
+
+static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_image *update, struct wolfBoot_image *swap)
+{
+    int sector = 0;
+    int ret;
+    uint8_t flag;
+    int hdr_size;
+    uint8_t *manifest_hdr;
+    /* Read encryption key/IV before starting the update */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_get_encrypt_key(key, nonce);
+#endif
+    WB_PATCH_CTX ctx;
+
+    /* Check that image contains the header with the manifest before delta */
+    hdr_size = wolfBoot_get_diffbase_hdr(PART_UPDATE, &manifest_hdr);
+    if (hdr_size < 0)
+        return -1;
+
+    ret = wb_patch_init(&ctx, boot->fw_base + IMAGE_HEADER_SIZE, boot->fw_size,
+            update->fw_base + IMAGE_HEADER_SIZE, update->fw_size);
+    if (ret < 0)
+        return ret;
+
+     while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
+        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
+           flag = SECT_FLAG_SWAPPING;
+           wolfBoot_copy_sector(boot, swap, sector);
+           if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
+               wolfBoot_set_update_sector_flag(sector, flag);
+        }
+        if (flag == SECT_FLAG_SWAPPING) {
+            int len = 0;
+            wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
+            while (len < WOLFBOOT_SECTOR_SIZE) {
+                ret = wb_patch(&ctx, delta_blk, WOLFBOOT_SECTOR_SIZE);
+                if (ret > 0) {
+                    wb_flash_write(boot, sector * WOLFBOOT_SECTOR_SIZE, delta_blk + len, ret);
+                    len += ret;
+                } else if (ret == 0) {
+                    flag = SECT_FLAG_UPDATED;
+                    wolfBoot_set_update_sector_flag(sector, flag);
+                    return 0;
+                } else
+                   return -1;
+            }
+            flag = SECT_FLAG_UPDATED;
+            wolfBoot_set_update_sector_flag(sector, flag);
+        }
+        sector++;
+    }
+    /* Put pre-diff manifest header for the new firmware */
+    wb_flash_write(boot, 0, manifest_hdr, hdr_size);
+    return 0;
+}
+
+
+#endif
+
 static int wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -164,6 +226,7 @@ static int wolfBoot_update(int fallback_allowed)
     wolfBoot_open_image(&update, PART_UPDATE);
     wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_open_image(&swap, PART_SWAP);
+
 
     /* Use biggest size for the swap */
     total_size = boot.fw_size + IMAGE_HEADER_SIZE;
@@ -183,7 +246,7 @@ static int wolfBoot_update(int fallback_allowed)
          */
 
         update_type = wolfBoot_get_image_type(PART_UPDATE);
-        if (((update_type & 0x00FF) != HDR_IMG_TYPE_APP) || ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
+        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) || ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
             return -1;
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
@@ -194,7 +257,13 @@ static int wolfBoot_update(int fallback_allowed)
                 (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
             return -1;
 #endif
+#ifdef DELTA_UPDATES
+        if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
+            return wolfBoot_delta_update(&boot, &update, &swap);
+        }
+#endif
     }
+
 
     hal_flash_unlock();
 #ifdef EXT_FLASH

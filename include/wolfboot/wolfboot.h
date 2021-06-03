@@ -55,6 +55,7 @@
 #define HDR_SHA256      0x03
 #define HDR_IMG_TYPE    0x04
 #define HDR_IMG_DELTA_BASE 0x05
+#define HDR_PREDIFF_MANIFEST 0x40
 #define HDR_PUBKEY      0x10
 #define HDR_SIGNATURE   0x20
 #define HDR_SHA3_384    0x13
@@ -140,6 +141,10 @@ int wolfBoot_dualboot_candidate(void);
 #define ENCRYPT_BLOCK_SIZE 16 
 #define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
 #define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+
+#ifdef DELTA_UPDATES
+int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
+#endif
 
 int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
