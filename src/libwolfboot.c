@@ -523,6 +523,7 @@ int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr)
 {
     uint8_t *image = NULL;
     uint32_t *magic = NULL;
+    uint16_t ret;
     if(part == PART_UPDATE) {
         if (PARTN_IS_EXT(PART_UPDATE))
         {
@@ -545,13 +546,14 @@ int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr)
             image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
         }
     }
-    if (image) {
-        magic = (uint32_t *)image;
-        if (*magic != WOLFBOOT_MAGIC)
-            return -1;
-        return (int)wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_PREDIFF_MANIFEST, ptr);
-    }
-    return -1;
+    magic = (uint32_t *)image;
+    if (*magic != WOLFBOOT_MAGIC)
+        return -1;
+    ret = wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_PREDIFF_MANIFEST, ptr);
+    if (ret == 0)
+        return -1;
+    else
+        return (int)ret;
 }
 
 uint16_t wolfBoot_get_image_type(uint8_t part)
@@ -581,15 +583,13 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
             image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
         }
     }
-    if (image) {
-        magic = (uint32_t *)image;
-        if (*magic != WOLFBOOT_MAGIC)
-            return 0;
-        if (wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
-            return 0;
-        if (type_field)
-            return *type_field;
-    }
+    magic = (uint32_t *)image;
+    if (*magic != WOLFBOOT_MAGIC)
+        return 0;
+    if (wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
+        return 0;
+    if (type_field)
+        return *type_field;
     return 0;
 }
 
