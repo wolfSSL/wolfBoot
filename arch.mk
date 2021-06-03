@@ -27,6 +27,9 @@ ifeq ($(ARCH),AARCH64)
   CFLAGS+=-DARCH_AARCH64 -march=armv8-a
   OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
   CFLAGS+=-DNO_QNX
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
 endif
 
 ifeq ($(ARCH),ARM)
@@ -247,4 +250,9 @@ ifeq ($(ARCH),AARCH64)
 endif
 ifeq ($(DUALBANK_SWAP),1)
   UPDATE_OBJS:=src/update_flash_hwswap.o
+endif
+
+## Debug
+ifeq ($(DEBUG),1)
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/logging.o
 endif
