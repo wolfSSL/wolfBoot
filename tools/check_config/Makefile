@@ -2,14 +2,21 @@
 -include ../../.config
 include ../config.mk
 include ../../options.mk
-CFLAGS+=-I. -I../../ -I../../include -m32
+
+CFLAGS+=-I. -I../../ -I../../include
+
+.PHONY: run clean
+
+run:
+	$(Q)$(RM) check_config.o
+	$(Q)$(MAKE) check_config
 
 check_config: check_config.o
-	@gcc -o $@ $^ $(CFLAGS)
-	@./check_config
+	$(Q)gcc -o $@ $^ $(CFLAGS)
+	$(Q)./$@
 
 %.o:%.c
-	@gcc -c -o $@ $^ $(CFLAGS)
+	$(Q)gcc -c -o $@ $^ $(CFLAGS)
 
 clean:
-	@rm -f check_config *.o
+	$(Q)rm -f check_config *.o

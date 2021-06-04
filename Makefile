@@ -153,8 +153,7 @@ config: FORCE
 	make -C config
 
 check_config:
-	make -C tools/check_config
-
+	make -C tools/check_config run
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"

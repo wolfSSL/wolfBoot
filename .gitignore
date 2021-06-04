@@ -68,6 +68,9 @@ tools/keytools/Release
 # Vim swap files
 .*.swp
 
+# emacs backups
+**~
+
 # tags etc.
 cscope.out
 tags
