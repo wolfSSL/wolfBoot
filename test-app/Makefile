@@ -179,44 +179,44 @@ standalone:CFLAGS+=-DTEST_APP_STANDALONE
 standalone:LDFLAGS:=$(CFLAGS) -T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
 image.bin: image.elf
-	@echo "\t[BIN] $@"
+	$(Q)echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -O binary $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
-	@echo "\t[LD] $@"
+	$(Q)echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) -o $@
 
 
 standalone: image.bin
 
 ../src/libwolfboot.o: ../src/libwolfboot.c FORCE
-	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
 
 %.o:%.c
-	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
 %.o:%.S
-	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)echo "\t[AS-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
-	@rm -f *.bin *.elf tags *.o $(LSCRIPT)
+	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
-	@printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
-	@printf "%d" $(WOLFBOOT_PARTITION_SIZE) > .partition-size
-	@printf "%d" $(IMAGE_HEADER_SIZE) > .header-size
-	@expr `cat .wolfboot-offset` + `cat .header-size` > .entry-point
-	@printf "0x%X" `cat .entry-point` > .entry-point
-	@expr `cat .partition-size` - `cat .header-size` > .app-size
-	@printf "0x%X" `cat .app-size` > .app-size
-	@ cat $(LSCRIPT_TEMPLATE) | \
+	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
+	$(Q)printf "%d" $(WOLFBOOT_PARTITION_SIZE) > .partition-size
+	$(Q)printf "%d" $(IMAGE_HEADER_SIZE) > .header-size
+	$(Q)expr `cat .wolfboot-offset` + `cat .header-size` > .entry-point
+	$(Q)printf "0x%X" `cat .entry-point` > .entry-point
+	$(Q)expr `cat .partition-size` - `cat .header-size` > .app-size
+	$(Q)printf "0x%X" `cat .app-size` > .app-size
+	$(Q)cat $(LSCRIPT_TEMPLATE) | \
 		sed -e "s/##WOLFBOOT_TEST_APP_SIZE##/`cat .app-size`/g" | \
 		sed -e "s/##WOLFBOOT_TEST_APP_ADDRESS##/`cat .entry-point`/g" \
 		> $(@)
-	@rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
 
 FORCE:
 

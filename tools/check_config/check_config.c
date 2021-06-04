@@ -75,20 +75,31 @@ int spi_flash_write(uint32_t address, const void *data, int len)
 
 int main(void)
 {
-    printf("WOLFBOOT_PARTITION_SIZE             : %lu\n", WOLFBOOT_PARTITION_SIZE);
-    printf("WOLFBOOT_SECTOR_SIZE                : %lu\n", WOLFBOOT_SECTOR_SIZE);
-    printf("Sectors per partition               : %lu\n", (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE));
-    printf("ENCRYPT_TMP_SECRET_OFFSET           : %lu\n", ENCRYPT_TMP_SECRET_OFFSET);
-    printf("TRAILER_SKIP                        : %lu\n", TRAILER_SKIP);
-    printf("TRAILER_OVERHEAD                    : %lu\n", TRAILER_OVERHEAD);
+    printf("WOLFBOOT_PARTITION_SIZE             : %u\n", WOLFBOOT_PARTITION_SIZE);
+    printf("WOLFBOOT_SECTOR_SIZE                : %u\n", WOLFBOOT_SECTOR_SIZE);
+    printf("Sectors per partition               : %u\n", (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE));
+    printf("ENCRYPT_TMP_SECRET_OFFSET           : %u\n", ENCRYPT_TMP_SECRET_OFFSET);
+    printf("TRAILER_SKIP                        : %u\n", TRAILER_SKIP);
+#if defined(EXT_ENCRYPTED)
+    printf("TRAILER_OVERHEAD                    : %u\n", TRAILER_OVERHEAD);
+#endif
     printf("WOLFBOOT_PARTITION_BOOT_ADDRESS     : %08X\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printf("WOLFBOOT_PARTITION_UPDATE_ADDRESS   : %08X\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
     printf("PART_BOOT_ENDFLAGS                  : %08X\n", PART_BOOT_ENDFLAGS);
     printf("PART_UPDATE_ENDFLAGS                : %08X\n", PART_UPDATE_ENDFLAGS);
 #if !defined(EXT_FLASH) || defined(FLAGS_HOME)
-    printf("Max firmware size                   : %lu\n",  (Min(PART_BOOT_ENDFLAGS, PART_UPDATE_ENDFLAGS) - WOLFBOOT_PARTITION_BOOT_ADDRESS) - TRAILER_OVERHEAD);
+    printf("Max firmware size                   : %u\n",  (Min(PART_BOOT_ENDFLAGS, PART_UPDATE_ENDFLAGS) - WOLFBOOT_PARTITION_BOOT_ADDRESS)
+#if defined(EXT_ENCRYPTED)
+           - TRAILER_OVERHEAD
+#endif
+           );
 #else
-    printf("Max firmware size                   : %lu\n",  (PART_BOOT_ENDFLAGS - WOLFBOOT_PARTITION_BOOT_ADDRESS) - TRAILER_OVERHEAD);
+    printf("Max firmware size                   : %u\n",
+           (PART_BOOT_ENDFLAGS - WOLFBOOT_PARTITION_BOOT_ADDRESS)
+#if defined(EXT_ENCRYPTED)
+           - TRAILER_OVERHEAD
+#endif
+           );
 #endif
     return 0;
 
