@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-/* #define DEBUG_UART */
+#define DEBUG_UART
 
 #define CCSRBAR 0xFE000000
 
@@ -70,82 +70,30 @@ static void uart_write(const char* buf, uint32_t sz)
 
 #endif /* DEBUG_UART */
 
+static char* hex_lut = "0123456789abcdef";
 
-/* T2080 RM 2.4 */
-#define CSSR CCSRBAR
-#define LAWBARHn(n) *((volatile uint32_t*)(CSSR + 0xC00 + n*0x10 + 0x0))
-#define LAWBARLn(n) *((volatile uint32_t*)(CSSR + 0xC00 + n*0x10 + 0x4))
-#define LAWBARn(n)  *((volatile uint32_t*)(CSSR + 0xC00 + n*0x10 + 0x8))
-
-/* T2080 2.4.3 - size is equal to 2^(enum + 1) */
-enum {
-    LAW_SIZE_4KB = 0xb,
-    LAW_SIZE_8KB,
-    LAW_SIZE_16KB,
-    LAW_SIZE_32KB,
-    LAW_SIZE_64KB,
-    LAW_SIZE_128KB, /* 0x10 */
-    LAW_SIZE_256KB,
-    LAW_SIZE_512KB,
-    LAW_SIZE_1MB,
-    LAW_SIZE_2MB,
-    LAW_SIZE_4MB,
-    LAW_SIZE_8MB,
-    LAW_SIZE_16MB,
-    LAW_SIZE_32MB,
-    LAW_SIZE_64MB,
-    LAW_SIZE_128MB,
-    LAW_SIZE_256MB, /* 0x1b */
-    LAW_SIZE_512MB,
-    LAW_SIZE_1GB,
-    LAW_SIZE_2GB,
-    LAW_SIZE_4GB,
-    LAW_SIZE_8GB, /* 0x20 */
-    LAW_SIZE_16GB,
-    LAW_SIZE_32GB,
-    LAW_SIZE_64GB,
-    LAW_SIZE_128GB,
-    LAW_SIZE_256GB,
-    LAW_SIZE_512GB,
-    LAW_SIZE_1TB,
-};
-
-static void law_init(void) {
-    /* T2080RM table 2-1 */
-    int id = 0x1f; /* IFC */
-    LAWBARn (0) = 0;
-    LAWBARHn(0) = 0xf;
-    LAWBARLn(0) = 0xe8000000;
-    LAWBARn (0) = (1<<31) | (id<<20) | LAW_SIZE_256MB;
-
-    id = 0x18;
-    LAWBARn (1) = 0;
-    LAWBARHn(1) = 0xf;
-    LAWBARLn(1) = 0xf4000000;
-    LAWBARn (1) = (1<<31) | (id<<20) | LAW_SIZE_32MB;
-
-}
-
-void hal_init(void) {
-    law_init();
+void main(void) {
 #ifdef DEBUG_UART
-    uart_init();
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    char snum[8];
+
     uart_write("wolfBoot\n", 9);
 #endif
-}
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len) {
-  return 0;
-}
+    /* Wait for reboot */
+    while(1) {
+#ifdef DEBUG_UART
+        for (j=0; j<1000000; j++)
+            ;
+        i++;
 
-int hal_flash_erase(uint32_t address, int len) {
-  return 0;
+        uart_write("\r\n0x", 4);
+        for (k=0; k<8; k++) {
+            snum[7 - k] = hex_lut[(i >> 4*k) & 0xf];
+        }
+        uart_write(snum, 8);
+#endif
+    }
 }
-
-void hal_flash_unlock(void) {
-}
-
-void hal_flash_lock(void) {
-}
-
-void hal_prepare_boot(void) {}
