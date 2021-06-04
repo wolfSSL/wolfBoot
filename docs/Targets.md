@@ -9,6 +9,7 @@ This README describes configuration of supported targets.
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
+* [NXP T2080 PPC](#nxp-t2080-ppc)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -18,7 +19,6 @@ This README describes configuration of supported targets.
 * [STM32L0](#stm32l0)
 * [STM32WB55](#stm32wb55)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
-
 
 ## STM32F4
 
@@ -765,7 +765,7 @@ Hardware acceleration is enable by default using psoc6 crypto hw support.
 
 To compile with hardware acceleration disabled, use the option
 
-``` PSOC6_CRYPTO=0 ```
+`PSOC6_CRYPTO=0`
 
 in your wolfBoot configuration.
 
@@ -862,3 +862,15 @@ WOLFBOOT_PARTITION_BOOT_ADDRESS?=0xA000
 WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x84000
 WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 ```
+
+## NXP T2080 PPC
+
+The T2080 is a PPC e6500 based processor.
+
+Example configuration for this target is provided in [/config/examples/t2080.config](/config/examples/t2080.config).
+
+### Building wolfBoot
+
+wolfBoot can be built with gcc powerpc tools. For example, `apt
+install gcc-powerpc-linux-gnu`. Then make will use the correct tools
+to compile.
