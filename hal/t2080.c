@@ -1,3 +1,23 @@
+/* t2080.c
+ *
+ * Copyright (C) 2021 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
 #include <stdint.h>
 
 /* #define DEBUG_UART */
@@ -13,22 +33,22 @@
 
 static inline uint8_t in_8(const volatile unsigned char *addr)
 {
-	uint8_t ret;
+    uint8_t ret;
 
-	asm volatile("sync;\n"
-                     "lbz %0,%1;\n"
-                     "isync"
-                     : "=r" (ret)
-                     : "m" (*addr));
-	return ret;
+    asm volatile("sync;\n"
+                 "lbz %0,%1;\n"
+                 "isync"
+                 : "=r" (ret)
+                 : "m" (*addr));
+    return ret;
 }
 
 static inline void out_8(volatile unsigned char *addr, uint8_t val)
 {
-	asm volatile("sync;\n"
-                     "stb %1,%0;\n"
-                     : "=m" (*addr)
-                     : "r" (val));
+    asm volatile("sync;\n"
+                 "stb %1,%0;\n"
+                 : "=m" (*addr)
+                 : "r" (val));
 }
 
 static void uart_init(void) {
@@ -63,7 +83,7 @@ static void uart_write(const char* buf, uint32_t sz)
     uint32_t pos = 0;
     while (sz-- > 0) {
         while (!(in_8(uart + 5) & 0x20))
-		;
+            ;
         out_8(uart + 0, buf[pos++]);
     }
 }
