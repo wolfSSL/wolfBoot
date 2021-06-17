@@ -139,6 +139,7 @@ clean:
 distclean: clean
 	@rm -f *.pem *.der tags ./src/*_pub_key.c include/target.h
 	$(Q)$(MAKE) -C tools/keytools clean
+	$(Q)$(MAKE) -C tools/delta clean
 	$(Q)$(MAKE) -C tools/bin-assemble clean
 	$(Q)$(MAKE) -C tools/check_config clean
 	$(Q)$(MAKE) -C tools/test-expect-version clean
@@ -158,6 +159,11 @@ include/target.h: include/target.h.in FORCE
 	sed -e "s/##WOLFBOOT_LOAD_ADDRESS##/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
 	sed -e "s/##WOLFBOOT_LOAD_DTS_ADDRESS##/$(WOLFBOOT_LOAD_DTS_ADDRESS)/g" \
 		> $@
+
+delta: tools/delta/bmdiff
+
+tools/delta/bmdiff: FORCE
+	$(Q)$(MAKE) -C tools/delta
 
 config: FORCE
 	make -C config
