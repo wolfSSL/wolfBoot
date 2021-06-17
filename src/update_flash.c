@@ -158,37 +158,25 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
     int ret;
     uint8_t flag;
     int hdr_size;
-    uint8_t *manifest_hdr;
     /* Read encryption key/IV before starting the update */
 #ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
     WB_PATCH_CTX ctx;
 
-    /* Check that image contains the header with the manifest before delta */
-    hdr_size = wolfBoot_get_diffbase_hdr(PART_UPDATE, &manifest_hdr);
-    if (hdr_size < 0)
-        return -1;
-
-    ret = wb_patch_init(&ctx, boot->fw_base + IMAGE_HEADER_SIZE, boot->fw_size,
+    ret = wb_patch_init(&ctx, boot->fw_base, boot->fw_size + IMAGE_HEADER_SIZE,
             update->fw_base + IMAGE_HEADER_SIZE, update->fw_size);
     if (ret < 0)
         return ret;
 
      while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
-           flag = SECT_FLAG_SWAPPING;
-           wolfBoot_copy_sector(boot, swap, sector);
-           if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
-               wolfBoot_set_update_sector_flag(sector, flag);
-        }
-        if (flag == SECT_FLAG_SWAPPING) {
             int len = 0;
-            wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
+            wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
             while (len < WOLFBOOT_SECTOR_SIZE) {
                 ret = wb_patch(&ctx, delta_blk, WOLFBOOT_SECTOR_SIZE);
                 if (ret > 0) {
-                    wb_flash_write(boot, sector * WOLFBOOT_SECTOR_SIZE, delta_blk + len, ret);
+                    wb_flash_write(swap, 0, delta_blk + len, ret);
                     len += ret;
                 } else if (ret == 0) {
                     flag = SECT_FLAG_UPDATED;
@@ -197,16 +185,19 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
                 } else
                    return -1;
             }
-            flag = SECT_FLAG_UPDATED;
+            flag = SECT_FLAG_SWAPPING;
             wolfBoot_set_update_sector_flag(sector, flag);
+        }
+        if (flag == SECT_FLAG_SWAPPING) {
+           wolfBoot_copy_sector(swap, boot, sector);
+           flag = SECT_FLAG_UPDATED;
+           if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
+               wolfBoot_set_update_sector_flag(sector, flag);
         }
         sector++;
     }
-    /* Put pre-diff manifest header for the new firmware */
-    wb_flash_write(boot, 0, manifest_hdr, hdr_size);
     return 0;
 }
-
 
 #endif
 

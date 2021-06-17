@@ -26,6 +26,10 @@ struct __attribute__((packed)) block_hdr {
 #define BLOCK_HDR_SIZE (sizeof (struct block_hdr))
 #define MAX_SRC_SIZE (1 << 24)
 
+#ifndef WOLFBOOT_SECTOR_SIZE
+#   define WOLFBOOT_SECTOR_SIZE 0x1000
+#endif
+
 int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch, uint32_t psz)
 
 {
@@ -39,10 +43,6 @@ int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch, 
     bm->patch_size = psz;
     return 0;
 }
-
-#ifndef WOLFBOOT_BLOCK_SIZE
-#   define WOLFBOOT_BLOCK_SIZE 0x100
-#endif
 
 int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
 {
@@ -130,11 +130,12 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     if (len < BLOCK_HDR_SIZE)
         return -1;
     while ((ctx->off_b < ctx->size_b) && (len > p_off + BLOCK_HDR_SIZE)) {
-        pa = ctx->src_a;
+        uint32_t page_start = ctx->off_b / WOLFBOOT_SECTOR_SIZE;
+        pa = ctx->src_a + page_start;
         found = 0;
         if (p_off + BLOCK_HDR_SIZE >  len)
             return p_off;
-        while (((uint32_t)(pa - ctx->src_a) < (ctx->size_a - BLOCK_HDR_SIZE)) && (p_off < len)) {
+        while (((uint32_t)(pa - ctx->src_a) < ctx->size_a) && (p_off < len)) {
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {

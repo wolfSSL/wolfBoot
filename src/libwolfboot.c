@@ -519,43 +519,6 @@ uint32_t wolfBoot_get_diffbase_version(uint8_t part)
     return wolfBoot_get_blob_diffbase_version(image);
 }
 
-int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr)
-{
-    uint8_t *image = NULL;
-    uint32_t *magic = NULL;
-    uint16_t ret;
-    if(part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE))
-        {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        }
-    } else if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        }
-    }
-    magic = (uint32_t *)image;
-    if (*magic != WOLFBOOT_MAGIC)
-        return -1;
-    ret = wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_PREDIFF_MANIFEST, ptr);
-    if (ret == 0)
-        return -1;
-    else
-        return (int)ret;
-}
-
 uint16_t wolfBoot_get_image_type(uint8_t part)
 {
     uint16_t *type_field = NULL;

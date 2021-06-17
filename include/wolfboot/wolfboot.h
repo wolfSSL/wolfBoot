@@ -55,7 +55,6 @@
 #define HDR_SHA256      0x03
 #define HDR_IMG_TYPE    0x04
 #define HDR_IMG_DELTA_BASE 0x05
-#define HDR_PREDIFF_MANIFEST 0x40
 #define HDR_PUBKEY      0x10
 #define HDR_SIGNATURE   0x20
 #define HDR_SHA3_384    0x13
