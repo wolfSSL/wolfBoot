@@ -72,7 +72,7 @@ argv = sys.argv
 hash_algo='sha256'
 
 
-def make_header(image_file, extra_fields=[]):
+def make_header(image_file, fw_version, extra_fields=[]):
     img_size = os.path.getsize(image_file)
     # Magic header (spells 'WOLF')
     header = struct.pack('<L', WOLFBOOT_MAGIC)
@@ -432,7 +432,7 @@ else:
     pubkey = wolfboot_key_buffer
 
 
-header = make_header(image_file)
+header = make_header(image_file, fw_version)
 
 # Create output image. Add padded header in front
 outfile = open(output_image_file, 'wb')
@@ -453,10 +453,10 @@ outfile.close()
 
 if (delta):
     tmp_outfile='/tmp/delta.bin'
-    os.system('./bmdiff ' + output_image_file + ' ' + delta_base_file + ' ' + tmp_outfile)
+    os.system('tools/delta/bmdiff ' + delta_base_file + ' ' + output_image_file + ' ' + tmp_outfile)
 
     base_version = re.split("_", (re.split("_v", delta_base_file)[1]))[0]
-    header = make_header(tmp_outfile, [[HDR_IMG_DELTA_BASE, 4, struct.pack("<L", int(base_version))]])
+    header = make_header(tmp_outfile, fw_version, [[HDR_IMG_DELTA_BASE, 4, struct.pack("<L", int(base_version))]])
     outfile = open(delta_output_image_file, 'wb')
     outfile.write(header)
     sz = len(header)

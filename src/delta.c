@@ -101,6 +101,11 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
             ctx->p_off++;
         }
     }
+    while (dst_off < len) {
+        *(dst + dst_off) = *(ctx->patch_base + ctx->p_off);
+        dst_off++;
+        ctx->p_off++;
+    }
     return dst_off;
 }
 

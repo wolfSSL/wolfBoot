@@ -22,6 +22,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#include <string.h>
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
@@ -158,32 +159,37 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
     int ret;
     uint8_t flag;
     int hdr_size;
+    hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
     /* Read encryption key/IV before starting the update */
 #ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
     WB_PATCH_CTX ctx;
 
-    ret = wb_patch_init(&ctx, boot->fw_base, boot->fw_size + IMAGE_HEADER_SIZE,
-            update->fw_base + IMAGE_HEADER_SIZE, update->fw_size);
+    ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
+            update->hdr + IMAGE_HEADER_SIZE, update->fw_size);
     if (ret < 0)
         return ret;
 
      while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
             int len = 0;
-            wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
             while (len < WOLFBOOT_SECTOR_SIZE) {
                 ret = wb_patch(&ctx, delta_blk, WOLFBOOT_SECTOR_SIZE);
                 if (ret > 0) {
+                    if (len == 0)
+                        wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
                     wb_flash_write(swap, 0, delta_blk + len, ret);
                     len += ret;
                 } else if (ret == 0) {
-                    flag = SECT_FLAG_UPDATED;
-                    wolfBoot_set_update_sector_flag(sector, flag);
-                    return 0;
+                    memset(delta_blk + len, 0xFF, WOLFBOOT_SECTOR_SIZE - len);
+                    wb_flash_write(swap, 0, delta_blk + len, WOLFBOOT_SECTOR_SIZE - len);
+                    break;
                 } else
-                   return -1;
+                    goto out;
             }
             flag = SECT_FLAG_SWAPPING;
             wolfBoot_set_update_sector_flag(sector, flag);
@@ -196,7 +202,18 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
         }
         sector++;
     }
-    return 0;
+    ret = 0;
+out:
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
+    hal_flash_lock();
+
+/* Save the encryption key after swapping */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key(key, nonce);
+#endif
+    return ret;
 }
 
 #endif
@@ -350,14 +367,17 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
+#ifndef DELTA_UPDATES
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
     if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
         wolfBoot_update_trigger();
         wolfBoot_update(1);
+    } else
+#endif
     /* Check for new updates in the UPDATE partition */
-    } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
+    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
         wolfBoot_update(0);
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
