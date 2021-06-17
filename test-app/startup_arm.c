@@ -29,7 +29,7 @@ extern unsigned int _end_bss;
 extern unsigned int _end_stack;
 extern unsigned int _start_heap;
 
-#ifdef STM32F
+#ifdef STM32
 extern void isr_tim2(void);
 #endif
 
@@ -286,7 +286,7 @@ void (* const IV[])(void) =
     isr_empty, //	UCPD1_IRQHandler
     isr_empty, //	ICACHE_IRQHandler
     isr_empty, //	OTFDEC1_IRQHandler
-#elif STM32 /* For STM32F4 */
+#elif defined(STM32) /* For STM32 */
     isr_empty,              // NVIC_WWDG_IRQ 0
     isr_empty,              // PVD_IRQ 1
     isr_empty,              // TAMP_STAMP_IRQ 2

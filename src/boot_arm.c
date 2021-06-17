@@ -202,16 +202,25 @@ void isr_reset(void) {
     main();
 }
 
-// forward to app handler
-#define ISR_FORWARDER(name, addr_low) \
-  void name(void) { asm volatile("  mov r1, #" #addr_low ";\n  movt r1, #0x0002;\n  bx r1\n"); }
+#ifdef CORTEX_R5
 
-ISR_FORWARDER(isr_swi, 0x0108)
-ISR_FORWARDER(isr_abort_prefetch, 0x010c)
-ISR_FORWARDER(isr_abort_data, 0x0110)
-ISR_FORWARDER(isr_reserved, 0x0114)
-ISR_FORWARDER(isr_irq, 0x0118)
-ISR_FORWARDER(isr_fiq, 0x011c)
+/* forward to app handler */
+
+/* jump to address in only parameter */
+asm volatile ("isr_jump:\n"
+              "  bx a1\n");
+
+#define ISR_FORWARDER(name, offset)                          \
+    void name(void) { isr_jump(offset + WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE); }
+
+ISR_FORWARDER(isr_swi,            0x08)
+ISR_FORWARDER(isr_abort_prefetch, 0x0c)
+ISR_FORWARDER(isr_abort_data,     0x10)
+ISR_FORWARDER(isr_reserved,       0x14)
+ISR_FORWARDER(isr_irq,            0x18)
+ISR_FORWARDER(isr_fiq,            0x1c)
+
+#endif /* CORTEX_R5 */
 
 void isr_fault(void)
 {
@@ -311,18 +320,17 @@ typedef void(*NMIHANDLER)(void);
 #endif
 
 #ifdef CORTEX_R5
-//__attribute__ ((section(".isr_vector")))
 asm volatile (
 "  .sect \".isr_vector\"\n"
 "resetEntry:\n"
-"  b   isr_reset\n"        // Reset
-"  b   isr_fault\n"        // Undefined
-"  b   isr_swi  \n"        // Software interrupt
-"  b   isr_abort_prefetch\n"        // Abort (Prefetch)
-"  b   isr_abort_data\n"        // Abort (Data)
+"  b   isr_reset\n"           // Reset
+"  b   isr_fault\n"           // Undefined
+"  b   isr_swi  \n"           // Software interrupt
+"  b   isr_abort_prefetch\n"  // Abort (Prefetch)
+"  b   isr_abort_data\n"      // Abort (Data)
 "  b   isr_reserved\n"        // Reserved
-"  b   isr_irq\n"  // IRQ
-"  b   isr_fiq\n"  // FIQ
+"  b   isr_irq\n"             // IRQ
+"  b   isr_fiq\n"             // FIQ
               );
 
 #else
