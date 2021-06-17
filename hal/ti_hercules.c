@@ -24,6 +24,7 @@
 #include <target.h>
 #include "image.h"
 #include "hal.h"
+#include "printf.h"
 
 #ifndef CORTEX_R5
 #   error "wolfBoot TI Hercules HAL: wrong architecture selected. Please compile with TARGET=ti_hercules."
@@ -40,7 +41,7 @@ void hal_init(void)
     int freq_MHz = 16;
     int st = Fapi_initializeFlashBanks(freq_MHz);
     if (st != 0) {
-        printf("Failed Fapi_initializeFlashBanks(%d) => (%d)\n", freq_MHz, st);
+        wolfBoot_printf("Failed Fapi_initializeFlashBanks(%d) => (%d)\n", freq_MHz, st);
         return;
     }
 
@@ -51,17 +52,17 @@ void hal_init(void)
         hal_flash_unlock();
 
         if (hal_flash_erase(address, 7)) {
-            printf("failed to erase\n");
+            wolfBoot_printf("failed to erase\n");
         }
 
         if(hal_flash_write(address, msg, sizeof(msg))) {
-            printf("failed to program\n");
+            wolfBoot_printf("failed to program\n");
         }
 
         hal_flash_lock();
 
         if(memcmp(msg, (void*)address, sizeof(msg))) {
-            printf("msg and flash don't match\n");
+            wolfBoot_printf("msg and flash don't match\n");
         }
 
         /* stall here to prevent accidently including this in production */
@@ -86,7 +87,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                                           0,
                                           Fapi_AutoEccGeneration);
     if (st != 0) {
-        printf("Failed Fapi_issueProgrammingCommand() => (%d)\n", st);
+        wolfBoot_printf("Failed Fapi_issueProgrammingCommand() => (%d)\n", st);
         return -1;
     }
 
@@ -101,13 +102,13 @@ void RAMFUNCTION hal_flash_unlock(void)
 
     int st = Fapi_setActiveFlashBank(bank);
     if (st != 0) {
-        printf("Failed Fapi_setActiveFlashBank(%d) => (%d)\n", bank, st);
+        wolfBoot_printf("Failed Fapi_setActiveFlashBank(%d) => (%d)\n", bank, st);
         return;
     }
 
     st = Fapi_enableMainBankSectors(en);
     if (st != 0) {
-        printf("Failed Fapi_enableMainBankSectors() => (%d)\n", st);
+        wolfBoot_printf("Failed Fapi_enableMainBankSectors() => (%d)\n", st);
         return;
     }
 
@@ -121,14 +122,14 @@ void RAMFUNCTION hal_flash_lock(void)
 
     int st = Fapi_setActiveFlashBank(bank);
     if (st != 0) {
-        printf("Failed Fapi_setActiveFlashBank(%d) => (%d)\n", bank, st);
+        wolfBoot_printf("Failed Fapi_setActiveFlashBank(%d) => (%d)\n", bank, st);
         return;
     }
 
     /* disable all sectors */
     st = Fapi_enableMainBankSectors(0);
     if (st != 0) {
-        printf("Failed Fapi_enableMainBankSectors() => (%d)\n", st);
+        wolfBoot_printf("Failed Fapi_enableMainBankSectors() => (%d)\n", st);
         return;
     }
 
@@ -141,7 +142,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int st = Fapi_issueAsyncCommandWithAddress(Fapi_EraseSector, (void*)address);
     if (st != 0) {
-        printf("Failed Fapi_issueAsyncCommandWithAddress(Fapi_EraseSector, 0x%08x) => (%d)\n",
+        wolfBoot_printf("Failed Fapi_issueAsyncCommandWithAddress(Fapi_EraseSector, 0x%08x) => (%d)\n",
                address, st);
         return -1;
     }
@@ -151,7 +152,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         ;
 
     if(FAPI_GET_FSM_STATUS != 0) {
-        printf("failed to erase\n");
+        wolfBoot_printf("failed to erase\n");
         return -1;
     }
 
