@@ -32,7 +32,7 @@
 #include <F021.h>
 #include <stdio.h>
 
-//#define FLASH_DEMO 1
+/* #define FLASH_DEMO 1 */
 
 /* public HAL functions */
 void hal_init(void)
@@ -44,7 +44,7 @@ void hal_init(void)
         return;
     }
 
-#if FLASH_DEMO
+#if defined(FLASH_DEMO) && FLASH_DEMO
     {
         uint32_t address = 0x1E0000;
         const char msg[] = "wolfBoot was here!";
