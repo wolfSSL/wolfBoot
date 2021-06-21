@@ -18,10 +18,11 @@ ifeq ($(SIGN),ECC256)
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
+  HAVE_XMALLOC_USER?=1
   ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=3888
+    STACK_USAGE?=3888
   else
-    #CFLAGS+=-Wstack-usage=6680
+    STACK_USAGE?=6680
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
@@ -38,7 +39,9 @@ ifeq ($(SIGN),ED25519)
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_ED25519" -Wstack-usage=1024
+  CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
+  HAVE_XMALLOC_USER?=0
+  STACK_USAGE?=1024
 endif
 
 ifeq ($(SIGN),RSA2048)
@@ -54,12 +57,13 @@ ifeq ($(SIGN),RSA2048)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" -D"XMALLOC_USER" $(RSA_EXTRA_CFLAGS) \
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" $(RSA_EXTRA_CFLAGS) \
 		  -D"IMAGE_HEADER_SIZE=512"
+  HAVE_XMALLOC_USER?=1
   ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=12288
+    STACK_USAGE?=12288
   else
-    CFLAGS+=-Wstack-usage=8320
+    STACK_USAGE?=8320
   endif
 endif
 
@@ -76,16 +80,23 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" -D"XMALLOC_USER" $(RSA_EXTRA_CFLAGS) \
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" $(RSA_EXTRA_CFLAGS) \
 		  -D"IMAGE_HEADER_SIZE=1024"
+  HAVE_XMALLOC_USER?=1
   ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=18064
+    STACK_USAGE?=18064
   else
-    CFLAGS+=-Wstack-usage=10680
+    STACK_USAGE?=10680
   endif
 endif
 
+ifeq ($(HAVE_XMALLOC_USER),1)
+  CFLAGS+=-D"XMALLOC_USER"
+endif
 
+ifneq ($(STACK_USAGE),0)
+  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+endif
 
 ifeq ($(RAM_CODE),1)
   CFLAGS+= -D"RAM_CODE"
