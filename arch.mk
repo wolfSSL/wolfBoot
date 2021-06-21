@@ -188,6 +188,8 @@ ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1
   CFLAGS+=-D"CORTEX_R5" -D"BIG_ENDIAN_ORDER"
+  HAVE_XMALLOC_USER?=0
+  STACK_USAGE=0
 
   ifeq ($(CCS_ROOT),)
     $(error "CCS_ROOT must be defined to root of tools")

@@ -1,5 +1,6 @@
 -include ../.config
 -include ../tools/config.mk
+-include ../arch.mk
 -include ../options.mk
 
 TARGET?=none
