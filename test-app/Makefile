@@ -1,6 +1,5 @@
 -include ../.config
 -include ../tools/config.mk
--include ../arch.mk
 -include ../options.mk
 
 TARGET?=none
@@ -205,22 +204,22 @@ image.bin: image.elf
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	$(Q)echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) --output_file $@
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
 
 
 standalone: image.bin
 
 ../src/libwolfboot.o: ../src/libwolfboot.c FORCE
 	$(Q)echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c --output_file $@ ../src/libwolfboot.c
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
 %.o:%.c
 	$(Q)echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c --output_file $@ $^
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 %.o:%.S
 	$(Q)echo "\t[AS-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c --output_file $@ $^
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT)
