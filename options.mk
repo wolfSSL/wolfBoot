@@ -94,7 +94,7 @@ ifeq ($(HAVE_XMALLOC_USER),1)
   CFLAGS+=-D"XMALLOC_USER"
 endif
 
-ifneq ($(STACK_USAGE),0)
+ifeq ($(USE_GCC),1)
   CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
 endif
 

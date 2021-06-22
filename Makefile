@@ -37,6 +37,13 @@ CFLAGS+= \
   -D"WOLFTPM_USER_SETTINGS" \
   -D"PLATFORM_$(TARGET)"
 
+# Setup default optimizations (for GCC)
+ifeq ($(USE_GCC),1)
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
+  CFLAGS+=-ffunction-sections -fdata-sections
+  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+endif
+
 MAIN_TARGET=factory.bin
 
 ifeq ($(TARGET),stm32l5)
@@ -59,7 +66,7 @@ wolfboot.bin: wolfboot.elf
 	@echo
 
 test-app/image.bin: wolfboot.elf
-	$(Q)make -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
 	$(Q)rm -f src/*.o hal/*.o
 	$(Q)$(SIZE) test-app/image.elf
 
@@ -159,11 +166,11 @@ check_config:
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c --output_file $@ $^
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 %.o:%.S
 	@echo "\t[AS-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c --output_file $@ $^
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 FORCE:
 

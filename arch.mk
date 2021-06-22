@@ -190,6 +190,7 @@ ifeq ($(TARGET),ti_hercules)
   CFLAGS+=-D"CORTEX_R5" -D"BIG_ENDIAN_ORDER"
   HAVE_XMALLOC_USER?=0
   STACK_USAGE=0
+  USE_GCC=0
 
   ifeq ($(CCS_ROOT),)
     $(error "CCS_ROOT must be defined to root of tools")
@@ -201,6 +202,7 @@ ifeq ($(TARGET),ti_hercules)
   AS=$(CROSS_COMPILE)armasm
   OBJCOPY=$(CROSS_COMPILE)armobjcopy
   SIZE=$(CROSS_COMPILE)armsize
+  OUTPUT_FLAG=--output_file
 
   F021_DIR?=c:\\ti\\Hercules\\F021\ Flash\ API\\02.01.01
 
@@ -270,19 +272,17 @@ endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
-# Setup default optimizations (for GCC)
-ifeq ($(CC),)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
-  CFLAGS+=-ffunction-sections -fdata-sections
-  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
-endif
 
-## Toolchain setup
-CC?=$(CROSS_COMPILE)gcc
-LD?=$(CROSS_COMPILE)gcc
-AS?=$(CROSS_COMPILE)gcc
-OBJCOPY?=$(CROSS_COMPILE)objcopy
-SIZE?=$(CROSS_COMPILE)size
+USE_GCC?=1
+ifeq ($(USE_GCC),1)
+  ## Toolchain setup
+  CC=$(CROSS_COMPILE)gcc
+  LD=$(CROSS_COMPILE)gcc
+  AS=$(CROSS_COMPILE)gcc
+  OBJCOPY=$(CROSS_COMPILE)objcopy
+  SIZE=$(CROSS_COMPILE)size
+  OUTPUT_FLAG=-o
+endif
 
 BOOT_IMG?=test-app/image.bin
 
