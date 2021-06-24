@@ -3,6 +3,9 @@
 This section documents the complete firmware update procedure, enabling secure boot
 for an existing embedded application.
 
+
+## Updating Microcontroller FLASH
+
 The steps to complete a firmware update with wolfBoot are:
    - Compile the firmware with the correct entry point
    - Sign the firmware
@@ -61,7 +64,7 @@ to the public key currently used for verification.
 The tool also adds all the required Tags to the image header, containing the signatures and the SHA256 hash of 
 the firmware.
 
-## Self-update
+### Self-update
 
 wolfBoot can update itself if `RAM_CODE` is set. This procedure
 operates almost the same as firmware update with a few key
@@ -77,3 +80,16 @@ rebooting.
 
 wolfBoot can be used to deploy new bootloader versions as well as
 update keys.
+
+### Incremental updates
+
+wolfBoot supports incremental updates, based on a specific older version. The sign tool
+can create a small "patch" that only contains the binary difference between the version
+currently running on the target and the update package. This reduces the size of the image
+to be transferred to the target, while keeping the same level of security through public key
+verification, and integrity due to the repeated check (on the patch and the resulting image).
+
+The format of the patch is based on the mechanism suggested by Bentley/McIlroy, which is particularly effective
+to generate small binary patches.
+
+

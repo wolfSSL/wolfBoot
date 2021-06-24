@@ -57,12 +57,14 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
     struct block_hdr *hdr;
     uint32_t dst_off = 0;
     uint32_t src_off;
+    uint32_t cur_sector = 0;
     if (!ctx)
         return -1;
     if (len < BLOCK_HDR_SIZE)
         return -1;
     if (ctx->p_off >= ctx->patch_size)
         return 0;
+
     while ( (ctx->p_off < ctx->patch_size) && (dst_off < len)) {
         uint8_t *pp = (ctx->patch_base + ctx->p_off);
         if (*pp == ESC) {
@@ -134,26 +136,45 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
 {
     struct block_hdr hdr;
     int found;
-    uint8_t *pa;
+    uint8_t *pa, *pb;
     uint16_t match_len;
     uint32_t blk_start;
     uint32_t p_off = 0;
+    char strndbg[30];
+    int dbglen = 0;
     if (ctx->off_b >= ctx->size_b)
         return 0;
     if (len < BLOCK_HDR_SIZE)
         return -1;
+
+
+
+
     while ((ctx->off_b < ctx->size_b) && (len > p_off + BLOCK_HDR_SIZE)) {
         uint32_t page_start = ctx->off_b / WOLFBOOT_SECTOR_SIZE;
-        pa = ctx->src_a + page_start;
         found = 0;
         if (p_off + BLOCK_HDR_SIZE >  len)
             return p_off;
+
+        /* 'A' Patch base is valid for addresses in this block or further.
+         * For matching previous blocks, 'B' is used as base instead.
+         *
+         * This mechanism ensures that the patch can refer to lower position
+         * in a FLASH memory that is being patched, using the destination as
+         * base for the sectors that have already been updated.
+         */
+
+        pa = ctx->src_a + (WOLFBOOT_SECTOR_SIZE * page_start);
         while (((uint32_t)(pa - ctx->src_a) < ctx->size_a) && (p_off < len)) {
+            if ((ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
+                break;
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
+                uint32_t b_start;
                 match_len = BLOCK_HDR_SIZE;
                 blk_start = pa - ctx->src_a;
+                b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
                 while (*pa == *(ctx->src_b + ctx->off_b)) {
@@ -172,9 +193,61 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 memcpy(patch + p_off, &hdr, sizeof(hdr));
                 p_off += BLOCK_HDR_SIZE;
                 found = 1;
+                printf("DIFF BLOCK START 'A':%d len: %d pos: %d\n", blk_start, match_len, b_start);
+
+                memset(strndbg, 0, 30);
+                strncpy(strndbg,ctx->src_a + blk_start, 20);
+                printf("STRNDBG from: '%s'\n", strndbg);
+                memset(strndbg, 0, 30);
+                strncpy(strndbg,ctx->src_b + b_start, 20);
+                printf("STRNDBG to: '%s'\n", strndbg);
+
                 break;
             } else pa++;
         }
+        if (!found) {
+            /* Try matching an earlier section in the resulting image */
+            uint32_t pb_end = page_start * WOLFBOOT_SECTOR_SIZE;
+            pb = ctx->src_b;
+            while (((uint32_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
+                uint32_t b_start = ctx->off_b;
+                if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
+                    break;
+                if (ctx->size_b - (pb - ctx->src_b) < BLOCK_HDR_SIZE)
+                    break;
+                if ((memcmp(pb, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
+                    match_len = BLOCK_HDR_SIZE;
+                    blk_start = pb - ctx->src_b;
+                    pb+= BLOCK_HDR_SIZE;
+                    ctx->off_b += BLOCK_HDR_SIZE;
+                    while (*pb == *(ctx->src_b + ctx->off_b)) {
+                        match_len++;
+                        pb++;
+                        ctx->off_b++;
+                        if ((uint32_t)(pb - ctx->src_b) >= ctx->size_b)
+                            break;
+                    }
+                    hdr.esc = ESC;
+                    hdr.off[0] = ((blk_start >> 16) & 0x000000FF);
+                    hdr.off[1] = ((blk_start >> 8) & 0x000000FF);
+                    hdr.off[2] = ((blk_start) & 0x000000FF);
+                    hdr.sz[0] = ((match_len >> 8) & 0x00FF);
+                    hdr.sz[1] = ((match_len) & 0x00FF);
+                    memcpy(patch + p_off, &hdr, sizeof(hdr));
+                    p_off += BLOCK_HDR_SIZE;
+                    found = 1;
+                    printf("DIFF BLOCK START 'B':%d len: %d pos: %d\n", blk_start, match_len, b_start);
+                    memset(strndbg, 0, 30);
+                    strncpy(strndbg,ctx->src_b + blk_start, 20);
+                    printf("STRNDBG from: '%s'\n", strndbg);
+                    memset(strndbg, 0, 30);
+                    strncpy(strndbg,ctx->src_b + b_start, 20);
+                    printf("STRNDBG to: '%s'\n", strndbg);
+                    break;
+                } else pb++;
+            }
+        }
+
         if (!found) {
             if (*(ctx->src_b + ctx->off_b) == ESC) {
                 *(patch + p_off++) = ESC;
@@ -218,7 +291,7 @@ int main(int argc, char *argv[])
     struct stat st;
     void *base;
     void *buffer;
-    uint8_t dest[64];
+    uint8_t dest[WOLFBOOT_SECTOR_SIZE];
     uint8_t ff = 0xff;
     if (strcmp(basename(argv[0]), "bmdiff") == 0) {
         mode = MODE_DIFF;
@@ -227,12 +300,12 @@ int main(int argc, char *argv[])
     } else {
         return 244;
     }
-    if (argc != 4) {
-        if (mode == MODE_DIFF) {
+    if ((argc != 4) && (mode == MODE_DIFF)) {
             printf("Usage: %s file1 file2 patch\n");
-        } else {
-            printf("Usage: %s file patch destination\n");
-        }
+            exit(2);
+    }
+    if ((argc != 3) && (mode == MODE_PATCH)) {
+        printf("Usage: %s file patch (WARNING: patching is done in place and it will overwrite the original source.)\n");
         exit(2);
     }
 
@@ -248,12 +321,12 @@ int main(int argc, char *argv[])
         exit(3);
     }
 
-    fd1 = open(argv[1], O_RDONLY);
+    fd1 = open(argv[1], O_RDWR);
     if (fd1 < 0) {
         printf("Cannot open file %s\n", argv[1]);
         exit(3);
     }
-    base = mmap(NULL, len1, PROT_READ, MAP_SHARED, fd1, 0);
+    base = mmap(NULL, len1, PROT_READ|PROT_WRITE, MAP_SHARED, fd1, 0);
     if (base == (void *)(-1)) {
         perror("mmap");
         exit(3);
@@ -274,14 +347,14 @@ int main(int argc, char *argv[])
         perror("mmap");
         exit(3);
     }
-    fd3 = open(argv[3], O_RDWR|O_CREAT|O_TRUNC, 0660);
-    if (fd3 < 0) {
-        printf("Cannot open file %s for writing\n", argv[3]);
-        exit(3);
-    }
     if (mode == MODE_DIFF) {
         int r;
-        uint32_t blksz = 64;
+        uint32_t blksz = WOLFBOOT_SECTOR_SIZE;
+        fd3 = open(argv[3], O_RDWR|O_CREAT|O_TRUNC, 0660);
+        if (fd3 < 0) {
+            printf("Cannot open file %s for writing\n", argv[3]);
+            exit(3);
+        }
         WB_DIFF_CTX dx;
         if (len2 <= 0) {
             exit(0);
@@ -304,7 +377,7 @@ int main(int argc, char *argv[])
     }
     if (mode == MODE_PATCH) {
         int r;
-        uint32_t blksz = 64;
+        uint32_t blksz = WOLFBOOT_SECTOR_SIZE;
         WB_PATCH_CTX px;
         if (len2 <= 0)
             exit(0);
@@ -313,18 +386,17 @@ int main(int argc, char *argv[])
         write(fd3, &ff, 1);
         lseek(fd3, 0, SEEK_SET);
         len3 = 0;
-        if (wb_patch_init(&px, base, MAX_SRC_SIZE, buffer, len2) != 0) {
+        if (wb_patch_init(&px, base, len1, buffer, len2) != 0) {
             exit(6);
         }
         do {
             r = wb_patch(&px, dest, blksz);
             if (r < 0)
                 exit(5);
-            if (r > 0)
-                write(fd3, dest, r);
+            memcpy(base + len3, dest, r);
             len3 += r;
         } while (r > 0);
-        ftruncate(fd3, len3);
+        ftruncate(fd1, len3);
     }
     return 0;
 }
