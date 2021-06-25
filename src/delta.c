@@ -58,6 +58,8 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
     uint32_t dst_off = 0;
     uint32_t src_off;
     uint32_t cur_sector = 0;
+    uint16_t sz;
+    uint32_t copy_sz;
     if (!ctx)
         return -1;
     if (len < BLOCK_HDR_SIZE)
@@ -65,8 +67,26 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
     if (ctx->p_off >= ctx->patch_size)
         return 0;
 
+
     while ( (ctx->p_off < ctx->patch_size) && (dst_off < len)) {
         uint8_t *pp = (ctx->patch_base + ctx->p_off);
+        if (ctx->matching) {
+            /* Resume matching block from previous sector */
+            sz = ctx->blk_sz;
+            if (sz > len)
+                sz = len;
+            memcpy(dst + dst_off, ctx->src_base + ctx->blk_off, sz);
+            if (ctx->blk_sz > len) {
+                ctx->blk_sz -= len;
+                ctx->blk_off += len;
+            } else {
+                ctx->blk_off = 0;
+                ctx->blk_sz = 0;
+                ctx->matching = 0;
+            }
+            dst_off += sz;
+            continue;
+        }
         if (*pp == ESC) {
             if (*(pp + 1) == ESC) {
                 *(dst + dst_off) = ESC;
@@ -75,24 +95,15 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
                 dst_off++;
                 continue;
             } else {
-                uint16_t sz;
-                uint32_t copy_sz;
                 hdr = (struct block_hdr *)pp;
                 src_off = (hdr->off[0] << 16) + (hdr->off[1] << 8) +
                     hdr->off[2];
                 sz = (hdr->sz[0] << 8) + hdr->sz[1];
-                if ((src_off + sz) > ctx->src_size) {
-                    return -1;
-                }
-                if (ctx->matching) {
-                    /* Continue from previous block */
-                    src_off += ctx->blk_off;
-                    sz -= ctx->blk_off;
-                }
                 ctx->matching = 1;
-                if (sz > len - dst_off) {
+                if (sz > (len - dst_off)) {
                     copy_sz = len - dst_off;
-                    ctx->blk_off += copy_sz;
+                    ctx->blk_off = src_off + copy_sz;
+                    ctx->blk_sz = sz - copy_sz;
                 } else {
                     copy_sz = sz;
                 }
@@ -101,8 +112,8 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
                     /* End of the block, reset counters and matching state */
                     ctx->matching = 0;
                     ctx->blk_off = 0;
-                    ctx->p_off += BLOCK_HDR_SIZE;
                 }
+                ctx->p_off += BLOCK_HDR_SIZE;
                 dst_off += copy_sz;
             }
         } else {
@@ -110,11 +121,6 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
             dst_off++;
             ctx->p_off++;
         }
-    }
-    while (dst_off < len) {
-        *(dst + dst_off) = *(ctx->patch_base + ctx->p_off);
-        dst_off++;
-        ctx->p_off++;
     }
     return dst_off;
 }
@@ -147,16 +153,14 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     if (len < BLOCK_HDR_SIZE)
         return -1;
 
-
-
-
-    while ((ctx->off_b < ctx->size_b) && (len > p_off + BLOCK_HDR_SIZE)) {
+    while ((ctx->off_b + BLOCK_HDR_SIZE < ctx->size_b) && (len > p_off + BLOCK_HDR_SIZE)) {
         uint32_t page_start = ctx->off_b / WOLFBOOT_SECTOR_SIZE;
+        uint32_t pa_start;
         found = 0;
         if (p_off + BLOCK_HDR_SIZE >  len)
             return p_off;
 
-        /* 'A' Patch base is valid for addresses in this block or further.
+        /* 'A' Patch base is valid for addresses in blocks ahead.
          * For matching previous blocks, 'B' is used as base instead.
          *
          * This mechanism ensures that the patch can refer to lower position
@@ -164,11 +168,14 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
          * base for the sectors that have already been updated.
          */
 
-        pa = ctx->src_a + (WOLFBOOT_SECTOR_SIZE * page_start);
-        while (((uint32_t)(pa - ctx->src_a) < ctx->size_a) && (p_off < len)) {
+        pa_start = (WOLFBOOT_SECTOR_SIZE + 1) * page_start;
+        pa = ctx->src_a + pa_start;
+        while (((uint32_t)(pa - ctx->src_a) < ctx->size_a ) && (p_off < len)) {
             if ((ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
                 break;
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
+                break;
+            if ((WOLFBOOT_SECTOR_SIZE - (ctx->off_b % WOLFBOOT_SECTOR_SIZE)) < BLOCK_HDR_SIZE)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
                 uint32_t b_start;
@@ -177,12 +184,15 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
-                while (*pa == *(ctx->src_b + ctx->off_b)) {
+                while (*pa == *(ctx->src_b + ctx->off_b)) { 
                     match_len++;
                     pa++;
                     ctx->off_b++;
                     if ((uint32_t)(pa - ctx->src_a) >= ctx->size_a)
                         break;
+                    if ((b_start / WOLFBOOT_SECTOR_SIZE) < (ctx->off_b / WOLFBOOT_SECTOR_SIZE)) {
+                        break;
+                    }
                 }
                 hdr.esc = ESC;
                 hdr.off[0] = ((blk_start >> 16) & 0x000000FF);
@@ -193,14 +203,6 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 memcpy(patch + p_off, &hdr, sizeof(hdr));
                 p_off += BLOCK_HDR_SIZE;
                 found = 1;
-                printf("DIFF BLOCK START 'A':%d len: %d pos: %d\n", blk_start, match_len, b_start);
-
-                memset(strndbg, 0, 30);
-                strncpy(strndbg,ctx->src_a + blk_start, 20);
-                printf("STRNDBG from: '%s'\n", strndbg);
-                memset(strndbg, 0, 30);
-                strncpy(strndbg,ctx->src_b + b_start, 20);
-                printf("STRNDBG to: '%s'\n", strndbg);
 
                 break;
             } else pa++;
@@ -215,6 +217,8 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     break;
                 if (ctx->size_b - (pb - ctx->src_b) < BLOCK_HDR_SIZE)
                     break;
+                if (WOLFBOOT_SECTOR_SIZE > (pb - ctx->src_b) - (page_start * WOLFBOOT_SECTOR_SIZE))
+                    break;
                 if ((memcmp(pb, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
                     match_len = BLOCK_HDR_SIZE;
                     blk_start = pb - ctx->src_b;
@@ -224,7 +228,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                         match_len++;
                         pb++;
                         ctx->off_b++;
-                        if ((uint32_t)(pb - ctx->src_b) >= ctx->size_b)
+                        if ((uint32_t)(pb - ctx->src_b) >= pb_end)
                             break;
                     }
                     hdr.esc = ESC;
@@ -236,13 +240,6 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     memcpy(patch + p_off, &hdr, sizeof(hdr));
                     p_off += BLOCK_HDR_SIZE;
                     found = 1;
-                    printf("DIFF BLOCK START 'B':%d len: %d pos: %d\n", blk_start, match_len, b_start);
-                    memset(strndbg, 0, 30);
-                    strncpy(strndbg,ctx->src_b + blk_start, 20);
-                    printf("STRNDBG from: '%s'\n", strndbg);
-                    memset(strndbg, 0, 30);
-                    strncpy(strndbg,ctx->src_b + b_start, 20);
-                    printf("STRNDBG to: '%s'\n", strndbg);
                     break;
                 } else pb++;
             }
@@ -381,10 +378,6 @@ int main(int argc, char *argv[])
         WB_PATCH_CTX px;
         if (len2 <= 0)
             exit(0);
-        printf("Patching\n");
-        lseek(fd3, MAX_SRC_SIZE -1, SEEK_SET);
-        write(fd3, &ff, 1);
-        lseek(fd3, 0, SEEK_SET);
         len3 = 0;
         if (wb_patch_init(&px, base, len1, buffer, len2) != 0) {
             exit(6);
@@ -393,10 +386,15 @@ int main(int argc, char *argv[])
             r = wb_patch(&px, dest, blksz);
             if (r < 0)
                 exit(5);
-            memcpy(base + len3, dest, r);
-            len3 += r;
+            if (r > 0) {
+                memcpy(base + len3, dest, r);
+                len3 += r;
+            }
         } while (r > 0);
+        munmap(base, len1);
+        lseek(fd1, 0, SEEK_SET);
         ftruncate(fd1, len3);
+        close(fd1);
     }
     return 0;
 }

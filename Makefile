@@ -165,6 +165,10 @@ delta: tools/delta/bmdiff
 tools/delta/bmdiff: FORCE
 	$(Q)$(MAKE) -C tools/delta
 
+delta-test: FORCE
+	$(Q)$(MAKE) -C tools/delta $@
+
+
 config: FORCE
 	make -C config
 

@@ -14,3 +14,16 @@ delta.o:
 
 clean:
 	rm -f bmpatch bmdiff delta.o
+
+delta-test: FORCE bmdiff bmpatch
+	@./bmdiff delta-test/0.txt delta-test/1.txt 0-to-1.patch
+	@./bmdiff delta-test/1.txt delta-test/0.txt 1-to-0.patch
+	@cp delta-test/0.txt 0p.txt
+	@cp delta-test/1.txt 1p.txt
+	@./bmpatch 0p.txt 0-to-1.patch
+	@./bmpatch 1p.txt 1-to-0.patch
+	@diff 0p.txt delta-test/1.txt && echo "Test 0-to-1: OK"
+	@diff 1p.txt delta-test/0.txt && echo "Test 1-to-0: OK"
+	@rm -f 0-to-1.patch 1-to-0.patch 0p.txt 1p.txt
+
+.PHONY: FORCE
