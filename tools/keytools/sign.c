@@ -286,8 +286,9 @@ int main(int argc, char** argv)
     if (sign == NO_SIGN) {
         key_buffer = NULL;
         signature = NULL;
-
-
+        printf ("*** WARNING: cipher 'none' selected.\n"
+                "*** Image will not be authenticated!\n"
+                "*** SECURE BOOT DISABLED.\n");
     } else {
         /* open and load key buffer */
         f = fopen(key_file, "rb");

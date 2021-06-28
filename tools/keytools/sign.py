@@ -172,7 +172,7 @@ if wolfboot_key_buffer_len == 0:
     if (sign != 'none'):
         print("Error. Key size is zero but cipher is " + sign)
         sys.exit(3)
-    print("*** WARNING: selected 'none' cipher.")
+    print("*** WARNING: cipher 'none' selected.")
     print("*** Image will not be authenticated!")
     print("*** SECURE BOOT DISABLED.")
 
