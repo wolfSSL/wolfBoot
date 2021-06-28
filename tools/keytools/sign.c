@@ -85,6 +85,7 @@
 #define HDR_TIMESTAMP_LEN 8
 #define HDR_IMG_TYPE_LEN  2
 
+#define HDR_IMG_TYPE_AUTH_NONE    0xFF00
 #define HDR_IMG_TYPE_AUTH_ED25519 0x0100
 #define HDR_IMG_TYPE_AUTH_ECC256  0x0200
 #define HDR_IMG_TYPE_AUTH_RSA2048 0x0300
@@ -96,6 +97,7 @@
 #define HASH_SHA3      HDR_SHA3_384
 
 #define SIGN_AUTO      0
+#define NO_SIGN        HDR_IMG_TYPE_AUTH_NONE
 #define SIGN_ED25519   HDR_IMG_TYPE_AUTH_ED25519
 #define SIGN_ECC256    HDR_IMG_TYPE_AUTH_ECC256
 #define SIGN_RSA2048   HDR_IMG_TYPE_AUTH_RSA2048
@@ -146,7 +148,7 @@ int main(int argc, char** argv)
     uint8_t* key_buffer = NULL;
     size_t   key_buffer_sz = 0;
     uint8_t* header = NULL;
-    uint32_t header_sz = 0;
+    uint32_t header_sz = 256;
     uint32_t header_idx = 0;
     uint8_t* signature = NULL;
     uint32_t signature_sz = 0;
@@ -180,7 +182,7 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
-        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] image key.der fw_version\n", argv[0]);
+        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
         printf("  - or - ");
@@ -190,7 +192,10 @@ int main(int argc, char** argv)
 
     /* Parse Arguments */
     for (i=1; i<argc; i++) {
-        if (strcmp(argv[i], "--ed25519") == 0) {
+        if (strcmp(argv[i], "--no-sign") == 0) {
+            sign = NO_SIGN;
+            sign_str = "NONE";
+        } else if (strcmp(argv[i], "--ed25519") == 0) {
             sign = SIGN_ED25519;
             sign_str = "ED25519";
         }
@@ -242,11 +247,17 @@ int main(int argc, char** argv)
         }
     }
 
-    image_file = argv[i+1];
-    key_file = argv[i+2];
-    fw_version = argv[i+3];
-    if (manual_sign) {
-        signature_file = argv[i+4];
+    if (sign != NO_SIGN) {
+        image_file = argv[i+1];
+        key_file = argv[i+2];
+        fw_version = argv[i+3];
+        if (manual_sign) {
+            signature_file = argv[i+4];
+        }
+    } else {
+        image_file = argv[i+1];
+        key_file = NULL;
+        fw_version = argv[i+2];
     }
 
     strncpy((char*)buf, image_file, sizeof(buf)-1);
@@ -264,171 +275,181 @@ int main(int argc, char** argv)
     printf("Input image:          %s\n", image_file);
     printf("Selected cipher:      %s\n", sign_str);
     printf("Selected hash  :      %s\n", hash_str);
-    printf("Public key:           %s\n", key_file);
+    if (sign != NO_SIGN) {
+        printf("Public key:           %s\n", key_file);
+    }
     printf("Output %6s:        %s\n",    sha_only ? "digest" : "image", output_image_file);
     if (encrypt) {
         printf ("Encrypted output: %s\n", output_encrypted_image_file);
     }
 
-    /* open and load key buffer */
-    f = fopen(key_file, "rb");
-    if (f == NULL) {
-        printf("Open key file %s failed\n", key_file);
-        goto exit;
-    }
-    fseek(f, 0, SEEK_END);
-    key_buffer_sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    key_buffer = malloc(key_buffer_sz);
-    if (key_buffer)
-        fread(key_buffer, 1, key_buffer_sz, f);
-    fclose(f);
-    if (key_buffer == NULL) {
-        printf("Key buffer malloc error!\n");
-        goto exit;
-    }
-
-    /* key type "auto" selection */
-    if (key_buffer_sz == 32) {
-        if ((sign != SIGN_ED25519) && !manual_sign && !sha_only ) {
-            printf("Error: key too short for cipher\n");
+    if (sign == NO_SIGN) {
+        key_buffer = NULL;
+        signature = NULL;
+        printf ("*** WARNING: cipher 'none' selected.\n"
+                "*** Image will not be authenticated!\n"
+                "*** SECURE BOOT DISABLED.\n");
+    } else {
+        /* open and load key buffer */
+        f = fopen(key_file, "rb");
+        if (f == NULL) {
+            printf("Open key file %s failed\n", key_file);
             goto exit;
         }
-        if (sign == SIGN_AUTO && (manual_sign || sha_only)) {
-            printf("ed25519 public key autodetected\n");
-            sign = SIGN_ED25519;
+        fseek(f, 0, SEEK_END);
+        key_buffer_sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        key_buffer = malloc(key_buffer_sz);
+        if (key_buffer)
+            fread(key_buffer, 1, key_buffer_sz, f);
+        fclose(f);
+        if (key_buffer == NULL) {
+            printf("Key buffer malloc error!\n");
+            goto exit;
         }
 
-    }
-    else if (key_buffer_sz == 64) {
-        if (sign == SIGN_ECC256) {
-            if (!manual_sign && !sha_only) {
+        /* key type "auto" selection */
+        if (key_buffer_sz == 32) {
+            if ((sign != SIGN_ED25519) && !manual_sign && !sha_only ) {
+                printf("Error: key too short for cipher\n");
+                goto exit;
+            }
+            if (sign == SIGN_AUTO && (manual_sign || sha_only)) {
+                printf("ed25519 public key autodetected\n");
+                sign = SIGN_ED25519;
+            }
+
+        }
+        else if (key_buffer_sz == 64) {
+            if (sign == SIGN_ECC256) {
+                if (!manual_sign && !sha_only) {
+                    printf("Error: key size does not match the cipher selected\n");
+                    goto exit;
+                } else {
+                    printf("ECC256 public key detected\n");
+                }
+            }
+            if (sign == SIGN_AUTO) {
+                if (!manual_sign && !sha_only) {
+                    sign = SIGN_ED25519;
+                    printf("ed25519 key autodetected\n");
+                } else {
+                    sign = SIGN_ECC256;
+                    printf("ecc256 public key autodetected\n");
+                }
+            }
+        }
+        else if (key_buffer_sz == 96) {
+            if (sign == SIGN_ED25519) {
                 printf("Error: key size does not match the cipher selected\n");
                 goto exit;
-            } else {
-                printf("ECC256 public key detected\n");
             }
-        }
-        if (sign == SIGN_AUTO) {
-            if (!manual_sign && !sha_only) {
-                sign = SIGN_ED25519;
-                printf("ed25519 key autodetected\n");
-            } else {
+            if (sign == SIGN_AUTO) {
                 sign = SIGN_ECC256;
-                printf("ecc256 public key autodetected\n");
+                printf("ecc256 key autodetected\n");
             }
         }
-    }
-    else if (key_buffer_sz == 96) {
-        if (sign == SIGN_ED25519) {
-            printf("Error: key size does not match the cipher selected\n");
-            goto exit;
-        }
-        if (sign == SIGN_AUTO) {
-            sign = SIGN_ECC256;
-            printf("ecc256 key autodetected\n");
-        }
-    }
-    else if (key_buffer_sz > 512) {
-        if (sign == SIGN_AUTO) {
-            sign = SIGN_RSA4096;
-            printf("rsa4096 key autodetected\n");
-        }
-    }
-    else if (key_buffer_sz > 128) {
-        if (sign == SIGN_AUTO) {
-            sign = SIGN_RSA2048;
-            printf("rsa2048 key autodetected\n");
-        }
-        if (sign != SIGN_RSA2048) {
-            printf("Error: key size too large for the selected cipher\n");
-            goto exit;
-        }
-    }
-    else {
-        printf("Error: key size does not match any cipher\n");
-        goto exit;
-    }
-
-    /* get header and signature sizes */
-    if (sign == SIGN_ED25519) {
-        header_sz = 256;
-        signature_sz = 64;
-    }
-    else if (sign == SIGN_ECC256) {
-        header_sz = 256;
-        signature_sz = 64;
-    }
-    else if (sign == SIGN_RSA2048) {
-        header_sz = 512;
-        signature_sz = 256;
-    }
-    else if (sign == SIGN_RSA4096) {
-        header_sz = 1024;
-        signature_sz = 512;
-    }
-    if (signature_sz == 0 || header_sz == 0) {
-        printf("Invalid hash or signature type!\n");
-        goto exit;
-    }
-
-    /* import (decode) private key for signing */
-    if (!sha_only && !manual_sign) {
-        /* import (decode) private key for signing */
-        if (sign == SIGN_ED25519) {
-        #ifdef HAVE_ED25519
-            ret = wc_ed25519_init(&key.ed);
-            if (ret == 0) {
-                pubkey = key_buffer + ED25519_KEY_SIZE;
-                pubkey_sz = ED25519_PUB_KEY_SIZE;
-                ret = wc_ed25519_import_private_key(key_buffer, ED25519_KEY_SIZE, pubkey, pubkey_sz, &key.ed);
+        else if (key_buffer_sz > 512) {
+            if (sign == SIGN_AUTO) {
+                sign = SIGN_RSA4096;
+                printf("rsa4096 key autodetected\n");
             }
-        #endif
+        }
+        else if (key_buffer_sz > 128) {
+            if (sign == SIGN_AUTO) {
+                sign = SIGN_RSA2048;
+                printf("rsa2048 key autodetected\n");
+            }
+            if (sign != SIGN_RSA2048) {
+                printf("Error: key size too large for the selected cipher\n");
+                goto exit;
+            }
+        }
+        else {
+            printf("Error: key size does not match any cipher\n");
+            goto exit;
+        }
+
+        /* get header and signature sizes */
+        if (sign == SIGN_ED25519) {
+            header_sz = 256;
+            signature_sz = 64;
         }
         else if (sign == SIGN_ECC256) {
-        #ifdef HAVE_ECC
-            ret = wc_ecc_init(&key.ecc);
-            if (ret == 0) {
-                ret = wc_ecc_import_unsigned(&key.ecc, &key_buffer[0], &key_buffer[32],
-                    &key_buffer[64], ECC_SECP256R1);
-                if (ret == 0) {
-                    pubkey = key_buffer; /* first 64 bytes is public portion */
-                    pubkey_sz = 64;
-                }
-            }
-        #endif
+            header_sz = 256;
+            signature_sz = 64;
         }
-        else if (sign == SIGN_RSA2048 || sign == SIGN_RSA4096) {
-        #ifndef NO_RSA
-            idx = 0;
-            ret = wc_InitRsaKey(&key.rsa, NULL);
-            if (ret == 0) {
-                ret = wc_RsaPrivateKeyDecode(key_buffer, &idx, &key.rsa, key_buffer_sz);
-                if (ret == 0) {
-                    ret = wc_RsaKeyToPublicDer(&key.rsa, key_buffer, key_buffer_sz);
-                    if (ret > 0) {
-                        pubkey = key_buffer;
-                        pubkey_sz = ret;
-                        ret = 0;
-                    }
-                }
-            }
-        #endif
+        else if (sign == SIGN_RSA2048) {
+            header_sz = 512;
+            signature_sz = 256;
         }
-        if (ret != 0) {
-            printf("Error %d loading key\n", ret);
+        else if (sign == SIGN_RSA4096) {
+            header_sz = 1024;
+            signature_sz = 512;
+        }
+        if ((sign != NO_SIGN && signature_sz == 0) || header_sz == 0) {
+            printf("Invalid hash or signature type!\n");
             goto exit;
         }
-    }
-    else {
-        /* using external key to sign, so only public portion is used */
-        pubkey = key_buffer;
-        pubkey_sz = key_buffer_sz;
-    }
-#ifdef DEBUG_SIGNTOOL
-    printf("Pubkey %d\n", pubkey_sz);
-    WOLFSSL_BUFFER(pubkey, pubkey_sz);
+
+        /* import (decode) private key for signing */
+        if (!sha_only && !manual_sign) {
+            /* import (decode) private key for signing */
+            if (sign == SIGN_ED25519) {
+#ifdef HAVE_ED25519
+                ret = wc_ed25519_init(&key.ed);
+                if (ret == 0) {
+                    pubkey = key_buffer + ED25519_KEY_SIZE;
+                    pubkey_sz = ED25519_PUB_KEY_SIZE;
+                    ret = wc_ed25519_import_private_key(key_buffer, ED25519_KEY_SIZE, pubkey, pubkey_sz, &key.ed);
+                }
 #endif
+            }
+            else if (sign == SIGN_ECC256) {
+#ifdef HAVE_ECC
+                ret = wc_ecc_init(&key.ecc);
+                if (ret == 0) {
+                    ret = wc_ecc_import_unsigned(&key.ecc, &key_buffer[0], &key_buffer[32],
+                            &key_buffer[64], ECC_SECP256R1);
+                    if (ret == 0) {
+                        pubkey = key_buffer; /* first 64 bytes is public portion */
+                        pubkey_sz = 64;
+                    }
+                }
+#endif
+            }
+            else if (sign == SIGN_RSA2048 || sign == SIGN_RSA4096) {
+#ifndef NO_RSA
+                idx = 0;
+                ret = wc_InitRsaKey(&key.rsa, NULL);
+                if (ret == 0) {
+                    ret = wc_RsaPrivateKeyDecode(key_buffer, &idx, &key.rsa, key_buffer_sz);
+                    if (ret == 0) {
+                        ret = wc_RsaKeyToPublicDer(&key.rsa, key_buffer, key_buffer_sz);
+                        if (ret > 0) {
+                            pubkey = key_buffer;
+                            pubkey_sz = ret;
+                            ret = 0;
+                        }
+                    }
+                }
+#endif
+            }
+            if (ret != 0) {
+                printf("Error %d loading key\n", ret);
+                goto exit;
+            }
+        }
+        else {
+            /* using external key to sign, so only public portion is used */
+            pubkey = key_buffer;
+            pubkey_sz = key_buffer_sz;
+        }
+#ifdef DEBUG_SIGNTOOL
+        printf("Pubkey %d\n", pubkey_sz);
+        WOLFSSL_BUFFER(pubkey, pubkey_sz);
+#endif
+    } /* sign != NO_SIGN */
 
     /* Get size of image */
     f = fopen(image_file, "rb");
@@ -579,99 +600,101 @@ int main(int argc, char** argv)
     /* Add image hash to header */
     header_append_tag(header, &header_idx, hash_algo, digest_sz, digest);
 
-    /* Add Pubkey Hash to header */
-    header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
+    if (sign != NO_SIGN) {
+        /* Add Pubkey Hash to header */
+        header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
 
-    /* If hash only, then save digest and exit */
-    if (sha_only) {
-        f = fopen(output_image_file, "wb");
-        if (f == NULL) {
-            printf("Open output file %s failed\n", output_image_file);
-            goto exit;
-        }
-        fwrite(digest, digest_sz, 1, f);
-        fclose(f);
-        printf("Digest image %s successfully created.\n", output_image_file);
-        ret = 0;
-        goto exit;
-    }
-
-    /* Sign the digest */
-    ret = NOT_COMPILED_IN; /* default error */
-    signature = malloc(signature_sz);
-    if (signature == NULL) {
-        printf("Signature malloc error!\n");
-        goto exit;
-    }
-    memset(signature, 0, signature_sz);
-    if (!manual_sign) {
-        printf("Signing the firmware...\n");
-
-        wc_InitRng(&rng);
-        if (sign == SIGN_ED25519) {
-        #ifdef HAVE_ED25519
-            ret = wc_ed25519_sign_msg(digest, digest_sz, signature, &signature_sz, &key.ed);
-        #endif
-        }
-        else if (sign == SIGN_ECC256) {
-        #ifdef HAVE_ECC
-            mp_int r, s;
-            mp_init(&r); mp_init(&s);
-            ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc, &r, &s);
-            mp_to_unsigned_bin(&r, &signature[0]);
-            mp_to_unsigned_bin(&s, &signature[32]);
-            mp_clear(&r); mp_clear(&s);
-            wc_ecc_free(&key.ecc);
-        #endif
-        }
-        else if (sign == SIGN_RSA2048 || sign == SIGN_RSA4096) {
-        #ifndef NO_RSA
-            uint32_t enchash_sz = digest_sz;
-            uint8_t* enchash = digest;
-            if (sign_wenc) {
-                /* add ASN.1 signature encoding */
-                int hashOID = 0;
-                if (hash_algo == HASH_SHA256)
-                    hashOID = SHA256h;
-                else if (hash_algo == HASH_SHA3)
-                    hashOID = SHA3_384h;
-                enchash_sz = wc_EncodeSignature(buf, digest, digest_sz, hashOID);
-                enchash = buf;
+        /* If hash only, then save digest and exit */
+        if (sha_only) {
+            f = fopen(output_image_file, "wb");
+            if (f == NULL) {
+                printf("Open output file %s failed\n", output_image_file);
+                goto exit;
             }
-            ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, signature_sz, 
-                &key.rsa, &rng);
-            wc_FreeRsaKey(&key.rsa);
-            if (ret > 0) {
-                signature_sz = ret;
-                ret = 0;
+            fwrite(digest, digest_sz, 1, f);
+            fclose(f);
+            printf("Digest image %s successfully created.\n", output_image_file);
+            ret = 0;
+            goto exit;
+        }
+
+        /* Sign the digest */
+        ret = NOT_COMPILED_IN; /* default error */
+        signature = malloc(signature_sz);
+        if (signature == NULL) {
+            printf("Signature malloc error!\n");
+            goto exit;
+        }
+        memset(signature, 0, signature_sz);
+        if (!manual_sign) {
+            printf("Signing the firmware...\n");
+
+            wc_InitRng(&rng);
+            if (sign == SIGN_ED25519) {
+#ifdef HAVE_ED25519
+                ret = wc_ed25519_sign_msg(digest, digest_sz, signature, &signature_sz, &key.ed);
+#endif
             }
-        #endif
-        }
-        wc_FreeRng(&rng);
+            else if (sign == SIGN_ECC256) {
+#ifdef HAVE_ECC
+                mp_int r, s;
+                mp_init(&r); mp_init(&s);
+                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc, &r, &s);
+                mp_to_unsigned_bin(&r, &signature[0]);
+                mp_to_unsigned_bin(&s, &signature[32]);
+                mp_clear(&r); mp_clear(&s);
+                wc_ecc_free(&key.ecc);
+#endif
+            }
+            else if (sign == SIGN_RSA2048 || sign == SIGN_RSA4096) {
+#ifndef NO_RSA
+                uint32_t enchash_sz = digest_sz;
+                uint8_t* enchash = digest;
+                if (sign_wenc) {
+                    /* add ASN.1 signature encoding */
+                    int hashOID = 0;
+                    if (hash_algo == HASH_SHA256)
+                        hashOID = SHA256h;
+                    else if (hash_algo == HASH_SHA3)
+                        hashOID = SHA3_384h;
+                    enchash_sz = wc_EncodeSignature(buf, digest, digest_sz, hashOID);
+                    enchash = buf;
+                }
+                ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, signature_sz, 
+                        &key.rsa, &rng);
+                wc_FreeRsaKey(&key.rsa);
+                if (ret > 0) {
+                    signature_sz = ret;
+                    ret = 0;
+                }
+#endif
+            }
+            wc_FreeRng(&rng);
 
-        if (ret != 0) {
-            printf("Signing error %d\n", ret);
-            goto exit;
+            if (ret != 0) {
+                printf("Signing error %d\n", ret);
+                goto exit;
+            }
         }
-    }
-    else {
-        printf("Opening signature file %s\n", signature_file);
+        else {
+            printf("Opening signature file %s\n", signature_file);
 
-        f = fopen(signature_file, "rb");
-        if (f == NULL) {
-            printf("Open signature file %s failed\n", signature_file);
-            goto exit;
+            f = fopen(signature_file, "rb");
+            if (f == NULL) {
+                printf("Open signature file %s failed\n", signature_file);
+                goto exit;
+            }
+            fread(signature, signature_sz, 1, f);
+            fclose(f);
         }
-        fread(signature, signature_sz, 1, f);
-        fclose(f);
-    }
 #ifdef DEBUG_SIGNTOOL
-    printf("Signature %d\n", signature_sz);
-    WOLFSSL_BUFFER(signature, signature_sz);
+        printf("Signature %d\n", signature_sz);
+        WOLFSSL_BUFFER(signature, signature_sz);
 #endif
 
-    /* Add signature to header */
-    header_append_tag(header, &header_idx, HDR_SIGNATURE, signature_sz, signature);
+        /* Add signature to header */
+        header_append_tag(header, &header_idx, HDR_SIGNATURE, signature_sz, signature);
+    } /* end if(sign != NO_SIGN) */
 
     /* Add padded header at end */
     while (header_idx < header_sz) {

@@ -26,6 +26,10 @@ else
 	endif
 endif
 
+ifeq ($(SIGN),NONE)
+  SIGN_ARGS+=--no-sign
+endif
+
 ifeq ($(SIGN),ED25519)
   SIGN_ARGS+= --ed25519
 endif
@@ -349,6 +353,12 @@ test-163-rollback-TPM-RSA: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=RSA2048 WOLFTPM=1
 	@make tpm-mute
 
+test-171-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=NONE
+
+test-173-rollback-NOSIGN: $(EXPVER) FORCE
+	@make test-03-rollback SIGN=NONE
+
 test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback \
 	test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI \
 	test-34-forward-self-update \
@@ -364,4 +374,6 @@ test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow
 	test-101-forward-update-no-downgrade-RSA2048-SHA3 \
 	test-111-forward-update-no-downgrade-RSA4096-SHA3 \
 	test-161-forward-update-no-downgrade-TPM-RSA \
-	test-163-rollback-TPM-RSA
+	test-163-rollback-TPM-RSA \
+	test-171-forward-update-no-downgrade-NOSIGN \
+	test-173-rollback-NOSIGN

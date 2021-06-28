@@ -23,6 +23,7 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_drv.h"
+#include <stddef.h>
 
 #include <wolfssl/wolfcrypt/settings.h>
 
@@ -430,6 +431,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 #endif /* WOLFBOOT_TPM && WOLFBOOT_HASH_TPM */
 }
 
+#ifndef WOLFBOOT_NO_SIGN
 static void key_sha256(uint8_t *hash)
 {
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_HASH_TPM)
@@ -468,6 +470,7 @@ static void key_sha256(uint8_t *hash)
     wc_Sha256Final(&sha256_ctx, hash);
 #endif /* WOLFBOOT_TPM && WOLFBOOT_HASH_TPM */
 }
+#endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA2-256 */
 
 #if defined(WOLFBOOT_HASH_SHA3_384)
@@ -719,6 +722,12 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     return 0;
 }
 
+#ifdef WOLFBOOT_NO_SIGN
+int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
+{
+    return 0;
+}
+#else
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
     int ret;
@@ -755,6 +764,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     img->signature_ok = 1;
     return 0;
 }
+#endif
 
 /* Peek at image offset and return static pointer */
 /* sz: optional and returns length of peek */
