@@ -10,7 +10,9 @@ endif
 ifeq ($(SIGN),NONE)
   SIGN_OPTIONS+=--no-sign
   PRIVATE_KEY=
-  CFLAGS+=-Wstack-usage=1024 -DWOLFBOOT_NO_SIGN
+  STACK_USAGE?=1024
+  CFLAGS+=-DWOLFBOOT_NO_SIGN
+  HAVE_XMALLOC_USER?=0
 endif
 
 ifeq ($(SIGN),ECC256)
