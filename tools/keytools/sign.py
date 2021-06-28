@@ -44,6 +44,7 @@ HDR_SHA3_384_LEN    = 48
 HDR_IMG_TYPE_LEN    = 2
 HDR_SIGNATURE_LEN   = 64
 
+HDR_IMG_TYPE_AUTH_NONE    = 0xFF00
 HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
 HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
 HDR_IMG_TYPE_AUTH_RSA2048 = 0x0300
@@ -66,7 +67,7 @@ argv = sys.argv
 hash_algo='sha256'
 
 if (argc < 4) or (argc > 10):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] image key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
     print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] image pub_key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
@@ -75,7 +76,9 @@ if (argc < 4) or (argc > 10):
 
 i = 1
 while (i < len(argv)):
-    if (argv[i] == '--ed25519'):
+    if (argv[i] == '--no-sign'):
+        sign='none'
+    elif (argv[i] == '--ed25519'):
         sign='ed25519'
     elif (argv[i] == '--ecc256'):
         sign='ecc256'
@@ -103,8 +106,12 @@ while (i < len(argv)):
     i += 1
 
 image_file = argv[i+1]
-key_file = argv[i+2]
-fw_version = int(argv[i+3])
+if sign != 'none':
+    key_file = argv[i+2]
+    fw_version = int(argv[i+3])
+else:
+    key_file = ''
+    fw_version = int(argv[i+2])
 
 if manual_sign:
     signature_file = argv[i+4]
@@ -152,10 +159,24 @@ if not encrypt:
 else:
     print ("Encrypted using:      " + encrypt_key_file)
 
-kf = open(key_file, "rb")
-wolfboot_key_buffer = kf.read(4096)
-wolfboot_key_buffer_len = len(wolfboot_key_buffer)
-if wolfboot_key_buffer_len == 32:
+if sign == 'none':
+    kf = None
+    wolfboot_key_buffer=''
+    wolfboot_key_buffer_len = 0
+else:
+    kf = open(key_file, "rb")
+    wolfboot_key_buffer = kf.read(4096)
+    wolfboot_key_buffer_len = len(wolfboot_key_buffer)
+
+if wolfboot_key_buffer_len == 0:
+    if (sign != 'none'):
+        print("Error. Key size is zero but cipher is " + sign)
+        sys.exit(3)
+    print("*** WARNING: selected 'none' cipher.")
+    print("*** Image will not be authenticated!")
+    print("*** SECURE BOOT DISABLED.")
+
+elif wolfboot_key_buffer_len == 32:
     if (sign != 'ed25519' and not manual_sign and not sha_only):
         print("Error: key too short for cipher")
         sys.exit(1)
@@ -195,8 +216,10 @@ else:
     print ("Error: key size does not match any cipher")
     sys.exit(2)
 
-
-if not sha_only and not manual_sign:
+if sign == 'none':
+    privkey = None
+    pubkey = None
+elif not sha_only and not manual_sign:
     ''' import (decode) private key for signing '''
     if sign == 'ed25519':
         ed = ciphers.Ed25519Private(key = wolfboot_key_buffer)
@@ -252,6 +275,8 @@ header += struct.pack('<Q', int(os.path.getmtime(image_file)))
 
 # Image type field
 header += struct.pack('<HH', HDR_IMG_TYPE, HDR_IMG_TYPE_LEN)
+if (sign == 'none'):
+    img_type = HDR_IMG_TYPE_AUTH_NONE
 if (sign == 'ed25519'):
     img_type = HDR_IMG_TYPE_AUTH_ED25519
 if (sign == 'ecc256'):
@@ -291,12 +316,13 @@ if hash_algo == 'sha256':
     header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
     header += digest
 
-    # pubkey SHA calculation
-    keysha = hashes.Sha256.new()
-    keysha.update(pubkey)
-    key_digest = keysha.digest()
-    header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
-    header += key_digest
+    if (sign != 'none'):
+        # pubkey SHA calculation
+        keysha = hashes.Sha256.new()
+        keysha.update(pubkey)
+        key_digest = keysha.digest()
+        header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
+        header += key_digest
     
 elif hash_algo == 'sha3':
     sha = hashes.Sha3.new()
@@ -315,12 +341,13 @@ elif hash_algo == 'sha3':
     header += struct.pack('<HH', HDR_SHA3_384, HDR_SHA3_384_LEN)
     header += digest
 
-    # pubkey SHA calculation
-    keysha = hashes.Sha3.new()
-    keysha.update(pubkey)
-    key_digest = keysha.digest()
-    header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA3_384_LEN)
-    header += key_digest
+    if (sign != 'none'):
+        # pubkey SHA calculation
+        keysha = hashes.Sha3.new()
+        keysha.update(pubkey)
+        key_digest = keysha.digest()
+        header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA3_384_LEN)
+        header += key_digest
 
 #print("Image Hash %d" % len(digest))
 #print([hex(j) for j in digest])
@@ -352,6 +379,8 @@ if not manual_sign:
         #plain = rsa.verify(signature)
         #print("plain:%d " % len(plain))
         #print([hex(j) for j in plain])
+    elif (sign == 'none'):
+        signature = ''
 else:
     print("Opening signature file %s" % signature_file)
     signfile = open(signature_file, 'rb')
@@ -362,8 +391,9 @@ else:
         sys.exit(4)
     signature = buf
 
-header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
-header += signature
+if (sign != 'none'):
+    header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
+    header += signature
 #print ("Signature %d" % len(signature))
 #print([hex(j) for j in signature])
 print ("Done.")

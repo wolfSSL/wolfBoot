@@ -6,6 +6,13 @@ ifeq ($(MEASURED_BOOT),1)
 endif
 
 ## DSA Settings
+
+ifeq ($(SIGN),NONE)
+  SIGN_OPTIONS+=--no-sign
+  PRIVATE_KEY=
+  CFLAGS+=-Wstack-usage=1024 -DWOLFBOOT_NO_SIGN
+endif
+
 ifeq ($(SIGN),ECC256)
   KEYGEN_OPTIONS+=--ecc256
   SIGN_OPTIONS+=--ecc256

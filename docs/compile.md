@@ -96,6 +96,16 @@ Better performance can be achieved using ECDSA with curve p-256. To activate ECC
 
 when invoking `make`.
 
+RSA is also supported, with different key length. To activate RSA2048 or RSA4096, use:
+
+`SIGN=RSA2048`
+
+or
+
+`SIGN=RSA4096`
+
+respectively.
+
 The default option, if no value is provided for the `SIGN` variable, is
 
 `SIGN=ED25519`
@@ -104,6 +114,13 @@ Changing the DSA algorithm will also result in compiling a different set of tool
 and firmware signature.
 
 Find the corresponding key generation and firmware signing tools in the [tools](../tools) directory.
+
+It's possible to disable authentication of the firmware image by explicitly using:
+
+`SIGN=NONE`
+
+in the Makefile commandline. This will compile a minimal bootloader with no support for public-key authenticated 
+secure boot.
 
 ### Enable debug symbols
 
