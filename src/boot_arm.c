@@ -137,7 +137,7 @@ static void mpu_init(void)
 
     mpu_setattr(2, MPUSIZE_64K | MPU_RASR_ENABLE | MPU_RASR_ATTR_SCB |
         MPU_RASR_ATTR_AP_PRW_UNO
-    #ifdef RAM_CODE
+    #ifndef RAM_CODE
         | MPU_RASR_ATTR_XN
     #endif
     );
