@@ -110,6 +110,10 @@ endif
 ifeq ($(UART_FLASH),1)
   CFLAGS+=-D"UART_FLASH=1"
   APP_OBJS+= ../src/uart_flash.o ../hal/uart/uart_drv_$(UART_TARGET).o
+else
+  ifeq ($(TARGET),stm32wb)
+    APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  endif
 endif
 
 ifeq ($(TARGET),kinetis)

@@ -39,11 +39,17 @@ void main(void) {
     uint32_t updv;
     hal_init();
     boot_led_on();
+    uart_init(115200, 8, 'N', 1);
 #ifdef SPI_FLASH
     spi_flash_probe();
 #endif
     version = wolfBoot_current_firmware_version();
     updv = wolfBoot_update_firmware_version();
+    uart_tx('*');
+    uart_tx((version >> 24) & 0xFF);
+    uart_tx((version >> 16) & 0xFF);
+    uart_tx((version >> 8) & 0xFF);
+    uart_tx(version & 0xFF);
     if ((version == 1) && (updv != 8)) {
         uint32_t sz;
         boot_led_off();
