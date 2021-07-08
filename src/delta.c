@@ -57,7 +57,6 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
     struct block_hdr *hdr;
     uint32_t dst_off = 0;
     uint32_t src_off;
-    uint32_t cur_sector = 0;
     uint16_t sz;
     uint32_t copy_sz;
     if (!ctx)
@@ -146,8 +145,6 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     uint16_t match_len;
     uint32_t blk_start;
     uint32_t p_off = 0;
-    char strndbg[30];
-    int dbglen = 0;
     if (ctx->off_b >= ctx->size_b)
         return 0;
     if (len < BLOCK_HDR_SIZE)
@@ -212,7 +209,6 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
             uint32_t pb_end = page_start * WOLFBOOT_SECTOR_SIZE;
             pb = ctx->src_b;
             while (((uint32_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
-                uint32_t b_start = ctx->off_b;
                 if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                     break;
                 if (ctx->size_b - (pb - ctx->src_b) < BLOCK_HDR_SIZE)

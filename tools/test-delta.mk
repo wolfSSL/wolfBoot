@@ -5,11 +5,6 @@ USBTTY?=/dev/ttyACM0
 TIMEOUT?=60
 EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 
-tools/uart-flash-server/ufserver: FORCE
-	@make -C `dirname $@`
-	@rm -f src/libwolfboot.o
-
-
 test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff
 	@st-flash erase
 	@diff .config config/examples/stm32wb-delta.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta.config to .config to run this test\n\n" && exit 1)
