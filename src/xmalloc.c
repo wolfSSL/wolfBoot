@@ -153,15 +153,14 @@ static struct xmalloc_slot xmalloc_pool[] = {
     };
 
 
-#elif defined WOLFBOOT_SIGN_NONE
-static struct xmalloc_slot xmalloc_pool[] = {
+#elif defined WOLFBOOT_NO_SIGN
+    static uint32_t sha_block[HASH_BLOCK_SIZE];
+    static struct xmalloc_slot xmalloc_pool[] = {
     #ifdef WOLFBOOT_HASH_SHA256
         { (uint8_t *)sha_block, WC_SHA256_BLOCK_SIZE * sizeof(uint32_t), 0 },
     #endif
         { NULL, 0, 0}
     };
-
-};
 
 #else 
 #   error "No cipher selected."

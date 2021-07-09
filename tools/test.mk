@@ -428,6 +428,9 @@ test-301-smallstack-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) FORCE
 test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
 	@make test-111-forward-update-no-downgrade-RSA4096-SHA3 WOLFBOOT_SMALL_STACK=1
 
+test-371-smallstack-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
+	@make test-171-forward-update-no-downgrade-NOSIGN WOLFBOOT_SMALL_STACK=1
+
 test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback \
 	test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI \
 	test-34-forward-self-update \
@@ -454,4 +457,5 @@ test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow
 	test-281-smallstack-forward-update-no-downgrade-ED25519-SHA3 \
 	test-291-smallstack-forward-update-no-downgrade-ECC256-SHA3 \
 	test-301-smallstack-forward-update-no-downgrade-RSA2048-SHA3 \
-	test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3
+	test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3 \
+	test-371-smallstack-forward-update-no-downgrade-NOSIGN

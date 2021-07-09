@@ -17,6 +17,7 @@ endif
 ifeq ($(WOLFBOOT_SMALL_STACK),1)
   CFLAGS+=-D"WOLFBOOT_SMALL_STACK" -D"XMALLOC_USER"
   STACK_USAGE?=4096
+  OBJS+=./src/xmalloc.o
 endif
 
 ifeq ($(SIGN),ECC256)
@@ -33,7 +34,6 @@ ifeq ($(SIGN),ECC256)
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     STACK_USAGE?=4096
-    OBJS+=./src/xmalloc.o
   else ifeq ($(WOLFTPM),0)
     STACK_USAGE?=3888
   else
@@ -55,9 +55,6 @@ ifeq ($(SIGN),ED25519)
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
-  ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    OBJS+=./src/xmalloc.o
-  endif
   STACK_USAGE?=1024
 endif
 
@@ -78,7 +75,6 @@ ifeq ($(SIGN),RSA2048)
 		  -D"IMAGE_HEADER_SIZE=512"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     STACK_USAGE?=4096
-    OBJS+=./src/xmalloc.o
   else ifeq ($(WOLFTPM),0)
     STACK_USAGE?=12288
   else
@@ -103,7 +99,6 @@ ifeq ($(SIGN),RSA4096)
 		  -D"IMAGE_HEADER_SIZE=1024"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     STACK_USAGE?=4096
-    OBJS+=./src/xmalloc.o
   else ifeq ($(WOLFTPM),0)
     STACK_USAGE?=18064
   else
