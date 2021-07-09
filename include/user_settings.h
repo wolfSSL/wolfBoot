@@ -33,7 +33,6 @@
 #define SINGLE_THREADED
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
-#define WOLFSSL_NO_MALLOC
 
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
@@ -70,8 +69,6 @@
 #   define WOLFSSL_SP_SMALL
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
-#   define WOLFSSL_SP_NO_MALLOC
-#   define WOLFSSL_SP_NO_DYN_STACK
 
 /* ECC options disabled to reduce size */
 #   define NO_ECC_SIGN
@@ -101,8 +98,6 @@
 #   define WOLFSSL_SP_MATH
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_SP_NO_3072
-#   define WOLFSSL_SP_NO_MALLOC
-#   define WOLFSSL_SP_NO_DYN_STACK
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA4096
@@ -120,8 +115,6 @@
 #   define WOLFSSL_SP_4096
 #   define WOLFSSL_SP_NO_2048
 #   define WOLFSSL_SP_NO_3072
-#   define WOLFSSL_SP_NO_MALLOC
-#   define WOLFSSL_SP_NO_DYN_STACK
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA3_384
@@ -177,6 +170,18 @@
 #ifdef __QNX__
 #   define WOLFSSL_HAVE_MIN
 #   define WOLFSSL_HAVE_MAX
+#endif
+
+
+/* Memory model */
+#ifndef WOLFBOOT_SMALL_STACK
+#   ifdef WOLFSSL_SP_MATH
+#       define WOLFSSL_SP_NO_MALLOC
+#       define WOLFSSL_SP_NO_DYN_STACK
+#       define WOLFSSL_NO_MALLOC
+#   endif
+#else
+#   define WOLFSSL_SMALL_STACK
 #endif
 
 #endif /* !H_USER_SETTINGS_ */

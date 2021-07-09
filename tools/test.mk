@@ -178,6 +178,10 @@ test-resetold: FORCE
 
 ## Test cases:
 
+# Group '0': ED25519 (default)
+#
+#
+
 test-01-forward-update-no-downgrade: $(EXPVER) FORCE
 	@make test-erase
 	@echo Creating and uploading factory image...
@@ -239,11 +243,19 @@ test-03-rollback: $(EXPVER) FORCE
 	@make clean
 	@echo TEST PASSED
 
+# Group '1': ECC
+#
+#
+
 test-11-forward-update-no-downgrade-ECC: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=ECC256
 
 test-13-rollback-ECC: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=ECC256
+
+# Group '2': SPI flash
+#
+#
 
 test-21-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
 	@make test-erase-ext
@@ -288,6 +300,10 @@ test-23-rollback-SPI: $(EXPVER) FORCE
 	@make clean
 	@echo TEST PASSED
 
+# Group '3,4': bootloader self-update
+#
+#
+
 test-34-forward-self-update: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory RAM_CODE=1 SIGN=$(SIGN)
@@ -305,11 +321,19 @@ test-34-forward-self-update: $(EXPVER) FORCE
 test-44-forward-self-update-ECC: $(EXPVER) FORCE
 	@make test-34-forward-self-update SIGN=ECC256
 
+# Group '5': RSA 2048 bit
+#
+#
+
 test-51-forward-update-no-downgrade-RSA: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=RSA2048
 
 test-53-rollback-RSA: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=RSA2048
+
+# Group '6': wolfTPM
+#
+#
 
 test-61-forward-update-no-downgrade-TPM: $(EXPVER) FORCE
 	@make test-spi-off || true
@@ -323,11 +347,18 @@ test-63-rollback-TPM: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=ECC256 WOLFTPM=1
 	@make tpm-mute
 
+# Group '7': RSA 4096 bit
+#
+#
 test-71-forward-update-no-downgrade-RSA-4096: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=RSA4096
 
 test-73-rollback-RSA-4096: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=RSA4096
+
+# Group '8,9,10,11': SHA3 combined with the four ciphers
+#
+#
 
 test-81-forward-update-no-downgrade-ED25519-SHA3: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=ED25519 HASH=SHA3
@@ -341,6 +372,9 @@ test-101-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) FORCE
 test-111-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=RSA4096 HASH=SHA3
 
+# Group 16: TPM with RSA
+#
+#
 test-161-forward-update-no-downgrade-TPM-RSA: $(EXPVER) FORCE
 	@make test-spi-off || true
 	@make tpm-unmute
@@ -353,11 +387,46 @@ test-163-rollback-TPM-RSA: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=RSA2048 WOLFTPM=1
 	@make tpm-mute
 
+# Group 17: NULL cipher, no signature
+#
+#
+
 test-171-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=NONE
 
 test-173-rollback-NOSIGN: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=NONE
+
+# Groups 20:31: Combinations of previous tests with WOLFBOOT_SMALL_STACK
+#
+#
+
+test-201-smallstack-forward-update-no-downgrade: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade WOLFBOOT_SMALL_STACK=1
+
+test-211-smallstack-forward-update-no-downgrade-ECC: $(EXPVER) FORCE
+	@make test-11-forward-update-no-downgrade-ECC WOLFBOOT_SMALL_STACK=1
+
+test-221-smallstack-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
+	@make test-21-forward-update-no-downgrade-SPI WOLFBOOT_SMALL_STACK=1
+
+test-251-smallstack-forward-update-no-downgrade-RSA: $(EXPVER) FORCE
+	@make test-51-forward-update-no-downgrade-RSA WOLFBOOT_SMALL_STACK=1
+
+test-271-smallstack-forward-update-no-downgrade-RSA4096: $(EXPVER) FORCE
+	@make test-71-forward-update-no-downgrade-RSA4096 WOLFBOOT_SMALL_STACK=1
+
+test-281-smallstack-forward-update-no-downgrade-ED25519-SHA3: $(EXPVER) FORCE
+	@make test-81-forward-update-no-downgrade-ED25519-SHA3 WOLFBOOT_SMALL_STACK=1
+
+test-291-smallstack-forward-update-no-downgrade-ECC256-SHA3: $(EXPVER) FORCE
+	@make test-81-forward-update-no-downgrade-ECC256-SHA3 WOLFBOOT_SMALL_STACK=1
+
+test-301-smallstack-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) FORCE
+	@make test-81-forward-update-no-downgrade-RSA2048-SHA3 WOLFBOOT_SMALL_STACK=1
+
+test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
+	@make test-81-forward-update-no-downgrade-RSA4096-SHA3 WOLFBOOT_SMALL_STACK=1
 
 test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback \
 	test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI \
@@ -376,4 +445,13 @@ test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow
 	test-161-forward-update-no-downgrade-TPM-RSA \
 	test-163-rollback-TPM-RSA \
 	test-171-forward-update-no-downgrade-NOSIGN \
-	test-173-rollback-NOSIGN
+	test-173-rollback-NOSIGN \
+	test-201-smallstack-forward-update-no-downgrade \
+	test-211-smallstack-forward-update-no-downgrade-ECC \
+	test-221-smallstack-forward-update-no-downgrade-SPI \
+	test-251-smallstack-forward-update-no-downgrade-RSA \
+	test-271-smallstack-forward-update-no-downgrade-RSA4096 \
+	test-281-smallstack-forward-update-no-downgrade-ED25519-SHA3 \
+	test-291-smallstack-forward-update-no-downgrade-ECC256-SHA3 \
+	test-301-smallstack-forward-update-no-downgrade-RSA2048-SHA3 \
+	test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3
