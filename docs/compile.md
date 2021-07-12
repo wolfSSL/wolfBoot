@@ -137,6 +137,20 @@ stage, or on these platform that do not support interrupt vector relocation.
 To disable interrupt vector table relocation, compile with `VTOR=0`. By default, wolfBoot will relocate the
 interrupt vector by setting the offset in the vector relocation offset register (VTOR).
 
+### Limit stack usage
+
+By default, wolfBoot does not require any memory allocation. It does this by performing all the operations
+using the stack. Although the stack space used by the algorithms can be predicted at compile time, the amount
+of stack space be relatively big, depending on the algorithm selected.
+
+Some targets offer limited amount of RAM to use as stack space, either in general, or in a configuration
+dedicated for the bootloader stage.
+
+In these cases, it might be useful to activate `WOLFBOOT_SMALL_STACK=1`. With this option, a fixed-size pool
+is created at compile time to assist the allocation of the object needed by the cryptography implementation.
+When compiled with `WOLFBOOT_SMALL_STACK=1`, wolfBoot reduces the stack usage considerably, and simulates dynamic
+memory allocations by assigning dedicated, statically allocated, pre-sized memory areas.
+
 ### Disable Backup of current running firmware
 
 Optionally, it is possible to disable the backup copy of the current running firmware upon the installation of the
