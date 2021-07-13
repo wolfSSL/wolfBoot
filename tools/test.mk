@@ -397,7 +397,7 @@ test-171-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
 test-173-rollback-NOSIGN: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=NONE
 
-# Groups 20:31: Combinations of previous tests with WOLFBOOT_SMALL_STACK
+# Groups 20:31,37: Combinations of previous tests with WOLFBOOT_SMALL_STACK
 #
 #
 
@@ -431,6 +431,73 @@ test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
 test-371-smallstack-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
 	@make test-171-forward-update-no-downgrade-NOSIGN WOLFBOOT_SMALL_STACK=1
 
+# Groups 40:51,57: Combinations of previous tests with USE_FAST_MATH
+#
+#
+test-401-fastmath-forward-update-no-downgrade: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SPMATH=0
+
+test-411-fastmath-forward-update-no-downgrade-ECC: $(EXPVER) FORCE
+	@make test-11-forward-update-no-downgrade-ECC SPMATH=0
+
+test-421-fastmath-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
+	@make test-21-forward-update-no-downgrade-SPI SPMATH=0
+
+test-451-fastmath-forward-update-no-downgrade-RSA: $(EXPVER) FORCE
+	@make test-51-forward-update-no-downgrade-RSA SPMATH=0
+
+test-471-fastmath-forward-update-no-downgrade-RSA4096: $(EXPVER) FORCE
+	@make test-71-forward-update-no-downgrade-RSA-4096 SPMATH=0
+
+test-481-fastmath-forward-update-no-downgrade-ED25519-SHA3: $(EXPVER) FORCE
+	@make test-81-forward-update-no-downgrade-ED25519-SHA3 SPMATH=0
+
+test-491-fastmath-forward-update-no-downgrade-ECC256-SHA3: $(EXPVER) FORCE
+	@make test-91-forward-update-no-downgrade-ECC256-SHA3 SPMATH=0
+
+test-501-fastmath-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) FORCE
+	@make test-101-forward-update-no-downgrade-RSA2048-SHA3 SPMATH=0
+
+test-511-fastmath-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
+	@make test-111-forward-update-no-downgrade-RSA4096-SHA3 SPMATH=0
+
+test-571-fastmath-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
+	@make test-171-forward-update-no-downgrade-NOSIGN SPMATH=0
+
+# Groups 60:71,77: Combinations of previous tests with NO_ASM
+#
+#
+test-601-no-asm-forward-update-no-downgrade: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade NO_ASM=1
+
+test-611-no-asm-forward-update-no-downgrade-ECC: $(EXPVER) FORCE
+	@make test-11-forward-update-no-downgrade-ECC NO_ASM=1
+
+test-621-no-asm-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
+	@make test-21-forward-update-no-downgrade-SPI NO_ASM=1
+
+test-651-no-asm-forward-update-no-downgrade-RSA: $(EXPVER) FORCE
+	@make test-51-forward-update-no-downgrade-RSA NO_ASM=1
+
+test-671-no-asm-forward-update-no-downgrade-RSA4096: $(EXPVER) FORCE
+	@make test-71-forward-update-no-downgrade-RSA-4096 NO_ASM=1
+
+test-681-no-asm-forward-update-no-downgrade-ED25519-SHA3: $(EXPVER) FORCE
+	@make test-81-forward-update-no-downgrade-ED25519-SHA3 NO_ASM=1
+
+test-691-no-asm-forward-update-no-downgrade-ECC256-SHA3: $(EXPVER) FORCE
+	@make test-91-forward-update-no-downgrade-ECC256-SHA3 NO_ASM=1
+
+test-701-no-asm-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) FORCE
+	@make test-101-forward-update-no-downgrade-RSA2048-SHA3 NO_ASM=1
+
+test-711-no-asm-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
+	@make test-111-forward-update-no-downgrade-RSA4096-SHA3 NO_ASM=1
+
+test-771-no-asm-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
+	@make test-171-forward-update-no-downgrade-NOSIGN NO_ASM=1
+
+
 test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow-downgrade test-03-rollback \
 	test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI \
 	test-34-forward-self-update \
@@ -458,4 +525,24 @@ test-all: clean test-01-forward-update-no-downgrade test-02-forward-update-allow
 	test-291-smallstack-forward-update-no-downgrade-ECC256-SHA3 \
 	test-301-smallstack-forward-update-no-downgrade-RSA2048-SHA3 \
 	test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3 \
-	test-371-smallstack-forward-update-no-downgrade-NOSIGN
+	test-371-smallstack-forward-update-no-downgrade-NOSIGN \
+	test-201-fastmath-forward-update-no-downgrade \
+	test-211-fastmath-forward-update-no-downgrade-ECC \
+	test-221-fastmath-forward-update-no-downgrade-SPI \
+	test-251-fastmath-forward-update-no-downgrade-RSA \
+	test-271-fastmath-forward-update-no-downgrade-RSA4096 \
+	test-281-fastmath-forward-update-no-downgrade-ED25519-SHA3 \
+	test-291-fastmath-forward-update-no-downgrade-ECC256-SHA3 \
+	test-301-fastmath-forward-update-no-downgrade-RSA2048-SHA3 \
+	test-311-fastmath-forward-update-no-downgrade-RSA4096-SHA3 \
+	test-371-fastmath-forward-update-no-downgrade-NOSIGN \
+	test-201-no-asm-forward-update-no-downgrade \
+	test-211-no-asm-forward-update-no-downgrade-ECC \
+	test-221-no-asm-forward-update-no-downgrade-SPI \
+	test-251-no-asm-forward-update-no-downgrade-RSA \
+	test-271-no-asm-forward-update-no-downgrade-RSA4096 \
+	test-281-no-asm-forward-update-no-downgrade-ED25519-SHA3 \
+	test-291-no-asm-forward-update-no-downgrade-ECC256-SHA3 \
+	test-301-no-asm-forward-update-no-downgrade-RSA2048-SHA3 \
+	test-311-no-asm-forward-update-no-downgrade-RSA4096-SHA3 \
+	test-371-no-asm-forward-update-no-downgrade-NOSIGN

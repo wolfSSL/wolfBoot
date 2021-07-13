@@ -34,6 +34,10 @@
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
+#ifdef USE_FAST_MATH
+#   define WC_NO_HARDEN
+#endif
+
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
 #   define HAVE_ED25519
@@ -50,9 +54,7 @@
 #ifdef WOLFBOOT_SIGN_ECC256
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
-#   undef USE_FAST_MATH
 #   define FP_MAX_BITS (256 + 32)
-
 
 /* Kinetis LTC support */
 #   ifdef FREESCALE_USE_LTC
@@ -64,11 +66,13 @@
 #   endif
 
 /* SP MATH */
-#   define WOLFSSL_SP
-#   define WOLFSSL_SP_MATH
-#   define WOLFSSL_SP_SMALL
-#   define SP_WORD_SIZE 32
-#   define WOLFSSL_HAVE_SP_ECC
+#   ifndef USE_FAST_MATH
+#       define WOLFSSL_SP
+#       define WOLFSSL_SP_MATH
+#       define WOLFSSL_SP_SMALL
+#       define SP_WORD_SIZE 32
+#       define WOLFSSL_HAVE_SP_ECC
+#   endif
 
 /* ECC options disabled to reduce size */
 #   define NO_ECC_SIGN
@@ -92,12 +96,14 @@
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */
-#   define WOLFSSL_HAVE_SP_RSA
-#   define WOLFSSL_SP
-#   define WOLFSSL_SP_SMALL
-#   define WOLFSSL_SP_MATH
-#   define SP_WORD_SIZE 32
-#   define WOLFSSL_SP_NO_3072
+#   ifndef USE_FAST_MATH
+#       define WOLFSSL_HAVE_SP_RSA
+#       define WOLFSSL_SP
+#       define WOLFSSL_SP_SMALL
+#       define WOLFSSL_SP_MATH
+#       define SP_WORD_SIZE 32
+#       define WOLFSSL_SP_NO_3072
+#   endif
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA4096
@@ -107,14 +113,16 @@
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (4096 * 2)
     /* sp math */
-#   define WOLFSSL_HAVE_SP_RSA
-#   define WOLFSSL_SP
-#   define WOLFSSL_SP_SMALL
-#   define WOLFSSL_SP_MATH
-#   define SP_WORD_SIZE 32
-#   define WOLFSSL_SP_4096
-#   define WOLFSSL_SP_NO_2048
-#   define WOLFSSL_SP_NO_3072
+#   ifndef USE_FAST_MATH
+#       define WOLFSSL_HAVE_SP_RSA
+#       define WOLFSSL_SP
+#       define WOLFSSL_SP_SMALL
+#       define WOLFSSL_SP_MATH
+#       define SP_WORD_SIZE 32
+#       define WOLFSSL_SP_4096
+#       define WOLFSSL_SP_NO_2048
+#       define WOLFSSL_SP_NO_3072
+#   endif
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA3_384
@@ -178,8 +186,8 @@
 #   ifdef WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
-#       define WOLFSSL_NO_MALLOC
 #   endif
+#   define WOLFSSL_NO_MALLOC
 #else
 #   define WOLFSSL_SMALL_STACK
 #endif

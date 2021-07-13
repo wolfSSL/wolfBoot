@@ -77,6 +77,8 @@ ifeq ($(SIGN),RSA2048)
     STACK_USAGE?=4096
   else ifeq ($(WOLFTPM),0)
     STACK_USAGE?=12288
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE?=35952
   else
     STACK_USAGE?=8320
   endif
@@ -101,6 +103,8 @@ ifeq ($(SIGN),RSA4096)
     STACK_USAGE?=4096
   else ifeq ($(WOLFTPM),0)
     STACK_USAGE?=18064
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE?=69232
   else
     STACK_USAGE?=10680
   endif

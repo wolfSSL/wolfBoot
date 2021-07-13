@@ -27,8 +27,10 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/sp.h>
-#include <wolfssl/wolfcrypt/sp_int.h>
+#ifndef USE_FAST_MATH
+    #include <wolfssl/wolfcrypt/sp.h>
+    #include <wolfssl/wolfcrypt/sp_int.h>
+#endif
 #include "target.h"
 
 
