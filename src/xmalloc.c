@@ -130,8 +130,8 @@ static struct xmalloc_slot xmalloc_pool[] = {
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define SPDIGIT_BUF0_SIZE (SP_DIGIT_SIZE * 128 * 5)
         #else
-            #define SPDIGIT_BUF0_SIZE (SP_DIGIT_SIZE * 180 * 5)
-            #define SPDIGIT_BUF1_SIZE (SP_DIGIT_SIZE * (180 * 4 + 3))
+            #define SPDIGIT_BUF0_SIZE (SP_DIGIT_SIZE * 196 * 5)
+            #define SPDIGIT_BUF1_SIZE (SP_DIGIT_SIZE * (196 * 4 + 3))
             static uint8_t sp_digit_buf1[SPDIGIT_BUF1_SIZE];
         #endif
     #endif
