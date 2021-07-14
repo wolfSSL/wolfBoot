@@ -155,6 +155,7 @@ static struct xmalloc_slot xmalloc_pool[] = {
 };
 
 #elif defined WOLFBOOT_SIGN_ED25519
+
 static uint32_t sha_block[HASH_BLOCK_SIZE];
 static uint32_t sha512_block[sizeof(word64) * 16];
 
@@ -167,38 +168,62 @@ static struct xmalloc_slot xmalloc_pool[] = {
 };
 
 #elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA4096)
-#ifdef WOLFBOOT_SIGN_RSA2048
-    #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
-        #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 64 * 5)
-    #else
-        #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 90 * 5)
-        #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (90 * 4 + 3))
-        static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
-    #endif
-#else
-    #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
-        #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 128 * 5)
-    #else
-        #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 196 * 5)
-        #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (196 * 4 + 3))
-        static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
-    #endif
-#endif
 
 static uint32_t sha_block[HASH_BLOCK_SIZE];
-static uint8_t mp_digit_buf0[MPDIGIT_BUF0_SIZE];
-static struct xmalloc_slot xmalloc_pool[] = {
-#ifdef WOLFBOOT_HASH_SHA256
-    { (uint8_t *)sha_block, WC_SHA256_BLOCK_SIZE * sizeof(uint32_t), 0 },
+#ifndef USE_FAST_MATH
+    #ifdef WOLFBOOT_SIGN_RSA2048
+        #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 64 * 5)
+        #else
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 90 * 5)
+            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (90 * 4 + 3))
+            static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
+        #endif
+    #else
+        #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 128 * 5)
+        #else
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 196 * 5)
+            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (196 * 4 + 3))
+            static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
+        #endif
+    #endif
+    static uint8_t mp_digit_buf0[MPDIGIT_BUF0_SIZE];
+    static struct xmalloc_slot xmalloc_pool[] = {
+    #ifdef WOLFBOOT_HASH_SHA256
+        { (uint8_t *)sha_block, WC_SHA256_BLOCK_SIZE * sizeof(uint32_t), 0 },
+    #endif
+        { mp_digit_buf0, MPDIGIT_BUF0_SIZE, 0},
+    #ifndef WOLFSSL_SP_ARM_CORTEX_M_ASM
+        { mp_digit_buf1, MPDIGIT_BUF1_SIZE, 0},
+    #endif
+        { NULL, 0, 0}
+    };
+#else
+    #define MP_INT_SIZE (sizeof(mp_int))
+    #define MP_MONT_REDUCE_BUF_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
+    static uint8_t mp_int_buffer0[MP_INT_SIZE];
+    static uint8_t mp_int_buffer1[MP_INT_SIZE * 3];
+    static uint8_t mp_int_buffer2[MP_INT_SIZE];
+    static uint8_t mp_int_buffer3[MP_INT_SIZE];
+    static uint8_t mp_int_buffer4[MP_INT_SIZE * 5];
+    static uint8_t mp_mont_reduce_buffer[MP_MONT_REDUCE_BUF_SIZE];
+    static struct xmalloc_slot xmalloc_pool[] = {
+    #ifdef WOLFBOOT_HASH_SHA256
+        { (uint8_t *)sha_block, WC_SHA256_BLOCK_SIZE * sizeof(uint32_t), 0 },
+    #endif
+        { mp_int_buffer0, MP_INT_SIZE, 0},
+        { mp_int_buffer1, MP_INT_SIZE * 3, 0},
+        { mp_int_buffer2, MP_INT_SIZE, 0},
+        { mp_int_buffer3, MP_INT_SIZE, 0},
+        { mp_int_buffer4, MP_INT_SIZE * 5, 0},
+        { mp_mont_reduce_buffer, MP_MONT_REDUCE_BUF_SIZE, 0 },
+        { NULL, 0, 0}
+    };
 #endif
-    { mp_digit_buf0, MPDIGIT_BUF0_SIZE, 0},
-#ifndef WOLFSSL_SP_ARM_CORTEX_M_ASM
-    { mp_digit_buf1, MPDIGIT_BUF1_SIZE, 0},
-#endif
-    { NULL, 0, 0}
-};
 
 #elif defined WOLFBOOT_NO_SIGN
+
 static uint32_t sha_block[HASH_BLOCK_SIZE];
 static struct xmalloc_slot xmalloc_pool[] = {
 #ifdef WOLFBOOT_HASH_SHA256

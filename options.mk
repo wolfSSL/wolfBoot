@@ -100,7 +100,11 @@ ifeq ($(SIGN),RSA4096)
   CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" $(RSA_EXTRA_CFLAGS) \
 		  -D"IMAGE_HEADER_SIZE=1024"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    STACK_USAGE?=4096
+    ifneq ($(SPMATH),1)
+      STACK_USAGE?=5888
+    else
+      STACK_USAGE?=4096
+    endif
   else ifeq ($(WOLFTPM),0)
     STACK_USAGE?=18064
   else ifneq ($(SPMATH),1)
