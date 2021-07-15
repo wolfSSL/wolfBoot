@@ -33,13 +33,13 @@ ifeq ($(SIGN),ECC256)
     ./lib/wolfssl/wolfcrypt/src/hash.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    STACK_USAGE=4096
-  else ifeq ($(WOLFTPM),0)
-    STACK_USAGE=3888
+       STACK_USAGE=4096
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=6680
   else ifneq ($(SPMATH),1)
     STACK_USAGE=5000
   else
-    STACK_USAGE=6680
+    STACK_USAGE=3888
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
@@ -81,12 +81,12 @@ ifeq ($(SIGN),RSA2048)
     else
       STACK_USAGE=4096
     endif
-  else ifeq ($(WOLFTPM),0)
-    STACK_USAGE=12288
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=9092
   else ifneq ($(SPMATH),1)
     STACK_USAGE=35952
   else
-    STACK_USAGE=9092
+    STACK_USAGE=12288
   endif
 endif
 
@@ -111,12 +111,12 @@ ifeq ($(SIGN),RSA4096)
     else
       STACK_USAGE=4096
     endif
-  else ifeq ($(WOLFTPM),0)
-    STACK_USAGE=18064
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=10680
   else ifneq ($(SPMATH),1)
     STACK_USAGE=69232
   else
-    STACK_USAGE=10680
+    STACK_USAGE=18064
   endif
 endif
 
