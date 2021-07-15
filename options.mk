@@ -82,7 +82,7 @@ ifeq ($(SIGN),RSA2048)
       STACK_USAGE=4096
     endif
   else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=9092
+    STACK_USAGE=9096
   else ifneq ($(SPMATH),1)
     STACK_USAGE=35952
   else
