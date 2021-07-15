@@ -1,11 +1,11 @@
 ## CPU Architecture selection via $ARCH
-
 UPDATE_OBJS:=./src/update_flash.o
 
 # check for FASTMATH or SP_MATH
 ifeq ($(SPMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
 else
+  CFLAGS+=-DUSE_FAST_MATH
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o ./lib/wolfssl/wolfcrypt/src/tfm.o
 endif
 
