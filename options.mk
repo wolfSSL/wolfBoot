@@ -10,13 +10,13 @@ endif
 ifeq ($(SIGN),NONE)
   SIGN_OPTIONS+=--no-sign
   PRIVATE_KEY=
-  STACK_USAGE?=1024
+  STACK_USAGE=1024
   CFLAGS+=-DWOLFBOOT_NO_SIGN
 endif
 
 ifeq ($(WOLFBOOT_SMALL_STACK),1)
   CFLAGS+=-D"WOLFBOOT_SMALL_STACK" -D"XMALLOC_USER"
-  STACK_USAGE?=4096
+  STACK_USAGE=4096
   OBJS+=./src/xmalloc.o
 endif
 
@@ -33,11 +33,11 @@ ifeq ($(SIGN),ECC256)
     ./lib/wolfssl/wolfcrypt/src/hash.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    STACK_USAGE?=4096
+    STACK_USAGE=4096
   else ifeq ($(WOLFTPM),0)
-    STACK_USAGE?=3888
+    STACK_USAGE=3888
   else
-    STACK_USAGE?=6680
+    STACK_USAGE=6680
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
@@ -74,13 +74,17 @@ ifeq ($(SIGN),RSA2048)
   CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" $(RSA_EXTRA_CFLAGS) \
 		  -D"IMAGE_HEADER_SIZE=512"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    STACK_USAGE?=4096
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5008
+    else
+      STACK_USAGE=4096
+    endif
   else ifeq ($(WOLFTPM),0)
-    STACK_USAGE?=12288
+    STACK_USAGE=12288
   else ifneq ($(SPMATH),1)
-    STACK_USAGE?=35952
+    STACK_USAGE=35952
   else
-    STACK_USAGE?=8320
+    STACK_USAGE=9092
   endif
 endif
 
@@ -101,16 +105,16 @@ ifeq ($(SIGN),RSA4096)
 		  -D"IMAGE_HEADER_SIZE=1024"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
-      STACK_USAGE?=5888
+      STACK_USAGE=5888
     else
-      STACK_USAGE?=4096
+      STACK_USAGE=4096
     endif
   else ifeq ($(WOLFTPM),0)
-    STACK_USAGE?=18064
+    STACK_USAGE=18064
   else ifneq ($(SPMATH),1)
-    STACK_USAGE?=69232
+    STACK_USAGE=69232
   else
-    STACK_USAGE?=10680
+    STACK_USAGE=10680
   endif
 endif
 
