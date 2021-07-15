@@ -690,8 +690,7 @@ test-fastmath-smallstack: clean
 	make test-1171-fastmath-smallstack-forward-update-no-downgrade-NOSIGN
 
 
-test-all:
-	clean
+test-all: clean
 	make test-base
 	make test-sha3
 	make test-tpm
