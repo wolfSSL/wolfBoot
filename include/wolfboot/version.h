@@ -32,6 +32,9 @@ extern "C" {
 #define LIBWOLFBOOT_VERSION_STRING "1.8.0"
 #define LIBWOLFBOOT_VERSION_HEX 0x01008000
 
+#ifndef WOLFBOOT_VERSION
+    #define WOLFBOOT_VERSION LIBWOLFBOOT_VERSION_HEX
+#endif
 
 #ifdef __cplusplus
 }

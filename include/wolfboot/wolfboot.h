@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include "target.h"
+#include "wolfboot/version.h"
 
 
 #ifndef IMAGE_HEADER_SIZE
