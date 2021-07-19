@@ -3,7 +3,7 @@
  *
  * Description of the NOR configuration interface required by the board.
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * wolfSSL is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

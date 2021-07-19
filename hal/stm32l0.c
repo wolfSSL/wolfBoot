@@ -1,6 +1,6 @@
 /* stm32l0.c
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
