@@ -1,11 +1,6 @@
-/* spi_drv.h
+/* version.h
  *
- * Driver for the SPI back-end of the SPI_FLASH module.
- *
- *   * Compile with SPI_FLASH=1
- *   * Define your platform specific SPI driver in spi_drv_$PLATFORM.c,
- *     implementing the spi_ calls below.
- *
+ * The wolfBoot library version
  *
  * Copyright (C) 2021 wolfSSL Inc.
  *
@@ -26,28 +21,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef SPI_DRV_H_INCLUDED
-#define SPI_DRV_H_INCLUDED
+#ifndef WOLFBOOT_VERSION_H
+#define WOLFBOOT_VERSION_H
 
-#include <stdint.h>
-#include "image.h"
-
-#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || defined(PLATFORM_stm32wb) || defined(PLATFORM_stm32l0)
-#include "hal/spi/spi_drv_stm32.h"
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#if defined(PLATFORM_zynq)
-#include "hal/spi/spi_drv_zynq.h"
+
+#define LIBWOLFBOOT_VERSION_STRING "1.8.0"
+#define LIBWOLFBOOT_VERSION_HEX 0x01008000
+
+#ifndef WOLFBOOT_VERSION
+    #define WOLFBOOT_VERSION LIBWOLFBOOT_VERSION_HEX
 #endif
 
-#if defined(PLATFORM_nrf52)
-#include "hal/spi/spi_drv_nrf52.h"
+#ifdef __cplusplus
+}
 #endif
 
-void spi_init(int polarity, int phase);
-void spi_write(const char byte);
-uint8_t spi_read(void);
-void spi_cs_on(int pin);
-void spi_cs_off(int pin);
-
-#endif /* !SPI_DRV_H_INCLUDED */
+#endif /* WOLFBOOT_VERSION_H */

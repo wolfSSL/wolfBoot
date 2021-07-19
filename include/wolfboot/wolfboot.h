@@ -2,7 +2,7 @@
  *
  * The wolfBoot API definitions.
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include "target.h"
+#include "wolfboot/version.h"
 
 
 #ifndef IMAGE_HEADER_SIZE

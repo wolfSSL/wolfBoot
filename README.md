@@ -236,5 +236,18 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * SPI driver: STM32L0x3
    * Uart driver: STM32L0x3
 
+### V1.8 (2021-07-19)
+ * Use SP math for RSA4096
+ * Updated RSA to use inline operation and disable OAEP padding
+ * Memory model: removed dependency on XMALLOC/XFREE for ECC and RSA operations
+ * Added option WOLFBOOT_SMALL_STACK with hardcoded compile-time buffers
+ * Added option SIGN=NONE to disable secure boot at compile time
+ * Fix self-update documentation
+ * Added test cases for configuration option combinations
+ * Hardware support
+   * New ARCH: PowerPC
+   * New ARCH: ARM Cortex-R
+   * New HAL: NXP T2080
+   * New HAL: TI TMS570LC435
+   * STM32H7: Correct BANK2 offset
 
-  
