@@ -170,6 +170,22 @@ static void mpu_off(void)
 #endif /* !WOLFBOOT_NO_MPU */
 
 
+#ifdef CORTEX_R5
+#define MINITGCR   ((volatile uint32_t *)0xFFFFFF5C)
+#define MSINENA    ((volatile uint32_t *)0xFFFFFF60)
+#define MSTCGSTAT  ((volatile uint32_t *)0xFFFFFF68)
+
+#define MINIDONE_FLAG  0x0100
+
+asm(
+        " .global __STACK_END\n"
+        "_c_int00:\n"
+        "  movw sp, __STACK_END\n"
+        "  movt sp, __STACK_END\n"
+        "  b isr_reset\n"
+        );
+#endif
+
 void isr_reset(void) {
     register unsigned int *src, *dst;
 #if defined(PLATFORM_kinetis)
@@ -180,6 +196,32 @@ void isr_reset(void) {
     /* disable watchdog via STCTRLH register */
     *((volatile unsigned short *)0x40052000) = 0x01D2u;
 #endif
+
+    /* init stack pointers and SRAM */
+#ifdef CORTEX_R5
+    /* 2.2.4.2 Auto-Initialization of On-Chip SRAM Modules */
+    /* 1. Set memory self-init */
+    *MINITGCR = 0xA;
+    *MSTCGSTAT = 0;
+    /* 2. enable self-init for L2 SRAM (see Table 2-7 of TRM) */
+    *MSINENA = 0x1;
+    /* 3-5. wait to complete */
+    while ( (*MSTCGSTAT & MINIDONE_FLAG) != MINIDONE_FLAG)
+        ;
+    /* set opposite bit pattern to maximize not setting incorrectly (2.5.1.21 note) */
+    *MINITGCR = 0x5;
+    /* Clear global stat */
+    *MSTCGSTAT = 0;
+
+    /* init stack pointers */
+
+    asm(
+            " cps   #0x1f\n"
+            "  movw sp, __STACK_END\n"
+            "  movt sp, __STACK_END\n"
+            );
+#endif
+
     /* Copy the .data section from flash to RAM. */
     src = (unsigned int *) &_stored_data;
     dst = (unsigned int *) &_start_data;
@@ -207,18 +249,50 @@ void isr_reset(void) {
 /* forward to app handler */
 
 /* jump to address in only parameter */
-asm volatile ("isr_jump:\n"
-              "  bx a1\n");
+__attribute__ ((section(".text")))
+const void* isr_table2[] = {
+    (void*)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE + 0x08),
+    (void*)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE + 0x08),
+    (void*)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE + 0x08),
+    (void*)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE + 0x08),
+};
 
-#define ISR_FORWARDER(name, offset)                          \
-    void name(void) { isr_jump(offset + WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE); }
+void isr_swi(void);
+void isr_abort_prefetch(void);
+void isr_abort_data(void);
+void isr_reserved(void);
 
-ISR_FORWARDER(isr_swi,            0x08)
-ISR_FORWARDER(isr_abort_prefetch, 0x0c)
-ISR_FORWARDER(isr_abort_data,     0x10)
-ISR_FORWARDER(isr_reserved,       0x14)
-ISR_FORWARDER(isr_irq,            0x18)
-ISR_FORWARDER(isr_fiq,            0x1c)
+asm(
+        "isr_table:\n"
+        " .word    isr_table2"
+);
+
+asm(
+        "isr_swi:"
+        "  mov r1, #0x00\n"
+        "  ldr r0, isr_table\n"
+        "  ldr r0, [r0, r1]\n"
+        "  bx r0\n");
+asm(
+        "isr_abort_prefetch:"
+        "  mov r1, #0x04\n"
+        "  ldr r0, isr_table\n"
+        "  ldr r0, [r0, r1]\n"
+        "  bx r0\n");
+asm(
+        "isr_abort_data:"
+        "  mov r1, #0x08\n"
+        "  ldr r0, isr_table\n"
+        "  ldr r0, [r0, r1]\n"
+        "  bx r0\n");
+asm(
+        "isr_reserved:"
+        "  mov r1, #0x0c\n"
+        "  ldr r0, isr_table\n"
+        "  ldr r0, [r0, r1]\n"
+        "  bx r0\n");
+
+
 
 #endif /* CORTEX_R5 */
 
@@ -263,6 +337,8 @@ static uint32_t app_end_stack;
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
 #if defined(CORTEX_R5)
+    (void)app_entry;
+    (void)app_end_stack;
   /* limitations with TI arm compiler requires assembly */
     asm volatile("do_boot_r5:\n"
                  "  mov     pc, r0\n");
@@ -323,14 +399,14 @@ typedef void(*NMIHANDLER)(void);
 asm volatile (
 "  .sect \".isr_vector\"\n"
 "resetEntry:\n"
-"  b   isr_reset\n"           // Reset
+"  b   _c_int00\n"           // Reset
 "  b   isr_fault\n"           // Undefined
 "  b   isr_swi  \n"           // Software interrupt
 "  b   isr_abort_prefetch\n"  // Abort (Prefetch)
 "  b   isr_abort_data\n"      // Abort (Data)
 "  b   isr_reserved\n"        // Reserved
-"  b   isr_irq\n"             // IRQ
-"  b   isr_fiq\n"             // FIQ
+"  ldr pc,[pc,#-0x1b0]\n"             // IRQ                                                                                           |
+"  ldr pc,[pc,#-0x1b0]\n"             // FIQ
               );
 
 #else

@@ -1,7 +1,6 @@
 
 /* see SPNU118U - January 2018  section 8.5 for linker syntax */
 --retain="*(.isr_vector)"
---entry_point=isr_reset
 
 MEMORY
 {

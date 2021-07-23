@@ -35,10 +35,12 @@
 #endif
 #define IMAGE_HEADER_OFFSET (2 * sizeof(uint32_t))
 
-#ifdef NVM_FLASH_WRITEONCE
-#   define FLASHBUFFER_SIZE WOLFBOOT_SECTOR_SIZE 
-#else
-#   define FLASHBUFFER_SIZE IMAGE_HEADER_SIZE
+#ifndef FLASHBUFFER_SIZE
+#    ifdef NVM_FLASH_WRITEONCE
+#        define FLASHBUFFER_SIZE WOLFBOOT_SECTOR_SIZE
+#    else
+#        define FLASHBUFFER_SIZE IMAGE_HEADER_SIZE
+#    endif
 #endif
 
 #ifdef BIG_ENDIAN_ORDER
