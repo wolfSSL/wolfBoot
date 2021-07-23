@@ -433,6 +433,27 @@ static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
 static uint32_t hdr_cpy_done = 0;
 #endif
 
+static inline uint32_t im2n(uint32_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    val = (((val & 0x000000FF) << 24) |
+           ((val & 0x0000FF00) <<  8) |
+           ((val & 0x00FF0000) >>  8) |
+           ((val & 0xFF000000) >> 24));
+#endif
+  return val;
+}
+
+
+static inline uint16_t im2ns(uint16_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    val = (((val & 0x000000FF) << 8) |
+           ((val & 0x0000FF00) >>  8));
+#endif
+  return val;
+}
+
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
     uint32_t *version_field = NULL;
@@ -443,7 +464,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     if (wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_VERSION, (void *)&version_field) == 0)
         return 0;
     if (version_field)
-        return *version_field;
+        return im2n(*version_field);
     return 0;
 }
 
@@ -546,13 +567,17 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
             image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
         }
     }
-    magic = (uint32_t *)image;
-    if (*magic != WOLFBOOT_MAGIC)
-        return 0;
-    if (wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
-        return 0;
-    if (type_field)
-        return *type_field;
+
+    if (image) {
+        magic = (uint32_t *)image;
+        if (*magic != WOLFBOOT_MAGIC)
+            return 0;
+        if (wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
+            return 0;
+        if (type_field)
+            return im2ns(*type_field);
+    }
+
     return 0;
 }
 

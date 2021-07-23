@@ -1,11 +1,10 @@
 
 /* see SPNU118U - January 2018  section 8.5 for linker syntax */
 --retain="*(.isr_vector)"
---entry_point=isr_reset
 
 MEMORY
 {
-    FLASH (RX) : ORIGIN = 0x00000000, LENGTH = 131072
+    FLASH (RX) : ORIGIN = 0x00000000, LENGTH = 262144
     RAM (RWX) : ORIGIN = 0x08000000, LENGTH = 0x00080000
 }
 

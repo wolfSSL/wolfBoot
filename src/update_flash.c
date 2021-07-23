@@ -35,9 +35,11 @@
 extern unsigned int _start_text;
 static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
 
-#ifndef BUFFER_DECLARED
-#define BUFFER_DECLARED
+#ifdef EXT_FLASH
+#  ifndef BUFFER_DECLARED
+#  define BUFFER_DECLARED
 static uint8_t buffer[FLASHBUFFER_SIZE];
+#  endif
 #endif
 
 static void RAMFUNCTION wolfBoot_erase_bootloader(void)
@@ -77,8 +79,9 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         }
         pos += FLASHBUFFER_SIZE;
     }
-
+#ifdef EXT_FLASH
 lock_and_reset:
+#endif
     hal_flash_lock();
     arch_reboot();
 }
@@ -87,8 +90,6 @@ void wolfBoot_check_self_update(void)
 {
     uint8_t st;
     struct wolfBoot_image update;
-    uint8_t *update_type;
-    uint32_t update_version;
 
     /* Check for self update in the UPDATE partition */
     if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING) &&
@@ -110,7 +111,7 @@ void wolfBoot_check_self_update(void)
 }
 #endif /* RAM_CODE for self_update */
 
-static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
+static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
 {
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
@@ -267,7 +268,7 @@ out:
 
 #endif
 
-static int wolfBoot_update(int fallback_allowed)
+static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
     const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
@@ -410,7 +411,7 @@ static int wolfBoot_update(int fallback_allowed)
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t st;
-    struct wolfBoot_image boot, update;
+    struct wolfBoot_image boot;
 
 #ifdef RAM_CODE
     wolfBoot_check_self_update();
@@ -426,9 +427,10 @@ void RAMFUNCTION wolfBoot_start(void)
     /* Check for new updates in the UPDATE partition */
         wolfBoot_update(0);
     }
-    if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
-            (wolfBoot_verify_integrity(&boot) < 0)  ||
-            (wolfBoot_verify_authenticity(&boot) < 0)) {
+    if ((wolfBoot_open_image(&boot, PART_BOOT) < 0)
+            || (wolfBoot_verify_integrity(&boot) < 0)
+            || (wolfBoot_verify_authenticity(&boot) < 0)
+            ) {
         if (wolfBoot_update(1) < 0) {
             /* panic: no boot option available. */
             while(1)
