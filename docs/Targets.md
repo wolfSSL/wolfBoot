@@ -121,6 +121,11 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08040000`
 6. RED LD9 will be on
 
+- NOTE: STM32_Programmer_CLI Default Locations
+* Windows: `C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe`
+* Linux: `/usr/local/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI`
+* Mac OS/X: `/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI`
+
 ### Scenario 2: Trustzone Disabled
 
 #### Example Description
@@ -139,6 +144,16 @@ A firmware update can be uploaded at address 0x08048000.
 
 The example configuration is available in [/config/examples/stm32l5-nonsecure-dualbank.config](/config/examples/stm32l5-nonsecure-dualbank.config).
 
+To run flash `./test-app/image.bin` to `0x08000000`.
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image.bin 0x08000000`
+
+Or program each partition using:
+1. flash `wolfboot.bin` to 0x08000000: 
+    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.elf`
+2. flash wolfBoot.bin to 0x0c00 0000
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08008000`
+
+RED LD9 will be on indicating successful boot ()
 
 ### Debugging
 
@@ -147,7 +162,19 @@ Use `make DEBUG=1` and reload firmware.
 - STM32CubeIDE v.1.3.0 required
 - Run the debugger via:
 
-`ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333`
+Linux:
+
+```
+ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333`
+```
+
+Max OS/X:
+
+```sh
+sudo ln -s /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_1.6.0.202101291314/tools/bin/native/mac_x64/libSTLinkUSBDriver.dylib /usr/local/lib/libSTLinkUSBDriver.dylib
+
+/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_1.6.0.202101291314/tools/bin/ST-LINK_gdbserver -d -cp ./Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.macos64_1.6.0.202101291314/tools/bin -e -r 1 -p 3333
+```
 
 - Connect with arm-none-eabi-gdb
 
