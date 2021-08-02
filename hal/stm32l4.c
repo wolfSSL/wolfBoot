@@ -32,62 +32,58 @@
 
 
 
-uint32_t Address = 0, PAGEError = 0;
+static uint32_t Address = 0, PAGEError = 0;
 
 
 static FLASH_EraseInitTypeDef EraseInitStruct;
   
   
-static uint32_t GetPage(uint32_t Addr)
+static uint32_t RAMFUNCTION GetPage(uint32_t Addr)
 {
-  uint32_t page = 0;
+    uint32_t page = 0;
   
-  if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
-  {
-    page = (Addr - FLASH_BASE) / FLASH_PAGE_SIZE;
-  }
-  else
-  {
-    page = (Addr - (FLASH_BASE + FLASH_BANK_SIZE)) / FLASH_PAGE_SIZE;
-  }
+    if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
+        page = (Addr - FLASH_BASE) / FLASH_PAGE_SIZE;
+    else
+        page = (Addr - (FLASH_BASE + FLASH_BANK_SIZE)) / FLASH_PAGE_SIZE;
   
-  return page;
+    return page;
 }
 
 
-static uint32_t GetBank(uint32_t Addr)
+static uint32_t RAMFUNCTION GetBank(uint32_t Addr)
 {
-  uint32_t bank = 0;
+    uint32_t bank = 0;
   
-  if (READ_BIT(SYSCFG->MEMRMP, SYSCFG_MEMRMP_FB_MODE) == 0)
-  {
-    if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
+    if (READ_BIT(SYSCFG->MEMRMP, SYSCFG_MEMRMP_FB_MODE) == 0)
     {
-      bank = FLASH_BANK_1;
+        if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
+        {
+            bank = FLASH_BANK_1;
+        }
+        else
+        {
+            bank = FLASH_BANK_2;
+        }
     }
     else
     {
-      bank = FLASH_BANK_2;
+        if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
+        {
+            bank = FLASH_BANK_2;
+        }
+        else
+        {
+            bank = FLASH_BANK_1;
+        }
     }
-  }
-  else
-  {
-    if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
-    {
-      bank = FLASH_BANK_2;
-    }
-    else
-    {
-      bank = FLASH_BANK_1;
-    }
-  }
-  
-  return bank;
+	
+    return bank;
 }
 
 static void RAMFUNCTION clear_errors(void)
 {
- __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -102,32 +98,36 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
 {
-  uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
-  uint32_t PAGEError = 0;
-  uint32_t end_address;
-  clear_errors();
+    uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
+    uint32_t PAGEError = 0;
+    uint32_t end_address;
+    clear_errors();
 
-    if (len == 0)
-        return -1;
-     hal_flash_unlock();
+        if (len == 0)
+            return -1;
+    hal_flash_unlock();
   
 
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
-
+	
     FirstPage = GetPage((uint32_t) address);
-  NbOfPages = GetPage((uint32_t) address) - FirstPage + 1;
-  BankNumber = GetBank((uint32_t) address);
-  EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
-  EraseInitStruct.Banks       = BankNumber;
-  EraseInitStruct.Page        = FirstPage;
-  EraseInitStruct.NbPages     = NbOfPages;
-  end_address = address + len - 1;
-  for (uint32_t p = address; p < end_address; p += FLASH_PAGE_SIZE){
-    if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK)
-    {
+    NbOfPages = GetPage((uint32_t) address) - FirstPage + 1;
+    BankNumber = GetBank((uint32_t) address);
+	
+    EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
+    EraseInitStruct.Banks       = BankNumber;
+    EraseInitStruct.Page        = FirstPage;
+    EraseInitStruct.NbPages     = NbOfPages;
+	
+    end_address = address + len - 1;
+	
+    for (uint32_t p = address; p < end_address; p += FLASH_PAGE_SIZE){
+	    
+        if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK)
+            return -1;
+	
     }
-  }
-  return 0;
+    return 0;
 }
 
 
@@ -141,23 +141,10 @@ static RAMFUNCTION void flash_wait_complete(void)
     while ((FLASH->SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
 }
-/*
-static void mass_erase(void)
-{
-    FLASH->CR |= FLASH_CR_MER1;
-    FLASH->CR |= FLASH_CR_MER2;
-    FLASH->CR |= FLASH_CR_STRT;
-    flash_wait_complete();
-    FLASH->CR &= ~FLASH_CR_MER1;
-    FLASH->CR &= ~FLASH_CR_MER2;
-}
-*/
-
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-
-     int i = 0;
+    int i = 0;
     uint32_t *dst;
     uint32_t reg;
     int ret=-1; 
@@ -166,38 +153,38 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     reg = FLASH->CR & (~FLASH_CR_FSTPG);
     FLASH->CR = reg | FLASH_CR_PG;
 
-    while (i < len) {
+    while (i < len) 
+    {
         clear_errors();
-            uint32_t val[2];
-            uint8_t *vbytes = (uint8_t *)(val);
-            int off = (address + i) - (((address + i) >> 3) << 3);
-            uint32_t base_addr = address & (~0x07);  /* aligned to 64 bit */
-            int u32_idx = (i >> 2);
+        uint32_t val[2];
+        uint8_t *vbytes = (uint8_t *)(val);
+        int off = (address + i) - (((address + i) >> 3) << 3);
+        uint32_t base_addr = address & (~0x07);  /* aligned to 64 bit */
+        int u32_idx = (i >> 2);
 
-            dst = (uint32_t *)(base_addr);
-            val[0] = dst[u32_idx];
-            val[1] = dst[u32_idx + 1];
-            while ((off < 8) && (i < len))
-                vbytes[off++] = data[i++];
-            dst[u32_idx] = val[0];
-            dst[u32_idx + 1] = val[1];
-            flash_wait_complete();
-        
-    }
+        dst = (uint32_t *)(base_addr);
+        val[0] = dst[u32_idx];
+        val[1] = dst[u32_idx + 1];
+        while ((off < 8) && (i < len))
+            vbytes[off++] = data[i++];
+        dst[u32_idx] = val[0];
+        dst[u32_idx + 1] = val[1];
+        flash_wait_complete();
+   }
 	if ((FLASH->SR &FLASH_SR_PROGERR)!=FLASH_SR_PROGERR )
         {
-          ret=0; 
+            ret=0; 
         }
-    if ((FLASH->SR & FLASH_SR_EOP) == FLASH_SR_EOP)
+        if ((FLASH->SR & FLASH_SR_EOP) == FLASH_SR_EOP)
 	    FLASH->SR |= FLASH_SR_EOP;
-    	    FLASH->CR &= ~FLASH_CR_PG;
+    	FLASH->CR &= ~FLASH_CR_PG;
              
     	  
- return ret;  
+    return ret;  
 }
 
 static void clock_pll_off(void)
-{//needs recheck
+{
     uint32_t reg32;
     /* Enable internal multi-speed oscillator. */
     RCC->CR |= RCC_CR_HSION;
@@ -222,7 +209,7 @@ static void clockconfig(int powersave)
     
      /* Enable Power controller */
     RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-/* Select clock parameters  */
+    /* Select clock parameters  */
     //cpu_freq=16000000;
     hpre= RCC_PRESCALER_DIV_NONE;
     ppre1= RCC_PRESCALER_DIV_NONE;
@@ -257,6 +244,7 @@ static void clockconfig(int powersave)
     RCC->CR &= ~RCC_CR_HSION;
 
 }
+
 void hal_init(void)
 {
     clockconfig(0);
