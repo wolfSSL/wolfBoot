@@ -173,7 +173,10 @@ test-factory: factory.bin
 test-resetold: FORCE
 	@(sleep 1 && st-info --reset) &
 
-
+test-size: FORCE
+	@make clean
+	@make wolfboot.bin
+	@FP=`$(SIZE) -A wolfboot.elf | grep Total | sed -e "s/^Total *//g"`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
 
 
 ## Test cases:
@@ -688,6 +691,16 @@ test-fastmath-smallstack: clean
 	make test-1101-fastmath-smallstack-forward-update-no-downgrade-RSA2048-SHA3
 	make test-1111-fastmath-smallstack-forward-update-no-downgrade-RSA4096-SHA3
 	make test-1171-fastmath-smallstack-forward-update-no-downgrade-NOSIGN
+
+test-size-all:
+	make test-size SIGN=ED25519 LIMIT=10670
+	make test-size SIGN=ECC256  LIMIT=21474
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13674
+	make test-size SIGN=RSA2048 LIMIT=10506
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11162
+	make test-size SIGN=RSA4096 LIMIT=10810
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11474
+
 
 
 test-all: clean
