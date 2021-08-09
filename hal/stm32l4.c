@@ -258,3 +258,13 @@ void hal_prepare_boot(void)
 
     clock_pll_off();
 }
+
+/* This value is unused, the function is never called
+ * as long as the timeout is 0xFFFFFFFF.
+ * It is defined here only to avoid a compiler error
+ * for a missing symbol in hal_flash_driver.
+ */
+uint32_t HAL_GetTick(void)
+{
+    return 0;
+}
