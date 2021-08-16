@@ -174,9 +174,9 @@ test-resetold: FORCE
 	@(sleep 1 && st-info --reset) &
 
 test-size: FORCE
-	@make clean
-	@make wolfboot.bin
-	@FP=`$(SIZE) -A wolfboot.elf | grep Total | sed -e "s/^Total *//g"`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
+	$(Q)make clean
+	$(Q)make wolfboot.bin
+	$(Q)FP=`$(SIZE) -A wolfboot.elf | awk -e ' /Total/ {print $$2;}'`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
 
 
 ## Test cases:
