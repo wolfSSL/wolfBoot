@@ -397,18 +397,6 @@ test-171-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
 test-173-rollback-NOSIGN: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=NONE
 
-# Group 18: Delta update
-#
-#
-
-test-181-forward-update-no-downgrade-delta:SIGN_ARGS+="-delta test-app/image_v1_signed.bin" 
-test-181-forward-update-no-downgrade-delta: $(EXPVER) FORCE
-	@make test-01-forward-update-no-downgrade DELTA_UPDATES=1
-
-test-183-rollback-delta:SIGN_ARGS+="-delta test-app/image_v1_signed.bin"
-test-183-rollback-delta: $(EXPVER) FORCE
-	@make test-03-rollback DELTA_UPDATES=1
-
 # Groups 20:31,37: Combinations of previous tests with WOLFBOOT_SMALL_STACK
 #
 #
@@ -700,16 +688,6 @@ test-fastmath-smallstack: clean
 	make test-1101-fastmath-smallstack-forward-update-no-downgrade-RSA2048-SHA3
 	make test-1111-fastmath-smallstack-forward-update-no-downgrade-RSA4096-SHA3
 	make test-1171-fastmath-smallstack-forward-update-no-downgrade-NOSIGN
-
-test-delta-update: clean
-	@echo Delta update tests
-	@echo ==========
-	@echo
-	@echo
-	@make test-181-forward-update-no-downgrade-delta
-	@make test-183-rollback-delta
-
-
 
 
 test-all: clean
