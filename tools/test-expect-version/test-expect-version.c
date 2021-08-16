@@ -97,7 +97,7 @@ int main(int argc, char** argv)
     alarm(TIMEOUT);
 
     if (argc > 2) {
-        fprintf(stderr, "Executing \"%s\"\n", argv[1]);
+        fprintf(stderr, "Executing \"%s\"\n", argv[2]);
         system(argv[2]);
     }
 

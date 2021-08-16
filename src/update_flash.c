@@ -151,7 +151,10 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
 }
 
 #ifdef DELTA_UPDATES
-static uint8_t delta_blk[WOLFBOOT_SECTOR_SIZE];
+
+#ifndef DELTA_BLOCK_SIZE
+#define DELTA_BLOCK_SIZE 256
+#endif
 
 static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_image *update, struct wolfBoot_image *swap)
 {
@@ -159,6 +162,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
     int ret;
     uint8_t flag;
     int hdr_size;
+    uint8_t delta_blk[DELTA_BLOCK_SIZE];
+    uint32_t offset = 0;
     hal_flash_unlock();
 #ifdef EXT_FLASH
     ext_flash_unlock();
@@ -177,16 +182,13 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
      while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
             int len = 0;
+            wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
             while (len < WOLFBOOT_SECTOR_SIZE) {
-                ret = wb_patch(&ctx, delta_blk, WOLFBOOT_SECTOR_SIZE);
+                ret = wb_patch(&ctx, delta_blk, DELTA_BLOCK_SIZE);
                 if (ret > 0) {
-                    if (len == 0)
-                        wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
-                    wb_flash_write(swap, 0, delta_blk + len, ret);
+                    wb_flash_write(swap, len, delta_blk, ret);
                     len += ret;
                 } else if (ret == 0) {
-                    memset(delta_blk + len, 0xFF, WOLFBOOT_SECTOR_SIZE - len);
-                    wb_flash_write(swap, 0, delta_blk + len, WOLFBOOT_SECTOR_SIZE - len);
                     break;
                 } else
                     goto out;

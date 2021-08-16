@@ -63,11 +63,8 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
         return -1;
     if (len < BLOCK_HDR_SIZE)
         return -1;
-    if (ctx->p_off >= ctx->patch_size)
-        return 0;
 
-
-    while ( (ctx->p_off < ctx->patch_size) && (dst_off < len)) {
+    while ( ( (ctx->matching != 0) || (ctx->p_off < ctx->patch_size)) && (dst_off < len)) {
         uint8_t *pp = (ctx->patch_base + ctx->p_off);
         if (ctx->matching) {
             /* Resume matching block from previous sector */
