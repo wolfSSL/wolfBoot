@@ -25,7 +25,14 @@
 
 #define ESC 0x7f
 
-struct __attribute__((packed)) block_hdr {
+#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
+    defined(__GNUC__)
+#define BLOCK_HDR_PACKED __attribute__ ((packed))
+#else
+#define BLOCK_HDR_PACKED
+#endif
+
+struct BLOCK_HDR_PACKED block_hdr {
     uint8_t esc;
     uint8_t off[3];
     uint8_t sz[2];
@@ -177,7 +184,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
-                while (*pa == *(ctx->src_b + ctx->off_b)) { 
+                while (*pa == *(ctx->src_b + ctx->off_b)) {
                     match_len++;
                     pa++;
                     ctx->off_b++;
