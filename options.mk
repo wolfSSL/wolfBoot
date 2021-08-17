@@ -39,7 +39,7 @@ ifeq ($(SIGN),ECC256)
   else ifneq ($(SPMATH),1)
     STACK_USAGE=5008
   else
-    STACK_USAGE=3888
+    STACK_USAGE=3896
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif

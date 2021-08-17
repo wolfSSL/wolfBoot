@@ -1,16 +1,19 @@
 all: bmdiff bmpatch
 
 
-bmdiff: delta.o
-	gcc -o bmdiff delta.o
+bmdiff: delta.o bmdiff.o
+	gcc -o bmdiff delta.o bmdiff.o
 
-bmpatch: delta.o
-	gcc -o bmpatch delta.o
+bmpatch: delta.o bmdiff.o
+	gcc -o bmpatch delta.o bmdiff.o
 
 lib: delta.o
 
 delta.o:
-	gcc -c -o delta.o ../../src/delta.c -I../../include -DBM_TEST_MAIN -ggdb
+	gcc -c -o delta.o ../../src/delta.c -I../../include -ggdb
+
+bmdiff.o:
+	gcc -c -o bmdiff.o bmdiff.c -I../../include -ggdb
 
 clean:
 	rm -f bmpatch bmdiff delta.o
