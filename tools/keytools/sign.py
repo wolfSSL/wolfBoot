@@ -25,16 +25,20 @@ import sys, os, struct, time, re
 from wolfcrypt import ciphers, hashes
 
 
-WOLFBOOT_MAGIC  = 0x464C4F57
-HDR_END         = 0x00
-HDR_VERSION     = 0x01
-HDR_TIMESTAMP   = 0x02
-HDR_SHA256      = 0x03
-HDR_SHA3_384    = 0x13
-HDR_IMG_TYPE    = 0x04
-HDR_PUBKEY      = 0x10
-HDR_SIGNATURE   = 0x20
-HDR_PADDING     = 0xFF
+WOLFBOOT_MAGIC              = 0x464C4F57
+HDR_END                     = 0x00
+HDR_VERSION                 = 0x01
+HDR_TIMESTAMP               = 0x02
+HDR_SHA256                  = 0x03
+HDR_IMG_DELTA_BASE          = 0x05
+HDR_IMG_DELTA_SIZE          = 0x06
+HDR_SHA3_384                = 0x13
+HDR_IMG_DELTA_INVERSE       = 0x15
+HDR_IMG_DELTA_INVERSE_SIZE  = 0x16
+HDR_IMG_TYPE                = 0x04
+HDR_PUBKEY                  = 0x10
+HDR_SIGNATURE               = 0x20
+HDR_PADDING                 = 0xFF
 
 
 HDR_VERSION_LEN     = 4
@@ -53,7 +57,6 @@ HDR_IMG_TYPE_DIFF         = 0x00D0
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
 HDR_IMG_TYPE_APP          = 0x0001
-HDR_IMG_DELTA_BASE        = 0x0005
 
 WOLFBOOT_HEADER_SIZE = 256
 
@@ -453,10 +456,31 @@ outfile.close()
 
 if (delta):
     tmp_outfile='/tmp/delta.bin'
+    tmp_inv_outfile='/tmp/delta-1.bin'
     os.system('tools/delta/bmdiff ' + delta_base_file + ' ' + output_image_file + ' ' + tmp_outfile)
+    os.system('tools/delta/bmdiff ' + output_image_file + ' ' + delta_base_file + ' ' + tmp_inv_outfile)
 
+    delta_size = os.path.getsize(tmp_outfile)
+    delta_inv_size = os.path.getsize(tmp_inv_outfile)
+    delta_file = open(tmp_outfile, 'ab+')
+    delta_inv_file = open(tmp_inv_outfile, 'rb')
+    while delta_file.tell() % 16 != 0:
+        delta_file.write(struct.pack('B', 0x00))
+    inv_off = delta_file.tell()
+    while True:
+        cpbuf = delta_inv_file.read(1024)
+        if len(cpbuf) == 0:
+            break
+        delta_file.write(cpbuf)
+    delta_file.close()
+    delta_inv_file.close()
     base_version = re.split("_", (re.split("_v", delta_base_file)[1]))[0]
-    header = make_header(tmp_outfile, fw_version, [[HDR_IMG_DELTA_BASE, 4, struct.pack("<L", int(base_version))]])
+    header = make_header(tmp_outfile, fw_version,
+            [[HDR_IMG_DELTA_BASE, 4, struct.pack("<L", int(base_version))],
+                [HDR_IMG_DELTA_SIZE, 2, struct.pack("<H", delta_size)],
+                [HDR_IMG_DELTA_INVERSE, 4, struct.pack("<L", inv_off + WOLFBOOT_HEADER_SIZE)],
+                [HDR_IMG_DELTA_INVERSE_SIZE, 2, struct.pack("<H", delta_inv_size)]
+                ])
     outfile = open(delta_output_image_file, 'wb')
     outfile.write(header)
     sz = len(header)
@@ -472,6 +496,7 @@ if (delta):
     infile.close()
     outfile.close()
     os.remove(tmp_outfile)
+    os.remove(tmp_inv_outfile)
 
 if (encrypt):
     sz = 0

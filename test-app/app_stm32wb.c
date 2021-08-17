@@ -59,7 +59,8 @@ void main(void) {
         wolfBoot_update_trigger();
         boot_led_on();
     } else {
-        wolfBoot_success();
+        if (version != 7)
+            wolfBoot_success();
     }
     /* Wait for reboot */
     while(1)

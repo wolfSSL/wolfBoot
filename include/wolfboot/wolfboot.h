@@ -49,16 +49,19 @@
 #    define WOLFBOOT_MAGIC_TRAIL    0x544F4F42 /* BOOT */
 #endif
 
-#define HDR_END         0x00
-#define HDR_VERSION     0x01
-#define HDR_TIMESTAMP   0x02
-#define HDR_SHA256      0x03
-#define HDR_IMG_TYPE    0x04
-#define HDR_IMG_DELTA_BASE 0x05
-#define HDR_PUBKEY      0x10
-#define HDR_SIGNATURE   0x20
-#define HDR_SHA3_384    0x13
-#define HDR_PADDING     0xFF
+#define HDR_END                     0x00
+#define HDR_VERSION                 0x01
+#define HDR_TIMESTAMP               0x02
+#define HDR_SHA256                  0x03
+#define HDR_IMG_TYPE                0x04
+#define HDR_IMG_DELTA_BASE          0x05
+#define HDR_IMG_DELTA_SIZE          0x06
+#define HDR_PUBKEY                  0x10
+#define HDR_SHA3_384                0x13
+#define HDR_IMG_DELTA_INVERSE       0x15
+#define HDR_IMG_DELTA_INVERSE_SIZE  0x16
+#define HDR_SIGNATURE               0x20
+#define HDR_PADDING                 0xFF
 
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
 #define HDR_IMG_TYPE_AUTH_ED25519 0x0100
@@ -111,10 +114,12 @@
 void wolfBoot_erase_partition(uint8_t part);
 void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);
+uint32_t wolfBoot_image_size(uint8_t *image);
 uint32_t wolfBoot_get_image_version(uint8_t part);
 uint16_t wolfBoot_get_image_type(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
+uint32_t wolfBoot_get_diffbase_version(uint8_t part);
 
 int wolfBoot_fallback_is_possible(void);
 int wolfBoot_dualboot_candidate(void);

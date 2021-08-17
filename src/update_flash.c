@@ -156,14 +156,18 @@ static int wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_imag
 #define DELTA_BLOCK_SIZE 256
 #endif
 
-static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_image *update, struct wolfBoot_image *swap)
+static int wolfBoot_delta_update(struct wolfBoot_image *boot,
+        struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse)
 {
     int sector = 0;
     int ret;
-    uint8_t flag;
+    uint8_t flag, st;
     int hdr_size;
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
     uint32_t offset = 0;
+    uint16_t ptr_len;
+
+
     hal_flash_unlock();
 #ifdef EXT_FLASH
     ext_flash_unlock();
@@ -174,14 +178,42 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
 #endif
     WB_PATCH_CTX ctx;
 
-    ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-            update->hdr + IMAGE_HEADER_SIZE, update->fw_size);
+    if (inverse) {
+        uint32_t cur_v, upd_v, delta_base_v;
+        uint32_t *inv_patch_off;
+        uint16_t *inv_patch_len;
+        cur_v = wolfBoot_current_firmware_version();
+        upd_v = wolfBoot_update_firmware_version();
+        delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
+        if ((cur_v == upd_v) && (delta_base_v < cur_v)) {
+            ptr_len = wolfBoot_find_header(update->hdr + IMAGE_HEADER_OFFSET,
+                    HDR_IMG_DELTA_INVERSE, (void *)&inv_patch_off);
+            if (ptr_len != sizeof(uint32_t))
+                return -1;
+            ptr_len = wolfBoot_find_header(update->hdr + IMAGE_HEADER_OFFSET,
+                    HDR_IMG_DELTA_INVERSE_SIZE, (void *)&inv_patch_len);
+            if (ptr_len != sizeof(uint16_t))
+                return -1;
+            ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
+                    update->hdr + *inv_patch_off, *inv_patch_len);
+        } else {
+            ret = -1;
+        }
+    } else {
+        uint16_t *patch_len;
+        ptr_len = wolfBoot_find_header(update->hdr + IMAGE_HEADER_OFFSET,
+                HDR_IMG_DELTA_SIZE, (void *)&patch_len);
+        if (ptr_len != sizeof(uint16_t))
+            return -1;
+        ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
+                update->hdr + IMAGE_HEADER_SIZE, *patch_len);
+    }
     if (ret < 0)
         return ret;
 
      while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
-            int len = 0;
+            uint32_t len = 0;
             wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
             while (len < WOLFBOOT_SECTOR_SIZE) {
                 ret = wb_patch(&ctx, delta_blk, DELTA_BLOCK_SIZE);
@@ -195,6 +227,19 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
             }
             flag = SECT_FLAG_SWAPPING;
             wolfBoot_set_update_sector_flag(sector, flag);
+        } else {
+            /* Consume one sector off the patched image
+             * when resuming an interrupted patch
+             */
+            uint32_t len = 0;
+            while (len < WOLFBOOT_SECTOR_SIZE) {
+                ret = wb_patch(&ctx, delta_blk, DELTA_BLOCK_SIZE);
+                if (ret == 0)
+                    break;
+                if (ret < 0)
+                    goto out;
+                len += ret;
+            }
         }
         if (flag == SECT_FLAG_SWAPPING) {
            wolfBoot_copy_sector(swap, boot, sector);
@@ -205,6 +250,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot, struct wolfBoot_im
         sector++;
     }
     ret = 0;
+    st = IMG_STATE_TESTING;
+    wolfBoot_set_partition_state(PART_BOOT, st);
 out:
 #ifdef EXT_FLASH
     ext_flash_lock();
@@ -269,7 +316,7 @@ static int wolfBoot_update(int fallback_allowed)
 #endif
 #ifdef DELTA_UPDATES
         if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
-            return wolfBoot_delta_update(&boot, &update, &swap);
+            return wolfBoot_delta_update(&boot, &update, &swap, fallback_allowed);
         }
 #endif
     }
@@ -369,17 +416,14 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
-#ifndef DELTA_UPDATES
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
     if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
         wolfBoot_update_trigger();
         wolfBoot_update(1);
-    } else
-#endif
+    } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
     /* Check for new updates in the UPDATE partition */
-    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
         wolfBoot_update(0);
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||

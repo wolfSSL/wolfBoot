@@ -90,6 +90,28 @@ to be transferred to the target, while keeping the same level of security throug
 verification, and integrity due to the repeated check (on the patch and the resulting image).
 
 The format of the patch is based on the mechanism suggested by Bentley/McIlroy, which is particularly effective
-to generate small binary patches.
+to generate small binary patches. This is useful to minimize time and resources needed to transfer,
+authenticate and install updates.
+
+#### Incremental update: example
+
+
+Requirement: wolfBoot is compiled with `DELTA_UPDATES=1`
+
+Version "1" is signed as usual, as a standalone image:
+
+`tools/keytools/sign.py --ecc256 --sha256 test-app/image.bin ecc256.der 1`
+
+When updating from version 1 to version 2, you can invoke the sign tool as:
+
+`tools/keytools/sign.py --delta test-app/image_v1_signed.bin --ecc256 --sha256 test-app/image.bin ecc256.der 2`
+
+Besides the usual output file `image_v2_signed.bin`, the sign tool creates an additional `image_v2_signed_diff.bin`
+which should be noticeably smaller in size as long as the two binary files contain overlapping areas.
+
+The `image_v2_signed_diff.bin` file can be now transferred to the update partition on the target like a full update image.
+
+At next reboot, wolfBoot recognizes the incremental update, checks the integrity, the authenticity and the versions
+of the patch. If all checks succeed, the new version is installed by applying the patch on the current firmware image.
 
 
