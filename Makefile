@@ -94,6 +94,7 @@ rsa4096.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
 
 keytools:
+	@make -C tools/keytools clean
 	@make -C tools/keytools
 
 test-app/image_v1_signed.bin: test-app/image.bin
