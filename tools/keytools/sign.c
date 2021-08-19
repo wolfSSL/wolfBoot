@@ -45,7 +45,6 @@
 
 #define MAX_SRC_SIZE (1 << 24)
 
-
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/asn.h>
 
@@ -95,6 +94,11 @@
 #define HDR_TIMESTAMP_LEN 8
 #define HDR_IMG_TYPE_LEN  2
 
+#define HDR_IMG_DELTA_BASE 0x05
+#define HDR_IMG_DELTA_SIZE 0x06
+#define HDR_IMG_DELTA_INVERSE 0x15
+#define HDR_IMG_DELTA_INVERSE_SIZE 0x16
+
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
 #define HDR_IMG_TYPE_AUTH_ED25519 0x0100
 #define HDR_IMG_TYPE_AUTH_ECC256  0x0200
@@ -102,7 +106,7 @@
 #define HDR_IMG_TYPE_AUTH_RSA4096 0x0400
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
-#define HDR_IMG_TYPE_DIFF         0x0010
+#define HDR_IMG_TYPE_DIFF         0x00D0
 
 #define HASH_SHA256    HDR_SHA256
 #define HASH_SHA3      HDR_SHA3_384
@@ -202,9 +206,9 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     if (*key_buffer)
         fread(*key_buffer, 1, *key_buffer_sz, f);
     fclose(f);
-    if (key_buffer == NULL) {
+    if (*key_buffer == NULL) {
         printf("Key buffer malloc error!\n");
-        return NULL;
+        goto failure;
     }
 
     /* key type "auto" selection */
@@ -315,7 +319,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         }
         if (ret != 0) {
             printf("Error %d loading key\n", ret);
-            return NULL;
+            goto failure;
         }
     }
     else {
@@ -334,11 +338,12 @@ failure:
         free(*key_buffer);
         *key_buffer = NULL;
     }
-
     return NULL;
 }
 
-static int make_header(int is_diff, const char *image_file, const char *outfile)
+static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, const char *image_file, const char *outfile,
+        uint32_t delta_base_version, uint16_t patch_len, uint32_t patch_inv_off,
+        uint16_t patch_inv_len)
 {
     uint32_t header_idx;
     uint8_t *header;
@@ -352,8 +357,6 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
     uint32_t read_sz, pos;
     uint8_t  digest[48]; /* max digest */
     uint32_t digest_sz = 0;
-    uint8_t* pubkey = NULL;
-    uint32_t pubkey_sz = 0;
     uint32_t image_sz = 0;
     header_idx = 0;
     header = malloc(CMD.header_sz);
@@ -386,9 +389,9 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
     header_append_tag(header, &header_idx, HDR_VERSION, HDR_VERSION_LEN,
         &fw_version32);
 
-    /* Append Four pad bytes, so timestamp is aligned */
-    header_idx += 4; /* memset 0xFF above handles value */
-
+    /* Append pad bytes, so timestamp val field is 8-byte aligned */
+    while ((header_idx % 8) != 4)
+        header_idx++;
     /* Append Timestamp field */
     stat(image_file, &attrib);
     header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
@@ -403,8 +406,20 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
     header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
         &image_type);
 
-    /* Six pad bytes, Sha-3 requires 8-byte alignment. */
-    header_idx += 6; /* memset 0xFF above handles value */
+    if (is_diff) {
+        header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE, 4,
+                &delta_base_version);
+        header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 2,
+                &patch_len);
+        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
+                &patch_inv_off);
+        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 2,
+                &patch_inv_len);
+    }
+
+    /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
+    while ((header_idx % 8) != 4)
+        header_idx++;
 
     /* Calculate hashes */
     if (CMD.hash_algo == HASH_SHA256)
@@ -503,7 +518,6 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
 
     /* Add image hash to header */
     header_append_tag(header, &header_idx, CMD.hash_algo, digest_sz, digest);
-
     if (CMD.sign != NO_SIGN) {
         WC_RNG rng;
         /* Add Pubkey Hash to header */
@@ -531,8 +545,11 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
         }
         memset(signature, 0, CMD.signature_sz);
         if (!CMD.manual_sign) {
-            printf("Signing the firmware...\n");
-
+            printf("Signing the digest...\n");
+#ifdef DEBUG_SIGTOOL
+            printf("Digest %d\n", digest_sz);
+            WOLFSSL_BUFFER(digest, digest_sz);
+#endif
             wc_InitRng(&rng);
             if (CMD.sign == SIGN_ED25519) {
 #ifdef HAVE_ED25519
@@ -547,7 +564,6 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
                 mp_to_unsigned_bin(&r, &signature[0]);
                 mp_to_unsigned_bin(&s, &signature[32]);
                 mp_clear(&r); mp_clear(&s);
-                wc_ecc_free(&key.ecc);
 #endif
             }
             else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
@@ -566,7 +582,6 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
                 }
                 ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, CMD.signature_sz,
                         &key.rsa, &rng);
-                wc_FreeRsaKey(&key.rsa);
                 if (ret > 0) {
                     CMD.signature_sz = ret;
                     ret = 0;
@@ -592,8 +607,8 @@ static int make_header(int is_diff, const char *image_file, const char *outfile)
             fclose(f);
         }
 #ifdef DEBUG_SIGNTOOL
-        printf("Signature %d\n", signature_sz);
-        WOLFSSL_BUFFER(signature, signature_sz);
+        printf("Signature %d\n", CMD.signature_sz);
+        WOLFSSL_BUFFER(signature, CMD.signature_sz);
 #endif
 
         /* Add signature to header */
@@ -674,83 +689,176 @@ failure:
     return ret;
 }
 
-
-static int base_diff(const char *f_base)
+static int make_header(uint8_t *pubkey, uint32_t pubkey_sz, const char *image_file, const char *outfile)
 {
-    int fd1, fd2, fd3;
-    int len1, len2, len3;
+    return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0);
+}
+
+static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz, const char *image_file, const char *outfile,
+        uint32_t delta_base_version, uint16_t patch_len,
+        uint32_t patch_inv_off, uint16_t patch_inv_len)
+{
+    return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile, delta_base_version, patch_len,
+            patch_inv_off, patch_inv_len);
+}
+
+static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
+{
+    int fd1 = -1, fd2 = -1, fd3 = -1;
+    int len1 = 0, len2 = 0, len3 = 0;
     struct stat st;
-    void *base;
-    void *buffer;
+    void *base = NULL;
+    void *buffer = NULL;
     uint8_t dest[WOLFBOOT_SECTOR_SIZE];
     uint8_t ff = 0xff;
     int r;
     uint32_t blksz = WOLFBOOT_SECTOR_SIZE;
+    uint16_t patch_sz, patch_inv_sz;
+    uint32_t patch_inv_off;
+    uint32_t delta_base_version = 0;
+    char *base_ver_p, *base_ver_e;
+    WB_DIFF_CTX diff_ctx;
+    int ret = -1;
 
     /* Get source file size */
     if (stat(f_base, &st) < 0) {
         printf("Cannot stat %s\n", f_base);
-        return -1;
+        goto cleanup;
     }
     len1 = st.st_size;
 
     if (len1 > MAX_SRC_SIZE) {
         printf("%s: file too large\n", f_base);
-        return -1;
+        goto cleanup;
     }
 
+    /* Open base image */
     fd1 = open(f_base, O_RDWR);
     if (fd1 < 0) {
         printf("Cannot open file %s\n", f_base);
-        return -1;
+        goto cleanup;
     }
     base = mmap(NULL, len1, PROT_READ|PROT_WRITE, MAP_SHARED, fd1, 0);
     if (base == (void *)(-1)) {
         perror("mmap");
-        return -1;
+        goto cleanup;
     }
+    /* Check base image version */
+    base_ver_p = strstr(f_base, "_v");
+    if (base_ver_p) {
+        base_ver_p += 2;
+        base_ver_e = strchr(base_ver_p, '_');
+        if (base_ver_e) {
+            long long retval;
+            retval = strtoll(base_ver_p, NULL, 10);
+            if (retval < 0)
+                delta_base_version = 0;
+            else
+                delta_base_version = (uint32_t)(retval&0xFFFFFFFF);
+        }
+    }
+
+    if (delta_base_version == 0) {
+        printf("Could not read firmware version from base file %s\n", f_base);
+        goto cleanup;
+    } else {
+        printf("Delta base version: %u\n", delta_base_version);
+    }
+
+    /* Open second image file */
     fd2 = open(CMD.output_image_file, O_RDONLY);
     if (fd2 < 0) {
         printf("Cannot open file %s\n", CMD.output_image_file);
-        return -1;
+        goto cleanup;
     }
     /* Get second file size */
     if (stat(CMD.output_image_file, &st) < 0) {
         printf("Cannot stat %s\n", CMD.output_image_file);
-        return -1;
+        goto cleanup;
     }
     len2 = st.st_size;
     buffer = mmap(NULL, len2, PROT_READ, MAP_SHARED, fd2, 0);
     if (base == (void *)(-1)) {
         perror("mmap");
-        return -1;
+        goto cleanup;
     }
+
+    /* Open output file */
     fd3 = open(wolfboot_delta_file, O_RDWR|O_CREAT|O_TRUNC, 0660);
     if (fd3 < 0) {
         printf("Cannot open file %s for writing\n", wolfboot_delta_file);
-        return -1;
+        goto cleanup;
     }
-    WB_DIFF_CTX dx;
     if (len2 <= 0) {
-        return -1;
+        goto cleanup;
     }
     lseek(fd3, MAX_SRC_SIZE -1, SEEK_SET);
     write(fd3, &ff, 1);
     lseek(fd3, 0, SEEK_SET);
     len3 = 0;
-    if (wb_diff_init(&dx, base, len1, buffer, len2) < 0) {
-        return -1;
+
+    /* Direct base->second patch */
+    if (wb_diff_init(&diff_ctx, base, len1, buffer, len2) < 0) {
+        goto cleanup;
     }
     do {
-        r = wb_diff(&dx, dest, blksz);
+        r = wb_diff(&diff_ctx, dest, blksz);
         if (r < 0)
-            return -1;
+            goto cleanup;
         write(fd3, dest, r);
         len3 += r;
     } while (r > 0);
+    patch_sz = len3;
+    while ((len3 % 16) != 0) {
+        uint8_t zero = 0;
+        write(fd3, &zero, 1);
+        len3++;
+    }
+    patch_inv_off = (uint32_t)len3 + CMD.header_sz;
+    patch_inv_sz = 0;
+
+    /* Inverse second->base patch */
+    if (wb_diff_init(&diff_ctx, buffer, len2, base, len1) < 0) {
+        goto cleanup;
+    }
+    do {
+        r = wb_diff(&diff_ctx, dest, blksz);
+        if (r < 0)
+            goto cleanup;
+        write(fd3, dest, r);
+        patch_inv_sz += r;
+        len3 += r;
+    } while (r > 0);
     ftruncate(fd3, len3);
+    close(fd3);
+    fd3 = -1;
     printf("Successfully created output file %s\n", wolfboot_delta_file);
-    return 0;
+
+    /* Create delta file, with header, from the resulting patch */
+    ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
+            delta_base_version, patch_sz, patch_inv_off, patch_inv_sz);
+
+cleanup:
+    if (fd3 >= 0) {
+        if (len3 > 0)
+            ftruncate(fd3, len3);
+        close(fd3);
+        fd3 = -1;
+    }
+    /* Unlink output file */
+    unlink(wolfboot_delta_file);
+    /* Cleanup/close */
+    if (fd2 >= 0) {
+        if (len2 > 0)
+            munmap(buffer, len2);
+        close(fd2);
+    }
+    if (fd1 >= 0) {
+        if (len1 > 0)
+            munmap(base, len1);
+        close(fd1);
+    }
+    return ret;
 }
 
 
@@ -764,8 +872,10 @@ int main(int argc, char** argv)
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
     uint8_t  buf[1024];
-    uint8_t *pubkey;
-    uint32_t pubkey_sz;
+    uint8_t *pubkey = NULL;
+    uint32_t pubkey_sz = 0;
+    uint8_t *kbuf=NULL, *key_buffer;
+    uint32_t key_buffer_sz;
 
 #ifdef DEBUG_SIGNTOOL
     wolfSSL_Debugging_ON();
@@ -913,21 +1023,31 @@ int main(int argc, char** argv)
                 "*** Image will not be authenticated!\n"
                 "*** SECURE BOOT DISABLED.\n");
     } else {
-        uint8_t *kbuf, *key_buffer;
-        uint32_t key_buffer_sz;
         kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkey_sz);
         if (!kbuf) {
             exit(1);
         }
     } /* CMD.sign != NO_SIGN */
-    make_header(0, CMD.image_file, CMD.output_image_file);
+    make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
 
     if (CMD.delta) {
-        ret = base_diff(CMD.delta_base_file);
-        if (ret == 0) {
-            ret = make_header(1, wolfboot_delta_file, CMD.output_diff_file);
-        }
-        unlink(wolfboot_delta_file);
+        ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz);
     }
+    if (kbuf)
+        free(kbuf);
+    if (CMD.sign == SIGN_ED25519) {
+#ifdef HAVE_ED25519
+        wc_ed25519_free(&key.ed);
+#endif
+    } else if (CMD.sign == SIGN_ECC256) {
+#ifdef HAVE_ECC
+        wc_ecc_free(&key.ecc);
+#endif
+    } else if (CMD.sign == SIGN_RSA4096 || CMD.sign == SIGN_RSA4096) {
+#ifndef NO_RSA
+        wc_FreeRsaKey(&key.rsa);
+#endif
+    }
+
     return ret;
 }
