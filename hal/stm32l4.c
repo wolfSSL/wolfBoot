@@ -55,25 +55,16 @@ static uint32_t RAMFUNCTION GetBank(uint32_t Addr)
 {
     uint32_t bank = 0;
   
-    if (READ_BIT(SYSCFG->MEMRMP, SYSCFG_MEMRMP_FB_MODE) == 0)
-    {
-        if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
-        {
+    if (READ_BIT(SYSCFG->MEMRMP, SYSCFG_MEMRMP_FB_MODE) == 0) {
+        if (Addr < (FLASH_BASE + FLASH_BANK_SIZE)) {
             bank = FLASH_BANK_1;
-        }
-        else
-        {
+        } else {
             bank = FLASH_BANK_2;
         }
-    }
-    else
-    {
-        if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
-        {
+    } else {
+        if (Addr < (FLASH_BASE + FLASH_BANK_SIZE)) {
             bank = FLASH_BANK_2;
-        }
-        else
-        {
+        } else {
             bank = FLASH_BANK_1;
         }
     }
@@ -81,7 +72,7 @@ static uint32_t RAMFUNCTION GetBank(uint32_t Addr)
     return bank;
 }
 
-static void RAMFUNCTION clear_errors(void)
+static void RAMFUNCTION hal_flash_clear_errors(void)
 {
      __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
 }
@@ -101,12 +92,12 @@ int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
     uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
     uint32_t PAGEError = 0;
     uint32_t end_address;
-    clear_errors();
+    hal_flash_clear_errors();
 
-        if (len == 0)
-            return -1;
+    if (len == 0) {
+        return -1;
+    }
     hal_flash_unlock();
-  
 
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
 	
@@ -121,12 +112,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
 	
     end_address = address + len - 1;
 	
-    for (uint32_t p = address; p < end_address; p += FLASH_PAGE_SIZE){
+    for (uint32_t p = address; p < end_address; p += FLASH_PAGE_SIZE) {
 	    
-        if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK)
-            return -1;
-	
+        if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK) {
+            break;
+	}
     }
+	
+    hal_flash_lock();
+	
     return 0;
 }
 
@@ -149,19 +143,18 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t reg;
     int ret=-1; 
 
-    clear_errors();
+    hal_flash_clear_errors();
     reg = FLASH->CR & (~FLASH_CR_FSTPG);
     FLASH->CR = reg | FLASH_CR_PG;
 
-    while (i < len) 
-    {
-        clear_errors();
+    while (i < len) {
         uint32_t val[2];
         uint8_t *vbytes = (uint8_t *)(val);
         int off = (address + i) - (((address + i) >> 3) << 3);
         uint32_t base_addr = address & (~0x07);  /* aligned to 64 bit */
         int u32_idx = (i >> 2);
-
+	
+	hal_flash_clear_errors();
         dst = (uint32_t *)(base_addr);
         val[0] = dst[u32_idx];
         val[1] = dst[u32_idx + 1];
@@ -170,16 +163,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         dst[u32_idx] = val[0];
         dst[u32_idx + 1] = val[1];
         flash_wait_complete();
-   }
-	if ((FLASH->SR &FLASH_SR_PROGERR)!=FLASH_SR_PROGERR )
-        {
-            ret=0; 
+    }
+    if ((FLASH->SR &FLASH_SR_PROGERR)!= FLASH_SR_PROGERR) {
+        ret=0; 
         }
-        if ((FLASH->SR & FLASH_SR_EOP) == FLASH_SR_EOP)
-	    FLASH->SR |= FLASH_SR_EOP;
-    	FLASH->CR &= ~FLASH_CR_PG;
-             
-    	  
+    if ((FLASH->SR & FLASH_SR_EOP) == FLASH_SR_EOP) {
+	FLASH->SR |= FLASH_SR_EOP;
+	}
+    FLASH->CR &= ~FLASH_CR_PG;
+	
     return ret;  
 }
 
@@ -207,10 +199,10 @@ static void clockconfig(int powersave)
     
     uint32_t hpre,ppre1,ppre2,flash_waitstates;
     
-     /* Enable Power controller */
+    /* Enable Power controller */
     RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
     /* Select clock parameters  */
-    //cpu_freq=16000000;
+    /*cpu_freq=16000000;*/
     hpre= RCC_PRESCALER_DIV_NONE;
     ppre1= RCC_PRESCALER_DIV_NONE;
     ppre2=RCC_PRESCALER_DIV_NONE;
@@ -225,7 +217,7 @@ static void clockconfig(int powersave)
     reg32 &= ~((1 << 1) | (1 << 0));
     RCC->CFGR = (reg32 | RCC_CFGR_SW_HSI);
     DMB();
-/* Set prescalers for AHB, ADC, ABP1, ABP2.
+    /* Set prescalers for AHB, ADC, ABP1, ABP2.
     */
     reg32 = RCC->CFGR;
     reg32 &= ~(0xF0);
