@@ -63,7 +63,7 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
   endif
-  
+
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
     CFLAGS+=-Ihal -DCORTEX_M33
@@ -74,7 +74,7 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x08000000
     endif
   endif
-  
+
   ifeq ($(TARGET),stm32l4)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
