@@ -70,12 +70,16 @@ int main(int argc, char** argv)
     sigset(SIGALRM, alarm_handler);
 
 
-    if (argc > 2) {
-        printf("Usage: %s [trigger command]\n", argv[0]);
+    if ((argc > 3) || (argc < 2)) {
+        printf("Usage: %s UART_TTY [trigger command]\n", argv[0]);
         exit(1);
     }
 
-    serialfd = open(UART_DEV, O_RDWR | O_NOCTTY);
+    serialfd = open(argv[1], O_RDWR | O_NOCTTY);
+    if (serialfd < 0) {
+        fprintf(stderr, "Cannot open serial port %s: %s\n", argv[1], strerror(errno));
+	exit(2);
+    }
     tcgetattr(serialfd, &tty);
     cfsetospeed(&tty, B115200);
     cfsetispeed(&tty, B115200);
@@ -92,9 +96,9 @@ int main(int argc, char** argv)
 
     alarm(TIMEOUT);
 
-    if (argc > 1) {
-        fprintf(stderr, "Executing \"%s\"\n", argv[1]);
-        system(argv[1]);
+    if (argc > 2) {
+        fprintf(stderr, "Executing \"%s\"\n", argv[2]);
+        system(argv[2]);
     }
 
     while (i >= 0) {

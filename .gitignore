@@ -65,6 +65,10 @@ tools/keytools/x64
 tools/keytools/Debug
 tools/keytools/Release
 
+# delta binaries
+tools/delta/bmdiff
+tools/delta/bmpatch
+
 # Vim swap files
 .*.swp
 

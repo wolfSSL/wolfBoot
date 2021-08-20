@@ -39,7 +39,7 @@ ifeq ($(SIGN),ECC256)
   else ifneq ($(SPMATH),1)
     STACK_USAGE=5008
   else
-    STACK_USAGE=3888
+    STACK_USAGE=3896
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
@@ -214,6 +214,14 @@ endif
 ifneq ($(WOLFBOOT_VERSION),0)
   ifneq ($(WOLFBOOT_VERSION),)
     CFLAGS+=-DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)
+  endif
+endif
+
+ifeq ($(DELTA_UPDATES),1)
+  OBJS += src/delta.o
+  CFLAGS+=-DDELTA_UPDATES
+  ifneq ($(DELTA_BLOCK_SIZE),)
+    CFLAGS+=-DDELTA_BLOCK_SIZE=$(DELTA_BLOCK_SIZE)
   endif
 endif
 

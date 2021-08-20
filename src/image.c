@@ -626,6 +626,12 @@ static inline uint32_t im2n(uint32_t val)
   return val;
 }
 
+uint32_t wolfBoot_image_size(uint8_t *image)
+{
+    uint32_t *size = (uint32_t *)(image + sizeof (uint32_t));
+    return im2n(*size);
+}
+
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
     uint32_t *magic;
@@ -686,12 +692,12 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC)
         return -1;
-    size = (uint32_t *)(image + sizeof (uint32_t));
-
-    if (im2n(*size) > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE))
-       return -1;
+    img->fw_size = wolfBoot_image_size(image);
+    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        img->fw_size = 0;
+        return -1;
+    }
     img->hdr_ok = 1;
-    img->fw_size = im2n(*size);
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
     img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
     return 0;

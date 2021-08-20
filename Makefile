@@ -10,7 +10,7 @@ include tools/config.mk
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT"
-CFLAGS+=-Werror
+CFLAGS+=-Werror -Wextra
 LSCRIPT:=config/target.ld
 LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
@@ -82,6 +82,7 @@ standalone:
 
 include tools/test.mk
 include tools/test-enc.mk
+include tools/test-delta.mk
 
 ed25519.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
@@ -93,6 +94,7 @@ rsa4096.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
 
 keytools:
+	@make -C tools/keytools clean
 	@make -C tools/keytools
 
 test-app/image_v1_signed.bin: test-app/image.bin
@@ -139,6 +141,7 @@ clean:
 distclean: clean
 	@rm -f *.pem *.der tags ./src/*_pub_key.c include/target.h
 	$(Q)$(MAKE) -C tools/keytools clean
+	$(Q)$(MAKE) -C tools/delta clean
 	$(Q)$(MAKE) -C tools/bin-assemble clean
 	$(Q)$(MAKE) -C tools/check_config clean
 	$(Q)$(MAKE) -C tools/test-expect-version clean
@@ -158,6 +161,15 @@ include/target.h: include/target.h.in FORCE
 	sed -e "s/##WOLFBOOT_LOAD_ADDRESS##/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
 	sed -e "s/##WOLFBOOT_LOAD_DTS_ADDRESS##/$(WOLFBOOT_LOAD_DTS_ADDRESS)/g" \
 		> $@
+
+delta: tools/delta/bmdiff
+
+tools/delta/bmdiff: FORCE
+	$(Q)$(MAKE) -C tools/delta
+
+delta-test: FORCE
+	$(Q)$(MAKE) -C tools/delta $@
+
 
 config: FORCE
 	make -C config

@@ -2,10 +2,11 @@
 
 CC      = gcc
 WOLFDIR = ../../lib/wolfssl/
-CFLAGS  = -Wall -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR)
+CFLAGS  = -Wall -Wextra -Werror
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I../../include
 
 # option variables
-DEBUG_FLAGS     = -g -DDEBUG
+DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE
 OPTIMIZE        = -Os
 
 # Options
@@ -34,6 +35,8 @@ SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/tfm.c \
 	$(WOLFDIR)wolfcrypt/src/wc_port.c \
 	$(WOLFDIR)wolfcrypt/src/wolfmath.c
+
+SRC+=../../src/delta.c
 
 .PHONY: clean all
 

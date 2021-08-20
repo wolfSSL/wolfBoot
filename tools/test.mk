@@ -1,6 +1,6 @@
 TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
-EXPVER=tools/test-expect-version/test-expect-version
+EXPVER=tools/test-expect-version/test-expect-version /dev/ttyS0
 BINASSEMBLE=tools/bin-assemble/bin-assemble
 SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
@@ -700,4 +700,4 @@ test-all: clean
 	make test-no-asm
 	make test-no-asm-smallstack
 	make test-fastmath-smallstack
-
+	make test-delta-update

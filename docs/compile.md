@@ -122,6 +122,15 @@ It's possible to disable authentication of the firmware image by explicitly usin
 in the Makefile commandline. This will compile a minimal bootloader with no support for public-key authenticated 
 secure boot.
 
+### Incremental updates
+
+wolfBoot support incremental updates. To enable this feature, compile with `DELTA_UPDATES=1`.
+
+An additional file is generated when the sign tool is invoked with the `--delta` option, containing only the
+differences between the old firmware to replace, currently running on the target, and the new version.
+
+For more information and examples, see the [firmware update](firmware_update.md) section.
+
 ### Enable debug symbols
 
 To debug the bootloader, simply compile with `DEBUG=1`. The size of the bootloade will increase
