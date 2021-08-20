@@ -56,11 +56,12 @@ int main(int argc, char *argv[])
         return 244;
     }
     if ((argc != 4) && (mode == MODE_DIFF)) {
-            printf("Usage: %s file1 file2 patch\n");
+            printf("Usage: %s file1 file2 patch\n", argv[0]);
             exit(2);
     }
     if ((argc != 3) && (mode == MODE_PATCH)) {
-        printf("Usage: %s file patch (WARNING: patching is done in place and it will overwrite the original source.)\n");
+        printf("Usage: %s file patch (WARNING: patching is done in place and it"
+                "will overwrite the original source.)\n", argv[0]);
         exit(2);
     }
 

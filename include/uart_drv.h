@@ -1,13 +1,6 @@
-/* uart_flash.h
+/* uart_drv.h
  *
- * Generic implementation of the read/write/erase
- * functionalities, on top of the uart_drv_*.h HAL.
- *
- * Compile with UART_FLASH=1
- *
- * Use tools/ufserver on the host to provide a remote
- * emulated non-volatile image via UART.
- *
+ * The HAL API definitions for UART driver extension.
  *
  * Copyright (C) 2021 wolfSSL Inc.
  *
@@ -28,18 +21,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef UART_FLASH_DRI_H
-#define UART_FLASH_DRI_H
+#ifndef H_HAL_UART_
+#define H_HAL_UART_
+
 #include <stdint.h>
-#include "uart_drv.h"
+int uart_tx(const uint8_t c);
+int uart_rx(uint8_t *c);
+int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
 
-#ifdef UART_FLASH
-    #ifndef UART_FLASH_BITRATE
-      #define UART_FLASH_BITRATE 460800
-    #endif
-    void uart_send_current_version(void);
-#else
-    #define uart_send_current_version() do{}while(0)
-#endif /* UART_FLASH */
-
-#endif /* !UART_FLASH_DRI_H */
+#endif /* H_HAL_UART_ */

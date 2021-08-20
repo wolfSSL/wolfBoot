@@ -27,6 +27,7 @@
 #include "led.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "uart_drv.h"
 
 #ifdef PLATFORM_stm32wb
 char enc_key[] = "0123456789abcdef0123456789abcdef" /* ChaCha key (256 bit) */

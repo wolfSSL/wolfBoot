@@ -1,6 +1,5 @@
 all: bmdiff bmpatch
-
-
+CFLAGS+=-Wall -Werror -Wextra
 bmdiff: delta.o bmdiff.o
 	gcc -o bmdiff delta.o bmdiff.o
 
@@ -10,10 +9,10 @@ bmpatch: delta.o bmdiff.o
 lib: delta.o
 
 delta.o:
-	gcc -c -o delta.o ../../src/delta.c -I../../include -ggdb
+	gcc -c -o delta.o ../../src/delta.c -I../../include -ggdb $(CFLAGS)
 
 bmdiff.o:
-	gcc -c -o bmdiff.o bmdiff.c -I../../include -ggdb
+	gcc -c -o bmdiff.o bmdiff.c -I../../include -ggdb $(CFLAGS)
 
 clean:
 	rm -f bmpatch bmdiff delta.o

@@ -2,7 +2,8 @@
 
 CC      = gcc
 WOLFDIR = ../../lib/wolfssl/
-CFLAGS  = -Wall -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I../../include
+CFLAGS  = -Wall -Wextra -Werror
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I../../include
 
 # option variables
 DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE

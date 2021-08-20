@@ -171,7 +171,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         pa_start = (WOLFBOOT_SECTOR_SIZE + 1) * page_start;
         pa = ctx->src_a + pa_start;
         while (((uint32_t)(pa - ctx->src_a) < ctx->size_a ) && (p_off < len)) {
-            if ((ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
+            if ((uint32_t)(ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
                 break;
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                 break;
@@ -214,7 +214,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
             while (((uint32_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
                 if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                     break;
-                if (ctx->size_b - (pb - ctx->src_b) < BLOCK_HDR_SIZE)
+                if ((uint32_t)(ctx->size_b - (pb - ctx->src_b)) < BLOCK_HDR_SIZE)
                     break;
                 if (WOLFBOOT_SECTOR_SIZE > (pb - ctx->src_b) - (page_start * WOLFBOOT_SECTOR_SIZE))
                     break;
