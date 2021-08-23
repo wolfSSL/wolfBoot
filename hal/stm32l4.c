@@ -116,7 +116,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
 	    
         if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK) {
             break;
-	}
+        }
     }
 	
     hal_flash_lock();
