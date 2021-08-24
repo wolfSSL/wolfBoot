@@ -79,6 +79,16 @@ ifeq ($(TARGET),stm32h7)
   LSCRIPT_TEMPLATE=ARM-stm32h7.ld
 endif
 
+ifeq ($(TARGET),stm32l4)
+  APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
+  APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
+  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+    -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
+    -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Include/
+endif
+
 ifeq ($(TARGET),stm32l5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld

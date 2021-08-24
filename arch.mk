@@ -78,11 +78,6 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
-  ifeq ($(TARGET),stm32l4)
-    ARCH_FLASH_OFFSET=0x08000000
-    SPI_TARGET=stm32
-  endif
-  
   ## Cortex-M CPU
   ifeq ($(CORTEX_M33),1)
     CFLAGS+=-mcpu=cortex-m33
@@ -274,11 +269,14 @@ endif
 
 ifeq ($(TARGET),stm32l4)
   SPI_TARGET=stm32
+  ARCH_FLASH_OFFSET=0x08000000
   OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
   OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
-  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
-  -Isrc -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
-  -I$(STM32CUBE)/Drivers/CMSIS/Include/
+  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+    -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
+    -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Include/
 endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)

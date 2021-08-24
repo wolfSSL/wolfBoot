@@ -180,7 +180,7 @@ void boot_led_off(void)
 #endif /* PLATFORM_stm32wb */
 
 #ifdef PLATFORM_stm32l4
-#define AHB2_CLOCK_ER (*(volatile uint32_t *)(0x4002104C)) // RCC_AHB2ENR
+#define AHB2_CLOCK_ER (*(volatile uint32_t *)(0x4002104C)) /* RCC_AHB2ENR */
 #define GPIOB_AHB2_CLOCK_ER (1 << 1)
 
 #define GPIOB_BASE 0x48000400
@@ -200,7 +200,7 @@ void boot_led_off(void)
 void boot_led_on(void)
 {
     uint32_t reg;
-    uint32_t pin = LED_BOOT_PIN; 
+    uint32_t pin = LED_BOOT_PIN;
     AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
     reg = GPIOB_MODE & ~(0x03 << (pin * 2));
     GPIOB_MODE = reg | (1 << (pin * 2));
@@ -211,7 +211,7 @@ void boot_led_on(void)
 void led_on(void)
 {
     uint32_t reg;
-    uint32_t pin = LED_PIN; 
+    uint32_t pin = LED_PIN;
     AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
     reg = GPIOB_MODE & ~(0x03 << (pin * 2));
     GPIOB_MODE = reg | (1 << (pin * 2));
