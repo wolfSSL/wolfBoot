@@ -78,7 +78,20 @@ mon reset init
 b main
 c
 ```
+## STM32L4
+Example 1MB partitioning on STM32L4
 
+- Sector size: 4KB
+- Wolfboot partition size: 40 KB
+- Application partition size: 488 KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x1000   /* 4 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x0800A100
+#define WOLFBOOT_PARTITION_SIZE              0x7A000 /* 488 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08084100
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x080FE100
+```
 
 ## STM32L5
 
