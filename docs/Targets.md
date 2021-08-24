@@ -12,6 +12,7 @@ This README describes configuration of supported targets.
 * [NXP T2080 PPC](#nxp-t2080-ppc)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
+* [STM32L4](#stm32l4)
 * [STM32F7](#stm32f7)
 * [STM32G0](#stm32g0)
 * [STM32H7](#stm32h7)
@@ -89,7 +90,7 @@ Example 1MB partitioning on STM32L4
 ```C
 #define WOLFBOOT_SECTOR_SIZE                 0x1000   /* 4 KB */
 #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x0800A100
-#define WOLFBOOT_PARTITION_SIZE              0x7A000 /* 488 KB */
+#define WOLFBOOT_PARTITION_SIZE              0x7A000  /* 488 KB */
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08084100
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x080FE100
 ```
