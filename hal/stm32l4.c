@@ -27,26 +27,21 @@
 #define DMB() asm volatile ("dmb")
 
 /*** RCC ***/
-
 #define RCC_PRESCALER_DIV_NONE 0
 
-
-
 static uint32_t Address = 0, PAGEError = 0;
-
-
 static FLASH_EraseInitTypeDef EraseInitStruct;
-  
-  
+
+
 static uint32_t RAMFUNCTION GetPage(uint32_t Addr)
 {
     uint32_t page = 0;
-  
+
     if (Addr < (FLASH_BASE + FLASH_BANK_SIZE))
         page = (Addr - FLASH_BASE) / FLASH_PAGE_SIZE;
     else
         page = (Addr - (FLASH_BASE + FLASH_BANK_SIZE)) / FLASH_PAGE_SIZE;
-  
+
     return page;
 }
 
@@ -54,7 +49,7 @@ static uint32_t RAMFUNCTION GetPage(uint32_t Addr)
 static uint32_t RAMFUNCTION GetBank(uint32_t Addr)
 {
     uint32_t bank = 0;
-  
+
     if (READ_BIT(SYSCFG->MEMRMP, SYSCFG_MEMRMP_FB_MODE) == 0) {
         if (Addr < (FLASH_BASE + FLASH_BANK_SIZE)) {
             bank = FLASH_BANK_1;
@@ -68,7 +63,7 @@ static uint32_t RAMFUNCTION GetBank(uint32_t Addr)
             bank = FLASH_BANK_1;
         }
     }
-	
+
     return bank;
 }
 
@@ -100,34 +95,34 @@ int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
     hal_flash_unlock();
 
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
-	
+
     FirstPage = GetPage((uint32_t) address);
     NbOfPages = GetPage((uint32_t) address) - FirstPage + 1;
     BankNumber = GetBank((uint32_t) address);
-	
+
     EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
     EraseInitStruct.Banks       = BankNumber;
     EraseInitStruct.Page        = FirstPage;
     EraseInitStruct.NbPages     = NbOfPages;
-	
+
     end_address = address + len - 1;
-	
+
     for (uint32_t p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-	    
+
         if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK) {
             break;
         }
     }
-	
+
     hal_flash_lock();
-	
+
     return 0;
 }
 
 
 static void RAMFUNCTION flash_set_waitstates(int waitstates)
 {
-    FLASH->ACR |=  waitstates | FLASH_ACR_DCEN | FLASH_ACR_ICEN;
+    FLASH->ACR |= (waitstates | FLASH_ACR_DCEN | FLASH_ACR_ICEN);
 }
 
 static RAMFUNCTION void flash_wait_complete(void)
@@ -141,7 +136,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int i = 0;
     uint32_t *dst;
     uint32_t reg;
-    int ret=-1; 
+    int ret = -1;
 
     hal_flash_clear_errors();
     reg = FLASH->CR & (~FLASH_CR_FSTPG);
@@ -153,7 +148,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         int off = (address + i) - (((address + i) >> 3) << 3);
         uint32_t base_addr = address & (~0x07);  /* aligned to 64 bit */
         int u32_idx = (i >> 2);
-	
+
         hal_flash_clear_errors();
         dst = (uint32_t *)(base_addr);
         val[0] = dst[u32_idx];
@@ -165,23 +160,25 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         flash_wait_complete();
     }
     if ((FLASH->SR &FLASH_SR_PROGERR)!= FLASH_SR_PROGERR) {
-        ret=0; 
-        }
+        ret=0;
+    }
     if ((FLASH->SR & FLASH_SR_EOP) == FLASH_SR_EOP) {
         FLASH->SR |= FLASH_SR_EOP;
-	}
+    }
     FLASH->CR &= ~FLASH_CR_PG;
-	
-    return ret;  
+
+    return ret;
 }
 
 static void clock_pll_off(void)
 {
     uint32_t reg32;
+
     /* Enable internal multi-speed oscillator. */
     RCC->CR |= RCC_CR_HSION;
     DMB();
     while ((RCC->CR & RCC_CR_HSIRDY) == 0) {};
+
     /* Select HSI as SYSCLK source. */
     reg32 = RCC->CFGR;
     reg32 &= ~((1 << 1) | (1 << 0));
@@ -196,11 +193,12 @@ static void clock_pll_off(void)
 static void clockconfig(int powersave)
 {
     uint32_t reg32;
-    
+
     uint32_t hpre,ppre1,ppre2,flash_waitstates;
-    
+
     /* Enable Power controller */
     RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+
     /* Select clock parameters  */
     /*cpu_freq=16000000;*/
     hpre= RCC_PRESCALER_DIV_NONE;
@@ -208,17 +206,19 @@ static void clockconfig(int powersave)
     ppre2=RCC_PRESCALER_DIV_NONE;
     flash_waitstates = 3;
     flash_set_waitstates(flash_waitstates);
+
     /* Enable internal high-speed oscillator. */
     RCC->CR |=RCC_CR_HSION;
     DMB();
     while ((RCC->CR & RCC_CR_HSIRDY)==0);
+
     /* select HSI as SYSCLK source*/
     reg32 = RCC->CFGR;
     reg32 &= ~((1 << 1) | (1 << 0));
     RCC->CFGR = (reg32 | RCC_CFGR_SW_HSI);
     DMB();
-    /* Set prescalers for AHB, ADC, ABP1, ABP2.
-    */
+
+    /* Set prescalers for AHB, ADC, ABP1, ABP2 */
     reg32 = RCC->CFGR;
     reg32 &= ~(0xF0);
     RCC->CFGR = (reg32 | (hpre << 4));
@@ -231,7 +231,7 @@ static void clockconfig(int powersave)
     reg32 &= ~(0x07 << 11);
     RCC->CFGR = (reg32 | (ppre2 << 11));
     DMB();
-   
+
     /* Disable internal high-speed oscillator. */
     RCC->CR &= ~RCC_CR_HSION;
 
