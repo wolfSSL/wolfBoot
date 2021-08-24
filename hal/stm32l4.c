@@ -154,7 +154,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         uint32_t base_addr = address & (~0x07);  /* aligned to 64 bit */
         int u32_idx = (i >> 2);
 	
-	hal_flash_clear_errors();
+        hal_flash_clear_errors();
         dst = (uint32_t *)(base_addr);
         val[0] = dst[u32_idx];
         val[1] = dst[u32_idx + 1];
@@ -168,7 +168,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         ret=0; 
         }
     if ((FLASH->SR & FLASH_SR_EOP) == FLASH_SR_EOP) {
-	FLASH->SR |= FLASH_SR_EOP;
+        FLASH->SR |= FLASH_SR_EOP;
 	}
     FLASH->CR &= ~FLASH_CR_PG;
 	
