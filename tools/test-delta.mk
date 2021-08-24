@@ -1,8 +1,8 @@
-SIGN_ARGS?=--ecc256
-SIGN_DELTA_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
-USBTTY?=/dev/ttyACM0
-TIMEOUT?=60
-EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
+test-delta-update:SIGN_ARGS?=--ecc256
+test-delta-update:SIGN_DELTA_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
+test-delta-update:USBTTY?=/dev/ttyACM0
+test-delta-update:TIMEOUT?=60
+test-delta-update:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 
 test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	@st-flash erase

@@ -35,7 +35,7 @@
 
 #ifdef UART_FLASH
     #ifndef UART_FLASH_BITRATE
-      #define UART_FLASH_BITRATE 460800
+      #define UART_FLASH_BITRATE 115200
     #endif
     void uart_send_current_version(void);
 #else

@@ -1,8 +1,8 @@
-ENC_TEST_UPDATE_VERSION?=2
-SIGN_ARGS?=--ecc256
-SIGN_ENC_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
-USBTTY?=/dev/ttyACM0
-TIMEOUT?=60
+test-enc-update:ENC_TEST_UPDATE_VERSION?=2
+test-enc-update:SIGN_ARGS?=--ecc256
+test-enc-update:SIGN_ENC_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
+test-enc-update:USBTTY?=/dev/ttyACM0
+test-enc-update:TIMEOUT?=60
 
 tools/uart-flash-server/ufserver: FORCE
 	@make -C `dirname $@`
