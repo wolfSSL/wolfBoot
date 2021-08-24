@@ -52,7 +52,7 @@
 
 #define FIRMWARE_PARTITION_SIZE 0x20000
 #define SWAP_SIZE 0x1000
-#define UART_BITRATE 460800
+#define UART_BITRATE 115200
 
 const char msgSha[]         = "Verifying SHA digest...";
 const char msgReadUpdate[]  = "Fetching update blocks ";
