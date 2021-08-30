@@ -190,6 +190,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 {
     int ret = -1;
     uint32_t idx = 0;
+    int io_sz;
     FILE *f;
 
     /* open and load key buffer */
@@ -203,8 +204,13 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     *key_buffer_sz = ftell(f);
     fseek(f, 0, SEEK_SET);
     *key_buffer = malloc(*key_buffer_sz);
-    if (*key_buffer)
-        fread(*key_buffer, 1, *key_buffer_sz, f);
+    if (*key_buffer) {
+        io_sz = fread(*key_buffer, 1, *key_buffer_sz, f);
+        if (io_sz != (int)*key_buffer_sz) {
+            printf("Key file read error!\n");
+            goto failure;
+        }
+    }
     fclose(f);
     if (*key_buffer == NULL) {
         printf("Key buffer malloc error!\n");
@@ -358,6 +364,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
     uint8_t  digest[48]; /* max digest */
     uint32_t digest_sz = 0;
     uint32_t image_sz = 0;
+    int io_sz;
+
     header_idx = 0;
     header = malloc(CMD.header_sz);
     if (header == NULL) {
@@ -439,7 +447,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                 read_sz = image_sz - pos;
                 if (read_sz > 32)
                     read_sz = 32;
-                fread(buf, read_sz, 1, f);
+                io_sz = fread(buf, 1, read_sz, f);
+                if (io_sz != (int)read_sz) {
+                    ret = -1; break;
+                }
                 ret = wc_Sha256Update(&sha, buf, read_sz);
                 pos += read_sz;
             }
@@ -481,7 +492,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                 read_sz = image_sz - pos;
                 if (read_sz > 128)
                     read_sz = 128;
-                fread(buf, read_sz, 1, f);
+                io_sz = fread(buf, 1, read_sz, f);
+                if (io_sz != (int)read_sz) {
+                    ret = -1; break;
+                }
                 ret = wc_Sha3_384_Update(&sha, buf, read_sz);
                 pos += read_sz;
             }
@@ -530,7 +544,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                 printf("Open output file %s failed\n", outfile);
                 goto failure;
             }
-            fwrite(digest, digest_sz, 1, f);
+            fwrite(digest, 1, digest_sz, f);
             fclose(f);
             printf("Digest image %s successfully created.\n", outfile);
             exit(0);
@@ -603,8 +617,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                 printf("Open signature file %s failed\n", CMD.signature_file);
                 goto failure;
             }
-            fread(signature, CMD.signature_sz, 1, f);
+            io_sz = fread(signature, 1, CMD.signature_sz, f);
             fclose(f);
+            if (io_sz != (int)CMD.signature_sz) {
+                printf("Error reading file %s\n", CMD.signature_file);
+                goto failure;
+            }
         }
 #ifdef DEBUG_SIGNTOOL
         printf("Signature %d\n", CMD.signature_sz);
@@ -626,7 +644,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         printf("Open output image file %s failed\n", outfile);
         goto failure;
     }
-    fwrite(header, header_idx, 1, f);
+    fwrite(header, 1, header_idx, f);
     /* Copy image to output */
     f2 = fopen(image_file, "rb");
     pos = 0;
@@ -642,8 +660,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
     }
 
     if (CMD.encrypt && CMD.encrypt_key_file) {
-        uint8_t key[32], iv[12];
+        uint8_t key[CHACHA_MAX_KEY_SZ], iv[CHACHA_IV_BYTES];
         uint8_t enc_buf[ENC_BLOCK_SIZE];
+        int ivSz, keySz;
         uint32_t fsize = 0;
         ChaCha cha;
 #ifndef HAVE_CHACHA
@@ -655,9 +674,14 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
             fprintf(stderr, "Open encryption key file %s: %s\n", CMD.encrypt_key_file, strerror(errno));
             exit(1);
         }
-        fread(key, 32, 1, fek);
-        fread(iv, 12, 1, fek);
+        keySz = fread(key, 1, sizeof(key), fek);
+        ivSz = fread(iv, 1, sizeof(iv), fek);
         fclose(fek);
+        if (keySz != sizeof(key) || ivSz != sizeof(iv)) {
+            fprintf(stderr, "Error reading key and iv from %s\n", CMD.encrypt_key_file);
+            exit(1);
+        }
+
         fef = fopen(CMD.output_encrypted_image_file, "wb");
         if (!fef) {
             fprintf(stderr, "Open encrypted output file %s: %s\n", CMD.encrypt_key_file, strerror(errno));
@@ -665,7 +689,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         fsize = ftell(f);
         fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
 
-        wc_Chacha_SetKey(&cha, key, 32);
+        wc_Chacha_SetKey(&cha, key, sizeof(key));
         for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
             int fread_retval;
             fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
@@ -719,6 +743,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
     char *base_ver_p, *base_ver_e;
     WB_DIFF_CTX diff_ctx;
     int ret = -1;
+    int io_sz;
 
     /* Get source file size */
     if (stat(f_base, &st) < 0) {
@@ -793,7 +818,10 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
         goto cleanup;
     }
     lseek(fd3, MAX_SRC_SIZE -1, SEEK_SET);
-    write(fd3, &ff, 1);
+    io_sz = write(fd3, &ff, 1);
+    if (io_sz != 1) {
+        goto cleanup;
+    }
     lseek(fd3, 0, SEEK_SET);
     len3 = 0;
 
@@ -805,13 +833,19 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
         r = wb_diff(&diff_ctx, dest, blksz);
         if (r < 0)
             goto cleanup;
-        write(fd3, dest, r);
+        io_sz = write(fd3, dest, r);
+        if (io_sz != r) {
+            goto cleanup;
+        }
         len3 += r;
     } while (r > 0);
     patch_sz = len3;
     while ((len3 % 16) != 0) {
         uint8_t zero = 0;
-        write(fd3, &zero, 1);
+        io_sz = write(fd3, &zero, 1);
+        if (io_sz != 1) {
+            goto cleanup;
+        }
         len3++;
     }
     patch_inv_off = (uint32_t)len3 + CMD.header_sz;
@@ -825,11 +859,17 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
         r = wb_diff(&diff_ctx, dest, blksz);
         if (r < 0)
             goto cleanup;
-        write(fd3, dest, r);
+        io_sz = write(fd3, dest, r);
+        if (io_sz != r) {
+            goto cleanup;
+        }
         patch_inv_sz += r;
         len3 += r;
     } while (r > 0);
-    ftruncate(fd3, len3);
+    io_sz = ftruncate(fd3, len3);
+    if (io_sz != len3) {
+        goto cleanup;
+    }
     close(fd3);
     fd3 = -1;
     printf("Successfully created output file %s\n", wolfboot_delta_file);
@@ -840,8 +880,10 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
 
 cleanup:
     if (fd3 >= 0) {
-        if (len3 > 0)
-            ftruncate(fd3, len3);
+        if (len3 > 0) {
+            io_sz = ftruncate(fd3, len3);
+            (void)io_sz; /* ignore failure */
+        }
         close(fd3);
         fd3 = -1;
     }
