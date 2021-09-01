@@ -3,7 +3,7 @@
  * Public key information for the signed images
  *
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -49,7 +49,7 @@
 #   define KEY_BUFFER  rsa4096_pub_key
 #   define KEY_LEN     rsa4096_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (512)
-#else
+#elif !defined(WOLFBOOT_NO_SIGN)
 #   error "No public key available for given signing algorithm."
 #endif /* Algorithm selection */
 

@@ -1,11 +1,25 @@
 ## Measured boot requires TPM to be present
 ifeq ($(MEASURED_BOOT),1)
   WOLFTPM:=1
-  CFLAGS+=-DWOLFBOOT_MEASURED_BOOT
-  CFLAGS+=-DWOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)
+  CFLAGS+=-D"WOLFBOOT_MEASURED_BOOT"
+  CFLAGS+=-D"WOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)"
 endif
 
 ## DSA Settings
+
+ifeq ($(SIGN),NONE)
+  SIGN_OPTIONS+=--no-sign
+  PRIVATE_KEY=
+  STACK_USAGE=1024
+  CFLAGS+=-DWOLFBOOT_NO_SIGN
+endif
+
+ifeq ($(WOLFBOOT_SMALL_STACK),1)
+  CFLAGS+=-D"WOLFBOOT_SMALL_STACK" -D"XMALLOC_USER"
+  STACK_USAGE=4096
+  OBJS+=./src/xmalloc.o
+endif
+
 ifeq ($(SIGN),ECC256)
   KEYGEN_OPTIONS+=--ecc256
   SIGN_OPTIONS+=--ecc256
@@ -15,12 +29,17 @@ ifeq ($(SIGN),ECC256)
     ./lib/wolfssl/wolfcrypt/src/ecc.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DXMALLOC_USER
-  ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=3888
+  CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+       STACK_USAGE=4096
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=6680
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE=5008
   else
-    CFLAGS+=-Wstack-usage=6680
+    STACK_USAGE=3896
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
 endif
@@ -37,7 +56,8 @@ ifeq ($(SIGN),ED25519)
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_ED25519 -Wstack-usage=1024
+  CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
+  STACK_USAGE?=1024
 endif
 
 ifeq ($(SIGN),RSA2048)
@@ -53,12 +73,20 @@ ifeq ($(SIGN),RSA2048)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_RSA2048 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
-		  -DIMAGE_HEADER_SIZE=512
-  ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=12288
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" $(RSA_EXTRA_CFLAGS) \
+		  -D"IMAGE_HEADER_SIZE=512"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5008
+    else
+      STACK_USAGE=4096
+    endif
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=9096
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE=35952
   else
-    CFLAGS+=-Wstack-usage=8320
+    STACK_USAGE=12288
   endif
 endif
 
@@ -75,36 +103,47 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
-  CFLAGS+=-DWOLFBOOT_SIGN_RSA4096 -DXMALLOC_USER $(RSA_EXTRA_CFLAGS) \
-		  -DIMAGE_HEADER_SIZE=1024
-  ifeq ($(WOLFTPM),0)
-    CFLAGS+=-Wstack-usage=18064
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" $(RSA_EXTRA_CFLAGS) \
+		  -D"IMAGE_HEADER_SIZE=1024"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5888
+    else
+      STACK_USAGE=4096
+    endif
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=10680
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE=69232
   else
-    CFLAGS+=-Wstack-usage=10680
+    STACK_USAGE=18064
   endif
 endif
 
 
+ifeq ($(USE_GCC),1)
+  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+endif
 
 ifeq ($(RAM_CODE),1)
-  CFLAGS+= -DRAM_CODE
+  CFLAGS+= -D"RAM_CODE"
 endif
 
 ifeq ($(FLAGS_HOME),1)
-  CFLAGS+=-DFLAGS_HOME=1
+  CFLAGS+=-D"FLAGS_HOME=1"
 endif
 
 ifeq ($(FLAGS_INVERT),1)
-  CFLAGS+=-DWOLFBOOT_FLAGS_INVERT=1
+  CFLAGS+=-D"WOLFBOOT_FLAGS_INVERT=1"
 endif
 
 ifeq ($(DUALBANK_SWAP),1)
-  CFLAGS+=-DDUALBANK_SWAP=1
+  CFLAGS+=-D"DUALBANK_SWAP=1"
 endif
 
 ifeq ($(SPI_FLASH),1)
   EXT_FLASH=1
-  CFLAGS+=-DSPI_FLASH=1
+  CFLAGS+=-D"SPI_FLASH=1"
   OBJS+= src/spi_flash.o
   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
@@ -114,17 +153,17 @@ ifeq ($(UART_FLASH),1)
 endif
 
 ifeq ($(ENCRYPT),1)
-  CFLAGS+=-DEXT_ENCRYPTED=1
+  CFLAGS+=-D"EXT_ENCRYPTED=1"
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
 endif
 
 ifeq ($(EXT_FLASH),1)
-  CFLAGS+= -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 -DPART_SWAP_EXT=1
+  CFLAGS+= -D"EXT_FLASH=1" -D"PART_UPDATE_EXT=1" -D"PART_SWAP_EXT=1"
   ifeq ($(NO_XIP),1)
-    CFLAGS+=-DPART_BOOT_EXT=1
+    CFLAGS+=-D"PART_BOOT_EXT=1"
   endif
   ifeq ($(UART_FLASH),1)
-    CFLAGS+=-DUART_FLASH=1
+    CFLAGS+=-D"UART_FLASH=1"
     OBJS+=src/uart_flash.o
     WOLFCRYPT_OBJS+=hal/uart/uart_drv_$(UART_TARGET).o
   endif
@@ -133,22 +172,26 @@ endif
 
 
 ifeq ($(ALLOW_DOWNGRADE),1)
-  CFLAGS+= -DALLOW_DOWNGRADE
+  CFLAGS+= -D"ALLOW_DOWNGRADE"
 endif
 
 ifeq ($(NVM_FLASH_WRITEONCE),1)
-  CFLAGS+= -DNVM_FLASH_WRITEONCE
+  CFLAGS+= -D"NVM_FLASH_WRITEONCE"
 endif
 
 ifeq ($(DISABLE_BACKUP),1)
-  CFLAGS+= -DDISABLE_BACKUP
+  CFLAGS+= -D"DISABLE_BACKUP"
 endif
 
 
 ifeq ($(DEBUG),1)
-  CFLAGS+=-O0 -g -ggdb3 -DDEBUG=1
+  CFLAGS+=-O0 -g -ggdb3 -D"DEBUG=1"
 else
-  CFLAGS+=-Os
+  ifeq ($(OPTIMIZATION_LEVEL),)
+    CFLAGS+=-Os
+  else
+    CFLAGS+=-O$(OPTIMIZATION_LEVEL)
+  endif
 endif
 
 ifeq ($(V),0)
@@ -156,16 +199,30 @@ ifeq ($(V),0)
 endif
 
 ifeq ($(NO_MPU),1)
-  CFLAGS+=-DWOLFBOOT_NO_MPU
+  CFLAGS+=-D"WOLFBOOT_NO_MPU"
 endif
 
 ifeq ($(VTOR),0)
-  CFLAGS+=-DNO_VTOR
+  CFLAGS+=-D"NO_VTOR"
 endif
 
 ifeq ($(PKA),1)
   OBJS += $(PKA_EXTRA_OBJS)
   CFLAGS+=$(PKA_EXTRA_CFLAGS)
+endif
+
+ifneq ($(WOLFBOOT_VERSION),0)
+  ifneq ($(WOLFBOOT_VERSION),)
+    CFLAGS+=-DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)
+  endif
+endif
+
+ifeq ($(DELTA_UPDATES),1)
+  OBJS += src/delta.o
+  CFLAGS+=-DDELTA_UPDATES
+  ifneq ($(DELTA_BLOCK_SIZE),)
+    CFLAGS+=-DDELTA_BLOCK_SIZE=$(DELTA_BLOCK_SIZE)
+  endif
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
@@ -177,14 +234,14 @@ ifeq ($(WOLFTPM),1)
     lib/wolfTPM/src/tpm2_tis.o \
     lib/wolfTPM/src/tpm2_wrap.o \
     lib/wolfTPM/src/tpm2_param_enc.o
-  CFLAGS+=-DWOLFBOOT_TPM -DSIZEOF_LONG=4 -Ilib/wolfTPM \
-    -DMAX_COMMAND_SIZE=1024 -DMAX_RESPONSE_SIZE=1024 -DWOLFTPM2_MAX_BUFFER=1500 \
-    -DMAX_SESSION_NUM=1 -DMAX_DIGEST_BUFFER=973 \
-    -DWOLFTPM_SMALL_STACK
+  CFLAGS+=-D"WOLFBOOT_TPM" -D"SIZEOF_LONG=4" -Ilib/wolfTPM \
+    -D"MAX_COMMAND_SIZE=1024" -D"MAX_RESPONSE_SIZE=1024" -D"WOLFTPM2_MAX_BUFFER=1500" \
+    -D"MAX_SESSION_NUM=1" -D"MAX_DIGEST_BUFFER=973" \
+    -D"WOLFTPM_SMALL_STACK"
   # Chip Type: WOLFTPM_SLB9670, WOLFTPM_ST33, WOLFTPM_MCHP
-  CFLAGS+=-DWOLFTPM_SLB9670
+  CFLAGS+=-D"WOLFTPM_SLB9670"
   # Use TPM for hashing (slow)
-  #CFLAGS+=-DWOLFBOOT_HASH_TPM
+  #CFLAGS+=-D"WOLFBOOT_HASH_TPM"
   ifneq ($(SPI_FLASH),1)
     WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
   endif
@@ -194,13 +251,14 @@ endif
 
 ## Hash settings
 ifeq ($(HASH),SHA256)
-  CFLAGS+=-DWOLFBOOT_HASH_SHA256
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
 endif
 
 ifeq ($(HASH),SHA3)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
-  CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
   SIGN_OPTIONS+=--sha3
 endif
+
 
 OBJS+=$(WOLFCRYPT_OBJS)

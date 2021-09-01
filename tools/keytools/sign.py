@@ -2,7 +2,7 @@
 '''
  * sign.py
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -21,20 +21,24 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 '''
 
-import sys, os, struct, time
+import sys, os, struct, time, re
 from wolfcrypt import ciphers, hashes
 
 
-WOLFBOOT_MAGIC  = 0x464C4F57
-HDR_END         = 0x00
-HDR_VERSION     = 0x01
-HDR_TIMESTAMP   = 0x02
-HDR_SHA256      = 0x03
-HDR_SHA3_384    = 0x13
-HDR_IMG_TYPE    = 0x04
-HDR_PUBKEY      = 0x10
-HDR_SIGNATURE   = 0x20
-HDR_PADDING     = 0xFF
+WOLFBOOT_MAGIC              = 0x464C4F57
+HDR_END                     = 0x00
+HDR_VERSION                 = 0x01
+HDR_TIMESTAMP               = 0x02
+HDR_SHA256                  = 0x03
+HDR_IMG_DELTA_BASE          = 0x05
+HDR_IMG_DELTA_SIZE          = 0x06
+HDR_SHA3_384                = 0x13
+HDR_IMG_DELTA_INVERSE       = 0x15
+HDR_IMG_DELTA_INVERSE_SIZE  = 0x16
+HDR_IMG_TYPE                = 0x04
+HDR_PUBKEY                  = 0x10
+HDR_SIGNATURE               = 0x20
+HDR_PADDING                 = 0xFF
 
 
 HDR_VERSION_LEN     = 4
@@ -44,10 +48,12 @@ HDR_SHA3_384_LEN    = 48
 HDR_IMG_TYPE_LEN    = 2
 HDR_SIGNATURE_LEN   = 64
 
+HDR_IMG_TYPE_AUTH_NONE    = 0xFF00
 HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
 HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
 HDR_IMG_TYPE_AUTH_RSA2048 = 0x0300
 HDR_IMG_TYPE_AUTH_RSA4096 = 0x0400
+HDR_IMG_TYPE_DIFF         = 0x00D0
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
 HDR_IMG_TYPE_APP          = 0x0001
@@ -59,23 +65,186 @@ self_update=False
 sha_only=False
 manual_sign=False
 encrypt=False
+delta=False
+encrypt_key_file=None
+delta_base_file=None
 
 
 argc = len(sys.argv)
 argv = sys.argv
 hash_algo='sha256'
 
+
+def make_header(image_file, fw_version, extra_fields=[]):
+    img_size = os.path.getsize(image_file)
+    # Magic header (spells 'WOLF')
+    header = struct.pack('<L', WOLFBOOT_MAGIC)
+    # Image size
+    header += struct.pack('<L', img_size)
+
+    # No pad bytes, version is aligned
+
+    # Version field
+    header += struct.pack('<HH', HDR_VERSION, HDR_VERSION_LEN)
+    header += struct.pack('<L', fw_version)
+
+    # Four pad bytes, so timestamp is aligned
+    header += struct.pack('BB', 0xFF, 0xFF)
+    header += struct.pack('BB', 0xFF, 0xFF)
+
+    # Timestamp field
+    header += struct.pack('<HH', HDR_TIMESTAMP, HDR_TIMESTAMP_LEN)
+    header += struct.pack('<Q', int(os.path.getmtime(image_file)))
+
+    # Image type field
+    header += struct.pack('<HH', HDR_IMG_TYPE, HDR_IMG_TYPE_LEN)
+    if (sign == 'none'):
+        img_type = HDR_IMG_TYPE_AUTH_NONE
+    if (sign == 'ed25519'):
+        img_type = HDR_IMG_TYPE_AUTH_ED25519
+    if (sign == 'ecc256'):
+        img_type = HDR_IMG_TYPE_AUTH_ECC256
+    if (sign == 'rsa2048'):
+        img_type = HDR_IMG_TYPE_AUTH_RSA2048
+    if (sign == 'rsa4096'):
+        img_type = HDR_IMG_TYPE_AUTH_RSA4096
+
+    if (not self_update):
+        img_type |= HDR_IMG_TYPE_APP
+
+    if (delta and len(extra_fields) > 0):
+        img_type |= HDR_IMG_TYPE_DIFF
+
+    header += struct.pack('<H', img_type)
+
+    for t in extra_fields:
+        tag = t[0]
+        sz = t[1]
+        payload = t[2]
+        header += struct.pack('<HH', tag, sz)
+        header += payload
+
+    # Pad bytes. Sha-3 field requires 8-byte alignment
+    while (len(header) % 8) != 4:
+        header += struct.pack('B', 0xFF)
+
+    print("Calculating %s digest..." % hash_algo)
+
+    if hash_algo == 'sha256':
+        sha = hashes.Sha256.new()
+
+        # Sha calculation
+        sha.update(header)
+        img_bin = open(image_file, 'rb')
+        while True:
+            buf = img_bin.read(32)
+            if (len(buf) == 0):
+                img_bin.close()
+                break
+            sha.update(buf)
+        digest = sha.digest()
+
+        # Add SHA to the header
+        header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
+        header += digest
+
+        if sign != 'none':
+            # pubkey SHA calculation
+            keysha = hashes.Sha256.new()
+            keysha.update(pubkey)
+            key_digest = keysha.digest()
+            header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
+            header += key_digest
+
+    elif hash_algo == 'sha3':
+        sha = hashes.Sha3.new()
+        # Sha calculation
+        sha.update(header)
+        img_bin = open(image_file, 'rb')
+        while True:
+            buf = img_bin.read(128)
+            if (len(buf) == 0):
+                img_bin.close()
+                break
+            sha.update(buf)
+        digest = sha.digest()
+
+        # Add SHA to the header
+        header += struct.pack('<HH', HDR_SHA3_384, HDR_SHA3_384_LEN)
+        header += digest
+
+        if sign != 'none':
+            # pubkey SHA calculation
+            keysha = hashes.Sha3.new()
+            keysha.update(pubkey)
+            key_digest = keysha.digest()
+            header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA3_384_LEN)
+            header += key_digest
+
+    #print("Image Hash %d" % len(digest))
+    #print([hex(j) for j in digest])
+
+    #print ("Pubkey: %d" % len(pubkey))
+    #print([hex(j) for j in pubkey])
+
+    #print("Pubkey Hash %d" % len(key_digest))
+    #print([hex(j) for j in key_digest])
+
+    if sha_only:
+        outfile = open(output_image_file, 'wb')
+        outfile.write(digest)
+        outfile.close()
+        print("Digest image " + output_image_file +" successfully created.")
+        print()
+        sys.exit(0)
+
+    if sign != 'none':
+        # Sign the digest
+        if not manual_sign:
+            print("Signing the firmware...")
+            if (sign == 'ed25519'):
+                signature = ed.sign(digest)
+            elif (sign == 'ecc256'):
+                r, s = ecc.sign_raw(digest)
+                signature = r + s
+            elif (sign == 'rsa2048') or (sign == 'rsa4096'):
+                signature = rsa.sign(digest)
+                #plain = rsa.verify(signature)
+                #print("plain:%d " % len(plain))
+                #print([hex(j) for j in plain])
+        else:
+            print("Opening signature file %s" % signature_file)
+            signfile = open(signature_file, 'rb')
+            buf = signfile.read(1024)
+            signfile.close()
+            if len(buf) != HDR_SIGNATURE_LEN:
+                print("Wrong signature file size %d, expected %d" % (len(buf), HDR_SIGNATURE_LEN))
+                sys.exit(4)
+            signature = buf
+    
+        header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
+        header += signature
+    #print ("Signature %d" % len(signature))
+    #print([hex(j) for j in signature])
+    print ("Done.")
+    return header
+
+
+#### MAIN ####
+
 if (argc < 4) or (argc > 10):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] image pub_key.der fw_version\n" % sys.argv[0])
+    print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--encrypt key.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
     sys.exit(1)
 
 i = 1
 while (i < len(argv)):
-    if (argv[i] == '--ed25519'):
+    if (argv[i] == '--no-sign'):
+        sign='none'
+    elif (argv[i] == '--ed25519'):
         sign='ed25519'
     elif (argv[i] == '--ecc256'):
         sign='ecc256'
@@ -97,14 +266,27 @@ while (i < len(argv)):
         encrypt = True
         i += 1
         encrypt_key_file = argv[i]
+    elif (argv[i] == '--delta'):
+        delta = True
+        i += 1
+        delta_base_file = argv[i]
     else:
         i-=1
         break
     i += 1
 
+
+if (encrypt and delta):
+    print("Encryption of delta images not supported yet.")
+    sys.exit(1)
+
 image_file = argv[i+1]
-key_file = argv[i+2]
-fw_version = int(argv[i+3])
+if sign != 'none':
+    key_file = argv[i+2]
+    fw_version = int(argv[i+3])
+else:
+    key_file = ''
+    fw_version = int(argv[i+2])
 
 if manual_sign:
     signature_file = argv[i+4]
@@ -131,6 +313,13 @@ if encrypt:
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_and_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_and_encrypted.bin"
+elif delta:
+    if '.' in image_file:
+        tokens = image_file.split('.')
+        delta_output_image_file = image_file.rstrip('.' + tokens[-1])
+        delta_output_image_file += "_v" + str(fw_version) + "_signed_diff.bin"
+    else:
+        delta_output_image_file = image_file + "_v" + str(fw_version) + "_signed_diff.bin"
 
 if (self_update):
     print("Update type:          wolfBoot")
@@ -152,10 +341,24 @@ if not encrypt:
 else:
     print ("Encrypted using:      " + encrypt_key_file)
 
-kf = open(key_file, "rb")
-wolfboot_key_buffer = kf.read(4096)
-wolfboot_key_buffer_len = len(wolfboot_key_buffer)
-if wolfboot_key_buffer_len == 32:
+if sign == 'none':
+    kf = None
+    wolfboot_key_buffer=''
+    wolfboot_key_buffer_len = 0
+else:
+    kf = open(key_file, "rb")
+    wolfboot_key_buffer = kf.read(4096)
+    wolfboot_key_buffer_len = len(wolfboot_key_buffer)
+
+if wolfboot_key_buffer_len == 0:
+    if (sign != 'none'):
+        print("Error. Key size is zero but cipher is " + sign)
+        sys.exit(3)
+    print("*** WARNING: cipher 'none' selected.")
+    print("*** Image will not be authenticated!")
+    print("*** SECURE BOOT DISABLED.")
+
+elif wolfboot_key_buffer_len == 32:
     if (sign != 'ed25519' and not manual_sign and not sha_only):
         print("Error: key too short for cipher")
         sys.exit(1)
@@ -195,8 +398,10 @@ else:
     print ("Error: key size does not match any cipher")
     sys.exit(2)
 
-
-if not sha_only and not manual_sign:
+if sign == 'none':
+    privkey = None
+    pubkey = None
+elif not sha_only and not manual_sign:
     ''' import (decode) private key for signing '''
     if sign == 'ed25519':
         ed = ciphers.Ed25519Private(key = wolfboot_key_buffer)
@@ -230,143 +435,7 @@ else:
     pubkey = wolfboot_key_buffer
 
 
-img_size = os.path.getsize(image_file)
-# Magic header (spells 'WOLF')
-header = struct.pack('<L', WOLFBOOT_MAGIC)
-# Image size
-header += struct.pack('<L', img_size)
-
-# No pad bytes, version is aligned
-
-# Version field
-header += struct.pack('<HH', HDR_VERSION, HDR_VERSION_LEN)
-header += struct.pack('<L', fw_version)
-
-# Four pad bytes, so timestamp is aligned
-header += struct.pack('BB', 0xFF, 0xFF)
-header += struct.pack('BB', 0xFF, 0xFF)
-
-# Timestamp field
-header += struct.pack('<HH', HDR_TIMESTAMP, HDR_TIMESTAMP_LEN)
-header += struct.pack('<Q', int(os.path.getmtime(image_file)))
-
-# Image type field
-header += struct.pack('<HH', HDR_IMG_TYPE, HDR_IMG_TYPE_LEN)
-if (sign == 'ed25519'):
-    img_type = HDR_IMG_TYPE_AUTH_ED25519
-if (sign == 'ecc256'):
-    img_type = HDR_IMG_TYPE_AUTH_ECC256
-if (sign == 'rsa2048'):
-    img_type = HDR_IMG_TYPE_AUTH_RSA2048
-if (sign == 'rsa4096'):
-    img_type = HDR_IMG_TYPE_AUTH_RSA4096
-
-if (not self_update):
-    img_type |= HDR_IMG_TYPE_APP
-
-header += struct.pack('<H', img_type)
-
-# Six pad bytes, Sha-3 requires 8-byte alignment.
-header += struct.pack('BB', 0xFF, 0xFF)
-header += struct.pack('BB', 0xFF, 0xFF)
-header += struct.pack('BB', 0xFF, 0xFF)
-
-print("Calculating %s digest..." % hash_algo)
-
-if hash_algo == 'sha256':
-    sha = hashes.Sha256.new()
-
-    # Sha calculation
-    sha.update(header)
-    img_bin = open(image_file, 'rb')
-    while True:
-        buf = img_bin.read(32)
-        if (len(buf) == 0):
-            img_bin.close()
-            break
-        sha.update(buf)
-    digest = sha.digest()
-
-    # Add SHA to the header
-    header += struct.pack('<HH', HDR_SHA256, HDR_SHA256_LEN)
-    header += digest
-
-    # pubkey SHA calculation
-    keysha = hashes.Sha256.new()
-    keysha.update(pubkey)
-    key_digest = keysha.digest()
-    header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
-    header += key_digest
-    
-elif hash_algo == 'sha3':
-    sha = hashes.Sha3.new()
-    # Sha calculation
-    sha.update(header)
-    img_bin = open(image_file, 'rb')
-    while True:
-        buf = img_bin.read(128)
-        if (len(buf) == 0):
-            img_bin.close()
-            break
-        sha.update(buf)
-    digest = sha.digest()
-
-    # Add SHA to the header
-    header += struct.pack('<HH', HDR_SHA3_384, HDR_SHA3_384_LEN)
-    header += digest
-
-    # pubkey SHA calculation
-    keysha = hashes.Sha3.new()
-    keysha.update(pubkey)
-    key_digest = keysha.digest()
-    header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA3_384_LEN)
-    header += key_digest
-
-#print("Image Hash %d" % len(digest))
-#print([hex(j) for j in digest])
-
-#print ("Pubkey: %d" % len(pubkey))
-#print([hex(j) for j in pubkey])
-
-#print("Pubkey Hash %d" % len(key_digest))
-#print([hex(j) for j in key_digest])
-
-if sha_only:
-    outfile = open(output_image_file, 'wb')
-    outfile.write(digest)
-    outfile.close()
-    print("Digest image " + output_image_file +" successfully created.")
-    print()
-    sys.exit(0)
-
-# Sign the digest
-if not manual_sign:
-    print("Signing the firmware...")
-    if (sign == 'ed25519'):
-        signature = ed.sign(digest)
-    elif (sign == 'ecc256'):
-        r, s = ecc.sign_raw(digest)
-        signature = r + s
-    elif (sign == 'rsa2048') or (sign == 'rsa4096'):
-        signature = rsa.sign(digest)
-        #plain = rsa.verify(signature)
-        #print("plain:%d " % len(plain))
-        #print([hex(j) for j in plain])
-else:
-    print("Opening signature file %s" % signature_file)
-    signfile = open(signature_file, 'rb')
-    buf = signfile.read(1024)
-    signfile.close()
-    if len(buf) != HDR_SIGNATURE_LEN:
-        print("Wrong signature file size %d, expected %d" % (len(buf), HDR_SIGNATURE_LEN))
-        sys.exit(4)
-    signature = buf
-
-header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
-header += signature
-#print ("Signature %d" % len(signature))
-#print([hex(j) for j in signature])
-print ("Done.")
+header = make_header(image_file, fw_version)
 
 # Create output image. Add padded header in front
 outfile = open(output_image_file, 'wb')
@@ -384,6 +453,51 @@ while True:
 
 infile.close()
 outfile.close()
+
+if (delta):
+    tmp_outfile='/tmp/delta.bin'
+    tmp_inv_outfile='/tmp/delta-1.bin'
+    os.system('tools/delta/bmdiff ' + delta_base_file + ' ' + output_image_file + ' ' + tmp_outfile)
+    os.system('tools/delta/bmdiff ' + output_image_file + ' ' + delta_base_file + ' ' + tmp_inv_outfile)
+
+    delta_size = os.path.getsize(tmp_outfile)
+    delta_inv_size = os.path.getsize(tmp_inv_outfile)
+    delta_file = open(tmp_outfile, 'ab+')
+    delta_inv_file = open(tmp_inv_outfile, 'rb')
+    while delta_file.tell() % 16 != 0:
+        delta_file.write(struct.pack('B', 0x00))
+    inv_off = delta_file.tell()
+    while True:
+        cpbuf = delta_inv_file.read(1024)
+        if len(cpbuf) == 0:
+            break
+        delta_file.write(cpbuf)
+    delta_file.close()
+    delta_inv_file.close()
+    base_version = re.split("_", (re.split("_v", delta_base_file)[1]))[0]
+    header = make_header(tmp_outfile, fw_version,
+            [[HDR_IMG_DELTA_BASE, 4, struct.pack("<L", int(base_version))],
+                [HDR_IMG_DELTA_SIZE, 2, struct.pack("<H", delta_size)],
+                [HDR_IMG_DELTA_INVERSE, 4, struct.pack("<L", inv_off + WOLFBOOT_HEADER_SIZE)],
+                [HDR_IMG_DELTA_INVERSE_SIZE, 2, struct.pack("<H", delta_inv_size)]
+                ])
+    outfile = open(delta_output_image_file, 'wb')
+    outfile.write(header)
+    sz = len(header)
+    while sz < WOLFBOOT_HEADER_SIZE:
+        outfile.write(struct.pack('B', 0xFF))
+        sz += 1
+    infile = open(tmp_outfile, 'rb')
+    while True:
+        buf = infile.read(1024)
+        if len(buf) == 0:
+            break
+        outfile.write(buf)
+    infile.close()
+    outfile.close()
+    os.remove(tmp_outfile)
+    os.remove(tmp_inv_outfile)
+
 if (encrypt):
     sz = 0
     off = 0

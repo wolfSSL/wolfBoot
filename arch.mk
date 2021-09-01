@@ -1,11 +1,11 @@
 ## CPU Architecture selection via $ARCH
-
 UPDATE_OBJS:=./src/update_flash.o
 
 # check for FASTMATH or SP_MATH
 ifeq ($(SPMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
 else
+  CFLAGS+=-DUSE_FAST_MATH
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o ./lib/wolfssl/wolfcrypt/src/tfm.o
 endif
 
@@ -158,15 +158,15 @@ endif
 ifeq ($(TARGET),imx_rt)
   ARCH_FLASH_OFFSET=0x60000000
   CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 \
-		  -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
-		  -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
-		  -I$(MCUXPRESSO)/components/uart/ \
-		  -I$(MCUXPRESSO)/components/flash/nor \
-		  -I$(MCUXPRESSO)/components/flash/nor/flexspi \
-		  -I$(MCUXPRESSO)/components/serial_manager/ \
-		  -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
-		  -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
-		  -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
+      -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
+      -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
+      -I$(MCUXPRESSO)/components/uart/ \
+      -I$(MCUXPRESSO)/components/flash/nor \
+      -I$(MCUXPRESSO)/components/flash/nor/flexspi \
+      -I$(MCUXPRESSO)/components/serial_manager/ \
+      -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
+      -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
+      -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
   OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
   ifeq ($(PKA),1)
      PKA_EXTRA_OBJS+= \
@@ -174,6 +174,44 @@ ifeq ($(TARGET),imx_rt)
          ./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
      PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
   endif
+endif
+
+# ARM Big Endian
+ifeq ($(ARCH),ARM_BE)
+  OBJS+=src/boot_arm.o
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
+endif
+
+ifeq ($(TARGET),ti_hercules)
+  # HALCoGen Source and Include?
+  CORTEX_R5=1
+  CFLAGS+=-D"CORTEX_R5" -D"BIG_ENDIAN_ORDER"
+  STACK_USAGE=0
+  USE_GCC=0
+
+  ifeq ($(CCS_ROOT),)
+    $(error "CCS_ROOT must be defined to root of tools")
+  endif
+  CROSS_COMPILE=$(CCS_ROOT)/bin/
+
+  CC=$(CROSS_COMPILE)armcl
+  LD=$(CROSS_COMPILE)armcl
+  AS=$(CROSS_COMPILE)armasm
+  OBJCOPY=$(CROSS_COMPILE)armobjcopy
+  SIZE=$(CROSS_COMPILE)armsize
+  OUTPUT_FLAG=--output_file
+
+  F021_DIR?=c:\\ti\\Hercules\\F021\ Flash\ API\\02.01.01
+
+  ARCH_FLAGS=-mv7R5 --code_state=32 --float_support=VFPv3D16 --enum_type=packed --abi=eabi -I"$(CCS_ROOT)/include" -I"$(F021_DIR)/include"
+  CFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=$(ARCH_FLAGS) -i"$(CCS_ROOT)/lib" -i"$(F021_DIR)" -z --be32 --map_file=wolfboot.map --reread_libs --diag_wrap=off --display_error_number --warn_sections -stack=0 -heap=0
+  LD_START_GROUP= #--start-group
+  LD_END_GROUP= -llibc.a -l"$(F021_DIR)\\F021_API_CortexR4_BE_L2FMC_V3D16.lib" $(LSCRIPT)
+
+  OPTIMIZATION_LEVEL=2
 endif
 
 ifeq ($(TARGET),lpc)
@@ -229,19 +267,33 @@ ifeq ($(TARGET),psoc6)
     endif
 endif
 
-
+ifeq ($(TARGET),stm32l4)
+  SPI_TARGET=stm32
+  ARCH_FLASH_OFFSET=0x08000000
+  OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
+  OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
+  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+    -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
+    -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Include/
+endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
-## Toolchain setup
-CC=$(CROSS_COMPILE)gcc
-LD=$(CROSS_COMPILE)gcc
-AS=$(CROSS_COMPILE)gcc
-OBJCOPY:=$(CROSS_COMPILE)objcopy
-SIZE:=$(CROSS_COMPILE)size
+
+USE_GCC?=1
+ifeq ($(USE_GCC),1)
+  ## Toolchain setup
+  CC=$(CROSS_COMPILE)gcc
+  LD=$(CROSS_COMPILE)gcc
+  AS=$(CROSS_COMPILE)gcc
+  OBJCOPY=$(CROSS_COMPILE)objcopy
+  SIZE=$(CROSS_COMPILE)size
+  OUTPUT_FLAG=-o
+endif
+
 BOOT_IMG?=test-app/image.bin
-
-
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)

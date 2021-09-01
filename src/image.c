@@ -1,6 +1,6 @@
 /* image.c
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -23,6 +23,7 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_drv.h"
+#include <stddef.h>
 
 #include <wolfssl/wolfcrypt/settings.h>
 
@@ -300,7 +301,9 @@ static uint16_t get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **
         return wolfBoot_find_header(img->hdr + IMAGE_HEADER_OFFSET, type, ptr);
 }
 
+#ifdef EXT_FLASH
 static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
+#endif
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
@@ -428,6 +431,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 #endif /* WOLFBOOT_TPM && WOLFBOOT_HASH_TPM */
 }
 
+#ifndef WOLFBOOT_NO_SIGN
 static void key_sha256(uint8_t *hash)
 {
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_HASH_TPM)
@@ -466,6 +470,7 @@ static void key_sha256(uint8_t *hash)
     wc_Sha256Final(&sha256_ctx, hash);
 #endif /* WOLFBOOT_TPM && WOLFBOOT_HASH_TPM */
 }
+#endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA2-256 */
 
 #if defined(WOLFBOOT_HASH_SHA3_384)
@@ -621,6 +626,12 @@ static inline uint32_t im2n(uint32_t val)
   return val;
 }
 
+uint32_t wolfBoot_image_size(uint8_t *image)
+{
+    uint32_t *size = (uint32_t *)(image + sizeof (uint32_t));
+    return im2n(*size);
+}
+
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
     uint32_t *magic;
@@ -681,12 +692,12 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC)
         return -1;
-    size = (uint32_t *)(image + sizeof (uint32_t));
-
-    if (im2n(*size) > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE))
-       return -1;
+    img->fw_size = wolfBoot_image_size(image);
+    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        img->fw_size = 0;
+        return -1;
+    }
     img->hdr_ok = 1;
-    img->fw_size = im2n(*size);
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
     img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
     return 0;
@@ -717,6 +728,12 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     return 0;
 }
 
+#ifdef WOLFBOOT_NO_SIGN
+int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
+{
+    return 0;
+}
+#else
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
     int ret;
@@ -753,6 +770,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     img->signature_ok = 1;
     return 0;
 }
+#endif
 
 /* Peek at image offset and return static pointer */
 /* sz: optional and returns length of peek */

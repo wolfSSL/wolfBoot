@@ -9,7 +9,7 @@
  * emulated non-volatile image via UART.
  *
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -31,15 +31,14 @@
 #ifndef UART_FLASH_DRI_H
 #define UART_FLASH_DRI_H
 #include <stdint.h>
+#include "uart_drv.h"
 
 #ifdef UART_FLASH
     #ifndef UART_FLASH_BITRATE
-      #define UART_FLASH_BITRATE 460800
+      #define UART_FLASH_BITRATE 115200
     #endif
-    int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
     void uart_send_current_version(void);
 #else
-    #define uart_init(...) (-1)
     #define uart_send_current_version() do{}while(0)
 #endif /* UART_FLASH */
 

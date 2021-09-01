@@ -2,7 +2,7 @@
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -78,6 +78,20 @@ static const char ACK='#';
 static uint8_t msg[MSGSIZE];
 
 
+#ifdef WOLFBOOT_NO_SIGN
+
+#define AIRCR *(volatile uint32_t *)(0xE000ED0C)
+#define AIRCR_VKEY (0x05FA << 16)
+#   define AIRCR_SYSRESETREQ (1 << 2)
+
+void arch_reboot(void)
+{
+    AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
+    while(1)
+        ;
+
+}
+#endif
 
 void uart_write(const char c)
 {
@@ -216,6 +230,7 @@ void main(void) {
         WFI();
 
 
+
     hal_flash_unlock();
     version = wolfBoot_current_firmware_version();
     if ((version & 0x01) == 0)
@@ -227,6 +242,11 @@ void main(void) {
     for (i = 3; i >= 0; i--) {
         uart_write(v_array[i]);
     }
+#ifdef WOLFBOOT_NO_SIGN
+    while(time_elapsed < 140)
+	WFI();
+    arch_reboot();
+#endif
     while (1) {
         r_total = 0;
         do {

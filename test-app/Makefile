@@ -15,22 +15,29 @@ ifeq ($(SIGN),RSA4096)
 endif
 ifeq ($(HASH),SHA256)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
-  CFLAGS+=-DWOLFBOOT_HASH_SHA256
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
 endif
 
 ifeq ($(NVM_FLASH_WRITEONCE),1)
-  CFLAGS+=-DNVM_FLASH_WRITEONCE
+  CFLAGS+=-D"NVM_FLASH_WRITEONCE"
 endif
 
 
 ifeq ($(HASH),SHA3_384)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
-  CFLAGS+=-DWOLFBOOT_HASH_SHA3_384
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
 endif
 
-CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
 
-APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../src/libwolfboot.o
+ifeq ($(TARGET),ti_hercules)
+  APP_OBJS:=app_$(TARGET).o ../src/libwolfboot.o
+  CFLAGS+=-I"../include"
+else
+  CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+  APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../src/libwolfboot.o
+endif
+
+
 include ../arch.mk
 
 ifeq ($(TZEN),1)
@@ -45,6 +52,11 @@ endif
 
 ifeq ($(ARCH),ARM)
   APP_OBJS+=startup_arm.o
+  CFLAGS+=-DSTM32
+endif
+ifeq ($(ARCH),ARM_BE)
+  APP_OBJS+=startup_arm.o
+  CFLAGS+=-DSTACK_PAINTING=0
 endif
 
 ifeq ($(V),0)
@@ -52,7 +64,7 @@ ifeq ($(V),0)
 endif
 
 ifeq ($(ENCRYPT),1)
-    CFLAGS+=-DEXT_ENCRYPTED=1
+    CFLAGS+=-D"EXT_ENCRYPTED=1"
 endif
 
 ENTRY_POINT=`cat .entry-point-address`
@@ -67,6 +79,16 @@ ifeq ($(TARGET),stm32h7)
   LSCRIPT_TEMPLATE=ARM-stm32h7.ld
 endif
 
+ifeq ($(TARGET),stm32l4)
+  APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
+  APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
+  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+    -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
+    -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
+    -I$(STM32CUBE)/Drivers/CMSIS/Include/
+endif
+
 ifeq ($(TARGET),stm32l5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld
@@ -76,20 +98,32 @@ ifeq ($(TARGET),stm32l5)
   CFLAGS+=-mcpu=cortex-m33  
   LDFLAGS+=-mcpu=cortex-m33
 endif
-LDFLAGS+=$(CFLAGS) -T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+
+
+
+ifeq ($(TARGET),ti_hercules)
+  LSCRIPT_TEMPLATE=ARM-r5be.ld
+  LDFLAGS+=$(LSCRIPT) --map_file=image.map
+else
+  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+endif
 
 ifeq ($(EXT_FLASH),1)
-  CFLAGS+=-DEXT_FLASH=1 -DPART_UPDATE_EXT=1
+  CFLAGS+=-D"EXT_FLASH=1" -D"PART_UPDATE_EXT=1"
 endif
 
 ifeq ($(SPI_FLASH),1)
-  CFLAGS+=-DSPI_FLASH
+  CFLAGS+=-D"SPI_FLASH"
   APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/spi_flash.o
 endif
 
 ifeq ($(UART_FLASH),1)
-  CFLAGS+=-DUART_FLASH=1
+  CFLAGS+=-D"UART_FLASH=1"
   APP_OBJS+= ../src/uart_flash.o ../hal/uart/uart_drv_$(UART_TARGET).o
+else
+  ifeq ($(TARGET),stm32wb)
+    APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  endif
 endif
 
 ifeq ($(TARGET),kinetis)
@@ -175,8 +209,8 @@ ifeq ($(TARGET),psoc6)
   CFLAGS+=-DCY8C624ABZI_D44
 endif
 
-standalone:CFLAGS+=-DTEST_APP_STANDALONE
-standalone:LDFLAGS:=$(CFLAGS) -T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
+standalone:CFLAGS+=-D"TEST_APP_STANDALONE"
+standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
 image.bin: image.elf
 	$(Q)echo "\t[BIN] $@"
@@ -184,22 +218,22 @@ image.bin: image.elf
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	$(Q)echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) -o $@
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
 
 
 standalone: image.bin
 
 ../src/libwolfboot.o: ../src/libwolfboot.c FORCE
 	$(Q)echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ ../src/libwolfboot.c
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
 %.o:%.c
 	$(Q)echo "\t[CC-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 %.o:%.S
 	$(Q)echo "\t[AS-$(ARCH)] $@"
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $^
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT)

@@ -65,6 +65,10 @@ tools/keytools/x64
 tools/keytools/Debug
 tools/keytools/Release
 
+# delta binaries
+tools/delta/bmdiff
+tools/delta/bmpatch
+
 # Vim swap files
 .*.swp
 
@@ -88,6 +92,7 @@ tools/test-expect-version/test-expect-version
 tools/test-update-server/server
 tools/uart-flash-server/ufserver
 tools/unit-tests/unit-parser
+tools/bin-assemble/bin-assemble
 config/*.ld
 
 # Generated confiuguration file

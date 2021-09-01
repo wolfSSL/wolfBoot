@@ -2,7 +2,7 @@
  *
  * Test bare-metal blinking led application
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -178,3 +178,54 @@ void boot_led_off(void)
 
 
 #endif /* PLATFORM_stm32wb */
+
+#ifdef PLATFORM_stm32l4
+#define AHB2_CLOCK_ER (*(volatile uint32_t *)(0x4002104C)) /* RCC_AHB2ENR */
+#define GPIOB_AHB2_CLOCK_ER (1 << 1)
+
+#define GPIOB_BASE 0x48000400
+#define GPIOB_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
+#define GPIOB_OTYPE (*(volatile uint32_t *)(GPIOB_BASE + 0x04))
+#define GPIOB_OSPD  (*(volatile uint32_t *)(GPIOB_BASE + 0x08))
+#define GPIOB_PUPD  (*(volatile uint32_t *)(GPIOB_BASE + 0x0c))
+#define GPIOB_ODR   (*(volatile uint32_t *)(GPIOB_BASE + 0x14))
+#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
+#define GPIOB_AFL   (*(volatile uint32_t *)(GPIOB_BASE + 0x20))
+#define GPIOB_AFH   (*(volatile uint32_t *)(GPIOB_BASE + 0x24))
+#define LED_PIN (14) /* User LD3: a red user LED is connected to PB14 */
+#define LED_BOOT_PIN (7) /* User LD2: a blue user LED is connected to PB7 */
+#define GPIO_OSPEED_100MHZ (0x03)
+
+
+void boot_led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_BOOT_PIN;
+    AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
+    reg = GPIOB_MODE & ~(0x03 << (pin * 2));
+    GPIOB_MODE = reg | (1 << (pin * 2));
+    reg = GPIOB_PUPD & ~(0x03 << (pin * 2));
+    GPIOB_PUPD = reg | (1 << (pin * 2));
+    GPIOB_BSRR |= (1 << pin);
+}
+void led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_PIN;
+    AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
+    reg = GPIOB_MODE & ~(0x03 << (pin * 2));
+    GPIOB_MODE = reg | (1 << (pin * 2));
+    reg = GPIOB_PUPD & ~(0x03 << (pin * 2));
+    GPIOB_PUPD = reg | (1 << (pin * 2));
+    GPIOB_BSRR |= (1 << pin);
+}
+void led_off(void)
+{
+    GPIOB_BSRR |= (1 << (LED_PIN + 16));
+}
+void boot_led_off(void)
+{
+    GPIOB_BSRR |= (1 << (LED_BOOT_PIN + 16));
+}
+
+#endif /* PLATFORM_stm32l4 */

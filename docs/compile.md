@@ -96,6 +96,16 @@ Better performance can be achieved using ECDSA with curve p-256. To activate ECC
 
 when invoking `make`.
 
+RSA is also supported, with different key length. To activate RSA2048 or RSA4096, use:
+
+`SIGN=RSA2048`
+
+or
+
+`SIGN=RSA4096`
+
+respectively.
+
 The default option, if no value is provided for the `SIGN` variable, is
 
 `SIGN=ED25519`
@@ -104,6 +114,22 @@ Changing the DSA algorithm will also result in compiling a different set of tool
 and firmware signature.
 
 Find the corresponding key generation and firmware signing tools in the [tools](../tools) directory.
+
+It's possible to disable authentication of the firmware image by explicitly using:
+
+`SIGN=NONE`
+
+in the Makefile commandline. This will compile a minimal bootloader with no support for public-key authenticated 
+secure boot.
+
+### Incremental updates
+
+wolfBoot support incremental updates. To enable this feature, compile with `DELTA_UPDATES=1`.
+
+An additional file is generated when the sign tool is invoked with the `--delta` option, containing only the
+differences between the old firmware to replace, currently running on the target, and the new version.
+
+For more information and examples, see the [firmware update](firmware_update.md) section.
 
 ### Enable debug symbols
 
@@ -119,6 +145,20 @@ stage, or on these platform that do not support interrupt vector relocation.
 
 To disable interrupt vector table relocation, compile with `VTOR=0`. By default, wolfBoot will relocate the
 interrupt vector by setting the offset in the vector relocation offset register (VTOR).
+
+### Limit stack usage
+
+By default, wolfBoot does not require any memory allocation. It does this by performing all the operations
+using the stack. Although the stack space used by the algorithms can be predicted at compile time, the amount
+of stack space be relatively big, depending on the algorithm selected.
+
+Some targets offer limited amount of RAM to use as stack space, either in general, or in a configuration
+dedicated for the bootloader stage.
+
+In these cases, it might be useful to activate `WOLFBOOT_SMALL_STACK=1`. With this option, a fixed-size pool
+is created at compile time to assist the allocation of the object needed by the cryptography implementation.
+When compiled with `WOLFBOOT_SMALL_STACK=1`, wolfBoot reduces the stack usage considerably, and simulates dynamic
+memory allocations by assigning dedicated, statically allocated, pre-sized memory areas.
 
 ### Disable Backup of current running firmware
 

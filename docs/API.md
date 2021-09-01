@@ -23,7 +23,7 @@ Basic interaction from the application is provided via the following high-level 
 
 `uint32_t wolfBoot_get_image_version(uint8_t part)`
 
-`void wolfBoot_update(void)`
+`void wolfBoot_update_trigger(void)`
 
 `void wolfBoot_success(void)`
 
@@ -43,7 +43,7 @@ and
 
 ### Trigger an update
 
-  - `wolfBoot_update()` is used to trigger an update upon the next reboot, and it is normally used by
+  - `wolfBoot_update_trigger()` is used to trigger an update upon the next reboot, and it is normally used by
 an update application that has retrieved a new version of the running firmware, and has
 stored it in the UPDATE partition on the flash. This function will set the state of the UPDATE partition 
 to `STATE_UPDATING`, instructing the bootloader to perform the update upon the next execution (after reboot).

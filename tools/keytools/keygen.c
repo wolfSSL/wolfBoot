@@ -3,7 +3,7 @@
  * C native key generation tool
  *
  *
- * Copyright (C) 2020 wolfSSL Inc.
+ * Copyright (C) 2021 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -298,12 +298,13 @@ int main(int argc, char** argv)
     f = fopen(kfilename, "rb");
     if (!force && (f != NULL)) {
         char reply[40];
+        int replySz;
         fclose(f);
         printf("** Warning: key file already exist! Are you sure you want to  generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ");
         fflush(stdout);
-        scanf("%s", reply);
+        replySz = scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
-        if (strcmp(reply, "Yes, I am sure!") != 0) {
+        if (replySz < 0 || strcmp(reply, "Yes, I am sure!") != 0) {
             printf("Operation aborted by user.");
             exit(5);
         }

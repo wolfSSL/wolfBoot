@@ -1,11 +1,20 @@
 # wolfBoot KeyGen and Signing Tool
 
+-include ../../.config
+
+V?=0
+ifeq ($(V),0)
+  Q=@
+endif
+
 CC      = gcc
-WOLFDIR = ../../lib/wolfssl/
-CFLAGS  = -Wall -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR)
+WOLFBOOTDIR = ../..
+WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl/
+CFLAGS  = -Wall -Wextra -Werror
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include
 
 # option variables
-DEBUG_FLAGS     = -g -DDEBUG
+DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE
 OPTIMIZE        = -Os
 
 # Options
@@ -35,21 +44,37 @@ SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/wc_port.c \
 	$(WOLFDIR)wolfcrypt/src/wolfmath.c
 
+SRC+=$(WOLFBOOTDIR)/src/delta.c
+
 .PHONY: clean all
 
-all: sign keygen
+all: $(WOLFBOOTDIR)/include/target.h sign keygen
 
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
 
+# Target.h is required for key tools
+$(WOLFBOOTDIR)/include/target.h: $(WOLFBOOTDIR)/include/target.h.in
+	@cat $(WOLFBOOTDIR)/include/target.h.in | \
+	sed -e "s/##WOLFBOOT_PARTITION_SIZE##/$(WOLFBOOT_PARTITION_SIZE)/g" | \
+	sed -e "s/##WOLFBOOT_SECTOR_SIZE##/$(WOLFBOOT_SECTOR_SIZE)/g" | \
+	sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_PARTITION_UPDATE_ADDRESS##/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_PARTITION_SWAP_ADDRESS##/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_DTS_BOOT_ADDRESS##/$(WOLFBOOT_DTS_BOOT_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_DTS_UPDATE_ADDRESS##/$(WOLFBOOT_DTS_UPDATE_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_LOAD_ADDRESS##/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
+	sed -e "s/##WOLFBOOT_LOAD_DTS_ADDRESS##/$(WOLFBOOT_LOAD_DTS_ADDRESS)/g" \
+		> $@
+
 # build template
 sign:
 	@echo "Building signing tool"
-	@$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
+	$(Q)$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
 
 keygen:
 	@echo "Building keygen tool"
-	@$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
+	$(Q)$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
 
 clean:
 	rm -f sign keygen

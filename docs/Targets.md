@@ -12,12 +12,14 @@ This README describes configuration of supported targets.
 * [NXP T2080 PPC](#nxp-t2080-ppc)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
+* [STM32L4](#stm32l4)
 * [STM32F7](#stm32f7)
 * [STM32G0](#stm32g0)
 * [STM32H7](#stm32h7)
 * [STM32L5](#stm32l5)
 * [STM32L0](#stm32l0)
 * [STM32WB55](#stm32wb55)
+* [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 
 ## STM32F4
@@ -78,7 +80,20 @@ mon reset init
 b main
 c
 ```
+## STM32L4
+Example 1MB partitioning on STM32L4
 
+- Sector size: 4KB
+- Wolfboot partition size: 40 KB
+- Application partition size: 488 KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x1000   /* 4 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x0800A000
+#define WOLFBOOT_PARTITION_SIZE              0x7A000  /* 488 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08084000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x080FE000
+```
 
 ## STM32L5
 
@@ -120,6 +135,11 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08040000`
 6. RED LD9 will be on
 
+- NOTE: STM32_Programmer_CLI Default Locations
+* Windows: `C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe`
+* Linux: `/usr/local/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI`
+* Mac OS/X: `/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI`
+
 ### Scenario 2: Trustzone Disabled
 
 #### Example Description
@@ -138,6 +158,16 @@ A firmware update can be uploaded at address 0x08048000.
 
 The example configuration is available in [/config/examples/stm32l5-nonsecure-dualbank.config](/config/examples/stm32l5-nonsecure-dualbank.config).
 
+To run flash `./test-app/image.bin` to `0x08000000`.
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image.bin 0x08000000`
+
+Or program each partition using:
+1. flash `wolfboot.bin` to 0x08000000: 
+    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.elf`
+2. flash wolfBoot.bin to 0x0c00 0000
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08008000`
+
+RED LD9 will be on indicating successful boot ()
 
 ### Debugging
 
@@ -146,7 +176,19 @@ Use `make DEBUG=1` and reload firmware.
 - STM32CubeIDE v.1.3.0 required
 - Run the debugger via:
 
-`ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333`
+Linux:
+
+```
+ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333`
+```
+
+Max OS/X:
+
+```sh
+sudo ln -s /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_1.6.0.202101291314/tools/bin/native/mac_x64/libSTLinkUSBDriver.dylib /usr/local/lib/libSTLinkUSBDriver.dylib
+
+/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_1.6.0.202101291314/tools/bin/ST-LINK_gdbserver -d -cp ./Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.macos64_1.6.0.202101291314/tools/bin -e -r 1 -p 3333
+```
 
 - Connect with arm-none-eabi-gdb
 
@@ -874,3 +916,7 @@ Example configuration for this target is provided in [/config/examples/t2080.con
 wolfBoot can be built with gcc powerpc tools. For example, `apt
 install gcc-powerpc-linux-gnu`. Then make will use the correct tools
 to compile.
+
+## TI Hercules TMS570LC435
+
+See [/config/examples/ti-tms570lc435.config](/config/examples/ti-tms570lc435.config) for example configuration.
