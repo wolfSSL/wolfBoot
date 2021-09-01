@@ -38,7 +38,7 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 static uint8_t buffer[FLASHBUFFER_SIZE];
 #endif
 
-static void RAMFUNCTION wolfBoot_erase_bootloader(void)
+void RAMFUNCTION wolfBoot_erase_bootloader(void)
 {
     uint32_t *start = (uint32_t *)&_start_text;
     uint32_t len = WOLFBOOT_PARTITION_BOOT_ADDRESS - (uint32_t)start;
@@ -48,7 +48,7 @@ static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 
 #include <string.h>
 
-static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
+void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
 {
     uint32_t pos = 0;
     uint32_t src_offset = IMAGE_HEADER_SIZE;

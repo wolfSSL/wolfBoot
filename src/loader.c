@@ -15,7 +15,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
+ * along with this program; if not, write to the Free Softwar
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
@@ -32,11 +32,12 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 extern void (** const IV_RAM)(void);
 #endif
 
+void trigger_setup(void);
 
 int main(void)
 {
     hal_init();
-    spi_flash_probe();
+    // wolfBoot_update_trigger();
 #ifdef UART_FLASH
     uart_init(UART_FLASH_BITRATE, 8, 'N', 1);
     uart_send_current_version();

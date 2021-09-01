@@ -150,7 +150,7 @@ static void mpu_init(void)
 
 }
 
-static void mpu_off(void)
+void mpu_off(void)
 {
     mpu_is_on = 0;
     MPU_CTRL = 0;
@@ -376,6 +376,14 @@ void (* const IV[])(void) =
     isr_empty,
 #endif
 };
+
+__attribute__((section(".boot_jmp")))
+void boot_jump(void)
+{
+    uint32_t x = (uint32_t)(&END_STACK);
+    asm volatile ("mov r13,%0" :: "r" (x));
+    isr_reset();
+}
 
 #ifdef RAM_CODE
 

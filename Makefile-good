@@ -11,7 +11,7 @@ include tools/config.mk
 WOLFBOOT_ROOT?=$(PWD)
 CFLAGS+=-D__WOLFBOOT -DWOLFBOOT_VERSION=$(WOLFBOOT_VERSION)UL -ffunction-sections -fdata-sections
 LSCRIPT:=config/target.ld
-LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+LDFLAGS:=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -Wa,-adhln -g
 OBJS:= \
 ./hal/$(TARGET).o \
 ./src/loader.o \
@@ -32,7 +32,7 @@ CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused \
   -I. -Iinclude/ -Ilib/wolfssl -nostartfiles \
   -DWOLFSSL_USER_SETTINGS \
   -DWOLFTPM_USER_SETTINGS \
-  -DPLATFORM_$(TARGET)
+  -DPLATFORM_$(TARGET) -mlong-calls -Og -g3
 
 MAIN_TARGET=factory.bin
 

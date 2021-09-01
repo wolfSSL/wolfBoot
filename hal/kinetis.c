@@ -304,8 +304,8 @@ static void do_flash_init(void)
     memset(&pflash, 0, sizeof(pflash));
     memset(&pcache, 0, sizeof(pcache));
     FLASH_Init(&pflash);
-    FTFx_CACHE_Init(&pcache);
-    FTFx_CACHE_ClearCachePrefetchSpeculation(&pcache, 1);
+    // FTFx_CACHE_Init(&pcache);
+    // FTFx_CACHE_ClearCachePrefetchSpeculation(&pcache, 1);
 }
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
