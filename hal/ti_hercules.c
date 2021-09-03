@@ -112,11 +112,13 @@ static inline int RAMFUNCTION hal_flash_unlock_helper(uint32_t address) {
     return 0;
 }
 
-#define WRITE_BLOCK_SIZE 32
+#define WRITE_BLOCK_SIZE FLASHBUFFER_SIZE
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int st = 0;
+    int off = 0;
+    int blk_size = WRITE_BLOCK_SIZE;
     uint8_t temp[WRITE_BLOCK_SIZE];
 
     hal_flash_unlock_helper(address);
@@ -134,12 +136,26 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                                           0,
                                           Fapi_AutoEccGeneration);
     } else {
-        st = Fapi_issueProgrammingCommand((void*)address,
-                                          (uint8_t*)data,
-                                          len,
-                                          NULL,
-                                          0,
-                                          Fapi_AutoEccGeneration);
+        off = 0;
+        blk_size = WRITE_BLOCK_SIZE;
+        while(off < len && st == 0) {
+            blk_size = WRITE_BLOCK_SIZE;
+            if (len-off < blk_size) {
+                blk_size = len - off;
+            }
+
+            st = Fapi_issueProgrammingCommand((void*)((uint8_t*)(address) + off),
+                                              (uint8_t*)data + off,
+                                              blk_size,
+                                              NULL,
+                                              0,
+                                              Fapi_AutoEccGeneration);
+
+            while(FAPI_CHECK_FSM_READY_BUSY != Fapi_Status_FsmReady)
+                    ;
+
+            off += blk_size;
+        }
     }
 
     if (st != 0) {
@@ -212,7 +228,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     hal_flash_unlock_helper(address);
     for(i=0; i < bank_sectors.u32NumberOfSectors; i++) {
         /* perfectly done */
-        if (end == cur) {
+        if (end == cur && found_start) {
                    ret = 0;
                    break;
         }
