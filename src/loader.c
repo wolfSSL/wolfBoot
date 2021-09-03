@@ -37,7 +37,43 @@ void trigger_setup(void);
 int main(void)
 {
     hal_init();
-    // wolfBoot_update_trigger();
+    // volatile uint32_t k = 0;
+    // for (volatile uint32_t i = 0; i < 50; i++) {
+    //     for (volatile uint32_t j = 0; j < 50; j++) {
+    //         k++;
+    //     }
+    // }
+    // for (volatile uint32_t i = 0; i < 50; i++) {
+    //     for (volatile uint32_t j = 0; j < 50; j++) {
+    //         k++;
+    //     }
+    // }
+    // for (volatile uint32_t i = 0; i < 50; i++) {
+    //     for (volatile uint32_t j = 0; j < 50; j++) {
+    //         k++;
+    //     }
+    // }
+    wolfBoot_update_trigger();
+    trigger_setup();
+    // while (1) {
+    //     trigger_high();
+    //     volatile uint32_t k = 0;
+    //     for (volatile uint32_t i = 0; i < 50; i++) {
+    //         for (volatile uint32_t j = 0; j < 50; j++) {
+    //             k++;
+    //         }
+    //     }
+    //     if (k == 2500) {
+    //         trigger_low();
+    //     } else {
+    //         while(1);
+    //     }
+    //     for (volatile uint32_t i = 0; i < 50; i++) {
+    //         for (volatile uint32_t j = 0; j < 50; j++) {
+    //             k++;
+    //         }
+    //     }
+    // }
 #ifdef UART_FLASH
     uart_init(UART_FLASH_BITRATE, 8, 'N', 1);
     uart_send_current_version();

@@ -267,6 +267,8 @@ out:
 
 #endif
 
+void trigger_high(void);
+void trigger_low(void);
 static int wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -305,14 +307,17 @@ static int wolfBoot_update(int fallback_allowed)
         update_type = wolfBoot_get_image_type(PART_UPDATE);
         if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) || ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
             return -1;
-        if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
-                || (wolfBoot_verify_authenticity(&update) < 0)) {
-            return -1;
-        }
+            //disable for now - make things quicker
+        // if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
+        //         || (wolfBoot_verify_authenticity(&update) < 0)) {
+        //     return -1;
+        // }
+    trigger_high();
 #ifndef ALLOW_DOWNGRADE
         if ( !fallback_allowed &&
-                (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
-            return -1;
+                (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) ) {
+                    return -1;
+                }
 #endif
 #ifdef DELTA_UPDATES
         if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
@@ -419,13 +424,21 @@ void RAMFUNCTION wolfBoot_start(void)
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
-    if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
-        wolfBoot_update_trigger();
-        wolfBoot_update(1);
-    } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
-    /* Check for new updates in the UPDATE partition */
-        wolfBoot_update(0);
+    while (1) {
+        if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
+            wolfBoot_update_trigger();
+            wolfBoot_update(1);
+        } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
+        /* Check for new updates in the UPDATE partition */
+            if (wolfBoot_update(0) < 0) 0;
+            if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
+                goto bad_goto_usage;
+            } else {
+                trigger_low();
+            }
+        }
     }
+bad_goto_usage:
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
             (wolfBoot_verify_integrity(&boot) < 0)  ||
             (wolfBoot_verify_authenticity(&boot) < 0)) {
@@ -444,6 +457,7 @@ void RAMFUNCTION wolfBoot_start(void)
             }
         }
     }
+    trigger_low();
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }

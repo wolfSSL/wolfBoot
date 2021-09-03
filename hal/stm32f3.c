@@ -224,14 +224,6 @@ volatile uint32_t *GPIOA_ODR = (uint32_t *)(GPIOA + 0x14);
 volatile uint32_t *GPIOA_PUPDR = (uint32_t *)(GPIOA + 0x0C);
 volatile uint32_t *GPIOA_IDR = (uint32_t *)(GPIOA + 0x10);
 
-void trigger_setup(void)
-{
-	*AHB_ENABLE_REG |= (1 << 17);
-    volatile uint32_t x = 0;
-    x = 0;
-    x = 0;
-	*GPIOA_MODER |= (0b01) << (12*2);
-}
 
 void trigger_high(void)
 {
@@ -241,6 +233,16 @@ void trigger_high(void)
 void trigger_low(void)
 {
     *GPIOA_ODR &= ~(1 << 12);
+}
+
+void trigger_setup(void)
+{
+	*AHB_ENABLE_REG |= (1 << 17);
+    volatile uint32_t x = 0;
+    x = 0;
+    x = 0;
+    trigger_low();
+	*GPIOA_MODER |= (0b01) << (12*2);
 }
 
 #define FLASH_OFFSET 0x8000000
