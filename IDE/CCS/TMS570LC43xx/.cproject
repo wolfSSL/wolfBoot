@@ -48,6 +48,8 @@
 									<listOptionValue builtIn="false" value="WOLFBOOT_VERSION=1"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_SIGN_ECC256"/>
 									<listOptionValue builtIn="false" value="BIG_ENDIAN_ORDER"/>
+									<listOptionValue builtIn="false" value="NVM_FLASH_WRITEONCE"/>
+									<listOptionValue builtIn="false" value="FLASHBUFFER_SIZE=32"/>
 									<listOptionValue builtIn="false" value="RAM_CODE=1"/>
 									<listOptionValue builtIn="false" value="CORTEX_R5"/>
 									<listOptionValue builtIn="false" value="__WOLFBOOT"/>
@@ -94,7 +96,6 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="lib/wolfboot/tools/bin-assemble"/>
 						<entry excluding="rsa2048_pub_key.c|rsa4096_pub_key.c|ed25519_pub_key.c|ed25519.c|rsa.c|lib" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
@@ -154,6 +155,8 @@
 									<listOptionValue builtIn="false" value="WOLFBOOT_VERSION=1"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_SIGN_ECC256"/>
 									<listOptionValue builtIn="false" value="BIG_ENDIAN_ORDER"/>
+									<listOptionValue builtIn="false" value="NVM_FLASH_WRITEONCE"/>
+									<listOptionValue builtIn="false" value="FLASHBUFFER_SIZE=32"/>
 									<listOptionValue builtIn="false" value="RAM_CODE=1"/>
 									<listOptionValue builtIn="false" value="CORTEX_R5"/>
 									<listOptionValue builtIn="false" value="__WOLFBOOT"/>

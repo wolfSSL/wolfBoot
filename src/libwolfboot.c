@@ -58,7 +58,9 @@
 #   define NULL (void *)0
 #endif
 
+#ifndef NVM_CACHE_SIZE
 #define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
+#endif
 
 #ifdef EXT_FLASH
 static uint32_t ext_cache;
@@ -97,15 +99,23 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
 
 int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
-    uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    uint32_t addr_align = addr & (~(NVM_CACHE_SIZE - 1));
+    uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
-    XMEMCPY(NVM_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
-    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    XMEMCPY(NVM_CACHE, (void *)addr_align, NVM_CACHE_SIZE);
+    ret = hal_flash_erase(addr_align, NVM_CACHE_SIZE);
     if (ret != 0)
         return ret;
     NVM_CACHE[addr_off] = val;
-    ret = hal_flash_write(addr_align, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
+#if FLASHBUFFER_SIZE != WOLFBOOT_SECTOR_SIZE
+    addr_off = 0;
+    while ((addr_off < WOLFBOOT_SECTOR_SIZE) && (ret == 0)) {
+        ret = hal_flash_write(addr_align + addr_off, NVM_CACHE + addr_off, FLASHBUFFER_SIZE);
+        addr_off += FLASHBUFFER_SIZE;
+    }
+#else
+    ret = hal_flash_write(addr_align, NVM_CACHE, NVM_CACHE_SIZE);
+#endif
     return ret;
 }
 
