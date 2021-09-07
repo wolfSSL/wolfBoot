@@ -39,8 +39,6 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <unistd.h>
-
-#include "target.h"
 #include "delta.h"
 
 #define MAX_SRC_SIZE (1 << 24)
@@ -448,8 +446,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                 if (read_sz > 32)
                     read_sz = 32;
                 io_sz = fread(buf, 1, read_sz, f);
-                if (io_sz != (int)read_sz) {
-                    ret = -1; break;
+                if ((io_sz < 0) && !feof(f)) {
+                    ret = -1;
+                    break;
                 }
                 ret = wc_Sha256Update(&sha, buf, read_sz);
                 pos += read_sz;
@@ -493,8 +492,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                 if (read_sz > 128)
                     read_sz = 128;
                 io_sz = fread(buf, 1, read_sz, f);
-                if (io_sz != (int)read_sz) {
-                    ret = -1; break;
+                if ((io_sz < 0) && !feof(f)) {
+                    ret = -1;
+                    break;
                 }
                 ret = wc_Sha3_384_Update(&sha, buf, read_sz);
                 pos += read_sz;
@@ -866,8 +866,8 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
         patch_inv_sz += r;
         len3 += r;
     } while (r > 0);
-    io_sz = ftruncate(fd3, len3);
-    if (io_sz != len3) {
+    ret = ftruncate(fd3, len3);
+    if (ret != 0) {
         goto cleanup;
     }
     close(fd3);
