@@ -2196,7 +2196,7 @@
             <name>$PROJ_DIR$\..\..\src\boot_arm.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\src\ecc256_pub_key.c</name>
+            <name>$PROJ_DIR$\keys\ecc256_pub_key.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\src\image.c</name>
@@ -2214,7 +2214,7 @@
             <name>$PROJ_DIR$\..\..\src\update_flash.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\src\xmalloc_ecc.c</name>
+            <name>$PROJ_DIR$\..\..\src\xmalloc.c</name>
         </file>
     </group>
 </project>
