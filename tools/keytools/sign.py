@@ -409,7 +409,7 @@ elif not sha_only and not manual_sign:
 
     if sign == 'ecc256':
         ecc = ciphers.EccPrivate()
-        ecc.decode_key_raw(wolfboot_key_buffer[0:31], wolfboot_key_buffer[32:63], wolfboot_key_buffer[64:])
+        ecc.decode_key_raw(wolfboot_key_buffer[0:32], wolfboot_key_buffer[32:64], wolfboot_key_buffer[64:])
         pubkey = wolfboot_key_buffer[0:64]
 
     if sign == 'rsa2048':
