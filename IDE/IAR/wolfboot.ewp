@@ -356,6 +356,7 @@
                     <state>$PROJ_DIR$\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\lib\wolfssl</state>
                     <state>$PROJ_DIR$\..\..</state>
+                    <state>$PROJ_DIR$</state>
                 </option>
                 <option>
                     <name>CCStdIncCheck</name>
@@ -2212,9 +2213,6 @@
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\src\update_flash.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\src\xmalloc.c</name>
         </file>
     </group>
 </project>
