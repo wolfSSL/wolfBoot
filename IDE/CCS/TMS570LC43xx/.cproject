@@ -46,6 +46,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.ti.ccstudio.buildDefinitions.TMS470_20.2.compilerID.DEFINE.847459773" name="Pre-define NAME (--define, -D)" superClass="com.ti.ccstudio.buildDefinitions.TMS470_20.2.compilerID.DEFINE" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="WOLFBOOT_VERSION=1"/>
+									<listOptionValue builtIn="false" value="PART_BOOT_ENDFLAGS=0x003C0000u"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_SIGN_ECC256"/>
 									<listOptionValue builtIn="false" value="BIG_ENDIAN_ORDER"/>
 									<listOptionValue builtIn="false" value="NVM_FLASH_WRITEONCE"/>
@@ -152,6 +153,7 @@
 								<option id="com.ti.ccstudio.buildDefinitions.TMS470_20.2.compilerID.DISPLAY_ERROR_NUMBER.1335449391" name="Emit diagnostic identifier numbers (--display_error_number, -pden)" superClass="com.ti.ccstudio.buildDefinitions.TMS470_20.2.compilerID.DISPLAY_ERROR_NUMBER" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.ti.ccstudio.buildDefinitions.TMS470_20.2.compilerID.DEFINE.850291989" name="Pre-define NAME (--define, -D)" superClass="com.ti.ccstudio.buildDefinitions.TMS470_20.2.compilerID.DEFINE" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="_INLINE"/>
+									<listOptionValue builtIn="false" value="PART_BOOT_ENDFLAGS=0x003C0000u"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_VERSION=1"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_SIGN_ECC256"/>
 									<listOptionValue builtIn="false" value="BIG_ENDIAN_ORDER"/>
