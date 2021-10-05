@@ -36,7 +36,7 @@
 #define WOLFBOOT_DELTA_H
 #include "target.h"
 
-#define DELTA_PATCH_BLOCK_SIZE 32
+#define DELTA_PATCH_BLOCK_SIZE 1024
 
 struct wb_patch_ctx {
     uint8_t *src_base;

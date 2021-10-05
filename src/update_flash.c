@@ -154,7 +154,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
 #ifdef DELTA_UPDATES
 
     #ifndef DELTA_BLOCK_SIZE
-    #   define DELTA_BLOCK_SIZE 256
+    #   define DELTA_BLOCK_SIZE 1024 
     #endif
 
 static int wolfBoot_delta_update(struct wolfBoot_image *boot,
@@ -169,7 +169,16 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint16_t ptr_len;
     uint32_t img_offset;
     uint16_t img_size;
+    uint32_t total_size;
+    WB_PATCH_CTX ctx;
 
+    /* Use biggest size for the swap */
+    total_size = boot->fw_size + IMAGE_HEADER_SIZE;
+    if ((update->fw_size + IMAGE_HEADER_SIZE) > total_size)
+            total_size = update->fw_size + IMAGE_HEADER_SIZE;
+
+    if (total_size <= IMAGE_HEADER_SIZE)
+        return -1;
 
     hal_flash_unlock();
 #ifdef EXT_FLASH
@@ -179,7 +188,6 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
-    WB_PATCH_CTX ctx;
     if (wolfBoot_get_delta_info(PART_UPDATE, inverse, &img_offset, &img_size) < 0) {
         return -1;
     }
@@ -201,7 +209,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     if (ret < 0)
         return ret;
 
-     while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
+     while((sector * WOLFBOOT_SECTOR_SIZE) < (int)total_size) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
             uint32_t len = 0;
             wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
@@ -237,9 +245,35 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
            if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
                wolfBoot_set_update_sector_flag(sector, flag);
         }
+#if 0
+        if (sector == 0) {
+            /* New total image size after first sector is patched */
+            volatile uint32_t update_size;
+            update_size =
+                wolfBoot_image_size((uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS)
+                + IMAGE_HEADER_SIZE;
+            if (update_size > total_size)
+                total_size = update_size;
+            if (total_size <= IMAGE_HEADER_SIZE) {
+                ret = -1;
+                goto out;
+            }
+            if (total_size > WOLFBOOT_PARTITION_SIZE) {
+                ret = -1;
+                goto out;
+            }
+
+        }
+#endif
         sector++;
     }
     ret = 0;
+    while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
+        hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS + 
+                sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
+        sector++;
+    }
+    //wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
     st = IMG_STATE_TESTING;
     wolfBoot_set_partition_state(PART_BOOT, st);
 out:
@@ -264,6 +298,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t sector = 0;
     uint8_t flag, st;
     struct wolfBoot_image boot, update, swap;
+    uint16_t update_type;
 #ifdef EXT_ENCRYPTED
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
@@ -282,17 +317,22 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     if (total_size <= IMAGE_HEADER_SIZE)
         return -1;
+    /* In case this is a new update, do the required
+     * checks on the firmware update
+     * before starting the swap
+     */
+
+    update_type = wolfBoot_get_image_type(PART_UPDATE);
+
+#ifdef DELTA_UPDATES
+    if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
+        return wolfBoot_delta_update(&boot, &update, &swap, fallback_allowed);
+    }
+#endif
 
     /* Check the first sector to detect interrupted update */
     if ((wolfBoot_get_update_sector_flag(0, &flag) < 0) || (flag == SECT_FLAG_NEW))
     {
-        uint16_t update_type;
-        /* In case this is a new update, do the required
-         * checks on the firmware update
-         * before starting the swap
-         */
-
-        update_type = wolfBoot_get_image_type(PART_UPDATE);
         if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) || ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
             return -1;
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
@@ -304,13 +344,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
             return -1;
 #endif
-#ifdef DELTA_UPDATES
-        if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
-            return wolfBoot_delta_update(&boot, &update, &swap, fallback_allowed);
-        }
-#endif
     }
-
 
     hal_flash_unlock();
 #ifdef EXT_FLASH
