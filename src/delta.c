@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "delta.h"
+#include "wolfboot/wolfboot.h"
 #include "image.h"
 
 
