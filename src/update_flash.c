@@ -153,9 +153,9 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
 
 #ifdef DELTA_UPDATES
 
-#ifndef DELTA_BLOCK_SIZE
-#define DELTA_BLOCK_SIZE 256
-#endif
+    #ifndef DELTA_BLOCK_SIZE
+    #   define DELTA_BLOCK_SIZE 256
+    #endif
 
 static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse)
@@ -167,6 +167,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
     uint32_t offset = 0;
     uint16_t ptr_len;
+    uint32_t img_offset;
+    uint16_t img_size;
 
 
     hal_flash_unlock();
@@ -178,36 +180,23 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
     WB_PATCH_CTX ctx;
-
+    if (wolfBoot_get_delta_info(PART_UPDATE, inverse, &img_offset, &img_size) < 0) {
+        return -1;
+    }
     if (inverse) {
         uint32_t cur_v, upd_v, delta_base_v;
-        uint32_t *inv_patch_off;
-        uint16_t *inv_patch_len;
         cur_v = wolfBoot_current_firmware_version();
         upd_v = wolfBoot_update_firmware_version();
         delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
         if ((cur_v == upd_v) && (delta_base_v < cur_v)) {
-            ptr_len = wolfBoot_find_header(update->hdr + IMAGE_HEADER_OFFSET,
-                    HDR_IMG_DELTA_INVERSE, (void *)&inv_patch_off);
-            if (ptr_len != sizeof(uint32_t))
-                return -1;
-            ptr_len = wolfBoot_find_header(update->hdr + IMAGE_HEADER_OFFSET,
-                    HDR_IMG_DELTA_INVERSE_SIZE, (void *)&inv_patch_len);
-            if (ptr_len != sizeof(uint16_t))
-                return -1;
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-                    update->hdr + *inv_patch_off, *inv_patch_len);
+                    update->hdr + img_offset, img_size);
         } else {
             ret = -1;
         }
     } else {
-        uint16_t *patch_len;
-        ptr_len = wolfBoot_find_header(update->hdr + IMAGE_HEADER_OFFSET,
-                HDR_IMG_DELTA_SIZE, (void *)&patch_len);
-        if (ptr_len != sizeof(uint16_t))
-            return -1;
         ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-                update->hdr + IMAGE_HEADER_SIZE, *patch_len);
+                update->hdr + IMAGE_HEADER_SIZE, img_size);
     }
     if (ret < 0)
         return ret;
