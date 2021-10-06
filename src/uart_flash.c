@@ -60,7 +60,7 @@ static int uart_rx_timeout(uint8_t *c)
     volatile int count = 0;
     while(++count < (WAIT_CYCLES * READ_TIMEOUT)) {
         if (uart_rx(c) == 1) /* Success */
-           return 0; 
+           return 0;
     }
     *c = 0x00;
     return -1;
@@ -155,7 +155,7 @@ void ext_flash_unlock(void)
 {
     wait_ack();
 }
-    
+
 void uart_send_current_version(void)
 {
     uint32_t version = wolfBoot_current_firmware_version();

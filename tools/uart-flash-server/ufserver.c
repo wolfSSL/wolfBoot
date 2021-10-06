@@ -55,6 +55,10 @@
 #define SWAP_SIZE 0x1000
 #define UART_BITRATE 115200
 
+/* Change the following to 1 to debug flash access */
+#define LOG_FLASH_ADDRESS 0
+
+
 const char msgSha[]         = "Verifying SHA digest...";
 const char msgReadUpdate[]  = "Fetching update blocks ";
 const char msgReadSwap[]    = "Reading SWAP blocks    ";
@@ -280,7 +284,9 @@ static void uart_flash_erase(uint8_t *base, int ud)
     } else {
         printmsg(msgEraseSwap);
     }
+#if LOG_FLASH_ADDRESS
     printf("Erase @%x\n", address);
+#endif
     for (i = 0; i < len; i++) {
         base[address + i] = 0xFF;
     }
@@ -307,7 +313,9 @@ static void uart_flash_read(uint8_t *base, int ud)
     } else {
         printmsg(msgReadSwap);
     }
+#if LOG_FLASH_ADDRESS
     printf("Read @%x\n", address);
+#endif
     if (address + len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
         return;
     for (i = 0; i < len; i++) {
@@ -330,7 +338,9 @@ static void uart_flash_write(uint8_t *base, int ud)
     } else {
         printmsg(msgWriteSwap);
     }
+#if LOG_FLASH_ADDRESS
     printf("Write @%x\n", address);
+#endif
     if (address + len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
         return;
     for (i = 0; i < len; i++) {
@@ -373,7 +383,7 @@ static void serve_update(uint8_t *base, const char *uart_dev)
            }
 
            v = buf[4] + (buf[3] << 8) + (buf[2] << 16) + (buf[1] << 24);
-           printf("Bootloader version from test app: %u\n", v);
+           printf("Boot partition version from test app: %u\n", v);
            continue;
        }
        if (buf[0] == CMD_HDR_VER) {

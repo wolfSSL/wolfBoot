@@ -1,7 +1,6 @@
 test-delta-update:SIGN_ARGS?=--ecc256
 test-delta-update:SIGN_DELTA_ARGS?=--ecc256 --encrypt /tmp/enc_key.der
 test-delta-update:USBTTY?=/dev/ttyACM0
-test-delta-update:TIMEOUT?=60
 test-delta-update:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 
 test-delta-update-ext:SIGN_ARGS?=--ecc256
@@ -26,23 +25,18 @@ test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserv
 	@st-flash write test-app/image_v7_signed_diff.bin 0x0802C000
 	@sleep 2
 	@st-flash reset
-	@sleep 20
-	@echo Expecting version '7'
-	@(test `$(EXPVER)` -eq 7)
-	@sleep 2
-	@st-flash reset
 	@echo Expecting version '7'
 	@(test `$(EXPVER)` -eq 7)
 	@sleep 2
 	@st-flash reset
 	@echo Expecting version '1'
 	@(test `$(EXPVER)` -eq 1)
-	@st-flash reset
 	@st-flash erase || st-flash erase
 	@st-flash write factory.bin 0x08000000
 	@echo Expecting version '1'
 	@(test `$(EXPVER)` -eq 1)
 	@sleep 1
+	@st-flash reset
 	@st-flash write test-app/image_v2_signed_diff.bin 0x0802C000
 	@st-flash reset
 	@echo Expecting version '2'
@@ -69,13 +63,30 @@ test-delta-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/uf
 	@sync
 	@echo Waiting $(TIMEOUT) seconds...
 	@sleep $(TIMEOUT)
-	@st-flash reset
-	@sleep 3
 	@killall ufserver
 	@st-flash reset
+	@sleep 3
 	@st-flash read boot_full.bin 0x0800C000 0x8000
 	@SIZE=`wc -c test-app/image_v7_signed.bin | cut -d" " -f 1`;  \
 		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
 	@diff boot.bin test-app/image_v7_signed.bin || (echo "TEST FAILED" && exit 1)
 	@rm boot.bin boot_full.bin
 	@echo "TEST SUCCESSFUL"
+	@sleep 1
+	@echo
+	@echo
+	@st-flash reset
+	@(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff.bin $(USBTTY))&
+	@echo TEST INVERSE
+	@sleep $(TIMEOUT)
+	@st-flash reset
+	@killall ufserver
+	@st-flash reset
+	@st-flash read boot_full.bin 0x0800C000 0x8000
+	@SIZE=`wc -c test-app/image_v1_signed.bin | cut -d" " -f 1`;  \
+		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
+	@diff boot.bin test-app/image_v1_signed.bin || (echo "TEST INVERSE FAILED" && exit 1)
+	@rm boot.bin boot_full.bin
+	@echo "TEST SUCCESSFUL"
+
+

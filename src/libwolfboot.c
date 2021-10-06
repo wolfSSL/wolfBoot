@@ -467,7 +467,7 @@ static inline uint16_t im2ns(uint16_t val)
 }
 
 #ifdef DELTA_UPDATES
-int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t *img_offset, uint16_t *img_size)
+int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset, uint16_t **img_size)
 {
     uint32_t *version_field = NULL;
     uint32_t *magic = NULL;
@@ -500,17 +500,17 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t *img_offset, uin
         return -1;
     if (inverse) {
         if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
-                    HDR_IMG_DELTA_INVERSE, (void *)img_offset) != sizeof(uint32_t)) {
+                    HDR_IMG_DELTA_INVERSE, (uint8_t **) img_offset) != sizeof(uint32_t)) {
             return -1;
         }
         if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
-                    HDR_IMG_DELTA_INVERSE_SIZE, (void *)img_size) != sizeof(uint16_t)) {
+                    HDR_IMG_DELTA_INVERSE_SIZE, (uint8_t **) img_size) != sizeof(uint16_t)) {
             return -1;
         }
     } else {
         *img_offset = 0x0000000;
         if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
-                    HDR_IMG_DELTA_SIZE, (void *)img_size) != sizeof(uint16_t)) {
+                    HDR_IMG_DELTA_SIZE, (uint8_t **)img_size) != sizeof(uint16_t)) {
             return -1;
         }
     }
