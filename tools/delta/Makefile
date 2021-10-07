@@ -1,5 +1,14 @@
 all: bmdiff bmpatch
 CFLAGS+=-Wall -Werror -Wextra
+
+ifeq ($(HASH),SHA3)
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
+  SIGN_OPTIONS+=--sha3
+else
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
+endif
+
 bmdiff: delta.o bmdiff.o
 	gcc -o bmdiff delta.o bmdiff.o
 

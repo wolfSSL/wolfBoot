@@ -40,12 +40,22 @@ struct BLOCK_HDR_PACKED block_hdr {
 
 #define BLOCK_HDR_SIZE (sizeof (struct block_hdr))
 
+#if defined(EXT_ENCRYPTED) && defined(__WOLFBOOT)
+#include "encrypt.h"
+#define ext_flash_check_write ext_flash_encrypt_write
+#define ext_flash_check_read ext_flash_decrypt_read
+#else
+#include "hal.h"
+#define ext_flash_check_write ext_flash_write
+#define ext_flash_check_read ext_flash_read
+#endif
+
 #ifndef WOLFBOOT_SECTOR_SIZE
 #   define WOLFBOOT_SECTOR_SIZE 0x1000
 #endif
 
-int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch, uint32_t psz)
-
+int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch,
+        uint32_t psz)
 {
     if (!bm || ssz == 0 || psz == 0) {
         return -1;
@@ -55,8 +65,42 @@ int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch, 
     bm->src_size = ssz;
     bm->patch_base = patch;
     bm->patch_size = psz;
+#ifdef EXT_FLASH
+    bm->patch_cache_start = 0xFFFFFFFF;
+#endif
     return 0;
 }
+
+#ifdef EXT_FLASH
+#define PATCH_CACHE_SIZE 256
+#define DELTA_SWAP_CACHE_SIZE 1024
+
+static inline uint8_t *patch_read_cache(WB_PATCH_CTX *ctx)
+{
+    if (ctx->patch_cache_start != 0xFFFFFFFF) {
+        if (ctx->patch_cache_start == ctx->p_off)
+            return ctx->patch_cache;
+
+        if (ctx->p_off < ctx->patch_cache_start +
+                (DELTA_PATCH_BLOCK_SIZE - BLOCK_HDR_SIZE))
+            return ctx->patch_cache + ctx->p_off;
+    }
+    ctx->patch_cache_start = ctx->p_off;
+    ext_flash_check_read(
+            (uintptr_t)(ctx->patch_base + ctx->p_off),
+            ctx->patch_cache, DELTA_PATCH_BLOCK_SIZE);
+    return ctx->patch_cache;
+}
+
+
+#else
+
+static inline uint8_t *patch_read_cache(WB_PATCH_CTX *ctx)
+{
+    return ctx->patch_base + ctx->p_off;
+}
+
+#endif
 
 int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
 {
@@ -71,7 +115,7 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
         return -1;
 
     while ( ( (ctx->matching != 0) || (ctx->p_off < ctx->patch_size)) && (dst_off < len)) {
-        uint8_t *pp = (ctx->patch_base + ctx->p_off);
+        uint8_t *pp = patch_read_cache(ctx);
         if (ctx->matching) {
             /* Resume matching block from previous sector */
             sz = ctx->blk_sz;
@@ -92,7 +136,7 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
         if (*pp == ESC) {
             if (*(pp + 1) == ESC) {
                 *(dst + dst_off) = ESC;
-                 /* Two bytes of the patch have been consumed to produce ESC */
+                /* Two bytes of the patch have been consumed to produce ESC */
                 ctx->p_off += 2;
                 dst_off++;
                 continue;
@@ -119,7 +163,7 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
                 dst_off += copy_sz;
             }
         } else {
-            *(dst + dst_off) = *(ctx->patch_base + ctx->p_off);
+            *(dst + dst_off) = *pp;
             dst_off++;
             ctx->p_off++;
         }

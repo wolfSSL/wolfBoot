@@ -466,6 +466,58 @@ static inline uint16_t im2ns(uint16_t val)
   return val;
 }
 
+#ifdef DELTA_UPDATES
+int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset, uint16_t **img_size)
+{
+    uint32_t *version_field = NULL;
+    uint32_t *magic = NULL;
+    uint8_t *image = (uint8_t *)0x00000000;
+    if(part == PART_UPDATE) {
+        if (PARTN_IS_EXT(PART_UPDATE))
+        {
+    #ifdef EXT_FLASH
+            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            hdr_cpy_done = 1;
+            image = hdr_cpy;
+    #endif
+        } else {
+            image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+        }
+    } else if (part == PART_BOOT) {
+        if (PARTN_IS_EXT(PART_BOOT)) {
+    #ifdef EXT_FLASH
+            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
+            hdr_cpy_done = 1;
+            image = hdr_cpy;
+    #endif
+        } else {
+            image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        }
+    }
+    /* Don't check image against NULL to allow using address 0x00000000 */
+    magic = (uint32_t *)image;
+    if (*magic != WOLFBOOT_MAGIC)
+        return -1;
+    if (inverse) {
+        if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
+                    HDR_IMG_DELTA_INVERSE, (uint8_t **) img_offset) != sizeof(uint32_t)) {
+            return -1;
+        }
+        if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
+                    HDR_IMG_DELTA_INVERSE_SIZE, (uint8_t **) img_size) != sizeof(uint16_t)) {
+            return -1;
+        }
+    } else {
+        *img_offset = 0x0000000;
+        if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
+                    HDR_IMG_DELTA_SIZE, (uint8_t **)img_size) != sizeof(uint16_t)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
     uint32_t *version_field = NULL;
@@ -479,6 +531,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
         return im2n(*version_field);
     return 0;
 }
+
 
 uint32_t wolfBoot_get_image_version(uint8_t part)
 {
