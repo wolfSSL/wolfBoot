@@ -21,8 +21,6 @@
 #include <stdint.h>
 #include <string.h>
 #include "delta.h"
-#include "wolfboot/wolfboot.h"
-#include "image.h"
 
 
 #define ESC 0x7f
@@ -41,6 +39,16 @@ struct BLOCK_HDR_PACKED block_hdr {
 };
 
 #define BLOCK_HDR_SIZE (sizeof (struct block_hdr))
+
+#if defined(EXT_ENCRYPTED) && defined(__WOLFBOOT)
+#include "encrypt.h"
+#define ext_flash_check_write ext_flash_encrypt_write
+#define ext_flash_check_read ext_flash_decrypt_read
+#else
+#include "hal.h"
+#define ext_flash_check_write ext_flash_write
+#define ext_flash_check_read ext_flash_read
+#endif
 
 #ifndef WOLFBOOT_SECTOR_SIZE
 #   define WOLFBOOT_SECTOR_SIZE 0x1000
