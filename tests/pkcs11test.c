@@ -1,6 +1,6 @@
 /* pkcs11test.c - unit tests
  *
- * Copyright (C) 2006-2018 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -19,7 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifndef HAVE_PKCS11_STATIC
 #include <dlfcn.h>
+#endif
+
+#ifdef HAVE_CONFIG_H
+    #include <wolfpkcs11/config.h>
+#endif
 
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/misc.h>
@@ -48,7 +54,9 @@
     PKCS11TEST_CASE(func, TEST_FLAG_INIT | TEST_FLAG_TOKEN | TEST_FLAG_SESSION)
 
 
+#ifndef HAVE_PKCS11_STATIC
 static void* dlib;
+#endif
 static CK_FUNCTION_LIST* funcList;
 static int slot = 0;
 const char* tokenName = "wolfpkcs11";
@@ -6876,8 +6884,11 @@ static CK_RV pkcs11_init_token()
 static void pkcs11_final(int closeDl)
 {
     funcList->C_Finalize(NULL);
-    if (closeDl)
+    if (closeDl) {
+    #ifndef HAVE_PKCS11_STATIC
         dlclose(dlib);
+    #endif
+    }
 }
 
 static CK_RV pkcs11_set_user_pin(int slotId)
@@ -7126,6 +7137,7 @@ static CK_RV pkcs11_test(int slotId, int setPin, int onlySet, int closeDl)
 static CK_RV pkcs11_init(const char* library)
 {
     CK_RV ret = CKR_OK;
+#ifndef HAVE_PKCS11_STATIC
     void* func;
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
@@ -7150,6 +7162,11 @@ static CK_RV pkcs11_init(const char* library)
     if (ret != CKR_OK && dlib != NULL)
         dlclose(dlib);
 
+#else
+    ret = C_GetFunctionList(&funcList);
+    (void)library;
+#endif
+
     return ret;
 }
 
@@ -7173,8 +7190,8 @@ int main(int argc, char* argv[])
 {
     int ret;
     CK_RV rv;
-    int slotId = 1;
-    const char* libName = "./src/.libs/libwolfpkcs11.so";
+    int slotId = WOLFPKCS11_DLL_SLOT;
+    const char* libName = WOLFPKCS11_DLL_FILENAME;
     int setPin = 1;
     int testCase;
     int onlySet = 0;

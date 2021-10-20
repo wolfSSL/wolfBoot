@@ -1,6 +1,6 @@
 /* testdata.h
  *
- * Copyright (C) 2006-2018 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -18,6 +18,19 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
+/* DLL Location and slot */
+#ifndef WOLFPKCS11_DLL_FILENAME
+    #ifdef __MACH__
+    #define WOLFPKCS11_DLL_FILENAME "./src/.libs/libwolfpkcs11.dylib"
+    #else
+    #define WOLFPKCS11_DLL_FILENAME "./src/.libs/libwolfpkcs11.so"
+    #endif
+#endif
+#ifndef WOLFPKCS11_DLL_SLOT
+    #define WOLFPKCS11_DLL_SLOT 1
+#endif
+
 
 #ifndef NO_RSA
 static unsigned char rsa_2048_modulus[] = {

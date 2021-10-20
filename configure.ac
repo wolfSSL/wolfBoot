@@ -315,6 +315,14 @@ else
     DISABLE_DEFS="$DISABLE_DEFS -DWOLFSSL_SHA512"
 fi
 
+if test "$enable_shared" = "no"; then
+    AM_CFLAGS="$AM_CFLAGS -DHAVE_PKCS11_STATIC"
+fi
+
+AM_CONDITIONAL([BUILD_STATIC],[test "x$enable_shared" = "xno"])
+
+
+
 # HARDEN FLAGS
 AX_HARDEN_CC_COMPILER_FLAGS
 
@@ -354,7 +362,7 @@ rm -f $OPTION_FILE
 echo "/* wolfpkcs11 options.h" > $OPTION_FILE
 echo " * generated from configure options" >> $OPTION_FILE
 echo " *" >> $OPTION_FILE
-echo " * Copyright (C) 2006-2018 wolfSSL Inc." >> $OPTION_FILE
+echo " * Copyright (C) 2006-2021 wolfSSL Inc." >> $OPTION_FILE
 echo " *" >> $OPTION_FILE
 echo " * * This file is part of wolfPKCS11." >> $OPTION_FILE
 echo " *" >> $OPTION_FILE

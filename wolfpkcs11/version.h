@@ -1,6 +1,6 @@
 /* wolfpkcs11_version.h.in
  *
- * Copyright (C) 2006-2017 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *

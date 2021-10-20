@@ -37,6 +37,6 @@ make
 
 ## Release Notes
 
-### wolfPKCS11 Release 1.0 (mm/dd/2018)
+### wolfPKCS11 Release 1.0 (10/20/2021)
 
 

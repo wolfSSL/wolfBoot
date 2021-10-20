@@ -1,6 +1,6 @@
 /* crypto.c
  *
- * Copyright (C) 2006-2018 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *

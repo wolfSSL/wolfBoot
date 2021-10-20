@@ -13,3 +13,7 @@ tests_pkcs11mtt_SOURCES = tests/pkcs11mtt.c
 
 tests_pkcs11mtt_LDADD = -lwolfssl -ldl -lm
 
+if BUILD_STATIC
+tests_pkcs11test_LDADD +=src/libwolfpkcs11.la
+tests_pkcs11mtt_LDADD += src/libwolfpkcs11.la
+endif

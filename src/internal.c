@@ -1,6 +1,6 @@
 /* internal.c
  *
- * Copyright (C) 2006-2018 wolfSSL Inc.
+ * Copyright (C) 2006-2021 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -26,6 +26,10 @@
 #include <wolfssl/wolfcrypt/hmac.h>
 
 #include <wolfpkcs11/internal.h>
+
+#ifndef HAVE_SCRYPT
+    #error PKCS11 requires scrypt. Please build wolfssl with `./configure --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP"`
+#endif
 
 /* Size of hash calculated from PIN. */
 #define PIN_HASH_SZ                    32
