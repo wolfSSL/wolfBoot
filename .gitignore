@@ -1,52 +1,37 @@
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
+.metadata
+language.settings.xml
+wolfpkcs11/config.h.in
+autom4te.cache
+build-aux
+aclocal.m4
+libtool.m4
+lt*.m4
+configure
+Makefile.in
+aminclude.am
+config.*
+libtool
+Makefile
+wolftpm-config
+.dirstamp
 *.la
 *.lo
+stamp-h1
+test-suite.log
+src/.deps
+src/.libs
+RemoteSystemsTempFiles
+*.o
+*.deps
+*.libs
+wolfpkcs11/options.h
+wolfpkcs11-config
+*.log
+*.trs
+coverage
+coverage.info
+tests/pkcs11test
+tests/pkcs11mtt
+*.gcda
+*.gcno
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf

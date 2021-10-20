@@ -1,0 +1,18 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+
+lib_LTLIBRARIES+=  src/libwolfpkcs11.la
+src_libwolfpkcs11_la_SOURCES = \
+        src/internal.c \
+        src/wolfpkcs11.c \
+        src/slot.c \
+        src/crypto.c
+
+src_libwolfpkcs11_la_CFLAGS       = -DBUILDING_WOLFPKCS11 $(AM_CFLAGS)
+src_libwolfpkcs11_la_CPPFLAGS     = -DBUILDING_WOLFPKCS11 $(AM_CPPFLAGS)
+src_libwolfpkcs11_la_LDFLAGS      = ${AM_LDFLAGS} -no-undefined -version-info ${WOLFPKCS11_LIBRARY_VERSION} 
+
+#src_libwolfpkcs11_la_DEPENDENCIES =
+#EXTRA_DIST +=
