@@ -4205,17 +4205,29 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
 {
     int ret;
     ecc_key pubKey;
+#ifdef ECC_TIMING_RESISTANT
+    WC_RNG rng;
+#endif
 
     ret = wc_ecc_init_ex(&pubKey, NULL, INVALID_DEVID);
     if (ret == 0) {
         ret = wc_ecc_import_x963(point, pointLen, &pubKey);
     }
+#ifdef ECC_TIMING_RESISTANT
+    if (ret == 0) {
+        ret = Rng_New(&priv->slot->token.rng, &priv->slot->token.rngLock, &rng);
+        wc_ecc_set_rng(&priv->data.ecKey, &rng);
+    }
+#endif
     if (ret == 0) {
         if (priv->onToken)
             WP11_Lock_LockRO(priv->lock);
         ret = wc_ecc_shared_secret(&priv->data.ecKey, &pubKey, key, &keyLen);
         if (priv->onToken)
             WP11_Lock_UnlockRO(priv->lock);
+#ifdef ECC_TIMING_RESISTANT
+        Rng_Free(&rng);
+#endif
     }
 
     wc_ecc_free(&pubKey);
@@ -4247,6 +4259,8 @@ int WP11_Dh_GenerateKeyPair(WP11_Object* pub, WP11_Object* priv,
     if (ret == 0) {
         ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
         if (ret == 0) {
+            priv->data.dhKey.len = (word32)sizeof(priv->data.dhKey.key);
+            pub->data.dhKey.len = (word32)sizeof(pub->data.dhKey.key);
             ret = wc_DhGenerateKeyPair(&pub->data.dhKey.params, &rng,
                                     priv->data.dhKey.key, &priv->data.dhKey.len,
                                     pub->data.dhKey.key, &pub->data.dhKey.len);
