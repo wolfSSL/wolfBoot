@@ -61,30 +61,35 @@
 #define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) //RM0444 - 5.4.15 - RCC_APBENR2 - SYSCFGEN
 
 #define FLASH_BASE          (0x40022000)  /*FLASH_R_BASE = 0x40000000UL + 0x00020000UL + 0x00002000UL */
-#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) //RM0444 - 3.7.1 - FLASH_ACR
-#define FLASH_KEY           (*(volatile uint32_t *)(FLASH_BASE + 0x08)) //RM0444 - 3.7.2 - FLASH_KEYR
-#define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) //RM0444 - 3.7.4 - FLASH_SR
-#define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x14)) //RM0444 - 3.7.5 - FLASH_CR
+#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) /* RM0444 - 3.7.1 - FLASH_ACR */
+#define FLASH_KEY           (*(volatile uint32_t *)(FLASH_BASE + 0x08)) /* RM0444 - 3.7.2 - FLASH_KEYR */
+#define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0444 - 3.7.4 - FLASH_SR */
+#define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x14)) /* RM0444 - 3.7.5 - FLASH_CR */
+#define FLASH_SECR          (*(volatile uint32_t *)(FLASH_BASE + 0x80)) /* RM0444 - 3.7.12 - FLASH_SECR */
 
 #define FLASHMEM_ADDRESS_SPACE (0x08000000)
 #define FLASH_PAGE_SIZE     (0x800) /* 2KB */
 
 /* Register values */
-#define FLASH_SR_BSY1                         (1 << 16) //RM0444 - 3.7.4 - FLASH_SR
-#define FLASH_SR_SIZERR                       (1 << 6)  //RM0444 - 3.7.4 - FLASH_SR
-#define FLASH_SR_PGAERR                       (1 << 5) //RM0444 - 3.7.4 - FLASH_SR
-#define FLASH_SR_WRPERR                       (1 << 4) //RM0444 - 3.7.4 - FLASH_SR
+#define FLASH_SR_BSY1                         (1 << 16) /* RM0444 - 3.7.4 - FLASH_SR */
+#define FLASH_SR_SIZERR                       (1 << 6)  /* RM0444 - 3.7.4 - FLASH_SR */
+#define FLASH_SR_PGAERR                       (1 << 5)  /* RM0444 - 3.7.4 - FLASH_SR */
+#define FLASH_SR_WRPERR                       (1 << 4)  /* RM0444 - 3.7.4 - FLASH_SR */
 #define FLASH_SR_PROGERR                      (1 << 3)
-#define FLASH_SR_EOP                          (1 << 0) //RM0444 - 3.7.4 - FLASH_SR
+#define FLASH_SR_EOP                          (1 << 0)  /* RM0444 - 3.7.4 - FLASH_SR */
 
-#define FLASH_CR_LOCK                         (1 << 31) //RM0444 - 3.7.5 - FLASH_CR
-#define FLASH_CR_STRT                         (1 << 16) //RM0444 - 3.7.5 - FLASH_CR
+#define FLASH_CR_LOCK                         (1 << 31) /* RM0444 - 3.7.5 - FLASH_CR */
+#define FLASH_CR_STRT                         (1 << 16) /* RM0444 - 3.7.5 - FLASH_CR */
 
-#define FLASH_CR_PER                          (1 << 1) //RM0444 - 3.7.5 - FLASH_CR
-#define FLASH_CR_PG                           (1 << 0) //RM0444 - 3.7.5 - FLASH_CR
+#define FLASH_CR_PER                          (1 << 1)  /* RM0444 - 3.7.5 - FLASH_CR */
+#define FLASH_CR_PG                           (1 << 0)  /* RM0444 - 3.7.5 - FLASH_CR */
+#define FLASH_CR_SEC_PROT                     (1 << 28) /* RM0444 - 3.7.5 - FLASH_CR */
 
-#define FLASH_CR_PNB_SHIFT                     3     //RM0444 - 3.7.5 - FLASH_CR - PNB bits 8:3
-#define FLASH_CR_PNB_MASK                      0x3f   //RM0444 - 3.7.5 - FLASH_CR  - PNB bits 8:3 - 6 bits
+#define FLASH_CR_PNB_SHIFT                     3        /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 8:3 */
+#define FLASH_CR_PNB_MASK                      0x3f     /* RM0444 - 3.7.5 - FLASH_CR  - PNB bits 8:3 - 6 bits */
+
+#define FLASH_SECR_SEC_SIZE_POS               (0U)
+#define FLASH_SECR_SEC_SIZE_MASK              (0xFF)
 
 #define FLASH_KEY1                            (0x45670123)
 #define FLASH_KEY2                            (0xCDEF89AB)
@@ -255,7 +260,6 @@ static void clock_pll_on(int powersave)
     reg32 |= ((pllm - 1) << 4);
     reg32 |= plln << 8;
     reg32 |= ((pllp - 1) << 17);
-//    reg32 |= ((pllq - 1) << 25); /* ? - Not in in RM0464 for STM32G0x0 */
     reg32 |= ((pllr - 1) << 29);
     RCC_PLLCFGR = reg32;
 
@@ -284,11 +288,29 @@ void hal_init(void)
     clock_pll_on(0);
 }
 
-void hal_prepare_boot(void)
+static void RAMFUNCTION hal_secure_boot(void)
+{
+#ifdef FLASH_SECURABLE_MEMORY_SUPPORT
+    uint32_t reg = FLASH_SECR;
+    uint32_t sec_size = (reg & FLASH_SECR_SEC_SIZE_MASK);
+
+    /* these are programmed values via CubeProgrammer */
+    if (sec_size > (WOLFBOOT_PARTITION_BOOT_ADDRESS / WOLFBOOT_SECTOR_SIZE)) {
+        /* panic: invalid sector size */
+        while(1)
+            ;
+    }
+
+    /* Activate secure user memory */
+    FLASH_CR |= FLASH_CR_SEC_PROT;
+#endif
+}
+
+void RAMFUNCTION hal_prepare_boot(void)
 {
 #ifdef SPI_FLASH
     spi_release();
 #endif
     clock_pll_off();
+    hal_secure_boot();
 }
-
