@@ -233,12 +233,12 @@ Example 128KB partitioning on STM32-G070:
 
 - Sector size: 2KB
 - Wolfboot partition size: 32KB
-- Application partition size: 45 KB
+- Application partition size: 44 KB
 
 ```C
 #define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
 #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x8000
-#define WOLFBOOT_PARTITION_SIZE              0xB000 /* 45 KB */
+#define WOLFBOOT_PARTITION_SIZE              0xB000  /* 44 KB */
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x13000
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x1E000
 ```
