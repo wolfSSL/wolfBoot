@@ -251,3 +251,14 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * New HAL: TI TMS570LC435
    * STM32H7: Correct BANK2 offset
 
+### V1.9 (2021-11-09)
+ * Delta/incremental updates
+ * Fixes for key tools
+ * Updates IAR IDE project
+ * Documentation updates and fixes
+   * API function names to match code
+   * STM32L5 updates
+ * Hardware support
+   * New HAL: STM32L4
+   * TMS570LC43xx: Use `NVM_FLASH_WRITEONCE` for update progress and
+                   fix stack pointer initialization
