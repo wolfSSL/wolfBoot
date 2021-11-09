@@ -63,10 +63,10 @@ struct xmalloc_slot {
         #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 8)
         #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 5)
     #else
-        #define MP_POINT_SIZE (244)
-        #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 10)
-        #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (3 * 10 + 1))
-        #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 10 * 5))
+        #define MP_POINT_SIZE (220)
+        #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 9)
+        #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 9 + 3))
+        #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 5))
     #endif
     #ifndef WC_NO_CACHE_RESISTANT
     static uint8_t mp_points_3[MP_POINT_SIZE];
@@ -175,16 +175,16 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 64 * 5)
         #else
-            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 90 * 5)
-            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (90 * 4 + 3))
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 72 * 5)
+            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (72 * 4 + 3))
             static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
         #endif
     #else
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 128 * 5)
         #else
-            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 196 * 5)
-            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (196 * 4 + 3))
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 142 * 5)
+            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (142 * 4 + 3))
             static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
         #endif
     #endif
