@@ -30,13 +30,15 @@
 
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
+#define ISB() __asm__ volatile ("isb")
+#define DSB() __asm__ volatile ("dsb")
+
 
 /*** RCC ***/
-
 #define RCC_BASE (0x40021000)
-#define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  //RM0444 - 5.4.1
-#define RCC_PLLCFGR         (*(volatile uint32_t *)(RCC_BASE + 0x0C))  //RM0444 - 5.4.4
-#define RCC_CFGR            (*(volatile uint32_t *)(RCC_BASE + 0x08))  //RM0444 - 5.4.3
+#define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0444 - 5.4.1 */
+#define RCC_PLLCFGR         (*(volatile uint32_t *)(RCC_BASE + 0x0C))  /* RM0444 - 5.4.4 */
+#define RCC_CFGR            (*(volatile uint32_t *)(RCC_BASE + 0x08))  /* RM0444 - 5.4.3 */
 #define APB1_CLOCK_ER       (*(volatile uint32_t *)(RCC_BASE + 0x3C))
 #define APB2_CLOCK_ER       (*(volatile uint32_t *)(RCC_BASE + 0x40))
 
@@ -48,7 +50,7 @@
 
 #define RCC_CFGR_SW_HSISYS          0x0
 #define RCC_CFGR_SW_PLL             0x2
-#define RCC_PLLCFGR_PLLR_EN       (1 << 28) //RM0444 - 5.4.3
+#define RCC_PLLCFGR_PLLR_EN       (1 << 28) /* RM0444 - 5.4.3 */
 
 #define RCC_PLLCFGR_PLLSRC_HSI16  2
 
@@ -58,7 +60,7 @@
 
 /*** FLASH ***/
 #define PWR_APB1_CLOCK_ER_VAL       (1 << 28)
-#define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) //RM0444 - 5.4.15 - RCC_APBENR2 - SYSCFGEN
+#define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) /* RM0444 - 5.4.15 - RCC_APBENR2 - SYSCFGEN */
 
 #define FLASH_BASE          (0x40022000)  /*FLASH_R_BASE = 0x40000000UL + 0x00020000UL + 0x00002000UL */
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) /* RM0444 - 3.7.1 - FLASH_ACR */
@@ -246,12 +248,12 @@ static void clock_pll_on(int powersave)
      * Set prescalers for AHB, ADC, ABP1, ABP2.
      */
     reg32 = RCC_CFGR;
-    reg32 &= ~(0xF0); //don't change bits [0-3] that were previously set
-    RCC_CFGR = (reg32 | (hpre << 8)); //RM0444 - 5.4.3 - RCC_CFGR
+    reg32 &= ~(0xF0); /* don't change bits [0-3] that were previously set */
+    RCC_CFGR = (reg32 | (hpre << 8)); /* RM0444 - 5.4.3 - RCC_CFGR */
     DMB();
     reg32 = RCC_CFGR;
-    reg32 &= ~(0x1C00); //don't change bits [0-14]
-    RCC_CFGR = (reg32 | (ppre << 12));  //RM0444 - 5.4.3 - RCC_CFGR
+    reg32 &= ~(0x1C00); /* don't change bits [0-14] */
+    RCC_CFGR = (reg32 | (ppre << 12));  /* RM0444 - 5.4.3 - RCC_CFGR */
     DMB();
 
     /* Set PLL config */
@@ -291,10 +293,9 @@ void hal_init(void)
 static void RAMFUNCTION hal_secure_boot(void)
 {
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT
-    uint32_t reg = FLASH_SECR;
-    uint32_t sec_size = (reg & FLASH_SECR_SEC_SIZE_MASK);
+    uint32_t sec_size = (FLASH_SECR & FLASH_SECR_SEC_SIZE_MASK);
 
-    /* The "SEC_SIZE" is the number of pages to extend from base 0x8000000 
+    /* The "SEC_SIZE" is the number of pages (2KB) to extend from base 0x8000000 
      * and it is programmed using the STM32CubeProgrammer option bytes.
      * Example: STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE= 
      */
@@ -304,8 +305,18 @@ static void RAMFUNCTION hal_secure_boot(void)
             ;
     }
 
+    /* unlock flash to access FLASH_CR write */
+    hal_flash_unlock();
+
+    ISB();
+
     /* Activate secure user memory */
-    FLASH_CR |= FLASH_CR_SEC_PROT;
+    /* secure code to make sure SEC_PROT gets set (based on reference code) */
+    do {
+        FLASH_CR |= FLASH_CR_SEC_PROT;
+    } while ((FLASH_CR & FLASH_CR_SEC_PROT) == 0);
+
+    DSB();
 #endif
 }
 
