@@ -262,6 +262,8 @@ number of 2KB pages to block access to from the 0x8000000 base address.
 STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
 ```
 
+For RAMFUNCTION support (required for SEC_PROT) make sure `RAM_CODE=1`.
+
 Compile requirements:
 `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
 

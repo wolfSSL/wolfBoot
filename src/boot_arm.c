@@ -159,7 +159,7 @@ static void mpu_init(void)
     mpu_on();
 }
 
-static void mpu_off(void)
+static void RAMFUNCTION mpu_off(void)
 {
     mpu_is_on = 0;
     MPU_CTRL = 0;
