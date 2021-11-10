@@ -294,7 +294,10 @@ static void RAMFUNCTION hal_secure_boot(void)
     uint32_t reg = FLASH_SECR;
     uint32_t sec_size = (reg & FLASH_SECR_SEC_SIZE_MASK);
 
-    /* these are programmed values via CubeProgrammer */
+    /* The "SEC_SIZE" is the number of pages to extend from base 0x8000000 
+     * and it is programmed using the STM32CubeProgrammer option bytes.
+     * Example: STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE= 
+     */
     if (sec_size > (WOLFBOOT_PARTITION_BOOT_ADDRESS / WOLFBOOT_SECTOR_SIZE)) {
         /* panic: invalid sector size */
         while(1)

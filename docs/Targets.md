@@ -237,10 +237,10 @@ Example 128KB partitioning on STM32-G070:
 
 ```C
 #define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x8000
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08008000
 #define WOLFBOOT_PARTITION_SIZE              0xB000  /* 44 KB */
-#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x13000
-#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x1E000
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08013000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x0801E000
 ```
 
 ### Building STM32G0
@@ -253,6 +253,14 @@ The TARGET for this is `stm32g0`: `make TARGET=stm32g0`.
 The option `CORTEX_M0` is automatically selected for this target.
 The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
 multiple writes after each erase operation.
+
+This target also supports secure memory protection on the bootloader region 
+using the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the 
+number of 2KB pages to block access to from the 0x8000000 base address.
+
+```
+STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
+```
 
 Compile requirements:
 `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
