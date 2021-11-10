@@ -99,7 +99,7 @@ int main(int argc, const char* argv[]) {
         entries[i].address = strtol(argv[2*i + 2], &endptr, 0);
         if (*endptr) {
             fprintf(stderr,
-                    "Remaining characters in adderss field %s\n", endptr);
+                    "Remaining characters in address field %s\n", endptr);
         }
         entries[i].fname = argv[2*i + 3];
 
