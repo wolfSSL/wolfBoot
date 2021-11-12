@@ -295,15 +295,22 @@ static void RAMFUNCTION hal_secure_boot(void)
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT
     uint32_t sec_size = (FLASH_SECR & FLASH_SECR_SEC_SIZE_MASK);
 
-    /* The "SEC_SIZE" is the number of pages (2KB) to extend from base 0x8000000 
+    /* The "SEC_SIZE" is the number of pages (2KB) to extend from base 0x8000000
      * and it is programmed using the STM32CubeProgrammer option bytes.
-     * Example: STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE= 
-     */
-    if (sec_size > (WOLFBOOT_PARTITION_BOOT_ADDRESS / WOLFBOOT_SECTOR_SIZE)) {
+     * Example: STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=  */
+#ifndef NO_FLASH_SEC_SIZE_CHECK
+    /* Make sure at least the first sector is protected and the size is not
+     * larger than boot partition */
+    if (sec_size <= 1 ||
+        sec_size > (WOLFBOOT_PARTITION_BOOT_ADDRESS / WOLFBOOT_SECTOR_SIZE)) {
         /* panic: invalid sector size */
         while(1)
             ;
     }
+#endif
+
+    /* TODO: Add checks for WRP, RDP and BootLock. Add warning to help lock down
+     *       target in production */
 
     /* unlock flash to access FLASH_CR write */
     hal_flash_unlock();
