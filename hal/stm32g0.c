@@ -112,7 +112,8 @@ static RAMFUNCTION void flash_wait_complete(void)
 
 static void RAMFUNCTION flash_clear_errors(void)
 {
-    FLASH_SR |= ( FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR |  FLASH_SR_PROGERR);
+    FLASH_SR |= (FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR |
+                 FLASH_SR_PROGERR);
 }
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
@@ -124,7 +125,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     while (i < len) {
         flash_clear_errors();
-        if ((len - i > 3) && ((((address + i) & 0x07) == 0)  && ((((uint32_t)data) + i) & 0x07) == 0)) {
+        if ((len - i > 3) && ((((address + i) & 0x07) == 0) &&
+                ((((uint32_t)data) + i) & 0x07) == 0)) {
             src = (uint32_t *)data;
             dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
             flash_wait_complete();
@@ -198,7 +200,7 @@ static void clock_pll_off(void)
 {
     uint32_t reg32;
 
-   /* Select HSISYS as SYSCLK source. */
+    /* Select HSISYS as SYSCLK source. */
     reg32 = RCC_CFGR;
     reg32 &= ~((1 << 1) | (1 << 0));
     RCC_CFGR = (reg32 | RCC_CFGR_SW_HSISYS);
@@ -208,7 +210,8 @@ static void clock_pll_off(void)
     DMB();
 }
 
-/*This implementation will setup HSI RC 16 MHz as PLL Source Mux, PLLCLK as System Clock Source*/
+/* This implementation will setup HSI RC 16 MHz as PLL Source Mux, PLLCLK as
+ * System Clock Source */
 static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
@@ -244,9 +247,7 @@ static void clock_pll_on(int powersave)
     /* Disable PLL */
     RCC_CR &= ~RCC_CR_PLLON;
 
-    /*
-     * Set prescalers for AHB, ADC, ABP1, ABP2.
-     */
+    /* Set prescalers for AHB, ADC, ABP1, ABP2. */
     reg32 = RCC_CFGR;
     reg32 &= ~(0xF0); /* don't change bits [0-3] that were previously set */
     RCC_CFGR = (reg32 | (hpre << 8)); /* RM0444 - 5.4.3 - RCC_CFGR */
