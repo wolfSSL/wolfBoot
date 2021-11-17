@@ -68,7 +68,7 @@ void RAMFUNCTION wolfBoot_start(void)
     /* First time we boot this update, set to TESTING to await
      * confirmation from the system
      */
-    if ((wolfBoot_get_partition_state(active, &p_state) == 0) &&
+    if ((active == PART_BOOT) && (wolfBoot_get_partition_state(active, &p_state) == 0) &&
         (p_state == IMG_STATE_UPDATING))
     {
         hal_flash_unlock();
@@ -77,9 +77,21 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 
     /* Booting from update is possible via HW-assisted swap */
-    if (active == PART_UPDATE)
+    if (active == PART_UPDATE) {
         hal_flash_dualbank_swap();
-
+        /* On some platform, e.g. STM32L5, hal_flash_dualbank_swap
+         * never returns. A reboot is triggered instead, so the code
+         * below is only executed if we are staging the firmware.
+         */
+        active = PART_BOOT;
+        if ((wolfBoot_get_partition_state(active, &p_state) == 0) &&
+                (p_state == IMG_STATE_UPDATING))
+        {
+            hal_flash_unlock();
+            wolfBoot_set_partition_state(active, IMG_STATE_TESTING);
+            hal_flash_lock();
+        }
+    }
     hal_prepare_boot();
     do_boot((void *)WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE);
 }
