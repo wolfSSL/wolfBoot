@@ -642,6 +642,17 @@ static void gtzc_init(void)
 
 #define OPTR_SWAP_BANK (1 << 20)
 
+#define AIRCR *(volatile uint32_t *)(0xE000ED0C)
+#define AIRCR_VKEY (0x05FA << 16)
+#define AIRCR_SYSRESETREQ (1 << 2)
+
+static void RAMFUNCTION stm32l5_reboot(void)
+{
+    AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
+    while(1)
+        ;
+
+}
 
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
@@ -655,6 +666,7 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
         FLASH_OPTR |= FLASH_OPTR_SWAP_BANK;
     hal_flash_opt_lock();
     hal_flash_lock();
+    stm32l5_reboot();
 }
 
 static void led_unsecure()
