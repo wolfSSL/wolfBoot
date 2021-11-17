@@ -2635,7 +2635,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
     byte wrappedKey[32], wrappingKeyData[32], keyData[32];
     CK_ULONG wrappedKeyLen;
     CK_ATTRIBUTE tmpl[] = {
-      {CKA_VALUE, NULL_PTR, 0}
+      {CKA_VALUE, CK_NULL_PTR, 0}
     };
     CK_ULONG     tmplCnt = sizeof(tmpl) / sizeof(*tmpl);
 
@@ -4132,7 +4132,7 @@ static CK_RV extract_secret(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key,
 {
     CK_RV ret = CKR_OK;
     CK_ATTRIBUTE tmpl[] = {
-      {CKA_VALUE, NULL_PTR, 0}
+      {CKA_VALUE, CK_NULL_PTR, 0}
     };
     CK_ULONG     tmplCnt = sizeof(tmpl) / sizeof(*tmpl);
 
