@@ -293,6 +293,18 @@ ifeq ($(USE_GCC),1)
   OUTPUT_FLAG=-o
 endif
 
+
+ifeq ($(TARGET),x86_64_efi)
+	CFLAGS += -fpic -ffreestanding -fno-stack-protector -fno-stack-check \
+	          -fshort-wchar -mno-red-zone -maccumulate-outgoing-args
+	CFLAGS += -I/usr/include/efi -DPLATFORM_X86_64_EFI
+	LDFLAGS = -shared -Bsymbolic -L/usr/lib -Thal/x86_64_efi.ld
+	LD_START_GROUP = $(EFI_CRT0)
+	LD_END_GROUP = -lgnuefi -lefi
+	LD=ld
+	UPDATE_OBJS:=src/update_ram.o
+endif
+
 BOOT_IMG?=test-app/image.bin
 
 ## Update mechanism
