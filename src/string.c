@@ -51,7 +51,7 @@ int isalpha(int c)
     return (isupper(c) || islower(c));
 }
 
-#ifndef __IAR_SYSTEMS_ICC__
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
 	unsigned char *d = (unsigned char *)s;
@@ -168,7 +168,7 @@ int strncmp(const char *s1, const char *s2, size_t n)
     return diff;
 }
 
-#ifndef __IAR_SYSTEMS_ICC__
+#if  !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
 void *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;

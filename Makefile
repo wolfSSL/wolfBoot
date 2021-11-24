@@ -39,10 +39,12 @@ CFLAGS+= \
   -D"PLATFORM_$(TARGET)"
 
 # Setup default optimizations (for GCC)
-ifeq ($(USE_GCC),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
-  CFLAGS+=-ffunction-sections -fdata-sections
-  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+ifneq ($(TARGET),x86_64_efi)
+  ifeq ($(USE_GCC),1)
+    CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
+    CFLAGS+=-ffunction-sections -fdata-sections
+    LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+  endif
 endif
 
 MAIN_TARGET=factory.bin
@@ -52,11 +54,26 @@ ifeq ($(TARGET),stm32l5)
 	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),x86_64_efi)
+	MAIN_TARGET:=wolfboot.efi
+endif
+
 ASFLAGS:=$(CFLAGS)
 
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 all: $(MAIN_TARGET)
+
+wolfboot.efi: wolfboot.elf
+	@echo "\t[BIN] $@"
+	$(Q)$(OBJCOPY)  -j .text -j .sdata -j .data \
+                -j .dynamic -j .dynsym  -j .rel \
+                -j .rela -j .reloc -j .eh_frame \
+                --target=efi-app-x86_64 --subsystem=10 $^ $@
+	@echo
+	@echo "\t[SIZE]"
+	$(Q)$(SIZE) wolfboot.efi
+	@echo
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"

@@ -28,11 +28,18 @@
 #    define PRINTF_ENABLED
 #endif
 
+#if defined(WOLFBOOT_DEBUG_EFI) && !defined(PRINTF_ENABLED)
+#    define PRINTF_ENABLED
+#endif
+
 #ifdef PRINTF_ENABLED
 #   include <stdio.h>
 #   if defined(DEBUG_ZYNQ) && !defined(USE_QNX)
 #       include "xil_printf.h"
 #       define wolfBoot_printf(_f_, ...) xil_printf(_f_, ##__VA_ARGS__)
+#   elif defined(WOLFBOOT_DEBUG_EFI)
+        /* NOTE: %s arguments will not work as EFI uses widechar string */
+#       define wolfBoot_printf(_f_, ...) Print(L##_f_, ##__VA_ARGS__)
 #   else
 #       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
 #   endif

@@ -37,6 +37,7 @@
 *.hex
 *.rom
 *.bin
+*.efi
 
 # Debug files
 *.dSYM/
