@@ -291,9 +291,9 @@ void hal_init(void)
     clock_pll_on(0);
 }
 
-static void RAMFUNCTION hal_secure_boot(void)
-{
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT
+static void RAMFUNCTION do_secure_boot(void)
+{
     uint32_t sec_size = (FLASH_SECR & FLASH_SECR_SEC_SIZE_MASK);
 
     /* The "SEC_SIZE" is the number of pages (2KB) to extend from base 0x8000000
@@ -325,8 +325,8 @@ static void RAMFUNCTION hal_secure_boot(void)
     } while ((FLASH_CR & FLASH_CR_SEC_PROT) == 0);
 
     DSB();
-#endif
 }
+#endif
 
 void RAMFUNCTION hal_prepare_boot(void)
 {
@@ -334,5 +334,7 @@ void RAMFUNCTION hal_prepare_boot(void)
     spi_release();
 #endif
     clock_pll_off();
-    hal_secure_boot();
+#ifdef FLASH_SECURABLE_MEMORY_SUPPORT
+    do_secure_boot();
+#endif
 }
