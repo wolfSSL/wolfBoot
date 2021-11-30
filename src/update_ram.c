@@ -30,6 +30,13 @@
 #include "wolfboot/wolfboot.h"
 #include <string.h>
 
+#ifdef PLATFORM_X86_64_EFI
+    #include "efi/efi.h"
+    #include "efi/efilib.h"
+    extern EFI_PHYSICAL_ADDRESS kernel_addr;
+    extern EFI_PHYSICAL_ADDRESS update_addr;
+#endif
+
 extern void hal_flash_dualbank_swap(void);
 
 static inline void boot_panic(void)
@@ -42,7 +49,12 @@ void RAMFUNCTION wolfBoot_start(void)
 {
     int active, ret = 0;
     struct wolfBoot_image os_image;
+#ifdef PLATFORM_X86_64_EFI
+    uint32_t* load_address = (uint32_t*)kernel_addr;
+#else
     uint32_t* load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
+#endif
+
     uint8_t* image_ptr;
     uint8_t p_state;
 #ifdef MMU
@@ -55,6 +67,11 @@ void RAMFUNCTION wolfBoot_start(void)
 
     if (active < 0) /* panic if no images available */
         boot_panic();
+
+#ifdef PLATFORM_X86_64_EFI
+    if (active == 1)
+        load_address = (uint32_t *)update_addr;
+#endif
 
     /* Check current status for failure (image still in TESTING), and fall-back
      * if an alternative is available
@@ -143,11 +160,14 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 #endif
 
-    hal_prepare_boot();
 	
     wolfBoot_printf("Booting at %08lx\n", load_address);
+    hal_prepare_boot();
 
-#ifdef MMU
+#ifdef PLATFORM_X86_64_EFI
+    extern void x86_64_efi_do_boot(uint8_t *);
+    x86_64_efi_do_boot((uint8_t*)load_address);
+#elif defined MMU
     do_boot((uint32_t*)load_address, (uint32_t*)dts_address);
 #else
     do_boot((uint32_t*)load_address);

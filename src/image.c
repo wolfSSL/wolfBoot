@@ -69,7 +69,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     int ret, verify_res = 0;
 #ifdef WOLFBOOT_TPM
     WOLFTPM2_KEY tpmKey;
-    #ifdef DEBUG
+    #ifdef WOLFBOOT_DEBUG_TPM
     const char* errStr;
     #endif
 
@@ -87,7 +87,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         verify_res = 1; /* TPM does hash verify compare */
     }
     else {
-    #ifdef DEBUG
+    #ifdef WOLFBOOT_DEBUG_TPM
         /* retrieve error string (for debugging) */
         errStr = wolfTPM2_GetRCString(ret);
         (void)errStr;
@@ -212,7 +212,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     WOLFTPM2_KEY tpmKey;
     const byte *n = NULL, *e = NULL;
     word32 nSz = 0, eSz = 0, inOutIdx = 0;
-    #ifdef DEBUG
+    #ifdef WOLFBOOT_DEBUG_TPM
         const char* errStr;
     #endif
 
@@ -226,7 +226,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     ret = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, &tpmKey, n, nSz, 
         *((word32*)e), TPM_ALG_NULL, TPM_ALG_SHA256);
     if (ret != 0) {
-    #ifdef DEBUG
+    #ifdef WOLFBOOT_DEBUG_TPM
         /* retrieve error string (for debugging) */
         errStr = wolfTPM2_GetRCString(ret);
         (void)errStr;
@@ -240,7 +240,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         sig, IMAGE_SIGNATURE_SIZE,
         output, &output_sz);
     if (ret != 0) {
-    #ifdef DEBUG
+    #ifdef WOLFBOOT_DEBUG_TPM
         /* retrieve error string (for debugging) */
         errStr = wolfTPM2_GetRCString(ret);
         (void)errStr;
@@ -564,7 +564,7 @@ static int measure_boot(uint8_t *hash)
 {
     int rc = -1;
     PCR_Extend_In pcrExtend;
-#ifdef DEBUG
+#ifdef WOLFBOOT_DEBUG_TPM
     PCR_Read_In pcrReadCmd;
     PCR_Read_Out pcrReadResp;
 #endif
@@ -580,7 +580,7 @@ static int measure_boot(uint8_t *hash)
         rc = 0;
     }
 
-#ifdef DEBUG
+#ifdef WOLFBOOT_DEBUG_TPM
     /* Test prcRead helps debug TPM communication and print PCR value in gdb */
     XMEMSET(&pcrReadCmd, 0, sizeof(pcrReadCmd));
     TPM2_SetupPCRSel(&pcrReadCmd.pcrSelectionIn, TPM_ALG_SHA256,

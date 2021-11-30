@@ -185,7 +185,7 @@ endif
 
 
 ifeq ($(DEBUG),1)
-  CFLAGS+=-O0 -g -ggdb3 -D"DEBUG=1"
+  CFLAGS+=-O0 -g -ggdb3
 else
   ifeq ($(OPTIMIZATION_LEVEL),)
     CFLAGS+=-Os
@@ -247,6 +247,9 @@ ifeq ($(WOLFTPM),1)
   endif
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
+  ifeq ($(DEBUG),1)
+    CFLAGS+=-DWOLFBOOT_DEBUG_TPM=1
+  endif
 endif
 
 ## Hash settings

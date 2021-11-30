@@ -646,7 +646,8 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
     return 0;
 }
 
-#if defined(ARCH_AARCH64) || defined(DUALBANK_SWAP)
+#if defined(ARCH_AARCH64) || defined(DUALBANK_SWAP) || defined(PLATFORM_X86_64_EFI)
+
 int wolfBoot_fallback_is_possible(void)
 {
     uint32_t boot_v, update_v;

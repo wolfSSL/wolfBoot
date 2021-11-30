@@ -21,6 +21,7 @@ This README describes configuration of supported targets.
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Qemu x86_64 UEFI](#qemu-x86_64-uefi)
 
 ## STM32F4
 
@@ -930,3 +931,52 @@ to compile.
 ## TI Hercules TMS570LC435
 
 See [/config/examples/ti-tms570lc435.config](/config/examples/ti-tms570lc435.config) for example configuration.
+
+
+## Qemu x86-64 UEFI
+
+x86-64bit machine with UEFI bios can run wolfBoot as EFI application.
+
+### Prerequisites:
+
+ * qemu-system-x86_64
+ * [GNU-EFI] (https://sourceforge.net/projects/gnu-efi/) 
+ * Open Virtual Machine firmware bios images (OVMF) by [Tianocore](https://tianocore.org)
+
+On a debian-like system it is sufficient to install the packages as follows:
+
+`apt install qemu ovmf gnu-efi`
+
+### Configuration
+
+An example configuration is provided in [config/examples/x86_64_efi.config](config/examples/x86_64_efi.config)
+
+### Building and running on qemu
+
+The bootloader and the initialization script `startup.nsh` for execution in the EFI environment are stored in a loopback FAT partition.
+
+The script [tools/efi/prepare_uefi_partition.sh](tools/efi/prepare_uefi_partition.sh) creates a new empty
+FAT loopback partitions and adds `startup.nsh`.
+
+A kernel with an embedded rootfs partition can be now created and added to the image, via the
+script [tools/efi/compile_efi_linux.sh](tools/efi/compile_efi_linux.sh). The script actually adds two instances
+of the target systems: `kernel.img` and `update.img`, both signed for authentication, and tagged with version
+`1` and `2` respectively.
+
+Compiling with `make` will produce the bootloader image in `wolfboot.efi`.
+
+
+The script [tools/efi/run_efi.sh](tools/efi/run_efi.sh) will add `wolfboot.efi` to the bootloader loopback
+partition, and run the system on qemu. If both kernel images are present and valid, wolfBoot will choose the image
+with the higher version number, so `update.img` will be staged as it's tagged with version `2`.
+
+The sequence is summarized below:
+
+```
+cp config/examples/x86_64_efi.config .config
+tools/efi/prepare_efi_partition.sh
+make
+tools/efi/compile_efi_linux.sh
+tools/efi/run_efi.sh
+```
+

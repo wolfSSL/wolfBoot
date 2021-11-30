@@ -21,6 +21,13 @@ UART_TARGET=$(TARGET)
 # Include SHA256 module because it's implicitly needed by RSA
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
+ifeq ($(ARCH),x86_64)
+  OBJS+=src/boot_x86_64.o
+  ifeq ($(DEBUG),1)
+    CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+  endif
+endif
+
 ## ARM
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE:=aarch64-none-elf-
@@ -297,6 +304,21 @@ ifeq ($(USE_GCC),1)
   OBJCOPY=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
   OUTPUT_FLAG=-o
+endif
+
+
+ifeq ($(TARGET),x86_64_efi)
+  GNU_EFI_LIB_PATH?=/usr/lib
+  GNU_EFI_CRT0=$(GNU_EFI_LIB_PATH)/crt0-efi-x86_64.o
+  GNU_EFI_LSCRIPT=$(GNU_EFI_LIB_PATH)/elf_x86_64_efi.lds
+  CFLAGS += -fpic -ffreestanding -fno-stack-protector -fno-stack-check \
+            -fshort-wchar -mno-red-zone -maccumulate-outgoing-args
+  CFLAGS += -I/usr/include/efi -DPLATFORM_X86_64_EFI
+  LDFLAGS = -shared -Bsymbolic -L/usr/lib -T$(GNU_EFI_LSCRIPT)
+  LD_START_GROUP = $(GNU_EFI_CRT0)
+  LD_END_GROUP = -lgnuefi -lefi
+  LD = ld
+  UPDATE_OBJS:=src/update_ram.o
 endif
 
 BOOT_IMG?=test-app/image.bin
