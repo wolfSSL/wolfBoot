@@ -41,6 +41,7 @@ extern "C" {
 
 
 #define CK_INVALID_HANDLE                     0UL
+#define CK_INVALID_SESSION                    0UL
 
 #define CKN_SURRENDER                         0UL
 
