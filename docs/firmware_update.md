@@ -81,7 +81,7 @@ rebooting.
 wolfBoot can be used to deploy new bootloader versions as well as
 update keys.
 
-### Incremental updates
+### Incremental updates (aka: 'delta' updates)
 
 wolfBoot supports incremental updates, based on a specific older version. The sign tool
 can create a small "patch" that only contains the binary difference between the version
@@ -93,8 +93,60 @@ The format of the patch is based on the mechanism suggested by Bentley/McIlroy, 
 to generate small binary patches. This is useful to minimize time and resources needed to transfer,
 authenticate and install updates.
 
-#### Incremental update: example
 
+#### How it works
+
+As an alternative to transferring the entire firmware image, the key tools create
+a binary diff between a base version previously uploaded and the new updated image.
+
+The resulting bundle (delta update) contains the information to derive the content
+of version '2' of the firmware, starting from the base version, that is currently
+running on the target (version '1' in this example), and the reverse patch to downgrade
+version '2' back to version '1' if something goes wrong running the new version.
+
+![Delta update](png/delta_updates.png)
+
+On the device side, wolfboot will recognize and verify the authenticity of the delta update before
+applying the patch to the current firmware. The new firmware is rebuilt in place,
+replacing the content of the BOOT partition according to the indication in the
+(authenticated) 'delta update' bundle.
+
+
+#### Two-steps verification
+
+Binary patches are created by comparing signed firmware images. wolfBoot verifies
+that the patch is applied correctly by checking for the integrity and the authenticity
+of the resulting image after the patch.
+
+The delta update bundle itself, containing the patches, is prefixed with a manifest
+header describing the details for the patch, and signed like a normal full update bundle.
+
+This means that wolfBoot will apply two levels of authentication: the first one 
+when the delta bundle is processed (e.g. when an update is triggered), and the second
+one every time a patch is applied, or reversed, to validate the firmware image
+before booting.
+
+These steps are performed automatically by the key tools when using the `--delta`
+option, as described in the example.
+
+
+#### Confirming the update
+
+From the application perspective, nothing changes from the normal, 'full' update case.
+Application must still call `wolfBoot_success()` on the first boot with the updated version
+to ensure that the update is confirmed.
+
+Failing to confirm the success of the update will cause wolfBoot to revert the patch
+applied during the update. The 'delta update' bundle also contains a reverse patch,
+which can revert the update and restore the base version of the firmware.
+
+The diagram below shows the authentication steps and the diff/patch process in both
+directions (update and roll-back for missed confirmation).
+
+![Delta update: details](png/delta_updates_2.png)
+
+
+#### Incremental update: example
 
 Requirement: wolfBoot is compiled with `DELTA_UPDATES=1`
 
@@ -109,9 +161,14 @@ When updating from version 1 to version 2, you can invoke the sign tool as:
 Besides the usual output file `image_v2_signed.bin`, the sign tool creates an additional `image_v2_signed_diff.bin`
 which should be noticeably smaller in size as long as the two binary files contain overlapping areas.
 
-The `image_v2_signed_diff.bin` file can be now transferred to the update partition on the target like a full update image.
+This is the delta update bundle, a signed package containing the patches for updating version 1 to version 2, and to roll back to version 1 if needed, after the first patch has been applied.
+
+The delta bundle `image_v2_signed_diff.bin` can be now transferred to the update partition on the target like a full update image.
 
 At next reboot, wolfBoot recognizes the incremental update, checks the integrity, the authenticity and the versions
 of the patch. If all checks succeed, the new version is installed by applying the patch on the current firmware image.
+
+If the update is not confirmed, at the next reboot wolfBoot will restore the original base `image_v1_signed.bin`, using
+the reverse patch contained in the delta update bundle.
 
 
