@@ -54,6 +54,11 @@ ifeq ($(TARGET),stm32l5)
 	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),stm32u5)
+    # Don't build a contiguous image
+	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),x86_64_efi)
 	MAIN_TARGET:=wolfboot.efi
 endif

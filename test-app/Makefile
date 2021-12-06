@@ -99,6 +99,15 @@ ifeq ($(TARGET),stm32l5)
   LDFLAGS+=-mcpu=cortex-m33
 endif
 
+ifeq ($(TARGET),stm32u5)
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-stm32u5-ns.ld
+  else
+    LSCRIPT_TEMPLATE=ARM-stm32u5.ld
+  endif
+  CFLAGS+=-mcpu=cortex-m33  
+  LDFLAGS+=-mcpu=cortex-m33
+endif
 
 
 ifeq ($(TARGET),ti_hercules)

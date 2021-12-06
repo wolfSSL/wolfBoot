@@ -429,7 +429,7 @@ void (* const IV[])(void) =
 	0,                           // reserved
 	isr_empty,                   // PendSV
 	isr_empty,                   // SysTick
-#ifdef PLATFORM_stm32l5   /* Fill with extra unused handlers */
+#if defined(PLATFORM_stm32l5) ||defined(PLATFORM_stm32u5)   /* Fill with extra unused handlers */
     isr_empty,
     isr_empty,
     isr_empty,
