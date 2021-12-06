@@ -1,4 +1,4 @@
-/* stm32l5_partition.h
+/* stm32u5_partition.h
  *
  * Copyright (C) 2021 wolfSSL Inc.
  *
@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef STM32L5_PARTITION_H
-#define STM32L5_PARTITION_H
+#ifndef STM32U5_PARTITION_H
+#define STM32U5_PARTITION_H
 
 #define SCS_BASE  (0xE000E000UL)
+#define SCS_NS_BASE  (0xE002E000UL)
 #define SCB_BASE  (SCS_BASE + 0x0D00UL)
+#define SCB_NS_BASE  (SCS_BASE + 0x0D00UL)
 #define SAU_BASE  (SCS_BASE + 0x0DD0UL)
 #define FPU_BASE  (SCS_BASE + 0x0F30UL)
 #define NVIC_BASE (SCS_BASE + 0x0100UL)
@@ -32,8 +34,13 @@
 #define SAU_RNR       (*(volatile uint32_t *)(SAU_BASE + 0x08))
 #define SAU_RBAR      (*(volatile uint32_t *)(SAU_BASE + 0x0C))
 #define SAU_RLAR      (*(volatile uint32_t *)(SAU_BASE + 0x10))
+
+#define SCB_CPACR     (*(volatile uint32_t *)(SCB_BASE + 0x88))
 #define SCB_NSACR     (*(volatile uint32_t *)(SCB_BASE + 0x8C))
+#define SCB_VTOR      (*(volatile uint32_t *)(SCB_BASE + 0x08))
 #define FPU_FPCCR     (*(volatile uint32_t *)(FPU_BASE + 0x04))
+
+#define SCB_NS_CPACR  (*(volatile uint32_t *)(SCB_NS_BASE + 0x88))
 
 /* SAU Control Register Definitions */
 #define SAU_CTRL_ALLNS_Pos                  1U                                            /*!< SAU CTRL: ALLNS Position */
@@ -85,18 +92,18 @@
 
 /*
 //   <q> Enable SAU
-//   <i> Value for SAU_CTRL register bit ENABLE
+//   <i> Value for SAU->CTRL register bit ENABLE
 */
-#define SAU_INIT_CTRL_ENABLE   1
+#define SAU_INIT_CTRL_ENABLE   0
 
 /*
 //   <o> When SAU is disabled
 //     <0=> All Memory is Secure
 //     <1=> All Memory is Non-Secure
-//   <i> Value for SAU_CTRL register bit ALLNS
+//   <i> Value for SAU->CTRL register bit ALLNS
 //   <i> When all Memory is Non-Secure (ALLNS is 1), IDAU can override memory map configuration.
 */
-#define SAU_INIT_CTRL_ALLNS  0
+#define SAU_INIT_CTRL_ALLNS   1
 
 /*
 // <h>Initialize Security Attribution Unit (SAU) Address Regions
@@ -111,17 +118,18 @@
 //   <e>Initialize SAU Region 0
 //   <i> Setup SAU Region 0 memory attributes
 */
-#define SAU_INIT_REGION0    1
+#define SAU_INIT_REGION0    0
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
 */
-#define SAU_INIT_START0     0x0C03E000      /* start address of SAU region 0 */
+
+#define SAU_INIT_START0     0x0C0FE000      /* start address of SAU region 0 */
 
 /*
 //     <o>End Address <0x1F-0xFFFFFFFF>
 */
-#define SAU_INIT_END0       0x0C03FFFF      /* end address of SAU region 0 */
+#define SAU_INIT_END0       0x0C0FFFFF      /* end address of SAU region 0 */
 
 /*
 //     <o>Region is
@@ -134,16 +142,16 @@
 //   <e>Initialize SAU Region 1
 //   <i> Setup SAU Region 1 memory attributes
 */
-#define SAU_INIT_REGION1    1
+#define SAU_INIT_REGION1    0
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
 */
-#define SAU_INIT_START1     0x08040000      /* start address of SAU region 1 */
+#define SAU_INIT_START1     0x08100000      /* start address of SAU region 1 */
 /*
 //     <o>End Address <0x1F-0xFFFFFFFF>
 */
-#define SAU_INIT_END1       0x0807FFFF      /* end address of SAU region 1 */
+#define SAU_INIT_END1       0x081FFFFF      /* end address of SAU region 1 */
 /*
 //     <o>Region is
 //         <0=>Non-Secure
@@ -155,17 +163,17 @@
 //   <e>Initialize SAU Region 2
 //   <i> Setup SAU Region 2 memory attributes
 */
-#define SAU_INIT_REGION2    1
+#define SAU_INIT_REGION2    0
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
 */
-#define SAU_INIT_START2     0x20018000      /* start address of SAU region 2 */
+#define SAU_INIT_START2     0x20040000      /* start address of SAU region 2 */
 
 /*
 //     <o>End Address <0x1F-0xFFFFFFFF>
 */
-#define SAU_INIT_END2       0x2003FFFF      /* end address of SAU region 2 */
+#define SAU_INIT_END2       0x200BFFFF      /* end address of SAU region 2 */
 
 /*
 //     <o>Region is
@@ -178,7 +186,7 @@
 //   <e>Initialize SAU Region 3
 //   <i> Setup SAU Region 3 memory attributes
 */
-#define SAU_INIT_REGION3    1
+#define SAU_INIT_REGION3    0
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -201,7 +209,7 @@
 //   <e>Initialize SAU Region 4
 //   <i> Setup SAU Region 4 memory attributes
 */
-#define SAU_INIT_REGION4    1
+#define SAU_INIT_REGION4    0
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -224,7 +232,7 @@
 //   <e>Initialize SAU Region 5
 //   <i> Setup SAU Region 5 memory attributes
 */
-#define SAU_INIT_REGION5    1
+#define SAU_INIT_REGION5    0
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -297,7 +305,7 @@
 // <o>Floating Point Unit usage
 //     <0=> Secure state only
 //     <3=> Secure and Non-Secure state
-//   <i> Value for SCB_NSACR register bits CP10, CP11
+//   <i> Value for SCB->NSACR register bits CP10, CP11
 */
 #define SCB_NSACR_CP10_11_VAL       3
 
@@ -305,7 +313,7 @@
 // <o>Treat floating-point registers as Secure
 //     <0=> Disabled
 //     <1=> Enabled
-//   <i> Value for FPU_FPCCR register bit TS
+//   <i> Value for FPU->FPCCR register bit TS
 */
 #define FPU_FPCCR_TS_VAL            0
 
@@ -313,7 +321,7 @@
 // <o>Clear on return (CLRONRET) accessibility
 //     <0=> Secure and Non-Secure state
 //     <1=> Secure state only
-//   <i> Value for FPU_FPCCR register bit CLRONRETS
+//   <i> Value for FPU->FPCCR register bit CLRONRETS
 */
 #define FPU_FPCCR_CLRONRETS_VAL     0
 
@@ -321,7 +329,7 @@
 // <o>Clear floating-point caller saved registers on exception return
 //     <0=> Disabled
 //     <1=> Enabled
-//   <i> Value for FPU_FPCCR register bit CLRONRET
+//   <i> Value for FPU->FPCCR register bit CLRONRET
 */
 #define FPU_FPCCR_CLRONRET_VAL      1
 
@@ -332,57 +340,85 @@
     SAU_RLAR =  (SAU_INIT_END##n                       & SAU_RLAR_LADDR_Msk) | \
                 ((SAU_INIT_NSC##n << SAU_RLAR_NSC_Pos)  & SAU_RLAR_NSC_Msk)   | 1U
 
+#define GTZC1_MPCBB3_S_BASE        (0x50033400)
+#define GTZC1_MPCBB3_S_CR          (*(volatile uint32_t *)(GTZC1_MPCBB3_S_BASE + 0x00))
+#define GTZC1_MPCBB3_S_CFGLOCKR1   (*(volatile uint32_t *)(GTZC1_MPCBB3_S_BASE + 0x10))
+#define GTZC1_MPCBB3_S_SECCFGR0    (GTZC1_MPCBB3_S_BASE + 0x100)
+#define GTZC1_MPCBB3_S_PRIVCFGR0   (GTZC1_MPCBB3_S_BASE + 0x200)
 
-#define GTZC_MPCBB1_S_BASE        (0x50032C00)
-#define GTZC_MPCBB1_S_CR          (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x00))
-#define GTZC_MPCBB1_S_LCKVTR1     (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x10))
-#define GTZC_MPCBB1_S_LCKVTR2     (*(volatile uint32_t *)(GTZC_MPCBB1_S_BASE + 0x14))
-#define GTZC_MPCBB1_S_VCTR_BASE   (GTZC_MPCBB1_S_BASE + 0x100)
+#define SET_GTZC1_MPCBBx_SECCFGR(x,n) \
+    (*((volatile uint32_t *)(GTZC1_MPCBB##x##_S_SECCFGR0 ) + n ))= GTZC1_MPCBB##x##_S_SECCFGR##n##_VAL
 
-#define GTZC_MPCBB2_S_BASE        (0x50033000)
-#define GTZC_MPCBB2_S_CR          (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x00))
-#define GTZC_MPCBB2_S_LCKVTR1     (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x10))
-#define GTZC_MPCBB2_S_LCKVTR2     (*(volatile uint32_t *)(GTZC_MPCBB2_S_BASE + 0x14))
-#define GTZC_MPCBB2_S_VCTR_BASE   (GTZC_MPCBB2_S_BASE + 0x100)
+#define SET_GTZC1_MPCBBx_PRIVCFGR(x,n) \
+    (*((volatile uint32_t *)(GTZC1_MPCBB##x##_S_PRIVCFGR0 ) + n ))= GTZC1_MPCBB##x##_S_PRIVCFGR##n##_VAL
 
-#define SET_GTZC_MPCBBx_S_VCTR(x,n) \
-    (*((volatile uint32_t *)(GTZC_MPCBB##x##_S_VCTR_BASE ) + n ))= GTZC_MPCBB##x##_S_VCTR##n##_VAL
+/*SRAM3 - SECCFG*/
+#define GTZC1_MPCBB3_S_SECCFGR0_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR1_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR2_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR3_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR4_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR5_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR6_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR7_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR8_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR9_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR10_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR11_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR12_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR13_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR14_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR15_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR16_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR17_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR18_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR19_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR20_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR21_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR22_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR23_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR24_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR25_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR26_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR27_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR28_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR29_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR30_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_SECCFGR31_VAL (0x00000000)
 
-/*SRAM1*/
-#define GTZC_MPCBB1_S_VCTR0_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR1_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR2_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR3_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR4_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR5_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR6_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR7_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR8_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR9_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR10_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR11_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR12_VAL (0xFFFFFFFF)
-#define GTZC_MPCBB1_S_VCTR13_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR14_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR15_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR16_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR17_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR18_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR19_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR20_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR21_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR22_VAL (0x00000000)
-#define GTZC_MPCBB1_S_VCTR23_VAL (0x00000000)
-
-/*SRAM2*/
-#define GTZC_MPCBB2_S_VCTR0_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR1_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR2_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR3_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR4_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR5_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR6_VAL (0x00000000)
-#define GTZC_MPCBB2_S_VCTR7_VAL (0x00000000)
+/*SRAM3 - PRIVCFG*/
+#define GTZC1_MPCBB3_S_PRIVCFGR0_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR1_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR2_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR3_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR4_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR5_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR6_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR7_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR8_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR9_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR10_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR11_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR12_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR13_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR14_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR15_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR16_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR17_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR18_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR19_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR20_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR21_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR22_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR23_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR24_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR25_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR26_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR27_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR28_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR29_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR30_VAL (0x00000000)
+#define GTZC1_MPCBB3_S_PRIVCFGR31_VAL (0x00000000)
 
 /**
   \brief   Setup a SAU Region
@@ -432,12 +468,15 @@ static __inline void TZ_SAU_Setup (void)
     SCB_NSACR = (SCB_NSACR & ~(SCB_NSACR_CP10_Msk | SCB_NSACR_CP11_Msk)) |
                    ((SCB_NSACR_CP10_11_VAL << SCB_NSACR_CP10_Pos) & (SCB_NSACR_CP10_Msk | SCB_NSACR_CP11_Msk));
 
+    SCB_CPACR |= ((0x3 << 20)|(0x3 << 22));     /* set CP10 and CP11 Full Access */
+
     FPU_FPCCR = (FPU_FPCCR & ~(FPU_FPCCR_TS_Msk | FPU_FPCCR_CLRONRETS_Msk | FPU_FPCCR_CLRONRET_Msk)) |
                    ((FPU_FPCCR_TS_VAL        << FPU_FPCCR_TS_Pos       ) & FPU_FPCCR_TS_Msk       ) |
                    ((FPU_FPCCR_CLRONRETS_VAL << FPU_FPCCR_CLRONRETS_Pos) & FPU_FPCCR_CLRONRETS_Msk) |
                    ((FPU_FPCCR_CLRONRET_VAL  << FPU_FPCCR_CLRONRET_Pos ) & FPU_FPCCR_CLRONRET_Msk );
+
   #endif
 
 }
 
-#endif  /* STM32L5_PARTITION_H */
+#endif  /* STM32U5_PARTITION_H */

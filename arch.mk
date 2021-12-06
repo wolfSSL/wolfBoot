@@ -124,6 +124,17 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
+  ifeq ($(TARGET),stm32u5)
+    CORTEX_M33=1
+    CFLAGS+=-Ihal -DCORTEX_M33
+    ARCH_FLASH_OFFSET=0x08000000
+    ifeq ($(TZEN),1)
+      WOLFBOOT_ORIGIN=0x0C000000
+    else
+      WOLFBOOT_ORIGIN=0x08000000
+    endif
+  endif
+
   ## Cortex-M CPU
   ifeq ($(CORTEX_M33),1)
     CFLAGS+=-mcpu=cortex-m33
