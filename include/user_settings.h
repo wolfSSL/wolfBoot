@@ -50,6 +50,19 @@
 #   define NO_ASN
 #endif
 
+/* ED448 */
+#ifdef WOLFBOOT_SIGN_ED448
+#   define HAVE_ED448
+#   define HAVE_ED448_VERIFY
+#   define ED448_SMALL
+#   define NO_ED448_SIGN
+#   define NO_ED448_EXPORT
+#   define NO_RSA
+#   define NO_ASN
+#   define WOLFSSL_SHA3
+#   define WOLFSSL_SHAKE256
+#endif
+
 /* ECC and SHA256 */
 #ifdef WOLFBOOT_SIGN_ECC256
 #   define HAVE_ECC

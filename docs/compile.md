@@ -106,6 +106,8 @@ or
 
 respectively.
 
+Ed448 is also supported via `SIGN=ED448`.
+
 The default option, if no value is provided for the `SIGN` variable, is
 
 `SIGN=ED25519`

@@ -31,6 +31,12 @@
 #   define KEY_BUFFER  ed25519_pub_key
 #   define KEY_LEN     ed25519_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (64)
+#elif defined(WOLFBOOT_SIGN_ED448)
+    extern const unsigned char ed448_pub_key[];
+    extern unsigned int ed448_pub_key_len;
+#   define KEY_BUFFER  ed448_pub_key
+#   define KEY_LEN     ed448_pub_key_len
+#   define IMAGE_SIGNATURE_SIZE (114)
 #elif defined(WOLFBOOT_SIGN_ECC256)
     extern const unsigned char ecc256_pub_key[];
     extern unsigned int ecc256_pub_key_len;

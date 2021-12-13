@@ -14,7 +14,7 @@ Note: There is a pure C version of the key tool available as well. See [C Key To
 ```sh
 git clone https://github.com/wolfSSL/wolfssl.git
 cd wolfssl
-./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 --enable-des3 CFLAGS="-DWOLFSSL_PUBLIC_MP"
+./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 --enable-ed448 --enable-des3 CFLAGS="-DWOLFSSL_PUBLIC_MP"
 make
 sudo make install
 ```
@@ -55,18 +55,18 @@ Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe`
 ## Command Line Usage
 
 ```sh
-./tools/keytools/keygen [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ]  pub_key_file.c
+./tools/keytools/keygen [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ]  pub_key_file.c
 ```
 
 ```sh
-./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version
+./tools/keytools/sign [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--wolfboot-update] image key.der fw_version
   - or -        ./tools/keytools/sign [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version
-  - or -        ./tools/keytools/sign [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig
+  - or -        ./tools/keytools/sign [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] image pub_key.der fw_version signature.sig
 ```
 
 ## Signing Firmware
 
-1. Load the private key to use for signing into `./rsa2048.der`, `./rsa4096.der` or `./ed25519.der`.
+1. Load the private key to use for signing into `./rsa2048.der`, `./rsa4096.der`, `./ed25519.der`, `ecc256.der`, or `./ed448.der`
 2. Run the signing tool with asymmetric algorithm, hash algorithm, file to sign, key and version.
 
 ```sh

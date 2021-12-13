@@ -85,7 +85,6 @@ wolfboot.bin: wolfboot.elf
 
 test-app/image.bin: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
-	$(Q)rm -f src/*.o hal/*.o
 	$(Q)$(SIZE) test-app/image.elf
 
 standalone:
@@ -103,6 +102,8 @@ include tools/test-delta.mk
 
 ed25519.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
+ed448.der:
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed448_pub_key.c
 ecc256.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
 rsa2048.der:
@@ -140,6 +141,8 @@ hex: wolfboot.hex
 	@$(OBJCOPY) -O ihex $^ $@
 
 src/ed25519_pub_key.c: ed25519.der
+
+src/ed448_pub_key.c: ed448.der
 
 src/ecc256_pub_key.c: ecc256.der
 
