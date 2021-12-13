@@ -48,6 +48,10 @@
 #include <wolfssl/wolfcrypt/ed25519.h>
 #endif
 
+#ifdef HAVE_ED448
+#include <wolfssl/wolfcrypt/ed448.h>
+#endif
+
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #ifdef DEBUG_SIGNTOOL
@@ -62,8 +66,10 @@
 #define KEYGEN_ECC256  1
 #define KEYGEN_RSA2048 2
 #define KEYGEN_RSA4096 3
+#define KEYGEN_ED448   4
 
 const char Ed25519_pub_key_define[] = "const uint8_t ed25519_pub_key[32] = {";
+const char Ed448_pub_key_define[] = "const uint8_t ed448_pub_key[57] = {";
 const char Ecc256_pub_key_define[] = "const uint8_t ecc256_pub_key[64] = {";
 const char Rsa_2048_pub_key_define[] = "const uint8_t rsa2048_pub_key[%d] = {";
 const char Rsa_4096_pub_key_define[] = "const uint8_t rsa4096_pub_key[%d] = {";
@@ -79,7 +85,7 @@ const char Cfile_Banner[] = "/* Public-key file for wolfBoot, automatically gene
 
 static void usage(const char *pname) /* implies exit */
 {
-    printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ]  pub_key_file.c\n", pname);
+    printf("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ]  pub_key_file.c\n", pname);
     exit(125);
 }
 
@@ -249,6 +255,47 @@ static void keygen_ed25519(WC_RNG *rng, char *pubkfile)
 }
 #endif
 
+#ifdef HAVE_ED448
+static void keygen_ed448(WC_RNG *rng, char *pubkfile)
+{
+    ed448_key k;
+    uint8_t priv[ED448_KEY_SIZE], pub[ED448_PUB_KEY_SIZE];
+    FILE *fpriv, *fpub;
+    uint32_t outlen = ED448_KEY_SIZE;
+    if (wc_ed448_make_key(rng, ED448_KEY_SIZE, &k) != 0) {
+        fprintf(stderr, "Unable to create ed448 key\n");
+        exit(1);
+    }
+    if (wc_ed448_export_private_only(&k, priv, &outlen) != 0) {
+        fprintf(stderr, "Unable to export ed448 private key\n");
+        exit(2);
+    }
+    if (wc_ed448_export_public(&k, pub, &outlen) != 0) {
+        fprintf(stderr, "Unable to export ed448 public key\n");
+        exit(2);
+    }
+    fpriv = fopen("ed448.der", "wb");
+    if (fpriv == NULL) {
+        fprintf(stderr, "Unable to open file 'ed448.der' for writing: %s", strerror(errno));
+        exit(3);
+    }
+    fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
+    fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
+    fclose(fpriv);
+    fpub = fopen(pubkfile, "w");
+    if (fpub == NULL) {
+        fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkfile, strerror(errno));
+        exit(4);
+    }
+    fprintf(fpub, "%s", Cfile_Banner);
+    fprintf(fpub, "%s", Ed448_pub_key_define);
+    fwritekey(pub, ED448_KEY_SIZE, fpub);
+    fprintf(fpub, "\n};\n");
+    fprintf(fpub, "const uint32_t ed448_pub_key_len = 57;\n");
+    fclose(fpub);
+}
+#endif
+
 int main(int argc, char** argv)
 {
     int i;
@@ -272,6 +319,10 @@ int main(int argc, char** argv)
         if (strcmp(argv[i], "--ed25519") == 0) {
             keytype = KEYGEN_ED25519;
             kfilename = strdup("ed25519.der");
+        }
+        else if (strcmp(argv[i], "--ed448") == 0) {
+            keytype = KEYGEN_ED448;
+            kfilename = strdup("ed448.der");
         }
         else if (strcmp(argv[i], "--ecc256") == 0) {
             keytype = KEYGEN_ECC256;
@@ -321,6 +372,14 @@ int main(int argc, char** argv)
         case KEYGEN_ED25519:
             {
                 keygen_ed25519(&rng, output_pubkey_file);
+                break;
+            }
+#endif
+
+#ifdef HAVE_ED448
+        case KEYGEN_ED448:
+            {
+                keygen_ed448(&rng, output_pubkey_file);
                 break;
             }
 #endif

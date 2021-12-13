@@ -60,6 +60,29 @@ ifeq ($(SIGN),ED25519)
   STACK_USAGE?=1024
 endif
 
+ifeq ($(SIGN),ED448)
+  KEYGEN_OPTIONS+=--ed448
+  SIGN_OPTIONS+=--ed448
+  PRIVATE_KEY=ed448.der
+  WOLFCRYPT_OBJS+= ./lib/wolfssl/wolfcrypt/src/ed448.o \
+    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
+    ./lib/wolfssl/wolfcrypt/src/ge_448.o \
+    ./lib/wolfssl/wolfcrypt/src/fe_448.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o \
+    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+
+  ifneq ($(HASH),SHA3)
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  endif
+  PUBLIC_KEY_OBJS=./src/ed448_pub_key.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_ED448"
+  IMAGE_HEADER_SIZE=512
+  CFLAGS+=-DIMAGE_HEADER_SIZE=512
+  STACK_USAGE?=4376
+endif
+
 ifeq ($(SIGN),RSA2048)
   KEYGEN_OPTIONS+=--rsa2048
   SIGN_OPTIONS+=--rsa2048

@@ -53,6 +53,7 @@ HDR_IMG_TYPE_AUTH_ED25519 = 0x0100
 HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
 HDR_IMG_TYPE_AUTH_RSA2048 = 0x0300
 HDR_IMG_TYPE_AUTH_RSA4096 = 0x0400
+HDR_IMG_TYPE_AUTH_ED448   = 0x0500
 HDR_IMG_TYPE_DIFF         = 0x00D0
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
@@ -102,6 +103,8 @@ def make_header(image_file, fw_version, extra_fields=[]):
         img_type = HDR_IMG_TYPE_AUTH_NONE
     if (sign == 'ed25519'):
         img_type = HDR_IMG_TYPE_AUTH_ED25519
+    if (sign == 'ed448'):
+        img_type = HDR_IMG_TYPE_AUTH_ED448
     if (sign == 'ecc256'):
         img_type = HDR_IMG_TYPE_AUTH_ECC256
     if (sign == 'rsa2048'):
@@ -204,6 +207,8 @@ def make_header(image_file, fw_version, extra_fields=[]):
             print("Signing the firmware...")
             if (sign == 'ed25519'):
                 signature = ed.sign(digest)
+            if (sign == 'ed448'):
+                signature = ed.sign(digest)
             elif (sign == 'ecc256'):
                 r, s = ecc.sign_raw(digest)
                 signature = r + s
@@ -221,7 +226,7 @@ def make_header(image_file, fw_version, extra_fields=[]):
                 print("Wrong signature file size %d, expected %d" % (len(buf), HDR_SIGNATURE_LEN))
                 sys.exit(4)
             signature = buf
-    
+
         header += struct.pack('<HH', HDR_SIGNATURE, HDR_SIGNATURE_LEN)
         header += signature
     #print ("Signature %d" % len(signature))
@@ -233,11 +238,11 @@ def make_header(image_file, fw_version, extra_fields=[]):
 #### MAIN ####
 
 if (argc < 4) or (argc > 10):
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
     print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
     sys.exit(1)
 
 i = 1
@@ -246,6 +251,8 @@ while (i < len(argv)):
         sign='none'
     elif (argv[i] == '--ed25519'):
         sign='ed25519'
+    elif (argv[i] == '--ed448'):
+        sign='ed448'
     elif (argv[i] == '--ecc256'):
         sign='ecc256'
     elif (argv[i] == '--rsa2048'):
@@ -379,6 +386,13 @@ elif wolfboot_key_buffer_len == 64:
         else:
             sign = 'ed25519'
             print("'ed25519' key autodetected.")
+elif wolfboot_key_buffer_len == 114:
+    if (sign != 'ed448' and not manual_sign and not sha_only):
+        print("Error: key size incorrect for cipher")
+        sys.exit(1)
+    elif sign == 'auto' and (manual_sign or sha_only):
+        sign = 'ed448'
+        print("'ed448' public key autodetected.")
 elif wolfboot_key_buffer_len == 96:
     if (sign == 'ed25519'):
         print("Error: key size does not match the cipher selected")
@@ -405,6 +419,10 @@ elif not sha_only and not manual_sign:
     ''' import (decode) private key for signing '''
     if sign == 'ed25519':
         ed = ciphers.Ed25519Private(key = wolfboot_key_buffer)
+        privkey, pubkey = ed.encode_key()
+
+    if sign == 'ed448':
+        ed = ciphers.Ed448Private(key = wolfboot_key_buffer)
         privkey, pubkey = ed.encode_key()
 
     if sign == 'ecc256':

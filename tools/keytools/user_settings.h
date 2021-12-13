@@ -49,6 +49,10 @@
 /* ED25519 */
 #define HAVE_ED25519
 
+/* ED448 */
+#define HAVE_ED448
+#define WOLFSSL_SHAKE256
+
 /* RSA */
 #define HAVE_RSA
 #define WOLFSSL_HAVE_SP_RSA

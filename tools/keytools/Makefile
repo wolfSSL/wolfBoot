@@ -7,16 +7,11 @@ ifeq ($(V),0)
   Q=@
 endif
 
-ifeq ($(WOLFBOOT_SECTOR_SIZE),)
-  WOLFBOOT_SECTOR_SIZE=2048
-endif
-
 CC      = gcc
 WOLFBOOTDIR = ../..
 WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl/
 CFLAGS  = -Wall -Wextra -Werror
 CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include
-CFLAGS  += -DWOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE)
 
 # option variables
 DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE
@@ -32,8 +27,11 @@ SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/coding.c \
 	$(WOLFDIR)wolfcrypt/src/chacha.c \
 	$(WOLFDIR)wolfcrypt/src/ed25519.c \
+	$(WOLFDIR)wolfcrypt/src/ed448.c \
 	$(WOLFDIR)wolfcrypt/src/fe_operations.c \
 	$(WOLFDIR)wolfcrypt/src/ge_operations.c \
+	$(WOLFDIR)wolfcrypt/src/fe_448.c \
+	$(WOLFDIR)wolfcrypt/src/ge_448.c \
 	$(WOLFDIR)wolfcrypt/src/hash.c \
 	$(WOLFDIR)wolfcrypt/src/logging.c \
 	$(WOLFDIR)wolfcrypt/src/memory.c \

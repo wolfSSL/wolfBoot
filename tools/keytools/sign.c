@@ -59,6 +59,9 @@
 #ifdef HAVE_ED25519
     #include <wolfssl/wolfcrypt/ed25519.h>
 #endif
+#ifdef HAVE_ED448
+    #include <wolfssl/wolfcrypt/ed448.h>
+#endif
 #ifndef NO_SHA256
     #include <wolfssl/wolfcrypt/sha256.h>
 #endif
@@ -102,6 +105,7 @@
 #define HDR_IMG_TYPE_AUTH_ECC256  0x0200
 #define HDR_IMG_TYPE_AUTH_RSA2048 0x0300
 #define HDR_IMG_TYPE_AUTH_RSA4096 0x0400
+#define HDR_IMG_TYPE_AUTH_ED448   0x0500
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 #define HDR_IMG_TYPE_DIFF         0x00D0
@@ -115,6 +119,7 @@
 #define SIGN_ECC256    HDR_IMG_TYPE_AUTH_ECC256
 #define SIGN_RSA2048   HDR_IMG_TYPE_AUTH_RSA2048
 #define SIGN_RSA4096   HDR_IMG_TYPE_AUTH_RSA4096
+#define SIGN_ED448     HDR_IMG_TYPE_AUTH_ED448
 
 #define ENC_BLOCK_SIZE 16
 
@@ -145,6 +150,9 @@ static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
 static union {
 #ifdef HAVE_ED25519
     ed25519_key ed;
+#endif
+#ifdef HAVE_ED448
+    ed448_key ed4;
 #endif
 #ifdef HAVE_ECC
     ecc_key ecc;
@@ -225,7 +233,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             printf("ed25519 public key autodetected\n");
             CMD.sign = SIGN_ED25519;
         }
-
     }
     else if (*key_buffer_sz == 64) {
         if (CMD.sign == SIGN_ECC256) {
@@ -244,6 +251,16 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 CMD.sign = SIGN_ECC256;
                 printf("ecc256 public key autodetected\n");
             }
+        }
+    }
+    else if (*key_buffer_sz == ED448_PRV_KEY_SIZE) {
+        if ((CMD.sign != SIGN_ED448) && !CMD.manual_sign && !CMD.sha_only ) {
+            printf("Error: key too short for cipher\n");
+            goto failure;
+        }
+        if (CMD.sign == SIGN_AUTO && (CMD.manual_sign || CMD.sha_only)) {
+            printf("ed448 public key autodetected\n");
+            CMD.sign = SIGN_ED448;
         }
     }
     else if (*key_buffer_sz == 96) {
@@ -273,7 +290,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         }
     }
     else {
-        printf("Error: key size does not match any cipher\n");
+        printf("Error: key size '%d' does not match any cipher\n", *key_buffer_sz);
         goto failure;
     }
 
@@ -290,8 +307,16 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 ret = wc_ed25519_import_private_key(*key_buffer, ED25519_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed);
             }
 #endif
-        }
-        else if (CMD.sign == SIGN_ECC256) {
+        } else if (CMD.sign == SIGN_ED448) {
+#ifdef HAVE_ED448
+            ret = wc_ed448_init(&key.ed4);
+            if (ret == 0) {
+                *pubkey = *key_buffer + ED448_KEY_SIZE;
+                *pubkey_sz = ED448_PUB_KEY_SIZE;
+                ret = wc_ed448_import_private_key(*key_buffer, ED448_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed4);
+            }
+#endif
+        } else if (CMD.sign == SIGN_ECC256) {
 #ifdef HAVE_ECC
             ret = wc_ecc_init(&key.ecc);
             if (ret == 0) {
@@ -303,8 +328,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 }
             }
 #endif
-        }
-        else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
+        } else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
 #ifndef NO_RSA
             idx = 0;
             ret = wc_InitRsaKey(&key.rsa, NULL);
@@ -568,6 +592,11 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
             if (CMD.sign == SIGN_ED25519) {
 #ifdef HAVE_ED25519
                 ret = wc_ed25519_sign_msg(digest, digest_sz, signature, &CMD.signature_sz, &key.ed);
+#endif
+            }
+            else if (CMD.sign == SIGN_ED448) {
+#ifdef HAVE_ED448
+                ret = wc_ed448_sign_msg(digest, digest_sz, signature, &CMD.signature_sz, &key.ed4, NULL, 0);
 #endif
             }
             else if (CMD.sign == SIGN_ECC256) {
@@ -925,11 +954,11 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
-        printf("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
+        printf("Usage: %s [--ed25519 | --ed447 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
         printf("  - or - ");
-        printf("       %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-CMD.sign] image pub_key.der fw_version signature.sig\n", argv[0]);
+        printf("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-CMD.sign] image pub_key.der fw_version signature.sig\n", argv[0]);
         return 0;
     }
 
@@ -941,6 +970,9 @@ int main(int argc, char** argv)
         } else if (strcmp(argv[i], "--ed25519") == 0) {
             CMD.sign = SIGN_ED25519;
             sign_str = "ED25519";
+        } else if (strcmp(argv[i], "--ed448") == 0) {
+            CMD.sign = SIGN_ED448;
+            sign_str = "ED448";
         }
         else if (strcmp(argv[i], "--ecc256") == 0) {
             CMD.sign = SIGN_ECC256;
@@ -1042,6 +1074,10 @@ int main(int argc, char** argv)
         CMD.header_sz = 256;
         CMD.signature_sz = 64;
     }
+    else if (CMD.sign == SIGN_ED448) {
+        CMD.header_sz = 512;
+        CMD.signature_sz = 114;
+    }
     else if (CMD.sign == SIGN_ECC256) {
         CMD.header_sz = 256;
         CMD.signature_sz = 64;
@@ -1080,6 +1116,10 @@ int main(int argc, char** argv)
     if (CMD.sign == SIGN_ED25519) {
 #ifdef HAVE_ED25519
         wc_ed25519_free(&key.ed);
+#endif
+    } else if (CMD.sign == SIGN_ED448) {
+#ifdef HAVE_ED448
+        wc_ed448_free(&key.ed4);
 #endif
     } else if (CMD.sign == SIGN_ECC256) {
 #ifdef HAVE_ECC

@@ -61,6 +61,33 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 
 #endif /* WOLFBOOT_SIGN_ED25519 */
 
+#ifdef WOLFBOOT_SIGN_ED448
+#include <wolfssl/wolfcrypt/ed448.h>
+
+static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
+{
+    int ret, res;
+    ed448_key ed;
+    ret = wc_ed448_init(&ed);
+    if (ret < 0) {
+        /* Failed to initialize key */
+        return -1;
+    }
+    ret = wc_ed448_import_public(KEY_BUFFER, KEY_LEN, &ed);
+    if (ret < 0) {
+        /* Failed to import ed448 key */
+        return -1;
+    }
+    ret = wc_ed448_verify_msg(sig, IMAGE_SIGNATURE_SIZE, hash, WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed, NULL, 0);
+    if ((ret < 0) || (res == 0)) {
+        return -1;
+    }
+    return 0;
+}
+
+
+#endif
+
 #ifdef WOLFBOOT_SIGN_ECC256
 #include <wolfssl/wolfcrypt/ecc.h>
 #define ECC_KEY_SIZE  32
