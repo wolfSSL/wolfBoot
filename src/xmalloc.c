@@ -167,6 +167,32 @@ static struct xmalloc_slot xmalloc_pool[] = {
     { NULL, 0, 0}
 };
 
+
+#elif defined WOLFBOOT_SIGN_ED448
+
+#include <wolfssl/wolfcrypt/ge_448.h>
+
+#define GE448_WINDOW_BUF_SIZE 448
+
+static uint32_t aslide[GE448_WINDOW_BUF_SIZE / sizeof(uint32_t)];
+static uint32_t bslide[GE448_WINDOW_BUF_SIZE / sizeof(uint32_t)];
+static ge448_p2 pi, p2;
+static uint32_t sha_block[HASH_BLOCK_SIZE];
+
+static struct xmalloc_slot xmalloc_pool[] = {
+#ifdef WOLFBOOT_HASH_SHA256
+    { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
+#endif
+    { (uint8_t *)aslide, GE448_WINDOW_BUF_SIZE, 0 },
+    { (uint8_t *)aslide, GE448_WINDOW_BUF_SIZE, 0 },
+    { (uint8_t *)&pi, sizeof(ge448_p2), 0 },
+    { (uint8_t *)&p2, sizeof(ge448_p2), 0},
+    { NULL, 0, 0}
+};
+
+
+
+
 #elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA4096)
 
 static uint32_t sha_block[HASH_BLOCK_SIZE];
