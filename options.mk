@@ -72,6 +72,11 @@ ifeq ($(SIGN),ED448)
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    STACK_USAGE?=1024
+  else
+    STACK_USAGE?=4376
+  endif
 
   ifneq ($(HASH),SHA3)
     WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
@@ -80,7 +85,6 @@ ifeq ($(SIGN),ED448)
   CFLAGS+=-D"WOLFBOOT_SIGN_ED448"
   IMAGE_HEADER_SIZE=512
   CFLAGS+=-DIMAGE_HEADER_SIZE=512
-  STACK_USAGE?=4376
 endif
 
 ifeq ($(SIGN),RSA2048)

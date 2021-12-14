@@ -207,7 +207,7 @@ def make_header(image_file, fw_version, extra_fields=[]):
             print("Signing the firmware...")
             if (sign == 'ed25519'):
                 signature = ed.sign(digest)
-            if (sign == 'ed448'):
+            elif (sign == 'ed448'):
                 signature = ed.sign(digest)
             elif (sign == 'ecc256'):
                 r, s = ecc.sign_raw(digest)
@@ -422,6 +422,8 @@ elif not sha_only and not manual_sign:
         privkey, pubkey = ed.encode_key()
 
     if sign == 'ed448':
+        HDR_SIGNATURE_LEN = 114
+        WOLFBOOT_HEADER_SIZE = 512
         ed = ciphers.Ed448Private(key = wolfboot_key_buffer)
         privkey, pubkey = ed.encode_key()
 
