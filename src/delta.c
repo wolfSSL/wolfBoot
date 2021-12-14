@@ -20,7 +20,7 @@
  */
 #include <stdint.h>
 #include <string.h>
-#include "delta.h"
+#include <delta.h>
 
 
 #define ESC 0x7f

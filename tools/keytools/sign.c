@@ -35,11 +35,22 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/mman.h>
 #include <fcntl.h>
 #include <stddef.h>
+#include <delta.h>
+
+#ifdef _WIN32
+#include <io.h>
+#define HAVE_MMAP 0
+#define ftruncate(fd, len) _chsize(fd, len)
+#else
+#define HAVE_MMAP 1
+#endif
+
+#if HAVE_MMAP
+#include <sys/mman.h>
 #include <unistd.h>
-#include "delta.h"
+#endif
 
 #define MAX_SRC_SIZE (1 << 24)
 
@@ -792,11 +803,25 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
         printf("Cannot open file %s\n", f_base);
         goto cleanup;
     }
+#if HAVE_MMAP
     base = mmap(NULL, len1, PROT_READ|PROT_WRITE, MAP_SHARED, fd1, 0);
     if (base == (void *)(-1)) {
         perror("mmap");
         goto cleanup;
     }
+#else
+    base = malloc(len1);
+    if (base == NULL) {
+        fprintf(stderr, "Error malloc for base %d\n", len1);
+        goto cleanup;
+    }
+    if (len1 != read(fd1, base, len1)) {
+        perror("read of base");
+        goto cleanup;
+    }
+#endif
+
+
     /* Check base image version */
     base_ver_p = strstr(f_base, "_v");
     if (base_ver_p) {
@@ -831,11 +856,23 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz)
         goto cleanup;
     }
     len2 = st.st_size;
+#if HAVE_MMAP
     buffer = mmap(NULL, len2, PROT_READ, MAP_SHARED, fd2, 0);
-    if (base == (void *)(-1)) {
+    if (buffer == (void *)(-1)) {
         perror("mmap");
         goto cleanup;
     }
+#else
+    buffer = malloc(len2);
+    if (buffer == NULL) {
+        fprintf(stderr, "Error malloc for buffer %d\n", len2);
+        goto cleanup;
+    }
+    if (len2 != read(fd2, buffer, len2)) {
+        perror("fread of buffer");
+        goto cleanup;
+    }
+#endif
 
     /* Open output file */
     fd3 = open(wolfboot_delta_file, O_RDWR|O_CREAT|O_TRUNC, 0660);
@@ -920,13 +957,23 @@ cleanup:
     unlink(wolfboot_delta_file);
     /* Cleanup/close */
     if (fd2 >= 0) {
-        if (len2 > 0)
+        if (len2 > 0) {
+#if HAVE_MMAP
             munmap(buffer, len2);
+#else
+            free(buffer);
+#endif
+        }
         close(fd2);
     }
     if (fd1 >= 0) {
-        if (len1 > 0)
+        if (len1 > 0) {
+#if HAVE_MMAP
             munmap(base, len1);
+#else
+            free(base);
+#endif
+        }
         close(fd1);
     }
     return ret;
