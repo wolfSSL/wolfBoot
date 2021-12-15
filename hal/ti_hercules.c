@@ -77,7 +77,7 @@ void hal_prepare_boot(void)
 {
 }
 
-static inline Fapi_FlashBankType f021_lookup_bank(uint32_t address) {
+static inline Fapi_FlashBankType RAMFUNCTION f021_lookup_bank(uint32_t address) {
     Fapi_FlashBankType bank = Fapi_FlashBank0;
 
     if (address >= 0x200000) {

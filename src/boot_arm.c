@@ -500,15 +500,24 @@ void (* const IV[])(void) =
 
 #ifdef RAM_CODE
 
-#define AIRCR *(volatile uint32_t *)(0xE000ED0C)
-#define AIRCR_VKEY (0x05FA << 16)
-#define AIRCR_SYSRESETREQ (1 << 2)
+#ifdef CORTEX_R5
+  // Section 2.5.1.45 of spnu563A
+#  define SYSECR    *((volatile uint32_t *)0xFFFFFFE0)
+#  define ECR_RESET (1 << 15)
+#else
+#  define AIRCR *(volatile uint32_t *)(0xE000ED0C)
+#  define AIRCR_VKEY (0x05FA << 16)
+#  define AIRCR_SYSRESETREQ (1 << 2)
+#endif
 
 void RAMFUNCTION arch_reboot(void)
 {
+#ifdef CORTEX_R5
+    SYSECR = ECR_RESET;
+#else
     AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
+#endif
     while(1)
         ;
-
 }
 #endif /* RAM_CODE */
