@@ -83,7 +83,7 @@ static inline uint8_t *patch_read_cache(WB_PATCH_CTX *ctx)
 
         if (ctx->p_off < ctx->patch_cache_start +
                 (DELTA_PATCH_BLOCK_SIZE - BLOCK_HDR_SIZE))
-            return ctx->patch_cache + ctx->p_off;
+            return ctx->patch_cache + ctx->p_off - ctx->patch_cache_start;
     }
     ctx->patch_cache_start = ctx->p_off;
     ext_flash_check_read(
