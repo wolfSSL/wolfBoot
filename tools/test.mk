@@ -130,7 +130,7 @@ test-update: test-app/image.bin FORCE
 
 test-self-update: FORCE
 	@mv $(PRIVATE_KEY) private_key.old
-	@make -b factory.bin RAM_CODE=1 WOLFBOOT_VERSION=1 SIGN=$(SIGN)
+	@make clean factory.bin RAM_CODE=1 WOLFBOOT_VERSION=1 SIGN=$(SIGN)
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
@@ -561,6 +561,9 @@ test-901-no-asm-smallstack-forward-update-no-downgrade-RSA2048-SHA3: $(EXPVER) F
 test-911-no-asm-smallstack-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
 	@make test-111-forward-update-no-downgrade-RSA4096-SHA3 NO_ASM=1 WOLFBOOT_SMALL_STACK=1
 
+test-912-no-asm-smallstack-forward-update-no-downgrade-ED448-SHA3: $(EXPVER) FORCE
+	@make test-112-forward-update-no-downgrade-ED448-SHA3 NO_ASM=1 WOLFBOOT_SMALL_STACK=1
+
 test-971-no-asm-smallstack-forward-update-no-downgrade-NOSIGN: $(EXPVER) FORCE
 	@make test-171-forward-update-no-downgrade-NOSIGN NO_ASM=1 WOLFBOOT_SMALL_STACK=1
 
@@ -581,6 +584,9 @@ test-1051-fastmath-smallstack-forward-update-no-downgrade-RSA: $(EXPVER) FORCE
 
 test-1071-fastmath-smallstack-forward-update-no-downgrade-RSA4096: $(EXPVER) FORCE
 	@make test-71-forward-update-no-downgrade-RSA-4096 SPMATH=0 WOLFBOOT_SMALL_STACK=1
+
+test-1074-fastmath-smallstack-forward-update-no-downgrade-ED448: $(EXPVER) FORCE
+	@make test-74-forward-update-no-downgrade-ED448 SPMATH=0 WOLFBOOT_SMALL_STACK=1
 
 test-1081-fastmath-smallstack-forward-update-no-downgrade-ED25519-SHA3: $(EXPVER) FORCE
 	@make test-81-forward-update-no-downgrade-ED25519-SHA3 SPMATH=0 WOLFBOOT_SMALL_STACK=1
