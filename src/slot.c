@@ -19,6 +19,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef HAVE_CONFIG_H
+    #include <wolfpkcs11/config.h>
+#endif
+
 #include <wolfpkcs11/pkcs11.h>
 #include <wolfpkcs11/internal.h>
 
