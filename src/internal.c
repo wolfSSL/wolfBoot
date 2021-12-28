@@ -20,6 +20,10 @@
  */
 
 
+#ifdef HAVE_CONFIG_H
+    #include <wolfpkcs11/config.h>
+#endif
+
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
