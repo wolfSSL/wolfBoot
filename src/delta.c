@@ -229,14 +229,15 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
                 while (*pa == *(ctx->src_b + ctx->off_b)) {
-                    match_len++;
-                    pa++;
-                    ctx->off_b++;
-                    if ((uint32_t)(pa - ctx->src_a) >= ctx->size_a)
-                        break;
-                    if ((b_start / WOLFBOOT_SECTOR_SIZE) < (ctx->off_b / WOLFBOOT_SECTOR_SIZE)) {
+                    if ((uint32_t)(pa + 1 - ctx->src_a) >= ctx->size_a) {
                         break;
                     }
+                    if ((b_start / WOLFBOOT_SECTOR_SIZE) < ((ctx->off_b + 1) / WOLFBOOT_SECTOR_SIZE)) {
+                        break;
+                    }
+                    pa++;
+                    ctx->off_b++;
+                    match_len++;
                 }
                 hdr.esc = ESC;
                 hdr.off[0] = ((blk_start >> 16) & 0x000000FF);
@@ -268,11 +269,13 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     pb+= BLOCK_HDR_SIZE;
                     ctx->off_b += BLOCK_HDR_SIZE;
                     while (*pb == *(ctx->src_b + ctx->off_b)) {
-                        match_len++;
                         pb++;
-                        ctx->off_b++;
-                        if ((uint32_t)(pb - ctx->src_b) >= pb_end)
+                        if ((uint32_t)(pb - ctx->src_b) >= pb_end) {
+                            pb--;
                             break;
+                        }
+                        match_len++;
+                        ctx->off_b++;
                     }
                     hdr.esc = ESC;
                     hdr.off[0] = ((blk_start >> 16) & 0x000000FF);
