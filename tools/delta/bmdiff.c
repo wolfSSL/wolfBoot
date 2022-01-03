@@ -23,7 +23,6 @@
  */
 #define MODE_DIFF 0
 #define MODE_PATCH 1
-#define BUF_SIZE 4096
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -36,7 +35,7 @@
 #include "delta.h"
 
 #define MAX_SRC_SIZE (1 << 24)
-#define PATCH_BLOCK_SIZE 4096
+#define PATCH_BLOCK_SIZE WOLFBOOT_SECTOR_SIZE
 
 int main(int argc, char *argv[])
 {

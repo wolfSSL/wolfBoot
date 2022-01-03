@@ -50,10 +50,6 @@ struct BLOCK_HDR_PACKED block_hdr {
 #define ext_flash_check_read ext_flash_read
 #endif
 
-#ifndef WOLFBOOT_SECTOR_SIZE
-#   define WOLFBOOT_SECTOR_SIZE 0x1000
-#endif
-
 int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch,
         uint32_t psz)
 {
