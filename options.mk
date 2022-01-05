@@ -181,7 +181,18 @@ endif
 
 ifeq ($(ENCRYPT),1)
   CFLAGS+=-D"EXT_ENCRYPTED=1"
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+  ifeq ($(ENCRYPT_WITH_CHACHA),1)
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+    CFLAGS+=-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA
+  else
+    CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+  endif
+  ifeq ($(ENCRYPT_WITH_AES128),1)
+    CFLAGS+=-DENCRYPT_WITH_AES128 -DWOLFSSL_AES_128
+  else ifeq ($(ENCRYPT_WITH_AES256),1)
+    CFLAGS+=-DENCRYPT_WITH_AES256 -DWOLFSSL_AES_256
+  endif
 endif
 
 ifeq ($(EXT_FLASH),1)

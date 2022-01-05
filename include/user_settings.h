@@ -144,7 +144,6 @@
 #endif
 
 #ifdef EXT_ENCRYPTED
-#   define HAVE_CHACHA
 #   define HAVE_PWDBASED
 #else
 #   define NO_PWDBASED
@@ -152,7 +151,9 @@
 
 /* Disables - For minimum wolfCrypt build */
 #ifndef WOLFBOOT_TPM
-#   define NO_AES
+#   if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256)
+#       define NO_AES
+#   endif
 #   define NO_HMAC
 #endif
 

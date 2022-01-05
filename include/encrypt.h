@@ -31,7 +31,12 @@
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
+#ifdef ENCRYPT_WITH_CHACHA
 #include <wolfssl/wolfcrypt/chacha.h>
+#else
+#include <wolfssl/wolfcrypt/aes.h>
+#endif
+
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
 

@@ -146,10 +146,22 @@ int wolfBoot_dualboot_candidate(void);
 #   error "No valid hash algorithm defined!"
 #endif
 
-/* Encryption support */
+
+#ifdef EXT_ENCRYPTED
 #define ENCRYPT_BLOCK_SIZE 16 
-#define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
 #define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+/* Encryption support */
+#if defined(ENCRYPT_WITH_CHACHA)
+    #define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
+#elif defined(ENCRYPT_WITH_AES128)
+    #define ENCRYPT_KEY_SIZE 16 /* AES128  */
+#elif defined(ENCRYPT_WITH_AES256)
+    #define ENCRYPT_KEY_SIZE 32 /* AES256 */
+#else
+#   error "Encryption ON, but no encryption algorithm selected."
+#endif
+
+#endif /* EXT_ENCRYPTED */
 
 #ifdef DELTA_UPDATES
 int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
