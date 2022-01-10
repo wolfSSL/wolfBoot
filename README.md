@@ -262,3 +262,13 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * New HAL: STM32L4
    * TMS570LC43xx: Use `NVM_FLASH_WRITEONCE` for update progress and
                    fix stack pointer initialization
+
+### V1.10 (2022-01-10)
+ * Delta updates: expanded documentation + bug fixes
+ * Support Ed448 for signature verification
+ * Hardware support:
+   * Secure memory mode for STM32G0
+   * Fix for STM32L5 in dual-bank mode
+   * UEFI support: wolfBoot as EFI application on x86_64
+   * Fixed self-update in Cortex-R5
+   * Fixed HW support regressions in PSOC-6 build
