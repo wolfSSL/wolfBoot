@@ -126,6 +126,7 @@ factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bi
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
+	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
 $(LSCRIPT): hal/$(TARGET).ld FORCE
