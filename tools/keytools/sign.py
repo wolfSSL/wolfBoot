@@ -90,8 +90,8 @@ def make_header(image_file, fw_version, extra_fields=[]):
     header += struct.pack('<L', fw_version)
 
     # Four pad bytes, so timestamp is aligned
-    header += struct.pack('BB', 0xFF, 0xFF)
-    header += struct.pack('BB', 0xFF, 0xFF)
+    header += struct.pack('BB', HDR_PADDING, HDR_PADDING)
+    header += struct.pack('BB', HDR_PADDING, HDR_PADDING)
 
     # Timestamp field
     header += struct.pack('<HH', HDR_TIMESTAMP, HDR_TIMESTAMP_LEN)
@@ -123,13 +123,20 @@ def make_header(image_file, fw_version, extra_fields=[]):
     for t in extra_fields:
         tag = t[0]
         sz = t[1]
+        if sz == 4:
+            while (len(header) % 4) != 0:
+                header += struct.pack('B', HDR_PADDING)
+        elif sz == 8:
+            while (len(header) % 8) != 4:
+                header += struct.pack('B', HDR_PADDING)
+
         payload = t[2]
         header += struct.pack('<HH', tag, sz)
         header += payload
 
     # Pad bytes. Sha-3 field requires 8-byte alignment
     while (len(header) % 8) != 4:
-        header += struct.pack('B', 0xFF)
+        header += struct.pack('B', HDR_PADDING)
 
     print("Calculating %s digest..." % hash_algo)
 
@@ -462,7 +469,7 @@ outfile = open(output_image_file, 'wb')
 outfile.write(header)
 sz = len(header)
 while sz < WOLFBOOT_HEADER_SIZE:
-    outfile.write(struct.pack('B',0xFF))
+    outfile.write(struct.pack('B',HDR_PADDING))
     sz += 1
 infile = open(image_file, 'rb')
 while True:
@@ -505,7 +512,7 @@ if (delta):
     outfile.write(header)
     sz = len(header)
     while sz < WOLFBOOT_HEADER_SIZE:
-        outfile.write(struct.pack('B', 0xFF))
+        outfile.write(struct.pack('B', HDR_PADDING))
         sz += 1
     infile = open(tmp_outfile, 'rb')
     while True:
