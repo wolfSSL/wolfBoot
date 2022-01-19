@@ -6,6 +6,7 @@ This README describes configuration of supported targets.
 
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cypress PSoC-6](#cypress-psoc-6)
+* [Nordic nRF52840](#nordic-nrf52840)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
@@ -980,3 +981,28 @@ tools/efi/compile_efi_linux.sh
 tools/efi/run_efi.sh
 ```
 
+
+## Nordic nRF52840
+
+We have full Nordic nRF5280 examples for Contiki and RIOT-OS in our [wolfBoot-examples repo](https://github.com/wolfSSL/wolfboot-examples)
+
+Examples for nRF52:
+* RIOT-OS: https://github.com/wolfSSL/wolfBoot-examples/tree/master/riotOS-nrf52840dk-ble
+* Contiki-OS: https://github.com/wolfSSL/wolfBoot-examples/tree/master/contiki-nrf52
+
+Example of flash memory layout and configuration on the nRF52:
+
+  - 0x000000 - 0x01efff : Reserved for Nordic SoftDevice binary
+  - 0x01f000 - 0x02efff : Bootloader partition for wolfBoot
+  - 0x02f000 - 0x056fff : Active (boot) partition
+  - 0x057000 - 0x057fff : Unused
+  - 0x058000 - 0x07ffff : Upgrade partition
+
+```c
+#define WOLFBOOT_SECTOR_SIZE              4096
+#define WOLFBOOT_PARTITION_SIZE           0x28000
+
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS   0x2f000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS   0x57000
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x58000
+```
