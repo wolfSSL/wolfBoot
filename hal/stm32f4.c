@@ -172,10 +172,11 @@ static void RAMFUNCTION clear_errors(void)
     FLASH_SR |= ( FLASH_SR_PGSERR | FLASH_SR_PGPERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR | FLASH_SR_OPERR | FLASH_SR_EOP );
 }
 
-int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t _address, const uint8_t *data, int len)
 {
     int i;
     uint32_t val;
+    uint32_t address = _address - ARCH_FLASH_OFFSET;
     flash_wait_complete();
     clear_errors();
     /* Set 8-bit write */
@@ -202,13 +203,15 @@ void RAMFUNCTION hal_flash_lock(void)
 }
 
 
-int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t _address, int len)
 {
     int start = -1, end = -1;
     uint32_t end_address;
     int i;
+    uint32_t address = _address - ARCH_FLASH_OFFSET;
     if (len == 0)
         return -1;
+
     end_address = address + len - 1;
 
     if (address < flash_sector[0] || end_address > FLASH_TOP)
