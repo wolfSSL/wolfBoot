@@ -448,10 +448,17 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         &image_type);
 
     if (is_diff) {
+        /* Append pad bytes, so fields are 4-byte aligned */
+        while ((header_idx % 4) != 0)
+            header_idx++;
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE, 4,
                 &delta_base_version);
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 2,
                 &patch_len);
+
+        /* Append pad bytes, so fields are 4-byte aligned */
+        while ((header_idx % 4) != 0)
+            header_idx++;
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
                 &patch_inv_off);
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 2,
