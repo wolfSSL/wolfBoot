@@ -59,6 +59,7 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),stm32g0)
     CORTEX_M0=1
     ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
 
     # Enable this feature for secure memory support
     # Makes the flash sectors for the bootloader unacessible from the application
@@ -66,19 +67,50 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-DFLASH_SECURABLE_MEMORY_SUPPORT
   endif
 
+  ifeq ($(TARGET),stm32f4)
+    ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
+    SPI_TARGET=stm32
+  endif
+
+  ifeq ($(TARGET),stm32l4)
+    SPI_TARGET=stm32
+    ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
+    OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
+    OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
+    CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+      -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
+      -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
+      -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
+      -I$(STM32CUBE)/Drivers/CMSIS/Include/
+  endif
+
   ifeq ($(TARGET),stm32f7)
     ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
     SPI_TARGET=stm32
   endif
 
   ifeq ($(TARGET),stm32h7)
     ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
     SPI_TARGET=stm32
   endif
 
   ifeq ($(TARGET),stm32wb)
     ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
     SPI_TARGET=stm32
+    ifneq ($(PKA),0)
+      PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
+      PKA_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
+          -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
+          -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
+          -I$(STM32CUBE)/Drivers/CMSIS/Include \
+          -Ihal \
+          -DSTM32WB55xx
+    endif
   endif
 
   ifeq ($(TARGET),stm32l5)
@@ -235,23 +267,6 @@ ifeq ($(TARGET),lpc)
   OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
 endif
 
-ifeq ($(TARGET),stm32f4)
-  SPI_TARGET=stm32
-endif
-
-ifeq ($(TARGET),stm32wb)
-  SPI_TARGET=stm32
-  ifneq ($(PKA),0)
-    PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
-    PKA_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
-        -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
-        -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
-        -I$(STM32CUBE)/Drivers/CMSIS/Include \
-        -Ihal \
-        -DSTM32WB55xx
-  endif
-endif
-
 ifeq ($(TARGET),psoc6)
     CORTEX_M0=1
     OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
@@ -294,17 +309,6 @@ ifeq ($(TARGET),psoc6)
     endif
 endif
 
-ifeq ($(TARGET),stm32l4)
-  SPI_TARGET=stm32
-  ARCH_FLASH_OFFSET=0x08000000
-  OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
-  OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
-  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
-    -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
-    -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
-    -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
-    -I$(STM32CUBE)/Drivers/CMSIS/Include/
-endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
@@ -350,3 +354,4 @@ endif
 ifeq ($(DEBUG),1)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/logging.o
 endif
+
