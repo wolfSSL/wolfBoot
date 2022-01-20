@@ -10,7 +10,7 @@ endif
 ifeq ($(SIGN),NONE)
   SIGN_OPTIONS+=--no-sign
   PRIVATE_KEY=
-  STACK_USAGE=1024
+  STACK_USAGE=1180
   CFLAGS+=-DWOLFBOOT_NO_SIGN
 endif
 
@@ -57,7 +57,7 @@ ifeq ($(SIGN),ED25519)
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
-  STACK_USAGE?=1024
+  STACK_USAGE?=1180
 endif
 
 ifeq ($(SIGN),ED448)
