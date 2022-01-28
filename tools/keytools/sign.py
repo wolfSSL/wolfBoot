@@ -66,6 +66,9 @@ self_update=False
 sha_only=False
 manual_sign=False
 encrypt=False
+chacha=True
+aes128=False
+aes256=False
 delta=False
 encrypt_key_file=None
 delta_base_file=None
@@ -249,7 +252,7 @@ if (argc < 4) or (argc > 10):
     print("  - or - ")
     print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--chacha | --aes128 | --aes256 ] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
     sys.exit(1)
 
 i = 1
@@ -278,6 +281,22 @@ while (i < len(argv)):
         manual_sign = True
     elif (argv[i] == '--encrypt'):
         encrypt = True
+        i += 1
+        encrypt_key_file = argv[i]
+    elif (argv[i] == '--chacha'):
+        encrypt = True
+        i += 1
+        encrypt_key_file = argv[i]
+    elif (argv[i] == '--aes128'):
+        encrypt = True
+        chacha = False
+        aes128 = True
+        i += 1
+        encrypt_key_file = argv[i]
+    elif (argv[i] == '--aes256'):
+        encrypt = True
+        chacha = False
+        aes256 = True
         i += 1
         encrypt_key_file = argv[i]
     elif (argv[i] == '--delta'):
@@ -530,17 +549,36 @@ if (encrypt):
     off = 0
     outfile = open(output_image_file, 'rb')
     ekeyfile = open(encrypt_key_file, 'rb')
-    key = ekeyfile.read(32)
-    iv_nonce = ekeyfile.read(12)
     enc_outfile = open(encrypted_output_image_file, 'wb')
-    cha = ciphers.ChaCha(key, 32)
-    while(True):
-        cha.set_iv(iv_nonce, off)
-        buf = outfile.read(16)
-        if len(buf) == 0:
-            break
-        enc_outfile.write(cha.encrypt(buf))
-        off += 1
+    if chacha:
+        key = ekeyfile.read(32)
+        iv_nonce = ekeyfile.read(12)
+        cha = ciphers.ChaCha(key, 32)
+        while True:
+            cha.set_iv(iv_nonce, off)
+            buf = outfile.read(16)
+            if len(buf) == 0:
+                break
+            enc_outfile.write(cha.encrypt(buf))
+            off += 1
+    elif aes128:
+        key = ekeyfile.read(16)
+        iv = ekeyfile.read(16)
+        aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
+        while True:
+            buf = outfile.read(16)
+            if len(buf) == 0:
+                break
+            enc_outfile.write(aesctr.encrypt(buf))
+    elif aes256:
+        key = ekeyfile.read(32)
+        iv = ekeyfile.read(16)
+        aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
+        while True:
+            buf = outfile.read(16)
+            if len(buf) == 0:
+                break
+            enc_outfile.write(aesctr.encrypt(buf))
     outfile.close()
     ekeyfile.close()
     enc_outfile.close()
