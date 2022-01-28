@@ -374,17 +374,28 @@ STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
 
 For RAMFUNCTION support (required for SEC_PROT) make sure `RAM_CODE=1`.
 
-Compile requirements:
-`make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
+### STM32G0 Programming
 
-### Debugging STM32G0
+Compile requirements: `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
 
-Use `make DEBUG=1` and reload firmware.
+The output is a single `factory.bin` that includes `wolfboot.bin` and `test-app/image_v1_signed.bin` combined together. 
+This should be programmed to the flash start address `0x08000000`.
+
+Flash using the STM32CubeProgrammer CLI:
 
 ```
-st-flash write factory.bin 0x08000000
+STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
+```
 
-# Start GDB server
+### STM32G0 Debugging
+
+Use `make DEBUG=1` and program firmware again.
+
+Start GDB server on port 3333:
+
+```
+ST-LINK_gdbserver -d -e -r 1 -p 3333
+OR
 st-util -p 3333
 ```
 
