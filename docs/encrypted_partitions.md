@@ -57,18 +57,27 @@ reboot.
 
 ### Symmetric encryption algorithm
 
-The algorithm currently used to encrypt and decrypt data in external partitions
+The default algorithm used to encrypt and decrypt data in external partitions
 is Chacha20-256.
 
  - The `key` provided to `wolfBoot_set_encrypt_key()` must be exactly 32 Bytes long.
  - The `nonce` argument must be a 96-bit (12 Bytes) randomly generated buffer, to be used as IV for encryption and decryption.
 
+AES-128 and AES-256 are also supported. AES is used in counter mode. AES-128 and AES-256 have a key length of 16 and 32 bytes
+respectively, and the IV size is 16 bytes long in both cases.
+
 ## Example usage
 
-### Signing and encrypting the update bundle
+To compile wolfBoot with encryption support, use the option `ENCRYPT=1`.
+
+By default, this also selects `ENCRYPT_WITH_CHACHA=1`. To use AES encryption instead,
+select `ENCRYPT_WITH_AES128=1` or `ENCRYPT_WITH_AES256=1`.
+
+
+### Signing and encrypting the update bundle with ChaCha20-256
 
 The `sign.py` tool can sign and encrypt the image with a single command.
-The encryption secret is provided in a binary file that should contain a concatenation of
+In case of chacha20, the encryption secret is provided in a binary file that should contain a concatenation of
 a 32B ChaCha-256 key and a 12B nonce.
 
 In the examples provided, the test application uses the following parameters:
@@ -89,6 +98,34 @@ secret file:
 
 ```
 ./tools/keytools/sign.py --encrypt enc_key.der test-app/image.bin ecc256.der 24
+
+```
+
+which will produce as output the file `test-app/image_v24_signed_and_encrypted.bin`, that can be transferred to the target's external device.
+
+### Signing and encrypting the update bundle with AES-256
+
+In case of AES-256, the encryption secret is provided in a binary file that should contain a concatenation of
+a 32B key and a 16B IV.
+
+In the examples provided, the test application uses the following parameters:
+
+```
+key = "0123456789abcdef0123456789abcdef"
+iv = "0123456789abcdef"
+```
+
+So it is easy to prepare the encryption secret in the test scripts or from the command line using:
+
+```
+echo -n "0123456789abcdef0123456789abcdef0123456789abcdef" > enc_key.der
+```
+
+The `sign.py` script can now be invoked to produce a signed+encrypted image, by using the extra argument `--encrypt` followed by the
+secret file. To select AES-256, use the `--aes256` option.
+
+```
+./tools/keytools/sign.py --aes256 --encrypt enc_key.der test-app/image.bin ecc256.der 24
 
 ```
 

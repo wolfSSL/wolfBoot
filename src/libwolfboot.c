@@ -818,8 +818,8 @@ static int aes_init(void)
         return -1;
 
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
-    XMEMCPY(&iv_buf[1], stored_nonce, ENCRYPT_NONCE_SIZE);
-    iv_buf[0] = 0;
+    XMEMCPY(iv_buf, stored_nonce, ENCRYPT_NONCE_SIZE);
+    iv_buf[4] = 0;
     /* AES_ENCRYPTION is used for both directions in CTR */
     wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
     wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
@@ -830,9 +830,11 @@ static int aes_init(void)
 static void aes_set_iv(byte *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
-    XMEMCPY(&iv_buf[1], nonce, ENCRYPT_NONCE_SIZE);
-    iv_buf[0] = ByteReverseWord32(iv_ctr);
+    uint32_t iv_local_ctr;
+    XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
+    iv_buf[3] = ByteReverseWord32(iv_ctr);
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);
+    wc_AesSetIV(&aes_dec, (byte *)iv_buf);
 }
 
 

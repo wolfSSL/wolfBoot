@@ -285,20 +285,14 @@ while (i < len(argv)):
         encrypt_key_file = argv[i]
     elif (argv[i] == '--chacha'):
         encrypt = True
-        i += 1
-        encrypt_key_file = argv[i]
     elif (argv[i] == '--aes128'):
         encrypt = True
         chacha = False
         aes128 = True
-        i += 1
-        encrypt_key_file = argv[i]
     elif (argv[i] == '--aes256'):
         encrypt = True
         chacha = False
         aes256 = True
-        i += 1
-        encrypt_key_file = argv[i]
     elif (argv[i] == '--delta'):
         delta = True
         i += 1
@@ -563,21 +557,25 @@ if (encrypt):
             off += 1
     elif aes128:
         key = ekeyfile.read(16)
-        iv = ekeyfile.read(16)
+        iv = ekeyfile.read(12) + struct.pack('<L', 0)
         aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
         while True:
             buf = outfile.read(16)
             if len(buf) == 0:
                 break
+            while (len(buf) % 16) != 0:
+                buf += struct.pack('B', HDR_PADDING)
             enc_outfile.write(aesctr.encrypt(buf))
     elif aes256:
         key = ekeyfile.read(32)
-        iv = ekeyfile.read(16)
+        iv = ekeyfile.read(12) + struct.pack('<L', 0)
         aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
         while True:
             buf = outfile.read(16)
             if len(buf) == 0:
                 break
+            while (len(buf) % 16) != 0:
+                buf += struct.pack('B', HDR_PADDING)
             enc_outfile.write(aesctr.encrypt(buf))
     outfile.close()
     ekeyfile.close()
