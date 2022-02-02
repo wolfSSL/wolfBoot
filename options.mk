@@ -84,7 +84,6 @@ ifeq ($(SIGN),ED448)
   PUBLIC_KEY_OBJS=./src/ed448_pub_key.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ED448"
   IMAGE_HEADER_SIZE=512
-  CFLAGS+=-DIMAGE_HEADER_SIZE=512
 endif
 
 ifeq ($(SIGN),RSA2048)
@@ -100,8 +99,7 @@ ifeq ($(SIGN),RSA2048)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa2048_pub_key.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" $(RSA_EXTRA_CFLAGS) \
-		  -D"IMAGE_HEADER_SIZE=512"
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
       STACK_USAGE=5008
@@ -130,8 +128,7 @@ ifeq ($(SIGN),RSA4096)
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o
   PUBLIC_KEY_OBJS=./src/rsa4096_pub_key.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" $(RSA_EXTRA_CFLAGS) \
-		  -D"IMAGE_HEADER_SIZE=1024"
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
       STACK_USAGE=5888
@@ -290,5 +287,5 @@ ifeq ($(HASH),SHA3)
   SIGN_OPTIONS+=--sha3
 endif
 
-
+CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 OBJS+=$(WOLFCRYPT_OBJS)

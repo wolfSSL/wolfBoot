@@ -21,6 +21,12 @@ OPTIMIZE        = -Os
 #CFLAGS+=$(DEBUG_FLAGS)
 CFLAGS+=$(OPTIMIZE)
 
+ifeq ($(IMAGE_HEADER_SIZE),)
+  IMAGE_HEADER_SIZE=256
+endif
+
+CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
+
 # Sources
 SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/ecc.c \
