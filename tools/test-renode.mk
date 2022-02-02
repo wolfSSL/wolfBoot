@@ -67,18 +67,6 @@ $(BINASSEMBLE):
 
 # Testbed actions
 #
-#
-# tpm-mute mode is the default
-#
-
-renode-testbed-on: FORCE
-	@(renode --disable-xwt -P $(RENODE_PORT) $(RENODE_CONFIG)) &
-	@sleep 5
-	@echo "Testbed on."
-
-renode-testbed-off: FORCE
-	@(echo && echo quit) | nc -q 1 localhost $(RENODE_PORT)
-	@echo "Testbed off."
 
 renode-factory: factory.bin test-app/image.bin FORCE
 	@rm -f /tmp/wolfboot.uart
