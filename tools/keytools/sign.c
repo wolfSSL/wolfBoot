@@ -89,6 +89,10 @@
 	#define PATH_MAX 256
 #endif
 
+#ifndef IMAGE_HEADER_SIZE
+    #define IMAGE_HEADER_SIZE 256
+#endif
+
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 
 #define HDR_VERSION     0x01
@@ -199,7 +203,7 @@ struct cmd_options {
 static struct cmd_options CMD = {
     .sign = SIGN_AUTO,
     .hash_algo = HASH_SHA256,
-    .header_sz = 256
+    .header_sz = IMAGE_HEADER_SIZE
 };
 
 static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
@@ -1125,23 +1129,28 @@ int main(int argc, char** argv)
 
     /* get header and signature sizes */
     if (CMD.sign == SIGN_ED25519) {
-        CMD.header_sz = 256;
+        if (CMD.header_sz < 256)
+            CMD.header_sz = 256;
         CMD.signature_sz = 64;
     }
     else if (CMD.sign == SIGN_ED448) {
-        CMD.header_sz = 512;
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
         CMD.signature_sz = 114;
     }
     else if (CMD.sign == SIGN_ECC256) {
-        CMD.header_sz = 256;
+        if (CMD.header_sz < 256)
+            CMD.header_sz = 256;
         CMD.signature_sz = 64;
     }
     else if (CMD.sign == SIGN_RSA2048) {
-        CMD.header_sz = 512;
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
         CMD.signature_sz = 256;
     }
     else if (CMD.sign == SIGN_RSA4096) {
-        CMD.header_sz = 1024;
+        if (CMD.header_sz < 1024)
+            CMD.header_sz = 1024;
         CMD.signature_sz = 512;
     }
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
