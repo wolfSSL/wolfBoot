@@ -67,7 +67,7 @@ static uint32_t RAMFUNCTION GetBank(uint32_t Addr)
     return bank;
 }
 
-static void RAMFUNCTION hal_flash_clear_errors(void)
+static void RAMFUNCTION flash_clear_errors(void)
 {
      __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
 }
@@ -84,38 +84,29 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
 {
-    uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
+    uint32_t FirstPage = 0, LastPage = 0, NbOfPages = 0, BankNumber = 0;
     uint32_t PAGEError = 0;
-    uint32_t end_address;
-    hal_flash_clear_errors();
+    int ret;
+    flash_clear_errors();
 
     if (len == 0) {
         return -1;
     }
-    hal_flash_unlock();
 
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
 
-    FirstPage = GetPage((uint32_t) address);
-    NbOfPages = GetPage((uint32_t) address) - FirstPage + 1;
-    BankNumber = GetBank((uint32_t) address);
-
+    FirstPage = GetPage(address);
+    LastPage = GetPage(address + len - 1);
+    NbOfPages = LastPage - FirstPage + 1;
+    BankNumber = GetBank(address);
     EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
     EraseInitStruct.Banks       = BankNumber;
     EraseInitStruct.Page        = FirstPage;
     EraseInitStruct.NbPages     = NbOfPages;
+    ret = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
 
-    end_address = address + len - 1;
-
-    for (uint32_t p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-
-        if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK) {
-            break;
-        }
-    }
-
-    hal_flash_lock();
-
+    if (ret != HAL_OK)
+        return -1;
     return 0;
 }
 
@@ -134,30 +125,43 @@ static RAMFUNCTION void flash_wait_complete(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
-    uint32_t *dst;
+    uint32_t *dst, *src;
+    uint32_t pdword[2] __attribute__((aligned(16)));
     uint32_t reg;
     int ret = -1;
 
-    hal_flash_clear_errors();
+    flash_clear_errors();
     reg = FLASH->CR & (~FLASH_CR_FSTPG);
     FLASH->CR = reg | FLASH_CR_PG;
 
     while (i < len) {
-        uint32_t val[2];
-        uint8_t *vbytes = (uint8_t *)(val);
-        int off = (address + i) - (((address + i) >> 3) << 3);
-        uint32_t base_addr = address & (~0x07);  /* aligned to 64 bit */
-        int u32_idx = (i >> 2);
-
-        hal_flash_clear_errors();
-        dst = (uint32_t *)(base_addr);
-        val[0] = dst[u32_idx];
-        val[1] = dst[u32_idx + 1];
-        while ((off < 8) && (i < len))
-            vbytes[off++] = data[i++];
-        dst[u32_idx] = val[0];
-        dst[u32_idx + 1] = val[1];
-        flash_wait_complete();
+        flash_clear_errors();
+        if ((len - i > 3) && ((((address + i) & 0x07) == 0)  && ((((uint32_t)data) + i) & 0x07) == 0)) {
+            uint32_t idx = i >> 2;
+            src = (uint32_t *)data;
+            dst = (uint32_t *)(address);
+            pdword[0] = src[idx];
+            pdword[1] = src[idx + 1];
+            flash_wait_complete();
+            dst[idx] = pdword[0];
+            dst[idx + 1] = pdword[1];
+            flash_wait_complete();
+            i+=8;
+        } else {
+            uint32_t val[2];
+            uint8_t *vbytes = (uint8_t *)(val);
+            int off = (address + i) - (((address + i) >> 3) << 3);
+            uint32_t base_addr = address & (~0x07); /* aligned to 64 bit */
+            int u32_idx = (i >> 2);
+            dst = (uint32_t *)(base_addr);
+            val[0] = dst[u32_idx];
+            val[1] = dst[u32_idx + 1];
+            while ((off < 8) && (i < len))
+                vbytes[off++] = data[i++];
+            dst[u32_idx] = val[0];
+            dst[u32_idx + 1] = val[1];
+            flash_wait_complete();
+        }
     }
     if ((FLASH->SR &FLASH_SR_PROGERR)!= FLASH_SR_PROGERR) {
         ret=0;

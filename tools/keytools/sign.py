@@ -294,6 +294,24 @@ if (encrypt and delta):
     print("Encryption of delta images not supported yet.")
     sys.exit(1)
 
+try:
+    cfile = open(".config", "r")
+except:
+    cfile = None
+    pass
+
+if cfile:
+    l = cfile.readline()
+    while l != '':
+        if "IMAGE_HEADER_SIZE" in l:
+            val=l.split('=')[1].rstrip('\n')
+            WOLFBOOT_HEADER_SIZE = int(val,0)
+            print("IMAGE_HEADER_SIZE (from .config): " + str(WOLFBOOT_HEADER_SIZE))
+
+        l = cfile.readline()
+    cfile.close()
+
+
 image_file = argv[i+1]
 if sign != 'none':
     key_file = argv[i+2]
@@ -430,7 +448,8 @@ elif not sha_only and not manual_sign:
 
     if sign == 'ed448':
         HDR_SIGNATURE_LEN = 114
-        WOLFBOOT_HEADER_SIZE = 512
+        if WOLFBOOT_HEADER_SIZE < 512:
+            WOLFBOOT_HEADER_SIZE = 512
         ed = ciphers.Ed448Private(key = wolfboot_key_buffer)
         privkey, pubkey = ed.encode_key()
 
@@ -440,27 +459,30 @@ elif not sha_only and not manual_sign:
         pubkey = wolfboot_key_buffer[0:64]
 
     if sign == 'rsa2048':
-        WOLFBOOT_HEADER_SIZE = 512
+        if WOLFBOOT_HEADER_SIZE < 512:
+            WOLFBOOT_HEADER_SIZE = 512
         HDR_SIGNATURE_LEN = 256
         rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
         privkey,pubkey = rsa.encode_key()
 
     if sign == 'rsa4096':
-        WOLFBOOT_HEADER_SIZE = 1024
+        if WOLFBOOT_HEADER_SIZE < 1024:
+            WOLFBOOT_HEADER_SIZE = 1024
         HDR_SIGNATURE_LEN = 512
         rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
         privkey,pubkey = rsa.encode_key()
 
 else:
     if sign == 'rsa2048':
-        WOLFBOOT_HEADER_SIZE = 512
+        if WOLFBOOT_HEADER_SIZE < 512:
+            WOLFBOOT_HEADER_SIZE = 512
         HDR_SIGNATURE_LEN = 256
     if sign == 'rsa4096':
-        WOLFBOOT_HEADER_SIZE = 1024
+        if WOLFBOOT_HEADER_SIZE < 512:
+            WOLFBOOT_HEADER_SIZE = 1024
         HDR_SIGNATURE_LEN = 512
 
     pubkey = wolfboot_key_buffer
-
 
 header = make_header(image_file, fw_version)
 
