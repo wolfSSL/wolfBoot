@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "system.h"
+#include "wolfboot/wolfboot.h"
 #include "hal.h"
 
 
@@ -205,7 +206,7 @@ void uart_update_mgr(void)
     int i;
     memset(page, 0xFF, PAGESIZE);
     hal_flash_unlock();
-//    version = wolfBoot_current_firmware_version();
+    version = wolfBoot_current_firmware_version();
 //    if ((version & 0x01) == 0)
 //        wolfBoot_success();
     uart_write(START);

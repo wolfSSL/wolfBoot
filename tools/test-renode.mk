@@ -1,12 +1,14 @@
 TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
-TARGET_UART=/tmp/wolfboot.uart
-RENODE_PORT=5555
-RENODE_OPTIONS=--pid-file=/tmp/renode.pid --hide-monitor
+RENODE_UART=/tmp/wolfboot.uart
+RENODE_PORT=55155
+RENODE_OPTIONS=--pid-file=/tmp/renode.pid
+RENODE_OPTIONS+=--disable-xwt -P $(RENODE_PORT)
 RENODE_CONFIG=tools/renode/stm32f4_discovery_wolfboot.resc
+POFF=131067
 
-EXPVER=tools/test-expect-version/test-expect-version $(TARGET_UART)
-BINASSEMBLE=tools/bin-assemble/bin-assemble
+RENODE_EXPVER=tools/test-expect-version/test-expect-version $(RENODE_UART)
+RENODE_BINASSEMBLE=tools/bin-assemble/bin-assemble
 
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
 	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
@@ -26,6 +28,12 @@ else
 	else
 		SIGN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py
 	endif
+endif
+
+
+ifeq ($(TARGET),stm32f7)
+  RENODE_CONFIG=tools/renode/stm32f746_wolfboot.resc
+  POFF=393211
 endif
 
 ifeq ($(SIGN),NONE)
@@ -59,18 +67,27 @@ ifeq ($(HASH),SHA3)
   SIGN_ARGS+= --sha3
 endif
 
-$(EXPVER):
-	$(MAKE) -C $(dir $@)
-
-$(BINASSEMBLE):
-	$(MAKE) -C $(dir $@)
-
 # Testbed actions
 #
+#
+renode-on: FORCE
+	@rm -f /tmp/wolfboot.uart
+	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG)&
+	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
+	@echo "Renode up: uart port activated"
+
+renode-off: FORCE
+	@echo "Terminating renode..."
+	(echo && echo quit o) | nc -q 1 localhost $(RENODE_PORT) > /dev/null
+	@tail --pid=`cat /tmp/renode.pid` -f /dev/null
+	@echo "Renode exited."
+	@killall renode || true
+	@killall mono || true
+
 
 renode-factory: factory.bin test-app/image.bin FORCE
 	@rm -f /tmp/wolfboot.uart
-	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-update.bin
+	@dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" > /tmp/renode-test-update.bin
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=/tmp/renode-test-update.bin bs=1 conv=notrunc
@@ -78,11 +95,9 @@ renode-factory: factory.bin test-app/image.bin FORCE
 	@cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin
 	@cp wolfboot.elf /tmp/renode-wolfboot.elf
 	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG)&
-	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
-	@echo "serial port activated"
-	@test `$(EXPVER)` -eq 1
-	@echo Waiting for renode to terminate...
-	@tail --pid=`cat /tmp/renode.pid` -f /dev/null
+	@make renode-on
+	@test `$(RENODE_EXPVER)` -eq 1
+	@make renode-off
 	@rm -f /tmp/renode.pid
 	@rm -f /tmp/renode-wolfboot.elf
 	@rm -f /tmp/renode-test-v1.bin
@@ -105,12 +120,12 @@ renode-factory-all:
 	@make clean
 	@make renode-factory
 	@make clean
-	@make renode-factory-ed448
+	@make renode-factory-ed448 RENODE_PORT=55156
 	@make clean
-	@make renode-factory-ecc256
+	@make renode-factory-ecc256 RENODE_PORT=55157
 	@make clean
-	@make renode-factory-rsa2048
+	@make renode-factory-rsa2048 RENODE_PORT=55158
 	@make clean
-	@make renode-factory-rsa4096
+	@make renode-factory-rsa4096 RENODE_PORT=55159
 	@echo All tests in $@ OK!
 

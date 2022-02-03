@@ -43,9 +43,9 @@ macro reset
     ### Uncomment next line to print function names at run-time
     ###    sysbus.cpu LogFunctionNames True
 
-    ### Start system for 6 seconds
+    ### Start system for 50 seconds
     start
-    sleep 6
+    sleep 50
     pause
 
 
