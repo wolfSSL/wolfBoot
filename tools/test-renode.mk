@@ -2,8 +2,8 @@ TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
 RENODE_UART=/tmp/wolfboot.uart
 RENODE_PORT=55155
-RENODE_OPTIONS=--pid-file=/tmp/renode.pid -P $(RENODE_PORT)
-RENODE_OPTIONS+=--disable-xwt
+RENODE_OPTIONS=--pid-file=/tmp/renode.pid
+RENODE_OPTIONS+=--disable-xwt -P $(RENODE_PORT)
 RENODE_CONFIG=tools/renode/stm32f4_discovery_wolfboot.resc
 POFF=131067
 
@@ -38,6 +38,10 @@ endif
 
 ifeq ($(TARGET),hifive1)
   RENODE_CONFIG=tools/renode/sifive_fe310_wolfboot.resc
+endif
+
+ifeq ($(TARGET),nrf52)
+  RENODE_CONFIG=tools/renode/nrf52840_wolfboot.resc
 endif
 
 ifeq ($(SIGN),NONE)
@@ -76,7 +80,8 @@ endif
 #
 renode-on: FORCE
 	@rm -f /tmp/wolfboot.uart
-	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 >/tmp/renode.log &
+	#@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 >/tmp/renode.log &
+	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) &
 	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
 	@echo "Renode up: uart port activated"
 	@echo "Renode running: renode has been started."
