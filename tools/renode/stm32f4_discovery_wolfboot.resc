@@ -43,20 +43,8 @@ macro reset
     ### Uncomment next line to print function names at run-time
     ###    sysbus.cpu LogFunctionNames True
 
-    ### Start system for 50 seconds
+    ### Start system
     start
-    sleep 50
-    pause
-
-
-    ### Uncomment next lines to load update package in FLASH
-    ### sysbus LoadBinary @/tmp/renode-test-update.bin 0x08040000
-    ### cpu Reset
-    ### start
-    ### sleep 60
-
-    ### Goodbye.
-    quit
 
 """
 

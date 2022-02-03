@@ -1,23 +1,27 @@
-:name: STM32F746
-:description: This script runs wolfboot on STM32F7 Discovery.
+:name: SiFive-FE310
+:description: This script runs wolfboot on SiFive-FE310 platform.
+
+$name?="SiFive-FE310"
 
 using sysbus
-$name?="STM32F746"
 mach create $name
+machine LoadPlatformDescription @platforms/cpus/sifive-fe310.repl
 
-machine LoadPlatformDescription @platforms/boards/stm32f7_discovery-bb.repl
 
-
-#showAnalyzer sysbus.usart1
+#showAnalyzer uart0
 emulation CreateUartPtyTerminal "term" "/tmp/wolfboot.uart" True
-connector Connect sysbus.usart1 term
+connector Connect uart0 term
+sysbus Tag <0x10008000 4> "PRCI_HFROSCCFG" 0xFFFFFFFF
+sysbus Tag <0x10008008 4> "PRCI_PLLCFG" 0xFFFFFFFF
+
+cpu PerformanceInMips 320
 
 macro reset
 """
 
     ### Load bootloader + signed image
     sysbus LoadELF @/tmp/renode-wolfboot.elf
-    sysbus LoadBinary @/tmp/renode-test-v1.bin 0x08020000
+    sysbus LoadBinary @/tmp/renode-test-v1.bin 0x20020000
 
     ### Uncomment next line to attach gdb
     ###    machine StartGdbServer 3333
@@ -31,3 +35,5 @@ macro reset
 """
 
 runMacro $reset
+
+

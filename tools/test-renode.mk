@@ -2,8 +2,8 @@ TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
 RENODE_UART=/tmp/wolfboot.uart
 RENODE_PORT=55155
-RENODE_OPTIONS=--pid-file=/tmp/renode.pid
-RENODE_OPTIONS+=--disable-xwt -P $(RENODE_PORT)
+RENODE_OPTIONS=--pid-file=/tmp/renode.pid -P $(RENODE_PORT)
+RENODE_OPTIONS+=--disable-xwt
 RENODE_CONFIG=tools/renode/stm32f4_discovery_wolfboot.resc
 POFF=131067
 
@@ -34,6 +34,10 @@ endif
 ifeq ($(TARGET),stm32f7)
   RENODE_CONFIG=tools/renode/stm32f746_wolfboot.resc
   POFF=393211
+endif
+
+ifeq ($(TARGET),hifive1)
+  RENODE_CONFIG=tools/renode/sifive_fe310_wolfboot.resc
 endif
 
 ifeq ($(SIGN),NONE)
@@ -72,17 +76,18 @@ endif
 #
 renode-on: FORCE
 	@rm -f /tmp/wolfboot.uart
-	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG)&
+	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) &
 	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
 	@echo "Renode up: uart port activated"
+	@echo "Renode running: renode has been started."
 
 renode-off: FORCE
 	@echo "Terminating renode..."
-	(echo && echo quit o) | nc -q 1 localhost $(RENODE_PORT) > /dev/null
+	@(echo && echo quit) | nc -q 1 localhost $(RENODE_PORT) > /dev/null
 	@tail --pid=`cat /tmp/renode.pid` -f /dev/null
 	@echo "Renode exited."
-	@killall renode || true
-	@killall mono || true
+	@killall renode 2>/dev/null || true
+	@killall mono 2>/dev/null || true
 
 
 renode-factory: factory.bin test-app/image.bin FORCE
@@ -94,7 +99,6 @@ renode-factory: factory.bin test-app/image.bin FORCE
 	@printf "pBOOT" >> /tmp/renode-test-update.bin
 	@cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin
 	@cp wolfboot.elf /tmp/renode-wolfboot.elf
-	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG)&
 	@make renode-on
 	@test `$(RENODE_EXPVER)` -eq 1
 	@make renode-off
