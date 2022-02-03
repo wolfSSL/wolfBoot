@@ -76,7 +76,7 @@ endif
 #
 renode-on: FORCE
 	@rm -f /tmp/wolfboot.uart
-	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) &
+	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 >/tmp/renode.log &
 	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
 	@echo "Renode up: uart port activated"
 	@echo "Renode running: renode has been started."
@@ -88,6 +88,7 @@ renode-off: FORCE
 	@echo "Renode exited."
 	@killall renode 2>/dev/null || true
 	@killall mono 2>/dev/null || true
+	@rm -f /tmp/renode.pid /tmp/renode.log /tmp/wolfboot.uart
 
 
 renode-factory: factory.bin test-app/image.bin FORCE
@@ -100,13 +101,12 @@ renode-factory: factory.bin test-app/image.bin FORCE
 	@cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin
 	@cp wolfboot.elf /tmp/renode-wolfboot.elf
 	@make renode-on
-	@test `$(RENODE_EXPVER)` -eq 1
+	@echo "Expecting version 1:"
+	@test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
 	@make renode-off
-	@rm -f /tmp/renode.pid
 	@rm -f /tmp/renode-wolfboot.elf
 	@rm -f /tmp/renode-test-v1.bin
 	@rm -f /tmp/renode-test-update.bin
-	@rm -f /tmp/wolfboot.uart
 
 renode-factory-ed448: FORCE
 	make renode-factory SIGN=ED448
