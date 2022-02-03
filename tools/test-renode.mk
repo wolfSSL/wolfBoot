@@ -80,8 +80,7 @@ endif
 #
 renode-on: FORCE
 	@rm -f /tmp/wolfboot.uart
-	#@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 >/tmp/renode.log &
-	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) &
+	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 >/tmp/renode.log &
 	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
 	@echo "Renode up: uart port activated"
 	@echo "Renode running: renode has been started."
