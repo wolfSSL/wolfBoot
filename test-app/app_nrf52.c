@@ -62,7 +62,7 @@ void uart_write(char c)
 {
     UART0_EVENT_ENDTX = 0;
 
-    UART0_TXD_PTR = &c;
+    UART0_TXD_PTR = (uint32_t)(&c);
     UART0_TXD_MAXCOUNT = 1;
     UART0_TASK_STARTTX = 1;
     while(UART0_EVENT_ENDTX == 0)
