@@ -892,19 +892,14 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     part = part_address(address);
     switch(part) {
         case PART_UPDATE:
-            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-            /* Do not encrypt last sectors */
-            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
+            /* do not encrypt flag sector */
+            if (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS >= START_FLAGS_OFFSET) {
                 return ext_flash_write(address, data, len);
             }
             break;
         case PART_SWAP:
-            {
-                uint32_t row_number;
-                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-                iv_counter = row_number;
-                break;
-            }
+            /* data is coming from update and is already encrypted */
+            return ext_flash_write(address, data, len);
         default:
             return -1;
     }
@@ -913,7 +908,6 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
         XMEMCPY(block + row_offset, data, step);
-        crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         address += step;
@@ -922,7 +916,6 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         iv_counter++;
     }
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
-        crypto_set_iv(encrypt_iv_nonce, iv_counter);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
         iv_counter++;
@@ -958,12 +951,10 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
             if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
             }
+            crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
             {
-                uint32_t row_number;
-                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-                iv_counter = row_number;
                 break;
             }
         default:
@@ -974,7 +965,6 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         int step = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
-        crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(data, dec_block + row_offset, step);
         address += step;
@@ -985,7 +975,6 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     if (ext_flash_read(address, data, sz) != sz)
         return -1;
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
-        crypto_set_iv(encrypt_iv_nonce, iv_counter);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         crypto_decrypt(data + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
         iv_counter++;

@@ -120,6 +120,12 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
+#ifdef EXT_ENCRYPTED
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint8_t nonce[ENCRYPT_NONCE_SIZE];
+    uint32_t iv_counter;
+#endif
+
     if (src == dst)
         return 0;
 
@@ -127,6 +133,18 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
         src_sector_offset = 0;
     if (dst->part == PART_SWAP)
         dst_sector_offset = 0;
+
+#ifdef EXT_ENCRYPTED
+    wolfBoot_get_encrypt_key(key, nonce);
+    if(src->part == PART_SWAP)
+        iv_counter = dst_sector_offset;
+    else
+        iv_counter = src_sector_offset;
+
+    iv_counter /= ENCRYPT_BLOCK_SIZE;
+    crypto_set_iv(nonce, iv_counter);
+#endif
+
 #ifdef EXT_FLASH
     if (PART_IS_EXT(src)) {
 #ifndef BUFFER_DECLARED
@@ -135,9 +153,20 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
 #endif
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
-            if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-                ext_flash_check_read((uintptr_t)(src->hdr) + src_sector_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
-                wb_flash_write(dst, dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
+          if (src_sector_offset + pos <
+              (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
+              /* bypass decryption, copy encrypted data into swap */
+              if (dst->part == PART_SWAP) {
+                  ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos,
+                                 (void *)buffer, FLASHBUFFER_SIZE);
+              } else {
+                  ext_flash_check_read((uintptr_t)(src->hdr) + src_sector_offset +
+                                         pos,
+                                     (void *)buffer, FLASHBUFFER_SIZE);
+              }
+
+              wb_flash_write(dst,
+                             dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
             }
             pos += FLASHBUFFER_SIZE;
         }
