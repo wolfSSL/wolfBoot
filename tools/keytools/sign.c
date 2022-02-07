@@ -771,13 +771,13 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
             exit(100);
 #endif
             wc_Chacha_SetKey(&cha, key, sizeof(key));
+            wc_Chacha_SetIV(&cha, iv, 0);
             for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
                 int fread_retval;
                 fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
                 if ((fread_retval == 0) && feof(f)) {
                     break;
                 }
-                wc_Chacha_SetIV(&cha, iv, (pos >> 4));
                 wc_Chacha_Process(&cha, enc_buf, buf, fread_retval);
                 fwrite(enc_buf, 1, fread_retval, fef);
             }

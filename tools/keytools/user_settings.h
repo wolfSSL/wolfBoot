@@ -68,7 +68,6 @@
 #define HAVE_CHACHA
 
 /* Disables */
-#define NO_AES
 #define NO_CMAC
 #define NO_HMAC
 #define NO_RC4
