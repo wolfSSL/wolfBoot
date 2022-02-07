@@ -831,8 +831,26 @@ static void aes_set_iv(byte *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
     uint32_t iv_local_ctr;
+    int i;
     XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
-    iv_buf[3] = ByteReverseWord32(iv_ctr);
+#ifndef BIG_ENDIAN_ORDER
+    for (i = 0; i < 4; i++) {
+        iv_buf[i] = ByteReverseWord32(iv_buf[i]);
+    }
+#endif
+    iv_buf[3] += iv_ctr;
+    if(iv_buf[3] > iv_ctr) { /* overflow */
+        for (i = 2; i >= 0; i--) {
+            iv_buf[i]++;
+            if (iv_buf[i] != 0)
+                break;
+        }
+    }
+#ifndef BIG_ENDIAN_ORDER
+    for (i = 0; i < 4; i++) {
+        iv_buf[i] = ByteReverseWord32(iv_buf[i]);
+    }
+#endif
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);
     wc_AesSetIV(&aes_dec, (byte *)iv_buf);
 }
