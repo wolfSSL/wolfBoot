@@ -172,4 +172,5 @@ int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
 int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
+
 #endif /* !WOLFBOOT_H */

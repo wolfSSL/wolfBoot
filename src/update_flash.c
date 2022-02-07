@@ -42,6 +42,10 @@ static uint8_t buffer[FLASHBUFFER_SIZE];
 #  endif
 #endif
 
+#ifdef EXT_ENCRYPTED
+#include "encrypt.h"
+#endif
+
 static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 {
     uint32_t *start = (uint32_t *)&_start_text;

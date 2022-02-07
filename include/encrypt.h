@@ -39,6 +39,29 @@
 
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
+#ifdef ENCRYPT_WITH_CHACHA
+
+extern ChaCha chacha;
+
+#define crypto_init() chacha_init()
+#define crypto_encrypt(eb,b,sz) wc_Chacha_Process(&chacha, eb, b, sz)
+#define crypto_decrypt(db,b,sz) wc_Chacha_Process(&chacha, db, b, sz)
+#define crypto_set_iv(n, iv) wc_Chacha_SetIV(&chacha, n, iv)
+
+int chacha_init(void);
+
+#elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+
+extern Aes aes_dec, aes_enc;
+
+#define crypto_init() aes_init()
+#define crypto_encrypt(eb,b,sz) wc_AesCtrEncrypt(&aes_enc, eb, b, sz)
+#define crypto_decrypt(db,b,sz) wc_AesCtrEncrypt(&aes_dec, db, b, sz)
+#define crypto_set_iv(n, iv) aes_set_iv(n, iv)
+
+int aes_init(void);
+void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr);
+#endif /* ENCRYPT_WITH_CHACHA */
 
 /* Internal read/write functions (not exported in the libwolfboot API) */
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);

@@ -764,9 +764,9 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
 
 #ifdef ENCRYPT_WITH_CHACHA
 
-static ChaCha chacha;
+ChaCha chacha;
 
-static int chacha_init(void)
+int chacha_init(void)
 {
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET);
     uint8_t ff[ENCRYPT_KEY_SIZE];
@@ -786,20 +786,15 @@ static int chacha_init(void)
     return 0;
 }
 
-#define crypto_init() chacha_init()
-#define crypto_encrypt(eb,b,sz) wc_Chacha_Process(&chacha, eb, b, sz)
-#define crypto_decrypt(db,b,sz) wc_Chacha_Process(&chacha, db, b, sz)
-#define crypto_set_iv(n,iv)     wc_Chacha_SetIV(&chacha, n, iv)
-
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
 
 /* Inline use of ByteReverseWord32 */
 #define WOLFSSL_MISC_INCLUDED
 #include <wolfcrypt/src/misc.c>
 
-static Aes aes_dec, aes_enc;
+Aes aes_dec, aes_enc;
 
-static int aes_init(void)
+int aes_init(void)
 {
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET);
     uint8_t ff[ENCRYPT_KEY_SIZE];
@@ -826,7 +821,7 @@ static int aes_init(void)
     return 0;
 }
 
-static void aes_set_iv(byte *nonce, uint32_t iv_ctr)
+void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
     uint32_t iv_local_ctr;
@@ -853,13 +848,6 @@ static void aes_set_iv(byte *nonce, uint32_t iv_ctr)
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);
     wc_AesSetIV(&aes_dec, (byte *)iv_buf);
 }
-
-
-#define crypto_init() aes_init()
-
-#define crypto_encrypt(eb,b,sz) wc_AesCtrEncrypt(&aes_enc, eb, b, sz)
-#define crypto_decrypt(db,b,sz) wc_AesCtrEncrypt(&aes_dec, db, b, sz)
-#define crypto_set_iv(n,iv)     aes_set_iv(n,iv)
 
 #endif
 
