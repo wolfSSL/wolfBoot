@@ -819,7 +819,6 @@ static int aes_init(void)
 
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
     XMEMCPY(iv_buf, stored_nonce, ENCRYPT_NONCE_SIZE);
-    iv_buf[4] = 0;
     /* AES_ENCRYPTION is used for both directions in CTR */
     wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
     wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
@@ -839,7 +838,7 @@ static void aes_set_iv(byte *nonce, uint32_t iv_ctr)
     }
 #endif
     iv_buf[3] += iv_ctr;
-    if(iv_buf[3] > iv_ctr) { /* overflow */
+    if(iv_buf[3] < iv_ctr) { /* overflow */
         for (i = 2; i >= 0; i--) {
             iv_buf[i]++;
             if (iv_buf[i] != 0)
