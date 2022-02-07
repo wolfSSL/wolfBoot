@@ -557,7 +557,7 @@ if (encrypt):
             off += 1
     elif aes128:
         key = ekeyfile.read(16)
-        iv = ekeyfile.read(12) + struct.pack('<L', 0)
+        iv = ekeyfile.read(16)
         aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
         while True:
             buf = outfile.read(16)
@@ -568,7 +568,7 @@ if (encrypt):
             enc_outfile.write(aesctr.encrypt(buf))
     elif aes256:
         key = ekeyfile.read(32)
-        iv = ekeyfile.read(12) + struct.pack('<L', 0)
+        iv = ekeyfile.read(16)
         aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
         while True:
             buf = outfile.read(16)

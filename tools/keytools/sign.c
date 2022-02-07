@@ -784,7 +784,6 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         } else if ((CMD.encrypt == ENC_AES128) || (CMD.encrypt == ENC_AES256)) {
             Aes aes_e;
             wc_AesInit(&aes_e, NULL, 0);
-            memset(iv + 12, 0, sizeof(uint32_t));
             wc_AesSetKeyDirect(&aes_e, key, keySz, iv, AES_ENCRYPTION);
             for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
                 int fread_retval;
