@@ -548,13 +548,12 @@ if (encrypt):
         key = ekeyfile.read(32)
         iv_nonce = ekeyfile.read(12)
         cha = ciphers.ChaCha(key, 32)
+        cha.set_iv(iv_nonce, 0)
         while True:
-            cha.set_iv(iv_nonce, off)
             buf = outfile.read(16)
             if len(buf) == 0:
                 break
             enc_outfile.write(cha.encrypt(buf))
-            off += 1
     elif aes128:
         key = ekeyfile.read(16)
         iv = ekeyfile.read(16)

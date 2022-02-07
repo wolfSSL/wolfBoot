@@ -871,7 +871,6 @@ static inline uint8_t part_address(uintptr_t a)
 
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
-    uint32_t iv_counter;
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
     int sz = len;
@@ -913,12 +912,10 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         address += step;
         data += step;
         sz -= step;
-        iv_counter++;
     }
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
-        iv_counter++;
     }
     return ext_flash_write(address, ENCRYPT_CACHE, len);
 }

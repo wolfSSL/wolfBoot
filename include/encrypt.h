@@ -57,10 +57,10 @@ extern Aes aes_dec, aes_enc;
 #define crypto_init() aes_init()
 #define crypto_encrypt(eb,b,sz) wc_AesCtrEncrypt(&aes_enc, eb, b, sz)
 #define crypto_decrypt(db,b,sz) wc_AesCtrEncrypt(&aes_dec, db, b, sz)
-#define crypto_set_iv(n, iv) aes_set_iv(n, iv)
+#define crypto_set_iv(n,a) aes_set_iv(n, a)
 
 int aes_init(void);
-void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr);
+void aes_set_iv(uint8_t *nonce, uint32_t address);
 #endif /* ENCRYPT_WITH_CHACHA */
 
 /* Internal read/write functions (not exported in the libwolfboot API) */
