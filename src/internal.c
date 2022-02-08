@@ -3636,26 +3636,30 @@ int WP11_RsaPkcs15_PrivateDecrypt(unsigned char* in, word32 inLen,
                                   unsigned char* out, word32* outLen,
                                   WP11_Object* priv, WP11_Slot* slot)
 {
-    int ret;
+    int ret = 0;
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     WC_RNG rng;
-
+#endif
     /* A random number generator is needed for blinding. */
     if (priv->onToken)
         WP11_Lock_LockRW(priv->lock);
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
     if (ret == 0) {
-    #if !defined(HAVE_FIPS) || \
-        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2))
         priv->data.rsaKey.rng = &rng;
-    #endif
+    }
+#endif
+    if (ret == 0) {
         ret = wc_RsaPrivateDecrypt_ex(in, inLen, out, *outLen,
                                        &priv->data.rsaKey, WC_RSA_PKCSV15_PAD,
                                        WC_HASH_TYPE_NONE, WC_MGF1NONE, NULL, 0);
-    #if !defined(HAVE_FIPS) || \
-        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2))
+    #if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
         priv->data.rsaKey.rng = NULL;
-    #endif
         Rng_Free(&rng);
+    #endif
     }
     if (priv->onToken)
         WP11_Lock_UnlockRW(priv->lock);
@@ -3664,6 +3668,7 @@ int WP11_RsaPkcs15_PrivateDecrypt(unsigned char* in, word32 inLen,
         *outLen = ret;
         ret = 0;
     }
+    (void)slot;
 
     return ret;
 }
@@ -3733,29 +3738,34 @@ int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
                                 unsigned char* out, word32* outLen,
                                 WP11_Object* priv, WP11_Session* session)
 {
-    int ret;
+    int ret = 0;
     WP11_OaepParams* oaep = &session->params.oaep;
     WP11_Slot* slot = WP11_Session_GetSlot(session);
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     WC_RNG rng;
+#endif
 
     /* A random number generator is needed for blinding. */
     if (priv->onToken)
         WP11_Lock_LockRW(priv->lock);
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
     if (ret == 0) {
-    #if !defined(HAVE_FIPS) || \
-        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2))
         priv->data.rsaKey.rng = &rng;
-    #endif
+    }
+#endif
+    if (ret == 0) {
         ret = wc_RsaPrivateDecrypt_ex(in, inLen, out, *outLen,
                                             &priv->data.rsaKey, WC_RSA_OAEP_PAD,
                                             oaep->hashType, oaep->mgf,
                                             oaep->label, oaep->labelSz);
-    #if !defined(HAVE_FIPS) || \
-        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2))
+    #if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
         priv->data.rsaKey.rng = NULL;
-    #endif
         Rng_Free(&rng);
+    #endif
     }
     if (priv->onToken)
         WP11_Lock_UnlockRW(priv->lock);
@@ -3769,6 +3779,7 @@ int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
             oaep->label = NULL;
         }
     }
+    (void)slot;
 
     return ret;
 }
@@ -4252,7 +4263,8 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
 {
     int ret;
     ecc_key pubKey;
-#ifdef ECC_TIMING_RESISTANT
+#if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     WC_RNG rng;
 #endif
 
@@ -4260,13 +4272,11 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
     if (ret == 0) {
         ret = wc_ecc_import_x963(point, pointLen, &pubKey);
     }
-#ifdef ECC_TIMING_RESISTANT
+#if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     if (ret == 0) {
         ret = Rng_New(&priv->slot->token.rng, &priv->slot->token.rngLock, &rng);
-    #if !defined(HAVE_FIPS) || \
-        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2))
         wc_ecc_set_rng(&priv->data.ecKey, &rng);
-    #endif
     }
 #endif
     if (ret == 0) {
@@ -4275,7 +4285,8 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
         ret = wc_ecc_shared_secret(&priv->data.ecKey, &pubKey, key, &keyLen);
         if (priv->onToken)
             WP11_Lock_UnlockRO(priv->lock);
-#ifdef ECC_TIMING_RESISTANT
+#if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
         Rng_Free(&rng);
 #endif
     }
