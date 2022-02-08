@@ -31,20 +31,20 @@
 /* STM32 H7 register configuration */
 /*** RCC ***/
 
-#define RCC_BASE (0x58024400) //RM0433 - Table 8
-#define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  //RM0433 - 7.7.2
-#define RCC_PLLCKSELR       (*(volatile uint32_t *)(RCC_BASE + 0x28))  //RM0433 - 7.7.11
-#define RCC_PLLCFGR         (*(volatile uint32_t *)(RCC_BASE + 0x2C))  //RM0433 - 7.7.12
-#define RCC_PLL1DIVR        (*(volatile uint32_t *)(RCC_BASE + 0x30))  //RM0433 - 7.7.13
+#define RCC_BASE            (0x58024400) /* RM0433 - Table 8 */
+#define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0433 - 7.7.2 */
+#define RCC_PLLCKSELR       (*(volatile uint32_t *)(RCC_BASE + 0x28))  /* RM0433 - 7.7.11 */
+#define RCC_PLLCFGR         (*(volatile uint32_t *)(RCC_BASE + 0x2C))  /* RM0433 - 7.7.12 */
+#define RCC_PLL1DIVR        (*(volatile uint32_t *)(RCC_BASE + 0x30))  /* RM0433 - 7.7.13 */
 
-#define RCC_CFGR            (*(volatile uint32_t *)(RCC_BASE + 0x10))  //RM0433 - 7.7.7
-#define RCC_D1CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x18))  //RM0433 - 7.7.8
-#define RCC_D2CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x1C))  //RM0433 - 7.7.8
-#define RCC_D3CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x20))  //RM0433 - 7.7.9
+#define RCC_CFGR            (*(volatile uint32_t *)(RCC_BASE + 0x10))  /* RM0433 - 7.7.7 */
+#define RCC_D1CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x18))  /* RM0433 - 7.7.8 */
+#define RCC_D2CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x1C))  /* RM0433 - 7.7.8 */
+#define RCC_D3CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x20))  /* RM0433 - 7.7.9 */
 
-#define APB1_CLOCK_LER       (*(volatile uint32_t *)(RCC_BASE + 0xE8))  //RM0433 - 7.7.45
-#define APB1_CLOCK_HER       (*(volatile uint32_t *)(RCC_BASE + 0xEC))  //RM0433 - 7.7.46
-#define APB2_CLOCK_ER        (*(volatile uint32_t *)(RCC_BASE + 0xF0))  //RM0433 - 7.7.47
+#define APB1_CLOCK_LER      (*(volatile uint32_t *)(RCC_BASE + 0xE8))  /* RM0433 - 7.7.45 */
+#define APB1_CLOCK_HER      (*(volatile uint32_t *)(RCC_BASE + 0xEC))  /* RM0433 - 7.7.46 */
+#define APB2_CLOCK_ER       (*(volatile uint32_t *)(RCC_BASE + 0xF0))  /* RM0433 - 7.7.47 */
 
 
 #define RCC_CR_PLL1RDY              (1 << 25)
@@ -73,48 +73,48 @@
 #define RCC_PLLCKSELR_DIVM1_NONE     0x1
 
 /*** PWR ***/
-#define PWR_BASE             (0x58024800) //RM0433 - Table 8
-#define PWR_CSR1             (*(volatile uint32_t *)(PWR_BASE + 0x04))  //RM0433 - 5.8.x
+#define PWR_BASE             (0x58024800) /* RM0433 - Table 8 */
+#define PWR_CSR1             (*(volatile uint32_t *)(PWR_BASE + 0x04))  /* RM0433 - 5.8.x */
 #define PWR_CSR1_ACTVOSRDY   (1 << 13)
-#define PWR_CR3              (*(volatile uint32_t *)(PWR_BASE + 0x0C))  //RM0433 - 5.8.4
+#define PWR_CR3              (*(volatile uint32_t *)(PWR_BASE + 0x0C))  /* RM0433 - 5.8.4 */
 #define PWR_CR3_SCUEN        (1 << 2)
 #define PWR_CR3_LDOEN        (1 << 1)
-#define PWR_D3CR             (*(volatile uint32_t *)(PWR_BASE + 0x18))  //RM0433 - 5.8.6
+#define PWR_D3CR             (*(volatile uint32_t *)(PWR_BASE + 0x18))  /* RM0433 - 5.8.6 */
 #define PWR_D3CR_VOSRDY      (1 << 13)
 #define PWR_D3CR_VOS_SHIFT   (14)
 #define PWR_D3CR_VOS_SCALE_1 (3)
 
-#define SYSCFG_BASE          (0x58000400) //RM0433 - Table 8
-#define SYSCFG_PMCR          (*(volatile uint32_t *)(SYSCFG_BASE + 0x04))  //RM0433 - 5.8.4
-#define SYSCFG_PWRCR         (*(volatile uint32_t *)(SYSCFG_BASE + 0x04))  //RM0433 - 5.8.4
-#define SYSCFG_UR0           (*(volatile uint32_t *)(SYSCFG_BASE + 0x300))  //RM0433 - 12.3.1.2
+#define SYSCFG_BASE          (0x58000400) /* RM0433 - Table 8 */
+#define SYSCFG_PMCR          (*(volatile uint32_t *)(SYSCFG_BASE + 0x04))  /* RM0433 - 5.8.4 */
+#define SYSCFG_PWRCR         (*(volatile uint32_t *)(SYSCFG_BASE + 0x04))  /* RM0433 - 5.8.4 */
+#define SYSCFG_UR0           (*(volatile uint32_t *)(SYSCFG_BASE + 0x300))  /* RM0433 - 12.3.1.2 */
 #define SYSCFG_PWRCR_ODEN    (1 << 0)
-#define SYSCFG_UR0_BKS       (1 << 0)   // bank swap
+#define SYSCFG_UR0_BKS       (1 << 0)   /* bank swap */
 
 /*** APB PRESCALER ***/
 #define RCC_PRESCALER_DIV_NONE 0
 #define RCC_PRESCALER_DIV_2 8
 
 /*** FLASH ***/
-#define SYSCFG_APB4_CLOCK_ER_VAL    (1 << 0) //RM0433 - 7.7.48 - RCC_APB4ENR - SYSCFGEN
+#define SYSCFG_APB4_CLOCK_ER_VAL    (1 << 0) /* RM0433 - 7.7.48 - RCC_APB4ENR - SYSCFGEN */
 
-#define FLASH_BASE          (0x52002000)   //RM0433 - Table 8
-#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) //RM0433 - 3.9.1 - FLASH_ACR
+#define FLASH_BASE          (0x52002000)   /* RM0433 - Table 8 */
+#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) /* RM0433 - 3.9.1 - FLASH_ACR */
 #define FLASH_OPTSR_CUR     (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
 
 /*bank 1 */
-#define FLASH_KEYR1          (*(volatile uint32_t *)(FLASH_BASE + 0x04)) //RM0433 - 3.9.2 - FLASH_KEYR 1
-#define FLASH_SR1            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) //RM0433 - 3.9.5 - FLASH_SR 1
-#define FLASH_CR1            (*(volatile uint32_t *)(FLASH_BASE + 0x0C)) //RM0433 - 3.9.4 - FLASH_CR 1
+#define FLASH_KEYR1          (*(volatile uint32_t *)(FLASH_BASE + 0x04)) /* RM0433 - 3.9.2 - FLASH_KEYR 1 */
+#define FLASH_SR1            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0433 - 3.9.5 - FLASH_SR 1 */
+#define FLASH_CR1            (*(volatile uint32_t *)(FLASH_BASE + 0x0C)) /* RM0433 - 3.9.4 - FLASH_CR 1 */
 
 /*bank 2 */
-#define FLASH_KEYR2          (*(volatile uint32_t *)(FLASH_BASE + 0x104)) //RM0433 - 3.9.24 - FLASH_KEYR 2
-#define FLASH_SR2            (*(volatile uint32_t *)(FLASH_BASE + 0x110)) //RM0433 - 3.9.26 - FLASH_SR 2
-#define FLASH_CR2            (*(volatile uint32_t *)(FLASH_BASE + 0x10C)) //RM0433 - 3.9.25 - FLASH_CR 2
+#define FLASH_KEYR2          (*(volatile uint32_t *)(FLASH_BASE + 0x104)) /* RM0433 - 3.9.24 - FLASH_KEYR 2 */
+#define FLASH_SR2            (*(volatile uint32_t *)(FLASH_BASE + 0x110)) /* RM0433 - 3.9.26 - FLASH_SR 2 */
+#define FLASH_CR2            (*(volatile uint32_t *)(FLASH_BASE + 0x10C)) /* RM0433 - 3.9.25 - FLASH_CR 2 */
 
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000UL)
 #define FLASH_PAGE_SIZE           (0x20000) /* 128KB */
-#define FLASH_BANK2_BASE          (0x08100000UL) /*!< Base address of : (up to 1 MB) Flash Bank2 accessible over AXI                          */
+#define FLASH_BANK2_BASE          (0x08100000UL) /*!< Base address of : (up to 1 MB) Flash Bank2 accessible over AXI */
 #define FLASH_BANK2_BASE_REL      (FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE)
 #define FLASH_TOP                 (0x081FFFFFUL) /*!< FLASH end address  */
 
@@ -135,7 +135,7 @@
 #define FLASH_SR_DBECCERR                   (1 << 26)
 #define FLASH_SR_EOP                        (1 << 16)
 
-#define FLASH_CR_LOCK                       (1 << 0) //RM0433 - 3.7.5 - FLASH_CR
+#define FLASH_CR_LOCK                       (1 << 0) /* RM0433 - 3.7.5 - FLASH_CR */
 #define FLASH_CR_STRT                       (1 << 7)
 #define FLASH_CR_PSIZE                      (1 << 4)
 #define FLASH_CR_BER                        (1 << 3)
@@ -145,8 +145,8 @@
 
 #define FLASH_OPTSR_CUR_BSY                 (1 << 0)
 
-#define FLASH_CR_SNB_SHIFT                  8     //SNB bits 10:8
-#define FLASH_CR_SNB_MASK                   0x7   //SNB bits 10:8 - 3 bits
+#define FLASH_CR_SNB_SHIFT                  8     /* SNB bits 10:8 */
+#define FLASH_CR_SNB_MASK                   0x7   /* SNB bits 10:8 - 3 bits */
 
 #define FLASH_KEY1                            (0x45670123)
 #define FLASH_KEY2                            (0xCDEF89AB)
@@ -163,13 +163,17 @@
 #   error "Please use a bigger WOLFBOOT_PARTITION_SIZE, since the last 128KB on each partition will be reserved for bootloader flags"
 #endif
 
-#define STM32H7_PART_BOOT_END (WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)
+#define STM32H7_PART_BOOT_END   (WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)
 #define STM32H7_PART_UPDATE_END (WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)
 #define STM32H7_WORD_SIZE (32)
-#define STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS (((STM32H7_PART_BOOT_END - 1) / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
-#define STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS (((STM32H7_PART_UPDATE_END - 1) / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
-#define STM32H7_BOOT_FLAGS_PAGE(x) ((x >= STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS) && (x < STM32H7_PART_BOOT_END))
-#define STM32H7_UPDATE_FLAGS_PAGE(x) ((x >= STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS) && (x < STM32H7_PART_UPDATE_END))
+#define STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS \
+    (((STM32H7_PART_BOOT_END - 1)   / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
+#define STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS \
+    (((STM32H7_PART_UPDATE_END - 1) / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
+#define STM32H7_BOOT_FLAGS_PAGE(x) \
+    ((x >= STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS)   && (x < STM32H7_PART_BOOT_END))
+#define STM32H7_UPDATE_FLAGS_PAGE(x) \
+    ((x >= STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS) && (x < STM32H7_PART_UPDATE_END))
 
 static uint32_t stm32h7_cache[STM32H7_WORD_SIZE / sizeof(uint32_t)];
 
@@ -177,7 +181,7 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
     if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates)
-        FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates ;
+        FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates;
 }
 
 static RAMFUNCTION void flash_wait_last(void)
@@ -188,18 +192,22 @@ static RAMFUNCTION void flash_wait_last(void)
 
 static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 {
-    if(bank==0)
+    if (bank==0)
       while ((FLASH_SR1 & FLASH_SR_QW) == FLASH_SR_QW);
-    if(bank==1)
+    if (bank==1)
       while ((FLASH_SR2 & FLASH_SR_QW) == FLASH_SR_QW);
 }
 
 static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 {
-    if(bank==0)
-      FLASH_SR1 |= ( FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |  FLASH_SR_INCERR | FLASH_SR_OPERR |FLASH_SR_RDPERR | FLASH_SR_RDSERR | FLASH_SR_SNECCERR|FLASH_SR_DBECCERR ) ;
-    if(bank==1)
-      FLASH_SR2 |= ( FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |  FLASH_SR_INCERR | FLASH_SR_OPERR |FLASH_SR_RDPERR | FLASH_SR_RDSERR | FLASH_SR_SNECCERR|FLASH_SR_DBECCERR ) ;
+    if (bank==0)
+        FLASH_SR1 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
+                      FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR | 
+                      FLASH_SR_RDSERR | FLASH_SR_SNECCERR | FLASH_SR_DBECCERR);
+    if (bank==1)
+        FLASH_SR2 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
+                      FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR |
+                      FLASH_SR_RDSERR | FLASH_SR_SNECCERR | FLASH_SR_DBECCERR);
 }
 
 static void RAMFUNCTION flash_program_on(uint8_t bank)
@@ -238,7 +246,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     }
 
     while (i < len) {
-        if ((len - i > 32) && ((((address + i) & 0x1F) == 0)  && ((((uint32_t)data) + i) & 0x1F) == 0)) {
+        if ((len - i > 32) && ((((address + i) & 0x1F) == 0) &&
+            ((((uint32_t)data) + i) & 0x1F) == 0))
+        {
             flash_wait_last();
             flash_clear_errors(0);
             flash_clear_errors(1);
@@ -261,11 +271,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             if (STM32H7_BOOT_FLAGS_PAGE(address)) {
                 if (base_addr != STM32H7_PART_BOOT_END - STM32H7_WORD_SIZE)
                     return -1;
-                hal_flash_erase(STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS, STM32H7_SECTOR_SIZE);
+                hal_flash_erase(STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS,
+                    STM32H7_SECTOR_SIZE);
             } else if (STM32H7_UPDATE_FLAGS_PAGE(address)) {
                 if (base_addr != STM32H7_PART_UPDATE_END - STM32H7_WORD_SIZE)
                     return -1;
-                hal_flash_erase(STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS, STM32H7_SECTOR_SIZE);
+                hal_flash_erase(STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS,
+                    STM32H7_SECTOR_SIZE);
             }
             /* Replace bytes in cache */
             while ((off < STM32H7_WORD_SIZE) && (i < len))
@@ -333,20 +345,28 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
     end_address = (address - FLASHMEM_ADDRESS_SPACE) + len - 1;
-    for (p = (address - FLASHMEM_ADDRESS_SPACE); p < end_address; p += FLASH_PAGE_SIZE) {
+    for (p = (address - FLASHMEM_ADDRESS_SPACE);
+         p < end_address;
+         p += FLASH_PAGE_SIZE)
+    {
         if (p < FLASH_BANK2_BASE_REL)
         {
-            uint32_t reg = FLASH_CR1 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
-            FLASH_CR1 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
+            uint32_t reg = FLASH_CR1 & 
+                (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT) | FLASH_CR_PSIZE));
+            FLASH_CR1 = reg |
+                (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
             DMB();
             FLASH_CR1 |= FLASH_CR_STRT;
             flash_wait_complete(1);
         }
-        if ((p>= FLASH_BANK2_BASE_REL) && (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE)))
+        if ((p>= FLASH_BANK2_BASE_REL) &&
+            (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE)))
         {
-            uint32_t reg = FLASH_CR2 & (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT)|FLASH_CR_PSIZE));
+            uint32_t reg = FLASH_CR2 &
+                (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT) | FLASH_CR_PSIZE));
             p-= (FLASH_BANK2_BASE);
-            FLASH_CR2 = reg | (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
+            FLASH_CR2 = reg |
+                (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
             DMB();
             FLASH_CR2 |= FLASH_CR_STRT;
             flash_wait_complete(2);
@@ -369,11 +389,13 @@ static void clock_pll_off(void)
     DMB();
 }
 
-/*This implementation will setup HSI RC 16 MHz as PLL Source Mux, PLLCLK as System Clock Source*/
+/* This implementation will setup HSI RC 16 MHz as PLL Source Mux, PLLCLK
+ * as System Clock Source*/
 static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
-    uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, d1cpre, d1ppre,d2ppre1,d2ppre2, d3ppre , flash_waitstates;
+    uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, d1cpre, d1ppre;
+    uint32_t d2ppre1,d2ppre2, d3ppre , flash_waitstates;
 
     PWR_CR3 |= PWR_CR3_LDOEN;
     while ((PWR_CSR1 & PWR_CSR1_ACTVOSRDY) == 0) {};
@@ -402,7 +424,7 @@ static void clock_pll_on(int powersave)
 
     flash_set_waitstates(flash_waitstates);
 
-   /* Enable internal high-speed oscillator. */
+    /* Enable internal high-speed oscillator. */
     RCC_CR |= RCC_CR_HSION;
     DMB();
     while ((RCC_CR & RCC_CR_HSIRDY) == 0) {};
@@ -423,37 +445,37 @@ static void clock_pll_on(int powersave)
     /*
      * Set prescalers for D1: D1CPRE, D1PPRE, HPRE
      */
-    RCC_D1CFGR |= (hpre << 0); //RM0433 - 7.7.8- RCC_CFGR
+    RCC_D1CFGR |= (hpre << 0); /* RM0433 - 7.7.8- RCC_CFGR */
     DMB();
 
     reg32 = RCC_D1CFGR;
-    reg32 &= ~(0xF0); //don't change bits [0-3] that were previously set
-    RCC_D1CFGR = (reg32 | (d1ppre << 4));  //RM0433 - 7.7.8- RCC_CFGR
+    reg32 &= ~(0xF0); /* don't change bits [0-3] that were previously set */
+    RCC_D1CFGR = (reg32 | (d1ppre << 4));  /* RM0433 - 7.7.8- RCC_CFGR */
     DMB();
 
     reg32 = RCC_D1CFGR;
-    reg32 &= ~(0x100); //don't change bits [0-7]
-    RCC_D1CFGR = (reg32 | (d1cpre << 8));  //RM0433 - 7.7.8- RCC_CFGR
+    reg32 &= ~(0x100); /* don't change bits [0-7] */
+    RCC_D1CFGR = (reg32 | (d1cpre << 8));  /* RM0433 - 7.7.8- RCC_CFGR */
     DMB();
 
     /*
      * Set prescalers for D2: D2PPRE1, D2PPRE2
      */
     reg32 = RCC_D2CFGR;
-    reg32 &= ~(0xF0); //don't change bits [0-3]
-    RCC_D2CFGR = (reg32 | (d2ppre1 << 4));  //RM0433 - 7.7.8- RCC_CFGR
+    reg32 &= ~(0xF0); /* don't change bits [0-3] */
+    RCC_D2CFGR = (reg32 | (d2ppre1 << 4));  /* RM0433 - 7.7.8- RCC_CFGR */
     DMB();
 
     reg32 = RCC_D2CFGR;
-    reg32 &= ~(0x100); //don't change bits [0-7]
-    RCC_D2CFGR = (reg32 | (d2ppre2 << 8));  //RM0433 - 7.7.8- RCC_CFGR
+    reg32 &= ~(0x100); /* don't change bits [0-7] */
+    RCC_D2CFGR = (reg32 | (d2ppre2 << 8));  /* RM0433 - 7.7.8- RCC_CFGR */
     DMB();
 
-   /*
+    /*
      * Set prescalers for D3: D3PPRE
      */
     reg32 = RCC_D3CFGR;
-    RCC_D3CFGR = (reg32 | (d3ppre << 4));  //RM0433 - 7.7.8- RCC_CFGR
+    RCC_D3CFGR = (reg32 | (d3ppre << 4));  /* RM0433 - 7.7.8- RCC_CFGR */
     DMB();
 
 
@@ -461,7 +483,7 @@ static void clock_pll_on(int powersave)
      * Set PLL config
      */
 
-    /*PLL Clock source selection + DIVM1*/
+    /* PLL Clock source selection + DIVM1 */
     reg32 = RCC_PLLCKSELR;
     reg32 |= RCC_PLLCKSELR_PLLSRC_HSE;
     reg32 |= ((pllm) << 4);

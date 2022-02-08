@@ -83,6 +83,8 @@ mon reset init
 b main
 c
 ```
+
+
 ## STM32L4
 Example 1MB partitioning on STM32L4
 
@@ -697,52 +699,26 @@ The STM32H7 build can be built using:
 make TARGET=stm32h7 SIGN=ECC256
 ```
 
-### Loading the firmware
+### STM32H7 Programming
 
-OpenOCD configuration for flashing/debugging, can be copied into `openocd.cfg` in your working directory:
-Note: May require OpenOCD 0.10.0 or greater for the STM32H7x support.
-
+ST-Link Flash Tools:
 ```
-source [find interface/stlink.cfg]
-source [find target/stm32h7x.cfg]
-$_CHIPNAME.cpu0 configure -event reset-init {
-    mmw 0xe0042004 0x7 0x0
-}
-init
-reset
-halt
+st-flash write factory.bin 0x08000000
+```
+OR
+```
+st-flash write wolfboot.bin 0x08000000
+st-flash write test-app/image_v1_signed.bin 0x08020000
 ```
 
-`openocd --file openocd.cfg`
+### STM32H7 Testing
 
-OpenOCD can be either run in background (to allow remote GDB and monitor terminal connections), or
-directly from command line, to execute terminal scripts.
+To sign the same application image as new version (2), use the sign tools
 
-If OpenOCD is running, local TCP port 4444 can be used to access an interactive terminal prompt.
+Python: `tools/keytools/sign.py --ecc256 --sha256 test-app/image.bin ecc256.der 2`
+C Tool: `tools/keytools/sign    --ecc256 --sha256 test-app/image.bin ecc256.der 2`
 
-Using the following openocd commands, the initial images for wolfBoot and the test application
-are loaded to flash in bank 0:
-
-```
-telnet localhost 4444
-flash write_image unlock erase wolfboot.bin 0x08000000
-flash verify_bank 0 wolfboot.bin
-flash write_image unlock erase test-app/image_v1_signed.bin 0x08020000
-flash verify_bank 0 test-app/image_v1_signed.bin 0x08020000
-reset
-```
-
-To sign the same application image as new version (2), use the python script `sign.py` provided:
-
-```
-tools/keytools/sign.py test-app/image.bin ecc256.der 2
-```
-
-From OpenOCD, the updated image (version 2) can be flashed to the second bank:
-```
-flash write_image unlock erase test-app/image_v2_signed.bin 0x08120000
-flash verify_bank 0 test-app/image_v1_signed.bin 0x20000
-```
+Flash the updated version 2 image: `st-flash write test-app/image_v2_signed.bin 0x08120000`
 
 Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and authenticate the image.
 If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
@@ -750,18 +726,18 @@ booting.
 
 ### STM32H7 Debugging
 
-Debugging with OpenOCD:
+1. Start GDB server
 
-Use the OpenOCD configuration from the previous section to run OpenOCD.
+ST-Link: `st-util -p 3333`
 
-From another console, connect using gdb, e.g.:
+2. Start GDB Client from wolfBoot root:
 
-Add wolfboot.elf to the make.
-
-```
-arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
-(gdb) add-symbol-file test-app/image.elf 0x08020000
-(gdb) add-symbol-file wolfboot.elf 0x08000000
+```sh
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x08020000
+mon reset init
+b main
+c
 ```
 
 
