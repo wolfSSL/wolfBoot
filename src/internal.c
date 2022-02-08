@@ -28,6 +28,7 @@
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/hmac.h>
+#include <wolfssl/wolfcrypt/ecc.h>
 
 #include <wolfpkcs11/internal.h>
 
@@ -1634,7 +1635,7 @@ static int wp11_mgf(CK_MECHANISM_TYPE mgfType, int *mgf)
  * @return  MEMORY_E when dynamic memory allocation fails.
  *          BAD_FUNC_ARG when the digest algorithm id or the mask generation
  *          function id are not recognized.
- *          0 on succes.
+ *          0 on success.
  */
 int WP11_Session_SetOaepParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
                                CK_MECHANISM_TYPE mgf, byte* label, int labelSz)
@@ -1674,7 +1675,7 @@ int WP11_Session_SetOaepParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
  * @param  sLen     [in]  Salt length.
  * @return  BAD_FUNC_ARG when the digest algorithm id or the mask generation
  *          function id are not recognized or salt length is too big.
- *          0 on succes.
+ *          0 on success.
  */
 int WP11_Session_SetPssParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
                               CK_MECHANISM_TYPE mgf, int sLen)
@@ -1706,7 +1707,7 @@ int WP11_Session_SetPssParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
  * @param  enc      [in]  Whether operation is encryption.
  * @param  object   [in]  AES key object.
  * @return  -ve on failure.
- *          0 on succes.
+ *          0 on success.
  */
 int WP11_Session_SetCbcParams(WP11_Session* session, unsigned char* iv,
                               int enc, WP11_Object* object)
@@ -1743,7 +1744,7 @@ int WP11_Session_SetCbcParams(WP11_Session* session, unsigned char* iv,
  * @param  tagBits  [in]  Number of bits to use as the authentication tag.
  * @return  BAD_FUNC_ARG if the IV/nonce or the tagBits are too big.
  *          Other -ve value on failure.
- *          0 on succes.
+ *          0 on success.
  */
 int WP11_Session_SetGcmParams(WP11_Session* session, unsigned char* iv,
                               int ivSz, unsigned char* aad, int aadLen,
@@ -2211,6 +2212,36 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
 #endif
 
 #ifdef HAVE_ECC
+
+#if !defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION <= 2))
+/* this function is not in the FIPS 140-2 version */
+/* ecc_sets is exposed in ecc.h */
+static int wc_ecc_get_curve_id_from_oid(const byte* oid, word32 len)
+{
+    int curve_idx;
+
+    if (oid == NULL)
+        return BAD_FUNC_ARG;
+
+    for (curve_idx = 0; ecc_sets[curve_idx].size != 0; curve_idx++) {
+        if (
+        #ifndef WOLFSSL_ECC_CURVE_STATIC
+            ecc_sets[curve_idx].oid &&
+        #endif
+            ecc_sets[curve_idx].oidSz == len &&
+                              XMEMCMP(ecc_sets[curve_idx].oid, oid, len) == 0) {
+            break;
+        }
+    }
+    if (ecc_sets[curve_idx].size == 0) {
+        return ECC_CURVE_INVALID;
+    }
+
+    return ecc_sets[curve_idx].id;
+}
+
+#endif
 /**
  * Set the EC Parameters based on the DER encoding of the OID.
  *
@@ -2221,7 +2252,7 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
  *          ASN_PARSE_E when DER encoding is bad.
  *          BAD_FUNC_ARG when OID is not known.
  *          Other -ve on failure.
- *          0 on succes.
+ *          0 on success.
  */
 static int EcSetParams(ecc_key* key, byte* der, int len)
 {
@@ -2251,7 +2282,7 @@ static int EcSetParams(ecc_key* key, byte* der, int len)
 }
 
 /**
- * Set the EC Point, encoded in DER and X9.63, as the publc key.
+ * Set the EC Point, encoded in DER and X9.63, as the public key.
  *
  * @param  key  [in]  EC Key object.
  * @param  der  [in]  DER encoding of OID.
@@ -2259,7 +2290,7 @@ static int EcSetParams(ecc_key* key, byte* der, int len)
  * @return  BUFFER_E when len is too short.
  *          ASN_PARSE_E when DER encoding is bad.
  *          Other -ve on failure.
- *          0 on succes.
+ *          0 on success.
  */
 static int EcSetPoint(ecc_key* key, byte* der, int len)
 {
@@ -3605,20 +3636,30 @@ int WP11_RsaPkcs15_PrivateDecrypt(unsigned char* in, word32 inLen,
                                   unsigned char* out, word32* outLen,
                                   WP11_Object* priv, WP11_Slot* slot)
 {
-    int ret;
+    int ret = 0;
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     WC_RNG rng;
-
+#endif
     /* A random number generator is needed for blinding. */
     if (priv->onToken)
         WP11_Lock_LockRW(priv->lock);
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
     if (ret == 0) {
         priv->data.rsaKey.rng = &rng;
+    }
+#endif
+    if (ret == 0) {
         ret = wc_RsaPrivateDecrypt_ex(in, inLen, out, *outLen,
                                        &priv->data.rsaKey, WC_RSA_PKCSV15_PAD,
                                        WC_HASH_TYPE_NONE, WC_MGF1NONE, NULL, 0);
+    #if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
         priv->data.rsaKey.rng = NULL;
         Rng_Free(&rng);
+    #endif
     }
     if (priv->onToken)
         WP11_Lock_UnlockRW(priv->lock);
@@ -3627,6 +3668,7 @@ int WP11_RsaPkcs15_PrivateDecrypt(unsigned char* in, word32 inLen,
         *outLen = ret;
         ret = 0;
     }
+    (void)slot;
 
     return ret;
 }
@@ -3696,23 +3738,34 @@ int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
                                 unsigned char* out, word32* outLen,
                                 WP11_Object* priv, WP11_Session* session)
 {
-    int ret;
+    int ret = 0;
     WP11_OaepParams* oaep = &session->params.oaep;
     WP11_Slot* slot = WP11_Session_GetSlot(session);
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     WC_RNG rng;
+#endif
 
     /* A random number generator is needed for blinding. */
     if (priv->onToken)
         WP11_Lock_LockRW(priv->lock);
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
     if (ret == 0) {
         priv->data.rsaKey.rng = &rng;
+    }
+#endif
+    if (ret == 0) {
         ret = wc_RsaPrivateDecrypt_ex(in, inLen, out, *outLen,
                                             &priv->data.rsaKey, WC_RSA_OAEP_PAD,
                                             oaep->hashType, oaep->mgf,
                                             oaep->label, oaep->labelSz);
+    #if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
         priv->data.rsaKey.rng = NULL;
         Rng_Free(&rng);
+    #endif
     }
     if (priv->onToken)
         WP11_Lock_UnlockRW(priv->lock);
@@ -3726,6 +3779,7 @@ int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
             oaep->label = NULL;
         }
     }
+    (void)slot;
 
     return ret;
 }
@@ -4209,7 +4263,8 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
 {
     int ret;
     ecc_key pubKey;
-#ifdef ECC_TIMING_RESISTANT
+#if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     WC_RNG rng;
 #endif
 
@@ -4217,7 +4272,8 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
     if (ret == 0) {
         ret = wc_ecc_import_x963(point, pointLen, &pubKey);
     }
-#ifdef ECC_TIMING_RESISTANT
+#if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
     if (ret == 0) {
         ret = Rng_New(&priv->slot->token.rng, &priv->slot->token.rngLock, &rng);
         wc_ecc_set_rng(&priv->data.ecKey, &rng);
@@ -4229,7 +4285,8 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
         ret = wc_ecc_shared_secret(&priv->data.ecKey, &pubKey, key, &keyLen);
         if (priv->onToken)
             WP11_Lock_UnlockRO(priv->lock);
-#ifdef ECC_TIMING_RESISTANT
+#if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
         Rng_Free(&rng);
 #endif
     }
