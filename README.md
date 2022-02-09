@@ -30,7 +30,7 @@ cd wolfPKCS11
 ./autogen.sh
 ./configure
 make
-
+```
 
 ### Build options and defines
 

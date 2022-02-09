@@ -984,10 +984,20 @@ int WP11_Slot_HasSession(WP11_Slot* slot)
 static int HashPIN(char* pin, int pinLen, byte* seed, int seedLen, byte* hash,
                    int hashLen)
 {
+#ifdef HAVE_SCRYPT
     /* Convert PIN into secret using scrypt algorithm. */
     return wc_scrypt(hash, (byte*)pin, pinLen, seed, seedLen,
                                     WP11_HASH_PIN_COST, WP11_HASH_PIN_BLOCKSIZE,
                                     WP11_HASH_PIN_PARALLEL, hashLen);
+#else
+    (void)pin;
+    (void)pinLen;
+    (void)seed;
+    (void)seedLen;
+    (void)hash;
+    (void)hashLen;
+    return NOT_COMPILED_IN;
+#endif
 }
 
 /**
@@ -2213,11 +2223,12 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
 
 #ifdef HAVE_ECC
 
-#if !defined(HAVE_FIPS) || \
+#if defined(HAVE_FIPS) || \
     (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION <= 2))
+#define USE_LOCAL_CURVE_OID_LOOKUP
 /* this function is not in the FIPS 140-2 version */
 /* ecc_sets is exposed in ecc.h */
-static int wc_ecc_get_curve_id_from_oid(const byte* oid, word32 len)
+static int ecc_get_curve_id_from_oid(const byte* oid, word32 len)
 {
     int curve_idx;
 
@@ -2268,7 +2279,11 @@ static int EcSetParams(ecc_key* key, byte* der, int len)
         ret = BUFFER_E;
     if (ret == 0) {
         /* Find the curve matching the OID. */
+    #ifdef USE_LOCAL_CURVE_OID_LOOKUP
+        curveId = ecc_get_curve_id_from_oid(der + 2, der[1]);
+    #else
         curveId = wc_ecc_get_curve_id_from_oid(der + 2, der[1]);
+    #endif
         if (curveId == ECC_CURVE_INVALID)
             ret = BAD_FUNC_ARG;
     }
@@ -4802,19 +4817,25 @@ int WP11_AesGcm_Decrypt(unsigned char* enc, word32 encSz, unsigned char* dec,
 
     ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
     if (ret == 0) {
-        if (secret->onToken)
+        if (secret->onToken) {
             WP11_Lock_LockRO(secret->lock);
+        }
+
         key = &secret->data.symmKey;
         ret = wc_AesGcmSetKey(&aes, key->data, key->len);
-        if (secret->onToken)
+        if (secret->onToken) {
             WP11_Lock_UnlockRO(secret->lock);
+        }
 
-        if (ret == 0)
+        if (ret == 0) {
             encSz -= authTagSz;
             ret = wc_AesGcmDecrypt(&aes, dec, enc, encSz, gcm->iv, gcm->ivSz,
                                       authTag, authTagSz, gcm->aad, gcm->aadSz);
-        if (ret == 0)
+        }
+
+        if (ret == 0) {
             *decSz = encSz;
+        }
 
         if (gcm->aad != NULL) {
             XFREE(gcm->aad, NULL, DYNAMIC_TYPE_TMP_BUFFER);
