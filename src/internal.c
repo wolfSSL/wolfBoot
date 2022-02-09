@@ -2223,7 +2223,7 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
 
 #ifdef HAVE_ECC
 
-#if !defined(HAVE_FIPS) || \
+#if defined(HAVE_FIPS) || \
     (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION <= 2))
 #define USE_LOCAL_CURVE_OID_LOOKUP
 /* this function is not in the FIPS 140-2 version */
