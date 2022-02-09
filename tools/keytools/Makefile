@@ -11,11 +11,11 @@ CC      = gcc
 WOLFBOOTDIR = ../..
 WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl/
 CFLAGS  = -Wall -Wextra -Werror
-CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include -DWOLFBOOT_KEYTOOLS -DWOLFSSL_AES_DIRECT -DWOLFSSL_AES_COUNTER
 
 # option variables
 DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE
-OPTIMIZE        = -Os
+OPTIMIZE        = -O2
 
 # Options
 #CFLAGS+=$(DEBUG_FLAGS)
@@ -29,6 +29,7 @@ CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 
 # Sources
 SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
+	$(WOLFDIR)wolfcrypt/src/aes.c \
 	$(WOLFDIR)wolfcrypt/src/ecc.c \
 	$(WOLFDIR)wolfcrypt/src/coding.c \
 	$(WOLFDIR)wolfcrypt/src/chacha.c \

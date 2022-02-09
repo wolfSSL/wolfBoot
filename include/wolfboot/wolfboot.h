@@ -131,7 +131,7 @@ int wolfBoot_dualboot_candidate(void);
 
 /* Hashing function configuration */
 #if defined(WOLFBOOT_HASH_SHA256)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (16)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
 #   define WOLFBOOT_SHA_HDR HDR_SHA256
 #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
 #   define image_hash image_sha256
@@ -146,10 +146,26 @@ int wolfBoot_dualboot_candidate(void);
 #   error "No valid hash algorithm defined!"
 #endif
 
+
+#ifdef EXT_ENCRYPTED
 /* Encryption support */
-#define ENCRYPT_BLOCK_SIZE 16 
-#define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
-#define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+#if defined(ENCRYPT_WITH_CHACHA)
+    #define ENCRYPT_BLOCK_SIZE 64
+    #define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
+    #define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+#elif defined(ENCRYPT_WITH_AES128)
+    #define ENCRYPT_BLOCK_SIZE 16
+    #define ENCRYPT_KEY_SIZE 16 /* AES128  */
+    #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
+#elif defined(ENCRYPT_WITH_AES256)
+    #define ENCRYPT_BLOCK_SIZE 16
+    #define ENCRYPT_KEY_SIZE 32 /* AES256 */
+    #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
+#else
+#   error "Encryption ON, but no encryption algorithm selected."
+#endif
+
+#endif /* EXT_ENCRYPTED */
 
 #ifdef DELTA_UPDATES
 int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
@@ -158,4 +174,5 @@ int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
 int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
+
 #endif /* !WOLFBOOT_H */

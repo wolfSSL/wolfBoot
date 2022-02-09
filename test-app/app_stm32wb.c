@@ -30,8 +30,15 @@
 #include "uart_drv.h"
 
 #ifdef PLATFORM_stm32wb
-char enc_key[] = "0123456789abcdef0123456789abcdef" /* ChaCha key (256 bit) */
-                 "0123456789ab";                    /* IV nonce    (96 bit) */
+
+/* Matches all keys:
+ *    - chacha (32 + 12)
+ *    - aes128 (16 + 16)
+ *    - aes256 (32 + 16)
+ */
+/* Longest key possible: AES256 (32 key + 16 IV = 48) */
+char enc_key[] = "0123456789abcdef0123456789abcdef"
+		 "0123456789abcdef";
 
 volatile uint32_t time_elapsed = 0;
 void main(void) {

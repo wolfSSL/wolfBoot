@@ -56,10 +56,12 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/asn.h>
+#include <wolfssl/wolfcrypt/aes.h>
 
 #ifdef HAVE_CHACHA
 #include <wolfssl/wolfcrypt/chacha.h>
 #endif
+
 
 #ifndef NO_RSA
     #include <wolfssl/wolfcrypt/rsa.h>
@@ -86,7 +88,7 @@
 #endif
 
 #if defined(_WIN32) && !defined(PATH_MAX)
-	#define PATH_MAX 256
+    #define PATH_MAX 256
 #endif
 
 #ifndef IMAGE_HEADER_SIZE
@@ -136,7 +138,15 @@
 #define SIGN_RSA4096   HDR_IMG_TYPE_AUTH_RSA4096
 #define SIGN_ED448     HDR_IMG_TYPE_AUTH_ED448
 
+
+#define ENC_OFF 0
+#define ENC_CHACHA 1
+#define ENC_AES128 2
+#define ENC_AES256 3
+
 #define ENC_BLOCK_SIZE 16
+#define ENC_MAX_KEY_SZ 32
+#define ENC_MAX_IV_SZ  16
 
 static void header_append_u32(uint8_t* header, uint32_t* idx, uint32_t tmp32)
 {
@@ -202,6 +212,7 @@ struct cmd_options {
 
 static struct cmd_options CMD = {
     .sign = SIGN_AUTO,
+    .encrypt  = ENC_OFF,
     .hash_algo = HASH_SHA256,
     .header_sz = IMAGE_HEADER_SIZE
 };
@@ -710,28 +721,45 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         pos += read_sz;
     }
 
-    if (CMD.encrypt && CMD.encrypt_key_file) {
-        uint8_t key[CHACHA_MAX_KEY_SZ], iv[CHACHA_IV_BYTES];
+    if ((CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
+        uint8_t key[ENC_MAX_KEY_SZ], iv[ENC_MAX_IV_SZ];
         uint8_t enc_buf[ENC_BLOCK_SIZE];
         int ivSz, keySz;
         uint32_t fsize = 0;
-        ChaCha cha;
-#ifndef HAVE_CHACHA
-        fprintf(stderr, "Encryption not supported: chacha support not found in wolfssl configuration.\n");
-        exit(100);
-#endif
+        switch (CMD.encrypt) {
+            case ENC_CHACHA:
+                ivSz = CHACHA_IV_BYTES;
+                keySz = CHACHA_MAX_KEY_SZ;
+                break;
+            case ENC_AES128:
+                ivSz = 16;
+                keySz = 16;
+                break;
+            case ENC_AES256:
+                ivSz = 16;
+                keySz = 32;
+                break;
+            default:
+                printf("No valid encryption mode selected\n");
+                goto failure;
+
+        }
         fek = fopen(CMD.encrypt_key_file, "rb");
         if (fek == NULL) {
             fprintf(stderr, "Open encryption key file %s: %s\n", CMD.encrypt_key_file, strerror(errno));
             exit(1);
         }
-        keySz = fread(key, 1, sizeof(key), fek);
-        ivSz = fread(iv, 1, sizeof(iv), fek);
-        fclose(fek);
-        if (keySz != sizeof(key) || ivSz != sizeof(iv)) {
-            fprintf(stderr, "Error reading key and iv from %s\n", CMD.encrypt_key_file);
+        ret = fread(key, 1, keySz, fek);
+        if (ret != keySz) {
+            fprintf(stderr, "Error reading key from %s\n", CMD.encrypt_key_file);
             exit(1);
         }
+        ret = fread(iv, 1, ivSz, fek);
+        if (ret != ivSz) {
+            fprintf(stderr, "Error reading IV from %s\n", CMD.encrypt_key_file);
+            exit(1);
+        }
+        fclose(fek);
 
         fef = fopen(CMD.output_encrypted_image_file, "wb");
         if (!fef) {
@@ -740,16 +768,40 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         fsize = ftell(f);
         fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
 
-        wc_Chacha_SetKey(&cha, key, sizeof(key));
-        for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
-            int fread_retval;
-            fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
-            if ((fread_retval == 0) && feof(f)) {
-                break;
+        if (CMD.encrypt == ENC_CHACHA) {
+            ChaCha cha;
+#ifndef HAVE_CHACHA
+            fprintf(stderr, "Encryption not supported: chacha support not found in wolfssl configuration.\n");
+            exit(100);
+#endif
+            wc_Chacha_SetKey(&cha, key, sizeof(key));
+            wc_Chacha_SetIV(&cha, iv, 0);
+            for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
+                int fread_retval;
+                fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
+                if ((fread_retval == 0) && feof(f)) {
+                    break;
+                }
+                wc_Chacha_Process(&cha, enc_buf, buf, fread_retval);
+                fwrite(enc_buf, 1, fread_retval, fef);
             }
-            wc_Chacha_SetIV(&cha, iv, (pos >> 4));
-            wc_Chacha_Process(&cha, enc_buf, buf, fread_retval);
-            fwrite(enc_buf, 1, fread_retval, fef);
+        } else if ((CMD.encrypt == ENC_AES128) || (CMD.encrypt == ENC_AES256)) {
+            Aes aes_e;
+            wc_AesInit(&aes_e, NULL, 0);
+            wc_AesSetKeyDirect(&aes_e, key, keySz, iv, AES_ENCRYPTION);
+            for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
+                int fread_retval;
+                fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
+                if ((fread_retval == 0) && feof(f)) {
+                    break;
+                }
+                /* Pad with FF if input is too short */
+                while((fread_retval % ENC_BLOCK_SIZE) != 0) {
+                    buf[fread_retval++] = 0xFF;
+                }
+                wc_AesCtrEncrypt(&aes_e, enc_buf, buf, fread_retval);
+                fwrite(enc_buf, 1, fread_retval, fef);
+            }
         }
         fclose(fef);
     }
@@ -757,7 +809,6 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
     ret = 0;
     fclose(f2);
     fclose(f);
-
 failure:
     if (header)
         free(header);
@@ -1012,7 +1063,7 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
-        printf("Usage: %s [--ed25519 | --ed447 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
+        printf("Usage: %s [--ed25519 | --ed447 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--chacha | --aes128 | --aes256] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
         printf("  - or - ");
@@ -1072,12 +1123,24 @@ int main(int argc, char** argv)
             CMD.manual_sign = 1;
         }
         else if (strcmp(argv[i], "--encrypt") == 0) {
-            CMD.encrypt = 1;
+            if (CMD.encrypt == ENC_OFF)
+                CMD.encrypt = ENC_CHACHA;
             CMD.encrypt_key_file = argv[++i];
-        } else if (strcmp(argv[i], "--delta") == 0) {
+        }
+        else if (strcmp(argv[i], "--aes128") == 0) {
+            CMD.encrypt = ENC_AES128;
+        }
+        else if (strcmp(argv[i], "--aes256") == 0) {
+            CMD.encrypt = ENC_AES256;
+        }
+        else if (strcmp(argv[i], "--chacha") == 0) {
+            CMD.encrypt = ENC_CHACHA;
+        }
+        else if (strcmp(argv[i], "--delta") == 0) {
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
-        } else {
+        }
+        else {
             i--;
             break;
         }

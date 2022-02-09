@@ -759,11 +759,14 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 
 #ifdef __WOLFBOOT
 
-static ChaCha chacha;
-static int chacha_initialized = 0;
-static uint8_t chacha_iv_nonce[ENCRYPT_NONCE_SIZE];
+static int encrypt_initialized = 0;
+static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
 
-static int chacha_init(void)
+#ifdef ENCRYPT_WITH_CHACHA
+
+ChaCha chacha;
+
+int chacha_init(void)
 {
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET);
     uint8_t ff[ENCRYPT_KEY_SIZE];
@@ -777,11 +780,76 @@ static int chacha_init(void)
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
         return -1;
 
-    XMEMCPY(chacha_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
+    XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
     wc_Chacha_SetKey(&chacha, key, ENCRYPT_KEY_SIZE);
-    chacha_initialized = 1;
+    encrypt_initialized = 1;
     return 0;
 }
+
+#elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+
+/* Inline use of ByteReverseWord32 */
+#define WOLFSSL_MISC_INCLUDED
+#include <wolfcrypt/src/misc.c>
+
+Aes aes_dec, aes_enc;
+
+int aes_init(void)
+{
+    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET);
+    uint8_t ff[ENCRYPT_KEY_SIZE];
+    uint8_t iv_buf[ENCRYPT_BLOCK_SIZE];
+    uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
+
+    wc_AesInit(&aes_enc, NULL, 0);
+    wc_AesInit(&aes_dec, NULL, 0);
+
+    /* Check against 'all 0xff' or 'all zero' cases */
+    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
+    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
+        return -1;
+    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
+    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
+        return -1;
+
+    XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
+    XMEMCPY(iv_buf, stored_nonce, ENCRYPT_NONCE_SIZE);
+    /* AES_ENCRYPTION is used for both directions in CTR */
+    wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
+    wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
+    encrypt_initialized = 1;
+    return 0;
+}
+
+void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
+{
+    uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
+    uint32_t iv_local_ctr;
+    int i;
+    XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
+#ifndef BIG_ENDIAN_ORDER
+    for (i = 0; i < 4; i++) {
+        iv_buf[i] = ByteReverseWord32(iv_buf[i]);
+    }
+#endif
+    iv_buf[3] += iv_ctr;
+    if(iv_buf[3] < iv_ctr) { /* overflow */
+        for (i = 2; i >= 0; i--) {
+            iv_buf[i]++;
+            if (iv_buf[i] != 0)
+                break;
+        }
+    }
+#ifndef BIG_ENDIAN_ORDER
+    for (i = 0; i < 4; i++) {
+        iv_buf[i] = ByteReverseWord32(iv_buf[i]);
+    }
+#endif
+    wc_AesSetIV(&aes_enc, (byte *)iv_buf);
+    wc_AesSetIV(&aes_dec, (byte *)iv_buf);
+}
+
+#endif
 
 
 static inline uint8_t part_address(uintptr_t a)
@@ -790,20 +858,19 @@ static inline uint8_t part_address(uintptr_t a)
 #if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
         (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
 #endif
-        (a <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
+        (a < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
         return PART_UPDATE;
     if ( 1 &&
 #if WOLFBOOT_PARTITION_SWAP_ADDRESS != 0
         (a >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
 #endif
-        (a <= WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
+        (a < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
         return PART_SWAP;
     return PART_NONE;
 }
 
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
-    uint32_t iv_counter;
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
     int sz = len;
@@ -818,25 +885,20 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     if (sz < ENCRYPT_BLOCK_SIZE) {
         sz = ENCRYPT_BLOCK_SIZE;
     }
-    if (!chacha_initialized)
-        if (chacha_init() < 0)
+    if (!encrypt_initialized)
+        if (crypto_init() < 0)
             return -1;
     part = part_address(address);
     switch(part) {
         case PART_UPDATE:
-            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-            /* Do not encrypt last sectors */
-            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
+            /* do not encrypt flag sector */
+            if (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS >= START_FLAGS_OFFSET) {
                 return ext_flash_write(address, data, len);
             }
             break;
         case PART_SWAP:
-            {
-                uint32_t row_number;
-                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-                iv_counter = row_number;
-                break;
-            }
+            /* data is coming from update and is already encrypted */
+            return ext_flash_write(address, data, len);
         default:
             return -1;
     }
@@ -845,19 +907,15 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
         XMEMCPY(block + row_offset, data, step);
-        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
-        wc_Chacha_Process(&chacha, enc_block, block, ENCRYPT_BLOCK_SIZE);
+        crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         address += step;
         data += step;
         sz -= step;
-        iv_counter++;
     }
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
-        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        wc_Chacha_Process(&chacha, ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
-        iv_counter++;
+        crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
     }
     return ext_flash_write(address, ENCRYPT_CACHE, len);
 }
@@ -879,8 +937,8 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     if (sz < ENCRYPT_BLOCK_SIZE) {
         sz = ENCRYPT_BLOCK_SIZE;
     }
-    if (!chacha_initialized)
-        if (chacha_init() < 0)
+    if (!encrypt_initialized)
+        if (crypto_init() < 0)
             return -1;
     part = part_address(row_address);
     switch(part) {
@@ -890,12 +948,10 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
             if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
             }
+            crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
             {
-                uint32_t row_number;
-                row_number = (address - WOLFBOOT_PARTITION_SWAP_ADDRESS) / ENCRYPT_BLOCK_SIZE;
-                iv_counter = row_number;
                 break;
             }
         default:
@@ -906,8 +962,7 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
         int step = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE) != ENCRYPT_BLOCK_SIZE)
             return -1;
-        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
-        wc_Chacha_Process(&chacha, dec_block, block, ENCRYPT_BLOCK_SIZE);
+        crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(data, dec_block + row_offset, step);
         address += step;
         data += step;
@@ -917,9 +972,8 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
     if (ext_flash_read(address, data, sz) != sz)
         return -1;
     for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
-        wc_Chacha_SetIV(&chacha, chacha_iv_nonce, iv_counter);
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        wc_Chacha_Process(&chacha, data + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
+        crypto_decrypt(data + (ENCRYPT_BLOCK_SIZE * i), block, ENCRYPT_BLOCK_SIZE);
         iv_counter++;
     }
     return len;
