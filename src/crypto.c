@@ -3247,10 +3247,12 @@ CK_RV C_GenerateKey(CK_SESSION_HANDLE hSession,
                     WP11_Object_Free(key);
                     rv = CKR_FUNCTION_FAILED;
                 }
-                else
+                else {
                    rv = AddObject(session, key, pTemplate, ulCount, phKey);
-                   if (rv != CKR_OK)
+                   if (rv != CKR_OK) {
                        WP11_Object_Free(key);
+                   }
+                }
             }
             break;
 #endif

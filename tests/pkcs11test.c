@@ -6321,9 +6321,10 @@ static CK_RV test_hmac_update(CK_SESSION_HANDLE session, int mechanism,
     ret = funcList->C_SignInit(session, &mech, key);
     CHECK_CKR(ret, "HMAC Sign Init");
     if (ret == CKR_OK) {
-        for (i = 0; ret == CKR_OK && i < (int)dataSz; i++)
+        for (i = 0; ret == CKR_OK && i < (int)dataSz; i++) {
             ret = funcList->C_SignUpdate(session, data + i, 1);
             CHECK_CKR(ret, "HMAC Sign Update");
+        }
     }
     if (ret == CKR_OK) {
         outSz = 0;
@@ -6352,9 +6353,10 @@ static CK_RV test_hmac_update(CK_SESSION_HANDLE session, int mechanism,
         CHECK_CKR(ret, "HMAC Verify Init");
     }
     if (ret == CKR_OK) {
-        for (i = 0; ret == CKR_OK && i < (int)dataSz; i++)
+        for (i = 0; ret == CKR_OK && i < (int)dataSz; i++) {
             ret = funcList->C_VerifyUpdate(session, data + i, 1);
             CHECK_CKR(ret, "HMAC Verify Update");
+        }
     }
     if (ret == CKR_OK) {
         ret = funcList->C_VerifyFinal(session, out, outSz);

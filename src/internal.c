@@ -4817,19 +4817,25 @@ int WP11_AesGcm_Decrypt(unsigned char* enc, word32 encSz, unsigned char* dec,
 
     ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
     if (ret == 0) {
-        if (secret->onToken)
+        if (secret->onToken) {
             WP11_Lock_LockRO(secret->lock);
+        }
+
         key = &secret->data.symmKey;
         ret = wc_AesGcmSetKey(&aes, key->data, key->len);
-        if (secret->onToken)
+        if (secret->onToken) {
             WP11_Lock_UnlockRO(secret->lock);
+        }
 
-        if (ret == 0)
+        if (ret == 0) {
             encSz -= authTagSz;
             ret = wc_AesGcmDecrypt(&aes, dec, enc, encSz, gcm->iv, gcm->ivSz,
                                       authTag, authTagSz, gcm->aad, gcm->aadSz);
-        if (ret == 0)
+        }
+
+        if (ret == 0) {
             *decSz = encSz;
+        }
 
         if (gcm->aad != NULL) {
             XFREE(gcm->aad, NULL, DYNAMIC_TYPE_TMP_BUFFER);
