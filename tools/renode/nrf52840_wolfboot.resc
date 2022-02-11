@@ -18,6 +18,12 @@ macro reset
     sysbus LoadELF @/tmp/renode-wolfboot.elf
     sysbus LoadBinary @/tmp/renode-test-v1.bin 0x20000
     start
+    sleep 10
+    pause
+    cpu Reset
+    sysbus LoadBinary @/tmp/renode-test-update.bin 0x60000
+    start
+
 
 """
 runMacro $reset
