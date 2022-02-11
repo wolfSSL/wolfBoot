@@ -1,13 +1,19 @@
 TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
-RENODE_UART=/tmp/wolfboot.uart
+TMP?=/tmp
+RENODE_UART?=$(TMP)/wolfboot.uart
+RENODE_LOG?=$(TMP)/wolfboot.log
+RENODE_PIDFILE?=$(TMP)/renode.pid
+
+
 RENODE_PORT=55155
-RENODE_OPTIONS=--pid-file=/tmp/renode.pid
+RENODE_OPTIONS=--pid-file=$(RENODE_PIDFILE)
 RENODE_OPTIONS+=--disable-xwt -P $(RENODE_PORT)
 RENODE_CONFIG=tools/renode/stm32f4_discovery_wolfboot.resc
 POFF=131067
 
-RENODE_EXPVER=tools/test-expect-version/test-expect-version $(RENODE_UART)
+EXPVER=tools/test-expect-version/test-expect-version
+RENODE_EXPVER=$(EXPVER) $(RENODE_UART)
 RENODE_BINASSEMBLE=tools/bin-assemble/bin-assemble
 
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
@@ -80,68 +86,68 @@ endif
 #
 #
 renode-on: FORCE
-	@rm -f /tmp/wolfboot.uart
-	@renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 >/tmp/renode.log &
-	@while ! (test -e /tmp/wolfboot.uart); do sleep .1; done
-	@echo "Renode up: uart port activated"
-	@echo "Renode running: renode has been started."
+	${Q}rm -f $(RENODE_UART)
+	${Q}renode $(RENODE_OPTIONS) $(RENODE_CONFIG) 2>&1 > $(RENODE_LOG) &
+	${Q}while ! (test -e $(RENODE_UART)); do sleep .1; done
+	${Q}echo "Renode up: uart port activated"
+	${Q}echo "Renode running: renode has been started."
 
 renode-off: FORCE
-	@echo "Terminating renode..."
-	@(echo && echo quit) | nc -q 1 localhost $(RENODE_PORT) > /dev/null
-	@tail --pid=`cat /tmp/renode.pid` -f /dev/null
-	@echo "Renode exited."
-	@killall renode 2>/dev/null || true
-	@killall mono 2>/dev/null || true
-	@rm -f /tmp/renode.pid /tmp/renode.log /tmp/wolfboot.uart
+	${Q}echo "Terminating renode..."
+	${Q}(echo && echo quit) | nc -q 1 localhost $(RENODE_PORT) > /dev/null
+	${Q}tail --pid=`cat $(RENODE_PIDFILE)` -f /dev/null
+	${Q}echo "Renode exited."
+	${Q}killall renode 2>/dev/null || true
+	${Q}killall mono 2>/dev/null || true
+	${Q}rm -f $(RENODE_PIDFILE) $(RENODE_LOG) $(RENODE_UART)
 
 
-renode-factory: factory.bin test-app/image.bin FORCE
-	@rm -f /tmp/wolfboot.uart
-	@dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
-		> /tmp/renode-test-update.bin
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
+renode-factory: factory.bin test-app/image.bin $(EXPVER) FORCE 
+	${Q}rm -f $(RENODE_UART)
+	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
+		> $(TMP)/renode-test-update.bin
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
-	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
-		of=/tmp/renode-test-update.bin bs=1 conv=notrunc
-	@printf "pBOOT" >> /tmp/renode-test-update.bin
-	@cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin
-	@cp wolfboot.elf /tmp/renode-wolfboot.elf
-	@make renode-on
-	@echo "Expecting version 1:"
-	@test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
-	@make renode-off
-	@rm -f /tmp/renode-wolfboot.elf
-	@rm -f /tmp/renode-test-v1.bin
-	@rm -f /tmp/renode-test-update.bin
-	@echo $@: TEST PASSED
+	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
+		of=$(TMP)/renode-test-update.bin bs=1 conv=notrunc
+	${Q}printf "pBOOT" >> $(TMP)/renode-test-update.bin
+	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
+	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
+	${Q}make renode-on
+	${Q}echo "Expecting version 1:"
+	${Q}test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
+	${Q}make renode-off
+	${Q}rm -f $(TMP)/renode-wolfboot.elf
+	${Q}rm -f $(TMP)/renode-test-v1.bin
+	${Q}rm -f $(TMP)/renode-test-update.bin
+	${Q}echo $@: TEST PASSED
 
-renode-update: factory.bin test-app/image.bin FORCE
-	@ test "$(TARGET)" = "nrf52" || (echo && echo " *** Error: only TARGET=nrf52 supported by $@" \
+renode-update: factory.bin test-app/image.bin $(EXPVER) FORCE
+	${Q} test "$(TARGET)" = "nrf52" || (echo && echo " *** Error: only TARGET=nrf52 supported by $@" \
 		&& echo && echo && false)
-	@rm -f /tmp/wolfboot.uart
-	@dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
-		> /tmp/renode-test-update.bin
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
+	${Q}rm -f $(RENODE_UART)
+	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
+		> $(TMP)/renode-test-update.bin
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
-	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
-		of=/tmp/renode-test-update.bin bs=1 conv=notrunc
-	@printf "pBOOT" >> /tmp/renode-test-update.bin
-	@cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin
-	@cp wolfboot.elf /tmp/renode-wolfboot.elf
-	@make renode-on
-	@echo "Expecting version 1:"
-	@test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
-	@echo "Expecting version 2:"
-	@test `$(RENODE_EXPVER)` -eq $(TEST_UPDATE_VERSION) || \
+	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
+		of=$(TMP)/renode-test-update.bin bs=1 conv=notrunc
+	${Q}printf "pBOOT" >> $(TMP)/renode-test-update.bin
+	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
+	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
+	${Q}make renode-on
+	${Q}echo "Expecting version 1:"
+	${Q}test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
+	${Q}echo "Expecting version 2:"
+	${Q}test `$(RENODE_EXPVER)` -eq $(TEST_UPDATE_VERSION) || \
 		(make renode-off && false)
-	@make renode-off
-	@rm -f /tmp/renode-wolfboot.elf
-	@rm -f /tmp/renode-test-v1.bin
-	@rm -f /tmp/renode-test-update.bin
-	@echo $@: TEST PASSED
+	${Q}make renode-off
+	${Q}rm -f $(TMP)/renode-wolfboot.elf
+	${Q}rm -f $(TMP)/renode-test-v1.bin
+	${Q}rm -f $(TMP)/renode-test-update.bin
+	${Q}echo $@: TEST PASSED
 
 renode-factory-ed448: FORCE
 	make renode-factory SIGN=ED448
@@ -156,17 +162,17 @@ renode-factory-rsa4096: FORCE
 	make renode-factory SIGN=RSA4096
 
 renode-factory-all: FORCE
-	@make clean
-	@make renode-factory
-	@make clean
-	@make renode-factory-ed448 RENODE_PORT=55156
-	@make clean
-	@make renode-factory-ecc256 RENODE_PORT=55157
-	@make clean
-	@make renode-factory-rsa2048 RENODE_PORT=55158
-	@make clean
-	@make renode-factory-rsa4096 RENODE_PORT=55159
-	@echo All tests in $@ OK!
+	${Q}make clean
+	${Q}make renode-factory
+	${Q}make clean
+	${Q}make renode-factory-ed448 RENODE_PORT=55156
+	${Q}make clean
+	${Q}make renode-factory-ecc256 RENODE_PORT=55157
+	${Q}make clean
+	${Q}make renode-factory-rsa2048 RENODE_PORT=55158
+	${Q}make clean
+	${Q}make renode-factory-rsa4096 RENODE_PORT=55159
+	${Q}echo All tests in $@ OK!
 
 renode-update-ed448: FORCE
 	make renode-update SIGN=ED448
@@ -181,14 +187,14 @@ renode-update-rsa4096: FORCE
 	make renode-update SIGN=RSA4096
 
 renode-update-all: FORCE
-	@make clean
-	@make renode-update
-	@make clean
-	@make renode-update-ed448 RENODE_PORT=55156
-	@make clean
-	@make renode-update-ecc256 RENODE_PORT=55157
-	@make clean
-	@make renode-update-rsa2048 RENODE_PORT=55158
-	@make clean
-	@make renode-update-rsa4096 RENODE_PORT=55159
-	@echo All tests in $@ OK!
+	${Q}make clean
+	${Q}make renode-update
+	${Q}make clean
+	${Q}make renode-update-ed448 RENODE_PORT=55156
+	${Q}make clean
+	${Q}make renode-update-ecc256 RENODE_PORT=55157
+	${Q}make clean
+	${Q}make renode-update-rsa2048 RENODE_PORT=55158
+	${Q}make clean
+	${Q}make renode-update-rsa4096 RENODE_PORT=55159
+	${Q}echo All tests in $@ OK!
