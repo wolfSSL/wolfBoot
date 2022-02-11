@@ -21,18 +21,20 @@
 
 #include <stdint.h>
 #include <image.h>
-/* STM32 F4 register configuration */
 
-/* Assembly helpers */
+#ifndef ARCH_FLASH_OFFSET
+#define ARCH_FLASH_OFFSET 0x08000000U
+#endif
+
+/* STM32 F4 register Assembly helpers */
 #define DMB() asm volatile ("dmb")
 
 /*** RCC ***/
-
-#define RCC_BASE (0x40023800)
-#define RCC_CR      (*(volatile uint32_t *)(RCC_BASE + 0x00))
-#define RCC_PLLCFGR (*(volatile uint32_t *)(RCC_BASE + 0x04))
-#define RCC_CFGR    (*(volatile uint32_t *)(RCC_BASE + 0x08))
-#define RCC_CR      (*(volatile uint32_t *)(RCC_BASE + 0x00))
+#define RCC_BASE    (0x40023800U)
+#define RCC_CR      (*(volatile uint32_t *)(RCC_BASE + 0x00U))
+#define RCC_PLLCFGR (*(volatile uint32_t *)(RCC_BASE + 0x04U))
+#define RCC_CFGR    (*(volatile uint32_t *)(RCC_BASE + 0x08U))
+#define RCC_CR      (*(volatile uint32_t *)(RCC_BASE + 0x00U))
 
 #define RCC_CR_PLLRDY               (1 << 25)
 #define RCC_CR_PLLON                (1 << 24)
@@ -54,20 +56,20 @@
 #define PLL_FULL_MASK (0x7F037FFF)
 
 /*** FLASH ***/
-#define APB1_CLOCK_ER           (*(volatile uint32_t *)(0x40023840))
-#define APB1_CLOCK_RST          (*(volatile uint32_t *)(0x40023820))
+#define APB1_CLOCK_ER           (*(volatile uint32_t *)(0x40023840U))
+#define APB1_CLOCK_RST          (*(volatile uint32_t *)(0x40023820U))
 #define TIM2_APB1_CLOCK_ER_VAL     (1 << 0)
 #define PWR_APB1_CLOCK_ER_VAL   (1 << 28)
 
-#define APB2_CLOCK_ER (*(volatile uint32_t *)(0x40023844))
-#define APB2_CLOCK_RST          (*(volatile uint32_t *)(0x40023824))
+#define APB2_CLOCK_ER           (*(volatile uint32_t *)(0x40023844U))
+#define APB2_CLOCK_RST          (*(volatile uint32_t *)(0x40023824U))
 #define SYSCFG_APB2_CLOCK_ER (1 << 14)
 
-#define FLASH_BASE          (0x40023C00)
-#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
-#define FLASH_KEYR          (*(volatile uint32_t *)(FLASH_BASE + 0x04))
-#define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
-#define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x10))
+#define FLASH_BASE          (0x40023C00U)
+#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00U))
+#define FLASH_KEYR          (*(volatile uint32_t *)(FLASH_BASE + 0x04U))
+#define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x0CU))
+#define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x10U))
 
 /* Register values */
 #define FLASH_ACR_RESET_DATA_CACHE            (1 << 12)
@@ -84,7 +86,7 @@
 #define FLASH_SR_OPERR                        (1 << 1)
 #define FLASH_SR_EOP                          (1 << 0)
 
-#define FLASH_CR_LOCK                         (1 << 31)
+#define FLASH_CR_LOCK               (uint32_t)(1 << 31)
 #define FLASH_CR_ERRIE                        (1 << 25)
 #define FLASH_CR_EOPIE                        (1 << 24)
 #define FLASH_CR_STRT                         (1 << 16)
@@ -100,8 +102,8 @@
 #define FLASH_CR_PROGRAM_X32                  (2 << 8)
 #define FLASH_CR_PROGRAM_X64                  (3 << 8)
 
-#define FLASH_KEY1                            (0x45670123)
-#define FLASH_KEY2                            (0xCDEF89AB)
+#define FLASH_KEY1                            (0x45670123U)
+#define FLASH_KEY2                            (0xCDEF89ABU)
 
 
 /* FLASH Geometry */
@@ -175,7 +177,6 @@ static void RAMFUNCTION clear_errors(void)
 int RAMFUNCTION hal_flash_write(uint32_t _address, const uint8_t *data, int len)
 {
     int i;
-    uint32_t val;
     uint32_t address = _address - ARCH_FLASH_OFFSET;
     flash_wait_complete();
     clear_errors();
@@ -183,7 +184,7 @@ int RAMFUNCTION hal_flash_write(uint32_t _address, const uint8_t *data, int len)
     FLASH_CR &= (~(0x03 << 8));
     for (i = 0; i < len; i++) {
         FLASH_CR |= FLASH_CR_PG;
-        *((uint8_t *)(address + i)) = data[i];
+        *(uint8_t*)(address + (uint32_t)i) = data[i];
         flash_wait_complete();
         FLASH_CR &= ~FLASH_CR_PG;
     }
@@ -262,12 +263,12 @@ static void clock_pll_on(int powersave)
     APB1_CLOCK_ER |= PWR_APB1_CLOCK_ER_VAL;
 
     /* Select clock parameters (CPU Speed = 168MHz) */
-    cpu_freq = 168000000;
+    cpu_freq = 168000000; (void)cpu_freq; /* not used */
     pllm = 8;
     plln = 336;
     pllp = 2;
     pllq = 7;
-    pllr = 0;
+    pllr = 0; (void)pllr; /* not used */
     hpre = RCC_PRESCALER_DIV_NONE;
     ppre1 = RCC_PRESCALER_DIV_4;
     ppre2 = RCC_PRESCALER_DIV_2;

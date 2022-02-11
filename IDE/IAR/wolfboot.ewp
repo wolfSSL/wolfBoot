@@ -229,6 +229,7 @@
                     <state>WOLFBOOT_HASH_SHA256</state>
                     <state>WOLFSSL_SP_ASM</state>
                     <state>WOLFSSL_SP_ARM_CORTEX_M_ASM</state>
+                    <state>ARCH_FLASH_OFFSET=0x08000000</state>
                 </option>
                 <option>
                     <name>CCPreprocFile</name>
