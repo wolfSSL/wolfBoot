@@ -31,6 +31,18 @@
 #define GPIO_OUTCLR     *((volatile uint32_t *)(GPIO_BASE + 0x50C))
 #define GPIO_PIN_CNF     ((volatile uint32_t *)(GPIO_BASE + 0x700)) // Array
 
+
+#define BAUD_115200 0x01D7E000
+
+#define UART0_BASE (0x40002000)
+#define UART0_TASK_STARTTX *((volatile uint32_t *)(UART0_BASE + 0x008))
+#define UART0_TASK_STOPTX  *((volatile uint32_t *)(UART0_BASE + 0x00C))
+#define UART0_EVENT_ENDTX  *((volatile uint32_t *)(UART0_BASE + 0x120))
+#define UART0_ENABLE       *((volatile uint32_t *)(UART0_BASE + 0x500))
+#define UART0_TXD_PTR      *((volatile uint32_t *)(UART0_BASE + 0x544))
+#define UART0_TXD_MAXCOUNT *((volatile uint32_t *)(UART0_BASE + 0x548))
+#define UART0_BAUDRATE     *((volatile uint32_t *)(UART0_BASE + 0x524))
+
 static void gpiotoggle(uint32_t pin)
 {
     uint32_t reg_val = GPIO_OUT;
@@ -38,12 +50,42 @@ static void gpiotoggle(uint32_t pin)
     GPIO_OUTSET = (~reg_val) & (1 << pin);
 }
 
+
+void uart_init(void)
+{
+    UART0_BAUDRATE = BAUD_115200;
+    UART0_ENABLE = 1;
+
+}
+
+void uart_write(char c)
+{
+    UART0_EVENT_ENDTX = 0;
+
+    UART0_TXD_PTR = (uint32_t)(&c);
+    UART0_TXD_MAXCOUNT = 1;
+    UART0_TASK_STARTTX = 1;
+    while(UART0_EVENT_ENDTX == 0)
+        ;
+}
+
+static const char START='*';
 void main(void)
 {
     //uint32_t pin = 19;
     uint32_t pin = 6;
     int i;
+    uint32_t version = 0;
+    uint8_t *v_array = (uint8_t *)&version;
     GPIO_PIN_CNF[pin] = 1; /* Output */
+
+    version = wolfBoot_current_firmware_version();
+
+    uart_init();
+    uart_write(START);
+    for (i = 3; i >= 0; i--) {
+        uart_write(v_array[i]);
+    }
     while(1) {
         gpiotoggle(pin);
         for (i = 0; i < 800000; i++)  // Wait a bit.

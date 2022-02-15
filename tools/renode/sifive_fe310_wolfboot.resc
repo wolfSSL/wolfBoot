@@ -1,0 +1,39 @@
+:name: SiFive-FE310
+:description: This script runs wolfboot on SiFive-FE310 platform.
+
+$name?="SiFive-FE310"
+
+using sysbus
+mach create $name
+machine LoadPlatformDescription @platforms/cpus/sifive-fe310.repl
+
+
+#showAnalyzer uart0
+emulation CreateUartPtyTerminal "term" "/tmp/wolfboot.uart" True
+connector Connect uart0 term
+sysbus Tag <0x10008000 4> "PRCI_HFROSCCFG" 0xFFFFFFFF
+sysbus Tag <0x10008008 4> "PRCI_PLLCFG" 0xFFFFFFFF
+
+cpu PerformanceInMips 320
+
+macro reset
+"""
+
+    ### Load bootloader + signed image
+    sysbus LoadELF @/tmp/renode-wolfboot.elf
+    sysbus LoadBinary @/tmp/renode-test-v1.bin 0x20020000
+
+    ### Uncomment next line to attach gdb
+    ###    machine StartGdbServer 3333
+
+    ### Uncomment next line to print function names at run-time
+    ###    sysbus.cpu LogFunctionNames True
+
+    ### Start system
+    start
+
+"""
+
+runMacro $reset
+
+

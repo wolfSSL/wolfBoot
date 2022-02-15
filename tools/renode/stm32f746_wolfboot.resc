@@ -1,0 +1,33 @@
+:name: STM32F746
+:description: This script runs wolfboot on STM32F7 Discovery.
+
+using sysbus
+$name?="STM32F746"
+mach create $name
+
+machine LoadPlatformDescription @platforms/boards/stm32f7_discovery-bb.repl
+
+
+#showAnalyzer sysbus.usart1
+emulation CreateUartPtyTerminal "term" "/tmp/wolfboot.uart" True
+connector Connect sysbus.usart1 term
+
+macro reset
+"""
+
+    ### Load bootloader + signed image
+    sysbus LoadELF @/tmp/renode-wolfboot.elf
+    sysbus LoadBinary @/tmp/renode-test-v1.bin 0x08020000
+
+    ### Uncomment next line to attach gdb
+    ###    machine StartGdbServer 3333
+
+    ### Uncomment next line to print function names at run-time
+    ###    sysbus.cpu LogFunctionNames True
+
+    ### Start system
+    start
+
+"""
+
+runMacro $reset

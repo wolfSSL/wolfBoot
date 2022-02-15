@@ -1,0 +1,29 @@
+:name: NRF52840
+:description: This script runs wolfboot on NRF52840.
+
+using sysbus
+
+mach create
+machine LoadPlatformDescription @platforms/cpus/nrf52840.repl
+
+
+emulation CreateUartPtyTerminal "term" "/tmp/wolfboot.uart" True
+connector Connect uart0 term
+
+cpu PerformanceInMips 100
+
+macro reset
+"""
+    ### Load bootloader + signed image
+    sysbus LoadELF @/tmp/renode-wolfboot.elf
+    sysbus LoadBinary @/tmp/renode-test-v1.bin 0x20000
+    start
+    sleep 10
+    pause
+    cpu Reset
+    sysbus LoadBinary @/tmp/renode-test-update.bin 0x60000
+    start
+
+
+"""
+runMacro $reset

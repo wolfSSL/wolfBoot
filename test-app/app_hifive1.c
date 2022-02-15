@@ -25,6 +25,9 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 
+/* Change to '1' to enable uart update */
+#define UART_UPDATE 0
+
 /* UART API's in hal/hifive1.c */
 extern void uart_write(char c);
 extern char uart_read(void);
@@ -84,6 +87,8 @@ void main(void) {
     for (i = 3; i >= 0; i--) {
         uart_write(v_array[i]);
     }
+
+#if (UART_UPDATE)
     while (1) {
         r_total = 0;
         do {
@@ -148,6 +153,7 @@ void main(void) {
             break;
         }
     }
+#endif
     /* Wait for reboot */
     while(1)
         ;

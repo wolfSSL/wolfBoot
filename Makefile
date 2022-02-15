@@ -104,6 +104,7 @@ standalone:
 include tools/test.mk
 include tools/test-enc.mk
 include tools/test-delta.mk
+include tools/test-renode.mk
 
 ed25519.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c

@@ -1,0 +1,53 @@
+:name: STM32F4 Discovery
+:description: This script runs wolfBoot and its test app on STM32F4 Discovery.
+
+using sysbus
+$name?="STM32F4_Discovery"
+mach create $name
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery-kit.repl
+
+cpu PerformanceInMips 125
+
+
+#showAnalyzer sysbus.uart1
+emulation CreateUartPtyTerminal "term" "/tmp/wolfboot.uart" True
+connector Connect sysbus.uart1 term
+
+sysbus LogPeripheralAccess sysbus.gpioPortA True
+sysbus LogPeripheralAccess sysbus.gpioPortB True
+sysbus LogPeripheralAccess sysbus.gpioPortC True
+sysbus LogPeripheralAccess sysbus.gpioPortD True
+
+### Set random board UNIQUE ID ###
+
+python "import _random"
+python "rand = _random.Random()"
+
+$id1 = `python "print rand.getrandbits(32)"`
+$id2 = `python "print rand.getrandbits(32)"`
+$id3 = `python "print rand.getrandbits(32)"`
+macro reset
+"""
+
+    ### Load bootloader + signed image
+    sysbus LoadELF @/tmp/renode-wolfboot.elf
+    sysbus LoadBinary @/tmp/renode-test-v1.bin 0x08020000
+
+    sysbus WriteDoubleWord 0x1FFF7A10 $id1
+    sysbus WriteDoubleWord 0x1FFF7A14 $id2
+    sysbus WriteDoubleWord 0x1FFF7A18 $id3
+
+    ### Uncomment next line to attach gdb
+    ###    machine StartGdbServer 3333
+
+    ### Uncomment next line to print function names at run-time
+    ###    sysbus.cpu LogFunctionNames True
+
+    ### Start system
+    start
+
+"""
+
+runMacro $reset
+
+
