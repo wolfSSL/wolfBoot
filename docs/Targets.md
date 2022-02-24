@@ -1041,7 +1041,17 @@ x86-64bit machine with UEFI bios can run wolfBoot as EFI application.
 
 On a debian-like system it is sufficient to install the packages as follows:
 
-`apt install qemu ovmf gnu-efi`
+```
+# for wolfBoot and others
+apt install git make gcc
+
+# for test scripts
+apt install sudo dosfstools curl
+apt install qemu qemu-system-x86 ovmf gnu-efi
+
+# for buildroot
+apt install file bzip2 g++ wget cpio unzip rsync bc
+```
 
 ### Configuration
 
@@ -1075,6 +1085,27 @@ make
 tools/efi/compile_efi_linux.sh
 tools/efi/run_efi.sh
 ```
+
+```
+EFI v2.70 (EDK II, 0x00010000)
+[700/1832]
+Mapping table
+      FS0: Alias(s):F0a:;BLK0:
+          PciRoot(0x0)/Pci(0x1,0x1)/Ata(0x0)
+     BLK1: Alias(s):
+               PciRoot(0x0)/Pci(0x1,0x1)/Ata(0x0)
+Press ESC in 1 seconds to skip startup.nsh or any other key to continue.
+Starting wolfBoot EFI...
+Image base: 0xE3C6000
+Opening file: kernel.img, size: 6658272
+Opening file: update.img, size: 6658272
+Active Part 1
+Firmware Valid
+Booting at 0D630000
+Staging kernel at address D630100, size: 6658016
+```
+
+You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
 
 
 ## Nordic nRF52840
