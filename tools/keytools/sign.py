@@ -491,7 +491,7 @@ else:
             WOLFBOOT_HEADER_SIZE = 512
         HDR_SIGNATURE_LEN = 256
     if sign == 'rsa4096':
-        if WOLFBOOT_HEADER_SIZE < 512:
+        if WOLFBOOT_HEADER_SIZE < 1024:
             WOLFBOOT_HEADER_SIZE = 1024
         HDR_SIGNATURE_LEN = 512
 
