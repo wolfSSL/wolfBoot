@@ -4,6 +4,7 @@ TMP?=/tmp
 RENODE_UART?=$(TMP)/wolfboot.uart
 RENODE_LOG?=$(TMP)/wolfboot.log
 RENODE_PIDFILE?=$(TMP)/renode.pid
+RENODE_UPDATE_FILE=$(TMP)/renode-test-update.bin
 
 
 RENODE_PORT=55155
@@ -102,16 +103,18 @@ renode-off: FORCE
 	${Q}rm -f $(RENODE_PIDFILE) $(RENODE_LOG) $(RENODE_UART)
 
 
-renode-factory: factory.bin test-app/image.bin $(EXPVER) FORCE 
-	${Q}rm -f $(RENODE_UART)
-	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
-		> $(TMP)/renode-test-update.bin
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+$(RENODE_UPDATE_FILE): test-app/image.bin FORCE
 	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
+	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
+		> $@
 	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
-		of=$(TMP)/renode-test-update.bin bs=1 conv=notrunc
-	${Q}printf "pBOOT" >> $(TMP)/renode-test-update.bin
+		of=$@ bs=1 conv=notrunc
+	${Q}printf "pBOOT" >> $@
+
+renode-factory: factory.bin test-app/image.bin $(RENODE_UPDATE_FILE) $(EXPVER) FORCE 
+	${Q}rm -f $(RENODE_UART)
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
 	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
 	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
 	${Q}make renode-on
@@ -120,7 +123,7 @@ renode-factory: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}make renode-off
 	${Q}rm -f $(TMP)/renode-wolfboot.elf
 	${Q}rm -f $(TMP)/renode-test-v1.bin
-	${Q}rm -f $(TMP)/renode-test-update.bin
+	${Q}rm -f $(RENODE_UPDATE_FILE)
 	${Q}echo $@: TEST PASSED
 
 renode-update: factory.bin test-app/image.bin $(EXPVER) FORCE
@@ -128,13 +131,13 @@ renode-update: factory.bin test-app/image.bin $(EXPVER) FORCE
 		&& echo && echo && false)
 	${Q}rm -f $(RENODE_UART)
 	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
-		> $(TMP)/renode-test-update.bin
+		> $(RENODE_UPDATE_FILE)
 	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
 	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
 	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
-		of=$(TMP)/renode-test-update.bin bs=1 conv=notrunc
-	${Q}printf "pBOOT" >> $(TMP)/renode-test-update.bin
+		of=$(RENODE_UPDATE_FILE) bs=1 conv=notrunc
+	${Q}printf "pBOOT" >> $(RENODE_UPDATE_FILE)
 	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
 	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
 	${Q}make renode-on
@@ -146,7 +149,7 @@ renode-update: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}make renode-off
 	${Q}rm -f $(TMP)/renode-wolfboot.elf
 	${Q}rm -f $(TMP)/renode-test-v1.bin
-	${Q}rm -f $(TMP)/renode-test-update.bin
+	${Q}rm -f $(RENODE_UPDATE_FILE)
 	${Q}echo $@: TEST PASSED
 
 renode-factory-ed448: FORCE
