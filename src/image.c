@@ -149,7 +149,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 #endif /* WOLFBOOT_TPM */
     if (ret < 0 || verify_res == 0)
         ret = -1;
-    else 
+    else
         ret = 0;
     return ret;
 }
@@ -181,20 +181,20 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
     int digest_len = 0, algo_len, tot_len;
 
     /* sequence - total size */
-    if (DecodeAsn1Tag(input, inputSz, &idx, &tot_len, 
+    if (DecodeAsn1Tag(input, inputSz, &idx, &tot_len,
             ASN_SEQUENCE | ASN_CONSTRUCTED) != 0) {
         return -1;
     }
 
     /* sequence - algoid */
-    if (DecodeAsn1Tag(input, inputSz, &idx, &algo_len, 
+    if (DecodeAsn1Tag(input, inputSz, &idx, &algo_len,
             ASN_SEQUENCE | ASN_CONSTRUCTED) != 0) {
         return -1;
     }
     idx += algo_len; /* skip algoid */
 
     /* digest */
-    if (DecodeAsn1Tag(input, inputSz, &idx, &digest_len, 
+    if (DecodeAsn1Tag(input, inputSz, &idx, &digest_len,
             ASN_OCTET_STRING) != 0) {
         return -1;
     }
@@ -250,7 +250,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
 
     /* Load public key into TPM */
     memset(&tpmKey, 0, sizeof(tpmKey));
-    ret = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, &tpmKey, n, nSz, 
+    ret = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, &tpmKey, n, nSz,
         *((word32*)e), TPM_ALG_NULL, TPM_ALG_SHA256);
     if (ret != 0) {
     #ifdef WOLFBOOT_DEBUG_TPM
@@ -260,7 +260,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     #endif
         return -1;
     }
-    
+
     /* Perform public decrypt and manually un-pad */
     ret = wolfTPM2_RsaEncrypt(&wolftpm_dev, &tpmKey,
         TPM_ALG_NULL, /* no padding */
