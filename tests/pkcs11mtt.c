@@ -47,9 +47,12 @@ static void* dlib;
 static CK_FUNCTION_LIST* funcList;
 static int slot;
 const char* tokenName = "wolfpkcs11";
-static byte* soPin = (byte*)"password";
-static int soPinLen = 8;
-byte* userPin = (byte*)"wolfpkcs11";
+
+/* FIPS requires pin to be at least 14 characters, since it is used for
+ * the HMAC key */
+static byte* soPin = (byte*)"password123456";
+static int soPinLen = 14;
+byte* userPin = (byte*)"wolfpkcs11-test";
 int userPinLen;
 
 #if !defined(NO_RSA) || defined(HAVE_ECC) || !defined(NO_DH)
