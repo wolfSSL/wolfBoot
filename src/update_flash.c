@@ -110,6 +110,7 @@ void wolfBoot_check_self_update(void)
             return;
         if (wolfBoot_verify_authenticity(&update) < 0)
             return;
+        PART_SANITY_CHECK(&update);
         wolfBoot_self_update(&update);
     }
 }
@@ -367,6 +368,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
         }
+        PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
         if ( !fallback_allowed &&
                 (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
@@ -511,6 +513,7 @@ void RAMFUNCTION wolfBoot_start(void)
             }
         }
     }
+    PART_SANITY_CHECK(&boot);
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }

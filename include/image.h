@@ -83,8 +83,50 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
 
 #if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
 
+#define PART_SANITY_CHECK(p) \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r3, #0"); \
+    asm volatile("mov r4, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r3, #0"); \
+    asm volatile("mov r4, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r3, #0"); \
+    asm volatile("mov r4, #0"); \
+    asm volatile("mov r2, %0" ::"r"((p)->hdr_ok)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r3, %0" ::"r"((p)->sha_ok)); \
+    asm volatile("cmp r3, #1"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r3, #1"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r3, #1"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r3, #1"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r4, %0" ::"r"((p)->signature_ok)); \
+    asm volatile("cmp r4, #1"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r4, #1"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r4, #1"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r4, #1"); \
+    asm volatile("bne .-12")
+
+
+
 #define RSA_VERIFY_FN(ret,fn,...) \
     ret = fn(__VA_ARGS__); \
+    asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+    asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
     asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
     asm volatile("cmp r0, r2"); \
     asm volatile("blt ."); \
@@ -93,7 +135,7 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
     asm volatile("cmp r0, r2"); \
     asm volatile("blt .-8"); \
     asm volatile("cmp r0, r2"); \
-    asm volatile("blt .-12"); \
+    asm volatile("blt .-12")
 
 
 #define VERIFY_FN(ret,p_res,fn,...) \
@@ -117,7 +159,7 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
     asm volatile("bne .-28"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1"); \
-    asm volatile("bne .-32"); \
+    asm volatile("bne .-32")
 
 #else
 
@@ -130,6 +172,10 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
     ret = fn(__VA_ARGS__); \
     if (ret < WOLFBOOT_SHA_DIGEST_SIZE) \
         ret = -1
+
+#define PART_SANITY_CHECK(p) \
+    if (((p)->hdr_ok != 1) || ((p)->sha_ok != 1) || ((p)->signature_ok != 1)) \
+        wolfBoot_panic()
 #endif
 
 /* Defined in libwolfboot */
