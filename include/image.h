@@ -42,6 +42,8 @@
 #endif
 #endif
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
 
 #define NAKED __attribute__((naked))
 
@@ -220,20 +222,16 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
     asm volatile("bge fail_check"); \
     asm volatile("b end_check"); \
     asm volatile("fail_check:"); \
-    asm volatile("pop {r7, r8, r9}"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
-    asm volatile("nop"); \
-    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
-    asm volatile("nop"); \
-    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
-    asm volatile("nop"); \
-    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
-    asm volatile("nop"); \
+    asm volatile("bx lr"); \
+    asm volatile("bx lr"); \
+    asm volatile("bx lr"); \
+    asm volatile("bx lr"); \
+    asm volatile("bx lr"); \
     asm volatile("end_check:")
 
 #else

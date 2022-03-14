@@ -325,6 +325,11 @@ out:
 
 #endif
 
+
+#ifdef WOLFBOOT_ARMORED
+#    pragma GCC push_options
+#    pragma GCC optimize("O0")
+#endif
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -467,14 +472,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     return 0;
 }
 
-#define likely(x)       __builtin_expect((x),1)
-#define unlikely(x)     __builtin_expect((x),0)
-
-
-#ifdef WOLFBOOT_ARMORED
-#    pragma GCC push_options
-#    pragma GCC optimize("O0")
-#endif
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t st;
