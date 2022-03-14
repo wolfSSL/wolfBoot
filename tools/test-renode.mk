@@ -177,6 +177,9 @@ renode-factory-all: FORCE
 	${Q}make renode-factory-rsa4096 RENODE_PORT=55159
 	${Q}echo All tests in $@ OK!
 
+renode-update-ed25519: FORCE
+	make renode-update SIGN=ED448
+
 renode-update-ed448: FORCE
 	make renode-update SIGN=ED448
 
@@ -191,7 +194,7 @@ renode-update-rsa4096: FORCE
 
 renode-update-all: FORCE
 	${Q}make clean
-	${Q}make renode-update
+	${Q}make renode-update-ed25519 RENODE_PORT=55155
 	${Q}make clean
 	${Q}make renode-update-ed448 RENODE_PORT=55156
 	${Q}make clean
@@ -201,3 +204,6 @@ renode-update-all: FORCE
 	${Q}make clean
 	${Q}make renode-update-rsa4096 RENODE_PORT=55159
 	${Q}echo All tests in $@ OK!
+
+renode-update-all-armored: FORCE
+	${Q}make renode-update-all ARMORED=1
