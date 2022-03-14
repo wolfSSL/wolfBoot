@@ -123,7 +123,7 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
 
 #define VERIFY_FN(ret,p_res,fn,...) \
     ret = fn(__VA_ARGS__); \
-    if (res != 1) \
+    if (*p_res != 1) \
         ret = -1
 
 #define RSA_VERIFY_FN(ret,fn,...) \
