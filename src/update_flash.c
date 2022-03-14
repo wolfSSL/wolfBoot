@@ -370,9 +370,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
-        if ( !fallback_allowed &&
-                (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
-            return -1;
+        CHECK_IMAGE_VERSION(fallback_allowed);
 #endif
     }
 
