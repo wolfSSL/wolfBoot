@@ -467,6 +467,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     return 0;
 }
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
+
+#ifdef WOLFBOOT_ARMORED
+#    pragma GCC push_options
+#    pragma GCC optimize("O0")
+#endif
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t st;
@@ -490,21 +498,22 @@ void RAMFUNCTION wolfBoot_start(void)
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
             ) {
-        if (wolfBoot_update(1) < 0) {
+        if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
-            while(1)
-                ;
+            wolfBoot_panic();
         } else {
             /* Emergency update successful, try to re-open boot image */
-            if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
+            if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
-                    (wolfBoot_verify_authenticity(&boot) < 0)) {
+                    (wolfBoot_verify_authenticity(&boot) < 0)))) {
                 /* panic: something went wrong after the emergency update */
-                while(1)
-                    ;
+                wolfBoot_panic();
             }
         }
     }
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }
+#ifdef WOLFBOOT_ARMORED
+#    pragma GCC pop_options
+#endif

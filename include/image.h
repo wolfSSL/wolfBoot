@@ -42,6 +42,9 @@
 #endif
 #endif
 
+
+#define NAKED __attribute__((naked))
+
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F
 #define SECT_FLAG_SWAPPING 0x07

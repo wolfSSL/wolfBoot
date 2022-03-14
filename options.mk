@@ -261,6 +261,10 @@ ifeq ($(DELTA_UPDATES),1)
   endif
 endif
 
+ifeq ($(ARMORED),1)
+  CFLAGS+=-DWOLFBOOT_ARMORED
+endif
+
 OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(UPDATE_OBJS)
 

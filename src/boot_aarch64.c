@@ -91,11 +91,12 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #define AIRCR_VKEY (0x05FA << 16)
 #define AIRCR_SYSRESETREQ (1 << 2)
 
-void RAMFUNCTION arch_reboot(void)
+void RAMFUNCTION NAKED arch_reboot(void)
 {
     AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
     while(1)
         ;
+    wolfBoot_panic();
 
 }
 #endif
