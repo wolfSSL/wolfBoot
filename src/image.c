@@ -52,11 +52,9 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         /* Failed to import ed25519 key */
         return -1;
     }
-    ret = wc_ed25519_verify_msg(sig, IMAGE_SIGNATURE_SIZE, hash, WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed);
-    if ((ret < 0) || (res == 0)) {
-        return -1;
-    }
-    return 0;
+    VERIFY_FN(ret, &res, wc_ed25519_verify_msg, sig, IMAGE_SIGNATURE_SIZE, hash,
+            WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed);
+    return ret;
 }
 
 #endif /* WOLFBOOT_SIGN_ED25519 */
@@ -78,11 +76,9 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
         /* Failed to import ed448 key */
         return -1;
     }
-    ret = wc_ed448_verify_msg(sig, IMAGE_SIGNATURE_SIZE, hash, WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed, NULL, 0);
-    if ((ret < 0) || (res == 0)) {
-        return -1;
-    }
-    return 0;
+    VERIFY_FN(ret, &res, wc_ed448_verify_msg, sig, IMAGE_SIGNATURE_SIZE, hash,
+                WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed, NULL, 0);
+    return ret;
 }
 
 
@@ -145,12 +141,8 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     mp_init(&s);
     mp_read_unsigned_bin(&r, sig, ECC_KEY_SIZE);
     mp_read_unsigned_bin(&s, sig + ECC_KEY_SIZE, ECC_KEY_SIZE);
-    ret = wc_ecc_verify_hash_ex(&r, &s, hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc);
+    VERIFY_FN(ret, &verify_res, wc_ecc_verify_hash_ex, &r, &s, hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc);
 #endif /* WOLFBOOT_TPM */
-    if (ret < 0 || verify_res == 0)
-        ret = -1;
-    else
-        ret = 0;
     return ret;
 }
 #endif /* WOLFBOOT_SIGN_ECC256 */
@@ -299,7 +291,7 @@ static int wolfBoot_verify_signature(uint8_t *hash, uint8_t *sig)
     }
 
     XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
-    ret = wc_RsaSSL_VerifyInline(output, IMAGE_SIGNATURE_SIZE, &digest_out, &rsa);
+    RSA_VERIFY_FN(ret, wc_RsaSSL_VerifyInline, output, IMAGE_SIGNATURE_SIZE, &digest_out, &rsa); 
 #endif /* WOLFBOOT_TPM */
 
 #ifndef NO_RSA_SIG_ENCODING
