@@ -226,14 +226,16 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
     asm volatile("mov r0, #0xFFFFFFFF"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
     asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("bx lr\n"); \
-    asm volatile("bx lr\n"); \
-    asm volatile("bx lr\n"); \
-    asm volatile("bx lr\n"); \
-    asm volatile("bx lr\n"); \
-    asm volatile("bx lr\n"); \
-    asm volatile("end_check:"); \
-    asm volatile("nop")
+    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
+    asm volatile("nop"); \
+    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
+    asm volatile("nop"); \
+    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
+    asm volatile("nop"); \
+    asm volatile("ldmia.w sp!, {r4, r5, r6, r8, r9, pc}"); \
+    asm volatile("nop"); \
+    asm volatile("end_check:")
+
 #else
 
 #define VERIFY_FN(ret,p_res,fn,...) \
