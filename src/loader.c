@@ -32,10 +32,6 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 extern void (** const IV_RAM)(void);
 #endif
 
-
-
-
-
 int main(void)
 {
     hal_init();

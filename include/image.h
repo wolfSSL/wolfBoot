@@ -60,30 +60,34 @@
 #endif
 
 
+
+
+#if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
+
 struct wolfBoot_image {
     uint8_t *hdr;
     uint8_t *trailer;
     uint8_t *sha_hash;
     uint8_t *fw_base;
     uint32_t fw_size;
-    uint8_t part;
-    uint8_t hdr_ok : 1;
-    uint8_t signature_ok : 1;
-    uint8_t sha_ok : 1;
+    uint32_t part;
+    uint32_t hdr_ok;
+    uint32_t canary_FEED4567;
+    uint32_t signature_ok;
+    uint32_t canary_FEED6789;
+    uint32_t not_signature_ok;
+    uint32_t canary_FEED89AB;
+    uint32_t sha_ok;
 };
 
-
-int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
-int wolfBoot_verify_integrity(struct wolfBoot_image *img);
-int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
-int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
-int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
-int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
-int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
-
-uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32_t* sz);
-
-#if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
+static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+{
+    img->canary_FEED4567 = 0xFEED4567;
+    img->signature_ok = 1;
+    img->canary_FEED6789 = 0xFEED6789;
+    img->not_signature_ok = ~(1);
+    img->canary_FEED89AB = 0xFEED89AB;
+}
 
 #define PART_SANITY_CHECK(p) \
     asm volatile("mov r2, #0"); \
@@ -127,47 +131,143 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
     asm volatile("cmp r2, #1"); \
     asm volatile("bne .-8"); \
     asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, %0" ::"r"((p)->not_signature_ok)); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEED6789)); \
+    asm volatile("mov r0, %0" ::"r"(0xFEED6789)); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEED4567)); \
+    asm volatile("mov r0, %0" ::"r"(0xFEED4567)); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEED89AB)); \
+    asm volatile("mov r0, %0" ::"r"(0xFEED89AB)); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0"); \
     asm volatile("bne .-12")
 
 
-
 #define RSA_VERIFY_FN(ret,fn,...) \
-    ret = fn(__VA_ARGS__); \
-    asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
-    asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
-    asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
-    asm volatile("cmp r0, r2"); \
-    asm volatile("blt ."); \
-    asm volatile("cmp r0, r2"); \
-    asm volatile("blt .-4"); \
-    asm volatile("cmp r0, r2"); \
-    asm volatile("blt .-8"); \
-    asm volatile("cmp r0, r2"); \
-    asm volatile("blt .-12")
+    { \
+        int tmp_ret = fn(__VA_ARGS__); \
+        asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+        asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+        asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        ret = tmp_ret; \
+        asm volatile("nope:"); \
+        asm volatile("nop"); \
+    }
 
+#define RSA_VERIFY_HASH(img,digest) \
+    { \
+        volatile int compare_res; \
+        if (!img || !digest)    \
+            asm volatile("b hnope"); \
+        asm volatile("mov r0, #50"); \
+        asm volatile("mov r0, #50"); \
+        asm volatile("mov r0, #50"); \
+        compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        wolfBoot_image_confirm_signature_ok(img); \
+        asm volatile("hnope:"); \
+        asm volatile("nop"); \
+    }
 
-#define VERIFY_FN(ret,p_res,fn,...) \
-    ret = fn(__VA_ARGS__); \
+#define VERIFY_FN(img,p_res,fn,...) \
+    fn(__VA_ARGS__); \
     asm volatile("cmp r0, #0"); \
-    asm volatile("bne ."); \
+    asm volatile("bne nope"); \
     asm volatile("cmp r0, #0"); \
-    asm volatile("bne .-4"); \
+    asm volatile("bne nope"); \
     asm volatile("cmp r0, #0"); \
-    asm volatile("bne .-8"); \
+    asm volatile("bne nope"); \
     asm volatile("cmp r0, #0"); \
-    asm volatile("bne .-12"); \
+    asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1"); \
-    asm volatile("bne .-18"); \
+    asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1"); \
-    asm volatile("bne .-24"); \
+    asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1"); \
-    asm volatile("bne .-28"); \
+    asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1"); \
-    asm volatile("bne .-32")
+    asm volatile("bne nope"); \
+    wolfBoot_image_confirm_signature_ok(img); \
+    asm volatile("nope:"); \
+    asm volatile("nop")
 
 
 #define CHECK_IMAGE_VERSION(fb_ok) \
@@ -236,15 +336,35 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
 
 #else
 
-#define VERIFY_FN(ret,p_res,fn,...) \
-    ret = fn(__VA_ARGS__); \
-    if (*p_res != 1) \
-        ret = -1
+struct wolfBoot_image {
+    uint8_t *hdr;
+    uint8_t *trailer;
+    uint8_t *sha_hash;
+    uint8_t *fw_base;
+    uint32_t fw_size;
+    uint8_t part;
+    uint8_t hdr_ok : 1;
+    uint8_t signature_ok : 1;
+    uint8_t sha_ok : 1;
+};
+
+static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+{
+    img->signature_ok = 1;
+}
+
+#define VERIFY_FN(img,p_res,fn,...) {\
+    int ret = fn(__VA_ARGS__); \
+    if ((ret == 0) && (*p_res == 1)) \
+        wolfBoot_image_confirm_signature_ok(img); \
+    }
 
 #define RSA_VERIFY_FN(ret,fn,...) \
-    ret = fn(__VA_ARGS__); \
-    if (ret < WOLFBOOT_SHA_DIGEST_SIZE) \
-        ret = -1
+    ret = fn(__VA_ARGS__);
+
+#define RSA_VERIFY_HASH(img,digest) \
+    if (XMEMCMP(img->sha_hash, digest, WOLFBOOT_SHA_DIGEST_SIZE) == 0) \
+        wolfBoot_image_confirm_signature_ok(img);
 
 #define PART_SANITY_CHECK(p) \
     if (((p)->hdr_ok != 1) || ((p)->sha_ok != 1) || ((p)->signature_ok != 1)) \
@@ -255,6 +375,17 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32
                 (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) ) \
         return -1;
 #endif
+
+/* Defined in image.c */
+int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
+int wolfBoot_verify_integrity(struct wolfBoot_image *img);
+int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
+int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
+int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
+int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
+int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
+
+uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32_t* sz);
 
 /* Defined in libwolfboot */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
