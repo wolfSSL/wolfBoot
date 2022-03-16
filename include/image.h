@@ -270,13 +270,18 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct
     asm volatile("nop")
 
 
-#define CHECK_IMAGE_VERSION(fb_ok) \
+#define VERIFY_VERSION_ALLOWED(fb_ok) \
+    asm volatile("push {r4, r5, r6, r7}"); \
     asm volatile("mov r0, #0"); \
-    asm volatile("mov r1, #1"); \
-    asm volatile("mov r2, #0"); \
+    asm volatile("mov r4, #1"); \
+    asm volatile("mov r5, #0"); \
+    asm volatile("mov r6, #2"); \
+    asm volatile("mov r7, #0"); \
     asm volatile("mov r0, #0"); \
-    asm volatile("mov r1, #1"); \
-    asm volatile("mov r2, #0"); \
+    asm volatile("mov r4, #1"); \
+    asm volatile("mov r5, #0"); \
+    asm volatile("mov r6, #2"); \
+    asm volatile("mov r7, #0"); \
     asm volatile("mov r0, %0" ::"r"(fb_ok)); \
     asm volatile("cmp r0, #1"); \
     asm volatile("bne do_check"); \
@@ -290,49 +295,59 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct
     asm volatile("mov r0, #1"); \
     asm volatile("mov r0, #1"); \
     asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r2, r0"); \
-    asm volatile("mov r2, r0"); \
-    asm volatile("mov r2, r0"); \
+    asm volatile("mov r5, r0"); \
+    asm volatile("mov r5, r0"); \
+    asm volatile("mov r5, r0"); \
     asm volatile("mov r0, #1"); \
     asm volatile("mov r0, #1"); \
     asm volatile("mov r0, #1"); \
     asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r2, r0"); \
-    asm volatile("mov r2, r0"); \
-    asm volatile("mov r2, r0"); \
+    asm volatile("mov r7, r0"); \
+    asm volatile("mov r7, r0"); \
+    asm volatile("mov r7, r0"); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne .-12"); \
     asm volatile("mov r0, #0"); \
     asm volatile("mov r0, #0"); \
     asm volatile("mov r0, #0"); \
     asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r1, r0"); \
-    asm volatile("mov r1, r0"); \
-    asm volatile("mov r1, r0"); \
+    asm volatile("mov r4, r0"); \
+    asm volatile("mov r4, r0"); \
+    asm volatile("mov r4, r0"); \
     asm volatile("mov r0, #0"); \
     asm volatile("mov r0, #0"); \
     asm volatile("mov r0, #0"); \
     asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r1, r0"); \
-    asm volatile("mov r1, r0"); \
-    asm volatile("mov r1, r0"); \
-    asm volatile("cmp r1, r2"); \
-    asm volatile("bge fail_check"); \
-    asm volatile("cmp r1, r2"); \
-    asm volatile("bge fail_check"); \
-    asm volatile("cmp r1, r2"); \
-    asm volatile("bge fail_check"); \
-    asm volatile("b end_check"); \
-    asm volatile("fail_check:"); \
-    asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("mov r0, #0xFFFFFFFF"); \
-    asm volatile("bx lr"); \
-    asm volatile("bx lr"); \
-    asm volatile("bx lr"); \
-    asm volatile("bx lr"); \
-    asm volatile("bx lr"); \
-    asm volatile("end_check:")
+    asm volatile("mov r6, r0"); \
+    asm volatile("mov r6, r0"); \
+    asm volatile("mov r6, r0"); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("cmp r4, r5"); \
+    asm volatile("bge ."); \
+    asm volatile("cmp r6, r7"); \
+    asm volatile("bge .-4"); \
+    asm volatile("cmp r4, r5"); \
+    asm volatile("bge .-8"); \
+    asm volatile("cmp r6, r7"); \
+    asm volatile("bge .-12"); \
+    asm volatile("end_check:"); \
+    asm volatile("pop {r4, r5, r6, r7}")
 
 #else
 
@@ -370,10 +385,8 @@ static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
     if (((p)->hdr_ok != 1) || ((p)->sha_ok != 1) || ((p)->signature_ok != 1)) \
         wolfBoot_panic()
 
-#define CHECK_IMAGE_VERSION(fb_ok) \
-    if ( !fallback_allowed && \
-                (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) ) \
-        return -1;
+#define VERIFY_VERSION_ALLOWED do{} while(0);
+
 #endif
 
 /* Defined in image.c */
