@@ -62,7 +62,11 @@
 
 
 
-#if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
+#if defined(WOLFBOOT_ARMORED)
+
+#if !defined(ARCH_ARM) || !defined(__GNUC__)
+#   error WOLFBOOT_ARMORED only available with arm-gcc compiler
+#endif
 
 struct wolfBoot_image {
     uint8_t *hdr;
