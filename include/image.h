@@ -307,7 +307,7 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct
  * which is passed as a pointer.
  *
  * Ensure that the verification function has been called, and then
- * set the return value accordingly. 
+ * set the return value accordingly.
  *
  * Double check by reading the value in p_res from memory a few times.
  */
@@ -350,12 +350,12 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct
  * initiating the update installation.
  *
  * At this point, wolfBoot thinks that the version check has been successful.
- * 
+ *
  *
  * The fallback flag (checked with redundancy) causes wolfBoot to skip the
  * redundant version checks.
  *
- * The redundant checks here ensure that the image version is read twice per 
+ * The redundant checks here ensure that the image version is read twice per
  * each partition, and the two return values are the same.
  *
  *

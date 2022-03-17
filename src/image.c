@@ -787,6 +787,14 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             return -1;
         img->sha_hash = digest;
     }
+    /* wolfBoot_verify_signature() does not return the result directly.
+     * A call to wolfBoot_image_confirm_signature_ok() is required in order to
+     * confirm that the signature verification is OK.
+     *
+     * only a call to wolfBoot_image_confirm_signature_ok() sets
+     * img->signature_ok to 1.
+     *
+     */
     wolfBoot_verify_signature(img, stored_signature);
     if (img->signature_ok == 1)
         return 0;
