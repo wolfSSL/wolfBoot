@@ -176,6 +176,32 @@ renode-no-downgrade: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UPDATE_FILE)
 	${Q}echo $@: TEST PASSED
 
+renode-corrupted: factory.bin test-app/image.bin $(EXPVER) FORCE
+	${Q} test "$(TARGET)" = "nrf52" || (echo && echo " *** Error: only TARGET=nrf52 supported by $@" \
+		&& echo && echo && false)
+	${Q}rm -f $(RENODE_UART)
+	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
+		> $(RENODE_UPDATE_FILE)
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
+		$(TEST_UPDATE_VERSION)
+	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
+		of=$(RENODE_UPDATE_FILE) bs=1 conv=notrunc
+	${Q}dd if=/dev/zero bs=1 count=6 seek=1040 conv=notrunc of=$(RENODE_UPDATE_FILE) 2>/dev/null
+	${Q}printf "pBOOT" >> $(RENODE_UPDATE_FILE)
+	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
+	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
+	${Q}make renode-on
+	${Q}echo "Expecting version 1:"
+	${Q}test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
+	${Q}echo "Expecting version 1:"
+	${Q}test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
+	${Q}make renode-off
+	${Q}rm -f $(TMP)/renode-wolfboot.elf
+	${Q}rm -f $(TMP)/renode-test-v1.bin
+	${Q}rm -f $(RENODE_UPDATE_FILE)
+	${Q}echo $@: TEST PASSED
+
 renode-factory-ed448: FORCE
 	make renode-factory SIGN=ED448
 
@@ -231,6 +257,21 @@ renode-no-downgrade-rsa2048: FORCE
 renode-no-downgrade-rsa4096: FORCE
 	make renode-no-downgrade SIGN=RSA4096
 
+renode-corrupted-ed25519: FORCE
+	make renode-corrupted SIGN=ED448
+
+renode-corrupted-ed448: FORCE
+	make renode-corrupted SIGN=ED448
+
+renode-corrupted-ecc256: FORCE
+	make renode-corrupted SIGN=ECC256
+
+renode-corrupted-rsa2048: FORCE
+	make renode-corrupted SIGN=RSA2048
+
+renode-corrupted-rsa4096: FORCE
+	make renode-corrupted SIGN=RSA4096
+
 renode-update-all: FORCE
 	${Q}make clean
 	${Q}make renode-update-ed25519 RENODE_PORT=55155
@@ -255,6 +296,19 @@ renode-no-downgrade-all: FORCE
 	${Q}make renode-no-downgrade-rsa2048 RENODE_PORT=55158
 	${Q}make clean
 	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55159
+	${Q}echo All tests in $@ OK!
+
+renode-corrupted-all: FORCE
+	${Q}make clean
+	${Q}make renode-corrupted-ed25519 RENODE_PORT=55155
+	${Q}make clean
+	${Q}make renode-corrupted-ed448 RENODE_PORT=55156
+	${Q}make clean
+	${Q}make renode-corrupted-ecc256 RENODE_PORT=55157
+	${Q}make clean
+	${Q}make renode-corrupted-rsa2048 RENODE_PORT=55158
+	${Q}make clean
+	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55159
 	${Q}echo All tests in $@ OK!
 
 renode-update-all-armored: FORCE
