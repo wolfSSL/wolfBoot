@@ -543,7 +543,8 @@ static void wp11_Session_Final(WP11_Session* session)
 #endif
 #ifndef NO_RSA
 #ifdef HAVE_AES_CBC
-    if (session->mechanism == CKM_AES_CBC && session->init) {
+    if ((session->mechanism == CKM_AES_CBC ||
+                      session->mechanism == CKM_AES_CBC_PAD) && session->init) {
         wc_AesFree(&session->params.cbc.aes);
         session->init = 0;
     }
@@ -2605,6 +2606,23 @@ static int GetBool(CK_BBOOL value, byte* data, CK_ULONG* len)
 }
 
 /**
+ * Get the boolean data for flags.
+ *
+ * @param  value  [in]      Flags.
+ * @param  flag   [in]      Flag to check for.
+ * @param  data   [in]      Buffer to hold boolean.
+ * @param  len    [in,out]  On in, length of buffer in bytes.
+ *                          On out, length of data in buffer.
+ * @return  BUFFER_E when buffer is too small for boolean.
+ *          0 on success.
+ */
+static int GetBoolForFlag(CK_ULONG flags, CK_ULONG flag, byte* data,
+    CK_ULONG* len)
+{
+    return GetBool((flags & flag) == flag, data, len);
+}
+
+/**
  * Get the data for a CK_ULONG.
  *
  * @param  value  [in]      CK_ULONG value.
@@ -2976,35 +2994,38 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             ret = GetBool(object->onToken, data, len);
             break;
         case CKA_PRIVATE:
-            ret = GetBool(object->opFlag | WP11_FLAG_PRIVATE, data, len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_PRIVATE, data, len);
             break;
         case CKA_SENSITIVE:
-            ret = GetBool(object->opFlag | WP11_FLAG_SENSITIVE, data, len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_SENSITIVE, data,
+                                                                           len);
             break;
         case CKA_EXTRACTABLE:
-            ret = GetBool(object->opFlag | WP11_FLAG_EXTRACTABLE, data, len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_EXTRACTABLE, data,
+                                                                           len);
             break;
         case CKA_MODIFIABLE:
-            ret = GetBool(object->opFlag | WP11_FLAG_MODIFIABLE, data, len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_MODIFIABLE, data,
+                                                                           len);
             break;
         case CKA_ALWAYS_SENSITIVE:
-            ret = GetBool(object->opFlag | WP11_FLAG_ALWAYS_SENSITIVE, data,
-                                                                           len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_ALWAYS_SENSITIVE,
+                                                                     data, len);
             break;
         case CKA_NEVER_EXTRACTABLE:
-            ret = GetBool(object->opFlag | WP11_FLAG_NEVER_EXTRACTABLE, data,
-                                                                           len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_NEVER_EXTRACTABLE,
+                                                                     data, len);
             break;
         case CKA_ALWAYS_AUTHENTICATE:
-            ret = GetBool(object->opFlag | WP11_FLAG_ALWAYS_AUTHENTICATE, data,
-                                                                           len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_ALWAYS_AUTHENTICATE,
+                                                                     data, len);
             break;
         case CKA_WRAP_WITH_TRUSTED:
-            ret = GetBool(object->opFlag | WP11_FLAG_WRAP_WITH_TRUSTED, data,
-                                                                           len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_WRAP_WITH_TRUSTED,
+                                                                     data, len);
             break;
         case CKA_TRUSTED:
-            ret = GetBool(object->opFlag | WP11_FLAG_TRUSTED, data, len);
+            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_TRUSTED, data, len);
             break;
         case CKA_COPYABLE:
             ret = GetBool(CK_FALSE, data, len);
@@ -3046,31 +3067,31 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             break;
 
         case CKA_ENCRYPT:
-            ret = GetBool(object->opFlag | CKF_ENCRYPT, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_ENCRYPT, data, len);
             break;
         case CKA_DECRYPT:
-            ret = GetBool(object->opFlag | CKF_DECRYPT, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_DECRYPT, data, len);
             break;
         case CKA_VERIFY:
-            ret = GetBool(object->opFlag | CKF_VERIFY, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_VERIFY, data, len);
             break;
         case CKA_VERIFY_RECOVER:
-            ret = GetBool(object->opFlag | CKF_VERIFY_RECOVER, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_VERIFY_RECOVER, data, len);
             break;
         case CKA_SIGN:
-            ret = GetBool(object->opFlag | CKF_SIGN, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_SIGN, data, len);
             break;
         case CKA_SIGN_RECOVER:
-            ret = GetBool(object->opFlag | CKF_SIGN_RECOVER, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_SIGN_RECOVER, data, len);
             break;
         case CKA_WRAP:
-            ret = GetBool(object->opFlag | CKF_WRAP, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_WRAP, data, len);
             break;
         case CKA_UNWRAP:
-            ret = GetBool(object->opFlag | CKF_UNWRAP, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_UNWRAP, data, len);
             break;
         case CKA_DERIVE:
-            ret = GetBool(object->opFlag | CKF_DERIVE, data, len);
+            ret = GetBoolForFlag(object->opFlag, CKF_DERIVE, data, len);
             break;
 
         case CKA_SUBJECT:
@@ -4621,6 +4642,227 @@ int WP11_AesCbc_DecryptFinal(WP11_Session* session)
 {
     int ret = 0;
     WP11_CbcParams* cbc = &session->params.cbc;
+
+    wc_AesFree(&cbc->aes);
+    cbc->partialSz = 0;
+    session->init = 0;
+
+    return ret;
+}
+
+/**
+ * Encrypt plain text with AES-CBC and PKCS#5/7 padding.
+ * Output buffer must be large enough to hold all data and padding.
+ *
+ * @param  plain    [in]      Plain text.
+ * @param  plainSz  [in]      Length of plain text in bytes.
+ * @param  enc      [in]      Buffer to hold encrypted data.
+ * @param  encSz    [in,out]  On in, length of buffer in bytes.
+ *                            On out, length of encrypted data in bytes.
+ * @param  session  [in]      Session object holding Aes object.
+ * @return  -ve on encryption failure.
+ *          0 on success.
+ */
+int WP11_AesCbcPad_Encrypt(unsigned char* plain, word32 plainSz,
+                          unsigned char* enc, word32* encSz,
+                          WP11_Session* session)
+{
+    int ret;
+    word32 sz = *encSz;
+    word32 finalSz;
+
+    ret = WP11_AesCbcPad_EncryptUpdate(plain, plainSz, enc, &sz, session);
+    if (ret == 0) {
+        finalSz = *encSz - sz;
+        ret = WP11_AesCbcPad_EncryptFinal(enc + sz, &finalSz, session);
+        if (ret == 0) {
+            *encSz = sz + finalSz;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Encrypt more plain text with AES-CBC.
+ * Data not filling a block is cached.
+ *
+ * @param  plain    [in]      Plain text.
+ * @param  plainSz  [in]      Length of plain text in bytes.
+ * @param  enc      [in]      Buffer to hold encrypted data.
+ * @param  encSz    [in,out]  On in, length of buffer in bytes.
+ *                            On out, length of encrypted data in bytes.
+ * @param  session  [in]      Session object holding Aes object.
+ * @return  -ve on encryption failure.
+ *          0 on success.
+ */
+int WP11_AesCbcPad_EncryptUpdate(unsigned char* plain, word32 plainSz,
+                                unsigned char* enc, word32* encSz,
+                                WP11_Session* session)
+{
+    return WP11_AesCbc_EncryptUpdate(plain, plainSz, enc, encSz, session);
+}
+
+/**
+ * Finalize encryption with AES-CBC and PKCS#5/7 padding.
+ * A block of encrypted data is returned due to padding.
+ *
+ * @param  enc      [in]      Buffer to hold encrypted data.
+ * @param  encSz    [in,out]  On in, length of buffer in bytes.
+ *                            On out, length of encrypted data in bytes.
+ * @param  session  [in]      Session object holding Aes object.
+ * @return  0 on success.
+ */
+int WP11_AesCbcPad_EncryptFinal(unsigned char* enc, word32* encSz,
+                                WP11_Session* session)
+{
+    int ret = 0;
+    WP11_CbcParams* cbc = &session->params.cbc;
+    int padCnt = AES_BLOCK_SIZE - cbc->partialSz;
+    int i;
+
+    for (i = 0; i < AES_BLOCK_SIZE; i++) {
+        byte mask = 0 - (i >= AES_BLOCK_SIZE - padCnt);
+        cbc->partial[i] &= ~mask;
+        cbc->partial[i] |= padCnt & mask;
+    }
+    ret = wc_AesCbcEncrypt(&cbc->aes, enc, cbc->partial, AES_BLOCK_SIZE);
+    if (ret == 0)
+        *encSz = AES_BLOCK_SIZE;
+
+    wc_AesFree(&cbc->aes);
+    cbc->partialSz = 0;
+    session->init = 0;
+
+    return ret;
+}
+
+/**
+ * Decrypt data with AES-CBC that has PKCS#5/7 padding.
+ * Output buffer must be large enough to hold all decrypted data.
+ * Padding is removed.
+ *
+ * @param  enc      [in]      Encrypted data.
+ * @param  encSz    [in]      Length of encrypted data in bytes.
+ * @param  dec      [in]      Buffer to hold decrypted data.
+ * @param  decSz    [in,out]  On in, length of buffer in bytes.
+ *                            On out, length of decrypted data in bytes.
+ * @param  session  [in]      Session object holding Aes object.
+ * @return  -ve on encryption failure.
+ *          0 on success.
+ */
+int WP11_AesCbcPad_Decrypt(unsigned char* enc, word32 encSz, unsigned char* dec,
+                           word32* decSz, WP11_Session* session)
+{
+    int ret;
+    word32 sz = *decSz;
+    word32 finalSz;
+
+    ret = WP11_AesCbcPad_DecryptUpdate(enc, encSz, dec, &sz, session);
+    if (ret == 0) {
+        finalSz = *decSz - sz;
+        ret = WP11_AesCbcPad_DecryptFinal(dec + sz, &finalSz, session);
+        if (ret == 0) {
+            *decSz = sz + finalSz;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Decrypt more data with AES-CBC. Keep data for padding.
+ * Data not filling a block or last block is cached.
+ *
+ * @param  enc      [in]      Encrypted data.
+ * @param  encSz    [in]      Length of encrypted data in bytes.
+ * @param  dec      [in]      Buffer to hold decrypted data.
+ * @param  decSz    [in,out]  On in, length of buffer in bytes.
+ *                            On out, length of decrypted data in bytes.
+ * @param  session  [in]      Session object holding Aes object.
+ * @return  -ve on encryption failure.
+ *          0 on success.
+ */
+int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
+                                 unsigned char* dec, word32* decSz,
+                                 WP11_Session* session)
+{
+    int ret = 0;
+    WP11_CbcParams* cbc = &session->params.cbc;
+    int sz = 0;
+    int outSz = 0;
+
+    if (cbc->partialSz > 0) {
+        sz = AES_BLOCK_SIZE - cbc->partialSz;
+        if (sz > (int)encSz)
+            sz = encSz;
+        XMEMCPY(cbc->partial + cbc->partialSz, enc, sz);
+        cbc->partialSz += sz;
+        enc += sz;
+        encSz -= sz;
+        if (cbc->partialSz == AES_BLOCK_SIZE && encSz > 0) {
+            ret = wc_AesCbcDecrypt(&cbc->aes, dec, cbc->partial,
+                                                                AES_BLOCK_SIZE);
+            dec += AES_BLOCK_SIZE;
+            outSz += AES_BLOCK_SIZE;
+            cbc->partialSz = 0;
+        }
+    }
+    if (ret == 0 && encSz > AES_BLOCK_SIZE) {
+        sz = encSz - (encSz & (AES_BLOCK_SIZE - 1));
+        if (sz == (int)encSz)
+            sz -= AES_BLOCK_SIZE;
+        ret = wc_AesCbcDecrypt(&cbc->aes, dec, enc, sz);
+        outSz += sz;
+        enc += sz;
+        encSz -= sz;
+    }
+    if (ret == 0 && encSz > 0) {
+        XMEMCPY(cbc->partial, enc, encSz);
+        cbc->partialSz = encSz;
+    }
+    if (ret == 0)
+        *decSz = outSz;
+
+    return ret;
+}
+
+/**
+ * Finalize decryption with AES-CBC and remove PKCS#5/7 padding.
+ * Decrypted data without padding is returned.
+ *
+ * @param  dec      [in]      Buffer to hold decrypted data.
+ * @param  decSz    [in,out]  On in, length of buffer in bytes.
+ *                            On out, length of decrypted data in bytes.
+ * @param  session  [in]      Session object holding Aes object.
+ * @return  0 on success.
+ */
+int WP11_AesCbcPad_DecryptFinal(unsigned char* dec, word32* decSz,
+                                WP11_Session* session)
+{
+    int ret = 0;
+    WP11_CbcParams* cbc = &session->params.cbc;
+    int i;
+    byte padCnt;
+    byte outSz;
+    unsigned char tmp[AES_BLOCK_SIZE];
+    unsigned char* p = dec;
+    size_t mask;
+
+    ret = wc_AesCbcDecrypt(&cbc->aes, cbc->partial, cbc->partial,
+                                                                cbc->partialSz);
+    if (ret == 0) {
+        padCnt = cbc->partial[AES_BLOCK_SIZE-1];
+        outSz = AES_BLOCK_SIZE - (padCnt & (0 - (padCnt <= AES_BLOCK_SIZE)));
+        for (i = 0; i < AES_BLOCK_SIZE; i++) {
+            mask = (size_t)0 - (i != outSz);
+            p = (unsigned char*)((size_t)p & mask);
+            p = (unsigned char*)((size_t)p | ((size_t)tmp & (~mask)));
+            *p = cbc->partial[i];
+            p++;
+        }
+        *decSz = outSz;
+    }
 
     wc_AesFree(&cbc->aes);
     cbc->partialSz = 0;

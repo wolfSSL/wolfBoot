@@ -105,6 +105,8 @@ extern "C" {
 #define WP11_INIT_AES_CBC_DEC          0x0002
 #define WP11_INIT_AES_GCM_ENC          0x0003
 #define WP11_INIT_AES_GCM_DEC          0x0004
+#define WP11_INIT_AES_CBC_PAD_ENC      0x0005
+#define WP11_INIT_AES_CBC_PAD_DEC      0x0006
 #define WP11_INIT_HMAC_SIGN            0x0010
 #define WP11_INIT_HMAC_VERIFY          0x0011
 #define WP11_INIT_RSA_X_509_ENC        0x0020
@@ -307,6 +309,7 @@ int WP11_Dh_Derive(unsigned char* pub, word32 pubLen, unsigned char* key,
                    word32* keyLen, WP11_Object* priv);
 
 int WP11_AesGenerateKey(WP11_Object* secret, WP11_Slot* slot);
+
 int WP11_AesCbc_PartLen(WP11_Session* session);
 int WP11_AesCbc_Encrypt(unsigned char* plain, word32 plainSz,
                         unsigned char* enc, word32* encSz,
@@ -321,6 +324,22 @@ int WP11_AesCbc_DecryptUpdate(unsigned char* enc, word32 encSz,
                               unsigned char* dec, word32* decSz,
                               WP11_Session* session);
 int WP11_AesCbc_DecryptFinal(WP11_Session* session);
+int WP11_AesCbcPad_Encrypt(unsigned char* plain, word32 plainSz,
+                           unsigned char* enc, word32* encSz,
+                           WP11_Session* session);
+int WP11_AesCbcPad_EncryptUpdate(unsigned char* plain, word32 plainSz,
+                           unsigned char* enc, word32* encSz,
+                           WP11_Session* session);
+int WP11_AesCbcPad_EncryptFinal(unsigned char* enc, word32* encSz,
+                                WP11_Session* session);
+int WP11_AesCbcPad_Decrypt(unsigned char* enc, word32 encSz, unsigned char* dec,
+                           word32* decSz, WP11_Session* session);
+int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
+                                 unsigned char* dec, word32* decSz,
+                                 WP11_Session* session);
+int WP11_AesCbcPad_DecryptFinal(unsigned char* dec, word32* decSz,
+                                WP11_Session* session);
+
 int WP11_AesGcm_GetTagBits(WP11_Session* session);
 int WP11_AesGcm_EncDataLen(WP11_Session* session);
 int WP11_AesGcm_Encrypt(unsigned char* plain, word32 plainSz,
