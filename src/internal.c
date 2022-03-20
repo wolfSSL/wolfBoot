@@ -3822,6 +3822,105 @@ int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
 #endif
 
 /**
+ * RSA sign data with private key.
+ *
+ * @param  in      [in]      Data to sign.
+ * @param  inLen   [in]      Length of data.
+ * @param  sig     [in]      Buffer to hold signature data.
+ * @param  sigLen  [in,out]  On in, length of buffer.
+ *                           On out, length data in buffer.
+ * @param  priv    [in]      Private key object.
+ * @param  slot    [in]      Slot operation is performed on.
+ * @return  RSA_BUFFER_E or BUFFER_E when sigLen is too small.
+ *          Other -ve when signing fails.
+ *          0 on success.
+ */
+int WP11_Rsa_Sign(unsigned char* in, word32 inLen, unsigned char* sig,
+                  word32* sigLen, WP11_Object* priv, WP11_Slot* slot)
+{
+    int ret;
+    WC_RNG rng;
+    byte data[RSA_MAX_SIZE / 8];
+    word32 keyLen;
+
+    keyLen = wc_RsaEncryptSize(&priv->data.rsaKey);
+    if (inLen < keyLen) {
+        XMEMSET(data, 0, keyLen - inLen);
+        XMEMCPY(data + keyLen - inLen, in, inLen);
+        in = data;
+        inLen = keyLen;
+    }
+
+    if (priv->onToken)
+        WP11_Lock_LockRO(priv->lock);
+    ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
+    if (ret == 0) {
+        ret = wc_RsaDirect(in, inLen, sig, sigLen, &priv->data.rsaKey,
+                           RSA_PRIVATE_ENCRYPT, &rng);
+
+        Rng_Free(&rng);
+    }
+    if (priv->onToken)
+        WP11_Lock_UnlockRO(priv->lock);
+
+    if (ret > 0)
+        *sigLen = ret;
+
+    return ret;
+}
+
+/**
+ * RSA verify data with public key.
+ *
+ * @param  sig     [in]   Signature data.
+ * @param  sigLen  [in]   Length of buffer.
+ * @param  in      [in]   Data to verify.
+ * @param  inLen   [in]   Length of data.
+ * @param  stat    [out]  Status of verification. 1 on success, otherwise 0.
+ * @param  pub     [in]   Public key object.
+ * @return  -ve when verifying fails.
+ *          0 on success.
+ */
+int WP11_Rsa_Verify(unsigned char* sig, word32 sigLen, unsigned char* in,
+                    word32 inLen, int* stat, WP11_Object* pub)
+{
+    byte decSig[RSA_MAX_SIZE / 8];
+    word32 decSigLen;
+    int ret = 0;
+    byte bits;
+    word32 i;
+    word32 j;
+
+    *stat = 0;
+
+    if (pub->onToken)
+        WP11_Lock_LockRO(pub->lock);
+    decSigLen = wc_RsaEncryptSize(&pub->data.rsaKey);
+    ret = wc_RsaDirect(sig, sigLen, decSig, &decSigLen, &pub->data.rsaKey,
+                       RSA_PUBLIC_DECRYPT, NULL);
+    if (pub->onToken)
+        WP11_Lock_UnlockRO(pub->lock);
+
+    if (ret > 0)
+        ret = 0;
+
+    if (ret == 0) {
+        bits = 0;
+        if (inLen < decSigLen) {
+            for (i = 0; (bits == 0) && (i < decSigLen - inLen); i++) {
+                bits |= decSigLen;
+            }
+        }
+        for (j=0,i=decSigLen - inLen; (bits == 0) && (i < decSigLen); i++,j++) {
+            bits |= (in[j] ^ decSig[i]);
+        }
+        *stat = (bits == 0);
+    }
+
+    return ret;
+}
+
+/**
  * PKCS#1.5 sign encoded hash with private key.
  *
  * @param  encHash     [in]      Encoded hash to sign.

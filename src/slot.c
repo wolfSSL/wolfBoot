@@ -311,7 +311,7 @@ static CK_MECHANISM_INFO rsaKgMechInfo = {
 #endif
 /* Info on RSA X.509 mechanism. */
 static CK_MECHANISM_INFO rsaX509MechInfo = {
-    1024, 4096, CKF_ENCRYPT | CKF_DECRYPT
+    1024, 4096, CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY
 };
 /* Info on RSA PKCS#1.5 mechanism. */
 static CK_MECHANISM_INFO rsaPkcsMechInfo = {

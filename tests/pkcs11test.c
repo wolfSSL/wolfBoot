@@ -3391,6 +3391,60 @@ static CK_RV rsa_oaep_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE priv,
 }
 #endif
 
+static CK_RV rsa_x_509_sig_test(CK_SESSION_HANDLE session,
+                                CK_OBJECT_HANDLE priv, CK_OBJECT_HANDLE pub,
+                                int hashSz)
+{
+    CK_RV  ret = CKR_OK;
+    byte   hash[64], badHash[32], out[2048/8];
+    CK_ULONG outSz;
+    CK_MECHANISM mech;
+
+    memset(hash, 9, sizeof(hash));
+    memset(badHash, 7, sizeof(badHash));
+    outSz = sizeof(out);
+
+    mech.mechanism      = CKM_RSA_X_509;
+    mech.ulParameterLen = 0;
+    mech.pParameter     = NULL;
+
+    ret = funcList->C_SignInit(session, &mech, priv);
+    CHECK_CKR(ret, "RSA X_509 Sign Init");
+    if (ret == CKR_OK) {
+        outSz = 0;
+        ret = funcList->C_Sign(session, hash, hashSz, NULL, &outSz);
+        CHECK_CKR(ret, "RSA X_509 Sign no out");
+    }
+    if (ret == CKR_OK) {
+        CHECK_COND(outSz == sizeof(out), ret, "RSA X_509 Sign out size");
+    }
+    if (ret == CKR_OK) {
+        outSz = 0;
+        ret = funcList->C_Sign(session, hash, hashSz, out, &outSz);
+        CHECK_CKR_FAIL(ret, CKR_BUFFER_TOO_SMALL,
+                                                "RSA X_509 Sign zero out size");
+        outSz = sizeof(out);
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Sign(session, hash, hashSz, out, &outSz);
+        CHECK_CKR(ret, "RSA X_509 Sign");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_VerifyInit(session, &mech, pub);
+        CHECK_CKR(ret, "RSA X_509 Verify Init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Verify(session, hash, hashSz, out, outSz);
+        CHECK_CKR(ret, "RSA X_509 Verify");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Verify(session, badHash, sizeof(badHash), out, outSz);
+        CHECK_CKR_FAIL(ret, CKR_SIGNATURE_INVALID, "RSA X_509 Verify bad hash");
+    }
+
+    return ret;
+}
+
 static CK_RV rsa_pkcs15_sig_test(CK_SESSION_HANDLE session,
                                  CK_OBJECT_HANDLE priv, CK_OBJECT_HANDLE pub,
                                  int hashSz)
@@ -3595,6 +3649,36 @@ static CK_RV test_rsa_fixed_keys_oaep(void* args)
     return ret;
 }
 #endif
+
+static CK_RV test_rsa_fixed_keys_x_509_sig(void* args)
+{
+    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
+    CK_RV ret;
+    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
+
+    ret = get_rsa_priv_key(session, NULL, 0, CK_FALSE, &priv);
+    if (ret == CKR_OK)
+        ret = get_rsa_pub_key(session, NULL, 0, &pub);
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 32);
+        CHECK_CKR(ret, "RSA X_509 - 32 byte hash");
+    }
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 28);
+        CHECK_CKR(ret, "RSA X_509 - 28 byte hash");
+    }
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 48);
+        CHECK_CKR(ret, "RSA X_509 - 48 byte hash");
+    }
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 64);
+        CHECK_CKR(ret, "RSA X_509 - 64 byte hash");
+    }
+
+    return ret;
+}
 
 static CK_RV test_rsa_fixed_keys_pkcs15_sig(void* args)
 {
@@ -7533,6 +7617,7 @@ static TEST_FUNC testFunc[] = {
 #ifndef WC_NO_RSA_OAEP
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_oaep),
 #endif
+    PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_x_509_sig),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_pkcs15_sig),
 #ifdef WC_RSA_PSS
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_pss),

@@ -119,6 +119,8 @@ extern "C" {
 #define WP11_INIT_RSA_PKCS_VERIFY      0x0031
 #define WP11_INIT_RSA_PKCS_PSS_SIGN    0x0032
 #define WP11_INIT_RSA_PKCS_PSS_VERIFY  0x0033
+#define WP11_INIT_RSA_X_509_SIGN       0x0034
+#define WP11_INIT_RSA_X_509_VERIFY     0x0035
 #define WP11_INIT_ECDSA_SIGN           0x0040
 #define WP11_INIT_ECDSA_VERIFY         0x0041
 
@@ -280,6 +282,10 @@ int WP11_RsaOaep_PublicEncrypt(unsigned char* in, word32 inLen,
 int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
                                 unsigned char* out, word32* outLen,
                                 WP11_Object* priv, WP11_Session* session);
+int WP11_Rsa_Sign(unsigned char* in, word32 inLen, unsigned char* sig,
+                  word32* sigLen, WP11_Object* priv, WP11_Slot* slot);
+int WP11_Rsa_Verify(unsigned char* sig, word32 sigLen, unsigned char* in,
+                    word32 inLen, int* stat, WP11_Object* pub);
 int WP11_RsaPkcs15_Sign(unsigned char* encHash, word32 encHashLen,
                         unsigned char* sig, word32* sigLen, WP11_Object* priv,
                         WP11_Slot* slot);
