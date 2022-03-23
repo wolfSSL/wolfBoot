@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "image.h"
+#include "loader.h"
 
 extern void trap_entry(void);
 extern void trap_exit(void);
