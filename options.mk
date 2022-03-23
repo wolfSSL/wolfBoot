@@ -42,6 +42,7 @@ ifeq ($(SIGN),ECC256)
     STACK_USAGE=3896
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
+  IMAGE_HEADER_SIZE?=256
 endif
 
 ifeq ($(SIGN),ED25519)
