@@ -64,7 +64,6 @@
 #endif
 
 void wolfBoot_start(void);
-//void wolfBoot_panic(void);
 
 #if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
 
