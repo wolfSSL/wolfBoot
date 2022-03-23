@@ -39,12 +39,6 @@
 
 extern void hal_flash_dualbank_swap(void);
 
-static inline void boot_panic(void)
-{
-    while(1)
-        ;
-}
-
 void RAMFUNCTION wolfBoot_start(void)
 {
     int active, ret = 0;
@@ -66,7 +60,7 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_printf("Active Part %d\n", active);
 
     if (active < 0) /* panic if no images available */
-        boot_panic();
+        wolfBoot_panic();
 
 #ifdef PLATFORM_X86_64_EFI
     if (active == 1)
@@ -93,7 +87,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
             /* panic if authentication fails and no backup */
             if (!wolfBoot_fallback_is_possible())
-                boot_panic();
+                wolfBoot_panic();
             else {
                 /* Invalidate failing image and switch to the
                  * other partition

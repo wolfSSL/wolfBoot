@@ -42,6 +42,7 @@
 #endif
 #endif
 
+
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F
 #define SECT_FLAG_SWAPPING 0x07
@@ -55,6 +56,404 @@
 #endif
 
 
+
+
+#if defined(WOLFBOOT_ARMORED)
+
+#if !defined(ARCH_ARM) || !defined(__GNUC__)
+#   error WOLFBOOT_ARMORED only available with arm-gcc compiler
+#endif
+
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
+struct wolfBoot_image {
+    uint8_t *hdr;
+    uint8_t *trailer;
+    uint8_t *sha_hash;
+    uint8_t *fw_base;
+    uint32_t fw_size;
+    uint32_t part;
+    uint32_t hdr_ok;
+    uint32_t canary_FEED4567;
+    uint32_t signature_ok;
+    uint32_t canary_FEED6789;
+    uint32_t not_signature_ok;
+    uint32_t canary_FEED89AB;
+    uint32_t sha_ok;
+};
+
+
+/**
+ * This function sets the flag that indicates the signature is valid for the
+ * wolfBoot_image.
+ *
+ * With ARMORED setup, the flag is redundant, and the information is wrapped in
+ * between canary variables, to mitigate attacks based on memory corruptions.
+ */
+static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+{
+    img->canary_FEED4567 = 0xFEED4567UL;
+    img->signature_ok = 1UL;
+    img->canary_FEED6789 = 0xFEED6789UL;
+    img->not_signature_ok = ~(1UL);
+    img->canary_FEED89AB = 0xFEED89ABUL;
+}
+
+/**
+ * Final sanity check, performed just before do_boot, or before starting an
+ * update that has been verified.
+ *
+ * This procedure detects if any of the previous checks has been skipped.
+ * If any of the required flags does not match the expected value, wolfBoot
+ * panics.
+ */
+#define PART_SANITY_CHECK(p) \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading hdr_ok flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->hdr_ok)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading hdr_ok flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->sha_ok)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading signature_ok flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->signature_ok)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading ~(signature_ok) flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->not_signature_ok)); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading canary value, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEED6789)); \
+    asm volatile("mov r0, %0" ::"r"(0xFEED6789)); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading canary value, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEED4567)); \
+    asm volatile("mov r0, %0" ::"r"(0xFEED4567)); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    asm volatile("mov r2, #0"); \
+    /* Loading canary value, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEED89AB)); \
+    asm volatile("mov r0, %0" ::"r"(0xFEED89AB)); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0"); \
+    asm volatile("bne .-12")
+
+/**
+ * First part of RSA verification. Ensure that the function is called by
+ * double checking its return value contains a valid
+ * len (>= WOLFBOOT_SHA_DIGEST_SIZE).
+ *
+ */
+#define RSA_VERIFY_FN(ret,fn,...) \
+    { \
+        /* Redundant set of r0=0 */ \
+        asm volatile("mov r0, #0"); \
+        asm volatile("mov r0, #0"); \
+        asm volatile("mov r0, #0"); \
+        /* Call the function */ \
+        int tmp_ret = fn(__VA_ARGS__); \
+        ret = -1; \
+        /* Redundant set of r2=SHA_DIGEST_SIZE */ \
+        asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+        asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+        asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE)); \
+        /* Redundant check for fn() return value >= r2 */ \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        asm volatile("cmp r0, r2"); \
+        asm volatile("blt nope"); \
+        /* Return value is set here in case of success */ \
+        ret = tmp_ret; \
+        asm volatile("nope:"); \
+        asm volatile("nop"); \
+    }
+
+/**
+ * Second part of RSA verification.
+ *
+ * Compare the digest twice, then confirm via
+ * wolfBoot_image_confirm_signature_ok();
+ */
+#define RSA_VERIFY_HASH(img,digest) \
+    { \
+        volatile int compare_res; \
+        if (!img || !digest)    \
+            asm volatile("b hnope"); \
+        /* Redundant set of r0=50*/ \
+        asm volatile("mov r0, #50"); \
+        asm volatile("mov r0, #50"); \
+        asm volatile("mov r0, #50"); \
+        compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        /* Repeat memcmp call */ \
+        compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope"); \
+        /* Confirm that the signature is OK */ \
+        wolfBoot_image_confirm_signature_ok(img); \
+        asm volatile("hnope:"); \
+        asm volatile("nop"); \
+    }
+
+/**
+ * ECC / Ed signature verification.
+ * ECC and Ed verify functions set an additional value 'p_res'
+ * which is passed as a pointer.
+ *
+ * Ensure that the verification function has been called, and then
+ * set the return value accordingly.
+ *
+ * Double check by reading the value in p_res from memory a few times.
+ */
+#define VERIFY_FN(img,p_res,fn,...) \
+    /* Redundant set of r0=50*/ \
+    asm volatile("mov r0, #50"); \
+    asm volatile("mov r0, #50"); \
+    asm volatile("mov r0, #50"); \
+    /* Call the verify function */ \
+    fn(__VA_ARGS__); \
+    /* Redundant checks that ensure the function actually returned 0 */ \
+    asm volatile("cmp r0, #0"); \
+    asm volatile("bne nope"); \
+    asm volatile("cmp r0, #0"); \
+    asm volatile("bne nope"); \
+    asm volatile("cmp r0, #0"); \
+    asm volatile("bne nope"); \
+    asm volatile("cmp r0, #0"); \
+    asm volatile("bne nope"); \
+    /* Check that res = 1, a few times, reading the value from memory */ \
+    asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne nope"); \
+    asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne nope"); \
+    asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne nope"); \
+    asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
+    asm volatile("cmp r2, #1"); \
+    asm volatile("bne nope"); \
+    /* Confirm that the signature is OK */ \
+    wolfBoot_image_confirm_signature_ok(img); \
+    asm volatile("nope:"); \
+    asm volatile("nop")
+
+/**
+ * This macro is only invoked after a successful update version check, prior to
+ * initiating the update installation.
+ *
+ * At this point, wolfBoot thinks that the version check has been successful.
+ *
+ *
+ * The fallback flag (checked with redundancy) causes wolfBoot to skip the
+ * redundant version checks.
+ *
+ * The redundant checks here ensure that the image version is read twice per
+ * each partition, and the two return values are the same.
+ *
+ *
+ * The comparison is also redundant, causing wolfBoot to panic if the update
+ * version is not strictly greater than the current one.
+ *
+ */
+#define VERIFY_VERSION_ALLOWED(fb_ok) \
+    /* Stash the registry values */ \
+    asm volatile("push {r4, r5, r6, r7}"); \
+    /* Redundant initialization with 'failure' values */ \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r4, #1"); \
+    asm volatile("mov r5, #0"); \
+    asm volatile("mov r6, #2"); \
+    asm volatile("mov r7, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r4, #1"); \
+    asm volatile("mov r5, #0"); \
+    asm volatile("mov r6, #2"); \
+    asm volatile("mov r7, #0"); \
+    /* Read the fb_ok flag, jump to end_check  \
+     * if proven fb_ok == 1 */ \
+    asm volatile("mov r0, %0" ::"r"(fb_ok)); \
+    asm volatile("cmp r0, #1"); \
+    asm volatile("bne do_check"); \
+    asm volatile("cmp r0, #1"); \
+    asm volatile("bne do_check"); \
+    asm volatile("cmp r0, #1"); \
+    asm volatile("bne do_check"); \
+    asm volatile("b end_check"); \
+    /* Do the actual version check: */ \
+    asm volatile("do_check:"); \
+    /* Read update versions to reg r5 and r7 */ \
+    asm volatile("mov r0, #1"); \
+    asm volatile("mov r0, #1"); \
+    asm volatile("mov r0, #1"); \
+    asm volatile("bl wolfBoot_get_image_version"); \
+    asm volatile("mov r5, r0"); \
+    asm volatile("mov r5, r0"); \
+    asm volatile("mov r5, r0"); \
+    asm volatile("mov r0, #1"); \
+    asm volatile("mov r0, #1"); \
+    asm volatile("mov r0, #1"); \
+    asm volatile("bl wolfBoot_get_image_version"); \
+    asm volatile("mov r7, r0"); \
+    asm volatile("mov r7, r0"); \
+    asm volatile("mov r7, r0"); \
+    /* Compare r5 and r7, if not equal, something went very wrong, */ \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r5, r7"); \
+    asm volatile("bne .-12"); \
+    /* Read current versions to reg r4 and r6 */ \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("bl wolfBoot_get_image_version"); \
+    asm volatile("mov r4, r0"); \
+    asm volatile("mov r4, r0"); \
+    asm volatile("mov r4, r0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("bl wolfBoot_get_image_version"); \
+    asm volatile("mov r6, r0"); \
+    asm volatile("mov r6, r0"); \
+    asm volatile("mov r6, r0"); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r4, r6"); \
+    asm volatile("bne .-12"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    asm volatile("mov r0, #0"); \
+    /* Compare the two versions in registries */ \
+    asm volatile("cmp r4, r5"); \
+    asm volatile("bge ."); \
+    asm volatile("cmp r6, r7"); \
+    asm volatile("bge .-4"); \
+    asm volatile("cmp r4, r5"); \
+    asm volatile("bge .-8"); \
+    asm volatile("cmp r6, r7"); \
+    asm volatile("bge .-12"); \
+    asm volatile("end_check:"); \
+    /* Restore previously saved registry values */ \
+    asm volatile("pop {r4, r5, r6, r7}")
+
+#else
+
 struct wolfBoot_image {
     uint8_t *hdr;
     uint8_t *trailer;
@@ -67,7 +466,36 @@ struct wolfBoot_image {
     uint8_t sha_ok : 1;
 };
 
+static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+{
+    img->signature_ok = 1;
+}
 
+#define likely(x) (x)
+#define unlikely(x) (x)
+
+#define VERIFY_FN(img,p_res,fn,...) {\
+    int ret = fn(__VA_ARGS__); \
+    if ((ret == 0) && (*p_res == 1)) \
+        wolfBoot_image_confirm_signature_ok(img); \
+    }
+
+#define RSA_VERIFY_FN(ret,fn,...) \
+    ret = fn(__VA_ARGS__);
+
+#define RSA_VERIFY_HASH(img,digest) \
+    if (XMEMCMP(img->sha_hash, digest, WOLFBOOT_SHA_DIGEST_SIZE) == 0) \
+        wolfBoot_image_confirm_signature_ok(img);
+
+#define PART_SANITY_CHECK(p) \
+    if (((p)->hdr_ok != 1) || ((p)->sha_ok != 1) || ((p)->signature_ok != 1)) \
+        wolfBoot_panic()
+
+#define VERIFY_VERSION_ALLOWED do{} while(0);
+
+#endif
+
+/* Defined in image.c */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);

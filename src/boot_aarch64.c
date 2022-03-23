@@ -96,6 +96,7 @@ void RAMFUNCTION arch_reboot(void)
     AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
     while(1)
         ;
+    wolfBoot_panic();
 
 }
 #endif

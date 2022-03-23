@@ -64,4 +64,21 @@
 #endif
 
 void wolfBoot_start(void);
+
+#if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
+
+#define wolfBoot_panic() \
+    asm volatile("b ."); \
+    asm volatile("b .-2"); \
+    asm volatile("b .-4"); \
+    asm volatile("b .-6"); \
+    asm volatile("b .-8"); 
+
+#else
+static inline void wolfBoot_panic(void)
+{
+    while(1)
+        ;
+}
+#endif
 #endif /* LOADER_H */

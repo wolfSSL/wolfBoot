@@ -69,8 +69,9 @@ void __attribute__((naked,section(".init"))) _reset(void) {
 
     /* Run wolfboot */
     main();
-    while(1)
-        ;
+
+    /* Should never return */
+    wolfBoot_panic();
 }
 
 void do_boot(const uint32_t *app_offset)
@@ -113,8 +114,10 @@ void RAMFUNCTION arch_reboot(void)
     AON_WDOGCFG |= (AON_WDOGCFG_RSTEN | AON_WDOGCFG_ENALWAYS | AON_WDOGCFG_ZEROCMP | AON_WDOGCFG_SCALE) ;
     AON_WDOGKEY = AON_WDOGKEY_VALUE;
     AON_WDOGFEED = 1;
+
     while(1)
         ;
+    wolfBoot_panic();
 }
 
 #endif /* RAM_CODE */

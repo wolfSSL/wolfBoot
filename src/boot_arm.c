@@ -299,13 +299,16 @@ asm(
 void isr_fault(void)
 {
     /* Panic. */
-    while(1) ;;
+    wolfBoot_panic();
 }
 
 void isr_empty(void)
 {
     /* Ignore unmapped event and continue */
 }
+
+
+
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 #   define isr_securefault isr_fault
@@ -519,5 +522,6 @@ void RAMFUNCTION arch_reboot(void)
 #endif
     while(1)
         ;
+    wolfBoot_panic();
 }
 #endif /* RAM_CODE */

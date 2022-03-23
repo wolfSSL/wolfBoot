@@ -110,6 +110,7 @@ void wolfBoot_check_self_update(void)
             return;
         if (wolfBoot_verify_authenticity(&update) < 0)
             return;
+        PART_SANITY_CHECK(&update);
         wolfBoot_self_update(&update);
     }
 }
@@ -324,6 +325,11 @@ out:
 
 #endif
 
+
+#ifdef WOLFBOOT_ARMORED
+#    pragma GCC push_options
+#    pragma GCC optimize("O0")
+#endif
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -367,10 +373,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
         }
+        PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
-        if ( !fallback_allowed &&
-                (wolfBoot_update_firmware_version() <= wolfBoot_current_firmware_version()) )
+        if (((fallback_allowed==1) && (~(uint32_t)fallback_allowed == 0xFFFFFFFE)) ||
+                (wolfBoot_current_firmware_version() < wolfBoot_update_firmware_version()) ) {
+            VERIFY_VERSION_ALLOWED(fallback_allowed);
+        } else {
             return -1;
+        }
 #endif
     }
 
@@ -490,21 +500,23 @@ void RAMFUNCTION wolfBoot_start(void)
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
             ) {
-        if (wolfBoot_update(1) < 0) {
+        if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
-            while(1)
-                ;
+            wolfBoot_panic();
         } else {
             /* Emergency update successful, try to re-open boot image */
-            if ((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
+            if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
-                    (wolfBoot_verify_authenticity(&boot) < 0)) {
+                    (wolfBoot_verify_authenticity(&boot) < 0)))) {
                 /* panic: something went wrong after the emergency update */
-                while(1)
-                    ;
+                wolfBoot_panic();
             }
         }
     }
+    PART_SANITY_CHECK(&boot);
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }
+#ifdef WOLFBOOT_ARMORED
+#    pragma GCC pop_options
+#endif
