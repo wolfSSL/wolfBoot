@@ -13,7 +13,7 @@ Build wolfSSL:
 git clone https://github.com/wolfSSL/wolfssl.git
 cd wolfssl
 ./autogen.sh
-./configure --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP"
+./configure --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"
 make
 make check
 sudo make install

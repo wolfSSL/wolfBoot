@@ -399,7 +399,7 @@ static CK_RV test_no_token_init(void* args)
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
     CK_TOKEN_INFO tokenInfo;
-    CK_FLAGS expFlags = CKF_RNG | CKF_CLOCK_ON_TOKEN;
+    CK_FLAGS expFlags = CKF_RNG | CKF_CLOCK_ON_TOKEN | CKF_LOGIN_REQUIRED;
     int flags = CKF_SERIAL_SESSION | CKF_RW_SESSION;
 
     session = CK_INVALID_HANDLE;
@@ -583,7 +583,8 @@ static CK_RV test_token(void* args)
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
     CK_TOKEN_INFO tokenInfo;
-    CK_FLAGS expFlags = CKF_RNG | CKF_CLOCK_ON_TOKEN | CKF_TOKEN_INITIALIZED;
+    CK_FLAGS expFlags = CKF_RNG | CKF_CLOCK_ON_TOKEN | CKF_LOGIN_REQUIRED |
+                        CKF_TOKEN_INITIALIZED;
     unsigned char label[32];
     int flags = CKF_SERIAL_SESSION | CKF_RW_SESSION;
 
@@ -882,8 +883,8 @@ static CK_RV test_login_logout(void* args)
     int roFlags = CKF_SERIAL_SESSION;
     CK_OBJECT_HANDLE roSession;
     CK_TOKEN_INFO tokenInfo;
-    CK_FLAGS expFlags = CKF_RNG | CKF_CLOCK_ON_TOKEN | CKF_TOKEN_INITIALIZED |
-                                                       CKF_USER_PIN_INITIALIZED;
+    CK_FLAGS expFlags = CKF_RNG | CKF_CLOCK_ON_TOKEN | CKF_LOGIN_REQUIRED |
+                        CKF_TOKEN_INITIALIZED | CKF_USER_PIN_INITIALIZED;
 
     funcList->C_Logout(session);
 
@@ -3390,6 +3391,60 @@ static CK_RV rsa_oaep_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE priv,
 }
 #endif
 
+static CK_RV rsa_x_509_sig_test(CK_SESSION_HANDLE session,
+                                CK_OBJECT_HANDLE priv, CK_OBJECT_HANDLE pub,
+                                int hashSz)
+{
+    CK_RV  ret = CKR_OK;
+    byte   hash[64], badHash[32], out[2048/8];
+    CK_ULONG outSz;
+    CK_MECHANISM mech;
+
+    memset(hash, 9, sizeof(hash));
+    memset(badHash, 7, sizeof(badHash));
+    outSz = sizeof(out);
+
+    mech.mechanism      = CKM_RSA_X_509;
+    mech.ulParameterLen = 0;
+    mech.pParameter     = NULL;
+
+    ret = funcList->C_SignInit(session, &mech, priv);
+    CHECK_CKR(ret, "RSA X_509 Sign Init");
+    if (ret == CKR_OK) {
+        outSz = 0;
+        ret = funcList->C_Sign(session, hash, hashSz, NULL, &outSz);
+        CHECK_CKR(ret, "RSA X_509 Sign no out");
+    }
+    if (ret == CKR_OK) {
+        CHECK_COND(outSz == sizeof(out), ret, "RSA X_509 Sign out size");
+    }
+    if (ret == CKR_OK) {
+        outSz = 0;
+        ret = funcList->C_Sign(session, hash, hashSz, out, &outSz);
+        CHECK_CKR_FAIL(ret, CKR_BUFFER_TOO_SMALL,
+                                                "RSA X_509 Sign zero out size");
+        outSz = sizeof(out);
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Sign(session, hash, hashSz, out, &outSz);
+        CHECK_CKR(ret, "RSA X_509 Sign");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_VerifyInit(session, &mech, pub);
+        CHECK_CKR(ret, "RSA X_509 Verify Init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Verify(session, hash, hashSz, out, outSz);
+        CHECK_CKR(ret, "RSA X_509 Verify");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Verify(session, badHash, sizeof(badHash), out, outSz);
+        CHECK_CKR_FAIL(ret, CKR_SIGNATURE_INVALID, "RSA X_509 Verify bad hash");
+    }
+
+    return ret;
+}
+
 static CK_RV rsa_pkcs15_sig_test(CK_SESSION_HANDLE session,
                                  CK_OBJECT_HANDLE priv, CK_OBJECT_HANDLE pub,
                                  int hashSz)
@@ -3594,6 +3649,36 @@ static CK_RV test_rsa_fixed_keys_oaep(void* args)
     return ret;
 }
 #endif
+
+static CK_RV test_rsa_fixed_keys_x_509_sig(void* args)
+{
+    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
+    CK_RV ret;
+    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
+
+    ret = get_rsa_priv_key(session, NULL, 0, CK_FALSE, &priv);
+    if (ret == CKR_OK)
+        ret = get_rsa_pub_key(session, NULL, 0, &pub);
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 32);
+        CHECK_CKR(ret, "RSA X_509 - 32 byte hash");
+    }
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 28);
+        CHECK_CKR(ret, "RSA X_509 - 28 byte hash");
+    }
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 48);
+        CHECK_CKR(ret, "RSA X_509 - 48 byte hash");
+    }
+    if (ret == CKR_OK) {
+        ret = rsa_x_509_sig_test(session, priv, pub, 64);
+        CHECK_CKR(ret, "RSA X_509 - 64 byte hash");
+    }
+
+    return ret;
+}
 
 static CK_RV test_rsa_fixed_keys_pkcs15_sig(void* args)
 {
@@ -5787,6 +5872,548 @@ static CK_RV test_aes_cbc_gen_key_id(void* args)
 
     return ret;
 }
+
+static CK_RV test_aes_cbc_pad_encdec(CK_SESSION_HANDLE session,
+                                     unsigned char* exp, CK_OBJECT_HANDLE key)
+{
+    CK_RV ret;
+    byte plain[32], enc[sizeof(plain)+16], dec[32], iv[16];
+    CK_ULONG plainSz, encSz, decSz, ivSz;
+    CK_MECHANISM mech;
+
+    memset(plain, 9, sizeof(plain));
+    memset(iv, 9, sizeof(iv));
+    plainSz = sizeof(plain);
+    encSz = sizeof(enc);
+    decSz = sizeof(dec);
+    ivSz = sizeof(iv);
+
+    mech.mechanism      = CKM_AES_CBC_PAD;
+    mech.ulParameterLen = ivSz;
+    mech.pParameter     = iv;
+
+    ret = funcList->C_EncryptInit(session, &mech, key);
+    CHECK_CKR(ret, "AES-CBC Pad Encrypt Init");
+    if (ret == CKR_OK) {
+        encSz = 0;
+        ret = funcList->C_Encrypt(session, plain, plainSz, NULL, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt no enc");
+    }
+    if (ret == CKR_OK && encSz != plainSz) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt encrypted length");
+    }
+    if (ret == CKR_OK) {
+        encSz = 0;
+        ret = funcList->C_Encrypt(session, plain, plainSz, enc, &encSz);
+        CHECK_CKR_FAIL(ret, CKR_BUFFER_TOO_SMALL,
+                                           "AES-CBC Pad Encrypt zero enc size");
+    }
+    if (ret == CKR_OK) {
+        encSz = sizeof(enc);
+        ret = funcList->C_Encrypt(session, plain, plainSz, enc, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt");
+    }
+    if (ret == CKR_OK && exp != NULL) {
+        if (encSz != plainSz + 16 || XMEMCMP(enc, exp, encSz) != 0)
+            ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Result not matching expected");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptInit(session, &mech, key);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Init");
+    }
+    if (ret == CKR_OK) {
+        decSz = 0;
+        ret = funcList->C_Decrypt(session, enc, encSz, NULL, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt");
+    }
+    if (ret == CKR_OK && decSz != encSz-1) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt decrypted length");
+    }
+    if (ret == CKR_OK) {
+        decSz = sizeof(dec);
+        ret = funcList->C_Decrypt(session, enc, encSz, dec, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt");
+    }
+    if (ret == CKR_OK) {
+        if (decSz != plainSz || XMEMCMP(plain, dec, decSz) != 0) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data match plain text");
+        }
+    }
+
+
+    return ret;
+}
+
+static CK_RV test_aes_cbc_pad_update(CK_SESSION_HANDLE session,
+                                     unsigned char* exp, CK_OBJECT_HANDLE key,
+                                     CK_ULONG inc)
+{
+    CK_RV ret;
+    byte plain[32], enc[sizeof(plain)+16], dec[32], iv[16];
+    byte* pIn;
+    byte* pOut;
+    CK_ULONG plainSz, encSz, decSz, ivSz, remSz, cumSz, partSz, inRemSz;
+    CK_MECHANISM mech;
+
+    memset(plain, 9, sizeof(plain));
+    memset(iv, 9, sizeof(iv));
+    memset(enc, 0, sizeof(enc));
+    memset(dec, 0, sizeof(dec));
+    plainSz = sizeof(plain);
+    encSz = sizeof(enc);
+    decSz = sizeof(dec);
+    ivSz = sizeof(iv);
+    remSz = encSz;
+    cumSz = 0;
+
+    mech.mechanism      = CKM_AES_CBC_PAD;
+    mech.ulParameterLen = ivSz;
+    mech.pParameter     = iv;
+
+    ret = funcList->C_EncryptInit(session, &mech, key);
+    CHECK_CKR(ret, "AES-CBC Pad Encrypt Init");
+    if (ret == CKR_OK) {
+        encSz = 1;
+        ret = funcList->C_EncryptUpdate(session, plain, 1, NULL, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Update");
+    }
+    if (ret == CKR_OK && encSz != 0) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Update encrypted size");
+    }
+    if (ret == CKR_OK) {
+        encSz = 0;
+        ret = funcList->C_EncryptUpdate(session, plain, 16, NULL, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Update");
+    }
+    if (ret == CKR_OK && encSz != 16) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Update encrypted size");
+    }
+    if (ret == CKR_OK) {
+        encSz = 0;
+        ret = funcList->C_EncryptUpdate(session, plain, 16, enc, &encSz);
+        CHECK_CKR_FAIL(ret, CKR_BUFFER_TOO_SMALL,
+                                    "AES-CBC Pad Encrypt Update zero enc size");
+        encSz = sizeof(enc);
+    }
+    if (ret == CKR_OK) {
+        pIn = plain;
+        pOut = enc;
+        inRemSz = plainSz;
+        partSz = inc;
+        while (ret == CKR_OK && inRemSz > 0) {
+            if (inc > inRemSz)
+                partSz = inRemSz;
+            ret = funcList->C_EncryptUpdate(session, pIn, partSz, pOut, &encSz);
+            CHECK_CKR(ret, "AES-CBC Pad Encrypt Update");
+            pIn += partSz;
+            inRemSz -= partSz;
+            pOut += encSz;
+            cumSz += encSz;
+            encSz = (remSz -= encSz);
+        }
+    }
+    if (ret == CKR_OK) {
+        encSz = 1;
+        ret = funcList->C_EncryptFinal(session, NULL, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Final");
+    }
+    if (ret == CKR_OK && encSz != 16) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Final encrypted size");
+    }
+    if (ret == CKR_OK) {
+        encSz = remSz;
+        ret = funcList->C_EncryptFinal(session, pOut, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Final");
+        encSz += cumSz;
+    }
+    if (ret == CKR_OK && exp != NULL) {
+        if (encSz != plainSz + 16 || XMEMCMP(enc, exp, encSz) != 0)
+            ret = -1;
+        CHECK_CKR(ret,
+                     "AES-CBC Pad Encrypt Update Result not matching expected");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptInit(session, &mech, key);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Init");
+    }
+    if (ret == CKR_OK) {
+        decSz = 1;
+        ret = funcList->C_DecryptUpdate(session, enc, 1, NULL, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Update");
+    }
+    if (ret == CKR_OK && decSz != 0) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Update encrypted size");
+    }
+    if (ret == CKR_OK) {
+        decSz = 0;
+        ret = funcList->C_DecryptUpdate(session, enc, 16, NULL, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Update");
+    }
+    if (ret == CKR_OK && decSz != 0) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Update encrypted size");
+    }
+    if (ret == CKR_OK) {
+        decSz = 0;
+        ret = funcList->C_DecryptUpdate(session, enc, 32, dec, &decSz);
+        CHECK_CKR_FAIL(ret, CKR_BUFFER_TOO_SMALL,
+                                    "AES-CBC Pad Encrypt Update zero dec size");
+        decSz = sizeof(dec);
+    }
+    if (ret == CKR_OK) {
+        pIn = enc;
+        pOut = dec;
+        cumSz = 0;
+        remSz = decSz;
+        inRemSz = encSz;
+        partSz = inc;
+        while (ret == CKR_OK && inRemSz > 0) {
+            if (inc > inRemSz)
+                partSz = inRemSz;
+            ret = funcList->C_DecryptUpdate(session, pIn, partSz, pOut, &decSz);
+            CHECK_CKR(ret, "AES-CBC Pad Decrypt Update");
+            pIn += partSz;
+            inRemSz -= partSz;
+            pOut += decSz;
+            cumSz += decSz;
+            decSz = (remSz -= decSz);
+        }
+    }
+    if (ret == CKR_OK) {
+        decSz = 16;
+        ret = funcList->C_DecryptFinal(session, NULL, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Final");
+    }
+    if (ret == CKR_OK && decSz != 15) {
+        ret = -1;
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Final decrypted size");
+    }
+    if (ret == CKR_OK) {
+        decSz = remSz;
+        ret = funcList->C_DecryptFinal(session, pOut, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Final");
+        decSz += cumSz;
+    }
+    if (ret == CKR_OK) {
+        if (decSz != plainSz) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data length match");
+        }
+        else if (XMEMCMP(plain, dec, decSz) != 0) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data match plain text");
+        }
+    }
+
+    return ret;
+}
+
+static CK_RV test_aes_cbc_pad(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key,
+                              CK_ULONG len, CK_ULONG inc)
+{
+    CK_RV ret;
+    byte plain[32], enc[sizeof(plain)+16], dec[32], iv[16];
+    byte* pIn;
+    byte* pOut;
+    CK_ULONG encSz, decSz, ivSz, remSz, cumSz, partSz, inRemSz;
+    CK_MECHANISM mech;
+
+    memset(plain, 9, sizeof(plain));
+    memset(iv, 9, sizeof(iv));
+    memset(enc, 0, sizeof(enc));
+    memset(dec, 0, sizeof(dec));
+    encSz = sizeof(enc);
+    decSz = sizeof(dec);
+    ivSz = sizeof(iv);
+    remSz = encSz;
+    cumSz = 0;
+
+    mech.mechanism      = CKM_AES_CBC_PAD;
+    mech.ulParameterLen = ivSz;
+    mech.pParameter     = iv;
+
+    ret = funcList->C_EncryptInit(session, &mech, key);
+    CHECK_CKR(ret, "AES-CBC Pad Encrypt Init");
+    if (ret == CKR_OK) {
+        ret = funcList->C_Encrypt(session, plain, len, enc, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt no enc");
+    }
+
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptInit(session, &mech, key);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Decrypt(session, enc, encSz, dec, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt");
+    }
+    if (ret == CKR_OK) {
+        if (decSz != len) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data length match");
+        }
+        else if (XMEMCMP(plain, dec, decSz) != 0) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data match plain text");
+        }
+    }
+
+    if (ret == CKR_OK) {
+        ret = funcList->C_EncryptInit(session, &mech, key);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Init");
+    }
+    if (ret == CKR_OK) {
+        pIn = plain;
+        pOut = enc;
+        inRemSz = len;
+        partSz = inc;
+        while (ret == CKR_OK && inRemSz > 0) {
+            if (inc > inRemSz)
+                partSz = inRemSz;
+            ret = funcList->C_EncryptUpdate(session, pIn, partSz, pOut, &encSz);
+            CHECK_CKR(ret, "AES-CBC Pad Encrypt Update");
+            pIn += partSz;
+            inRemSz -= partSz;
+            pOut += encSz;
+            cumSz += encSz;
+            encSz = (remSz -= encSz);
+        }
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_EncryptFinal(session, pOut, &encSz);
+        CHECK_CKR(ret, "AES-CBC Pad Encrypt Final");
+    }
+
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptInit(session, &mech, key);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Init");
+    }
+    if (ret == CKR_OK) {
+        pIn = enc;
+        pOut = dec;
+        cumSz = 0;
+        remSz = decSz;
+        inRemSz = encSz;
+        partSz = inc;
+        while (ret == CKR_OK && inRemSz > 0) {
+            if (inc > inRemSz)
+                partSz = inRemSz;
+            ret = funcList->C_DecryptUpdate(session, pIn, partSz, pOut, &decSz);
+            CHECK_CKR(ret, "AES-CBC Pad Decrypt Update");
+            pIn += partSz;
+            inRemSz -= partSz;
+            pOut += decSz;
+            cumSz += decSz;
+            decSz = (remSz -= decSz);
+        }
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptFinal(session, pOut, &decSz);
+        CHECK_CKR(ret, "AES-CBC Pad Decrypt Final");
+        decSz += cumSz;
+    }
+    if (ret == CKR_OK) {
+        if (decSz != len) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data length match");
+        }
+        else if (XMEMCMP(plain, dec, decSz) != 0) {
+            ret = -1;
+            CHECK_CKR(ret, "AES-CBC Pad Decrypted data match plain text");
+        }
+    }
+
+    return ret;
+}
+
+static CK_RV test_aes_cbc_pad_fixed_key(void* args)
+{
+    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
+    CK_RV ret;
+    CK_OBJECT_HANDLE key;
+
+    ret = get_aes_128_key(session, NULL, 0, &key);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_encdec(session, aes_128_cbc_pad_exp, key);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_update(session, aes_128_cbc_pad_exp, key, 16);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_update(session, aes_128_cbc_pad_exp, key, 1);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_update(session, aes_128_cbc_pad_exp, key, 5);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_update(session, aes_128_cbc_pad_exp, key, 18);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad(session, key, 31, 1);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad(session, key, 17, 4);
+
+    return ret;
+}
+
+static CK_RV test_aes_cbc_pad_fail(void* args)
+{
+    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
+    CK_RV ret;
+    CK_OBJECT_HANDLE key;
+    CK_OBJECT_HANDLE generic;
+    byte plain[32], enc[sizeof(plain)+16], dec[32], iv[16];
+    CK_ULONG plainSz, encSz, decSz, ivSz;
+    CK_MECHANISM mech;
+
+    memset(plain, 9, sizeof(plain));
+    memset(iv, 9, sizeof(iv));
+    plainSz = sizeof(plain);
+    encSz = sizeof(enc);
+    decSz = sizeof(dec);
+    ivSz = sizeof(iv);
+
+    mech.mechanism      = CKM_AES_CBC_PAD;
+    mech.ulParameterLen = ivSz;
+    mech.pParameter     = iv;
+
+    ret = get_aes_128_key(session, NULL, 0, &key);
+    if (ret == CKR_OK) {
+        ret = get_generic_key(session, plain, sizeof(plain), CK_FALSE,
+                                                                      &generic);
+    }
+    if (ret == CKR_OK) {
+       ret = funcList->C_EncryptInit(session, &mech, generic);
+       CHECK_CKR_FAIL(ret, CKR_KEY_TYPE_INCONSISTENT,
+                                     "AES-CBC Pad Encrypt Init wrong key type");
+    }
+    if (ret == CKR_OK) {
+       ret = funcList->C_DecryptInit(session, &mech, generic);
+       CHECK_CKR_FAIL(ret, CKR_KEY_TYPE_INCONSISTENT,
+                                     "AES-CBC Pad Decrypt Init wrong key type");
+    }
+
+    if (ret == CKR_OK) {
+       mech.pParameter = NULL;
+       ret = funcList->C_EncryptInit(session, &mech, key);
+       CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
+                                     "AES-CBC Pad Encrypt Init parameter NULL");
+       mech.pParameter = iv;
+    }
+    if (ret == CKR_OK) {
+       mech.ulParameterLen = ivSz - 1;
+       ret = funcList->C_EncryptInit(session, &mech, key);
+       CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
+                             "AES-CBC Pad Encrypt Init parameter length short");
+       mech.ulParameterLen = ivSz;
+    }
+    if (ret == CKR_OK) {
+       mech.ulParameterLen = ivSz + 1;
+       ret = funcList->C_EncryptInit(session, &mech, key);
+       CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
+                              "AES-CBC Pad Encrypt Init parameter length long");
+       mech.ulParameterLen = ivSz;
+    }
+    if (ret == CKR_OK) {
+       mech.pParameter = NULL;
+       ret = funcList->C_DecryptInit(session, &mech, key);
+       CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
+                                     "AES-CBC Pad Decrypt Init parameter NULL");
+       mech.pParameter = iv;
+    }
+    if (ret == CKR_OK) {
+       mech.ulParameterLen = ivSz - 1;
+       ret = funcList->C_DecryptInit(session, &mech, key);
+       CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
+                             "AES-CBC Pad Decrypt Init parameter length short");
+       mech.ulParameterLen = ivSz;
+    }
+    if (ret == CKR_OK) {
+       mech.ulParameterLen = ivSz + 1;
+       ret = funcList->C_DecryptInit(session, &mech, key);
+       CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
+                              "AES-CBC Pad Decrypt Init parameter length long");
+       mech.ulParameterLen = ivSz;
+    }
+
+    if (ret == CKR_OK) {
+       ret = funcList->C_EncryptInit(session, &mech, key);
+       CHECK_CKR(ret, "AES-CBC Pad Encrypt Init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Decrypt(session, enc, encSz, dec, &decSz);
+        CHECK_CKR_FAIL(ret, CKR_OPERATION_NOT_INITIALIZED,
+                                              "AES-CBC Pad Decrypt wrong init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptUpdate(session, enc, encSz, dec, &decSz);
+        CHECK_CKR_FAIL(ret, CKR_OPERATION_NOT_INITIALIZED,
+                                       "AES-CBC Pad Decrypt Update wrong init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_DecryptFinal(session, enc, &decSz);
+        CHECK_CKR_FAIL(ret, CKR_OPERATION_NOT_INITIALIZED,
+                                        "AES-CBC Pad Decrypt Final wrong init");
+    }
+    if (ret == CKR_OK) {
+       ret = funcList->C_DecryptInit(session, &mech, key);
+       CHECK_CKR(ret, "AES-CBC Pad Decrypt Init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Encrypt(session, plain, plainSz, enc, &encSz);
+        CHECK_CKR_FAIL(ret, CKR_OPERATION_NOT_INITIALIZED,
+                                              "AES-CBC Pad Encrypt wrong init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_EncryptUpdate(session, plain, plainSz, enc, &encSz);
+        CHECK_CKR_FAIL(ret, CKR_OPERATION_NOT_INITIALIZED,
+                                       "AES-CBC Pad Encrypt Update wrong init");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_EncryptFinal(session, enc, &encSz);
+        CHECK_CKR_FAIL(ret, CKR_OPERATION_NOT_INITIALIZED,
+                                        "AES-CBC Pad Encrypt Final wrong init");
+    }
+
+    return ret;
+}
+
+static CK_RV test_aes_cbc_pad_gen_key(void* args)
+{
+    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
+    CK_RV ret;
+    CK_OBJECT_HANDLE key;
+
+    ret = gen_aes_key(session, 16, NULL, 0, 0, &key);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_encdec(session, NULL, key);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_update(session, NULL, key, 32);
+
+    return ret;
+}
+
+static CK_RV test_aes_cbc_pad_gen_key_id(void* args)
+{
+    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
+    CK_RV ret;
+    CK_OBJECT_HANDLE key;
+    unsigned char* id = (unsigned char*)"123aes128";
+    int idSz = 9;
+
+    ret = gen_aes_key(session, 32, id, idSz, 0, NULL);
+    if (ret == CKR_OK)
+        ret = find_aes_key(session, id, idSz, &key);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_encdec(session, NULL, key);
+    if (ret == CKR_OK)
+        ret = test_aes_cbc_pad_update(session, NULL, key, 32);
+
+    return ret;
+}
 #endif
 
 #ifdef HAVE_AESGCM
@@ -6990,6 +7617,7 @@ static TEST_FUNC testFunc[] = {
 #ifndef WC_NO_RSA_OAEP
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_oaep),
 #endif
+    PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_x_509_sig),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_pkcs15_sig),
 #ifdef WC_RSA_PSS
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_pss),
@@ -7030,6 +7658,10 @@ static TEST_FUNC testFunc[] = {
     PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_fail),
     PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_gen_key),
     PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_gen_key_id),
+    PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_pad_fixed_key),
+    PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_pad_fail),
+    PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_pad_gen_key),
+    PKCS11TEST_FUNC_SESS_DECL(test_aes_cbc_pad_gen_key_id),
 #endif
 #ifdef HAVE_AESGCM
     PKCS11TEST_FUNC_SESS_DECL(test_aes_gcm_fixed_key),

@@ -106,7 +106,7 @@ static CK_TOKEN_INFO tokenInfoTemplate = {
     "wolfpkcs11",
     "wolfpkcs11",
     "0000000000000000",
-    CKF_RNG | CKF_CLOCK_ON_TOKEN,
+    CKF_RNG | CKF_CLOCK_ON_TOKEN | CKF_LOGIN_REQUIRED,
     WP11_SESSION_CNT_MAX, /* ulMaxSessionCount */
     CK_UNAVAILABLE_INFORMATION, /* ulSessionCount */
     WP11_SESSION_CNT_MAX, /* ulMaxRwSessionCount */
@@ -227,6 +227,7 @@ static CK_MECHANISM_TYPE mechanismList[] = {
 #ifndef NO_AES
 #ifdef HAVE_AES_CBC
     CKM_AES_CBC,
+    CKM_AES_CBC_PAD,
 #endif
 #ifdef HAVE_AESGCM
     CKM_AES_GCM,
@@ -310,7 +311,7 @@ static CK_MECHANISM_INFO rsaKgMechInfo = {
 #endif
 /* Info on RSA X.509 mechanism. */
 static CK_MECHANISM_INFO rsaX509MechInfo = {
-    1024, 4096, CKF_ENCRYPT | CKF_DECRYPT
+    1024, 4096, CKF_ENCRYPT | CKF_DECRYPT | CKF_SIGN | CKF_VERIFY
 };
 /* Info on RSA PKCS#1.5 mechanism. */
 static CK_MECHANISM_INFO rsaPkcsMechInfo = {
@@ -473,6 +474,7 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
 #endif
 #ifndef NO_AES
 #ifdef HAVE_AES_CBC
+        case CKM_AES_CBC_PAD:
         case CKM_AES_CBC:
             XMEMCPY(pInfo, &aesCbcMechInfo, sizeof(CK_MECHANISM_INFO));
             break;
