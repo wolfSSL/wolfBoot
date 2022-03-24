@@ -30,18 +30,26 @@ jobs:
         run: |
           make -C tools/test-expect-version
 
-  # ECC256 TEST
       - name: make clean
         run: |
           make clean && make -C tools/keytools clean && rm -f include/target.h
 
       - name: Select config
         run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
+          cp config/examples/nrf52840.config .config && make include/target.h
 
       - name: Build key tools
         run: |
-          make -C tools/keytools SIGN=ECC256
+          make -C tools/keytools
+
+  # ECC256 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
 
       - name: Build wolfboot and test app image v1, SIGN=ECC256
         run: |
@@ -54,18 +62,34 @@ jobs:
       - name: Renode Tests ECC256
         run: ./tools/renode/docker-test.sh
 
+# ECC384 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC384
+        run: |
+          make SIGN=ECC384
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC384 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh
+
 # ED25519 TEST
       - name: make clean
         run: |
-          make clean && make -C tools/keytools clean && rm -f include/target.h
+          make clean && rm -f include/target.h
 
       - name: Select config
         run: |
           cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
-
-      - name: Build key tools
-        run: |
-          make -C tools/keytools SIGN=ED25519
 
       - name: Build wolfboot and test app image v1, SIGN=ED25519
         run: |
@@ -81,15 +105,11 @@ jobs:
 # ED448 TEST
       - name: make clean
         run: |
-          make clean && make -C tools/keytools clean && rm -f include/target.h
+          make clean && rm -f include/target.h
 
       - name: Select config
         run: |
           cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
-
-      - name: Build key tools
-        run: |
-          make -C tools/keytools SIGN=ED448
 
       - name: Build wolfboot and test app image v1, SIGN=ED448
         run: |
@@ -105,15 +125,11 @@ jobs:
 # RSA2048 TEST
       - name: make clean
         run: |
-          make clean && make -C tools/keytools clean && rm -f include/target.h
+          make clean && rm -f include/target.h
 
       - name: Select config
         run: |
           cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
-
-      - name: Build key tools
-        run: |
-          make -C tools/keytools SIGN=RSA2048
 
       - name: Build wolfboot and test app image v1, SIGN=RSA2048
         run: |
@@ -129,15 +145,11 @@ jobs:
 # RSA4096 TEST
       - name: make clean
         run: |
-          make clean && make -C tools/keytools clean && rm -f include/target.h
+          make clean && rm -f include/target.h
 
       - name: Select config
         run: |
           cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
-
-      - name: Build key tools
-        run: |
-          make -C tools/keytools SIGN=RSA4096
 
       - name: Build wolfboot and test app image v1, SIGN=RSA4096
         run: |
@@ -149,8 +161,6 @@ jobs:
 
       - name: Renode Tests RSA4096
         run: ./tools/renode/docker-test.sh
-
-
 
       - name: Upload Output Dir
         uses: actions/upload-artifact@v2

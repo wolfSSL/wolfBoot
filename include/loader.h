@@ -43,6 +43,18 @@
 #   define KEY_BUFFER  ecc256_pub_key
 #   define KEY_LEN     ecc256_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (64)
+#elif defined(WOLFBOOT_SIGN_ECC384)
+    extern const unsigned char ecc384_pub_key[];
+    extern unsigned int ecc384_pub_key_len;
+#   define KEY_BUFFER  ecc384_pub_key
+#   define KEY_LEN     ecc384_pub_key_len
+#   define IMAGE_SIGNATURE_SIZE (96)
+#elif defined(WOLFBOOT_SIGN_ECC521)
+    extern const unsigned char ecc521_pub_key[];
+    extern unsigned int ecc521_pub_key_len;
+#   define KEY_BUFFER  ecc521_pub_key
+#   define KEY_LEN     ecc521_pub_key_len
+#   define IMAGE_SIGNATURE_SIZE (132)
 #elif defined(WOLFBOOT_SIGN_RSA2048)
     extern const unsigned char rsa2048_pub_key[];
     extern unsigned int rsa2048_pub_key_len;

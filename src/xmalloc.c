@@ -54,20 +54,38 @@ struct xmalloc_slot {
 #   error "No hash mechanism selected."
 #endif
 
-#ifdef WOLFBOOT_SIGN_ECC256
+#if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384)
 
 #ifndef USE_FAST_MATH
-    #define MP_CURVE_SPECS_SIZE (80)
-    #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
-        #define MP_POINT_SIZE (196)
-        #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 8)
-        #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 5)
-    #else
-        #define MP_POINT_SIZE (220)
-        #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 9)
-        #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 9 + 3))
-        #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 5))
-    #endif
+    /* SP MATH */
+    #ifdef WOLFBOOT_SIGN_ECC256
+        #define MP_CURVE_SPECS_SIZE (80)
+        #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
+            #define MP_POINT_SIZE (196)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 8)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 5)
+        #else
+            #define MP_POINT_SIZE (220)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 9)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 9 + 3))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 5))
+            #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 8)
+        #endif
+    #endif /* WOLFBOOT_SIGN_ECC256 */
+    #ifdef WOLFBOOT_SIGN_ECC384
+        #define MP_CURVE_SPECS_SIZE (112)
+        #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
+            #define MP_POINT_SIZE (292)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 12)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 12 * 6)
+            #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 12)
+        #else
+            #define MP_POINT_SIZE (220)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 9)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 9 + 3))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 5))
+        #endif
+    #endif /* WOLFBOOT_SIGN_ECC384 */
     #ifndef WC_NO_CACHE_RESISTANT
     static uint8_t mp_points_3[MP_POINT_SIZE];
     #endif
@@ -76,17 +94,31 @@ struct xmalloc_slot {
     static uint8_t mp_points_2[MP_POINT_SIZE * (16 + 1)];
     static uint8_t mp_digits_buffer_0[MP_DIGITS_BUFFER_SIZE_0];
     static uint8_t mp_digits_buffer_1[MP_DIGITS_BUFFER_SIZE_1];
-    #ifndef WOLFSSL_SP_ARM_CORTEX_M_ASM
+    #if !defined(WOLFSSL_SP_ARM_CORTEX_M_ASM) && defined(WOLFBOOT_SIGN_ECC256)
     static uint8_t mp_digits_buffer_2[MP_DIGITS_BUFFER_SIZE_2];
-    static uint8_t mp_montgomery[sizeof(int64_t) * 2 * 8];
+    static uint8_t mp_montgomery[MP_MONTGOMERY_SIZE];
+    #elif defined(WOLFBOOT_SIGN_ECC384)
+    static uint8_t mp_montgomery[MP_MONTGOMERY_SIZE];
     #endif
 #else
+    /* TFM */
     #define MP_INT_SIZE ((sizeof (fp_int)))
-    #define MP_CURVE_SPECS_SIZE (MP_INT_SIZE)
-    #define MP_CURVE_FIELD_COUNT_SIZE (380)
-    #define ECC_POINT_SIZE (228)
-    #define MP_INT_BUFFER_SIZE (MP_INT_SIZE * 6)
-    #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
+    #ifdef WOLFBOOT_SIGN_ECC256
+        #define MP_CURVE_SPECS_SIZE (MP_INT_SIZE)
+        #define MP_CURVE_FIELD_COUNT_SIZE (380)
+        #define ECC_POINT_SIZE (228)
+        #define MP_INT_BUFFER_SIZE (MP_INT_SIZE * 6)
+        #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
+    #endif
+    #ifdef WOLFBOOT_SIGN_ECC384
+        #define MP_CURVE_SPECS_SIZE (MP_INT_SIZE)
+        #define MP_CURVE_FIELD_COUNT_SIZE (380)
+        #define ECC_POINT_SIZE (516)
+        #define MP_INT_BUFFER_SIZE (MP_INT_SIZE * 5)
+        #define MP_INT_BUFFER_SIZE_1 (MP_INT_SIZE * 6)
+        #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
+    #endif
+
     static uint8_t mp_curve_field_count[MP_CURVE_FIELD_COUNT_SIZE];
     static uint8_t mp_int_v[MP_INT_SIZE];
     static uint8_t mp_int_w[MP_INT_SIZE];
@@ -103,6 +135,9 @@ struct xmalloc_slot {
     static uint8_t ecc_point4[ECC_POINT_SIZE];
     static uint8_t ecc_point5[ECC_POINT_SIZE];
     static uint8_t mp_buffer0[MP_INT_BUFFER_SIZE];
+    #ifdef WOLFBOOT_SIGN_ECC384
+    static uint8_t mp_buffer1[MP_INT_BUFFER_SIZE_1];
+    #endif
     static uint8_t mp_digits_buffer[MP_DIGIT_BUFFER_MONT_SIZE];
 #endif
 
@@ -121,6 +156,9 @@ static struct xmalloc_slot xmalloc_pool[] = {
     { (uint8_t *)mp_points_0, MP_POINT_SIZE * 2, 0 },
     #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
     { (uint8_t *)mp_points_1, MP_POINT_SIZE * 2, 0 },
+        #ifdef WOLFBOOT_SIGN_ECC384
+    { (uint8_t *)mp_montgomery, MP_MONTGOMERY_SIZE, 0 },
+        #endif
     #else
     { (uint8_t *)mp_points_1, MP_POINT_SIZE * 3, 0 },
     { (uint8_t *)mp_digits_buffer_2, MP_DIGITS_BUFFER_SIZE_2, 0 },
@@ -149,6 +187,9 @@ static struct xmalloc_slot xmalloc_pool[] = {
     { ecc_point4, ECC_POINT_SIZE, 0},
     { ecc_point5, ECC_POINT_SIZE, 0},
     { mp_buffer0, MP_INT_BUFFER_SIZE, 0},
+    #ifdef WOLFBOOT_SIGN_ECC384
+    { mp_buffer1, MP_INT_BUFFER_SIZE_1, 0},
+    #endif
     { mp_digits_buffer, MP_DIGIT_BUFFER_MONT_SIZE, 0},
 #endif
     { NULL, 0, 0}

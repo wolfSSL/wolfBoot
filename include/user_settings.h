@@ -64,10 +64,13 @@
 #endif
 
 /* ECC and SHA256 */
-#ifdef WOLFBOOT_SIGN_ECC256
+#if defined (WOLFBOOT_SIGN_ECC256) ||\
+    defined (WOLFBOOT_SIGN_ECC384) ||\
+    defined (WOLFBOOT_SIGN_ECC521)
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
-#   define FP_MAX_BITS (256 + 32)
+
+
 
 /* Kinetis LTC support */
 #   ifdef FREESCALE_USE_LTC
@@ -96,8 +99,25 @@
 /* Curve */
 #   define NO_ECC192
 #   define NO_ECC224
+#ifdef WOLFBOOT_SIGN_ECC256
 #   define HAVE_ECC256
+#   define FP_MAX_BITS (256 + 32)
 #   define NO_ECC384
+#   define NO_ECC521
+#elif defined WOLFBOOT_SIGN_ECC384
+#   define HAVE_ECC384
+#   define FP_MAX_BITS (1024 + 32)
+#   define WOLFSSL_SP_384
+#   define WOLFSSL_SP_NO_256
+#   define NO_ECC256
+#   define NO_ECC521
+#elif defined WOLFBOOT_SIGN_ECC521
+#   define HAVE_ECC521
+#   define FP_MAX_BITS (544 + 32)
+#   define NO_ECC256
+#   define NO_ECC384
+#endif
+
 #   define NO_RSA
 #   define NO_ASN
 #endif

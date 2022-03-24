@@ -51,6 +51,60 @@ ifeq ($(SIGN),ECC256)
   endif
 endif
 
+ifeq ($(SIGN),ECC384)
+  KEYGEN_OPTIONS+=--ecc384
+  SIGN_OPTIONS+=--ecc384
+  PRIVATE_KEY=ecc384.der
+  WOLFCRYPT_OBJS+= \
+    $(MATH_OBJS) \
+    ./lib/wolfssl/wolfcrypt/src/ecc.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_ECC384"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+       STACK_USAGE=5880
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=6680
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE=6056
+  else
+    STACK_USAGE=5880
+  endif
+  PUBLIC_KEY_OBJS=./src/ecc384_pub_key.o
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
+endif
+
+ifeq ($(SIGN),ECC521)
+  KEYGEN_OPTIONS+=--ecc521
+  SIGN_OPTIONS+=--ecc521
+  PRIVATE_KEY=ecc521.der
+  WOLFCRYPT_OBJS+= \
+    $(MATH_OBJS) \
+    ./lib/wolfssl/wolfcrypt/src/ecc.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_ECC521"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+       STACK_USAGE=4096
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=6680
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE=7352
+  else
+    STACK_USAGE=3896
+  endif
+  PUBLIC_KEY_OBJS=./src/ecc521_pub_key.o
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
+endif
+
 ifeq ($(SIGN),ED25519)
   KEYGEN_OPTIONS+=--ed25519
   SIGN_OPTIONS+=--ed25519

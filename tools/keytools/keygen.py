@@ -45,6 +45,8 @@ Cfile_Banner="/* Public-key file for wolfBoot, automatically generated. Do not e
 Ed25519_pub_key_define = "const uint8_t ed25519_pub_key[32] = {\n\t"
 Ed448_pub_key_define= "const uint8_t ed448_pub_key[57] = {\n\t"
 Ecc256_pub_key_define = "const uint8_t ecc256_pub_key[64] = {\n\t"
+Ecc384_pub_key_define = "const uint8_t ecc384_pub_key[96] = {\n\t"
+Ecc521_pub_key_define = "const uint8_t ecc521_pub_key[132] = {\n\t"
 Rsa_2048_pub_key_define = "const uint8_t rsa2048_pub_key[%d] = {\n\t"
 Rsa_4096_pub_key_define = "const uint8_t rsa4096_pub_key[%d] = {\n\t"
 
@@ -56,6 +58,8 @@ parser = ap.ArgumentParser(prog='keygen.py', description='wolfBoot key generatio
 parser.add_argument('--ed25519', dest='ed25519', action='store_true')
 parser.add_argument('--ed448', dest='ed448', action='store_true')
 parser.add_argument('--ecc256',  dest='ecc256', action='store_true')
+parser.add_argument('--ecc384',  dest='ecc384', action='store_true')
+parser.add_argument('--ecc521',  dest='ecc521', action='store_true')
 parser.add_argument('--rsa2048', dest='rsa2048', action='store_true')
 parser.add_argument('--rsa4096', dest='rsa4096', action='store_true')
 parser.add_argument('--force', dest='force', action='store_true')
@@ -79,6 +83,14 @@ if (args.ecc256):
     if sign is not None:
         dupsign()
     sign='ecc256'
+if (args.ecc384):
+    if sign is not None:
+        dupsign()
+    sign='ecc384'
+if (args.ecc521):
+    if sign is not None:
+        dupsign()
+    sign='ecc521'
 if (args.rsa2048):
     if sign is not None:
         dupsign()
@@ -165,16 +177,42 @@ if (sign == "ed448"):
         f.write("\n};\n")
         f.write("const uint32_t ed448_pub_key_len = 57;\n")
         f.close()
+if (sign[0:3] == 'ecc'):
+    if (sign == "ecc256"):
+        ec = ciphers.EccPrivate.make_key(32)
+        banner = Ecc256_pub_key_define
+        ecc_pub_key_len = 64
+        qx,qy,d = ec.encode_key_raw()
+        if os.path.exists(key_file) and not force:
+            choice = input("** Warning: key file already exist! Are you sure you want to "+
+                    "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
+            if (choice != "Yes, I am sure!"):
+                print("Operation canceled.")
+                sys.exit(2)
 
-if (sign == "ecc256"):
-    ec = ciphers.EccPrivate.make_key(32)
-    qx,qy,d = ec.encode_key_raw()
-    if os.path.exists(key_file) and not force:
-        choice = input("** Warning: key file already exist! Are you sure you want to "+
-                "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
-        if (choice != "Yes, I am sure!"):
-            print("Operation canceled.")
-            sys.exit(2)
+    if (sign == "ecc384"):
+        ec = ciphers.EccPrivate.make_key(48)
+        banner = Ecc384_pub_key_define
+        ecc_pub_key_len = 96
+        qx,qy,d = ec.encode_key_raw()
+        if os.path.exists(key_file) and not force:
+            choice = input("** Warning: key file already exist! Are you sure you want to "+
+                    "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
+            if (choice != "Yes, I am sure!"):
+                print("Operation canceled.")
+                sys.exit(2)
+
+    if (sign == "ecc521"):
+        ec = ciphers.EccPrivate.make_key(66)
+        banner = Ecc521_pub_key_define
+        ecc_pub_key_len = 132
+        qx,qy,d = ec.encode_key_raw()
+        if os.path.exists(key_file) and not force:
+            choice = input("** Warning: key file already exist! Are you sure you want to "+
+                    "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
+            if (choice != "Yes, I am sure!"):
+                print("Operation canceled.")
+                sys.exit(2)
 
     print()
     print("Creating file " + key_file)
@@ -186,7 +224,7 @@ if (sign == "ecc256"):
     print("Creating file " + pubkey_cfile)
     with open(pubkey_cfile, "w") as f:
         f.write(Cfile_Banner)
-        f.write(Ecc256_pub_key_define)
+        f.write(banner)
         i = 0
         for c in bytes(qx):
             f.write("0x%02X, " % c)
@@ -200,7 +238,7 @@ if (sign == "ecc256"):
                 f.write('\n')
         f.write("0x%02X" % qy[-1])
         f.write("\n};\n")
-        f.write("const uint32_t ecc256_pub_key_len = 64;\n")
+        f.write("const uint32_t %s_pub_key_len = %d;\n" % (sign, ecc_pub_key_len))
         f.close()
 
 if (sign == "rsa2048"):

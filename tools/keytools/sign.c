@@ -123,6 +123,8 @@
 #define HDR_IMG_TYPE_AUTH_RSA2048 0x0300
 #define HDR_IMG_TYPE_AUTH_RSA4096 0x0400
 #define HDR_IMG_TYPE_AUTH_ED448   0x0500
+#define HDR_IMG_TYPE_AUTH_ECC384  0x0600
+#define HDR_IMG_TYPE_AUTH_ECC521  0x0700
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 #define HDR_IMG_TYPE_DIFF         0x00D0
@@ -137,6 +139,8 @@
 #define SIGN_RSA2048   HDR_IMG_TYPE_AUTH_RSA2048
 #define SIGN_RSA4096   HDR_IMG_TYPE_AUTH_RSA4096
 #define SIGN_ED448     HDR_IMG_TYPE_AUTH_ED448
+#define SIGN_ECC384    HDR_IMG_TYPE_AUTH_ECC384
+#define SIGN_ECC521    HDR_IMG_TYPE_AUTH_ECC521
 
 
 #define ENC_OFF 0
@@ -295,8 +299,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             goto failure;
         }
         if (CMD.sign == SIGN_AUTO) {
-            CMD.sign = SIGN_ECC256;
-            printf("ecc256 key autodetected\n");
+            CMD.sign = SIGN_ECC384;
+            printf("ecc384 key autodetected\n");
         }
     }
     else if (*key_buffer_sz > 512) {
@@ -310,13 +314,15 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             CMD.sign = SIGN_RSA2048;
             printf("rsa2048 key autodetected\n");
         }
-        if (CMD.sign != SIGN_RSA2048) {
+        if ((CMD.sign != SIGN_RSA2048) && (CMD.sign != SIGN_ECC384) &&
+            (CMD.sign != SIGN_ECC521)) {
             printf("Error: key size too large for the selected cipher\n");
             goto failure;
         }
     }
     else {
-        printf("Error: key size '%d' does not match any cipher\n", *key_buffer_sz);
+        printf("Error: key size '%d' does not match any cipher\n",
+                *key_buffer_sz);
         goto failure;
     }
 
@@ -330,7 +336,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             if (ret == 0) {
                 *pubkey = *key_buffer + ED25519_KEY_SIZE;
                 *pubkey_sz = ED25519_PUB_KEY_SIZE;
-                ret = wc_ed25519_import_private_key(*key_buffer, ED25519_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed);
+                ret = wc_ed25519_import_private_key(*key_buffer,
+                        ED25519_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed);
             }
 #endif
         } else if (CMD.sign == SIGN_ED448) {
@@ -339,29 +346,53 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             if (ret == 0) {
                 *pubkey = *key_buffer + ED448_KEY_SIZE;
                 *pubkey_sz = ED448_PUB_KEY_SIZE;
-                ret = wc_ed448_import_private_key(*key_buffer, ED448_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed4);
+                ret = wc_ed448_import_private_key(*key_buffer, ED448_KEY_SIZE,
+                        *pubkey, *pubkey_sz, &key.ed4);
             }
 #endif
-        } else if (CMD.sign == SIGN_ECC256) {
 #ifdef HAVE_ECC
+        } else if (CMD.sign == SIGN_ECC256) {
             ret = wc_ecc_init(&key.ecc);
             if (ret == 0) {
-                ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer, (*key_buffer) + 32,
-                        (*key_buffer) + 64, ECC_SECP256R1);
+                ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer,
+                        (*key_buffer) + 32, (*key_buffer) + 64, ECC_SECP256R1);
                 if (ret == 0) {
                     *pubkey = *key_buffer; /* first 64 bytes is public portion */
                     *pubkey_sz = 64;
                 }
             }
+        } else if (CMD.sign == SIGN_ECC384) {
+            ret = wc_ecc_init(&key.ecc);
+            if (ret == 0) {
+                ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer,
+                        (*key_buffer) + 48, (*key_buffer) + 96, ECC_SECP384R1);
+                if (ret == 0) {
+                    *pubkey = *key_buffer; /* first 96 bytes is public portion */
+                    *pubkey_sz = 96;
+                }
+            }
+        } else if (CMD.sign == SIGN_ECC521) {
+            ret = wc_ecc_init(&key.ecc);
+            if (ret == 0) {
+                ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer,
+                        (*key_buffer) + 66, (*key_buffer) + 132, ECC_SECP521R1);
+                if (ret == 0) {
+                    *pubkey = *key_buffer; /* first 132 bytes is public portion */
+                    *pubkey_sz = 132;
+                }
+            }
+        }
 #endif
-        } else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
 #ifndef NO_RSA
+       else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
             idx = 0;
             ret = wc_InitRsaKey(&key.rsa, NULL);
             if (ret == 0) {
-                ret = wc_RsaPrivateKeyDecode(*key_buffer, &idx, &key.rsa, *key_buffer_sz);
+                ret = wc_RsaPrivateKeyDecode(*key_buffer, &idx, &key.rsa,
+                        *key_buffer_sz);
                 if (ret == 0) {
-                    ret = wc_RsaKeyToPublicDer(&key.rsa, *key_buffer, *key_buffer_sz);
+                    ret = wc_RsaKeyToPublicDer(&key.rsa, *key_buffer,
+                            *key_buffer_sz);
                     if (ret > 0) {
                         *pubkey = *key_buffer;
                         *pubkey_sz = ret;
@@ -369,8 +400,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     }
                 }
             }
-#endif
         }
+#endif
         if (ret != 0) {
             printf("Error %d loading key\n", ret);
             goto failure;
@@ -395,7 +426,8 @@ failure:
     return NULL;
 }
 
-static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, const char *image_file, const char *outfile,
+static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
+        const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint16_t patch_len, uint32_t patch_inv_off,
         uint16_t patch_inv_len)
 {
@@ -624,24 +656,45 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
             wc_InitRng(&rng);
             if (CMD.sign == SIGN_ED25519) {
 #ifdef HAVE_ED25519
-                ret = wc_ed25519_sign_msg(digest, digest_sz, signature, &CMD.signature_sz, &key.ed);
+                ret = wc_ed25519_sign_msg(digest, digest_sz, signature,
+                        &CMD.signature_sz, &key.ed);
 #endif
             }
             else if (CMD.sign == SIGN_ED448) {
 #ifdef HAVE_ED448
-                ret = wc_ed448_sign_msg(digest, digest_sz, signature, &CMD.signature_sz, &key.ed4, NULL, 0);
+                ret = wc_ed448_sign_msg(digest, digest_sz, signature,
+                        &CMD.signature_sz, &key.ed4, NULL, 0);
 #endif
             }
-            else if (CMD.sign == SIGN_ECC256) {
 #ifdef HAVE_ECC
+            else if (CMD.sign == SIGN_ECC256) {
                 mp_int r, s;
                 mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc, &r, &s);
+                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
+                        &r, &s);
                 mp_to_unsigned_bin(&r, &signature[0]);
                 mp_to_unsigned_bin(&s, &signature[32]);
                 mp_clear(&r); mp_clear(&s);
-#endif
             }
+            else if (CMD.sign == SIGN_ECC384) {
+                mp_int r, s;
+                mp_init(&r); mp_init(&s);
+                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
+                        &r, &s);
+                mp_to_unsigned_bin(&r, &signature[0]);
+                mp_to_unsigned_bin(&s, &signature[48]);
+                mp_clear(&r); mp_clear(&s);
+            }
+            else if (CMD.sign == SIGN_ECC521) {
+                mp_int r, s;
+                mp_init(&r); mp_init(&s);
+                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
+                        &r, &s);
+                mp_to_unsigned_bin(&r, &signature[0]);
+                mp_to_unsigned_bin(&s, &signature[66]);
+                mp_clear(&r); mp_clear(&s);
+            }
+#endif
             else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
 #ifndef NO_RSA
                 uint32_t enchash_sz = digest_sz;
@@ -653,10 +706,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
                         hashOID = SHA256h;
                     else if (CMD.hash_algo == HASH_SHA3)
                         hashOID = SHA3_384h;
-                    enchash_sz = wc_EncodeSignature(buf, digest, digest_sz, hashOID);
+                    enchash_sz = wc_EncodeSignature(buf, digest, digest_sz,
+                            hashOID);
                     enchash = buf;
                 }
-                ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, CMD.signature_sz,
+                ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature,
+                        CMD.signature_sz,
                         &key.rsa, &rng);
                 if (ret > 0) {
                     CMD.signature_sz = ret;
@@ -692,7 +747,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
 #endif
 
         /* Add signature to header */
-        header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz, signature);
+        header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz,
+                signature);
     } /* end if(sign != NO_SIGN) */
 
     /* Add padded header at end */
@@ -746,7 +802,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         }
         fek = fopen(CMD.encrypt_key_file, "rb");
         if (fek == NULL) {
-            fprintf(stderr, "Open encryption key file %s: %s\n", CMD.encrypt_key_file, strerror(errno));
+            fprintf(stderr, "Open encryption key file %s: %s\n",
+                    CMD.encrypt_key_file, strerror(errno));
             exit(1);
         }
         ret = fread(key, 1, keySz, fek);
@@ -763,7 +820,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
 
         fef = fopen(CMD.output_encrypted_image_file, "wb");
         if (!fef) {
-            fprintf(stderr, "Open encrypted output file %s: %s\n", CMD.encrypt_key_file, strerror(errno));
+            fprintf(stderr, "Open encrypted output file %s: %s\n",
+                    CMD.encrypt_key_file, strerror(errno));
         }
         fsize = ftell(f);
         fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
@@ -771,7 +829,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz, cons
         if (CMD.encrypt == ENC_CHACHA) {
             ChaCha cha;
 #ifndef HAVE_CHACHA
-            fprintf(stderr, "Encryption not supported: chacha support not found in wolfssl configuration.\n");
+            fprintf(stderr, "Encryption not supported: chacha support not found"
+                   "in wolfssl configuration.\n");
             exit(100);
 #endif
             wc_Chacha_SetKey(&cha, key, sizeof(key));
@@ -815,16 +874,19 @@ failure:
     return ret;
 }
 
-static int make_header(uint8_t *pubkey, uint32_t pubkey_sz, const char *image_file, const char *outfile)
+static int make_header(uint8_t *pubkey, uint32_t pubkey_sz,
+        const char *image_file, const char *outfile)
 {
     return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0);
 }
 
-static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz, const char *image_file, const char *outfile,
+static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
+        const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint16_t patch_len,
         uint32_t patch_inv_off, uint16_t patch_inv_len)
 {
-    return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile, delta_base_version, patch_len,
+    return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile,
+            delta_base_version, patch_len,
             patch_inv_off, patch_inv_len);
 }
 
@@ -1063,11 +1125,11 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
-        printf("Usage: %s [--ed25519 | --ed447 | --ecc256 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--chacha | --aes128 | --aes256] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
+        printf("Usage: %s [--ed25519 | --ed447 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--chacha | --aes128 | --aes256] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
         printf("  - or - ");
         printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
         printf("  - or - ");
-        printf("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-CMD.sign] image pub_key.der fw_version signature.sig\n", argv[0]);
+        printf("       %s [--ed25519 | --ed448 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-CMD.sign] image pub_key.der fw_version signature.sig\n", argv[0]);
         return 0;
     }
 
@@ -1086,6 +1148,14 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--ecc256") == 0) {
             CMD.sign = SIGN_ECC256;
             sign_str = "ECC256";
+        }
+        else if (strcmp(argv[i], "--ecc384") == 0) {
+            CMD.sign = SIGN_ECC384;
+            sign_str = "ECC384";
+        }
+        else if (strcmp(argv[i], "--ecc521") == 0) {
+            CMD.sign = SIGN_ECC521;
+            sign_str = "ECC521";
         }
         else if (strcmp(argv[i], "--rsa2048enc") == 0) {
             CMD.sign = SIGN_RSA2048;
@@ -1164,14 +1234,17 @@ int main(int argc, char** argv)
     if (tmpstr) {
         *tmpstr = '\0'; /* null terminate at last "." */
     }
-    snprintf(CMD.output_image_file, sizeof(CMD.output_image_file), "%s_v%s_%s.bin",
-        (char*)buf, CMD.fw_version, CMD.sha_only ? "digest" : "signed");
+    snprintf(CMD.output_image_file, sizeof(CMD.output_image_file),
+            "%s_v%s_%s.bin", (char*)buf, CMD.fw_version,
+            CMD.sha_only ? "digest" : "signed");
 
-    snprintf(CMD.output_encrypted_image_file, sizeof(CMD.output_encrypted_image_file),
+    snprintf(CMD.output_encrypted_image_file,
+            sizeof(CMD.output_encrypted_image_file),
             "%s_v%s_signed_and_encrypted.bin",
         (char*)buf, CMD.fw_version);
 
-    printf("Update type:          %s\n", CMD.self_update ? "wolfBoot" : "Firmware");
+    printf("Update type:          %s\n",
+            CMD.self_update ? "wolfBoot" : "Firmware");
     printf("Input image:          %s\n", CMD.image_file);
     printf("Selected cipher:      %s\n", sign_str);
     printf("Selected hash  :      %s\n", hash_str);
@@ -1180,7 +1253,8 @@ int main(int argc, char** argv)
     }
     if (CMD.delta) {
         printf("Delta Base file:      %s\n", CMD.delta_base_file);
-        snprintf(CMD.output_diff_file, sizeof(CMD.output_image_file), "%s_v%s_signed_diff.bin",
+        snprintf(CMD.output_diff_file, sizeof(CMD.output_image_file),
+                "%s_v%s_signed_diff.bin",
                 (char*)buf, CMD.fw_version);
 
     }
@@ -1205,6 +1279,16 @@ int main(int argc, char** argv)
         if (CMD.header_sz < 256)
             CMD.header_sz = 256;
         CMD.signature_sz = 64;
+    }
+    else if (CMD.sign == SIGN_ECC384) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        CMD.signature_sz = 96;
+    }
+    else if (CMD.sign == SIGN_ECC521) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        CMD.signature_sz = 132;
     }
     else if (CMD.sign == SIGN_RSA2048) {
         if (CMD.header_sz < 512)

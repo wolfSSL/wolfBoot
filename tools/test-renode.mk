@@ -68,6 +68,16 @@ ifeq ($(SIGN),ECC256)
   SIGN_ARGS+= --ecc256
 endif
 
+ifeq ($(SIGN),ECC384)
+  SIGN_ARGS+= --ecc384
+endif
+
+# Already supported in sign tools, not yet in wolfBoot.
+# Currently, a compile-time error is produced if selected.
+ifeq ($(SIGN),ECC521)
+  SIGN_ARGS+= --ecc521
+endif
+
 ifeq ($(SIGN),RSA2048)
   SIGN_ARGS+= --rsa2048
 endif
@@ -208,6 +218,9 @@ renode-factory-ed448: FORCE
 renode-factory-ecc256: FORCE
 	make renode-factory SIGN=ECC256
 
+renode-factory-ecc384: FORCE
+	make renode-factory SIGN=ECC384
+
 renode-factory-rsa2048: FORCE
 	make renode-factory SIGN=RSA2048
 
@@ -222,9 +235,11 @@ renode-factory-all: FORCE
 	${Q}make clean
 	${Q}make renode-factory-ecc256 RENODE_PORT=55157
 	${Q}make clean
-	${Q}make renode-factory-rsa2048 RENODE_PORT=55158
+	${Q}make renode-factory-ecc384 RENODE_PORT=55158
 	${Q}make clean
-	${Q}make renode-factory-rsa4096 RENODE_PORT=55159
+	${Q}make renode-factory-rsa2048 RENODE_PORT=55160
+	${Q}make clean
+	${Q}make renode-factory-rsa4096 RENODE_PORT=55161
 	${Q}echo All tests in $@ OK!
 
 renode-update-ed25519: FORCE
@@ -235,6 +250,9 @@ renode-update-ed448: FORCE
 
 renode-update-ecc256: FORCE
 	make renode-update SIGN=ECC256
+
+renode-update-ecc384: FORCE
+	make renode-update SIGN=ECC384
 
 renode-update-rsa2048: FORCE
 	make renode-update SIGN=RSA2048
@@ -251,6 +269,9 @@ renode-no-downgrade-ed448: FORCE
 renode-no-downgrade-ecc256: FORCE
 	make renode-no-downgrade SIGN=ECC256
 
+renode-no-downgrade-ecc384: FORCE
+	make renode-no-downgrade SIGN=ECC384
+
 renode-no-downgrade-rsa2048: FORCE
 	make renode-no-downgrade SIGN=RSA2048
 
@@ -266,6 +287,9 @@ renode-corrupted-ed448: FORCE
 renode-corrupted-ecc256: FORCE
 	make renode-corrupted SIGN=ECC256
 
+renode-corrupted-ecc384: FORCE
+	make renode-corrupted SIGN=ECC384
+
 renode-corrupted-rsa2048: FORCE
 	make renode-corrupted SIGN=RSA2048
 
@@ -280,9 +304,11 @@ renode-update-all: FORCE
 	${Q}make clean
 	${Q}make renode-update-ecc256 RENODE_PORT=55157
 	${Q}make clean
-	${Q}make renode-update-rsa2048 RENODE_PORT=55158
+	${Q}make renode-update-ecc384 RENODE_PORT=55158
 	${Q}make clean
-	${Q}make renode-update-rsa4096 RENODE_PORT=55159
+	${Q}make renode-update-rsa2048 RENODE_PORT=55160
+	${Q}make clean
+	${Q}make renode-update-rsa4096 RENODE_PORT=55161
 	${Q}echo All tests in $@ OK!
 
 renode-no-downgrade-all: FORCE
@@ -293,9 +319,11 @@ renode-no-downgrade-all: FORCE
 	${Q}make clean
 	${Q}make renode-no-downgrade-ecc256 RENODE_PORT=55157
 	${Q}make clean
-	${Q}make renode-no-downgrade-rsa2048 RENODE_PORT=55158
+	${Q}make renode-no-downgrade-ecc384 RENODE_PORT=55158
 	${Q}make clean
-	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55159
+	${Q}make renode-no-downgrade-rsa2048 RENODE_PORT=55160
+	${Q}make clean
+	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55161
 	${Q}echo All tests in $@ OK!
 
 renode-corrupted-all: FORCE
@@ -306,10 +334,24 @@ renode-corrupted-all: FORCE
 	${Q}make clean
 	${Q}make renode-corrupted-ecc256 RENODE_PORT=55157
 	${Q}make clean
-	${Q}make renode-corrupted-rsa2048 RENODE_PORT=55158
+	${Q}make renode-corrupted-ecc384 RENODE_PORT=55158
 	${Q}make clean
-	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55159
+	${Q}make renode-corrupted-rsa2048 RENODE_PORT=55160
+	${Q}make clean
+	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55161
 	${Q}echo All tests in $@ OK!
 
 renode-update-all-armored: FORCE
 	${Q}make renode-update-all ARMORED=1
+
+renode-update-all-smallstack: FORCE
+	${Q}make renode-update-all WOLFBOOT_SMALL_STACK=1
+
+renode-update-all-smallstack-noasm: FORCE
+	${Q}make renode-update-all WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+renode-update-all-fastmath: FORCE
+	${Q}make renode-update-all SPMATH=0
+
+renode-update-all-smallstack-fastmath: FORCE
+	${Q}make renode-update-all SPMATH=0 WOLFBOOT_SMALL_STACK=1

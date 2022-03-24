@@ -82,9 +82,25 @@ static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
 
 #endif
 
-#ifdef WOLFBOOT_SIGN_ECC256
+
+#if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384) \
+    || defined(WOLFBOOT_SIGN_ECC521)
+
 #include <wolfssl/wolfcrypt/ecc.h>
-#define ECC_KEY_SIZE  32
+
+#ifdef WOLFBOOT_SIGN_ECC256
+    #define ECC_KEY_SIZE  32
+    #define ECC_KEY_TYPE ECC_SECP256R1
+#endif
+#ifdef WOLFBOOT_SIGN_ECC384
+    #define ECC_KEY_SIZE  48
+    #define ECC_KEY_TYPE ECC_SECP384R1
+#endif
+#ifdef WOLFBOOT_SIGN_ECC521
+    #define ECC_KEY_SIZE  66
+    #define ECC_KEY_TYPE ECC_SECP521R1
+#endif
+
 static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, verify_res = 0;
@@ -131,7 +147,7 @@ static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
 
     /* Import public key */
     ret = wc_ecc_import_unsigned(&ecc, (byte*)KEY_BUFFER,
-        (byte*)(KEY_BUFFER + ECC_KEY_SIZE), NULL, ECC_SECP256R1);
+        (byte*)(KEY_BUFFER + ECC_KEY_SIZE), NULL, ECC_KEY_TYPE);
     if ((ret < 0) || ecc.type != ECC_PUBLICKEY) {
         /* Failed to import ecc key */
         return;

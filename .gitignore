@@ -55,6 +55,8 @@
 src/ed25519_pub_key.c
 src/ed448_pub_key.c
 src/ecc256_pub_key.c
+src/ecc384_pub_key.c
+src/ecc512_pub_key.c
 src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
 
