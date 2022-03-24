@@ -14,6 +14,10 @@ ifeq ($(SIGN),NONE)
   CFLAGS+=-DWOLFBOOT_NO_SIGN
 endif
 
+ifeq ($(IMAGE_HEADER_SIZE),)
+  IMAGE_HEADER_SIZE=256
+endif
+
 ifeq ($(WOLFBOOT_SMALL_STACK),1)
   CFLAGS+=-D"WOLFBOOT_SMALL_STACK" -D"XMALLOC_USER"
   STACK_USAGE=4096
@@ -42,7 +46,9 @@ ifeq ($(SIGN),ECC256)
     STACK_USAGE=3896
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
-  IMAGE_HEADER_SIZE?=256
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
+    IMAGE_HEADER_SIZE=256
+  endif
 endif
 
 ifeq ($(SIGN),ED25519)
@@ -59,7 +65,9 @@ ifeq ($(SIGN),ED25519)
   PUBLIC_KEY_OBJS=./src/ed25519_pub_key.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
   STACK_USAGE?=1180
-  IMAGE_HEADER_SIZE?=256
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
+    IMAGE_HEADER_SIZE=256
+  endif
 endif
 
 ifeq ($(SIGN),ED448)
@@ -85,14 +93,15 @@ ifeq ($(SIGN),ED448)
   endif
   PUBLIC_KEY_OBJS=./src/ed448_pub_key.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ED448"
-  IMAGE_HEADER_SIZE?=512
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
 endif
 
 ifeq ($(SIGN),RSA2048)
   KEYGEN_OPTIONS+=--rsa2048
   SIGN_OPTIONS+=--rsa2048
   PRIVATE_KEY=rsa2048.der
-  IMAGE_HEADER_SIZE?=512
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
@@ -115,13 +124,15 @@ ifeq ($(SIGN),RSA2048)
   else
     STACK_USAGE=12288
   endif
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
 endif
 
 ifeq ($(SIGN),RSA4096)
   KEYGEN_OPTIONS+=--rsa4096
   SIGN_OPTIONS+=--rsa4096
   PRIVATE_KEY=rsa4096.der
-  IMAGE_HEADER_SIZE?=1024
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
@@ -143,6 +154,9 @@ ifeq ($(SIGN),RSA4096)
     STACK_USAGE=69232
   else
     STACK_USAGE=18064
+  endif
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 1024; echo $$?),0)
+    IMAGE_HEADER_SIZE=1024
   endif
 endif
 
