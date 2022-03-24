@@ -48,8 +48,6 @@ ifeq ($(SIGN),ECC256)
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
-  else
-    IMAGE_HEADER_SIZE?=256
   endif
 endif
 
@@ -69,8 +67,6 @@ ifeq ($(SIGN),ED25519)
   STACK_USAGE?=1180
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
-  else
-    IMAGE_HEADER_SIZE?=256
   endif
 endif
 
@@ -99,8 +95,6 @@ ifeq ($(SIGN),ED448)
   CFLAGS+=-D"WOLFBOOT_SIGN_ED448"
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
     IMAGE_HEADER_SIZE=512
-  else
-    IMAGE_HEADER_SIZE?=512
   endif
 endif
 
@@ -132,8 +126,6 @@ ifeq ($(SIGN),RSA2048)
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
     IMAGE_HEADER_SIZE=512
-  else
-    IMAGE_HEADER_SIZE?=512
   endif
 endif
 
@@ -165,8 +157,6 @@ ifeq ($(SIGN),RSA4096)
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 1024; echo $$?),0)
     IMAGE_HEADER_SIZE=1024
-  else
-    IMAGE_HEADER_SIZE?=1024
   endif
 endif
 
