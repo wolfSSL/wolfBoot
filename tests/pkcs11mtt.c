@@ -6488,6 +6488,8 @@ int main(int argc, char* argv[])
     int closeDl = 1;
     int i;
 
+    setenv("WOLFPKCS11_NO_STORE", "1", 1);
+
     argc--;
     argv++;
     while (argc > 0) {

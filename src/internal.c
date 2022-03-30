@@ -29,8 +29,10 @@
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/hmac.h>
 #include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/asn_public.h>
 
 #include <wolfpkcs11/internal.h>
+#include <wolfpkcs11/store.h>
 
 #ifndef HAVE_SCRYPT
     #error PKCS11 requires scrypt. Please build wolfssl with `./configure --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP"`
@@ -564,6 +566,1278 @@ static void wp11_Session_Final(WP11_Session* session)
 #endif
 }
 
+#ifndef WOLFPKCS11_NO_STORE
+#ifndef WOLFPKCS11_CUSTOM_STORE
+/* Functions that handle storing data. */
+
+/**
+ * Opens access to location to read/write token data.
+ *
+ * @param [in]   type   Type of data to be stored. See WOLFPKCS11_STORE_*.
+ * @param [in]   id1    Numeric identifier 1.
+ * @param [in]   id2    Numeric identifier 2.
+ * @param [in]   read   1 when opening for read and 0 for write.
+ * @param [out]  store  Returns file pointer.
+ * @return  0 on success.
+ * @return  NOT_AVAILABLE_E when data not available.
+ * @return  Other value to indicate failure.
+ */
+int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
+    void** store)
+{
+    int ret = 0;
+    char name[120] = "\0";
+    XFILE file;
+    const char* str;
+
+    str = XGETENV("WOLFPKCS11_NO_STORE");
+    if (str != NULL) {
+        return NOT_AVAILABLE_E;
+    }
+    str = XGETENV("WOLFPKCS11_TOKEN_PATH");
+    if (str == NULL) {
+        str = "/tmp";
+    }
+    /* 47 is maximum number of character to a filename and path separator. */
+    else if (XSTRLEN(str) > sizeof(name) - 47) {
+       return -1;
+    }
+
+    /* Set different filename for each type of data and differnt ids. */
+    switch (type) {
+        case WOLFPKCS11_STORE_TOKEN:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_token_%016lx", str, id1);
+            break;
+        case WOLFPKCS11_STORE_OBJECT:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_obj_%016lx_%016lx", str, id1,
+                      id2);
+            break;
+        case WOLFPKCS11_STORE_SYMMKEY:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_symmkey_%016lx_%016lx", str,
+                      id1, id2);
+            break;
+        case WOLFPKCS11_STORE_RSAKEY:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_rsakey_%016lx_%016lx", str,
+                      id1, id2);
+            break;
+        case WOLFPKCS11_STORE_ECCKEY:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_ecckey_%016lx_%016lx", str,
+                      id1, id2);
+            break;
+        case WOLFPKCS11_STORE_DHKEY:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_dhkey_%016lx_%016lx", str,
+                      id1, id2);
+            break;
+        default:
+            ret = -1;
+            break;
+    }
+
+    /* Open file for read or write. */
+    if (ret == 0) {
+        if (read) {
+            file = XFOPEN(name, "r");
+            if (file == NULL) {
+                ret = NOT_AVAILABLE_E;
+            }
+        }
+        else {
+            file = XFOPEN(name, "w");
+            if (file == NULL) {
+                ret = READ_ONLY_E;
+            }
+        }
+    }
+
+    if (ret == 0) {
+        /* Return the file pointer. */
+        *store = file;
+    }
+
+    return ret;
+}
+
+/**
+ * Closes access to location being read or written.
+ * Any dynamic memory associated with the store is freed here.
+ *
+ * @param [in]  store  Context for operation.
+ */
+void wolfPKCS11_Store_Close(void* store)
+{
+    XFILE file = (XFILE)store;
+    /* Close a valid file pointer. */
+    if (store != XBADFILE) {
+        XFCLOSE(file);
+    }
+}
+
+/**
+ * Reads a specific number of bytes into buffer.
+ *
+ * @param [in]       store   Context for operation.
+ * @param [in, out]  buffer  Buffer to hold data read.
+ * @param [in]       len     Length of data required.
+ * @return  Length of data read into buffer.
+ * @return  -ve to indicate failure.
+ */
+int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
+{
+    int ret;
+    XFILE file = (XFILE)store;
+
+    /* Read from a valid file pointer. */
+    if (store != XBADFILE) {
+        ret = XFREAD(buffer, 1, len, file);
+    }
+    else {
+        ret = BUFFER_E;
+    }
+
+    return ret;
+}
+
+/**
+ * Writes a specific number of bytes from buffer.
+ *
+ * @param [in]  store   Context for operation.
+ * @param [in]  buffer  Data to write.
+ * @param [in]  len     Length of data to write.
+ * @return  Length of data written into buffer.
+ * @return  -ve to indicate failure.
+ */
+int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
+{
+    int ret;
+    XFILE file = (XFILE)store;
+
+    /* Write to a valid file pointer. */
+    if (store != XBADFILE) {
+        ret = XFWRITE(buffer, 1, len, file);
+    }
+    else {
+        ret = BUFFER_E;
+    }
+
+    return ret;
+}
+#endif
+
+/*
+ * Opens access to location to read/write token data.
+ *
+ * @param [in]   type   Type of data to be stored. See WOLFPKCS11_STORE_*.
+ * @param [in]   id1    Numeric identifier 1.
+ * @param [in]   id2    Numeric identifier 2.
+ * @param [in]   read   1 when opening for read and 0 for write.
+ * @param [out]  store  Returns pointer to context data.
+ * @return  0 on success.
+ * @return  NOT_AVAILABLE_E when data not available.
+ * @return  Other value to indicate failure.
+ */
+static int wp11_storage_open(int type, CK_ULONG id1, CK_ULONG id2, int read,
+                             void** storage)
+{
+    return wolfPKCS11_Store_Open(type, id1, id2, read, storage);
+}
+
+/*
+ * Closes access to location being read or written.
+ * Any dynamic memory associated with the store is freed here.
+ *
+ * @param [in]  store  Context for operation.
+ */
+static void wp11_storage_close(void* storage)
+{
+    wolfPKCS11_Store_Close(storage);
+}
+
+/**
+ * Reads a specific number of bytes into buffer.
+ *
+ * @param [in]       store   Context for operation.
+ * @param [in, out]  buffer  Buffer to hold data read.
+ * @param [in]       len     Length of data required.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read(void* storage, unsigned char* buffer, int len)
+{
+    int ret = 0;
+    unsigned char* p = buffer;
+
+    /* Keep reading until no data returned, error or full. */
+    while (len > 0) {
+        ret = wolfPKCS11_Store_Read(storage, p, len);
+        if (ret <= 0) {
+            break;
+        }
+        len -= ret;
+        p += ret;
+    }
+    if (len == 0) {
+        /* All read successfully. */
+        ret = 0;
+    }
+    else if (ret == 0) {
+        /* Failed to read all data. */
+        ret = BUFFER_E;
+    }
+
+    return ret;
+}
+
+/**
+ * Writes a specific number of bytes from buffer.
+ *
+ * @param [in]  store   Context for operation.
+ * @param [in]  buffer  Data to write.
+ * @param [in]  len     Length of data to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write(void* storage, unsigned char* buffer, int len)
+{
+    int ret = 0;
+    unsigned char* p = buffer;
+
+    /* Keep writing until no data written, error or all written. */
+    while (len > 0) {
+        ret = wolfPKCS11_Store_Write(storage, p, len);
+        if (ret <= 0) {
+            break;
+        }
+        len -= ret;
+        p += ret;
+    }
+    if (len == 0) {
+        /* All written successfully. */
+        ret = 0;
+    }
+    else if (ret == 0) {
+        /* Failed to write all data. */
+        ret = BUFFER_E;
+    }
+
+    return ret;
+}
+
+/**
+ * Read a boolean value.
+ *
+ * @param [in]       store  Context for operation.
+ * @param [in, out]  val    Boolean value read.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read_boolean(void* storage, byte* val)
+{
+    return wp11_storage_read(storage, val, sizeof(byte));
+}
+
+/**
+ * Write a boolean value.
+ *
+ * @param [in]  store  Context for operation.
+ * @param [in]  val    Boolean value to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_boolean(void* storage, byte val)
+{
+     return wp11_storage_write(storage, &val, sizeof(byte));
+}
+
+/**
+ * Read an integer value.
+ *
+ * @param [in]       store  Context for operation.
+ * @param [in, out]  val    Integer value read.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read_int(void* storage, int* val)
+{
+    int ret;
+    unsigned char num[sizeof(int)];
+    int i;
+
+    /* Read big-endian byte array. */
+    ret = wp11_storage_read(storage, num, sizeof(num));
+    if (ret == 0) {
+        /* Convert to integer. */
+        *val = num[0];
+        for (i = 1; i < (int)sizeof(num); i++) {
+            *val <<= 8;
+            *val += num[i];
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Write an integer value.
+ *
+ * @param [in]  store  Context for operation.
+ * @param [in]  val    Integer value to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_int(void* storage, int val)
+{
+    unsigned char num[sizeof(int)];
+    int i;
+
+    /* Convert integer to big-endian byte array. */
+    for (i = 0; i < (int)sizeof(num); i++) {
+        num[i] = val >> ((sizeof(num) - 1 - i) * 8);
+    }
+
+    /* Write big-endian byte array. */
+    return wp11_storage_write(storage, num, sizeof(num));
+}
+
+/**
+ * Read an unsigned 32-bit value.
+ *
+ * @param [in]       store  Context for operation.
+ * @param [in, out]  val    Unsigned 32-bit value read.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read_word32(void* storage, word32* val)
+{
+    int ret;
+    unsigned char num[4];
+
+    /* Read big-endian byte array. */
+    ret = wp11_storage_read(storage, num, sizeof(num));
+    if (ret == 0) {
+        /* Convert to 32-bit value. */
+        *val = ((int)num[0] << 24) |
+               ((int)num[1] << 16) |
+               ((int)num[2] <<  8) |
+               ((int)num[3] <<  0);
+    }
+
+    return ret;
+}
+
+/**
+ * Write an unsigned 32-bit value.
+ *
+ * @param [in]  store  Context for operation.
+ * @param [in]  val    Unsigned 32-bit value to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_word32(void* storage, word32 val)
+{
+    unsigned char num[sizeof(word32)];
+    int i;
+
+    /* Convert unsigned 32-bit number to big-endian byte array. */
+    for (i = 0; i < (int)sizeof(num); i++) {
+        num[i] = val >> ((sizeof(num) - 1 - i) * 8);
+    }
+
+    /* Write big-endian byte array. */
+    return wp11_storage_write(storage, num, sizeof(num));
+}
+
+/**
+ * Read an unsigned long value.
+ *
+ * @param [in]       store  Context for operation.
+ * @param [in, out]  val    Unsigned long value read.
+ * @return  0 on success.
+ */
+static int wp11_storage_read_ulong(void* storage, CK_ULONG* val)
+{
+    int ret;
+    unsigned char num[sizeof(CK_ULONG)];
+    int i;
+
+    /* Read big-endian byte array. */
+    ret = wp11_storage_read(storage, num, sizeof(num));
+    if (ret == 0) {
+        /* Convert to unsigned long value. */
+        *val = num[0];
+        for (i = 1; i < (int)sizeof(num); i++) {
+            *val <<= 8;
+            *val += num[i];
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Write an unsigned long value.
+ *
+ * @param [in]  store  Context for operation.
+ * @param [in]  val    Unsigned long value to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_ulong(void* storage, CK_ULONG val)
+{
+    unsigned char num[sizeof(CK_ULONG)];
+    int i;
+
+    /* Convert unsigned long number to big-endian byte array. */
+    for (i = 0; i < (int)sizeof(num); i++) {
+        num[i] = val >> ((sizeof(num) - 1 - i) * 8);
+    }
+
+    /* Write big-endian byte array. */
+    return wp11_storage_write(storage, num, sizeof(num));
+}
+
+/**
+ * Read a time_t value.
+ *
+ * @param [in]       store  Context for operation.
+ * @param [in, out]  val    time_t value read.
+ * @return  0 on success.
+ */
+static int wp11_storage_read_time(void* storage, time_t* timeVal)
+{
+    int ret;
+    unsigned char num[sizeof(time_t)];
+    int i;
+
+    /* Read big-endian byte array. */
+    ret = wp11_storage_read(storage, num, sizeof(num));
+    if (ret == 0) {
+        /* Convert to time_t value. */
+        *timeVal = num[0];
+        for (i = 1; i < (int)sizeof(num); i++) {
+            *timeVal <<= 8;
+            *timeVal += num[i];
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Write an unsigned long value.
+ *
+ * @param [in]  store  Context for operation.
+ * @param [in]  val    Unsigned long value to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_time(void* storage, time_t timeVal)
+{
+    unsigned char num[sizeof(time_t)];
+    int i;
+
+    /* Convert time_t number to big-endian byte array. */
+    for (i = 0; i < (int)sizeof(num); i++) {
+        num[i] = timeVal >> ((sizeof(num) - 1 - i) * 8);
+    }
+
+    /* Write big-endian byte array. */
+    return wp11_storage_write(storage, num, sizeof(num));
+}
+
+/**
+ * Read an array of bytes with a fixed length.
+ *
+ * @param [in]       store   Context for operation.
+ * @param [in, out]  buffer  Buffer to hold data read.
+ * @param [in]       len     Length of data to read.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read_fixed_array(void* storage,
+                                         unsigned char* buffer, int len)
+{
+    return wp11_storage_read(storage, buffer, len);
+}
+
+/**
+ * Write an array of bytes with a fixed length.
+ *
+ * @param [in]  store   Context for operation.
+ * @param [in]  buffer  Data to write.
+ * @param [in]  len     Length of data to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_fixed_array(void* storage,
+                                          unsigned char* buffer, int len)
+{
+    return wp11_storage_write(storage, buffer, len);
+}
+
+/**
+ * Read an array of bytes with variable length.
+ *
+ * @param [in]       store   Context for operation.
+ * @param [in, out]  buffer  Buffer to hold data read.
+ * @param [in, out]  len     Length of data read.
+ * @param [in]       max     Length of buffer.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read_array(void* storage, unsigned char* buffer,
+                                   word32* len, word32 max)
+{
+    int ret;
+
+    /* Read length of array. */
+    ret = wp11_storage_read_word32(storage, len);
+    if (ret == 0 && *len > max) {
+        ret = BUFFER_E;
+    }
+    if (ret == 0) {
+        /* Read array data. */
+        ret = wp11_storage_read(storage, buffer, *len);
+    }
+
+    return ret;
+}
+
+/**
+ * Write an array of bytes with variable length.
+ *
+ * @param [in]  store   Context for operation.
+ * @param [in]  buffer  Data to write.
+ * @param [in]  len     Length of data to write.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_array(void* storage,
+                                    unsigned char* buffer, word32 len)
+{
+    int ret;
+
+    /* Write length of array. */
+    ret = wp11_storage_write_word32(storage, len);
+    if (ret == 0) {
+        /* Write array. */
+        ret = wp11_storage_write(storage, buffer, len);
+    }
+
+    return ret;
+}
+
+/**
+ * Read an array of bytes with variable length and allocate buffer to hold it.
+ *
+ * @param [in]       store   Context for operation.
+ * @param [in, out]  buffer  Buffer to hold data read.
+ * @param [in]       len     Length of data to read.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+static int wp11_storage_read_alloc_array(void* storage,
+                                         unsigned char** buffer, int* len)
+{
+    int ret;
+
+    /* Read length of array. */
+    ret = wp11_storage_read_int(storage, len);
+    if (ret == 0) {
+        /* Allocate buffer to hold data. */
+        *buffer = XMALLOC(*len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        if (*buffer == NULL)
+            ret = MEMORY_E;
+    }
+    if (ret == 0) {
+        /* Read array data into allocated buffer. */
+        ret = wp11_storage_read(storage, *buffer, *len);
+        if (ret != 0) {
+            XFREE(*buffer, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            *buffer = NULL;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Read a string.
+ *
+ * @param [in]       store  Context for operation.
+ * @param [in, out]  str    Buffer to hold string.
+ * @param [in]       max    Maximum length allowed for string.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_read_string(void* storage, char* str, int max)
+{
+    return wp11_storage_read(storage, (unsigned char*)str, max);
+}
+
+/**
+ * Write an array of bytes with variable length.
+ *
+ * @param [in]  store  Context for operation.
+ * @param [in]  str    String to write.
+ * @param [in]  max    Maximum length of string.
+ * @return  0 on success.
+ * @return  BUFFER_E to indicate failure.
+ */
+static int wp11_storage_write_string(void* storage, char* str, int max)
+{
+    return wp11_storage_write(storage, (unsigned char *)str, max);
+}
+#endif
+
+/**
+ * Create a new Object object.
+ *
+ * @param  slot     [in]   Slot object.
+ * @param  type     [in]   Type of Object.
+ * @param  object   [out]  New Object object.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ *          0 on success.
+ */
+static int wp11_Object_New(WP11_Slot* slot, CK_KEY_TYPE type,
+                           WP11_Object** object)
+{
+    int ret = 0;
+    WP11_Object* obj = NULL;
+
+    obj = XMALLOC(sizeof(*obj), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (obj == NULL)
+        ret = MEMORY_E;
+
+    if (ret == 0) {
+        XMEMSET(obj, 0, sizeof(*obj));
+        obj->type = type;
+        obj->onToken = 0;
+        obj->slot = slot;
+        obj->keyGenMech = CK_UNAVAILABLE_INFORMATION;
+
+        *object = obj;
+    }
+
+    return ret;
+}
+
+/**
+ * Create a new Object object.
+ *
+ * @param  session  [in]   Session object.
+ * @param  type     [in]   Type of Object.
+ * @param  object   [out]  New Object object.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ *          0 on success.
+ */
+int WP11_Object_New(WP11_Session* session, CK_KEY_TYPE type,
+                    WP11_Object** object)
+{
+    return wp11_Object_New(session->slot, type, object);
+}
+
+#ifndef WOLFSSL_NO_STOGE
+#ifndef NO_RSA
+/**
+ * Load an RSA key from storage.
+ *
+ * @param [in, out]  object   RSA key object.
+ * @param [in]       tokenId  Id of token this key belongs to.
+ * @param [in]       objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Object_Load_RsaKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+    unsigned char* der = NULL;
+    int len;
+    word32 idx = 0;
+
+    /* Open access to RSA key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_RSAKEY, tokenId, objId, 1,
+                            &storage);
+    if (ret == 0) {
+        /* Read of DER encoded RSA key. */
+        ret = wp11_storage_read_alloc_array(storage, &der, &len);
+        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+            /* Decode RSA private key. */
+            ret = wc_RsaPrivateKeyDecode(der, &idx, &object->data.rsaKey, len);
+        }
+        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+            /* Decode RSA public key. */
+            ret = wc_RsaPublicKeyDecode(der, &idx, &object->data.rsaKey, len);
+        }
+        if (der != NULL) {
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        }
+
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+
+/**
+ * Store an RSA key to storage.
+ *
+ * @param [in]  object   RSA key object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @param [in]  objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+    unsigned char* der = NULL;
+    word32 len;
+
+    /* Open access to RSA key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_RSAKEY, tokenId, objId, 0,
+                            &storage);
+    if (ret == 0) {
+        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+            /* Get length of encoded private key. */
+            ret = wc_RsaKeyToDer(&object->data.rsaKey, NULL, 0);
+            if (ret >= 0) {
+                len = ret;
+                ret = 0;
+            }
+        }
+        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+            /* Get length of encoded public key. */
+            ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, NULL, 0);
+            if (ret >= 0) {
+                len = ret;
+                ret = 0;
+            }
+        }
+        if (ret == 0) {
+            /* Allocate buffer to hold encoded key. */
+            der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            if (der == NULL)
+                ret = MEMORY_E;
+        }
+        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+            /* Encode private key. */
+            ret = wc_RsaKeyToDer(&object->data.rsaKey, der, len);
+            if (ret >= 0) {
+                ret = 0;
+            }
+        }
+        else if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+            /* Encode public key. */
+            ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, der, len);
+            if (ret >= 0) {
+                ret = 0;
+            }
+        }
+        if (ret == 0) {
+            /* Write encoded RSA key to storage. */
+            ret = wp11_storage_write_array(storage, der, len);
+        }
+        if (der != NULL) {
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        }
+
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+#endif
+
+#ifdef HAVE_ECC
+/**
+ * Load an ECC key from storage.
+ *
+ * @param [in, out]  object   ECC key object.
+ * @param [in]       tokenId  Id of token this key belongs to.
+ * @param [in]       objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Object_Load_EccKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+    unsigned char* der = NULL;
+    int len;
+    word32 idx = 0;
+
+    /* Open access to ECC key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_ECCKEY, tokenId, objId, 1,
+                            &storage);
+    if (ret == 0) {
+        /* Read DER encoded ECC key. */
+        ret = wp11_storage_read_alloc_array(storage, &der, &len);
+        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+            /* Decode EC private key. */
+            ret = wc_EccPrivateKeyDecode(der, &idx, &object->data.ecKey, len);
+        }
+        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+            /* Decode EC public key. */
+            ret = wc_EccPublicKeyDecode(der, &idx, &object->data.ecKey, len);
+        }
+        if (der != NULL) {
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        }
+
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+
+/**
+ * Store an ECC key to storage.
+ *
+ * @param [in]  object   ECC key object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @param [in]  objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+    unsigned char* der = NULL;
+    word32 len = 0;
+
+    /* Open access to ECC key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_ECCKEY, tokenId, objId, 0,
+                            &storage);
+    if (ret == 0) {
+        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+            /* Get length of encoded private key. */
+            ret = wc_EccKeyDerSize(&object->data.ecKey, 0);
+            if (ret >= 0) {
+                len = ret;
+                ret = 0;
+            }
+        }
+        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+            /* Get length of encoded public key. */
+            ret = wc_EccPublicKeyToDer(&object->data.ecKey, NULL, 0, 1);
+            if (ret >= 0) {
+                len = ret;
+                ret = 0;
+            }
+        }
+        if (ret == 0) {
+            /* Allocate buffer to hold encoded key. */
+            der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            if (der == NULL)
+                ret = MEMORY_E;
+        }
+        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+            /* Encode private key. */
+            ret = wc_EccPrivateKeyToDer(&object->data.ecKey, der, len);
+            if (ret >= 0) {
+                ret = 0;
+            }
+        }
+        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+            /* Encode public key. */
+            ret = wc_EccPublicKeyToDer(&object->data.ecKey, der, len, 1);
+            if (ret >= 0) {
+                ret = 0;
+            }
+        }
+        if (ret == 0) {
+            /* Write encoded ECC key to storage. */
+            ret = wp11_storage_write_array(storage, der, len);
+        }
+        if (der != NULL) {
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        }
+
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+#endif
+
+#ifndef NO_DH
+/**
+ * Load an DH key from storage.
+ *
+ * @param [in, out]  object   DH key object.
+ * @param [in]       tokenId  Id of token this key belongs to.
+ * @param [in]       objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Object_Load_DhKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+    unsigned char* der = NULL;
+    int len;
+    word32 idx = 0;
+
+    /* Open access to DH key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_DHKEY, tokenId, objId, 1,
+                            &storage);
+    if (ret == 0) {
+        /* Read DH key. */
+        ret = wp11_storage_read_array(storage, object->data.dhKey.key,
+            &object->data.dhKey.len, WP11_MAX_DH_KEY_SZ);
+        if (ret == 0) {
+            /* Read DER encoded DH parameters. */
+            ret = wp11_storage_read_alloc_array(storage, &der, &len);
+        }
+        if (ret == 0) {
+            /* Decode DH parameters. */
+            ret = wc_DhKeyDecode(der, &idx, &object->data.dhKey.params, len);
+        }
+        if (der != NULL) {
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        }
+
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+
+/**
+ * Store an DH key to storage.
+ *
+ * @param [in]  object   DH key object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @param [in]  objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Object_Store_DhKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+    unsigned char* der = NULL;
+    word32 len;
+
+    /* Open access to DH key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_DHKEY, tokenId, objId, 0,
+                            &storage);
+    if (ret == 0) {
+        ret = wp11_storage_write_array(storage, object->data.dhKey.key,
+                                                        object->data.dhKey.len);
+        if (ret == 0) {
+            /* Get length of encoded DH parameters. */
+            ret = wc_DhParamsToDer(&object->data.dhKey.params, NULL, &len);
+            if (ret == LENGTH_ONLY_E) {
+                ret = 0;
+            }
+        }
+        if (ret == 0) {
+            /* Allocate buffer to hold encoded key. */
+            der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            if (der == NULL)
+                ret = MEMORY_E;
+        }
+        if (ret == 0) {
+            /* Encode DH parameters. */
+            ret = wc_DhParamsToDer(&object->data.dhKey.params, der, &len);
+            if (ret >= 0) {
+                ret = 0;
+            }
+        }
+        if (ret == 0) {
+            /* Write encoded DH parameters to storage. */
+            ret = wp11_storage_write_array(storage, der, len);
+        }
+        if (der != NULL) {
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        }
+
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+#endif
+
+/**
+ * Load an symmetric key from storage.
+ *
+ * @param [in, out]  object   Symmetric key object.
+ * @param [in]       tokenId  Id of token this key belongs to.
+ * @param [in]       objId    Id of object for token.
+ * @return  0 on success.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Object_Load_SymmKey(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+
+    /* Open access to symmetric key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_SYMMKEY, tokenId, objId, 1,
+                            &storage);
+    if (ret == 0) {
+        /* Read symmetric key from storage. */
+        ret = wp11_storage_read_array(storage, object->data.symmKey.data,
+            &object->data.symmKey.len, WP11_MAX_SYM_KEY_SZ);
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+
+/**
+ * Store a symmetric key to storage.
+ *
+ * @param [in]  object   Symmetric key object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @param [in]  objId    Id of object for token.
+ * @return  0 on success.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Object_Store_SymmKey(WP11_Object* object, int tokenId,
+                                     int objId)
+{
+    int ret;
+    void* storage = NULL;
+
+    /* Open access to symmetric key. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_SYMMKEY, tokenId, objId, 0,
+                            &storage);
+    if (ret == 0) {
+        /* Write symmetric key to storage. */
+        ret = wp11_storage_write_array(storage, object->data.symmKey.data,
+                                       object->data.symmKey.len);
+        wp11_storage_close(storage);
+    }
+
+    return ret;
+}
+
+/**
+ * Load a key object from storage.
+ *
+ * @param [in, out]  object   Key object.
+ * @param [in]       tokenId  Id of token this key belongs to.
+ * @param [in]       objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Object_Load(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+
+    /* Open access to key object. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 1,
+                            &storage);
+    if (ret == 0) {
+        /* Read object class. */
+        ret = wp11_storage_read_ulong(storage, &object->objClass);
+        if (ret == 0) {
+            /* Read key gen mechanism. */
+            ret = wp11_storage_read_ulong(storage, &object->keyGenMech);
+        }
+        if (ret == 0) {
+            /* Read whether the object is on a token. */
+            byte onToken = 0;
+            ret = wp11_storage_read_boolean(storage, &onToken);
+            if (ret == 0) {
+                object->onToken = onToken;
+            }
+        }
+        if (ret == 0) {
+            /* Read whether the object is local. */
+            byte local = 0;
+            ret = wp11_storage_read_boolean(storage, &local);
+            if (ret == 0) {
+                object->local = local;
+            }
+        }
+        if (ret == 0) {
+            /* Read the flags of the object. */
+            ret = wp11_storage_read_word32(storage, &object->flag);
+        }
+        if (ret == 0) {
+            /* Read the operational flags of the object. */
+            ret = wp11_storage_read_word32(storage, &object->opFlag);
+        }
+        if (ret == 0) {
+            /* Read the start date. */
+            ret = wp11_storage_read_fixed_array(storage,
+                                          (unsigned char*)object->startDate, 8);
+        }
+        if (ret == 0) {
+            /* Read the end date. */
+            ret = wp11_storage_read_fixed_array(storage,
+                                            (unsigned char*)object->endDate, 8);
+        }
+
+        if (ret == 0) {
+            /* Read id for the object. */
+            ret = wp11_storage_read_alloc_array(storage, &object->keyId,
+                                                &object->keyIdLen);
+        }
+        if (ret == 0) {
+            /* Read label for the object. */
+            ret = wp11_storage_read_alloc_array(storage, &object->label,
+                                                &object->labelLen);
+        }
+
+        wp11_storage_close(storage);
+    }
+    if (ret == 0) {
+        /* Load separate key data. */
+        switch (object->type) {
+    #ifndef NO_RSA
+            case CKK_RSA:
+                ret = wp11_Object_Load_RsaKey(object, tokenId, objId);
+                break;
+    #endif
+    #ifdef HAVE_ECC
+            case CKK_EC:
+                ret = wp11_Object_Load_EccKey(object, tokenId, objId);
+                break;
+    #endif
+    #ifndef NO_DH
+            case CKK_DH:
+                ret = wp11_Object_Load_DhKey(object, tokenId, objId);
+                break;
+    #endif
+    #ifndef NO_AES
+            case CKK_AES:
+    #endif
+            case CKK_GENERIC_SECRET:
+                ret = wp11_Object_Load_SymmKey(object, tokenId, objId);
+                break;
+            default:
+                ret = NOT_AVAILABLE_E;
+        }
+    }
+
+    return ret;
+}
+
+/**
+ * Store a key object to storage.
+ *
+ * @param [in]  object   Key object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @param [in]  objId    Id of object for token.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
+{
+    int ret;
+    void* storage = NULL;
+
+    /* Open access to key object. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 0,
+                            &storage);
+    if (ret == 0) {
+        /* Write object class. */
+        ret = wp11_storage_write_ulong(storage, object->objClass);
+        if (ret == 0) {
+            /* Write key gen mechanism. */
+            ret = wp11_storage_write_ulong(storage, object->keyGenMech);
+        }
+        if (ret == 0) {
+            /* Write whether the object is on a token. */
+            ret = wp11_storage_write_boolean(storage, object->onToken);
+        }
+        if (ret == 0) {
+            /* Write whether the object is local. */
+            ret = wp11_storage_write_boolean(storage, object->local);
+        }
+        if (ret == 0) {
+            /* Write the flags of the object. */
+            ret = wp11_storage_write_word32(storage, object->flag);
+        }
+        if (ret == 0) {
+            /* Write the operational flags of the object. */
+            ret = wp11_storage_write_word32(storage, object->opFlag);
+        }
+        if (ret == 0) {
+            /* Write the start date. */
+            ret = wp11_storage_write_fixed_array(storage,
+                                          (unsigned char*)object->startDate, 8);
+        }
+        if (ret == 0) {
+            /* Write the end date. */
+            ret = wp11_storage_write_fixed_array(storage,
+                                            (unsigned char*)object->endDate, 8);
+        }
+
+        if (ret == 0) {
+            /* Write id of the object. */
+            ret = wp11_storage_write_array(storage, object->keyId,
+                                                              object->keyIdLen);
+        }
+        if (ret == 0) {
+            /* Write label of the object. */
+            ret = wp11_storage_write_array(storage, object->label,
+                                                              object->labelLen);
+        }
+
+        wp11_storage_close(storage);
+    }
+    if (ret == 0) {
+        /* Store key data separately. */
+        switch (object->type) {
+    #ifndef NO_RSA
+            case CKK_RSA:
+                ret = wp11_Object_Store_RsaKey(object, tokenId, objId);
+                break;
+    #endif
+    #ifdef HAVE_ECC
+            case CKK_EC:
+                ret = wp11_Object_Store_EccKey(object, tokenId, objId);
+                break;
+    #endif
+    #ifndef NO_DH
+            case CKK_DH:
+                ret = wp11_Object_Store_DhKey(object, tokenId, objId);
+                break;
+    #endif
+    #ifndef NO_AES
+            case CKK_AES:
+    #endif
+            case CKK_GENERIC_SECRET:
+                ret = wp11_Object_Store_SymmKey(object, tokenId, objId);
+                break;
+            default:
+                ret = NOT_AVAILABLE_E;
+        }
+    }
+
+    return ret;
+}
+#endif
+
 /**
  * Initialize the token.
  *
@@ -607,6 +1881,227 @@ static void wp11_Token_Final(WP11_Token* token)
     WP11_Lock_Free(&token->lock);
     XMEMSET(token, 0, sizeof(*token));
 }
+
+#ifndef WOLFSSL_NO_STORE
+/**
+ * Load a token from storage.
+ *
+ * @param [in, out]  object   Token object.
+ * @param [in]       tokenId  Id of token this key belongs to.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Token_Load(WP11_Slot* slot, int tokenId, WP11_Token* token)
+{
+    int ret;
+    int i;
+    void* storage = NULL;
+    WP11_Object* object;
+    WP11_Object** current;
+    int objCnt = 0;
+    word32 len;
+
+    /* Open access to token object. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_TOKEN, tokenId, 0, 1, &storage);
+    if (ret == 0) {
+        /* Read label for token. */
+        ret = wp11_storage_read_string(storage, token->label, LABEL_SZ);
+        if (ret == 0) {
+            /* Read Security Officer's PIN. */
+            ret = wp11_storage_read_array(storage, token->soPin, &len,
+                                          PIN_HASH_SZ);
+        }
+        if (ret == 0) {
+            /* Read Security Officer's PIN seed. */
+            token->soPinLen = len;
+            ret = wp11_storage_read_fixed_array(storage, token->soPinSeed,
+                                                PIN_SEED_SZ);
+        }
+        if (ret == 0) {
+            /* Read Security Officer's failed login count. */
+            ret = wp11_storage_read_int(storage, &token->soFailedLogin);
+        }
+        if (ret == 0) {
+            /* Read time of last failed login as Security Officer. */
+            ret = wp11_storage_read_time(storage, &token->soLastFailedLogin);
+        }
+        if (ret == 0) {
+            /* Read failed login timout for Security Officer. */
+            ret = wp11_storage_read_time(storage, &token->soFailLoginTimeout);
+        }
+        if (ret == 0) {
+            /* Read User's PIN. */
+            ret = wp11_storage_read_array(storage, token->userPin, &len,
+                                          PIN_HASH_SZ);
+        }
+        if (ret == 0) {
+            /* Read User's PIN seed. */
+            token->userPinLen = len;
+            ret = wp11_storage_read_fixed_array(storage, token->userPinSeed,
+                                                PIN_SEED_SZ);
+        }
+        if (ret == 0) {
+            /* Read User's failed login count. */
+            ret = wp11_storage_read_int(storage, &token->userFailedLogin);
+        }
+        if (ret == 0) {
+            /* Read time of last failed login as User. */
+            ret = wp11_storage_read_time(storage, &token->userLastFailedLogin);
+        }
+        if (ret == 0) {
+            /* Read failed login timout for User. */
+            ret = wp11_storage_read_time(storage, &token->userFailLoginTimeout);
+        }
+
+        if (ret == 0) {
+            /* Read count of object on token. */
+            ret = wp11_storage_read_int(storage, &objCnt);
+        }
+        /* Create an objects. */
+        current = &token->object;
+        for (i = 0; (ret == 0) && (i < objCnt); i++) {
+            CK_KEY_TYPE type;
+
+            /* Read type of key object for creation of key object. */
+            ret = wp11_storage_read_ulong(storage, &type);
+            if (ret == 0) {
+                object = NULL;
+                ret = wp11_Object_New(slot, type, &object);
+            }
+            if (ret == 0) {
+                object->lock = &token->lock;
+                /* Add to end of list. */
+                *current = object;
+                current = &object->next;
+                token->objCnt++;
+            }
+        }
+
+        wp11_storage_close(storage);
+
+        object = token->object;
+        for (i = token->objCnt - 1; (ret == 0) && (i >= 0); i--) {
+            /* Load the objects. */
+            ret = wp11_Object_Load(object, tokenId, i);
+            object = object->next;
+        }
+
+        if (ret == 0) {
+            /* Set to state of initialized. */
+            token->state = WP11_TOKEN_STATE_INITIALIZED;
+        }
+        if (ret != 0) {
+            /* Failed to load - clear out any data and initialize. */
+            wp11_Token_Final(token);
+            wp11_Token_Init(token, token->label);
+            ret = 0;
+        }
+    }
+    else if (ret == NOT_AVAILABLE_E) {
+        /* No data to read. */
+        ret = 0;
+    }
+
+    return ret;
+}
+
+/**
+ * Store a token to storage.
+ *
+ * @param [in]  object   Token object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Token_Store(WP11_Token* token, int tokenId)
+{
+    int ret;
+    int i;
+    void* storage = NULL;
+    WP11_Object* object;
+
+    /* Open access to token object. */
+    ret = wp11_storage_open(WOLFPKCS11_STORE_TOKEN, tokenId, 0, 0, &storage);
+    if (ret == 0) {
+        /* Write label of token. */
+        ret = wp11_storage_write_string(storage, token->label, LABEL_SZ);
+        if (ret == 0) {
+            /* Write Security Officer's PIN. */
+            ret = wp11_storage_write_array(storage, token->soPin,
+                                           token->soPinLen);
+        }
+        if (ret == 0) {
+            /* Write Security Officer's PIN seed. */
+            ret = wp11_storage_write_fixed_array(storage, token->soPinSeed,
+                                                 PIN_SEED_SZ);
+        }
+        if (ret == 0) {
+            /* Write Security Officer's failed login count. */
+            ret = wp11_storage_write_int(storage, token->soFailedLogin);
+        }
+        if (ret == 0) {
+            /* Write time of last failed login as Security Officer. */
+            ret = wp11_storage_write_time(storage, token->soLastFailedLogin);
+        }
+        if (ret == 0) {
+            /* Write failed login timout for Security Officer. */
+            ret = wp11_storage_write_time(storage, token->soFailLoginTimeout);
+        }
+        if (ret == 0) {
+            /* Write User's PIN. */
+            ret = wp11_storage_write_array(storage, token->userPin,
+                                           token->userPinLen);
+        }
+        if (ret == 0) {
+            /* Write User's PIN seed. */
+            ret = wp11_storage_write_fixed_array(storage, token->userPinSeed,
+                                                 PIN_SEED_SZ);
+        }
+        if (ret == 0) {
+            /* Write User's failed login count. */
+            ret = wp11_storage_write_int(storage, token->userFailedLogin);
+        }
+        if (ret == 0) {
+            /* Write time of last failed login as User. */
+            ret = wp11_storage_write_time(storage, token->userLastFailedLogin);
+        }
+        if (ret == 0) {
+            /* Write failed login timout for User. */
+            ret = wp11_storage_write_time(storage, token->userFailLoginTimeout);
+        }
+
+        if (ret == 0) {
+            /* Write count of object on token. */
+            ret = wp11_storage_write_int(storage, token->objCnt);
+        }
+        object = token->object;
+        for (i = token->objCnt - 1; (ret == 0) && (i >= 0); i--) {
+            /* Write type of key object for creation of key object. */
+            ret = wp11_storage_write_ulong(storage, object->type);
+            object = object->next;
+        }
+
+        wp11_storage_close(storage);
+
+        object = token->object;
+        for (i = token->objCnt - 1; (ret == 0) && (i >= 0); i--) {
+            /* Write the objects. */
+            ret = wp11_Object_Store(object, tokenId, i);
+            object = object->next;
+        }
+    }
+    else if (ret == NOT_AVAILABLE_E) {
+        /* Not writing. */
+        ret = 0;
+    }
+
+    return ret;
+}
+#endif
 
 /**
  * Free first session in slot and any others not in use down to a minimum.
@@ -685,6 +2180,37 @@ static int wp11_Slot_Init(WP11_Slot* slot, int id)
     return ret;
 }
 
+#ifndef WOLFPKCS11_NO_STORE
+/**
+ * Load tokens in slot from storage.
+ *
+ * @param [in, out]  object  Slot object.
+ * @param [in]       slotId  Id of slot this key belongs to.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when loading fails.
+ * @return  NOT_AVAILABLE_E when unable to locate data.
+ */
+static int wp11_Slot_Load(WP11_Slot* slot, int id)
+{
+    return wp11_Token_Load(slot, id, &slot->token);
+}
+
+/**
+ * Store tokens in slot to storage.
+ *
+ * @param [in]  object  Slot object.
+ * @param [in]  slotId  Id of slot this key belongs to.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  BUFFER_E when storing fails.
+ * @return  NOT_AVAILABLE_E when unable to write data.
+ */
+static int wp11_Slot_Store(WP11_Slot* slot, int id)
+{
+    return wp11_Token_Store(&slot->token, id);
+}
+#endif
 
 /**
  * Initialize the globals for the library.
@@ -703,10 +2229,14 @@ int WP11_Library_Init(void)
         ret = WP11_Lock_Init(&globalLock);
         if (ret == 0)
             ret = wc_InitRng(&globalRandom);
-        if (ret == 0) {
-            for (i = 0; i < slotCnt; i++)
-                ret = wp11_Slot_Init(&slotList[i], i + 1);
+        for (i = 0; (ret == 0) && (i < slotCnt); i++) {
+            ret = wp11_Slot_Init(&slotList[i], i + 1);
         }
+#ifndef WOLFPKCS11_NO_STORE
+        for (i = 0; (ret == 0) && (i < slotCnt); i++) {
+            ret = wp11_Slot_Load(&slotList[i], i + 1);
+        }
+#endif
     }
     if (ret == 0) {
         WP11_Lock_LockRW(&globalLock);
@@ -730,6 +2260,11 @@ void WP11_Library_Final(void)
     cnt = --libraryInitCount;
     WP11_Lock_UnlockRW(&globalLock);
     if (cnt == 0) {
+#ifndef WOLFPKCS11_NO_STORE
+        /* Store the slots. */
+        for (i = 0; i < slotCnt; i++)
+            wp11_Slot_Store(&slotList[i], i + 1);
+#endif
         /* Cleanup the slots. */
         for (i = 0; i < slotCnt; i++)
             wp11_Slot_Final(&slotList[i]);
@@ -2062,38 +3597,6 @@ void WP11_Session_FindFinal(WP11_Session* session)
 
 
 /**
- * Create a new Object object.
- *
- * @param  session  [in]   Session object.
- * @param  type     [in]   Type of Object.
- * @param  object   [out]  New Object object.
- * @return  MEMORY_E when dynamic memory allocation fails.
- *          0 on success.
- */
-int WP11_Object_New(WP11_Session* session, CK_KEY_TYPE type,
-                    WP11_Object** object)
-{
-    int ret = 0;
-    WP11_Object* obj = NULL;
-
-    obj = XMALLOC(sizeof(*obj), NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    if (obj == NULL)
-        ret = MEMORY_E;
-
-    if (ret == 0) {
-        XMEMSET(obj, 0, sizeof(*obj));
-        obj->type = type;
-        obj->onToken = 0;
-        obj->slot = session->slot;
-        obj->keyGenMech = CK_UNAVAILABLE_INFORMATION;
-
-        *object = obj;
-    }
-
-    return ret;
-}
-
-/**
  * Free the object and take it out of the linked list.
  *
  * @param  object  [in]  Object object.
@@ -2112,6 +3615,10 @@ void WP11_Object_Free(WP11_Object* object)
 #ifdef HAVE_ECC
     if (object->type == CKK_EC)
         wc_ecc_free(&object->data.ecKey);
+#endif
+#ifndef NO_RSA
+    if (object->type == CKK_DH)
+        wc_FreeDhKey(&object->data.dhKey.params);
 #endif
     if (object->type == CKK_AES || object->type == CKK_GENERIC_SECRET)
         XMEMSET(object->data.symmKey.data, 0, object->data.symmKey.len);
@@ -2209,6 +3716,14 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
                object->size = (word32)*(CK_ULONG*)data[8];
            else if (len[8] != 0)
                ret = BUFFER_E;
+        }
+        if (ret == 0) {
+            if (mp_iszero(&key->d) && mp_iszero(&key->p)) {
+                key->type = RSA_PUBLIC;
+            }
+            else {
+                key->type = RSA_PRIVATE;
+            }
         }
 
         if (ret != 0)
@@ -2606,7 +4121,7 @@ static int GetBool(CK_BBOOL value, byte* data, CK_ULONG* len)
 }
 
 /**
- * Get the boolean data for flags.
+ * Get the boolean data for operation flags.
  *
  * @param  value  [in]      Flags.
  * @param  flag   [in]      Flag to check for.
@@ -2616,7 +4131,7 @@ static int GetBool(CK_BBOOL value, byte* data, CK_ULONG* len)
  * @return  BUFFER_E when buffer is too small for boolean.
  *          0 on success.
  */
-static int GetBoolForFlag(CK_ULONG flags, CK_ULONG flag, byte* data,
+static int GetOpFlagBool(CK_ULONG flags, CK_ULONG flag, byte* data,
     CK_ULONG* len)
 {
     return GetBool((flags & flag) == flag, data, len);
@@ -2748,7 +4263,7 @@ static int RsaObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
         case CKA_WRAP_TEMPLATE:
         case CKA_UNWRAP_TEMPLATE:
         default:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
     }
 
@@ -2865,7 +4380,7 @@ static int EcObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
         case CKA_UNWRAP_TEMPLATE:
         case CKA_DERIVE_TEMPLATE:
         default:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
     }
 
@@ -2915,7 +4430,7 @@ static int DhObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
         case CKA_UNWRAP_TEMPLATE:
         case CKA_DERIVE_TEMPLATE:
         default:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
     }
 
@@ -2956,7 +4471,7 @@ static int SecretObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
         case CKA_WRAP_TEMPLATE:
         case CKA_UNWRAP_TEMPLATE:
         default:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
     }
 
@@ -2994,38 +4509,38 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             ret = GetBool(object->onToken, data, len);
             break;
         case CKA_PRIVATE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_PRIVATE, data, len);
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_PRIVATE, data, len);
             break;
         case CKA_SENSITIVE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_SENSITIVE, data,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_SENSITIVE, data,
                                                                            len);
             break;
         case CKA_EXTRACTABLE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_EXTRACTABLE, data,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_EXTRACTABLE, data,
                                                                            len);
             break;
         case CKA_MODIFIABLE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_MODIFIABLE, data,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_MODIFIABLE, data,
                                                                            len);
             break;
         case CKA_ALWAYS_SENSITIVE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_ALWAYS_SENSITIVE,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_ALWAYS_SENSITIVE,
                                                                      data, len);
             break;
         case CKA_NEVER_EXTRACTABLE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_NEVER_EXTRACTABLE,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_NEVER_EXTRACTABLE,
                                                                      data, len);
             break;
         case CKA_ALWAYS_AUTHENTICATE:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_ALWAYS_AUTHENTICATE,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_ALWAYS_AUTHENTICATE,
                                                                      data, len);
             break;
         case CKA_WRAP_WITH_TRUSTED:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_WRAP_WITH_TRUSTED,
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_WRAP_WITH_TRUSTED,
                                                                      data, len);
             break;
         case CKA_TRUSTED:
-            ret = GetBoolForFlag(object->opFlag, WP11_FLAG_TRUSTED, data, len);
+            ret = GetOpFlagBool(object->opFlag, WP11_FLAG_TRUSTED, data, len);
             break;
         case CKA_COPYABLE:
             ret = GetBool(CK_FALSE, data, len);
@@ -3034,7 +4549,7 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             ret = GetBool(CK_TRUE, data, len);
             break;
         case CKA_APPLICATION:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
         case CKA_ID:
             ret = GetData(object->keyId, object->keyIdLen, data, len);
@@ -3063,39 +4578,39 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
             ret = GetULong(object->keyGenMech, data, len);
             break;
         case CKA_ALLOWED_MECHANISMS:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
 
         case CKA_ENCRYPT:
-            ret = GetBoolForFlag(object->opFlag, CKF_ENCRYPT, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_ENCRYPT, data, len);
             break;
         case CKA_DECRYPT:
-            ret = GetBoolForFlag(object->opFlag, CKF_DECRYPT, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_DECRYPT, data, len);
             break;
         case CKA_VERIFY:
-            ret = GetBoolForFlag(object->opFlag, CKF_VERIFY, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_VERIFY, data, len);
             break;
         case CKA_VERIFY_RECOVER:
-            ret = GetBoolForFlag(object->opFlag, CKF_VERIFY_RECOVER, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_VERIFY_RECOVER, data, len);
             break;
         case CKA_SIGN:
-            ret = GetBoolForFlag(object->opFlag, CKF_SIGN, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_SIGN, data, len);
             break;
         case CKA_SIGN_RECOVER:
-            ret = GetBoolForFlag(object->opFlag, CKF_SIGN_RECOVER, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_SIGN_RECOVER, data, len);
             break;
         case CKA_WRAP:
-            ret = GetBoolForFlag(object->opFlag, CKF_WRAP, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_WRAP, data, len);
             break;
         case CKA_UNWRAP:
-            ret = GetBoolForFlag(object->opFlag, CKF_UNWRAP, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_UNWRAP, data, len);
             break;
         case CKA_DERIVE:
-            ret = GetBoolForFlag(object->opFlag, CKF_DERIVE, data, len);
+            ret = GetOpFlagBool(object->opFlag, CKF_DERIVE, data, len);
             break;
 
         case CKA_SUBJECT:
-            ret = NOT_AVAILABE_E;
+            ret = NOT_AVAILABLE_E;
             break;
 
         default:
@@ -3122,7 +4637,7 @@ int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
                     ret = SecretObject_GetAttr(object, type, data, len);
                     break;
                 default:
-                    ret = NOT_AVAILABE_E;
+                    ret = NOT_AVAILABLE_E;
                     break;
             }
             break;
@@ -3456,14 +4971,14 @@ int WP11_Object_MatchAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
     /* Get the attribute data into the stack buffer if big enough. */
     if (len <= (int)sizeof(attrData)) {
         if (WP11_Object_GetAttr(object, type, attrData, &attrLen) == 0)
-            ret = attrLen == len && XMEMCMP(attrData, data, len) == 0;
+            ret = (attrLen == len) && (XMEMCMP(attrData, data, len) == 0);
     }
     else {
         /* Allocate a buffer to hold data and then compare. */
         ptr = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         if (ptr != NULL) {
             if (WP11_Object_GetAttr(object, type, ptr, &attrLen) == 0)
-                ret = attrLen == len && XMEMCMP(ptr, data, len) == 0;
+                ret = (attrLen == len) && (XMEMCMP(ptr, data, len) == 0);
             XFREE(ptr, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         }
     }

@@ -4,6 +4,7 @@
 
 nobase_include_HEADERS += \
         wolfpkcs11/pkcs11.h \
+        wolfpkcs11/store.h \
         wolfpkcs11/internal.h \
         wolfpkcs11/visibility.h \
         wolfpkcs11/version.h \

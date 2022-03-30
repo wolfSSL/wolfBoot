@@ -93,6 +93,7 @@ static CK_KEY_TYPE aesKeyType  = CKK_AES;
 #endif
 static CK_KEY_TYPE genericKeyType  = CKK_GENERIC_SECRET;
 
+
 static CK_RV test_get_function_list(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
@@ -2916,15 +2917,17 @@ static CK_RV gen_rsa_key(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE* pubKey,
         { CKA_MODULUS_BITS,    &bits,    sizeof(bits)    },
         { CKA_ENCRYPT,         &ckTrue,  sizeof(ckTrue)  },
         { CKA_VERIFY,          &ckTrue,  sizeof(ckTrue)  },
-        { CKA_PUBLIC_EXPONENT, pub_exp,  sizeof(pub_exp) }
+        { CKA_PUBLIC_EXPONENT, pub_exp,  sizeof(pub_exp) },
+        { CKA_LABEL,           (unsigned char*)"", 0 },
     };
     int               pubTmplCnt = sizeof(pubKeyTmpl)/sizeof(*pubKeyTmpl);
     CK_ATTRIBUTE      privKeyTmpl[] = {
-        {CKA_DECRYPT,  &ckTrue, sizeof(ckTrue) },
-        {CKA_SIGN,     &ckTrue, sizeof(ckTrue) },
-        {CKA_ID,       id,      idLen          }
+        { CKA_DECRYPT,  &ckTrue, sizeof(ckTrue) },
+        { CKA_SIGN,     &ckTrue, sizeof(ckTrue) },
+        { CKA_LABEL,    (unsigned char*)"priv_label", 10 },
+        { CKA_ID,       id,      idLen          }
     };
-    int               privTmplCnt = 2;
+    int               privTmplCnt = 3;
 
     if (idLen > 0)
         privTmplCnt++;
@@ -3000,6 +3003,64 @@ static CK_RV find_rsa_priv_key(CK_SESSION_HANDLE session,
         { CKA_CLASS,     &privKeyClass,  sizeof(privKeyClass) },
         { CKA_KEY_TYPE,  &rsaKeyType,    sizeof(rsaKeyType)   },
         { CKA_ID,        id,             idLen                }
+    };
+    CK_ULONG privKeyTmplCnt = sizeof(privKeyTmpl) / sizeof(*privKeyTmpl);
+    CK_ULONG count;
+
+    ret = funcList->C_FindObjectsInit(session, privKeyTmpl, privKeyTmplCnt);
+    CHECK_CKR(ret, "RSA Private Key Find Objects Init");
+    if (ret == CKR_OK) {
+        ret = funcList->C_FindObjects(session, privKey, 1, &count);
+        CHECK_CKR(ret, "RSA Private Key Find Objects");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_FindObjectsFinal(session);
+        CHECK_CKR(ret, "RSA Private Key Find Objects Final");
+    }
+    if (ret == CKR_OK && count == 0) {
+        ret = -1;
+        CHECK_CKR(ret, "RSA Private Key Find Objects Count");
+    }
+
+    return ret;
+}
+
+static CK_RV find_rsa_pub_key_label(CK_SESSION_HANDLE session,
+                                    CK_OBJECT_HANDLE* pubKey)
+{
+    CK_RV ret = CKR_OK;
+    CK_ATTRIBUTE      pubKeyTmpl[] = {
+        { CKA_LABEL,     (unsigned char*)"", 0 },
+    };
+    CK_ULONG pubKeyTmplCnt = sizeof(pubKeyTmpl) / sizeof(*pubKeyTmpl);
+    CK_ULONG count;
+
+    ret = funcList->C_FindObjectsInit(session, pubKeyTmpl, pubKeyTmplCnt);
+    CHECK_CKR(ret, "RSA Public Key Find Objects Init");
+    if (ret == CKR_OK) {
+        ret = funcList->C_FindObjects(session, pubKey, 1, &count);
+        CHECK_CKR(ret, "RSA Public Key Find Objects");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_FindObjectsFinal(session);
+        CHECK_CKR(ret, "RSA Public Key Find Objects Final");
+    }
+    if (ret == CKR_OK && count == 0) {
+        ret = -1;
+        CHECK_CKR(ret, "RSA Public Key Find Objects Count");
+    }
+
+    return ret;
+}
+
+static CK_RV find_rsa_priv_key_label(CK_SESSION_HANDLE session,
+                                     CK_OBJECT_HANDLE* privKey)
+{
+    CK_RV ret = CKR_OK;
+    CK_ATTRIBUTE      privKeyTmpl[] = {
+        { CKA_CLASS,     &privKeyClass,  sizeof(privKeyClass) },
+        { CKA_KEY_TYPE,  &rsaKeyType,    sizeof(rsaKeyType)   },
+        { CKA_LABEL,     (unsigned char*)"priv_label", 10 },
     };
     CK_ULONG privKeyTmplCnt = sizeof(privKeyTmpl) / sizeof(*privKeyTmpl);
     CK_ULONG count;
@@ -4160,6 +4221,10 @@ static CK_RV test_rsa_gen_keys(void* args)
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
 
     ret = gen_rsa_key(session, &pub, &priv, NULL, 0);
+    if (ret == CKR_OK)
+        ret = find_rsa_pub_key_label(session, &pub);
+    if (ret == CKR_OK)
+        ret = find_rsa_priv_key_label(session, &priv);
     if (ret == CKR_OK)
         ret = rsa_raw_test(session, priv, pub);
     if (ret == CKR_OK)
@@ -7834,6 +7899,8 @@ int main(int argc, char* argv[])
     int onlySet = 0;
     int closeDl = 1;
     int i;
+
+    setenv("WOLFPKCS11_NO_STORE", "1", 1);
 
     argc--;
     argv++;

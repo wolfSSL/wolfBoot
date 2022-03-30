@@ -32,6 +32,8 @@ coverage
 coverage.info
 tests/pkcs11test
 tests/pkcs11mtt
+tests/pkcs11str
+test/*
 *.gcda
 *.gcno
 
