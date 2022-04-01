@@ -54,6 +54,8 @@ HDR_IMG_TYPE_AUTH_ECC256  = 0x0200
 HDR_IMG_TYPE_AUTH_RSA2048 = 0x0300
 HDR_IMG_TYPE_AUTH_RSA4096 = 0x0400
 HDR_IMG_TYPE_AUTH_ED448   = 0x0500
+HDR_IMG_TYPE_AUTH_ECC384  = 0x0600
+HDR_IMG_TYPE_AUTH_ECC521  = 0x0700
 HDR_IMG_TYPE_DIFF         = 0x00D0
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
@@ -110,6 +112,10 @@ def make_header(image_file, fw_version, extra_fields=[]):
         img_type = HDR_IMG_TYPE_AUTH_ED448
     if (sign == 'ecc256'):
         img_type = HDR_IMG_TYPE_AUTH_ECC256
+    if (sign == 'ecc384'):
+        img_type = HDR_IMG_TYPE_AUTH_ECC384
+    if (sign == 'ecc521'):
+        img_type = HDR_IMG_TYPE_AUTH_ECC521
     if (sign == 'rsa2048'):
         img_type = HDR_IMG_TYPE_AUTH_RSA2048
     if (sign == 'rsa4096'):
@@ -219,7 +225,7 @@ def make_header(image_file, fw_version, extra_fields=[]):
                 signature = ed.sign(digest)
             elif (sign == 'ed448'):
                 signature = ed.sign(digest)
-            elif (sign == 'ecc256'):
+            elif (sign[0:3] == 'ecc'):
                 r, s = ecc.sign_raw(digest)
                 signature = r + s
             elif (sign == 'rsa2048') or (sign == 'rsa4096'):
@@ -265,6 +271,10 @@ while (i < len(argv)):
         sign='ed448'
     elif (argv[i] == '--ecc256'):
         sign='ecc256'
+    elif (argv[i] == '--ecc384'):
+        sign='ecc384'
+    elif (argv[i] == '--ecc521'):
+        sign='ecc521'
     elif (argv[i] == '--rsa2048'):
         sign='rsa2048'
     elif (argv[i] == '--rsa4096'):
@@ -438,6 +448,20 @@ elif wolfboot_key_buffer_len == 96:
     if sign == 'auto':
         sign = 'ecc256'
         print("'ecc256' key autodetected.")
+elif wolfboot_key_buffer_len == 144:
+    if (sign != 'auto' and sign != 'ecc384'):
+        print("Error: key size does not match the cipher selected")
+        sys.exit(1)
+    if sign == 'auto':
+        sign = 'ecc384'
+        print("'ecc384' key autodetected.")
+elif wolfboot_key_buffer_len == 198:
+    if (sign != 'auto' and sign != 'ecc521'):
+        print("Error: key size does not match the cipher selected")
+        sys.exit(1)
+    if sign == 'auto':
+        sign = 'ecc521'
+        print("'ecc521' key autodetected.")
 elif (wolfboot_key_buffer_len > 512):
     if (sign == 'auto'):
         print("'rsa4096' key autodetected.")
@@ -445,7 +469,7 @@ elif (wolfboot_key_buffer_len > 128):
     if (sign == 'auto'):
         print("'rsa2048' key autodetected.")
     elif (sign != 'rsa2048'):
-        print ("Error: key size too large for the selected cipher")
+        print ("Error: key size %d too large for the selected cipher" % wolfboot_key_buffer_len)
 else:
     print ("Error: key size does not match any cipher")
     sys.exit(2)
@@ -462,6 +486,7 @@ elif not sha_only and not manual_sign:
     if sign == 'ed448':
         HDR_SIGNATURE_LEN = 114
         if WOLFBOOT_HEADER_SIZE < 512:
+            print("Ed448: header size increased to 512")
             WOLFBOOT_HEADER_SIZE = 512
         ed = ciphers.Ed448Private(key = wolfboot_key_buffer)
         privkey, pubkey = ed.encode_key()
@@ -471,8 +496,29 @@ elif not sha_only and not manual_sign:
         ecc.decode_key_raw(wolfboot_key_buffer[0:32], wolfboot_key_buffer[32:64], wolfboot_key_buffer[64:])
         pubkey = wolfboot_key_buffer[0:64]
 
+    if sign == 'ecc384':
+        HDR_SIGNATURE_LEN = 96
+        if WOLFBOOT_HEADER_SIZE < 512:
+            print("Ecc384: header size increased to 512")
+            WOLFBOOT_HEADER_SIZE = 512
+        ecc = ciphers.EccPrivate()
+        ecc.decode_key_raw(wolfboot_key_buffer[0:48], wolfboot_key_buffer[48:96], wolfboot_key_buffer[96:],
+                curve_id = ciphers.ECC_SECP384R1)
+        pubkey = wolfboot_key_buffer[0:96]
+
+    if sign == 'ecc521':
+        HDR_SIGNATURE_LEN = 132
+        ecc = ciphers.EccPrivate()
+        ecc.decode_key_raw(wolfboot_key_buffer[0:66], wolfboot_key_buffer[66:132], wolfboot_key_buffer[132:],
+                curve_id = ciphers.ECC_SECP521R1)
+        pubkey = wolfboot_key_buffer[0:132]
+        if WOLFBOOT_HEADER_SIZE < 512:
+            print("Ecc521: header size increased to 512")
+            WOLFBOOT_HEADER_SIZE = 512
+
     if sign == 'rsa2048':
         if WOLFBOOT_HEADER_SIZE < 512:
+            print("Rsa2048: header size increased to 512")
             WOLFBOOT_HEADER_SIZE = 512
         HDR_SIGNATURE_LEN = 256
         rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
@@ -480,6 +526,7 @@ elif not sha_only and not manual_sign:
 
     if sign == 'rsa4096':
         if WOLFBOOT_HEADER_SIZE < 1024:
+            print("Rsa4096: header size increased to 1024")
             WOLFBOOT_HEADER_SIZE = 1024
         HDR_SIGNATURE_LEN = 512
         rsa = ciphers.RsaPrivate(wolfboot_key_buffer)

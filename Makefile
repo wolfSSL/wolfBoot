@@ -112,6 +112,10 @@ ed448.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed448_pub_key.c
 ecc256.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
+ecc384.der:
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc384_pub_key.c
+ecc521.der:
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc521_pub_key.c
 rsa2048.der:
 	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
 rsa4096.der:
@@ -152,6 +156,10 @@ src/ed25519_pub_key.c: ed25519.der
 src/ed448_pub_key.c: ed448.der
 
 src/ecc256_pub_key.c: ecc256.der
+
+src/ecc384_pub_key.c: ecc384.der
+
+src/ecc521_pub_key.c: ecc521.der
 
 src/rsa2048_pub_key.c: rsa2048.der
 
