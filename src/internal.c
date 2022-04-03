@@ -25,6 +25,7 @@
 #endif
 
 #include <wolfssl/options.h>
+#include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/hmac.h>
@@ -1517,6 +1518,146 @@ static int wp11_Object_Load_DhKey(WP11_Object* object, int tokenId, int objId)
     return ret;
 }
 
+#if !defined(WOLFSSL_DH_EXTRA) || LIBWOLFSSL_VERSION_HEX < 0x04008000
+/* Calculates the minimum number of bytes required to encode the value.
+ *
+ * @param [in] value  Value to be encoded.
+ * @return  Number of bytes to encode value.
+ */
+static word32 wp11_BytePrecision(word32 value)
+{
+    word32 i;
+    for (i = (word32)sizeof(value); i; --i)
+        if (value >> ((i - 1) * 8))
+            break;
+
+    return i;
+}
+
+/* Encode a length for DER.
+ *
+ * @param [in]  length  Value to encode.
+ * @param [out] output  Buffer to encode into.
+ * @return  Number of bytes encoded.
+ */
+static word32 wp11_SetLength(word32 length, byte* output)
+{
+    /* Start encoding at start of buffer. */
+    word32 i = 0;
+
+    if (length < 0x80) {
+        /* Only one byte needed to encode. */
+        if (output) {
+            /* Write out length value. */
+            output[i] = (byte)length;
+        }
+        /* Skip over length. */
+        i++;
+    }
+    else {
+        /* Calculate the number of bytes required to encode value. */
+        byte j = (byte)wp11_BytePrecision(length);
+
+        if (output) {
+            /* Encode count byte. */
+            output[i] = j | 0x80;
+        }
+        /* Skip over count byte. */
+        i++;
+
+        /* Encode value as a big-endian byte array. */
+        for (; j > 0; --j) {
+            if (output) {
+                /* Encode next most-significant byte. */
+                output[i] = (byte)(length >> ((j - 1) * 8));
+            }
+            /* Skip over byte. */
+            i++;
+        }
+    }
+
+    /* Return number of bytes in encoded length. */
+    return i;
+}
+
+/* Encode DH key parameters to DER format into output and setting len to outSz.
+ *
+ * If output is NULL then max expected size is set to outSz and LENGTH_ONLY_E is
+ * returned.
+ *
+ * Assumes key and outSz are not NULL.
+ *
+ * @param [in]   key     Dh key with parameters.
+ * @param [out]  output  Buffer to place DER data. May be NULL.
+ * @param [out]  outSz   Length of DER data.
+ *
+ * @return  Number of bytes written on success
+ * @return  LENGTH_ONLY_E when NULL output buffer passed in. outSz will be set.
+ * @return  Other -ve on failure.
+ */
+static int wp11_DhParamsToDer(DhKey* key, byte* output, word32* outSz)
+{
+    int ret = 0;
+    word32 len = 0, idx = 0, len2;
+
+    len  = 5;                               /* Sequence */
+    len += 1 + 4;                           /* Integer */
+    len += mp_leading_bit(&key->p) ? 1 : 0;
+    len += mp_unsigned_bin_size(&key->p);
+    len += 1 + 4;                           /* Integer */
+    len += mp_leading_bit(&key->g) ? 1 : 0;
+    len += mp_unsigned_bin_size(&key->g);
+
+    if (output == NULL) {
+        *outSz = len;
+        return LENGTH_ONLY_E;
+    }
+
+    if (ret == 0) {
+        idx = len;
+        len2 = mp_unsigned_bin_size(&key->g);
+        idx -= len2;
+        ret = mp_to_unsigned_bin(&key->g, output + idx);
+    }
+    if (ret >= 0) {
+        if (mp_leading_bit(&key->g)) {
+            output[--idx] = 0x00;
+            len2++;
+        }
+        idx -= wp11_SetLength(len2, NULL);
+        wp11_SetLength(len2, output + idx);
+        output[--idx] = 0x02;
+
+        len2 = mp_unsigned_bin_size(&key->p);
+        idx -= len2;
+        ret = mp_to_unsigned_bin(&key->p, output + idx);
+    }
+    if (ret >= 0) {
+        if (mp_leading_bit(&key->p)) {
+            output[--idx] = 0x00;
+            len2++;
+        }
+        idx -= wp11_SetLength(len2, NULL);
+        wp11_SetLength(len2, output + idx);
+        output[--idx] = 0x02;
+
+        len2 = len - idx;
+        idx -= wp11_SetLength(len2, NULL);
+        idx -= 1;
+        output[idx] = 0x30;
+        wp11_SetLength(len2, output + idx + 1);
+    }
+    if (ret >= 0) {
+        XMEMMOVE(output, output + idx, len - idx);
+        *outSz = len - idx;
+    }
+
+    return ret;
+}
+
+#define wc_DhParamsToDer    wp11_DhParamsToDer
+#endif
+
 /**
  * Store an DH key to storage.
  *
@@ -1664,7 +1805,7 @@ static int wp11_Object_Load(WP11_Object* object, int tokenId, int objId)
             byte onToken = 0;
             ret = wp11_storage_read_boolean(storage, &onToken);
             if (ret == 0) {
-                object->onToken = onToken;
+                object->onToken = (onToken != 0);
             }
         }
         if (ret == 0) {
@@ -1672,7 +1813,7 @@ static int wp11_Object_Load(WP11_Object* object, int tokenId, int objId)
             byte local = 0;
             ret = wp11_storage_read_boolean(storage, &local);
             if (ret == 0) {
-                object->local = local;
+                object->local = (local != 0);
             }
         }
         if (ret == 0) {

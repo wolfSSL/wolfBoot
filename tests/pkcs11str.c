@@ -35,6 +35,8 @@
 
 #include "testdata.h"
 
+int verbose = 0;
+
 #ifdef DEBUG_WOLFPKCS11
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
@@ -879,6 +881,7 @@ static void Usage(void)
     printf("-soPin <string>    Security Officer PIN\n");
     printf("-userPin <string>  User PIN\n");
     printf("-no-close          Do not close the PKCS#11 library before exit\n");
+    printf("-v                 Verbose output\n");
 }
 
 /* Match the command line argument with the string.
@@ -950,6 +953,9 @@ int main(int argc, char* argv[])
         }
         else if (string_matches(*argv, "-no-close")) {
             closeDl = 0;
+        }
+        else if (string_matches(*argv, "-v")) {
+            verbose = 1;
         }
 
         argc--;
