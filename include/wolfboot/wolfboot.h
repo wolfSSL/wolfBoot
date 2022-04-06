@@ -60,6 +60,7 @@
 #define HDR_IMG_DELTA_SIZE          0x06
 #define HDR_PUBKEY                  0x10
 #define HDR_SHA3_384                0x13
+#define HDR_SHA384                  0x14
 #define HDR_IMG_DELTA_INVERSE       0x15
 #define HDR_IMG_DELTA_INVERSE_SIZE  0x16
 #define HDR_SIGNATURE               0x20
@@ -143,6 +144,12 @@ int wolfBoot_dualboot_candidate(void);
 #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
 #   define image_hash image_sha256
 #   define key_hash key_sha256
+#elif defined(WOLFBOOT_HASH_SHA384)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+#   define WOLFBOOT_SHA_HDR HDR_SHA384
+#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+#   define image_hash image_sha384
+#   define key_hash key_sha384
 #elif defined(WOLFBOOT_HASH_SHA3_384)
 #   define WOLFBOOT_SHA_BLOCK_SIZE (128)
 #   define WOLFBOOT_SHA_HDR HDR_SHA3_384

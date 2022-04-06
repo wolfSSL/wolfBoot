@@ -89,6 +89,9 @@ endif
 ifeq ($(HASH),SHA256)
   SIGN_ARGS+= --sha256
 endif
+ifeq ($(HASH),SHA384)
+  SIGN_ARGS+= --sha384
+endif
 ifeq ($(HASH),SHA3)
   SIGN_ARGS+= --sha3
 endif
