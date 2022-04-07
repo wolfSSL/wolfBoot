@@ -156,7 +156,7 @@ struct WP11_Object {
     unsigned char* keyId;              /* Key identifier                      */
     int keyIdLen;                      /* Length of key identifier            */
     unsigned char* label;              /* Object label                        */
-    int labelLen;                      /* length of object label              */
+    int labelLen;                      /* Length of object label              */
 
     WP11_Lock* lock;                   /* Object specific lock                */
 
@@ -617,17 +617,29 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
             XSNPRINTF(name, sizeof(name), "%s/wp11_symmkey_%016lx_%016lx", str,
                       id1, id2);
             break;
-        case WOLFPKCS11_STORE_RSAKEY:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_rsakey_%016lx_%016lx", str,
-                      id1, id2);
+        case WOLFPKCS11_STORE_RSAKEY_PRIV:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_rsakey_priv_%016lx_%016lx",
+                      str, id1, id2);
             break;
-        case WOLFPKCS11_STORE_ECCKEY:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_ecckey_%016lx_%016lx", str,
-                      id1, id2);
+        case WOLFPKCS11_STORE_RSAKEY_PUB:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_rsakey_pub_%016lx_%016lx",
+                      str, id1, id2);
             break;
-        case WOLFPKCS11_STORE_DHKEY:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_dhkey_%016lx_%016lx", str,
-                      id1, id2);
+        case WOLFPKCS11_STORE_ECCKEY_PRIV:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_ecckey_priv_%016lx_%016lx",
+                      str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_ECCKEY_PUB:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_ecckey_pub_%016lx_%016lx",
+                      str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_DHKEY_PRIV:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_dhkey_priv_%016lx_%016lx",
+                      str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_DHKEY_PUB:
+            XSNPRINTF(name, sizeof(name), "%s/wp11_dhkey_pub_%016lx_%016lx",
+                      str, id1, id2);
             break;
         default:
             ret = -1;
@@ -1258,18 +1270,24 @@ static int wp11_Object_Load_RsaKey(WP11_Object* object, int tokenId, int objId)
     unsigned char* der = NULL;
     int len;
     word32 idx = 0;
+    int storeType;
+
+    /* Determine store type - private keys may be encrypted. */
+    if (object->objClass == CKO_PRIVATE_KEY)
+        storeType = WOLFPKCS11_STORE_RSAKEY_PRIV;
+    else
+        storeType = WOLFPKCS11_STORE_RSAKEY_PUB;
 
     /* Open access to RSA key. */
-    ret = wp11_storage_open(WOLFPKCS11_STORE_RSAKEY, tokenId, objId, 1,
-                            &storage);
+    ret = wp11_storage_open(storeType, tokenId, objId, 1, &storage);
     if (ret == 0) {
         /* Read of DER encoded RSA key. */
         ret = wp11_storage_read_alloc_array(storage, &der, &len);
-        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PRIV) {
             /* Decode RSA private key. */
             ret = wc_RsaPrivateKeyDecode(der, &idx, &object->data.rsaKey, len);
         }
-        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PUB) {
             /* Decode RSA public key. */
             ret = wc_RsaPublicKeyDecode(der, &idx, &object->data.rsaKey, len);
         }
@@ -1300,12 +1318,18 @@ static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
     void* storage = NULL;
     unsigned char* der = NULL;
     word32 len;
+    int storeType;
+
+    /* Determine store type - private keys may be encrypted. */
+    if (object->objClass == CKO_PRIVATE_KEY)
+        storeType = WOLFPKCS11_STORE_RSAKEY_PRIV;
+    else
+        storeType = WOLFPKCS11_STORE_RSAKEY_PUB;
 
     /* Open access to RSA key. */
-    ret = wp11_storage_open(WOLFPKCS11_STORE_RSAKEY, tokenId, objId, 0,
-                            &storage);
+    ret = wp11_storage_open(storeType, tokenId, objId, 0, &storage);
     if (ret == 0) {
-        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+        if (storeType == WOLFPKCS11_STORE_RSAKEY_PRIV) {
             /* Get length of encoded private key. */
             ret = wc_RsaKeyToDer(&object->data.rsaKey, NULL, 0);
             if (ret >= 0) {
@@ -1313,7 +1337,7 @@ static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
                 ret = 0;
             }
         }
-        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        else {
             /* Get length of encoded public key. */
             ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, NULL, 0);
             if (ret >= 0) {
@@ -1321,26 +1345,29 @@ static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
                 ret = 0;
             }
         }
+
         if (ret == 0) {
             /* Allocate buffer to hold encoded key. */
             der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (der == NULL)
                 ret = MEMORY_E;
         }
-        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PRIV) {
             /* Encode private key. */
             ret = wc_RsaKeyToDer(&object->data.rsaKey, der, len);
             if (ret >= 0) {
                 ret = 0;
             }
         }
-        else if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        else if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PUB) {
             /* Encode public key. */
             ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, der, len);
             if (ret >= 0) {
                 ret = 0;
             }
         }
+
         if (ret == 0) {
             /* Write encoded RSA key to storage. */
             ret = wp11_storage_write_array(storage, der, len);
@@ -1375,18 +1402,24 @@ static int wp11_Object_Load_EccKey(WP11_Object* object, int tokenId, int objId)
     unsigned char* der = NULL;
     int len;
     word32 idx = 0;
+    int storeType;
+
+    /* Determine store type - private keys may be encrypted. */
+    if (object->objClass == CKO_PRIVATE_KEY)
+        storeType = WOLFPKCS11_STORE_ECCKEY_PRIV;
+    else
+        storeType = WOLFPKCS11_STORE_ECCKEY_PUB;
 
     /* Open access to ECC key. */
-    ret = wp11_storage_open(WOLFPKCS11_STORE_ECCKEY, tokenId, objId, 1,
-                            &storage);
+    ret = wp11_storage_open(storeType, tokenId, objId, 1, &storage);
     if (ret == 0) {
         /* Read DER encoded ECC key. */
         ret = wp11_storage_read_alloc_array(storage, &der, &len);
-        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PRIV) {
             /* Decode EC private key. */
             ret = wc_EccPrivateKeyDecode(der, &idx, &object->data.ecKey, len);
         }
-        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PUB) {
             /* Decode EC public key. */
             ret = wc_EccPublicKeyDecode(der, &idx, &object->data.ecKey, len);
         }
@@ -1417,12 +1450,18 @@ static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
     void* storage = NULL;
     unsigned char* der = NULL;
     word32 len = 0;
+    int storeType;
+
+    /* Determine store type - private keys may be encrypted. */
+    if (object->objClass == CKO_PRIVATE_KEY)
+        storeType = WOLFPKCS11_STORE_ECCKEY_PRIV;
+    else
+        storeType = WOLFPKCS11_STORE_ECCKEY_PUB;
 
     /* Open access to ECC key. */
-    ret = wp11_storage_open(WOLFPKCS11_STORE_ECCKEY, tokenId, objId, 0,
-                            &storage);
+    ret = wp11_storage_open(storeType, tokenId, objId, 0, &storage);
     if (ret == 0) {
-        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+        if (storeType == WOLFPKCS11_STORE_ECCKEY_PRIV) {
             /* Get length of encoded private key. */
             ret = wc_EccKeyDerSize(&object->data.ecKey, 0);
             if (ret >= 0) {
@@ -1430,7 +1469,7 @@ static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
                 ret = 0;
             }
         }
-        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        else {
             /* Get length of encoded public key. */
             ret = wc_EccPublicKeyToDer(&object->data.ecKey, NULL, 0, 1);
             if (ret >= 0) {
@@ -1438,26 +1477,29 @@ static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
                 ret = 0;
             }
         }
+
         if (ret == 0) {
             /* Allocate buffer to hold encoded key. */
             der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (der == NULL)
                 ret = MEMORY_E;
         }
-        if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PRIV) {
             /* Encode private key. */
             ret = wc_EccPrivateKeyToDer(&object->data.ecKey, der, len);
             if (ret >= 0) {
                 ret = 0;
             }
         }
-        if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PUB) {
             /* Encode public key. */
             ret = wc_EccPublicKeyToDer(&object->data.ecKey, der, len, 1);
             if (ret >= 0) {
                 ret = 0;
             }
         }
+
         if (ret == 0) {
             /* Write encoded ECC key to storage. */
             ret = wp11_storage_write_array(storage, der, len);
@@ -1492,10 +1534,16 @@ static int wp11_Object_Load_DhKey(WP11_Object* object, int tokenId, int objId)
     unsigned char* der = NULL;
     int len;
     word32 idx = 0;
+    int storeType;
+
+    /* Determine store type - private keys may be encrypted. */
+    if (object->objClass == CKO_PRIVATE_KEY)
+        storeType = WOLFPKCS11_STORE_DHKEY_PRIV;
+    else
+        storeType = WOLFPKCS11_STORE_DHKEY_PUB;
 
     /* Open access to DH key. */
-    ret = wp11_storage_open(WOLFPKCS11_STORE_DHKEY, tokenId, objId, 1,
-                            &storage);
+    ret = wp11_storage_open(storeType, tokenId, objId, 1, &storage);
     if (ret == 0) {
         /* Read DH key. */
         ret = wp11_storage_read_array(storage, object->data.dhKey.key,
@@ -1675,10 +1723,16 @@ static int wp11_Object_Store_DhKey(WP11_Object* object, int tokenId, int objId)
     void* storage = NULL;
     unsigned char* der = NULL;
     word32 len;
+    int storeType;
+
+    /* Determine store type - private keys may be encrypted. */
+    if (object->objClass == CKO_PRIVATE_KEY)
+        storeType = WOLFPKCS11_STORE_DHKEY_PRIV;
+    else
+        storeType = WOLFPKCS11_STORE_DHKEY_PUB;
 
     /* Open access to DH key. */
-    ret = wp11_storage_open(WOLFPKCS11_STORE_DHKEY, tokenId, objId, 0,
-                            &storage);
+    ret = wp11_storage_open(storeType, tokenId, objId, 0, &storage);
     if (ret == 0) {
         ret = wp11_storage_write_array(storage, object->data.dhKey.key,
                                                         object->data.dhKey.len);
@@ -2008,17 +2062,26 @@ static void wp11_Object_Unstore(WP11_Object* object, int tokenId, int objId)
     switch (object->type) {
     #ifndef NO_RSA
         case CKK_RSA:
-            storeObjType = WOLFPKCS11_STORE_RSAKEY;
+            if (object->objClass == CKO_PRIVATE_KEY)
+                storeObjType = WOLFPKCS11_STORE_RSAKEY_PRIV;
+            else
+                storeObjType = WOLFPKCS11_STORE_RSAKEY_PUB;
             break;
     #endif
     #ifdef HAVE_ECC
         case CKK_EC:
-            storeObjType = WOLFPKCS11_STORE_ECCKEY;
+            if (object->objClass == CKO_PRIVATE_KEY)
+                storeObjType = WOLFPKCS11_STORE_ECCKEY_PRIV;
+            else
+                storeObjType = WOLFPKCS11_STORE_ECCKEY_PUB;
             break;
     #endif
     #ifndef NO_DH
         case CKK_DH:
-            storeObjType = WOLFPKCS11_STORE_DHKEY;
+            if (object->objClass == CKO_PRIVATE_KEY)
+                storeObjType = WOLFPKCS11_STORE_DHKEY_PRIV;
+            else
+                storeObjType = WOLFPKCS11_STORE_DHKEY_PUB;
             break;
     #endif
     #ifndef NO_AES
