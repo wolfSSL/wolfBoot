@@ -1,4 +1,4 @@
-name: Renode Automated Tests: SHA algorithms
+name: Renode Automated multi SHA algorithms
 
 on:
   push:
