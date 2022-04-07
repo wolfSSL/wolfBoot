@@ -1794,8 +1794,12 @@ static int wp11_Object_Load(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 1,
                             &storage);
     if (ret == 0) {
-        /* Read object class. */
-        ret = wp11_storage_read_ulong(storage, &object->objClass);
+        /* Read handle value. */
+        ret = wp11_storage_read_ulong(storage, &object->handle);
+        if (ret == 0) {
+            /* Read object class. */
+            ret = wp11_storage_read_ulong(storage, &object->objClass);
+        }
         if (ret == 0) {
             /* Read key gen mechanism. */
             ret = wp11_storage_read_ulong(storage, &object->keyGenMech);
@@ -1851,24 +1855,24 @@ static int wp11_Object_Load(WP11_Object* object, int tokenId, int objId)
     if (ret == 0) {
         /* Load separate key data. */
         switch (object->type) {
-    #ifndef NO_RSA
+        #ifndef NO_RSA
             case CKK_RSA:
                 ret = wp11_Object_Load_RsaKey(object, tokenId, objId);
                 break;
-    #endif
-    #ifdef HAVE_ECC
+        #endif
+        #ifdef HAVE_ECC
             case CKK_EC:
                 ret = wp11_Object_Load_EccKey(object, tokenId, objId);
                 break;
-    #endif
-    #ifndef NO_DH
+        #endif
+        #ifndef NO_DH
             case CKK_DH:
                 ret = wp11_Object_Load_DhKey(object, tokenId, objId);
                 break;
-    #endif
-    #ifndef NO_AES
+        #endif
+        #ifndef NO_AES
             case CKK_AES:
-    #endif
+        #endif
             case CKK_GENERIC_SECRET:
                 ret = wp11_Object_Load_SymmKey(object, tokenId, objId);
                 break;
@@ -1900,8 +1904,12 @@ static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 0,
                             &storage);
     if (ret == 0) {
-        /* Write object class. */
-        ret = wp11_storage_write_ulong(storage, object->objClass);
+        /* Write handle value. */
+        ret = wp11_storage_write_ulong(storage, object->handle);
+        if (ret == 0) {
+            /* Write object class. */
+            ret = wp11_storage_write_ulong(storage, object->objClass);
+        }
         if (ret == 0) {
             /* Write key gen mechanism. */
             ret = wp11_storage_write_ulong(storage, object->keyGenMech);
@@ -1949,24 +1957,24 @@ static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
     if (ret == 0) {
         /* Store key data separately. */
         switch (object->type) {
-    #ifndef NO_RSA
+        #ifndef NO_RSA
             case CKK_RSA:
                 ret = wp11_Object_Store_RsaKey(object, tokenId, objId);
                 break;
-    #endif
-    #ifdef HAVE_ECC
+        #endif
+        #ifdef HAVE_ECC
             case CKK_EC:
                 ret = wp11_Object_Store_EccKey(object, tokenId, objId);
                 break;
-    #endif
-    #ifndef NO_DH
+        #endif
+        #ifndef NO_DH
             case CKK_DH:
                 ret = wp11_Object_Store_DhKey(object, tokenId, objId);
                 break;
-    #endif
-    #ifndef NO_AES
+        #endif
+        #ifndef NO_AES
             case CKK_AES:
-    #endif
+        #endif
             case CKK_GENERIC_SECRET:
                 ret = wp11_Object_Store_SymmKey(object, tokenId, objId);
                 break;
@@ -1976,6 +1984,52 @@ static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
     }
 
     return ret;
+}
+
+/**
+ * Unstore a key object to storage.
+ *
+ * Empties the contents of the object.
+ *
+ * @param [in]  object   Key object.
+ * @param [in]  tokenId  Id of token this key belongs to.
+ * @param [in]  objId    Id of object for token.
+ */
+static void wp11_Object_Unstore(WP11_Object* object, int tokenId, int objId)
+{
+    void* storage = NULL;
+    int storeObjType = -1;
+
+    /* Open access to key object. */
+    wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 0, &storage);
+    wp11_storage_close(storage);
+
+    /* Open access to symmetric key. */
+    switch (object->type) {
+    #ifndef NO_RSA
+        case CKK_RSA:
+            storeObjType = WOLFPKCS11_STORE_RSAKEY;
+            break;
+    #endif
+    #ifdef HAVE_ECC
+        case CKK_EC:
+            storeObjType = WOLFPKCS11_STORE_ECCKEY;
+            break;
+    #endif
+    #ifndef NO_DH
+        case CKK_DH:
+            storeObjType = WOLFPKCS11_STORE_DHKEY;
+            break;
+    #endif
+    #ifndef NO_AES
+        case CKK_AES:
+    #endif
+        case CKK_GENERIC_SECRET:
+            storeObjType = WOLFPKCS11_STORE_SYMMKEY;
+            break;
+    }
+    wp11_storage_open(storeObjType, tokenId, objId, 0, &storage);
+    wp11_storage_close(storage);
 }
 #endif
 
@@ -3501,6 +3555,11 @@ int WP11_Session_AddObject(WP11_Session* session, int onToken,
             object->next = next;
             token->object = object;
         }
+#ifndef WOLFPKCS11_NO_STORE
+        if (ret == 0) {
+            wp11_Slot_Store(session->slot, session->slotId);
+        }
+#endif
         WP11_Lock_UnlockRW(&token->lock);
     }
     else {
@@ -3533,16 +3592,21 @@ void WP11_Session_RemoveObject(WP11_Session* session, WP11_Object* object)
 {
     WP11_Object** curr;
     WP11_Token* token;
+    int id;
 
     /* Find the object in list and relink. */
     if (object->onToken) {
         WP11_Lock_LockRW(object->lock);
         token = &session->slot->token;
         token->objCnt--;
+        /* Id of first object on token. */
+        id = token->objCnt;
         curr = &token->object;
     }
     else {
         session->objCnt--;
+        /* Id of first object in session. */
+        id = session->objCnt;
         curr = &session->object;
     }
 
@@ -3552,9 +3616,16 @@ void WP11_Session_RemoveObject(WP11_Session* session, WP11_Object* object)
             break;
         }
         curr = &(*curr)->next;
+        /* Id of next object as it isn't the one being removed. */
+        id--;
     }
-    if (object->onToken)
+    if (object->onToken) {
+#ifndef WOLFPKCS11_NO_STORE
+        wp11_Object_Unstore(object, session->slotId, id);
+        wp11_Slot_Store(session->slot, session->slotId);
+#endif
         WP11_Lock_UnlockRW(object->lock);
+    }
 }
 
 /**
