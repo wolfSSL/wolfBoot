@@ -150,7 +150,12 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-mcpu=cortex-m0
     LDFLAGS+=-mcpu=cortex-m0
     ifeq ($(SPMATH),1)
-      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+      ifeq ($(NO_ASM),1)
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+      else
+        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
+      endif
     endif
   else
     ifeq ($(NO_ASM),1)
