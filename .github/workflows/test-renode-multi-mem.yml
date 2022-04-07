@@ -1,0 +1,685 @@
+name: Renode Automated Tests: memory configurations
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      # Get the arm-non-eabi-gcc toolchain
+      - name: Install arm-none-eabi-gcc
+        uses: fiam/arm-none-eabi-gcc@v1
+        with:
+          # The arm-none-eabi-gcc release to use.
+          release: "9-2019-q4"
+
+      - name: Install wolfSSL
+        run: |
+          sudo apt-get install --no-install-recommends -y -q make libwolfssl-dev
+
+      - name: Build test-expect-version
+        run: |
+          make -C tools/test-expect-version
+
+      - name: make clean
+        run: |
+          make clean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+
+  ##### SMALL STACK tests
+
+  # ECC256 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC256
+        run: |
+          make SIGN=ECC256 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC256
+        run: ./tools/renode/docker-test.sh
+
+# ECC384 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC384
+        run: |
+          make SIGN=ECC384 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh
+
+# ED25519 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
+
+      - name: Build wolfboot and test app image v1, SIGN=ED25519
+        run: |
+          make SIGN=ED25519 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED25519
+        run: ./tools/renode/docker-test.sh
+
+# ED448 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
+
+      - name: Build wolfboot and test app image v1, SIGN=ED448
+        run: |
+          make SIGN=ED448 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED448 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED448
+        run: ./tools/renode/docker-test.sh
+
+# RSA2048 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA2048
+        run: |
+          make SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA4096 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA4096
+        run: |
+          make SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA4096
+        run: ./tools/renode/docker-test.sh
+
+      - name: Upload Output Dir
+        uses: actions/upload-artifact@v2
+        with:
+          name: Renode Test Results
+          path: test_results/
+
+  ##### NO_ASM tests
+
+  # ECC256 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC256
+        run: |
+          make SIGN=ECC256 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC256 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC256
+        run: ./tools/renode/docker-test.sh
+
+# ECC384 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC384
+        run: |
+          make SIGN=ECC384 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC384 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh
+
+# ED25519 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
+
+      - name: Build wolfboot and test app image v1, SIGN=ED25519
+        run: |
+          make SIGN=ED25519 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED25519 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED25519
+        run: ./tools/renode/docker-test.sh
+
+# ED448 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
+
+      - name: Build wolfboot and test app image v1, SIGN=ED448
+        run: |
+          make SIGN=ED448 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED448 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED448
+        run: ./tools/renode/docker-test.sh
+
+# RSA2048 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA2048
+        run: |
+          make SIGN=RSA2048 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA2048 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA4096 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA4096
+        run: |
+          make SIGN=RSA4096 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA4096 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA4096
+        run: ./tools/renode/docker-test.sh
+
+      - name: Upload Output Dir
+        uses: actions/upload-artifact@v2
+        with:
+          name: Renode Test Results
+          path: test_results/
+  
+##### SMALL STACK + NO_ASM tests
+
+  # ECC256 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC256
+        run: |
+          make SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 NO_ASM=1  && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC256
+        run: ./tools/renode/docker-test.sh
+
+# ECC384 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC384
+        run: |
+          make SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh
+
+# ED25519 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
+
+      - name: Build wolfboot and test app image v1, SIGN=ED25519
+        run: |
+          make SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 NO_ASM=1  && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED25519
+        run: ./tools/renode/docker-test.sh
+
+# ED448 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
+
+      - name: Build wolfboot and test app image v1, SIGN=ED448
+        run: |
+          make SIGN=ED448 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED448 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED448
+        run: ./tools/renode/docker-test.sh
+
+# RSA2048 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA2048
+        run: |
+          make SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA4096 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA4096
+        run: |
+          make SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA4096
+        run: ./tools/renode/docker-test.sh
+
+      - name: Upload Output Dir
+        uses: actions/upload-artifact@v2
+        with:
+          name: Renode Test Results
+          path: test_results/
+
+    ##### FAST MATH tests
+
+  # ECC256 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC256
+        run: |
+          make SIGN=ECC256 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC256 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC256
+        run: ./tools/renode/docker-test.sh
+
+# ECC384 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC384
+        run: |
+          make SIGN=ECC384 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC384 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh
+
+# ED25519 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config SPMATH=0 && make include/target.h SIGN=ED25519
+
+      - name: Build wolfboot and test app image v1, SIGN=ED25519
+        run: |
+          make SIGN=ED25519 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED25519 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED25519
+        run: ./tools/renode/docker-test.sh
+
+# ED448 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
+
+      - name: Build wolfboot and test app image v1, SIGN=ED448
+        run: |
+          make SIGN=ED448 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED448 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED448
+        run: ./tools/renode/docker-test.sh
+
+# RSA2048 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA2048
+        run: |
+          make SIGN=RSA2048 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA2048 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA4096 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA4096
+        run: |
+          make SIGN=RSA4096 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA4096 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA4096
+        run: ./tools/renode/docker-test.sh
+
+      - name: Upload Output Dir
+        uses: actions/upload-artifact@v2
+        with:
+          name: Renode Test Results
+          path: test_results/
+  
+##### SMALL STACK + FAST MATH tests
+
+  # ECC256 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC256
+        run: |
+          make SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC256
+        run: ./tools/renode/docker-test.sh
+
+# ECC384 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
+
+      - name: Build wolfboot and test app image v1, SIGN=ECC384
+        run: |
+          make SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh
+
+# ED25519 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
+
+      - name: Build wolfboot and test app image v1, SIGN=ED25519
+        run: |
+          make SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED25519
+        run: ./tools/renode/docker-test.sh
+
+# ED448 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
+
+      - name: Build wolfboot and test app image v1, SIGN=ED448
+        run: |
+          make SIGN=ED448 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=ED448 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests ED448
+        run: ./tools/renode/docker-test.sh
+
+# RSA2048 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA2048
+        run: |
+          make SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA4096 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA4096
+        run: |
+          make SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA4096
+        run: ./tools/renode/docker-test.sh
+
+      - name: Upload Output Dir
+        uses: actions/upload-artifact@v2
+        with:
+          name: Renode Test Results
+          path: test_results/
+
