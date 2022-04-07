@@ -68,7 +68,7 @@ ifeq ($(SIGN),ECC384)
   else ifeq ($(WOLFTPM),1)
     STACK_USAGE=6680
   else ifneq ($(SPMATH),1)
-    STACK_USAGE=6056
+    STACK_USAGE=11248
   else
     STACK_USAGE=5880
   endif
