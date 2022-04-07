@@ -511,6 +511,67 @@ static void key_sha256(uint8_t *hash)
 #endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA2-256 */
 
+#if defined(WOLFBOOT_HASH_SHA384)
+
+#include <wolfssl/wolfcrypt/sha512.h>
+static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
+{
+    uint8_t *stored_sha, *end_sha;
+    uint16_t stored_sha_len;
+    uint8_t *p;
+    int blksz;
+    uint32_t position = 0;
+    wc_Sha384 sha384_ctx;
+    if (!img)
+        return -1;
+    p = get_img_hdr(img);
+    stored_sha_len = get_header(img, HDR_SHA384, &stored_sha);
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+        return -1;
+    wc_InitSha384(&sha384_ctx);
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    while (p < end_sha) {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (end_sha - p < blksz)
+            blksz = end_sha - p;
+        wc_Sha384Update(&sha384_ctx, p, blksz);
+        p += blksz;
+    }
+    do {
+        p = get_sha_block(img, position);
+        if (p == NULL)
+            break;
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (position + blksz > img->fw_size)
+            blksz = img->fw_size - position;
+        wc_Sha384Update(&sha384_ctx, p, blksz);
+        position += blksz;
+    } while(position < img->fw_size);
+
+    wc_Sha384Final(&sha384_ctx, hash);
+    return 0;
+}
+
+#ifndef WOLFBOOT_NO_SIGN
+static void key_sha384(uint8_t *hash)
+{
+    int blksz;
+    unsigned int i = 0;
+    wc_Sha384 sha384_ctx;
+    wc_InitSha384(&sha384_ctx);
+    while(i < KEY_LEN)
+    {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if ((i + blksz) > KEY_LEN)
+            blksz = KEY_LEN - i;
+        wc_Sha384Update(&sha384_ctx, (KEY_BUFFER + i), blksz);
+        i += blksz;
+    }
+    wc_Sha384Final(&sha384_ctx, hash);
+}
+#endif /* WOLFBOOT_NO_SIGN */
+#endif /* WOLFBOOT_HASH_SHA384 */
+
 #if defined(WOLFBOOT_HASH_SHA3_384)
 
 #include <wolfssl/wolfcrypt/sha3.h>
@@ -553,7 +614,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 
-static void key_sha3_384(struct wolfBoot_image *img)
+static void key_sha3_384(uint8_t *hash)
 {
     int blksz;
     unsigned int i = 0;

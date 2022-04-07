@@ -78,6 +78,9 @@
 #ifndef NO_SHA256
     #include <wolfssl/wolfcrypt/sha256.h>
 #endif
+#ifndef NO_SHA384
+    #include <wolfssl/wolfcrypt/sha512.h>
+#endif
 #ifdef WOLFSSL_SHA3
     #include <wolfssl/wolfcrypt/sha3.h>
 #endif
@@ -105,8 +108,11 @@
 
 #define HDR_SHA256      0x03
 #define HDR_SHA3_384    0x13
+#define HDR_SHA384      0x14
 
 #define HDR_SHA256_LEN    32
+#define HDR_SHA384_LEN    48
+
 #define HDR_SHA3_384_LEN  48
 #define HDR_VERSION_LEN   4
 #define HDR_TIMESTAMP_LEN 8
@@ -130,6 +136,7 @@
 #define HDR_IMG_TYPE_DIFF         0x00D0
 
 #define HASH_SHA256    HDR_SHA256
+#define HASH_SHA384    HDR_SHA384
 #define HASH_SHA3      HDR_SHA3_384
 
 #define SIGN_AUTO      0
@@ -559,6 +566,50 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         }
         if (ret == 0)
             digest_sz = HDR_SHA256_LEN;
+    #endif
+    }
+    else if (CMD.hash_algo == HASH_SHA384)
+    {
+    #ifndef NO_SHA384
+        wc_Sha384 sha;
+        printf("Calculating SHA384 digest...\n");
+        ret = wc_InitSha384_ex(&sha, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            /* Hash Header */
+            ret = wc_Sha384Update(&sha, header, header_idx);
+
+            /* Hash image file */
+            f = fopen(image_file, "rb");
+            pos = 0;
+            while (ret == 0 && pos < image_sz) {
+                read_sz = image_sz - pos;
+                if (read_sz > 32)
+                    read_sz = 32;
+                io_sz = fread(buf, 1, read_sz, f);
+                if ((io_sz < 0) && !feof(f)) {
+                    ret = -1;
+                    break;
+                }
+                ret = wc_Sha384Update(&sha, buf, read_sz);
+                pos += read_sz;
+            }
+            fclose(f);
+            if (ret == 0)
+                wc_Sha384Final(&sha, digest);
+            wc_Sha384Free(&sha);
+        }
+        /* pubkey hash calculation */
+        if (ret == 0) {
+            ret = wc_InitSha384_ex(&sha, NULL, INVALID_DEVID);
+            if (ret == 0) {
+                ret = wc_Sha384Update(&sha, pubkey, pubkey_sz);
+                if (ret == 0)
+                    wc_Sha384Final(&sha, buf);
+                wc_Sha384Free(&sha);
+            }
+        }
+        if (ret == 0)
+            digest_sz = HDR_SHA384_LEN;
     #endif
     }
     else if (CMD.hash_algo == HASH_SHA3)
@@ -1104,6 +1155,10 @@ cleanup:
 }
 
 
+static const char Hashes_str[] = "[--sha256 | --sha384 | --sha3]";
+static const char Enc_str[] = "[--chacha | --aes128 | --aes256]";
+static const char Sign_algo_str[] = "[--ed25519 | --ed447 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign]";
+
 
 
 int main(int argc, char** argv)
@@ -1125,11 +1180,16 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
-        printf("Usage: %s [--ed25519 | --ed447 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt enc_key.bin] [--chacha | --aes128 | --aes256] [--delta image_vX_signed.bin] image key.der fw_version\n", argv[0]);
-        printf("  - or - ");
-        printf("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] image pub_key.der fw_version\n", argv[0]);
-        printf("  - or - ");
-        printf("       %s [--ed25519 | --ed448 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-CMD.sign] image pub_key.der fw_version signature.sig\n", argv[0]);
+        printf("Usage: %s %s %s [--wolfboot-update] [--encrypt enc_key.bin] %s"
+               " [--delta image_vX_signed.bin] image key.der fw_version\n",
+               argv[0], Hashes_str, Sign_algo_str, Enc_str);
+        printf("  - or - \n");
+        printf("       %s %s [--wolfboot-update] image pub_key.der fw_version\n",
+                argv[0], Hashes_str);
+        printf("  - or - \n");
+        printf("       %s %s %s [--manual-CMD.sign] image pub_key.der"
+               "fw_version signature.sig\n",
+                argv[0], Hashes_str, Sign_algo_str);
         return 0;
     }
 
@@ -1178,6 +1238,10 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--sha256") == 0) {
             CMD.hash_algo = HASH_SHA256;
             hash_str = "SHA256";
+        }
+        else if (strcmp(argv[i], "--sha384") == 0) {
+            CMD.hash_algo = HASH_SHA384;
+            hash_str = "SHA384";
         }
         else if (strcmp(argv[i], "--sha3") == 0) {
             CMD.hash_algo = HASH_SHA3;

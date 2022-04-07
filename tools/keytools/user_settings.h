@@ -64,6 +64,7 @@
 
 /* Hashing */
 #define WOLFSSL_SHA512 /* Required for ED25519 */
+#define WOLFSSL_SHA384 /* Required for ED25519 */
 #define WOLFSSL_SHA3
 #undef  NO_SHA256
 

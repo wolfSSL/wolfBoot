@@ -33,6 +33,7 @@ HDR_SHA256                  = 0x03
 HDR_IMG_DELTA_BASE          = 0x05
 HDR_IMG_DELTA_SIZE          = 0x06
 HDR_SHA3_384                = 0x13
+HDR_SHA384                  = 0x14
 HDR_IMG_DELTA_INVERSE       = 0x15
 HDR_IMG_DELTA_INVERSE_SIZE  = 0x16
 HDR_IMG_TYPE                = 0x04
@@ -44,6 +45,7 @@ HDR_PADDING                 = 0xFF
 HDR_VERSION_LEN     = 4
 HDR_TIMESTAMP_LEN   = 8
 HDR_SHA256_LEN      = 32
+HDR_SHA384_LEN      = 48
 HDR_SHA3_384_LEN    = 48
 HDR_IMG_TYPE_LEN    = 2
 HDR_SIGNATURE_LEN   = 64
@@ -175,6 +177,32 @@ def make_header(image_file, fw_version, extra_fields=[]):
             header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA256_LEN)
             header += key_digest
 
+    elif hash_algo == 'sha384':
+        sha = hashes.Sha384.new()
+
+        # Sha calculation
+        sha.update(header)
+        img_bin = open(image_file, 'rb')
+        while True:
+            buf = img_bin.read(48)
+            if (len(buf) == 0):
+                img_bin.close()
+                break
+            sha.update(buf)
+        digest = sha.digest()
+
+        # Add SHA to the header
+        header += struct.pack('<HH', HDR_SHA384, HDR_SHA384_LEN)
+        header += digest
+
+        if sign != 'none':
+            # pubkey SHA calculation
+            keysha = hashes.Sha384.new()
+            keysha.update(pubkey)
+            key_digest = keysha.digest()
+            header += struct.pack('<HH', HDR_PUBKEY, HDR_SHA384_LEN)
+            header += key_digest
+
     elif hash_algo == 'sha3':
         sha = hashes.Sha3.new()
         # Sha calculation
@@ -254,11 +282,11 @@ def make_header(image_file, fw_version, extra_fields=[]):
 #### MAIN ####
 
 if (argc < 4) or (argc > 10):
-    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha384 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--sha256 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
+    print("       %s [--sha256 | --sha384 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
-    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha3] [--manual-sign] [--chacha | --aes128 | --aes256 ] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha384 | --sha3] [--manual-sign] [--chacha | --aes128 | --aes256 ] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
     sys.exit(1)
 
 i = 1
@@ -281,6 +309,8 @@ while (i < len(argv)):
         sign='rsa4096'
     elif (argv[i] == '--sha256'):
         hash_algo='sha256'
+    elif (argv[i] == '--sha384'):
+        hash_algo='sha384'
     elif (argv[i] == '--sha3'):
         hash_algo='sha3'
     elif (argv[i] == '--wolfboot-update'):

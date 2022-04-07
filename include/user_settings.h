@@ -163,6 +163,11 @@
 #   define NO_SHA256
 #endif
 
+#ifdef WOLFBOOT_HASH_SHA384
+#   define WOLFSSL_SHA384
+#   define NO_SHA256
+#endif
+
 #ifdef EXT_ENCRYPTED
 #   define HAVE_PWDBASED
 #else

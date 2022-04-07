@@ -367,6 +367,14 @@ ifeq ($(HASH),SHA256)
   CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
 endif
 
+ifeq ($(HASH),SHA384)
+  CFLAGS+=-D"WOLFBOOT_HASH_SHA384"
+  SIGN_OPTIONS+=--sha384
+  ifneq ($(SIGN),ED25519)
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha512.o
+  endif
+endif
+
 ifeq ($(HASH),SHA3)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
