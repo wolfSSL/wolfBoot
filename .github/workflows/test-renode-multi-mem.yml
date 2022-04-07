@@ -1,4 +1,4 @@
-name: Renode Automated Tests: memory configurations
+name: Renode Automated multi memory configurations
 
 on:
   push:
