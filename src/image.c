@@ -614,7 +614,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 
-static void key_sha3_384(struct wolfBoot_image *img)
+static void key_sha3_384(uint8_t *hash)
 {
     int blksz;
     unsigned int i = 0;
