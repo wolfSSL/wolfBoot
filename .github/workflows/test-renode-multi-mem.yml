@@ -56,7 +56,7 @@ jobs:
 
       - name: Build wolfboot and test app image v1, SIGN=NONE WOLFBOOT_SMALL_STACK=1
         run: |
-          make SIGN=NONE
+          make SIGN=NONE WOLFBOOT_SMALL_STACK=1
 
       - name: Build update image v2
         run: |
