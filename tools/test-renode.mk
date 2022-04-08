@@ -106,14 +106,17 @@ renode-on: FORCE
 	${Q}echo "Renode up: uart port activated"
 	${Q}echo "Renode running: renode has been started."
 
+renode-off-force: FORCE
+	${Q}killall renode 2>/dev/null || true
+	${Q}killall mono 2>/dev/null || true
+	${Q}rm -f $(RENODE_PIDFILE) $(RENODE_LOG) $(RENODE_UART)
+
 renode-off: FORCE
 	${Q}echo "Terminating renode..."
 	${Q}(echo && echo quit) | nc -q 1 localhost $(RENODE_PORT) > /dev/null
 	${Q}tail --pid=`cat $(RENODE_PIDFILE)` -f /dev/null
 	${Q}echo "Renode exited."
-	${Q}killall renode 2>/dev/null || true
-	${Q}killall mono 2>/dev/null || true
-	${Q}rm -f $(RENODE_PIDFILE) $(RENODE_LOG) $(RENODE_UART)
+	${Q}make renode-off-force
 
 
 $(RENODE_UPDATE_FILE): test-app/image.bin FORCE
@@ -131,12 +134,19 @@ renode-factory: factory.bin test-app/image.bin $(RENODE_UPDATE_FILE) $(EXPVER) F
 	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
 	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
 	${Q}make renode-on
+	${Q}date +%s.%N > .stime
 	${Q}echo "Expecting version 1:"
 	${Q}test `$(RENODE_EXPVER)` -eq 1 || (make renode-off && false)
-	${Q}make renode-off
+	${Q}date +%s.%N > .etime
+	${Q}make renode-off-force
+	${Q}sleep 1
+	${Q}killall renode 2>/dev/null || true
+	${Q}killall mono 2>/dev/null || true
+	${Q}rm -f $(RENODE_PIDFILE) $(RENODE_LOG) $(RENODE_UART)
 	${Q}rm -f $(TMP)/renode-wolfboot.elf
 	${Q}rm -f $(TMP)/renode-test-v1.bin
 	${Q}rm -f $(RENODE_UPDATE_FILE)
+	${Q}echo $@: BOOT TIME for $(SIGN) on $(TARGET) is $$(echo `cat .etime` - `cat .stime` | bc -l)
 	${Q}echo $@: TEST PASSED
 
 renode-update: factory.bin test-app/image.bin $(EXPVER) FORCE
@@ -215,6 +225,9 @@ renode-corrupted: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UPDATE_FILE)
 	${Q}echo $@: TEST PASSED
 
+renode-factory-ed25519: FORCE
+	make renode-factory SIGN=ED25519
+
 renode-factory-ed448: FORCE
 	make renode-factory SIGN=ED448
 
@@ -232,7 +245,7 @@ renode-factory-rsa4096: FORCE
 
 renode-factory-all: FORCE
 	${Q}make clean
-	${Q}make renode-factory
+	${Q}make renode-factory-ed25519
 	${Q}make clean
 	${Q}make renode-factory-ed448 RENODE_PORT=55156
 	${Q}make clean
@@ -243,6 +256,8 @@ renode-factory-all: FORCE
 	${Q}make renode-factory-rsa2048 RENODE_PORT=55160
 	${Q}make clean
 	${Q}make renode-factory-rsa4096 RENODE_PORT=55161
+	${Q}make clean
+	${Q}make renode-factory SIGN=NONE RENODE_PORT=55162
 	${Q}echo All tests in $@ OK!
 
 renode-update-ed25519: FORCE
@@ -299,6 +314,9 @@ renode-corrupted-rsa2048: FORCE
 renode-corrupted-rsa4096: FORCE
 	make renode-corrupted SIGN=RSA4096
 
+renode-boot-time-all: FORCE
+	tools/scripts/renode-test-all.sh 2>/dev/null |grep "BOOT TIME" 
+
 renode-update-all: FORCE
 	${Q}make clean
 	${Q}make renode-update-ed25519 RENODE_PORT=55155
@@ -312,6 +330,8 @@ renode-update-all: FORCE
 	${Q}make renode-update-rsa2048 RENODE_PORT=55160
 	${Q}make clean
 	${Q}make renode-update-rsa4096 RENODE_PORT=55161
+	${Q}make clean
+	${Q}make renode-update SIGN=NONE RENODE_PORT=55162
 	${Q}echo All tests in $@ OK!
 
 renode-no-downgrade-all: FORCE
@@ -327,6 +347,8 @@ renode-no-downgrade-all: FORCE
 	${Q}make renode-no-downgrade-rsa2048 RENODE_PORT=55160
 	${Q}make clean
 	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55161
+	${Q}make clean
+	${Q}make renode-no-downgrade SIGN=NONE RENODE_PORT=55162
 	${Q}echo All tests in $@ OK!
 
 renode-corrupted-all: FORCE
@@ -342,6 +364,8 @@ renode-corrupted-all: FORCE
 	${Q}make renode-corrupted-rsa2048 RENODE_PORT=55160
 	${Q}make clean
 	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55161
+	${Q}make clean
+	${Q}make renode-corrupted SIGN=NONE RENODE_PORT=55162
 	${Q}echo All tests in $@ OK!
 
 renode-update-all-armored: FORCE
