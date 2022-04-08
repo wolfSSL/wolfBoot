@@ -613,7 +613,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     wc_Sha3_384_Final(&sha3_ctx, hash);
     return 0;
 }
-
+#ifndef WOLFBOOT_NO_SIGN
 static void key_sha3_384(uint8_t *hash)
 {
     int blksz;
@@ -630,6 +630,7 @@ static void key_sha3_384(uint8_t *hash)
     }
     wc_Sha3_384_Final(&sha3_ctx, hash);
 }
+#endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA3-384 */
 
 #ifdef WOLFBOOT_TPM
