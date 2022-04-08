@@ -3617,7 +3617,7 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
     if (rv == CKR_OK) {
         CK_ULONG len;
         ret = WP11_Object_GetAttr(pub, CKA_LABEL, NULL, &len);
-        if (ret == NOT_AVAILABLE_E) {
+        if (ret == 0 && len == 0) {
             CK_ULONG i;
             for (i = 0; i < ulPrivateKeyAttributeCount; i++) {
                 CK_ATTRIBUTE* attr = &pPrivateKeyTemplate[i];
