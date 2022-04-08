@@ -1,0 +1,44 @@
+name: Footprint test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      # Get the arm-non-eabi-gcc toolchain
+      - name: Install arm-none-eabi-gcc
+        uses: fiam/arm-none-eabi-gcc@v1
+        with:
+          # The arm-none-eabi-gcc release to use.
+          release: "9-2019-q4"
+
+      - name: make clean
+        run: |
+          make clean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Install wolfSSL
+        run: |
+          sudo apt-get install --no-install-recommends -y -q make libwolfssl-dev
+
+      - name: Select config
+        run: |
+          cp config/examples/stm32f4.config .config && make include/target.h
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build wolfboot and test footprint
+        run: |
+          make test-size-all
+
