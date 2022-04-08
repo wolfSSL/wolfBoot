@@ -66,6 +66,11 @@ $(EXPVER):
 $(BINASSEMBLE):
 	$(MAKE) -C $(dir $@)
 
+test-size: FORCE
+	$(Q)make clean
+	$(Q)make wolfboot.bin
+	$(Q)FP=`$(SIZE) -A wolfboot.elf | awk -e ' /Total/ {print $$2;}'`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
+
 # Testbed actions
 #
 #
@@ -759,3 +764,15 @@ test-all: clean
 	make test-no-asm-smallstack
 	make test-fastmath-smallstack
 	make test-delta-update
+
+test-size-all:
+	make test-size SIGN=ED25519 LIMIT=10670
+	make test-size SIGN=ECC256  LIMIT=21538
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13042
+	make test-size SIGN=RSA2048 LIMIT=10538
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11626
+	make test-size SIGN=RSA4096 LIMIT=10894
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11910
+	make test-size SIGN=ECC384 LIMIT=16866
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=14294
+	make test-size SIGN=ED448 LIMIT=12830
