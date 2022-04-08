@@ -45,6 +45,26 @@ jobs:
 
   ##### SMALL STACK tests
 
+  # SIGN=NONE TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=NONE WOLFBOOT_SMALL_STACK=1
+
+      - name: Build wolfboot and test app image v1, SIGN=NONE WOLFBOOT_SMALL_STACK=1
+        run: |
+          make SIGN=NONE
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=NONE WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests SIGN=NONE WOLFBOOT_SMALL_STACK=1
+        run: ./tools/renode/docker-test.sh
+
   # ECC256 TEST
       - name: make clean
         run: |
@@ -298,7 +318,7 @@ jobs:
         with:
           name: Renode Test Results
           path: test_results/
-  
+
 ##### SMALL STACK + NO_ASM tests
 
   # ECC256 TEST
@@ -339,46 +359,6 @@ jobs:
           make /tmp/renode-test-update.bin SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
 
       - name: Renode Tests ECC384
-        run: ./tools/renode/docker-test.sh
-
-# ED25519 TEST
-      - name: make clean
-        run: |
-          make clean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
-
-      - name: Build wolfboot and test app image v1, SIGN=ED25519
-        run: |
-          make SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 NO_ASM=1  && cp /tmp/renode-test-update.bin test-app/
-
-      - name: Renode Tests ED25519
-        run: ./tools/renode/docker-test.sh
-
-# ED448 TEST
-      - name: make clean
-        run: |
-          make clean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
-
-      - name: Build wolfboot and test app image v1, SIGN=ED448
-        run: |
-          make SIGN=ED448 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED448 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
-
-      - name: Renode Tests ED448
         run: ./tools/renode/docker-test.sh
 
 # RSA2048 TEST
@@ -469,46 +449,6 @@ jobs:
       - name: Renode Tests ECC384
         run: ./tools/renode/docker-test.sh
 
-# ED25519 TEST
-      - name: make clean
-        run: |
-          make clean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
-
-      - name: Build wolfboot and test app image v1, SIGN=ED25519
-        run: |
-          make SIGN=ED25519 SPMATH=0
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED25519 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
-
-      - name: Renode Tests ED25519
-        run: ./tools/renode/docker-test.sh
-
-# ED448 TEST
-      - name: make clean
-        run: |
-          make clean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
-
-      - name: Build wolfboot and test app image v1, SIGN=ED448
-        run: |
-          make SIGN=ED448 SPMATH=0
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED448 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
-
-      - name: Renode Tests ED448
-        run: ./tools/renode/docker-test.sh
-
 # RSA2048 TEST
       - name: make clean
         run: |
@@ -554,7 +494,7 @@ jobs:
         with:
           name: Renode Test Results
           path: test_results/
-  
+
 ##### SMALL STACK + FAST MATH tests
 
   # ECC256 TEST
@@ -595,46 +535,6 @@ jobs:
           make /tmp/renode-test-update.bin SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
 
       - name: Renode Tests ECC384
-        run: ./tools/renode/docker-test.sh
-
-# ED25519 TEST
-      - name: make clean
-        run: |
-          make clean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
-
-      - name: Build wolfboot and test app image v1, SIGN=ED25519
-        run: |
-          make SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 SPMATH=0
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED25519 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
-
-      - name: Renode Tests ED25519
-        run: ./tools/renode/docker-test.sh
-
-# ED448 TEST
-      - name: make clean
-        run: |
-          make clean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
-
-      - name: Build wolfboot and test app image v1, SIGN=ED448
-        run: |
-          make SIGN=ED448 WOLFBOOT_SMALL_STACK=1 SPMATH=0
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED448 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
-
-      - name: Renode Tests ED448
         run: ./tools/renode/docker-test.sh
 
 # RSA2048 TEST

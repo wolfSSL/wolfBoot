@@ -42,6 +42,27 @@ jobs:
         run: |
           make -C tools/keytools
 
+   # SIGN=NONE TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=NONE
+
+      - name: Build wolfboot and test app image v1, SIGN=NONE
+        run: |
+          make SIGN=NONE
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=NONE && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests SIGN=NONE
+        run: ./tools/renode/docker-test.sh
+
+
   # ECC256 TEST
       - name: make clean
         run: |

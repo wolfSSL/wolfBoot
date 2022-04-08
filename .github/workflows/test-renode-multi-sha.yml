@@ -45,6 +45,27 @@ jobs:
 
   ##### SHA384 tests
 
+    # SIGN=NONE TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=NONE HASH=SHA384
+
+      - name: Build wolfboot and test app image v1, SIGN=NONE HASH=SHA384
+        run: |
+          make SIGN=NONE
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=NONE HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests SIGN=NONE HASH=SHA384
+        run: ./tools/renode/docker-test.sh
+
+
   # ECC256 TEST
       - name: make clean
         run: |
@@ -171,7 +192,26 @@ jobs:
           name: Renode Test Results
           path: test_results/
 
-  ##### SHA-384 tests
+  ##### SHA-3 tests
+  # SIGN=NONE TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=NONE HASH=SHA3
+
+      - name: Build wolfboot and test app image v1, SIGN=NONE HASH=SHA3
+        run: |
+          make SIGN=NONE
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=NONE HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests SIGN=NONE HASH=SHA3
+        run: ./tools/renode/docker-test.sh
 
   # ECC256 TEST
       - name: make clean

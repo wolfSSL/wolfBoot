@@ -830,6 +830,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 #ifdef WOLFBOOT_NO_SIGN
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
+    wolfBoot_image_confirm_signature_ok(img);
     return 0;
 }
 #else

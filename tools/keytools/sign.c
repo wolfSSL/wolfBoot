@@ -1195,7 +1195,7 @@ int main(int argc, char** argv)
 
     /* Parse Arguments */
     for (i=1; i<argc; i++) {
-        if (strcmp(argv[i], "--no-CMD.sign") == 0) {
+        if (strcmp(argv[i], "--no-sign") == 0) {
             CMD.sign = NO_SIGN;
             sign_str = "NONE";
         } else if (strcmp(argv[i], "--ed25519") == 0) {
