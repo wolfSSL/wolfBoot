@@ -766,6 +766,7 @@ test-all: clean
 	make test-delta-update
 
 test-size-all:
+	make test-size SIGN=NONE LIMIT=4602
 	make test-size SIGN=ED25519 LIMIT=10670
 	make test-size SIGN=ECC256  LIMIT=21538
 	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13042
