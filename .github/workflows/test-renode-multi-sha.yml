@@ -56,7 +56,7 @@ jobs:
 
       - name: Build wolfboot and test app image v1, SIGN=NONE HASH=SHA384
         run: |
-          make SIGN=NONE
+          make SIGN=NONE HASH=SHA384
 
       - name: Build update image v2
         run: |
@@ -204,7 +204,7 @@ jobs:
 
       - name: Build wolfboot and test app image v1, SIGN=NONE HASH=SHA3
         run: |
-          make SIGN=NONE
+          make SIGN=NONE HASH=SHA3
 
       - name: Build update image v2
         run: |
