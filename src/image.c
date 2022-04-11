@@ -256,7 +256,7 @@ static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
     ret = wc_RsaPublicKeyDecode_ex(KEY_BUFFER, &inOutIdx, KEY_LEN, &n, &nSz, &e,
             &eSz);
     if (ret < 0)
-        return -1;
+        return;
 
     /* Load public key into TPM */
     memset(&tpmKey, 0, sizeof(tpmKey));
@@ -268,7 +268,7 @@ static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
         errStr = wolfTPM2_GetRCString(ret);
         (void)errStr;
     #endif
-        return -1;
+        return;
     }
 
     /* Perform public decrypt and manually un-pad */
