@@ -1,6 +1,7 @@
 TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
-EXPVER=tools/test-expect-version/test-expect-version /dev/ttyS0
+EXPVER=tools/test-expect-version/test-expect-version
+EXPVER_CMD=$(EXPVER) /dev/ttyS0
 BINASSEMBLE=tools/bin-assemble/bin-assemble
 SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
@@ -199,17 +200,17 @@ test-01-forward-update-no-downgrade: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory
 	@echo Expecting version '1'
-	@(test `$(EXPVER)` -eq 1)
+	(test `$(EXPVER_CMD)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=4
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=1
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -218,17 +219,17 @@ test-02-forward-update-allow-downgrade: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory ALLOW_DOWNGRADE=1
 	@echo Expecting version '1'
-	@(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER_CMD)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=4
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=2
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 2)
+	@(test `$(EXPVER_CMD)` -eq 2)
 	@make clean
 	@echo TEST PASSED
 
@@ -237,21 +238,21 @@ test-03-rollback: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory
 	@echo Expecting version '1'
-	@(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER_CMD)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=4
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update TEST_UPDATE_VERSION=5
 	@echo Expecting version '5'
-	@(test `$(EXPVER)` -eq 5)
+	@(test `$(EXPVER_CMD)` -eq 5)
 	@echo
 	@echo Resetting to trigger rollback...
 	@make test-reset
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -274,17 +275,17 @@ test-21-forward-update-no-downgrade-SPI: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory $(SPI_OPTIONS)
 	@echo Expecting version '1'
-	@(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER_CMD)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=4 $(SPI_OPTIONS)
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=1 $(SPI_OPTIONS)
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -293,22 +294,22 @@ test-23-rollback-SPI: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory $(SPI_OPTIONS)
 	@echo Expecting version '1'
-	@(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER_CMD)` -eq 1)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=4 $(SPI_OPTIONS)
 	@echo Expecting version '4'
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@echo
 	@echo Creating and uploading update image...
 	@make test-update-ext TEST_UPDATE_VERSION=5 $(SPI_OPTIONS)
 	@echo Expecting version '5'
-	@(test `$(EXPVER)` -eq 5)
+	@(test `$(EXPVER_CMD)` -eq 5)
 	@echo
 	@echo Resetting to trigger rollback...
 	@make test-reset
 	@sleep 2
-	@(test `$(EXPVER)` -eq 4)
+	@(test `$(EXPVER_CMD)` -eq 4)
 	@make clean
 	@echo TEST PASSED
 
@@ -320,13 +321,13 @@ test-34-forward-self-update: $(EXPVER) FORCE
 	@echo Creating and uploading factory image...
 	@make test-factory WOLFBOOT_VERSION=1 RAM_CODE=1 SIGN=$(SIGN)
 	@echo Expecting version '1'
-	@(test `$(EXPVER)` -eq 1)
+	@(test `$(EXPVER_CMD)` -eq 1)
 	@echo
 	@echo Updating keys, firmware, bootloader
 	@make test-self-update WOLFBOOT_VERSION=4 TEST_UPDATE_VERSION=2 RAM_CODE=1 SIGN=$(SIGN)
 	@sleep 2
 	@echo Expecting version '2'
-	@(test `$(EXPVER)` -eq 2)
+	@(test `$(EXPVER_CMD)` -eq 2)
 	@make clean
 	@echo TEST PASSED
 
