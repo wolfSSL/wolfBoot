@@ -31,6 +31,7 @@
 #include <wolfssl/wolfcrypt/hmac.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
+#include <wolfssl/wolfcrypt/aes.h>
 
 #include <wolfpkcs11/internal.h>
 #include <wolfpkcs11/store.h>
@@ -138,6 +139,12 @@ struct WP11_Object {
     } data;
     CK_KEY_TYPE type;                  /* Key type of this object             */
     word32 size;                       /* Size of the key in bits or bytes    */
+#ifndef WOLFPKCS11_NO_STORE
+    unsigned char* keyData;            /* Encoded key data                    */
+    int keyDataLen;                    /* Length of encoded key data          */
+    byte iv[GCM_NONCE_MID_SZ];         /* IV/nonce for encrypt/decrypt        */
+    byte encoded:1;                    /* Key isn't in decoded form           */
+#endif
 
     WP11_Session* session;             /* Session object belongs to           */
     WP11_Slot* slot;                   /* Slot object belongs to              */
@@ -275,6 +282,10 @@ typedef struct WP11_Token {
     int userFailedLogin;               /* Count of consecutive failed logins  */
     time_t userLastFailedLogin;        /* Time of last login if it failed     */
     time_t userFailLoginTimeout;       /* Timeout after max login fails       */
+#ifndef WOLFPKCS11_NO_STORE
+    byte seed[PIN_SEED_SZ];            /* Seed used to calculate key          */
+    byte key[AES_256_KEY_SIZE];        /* Key to en/decrypt private data      */
+#endif
     WC_RNG rng;                        /* Random number generator             */
     WP11_Lock rngLock;                 /* Lock for random access              */
     WP11_Lock lock;                    /* Lock for object access              */
@@ -1250,8 +1261,189 @@ int WP11_Object_New(WP11_Session* session, CK_KEY_TYPE type,
     return wp11_Object_New(session->slot, type, object);
 }
 
-#ifndef WOLFSSL_NO_STOGE
+#ifndef WOLFPKCS11_NO_STORE
+/**
+ * Encrypt the data with AES-GCM.
+ *
+ * The tag is append to the encrypted data.
+ *
+ * @param [out]  out    Output buffer to hold encrypted data and tag.
+ * @param [in]   data   Data to be encrypted.
+ * @param [in]   len    Length of data.
+ * @param [in]   key    AES key.
+ * @param [in]   keySz  Length of AES key in bytes.
+ * @param [in]   iv     IV/nonce.
+ * @param [in]   ivSz   Length of IV in bytes.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_EncryptData(byte* out, byte* data, int len, byte* key,
+                            int keySz, byte* iv, int ivSz)
+{
+    Aes aes;
+    int ret;
+
+    ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_AesGcmSetKey(&aes, key, keySz);
+    }
+    if (ret == 0) {
+        ret = wc_AesGcmEncrypt(&aes, out, data, len, iv, ivSz, out + len,
+                                                       AES_BLOCK_SIZE, NULL, 0);
+    }
+
+    return ret;
+}
+
+/**
+ * Decrypt the data with AES-GCM.
+ *
+ * The tag is append to the encrypted data.
+ *
+ * @param [out]  out    Output buffer to hold decrypted data.
+ * @param [in]   data   Data and tag to be decrypted.
+ * @param [in]   len    Length of data.
+ * @param [in]   key    AES key.
+ * @param [in]   keySz  Length of AES key in bytes.
+ * @param [in]   iv     IV/nonce.
+ * @param [in]   ivSz   Length of IV in bytes.
+ * @return  0 on success.
+ * @reutrn  AES_GCM_AUTH_E when encrypted data could not be verified.
+ * @return  Other -ve on failure.
+ */
+static int wp11_DecryptData(byte* out, byte* data, int len, byte* key,
+                            int keySz, byte* iv, int ivSz)
+{
+    Aes aes;
+    int ret;
+
+    ret = wc_AesInit(&aes, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_AesGcmSetKey(&aes, key, keySz);
+    }
+    if (ret == 0) {
+        ret = wc_AesGcmDecrypt(&aes, out, data, len, iv, ivSz, data + len,
+                                                       AES_BLOCK_SIZE, NULL, 0);
+    }
+
+    return ret;
+}
+
 #ifndef NO_RSA
+/**
+ * Decode the RSA key.
+ *
+ * Encoded private keys are encrypted.
+ *
+ * @param [in, out]  object  RSA key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Decode_RsaKey(WP11_Object* object)
+{
+    int ret = 0;
+    word32 idx = 0;
+
+    if (object->objClass == CKO_PRIVATE_KEY) {
+        unsigned char* der;
+        int len = object->keyDataLen - AES_BLOCK_SIZE;
+
+        der = (unsigned char*)XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        if (der == NULL) {
+            ret = MEMORY_E;
+        }
+        if (ret == 0) {
+            ret = wp11_DecryptData(der, object->keyData, len,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+        }
+        if (ret == 0) {
+            /* Decode RSA private key. */
+            ret = wc_RsaPrivateKeyDecode(der, &idx, &object->data.rsaKey, len);
+            XMEMSET(der, 0, len);
+        }
+        if (der != NULL)
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    else {
+        /* Decode RSA public key. */
+        ret = wc_RsaPublicKeyDecode(object->keyData, &idx, &object->data.rsaKey,
+                                                            object->keyDataLen);
+    }
+    object->encoded = (ret != 0);
+
+    return ret;
+}
+
+/**
+ * Encode the RSA key.
+ *
+ * Private keys are encoded and then encrypted.
+ *
+ * @param [in, out]  object  RSA key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Encode_RsaKey(WP11_Object* object)
+{
+    int ret;
+
+    if (object->objClass == CKO_PRIVATE_KEY) {
+        /* Get length of encoded private key. */
+        ret = wc_RsaKeyToDer(&object->data.rsaKey, NULL, 0);
+        if (ret >= 0) {
+            object->keyDataLen = ret + AES_BLOCK_SIZE;
+            ret = 0;
+        }
+    }
+    else {
+        /* Get length of encoded public key. */
+        ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, NULL, 0);
+        if (ret >= 0) {
+            object->keyDataLen = ret;
+            ret = 0;
+        }
+    }
+
+    if (ret == 0) {
+        XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        /* Allocate buffer to hold encoded key. */
+        object->keyData = XMALLOC(object->keyDataLen, NULL,
+                                                       DYNAMIC_TYPE_TMP_BUFFER);
+        if (object->keyData == NULL)
+            ret = MEMORY_E;
+    }
+
+    if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+        /* Encode private key. */
+        ret = wc_RsaKeyToDer(&object->data.rsaKey, object->keyData,
+                                                            object->keyDataLen);
+        if (ret >= 0) {
+            ret = wp11_EncryptData(object->keyData, object->keyData, ret,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+        }
+    }
+    else if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        /* Encode public key. */
+        ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, object->keyData,
+                                                            object->keyDataLen);
+        if (ret >= 0) {
+            ret = 0;
+        }
+    }
+
+    if (ret != 0) {
+        XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        object->keyData = NULL;
+        object->keyDataLen = 0;
+    }
+
+    return ret;
+}
+
 /**
  * Load an RSA key from storage.
  *
@@ -1267,9 +1459,6 @@ static int wp11_Object_Load_RsaKey(WP11_Object* object, int tokenId, int objId)
 {
     int ret;
     void* storage = NULL;
-    unsigned char* der = NULL;
-    int len;
-    word32 idx = 0;
     int storeType;
 
     /* Determine store type - private keys may be encrypted. */
@@ -1282,19 +1471,8 @@ static int wp11_Object_Load_RsaKey(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(storeType, tokenId, objId, 1, &storage);
     if (ret == 0) {
         /* Read of DER encoded RSA key. */
-        ret = wp11_storage_read_alloc_array(storage, &der, &len);
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PRIV) {
-            /* Decode RSA private key. */
-            ret = wc_RsaPrivateKeyDecode(der, &idx, &object->data.rsaKey, len);
-        }
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PUB) {
-            /* Decode RSA public key. */
-            ret = wc_RsaPublicKeyDecode(der, &idx, &object->data.rsaKey, len);
-        }
-        if (der != NULL) {
-            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        }
-
+        ret = wp11_storage_read_alloc_array(storage, &object->keyData,
+                                                           &object->keyDataLen);
         wp11_storage_close(storage);
     }
 
@@ -1316,8 +1494,6 @@ static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
 {
     int ret;
     void* storage = NULL;
-    unsigned char* der = NULL;
-    word32 len;
     int storeType;
 
     /* Determine store type - private keys may be encrypted. */
@@ -1329,53 +1505,14 @@ static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
     /* Open access to RSA key. */
     ret = wp11_storage_open(storeType, tokenId, objId, 0, &storage);
     if (ret == 0) {
-        if (storeType == WOLFPKCS11_STORE_RSAKEY_PRIV) {
-            /* Get length of encoded private key. */
-            ret = wc_RsaKeyToDer(&object->data.rsaKey, NULL, 0);
-            if (ret >= 0) {
-                len = ret;
-                ret = 0;
-            }
+        if (object->keyData == NULL) {
+            ret = wp11_Object_Encode_RsaKey(object);
         }
-        else {
-            /* Get length of encoded public key. */
-            ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, NULL, 0);
-            if (ret >= 0) {
-                len = ret;
-                ret = 0;
-            }
-        }
-
-        if (ret == 0) {
-            /* Allocate buffer to hold encoded key. */
-            der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-            if (der == NULL)
-                ret = MEMORY_E;
-        }
-
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PRIV) {
-            /* Encode private key. */
-            ret = wc_RsaKeyToDer(&object->data.rsaKey, der, len);
-            if (ret >= 0) {
-                ret = 0;
-            }
-        }
-        else if (ret == 0 && storeType == WOLFPKCS11_STORE_RSAKEY_PUB) {
-            /* Encode public key. */
-            ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, der, len);
-            if (ret >= 0) {
-                ret = 0;
-            }
-        }
-
         if (ret == 0) {
             /* Write encoded RSA key to storage. */
-            ret = wp11_storage_write_array(storage, der, len);
+            ret = wp11_storage_write_array(storage, object->keyData,
+                                                            object->keyDataLen);
         }
-        if (der != NULL) {
-            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        }
-
         wp11_storage_close(storage);
     }
 
@@ -1384,6 +1521,120 @@ static int wp11_Object_Store_RsaKey(WP11_Object* object, int tokenId, int objId)
 #endif
 
 #ifdef HAVE_ECC
+/**
+ * Decode the ECC key.
+ *
+ * Encoded private keys are encrypted.
+ *
+ * @param [in, out]  object  ECC key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Decode_EccKey(WP11_Object* object)
+{
+    int ret = 0;
+    word32 idx = 0;
+
+    if (object->objClass == CKO_PRIVATE_KEY) {
+        unsigned char* der;
+        int len = object->keyDataLen - AES_BLOCK_SIZE;
+
+        der = (unsigned char*)XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        if (der == NULL) {
+            ret = MEMORY_E;
+        }
+        if (ret == 0) {
+            ret = wp11_DecryptData(der, object->keyData, len,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+        }
+        if (ret == 0) {
+            /* Decode RSA private key. */
+            ret = wc_EccPrivateKeyDecode(der, &idx, &object->data.ecKey, len);
+            XMEMSET(der, 0, len);
+        }
+        if (der != NULL)
+            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+    else {
+        /* Decode RSA public key. */
+        ret = wc_EccPublicKeyDecode(object->keyData, &idx, &object->data.ecKey,
+                                                            object->keyDataLen);
+    }
+    object->encoded = (ret != 0);
+
+    return ret;
+}
+
+/**
+ * Encode the ECC key.
+ *
+ * Private keys are encoded and then encrypted.
+ *
+ * @param [in, out]  object  ECC key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Encode_EccKey(WP11_Object* object)
+{
+    int ret;
+
+    if (object->objClass == CKO_PRIVATE_KEY) {
+        /* Get length of encoded private key. */
+        ret = wc_EccKeyDerSize(&object->data.ecKey, 0);
+        if (ret >= 0) {
+            object->keyDataLen = ret + AES_BLOCK_SIZE;
+            ret = 0;
+        }
+    }
+    else {
+        /* Get length of encoded public key. */
+        ret = wc_EccPublicKeyToDer(&object->data.ecKey, NULL, 0, 1);
+        if (ret >= 0) {
+            object->keyDataLen = ret;
+            ret = 0;
+        }
+    }
+
+    if (ret == 0) {
+        XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        /* Allocate buffer to hold encoded key. */
+        object->keyData = XMALLOC(object->keyDataLen, NULL,
+                                                       DYNAMIC_TYPE_TMP_BUFFER);
+        if (object->keyData == NULL)
+            ret = MEMORY_E;
+    }
+
+    if (ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+        /* Encode private key. */
+        ret = wc_EccPrivateKeyToDer(&object->data.ecKey, object->keyData,
+                                                            object->keyDataLen);
+        if (ret >= 0) {
+            ret = wp11_EncryptData(object->keyData, object->keyData, ret,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+        }
+    }
+    else if (ret == 0 && object->objClass == CKO_PUBLIC_KEY) {
+        /* Encode public key. */
+        ret = wc_EccPublicKeyToDer(&object->data.ecKey, object->keyData,
+                                                         object->keyDataLen, 1);
+        if (ret >= 0) {
+            ret = 0;
+        }
+    }
+
+    if (ret != 0) {
+        XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        object->keyData = NULL;
+        object->keyDataLen = 0;
+    }
+
+    return ret;
+}
+
 /**
  * Load an ECC key from storage.
  *
@@ -1399,9 +1650,6 @@ static int wp11_Object_Load_EccKey(WP11_Object* object, int tokenId, int objId)
 {
     int ret;
     void* storage = NULL;
-    unsigned char* der = NULL;
-    int len;
-    word32 idx = 0;
     int storeType;
 
     /* Determine store type - private keys may be encrypted. */
@@ -1414,19 +1662,8 @@ static int wp11_Object_Load_EccKey(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(storeType, tokenId, objId, 1, &storage);
     if (ret == 0) {
         /* Read DER encoded ECC key. */
-        ret = wp11_storage_read_alloc_array(storage, &der, &len);
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PRIV) {
-            /* Decode EC private key. */
-            ret = wc_EccPrivateKeyDecode(der, &idx, &object->data.ecKey, len);
-        }
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PUB) {
-            /* Decode EC public key. */
-            ret = wc_EccPublicKeyDecode(der, &idx, &object->data.ecKey, len);
-        }
-        if (der != NULL) {
-            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        }
-
+        ret = wp11_storage_read_alloc_array(storage, &object->keyData,
+                                                           &object->keyDataLen);
         wp11_storage_close(storage);
     }
 
@@ -1448,8 +1685,6 @@ static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
 {
     int ret;
     void* storage = NULL;
-    unsigned char* der = NULL;
-    word32 len = 0;
     int storeType;
 
     /* Determine store type - private keys may be encrypted. */
@@ -1461,51 +1696,13 @@ static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
     /* Open access to ECC key. */
     ret = wp11_storage_open(storeType, tokenId, objId, 0, &storage);
     if (ret == 0) {
-        if (storeType == WOLFPKCS11_STORE_ECCKEY_PRIV) {
-            /* Get length of encoded private key. */
-            ret = wc_EccKeyDerSize(&object->data.ecKey, 0);
-            if (ret >= 0) {
-                len = ret;
-                ret = 0;
-            }
+        if (object->keyData == NULL) {
+            ret = wp11_Object_Encode_EccKey(object);
         }
-        else {
-            /* Get length of encoded public key. */
-            ret = wc_EccPublicKeyToDer(&object->data.ecKey, NULL, 0, 1);
-            if (ret >= 0) {
-                len = ret;
-                ret = 0;
-            }
-        }
-
-        if (ret == 0) {
-            /* Allocate buffer to hold encoded key. */
-            der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-            if (der == NULL)
-                ret = MEMORY_E;
-        }
-
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PRIV) {
-            /* Encode private key. */
-            ret = wc_EccPrivateKeyToDer(&object->data.ecKey, der, len);
-            if (ret >= 0) {
-                ret = 0;
-            }
-        }
-        if (ret == 0 && storeType == WOLFPKCS11_STORE_ECCKEY_PUB) {
-            /* Encode public key. */
-            ret = wc_EccPublicKeyToDer(&object->data.ecKey, der, len, 1);
-            if (ret >= 0) {
-                ret = 0;
-            }
-        }
-
         if (ret == 0) {
             /* Write encoded ECC key to storage. */
-            ret = wp11_storage_write_array(storage, der, len);
-        }
-        if (der != NULL) {
-            XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            ret = wp11_storage_write_array(storage, object->keyData,
+                                                            object->keyDataLen);
         }
 
         wp11_storage_close(storage);
@@ -1516,6 +1713,78 @@ static int wp11_Object_Store_EccKey(WP11_Object* object, int tokenId, int objId)
 #endif
 
 #ifndef NO_DH
+/**
+ * Decode the DH key.
+ *
+ * Encoded private keys are encrypted.
+ *
+ * @param [in, out]  object  DH key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Decode_DhKey(WP11_Object* object)
+{
+    int ret = 0;
+
+    if (object->objClass == CKO_PRIVATE_KEY) {
+        ret = wp11_DecryptData(object->data.dhKey.key, object->keyData,
+                                    object->keyDataLen - AES_BLOCK_SIZE,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+        if (ret == 0)
+            object->data.dhKey.len = object->keyDataLen - AES_BLOCK_SIZE;
+    }
+    else {
+        XMEMCPY(object->data.dhKey.key, object->keyData, object->keyDataLen);
+        object->data.dhKey.len = object->keyDataLen;
+    }
+    object->encoded = (ret != 0);
+
+    return ret;
+}
+
+/**
+ * Encode the DH key.
+ *
+ * Private keys are encrypted.
+ *
+ * @param [in, out]  object  DH key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Encode_DhKey(WP11_Object* object)
+{
+    int ret = 0;
+
+    object->keyDataLen = object->data.dhKey.len + AES_BLOCK_SIZE;
+    XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    /* Allocate buffer to hold encoded key. */
+    object->keyData = XMALLOC(object->keyDataLen, NULL,
+                                                       DYNAMIC_TYPE_TMP_BUFFER);
+    if (object->keyData == NULL)
+        ret = MEMORY_E;
+
+    if (ret == 0) {
+        if (object->objClass == CKO_PRIVATE_KEY) {
+            ret = wp11_EncryptData(object->keyData, object->data.dhKey.key,
+                                    object->data.dhKey.len,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+            if (ret == 0)
+                object->keyDataLen = object->data.dhKey.len + AES_BLOCK_SIZE;
+        }
+        else {
+            XMEMCPY(object->keyData, object->data.dhKey.key,
+                                                        object->data.dhKey.len);
+            object->keyDataLen = object->data.dhKey.len;
+        }
+    }
+
+    return ret;
+}
+
 /**
  * Load an DH key from storage.
  *
@@ -1546,8 +1815,8 @@ static int wp11_Object_Load_DhKey(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(storeType, tokenId, objId, 1, &storage);
     if (ret == 0) {
         /* Read DH key. */
-        ret = wp11_storage_read_array(storage, object->data.dhKey.key,
-            &object->data.dhKey.len, WP11_MAX_DH_KEY_SZ);
+        ret = wp11_storage_read_alloc_array(storage, &object->keyData,
+            &object->keyDataLen);
         if (ret == 0) {
             /* Read DER encoded DH parameters. */
             ret = wp11_storage_read_alloc_array(storage, &der, &len);
@@ -1734,8 +2003,13 @@ static int wp11_Object_Store_DhKey(WP11_Object* object, int tokenId, int objId)
     /* Open access to DH key. */
     ret = wp11_storage_open(storeType, tokenId, objId, 0, &storage);
     if (ret == 0) {
-        ret = wp11_storage_write_array(storage, object->data.dhKey.key,
-                                                        object->data.dhKey.len);
+        if (object->keyData == NULL) {
+            ret = wp11_Object_Encode_DhKey(object);
+        }
+        if (ret == 0) {
+            ret = wp11_storage_write_array(storage, object->keyData,
+                                                            object->keyDataLen);
+        }
         if (ret == 0) {
             /* Get length of encoded DH parameters. */
             ret = wc_DhParamsToDer(&object->data.dhKey.params, NULL, &len);
@@ -1772,6 +2046,61 @@ static int wp11_Object_Store_DhKey(WP11_Object* object, int tokenId, int objId)
 #endif
 
 /**
+ * Decode the symmetric key - requires decryption.
+ *
+ * @param [in, out]  object  Symmetric key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Decode_SymmKey(WP11_Object* object)
+{
+    int ret;
+
+    ret = wp11_DecryptData(object->data.symmKey.data, object->keyData,
+                                    object->keyDataLen - AES_BLOCK_SIZE,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+    if (ret == 0)
+        object->data.symmKey.len = object->keyDataLen - AES_BLOCK_SIZE;
+    object->encoded = (ret != 0);
+
+    return ret;
+}
+
+/**
+ * Encode the symmetric key - requires encryption.
+ *
+ * @param [in, out]  object  Symmetric key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Encode_SymmKey(WP11_Object* object)
+{
+    int ret = 0;
+
+    object->keyDataLen = object->data.symmKey.len + AES_BLOCK_SIZE;
+    XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    /* Allocate buffer to hold encoded key. */
+    object->keyData = XMALLOC(object->keyDataLen, NULL,
+                                                       DYNAMIC_TYPE_TMP_BUFFER);
+    if (object->keyData == NULL)
+        ret = MEMORY_E;
+
+    if (ret == 0) {
+        ret = wp11_EncryptData(object->keyData, object->data.symmKey.data,
+                                    object->data.symmKey.len,
+                                    object->slot->token.key,
+                                    sizeof(object->slot->token.key), object->iv,
+                                    sizeof(object->iv));
+        if (ret == 0)
+            object->keyDataLen = object->data.symmKey.len + AES_BLOCK_SIZE;
+    }
+
+    return ret;
+}
+
+/**
  * Load an symmetric key from storage.
  *
  * @param [in, out]  object   Symmetric key object.
@@ -1791,8 +2120,8 @@ static int wp11_Object_Load_SymmKey(WP11_Object* object, int tokenId, int objId)
                             &storage);
     if (ret == 0) {
         /* Read symmetric key from storage. */
-        ret = wp11_storage_read_array(storage, object->data.symmKey.data,
-            &object->data.symmKey.len, WP11_MAX_SYM_KEY_SZ);
+        ret = wp11_storage_read_alloc_array(storage, &object->keyData,
+            &object->keyDataLen);
         wp11_storage_close(storage);
     }
 
@@ -1819,9 +2148,14 @@ static int wp11_Object_Store_SymmKey(WP11_Object* object, int tokenId,
     ret = wp11_storage_open(WOLFPKCS11_STORE_SYMMKEY, tokenId, objId, 0,
                             &storage);
     if (ret == 0) {
-        /* Write symmetric key to storage. */
-        ret = wp11_storage_write_array(storage, object->data.symmKey.data,
-                                       object->data.symmKey.len);
+        if (object->keyData == NULL) {
+            ret = wp11_Object_Encode_SymmKey(object);
+        }
+        if (ret == 0) {
+            /* Write symmetric key to storage. */
+            ret = wp11_storage_write_array(storage, object->keyData,
+                object->keyDataLen);
+        }
         wp11_storage_close(storage);
     }
 
@@ -1848,8 +2182,13 @@ static int wp11_Object_Load(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 1,
                             &storage);
     if (ret == 0) {
-        /* Read handle value. */
-        ret = wp11_storage_read_ulong(storage, &object->handle);
+        /* Read the IV. */
+        ret = wp11_storage_read_fixed_array(storage, object->iv,
+                                                            sizeof(object->iv));
+        if (ret == 0) {
+            /* Read handle value. */
+            ret = wp11_storage_read_ulong(storage, &object->handle);
+        }
         if (ret == 0) {
             /* Read object class. */
             ret = wp11_storage_read_ulong(storage, &object->objClass);
@@ -1958,8 +2297,13 @@ static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
     ret = wp11_storage_open(WOLFPKCS11_STORE_OBJECT, tokenId, objId, 0,
                             &storage);
     if (ret == 0) {
-        /* Write handle value. */
-        ret = wp11_storage_write_ulong(storage, object->handle);
+        /* Write the start date. */
+        ret = wp11_storage_write_fixed_array(storage, object->iv,
+                                                            sizeof(object->iv));
+        if (ret == 0) {
+            /* Write handle value. */
+            ret = wp11_storage_write_ulong(storage, object->handle);
+        }
         if (ret == 0) {
             /* Write object class. */
             ret = wp11_storage_write_ulong(storage, object->objClass);
@@ -2008,6 +2352,12 @@ static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
 
         wp11_storage_close(storage);
     }
+    if (ret == 0 && object->keyData == NULL &&
+              (object->objClass == CKO_PRIVATE_KEY || object->type == CKK_AES ||
+               object->type == CKK_GENERIC_SECRET)) {
+        ret = wc_RNG_GenerateBlock(&object->slot->token.rng, object->iv,
+                                                            sizeof(object->iv));
+    }
     if (ret == 0) {
         /* Store key data separately. */
         switch (object->type) {
@@ -2035,6 +2385,110 @@ static int wp11_Object_Store(WP11_Object* object, int tokenId, int objId)
             default:
                 ret = NOT_AVAILABLE_E;
         }
+    }
+
+    return ret;
+}
+
+/**
+ * Decode the key object. Private keys require decryption.
+ *
+ * When decryption authentication fails then the wrong user is trying to access
+ * the private key.
+ *
+ * @param [in, out]  object  Key object.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Decode(WP11_Object* object)
+{
+    int ret;
+
+    switch (object->type) {
+    #ifndef NO_RSA
+        case CKK_RSA:
+            ret = wp11_Object_Decode_RsaKey(object);
+            break;
+    #endif
+    #ifdef HAVE_ECC
+        case CKK_EC:
+            ret = wp11_Object_Decode_EccKey(object);
+            break;
+    #endif
+    #ifndef NO_DH
+        case CKK_DH:
+            ret = wp11_Object_Decode_DhKey(object);
+            break;
+    #endif
+    #ifndef NO_AES
+        case CKK_AES:
+    #endif
+        case CKK_GENERIC_SECRET:
+            ret = wp11_Object_Decode_SymmKey(object);
+            break;
+        default:
+            ret = NOT_AVAILABLE_E;
+    }
+
+    /* Authentication failure means this object isn't for this user. */
+    if (ret == AES_GCM_AUTH_E)
+        ret = 0;
+
+    return ret;
+}
+
+/**
+ * Encode the key object. Private keys require encryption.
+ *
+ * @param [in, out]  object   Key object.
+ * @param [in]       protect  Unencrypred private key data is cleared.
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+static int wp11_Object_Encode(WP11_Object* object, int protect)
+{
+    int ret;
+
+    switch (object->type) {
+    #ifndef NO_RSA
+        case CKK_RSA:
+            ret = wp11_Object_Encode_RsaKey(object);
+            if (protect && ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+                wc_FreeRsaKey(&object->data.rsaKey);
+                object->encoded = 1;
+            }
+            break;
+    #endif
+    #ifdef HAVE_ECC
+        case CKK_EC:
+            ret = wp11_Object_Encode_EccKey(object);
+            if (protect && ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+                wc_ecc_free(&object->data.ecKey);
+                object->encoded = 1;
+            }
+            break;
+    #endif
+    #ifndef NO_DH
+        case CKK_DH:
+            ret = wp11_Object_Encode_DhKey(object);
+            if (protect && ret == 0 && object->objClass == CKO_PRIVATE_KEY) {
+                XMEMSET(object->data.dhKey.key, 0, object->data.dhKey.len);
+                object->encoded = 1;
+            }
+            break;
+    #endif
+    #ifndef NO_AES
+        case CKK_AES:
+    #endif
+        case CKK_GENERIC_SECRET:
+            ret = wp11_Object_Encode_SymmKey(object);
+            if (protect && ret == 0) {
+                XMEMSET(object->data.symmKey.data, 0, object->data.symmKey.len);
+                object->encoded = 1;
+            }
+            break;
+        default:
+            ret = NOT_AVAILABLE_E;
     }
 
     return ret;
@@ -2140,7 +2594,7 @@ static void wp11_Token_Final(WP11_Token* token)
     XMEMSET(token, 0, sizeof(*token));
 }
 
-#ifndef WOLFSSL_NO_STORE
+#ifndef WOLFPKCS11_NO_STORE
 /**
  * Load a token from storage.
  *
@@ -2211,6 +2665,11 @@ static int wp11_Token_Load(WP11_Slot* slot, int tokenId, WP11_Token* token)
         if (ret == 0) {
             /* Read failed login timout for User. */
             ret = wp11_storage_read_time(storage, &token->userFailLoginTimeout);
+        }
+        if (ret == 0) {
+            /* Read seed used to calculate key. */
+            ret = wp11_storage_read_fixed_array(storage, token->seed,
+                                                PIN_SEED_SZ);
         }
 
         if (ret == 0) {
@@ -2330,6 +2789,11 @@ static int wp11_Token_Store(WP11_Token* token, int tokenId)
         if (ret == 0) {
             /* Write failed login timout for User. */
             ret = wp11_storage_write_time(storage, token->userFailLoginTimeout);
+        }
+        if (ret == 0) {
+            /* Write seed used to calucate key. */
+            ret = wp11_storage_write_fixed_array(storage, token->seed,
+                                                 PIN_SEED_SZ);
         }
 
         if (ret == 0) {
@@ -2995,6 +3459,7 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
     time_t now;
     time_t allowed;
     int state;
+    WP11_Token* token = &slot->token;
 
     if (wc_GetTime(&now, sizeof(now)) != 0)
         ret = PIN_INVALID_E;
@@ -3003,18 +3468,17 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
     /* Have we already logged in? */
     if (ret == 0) {
         /* Have we already logged in? */
-        state = slot->token.loginState;
+        state = token->loginState;
         if (state == WP11_APP_STATE_RW_SO || state == WP11_APP_STATE_RO_USER ||
                                               state == WP11_APP_STATE_RW_USER) {
             ret = LOGGED_IN_E;
         }
     }
     /* Check for too many fails */
-    if (ret == 0 && slot->token.userFailedLogin == WP11_MAX_LOGIN_FAILS_USER) {
-        allowed = slot->token.userLastFailedLogin +
-                                               slot->token.userFailLoginTimeout;
+    if (ret == 0 && token->userFailedLogin == WP11_MAX_LOGIN_FAILS_USER) {
+        allowed = token->userLastFailedLogin + token->userFailLoginTimeout;
         if (allowed < now)
-            slot->token.userFailedLogin = 0;
+            token->userFailedLogin = 0;
         else
             ret = PIN_INVALID_E;
     }
@@ -3022,28 +3486,45 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
 
     if (ret == 0) {
         ret = WP11_Slot_CheckUserPin(slot, pin, pinLen);
+    #ifndef WOLFPKCS11_NO_STORE
+        if (ret == 0) {
+            ret = HashPIN(pin, pinLen, token->seed, sizeof(token->seed),
+                token->key, sizeof(token->key));
+        }
+    #endif
         WP11_Lock_LockRW(&slot->lock);
         /* PIN Failed - Update failure info. */
         if (ret == PIN_INVALID_E) {
-            slot->token.userFailedLogin++;
-            if (slot->token.userFailedLogin == WP11_MAX_LOGIN_FAILS_USER) {
-                slot->token.userLastFailedLogin = now;
-                slot->token.userFailLoginTimeout +=
-                                                   WP11_USER_LOGIN_FAIL_TIMEOUT;
+            token->userFailedLogin++;
+            if (token->userFailedLogin == WP11_MAX_LOGIN_FAILS_USER) {
+                token->userLastFailedLogin = now;
+                token->userFailLoginTimeout += WP11_USER_LOGIN_FAIL_TIMEOUT;
             }
         }
         /* Worked - clear failure info. */
         else if (ret == 0) {
-            slot->token.userFailedLogin = 0;
-            slot->token.userLastFailedLogin = 0;
-            slot->token.userFailLoginTimeout = 0;
+        #ifndef WOLFPKCS11_NO_STORE
+            WP11_Object* object;
+        #endif
+
+            token->userFailedLogin = 0;
+            token->userLastFailedLogin = 0;
+            token->userFailLoginTimeout = 0;
+
+        #ifndef WOLFPKCS11_NO_STORE
+            object = token->object;
+            while (ret == 0 && object != NULL) {
+                ret = wp11_Object_Decode(object);
+                object = object->next;
+            }
+        #endif
         }
         WP11_Lock_UnlockRW(&slot->lock);
     }
 
     if (ret == 0) {
         WP11_Lock_LockRW(&slot->lock);
-        slot->token.loginState = WP11_APP_STATE_RW_USER;
+        token->loginState = WP11_APP_STATE_RW_USER;
         WP11_Lock_UnlockRW(&slot->lock);
     }
 
@@ -3081,8 +3562,12 @@ int WP11_Slot_SetSOPin(WP11_Slot* slot, char* pin, int pinLen)
                                          sizeof(token->soPin));
         WP11_Lock_LockRW(&slot->lock);
     }
-    if (ret == 0)
+    if (ret == 0) {
         token->soPinLen = sizeof(token->soPin);
+    #ifndef WOLFPKCS11_NO_STORE
+        ret = wp11_Token_Store(token, slot->id);
+    #endif
+    }
     WP11_Lock_UnlockRW(&slot->lock);
 
     return ret;
@@ -3109,6 +3594,12 @@ int WP11_Slot_SetUserPin(WP11_Slot* slot, char* pin, int pinLen)
     WP11_Lock_LockRW(&slot->token.rngLock);
     ret = wc_RNG_GenerateBlock(&slot->token.rng, token->userPinSeed,
                                                     sizeof(token->userPinSeed));
+#ifndef WOLFPKCS11_NO_STORE
+    if (ret == 0) {
+        ret = wc_RNG_GenerateBlock(&slot->token.rng, token->seed,
+                                                           sizeof(token->seed));
+    }
+#endif
     WP11_Lock_UnlockRW(&slot->token.rngLock);
     if (ret == 0) {
         WP11_Lock_UnlockRW(&slot->lock);
@@ -3116,10 +3607,20 @@ int WP11_Slot_SetUserPin(WP11_Slot* slot, char* pin, int pinLen)
         ret = HashPIN(pin, pinLen, token->userPinSeed,
                                      sizeof(token->userPinSeed), token->userPin,
                                      sizeof(token->userPin));
+    #ifndef WOLFPKCS11_NO_STORE
+        if (ret == 0) {
+            ret = HashPIN(pin, pinLen, token->seed, sizeof(token->seed),
+                token->key, sizeof(token->key));
+        }
+    #endif
         WP11_Lock_LockRW(&slot->lock);
     }
-    if (ret == 0)
+    if (ret == 0) {
         token->userPinLen = sizeof(token->userPin);
+    #ifndef WOLFPKCS11_NO_STORE
+        ret = wp11_Token_Store(token, slot->id);
+    #endif
+    }
     WP11_Lock_UnlockRW(&slot->lock);
 
     return ret;
@@ -3132,8 +3633,25 @@ int WP11_Slot_SetUserPin(WP11_Slot* slot, char* pin, int pinLen)
  */
 void WP11_Slot_Logout(WP11_Slot* slot)
 {
+#ifndef WOLFPKCS11_NO_STORE
+    int state;
+    int ret = 0;
+#endif
+
     WP11_Lock_LockRW(&slot->lock);
+
+#ifndef WOLFPKCS11_NO_STORE
+    state = slot->token.loginState;
+    if (state == WP11_APP_STATE_RO_USER || state == WP11_APP_STATE_RW_USER) {
+        WP11_Object* object = slot->token.object;
+        while (ret == 0 && object != NULL) {
+            ret = wp11_Object_Encode(object, 1);
+            object = object->next;
+        }
+    }
+#endif
     slot->token.loginState = WP11_APP_STATE_RW_PUBLIC;
+
     WP11_Lock_UnlockRW(&slot->lock);
 }
 
@@ -3605,6 +4123,10 @@ int WP11_Session_AddObject(WP11_Session* session, int onToken,
         WP11_Lock_LockRW(&token->lock);
         if (token->objCnt >= WP11_TOKEN_OBJECT_CNT_MAX)
             ret = OBJ_COUNT_E;
+    #ifndef WOLFPKCS11_NO_STORE
+        if (ret == 0)
+            ret = wp11_Object_Encode(object, 0);
+    #endif
         if (ret == 0) {
             token->objCnt++;
             object->lock = &token->lock;
@@ -3618,11 +4140,11 @@ int WP11_Session_AddObject(WP11_Session* session, int onToken,
             object->next = next;
             token->object = object;
         }
-#ifndef WOLFPKCS11_NO_STORE
+    #ifndef WOLFPKCS11_NO_STORE
         if (ret == 0) {
             wp11_Slot_Store(session->slot, session->slotId);
         }
-#endif
+    #endif
         WP11_Lock_UnlockRW(&token->lock);
     }
     else {
@@ -3766,6 +4288,14 @@ static WP11_Object* wp11_Session_FindNext(WP11_Session* session, int onToken,
         if (ret == NULL)
             break;
 
+   #ifndef WOLFPKCS11_NO_STORE
+        if (ret->encoded) {
+            object = ret;
+            ret = NULL;
+            continue;
+        }
+   #endif
+
         if ((ret->opFlag | WP11_FLAG_PRIVATE) == WP11_FLAG_PRIVATE) {
             if (!onToken)
                 WP11_Lock_LockRO(&session->slot->token.lock);
@@ -3897,6 +4427,10 @@ void WP11_Object_Free(WP11_Object* object)
 #endif
     if (object->type == CKK_AES || object->type == CKK_GENERIC_SECRET)
         XMEMSET(object->data.symmKey.data, 0, object->data.symmKey.len);
+#ifndef WOLFPKCS11_NO_STORE
+    if (object->keyData != NULL)
+        XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+#endif
 
     /* Dispose of object. */
     XFREE(object, NULL, DYNAMIC_TYPE_TMP_BUFFER);

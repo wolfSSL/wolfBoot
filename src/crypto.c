@@ -494,7 +494,7 @@ static CK_RV CreateObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTemplate,
     keyType = *(CK_KEY_TYPE*)attr->pValue;
 
     if (keyType != CKK_RSA && keyType != CKK_EC && keyType != CKK_DH &&
-                         keyType != CKK_AES &&  keyType != CKK_GENERIC_SECRET) {
+                          keyType != CKK_AES && keyType != CKK_GENERIC_SECRET) {
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 

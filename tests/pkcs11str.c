@@ -756,6 +756,7 @@ static CK_RV pkcs11_test(int slotId, int setPin, int closeDl)
             pkcs11_close_session(session);
         }
     }
+#ifndef WOLFPKCS11_NO_STORE
     if (inited) {
         printf("Finalize library\n");
         pkcs11_final(0);
@@ -771,6 +772,7 @@ static CK_RV pkcs11_test(int slotId, int setPin, int closeDl)
             printf("Done\n");
         }
     }
+#endif
     if (ret == CKR_OK) {
         inited = 1;
 
