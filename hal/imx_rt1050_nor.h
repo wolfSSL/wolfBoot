@@ -88,9 +88,8 @@ typedef enum _FlexSpiSerialClockFreq
     kFlexSpiSerialClk_75MHz  = 4,
     kFlexSpiSerialClk_80MHz  = 5,
     kFlexSpiSerialClk_100MHz = 6,
-    kFlexSpiSerialClk_120MHz = 7,
-    kFlexSpiSerialClk_133MHz = 8,
-    kFlexSpiSerialClk_166MHz = 9,
+    kFlexSpiSerialClk_133MHz = 7,
+    kFlexSpiSerialClk_166MHz = 8,
 } flexspi_serial_clk_freq_t;
 
 //!@brief FlexSPI clock configuration type
@@ -159,25 +158,7 @@ enum
     kDeviceConfigCmdType_Reset,      //!< Reset device command
 };
 
-
-/*  */
-#define NOR_CMD_INDEX_READ        CMD_INDEX_READ        //!< 0
-#define NOR_CMD_INDEX_READSTATUS  CMD_INDEX_READSTATUS  //!< 1
-#define NOR_CMD_INDEX_WRITEENABLE CMD_INDEX_WRITEENABLE //!< 2
-#define NOR_CMD_INDEX_ERASESECTOR 3                     //!< 3
-#define NOR_CMD_INDEX_PAGEPROGRAM CMD_INDEX_WRITE       //!< 4
-#define NOR_CMD_INDEX_CHIPERASE   5                     //!< 5
-#define NOR_CMD_INDEX_DUMMY       6                     //!< 6
-#define NOR_CMD_INDEX_ERASEBLOCK  7                     //!< 7
-
-#define NOR_CMD_LUT_SEQ_IDX_READSTATUS_XPI \
-    2 //!< 2  Read status DPI/QPI/OPI sequence id in lookupTable stored in config block
-#define NOR_CMD_LUT_SEQ_IDX_WRITEENABLE_XPI \
-    4 //!< 4  Write Enable DPI/QPI/OPI sequence id in lookupTable stored in config block
-
-/*
- *  Serial NOR configuration block
- */
+/* FlexSPI Memory Configuration Block */
 typedef struct _FlexSPIConfig
 {
     uint32_t tag;               //!< [0x000-0x003] Tag, fixed value 0x42464346UL
@@ -231,6 +212,41 @@ typedef struct _FlexSPIConfig
     uint32_t reserved4[4];              //!< [0x1b0-0x1bf] Reserved for future use
 } flexspi_common_mem_t;
 
+/*  */
+#define NOR_CMD_INDEX_READ        CMD_INDEX_READ        //!< 0
+#define NOR_CMD_INDEX_READSTATUS  CMD_INDEX_READSTATUS  //!< 1
+#define NOR_CMD_INDEX_WRITEENABLE CMD_INDEX_WRITEENABLE //!< 2
+#define NOR_CMD_INDEX_ERASESECTOR 3                     //!< 3
+#define NOR_CMD_INDEX_PAGEPROGRAM CMD_INDEX_WRITE       //!< 4
+#define NOR_CMD_INDEX_CHIPERASE   5                     //!< 5
+#define NOR_CMD_INDEX_DUMMY       6                     //!< 6
+#define NOR_CMD_INDEX_ERASEBLOCK  7                     //!< 7
+
+/*
+#define NOR_CMD_LUT_SEQ_IDX_READ CMD_LUT_SEQ_IDX_READ //!< 0  READ LUT sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_READSTATUS \
+    CMD_LUT_SEQ_IDX_READSTATUS //!< 1  Read Status LUT sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_READSTATUS_XPI \
+    2 //!< 2  Read status DPI/QPI/OPI sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_WRITEENABLE \
+    CMD_LUT_SEQ_IDX_WRITEENABLE //!< 3  Write Enable sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_WRITEENABLE_XPI \
+    4 //!< 4  Write Enable DPI/QPI/OPI sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_ERASESECTOR 5 //!< 5  Erase Sector sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_ERASEBLOCK  8 //!< 8 Erase Block sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_PAGEPROGRAM \
+    CMD_LUT_SEQ_IDX_WRITE                //!< 9  Program sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_CHIPERASE 11 //!< 11 Chip Erase sequence in lookupTable id stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_READ_SFDP 13 //!< 13 Read SFDP sequence in lookupTable id stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_RESTORE_NOCMD \
+    14 //!< 14 Restore 0-4-4/0-8-8 mode sequence id in lookupTable stored in config block
+#define NOR_CMD_LUT_SEQ_IDX_EXIT_NOCMD \
+    15 //!< 15 Exit 0-4-4/0-8-8 mode sequence id in lookupTable stored in config blobk
+       */
+
+/*
+ *  Serial NOR configuration block
+ */
 typedef struct _flexspi_nor_config
 {
     flexspi_common_mem_t memConfig; //!< Common memory configuration info via FlexSPI
@@ -247,11 +263,4 @@ typedef struct _flexspi_nor_config
     uint32_t reserve2[11];          //!< Reserved for future use
 } flexspi_nor_config_t;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#ifdef __cplusplus
-}
-#endif
 #endif /* IMXRT_NOR */

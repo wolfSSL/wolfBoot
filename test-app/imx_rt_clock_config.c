@@ -47,7 +47,7 @@ const clock_video_pll_config_t videoPllConfig_BOARD_BootClockRUN =
         .denominator = 1,                         /* 30 bit denominator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
         .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
     };
-void rt1060_init_boot_clock(void)
+void imx_rt_init_boot_clock(void)
 {
     /* Init RTC OSC clock frequency. */
     CLOCK_SetRtcXtalFreq(32768U);
@@ -125,17 +125,28 @@ void rt1060_init_boot_clock(void)
 #if !(defined(XIP_EXTERNAL_FLASH) && (XIP_EXTERNAL_FLASH == 1))
     /* Disable Flexspi clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi);
-    /* Set FLEXSPI_PODF. */
-    CLOCK_SetDiv(kCLOCK_FlexspiDiv, 1);
-    /* Set Flexspi clock source. */
-    CLOCK_SetMux(kCLOCK_FlexspiMux, 3);
+    #ifdef CPU_MIMXRT1062DVL6A
+        /* Set FLEXSPI_PODF. */
+        CLOCK_SetDiv(kCLOCK_FlexspiDiv, 1);
+        /* Set Flexspi clock source. */
+        CLOCK_SetMux(kCLOCK_FlexspiMux, 3);
+    #endif
+    #ifdef CPU_MIMXRT1062DVL6A
+        /* Set FLEXSPI_PODF. */
+        CLOCK_SetDiv(kCLOCK_FlexspiDiv, 2);
+        /* Set Flexspi clock source. */
+        CLOCK_SetMux(kCLOCK_FlexspiMux, 1);
+    #endif
 #endif
+
+#ifdef CPU_MIMXRT1062DVL6A
     /* Disable Flexspi2 clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi2);
     /* Set FLEXSPI2_PODF. */
     CLOCK_SetDiv(kCLOCK_Flexspi2Div, 1);
     /* Set Flexspi2 clock source. */
     CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
+#endif
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
@@ -192,10 +203,14 @@ void rt1060_init_boot_clock(void)
     /* Disable CAN clock gate. */
     CLOCK_DisableClock(kCLOCK_Can1);
     CLOCK_DisableClock(kCLOCK_Can2);
+#ifdef CPU_MIMXRT1062DVL6A
     CLOCK_DisableClock(kCLOCK_Can3);
+#endif
     CLOCK_DisableClock(kCLOCK_Can1S);
     CLOCK_DisableClock(kCLOCK_Can2S);
+#ifdef CPU_MIMXRT1062DVL6A
     CLOCK_DisableClock(kCLOCK_Can3S);
+#endif
     /* Set CAN_CLK_PODF. */
     CLOCK_SetDiv(kCLOCK_CanDiv, 1);
     /* Set Can clock source. */
@@ -320,10 +335,12 @@ void rt1060_init_boot_clock(void)
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_DIV_SELECT(1);
     /* Enable Enet output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENABLE_MASK;
+#ifdef CPU_MIMXRT1062DVL6A
     /* Set Enet2 output divider. */
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
     /* Enable Enet2 output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET2_REF_EN_MASK;
+#endif
     /* Enable Enet25M output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET_25M_REF_EN_MASK;
     /* DeInit Usb2 PLL. */
@@ -370,11 +387,13 @@ void rt1060_init_boot_clock(void)
     IOMUXC_MQSConfig(IOMUXC_GPR,kIOMUXC_MqsPwmOverSampleRate32, 0);
     /* Set ENET1 Tx clock source. */
     IOMUXC_EnableMode(IOMUXC_GPR, kIOMUXC_GPR_ENET1RefClkMode, false);
+#ifdef CPU_MIMXRT1062DVL6A
     /* Set ENET2 Tx clock source. */
 #if defined(FSL_IOMUXC_DRIVER_VERSION) && (FSL_IOMUXC_DRIVER_VERSION != (MAKE_VERSION(2, 0, 0)))
     IOMUXC_EnableMode(IOMUXC_GPR, kIOMUXC_GPR_ENET2RefClkMode, false);
 #else
     IOMUXC_EnableMode(IOMUXC_GPR, IOMUXC_GPR_GPR1_ENET2_CLK_SEL_MASK, false);
+#endif
 #endif
     /* Set GPT1 High frequency reference clock source. */
     IOMUXC_GPR->GPR5 &= ~IOMUXC_GPR_GPR5_VREF_1M_CLK_GPT1_MASK;

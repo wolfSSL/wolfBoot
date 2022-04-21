@@ -30,7 +30,12 @@
 #include "fsl_nor_flash.h"
 #include "fsl_flexspi.h"
 #include "fsl_flexspi_nor_flash.h"
-#include "imx_rt_nor.h"
+#ifdef CPU_MIMXRT1062DVL6A
+#include "imx_rt1060_nor.h"
+#endif
+#ifdef CPU_MIMXRT1052DVJ6B
+#include "imx_rt1050_nor.h"
+#endif
 #include "xip/fsl_flexspi_nor_boot.h"
 
 #ifdef __WOLFBOOT
@@ -213,6 +218,14 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 const uint8_t dcd_data[1] = {0};
 extern void isr_reset(void);
 
+
+const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
+  FLASH_BASE,                 /* boot start location */
+  FLASH_SIZE,                 /* size */
+  PLUGIN_FLAG,                /* Plugin flag*/
+  0xFFFFFFFF                  /* empty - extra data word */
+};
+
 const ivt __attribute__((section(".image_vt"))) image_vector_table = {
   IVT_HEADER,                         /* IVT Header */
   (uint32_t)isr_reset,               /* Image Entry Function */
@@ -222,13 +235,6 @@ const ivt __attribute__((section(".image_vt"))) image_vector_table = {
   (uint32_t)&image_vector_table,      /* Pointer to IVT Self (absolute address */
   (uint32_t)CSF_ADDRESS,              /* Address where CSF file is stored */
   IVT_RSVD                            /* Reserved = 0 */
-};
-
-const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
-  FLASH_BASE,                 /* boot start location */
-  FLASH_SIZE,                 /* size */
-  PLUGIN_FLAG,                /* Plugin flag*/
-  0xFFFFFFFF                  /* empty - extra data word */
 };
 
 /*******************************************************************************
@@ -304,11 +310,13 @@ static void clock_init(void)
         CCM->CBCDR = (CCM->CBCDR & (~(CCM_CBCDR_SEMC_PODF_MASK | CCM_CBCDR_AHB_PODF_MASK | CCM_CBCDR_IPG_PODF_MASK))) |
             CCM_CBCDR_SEMC_PODF(2) | CCM_CBCDR_AHB_PODF(2) | CCM_CBCDR_IPG_PODF(2);
 
+#ifdef CPU_MIMXRT1062DVL6A
         // Configure FLEXSPI2 CLOCKS
         CCM->CBCMR =
             (CCM->CBCMR &
              (~(CCM_CBCMR_PRE_PERIPH_CLK_SEL_MASK | CCM_CBCMR_FLEXSPI2_CLK_SEL_MASK | CCM_CBCMR_FLEXSPI2_PODF_MASK))) |
             CCM_CBCMR_PRE_PERIPH_CLK_SEL(3) | CCM_CBCMR_FLEXSPI2_CLK_SEL(1) | CCM_CBCMR_FLEXSPI2_PODF(7);
+#endif
 
         // Confgiure FLEXSPI CLOCKS
         CCM->CSCMR1 = ((CCM->CSCMR1 &

@@ -226,15 +226,28 @@ ifeq ($(TARGET),imx_rt)
       -I$(MCUXPRESSO)/components/flash/nor \
       -I$(MCUXPRESSO)/components/flash/nor/flexspi \
       -I$(MCUXPRESSO)/components/serial_manager/ \
-      -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
-      -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/ -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
+      -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include \
+      -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Core/Include \
+      -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
+      -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
       -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
+
   OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
+    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+    ifeq ($(PKA),1)
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/devices/MIMXRT1062/drivers/fsl_dcp.o
+    endif
+  else
+    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
+    ifeq ($(PKA),1)
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/devices/MIMXRT1052/drivers/fsl_dcp.o
+    endif
+  endif
+
   ifeq ($(PKA),1)
-     PKA_EXTRA_OBJS+= \
-         $(MCUXPRESSO)/devices/MIMXRT1062/drivers/fsl_dcp.o \
-         ./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
-     PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
+   PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
+   PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
   endif
 endif
 
@@ -298,17 +311,17 @@ ifeq ($(TARGET),psoc6)
                      $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
                      $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
     PSOC6_CRYPTO_OBJS=./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v1.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw_v1.o \
-					 $(CYPRESS_PDL)/drivers/source/cy_crypto.o
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v1.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw_v1.o \
+                     $(CYPRESS_PDL)/drivers/source/cy_crypto.o
 
     CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
         -I$(CYPRESS_PDL)/devices/include \
