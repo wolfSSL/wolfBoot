@@ -232,7 +232,7 @@ typedef struct WP11_Hmac {
 #endif
 
 struct WP11_Session {
-    unsigned char inUse;               /* Inidicates session has been opened  */
+    unsigned char inUse;               /* Indicates session has been opened   */
     CK_SESSION_HANDLE handle;          /* CryptoKi API session handle value   */
     CK_MECHANISM_TYPE mechanism;       /* Op that is being performed          */
     CK_SLOT_ID slotId;                 /* Id of slot that session is on       */
@@ -276,7 +276,7 @@ typedef struct WP11_Token {
     int soFailedLogin;                 /* Count of consecutive failed logins  */
     time_t soLastFailedLogin;          /* Time of last login if it failed     */
     time_t soFailLoginTimeout;         /* Timeout after max login fails       */
-    byte userPin[PIN_HASH_SZ];         /* User's PIN hased with seed          */
+    byte userPin[PIN_HASH_SZ];         /* User's PIN hashed with seed         */
     int userPinLen;                    /* Used to indicate PIN set            */
     byte userPinSeed[PIN_SEED_SZ];     /* Seed for calculating user's PIN     */
     int userFailedLogin;               /* Count of consecutive failed logins  */
@@ -615,7 +615,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
        return -1;
     }
 
-    /* Set different filename for each type of data and differnt ids. */
+    /* Set different filename for each type of data and different ids. */
     switch (type) {
         case WOLFPKCS11_STORE_TOKEN:
             XSNPRINTF(name, sizeof(name), "%s/wp11_token_%016lx", str, id1);
@@ -712,7 +712,7 @@ int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
 
     /* Read from a valid file pointer. */
     if (store != XBADFILE) {
-        ret = XFREAD(buffer, 1, len, file);
+        ret = (int)XFREAD(buffer, 1, len, file);
     }
     else {
         ret = BUFFER_E;
@@ -737,7 +737,7 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
 
     /* Write to a valid file pointer. */
     if (store != XBADFILE) {
-        ret = XFWRITE(buffer, 1, len, file);
+        ret = (int)XFWRITE(buffer, 1, len, file);
     }
     else {
         ret = BUFFER_E;
@@ -1308,7 +1308,7 @@ static int wp11_EncryptData(byte* out, byte* data, int len, byte* key,
  * @param [in]   iv     IV/nonce.
  * @param [in]   ivSz   Length of IV in bytes.
  * @return  0 on success.
- * @reutrn  AES_GCM_AUTH_E when encrypted data could not be verified.
+ * @return  AES_GCM_AUTH_E when encrypted data could not be verified.
  * @return  Other -ve on failure.
  */
 static int wp11_DecryptData(byte* out, byte* data, int len, byte* key,
@@ -2441,7 +2441,7 @@ static int wp11_Object_Decode(WP11_Object* object)
  * Encode the key object. Private keys require encryption.
  *
  * @param [in, out]  object   Key object.
- * @param [in]       protect  Unencrypred private key data is cleared.
+ * @param [in]       protect  Unencrypted private key data is cleared.
  * @return  0 on success.
  * @return  -ve on failure.
  */
@@ -3565,7 +3565,7 @@ int WP11_Slot_SetSOPin(WP11_Slot* slot, char* pin, int pinLen)
     if (ret == 0) {
         token->soPinLen = sizeof(token->soPin);
     #ifndef WOLFPKCS11_NO_STORE
-        ret = wp11_Token_Store(token, slot->id);
+        ret = wp11_Token_Store(token, (int)slot->id);
     #endif
     }
     WP11_Lock_UnlockRW(&slot->lock);
@@ -3618,7 +3618,7 @@ int WP11_Slot_SetUserPin(WP11_Slot* slot, char* pin, int pinLen)
     if (ret == 0) {
         token->userPinLen = sizeof(token->userPin);
     #ifndef WOLFPKCS11_NO_STORE
-        ret = wp11_Token_Store(token, slot->id);
+        ret = wp11_Token_Store(token, (int)slot->id);
     #endif
     }
     WP11_Lock_UnlockRW(&slot->lock);
@@ -3858,10 +3858,10 @@ CK_MECHANISM_TYPE WP11_Session_GetMechanism(WP11_Session* session)
 }
 
 /**
- * Set the mechansim for this session.
+ * Set the mechanism for this session.
  *
  * @param  session    [in]  Session object.
- * @param  mechansim  [in]  Mechanism value.
+ * @param  mechanism  [in]  Mechanism value.
  */
 void WP11_Session_SetMechanism(WP11_Session* session,
                                CK_MECHANISM_TYPE mechanism)
@@ -4142,7 +4142,7 @@ int WP11_Session_AddObject(WP11_Session* session, int onToken,
         }
     #ifndef WOLFPKCS11_NO_STORE
         if (ret == 0) {
-            wp11_Slot_Store(session->slot, session->slotId);
+            wp11_Slot_Store(session->slot, (int)session->slotId);
         }
     #endif
         WP11_Lock_UnlockRW(&token->lock);
@@ -4206,8 +4206,8 @@ void WP11_Session_RemoveObject(WP11_Session* session, WP11_Object* object)
     }
     if (object->onToken) {
 #ifndef WOLFPKCS11_NO_STORE
-        wp11_Object_Unstore(object, session->slotId, id);
-        wp11_Slot_Store(session->slot, session->slotId);
+        wp11_Object_Unstore(object, (int)session->slotId, id);
+        wp11_Slot_Store(session->slot, (int)session->slotId);
 #endif
         WP11_Lock_UnlockRW(object->lock);
     }
@@ -7310,7 +7310,7 @@ int WP11_AesGcm_GetTagBits(WP11_Session* session)
 }
 
 /**
- * Return the number of encryped data bytes to decrypt from GCM parameters.
+ * Return the number of encrypted data bytes to decrypt from GCM parameters.
  *
  * @param  session  [in]  Session object.
  * @return  Encrypted data bytes length.

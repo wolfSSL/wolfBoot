@@ -247,7 +247,7 @@ static CK_RV CheckAttributes(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount, int set)
  * Set the values of the attributes into the object.
  *
  * @param  session    [in]  Session object.
- * @param  obj        [in]  Object to set value agqainst.
+ * @param  obj        [in]  Object to set value against.
  * @param  pTemplate  [in]  Template of attributes set against object.
  * @param  ulCount    [in]  Number of attribute triplets in template.
  * @return  CKR_ARGUMENTS_BAD when pTemplate is NULL.

@@ -907,7 +907,9 @@ int main(int argc, char* argv[])
     int setPin = 1;
     int closeDl = 1;
 
-    setenv("WOLFPKCS11_TOKEN_PATH", "./test", 1);
+    if (!getenv("WOLFPKCS11_TOKEN_PATH")) {
+        setenv("WOLFPKCS11_TOKEN_PATH", "./tests", 1);
+    }
 
     argc--;
     argv++;
