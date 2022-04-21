@@ -163,7 +163,7 @@ extern "C" {
 #define PIN_INVALID_E                  -1
 #define PIN_NOT_SET_E                  -2
 #define READ_ONLY_E                    -3
-#define NOT_AVAILABE_E                 -4
+#define NOT_AVAILABLE_E                -4
 #define FIND_FULL_E                    -5
 #define FIND_NO_MORE_E                 -6
 #define SESSION_EXISTS_E               -7

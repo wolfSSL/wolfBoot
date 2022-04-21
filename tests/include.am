@@ -4,18 +4,22 @@
 check_PROGRAMS += tests/pkcs11test
 noinst_PROGRAMS += tests/pkcs11test
 tests_pkcs11test_SOURCES = tests/pkcs11test.c
-
 tests_pkcs11test_LDADD = -lwolfssl -ldl -lm
 
 check_PROGRAMS += tests/pkcs11mtt
 noinst_PROGRAMS += tests/pkcs11mtt
 tests_pkcs11mtt_SOURCES = tests/pkcs11mtt.c
-
 tests_pkcs11mtt_LDADD = -lwolfssl -ldl -lm
+
+check_PROGRAMS += tests/pkcs11str
+noinst_PROGRAMS += tests/pkcs11str
+tests_pkcs11str_SOURCES = tests/pkcs11str.c
+tests_pkcs11str_LDADD = -lwolfssl -ldl -lm
 
 if BUILD_STATIC
 tests_pkcs11test_LDADD +=src/libwolfpkcs11.la
-tests_pkcs11mtt_LDADD += src/libwolfpkcs11.la
+tests_pkcs11mtt_LDADD  += src/libwolfpkcs11.la
+tests_pkcs11str_LDADD  += src/libwolfpkcs11.la
 endif
 
 EXTRA_DIST += tests/unit.h \

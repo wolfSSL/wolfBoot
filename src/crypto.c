@@ -247,7 +247,7 @@ static CK_RV CheckAttributes(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount, int set)
  * Set the values of the attributes into the object.
  *
  * @param  session    [in]  Session object.
- * @param  obj        [in]  Object to set value agqainst.
+ * @param  obj        [in]  Object to set value against.
  * @param  pTemplate  [in]  Template of attributes set against object.
  * @param  ulCount    [in]  Number of attribute triplets in template.
  * @return  CKR_ARGUMENTS_BAD when pTemplate is NULL.
@@ -494,7 +494,7 @@ static CK_RV CreateObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTemplate,
     keyType = *(CK_KEY_TYPE*)attr->pValue;
 
     if (keyType != CKK_RSA && keyType != CKK_EC && keyType != CKK_DH &&
-                         keyType != CKK_AES &&  keyType != CKK_GENERIC_SECRET) {
+                          keyType != CKK_AES && keyType != CKK_GENERIC_SECRET) {
         return CKR_ATTRIBUTE_VALUE_INVALID;
     }
 
@@ -776,7 +776,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession,
             return CKR_ATTRIBUTE_TYPE_INVALID;
         else if (ret == BUFFER_E)
             return CKR_BUFFER_TOO_SMALL;
-        else if (ret == NOT_AVAILABE_E)
+        else if (ret == NOT_AVAILABLE_E)
             return CK_UNAVAILABLE_INFORMATION;
         else if (ret != 0)
             return CKR_FUNCTION_FAILED;
@@ -3548,15 +3548,6 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
                 if (ret != 0)
                     rv = CKR_FUNCTION_FAILED;
             }
-
-            if (rv == CKR_OK) {
-                rv = AddObject(session, pub, pPublicKeyTemplate,
-                                        ulPublicKeyAttributeCount, phPublicKey);
-            }
-            if (rv == CKR_OK) {
-                rv = AddObject(session, priv, pPrivateKeyTemplate,
-                                      ulPrivateKeyAttributeCount, phPrivateKey);
-            }
             break;
 #endif
 #ifdef HAVE_ECC
@@ -3580,15 +3571,6 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
                                                  WP11_Session_GetSlot(session));
                 if (ret != 0)
                     rv = CKR_FUNCTION_FAILED;
-            }
-
-            if (rv == CKR_OK) {
-                rv = AddObject(session, pub, pPublicKeyTemplate,
-                                        ulPublicKeyAttributeCount, phPublicKey);
-            }
-            if (rv == CKR_OK) {
-                rv = AddObject(session, priv, pPrivateKeyTemplate,
-                                      ulPrivateKeyAttributeCount, phPrivateKey);
             }
             break;
 #endif
@@ -3614,15 +3596,6 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
                 if (ret != 0)
                     rv = CKR_FUNCTION_FAILED;
             }
-
-            if (rv == CKR_OK) {
-                rv = AddObject(session, pub, pPublicKeyTemplate,
-                                        ulPublicKeyAttributeCount, phPublicKey);
-            }
-            if (rv == CKR_OK) {
-                rv = AddObject(session, priv, pPrivateKeyTemplate,
-                                      ulPrivateKeyAttributeCount, phPrivateKey);
-            }
             break;
 #endif
         default:
@@ -3631,6 +3604,32 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
             (void)ulPrivateKeyAttributeCount;
             return CKR_MECHANISM_INVALID;
     }
+
+    if (rv == CKR_OK) {
+        rv = AddObject(session, pub, pPublicKeyTemplate,
+                                        ulPublicKeyAttributeCount, phPublicKey);
+    }
+    if (rv == CKR_OK) {
+        rv = AddObject(session, priv, pPrivateKeyTemplate,
+                                      ulPrivateKeyAttributeCount, phPrivateKey);
+    }
+#ifdef WOLFPKCS11_KEYPAIR_GEN_COMMON_LABEL
+    if (rv == CKR_OK) {
+        CK_ULONG len;
+        ret = WP11_Object_GetAttr(pub, CKA_LABEL, NULL, &len);
+        if (ret == 0 && len == 0) {
+            CK_ULONG i;
+            for (i = 0; i < ulPrivateKeyAttributeCount; i++) {
+                CK_ATTRIBUTE* attr = &pPrivateKeyTemplate[i];
+                if (attr->type == CKA_LABEL) {
+                    WP11_Object_SetAttr(pub, CKA_LABEL, attr->pValue,
+                                                              attr->ulValueLen);
+                    break;
+                }
+            }
+        }
+    }
+#endif
 
     if (rv != CKR_OK && pub != NULL)
         WP11_Object_Free(pub);

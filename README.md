@@ -35,6 +35,29 @@ make check
 
 ### Build options and defines
 
+#### Define WOLFPKCS11_NO_STORE
+
+Disables storage of tokens.
+
+#### Define WOLFPKCS11_CUSTOM_STORE
+
+Removes default implementation of storage functions.
+See wolfpkcs11/store.h for prototypes of functions to implement.
+
+#### Define WOLFPKCS11_KEYPAIR_GEN_COMMON_LABEL
+
+Sets the private key's label against the public key when generating key pairs.
+
+## Environment variables
+
+### WOLFPKCS11_TOKEN_PATH
+
+Path into which files are stored that contain token data.
+When not set, defaults to: /tmp
+
+### WOLFPKCS11_NO_STORE
+
+Set to any value to stop storage of token data.
 
 ## Release Notes
 
