@@ -13,6 +13,11 @@ AC_CONFIG_AUX_DIR([build-aux])
 # The following sets CFLAGS to empty if unset on command line.
 : ${CFLAGS=""}
 
+# Capture user C_EXTRA_FLAGS from configure line.
+# Use of C_EXTRA_FLAGS is deprecated because CFLAGS was fixed but someone
+# might still be using it.
+CFLAGS="$CFLAGS $C_EXTRA_FLAGS $C_FLAGS"
+
 # Test ar for the "U" option. Should be checked before the libtool macros.
 xxx_ar_flags=$((ar --help) 2>&1)
 AS_CASE([$xxx_ar_flags],[*'use actual timestamps and uids/gids'*],[: ${AR_FLAGS="Ucru"}])
