@@ -159,25 +159,7 @@ enum
     kDeviceConfigCmdType_Reset,      //!< Reset device command
 };
 
-
-/*  */
-#define NOR_CMD_INDEX_READ        CMD_INDEX_READ        //!< 0
-#define NOR_CMD_INDEX_READSTATUS  CMD_INDEX_READSTATUS  //!< 1
-#define NOR_CMD_INDEX_WRITEENABLE CMD_INDEX_WRITEENABLE //!< 2
-#define NOR_CMD_INDEX_ERASESECTOR 3                     //!< 3
-#define NOR_CMD_INDEX_PAGEPROGRAM CMD_INDEX_WRITE       //!< 4
-#define NOR_CMD_INDEX_CHIPERASE   5                     //!< 5
-#define NOR_CMD_INDEX_DUMMY       6                     //!< 6
-#define NOR_CMD_INDEX_ERASEBLOCK  7                     //!< 7
-
-#define NOR_CMD_LUT_SEQ_IDX_READSTATUS_XPI \
-    2 //!< 2  Read status DPI/QPI/OPI sequence id in lookupTable stored in config block
-#define NOR_CMD_LUT_SEQ_IDX_WRITEENABLE_XPI \
-    4 //!< 4  Write Enable DPI/QPI/OPI sequence id in lookupTable stored in config block
-
-/*
- *  Serial NOR configuration block
- */
+/* FlexSPI Memory Configuration Block */
 typedef struct _FlexSPIConfig
 {
     uint32_t tag;               //!< [0x000-0x003] Tag, fixed value 0x42464346UL
@@ -231,6 +213,19 @@ typedef struct _FlexSPIConfig
     uint32_t reserved4[4];              //!< [0x1b0-0x1bf] Reserved for future use
 } flexspi_common_mem_t;
 
+/*  */
+#define NOR_CMD_INDEX_READ        CMD_INDEX_READ        //!< 0
+#define NOR_CMD_INDEX_READSTATUS  CMD_INDEX_READSTATUS  //!< 1
+#define NOR_CMD_INDEX_WRITEENABLE CMD_INDEX_WRITEENABLE //!< 2
+#define NOR_CMD_INDEX_ERASESECTOR 3                     //!< 3
+#define NOR_CMD_INDEX_PAGEPROGRAM CMD_INDEX_WRITE       //!< 4
+#define NOR_CMD_INDEX_CHIPERASE   5                     //!< 5
+#define NOR_CMD_INDEX_DUMMY       6                     //!< 6
+#define NOR_CMD_INDEX_ERASEBLOCK  7                     //!< 7
+
+/*
+ *  Serial NOR configuration block
+ */
 typedef struct _flexspi_nor_config
 {
     flexspi_common_mem_t memConfig; //!< Common memory configuration info via FlexSPI

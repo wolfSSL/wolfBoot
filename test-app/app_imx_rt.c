@@ -26,9 +26,12 @@
 #include "fsl_iomuxc.h"
 
 static int g_pinSet = false;
+extern void imx_rt_init_boot_clock(void);
+
+
 
 /* Get debug console frequency. */
-static uint32_t rt1060_debug_console_get_freq(void)
+static uint32_t debug_console_get_freq(void)
 {
     uint32_t freq;
     /* To make it simple, we assume default PLL and divider settings, and the only variable
@@ -49,12 +52,13 @@ static uint32_t rt1060_debug_console_get_freq(void)
 #define UART_BASEADDR (uint32_t) LPUART1
 #define UART_INSTANCE 1U
 #define UART_BAUDRATE (115200U)
-void rt1060_init_debug_console(void)
+void init_debug_console(void)
 {
-    uint32_t uartClkSrcFreq = rt1060_debug_console_get_freq();
+    uint32_t uartClkSrcFreq = debug_console_get_freq();
     DbgConsole_Init(UART_INSTANCE, UART_BAUDRATE, UART_TYPE, uartClkSrcFreq);
 }
 
+#ifdef CPU_MIMXRT1062DVL6A
 /* Pin settings */
 void rt1060_init_pins(void) {
   CLOCK_EnableClock(kCLOCK_Iomuxc);           /* iomuxc clock (iomuxc_clk_enable): 0x03U */
@@ -86,16 +90,38 @@ void rt1060_init_pins(void) {
       0x10B0U);
 }
 
+#endif
 
-void rt1060_init_boot_clock(void);
+#ifdef CPU_MIMXRT1052DVJ6B
+void rt1050_init_pins(void) {
+  CLOCK_EnableClock(kCLOCK_Iomuxc);
+  IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_12_LPUART1_TXD, 0U);
+  IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_13_LPUART1_RXD, 0U);
+  IOMUXC_SetPinMux(IOMUXC_GPIO_SD_B0_04_CCM_CLKO1, 0U);
+  IOMUXC_SetPinMux(IOMUXC_GPIO_SD_B0_05_CCM_CLKO2, 0U);
+  IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_12_LPUART1_TXD, 0x10B0U);
+  IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_13_LPUART1_RXD, 0x10B0U);
+  IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_B0_04_CCM_CLKO1, 0x10B0U);
+  IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_B0_05_CCM_CLKO2, 0x10B0U);
+}
+#endif
+
+
 
 void main()
 {
+
+    imx_rt_init_boot_clock();
+#ifdef CPU_MIMXRT1062DVL6A
     rt1060_init_pins();
-    rt1060_init_boot_clock();
+#endif
+
+#ifdef CPU_MIMXRT1052DVJ6B
+    rt1050_init_pins();
+#endif
     SystemCoreClockUpdate();
     SysTick_Config(SystemCoreClock / 1000U);
-    rt1060_init_debug_console();
+    init_debug_console();
     PRINTF("wolfBoot Test app, version = %d\n", wolfBoot_current_firmware_version());
     while(1) {
         SDK_DelayAtLeastUs(100000, SDK_DEVICE_MAXIMUM_CPU_CLOCK_FREQUENCY);

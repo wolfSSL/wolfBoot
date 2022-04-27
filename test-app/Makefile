@@ -95,7 +95,7 @@ ifeq ($(TARGET),stm32l5)
   else
     LSCRIPT_TEMPLATE=ARM-stm32l5.ld
   endif
-  CFLAGS+=-mcpu=cortex-m33  
+  CFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-mcpu=cortex-m33
 endif
 
@@ -105,7 +105,7 @@ ifeq ($(TARGET),stm32u5)
   else
     LSCRIPT_TEMPLATE=ARM-stm32u5.ld
   endif
-  CFLAGS+=-mcpu=cortex-m33  
+  CFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-mcpu=cortex-m33
 endif
 
@@ -143,7 +143,6 @@ endif
 
 ifeq ($(TARGET),imx_rt)
   CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DXIP_EXTERNAL_FLASH=1 \
-          -I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/  \
           -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ -I$(MCUXPRESSO)/components/serial_manager \
           -I$(MCUXPRESSO)/components/uart/ -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
 		  -I$(MCUXPRESSO)/components/flash/nor \
@@ -152,16 +151,26 @@ ifeq ($(TARGET),imx_rt)
   LDFLAGS+=-mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections -ffreestanding -fno-builtin -mthumb -mapcs -Xlinker --gc-sections -Xlinker -static -Xlinker -z -Xlinker muldefs -Xlinker -Map=output.map -static -lm -lc -lnosys
   LSCRIPT_TEMPLATE=imx_rt.ld
   APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-            imx_rt_clock_config.o $(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o \
+			$(MCUXPRESSO_DRIVERS)/drivers/fsl_common_arm.o \
+            imx_rt_clock_config.o \
 		    $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o \
             $(MCUXPRESSO_DRIVERS)/utilities/str/fsl_str.o \
-            $(MCUXPRESSO)/components/uart/lpuart_adapter.o \
-            $(MCUXPRESSO)/components/serial_manager/serial_manager.o \
-            $(MCUXPRESSO)/components/lists/generic_list.o \
-            $(MCUXPRESSO)/components/serial_manager/serial_port_uart.o \
+            $(MCUXPRESSO)/components/uart/fsl_adapter_lpuart.o \
+            $(MCUXPRESSO)/components/serial_manager/fsl_component_serial_manager.o \
+            $(MCUXPRESSO)/components/lists/fsl_component_generic_list.o \
+            $(MCUXPRESSO)/components/serial_manager/fsl_component_serial_port_uart.o \
             $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o \
 			$(MCUXPRESSO)/components/flash/nor/flexspi/fsl_flexspi_nor_flash.o \
             $(MCUXPRESSO_DRIVERS)/utilities/debug_console/fsl_debug_console.o
+
+
+    ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
+        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
+        APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1052.o
+    else ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
+        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+        APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
+    endif
 endif
 
 ifeq ($(TARGET),stm32g0)
