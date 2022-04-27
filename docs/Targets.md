@@ -972,7 +972,7 @@ the monitor command sequence below:
 
 ## NXP iMX-RT
 
-NXP RT1060/1062 (RT1060-EVK)
+NXP RT1060/1062 and RT1050
 
 The NXP iMX-RT1060 is a Cortex-M7 with a DCP coprocessor for SHA256 acceleration.
 Example configuration for this target is provided in [/config/examples/imx-rt1060.config](/config/examples/imx-rt1060.config).
@@ -980,14 +980,17 @@ Example configuration for this target is provided in [/config/examples/imx-rt106
 ### Building wolfBoot
 
 MCUXpresso SDK is required by wolfBoot to access device drivers on this platform.
-A package can be obtained from the [MCUXpresso SDK Builder](https://mcuxpresso.nxp.com/en/welcome), by selecting `EVK-MIMXRT1060` as target, and keeping the default choice of components.
+A package can be obtained from the [MCUXpresso SDK Builder](https://mcuxpresso.nxp.com/en/welcome), by selecting a target and keeping the default choice of components.
 
-Set the `MCUXPRESSO` configuration variable to the path where the SDK package is extracted, then build wolfBoot normally by running `make`.
+* For the RT1060 use `EVKB-IMXRT1060`. See configuration example in `config/examples/imx-rt1060.config`.
+* For the RT1050 use `EVKB-IMXRT1050`. See configuration example in `config/examples/imx-rt1050.config`.
 
-wolfBoot support for iMX-RT1060 has been tested using MCUXpresso SDK version 2.8.2.
+Set the wolfBoot `MCUXPRESSO` configuration variable to the path where the SDK package is extracted, then build wolfBoot normally by running `make`.
+
+wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK version 2.11.1.
 
 DCP support (hardware acceleration for SHA256 operations) can be enabled by using PKA=1 in the configuration file.
-Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device (RT1060-EVK).
+Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device.
 
 
 ## NXP Kinetis
