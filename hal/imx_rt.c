@@ -83,14 +83,10 @@ typedef struct
 /* Flex SPI op */
 typedef enum _FlexSPIOperationType
 {
-    kFlexSpiOperation_Command, //!< FlexSPI operation: Only command, both TX and
-    //! RX buffer are ignored.
-    kFlexSpiOperation_Config, //!< FlexSPI operation: Configure device mode, the
-    //! TX FIFO size is fixed in LUT.
-    kFlexSpiOperation_Write, //!< FlexSPI operation: Write, only TX buffer is
-    //! effective
-    kFlexSpiOperation_Read, //!< FlexSPI operation: Read, only Rx Buffer is
-    //! effective.
+    kFlexSpiOperation_Command,
+    kFlexSpiOperation_Config,
+    kFlexSpiOperation_Write,
+    kFlexSpiOperation_Read,
     kFlexSpiOperation_End = kFlexSpiOperation_Read,
 } flexspi_operation_t;
 
@@ -115,14 +111,14 @@ typedef struct _serial_nor_config_option
     {
         struct
         {
-            uint32_t max_freq : 4; //!< Maximum supported Frequency
-            uint32_t misc_mode : 4; //!< miscellaneous mode
-            uint32_t quad_mode_setting : 4; //!< Quad mode setting
-            uint32_t cmd_pads : 4; //!< Command pads
-            uint32_t query_pads : 4; //!< SFDP read pads
-            uint32_t device_type : 4; //!< Device type
-            uint32_t option_size : 4; //!< Option size, in terms of uint32_t, size = (option_size + 1) * 4
-            uint32_t tag : 4; //!< Tag, must be 0x0E
+            uint32_t max_freq : 4; /*  Maximum supported Frequency */
+            uint32_t misc_mode : 4; /* miscellaneous mode */
+            uint32_t quad_mode_setting : 4; /* Quad mode setting */
+            uint32_t cmd_pads : 4;  /* Command pads */
+            uint32_t query_pads : 4;  /* SFDP read pads */
+            uint32_t device_type : 4; /* Device type */
+            uint32_t option_size : 4; /* Option size, in terms of uint32_t, size = (option_size + 1) * 4 */
+            uint32_t tag : 4; /* Tag, must be 0x0E */
         } B;
         uint32_t U;
     } option0;
@@ -130,11 +126,11 @@ typedef struct _serial_nor_config_option
     {
         struct
         {
-            uint32_t dummy_cycles : 8; //!< Dummy cycles before read
-            uint32_t reserved0 : 8; //!< Reserved for future use
-            uint32_t pinmux_group : 4; //!< The pinmux group selection
-            uint32_t reserved1 : 8; //!< Reserved for future use
-            uint32_t flash_connection : 4; //!< Flash connection option: 0 - Single Flash connected to port A
+            uint32_t dummy_cycles : 8;  /* Dummy cycles before read */
+            uint32_t reserved0 : 8;     /* Reserved for future use */
+            uint32_t pinmux_group : 4;  /* The pinmux group selection */
+            uint32_t reserved1 : 8;     /* Reserved for future use */
+            uint32_t flash_connection : 4; /* Flash connection option: 0 - Single Flash connected to port A */
         } B;
         uint32_t U;
     } option1;
@@ -165,12 +161,12 @@ typedef struct
 /* Root pointer */
 typedef struct
 {
-    const uint32_t version;                 //!< Bootloader version number
-    const char *copyright;                  //!< Bootloader Copyright
-    void (*runBootloader)(void *arg);       //!< Function to start the bootloader executing
-    const uint32_t *reserved0;              //!< Reserved
-    const flexspi_nor_driver_interface_t *flexSpiNorDriver; //!< FlexSPI NOR Flash API
-    const uint32_t *reserved1;              //!< Reserved
+    const uint32_t version;                 /* Bootloader version number */
+    const char *copyright;                  /* Bootloader Copyright */
+    void (*runBootloader)(void *arg);       /* Function to start the bootloader executing */
+    const uint32_t *reserved0;              /* Reserved */
+    const flexspi_nor_driver_interface_t *flexSpiNorDriver; /* FlexSPI NOR Flash API */
+    const uint32_t *reserved1;              /* Reserved */
     const rtwdog_driver_interface_t *rtwdogDriver;
     const wdog_driver_interface_t *wdogDriver;
     const uint32_t *reserved2;
@@ -181,7 +177,13 @@ flexspi_nor_config_t flexspi_config;
 
 
 /** Flash configuration in the .flash_config section of flash **/
-
+#ifdef CPU_MIMXRT1062DVL6A
+    #define CONFIG_FLASH_SIZE                (8 * 1024 * 1024)  /* 8MBytes   */
+    #define CONFIG_FLASH_PAGE_SIZE           256UL              /* 256Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE         (4 * 1024)         /* 4KBytes   */
+    #define CONFIG_FLASH_BLOCK_SIZE          (64 * 1024)        /* 64KBytes  */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE   false
+    #define CONFIG_SERIAL_CLK_FREQ  kFlexSpiSerialClk_100MHz
 const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
     .memConfig =
     {
@@ -191,27 +193,66 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         .csHoldTime       = 3u,
         .csSetupTime      = 3u,
         .sflashPadType    = kSerialFlash_4Pads,
-        .serialClkFreq    = kFlexSpiSerialClk_100MHz,
-        .sflashA1Size     = 8u * 1024u * 1024u,
+        .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
+        .sflashA1Size     = CONFIG_FLASH_SIZE,
         .lookupTable =
         {
-            // Read LUTs
             FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
             FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
         },
     },
-    .pageSize           = 256u,
-    .sectorSize         = 4u * 1024u,
-    .blockSize          = 64u * 1024u,
-    .isUniformBlockSize = false,
+    .pageSize           = CONFIG_FLASH_PAGE_SIZE,
+    .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
+    .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
+    .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
 };
+#endif
+
+
+#ifdef CPU_MIMXRT1052DVJ6B
+    #define CONFIG_FLASH_SIZE                (64 * 1024 * 1024) /* 64MBytes  */
+    #define CONFIG_FLASH_PAGE_SIZE           512UL              /* 512Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE         (256 * 1024)       /* 256KBytes */
+    #define CONFIG_FLASH_BLOCK_SIZE          (256 * 1024)       /* 256KBytes */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE   true
+    #define CONFIG_SERIAL_CLK_FREQ  kFlexSpiSerialClk_30MHz
+const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+    .memConfig =
+        {
+            .tag                = FLEXSPI_CFG_BLK_TAG,
+            .version            = FLEXSPI_CFG_BLK_VERSION,
+            .readSampleClkSrc   = kFlexSPIReadSampleClk_ExternalInputFromDqsPad,
+            .csHoldTime         = 3u,
+            .csSetupTime        = 3u,
+            .columnAddressWidth = 3u,
+            .controllerMiscOption =
+                (1u << kFlexSpiMiscOffset_DdrModeEnable) | (1u << kFlexSpiMiscOffset_WordAddressableEnable) |
+                (1u << kFlexSpiMiscOffset_SafeConfigFreqEnable) | (1u << kFlexSpiMiscOffset_DiffClkEnable),
+            .sflashPadType = kSerialFlash_8Pads,
+            .serialClkFreq = kFlexSpiSerialClk_133MHz,
+            .sflashA1Size  = 64u * 1024u * 1024u,
+            .dataValidTime = {16u, 16u},
+            .lookupTable =
+                {
+                    FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0xA0, RADDR_DDR, FLEXSPI_8PAD, 0x18),
+                    FLEXSPI_LUT_SEQ(CADDR_DDR, FLEXSPI_8PAD, 0x10, DUMMY_DDR, FLEXSPI_8PAD, 0x06),
+                    FLEXSPI_LUT_SEQ(READ_DDR, FLEXSPI_8PAD, 0x04, STOP, FLEXSPI_1PAD, 0x0),
+                },
+        },
+    .pageSize           = 512u,
+    .sectorSize         = 256u * 1024u,
+    .blockSize          = 256u * 1024u,
+    .isUniformBlockSize = true,
+};
+
+#endif
+
 
 #ifndef __FLASH_BASE
 #   define __FLASH_BASE 0x60000000
 #endif
 #ifndef FLASH_BASE
 #define FLASH_BASE __FLASH_BASE
-#define FLASH_SIZE 0x800000
 #define PLUGIN_FLAG 0x0UL
 #endif
 
@@ -221,7 +262,7 @@ extern void isr_reset(void);
 
 const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
   FLASH_BASE,                 /* boot start location */
-  FLASH_SIZE,                 /* size */
+  CONFIG_FLASH_SIZE,          /* size */
   PLUGIN_FLAG,                /* Plugin flag*/
   0xFFFFFFFF                  /* empty - extra data word */
 };
@@ -273,26 +314,26 @@ static void clock_init(void)
 {
     if (CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK)
     {
-        // Configure ARM_PLL
+        /* Configure ARM_PLL */
         CCM_ANALOG->PLL_ARM =
             CCM_ANALOG_PLL_ARM_BYPASS(1) | CCM_ANALOG_PLL_ARM_ENABLE(1) | CCM_ANALOG_PLL_ARM_DIV_SELECT(24);
-        // Wait Until clock is locked
+        /* Wait Until clock is locked */
         while ((CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_LOCK_MASK) == 0)
         {
         }
 
-        // Configure PLL_SYS
+        /* Configure PLL_SYS */
         CCM_ANALOG->PLL_SYS &= ~CCM_ANALOG_PLL_SYS_POWERDOWN_MASK;
-        // Wait Until clock is locked
+        /* Wait Until clock is locked */
         while ((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_LOCK_MASK) == 0)
         {
         }
 
-        // Configure PFD_528
+        /* Configure PFD_528 */
         CCM_ANALOG->PFD_528 = CCM_ANALOG_PFD_528_PFD0_FRAC(24) | CCM_ANALOG_PFD_528_PFD1_FRAC(24) |
             CCM_ANALOG_PFD_528_PFD2_FRAC(19) | CCM_ANALOG_PFD_528_PFD3_FRAC(24);
 
-        // Configure USB1_PLL
+        /* Configure USB1_PLL */
         CCM_ANALOG->PLL_USB1 =
             CCM_ANALOG_PLL_USB1_DIV_SELECT(0) | CCM_ANALOG_PLL_USB1_POWER(1) | CCM_ANALOG_PLL_USB1_ENABLE(1);
         while ((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_LOCK_MASK) == 0)
@@ -300,31 +341,31 @@ static void clock_init(void)
         }
         CCM_ANALOG->PLL_USB1 &= ~CCM_ANALOG_PLL_USB1_BYPASS_MASK;
 
-        // Configure PFD_480
+        /* Configure PFD_480 */
         CCM_ANALOG->PFD_480 = CCM_ANALOG_PFD_480_PFD0_FRAC(35) | CCM_ANALOG_PFD_480_PFD1_FRAC(35) |
             CCM_ANALOG_PFD_480_PFD2_FRAC(26) | CCM_ANALOG_PFD_480_PFD3_FRAC(15);
 
-        // Configure Clock PODF
+        /* Configure Clock PODF */
         CCM->CACRR = CCM_CACRR_ARM_PODF(1);
 
         CCM->CBCDR = (CCM->CBCDR & (~(CCM_CBCDR_SEMC_PODF_MASK | CCM_CBCDR_AHB_PODF_MASK | CCM_CBCDR_IPG_PODF_MASK))) |
             CCM_CBCDR_SEMC_PODF(2) | CCM_CBCDR_AHB_PODF(2) | CCM_CBCDR_IPG_PODF(2);
 
 #ifdef CPU_MIMXRT1062DVL6A
-        // Configure FLEXSPI2 CLOCKS
+        /* Configure FLEXSPI2 CLOCKS */
         CCM->CBCMR =
             (CCM->CBCMR &
              (~(CCM_CBCMR_PRE_PERIPH_CLK_SEL_MASK | CCM_CBCMR_FLEXSPI2_CLK_SEL_MASK | CCM_CBCMR_FLEXSPI2_PODF_MASK))) |
             CCM_CBCMR_PRE_PERIPH_CLK_SEL(3) | CCM_CBCMR_FLEXSPI2_CLK_SEL(1) | CCM_CBCMR_FLEXSPI2_PODF(7);
 #endif
 
-        // Confgiure FLEXSPI CLOCKS
+        /* Configure FLEXSPI CLOCKS */
         CCM->CSCMR1 = ((CCM->CSCMR1 &
                     ~(CCM_CSCMR1_FLEXSPI_CLK_SEL_MASK | CCM_CSCMR1_FLEXSPI_PODF_MASK | CCM_CSCMR1_PERCLK_PODF_MASK |
                         CCM_CSCMR1_PERCLK_CLK_SEL_MASK)) |
                 CCM_CSCMR1_FLEXSPI_CLK_SEL(3) | CCM_CSCMR1_FLEXSPI_PODF(7) | CCM_CSCMR1_PERCLK_PODF(1));
 
-        // Finally, Enable PLL_ARM, PLL_SYS and PLL_USB1
+        /* Finally, Enable PLL_ARM, PLL_SYS and PLL_USB1 */
         CCM_ANALOG->PLL_ARM &= ~CCM_ANALOG_PLL_ARM_BYPASS_MASK;
         CCM_ANALOG->PLL_SYS &= ~CCM_ANALOG_PLL_SYS_BYPASS_MASK;
         CCM_ANALOG->PLL_USB1 &= ~CCM_ANALOG_PLL_USB1_BYPASS_MASK;
@@ -357,8 +398,10 @@ static serial_nor_config_option_t flexspi_cfg_option = {};
 
 static int nor_flash_init(void)
 {
+#ifdef CPU_MIMXRT1062DVL6A
     flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
     g_bootloaderTree->flexSpiNorDriver->get_config(0, &flexspi_config, &flexspi_cfg_option);
+#endif
     g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
     return 0;
 }
