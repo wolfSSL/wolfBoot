@@ -205,7 +205,11 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint16_t *img_size;
     uint32_t total_size;
     WB_PATCH_CTX ctx;
-
+#ifdef EXT_ENCRYPTED
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint8_t nonce[ENCRYPT_NONCE_SIZE];
+    uint8_t enc_blk[DELTA_BLOCK_SIZE];
+#endif
     /* Use biggest size for the swap */
     total_size = boot->fw_size + IMAGE_HEADER_SIZE;
     if ((update->fw_size + IMAGE_HEADER_SIZE) > total_size)
@@ -247,8 +251,17 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             while (len < WOLFBOOT_SECTOR_SIZE) {
                 ret = wb_patch(&ctx, delta_blk, DELTA_BLOCK_SIZE);
                 if (ret > 0) {
-                    wb_flash_write(swap, len, delta_blk, ret);
-                    len += ret;
+#ifdef EXT_ENCRYPTED
+                        uint32_t iv_counter = sector * WOLFBOOT_SECTOR_SIZE + len;
+                        iv_counter /= ENCRYPT_BLOCK_SIZE;
+                        /* Encrypt + send */
+                        crypto_set_iv(nonce, iv_counter);
+                        crypto_encrypt(enc_blk, delta_blk, ret);
+                        ret = ext_flash_write((uint32_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + len), enc_blk, ret);
+#else
+                        wb_flash_write(swap, len, delta_blk, ret);
+#endif
+                        len += ret;
                 } else if (ret == 0) {
                     break;
                 } else
@@ -387,7 +400,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
-        return wolfBoot_delta_update(&boot, &update, &swap, fallback_allowed);
+        return wolfBoot_delta_update(&boot, &update, &swap,
+                        (wolfBoot_current_firmware_version() >= wolfBoot_update_firmware_version()));
     }
 #endif
 

@@ -344,8 +344,7 @@ while (i < len(argv)):
 
 
 if (encrypt and delta):
-    print("Encryption of delta images not supported yet.")
-    sys.exit(1)
+    print("Encryption of delta image")
 
 try:
     cfile = open(".config", "r")
@@ -391,14 +390,23 @@ else:
     else:
         output_image_file = image_file + "_v" + str(fw_version) + "_digest.bin"
 
-if encrypt:
+if delta and encrypt:
+    if '.' in image_file:
+        tokens = image_file.split('.')
+        encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
+        encrypted_output_image_file += "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
+    else:
+        encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
+
+elif encrypt:
     if '.' in image_file:
         tokens = image_file.split('.')
         encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_and_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_and_encrypted.bin"
-elif delta:
+
+if delta:
     if '.' in image_file:
         tokens = image_file.split('.')
         delta_output_image_file = image_file.rstrip('.' + tokens[-1])
@@ -593,6 +601,11 @@ while True:
 infile.close()
 outfile.close()
 
+if (encrypt):
+    delta_align=64
+else:
+    delta_align=16
+
 if (delta):
     tmp_outfile='/tmp/delta.bin'
     tmp_inv_outfile='/tmp/delta-1.bin'
@@ -603,7 +616,7 @@ if (delta):
     delta_inv_size = os.path.getsize(tmp_inv_outfile)
     delta_file = open(tmp_outfile, 'ab+')
     delta_inv_file = open(tmp_inv_outfile, 'rb')
-    while delta_file.tell() % 16 != 0:
+    while delta_file.tell() % delta_align != 0:
         delta_file.write(struct.pack('B', 0x00))
     inv_off = delta_file.tell()
     while True:
@@ -636,6 +649,7 @@ if (delta):
     outfile.close()
     os.remove(tmp_outfile)
     os.remove(tmp_inv_outfile)
+    output_image_file = delta_output_image_file
 
 if (encrypt):
     sz = 0
