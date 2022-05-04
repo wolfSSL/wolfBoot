@@ -43,7 +43,7 @@ ifeq ($(SIGN),ECC256)
   else ifneq ($(SPMATH),1)
     STACK_USAGE=5008
   else
-    STACK_USAGE=3896
+    STACK_USAGE=3952
   endif
   PUBLIC_KEY_OBJS=./src/ecc256_pub_key.o
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
