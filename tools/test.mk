@@ -768,13 +768,13 @@ test-all: clean
 
 test-size-all:
 	make test-size SIGN=NONE LIMIT=4610
-	make test-size SIGN=ED25519 LIMIT=10670
-	make test-size SIGN=ECC256  LIMIT=21538
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13042
-	make test-size SIGN=RSA2048 LIMIT=10538
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11626
-	make test-size SIGN=RSA4096 LIMIT=10894
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11910
-	make test-size SIGN=ECC384 LIMIT=16866
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=14294
-	make test-size SIGN=ED448 LIMIT=12830
+	make test-size SIGN=ED25519 LIMIT=10734
+	make test-size SIGN=ECC256  LIMIT=21758
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13266
+	make test-size SIGN=RSA2048 LIMIT=10722
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11702
+	make test-size SIGN=RSA4096 LIMIT=11074
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11974
+	make test-size SIGN=ECC384 LIMIT=17078
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=14698
+	make test-size SIGN=ED448 LIMIT=12902
