@@ -65,13 +65,13 @@ struct xmalloc_slot {
         #define MP_CURVE_SPECS_SIZE (80)
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MP_POINT_SIZE (196)
-            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 8)
-            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 5)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 8)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 6)
         #else
             #define MP_POINT_SIZE (220)
-            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 16 * 9)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 9)
             #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 9 + 3))
-            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 5))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 6))
             #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 8)
         #endif
     #endif /* WOLFBOOT_SIGN_ECC256 */
