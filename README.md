@@ -279,6 +279,7 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
  * Support AES128 and AES256 for update encryption
  * Support ECC384 signature verification
  * Support SHA2-384 for image hash
+ * Fixed alignment of delta update fields in manifest
  * Image size propagated to sign tools
  * Added test automation based on renode.io and github actions
  * Hardware support
