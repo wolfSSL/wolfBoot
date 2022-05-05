@@ -272,3 +272,18 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * UEFI support: wolfBoot as EFI application on x86_64
    * Fixed self-update in Cortex-R5
    * Fixed HW support regressions in PSOC-6 build
+
+### V1.11 (2022-04-05)
+ * Mitigation against fault-injections and glitching attacks
+    (https://www.wolfssl.com/secure-boot-glitching-attacks/)
+ * Support AES128 and AES256 for update encryption
+ * Support ECC384 signature verification
+ * Support SHA2-384 for image hash
+ * Image size propagated to sign tools
+ * Added test automation based on renode.io and github actions
+ * Hardware support
+   * New HAL: STM32U5
+   * New HAL: NXP i.MX-RT1050
+   * Fix risc-V 32bit port (missing include)
+   * Fix STM32L4 (VTOR alignments; clock setting clash in libwolfboot)
+   * STM32H7: improve HAL and documentation
