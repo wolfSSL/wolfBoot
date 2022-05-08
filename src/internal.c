@@ -37,7 +37,9 @@
 #include <wolfpkcs11/store.h>
 
 #ifndef HAVE_SCRYPT
-    #error PKCS11 requires scrypt. Please build wolfssl with `./configure --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP"`
+    #error PKCS11 requires scrypt. Please build wolfssl with " \
+        "`./configure --enable-rsapss --enable-keygen --enable-pwdbased " \
+        "--enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"`
 #endif
 
 /* Size of hash calculated from PIN. */

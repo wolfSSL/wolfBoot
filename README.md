@@ -61,6 +61,25 @@ Set to any value to stop storage of token data.
 
 ## Release Notes
 
-### wolfPKCS11 Release 1.0 (10/20/2021)
+### wolfPKCS11 Release 1.1 (May 6, 2022)
 
+* Added support for CKM_AES_CBC_PAD
+* Added support for storage of token data.
+* Added support encrypted private keys.
+* Added CKF_LOGIN_REQUIRED to the slot flags.
+* Added RSA X_509 support for signing/verifying
+* Added missing `CK_INVALID_SESSION`.
+* Added some missing PKCS11 types.
+* Fixed building with FIPS 140-2 (fipsv2).
+* Fixed `WP11_API` visibility.
+* Fixed test pin to be at least 14-characters as required by FIPS HMAC.
+* Fixed getting a boolean for the operations flags.
+* Fixed misleading indentation fixes.
+* Improve the `curve_oid` lookup with FIPS.
+* Removed `config.h` from the public pkcs11.h header.
+* Convert repository to GPLv3.
+
+### wolfPKCS11 Release 1.0 (October 20, 2021)
+
+* Initial PKCS11 support
 
