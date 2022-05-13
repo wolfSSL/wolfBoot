@@ -849,7 +849,7 @@ static CK_RV pkcs11_init(const char* library)
     }
 
     if (ret == CKR_OK) {
-        func = (CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
+        func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
             fprintf(stderr, "Failed to get function list function\n");
             ret = -1;

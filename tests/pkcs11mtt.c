@@ -647,13 +647,13 @@ static CK_RV test_attribute_types(void* args)
         { CKA_VALUE,             keyData,           sizeof(keyData)           },
     };
     CK_ULONG tmplCnt = sizeof(tmpl) / sizeof(*tmpl);
-    CK_BBOOL private, sensitive, extractable, modifiable, alwaysSensitive;
+    CK_BBOOL privateBool, sensitive, extractable, modifiable, alwaysSensitive;
     CK_BBOOL neverExtractable, alwaysAuthenticate, copyable, destroyable, local;
     CK_BBOOL wrapWithTrusted, trusted;
     CK_BBOOL encrypt, decrypt, verify, verifyRecover, sign, signRecover;
     CK_BBOOL wrap, unwrap, derive;
     CK_ATTRIBUTE boolTmpl[] = {
-        { CKA_PRIVATE,             &private,            sizeof(CK_BBOOL)      },
+        { CKA_PRIVATE,             &privateBool,        sizeof(CK_BBOOL)      },
         { CKA_SENSITIVE,           &sensitive,          sizeof(CK_BBOOL)      },
         { CKA_EXTRACTABLE,         &extractable,        sizeof(CK_BBOOL)      },
         { CKA_MODIFIABLE,          &modifiable,         sizeof(CK_BBOOL)      },
@@ -677,7 +677,7 @@ static CK_RV test_attribute_types(void* args)
     };
     CK_ULONG boolTmplCnt = sizeof(boolTmpl) / sizeof(*boolTmpl);
     CK_ATTRIBUTE boolSetTmpl[] = {
-        { CKA_PRIVATE,             &private,            sizeof(CK_BBOOL)      },
+        { CKA_PRIVATE,             &privateBool,        sizeof(CK_BBOOL)      },
         { CKA_SENSITIVE,           &sensitive,          sizeof(CK_BBOOL)      },
         { CKA_EXTRACTABLE,         &extractable,        sizeof(CK_BBOOL)      },
         { CKA_MODIFIABLE,          &modifiable,         sizeof(CK_BBOOL)      },
@@ -6437,7 +6437,7 @@ static CK_RV pkcs11_init(const char* library)
     }
 
     if (ret == CKR_OK) {
-        func = (CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
+        func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
             fprintf(stderr, "Failed to get function list function\n");
             ret = -1;

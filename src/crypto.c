@@ -319,7 +319,7 @@ static CK_RV SetAttributeValue(WP11_Session* session, WP11_Object* obj,
     for (i = 0; i < cnt; i++) {
         for (j = 0; j < (int)ulCount; j++) {
             if (attrs[i] == pTemplate[j].type) {
-                data[i] = pTemplate[j].pValue;
+                data[i] = (unsigned char*)pTemplate[j].pValue;
                 if (data[i] == NULL)
                     return CKR_ATTRIBUTE_VALUE_INVALID;
                 len[i] = (int)pTemplate[j].ulValueLen;
@@ -364,7 +364,7 @@ static CK_RV SetAttributeValue(WP11_Session* session, WP11_Object* obj,
     /* Set remaining attributes - key specific attributes ignored. */
     for (i = 0; i < (int)ulCount; i++) {
         attr = &pTemplate[i];
-        ret = WP11_Object_SetAttr(obj, attr->type, attr->pValue,
+        ret = WP11_Object_SetAttr(obj, attr->type, (byte*)attr->pValue,
                                                               attr->ulValueLen);
         if (ret == BAD_FUNC_ARG)
             return CKR_ATTRIBUTE_VALUE_INVALID;
@@ -770,7 +770,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession,
     for (i = 0; i < (int)ulCount; i++) {
         attr = &pTemplate[i];
 
-        ret = WP11_Object_GetAttr(obj, attr->type, attr->pValue,
+        ret = WP11_Object_GetAttr(obj, attr->type, (byte*)attr->pValue,
                                                              &attr->ulValueLen);
         if (ret == BAD_FUNC_ARG)
             return CKR_ATTRIBUTE_TYPE_INVALID;
@@ -789,7 +789,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession,
  * Set the values of the attributes into the object.
  *
  * @param  hSession   [in]  Handle of session.
- * @param  hObject    [in]  Handle of object to set value agqainst.
+ * @param  hObject    [in]  Handle of object to set value against.
  * @param  pTemplate  [in]  Template of attributes set against object.
  * @param  ulCount    [in]  Number of attribute triplets in template.
  * @return  CKR_CRYPTOKI_NOT_INITIALIZED when library not initialized.
@@ -1020,8 +1020,8 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
 
             ret = WP11_Session_SetOaepParams(session, params->hashAlg,
-                                              params->mgf, params->pSourceData,
-                                              (int)params->ulSourceDataLen);
+                params->mgf, (byte*)params->pSourceData,
+                (int)params->ulSourceDataLen);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_RSA_PKCS_OAEP_ENC;
@@ -1039,8 +1039,8 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
             if (pMechanism->ulParameterLen != AES_IV_SIZE)
                 return CKR_MECHANISM_PARAM_INVALID;
-            ret = WP11_Session_SetCbcParams(session, pMechanism->pParameter, 1,
-                                                                           obj);
+            ret = WP11_Session_SetCbcParams(session,
+                (unsigned char*)pMechanism->pParameter, 1, obj);
             if (ret == MEMORY_E)
                 return CKR_DEVICE_MEMORY;
             if (ret != 0)
@@ -1055,8 +1055,8 @@ CK_RV C_EncryptInit(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
             if (pMechanism->ulParameterLen != AES_IV_SIZE)
                 return CKR_MECHANISM_PARAM_INVALID;
-            ret = WP11_Session_SetCbcParams(session, pMechanism->pParameter, 1,
-                                                                           obj);
+            ret = WP11_Session_SetCbcParams(session,
+                (unsigned char*)pMechanism->pParameter, 1, obj);
             if (ret == MEMORY_E)
                 return CKR_DEVICE_MEMORY;
             if (ret != 0)
@@ -1593,8 +1593,8 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
 
             ret = WP11_Session_SetOaepParams(session, params->hashAlg,
-                                               params->mgf, params->pSourceData,
-                                               (int)params->ulSourceDataLen);
+                params->mgf, (byte*)params->pSourceData,
+                (int)params->ulSourceDataLen);
             if (ret != 0)
                 return CKR_MECHANISM_PARAM_INVALID;
             init = WP11_INIT_RSA_PKCS_OAEP_DEC;
@@ -1611,8 +1611,8 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
             if (pMechanism->ulParameterLen != AES_IV_SIZE)
                 return CKR_MECHANISM_PARAM_INVALID;
-            ret = WP11_Session_SetCbcParams(session, pMechanism->pParameter, 0,
-                                                                           obj);
+            ret = WP11_Session_SetCbcParams(session,
+                (unsigned char*)pMechanism->pParameter, 0, obj);
             if (ret == MEMORY_E)
                 return CKR_DEVICE_MEMORY;
             if (ret != 0)
@@ -1626,8 +1626,8 @@ CK_RV C_DecryptInit(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
             if (pMechanism->ulParameterLen != AES_IV_SIZE)
                 return CKR_MECHANISM_PARAM_INVALID;
-            ret = WP11_Session_SetCbcParams(session, pMechanism->pParameter, 0,
-                                                                           obj);
+            ret = WP11_Session_SetCbcParams(session,
+                (unsigned char*)pMechanism->pParameter, 0, obj);
             if (ret == MEMORY_E)
                 return CKR_DEVICE_MEMORY;
             if (ret != 0)
@@ -3846,7 +3846,7 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
 
             keyLen = (word32)(params->ulPublicDataLen / 2);
-            derivedKey = XMALLOC(keyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            derivedKey = (byte*)XMALLOC(keyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (derivedKey == NULL)
                 return CKR_DEVICE_MEMORY;
 
@@ -3866,11 +3866,11 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession,
                 return CKR_MECHANISM_PARAM_INVALID;
 
             keyLen = (word32)pMechanism->ulParameterLen;
-            derivedKey = XMALLOC(keyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            derivedKey = (byte*)XMALLOC(keyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (derivedKey == NULL)
                 return CKR_DEVICE_MEMORY;
 
-            ret = WP11_Dh_Derive(pMechanism->pParameter,
+            ret = WP11_Dh_Derive((unsigned char*)pMechanism->pParameter,
                                     (int)pMechanism->ulParameterLen, derivedKey,
                                     &keyLen, obj);
             if (ret != 0)
