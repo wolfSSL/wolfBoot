@@ -37,3 +37,9 @@ test/*
 *.gcda
 *.gcno
 
+tests/wp11_rsakey_*
+tests/wp11_dhkey_*
+tests/wp11_ecckey_*
+tests/wp11_symmkey_*
+tests/wp11_token_*
+tests/wp11_obj_*

@@ -486,7 +486,7 @@ static int wp11_Session_New(WP11_Slot* slot, CK_OBJECT_HANDLE handle,
     int ret = 0;
     WP11_Session* sess;
 
-    sess = XMALLOC(sizeof(*sess), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    sess = (WP11_Session*)XMALLOC(sizeof(*sess), NULL, DYNAMIC_TYPE_TMP_BUFFER);
     if (sess == NULL)
         ret = MEMORY_E;
 
@@ -1171,7 +1171,7 @@ static int wp11_storage_read_alloc_array(void* storage,
     ret = wp11_storage_read_int(storage, len);
     if (ret == 0) {
         /* Allocate buffer to hold data. */
-        *buffer = XMALLOC(*len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        *buffer = (unsigned char*)XMALLOC(*len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         if (*buffer == NULL)
             ret = MEMORY_E;
     }
@@ -1231,7 +1231,7 @@ static int wp11_Object_New(WP11_Slot* slot, CK_KEY_TYPE type,
     int ret = 0;
     WP11_Object* obj = NULL;
 
-    obj = XMALLOC(sizeof(*obj), NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    obj = (WP11_Object*)XMALLOC(sizeof(*obj), NULL, DYNAMIC_TYPE_TMP_BUFFER);
     if (obj == NULL)
         ret = MEMORY_E;
 
@@ -1411,7 +1411,7 @@ static int wp11_Object_Encode_RsaKey(WP11_Object* object)
     if (ret == 0) {
         XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         /* Allocate buffer to hold encoded key. */
-        object->keyData = XMALLOC(object->keyDataLen, NULL,
+        object->keyData = (unsigned char*)XMALLOC(object->keyDataLen, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
         if (object->keyData == NULL)
             ret = MEMORY_E;
@@ -1602,7 +1602,7 @@ static int wp11_Object_Encode_EccKey(WP11_Object* object)
     if (ret == 0) {
         XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         /* Allocate buffer to hold encoded key. */
-        object->keyData = XMALLOC(object->keyDataLen, NULL,
+        object->keyData = (unsigned char*)XMALLOC(object->keyDataLen, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
         if (object->keyData == NULL)
             ret = MEMORY_E;
@@ -1762,7 +1762,7 @@ static int wp11_Object_Encode_DhKey(WP11_Object* object)
     object->keyDataLen = object->data.dhKey.len + AES_BLOCK_SIZE;
     XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     /* Allocate buffer to hold encoded key. */
-    object->keyData = XMALLOC(object->keyDataLen, NULL,
+    object->keyData = (unsigned char*)XMALLOC(object->keyDataLen, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
     if (object->keyData == NULL)
         ret = MEMORY_E;
@@ -2021,7 +2021,7 @@ static int wp11_Object_Store_DhKey(WP11_Object* object, int tokenId, int objId)
         }
         if (ret == 0) {
             /* Allocate buffer to hold encoded key. */
-            der = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            der = (unsigned char*)XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
             if (der == NULL)
                 ret = MEMORY_E;
         }
@@ -2084,7 +2084,7 @@ static int wp11_Object_Encode_SymmKey(WP11_Object* object)
     object->keyDataLen = object->data.symmKey.len + AES_BLOCK_SIZE;
     XFREE(object->keyData, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     /* Allocate buffer to hold encoded key. */
-    object->keyData = XMALLOC(object->keyDataLen, NULL,
+    object->keyData = (unsigned char*)XMALLOC(object->keyDataLen, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
     if (object->keyData == NULL)
         ret = MEMORY_E;
@@ -3849,7 +3849,7 @@ WP11_Slot* WP11_Session_GetSlot(WP11_Session* session)
 }
 
 /**
- * Get the mechansim associated with the session.
+ * Get the mechanism associated with the session.
  *
  * @param  session  [in]  Session object.
  * @return  Mechanism of the session.
@@ -3976,7 +3976,7 @@ int WP11_Session_SetOaepParams(WP11_Session* session, CK_MECHANISM_TYPE hashAlg,
         oaep->labelSz = 0;
     }
     if (ret == 0 && label != NULL) {
-        oaep->label = XMALLOC(labelSz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        oaep->label = (byte*)XMALLOC(labelSz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         if (oaep->label == NULL)
             ret = MEMORY_E;
         else {
@@ -4086,7 +4086,8 @@ int WP11_Session_SetGcmParams(WP11_Session* session, unsigned char* iv,
         gcm->ivSz = ivSz;
         gcm->tagBits = tagBits;
         if (aad != NULL) {
-            gcm->aad = XMALLOC(aadLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            gcm->aad = (unsigned char*)XMALLOC(aadLen, NULL,
+                DYNAMIC_TYPE_TMP_BUFFER);
             if (gcm->aad == NULL)
                 ret = MEMORY_E;
             if (ret == 0) {
@@ -4356,7 +4357,7 @@ void WP11_Session_Find(WP11_Session* session, int onToken,
     while ((obj = wp11_Session_FindNext(session, onToken, obj)) != NULL) {
         for (i = 0; i < (int)ulCount; i++) {
             attr = &pTemplate[i];
-            if (!WP11_Object_MatchAttr(obj, attr->type, attr->pValue,
+            if (!WP11_Object_MatchAttr(obj, attr->type, (byte*)attr->pValue,
                                                             attr->ulValueLen)) {
                 break;
             }
@@ -5492,7 +5493,8 @@ static int WP11_Object_SetKeyId(WP11_Object* object, unsigned char* keyId,
 
     if (object->keyId != NULL)
         XFREE(object->keyId, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    object->keyId = XMALLOC(keyIdLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    object->keyId = (unsigned char*)XMALLOC(keyIdLen, NULL,
+        DYNAMIC_TYPE_TMP_BUFFER);
     if (object->keyId == NULL)
         ret = MEMORY_E;
     if (ret == 0) {
@@ -5519,7 +5521,8 @@ static int WP11_Object_SetLabel(WP11_Object* object, unsigned char* label,
 
     if (object->label != NULL)
         XFREE(object->label, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    object->label = XMALLOC(labelLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    object->label = (unsigned char*)XMALLOC(labelLen, NULL,
+        DYNAMIC_TYPE_TMP_BUFFER);
     if (object->label == NULL)
         ret = MEMORY_E;
     if (ret == 0) {
@@ -5786,7 +5789,7 @@ int WP11_Object_MatchAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
     }
     else {
         /* Allocate a buffer to hold data and then compare. */
-        ptr = XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        ptr = (byte*)XMALLOC(len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         if (ptr != NULL) {
             if (WP11_Object_GetAttr(object, type, ptr, &attrLen) == 0)
                 ret = (attrLen == len) && (XMEMCMP(ptr, data, len) == 0);
@@ -7534,7 +7537,7 @@ int WP11_AesGcm_DecryptUpdate(unsigned char* enc, word32 encSz,
     unsigned char* newEnc;
     WP11_GcmParams* gcm = &session->params.gcm;
 
-    newEnc = XREALLOC(gcm->enc, gcm->encSz + encSz, NULL,
+    newEnc = (unsigned char*)XREALLOC(gcm->enc, gcm->encSz + encSz, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
     if (newEnc == NULL)
         ret = MEMORY_E;
