@@ -215,7 +215,7 @@ ifeq ($(SIGN),RSA4096)
 endif
 
 
-ifeq ($(USE_GCC),1)
+ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
 endif
 

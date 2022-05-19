@@ -23,6 +23,7 @@ OBJS:= \
 ./src/string.o \
 ./src/image.o \
 ./src/libwolfboot.o
+UPDATE_OBJS:=
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 ifneq ("$(NO_LOADER)","1")
@@ -69,6 +70,7 @@ ifeq ($(TARGET),library)
 	MAIN_TARGET:=test-lib
 endif
 
+ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 all: $(MAIN_TARGET)
@@ -140,6 +142,7 @@ factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bi
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo "\t[LD] $@"
+	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
 $(LSCRIPT): hal/$(TARGET).ld FORCE

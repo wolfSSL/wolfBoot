@@ -376,7 +376,12 @@ static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_
 
 #else
 #   define fetch_hdr_cpy(i) ((uint8_t *)0)
-static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr) { return 0; }
+static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type,
+    uint8_t **ptr)
+{
+    (void)img; (void)type; (void)ptr;
+    return 0;
+}
 #endif
 
 static uint8_t *get_img_hdr(struct wolfBoot_image *img)
@@ -824,7 +829,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
     if (image_hash(img, digest) != 0)
-          return -1;
+        return -1;
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
     /*
      * TPM measurement must be performed regardless of the
