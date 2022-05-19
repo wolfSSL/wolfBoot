@@ -18,6 +18,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+#ifdef DELTA_UPDATES
 #include <stdint.h>
 #include <string.h>
 #include <delta.h>
@@ -336,4 +337,4 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     return (p_off);
 }
 
-
+#endif /* DELTA_UPDATES */

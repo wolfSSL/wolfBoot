@@ -180,8 +180,9 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
 
 
 /* Globals */
-
+#ifdef DELTA_UPDATES
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
+#endif
 
 static union {
 #ifdef HAVE_ED25519
@@ -931,6 +932,7 @@ static int make_header(uint8_t *pubkey, uint32_t pubkey_sz,
     return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0);
 }
 
+#ifdef DELTA_UPDATES
 static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint16_t patch_len,
@@ -1154,6 +1156,7 @@ cleanup:
     return ret;
 }
 
+#endif /* DELTA_UPDATES */
 
 static const char Hashes_str[] = "[--sha256 | --sha384 | --sha3]";
 static const char Enc_str[] = "[--chacha | --aes128 | --aes256]";
@@ -1181,7 +1184,10 @@ int main(int argc, char** argv)
     /* Check arguments and print usage */
     if (argc < 4 || argc > 10) {
         printf("Usage: %s %s %s [--wolfboot-update] [--encrypt enc_key.bin] %s"
-               " [--delta image_vX_signed.bin] image key.der fw_version\n",
+        #ifdef DELTA_UPDATES
+               " [--delta image_vX_signed.bin] "
+        #endif
+               "image key.der fw_version\n",
                argv[0], Hashes_str, Sign_algo_str, Enc_str);
         printf("  - or - \n");
         printf("       %s %s [--wolfboot-update] image pub_key.der fw_version\n",
@@ -1270,10 +1276,12 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--chacha") == 0) {
             CMD.encrypt = ENC_CHACHA;
         }
+#ifdef DELTA_UPDATES
         else if (strcmp(argv[i], "--delta") == 0) {
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
         }
+#endif
         else {
             i--;
             break;
@@ -1315,6 +1323,7 @@ int main(int argc, char** argv)
     if (CMD.sign != NO_SIGN) {
         printf("Public key:           %s\n", CMD.key_file);
     }
+#ifdef DELTA_UPDATES
     if (CMD.delta) {
         printf("Delta Base file:      %s\n", CMD.delta_base_file);
         snprintf(CMD.output_diff_file, sizeof(CMD.output_image_file),
@@ -1322,6 +1331,7 @@ int main(int argc, char** argv)
                 (char*)buf, CMD.fw_version);
 
     }
+#endif
     printf("Output %6s:        %s\n",    CMD.sha_only ? "digest" : "image",
             CMD.output_image_file);
     if (CMD.encrypt) {
@@ -1382,9 +1392,12 @@ int main(int argc, char** argv)
     } /* CMD.sign != NO_SIGN */
     make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
 
+#ifdef DELTA_UPDATES
     if (CMD.delta) {
         ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz);
     }
+#endif
+
     if (kbuf)
         free(kbuf);
     if (CMD.sign == SIGN_ED25519) {

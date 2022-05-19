@@ -70,17 +70,28 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
+void* hal_get_primary_address(void)
+{
+    return (void*)kernel_addr;
+}
+void* hal_get_update_address(void)
+{
+  return (void*)update_addr;
+}
+
+
 static void panic()
 {
     while(1) {}
 }
 
-void RAMFUNCTION x86_64_efi_do_boot(uint8_t *kernel)
+void RAMFUNCTION x86_64_efi_do_boot(uint32_t *kernel_addr)
 {
     MEMMAP_DEVICE_PATH mem_path_device[2];
     EFI_HANDLE kernelImageHandle;
     EFI_STATUS status;
     uint32_t *size;
+    uint8_t* kernel = (uint8_t*)kernel_addr;
 
     size = (uint32_t *)(kernel + 4);
     kernel += IMAGE_HEADER_SIZE;

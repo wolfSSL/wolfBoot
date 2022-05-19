@@ -375,6 +375,10 @@ ifeq ($(HASH),SHA384)
   endif
 endif
 
+ifeq ($(WOLFBOOT_NO_PARTITIONS),1)
+  CFLAGS+=-D"WOLFBOOT_NO_PARTITIONS"
+endif
+
 ifeq ($(HASH),SHA3)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"

@@ -102,6 +102,7 @@
  #endif /* defined WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ED25519 */
 #endif /* defined WOLFBOOT */
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
@@ -110,6 +111,7 @@
 #define PART_DTS (0x10)
 #define PART_DTS_BOOT       (PART_DTS | PART_BOOT)
 #define PART_DTS_UPDATE     (PART_DTS | PART_UPDATE)
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define IMG_STATE_NEW       0xFF
@@ -123,19 +125,26 @@
 #define IMG_STATE_SUCCESS   0xFF
 #endif
 
-
-void wolfBoot_erase_partition(uint8_t part);
 void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);
 uint32_t wolfBoot_image_size(uint8_t *image);
+uint32_t wolfBoot_get_blob_version(uint8_t *blob);
+uint32_t wolfBoot_get_blob_type(uint8_t *blob);
+uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob);
+
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+void wolfBoot_erase_partition(uint8_t part);
 uint32_t wolfBoot_get_image_version(uint8_t part);
 uint16_t wolfBoot_get_image_type(uint8_t part);
+uint32_t wolfBoot_get_diffbase_version(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
-uint32_t wolfBoot_get_diffbase_version(uint8_t part);
+#endif
 
 int wolfBoot_fallback_is_possible(void);
 int wolfBoot_dualboot_candidate(void);
+
+int wolfBoot_dualboot_candidate_addr(void**);
 
 /* Hashing function configuration */
 #if defined(WOLFBOOT_HASH_SHA256)

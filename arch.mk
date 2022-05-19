@@ -1,6 +1,4 @@
 ## CPU Architecture selection via $ARCH
-UPDATE_OBJS:=./src/update_flash.o
-
 
 # check for FASTMATH or SP_MATH
 ifeq ($(SPMATH),1)
@@ -341,8 +339,8 @@ endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
-
 USE_GCC?=1
+USE_GCC_HEADLESS?=1
 ifeq ($(USE_GCC),1)
   ## Toolchain setup
   CC=$(CROSS_COMPILE)gcc
@@ -355,12 +353,14 @@ endif
 
 
 ifeq ($(TARGET),x86_64_efi)
+  USE_GCC_HEADLESS=0
   GNU_EFI_LIB_PATH?=/usr/lib
   GNU_EFI_CRT0=$(GNU_EFI_LIB_PATH)/crt0-efi-x86_64.o
   GNU_EFI_LSCRIPT=$(GNU_EFI_LIB_PATH)/elf_x86_64_efi.lds
   CFLAGS += -fpic -ffreestanding -fno-stack-protector -fno-stack-check \
             -fshort-wchar -mno-red-zone -maccumulate-outgoing-args
-  CFLAGS += -I/usr/include/efi -I/usr/include/efi/x86_64 -DPLATFORM_X86_64_EFI
+  CFLAGS += -I/usr/include/efi -I/usr/include/efi/x86_64 \
+            -DPLATFORM_X86_64_EFI  -DWOLFBOOT_DUALBOOT
   LDFLAGS = -shared -Bsymbolic -L/usr/lib -T$(GNU_EFI_LSCRIPT)
   LD_START_GROUP = $(GNU_EFI_CRT0)
   LD_END_GROUP = -lgnuefi -lefi
@@ -372,12 +372,18 @@ BOOT_IMG?=test-app/image.bin
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)
-  CFLAGS+=-DMMU
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   UPDATE_OBJS:=src/update_ram.o
 endif
 ifeq ($(DUALBANK_SWAP),1)
+  CFLAGS+=-DWOLFBOOT_DUALBOOT
   UPDATE_OBJS:=src/update_flash_hwswap.o
 endif
+
+ifeq ("$(UPDATE_OBJS)","")
+  UPDATE_OBJS:=./src/update_flash.o
+endif
+
 
 ## Debug
 ifeq ($(DEBUG),1)
