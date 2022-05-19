@@ -319,6 +319,8 @@ void* XMALLOC(size_t n, void* heap, int type)
         }
         i++;
     }
+    (void)heap;
+    (void)type;
     return NULL;
 }
 
@@ -332,4 +334,6 @@ void XFREE(void *ptr, void *heap, int type)
         }
         i++;
     }
+    (void)heap;
+    (void)type;
 }
