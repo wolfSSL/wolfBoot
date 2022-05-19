@@ -1,7 +1,10 @@
+# Build wolfBoot as Library
+
+## Example Build steps
+
 ```
 ln -s config/examples/library.config .config
 ```
-
 
 ```
 cat > include/target.h << EOF
@@ -28,4 +31,7 @@ make keytools
 ```
 make test-lib
 ./test-lib empty_v1_signed.bin
+
+Firmware Valid
+booting 0x5609e3526590(actually exiting)
 ```
