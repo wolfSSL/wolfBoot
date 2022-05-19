@@ -23,7 +23,6 @@ OBJS:= \
 ./src/string.o \
 ./src/image.o \
 ./src/libwolfboot.o
-UPDATE_OBJS:=
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 ifneq ("$(NO_LOADER)","1")
