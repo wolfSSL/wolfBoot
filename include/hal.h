@@ -24,7 +24,6 @@
 #ifndef H_HAL_
 #define H_HAL_
 
-#include <inttypes.h>
 
 #include "target.h"
 
@@ -46,6 +45,11 @@ void hal_prepare_boot(void);
 
 #ifdef DUALBANK_SWAP
     void hal_flash_dualbank_swap(void);
+#endif
+
+#ifdef WOLFBOOT_DUALBOOT
+    void* hal_get_primary_address(void);
+    void* hal_get_update_address(void);
 #endif
 
 #ifndef SPI_FLASH

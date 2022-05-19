@@ -732,9 +732,32 @@ uint32_t wolfBoot_image_size(uint8_t *image)
     return im2n(*size);
 }
 
-int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
+int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 {
     uint32_t *magic;
+
+    img->hdr = image;
+
+    magic = (uint32_t *)(image);
+    if (*magic != WOLFBOOT_MAGIC)
+        return -1;
+    img->fw_size = wolfBoot_image_size(image);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        img->fw_size = 0;
+        return -1;
+    }
+    img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
+#endif
+    img->hdr_ok = 1;
+    img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
+
+    return 0;
+}
+
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
+{
     uint32_t *size;
     uint8_t *image;
     if (!img)
@@ -789,19 +812,9 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     else
         image = (uint8_t *)img->hdr;
 
-    magic = (uint32_t *)(image);
-    if (*magic != WOLFBOOT_MAGIC)
-        return -1;
-    img->fw_size = wolfBoot_image_size(image);
-    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
-        img->fw_size = 0;
-        return -1;
-    }
-    img->hdr_ok = 1;
-    img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
-    img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
-    return 0;
+    return wolfBoot_open_image_address(img, image);
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
@@ -811,7 +824,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
     if (image_hash(img, digest) != 0)
-        return -1;
+          return -1;
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
     /*
      * TPM measurement must be performed regardless of the

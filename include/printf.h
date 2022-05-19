@@ -38,6 +38,8 @@
 #       include "xil_printf.h"
 #       define wolfBoot_printf(_f_, ...) xil_printf(_f_, ##__VA_ARGS__)
 #   elif defined(WOLFBOOT_DEBUG_EFI)
+#       include "efi/efi.h"
+#       include "efi/efilib.h"
         /* NOTE: %s arguments will not work as EFI uses widechar string */
 #       define wolfBoot_printf(_f_, ...) Print(L##_f_, ##__VA_ARGS__)
 #   else

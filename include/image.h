@@ -497,6 +497,7 @@ static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
 
 /* Defined in image.c */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
+int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);

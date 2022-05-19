@@ -20,14 +20,15 @@
  */
 
 #include <stdint.h>
-#include <inttypes.h>
+
 
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 
 #ifdef UNIT_TEST
-#   define unit_dbg printf
+#   include "printf.h"
+#   define unit_dbg wolfBoot_printf
 #else
 #   define unit_dbg(...) do{}while(0)
 #endif
@@ -199,6 +200,19 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
         }
     }
 }
+#elif !defined(WOLFBOOT_FIXED_PARTITIONS)
+static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
+{
+    return 0;
+}
+static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
+{
+    return;
+}
+static void RAMFUNCTION set_partition_magic(uint8_t part)
+{
+    return;
+}
 
 #else
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
@@ -207,8 +221,9 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
         return (void *)(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at));
     else if (part == PART_UPDATE) {
         return (void *)(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at));
-    } else
-        return NULL;
+    }
+
+    return NULL;
 }
 
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
@@ -234,6 +249,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 
 
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 static uint32_t* RAMFUNCTION get_partition_magic(uint8_t part)
 {
     return (uint32_t *)get_trailer_at(part, 0);
@@ -322,33 +338,32 @@ int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag)
     return 0;
 }
 
+
 void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 {
+    uint32_t address = 0;
+    int size = 0;
+
     if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
-            ext_flash_unlock();
-            ext_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_SIZE);
-            ext_flash_lock();
-        } else {
-            hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_SIZE);
-        }
+        address = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        size = WOLFBOOT_PARTITION_SIZE;
     }
     if (part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE)) {
-            ext_flash_unlock();
-            ext_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
-            ext_flash_lock();
-        } else {
-            hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
-        }
+        address = WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+        size = WOLFBOOT_PARTITION_SIZE;
     }
     if (part == PART_SWAP) {
-        if (PARTN_IS_EXT(PART_SWAP)) {
+        address = WOLFBOOT_PARTITION_SWAP_ADDRESS;
+        size = WOLFBOOT_SECTOR_SIZE;
+    }
+
+    if (size > 0) {
+        if (PARTN_IS_EXT(part)) {
             ext_flash_unlock();
-            ext_flash_erase(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+            ext_flash_erase(address, size);
             ext_flash_lock();
         } else {
-            hal_flash_erase(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+            hal_flash_erase(address, size);
         }
     }
 }
@@ -396,6 +411,7 @@ void RAMFUNCTION wolfBoot_success(void)
     wolfBoot_erase_encrypt_key();
 #endif
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
@@ -425,6 +441,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
         len = p[2] | (p[3] << 8);
         if ((4 + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
             unit_dbg("This field is too large (bigger than the space available in the current header)\n");
+            unit_dbg("%d %d %d\n", len, IMAGE_HEADER_SIZE, IMAGE_HEADER_OFFSET);
             break;
         }
         if (p + 4 + len > max_p) {
@@ -522,6 +539,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
     uint32_t *version_field = NULL;
     uint32_t *magic = NULL;
+
     magic = (uint32_t *)blob;
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
@@ -532,37 +550,22 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     return 0;
 }
 
-
-uint32_t wolfBoot_get_image_version(uint8_t part)
+uint32_t wolfBoot_get_blob_type(uint8_t *blob)
 {
-    uint8_t *image = (uint8_t *)0x00000000;
-    if(part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE))
-        {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        }
-    } else if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        }
-    }
-    /* Don't check image against NULL to allow using address 0x00000000 */
-    return wolfBoot_get_blob_version(image);
+    uint32_t *type_field = NULL;
+    uint32_t *magic = NULL;
+    magic = (uint32_t *)blob;
+    if (*magic != WOLFBOOT_MAGIC)
+      return 0;
+    if (wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
+      return 0;
+    if (type_field)
+      return im2ns(*type_field);
+
+    return 0;
 }
 
-static uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
+uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
 {
     uint32_t *delta_base = NULL;
     uint32_t *magic = NULL;
@@ -576,87 +579,57 @@ static uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     return 0;
 }
 
+
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+static uint8_t* wolfBoot_get_image_from_part(uint8_t part) {
+    uint8_t *image = (uint8_t *)0x00000000;
+
+    if(part == PART_UPDATE) {
+      image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+
+    } else if (part == PART_BOOT) {
+        image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    }
+    #ifdef EXT_FLASH
+    if (PARTN_IS_EXT(part))
+    {
+        ext_flash_check_read((uintptr_t)image, hdr_cpy, IMAGE_HEADER_SIZE);
+        hdr_cpy_done = 1;
+        image = hdr_cpy;
+    }
+    #endif
+
+    return image;
+}
+
+
+uint32_t wolfBoot_get_image_version(uint8_t part)
+{
+    /* Don't check image against NULL to allow using address 0x00000000 */
+    return wolfBoot_get_blob_version(wolfBoot_get_image_from_part(part));
+}
+
 uint32_t wolfBoot_get_diffbase_version(uint8_t part)
 {
-    uint8_t *image = (uint8_t *)0x00000000;
-    if(part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE))
-        {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        }
-    } else if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        }
-    }
     /* Don't check image against NULL to allow using address 0x00000000 */
-    return wolfBoot_get_blob_diffbase_version(image);
+    return wolfBoot_get_blob_diffbase_version(wolfBoot_get_image_from_part(part));
 }
 
 uint16_t wolfBoot_get_image_type(uint8_t part)
 {
-    uint16_t *type_field = NULL;
-    uint8_t *image = NULL;
-    uint32_t *magic = NULL;
-    if(part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE))
-        {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        }
-    } else if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        }
-    }
+    uint8_t *image = wolfBoot_get_image_from_part(part);
 
     if (image) {
-        magic = (uint32_t *)image;
-        if (*magic != WOLFBOOT_MAGIC)
-            return 0;
-        if (wolfBoot_find_header(image + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, (void *)&type_field) == 0)
-            return 0;
-        if (type_field)
-            return im2ns(*type_field);
+      return wolfBoot_get_blob_type(image);
     }
 
     return 0;
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
-#if defined(ARCH_AARCH64) || defined(DUALBANK_SWAP) || defined(PLATFORM_X86_64_EFI)
+#if defined(WOLFBOOT_DUALBOOT)
 
-int wolfBoot_fallback_is_possible(void)
-{
-    uint32_t boot_v, update_v;
-    boot_v = wolfBoot_current_firmware_version();
-    update_v = wolfBoot_update_firmware_version();
-    if ((boot_v == 0) || (update_v == 0))
-        return 0;
-    return 1;
-}
+#if defined(WOLFBOOT_FIXED_PARTITIONS)
 
 int wolfBoot_dualboot_candidate(void)
 {
@@ -691,14 +664,57 @@ int wolfBoot_dualboot_candidate(void)
     return candidate;
 }
 #else
-int wolfBoot_dualboot_candidate(void) { return 0; }
+
+static int wolfBoot_current_firmware_version()
+{
+  return wolfBoot_get_blob_version(hal_get_primary_address());
+}
+static int wolfBoot_update_firmware_version() {
+  return wolfBoot_get_blob_version(hal_get_update_address());
+}
+
+int wolfBoot_dualboot_candidate_addr(void** addr)
+{
+    int fallback_possible = 0;
+    uint32_t boot_v, update_v;
+    uint8_t p_state;
+    int retval = 0;
+
+    /* Find the candidate */
+    boot_v = wolfBoot_current_firmware_version();
+    update_v = wolfBoot_update_firmware_version();
+    /* -1 means  no images available */
+    if ((boot_v == 0) && (update_v == 0))
+        return -1;
+
+    *addr = hal_get_primary_address();
+
+    if (boot_v == 0) { /* No primary image */
+        retval = 1;
+        *addr = hal_get_update_address();
+    }
+    else if ((boot_v > 0) && (update_v > 0)) {
+        fallback_possible = 1;
+        if (update_v > boot_v) {
+            retval = 1;
+            *addr = hal_get_update_address();
+        }
+    }
+
+    return retval;
+}
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
+
 int wolfBoot_fallback_is_possible(void)
 {
-    if (wolfBoot_update_firmware_version() > 0)
-        return 1;
-    return 0;
+    uint32_t boot_v, update_v;
+    boot_v = wolfBoot_current_firmware_version();
+    update_v = wolfBoot_update_firmware_version();
+    if ((boot_v == 0) || (update_v == 0))
+        return 0;
+    return 1;
 }
-#endif /* ARCH_AARCH64 || DUALBANK_SWAP */
+#endif /* WOLFBOOT_DUALBOOT */
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
@@ -981,4 +997,3 @@ int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 #endif
 
 #endif /* EXT_ENCRYPTED */
-

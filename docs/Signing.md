@@ -98,6 +98,7 @@ openssl rsautl -sign -keyform der -inkey rsa2048.der -in test-app/image_v1_diges
 # OR
 python3 ./tools/keytools/sign.py --rsa2048 --sha256 --manual-sign test-app/image.bin rsa4096_pub.der 1 test-app/image_v1.sig
 
-# Combine into factory image
-cat wolfboot-align.bin test-app/image_v1_signed.bin > factory.bin
+# Combine into factory image (0xc0000 is the WOLFBOOT_PARTITION_BOOT_ADDRESS)
+tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \
+                              0xc0000 test-app/image_v1_signed.bin
 ```

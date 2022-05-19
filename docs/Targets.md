@@ -815,7 +815,7 @@ cd $wolfboot_dir
 
 ```
 cp config/examples/raspi3.config .config
-make wolfboot-align.bin
+make wolfboot.bin
 ```
 
 * Sign Image
@@ -826,7 +826,8 @@ tools/keytools/sign.py --rsa4096 --sha3 Image rsa4096.der 1
 * Compose the image
 
 ```
-cat wolfboot-align.bin Image_v1_signed.bin >wolfboot_linux_raspi.bin
+tools/bin-assemble/bin-assemble wolfboot_linux_raspi.bin 0x0 wolfboot.bin \
+                              0xc0000 Image_v1_signed.bin
 dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
 ```
 

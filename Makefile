@@ -16,15 +16,18 @@ LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
 
+V?=0
+
 OBJS:= \
 ./hal/$(TARGET).o \
-./src/loader.o \
 ./src/string.o \
 ./src/image.o \
 ./src/libwolfboot.o
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
-UPDATE_OBJS:=
+ifneq ("$(NO_LOADER)","1")
+  OBJS+=./src/loader.o
+endif
 
 ## Architecture/CPU configuration
 include arch.mk
@@ -39,12 +42,10 @@ CFLAGS+= \
   -D"PLATFORM_$(TARGET)"
 
 # Setup default optimizations (for GCC)
-ifneq ($(TARGET),x86_64_efi)
-  ifeq ($(USE_GCC),1)
-    CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
-    CFLAGS+=-ffunction-sections -fdata-sections
-    LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
-  endif
+ifeq ($(USE_GCC_HEADLESS),1)
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
+  CFLAGS+=-ffunction-sections -fdata-sections
+  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
 endif
 
 MAIN_TARGET=factory.bin
@@ -63,11 +64,17 @@ ifeq ($(TARGET),x86_64_efi)
 	MAIN_TARGET:=wolfboot.efi
 endif
 
-ASFLAGS:=$(CFLAGS)
+ifeq ($(TARGET),library)
+	CFLAGS+=-g
+	MAIN_TARGET:=test-lib
+endif
 
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 all: $(MAIN_TARGET)
+
+test-lib: $(OBJS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $^
 
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
@@ -106,20 +113,17 @@ include tools/test-enc.mk
 include tools/test-delta.mk
 include tools/test-renode.mk
 
-ed25519.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed25519_pub_key.c
-ed448.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ed448_pub_key.c
-ecc256.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc256_pub_key.c
-ecc384.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc384_pub_key.c
-ecc521.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/ecc521_pub_key.c
-rsa2048.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa2048_pub_key.c
-rsa4096.der:
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/rsa4096_pub_key.c
+PYTHON?=python3
+keytools_check:
+	$(Q)(test -x "$(KEYGEN_TOOL)") || \
+	($(PYTHON) -c "import wolfcrypt"  > /dev/null 2>&1) || \
+	 (echo "ERROR: Key tool unavailable '$(KEYGEN_TOOL)'.\n"\
+		"Run 'make keytools' or install wolfcrypt 'pip3 install wolfcrypt'"  && false)
+
+
+%.der:
+	$(Q)$(MAKE) keytools_check
+	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/$(@:.der=)_pub_key.c
 
 keytools:
 	@make -C tools/keytools clean
@@ -222,4 +226,4 @@ check_config:
 
 FORCE:
 
-.PHONY: FORCE clean
+.PHONY: FORCE clean keytool_check
