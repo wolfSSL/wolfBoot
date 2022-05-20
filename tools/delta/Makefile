@@ -1,5 +1,5 @@
 all: bmdiff bmpatch
-CFLAGS+=-Wall -Werror -Wextra
+CFLAGS+=-Wall -Werror -Wextra -DDELTA_UPDATES
 
 ifeq ($(HASH),SHA3)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
