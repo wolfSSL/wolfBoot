@@ -232,8 +232,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         upd_v = wolfBoot_update_firmware_version();
         delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
         if ((cur_v == upd_v) && (delta_base_v < cur_v)) {
-            ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-                    update->hdr + *img_offset, *img_size);
+            ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
+                    IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
         } else {
             ret = -1;
         }
@@ -244,24 +244,27 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     if (ret < 0)
         goto out;
 
-     while((sector * WOLFBOOT_SECTOR_SIZE) < (int)total_size) {
-        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
+    while((sector * WOLFBOOT_SECTOR_SIZE) < (int)total_size) {
+        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) ||
+                (flag == SECT_FLAG_NEW)) {
             uint32_t len = 0;
             wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
             while (len < WOLFBOOT_SECTOR_SIZE) {
                 ret = wb_patch(&ctx, delta_blk, DELTA_BLOCK_SIZE);
                 if (ret > 0) {
 #ifdef EXT_ENCRYPTED
-                        uint32_t iv_counter = sector * WOLFBOOT_SECTOR_SIZE + len;
-                        iv_counter /= ENCRYPT_BLOCK_SIZE;
-                        /* Encrypt + send */
-                        crypto_set_iv(nonce, iv_counter);
-                        crypto_encrypt(enc_blk, delta_blk, ret);
-                        ret = ext_flash_write((uint32_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + len), enc_blk, ret);
+                    uint32_t iv_counter = sector * WOLFBOOT_SECTOR_SIZE + len;
+                    iv_counter /= ENCRYPT_BLOCK_SIZE;
+                    /* Encrypt + send */
+                    crypto_set_iv(nonce, iv_counter);
+                    crypto_encrypt(enc_blk, delta_blk, ret);
+                    ret = ext_flash_write(
+                            (uint32_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + len),
+                            enc_blk, ret);
 #else
-                        wb_flash_write(swap, len, delta_blk, ret);
+                    wb_flash_write(swap, len, delta_blk, ret);
 #endif
-                        len += ret;
+                    len += ret;
                 } else if (ret == 0) {
                     break;
                 } else
@@ -378,9 +381,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
 
     /* Check the first sector to detect interrupted update */
-    if ((wolfBoot_get_update_sector_flag(0, &flag) < 0) || (flag == SECT_FLAG_NEW))
+    if ((wolfBoot_get_update_sector_flag(0, &flag) < 0) ||
+            (flag == SECT_FLAG_NEW))
     {
-        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) || ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
+        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
+                ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
             return -1;
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
@@ -388,8 +393,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
-        if (((fallback_allowed==1) && (~(uint32_t)fallback_allowed == 0xFFFFFFFE)) ||
-                (wolfBoot_current_firmware_version() < wolfBoot_update_firmware_version()) ) {
+        if ( ((fallback_allowed==1) && 
+                    (~(uint32_t)fallback_allowed == 0xFFFFFFFE)) ||
+                (wolfBoot_current_firmware_version() <
+                 wolfBoot_update_firmware_version()) ) {
             VERIFY_VERSION_ALLOWED(fallback_allowed);
         } else {
             return -1;
@@ -401,7 +408,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
         return wolfBoot_delta_update(&boot, &update, &swap,
-                        (wolfBoot_current_firmware_version() >= wolfBoot_update_firmware_version()));
+                        (wolfBoot_current_firmware_version() >=
+                         wolfBoot_update_firmware_version()));
     }
 #endif
 

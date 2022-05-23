@@ -1338,10 +1338,9 @@ int main(int argc, char** argv)
                 "%s_v%s_signed_diff.bin",
                 (char*)buf, CMD.fw_version);
         snprintf(CMD.output_encrypted_image_file,
-            sizeof(CMD.output_encrypted_image_file),
-            "%s_v%s_signed_diff_encrypted.bin",
-        (char*)buf, CMD.fw_version);
-
+                sizeof(CMD.output_encrypted_image_file),
+                "%s_v%s_signed_diff_encrypted.bin",
+                (char*)buf, CMD.fw_version);
     }
     printf("Output %6s:        %s\n",    CMD.sha_only ? "digest" : "image",
             CMD.output_image_file);
