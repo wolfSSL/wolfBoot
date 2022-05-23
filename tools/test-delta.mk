@@ -128,15 +128,15 @@ test-delta-enc-update-ext: factory.bin test-app/image.bin tools/uart-flash-serve
 	   @rm -f zero.bin
 	   @diff .config config/examples/stm32wb-delta-enc-ext.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta-enc-ext.config to .config to run this test\n\n" && exit 1)
 	   $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin \
-	           --encrypt enc_key.der \
+	           $(ENCRYPT_STRING) --encrypt /tmp/enc_key.der \
 	           test-app/image.bin \
 	           $(PRIVATE_KEY) 7
 	   @(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff_encrypted.bin $(USBTTY))&
 	   @st-flash write factory.bin 0x08000000
 	   @sync
-	   @sleep 5
+	   @sleep 4
 	   @st-flash reset
-	   @sleep 5
+	   @sleep 2
 	   @echo Waiting $(TIMEOUT) seconds...
 	   @st-flash reset
 	   @sleep $(TIMEOUT)
@@ -164,3 +164,15 @@ test-delta-enc-update-ext: factory.bin test-app/image.bin tools/uart-flash-serve
 	   @diff boot.bin test-app/image_v1_signed.bin || (echo "TEST INVERSE FAILED" && exit 1)
 	   @rm boot.bin boot_full.bin
 	   @echo "TEST SUCCESSFUL"
+
+test-delta-chacha-update-ext:
+	@printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
+	@make test-delta-enc-update-ext ENCRYPT_WITH_CHACHA=1
+
+test-delta-aes128-update-ext:
+	@printf "0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
+	@make test-delta-enc-update-ext ENCRYPT_WITH_AES128=1 ENCRYPT_STRING=--aes128
+
+test-delta-aes256-update-ext:
+	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
+	@make test-delta-enc-update-ext ENCRYPT_WITH_AES256=1 ENCRYPT_STRING=--aes256
