@@ -22,6 +22,13 @@
 '''
 
 import sys, os, struct, time, re
+
+try:
+    import wolfcrypt
+except:
+    print ("No wolfcrypt support found. Try 'pip install wolfcrypt'")
+    sys.exit(1)
+
 from wolfcrypt import ciphers, hashes
 
 
@@ -281,7 +288,10 @@ def make_header(image_file, fw_version, extra_fields=[]):
 
 #### MAIN ####
 
-if (argc < 4) or (argc > 10):
+print("wolfBoot KeyTools (Python version)")
+print("wolfcrypt-py version: " + wolfcrypt.__version__)
+
+if (argc < 4) or (argc > 12):
     print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha384 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
     print("  - or - ")
     print("       %s [--sha256 | --sha384 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
@@ -344,8 +354,7 @@ while (i < len(argv)):
 
 
 if (encrypt and delta):
-    print("Encryption of delta images not supported yet.")
-    sys.exit(1)
+    print("Encryption of delta image")
 
 try:
     cfile = open(".config", "r")
@@ -391,14 +400,23 @@ else:
     else:
         output_image_file = image_file + "_v" + str(fw_version) + "_digest.bin"
 
-if encrypt:
+if delta and encrypt:
+    if '.' in image_file:
+        tokens = image_file.split('.')
+        encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
+        encrypted_output_image_file += "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
+    else:
+        encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
+
+elif encrypt:
     if '.' in image_file:
         tokens = image_file.split('.')
         encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_and_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_and_encrypted.bin"
-elif delta:
+
+if delta:
     if '.' in image_file:
         tokens = image_file.split('.')
         delta_output_image_file = image_file.rstrip('.' + tokens[-1])
@@ -593,6 +611,11 @@ while True:
 infile.close()
 outfile.close()
 
+if (encrypt):
+    delta_align=64
+else:
+    delta_align=16
+
 if (delta):
     tmp_outfile='/tmp/delta.bin'
     tmp_inv_outfile='/tmp/delta-1.bin'
@@ -603,7 +626,7 @@ if (delta):
     delta_inv_size = os.path.getsize(tmp_inv_outfile)
     delta_file = open(tmp_outfile, 'ab+')
     delta_inv_file = open(tmp_inv_outfile, 'rb')
-    while delta_file.tell() % 16 != 0:
+    while delta_file.tell() % delta_align != 0:
         delta_file.write(struct.pack('B', 0x00))
     inv_off = delta_file.tell()
     while True:
@@ -636,6 +659,7 @@ if (delta):
     outfile.close()
     os.remove(tmp_outfile)
     os.remove(tmp_inv_outfile)
+    output_image_file = delta_output_image_file
 
 if (encrypt):
     sz = 0
@@ -644,6 +668,7 @@ if (encrypt):
     ekeyfile = open(encrypt_key_file, 'rb')
     enc_outfile = open(encrypted_output_image_file, 'wb')
     if chacha:
+        print("Encryption algorithm: ChaCha20")
         key = ekeyfile.read(32)
         iv_nonce = ekeyfile.read(12)
         cha = ciphers.ChaCha(key, 32)
@@ -654,6 +679,7 @@ if (encrypt):
                 break
             enc_outfile.write(cha.encrypt(buf))
     elif aes128:
+        print("Encryption algorithm: AES128-CTR")
         key = ekeyfile.read(16)
         iv = ekeyfile.read(16)
         aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)
@@ -665,6 +691,7 @@ if (encrypt):
                 buf += struct.pack('B', HDR_PADDING)
             enc_outfile.write(aesctr.encrypt(buf))
     elif aes256:
+        print("Encryption algorithm: AES256-CTR")
         key = ekeyfile.read(32)
         iv = ekeyfile.read(16)
         aesctr = ciphers.Aes(key, ciphers.MODE_CTR, iv)

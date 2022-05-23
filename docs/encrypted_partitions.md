@@ -132,6 +132,10 @@ secret file. To select AES-256, use the `--aes256` option.
 which will produce as output the file `test-app/image_v24_signed_and_encrypted.bin`, that can be transferred to the target's external device.
 
 
+### Encryption of incremental (delta) updates
+
+When used in combination with delta updates, encryption works the same way as in full-update mode. The final delta image is encrypted with the selected algorithm.
+
 ### API usage in the application
 
 When transferring the image, the application can still use the libwolfboot API functions to store the encrypted firmware. When called from the application,

@@ -26,6 +26,7 @@ ifeq ($(IMAGE_HEADER_SIZE),)
 endif
 
 CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
+CFLAGS+=-DDELTA_UPDATES
 
 # Sources
 SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
