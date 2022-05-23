@@ -68,7 +68,6 @@ test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserv
 	@(test `$(EXPVER)` -eq 2)
 	@echo "TEST SUCCESSFUL"
 
-
 test-delta-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	@killall ufserver || true
 	@st-flash reset
@@ -118,48 +117,50 @@ test-delta-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/uf
 	@echo "TEST SUCCESSFUL"
 
 test-delta-enc-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
-	@killall ufserver || true
-	@st-flash reset
-	@dd if=/dev/zero of=zero.bin bs=4096 count=1
-	@st-flash write zero.bin 0x0800B000
-	@st-flash reset
-	@st-flash write zero.bin 0x0802B000
-	@st-flash reset
-	@st-flash erase || st-flash erase
-	@rm -f zero.bin
-	@diff .config config/examples/stm32wb-delta-enc-ext.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta-enc-ext.config to .config to run this test\n\n" && exit 1)
-	$(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin \
-		--encrypt enc_key.der \
-		test-app/image.bin \
-		$(PRIVATE_KEY) 7
-	@(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff_encrypted.bin $(USBTTY))&
-	@st-flash write factory.bin 0x08000000
-	@sync
-	@sleep 5
-	@st-flash reset
-	@echo Waiting $(TIMEOUT) seconds...
-	@sleep $(TIMEOUT)
-	@st-flash reset
-	@st-flash read boot_full.bin 0x0800C000 0x8000
-	@SIZE=`wc -c test-app/image_v7_signed.bin | cut -d" " -f 1`;  \
-		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
-	@diff boot.bin test-app/image_v7_signed.bin || (echo "TEST FAILED" && exit 1)
-	@rm boot.bin boot_full.bin
-	@echo "TEST SUCCESSFUL"
-	@sleep 1
-	@echo
-	@echo
-	@st-flash reset
-	@echo TEST INVERSE
-	@sleep $(TIMEOUT)
-	@st-flash reset
-	@killall ufserver
-	@st-flash reset
-	@st-flash read boot_full.bin 0x0800C000 0x8000
-	@SIZE=`wc -c test-app/image_v1_signed.bin | cut -d" " -f 1`;  \
-		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
-	@diff boot.bin test-app/image_v1_signed.bin || (echo "TEST INVERSE FAILED" && exit 1)
-	@rm boot.bin boot_full.bin
-	@echo "TEST SUCCESSFUL"
-
-
+	   @killall ufserver || true
+	   @st-flash reset
+	   @dd if=/dev/zero of=zero.bin bs=4096 count=1
+	   @st-flash write zero.bin 0x0800B000
+	   @st-flash reset
+	   @st-flash write zero.bin 0x0802B000
+	   @st-flash reset
+	   @st-flash erase || st-flash erase
+	   @rm -f zero.bin
+	   @diff .config config/examples/stm32wb-delta-enc-ext.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta-enc-ext.config to .config to run this test\n\n" && exit 1)
+	   $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin \
+	           --encrypt enc_key.der \
+	           test-app/image.bin \
+	           $(PRIVATE_KEY) 7
+	   @(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff_encrypted.bin $(USBTTY))&
+	   @st-flash write factory.bin 0x08000000
+	   @sync
+	   @sleep 5
+	   @st-flash reset
+	   @sleep 5
+	   @echo Waiting $(TIMEOUT) seconds...
+	   @st-flash reset
+	   @sleep $(TIMEOUT)
+	   @st-flash reset
+	   @st-flash read boot_full.bin 0x0800C000 0x8000
+	   @SIZE=`wc -c test-app/image_v7_signed.bin | cut -d" " -f 1`;  \
+	           dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
+	   @diff boot.bin test-app/image_v7_signed.bin || (echo "TEST FAILED" && exit 1)
+	   @rm boot.bin boot_full.bin
+	   @echo "TEST SUCCESSFUL"
+	   @sleep 1
+	   @echo
+	   @echo
+	   @echo TEST INVERSE
+	   @killall ufserver
+	   @(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff_encrypted.bin $(USBTTY))&
+	   @st-flash reset
+	   @sleep $(TIMEOUT)
+	   @st-flash reset
+	   @killall ufserver
+	   @st-flash reset
+	   @st-flash read boot_full.bin 0x0800C000 0x8000
+	   @SIZE=`wc -c test-app/image_v1_signed.bin | cut -d" " -f 1`;  \
+	           dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
+	   @diff boot.bin test-app/image_v1_signed.bin || (echo "TEST INVERSE FAILED" && exit 1)
+	   @rm boot.bin boot_full.bin
+	   @echo "TEST SUCCESSFUL"
