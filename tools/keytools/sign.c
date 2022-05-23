@@ -39,6 +39,8 @@
 #include <stddef.h>
 #include <delta.h>
 
+#include "wolfboot/version.h"
+
 #ifdef _WIN32
 #include <io.h>
 #define HAVE_MMAP 0
@@ -1176,8 +1178,11 @@ int main(int argc, char** argv)
     wolfSSL_Debugging_ON();
 #endif
 
+    printf("wolfBoot KeyTools (Compiled C version)\n");
+    printf("wolfBoot version %X\n", WOLFBOOT_VERSION);
+
     /* Check arguments and print usage */
-    if (argc < 4 || argc > 10) {
+    if (argc < 4 || argc > 12) {
         printf("Usage: %s %s %s [--wolfboot-update] [--encrypt enc_key.bin] %s"
                " [--delta image_vX_signed.bin] "
                "image key.der fw_version\n",
@@ -1308,6 +1313,19 @@ int main(int argc, char** argv)
 
     printf("Update type:          %s\n",
             CMD.self_update ? "wolfBoot" : "Firmware");
+    switch(CMD.encrypt) {
+        case ENC_OFF:
+                break;
+        case ENC_CHACHA:
+                printf("Encryption Algorithm: ChaCha20\n");
+                break;
+        case ENC_AES128:
+                printf("Encryption Algorithm: AES128-CTR\n");
+                break;
+        case ENC_AES256:
+                printf("Encryption Algorithm: AES256-CTR\n");
+                break;
+    }
     printf("Input image:          %s\n", CMD.image_file);
     printf("Selected cipher:      %s\n", sign_str);
     printf("Selected hash  :      %s\n", hash_str);
@@ -1328,7 +1346,7 @@ int main(int argc, char** argv)
     printf("Output %6s:        %s\n",    CMD.sha_only ? "digest" : "image",
             CMD.output_image_file);
     if (CMD.encrypt) {
-        printf ("Encrypted output: %s\n", CMD.output_encrypted_image_file);
+        printf("Encrypted output:     %s\n", CMD.output_encrypted_image_file);
     }
 
     /* get header and signature sizes */
