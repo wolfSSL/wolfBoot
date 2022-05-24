@@ -295,11 +295,8 @@ print("wolfcrypt-py version: " + wolfcrypt.__version__)
 
 
 if (argc < 4) or (argc > 12):
-    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha384 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
-    print("  - or - ")
-    print("       %s [--sha256 | --sha384 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
-    print("  - or - ")
-    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha384 | --sha3] [--manual-sign] [--chacha | --aes128 | --aes256 ] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("Usage: "+argv[0]+" [options] image key version");
+    print("For full usage manual, see 'docs/Signing.md'");
     sys.exit(1)
 
 i = 1

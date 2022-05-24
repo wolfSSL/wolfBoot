@@ -90,14 +90,14 @@ If none of the following is used, '--sha256' is assumed by default.
 
 If none of the following is used, "--id=1" is assumed by default. On systems
 with a single image to verify (e.g. microcontroller with a single active
-partitions), ID=1 is the default identifier for the firmware image to stage.
+partition), ID=1 is the default identifier for the firmware image to stage.
 ID=0 is reserved for wolfBoot 'self-update', and refers to the partition where
 the bootloader itself is stored.
 
   * `--id N` Set image partition id to "N".
 
   * `--wolfboot-update` Indicate that the image contains a signed self-update
-package for the bootloader. Equivalent to `--id=0`.
+package for the bootloader. Equivalent to `--id 0`.
 
 #### Encryption using a symmetric key
 

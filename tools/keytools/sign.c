@@ -1157,12 +1157,6 @@ cleanup:
     return ret;
 }
 
-static const char Hashes_str[] = "[--sha256 | --sha384 | --sha3]";
-static const char Enc_str[] = "[--chacha | --aes128 | --aes256]";
-static const char Sign_algo_str[] = "[--ed25519 | --ed447 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign]";
-
-
-
 int main(int argc, char** argv)
 {
     int ret = 0;
@@ -1185,18 +1179,9 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 12) {
-        printf("Usage: %s %s %s [--wolfboot-update] [--encrypt enc_key.bin] %s"
-               " [--delta image_vX_signed.bin] "
-               "image key.der fw_version\n",
-               argv[0], Hashes_str, Sign_algo_str, Enc_str);
-        printf("  - or - \n");
-        printf("       %s %s [--wolfboot-update] image pub_key.der fw_version\n",
-                argv[0], Hashes_str);
-        printf("  - or - \n");
-        printf("       %s %s %s [--manual-CMD.sign] image pub_key.der"
-               "fw_version signature.sig\n",
-                argv[0], Hashes_str, Sign_algo_str);
-        return 0;
+        printf("Usage: %s [options] image key version\n", argv[0]);
+        printf("For full usage manual, see 'docs/Signing.md'\n");
+        exit(1);
     }
 
     /* Parse Arguments */
