@@ -66,6 +66,13 @@
 #define HDR_SIGNATURE               0x20
 #define HDR_PADDING                 0xFF
 
+/*
+ * 8 bits: auth type
+ * 4 bits: extra features
+ * 4 bits: partition id  (0 = bootloader)
+ *
+ */
+#define HDR_IMG_TYPE_AUTH_MASK    0xFF00
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
 #define HDR_IMG_TYPE_AUTH_ED25519 0x0100
 #define HDR_IMG_TYPE_AUTH_ECC256  0x0200
@@ -74,9 +81,12 @@
 #define HDR_IMG_TYPE_AUTH_ED448   0x0500
 #define HDR_IMG_TYPE_AUTH_ECC384  0x0600
 #define HDR_IMG_TYPE_AUTH_ECC521  0x0700
+
+#define HDR_IMG_TYPE_DIFF         0x00D0
+
+#define HDR_IMG_TYPE_PART_MASK    0x000F
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
-#define HDR_IMG_TYPE_DIFF         0x00D0
 
 
 #ifdef __WOLFBOOT
@@ -131,6 +141,11 @@ uint32_t wolfBoot_image_size(uint8_t *image);
 uint32_t wolfBoot_get_blob_version(uint8_t *blob);
 uint32_t wolfBoot_get_blob_type(uint8_t *blob);
 uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob);
+
+/* Get partition ID from manifest header */
+static inline uint8_t wolfBoot_get_blob_partition_id(uint8_t *blob) {
+    return wolfBoot_get_blob_type(blob) & HDR_IMG_TYPE_PART_MASK;
+}
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 void wolfBoot_erase_partition(uint8_t part);

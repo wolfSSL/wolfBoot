@@ -125,6 +125,7 @@
 #define HDR_IMG_DELTA_INVERSE 0x15
 #define HDR_IMG_DELTA_INVERSE_SIZE 0x16
 
+#define HDR_IMG_TYPE_AUTH_MASK    0xFF00
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
 #define HDR_IMG_TYPE_AUTH_ED25519 0x0100
 #define HDR_IMG_TYPE_AUTH_ECC256  0x0200
@@ -220,13 +221,15 @@ struct cmd_options {
     uint32_t pubkey_sz;
     uint32_t header_sz;
     uint32_t signature_sz;
+    uint8_t partition_id;
 };
 
 static struct cmd_options CMD = {
     .sign = SIGN_AUTO,
     .encrypt  = ENC_OFF,
     .hash_algo = HASH_SHA256,
-    .header_sz = IMAGE_HEADER_SIZE
+    .header_sz = IMAGE_HEADER_SIZE,
+    .partition_id = HDR_IMG_TYPE_APP
 };
 
 static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
@@ -494,9 +497,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         &attrib.st_ctime);
 
     /* Append Image type field */
-    image_type = (uint16_t)CMD.sign;
-    if (!CMD.self_update)
-        image_type |= HDR_IMG_TYPE_APP;
+    image_type = (uint16_t)CMD.sign & HDR_IMG_TYPE_AUTH_MASK;
+    image_type |= CMD.partition_id;
     if (is_diff)
         image_type |= HDR_IMG_TYPE_DIFF;
     header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
@@ -1155,12 +1157,6 @@ cleanup:
     return ret;
 }
 
-static const char Hashes_str[] = "[--sha256 | --sha384 | --sha3]";
-static const char Enc_str[] = "[--chacha | --aes128 | --aes256]";
-static const char Sign_algo_str[] = "[--ed25519 | --ed447 | --ecc256 | --ecc384 | --ecc521 | --rsa2048 | --rsa2048enc | --rsa4096 | --rsa4096enc | --no-CMD.sign]";
-
-
-
 int main(int argc, char** argv)
 {
     int ret = 0;
@@ -1183,18 +1179,9 @@ int main(int argc, char** argv)
 
     /* Check arguments and print usage */
     if (argc < 4 || argc > 12) {
-        printf("Usage: %s %s %s [--wolfboot-update] [--encrypt enc_key.bin] %s"
-               " [--delta image_vX_signed.bin] "
-               "image key.der fw_version\n",
-               argv[0], Hashes_str, Sign_algo_str, Enc_str);
-        printf("  - or - \n");
-        printf("       %s %s [--wolfboot-update] image pub_key.der fw_version\n",
-                argv[0], Hashes_str);
-        printf("  - or - \n");
-        printf("       %s %s %s [--manual-CMD.sign] image pub_key.der"
-               "fw_version signature.sig\n",
-                argv[0], Hashes_str, Sign_algo_str);
-        return 0;
+        printf("Usage: %s [options] image key version\n", argv[0]);
+        printf("For full usage manual, see 'docs/Signing.md'\n");
+        exit(1);
     }
 
     /* Parse Arguments */
@@ -1253,6 +1240,17 @@ int main(int argc, char** argv)
         }
         else if (strcmp(argv[i], "--wolfboot-update") == 0) {
             CMD.self_update = 1;
+            CMD.partition_id = 0;
+        }
+        else if (strcmp(argv[i], "--id") == 0) {
+            long id = strtol(argv[++i], NULL, 10);
+            if ((id < 0 || id > 15) || ((id == 0) && (argv[i][0] != '0'))) {
+                fprintf(stderr, "Invalid partition id: %s\n", argv[i]);
+                exit(16);
+            }
+            CMD.partition_id = (uint8_t)id;
+            if (id == 0)
+                CMD.self_update = 1;
         }
         else if (strcmp(argv[i], "--sha-only") == 0) {
             CMD.sha_only = 1;
@@ -1347,6 +1345,10 @@ int main(int argc, char** argv)
     if (CMD.encrypt) {
         printf("Encrypted output:     %s\n", CMD.output_encrypted_image_file);
     }
+    printf("Target partition id : %hu ", CMD.partition_id);
+    if (CMD.partition_id == HDR_IMG_TYPE_WOLFBOOT)
+        printf("(bootloader)");
+    printf("\n");
 
     /* get header and signature sizes */
     if (CMD.sign == SIGN_ED25519) {

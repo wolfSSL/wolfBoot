@@ -83,6 +83,7 @@ aes256=False
 delta=False
 encrypt_key_file=None
 delta_base_file=None
+partition_id = HDR_IMG_TYPE_APP
 
 
 argc = len(sys.argv)
@@ -130,8 +131,7 @@ def make_header(image_file, fw_version, extra_fields=[]):
     if (sign == 'rsa4096'):
         img_type = HDR_IMG_TYPE_AUTH_RSA4096
 
-    if (not self_update):
-        img_type |= HDR_IMG_TYPE_APP
+    img_type |= partition_id
 
     if (delta and len(extra_fields) > 0):
         img_type |= HDR_IMG_TYPE_DIFF
@@ -291,12 +291,12 @@ def make_header(image_file, fw_version, extra_fields=[]):
 print("wolfBoot KeyTools (Python version)")
 print("wolfcrypt-py version: " + wolfcrypt.__version__)
 
+
+
+
 if (argc < 4) or (argc > 12):
-    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 | --no-sign] [--sha256 | --sha384 | --sha3] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image key.der fw_version\n" % sys.argv[0])
-    print("  - or - ")
-    print("       %s [--sha256 | --sha384 | --sha3] [--sha-only] [--wolfboot-update] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version\n" % sys.argv[0])
-    print("  - or - ")
-    print("       %s [--ed25519 | --ed448 | --ecc256 | --rsa2048 | --rsa4096 ] [--sha256 | --sha384 | --sha3] [--manual-sign] [--chacha | --aes128 | --aes256 ] [--encrypt key.bin] [--delta base_file.bin] image pub_key.der fw_version signature.sig\n" % sys.argv[0])
+    print("Usage: "+argv[0]+" [options] image key version");
+    print("For full usage manual, see 'docs/Signing.md'");
     sys.exit(1)
 
 i = 1
@@ -325,6 +325,15 @@ while (i < len(argv)):
         hash_algo='sha3'
     elif (argv[i] == '--wolfboot-update'):
         self_update = True
+        partition_id = HDR_IMG_TYPE_WOLFBOOT
+    elif (argv[i] == '--id'):
+        i+=1
+        partition_id = int(argv[i])
+        if partition_id < 0 or partition_id > 15:
+            print("Invalid partition id: " + argv[i])
+            sys.exit(16)
+        if partition_id == 0:
+            self_update = True
     elif (argv[i] == '--sha-only'):
         sha_only = True
     elif (argv[i] == '--manual-sign'):
@@ -443,6 +452,10 @@ if not encrypt:
     print ("Not Encrypted")
 else:
     print ("Encrypted using:      " + encrypt_key_file)
+nickname = ""
+if partition_id == 0:
+    nickname = "(bootloader)"
+print ("Target partition id:  " + str(partition_id) +" "+ nickname)
 
 if sign == 'none':
     kf = None
