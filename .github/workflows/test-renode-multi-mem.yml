@@ -165,6 +165,26 @@ jobs:
       - name: Renode Tests RSA2048
         run: ./tools/renode/docker-test.sh
 
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
+        run: ./tools/renode/docker-test.sh
+
 # RSA4096 TEST
       - name: make clean
         run: |
@@ -293,6 +313,26 @@ jobs:
       - name: Renode Tests RSA2048
         run: ./tools/renode/docker-test.sh
 
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
+        run: ./tools/renode/docker-test.sh
+
 # RSA4096 TEST
       - name: make clean
         run: |
@@ -379,6 +419,26 @@ jobs:
           make /tmp/renode-test-update.bin SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
 
       - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1 NO_ASM=1
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1 NO_ASM=1 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
         run: ./tools/renode/docker-test.sh
 
 # RSA4096 TEST
@@ -469,6 +529,26 @@ jobs:
       - name: Renode Tests RSA2048
         run: ./tools/renode/docker-test.sh
 
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
+        run: ./tools/renode/docker-test.sh
+
 # RSA4096 TEST
       - name: make clean
         run: |
@@ -555,6 +635,26 @@ jobs:
           make /tmp/renode-test-update.bin SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
 
       - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1 SPMATH=0
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1 SPMATH=0 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
         run: ./tools/renode/docker-test.sh
 
 # RSA4096 TEST

@@ -61,6 +61,12 @@
 #   define KEY_BUFFER  rsa2048_pub_key
 #   define KEY_LEN     rsa2048_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (256)
+#elif defined(WOLFBOOT_SIGN_RSA3072)
+    extern const unsigned char rsa3072_pub_key[];
+    extern unsigned int rsa3072_pub_key_len;
+#   define KEY_BUFFER  rsa3072_pub_key
+#   define KEY_LEN     rsa3072_pub_key_len
+#   define IMAGE_SIGNATURE_SIZE (384)
 #elif defined(WOLFBOOT_SIGN_RSA4096)
     extern const unsigned char rsa4096_pub_key[];
     extern unsigned int rsa4096_pub_key_len;

@@ -36,7 +36,6 @@
 
 /* Math */
 #define WOLFSSL_SP
-#define WOLFSSL_SP_NO_3072
 #define USE_FAST_MATH
 #define FP_MAX_BITS (4096 * 2)
 #define TFM_TIMING_RESISTANT

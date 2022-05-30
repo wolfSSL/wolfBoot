@@ -166,6 +166,26 @@ jobs:
       - name: Renode Tests RSA2048
         run: ./tools/renode/docker-test.sh
 
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 HASH=SHA384
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
+        run: ./tools/renode/docker-test.sh
+
 # RSA4096 TEST
       - name: make clean
         run: |
@@ -311,6 +331,26 @@ jobs:
           make /tmp/renode-test-update.bin SIGN=RSA2048 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
 
       - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh
+
+# RSA3072 TEST
+      - name: make clean
+        run: |
+          make clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
+
+      - name: Build wolfboot and test app image v1, SIGN=RSA3072
+        run: |
+          make SIGN=RSA3072 HASH=SHA3
+
+      - name: Build update image v2
+        run: |
+          make /tmp/renode-test-update.bin SIGN=RSA3072 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
+
+      - name: Renode Tests RSA3072
         run: ./tools/renode/docker-test.sh
 
 # RSA4096 TEST

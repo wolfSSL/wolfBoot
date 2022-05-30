@@ -164,7 +164,9 @@ static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
 }
 #endif /* WOLFBOOT_SIGN_ECC256 */
 
-#if defined(WOLFBOOT_SIGN_RSA2048) || defined (WOLFBOOT_SIGN_RSA4096)
+#if defined(WOLFBOOT_SIGN_RSA2048) || \
+        defined (WOLFBOOT_SIGN_RSA3072) || \
+        defined (WOLFBOOT_SIGN_RSA4096)
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/rsa.h>
 
@@ -326,7 +328,8 @@ static void wolfBoot_verify_signature(struct wolfBoot_image *img, uint8_t *sig)
         RSA_VERIFY_HASH(img, digest_out);
 
 }
-#endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_RSA4096 */
+#endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_3072
+          || WOLFBOOT_SIGN_RSA4096 */
 
 
 static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);

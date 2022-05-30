@@ -49,6 +49,10 @@ ifeq ($(SIGN),RSA2048)
   SIGN_ARGS+= --rsa2048
 endif
 
+ifeq ($(SIGN),RSA3072)
+  SIGN_ARGS+= --rsa3072
+endif
+
 ifeq ($(SIGN),RSA4096)
   SIGN_ARGS+= --rsa4096
 endif
@@ -362,7 +366,7 @@ test-63-rollback-TPM: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=ECC256 WOLFTPM=1
 	@make tpm-mute
 
-# Group '7': RSA 4096 bit and ED448
+# Group '7': RSA 4096 bit, ED448 and RSA 3072
 #
 #
 test-71-forward-update-no-downgrade-RSA-4096: $(EXPVER) FORCE
@@ -376,6 +380,12 @@ test-74-forward-update-no-downgrade-ED448: $(EXPVER) FORCE
 
 test-75-rollback-ED448: $(EXPVER) FORCE
 	@make test-03-rollback SIGN=ED448
+
+test-76-forward-update-no-downgrade-RSA3072: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=RSA3072
+
+test-77-rollback-RSA3072: $(EXPVER) FORCE
+	@make test-03-rollback SIGN=RSA3072
 
 # Group '8,9,10,11': SHA3 combined with the five ciphers
 #
@@ -395,6 +405,9 @@ test-111-forward-update-no-downgrade-RSA4096-SHA3: $(EXPVER) FORCE
 
 test-112-forward-update-no-downgrade-ED448-SHA3: $(EXPVER) FORCE
 	@make test-01-forward-update-no-downgrade SIGN=ED448 HASH=SHA3 IMAGE_HEADER_SIZE=512
+
+test-113-forward-update-no-downgrade-RSA3072-SHA3: $(EXPVER) FORCE
+	@make test-01-forward-update-no-downgrade SIGN=RSA3072 HASH=SHA3
 
 # Group 16: TPM with RSA
 #
@@ -637,6 +650,9 @@ test-base: clean
 	make test-71-forward-update-no-downgrade-RSA-4096
 	make test-73-rollback-RSA-4096
 	make test-74-forward-update-no-downgrade-ED448
+	make test-75-rollback-ED448
+	make test-76-forward-update-no-downgrade-RSA-3072
+	make test-77-rollback-RSA-3072
 
 test-sha3: clean
 	@echo SHA3 Tests
@@ -648,6 +664,7 @@ test-sha3: clean
 	make test-101-forward-update-no-downgrade-RSA2048-SHA3
 	make test-111-forward-update-no-downgrade-RSA4096-SHA3
 	make test-112-forward-update-no-downgrade-ED448-SHA3
+	make test-113-forward-update-no-downgrade-RSA3072-SHA3
 
 test-tpm: clean
 	@echo TPM Tests

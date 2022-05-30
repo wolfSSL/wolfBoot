@@ -136,6 +136,25 @@
 #       define WOLFSSL_SP_MATH
 #       define SP_WORD_SIZE 32
 #       define WOLFSSL_SP_NO_3072
+#       define WOLFSSL_SP_NO_4096
+#   endif
+#endif
+
+#ifdef WOLFBOOT_SIGN_RSA3072
+#   define RSA_LOW_MEM
+#   define WOLFSSL_RSA_VERIFY_INLINE
+#   define WOLFSSL_RSA_VERIFY_ONLY
+#   define WC_NO_RSA_OAEP
+#   define FP_MAX_BITS (3072 * 2)
+    /* sp math */
+#   ifndef USE_FAST_MATH
+#       define WOLFSSL_HAVE_SP_RSA
+#       define WOLFSSL_SP
+#       define WOLFSSL_SP_SMALL
+#       define WOLFSSL_SP_MATH
+#       define SP_WORD_SIZE 32
+#       define WOLFSSL_SP_NO_2048
+#       define WOLFSSL_SP_NO_4096
 #   endif
 #endif
 
@@ -230,5 +249,6 @@
 #else
 #   define WOLFSSL_SMALL_STACK
 #endif
+
 
 #endif /* !H_USER_SETTINGS_ */

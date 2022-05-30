@@ -238,7 +238,8 @@ static struct xmalloc_slot xmalloc_pool[] = {
 
 
 
-#elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA4096)
+#elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA4096) || \
+    defined(WOLFBOOT_SIGN_RSA3072)
 
 static uint32_t sha_block[HASH_BLOCK_SIZE];
 #ifndef USE_FAST_MATH
@@ -250,6 +251,16 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
             #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (72 * 4 + 3))
             static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
         #endif
+    #elif defined WOLFBOOT_SIGN_RSA3072
+        #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 96 * 5)
+        #else
+            #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 106 * 5)
+            #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (106 * 4 + 3))
+            static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
+        #endif
+
+
     #else
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 128 * 5)
