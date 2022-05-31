@@ -814,6 +814,8 @@ int chacha_init(void)
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
 
+    XMEMSET(&chacha, 0, sizeof(chacha));
+
     /* Check against 'all 0xff' or 'all zero' cases */
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
@@ -844,6 +846,8 @@ int aes_init(void)
     uint8_t iv_buf[ENCRYPT_BLOCK_SIZE];
     uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
 
+    XMEMSET(&aes_enc, 0, sizeof(aes_enc));
+    XMEMSET(&aes_dec, 0, sizeof(aes_dec));
     wc_AesInit(&aes_enc, NULL, 0);
     wc_AesInit(&aes_dec, NULL, 0);
 
