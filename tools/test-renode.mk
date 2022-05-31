@@ -82,6 +82,10 @@ ifeq ($(SIGN),RSA2048)
   SIGN_ARGS+= --rsa2048
 endif
 
+ifeq ($(SIGN),RSA3072)
+  SIGN_ARGS+= --rsa3072
+endif
+
 ifeq ($(SIGN),RSA4096)
   SIGN_ARGS+= --rsa4096
 endif
@@ -240,6 +244,9 @@ renode-factory-ecc384: FORCE
 renode-factory-rsa2048: FORCE
 	make renode-factory SIGN=RSA2048
 
+renode-factory-rsa3072: FORCE
+	make renode-factory SIGN=RSA3072
+
 renode-factory-rsa4096: FORCE
 	make renode-factory SIGN=RSA4096
 
@@ -255,9 +262,11 @@ renode-factory-all: FORCE
 	${Q}make clean
 	${Q}make renode-factory-rsa2048 RENODE_PORT=55160
 	${Q}make clean
-	${Q}make renode-factory-rsa4096 RENODE_PORT=55161
+	${Q}make renode-factory-rsa3072 RENODE_PORT=55161
 	${Q}make clean
-	${Q}make renode-factory SIGN=NONE RENODE_PORT=55162
+	${Q}make renode-factory-rsa4096 RENODE_PORT=55162
+	${Q}make clean
+	${Q}make renode-factory SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-update-ed25519: FORCE
@@ -274,6 +283,9 @@ renode-update-ecc384: FORCE
 
 renode-update-rsa2048: FORCE
 	make renode-update SIGN=RSA2048
+
+renode-update-rsa3072: FORCE
+	make renode-update SIGN=RSA3072
 
 renode-update-rsa4096: FORCE
 	make renode-update SIGN=RSA4096
@@ -329,9 +341,11 @@ renode-update-all: FORCE
 	${Q}make clean
 	${Q}make renode-update-rsa2048 RENODE_PORT=55160
 	${Q}make clean
-	${Q}make renode-update-rsa4096 RENODE_PORT=55161
+	${Q}make renode-update-rsa3072 RENODE_PORT=55161
 	${Q}make clean
-	${Q}make renode-update SIGN=NONE RENODE_PORT=55162
+	${Q}make renode-update-rsa4096 RENODE_PORT=55162
+	${Q}make clean
+	${Q}make renode-update SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-no-downgrade-all: FORCE
@@ -346,9 +360,11 @@ renode-no-downgrade-all: FORCE
 	${Q}make clean
 	${Q}make renode-no-downgrade-rsa2048 RENODE_PORT=55160
 	${Q}make clean
-	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55161
+	${Q}make renode-no-downgrade-rsa3072 RENODE_PORT=55161
 	${Q}make clean
-	${Q}make renode-no-downgrade SIGN=NONE RENODE_PORT=55162
+	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55162
+	${Q}make clean
+	${Q}make renode-no-downgrade SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-corrupted-all: FORCE
@@ -363,9 +379,11 @@ renode-corrupted-all: FORCE
 	${Q}make clean
 	${Q}make renode-corrupted-rsa2048 RENODE_PORT=55160
 	${Q}make clean
-	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55161
+	${Q}make renode-corrupted-rsa3072 RENODE_PORT=55161
 	${Q}make clean
-	${Q}make renode-corrupted SIGN=NONE RENODE_PORT=55162
+	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55162
+	${Q}make clean
+	${Q}make renode-corrupted SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-update-all-armored: FORCE

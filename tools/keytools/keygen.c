@@ -69,6 +69,7 @@
 #define KEYGEN_ED448   4
 #define KEYGEN_ECC384  5
 #define KEYGEN_ECC521  6
+#define KEYGEN_RSA3072  7
 
 const char Ed25519_pub_key_define[] = "const uint8_t ed25519_pub_key[32] = {";
 const char Ed448_pub_key_define[] = "const uint8_t ed448_pub_key[57] = {";
@@ -76,6 +77,7 @@ const char Ecc256_pub_key_define[] = "const uint8_t ecc256_pub_key[64] = {";
 const char Ecc384_pub_key_define[] = "const uint8_t ecc384_pub_key[96] = {";
 const char Ecc521_pub_key_define[] = "const uint8_t ecc521_pub_key[132] = {";
 const char Rsa_2048_pub_key_define[] = "const uint8_t rsa2048_pub_key[%d] = {";
+const char Rsa_3072_pub_key_define[] = "const uint8_t rsa3072_pub_key[%d] = {";
 const char Rsa_4096_pub_key_define[] = "const uint8_t rsa4096_pub_key[%d] = {";
 
 const char Cfile_Banner[] = "/* Public-key file for wolfBoot, automatically generated. Do not edit.  */\n" \
@@ -90,7 +92,8 @@ const char Cfile_Banner[] = "/* Public-key file for wolfBoot, automatically gene
 static void usage(const char *pname) /* implies exit */
 {
     printf("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 "
-           "| --ecc521 | --rsa2048 | --rsa4096 ]  pub_key_file.c\n", pname);
+           "| --ecc521 | --rsa2048 | --rsa3072 "
+           "| --rsa4096 ]  pub_key_file.c\n", pname);
     exit(125);
 }
 
@@ -120,6 +123,11 @@ static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
     int privlen, publen;
     FILE *fpub, *fpriv;
     char priv_fname[40];
+
+    if (wc_InitRsaKey(&k, NULL) != 0) {
+        fprintf(stderr, "Unable to initialize RSA%d key\n", size);
+        exit(1);
+    }
 
     if (wc_MakeRsaKey(&k, size, 65537, rng) != 0) {
         fprintf(stderr, "Unable to create RSA%d key\n", size);
@@ -152,6 +160,8 @@ static void keygen_rsa(WC_RNG *rng, char *pubkeyfile, int size)
     fprintf(fpub, "%s", Cfile_Banner);
     if (size == 2048)
         fprintf(fpub, Rsa_2048_pub_key_define, publen);
+    else if (size == 3072)
+        fprintf(fpub, Rsa_3072_pub_key_define, publen);
     else
         fprintf(fpub, Rsa_4096_pub_key_define, publen);
 
@@ -359,6 +369,10 @@ int main(int argc, char** argv)
             keytype = KEYGEN_RSA2048;
             kfilename = strdup("rsa2048.der");
         }
+        else if (strcmp(argv[i], "--rsa3072") == 0) {
+            keytype = KEYGEN_RSA3072;
+            kfilename = strdup("rsa3072.der");
+        }
         else if (strcmp(argv[i], "--rsa4096") == 0) {
             keytype = KEYGEN_RSA4096;
             kfilename = strdup("rsa4096.der");
@@ -435,6 +449,11 @@ int main(int argc, char** argv)
                 keygen_rsa(&rng, output_pubkey_file, 2048);
                 break;
             }
+        case KEYGEN_RSA3072:
+            {
+                keygen_rsa(&rng, output_pubkey_file, 3072);
+                break;
+            }
         case KEYGEN_RSA4096:
             {
                 keygen_rsa(&rng, output_pubkey_file, 4096);
@@ -443,6 +462,7 @@ int main(int argc, char** argv)
 #endif
     } /* end switch */
 
+    wc_FreeRng(&rng);
     printf("Done.\n");
     return 0;
 }

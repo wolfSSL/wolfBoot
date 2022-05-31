@@ -183,6 +183,40 @@ ifeq ($(SIGN),RSA2048)
   endif
 endif
 
+ifeq ($(SIGN),RSA3072)
+  KEYGEN_OPTIONS+=--rsa3072
+  SIGN_OPTIONS+=--rsa3072
+  PRIVATE_KEY=rsa3072.der
+  WOLFCRYPT_OBJS+= \
+    $(RSA_EXTRA_OBJS) \
+    $(MATH_OBJS) \
+    ./lib/wolfssl/wolfcrypt/src/rsa.o \
+    ./lib/wolfssl/wolfcrypt/src/asn.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o
+  PUBLIC_KEY_OBJS=./src/rsa3072_pub_key.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA3072" $(RSA_EXTRA_CFLAGS)
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5008
+    else
+      STACK_USAGE=4096
+    endif
+  else ifeq ($(WOLFTPM),1)
+    STACK_USAGE=9096
+  else ifneq ($(SPMATH),1)
+    STACK_USAGE=52592
+  else
+    STACK_USAGE=12288
+  endif
+  ifneq ($(HASH),SHA256)
+    IMAGE_HEADER_SIZE=1024
+  endif
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
+endif
+
 ifeq ($(SIGN),RSA4096)
   KEYGEN_OPTIONS+=--rsa4096
   SIGN_OPTIONS+=--rsa4096

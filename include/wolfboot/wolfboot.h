@@ -81,6 +81,7 @@
 #define HDR_IMG_TYPE_AUTH_ED448   0x0500
 #define HDR_IMG_TYPE_AUTH_ECC384  0x0600
 #define HDR_IMG_TYPE_AUTH_ECC521  0x0700
+#define HDR_IMG_TYPE_AUTH_RSA3072 0x0800
 
 #define HDR_IMG_TYPE_DIFF         0x00D0
 
@@ -105,6 +106,8 @@
  #   error "ECC521 curves not yet supported in this version of wolfBoot. Please select a valid SIGN= option."
  #elif defined(WOLFBOOT_SIGN_RSA2048)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA2048
+ #elif defined(WOLFBOOT_SIGN_RSA3072)
+ #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA3072
  #elif defined(WOLFBOOT_SIGN_RSA4096)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA4096
  #else

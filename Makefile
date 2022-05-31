@@ -168,6 +168,8 @@ src/ecc521_pub_key.c: ecc521.der
 
 src/rsa2048_pub_key.c: rsa2048.der
 
+src/rsa3072_pub_key.c: rsa3072.der
+
 src/rsa4096_pub_key.c: rsa4096.der
 
 keys: $(PRIVATE_KEY)

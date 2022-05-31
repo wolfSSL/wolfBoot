@@ -65,6 +65,7 @@ HDR_IMG_TYPE_AUTH_RSA4096 = 0x0400
 HDR_IMG_TYPE_AUTH_ED448   = 0x0500
 HDR_IMG_TYPE_AUTH_ECC384  = 0x0600
 HDR_IMG_TYPE_AUTH_ECC521  = 0x0700
+HDR_IMG_TYPE_AUTH_RSA3072 = 0x0800
 HDR_IMG_TYPE_DIFF         = 0x00D0
 
 HDR_IMG_TYPE_WOLFBOOT     = 0x0000
@@ -128,6 +129,8 @@ def make_header(image_file, fw_version, extra_fields=[]):
         img_type = HDR_IMG_TYPE_AUTH_ECC521
     if (sign == 'rsa2048'):
         img_type = HDR_IMG_TYPE_AUTH_RSA2048
+    if (sign == 'rsa3072'):
+        img_type = HDR_IMG_TYPE_AUTH_RSA3072
     if (sign == 'rsa4096'):
         img_type = HDR_IMG_TYPE_AUTH_RSA4096
 
@@ -263,11 +266,8 @@ def make_header(image_file, fw_version, extra_fields=[]):
             elif (sign[0:3] == 'ecc'):
                 r, s = ecc.sign_raw(digest)
                 signature = r + s
-            elif (sign == 'rsa2048') or (sign == 'rsa4096'):
+            elif (sign == 'rsa2048') or (sign == 'rsa4096') or (sign == 'rsa3072'):
                 signature = rsa.sign(digest)
-                #plain = rsa.verify(signature)
-                #print("plain:%d " % len(plain))
-                #print([hex(j) for j in plain])
         else:
             print("Opening signature file %s" % signature_file)
             signfile = open(signature_file, 'rb')
@@ -315,6 +315,8 @@ while (i < len(argv)):
         sign='ecc521'
     elif (argv[i] == '--rsa2048'):
         sign='rsa2048'
+    elif (argv[i] == '--rsa3072'):
+        sign='rsa3072'
     elif (argv[i] == '--rsa4096'):
         sign='rsa4096'
     elif (argv[i] == '--sha256'):
@@ -525,9 +527,15 @@ elif wolfboot_key_buffer_len == 198:
         print("'ecc521' key autodetected.")
 elif (wolfboot_key_buffer_len > 512):
     if (sign == 'auto'):
+        sign = 'rsa4096'
         print("'rsa4096' key autodetected.")
+elif (wolfboot_key_buffer_len > 256):
+    if (sign == 'auto'):
+        sign = 'rsa3072'
+        print("'rsa3072' key autodetected.")
 elif (wolfboot_key_buffer_len > 128):
     if (sign == 'auto'):
+        sign = 'rsa2048'
         print("'rsa2048' key autodetected.")
     elif (sign != 'rsa2048'):
         print ("Error: key size %d too large for the selected cipher" % wolfboot_key_buffer_len)
@@ -585,6 +593,18 @@ elif not sha_only and not manual_sign:
         rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
         privkey,pubkey = rsa.encode_key()
 
+    if sign == 'rsa3072':
+        if hash_algo != 'sha256':
+            if WOLFBOOT_HEADER_SIZE < 1024:
+                print("Rsa3072: header size increased to 1024")
+                WOLFBOOT_HEADER_SIZE = 1024
+        if WOLFBOOT_HEADER_SIZE < 512:
+            print("Rsa3072: header size increased to 512")
+            WOLFBOOT_HEADER_SIZE = 512
+        HDR_SIGNATURE_LEN = 384
+        rsa = ciphers.RsaPrivate(wolfboot_key_buffer)
+        privkey,pubkey = rsa.encode_key()
+
     if sign == 'rsa4096':
         if WOLFBOOT_HEADER_SIZE < 1024:
             print("Rsa4096: header size increased to 1024")
@@ -598,6 +618,10 @@ else:
         if WOLFBOOT_HEADER_SIZE < 512:
             WOLFBOOT_HEADER_SIZE = 512
         HDR_SIGNATURE_LEN = 256
+    if sign == 'rsa3072':
+        if WOLFBOOT_HEADER_SIZE < 512:
+            WOLFBOOT_HEADER_SIZE = 512
+        HDR_SIGNATURE_LEN = 384
     if sign == 'rsa4096':
         if WOLFBOOT_HEADER_SIZE < 1024:
             WOLFBOOT_HEADER_SIZE = 1024

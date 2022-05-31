@@ -25,7 +25,7 @@ import sys,os
 from wolfcrypt import ciphers
 
 def usage():
-    print("Usage: %s [--ed25519 | --ecc256 | --rsa2048 | --rsa4096] [ --force ] pub_key_file.c\n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 | --ecc521 | --rsa2048| --rsa3072 | --rsa4096] [ --force ] pub_key_file.c\n" % sys.argv[0])
     parser.print_help()
     sys.exit(1)
 
@@ -48,6 +48,7 @@ Ecc256_pub_key_define = "const uint8_t ecc256_pub_key[64] = {\n\t"
 Ecc384_pub_key_define = "const uint8_t ecc384_pub_key[96] = {\n\t"
 Ecc521_pub_key_define = "const uint8_t ecc521_pub_key[132] = {\n\t"
 Rsa_2048_pub_key_define = "const uint8_t rsa2048_pub_key[%d] = {\n\t"
+Rsa_3072_pub_key_define = "const uint8_t rsa3072_pub_key[%d] = {\n\t"
 Rsa_4096_pub_key_define = "const uint8_t rsa4096_pub_key[%d] = {\n\t"
 
 sign="ed25519"
@@ -61,6 +62,7 @@ parser.add_argument('--ecc256',  dest='ecc256', action='store_true')
 parser.add_argument('--ecc384',  dest='ecc384', action='store_true')
 parser.add_argument('--ecc521',  dest='ecc521', action='store_true')
 parser.add_argument('--rsa2048', dest='rsa2048', action='store_true')
+parser.add_argument('--rsa3072', dest='rsa3072', action='store_true')
 parser.add_argument('--rsa4096', dest='rsa4096', action='store_true')
 parser.add_argument('--force', dest='force', action='store_true')
 parser.add_argument('cfile')
@@ -95,6 +97,10 @@ if (args.rsa2048):
     if sign is not None:
         dupsign()
     sign='rsa2048'
+if (args.rsa3072):
+    if sign is not None:
+        dupsign()
+    sign='rsa3072'
 if (args.rsa4096):
     if sign is not None:
         dupsign()
@@ -267,6 +273,34 @@ if (sign == "rsa2048"):
                 f.write('\n')
         f.write("\n};\n")
         f.write("const uint32_t rsa2048_pub_key_len = %d;\n" % len(pub))
+        f.close()
+
+if (sign == "rsa3072"):
+    rsa = ciphers.RsaPrivate.make_key(3072)
+    if os.path.exists(key_file) and not force:
+        choice = input("** Warning: key file already exist! Are you sure you want to "+
+                "generate a new key and overwrite the existing key? [Type 'Yes, I am sure!']: ")
+        if (choice != "Yes, I am sure!"):
+            print("Operation canceled.")
+            sys.exit(2)
+    priv,pub = rsa.encode_key()
+    print()
+    print("Creating file " + key_file)
+    with open(key_file, "wb") as f:
+        f.write(priv)
+        f.close()
+    print("Creating file " + pubkey_cfile)
+    with open(pubkey_cfile, "w") as f:
+        f.write(Cfile_Banner)
+        f.write(Rsa_3072_pub_key_define % len(pub))
+        i = 0
+        for c in bytes(pub):
+            f.write("0x%02X, " % c)
+            i += 1
+            if (i % 8 == 0):
+                f.write('\n')
+        f.write("\n};\n")
+        f.write("const uint32_t rsa3072_pub_key_len = %d;\n" % len(pub))
         f.close()
 
 if (sign == "rsa4096"):

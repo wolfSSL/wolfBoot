@@ -134,6 +134,7 @@
 #define HDR_IMG_TYPE_AUTH_ED448   0x0500
 #define HDR_IMG_TYPE_AUTH_ECC384  0x0600
 #define HDR_IMG_TYPE_AUTH_ECC521  0x0700
+#define HDR_IMG_TYPE_AUTH_RSA3072 0x0800
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 #define HDR_IMG_TYPE_DIFF         0x00D0
@@ -147,6 +148,7 @@
 #define SIGN_ED25519   HDR_IMG_TYPE_AUTH_ED25519
 #define SIGN_ECC256    HDR_IMG_TYPE_AUTH_ECC256
 #define SIGN_RSA2048   HDR_IMG_TYPE_AUTH_RSA2048
+#define SIGN_RSA3072   HDR_IMG_TYPE_AUTH_RSA3072
 #define SIGN_RSA4096   HDR_IMG_TYPE_AUTH_RSA4096
 #define SIGN_ED448     HDR_IMG_TYPE_AUTH_ED448
 #define SIGN_ECC384    HDR_IMG_TYPE_AUTH_ECC384
@@ -320,6 +322,12 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             printf("rsa4096 key autodetected\n");
         }
     }
+    else if (*key_buffer_sz > 256) {
+        if (CMD.sign == SIGN_AUTO) {
+            CMD.sign = SIGN_RSA3072;
+            printf("rsa3072 key autodetected\n");
+        }
+    }
     else if (*key_buffer_sz > 128) {
         if (CMD.sign == SIGN_AUTO) {
             CMD.sign = SIGN_RSA2048;
@@ -395,7 +403,9 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         }
 #endif
 #ifndef NO_RSA
-       else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
+       else if (CMD.sign == SIGN_RSA2048 || 
+               CMD.sign == SIGN_RSA3072 ||
+               CMD.sign == SIGN_RSA4096) {
             idx = 0;
             ret = wc_InitRsaKey(&key.rsa, NULL);
             if (ret == 0) {
@@ -749,7 +759,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 mp_clear(&r); mp_clear(&s);
             }
 #endif
-            else if (CMD.sign == SIGN_RSA2048 || CMD.sign == SIGN_RSA4096) {
+            else if (CMD.sign == SIGN_RSA2048 || 
+                    CMD.sign == SIGN_RSA3072 ||
+                    CMD.sign == SIGN_RSA4096) {
+
 #ifndef NO_RSA
                 uint32_t enchash_sz = digest_sz;
                 uint8_t* enchash = digest;
@@ -1217,6 +1230,15 @@ int main(int argc, char** argv)
             CMD.sign = SIGN_RSA2048;
             sign_str = "RSA2048";
         }
+        else if (strcmp(argv[i], "--rsa3072enc") == 0) {
+            CMD.sign = SIGN_RSA3072;
+            sign_str = "RSA3072ENC";
+            CMD.sign_wenc = 1;
+        }
+        else if (strcmp(argv[i], "--rsa3072") == 0) {
+            CMD.sign = SIGN_RSA3072;
+            sign_str = "RSA3072";
+        }
         else if (strcmp(argv[i], "--rsa4096enc") == 0) {
             CMD.sign = SIGN_RSA4096;
             sign_str = "RSA4096ENC";
@@ -1380,6 +1402,13 @@ int main(int argc, char** argv)
         if (CMD.header_sz < 512)
             CMD.header_sz = 512;
         CMD.signature_sz = 256;
+    }
+    else if (CMD.sign == SIGN_RSA3072) {
+        if ((CMD.header_sz < 1024) && (CMD.hash_algo != HASH_SHA256))
+            CMD.header_sz = 1024;
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        CMD.signature_sz = 384;
     }
     else if (CMD.sign == SIGN_RSA4096) {
         if (CMD.header_sz < 1024)
