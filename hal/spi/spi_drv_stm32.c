@@ -83,13 +83,28 @@ static void RAMFUNCTION spi1_pins_setup(void)
     reg = SPI_PIO_MODE & ~ (0x03 << (SPI1_MISO_PIN * 2));
     SPI_PIO_MODE = reg | (2 << (SPI1_MISO_PIN * 2));
 
-    /* Alternate function: use low pins (5,6,7) */
+    /* Alternate function */
+#if SPI1_CLOCK_PIN < 8
     reg = SPI_PIO_AFL & ~(0xf << ((SPI1_CLOCK_PIN) * 4));
     SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_CLOCK_PIN) * 4));
+#else
+    reg = SPI_PIO_AFH & ~(0xf << ((SPI1_CLOCK_PIN - 8) * 4));
+    SPI_PIO_AFH = reg | (SPI1_PIN_AF << ((SPI1_CLOCK_PIN - 8) * 4));
+#endif
+#if SPI1_MOSI_PIN < 8
     reg = SPI_PIO_AFL & ~(0xf << ((SPI1_MOSI_PIN) * 4));
     SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_MOSI_PIN) * 4));
+#else
+    reg = SPI_PIO_AFH & ~(0xf << ((SPI1_MOSI_PIN-8) * 4));
+    SPI_PIO_AFH = reg | (SPI1_PIN_AF << ((SPI1_MOSI_PIN - 8) * 4));
+#endif
+#if SPI1_MISO_PIN < 8
     reg = SPI_PIO_AFL & ~(0xf << ((SPI1_MISO_PIN) * 4));
     SPI_PIO_AFL = reg | (SPI1_PIN_AF << ((SPI1_MISO_PIN) * 4));
+#else
+    reg = SPI_PIO_AFH & ~(0xf << ((SPI1_MISO_PIN-8) * 4));
+    SPI_PIO_AFH = reg | (SPI1_PIN_AF << ((SPI1_MISO_PIN - 8) * 4));
+#endif
 
 #ifdef PLATFORM_stm32l0
     reg = SPI_PIO_PUPD & ~(0x03 <<  (SPI1_CLOCK_PIN * 2));
@@ -117,9 +132,21 @@ static void spi_pins_release(void)
     SPI_PIO_MODE &= ~ (0x03 << (SPI1_MISO_PIN * 2));
 
     /* Alternate function clear */
+#if SPI1_CLOCK_PIN < 8
     SPI_PIO_AFL &= ~(0xf << ((SPI1_CLOCK_PIN) * 4));
+#else
+    SPI_PIO_AFH &= ~(0xf << ((SPI1_CLOCK_PIN - 8) * 4));
+#endif
+#if SPI1_MOSI_PIN < 8
     SPI_PIO_AFL &= ~(0xf << ((SPI1_MOSI_PIN) * 4));
+#else
+    SPI_PIO_AFL &= ~(0xf << ((SPI1_MOSI_PIN - 8) * 4));
+#endif
+#if SPI1_MISO_PIN < 8
     SPI_PIO_AFL &= ~(0xf << ((SPI1_MISO_PIN) * 4));
+#else
+    SPI_PIO_AFL &= ~(0xf << ((SPI1_MISO_PIN - 8) * 4));
+#endif
 
     /* Floating */
     SPI_PIO_PUPD &= ~ (0x03 << (SPI1_CLOCK_PIN * 2));
@@ -184,7 +211,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 void RAMFUNCTION spi_release(void)
 {
     spi1_reset();
-	SPI1_CR2 &= ~SPI_CR2_SSOE;
-	SPI1_CR1 = 0;
+    SPI1_CR2 &= ~SPI_CR2_SSOE;
+    SPI1_CR1 = 0;
     spi_pins_release();
 }

@@ -131,6 +131,7 @@ ifeq ($(ARCH),ARM)
     else
       WOLFBOOT_ORIGIN=0x08000000
     endif
+    SPI_TARGET=stm32
   endif
 
   ## Cortex-M CPU
@@ -172,6 +173,10 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 endif
+endif
+
+ifeq ($(TZEN),1)
+  CFLAGS+=-DTZEN
 endif
 
 ## RISCV
