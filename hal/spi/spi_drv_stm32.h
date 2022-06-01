@@ -48,6 +48,50 @@
 #define SPI1_MOSI_PIN  5 /* SPI_MOSI PB5  */
 #endif
 
+#ifdef PLATFORM_stm32u5
+
+#ifdef TZEN
+#define PERIPH_BASE (0x50000000UL)
+#else
+#define PERIPH_BASE (0x40000000UL)
+#endif
+
+#define APB2PERIPH_BASE (PERIPH_BASE + 0x00010000UL)
+#define AHB2PERIPH_BASE (PERIPH_BASE + 0x02020000UL)
+
+#undef  SPI1
+#define SPI1 (APB2PERIPH_BASE + 0x3000UL)
+
+#define RCC_BASE        (APB2PERIPH_BASE + 0x0C00UL)
+#define APB2_CLOCK_ER     (*(volatile uint32_t *)(RCC_BASE + 0xA4))
+#define APB2_CLOCK_RST    (*(volatile uint32_t *)(RCC_BASE + 0x7C))
+#define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C))
+
+#define GPIO_BASE   (APB2PERIPH_BASE + 0x02020000UL)
+#define GPIOA_BASE  (GPIO_BASE + 0x00000UL)
+#define GPIOB_BASE  (GPIO_BASE + 0x00400UL)
+#define GPIOC_BASE  (GPIO_BASE + 0x00800UL)
+#define GPIOD_BASE  (GPIO_BASE + 0x00C00UL)
+#define GPIOE_BASE  (GPIO_BASE + 0x01000UL)
+#define GPIOF_BASE  (GPIO_BASE + 0x01400UL)
+#define GPIOG_BASE  (GPIO_BASE + 0x01800UL)
+#define GPIOH_BASE  (GPIO_BASE + 0x01C00UL)
+#define GPIOI_BASE  (GPIO_BASE + 0x02000UL)
+
+/* STMOD+ Port */
+#define SPI_GPIO    GPIOE_BASE
+#define SPI_CS_GPIO GPIOE_BASE
+#define SPI_CS_FLASH   11 /* Flash CS connected to GPIOE11 */
+#define SPI_CS_TPM     10 /* TPM   CS connected to GPIOE10 */
+
+#define SPI1_PIN_AF    5 /* Alternate function for SPI pins */
+#define SPI1_CLOCK_PIN 13 /* SPI_SCK: PE13  */
+#define SPI1_MISO_PIN  14 /* SPI_MISO PE14 */
+#define SPI1_MOSI_PIN  15 /* SPI_MOSI PE15  */
+
+#endif /* PLATFORM_stm32u5 */
+
+
 #ifdef PLATFORM_stm32wb
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x58000060))
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x58000040))
@@ -121,8 +165,8 @@
 #define SPI_CR1_BAUDRATE        	(0x07 << 3)
 #define SPI_CR1_SPI_EN		    	(1 << 6)
 #define SPI_CR1_LSBFIRST		    (1 << 7)
-#define SPI_CR1_SSI			(1 << 8)
-#define SPI_CR1_SSM			(1 << 9)
+#define SPI_CR1_SSI			        (1 << 8)
+#define SPI_CR1_SSM			        (1 << 9)
 #define SPI_CR1_16BIT_FORMAT        (1 << 11)
 #define SPI_CR1_TX_CRC_NEXT			(1 << 12)
 #define SPI_CR1_HW_CRC_EN			(1 << 13)
@@ -130,29 +174,25 @@
 #define SPI_CR2_SSOE			    (1 << 2)
 
 
-#define SPI_SR_RX_NOTEMPTY  	        (1 << 0)
-#define SPI_SR_TX_EMPTY			        (1 << 1)
-#define SPI_SR_BUSY			            (1 << 7)
+#define SPI_SR_RX_NOTEMPTY  	    (1 << 0)
+#define SPI_SR_TX_EMPTY			    (1 << 1)
+#define SPI_SR_BUSY			        (1 << 7)
 
 
-
-
-
-
-#define SPI_PIO_MODE  (*(volatile uint32_t *)(SPI_PIO_BASE + 0x00))
-#define SPI_PIO_AFL   (*(volatile uint32_t *)(SPI_PIO_BASE + 0x20))
-#define SPI_PIO_AFH   (*(volatile uint32_t *)(SPI_PIO_BASE + 0x24))
-#define SPI_PIO_OSPD  (*(volatile uint32_t *)(SPI_PIO_BASE + 0x08))
-#define SPI_PIO_PUPD (*(volatile uint32_t *)(SPI_PIO_BASE + 0x0c))
-#define SPI_PIO_BSRR (*(volatile uint32_t *)(SPI_PIO_BASE + 0x18))
-#define SPI_PIO_CS_MODE  (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x00))
-#define SPI_PIO_CS_AFL   (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x20))
-#define SPI_PIO_CS_AFH   (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x24))
-#define SPI_PIO_CS_OSPD  (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x08))
+#define SPI_PIO_MODE    (*(volatile uint32_t *)(SPI_PIO_BASE + 0x00))
+#define SPI_PIO_AFL     (*(volatile uint32_t *)(SPI_PIO_BASE + 0x20))
+#define SPI_PIO_AFH     (*(volatile uint32_t *)(SPI_PIO_BASE + 0x24))
+#define SPI_PIO_OSPD    (*(volatile uint32_t *)(SPI_PIO_BASE + 0x08))
+#define SPI_PIO_PUPD    (*(volatile uint32_t *)(SPI_PIO_BASE + 0x0c))
+#define SPI_PIO_BSRR    (*(volatile uint32_t *)(SPI_PIO_BASE + 0x18))
+#define SPI_PIO_CS_MODE (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x00))
+#define SPI_PIO_CS_AFL  (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x20))
+#define SPI_PIO_CS_AFH  (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x24))
+#define SPI_PIO_CS_OSPD (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x08))
 #define SPI_PIO_CS_PUPD (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x0c))
 #define SPI_PIO_CS_BSRR (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x18))
 #define SPI_PIO_CS_ODR  (*(volatile uint32_t *)(SPI_CS_PIO_BASE + 0x14))
 #define GPIO_MODE_AF (2)
 
 
-#endif
+#endif /* !SPI_DRV_STM32_H_INCLUDED */
