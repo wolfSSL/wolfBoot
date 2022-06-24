@@ -21,7 +21,7 @@
 
 #include <stdint.h>
 
-#define DEBUG_UART
+/* #define DEBUG_UART */
 
 #define CCSRBAR 0xFE000000
 
@@ -101,7 +101,7 @@ void main(void) {
     int k = 0;
     char snum[8];
 
-    uart_write("wolfBoot\n", 9);
+    uart_write("Test App\n", 9);
 #endif
 
     /* Wait for reboot */

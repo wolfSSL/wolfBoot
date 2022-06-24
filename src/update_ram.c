@@ -33,12 +33,6 @@
 extern void hal_flash_dualbank_swap(void);
 extern int wolfBoot_get_dts_size(void *dts_addr);
 
-static inline void boot_panic(void)
-{
-    while(1)
-        ;
-}
-
 
 void RAMFUNCTION wolfBoot_start(void)
 {
@@ -59,8 +53,12 @@ void RAMFUNCTION wolfBoot_start(void)
 #else
     active = wolfBoot_dualboot_candidate_addr((void**)&load_address);
 #endif
-    if (active < 0) /* panic if no images available */
+
+    wolfBoot_printf("Active Part: %d\n", active);
+
+    if (active < 0) { /* panic if no images available */
         wolfBoot_panic();
+    }
 
 
     #ifdef WOLFBOOT_FIXED_PARTITIONS

@@ -167,7 +167,7 @@ To run flash `./test-app/image.bin` to `0x08000000`.
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image.bin 0x08000000`
 
 Or program each partition using:
-1. flash `wolfboot.bin` to 0x08000000: 
+1. flash `wolfboot.bin` to 0x08000000:
     - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.elf`
 2. flash wolfBoot.bin to 0x0c00 0000
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08008000`
@@ -366,8 +366,8 @@ The option `CORTEX_M0` is automatically selected for this target.
 The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
 multiple writes after each erase operation.
 
-This target also supports secure memory protection on the bootloader region 
-using the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the 
+This target also supports secure memory protection on the bootloader region
+using the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the
 number of 2KB pages to block access to from the 0x8000000 base address.
 
 ```
@@ -380,7 +380,7 @@ For RAMFUNCTION support (required for SEC_PROT) make sure `RAM_CODE=1`.
 
 Compile requirements: `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
 
-The output is a single `factory.bin` that includes `wolfboot.bin` and `test-app/image_v1_signed.bin` combined together. 
+The output is a single `factory.bin` that includes `wolfboot.bin` and `test-app/image_v1_signed.bin` combined together.
 This should be programmed to the flash start address `0x08000000`.
 
 Flash using the STM32CubeProgrammer CLI:
@@ -1024,15 +1024,34 @@ WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 
 ## NXP T2080 PPC
 
-The T2080 is a PPC e6500 based processor.
+The T2080 is a PPC e6500 based processor. Support has been tested with the NAII 68PPC2.
 
-Example configuration for this target is provided in [/config/examples/t2080.config](/config/examples/t2080.config).
+Example configurations for this target are provided in:
+* NXP T2080: [/config/examples/t2080.config](/config/examples/t2080.config).
+* NAII 68PPC2: [/config/examples/t2080_68ppc2.config](/config/examples/t2080_68ppc2.config).
 
-### Building wolfBoot
+
+### Building wolfBoot for NXP T2080 PPC
 
 wolfBoot can be built with gcc powerpc tools. For example, `apt
 install gcc-powerpc-linux-gnu`. Then make will use the correct tools
 to compile.
+
+```
+cp ./config/examples/t2080_68ppc2.config .config
+make distclean
+make keytools
+make wolfboot.elf
+```
+
+### Programming NXP T2080 PPC
+
+In CodeWarrior use the `Flash Programmer` tool (see under Commander View -> Miscellaneous)
+Connection: "CodeWarrior TAP Connection"
+Flash Configuration File: "T2080QDS_NOR_FLASH.xml"
+Unprotect flash memory before erase: Check
+File to flash: wolfboot.bin
+Offset: 0xEFF40000
 
 ## TI Hercules TMS570LC435
 
@@ -1046,7 +1065,7 @@ x86-64bit machine with UEFI bios can run wolfBoot as EFI application.
 ### Prerequisites:
 
  * qemu-system-x86_64
- * [GNU-EFI] (https://sourceforge.net/projects/gnu-efi/) 
+ * [GNU-EFI] (https://sourceforge.net/projects/gnu-efi/)
  * Open Virtual Machine firmware bios images (OVMF) by [Tianocore](https://tianocore.org)
 
 On a debian-like system it is sufficient to install the packages as follows:

@@ -194,7 +194,6 @@ ifeq ($(ARCH),PPC)
   CROSS_COMPILE:=powerpc-linux-gnu-
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles
   LDFLAGS+=-Wl,--build-id=none
-  #MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
@@ -252,6 +251,16 @@ endif
 # ARM Big Endian
 ifeq ($(ARCH),ARM_BE)
   OBJS+=src/boot_arm.o
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
+endif
+
+ifeq ($(TARGET),t2080)
+  # Power PC big endian
+  CFLAGS+=-DBIG_ENDIAN_ORDER
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
   endif
