@@ -50,7 +50,10 @@ void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void do_boot(const uint32_t *app_offset)
 #endif
 {
-  asm volatile("mtlr %0; blr":: "r"(app_offset));
+    /* TODO: Determine if the dts_offset needs passed as argument */
+    (void)dts_offset;
+
+    asm volatile("mtlr %0; blr":: "r"(app_offset));
 }
 
 void arch_reboot(void) {}
