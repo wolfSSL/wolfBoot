@@ -443,7 +443,7 @@ else:
 print ("Input image:          " + image_file)
 
 print ("Selected cipher:      " + sign)
-print ("Public key:           " + key_file)
+print ("Private key:          " + key_file)
 
 if not sha_only:
     print ("Output image:         " + output_image_file)

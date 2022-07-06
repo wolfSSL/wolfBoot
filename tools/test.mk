@@ -17,8 +17,6 @@ else
 	endif
 endif
 
-
-
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
 	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
 else
@@ -806,15 +804,15 @@ test-all: clean
 
 test-size-all:
 	make test-size SIGN=NONE LIMIT=4646
-	make test-size SIGN=ED25519 LIMIT=11214
-	make test-size SIGN=ECC256  LIMIT=21958
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13718
-	make test-size SIGN=RSA2048 LIMIT=12906
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=13070
-	make test-size SIGN=RSA4096 LIMIT=13242
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=13322
-	make test-size SIGN=ECC384 LIMIT=17562
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15326
-	make test-size SIGN=ED448 LIMIT=13558
-	make test-size SIGN=RSA3072 LIMIT=13098
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=13178
+	make test-size SIGN=ED25519 LIMIT=11318
+	make test-size SIGN=ECC256  LIMIT=22066
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13826
+	make test-size SIGN=RSA2048 LIMIT=12994
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=13230
+	make test-size SIGN=RSA4096 LIMIT=13330
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=13486
+	make test-size SIGN=ECC384 LIMIT=17670
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15434
+	make test-size SIGN=ED448 LIMIT=13670
+	make test-size SIGN=RSA3072 LIMIT=13186
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=13266

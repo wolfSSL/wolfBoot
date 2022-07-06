@@ -32,7 +32,7 @@ jobs:
 
       - name: make clean
         run: |
-          make clean && make -C tools/keytools clean && rm -f include/target.h
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -45,7 +45,7 @@ jobs:
    # SIGN=NONE TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -66,7 +66,7 @@ jobs:
   # ECC256 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -86,7 +86,7 @@ jobs:
 # ECC384 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -106,7 +106,7 @@ jobs:
 # ED25519 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -126,7 +126,7 @@ jobs:
 # ED448 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -146,7 +146,7 @@ jobs:
 # RSA2048 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -166,7 +166,7 @@ jobs:
 # RSA3072 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |
@@ -186,7 +186,7 @@ jobs:
 # RSA4096 TEST
       - name: make clean
         run: |
-          make clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Select config
         run: |

@@ -66,6 +66,18 @@
 #define HDR_SIGNATURE               0x20
 #define HDR_PADDING                 0xFF
 
+/* Auth Key types */
+#define AUTH_KEY_ED25519 0x01
+#define AUTH_KEY_ECC256  0x02
+#define AUTH_KEY_RSA2048 0x03
+#define AUTH_KEY_RSA4096 0x04
+#define AUTH_KEY_ED448   0x05
+#define AUTH_KEY_ECC384  0x06
+#define AUTH_KEY_ECC521  0x07
+#define AUTH_KEY_RSA3072 0x08
+
+
+
 /*
  * 8 bits: auth type
  * 4 bits: extra features
@@ -74,14 +86,14 @@
  */
 #define HDR_IMG_TYPE_AUTH_MASK    0xFF00
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
-#define HDR_IMG_TYPE_AUTH_ED25519 0x0100
-#define HDR_IMG_TYPE_AUTH_ECC256  0x0200
-#define HDR_IMG_TYPE_AUTH_RSA2048 0x0300
-#define HDR_IMG_TYPE_AUTH_RSA4096 0x0400
-#define HDR_IMG_TYPE_AUTH_ED448   0x0500
-#define HDR_IMG_TYPE_AUTH_ECC384  0x0600
-#define HDR_IMG_TYPE_AUTH_ECC521  0x0700
-#define HDR_IMG_TYPE_AUTH_RSA3072 0x0800
+#define HDR_IMG_TYPE_AUTH_ED25519 (AUTH_KEY_ED25519 << 8)
+#define HDR_IMG_TYPE_AUTH_ECC256  (AUTH_KEY_ECC256  << 8)
+#define HDR_IMG_TYPE_AUTH_RSA2048 (AUTH_KEY_RSA2048 << 8)
+#define HDR_IMG_TYPE_AUTH_RSA4096 (AUTH_KEY_RSA4096 << 8)
+#define HDR_IMG_TYPE_AUTH_ED448   (AUTH_KEY_ED448   << 8)
+#define HDR_IMG_TYPE_AUTH_ECC384  (AUTH_KEY_ECC384  << 8)
+#define HDR_IMG_TYPE_AUTH_ECC521  (AUTH_KEY_ECC521  << 8)
+#define HDR_IMG_TYPE_AUTH_RSA3072 (AUTH_KEY_RSA3072 << 8)
 
 #define HDR_IMG_TYPE_DIFF         0x00D0
 
@@ -89,30 +101,91 @@
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 
+/* Hashing function configuration */
+#if defined(WOLFBOOT_HASH_SHA256)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+#   define WOLFBOOT_SHA_HDR HDR_SHA256
+#   define WOLFBOOT_SHA_DIGEST_SIZE (32)
+#   define image_hash image_sha256
+#   define key_hash key_sha256
+#elif defined(WOLFBOOT_HASH_SHA384)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+#   define WOLFBOOT_SHA_HDR HDR_SHA384
+#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+#   define image_hash image_sha384
+#   define key_hash key_sha384
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (128)
+#   define WOLFBOOT_SHA_HDR HDR_SHA3_384
+#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+#   define image_hash image_sha3_384
+#   define key_hash key_sha3_384
+#else
+#   error "No valid hash algorithm defined!"
+#endif
 
 #ifdef __WOLFBOOT
+ #define KEYSTORE_PUBKEY_SIZE_NONE 0
+ #define KEYSTORE_PUBKEY_SIZE_ED25519 32
+ #define KEYSTORE_PUBKEY_SIZE_ED448 57
+ #define KEYSTORE_PUBKEY_SIZE_ECC256 64
+ #define KEYSTORE_PUBKEY_SIZE_ECC384 96
+ #define KEYSTORE_PUBKEY_SIZE_RSA2048 320
+ #define KEYSTORE_PUBKEY_SIZE_RSA3072 448
+ #define KEYSTORE_PUBKEY_SIZE_RSA4096 576
  #if defined(WOLFBOOT_NO_SIGN)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_NONE
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_NONE
  #elif defined(WOLFBOOT_SIGN_ED25519)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ED25519
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ED25519
  #elif defined(WOLFBOOT_SIGN_ED448)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ED448
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ED448
  #elif defined(WOLFBOOT_SIGN_ECC256)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ECC256
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC256
  #elif defined(WOLFBOOT_SIGN_ECC384)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ECC384
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC384
  #elif defined(WOLFBOOT_SIGN_ECC521)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ECC521
  #   error "ECC521 curves not yet supported in this version of wolfBoot. Please select a valid SIGN= option."
  #elif defined(WOLFBOOT_SIGN_RSA2048)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA2048
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA2048
  #elif defined(WOLFBOOT_SIGN_RSA3072)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA3072
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA3072
  #elif defined(WOLFBOOT_SIGN_RSA4096)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA4096
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
  #else
  #   error "no valid authentication mechanism selected. Please select a valid SIGN= option."
  #endif /* defined WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ED25519 */
+
+
+/* Mask for key permissions */
+ #define KEY_VERIFY_ALL         (0xFFFFFFFFU)
+ #define KEY_VERIFY_ONLY_ID(X)  (1U << X)
+ #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
+ #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
+
+ struct keystore_slot {
+     uint32_t slot_id;
+     uint32_t key_type;
+     uint32_t part_id_mask;
+     uint32_t pubkey_size;
+     uint8_t  pubkey[KEYSTORE_PUBKEY_SIZE];
+ };
+
+ /* KeyStore API */
+ int keystore_num_pubkeys(void);
+ uint8_t *keystore_get_buffer(int id);
+ int keystore_get_size(int id);
+ uint32_t keystore_get_mask(int id);
+
+
 #endif /* defined WOLFBOOT */
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -164,30 +237,6 @@ int wolfBoot_dualboot_candidate(void);
 
 int wolfBoot_dualboot_candidate_addr(void**);
 
-/* Hashing function configuration */
-#if defined(WOLFBOOT_HASH_SHA256)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
-#   define WOLFBOOT_SHA_HDR HDR_SHA256
-#   define WOLFBOOT_SHA_DIGEST_SIZE (32)
-#   define image_hash image_sha256
-#   define key_hash key_sha256
-#elif defined(WOLFBOOT_HASH_SHA384)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
-#   define WOLFBOOT_SHA_HDR HDR_SHA384
-#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
-#   define image_hash image_sha384
-#   define key_hash key_sha384
-#elif defined(WOLFBOOT_HASH_SHA3_384)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (128)
-#   define WOLFBOOT_SHA_HDR HDR_SHA3_384
-#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
-#   define image_hash image_sha3_384
-#   define key_hash key_sha3_384
-#else
-#   error "No valid hash algorithm defined!"
-#endif
-
-
 #ifdef EXT_ENCRYPTED
 /* Encryption support */
 #if defined(ENCRYPT_WITH_CHACHA)
@@ -215,5 +264,6 @@ int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
 int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
+
 
 #endif /* !WOLFBOOT_H */

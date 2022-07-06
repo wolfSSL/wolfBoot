@@ -16,13 +16,27 @@ LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
 
+
+
+
+
 V?=0
 
 OBJS:= \
-./hal/$(TARGET).o \
-./src/string.o \
-./src/image.o \
-./src/libwolfboot.o
+	./hal/$(TARGET).o \
+	./src/string.o \
+	./src/image.o \
+	./src/libwolfboot.o
+
+ifeq ($(SIGN),NONE)
+  PRIVATE_KEY=
+else
+  PRIVATE_KEY=wolfboot_signing_private_key.der
+  OBJS+=./src/keystore.o
+endif
+
+
+
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 ifneq ("$(NO_LOADER)","1")
@@ -126,9 +140,10 @@ keytools_check:
 		"Run 'make keytools' or install wolfcrypt 'pip3 install wolfcrypt'"  && false)
 
 
-%.der:
+$(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
-	$(Q)$(KEYGEN_TOOL) $(KEYGEN_OPTIONS) src/$(@:.der=)_pub_key.c
+	$(Q)(test $(SIGN) = NONE) || ($(KEYGEN_TOOL) $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
+	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 
 keytools:
 	@make -C tools/keytools clean
@@ -136,7 +151,8 @@ keytools:
 
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
-	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+	$(Q)(test $(SIGN) = NONE) || $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+	$(Q)(test $(SIGN) = NONE) && $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT) image.elf
@@ -155,6 +171,7 @@ factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bi
                               $(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
+	$(Q)(test $(SIGN) = NONE) || (grep $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
@@ -171,21 +188,7 @@ hex: wolfboot.hex
 	@echo "\t[ELF2HEX] $@"
 	@$(OBJCOPY) -O ihex $^ $@
 
-src/ed25519_pub_key.c: ed25519.der
-
-src/ed448_pub_key.c: ed448.der
-
-src/ecc256_pub_key.c: ecc256.der
-
-src/ecc384_pub_key.c: ecc384.der
-
-src/ecc521_pub_key.c: ecc521.der
-
-src/rsa2048_pub_key.c: rsa2048.der
-
-src/rsa3072_pub_key.c: rsa3072.der
-
-src/rsa4096_pub_key.c: rsa4096.der
+src/keystore.c: $(PRIVATE_KEY)
 
 keys: $(PRIVATE_KEY)
 
@@ -195,8 +198,7 @@ clean:
 	@make -C test-app clean
 	@make -C tools/check_config clean
 
-distclean: clean
-	@rm -f *.pem *.der tags ./src/*_pub_key.c include/target.h
+utilsclean: clean
 	$(Q)$(MAKE) -C tools/keytools clean
 	$(Q)$(MAKE) -C tools/delta clean
 	$(Q)$(MAKE) -C tools/bin-assemble clean
@@ -205,6 +207,14 @@ distclean: clean
 	$(Q)$(MAKE) -C tools/test-update-server clean
 	$(Q)$(MAKE) -C tools/uart-flash-server clean
 	$(Q)$(MAKE) -C tools/unit-tests clean
+
+keysclean: clean
+	@rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
+
+
+
+distclean: clean keysclean utilsclean
+
 
 include/target.h: include/target.h.in FORCE
 	@cat include/target.h.in | \
