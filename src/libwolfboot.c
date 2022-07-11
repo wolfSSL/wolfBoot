@@ -758,7 +758,9 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
     int ret = 0;
     hal_flash_unlock();
-    XMEMCPY(ENCRYPT_CACHE, (void *)addr_align, WOLFBOOT_SECTOR_SIZE);
+    /* casting to unsigned long to abide compilers on 64bit architectures */
+    XMEMCPY(ENCRYPT_CACHE,
+            (void*)(unsigned long)addr_align, WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
