@@ -110,3 +110,6 @@ IDE/IAR/settings
 IDE/IAR/*.ewt
 IDE/IAR/Debug
 IDE/IAR/Release
+
+# Simulated Flash files
+*.dd

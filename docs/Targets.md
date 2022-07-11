@@ -1136,3 +1136,31 @@ Example of flash memory layout and configuration on the nRF52:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS   0x57000
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x58000
 ```
+## Simulated
+
+You can create a simulated target that uses files to mimic an internal and
+optionally an external flash. The build will produce an executable ELF file
+`wolfBoot.elf`. You can provide another executable ELF as firmware image and it
+will be executed. The command-line arguments of `wolfBoot.elf` are forwarded to
+the application. The example application `test-app\app_sim.c` uses the arguments
+to interact with `libwolfboot.c` and automatize functional testing.  You can
+find an example configuration in `config/examples/sim.config`.
+
+An example of using the `test-app/sim.c` to test firmware update:
+
+```
+cp ./config/examples/sim.config .config
+make
+
+# create the file internal_flash.dd with firmware v1 on the boot partition and
+# firmware v2 on the update partition
+make test-sim-internal-flash-with-update
+# it should print 1
+./wolfboot.elf success get_version
+# trigger an update
+./wolfboot.elf update_trigger
+# it should print 2
+./wolfboot.elf success get_version
+# it should print 2
+./wolfboot.elf success get_version
+```
