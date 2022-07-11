@@ -69,6 +69,10 @@ ifeq ($(TARGET),library)
 	MAIN_TARGET:=test-lib
 endif
 
+ifeq ($(TARGET),sim)
+	MAIN_TARGET:=wolfboot.elf test-app/image_v1_signed.bin internal_flash.dd
+endif
+
 ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
@@ -130,9 +134,20 @@ keytools:
 	@make -C tools/keytools clean
 	@make -C tools/keytools
 
-test-app/image_v1_signed.bin: test-app/image.bin
+test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+
+test-app/image.elf: wolfboot.elf
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT) image.elf
+	$(Q)$(SIZE) test-app/image.elf
+
+internal_flash.dd: test-app/image_v1_signed.bin wolfboot.elf $(BINASSEMBLE)
+	@echo "\t[MERGE] internal_flash.dd"
+	$(Q)dd if=/dev/zero bs=1 count=$$(($(WOLFBOOT_SECTOR_SIZE))) > /tmp/swap
+	$(Q)$(BINASSEMBLE) $@ 0 test-app/image_v1_signed.bin \
+		$(WOLFBOOT_PARTITION_SIZE) /tmp/swap \
+		$$(($(WOLFBOOT_PARTITION_SIZE)*2)) /tmp/swap
 
 factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE)
 	@echo "\t[MERGE] $@"

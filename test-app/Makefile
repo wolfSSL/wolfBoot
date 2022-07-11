@@ -6,6 +6,11 @@ TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 
+
+ifeq ($(TARGET),sim)
+  LDFLAGS=-Wl,-gc-sections -Wl,-Map=image.map
+endif
+
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
 endif
@@ -115,6 +120,11 @@ ifeq ($(TARGET),ti_hercules)
   LDFLAGS+=$(LSCRIPT) --map_file=image.map
 else
   LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+endif
+
+ifeq ($(TARGET),sim)
+  LDFLAGS=-Wl,-gc-sections -Wl,-Map=image.map
+  APP_OBJS=app_$(TARGET).o ../src/libwolfboot.o ../hal/$(TARGET).o
 endif
 
 ifeq ($(EXT_FLASH),1)

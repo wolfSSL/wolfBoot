@@ -368,6 +368,15 @@ ifeq ($(TARGET),x86_64_efi)
   UPDATE_OBJS:=src/update_ram.o
 endif
 
+ifeq ($(TARGET),sim)
+  USE_GCC_HEADLESS=0
+  LD = gcc
+  UPDATE_OBJS:=src/update_flash.o
+  LD_START_GROUP=
+  LD_END_GROUP=
+  BOOT_IMG=test-app/image.elf
+endif
+
 BOOT_IMG?=test-app/image.bin
 
 ## Update mechanism

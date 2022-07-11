@@ -32,8 +32,22 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 extern void (** const IV_RAM)(void);
 #endif
 
+#ifdef PLATFORM_sim
+extern char **main_argv;
+extern int main_argc;
+int main(int argc, char *argv[])
+#else
 int main(void)
+#endif
 {
+
+#ifdef PLATFORM_sim
+    /* to forward arguments to the test-app for testing. See
+     * test-app/app_sim.c */
+    main_argv = argv;
+    main_argc = argc;
+#endif
+
     hal_init();
     spi_flash_probe();
 #ifdef UART_FLASH
