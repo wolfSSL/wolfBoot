@@ -152,7 +152,7 @@ The API consists of a few functions described below.
 
 Returns the number of slots in the keystore. At least one slot
 should be populated if you want to authenticate your firmware today.
-The interface assumes that the slots are numbered sequencially, from zero to 
+The interface assumes that the slots are numbered sequentially, from zero to 
 `keystore_num_pubkeys() - 1`. Accessing those slots through this API should always
  return a valid public key.
 

@@ -98,17 +98,16 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #include <wolfssl/wolfcrypt/ecc.h>
 
 #ifdef WOLFBOOT_SIGN_ECC256
-    #define ECC_KEYSTORE_PUBKEY_SIZE  32
     #define ECC_KEY_TYPE ECC_SECP256R1
 #endif
 #ifdef WOLFBOOT_SIGN_ECC384
-    #define ECC_KEYSTORE_PUBKEY_SIZE  48
     #define ECC_KEY_TYPE ECC_SECP384R1
 #endif
 #ifdef WOLFBOOT_SIGN_ECC521
-    #define ECC_KEYSTORE_PUBKEY_SIZE  66
     #define ECC_KEY_TYPE ECC_SECP521R1
 #endif
+
+#define KEYSTORE_ECC_POINT_SIZE (KEYSTORE_PUBKEY_SIZE / 2)
 
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
@@ -126,8 +125,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     /* Load public key into TPM */
     memset(&tpmKey, 0, sizeof(tpmKey));
     ret = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, &tpmKey, TPM_ECC_NIST_P256,
-            pubkey, ECC_KEYSTORE_PUBKEY_SIZE, pubkey + ECC_KEYSTORE_PUBKEY_SIZE,
-            ECC_KEYSTORE_PUBKEY_SIZE);
+            pubkey, KEYSTORE_ECC_POINT_SIZE, pubkey + KEYSTORE_ECC_POINT_SIZE,
+            KEYSTORE_ECC_POINT_SIZE);
     if (ret < 0)
         return;
     ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey, sig,
@@ -161,7 +160,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     /* Import public key */
     ret = wc_ecc_import_unsigned(&ecc, pubkey,
-            (byte*)(pubkey + ECC_KEYSTORE_PUBKEY_SIZE), NULL, ECC_KEY_TYPE);
+            (byte*)(pubkey + KEYSTORE_ECC_POINT_SIZE), NULL, ECC_KEY_TYPE);
     if ((ret < 0) || ecc.type != ECC_PUBLICKEY) {
         /* Failed to import ecc key */
         return;
@@ -170,9 +169,9 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     /* Import signature into r,s */
     mp_init(&r);
     mp_init(&s);
-    mp_read_unsigned_bin(&r, sig, ECC_KEYSTORE_PUBKEY_SIZE);
-    mp_read_unsigned_bin(&s, sig + ECC_KEYSTORE_PUBKEY_SIZE,
-            ECC_KEYSTORE_PUBKEY_SIZE);
+    mp_read_unsigned_bin(&r, sig, KEYSTORE_ECC_POINT_SIZE);
+    mp_read_unsigned_bin(&s, sig + KEYSTORE_ECC_POINT_SIZE,
+            KEYSTORE_ECC_POINT_SIZE);
     VERIFY_FN(img, &verify_res, wc_ecc_verify_hash_ex, &r, &s, img->sha_hash,
             WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc);
 #endif /* WOLFBOOT_TPM */

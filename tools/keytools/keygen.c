@@ -82,14 +82,18 @@
 static FILE *fpub, *fpub_image;
 static int force = 0;
 static WC_RNG rng;
- 
+
+#ifndef KEYSLOT_MAX_PUBKEY_SIZE
+    #define KEYSLOT_MAX_PUBKEY_SIZE 2048
+#endif
+
 struct keystore_slot {
      uint32_t slot_id;
      uint32_t key_type;
      uint32_t part_id_mask;
      uint32_t pubkey_size;
-     uint8_t  pubkey[2048];
- };
+     uint8_t  pubkey[KEYSLOT_MAX_PUBKEY_SIZE];
+};
 
 const char pubkeyfile[]= "src/keystore.c";
 const char pubkeyimg[] = "keystore.der";
@@ -171,7 +175,7 @@ static void fwritekey(uint8_t *key, int len, FILE *f)
     }
 }
 
-const char KType[9][20] = {
+const char KType[][17] = {
     "AUTH_KEY_NONE",
     "AUTH_KEY_ED25519",
     "AUTH_KEY_ECC256",
@@ -183,7 +187,7 @@ const char KType[9][20] = {
     "AUTH_KEY_RSA3072"
 };
 
-const char KSize[9][32] = {
+const char KSize[][29] = {
     "KEYSTORE_PUBKEY_SIZE_NONE",
     "KEYSTORE_PUBKEY_SIZE_ED25519",
     "KEYSTORE_PUBKEY_SIZE_ECC256",
@@ -195,7 +199,7 @@ const char KSize[9][32] = {
     "KEYSTORE_PUBKEY_SIZE_RSA3072"
 };
 
-const char KName[9][8] = {
+const char KName[][8] = {
     "NONE",
     "ED25519",
     "ECC256",
@@ -482,7 +486,7 @@ static void key_generate(uint32_t ktype, const char *kfilename)
 
 static void key_import(uint32_t ktype, const char *fname)
 {
-    uint8_t buf[4096];
+    uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
     FILE *f;
     int r;
     f = fopen(fname, "rb");
@@ -490,7 +494,7 @@ static void key_import(uint32_t ktype, const char *fname)
         fprintf(stderr, "Fatal error: could not open file %s to import public key\n", fname);
         exit(6);
     }
-    r = fread(buf, 4096, 1, f);
+    r = fread(buf, sizeof(buf), 1, f);
     keystore_add(ktype, buf, r, fname);
 }
 
@@ -541,7 +545,8 @@ int main(int argc, char** argv)
             i++;
             n_pubkeys++;
             continue;
-        } else if (strcmp(argv[i], "-i") == 0) {
+        }
+        else if (strcmp(argv[i], "-i") == 0) {
             i++;
             n_pubkeys++;
             continue;
@@ -572,7 +577,8 @@ int main(int argc, char** argv)
             printf("Imp %s\n", argv[i + 1]);
             key_import(keytype, argv[i + 1]);
             i++;
-        } else if (strcmp(argv[i], "-g") == 0) {
+        }
+        else if (strcmp(argv[i], "-g") == 0) {
             printf("Gen %s\n", argv[i + 1]);
             key_generate(keytype, argv[i + 1]);
             i++;

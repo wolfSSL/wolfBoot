@@ -109,7 +109,11 @@ ifeq ($(SIGN),ED25519)
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
-  STACK_USAGE?=1180
+  ifeq ($(WOLFTPM),1)
+    STACK_USAGE=6680
+  else
+    STACK_USAGE?=1180
+  endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
   endif
@@ -126,11 +130,14 @@ ifeq ($(SIGN),ED448)
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
-  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+  ifeq ($(WOLFTPM),1)
+    STACK_USAGE=6680
+  else ifeq ($(WOLFBOOT_SMALL_STACK),1)
     STACK_USAGE?=1024
   else
     STACK_USAGE?=4376
   endif
+
 
   ifneq ($(HASH),SHA3)
     WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
