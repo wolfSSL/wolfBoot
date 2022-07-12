@@ -28,6 +28,8 @@
 #include <wolfssl/wolfcrypt/settings.h>
 #include <string.h>
 
+#include "image.h"
+
 #ifdef WOLFBOOT_TPM
 #include <stdlib.h>
 #include "wolftpm/tpm2.h"
@@ -943,6 +945,8 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     /* Check if the key permission mask matches the current partition id */
     if (((1U << image_part) & key_mask) != (1U << image_part))
         return -1; /* Key not allowed to verify this partition id */
+
+    CONFIRM_MASK_VALID(image_part, key_mask);
 
     /* wolfBoot_verify_signature() does not return the result directly.
      * A call to wolfBoot_image_confirm_signature_ok() is required in order to

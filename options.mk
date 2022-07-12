@@ -41,7 +41,7 @@ ifeq ($(SIGN),ECC256)
   else ifneq ($(SPMATH),1)
     STACK_USAGE=5008
   else
-    STACK_USAGE=3952
+    STACK_USAGE=3960
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
