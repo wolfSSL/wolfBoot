@@ -399,14 +399,18 @@ if manual_sign:
 if not sha_only:
     if '.' in image_file:
         tokens = image_file.split('.')
-        output_image_file = image_file.rstrip('.' + tokens[-1])
+        output_image_file = ''
+        for x in tokens[0:-1]:
+            output_image_file+=x
         output_image_file += "_v" + str(fw_version) + "_signed.bin"
     else:
         output_image_file = image_file + "_v" + str(fw_version) + "_signed.bin"
 else:
     if '.' in image_file:
         tokens = image_file.split('.')
-        output_image_file = image_file.rstrip('.' + tokens[-1])
+        output_image_file = ''
+        for x in tokens[0:-1]:
+            output_image_file+=x
         output_image_file += "_v" + str(fw_version) + "_digest.bin"
     else:
         output_image_file = image_file + "_v" + str(fw_version) + "_digest.bin"
@@ -414,7 +418,9 @@ else:
 if delta and encrypt:
     if '.' in image_file:
         tokens = image_file.split('.')
-        encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
+        encrypted_image_file = ''
+        for x in tokens[0:-1]:
+            encrypted_image_file += x
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
@@ -422,7 +428,9 @@ if delta and encrypt:
 elif encrypt:
     if '.' in image_file:
         tokens = image_file.split('.')
-        encrypted_output_image_file = image_file.rstrip('.' + tokens[-1])
+        encrypted_output_file = ''
+        for x in tokens[0:-1]:
+            encrypted_output_file += x
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_and_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_and_encrypted.bin"
@@ -430,7 +438,9 @@ elif encrypt:
 if delta:
     if '.' in image_file:
         tokens = image_file.split('.')
-        delta_output_image_file = image_file.rstrip('.' + tokens[-1])
+        delta_output_image_file = ''
+        for x in tokens[0:-1]:
+            delta_output_image_file += x
         delta_output_image_file += "_v" + str(fw_version) + "_signed_diff.bin"
     else:
         delta_output_image_file = image_file + "_v" + str(fw_version) + "_signed_diff.bin"
