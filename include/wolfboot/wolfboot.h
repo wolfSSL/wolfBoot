@@ -101,30 +101,6 @@
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 
-/* Hashing function configuration */
-#if defined(WOLFBOOT_HASH_SHA256)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
-#   define WOLFBOOT_SHA_HDR HDR_SHA256
-#   define WOLFBOOT_SHA_DIGEST_SIZE (32)
-#   define image_hash image_sha256
-#   define key_hash key_sha256
-#elif defined(WOLFBOOT_HASH_SHA384)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (256)
-#   define WOLFBOOT_SHA_HDR HDR_SHA384
-#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
-#   define image_hash image_sha384
-#   define key_hash key_sha384
-#elif defined(WOLFBOOT_HASH_SHA3_384)
-#   define WOLFBOOT_SHA_BLOCK_SIZE (128)
-#   define WOLFBOOT_SHA_HDR HDR_SHA3_384
-#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
-#   define image_hash image_sha3_384
-#   define key_hash key_sha3_384
-#else
-#   error "No valid hash algorithm defined!"
-#endif
-
-#ifdef __WOLFBOOT
  #define KEYSTORE_PUBKEY_SIZE_NONE 0
  #define KEYSTORE_PUBKEY_SIZE_ED25519 32
  #define KEYSTORE_PUBKEY_SIZE_ED448 57
@@ -133,6 +109,39 @@
  #define KEYSTORE_PUBKEY_SIZE_RSA2048 320
  #define KEYSTORE_PUBKEY_SIZE_RSA3072 448
  #define KEYSTORE_PUBKEY_SIZE_RSA4096 576
+
+/* Mask for key permissions */
+ #define KEY_VERIFY_ALL         (0xFFFFFFFFU)
+ #define KEY_VERIFY_ONLY_ID(X)  (1U << X)
+ #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
+ #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
+
+#ifdef __WOLFBOOT
+
+ /* Hashing configuration */
+ #if defined(WOLFBOOT_HASH_SHA256)
+ #   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+ #   define WOLFBOOT_SHA_HDR HDR_SHA256
+ #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
+ #   define image_hash image_sha256
+ #   define key_hash key_sha256
+ #elif defined(WOLFBOOT_HASH_SHA384)
+ #   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+ #   define WOLFBOOT_SHA_HDR HDR_SHA384
+ #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+ #   define image_hash image_sha384
+ #   define key_hash key_sha384
+ #elif defined(WOLFBOOT_HASH_SHA3_384)
+ #   define WOLFBOOT_SHA_BLOCK_SIZE (128)
+ #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
+ #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+ #   define image_hash image_sha3_384
+ #   define key_hash key_sha3_384
+ #else
+ #   error "No valid hash algorithm defined!"
+ #endif
+
+ /* Authentication configuration */
  #if defined(WOLFBOOT_NO_SIGN)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_NONE
  #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_NONE
@@ -164,13 +173,6 @@
  #   error "no valid authentication mechanism selected. Please select a valid SIGN= option."
  #endif /* defined WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ED25519 */
 
-
-/* Mask for key permissions */
- #define KEY_VERIFY_ALL         (0xFFFFFFFFU)
- #define KEY_VERIFY_ONLY_ID(X)  (1U << X)
- #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
- #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
-
  struct keystore_slot {
      uint32_t slot_id;
      uint32_t key_type;
@@ -184,7 +186,6 @@
  uint8_t *keystore_get_buffer(int id);
  int keystore_get_size(int id);
  uint32_t keystore_get_mask(int id);
-
 
 #endif /* defined WOLFBOOT */
 

@@ -65,6 +65,8 @@
 #define PATH_MAX 256
 #endif
 
+#include "wolfboot/wolfboot.h"
+
 
 #define KEYGEN_NONE    0
 #define KEYGEN_ED25519 1
@@ -77,9 +79,17 @@
 #define KEYGEN_RSA3072  8
 
 /* Globals */
-static FILE *fpub;
+static FILE *fpub, *fpub_image;
 static int force = 0;
 static WC_RNG rng;
+ 
+struct keystore_slot {
+     uint32_t slot_id;
+     uint32_t key_type;
+     uint32_t part_id_mask;
+     uint32_t pubkey_size;
+     uint8_t  pubkey[2048];
+ };
 
 const char pubkeyfile[]= "src/keystore.c";
 const char pubkeyimg[] = "keystore.der";
@@ -200,6 +210,7 @@ const char KName[9][8] = {
 void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile)
 {
     static int id_slot = 0;
+    struct keystore_slot sl;
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
         fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
     else
@@ -207,11 +218,46 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     fwritekey(key, sz, fpub);
     fprintf(fpub, Pubkey_footer);
     fprintf(fpub, Slot_footer);
-    printf("Private key:           %s\n", keyfile);
+    printf("Associated key file:   %s\n", keyfile);
     printf("Key type   :           %s\n", KName[ktype]);
     printf("Public key slot:       %u\n", id_slot);
+
+    memset(&sl, 0, sizeof(sl));
+    sl.slot_id = id_slot;
+    sl.key_type = ktype;
+    sl.part_id_mask = 0xFFFFFFFF;
+    switch (ktype){
+        case KEYGEN_ED25519:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ED25519;
+            break;
+        case KEYGEN_ED448:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ED448;
+            break;
+        case KEYGEN_ECC256:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC256;
+            break;
+        case KEYGEN_ECC384:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC384;
+            break;
+        case KEYGEN_RSA2048:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA2048;
+            break;
+        case KEYGEN_RSA3072:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA3072;
+            break;
+        case KEYGEN_RSA4096:
+            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA4096;
+            break;
+        default:
+            sl.pubkey_size = 0;
+    }
+
+    memcpy(sl.pubkey, key, sz);
+    fwrite(&sl, sl.pubkey_size, 1, fpub_image);
+    sl.pubkey_size = sz;
     id_slot++;
 }
+
 
 #if !defined(NO_RSA) && defined(WOLFSSL_KEY_GEN)
 static void keygen_rsa(const char *keyfile, int kbits)
@@ -513,6 +559,11 @@ int main(int argc, char** argv)
         fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkeyfile, strerror(errno));
         exit(4);
     }
+    fpub_image = fopen(pubkeyimg, "wb");
+    if (fpub_image == NULL) {
+        fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkeyimg, strerror(errno));
+        exit(4);
+    }
     wc_InitRng(&rng);
     fprintf(fpub, Cfile_Banner, KName[keytype]);
     fprintf(fpub, Store_hdr, n_pubkeys);
@@ -530,6 +581,10 @@ int main(int argc, char** argv)
     wc_FreeRng(&rng);
     fprintf(fpub, Store_footer);
     fprintf(fpub, Keystore_API);
+    if (fpub)
+        fclose(fpub);
+    if (fpub_image)
+        fclose(fpub_image);
     printf("Done.\n");
     return 0;
 }
