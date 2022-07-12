@@ -604,7 +604,7 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
         return;
 
     wc_InitSha384(&sha384_ctx);
-    while(i < KEYSTORE_PUBKEY_SIZE)
+    while(i < (uint32_t)(pubkey_sz))
     {
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if ((i + blksz) > (uint32_t)pubkey_sz)
