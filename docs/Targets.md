@@ -784,7 +784,9 @@ arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 
 ## Cortex-A53 / Raspberry PI 3 (experimental)
 
-Tested using `https://github.com/raspberrypi/linux`
+Tested using `https://github.com/raspberrypi/linux` on Ubuntu 20
+
+Prerequsites: `sudo apt install gcc-aarch64-linux-gnu qemu-system-aarch64`
 
 ### Compiling the kernel
 
@@ -797,6 +799,7 @@ git clone https://github.com/raspberrypi/linux linux-rpi -b rpi-4.19.y --depth=1
 * Build kernel image:
 
 ```
+export wolfboot_dir=`pwd`
 cd linux-rpi
 make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcmrpi3_defconfig
 make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
@@ -805,7 +808,7 @@ make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 * Copy Image and .dtb to the wolfboot directory
 
 ```
-cp Image arch/arm64/boot/dts/broadcom/bcm2710-rpi-3-b.dtb $wolfboot_dir
+cp ./arch/arm64/boot/Image arch/arm64/boot/dts/broadcom/bcm2710-rpi-3-b.dtb $wolfboot_dir
 cd $wolfboot_dir
 ```
 
@@ -815,12 +818,14 @@ cd $wolfboot_dir
 
 ```
 cp config/examples/raspi3.config .config
-make wolfboot.bin
+make clean
+make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 ```
 
 * Sign Image
 ```
-tools/keytools/sign.py --rsa4096 --sha3 Image rsa4096.der 1
+make keytools
+./tools/keytools/sign --rsa4096 --sha3 Image rsa4096.der 1
 ```
 
 * Compose the image
