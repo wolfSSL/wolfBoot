@@ -24,12 +24,12 @@
  *
  */
 
-#define _XOPEN_SOURCE 600
 
 #include <stdio.h>                  /* standard in/out procedures */
 #include <stdlib.h>                 /* defines system calls */
 #include <string.h>                 /* necessary for memset */
 #include <netdb.h>
+#include <termios.h>
 #include <sys/socket.h>             /* used for all socket calls */
 #include <netinet/in.h>             /* used for sockaddr_in6 */
 #include <arpa/inet.h>
@@ -37,9 +37,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <termios.h>
 #include <signal.h>
 #include <errno.h>
+
+#ifndef __MACH__
+#include <termio.h>
+#include <linux/serial.h>
+#endif
 
 #define MSGLEN      (4 + 4 + 8)
 
@@ -83,16 +87,12 @@ int main(int argc, char** argv)
     tcgetattr(serialfd, &tty);
     cfsetospeed(&tty, B115200);
     cfsetispeed(&tty, B115200);
-    tty.c_cflag = (tty.c_cflag & ~CSIZE) | (CS8);
-    tty.c_iflag &= ~(IGNBRK | IXON | IXOFF | IXANY| INLCR | ICRNL);
-    tty.c_oflag &= ~OPOST;
-    tty.c_oflag &= ~(ONLCR|OCRNL);
-    tty.c_cflag &= ~(PARENB | PARODD | CSTOPB);
-    tty.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-    tty.c_iflag &= ~ISTRIP;
-    tty.c_cc[VMIN] = 0;
-    tty.c_cc[VTIME] = 5;
     tcsetattr(serialfd, TCSANOW, &tty);
+    cfmakeraw(&tty);
+    tty.c_cflag |= (CLOCAL | CREAD);
+    tty.c_cflag &= ~CRTSCTS;
+    if (tcsetattr(serialfd, TCSANOW, &tty) != 0)
+	    return -1;
 
     alarm(TIMEOUT);
 
