@@ -191,6 +191,9 @@ Steps for manually signing firmware using an external key source.
 # Create file with Public Key
 openssl rsa -inform DER -outform DER -in rsa2048.der -out rsa2048_pub.der -pubout
 
+# Create .c file with public key for wolfBoot root of trust
+./lib/wolfssl/scripts/dertoc.pl rsa2048_pub.der rsa2048_pub_key src/rsa2048_pub_key.c
+
 # Generate Hash to Sign
 ./tools/keytools/sign            --rsa2048 --sha-only --sha256 test-app/image.bin rsa2048_pub.der 1
 # OR
