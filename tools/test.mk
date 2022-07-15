@@ -1,7 +1,7 @@
 TEST_UPDATE_VERSION?=2
 WOLFBOOT_VERSION?=0
 EXPVER=tools/test-expect-version/test-expect-version
-EXPVER_CMD=$(EXPVER) /dev/ttyS0
+EXPVER_CMD=$(EXPVER) /dev/ttyAMA0
 BINASSEMBLE=tools/bin-assemble/bin-assemble
 SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
@@ -85,16 +85,16 @@ test-size: FORCE
 #
 tpm-mute:
 	@if ! (test -d /sys/class/gpio/gpio7); then echo "7" > /sys/class/gpio/export || true; fi
-	@echo "out" >/sys/class/gpio/gpio7/direction
+	@echo "out" >/sys/class/gpio/gpio7/direction || true
 	@echo "1" >/sys/class/gpio/gpio7/value || true
 
 tpm-unmute:
 	@if ! (test -d /sys/class/gpio/gpio7); then echo "7" > /sys/class/gpio/export || true; fi
-	@echo "in" >/sys/class/gpio/gpio7/direction
+	@echo "in" >/sys/class/gpio/gpio7/direction || true
 
 testbed-on: FORCE
 	@if ! (test -d /sys/class/gpio/gpio4); then echo "4" > /sys/class/gpio/export || true; fi
-	@echo "out" >/sys/class/gpio/gpio4/direction
+	@echo "out" >/sys/class/gpio/gpio4/direction || true
 	@echo "0" >/sys/class/gpio/gpio4/value || true
 	@make tpm-mute
 	@echo "Testbed on."
@@ -102,7 +102,7 @@ testbed-on: FORCE
 testbed-off: FORCE
 	@make tpm-mute
 	@if ! (test -d /sys/class/gpio/gpio4); then echo "4" > /sys/class/gpio/export || true; fi
-	@echo "out" >/sys/class/gpio/gpio4/direction
+	@echo "out" >/sys/class/gpio/gpio4/direction || true
 	@echo "1" >/sys/class/gpio/gpio4/value || true
 	@echo "Testbed off."
 
@@ -117,7 +117,7 @@ test-spi-on: FORCE
 	@echo "10" >/sys/class/gpio/unexport || true
 	@echo "11" >/sys/class/gpio/unexport || true
 	@modprobe spi_bcm2835
-	@modprobe spidev
+	#@modprobe spidev
 
 test-spi-off: FORCE
 	@rmmod spi_bcm2835 || true
@@ -126,10 +126,10 @@ test-spi-off: FORCE
 	@echo "9" >/sys/class/gpio/export || true
 	@echo "10" >/sys/class/gpio/export || true
 	@echo "11" >/sys/class/gpio/export || true
-	@echo "in" >/sys/class/gpio/gpio8/direction
-	@echo "in" >/sys/class/gpio/gpio9/direction
-	@echo "in" >/sys/class/gpio/gpio10/direction
-	@echo "in" >/sys/class/gpio/gpio11/direction
+	@echo "in" >/sys/class/gpio/gpio8/direction || true
+	@echo "in" >/sys/class/gpio/gpio9/direction || true
+	@echo "in" >/sys/class/gpio/gpio10/direction || true
+	@echo "in" >/sys/class/gpio/gpio11/direction || true
 	@make testbed-on
 
 test-update: test-app/image.bin FORCE
