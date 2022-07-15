@@ -70,8 +70,10 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 	asm volatile("mov x5, xzr");
 #endif
 
+#ifndef NO_QNX
     /* Initialize GICv2 for Kernel */
     gicv2_init_secure();
+#endif
 
     /* Zero registers x1, x2, x3 */
     asm volatile("mov x3, xzr");
