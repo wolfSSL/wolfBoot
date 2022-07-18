@@ -831,8 +831,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     }
 #ifdef MMU
     if (part == PART_DTS_BOOT || part == PART_DTS_UPDATE) {
-        img->hdr = (part == PART_DTS_BOOT) ? (void*)WOLFBOOT_DTS_BOOT_ADDRESS
-                                           : (void*)WOLFBOOT_DTS_UPDATE_ADDRESS;
+        img->hdr = (void *)WOLFBOOT_LOAD_DTS_ADDRESS;
         if (PART_IS_EXT(img))
             image = fetch_hdr_cpy(img);
         else

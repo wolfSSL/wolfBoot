@@ -31,6 +31,24 @@
 #define CORTEXA53_0_CPU_CLK_FREQ_HZ 1099989014
 #define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
 
+#ifndef WOLFBOOT_UPDATE_ADDRESS
+#   define WOLFBOOT_UPDATE_ADDRESS 0x00000
+#endif
+
+static const void* kernel_addr = (void*)WOLFBOOT_LOAD_ADDRESS;
+static const void* update_addr = (void*)WOLFBOOT_UPDATE_ADDRESS;
+
+void* hal_get_primary_address(void)
+{
+    return (void*)kernel_addr;
+}
+
+void* hal_get_update_address(void)
+{
+  return (void*)update_addr;
+}
+
+
 
 /* QSPI functions */
 void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)

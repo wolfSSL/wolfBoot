@@ -58,7 +58,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint8_t* image_ptr;
     uint8_t p_state;
 #ifdef MMU
-    uint32_t* dts_address = NULL;
+    uint32_t* dts_address = (void *)WOLFBOOT_LOAD_DTS_ADDRESS;
 #endif
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -147,7 +147,7 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 #endif
 
-#ifdef MMU
+#if defined(WOLFBOOT_FIXED_PARTITIONS) && defined (MMU)
     /* Device Tree Blob (DTB) Handling */
     if (wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
         dts_address = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
@@ -165,16 +165,12 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 #endif
 
-
-    wolfBoot_printf("Booting at %08lx\n", load_address);
+    wolfBoot_printf("Booting at %08lx\n", os_image.fw_base);
     hal_prepare_boot();
 
-#ifdef PLATFORM_X86_64_EFI
-    extern void x86_64_efi_do_boot(uint8_t *);
-    x86_64_efi_do_boot((uint8_t*)load_address);
-#elif defined MMU
-    do_boot((uint32_t*)load_address, (uint32_t*)dts_address);
+#if defined MMU
+    do_boot((uint32_t*)os_image.fw_base, (uint32_t*)dts_address);
 #else
-    do_boot((uint32_t*)load_address);
+    do_boot((uint32_t*)os_image.fw_base);
 #endif
 }

@@ -37,12 +37,15 @@
     #define WOLFBOOT_PARTITION_SIZE              ##WOLFBOOT_PARTITION_SIZE##
     #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    ##WOLFBOOT_PARTITION_UPDATE_ADDRESS##
     #define WOLFBOOT_PARTITION_SWAP_ADDRESS      ##WOLFBOOT_PARTITION_SWAP_ADDRESS##
-
-    /* Load address in RAM for staged OS (update_ram only) */
     #define WOLFBOOT_DTS_BOOT_ADDRESS            ##WOLFBOOT_DTS_BOOT_ADDRESS##
     #define WOLFBOOT_DTS_UPDATE_ADDRESS          ##WOLFBOOT_DTS_UPDATE_ADDRESS##
-    #define WOLFBOOT_LOAD_ADDRESS                ##WOLFBOOT_LOAD_ADDRESS##
-    #define WOLFBOOT_LOAD_DTS_ADDRESS            ##WOLFBOOT_LOAD_DTS_ADDRESS##
 #endif
+
+/* Load address in RAM for staged OS (update_ram only) */
+#define WOLFBOOT_LOAD_ADDRESS                ##WOLFBOOT_LOAD_ADDRESS##
+#define WOLFBOOT_LOAD_DTS_ADDRESS            ##WOLFBOOT_LOAD_DTS_ADDRESS##
+
+
+
 
 #endif /* !H_TARGETS_TARGET_ */

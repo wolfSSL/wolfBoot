@@ -74,6 +74,7 @@ void* hal_get_primary_address(void)
 {
     return (void*)kernel_addr;
 }
+
 void* hal_get_update_address(void)
 {
   return (void*)update_addr;
@@ -85,34 +86,36 @@ static void panic()
     while(1) {}
 }
 
-void RAMFUNCTION x86_64_efi_do_boot(uint32_t *kernel_addr)
+void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
 {
+    uint32_t *size;
+    uint8_t* manifest = ((uint8_t*)boot_addr) - IMAGE_HEADER_SIZE;
+
+    (void)dts_address; /* Unused for now */
+
     MEMMAP_DEVICE_PATH mem_path_device[2];
     EFI_HANDLE kernelImageHandle;
     EFI_STATUS status;
-    uint32_t *size;
-    uint8_t* kernel = (uint8_t*)kernel_addr;
 
-    size = (uint32_t *)(kernel + 4);
-    kernel += IMAGE_HEADER_SIZE;
+    size = (uint32_t *)(manifest + 4);
 
     mem_path_device->Header.Type = EFI_DEVICE_PATH_PROTOCOL_HW_TYPE;
     mem_path_device->Header.SubType = EFI_DEVICE_PATH_PROTOCOL_MEM_SUBTYPE;
     mem_path_device->MemoryType = EfiLoaderData;
-    mem_path_device->StartingAddress = (EFI_PHYSICAL_ADDRESS)kernel;
-    mem_path_device->EndingAddress = (EFI_PHYSICAL_ADDRESS)(kernel+*size);
+    mem_path_device->StartingAddress = (EFI_PHYSICAL_ADDRESS)boot_addr;
+    mem_path_device->EndingAddress = (EFI_PHYSICAL_ADDRESS)(boot_addr+*size);
     SetDevicePathNodeLength(&mem_path_device->Header,
                             sizeof(MEMMAP_DEVICE_PATH));
 
     SetDevicePathEndNode(&mem_path_device[1].Header);
 
-    wolfBoot_printf("Staging kernel at address %x, size: %u\n", kernel, *size);
+    wolfBoot_printf("Staging kernel at address %x, size: %u\n", boot_addr, *size);
     status = uefi_call_wrapper(gSystemTable->BootServices->LoadImage,
                                6,
                                0, /* bool */
                                gImageHandle,
                                (EFI_DEVICE_PATH*)mem_path_device,
-                               kernel,
+                               boot_addr,
                                *size,
                                &kernelImageHandle);
     if (status != EFI_SUCCESS) {
