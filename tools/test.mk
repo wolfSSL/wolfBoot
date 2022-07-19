@@ -670,8 +670,8 @@ test-base: clean
 	make test-73-rollback-RSA-4096
 	make test-74-forward-update-no-downgrade-ED448
 	make test-75-rollback-ED448
-	make test-76-forward-update-no-downgrade-RSA-3072
-	make test-77-rollback-RSA-3072
+	make test-76-forward-update-no-downgrade-RSA3072
+	make test-77-rollback-RSA3072
 
 test-sha3: clean
 	@echo SHA3 Tests
