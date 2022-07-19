@@ -251,26 +251,26 @@ renode-factory-rsa4096: FORCE
 	make renode-factory SIGN=RSA4096
 
 renode-factory-all: FORCE
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-ed25519
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-ed448 RENODE_PORT=55156
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-ecc256 RENODE_PORT=55157
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-ecc384 RENODE_PORT=55158
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-rsa2048 RENODE_PORT=55160
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-rsa3072 RENODE_PORT=55161
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory-rsa4096 RENODE_PORT=55162
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-factory SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-update-ed25519: FORCE
-	make renode-update SIGN=ED448
+	make renode-update SIGN=ED25519
 
 renode-update-ed448: FORCE
 	make renode-update SIGN=ED448
@@ -330,59 +330,59 @@ renode-boot-time-all: FORCE
 	tools/scripts/renode-test-all.sh 2>/dev/null |grep "BOOT TIME" 
 
 renode-update-all: FORCE
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-ed25519 RENODE_PORT=55155
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-ed448 RENODE_PORT=55156
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-ecc256 RENODE_PORT=55157
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-ecc384 RENODE_PORT=55158
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-rsa2048 RENODE_PORT=55160
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-rsa3072 RENODE_PORT=55161
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update-rsa4096 RENODE_PORT=55162
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-update SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-no-downgrade-all: FORCE
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-ed25519 RENODE_PORT=55155
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-ed448 RENODE_PORT=55156
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-ecc256 RENODE_PORT=55157
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-ecc384 RENODE_PORT=55158
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-rsa2048 RENODE_PORT=55160
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-rsa3072 RENODE_PORT=55161
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade-rsa4096 RENODE_PORT=55162
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-no-downgrade SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 
 renode-corrupted-all: FORCE
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-ed25519 RENODE_PORT=55155
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-ed448 RENODE_PORT=55156
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-ecc256 RENODE_PORT=55157
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-ecc384 RENODE_PORT=55158
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-rsa2048 RENODE_PORT=55160
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-rsa3072 RENODE_PORT=55161
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted-rsa4096 RENODE_PORT=55162
-	${Q}make clean
+	${Q}make keysclean
 	${Q}make renode-corrupted SIGN=NONE RENODE_PORT=55163
 	${Q}echo All tests in $@ OK!
 

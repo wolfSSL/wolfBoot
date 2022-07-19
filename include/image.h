@@ -452,6 +452,35 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct
     /* Restore previously saved registry values */ \
     asm volatile("pop {r4, r5, r6, r7}")
 
+#define CONFIRM_MASK_VALID(id, mask) \
+    asm volatile("mov r1, %0" :: "r"(id));  \
+    /* id &= 0x0F */ \
+    asm volatile("and.w r1, r1, #15"); \
+    asm volatile("mov r0, %0" :: "r"(mask)); \
+    asm volatile("movs r2, #1"); \
+    asm volatile("lsls r2, r1"); \
+    asm volatile("ands r2, r0"); \
+    asm volatile("movs r0, #1"); \
+    asm volatile("lsls r0, r1"); \
+    asm volatile("cmp r0, r2"); \
+    asm volatile("bne ."); \
+    asm volatile("mov r0, %0" :: "r"(mask)); \
+    asm volatile("movs r2, #1"); \
+    asm volatile("lsls r2, r1"); \
+    asm volatile("ands r2, r0"); \
+    asm volatile("movs r0, #1"); \
+    asm volatile("lsls r0, r1"); \
+    asm volatile("cmp r0, r2"); \
+    asm volatile("bne ."); \
+    asm volatile("mov r0, %0" :: "r"(mask)); \
+    asm volatile("movs r2, #1"); \
+    asm volatile("lsls r2, r1"); \
+    asm volatile("ands r2, r0"); \
+    asm volatile("movs r0, #1"); \
+    asm volatile("lsls r0, r1"); \
+    asm volatile("cmp r0, r2"); \
+    asm volatile("bne ."); \
+
 #else
 
 struct wolfBoot_image {
@@ -489,6 +518,10 @@ static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
 
 #define PART_SANITY_CHECK(p) \
     if (((p)->hdr_ok != 1) || ((p)->sha_ok != 1) || ((p)->signature_ok != 1)) \
+        wolfBoot_panic()
+
+#define CONFIRM_MASK_VALID(id, mask) \
+    if ((mask & (1UL << id)) != (1UL << id)) \
         wolfBoot_panic()
 
 #define VERIFY_VERSION_ALLOWED do{} while(0);

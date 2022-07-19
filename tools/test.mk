@@ -17,8 +17,6 @@ else
 	endif
 endif
 
-
-
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
 	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
 else
@@ -656,20 +654,29 @@ test-base: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-01-forward-update-no-downgrade
 	make test-02-forward-update-allow-downgrade test-03-rollback
+	@make keysclean
 	make test-11-forward-update-no-downgrade-ECC test-13-rollback-ECC
+	@make keysclean
 	make test-21-forward-update-no-downgrade-SPI test-23-rollback-SPI
 	make test-34-forward-self-update
+	@make keysclean
 	make test-44-forward-self-update-ECC
+	@make keysclean
 	make test-51-forward-update-no-downgrade-RSA
 	make test-53-rollback-RSA
+	@make keysclean
 	make test-61-forward-update-no-downgrade-TPM
 	make test-63-rollback-TPM
+	@make keysclean
 	make test-71-forward-update-no-downgrade-RSA-4096
 	make test-73-rollback-RSA-4096
+	@make keysclean
 	make test-74-forward-update-no-downgrade-ED448
 	make test-75-rollback-ED448
+	@make keysclean
 	make test-76-forward-update-no-downgrade-RSA3072
 	make test-77-rollback-RSA3072
 
@@ -678,11 +685,17 @@ test-sha3: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-81-forward-update-no-downgrade-ED25519-SHA3
+	@make keysclean
 	make test-91-forward-update-no-downgrade-ECC256-SHA3
+	@make keysclean
 	make test-101-forward-update-no-downgrade-RSA2048-SHA3
+	@make keysclean
 	make test-111-forward-update-no-downgrade-RSA4096-SHA3
+	@make keysclean
 	make test-112-forward-update-no-downgrade-ED448-SHA3
+	@make keysclean
 	make test-113-forward-update-no-downgrade-RSA3072-SHA3
 
 test-tpm: clean
@@ -690,6 +703,7 @@ test-tpm: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-161-forward-update-no-downgrade-TPM-RSA
 	make test-163-rollback-TPM-RSA
 
@@ -698,6 +712,7 @@ test-nosign: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-171-forward-update-no-downgrade-NOSIGN
 	make test-173-rollback-NOSIGN
 
@@ -706,17 +721,29 @@ test-smallstack: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-201-smallstack-forward-update-no-downgrade
+	@make keysclean
 	make test-211-smallstack-forward-update-no-downgrade-ECC
+	@make keysclean
 	make test-221-smallstack-forward-update-no-downgrade-SPI
+	@make keysclean
 	make test-251-smallstack-forward-update-no-downgrade-RSA
+	@make keysclean
 	make test-271-smallstack-forward-update-no-downgrade-RSA4096
+	@make keysclean
 	make test-274-smallstack-forward-update-no-downgrade-ED448
+	@make keysclean
 	make test-281-smallstack-forward-update-no-downgrade-ED25519-SHA3
+	@make keysclean
 	make test-291-smallstack-forward-update-no-downgrade-ECC256-SHA3
+	@make keysclean
 	make test-301-smallstack-forward-update-no-downgrade-RSA2048-SHA3
+	@make keysclean
 	make test-311-smallstack-forward-update-no-downgrade-RSA4096-SHA3
+	@make keysclean
 	make test-312-smallstack-forward-update-no-downgrade-ED448-SHA3
+	@make keysclean
 	make test-371-smallstack-forward-update-no-downgrade-NOSIGN
 
 test-fastmath: clean
@@ -724,17 +751,29 @@ test-fastmath: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-401-fastmath-forward-update-no-downgrade
+	@make keysclean
 	make test-411-fastmath-forward-update-no-downgrade-ECC
+	@make keysclean
 	make test-421-fastmath-forward-update-no-downgrade-SPI
+	@make keysclean
 	make test-451-fastmath-forward-update-no-downgrade-RSA
+	@make keysclean
 	true || make test-471-fastmath-forward-update-no-downgrade-RSA4096 #Not enough RAM
+	@make keysclean
 	make test-474-fastmath-forward-update-no-downgrade-ED448
+	@make keysclean
 	make test-481-fastmath-forward-update-no-downgrade-ED25519-SHA3
+	@make keysclean
 	make test-491-fastmath-forward-update-no-downgrade-ECC256-SHA3
+	@make keysclean
 	make test-501-fastmath-forward-update-no-downgrade-RSA2048-SHA3
+	@make keysclean
 	true || make test-511-fastmath-forward-update-no-downgrade-RSA4096-SHA3 #Not enough RAM
+	@make keysclean
 	make test-512-fastmath-forward-update-no-downgrade-ED448-SHA3
+	@make keysclean
 	make test-571-fastmath-forward-update-no-downgrade-NOSIGN
 
 test-no-asm: clean
@@ -742,17 +781,29 @@ test-no-asm: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-601-no-asm-forward-update-no-downgrade
+	@make keysclean
 	make test-611-no-asm-forward-update-no-downgrade-ECC
+	@make keysclean
 	make test-621-no-asm-forward-update-no-downgrade-SPI
+	@make keysclean
 	make test-651-no-asm-forward-update-no-downgrade-RSA
+	@make keysclean
 	make test-671-no-asm-forward-update-no-downgrade-RSA4096
+	@make keysclean
 	make test-674-no-asm-forward-update-no-downgrade-ED448
+	@make keysclean
 	make test-681-no-asm-forward-update-no-downgrade-ED25519-SHA3
+	@make keysclean
 	make test-691-no-asm-forward-update-no-downgrade-ECC256-SHA3
+	@make keysclean
 	make test-701-no-asm-forward-update-no-downgrade-RSA2048-SHA3
+	@make keysclean
 	make test-711-no-asm-forward-update-no-downgrade-RSA4096-SHA3
+	@make keysclean
 	make test-712-no-asm-forward-update-no-downgrade-ED448-SHA3
+	@make keysclean
 	make test-771-no-asm-forward-update-no-downgrade-NOSIGN
 
 test-no-asm-smallstack: clean
@@ -760,17 +811,29 @@ test-no-asm-smallstack: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-801-no-asm-smallstack-forward-update-no-downgrade
+	@make keysclean
 	make test-811-no-asm-smallstack-forward-update-no-downgrade-ECC
+	@make keysclean
 	make test-821-no-asm-smallstack-forward-update-no-downgrade-SPI
+	@make keysclean
 	make test-851-no-asm-smallstack-forward-update-no-downgrade-RSA
+	@make keysclean
 	make test-871-no-asm-smallstack-forward-update-no-downgrade-RSA4096
+	@make keysclean
 	make test-874-no-asm-smallstack-forward-update-no-downgrade-ED448
+	@make keysclean
 	make test-881-no-asm-smallstack-forward-update-no-downgrade-ED25519-SHA3
+	@make keysclean
 	make test-891-no-asm-smallstack-forward-update-no-downgrade-ECC256-SHA3
+	@make keysclean
 	make test-901-no-asm-smallstack-forward-update-no-downgrade-RSA2048-SHA3
+	@make keysclean
 	make test-911-no-asm-smallstack-forward-update-no-downgrade-RSA4096-SHA3
+	@make keysclean
 	make test-912-no-asm-smallstack-forward-update-no-downgrade-ED448-SHA3
+	@make keysclean
 	make test-971-no-asm-smallstack-forward-update-no-downgrade-NOSIGN
 
 test-fastmath-smallstack: clean
@@ -778,17 +841,29 @@ test-fastmath-smallstack: clean
 	@echo ==========
 	@echo
 	@echo
+	@make keysclean
 	make test-1001-fastmath-smallstack-forward-update-no-downgrade
+	@make keysclean
 	make test-1011-fastmath-smallstack-forward-update-no-downgrade-ECC
+	@make keysclean
 	make test-1021-fastmath-smallstack-forward-update-no-downgrade-SPI
+	@make keysclean
 	make test-1051-fastmath-smallstack-forward-update-no-downgrade-RSA
+	@make keysclean
 	make test-1071-fastmath-smallstack-forward-update-no-downgrade-RSA4096
+	@make keysclean
 	make test-1074-fastmath-smallstack-forward-update-no-downgrade-ED448
+	@make keysclean
 	make test-1081-fastmath-smallstack-forward-update-no-downgrade-ED25519-SHA3
+	@make keysclean
 	make test-1091-fastmath-smallstack-forward-update-no-downgrade-ECC256-SHA3
+	@make keysclean
 	make test-1101-fastmath-smallstack-forward-update-no-downgrade-RSA2048-SHA3
+	@make keysclean
 	make test-1111-fastmath-smallstack-forward-update-no-downgrade-RSA4096-SHA3
+	@make keysclean
 	make test-1112-fastmath-smallstack-forward-update-no-downgrade-ED448-SHA3
+	@make keysclean
 	make test-1171-fastmath-smallstack-forward-update-no-downgrade-NOSIGN
 
 
@@ -806,15 +881,28 @@ test-all: clean
 
 test-size-all:
 	make test-size SIGN=NONE LIMIT=4646
-	make test-size SIGN=ED25519 LIMIT=11214
-	make test-size SIGN=ECC256  LIMIT=21958
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13718
-	make test-size SIGN=RSA2048 LIMIT=12906
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=13070
-	make test-size SIGN=RSA4096 LIMIT=13242
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=13322
-	make test-size SIGN=ECC384 LIMIT=17562
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15326
-	make test-size SIGN=ED448 LIMIT=13558
-	make test-size SIGN=RSA3072 LIMIT=13098
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=13178
+	make keysclean
+	make test-size SIGN=ED25519 LIMIT=11366
+	make keysclean
+	make test-size SIGN=ECC256  LIMIT=22118
+	make keysclean
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13878
+	make keysclean
+	make test-size SIGN=RSA2048 LIMIT=13110
+	make keysclean
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=13274
+	make keysclean
+	make test-size SIGN=RSA4096 LIMIT=13446
+	make keysclean
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=13526
+	make keysclean
+	make test-size SIGN=ECC384 LIMIT=17722
+	make keysclean
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15486
+	make keysclean
+	make test-size SIGN=ED448 LIMIT=13718
+	make keysclean
+	make test-size SIGN=RSA3072 LIMIT=13302
+	make keysclean
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=13382
+	make keysclean

@@ -28,50 +28,34 @@
 #if defined(WOLFBOOT_SIGN_ED25519)
     extern const unsigned char ed25519_pub_key[];
     extern unsigned int ed25519_pub_key_len;
-#   define KEY_BUFFER  ed25519_pub_key
-#   define KEY_LEN     ed25519_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (64)
 #elif defined(WOLFBOOT_SIGN_ED448)
     extern const unsigned char ed448_pub_key[];
     extern unsigned int ed448_pub_key_len;
-#   define KEY_BUFFER  ed448_pub_key
-#   define KEY_LEN     ed448_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (114)
 #elif defined(WOLFBOOT_SIGN_ECC256)
     extern const unsigned char ecc256_pub_key[];
     extern unsigned int ecc256_pub_key_len;
-#   define KEY_BUFFER  ecc256_pub_key
-#   define KEY_LEN     ecc256_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (64)
 #elif defined(WOLFBOOT_SIGN_ECC384)
     extern const unsigned char ecc384_pub_key[];
     extern unsigned int ecc384_pub_key_len;
-#   define KEY_BUFFER  ecc384_pub_key
-#   define KEY_LEN     ecc384_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (96)
 #elif defined(WOLFBOOT_SIGN_ECC521)
     extern const unsigned char ecc521_pub_key[];
     extern unsigned int ecc521_pub_key_len;
-#   define KEY_BUFFER  ecc521_pub_key
-#   define KEY_LEN     ecc521_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (132)
 #elif defined(WOLFBOOT_SIGN_RSA2048)
     extern const unsigned char rsa2048_pub_key[];
     extern unsigned int rsa2048_pub_key_len;
-#   define KEY_BUFFER  rsa2048_pub_key
-#   define KEY_LEN     rsa2048_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (256)
 #elif defined(WOLFBOOT_SIGN_RSA3072)
     extern const unsigned char rsa3072_pub_key[];
     extern unsigned int rsa3072_pub_key_len;
-#   define KEY_BUFFER  rsa3072_pub_key
-#   define KEY_LEN     rsa3072_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (384)
 #elif defined(WOLFBOOT_SIGN_RSA4096)
     extern const unsigned char rsa4096_pub_key[];
     extern unsigned int rsa4096_pub_key_len;
-#   define KEY_BUFFER  rsa4096_pub_key
-#   define KEY_LEN     rsa4096_pub_key_len
 #   define IMAGE_SIGNATURE_SIZE (512)
 #elif !defined(WOLFBOOT_NO_SIGN)
 #   error "No public key available for given signing algorithm."

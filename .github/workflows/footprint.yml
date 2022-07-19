@@ -24,7 +24,7 @@ jobs:
 
       - name: make clean
         run: |
-          make clean && make -C tools/keytools clean && rm -f include/target.h
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
 
       - name: Install wolfSSL
         run: |
