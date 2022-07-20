@@ -91,7 +91,7 @@ Step 3: compile keytools and create keys.
 
 ```
 make keytools
-./tools/keytools/keygen --ed25519 src/ed25519_pub_key.c
+./tools/keytools/keygen --ed25519 -g wolfboot_signing_private_key.der
 ```
 
 
@@ -99,7 +99,7 @@ Step 4: Create an empty file and sign it using the private key.
 
 ```
 touch empty
-./tools/keytools/sign --ed25519 --sha256 empty ed25519.der 1
+./tools/keytools/sign --ed25519 --sha256 empty wolfboot_signing_private_key.der 1
 ```
 
 
