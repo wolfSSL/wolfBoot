@@ -418,9 +418,9 @@ else:
 if delta and encrypt:
     if '.' in image_file:
         tokens = image_file.split('.')
-        encrypted_image_file = ''
+        encrypted_output_image_file = ''
         for x in tokens[0:-1]:
-            encrypted_image_file += x
+            encrypted_output_image_file += x
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_diff_encrypted.bin"
