@@ -4,17 +4,17 @@ test-delta-update:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyA
 
 test-delta-update-ext:SIGN_ARGS?=--ecc256
 test-delta-update-ext:USBTTY?=/dev/ttyACM0
-test-delta-update-ext:TIMEOUT?=70
+test-delta-update-ext:TIMEOUT?=35
 test-delta-update-ext:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 
 test-delta-enc-update-ext:SIGN_ARGS=--ecc256 --sha256
 test-delta-enc-update-ext:USBTTY?=/dev/ttyACM0
-test-delta-enc-update-ext:TIMEOUT?=50
+test-delta-enc-update-ext:TIMEOUT?=55
 test-delta-enc-update-ext:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 test-delta-enc-update-ext:PART_SIZE=131023
 test-delta-enc-update-ext:APP=test-app/image_v7_signed_diff_encrypted.bin
 
-test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
+test-delta-update: distclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	@killall ufserver || true
 	@st-flash reset
 	@sleep 2
@@ -45,10 +45,10 @@ test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserv
 	@echo Expecting version '1'
 	@(test `$(EXPVER)` -eq 1)
 	@sleep 2
-	@st-flash reset
-	@sleep 2
 	@st-flash erase || st-flash erase
 	@st-flash write factory.bin 0x08000000
+	@sleep 2
+	@st-flash reset
 	@echo Expecting version '1'
 	@test `$(EXPVER)` -eq 1
 	@sleep 2
@@ -68,7 +68,7 @@ test-delta-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserv
 	@(test `$(EXPVER)` -eq 2)
 	@echo "TEST SUCCESSFUL"
 
-test-delta-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
+test-delta-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	@killall ufserver || true
 	@st-flash reset
 	@dd if=/dev/zero of=zero.bin bs=4096 count=1
@@ -89,9 +89,7 @@ test-delta-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/uf
 	@echo Waiting $(TIMEOUT) seconds...
 	@sleep $(TIMEOUT)
 	@st-flash reset
-	@sleep 10
-	@st-flash reset
-	@sleep 5
+	@sleep 2
 	@st-flash read boot_full.bin 0x0800C000 0x8000
 	@SIZE=`wc -c test-app/image_v7_signed.bin | cut -d" " -f 1`;  \
 		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
@@ -116,7 +114,7 @@ test-delta-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/uf
 	@rm boot.bin boot_full.bin
 	@echo "TEST SUCCESSFUL"
 
-test-delta-enc-update-ext: factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
+test-delta-enc-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	   @killall ufserver || true
 	   @st-flash reset
 	   @dd if=/dev/zero of=zero.bin bs=4096 count=1
