@@ -96,7 +96,7 @@ test-delta-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash
 	@diff boot.bin test-app/image_v7_signed.bin || (echo "TEST FAILED" && exit 1)
 	@rm boot.bin boot_full.bin
 	@echo "TEST SUCCESSFUL"
-	@sleep 1
+	@sleep 3
 	@echo
 	@echo
 	@echo TEST INVERSE
