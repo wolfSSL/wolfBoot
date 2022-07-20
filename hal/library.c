@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #if 1 /* for desktop testing */
     #define HAVE_UNISTD_H
@@ -113,6 +114,7 @@ int wolfBoot_start(void)
 {
     struct wolfBoot_image os_image;
     int ret = 0;
+    memset(&os_image, 0, sizeof(os_image));
 
     os_image.hdr = (uint8_t*)gImage;
 
@@ -168,6 +170,9 @@ int main(int argc, const char* argv[])
             wolfBoot_printf("read %zu of %zu bytes from %s\n", bread, sz, argv[1]);
         }
         fclose(img);
+    } else {
+        wolfBoot_printf("usage: %s image_file.bin\n", argv[0]);
+        return 255;
     }
 #endif
 
