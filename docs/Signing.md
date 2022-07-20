@@ -37,6 +37,29 @@ Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe`
 
 ## Command Line Usage
 
+### Keygen tool
+
+Usage: `keygen[.py] [OPTIONS] [-g new-keypair.der] [-i existing-pubkey.der] [...]`
+
+`keygen` is used to populate a keystore with existing and new public keys.
+Two options are supported:
+
+- `-g privkey.der` to generate a new keypair, add the public key to the keystore and save the private key in a new file `privkey.der`
+- `-i existing.der` to import an existing public key from `existing.der`
+
+Arguments are not exclusive, and can be repeated more than once to populate a keystore with multiple keys.
+
+One option must be specified to select the algorithm enabled in the keystore (e.g. `--ed25519` or `--rsa3072`. See the section "Public key signature options" for the sign tool for the available options.
+
+The files generate by the keygen tool is the following:
+
+- A C file `src/keystore.c`, which is normally linked with the wolfBoot image, when the keys are provisioned through generated C code.
+- A binary file `keystore.img` that can be used to provision the public keys through an alternative storage
+- The private key, for each `-g` option provided from command line
+
+For more information about the keystore mechanism, see [keystore.md](keystore.md).
+
+
 ### Sign tool
 
 `sign` and `sign.py` produce a signed firmware image by creating a manifest header
@@ -67,6 +90,9 @@ file is in this format.
 file is in this format.
 
   * `--rsa2048` Use rsa2048 for signing the firmware. Assume that the given KEY.DER
+file is in this format.
+
+  * `--rsa3072` Use rsa3072 for signing the firmware. Assume that the given KEY.DER
 file is in this format.
 
   * `--rsa4096` Use rsa4096 for signing the firmware. Assume that the given KEY.DER
@@ -172,13 +198,13 @@ For a real-life example, see the section below.
 
 ### Signing Firmware
 
-1. Load the private key to use for signing into `./rsa2048.der`, `./rsa4096.der`, `./ed25519.der`, `ecc256.der`, or `./ed448.der`
+1. Load the private key to use for signing into `./wolfboot_signing_private_key.der`
 2. Run the signing tool with asymmetric algorithm, hash algorithm, file to sign, key and version.
 
 ```sh
-./tools/keytools/sign --rsa2048 --sha256 test-app/image.bin rsa2048.der 1
+./tools/keytools/sign --rsa2048 --sha256 test-app/image.bin wolfboot_signing_private_key.der 1
 # OR
-python3 ./tools/keytools/sign.py --rsa2048 --sha256 test-app/image.bin rsa2048.der 1
+python3 ./tools/keytools/sign.py --rsa2048 --sha256 test-app/image.bin wolfboot_signing_private_key.der 1
 ```
 
 Note: The last argument is the “version” number.
@@ -189,10 +215,12 @@ Steps for manually signing firmware using an external key source.
 
 ```sh
 # Create file with Public Key
-openssl rsa -inform DER -outform DER -in rsa2048.der -out rsa2048_pub.der -pubout
+openssl rsa -inform DER -outform DER -in my_key.der -out rsa2048_pub.der -pubout
 
-# Create .c file with public key for wolfBoot root of trust
-./lib/wolfssl/scripts/dertoc.pl rsa2048_pub.der rsa2048_pub_key src/rsa2048_pub_key.c
+# Add the public key to the wolfBoot keystore using `keygen -i`
+./tools/keytools/keygen --rsa2048 -i rsa2048_pub.der
+# OR
+python3 ./tools/keytools/keygen.py --rsa2048 -i rsa4096_pub.der
 
 # Generate Hash to Sign
 ./tools/keytools/sign            --rsa2048 --sha-only --sha256 test-app/image.bin rsa2048_pub.der 1
@@ -200,7 +228,7 @@ openssl rsa -inform DER -outform DER -in rsa2048.der -out rsa2048_pub.der -pubou
 python3 ./tools/keytools/sign.py --rsa2048 --sha-only --sha256 test-app/image.bin rsa4096_pub.der 1
 
 # Sign hash Example (here is where you would use an HSM)
-openssl rsautl -sign -keyform der -inkey rsa2048.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
+openssl pkeyutl -sign -keyform der -inkey my_key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
 
 # Generate final signed binary
 ./tools/keytools/sign            --rsa2048 --sha256 --manual-sign test-app/image.bin rsa2048_pub.der 1 test-app/image_v1.sig

@@ -182,6 +182,13 @@ pubkey_cfile = "src/keystore.c"
 keystore_imgfile = "keystore.der"
 key_files = args.keyfile
 pubkey_files = args.pubfile
+
+if pubkey_files == None:
+    pubkey_files = []
+
+if key_files == None:
+    key_files = []
+
 print("keys to import:")
 print(pubkey_files)
 print("keys to generate:")
@@ -236,7 +243,7 @@ if pubkey_cfile[-2:] != '.c':
 print ("Output C file:        " + pubkey_cfile)
 pfile = open(pubkey_cfile, "w")
 pfile.write(Cfile_Banner % sign.upper())
-pfile.write(Store_hdr % len(key_files))
+pfile.write(Store_hdr % (len(key_files) + len(pubkey_files)))
 ksfile = open(keystore_imgfile, "wb")
 
 pub_slot_index = 0

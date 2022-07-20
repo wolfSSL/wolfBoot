@@ -1277,7 +1277,7 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--sha-only") == 0) {
             CMD.sha_only = 1;
         }
-        else if (strcmp(argv[i], "--manual-CMD.sign") == 0) {
+        else if (strcmp(argv[i], "--manual-sign") == 0) {
             CMD.manual_sign = 1;
         }
         else if (strcmp(argv[i], "--encrypt") == 0) {

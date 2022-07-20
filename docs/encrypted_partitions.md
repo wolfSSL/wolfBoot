@@ -97,7 +97,7 @@ The `sign.py` script can now be invoked to produce a signed+encrypted image, by 
 secret file:
 
 ```
-./tools/keytools/sign.py --encrypt enc_key.der test-app/image.bin ecc256.der 24
+./tools/keytools/sign.py --encrypt enc_key.der test-app/image.bin wolfboot_signing_private_key.der 24
 
 ```
 
@@ -125,7 +125,7 @@ The `sign.py` script can now be invoked to produce a signed+encrypted image, by 
 secret file. To select AES-256, use the `--aes256` option.
 
 ```
-./tools/keytools/sign.py --aes256 --encrypt enc_key.der test-app/image.bin ecc256.der 24
+./tools/keytools/sign.py --aes256 --encrypt enc_key.der test-app/image.bin wolfboot_signing_private_key.der 24
 
 ```
 
