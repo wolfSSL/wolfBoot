@@ -139,14 +139,15 @@ void RAMFUNCTION wolfBoot_start(void)
     }
   #ifdef MMU
     /* Load DTS to RAM */
-    if (PART_IS_EXT(&os_image)) {
-        if (wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
-            dts_address = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    if (PART_IS_EXT(&os_image) &&
+        wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
+        dts_buf = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+        dts_size = (uint32_t)os_image.fw_size;
+
         wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
-                os_image.fw_size, WOLFBOOT_LOAD_DTS_ADDRESS);
+                dts_size, dts_buf);
         ext_flash_read((uintptr_t)os_image.fw_base,
-                (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS,
-                os_image.fw_size);
+                (uint8_t*)dts_buf, dts_size);
     }
   #endif /* MMU */
 #else
@@ -162,7 +163,7 @@ void RAMFUNCTION wolfBoot_start(void)
         } else {
             dts_size = (uint32_t)ret;
             wolfBoot_printf("Loading DTB (size %d) to RAM at %08lx\n",
-                    dts_size, dts_address);
+                    dts_size, dts_buf);
             memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, dts_buf, dts_size);
         }
     }
@@ -172,7 +173,7 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_printf("Booting at %08lx\n", WOLFBOOT_LOAD_ADDRESS);
     hal_prepare_boot();
 
-#if defined MMU
+#ifdef MMU
     do_boot((uint32_t*)WOLFBOOT_LOAD_ADDRESS,
             (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS);
 #else
