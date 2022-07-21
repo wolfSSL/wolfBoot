@@ -54,7 +54,6 @@
                              /* MAGIC + PART_FLAG (1B) + (N_SECTORS / 2) */
     #define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
 #else
-    #define XMEMCPY memcpy
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
 #endif
 
@@ -69,6 +68,15 @@
 #ifdef EXT_FLASH
 static uint32_t ext_cache;
 #endif
+
+/* Inline use of ByteReverseWord32 */
+#define WOLFSSL_MISC_INCLUDED
+#include <wolfcrypt/src/misc.c>
+uint32_t wb_reverse_word32(uint32_t x)
+{
+    return ByteReverseWord32(x);
+}
+
 
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 /* Top addresses for FLAGS field
@@ -834,10 +842,6 @@ int chacha_init(void)
 
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
 
-/* Inline use of ByteReverseWord32 */
-#define WOLFSSL_MISC_INCLUDED
-#include <wolfcrypt/src/misc.c>
-
 Aes aes_dec, aes_enc;
 
 int aes_init(void)
@@ -878,7 +882,7 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
     XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
 #ifndef BIG_ENDIAN_ORDER
     for (i = 0; i < 4; i++) {
-        iv_buf[i] = ByteReverseWord32(iv_buf[i]);
+        iv_buf[i] = wb_reverse_word32(iv_buf[i]);
     }
 #endif
     iv_buf[3] += iv_ctr;
@@ -891,7 +895,7 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
     }
 #ifndef BIG_ENDIAN_ORDER
     for (i = 0; i < 4; i++) {
-        iv_buf[i] = ByteReverseWord32(iv_buf[i]);
+        iv_buf[i] = wb_reverse_word32(iv_buf[i]);
     }
 #endif
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);

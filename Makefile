@@ -16,10 +16,6 @@ LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
 
-
-
-
-
 V?=0
 
 OBJS:= \

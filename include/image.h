@@ -29,6 +29,8 @@
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
+int wolfBot_get_dts_size(void *dts_addr);
+
 
 #ifndef RAMFUNCTION
 #if defined(__WOLFBOOT) && defined(RAM_CODE)
@@ -538,7 +540,9 @@ int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
 int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
 int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
 
-uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset, uint32_t* sz);
+uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
+        uint32_t* sz);
+
 
 /* Defined in libwolfboot */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);

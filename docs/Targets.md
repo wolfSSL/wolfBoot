@@ -801,6 +801,7 @@ git clone https://github.com/raspberrypi/linux linux-rpi -b rpi-4.19.y --depth=1
 ```
 export wolfboot_dir=`pwd`
 cd linux-rpi
+patch -p1 < $wolfboot_dir/tools/wolfboot-rpi-devicetree.diff
 make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcmrpi3_defconfig
 make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 ```
@@ -822,7 +823,7 @@ make clean
 make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 ```
 
-* Sign Image
+* Sign Linux kernel image
 ```
 make keytools
 ./tools/keytools/sign --rsa4096 --sha3 Image wolfboot_signing_private_key.der 1
@@ -839,7 +840,7 @@ dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrun
 * Test boot using qemu
 
 ```
-qemu-system-aarch64 -M raspi3 -m 512 -serial stdio -kernel wolfboot_linux_raspi.bin -append "terminal=ttyS0 rootwait" -dtb ./bcm2710-rpi-3-b.dtb -cpu cortex-a53
+qemu-system-aarch64 -M raspi3 -m 512 -serial stdio -kernel wolfboot_linux_raspi.bin -append "terminal=ttyS0 rootwait" -cpu cortex-a53
 ```
 
 

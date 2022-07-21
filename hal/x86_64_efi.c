@@ -80,6 +80,15 @@ void* hal_get_update_address(void)
   return (void*)update_addr;
 }
 
+void *hal_get_dts_address(void)
+{
+    return NULL;
+}
+
+void *hal_get_dts_update_address(void)
+{
+    return NULL;
+}
 
 static void panic()
 {
