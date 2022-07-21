@@ -80,7 +80,7 @@ ifeq ($(TARGET),library)
 endif
 
 ifeq ($(TARGET),sim)
-	MAIN_TARGET:=wolfboot.elf test-app/image_v1_signed.bin internal_flash.dd
+	MAIN_TARGET:=wolfboot.elf tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 
 ASFLAGS:=$(CFLAGS)

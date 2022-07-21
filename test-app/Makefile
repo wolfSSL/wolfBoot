@@ -237,6 +237,8 @@ ifeq ($(TARGET),psoc6)
   CFLAGS+=-DCY8C624ABZI_D44
 endif
 
+CFLAGS+=-I../lib/wolfssl
+
 standalone:CFLAGS+=-D"TEST_APP_STANDALONE"
 standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
