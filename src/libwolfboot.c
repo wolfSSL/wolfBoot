@@ -69,6 +69,8 @@
 static uint32_t ext_cache;
 #endif
 
+
+#ifdef __WOLFBOOT
 /* Inline use of ByteReverseWord32 */
 #define WOLFSSL_MISC_INCLUDED
 #include <wolfcrypt/src/misc.c>
@@ -76,6 +78,7 @@ uint32_t wb_reverse_word32(uint32_t x)
 {
     return ByteReverseWord32(x);
 }
+#endif
 
 
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
