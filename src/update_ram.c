@@ -150,8 +150,8 @@ void RAMFUNCTION wolfBoot_start(void)
     }
   #endif /* MMU */
 #else
-    wolfBoot_printf("Loading %d bytes to RAM at %08lx\n",
-            os_image.fw_size, WOLFBOOT_LOAD_ADDRESS);
+    wolfBoot_printf("Loading %d bytes to RAM at %08lx\n", os_image.fw_size,
+            (WOLFBOOT_LOAD_ADDRESS));
     memcpy((void*)WOLFBOOT_LOAD_ADDRESS, os_image.fw_base, os_image.fw_size);
   #ifdef MMU
     dts_buf = hal_get_dts_address();

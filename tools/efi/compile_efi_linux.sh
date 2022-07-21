@@ -22,8 +22,8 @@ if [ -f "./tools/keytools/sign" ]; then
     SIGN_TOOL="./tools/keytools/sign"
 fi
 
-$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage ed25519.der 1
-$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage ed25519.der 2
+$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfBoot_signing_private_key.der 1
+$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 2
 
 mkdir -p /tmp/efi
 sudo mount /tmp/efi.disk /tmp/efi
