@@ -49,6 +49,7 @@ void RAMFUNCTION wolfBoot_start(void)
 {
     int active, ret = 0;
     struct wolfBoot_image os_image;
+    uint32_t *dtb_load_address = (void*)0x4000000;
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     uint32_t* load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
 #else
@@ -164,12 +165,15 @@ void RAMFUNCTION wolfBoot_start(void)
     #endif
     }
 #endif
-
-    wolfBoot_printf("Booting at %08lx\n", os_image.fw_base);
+//    load_address = (void *)0x200000 + (*(((uint64_t *)(os_image.fw_base)) + 1));
+    load_address = (void *)0x3000000 + (*(((uint64_t *)(os_image.fw_base)) + 1));
+    memcpy((void*)load_address, os_image.fw_base, os_image.fw_size);
+    memcpy((void*)dtb_load_address, dts_address, 26524);
+    wolfBoot_printf("Booting at %08lx\n", load_address);
     hal_prepare_boot();
 
 #if defined MMU
-    do_boot((uint32_t*)os_image.fw_base, (uint32_t*)dts_address);
+    do_boot((uint32_t*)load_address, (uint32_t*)dtb_load_address);
 #else
     do_boot((uint32_t*)os_image.fw_base);
 #endif

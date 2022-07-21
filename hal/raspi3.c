@@ -35,8 +35,8 @@
 #   define WOLFBOOT_UPDATE_ADDRESS 0x00000
 #endif
 
-static const void* kernel_addr = (void*)WOLFBOOT_LOAD_ADDRESS;
-static const void* update_addr = (void*)WOLFBOOT_UPDATE_ADDRESS;
+static const void* kernel_addr = (void*)0x0140000;
+static const void* update_addr = (void*)0x1140000;
 
 void* hal_get_primary_address(void)
 {
