@@ -52,6 +52,11 @@ void hal_prepare_boot(void);
     void* hal_get_update_address(void);
 #endif
 
+#ifdef MMU
+    void *hal_get_dts_address(void);
+    void *hal_get_dts_update_address(void);
+#endif
+
 #ifndef SPI_FLASH
     /* user supplied external flash interfaces */
     int  ext_flash_write(uintptr_t address, const uint8_t *data, int len);

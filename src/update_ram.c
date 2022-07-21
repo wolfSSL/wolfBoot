@@ -22,22 +22,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include "loader.h"
 #include "image.h"
+#include "loader.h"
 #include "hal.h"
 #include "spi_flash.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
 
-#ifdef PLATFORM_X86_64_EFI
-    #include "efi/efi.h"
-    #include "efi/efilib.h"
-    extern EFI_PHYSICAL_ADDRESS kernel_addr;
-    extern EFI_PHYSICAL_ADDRESS update_addr;
-#endif
-
 extern void hal_flash_dualbank_swap(void);
+extern int wolfBoot_get_dts_size(void *dts_addr);
 
 static inline void boot_panic(void)
 {
@@ -45,34 +39,30 @@ static inline void boot_panic(void)
         ;
 }
 
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     int active, ret = 0;
     struct wolfBoot_image os_image;
-#ifdef WOLFBOOT_FIXED_PARTITIONS
-    uint32_t* load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
-#else
-    uint32_t* load_address = hal_get_primary_address();
-#endif
-
-    uint8_t* image_ptr;
+    uint8_t *image_ptr;
     uint8_t p_state;
-#ifdef MMU
-    uint32_t* dts_address = NULL;
-#endif
+    uint32_t *load_address;
+    uint8_t *dts_buf = NULL;
+    uint32_t dts_size = 0;
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     active = wolfBoot_dualboot_candidate();
+    if (active == PART_UPDATE)
+        load_address = (uint32_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    else
+        load_address = (uint32_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 #else
     active = wolfBoot_dualboot_candidate_addr((void**)&load_address);
 #endif
-
-    wolfBoot_printf("Active Part %d\n", active);
-
     if (active < 0) /* panic if no images available */
         wolfBoot_panic();
 
-    wolfBoot_printf("Active Part %x\n", load_address);
+
     #ifdef WOLFBOOT_FIXED_PARTITIONS
     /* Check current status for failure (image still in TESTING), and fall-back
      * if an alternative is available
@@ -84,8 +74,9 @@ void RAMFUNCTION wolfBoot_start(void)
         active ^= 1; /* switch to other partition if available */
     }
     #endif
-    wolfBoot_printf("Active Part %d %x\n", active, load_address);
 
+    wolfBoot_printf("Active Partition: %c\n", active?'B':'A');
+    wolfBoot_printf("Active Partition start address: %x\n", load_address);
     for (;;) {
         if (((ret = wolfBoot_open_image_address(&os_image, (uint8_t*)load_address)) < 0) ||
             ((ret = wolfBoot_verify_integrity(&os_image) < 0)) ||
@@ -139,42 +130,53 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef EXT_FLASH
     /* Load image to RAM */
     if (PART_IS_EXT(&os_image)) {
-        wolfBoot_printf("Loading %d to RAM at %08lx\n", os_image.fw_size, load_address);
+        wolfBoot_printf("Loading %d bytes to RAM at %08lx\n",
+                os_image.fw_size, WOLFBOOT_LOAD_ADDRESS);
 
         ext_flash_read((uintptr_t)os_image.fw_base,
-                       (uint8_t*)load_address,
+                       (uint8_t*)WOLFBOOT_LOAD_ADDRESS,
                        os_image.fw_size);
     }
-#endif
+  #ifdef MMU
+    /* Load DTS to RAM */
+    if (PART_IS_EXT(&os_image) &&
+        wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
+        dts_buf = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+        dts_size = (uint32_t)os_image.fw_size;
 
-#ifdef MMU
-    /* Device Tree Blob (DTB) Handling */
-    if (wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
-        dts_address = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
-
-    #ifdef EXT_FLASH
-        /* Load DTS to RAM */
-        if (PART_IS_EXT(&os_image)) {
-            wolfBoot_printf("Loading DTS %d to RAM at %08lx\n", os_image.fw_size, dts_address);
-
-            ext_flash_read((uintptr_t)os_image.fw_base,
-                        (uint8_t*)dts_address,
-                        os_image.fw_size);
-        }
-    #endif
+        wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
+                dts_size, dts_buf);
+        ext_flash_read((uintptr_t)os_image.fw_base,
+                (uint8_t*)dts_buf, dts_size);
     }
-#endif
+  #endif /* MMU */
+#else
+    wolfBoot_printf("Loading %d bytes to RAM at %08lx\n", os_image.fw_size,
+            (WOLFBOOT_LOAD_ADDRESS));
+    memcpy((void*)WOLFBOOT_LOAD_ADDRESS, os_image.fw_base, os_image.fw_size);
+  #ifdef MMU
+    dts_buf = hal_get_dts_address();
+    if (dts_buf) {
+        ret = wolfBoot_get_dts_size(dts_buf);
+        if (ret < 0) {
+            wolfBoot_printf("Failed parsing DTB to load.\n");
+        } else {
+            dts_size = (uint32_t)ret;
+            wolfBoot_printf("Loading DTB (size %d) to RAM at %08lx\n",
+                    dts_size, dts_buf);
+            memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, dts_buf, dts_size);
+        }
+    }
+  #endif /* MMU */
 
-
-    wolfBoot_printf("Booting at %08lx\n", load_address);
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
+    wolfBoot_printf("Booting at %08lx\n", WOLFBOOT_LOAD_ADDRESS);
     hal_prepare_boot();
 
-#ifdef PLATFORM_X86_64_EFI
-    extern void x86_64_efi_do_boot(uint8_t *);
-    x86_64_efi_do_boot((uint8_t*)load_address);
-#elif defined MMU
-    do_boot((uint32_t*)load_address, (uint32_t*)dts_address);
+#ifdef MMU
+    do_boot((uint32_t*)WOLFBOOT_LOAD_ADDRESS,
+            (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS);
 #else
-    do_boot((uint32_t*)load_address);
+    do_boot((uint32_t*)os_image.fw_base);
 #endif
 }

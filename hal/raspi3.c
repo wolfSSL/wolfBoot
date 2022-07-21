@@ -31,6 +31,30 @@
 #define CORTEXA53_0_CPU_CLK_FREQ_HZ 1099989014
 #define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
 
+/* Fixed addresses */
+static const void* kernel_addr  = (void*)0x0140000;
+static const void* update_addr  = (void*)0x1140000;
+static const void* dts_addr     = (void*)0x00a0000;
+
+void* hal_get_primary_address(void)
+{
+    return (void*)kernel_addr;
+}
+
+void* hal_get_update_address(void)
+{
+  return (void*)update_addr;
+}
+
+void* hal_get_dts_address(void)
+{
+  return (void*)dts_addr;
+}
+
+void* hal_get_dts_update_address(void)
+{
+  return NULL; /* Not yet supported */
+}
 
 /* QSPI functions */
 void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)

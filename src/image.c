@@ -808,10 +808,36 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
     return 0;
 }
 
+#ifdef MMU
+/* misc.c included via libwolfboot.c */
+extern uint32_t wb_reverse_word32(uint32_t);
+
+int wolfBoot_get_dts_size(void *dts_addr)
+{
+    uint32_t hdr[2];
+    uint32_t magic;
+    uint32_t size;
+    memcpy(hdr, dts_addr, 2 * sizeof(uint32_t));
+
+#ifdef BIG_ENDIAN_ORDER
+    magic = wb_reverse_word32(hdr[0]);
+    size = hdr[1];
+#else
+    magic = hdr[0];
+    size = wb_reverse_word32(hdr[1]);
+#endif
+    if (magic != UBOOT_FDT_MAGIC)
+        return -1;
+    else
+        return (int)size;
+}
+#endif
+
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
-    uint32_t *size;
+    int ret;
+    uint32_t size;
     uint8_t *image;
     if (!img)
         return -1;
@@ -831,22 +857,17 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     }
 #ifdef MMU
     if (part == PART_DTS_BOOT || part == PART_DTS_UPDATE) {
-        img->hdr = (part == PART_DTS_BOOT) ? (void*)WOLFBOOT_DTS_BOOT_ADDRESS
-                                           : (void*)WOLFBOOT_DTS_UPDATE_ADDRESS;
+        img->hdr = (void *)WOLFBOOT_LOAD_DTS_ADDRESS;
         if (PART_IS_EXT(img))
             image = fetch_hdr_cpy(img);
         else
             image = (uint8_t*)img->hdr;
-        if (*((uint32_t*)image) != UBOOT_FDT_MAGIC)
+        ret = wolfBoot_get_dts_size(image);
+        if (ret < 0)
             return -1;
         img->hdr_ok = 1;
         img->fw_base = img->hdr;
-        /* DTS data is big endian */
-        size = (uint32_t*)(image + sizeof(uint32_t));
-        img->fw_size = (((*size & 0x000000FF) << 24) |
-                        ((*size & 0x0000FF00) <<  8) |
-                        ((*size & 0x00FF0000) >>  8) |
-                        ((*size & 0xFF000000) >> 24));
+        img->fw_size = (uint32_t)size;
         return 0;
     }
 #endif

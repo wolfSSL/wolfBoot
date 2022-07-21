@@ -1,0 +1,15 @@
+diff --git a/arch/arm/boot/dts/bcm2710-rpi-3-b.dts b/arch/arm/boot/dts/bcm2710-rpi-3-b.dts
+index 261827cdb957..13613f965a10 100644
+--- a/arch/arm/boot/dts/bcm2710-rpi-3-b.dts
++++ b/arch/arm/boot/dts/bcm2710-rpi-3-b.dts
+@@ -18,6 +18,10 @@
+ 		serial1 = &uart0;
+ 		mmc1 = &mmcnr;
+ 	};
++	memory@0 {
++		reg = <0x00 0x3c000000>;
++		device_type = "memory";
++	};
+ };
+ 
+ &gpio {
