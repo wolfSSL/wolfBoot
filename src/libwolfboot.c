@@ -57,7 +57,7 @@
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
 #endif
 
-#if defined(WOLFBOOT_TPM) && !defined(__WOLFBOOT)
+#if !defined(__WOLFBOOT)
     #define XMEMSET memset
     #define XMEMCPY memcpy
     #define XMEMCMP memcmp
