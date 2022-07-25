@@ -88,23 +88,19 @@ test-delta-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash
 	@sync
 	@echo Waiting $(TIMEOUT) seconds...
 	@sleep $(TIMEOUT)
-	@st-flash reset
-	@sleep 2
+	@killall ufserver
 	@st-flash read boot_full.bin 0x0800C000 0x8000
 	@SIZE=`wc -c test-app/image_v7_signed.bin | cut -d" " -f 1`;  \
 		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
 	@diff boot.bin test-app/image_v7_signed.bin || (echo "TEST FAILED" && exit 1)
 	@rm boot.bin boot_full.bin
 	@echo "TEST SUCCESSFUL"
-	@sleep 3
 	@echo
 	@echo
 	@echo TEST INVERSE
-	@st-flash reset
-	@sleep 1
+	@(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff.bin $(USBTTY))&
 	@st-flash reset
 	@sleep $(TIMEOUT)
-	@st-flash reset
 	@killall ufserver
 	@st-flash reset
 	@st-flash read boot_full.bin 0x0800C000 0x8000
