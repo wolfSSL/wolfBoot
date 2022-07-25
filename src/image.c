@@ -836,8 +836,9 @@ int wolfBoot_get_dts_size(void *dts_addr)
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
+#ifdef MMU
     int ret;
-    uint32_t size;
+#endif
     uint8_t *image;
     if (!img)
         return -1;
@@ -867,7 +868,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
             return -1;
         img->hdr_ok = 1;
         img->fw_base = img->hdr;
-        img->fw_size = (uint32_t)size;
+        img->fw_size = (uint32_t)ret;
         return 0;
     }
 #endif
@@ -924,7 +925,6 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 #else
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
-    int ret;
     uint8_t *stored_signature;
     uint16_t stored_signature_size;
     uint8_t *pubkey_hint;

@@ -254,7 +254,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     fseek(f, 0, SEEK_SET);
     *key_buffer = malloc(*key_buffer_sz);
     if (*key_buffer) {
-        io_sz = fread(*key_buffer, 1, *key_buffer_sz, f);
+        io_sz = (int)fread(*key_buffer, 1, *key_buffer_sz, f);
         if (io_sz != (int)*key_buffer_sz) {
             printf("Key file read error!\n");
             goto failure;
@@ -554,7 +554,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 read_sz = image_sz - pos;
                 if (read_sz > 32)
                     read_sz = 32;
-                io_sz = fread(buf, 1, read_sz, f);
+                io_sz = (int)fread(buf, 1, read_sz, f);
                 if ((io_sz < 0) && !feof(f)) {
                     ret = -1;
                     break;
@@ -598,7 +598,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 read_sz = image_sz - pos;
                 if (read_sz > 32)
                     read_sz = 32;
-                io_sz = fread(buf, 1, read_sz, f);
+                io_sz = (int)fread(buf, 1, read_sz, f);
                 if ((io_sz < 0) && !feof(f)) {
                     ret = -1;
                     break;
@@ -644,7 +644,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 read_sz = image_sz - pos;
                 if (read_sz > 128)
                     read_sz = 128;
-                io_sz = fread(buf, 1, read_sz, f);
+                io_sz = (int)fread(buf, 1, read_sz, f);
                 if ((io_sz < 0) && !feof(f)) {
                     ret = -1;
                     break;
@@ -801,7 +801,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 printf("Open signature file %s failed\n", CMD.signature_file);
                 goto failure;
             }
-            io_sz = fread(signature, 1, CMD.signature_sz, f);
+            io_sz = (int)fread(signature, 1, CMD.signature_sz, f);
             fclose(f);
             if (io_sz != (int)CMD.signature_sz) {
                 printf("Error reading file %s\n", CMD.signature_file);
@@ -837,7 +837,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         read_sz = image_sz;
         if (read_sz > sizeof(buf))
             read_sz = sizeof(buf);
-        read_sz = fread(buf, 1, read_sz, f2);
+        read_sz = (uint32_t)fread(buf, 1, read_sz, f2);
         if ((read_sz == 0) && (feof(f2)))
             break;
         fwrite(buf, 1, read_sz, f);
@@ -873,12 +873,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     CMD.encrypt_key_file, strerror(errno));
             exit(1);
         }
-        ret = fread(key, 1, keySz, fek);
+        ret = (int)fread(key, 1, keySz, fek);
         if (ret != keySz) {
             fprintf(stderr, "Error reading key from %s\n", CMD.encrypt_key_file);
             exit(1);
         }
-        ret = fread(iv, 1, ivSz, fek);
+        ret = (int)fread(iv, 1, ivSz, fek);
         if (ret != ivSz) {
             fprintf(stderr, "Error reading IV from %s\n", CMD.encrypt_key_file);
             exit(1);
@@ -904,7 +904,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             wc_Chacha_SetIV(&cha, iv, 0);
             for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
                 int fread_retval;
-                fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
+                fread_retval = (int)fread(buf, 1, ENC_BLOCK_SIZE, f);
                 if ((fread_retval == 0) && feof(f)) {
                     break;
                 }
@@ -917,7 +917,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             wc_AesSetKeyDirect(&aes_e, key, keySz, iv, AES_ENCRYPTION);
             for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
                 int fread_retval;
-                fread_retval = fread(buf, 1, ENC_BLOCK_SIZE, f);
+                fread_retval = (int)fread(buf, 1, ENC_BLOCK_SIZE, f);
                 if ((fread_retval == 0) && feof(f)) {
                     break;
                 }
