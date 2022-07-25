@@ -428,9 +428,9 @@ if delta and encrypt:
 elif encrypt:
     if '.' in image_file:
         tokens = image_file.split('.')
-        encrypted_output_file = ''
+        encrypted_output_image_file = ''
         for x in tokens[0:-1]:
-            encrypted_output_file += x
+            encrypted_output_image_file += x
         encrypted_output_image_file += "_v" + str(fw_version) + "_signed_and_encrypted.bin"
     else:
         encrypted_output_image_file = image_file + "_v" + str(fw_version) + "_signed_and_encrypted.bin"
