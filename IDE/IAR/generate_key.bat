@@ -1,2 +1,4 @@
-keytools\keygen.exe --ecc256 ..\..\src\ecc256_pub_key.c
-move ecc256.der ..\..\
+cd ..\..
+REM Build the src/keystore.c
+IDE\IAR\keytools\keygen.exe --ecc256 -g wolfboot_signing_private_key.der
+cd IDE\IAR

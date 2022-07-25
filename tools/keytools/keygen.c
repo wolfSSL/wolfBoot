@@ -36,7 +36,9 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#ifndef _WIN32
+    #include <unistd.h>
+#endif
 
 #include <wolfssl/wolfcrypt/settings.h>
 #ifndef NO_RSA

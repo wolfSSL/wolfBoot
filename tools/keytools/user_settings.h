@@ -70,6 +70,10 @@
 /* Chacha stream cipher */
 #define HAVE_CHACHA
 
+/* AES */
+#define WOLFSSL_AES_COUNTER
+#define WOLFSSL_AES_DIRECT
+
 /* Disables */
 #define NO_CMAC
 #define NO_HMAC

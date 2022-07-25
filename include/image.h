@@ -526,7 +526,7 @@ static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
     if ((mask & (1UL << id)) != (1UL << id)) \
         wolfBoot_panic()
 
-#define VERIFY_VERSION_ALLOWED do{} while(0);
+#define VERIFY_VERSION_ALLOWED(fb_ok) do{} while(0)
 
 #endif
 
