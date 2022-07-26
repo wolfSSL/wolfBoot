@@ -879,30 +879,31 @@ test-all: clean
 	make test-fastmath-smallstack
 	make test-delta-update
 
+
 test-size-all:
 	make test-size SIGN=NONE LIMIT=4646
 	make keysclean
-	make test-size SIGN=ED25519 LIMIT=11366
+	make test-size SIGN=ED25519 LIMIT=11262
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=22118
+	make test-size SIGN=ECC256  LIMIT=22134
 	make keysclean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13878
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13586
 	make keysclean
-	make test-size SIGN=RSA2048 LIMIT=13110
+	make test-size SIGN=RSA2048 LIMIT=11038
 	make keysclean
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=13274
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11058
 	make keysclean
-	make test-size SIGN=RSA4096 LIMIT=13446
+	make test-size SIGN=RSA4096 LIMIT=11386
 	make keysclean
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=13526
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11314
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=17722
+	make test-size SIGN=ECC384 LIMIT=17470
 	make keysclean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15486
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15022
 	make keysclean
-	make test-size SIGN=ED448 LIMIT=13718
+	make test-size SIGN=ED448 LIMIT=13278
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=13302
+	make test-size SIGN=RSA3072 LIMIT=11234
 	make keysclean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=13382
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11154
 	make keysclean
