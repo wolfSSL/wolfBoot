@@ -288,3 +288,13 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
    * Fix risc-V 32bit port (missing include)
    * Fix STM32L4 (VTOR alignments; clock setting clash in libwolfboot)
    * STM32H7: improve HAL and documentation
+
+### V1.12 (2022-07-26)
+ * Encrypted delta updates
+ * Support RSA3072 signature verification
+ * Partition ID support to include custom additional images
+ * New format to store multiple public keys, using keystore
+ * Several fixes to keytools and IDE support
+ * Added new test cases
+ * Hardware support
+   * New HAL: Simulated target for rapid tests
