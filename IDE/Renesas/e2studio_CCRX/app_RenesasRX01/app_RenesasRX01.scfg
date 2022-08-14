@@ -15,7 +15,7 @@
     </general>
     <tool id="Clock">
         <option enabled="true" id="vccinput" selection="textinputitem">
-            <item enabled="true" id="textinputitem" input="3.3" value="3.300"/>
+            <item enabled="true" id="textinputitem" input="3.3" value="3.3"/>
         </option>
         <option enabled="true" id="mainclockenable" selection="check">
             <item enabled="true" id="check"/>
@@ -26,10 +26,10 @@
             <item enabled="true" id="srcEOI"/>
         </option>
         <option enabled="true" id="mainfrequency" selection="textinputitem">
-            <item enabled="true" id="textinputitem" input="16" value="16.000000"/>
+            <item enabled="true" id="textinputitem" input="16" value="16"/>
         </option>
         <option enabled="true" id="mainwaittime" selection="textinputitem">
-            <item enabled="true" id="textinputitem" input="9980" value="9980.000000"/>
+            <item enabled="true" id="textinputitem" input="9980" value="9980"/>
         </option>
         <option enabled="true" id="subclockenable" selection="uncheck">
             <item enabled="true" id="check"/>
@@ -43,7 +43,7 @@
             <item enabled="true" id="standardCL"/>
         </option>
         <option enabled="false" id="subwaittime" selection="textinputitem">
-            <item enabled="true" id="textinputitem" input="2000" value="2000.000000"/>
+            <item enabled="true" id="textinputitem" input="2000" value="2000"/>
         </option>
         <option enabled="true" id="hococlockenable" selection="uncheck">
             <item enabled="true" id="check"/>
@@ -73,7 +73,7 @@
             <item enabled="true" id="textinputitem" input="" value="120"/>
         </option>
         <option enabled="true" id="pllswitcher" selection="pllmain">
-            <item enabled="true" id="pllmain" input="" value="16.0"/>
+            <item enabled="true" id="pllmain" input="" value="16"/>
             <item enabled="false" id="pllhoco" input="" value="16"/>
         </option>
         <option enabled="true" id="plldivider" selection="div1-2">
@@ -174,7 +174,7 @@
         </option>
         <option enabled="true" id="sckswitcher" selection="pll">
             <item enabled="true" id="pll" input="" value="240.0"/>
-            <item enabled="true" id="main" input="" value="16.0"/>
+            <item enabled="true" id="main" input="" value="16"/>
             <item enabled="false" id="sub" input="" value="0.032768"/>
             <item enabled="false" id="hoco" input="" value="16"/>
             <item enabled="false" id="loco" input="" value="0.24"/>
@@ -182,7 +182,7 @@
         <option enabled="true" id="ckoswitcher" selection="ckomain">
             <item enabled="true" id="ckoppll" input="" value="200.0"/>
             <item enabled="true" id="ckopll" input="" value="240.0"/>
-            <item enabled="true" id="ckomain" input="" value="16.0"/>
+            <item enabled="true" id="ckomain" input="" value="16"/>
             <item enabled="false" id="ckosub" input="" value="0.032768"/>
             <item enabled="false" id="ckohoco" input="" value="16"/>
             <item enabled="false" id="ckoloco" input="" value="0.24"/>
@@ -335,7 +335,7 @@
             <item enabled="true" id="uncheck"/>
         </option>
         <option enabled="false" id="clkout" selection="textoutputitem">
-            <item enabled="true" id="textoutputitem" input="" value="16.0"/>
+            <item enabled="true" id="textoutputitem" input="" value="16"/>
         </option>
         <option enabled="false" id="cacilclk" selection="textoutputitem">
             <item enabled="true" id="textoutputitem" input="" value="120"/>
@@ -357,7 +357,7 @@
             <item enabled="true" id="textoutputitem" input="" value="32.768"/>
         </option>
         <option enabled="true" id="cacmclk" selection="textoutputitem">
-            <item enabled="true" id="textoutputitem" input="" value="16.0"/>
+            <item enabled="true" id="textoutputitem" input="" value="16"/>
         </option>
     </tool>
     <tool id="Interrupt">
@@ -589,6 +589,9 @@
     <tool id="Pins" version="1.0.1.0">
         <pinItem allocation="10" comments="" direction="None" id="EMLE" isUsedBySoftware="true" locked="false" operationMode="" status="0"/>
         <pinItem allocation="20" comments="" direction="None" id="XTAL" isUsedBySoftware="true" locked="false" operationMode="" status="0"/>
+        <pinItem allocation="28" comments="" direction="None" id="CTS1#" isUsedBySoftware="true" locked="false" operationMode="" status="0"/>
+        <pinItem allocation="29" comments="" direction="None" id="RXD1" isUsedBySoftware="true" locked="false" operationMode="" status="0"/>
+        <pinItem allocation="31" comments="" direction="None" id="TXD1" isUsedBySoftware="true" locked="false" operationMode="" status="0"/>
         <pinItem allocation="22" comments="" direction="None" id="EXTAL" isUsedBySoftware="true" locked="false" operationMode="" status="0"/>
         <pinItem allocation="16" comments="" direction="None" id="FINED" isUsedBySoftware="true" locked="false" operationMode="" status="65280"/>
         <pinnumItem comment="LCD-B4" id="88"/>
@@ -771,6 +774,246 @@
                 <gridItem id="FLASH_CFG_DATA_FLASH_BGO" selectedIndex="0"/>
                 <gridItem id="FLASH_CFG_CODE_FLASH_BGO" selectedIndex="0"/>
                 <gridItem id="FLASH_CFG_CODE_FLASH_RUN_FROM_ROM" selectedIndex="0"/>
+            </component>
+            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
+            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
+        </configuration>
+        <configuration inuse="true" name="r_sci_rx">
+            <component description="依存モジュール: r_bsp バージョン 7.20&#10;依存モジュール: r_byteq バージョン 1.40, 1.50, 1.60, 1.70, 1.71, 1.80, 1.81, 1.82, 1.90, 2.00&#10;This module allows any number of SCI channels on the MCU to run in full duplex Asynchronous mode, single master Simple SPI mode, or master Synchronous mode simultaneously. The driver is interrupt driven and non-blocking. Transmit and receive buffer queues are used in Asynchronous mode and their sizes may be configured independently for each channel. Resources for unused channels or modes may be removed via settings in the driver's config.h file." detailDescription="SCI Driver" display="r_sci_rx" id="r_sci_rx4.40" version="4.40">
+                <gridItem id="SCK0" selectedIndex="0"/>
+                <gridItem id="RXD0/SMISO0/SSCL0" selectedIndex="0"/>
+                <gridItem id="TXD0/SMOSI0/SSDA0" selectedIndex="0"/>
+                <gridItem id="CTS0#/RTS0#/SS0#" selectedIndex="0"/>
+                <gridItem id="SCI0" selectedIndex="0"/>
+                <gridItem id="SCK1" selectedIndex="0"/>
+                <gridItem id="RXD1/SMISO1/SSCL1" selectedIndex="1"/>
+                <gridItem id="TXD1/SMOSI1/SSDA1" selectedIndex="1"/>
+                <gridItem id="CTS1#/RTS1#/SS1#" selectedIndex="1"/>
+                <gridItem id="SCI1" selectedIndex="1"/>
+                <gridItem id="SCK2" selectedIndex="1"/>
+                <gridItem id="RXD2/SMISO2/SSCL2" selectedIndex="1"/>
+                <gridItem id="TXD2/SMOSI2/SSDA2" selectedIndex="1"/>
+                <gridItem id="CTS2#/RTS2#/SS2#" selectedIndex="1"/>
+                <gridItem id="SCI2" selectedIndex="1"/>
+                <gridItem id="SCK3" selectedIndex="0"/>
+                <gridItem id="RXD3/SMISO3/SSCL3" selectedIndex="0"/>
+                <gridItem id="TXD3/SMOSI3/SSDA3" selectedIndex="0"/>
+                <gridItem id="CTS3#/RTS3#/SS3#" selectedIndex="0"/>
+                <gridItem id="SCI3" selectedIndex="0"/>
+                <gridItem id="SCK4" selectedIndex="0"/>
+                <gridItem id="RXD4/SMISO4/SSCL4" selectedIndex="0"/>
+                <gridItem id="TXD4/SMOSI4/SSDA4" selectedIndex="0"/>
+                <gridItem id="CTS4#/RTS4#/SS4#" selectedIndex="0"/>
+                <gridItem id="SCI4" selectedIndex="0"/>
+                <gridItem id="SCK5" selectedIndex="0"/>
+                <gridItem id="RXD5/SMISO5/SSCL5" selectedIndex="0"/>
+                <gridItem id="TXD5/SMOSI5/SSDA5" selectedIndex="0"/>
+                <gridItem id="CTS5#/RTS5#/SS5#" selectedIndex="0"/>
+                <gridItem id="SCI5" selectedIndex="0"/>
+                <gridItem id="SCK6" selectedIndex="0"/>
+                <gridItem id="RXD6/SMISO6/SSCL6" selectedIndex="1"/>
+                <gridItem id="TXD6/SMOSI6/SSDA6" selectedIndex="1"/>
+                <gridItem id="CTS6#/RTS6#/SS6#" selectedIndex="0"/>
+                <gridItem id="SCI6" selectedIndex="1"/>
+                <gridItem id="SCK7" selectedIndex="1"/>
+                <gridItem id="RXD7/SMISO7/SSCL7" selectedIndex="1"/>
+                <gridItem id="TXD7/SMOSI7/SSDA7" selectedIndex="1"/>
+                <gridItem id="CTS7#/RTS7#/SS7#" selectedIndex="1"/>
+                <gridItem id="SCI7" selectedIndex="1"/>
+                <gridItem id="SCK8" selectedIndex="0"/>
+                <gridItem id="RXD8/SMISO8/SSCL8" selectedIndex="0"/>
+                <gridItem id="TXD8/SMOSI8/SSDA8" selectedIndex="0"/>
+                <gridItem id="CTS8#/RTS8#/SS8#" selectedIndex="0"/>
+                <gridItem id="SCI8" selectedIndex="0"/>
+                <gridItem id="SCK9" selectedIndex="0"/>
+                <gridItem id="RXD9/SMISO9/SSCL9" selectedIndex="0"/>
+                <gridItem id="TXD9/SMOSI9/SSDA9" selectedIndex="0"/>
+                <gridItem id="CTS9#/RTS9#/SS9#" selectedIndex="0"/>
+                <gridItem id="SCI9" selectedIndex="0"/>
+                <gridItem id="SCK10" selectedIndex="0"/>
+                <gridItem id="RXD10/SMISO10/SSCL10" selectedIndex="0"/>
+                <gridItem id="TXD10/SMOSI10/SSDA10" selectedIndex="0"/>
+                <gridItem id="SS10#" selectedIndex="0"/>
+                <gridItem id="CTS10#" selectedIndex="0"/>
+                <gridItem id="RTS10#" selectedIndex="0"/>
+                <gridItem id="SCI10" selectedIndex="0"/>
+                <gridItem id="SCK11" selectedIndex="0"/>
+                <gridItem id="RXD11/SMISO11/SSCL11" selectedIndex="1"/>
+                <gridItem id="TXD11/SMOSI11/SSDA11" selectedIndex="1"/>
+                <gridItem id="SS11#" selectedIndex="0"/>
+                <gridItem id="CTS11#" selectedIndex="0"/>
+                <gridItem id="RTS11#" selectedIndex="0"/>
+                <gridItem id="SCI11" selectedIndex="1"/>
+                <gridItem id="SCK12" selectedIndex="0"/>
+                <gridItem id="RXD12/SMISO12/SSCL12" selectedIndex="0"/>
+                <gridItem id="TXD12/SMOSI12/SSDA12" selectedIndex="0"/>
+                <gridItem id="CTS12#/RTS12#/SS12#" selectedIndex="0"/>
+                <gridItem id="SCI12" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_PARAM_CHECKING_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_ASYNC_INCLUDED" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_SYNC_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_SSPI_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_IRDA_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_USE_CIRCULAR_BUFFER" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_DUMMY_TX_BYTE" selectedIndex="0xFF"/>
+                <gridItem id="SCI_CFG_CH0_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_INCLUDED" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH2_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH12_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH0_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH1_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH2_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH3_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH4_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH5_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH6_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH7_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH8_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH9_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH10_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH11_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH12_TX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH0_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH1_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH2_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH3_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH4_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH5_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH6_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH7_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH8_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH9_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH10_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH11_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_CH12_RX_BUFSIZ" selectedIndex="80"/>
+                <gridItem id="SCI_CFG_TEI_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_ERI_TEI_PRIORITY" selectedIndex="3"/>
+                <gridItem id="SCI_CFG_CH7_FIFO_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_FIFO_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_FIFO_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_FIFO_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_FIFO_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_TX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH8_TX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH9_TX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH10_TX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH11_TX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH7_RX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH8_RX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH9_RX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH10_RX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH11_RX_FIFO_THRESH" selectedIndex="8"/>
+                <gridItem id="SCI_CFG_CH0_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH2_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_DATA_MATCH_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH0_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH2_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH12_TX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH0_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH2_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH12_RX_DTC_DMACA_ENABLE" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH0_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH2_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH12_TX_DMACA_CH_NUM" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH0_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH1_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH2_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH3_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH4_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH5_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH6_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH7_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH8_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH9_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH10_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH11_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH12_RX_DMACA_CH_NUM" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH5_IRDA_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_IRDA_IRTXD_INACTIVE_LEVEL" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH5_IRDA_IRRXD_INACTIVE_LEVEL" selectedIndex="1"/>
+                <gridItem id="SCI_CFG_CH0_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH2_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_RX_DATA_SAMPLING_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH0_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH1_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH2_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH3_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH4_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH5_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH6_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH7_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH8_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH9_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH10_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+                <gridItem id="SCI_CFG_CH11_TX_SIGNAL_TRANSITION_TIMING_INCLUDED" selectedIndex="0"/>
+            </component>
+            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
+            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
+        </configuration>
+        <configuration inuse="true" name="r_byteq">
+            <component description="依存モジュール: r_bsp バージョン 6.20&#10;This module allocates a queue control block in an Open() call to handle indexing for buffers provided by the user application. Additional functions are provided to put and get data from the buffer queue, inspect the number of bytes available or in use, and to flush the queue. There is no limit to the number of queues supported, and queue control blocks can be allocated statically at build time or dynamically at run time." detailDescription="Byte-based circular buffer library." display="r_byteq" id="r_byteq2.00" version="2.00">
+                <gridItem id="BYTEQ_CFG_PARAM_CHECKING_ENABLE" selectedIndex="0"/>
+                <gridItem id="BYTEQ_CFG_USE_HEAP_FOR_CTRL_BLKS" selectedIndex="0"/>
+                <gridItem id="BYTEQ_CFG_MAX_CTRL_BLKS" selectedIndex="32"/>
+                <gridItem id="BYTEQ_CFG_PROTECT_QUEUE" selectedIndex="0"/>
+                <gridItem id="BYTEQ_CFG_CRITICAL_SECTION" selectedIndex="0"/>
             </component>
             <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
             <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>

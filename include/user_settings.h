@@ -28,6 +28,18 @@
 
 #include <target.h>
 
+#define WOLFBOOT_SIGN_ED25519
+#define WOLFBOOT_HASH_SHA256
+
+#define WOLFBOOT_DUALBOOT
+#define WOLFBOOT_FIXED_PARTITIONS
+
+#include "rx72n/r_flash_rx72n.h"
+#define FLASHBUFFER_SIZE WOLFBOOT_SECTOR_SIZE
+#define WOLFSSL_HAVE_MIN
+#define WOLFSSL_HAVE_MAX
+#define WC_NO_RNG_SIMPLE
+
 /* System */
 #define WOLFSSL_GENERAL_ALIGNMENT 4
 #define SINGLE_THREADED
