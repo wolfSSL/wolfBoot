@@ -177,16 +177,26 @@ endif
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE:=riscv32-unknown-elf-
-  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
-  LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -nostartfiles -DARCH_RISCV
+  ifeq ($(TARGET),hifive1)
+	  CFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+	  LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+      ARCH_FLASH_OFFSET=0x20010000
+      OBJS+=src/vector_riscv.o
+  endif
+  ifeq ($(TARGET),gd32vf103)
+	  CFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medlow
+	  LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medlow
+      ARCH_FLASH_OFFSET=0x08000000
+      OBJS+=src/vector_riscv_static.o
+  endif
   MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  OBJS+=src/boot_riscv.o
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
 
-  OBJS+=src/boot_riscv.o src/vector_riscv.o
-  ARCH_FLASH_OFFSET=0x20010000
 endif
 
 # powerpc

@@ -508,6 +508,7 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
+
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
