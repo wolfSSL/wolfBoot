@@ -42,6 +42,8 @@
 #       include "efi/efilib.h"
         /* NOTE: %s arguments will not work as EFI uses widechar string */
 #       define wolfBoot_printf(_f_, ...) Print(L##_f_, ##__VA_ARGS__)
+#   elif defined(__CCRX__)
+#       define wolfBoot_printf printf
 #   else
 #       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
 #   endif
