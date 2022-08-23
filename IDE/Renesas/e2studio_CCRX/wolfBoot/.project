@@ -40,6 +40,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/hal/renesas-rx.c</locationURI>
 		</link>
 		<link>
+			<name>src/wolfboot/boot_renesas_rx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/boot_renesas_rx.c</locationURI>
+		</link>
+		<link>
 			<name>src/wolfboot/delta.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/delta.c</locationURI>
