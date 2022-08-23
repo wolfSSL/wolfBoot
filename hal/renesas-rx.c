@@ -44,23 +44,11 @@ void hal_init(void)
 
 }
 
-#ifdef __WOLFBOOT
 void hal_prepare_boot(void)
 {
 
 }
 
-#pragma inline_asm longJump
-static void longJump(unsigned long app_offset)
-{
-    jmp   r1;
-}
-
-void do_boot(const uint32_t *app_offset)
-{
-    longJump(app_offset);
-}
-#endif
 
 
 
