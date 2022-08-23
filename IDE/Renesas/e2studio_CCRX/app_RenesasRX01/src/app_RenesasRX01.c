@@ -28,6 +28,56 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 
+static void printPart(uint8_t *part)
+{
+#ifdef WOLFBOOT_PARTION_VERBOS
+    uint32_t *v;
+    int i;
+#endif
+    uint8_t  *magic;
+    uint8_t  state;
+    uint32_t ver;
+
+    magic = part;
+    printf("Magic:    %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    ver = wolfBoot_get_blob_version(part);
+    printf("Version:  %02x\n", ver);
+    state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
+    printf("Status:   %02x\n", state);
+    magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
+    printf("Tail Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+
+#ifdef PARTIION_VERBOS
+    v = (uint32_t *)part;
+    for(i = 0; i < 0x100/4; i++) {
+        if(i % 4 == 0)
+            print("\n%08x: ", (uint32_t)v+i*4);
+        print("%08x ", v[i]);
+    }
+
+    print("\n\nImage:");
+
+    for( ; i < 0x100/4 + 16; i++) {
+        if(i % 4 == 0)
+            print("\n%08x: ", (uint32_t)v+i*4);
+        print("%08x ", v[i]);
+    }
+
+    print("\n\n");
+#endif
+
+}
+
+
+static void printPartitions(void)
+{
+    printf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    printf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+}
+
+
 void main(void)
 {
     uint8_t firmware_version = 0;
@@ -37,6 +87,8 @@ void main(void)
     printf("| ------------------------------------------------------------------- |\n");
     printf("| Renesas RX User Application in BOOT partition started by wolfBoot   |\n");
     printf("| ------------------------------------------------------------------- |\n\n");
+
+    printPartitions();
 
     /* The same as: wolfBoot_get_image_version(PART_BOOT); */
     firmware_version = wolfBoot_current_firmware_version();
@@ -54,7 +106,7 @@ void main(void)
     getchar();
 
     wolfBoot_update_trigger();
-    printf("Update Triggered\n");
+    printf("Firmware Update is triggered\n");
 
     /* busy wait */
 busy_idle:
