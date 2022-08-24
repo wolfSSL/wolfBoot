@@ -3861,8 +3861,10 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
                 return CKR_HOST_MEMORY;
 
             ret = WP11_Rsa_SerializeKey(key,  serialBuff, &serialSize);
-            if (ret != 0)
-                return CKR_FUNCTION_FAILED;
+            if (ret != 0) {
+                rv = CKR_FUNCTION_FAILED;
+                goto err_out;
+            }
 
             break;
         default:
