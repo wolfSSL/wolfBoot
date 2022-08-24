@@ -39,6 +39,16 @@
 #define ATTR_TYPE_DATA         2
 #define ATTR_TYPE_DATE         3
 
+#define CHECK_KEYTYPE(kt) \
+   (kt == CKK_RSA || kt == CKK_EC || kt == CKK_DH || \
+    kt == CKK_AES || kt == CKK_GENERIC_SECRET) ? CKR_OK : CKR_ATTRIBUTE_VALUE_INVALID
+
+#define CHECK_KEYCLASS(kc) \
+    (kc == CKO_PRIVATE_KEY || kc == CKO_PUBLIC_KEY || kc == CKO_SECRET_KEY)? CKR_OK : CKR_ATTRIBUTE_VALUE_INVALID
+
+#define CHECK_WRAPPABLE(kc, kt) \
+    (kc == CKO_PRIVATE_KEY && kt == CKK_RSA) ? CKR_OK: CKR_KEY_NOT_WRAPPABLE
+
 #ifndef NO_RSA
 /* RSA key data attributes. */
 static CK_ATTRIBUTE_TYPE rsaKeyParams[] = {
@@ -185,6 +195,18 @@ static void FindAttributeType(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount,
         if (pTemplate[i].type == type)
             *attribute = &pTemplate[i];
     }
+}
+
+static CK_RV FindValidAttributeType(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount,
+                                    CK_ATTRIBUTE_TYPE type, CK_ATTRIBUTE** attr, size_t sz) {
+    FindAttributeType(pTemplate, ulCount, type, attr);
+    if (*attr == NULL)
+        return CKR_TEMPLATE_INCOMPLETE;
+
+    if ((*attr)->pValue == NULL || (*attr)->ulValueLen != sz)
+        return CKR_ATTRIBUTE_VALUE_INVALID;
+
+    return CKR_OK;
 }
 
 /**
@@ -460,6 +482,126 @@ static CK_RV AddObject(WP11_Session* session, WP11_Object* object,
     *phKey = WP11_Object_GetHandle(object);
 
     return CKR_OK;
+}
+
+/**
+ * Create an RSA private key object in the session or on the token associated with the session.
+ *
+ * @param  session    [in]   Handle of session.
+ * @param  pTemplate  [in]   Template of attributes for object.
+ * @param  ulCount    [in]   Number of attribute triplets in template.
+ * @param  derBuf     [in]   DER-encoded private key
+ * @param  derlen     [in]   Length of the DER-encoded key data
+ * @param  phKey      [out]  pointer to hold the handle to the new key object
+ * @return  CKR_CRYPTOKI_NOT_INITIALIZED when library not initialized.
+ *          CKR_SESSION_HANDLE_INVALID when session handle is not valid.
+ *          CKR_ARGUMENTS_BAD when pTemplate or phObject is NULL.
+ *          CKR_SESSION_READ_ONLY when the session cannot create objects.
+ *          CKR_TEMPLATE_INCOMPLETE when CKA_KEY_TYPE is missing.
+ *          CKR_ATTRIBUTE_VALUE_INVALID when an attribute has invalid value or
+ *          length.
+ *          CKR_DEVICE_MEMORY when dynamic memory allocation fails.
+ *          CKR_FUNCTION_FAILED when creating the object fails.
+ *          CKR_WRAPPED_KEY_INVALID when DER-encoded key data isn't valid
+ *          CKR_OK on success.
+ */
+static CK_RV AddRSAPrivateKeyObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTemplate,
+                                    CK_ULONG ulCount, byte* derBuf, CK_ULONG derLen, CK_OBJECT_HANDLE_PTR phKey)
+{
+    CK_RV rv;
+    WP11_Object* privKeyObject = NULL;
+
+    *phKey = CK_INVALID_HANDLE;
+
+    rv = NewObject(session, CKK_RSA, CKO_PRIVATE_KEY,
+                   pTemplate, ulCount,
+                   &privKeyObject);
+
+    if (rv != CKR_OK)
+        return rv;
+
+    if ( WP11_Rsa_ParsePrivKey(derBuf, (word32)derLen, privKeyObject) != 0 ) {
+        rv = CKR_WRAPPED_KEY_INVALID;
+        goto err_out;
+    }
+
+    rv = AddObject(session, privKeyObject, pTemplate, ulCount, phKey);
+
+    /* Some other libraries create a public key object along with private key.
+     * We'll do that when WOLFPKCS11_KEYPAIR_GEN_COMMON_LABEL is defined.
+     */
+#ifdef WOLFPKCS11_KEYPAIR_GEN_COMMON_LABEL
+    {
+        const int TOKEN_IDX = 0;
+        const int LABEL_IDX = 1;
+
+        WP11_Object* pubKeyObject = NULL;
+        CK_ATTRIBUTE* attr = NULL;
+        CK_BBOOL trueVal = CK_TRUE;
+        CK_BBOOL falseVal = CK_TRUE;
+
+        CK_OBJECT_HANDLE hPub;
+
+        CK_ATTRIBUTE      pubt[] = {
+                {CKA_TOKEN,    NULL, sizeof(CK_BBOOL)},
+                {CKA_LABEL,    NULL, 0},
+                {CKA_WRAP,    &falseVal, sizeof(falseVal)},
+                {CKA_VERIFY,  &trueVal, sizeof(trueVal)},
+                {CKA_ENCRYPT, &trueVal,  sizeof(trueVal)}
+        };
+
+        if (rv != CKR_OK)
+            goto err_out;
+
+        FindAttributeType(pTemplate, ulCount, CKA_TOKEN, &attr);
+        if (attr != NULL)
+            if (attr->pValue != NULL && attr->ulValueLen == sizeof(CK_BBOOL))
+                pubt[TOKEN_IDX].pValue = attr->pValue;
+
+
+        FindAttributeType(pTemplate, ulCount, CKA_LABEL, &attr);
+        if (attr != NULL) {
+            if (attr->pValue != NULL && attr->ulValueLen != 0) {
+                pubt[LABEL_IDX].pValue = attr->pValue;
+                pubt[LABEL_IDX].ulValueLen = attr->ulValueLen;
+            }
+        }
+
+        rv = NewObject(session, CKK_RSA, CKO_PUBLIC_KEY,
+                       pubt, sizeof(pubt) / sizeof(CK_ATTRIBUTE),
+                       &pubKeyObject);
+
+        if (rv != CKR_OK)
+            goto err_out;
+
+        if (WP11_Rsa_PrivKey2PubKey(privKeyObject, pubKeyObject, derBuf, (word32)derLen) == 0) {
+
+            rv = AddObject(session, pubKeyObject, pubt, sizeof(pubt) / sizeof(CK_ATTRIBUTE), &hPub);
+
+            if (rv != CKR_OK) {
+                WP11_Object_Free(pubKeyObject);
+            }
+        } else {
+            rv = CKR_WRAPPED_KEY_INVALID;
+            WP11_Object_Free(pubKeyObject);
+        }
+    }
+
+#endif
+err_out:
+    if (rv != CKR_OK) {
+
+        if (*phKey != CK_INVALID_HANDLE) {
+            WP11_Session_RemoveObject(session, privKeyObject);
+            *phKey = CK_INVALID_HANDLE;
+        }
+
+        if (privKeyObject != NULL) {
+            WP11_Object_Free(privKeyObject);
+        }
+    }
+
+    return rv;
 }
 
 /**
@@ -3645,7 +3787,7 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
 
 /**
  * Wrap a key using another key.
- * No mechanisms are supported.
+ * Support only RSA private key wrapped by AESCBCPAD mechanism
  *
  * @param  hSession          [in]      Handle of session.
  * @param  pMechanism        [in]      Type of operation to perform with
@@ -3669,9 +3811,15 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
                 CK_ULONG_PTR pulWrappedKeyLen)
 {
     int ret;
+    CK_RV rv;
     WP11_Session* session = NULL;
     WP11_Object* key = NULL;
     WP11_Object* wrappingKey = NULL;
+    CK_KEY_TYPE wrapkeyType;
+    CK_KEY_TYPE  keyType = CKK_RSA;
+    CK_OBJECT_CLASS keyClass = CKO_PRIVATE_KEY;
+    word32 serialSize = 0;
+    byte* serialBuff = NULL;
 
     if (!WP11_Library_IsInitialized())
         return CKR_CRYPTOKI_NOT_INITIALIZED;
@@ -3680,21 +3828,82 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
     if (pMechanism == NULL || pulWrappedKeyLen == NULL)
         return CKR_ARGUMENTS_BAD;
 
+    if (! WP11_Session_IsRW(session))
+        return CKR_SESSION_READ_ONLY;
+
     ret = WP11_Object_Find(session, hWrappingKey, &wrappingKey);
     if (ret != 0)
-        return CKR_OBJECT_HANDLE_INVALID;
+        return CKR_WRAPPING_KEY_HANDLE_INVALID;
+
+    wrapkeyType = WP11_Object_GetType(wrappingKey);
+
     ret = WP11_Object_Find(session, hKey, &key);
     if (ret != 0)
         return CKR_OBJECT_HANDLE_INVALID;
 
-    (void)pWrappedKey;
+    keyType = WP11_Object_GetType(key);
 
-    return CKR_MECHANISM_INVALID;
+    keyClass = WP11_Object_GetClass(key);
+
+    rv = CHECK_WRAPPABLE(keyClass, keyType);
+    if (rv != CKR_OK)
+        return rv;
+
+    switch(keyType) {
+
+        case CKK_RSA:
+            ret = WP11_Rsa_SerializeKey(key, NULL, &serialSize);
+            if (ret != 0)
+                return CKR_FUNCTION_FAILED;
+
+            serialBuff = XMALLOC(serialSize, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            if (serialBuff == NULL)
+                return CKR_HOST_MEMORY;
+
+            ret = WP11_Rsa_SerializeKey(key,  serialBuff, &serialSize);
+            if (ret != 0)
+                return CKR_FUNCTION_FAILED;
+
+            break;
+        default:
+            return CKR_KEY_NOT_WRAPPABLE;
+    }
+
+    switch (pMechanism->mechanism) {
+        /* These unwrap mechanisms can be supported with high level C_Encrypt */
+        case CKM_AES_CBC_PAD:
+
+            if (wrapkeyType != CKK_AES) {
+                rv = CKR_WRAPPING_KEY_TYPE_INCONSISTENT;
+                goto err_out;
+            }
+
+            rv = C_EncryptInit(hSession, pMechanism, hWrappingKey);
+            if (rv != CKR_OK)
+                goto err_out;
+
+            rv = C_Encrypt(hSession, serialBuff, serialSize, pWrappedKey, pulWrappedKeyLen);
+            if (rv != CKR_OK)
+                goto err_out;
+
+            break;
+        default:
+            return CKR_MECHANISM_INVALID;
+    }
+
+err_out:
+
+    if (serialBuff != NULL) {
+        XMEMSET(serialBuff, 0, serialSize);
+        XFREE(serialBuff, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+
+    return rv;
 }
 
 /**
- * Unwrap a key using a key.
- * No mechanisms are supported.
+ * Unwrap a key using a wrap key.
+ * Support only RSA private key wrapped by AESCBCPAD mechanism
  *
  * @param  hSession          [in]   Handle of session.
  * @param  pMechanism        [in]   Type of operation to perform with
@@ -3721,26 +3930,110 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
                   CK_ULONG ulAttributeCount,
                   CK_OBJECT_HANDLE_PTR phKey)
 {
+    CK_RV rv;
     int ret;
     WP11_Session* session = NULL;
     WP11_Object* unwrappingKey = NULL;
+    CK_KEY_TYPE wrapkeyType;
+    CK_KEY_TYPE       keyType = CKK_RSA;
+    CK_OBJECT_CLASS   keyClass = CKO_PRIVATE_KEY;
+    CK_ATTRIBUTE*     attr = NULL;
+    byte* workBuffer = NULL;
+    CK_ULONG ulUnwrappedLen = 0;
 
     if (!WP11_Library_IsInitialized())
         return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (WP11_Session_Get(hSession, &session) != 0)
         return CKR_SESSION_HANDLE_INVALID;
+
+    if (! WP11_Session_IsRW(session))
+        return CKR_SESSION_READ_ONLY;
+
     if (pMechanism == NULL || pWrappedKey == NULL || ulWrappedKeyLen == 0 ||
                                            pTemplate == NULL || phKey == NULL) {
         return CKR_ARGUMENTS_BAD;
     }
 
+    *phKey = CK_INVALID_HANDLE;
+
     ret = WP11_Object_Find(session, hUnwrappingKey, &unwrappingKey);
     if (ret != 0)
-        return CKR_OBJECT_HANDLE_INVALID;
+        return CKR_UNWRAPPING_KEY_HANDLE_INVALID;
 
-    (void)ulAttributeCount;
+    rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_KEY_TYPE, &attr, sizeof(CK_KEY_TYPE));
 
-    return CKR_MECHANISM_INVALID;
+    if (rv != CKR_OK)
+        return rv;
+
+    keyType = *(CK_KEY_TYPE*)attr->pValue;
+
+    rv = CHECK_KEYTYPE(keyType);
+
+    if (rv != CKR_OK)
+        return rv;
+
+    rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_CLASS, &attr, sizeof(CK_OBJECT_CLASS));
+
+    if (rv != CKR_OK)
+        return rv;
+
+    keyClass = *(CK_OBJECT_CLASS*)attr->pValue;
+
+    rv = CHECK_KEYCLASS(keyClass);
+
+    if (rv != CKR_OK)
+        return rv;
+
+    rv = CHECK_WRAPPABLE(keyClass, keyType);
+
+    if (rv != CKR_OK)
+        return rv;
+
+    wrapkeyType = WP11_Object_GetType(unwrappingKey);
+
+    switch (pMechanism->mechanism) {
+        /* These unwrap mechanisms can be supported with high level C_Decrypt */
+        case CKM_AES_CBC_PAD:
+
+            if (wrapkeyType != CKK_AES)
+                return CKR_UNWRAPPING_KEY_TYPE_INCONSISTENT;
+
+            workBuffer = XMALLOC(ulWrappedKeyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            if (workBuffer == NULL)
+                return CKR_HOST_MEMORY;
+
+            rv = C_DecryptInit(hSession, pMechanism, hUnwrappingKey);
+            if (rv != CKR_OK)
+                goto err_out;
+
+            rv = C_Decrypt(hSession, pWrappedKey, ulWrappedKeyLen, workBuffer, &ulUnwrappedLen);
+            if (rv != CKR_OK)
+                goto err_out;
+
+            break;
+        default:
+            fprintf(stderr, "WACKY WACKY MECH: %ld %ld\n", CKM_AES_CBC_PAD, pMechanism->mechanism);
+            return CKR_MECHANISM_INVALID;
+    }
+
+    switch(keyType) {
+        case CKK_RSA:
+
+            rv = AddRSAPrivateKeyObject(session, pTemplate, ulAttributeCount, workBuffer, ulUnwrappedLen, phKey);
+            break;
+        default:
+            rv = CKR_KEY_NOT_WRAPPABLE;
+            goto err_out;
+    }
+
+    err_out:
+
+    if ( workBuffer != NULL) {
+        XMEMSET(workBuffer, 0, ulWrappedKeyLen);
+        XFREE(workBuffer, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
+
+    return rv;
 }
 
 #if defined(HAVE_ECC) || !defined(NO_DH)

@@ -177,6 +177,8 @@ extern "C" {
 #define SESSION_COUNT_E                -8
 #define LOGGED_IN_E                    -9
 #define OBJ_COUNT_E                    -10
+#define OBJ_TYPE_E                     -11
+#define PARAM_E                        -12
 
 
 typedef struct WP11_Object WP11_Object;
@@ -261,6 +263,8 @@ int WP11_Object_SetSecretKey(WP11_Object* object, unsigned char** data,
                              CK_ULONG* len);
 int WP11_Object_SetClass(WP11_Object* object, CK_OBJECT_CLASS objClass);
 
+CK_OBJECT_CLASS WP11_Object_GetClass(WP11_Object* object);
+
 int WP11_Object_Find(WP11_Session* session, CK_OBJECT_HANDLE objHandle,
                      WP11_Object** object);
 int WP11_Object_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
@@ -270,9 +274,17 @@ int WP11_Object_SetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type, byte* data,
 int WP11_Object_MatchAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
                           byte* data, CK_ULONG len);
 
+int WP11_Rsa_SerializeKey(WP11_Object* object, byte* output, word32* poutsz);
+
+int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey);
+
+int WP11_Rsa_PrivKey2PubKey(WP11_Object* privKey, WP11_Object* pubKey, byte* workbuf, word32 worksz);
+
 int WP11_Rsa_GenerateKeyPair(WP11_Object* pub, WP11_Object* priv,
                              WP11_Slot* slot);
+
 word32 WP11_Rsa_KeyLen(WP11_Object* key);
+
 int WP11_Rsa_PublicEncrypt(unsigned char* in, word32 inLen, unsigned char* out,
                            word32* outLen, WP11_Object* pub, WP11_Slot* slot);
 int WP11_Rsa_PrivateDecrypt(unsigned char* in, word32 inLen, unsigned char* out,
