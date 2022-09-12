@@ -48,6 +48,11 @@ static int wolfBoot_unseal_pubkey(uint8_t* pubkey, WOLFTPM2_KEY* tpmKey);
 
 #endif /* WOLFBOOT_TPM */
 
+#ifdef WOLFBOOT_RENESAS_TSIP
+#include "r_tsip_rx_if.h"
+#include "key_data.h"
+#include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
+#endif
 
 static int keyslot_id_by_sha(const uint8_t *hint);
 
@@ -290,9 +295,11 @@ static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
-    int ret;
+    int ret = 0;
     uint8_t output[IMAGE_SIGNATURE_SIZE];
+#ifdef WOLFBOOT_TPM
     int output_sz = sizeof(output);
+#endif
     uint8_t* digest_out = NULL;
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
@@ -351,7 +358,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     {
         struct RsaKey rsa;
         word32 in_out = 0;
-        int res = 0;
 
 #if !defined(WOLFBOOT_RENESAS_SCEPROTECT)
 
@@ -368,6 +374,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
             return;
         }
 
+        #ifndef WOLFBOOT_RENESAS_TSIP
         XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
         RSA_VERIFY_FN(ret, wc_RsaSSL_VerifyInline, output, IMAGE_SIGNATURE_SIZE,
                 &digest_out, &rsa);
@@ -387,6 +394,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     }
 #endif /* WOLFBOOT_TPM */
 
+#ifndef WOLFBOOT_RENESAS_TSIP
 #ifndef NO_RSA_SIG_ENCODING
     if (ret > WOLFBOOT_SHA_DIGEST_SIZE) {
         /* larger result indicates it might have an ASN.1 encoded header */
@@ -395,7 +403,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #endif
     if (ret == WOLFBOOT_SHA_DIGEST_SIZE && img && digest_out)
         RSA_VERIFY_HASH(img, digest_out);
-
+#endif
 }
 #endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_3072
           || WOLFBOOT_SIGN_RSA4096 */

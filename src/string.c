@@ -70,6 +70,7 @@ int isalpha(int c)
     return (isupper(c) || islower(c));
 }
 
+#if !defined(__CCRX__) /* Renesas CCRX */
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
@@ -108,6 +109,7 @@ int strcmp(const char *s1, const char *s2)
 
     return diff;
 }
+#endif /* Renesas CCRX */
 
 int strcasecmp(const char *s1, const char *s2)
 {

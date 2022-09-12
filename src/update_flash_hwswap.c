@@ -93,5 +93,5 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
     hal_prepare_boot();
-    do_boot((void *)WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE);
+    do_boot((void *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE));
 }
