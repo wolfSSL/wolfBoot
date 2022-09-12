@@ -35,6 +35,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>src/keystore.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/keystore.c</locationURI>
+		</link>
+		<link>
 			<name>src/hal/renesas-rx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/hal/renesas-rx.c</locationURI>
@@ -68,6 +73,11 @@
 			<name>src/wolfboot/spi_flash.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/spi_flash.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfboot/string.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/string.c</locationURI>
 		</link>
 		<link>
 			<name>src/wolfboot/uart_flash.c</name>
@@ -145,6 +155,21 @@
 			<locationURI>PARENT-5-PROJECT_LOC/wolfssl/wolfcrypt/src/hash.c</locationURI>
 		</link>
 		<link>
+			<name>src/wolfcrypt/memory.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/memory.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/misc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/misc.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/rsa.c</locationURI>
+		</link>
+		<link>
 			<name>src/wolfcrypt/sha256.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/wolfssl/wolfcrypt/src/sha256.c</locationURI>
@@ -158,6 +183,21 @@
 			<name>src/wolfcrypt/sp_c32.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/wolfssl/wolfcrypt/src/sp_c32.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/tfm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/tfm.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/Renesas/Renesas</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/Renesas/Renesas/renesas_tsip_rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_rsa.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

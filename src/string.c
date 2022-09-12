@@ -51,6 +51,7 @@ int isalpha(int c)
     return (isupper(c) || islower(c));
 }
 
+#if !defined(__CCRX__) /* Renesas CCRX */
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
@@ -89,6 +90,7 @@ int strcmp(const char *s1, const char *s2)
 
 	return diff;
 }
+#endif /* Renesas CCRX */
 
 int strcasecmp(const char *s1, const char *s2)
 {
@@ -126,6 +128,7 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
 	return diff;
 }
 
+#if !defined(__CCRX__) /* Renesas CCRX */
 size_t strlen(const char *s)
 {
     size_t i = 0;
@@ -244,4 +247,5 @@ void *memmove(void *dst, const void *src, size_t n)
         return memcpy(dst, src, n);
     }
 }
+#endif
 #endif

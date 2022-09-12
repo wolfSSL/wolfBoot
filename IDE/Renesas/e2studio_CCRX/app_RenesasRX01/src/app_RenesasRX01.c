@@ -30,7 +30,7 @@
 
 static void printPart(uint8_t *part)
 {
-#ifdef WOLFBOOT_PARTION_VERBOS
+#ifdef WOLFBOOT_DEBUG_PARTION
     uint32_t *v;
     int i;
 #endif
@@ -47,23 +47,13 @@ static void printPart(uint8_t *part)
     magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
     printf("Tail Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
 
-#ifdef PARTIION_VERBOS
+#ifdef WOLFBOOT_DEBUG_PARTION
     v = (uint32_t *)part;
     for(i = 0; i < 0x100/4; i++) {
         if(i % 4 == 0)
             print("\n%08x: ", (uint32_t)v+i*4);
         print("%08x ", v[i]);
     }
-
-    print("\n\nImage:");
-
-    for( ; i < 0x100/4 + 16; i++) {
-        if(i % 4 == 0)
-            print("\n%08x: ", (uint32_t)v+i*4);
-        print("%08x ", v[i]);
-    }
-
-    print("\n\n");
 #endif
 
 }
@@ -74,7 +64,7 @@ static void printPartitions(void)
     printf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
-    printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    //printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
 }
 
 

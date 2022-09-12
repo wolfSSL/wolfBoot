@@ -1,5 +1,7 @@
 ## wolfBoot for Renesas RX72N
 
+#define BSP_CFG_USTACK_BYTES            (0x2000)
+
 ```
 MCU:          Renesas RX72N
 Board:        RX72N/Envision Kit
@@ -7,16 +9,25 @@ IDE:          e2Studio
 Compiler:     CCRX
 FIT Module:   r_flash_rx
 
-Optional:
-Flash Wirter: Renesas Flash Programmer v3
 
 e2Studio Project:
 wolfBoot      IDE/Renesas/e2studio_CCRX/wolfBoot
 Sample app    IDE/Renesas/e2studio_CCRX/app_RenesasRX01
 
-Key tool:
-Key generation    tools/keytools/keygen
-Signature         tools/keytools/sign
+Other Tools:
+- Key tool
+    Key generation    tools/keytools/keygen
+    Signature         tools/keytools/sign
+        Included in wolfBoot with source code
+
+- Flash Wirter
+    Renesas Flash Programmer v3
+        Download from Renesas site
+
+- Binary tool: 
+    rx-elf-objcopy.exe
+        Included in GCC for Renesas RX
+
 
 Flash Allocation:
 +---------------------------+------------------------+-----+
@@ -49,13 +60,14 @@ board for the debugger and flash programmer.
 ### 1) Key generation
 
 ```
+$ cd <wolfBoot>
 $ export PATH:$PATH:<wolfBoot>/tools/keytools
-$ keygen --ed255519 -g ./pri-ed25519.der
+$ keygen --ecc256 -g ./pri-ecc256.der
 ```
 
-It generates a pair of private and public key with -g option. The private
-key is stored in the specified file. The public key is stored in a key store
-as a C source code soo that it can be compiled and linked with wolfBoot.
+It generates a pair of private and public key with -g option. The private key is stored 
+in the specified file. The public key is stored in a key store as a C source code 
+in "src/keystore.c" soo that it can be compiled and linked with wolfBoot.
 If you have an existing key pair, you can use -i option to import the pablic
 key to the store.
 
@@ -111,7 +123,8 @@ Include Paths
 "C:..\..\..\..\..\wolfBoot\wolfboot\include"
 
 Pre-Include
-../../../../../include/user_settings.h
+../../include/user_settings.h
+../../include/terget.h
 
 Code Origin and entry point (PResetPRG) is "0xffc10100" (See Section Viewer of Linker Section).
 ```
@@ -135,15 +148,14 @@ contain generated signature and other control fields. Output file name is made u
 the input file name and version like app_RenesasRx01_v1.0_signed.bin.
 
 ```
-$ sign --ed25519 app_RenesasRx01.bin ../../../../../pri-ed25519.der 1.0
-ed25519.der 1.0
+$ sign --ecc256 app_RenesasRx01.bin ../../../../../pri-ecc256.der 1.0 ecc256.der 1.0
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 10B0000
 Update type:          Firmware
 Input image:          app_RenesasRx.bin
-Selected cipher:      ED25519
+Selected cipher:      ECC256
 Selected hash  :      SHA256
-Public key:           ed25519.der
+Public key:           ecc256.der
 Output  image:        app_RenesasRx_v1.0_signed.bin
 Target partition id : 1
 Calculating SHA256 digest...
@@ -210,7 +222,7 @@ You can download it by the flash programmer.
 
 
 ```
-$ sign --ed25519 app_RenesasRx01.bin ../../../../../pri-ed25519.der 2.0
+$ sign --ecc256 app_RenesasRx01.bin ../../../../../pri-ecc256.der 2.0
 rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffdf0000 app_RenesasRx01_v2.0_signed.bin app_RenesasRx01_v2.0_signed.hex
 ```
 
@@ -235,7 +247,7 @@ wolfBoot_update_trigger() whcih changes the partition status and triggers
 updating the firmware.
 
 Since this is just a trigger, the application can continue the process.
-In the demo application it outputs a message "Update Triggered" and enters
+In the demo application it outputs a message "Firmware Update is triggered" and enters
 a infinit loop of nop.
 
 Now you can re-boot it by start wolfBoot by e2Studion debugger. The boot
@@ -254,4 +266,8 @@ Hit any key to update the firmware.
 ```
 
 Not the application behavior is almost identical but the Version is "2" this time.
+
+
+
+## Creating an application project from scratch
 
