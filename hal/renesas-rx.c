@@ -30,17 +30,30 @@
 #include "hal.h"
 #include "r_flash_rx.h"
 
+#ifdef WOLFBOOT_RENESAS_TSIP
+#include "r_tsip_rx_if.h"
+#include "key_data.h"
+
+tsip_tls_ca_certification_public_key_index_t g_key_index_1;
+tsip_update_key_ring_t g_key_index_2;
+
+#endif
+
 static inline void hal_panic(void)
 {
     while(1)
         ;
 }
 
-
 void hal_init(void)
 {
     if(R_FLASH_Open() != FLASH_SUCCESS)
         hal_panic();
+
+#ifdef WOLFBOOT_RENESAS_TSIP
+	if(R_TSIP_Open(&g_key_index_1, &g_key_index_2)!= TSIP_SUCCESS)
+        hal_panic();
+#endif
 
 }
 
@@ -49,9 +62,6 @@ void hal_prepare_boot(void)
 
 }
 
-
-
-
 #define MIN_PROG (0x8000)
 #define ALIGN_FLASH(a) ((a) / MIN_PROG * MIN_PROG)
 static uint8_t save[MIN_PROG];
@@ -59,7 +69,8 @@ static uint8_t save[MIN_PROG];
 int blockWrite(const uint8_t *data, uint32_t addr, int len)
 {
     for(; len; len-=MIN_PROG, data+=MIN_PROG, addr+=MIN_PROG) {
-        if(R_FLASH_Write((uint32_t)data, addr, MIN_PROG) != FLASH_SUCCESS)
+    	memcpy(save, data, MIN_PROG); /* for the case "data" ls a flash address */
+        if(R_FLASH_Write((uint32_t)save, addr, MIN_PROG) != FLASH_SUCCESS)
             return -1;
     }
     return 0;
@@ -96,6 +107,8 @@ int hal_flash_write(uint32_t addr, const uint8_t *data, int len)
     if(len > 0) {
         memcpy(save, (const void *)addr, MIN_PROG);
         memcpy(save, data, len);
+        if(R_FLASH_Erase((flash_block_address_t)addr, 1) != FLASH_SUCCESS)
+        return -1;
         if(R_FLASH_Write((uint32_t)save, addr, MIN_PROG) != FLASH_SUCCESS)
             goto error;
     }
@@ -150,6 +163,12 @@ void RAMFUNCTION hal_flash_lock(void)
 
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
+	flash_cmd_t cmd = FLASH_CMD_SWAPFLAG_TOGGLE;
+	printf("FLASH_CMD_SWAPFLAG_TOGGLE=%d\n", FLASH_CMD_SWAPFLAG_TOGGLE);
+	hal_flash_unlock();
+    if(R_FLASH_Control(cmd, NULL) != FLASH_SUCCESS)
+        hal_panic();
+    hal_flash_lock();
 
 }
 
