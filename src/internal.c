@@ -1504,6 +1504,61 @@ int WP11_Rsa_SerializeKey(WP11_Object* object, byte* output, word32* poutsz)
 }
 
 /**
+ * Export the RSA key in plain-text PKCS8.
+ *
+ * Keys are encoded in PKCS8 w/o encryption
+ *
+ * @param [in, out]  object  RSA key object.
+ * @param [out]  output  holds encoded key and can be null.
+ * @param [in/out]  poutsz  in and out size of output buffer
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+int WP11_Rsa_SerializeKeyPTPKC8(WP11_Object* object, byte* output, word32* poutsz)
+{
+    int ret;
+    word32 dersz = 0;
+    byte* der = NULL;
+
+    if (object == NULL || poutsz == NULL)
+        return PARAM_E;
+
+    if (object->type != CKK_RSA)
+        return OBJ_TYPE_E;
+
+    if (object->objClass != CKO_PRIVATE_KEY)
+        return OBJ_TYPE_E;
+
+    ret = WP11_Rsa_SerializeKey(object, NULL, &dersz);
+
+    if (ret != 0)
+        return ret;
+
+    der = (unsigned char*)XMALLOC(dersz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+
+    if (der == NULL)
+        return MEMORY_E;
+
+    ret = WP11_Rsa_SerializeKey(object, der, &dersz);
+
+    if ( ret != 0) {
+        goto end_func;
+    }
+
+    /* Get length of encoded private key. */
+    ret = wc_CreatePKCS8Key(output, poutsz, der,
+                            dersz, RSAk, NULL, 0);
+    if ( ret == LENGTH_ONLY_E || ret > 0)
+        ret = 0;
+
+end_func:
+    if (NULL != der)
+        XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+
+    return ret;
+}
+
+/**
  * Load an RSA key from storage.
  *
  * @param [in, out]  object   RSA key object.

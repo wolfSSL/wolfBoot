@@ -276,6 +276,8 @@ int WP11_Object_MatchAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
 
 int WP11_Rsa_SerializeKey(WP11_Object* object, byte* output, word32* poutsz);
 
+int WP11_Rsa_SerializeKeyPTPKC8(WP11_Object* object, byte* output, word32* poutsz);
+
 int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey);
 
 int WP11_Rsa_PrivKey2PubKey(WP11_Object* privKey, WP11_Object* pubKey, byte* workbuf, word32 worksz);

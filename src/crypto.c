@@ -3787,7 +3787,7 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
 
 /**
  * Wrap a key using another key.
- * Support only RSA private key wrapped by AESCBCPAD mechanism
+ * No mechanisms are supported.
  *
  * @param  hSession          [in]      Handle of session.
  * @param  pMechanism        [in]      Type of operation to perform with
@@ -3831,15 +3831,15 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
     if (! WP11_Session_IsRW(session))
         return CKR_SESSION_READ_ONLY;
 
+    ret = WP11_Object_Find(session, hKey, &key);
+    if (ret != 0)
+        return CKR_OBJECT_HANDLE_INVALID;
+
     ret = WP11_Object_Find(session, hWrappingKey, &wrappingKey);
     if (ret != 0)
         return CKR_WRAPPING_KEY_HANDLE_INVALID;
 
     wrapkeyType = WP11_Object_GetType(wrappingKey);
-
-    ret = WP11_Object_Find(session, hKey, &key);
-    if (ret != 0)
-        return CKR_OBJECT_HANDLE_INVALID;
 
     keyType = WP11_Object_GetType(key);
 
@@ -3852,7 +3852,8 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
     switch(keyType) {
 
         case CKK_RSA:
-            ret = WP11_Rsa_SerializeKey(key, NULL, &serialSize);
+            ret = WP11_Rsa_SerializeKeyPTPKC8(key, NULL, &serialSize);
+            
             if (ret != 0)
                 return CKR_FUNCTION_FAILED;
 
@@ -3860,11 +3861,10 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
             if (serialBuff == NULL)
                 return CKR_HOST_MEMORY;
 
-            ret = WP11_Rsa_SerializeKey(key,  serialBuff, &serialSize);
-            if (ret != 0) {
-                rv = CKR_FUNCTION_FAILED;
-                goto err_out;
-            }
+            ret = WP11_Rsa_SerializeKeyPTPKC8(key, serialBuff, &serialSize);
+           
+            if (ret != 0)
+                return CKR_FUNCTION_FAILED;
 
             break;
         default:
@@ -3955,12 +3955,16 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
                                            pTemplate == NULL || phKey == NULL) {
         return CKR_ARGUMENTS_BAD;
     }
-
+    
     *phKey = CK_INVALID_HANDLE;
 
     ret = WP11_Object_Find(session, hUnwrappingKey, &unwrappingKey);
     if (ret != 0)
         return CKR_UNWRAPPING_KEY_HANDLE_INVALID;
+
+    if (pMechanism->mechanism != CKM_AES_CBC_PAD) {
+        return CKR_MECHANISM_INVALID;
+    }
 
     rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_KEY_TYPE, &attr, sizeof(CK_KEY_TYPE));
 
@@ -4014,7 +4018,6 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
 
             break;
         default:
-            fprintf(stderr, "WACKY WACKY MECH: %ld %ld\n", CKM_AES_CBC_PAD, pMechanism->mechanism);
             return CKR_MECHANISM_INVALID;
     }
 
