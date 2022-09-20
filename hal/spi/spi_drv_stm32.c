@@ -43,7 +43,7 @@ void RAMFUNCTION spi_cs_on(int pin)
 }
 
 
-static void spi_flash_pin_setup(void)
+static void RAMFUNCTION spi_flash_pin_setup(void)
 {
     uint32_t reg;
     RCC_GPIO_CLOCK_ER |= SPI_PIO_CS_CEN;
@@ -71,7 +71,7 @@ static void spi_tpm2_pin_setup(void)
 #endif
 }
 
-static void spi1_pins_setup(void)
+static void RAMFUNCTION spi1_pins_setup(void)
 {
     uint32_t reg;
     RCC_GPIO_CLOCK_ER |= SPI_PIO_CEN;
@@ -132,7 +132,7 @@ static void spi_pins_release(void)
 
 }
 
-static void spi1_reset(void)
+static void RAMFUNCTION spi1_reset(void)
 {
     APB2_CLOCK_RST |= SPI1_APB2_CLOCK_ER_VAL;
     APB2_CLOCK_RST &= ~SPI1_APB2_CLOCK_ER_VAL;
@@ -161,7 +161,7 @@ void RAMFUNCTION spi_write(const char byte)
 }
 
 
-void spi_init(int polarity, int phase)
+void RAMFUNCTION spi_init(int polarity, int phase)
 {
     static int initialized = 0;
     if (!initialized) {

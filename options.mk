@@ -41,7 +41,7 @@ ifeq ($(SIGN),ECC256)
   else ifneq ($(SPMATH),1)
     STACK_USAGE=5008
   else
-    STACK_USAGE=3960
+    STACK_USAGE=5880
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
@@ -112,7 +112,7 @@ ifeq ($(SIGN),ED25519)
   ifeq ($(WOLFTPM),1)
     STACK_USAGE=6680
   else
-    STACK_USAGE?=1180
+    STACK_USAGE?=5000
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
@@ -411,3 +411,15 @@ endif
 
 CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 OBJS+=$(WOLFCRYPT_OBJS)
+
+# check if both encryption and self update are on
+#
+ifeq ($(RAM_CODE),1)
+  ifeq ($(ENCRYPT),1)
+    ifneq ($(ENCRYPT_WITH_CHACHA),1)
+       LSCRIPT_IN=NONE
+    else
+       LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
+    endif
+  endif
+endif

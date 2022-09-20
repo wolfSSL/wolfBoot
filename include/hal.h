@@ -70,8 +70,7 @@ void hal_prepare_boot(void);
     #define ext_flash_unlock() do{}while(0)
     #define ext_flash_read spi_flash_read
     #define ext_flash_write spi_flash_write
-
-    static int ext_flash_erase(uintptr_t address, int len)
+    static inline int ext_flash_erase(uintptr_t address, int len)
     {
         uint32_t end = address + len - 1;
         uint32_t p;

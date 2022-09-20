@@ -77,7 +77,7 @@ static uint8_t RAMFUNCTION read_status(void)
     return status;
 }
 
-static void spi_cmd(uint8_t cmd)
+static void RAMFUNCTION spi_cmd(uint8_t cmd)
 {
     spi_cs_on(SPI_CS_FLASH);
     spi_write(cmd);
@@ -85,7 +85,7 @@ static void spi_cmd(uint8_t cmd)
     spi_cs_off(SPI_CS_FLASH);
 }
 
-static void flash_write_enable(void)
+static void RAMFUNCTION flash_write_enable(void)
 {
     uint8_t status;
     do {
@@ -94,7 +94,7 @@ static void flash_write_enable(void)
     } while ((status & ST_WEL) == 0);
 }
 
-static void flash_write_disable(void)
+static void RAMFUNCTION flash_write_disable(void)
 {
     spi_cmd(WRDI);
 }
@@ -107,7 +107,7 @@ static void RAMFUNCTION wait_busy(void)
     } while(status & ST_BUSY);
 }
 
-static int spi_flash_write_page(uint32_t address, const void *data, int len)
+static int RAMFUNCTION spi_flash_write_page(uint32_t address, const void *data, int len)
 {
     const uint8_t *buf = data;
     int j = 0;
@@ -132,7 +132,7 @@ static int spi_flash_write_page(uint32_t address, const void *data, int len)
     return j;
 }
 
-static int spi_flash_write_sb(uint32_t address, const void *data, int len)
+static int RAMFUNCTION spi_flash_write_sb(uint32_t address, const void *data, int len)
 {
     const uint8_t *buf = data;
     uint8_t verify = 0;
@@ -198,7 +198,7 @@ uint16_t spi_flash_probe(void)
 }
 
 
-void spi_flash_sector_erase(uint32_t address)
+void RAMFUNCTION spi_flash_sector_erase(uint32_t address)
 {
     address &= (~(SPI_FLASH_SECTOR_SIZE - 1));
 
@@ -230,7 +230,7 @@ int RAMFUNCTION spi_flash_read(uint32_t address, void *data, int len)
     return i;
 }
 
-int spi_flash_write(uint32_t address, const void *data, int len)
+int RAMFUNCTION spi_flash_write(uint32_t address, const void *data, int len)
 {
     if (chip_write_mode == SST_SINGLEBYTE)
         return spi_flash_write_sb(address, data, len);
