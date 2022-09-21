@@ -828,7 +828,7 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
 
 ChaCha chacha;
 
-int chacha_init(void)
+int RAMFUNCTION chacha_init(void)
 {
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
         ENCRYPT_TMP_SECRET_OFFSET);
@@ -916,7 +916,7 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 #endif
 
 
-static inline uint8_t part_address(uintptr_t a)
+static uint8_t RAMFUNCTION part_address(uintptr_t a)
 {
     if ( 1 &&
 #if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
@@ -933,7 +933,7 @@ static inline uint8_t part_address(uintptr_t a)
     return PART_NONE;
 }
 
-int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
+int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t part;
@@ -987,7 +987,7 @@ int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
     return ext_flash_write(address, ENCRYPT_CACHE, len);
 }
 
-int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
+int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
     uint32_t iv_counter = 0;
     uint8_t block[ENCRYPT_BLOCK_SIZE];

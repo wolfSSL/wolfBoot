@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x00000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
-    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00030000
+    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 
 SECTIONS
@@ -10,10 +10,8 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
-;        *(EXCLUDE_FILE(*chacha*) .text*)
-;       *(EXCLUDE_FILE(*chacha*) .rodata*)
-	*(.text*)
-	*(.rodata*)
+        *(EXCLUDE_FILE(*chacha.o).text*)
+        *(EXCLUDE_FILE(*chacha.o).rodata*)
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
@@ -22,7 +20,6 @@ SECTIONS
         . = ALIGN(4);
         *(.ARM.exidx*)
     } > FLASH
-
     _stored_data = .;
     .data : AT (_stored_data)
     {
@@ -30,9 +27,10 @@ SECTIONS
         KEEP(*(.data*))
         . = ALIGN(4);
         KEEP(*(.ramcode))
-;        KEEP(*(.text.wc_Chacha*))
-;	KEEP(*(.rodata.sigma))
-;	KEEP(*(.rodata.tau))
+        KEEP(*(.text.wc_Chacha*))
+        KEEP(*(.text.rotlFixed*))
+        KEEP(*(.rodata.sigma))
+        KEEP(*(.rodata.tau))
         . = ALIGN(4);
         _end_data = .;
     } > RAM

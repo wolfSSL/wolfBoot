@@ -102,6 +102,11 @@ void boot_led_on(void)
     GPIOA_BSRR |= (1 << pin);
 }
 
+void boot_led_off(void)
+{
+    uint32_t pin = LED_BOOT_PIN;
+    GPIOA_BSRR |= (1 << (pin + 16));
+}
 
 #endif /* PLATFORM_stm32l0 */
 

@@ -26,12 +26,48 @@
 #include <string.h>
 #include "led.h"
 #include "wolfboot/wolfboot.h"
+#ifdef SPI_FLASH
+#include "spi_flash.h"
+#endif
 
 #ifdef PLATFORM_stm32l0
 
+/* Matches all keys:
+ *    - chacha (32 + 12)
+ *    - aes128 (16 + 16)
+ *    - aes256 (32 + 16)
+ */
+/* Longest key possible: AES256 (32 key + 16 IV = 48) */
+char enc_key[] = "0123456789abcdef0123456789abcdef"
+		 "0123456789abcdef";
+
 void main(void) {
+    uint32_t version;
+    volatile uint32_t i, j;
+#ifdef SPI_FLASH
+    spi_flash_probe();
+#endif
+    version = wolfBoot_current_firmware_version();
+
+    if ((version % 2) == 1) {
+        uint32_t sz;
+#if EXT_ENCRYPTED
+        wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
+#endif
+        wolfBoot_update_trigger();
+    } else {
+        wolfBoot_success();
+    }
+
+    for (i = 0; i < version; i++) {
+        boot_led_on();
+        for (j = 0; j < 200000; j++)
+                ;
+        boot_led_off();
+        for (j = 0; j < 200000; j++)
+                ;
+    }
     boot_led_on();
-    wolfBoot_success();
     /* Wait for reboot */
     while(1)
         ;

@@ -15,8 +15,8 @@ LSCRIPT:=config/target.ld
 LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
-
 V?=0
+LSCRIPT_IN:=hal/$(TARGET).ld
 
 OBJS:= \
 	./hal/$(TARGET).o \
@@ -30,8 +30,6 @@ else
   PRIVATE_KEY=wolfboot_signing_private_key.der
   OBJS+=./src/keystore.o
 endif
-
-
 
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
@@ -172,8 +170,16 @@ wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
-$(LSCRIPT): hal/$(TARGET).ld FORCE
-	@cat hal/$(TARGET).ld | \
+$(LSCRIPT): FORCE
+	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
+		"configuration found. If you selected Encryption and RAM_CODE, then maybe" \
+		"the encryption algorithm is not yet supported with bootloader updates." \
+		&& false)
+	@(test -r $(LSCRIPT_IN)) || (echo "Error: no RAM/ChaCha linker script found." \
+	         "If you selected Encryption and RAM_CODE, ensure that you have a" \
+	         "custom linker script (i.e. $(TARGET)_chacha_ram.ld). Please read " \
+			 "docs/encrypted_partitions.md for more information" && false)
+	@cat $(LSCRIPT_IN) | \
 		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/$(BOOTLOADER_PARTITION_SIZE)/g" | \
 		sed -e "s/##WOLFBOOT_ORIGIN##/$(WOLFBOOT_ORIGIN)/g" \
 		> $@

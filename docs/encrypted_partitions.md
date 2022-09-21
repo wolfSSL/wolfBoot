@@ -136,6 +136,49 @@ which will produce as output the file `test-app/image_v24_signed_and_encrypted.b
 
 When used in combination with delta updates, encryption works the same way as in full-update mode. The final delta image is encrypted with the selected algorithm.
 
+
+### Encryption of self-updates
+
+When used in combination with bootloader 'self' updates, the encryption algorithm must be configured to run from RAM.
+
+This is done by changing the linker script for the target. At the moment the feature has been successfully tested
+with the ChaCha algorithm.
+
+The `.text` and `.rodata` segments in FLASH must be updated to not include symbols to be loaded in memory, so the following lines in the .text section:
+
+```
+        *(.text*)
+        *(.rodata*)
+
+
+```
+
+
+Must be replaced with:
+
+```
+        *(EXCLUDE_FILE(*chacha.o).text*)
+        *(EXCLUDE_FILE(*chacha.o).rodata*)
+```
+
+
+Similarly, the .data section loaded in RAM should contain all the .text and .rodata also coming
+from the symbols of the encryption algorithm. The .data section should have the following added,
+after           `KEEP(*(.ramcode))`:
+
+```
+        KEEP(*(.text.wc_Chacha*))
+        KEEP(*(.text.rotlFixed*))
+        KEEP(*(.rodata.sigma))
+        KEEP(*(.rodata.tau))
+```
+
+The combination of encryption + self update has been successfully tested on STM32L0.
+When using makefile based build, a different linker script `hal/$(TARGET)_chacha_ram.ld` is used
+as template. The file `hal/stm32l0_chacha_ram.ld` contains the changes described above to place
+all the needed symbols in RAM.
+
+
 ### API usage in the application
 
 When transferring the image, the application can still use the libwolfboot API functions to store the encrypted firmware. When called from the application,

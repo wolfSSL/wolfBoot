@@ -169,7 +169,8 @@ int strncmp(const char *s1, const char *s2, size_t n)
 }
 
 #if  !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
-void *memcpy(void *dst, const void *src, size_t n)
+#include "image.h"
+void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;
     const char *s = (const char *)src;

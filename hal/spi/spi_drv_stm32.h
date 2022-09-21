@@ -72,15 +72,26 @@
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x40021034))
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x40021024))
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(0x4002102C))
+#define GPIOA_BASE (0x50000000)
 #define GPIOB_BASE (0x50000400)
-#define SPI_GPIO    GPIOB_BASE
+
 #define SPI_CS_GPIO GPIOB_BASE
-#define SPI_CS_FLASH 8 /* Flash CS connected to GPIOB8 */
 #define SPI1_PIN_AF    0 /* Alternate function for SPI pins */
-#define SPI1_CLOCK_PIN 3 /* SPI_SCK: PB3  */
-#define SPI1_MISO_PIN  4 /* SPI_MISO PB4  */
-#define SPI1_MOSI_PIN  5 /* SPI_MOSI PB5  */
-#endif
+
+#ifndef SPI_ALT_CONFIGURATION
+    #define SPI_GPIO       GPIOB_BASE
+    #define SPI_CS_FLASH   8 /* Flash CS connected to GPIOB8 */
+    #define SPI1_CLOCK_PIN 3 /* SPI_SCK: PB3  */
+    #define SPI1_MISO_PIN  4 /* SPI_MISO PB4  */
+    #define SPI1_MOSI_PIN  5 /* SPI_MOSI PB5  */
+#else
+    #define SPI_GPIO       GPIOA_BASE
+    #define SPI_CS_FLASH   6 /* Flash CS connected to GPIOB6 */
+    #define SPI1_CLOCK_PIN 5 /* SPI_SCK: PA5  */
+    #define SPI1_MISO_PIN  6 /* SPI_MISO PA6  */
+    #define SPI1_MOSI_PIN  7 /* SPI_MOSI PA7  */
+#endif /* SPI_ALT_CONFIGURATION */
+#endif /* PLATFORM_stm32l0 */
 
 #define SPI_PIO_BASE    SPI_GPIO
 #define SPI_CS_PIO_BASE SPI_CS_GPIO
