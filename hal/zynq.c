@@ -47,7 +47,10 @@
     /* QNX QSPI driver */
     #include <sys/siginfo.h>
     #include "xzynq_gqspi.h"
+#else
+    /* QSPI bare-metal */
 #endif
+
 
 /* QSPI bare-metal driver */
 #define CORTEXA53_0_CPU_CLK_FREQ_HZ    1099989014
@@ -186,7 +189,7 @@
 #define GQPI_USE_4BYTE_ADDR    1
 #endif
 #ifndef GQSPI_DUMMY_READ
-#define GQSPI_DUMMY_READ       8 /* Number of dummy clock cycles for reads */
+#define GQSPI_DUMMY_READ       (8*8) /* Number of dummy clock cycles for reads */
 #endif
 
 
@@ -210,6 +213,7 @@
 
 /* Flash Commands */
 #define WRITE_ENABLE_CMD       0x06U
+#define READ_SR_CMD            0x05U
 #define WRITE_DISABLE_CMD      0x04U
 #define READ_ID_CMD            0x9FU
 #define MULTI_IO_READ_ID_CMD   0xAFU
@@ -238,6 +242,7 @@
 #define RESET_ENABLE_CMD       0x66U
 #define RESET_MEMORY_CMD       0x99U
 
+#define WRITE_EN_MASK          0x02 /* 0=Write Enabled, 1=Disabled Write */
 #define FLASH_READY_MASK       0x80 /* 0=Busy, 1=Ready */
 
 
@@ -262,6 +267,10 @@ typedef struct QspiDev {
 
 static QspiDev_t mDev;
 
+/* forward declarations */
+static int qspi_wait_ready(QspiDev_t* dev);
+static int qspi_status(QspiDev_t* dev, uint8_t* status);
+static int qspi_wait_we(QspiDev_t* dev);
 #ifdef TEST_FLASH
 static int test_flash(QspiDev_t* dev);
 #endif
@@ -336,7 +345,7 @@ static int test_flash(QspiDev_t* dev);
 static void uart_init(void)
 {
     /* Enable TX/RX and Reset */
-    ZYNQMP_UART_CR = (ZYNQMP_UART_CR_TX_EN | ZYNQMP_UART_CR_RX_EN | 
+    ZYNQMP_UART_CR = (ZYNQMP_UART_CR_TX_EN | ZYNQMP_UART_CR_RX_EN |
         ZYNQMP_UART_CR_TXRST | ZYNQMP_UART_CR_RXRST);
     /* 8-bits, no parity */
     ZYNQMP_UART_MR = ZYNQMP_UART_MR_PARITY_NONE;
@@ -384,15 +393,15 @@ static int qspi_transfer(QspiDev_t* pDev,
     /* Chip Select */
     if (pDev->cs == GQSPI_GEN_FIFO_CS_BOTH) {
         XQspiPsu_SelectFlash(&pDev->qspiPsuInst,
-		    XQSPIPSU_SELECT_FLASH_CS_BOTH, XQSPIPSU_SELECT_FLASH_BUS_BOTH);
+            XQSPIPSU_SELECT_FLASH_CS_BOTH, XQSPIPSU_SELECT_FLASH_BUS_BOTH);
     }
     else if (pDev->cs == GQSPI_GEN_FIFO_CS_LOWER) {
         XQspiPsu_SelectFlash(&pDev->qspiPsuInst,
-		    XQSPIPSU_SELECT_FLASH_CS_LOWER, XQSPIPSU_SELECT_FLASH_BUS_LOWER);
+            XQSPIPSU_SELECT_FLASH_CS_LOWER, XQSPIPSU_SELECT_FLASH_BUS_LOWER);
     }
     else {
         XQspiPsu_SelectFlash(&pDev->qspiPsuInst,
-		    XQSPIPSU_SELECT_FLASH_CS_UPPER, XQSPIPSU_SELECT_FLASH_BUS_UPPER);
+            XQSPIPSU_SELECT_FLASH_CS_UPPER, XQSPIPSU_SELECT_FLASH_BUS_UPPER);
     }
 
     /* Transfer Bus Width - only applies to read/write command */
@@ -406,7 +415,7 @@ static int qspi_transfer(QspiDev_t* pDev,
     msgs[msgCnt].TxBfrPtr = (uint8_t*)cmdData;
     msgs[msgCnt].ByteCount = cmdSz;
     msgs[msgCnt].BusWidth = XQSPIPSU_SELECT_MODE_SPI;
-	msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_TX;
+    msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_TX;
     msgCnt++;
 
     /* TX */
@@ -416,7 +425,7 @@ static int qspi_transfer(QspiDev_t* pDev,
         msgs[msgCnt].ByteCount = txSz;
         msgs[msgCnt].BusWidth = busWidth;
         msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_TX;
-        if (pDev->stripe & GQSPI_GEN_FIFO_STRIPE) 
+        if (pDev->stripe & GQSPI_GEN_FIFO_STRIPE)
             msgs[msgCnt].Flags |= XQSPIPSU_MSG_FLAG_STRIPE;
         msgCnt++;
     }
@@ -441,7 +450,7 @@ static int qspi_transfer(QspiDev_t* pDev,
         msgs[msgCnt].ByteCount = rxSz;
         msgs[msgCnt].BusWidth = busWidth;
         msgs[msgCnt].Flags = XQSPIPSU_MSG_FLAG_RX;
-        if (pDev->stripe & GQSPI_GEN_FIFO_STRIPE) 
+        if (pDev->stripe & GQSPI_GEN_FIFO_STRIPE)
             msgs[msgCnt].Flags |= XQSPIPSU_MSG_FLAG_STRIPE;
         msgCnt++;
     }
@@ -501,9 +510,9 @@ static int qspi_transfer(QspiDev_t* pDev,
     rx_buf.len = rxSz;
 
     /* Send the TX buffer */
-    ret = xzynq_qspi_transfer(pDev->qnx, 
-        txData ? &tx_buf : NULL, 
-        rxData ? &rx_buf : NULL, 
+    ret = xzynq_qspi_transfer(pDev->qnx,
+        txData ? &tx_buf : NULL,
+        rxData ? &rx_buf : NULL,
         &cmd_buf, flags);
     if (ret < 0) {
         wolfBoot_printf("QSPI Transfer failed! %d\n", ret);
@@ -531,7 +540,7 @@ static int qspi_gen_fifo_write(uint32_t reg_genfifo)
         return GQSPI_CODE_TIMEOUT;
     }
 
-#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
     wolfBoot_printf("FifoEntry=%08x\n", reg_genfifo);
 #endif
     GQSPI_GEN_FIFO = reg_genfifo;
@@ -582,7 +591,7 @@ static int gspi_fifo_rx(uint8_t* data, uint32_t sz, uint32_t discardSz)
     #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
         wolfBoot_printf("RXD=%08x\n", tmp32);
         if (discardSz > 0)
-        	wolfBoot_printf("Discard %d\n", discardSz);
+            wolfBoot_printf("Discard %d\n", discardSz);
     #endif
         if (discardSz >= GQSPI_FIFO_WORD_SZ) {
             discardSz -= GQSPI_FIFO_WORD_SZ;
@@ -646,8 +655,10 @@ static int qspi_transfer(QspiDev_t* pDev,
 
        /* Submit general FIFO operation */
        ret = qspi_gen_fifo_write(reg_genfifo);
-       if (ret != GQSPI_CODE_SUCCESS)
+       if (ret != GQSPI_CODE_SUCCESS) {
+           wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
            break;
+       }
 
        /* offset size and buffer */
        xferSz--;
@@ -679,11 +690,16 @@ static int qspi_transfer(QspiDev_t* pDev,
 
         /* Submit general FIFO operation */
         ret = qspi_gen_fifo_write(reg_genfifo);
+        if (ret != GQSPI_CODE_SUCCESS) {
+            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+        }
 
         /* Fill FIFO */
         ret = gspi_fifo_tx(txData, xferSz);
-        if (ret != GQSPI_CODE_SUCCESS)
+        if (ret != GQSPI_CODE_SUCCESS) {
+            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
             break;
+        }
 
         /* offset size and buffer */
         txSz -= xferSz;
@@ -731,11 +747,16 @@ static int qspi_transfer(QspiDev_t* pDev,
 
         /* Submit general FIFO operation */
         ret = qspi_gen_fifo_write(reg_genfifo);
-        if (ret != GQSPI_CODE_SUCCESS)
+        if (ret != GQSPI_CODE_SUCCESS) {
+            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
             break;
+        }
 
         /* Read FIFO */
-        ret = gspi_fifo_rx(rxData, xferSz, dummySz);
+        ret = gspi_fifo_rx(rxData, xferSz-dummySz, dummySz);
+        if (ret != GQSPI_CODE_SUCCESS) {
+            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+        }
 
         /* offset size and buffer */
         rxSz -= xferSz;
@@ -755,8 +776,11 @@ static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
 {
     int ret;
     uint8_t cmd[20]; /* size multiple of uint32_t */
+    uint8_t status;
+
+    memset(cmd, 0, sizeof(cmd));
     cmd[0] = MULTI_IO_READ_ID_CMD;
-    ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, sizeof(cmd), 0, 
+    ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, sizeof(cmd), 0,
         GQSPI_GEN_FIFO_MODE_SPI);
 
     wolfBoot_printf("Read FlashID %s: Ret %d, %02x %02x %02x\n",
@@ -768,6 +792,13 @@ static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
             idSz = sizeof(cmd);
         memcpy(id, cmd, idSz);
     }
+
+    qspi_status(dev, &status);
+    if (status & WRITE_EN_MASK) {
+        wolfBoot_printf("Write disabled: status %02x\n", status);
+        ret = -1;
+    }
+
     return ret;
 }
 
@@ -775,17 +806,33 @@ static int qspi_write_enable(QspiDev_t* dev)
 {
     int ret;
     uint8_t cmd[4]; /* size multiple of uint32_t */
+    uint8_t status;
+
     memset(cmd, 0, sizeof(cmd));
-    cmd[0] = WRITE_DISABLE_CMD;
+    cmd[0] = WRITE_ENABLE_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
     wolfBoot_printf("Write Enable: Ret %d\n", ret);
+
+    ret = qspi_wait_ready(dev);
+    wolfBoot_printf("wait ready: Ret %d\n", ret);
+
+    ret = qspi_wait_we(dev);
+    wolfBoot_printf("wait we: Ret %d\n", ret);
+
+    qspi_status(dev, &status);
+    if ((status & WRITE_EN_MASK) == 0) {
+        wolfBoot_printf("status %02x\n", status);
+        ret = -1;
+    }
+
     return ret;
 }
 static int qspi_write_disable(QspiDev_t* dev)
 {
     int ret;
     uint8_t cmd[4]; /* size multiple of uint32_t */
+
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = WRITE_DISABLE_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0,
@@ -798,11 +845,31 @@ static int qspi_flash_status(QspiDev_t* dev, uint8_t* status)
 {
     int ret;
     uint8_t cmd[4]; /* size multiple of uint32_t */
+
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = READ_FSR_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, 2, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
     wolfBoot_printf("Flash Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
+    if (ret == GQSPI_CODE_SUCCESS && status) {
+        if (dev->stripe) {
+            cmd[0] &= cmd[1];
+        }
+        *status = cmd[0];
+    }
+    return ret;
+}
+
+static int qspi_status(QspiDev_t* dev, uint8_t* status)
+{
+    int ret;
+    uint8_t cmd[4]; /* size multiple of uint32_t */
+
+    memset(cmd, 0, sizeof(cmd));
+    cmd[0] = READ_SR_CMD;
+    ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, 2, 0,
+        GQSPI_GEN_FIFO_MODE_SPI);
+    wolfBoot_printf("Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
     if (ret == GQSPI_CODE_SUCCESS && status) {
         if (dev->stripe) {
             cmd[0] &= cmd[1];
@@ -831,13 +898,37 @@ static int qspi_wait_ready(QspiDev_t* dev)
     return GQSPI_CODE_TIMEOUT;
 }
 
+static int qspi_wait_we(QspiDev_t* dev)
+{
+    int ret;
+    uint32_t timeout;
+    uint8_t status = 0;
+
+    timeout = 0;
+    while (++timeout < QSPI_FLASH_READY_TRIES) {
+        ret = qspi_status(dev, &status);
+        if (ret == GQSPI_CODE_SUCCESS &&
+        (status & WRITE_EN_MASK)
+        ) {
+            return ret;
+        }
+    }
+
+    wolfBoot_printf("Flash WE Timeout!\n");
+
+    return GQSPI_CODE_TIMEOUT;
+}
+
+
 #if GQPI_USE_4BYTE_ADDR == 1
 static int qspi_enter_4byte_addr(QspiDev_t* dev)
 {
     int ret;
     uint8_t cmd[4]; /* size multiple of uint32_t */
+
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = ENTER_4B_ADDR_MODE_CMD;
+    (void)qspi_wait_ready(&mDev); /* Wait for not busy */
     ret = qspi_write_enable(&mDev);
     if (ret == GQSPI_CODE_SUCCESS) {
         ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
@@ -854,6 +945,7 @@ static int qspi_exit_4byte_addr(QspiDev_t* dev)
 {
     int ret;
     uint8_t cmd[4]; /* size multiple of uint32_t */
+
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = EXIT_4B_ADDR_MODE_CMD;
     ret = qspi_write_enable(&mDev);
@@ -1057,7 +1149,7 @@ void hal_init(void)
 
 #ifdef DEBUG_ZYNQ
     const char* bootMsg = "\nwolfBoot Secure Boot\n";
-#ifdef DEBUG_UART    
+#ifdef DEBUG_UART
     uart_init();
     uart_write(bootMsg, strlen(bootMsg));
 #endif
@@ -1241,6 +1333,9 @@ static int test_flash(QspiDev_t* dev)
 {
     int ret;
     uint32_t i;
+#ifndef USE_XQSPIPSU
+    uint8_t pageData[FLASH_PAGE_SIZE];
+#endif
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
@@ -1260,13 +1355,16 @@ static int test_flash(QspiDev_t* dev)
     ret = ext_flash_read(TEST_ADDRESS, pageData, sizeof(pageData));
     wolfBoot_printf("Read Page: Ret %d\n", ret);
 
+    wolfBoot_printf("Checking...\n");
     /* Check data */
     for (i=0; i<sizeof(pageData); i++) {
+        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
         if (pageData[i] != (i & 0xff)) {
-        	wolfBoot_printf("Check Data @ %d failed\n", i);
+            wolfBoot_printf("Check Data @ %d failed\n", i);
             return GQSPI_CODE_FAILED;
         }
     }
+
     wolfBoot_printf("Flash Test Passed\n");
     return ret;
 }
