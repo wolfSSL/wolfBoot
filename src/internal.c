@@ -1530,12 +1530,10 @@ int WP11_Rsa_SerializeKeyPTPKC8(WP11_Object* object, byte* output, word32* pouts
         return OBJ_TYPE_E;
 
     ret = WP11_Rsa_SerializeKey(object, NULL, &dersz);
-
     if (ret != 0)
         return ret;
 
     der = (unsigned char*)XMALLOC(dersz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-
     if (der == NULL)
         return MEMORY_E;
 
@@ -5957,16 +5955,15 @@ int WP11_Object_MatchAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
  * @return  -ve when key parse fails.
  *          0 on success.
  */
-int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey) {
+int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey)
+{
     int ret = 0;
     word32 idx = 0;
 
-    ret = wc_InitRsaKey(&(privKey->data.rsaKey), NULL);
-    if (ret != 0)
-        return ret;
-
-    ret = wc_RsaPrivateKeyDecode(data, &idx, &privKey->data.rsaKey, dataLen);
-
+    ret = wc_InitRsaKey(&privKey->data.rsaKey, NULL);
+    if (ret == 0) {
+        ret = wc_RsaPrivateKeyDecode(data, &idx, &privKey->data.rsaKey, dataLen);
+    }
     return ret;
 }
 
@@ -5980,21 +5977,23 @@ int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey) {
  * @return  -ve when key parse fails.
  *          0 on success.
  */
-int WP11_Rsa_PrivKey2PubKey(WP11_Object* privKey, WP11_Object* pubKey, byte* workbuf, word32 worksz) {
+int WP11_Rsa_PrivKey2PubKey(WP11_Object* privKey, WP11_Object* pubKey,
+    byte* workbuf, word32 worksz)
+{
     int ret;
     word32 idx = 0;
 
     ret = wc_InitRsaKey(&pubKey->data.rsaKey, NULL);
-    if (ret != 0)
-        return ret;
-
-    ret = wc_RsaKeyToPublicDer(&privKey->data.rsaKey, workbuf, worksz);
-    if (ret < 0)
-        return ret;
-    else
-        worksz = (word32)ret;
-
-    ret = wc_RsaPublicKeyDecode(workbuf, &idx, &pubKey->data.rsaKey, worksz);
+    if (ret == 0) {
+        ret = wc_RsaKeyToPublicDer(&privKey->data.rsaKey, workbuf, worksz);
+        if (ret >= 0) {
+            worksz = (word32)ret;
+            ret = 0;
+        }
+    }
+    if (ret == 0) {
+        ret = wc_RsaPublicKeyDecode(workbuf, &idx, &pubKey->data.rsaKey, worksz);
+    }
 
     return ret;
 }

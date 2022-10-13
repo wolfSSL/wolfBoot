@@ -192,19 +192,23 @@ static void FindAttributeType(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount,
 
     *attribute = NULL;
     for (i = 0; i < (int)ulCount; i++) {
-        if (pTemplate[i].type == type)
+        if (pTemplate[i].type == type) {
             *attribute = &pTemplate[i];
+        }
     }
 }
 
 static CK_RV FindValidAttributeType(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount,
-                                    CK_ATTRIBUTE_TYPE type, CK_ATTRIBUTE** attr, size_t sz) {
+                        CK_ATTRIBUTE_TYPE type, CK_ATTRIBUTE** attr, size_t sz)
+{
     FindAttributeType(pTemplate, ulCount, type, attr);
-    if (*attr == NULL)
+    if (*attr == NULL) {
         return CKR_TEMPLATE_INCOMPLETE;
+    }
 
-    if ((*attr)->pValue == NULL || (*attr)->ulValueLen != sz)
+    if ((*attr)->pValue == NULL || (*attr)->ulValueLen != sz) {
         return CKR_ATTRIBUTE_VALUE_INVALID;
+    }
 
     return CKR_OK;
 }
@@ -491,7 +495,7 @@ static CK_RV AddObject(WP11_Session* session, WP11_Object* object,
  * @param  pTemplate  [in]   Template of attributes for object.
  * @param  ulCount    [in]   Number of attribute triplets in template.
  * @param  derBuf     [in]   DER-encoded private key
- * @param  derlen     [in]   Length of the DER-encoded key data
+ * @param  derLen     [in]   Length of the DER-encoded key data
  * @param  phKey      [out]  pointer to hold the handle to the new key object
  * @return  CKR_CRYPTOKI_NOT_INITIALIZED when library not initialized.
  *          CKR_SESSION_HANDLE_INVALID when session handle is not valid.
@@ -505,8 +509,9 @@ static CK_RV AddObject(WP11_Session* session, WP11_Object* object,
  *          CKR_WRAPPED_KEY_INVALID when DER-encoded key data isn't valid
  *          CKR_OK on success.
  */
-static CK_RV AddRSAPrivateKeyObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTemplate,
-                                    CK_ULONG ulCount, byte* derBuf, CK_ULONG derLen, CK_OBJECT_HANDLE_PTR phKey)
+static CK_RV AddRSAPrivateKeyObject(WP11_Session* session,
+    CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, byte* derBuf, CK_ULONG derLen,
+    CK_OBJECT_HANDLE_PTR phKey)
 {
     CK_RV rv;
     WP11_Object* privKeyObject = NULL;
@@ -516,11 +521,10 @@ static CK_RV AddRSAPrivateKeyObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTem
     rv = NewObject(session, CKK_RSA, CKO_PRIVATE_KEY,
                    pTemplate, ulCount,
                    &privKeyObject);
-
     if (rv != CKR_OK)
         return rv;
 
-    if ( WP11_Rsa_ParsePrivKey(derBuf, (word32)derLen, privKeyObject) != 0 ) {
+    if (WP11_Rsa_ParsePrivKey(derBuf, (word32)derLen, privKeyObject) != 0 ) {
         rv = CKR_WRAPPED_KEY_INVALID;
         goto err_out;
     }
@@ -542,7 +546,7 @@ static CK_RV AddRSAPrivateKeyObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTem
 
         CK_OBJECT_HANDLE hPub;
 
-        CK_ATTRIBUTE      pubt[] = {
+        CK_ATTRIBUTE pubt[] = {
                 {CKA_TOKEN,    NULL, sizeof(CK_BBOOL)},
                 {CKA_LABEL,    NULL, 0},
                 {CKA_WRAP,    &falseVal, sizeof(falseVal)},
@@ -574,28 +578,27 @@ static CK_RV AddRSAPrivateKeyObject(WP11_Session* session, CK_ATTRIBUTE_PTR pTem
         if (rv != CKR_OK)
             goto err_out;
 
-        if (WP11_Rsa_PrivKey2PubKey(privKeyObject, pubKeyObject, derBuf, (word32)derLen) == 0) {
-
-            rv = AddObject(session, pubKeyObject, pubt, sizeof(pubt) / sizeof(CK_ATTRIBUTE), &hPub);
-
+        if (WP11_Rsa_PrivKey2PubKey(privKeyObject, pubKeyObject, derBuf,
+                                                         (word32)derLen) == 0) {
+            rv = AddObject(session, pubKeyObject, pubt,
+                sizeof(pubt) / sizeof(CK_ATTRIBUTE), &hPub);
             if (rv != CKR_OK) {
                 WP11_Object_Free(pubKeyObject);
             }
-        } else {
+        }
+        else {
             rv = CKR_WRAPPED_KEY_INVALID;
             WP11_Object_Free(pubKeyObject);
         }
     }
-
 #endif
+
 err_out:
     if (rv != CKR_OK) {
-
         if (*phKey != CK_INVALID_HANDLE) {
             WP11_Session_RemoveObject(session, privKeyObject);
             *phKey = CK_INVALID_HANDLE;
         }
-
         if (privKeyObject != NULL) {
             WP11_Object_Free(privKeyObject);
         }
@@ -3849,11 +3852,11 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
     if (rv != CKR_OK)
         return rv;
 
-    switch(keyType) {
+    switch (keyType) {
 
         case CKK_RSA:
             ret = WP11_Rsa_SerializeKeyPTPKC8(key, NULL, &serialSize);
-            
+
             if (ret != 0)
                 return CKR_FUNCTION_FAILED;
 
@@ -3862,7 +3865,7 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
                 return CKR_HOST_MEMORY;
 
             ret = WP11_Rsa_SerializeKeyPTPKC8(key, serialBuff, &serialSize);
-           
+
             if (ret != 0)
                 return CKR_FUNCTION_FAILED;
 
@@ -3955,7 +3958,7 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
                                            pTemplate == NULL || phKey == NULL) {
         return CKR_ARGUMENTS_BAD;
     }
-    
+
     *phKey = CK_INVALID_HANDLE;
 
     ret = WP11_Object_Find(session, hUnwrappingKey, &unwrappingKey);
@@ -3966,32 +3969,27 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
         return CKR_MECHANISM_INVALID;
     }
 
-    rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_KEY_TYPE, &attr, sizeof(CK_KEY_TYPE));
-
+    rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_KEY_TYPE,
+        &attr, sizeof(CK_KEY_TYPE));
     if (rv != CKR_OK)
         return rv;
 
     keyType = *(CK_KEY_TYPE*)attr->pValue;
-
     rv = CHECK_KEYTYPE(keyType);
-
     if (rv != CKR_OK)
         return rv;
 
-    rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_CLASS, &attr, sizeof(CK_OBJECT_CLASS));
-
+    rv = FindValidAttributeType(pTemplate, ulAttributeCount, CKA_CLASS, &attr,
+        sizeof(CK_OBJECT_CLASS));
     if (rv != CKR_OK)
         return rv;
 
     keyClass = *(CK_OBJECT_CLASS*)attr->pValue;
-
     rv = CHECK_KEYCLASS(keyClass);
-
     if (rv != CKR_OK)
         return rv;
 
     rv = CHECK_WRAPPABLE(keyClass, keyType);
-
     if (rv != CKR_OK)
         return rv;
 
@@ -4012,7 +4010,8 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
             if (rv != CKR_OK)
                 goto err_out;
 
-            rv = C_Decrypt(hSession, pWrappedKey, ulWrappedKeyLen, workBuffer, &ulUnwrappedLen);
+            rv = C_Decrypt(hSession, pWrappedKey, ulWrappedKeyLen, workBuffer,
+                &ulUnwrappedLen);
             if (rv != CKR_OK)
                 goto err_out;
 
@@ -4021,10 +4020,11 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
             return CKR_MECHANISM_INVALID;
     }
 
-    switch(keyType) {
+    switch (keyType) {
         case CKK_RSA:
 
-            rv = AddRSAPrivateKeyObject(session, pTemplate, ulAttributeCount, workBuffer, ulUnwrappedLen, phKey);
+            rv = AddRSAPrivateKeyObject(session, pTemplate, ulAttributeCount,
+                workBuffer, ulUnwrappedLen, phKey);
             break;
         default:
             rv = CKR_KEY_NOT_WRAPPABLE;
@@ -4033,7 +4033,7 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
 
     err_out:
 
-    if ( workBuffer != NULL) {
+    if (workBuffer != NULL) {
         XMEMSET(workBuffer, 0, ulWrappedKeyLen);
         XFREE(workBuffer, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     }
