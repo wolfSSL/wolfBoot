@@ -67,7 +67,7 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         while (pos < src->fw_size) {
             uint8_t buffer[FLASHBUFFER_SIZE];
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-		uint32_t opos = pos + ((uint32_t)&_start_text);
+                uint32_t opos = pos + ((uint32_t)&_start_text);
                 ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
                 hal_flash_write(opos, buffer, FLASHBUFFER_SIZE);
             }
@@ -254,13 +254,18 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                 if (ret > 0) {
 #ifdef EXT_ENCRYPTED
                     uint32_t iv_counter = sector * WOLFBOOT_SECTOR_SIZE + len;
+                    int wr_ret;
                     iv_counter /= ENCRYPT_BLOCK_SIZE;
                     /* Encrypt + send */
                     crypto_set_iv(nonce, iv_counter);
                     crypto_encrypt(enc_blk, delta_blk, ret);
-                    ret = ext_flash_write(
+                    wr_ret = ext_flash_write(
                             (uint32_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + len),
                             enc_blk, ret);
+                    if (wr_ret < 0) {
+                        ret = wr_ret;
+                        goto out;
+                    }
 #else
                     wb_flash_write(swap, len, delta_blk, ret);
 #endif
