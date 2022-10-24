@@ -111,6 +111,8 @@ static int RAMFUNCTION spi_flash_write_page(uint32_t address, const void *data, 
 {
     const uint8_t *buf = data;
     int j = 0;
+    if (len < 1)
+        return -1;
     while (len > 0) {
         wait_busy();
         flash_write_enable();
@@ -129,7 +131,7 @@ static int RAMFUNCTION spi_flash_write_page(uint32_t address, const void *data, 
         spi_cs_off(SPI_CS_FLASH);
     }
     wait_busy();
-    return j;
+    return 0;
 }
 
 static int RAMFUNCTION spi_flash_write_sb(uint32_t address, const void *data, int len)
@@ -137,6 +139,7 @@ static int RAMFUNCTION spi_flash_write_sb(uint32_t address, const void *data, in
     const uint8_t *buf = data;
     uint8_t verify = 0;
     int j = 0;
+
     wait_busy();
     if (len < 1)
         return -1;
