@@ -91,7 +91,7 @@ int  ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         if (wait_ack() != 0)
             return -1;
     }
-    return i;
+    return 0;
 }
 
 int  ext_flash_read(uintptr_t address, uint8_t *data, int len)
@@ -118,7 +118,7 @@ int  ext_flash_read(uintptr_t address, uint8_t *data, int len)
             return 0;
         uart_tx(CMD_ACK);
     }
-    return len;
+    return 0;
 }
 
 int  ext_flash_erase(uintptr_t address, int len)
