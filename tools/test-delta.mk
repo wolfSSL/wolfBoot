@@ -4,12 +4,12 @@ test-delta-update:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyA
 
 test-delta-update-ext:SIGN_ARGS?=--ecc256
 test-delta-update-ext:USBTTY?=/dev/ttyACM0
-test-delta-update-ext:TIMEOUT?=35
+test-delta-update-ext:TIMEOUT?=50
 test-delta-update-ext:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 
 test-delta-enc-update-ext:SIGN_ARGS=--ecc256 --sha256
 test-delta-enc-update-ext:USBTTY?=/dev/ttyACM0
-test-delta-enc-update-ext:TIMEOUT?=55
+test-delta-enc-update-ext:TIMEOUT?=70
 test-delta-enc-update-ext:EXPVER=tools/test-expect-version/test-expect-version /dev/ttyACM0
 test-delta-enc-update-ext:PART_SIZE=131023
 test-delta-enc-update-ext:APP=test-app/image_v7_signed_diff_encrypted.bin
