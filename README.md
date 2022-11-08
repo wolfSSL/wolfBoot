@@ -298,3 +298,13 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
  * Added new test cases
  * Hardware support
    * New HAL: Simulated target for rapid tests
+
+### V1.13 (2022-11-08)
+ * Fixed IAR sign script
+ * Added support for encrypted self-update
+ * Support for NAII 68PPC2 with NXP T2080 on DEOS
+ * Fixed Xilinx QSPI support
+ * Fixed API usage in external flash support for SPI/UART
+ * Fixed bug in encrypted delta updates
+ * Updated wolfCrypt to wolfSSL submodule v5.5.3
+
