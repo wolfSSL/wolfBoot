@@ -11,19 +11,20 @@ This README describes configuration of supported targets.
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP T2080 PPC](#nxp-t2080-ppc)
+* [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
-* [STM32L4](#stm32l4)
 * [STM32F7](#stm32f7)
+* [STM32L0](#stm32l0)
+* [STM32L4](#stm32l4)
+* [STM32L5](#stm32l5)
 * [STM32G0](#stm32g0)
 * [STM32H7](#stm32h7)
-* [STM32L5](#stm32l5)
 * [STM32U5](#stm32u5)
-* [STM32L0](#stm32l0)
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
-* [Qemu x86_64 UEFI](#qemu-x86_64-uefi)
+
 
 ## STM32F4
 
@@ -99,6 +100,7 @@ Example 1MB partitioning on STM32L4
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08084000
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x080FE000
 ```
+
 
 ## STM32L5
 
@@ -203,6 +205,8 @@ arm-none-eabi-gdb
 add-symbol-file test-app/image.elf
 mon reset init
 ```
+
+
 ## STM32U5
 
 ### Scenario 1: TrustZone Enabled
@@ -311,6 +315,7 @@ arm-none-eabi-gdb
 add-symbol-file test-app/image.elf
 mon reset init
 ```
+
 
 ## STM32L0
 
@@ -897,7 +902,6 @@ wolfBoot uses the following components to access peripherals on the PSoC:
 Cypress provides a [customized OpenOCD](https://github.com/cypresssemiconductorco/Openocd) for programming the flash and
 debugging.
 
-
 ### Clock settings
 
 wolfBoot configures PLL1 to run at 100 MHz and is driving `CLK_FAST`, `CLK_PERI`, and `CLK_SLOW` at that frequency.
@@ -1000,6 +1004,7 @@ DCP support (hardware acceleration for SHA256 operations) can be enabled by usin
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device.
 
 
+
 ## NXP Kinetis
 
 Supports K64 and K82 with crypto hardware acceleration.
@@ -1022,36 +1027,184 @@ WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x84000
 WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 ```
 
-## NXP T2080 PPC
 
-The T2080 is a PPC e6500 based processor. Support has been tested with the NAII 68PPC2.
+## NXP QorIQ T2080 PPC
+
+The NXP QorIQ T2080 is a PPC e6500 based processor. Support has been tested with the NAII 68PPC2.
 
 Example configurations for this target are provided in:
 * NXP T2080: [/config/examples/t2080.config](/config/examples/t2080.config).
 * NAII 68PPC2: [/config/examples/t2080_68ppc2.config](/config/examples/t2080_68ppc2.config).
 
+### Design NXP T2080 PPC
+
+The QorIQ requires a Reset Configuration Word (RCW) to define the boot parameters, which resides at the start of the flash (0xE8000000).
+
+The flash boot entry point is `0xEFFFFFFC`, which is an offset jump to wolfBoot initialization boot code. Initially the PowerPC core enables only a 4KB region to execute from. The initialization code (`src/boot_ppc_start.S`) sets the required CCSR and TLB for memory addressing and jumps to wolfBoot `main()`.
+
+RM 4.3.3 Boot Space Translation
+
+"When each core comes out of reset, its MMU has one 4 KB page defined at 0x0_FFFF_Fnnn. Each core begins execution with the instruction at effective address 0x0_FFFF_FFFC. To get this instruction, the core's first instruction fetch is a burst read of boot code from effective address 0x0_FFFF_FFC0."
 
 ### Building wolfBoot for NXP T2080 PPC
 
-wolfBoot can be built with gcc powerpc tools. For example, `apt
-install gcc-powerpc-linux-gnu`. Then make will use the correct tools
-to compile.
+By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
+
+The `make` creates a `factory.bin` image that can be programmed at `0xE8080000`
 
 ```
 cp ./config/examples/t2080_68ppc2.config .config
-make distclean
+make clean
 make keytools
+make
+```
+
+Or each `make` component can be manually built using:
+
+```
 make wolfboot.elf
+make test-app/image_v1_signed.bin
+```
+
+If getting errors with keystore then you can reset things using `make distclean`.
+
+#### Building QorIQ Linux SDK fsl-toolchain
+
+To use the NXP cross-compiler:
+
+Find "QorIQ Linux SDK v2.0 PPCE6500 IMAGE.iso" on nxp.com and extract the "fsl-toolchain". Then run the script to install to default location `/opt/fsl-qoriq/2.0/`.
+
+Then add the following lines to your `.config`:
+```
+CROSS_COMPILE?=/opt/fsl-qoriq/2.0/sysroots/x86_64-fslsdk-linux/usr/bin/powerpc-fsl-linux/powerpc-fsl-linux-
+CROSS_COMPILE_PATH=/opt/fsl-qoriq/2.0/sysroots/ppce6500-fsl-linux/usr
 ```
 
 ### Programming NXP T2080 PPC
 
+NOR Flash Region: `0xE8000000 - 0xEFFFFFFF` (128 MB)
+
+Flash Layout (with files):
+
+| Description | File | Address |
+| ----------- | ---- | ------- |
+| Reset Configuration Word (RCW) | `68PPC2_RCW_v0p7.bin` | `0xE8000000` |
+| Frame Manager Microcode | `fsl_fman_ucode_t2080_r1.0.bin` | `0xE8020000` |
+| Signed Aplication | `test-app/image_v1_signed.bin` | `0xE8080000` |
+| wolfBoot | `wolfboot.bin` | `0xEFF40000` |
+| Boot Entry Point (with offset jump to init code) |  | `0xEFFFFFFC` |
+
+Or program the `factory.bin` to `0xE8080000`
+
+
+#### Flash Programming with Lauterbach
+
+See these TRACE32 demo script files:
+* `./demo/powerpc64bit/hardware/qoriq_t2/t2080rdb/flash_cfi.cmm`
+* `./demo/powerpc64bit/hardware/qoriq_t2/t2080rdb/demo_set_rcw.cmm`
+
+```
+DO flash_cfi.cmm
+
+FLASH.ReProgram 0xEFF40000--0xEFFFFFFF /Erase
+Data.LOAD.binary wolfboot.bin 0xEFF40000
+FLASH.ReProgram.off
+
+Data.LOAD.binary wolfboot.bin 0xEFF40000 /Verify
+```
+
+Note: To disable the flash protection bits use:
+
+```
+;enter Non-volatile protection mode (C0h)
+Data.Set 0xE8000000+0xAAA %W 0xAAAA
+Data.Set 0xE8000000+0x554 %W 0x5555
+Data.Set 0xE8000000+0xAAA %W 0xC0C0
+;clear all protection bit (80h/30h)
+Data.Set 0xE8000000 %W 0x8080
+Data.Set 0xE8000000 %W 0x3030
+;exit Non-volatile protection mode (90h/00h)
+Data.Set 0xE8000000 %W 0x9090
+Data.Set 0xE8000000 %W 0x0000
+```
+
+#### Flash Programming with CodeWarrior TAP
+
 In CodeWarrior use the `Flash Programmer` tool (see under Commander View -> Miscellaneous)
-Connection: "CodeWarrior TAP Connection"
-Flash Configuration File: "T2080QDS_NOR_FLASH.xml"
-Unprotect flash memory before erase: Check
-File to flash: wolfboot.bin
-Offset: 0xEFF40000
+* Connection: "CodeWarrior TAP Connection"
+* Flash Configuration File: "T2080QDS_NOR_FLASH.xml"
+* Unprotect flash memory before erase: Check
+* Choose file and set offset address.
+
+#### Flash Programming from U-Boot
+
+```
+tftp 1000000 wolfboot.bin
+protect off eff40000 +C0000
+erase eff40000 +C0000
+cp.b 1000000 eff40000 C0000
+protect on eff40000 +C0000
+cmp.b 1000000 eff40000 C0000
+```
+
+### Debugging NXP T2080 PPC
+
+#### Lauterbach
+
+```
+SYStem.RESet
+SYStem.BdmClock 15.MHz
+SYStem.CPU T2080
+SYStem.DETECT CPU
+CORE.ASSIGN 1.
+SYStem.Option.FREEZE OFF
+SYStem.Up
+
+Data.LOAD.Elf wolfboot.elf /NoCODE
+
+Break main
+List.auto
+Go
+```
+
+If cross-compiling on a different machine you can use the `/StripPART` option:
+
+```
+sYmbol.SourcePATH.SetBaseDir ~/wolfBoot
+Data.LOAD.Elf wolfboot.elf /NoCODE /StripPART "/home/username/wolfBoot/"
+```
+
+#### CodeWarrior TAP
+
+This is an example for debugging the T2080 with CodeWarrior TAP, however we were not successful using it. The Lauterbach is what we ended up using to debug.
+
+Start GDB Proxy:
+
+Linux: /opt/Freescale/CW_PA_v10.5.1/PA/ccs/bin/gdbproxy
+Windows: C:\Freescale\CW_PA_v10.5.1\PA\ccs\bin\gdbproxy.exe
+
+```
+set logging on
+set debug remote 10
+set remotetimeout 20
+set tdesc filename ../xml/e6500.xml
+set remote hardware-breakpoint-limit 10
+target remote t2080-tap-01:2345
+mon probe fpga
+mon ccs_host t2080-tap-01
+mon ccs_path /opt/Freescale/CodeWarrior_PA_10.5.1/PA/ccs/bin/ccs
+mon jtag_speed 12500
+mon jtag_chain t4amp
+mon connect
+Remote debugging using t2080-tap-01:2345
+0x00000000 in ?? ()
+(gdb) mon get_probe_status
+Connected to gdbserver t2080-tap-01:2345
+
+Executing Initialization File: /opt/Freescale/CodeWarrior_PA_10.5.1/PA/PA_Support/Initialization_Files/QorIQ_T2/68PPC2_init_sram.tcl
+thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu, target)
+```
+
 
 ## TI Hercules TMS570LC435
 
@@ -1161,6 +1314,7 @@ Example of flash memory layout and configuration on the nRF52:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS   0x57000
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x58000
 ```
+
 ## Simulated
 
 You can create a simulated target that uses files to mimic an internal and

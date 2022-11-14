@@ -37,11 +37,12 @@
 #   define TRAILER_SKIP 0
 #endif
 
+#include <stddef.h> /* for size_t */
+
 #if defined(EXT_ENCRYPTED)
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
     #else
-        #include <stddef.h>
         #include <string.h>
         #define XMEMSET memset
         #define XMEMCPY memcpy
@@ -63,8 +64,6 @@
     #define XMEMCMP memcmp
 #endif
 
-
-
 #ifndef NULL
 #   define NULL (void *)0
 #endif
@@ -82,7 +81,7 @@ static uint32_t ext_cache;
 /* Inline use of ByteReverseWord32 */
 #define WOLFSSL_MISC_INCLUDED
 #include <wolfcrypt/src/misc.c>
-uint32_t wb_reverse_word32(uint32_t x)
+static uint32_t wb_reverse_word32(uint32_t x)
 {
     return ByteReverseWord32(x);
 }
@@ -464,7 +463,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
             continue;
         }
         /* Sanity check to prevent dereferencing unaligned half-words */
-        if ((((unsigned long)p) & 0x01) != 0) {
+        if ((((size_t)p) & 0x01) != 0) {
             p++;
             continue;
         }

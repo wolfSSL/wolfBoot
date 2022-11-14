@@ -1,30 +1,36 @@
 OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
-RESET_ADDR = 0x00000000effffffc;
 
-/* On initial start, only a limited space(4k) is accessible. Code here
- * bootstraps to enable access to other needed address spaces
- */
-BOOTSTRAP_TLB = 0x00000000effff000;
+/* On initial start, only a limited space(4k) is accessible.
+ * Code here bootstraps to enable access to other needed address spaces */
+BOOTSTRAP_TLB = 0xEFFFF000;
 
-START = ##WOLFBOOT_ORIGIN##;
-FLASH_LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##;
-
-PHDRS
-{
-    text PT_LOAD;
-    bss  PT_LOAD;
-}
+/* Entry point where RCW directs code to execute from */
+BOOTSTRAP_ENTRY = 0xEFFFFFFC;
 
 MEMORY
 {
-    FLASH (rx) : ORIGIN = START, LENGTH = FLASH_LENGTH
-    RAM (rwx) : ORIGIN = 0xfdd00000, LENGTH = 0x00002000
+    FLASH (rx) : ORIGIN = ##WOLFBOOT_ORIGIN##, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    /* Use L1 memory (DDR is not setup yet) */
+    RAM (rwx) : ORIGIN = 0xFDD00000, LENGTH = 0x4000
 }
 
 SECTIONS
 {
+    /* boot code boot_ppc_start.S for _reset */
+    .boot BOOTSTRAP_TLB :
+    {
+        KEEP(*(.boot))
+    } = 0xFFFC
+    . = ALIGN(4);
+
+    /* entry point branch offset to _reset */
+    .reset BOOTSTRAP_ENTRY :
+    {
+        KEEP(*(.reset))
+    } = 0x4
+    . = ALIGN(4);
 
     .text :
     {
@@ -33,20 +39,19 @@ SECTIONS
         *(.sdata*)
     } > FLASH
 
-    . = ALIGN(4);
+    /* Read-only sections, merged into text segment: */
+    .interp         : { *(.interp) }
+    .hash           : { *(.hash) }
+    .dynsym         : { *(.dynsym) }
+    .dynstr         : { *(.dynstr) }
+    .gnu.version    : { *(.gnu.version) }
+    .gnu.version_r  : { *(.gnu.version_r) }
+    .gnu.hash       : { *(.gnu.hash) }
+    .rela.dyn       : { *(.rela.dyn) }
 
-    .boot BOOTSTRAP_TLB :
-    {
-        KEEP(*(.boot))
-    } :text = 0xffff
+    _stored_data = .;
 
-    .reset RESET_ADDR :
-    {
-        KEEP(*(.reset))
-    } :text = 0xffff
-    . = 0xeffffffc + 0x4;
-
-    .data :
+    .data : AT (_stored_data)
     {
         _start_data = .;
         KEEP(*(.data*))

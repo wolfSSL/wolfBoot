@@ -33,8 +33,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#include <limits.h>
 
+#ifndef BLOCK_SZ
 #define BLOCK_SZ 1024
+#endif
+
+#ifndef BIN_FILL_CHAR
+#define BIN_FILL_CHAR '\xff'
+#endif
 
 void usage(const char* execname)
 {
@@ -65,14 +72,13 @@ int binentry_address_compare(const void* a, const void* b)
     }
 }
 
-
 int main(int argc, const char* argv[]) {
     const char* outname = NULL;
     size_t i = 0;
     size_t num_entries = 0;
     binentry_t* entries = NULL;
     size_t cur_add = 0;
-    char fill = '\xff';
+    char fill = BIN_FILL_CHAR;
     size_t nr = 0;
     size_t nw = 0;
     char data[BLOCK_SZ];
@@ -86,7 +92,7 @@ int main(int argc, const char* argv[]) {
     outname = argv[1];
     num_entries = (argc - 2) / 2;
 
-    entries = malloc( sizeof(binentry_t) * num_entries);
+    entries = malloc(sizeof(binentry_t) * num_entries);
     if (entries == NULL) {
         fprintf(stderr, "unable to allocate %zu entries\n;", num_entries);
         return EXIT_FAILURE;
@@ -140,7 +146,7 @@ int main(int argc, const char* argv[]) {
     // TODO: consider handling stdout "-"
 
     FILE* fo = fopen(outname, "wb");
-    if (fo == NULL){
+    if (fo == NULL) {
         fprintf(stderr, "opening %s failed %s\n",
                 outname, strerror(errno));
         return EXIT_FAILURE;
@@ -148,6 +154,7 @@ int main(int argc, const char* argv[]) {
 
     cur_add = entries[0].address;
     for (i=0; i<num_entries; i++) {
+        size_t fillSz = entries[i].address - cur_add;
         FILE* fi = fopen(entries[i].fname, "rb");
         if (fi == NULL){
             fprintf(stderr, "opening %s failed %s\n",
@@ -155,17 +162,29 @@ int main(int argc, const char* argv[]) {
             return EXIT_FAILURE;
         }
 
-        /* fill until address */
-        while(cur_add < entries[i].address) {
-            nw = fwrite(&fill, 1, 1, fo);
-            if (nw != 1) {
-                fprintf(stderr,
-                  "Failed to write fill bytes at 0x%zu\n",
-                        cur_add);
-                return EXIT_FAILURE;
-            }
+        if (fillSz > 0 && fillSz < INT_MAX) {
+            /* fill until address - blocks then bytes */
+            memset(data, fill, sizeof(data));
 
-            cur_add++;
+            while (cur_add + sizeof(data) < entries[i].address) {
+                nw = fwrite(data, 1, sizeof(data), fo);
+                if (nw != sizeof(data)) {
+                    fprintf(stderr, "Failed to write %zu fill bytes at 0x%zu\n",
+                            sizeof(data), cur_add);
+                    return EXIT_FAILURE;
+                }
+                cur_add += sizeof(data);
+            }
+            while (cur_add < entries[i].address) {
+                nw = fwrite(&fill, 1, 1, fo);
+                if (nw != 1) {
+                    fprintf(stderr, "Failed to write fill bytes at 0x%zu\n",
+                            cur_add);
+                    return EXIT_FAILURE;
+                }
+                cur_add++;
+            }
+            fprintf(stderr, "\tAdded %12zu bytes fill\n", fillSz);
         }
 
         while (!feof(fi)) {
@@ -195,6 +214,8 @@ int main(int argc, const char* argv[]) {
 
         }
 
+        fprintf(stderr, "\tAdded %12zu bytes at 0x%8zx from %s\n",
+            cur_add - entries[i].address, entries[i].address, entries[i].fname);
 
         fclose(fi);
     }

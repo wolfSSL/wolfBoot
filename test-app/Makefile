@@ -177,9 +177,11 @@ ifeq ($(TARGET),imx_rt)
     ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
         CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
         APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1052.o
-    else ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
-        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
-        APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
+    else
+      ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
+          CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+          APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
+      endif
     endif
 endif
 
@@ -245,7 +247,7 @@ standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
 image.bin: image.elf
 	$(Q)echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) -O binary $^ $@
+	$(Q)$(OBJCOPY) --gap-fill 0xff -O binary $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	$(Q)echo "\t[LD] $@"

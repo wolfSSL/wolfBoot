@@ -799,7 +799,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Image size %d > max %d\n",
-            *size, (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
+            img->fw_size, (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
         img->fw_size = 0;
         return -1;
     }
@@ -815,8 +815,13 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 }
 
 #ifdef MMU
-/* misc.c included via libwolfboot.c */
-extern uint32_t wb_reverse_word32(uint32_t);
+/* Inline use of ByteReverseWord32 */
+#define WOLFSSL_MISC_INCLUDED
+#include <wolfcrypt/src/misc.c>
+static uint32_t wb_reverse_word32(uint32_t x)
+{
+    return ByteReverseWord32(x);
+}
 
 int wolfBoot_get_dts_size(void *dts_addr)
 {
