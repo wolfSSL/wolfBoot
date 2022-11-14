@@ -88,6 +88,11 @@
 #       define WOLFSSL_SP_SMALL
 #       define SP_WORD_SIZE 32
 #       define WOLFSSL_HAVE_SP_ECC
+
+        /* SP Math needs to understand long long */
+#       ifndef ULLONG_MAX
+#           define ULLONG_MAX 18446744073709551615ULL
+#       endif
 #   endif
 
 /* ECC options disabled to reduce size */
@@ -256,6 +261,5 @@
 #else
 #   define WOLFSSL_SMALL_STACK
 #endif
-
 
 #endif /* !H_USER_SETTINGS_ */

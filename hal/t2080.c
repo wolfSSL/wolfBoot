@@ -21,25 +21,46 @@
 #include <stdint.h>
 #include "target.h"
 
-/* #define DEBUG_UART */
+#define DEBUG_UART
 
 #define OFFSETOF(type, field) ((uint32_t)&(((type *)0)->field))
 
 #define CCSRBAR 0xFE000000
 
-#ifdef DEBUG_UART
-    #define UART0_OFFSET 0x11C500
-    #define UART0_BASE  (CCSRBAR + UART0_OFFSET)
+/* T2080 PC16552D Dual UART */
+#define UART0_OFFSET 0x11C500
+#define UART1_OFFSET 0x11D500
+#define UART0_BASE  (CCSRBAR + UART0_OFFSET)
+#define UART1_BASE  (CCSRBAR + UART1_OFFSET)
 
-    #define SYS_CLK 600000000
-    #define BAUD_RATE 115200
-#endif
+#define UART_RBR 0 /* receiver buffer register */
+#define UART_THR 0 /* transmitter holding register */
+#define UART_IER 1 /* interrupt enable register */
+#define UART_IIR 2 /* interrupt ID register */
+#define UART_FCR 2 /* FIFO control register */
+#define UART_FCR_TFR 0x04 /* Transmitter FIFO reset */
+#define UART_FCR_RFR 0x02 /* Receiver FIFO reset */
+#define UART_FCR_FEN 0x01 /* FIFO enable */
+
+#define UART_LCR 3 /* line control register */
+#define UART_LCR_DLAB 0x80 /* Divisor latch access bit */
+#define UART_LCR_WLS  0x03 /* Word length select: 8-bits */
+#define UART_MCR 4 /* modem control register */
+
+#define UART_LSR 5 /* line status register */
+#define UART_LSR_TEMT 0x40 /* Transmitter empty */
+#define UART_LSR_THRE 0x20 /* Transmitter holding register empty */
+
+#define UART_DLB 0 /* divisor least significant byte register */
+#define UART_DMB 1 /* divisor most significant byte register */
+
+#define SYS_CLK 600000000
+#define BAUD_RATE 115200
 
 /* T2080 RM 2.4 */
-#define CSSR CCSRBAR
-#define LAWBARHn(n) *((volatile uint32_t*)(CSSR + 0xC00 + n*0x10 + 0x0))
-#define LAWBARLn(n) *((volatile uint32_t*)(CSSR + 0xC00 + n*0x10 + 0x4))
-#define LAWBARn(n)  *((volatile uint32_t*)(CSSR + 0xC00 + n*0x10 + 0x8))
+#define LAWBARHn(n) *((volatile uint32_t*)(CCSRBAR + 0xC00 + n*0x10 + 0x0))
+#define LAWBARLn(n) *((volatile uint32_t*)(CCSRBAR + 0xC00 + n*0x10 + 0x4))
+#define LAWBARn(n)  *((volatile uint32_t*)(CCSRBAR + 0xC00 + n*0x10 + 0x8))
 
 /* T2080 2.4.3 - size is equal to 2^(enum + 1) */
 enum law_sizes {
@@ -116,7 +137,7 @@ typedef struct cpld_data {
 
 
 /* IO Helpers */
-static inline uint8_t in_8(const volatile unsigned char *addr)
+static inline uint8_t in_8(const volatile uint8_t *addr)
 {
     uint8_t ret;
     asm volatile("sync;\n"
@@ -126,7 +147,7 @@ static inline uint8_t in_8(const volatile unsigned char *addr)
                  : "m" (*addr));
     return ret;
 }
-static inline void out_8(volatile unsigned char *addr, uint8_t val)
+static inline void out_8(volatile uint8_t *addr, uint8_t val)
 {
     asm volatile("sync;\n"
                  "stb %1,%0;\n"
@@ -135,26 +156,26 @@ static inline void out_8(volatile unsigned char *addr, uint8_t val)
 }
 
 /* CPLD */
-static uint8_t cpld_read(unsigned int reg)
+static uint8_t cpld_read(uint32_t reg)
 {
-	void *p = (void *)CPLD_BASE;
-	return in_8(p + reg);
+    register volatile uint32_t* p = (uint32_t*)CPLD_BASE;
+    return in_8((uint8_t*)(p + reg));
 }
 
-static void cpld_write(unsigned int reg, uint8_t value)
+static void cpld_write(uint32_t reg, uint8_t value)
 {
-	void *p = (void *)CPLD_BASE;
-	out_8(p + reg, value);
+    register volatile uint32_t* p = (uint32_t*)CPLD_BASE;
+    out_8((uint8_t*)(p + reg), value);
 }
 
 /* Set the boot bank to the default bank */
 void cpld_set_defbank(void)
 {
-	uint8_t reg = CPLD_READ(flash_csr);
+    uint8_t reg = CPLD_READ(flash_csr);
 
-	reg = (reg & ~CPLD_BANK_SEL_MASK) | CPLD_LBMAP_DFLTBANK;
-	CPLD_WRITE(flash_csr, reg);
-	CPLD_WRITE(reset_ctl, CPLD_LBMAP_RESET);
+    reg = (reg & ~CPLD_BANK_SEL_MASK) | CPLD_LBMAP_DFLTBANK;
+    CPLD_WRITE(flash_csr, reg);
+    CPLD_WRITE(reset_ctl, CPLD_LBMAP_RESET);
 }
 
 
@@ -170,21 +191,20 @@ static void uart_init(void)
     uint32_t div = (((SYS_CLK / 2.0) / (16 * BAUD_RATE)) + 0.5);
     register volatile uint8_t* uart = (uint8_t*)UART0_BASE;
 
-    while (!(in_8(uart + 5) & 0x40))
+    while (!(in_8(uart + UART_LSR) & UART_LSR_TEMT))
        ;
 
     /* set ier, fcr, mcr */
-    out_8(uart + 1, 0);
-    out_8(uart + 4, 3);
-    out_8(uart + 2, 7);
+    out_8(uart + UART_IER, 0);
+    out_8(uart + UART_FCR, (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN));
 
     /* enable baud rate access (DLAB=1) - divisor latch access bit*/
-    out_8(uart + 3, 0x83);
+    out_8(uart + UART_LCR, (UART_LCR_DLAB | UART_LCR_WLS));
     /* set divisor */
-    out_8(uart + 0, div & 0xff);
-    out_8(uart + 1, (div>>8) & 0xff);
+    out_8(uart + UART_DLB, div & 0xff);
+    out_8(uart + UART_DMB, (div>>8) & 0xff);
     /* disable rate access (DLAB=0) */
-    out_8(uart + 3, 0x03);
+    out_8(uart + UART_LCR, (UART_LCR_WLS));
 }
 
 static void uart_write(const char* buf, uint32_t sz)
@@ -192,9 +212,9 @@ static void uart_write(const char* buf, uint32_t sz)
     volatile uint8_t* uart = (uint8_t*)UART0_BASE;
     uint32_t pos = 0;
     while (sz-- > 0) {
-        while (!(in_8(uart + 5) & 0x20))
+        while (!(in_8(uart + UART_LSR) & UART_LSR_THRE))
             ;
-        out_8(uart + 0, buf[pos++]);
+        out_8(uart + UART_THR, buf[pos++]);
     }
 }
 #endif /* DEBUG_UART */
@@ -222,7 +242,7 @@ static const char* kHexLut = "0123456789abcdef";
 static void tohexstr(uint32_t val, char* out)
 {
     int i;
-    for (i=0; i<sizeof(val)*2; i++) {
+    for (i=0; i<(int)sizeof(val)*2; i++) {
         out[(sizeof(val)*2) - i - 1] = kHexLut[(val >> 4*i) & 0xF];
     }
 }
@@ -236,33 +256,41 @@ void hal_init(void)
     uart_init();
     uart_write("wolfBoot Init\n", 14);
 
+#if 0 /* NOT WORKING */
     uart_write("Board Rev: 0x", 13);
-    tohexstr(CPLD_READ(hw_ver)), buf);
+    tohexstr(CPLD_READ(hw_ver), buf);
     uart_write(buf, 8);
     uart_write(" CPLD ver: 0x", 13);
-    tohexstr(CPLD_READ(sw_ver)), buf);
+    tohexstr(CPLD_READ(sw_ver), buf);
     uart_write(buf, 8);
     uart_write("\n", 1);
 #endif
+#endif
 
 
+#if 0 /* NOT TESTED */
     /* CPLD setup */
     cpld_set_defbank();
 
     /* Disable SATA Write Protection */
     SATA_ENBL = 0;
-
+#endif
 }
 
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    /* TODO: Implement NOR flash write */
+    (void)address;
+    (void)data;
+    (void)len;
+    /* TODO: Implement NOR flash write using IFC */
     return 0;
 }
 
 int hal_flash_erase(uint32_t address, int len)
 {
-    /* TODO: Implement NOR flash erase */
+    (void)address;
+    (void)len;
+    /* TODO: Implement NOR flash erase using IFC */
     return 0;
 }
 

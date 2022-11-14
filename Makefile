@@ -12,6 +12,7 @@ WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra
 LSCRIPT:=config/target.ld
+LSCRIPT_FLAGS:=
 LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
@@ -53,7 +54,9 @@ CFLAGS+= \
 ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
   CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
-  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles -fomit-frame-pointer
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
+  # Not setting LDFLAGS directly since it is passed to the test-app
+  LSCRIPT_FLAGS+=-T $(LSCRIPT)
 endif
 
 MAIN_TARGET=factory.bin
@@ -92,9 +95,9 @@ test-lib: $(OBJS)
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY)  -j .text -j .sdata -j .data \
-                -j .dynamic -j .dynsym  -j .rel \
-                -j .rela -j .reloc -j .eh_frame \
-                --target=efi-app-x86_64 --subsystem=10 $^ $@
+					-j .dynamic -j .dynsym  -j .rel \
+					-j .rela -j .reloc -j .eh_frame \
+					--target=efi-app-x86_64 --subsystem=10 $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.efi
@@ -102,23 +105,23 @@ wolfboot.efi: wolfboot.elf
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) -O binary $^ $@
+	$(Q)$(OBJCOPY) --gap-fill 0xff -O binary $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
 	@echo
 
 test-app/image.bin: wolfboot.elf
-	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT)
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)"
 	$(Q)$(SIZE) test-app/image.elf
 
 standalone:
-	$(Q)make -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
+	$(Q)$(MAKE) -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
     NO_XIP=$(NO_XIP) V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
 	MCUXPRESSO=$(MCUXPRESSO) MCUXPRESSO_CPU=$(MCUXPRESSO_CPU) MCUXPRESSO_DRIVERS=$(MCUXPRESSO_DRIVERS) \
 	MCUXPRESSO_CMSIS=$(MCUXPRESSO_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK) standalone
-	$(Q)$(OBJCOPY) -O binary test-app/image.elf standalone.bin
+	$(Q)$(OBJCOPY) --gap-fill 0xff -O binary test-app/image.elf standalone.bin
 	$(Q)$(SIZE) test-app/image.elf
 
 include tools/test.mk
@@ -140,8 +143,8 @@ $(PRIVATE_KEY):
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 
 keytools:
-	@make -C tools/keytools clean
-	@make -C tools/keytools
+	@$(MAKE) -C tools/keytools clean
+	@$(MAKE) -C tools/keytools
 
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
@@ -149,7 +152,7 @@ test-app/image_v1_signed.bin: $(BOOT_IMG)
 	$(Q)(test $(SIGN) = NONE) && $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
-	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT=$(WOLFBOOT_ROOT) image.elf
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
 	$(Q)$(SIZE) test-app/image.elf
 
 internal_flash.dd: test-app/image_v1_signed.bin wolfboot.elf $(BINASSEMBLE)
@@ -161,14 +164,14 @@ internal_flash.dd: test-app/image_v1_signed.bin wolfboot.elf $(BINASSEMBLE)
 
 factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE)
 	@echo "\t[MERGE] $@"
-	$(Q)$(BINASSEMBLE) $@ $(ARCH_FLASH_OFFSET) wolfboot.bin \
-                              $(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
+	$(Q)$(BINASSEMBLE) $@ $(WOLFBOOT_ORIGIN) wolfboot.bin \
+		$(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
 wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	$(Q)(test $(SIGN) = NONE) || (grep $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
-	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
+	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
 $(LSCRIPT): FORCE
 	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
@@ -176,9 +179,9 @@ $(LSCRIPT): FORCE
 		"the encryption algorithm is not yet supported with bootloader updates." \
 		&& false)
 	@(test -r $(LSCRIPT_IN)) || (echo "Error: no RAM/ChaCha linker script found." \
-	         "If you selected Encryption and RAM_CODE, ensure that you have a" \
-	         "custom linker script (i.e. $(TARGET)_chacha_ram.ld). Please read " \
-			 "docs/encrypted_partitions.md for more information" && false)
+		"If you selected Encryption and RAM_CODE, ensure that you have a" \
+		"custom linker script (i.e. $(TARGET)_chacha_ram.ld). Please read " \
+		"docs/encrypted_partitions.md for more information" && false)
 	@cat $(LSCRIPT_IN) | \
 		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/$(BOOTLOADER_PARTITION_SIZE)/g" | \
 		sed -e "s/##WOLFBOOT_ORIGIN##/$(WOLFBOOT_ORIGIN)/g" \
@@ -195,10 +198,10 @@ src/keystore.c: $(PRIVATE_KEY)
 keys: $(PRIVATE_KEY)
 
 clean:
-	@find . -type f -name "*.o" | xargs rm -f
+	@rm -f src/*.o hal/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
 	@rm -f *.bin *.elf wolfboot.map test-update.rom *.hex config/target.ld
-	@make -C test-app clean
-	@make -C tools/check_config clean
+	@$(MAKE) -C test-app clean
+	@$(MAKE) -C tools/check_config clean
 
 utilsclean: clean
 	$(Q)$(MAKE) -C tools/keytools clean
@@ -241,10 +244,10 @@ delta-test: FORCE
 
 
 config: FORCE
-	make -C config
+	$(MAKE) -C config
 
 check_config:
-	make -C tools/check_config run
+	$(MAKE) -C tools/check_config run
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"

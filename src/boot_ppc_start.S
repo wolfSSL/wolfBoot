@@ -77,11 +77,13 @@ Also see MPC8544ERM
 .global _reset
 
 _reset:
-        /* CRM 9.9.2 and EREF 10.4 enable debug interrupt */
+
 #if defined(DEBUG)
+        /* CRM 9.9.2 and EREF 10.4 enable debug interrupt */
         li      1, (1<<9)
         mtmsr   1
 #endif
+
 setup_interrupts:
 
 #define MAS0     0x270
@@ -110,7 +112,7 @@ setup_mmu:
         lis     3, 0xfe00
         ori     3, 3, 0x000a
         mtspr   MAS2, 3
-        /* rpn permisisons(super W,R) */
+        /* rpn permissions(super W,R) */
         lis     3, 0xfe00
         ori     3, 3, 0x0005
         mtspr   MAS3, 3

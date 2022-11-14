@@ -36,12 +36,16 @@ ifeq ($(SIGN),ECC256)
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
        STACK_USAGE=4096
-  else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=6680
-  else ifneq ($(SPMATH),1)
-    STACK_USAGE=5008
   else
-    STACK_USAGE=5880
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=6680
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=5008
+      else
+        STACK_USAGE=5880
+      endif
+    endif
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 256; echo $$?),0)
     IMAGE_HEADER_SIZE=256
@@ -61,12 +65,16 @@ ifeq ($(SIGN),ECC384)
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC384"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
        STACK_USAGE=5880
-  else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=6680
-  else ifneq ($(SPMATH),1)
-    STACK_USAGE=11248
   else
-    STACK_USAGE=5880
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=6680
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=11248
+      else
+        STACK_USAGE=5880
+      endif
+    endif
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
     IMAGE_HEADER_SIZE=512
@@ -86,13 +94,18 @@ ifeq ($(SIGN),ECC521)
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC521"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
        STACK_USAGE=4096
-  else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=6680
-  else ifneq ($(SPMATH),1)
-    STACK_USAGE=7352
   else
-    STACK_USAGE=3896
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=6680
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=7352
+      else
+        STACK_USAGE=3896
+      endif
+    endif
   endif
+
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
     IMAGE_HEADER_SIZE=512
   endif
@@ -132,10 +145,12 @@ ifeq ($(SIGN),ED448)
     ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
   ifeq ($(WOLFTPM),1)
     STACK_USAGE=6680
-  else ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    STACK_USAGE?=1024
   else
-    STACK_USAGE?=4376
+    ifeq ($(WOLFBOOT_SMALL_STACK),1)
+      STACK_USAGE?=1024
+    else
+      STACK_USAGE?=4376
+    endif
   endif
 
 
@@ -165,12 +180,16 @@ ifeq ($(SIGN),RSA2048)
     else
       STACK_USAGE=4096
     endif
-  else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=9096
-  else ifneq ($(SPMATH),1)
-    STACK_USAGE=35952
   else
-    STACK_USAGE=12288
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=9096
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=35952
+      else
+        STACK_USAGE=12288
+      endif
+    endif
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
     IMAGE_HEADER_SIZE=512
@@ -194,12 +213,16 @@ ifeq ($(SIGN),RSA3072)
     else
       STACK_USAGE=4364
     endif
-  else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=9096
-  else ifneq ($(SPMATH),1)
-    STACK_USAGE=52592
   else
-    STACK_USAGE=12288
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=9096
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=52592
+      else
+        STACK_USAGE=12288
+      endif
+    endif
   endif
   ifneq ($(HASH),SHA256)
     IMAGE_HEADER_SIZE=1024
@@ -226,12 +249,16 @@ ifeq ($(SIGN),RSA4096)
     else
       STACK_USAGE=5768
     endif
-  else ifeq ($(WOLFTPM),1)
-    STACK_USAGE=10680
-  else ifneq ($(SPMATH),1)
-    STACK_USAGE=69232
   else
-    STACK_USAGE=18064
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=10680
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=69232
+      else
+        STACK_USAGE=18064
+      endif
+    endif
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 1024; echo $$?),0)
     IMAGE_HEADER_SIZE=1024
@@ -276,14 +303,16 @@ ifeq ($(ENCRYPT),1)
     CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT
     CFLAGS+=-DENCRYPT_WITH_AES128 -DWOLFSSL_AES_128
     WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
-  else ifeq ($(ENCRYPT_WITH_AES256),1)
-    CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT
-    CFLAGS+=-DENCRYPT_WITH_AES256 -DWOLFSSL_AES_256
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
   else
-    ENCRYPT_WITH_CHACHA=1
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
-    CFLAGS+=-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA
+    ifeq ($(ENCRYPT_WITH_AES256),1)
+      CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT
+      CFLAGS+=-DENCRYPT_WITH_AES256 -DWOLFSSL_AES_256
+      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+    else
+      ENCRYPT_WITH_CHACHA=1
+      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+      CFLAGS+=-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA
+    endif
   endif
 endif
 
@@ -315,7 +344,7 @@ endif
 
 
 ifeq ($(DEBUG),1)
-  CFLAGS+=-O0 -g -ggdb3
+  CFLAGS+=-O0 -g -ggdb3 -D"DEBUG"
 else
   ifeq ($(OPTIMIZATION_LEVEL),)
     CFLAGS+=-Os
