@@ -26,6 +26,13 @@
 #include <stddef.h>
 #include <string.h>
 
+#ifdef DEBUG_UART
+    #include "printf.h"
+    #ifdef PRINTF_ENABLED
+    #include <stdarg.h>
+    #endif
+#endif
+
 int islower(int c)
 {
     return (c >= 'a' && c <= 'z');
@@ -54,13 +61,13 @@ int isalpha(int c)
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
-	unsigned char *d = (unsigned char *)s;
+    unsigned char *d = (unsigned char *)s;
 
-	while (n--) {
-		*d++ = (unsigned char)c;
-	}
+    while (n--) {
+        *d++ = (unsigned char)c;
+    }
 
-	return s;
+    return s;
 }
 #endif /* IAR */
 
@@ -87,7 +94,7 @@ int strcmp(const char *s1, const char *s2)
         s2++;
     }
 
-	return diff;
+    return diff;
 }
 
 int strcasecmp(const char *s1, const char *s2)
@@ -104,7 +111,7 @@ int strcasecmp(const char *s1, const char *s2)
         s2++;
     }
 
-	return diff;
+    return diff;
 }
 
 int strncasecmp(const char *s1, const char *s2, size_t n)
@@ -123,7 +130,7 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
         if (++i > n)
             break;
     }
-	return diff;
+    return diff;
 }
 
 size_t strlen(const char *s)
@@ -225,7 +232,7 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
         n--;
     }
 
-	return diff;
+    return diff;
 }
 
 #ifndef __IAR_SYSTEMS_ICC__
@@ -246,3 +253,98 @@ void *memmove(void *dst, const void *src, size_t n)
     }
 }
 #endif
+
+#if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
+/* minimal printf for 32-bit */
+void uart_writenum(int num, int base)
+{
+    int i = 0;
+    char buf[sizeof(int)*2+1+1];
+    const char* kDigitLut = "0123456789ABCDEF";
+    unsigned int val = (unsigned int)num;
+    if (base == 10 && num < 0) { /* handle negative */
+        buf[i++] = '-';
+        val = -num;
+    }
+    do {
+        buf[i++] = kDigitLut[(val % base)];
+        val /= base;
+    } while (val > 0U);
+    uart_write(buf, i);
+}
+
+void uart_vprintf(const char* fmt, va_list argp)
+{
+    char* fmtp = (char*)fmt;
+    while (fmtp != NULL && *fmtp != '\0') {
+        /* print non formatting characters */
+        if (*fmtp != '%') {
+            uart_write(fmtp++, 1);
+            continue;
+        }
+        fmtp++; /* skip % */
+
+        /* find formatters */
+        while (*fmtp != '\0') {
+            if (*fmtp >= '0' && *fmtp <= '9') {
+                /* length formatter - skip */
+                fmtp++;
+            }
+            else if (*fmtp == 'l') {
+                /* long - skip */
+                fmtp++;
+            }
+            else if (*fmtp == 'z') {
+                /* auto type - skip */
+                fmtp++;
+            }
+            else {
+                break;
+            }
+        }
+
+        switch (*fmtp) {
+            case '%':
+                uart_write(fmtp, 1);
+                break;
+            case 'u':
+            case 'i':
+            case 'd':
+            {
+                int n = (int)va_arg(argp, int);
+                uart_writenum(n, 10);
+                break;
+            }
+            case 'x':
+            case 'p':
+            {
+                int n = (int)va_arg(argp, int);
+                uart_writenum(n, 16);
+                break;
+            }
+            case 's':
+            {
+                char* str = (char*)va_arg(argp, char*);
+                uart_write(str, (uint32_t)strlen(str));
+                break;
+            }
+            case 'c':
+            {
+                char c = (char)va_arg(argp, int);
+                uart_write(&c, 1);
+                break;
+            }
+            default:
+                break;
+        }
+        fmtp++;
+    };
+}
+void uart_printf(const char* fmt, ...)
+{
+    va_list argp;
+    va_start(argp, fmt);
+    uart_vprintf(fmt, argp);
+    va_end(argp);
+}
+#endif /* PRINTF_ENABLED && DEBUG_UART */
