@@ -176,26 +176,21 @@ endif
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
-  CFLAGS+=-DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
   MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-
-  ifeq ($(DEBUG_UART),0)
-    CFLAGS+=-fno-builtin-printf
-  endif
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
 
   OBJS+=src/boot_riscv.o src/vector_riscv.o
-  ARCH_FLASH_OFFSET?=0x20010000
+  ARCH_FLASH_OFFSET=0x20010000
 endif
 
 # powerpc
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
-  CFLAGS+=-g -nostartfiles
   LDFLAGS+=-Wl,--build-id=none
 
   ifeq ($(DEBUG_UART),0)
@@ -267,8 +262,12 @@ ifeq ($(TARGET),t2080)
   # Power PC big endian
   ARCH_FLAGS=-m32 -mhard-float -mcpu=e6500
   CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT -pipe -feliminate-unused-debug-types
-  LDFLAGS+=$(ARCH_FLAGS) -Wl,--hash-style=gnu -Wl,--as-needed
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-pipe # use pipes instead of temp files
+  CFLAGS+=-feliminate-unused-debug-types
+  LDFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
+  LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o

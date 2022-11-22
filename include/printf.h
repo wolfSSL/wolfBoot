@@ -25,11 +25,16 @@
 #define WOLFBOOT_PRINTF_INCLUDED
 
 #if defined(DEBUG_ZYNQ) && !defined(PRINTF_ENABLED)
-#    define PRINTF_ENABLED
+#   define PRINTF_ENABLED
 #endif
 
 #if defined(WOLFBOOT_DEBUG_EFI) && !defined(PRINTF_ENABLED)
-#    define PRINTF_ENABLED
+#   define PRINTF_ENABLED
+#endif
+
+#if defined(DEBUG_UART) && !defined(PRINTF_ENABLED) && !defined(NO_PRINTF_UART)
+#   define PRINTF_ENABLED
+    void uart_write(const char* buf, unsigned int sz);
 #endif
 
 #ifdef PRINTF_ENABLED
@@ -42,6 +47,10 @@
 #       include "efi/efilib.h"
         /* NOTE: %s arguments will not work as EFI uses widechar string */
 #       define wolfBoot_printf(_f_, ...) Print(L##_f_, ##__VA_ARGS__)
+#   elif defined(DEBUG_UART)
+        /* use minimal printf support in string.h */
+        void uart_printf(const char* fmt, ...);
+#       define wolfBoot_printf(_f_, ...) uart_printf(_f_, ##__VA_ARGS__)
 #   else
 #       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
 #   endif

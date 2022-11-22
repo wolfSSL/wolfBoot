@@ -213,6 +213,10 @@ enum ifc_amask_sizes {
 #define SATA_ENBL (*(volatile uint32_t *)(0xB1003F4C)) /* also saw 0xB4003F4C */
 
 
+/* DDR */
+/* NAII 68PPC2 - 8GB discrete DDR3 IM8G08D3EBDG-15E */
+
+
 #ifdef DEBUG_UART
 static void uart_init(void)
 {
@@ -239,13 +243,13 @@ static void uart_init(void)
     UART_LCR(UART_SEL) = (UART_LCR_WLS);
 }
 
-static void uart_write(const char* buf, uint32_t sz)
+void uart_write(const char* buf, uint32_t sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {
         while (!(UART_LSR(UART_SEL) & UART_LSR_THRE))
             ;
-        UART_THR(0) = buf[pos++];
+        UART_THR(UART_SEL) = buf[pos++];
     }
 }
 #endif /* DEBUG_UART */
@@ -352,6 +356,7 @@ void hal_init(void)
 
     uart_write("CPLD FW Rev: 0x", 15);
     tohexstr(fw, buf);
+    uart_write(buf, (uint32_t)sizeof(buf));
     uart_write("\n", 1);
 #endif
 
