@@ -16,8 +16,10 @@ LSCRIPT_FLAGS:=
 LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
-V?=0
 LSCRIPT_IN:=hal/$(TARGET).ld
+V?=0
+DEBUG?=0
+DEBUG_UART?=0
 
 OBJS:= \
 	./hal/$(TARGET).o \

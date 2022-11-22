@@ -176,23 +176,31 @@ endif
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
-  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
+  CFLAGS+=-DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
   MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+
+  ifeq ($(DEBUG_UART),0)
+    CFLAGS+=-fno-builtin-printf
+  endif
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
 
   OBJS+=src/boot_riscv.o src/vector_riscv.o
-  ARCH_FLASH_OFFSET=0x20010000
+  ARCH_FLASH_OFFSET?=0x20010000
 endif
 
 # powerpc
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
-  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles
+  CFLAGS+=-g -nostartfiles
   LDFLAGS+=-Wl,--build-id=none
+
+  ifeq ($(DEBUG_UART),0)
+    CFLAGS+=-fno-builtin-printf
+  endif
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
@@ -419,3 +427,7 @@ ifeq ($(DEBUG),1)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/logging.o
 endif
 
+# Debug UART
+ifeq ($(DEBUG_UART),1)
+  CFLAGS+=-DDEBUG_UART
+endif
