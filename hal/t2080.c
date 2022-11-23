@@ -20,6 +20,7 @@
  */
 #include <stdint.h>
 #include "target.h"
+#include "printf.h"
 
 /* T2080 */
 #define CCSRBAR (0xFE000000)
@@ -52,6 +53,7 @@
 #define UART_LSR_TEMT (0x40) /* Transmitter empty */
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
+#define GET_PHYS_HIGH(addr) (((uint64_t)(addr)) >> 32)
 
 /* T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
 #define LAWBAR_BASE(n) (CCSRBAR + 0xC00 + (n * 0x10))
@@ -64,8 +66,9 @@
 
 /* T2080 Global Source/Target ID Assignments - RM Table 2-1 */
 enum law_target_id {
-    LAW_TRGT_BMAN = 0x18, /* Buffer Manager (BMan) (control) */
-    LAW_TRGT_IFC  = 0x1F, /* Integrated Flash Controller */
+    LAW_TRGT_DDR_1 = 0x10,
+    LAW_TRGT_BMAN  = 0x18, /* Buffer Manager (BMan) (control) */
+    LAW_TRGT_IFC   = 0x1F, /* Integrated Flash Controller */
 };
 
 /* T2080 2.4.3 - size is equal to 2^(enum + 1) */
@@ -100,6 +103,64 @@ enum law_sizes {
     LAW_SIZE_512GB,
     LAW_SIZE_1TB,
 };
+
+
+/* MMU Assist Registers E6500RM 2.13.10 */
+#define MAS0_TLBSEL_MSK 0x30000000
+#define MAS0_TLBSEL(x)  (((x) << 28) & MAS0_TLBSEL_MSK)
+#define MAS0_ESEL_MSK   0x0FFF0000
+#define MAS0_ESEL(x)    (((x) << 16) & MAS0_ESEL_MSK)
+#define MAS0_NV(x)      ((x) & 0x00000FFF)
+
+#define MAS1_VALID      0x80000000
+#define MAS1_IPROT      0x40000000
+#define MAS1_TID(x)     (((x) << 16) & 0x3FFF0000)
+#define MAS1_TS         0x00001000
+#define MAS1_TSIZE(x)   (((x) << 7) & 0x00000F80)
+#define TSIZE_TO_BYTES(x) (1ULL << ((x) + 10))
+
+#define MAS2_EPN        0xFFFFF000
+#define MAS2_X0         0x00000040
+#define MAS2_X1         0x00000020
+#define MAS2_W          0x00000010
+#define MAS2_I          0x00000008
+#define MAS2_M          0x00000004
+#define MAS2_G          0x00000002
+#define MAS2_E          0x00000001
+
+#define MAS3_RPN        0xFFFFF000
+#define MAS3_U0         0x00000200
+#define MAS3_U1         0x00000100
+#define MAS3_U2         0x00000080
+#define MAS3_U3         0x00000040
+#define MAS3_UX         0x00000020
+#define MAS3_SX         0x00000010
+#define MAS3_UW         0x00000008
+#define MAS3_SW         0x00000004
+#define MAS3_UR         0x00000002
+#define MAS3_SR         0x00000001
+
+#define MAS7_RPN        0xFFFFFFFF
+
+#define BOOKE_PAGESZ_4K    2
+#define BOOKE_PAGESZ_16M   14
+#define BOOKE_PAGESZ_256M  18
+#define BOOKE_PAGESZ_2G    21
+
+#define BOOKE_MAS0(tlbsel,esel,nv) \
+        (MAS0_TLBSEL(tlbsel) | MAS0_ESEL(esel) | MAS0_NV(nv))
+#define BOOKE_MAS1(v,iprot,tid,ts,tsize) \
+        ((((v) << 31) & MAS1_VALID)         | \
+        (((iprot) << 30) & MAS1_IPROT)      | \
+        (MAS1_TID(tid))                     | \
+        (((ts) << 12) & MAS1_TS)            | \
+        (MAS1_TSIZE(tsize)))
+#define BOOKE_MAS2(epn, wimge) \
+        (((epn) & MAS3_RPN) | (wimge))
+#define BOOKE_MAS3(rpn, user, perms) \
+        (((rpn) & MAS3_RPN) | (user) | (perms))
+#define BOOKE_MAS7(rpn) \
+        (((uint64_t)(rpn)) >> 32)
 
 
 /* T2080 IFC (Integrated Flash Controller) - RM 13.3 */
@@ -171,6 +232,8 @@ enum ifc_amask_sizes {
 
 /* NOR Flash */
 #define FLASH_BASE        0xE8000000
+#define FLASH_BASE_PHYS  (0xF00000000ULL | FLASH_BASE)
+
 #define FLASH_BANK_SIZE   (128*1024*1024)
 #define FLASH_PAGE_SIZE   (1024) /* program buffer */
 #define FLASH_SECTOR_SIZE (128*1024)
@@ -182,8 +245,12 @@ enum ifc_amask_sizes {
 #define FLASH_WRITE_TOUT  500   /* Flash Write Timeout (ms) */
 
 
+#if 0
+    #define ENABLE_CPLD
+#endif
 /* CPLD */
-#define CPLD_BASE              (0xFFDF0000)
+#define CPLD_BASE               0xFFDF0000
+#define CPLD_BASE_PHYS         (0xF00000000ULL | CPLD_BASE)
 
 #define CPLD_SPARE              0x00
 #define CPLD_SATA_MUX_SEL       0x02
@@ -212,9 +279,43 @@ enum ifc_amask_sizes {
 /* SATA */
 #define SATA_ENBL (*(volatile uint32_t *)(0xB1003F4C)) /* also saw 0xB4003F4C */
 
-
 /* DDR */
+#if 0 /* DDR support not done */
+    #define ENABLE_DDR
+#endif
 /* NAII 68PPC2 - 8GB discrete DDR3 IM8G08D3EBDG-15E */
+/* 1333.333 MT/s data rate 8 GiB (DDR3, 64-bit, CL=9, ECC on) */
+#define DDR_BASE        0x00000000
+#define DDR_SIZE        (8192 * 1024 * 1024)
+#define DDR_N_RANKS     2
+#define DDR_RANK_DENS   0x100000000
+#define DDR_SDRAM_WIDTH 64
+#define DDR_EC_SDRAM_W  8
+#define DDR_N_ROW_ADDR  16
+#define DDR_N_COL_ADDR  10
+#define DDR_N_BANKS     8
+#define DDR_EDC_CONFIG  2
+#define DDR_BURSTL_MASK 0x0c
+#define DDR_TCKMIN_X_PS 1500
+#define DDR_TCMMAX_PS   3000
+#define DDR_CASLAT_X    0x000007E0
+#define DDR_TAA_PS      13500
+#define DDR_TRCD_PS     13500
+#define DDR_TRP_PS      13500
+#define DDR_TRAS_PS     36000
+#define DDR_TRC_PS      49500
+#define DDR_TFAW_PS     30000
+#define DDR_TWR_PS      15000
+#define DDR_TRFC_PS     260000
+#define DDR_TRRD_PS     6000
+#define DDR_TWTR_PS     7500
+#define DDR_TRTP_PS     7500
+#define DDR_REF_RATE_PS 7800000
+
+/* 12.4 DDR Memory Map */
+#define DDR_CS0_BNDS 0x8000
+
+
 
 
 #ifdef DEBUG_UART
@@ -259,33 +360,67 @@ void law_init(void)
 {
     /* IFC - NOR Flash */
     LAWBARn (1) = 0; /* reset */
-    LAWBARHn(1) = 0xF;
+    LAWBARHn(1) = GET_PHYS_HIGH(FLASH_BASE_PHYS);
     LAWBARLn(1) = FLASH_BASE;
     LAWBARn (1) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
 
+#ifdef ENABLE_CPLD
     /* IFC - CPLD */
     LAWBARn (2) = 0; /* reset */
-    LAWBARHn(2) = 0xF;
+    LAWBARHn(2) = GET_PHYS_HIGH(CPLD_BASE_PHYS);
     LAWBARLn(2) = CPLD_BASE;
     LAWBARn (2) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_4KB;
+#endif
 
-    /* Buffer Manager (BMan) (control) */
+    /* Buffer Manager (BMan) (control) - probably not required */
     LAWBARn (3) = 0; /* reset */
     LAWBARHn(3) = 0xF;
     LAWBARLn(3) = 0xF4000000;
     LAWBARn (3) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_BMAN) | LAW_SIZE_32MB;
+
+#ifdef ENABLE_DDR
+    /* DDR */
+    LAWBARn (4) = 0; /* reset */
+    LAWBARHn(4) = 0;
+    LAWBARLn(4) = 0x0000000;
+    LAWBARn (4) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
+#endif
 }
 
-#ifdef DEBUG_UART
-static const char* kHexLut = "0123456789abcdef";
-static void tohexstr(uint32_t val, char* out)
+extern void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
+    uint32_t mas7);
+
+void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
+             uint8_t perms, uint8_t wimge,
+             uint8_t ts, uint8_t tsize, uint8_t iprot)
 {
-    int i;
-    for (i=0; i<(int)sizeof(val)*2; i++) {
-        out[(sizeof(val)*2) - i - 1] = kHexLut[(val >> 4*i) & 0xF];
-    }
+    uint32_t _mas0, _mas1, _mas2, _mas3, _mas7;
+
+    _mas0 = BOOKE_MAS0(tlb, esel, 0);
+    _mas1 = BOOKE_MAS1(1, iprot, 0, ts, tsize);
+    _mas2 = BOOKE_MAS2(epn, wimge);
+    _mas3 = BOOKE_MAS3(rpn, 0, perms);
+    _mas7 = BOOKE_MAS7(rpn);
+
+    write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
 }
+
+/* setup memory map assist */
+void tlbs_init(void)
+{
+#ifdef ENABLE_CPLD
+    /* CPLD - TBL=1, Entry 17 */
+    set_tlb(1, 17, CPLD_BASE, CPLD_BASE_PHYS,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G,
+        0, BOOKE_PAGESZ_4K, 1);
 #endif
+#ifdef ENABLE_DDR
+    /* DDR - TBL=1, Entry 19 */
+    set_tlb(1, 19, DDR_BASE, 0,
+        MAS3_SX | MAS3_SW | MAS3_SR, 0,
+        0, BOOKE_PAGESZ_2G, 1);
+#endif
+}
 
 static void hal_flash_init(void)
 {
@@ -311,8 +446,15 @@ static void hal_flash_init(void)
     IFC_CSOR(0) = 0x0000000C; /* TRHZ (80 clocks for read enable high) */
 }
 
+static void hal_ddr_init(void)
+{
+#ifdef ENABLE_DDR
+#endif
+}
+
 static void hal_cpld_init(void)
 {
+#ifdef ENABLE_CPLD
     /* CPLD IFC Timing Parameters */
     IFC_FTIM0(3) = (IFC_FTIM0_GPCM_TACSE(16) |
                     IFC_FTIM0_GPCM_TEADC(16) |
@@ -332,13 +474,13 @@ static void hal_cpld_init(void)
                        IFC_CSPR_V);
     IFC_AMASK(3) = IFC_AMASK_64KB;
     IFC_CSOR(3) = 0;
+#endif
 }
 
 void hal_init(void)
 {
 #ifdef DEBUG_UART
-    uint8_t fw;
-    char buf[sizeof(uint32_t)*2];
+    uint32_t fw;
 
     uart_init();
     uart_write("wolfBoot Init\n", 14);
@@ -346,20 +488,19 @@ void hal_init(void)
 
     hal_flash_init();
     hal_cpld_init();
+    hal_ddr_init();
 
-#if 0 /* NOT TESTED */
+#ifdef ENABLE_CPLD
     CPLD_DATA(CPLD_PROC_STATUS) = 1; /* Enable proc reset */
     CPLD_DATA(CPLD_WR_TEMP_ALM_OVRD) = 0; /* Enable temp alarm */
 
 #ifdef DEBUG_UART
     fw = CPLD_DATA(CPLD_FW_REV);
-
-    uart_write("CPLD FW Rev: 0x", 15);
-    tohexstr(fw, buf);
-    uart_write(buf, (uint32_t)sizeof(buf));
-    uart_write("\n", 1);
+    wolfBoot_printf("CPLD FW Rev: 0x%x\n", fw);
 #endif
+#endif /* ENABLE_CPLD */
 
+#if 0 /* not tested */
     /* Disable SATA Write Protection */
     SATA_ENBL = 0;
 #endif
