@@ -9,7 +9,12 @@ endif
 
 ifeq ($(SIGN),NONE)
   SIGN_OPTIONS+=--no-sign
-  STACK_USAGE=1216
+  ifeq ($(HASH),SHA384)
+    STACK_USAGE=3760
+  else
+    STACK_USAGE=1216
+  endif
+
   CFLAGS+=-DWOLFBOOT_NO_SIGN
 endif
 

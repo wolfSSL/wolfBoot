@@ -1096,6 +1096,15 @@ Flash Layout (with files):
 
 Or program the `factory.bin` to `0xE8080000`
 
+Example Boot Debug Output:
+
+```
+wolfBoot Init
+Part: Active 0, Address E8080000
+Part: Size 1028
+Firmware Valid
+Loading 1028 bytes to RAM at 19000
+```
 
 #### Flash Programming with Lauterbach
 
