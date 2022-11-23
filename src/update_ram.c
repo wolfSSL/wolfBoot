@@ -46,7 +46,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     active = wolfBoot_dualboot_candidate();
-    if (active == PART_UPDATE)
+    if (active == PART_BOOT)
         load_address = (uint32_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     else
         load_address = (uint32_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
@@ -54,34 +54,19 @@ void RAMFUNCTION wolfBoot_start(void)
     active = wolfBoot_dualboot_candidate_addr((void**)&load_address);
 #endif
 
-    wolfBoot_printf("Active Part: %d\n", active);
+    wolfBoot_printf("Part: Active %d, Address %x\n", active, load_address);
 
     if (active < 0) { /* panic if no images available */
         wolfBoot_panic();
     }
 
-
-    #ifdef WOLFBOOT_FIXED_PARTITIONS
-    /* Check current status for failure (image still in TESTING), and fall-back
-     * if an alternative is available
-     */
-    if (wolfBoot_fallback_is_possible() &&
-            (wolfBoot_get_partition_state(active, &p_state) == 0) &&
-            (p_state == IMG_STATE_TESTING))
-    {
-        active ^= 1; /* switch to other partition if available */
-    }
-    #endif
-
-    wolfBoot_printf("Active Partition: %c\n", active?'B':'A');
-    wolfBoot_printf("Active Partition start address: %x\n", load_address);
     for (;;) {
         if (((ret = wolfBoot_open_image_address(&os_image, (uint8_t*)load_address)) < 0) ||
             ((ret = wolfBoot_verify_integrity(&os_image) < 0)) ||
             ((ret = wolfBoot_verify_authenticity(&os_image)) < 0)) {
 
-        wolfBoot_printf("Failure %d: Part %d, Hdr %d, Hash %d, Sig %d\n", ret,
-            active, os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
+            wolfBoot_printf("Failure %d: Part %d, Hdr %d, Hash %d, Sig %d\n", ret,
+                active, os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
 
             /* panic if authentication fails and no backup */
             if (!wolfBoot_fallback_is_possible())

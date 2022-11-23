@@ -86,6 +86,7 @@ _reset:
 
 setup_interrupts:
 
+/* MMU Assist Registers */
 #define MAS0     0x270
 #define MAS1     0x271
 #define MAS2     0x272
@@ -391,7 +392,7 @@ ram_q:
         bdnz    1b
 
         /* Set up LAW to map IFC(flash) to 0xf_e800_0000
-         * This must be in place along with TLB before switching back to TS=0
+         * This must be in place along with TLB before switching back to AS/TS=0
          */
         bl      law_init
 
@@ -439,18 +440,21 @@ ram_q:
         ori     3, 3, 0x0015
         mtspr   MAS3, 3
         /* upper rpn */
-        li     3, 0xf
+        li      3, 0xf
         mtspr   MAS7, 3
         isync
         msync
         tlbwe
         isync
 
+        /* Init the MMU Assist registers */
+        bl      tlbs_init
+
         /* switch back to AS/TS=0 */
-        lis	3,(MSR_DE)@h
-	ori	3,3,(MSR_DE)@l
-	mtmsr	3
-	isync
+        lis     3,(MSR_DE)@h
+        ori     3,3,(MSR_DE)@l
+        mtmsr   3
+        isync
 
         /* PowerPC e500 Application Binary Interface User’s Guide
          * 2.3.5.1.1 Minimal Stack Frame: No Local Variables or Saved Parameters

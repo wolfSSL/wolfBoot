@@ -33,6 +33,35 @@ extern unsigned int _end_data;
 
 extern void main(void);
 
+#define MTSPR(rn, v) asm volatile("mtspr " rn ",%0" : : "r" (v))
+
+/* e6500 MPC85xx MMU Assist Registers */
+#define MAS0 "0x270"
+#define MAS1 "0x271"
+#define MAS2 "0x272"
+#define MAS3 "0x273"
+#define MAS7 "0x3B0"
+#define MMUCSR0 "0x3F4" /* MMU control and status register 0 */
+
+void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
+    uint32_t mas7)
+{
+    MTSPR(MAS0, mas0);
+    MTSPR(MAS1, mas1);
+    MTSPR(MAS2, mas2);
+    MTSPR(MAS3, mas3);
+    MTSPR(MAS7, mas7);
+    asm volatile("isync;msync;tlbwe;isync");
+}
+
+void invalidate_tlb(int tlb)
+{
+    if (tlb == 0)
+        MTSPR(MMUCSR0, 0x4);
+    else if (tlb == 1)
+        MTSPR(MMUCSR0, 0x2);
+}
+
 void boot_entry_C(void)
 {
     register unsigned int *dst, *src;

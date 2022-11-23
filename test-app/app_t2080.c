@@ -84,7 +84,7 @@ static void uart_write(const char* buf, uint32_t sz)
     while (sz-- > 0) {
         while (!(UART_LSR(UART_SEL) & UART_LSR_THRE))
             ;
-        UART_THR(0) = buf[pos++];
+        UART_THR(UART_SEL) = buf[pos++];
     }
 }
 
