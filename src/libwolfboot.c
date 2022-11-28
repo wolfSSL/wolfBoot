@@ -574,7 +574,7 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
 
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
-    uint32_t *version_field = NULL;
+    uint32_t *volatile version_field = NULL;
     uint32_t *magic = NULL;
 
     magic = (uint32_t *)blob;
@@ -590,7 +590,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 
 uint32_t wolfBoot_get_blob_type(uint8_t *blob)
 {
-    uint32_t *type_field = NULL;
+    uint32_t *volatile type_field = NULL;
     uint32_t *magic = NULL;
     magic = (uint32_t *)blob;
     if (*magic != WOLFBOOT_MAGIC)
@@ -606,7 +606,7 @@ uint32_t wolfBoot_get_blob_type(uint8_t *blob)
 
 uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
 {
-    uint32_t *delta_base = NULL;
+    uint32_t *volatile delta_base = NULL;
     uint32_t *magic = NULL;
     magic = (uint32_t *)blob;
     if (*magic != WOLFBOOT_MAGIC)
