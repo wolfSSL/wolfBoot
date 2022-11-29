@@ -44,6 +44,7 @@ void RAMFUNCTION reloc_iv(const uint32_t *address)
     asm volatile("csrw mtvec, %0":: "r"(address + 1));
 }
 
+#ifndef PLATFORM_gd32vf103
 void __attribute__((naked,section(".init"))) _reset(void) {
     register uint32_t *src, *dst;
     asm volatile("la gp, _global_pointer");
@@ -74,6 +75,7 @@ void __attribute__((naked,section(".init"))) _reset(void) {
     /* Should never return */
     wolfBoot_panic();
 }
+#endif
 
 void do_boot(const uint32_t *app_offset)
 {

@@ -11,6 +11,7 @@ include tools/config.mk
 WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra
+CFLAGS+=-Wno-array-parameter
 LSCRIPT:=config/target.ld
 LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group

@@ -12,6 +12,7 @@ This README describes configuration of supported targets.
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP T2080 PPC](#nxp-t2080-ppc)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
+* [GD32F103 RISC-V](#gd32f103-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32L4](#stm32l4)
 * [STM32F7](#stm32f7)
@@ -563,6 +564,20 @@ In another terminal:
 riscv64-unknown-elf-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
 add-symbol-file test-app/image.elf 0x20020100
 ```
+
+## GD32VF103 RISC-V
+
+This port has been tested on Sipeed Longan nano 1.1.
+
+A configuration file is provided in `config/examples/gd32vf103.config`.
+
+Copy to `.config`, then run `make`.
+
+`factory.bin` can be uploaded by booting the board in DFU mode (keep BOOT button pressed
+while rebooting), by running:
+
+`dfu-util -D factory.bin -s 0x08000000 -w`
+
 
 
 ## STM32F7
