@@ -331,7 +331,7 @@ static void RAMFUNCTION do_secure_boot(void)
 void RAMFUNCTION hal_prepare_boot(void)
 {
 #ifdef SPI_FLASH
-    spi_release();
+    spi_flash_release();
 #endif
     clock_pll_off();
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT

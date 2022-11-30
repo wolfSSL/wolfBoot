@@ -704,6 +704,8 @@ The STM32H7 build can be built using:
 make TARGET=stm32h7 SIGN=ECC256
 ```
 
+The STM32H7 also supports using the QSPI for external flash. To enable use `QSPI_FLASH=1` in your configuration. The pins are defined in `hal/spi/spi_drv_stm32.h`. A built-in alternate pin configuration can be used with `QSPI_ALT_CONFIGURATION`. The flash and QSPI parameters are defined in `src/qspi_flash.c` and can be overrriden at build time.
+
 ### STM32H7 Programming
 
 ST-Link Flash Tools:
@@ -734,6 +736,13 @@ booting.
 1. Start GDB server
 
 ST-Link: `st-util -p 3333`
+
+ST-Link: `ST-LINK_gdbserver -d -e -r 1 -p 3333`
+
+Mac OS:
+```
+/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_2.0.300.202203231527/tools/bin/ST-LINK_gdbserver -d -cp /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.macos64_2.0.200.202202231230/tools/bin -e -r 1 -p 3333
+```
 
 2. Start GDB Client from wolfBoot root:
 

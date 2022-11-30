@@ -298,6 +298,13 @@ ifeq ($(SPI_FLASH),1)
   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
 
+ifeq ($(QSPI_FLASH),1)
+  EXT_FLASH=1
+  CFLAGS+=-D"QSPI_FLASH=1"
+  OBJS+= src/qspi_flash.o
+  WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+endif
+
 ifeq ($(UART_FLASH),1)
   EXT_FLASH=1
 endif

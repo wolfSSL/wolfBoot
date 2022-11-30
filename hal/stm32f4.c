@@ -341,7 +341,7 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 #ifdef SPI_FLASH
-    spi_release();
+    spi_flash_release();
 #endif
 
     clock_pll_off();

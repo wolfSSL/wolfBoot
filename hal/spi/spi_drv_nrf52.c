@@ -50,27 +50,28 @@
 #define SPI_FREQUENCY     *((volatile uint32_t *)(SPI + 0x524))
 #define SPI_CONFIG        *((volatile uint32_t *)(SPI + 0x554))
 
-#define K125 0x02000000  
-#define K250 0x04000000  
-#define K500 0x08000000  
-#define M1   0x10000000  
-#define M2   0x20000000  
-#define M4   0x40000000  
-#define M8   0x80000000  
+#define K125 0x02000000
+#define K250 0x04000000
+#define K500 0x08000000
+#define M1   0x10000000
+#define M2   0x20000000
+#define M4   0x40000000
+#define M8   0x80000000
 
-void RAMFUNCTION spi_cs_off(int pin)
+void RAMFUNCTION spi_cs_off(uint32_t base, int pin)
 {
     GPIO_OUTSET = (1 << pin);
     while ((GPIO_OUT & (1 << pin)) == 0)
         ;
+    (void)base;
 }
 
-void RAMFUNCTION spi_cs_on(int pin)
+void RAMFUNCTION spi_cs_on(uint32_t base, int pin)
 {
     GPIO_OUTCLR = (1 << pin);
     while ((GPIO_OUT & (1 << pin)) != 0)
         ;
-
+    (void)base;
 }
 
 uint8_t RAMFUNCTION spi_read(void)

@@ -114,7 +114,7 @@
 #define FLASH_OPTKEY2                         (0x4C5D6E7F)
 
 
-/* FLASH Geometry 
+/* FLASH Geometry
  *
  * per ST AN4826, two configurations are possible on STM32F7:
  *
@@ -421,7 +421,7 @@ void hal_init(void)
 void RAMFUNCTION hal_prepare_boot(void)
 {
 #ifdef SPI_FLASH
-    spi_release();
+    spi_flash_release();
 #endif
 
     clock_pll_off();
