@@ -66,7 +66,7 @@ void hal_prepare_boot(void);
     void *hal_get_dts_update_address(void);
 #endif
 
-#ifndef SPI_FLASH
+#if !defined(SPI_FLASH) && !defined(QSPI_FLASH)
     /* user supplied external flash interfaces */
     int  ext_flash_write(uintptr_t address, const uint8_t *data, int len);
     int  ext_flash_read(uintptr_t address, uint8_t *data, int len);
@@ -81,11 +81,16 @@ void hal_prepare_boot(void);
     #define ext_flash_write spi_flash_write
     static inline int ext_flash_erase(uintptr_t address, int len)
     {
+        int ret = 0;
         uint32_t end = address + len - 1;
         uint32_t p;
-        for (p = address; p <= end; p += SPI_FLASH_SECTOR_SIZE)
-            spi_flash_sector_erase(p);
-        return 0;
+        for (p = address; p <= end; p += SPI_FLASH_SECTOR_SIZE) {
+            ret = spi_flash_sector_erase(p);
+            if (ret != 0) {
+                break;
+            }
+        }
+        return ret;
     }
 #endif /* !SPI_FLASH */
 

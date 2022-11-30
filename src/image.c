@@ -693,14 +693,14 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     (void)userCtx;
     (void)ctx;
     word16 i;
-    spi_cs_on(SPI_CS_TPM);
+    spi_cs_on(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
     memset(rxBuf, 0, xferSz);
     for (i = 0; i < xferSz; i++)
     {
         spi_write(txBuf[i]);
         rxBuf[i] = spi_read();
     }
-    spi_cs_off(SPI_CS_TPM);
+    spi_cs_off(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
     /*
     printf("\r\nSPI TX: ");
     printbin(txBuf, xferSz);

@@ -57,9 +57,9 @@ void hal_prepare_boot(void)
 {
 }
 
-void spi_flash_sector_erase(uint32_t address)
+int spi_flash_sector_erase(uint32_t address)
 {
-
+    return 0;
 }
 int spi_flash_read(uint32_t address, void *data, int len)
 {

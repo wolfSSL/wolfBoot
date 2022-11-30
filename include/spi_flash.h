@@ -6,7 +6,7 @@
  * Compile with SPI_FLASH=1
  *
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2022 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -28,24 +28,30 @@
 #ifndef SPI_FLASH_DRI_H
 #define SPI_FLASH_DRI_H
 
+#ifndef SPI_FLASH_SECTOR_SIZE
 #define SPI_FLASH_SECTOR_SIZE (4096)
-#define SPI_FLASH_PAGE_SIZE   (256)
+#endif
 
-#ifdef SPI_FLASH
+#ifndef SPI_FLASH_PAGE_SIZE
+#define SPI_FLASH_PAGE_SIZE   (256)
+#endif
+
+#if defined(SPI_FLASH) || defined(QSPI_FLASH)
 
 #include <stdint.h>
 
+/* returns (manuf << 8 | product) */
 uint16_t spi_flash_probe(void);
-void spi_release(void);
+void spi_flash_release(void);
 
-void spi_flash_sector_erase(uint32_t address);
+int spi_flash_sector_erase(uint32_t address);
 int spi_flash_read(uint32_t address, void *data, int len);
 int spi_flash_write(uint32_t address, const void *data, int len);
 
 #else
 
 #define spi_flash_probe() do{}while(0)
-#define spi_release() do{}while(0)
+#define spi_flash_release() do{}while(0)
 
 #endif /* SPI_FLASH */
 

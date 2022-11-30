@@ -47,8 +47,8 @@
 #endif
 
 
-#define SPI_CS_FLASH SPI_CS_PIN
-
+#define SPI_CS_FLASH    SPI_CS_PIN
+#define SPI_CS_PIO_BASE GPIO_BASE
 
 
 #endif
