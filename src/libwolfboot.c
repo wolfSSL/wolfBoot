@@ -1036,7 +1036,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
         XMEMCPY(data, dec_block + row_offset, step);
         address += step;
         data += step;
-        sz -= step;
+        sz = len - step;
         iv_counter++;
     }
     if (ext_flash_read(address, data, sz) != sz)
