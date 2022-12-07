@@ -38,7 +38,7 @@ sign="ed25519"
 
 
 def usage():
-    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 | --ecc521 | --rsa2048| --rsa3072 | --rsa4096] [ --force ] [-i pubkey0.der [-i pubkey1.der -i pubkey2.der ... -i pubkeyN.der]] [-i pubkey0.der [-i pubkey1.der -i pubkey2.der ... -i pubkeyN.der]]n" % sys.argv[0])
+    print("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 | --ecc521 | --rsa2048| --rsa3072 | --rsa4096] [ --force ] [-i pubkey0.der [-i pubkey1.der -i pubkey2.der ... -i pubkeyN.der]] [-i pubkey0.der [-i pubkey1.der -i pubkey2.der ... -i pubkeyN.der] [-keystoreDir dir]]n" % sys.argv[0])
     parser.print_help()
     sys.exit(1)
 
@@ -172,14 +172,20 @@ parser.add_argument('--rsa4096', dest='rsa4096', action='store_true')
 parser.add_argument('--force', dest='force', action='store_true')
 parser.add_argument('-i', dest='pubfile', nargs='+', action='extend')
 parser.add_argument('-g', dest='keyfile', nargs='+', action='extend')
+parser.add_argument('-keystoreDir', dest='storeDir', nargs='+', action='extend')
 
 
 args=parser.parse_args()
 
 #sys.exit(0) #test
 
-pubkey_cfile = "src/keystore.c"
-keystore_imgfile = "keystore.der"
+if (type(args.storeDir) == list):
+    pubkey_cfile = "".join(args.storeDir)+"/keystore.c"
+    keystore_imgfile =  "".join(args.storeDir)+"/keystore.der"
+else:
+    pubkey_cfile = "src/keystore.c"
+    keystore_imgfile = "keystore.der"
+    
 key_files = args.keyfile
 pubkey_files = args.pubfile
 

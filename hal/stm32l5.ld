@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = ##WOLFBOOT_ORIGIN##, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
     RAM (rwx) : ORIGIN = 0x30000000, LENGTH = 0x00017FFF
 }
 
@@ -14,7 +14,7 @@ SECTIONS
         *(.rodata*)
         . = ALIGN(8);
         _end_text = .;
-    } > FLASH 
+    } > FLASH
     .edidx :
     {
         . = ALIGN(4);

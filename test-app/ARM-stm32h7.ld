@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = ##WOLFBOOT_TEST_APP_ADDRESS##, LENGTH = ##WOLFBOOT_TEST_APP_SIZE##
+    FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping TCM only */
 }
 
@@ -40,6 +40,11 @@ SECTIONS
         _end = .;
     } > RAM
 }
+
+_wolfboot_partition_boot_address = 0x8020000;
+_wolfboot_partition_size = 0xD0000;
+_wolfboot_partition_update_address = 0x80F0000;
+_wolfboot_partition_swap_address = 0x81C0000;
 
 PROVIDE(_start_heap = _end);
 PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));

@@ -10,7 +10,7 @@ PHDRS
 
 SECTIONS
 {
-    . = ##WOLFBOOT_TEST_APP_ADDRESS##;
+    . = @WOLFBOOT_TEST_APP_ADDRESS@;
 
     .text :
     {

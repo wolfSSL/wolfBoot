@@ -24,6 +24,11 @@
 
 #ifndef IMAGE_H
 #define IMAGE_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 #include "target.h"
@@ -641,6 +646,10 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img, uint32_
 #else
 #include "encrypt.h"
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - ENCRYPT_TMP_SECRET_OFFSET)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* !IMAGE_H */
