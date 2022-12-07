@@ -25,6 +25,10 @@
 #ifndef LOADER_H
 #define LOADER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if defined(WOLFBOOT_SIGN_ED25519)
     extern const unsigned char ed25519_pub_key[];
     extern unsigned int ed25519_pub_key_len;
@@ -74,7 +78,7 @@ void wolfBoot_start(void);
     asm volatile("b .-2"); \
     asm volatile("b .-4"); \
     asm volatile("b .-6"); \
-    asm volatile("b .-8"); 
+    asm volatile("b .-8");
 
 #else
 static inline void wolfBoot_panic(void)
@@ -83,4 +87,9 @@ static inline void wolfBoot_panic(void)
         ;
 }
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* LOADER_H */

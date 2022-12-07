@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping TCM only */
 }
 
@@ -46,5 +46,10 @@ SECTIONS
     } > RAM
     . = ALIGN(4);
 }
+
+_wolfboot_partition_boot_address = 0x8020000;
+_wolfboot_partition_size = 0xD0000;
+_wolfboot_partition_update_address = 0x80F0000;
+_wolfboot_partition_swap_address = 0x81C0000;
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);

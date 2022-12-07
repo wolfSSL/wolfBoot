@@ -24,6 +24,9 @@
 #ifndef H_HAL_
 #define H_HAL_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "target.h"
 
@@ -35,6 +38,12 @@ extern void do_boot(const uint32_t *app_offset);
 #endif
 extern void arch_reboot(void);
 
+/* Simulator-only calls */
+#ifdef PLATFORM_sim
+void hal_set_internal_flash_file(const char* file);
+void hal_set_external_flash_file(const char* file);
+void hal_deinit();
+#endif
 
 void hal_init(void);
 int hal_flash_write(uint32_t address, const uint8_t *data, int len);
@@ -79,5 +88,9 @@ void hal_prepare_boot(void);
         return 0;
     }
 #endif /* !SPI_FLASH */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* H_HAL_FLASH_ */

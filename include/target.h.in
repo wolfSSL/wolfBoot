@@ -27,26 +27,45 @@
 #ifndef H_TARGETS_TARGET_
 #define H_TARGETS_TARGET_
 
+
 #ifndef WOLFBOOT_NO_PARTITIONS
 #    define WOLFBOOT_FIXED_PARTITIONS
 #endif
 
-#define WOLFBOOT_SECTOR_SIZE                 ##WOLFBOOT_SECTOR_SIZE##
+#define WOLFBOOT_SECTOR_SIZE                 @WOLFBOOT_SECTOR_SIZE@
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
-    #define WOLFBOOT_PARTITION_BOOT_ADDRESS      ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
-    #define WOLFBOOT_PARTITION_SIZE              ##WOLFBOOT_PARTITION_SIZE##
-    #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    ##WOLFBOOT_PARTITION_UPDATE_ADDRESS##
-    #define WOLFBOOT_PARTITION_SWAP_ADDRESS      ##WOLFBOOT_PARTITION_SWAP_ADDRESS##
-    #define WOLFBOOT_DTS_BOOT_ADDRESS            ##WOLFBOOT_DTS_BOOT_ADDRESS##
-    #define WOLFBOOT_DTS_UPDATE_ADDRESS          ##WOLFBOOT_DTS_UPDATE_ADDRESS##
+
+#ifdef PULL_LINKER_DEFINES
+    #include <stdint.h>
+
+    /* linker script variables */
+    extern const uint32_t _wolfboot_partition_boot_address[];
+    extern const uint32_t _wolfboot_partition_size[];
+    extern const uint32_t _wolfboot_partition_update_address[];
+    extern const uint32_t _wolfboot_partition_swap_address[];
+
+    /* create plain integers from linker script variables */
+    static const uint32_t WOLFBOOT_PARTITION_BOOT_ADDRESS = (uint32_t)_wolfboot_partition_boot_address;
+    static const uint32_t WOLFBOOT_PARTITION_SIZE = (uint32_t)_wolfboot_partition_size;
+    static const uint32_t WOLFBOOT_PARTITION_UPDATE_ADDRESS = (uint32_t)_wolfboot_partition_update_address;
+    static const uint32_t WOLFBOOT_PARTITION_SWAP_ADDRESS = (uint32_t)_wolfboot_partition_swap_address;
+#else
+    /* use values provided on input template parsing */
+    #define WOLFBOOT_PARTITION_BOOT_ADDRESS      @WOLFBOOT_PARTITION_BOOT_ADDRESS@
+    #define WOLFBOOT_PARTITION_SIZE              @WOLFBOOT_PARTITION_SIZE@
+    #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    @WOLFBOOT_PARTITION_UPDATE_ADDRESS@
+    #define WOLFBOOT_PARTITION_SWAP_ADDRESS      @WOLFBOOT_PARTITION_SWAP_ADDRESS@
 #endif
 
+#define WOLFBOOT_DTS_BOOT_ADDRESS            @WOLFBOOT_DTS_BOOT_ADDRESS@
+#define WOLFBOOT_DTS_UPDATE_ADDRESS          @WOLFBOOT_DTS_UPDATE_ADDRESS@
+
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
+
 /* Load address in RAM for staged OS (update_ram only) */
-#define WOLFBOOT_LOAD_ADDRESS                ##WOLFBOOT_LOAD_ADDRESS##
-#define WOLFBOOT_LOAD_DTS_ADDRESS            ##WOLFBOOT_LOAD_DTS_ADDRESS##
-
-
+#define WOLFBOOT_LOAD_ADDRESS                @WOLFBOOT_LOAD_ADDRESS@
+#define WOLFBOOT_LOAD_DTS_ADDRESS            @WOLFBOOT_LOAD_DTS_ADDRESS@
 
 
 #endif /* !H_TARGETS_TARGET_ */

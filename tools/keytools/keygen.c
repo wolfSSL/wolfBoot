@@ -63,7 +63,7 @@
 #include <wolfssl/wolfcrypt/logging.h>
 #endif
 
-#if defined(_WIN32) && !defined(PATH_MAX)
+#if !defined(PATH_MAX)
 #define PATH_MAX 256
 #endif
 
@@ -97,8 +97,8 @@ struct keystore_slot {
      uint8_t  pubkey[KEYSLOT_MAX_PUBKEY_SIZE];
 };
 
-const char pubkeyfile[]= "src/keystore.c";
-const char pubkeyimg[] = "keystore.der";
+char pubkeyfile[PATH_MAX]= "src/keystore.c";
+char pubkeyimg[PATH_MAX] = "keystore.der";
 
 const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generated. Do not edit.  */\n"
              "/*\n"
@@ -156,7 +156,7 @@ static void usage(const char *pname) /* implies exit */
 {
     printf("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 "
            "| --ecc521 | --rsa2048 | --rsa3072 "
-           "| --rsa4096 ] [-g privkey] [-i pubkey] \n", pname);
+           "| --rsa4096 ] [-g privkey] [-i pubkey] [-keystoreDir dir] \n", pname);
     exit(125);
 }
 
@@ -551,6 +551,13 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "-i") == 0) {
             i++;
             n_pubkeys++;
+            continue;
+        }
+        else if (strcmp(argv[i], "-keystoreDir") == 0) {
+            i++;
+            sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c"); 
+            sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der"); 
+            i++;
             continue;
         }
         else {

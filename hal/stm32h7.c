@@ -159,7 +159,8 @@
 
 #define STM32H7_SECTOR_SIZE 0x20000
 
-#if (WOLFBOOT_PARTITION_SIZE < (2 * STM32H7_SECTOR_SIZE))
+#if defined(WOLFBOOT_PARTITION_SIZE) && \
+    (WOLFBOOT_PARTITION_SIZE < (2 * STM32H7_SECTOR_SIZE))
 #   error "Please use a bigger WOLFBOOT_PARTITION_SIZE, since the last 128KB on each partition will be reserved for bootloader flags"
 #endif
 
@@ -202,7 +203,7 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 {
     if (bank==0)
         FLASH_SR1 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
-                      FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR | 
+                      FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR |
                       FLASH_SR_RDSERR | FLASH_SR_SNECCERR | FLASH_SR_DBECCERR);
     if (bank==1)
         FLASH_SR2 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
@@ -351,7 +352,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     {
         if (p < FLASH_BANK2_BASE_REL)
         {
-            uint32_t reg = FLASH_CR1 & 
+            uint32_t reg = FLASH_CR1 &
                 (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT) | FLASH_CR_PSIZE));
             FLASH_CR1 = reg |
                 (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);

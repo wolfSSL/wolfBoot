@@ -280,8 +280,12 @@ $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)expr `cat .partition-size` - `cat .header-size` > .app-size
 	$(Q)printf "0x%X" `cat .app-size` > .app-size
 	$(Q)cat $(LSCRIPT_TEMPLATE) | \
-		sed -e "s/##WOLFBOOT_TEST_APP_SIZE##/`cat .app-size`/g" | \
-		sed -e "s/##WOLFBOOT_TEST_APP_ADDRESS##/`cat .entry-point`/g" \
+		sed -e "s/@WOLFBOOT_TEST_APP_SIZE@/`cat .app-size`/g" | \
+		sed -e "s/@WOLFBOOT_TEST_APP_ADDRESS@/`cat .entry-point`/g" | \
+    		sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
+		sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
+		sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
+		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
 		> $(@)
 	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
 

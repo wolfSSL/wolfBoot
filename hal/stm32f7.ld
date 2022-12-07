@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping TCM only */
 }
 
@@ -15,7 +15,7 @@ SECTIONS
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
-    
+
     .edidx :
     {
         . = ALIGN(4);

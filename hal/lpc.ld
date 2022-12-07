@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x00000000, LENGTH = ##WOLFBOOT_PARTITION_BOOT_ADDRESS##
+    FLASH (rx) : ORIGIN = 0x00000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
     RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 64K
 }
 
@@ -36,7 +36,7 @@ SECTIONS
         _end_data = .;
     } > RAM
 
-    .bss (NOLOAD) : 
+    .bss (NOLOAD) :
     {
         _start_bss = .;
         __bss_start__ = .;
