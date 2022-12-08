@@ -135,6 +135,14 @@
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(RCC_BASE + 0xF0)) /* RM0433 - 8.7.47 */
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(RCC_BASE + 0x98)) /* RM0433 - 8.7.35 */
 
+#define DLYB_QSPI_BASE    (0x52006000UL)
+#define DLYB_CR(base)     (*(volatile uint32_t *)((base) + 0x00)) /* Control register */
+#define DLYB_CFGR(base)   (*(volatile uint32_t *)((base) + 0x04)) /* Configuration register */
+
+#define DLYB_CR_SEN (1 << 1) /* Sampler length enable bit */
+#define DLYB_CR_DEN (1 << 0) /* Delay block enable bit */
+
+
 #define GPIOA_BASE (0x58020000)
 #define GPIOB_BASE (0x58020400)
 #define GPIOC_BASE (0x58020800)
@@ -142,6 +150,10 @@
 #define GPIOE_BASE (0x58021000)
 #define GPIOF_BASE (0x58021400)
 #define GPIOG_BASE (0x58021800)
+#define GPIOH_BASE (0x58021C00)
+#define GPIOI_BASE (0x58022000)
+#define GPIOJ_BASE (0x58022400)
+#define GPIOK_BASE (0x58022800)
 
 
 /** QSPI **/
@@ -155,7 +167,12 @@
 #define RCC_D1CCIPR_QSPISEL(sel) (((sel) & 0x3) << 4) /* 0=hclk3, 1=pll1_q_ck, 2=pll2_r_ck, 3=per_ck */
 #define AHB3_CLOCK_RST     (*(volatile uint32_t *)(RCC_BASE + 0x7C)) /* RM0433 - 8.7.28 - RCC_AHB3RSTR */
 #define AHB3_CLOCK_EN      (*(volatile uint32_t *)(RCC_BASE + 0xD4)) /* RM0433 - 8.7.40 - RCC_AHB3ENR */
-#define RCC_AHB3ENR_QSPIEN (1 << 14)
+#define RCC_AHB3ENR_QSPIEN (1 << 14) /* QUADSPI and QUADSPI Delay clock enabled */
+
+#define HCLK3_MHZ      240000000
+#ifndef QSPI_CLOCK_MHZ
+#define QSPI_CLOCK_MHZ 8000000
+#endif
 
 /* QSPI CLK PB2 */
 #define QSPI_CLOCK_PIO_BASE  GPIOB_BASE
@@ -166,11 +183,9 @@
 #ifndef QSPI_ALT_CONFIGURATION
 #define QSPI_CS_PIO_BASE     GPIOG_BASE
 #define QSPI_CS_FLASH_PIN    6
-#define QSPI_CS_FLASH_AF     10
 #else
 #define QSPI_CS_PIO_BASE     GPIOB_BASE
 #define QSPI_CS_FLASH_PIN    6
-#define QSPI_CS_FLASH_AF     10
 #endif
 
 /* QSPI_IO0 (MOSI) - PD11 (alt PE7) */
@@ -181,7 +196,6 @@
 #else
 #define QSPI_IO0_PIO_BASE   GPIOE_BASE
 #define QSPI_IO0_PIN        7
-#define QSPI_IO0_PIN_AF     10
 #endif
 
 /* QSPI_IO1 (MISO) - PD12 (alt PE8) */
@@ -192,7 +206,6 @@
 #else
 #define QSPI_IO1_PIO_BASE   GPIOE_BASE
 #define QSPI_IO1_PIN        8
-#define QSPI_IO1_PIN_AF     10
 #endif
 
 /* QSPI_IO2 - PE2 (alt PE9) */
@@ -203,7 +216,6 @@
 #else
 #define QSPI_IO2_PIO_BASE   GPIOE_BASE
 #define QSPI_IO2_PIN        9
-#define QSPI_IO2_PIN_AF     10
 #endif
 
 /* QSPI_IO3 - PD13 (alt PE10) */
@@ -296,9 +308,6 @@
 #endif /* QSPI_FLASH */
 
 
-#define GPIO_MODE_AF (2)
-
-
 /* SPI */
 #ifndef SPI1_BASE
 #define SPI1_BASE (0x40013000) /* SPI1 base address */
@@ -329,13 +338,21 @@
 #define SPI_SR_TX_EMPTY			    (1 << 1)
 #define SPI_SR_BUSY			        (1 << 7)
 
-#define SPI_PIO_MODE(base)    (*(volatile uint32_t *)(base + 0x00))
-#define SPI_PIO_AFL(base)     (*(volatile uint32_t *)(base + 0x20))
-#define SPI_PIO_AFH(base)     (*(volatile uint32_t *)(base + 0x24))
-#define SPI_PIO_OSPD(base)    (*(volatile uint32_t *)(base + 0x08))
-#define SPI_PIO_PUPD(base)    (*(volatile uint32_t *)(base + 0x0c))
-#define SPI_PIO_ODR(base)     (*(volatile uint32_t *)(base + 0x14))
-#define SPI_PIO_BSRR(base)    (*(volatile uint32_t *)(base + 0x18))
+
+/* GPIO */
+#define GPIO_MODE(base)    (*(volatile uint32_t *)(base + 0x00)) /* GPIOx_MODER */
+#define GPIO_OTYPE(base)   (*(volatile uint32_t *)(base + 0x04)) /* GPIOx_OTYPER */
+#define GPIO_OSPD(base)    (*(volatile uint32_t *)(base + 0x08)) /* GPIOx_OSPEEDR */
+#define GPIO_PUPD(base)    (*(volatile uint32_t *)(base + 0x0c)) /* GPIOx_PUPDR */
+#define GPIO_ODR(base)     (*(volatile uint32_t *)(base + 0x14)) /* GPIOx_ODR */
+#define GPIO_BSRR(base)    (*(volatile uint32_t *)(base + 0x18)) /* GPIOx_BSRR */
+#define GPIO_AFL(base)     (*(volatile uint32_t *)(base + 0x20)) /* GPIOx_AFRL */
+#define GPIO_AFH(base)     (*(volatile uint32_t *)(base + 0x24)) /* GPIOx_AFRH */
+
+#define GPIO_MODE_INPUT  (0)
+#define GPIO_MODE_OUTPUT (1)
+#define GPIO_MODE_AF     (2)
+#define GPIO_MODE_ANALOG (3)
 
 
 /* QUADSPI */
