@@ -171,12 +171,12 @@
 
 #define UART_CR2_STOP_MASK                  (0x3 << 12)
 #define UART_CR2_STOP(bits)                 (((bits) & 0x3) << 12)
-#define USART_CR2_LINEN                     (1 << 14)
-#define USART_CR2_CLKEN                     (1 << 11)
+#define UART_CR2_LINEN                      (1 << 14)
+#define UART_CR2_CLKEN                      (1 << 11)
 
-#define USART_CR3_SCEN                      (1 << 5)
-#define USART_CR3_HDSEL                     (1 << 3)
-#define USART_CR3_IREN                      (1 << 1)
+#define UART_CR3_SCEN                       (1 << 5)
+#define UART_CR3_HDSEL                      (1 << 3)
+#define UART_CR3_IREN                       (1 << 1)
 
 #define UART_ISR_TX_FIFO_NOT_FULL           (1 << 7) /* Transmit Data Empty (TXE) or TX FIFO Not Full (TXFNF) */
 #define UART_ISR_RX_FIFO_NOT_EMPTY          (1 << 5)
@@ -564,10 +564,10 @@ static int uart_init(void)
     UART_CR1(UART_BASE) &= ~(UART_CR1_PARITY_ENABLED | UART_CR1_PARITY_ODD);
 
     /* In asynchronous mode, the following bits must be kept cleared:
-     * - LINEN and CLKEN bits in the USART_CR2 register,
-     * - SCEN, HDSEL and IREN  bits in the USART_CR3 register.*/
-    UART_CR2(UART_BASE) &= ~(USART_CR2_LINEN | USART_CR2_CLKEN);
-    UART_CR3(UART_BASE) &= ~(USART_CR3_SCEN | USART_CR3_HDSEL | USART_CR3_IREN);
+     * - LINEN and CLKEN bits in the UART_CR2 register,
+     * - SCEN, HDSEL and IREN  bits in the UART_CR3 register.*/
+    UART_CR2(UART_BASE) &= ~(UART_CR2_LINEN | UART_CR2_CLKEN);
+    UART_CR3(UART_BASE) &= ~(UART_CR3_SCEN | UART_CR3_HDSEL | UART_CR3_IREN);
 
     /* Turn on UART */
     UART_CR1(UART_BASE) |= (UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE |
