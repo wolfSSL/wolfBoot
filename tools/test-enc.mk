@@ -38,7 +38,7 @@ test-enc-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
 	@sleep 3
 	@killall ufserver
 	@st-flash read boot_full.bin 0x08010000 0x8000
-	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | cut -d" " -f 1`;  \
+	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | awk '{$$1=$$1};1' | cut -d" " -f 1`;  \
 		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
 	@diff boot.bin test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin || (echo "TEST FAILED" && exit 1)
 	@rm boot.bin boot_full.bin
@@ -61,7 +61,7 @@ test-enc-aes128-update: factory.bin test-app/image.bin tools/uart-flash-server/u
 	@sleep 3
 	@killall ufserver
 	@st-flash read boot_full.bin 0x08010000 0x8000
-	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | cut -d" " -f 1`;  \
+	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | awk '{$$1=$$1};1' | cut -d" " -f 1`;  \
 		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
 	@diff boot.bin test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin || (echo "TEST FAILED" && exit 1)
 	@rm boot.bin boot_full.bin
@@ -84,7 +84,7 @@ test-enc-aes256-update: factory.bin test-app/image.bin tools/uart-flash-server/u
 	@sleep 3
 	@killall ufserver
 	@st-flash read boot_full.bin 0x08010000 0x8000
-	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | cut -d" " -f 1`;  \
+	@SIZE=`wc -c test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin | awk '{$$1=$$1};1' | cut -d" " -f 1`;  \
 		dd if=boot_full.bin of=boot.bin bs=1 count=$$SIZE
 	@diff boot.bin test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed.bin || (echo "TEST FAILED" && exit 1)
 	@rm boot.bin boot_full.bin

@@ -4,7 +4,7 @@
  *
  * Run on HOST machine to export an emulated external, non-volatile memory.
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2022 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -67,7 +67,8 @@ const char msgWriteSwap[]   = "Writing SWAP blocks    ";
 const char msgEraseUpdate[] = "Erase update blocks    ";
 const char msgEraseSwap[]   = "Erase swap blocks      ";
 
-extern uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
+extern uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type,
+    uint8_t **ptr);
 
 const char blinker[]="-\\|/";
 static int valid_update = 1;
@@ -190,8 +191,7 @@ uint8_t *mmap_firmware(const char *fname)
         return (void *)-1;
     }
     fd = open(fname, O_RDWR);
-    if (fd < 0)
-    {
+    if (fd < 0) {
         perror("open");
         return (void *)-1;
     }
@@ -211,7 +211,9 @@ uint8_t *mmap_firmware(const char *fname)
             write(fd, &pad, 1);
     }
     if (strncmp((char *)&signature_word, "WOLF", 4) != 0) {
-        fprintf(stderr, "Warning: the binary file provided does not appear to contain a valid firmware partition file. (If the update is encrypted, this is OK)\n");
+        fprintf(stderr, "Warning: the binary file provided does not appear to "
+            "contain a valid firmware partition file. "
+            "(If the update is encrypted, this is OK)\n");
         valid_update = 0;
     } else {
         int i;
@@ -221,7 +223,8 @@ uint8_t *mmap_firmware(const char *fname)
         for (i = 0; i < SWAP_SIZE; i++)
             write(fd, update_flags, 5);
     }
-    base_fw = mmap(NULL, FIRMWARE_PARTITION_SIZE + SWAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    base_fw = mmap(NULL, FIRMWARE_PARTITION_SIZE + SWAP_SIZE,
+        (PROT_READ | PROT_WRITE), MAP_SHARED, fd, 0);
     if (base_fw == (void *)(-1)) {
         perror("mmap");
         return (void *)-1;
@@ -357,7 +360,8 @@ static void serve_update(uint8_t *base, const char *uart_dev)
     uint8_t buf[8];
     int ud = open_uart(uart_dev);
     if (ud < 0) {
-        fprintf(stderr, "Cannot open serial port %s: %s.\n", uart_dev, strerror(errno));
+        fprintf(stderr, "Cannot open serial port %s: %s.\n",
+            uart_dev, strerror(errno));
         exit(3);
     }
     while (1) {
@@ -369,7 +373,9 @@ static void serve_update(uint8_t *base, const char *uart_dev)
        if (ret == 0)
            continue;
 
-       if ((buf[0] != CMD_HDR_WOLF) && (buf[0] != CMD_HDR_VER) && (buf[0] != CMD_APP_VER)) {
+       if ((buf[0] != CMD_HDR_WOLF) &&
+           (buf[0] != CMD_HDR_VER) &&
+           (buf[0] != CMD_APP_VER)) {
            printf("bad hdr: %02x\n", buf[0]);
            continue;
        }
@@ -441,7 +447,9 @@ static void serve_update(uint8_t *base, const char *uart_dev)
 
 void usage(char *pname)
 {
-    printf("Usage: %s binary_file serial_port\nExample:\n%s firmware_v3_signed.bin /dev/ttyUSB0\n", pname, pname);
+    printf("Usage: %s binary_file serial_port\nExample:\n"
+        "%s firmware_v3_signed.bin /dev/ttyUSB0\n",
+        pname, pname);
     exit(1);
 }
 
