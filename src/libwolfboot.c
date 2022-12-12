@@ -72,6 +72,13 @@
 #define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
 #endif
 
+#ifdef BUILD_TOOL
+/* Building for a local utility tool */
+#undef EXT_FLASH
+#undef EXT_ENCRYPTED
+#undef WOLFBOOT_FIXED_PARTITIONS
+#endif
+
 #ifdef EXT_FLASH
 static uint32_t ext_cache;
 #endif
@@ -123,10 +130,10 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
 
 int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
-    uint32_t addr_align = addr & (~(NVM_CACHE_SIZE - 1));
+    size_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
     uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
-    XMEMCPY(NVM_CACHE, (void *)addr_align, NVM_CACHE_SIZE);
+    XMEMCPY(NVM_CACHE, (void*)addr_align, NVM_CACHE_SIZE);
     ret = hal_flash_erase(addr_align, NVM_CACHE_SIZE);
     if (ret != 0)
         return ret;
@@ -147,9 +154,9 @@ int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
 int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
 {
     uint32_t off = addr % NVM_CACHE_SIZE;
-    uint32_t base = addr - off;
+    size_t base = (size_t)addr - off;
     int ret;
-    XMEMCPY(NVM_CACHE, (void *)base, NVM_CACHE_SIZE);
+    XMEMCPY(NVM_CACHE, (void*)base, NVM_CACHE_SIZE);
     ret = hal_flash_erase(base, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
@@ -164,8 +171,7 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
                                 (void*)&wolfboot_magic_trail, sizeof(uint32_t));
 #endif
 
-#if defined EXT_FLASH
-
+#ifdef EXT_FLASH
 
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
@@ -232,14 +238,20 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 #elif !defined(WOLFBOOT_FIXED_PARTITIONS)
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
+    (void)part;
+    (void)at;
     return 0;
 }
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
+    (void)part;
+    (void)at;
+    (void)val;
     return;
 }
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
+    (void)part;
     return;
 }
 
@@ -809,7 +821,6 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
-    int i;
     uint8_t *mem = (uint8_t *)ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS;
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
@@ -935,11 +946,11 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
-    uint8_t part;
-    int sz = len;
-    uint32_t row_address = address, row_offset;
-    int i;
     uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
+    uint32_t row_address = address, row_offset;
+    int sz = len, i, step;
+    uint8_t part;
+
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
         row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
@@ -948,11 +959,12 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
     if (sz < ENCRYPT_BLOCK_SIZE) {
         sz = ENCRYPT_BLOCK_SIZE;
     }
-    if (!encrypt_initialized)
+    if (!encrypt_initialized) {
         if (crypto_init() < 0)
             return -1;
+    }
     part = part_address(address);
-    switch(part) {
+    switch (part) {
         case PART_UPDATE:
             /* do not encrypt flag sector */
             if (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS >=
@@ -966,34 +978,40 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
         default:
             return -1;
     }
+
+    /* encrypt blocks */
     if (sz > len) {
-        int step = ENCRYPT_BLOCK_SIZE - row_offset;
+        step = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
-                != ENCRYPT_BLOCK_SIZE)
+                != ENCRYPT_BLOCK_SIZE) {
             return -1;
+        }
         XMEMCPY(block + row_offset, data, step);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         address += step;
         data += step;
-        sz -= step;
+        sz = len - step;
     }
-    for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
+
+    /* encrypt remainder */
+    step = sz & ~(ENCRYPT_BLOCK_SIZE - 1);
+    for (i = 0; i < step / ENCRYPT_BLOCK_SIZE; i++) {
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block,
             ENCRYPT_BLOCK_SIZE);
     }
-    return ext_flash_write(address, ENCRYPT_CACHE, len);
+
+    return ext_flash_write(address, ENCRYPT_CACHE, step);
 }
 
 int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
-    uint32_t iv_counter = 0;
     uint8_t block[ENCRYPT_BLOCK_SIZE];
+    uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+    uint32_t row_address = address, row_offset, iv_counter = 0;
+    int sz = len, i, step;
     uint8_t part;
-    int sz = len;
-    uint32_t row_address = address, row_offset;
-    int i;
 
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
@@ -1003,11 +1021,12 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     if (sz < ENCRYPT_BLOCK_SIZE) {
         sz = ENCRYPT_BLOCK_SIZE;
     }
-    if (!encrypt_initialized)
+    if (!encrypt_initialized) {
         if (crypto_init() < 0)
             return -1;
+    }
     part = part_address(row_address);
-    switch(part) {
+    switch (part) {
         case PART_UPDATE:
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) /
                 ENCRYPT_BLOCK_SIZE;
@@ -1025,25 +1044,40 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
         default:
             return -1;
     }
+
+    /* decrypt blocks */
     if (sz > len) {
-        uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
-        int step = ENCRYPT_BLOCK_SIZE - row_offset;
+        step = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
-                != ENCRYPT_BLOCK_SIZE)
+                != ENCRYPT_BLOCK_SIZE) {
             return -1;
+        }
         crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(data, dec_block + row_offset, step);
         address += step;
         data += step;
-        sz -= step;
+        sz = len - step;
         iv_counter++;
     }
-    if (ext_flash_read(address, data, sz) != sz)
+
+    /* decrypt remainder */
+    step = sz & ~(ENCRYPT_BLOCK_SIZE - 1);
+    if (ext_flash_read(address, data, step) != step)
         return -1;
-    for (i = 0; i < sz / ENCRYPT_BLOCK_SIZE; i++) {
+    for (i = 0; i < step / ENCRYPT_BLOCK_SIZE; i++) {
         XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
         crypto_decrypt(data + (ENCRYPT_BLOCK_SIZE * i), block,
             ENCRYPT_BLOCK_SIZE);
+        iv_counter++;
+    }
+    sz -= step;
+    if (sz > 0) {
+        if (ext_flash_read(address + step, block, ENCRYPT_BLOCK_SIZE)
+                != ENCRYPT_BLOCK_SIZE) {
+            return -1;
+        }
+        crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
+            XMEMCPY(data + step, dec_block, sz);
         iv_counter++;
     }
     return len;

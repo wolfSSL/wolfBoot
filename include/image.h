@@ -98,7 +98,8 @@ struct wolfBoot_image {
  * With ARMORED setup, the flag is redundant, and the information is wrapped in
  * between canary variables, to mitigate attacks based on memory corruptions.
  */
-static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
+    struct wolfBoot_image *img)
 {
     img->canary_FEED4567 = 0xFEED4567UL;
     img->signature_ok = 1UL;
@@ -502,7 +503,9 @@ struct wolfBoot_image {
     uint8_t sha_ok : 1;
 };
 
-static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+/* do not warn if this is not used */
+static void __attribute__ ((unused)) wolfBoot_image_confirm_signature_ok(
+    struct wolfBoot_image *img)
 {
     img->signature_ok = 1;
 }
