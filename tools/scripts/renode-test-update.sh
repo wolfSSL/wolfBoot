@@ -7,6 +7,7 @@ export POFF=262139
 export RENODE_PORT=55155
 export RENODE_OPTIONS="--pid-file=$RENODE_PIDFILE --disable-xwt -P $RENODE_PORT"
 export EXPVER=tools/test-expect-version/test-expect-version
+export TEST_OPTIONS=$@
 
 quit_renode() {
     if (which nc); then
@@ -18,9 +19,16 @@ quit_renode() {
 
 
 rm -f $RENODE_UART
-cp wolfboot.elf /tmp/renode-wolfboot.elf
-cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin
-cp test-app/renode-test-update.bin /tmp
+make distclean
+make -C tools/keytools
+make -C tools/test-expect-version
+make clean && make $TEST_OPTIONS || exit 2
+make /tmp/renode-test-update.bin $TEST_OPTIONS || exit 2
+cp /tmp/renode-test-update.bin test-app/ || exit 3
+
+cp wolfboot.elf /tmp/renode-wolfboot.elf || exit 3
+cp test-app/image_v1_signed.bin /tmp/renode-test-v1.bin || exit 3
+cp test-app/renode-test-update.bin /tmp || exit 3
 echo "Launching Renode"
 renode $RENODE_OPTIONS $RENODE_CONFIG >/dev/null &
 while ! (test -e $RENODE_UART); do sleep .1; done

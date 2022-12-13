@@ -7,7 +7,7 @@ on:
     branches: [master]
 
 jobs:
-  build_and_test:
+  renode_automated_multi_sha:
     runs-on: ubuntu-20.04
 
     steps:
@@ -15,196 +15,49 @@ jobs:
         with:
           submodules: true
 
-      # Get the arm-non-eabi-gcc toolchain
-      - name: Install arm-none-eabi-gcc
-        uses: fiam/arm-none-eabi-gcc@v1
-        with:
-          # The arm-none-eabi-gcc release to use.
-          release: "9-2019-q4"
-
-      - name: Install wolfSSL
-        run: |
-          sudo apt-get install --no-install-recommends -y -q make libwolfssl-dev
-
-      - name: Build test-expect-version
-        run: |
-          make -C tools/test-expect-version
-
-      - name: make clean
-        run: |
-          make keysclean && make -C tools/keytools clean && rm -f include/target.h
-
       - name: Select config
         run: |
           cp config/examples/nrf52840.config .config && make include/target.h
 
-      - name: Build key tools
-        run: |
-          make -C tools/keytools
-
-
-  ##### SHA384 tests
-
-    # SIGN=NONE TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=NONE HASH=SHA384
-
-      - name: Build wolfboot and test app image v1, SIGN=NONE HASH=SHA384
-        run: |
-          make SIGN=NONE HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=NONE HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
+##### SHA384 tests
       - name: Renode Tests SIGN=NONE HASH=SHA384
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=NONE HASH=SHA384"
 
 
-  # ECC256 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
-
-      - name: Build wolfboot and test app image v1, SIGN=ECC256
-        run: |
-          make SIGN=ECC256 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ECC256 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
+# ECC256 TEST
       - name: Renode Tests ECC256
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ECC256 HASH=SHA384"
+
 
 # ECC384 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
-
-      - name: Build wolfboot and test app image v1, SIGN=ECC384
-        run: |
-          make SIGN=ECC384 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ECC384 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests ECC384
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ECC384 HASH=SHA384"
+
 
 # ED25519 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
-
-      - name: Build wolfboot and test app image v1, SIGN=ED25519
-        run: |
-          make SIGN=ED25519 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED25519 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests ED25519
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ED25519 HASH=SHA384"
+
 
 # ED448 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
-
-      - name: Build wolfboot and test app image v1, SIGN=ED448
-        run: |
-          make SIGN=ED448 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED448 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests ED448
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ED448 HASH=SHA384"
+
 
 # RSA2048 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
-
-      - name: Build wolfboot and test app image v1, SIGN=RSA2048
-        run: |
-          make SIGN=RSA2048 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=RSA2048 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests RSA2048
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=RSA2048 HASH=SHA384"
+
 
 # RSA3072 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
-
-      - name: Build wolfboot and test app image v1, SIGN=RSA3072
-        run: |
-          make SIGN=RSA3072 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=RSA3072 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests RSA3072
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=RSA3072 HASH=SHA384"
+
 
 # RSA4096 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
-
-      - name: Build wolfboot and test app image v1, SIGN=RSA4096
-        run: |
-          make SIGN=RSA4096 HASH=SHA384
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=RSA4096 HASH=SHA384 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests RSA4096
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=RSA4096 HASH=SHA384"
+
 
       - name: Upload Output Dir
         uses: actions/upload-artifact@v2
@@ -212,166 +65,46 @@ jobs:
           name: Renode Test Results
           path: test_results/
 
-  ##### SHA-3 tests
-  # SIGN=NONE TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=NONE HASH=SHA3
-
-      - name: Build wolfboot and test app image v1, SIGN=NONE HASH=SHA3
-        run: |
-          make SIGN=NONE HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=NONE HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
+##### SHA-3 tests
+# SIGN=NONE TEST
       - name: Renode Tests SIGN=NONE HASH=SHA3
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=NONE HASH=SHA3"
 
-  # ECC256 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
 
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC256
-
-      - name: Build wolfboot and test app image v1, SIGN=ECC256
-        run: |
-          make SIGN=ECC256 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ECC256 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
+# ECC256 TEST
       - name: Renode Tests ECC256
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ECC256 HASH=SHA3"
+
 
 # ECC384 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ECC384
-
-      - name: Build wolfboot and test app image v1, SIGN=ECC384
-        run: |
-          make SIGN=ECC384 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ECC384 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests ECC384
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ECC384 HASH=SHA3"
+
 
 # ED25519 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED25519
-
-      - name: Build wolfboot and test app image v1, SIGN=ED25519
-        run: |
-          make SIGN=ED25519 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED25519 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests ED25519
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ED25519 HASH=SHA3"
+
 
 # ED448 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=ED448
-
-      - name: Build wolfboot and test app image v1, SIGN=ED448
-        run: |
-          make SIGN=ED448 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=ED448 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests ED448
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=ED448 HASH=SHA3"
+
 
 # RSA2048 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA2048
-
-      - name: Build wolfboot and test app image v1, SIGN=RSA2048
-        run: |
-          make SIGN=RSA2048 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=RSA2048 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests RSA2048
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=RSA2048 HASH=SHA3"
+
 
 # RSA3072 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA3072
-
-      - name: Build wolfboot and test app image v1, SIGN=RSA3072
-        run: |
-          make SIGN=RSA3072 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=RSA3072 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests RSA3072
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=RSA3072 HASH=SHA3"
+
 
 # RSA4096 TEST
-      - name: make clean
-        run: |
-          make keysclean && rm -f include/target.h
-
-      - name: Select config
-        run: |
-          cp config/examples/nrf52840.config .config && make include/target.h SIGN=RSA4096
-
-      - name: Build wolfboot and test app image v1, SIGN=RSA4096
-        run: |
-          make SIGN=RSA4096 HASH=SHA3
-
-      - name: Build update image v2
-        run: |
-          make /tmp/renode-test-update.bin SIGN=RSA4096 HASH=SHA3 && cp /tmp/renode-test-update.bin test-app/
-
       - name: Renode Tests RSA4096
-        run: ./tools/renode/docker-test.sh
+        run: ./tools/renode/docker-test.sh "SIGN=RSA4096 HASH=SHA3"
+
 
       - name: Upload Output Dir
         uses: actions/upload-artifact@v2
