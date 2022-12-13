@@ -117,7 +117,7 @@ struct xmalloc_slot {
     #ifdef WOLFBOOT_SIGN_ECC384
         #define MP_CURVE_SPECS_SIZE (MP_INT_SIZE)
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
-        #define ECC_POINT_SIZE (516)
+        #define ECC_POINT_SIZE (408)
         #define MP_INT_BUFFER_SIZE (MP_INT_SIZE * 5)
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
