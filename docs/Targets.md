@@ -1042,8 +1042,8 @@ WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 The NXP QorIQ T2080 is a PPC e6500 based processor. Support has been tested with the NAII 68PPC2.
 
 Example configurations for this target are provided in:
-* NXP T2080: [/config/examples/t2080.config](/config/examples/t2080.config).
-* NAII 68PPC2: [/config/examples/t2080_68ppc2.config](/config/examples/t2080_68ppc2.config).
+* NXP T2080: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
+* NAII 68PPC2: [/config/examples/nxp-t2080-68ppc2.config](/config/examples/nxp-t2080-68ppc2.config).
 
 ### Design NXP T2080 PPC
 
@@ -1062,7 +1062,7 @@ By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These t
 The `make` creates a `factory.bin` image that can be programmed at `0xE8080000`
 
 ```
-cp ./config/examples/t2080_68ppc2.config .config
+cp ./config/examples/nxp-t2080-68ppc2.config .config
 make clean
 make keytools
 make
@@ -1110,9 +1110,21 @@ Example Boot Debug Output:
 ```
 wolfBoot Init
 Part: Active 0, Address E8080000
-Part: Size 1028
+Image size 1028
 Firmware Valid
 Loading 1028 bytes to RAM at 19000
+Failed parsing DTB to load.
+Booting at 19000
+Test App
+
+0x00000001
+0x00000002
+0x00000003
+0x00000004
+0x00000005
+0x00000006
+0x00000007
+...
 ```
 
 #### Flash Programming with Lauterbach

@@ -1,6 +1,6 @@
-/* app_t2080.c
+/* app_nxp_t2080.c
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2022 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

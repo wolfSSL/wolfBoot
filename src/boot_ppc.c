@@ -32,6 +32,7 @@ extern unsigned int _start_data;
 extern unsigned int _end_data;
 
 extern void main(void);
+extern void hal_ddr_init(void);
 
 #define MTSPR(rn, v) asm volatile("mtspr " rn ",%0" : : "r" (v))
 
@@ -62,9 +63,16 @@ void invalidate_tlb(int tlb)
         MTSPR(MMUCSR0, 0x2);
 }
 
+void __attribute((weak)) hal_ddr_init(void)
+{
+
+}
+
 void boot_entry_C(void)
 {
     register unsigned int *dst, *src;
+
+    hal_ddr_init();
 
     /* Copy the .data section from flash to RAM */
     src = (unsigned int*)&_stored_data;
@@ -92,8 +100,10 @@ void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void do_boot(const uint32_t *app_offset)
 #endif
 {
+#ifdef MMU
     /* TODO: Determine if the dts_offset needs passed as argument */
     (void)dts_offset;
+#endif
 
     asm volatile("mtlr %0; blr":: "r"(app_offset));
 }
