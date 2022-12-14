@@ -20,7 +20,9 @@
  */
 
 #include <stdint.h>
-#include <image.h>
+
+#include "image.h"
+#include "spi_drv.h"
 
 #ifndef ARCH_FLASH_OFFSET
 #define ARCH_FLASH_OFFSET 0x08000000U
@@ -60,10 +62,6 @@
 #define APB1_CLOCK_RST          (*(volatile uint32_t *)(0x40023820U))
 #define TIM2_APB1_CLOCK_ER_VAL     (1 << 0)
 #define PWR_APB1_CLOCK_ER_VAL   (1 << 28)
-
-#define APB2_CLOCK_ER           (*(volatile uint32_t *)(0x40023844U))
-#define APB2_CLOCK_RST          (*(volatile uint32_t *)(0x40023824U))
-#define SYSCFG_APB2_CLOCK_ER (1 << 14)
 
 #define FLASH_BASE          (0x40023C00U)
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00U))
@@ -336,6 +334,10 @@ static void clock_pll_on(int powersave)
 void hal_init(void)
 {
     clock_pll_on(0);
+
+#ifdef SPI_FLASH
+    spi_init(0,0);
+#endif
 }
 
 void hal_prepare_boot(void)
