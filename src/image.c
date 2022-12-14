@@ -793,7 +793,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
-    wolfBoot_printf("Part: Size %d\n", img->fw_size);
+    wolfBoot_printf("Image size %d\n", img->fw_size);
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Image size %d > max %d\n",
@@ -801,11 +801,15 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
         img->fw_size = 0;
         return -1;
     }
-#endif
     if (!img->hdr_ok) {
         img->hdr = image;
-        img->hdr_ok = 1;
     }
+#else
+    if (img->hdr == NULL) {
+        img->hdr = image;
+    }
+#endif
+    img->hdr_ok = 1;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
     img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
 
