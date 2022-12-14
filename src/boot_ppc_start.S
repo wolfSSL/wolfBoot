@@ -447,9 +447,6 @@ ram_q:
         tlbwe
         isync
 
-        /* Init the MMU Assist registers */
-        bl      tlbs_init
-
         /* switch back to AS/TS=0 */
         lis     3,(MSR_DE)@h
         ori     3,3,(MSR_DE)@l

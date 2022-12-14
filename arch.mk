@@ -258,7 +258,7 @@ ifeq ($(ARCH),ARM_BE)
   endif
 endif
 
-ifeq ($(TARGET),t2080)
+ifeq ($(TARGET),nxp_t2080)
   # Power PC big endian
   ARCH_FLAGS=-m32 -mhard-float -mcpu=e6500
   CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER

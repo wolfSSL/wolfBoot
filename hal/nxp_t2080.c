@@ -1,4 +1,4 @@
-/* t2080.c
+/* nxp_t2080.c
  *
  * Copyright (C) 2022 wolfSSL Inc.
  *
@@ -280,7 +280,7 @@ enum ifc_amask_sizes {
 #define SATA_ENBL (*(volatile uint32_t *)(0xB1003F4C)) /* also saw 0xB4003F4C */
 
 /* DDR */
-#if 0 /* DDR support not done */
+#if 1
     #define ENABLE_DDR
 #endif
 /* NAII 68PPC2 - 8GB discrete DDR3 IM8G08D3EBDG-15E */
@@ -312,6 +312,50 @@ enum ifc_amask_sizes {
 #define DDR_TRTP_PS     7500
 #define DDR_REF_RATE_PS 7800000
 
+#define DDR_CS0_BNDS_VAL       0x000000FF
+#define DDR_CS1_BNDS_VAL       0x010001FF
+#define DDR_CS2_BNDS_VAL       0x0300033F
+#define DDR_CS3_BNDS_VAL       0x0340037F
+#define DDR_CS0_CONFIG_VAL     0x80044402
+#define DDR_CS1_CONFIG_VAL     0x80044402
+#define DDR_CS2_CONFIG_VAL     0x00000202
+#define DDR_CS3_CONFIG_VAL     0x00040202
+#define DDR_CS_CONFIG_2_VAL    0x00000000
+
+#define DDR_TIMING_CFG_0_VAL   0xFF530004
+#define DDR_TIMING_CFG_1_VAL   0x98906345
+#define DDR_TIMING_CFG_2_VAL   0x0040A114
+#define DDR_TIMING_CFG_3_VAL   0x010A1100
+#define DDR_TIMING_CFG_4_VAL   0x00000001
+#define DDR_TIMING_CFG_5_VAL   0x04402400
+
+#define DDR_SDRAM_MODE_VAL     0x00441C70
+#define DDR_SDRAM_MODE_2_VAL   0x00980000
+#define DDR_SDRAM_MODE_3_8_VAL 0x00000000
+#define DDR_SDRAM_MD_CNTL_VAL  0x00000000
+
+#define DDR_SDRAM_CFG_VAL      0xE7040000
+#define DDR_SDRAM_CFG_2_VAL    0x00401010
+
+#define DDR_SDRAM_INTERVAL_VAL 0x0C300100
+#define DDR_DATA_INIT_VAL      0xDEADBEEF
+#define DDR_SDRAM_CLK_CNTL_VAL 0x02400000
+#define DDR_ZQ_CNTL_VAL        0x89080600
+
+#define DDR_WRLVL_CNTL_VAL     0x8675F604
+#define DDR_WRLVL_CNTL_2_VAL   0x05060607
+#define DDR_WRLVL_CNTL_3_VAL   0x080A0A0B
+
+#define DDR_SDRAM_RCW_1_VAL    0x00000000
+#define DDR_SDRAM_RCW_2_VAL    0x00000000
+
+#define DDR_DDRCDR_1_VAL       0x80040000
+#define DDR_DDRCDR_2_VAL       0x00000001
+
+#define DDR_ERR_INT_EN_VAL     0x0000001D
+#define DDR_ERR_SBE_VAL        0x00010000
+
+
 /* 12.4 DDR Memory Map */
 #define DDR_BASE           (CCSRBAR + 0x8000)
 #define DDR_BASE_PHYS      (0xF00000000ULL | DDR_BASE)
@@ -321,9 +365,10 @@ enum ifc_amask_sizes {
 #define DDR_CS_CONFIG_2(n) *((volatile uint32_t*)(DDR_BASE + 0x0C0 + (n * 4))) /* Chip select n configuration 2 */
 #define DDR_SDRAM_CFG      *((volatile uint32_t*)(DDR_BASE + 0x110)) /* DDR SDRAM control configuration */
 #define DDR_SDRAM_CFG_2    *((volatile uint32_t*)(DDR_BASE + 0x114)) /* DDR SDRAM control configuration 2 */
-#define DDR_DATA_INIT      *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
+#define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
 #define DDR_INIT_ADDR      *((volatile uint32_t*)(DDR_BASE + 0x148)) /* DDR training initialization address */
 #define DDR_INIT_EXT_ADDR  *((volatile uint32_t*)(DDR_BASE + 0x14C)) /* DDR training initialization extended address */
+#define DDR_DATA_INIT      *((volatile uint32_t*)(DDR_BASE + 0x128)) /* DDR training initialization value */
 #define DDR_TIMING_CFG_0   *((volatile uint32_t*)(DDR_BASE + 0x104)) /* DDR SDRAM timing configuration 0 */
 #define DDR_TIMING_CFG_1   *((volatile uint32_t*)(DDR_BASE + 0x108)) /* DDR SDRAM timing configuration 1 */
 #define DDR_TIMING_CFG_2   *((volatile uint32_t*)(DDR_BASE + 0x10C)) /* DDR SDRAM timing configuration 2 */
@@ -335,11 +380,15 @@ enum ifc_amask_sizes {
 #define DDR_WRLVL_CNTL     *((volatile uint32_t*)(DDR_BASE + 0x174)) /* DDR write leveling control */
 #define DDR_WRLVL_CNTL_2   *((volatile uint32_t*)(DDR_BASE + 0x190)) /* DDR write leveling control 2 */
 #define DDR_WRLVL_CNTL_3   *((volatile uint32_t*)(DDR_BASE + 0x194)) /* DDR write leveling control 3 */
+#define DDR_SR_CNTR        *((volatile uint32_t*)(DDR_BASE + 0x17C)) /* DDR Self Refresh Counter */
+#define DDR_SDRAM_RCW_1    *((volatile uint32_t*)(DDR_BASE + 0x180)) /* DDR Register Control Word 1 */
+#define DDR_SDRAM_RCW_2    *((volatile uint32_t*)(DDR_BASE + 0x184)) /* DDR Register Control Word 2 */
 #define DDR_DDRCDR_1       *((volatile uint32_t*)(DDR_BASE + 0xB28)) /* DDR Control Driver Register 1 */
 #define DDR_DDRCDR_2       *((volatile uint32_t*)(DDR_BASE + 0xB2C)) /* DDR Control Driver Register 2 */
-#define DDR_ERR_DISABLE    *((volatile uint32_t*)(DDR_BASE + 0xE44)) /* Memory error disable */
 #define DDR_DDRDSR_1       *((volatile uint32_t*)(DDR_BASE + 0xB20)) /* DDR Debug Status Register 1 */
 #define DDR_DDRDSR_2       *((volatile uint32_t*)(DDR_BASE + 0xB24)) /* DDR Debug Status Register 2 */
+#define DDR_ERR_DISABLE    *((volatile uint32_t*)(DDR_BASE + 0xE44)) /* Memory error disable */
+#define DDR_ERR_INT_EN     *((volatile uint32_t*)(DDR_BASE + 0xE48)) /* Memory error interrupt enable */
 #define DDR_ERR_SBE        *((volatile uint32_t*)(DDR_BASE + 0xE58)) /* Single-Bit ECC memory error management */
 #define DDR_SDRAM_MODE     *((volatile uint32_t*)(DDR_BASE + 0x118)) /* DDR SDRAM mode configuration */
 #define DDR_SDRAM_MODE_2   *((volatile uint32_t*)(DDR_BASE + 0x11C)) /* DDR SDRAM mode configuration 2 */
@@ -349,9 +398,12 @@ enum ifc_amask_sizes {
 #define DDR_SDRAM_MODE_6   *((volatile uint32_t*)(DDR_BASE + 0x20C)) /* DDR SDRAM mode configuration 6 */
 #define DDR_SDRAM_MODE_7   *((volatile uint32_t*)(DDR_BASE + 0x210)) /* DDR SDRAM mode configuration 7 */
 #define DDR_SDRAM_MODE_8   *((volatile uint32_t*)(DDR_BASE + 0x214)) /* DDR SDRAM mode configuration 8 */
+#define DDR_SDRAM_MD_CNTL  *((volatile uint32_t*)(DDR_BASE + 0x120)) /* DDR SDRAM mode control */
 #define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
 #define DDR_SDRAM_CLK_CNTL *((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
 
+#define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
+#define DDR_SDRAM_CFG2_D_INIT  0x00000010 /* data initialization in progress */
 
 
 #ifdef DEBUG_UART
@@ -400,27 +452,11 @@ void law_init(void)
     LAWBARLn(1) = FLASH_BASE;
     LAWBARn (1) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
 
-#ifdef ENABLE_CPLD
-    /* IFC - CPLD */
-    LAWBARn (2) = 0; /* reset */
-    LAWBARHn(2) = GET_PHYS_HIGH(CPLD_BASE_PHYS);
-    LAWBARLn(2) = CPLD_BASE;
-    LAWBARn (2) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_4KB;
-#endif
-
     /* Buffer Manager (BMan) (control) - probably not required */
     LAWBARn (3) = 0; /* reset */
     LAWBARHn(3) = 0xF;
     LAWBARLn(3) = 0xF4000000;
     LAWBARn (3) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_BMAN) | LAW_SIZE_32MB;
-
-#ifdef ENABLE_DDR
-    /* DDR */
-    LAWBARn (4) = 0; /* reset */
-    LAWBARHn(4) = 0;
-    LAWBARLn(4) = 0x0000000;
-    LAWBARn (4) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
-#endif
 }
 
 extern void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
@@ -439,23 +475,6 @@ void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
     _mas7 = BOOKE_MAS7(rpn);
 
     write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
-}
-
-/* setup memory map assist */
-void tlbs_init(void)
-{
-#ifdef ENABLE_CPLD
-    /* CPLD - TBL=1, Entry 17 */
-    set_tlb(1, 17, CPLD_BASE, CPLD_BASE_PHYS,
-        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G,
-        0, BOOKE_PAGESZ_4K, 1);
-#endif
-#ifdef ENABLE_DDR
-    /* DDR - TBL=1, Entry 19 */
-    set_tlb(1, 19, DDR_ADDRESS, 0,
-        MAS3_SX | MAS3_SW | MAS3_SR, 0,
-        0, BOOKE_PAGESZ_2G, 1);
-#endif
 }
 
 static void hal_flash_init(void)
@@ -482,9 +501,84 @@ static void hal_flash_init(void)
     IFC_CSOR(0) = 0x0000000C; /* TRHZ (80 clocks for read enable high) */
 }
 
-static void hal_ddr_init(void)
+void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
+    /* Setup DDR CS (chip select) bounds */
+    DDR_CS_BNDS(0) = DDR_CS0_BNDS_VAL;
+    DDR_CS_CONFIG(0) = DDR_CS0_CONFIG_VAL;
+    DDR_CS_CONFIG_2(0) = DDR_CS_CONFIG_2_VAL;
+    DDR_CS_BNDS(1) = DDR_CS1_BNDS_VAL;
+    DDR_CS_CONFIG(1) = DDR_CS1_CONFIG_VAL;
+    DDR_CS_CONFIG_2(1) = DDR_CS_CONFIG_2_VAL;
+    DDR_CS_BNDS(2) = DDR_CS2_BNDS_VAL;
+    DDR_CS_CONFIG(2) = DDR_CS2_CONFIG_VAL;
+    DDR_CS_CONFIG_2(2) = DDR_CS_CONFIG_2_VAL;
+    DDR_CS_BNDS(3) = DDR_CS3_BNDS_VAL;
+    DDR_CS_CONFIG(3) = DDR_CS3_CONFIG_VAL;
+    DDR_CS_CONFIG_2(3) = DDR_CS_CONFIG_2_VAL;
+
+    /* DDR SDRAM timing configuration */
+    DDR_TIMING_CFG_0 = DDR_TIMING_CFG_0_VAL;
+    DDR_TIMING_CFG_1 = DDR_TIMING_CFG_1_VAL;
+    DDR_TIMING_CFG_2 = DDR_TIMING_CFG_2_VAL;
+    DDR_TIMING_CFG_3 = DDR_TIMING_CFG_3_VAL;
+    DDR_TIMING_CFG_4 = DDR_TIMING_CFG_4_VAL;
+    DDR_TIMING_CFG_5 = DDR_TIMING_CFG_5_VAL;
+
+    /* DDR SDRAM mode configuration */
+    DDR_SDRAM_MODE =   DDR_SDRAM_MODE_VAL;
+    DDR_SDRAM_MODE_2 = DDR_SDRAM_MODE_2_VAL;
+    DDR_SDRAM_MODE_3 = DDR_SDRAM_MODE_3_8_VAL;
+    DDR_SDRAM_MODE_4 = DDR_SDRAM_MODE_3_8_VAL;
+    DDR_SDRAM_MODE_5 = DDR_SDRAM_MODE_3_8_VAL;
+    DDR_SDRAM_MODE_6 = DDR_SDRAM_MODE_3_8_VAL;
+    DDR_SDRAM_MODE_7 = DDR_SDRAM_MODE_3_8_VAL;
+    DDR_SDRAM_MODE_8 = DDR_SDRAM_MODE_3_8_VAL;
+    DDR_SDRAM_MD_CNTL = DDR_SDRAM_MD_CNTL_VAL;
+
+    /* DDR Configuration */
+    DDR_SDRAM_INTERVAL = DDR_SDRAM_INTERVAL_VAL;
+    DDR_SDRAM_CLK_CNTL = DDR_SDRAM_CLK_CNTL_VAL;
+    DDR_DATA_INIT = DDR_DATA_INIT_VAL;
+    DDR_ZQ_CNTL = DDR_ZQ_CNTL_VAL;
+    DDR_WRLVL_CNTL = DDR_WRLVL_CNTL_VAL;
+    DDR_WRLVL_CNTL_2 = DDR_WRLVL_CNTL_2_VAL;
+    DDR_WRLVL_CNTL_3 = DDR_WRLVL_CNTL_3_VAL;
+    DDR_SR_CNTR = 0;
+    DDR_SDRAM_RCW_1 = 0;
+    DDR_SDRAM_RCW_2 = 0;
+    DDR_DDRCDR_1 = DDR_DDRCDR_1_VAL;
+    DDR_DDRCDR_2 = DDR_DDRCDR_2_VAL;
+    DDR_SDRAM_CFG_2 = DDR_SDRAM_CFG_2_VAL;
+    DDR_INIT_ADDR = 0;
+    DDR_INIT_EXT_ADDR = 0;
+    DDR_ERR_DISABLE = 0;
+    DDR_ERR_INT_EN = DDR_ERR_INT_EN_VAL;
+    DDR_ERR_SBE = DDR_ERR_SBE_VAL;
+
+    /* Set values, but do not enable the DDR yet */
+    DDR_SDRAM_CFG = (DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN);
+
+    /* TODO: Errata A009942 */
+
+    /* Enable controller */
+    DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
+    asm volatile("sync;isync");
+
+    /* Map LAW for DDR */
+    LAWBARn (4) = 0; /* reset */
+    LAWBARHn(4) = 0;
+    LAWBARLn(4) = 0x0000000;
+    LAWBARn (4) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
+
+    /* Wait for data initialization is complete */
+    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
+
+    /* DDR - TBL=1, Entry 19 */
+    set_tlb(1, 19, DDR_ADDRESS, 0,
+        MAS3_SX | MAS3_SW | MAS3_SR, 0,
+        0, BOOKE_PAGESZ_2G, 1);
 #endif
 }
 
@@ -510,6 +604,17 @@ static void hal_cpld_init(void)
                        IFC_CSPR_V);
     IFC_AMASK(3) = IFC_AMASK_64KB;
     IFC_CSOR(3) = 0;
+
+    /* IFC - CPLD */
+    LAWBARn (2) = 0; /* reset */
+    LAWBARHn(2) = GET_PHYS_HIGH(CPLD_BASE_PHYS);
+    LAWBARLn(2) = CPLD_BASE;
+    LAWBARn (2) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_4KB;
+
+    /* CPLD - TBL=1, Entry 17 */
+    set_tlb(1, 17, CPLD_BASE, CPLD_BASE_PHYS,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G,
+        0, BOOKE_PAGESZ_4K, 1);
 #endif
 }
 
@@ -524,7 +629,6 @@ void hal_init(void)
 
     hal_flash_init();
     hal_cpld_init();
-    hal_ddr_init();
 
 #ifdef ENABLE_CPLD
     CPLD_DATA(CPLD_PROC_STATUS) = 1; /* Enable proc reset */
