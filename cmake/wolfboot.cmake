@@ -75,15 +75,15 @@ function(gen_wolfboot_signed_image TARGET)
 
     # generate signed image
     add_custom_command(
-        OUTPUT ${TARGET}_signed.bin
-        DEPENDS ${INPUT_IMAGE} ${WOLFBOOT_SIGNING_PRIVATE_KEY}
+        OUTPUT ${TARGET}_v${VERSION}_signed.bin
+        DEPENDS ${INPUT_IMAGE} ${WOLFBOOT_SIGNING_PRIVATE_KEY} keystore
         COMMAND ${SIGN_TOOL} ${KEYTOOL_OPTIONS} ${INPUT_IMAGE} ${WOLFBOOT_SIGNING_PRIVATE_KEY} ${VERSION}
-        COMMENT "Signing  ${TARGET}"
+        COMMENT "Signing ${TARGET}"
     )
 
-    add_custom_target(${TARGET}_signed ALL DEPENDS ${TARGET}_signed.bin)
+    add_custom_target(${TARGET}_signed ALL DEPENDS ${TARGET}_v${VERSION}_signed.bin)
 
-    multiconfigfileinstall(${TARGET}_signed.bin bin)
+    multiconfigfileinstall(${TARGET}_v${VERSION}_signed.bin bin)
 endfunction()
 
 function(gen_wolfboot_factory_image PLATFORM_NAME TARGET)
@@ -108,7 +108,7 @@ function(gen_wolfboot_factory_image PLATFORM_NAME TARGET)
     # merge images
     add_custom_command(
         OUTPUT ${FILENAME}_factory.bin
-        DEPENDS $<TARGET_FILE:wolfboot_${PLATFORM_NAME}>.bin ${FILENAME}_signed.bin
+        DEPENDS $<TARGET_FILE:wolfboot_${PLATFORM_NAME}>.bin ${FILENAME}_v${VERSION}_signed.bin
                 ${WOLFBOOT_SIGNING_PRIVATE_KEY} binAssemble
         COMMAND ${BINASSEMBLE} ${FILENAME}_factory.bin ${ARCH_FLASH_OFFSET}
         $<TARGET_FILE:wolfboot_${PLATFORM_NAME}>.bin ${BOOT_ADDRESS} ${TARGET}_v${VERSION}_signed.bin

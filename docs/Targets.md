@@ -721,6 +721,7 @@ st-flash write test-app/image_v1_signed.bin 0x08020000
 To sign the same application image as new version (2), use the sign tools
 
 Python: `tools/keytools/sign.py --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2`
+
 C Tool: `tools/keytools/sign    --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2`
 
 Flash the updated version 2 image: `st-flash write test-app/image_v2_signed.bin 0x08120000`
