@@ -19,44 +19,64 @@ https://github.com/wolfSSL/wolfssl/archive/master.zip
 
 1. Extract wolfBoot
 2. `cd wolfBoot/lib`
-3. Extact wolfSSL (should be named `lib/wolfssl`)
+3. Extract wolfSSL (should be named `lib/wolfssl`)
 
 Directory should look like:
 
 ```
 wolfBoot
  -> config
- -> docs
- -> hal
+   -> examples (sample configurations)
+ -> docs (markdown docs)
+ -> hal (Hardware target abstractions)
+   -> spi
+   -> uart
  -> IDE
  -> include
- -> lib
+ -> lib (wolfSSL and wolfTPM submodules)
    -> wolfssl
      -> src
      -> wolfcrypt/src
  -> src
- -> test-app
- -> tools
+   -> image.c (crypto verify/hash)
+   -> loader.c (main)
+   -> libwolfboot.c (User application API’s)
+   -> update_*.c (flash/ram wolfBoot_start)
+-> test-app (example applications)
+-> tools
+  -> keytools (signing and key generation tools)
 ```
 
 ## Configuration
 
 Use `make config` to walk-through setting up the platform, architecture and partition settings.
 OR
-Use the `config/examples` as a template to wolfBoot root as `.config`. 
+Use the `config/examples` as a template to wolfBoot root as `.config`.
 Example: `cp ./config/examples/zynqmp.config .config`
 
 ## Setup the Key
 
-Use the key generation tool in `tools/keytool` or get existing keys. 
-Copy `rsa4096.der` to wolfBoot root
-Copy `rsa4096_pub_key.c` to `./src`
+Build the key tools: `make keytools`
+
+The key generation is handled the first time you use `make`, however we do provide some tools to help use existing keys.
+See tools in `tools/keytool`. Public key(s) are populated into the `src/keystore.c`.
+The signing key used goes into wolfBoot root (example `rsa4096.der`).
 
 ## Building
 
 ```sh
 make
 ```
+
+The “make [target]”
+* `keytools`: Build the C version of the key tools
+* `wolfboot.bin`: Build the .elf and .bin version of the bootloader only
+* `test-app/image.bin`: Builds the test application
+* `test-app/image_v1_signed.bin`: Builds the test application signed with version 1
+* `factory.bin`: Builds bootloader and test application signed and appended together
+
+Note: Default is “factory.bin”
+
 
 ## Building with Cross Compile
 

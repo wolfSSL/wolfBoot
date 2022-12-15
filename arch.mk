@@ -274,6 +274,22 @@ ifeq ($(TARGET),nxp_t2080)
   endif
 endif
 
+ifeq ($(TARGET),nxp_p1021)
+  # Power PC big endian
+  ARCH_FLAGS=-m32 -mhard-float -mcpu=e500mc
+  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-pipe # use pipes instead of temp files
+  CFLAGS+=-feliminate-unused-debug-types
+  LDFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
+  LDFLAGS+=-Wl,--as-needed # remove weak functions not used
+  UPDATE_OBJS:=src/update_ram.o
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
+endif
+
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1

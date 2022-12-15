@@ -1,4 +1,5 @@
 # wolfBoot
+
 wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/))
 
 wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers,
@@ -7,7 +8,6 @@ relying on wolfCrypt for firmware authentication, providing firmware update mech
 Due to the minimalist design of the bootloader and the tiny HAL API, wolfBoot is completely independent
 from any OS or bare-metal application, and can be easily ported and integrated in existing embedded software
 projects to provide a secure firmware update mechanism.
-
 
 ## Features
    - Multi-slot partitioning of the flash device
@@ -93,16 +93,19 @@ For more detailed information about firmware update implementation, see [Firmwar
 
 ### Makefile
 
-To build using the Makefile, create a `.config` file with your build specifications in the wolfBoot root directory. You can find a 
+To build using the Makefile, create a `.config` file with your build specifications in the wolfBoot root directory. You can find a
 number of examples that you can use inside [config/examples](config/examples). Then run `make keytools` to generate the signing
-and key generation tools. If you have wolfCrypt-py installed and would like to use it, you can skip this step. 
+and key generation tools. If you have wolfCrypt-py installed and would like to use it, you can skip this step.
+
+Documentation for the flash configuration options used in `.config` can be found in [docs/compile.md](docs/compile.md).
 
 For example, to build using our provided `stm32h7.config`:
+
 ```
 cp config/examples/stm32h7.config .config
 make keytools
 make
-``` 
+```
 
 ### CMake
 
@@ -116,7 +119,7 @@ $ mkdir build
 $ cd build
 $ cmake -DWOLFBOOT_TARGET=stm32h7 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000 ..
 $ make
-``` 
+```
 
 The output should look something like:
 ```
@@ -174,7 +177,7 @@ Selected cipher:      ECC256
 Selected hash  :      SHA256
 Public key:           /home/user/wolfBoot/build/wolfboot_signing_private_key.der
 Output  image:        /home/user/wolfBoot/build/test-app/image_v1_signed.bin
-Target partition id : 1 
+Target partition id : 1
 Calculating SHA256 digest...
 Signing the digest...
 Output image(s) successfully created.
@@ -206,7 +209,7 @@ Selected cipher:      ECC256
 Selected hash  :      SHA256
 Public key:           /home/user/wolfBoot/build/wolfboot_signing_private_key.der
 Output  image:        /home/user/wolfBoot/build/test-app/image_v1_signed.bin
-Target partition id : 1 
+Target partition id : 1
 Calculating SHA256 digest...
 Signing the digest...
 Output image(s) successfully created.
@@ -223,12 +226,12 @@ Signing and hashing algorithms can be specified with `-DSIGN=<alg>` and `-DHASH=
 options to configuring wolfBoot, add `-LAH` to your cmake command, along with the partition specifications.
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32h7 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000 -LAH ..
-``` 
+```
 
 ##### stm32f4
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32f4 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08020000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08040000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x08060000 ..
-``` 
+```
 
 ##### stm32u5
 ```

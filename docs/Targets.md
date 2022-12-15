@@ -10,6 +10,7 @@ This README describes configuration of supported targets.
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
+* [NXP P1021 PPC](#nxp-p1021-ppc)
 * [NXP T2080 PPC](#nxp-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)

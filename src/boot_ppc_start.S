@@ -125,7 +125,6 @@ setup_mmu:
         tlbwe
         isync
 
-
         /* For TS/AS=1 map all 8M of boot ROM
          * This window is always enabled T2080 RM (See LAW 2.3.5)
          */
@@ -447,11 +446,29 @@ ram_q:
         tlbwe
         isync
 
+
+        /* enable branch prediction */
+#define BUCSR         0x3F5      /* Branch Control and Status Register */
+#define BUCSR_STAC_EN 0x01000000 /* Segment target addr cache enable */
+#define BUCSR_LS_EN   0x00400000 /* Link stack enable */
+#define BUCSR_BBFI    0x00000200 /* Branch buffer flash invalidate */
+#define BUCSR_BPEN    0x00000001 /* Branch prediction enable */
+#define BUCSR_ENABLE (BUCSR_STAC_EN | BUCSR_LS_EN | BUCSR_BBFI | BUCSR_BPEN)
+        lis     0, (BUCSR_ENABLE)@h
+        ori     0, 0, (BUCSR_ENABLE)@l
+        mtspr   BUCSR, 0
+
+        /* time base enable */
+        lis     4, 0x0000
+        ori     4, 4, 0x4000
+        mtspr   0x3F0, 4
+
         /* switch back to AS/TS=0 */
         lis     3,(MSR_DE)@h
         ori     3,3,(MSR_DE)@l
         mtmsr   3
         isync
+
 
         /* PowerPC e500 Application Binary Interface User’s Guide
          * 2.3.5.1.1 Minimal Stack Frame: No Local Variables or Saved Parameters
