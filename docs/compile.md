@@ -28,11 +28,11 @@ without parameters.
 
 If supported natively, the target platform can be specified using the `TARGET` variable.
 Make will automatically select the correct compile option, and include the corresponding HAL for
-the selected target. 
+the selected target.
 
 For a list of the platforms currently supported, see the [HAL documentation](./HAL.md).
 
-To add a new platform, simply create the corresponding HAL driver and linker script file 
+To add a new platform, simply create the corresponding HAL driver and linker script file
 in the [hal](../hal) directory.
 
 Default option if none specified: `TARGET=stm32f4`
@@ -46,26 +46,26 @@ By default, wolfBoot is compiled for ARM Cortex-M3/4/7. To compile for Cortex-M0
 
 The file [include/target.h](../include/target.h) is generated according to the configured flash geometry,
 partitions size and offset of the target system. The following values must be set to provide the
-desired flash configuration, either via the command line, or using the .config file: 
+desired flash configuration, either via the command line, or using the .config file:
 
- - `WOLFBOOT_SECTOR_SIZE` 
+ - `WOLFBOOT_SECTOR_SIZE`
 
 This variable determines the size of the physical sector on the flash memory. If areas with different
 block sizes are used for the two partitions (e.g. update partition on an external flash), this variable
 should indicate the size of the biggest sector shared between the two partitions.
 
 WolfBoot uses this value as minimum unit when swapping the firmware images in place. For this reason,
-this value is also used to set the size of the SWAP partition. 
+this value is also used to set the size of the SWAP partition.
 
  - `WOLFBOOT_PARTITION_BOOT_ADDRESS`
 
 This is the start address of the boot partition, aligned to the beginning of a new flash sector.
-The application code starts after a further offset, equal to the partition header size (256B 
+The application code starts after a further offset, equal to the partition header size (256B
 for Ed25519 and ECC signature headers).
 
  - `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
 
-This is the start address of the update partition. If an external memory is used via the 
+This is the start address of the update partition. If an external memory is used via the
 `EXT_FLASH` option, this variable contains the offset of the update partition from the
 beginning of the external memory addressable space.
 
@@ -121,7 +121,7 @@ It's possible to disable authentication of the firmware image by explicitly usin
 
 `SIGN=NONE`
 
-in the Makefile commandline. This will compile a minimal bootloader with no support for public-key authenticated 
+in the Makefile commandline. This will compile a minimal bootloader with no support for public-key authenticated
 secure boot.
 
 ### Incremental updates
@@ -136,13 +136,13 @@ For more information and examples, see the [firmware update](firmware_update.md)
 ### Enable debug symbols
 
 To debug the bootloader, simply compile with `DEBUG=1`. The size of the bootloade will increase
-consistently, so ensure that you have enough space at the beginning of the flash before 
+consistently, so ensure that you have enough space at the beginning of the flash before
 `WOLFBOOT_PARTITION_BOOT_ADDRESS`.
 
 ### Disable interrupt vector relocation
 
 On some platforms, it might be convenient to avoid the interrupt vector relocation before boot-up.
-This is required when a component on the system already manages the interrupt relocation at a different 
+This is required when a component on the system already manages the interrupt relocation at a different
 stage, or on these platform that do not support interrupt vector relocation.
 
 To disable interrupt vector table relocation, compile with `VTOR=0`. By default, wolfBoot will relocate the
@@ -186,8 +186,8 @@ cannot be safely powered down or restarted during a swap operation.
 
 ### Allow version roll-back
 
-WolfBoot will not allow updates to a firmware with a version number smaller than the current one. To allow 
-downgrades, compile with `ALLOW_DOWNGRADE=1`. 
+WolfBoot will not allow updates to a firmware with a version number smaller than the current one. To allow
+downgrades, compile with `ALLOW_DOWNGRADE=1`.
 
 Warning: this option will disable version checking before the updates, thus exposing the system to potential
 forced downgrade attacks.
@@ -196,8 +196,8 @@ forced downgrade attacks.
 
 WolfBoot can be compiled with the makefile option `EXT_FLASH=1`. When the external flash support is
 enabled, update and swap partitions can be associated to an external memory, and will use alternative
-HAL function for read/write/erase access. 
-To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or 
+HAL function for read/write/erase access.
+To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or
 `PART_SWAP_EXT`, respectively. By default, the makefile assumes that if an external memory is present,
 both `PART_UPDATE_EXT` and `PART_SWAP_EXT` are defined.
 
@@ -263,12 +263,12 @@ While on one hand this option slightly reduces the space available in the BOOT p
 the BOOT partition.
 
 ### Invert logic of flags
-By default, most NVMs set the content of erased pages to `0xFF` (all ones). 
+
+By default, most NVMs set the content of erased pages to `0xFF` (all ones).
 Some FLASH memory models use inverted logic for erased page, setting the content to `0x00` (all zeroes) after erase.
 For these special cases, the option `FLAGS_INVERT = 1` can be used to modify the logic of the partition/sector flags used in wolfBoot.
 
 Note: if you are using an external FLASH (e.g. SPI) in combination with a flash with inverted logic, ensure that you store all the flags in one partition, by using the `FLAGS_HOME=1` option described above.
-
 
 
 ### Using Mac OS/X

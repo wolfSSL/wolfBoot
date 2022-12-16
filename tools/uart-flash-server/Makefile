@@ -2,7 +2,7 @@
 -include ../../tools/config.mk
 -include ../../options.mk
 
-CC=$(CROSS_COMPILE)gcc
+CC=gcc
 CFLAGS+=-DBUILD_TOOL -Wall -g -ggdb -I../../include -I../../hal -Wextra
 Q?=@
 ifeq ($(V),1)
