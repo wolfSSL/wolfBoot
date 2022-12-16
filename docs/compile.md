@@ -262,11 +262,15 @@ associated to the UPDATE partition are stored in the BOOT partition itself.
 While on one hand this option slightly reduces the space available in the BOOT partition to store the firmware image, it keeps all the flags in
 the BOOT partition.
 
-### Invert logic of flags
+### Flash Erase value / Flag logic inversion
 
 By default, most NVMs set the content of erased pages to `0xFF` (all ones).
+
 Some FLASH memory models use inverted logic for erased page, setting the content to `0x00` (all zeroes) after erase.
+
 For these special cases, the option `FLAGS_INVERT = 1` can be used to modify the logic of the partition/sector flags used in wolfBoot.
+
+You can also manually override the fill bytes using `FILL_BYTE=` at build-time. It default to `0xFF`, but will use `0x00` if `FLAGS_INVERT` is set.
 
 Note: if you are using an external FLASH (e.g. SPI) in combination with a flash with inverted logic, ensure that you store all the flags in one partition, by using the `FLAGS_HOME=1` option described above.
 
