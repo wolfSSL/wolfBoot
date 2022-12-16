@@ -55,27 +55,6 @@ if(NOT DEFINED WOLFBOOT_SECTOR_SIZE)
     message(FATAL_ERROR "WOLFBOOT_SECTOR_SIZE must be defined")
 endif()
 
-# If PULL_LINKER_DEFINES is set, partition addresses and size info will come from the linker script,
-# so no need to pass them on the command line. These variables do need to be set for building the
-# test apps.
-if(NOT DEFINED PULL_LINKER_DEFINES AND NOT DEFINED BUILD_TEST_APPS)
-    if(NOT DEFINED WOLFBOOT_PARTITION_SIZE)
-        message(FATAL_ERROR "WOLFBOOT_PARTITION_SIZE must be defined")
-    endif()
-
-    if(NOT DEFINED WOLFBOOT_PARTITION_BOOT_ADDRESS)
-        message(FATAL_ERROR "WOLFBOOT_PARTITION_BOOT_ADDRESS must be defined")
-    endif()
-
-    if(NOT DEFINED WOLFBOOT_PARTITION_UPDATE_ADDRESS)
-        message(FATAL_ERROR "WOLFBOOT_PARTITION_UPDATE_ADDRESS must be defined")
-    endif()
-
-    if(NOT DEFINED WOLFBOOT_PARTITION_SWAP_ADDRESS)
-        message(FATAL_ERROR "WOLFBOOT_PARTITION_SWAP_ADDRESS must be defined")
-    endif()
-endif()
-
 if(NOT DEFINED ARM_TARGETS)
     list(APPEND ARM_TARGETS stm32h7 stm32l0 stm32f4 stm32u5)
     set(ARM_TARGETS
@@ -151,6 +130,27 @@ add_option(
     "Pull partition addresses from the linker script instead of defining fixed addresses in target.h (default: disabled)"
     "no"
     "yes;no")
+
+# If PULL_LINKER_DEFINES is set, partition addresses and size info will come from the linker script,
+# so no need to pass them on the command line. These variables do need to be set for building the
+# test apps.
+if(NOT DEFINED PULL_LINKER_DEFINES AND NOT DEFINED BUILD_TEST_APPS)
+    if(NOT DEFINED WOLFBOOT_PARTITION_SIZE)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_SIZE must be defined")
+    endif()
+
+    if(NOT DEFINED WOLFBOOT_PARTITION_BOOT_ADDRESS)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_BOOT_ADDRESS must be defined")
+    endif()
+
+    if(NOT DEFINED WOLFBOOT_PARTITION_UPDATE_ADDRESS)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_UPDATE_ADDRESS must be defined")
+    endif()
+
+    if(NOT DEFINED WOLFBOOT_PARTITION_SWAP_ADDRESS)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_SWAP_ADDRESS must be defined")
+    endif()
+endif()
 
 # unset cache variables Variables that need to be accessed by the gen_wolfboot_platform_target cmake
 # function called from the parent cmake project are added to the cache so that they can be accessed
