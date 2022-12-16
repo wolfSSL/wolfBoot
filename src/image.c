@@ -906,6 +906,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
         image = fetch_hdr_cpy(img);
     else
         image = (uint8_t *)img->hdr;
+    img->hdr_ok = 1;
 
     return wolfBoot_open_image_address(img, image);
 }

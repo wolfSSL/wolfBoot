@@ -6,8 +6,8 @@ if [ -f "./tools/keytools/sign" ]; then
 fi
 
 # SIZE is WOLFBOOT_PARTITION_SIZE - 49 (44B: key + nonce, 5B: "pBOOT")
-#SIZE=131023
-SIZE=65487
+SIZE=131023
+#SIZE=65487
 VERSION=8
 APP=test-app/image_v"$VERSION"_signed_and_encrypted.bin
 
