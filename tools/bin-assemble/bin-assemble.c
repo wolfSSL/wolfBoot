@@ -39,8 +39,8 @@
 #define BLOCK_SZ 1024
 #endif
 
-#ifndef BIN_FILL_CHAR
-#define BIN_FILL_CHAR '\xff'
+#ifndef FILL_BYTE
+#define FILL_BYTE '\xff'
 #endif
 
 void usage(const char* execname)
@@ -78,7 +78,7 @@ int main(int argc, const char* argv[]) {
     size_t num_entries = 0;
     binentry_t* entries = NULL;
     size_t cur_add = 0;
-    char fill = BIN_FILL_CHAR;
+    char fill = FILL_BYTE;
     size_t nr = 0;
     size_t nw = 0;
     char data[BLOCK_SZ];
@@ -184,7 +184,8 @@ int main(int argc, const char* argv[]) {
                 }
                 cur_add++;
             }
-            fprintf(stderr, "\tAdded %12zu bytes fill\n", fillSz);
+            fprintf(stderr, "\tAdded %12zu bytes of 0x%02x fill\n",
+                fillSz, (unsigned char)fill);
         }
 
         while (!feof(fi)) {
@@ -214,7 +215,7 @@ int main(int argc, const char* argv[]) {
 
         }
 
-        fprintf(stderr, "\tAdded %12zu bytes at 0x%8zx from %s\n",
+        fprintf(stderr, "\tAdded %12zu bytes at 0x%08zx from %s\n",
             cur_add - entries[i].address, entries[i].address, entries[i].fname);
 
         fclose(fi);

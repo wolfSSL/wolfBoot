@@ -108,7 +108,7 @@ wolfboot.efi: wolfboot.elf
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) --gap-fill 0xff -O binary $^ $@
+	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
@@ -124,7 +124,7 @@ standalone:
 	MCUXPRESSO=$(MCUXPRESSO) MCUXPRESSO_CPU=$(MCUXPRESSO_CPU) MCUXPRESSO_DRIVERS=$(MCUXPRESSO_DRIVERS) \
 	MCUXPRESSO_CMSIS=$(MCUXPRESSO_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK) standalone
-	$(Q)$(OBJCOPY) --gap-fill 0xff -O binary test-app/image.elf standalone.bin
+	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary test-app/image.elf standalone.bin
 	$(Q)$(SIZE) test-app/image.elf
 
 include tools/test.mk

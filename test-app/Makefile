@@ -247,7 +247,7 @@ standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
 image.bin: image.elf
 	$(Q)echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) --gap-fill 0xff -O binary $^ $@
+	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	$(Q)echo "\t[LD] $@"
