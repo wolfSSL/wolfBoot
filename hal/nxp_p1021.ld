@@ -12,8 +12,12 @@ BOOTSTRAP_ENTRY = 0xEFFFFFFC;
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    /* Note: If DDR not setup, can use L1 memory at 0xFDD00000 and 0x4000 length */
-    RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x1FFFFFFF
+
+    /* DDR3 - 512MB */
+    DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x1FFFFFFF
+
+    /* L2 as SRAM */
+    RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 0x4000
 }
 
 SECTIONS

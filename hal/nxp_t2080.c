@@ -57,12 +57,12 @@
 
 /* T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
 #define LAWBAR_BASE(n) (CCSRBAR + 0xC00 + (n * 0x10))
-#define LAWBARHn(n)   *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
-#define LAWBARLn(n)   *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x4))
-#define LAWBARn(n)    *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x8))
+#define LAWBARH(n)     *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
+#define LAWBARL(n)     *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x4))
+#define LAWAR(n)       *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x8))
 
-#define LAWBARn_ENABLE      (1<<31)
-#define LAWBARn_TRGT_ID(id) (id<<20)
+#define LAWAR_ENABLE      (1<<31)
+#define LAWAR_TRGT_ID(id) (id<<20)
 
 /* T2080 Global Source/Target ID Assignments - RM Table 2-1 */
 enum law_target_id {
@@ -216,11 +216,12 @@ enum ifc_amask_sizes {
     IFC_AMASK_256KB = 0xFFFC,
     IFC_AMASK_512KB = 0xFFF8,
     IFC_AMASK_1MB   = 0xFFF0,
-    IFC_AMASK_2MB   = 0xFFC0,
-    IFC_AMASK_4MB   = 0xFF80,
-    IFC_AMASK_8MB   = 0xFF00,
-    IFC_AMASK_16MB  = 0xFE00,
-    IFC_AMASK_32MB  = 0xFC00,
+    IFC_AMASK_2MB   = 0xFFE0,
+    IFC_AMASK_4MB   = 0xFFC0,
+    IFC_AMASK_8MB   = 0xFF80,
+    IFC_AMASK_16MB  = 0xFF00,
+    IFC_AMASK_32MB  = 0xFE00,
+    IFC_AMASK_64MB  = 0xFC00,
     IFC_AMASK_128MB = 0xF800,
     IFC_AMASK_256MB = 0xF000,
     IFC_AMASK_512MB = 0xE000,
@@ -447,16 +448,16 @@ void uart_write(const char* buf, uint32_t sz)
 void law_init(void)
 {
     /* IFC - NOR Flash */
-    LAWBARn (1) = 0; /* reset */
-    LAWBARHn(1) = GET_PHYS_HIGH(FLASH_BASE_PHYS);
-    LAWBARLn(1) = FLASH_BASE;
-    LAWBARn (1) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
+    LAWAR(1) = 0; /* reset */
+    LAWBARH(1) = GET_PHYS_HIGH(FLASH_BASE_PHYS);
+    LAWBARL(1) = FLASH_BASE;
+    LAWAR(1) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
 
     /* Buffer Manager (BMan) (control) - probably not required */
-    LAWBARn (3) = 0; /* reset */
-    LAWBARHn(3) = 0xF;
-    LAWBARLn(3) = 0xF4000000;
-    LAWBARn (3) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_BMAN) | LAW_SIZE_32MB;
+    LAWAR(3) = 0; /* reset */
+    LAWBARH(3) = 0xF;
+    LAWBARL(3) = 0xF4000000;
+    LAWAR(3) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_BMAN) | LAW_SIZE_32MB;
 }
 
 extern void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
@@ -567,10 +568,10 @@ void hal_ddr_init(void)
     asm volatile("sync;isync");
 
     /* Map LAW for DDR */
-    LAWBARn (4) = 0; /* reset */
-    LAWBARHn(4) = 0;
-    LAWBARLn(4) = 0x0000000;
-    LAWBARn (4) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
+    LAWAR (4) = 0; /* reset */
+    LAWBARH(4) = 0;
+    LAWBARL(4) = 0x0000000;
+    LAWAR (4) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
 
     /* Wait for data initialization is complete */
     while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
@@ -606,10 +607,10 @@ static void hal_cpld_init(void)
     IFC_CSOR(3) = 0;
 
     /* IFC - CPLD */
-    LAWBARn (2) = 0; /* reset */
-    LAWBARHn(2) = GET_PHYS_HIGH(CPLD_BASE_PHYS);
-    LAWBARLn(2) = CPLD_BASE;
-    LAWBARn (2) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_4KB;
+    LAWAR (2) = 0; /* reset */
+    LAWBARH(2) = GET_PHYS_HIGH(CPLD_BASE_PHYS);
+    LAWBARL(2) = CPLD_BASE;
+    LAWAR (2) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_4KB;
 
     /* CPLD - TBL=1, Entry 17 */
     set_tlb(1, 17, CPLD_BASE, CPLD_BASE_PHYS,
@@ -698,7 +699,9 @@ void hal_prepare_boot(void)
 
 }
 
+#ifdef MMU
 void* hal_get_dts_address(void)
 {
     return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
 }
+#endif

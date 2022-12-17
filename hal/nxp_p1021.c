@@ -54,21 +54,20 @@
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
 /* P1021 LAW - Local Access Window (Memory Map) - RM 2.4 */
-#define LAWBAR_BASE(n) (CCSRBAR + 0xC00 + (n * 0x10))
-#define LAWBARHn(n)   *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
-#define LAWBARLn(n)   *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x4))
-#define LAWBARn(n)    *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x8))
+#define LAWBAR_BASE(n) (CCSRBAR + 0xC08 + (n * 0x20))
+#define LAWBAR(n)      *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
+#define LAWAR(n)       *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x4))
 
-#define LAWBARn_ENABLE      (1<<31)
-#define LAWBARn_TRGT_ID(id) (id<<20)
+#define LAWAR_ENABLE      (1<<31)
+#define LAWAR_TRGT_ID(id) (id<<20)
 
 /* P1021 Global Source/Target ID Assignments - RM Table 2-7 */
 enum law_target_id {
-    LAW_TRGT_DDR = 0x0F,
-    LAW_TRGT_IFC = 0x1F, /* Integrated Flash Controller */
+    LAW_TRGT_ELBC = 0x4, /* eLBC (Enhanced Local Bus Controller) */
+    LAW_TRGT_DDR = 0xF,  /* DDR Memory Controller */
 };
 
-/* P1021 2.4.3 - size is equal to 2^(enum + 1) */
+/* P1021 2.4.2 - size is equal to 2^(enum + 1) */
 enum law_sizes {
     LAW_SIZE_4KB = 0x0B,
     LAW_SIZE_8KB,
@@ -94,11 +93,6 @@ enum law_sizes {
     LAW_SIZE_8GB, /* 0x20 */
     LAW_SIZE_16GB,
     LAW_SIZE_32GB,
-    LAW_SIZE_64GB,
-    LAW_SIZE_128GB,
-    LAW_SIZE_256GB,
-    LAW_SIZE_512GB,
-    LAW_SIZE_1TB,
 };
 
 
@@ -160,75 +154,92 @@ enum law_sizes {
         (((uint64_t)(rpn)) >> 32)
 
 
-/* P1021 IFC (Integrated Flash Controller) - RM 13.3 */
-#define IFC_BASE        (CCSRBAR + 0x00124000)
-#define IFC_MAX_BANKS   8
+/* P1021 eLBC (Enhanced Local Bus Controller) - RM 12.3 */
+#define ELBC_BASE        (CCSRBAR + 0x5000)
+#define ELBC_MAX_BANKS   8
 
-#define IFC_CSPR_EXT(n) *((volatile uint32_t*)(IFC_BASE + 0x000C + (n * 0xC))) /* Extended Base Address */
-#define IFC_CSPR(n)     *((volatile uint32_t*)(IFC_BASE + 0x0010 + (n * 0xC))) /* Chip-select Property */
-#define IFC_AMASK(n)    *((volatile uint32_t*)(IFC_BASE + 0x00A0 + (n * 0xC)))
-#define IFC_CSOR(n)     *((volatile uint32_t*)(IFC_BASE + 0x0130 + (n * 0xC)))
-#define IFC_CSOR_EXT(n) *((volatile uint32_t*)(IFC_BASE + 0x0134 + (n * 0xC)))
-#define IFC_FTIM0(n)    *((volatile uint32_t*)(IFC_BASE + 0x01C0 + (n * 0x30)))
-#define IFC_FTIM1(n)    *((volatile uint32_t*)(IFC_BASE + 0x01C4 + (n * 0x30)))
-#define IFC_FTIM2(n)    *((volatile uint32_t*)(IFC_BASE + 0x01C8 + (n * 0x30)))
-#define IFC_FTIM3(n)    *((volatile uint32_t*)(IFC_BASE + 0x01CC + (n * 0x30)))
+#define ELBC_BR(n) *((volatile uint32_t*)(ELBC_BASE + 0x0000 + (n * 0x8))) /* Base registers */
+#define ELBC_OR(n) *((volatile uint32_t*)(ELBC_BASE + 0x0000 + (n * 0x8))) /* Options registers */
+#define ELBC_MDR   *((volatile uint32_t*)(ELBC_BASE + 0x88)) /* memory data register */
+#define ELBC_FIR   *((volatile uint32_t*)(ELBC_BASE + 0xE4)) /* flash instruction register */
+#define ELBC_FCR   *((volatile uint32_t*)(ELBC_BASE + 0xE8))  /* flash command register */
+#define ELBC_FBAR  *((volatile uint32_t*)(ELBC_BASE + 0xEC))  /* flash address register - OR_PGS=0 (shift 5), OR_PGS=1 (shift 6) */
+#define ELBC_FPAR  *((volatile uint32_t*)(ELBC_BASE + 0xF0))  /* flash page address register*/
 
-#define IFC_CSPR_PHYS_ADDR(x) (((uint32_t)x) & 0xFFFF0000) /* Physical base address */
-#define IFC_CSPR_PORT_SIZE_8  0x00000080 /* Port Size 8 */
-#define IFC_CSPR_PORT_SIZE_16 0x00000100 /* Port Size 16 */
-#define IFC_CSPR_WP           0x00000040 /* Write Protect */
-#define IFC_CSPR_MSEL_NOR     0x00000000 /* Mode Select - NOR */
-#define IFC_CSPR_MSEL_NAND    0x00000002 /* Mode Select - NAND */
-#define IFC_CSPR_MSEL_GPCM    0x00000004 /* Mode Select - GPCM (General-purpose chip-select machine) */
-#define IFC_CSPR_V            0x00000001 /* Bank Valid */
+#define ELBC_BR_ADDR(n)   (((uint32_t)n) & 0xFFFF8000) /* Physical base address - upper 17-bits */
+#define ELBC_BR_PS(n)     (((n) & 0x3) << 12) /* port size - 1=8-bit, 2=16-bit */
+#define ELBC_BR_DECC(n)   (((n) & 0x3) << 10) /* data error checking - 0=disabled, 1=ECC check enable / gen disabled, 2=ECC check/gen enabled */
+#define ELBC_BR_WP        (1 << 8)            /* write protect */
+#define ELBC_BR_MSEL(n)   ((n) & 0x7 << 7)    /* machine select:
+                                               *   0=GPCM (General Purpose Chip-Select Machine)
+                                               *   1=FCM (Flash Control Machine),
+                                               *   4=UPMA, 5=UPMB, 6=UPMC (User Programmable Machines) */
+#define ELBC_BR_V         (1 << 0)            /* bank valid */
 
-/* NAND Timings (IFC clocks) */
-#define IFC_FTIM0_NOR_TACSE(n) (((n) & 0x0F) << 28) /* After address hold cycle */
-#define IFC_FTIM0_NOR_TEADC(n) (((n) & 0x3F) << 16) /* External latch address delay cycles */
-#define IFC_FTIM0_NOR_TAVDS(n) (((n) & 0x3F) << 8)  /* Delay between CS assertion */
-#define IFC_FTIM0_NOR_TEAHC(n) (((n) & 0x3F) << 0)  /* External latch address hold cycles */
-#define IFC_FTIM1_NOR_TACO(n)  (((n) & 0xFF) << 24) /* CS assertion to output enable */
-#define IFC_FTIM1_NOR_TRAD(n)  (((n) & 0x3F) << 8)  /* read access delay */
-#define IFC_FTIM1_NOR_TSEQ(n)  (((n) & 0x3F) << 0)  /* sequential read access delay */
-#define IFC_FTIM2_NOR_TCS(n)   (((n) & 0x0F) << 24) /* Chip-select assertion setup time */
-#define IFC_FTIM2_NOR_TCH(n)   (((n) & 0x0F) << 18) /* Chip-select hold time */
-#define IFC_FTIM2_NOR_TWPH(n)  (((n) & 0x3F) << 10) /* Chip-select hold time */
-#define IFC_FTIM2_NOR_TWP(n)   (((n) & 0xFF) << 0)  /* Write enable pulse width */
+#define ELBC_OR_AMASK(n)  ((((uint32_t)n) & 0xFFFF8) << 15) /* Address mask - upper 17-bits */
+#define ELBC_OR_BCTLD     (1 << 12) /* buffer control disable */
+#define ELBC_OR_PGS       (1 << 10) /* page size 0=512, 1=2048 bytes */
+#define ELBC_OR_CSCT      (1 << 9)  /* chip select to command time - TRLX=0 (0=1, 1=4), TRLX=1 (0=2, 1=8) clock cycles */
+#define ELBC_OR_CST       (1 << 8)  /* command setup time - TRLX=0 (0=0 or 1=0.25) TRLX=1 (0=0.5 or 1=1) clock cycles */
+#define ELBC_OR_CHT       (1 << 7)  /* command hold time - TRLX=0 (0=0.5 or 1=1) TRLX=1 (0=1.5 or 1=2) clock cycles */
+#define ELBC_OR_SCY(n)    (((n) & 0x7) << 4) /* cycle length in bus clocks (0-7 bus clock cycle wait states) */
+#define ELBC_OR_RST       (1 << 3)  /* read time setup - read enable asserted 1 clock */
+#define ELBC_OR_TRLX      (1 << 2)  /* timing related */
+#define ELBC_OR_EHTR      (1 << 1)  /* extended hold time - LRLX=0 (0=1 or 1=2), LRLX=1 (0=2 or 1=8) inserted idle clock cycles */
 
-/* GPCM Timings (IFC clocks) */
-#define IFC_FTIM0_GPCM_TACSE(n) (((n) & 0x0F) << 28) /* After address hold cycle */
-#define IFC_FTIM0_GPCM_TEADC(n) (((n) & 0x3F) << 16) /* External latch address delay cycles */
-#define IFC_FTIM0_GPCM_TEAHC(n) (((n) & 0x3F) << 0)  /* External latch address hold cycles */
-#define IFC_FTIM1_GPCM_TACO(n)  (((n) & 0xFF) << 24) /* CS assertion to output enable */
-#define IFC_FTIM1_GPCM_TRAD(n)  (((n) & 0x3F) << 8)  /* read access delay */
-#define IFC_FTIM2_GPCM_TCS(n)   (((n) & 0x0F) << 24) /* Chip-select assertion setup time */
-#define IFC_FTIM2_GPCM_TCH(n)   (((n) & 0x0F) << 18) /* Chip-select hold time */
-#define IFC_FTIM2_GPCM_TWP(n)   (((n) & 0xFF) << 0)  /* Write enable pulse width */
+#define ELBC_FIR_OP(s,op) ((op) & 0xF) << (28 - ((s % 8) * 4)) /* up to 8 sequences of instructions */
+    /* 0=NOP-No-operation and end of operation sequence,
+     * 1=CA-Issue current column address as set in FPAR, with length set by ORx[PGS]
+     * 2=PA-Issue current block+page address as set in FBAR and FPAR, with length set by FMR[AL]
+     * 3=UA-Issue user-defined address byte from next AS field in MDR
+     * 4=CM0-Issue command from FCR[CMD0]
+     * 5=CM1-Issue command from FCR[CMD1]
+     * 6=CM2-Issue command from FCR[CMD2]
+     * 7=CM3-Issue command from FCR[CMD3]
+     * 8=WB-Write FBCR bytes of data from current FCM buffer to Flash device
+     * 9=WS-Write one byte (8b port) of data from next AS field of MDR to Flash device
+     * 10=RB-Read FBCR bytes of data from Flash device into current FCM RAM buffer
+     * 11=RS-Read one byte (8b port) of data from Flash device into next AS field of MDR
+     * 12=CW0-Wait for LFRB to return high or time-out, then issue command from FCR[CMD0]
+     * 13=CW1-Wait for LFRB to return high or time-out, then issue command from FCR[CMD1]
+     * 14=RBW-Wait for LFRB to return high or time-out, then read FBCR bytes of data from Flash device into current FCM RAM buffer
+     * 15=RSW-Wait for LFRB to return high or time-out, then read one byte (8b port) of data from Flash device into next AS field of MDR
+     */
+#define ELBC_FCR_CMD(s,cmd) (((cmd) & 0xFF) << (24 - ((s % 4) * 8))) /* up to 4 command opcodes */
 
-/* IFC AMASK - RM Table 13-3 - Count of MSB minus 1 */
-enum ifc_amask_sizes {
-    IFC_AMASK_64KB =  0xFFFF,
-    IFC_AMASK_128KB = 0xFFFE,
-    IFC_AMASK_256KB = 0xFFFC,
-    IFC_AMASK_512KB = 0xFFF8,
-    IFC_AMASK_1MB   = 0xFFF0,
-    IFC_AMASK_2MB   = 0xFFC0,
-    IFC_AMASK_4MB   = 0xFF80,
-    IFC_AMASK_8MB   = 0xFF00,
-    IFC_AMASK_16MB  = 0xFE00,
-    IFC_AMASK_32MB  = 0xFC00,
-    IFC_AMASK_128MB = 0xF800,
-    IFC_AMASK_256MB = 0xF000,
-    IFC_AMASK_512MB = 0xE000,
-    IFC_AMASK_1GB   = 0xC000,
-    IFC_AMASK_2GB   = 0x8000,
-    IFC_AMASK_4GB   = 0x0000,
+#define ELBC_FBAR_ADDR(n) (((n) >> 5) & 0xFFFFFF)
+#define ELBC_FPAR_PI(n)   (((n) & 0x7) << 10) /* page index */
+#define ELBC_FPAR_MS      (1 << 9) /* main/spare region locator */
+#define ELBC_FPAR_CI(n)   ((n) & 0x1FF)
+
+
+
+
+/* IFC AMASK - RM Table 12-6 - Count of MSB minus 1 */
+enum elbc_amask_sizes {
+    ELBC_AMASK_32KB =  0x1FFFF,
+    ELBC_AMASK_64KB =  0x0FFFF,
+    ELBC_AMASK_128KB = 0x0FFFE,
+    ELBC_AMASK_256KB = 0x0FFFC,
+    ELBC_AMASK_512KB = 0x0FFF8,
+    ELBC_AMASK_1MB   = 0x0FFF0,
+    ELBC_AMASK_2MB   = 0x0FFE0,
+    ELBC_AMASK_4MB   = 0x0FFC0,
+    ELBC_AMASK_8MB   = 0x0FF80,
+    ELBC_AMASK_16MB  = 0x0FF00,
+    ELBC_AMASK_32MB  = 0x0FE00,
+    ELBC_AMASK_64MB  = 0x0FC00,
+    ELBC_AMASK_128MB = 0x0F800,
+    ELBC_AMASK_256MB = 0x0F000,
+    ELBC_AMASK_512MB = 0x0E000,
+    ELBC_AMASK_1GB   = 0x0C000,
+    ELBC_AMASK_2GB   = 0x08000,
+    ELBC_AMASK_4GB   = 0x00000,
 };
 
 
 /* NAND Flash */
-#define FLASH_BASE        0xFC000000
+#define FLASH_BASE        0xEC000000
 
 #define FLASH_BANK_SIZE   (64*1024*1024)
 #define FLASH_PAGE_SIZE   (1024) /* program buffer */
@@ -241,79 +252,44 @@ enum ifc_amask_sizes {
 #define FLASH_WRITE_TOUT  500   /* Flash Write Timeout (ms) */
 
 /* DDR */
-#if 0 /* DDR support not done */
+#if 1
     #define ENABLE_DDR
 #endif
 
 /* DDR3: 512MB, 333.333 MHz (666.667 MT/s) */
 #define DDR_ADDRESS     0x00000000
 #define DDR_SIZE        (512 * 1024 * 1024)
-#define DDR_N_RANKS     2
-#define DDR_RANK_DENS   0x100000000
-#define DDR_SDRAM_WIDTH 64
-#define DDR_EC_SDRAM_W  8
-#define DDR_N_ROW_ADDR  16
-#define DDR_N_COL_ADDR  10
-#define DDR_N_BANKS     8
-#define DDR_EDC_CONFIG  2
-#define DDR_BURSTL_MASK 0x0c
-#define DDR_TCKMIN_X_PS 1500
-#define DDR_TCMMAX_PS   3000
-#define DDR_CASLAT_X    0x000007E0
-#define DDR_TAA_PS      13500
-#define DDR_TRCD_PS     13500
-#define DDR_TRP_PS      13500
-#define DDR_TRAS_PS     36000
-#define DDR_TRC_PS      49500
-#define DDR_TFAW_PS     30000
-#define DDR_TWR_PS      15000
-#define DDR_TRFC_PS     260000
-#define DDR_TRRD_PS     6000
-#define DDR_TWTR_PS     7500
-#define DDR_TRTP_PS     7500
-#define DDR_REF_RATE_PS 7800000
 
-#define DDR_CS0_BNDS_VAL       0x000000FF
-#define DDR_CS1_BNDS_VAL       0x010001FF
-#define DDR_CS2_BNDS_VAL       0x0300033F
-#define DDR_CS3_BNDS_VAL       0x0340037F
-#define DDR_CS0_CONFIG_VAL     0x80044402
-#define DDR_CS1_CONFIG_VAL     0x80044402
-#define DDR_CS2_CONFIG_VAL     0x00000202
-#define DDR_CS3_CONFIG_VAL     0x00040202
+#define DDR_CS0_BNDS_VAL       0x0000001F
+#define DDR_CS0_CONFIG_VAL     0x80014202
 #define DDR_CS_CONFIG_2_VAL    0x00000000
 
-#define DDR_TIMING_CFG_0_VAL   0xFF530004
-#define DDR_TIMING_CFG_1_VAL   0x98906345
-#define DDR_TIMING_CFG_2_VAL   0x0040A114
-#define DDR_TIMING_CFG_3_VAL   0x010A1100
-#define DDR_TIMING_CFG_4_VAL   0x00000001
-#define DDR_TIMING_CFG_5_VAL   0x04402400
+#define DDR_TIMING_CFG_0_VAL   0x00330004
+#define DDR_TIMING_CFG_1_VAL   0x5d5bd746
+#define DDR_TIMING_CFG_2_VAL   0x0fa8c8cd
+#define DDR_TIMING_CFG_3_VAL   0x00010000
+#define DDR_TIMING_CFG_4_VAL   0x00220001
+#define DDR_TIMING_CFG_5_VAL   0x03402400
 
-#define DDR_SDRAM_MODE_VAL     0x00441C70
-#define DDR_SDRAM_MODE_2_VAL   0x00980000
+#define DDR_SDRAM_MODE_VAL     0x40461320
+#define DDR_SDRAM_MODE_2_VAL   0x8000C000
 #define DDR_SDRAM_MODE_3_8_VAL 0x00000000
 #define DDR_SDRAM_MD_CNTL_VAL  0x00000000
 
-#define DDR_SDRAM_CFG_VAL      0xE7040000
-#define DDR_SDRAM_CFG_2_VAL    0x00401010
+#define DDR_SDRAM_CFG_VAL      0x47000000
+#define DDR_SDRAM_CFG_2_VAL    0x04401040
 
-#define DDR_SDRAM_INTERVAL_VAL 0x0C300100
-#define DDR_DATA_INIT_VAL      0xDEADBEEF
-#define DDR_SDRAM_CLK_CNTL_VAL 0x02400000
+#define DDR_SDRAM_INTERVAL_VAL 0x0a280000
+#define DDR_DATA_INIT_VAL      0x1021BABE
+#define DDR_SDRAM_CLK_CNTL_VAL 0x03000000
 #define DDR_ZQ_CNTL_VAL        0x89080600
 
-#define DDR_WRLVL_CNTL_VAL     0x8675F604
-#define DDR_WRLVL_CNTL_2_VAL   0x05060607
-#define DDR_WRLVL_CNTL_3_VAL   0x080A0A0B
+#define DDR_WRLVL_CNTL_VAL     0x86559608
 
-#define DDR_SDRAM_RCW_1_VAL    0x00000000
-#define DDR_SDRAM_RCW_2_VAL    0x00000000
+#define DDR_DDRCDR_1_VAL       0x000EAA00
+#define DDR_DDRCDR_2_VAL       0x00000000
 
-#define DDR_DDRCDR_1_VAL       0x80040000
-#define DDR_DDRCDR_2_VAL       0x00000001
-
-#define DDR_ERR_INT_EN_VAL     0x0000001D
+#define DDR_ERR_INT_EN_VAL     0x0000000D
 #define DDR_ERR_SBE_VAL        0x00010000
 
 
@@ -407,10 +383,9 @@ void uart_write(const char* buf, uint32_t sz)
 void law_init(void)
 {
     /* IFC - NAND Flash */
-    LAWBARn (1) = 0; /* reset */
-    LAWBARHn(1) = FLASH_BASE;
-    LAWBARLn(1) = FLASH_BASE;
-    LAWBARn (1) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
+    LAWAR (1) = 0; /* reset */
+    LAWBAR(1) = FLASH_BASE;
+    LAWAR (1) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_ELBC) | LAW_SIZE_64MB;
 
 }
 
@@ -434,26 +409,16 @@ void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
 
 static void hal_flash_init(void)
 {
-    /* NAND IFC Flash Timing Parameters */
-    IFC_FTIM0(0) = (IFC_FTIM0_NOR_TACSE(4) | \
-                    IFC_FTIM0_NOR_TEADC(5) | \
-                    IFC_FTIM0_NOR_TEAHC(5));
-    IFC_FTIM1(0) = (IFC_FTIM1_NOR_TACO(53) |
-                    IFC_FTIM1_NOR_TRAD(26) |
-                    IFC_FTIM1_NOR_TSEQ(19));
-    IFC_FTIM2(0) = (IFC_FTIM2_NOR_TCS(4) |
-                    IFC_FTIM2_NOR_TCH(4) |
-                    IFC_FTIM2_NOR_TWPH(14) |
-                    IFC_FTIM2_NOR_TWP(28));
-    IFC_FTIM3(0) = 0;
-    /* NAND IFC Definitions (CS0) */
-    IFC_CSPR_EXT(0) = (0xF);
-    IFC_CSPR(0) =     (IFC_CSPR_PHYS_ADDR(FLASH_BASE) | \
-                       IFC_CSPR_PORT_SIZE_16 | \
-                       IFC_CSPR_MSEL_NOR | \
-                       IFC_CSPR_V);
-    IFC_AMASK(0) = IFC_AMASK_128MB;
-    IFC_CSOR(0) = 0x0000000C; /* TRHZ (80 clocks for read enable high) */
+    /* NAND Definitions (CS0) */
+    /* FSM, 8-bit, ECC check/gen enable, valid */
+    ELBC_BR(0) = ELBC_BR_ADDR(FLASH_BASE) |
+        ELBC_BR_MSEL(1) | ELBC_BR_PS(1) | ELBC_BR_DECC(2) | ELBC_BR_V;
+
+    /* Mask=32MB, Page Size = 512, relaxed timing */
+    ELBC_OR(0) = ELBC_OR_AMASK(ELBC_AMASK_32MB) |
+        ELBC_OR_CSCT | ELBC_OR_CST | ELBC_OR_CHT | ELBC_OR_SCY(1) |
+        ELBC_OR_TRLX | ELBC_OR_EHTR;
+
 }
 
 void hal_ddr_init(void)
@@ -463,15 +428,6 @@ void hal_ddr_init(void)
     DDR_CS_BNDS(0) = DDR_CS0_BNDS_VAL;
     DDR_CS_CONFIG(0) = DDR_CS0_CONFIG_VAL;
     DDR_CS_CONFIG_2(0) = DDR_CS_CONFIG_2_VAL;
-    DDR_CS_BNDS(1) = DDR_CS1_BNDS_VAL;
-    DDR_CS_CONFIG(1) = DDR_CS1_CONFIG_VAL;
-    DDR_CS_CONFIG_2(1) = DDR_CS_CONFIG_2_VAL;
-    DDR_CS_BNDS(2) = DDR_CS2_BNDS_VAL;
-    DDR_CS_CONFIG(2) = DDR_CS2_CONFIG_VAL;
-    DDR_CS_CONFIG_2(2) = DDR_CS_CONFIG_2_VAL;
-    DDR_CS_BNDS(3) = DDR_CS3_BNDS_VAL;
-    DDR_CS_CONFIG(3) = DDR_CS3_CONFIG_VAL;
-    DDR_CS_CONFIG_2(3) = DDR_CS_CONFIG_2_VAL;
 
     /* DDR SDRAM timing configuration */
     DDR_TIMING_CFG_0 = DDR_TIMING_CFG_0_VAL;
@@ -498,8 +454,6 @@ void hal_ddr_init(void)
     DDR_DATA_INIT = DDR_DATA_INIT_VAL;
     DDR_ZQ_CNTL = DDR_ZQ_CNTL_VAL;
     DDR_WRLVL_CNTL = DDR_WRLVL_CNTL_VAL;
-    DDR_WRLVL_CNTL_2 = DDR_WRLVL_CNTL_2_VAL;
-    DDR_WRLVL_CNTL_3 = DDR_WRLVL_CNTL_3_VAL;
     DDR_SR_CNTR = 0;
     DDR_SDRAM_RCW_1 = 0;
     DDR_SDRAM_RCW_2 = 0;
@@ -522,10 +476,9 @@ void hal_ddr_init(void)
     asm volatile("sync;isync");
 
     /* Map LAW for DDR */
-    LAWBARn (4) = 0; /* reset */
-    LAWBARHn(4) = 0;
-    LAWBARLn(4) = 0x0000000;
-    LAWBARn (4) = LAWBARn_ENABLE | LAWBARn_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
+    LAWAR(4) = 0; /* reset */
+    LAWBAR(4) = 0x0000000;
+    LAWAR(4) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR) | LAW_SIZE_8GB;
 
     /* Wait for data initialization is complete */
     while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
@@ -601,7 +554,35 @@ void hal_prepare_boot(void)
 
 }
 
+
+int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
+{
+    return 0;
+}
+
+int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+{
+    return 0;
+}
+
+int ext_flash_erase(uintptr_t address, int len)
+{
+    return 0;
+}
+
+void ext_flash_lock(void)
+{
+
+}
+
+void ext_flash_unlock(void)
+{
+
+}
+
+#ifdef MMU
 void* hal_get_dts_address(void)
 {
     return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
 }
+#endif
