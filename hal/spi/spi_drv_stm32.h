@@ -279,17 +279,8 @@
 #ifndef SPI_MOSI_PIN_AF
 #define SPI_MOSI_PIN_AF  SPI_PIN_AF
 #endif
-#ifndef SPI_CS_FLASH_AF
-#define SPI_CS_FLASH_AF  SPI_PIN_AF
-#endif
-#ifndef SPI_CS_TPM_AF
-#define SPI_CS_TPM_AF    SPI_PIN_AF
-#endif
 
 #ifdef QSPI_FLASH
-#ifndef QSPI_CS_FLASH_AF
-#define QSPI_CS_FLASH_AF  QSPI_PIN_AF
-#endif
 #ifndef QSPI_CLOCK_PIN_AF
 #define QSPI_CLOCK_PIN_AF QSPI_PIN_AF
 #endif

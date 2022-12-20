@@ -205,7 +205,7 @@ src/keystore.c: $(PRIVATE_KEY)
 keys: $(PRIVATE_KEY)
 
 clean:
-	@rm -f src/*.o hal/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
+	@rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
 	@rm -f *.bin *.elf wolfboot.map test-update.rom *.hex config/target.ld
 	@$(MAKE) -C test-app clean
 	@$(MAKE) -C tools/check_config clean
