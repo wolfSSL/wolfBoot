@@ -26,6 +26,15 @@
 #define CCSRBAR (0xFF700000)
 #define SYS_CLK (400000000)
 
+/* Global Utilities (GUTS) */
+#define GUTS_PORPLLSR *((volatile uint32_t*)(CCSRBAR + 0x0UL)) /* POR PLL ratio status register */
+
+/* Local Bus Controller (LBC) */
+#define LBC_BASE       (CCSRBAR + 0x5000)
+#define LBC_LBCR       *((volatile uint32_t*)(LBC_BASE + 0xD0))
+#define LBC_LBCR_ABSWP (1 << 19) /* Address byte swap for 16-bit port size */
+
+
 /* P1021 PC16552D Dual UART */
 #define BAUD_RATE 115200
 #define UART_SEL 0 /* select UART 0 or 1 */
@@ -158,13 +167,21 @@ enum law_sizes {
 #define ELBC_BASE        (CCSRBAR + 0x5000)
 #define ELBC_MAX_BANKS   8
 
-#define ELBC_BR(n) *((volatile uint32_t*)(ELBC_BASE + 0x0000 + (n * 0x8))) /* Base registers */
-#define ELBC_OR(n) *((volatile uint32_t*)(ELBC_BASE + 0x0000 + (n * 0x8))) /* Options registers */
-#define ELBC_MDR   *((volatile uint32_t*)(ELBC_BASE + 0x88)) /* memory data register */
-#define ELBC_FIR   *((volatile uint32_t*)(ELBC_BASE + 0xE4)) /* flash instruction register */
-#define ELBC_FCR   *((volatile uint32_t*)(ELBC_BASE + 0xE8))  /* flash command register */
-#define ELBC_FBAR  *((volatile uint32_t*)(ELBC_BASE + 0xEC))  /* flash address register - OR_PGS=0 (shift 5), OR_PGS=1 (shift 6) */
-#define ELBC_FPAR  *((volatile uint32_t*)(ELBC_BASE + 0xF0))  /* flash page address register*/
+#define ELBC_BR(n)  *((volatile uint32_t*)(ELBC_BASE + 0x0000 + (n * 0x8))) /* Base registers */
+#define ELBC_OR(n)  *((volatile uint32_t*)(ELBC_BASE + 0x0000 + (n * 0x8))) /* Options registers */
+#define ELBC_MDR    *((volatile uint32_t*)(ELBC_BASE + 0x88))  /* memory data register */
+#define ELBC_LSOR   *((volatile uint32_t*)(ELBC_BASE + 0x90))  /* operation initiation register */
+#define ELBC_FMR    *((volatile uint32_t*)(ELBC_BASE + 0xE0))  /* flash mode register */
+#define ELBC_FIR    *((volatile uint32_t*)(ELBC_BASE + 0xE4))  /* flash instruction register */
+#define ELBC_FCR    *((volatile uint32_t*)(ELBC_BASE + 0xE8))  /* flash command register */
+#define ELBC_FBAR   *((volatile uint32_t*)(ELBC_BASE + 0xEC))  /* flash address register - OR_PGS=0 (shift 5), OR_PGS=1 (shift 6) */
+#define ELBC_FPAR   *((volatile uint32_t*)(ELBC_BASE + 0xF0))  /* flash page address register */
+#define ELBC_FBCR   *((volatile uint32_t*)(ELBC_BASE + 0xF4))  /* flash byte count register */
+
+#define ELBC_LTESR  *((volatile uint32_t*)(ELBC_BASE + 0xB0))  /* transfer error status register */
+#define ELBC_LTEIR  *((volatile uint32_t*)(ELBC_BASE + 0xB8))  /* transfer error interrupt enable register */
+#define ELBC_LTEATR *((volatile uint32_t*)(ELBC_BASE + 0xBC))  /* transfer error attributes register */
+
 
 #define ELBC_BR_ADDR(n)   (((uint32_t)n) & 0xFFFF8000) /* Physical base address - upper 17-bits */
 #define ELBC_BR_PS(n)     (((n) & 0x3) << 12) /* port size - 1=8-bit, 2=16-bit */
@@ -187,24 +204,31 @@ enum law_sizes {
 #define ELBC_OR_TRLX      (1 << 2)  /* timing related */
 #define ELBC_OR_EHTR      (1 << 1)  /* extended hold time - LRLX=0 (0=1 or 1=2), LRLX=1 (0=2 or 1=8) inserted idle clock cycles */
 
+#define ELBC_LSOR_BANK(n) ((n) & 0x7) /* flash bank 0-7 */
+
+#define ELBC_FMR_CWTO(n)  /* command wait timeout */
+#define ELBC_FMR_BOOT     (1 << 11) /* flash auto-boot lead mode 0=FCM is op normal, 1=eLBC autoload 4-Kbyte boot block */
+#define ELBC_FMR_ECCM     (1 << 8)  /* ECC mode 0=ECC is checked/calc 6/8 spare, 1=8/10 spare */
+#define ELBC_FMR_AL(n)    (((n) & 0x3) << 4) /* address length */
+#define ELBC_FMR_OP(n)    (((n) & 0x3) << 0) /* flash operation 0=normal, 1=sim auto-boot block load, 2=exe FIR cmd w/write protect enable, 3=exe FIR cmd */
+
 #define ELBC_FIR_OP(s,op) ((op) & 0xF) << (28 - ((s % 8) * 4)) /* up to 8 sequences of instructions */
-    /* 0=NOP-No-operation and end of operation sequence,
-     * 1=CA-Issue current column address as set in FPAR, with length set by ORx[PGS]
-     * 2=PA-Issue current block+page address as set in FBAR and FPAR, with length set by FMR[AL]
-     * 3=UA-Issue user-defined address byte from next AS field in MDR
-     * 4=CM0-Issue command from FCR[CMD0]
-     * 5=CM1-Issue command from FCR[CMD1]
-     * 6=CM2-Issue command from FCR[CMD2]
-     * 7=CM3-Issue command from FCR[CMD3]
-     * 8=WB-Write FBCR bytes of data from current FCM buffer to Flash device
-     * 9=WS-Write one byte (8b port) of data from next AS field of MDR to Flash device
-     * 10=RB-Read FBCR bytes of data from Flash device into current FCM RAM buffer
-     * 11=RS-Read one byte (8b port) of data from Flash device into next AS field of MDR
-     * 12=CW0-Wait for LFRB to return high or time-out, then issue command from FCR[CMD0]
-     * 13=CW1-Wait for LFRB to return high or time-out, then issue command from FCR[CMD1]
-     * 14=RBW-Wait for LFRB to return high or time-out, then read FBCR bytes of data from Flash device into current FCM RAM buffer
-     * 15=RSW-Wait for LFRB to return high or time-out, then read one byte (8b port) of data from Flash device into next AS field of MDR
-     */
+#define ELBC_FIR_OP_NOP 0  /* No-operation and end of operation sequence */
+#define ELBC_FIR_OP_CA  1  /* Issue current column address as set in FPAR, with length set by ORx[PGS] */
+#define ELBC_FIR_OP_PA  2  /* Issue current block+page address as set in FBAR and FPAR, with length set by FMR[AL] */
+#define ELBC_FIR_OP_UA  3  /* Issue user-defined address byte from next AS field in MDR */
+#define ELBC_FIR_OP_CM0 4  /* Issue command from FCR[CMD0] */
+#define ELBC_FIR_OP_CM1 5  /* Issue command from FCR[CMD1] */
+#define ELBC_FIR_OP_CM2 6  /* Issue command from FCR[CMD2] */
+#define ELBC_FIR_OP_CM3 7  /* Issue command from FCR[CMD3] */
+#define ELBC_FIR_OP_WB  8  /* Write FBCR bytes of data from current FCM buffer to Flash device */
+#define ELBC_FIR_OP_WS  9  /* Write one byte (8b port) of data from next AS field of MDR to Flash device */
+#define ELBC_FIR_OP_RB  10 /* Read FBCR bytes of data from Flash device into current FCM RAM buffer */
+#define ELBC_FIR_OP_RS  11 /* Read one byte (8b port) of data from Flash device into next AS field of MDR */
+#define ELBC_FIR_OP_CW0 12 /* Wait for LFRB to return high or time-out, then issue command from FCR[CMD0] */
+#define ELBC_FIR_OP_CW1 13 /* Wait for LFRB to return high or time-out, then issue command from FCR[CMD1] */
+#define ELBC_FIR_OP_RBW 14 /* Wait for LFRB to return high or time-out, then read FBCR bytes of data from Flash device into current FCM RAM buffer */
+#define ELBC_FIR_OP_RSW 15 /* Wait for LFRB to return high or time-out, then read one byte (8b port) of data from Flash device into next AS field of MDR */
 #define ELBC_FCR_CMD(s,cmd) (((cmd) & 0xFF) << (24 - ((s % 4) * 8))) /* up to 4 command opcodes */
 
 #define ELBC_FBAR_ADDR(n) (((n) >> 5) & 0xFFFFFF)
@@ -212,7 +236,11 @@ enum law_sizes {
 #define ELBC_FPAR_MS      (1 << 9) /* main/spare region locator */
 #define ELBC_FPAR_CI(n)   ((n) & 0x1FF)
 
+#define ELBC_LTESR_FCT (1 << 30) /* FCM command timeout */
+#define ELBC_LTESR_PAR (1 << 29) /* Parity of ECC error */
+#define ELBC_LTESR_CC  (1 << 0)  /* FCM command completion event */
 
+#define ELBC_NAND_MASK (ELBC_LTESR_FCT | ELBC_LTESR_PAR | ELBC_LTESR_CC)
 
 
 /* IFC AMASK - RM Table 12-6 - Count of MSB minus 1 */
@@ -239,7 +267,7 @@ enum elbc_amask_sizes {
 
 
 /* NAND Flash */
-#define FLASH_BASE        0xEC000000
+#define FLASH_BASE        0xFC000000 /* memory used for transfering block to/from NAND */
 
 #define FLASH_BANK_SIZE   (64*1024*1024)
 #define FLASH_PAGE_SIZE   (1024) /* program buffer */
@@ -250,6 +278,20 @@ enum elbc_amask_sizes {
 
 #define FLASH_ERASE_TOUT  60000 /* Flash Erase Timeout (ms) */
 #define FLASH_WRITE_TOUT  500   /* Flash Write Timeout (ms) */
+
+
+/* NAND Flash Commands */
+#define NAND_CMD_READ_ID      0x90
+#define NAND_CMD_STATUS       0x70
+#define NAND_CMD_READA        0x00
+#define NAND_CMD_READB        0x01
+#define NAND_CMD_READC        0x50
+#define NAND_CMD_PAGE_PROG1   0x80
+#define NAND_CMD_PAGE_PROG2   0x10
+#define NAND_CMD_BLOCK_ERASE1 0x60
+#define NAND_CMD_BLOCK_ERASE2 0xD0
+#define NAND_CMD_RESET        0xFF
+
 
 /* DDR */
 #if 1
@@ -382,10 +424,6 @@ void uart_write(const char* buf, uint32_t sz)
 /* called from boot_ppc_start.S */
 void law_init(void)
 {
-    /* IFC - NAND Flash */
-    LAWAR (1) = 0; /* reset */
-    LAWBAR(1) = FLASH_BASE;
-    LAWAR (1) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_ELBC) | LAW_SIZE_64MB;
 
 }
 
@@ -407,8 +445,43 @@ void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
     write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
 }
 
+static void hal_flash_set_addr(int col, int page)
+{
+    ELBC_FBAR = ELBC_FBAR_ADDR(page);
+    ELBC_FPAR = ELBC_FPAR_PI(page) | ELBC_FPAR_CI(col);
+}
+
+static int hal_flash_command()
+{
+
+    /* Read Flash ID */
+    ELBC_FIR = ELBC_FIR_OP(0, ELBC_FIR_OP_CW0) |
+               ELBC_FIR_OP(1, ELBC_FIR_OP_UA) |
+               ELBC_FIR_OP(2, ELBC_FIR_OP_RBW);
+    ELBC_FCR = ELBC_FCR_CMD(0, NAND_CMD_READ_ID);
+    ELBC_FBCR = 5;
+    hal_flash_set_addr(0, 0);
+
+    ELBC_FMR = ELBC_FMR_OP(3); /* execure FIR with write support */
+    ELBC_MDR = 0;
+    ELBC_LSOR = ELBC_LSOR_BANK(0);
+
+    /* wait for FCM complete flag */
+    while (!(ELBC_LTESR & ELBC_LTESR_CC));
+    /* clear interrupt */
+    ELBC_LTESR &= ELBC_NAND_MASK;
+    ELBC_LTEATR = 0;
+
+    /* TODO: Download from correct base buffer page (8 - 1KB pages) */
+    /* Example: FLASH_BASE + (0x400 * page) + */
+
+    return 0;
+}
+
 static void hal_flash_init(void)
 {
+    uint8_t flash_id[8];
+
     /* NAND Definitions (CS0) */
     /* FSM, 8-bit, ECC check/gen enable, valid */
     ELBC_BR(0) = ELBC_BR_ADDR(FLASH_BASE) |
@@ -418,6 +491,13 @@ static void hal_flash_init(void)
     ELBC_OR(0) = ELBC_OR_AMASK(ELBC_AMASK_32MB) |
         ELBC_OR_CSCT | ELBC_OR_CST | ELBC_OR_CHT | ELBC_OR_SCY(1) |
         ELBC_OR_TRLX | ELBC_OR_EHTR;
+
+    /* Clear event registers */
+    ELBC_LTESR = ELBC_NAND_MASK;
+    ELBC_LTEATR = 0;
+
+    /* Enable interrupts */
+    ELBC_LTEIR = ELBC_NAND_MASK;
 
 }
 
@@ -492,6 +572,8 @@ void hal_ddr_init(void)
 
 void hal_init(void)
 {
+    LBC_LBCR |= LBC_LBCR_ABSWP; /* Enable LBC address byte swap */
+
 #ifdef DEBUG_UART
     uint32_t fw;
 
@@ -521,32 +603,12 @@ int hal_flash_erase(uint32_t address, int len)
 
 void hal_flash_unlock(void)
 {
-    /* Disable all flash protection bits */
-    /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xC0C0;
-    /* clear all protection bit (80h/30h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x8080;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x3030;
-    /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+
 }
 
 void hal_flash_lock(void)
 {
-    /* Enable all flash protection bits */
-    /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xC0C0;
-    /* set all protection bit (A0h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0xA0A0;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
-    /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+
 }
 
 void hal_prepare_boot(void)
