@@ -281,6 +281,10 @@
 #endif
 
 #ifdef QSPI_FLASH
+#ifndef QSPI_CS_FLASH_AF
+#define QSPI_CS_FLASH_AF  QSPI_PIN_AF
+#endif
+
 #ifndef QSPI_CLOCK_PIN_AF
 #define QSPI_CLOCK_PIN_AF QSPI_PIN_AF
 #endif
@@ -358,7 +362,7 @@
 #define QUADSPI_CCR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x14)) /* Communication Configuration register */
 #define QUADSPI_AR        (*(volatile uint32_t *)(QUADSPI_BASE + 0x18)) /* Address register */
 #define QUADSPI_ABR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x1C)) /* Alternate Bytes register */
-#define QUADSPI_DR        (*(volatile uint8_t  *)(QUADSPI_BASE + 0x23)) /* Data register */
+#define QUADSPI_DR        (*(volatile uint8_t  *)(QUADSPI_BASE + 0x20)) /* Data register */
 #define QUADSPI_PSMKR     (*(volatile uint32_t *)(QUADSPI_BASE + 0x24)) /* Polling Status Mask register */
 #define QUADSPI_PSMAR     (*(volatile uint32_t *)(QUADSPI_BASE + 0x28)) /* Polling Status Match register */
 #define QUADSPI_PIR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x2C)) /* Polling Interval register */

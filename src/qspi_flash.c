@@ -136,7 +136,7 @@ static int qspi_flash_read_id(uint8_t* id, uint32_t idSz)
     qspi_status((uint8_t*)&status);
 #ifdef DEBUG_QSPI
     wolfBoot_printf("Flash: Ret %d: ID: %x, Cmd %x, status %x\n",
-        ret, (uint32_t)data, FLASH_READ_CMD, status);
+        ret, *((uint32_t*)data), READ_ID_CMD, status);
 #endif
 
     /* optionally return id data */

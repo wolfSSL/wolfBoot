@@ -134,33 +134,33 @@ static void RAMFUNCTION stm_pins_setup(void)
 #ifdef SPI_FLASH
     #ifdef PLATFORM_stm32l0
     stm_gpio_config(SPI_CLOCK_PIO_BASE, SPI_CLOCK_PIN, GPIO_MODE_AF,
-            SPI_CLOCK_PIN_AF, 2, 3);
+        SPI_CLOCK_PIN_AF, 2, 3);
     stm_gpio_config(SPI_MOSI_PIO_BASE, SPI_MOSI_PIN, GPIO_MODE_AF,
-            SPI_MOSI_PIN_AF, 2, 3);
+        SPI_MOSI_PIN_AF, 2, 3);
     stm_gpio_config(SPI_MISO_PIO_BASE, SPI_MISO_PIN, GPIO_MODE_AF,
-            SPI_MISO_PIN_AF, 2, 3);
+        SPI_MISO_PIN_AF, 2, 3);
     #else
     stm_gpio_config(SPI_CLOCK_PIO_BASE, SPI_CLOCK_PIN, GPIO_MODE_AF,
-            SPI_CLOCK_PIN_AF, 0, 3);
+        SPI_CLOCK_PIN_AF, 0, 3);
     stm_gpio_config(SPI_MOSI_PIO_BASE, SPI_MOSI_PIN, GPIO_MODE_AF,
-            SPI_MOSI_PIN_AF, 0, 0);
+        SPI_MOSI_PIN_AF, 0, 0);
     stm_gpio_config(SPI_MISO_PIO_BASE, SPI_MISO_PIN, GPIO_MODE_AF,
-            SPI_MISO_PIN_AF, 1, 0);
+        SPI_MISO_PIN_AF, 1, 0);
     #endif
 #endif
 #ifdef QSPI_FLASH
-    stm_gpio_config(QSPI_CS_PIO_BASE, QSPI_CS_FLASH_PIN, GPIO_MODE_OUTPUT,
-            0, 1, 3);
+    stm_gpio_config(QSPI_CS_PIO_BASE, QSPI_CS_FLASH_PIN, GPIO_MODE_AF,
+        QSPI_CS_FLASH_AF, 1, 3);
     stm_gpio_config(QSPI_CLOCK_PIO_BASE, QSPI_CLOCK_PIN, GPIO_MODE_AF,
-            QSPI_CLOCK_PIN_AF, 0, 3);
+        QSPI_CLOCK_PIN_AF, 0, 3);
     stm_gpio_config(QSPI_IO0_PIO_BASE, QSPI_IO0_PIN, GPIO_MODE_AF,
-            QSPI_IO0_PIN_AF, 0, 3);
+        QSPI_IO0_PIN_AF, 0, 3);
     stm_gpio_config(QSPI_IO1_PIO_BASE, QSPI_IO1_PIN, GPIO_MODE_AF,
-            QSPI_IO1_PIN_AF, 0, 3);
+        QSPI_IO1_PIN_AF, 0, 3);
     stm_gpio_config(QSPI_IO2_PIO_BASE, QSPI_IO2_PIN, GPIO_MODE_AF,
-            QSPI_IO2_PIN_AF, 0, 3);
+        QSPI_IO2_PIN_AF, 0, 3);
     stm_gpio_config(QSPI_IO3_PIO_BASE, QSPI_IO3_PIN, GPIO_MODE_AF,
-            QSPI_IO3_PIN_AF, 0, 3);
+        QSPI_IO3_PIN_AF, 0, 3);
 #endif
 }
 
@@ -320,11 +320,13 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 
         /* Configure chip selects */
 #ifdef SPI_FLASH
-        stm_gpio_config(SPI_CS_PIO_BASE, SPI_CS_FLASH, GPIO_MODE_OUTPUT, 0, 1, 3);
+        stm_gpio_config(SPI_CS_PIO_BASE, SPI_CS_FLASH, GPIO_MODE_OUTPUT,
+            0, 1, 3);
         spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
 #endif
 #ifdef WOLFBOOT_TPM
-        stm_gpio_config(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM, GPIO_MODE_OUTPUT, 0, 1, 3);
+        stm_gpio_config(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM, GPIO_MODE_OUTPUT,
+            0, 1, 3);
         spi_cs_off(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
 #endif
 
@@ -336,13 +338,18 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         /* Wait till BUSY flag cleared */
         while (QUADSPI_SR & QUADSPI_SR_BUSY) {};
 
-        /* Configure QSPI Clock Prescaler (240/X), Flash ID 0, Dual Flash=0, Sample Shift=None */
-        QUADSPI_CR &= ~(QUADSPI_CR_PRESCALER_MASK | QUADSPI_CR_FSEL | QUADSPI_CR_DFM | QUADSPI_CR_SSHIFT);
+        /* Configure QSPI Clock Prescaler (240/X), Flash ID 0, Dual Flash=0,
+         * Sample Shift=None */
+        QUADSPI_CR &= ~(QUADSPI_CR_PRESCALER_MASK | QUADSPI_CR_FSEL |
+            QUADSPI_CR_DFM | QUADSPI_CR_SSHIFT);
         QUADSPI_CR |= (QUADSPI_CR_PRESCALER(HCLK3_MHZ/QSPI_CLOCK_MHZ));
 
-        /* Configure QSPI Flash Size (16MB), CS High Time (1 clock) and Clock Mode (0) */
-        QUADSPI_DCR &= ~(QUADSPI_DCR_FSIZE_MASK | QUADSPI_DCR_CSHT_MASK | QUADSPI_DCR_CKMODE_3);
-        QUADSPI_DCR |= (QUADSPI_DCR_FSIZE(22) | QUADSPI_DCR_CSHT(0) | QUADSPI_DCR_CKMODE_0);
+        /* Configure QSPI Flash Size (16MB), CS High Time (1 clock) and
+         * Clock Mode (0) */
+        QUADSPI_DCR &= ~(QUADSPI_DCR_FSIZE_MASK | QUADSPI_DCR_CSHT_MASK |
+            QUADSPI_DCR_CKMODE_3);
+        QUADSPI_DCR |= (QUADSPI_DCR_FSIZE(22) | QUADSPI_DCR_CSHT(0) |
+            QUADSPI_DCR_CKMODE_0);
 #endif /* QSPI_FLASH */
 #ifdef SPI_FLASH
         /* Configure SPI1 for master mode */
