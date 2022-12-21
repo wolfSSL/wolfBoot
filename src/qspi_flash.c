@@ -52,7 +52,7 @@
 #endif
 #define FLASH_NUM_SECTORS      (FLASH_DEVICE_SIZE/FLASH_SECTOR_SIZE)
 
-/* QSPI Configuration */
+/* QSPI Configuration - Use single/dual/quad mode for data transfers */
 #ifndef QSPI_ADDR_MODE
 #define QSPI_ADDR_MODE         QSPI_ADDR_MODE_SPI
 #endif
@@ -60,7 +60,7 @@
 #define QSPI_ADDR_SZ           3
 #endif
 #ifndef QSPI_DUMMY_READ
-#define QSPI_DUMMY_READ        (8) /* Number of dummy clock cycles for reads */
+#define QSPI_DUMMY_READ        8 /* Number of dummy clock cycles for reads */
 #endif
 #ifndef QSPI_FLASH_READY_TRIES
 #define QSPI_FLASH_READY_TRIES 1000
@@ -135,7 +135,6 @@
 /* forward declarations */
 static int qspi_wait_ready(void);
 static int qspi_status(uint8_t* status);
-static int qspi_wait_we(void);
 #ifdef TEST_FLASH
 static int test_flash(void);
 #endif
@@ -168,18 +167,35 @@ static int qspi_flash_read_id(uint8_t* id, uint32_t idSz)
 static int qspi_write_enable(void)
 {
     int ret;
+    uint32_t timeout;
+    uint8_t status = 0;
 
+    /* send write enable */
     ret = qspi_transfer(WRITE_ENABLE_CMD, 0, 0, NULL, 0, NULL, 0, 0,
         QSPI_ADDR_MODE_SPI);
 #if defined(DEBUG_QSPI) && DEBUG_QSPI > 1
     wolfBoot_printf("Write Enable: Ret %d\n", ret);
 #endif
 
-    qspi_wait_ready();
+    /* wait until write enabled and not busy */
+    timeout = 0;
+    while (++timeout < QSPI_FLASH_READY_TRIES) {
+        ret = qspi_status(&status);
+        if (ret == 0 && (status & FLASH_SR_WRITE_EN)
+                     && (status & FLASH_SR_BUSY) == 0) {
+            break;
+        }
+    }
+    if (timeout >= QSPI_FLASH_READY_TRIES) {
+#ifdef DEBUG_QSPI
+        wolfBoot_printf("Flash WE Timeout!\n");
+#endif
+        return -1; /* timeout */
+    }
 
-    ret = qspi_wait_we();
 #if defined(DEBUG_QSPI) && DEBUG_QSPI > 1
-    wolfBoot_printf("Write Enabled: %s\n", ret == 0 ? "yes" : "no");
+    wolfBoot_printf("Write Enabled: %s\n",
+        (status & FLASH_SR_WRITE_EN) ? "yes" : "no");
 #endif
 
     return ret;
@@ -239,52 +255,33 @@ static int qspi_wait_ready(void)
     return -1;
 }
 
-static int qspi_wait_we(void)
-{
-    int ret;
-    uint32_t timeout;
-    uint8_t status = 0;
-
-    timeout = 0;
-    while (++timeout < QSPI_FLASH_READY_TRIES) {
-        ret = qspi_status(&status);
-        if (ret == 0 && (status & FLASH_SR_WRITE_EN)) {
-            return ret;
-        }
-    }
-
-#ifdef DEBUG_QSPI
-    wolfBoot_printf("Flash WE Timeout!\n");
-#endif
-    return -1;
-}
-
 #if QSPI_ADDR_MODE == QSPI_ADDR_MODE_QSPI
 static int qspi_quad_enable(void)
 {
     int ret;
     uint8_t data[4]; /* size multiple of uint32_t */
 
-    ret = qspi_write_enable();
-    if (ret == 0) {
-        memset(data, 0, sizeof(data));
-        ret = qspi_transfer(READ_SR2_CMD, 0, 0, NULL, 0, data, 1, 0,
-            QSPI_ADDR_MODE_SPI);
+    memset(data, 0, sizeof(data));
+    ret = qspi_transfer(READ_SR2_CMD, 0, 0, NULL, 0, data, 1, 0,
+        QSPI_ADDR_MODE_SPI);
 #ifdef DEBUG_QSPI
-        wolfBoot_printf("Status Reg 2: Ret %d, 0x%x\n", ret, data[0]);
+    wolfBoot_printf("Status Reg 2: Ret %d, 0x%x\n", ret, data[0]);
 #endif
+    if (ret == 0 && (data[0] & FLASH_SR2_QE) == 0) {
+        ret = qspi_write_enable();
         if (ret == 0) {
-            if ((data[0] & FLASH_SR2_QE) == 0) {
-                data[0] |= FLASH_SR2_QE;
-                ret = qspi_transfer(WRITE_SR2_CMD, 0, 0, data, 1, NULL, 0, 0,
-                    QSPI_ADDR_MODE_SPI);
+            memset(data, 0, sizeof(data));
+            data[0] |= FLASH_SR2_QE;
+            ret = qspi_transfer(WRITE_SR2_CMD, 0, 0, data, 1, NULL, 0, 0,
+                QSPI_ADDR_MODE_SPI);
 #ifdef DEBUG_QSPI
-        wolfBoot_printf("Setting Quad Enable: Ret %d, SR2 0x%x\n",
-        ret, data[0]);
+            wolfBoot_printf("Setting Quad Enable: Ret %d, SR2 0x%x\n",
+                ret, data[0]);
 #endif
-            }
+
+            qspi_wait_ready();
+            qspi_write_disable();
         }
-        qspi_write_disable();
     }
     return ret;
 }
@@ -296,8 +293,7 @@ static int qspi_enter_4byte_addr(void)
     int ret = qspi_write_enable();
     if (ret == 0) {
         ret = qspi_transfer(ENTER_4B_ADDR_MODE_CMD, 0, 0,
-            NULL, 0, NULL, 0,
-            0, QSPI_ADDR_MODE_SPI);
+            NULL, 0, NULL, 0, 0, QSPI_ADDR_MODE_SPI);
 #ifdef DEBUG_QSPI
         wolfBoot_printf("Enter 4-byte address mode: Ret %d\n", ret);
 #endif
@@ -313,8 +309,7 @@ static int qspi_exit_4byte_addr(void)
     int ret = qspi_write_enable();
     if (ret == 0) {
         ret = qspi_transfer(EXIT_4B_ADDR_MODE_CMD, 0, 0,
-            NULL, 0, NULL, 0,
-            0, QSPI_ADDR_MODE_SPI);
+            NULL, 0, NULL, 0, 0, QSPI_ADDR_MODE_SPI);
 #ifdef DEBUG_QSPI
         wolfBoot_printf("Enter 4-byte address mode: Ret %d\n", ret);
 #endif
@@ -357,8 +352,7 @@ int spi_flash_sector_erase(uint32_t address)
     if (ret == 0) {
         /* ------ Erase Flash ------ */
         ret = qspi_transfer(SEC_ERASE_CMD, address, QSPI_ADDR_SZ,
-            NULL, 0, NULL, 0,
-            0, QSPI_ADDR_MODE_SPI);
+            NULL, 0, NULL, 0, 0, QSPI_ADDR_MODE_SPI);
 #ifdef DEBUG_QSPI
         wolfBoot_printf("Flash Erase: Ret %d, Address 0x%x\n", ret, address);
 #endif
@@ -384,8 +378,7 @@ int spi_flash_read(uint32_t address, void *data, int len)
 
     /* ------ Read Flash ------ */
     ret = qspi_transfer(FLASH_READ_CMD, address, QSPI_ADDR_SZ,
-        NULL, 0, data, len,
-        QSPI_DUMMY_READ, QSPI_ADDR_MODE);
+        NULL, 0, data, len, QSPI_DUMMY_READ, QSPI_ADDR_MODE);
 #ifdef DEBUG_QSPI
     wolfBoot_printf("Flash Read: Ret %d, Address 0x%x, Len %d, Cmd 0x%x\n",
         ret, address, len, FLASH_READ_CMD);

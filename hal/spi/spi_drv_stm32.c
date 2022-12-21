@@ -218,6 +218,9 @@ int qspi_transfer(
         mode = 0; /* no data */
     }
 
+    /* Enable the QSPI peripheral */
+    QUADSPI_CR |= QUADSPI_CR_EN;
+
     if (dsz > 0) {
         QUADSPI_DLR = dsz-1;
     }
@@ -226,9 +229,6 @@ int qspi_transfer(
         amode = 1;
         adsz = addrSz-1;
     }
-
-    /* Enable the QSPI peripheral */
-    QUADSPI_CR |= QUADSPI_CR_EN;
 
     /* Configure QSPI: CCR register with all communications parameters */
     /* mode 1=1SPI, 2=2SPI, 3=4SPI */
@@ -303,9 +303,9 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 
         /* Setup clocks */
 #ifdef QSPI_FLASH
-        /* Enable QUADSPI clock on HCLK3 (240MHz max) */
+        /* Select QUADSPI clock source */
         RCC_D1CCIPR &= ~RCC_D1CCIPR_QSPISEL_MASK;
-        RCC_D1CCIPR |= RCC_D1CCIPR_QSPISEL(0);
+        RCC_D1CCIPR |= RCC_D1CCIPR_QSPISEL(QSPI_CLOCK_SEL);
         AHB3_CLOCK_EN |= RCC_AHB3ENR_QSPIEN;
 #endif
 #ifdef SPI_FLASH
@@ -333,16 +333,16 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 #ifdef QSPI_FLASH
         /* Configure QSPI FIFO Threshold (1 byte) */
         QUADSPI_CR &= ~QUADSPI_CR_FTHRES_MASK;
-        QUADSPI_CR |= QUADSPI_CR_FTHRES(1);
+        QUADSPI_CR |= QUADSPI_CR_FTHRES(4);
 
         /* Wait till BUSY flag cleared */
         while (QUADSPI_SR & QUADSPI_SR_BUSY) {};
 
-        /* Configure QSPI Clock Prescaler (240/X), Flash ID 0, Dual Flash=0,
+        /* Configure QSPI Clock Prescaler (64/X), Flash ID 0, Dual Flash=0,
          * Sample Shift=None */
         QUADSPI_CR &= ~(QUADSPI_CR_PRESCALER_MASK | QUADSPI_CR_FSEL |
             QUADSPI_CR_DFM | QUADSPI_CR_SSHIFT);
-        QUADSPI_CR |= (QUADSPI_CR_PRESCALER(HCLK3_MHZ/QSPI_CLOCK_MHZ));
+        QUADSPI_CR |= (QUADSPI_CR_PRESCALER((QSPI_CLOCK_BASE/QSPI_CLOCK_MHZ)));
 
         /* Configure QSPI Flash Size (16MB), CS High Time (1 clock) and
          * Clock Mode (0) */

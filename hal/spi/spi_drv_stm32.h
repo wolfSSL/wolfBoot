@@ -165,13 +165,25 @@
 #define RCC_D1CCIPR        (*(volatile uint32_t *)(RCC_BASE + 0x4C)) /* RM0433 - 8.7.19 (RCC_D1CCIPR) */
 #define RCC_D1CCIPR_QSPISEL_MASK (0x3 << 4)
 #define RCC_D1CCIPR_QSPISEL(sel) (((sel) & 0x3) << 4) /* 0=hclk3, 1=pll1_q_ck, 2=pll2_r_ck, 3=per_ck */
+#define RCC_D1CCIPR_QSPISEL_HCLK3 0
+#define RCC_D1CCIPR_QSPISEL_PLL1  1
+#define RCC_D1CCIPR_QSPISEL_PLL2  2
+#define RCC_D1CCIPR_QSPISEL_PERCK 3
 #define AHB3_CLOCK_RST     (*(volatile uint32_t *)(RCC_BASE + 0x7C)) /* RM0433 - 8.7.28 - RCC_AHB3RSTR */
 #define AHB3_CLOCK_EN      (*(volatile uint32_t *)(RCC_BASE + 0xD4)) /* RM0433 - 8.7.40 - RCC_AHB3ENR */
 #define RCC_AHB3ENR_QSPIEN (1 << 14) /* QUADSPI and QUADSPI Delay clock enabled */
 
-#define HCLK3_MHZ      240000000
+#define HCLK3_MHZ       240000000
+#define PERCK_MHZ       64000000
+#ifndef QSPI_CLOCK_BASE
+#define QSPI_CLOCK_BASE PERCK_MHZ
+#endif
+#ifndef QSPI_CLOCK_SEL
+/* Enable QUADSPI clock on PER_CK (64MHz) */
+#define QSPI_CLOCK_SEL  RCC_D1CCIPR_QSPISEL_PERCK
+#endif
 #ifndef QSPI_CLOCK_MHZ
-#define QSPI_CLOCK_MHZ 8000000
+#define QSPI_CLOCK_MHZ  16000000
 #endif
 
 /* QSPI CLK PB2 */
@@ -370,13 +382,14 @@
 
 #define QUADSPI_CR_PRESCALER_MASK (0xFF << 24)
 #define QUADSPI_CR_PRESCALER(pre) ((((pre)-1) & 0xFF) << 24) /* Clock prescaler: quadspi_ker_ck/pre+1 */
+#define QUADSPI_CR_FTIE           (1 << 13) /* FIFO threshold interrupt enable */
 #define QUADSPI_CR_FTHRES_MASK    (0xF << 8)
-#define QUADSPI_CR_FTHRES(thr)    ((((thr)-1) & 0xF) << 8) /* FIFO threshold level */
-#define QUADSPI_CR_FSEL           (0x1 << 7)               /* 0=Flash 1 or 1=Flash 2 */
-#define QUADSPI_CR_DFM            (0x1 << 6)               /* Dual-flash mode */
-#define QUADSPI_CR_SSHIFT         (0x1 << 4)               /* Sample shift 1=1/2 cycle shift */
-#define QUADSPI_CR_ABORT          (0x1 << 1)               /* Abort request */
-#define QUADSPI_CR_EN             (0x1 << 0)               /* Enable the QUADSPI */
+#define QUADSPI_CR_FTHRES(thr)    ((((thr)-1) & 0x1F) << 8) /* FIFO threshold level */
+#define QUADSPI_CR_FSEL           (1 << 7)  /* 0=Flash 1 or 1=Flash 2 */
+#define QUADSPI_CR_DFM            (1 << 6)  /* Dual-flash mode */
+#define QUADSPI_CR_SSHIFT         (1 << 4)  /* Sample shift 1=1/2 cycle shift */
+#define QUADSPI_CR_ABORT          (1 << 1)  /* Abort request */
+#define QUADSPI_CR_EN             (1 << 0)  /* Enable the QUADSPI */
 
 #define QUADSPI_CCR_DDRM          (1 << 31) /* Double data rate mode */
 #define QUADSPI_CCR_DHHC          (1 << 30) /* Delay the data output by 1/4 of the QUADSPI output clock cycle in DDR mode */
@@ -410,6 +423,6 @@
 
 #define QUADSPI_SR_TCF            (1 << 1)                  /* Transfer complete flag - set in indirect mode when the programmed number of data has been transferred */
 #define QUADSPI_SR_FTF            (1 << 2)                  /* FIFO threshold flag */
-#define QUADSPI_SR_BUSY           (1 << 5)                  /* Busy - operation is on going when set */
+#define QUADSPI_SR_BUSY           (1 << 5)                  /* Busy - operation is ongoing when set */
 
 #endif /* !SPI_DRV_STM32_H_INCLUDED */
