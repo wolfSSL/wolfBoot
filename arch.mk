@@ -164,7 +164,13 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
     LDFLAGS+=-mcpu=cortex-m33
     ifeq ($(TZEN),1)
-      CFLAGS += -mcmse
+      CFLAGS+=-mcmse
+      ifeq ($(WCSM),1)
+        OBJS+=./src/wc_callable.o
+        WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+        CFLAGS+=-DWOLFCRYPT_SECURE_MODE
+        SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
+      endif
     endif
     ifeq ($(SPMATH),1)
       ifeq ($(NO_ASM),1)

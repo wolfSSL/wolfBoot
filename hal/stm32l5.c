@@ -728,3 +728,5 @@ void hal_prepare_boot(void)
     led_unsecure();
 #endif
 }
+
+

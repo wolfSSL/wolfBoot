@@ -103,6 +103,10 @@ void main(void)
     boot_led_off();
     if (wolfBoot_current_firmware_version() > 1)
         boot_led_on();
+#ifdef WOLFBOOT_SECURE_CALLS
+    nsc_test();
+#endif
+
     while(1)
         ;
 }

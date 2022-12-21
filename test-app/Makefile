@@ -49,6 +49,10 @@ endif
 
 ifeq ($(TZEN),1)
     APP_OBJS+=../hal/$(TARGET)_ns.o
+    ifeq ($(WCSM),1)
+        APP_OBJS+=../src/wc_secure_calls.o
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS
+    endif
 else
     APP_OBJS+=../hal/$(TARGET).o
 endif
