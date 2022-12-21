@@ -248,7 +248,7 @@ int qspi_transfer(
 
     while (dsz > 0U) {
         if (fmode == 0) {
-            while ((QUADSPI_SR & QUADSPI_SR_FTF));
+            while ((QUADSPI_SR & QUADSPI_SR_FTF) == 0);
             QUADSPI_DR = *dptr;
         }
         else {

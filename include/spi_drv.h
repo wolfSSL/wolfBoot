@@ -60,11 +60,11 @@ uint8_t spi_read(void);
 
 
 #ifdef QSPI_FLASH
-enum QSPIMode {
-    QSPI_ADDR_MODE_SPI =  1,
-    QSPI_ADDR_MODE_DSPI = 2,
-    QSPI_ADDR_MODE_QSPI = 3,
-};
+
+/* these are used in macro logic, so must be defines */
+#define QSPI_ADDR_MODE_SPI  1
+#define QSPI_ADDR_MODE_DSPI 2
+#define QSPI_ADDR_MODE_QSPI 3
 
 int qspi_transfer(
     const uint8_t cmd, uint32_t addr, uint32_t addrSz,
