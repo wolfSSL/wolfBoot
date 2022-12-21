@@ -1037,10 +1037,20 @@ WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x84000
 WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 ```
 
+## NXP QorIQ P1021 PPC
+
+The NXP QorIQ P1021 is a PPC e500v2 based processor (two cores). This has been tested with a NAND boot source.
+
+wolfBoot supports loading from external flash using the eLBC FMC (Flash Machine) with NAND.
+
+When each e500 core comes out of reset, its MMU has one 4-Kbyte page defined at `0x0_FFFF_Fnnn`. For NAND boot the first 4KB is loaded to this region with the first offset jump instruction at `0x0_FFFF_FFFC`.
+
+
+
 
 ## NXP QorIQ T2080 PPC
 
-The NXP QorIQ T2080 is a PPC e6500 based processor. Support has been tested with the NAII 68PPC2.
+The NXP QorIQ T2080 is a PPC e6500 based processor (four cores). Support has been tested with the NAII 68PPC2.
 
 Example configurations for this target are provided in:
 * NXP T2080: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).

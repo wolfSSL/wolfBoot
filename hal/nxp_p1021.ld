@@ -4,10 +4,10 @@ ENTRY( _reset )
 
 /* On initial start, only a limited space(4k) is accessible.
  * Code here bootstraps to enable access to other needed address spaces */
-BOOTSTRAP_TLB = 0xEFFFF000;
+BOOTSTRAP_TLB = 0x00000000;
 
-/* Entry point where RCW directs code to execute from */
-BOOTSTRAP_ENTRY = 0xEFFFFFFC;
+/* Entry point where boot ROM directs code to execute from */
+BOOTSTRAP_ENTRY = 0x00000FFC;
 
 MEMORY
 {
