@@ -194,69 +194,61 @@ static void RAMFUNCTION spi_reset(void)
 }
 
 #ifdef QSPI_FLASH
-int qspi_transfer(
-    const uint8_t cmd, uint32_t addr, uint32_t addrSz,
-    const uint8_t* txData, uint32_t txSz,
-    uint8_t* rxData, uint32_t rxSz, uint32_t dummySz,
-    uint32_t mode)
+int qspi_transfer(uint8_t fmode, const uint8_t cmd,
+    uint32_t addr, uint32_t addrSz, uint32_t addrMode,
+    uint32_t alt, uint32_t altSz, uint32_t altMode,
+    uint32_t dummySz,
+    uint8_t* data, uint32_t dataSz, uint32_t dataMode)
 {
-    uint32_t fmode = 0, amode = 0;
-    uint32_t adsz = 0, dsz = 0;
-    uint8_t* dptr = NULL;
+    uint32_t adsz = 0, absz = 0;
 
-    if (txData != NULL && txSz > 0) {
-        fmode = 0; /* indirect write */
-        dsz = txSz;
-        dptr = (uint8_t*)txData;
+    if (addrSz > 0) {
+        adsz = addrSz-1;
     }
-    else if (rxData != NULL && rxSz > 0) {
-        fmode = 1; /* indirect read */
-        dsz = rxSz;
-        dptr = rxData;
-    }
-    else {
-        mode = 0; /* no data */
+    if (altSz > 0) {
+        absz = altSz-1;
     }
 
     /* Enable the QSPI peripheral */
     QUADSPI_CR |= QUADSPI_CR_EN;
 
-    if (dsz > 0) {
-        QUADSPI_DLR = dsz-1;
-    }
-
-    if (addrSz > 0) {
-        amode = 1;
-        adsz = addrSz-1;
+    if (dataSz > 0) {
+        QUADSPI_DLR = dataSz-1;
     }
 
     /* Configure QSPI: CCR register with all communications parameters */
     /* mode 1=1SPI, 2=2SPI, 3=4SPI */
     QUADSPI_CCR = (
-        QUADSPI_CCR_FMODE(fmode) |   /* Functional Mode */
-        QUADSPI_CCR_IMODE(1) |       /* Instruction Mode */
-        QUADSPI_CCR_ADMODE(amode) |  /* Address Mode */
-        QUADSPI_CCR_ADSIZE(adsz) |   /* Address Size */
-        QUADSPI_CCR_ABMODE(0) |      /* Alternate byte (none) */
-        QUADSPI_CCR_DMODE(mode) |    /* Data Mode */
-        QUADSPI_CCR_DCYC(dummySz) |  /* Dummy Cycles (between instruction and read) */
-        cmd                          /* Instruction / Command byte */
+        QUADSPI_CCR_FMODE(fmode) |     /* Functional Mode */
+        QUADSPI_CCR_IMODE(1) |         /* Instruction Mode - always single SPI */
+        QUADSPI_CCR_ADMODE(addrMode) | /* Address Mode */
+        QUADSPI_CCR_ADSIZE(adsz) |     /* Address Size */
+        QUADSPI_CCR_ABMODE(altMode) |  /* Alternate byte mode */
+        QUADSPI_CCR_ABSIZE(absz ) |    /* Alternate byte size */
+        QUADSPI_CCR_DMODE(dataMode) |  /* Data Mode */
+        QUADSPI_CCR_DCYC(dummySz) |    /* Dummy Cycles (between instruction and read) */
+        cmd                            /* Instruction / Command byte */
     );
+
+    /* Set optional alternate bytes */
+    if (altSz > 0) {
+        QUADSPI_ABR = alt;
+    }
 
     /* Set command address 4 or 3 byte */
     QUADSPI_AR = addr;
 
-    while (dsz > 0U) {
+    while (dataSz > 0U) {
         if (fmode == 0) {
             while ((QUADSPI_SR & QUADSPI_SR_FTF) == 0);
-            QUADSPI_DR = *dptr;
+            QUADSPI_DR = *data;
         }
         else {
             while ((QUADSPI_SR & (QUADSPI_SR_FTF | QUADSPI_SR_TCF)) == 0);
-            *dptr = QUADSPI_DR;
+            *data = QUADSPI_DR;
         }
-        dsz--;
-        dptr++;
+        dataSz--;
+        data++;
     }
 
     /* wait for transfer complete */

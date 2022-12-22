@@ -61,16 +61,21 @@ uint8_t spi_read(void);
 
 #ifdef QSPI_FLASH
 
-/* these are used in macro logic, so must be defines */
-#define QSPI_ADDR_MODE_SPI  1
-#define QSPI_ADDR_MODE_DSPI 2
-#define QSPI_ADDR_MODE_QSPI 3
+#define QSPI_MODE_WRITE 0
+#define QSPI_MODE_READ  1
 
-int qspi_transfer(
-    const uint8_t cmd, uint32_t addr, uint32_t addrSz,
-    const uint8_t* txData, uint32_t txSz,
-    uint8_t* rxData, uint32_t rxSz, uint32_t dummySz,
-    uint32_t mode);
+/* these are used in macro logic, so must be defines */
+#define QSPI_DATA_MODE_NONE 0
+#define QSPI_DATA_MODE_SPI  1
+#define QSPI_DATA_MODE_DSPI 2
+#define QSPI_DATA_MODE_QSPI 3
+
+int qspi_transfer(uint8_t fmode, const uint8_t cmd,
+    uint32_t addr, uint32_t addrSz, uint32_t addrMode,
+    uint32_t alt, uint32_t altSz, uint32_t altMode,
+    uint32_t dummySz,
+    uint8_t* data, uint32_t dataSz, uint32_t dataMode
+);
 #endif /* QSPI_FLASH */
 
 #endif /* SPI_FLASH || QSPI_FLASH */
