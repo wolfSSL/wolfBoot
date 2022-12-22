@@ -238,6 +238,21 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     /* Set command address 4 or 3 byte */
     QUADSPI_AR = addr;
 
+    /* Fill data 32-bits at a time */
+    while (dataSz >= 4U) {
+        if (fmode == 0) {
+            while ((QUADSPI_SR & QUADSPI_SR_FTF) == 0);
+            QUADSPI_DR32 = *(uint32_t*)data;
+        }
+        else {
+            while ((QUADSPI_SR & (QUADSPI_SR_FTF | QUADSPI_SR_TCF)) == 0);
+            *(uint32_t*)data = QUADSPI_DR32;
+        }
+        dataSz -= 4;
+        data += 4;
+    }
+
+    /* Fill remainder bytes */
     while (dataSz > 0U) {
         if (fmode == 0) {
             while ((QUADSPI_SR & QUADSPI_SR_FTF) == 0);

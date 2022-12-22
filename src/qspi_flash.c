@@ -380,7 +380,7 @@ int spi_flash_sector_erase(uint32_t address)
         if (ret == 0) {
             ret = qspi_wait_ready(); /* Wait for not busy */
         }
-        qspi_write_disable();
+        /* write disable is automatic */
     }
     return ret;
 }
@@ -458,7 +458,7 @@ int spi_flash_write(uint32_t address, const void *data, int len)
             if (ret != 0) {
                 break;
             }
-            qspi_write_disable();
+            /* write disable is automatic */
         }
     }
 
