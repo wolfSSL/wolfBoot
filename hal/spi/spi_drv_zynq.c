@@ -31,13 +31,15 @@
 
 #ifdef SPI_FLASH
 
-void spi_cs_off(int pin)
+void spi_cs_off(uint32_t base, int pin)
 {
+    (void)base;
     (void)pin;
 }
 
-void spi_cs_on(int pin)
+void spi_cs_on(uint32_t base, int pin)
 {
+    (void)base;
     (void)pin;
 }
 

@@ -19,6 +19,7 @@
 #define SPI_DRV_ZYNQ_H_INCLUDED
 #include <stdint.h>
 
-#define SPI_CS_FLASH 0
+#define SPI_CS_FLASH    0
+#define SPI_CS_PIO_BASE 0UL
 
 #endif /* !SPI_DRV_ZYNQ_H_INCLUDED */

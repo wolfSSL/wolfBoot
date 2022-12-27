@@ -305,7 +305,7 @@ void main(void) {
             /* Update complete */
             spi_flash_probe();
             wolfBoot_update_trigger();
-            spi_release();
+            spi_flash_release();
             hal_flash_lock();
             break;
         }

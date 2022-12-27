@@ -119,7 +119,7 @@ test-app/image.bin: wolfboot.elf
 	$(Q)$(SIZE) test-app/image.elf
 
 standalone:
-	$(Q)$(MAKE) -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) ARCH=$(ARCH) \
+	$(Q)$(MAKE) -C test-app TARGET=$(TARGET) EXT_FLASH=$(EXT_FLASH) SPI_FLASH=$(SPI_FLASH) QSPI_FLASH=$(QSPI_FLASH) ARCH=$(ARCH) \
     NO_XIP=$(NO_XIP) V=$(V) RAM_CODE=$(RAM_CODE) WOLFBOOT_VERSION=$(WOLFBOOT_VERSION)\
 	MCUXPRESSO=$(MCUXPRESSO) MCUXPRESSO_CPU=$(MCUXPRESSO_CPU) MCUXPRESSO_DRIVERS=$(MCUXPRESSO_DRIVERS) \
 	MCUXPRESSO_CMSIS=$(MCUXPRESSO_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
@@ -205,7 +205,7 @@ src/keystore.c: $(PRIVATE_KEY)
 keys: $(PRIVATE_KEY)
 
 clean:
-	@rm -f src/*.o hal/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
+	@rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
 	@rm -f *.bin *.elf wolfboot.map test-update.rom *.hex config/target.ld
 	@$(MAKE) -C test-app clean
 	@$(MAKE) -C tools/check_config clean

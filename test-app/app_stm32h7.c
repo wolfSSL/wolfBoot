@@ -26,7 +26,8 @@
  *                                                                                                                     |
  *  The following application runs on the above mentioned board.                                                       |
  *  It contains setup of LD1, LD2 and LD3.                                                                             |
- *  As well as setup of UART serial communication using USART2 on pins PD5 (TX) and PD6 (RX).                          |
+ *  USART serial communication defaults to using USART3 on pins PD8 (TX) and PD9 (RX) (VCOM Port).                     |
+ *    To use USART2 set UART_PORT=2 to use pins PD5 (TX) and PD6 (RX).                                                 |
  *  --------------------------------------------------------------------------------------------------------------------
  */
 
@@ -86,6 +87,8 @@
 #define GPIOB_AFH   (*(volatile uint32_t *)(GPIOB_BASE + 0x24))
 #define GPIOB_AHB4_CLOCK_ER (1 << 1)
 
+#define GPIOD_BASE  (0x58020C00)
+
 /* GPIO GROUP E */
 #define GPIOE_BASE  0x58021000
 #define GPIOE_MODE  (*(volatile uint32_t *)(GPIOE_BASE + 0x00))
@@ -97,14 +100,23 @@
 
 /* UART SETUP */
 /* ====================================================================== */
+#ifndef UART_PORT
+#define UART_PORT 3 /* default to Nucleo VCOM port */
+#endif
+
+#if UART_PORT == 3
+/* USART3 Base address (connected to ST virtual com port on Nucleo board) */
+#define UART_BASE   (0x40004800)
+#define UART_TX_PIN 8 /* PD8, USART Transmit pin */
+#define UART_RX_PIN 9 /* PD9, USART Receive pin */
+#else
 /* USART2 Base address (chosen because of its pin layout on Nucleo board) */
 #define UART_BASE   (0x40004400)
-#define RCC_BASE    (0x58024400)
-#define GPIOD_BASE  (0x58020C00)
-
-#define UART_PIN_AF 7 /* AF stands for Alternate Function. For PD5/PD6 AF7 equals USART2 RX/TX. */
 #define UART_TX_PIN 5 /* PD5, USART Transmit pin */
 #define UART_RX_PIN 6 /* PD6, USART Receive pin */
+#endif
+
+#define UART_PIN_AF 7 /* AF stands for Alternate Function. USART TX/RX */
 
 /* UART/USART: Defining register start addresses. */
 #define UART_CR1    (*(volatile uint32_t *)(UART_BASE + 0x00))
@@ -116,6 +128,7 @@
 #define UART_RQR    (*(volatile uint32_t *)(UART_BASE + 0x18))
 
 /* RCC: Defining register start addresses. */
+#define RCC_BASE    (0x58024400)
 #define RCC_D2CCIP2R (*(volatile uint32_t *)(RCC_BASE + 0x54))
 #define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0xD8))
 #define RCC_AHB4ENR (*(volatile uint32_t *)(RCC_BASE + 0xE0))
@@ -154,7 +167,9 @@
 #define RCC_AHB4_GPIOD_EN                   (1 << 3)
 
 /* HSI Clock speed */
+#ifndef CLOCK_SPEED
 #define CLOCK_SPEED 64000000
+#endif
 
 /* Marking the update partition as ready to be swapped and executed. */
 #define UPDATE_PARTITION_BASE (0x08060000)
@@ -177,16 +192,13 @@
 
 static void ld1_write(uint8_t led_status)
 {
-    if (led_status == 0)
-    {
+    if (led_status == 0) {
         SET_BIT(GPIOB_BSRR, (1 << (LD1_PIN + 16)));
     }
-    else if (led_status == 2)
-    {
+    else if (led_status == 2) {
         SET_BIT(GPIOB_BSRR, (1 << LD1_PIN));
     }
-    else if (led_status == 1)
-    {
+    else if (led_status == 1) {
         uint32_t reg;
         uint32_t pin = LD1_PIN;
         SET_BIT(RCC_AHB4ENR, GPIOB_AHB4_CLOCK_ER);
@@ -200,16 +212,13 @@ static void ld1_write(uint8_t led_status)
 
 static void ld2_write(uint8_t led_status)
 {
-    if (led_status == 0)
-    {
+    if (led_status == 0) {
         GPIOE_BSRR |= (1 << (LD2_PIN + 16));
     }
-    else if (led_status == 2)
-    {
+    else if (led_status == 2) {
         SET_BIT(GPIOE_BSRR, (1 << LD2_PIN));
     }
-    else if (led_status == 1)
-    {
+    else if (led_status == 1) {
         uint32_t reg;
         uint32_t pin = LD2_PIN;
         RCC_AHB4ENR |= GPIOE_AHB4_CLOCK_ER;
@@ -259,14 +268,23 @@ int uart_setup(uint32_t bitrate)
     GPIOD_MODE = reg | (2 << (UART_RX_PIN * 2));
 
     /* Alternate function. Use AFLR for pins 0-7 and AFHR for pins 8-15 */
+#if UART_TX_PIN >= 8
+    reg = GPIOD_AFRH & ~(0xf << ((UART_TX_PIN & 0x07)*4));
+    GPIOD_AFRH = reg | (UART_PIN_AF << ((UART_TX_PIN & 0x07)*4));
+#else
     reg = GPIOD_AFRL & ~(0xf << ((UART_TX_PIN)*4));
     GPIOD_AFRL = reg | (UART_PIN_AF << ((UART_TX_PIN)*4));
+#endif
+#if UART_RX_PIN >= 8
+    reg = GPIOD_AFRH & ~(0xf << ((UART_RX_PIN & 0x07)*4));
+    GPIOD_AFRH = reg | (UART_PIN_AF << ((UART_RX_PIN & 0x07)*4));
+#else
     reg = GPIOD_AFRL & ~(0xf << ((UART_RX_PIN)*4));
     GPIOD_AFRL = reg | (UART_PIN_AF << ((UART_RX_PIN)*4));
+#endif
 
     /* Disable UART to enable settings to be written into the registers. */
-    if (READ_BIT(UART_CR1, UART_CR1_UART_ENABLE) == 1)
-    {
+    if (READ_BIT(UART_CR1, UART_CR1_UART_ENABLE) == 1) {
         CLEAR_BIT(UART_CR1, UART_CR1_UART_ENABLE);
     }
 
@@ -276,8 +294,13 @@ int uart_setup(uint32_t bitrate)
     SET_BIT(RCC_D2CCIP2R, (1 << 1));
     CLEAR_BIT(RCC_D2CCIP2R, (1 << 2));
 
+#if UART_PORT == 3
+    /* Enable clock for USART_3 */
+    SET_BIT(RCC_APB1ENR, RCC_APB1_USART3_EN);
+#else
     /* Enable clock for USART_2 */
     SET_BIT(RCC_APB1ENR, RCC_APB1_USART2_EN);
+#endif
 
     /* Enable FIFO mode */
     SET_BIT(UART_CR1, (1 << 29));
@@ -313,9 +336,9 @@ int uart_setup(uint32_t bitrate)
         return -1;
 }
 
-void uart_write(const char c)
+static void uart_write(const char c)
 {
-    /* USART transmit data register(TDR), bit 0-8 contains the data character 
+    /* USART transmit data register(TDR), bit 0-8 contains the data character
      * to be transmitted.
      * The register mus be written only when TXE/TXFNF = 1;
      * TXE   :  Set by hardware when the content of the USART_TDR register has
@@ -334,8 +357,7 @@ void uart_write(const char c)
 void uart_print(const char *s)
 {
     int i = 0;
-    while (s[i])
-    {
+    while (s[i]) {
         uart_write(s[i++]);
     }
 }
@@ -352,7 +374,7 @@ void main(void)
         ld3_write(LED_INIT);
 
     /* LED Indicator of successful UART initialization. SUCCESS = ON, FAIL = OFF */
-    if (uart_setup(9600) < 0)
+    if (uart_setup(115200) < 0)
         ld2_write(LED_OFF);
     else
         ld2_write(LED_INIT);

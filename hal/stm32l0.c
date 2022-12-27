@@ -259,7 +259,7 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 #ifdef SPI_FLASH
-    spi_release();
+    spi_flash_release();
 #endif
     hal_flash_lock();
     if ((FLASH_PECR & FLASH_PECR_PELOCK) == 0)

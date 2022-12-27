@@ -7,7 +7,7 @@
  *     implementing the spi_ calls below.
  *
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2022 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -32,9 +32,11 @@
 #include <stdint.h>
 #include "image.h"
 
+#if defined(SPI_FLASH) || defined(QSPI_FLASH)
+
 #if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || \
     defined(PLATFORM_stm32wb) || defined(PLATFORM_stm32l0) || \
-    defined(PLATFORM_stm32u5)
+    defined(PLATFORM_stm32u5) || defined(PLATFORM_stm32h7)
 #include "hal/spi/spi_drv_stm32.h"
 #endif
 
@@ -47,9 +49,35 @@
 #endif
 
 void spi_init(int polarity, int phase);
+void spi_release(void);
+
+#ifdef SPI_FLASH
+void spi_cs_on(uint32_t base, int pin);
+void spi_cs_off(uint32_t base, int pin);
 void spi_write(const char byte);
 uint8_t spi_read(void);
-void spi_cs_on(int pin);
-void spi_cs_off(int pin);
+#endif /* SPI_FLASH */
+
+
+#ifdef QSPI_FLASH
+
+#define QSPI_MODE_WRITE 0
+#define QSPI_MODE_READ  1
+
+/* these are used in macro logic, so must be defines */
+#define QSPI_DATA_MODE_NONE 0
+#define QSPI_DATA_MODE_SPI  1
+#define QSPI_DATA_MODE_DSPI 2
+#define QSPI_DATA_MODE_QSPI 3
+
+int qspi_transfer(uint8_t fmode, const uint8_t cmd,
+    uint32_t addr, uint32_t addrSz, uint32_t addrMode,
+    uint32_t alt, uint32_t altSz, uint32_t altMode,
+    uint32_t dummySz,
+    uint8_t* data, uint32_t dataSz, uint32_t dataMode
+);
+#endif /* QSPI_FLASH */
+
+#endif /* SPI_FLASH || QSPI_FLASH */
 
 #endif /* !SPI_DRV_H_INCLUDED */

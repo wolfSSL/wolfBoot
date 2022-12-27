@@ -261,26 +261,18 @@ void uart_writenum(int num, int base)
     char buf[sizeof(int)*2+1];
     const char* kDigitLut = "0123456789ABCDEF";
     unsigned int val = (unsigned int)num;
-#ifdef BIG_ENDIAN_ORDER
     int sz = 0;
-#endif
     if (base == 10 && num < 0) { /* handle negative */
         buf[i++] = '-';
         val = -num;
     }
     do {
-    #ifdef BIG_ENDIAN_ORDER
         buf[sizeof(buf)-sz-1] = kDigitLut[(val % base)];
         sz++;
-    #else
-        buf[i++] = kDigitLut[(val % base)];
-    #endif
         val /= base;
     } while (val > 0U);
-#ifdef BIG_ENDIAN_ORDER
     memmove(&buf[i], &buf[sizeof(buf)-sz], sz);
     i+=sz;
-#endif
     uart_write(buf, i);
 }
 

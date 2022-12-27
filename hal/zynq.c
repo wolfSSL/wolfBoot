@@ -1333,9 +1333,7 @@ static int test_flash(QspiDev_t* dev)
 {
     int ret;
     uint32_t i;
-#ifndef USE_XQSPIPSU
     uint8_t pageData[FLASH_PAGE_SIZE];
-#endif
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */

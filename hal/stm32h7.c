@@ -30,7 +30,6 @@
 
 /* STM32 H7 register configuration */
 /*** RCC ***/
-
 #define RCC_BASE            (0x58024400) /* RM0433 - Table 8 */
 #define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0433 - 7.7.2 */
 #define RCC_PLLCKSELR       (*(volatile uint32_t *)(RCC_BASE + 0x28))  /* RM0433 - 7.7.11 */
@@ -42,10 +41,15 @@
 #define RCC_D2CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x1C))  /* RM0433 - 7.7.8 */
 #define RCC_D3CFGR          (*(volatile uint32_t *)(RCC_BASE + 0x20))  /* RM0433 - 7.7.9 */
 
-#define APB1_CLOCK_LER      (*(volatile uint32_t *)(RCC_BASE + 0xE8))  /* RM0433 - 7.7.45 */
-#define APB1_CLOCK_HER      (*(volatile uint32_t *)(RCC_BASE + 0xEC))  /* RM0433 - 7.7.46 */
-#define APB2_CLOCK_ER       (*(volatile uint32_t *)(RCC_BASE + 0xF0))  /* RM0433 - 7.7.47 */
+#define RCC_D2CCIP2R        (*(volatile uint32_t *)(RCC_BASE + 0x54))  /* RM0433 - 8.7.21 */
 
+#define APB1_CLOCK_LRST     (*(volatile uint32_t *)(RCC_BASE + 0x90))  /* RM0433 - 8.7.33 - RCC_APB1LRSTR */
+
+#define AHB4_CLOCK_ENR      (*(volatile uint32_t *)(RCC_BASE + 0xE0))  /* RM0433 - 8.7.43 */
+#define APB1_CLOCK_LER      (*(volatile uint32_t *)(RCC_BASE + 0xE8))  /* RM0433 - 8.7.45 - RCC_APB1LENR */
+#define APB1_CLOCK_HER      (*(volatile uint32_t *)(RCC_BASE + 0xEC))  /* RM0433 - 8.7.46 */
+#define APB2_CLOCK_ER       (*(volatile uint32_t *)(RCC_BASE + 0xF0))  /* RM0433 - 8.7.47 */
+#define AHB3_CLOCK_ER       (*(volatile uint32_t *)(RCC_BASE + 0xD4))  /* RM0433 - 8.7.40 */
 
 #define RCC_CR_PLL1RDY              (1 << 25)
 #define RCC_CR_PLL1ON               (1 << 24)
@@ -72,6 +76,25 @@
 
 #define RCC_PLLCKSELR_DIVM1_NONE     0x1
 
+/*** GPIO ***/
+#define GPIOA_BASE (0x58020000)
+#define GPIOB_BASE (0x58020400)
+#define GPIOC_BASE (0x58020800)
+#define GPIOD_BASE (0x58020C00)
+#define GPIOE_BASE (0x58021000)
+#define GPIOF_BASE (0x58021400)
+#define GPIOG_BASE (0x58021800)
+
+#define GPIO_MODE(base)  (*(volatile uint32_t *)((base) + 0x00))
+#define GPIO_OTYPE(base) (*(volatile uint32_t *)((base) + 0x04))
+#define GPIO_OSPD(base)  (*(volatile uint32_t *)((base) + 0x08))
+#define GPIO_PUPD(base)  (*(volatile uint32_t *)((base) + 0x0c))
+#define GPIO_ODR(base)   (*(volatile uint32_t *)((base) + 0x14))
+#define GPIO_BSRR(base)  (*(volatile uint32_t *)((base) + 0x18))
+#define GPIO_AFRL(base)  (*(volatile uint32_t *)((base) + 0x20))
+#define GPIO_AFRH(base)  (*(volatile uint32_t *)((base) + 0x24))
+
+
 /*** PWR ***/
 #define PWR_BASE             (0x58024800) /* RM0433 - Table 8 */
 #define PWR_CSR1             (*(volatile uint32_t *)(PWR_BASE + 0x04))  /* RM0433 - 5.8.x */
@@ -95,6 +118,85 @@
 #define RCC_PRESCALER_DIV_NONE 0
 #define RCC_PRESCALER_DIV_2 8
 
+
+/*** UART ***/
+#ifndef CLOCK_SPEED
+#define CLOCK_SPEED 64000000UL /* 120MHz pclk1, 64MHz HSI */
+#endif
+#ifndef BAUD_RATE
+#define BAUD_RATE   115200
+#endif
+#ifndef UART_PORT
+#define UART_PORT   3 /* default to Nucleo VCOM port */
+#endif
+
+#if UART_PORT == 3
+/* USART3 Base address (connected to ST virtual com port on Nucleo board) */
+#define UART_BASE      (0x40004800)
+#define UART_GPIO_BASE GPIOD_BASE
+#define UART_TX_PIN    8 /* PD8, USART Transmit pin */
+#define UART_RX_PIN    9 /* PD9, USART Receive pin */
+#else
+/* USART2 Base address (chosen because of its pin layout on Nucleo board) */
+#define UART_BASE      (0x40004400)
+#define UART_GPIO_BASE GPIOD_BASE
+#define UART_TX_PIN    5 /* PD5, USART Transmit pin */
+#define UART_RX_PIN    6 /* PD6, USART Receive pin */
+#endif
+
+#define UART_PIN_AF 7 /* AF stands for Alternate Function. USART TX/RX */
+
+/* UART/USART: Defining register start addresses. */
+#define UART_CR1(base)    (*(volatile uint32_t *)((base) + 0x00))
+#define UART_CR2(base)    (*(volatile uint32_t *)((base) + 0x04))
+#define UART_CR3(base)    (*(volatile uint32_t *)((base) + 0x08))
+#define UART_BRR(base)    (*(volatile uint32_t *)((base) + 0x0C))
+#define UART_RQR(base)    (*(volatile uint32_t *)((base) + 0x18))
+#define UART_ISR(base)    (*(volatile uint32_t *)((base) + 0x1C))
+#define UART_ICR(base)    (*(volatile uint32_t *)((base) + 0x20))
+#define UART_RDR(base)    (*(volatile uint32_t *)((base) + 0x24))
+#define UART_TDR(base)    (*(volatile uint32_t *)((base) + 0x28))
+#define UART_PRESC(base)  (*(volatile uint32_t *)((base) + 0x2C))
+
+/* UART/USART: Defining register bit placement for CR1 and ISR register for readability. */
+#define UART_CR1_UART_ENABLE                (1 << 0)
+#define UART_CR1_TX_ENABLE                  (1 << 3)
+#define UART_CR1_RX_ENABLE                  (1 << 2)
+#define UART_CR1_M1                         (1 << 28)
+#define UART_CR1_M0                         (1 << 12)
+#define UART_CR1_PARITY_ENABLED             (1 << 10)
+#define UART_CR1_PARITY_ODD                 (1 << 9)
+#define UART_CR1_FIFOEN                     (1 << 29)
+#define UART_CR1_OVER8                      (1 << 15)
+
+#define UART_CR2_STOP_MASK                  (0x3 << 12)
+#define UART_CR2_STOP(bits)                 (((bits) & 0x3) << 12)
+#define UART_CR2_LINEN                      (1 << 14)
+#define UART_CR2_CLKEN                      (1 << 11)
+
+#define UART_CR3_SCEN                       (1 << 5)
+#define UART_CR3_HDSEL                      (1 << 3)
+#define UART_CR3_IREN                       (1 << 1)
+
+#define UART_ISR_TX_FIFO_NOT_FULL           (1 << 7) /* Transmit Data Empty (TXE) or TX FIFO Not Full (TXFNF) */
+#define UART_ISR_RX_FIFO_NOT_EMPTY          (1 << 5)
+#define UART_ISR_TRANSMISSION_COMPLETE      (1 << 6)
+
+/* RCC: Defining register bit placement for APB1, APB2, AHB1 and AHB4 register for readability. */
+#define RCC_APB1_USART2_EN                  (1 << 17)
+#define RCC_APB1_USART3_EN                  (1 << 18)
+#define RCC_APB1_UART4_EN                   (1 << 19)
+#define RCC_APB1_UART5_EN                   (1 << 20)
+#define RCC_APB1_UART7_EN                   (1 << 30)
+#define RCC_APB1_UART8_EN                   (1 << 31)
+#define RCC_APB2_USART1_EN                  (1 << 4)
+#define RCC_APB2_USART6_EN                  (1 << 5)
+
+#define RCC_AHB4_GPIOD_EN                   (1 << 3)
+
+/*** QSPI ***/
+/* See hal/spi/spi_drv_stm32.c */
+
 /*** FLASH ***/
 #define SYSCFG_APB4_CLOCK_ER_VAL    (1 << 0) /* RM0433 - 7.7.48 - RCC_APB4ENR - SYSCFGEN */
 
@@ -102,25 +204,25 @@
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) /* RM0433 - 3.9.1 - FLASH_ACR */
 #define FLASH_OPTSR_CUR     (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
 
-/*bank 1 */
-#define FLASH_KEYR1          (*(volatile uint32_t *)(FLASH_BASE + 0x04)) /* RM0433 - 3.9.2 - FLASH_KEYR 1 */
-#define FLASH_SR1            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0433 - 3.9.5 - FLASH_SR 1 */
-#define FLASH_CR1            (*(volatile uint32_t *)(FLASH_BASE + 0x0C)) /* RM0433 - 3.9.4 - FLASH_CR 1 */
+/* Bank 1 */
+#define FLASH_KEYR1         (*(volatile uint32_t *)(FLASH_BASE + 0x04)) /* RM0433 - 3.9.2 - FLASH_KEYR 1 */
+#define FLASH_SR1           (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0433 - 3.9.5 - FLASH_SR 1 */
+#define FLASH_CR1           (*(volatile uint32_t *)(FLASH_BASE + 0x0C)) /* RM0433 - 3.9.4 - FLASH_CR 1 */
 
-/*bank 2 */
-#define FLASH_KEYR2          (*(volatile uint32_t *)(FLASH_BASE + 0x104)) /* RM0433 - 3.9.24 - FLASH_KEYR 2 */
-#define FLASH_SR2            (*(volatile uint32_t *)(FLASH_BASE + 0x110)) /* RM0433 - 3.9.26 - FLASH_SR 2 */
-#define FLASH_CR2            (*(volatile uint32_t *)(FLASH_BASE + 0x10C)) /* RM0433 - 3.9.25 - FLASH_CR 2 */
+/* Bank 2 */
+#define FLASH_KEYR2         (*(volatile uint32_t *)(FLASH_BASE + 0x104)) /* RM0433 - 3.9.24 - FLASH_KEYR 2 */
+#define FLASH_SR2           (*(volatile uint32_t *)(FLASH_BASE + 0x110)) /* RM0433 - 3.9.26 - FLASH_SR 2 */
+#define FLASH_CR2           (*(volatile uint32_t *)(FLASH_BASE + 0x10C)) /* RM0433 - 3.9.25 - FLASH_CR 2 */
 
+/* Flash Configuration */
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000UL)
 #define FLASH_PAGE_SIZE           (0x20000) /* 128KB */
 #define FLASH_BANK2_BASE          (0x08100000UL) /*!< Base address of : (up to 1 MB) Flash Bank2 accessible over AXI */
 #define FLASH_BANK2_BASE_REL      (FLASH_BANK2_BASE - FLASHMEM_ADDRESS_SPACE)
 #define FLASH_TOP                 (0x081FFFFFUL) /*!< FLASH end address  */
 
-
 /* Register values */
-#define FLASH_ACR_LATENCY_MASK                (0x07)
+#define FLASH_ACR_LATENCY_MASK              (0x07)
 #define FLASH_SR_BSY                        (1 << 0)
 #define FLASH_SR_WBNE                       (1 << 1)
 #define FLASH_SR_QW                         (1 << 2)
@@ -148,8 +250,8 @@
 #define FLASH_CR_SNB_SHIFT                  8     /* SNB bits 10:8 */
 #define FLASH_CR_SNB_MASK                   0x7   /* SNB bits 10:8 - 3 bits */
 
-#define FLASH_KEY1                            (0x45670123)
-#define FLASH_KEY2                            (0xCDEF89AB)
+#define FLASH_KEY1                          (0x45670123)
+#define FLASH_KEY2                          (0xCDEF89AB)
 
 
 /* STM32H7: Due to ECC functionality, it is not possible to write partition/sector
@@ -182,33 +284,37 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
     if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates)
-        FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates;
+        FLASH_ACR = (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates;
 }
 
 static RAMFUNCTION void flash_wait_last(void)
 {
-    while((FLASH_OPTSR_CUR & FLASH_OPTSR_CUR_BSY))
+    while ((FLASH_OPTSR_CUR & FLASH_OPTSR_CUR_BSY))
         ;
 }
 
 static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 {
-    if (bank==0)
-      while ((FLASH_SR1 & FLASH_SR_QW) == FLASH_SR_QW);
-    if (bank==1)
-      while ((FLASH_SR2 & FLASH_SR_QW) == FLASH_SR_QW);
+    if (bank == 0) {
+        while ((FLASH_SR1 & FLASH_SR_QW) == FLASH_SR_QW);
+    }
+    else {
+        while ((FLASH_SR2 & FLASH_SR_QW) == FLASH_SR_QW);
+    }
 }
 
 static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 {
-    if (bank==0)
+    if (bank == 0) {
         FLASH_SR1 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
                       FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR |
                       FLASH_SR_RDSERR | FLASH_SR_SNECCERR | FLASH_SR_DBECCERR);
-    if (bank==1)
+    }
+    else {
         FLASH_SR2 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
                       FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR |
                       FLASH_SR_RDSERR | FLASH_SR_SNECCERR | FLASH_SR_DBECCERR);
+    }
 }
 
 static void RAMFUNCTION flash_program_on(uint8_t bank)
@@ -217,7 +323,8 @@ static void RAMFUNCTION flash_program_on(uint8_t bank)
         FLASH_CR1 |= FLASH_CR_PG;
         while ((FLASH_CR1 & FLASH_CR_PG) == 0)
             ;
-    } else {
+    }
+    else {
         FLASH_CR2 |= FLASH_CR_PG;
         while ((FLASH_CR2 & FLASH_CR_PG) == 0)
             ;
@@ -228,7 +335,8 @@ static void RAMFUNCTION flash_program_off(uint8_t bank)
 {
     if (bank == 0) {
         FLASH_CR1 &= ~FLASH_CR_PG;
-    } else {
+    }
+    else {
         FLASH_CR2 &= ~FLASH_CR_PG;
     }
 }
@@ -261,7 +369,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 dst[ii] = src[ii];
             }
             i+=32;
-        } else {
+        }
+        else {
             int off = (address + i) - (((address + i) >> 5) << 5);
             uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
             dst = (uint32_t *)(base_addr);
@@ -274,15 +383,17 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                     return -1;
                 hal_flash_erase(STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS,
                     STM32H7_SECTOR_SIZE);
-            } else if (STM32H7_UPDATE_FLAGS_PAGE(address)) {
+            }
+            else if (STM32H7_UPDATE_FLAGS_PAGE(address)) {
                 if (base_addr != STM32H7_PART_UPDATE_END - STM32H7_WORD_SIZE)
                     return -1;
                 hal_flash_erase(STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS,
                     STM32H7_SECTOR_SIZE);
             }
             /* Replace bytes in cache */
-            while ((off < STM32H7_WORD_SIZE) && (i < len))
+            while ((off < STM32H7_WORD_SIZE) && (i < len)) {
                 vbytes[off++] = data[i++];
+            }
 
             /* Actual write from cache to FLASH */
             flash_wait_last();
@@ -350,8 +461,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
          p < end_address;
          p += FLASH_PAGE_SIZE)
     {
-        if (p < FLASH_BANK2_BASE_REL)
-        {
+        if (p < FLASH_BANK2_BASE_REL) {
             uint32_t reg = FLASH_CR1 &
                 (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT) | FLASH_CR_PSIZE));
             FLASH_CR1 = reg |
@@ -361,8 +471,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             flash_wait_complete(1);
         }
         if ((p>= FLASH_BANK2_BASE_REL) &&
-            (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE)))
-        {
+            (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE))) {
             uint32_t reg = FLASH_CR2 &
                 (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT) | FLASH_CR_PSIZE));
             p-= (FLASH_BANK2_BASE);
@@ -375,6 +484,108 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     }
     return 0;
 }
+
+#ifdef DEBUG_UART
+static int uart_init(void)
+{
+    uint32_t reg;
+
+    /* Set general UART clock source (all uarts but nr 1 and 6) */
+    /* USART234578SEL bits 2:0 */
+    RCC_D2CCIP2R &= ~(0x7 << 0);
+    RCC_D2CCIP2R |=  (0x3 << 0); /* 000 = pclk1 (120MHz), 011 = hsi (64MHz) */
+
+#if UART_PORT == 3
+    /* Enable clock for USART_3 and reset */
+    APB1_CLOCK_LER |= RCC_APB1_USART3_EN;
+
+    APB1_CLOCK_LRST |= RCC_APB1_USART3_EN;
+    APB1_CLOCK_LRST &= ~RCC_APB1_USART3_EN;
+#else
+    /* Enable clock for USART_2 and reset */
+    APB1_CLOCK_LER |= RCC_APB1_USART2_EN;
+
+    APB1_CLOCK_LRST |= RCC_APB1_USART2_EN;
+    APB1_CLOCK_LRST &= ~RCC_APB1_USART2_EN;
+#endif
+
+    /* Enable UART pins */
+    AHB4_CLOCK_ENR |= RCC_AHB4_GPIOD_EN;
+
+    /* Set mode = AF. The PORT D I/O pin is first reset and then set to AF
+     * (bit config 10:Alternate function mode) */
+    reg = GPIO_MODE(UART_GPIO_BASE) & ~(0x03 << (UART_TX_PIN * 2));
+    GPIO_MODE(UART_GPIO_BASE) = reg | (2 << (UART_TX_PIN * 2));
+    reg = GPIO_MODE(UART_GPIO_BASE) & ~(0x03 << (UART_RX_PIN * 2));
+    GPIO_MODE(UART_GPIO_BASE) = reg | (2 << (UART_RX_PIN * 2));
+
+    /* Alternate function. Use AFLR for pins 0-7 and AFHR for pins 8-15 */
+#if UART_TX_PIN < 8
+    reg = GPIO_AFRL(UART_GPIO_BASE) & ~(0xf << ((UART_TX_PIN) * 4));
+    GPIO_AFRL(UART_GPIO_BASE) = reg | (UART_PIN_AF << ((UART_TX_PIN) * 4));
+#else
+    reg = GPIO_AFRH(UART_GPIO_BASE) & ~(0xf << ((UART_TX_PIN - 8) * 4));
+    GPIO_AFRH(UART_GPIO_BASE) = reg | (UART_PIN_AF << ((UART_TX_PIN - 8) * 4));
+#endif
+#if UART_RX_PIN < 8
+    reg = GPIO_AFRL(UART_GPIO_BASE) & ~(0xf << ((UART_RX_PIN)*4));
+    GPIO_AFRL(UART_GPIO_BASE) = reg | (UART_PIN_AF << ((UART_RX_PIN)*4));
+#else
+    reg = GPIO_AFRH(UART_GPIO_BASE) & ~(0xf << ((UART_RX_PIN - 8) * 4));
+    GPIO_AFRH(UART_GPIO_BASE) = reg | (UART_PIN_AF << ((UART_RX_PIN - 8) * 4));
+#endif
+
+    /* Disable UART to enable settings to be written into the registers. */
+    if (UART_CR1(UART_BASE) & UART_CR1_UART_ENABLE) {
+        UART_CR1(UART_BASE) &= ~UART_CR1_UART_ENABLE;
+    }
+
+    /* Clock Prescaler */
+    UART_PRESC(UART_BASE) = 0; /* no div (div=1) */
+
+    /* Configure clock (speed/bitrate). Requires UE = 0. */
+    UART_BRR(UART_BASE) = (uint16_t)(CLOCK_SPEED / BAUD_RATE);
+
+    /* Enable FIFO mode */
+    UART_CR1(UART_BASE) |= UART_CR1_FIFOEN;
+
+    /* Enable 16-bit oversampling */
+    UART_CR1(UART_BASE) &= ~UART_CR1_OVER8;
+
+    /* Configure the M bits (word length) */
+    /* Word length is 8 bits by default (0=1 start, 8 data, 0 stop) */
+    UART_CR1(UART_BASE) &= ~(UART_CR1_M0 | UART_CR1_M1);
+
+    /* Configure stop bits (00: 1 stop bit / 10: 2 stop bits.) */
+    UART_CR2(UART_BASE) &= ~UART_CR2_STOP_MASK;
+    UART_CR2(UART_BASE) |= UART_CR2_STOP(0);
+
+    /* Configure parity bits, disabled */
+    UART_CR1(UART_BASE) &= ~(UART_CR1_PARITY_ENABLED | UART_CR1_PARITY_ODD);
+
+    /* In asynchronous mode, the following bits must be kept cleared:
+     * - LINEN and CLKEN bits in the UART_CR2 register,
+     * - SCEN, HDSEL and IREN  bits in the UART_CR3 register.*/
+    UART_CR2(UART_BASE) &= ~(UART_CR2_LINEN | UART_CR2_CLKEN);
+    UART_CR3(UART_BASE) &= ~(UART_CR3_SCEN | UART_CR3_HDSEL | UART_CR3_IREN);
+
+    /* Turn on UART */
+    UART_CR1(UART_BASE) |= (UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE |
+        UART_CR1_UART_ENABLE);
+
+    return 0;
+}
+
+void uart_write(const char* buf, unsigned int sz)
+{
+    uint32_t pos = 0;
+    while (sz-- > 0) {
+        while ((UART_ISR(UART_BASE) & UART_ISR_TX_FIFO_NOT_FULL) == 0);
+
+        UART_TDR(UART_BASE) = buf[pos++];
+    }
+}
+#endif /* DEBUG_UART */
 
 static void clock_pll_off(void)
 {
@@ -391,12 +602,12 @@ static void clock_pll_off(void)
 }
 
 /* This implementation will setup HSI RC 16 MHz as PLL Source Mux, PLLCLK
- * as System Clock Source*/
+ * as System Clock Source */
 static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
     uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, d1cpre, d1ppre;
-    uint32_t d2ppre1,d2ppre2, d3ppre , flash_waitstates;
+    uint32_t d2ppre1, d2ppre2, d3ppre, flash_waitstates;
 
     PWR_CR3 |= PWR_CR3_LDOEN;
     while ((PWR_CSR1 & PWR_CSR1_ACTVOSRDY) == 0) {};
@@ -415,12 +626,12 @@ static void clock_pll_on(int powersave)
     pllp = 2;
     pllq = 20;
     pllr = 2;
-    d1cpre = RCC_PRESCALER_DIV_NONE;
-    hpre  = RCC_PRESCALER_DIV_2;
-    d1ppre = (RCC_PRESCALER_DIV_2 >>1 );
-    d2ppre1 = (RCC_PRESCALER_DIV_2>>1);
-    d2ppre2 = (RCC_PRESCALER_DIV_2 >>1);
-    d3ppre = (RCC_PRESCALER_DIV_2 >>1);
+    d1cpre =   RCC_PRESCALER_DIV_NONE;
+    hpre  =    RCC_PRESCALER_DIV_2;
+    d1ppre =  (RCC_PRESCALER_DIV_2 >> 1);
+    d2ppre1 = (RCC_PRESCALER_DIV_2 >> 1);
+    d2ppre2 = (RCC_PRESCALER_DIV_2 >> 1);
+    d3ppre =  (RCC_PRESCALER_DIV_2 >> 1);
     flash_waitstates = 4;
 
     flash_set_waitstates(flash_waitstates);
@@ -534,8 +745,17 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
 void hal_init(void)
 {
     clock_pll_on(0);
+
+#ifdef DEBUG_UART
+    uart_init();
+    uart_write("wolfBoot Init\n", 14);
+#endif
 }
+
 void hal_prepare_boot(void)
 {
+#ifdef SPI_FLASH
+    spi_flash_release();
+#endif
     clock_pll_off();
 }
