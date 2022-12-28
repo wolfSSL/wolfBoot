@@ -32,7 +32,7 @@
 #include <stdint.h>
 #include "image.h"
 
-#if defined(SPI_FLASH) || defined(QSPI_FLASH)
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH)
 
 #if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || \
     defined(PLATFORM_stm32wb) || defined(PLATFORM_stm32l0) || \
@@ -51,13 +51,12 @@
 void spi_init(int polarity, int phase);
 void spi_release(void);
 
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 void spi_cs_on(uint32_t base, int pin);
 void spi_cs_off(uint32_t base, int pin);
 void spi_write(const char byte);
 uint8_t spi_read(void);
-#endif /* SPI_FLASH */
-
+#endif /* SPI_FLASH || WOLFBOOT_TPM */
 
 #ifdef QSPI_FLASH
 
