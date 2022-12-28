@@ -1,0 +1,125 @@
+name: Test Example Configs
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+
+  cypsoc6_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/cypsoc6.config
+
+  nrf52840_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/nrf52840.config
+
+  stm32f4_small_blocks_uart_update_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32f4-small-blocks-uart-update.config
+
+  stm32f4_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32f4.config
+
+  stm32f7_dualbank_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32f7-dualbank.config
+
+  stm32f7_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32f7.config
+
+  stm32g0_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32g0.config
+
+  stm32h7_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32h7.config
+
+  stm32h7_qspi_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32h7.config
+      make-args: QSPI_FLASH=1
+
+  stm32l0_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32l0.config
+
+  stm32l5_nonsecure_dualbank_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32l5-nonsecure-dualbank.config
+
+  stm32l5_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32l5.config
+
+  stm32u5_nonsecure_dualbank_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32u5-nonsecure-dualbank.config
+
+  stm32u5_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32u5.config
+
+  stm32wb_delta_enc_ext_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-delta-enc-ext.config
+
+  stm32wb_delta_ext_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-delta-ext.config
+
+  stm32wb_delta_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-delta.config
+
+  stm32wb_pka_1mb_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-pka-1mb.config
+
+  stm32wb_tpm_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-tpm.config
+
+  stm32wb_uart_flash_encryption_aes128_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-uart-flash-encryption-aes128.config
+
+  stm32wb_uart_flash_encryption_aes256_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-uart-flash-encryption-aes256.config
+
+  stm32wb_uart_flash_encryption_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb-uart-flash-encryption.config
+
+  stm32wb_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      config-file: ./config/examples/stm32wb.config
