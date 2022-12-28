@@ -84,8 +84,6 @@
 #define CPU_FREQ (24000000)
 #endif
 
-#ifndef UART_FLASH
-
 static void uart2_pins_setup(void)
 {
     uint32_t reg;
@@ -214,5 +212,5 @@ void main(void)
     while(1)
         ;
 }
-#endif /** PLATFROM_stm32l0 **/
 
+#endif /** PLATFROM_stm32l0 **/

@@ -8,10 +8,11 @@ on:
 
 jobs:
 
-  cypsoc6_test:
-    uses: ./.github/workflows/test-build.yml
-    with:
-      config-file: ./config/examples/cypsoc6.config
+  # DISABLED: cypsoc6.config requires cy_device_headers.h
+  # cypsoc6_test:
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     config-file: ./config/examples/cypsoc6.config
 
   nrf52840_test:
     uses: ./.github/workflows/test-build.yml
@@ -59,6 +60,12 @@ jobs:
     with:
       config-file: ./config/examples/stm32l0.config
 
+  # DISABLED: stm32l4-cube.config requires Cube HAL
+  # stm32l4_cube_test:
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     config-file: ./config/examples/stm32l4-cube.config
+
   stm32l5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:
@@ -94,10 +101,11 @@ jobs:
     with:
       config-file: ./config/examples/stm32wb-delta.config
 
-  stm32wb_pka_1mb_test:
-    uses: ./.github/workflows/test-build.yml
-    with:
-      config-file: ./config/examples/stm32wb-pka-1mb.config
+  # DISABLED: stm32wb-pka-1mb.config requires STM32 HAL #include "stm32wbxx_hal.h
+  # stm32wb_pka_1mb_test:
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     config-file: ./config/examples/stm32wb-pka-1mb.config
 
   stm32wb_tpm_test:
     uses: ./.github/workflows/test-build.yml
