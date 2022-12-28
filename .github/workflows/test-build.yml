@@ -4,6 +4,9 @@ on:
 
   workflow_call:
     inputs:
+      arch:
+        required: true
+        type: string
       config-file:
         required: true
         type: string
@@ -13,20 +16,17 @@ on:
 
 jobs:
 
-  build_arm:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: true
 
-      # Get the arm-non-eabi-gcc toolchain
-      - name: Install arm-none-eabi-gcc
-        uses: fiam/arm-none-eabi-gcc@v1
-        with:
-          # The arm-none-eabi-gcc release to use.
-          release: "9-2019-q4"
+      - name: Install cross compilers
+        run: |
+          sudo apt-get install -y gcc-arm-none-eabi gcc-aarch64-linux-gnu gcc-powerpc-linux-gnu gnu-efi
 
       - name: make clean
         run: |

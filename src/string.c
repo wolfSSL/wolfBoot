@@ -24,7 +24,11 @@
 
 
 #include <stddef.h>
+#ifndef PLATFORM_library
 #include <string.h>
+#else
+size_t strlen(const char *s); /* forward declaration */
+#endif
 
 #ifdef DEBUG_UART
     #include "printf.h"
