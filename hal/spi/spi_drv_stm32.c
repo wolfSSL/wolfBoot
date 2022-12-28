@@ -29,7 +29,7 @@
 #include "spi_drv.h"
 #include "spi_drv_stm32.h"
 
-#if defined(SPI_FLASH) || defined(QSPI_FLASH)
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH)
 
 void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
         uint32_t af, uint32_t pull, uint32_t speed)
@@ -112,7 +112,7 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
     GPIO_OSPD(base) |= (speed << (pin * 2));
 }
 
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 void RAMFUNCTION spi_cs_off(uint32_t base, int pin)
 {
     GPIO_BSRR(base) |= (1 << pin);
@@ -126,7 +126,7 @@ void RAMFUNCTION spi_cs_on(uint32_t base, int pin)
     while (GPIO_ODR(base) & (1 << pin))
         ;
 }
-#endif /* SPI_FLASH */
+#endif /* SPI_FLASH || WOLFBOOT_TPM */
 
 
 static void RAMFUNCTION stm_pins_setup(void)
@@ -278,7 +278,7 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
 #endif /* QSPI_FLASH */
 
 
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 uint8_t RAMFUNCTION spi_read(void)
 {
     volatile uint32_t reg;
@@ -300,7 +300,7 @@ void RAMFUNCTION spi_write(const char byte)
         reg = SPI1_SR;
     } while ((reg & SPI_SR_TX_EMPTY) == 0);
 }
-#endif /* SPI_FLASH */
+#endif /* SPI_FLASH || WOLFBOOT_TPM */
 
 static int initialized = 0;
 void RAMFUNCTION spi_init(int polarity, int phase)
@@ -387,4 +387,4 @@ void RAMFUNCTION spi_release(void)
     }
 }
 
-#endif /* SPI_FLASH || QSPI_FLASH */
+#endif /* SPI_FLASH || QSPI_FLASH || WOLFBOOT_TPM */
