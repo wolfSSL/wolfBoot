@@ -804,6 +804,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
     if (!img->hdr_ok) {
         img->hdr = image;
     }
+    img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
 #else
     if (img->hdr == NULL) {
         img->hdr = image;
@@ -811,7 +812,6 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 #endif
     img->hdr_ok = 1;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
-    img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
 
     return 0;
 }

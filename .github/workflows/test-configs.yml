@@ -8,126 +8,220 @@ on:
 
 jobs:
 
-  # DISABLED: cypsoc6.config requires cy_device_headers.h
+  # TODO: cypsoc6.config requires cy_device_headers.h
   # cypsoc6_test:
   #   uses: ./.github/workflows/test-build.yml
   #   with:
+  #     arch: arm
   #     config-file: ./config/examples/cypsoc6.config
+
+  # TODO: hifive.config requires RISC-V compiler
+  # hifive1_test:
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     arch: riscv
+  #     config-file: ./config/examples/hifive.config
+
+  # TODO: imx-rt1050.config
+  # TODO: imx-rt1060.config
+
+  # TODO: kinetis-k82f.config requires the KSDK
+  # kinetis_k82f_test:
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     arch: arm
+  #     config-file: ./config/examples/kinetis-k82f.config
+
+  library_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/library.config
+
+  # TODO: lpc54606j512.config requires MCUXPRESSO files
+  # lpc54606j512_test
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     arch: arm
+  #     config-file: ./config/examples/lpc54606j512.config
 
   nrf52840_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/nrf52840.config
+
+  nxp_t2080_68ppc2_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/t2080_68ppc2.config
+
+  nxp_t2080_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/t2080.config
+
+  raspi3_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/raspi3.config
+      make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
+
+  sim_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
 
   stm32f4_small_blocks_uart_update_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32f4-small-blocks-uart-update.config
 
   stm32f4_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32f4.config
 
   stm32f7_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32f7-dualbank.config
 
   stm32f7_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32f7.config
 
   stm32g0_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32g0.config
 
   stm32h7_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32h7.config
 
   stm32h7_qspi_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32h7.config
       make-args: QSPI_FLASH=1
 
   stm32l0_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32l0.config
 
-  # DISABLED: stm32l4-cube.config requires Cube HAL
+  # TODO: stm32l4-cube.config requires Cube HAL
   # stm32l4_cube_test:
   #   uses: ./.github/workflows/test-build.yml
   #   with:
+  #     arch: arm
   #     config-file: ./config/examples/stm32l4-cube.config
 
   stm32l5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32l5-nonsecure-dualbank.config
 
   stm32l5_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32l5.config
 
   stm32u5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32u5-nonsecure-dualbank.config
 
   stm32u5_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32u5.config
 
   stm32wb_delta_enc_ext_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-delta-enc-ext.config
 
   stm32wb_delta_ext_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-delta-ext.config
 
   stm32wb_delta_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-delta.config
 
-  # DISABLED: stm32wb-pka-1mb.config requires STM32 HAL #include "stm32wbxx_hal.h
+  # TODO: stm32wb-pka-1mb.config requires STM32 HAL #include "stm32wbxx_hal.h
   # stm32wb_pka_1mb_test:
   #   uses: ./.github/workflows/test-build.yml
   #   with:
+  #     arch: arm
   #     config-file: ./config/examples/stm32wb-pka-1mb.config
 
   stm32wb_tpm_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-tpm.config
 
   stm32wb_uart_flash_encryption_aes128_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-uart-flash-encryption-aes128.config
 
   stm32wb_uart_flash_encryption_aes256_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-uart-flash-encryption-aes256.config
 
   stm32wb_uart_flash_encryption_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb-uart-flash-encryption.config
 
   stm32wb_test:
     uses: ./.github/workflows/test-build.yml
     with:
+      arch: arm
       config-file: ./config/examples/stm32wb.config
+
+  # TODO: ti-tms570lc435.config requires CCS_ROOT
+
+  x86_64_efi_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/x86_64_efi.config
+
+  zynqmp_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp.config
+      make-args: CROSS_COMPILE=aarch64-linux-gnu-

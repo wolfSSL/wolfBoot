@@ -124,7 +124,7 @@ void RAMFUNCTION wolfBoot_start(void)
     /* Load DTS to RAM */
     if (PART_IS_EXT(&os_image) &&
         wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
-        dts_buf = (uint32_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+        dts_buf = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
         dts_size = (uint32_t)os_image.fw_size;
 
         wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
@@ -136,8 +136,21 @@ void RAMFUNCTION wolfBoot_start(void)
 #else
     wolfBoot_printf("Loading %d bytes to RAM at %08lx\n", os_image.fw_size,
             (WOLFBOOT_LOAD_ADDRESS));
+
+#ifdef __GNUC__
+    /* WOLFBOOT_LOAD_ADDRESS can be 0 address,
+     * so don't warn on use of NULL for memcpy */
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wnonnull"
+#endif
+
     memcpy((void*)WOLFBOOT_LOAD_ADDRESS, os_image.fw_base, os_image.fw_size);
-  #ifdef MMU
+
+#ifdef __GNUC__
+    #pragma GCC diagnostic pop
+#endif
+
+#ifdef MMU
     dts_buf = hal_get_dts_address();
     if (dts_buf) {
         ret = wolfBoot_get_dts_size(dts_buf);
@@ -150,7 +163,7 @@ void RAMFUNCTION wolfBoot_start(void)
             memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, dts_buf, dts_size);
         }
     }
-  #endif /* MMU */
+#endif /* MMU */
 
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
     wolfBoot_printf("Booting at %08lx\n", WOLFBOOT_LOAD_ADDRESS);
