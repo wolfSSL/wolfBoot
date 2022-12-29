@@ -335,7 +335,7 @@ void hal_init(void)
 {
     clock_pll_on(0);
 
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
     spi_init(0,0);
 #endif
 }

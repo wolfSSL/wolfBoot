@@ -131,7 +131,7 @@ void RAMFUNCTION spi_cs_on(uint32_t base, int pin)
 
 static void RAMFUNCTION stm_pins_setup(void)
 {
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
     #ifdef PLATFORM_stm32l0
     stm_gpio_config(SPI_CLOCK_PIO_BASE, SPI_CLOCK_PIN, GPIO_MODE_AF,
         SPI_CLOCK_PIN_AF, 2, 3);
@@ -166,7 +166,7 @@ static void RAMFUNCTION stm_pins_setup(void)
 
 static void stm_pins_release(void)
 {
-#ifdef SPI_FLASH
+#if defined (SPI_FLASH) || defined (WOLFBOOT_TPM)
     stm_gpio_config(SPI_CLOCK_PIO_BASE, SPI_CLOCK_PIN, GPIO_MODE_INPUT, 0, 0, 0);
     stm_gpio_config(SPI_MOSI_PIO_BASE, SPI_MOSI_PIN, GPIO_MODE_INPUT, 0, 0, 0);
     stm_gpio_config(SPI_MISO_PIO_BASE, SPI_MISO_PIN, GPIO_MODE_INPUT, 0, 0, 0);
@@ -187,7 +187,7 @@ static void RAMFUNCTION spi_reset(void)
     AHB3_CLOCK_RST |= RCC_AHB3ENR_QSPIEN;
     AHB3_CLOCK_RST &= ~RCC_AHB3ENR_QSPIEN;
 #endif
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
     APB2_CLOCK_RST |= SPI1_APB2_CLOCK_ER_VAL;
     APB2_CLOCK_RST &= ~SPI1_APB2_CLOCK_ER_VAL;
 #endif
@@ -315,7 +315,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         RCC_D1CCIPR |= RCC_D1CCIPR_QSPISEL(QSPI_CLOCK_SEL);
         AHB3_CLOCK_EN |= RCC_AHB3ENR_QSPIEN;
 #endif
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         APB2_CLOCK_ER |= SPI1_APB2_CLOCK_ER_VAL;
 #endif
 
@@ -336,6 +336,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
             0, 1, 3);
         spi_cs_off(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
 #endif
+
 
 #ifdef QSPI_FLASH
         /* Configure QSPI FIFO Threshold (1 byte) */
@@ -358,7 +359,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         QUADSPI_DCR |= (QUADSPI_DCR_FSIZE(22) | QUADSPI_DCR_CSHT(0) |
             QUADSPI_DCR_CKMODE_0);
 #endif /* QSPI_FLASH */
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         /* Configure SPI1 for master mode */
 #   ifdef PLATFORM_stm32l0
         SPI1_CR1 = SPI_CR1_MASTER | (polarity << 1) | (phase << 0);
@@ -368,7 +369,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 #   endif
         SPI1_CR2 |= SPI_CR2_SSOE;
         SPI1_CR1 |= SPI_CR1_SPI_EN;
-#endif /* SPI_FLASH */
+#endif /* SPI_FLASH || WOLFBOOOT_TPM */
     }
 }
 
@@ -379,7 +380,7 @@ void RAMFUNCTION spi_release(void)
     }
     if (initialized == 0) {
         spi_reset();
-    #ifdef SPI_FLASH
+    #if defined (SPI_FLASH) || defined(WOLFBOOT_TPM)
         SPI1_CR2 &= ~SPI_CR2_SSOE;
         SPI1_CR1 = 0;
     #endif
