@@ -51,17 +51,23 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf52840.config
 
+  nxp_p1021_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-p1021.config
+
   nxp_t2080_68ppc2_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: ppc
-      config-file: ./config/examples/t2080_68ppc2.config
+      config-file: ./config/examples/nxp-t2080-68ppc2.config
 
   nxp_t2080_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: ppc
-      config-file: ./config/examples/t2080.config
+      config-file: ./config/examples/nxp-t2080.config
 
   raspi3_test:
     uses: ./.github/workflows/test-build.yml
