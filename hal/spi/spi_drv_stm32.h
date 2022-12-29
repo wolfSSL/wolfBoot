@@ -29,6 +29,7 @@
 #define GPIOC_BASE (0x40020800)
 #define GPIOD_BASE (0x40020C00)
 #define GPIOE_BASE (0x40021000)
+#define GPIO_BASE GPIOA_BASE
 #define SPI_GPIO      GPIOB_BASE
 #define SPI_CS_GPIO   GPIOE_BASE
 #define SPI_CS_FLASH  1 /* Flash CS connected to GPIOE1 */
