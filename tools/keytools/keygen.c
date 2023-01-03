@@ -217,6 +217,7 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
 {
     static int id_slot = 0;
     struct keystore_slot sl;
+
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
         fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
     else
@@ -491,13 +492,54 @@ static void key_import(uint32_t ktype, const char *fname)
     uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
     FILE *f;
     int r;
+    int i;
+    int keySize = 0;
     f = fopen(fname, "rb");
     if (f == NULL) {
         fprintf(stderr, "Fatal error: could not open file %s to import public key\n", fname);
         exit(6);
     }
-    r = fread(buf, sizeof(buf), 1, f);
-    keystore_add(ktype, buf, r, fname);
+
+    switch (ktype) {
+        case KEYGEN_ED25519:
+            keySize = KEYSTORE_PUBKEY_SIZE_ED25519;
+            break;
+        case KEYGEN_ED448:
+            keySize = KEYSTORE_PUBKEY_SIZE_ED448;
+            break;
+        case KEYGEN_ECC256:
+            keySize = KEYSTORE_PUBKEY_SIZE_ECC256;
+            break;
+        case KEYGEN_ECC384:
+            keySize = KEYSTORE_PUBKEY_SIZE_ECC384;
+            break;
+        case KEYGEN_RSA2048:
+            keySize = KEYSTORE_PUBKEY_SIZE_RSA2048;
+            break;
+        case KEYGEN_RSA3072:
+            keySize = KEYSTORE_PUBKEY_SIZE_RSA3072;
+            break;
+        case KEYGEN_RSA4096:
+            keySize = KEYSTORE_PUBKEY_SIZE_RSA4096;
+            break;
+        default:
+            keySize = 0;
+    }
+
+    i = 0;
+
+    do
+    {
+        r = fread(buf + i, 1, 1, f);
+        i += r;
+    } while ( i < keySize && r > 0);
+
+    if (i <= 0 || i > keySize) {
+        printf("Fatal error: could not find valid key in file %s\n", fname);
+        exit(6);
+    }
+
+    keystore_add(ktype, buf, i, fname);
 }
 
 int main(int argc, char** argv)
