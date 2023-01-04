@@ -217,7 +217,7 @@ static uint32_t get_pubkey_size(uint32_t keyType)
 {
     uint32_t size = 0;
 
-    switch (ktype) {
+    switch (keyType) {
         case KEYGEN_ED25519:
             size = KEYSTORE_PUBKEY_SIZE_ED25519;
             break;
