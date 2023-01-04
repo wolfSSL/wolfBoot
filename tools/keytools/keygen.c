@@ -213,6 +213,39 @@ const char KName[][8] = {
     "RSA3072"
 };
 
+static uint32_t get_pubkey_size(uint32_t keyType)
+{
+    uint32_t size = 0;
+
+    switch (ktype) {
+        case KEYGEN_ED25519:
+            size = KEYSTORE_PUBKEY_SIZE_ED25519;
+            break;
+        case KEYGEN_ED448:
+            size = KEYSTORE_PUBKEY_SIZE_ED448;
+            break;
+        case KEYGEN_ECC256:
+            size = KEYSTORE_PUBKEY_SIZE_ECC256;
+            break;
+        case KEYGEN_ECC384:
+            size = KEYSTORE_PUBKEY_SIZE_ECC384;
+            break;
+        case KEYGEN_RSA2048:
+            size = KEYSTORE_PUBKEY_SIZE_RSA2048;
+            break;
+        case KEYGEN_RSA3072:
+            size = KEYSTORE_PUBKEY_SIZE_RSA3072;
+            break;
+        case KEYGEN_RSA4096:
+            size = KEYSTORE_PUBKEY_SIZE_RSA4096;
+            break;
+        default:
+            size = 0;
+    }
+
+    return size;
+}
+
 void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile)
 {
     static int id_slot = 0;
@@ -233,31 +266,8 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     sl.slot_id = id_slot;
     sl.key_type = ktype;
     sl.part_id_mask = 0xFFFFFFFF;
-    switch (ktype){
-        case KEYGEN_ED25519:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ED25519;
-            break;
-        case KEYGEN_ED448:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ED448;
-            break;
-        case KEYGEN_ECC256:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC256;
-            break;
-        case KEYGEN_ECC384:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC384;
-            break;
-        case KEYGEN_RSA2048:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA2048;
-            break;
-        case KEYGEN_RSA3072:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA3072;
-            break;
-        case KEYGEN_RSA4096:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA4096;
-            break;
-        default:
-            sl.pubkey_size = 0;
-    }
+
+    sl.pubkey_size = get_pubkey_size(ktype);
 
     memcpy(sl.pubkey, key, sz);
     fwrite(&sl, sl.pubkey_size, 1, fpub_image);
@@ -519,24 +529,7 @@ static void key_import(uint32_t ktype, const char *fname)
     fclose(file);
 
     /* parse the key if it has a header */
-    switch (ktype) {
-        case KEYGEN_ECC256:
-            keySz = KEYSTORE_PUBKEY_SIZE_ECC256;
-            break;
-        case KEYGEN_ECC384:
-            keySz = KEYSTORE_PUBKEY_SIZE_ECC384;
-            break;
-        case KEYGEN_ECC521:
-            keySz = KEYSTORE_PUBKEY_SIZE_ECC521;
-            break;
-        case KEYGEN_RSA2048:
-        case KEYGEN_RSA3072:
-        case KEYGEN_RSA4096:
-        case KEYGEN_ED25519:
-        case KEYGEN_ED448:
-        default:
-            break;
-    }
+    keySz = get_pubkey_size(ktype);
 
     if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
         ktype == KEYGEN_ECC521) {
