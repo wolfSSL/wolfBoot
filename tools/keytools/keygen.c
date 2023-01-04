@@ -339,6 +339,8 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
         exit(3);
     }
 
+    wc_ecc_free(&k);
+
     fpriv = fopen(priv_fname, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", priv_fname,  strerror(errno));
@@ -490,6 +492,7 @@ static void key_generate(uint32_t ktype, const char *kfilename)
 static void key_import(uint32_t ktype, const char *fname)
 {
     int ret = 0;
+    int initRet = 0;
     uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
     FILE* file;
     int readLen = 0;
@@ -538,12 +541,15 @@ static void key_import(uint32_t ktype, const char *fname)
     if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
         ktype == KEYGEN_ECC521) {
         if ((uint32_t)readLen > keySz) {
-            ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
+            initRet = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
 
             if (ret == 0) {
                 ret = wc_ecc_export_public_raw(eccKey, buf, &qxSz,
                     buf + keySz / 2, &qySz);
             }
+
+            if (initRet == 0)
+                wc_ecc_free(eccKey);
 
             readLen = keySz;
         }
