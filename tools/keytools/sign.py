@@ -550,8 +550,13 @@ elif (wolfboot_key_buffer_len > 128):
     elif (sign != 'rsa2048'):
         print ("Error: key size %d too large for the selected cipher" % wolfboot_key_buffer_len)
 else:
-    print ("Error: key size does not match any cipher")
-    sys.exit(2)
+    if sign[0:3] == 'ecc':
+        # if this decode doesn't raise an error we have a valid ecc private key
+        tmpEcc = ciphers.EccPrivate()
+        tmpEcc.decode_key(wolfboot_key_buffer)
+    else:
+        print ("Error: key size does not match any cipher")
+        sys.exit(2)
 
 if sign == 'none':
     privkey = None
@@ -572,8 +577,15 @@ elif not sha_only and not manual_sign:
 
     if sign == 'ecc256':
         ecc = ciphers.EccPrivate()
-        ecc.decode_key_raw(wolfboot_key_buffer[0:32], wolfboot_key_buffer[32:64], wolfboot_key_buffer[64:])
-        pubkey = wolfboot_key_buffer[0:64]
+
+        if (wolfboot_key_buffer_len == 96):
+            ecc.decode_key_raw(wolfboot_key_buffer[0:32],
+                wolfboot_key_buffer[32:64], wolfboot_key_buffer[64:])
+            pubkey = wolfboot_key_buffer[0:64]
+        else:
+            ecc.decode_key(wolfboot_key_buffer)
+            pubkey = ecc.encode_key_raw()
+            pubkey = pubkey[0] + pubkey[1]
 
     if sign == 'ecc384':
         HDR_SIGNATURE_LEN = 96
@@ -581,16 +593,33 @@ elif not sha_only and not manual_sign:
             print("Ecc384: header size increased to 512")
             WOLFBOOT_HEADER_SIZE = 512
         ecc = ciphers.EccPrivate()
-        ecc.decode_key_raw(wolfboot_key_buffer[0:48], wolfboot_key_buffer[48:96], wolfboot_key_buffer[96:],
+
+        if (wolfboot_key_buffer_len == 144):
+            ecc.decode_key_raw(wolfboot_key_buffer[0:48],
+                wolfboot_key_buffer[48:96], wolfboot_key_buffer[96:],
                 curve_id = ciphers.ECC_SECP384R1)
-        pubkey = wolfboot_key_buffer[0:96]
+            pubkey = wolfboot_key_buffer[0:96]
+        else:
+            ecc.decode_key(wolfboot_key_buffer)
+            pubkey = ecc.encode_key_raw()
+            pubkey = pubkey[0] + pubkey[1]
+
 
     if sign == 'ecc521':
         HDR_SIGNATURE_LEN = 132
+
         ecc = ciphers.EccPrivate()
-        ecc.decode_key_raw(wolfboot_key_buffer[0:66], wolfboot_key_buffer[66:132], wolfboot_key_buffer[132:],
+
+        if (wolfboot_key_buffer_len == 198):
+            ecc.decode_key_raw(wolfboot_key_buffer[0:66],
+                wolfboot_key_buffer[66:132], wolfboot_key_buffer[132:],
                 curve_id = ciphers.ECC_SECP521R1)
-        pubkey = wolfboot_key_buffer[0:132]
+            pubkey = wolfboot_key_buffer[0:132]
+        else:
+            ecc.decode_key(wolfboot_key_buffer)
+            pubkey = ecc.encode_key_raw()
+            pubkey = pubkey[0] + pubkey[1]
+
         if WOLFBOOT_HEADER_SIZE < 512:
             print("Ecc521: header size increased to 512")
             WOLFBOOT_HEADER_SIZE = 512
