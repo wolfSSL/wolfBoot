@@ -230,6 +230,9 @@ static uint32_t get_pubkey_size(uint32_t keyType)
         case KEYGEN_ECC384:
             size = KEYSTORE_PUBKEY_SIZE_ECC384;
             break;
+        case KEYGEN_ECC521:
+            size = KEYSTORE_PUBKEY_SIZE_ECC521;
+            break;
         case KEYGEN_RSA2048:
             size = KEYSTORE_PUBKEY_SIZE_RSA2048;
             break;
@@ -246,10 +249,13 @@ static uint32_t get_pubkey_size(uint32_t keyType)
     return size;
 }
 
-void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile)
+void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile, int exportPub)
 {
     static int id_slot = 0;
     struct keystore_slot sl;
+    FILE* exportFile;
+    char* pubFname;
+    const char* pubPrefix = "pub_";
 
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
         fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
@@ -273,6 +279,31 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     fwrite(&sl, sl.pubkey_size, 1, fpub_image);
     sl.pubkey_size = sz;
     id_slot++;
+
+    if (exportPub == 1) {
+        /* write public key */
+        pubFname = malloc(strlen(pubPrefix) + strlen(keyfile) + 1);
+
+        if (pubFname == NULL) {
+            printf("Failed to export public key\n");
+            return;
+        }
+
+        strcpy(pubFname, pubPrefix);
+        strcpy(pubFname + strlen(pubPrefix), keyfile);
+
+        exportFile = fopen(pubFname, "wb");
+
+        if (exportFile == NULL) {
+            fprintf(stderr, "Unable to open file '%s' for writing: %s", keyfile, strerror(errno));
+            exit(4);
+        }
+
+        fwrite(key, sz, 1, exportFile);
+        fclose(exportFile);
+
+        printf("Exported Public Key:   %s\n", pubFname);
+    }
 }
 
 
@@ -313,11 +344,11 @@ static void keygen_rsa(const char *keyfile, int kbits)
     fclose(fpriv);
 
     if (kbits == 2048)
-        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile);
+        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile, 1);
     else if (kbits == 3072)
-        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile);
+        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile, 1);
     else if (kbits == 4096)
-        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile);
+        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile, 1);
 }
 #endif
 
@@ -366,11 +397,11 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
 
     if (ecc_key_size == 32)
-        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname);
+        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, 1);
     else if (ecc_key_size == 48)
-        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname);
+        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, 1);
     else if (ecc_key_size == 66)
-        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname);
+        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, 1);
 }
 #endif
 
@@ -402,7 +433,7 @@ static void keygen_ed25519(const char *privkey)
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
-    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey);
+    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, 1);
 }
 #endif
 
@@ -433,7 +464,7 @@ static void keygen_ed448(const char *privkey)
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
     fclose(fpriv);
-    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey);
+    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey, 1);
 }
 #endif
 
@@ -554,7 +585,7 @@ static void key_import(uint32_t ktype, const char *fname)
     }
 
     /* needs to be r - rawOffset because rsa keys are not exactly keysize */
-    keystore_add(ktype, buf, readLen, fname);
+    keystore_add(ktype, buf, readLen, fname, 0);
 }
 
 int main(int argc, char** argv)

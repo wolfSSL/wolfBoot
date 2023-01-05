@@ -292,6 +292,10 @@ if pubkey_files != None:
     pub_slot_index = len(pubkey_files)
 
 for slot_index_off, key_file in enumerate(key_files):
+    exportPubkeyFile = 'pub_' + key_file
+    # initialize outside of if statements
+    priv = []
+    pub = []
     slot_index = slot_index_off + pub_slot_index
     print ("Public key slot:      " + str(slot_index))
     print ("Selected cipher:      " + sign)
@@ -308,24 +312,9 @@ for slot_index_off, key_file in enumerate(key_files):
         ed = ciphers.Ed25519Private.make_key(32)
         priv,pub = ed.encode_key()
 
-        print()
-        print("Creating file " + key_file)
-        with open(key_file, "wb") as f:
-            f.write(priv)
-            f.write(pub)
-            f.close()
-        keystore_add(slot_index, pub)
-
     if (sign == "ed448"):
         ed = ciphers.Ed448Private.make_key(57)
         priv,pub = ed.encode_key()
-        print()
-        print("Creating file " + key_file)
-        with open(key_file, "wb") as f:
-            f.write(priv)
-            f.write(pub)
-            f.close()
-        keystore_add(slot_index, pub)
 
     if (sign[0:3] == 'ecc'):
         if (sign == "ecc256"):
@@ -342,51 +331,36 @@ for slot_index_off, key_file in enumerate(key_files):
             ec = ciphers.EccPrivate.make_key(66)
             ecc_pub_key_len = 132
             qx,qy,d = ec.encode_key_raw()
-        print()
-        print("Creating file " + key_file)
-        keystore_add(slot_index, bytes(qx) + bytes(qy))
-        with open(key_file, "wb") as f:
-            f.write(qx)
-            f.write(qy)
-            f.write(d)
-            f.close()
+
+        priv = qx + qy + d
+        pub = qx + qy
 
     if (sign == "rsa2048"):
         rsa = ciphers.RsaPrivate.make_key(2048)
         priv,pub = rsa.encode_key()
-        print()
-        print("Creating file " + key_file)
-        with open(key_file, "wb") as f:
-            f.write(priv)
-            f.close()
-        print("Creating file " + pubkey_cfile)
-        keystore_add(slot_index, pub, len(pub))
 
     if (sign == "rsa3072"):
         rsa = ciphers.RsaPrivate.make_key(3072)
         priv,pub = rsa.encode_key()
-        print()
-        print("Creating file " + key_file)
-        with open(key_file, "wb") as f:
-            f.write(priv)
-            f.close()
-        keystore_add(slot_index, pub, len(pub))
 
     if (sign == "rsa4096"):
         rsa = ciphers.RsaPrivate.make_key(4096)
-        if os.path.exists(key_file) and not force:
-            choice = input("** Warning: key file already exist! Are you sure you want to "+
-                    "generate a new key and overwrite the existing key? [Type 'Yes']: ")
-            if (choice != "Yes"):
-                print("Operation canceled.")
-                sys.exit(2)
         priv,pub = rsa.encode_key()
-        print()
-        print("Creating file " + key_file)
-        with open(key_file, "wb") as f:
-            f.write(priv)
-            f.close()
-        keystore_add(slot_index, pub, len(pub))
+
+    print()
+    print("Creating file " + key_file)
+    with open(key_file, "wb") as f:
+        f.write(priv)
+        f.write(pub)
+        f.close()
+
+    print()
+    print('Exported Public Key: ' + exportPubkeyFile)
+    with open(exportPubkeyFile, "wb") as f:
+        f.write(pub)
+        f.close()
+
+    keystore_add(slot_index, pub)
 
 pfile.write(Store_footer)
 pfile.write(Keystore_API)
