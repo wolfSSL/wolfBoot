@@ -551,9 +551,14 @@ elif (wolfboot_key_buffer_len > 128):
         print ("Error: key size %d too large for the selected cipher" % wolfboot_key_buffer_len)
 else:
     if sign[0:3] == 'ecc':
-        # if this decode doesn't raise an error we have a valid ecc private key
-        tmpEcc = ciphers.EccPrivate()
-        tmpEcc.decode_key(wolfboot_key_buffer)
+        # if this decode doesn't raise an error we have a valid ecc key
+        # public only
+        if manual_sign or sha_only:
+            tmpEcc = ciphers.EccPublic(wolfboot_key_buffer)
+        #private
+        else:
+            tmpEcc = ciphers.EccPrivate()
+            tmpEcc.decode_key(wolfboot_key_buffer)
     else:
         print ("Error: key size does not match any cipher")
         sys.exit(2)
@@ -666,7 +671,13 @@ else:
             WOLFBOOT_HEADER_SIZE = 1024
         HDR_SIGNATURE_LEN = 512
 
-    pubkey = wolfboot_key_buffer
+    # if it's an ecc key, check if it is encoded
+    if (sign == 'ecc256' and wolfboot_key_buffer_len != 64) or (sign == 'ecc384' and wolfboot_key_buffer_len != 96) or (sign == 'ecc384' and wolfboot_key_buffer_len != 132):
+        eccKey = ciphers.EccPublic(wolfboot_key_buffer)
+        pubkey = eccKey.encode_key_raw()
+        pubkey = pubkey[0] + pubkey[1]
+    else:
+        pubkey = wolfboot_key_buffer
 
 header = make_header(image_file, fw_version)
 
