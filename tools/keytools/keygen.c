@@ -213,10 +213,44 @@ const char KName[][8] = {
     "RSA3072"
 };
 
+static uint32_t get_pubkey_size(uint32_t keyType)
+{
+    uint32_t size = 0;
+
+    switch (keyType) {
+        case KEYGEN_ED25519:
+            size = KEYSTORE_PUBKEY_SIZE_ED25519;
+            break;
+        case KEYGEN_ED448:
+            size = KEYSTORE_PUBKEY_SIZE_ED448;
+            break;
+        case KEYGEN_ECC256:
+            size = KEYSTORE_PUBKEY_SIZE_ECC256;
+            break;
+        case KEYGEN_ECC384:
+            size = KEYSTORE_PUBKEY_SIZE_ECC384;
+            break;
+        case KEYGEN_RSA2048:
+            size = KEYSTORE_PUBKEY_SIZE_RSA2048;
+            break;
+        case KEYGEN_RSA3072:
+            size = KEYSTORE_PUBKEY_SIZE_RSA3072;
+            break;
+        case KEYGEN_RSA4096:
+            size = KEYSTORE_PUBKEY_SIZE_RSA4096;
+            break;
+        default:
+            size = 0;
+    }
+
+    return size;
+}
+
 void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile)
 {
     static int id_slot = 0;
     struct keystore_slot sl;
+
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
         fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
     else
@@ -232,31 +266,8 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     sl.slot_id = id_slot;
     sl.key_type = ktype;
     sl.part_id_mask = 0xFFFFFFFF;
-    switch (ktype){
-        case KEYGEN_ED25519:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ED25519;
-            break;
-        case KEYGEN_ED448:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ED448;
-            break;
-        case KEYGEN_ECC256:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC256;
-            break;
-        case KEYGEN_ECC384:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC384;
-            break;
-        case KEYGEN_RSA2048:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA2048;
-            break;
-        case KEYGEN_RSA3072:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA3072;
-            break;
-        case KEYGEN_RSA4096:
-            sl.pubkey_size = KEYSTORE_PUBKEY_SIZE_RSA4096;
-            break;
-        default:
-            sl.pubkey_size = 0;
-    }
+
+    sl.pubkey_size = get_pubkey_size(ktype);
 
     memcpy(sl.pubkey, key, sz);
     fwrite(&sl, sl.pubkey_size, 1, fpub_image);
@@ -337,6 +348,8 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
         fprintf(stderr, "Unable to export public key\n");
         exit(3);
     }
+
+    wc_ecc_free(&k);
 
     fpriv = fopen(priv_fname, "wb");
     if (fpriv == NULL) {
@@ -488,16 +501,60 @@ static void key_generate(uint32_t ktype, const char *kfilename)
 
 static void key_import(uint32_t ktype, const char *fname)
 {
+    int ret = 0;
+    int initRet = 0;
     uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
-    FILE *f;
-    int r;
-    f = fopen(fname, "rb");
-    if (f == NULL) {
+    FILE* file;
+    int readLen = 0;
+    uint32_t keySz = 0;
+    ecc_key eccKey[1];
+    uint32_t keySzOut = 0;
+    uint32_t qxSz = MAX_ECC_KEY_SIZE;
+    uint32_t qySz = MAX_ECC_KEY_SIZE;
+
+    file = fopen(fname, "rb");
+
+    if (file == NULL) {
         fprintf(stderr, "Fatal error: could not open file %s to import public key\n", fname);
         exit(6);
     }
-    r = fread(buf, sizeof(buf), 1, f);
-    keystore_add(ktype, buf, r, fname);
+
+    readLen = fread(buf, 1, sizeof(buf), file);
+
+    if (readLen <= 0) {
+        printf("Fatal error: could not find valid key in file %s\n", fname);
+        exit(6);
+    }
+
+    fclose(file);
+
+    /* parse the key if it has a header */
+    keySz = get_pubkey_size(ktype);
+
+    if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
+        ktype == KEYGEN_ECC521) {
+        if ((uint32_t)readLen > keySz) {
+            initRet = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
+
+            if (ret == 0) {
+                ret = wc_ecc_export_public_raw(eccKey, buf, &qxSz,
+                    buf + keySz / 2, &qySz);
+            }
+
+            if (initRet == 0)
+                wc_ecc_free(eccKey);
+
+            readLen = keySz;
+        }
+    }
+
+    if (ret != 0) {
+        printf("Fatal error: could not parse public key %s\n", fname);
+        exit(6);
+    }
+
+    /* needs to be r - rawOffset because rsa keys are not exactly keysize */
+    keystore_add(ktype, buf, readLen, fname);
 }
 
 int main(int argc, char** argv)
