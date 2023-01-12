@@ -596,8 +596,8 @@ target_compile_options(wolfboothal PRIVATE ${WOLFBOOT_COMPILE_OPTIONS} ${EXTRA_C
 
 if(PYTHON_KEYTOOLS)
     message(STATUS "Using Python Keytools")
-    set(SIGN_TOOL python3 ${WOLFBOOT_ROOT}/tools/keytools/sign.py)
-    set(KEYGEN_TOOL python3 ${WOLFBOOT_ROOT}/tools/keytools/keygen.py)
+    set(SIGN_TOOL ${WOLFBOOT_ROOT}/tools/keytools/sign.py)
+    set(KEYGEN_TOOL ${WOLFBOOT_ROOT}/tools/keytools/keygen.py)
 else()
     message(STATUS "Using C Keytools")
     set(SIGN_TOOL ${CMAKE_CURRENT_BINARY_DIR}/sign)
@@ -673,69 +673,71 @@ target_include_directories(target BEFORE INTERFACE ${CMAKE_CURRENT_BINARY_DIR})
 
 set(KEYSTORE ${CMAKE_CURRENT_BINARY_DIR}/keystore.c)
 
+if(NOT PYTHON_KEYTOOLS)
+    list(
+        APPEND
+        KEYTOOL_SOURCES
+        src/delta.c
+        lib/wolfssl/wolfcrypt/src/asn.c
+        lib/wolfssl/wolfcrypt/src/aes.c
+        lib/wolfssl/wolfcrypt/src/ecc.c
+        lib/wolfssl/wolfcrypt/src/coding.c
+        lib/wolfssl/wolfcrypt/src/chacha.c
+        lib/wolfssl/wolfcrypt/src/ed25519.c
+        lib/wolfssl/wolfcrypt/src/ed448.c
+        lib/wolfssl/wolfcrypt/src/fe_operations.c
+        lib/wolfssl/wolfcrypt/src/ge_operations.c
+        lib/wolfssl/wolfcrypt/src/fe_448.c
+        lib/wolfssl/wolfcrypt/src/ge_448.c
+        lib/wolfssl/wolfcrypt/src/hash.c
+        lib/wolfssl/wolfcrypt/src/logging.c
+        lib/wolfssl/wolfcrypt/src/memory.c
+        lib/wolfssl/wolfcrypt/src/random.c
+        lib/wolfssl/wolfcrypt/src/rsa.c
+        lib/wolfssl/wolfcrypt/src/sp_int.c
+        lib/wolfssl/wolfcrypt/src/sp_c32.c
+        lib/wolfssl/wolfcrypt/src/sp_c64.c
+        lib/wolfssl/wolfcrypt/src/sha3.c
+        lib/wolfssl/wolfcrypt/src/sha256.c
+        lib/wolfssl/wolfcrypt/src/sha512.c
+        lib/wolfssl/wolfcrypt/src/tfm.c
+        lib/wolfssl/wolfcrypt/src/wc_port.c
+        lib/wolfssl/wolfcrypt/src/wolfmath.c)
+
+    list(
+        APPEND
+        KEYTOOL_FLAGS
+        -Wall
+        -Wextra
+        -Werror
+        -Itools/keytools
+        -DWOLFSSL_USER_SETTINGS
+        -Ilib/wolfssl/
+        -Iinclude
+        -I${CMAKE_CURRENT_BINARY_DIR}
+        -DWOLFBOOT_KEYTOOLS
+        -O2
+        -DIMAGE_HEADER_SIZE=${IMAGE_HEADER_SIZE}
+        -DDELTA_UPDATES)
+
+    add_custom_command(
+        OUTPUT ${SIGN_TOOL}
+        COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/sign tools/keytools/sign.c ${KEYTOOL_SOURCES}
+                ${KEYTOOL_FLAGS}
+        WORKING_DIRECTORY ${WOLFBOOT_ROOT}
+        COMMENT "Building signing tool")
+
+    add_custom_command(
+        OUTPUT ${KEYGEN_TOOL}
+        COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/keygen tools/keytools/keygen.c ${KEYTOOL_SOURCES}
+                ${KEYTOOL_FLAGS}
+        WORKING_DIRECTORY ${WOLFBOOT_ROOT}
+        COMMENT "Building keygen tool")
+
+    add_custom_target(keytools ALL DEPENDS ${SIGN_TOOL} ${KEYGEN_TOOL})
+endif()
+
 if(NOT SIGN STREQUAL "NONE")
-    if(NOT PYTHON_KEYTOOLS)
-        list(
-            APPEND
-            KEYTOOL_SOURCES
-            src/delta.c
-            lib/wolfssl/wolfcrypt/src/asn.c
-            lib/wolfssl/wolfcrypt/src/aes.c
-            lib/wolfssl/wolfcrypt/src/ecc.c
-            lib/wolfssl/wolfcrypt/src/coding.c
-            lib/wolfssl/wolfcrypt/src/chacha.c
-            lib/wolfssl/wolfcrypt/src/ed25519.c
-            lib/wolfssl/wolfcrypt/src/ed448.c
-            lib/wolfssl/wolfcrypt/src/fe_operations.c
-            lib/wolfssl/wolfcrypt/src/ge_operations.c
-            lib/wolfssl/wolfcrypt/src/fe_448.c
-            lib/wolfssl/wolfcrypt/src/ge_448.c
-            lib/wolfssl/wolfcrypt/src/hash.c
-            lib/wolfssl/wolfcrypt/src/logging.c
-            lib/wolfssl/wolfcrypt/src/memory.c
-            lib/wolfssl/wolfcrypt/src/random.c
-            lib/wolfssl/wolfcrypt/src/rsa.c
-            lib/wolfssl/wolfcrypt/src/sp_int.c
-            lib/wolfssl/wolfcrypt/src/sp_c32.c
-            lib/wolfssl/wolfcrypt/src/sp_c64.c
-            lib/wolfssl/wolfcrypt/src/sha3.c
-            lib/wolfssl/wolfcrypt/src/sha256.c
-            lib/wolfssl/wolfcrypt/src/sha512.c
-            lib/wolfssl/wolfcrypt/src/tfm.c
-            lib/wolfssl/wolfcrypt/src/wc_port.c
-            lib/wolfssl/wolfcrypt/src/wolfmath.c)
-
-        list(
-            APPEND
-            KEYTOOL_FLAGS
-            -Wall
-            -Wextra
-            -Werror
-            -Itools/keytools
-            -DWOLFSSL_USER_SETTINGS
-            -Ilib/wolfssl/
-            -Iinclude
-            -I${CMAKE_CURRENT_BINARY_DIR}
-            -DWOLFBOOT_KEYTOOLS
-            -O2
-            -DIMAGE_HEADER_SIZE=${IMAGE_HEADER_SIZE}
-            -DDELTA_UPDATES)
-
-        add_custom_command(
-            OUTPUT ${SIGN_TOOL}
-            COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/sign tools/keytools/sign.c ${KEYTOOL_SOURCES}
-                    ${KEYTOOL_FLAGS}
-            WORKING_DIRECTORY ${WOLFBOOT_ROOT}
-            COMMENT "Building signing tool")
-
-        add_custom_command(
-            OUTPUT ${KEYGEN_TOOL}
-            COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/keygen tools/keytools/keygen.c
-                    ${KEYTOOL_SOURCES} ${KEYTOOL_FLAGS}
-            WORKING_DIRECTORY ${WOLFBOOT_ROOT}
-            COMMENT "Building keygen tool")
-    endif()
-
     if(PYTHON_KEYTOOLS)
         add_custom_target(keystore DEPENDS ${KEYSTORE})
     else()

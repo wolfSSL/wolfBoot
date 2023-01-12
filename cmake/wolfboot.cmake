@@ -76,7 +76,7 @@ function(gen_wolfboot_signed_image TARGET)
     # generate signed image
     add_custom_command(
         OUTPUT ${TARGET}_v${VERSION}_signed.bin
-        DEPENDS ${INPUT_IMAGE} ${WOLFBOOT_SIGNING_PRIVATE_KEY} keystore
+        DEPENDS ${INPUT_IMAGE} ${WOLFBOOT_SIGNING_PRIVATE_KEY} ${SIGN_TOOL}
         COMMAND ${SIGN_TOOL} ${KEYTOOL_OPTIONS} ${INPUT_IMAGE} ${WOLFBOOT_SIGNING_PRIVATE_KEY} ${VERSION}
         COMMENT "Signing ${TARGET}"
     )
