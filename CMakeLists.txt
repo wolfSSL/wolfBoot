@@ -32,18 +32,18 @@
 cmake_minimum_required(VERSION 3.16)
 
 if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
-    message(FATAL_ERROR "In-source builds are not allowed.\
+    message(
+        FATAL_ERROR
+            "In-source builds are not allowed.\
      Run cmake from a separate directory from where CMakeLists.txt lives.\
      NOTE: cmake will now create CMakeCache.txt and CMakeFiles/*.\
      You must delete them, or cmake will refuse to work.")
 endif()
 
-
 project(wolfBoot)
 
 include(cmake/utils.cmake)
 include(cmake/functions.cmake)
-
 
 if(NOT DEFINED WOLFBOOT_TARGET)
     message(FATAL_ERROR "WOLFBOOT_TARGET must be defined")
@@ -51,26 +51,9 @@ else()
     message(STATUS "Building for ${WOLFBOOT_TARGET}")
 endif()
 
-if(NOT DEFINED WOLFBOOT_PARTITION_SIZE)
-    message(FATAL_ERROR "WOLFBOOT_PARTITION_SIZE must be defined")
-endif()
-
 if(NOT DEFINED WOLFBOOT_SECTOR_SIZE)
     message(FATAL_ERROR "WOLFBOOT_SECTOR_SIZE must be defined")
 endif()
-
-if(NOT DEFINED WOLFBOOT_PARTITION_BOOT_ADDRESS)
-    message(FATAL_ERROR "WOLFBOOT_PARTITION_BOOT_ADDRESS must be defined")
-endif()
-
-if(NOT DEFINED WOLFBOOT_PARTITION_UPDATE_ADDRESS)
-    message(FATAL_ERROR "WOLFBOOT_PARTITION_UPDATE_ADDRESS must be defined")
-endif()
-
-if(NOT DEFINED WOLFBOOT_PARTITION_SWAP_ADDRESS)
-    message(FATAL_ERROR "WOLFBOOT_PARTITION_SWAP_ADDRESS must be defined")
-endif()
-
 
 if(NOT DEFINED ARM_TARGETS)
     list(APPEND ARM_TARGETS stm32h7 stm32l0 stm32f4 stm32u5)
@@ -140,7 +123,34 @@ add_option(
     "no"
     "yes;no")
 add_option("BUILD_TEST_APPS" "Build the wolfBoot test apps (default: disabled)" "no" "yes;no")
-add_option("PYTHON_KEYTOOLS" "Use wolfCrypt-py for key generation and signing (default: disabled)" "no" "yes;no")
+add_option("PYTHON_KEYTOOLS" "Use wolfCrypt-py for key generation and signing (default: disabled)"
+           "no" "yes;no")
+add_option(
+    "PULL_LINKER_DEFINES"
+    "Pull partition addresses from the linker script instead of defining fixed addresses in target.h (default: disabled)"
+    "no"
+    "yes;no")
+
+# If PULL_LINKER_DEFINES is set, partition addresses and size info will come from the linker script,
+# so no need to pass them on the command line. These variables do need to be set for building the
+# test apps.
+if(NOT DEFINED PULL_LINKER_DEFINES AND NOT DEFINED BUILD_TEST_APPS)
+    if(NOT DEFINED WOLFBOOT_PARTITION_SIZE)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_SIZE must be defined")
+    endif()
+
+    if(NOT DEFINED WOLFBOOT_PARTITION_BOOT_ADDRESS)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_BOOT_ADDRESS must be defined")
+    endif()
+
+    if(NOT DEFINED WOLFBOOT_PARTITION_UPDATE_ADDRESS)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_UPDATE_ADDRESS must be defined")
+    endif()
+
+    if(NOT DEFINED WOLFBOOT_PARTITION_SWAP_ADDRESS)
+        message(FATAL_ERROR "WOLFBOOT_PARTITION_SWAP_ADDRESS must be defined")
+    endif()
+endif()
 
 # unset cache variables Variables that need to be accessed by the gen_wolfboot_platform_target cmake
 # function called from the parent cmake project are added to the cache so that they can be accessed
@@ -239,7 +249,6 @@ if(ARCH STREQUAL "AARCH64")
     endif()
 
 endif()
-
 
 list(APPEND WOLFBOOT_DEFS ARCH_FLASH_OFFSET=${ARCH_FLASH_OFFSET})
 
@@ -432,6 +441,10 @@ list(APPEND WOLFBOOT_DEFS ${SIGN_OPTIONS})
 
 list(APPEND WOLFBOOT_COMPILE_OPTIONS -Wstack-usage=${STACK_USAGE} -Wno-unused)
 
+if(PULL_LINKER_DEFINES)
+    list(APPEND WOLFBOOT_DEFS PULL_LINKER_DEFINES)
+endif()
+
 if(RAM_CODE)
     list(APPEND WOLFBOOT_DEFS RAM_CODE)
 endif()
@@ -490,7 +503,8 @@ endif()
 if(NOT DEFINED WOLFBOOT_VERSION)
     set(WOLFBOOT_VERSION 1)
 endif()
-    list(APPEND WOLFBOOT_DEFS WOLFBOOT_VERSION=${WOLFBOOT_VERSION})
+
+list(APPEND WOLFBOOT_DEFS WOLFBOOT_VERSION=${WOLFBOOT_VERSION})
 
 if(DELTA_UPDATES)
     list(APPEND WOLFBOOT_SOURCES src/delta.c)
@@ -536,19 +550,16 @@ set(SPI_TARGET ${WOLFBOOT_TARGET})
 # Default UART driver name
 set(UART_TARGET ${WOLFBOOT_TARGET})
 
-if(${WOLFBOOT_TARGET} STREQUAL "stm32l0")
-    set(SPI_TARGET stm32)
-endif()
+set(SPI_DRV_STM32_TARGETS
+    "stm32l0"
+    "stm32f4"
+    "stm32l4"
+    "stm32f7"
+    "stm32h7"
+    "stm32wb"
+    "stm32u5")
 
-if(${WOLFBOOT_TARGET} STREQUAL "stm32h7")
-    set(SPI_TARGET stm32)
-endif()
-
-if(${WOLFBOOT_TARGET} STREQUAL "stm32u5")
-    set(SPI_TARGET stm32)
-endif()
-
-if(${WOLFBOOT_TARGET} STREQUAL "stm32f4")
+if(${WOLFBOOT_TARGET} IN_LIST SPI_DRV_STM32_TARGETS)
     set(SPI_TARGET stm32)
 endif()
 
@@ -585,12 +596,12 @@ target_compile_options(wolfboothal PRIVATE ${WOLFBOOT_COMPILE_OPTIONS} ${EXTRA_C
 
 if(PYTHON_KEYTOOLS)
     message(STATUS "Using Python Keytools")
-    set(SIGN_TOOL python3 ${WOLFBOOT_ROOT}/tools/keytools/sign.py)
-    set(KEYGEN_TOOL python3 ${WOLFBOOT_ROOT}/tools/keytools/keygen.py)
+    set(SIGN_TOOL ${WOLFBOOT_ROOT}/tools/keytools/sign.py)
+    set(KEYGEN_TOOL ${WOLFBOOT_ROOT}/tools/keytools/keygen.py)
 else()
     message(STATUS "Using C Keytools")
-    set(SIGN_TOOL  ${CMAKE_CURRENT_BINARY_DIR}/sign)
-    set(KEYGEN_TOOL  ${CMAKE_CURRENT_BINARY_DIR}/keygen)
+    set(SIGN_TOOL ${CMAKE_CURRENT_BINARY_DIR}/sign)
+    set(KEYGEN_TOOL ${CMAKE_CURRENT_BINARY_DIR}/keygen)
 endif()
 
 list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT} ${WOLFBOOT_ROOT}/include)
@@ -657,70 +668,97 @@ set(WOLFBOOT_VERSION
 configure_file(include/target.h.in ${CMAKE_CURRENT_BINARY_DIR}/target.h @ONLY)
 
 add_library(target INTERFACE)
+target_compile_definitions(target INTERFACE ${WOLFBOOT_DEFS})
 target_include_directories(target BEFORE INTERFACE ${CMAKE_CURRENT_BINARY_DIR})
-
 
 set(KEYSTORE ${CMAKE_CURRENT_BINARY_DIR}/keystore.c)
 
+if(NOT PYTHON_KEYTOOLS)
+    list(
+        APPEND
+        KEYTOOL_SOURCES
+        src/delta.c
+        lib/wolfssl/wolfcrypt/src/asn.c
+        lib/wolfssl/wolfcrypt/src/aes.c
+        lib/wolfssl/wolfcrypt/src/ecc.c
+        lib/wolfssl/wolfcrypt/src/coding.c
+        lib/wolfssl/wolfcrypt/src/chacha.c
+        lib/wolfssl/wolfcrypt/src/ed25519.c
+        lib/wolfssl/wolfcrypt/src/ed448.c
+        lib/wolfssl/wolfcrypt/src/fe_operations.c
+        lib/wolfssl/wolfcrypt/src/ge_operations.c
+        lib/wolfssl/wolfcrypt/src/fe_448.c
+        lib/wolfssl/wolfcrypt/src/ge_448.c
+        lib/wolfssl/wolfcrypt/src/hash.c
+        lib/wolfssl/wolfcrypt/src/logging.c
+        lib/wolfssl/wolfcrypt/src/memory.c
+        lib/wolfssl/wolfcrypt/src/random.c
+        lib/wolfssl/wolfcrypt/src/rsa.c
+        lib/wolfssl/wolfcrypt/src/sp_int.c
+        lib/wolfssl/wolfcrypt/src/sp_c32.c
+        lib/wolfssl/wolfcrypt/src/sp_c64.c
+        lib/wolfssl/wolfcrypt/src/sha3.c
+        lib/wolfssl/wolfcrypt/src/sha256.c
+        lib/wolfssl/wolfcrypt/src/sha512.c
+        lib/wolfssl/wolfcrypt/src/tfm.c
+        lib/wolfssl/wolfcrypt/src/wc_port.c
+        lib/wolfssl/wolfcrypt/src/wolfmath.c)
+
+    list(
+        APPEND
+        KEYTOOL_FLAGS
+        -Wall
+        -Wextra
+        -Werror
+        -Itools/keytools
+        -DWOLFSSL_USER_SETTINGS
+        -Ilib/wolfssl/
+        -Iinclude
+        -I${CMAKE_CURRENT_BINARY_DIR}
+        -DWOLFBOOT_KEYTOOLS
+        -O2
+        -DIMAGE_HEADER_SIZE=${IMAGE_HEADER_SIZE}
+        -DDELTA_UPDATES)
+
+    add_custom_command(
+        OUTPUT ${SIGN_TOOL}
+        COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/sign tools/keytools/sign.c ${KEYTOOL_SOURCES}
+                ${KEYTOOL_FLAGS}
+        WORKING_DIRECTORY ${WOLFBOOT_ROOT}
+        COMMENT "Building signing tool")
+
+    add_custom_command(
+        OUTPUT ${KEYGEN_TOOL}
+        COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/keygen tools/keytools/keygen.c ${KEYTOOL_SOURCES}
+                ${KEYTOOL_FLAGS}
+        WORKING_DIRECTORY ${WOLFBOOT_ROOT}
+        COMMENT "Building keygen tool")
+
+    add_custom_target(keytools ALL DEPENDS ${SIGN_TOOL} ${KEYGEN_TOOL})
+endif()
+
 if(NOT SIGN STREQUAL "NONE")
+    if(PYTHON_KEYTOOLS)
+        add_custom_target(keystore DEPENDS ${KEYSTORE})
+    else()
+        add_custom_target(keystore DEPENDS ${SIGN_TOOL} ${KEYGEN_TOOL} ${KEYSTORE})
+    endif()
+
+    # generate keystore if it does not already exist
     if(NOT EXISTS ${KEYSTORE})
-
-        if(NOT PYTHON_KEYTOOLS) 
-            list(APPEND KEYTOOL_SOURCES src/delta.c
-                lib/wolfssl/wolfcrypt/src/asn.c 
-                lib/wolfssl/wolfcrypt/src/aes.c 
-                lib/wolfssl/wolfcrypt/src/ecc.c 
-                lib/wolfssl/wolfcrypt/src/coding.c 
-                lib/wolfssl/wolfcrypt/src/chacha.c 
-                lib/wolfssl/wolfcrypt/src/ed25519.c 
-                lib/wolfssl/wolfcrypt/src/ed448.c 
-                lib/wolfssl/wolfcrypt/src/fe_operations.c 
-                lib/wolfssl/wolfcrypt/src/ge_operations.c 
-                lib/wolfssl/wolfcrypt/src/fe_448.c 
-                lib/wolfssl/wolfcrypt/src/ge_448.c 
-                lib/wolfssl/wolfcrypt/src/hash.c 
-                lib/wolfssl/wolfcrypt/src/logging.c 
-                lib/wolfssl/wolfcrypt/src/memory.c 
-                lib/wolfssl/wolfcrypt/src/random.c 
-                lib/wolfssl/wolfcrypt/src/rsa.c 
-                lib/wolfssl/wolfcrypt/src/sp_int.c 
-                lib/wolfssl/wolfcrypt/src/sp_c32.c 
-                lib/wolfssl/wolfcrypt/src/sp_c64.c 
-                lib/wolfssl/wolfcrypt/src/sha3.c 
-                lib/wolfssl/wolfcrypt/src/sha256.c 
-                lib/wolfssl/wolfcrypt/src/sha512.c 
-                lib/wolfssl/wolfcrypt/src/tfm.c 
-                lib/wolfssl/wolfcrypt/src/wc_port.c 
-                lib/wolfssl/wolfcrypt/src/wolfmath.c)
-
-            list(APPEND KEYTOOL_FLAGS -Wall -Wextra -Werror -Itools/keytools -DWOLFSSL_USER_SETTINGS 
-                -Ilib/wolfssl/ -Iinclude -I${CMAKE_CURRENT_BINARY_DIR} -DWOLFBOOT_KEYTOOLS -O2 -DIMAGE_HEADER_SIZE=256 -DDELTA_UPDATES)
-
-            add_custom_command(
-                OUTPUT ${SIGN_TOOL}
-                COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/sign tools/keytools/sign.c ${KEYTOOL_SOURCES} ${KEYTOOL_FLAGS}
-                WORKING_DIRECTORY ${WOLFBOOT_ROOT}
-                COMMENT "Building signing tool")
-
-            add_custom_command(
-                OUTPUT ${KEYGEN_TOOL}
-                COMMAND gcc -o ${CMAKE_CURRENT_BINARY_DIR}/keygen tools/keytools/keygen.c ${KEYTOOL_SOURCES} ${KEYTOOL_FLAGS}
-                WORKING_DIRECTORY ${WOLFBOOT_ROOT}
-                COMMENT "Building keygen tool")
-        endif()
- 
         add_custom_command(
-            OUTPUT ${KEYSTORE}
-            COMMAND ${KEYGEN_TOOL} ${KEYTOOL_OPTIONS} -g ${WOLFBOOT_SIGNING_PRIVATE_KEY} -keystoreDir ${CMAKE_CURRENT_BINARY_DIR}
+            OUTPUT ${KEYSTORE} ${WOLFBOOT_SIGNING_PRIVATE_KEY}
+            COMMAND ${KEYGEN_TOOL} ${KEYTOOL_OPTIONS} -g ${WOLFBOOT_SIGNING_PRIVATE_KEY}
+                    -keystoreDir ${CMAKE_CURRENT_BINARY_DIR}
             WORKING_DIRECTORY ${WOLFBOOT_ROOT}
             COMMENT "Generating keystore.c and signing private key")
 
-        if(PYTHON_KEYTOOLS)
-            add_custom_target(keystore DEPENDS ${KEYSTORE})
-        else()   
-            add_custom_target(keystore ALL DEPENDS ${SIGN_TOOL} ${KEYGEN_TOOL} ${KEYSTORE})
+        if(NOT PYTHON_KEYTOOLS)
+            add_custom_command(
+                OUTPUT ${KEYSTORE} ${WOLFBOOT_SIGNING_PRIVATE_KEY}
+                DEPENDS ${KEYGEN_TOOL}
+                APPEND)
         endif()
-
     endif()
 
     add_library(public_key)
@@ -740,4 +778,3 @@ target_link_libraries(wolfboot wolfboothal target wolfcrypt)
 
 # dont warn on unused code
 target_compile_options(wolfboot PRIVATE -Wno-unused ${SIM_COMPILE_OPTIONS})
-
