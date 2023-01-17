@@ -161,6 +161,18 @@
 /* Default Base (E) and AF (alternate function=10) for QSPI */
 #define QSPI_GPIO            GPIOE_BASE
 #define QSPI_PIN_AF          10
+/* Default to flash bank 1 (2 for alt) */
+#ifndef QSPI_FLASH_BANK
+    #ifdef QSPI_ALT_CONFIGURATION
+        #define QSPI_FLASH_BANK      2
+    #else
+        #define QSPI_FLASH_BANK      1
+    #endif
+#endif
+/* Default flash size to 16MB */
+#ifndef QSPI_FLASH_SIZE
+#define QSPI_FLASH_SIZE      23 /* 2^24 = 16 MB */
+#endif
 
 /* QSPI uses hclk3 (240MHz max) by default */
 #define RCC_D1CCIPR        (*(volatile uint32_t *)(RCC_BASE + 0x4C)) /* RM0433 - 8.7.19 (RCC_D1CCIPR) */
@@ -172,7 +184,7 @@
 #define RCC_D1CCIPR_QSPISEL_PERCK 3
 #define AHB3_CLOCK_RST     (*(volatile uint32_t *)(RCC_BASE + 0x7C)) /* RM0433 - 8.7.28 - RCC_AHB3RSTR */
 #define AHB3_CLOCK_EN      (*(volatile uint32_t *)(RCC_BASE + 0xD4)) /* RM0433 - 8.7.40 - RCC_AHB3ENR */
-#define RCC_AHB3ENR_QSPIEN (1 << 14) /* QUADSPI and QUADSPI Delay clock enabled */
+#define RCC_AHB3ENR_QSPIEN (1 << 14) /* QUADSPI/OCTOSPI clock enabled */
 
 #define HCLK3_MHZ       240000000
 #define PERCK_MHZ       64000000
@@ -187,12 +199,12 @@
 #define QSPI_CLOCK_MHZ  16000000
 #endif
 
-/* QSPI CLK PB2 */
+/* QSPI CLK PB2 (alt OCTOSPIM_P1_CLK)*/
 #define QSPI_CLOCK_PIO_BASE  GPIOB_BASE
 #define QSPI_CLOCK_PIN       2
 #define QSPI_CLOCK_PIN_AF    9
 
-/* nQSPI_CS PG6 (alt PB6) */
+/* nQSPI_CS PG6 (alt PB6 -> OCTOSPIM_P1_NCS) */
 #ifndef QSPI_ALT_CONFIGURATION
 #define QSPI_CS_PIO_BASE     GPIOG_BASE
 #define QSPI_CS_FLASH_PIN    6
@@ -201,7 +213,7 @@
 #define QSPI_CS_FLASH_PIN    6
 #endif
 
-/* QSPI_IO0 (MOSI) - PD11 (alt PE7) */
+/* QSPI_IO0 (MOSI) - PD11 (alt PE7 -> OCTOSPIM_P1_IO4) */
 #ifndef QSPI_ALT_CONFIGURATION
 #define QSPI_IO0_PIO_BASE   GPIOD_BASE
 #define QSPI_IO0_PIN        11
@@ -211,7 +223,7 @@
 #define QSPI_IO0_PIN        7
 #endif
 
-/* QSPI_IO1 (MISO) - PD12 (alt PE8) */
+/* QSPI_IO1 (MISO) - PD12 (alt PE8 -> OCTOSPIM_P1_IO5) */
 #ifndef QSPI_ALT_CONFIGURATION
 #define QSPI_IO1_PIO_BASE   GPIOD_BASE
 #define QSPI_IO1_PIN        12
@@ -221,7 +233,7 @@
 #define QSPI_IO1_PIN        8
 #endif
 
-/* QSPI_IO2 - PE2 (alt PE9) */
+/* QSPI_IO2 - PE2 (alt PE9 -> OCTOSPIM_P1_IO6) */
 #ifndef QSPI_ALT_CONFIGURATION
 #define QSPI_IO2_PIO_BASE   GPIOE_BASE
 #define QSPI_IO2_PIN        2
@@ -231,7 +243,7 @@
 #define QSPI_IO2_PIN        9
 #endif
 
-/* QSPI_IO3 - PD13 (alt PE10) */
+/* QSPI_IO3 - PD13 (alt PE10 -> OCTOSPIM_P1_IO7) */
 #ifndef QSPI_ALT_CONFIGURATION
 #define QSPI_IO3_PIO_BASE   GPIOD_BASE
 #define QSPI_IO3_PIN        13
@@ -261,7 +273,7 @@
 #define SPI_CS_TPM_PIO_BASE SPI_CS_GPIO
 #endif
 
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 #ifndef QSPI_CS_PIO_BASE
 #define QSPI_CS_PIO_BASE    QSPI_CS_GPIO
 #endif
@@ -280,7 +292,7 @@
 #ifndef QSPI_IO3_PIO_BASE
 #define QSPI_IO3_PIO_BASE   QSPI_GPIO
 #endif
-#endif
+#endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
 /* Setup alternate functions */
 #ifndef SPI_CLOCK_PIN_AF
@@ -293,7 +305,7 @@
 #define SPI_MOSI_PIN_AF  SPI_PIN_AF
 #endif
 
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 #ifndef QSPI_CS_FLASH_AF
 #define QSPI_CS_FLASH_AF  QSPI_PIN_AF
 #endif
@@ -313,7 +325,7 @@
 #ifndef QSPI_IO3_PIN_AF
 #define QSPI_IO3_PIN_AF   QSPI_PIN_AF
 #endif
-#endif /* QSPI_FLASH */
+#endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
 
 /* SPI */
@@ -367,25 +379,26 @@
 #ifndef QUADSPI_BASE
 #define QUADSPI_BASE      0x52005000UL
 #endif
-#define QUADSPI_CR        (*(volatile uint32_t *)(QUADSPI_BASE + 0x00)) /* Control register */
-#define QUADSPI_DCR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x04)) /* Device Configuration register */
-#define QUADSPI_SR        (*(volatile uint32_t *)(QUADSPI_BASE + 0x08)) /* Status register */
-#define QUADSPI_FCR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x0C)) /* Flag Clear register */
-#define QUADSPI_DLR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x10)) /* Data Length register */
-#define QUADSPI_CCR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x14)) /* Communication Configuration register */
-#define QUADSPI_AR        (*(volatile uint32_t *)(QUADSPI_BASE + 0x18)) /* Address register */
-#define QUADSPI_ABR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x1C)) /* Alternate Bytes register */
-#define QUADSPI_DR        (*(volatile uint8_t  *)(QUADSPI_BASE + 0x20)) /* Data register */
-#define QUADSPI_DR32      (*(volatile uint32_t *)(QUADSPI_BASE + 0x20)) /* Data register - 32 bit */
-#define QUADSPI_PSMKR     (*(volatile uint32_t *)(QUADSPI_BASE + 0x24)) /* Polling Status Mask register */
-#define QUADSPI_PSMAR     (*(volatile uint32_t *)(QUADSPI_BASE + 0x28)) /* Polling Status Match register */
-#define QUADSPI_PIR       (*(volatile uint32_t *)(QUADSPI_BASE + 0x2C)) /* Polling Interval register */
-#define QUADSPI_LPTR      (*(volatile uint32_t *)(QUADSPI_BASE + 0x30)) /* Low Power Timeout register */
+
+#define QUADSPI_CR                (*(volatile uint32_t *)(QUADSPI_BASE + 0x00)) /* Control register */
+#define QUADSPI_DCR               (*(volatile uint32_t *)(QUADSPI_BASE + 0x04)) /* Device Configuration register */
+#define QUADSPI_SR                (*(volatile uint32_t *)(QUADSPI_BASE + 0x08)) /* Status register */
+#define QUADSPI_FCR               (*(volatile uint32_t *)(QUADSPI_BASE + 0x0C)) /* Flag Clear register */
+#define QUADSPI_DLR               (*(volatile uint32_t *)(QUADSPI_BASE + 0x10)) /* Data Length register */
+#define QUADSPI_CCR               (*(volatile uint32_t *)(QUADSPI_BASE + 0x14)) /* Communication Configuration register */
+#define QUADSPI_AR                (*(volatile uint32_t *)(QUADSPI_BASE + 0x18)) /* Address register */
+#define QUADSPI_ABR               (*(volatile uint32_t *)(QUADSPI_BASE + 0x1C)) /* Alternate Bytes register */
+#define QUADSPI_DR                (*(volatile uint8_t  *)(QUADSPI_BASE + 0x20)) /* Data register */
+#define QUADSPI_DR32              (*(volatile uint32_t *)(QUADSPI_BASE + 0x20)) /* Data register - 32 bit */
+#define QUADSPI_PSMKR             (*(volatile uint32_t *)(QUADSPI_BASE + 0x24)) /* Polling Status Mask register */
+#define QUADSPI_PSMAR             (*(volatile uint32_t *)(QUADSPI_BASE + 0x28)) /* Polling Status Match register */
+#define QUADSPI_PIR               (*(volatile uint32_t *)(QUADSPI_BASE + 0x2C)) /* Polling Interval register */
+#define QUADSPI_LPTR              (*(volatile uint32_t *)(QUADSPI_BASE + 0x30)) /* Low Power Timeout register */
 
 #define QUADSPI_CR_PRESCALER_MASK (0xFF << 24)
 #define QUADSPI_CR_PRESCALER(pre) ((((pre)-1) & 0xFF) << 24) /* Clock prescaler: quadspi_ker_ck/pre+1 */
 #define QUADSPI_CR_FTIE           (1 << 13) /* FIFO threshold interrupt enable */
-#define QUADSPI_CR_FTHRES_MASK    (0xF << 8)
+#define QUADSPI_CR_FTHRES_MASK    (0x1F << 8)
 #define QUADSPI_CR_FTHRES(thr)    ((((thr)-1) & 0x1F) << 8) /* FIFO threshold level */
 #define QUADSPI_CR_FSEL           (1 << 7)  /* 0=Flash 1 or 1=Flash 2 */
 #define QUADSPI_CR_DFM            (1 << 6)  /* Dual-flash mode */
@@ -417,7 +430,7 @@
 #define QUADSPI_CCR_INSTRUCTION(ins) (((ins) & 0xFF) << 0)  /* Instruction to be send to the external SPI device */
 
 #define QUADSPI_DCR_FSIZE_MASK    (0x1F << 16)
-#define QUADSPI_DCR_FSIZE(fsz)    (((fsz) & 0x1F) << 16)    /* Flash memory size (2 ^ (fsize + 1)). Example 16MB is 22 */
+#define QUADSPI_DCR_FSIZE(fsz)    (((fsz) & 0x1F) << 16)    /* Flash memory size (2 ^ (fsize + 1)). Example 16MB is 23 */
 #define QUADSPI_DCR_CSHT_MASK     (0x7 << 8)
 #define QUADSPI_DCR_CSHT(csht)    (((csht) & 0x7) <<  8)    /* Chip select high time - Number of clock cycles (+1) nCS to remain high between commands */
 #define QUADSPI_DCR_CKMODE_3      (1 << 0)                  /* Clock mode 3 - clk high while nCS released */
@@ -426,5 +439,82 @@
 #define QUADSPI_SR_TCF            (1 << 1)                  /* Transfer complete flag - set in indirect mode when the programmed number of data has been transferred */
 #define QUADSPI_SR_FTF            (1 << 2)                  /* FIFO threshold flag */
 #define QUADSPI_SR_BUSY           (1 << 5)                  /* Busy - operation is ongoing when set */
+
+
+/* OCTOSPI (1=0x5000, 2=0xA000)*/
+#ifndef OCTOSPI_BASE
+#define OCTOSPI_BASE      0x52005000
+#endif
+
+#define OCTOSPI_CR                (*(volatile uint32_t *)(OCTOSPI_BASE + 0x00)) /* Control register */
+#define OCTOSPI_DCR1              (*(volatile uint32_t *)(OCTOSPI_BASE + 0x08)) /* Device Configuration register 1 */
+#define OCTOSPI_DCR2              (*(volatile uint32_t *)(OCTOSPI_BASE + 0x0C)) /* Device Configuration register 2 */
+#define OCTOSPI_DCR3              (*(volatile uint32_t *)(OCTOSPI_BASE + 0x10)) /* Device Configuration register 3 */
+#define OCTOSPI_DCR4              (*(volatile uint32_t *)(OCTOSPI_BASE + 0x14)) /* Device Configuration register 4 */
+#define OCTOSPI_SR                (*(volatile uint32_t *)(OCTOSPI_BASE + 0x20)) /* Status register */
+#define OCTOSPI_FCR               (*(volatile uint32_t *)(OCTOSPI_BASE + 0x24)) /* Flag Clear register */
+#define OCTOSPI_DLR               (*(volatile uint32_t *)(OCTOSPI_BASE + 0x40)) /* Data Length register */
+#define OCTOSPI_AR                (*(volatile uint32_t *)(OCTOSPI_BASE + 0x48)) /* Address register */
+#define OCTOSPI_DR                (*(volatile uint8_t  *)(OCTOSPI_BASE + 0x50)) /* Data register */
+#define OCTOSPI_DR32              (*(volatile uint32_t *)(OCTOSPI_BASE + 0x50)) /* Data register - 32 bit */
+#define OCTOSPI_PSMKR             (*(volatile uint32_t *)(OCTOSPI_BASE + 0x80)) /* Polling Status Mask register */
+#define OCTOSPI_PSMAR             (*(volatile uint32_t *)(OCTOSPI_BASE + 0x88)) /* Polling Status Match register */
+#define OCTOSPI_PIR               (*(volatile uint32_t *)(OCTOSPI_BASE + 0x90)) /* Polling Interval register */
+#define OCTOSPI_CCR               (*(volatile uint32_t *)(OCTOSPI_BASE + 0x100)) /* Communication Configuration register */
+#define OCTOSPI_TCR               (*(volatile uint32_t *)(OCTOSPI_BASE + 0x108)) /* Timing Configuration register */
+#define OCTOSPI_IR                (*(volatile uint32_t *)(OCTOSPI_BASE + 0x110)) /* Instruction register */
+#define OCTOSPI_ABR               (*(volatile uint32_t *)(OCTOSPI_BASE + 0x120)) /* Alternate Bytes register */
+#define OCTOSPI_LPTR              (*(volatile uint32_t *)(OCTOSPI_BASE + 0x130)) /* Low Power Timeout register */
+
+#define OCTOSPI_CR_FMODE_MASK     (0x3 << 28)
+#define OCTOSPI_CR_FMODE(fmode)   (((fmode) & 0x3) << 28)  /* Functional Mode (0=indirect write, 1=indirect read, 2=auto poll, 3=mem mapped) */
+#define OCTOSPI_CR_FTIE           (1 << 18)                /* FIFO threshold interrupt enable */
+#define OCTOSPI_CR_TCIE           (1 << 17)                /* Transfer complete inerrupt enable */
+#define OCTOSPI_CR_FTHRES_MASK    (0x1F << 8)
+#define OCTOSPI_CR_FTHRES(thr)    ((((thr)-1) & 0x1F) << 8) /* FIFO threshold level */
+#define OCTOSPI_CR_FSEL           (1 << 7)                 /* 0=Flash 1 or 1=Flash 2 */
+#define OCTOSPI_CR_ABORT          (1 << 1)                 /* Abort request */
+#define OCTOSPI_CR_EN             (1 << 0)                 /* Enable the QUADSPI */
+
+#define OCTOCPI_DCR1_MTYP_MASK    (0x7 << 24)
+#define OCTOCPI_DCR1_MTYP(mtyp)   (((mtyp) & 0x7) << 24)   /* Memory type: 0=Micron, 1=Macronix, 2=Std, 3=Macronix RAM, 4=HyperBus mem, 5=HyperBus reg */
+#define OCTOSPI_DCR1_DEVSIZE_MASK (0x1F << 16)
+#define OCTOSPI_DCR1_DEVSIZE(dsz) (((dsz) & 0x1F) << 16)   /* Device memory size (2 ^ (fsize + 1)). Example 16MB is 23 */
+#define OCTOSPI_DCR1_CSHT_MASK    (0x3F << 8)
+#define OCTOSPI_DCR1_CSHT(csht)   (((csht) & 0x3F) << 8)   /* Chip select high time - Number of clock cycles (+1) nCS to remain high between commands */
+#define OCTOSPI_DCR1_CKMODE_3     (1 << 0)                 /* Clock mode 3 - clk high while nCS released */
+#define OCTOSPI_DCR1_CKMODE_0     (0)                      /* Clock mode 0 - clk low while nCS released */
+
+#define OCTOSPI_DCR2_PRESCALER_MASK (0xFF << 0)
+#define OCTOSPI_DCR2_PRESCALER(pre) ((((pre)-1) & 0xFF) << 0) /* Clock prescaler: quadspi_ker_ck/pre+1 */
+
+#define OCTOSPI_SR_TCF            (1 << 1)                 /* Transfer complete flag - set in indirect mode when the programmed number of data has been transferred */
+#define OCTOSPI_SR_FTF            (1 << 2)                 /* FIFO threshold flag */
+#define OCTOSPI_SR_BUSY           (1 << 5)                 /* Busy - operation is ongoing when set */
+#define OCTOSPI_SR_FLEVEL(sr)     (((sr) >> 8) & 0x3F)     /* FIFO level */
+
+#define OCTOSPI_CCR_SIOO          (1 << 31)                /* Send instruction only once mode */
+#define OCTOSPI_CCR_DDTR          (1 << 27)                /* Data Double transfer rate mode */
+#define OCTOSPI_CCR_DMODE_MASK    (0x7 << 24)
+#define OCTOSPI_CCR_DMODE(dmode)  (((dmode) & 0x7) << 24)  /* Data mode (0=no data, 1=data on single line, 2=data on two lines, 3=data on four lines, 4=data on eight lines) */
+#define OCTOSPI_CCR_ABSIZE_MASK   (0x3 << 20)
+#define OCTOSPI_CCR_ABSIZE(absz)  (((absz) & 0x3) << 20)   /* Alternate bytes size */
+#define OCTOSPI_CCR_ABDTR         (1 << 19)                /* Alternate bytes Double transfer rate mode */
+#define OCTOSPI_CCR_ABMODE_MASK   (0x7 << 16)
+#define OCTOSPI_CCR_ABMODE(abm)   (((abm) & 0x7) << 16)    /* Alternate bytes mode (0=no alt data, 1=alt on single line, 2=alt on two lines, 3=alt on four lines, 4=alt on eight lines) */
+#define OCTOSPI_CCR_ADSIZE_MASK   (0x3 << 12)
+#define OCTOSPI_CCR_ADSIZE(sz)    (((sz) & 0x3) << 12)     /* Address bytes size (0=8-bit, 1=16-bit, 2=24-bit, 3=32-bit) */
+#define OCTOSPI_CCR_ADMODE_MASK   (0x7 << 8)
+#define OCTOSPI_CCR_ADMODE(adm)   (((adm) & 0x7) << 8)     /* Address mode (0=no addr, 1=addr on single line, 2=addr on two lines, 3=addr on four lines, 4=addr on eight lines) */
+#define OCTOSPI_CCR_ISIZE_MASK    (0x3 << 4)
+#define OCTOSPI_CCR_ISIZE(sz)     (((sz) & 0x3) << 4)      /* Instruction size (0=8-bit, 1=16-bit, 2=24-bit, 3=32-bit) */
+#define OCTOSPI_CCR_IMODE_MASK    (0x7 << 0)
+#define OCTOSPI_CCR_IMODE(imode)  (((imode) & 0x7) << 0)   /* Instruction mode (0=no instr, 1=instr on single line, 2=instr on two lines, 3=instr on four lines, 4=instr on eight lines) */
+
+#define OCTOSPI_TCR_SSHIFT        (1 << 30)                /* Sample shift 1=1/2 cycle shift */
+#define OCTOSPI_TCR_DHQC          (1 << 28)                /* Delay the data output by 1/4 of clock cycle */
+#define OCTOSPI_TCR_DCYC_MASK     (0x1F << 0)
+#define OCTOSPI_TCR_DCYC(dcyc)    (((dcyc) & 0x1F) << 0)   /* Number of dummy cycles */
+
 
 #endif /* !SPI_DRV_STM32_H_INCLUDED */

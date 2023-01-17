@@ -140,6 +140,11 @@ ifeq ($(SPI_FLASH),1)
   APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/spi_flash.o
 endif
 
+ifeq ($(OCTOSPI_FLASH),1)
+  QSPI_FLASH = 1
+  CFLAGS+=-D"OCTOSPI_FLASH"
+endif
+
 ifeq ($(QSPI_FLASH),1)
   CFLAGS+=-D"QSPI_FLASH"
   APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/qspi_flash.o
