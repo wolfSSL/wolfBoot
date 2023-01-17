@@ -303,6 +303,12 @@ ifeq ($(SPI_FLASH),1)
   WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
 endif
 
+ifeq ($(OCTOSPI_FLASH),1)
+  EXT_FLASH=1
+  QSPI_FLASH=1
+  CFLAGS+=-D"OCTOSPI_FLASH=1"
+endif
+
 ifeq ($(QSPI_FLASH),1)
   EXT_FLASH=1
   CFLAGS+=-D"QSPI_FLASH=1"
@@ -469,3 +475,5 @@ ifeq ($(RAM_CODE),1)
     endif
   endif
 endif
+
+CFLAGS+=$(CFLAGS_EXTRA)

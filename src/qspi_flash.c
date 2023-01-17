@@ -26,7 +26,7 @@
 #include "spi_drv.h"
 #include "spi_flash.h"
 
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 
 #include "string.h"
 #include "printf.h"
@@ -474,9 +474,7 @@ void spi_flash_release(void)
     spi_release();
 }
 
-#endif /* QSPI_FLASH */
-
-
+#endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
 
 #ifdef TEST_FLASH

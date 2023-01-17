@@ -66,7 +66,7 @@ void hal_prepare_boot(void);
     void *hal_get_dts_update_address(void);
 #endif
 
-#if !defined(SPI_FLASH) && !defined(QSPI_FLASH)
+#if !defined(SPI_FLASH) && !defined(QSPI_FLASH) && !defined(OCTOSPI_FLASH)
     /* user supplied external flash interfaces */
     int  ext_flash_write(uintptr_t address, const uint8_t *data, int len);
     int  ext_flash_read(uintptr_t address, uint8_t *data, int len);

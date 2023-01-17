@@ -82,11 +82,13 @@ ifeq ($(ARCH),ARM)
   endif
 
   ifeq ($(TARGET),stm32f7)
+    CORTEX_M7=1
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
   endif
 
   ifeq ($(TARGET),stm32h7)
+    CORTEX_M7=1
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
   endif
@@ -107,7 +109,7 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
-    CFLAGS+=-Ihal -DCORTEX_M33
+    CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x08000000
     ifeq ($(TZEN),1)
       WOLFBOOT_ORIGIN=0x0C000000
@@ -118,7 +120,7 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32u5)
     CORTEX_M33=1
-    CFLAGS+=-Ihal -DCORTEX_M33
+    CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x08000000
     ifeq ($(TZEN),1)
       WOLFBOOT_ORIGIN=0x0C000000
@@ -130,13 +132,25 @@ ifeq ($(ARCH),ARM)
 
   ## Cortex-M CPU
   ifeq ($(CORTEX_M33),1)
-    CFLAGS+=-mcpu=cortex-m33
+    CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
     LDFLAGS+=-mcpu=cortex-m33
     ifeq ($(TZEN),1)
       CFLAGS += -mcmse
     endif
     ifeq ($(SPMATH),1)
       MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    endif
+  else
+  ifeq ($(CORTEX_M7),1)
+    CFLAGS+=-mcpu=cortex-m7
+    LDFLAGS+=-mcpu=cortex-m7
+    ifeq ($(SPMATH),1)
+      ifeq ($(NO_ASM),1)
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+      else
+        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+      endif
     endif
   else
   ifeq ($(CORTEX_M0),1)
@@ -166,6 +180,7 @@ ifeq ($(ARCH),ARM)
       endif
     endif
   endif
+endif
 endif
 endif
 

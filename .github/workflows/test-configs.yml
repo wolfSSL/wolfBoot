@@ -125,6 +125,12 @@ jobs:
       config-file: ./config/examples/stm32h7.config
       make-args: QSPI_FLASH=1
 
+  stm32h7_octospi_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32h7-octospi.config
+
   stm32l0_test:
     uses: ./.github/workflows/test-build.yml
     with:
