@@ -57,7 +57,6 @@ extern int tolower(int c);
 #   define WOLFSSL_SHA512
 #   define USE_SLOW_SHA512
 #   define NO_RSA
-#   define NO_ASN
 #endif
 
 /* ED448 */
@@ -68,7 +67,6 @@ extern int tolower(int c);
 #   define NO_ED448_SIGN
 #   define NO_ED448_EXPORT
 #   define NO_RSA
-#   define NO_ASN
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
 #endif
@@ -105,6 +103,10 @@ extern int tolower(int c);
 #   define NO_ECC_EXPORT
 #   define NO_ECC_DHE
 #   define NO_ECC_KEY_EXPORT
+#   define NO_ASN
+#else
+#   define HAVE_ECC_SIGN
+#   define HAVE_ECC_CDH
 #endif
 
 /* Curve */
@@ -134,7 +136,6 @@ extern int tolower(int c);
 #endif
 
 #   define NO_RSA
-#   define NO_ASN
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA2048
@@ -360,6 +361,15 @@ extern int tolower(int c);
 #       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
 #endif
 #   define WOLFSSL_SMALL_STACK
+#endif
+
+#ifdef WOLFTPM_MMIO
+    void delay(int msec);
+    #define XTPM_WAIT() delay(1000);
+    #define DEBUG_WOLFTPM
+    #define WOLFTPM_ADV_IO
+    void uart_printf(const char* fmt, ...);
+    #define XPRINTF uart_printf
 #endif
 
 #endif /* !H_USER_SETTINGS_ */

@@ -8,8 +8,8 @@
 
 /* Secure calls prototypes for the non-secure world */
 
-int __attribute__((cmse_nonsecure_call)) nsc_test(void);
-int __attribute__((cmse_nonsecure_call)) wcsm_ecc_keygen(uint32_t key_size, int ecc_curve);
+int __attribute__((cmse_nonsecure_entry)) nsc_test(void);
+int __attribute__((cmse_nonsecure_entry)) wcsm_ecc_keygen(uint32_t key_size, int ecc_curve);
 
 
 

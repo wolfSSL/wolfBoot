@@ -168,6 +168,7 @@ ifeq ($(ARCH),ARM)
       ifeq ($(WCSM),1)
         OBJS+=./src/wc_callable.o
         WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+        WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
         CFLAGS+=-DWOLFCRYPT_SECURE_MODE
         SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
       endif
