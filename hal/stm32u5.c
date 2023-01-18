@@ -295,12 +295,12 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
-    uint32_t *src, *dst;
-    uint32_t qword[4];
+    uint32_t *dst;
+    uint32_t qword;
+    int offset;
     volatile uint32_t *sr, *cr;
 
     flash_clear_errors(0);
-    src = (uint32_t*)data;
     dst = (uint32_t*)address;
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
@@ -323,24 +323,30 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #endif
 
     while (i < len) {
-        qword[0] = src[i >> 2];
-        qword[1] = src[(i >> 2) + 1];
-        qword[2] = src[(i >> 2) + 2];
-        qword[3] = src[(i >> 2) + 3];
+        /* load the start of the word */
+        qword = *(uint32_t*)(((uint32_t)dst) -
+            (((uint32_t)dst) % 4));
+
+        do {
+            /* shift up by the number of bytes past word align */
+            offset = (((uint32_t)dst + i) % 4);
+            qword |= ((uint32_t)data[i] << offset);
+            i++;
+        } while (i < len && (((uint32_t)dst + i) % 4) != 0);
+
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = qword[0];
+
+        /* write the start of the word */
+        *(uint32_t*)(((uint32_t)dst + i) -
+            (((uint32_t)dst + i) % 4)) = qword;
+
         ISB();
-        dst[(i >> 2) + 1] = qword[1];
-        ISB();
-        dst[(i >> 2) + 2] = qword[2];
-        ISB();
-        dst[(i >> 2) + 3] = qword[3];
-        ISB();
+
         flash_wait_complete(0);
+
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
-        i += 16;
     }
 
     return 0;
