@@ -60,6 +60,7 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
+    memset(&os_image, 0, sizeof(os_image));
     for (;;) {
         if (((ret = wolfBoot_open_image_address(&os_image, (uint8_t*)load_address)) < 0) ||
             ((ret = wolfBoot_verify_integrity(&os_image) < 0)) ||
