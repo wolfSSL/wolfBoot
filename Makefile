@@ -176,7 +176,7 @@ wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
-$(LSCRIPT): FORCE
+$(LSCRIPT): $(LSCRIPT_IN) FORCE
 	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
 		"configuration found. If you selected Encryption and RAM_CODE, then maybe" \
 		"the encryption algorithm is not yet supported with bootloader updates." \
