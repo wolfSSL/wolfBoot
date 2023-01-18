@@ -12,6 +12,8 @@
     #define WCS_SLOTS (4)
 #endif
 
+#define WCS_MAX_RAW_KEY 256
+
 #define WCS_TYPE_AES 1
 #define WCS_TYPE_ECC 2
 
@@ -21,18 +23,20 @@
 #define ACCESS_DERIVE            (1 << 3)
 #define ACCESS_EXPORT_PUBLIC     (1 << 4)
 #define ACCESS_EXPORT_PRIVATE    (1 << 5)
-#define ACCESS_USAGE_COUNTER     (1 << 6)
-#define ACCESS_VALID_DATE        (1 << 7)
+#define ACCESS_WRITE             (1 << 6)
+#define ACCESS_USAGE_COUNTER     (1 << 7)
+#define ACCESS_VALID_DATE        (1 << 8)
 
 struct wcs_key
 {
-    uint32_t id;
-    uint32_t type;
+    word32 id;
+    word32 type;
     int in_use;
     size_t size;
-    uint32_t access_flags;
+    word32 access_flags;
+    word32 key_size;
     union wcs_key_type_u {
-        Aes aes;
+        byte raw[WCS_MAX_RAW_KEY];
         ecc_key ecc;
         /*  ....  */
     } key;
@@ -65,8 +69,14 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(size_t key_size,
         return -1;
     if (slot_id >= WCS_SLOTS)
         return -1;
+    if (WCS_Keys[slot_id].in_use != 0)
+        return -1;
+    if (WCS_Keys[slot_id].type != WCS_TYPE_ECC)
+        return -1;
+    if ((WCS_Keys[slot_id].access_flags & ACCESS_WRITE) == 0)
+        return -1;
 
-    /* TODO: important: arguments check */
+    /* TODO: important: arguments check: key_size/ecc curve */
 
     wk = &WCS_Keys[slot_id];
     if (wc_ecc_init(new_key) != 0)
@@ -132,13 +142,13 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_verify_call(struct wcs_verify_
         return -1;
     if (WCS_Keys[slot_id].type != WCS_TYPE_ECC)
         return -1;
-    if ((WCS_Keys[slot_id].access_flags & ACCESS_SIGN) == 0)
+    if ((WCS_Keys[slot_id].access_flags & ACCESS_VERIFY) == 0)
         return -1;
     ret = wc_ecc_verify_hash(p->sig, p->sigSz, p->hash, p->hashSz, p->verify_res, &WCS_Keys[slot_id].key.ecc);
     return ret;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id, byte *pubkey, word32 *pubkeySz)
+int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic_call(int slot_id, byte *pubkey, word32 *pubkeySz)
 {
     int ret;
     word32 x_sz, y_sz;
@@ -153,7 +163,7 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id, byte *p
         return -1;
     if (WCS_Keys[slot_id].type != WCS_TYPE_ECC)
         return -1;
-    if ((WCS_Keys[slot_id].access_flags & ACCESS_SIGN) == 0)
+    if ((WCS_Keys[slot_id].access_flags & ACCESS_EXPORT_PUBLIC) == 0)
         return -1;
 
     /* TODO: check bidirectional argument pubkeySz for valid ecc key size */
@@ -165,20 +175,57 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id, byte *p
     return ret;
 }
 
-
-
-/*
-int wcs_ecc_getpublic();
-int wcs_ecdh();
-int wcs_aes_encrypt();
-int wcs_aes_decrypt();
-*/
-
-
-
-int __attribute__((cmse_nonsecure_entry)) nsc_test(void)
+int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id)
 {
+    int outlen = 256;
+    ecc_key *priv, *pub;
+    byte outkey[256];
+    
+    if (privkey_slot_id > WCS_SLOTS)
+        return -1;
+    if (WCS_Keys[privkey_slot_id].in_use == 0)
+        return -1;
+    if (WCS_Keys[privkey_slot_id].type != WCS_TYPE_ECC)
+        return -1;
+    if ((WCS_Keys[privkey_slot_id].access_flags & ACCESS_DERIVE) == 0)
+        return -1;
+
+    if (pubkey_slot_id > WCS_SLOTS)
+        return -1;
+    if (WCS_Keys[pubkey_slot_id].in_use == 0)
+        return -1;
+    if (WCS_Keys[pubkey_slot_id].type != WCS_TYPE_ECC)
+        return -1;
+    if ((WCS_Keys[pubkey_slot_id].access_flags & ACCESS_DERIVE) == 0)
+        return -1;
+    
+    if (shared_slot_id > WCS_SLOTS)
+        return -1;
+    if (WCS_Keys[shared_slot_id].in_use != 0)
+        return -1;
+    if ((WCS_Keys[shared_slot_id].access_flags & ACCESS_WRITE) == 0)
+        return -1;
+    if ((WCS_Keys[shared_slot_id].access_flags & ACCESS_ENCDEC) == 0)
+        return -1;
+
+    priv = &WCS_Keys[privkey_slot_id].key.ecc;
+    pub  = &WCS_Keys[pubkey_slot_id].key.ecc;
+
+    if (wc_ecc_shared_secret(priv, pub, outkey, &outlen) != 0)
+        return -1;
+
+    if (outlen > WCS_MAX_RAW_KEY)
+        return -1;
+
+    WCS_Keys[shared_slot_id].in_use++;
+    WCS_Keys[shared_slot_id].key_size = outlen;
+    XMEMCPY(WCS_Keys[shared_slot_id].key.raw, outkey, outlen);
     return 0;
+}
+
+int __attribute__((cmse_nonsecure_entry)) wcs_get_random_call(byte *rand, size_t size)
+{
+
 }
 
 void wsc_Init(void)
