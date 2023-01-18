@@ -1,0 +1,82 @@
+FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
+FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
+BOOTLOADER_START = @BOOTLOADER_START@;
+RESETVECTOR_START = 0xffffffec;
+FSP_T_BASE = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
+FSP_M_BASE = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
+FSP_S_BASE = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
+WOLFBOOT_LOAD_BASE = @WOLFBOOT_LOAD_BASE@;
+
+OUTPUT_FORMAT(elf32-i386)
+
+MEMORY
+{
+    FLASH (rx) : ORIGIN = FLASH_START LENGTH = FLASH_SIZE
+    RAM (rwx) : ORIGIN = 0x0 LENGTH = FLASH_START
+}
+
+SECTIONS
+{
+    .reset_vector RESETVECTOR_START :
+    {
+       KEEP(*(.reset_vector))
+    }
+
+    .bootloader BOOTLOADER_START :
+    {
+       _off_boot = ABSOLUTE(.) & 0xffff;
+       KEEP(*(.boot*))
+       KEEP(src/boot_x86_fsp.o(.text))
+       KEEP(hal/x86_uart.o(.text))
+       KEEP(src/x86/fsp/hob.o(.text))
+       KEEP(src/x86/fsp/machines*(.text))
+       KEEP(src/x86/fsp/machines*(.data))
+       KEEP(src/x86/fsp/machines*(.rodata))
+    }
+
+   .text WOLFBOOT_LOAD_BASE : AT (FLASH_START)
+    {
+       _wolfboot_load_address = ABSOLUTE(FLASH_START);
+       _start_wolfboot = .;
+       _start_text = .;
+       *(.text*)
+       *(.rodata*)
+       *(.eh_frame*)
+       *(.data*)
+       . = ALIGN(4);
+       _end_text = .;
+       _end_wolfboot = .;
+    }
+
+    .bss WOLFBOOT_LOAD_BASE + SIZEOF(.text) (NOLOAD):
+    {
+       _start_bss = .;
+       __bss_start__ = .;
+       *(.bss*)
+       *(COMMON)
+       . = ALIGN(4);
+       _end_bss = .;
+       __bss_end__ = .;
+       _end = .;
+    }
+
+    .fsp_t FSP_T_BASE :
+    AT(FSP_T_BASE)
+    {
+       _start_fsp_t = .;
+       *(.fsp_t)
+    }
+
+    .fsp_s FSP_S_BASE :
+    {
+       _start_fsp_s = .;
+       *(.fsp_s)
+    }
+
+    .fsp_m FSP_M_BASE :
+    {
+       _start_fsp_m = .;
+       *(.fsp_m)
+    }
+
+}

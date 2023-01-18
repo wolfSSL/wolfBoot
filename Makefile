@@ -78,6 +78,10 @@ ifeq ($(TARGET),x86_64_efi)
 	MAIN_TARGET:=wolfboot.efi
 endif
 
+ifeq ($(TARGET),x86_fsp)
+	MAIN_TARGET:=wolfboot.bin
+endif
+
 ifeq ($(TARGET),library)
 	CFLAGS+=-g
 	MAIN_TARGET:=test-lib
@@ -131,6 +135,10 @@ include tools/test.mk
 include tools/test-enc.mk
 include tools/test-delta.mk
 include tools/test-renode.mk
+
+ifeq ($(TARGET),x86_fsp)
+	include x86_fsp.mk
+endif
 
 PYTHON?=python3
 keytools_check:
@@ -207,6 +215,7 @@ keys: $(PRIVATE_KEY)
 clean:
 	@rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
 	@rm -f *.bin *.elf wolfboot.map test-update.rom *.hex config/target.ld
+	@rm -f src/x86/fsp/machines/qemu/*.o src/x86/*.o $(MACHINE_OBJ)
 	@$(MAKE) -C test-app clean
 	@$(MAKE) -C tools/check_config clean
 

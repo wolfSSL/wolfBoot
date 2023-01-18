@@ -21,9 +21,11 @@ UART_TARGET=$(TARGET)
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
 ifeq ($(ARCH),x86_64)
-  OBJS+=src/boot_x86_64.o
-  ifeq ($(DEBUG),1)
-    CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+  ifeq ($(TARGET),x86_64_efi)
+     OBJS+=src/boot_x86_64.o
+    ifeq ($(DEBUG),1)
+      CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+    endif
   endif
 endif
 
@@ -382,6 +384,21 @@ ifeq ($(USE_GCC),1)
   OBJCOPY=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
   OUTPUT_FLAG=-o
+endif
+
+ifeq ($(ARCH),x86_64)
+  ifeq ($(TARGET),x86_fsp)
+    USE_GCC_HEADLESS=0
+    CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -DLINUX_PAYLOAD -DDEBUG_UART
+    LD_START_GROUP =
+    LD_END_GROUP =
+    OBJS+=src/boot_x86_fsp_start.o src/fsp_t.o $(MACHINE_OBJ) src/boot_x86_fsp.o hal/x86_uart.o src/x86/linux_loader.o
+    OBJS+=src/fsp_m.o src/fsp_s.o src/x86/fsp/hob.o
+    OBJS+=src/boot_x86_fsp_payload.o
+    LD := ld
+    LDFLAGS = -m elf_i386 --no-gc-sections --print-gc-sections -T $(LSCRIPT) -Map=wolfboot.map
+    UPDATE_OBJS:=src/update_ram.o
+  endif
 endif
 
 ifneq ($(CROSS_COMPILE_PATH),)

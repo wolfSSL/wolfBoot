@@ -25,7 +25,7 @@ This README describes configuration of supported targets.
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
-
+* [Intel x86-64 Intel FSP](#Intel-x86_64-with-Intel-FSP-support)
 
 ## STM32F4
 
@@ -1384,3 +1384,38 @@ make test-sim-internal-flash-with-update
 # it should print 2
 ./wolfboot.elf success get_version
 ```
+
+
+## Intel x86_64 with Intel FSP support
+
+This feature is experimental and has only been tested on QEMU. Intel FSP
+provides a set of common firmware services that can be used for memory
+initialization, power management, and silicon initialization. Wolfboot accesses
+these services by invoking machine-dependent binary code provided by the Intel
+FSP in the form of binary blobs.
+
+To use this feature, you will need to configure the following variables:
+
+- `ARCH` = x86_64
+- `TARGET` = x86_fsp
+- `FSP_T_BASE`: the base address where the FSP-T binary blob will be loaded.
+- `FSP_M_BASE`: the base address where the FSP-M binary blob will be loaded.
+- `FSP_S_BASE`: the base address where the FSP-S binary blob will be loaded.
+- `FSP_T_BIN`: path to the FSP-T binary blob
+- `FSP_M_BIN`: path to the FSP-M binary blob
+- `FSP_S_BIN`: path to the FSP-S binary blob
+- `BOOTLOADER_START`: the start address of wolfBoot inside the flash (flash is mapped as it ends at the 4GB boundary)
+- `BOOTLOADER_PARTITION_SIZE`: the size of the partition that stores wolfBoot in the flash
+- `WOLFBOOT_LOAD_BASE`: the address where wolfboot will be loaded in RAM after the first initialization phase
+- `MACHINE_OBJ`: the machine-dependent file that implements machine-dependent logic
+
+While Intel FSP aims to abstract away specific machine details, you still need
+some machine-specific code. Refer to the Intel Integration Guide of the selected
+silicon for more information.
+
+Note:
+- This feature is experimental, so it may have bugs or limitations. Moreover, it
+  supports only the minimum required to work on QEMU. No initialization for
+  ACPI, APIC, WATCHDOG or similar is done.
+
+- This feature requires NASM
