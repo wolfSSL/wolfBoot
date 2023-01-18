@@ -358,7 +358,6 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int iStart = 0;
     uint32_t *dst;
     uint32_t qword[4];
-    uint8_t* qword_tmp;
     int offset;
     volatile uint32_t *sr, *cr;
 
