@@ -292,6 +292,66 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 
 }
 
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && (!defined(FLAGS_HOME) || !defined(DISABLE_BACKUP))
+static void RAMFUNCTION hal_flash_nonsecure_unlock(void)
+{
+    flash_wait_complete(0);
+    if ((FLASH_NS_CR & FLASH_CR_LOCK) != 0) {
+        FLASH_NS_KEYR = FLASH_KEY1;
+        DMB();
+        FLASH_NS_KEYR = FLASH_KEY2;
+        DMB();
+        while ((FLASH_NS_CR & FLASH_CR_LOCK) != 0)
+            ;
+    }
+}
+
+static void RAMFUNCTION hal_flash_nonsecure_lock(void)
+{
+    flash_wait_complete(0);
+    if ((FLASH_NS_CR & FLASH_CR_LOCK) == 0)
+        FLASH_NS_CR |= FLASH_CR_LOCK;
+}
+
+static void claim_nonsecure_area(uint32_t address, int len)
+{
+    int page_n, reg_idx;
+    uint32_t reg;
+    uint32_t end = address + len;
+
+
+    if (address < FLASH_BANK2_BASE)
+        return;
+    if (end > (FLASH_TOP + 1))
+        return;
+
+    flash_wait_complete(0);
+    flash_clear_errors(0);
+    while (address < end) {
+        page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+        reg_idx = page_n / 32;
+        int pos;
+        pos = page_n % 32;
+        hal_flash_nonsecure_unlock();
+        FLASH_SECBB2[reg_idx] |= ( 1 << pos);
+        ISB();
+        flash_wait_complete(0);
+        hal_flash_nonsecure_lock();
+        /* Erase claimed non-secure page, in secure mode */
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
+        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER);
+        DMB();
+        FLASH_CR |= FLASH_CR_STRT;
+        ISB();
+        flash_wait_complete(0);
+        address += FLASH_PAGE_SIZE;
+    }
+    FLASH_CR &= ~FLASH_CR_PER ;
+}
+#else
+#define claim_nonsecure_area(...) do{}while(0)
+#endif
+
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
@@ -307,12 +367,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     if ((((FLASH_OPTR & FLASH_OPTR_DBANK) == 0) && (address <= FLASH_TOP)) || (address < FLASH_BANK2_BASE)) {
         cr = &FLASH_CR;
         sr = &FLASH_SR;
+
         /* Convert into secure address space */
         dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
     }
     else if (address >= (FLASH_BANK2_BASE) && (address <= (FLASH_TOP) )) {
         cr = &FLASH_NS_CR;
         sr = &FLASH_NS_SR;
+
+        claim_nonsecure_area(address - (address % 4), len + (address % 4));
     }
     else {
         return 0; /* Address out of range */
