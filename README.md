@@ -469,3 +469,13 @@ Use `make keysclean` or `make distclean` to delete keys and regenerate.
  * Fixed bug in encrypted delta updates
  * Updated wolfCrypt to wolfSSL submodule v5.5.3
 
+### V1.14 (2022-12-30)
+ * Added support for CMake build
+ * STM32U5: Support for external flash
+ * STM32H7: Support for QSPI flash
+ * Support for NXP QoriQ P1021
+ * Cleanups and improvements for DEOS support on t2080
+ * Docker tests: refactoring
+ * Github Actions: added build checks for most available configurations
+ * Updated wolfTPM to v.2.7.0
+ * Updated wolfCrypt to wolfSSL v.5.5.4

@@ -47,9 +47,9 @@ SECTIONS
     . = ALIGN(4);
 }
 
-_wolfboot_partition_boot_address = 0x8020000;
-_wolfboot_partition_size = 0xD0000;
-_wolfboot_partition_update_address = 0x80F0000;
-_wolfboot_partition_swap_address = 0x81C0000;
+_wolfboot_partition_boot_address = @WOLFBOOT_PARTITION_BOOT_ADDRESS@;
+_wolfboot_partition_size = @WOLFBOOT_PARTITION_SIZE@;
+_wolfboot_partition_update_address = @WOLFBOOT_PARTITION_UPDATE_ADDRESS@;
+_wolfboot_partition_swap_address = @WOLFBOOT_PARTITION_SWAP_ADDRESS@;
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);
