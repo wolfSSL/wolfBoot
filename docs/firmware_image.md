@@ -27,7 +27,7 @@ chain-loading the firmware the interrupt continue to work properly after the boo
 ### Image header: Tags
 
 The **image header** is prepended with a single 4-byte magic number, followed by a 4-byte field indicating the 
-firmware image (excluding the header). All numbers in the header are stored in Little-endian format.
+firmware image size (excluding the header). All numbers in the header are stored in Little-endian format.
 
 The two fixed fields are followed by one or more tags. Each TAG is structured as follows:
 
