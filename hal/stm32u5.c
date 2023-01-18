@@ -355,8 +355,10 @@ static void claim_nonsecure_area(uint32_t address, int len)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
+    int iStart = 0;
     uint32_t *dst;
-    uint32_t qword;
+    uint32_t qword[4];
+    uint8_t* qword_tmp;
     int offset;
     volatile uint32_t *sr, *cr;
 
@@ -375,7 +377,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         cr = &FLASH_NS_CR;
         sr = &FLASH_NS_SR;
 
-        claim_nonsecure_area(address - (address % 4), len + (address % 4));
+        claim_nonsecure_area(address - (address % 16), len + (address % 16));
     }
     else {
         return 0; /* Address out of range */
@@ -386,23 +388,42 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #endif
 
     while (i < len) {
-        /* load the start of the word */
-        qword = *(uint32_t*)(((uint32_t)dst) -
-            (((uint32_t)dst) % 4));
+        /* save the start so we write to the same quad sector */
+        iStart = i;
+
+        /* load from the start of the quad word */
+        qword[0] = *(uint32_t*)(((uint32_t)dst + i) -
+            (((uint32_t)dst + i) % 16));
+        /* + 1 after cast will result in + 4 to address with uint32_t* type */
+        qword[1] = *((uint32_t*)(((uint32_t)dst + i) -
+            (((uint32_t)dst + i) % 16)) + 1);
+        qword[2] = *((uint32_t*)(((uint32_t)dst + i) -
+            (((uint32_t)dst + i) % 16)) + 2);
+        qword[3] = *((uint32_t*)(((uint32_t)dst + i) -
+            (((uint32_t)dst + i) % 16)) + 3);
 
         do {
-            /* shift up by the number of bytes past word align */
-            offset = (((uint32_t)dst + i) % 4);
-            qword |= ((uint32_t)data[i] << offset);
+            /* move up by the number of bytes past word align */
+            offset = (((uint32_t)dst + i) % 16);
+            /* easier to cast to byte than mess with shifting 12 bytes */
+            ((uint8_t*)qword)[offset] = data[i];
             i++;
-        } while (i < len && (((uint32_t)dst + i) % 4) != 0);
+        } while (i < len && (((uint32_t)dst + i) % 16) != 0);
 
         *cr |= FLASH_CR_PG;
 
-        /* write the start of the word */
-        *(uint32_t*)(((uint32_t)dst + i) -
-            (((uint32_t)dst + i) % 4)) = qword;
-
+        /* write at the start of the quad word */
+        *(uint32_t*)(((uint32_t)dst + iStart) -
+            (((uint32_t)dst + iStart) % 16)) = qword[0];
+        ISB();
+        *((uint32_t*)(((uint32_t)dst + iStart) -
+            (((uint32_t)dst + iStart) % 16)) + 1) = qword[1];
+        ISB();
+        *((uint32_t*)(((uint32_t)dst + iStart) -
+            (((uint32_t)dst + iStart) % 16)) + 2) = qword[2];
+        ISB();
+        *((uint32_t*)(((uint32_t)dst + iStart) -
+            (((uint32_t)dst + iStart) % 16)) + 3) = qword[3];
         ISB();
 
         flash_wait_complete(0);
