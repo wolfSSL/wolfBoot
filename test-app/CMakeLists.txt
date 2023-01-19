@@ -55,6 +55,15 @@ endif()
 
 if(SPI_FLASH)
     list(APPEND TEST_APP_COMPILE_DEFINITIONS SPI_FLASH)
+    list(APPEND APP_SOURCES ../hal/spi/spi_drv_${SPI_TARGET}.c ../src/spi_flash.c)
+endif()
+if(OCTOSPI_FLASH)
+    set(QSPI_FLASH ON)
+    list(APPEND TEST_APP_COMPILE_DEFINITIONS OCTOSPI_FLASH)
+endif()
+if(QSPI_FLASH)
+    list(APPEND TEST_APP_COMPILE_DEFINITIONS QSPI_FLASH)
+    list(APPEND APP_SOURCES ../hal/spi/spi_drv_${SPI_TARGET}.c ../src/qspi_flash.c)
 endif()
 
 math(EXPR WOLFBOOT_TEST_APP_ADDRESS "${WOLFBOOT_PARTITION_BOOT_ADDRESS} + ${IMAGE_HEADER_SIZE}"
@@ -95,7 +104,10 @@ add_executable(image)
 
 target_sources(image PRIVATE ${APP_SOURCES})
 
-target_include_directories(image PRIVATE ../include ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(image PRIVATE
+    ../
+    ../include
+    ${CMAKE_CURRENT_BINARY_DIR})
 
 target_link_libraries(image wolfboot target)
 
@@ -118,7 +130,7 @@ if(WOLFBOOT_TARGET IN_LIST ARM_TARGETS)
     # add boot address to cache
     unset(${PLATFORM_NAME}_BOOT_ADDRESS CACHE)
     set(${PLATFORM_NAME}_BOOT_ADDRESS ${WOLFBOOT_PARTITION_BOOT_ADDRESS} CACHE INTERNAL "")
-    
+
     gen_wolfboot_factory_image(${PLATFORM_NAME} image)
 else()
     gen_wolfboot_signed_image(image)

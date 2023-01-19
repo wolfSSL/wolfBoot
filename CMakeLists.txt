@@ -113,6 +113,8 @@ add_option(
 add_option("SIGN" "Configure Digital Signatures Algorithm (default: ECC256)" "ECC256"
            "ECC256;ECC384;ECC521;ED25519;ED448;NONE;RSA2048;RSA4096")
 add_option("SPI_FLASH" "Use external SPI flash drivers (default: disabled)" "no" "yes;no")
+add_option("QSPI_FLASH" "Use external QSPI flash drivers (default: disabled)" "no" "yes;no")
+add_option("OCTOSPI_FLASH" "Use external OCTOSPI flash drivers (default: disabled)" "no" "yes;no")
 add_option("SPMATH" "Use SP Math (default: disabled)" "no" "yes;no")
 add_option("WOLFBOOT_TARGET" "Target platform to build for (default: stm32h7)" "stm32h7"
            "stm32f4;stm32h7;stm32l0;stm32u5;x86_64_efi;sim")
@@ -461,6 +463,14 @@ if(SPI_FLASH)
     set(EXT_FLASH ON)
 endif()
 
+if(OCTOSPI_FLASH)
+    set(QSPI_FLASH ON)
+endif()
+
+if(QSPI_FLASH)
+    set(EXT_FLASH ON)
+endif()
+
 if(UART_FLASH)
     set(EXT_FLASH ON)
 endif()
@@ -568,6 +578,15 @@ if(SPI_FLASH)
     list(APPEND WOLFBOOT_FLASH_SOURCES hal/spi/spi_drv_${SPI_TARGET}.c src/spi_flash.c)
 endif()
 
+if(QSPI_FLASH)
+    list(APPEND WOLFBOOT_DEFS QSPI_FLASH)
+    list(APPEND WOLFBOOT_FLASH_SOURCES hal/spi/spi_drv_${SPI_TARGET}.c src/qspi_flash.c)
+endif()
+
+if(OCTOSPI_FLASH)
+    list(APPEND WOLFBOOT_DEFS OCTOSPI_FLASH)
+endif()
+
 if(UART_FLASH)
     list(APPEND WOLFBOOT_DEFS UART_FLASH)
     list(APPEND WOLFBOOT_FLASH_SOURCES hal/uart/uart_drv_${UART_TARGET}.c src/uart_flash.c)
@@ -591,7 +610,7 @@ target_sources(wolfboothal PRIVATE include/hal.h hal/${WOLFBOOT_TARGET}.c ${WOLF
                                    ${PARTITION_SOURCE})
 target_link_libraries(wolfboothal target user_settings)
 target_compile_definitions(wolfboothal PRIVATE ${WOLFBOOT_DEFS})
-target_include_directories(wolfboothal PRIVATE include)
+target_include_directories(wolfboothal PRIVATE ${WOLFBOOT_ROOT} include)
 target_compile_options(wolfboothal PRIVATE ${WOLFBOOT_COMPILE_OPTIONS} ${EXTRA_COMPILE_OPTIONS})
 
 if(PYTHON_KEYTOOLS)
