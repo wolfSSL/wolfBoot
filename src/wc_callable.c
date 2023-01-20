@@ -14,8 +14,9 @@
 
 #define WCS_MAX_RAW_KEY 256
 
-#define WCS_TYPE_AES 1
-#define WCS_TYPE_ECC 2
+#define WCS_TYPE_FILE 0 /* Generic file support (e.g. TLS CA) */
+#define WCS_TYPE_AES  1 /* AES symmetric key */
+#define WCS_TYPE_ECC  2 /* ECC key/keypair */
 
 #define ACCESS_ENCDEC            (1 << 0)
 #define ACCESS_SIGN              (1 << 1)
@@ -26,6 +27,7 @@
 #define ACCESS_WRITE             (1 << 6)
 #define ACCESS_USAGE_COUNTER     (1 << 7)
 #define ACCESS_VALID_DATE        (1 << 8)
+#define ACCESS_READ              (1 << 9)
 
 struct wcs_key
 {
@@ -56,6 +58,87 @@ static int new_slot(void)
     return key_slot;
 }
 
+/* Secure-only interface, for key provisioning and setup
+ */
+int wcs_key_set_type(int key_slot, word32 type)
+{
+    if (key_slot >= WCS_SLOTS)
+        return -1;
+    WCS_Keys[key_slot].in_use = 1;
+    WCS_Keys[key_slot].type = type;
+    return 0;
+}
+
+
+/* Set up access flags */
+int wcs_key_set_flags(int key_slot, word32 flags)
+{
+    if (key_slot >= WCS_SLOTS)
+        return -1;
+    WCS_Keys[key_slot].in_use = 1;
+    WCS_Keys[key_slot].access_flags = flags;
+    return 0;
+}
+
+/* Add a raw key or a certificate file */
+int wcs_key_set_raw(int key_slot, byte *key, word32 key_size)
+{
+    if (key_slot >= WCS_SLOTS)
+        return -1;
+    if (key_size > WCS_MAX_RAW_KEY)
+        return -1;
+    if (WCS_Keys[key_slot].type == WCS_TYPE_ECC)
+        return -1;
+
+    WCS_Keys[key_slot].in_use = 1;
+    WCS_Keys[key_slot].size = key_size;
+    XMEMCPY(WCS_Keys[key_slot].key.raw, key, key_size);
+    return 0;
+}
+
+int wcs_ecc_import_unsigned(int key_slot, byte *qx, byte *qy,
+        byte *d, int curve_id)
+{
+    ecc_key *key;
+    word32 ksize;
+    if (key_slot >= WCS_SLOTS)
+        return -1;
+    if (WCS_Keys[key_slot].type != WCS_TYPE_ECC)
+        return -1;
+    key = &WCS_Keys[key_slot].key.ecc;
+    if (wc_ecc_init(key) < 0)
+        return -1;
+    if (wc_ecc_import_unsigned(key, qx, qy, d, curve_id) < 0)
+        return -1;
+    WCS_Keys[key_slot].in_use++;
+    return 0;
+}
+
+/* Non-secure callable interface, for access from non-secure domain.
+ * This is the base API to access crypto functions from the application
+ * using WCS.
+ */
+
+int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
+        byte *pubkey, word32 key_size, int curve_id)
+{
+    ecc_key *key;
+
+    if (slot_id >= WCS_SLOTS)
+        return -1;
+    if (WCS_Keys[slot_id].in_use)
+        return -1;
+    if (WCS_Keys[slot_id].type != WCS_TYPE_ECC)
+        return -1;
+    if ((WCS_Keys[slot_id].access_flags & ACCESS_WRITE) == 0)
+        return -1;
+    if ((curve_id < 0) || (wc_ecc_is_valid_idx(curve_id) == 0))
+        return ECC_BAD_ARG_E;
+    key = &WCS_Keys[slot_id].key.ecc;
+    if (wc_ecc_init(key) < 0)
+        return -1;
+    return wc_ecc_import_unsigned(key, pubkey, pubkey + key_size, NULL, curve_id);
+}
 
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(size_t key_size,
         int ecc_curve)
@@ -144,11 +227,11 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_verify_call(struct wcs_verify_
         return -1;
     if ((WCS_Keys[slot_id].access_flags & ACCESS_VERIFY) == 0)
         return -1;
-    ret = wc_ecc_verify_hash(p->sig, p->sigSz, p->hash, p->hashSz, p->verify_res, &WCS_Keys[slot_id].key.ecc);
+    ret = wc_ecc_verify_hash(p->sig, p->sigSz, p->hash, p->hashSz, &p->verify_res, &WCS_Keys[slot_id].key.ecc);
     return ret;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic_call(int slot_id, byte *pubkey, word32 *pubkeySz)
+int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id, byte *pubkey, word32 *pubkeySz)
 {
     int ret;
     word32 x_sz, y_sz;
@@ -177,7 +260,7 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic_call(int slot_id, by
 
 int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id)
 {
-    int outlen = 256;
+    word32 outlen = 256;
     ecc_key *priv, *pub;
     byte outkey[256];
     
@@ -225,12 +308,16 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, i
 
 int __attribute__((cmse_nonsecure_entry)) wcs_get_random_call(byte *rand, size_t size)
 {
-
+    int ret;
+    ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
+    return ret;
 }
 
 void wsc_Init(void)
 {
     wc_InitRng(&wcs_rng);
 }
+
+
 
 #endif

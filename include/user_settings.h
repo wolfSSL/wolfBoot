@@ -107,6 +107,12 @@ extern int tolower(int c);
 #else
 #   define HAVE_ECC_SIGN
 #   define HAVE_ECC_CDH
+#   define WOLFSSL_SP
+#   define WOLFSSL_SP_MATH
+#   define WOLFSSL_SP_SMALL
+#   define SP_WORD_SIZE 32
+#   define WOLFSSL_HAVE_SP_ECC
+#   define WOLFSSL_SP_MATH_ALL
 #endif
 
 /* Curve */

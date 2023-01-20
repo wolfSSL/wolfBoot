@@ -104,7 +104,6 @@ void main(void)
     if (wolfBoot_current_firmware_version() > 1)
         boot_led_on();
 #ifdef WOLFCRYPT_SECURE_MODE
-    nsc_test();
 #endif
 
     while(1)
