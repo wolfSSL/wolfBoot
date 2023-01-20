@@ -5,6 +5,7 @@
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/random.h"
 #include "wolfboot/wolfboot.h"
+#include "wolfboot/wc_secure.h"
 #include "hal.h"
 #include <stdint.h>
 
@@ -32,14 +33,14 @@
 
 struct wcs_key
 {
-    word32 id;
-    word32 type;
+    uint32_t id;
+    uint32_t type;
     int in_use;
-    size_t size;
-    word32 access_flags;
-    word32 key_size;
+    uint32_t size;
+    uint32_t access_flags;
+    uint32_t key_size;
     union wcs_key_type_u {
-        byte raw[WCS_MAX_RAW_KEY];
+        uint8_t raw[WCS_MAX_RAW_KEY];
         ecc_key ecc;
         /*  ....  */
     } key;
@@ -61,7 +62,7 @@ static int new_slot(void)
 
 /* Secure-only interface, for key provisioning and setup
  */
-int wcs_key_set_type(int key_slot, word32 type)
+int wcs_key_set_type(int key_slot, uint32_t type)
 {
     if (key_slot >= WCS_SLOTS)
         return -1;
@@ -72,7 +73,7 @@ int wcs_key_set_type(int key_slot, word32 type)
 
 
 /* Set up access flags */
-int wcs_key_set_flags(int key_slot, word32 flags)
+int wcs_key_set_flags(int key_slot, uint32_t flags)
 {
     if (key_slot >= WCS_SLOTS)
         return -1;
@@ -82,7 +83,7 @@ int wcs_key_set_flags(int key_slot, word32 flags)
 }
 
 /* Add a raw key or a certificate file */
-int wcs_key_set_raw(int key_slot, byte *key, word32 key_size)
+int wcs_key_set_raw(int key_slot, uint8_t *key, uint32_t key_size)
 {
     if (key_slot >= WCS_SLOTS)
         return -1;
@@ -97,11 +98,11 @@ int wcs_key_set_raw(int key_slot, byte *key, word32 key_size)
     return 0;
 }
 
-int wcs_ecc_import_unsigned(int key_slot, byte *qx, byte *qy,
-        byte *d, int curve_id)
+int wcs_ecc_import_unsigned(int key_slot, uint8_t *qx, uint8_t *qy,
+        uint8_t *d, int curve_id)
 {
     ecc_key *key;
-    word32 ksize;
+    uint32_t ksize;
     if (key_slot >= WCS_SLOTS)
         return -1;
     if (WCS_Keys[key_slot].type != WCS_TYPE_ECC)
@@ -121,7 +122,7 @@ int wcs_ecc_import_unsigned(int key_slot, byte *qx, byte *qy,
  */
 
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
-        byte *pubkey, word32 key_size, int curve_id)
+        uint8_t *pubkey, uint32_t key_size, int curve_id)
 {
     ecc_key *key;
 
@@ -138,11 +139,12 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
     key = &WCS_Keys[slot_id].key.ecc;
     if (wc_ecc_init(key) < 0)
         return -1;
-    return wc_ecc_import_unsigned(key, pubkey, pubkey + key_size, NULL, curve_id);
+    return wc_ecc_import_unsigned(key, pubkey, pubkey + key_size, NULL,
+            curve_id);
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(size_t key_size,
-        int ecc_curve)
+int __attribute__((cmse_nonsecure_entry))
+wcs_ecc_keygen(uint32_t key_size, int ecc_curve)
 {
     int slot_id;
     struct wcs_key *wk;
@@ -174,27 +176,9 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(size_t key_size,
     return slot_id;
 }
 
-struct wcs_sign_call_params
-{
-    int slot_id;
-    const byte *in;
-    word32 inSz;
-    byte *out;
-    word32 outSz;
-    int verify_res;
-};
 
-struct wcs_verify_call_params
-{
-    int slot_id;
-    const byte *sig;
-    word32 sigSz;
-    byte *hash;
-    word32 hashSz;
-    int verify_res;
-};
-
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_sign_call(struct wcs_sign_call_params *p)
+int __attribute__((cmse_nonsecure_entry))
+wcs_ecc_sign_call(struct wcs_sign_call_params *p)
 {
     int slot_id = p->slot_id;
     int ret;
@@ -209,11 +193,13 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_sign_call(struct wcs_sign_call
         return -1;
     if ((WCS_Keys[slot_id].access_flags & ACCESS_SIGN) == 0)
         return -1;
-    ret = wc_ecc_sign_hash(p->in, p->inSz, p->out, &p->outSz, &wcs_rng, &WCS_Keys[slot_id].key.ecc);
+    ret = wc_ecc_sign_hash(p->in, p->inSz, p->out, (word32 *)&p->outSz, &wcs_rng,
+            &WCS_Keys[slot_id].key.ecc);
     return ret;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_verify_call(struct wcs_verify_call_params *p)
+int __attribute__((cmse_nonsecure_entry))
+wcs_ecc_verify_call(struct wcs_verify_call_params *p)
 {
     int slot_id = p->slot_id;
     int ret;
@@ -228,14 +214,16 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_verify_call(struct wcs_verify_
         return -1;
     if ((WCS_Keys[slot_id].access_flags & ACCESS_VERIFY) == 0)
         return -1;
-    ret = wc_ecc_verify_hash(p->sig, p->sigSz, p->hash, p->hashSz, &p->verify_res, &WCS_Keys[slot_id].key.ecc);
+    ret = wc_ecc_verify_hash(p->sig, p->sigSz, p->hash, p->hashSz,
+            &p->verify_res, &WCS_Keys[slot_id].key.ecc);
     return ret;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id, byte *pubkey, word32 *pubkeySz)
+int __attribute__((cmse_nonsecure_entry))
+wcs_ecc_getpublic(int slot_id, uint8_t *pubkey, uint32_t *pubkeySz)
 {
     int ret;
-    word32 x_sz, y_sz;
+    uint32_t x_sz, y_sz;
     x_sz = *pubkeySz / 2;
     y_sz = x_sz;
 
@@ -252,19 +240,21 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id, byte *p
 
     /* TODO: check bidirectional argument pubkeySz for valid ecc key size */
 
-    ret = wc_ecc_export_public_raw(&WCS_Keys[slot_id].key.ecc, pubkey, &x_sz, pubkey + x_sz, &y_sz);
+    ret = wc_ecc_export_public_raw(&WCS_Keys[slot_id].key.ecc, pubkey,
+            (word32 *)&x_sz, pubkey + x_sz, (word32 *)&y_sz);
     if (ret == 0) {
         *pubkeySz = x_sz + y_sz;
     }
     return ret;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id)
+int __attribute__((cmse_nonsecure_entry))
+wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id)
 {
-    word32 outlen = 256;
+    uint32_t outlen = 256;
     ecc_key *priv, *pub;
-    byte outkey[256];
-    
+    uint8_t outkey[256];
+
     if (privkey_slot_id > WCS_SLOTS)
         return -1;
     if (WCS_Keys[privkey_slot_id].in_use == 0)
@@ -282,7 +272,7 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, i
         return -1;
     if ((WCS_Keys[pubkey_slot_id].access_flags & ACCESS_DERIVE) == 0)
         return -1;
-    
+
     if (shared_slot_id > WCS_SLOTS)
         return -1;
     if (WCS_Keys[shared_slot_id].in_use != 0)
@@ -295,7 +285,7 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, i
     priv = &WCS_Keys[privkey_slot_id].key.ecc;
     pub  = &WCS_Keys[pubkey_slot_id].key.ecc;
 
-    if (wc_ecc_shared_secret(priv, pub, outkey, &outlen) != 0)
+    if (wc_ecc_shared_secret(priv, pub, outkey, (word32*)&outlen) != 0)
         return -1;
 
     if (outlen > WCS_MAX_RAW_KEY)
@@ -307,7 +297,8 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, i
     return 0;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_get_random(byte *rand, size_t size)
+int __attribute__((cmse_nonsecure_entry))
+wcs_get_random(uint8_t *rand, uint32_t size)
 {
     int ret;
     ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
