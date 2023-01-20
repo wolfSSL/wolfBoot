@@ -105,6 +105,8 @@ extern int tolower(int c);
 #   define NO_ECC_KEY_EXPORT
 #   define NO_ASN
 #else
+
+
 #   define HAVE_ECC_SIGN
 #   define HAVE_ECC_CDH
 #   define WOLFSSL_SP
@@ -113,6 +115,9 @@ extern int tolower(int c);
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
 #   define WOLFSSL_SP_MATH_ALL
+
+int hal_trng_get_entropy(unsigned char *out, unsigned len);
+#   define CUSTOM_RAND_GENERATE_SEED hal_trng_get_entropy
 #endif
 
 /* Curve */
@@ -334,7 +339,6 @@ extern int tolower(int c);
     #define WC_NO_HASHDRBG
 #else
     #define HAVE_HASHDRBG
-    #define WOLFSSL_GENSEED_FORTEST
 #endif
 
 #define BENCH_EMBEDDED

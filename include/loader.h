@@ -97,6 +97,10 @@ static inline void wolfBoot_panic(void)
 }
 #endif
 
+#ifdef WOLFCRYPT_SECURE_MODE
+void wcs_Init(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

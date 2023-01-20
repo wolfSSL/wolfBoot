@@ -54,6 +54,9 @@
 #define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
 #define PWR_CR2_IOSV         (1 << 9)
 
+int wcs_get_random(unsigned char *rand,
+       uint32_t size);
+
 static void boot_led_on(void)
 {
     uint32_t reg;
@@ -97,14 +100,20 @@ void usr_led_off(void)
 
 void main(void)
 {
+#ifdef WOLFBOOT_SECURE_CALLS
+    uint32_t rand;
+    uint32_t i;
+    wcs_get_random((void*)&rand, 4);
+    for (i = 0; i < rand; i++)
+        ;
+
+#endif
     hal_init();
     boot_led_on();
     usr_led_on();
     boot_led_off();
     if (wolfBoot_current_firmware_version() > 1)
         boot_led_on();
-#ifdef WOLFCRYPT_SECURE_MODE
-#endif
 
     while(1)
         ;

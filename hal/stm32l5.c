@@ -238,6 +238,7 @@
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x4C ))
 #define GPIOG_AHB2_CLOCK_ER (1 << 6)
 #define GPIOD_AHB2_CLOCK_ER (1 << 3)
+#define TRNG_AHB2_CLOCK_ER  (1 << 18)
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 
@@ -729,4 +730,45 @@ void hal_prepare_boot(void)
 #endif
 }
 
+#ifdef WOLFCRYPT_SECURE_MODE
 
+#define TRNG_BASE 0x520C0800
+#define TRNG_CR *((volatile uint32_t *)(TRNG_BASE + 0x00))
+#define TRNG_SR *((volatile uint32_t *)(TRNG_BASE + 0x04))
+#define TRNG_DR *((volatile uint32_t *)(TRNG_BASE + 0x08))
+
+#define TRNG_SR_DRDY (1 << 0)
+#define TRNG_CR_RNGEN (1 << 2)
+
+void hal_trng_init(void)
+{
+    RCC_AHB2_CLOCK_ER |= TRNG_AHB2_CLOCK_ER;
+    TRNG_CR |= TRNG_CR_RNGEN;
+    while ((TRNG_SR & TRNG_SR_DRDY) == 0)
+        ;
+}
+
+/* Never used (RNG keeps running when in secure-mode) */
+void hal_trng_fini(void)
+{
+    TRNG_CR &= (~TRNG_CR_RNGEN);
+}
+
+int hal_trng_get_entropy(unsigned char *out, unsigned len)
+{
+    unsigned i;
+    uint32_t rand_seed = 0;
+    for (i = 0; i < len; i += 4)
+    {
+        while ((TRNG_SR & TRNG_SR_DRDY) == 0)
+            ;
+        rand_seed = TRNG_DR;
+        if ((len - i) < 4)
+            memcpy(out + i, &rand_seed, len - i);
+        else
+            memcpy(out + i, &rand_seed, 4);
+    }
+    return rand_seed;
+}
+
+#endif

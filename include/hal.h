@@ -106,6 +106,14 @@ void hal_prepare_boot(void);
     }
 #endif /* !SPI_FLASH */
 
+#ifdef WOLFCRYPT_SECURE_MODE
+
+void hal_trng_init(void);
+void hal_trng_fini(void);
+int hal_trng_get_entropy(unsigned char *out, unsigned len);
+
+#endif
+
 #ifdef __cplusplus
 }
 #endif

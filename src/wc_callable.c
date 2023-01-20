@@ -5,6 +5,7 @@
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/random.h"
 #include "wolfboot/wolfboot.h"
+#include "hal.h"
 #include <stdint.h>
 
 
@@ -306,18 +307,17 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id, i
     return 0;
 }
 
-int __attribute__((cmse_nonsecure_entry)) wcs_get_random_call(byte *rand, size_t size)
+int __attribute__((cmse_nonsecure_entry)) wcs_get_random(byte *rand, size_t size)
 {
     int ret;
     ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
     return ret;
 }
 
-void wsc_Init(void)
+void wcs_Init(void)
 {
+    hal_trng_init();
     wc_InitRng(&wcs_rng);
 }
-
-
 
 #endif

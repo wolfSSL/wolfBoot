@@ -38,6 +38,7 @@ else
 endif
 
 WOLFCRYPT_OBJS:=
+SECURE_OBJS:=
 PUBLIC_KEY_OBJS:=
 ifneq ("$(NO_LOADER)","1")
   OBJS+=./src/loader.o
