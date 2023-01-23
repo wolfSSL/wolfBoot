@@ -139,6 +139,7 @@ wolfboot.bin: wolfboot.elf
 	$(Q)$(SIZE) wolfboot.elf
 	@echo
 
+
 test-app/image.bin: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)"
 	$(Q)$(SIZE) test-app/image.elf

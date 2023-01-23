@@ -21,8 +21,6 @@
 
 #include <stdint.h>
 #include <image.h>
-#include "stm32l5_partition.h"
-
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
 #define ISB() __asm__ volatile ("isb")

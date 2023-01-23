@@ -28,6 +28,7 @@
 #include "system.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "wolfboot/wc_secure.h"
 
 #define LED_BOOT_PIN (12)  //PG12 - Discovery - Green Led
 #define LED_USR_PIN (3) //PD3  - Discovery  - Red Led
@@ -53,9 +54,6 @@
 
 #define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
 #define PWR_CR2_IOSV         (1 << 9)
-
-int wcs_get_random(unsigned char *rand,
-       uint32_t size);
 
 static void boot_led_on(void)
 {
@@ -104,7 +102,7 @@ void main(void)
     uint32_t rand;
     uint32_t i;
     wcs_get_random((void*)&rand, 4);
-    for (i = 0; i < rand; i++)
+    for (i = 0; i < (rand / 100000000); i++)
         ;
 
 #endif

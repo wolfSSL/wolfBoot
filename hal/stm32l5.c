@@ -22,7 +22,6 @@
 #include <stdint.h>
 #include <image.h>
 #include <string.h>
-#include "stm32l5_partition.h"
 
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
@@ -116,6 +115,9 @@
 #define RCC_APB2ENR         (*(volatile uint32_t *)(RCC_BASE + 0x60))
 #define RCC_APB2ENR_SYSCFGEN      (1 << 0)
 
+#define RCC_CRRCR         (*(volatile uint32_t *)(RCC_BASE + 0x98))
+#define RCC_CRRCR_HSI48ON      (1 << 0)
+#define RCC_CRRCR_HSI48RDY     (1 << 1)
 
 /*** PWR ***/
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
@@ -241,12 +243,8 @@
 #define TRNG_AHB2_CLOCK_ER  (1 << 18)
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-
-#define SCS_BASE  (0xE000E000UL)
-#define SCB_BASE  (SCS_BASE + 0x0D00UL)
-#define SCB_SHCSR     (*(volatile uint32_t *)(SCB_BASE + 0x24))
+#define SCB_SHCSR     (*(volatile uint32_t *)(0xE000ED24))
 #define SCB_SHCSR_SECUREFAULT_EN            (1<<19)
-
 #endif
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
@@ -393,9 +391,6 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
   return 0;
 }
 
-
-
-
 void RAMFUNCTION hal_flash_unlock(void)
 {
     flash_wait_complete(0);
@@ -408,8 +403,6 @@ void RAMFUNCTION hal_flash_unlock(void)
             ;
     }
 }
-
-
 
 void RAMFUNCTION hal_flash_lock(void)
 {
@@ -600,44 +593,90 @@ static void clock_pll_on(int powersave)
   DMB();
 
 }
+
+static void hsi48_on(void)
+{
+    RCC_CRRCR |= RCC_CRRCR_HSI48ON;
+    while(RCC_CRRCR & RCC_CRRCR_HSI48RDY)
+        ;
+}
+
+/* SAU registers, used to define memory mapped regions */
+#define SAU_CTRL   (*(volatile uint32_t *)(0xE000EDD0))
+#define SAU_RNR (*(volatile uint32_t *)(0xE000EDD8)) /** SAU_RNR - region number register **/
+#define SAU_RBAR (*(volatile uint32_t *)(0xE000EDDC)) /** SAU_RBAR - region base address register **/
+#define SAU_RLAR (*(volatile uint32_t *)(0xE000EDE0)) /** SAU_RLAR - region limit address register **/
+
+#define SAU_REGION_MASK 0x000000FF
+#define SAU_ADDR_MASK 0xFFFFFFE0 /* LS 5 bit are reserved or used for flags */
+
+/* Flag for the SAU region limit register */
+#define SAU_REG_ENABLE (1 << 0) /* Indicates that the region is enabled. */
+#define SAU_REG_SECURE (1 << 1) /* When on, the region is S or NSC */
+
+#define SAU_INIT_CTRL_ENABLE (1 << 0)
+#define SAU_INIT_CTRL_ALLNS  (1 << 1)
+
+static void sau_init_region(uint32_t region, uint32_t start_addr,
+        uint32_t end_addr, int secure)
+{
+    uint32_t secure_flag = 0;
+    if (secure)
+        secure_flag = SAU_REG_SECURE;
+    SAU_RNR = region & SAU_REGION_MASK;
+    SAU_RBAR = start_addr & SAU_ADDR_MASK;
+    SAU_RLAR = (end_addr & SAU_ADDR_MASK)
+        | secure_flag | SAU_REG_ENABLE;
+}
+
+
+static void tz_sau_init(void)
+{
+    /* Non-secure callable: NSC functions area */
+    sau_init_region(0, 0x0C020000, 0x0C040000, 1);
+
+    /* Non-secure: application flash area */
+    sau_init_region(1, 0x08040000, 0x0804FFFF, 0);
+
+    /* Non-secure RAM region in SRAM1 */
+    sau_init_region(2, 0x20018000, 0x2002FFFF, 0);
+
+    /* Non-secure: internal peripherals */
+    sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
+
+    /* Enable SAU */
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+
+    /* Enable securefault handler */
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+
+}
+
+#define GTZC_MPCBB1_S_BASE        (0x50032C00)
+#define GTZC_MPCBB1_S_VCTR_BASE   (GTZC_MPCBB1_S_BASE + 0x100)
+
+#define GTZC_MPCBB2_S_BASE        (0x50033000)
+#define GTZC_MPCBB2_S_VCTR_BASE   (GTZC_MPCBB2_S_BASE + 0x100)
+
+#define SET_GTZC_MPCBBx_S_VCTR(bank,n,val) \
+    (*((volatile uint32_t *)(GTZC_MPCBB##bank##_S_VCTR_BASE ) + n ))= val
+
 static void gtzc_init(void)
 {
-  /*configure SRAM1 */
-  SET_GTZC_MPCBBx_S_VCTR(1,0);
-  SET_GTZC_MPCBBx_S_VCTR(1,1);
-  SET_GTZC_MPCBBx_S_VCTR(1,2);
-  SET_GTZC_MPCBBx_S_VCTR(1,3);
-  SET_GTZC_MPCBBx_S_VCTR(1,4);
-  SET_GTZC_MPCBBx_S_VCTR(1,5);
-  SET_GTZC_MPCBBx_S_VCTR(1,6);
-  SET_GTZC_MPCBBx_S_VCTR(1,7);
-  SET_GTZC_MPCBBx_S_VCTR(1,8);
-  SET_GTZC_MPCBBx_S_VCTR(1,9);
-  SET_GTZC_MPCBBx_S_VCTR(1,10);
-  SET_GTZC_MPCBBx_S_VCTR(1,11);
-  SET_GTZC_MPCBBx_S_VCTR(1,12);
-  SET_GTZC_MPCBBx_S_VCTR(1,13);
-  SET_GTZC_MPCBBx_S_VCTR(1,14);
-  SET_GTZC_MPCBBx_S_VCTR(1,15);
-  SET_GTZC_MPCBBx_S_VCTR(1,16);
-  SET_GTZC_MPCBBx_S_VCTR(1,17);
-  SET_GTZC_MPCBBx_S_VCTR(1,18);
-  SET_GTZC_MPCBBx_S_VCTR(1,19);
-  SET_GTZC_MPCBBx_S_VCTR(1,20);
-  SET_GTZC_MPCBBx_S_VCTR(1,21);
-  SET_GTZC_MPCBBx_S_VCTR(1,22);
-  SET_GTZC_MPCBBx_S_VCTR(1,23);
+   int i;
+  /* Configure lower half of SRAM1 as secure */
+   for (i = 0; i < 12; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
+   }
+   /* Configure upper half of SRAM1 as non-secure */
+   for (i = 12; i < 24; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(1, i, 0x0);
+   }
 
-  /*configure SRAM2 */
-  SET_GTZC_MPCBBx_S_VCTR(2,0);
-  SET_GTZC_MPCBBx_S_VCTR(2,1);
-  SET_GTZC_MPCBBx_S_VCTR(2,2);
-  SET_GTZC_MPCBBx_S_VCTR(2,3);
-  SET_GTZC_MPCBBx_S_VCTR(2,4);
-  SET_GTZC_MPCBBx_S_VCTR(2,5);
-  SET_GTZC_MPCBBx_S_VCTR(2,6);
-  SET_GTZC_MPCBBx_S_VCTR(2,7);
-
+  /* Configure SRAM2 as secure */
+   for (i = 0; i < 8; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(2, i, 0xFFFFFFFF);
+   }
 }
 
 
@@ -707,18 +746,19 @@ static void RAMFUNCTION fork_bootloader(void)
 
 void hal_init(void)
 {
-    TZ_SAU_Setup();
+
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
     if ((FLASH_OPTR & (FLASH_OPTR_SWAP_BANK | FLASH_OPTR_DBANK)) == FLASH_OPTR_DBANK)
         fork_bootloader();
 #endif
-    clock_pll_on(0);
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
   /* Enable SecureFault handler (HardFault is default) */
     SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+    tz_sau_init();
     gtzc_init();
 #endif
+    clock_pll_on(0);
 
 }
 
@@ -739,11 +779,31 @@ void hal_prepare_boot(void)
 
 #define TRNG_SR_DRDY (1 << 0)
 #define TRNG_CR_RNGEN (1 << 2)
+#define TRNG_CR_CONFIG3_SHIFT (8)
+#define TRNG_CR_CONFIG2_SHIFT (13)
+#define TRNG_CR_CLKDIV_SHIFT (16)
+#define TRNG_CR_CONFIG1_SHIFT (20)
+#define TRNG_CR_CONDRST (1 << 30)
+
 
 void hal_trng_init(void)
 {
+    uint32_t reg_val;
+    hsi48_on();
     RCC_AHB2_CLOCK_ER |= TRNG_AHB2_CLOCK_ER;
-    TRNG_CR |= TRNG_CR_RNGEN;
+
+    reg_val = TRNG_CR;
+    reg_val &= ~(0x1F << TRNG_CR_CONFIG1_SHIFT);
+    reg_val &= ~(0x7 << TRNG_CR_CLKDIV_SHIFT);
+    reg_val &= ~(0x3 << TRNG_CR_CONFIG2_SHIFT);
+    reg_val &= ~(0x7 << TRNG_CR_CONFIG3_SHIFT);
+
+    reg_val |= 0x0F << TRNG_CR_CONFIG1_SHIFT;
+    reg_val |= 0x0D << TRNG_CR_CONFIG3_SHIFT;
+    TRNG_CR = TRNG_CR_CONDRST | reg_val;
+    while ((TRNG_CR & TRNG_CR_CONDRST) == 0)
+        ;
+    TRNG_CR = reg_val | TRNG_CR_RNGEN;
     while ((TRNG_SR & TRNG_SR_DRDY) == 0)
         ;
 }
