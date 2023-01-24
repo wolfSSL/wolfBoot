@@ -13,7 +13,6 @@ struct wcs_sign_call_params
     uint32_t inSz;
     uint8_t *out;
     uint32_t outSz;
-    int verify_res;
 };
 
 struct wcs_verify_call_params
@@ -23,7 +22,7 @@ struct wcs_verify_call_params
     uint32_t sigSz;
     uint8_t *hash;
     uint32_t hashSz;
-    int verify_res;
+    int *verify_res;
 };
 #endif
 
@@ -43,10 +42,40 @@ int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id,
 int __attribute__((cmse_nonsecure_entry)) wcs_get_random(uint8_t *rand,
         uint32_t size);
 
+
+/* Calls with wrapper for arguments (ABI only allows 4 arguments) */
 int __attribute__((cmse_nonsecure_entry))
     wcs_ecc_sign_call(struct wcs_sign_call_params *p);
 int __attribute__((cmse_nonsecure_entry))
     wcs_ecc_verify_call(struct wcs_verify_call_params *p);
+
+
+
+/* exposed API for sign/verify with all needed arguments */
+static inline int wcs_ecc_sign(int slot_id, const uint8_t *in,
+        uint32_t inSz, uint8_t *out, uint32_t outSz)
+{
+    struct wcs_sign_call_params p;
+    p.slot_id = slot_id;
+    p.in = in;
+    p.inSz = inSz;
+    p.out = out;
+    p.outSz = outSz;
+    return wcs_ecc_sign_call(&p);
+}
+
+static inline int wcs_ecc_verify(int slot_id, const uint8_t *sig,
+        uint32_t sigSz, uint8_t *hash, uint32_t hashSz, int *verify_res)
+{
+    struct wcs_verify_call_params p;
+    p.slot_id = slot_id;
+    p.sig = sig;
+    p.sigSz = sigSz;
+    p.hash = hash;
+    p.hashSz = hashSz;
+    p.verify_res = verify_res;
+    return wcs_ecc_verify_call(&p);
+}
 
 #endif /* WOLFBOOT_SECURE_CALLS */
 

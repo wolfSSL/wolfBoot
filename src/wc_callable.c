@@ -220,7 +220,7 @@ wcs_ecc_verify_call(struct wcs_verify_call_params *p)
     if ((WCS_Keys[slot_id].access_flags & ACCESS_VERIFY) == 0)
         return -1;
     ret = wc_ecc_verify_hash(p->sig, p->sigSz, p->hash, p->hashSz,
-            &p->verify_res, &WCS_Keys[slot_id].key.ecc);
+            p->verify_res, &WCS_Keys[slot_id].key.ecc);
     return ret;
 }
 
