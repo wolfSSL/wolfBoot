@@ -47,7 +47,6 @@ struct wcs_key
 };
 
 static struct wcs_key WCS_Keys[WCS_SLOTS]  = { };
-static WC_RNG wcs_rng;
 
 static int new_slot(void)
 {
@@ -149,6 +148,7 @@ wcs_ecc_keygen(uint32_t key_size, int ecc_curve)
     int slot_id;
     struct wcs_key *wk;
     int ret;
+    WC_RNG wcs_rng;
     ecc_key *new_key = NULL;
     slot_id = new_slot();
     if (slot_id < 0)
@@ -167,7 +167,9 @@ wcs_ecc_keygen(uint32_t key_size, int ecc_curve)
     wk = &WCS_Keys[slot_id];
     if (wc_ecc_init(new_key) != 0)
         return -1;
+    wc_InitRng(&wcs_rng);
     ret = wc_ecc_make_key_ex(&wcs_rng, key_size, new_key, ecc_curve);
+    wc_FreeRng(&wcs_rng);
     if (ret < 0)
         return -1;
     wk->in_use++;
@@ -182,6 +184,7 @@ wcs_ecc_sign_call(struct wcs_sign_call_params *p)
 {
     int slot_id = p->slot_id;
     int ret;
+    WC_RNG wcs_rng;
 
     /* TODO: sanity check memory range for param pointer */
 
@@ -193,8 +196,10 @@ wcs_ecc_sign_call(struct wcs_sign_call_params *p)
         return -1;
     if ((WCS_Keys[slot_id].access_flags & ACCESS_SIGN) == 0)
         return -1;
+    wc_InitRng(&wcs_rng);
     ret = wc_ecc_sign_hash(p->in, p->inSz, p->out, (word32 *)&p->outSz, &wcs_rng,
             &WCS_Keys[slot_id].key.ecc);
+    wc_FreeRng(&wcs_rng);
     return ret;
 }
 
@@ -301,14 +306,16 @@ int __attribute__((cmse_nonsecure_entry))
 wcs_get_random(uint8_t *rand, uint32_t size)
 {
     int ret;
+    WC_RNG wcs_rng;
+    wc_InitRng(&wcs_rng);
     ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
+    wc_FreeRng(&wcs_rng);
     return ret;
 }
 
 void wcs_Init(void)
 {
     hal_trng_init();
-    wc_InitRng(&wcs_rng);
 }
 
 #endif

@@ -32,7 +32,10 @@ extern "C" {
 #include <stdint.h>
 #include "target.h"
 #include "wolfboot/version.h"
+
+#ifdef WOLFCRYPT_SECURE_MODE
 #include "wolfboot/wc_secure.h"
+#endif
 
 
 #ifndef IMAGE_HEADER_SIZE

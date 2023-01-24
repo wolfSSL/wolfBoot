@@ -2,6 +2,7 @@ MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
     RAM (rwx) : ORIGIN = 0x30000000, LENGTH = 0x00017FFF
+    FLASH_NSC(rx): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x20000, LENGTH = 0x20000
 }
 
 SECTIONS
@@ -15,12 +16,19 @@ SECTIONS
         . = ALIGN(8);
         _end_text = .;
     } > FLASH
+
     .edidx :
     {
         . = ALIGN(4);
         *(.ARM.exidx*)
     } > FLASH
 
+    .gnu.sgstubs :
+    {
+        . = ALIGN(4);
+        *(.gnu.sgstubs*)   /* Secure Gateway stubs */
+        . = ALIGN(4);
+    } >FLASH_NSC
 
     _stored_data = .;
     .data : AT (_stored_data)

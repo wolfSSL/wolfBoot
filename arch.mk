@@ -136,6 +136,7 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
+
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
     CFLAGS+=-Ihal
@@ -164,6 +165,7 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
     LDFLAGS+=-mcpu=cortex-m33
     ifeq ($(TZEN),1)
+      OBJS+=hal/stm32_tz.o
       CFLAGS+=-mcmse
       ifeq ($(WCSM),1)
         SECURE_OBJS+=./src/wc_callable.o

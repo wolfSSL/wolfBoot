@@ -106,6 +106,21 @@ void hal_prepare_boot(void);
     }
 #endif /* !SPI_FLASH */
 
+#ifdef TZEN
+
+/* TrustZone hal API */
+
+void hal_tz_claim_nonsecure_area(uint32_t address, int len);
+void hal_tz_release_nonsecure_area(void);
+void hal_tz_sau_init(void);
+void hal_gtzc_init(void);
+
+/* Needed by TZ to claim/release nonsecure flash areas */
+void hal_flash_wait_complete(uint8_t bank);
+void hal_flash_clear_errors(uint8_t bank);
+
+#endif
+
 #ifdef WOLFCRYPT_SECURE_MODE
 
 void hal_trng_init(void);
