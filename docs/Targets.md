@@ -13,6 +13,7 @@ This README describes configuration of supported targets.
 * [NXP P1021 PPC](#nxp-p1021-ppc)
 * [NXP T2080 PPC](#nxp-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [NXP LS1028A](#nxp-ls1028a)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -1248,6 +1249,7 @@ thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu
 ```
 
 
+
 ## TI Hercules TMS570LC435
 
 See [/config/examples/ti-tms570lc435.config](/config/examples/ti-tms570lc435.config) for example configuration.
@@ -1385,3 +1387,37 @@ make test-sim-internal-flash-with-update
 # it should print 2
 ./wolfboot.elf success get_version
 ```
+
+## NXP LS1028A
+
+The LS1028A is a AARCH64 armv8-a Cortex-A72 based processor. Support has been tested with the NXP LS1028ARDB.
+
+Example configurations for this target are provided in:
+* NXP LS1028A: [/config/examples/nxp-ls1028A.config](/config/examples/LS1028A.config).
+
+Boot Configuration:
+SW2[1:4] -> `1111: XSPI serial NOR, 24-bit address (default setting)`
+
+### Building wolfBoot for NXP LS1028A
+
+wolfBoot can be built with aarch64-none-elf- tools setting `ARCH=AARCH64` in the `.config` will set the correct compiler command.
+
+```
+cp ./config/examples/nxp-ls1028a.config .config
+make distclean
+make keytools
+make wolfboot.elf
+```
+
+### Programming NXP LS1028A
+
+#### Lauterbach
+
+```
+~/t32/bin/macosx64/t32marm-qt -c /Users/davidgarske/t32/config_usb.t32
+
+```
+
+### Debugging NXP LS1028A
+
+#### Lauterbach

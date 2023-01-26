@@ -290,6 +290,19 @@ ifeq ($(TARGET),nxp_p1021)
   endif
 endif
 
+ifeq ($(TARGET),nxp_ls1028a)
+  CFLAGS+= -DTARGET_A72 -DMMU 
+  LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT" 
+
+  # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,--gc-sections
+
+  ifeq ($(DEBUG_UART),0)
+    CFLAGS+=-fno-builtin-printf
+  endif
+endif
+
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1
