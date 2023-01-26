@@ -193,11 +193,13 @@ static int nvm_select_fresh_sector(int part)
     return sel;
 }
 
-int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
+static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
     size_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
     uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     size_t addr_read, addr_write;
     int ret = 0;
+
+    nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = addr_align - (nvm_cached_sector * NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     NVM_CACHE[addr_off] = val;
@@ -229,12 +231,13 @@ int RAMFUNCTION hal_trailer_write(uint32_t addr, uint8_t val) {
     return ret;
 }
 
-int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
+static int RAMFUNCTION partition_magic_write(uint8_t part, uint32_t addr)
 {
     uint32_t off = addr % NVM_CACHE_SIZE;
     size_t base = (size_t)addr - off;
     int ret;
     size_t addr_read, addr_write;
+    nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
     addr_write = base - (!!!nvm_cached_sector * NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE, (void*)base, NVM_CACHE_SIZE);
@@ -246,8 +249,8 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
 }
 
 #else
-#   define hal_trailer_write(addr, val) hal_flash_write(addr, (void *)&val, 1)
-#   define hal_set_partition_magic(addr) hal_flash_write(addr, \
+#   define trailer_write(part,addr, val) hal_flash_write(addr, (void *)&val, 1)
+#   define partition_magic_write(part,addr) hal_flash_write(addr, \
                                 (void*)&wolfboot_magic_trail, sizeof(uint32_t));
 #endif
 
@@ -289,7 +292,7 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
             ext_flash_check_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
                 (void *)&val, 1);
         } else {
-            hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
+            trailer_write(part, PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
         }
     }
     else if (part == PART_UPDATE) {
@@ -297,7 +300,7 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
             ext_flash_check_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
                 (void *)&val, 1);
         } else {
-            hal_trailer_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
+            trailer_write(part, PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
         }
     }
 }
@@ -309,7 +312,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
             ext_flash_check_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t),
                 (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
-            hal_set_partition_magic(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
+            partition_magic_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
         }
     }
     else if (part == PART_UPDATE) {
@@ -317,7 +320,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
             ext_flash_check_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t),
                 (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
-            hal_set_partition_magic(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
+            partition_magic_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
         }
     }
 }
@@ -362,20 +365,20 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
-        hal_trailer_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
+        trailer_write(part, PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
     }
     else if (part == PART_UPDATE) {
-        hal_trailer_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
+        trailer_write(part, PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
     }
 }
 
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
-        hal_set_partition_magic(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
+        partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
     }
     else if (part == PART_UPDATE) {
-        hal_set_partition_magic(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
+        partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
     }
 }
 #endif /* EXT_FLASH */
