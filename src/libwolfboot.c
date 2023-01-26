@@ -881,13 +881,13 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     int ret = 0;
     int sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(part);
+    sel_sec = nvm_select_fresh_sector(PART_BOOT);
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
     hal_flash_unlock();
     /* casting to unsigned long to abide compilers on 64bit architectures */
     XMEMCPY(ENCRYPT_CACHE,
-            (void*)(unsigned long)(addr_align ,
+            (void*)(unsigned long)(addr_align) ,
                 WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
@@ -913,7 +913,7 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
         WOLFBOOT_PARTITION_BOOT_ADDRESS);
     int sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(part);
+    sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
     XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
@@ -928,7 +928,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
         WOLFBOOT_PARTITION_BOOT_ADDRESS;
     int sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(part);
+    sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
