@@ -43,6 +43,8 @@
 #define UART0_TXD_MAXCOUNT *((volatile uint32_t *)(UART0_BASE + 0x548))
 #define UART0_BAUDRATE     *((volatile uint32_t *)(UART0_BASE + 0x524))
 
+static const char extradata[1024 * 16] = "hi!";
+
 static void gpiotoggle(uint32_t pin)
 {
     uint32_t reg_val = GPIO_OUT;
@@ -77,6 +79,7 @@ void main(void)
     int i;
     uint32_t version = 0;
     uint8_t *v_array = (uint8_t *)&version;
+    (void)extradata;
     GPIO_PIN_CNF[pin] = 1; /* Output */
 
     version = wolfBoot_current_firmware_version();

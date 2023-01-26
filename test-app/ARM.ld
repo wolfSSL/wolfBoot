@@ -13,7 +13,7 @@ SECTIONS
         *(.init)
         *(.fini)
         *(.text*)
-        *(.rodata*)
+        KEEP(*(.rodata*))
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
