@@ -312,7 +312,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
             ext_flash_check_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t),
                 (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
-            partition_magic_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t));
+            partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
         }
     }
     else if (part == PART_UPDATE) {
@@ -320,7 +320,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
             ext_flash_check_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t),
                 (void *)&wolfboot_magic_trail, sizeof(uint32_t));
         } else {
-            partition_magic_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
+            partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
         }
     }
 }
