@@ -255,7 +255,7 @@ int RAMFUNCTION hal_set_partition_magic(uint32_t addr)
 
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
-    uint32_t sel_sec = 0
+    uint32_t sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
         nvm_select_fresh_sector(part);
 #endif

@@ -354,9 +354,9 @@ out:
 
 /* Reserve space for two sectors in case of NVM_FLASH_WRITEONCE, for redundancy */
 #ifndef NVM_FLASH_WRITEONCE
-    #define MAX_UPDATE_SIZE (WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE)
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE))
 #else
-    #define MAX_UPDATE_SIZE (WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE))
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
 
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
