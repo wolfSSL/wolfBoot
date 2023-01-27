@@ -136,15 +136,22 @@
 #define UART_GPIO_BASE GPIOD_BASE
 #define UART_TX_PIN    8 /* PD8, USART Transmit pin */
 #define UART_RX_PIN    9 /* PD9, USART Receive pin */
+#define UART_PIN_AF    7 /* AF stands for Alternate Function. USART TX/RX */
+#elif UART_PORT == 5
+/* USART5 Base address */
+#define UART_BASE      (0x40005000)
+#define UART_GPIO_BASE GPIOB_BASE
+#define UART_TX_PIN    13 /* PB13, USART Transmit pin */
+#define UART_RX_PIN    12 /* PB12, USART Receive pin */
+#define UART_PIN_AF    14 /* AF stands for Alternate Function. USART TX/RX */
 #else
 /* USART2 Base address (chosen because of its pin layout on Nucleo board) */
 #define UART_BASE      (0x40004400)
 #define UART_GPIO_BASE GPIOD_BASE
 #define UART_TX_PIN    5 /* PD5, USART Transmit pin */
 #define UART_RX_PIN    6 /* PD6, USART Receive pin */
+#define UART_PIN_AF    7 /* AF stands for Alternate Function. USART TX/RX */
 #endif
-
-#define UART_PIN_AF 7 /* AF stands for Alternate Function. USART TX/RX */
 
 /* UART/USART: Defining register start addresses. */
 #define UART_CR1(base)    (*(volatile uint32_t *)((base) + 0x00))
@@ -501,6 +508,12 @@ static int uart_init(void)
 
     APB1_CLOCK_LRST |= RCC_APB1_USART3_EN;
     APB1_CLOCK_LRST &= ~RCC_APB1_USART3_EN;
+#elif UART_PORT == 5
+    /* Enable clock for USART_5 and reset */
+    APB1_CLOCK_LER |= RCC_APB1_UART5_EN;
+
+    APB1_CLOCK_LRST |= RCC_APB1_UART5_EN;
+    APB1_CLOCK_LRST &= ~RCC_APB1_UART5_EN;
 #else
     /* Enable clock for USART_2 and reset */
     APB1_CLOCK_LER |= RCC_APB1_USART2_EN;
