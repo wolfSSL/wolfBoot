@@ -351,6 +351,14 @@ out:
 #    pragma GCC push_options
 #    pragma GCC optimize("O0")
 #endif
+
+/* Reserve space for two sectors in case of NVM_FLASH_WRITEONCE, for redundancy */
+#ifndef NVM_FLASH_WRITEONCE
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE))
+#else
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
+#endif
+
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -391,6 +399,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     {
         if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
                 ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
+            return -1;
+        if (update.fw_size > MAX_UPDATE_SIZE - 1)
             return -1;
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
