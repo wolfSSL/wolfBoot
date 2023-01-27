@@ -44,7 +44,6 @@
 #define UART0_BAUDRATE     *((volatile uint32_t *)(UART0_BASE + 0x524))
 
 
-__attribute__((section(".rodata")))
 static const char extradata[1024 * 16] = "hi!";
 
 static void gpiotoggle(uint32_t pin)

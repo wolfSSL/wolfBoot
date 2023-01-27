@@ -133,6 +133,12 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
  *
  */
 
+#ifndef FLAGS_INVERT
+#define FLAG_CMP(a,b) ((a < b)? 0 : 1)
+#else
+#define FLAG_CMP(a,b) ((a > b)? 0 : 1)
+#endif
+
 #include <stddef.h>
 #include <string.h>
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
@@ -140,10 +146,11 @@ static int nvm_cached_sector = 0;
 
 static int nvm_select_fresh_sector(int part)
 {
+    int sel;
     uint32_t off;
     uint32_t base;
-    int sel;
     uint32_t addr_align;
+
     if (part == PART_BOOT)
         base = PART_BOOT_ENDFLAGS;
     else
@@ -157,46 +164,37 @@ static int nvm_select_fresh_sector(int part)
         uint8_t byte_0 = *(((uint8_t *)base) - off);
         uint8_t byte_1 = *(((uint8_t *)base) - (WOLFBOOT_SECTOR_SIZE + off));
 
-        if (byte_0 == FLASH_BYTE_ERASED && byte_1 != FLASH_BYTE_ERASED)
-        {
+        if (byte_0 == FLASH_BYTE_ERASED && byte_1 != FLASH_BYTE_ERASED) {
             sel = 1;
             break;
         }
-        else if (byte_0 != FLASH_BYTE_ERASED && byte_1 == FLASH_BYTE_ERASED)
-        {
+        else if (byte_0 != FLASH_BYTE_ERASED && byte_1 == FLASH_BYTE_ERASED) {
             sel = 0;
             break;
         }
-        else if ((byte_0 == FLASH_BYTE_ERASED) && (byte_1 == FLASH_BYTE_ERASED))
-        {
+        else if ((byte_0 == FLASH_BYTE_ERASED) &&
+                (byte_1 == FLASH_BYTE_ERASED)) {
             /* Examine previous position one byte ahead */
             byte_0 = *(((uint8_t *)base) + 1 - off);
             byte_1 = *(((uint8_t *)base) + 1 - (WOLFBOOT_SECTOR_SIZE + off));
-#ifndef FLAGS_INVERT
-            if (byte_0 < byte_1)
-                sel = 0;
-            else
-                sel = 1;
-#else
-            if (byte_0 > byte_1)
-                sel = 0;
-            else
-                sel = 1;
-#endif
+            sel = FLAG_CMP(byte_0, byte_1);
             break;
         }
     }
     /* Erase the non-selected partition */
-    addr_align = (uint32_t)(base - ((!!!sel) * WOLFBOOT_SECTOR_SIZE)) & (~(NVM_CACHE_SIZE - 1));
-    if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - 4)) != FLASH_WORD_ERASED)
+    addr_align = (uint32_t)(base - ((!sel) * WOLFBOOT_SECTOR_SIZE))
+        & (~(NVM_CACHE_SIZE - 1));
+    if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
+            != FLASH_WORD_ERASED) {
         hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    }
     return sel;
 }
 
 static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
     size_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
-    uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     size_t addr_read, addr_write;
+    uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
 
     nvm_cached_sector = nvm_select_fresh_sector(part);
@@ -204,9 +202,8 @@ static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
     XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     NVM_CACHE[addr_off] = val;
 
-
     /* Calculate write address */
-    addr_write = addr_align - ((!!!nvm_cached_sector) * NVM_CACHE_SIZE);
+    addr_write = addr_align - ((!nvm_cached_sector) * NVM_CACHE_SIZE);
 
     /* Ensure that the destination was erased, or force erase */
     if (*((uint32_t *)(addr_write + NVM_CACHE_SIZE - sizeof(uint32_t)))
@@ -227,7 +224,7 @@ static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
 
     /* Once a copy has been written, erase the older sector */
     ret = hal_flash_erase(addr_read, NVM_CACHE_SIZE);
-    nvm_cached_sector = !!!nvm_cached_sector;
+    nvm_cached_sector = !nvm_cached_sector;
     return ret;
 }
 
@@ -235,15 +232,15 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uint32_t addr)
 {
     uint32_t off = addr % NVM_CACHE_SIZE;
     size_t base = (size_t)addr - off;
-    int ret;
     size_t addr_read, addr_write;
+    int ret;
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
-    addr_write = base - (!!!nvm_cached_sector * NVM_CACHE_SIZE);
+    addr_write = base - (!nvm_cached_sector * NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE, (void*)base, NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(addr_write, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
-    nvm_cached_sector = !!!nvm_cached_sector;
+    nvm_cached_sector = !nvm_cached_sector;
     ret = hal_flash_erase(addr_read, WOLFBOOT_SECTOR_SIZE);
     return ret;
 }
@@ -351,9 +348,10 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 #ifdef NVM_FLASH_WRITEONCE
     sel_sec = nvm_select_fresh_sector(part);
 #endif
-    if (part == PART_BOOT)
+    if (part == PART_BOOT) {
         return (void *)(PART_BOOT_ENDFLAGS -
                 (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
+    }
     else if (part == PART_UPDATE) {
         return (void *)(PART_UPDATE_ENDFLAGS -
                 (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
