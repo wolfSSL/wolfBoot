@@ -38,17 +38,26 @@
     .dword \addr_hi
 .endm
 
+/* Create table entry */
+.macro TABLE_ENTRY pa, attr
+    PUT_64B \attr, (\pa) + 0x3
+.endm
+
+/* Create 2MB block */
 .macro BLOCK_2MB pa, addr_hi, addr_lo
     PUT_64B \addr_hi , ((\pa) & 0xffe00000) | \addr_lo | 0x1
 .endm
 
+/* Create 1GB block */
 .macro BLOCK_1GB pa, addr_hi, addr_lo
     PUT_64B \addr_hi , ((\pa) & 0xc0000000) | \addr_lo | 0x1
 .endm
 
+/* Translation table layout */
+.data
 .align 12
 ttb0_base:
-    PUT_64B 0, level2_pagetable + 0x3
+    TABLE_ENTRY level2_pagetable, 0
     BLOCK_1GB 0x80000000, 0, 0x740
     BLOCK_1GB 0xC0000000, 0, 0x740
 
@@ -59,10 +68,6 @@ level2_pagetable:
     BLOCK_2MB (ADDR << 20), 0, 0x74c
     .set ADDR, ADDR + 2
     .endr
-
-.align 4
-stack_size:
-    .dword STACK_SIZE
 
 
 #ifndef USE_BUILTIN_STARTUP 
@@ -114,7 +119,7 @@ _vector_table:
    b    7b
 
 
-8:  //mov sp, x1        // set stack pointer
+8: 
 /* Enable exception interrupts route to EL3 */
 init_exceptions:
     mrs x0, scr_el3
@@ -160,10 +165,9 @@ init_registers:
 /* Initialize stack pointer */
 init_stackpointer:
     adr x1, _stack
-    add x1, x1, #16
     mrs x2, mpidr_el1        /* Get CPU ID */
     and x2, x2, #0xff
-    ldr x3, stack_size       /* Stack size */
+    ldr x3, =STACK_SIZE
     mul x3, x2, x3           /* Stack offset */
     sub x1, x1, x3
     mov sp, x1               /* Set stack pointer */
@@ -182,6 +186,8 @@ init_systemctl:
 
 /* Initalize MMU and Caches */
 init_mmu:
+    bl hal_ddr_init
+
     /* Diable and invalidate caches */
     mrs x0, sctlr_el3       
     bic x0, x0, #(0x1 << 2)
@@ -212,19 +218,18 @@ init_mmu:
     cmp x5, x3
     ble way_loop              /* loop until all ways are invalidated */
 
-    /* Set up MMU */
+    /* Set up MMU, TCR, TTBRn */
     ldr x1, =0x3520           /* 4GB, 4KB granularity, cacheable */
     msr tcr_el3, x1
-    msr tcr_el2, x1
     msr tcr_el1, x1
 
     ldr x1, =0xff440400       /* ATTr0-3 */
     msr mair_el3, x1
-    msr mair_el2, x1
     msr mair_el1, x1
 
     adr x0, ttb0_base
     msr ttbr0_el3, x0
+    msr ttbr0_el1, x0
 
     /* Translation tables */
     ldr x1, =level2_pagetable /* first entry points to l2 */
@@ -234,9 +239,9 @@ init_mmu:
     str x2, [x0], #8
 
     /* Entry 2 & 3 */
-    ldr x2, =0x80000741 /* Second entry 1GB from 0x80000000 */
+    ldr x2, =0x80000741    /* Second entry 1GB from 0x80000000 */
     str x2, [x0], #8
-    ldr x2, =0xC0000741 /* Third entry 1GB from 0xC0000000 */
+    ldr x2, =0xC0000741    /* Third entry 1GB from 0xC0000000 */
     str x2, [x0], #8
 
     ldr x0, =level2_pagetable

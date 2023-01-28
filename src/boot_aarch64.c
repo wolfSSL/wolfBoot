@@ -33,15 +33,13 @@ extern unsigned int _end_data;
 
 extern void main(void);
 extern void gicv2_init_secure(void);
-extern void hal_ddr_init(void);
 
 void boot_entry_C(void) 
 {
     register unsigned int *dst, *src;
 
-    hal_ddr_init();
-
     /* Copy the .data section from flash to RAM */
+#ifdef ROM
     src = (unsigned int*)&_stored_data;
     dst = (unsigned int*)&_start_data;
     while (dst < (unsigned int*)&_end_data) {
@@ -49,6 +47,7 @@ void boot_entry_C(void)
         dst++;
         src++;
     }
+#endif
 
     /* Initialize the BSS section to 0 */
     dst = &__bss_start__;

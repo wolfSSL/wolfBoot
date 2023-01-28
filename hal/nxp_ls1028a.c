@@ -115,9 +115,9 @@ static const void* dts_addr     = (void*)0x00a0000;
 #define XSPI_SFAR              XSPI_IPCR0 /* Serial Flash Address Register determined by AHB burst address */
 
 /* XSPI register instructions */
-#define XSPI_SWRESET(x)        XSPI_MCRn(x) |= 0x1;           /* XSPI Software Reset */
-#define XSPI_ENTER_STOP(x)     XSPI_MCRn(x) |= 0x1 << 1;      /* XSPI Module Disable */
-#define XSPI_EXIT_STOP(x)      XSPI_MCRn(x) |= 0x0 << 1;      /* XSPI Module Enable */
+#define XSPI_SWRESET()         XSPI_MCRn(0) |= 0x1;           /* XSPI Software Reset */
+#define XSPI_ENTER_STOP()      XSPI_MCRn(0) |= 0x1 << 1;      /* XSPI Module Disable */
+#define XSPI_EXIT_STOP()       XSPI_MCRn(0) |= 0x0 << 1;      /* XSPI Module Enable */
 #define XSPI_LUT_LOCK()        XSPI_LUTCR = 0x1;              /* XSPI LUT Lock */
 #define XSPI_LUT_UNLOCK()      XSPI_LUTCR = 0x2;              /* XSPI LUT Unlock */
 #define XSPI_ISEQID(x)         (x << 16)                      /* Sequence Index In LUT */
@@ -448,8 +448,8 @@ void xspi_init()
     /* Release FlexSPI from reset using PRSTCLR */
 
     /* Set MCR0[MDIS] to 0x1 (Make sure controller is configured in module stop mode) */
-    XSPI_ENTER_STOP(0);
-    while (XSPI_MCR0 & XSPI_MCR_MDIS_MASK);
+    XSPI_ENTER_STOP();
+    while ((XSPI_MCR0 & XSPI_MCR_MDIS_MASK) == 0);
 
     /* Configure module control register */
     XSPI_MCR0 = XSPI_MCR0_CFG;
@@ -482,16 +482,7 @@ void xspi_init()
     XSPI_DLLBCR = XSPI_DLLBCR_CFG;
 
     /* set MCR0[MDIS] to 0x0 (Exit module stop mode) */
-    XSPI_EXIT_STOP(0);
-
-    /* Configure LUT as needed (For AHB command or IP command) */
-    hal_flash_init();
-
-    XSPI_AHBCR &= ~XSPI_AHB_UPDATE;
-
-    /* Reset controller optionally (by set MCR0[SWRESET] to 0x1) */
-    XSPI_SWRESET(0);
-    while (XSPI_MCR0 & XSPI_MCR_SWRESET_MASK);
+    XSPI_EXIT_STOP();
 }
 
 void xspi_lut_lock(void)
@@ -515,10 +506,11 @@ void xspi_lut_unlock(void)
  */
 void hal_flash_init()
 {
-    xspi_lut_unlock();
 
     /* Init base XSPI module */
     xspi_init();
+
+    xspi_lut_unlock();
 
     /* LUT0 - Read Status 1 byte */
     XSPI_LUT(0) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_RSR, LUT_NXP_READ, LUT_PAD(1), 0x1);
@@ -563,6 +555,8 @@ void hal_flash_init()
     XSPI_LUT(27) = 0x0;
 
     xspi_lut_lock();
+
+    XSPI_AHBCR &= ~XSPI_AHB_UPDATE;
 }
 
 /* Called from boot_aarch64_start.S */
@@ -624,13 +618,8 @@ void hal_ddr_init() {
     DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
 
     /* Wait for data initialization is complete */
-    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
+    while (!(DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
 
-    /* Configure TBL */
-    /* DDR - TBL=1, Entry 19 */
-    //set_tlb(1, 19, DDR_ADDRESS, 0,
-    //    MAS3_SX | MAS3_SW | MAS3_SR, 0,
-    //    0, BOOKE_PAGESZ_2G, 1);
  #endif
 }
 
@@ -641,6 +630,7 @@ void hal_init(void)
 
     uart_init();
     uart_write("wolfBoot Init\n", 14);
+
 #endif
 
     hal_flash_init();

@@ -88,6 +88,6 @@ SECTIONS
         *(.stack)
     } > OCRAM
 
-    PROVIDE(_stack = ADDR(.stack));
+    PROVIDE(_stack_top = ADDR(.stack));
     PROVIDE(_stack_base = .);
 }
