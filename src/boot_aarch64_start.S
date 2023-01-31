@@ -33,41 +33,14 @@
 #define GICC_BASE       0xF9020000
 #define GICC_PMR        0x0004
 
-.macro PUT_64B addr_hi, addr_lo
-    .dword \addr_lo
-    .dword \addr_hi
-.endm
 
-/* Create table entry */
-.macro TABLE_ENTRY pa, attr
-    PUT_64B \attr, (\pa) + 0x3
-.endm
-
-/* Create 2MB block */
-.macro BLOCK_2MB pa, addr_hi, addr_lo
-    PUT_64B \addr_hi , ((\pa) & 0xffe00000) | \addr_lo | 0x1
-.endm
-
-/* Create 1GB block */
-.macro BLOCK_1GB pa, addr_hi, addr_lo
-    PUT_64B \addr_hi , ((\pa) & 0xc0000000) | \addr_lo | 0x1
-.endm
-
-/* Translation table layout */
 .data
 .align 12
 ttb0_base:
-    TABLE_ENTRY level2_pagetable, 0
-    BLOCK_1GB 0x80000000, 0, 0x740
-    BLOCK_1GB 0xC0000000, 0, 0x740
-
+    .space 4096, 0
 .align 12
 level2_pagetable:
-    .set ADDR, 0x00
-    .rept 0x200
-    BLOCK_2MB (ADDR << 20), 0, 0x74c
-    .set ADDR, ADDR + 2
-    .endr
+    .space 4096, 0
 
 
 #ifndef USE_BUILTIN_STARTUP 
@@ -221,14 +194,13 @@ init_mmu:
     /* Set up MMU, TCR, TTBRn */
     ldr x1, =0x3520           /* 4GB, 4KB granularity, cacheable */
     msr tcr_el3, x1
-    msr tcr_el1, x1
 
     ldr x1, =0xff440400       /* ATTr0-3 */
     msr mair_el3, x1
-    msr mair_el1, x1
 
     adr x0, ttb0_base
     msr ttbr0_el3, x0
+    msr ttbr0_el2, x0
     msr ttbr0_el1, x0
 
     /* Translation tables */
@@ -238,12 +210,12 @@ init_mmu:
     orr x2, x2, 0x3
     str x2, [x0], #8
 
-    /* Entry 2 & 3 */
     ldr x2, =0x80000741    /* Second entry 1GB from 0x80000000 */
     str x2, [x0], #8
     ldr x2, =0xC0000741    /* Third entry 1GB from 0xC0000000 */
     str x2, [x0], #8
 
+    /* Set level 2 table */
     ldr x0, =level2_pagetable
     ldr x2, =0x0000074d
     mov x4, #512            /* 512 entreis */
@@ -258,13 +230,17 @@ init_mmu:
     mrs x0, S3_1_c15_c2_1
     orr x0, x0, #(0x1 << 6) /* SMP bit */
     msr S3_1_c15_c2_1, x0
- 
+    isb
+
     mrs x0, sctlr_el3
     orr x0, x0, #(0x1 << 2)  /* C bit D cache */
     orr x0, x0, #(0x1 << 12) /* I bit I cache */
     orr x0, x0, #0x1         /* M bit MMU */
-    msr sctlr_el3, x0  
+
     dsb sy
+    msr sctlr_el3, x0  
+    msr sctlr_el2, x0
+    msr sctlr_el1, x0
     isb
 
     bl boot_entry_C   // boot_entry_C never returns

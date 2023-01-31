@@ -7,8 +7,8 @@ MEMORY
 {
     /*The flash address range on LS1028A RDB is 0x20000000 - 0x23FFFFFF.*/
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 0x100000
-    /* DDR4 - 4GB */
-    DRAM (rwx) : ORIGIN = 0x80000000, LENGTH = 0xffffffff
+    /* DDR4 - 2GB */
+    DRAM (rwx) : ORIGIN = 0x80000000, LENGTH = 0x80000000
     /* OCRAM 256K for startup RAM */
     OCRAM (rwx) : ORIGIN = 0x18000000, LENGTH = 256K
 }
