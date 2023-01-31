@@ -242,8 +242,8 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 3. Prepare board with option bytes configuration reported above
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
-4. flash wolfBoot.elf to 0x0c000000
-    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.elf 0x0C000000`
+4. flash wolfBoot.bin to 0x0c000000
+    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
 5. flash .\test-app\image_v1_signed.bin to 0x08010000
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08100000`
 6. RED LD9 will be on
@@ -272,8 +272,8 @@ A firmware update can be uploaded at address 0x08108000.
 The example configuration is available in [/config/examples/stm32u5-nonsecure-dualbank.config](/config/examples/stm32u5-nonsecure-dualbank.config).
 
 Program each partition using:
-1. flash `wolfboot.elf` to 0x08000000:
-    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.elf 0x08000000`
+1. flash `wolfboot.bin` to 0x08000000:
+    - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x08000000`
 2. flash `image_v1_signed.bin` to 0x08008000
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08008000`
 
