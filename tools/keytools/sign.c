@@ -477,7 +477,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
                 initRet = ret = wc_ecc_init(key.ecc);
 
-                if (ret) {
+                if (ret == 0) {
                     ret = wc_ecc_import_unsigned(key.ecc, *key_buffer,
                         (*key_buffer) + 48, (*key_buffer) + 96,
                         ECC_SECP384R1);
@@ -533,7 +533,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
                 initRet = ret = wc_ecc_init(key.ecc);
 
-                if (ret) {
+                if (ret == 0) {
                     ret = wc_ecc_import_unsigned(key.ecc, *key_buffer,
                         (*key_buffer) + 66, (*key_buffer) + 132,
                         ECC_SECP521R1);
