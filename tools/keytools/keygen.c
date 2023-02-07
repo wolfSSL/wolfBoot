@@ -399,17 +399,21 @@ static void keygen_rsa(const char *keyfile, int kbits)
 #endif
 
 #ifdef HAVE_ECC
-#define MAX_ECC_KEY_SIZE 66
 
 static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
 {
     ecc_key k[1];
-    uint8_t Qx[MAX_ECC_KEY_SIZE], Qy[MAX_ECC_KEY_SIZE], d[MAX_ECC_KEY_SIZE];
+    uint8_t Qx[ECC_MAXSIZE], Qy[ECC_MAXSIZE], d[ECC_MAXSIZE];
     uint32_t qxsize = ecc_key_size,
              qysize = ecc_key_size,
              dsize =  ecc_key_size;
-    uint8_t k_buffer[2 * MAX_ECC_KEY_SIZE];
+    uint8_t k_buffer[2 * ECC_MAXSIZE];
     FILE *fpriv;
+
+    if (wc_ecc_init(k) != 0) {
+        fprintf(stderr, "Unable to init ecc key\n");
+        exit(1);
+    }
 
     if (wc_ecc_make_key(&rng, ecc_key_size, k) != 0) {
         fprintf(stderr, "Unable to create ecc key\n");
@@ -459,6 +463,12 @@ static void keygen_ed25519(const char *privkey)
     uint8_t priv[32], pub[32];
     FILE *fpriv;
     uint32_t outlen = ED25519_KEY_SIZE;
+
+    if (wc_ed25519_init(k) != 0) {
+        fprintf(stderr, "Unable to init ed25519 key\n");
+        exit(1);
+    }
+
     if (wc_ed25519_make_key(&rng, ED25519_KEY_SIZE, k) != 0) {
         fprintf(stderr, "Unable to create ed25519 key\n");
         exit(1);
@@ -492,6 +502,12 @@ static void keygen_ed448(const char *privkey)
     uint8_t priv[ED448_KEY_SIZE], pub[ED448_PUB_KEY_SIZE];
     FILE *fpriv;
     uint32_t outlen = ED448_KEY_SIZE;
+
+    if (wc_ed448_init(k) != 0) {
+        fprintf(stderr, "Unable to init ed448 key\n");
+        exit(1);
+    }
+
     if (wc_ed448_make_key(&rng, ED448_KEY_SIZE, k) != 0) {
         fprintf(stderr, "Unable to create ed448 key\n");
         exit(1);
@@ -595,8 +611,8 @@ static void key_import(uint32_t ktype, const char *fname)
     ed25519_key ed25519Key[1];
     ed448_key ed448Key[1];
     uint32_t keySzOut = 0;
-    uint32_t qxSz = MAX_ECC_KEY_SIZE;
-    uint32_t qySz = MAX_ECC_KEY_SIZE;
+    uint32_t qxSz = ECC_MAXSIZE;
+    uint32_t qySz = ECC_MAXSIZE;
     void* anyKey = NULL;
 
     file = fopen(fname, "rb");

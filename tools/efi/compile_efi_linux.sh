@@ -17,10 +17,10 @@ fi
 BR2_EXTERNAL=$(pwd)/tools/efi/br_ext_dir make -C $WORK_DIR/$BR_DIR tiny_defconfig O=$IMAGE_DIR
 make -C $WORK_DIR/$BR_DIR O=$IMAGE_DIR
 
-#SIGN_TOOL="python3 ./tools/keytools/sign.py"
-#if [ -f "./tools/keytools/sign" ]; then
+SIGN_TOOL="python3 ./tools/keytools/sign.py"
+if [ -f "./tools/keytools/sign" ]; then
     SIGN_TOOL="./tools/keytools/sign"
-#fi
+fi
 
 $SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfBoot_signing_private_key.der 1
 $SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 2

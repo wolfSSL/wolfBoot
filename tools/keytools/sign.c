@@ -70,7 +70,6 @@
 #endif
 #ifdef HAVE_ECC
     #include <wolfssl/wolfcrypt/ecc.h>
-    #define MAX_ECC_KEY_SIZE 66
 #endif
 #ifdef HAVE_ED25519
     #include <wolfssl/wolfcrypt/ed25519.h>
@@ -130,16 +129,6 @@
 
 #define HDR_IMG_TYPE_AUTH_MASK    0xFF00
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
-/*
-#define HDR_IMG_TYPE_AUTH_ED25519 0x0100
-#define HDR_IMG_TYPE_AUTH_ECC256  0x0200
-#define HDR_IMG_TYPE_AUTH_RSA2048 0x0300
-#define HDR_IMG_TYPE_AUTH_RSA4096 0x0400
-#define HDR_IMG_TYPE_AUTH_ED448   0x0500
-#define HDR_IMG_TYPE_AUTH_ECC384  0x0600
-#define HDR_IMG_TYPE_AUTH_ECC521  0x0700
-#define HDR_IMG_TYPE_AUTH_RSA3072 0x0800
-*/
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 #define HDR_IMG_TYPE_DIFF         0x00D0
@@ -248,8 +237,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     int io_sz;
     FILE *f;
     uint32_t keySzOut;
-    uint32_t qxSz = MAX_ECC_KEY_SIZE;
-    uint32_t qySz = MAX_ECC_KEY_SIZE;
+    uint32_t qxSz = ECC_MAXSIZE;
+    uint32_t qySz = ECC_MAXSIZE;
 
     /* open and load key buffer */
     *key_buffer = NULL;
