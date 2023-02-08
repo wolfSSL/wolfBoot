@@ -276,8 +276,11 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
-                if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_ED25519)
+                if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_ED25519) {
                     memcpy(*pubkey, *key_buffer, KEYSTORE_PUBKEY_SIZE_ED25519);
+
+                    ret = 0;
+                }
                 else {
                     initRet = ret = wc_Ed25519PublicKeyDecode(*key_buffer,
                         &keySzOut, key.ed, *key_buffer_sz);
@@ -330,8 +333,11 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
-                if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_ED448)
+                if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_ED448) {
                     memcpy(*pubkey, *key_buffer, KEYSTORE_PUBKEY_SIZE_ED448);
+
+                    ret = 0;
+                }
                 else {
                     initRet = ret = wc_Ed448PublicKeyDecode(*key_buffer,
                         &keySzOut, key.ed4, *key_buffer_sz);
@@ -383,8 +389,11 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
-                if (*key_buffer_sz == 64)
+                if (*key_buffer_sz == 64) {
                     memcpy(*pubkey, *key_buffer, 64);
+
+                    ret = 0;
+                }
                 else {
                     initRet = ret = wc_EccPublicKeyDecode(*key_buffer,
                         &keySzOut, key.ecc, *key_buffer_sz);
@@ -440,8 +449,11 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
-                if (*key_buffer_sz == 96)
+                if (*key_buffer_sz == 96) {
                     memcpy(*pubkey, *key_buffer, 96);
+
+                    ret = 0;
+                }
                 else {
                     initRet = ret = wc_EccPublicKeyDecode(*key_buffer,
                         &keySzOut, key.ecc, *key_buffer_sz);
@@ -496,8 +508,11 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
-                if (*key_buffer_sz == 132)
+                if (*key_buffer_sz == 132) {
                     memcpy(*pubkey, *key_buffer, 132);
+
+                    ret = 0;
+                }
                 else {
                     initRet = ret = wc_EccPublicKeyDecode(*key_buffer,
                         &keySzOut, key.ecc, *key_buffer_sz);
@@ -555,6 +570,31 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             if (CMD.manual_sign || CMD.sha_only) {
                 *pubkey = *key_buffer;
                 *pubkey_sz = *key_buffer_sz;
+
+                if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA2048) {
+                    CMD.sign = SIGN_RSA2048;
+                    CMD.header_sz = 512;
+                    CMD.signature_sz = 256;
+                }
+                else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA3072) {
+                    CMD.sign = SIGN_RSA3072;
+
+                    if(CMD.hash_algo != HASH_SHA256) {
+                        CMD.header_sz = 1024;
+                    }
+                    else {
+                        CMD.header_sz = 512;
+                    }
+
+                    CMD.signature_sz = 384;
+                }
+                else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA4096) {
+                    CMD.sign = SIGN_RSA4096;
+                    CMD.header_sz = 1024;
+                    CMD.signature_sz = 512;
+                }
+
+                ret = 0;
             }
             else {
                 idx = 0;
