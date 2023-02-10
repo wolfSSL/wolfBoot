@@ -29,27 +29,28 @@ struct wcs_verify_call_params
 
 #ifdef WOLFBOOT_SECURE_CALLS
 
+
 /* Secure calls prototypes for the non-secure world */
+
+/* ECC */
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
         uint8_t *pubkey, uint32_t key_size, int curve_id);
-
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(uint32_t key_size,
         int ecc_curve);
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id,
         uint8_t *pubkey, uint32_t *pubkeySz);
 int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id,
         int pubkey_slot_id, int shared_slot_id);
-int __attribute__((cmse_nonsecure_entry)) wcs_get_random(uint8_t *rand,
-        uint32_t size);
 
-
-/* Calls with wrapper for arguments (ABI only allows 4 arguments) */
+/*  ECC Calls with wrapper for arguments (ABI only allows 4 arguments) */
 int __attribute__((cmse_nonsecure_entry))
     wcs_ecc_sign_call(struct wcs_sign_call_params *p);
 int __attribute__((cmse_nonsecure_entry))
     wcs_ecc_verify_call(struct wcs_verify_call_params *p);
 
-
+/* RNG */
+int __attribute__((cmse_nonsecure_entry)) wcs_get_random(uint8_t *rand,
+        uint32_t size);
 
 /* exposed API for sign/verify with all needed arguments */
 static inline int wcs_ecc_sign(int slot_id, const uint8_t *in,
@@ -78,6 +79,5 @@ static inline int wcs_ecc_verify(int slot_id, const uint8_t *sig,
 }
 
 #endif /* WOLFBOOT_SECURE_CALLS */
-
 
 #endif

@@ -25,6 +25,9 @@
 /* Option to enable sign tool debugging */
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
 //#define DEBUG_SIGNTOOL
+//
+
+#include "signtools.h"
 
 #ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS

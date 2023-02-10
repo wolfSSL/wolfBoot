@@ -1,8 +1,9 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    RAM (rwx) : ORIGIN = 0x30000000, LENGTH = 0x00017FFF
-    FLASH_NSC(rx): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x20000, LENGTH = 0x20000
+    RAM (rwx) : ORIGIN = 0x30000000, LENGTH = 0x00016000
+    RAM_KV (rw): ORIGIN = 0x30016000, LENGTH = 0x2000
+    FLASH_NSC(rx): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x200000, LENGTH = 0x20000
 }
 
 SECTIONS
@@ -25,6 +26,7 @@ SECTIONS
 
     .gnu.sgstubs :
     {
+        . += 0x400;
         . = ALIGN(4);
         *(.gnu.sgstubs*)   /* Secure Gateway stubs */
         . = ALIGN(4);
@@ -57,3 +59,7 @@ SECTIONS
 }
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);
+
+_keyvault_origin = ORIGIN(RAM_KV);
+_keyvault_size = LENGTH(RAM_KV);
+
