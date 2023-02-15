@@ -3609,10 +3609,6 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
         rv = AddObject(session, pub, pPublicKeyTemplate,
                                         ulPublicKeyAttributeCount, phPublicKey);
     }
-    if (rv == CKR_OK) {
-        rv = AddObject(session, priv, pPrivateKeyTemplate,
-                                      ulPrivateKeyAttributeCount, phPrivateKey);
-    }
 #ifdef WOLFPKCS11_KEYPAIR_GEN_COMMON_LABEL
     if (rv == CKR_OK) {
         CK_ULONG len;
@@ -3630,6 +3626,10 @@ CK_RV C_GenerateKeyPair(CK_SESSION_HANDLE hSession,
         }
     }
 #endif
+    if (rv == CKR_OK) {
+        rv = AddObject(session, priv, pPrivateKeyTemplate,
+                                      ulPrivateKeyAttributeCount, phPrivateKey);
+    }
 
     if (rv != CKR_OK && pub != NULL)
         WP11_Object_Free(pub);
