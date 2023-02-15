@@ -1552,7 +1552,10 @@ static int wp11_Object_Decode_EccKey(WP11_Object* object)
                                     sizeof(object->iv));
         }
         if (ret == 0) {
-            /* Decode RSA private key. */
+            ret = wc_ecc_init(&object->data.ecKey);
+        }
+        if (ret == 0) {
+            /* Decode ECC private key. */
             ret = wc_EccPrivateKeyDecode(der, &idx, &object->data.ecKey, len);
             XMEMSET(der, 0, len);
         }
@@ -1560,7 +1563,7 @@ static int wp11_Object_Decode_EccKey(WP11_Object* object)
             XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     }
     else {
-        /* Decode RSA public key. */
+        /* Decode ECC public key. */
         ret = wc_EccPublicKeyDecode(object->keyData, &idx, &object->data.ecKey,
                                                             object->keyDataLen);
     }
