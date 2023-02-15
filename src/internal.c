@@ -740,6 +740,10 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
     /* Write to a valid file pointer. */
     if (store != XBADFILE) {
         ret = (int)XFWRITE(buffer, 1, len, file);
+        if (ret == len) {
+           /* Ensure data makes it to storage. */
+           (void)XFFLUSH(file);
+        }
     }
     else {
         ret = BUFFER_E;
