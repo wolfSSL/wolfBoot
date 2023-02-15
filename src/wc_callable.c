@@ -143,14 +143,12 @@ static int keyvault_init(void)
     int i;
     ecc_key ecc;
     struct wcs_key *item;
+    word32 buffer_len;
     (void)item;
     XMEMSET(&WCS_KV, 0, sizeof(WCS_KV));
     WCS_KV.keyvault_base = (uint32_t)&_keyvault_origin;
-    for (i = 0; i < WCS_SLOTS; i++)
-        WCS_KV.keyvault_off[i] = (uint32_t)KEYVAULT_INVALID_ADDRESS;
 
 #ifdef EXAMPLE_KEYVAULT
-
     /* Slot 0: Certificate stored as raw file, Read-only */
     if (keyvault_alloc_slot(0, WCS_TYPE_FILE, sizeof(ca_ecc_cert_der_256)) != 0) {
         return -1;
@@ -180,8 +178,8 @@ static int keyvault_init(void)
         return -1;
     }
     wc_ecc_init(&ecc);
-    if (wc_ecc_import_private_key_ex(ecc_key_der_256, sizeof(ecc_key_der_256),
-            NULL, 0, &ecc, ECC_SECP256R1) == 0)
+    buffer_len = 0;
+    if (wc_EccPrivateKeyDecode(ecc_key_der_256, &buffer_len, &ecc, sizeof_ecc_key_der_256) == 0)
     {
         XMEMCPY(&item->key.ecc, &ecc, sizeof(ecc_key));
         item->provisioned = 1;
@@ -225,16 +223,8 @@ static int keyvault_init(void)
         return -1;
     }
     wc_ecc_init(&ecc);
-    if (wc_ecc_import_private_key_ex(ecc_key_der_256, sizeof(ecc_key_der_256),
-            NULL, 0, &ecc, ECC_SECP256R1) == 0)
-    {
-        XMEMCPY(&item->key.ecc, &ecc, sizeof(ecc_key));
-        item->provisioned = 0;
-        WCS_KV.slot_used[4]++;
-    }
-    else {
-        return -1;
-    }
+    item->provisioned = 0;
+    WCS_KV.slot_used[4]++;
 
 #endif
     return 0;
@@ -281,8 +271,8 @@ wcs_ecc_keygen(uint32_t key_size, int ecc_curve)
     int ret;
     WC_RNG wcs_rng;
     ecc_key new_key;
-    slot_id = keyvault_new(WCS_TYPE_ECC, sizeof(ecc_key), WCS_ACCESS_READ
-            | WCS_ACCESS_DERIVE | WCS_ACCESS_SIGN | WCS_ACCESS_EXPORT_PUBLIC);
+    slot_id = keyvault_new(WCS_TYPE_ECC, sizeof(ecc_key),
+            WCS_ACCESS_DERIVE | WCS_ACCESS_SIGN | WCS_ACCESS_EXPORT_PUBLIC);
     if (slot_id < 0)
         return -1;
     if (slot_id >= WCS_SLOTS)
@@ -475,9 +465,43 @@ wcs_get_random(uint8_t *rand, uint32_t size)
     return ret;
 }
 
+int __attribute__((cmse_nonsecure_entry))
+wcs_slot_read(int slot_id, uint8_t *buffer, uint32_t len)
+{
+    struct wcs_key *item;
+    if (slot_id > WCS_SLOTS)
+        return -1;
+    if (WCS_KV.slot_used[slot_id] == 0)
+        return -1;
+
+    /* TODO: sanity check memory range for param buffer */
+
+    item = keyvault_get_slot(slot_id);
+    if (item == KEYVAULT_INVALID_ADDRESS)
+        return -1;
+
+    if (item->provisioned == 0)
+        return -1;
+
+    if (item->type != WCS_TYPE_FILE)
+        return -1;
+
+    if ((item->access_flags & WCS_ACCESS_READ) == 0)
+        return -1;
+
+    if (item->size > len)
+        return -1;
+    if (item->size < len)
+        len = item->size;
+
+    XMEMCPY(buffer, &item->key.raw, len);
+    return len;
+}
+
 void wcs_Init(void)
 {
     hal_trng_init();
+    keyvault_init();
 }
 
 #endif

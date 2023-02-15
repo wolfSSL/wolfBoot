@@ -96,14 +96,22 @@ void usr_led_off(void)
     GPIOD_BSRR |= (1 << (LED_USR_PIN));
 }
 
+static char CaBuf[2048];
+static uint8_t my_pubkey[200];
+
 void main(void)
 {
 #ifdef WOLFBOOT_SECURE_CALLS
     uint32_t rand;
     uint32_t i;
+    uint32_t klen = 200;
     wcs_get_random((void*)&rand, 4);
     for (i = 0; i < (rand / 100000000); i++)
         ;
+
+    wcs_slot_read(0, CaBuf, 2048);
+    wcs_ecc_getpublic(1, my_pubkey, &klen);
+    wcs_ecc_import_public(4, my_pubkey, klen, 7);
 
 #endif
     hal_init();

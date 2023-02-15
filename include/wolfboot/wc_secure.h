@@ -32,6 +32,12 @@ struct wcs_verify_call_params
 
 /* Secure calls prototypes for the non-secure world */
 
+/* RAW file read */
+int __attribute__((cmse_nonsecure_entry)) wcs_slot_read(int slot_id,
+        uint8_t *buffer, uint32_t len);
+
+
+
 /* ECC */
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
         uint8_t *pubkey, uint32_t key_size, int curve_id);
