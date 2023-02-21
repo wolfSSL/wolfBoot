@@ -36,6 +36,9 @@
 #ifdef CPU_MIMXRT1052DVJ6B
 #include "imx_rt1050_nor.h"
 #endif
+#ifdef CPU_MIMXRT1064DVL6A
+#include "imx_rt1064_nor.h"
+#endif
 #include "xip/fsl_flexspi_nor_boot.h"
 
 #ifdef __WOLFBOOT
@@ -175,6 +178,38 @@ typedef struct
 bootloader_api_entry_t *g_bootloaderTree;
 flexspi_nor_config_t flexspi_config;
 
+/** Flash configuration in the .flash_config section of flash **/
+#ifdef CPU_MIMXRT1064DVL6A
+#define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
+#define CONFIG_FLASH_PAGE_SIZE 256UL        /* 256Bytes  */
+#define CONFIG_FLASH_SECTOR_SIZE (4 * 1024) /* 4KBytes   */
+#define CONFIG_FLASH_BLOCK_SIZE (64 * 1024) /* 64KBytes  */
+#define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
+#define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_100MHz
+const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+    .memConfig =
+        {
+            .tag              = FLEXSPI_CFG_BLK_TAG,
+            .version          = FLEXSPI_CFG_BLK_VERSION,
+            .readSampleClkSrc = kFlexSPIReadSampleClk_LoopbackFromDqsPad,
+            .csHoldTime       = 3u,
+            .csSetupTime      = 3u,
+            .sflashPadType    = kSerialFlash_4Pads,
+            .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
+            .sflashA1Size     = CONFIG_FLASH_SIZE,
+            .lookupTable =
+                {
+                    FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
+                    FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
+                },
+        },
+    .pageSize           = CONFIG_FLASH_PAGE_SIZE,
+    .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
+    .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
+    .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
+};
+#endif
+
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1062DVL6A
@@ -247,10 +282,19 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 #endif
 
-
 #ifndef __FLASH_BASE
-#   define __FLASH_BASE 0x60000000
+
+#if defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1062DVL6A)
+#define __FLASH_BASE 0x60000000
+#elif defined(CPU_MIMXRT1064DVL6A)
+#define __FLASH_BASE 0x70000000
+#else
+#error "Please define MCUXPRESSO SDK CPU variant macro (e.g. CPU_MIMXRT1062DVL6A)"
 #endif
+
+#endif
+
+
 #ifndef FLASH_BASE
 #define FLASH_BASE __FLASH_BASE
 #define PLUGIN_FLAG 0x0UL
@@ -351,7 +395,7 @@ static void clock_init(void)
         CCM->CBCDR = (CCM->CBCDR & (~(CCM_CBCDR_SEMC_PODF_MASK | CCM_CBCDR_AHB_PODF_MASK | CCM_CBCDR_IPG_PODF_MASK))) |
             CCM_CBCDR_SEMC_PODF(2) | CCM_CBCDR_AHB_PODF(2) | CCM_CBCDR_IPG_PODF(2);
 
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
         /* Configure FLEXSPI2 CLOCKS */
         CCM->CBCMR =
             (CCM->CBCMR &
@@ -398,7 +442,7 @@ static serial_nor_config_option_t flexspi_cfg_option = {};
 
 static int nor_flash_init(void)
 {
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
     flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
     g_bootloaderTree->flexSpiNorDriver->get_config(0, &flexspi_config, &flexspi_cfg_option);
 #endif

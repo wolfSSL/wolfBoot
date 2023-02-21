@@ -186,6 +186,7 @@ $(LSCRIPT): FORCE
 		"custom linker script (i.e. $(TARGET)_chacha_ram.ld). Please read " \
 		"docs/encrypted_partitions.md for more information" && false)
 	@cat $(LSCRIPT_IN) | \
+		sed -e "s/@ARCH_FLASH_OFFSET@/$(ARCH_FLASH_OFFSET)/g" | \
 		sed -e "s/@BOOTLOADER_PARTITION_SIZE@/$(BOOTLOADER_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_ORIGIN@/$(WOLFBOOT_ORIGIN)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \

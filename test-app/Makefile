@@ -196,6 +196,10 @@ ifeq ($(TARGET),imx_rt)
           CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
           APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
       endif
+      ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
+          CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+          APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1064.o
+      endif
     endif
 endif
 

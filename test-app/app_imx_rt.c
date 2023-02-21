@@ -58,8 +58,8 @@ void init_debug_console(void)
     DbgConsole_Init(UART_INSTANCE, UART_BAUDRATE, UART_TYPE, uartClkSrcFreq);
 }
 
-#ifdef CPU_MIMXRT1062DVL6A
-/* Pin settings */
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
+/* Pin settings (same for both 1062 and 1064) */
 void rt1060_init_pins(void) {
   CLOCK_EnableClock(kCLOCK_Iomuxc);           /* iomuxc clock (iomuxc_clk_enable): 0x03U */
 
@@ -112,7 +112,7 @@ void main()
 {
 
     imx_rt_init_boot_clock();
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
     rt1060_init_pins();
 #endif
 
