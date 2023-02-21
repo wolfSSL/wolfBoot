@@ -233,9 +233,7 @@ endif
 
 ifeq ($(TARGET),imx_rt)
   CORTEX_M7=1
-  # Note: removed -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 from CFLAGS as it is no longer a path in the SDK
   CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) \
-      -I/usr/local/gcc-arm-none-eabi-9-2019-q4-major/arm-none-eabi/include \
       -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
       -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
       -I$(MCUXPRESSO)/components/uart/ \
