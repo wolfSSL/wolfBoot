@@ -146,6 +146,13 @@ void imx_rt_init_boot_clock(void)
     CLOCK_SetDiv(kCLOCK_Flexspi2Div, 1);
     /* Set Flexspi2 clock source. */
     CLOCK_SetMux(kCLOCK_Flexspi2Mux, 1);
+#elif defined(CPU_MIMXRT1064DVL6A)
+    /* Disable Flexspi clock gate. */
+    CLOCK_DisableClock(kCLOCK_FlexSpi);
+    /* Set FLEXSPI_PODF. */
+    CLOCK_SetDiv(kCLOCK_FlexspiDiv, 1);
+    /* Set Flexspi clock source. */
+    CLOCK_SetMux(kCLOCK_FlexspiMux, 3);
 #endif
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);

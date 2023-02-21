@@ -232,8 +232,10 @@ ifeq ($(TARGET),kinetis)
 endif
 
 ifeq ($(TARGET),imx_rt)
-  ARCH_FLASH_OFFSET=0x60000000
-  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 \
+  CORTEX_M7=1
+  # Note: removed -I$(MCUXPRESSO)/middleware/mflash/mimxrt1062 from CFLAGS as it is no longer a path in the SDK
+  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) \
+      -I/usr/local/gcc-arm-none-eabi-9-2019-q4-major/arm-none-eabi/include \
       -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
       -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
       -I$(MCUXPRESSO)/components/uart/ \
@@ -247,12 +249,25 @@ ifeq ($(TARGET),imx_rt)
       -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
 
   OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
-  ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
+
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
+  ARCH_FLASH_OFFSET=0x70000000
+  CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+    ifeq ($(PKA),1)
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/devices/MIMXRT1064/drivers/fsl_dcp.o
+    endif
+  endif
+
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
+    ARCH_FLASH_OFFSET=0x60000000
     CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
     ifeq ($(PKA),1)
       PKA_EXTRA_OBJS+= $(MCUXPRESSO)/devices/MIMXRT1062/drivers/fsl_dcp.o
     endif
-  else
+  endif
+
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
+    ARCH_FLASH_OFFSET=0x60000000
     CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
     ifeq ($(PKA),1)
       PKA_EXTRA_OBJS+= $(MCUXPRESSO)/devices/MIMXRT1052/drivers/fsl_dcp.o
