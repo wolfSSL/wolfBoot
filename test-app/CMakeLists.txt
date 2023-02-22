@@ -36,6 +36,10 @@ endif()
 
 set(APP_SOURCES app_${WOLFBOOT_TARGET}.c led.c system.c timer.c)
 
+if(DEBUG_UART)
+    list(APPEND APP_SOURCES ../src/string.c)
+endif()
+
 if(ARCH STREQUAL "ARM")
     list(APPEND APP_SOURCES startup_arm.c)
     list(APPEND TEST_APP_COMPILE_DEFINITIONS STM32)

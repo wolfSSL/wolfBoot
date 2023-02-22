@@ -124,6 +124,7 @@ add_option(
     "Use a fixed-size memory pool created at compile time for cryptography implementation (default: disabled)"
     "no"
     "yes;no")
+add_option("DEBUG_UART" "Enable trace debugging over a UART (default: disabled)" "no" "yes;no")
 add_option("BUILD_TEST_APPS" "Build the wolfBoot test apps (default: disabled)" "no" "yes;no")
 add_option("PYTHON_KEYTOOLS" "Use wolfCrypt-py for key generation and signing (default: disabled)"
            "no" "yes;no")
@@ -171,6 +172,11 @@ unset(KEYTOOL_OPTIONS CACHE)
 unset(BINASSEMBLE CACHE)
 unset(ARCH_FLASH_OFFSET CACHE)
 unset(WOLFBOOT_VERSION CACHE)
+
+if(EXTRA_DEFS)
+    string(REPLACE " " ";" WOLFBOOT_EXTRA_DEFS ${EXTRA_DEFS})
+    list(APPEND WOLFBOOT_DEFS ${WOLFBOOT_EXTRA_DEFS})
+endif()
 
 set(WOLFBOOT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 list(APPEND WOLFBOOT_DEFS __WOLFBOOT)
@@ -571,6 +577,11 @@ set(SPI_DRV_STM32_TARGETS
 
 if(${WOLFBOOT_TARGET} IN_LIST SPI_DRV_STM32_TARGETS)
     set(SPI_TARGET stm32)
+endif()
+
+if(DEBUG_UART)
+    set(WOLFBOOT_UART_DRIVER ${WOLFBOOT_ROOT}/hal/uart/uart_drv_${UART_TARGET}.c)
+    list(APPEND WOLFBOOT_DEFS DEBUG_UART)
 endif()
 
 if(SPI_FLASH)

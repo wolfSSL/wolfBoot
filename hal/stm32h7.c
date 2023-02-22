@@ -199,6 +199,7 @@
 #define RCC_APB2_USART1_EN                  (1 << 4)
 #define RCC_APB2_USART6_EN                  (1 << 5)
 
+#define RCC_AHB4_GPIOB_EN                   (1 << 1)
 #define RCC_AHB4_GPIOD_EN                   (1 << 3)
 
 /*** QSPI ***/
@@ -523,7 +524,11 @@ static int uart_init(void)
 #endif
 
     /* Enable UART pins */
+#if UART_PORT == 5
+    AHB4_CLOCK_ENR |= RCC_AHB4_GPIOB_EN;
+#else
     AHB4_CLOCK_ENR |= RCC_AHB4_GPIOD_EN;
+#endif
 
     /* Set mode = AF. The PORT D I/O pin is first reset and then set to AF
      * (bit config 10:Alternate function mode) */

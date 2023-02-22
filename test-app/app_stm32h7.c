@@ -75,7 +75,7 @@
 /* ====================================================================== */
 /* Defining LED pin numbers in the corresponding GPIO group */
 #define LD1_PIN     (0)  /* Nucleo LD1 - Green Led */
-#define LD2_PIN     (1)  /* Nucleo LD2 - Yellow Led */
+#define LD2_PIN     (4)  /* Nucleo LD2 - Yellow Led */
 #define LD3_PIN     (14) /* Nucleo LD3 - Red Led */
 
 /* GPIO GROUP B */
