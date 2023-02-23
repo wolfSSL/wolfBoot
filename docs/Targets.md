@@ -988,26 +988,26 @@ the monitor command sequence below:
 
 ## NXP iMX-RT
 
-NXP RT1060/1062 and RT1050
+The NXP iMX-RT10xx family of devices contain a Cortex-M7 with a DCP coprocessor for SHA256 acceleration.
 
-The NXP iMX-RT1060 is a Cortex-M7 with a DCP coprocessor for SHA256 acceleration.
-Example configuration for this target is provided in [/config/examples/imx-rt1060.config](/config/examples/imx-rt1060.config).
+WolfBoot currently supports the NXP RT1050, RT1060/1062, and RT1064 devices.
 
 ### Building wolfBoot
 
 MCUXpresso SDK is required by wolfBoot to access device drivers on this platform.
 A package can be obtained from the [MCUXpresso SDK Builder](https://mcuxpresso.nxp.com/en/welcome), by selecting a target and keeping the default choice of components.
 
-* For the RT1060 use `EVKB-IMXRT1060`. See configuration example in `config/examples/imx-rt1060.config`.
 * For the RT1050 use `EVKB-IMXRT1050`. See configuration example in `config/examples/imx-rt1050.config`.
+* For the RT1060 use `EVKB-IMXRT1060`. See configuration example in `config/examples/imx-rt1060.config`.
+* For the RT1064 use `EVK-IMXRT1064`. See configuration example in `config/examples/imx-rt1064.config`.
 
 Set the wolfBoot `MCUXPRESSO` configuration variable to the path where the SDK package is extracted, then build wolfBoot normally by running `make`.
 
-wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK version 2.11.1.
+wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK version 2.11.1. Support for the iMX-RT1064 has been tested using MCUXpresso SDK version 2.13.0
 
 DCP support (hardware acceleration for SHA256 operations) can be enabled by using PKA=1 in the configuration file.
-Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device.
 
+Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
 
 
 ## NXP Kinetis
