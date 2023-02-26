@@ -27,29 +27,59 @@
 #   error "wolfBoot raspi3 HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
 
+#define TEST_ENCRYPT
+
 
 #define CORTEXA53_0_CPU_CLK_FREQ_HZ 1099989014
 #define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99998999
 
 /* Fixed addresses */
-static const void* kernel_addr  = (void*)0x0140000;
-static const void* update_addr  = (void*)0x1140000;
-static const void* dts_addr     = (void*)0x00a0000;
+extern void *kernel_addr, *update_addr, *dts_addr;
 
 void* hal_get_primary_address(void)
 {
-    return (void*)kernel_addr;
+    return (void*)&kernel_addr;
 }
 
 void* hal_get_update_address(void)
 {
-  return (void*)update_addr;
+  return (void*)&update_addr;
 }
 
 void* hal_get_dts_address(void)
 {
-  return (void*)dts_addr;
+  return (void*)&dts_addr;
 }
+
+#ifdef EXT_FLASH
+int ext_flash_read(unsigned long address, uint8_t *data, int len)
+{
+    XMEMCPY(data, (void *)address, len);
+    return len;
+}
+
+int ext_flash_erase(unsigned long address, int len)
+{
+    XMEMSET((void *)address, 0xFF, len);
+    return len;
+}
+
+int ext_flash_write(unsigned long address, const uint8_t *data, int len)
+{
+    XMEMCPY((void *)address, data, len);
+    return len;
+}
+
+void ext_flash_lock(void)
+{
+}
+
+void ext_flash_unlock(void)
+{
+}
+
+#endif
+
 
 void* hal_get_dts_update_address(void)
 {
@@ -71,6 +101,12 @@ void zynq_init(uint32_t cpu_clock)
 /* public HAL functions */
 void hal_init(void)
 {
+    #if defined(TEST_ENCRYPT) && defined (EXT_ENCRYPTED)
+    char enc_key[] = "0123456789abcdef0123456789abcdef"
+		 "0123456789abcdef";
+    wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
+    #endif
+
 }
 
 void hal_prepare_boot(void)
