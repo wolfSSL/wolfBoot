@@ -36,7 +36,7 @@
 #define SPI_FLASH_PAGE_SIZE   (256)
 #endif
 
-#if defined(SPI_FLASH) || defined(QSPI_FLASH)
+#if defined(SPI_FLASH) || defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 
 #include <stdint.h>
 
@@ -53,6 +53,6 @@ int spi_flash_write(uint32_t address, const void *data, int len);
 #define spi_flash_probe() do{}while(0)
 #define spi_flash_release() do{}while(0)
 
-#endif /* SPI_FLASH */
+#endif /* SPI_FLASH || QSPI_FLASH || OCTOSPI_FLASH */
 
 #endif /* !SPI_FLASH_DRI_H */

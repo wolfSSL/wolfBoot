@@ -29,7 +29,8 @@
 #include "spi_drv.h"
 #include "spi_drv_stm32.h"
 
-#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH)
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH) || \
+    defined(OCTOSPI_FLASH)
 
 void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
         uint32_t af, uint32_t pull, uint32_t speed)
@@ -148,7 +149,7 @@ static void RAMFUNCTION stm_pins_setup(void)
         SPI_MISO_PIN_AF, 1, 0);
     #endif
 #endif
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
     stm_gpio_config(QSPI_CS_PIO_BASE, QSPI_CS_FLASH_PIN, GPIO_MODE_AF,
         QSPI_CS_FLASH_AF, 1, 3);
     stm_gpio_config(QSPI_CLOCK_PIO_BASE, QSPI_CLOCK_PIN, GPIO_MODE_AF,
@@ -171,7 +172,7 @@ static void stm_pins_release(void)
     stm_gpio_config(SPI_MOSI_PIO_BASE, SPI_MOSI_PIN, GPIO_MODE_INPUT, 0, 0, 0);
     stm_gpio_config(SPI_MISO_PIO_BASE, SPI_MISO_PIN, GPIO_MODE_INPUT, 0, 0, 0);
 #endif
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
     stm_gpio_config(QSPI_CS_PIO_BASE, QSPI_CS_FLASH_PIN, GPIO_MODE_INPUT, 0, 0, 0);
     stm_gpio_config(QSPI_CLOCK_PIO_BASE, QSPI_CLOCK_PIN, GPIO_MODE_INPUT, 0, 0, 0);
     stm_gpio_config(QSPI_IO0_PIO_BASE, QSPI_IO0_PIN, GPIO_MODE_INPUT, 0, 0, 0);
@@ -183,7 +184,7 @@ static void stm_pins_release(void)
 
 static void RAMFUNCTION spi_reset(void)
 {
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
     AHB3_CLOCK_RST |= RCC_AHB3ENR_QSPIEN;
     AHB3_CLOCK_RST &= ~RCC_AHB3ENR_QSPIEN;
 #endif
@@ -193,7 +194,89 @@ static void RAMFUNCTION spi_reset(void)
 #endif
 }
 
-#ifdef QSPI_FLASH
+#ifdef OCTOSPI_FLASH
+int qspi_transfer(uint8_t fmode, const uint8_t cmd,
+    uint32_t addr, uint32_t addrSz, uint32_t addrMode,
+    uint32_t alt, uint32_t altSz, uint32_t altMode,
+    uint32_t dummySz,
+    uint8_t* data, uint32_t dataSz, uint32_t dataMode)
+{
+    uint32_t adsz = 0, absz = 0;
+
+    if (addrSz > 0) {
+        adsz = addrSz-1;
+    }
+    if (altSz > 0) {
+        absz = altSz-1;
+    }
+
+    /* Enable the QSPI peripheral */
+    OCTOSPI_CR &= ~(OCTOSPI_CR_EN | OCTOSPI_CR_FMODE_MASK);
+    OCTOSPI_CR |= OCTOSPI_CR_EN | OCTOSPI_CR_FMODE(fmode);
+
+    if (dataSz > 0) {
+        OCTOSPI_DLR = dataSz-1;
+    }
+
+    /* Configure QSPI: CCR register with all communications parameters */
+    /* mode 1=1SPI, 2=2SPI, 3=4SPI, 4=8SPI */
+    OCTOSPI_CCR = (
+        OCTOSPI_CCR_IMODE(1) |         /* Instruction Mode - always single SPI */
+        OCTOSPI_CCR_ADMODE(addrMode) | /* Address Mode */
+        OCTOSPI_CCR_ADSIZE(adsz) |     /* Address Size */
+        OCTOSPI_CCR_ABMODE(altMode) |  /* Alternate byte mode */
+        OCTOSPI_CCR_ABSIZE(absz ) |    /* Alternate byte size */
+        OCTOSPI_CCR_DMODE(dataMode)    /* Data Mode */
+    );
+    OCTOSPI_TCR = OCTOSPI_TCR_DCYC(dummySz); /* Dummy Cycles (between instruction and read) */
+    OCTOSPI_IR = cmd;
+
+    /* Set optional alternate bytes */
+    if (altSz > 0) {
+        OCTOSPI_ABR = alt;
+    }
+
+    /* Set command address 4 or 3 byte */
+    OCTOSPI_AR = addr;
+
+    /* Fill data 32-bits at a time */
+    while (dataSz >= 4U) {
+        if (fmode == 0) {
+            while ((OCTOSPI_SR & OCTOSPI_SR_FTF) == 0);
+            OCTOSPI_DR32 = *(uint32_t*)data;
+        }
+        else {
+            while ((OCTOSPI_SR & (OCTOSPI_SR_FTF | OCTOSPI_SR_TCF)) == 0);
+            *(uint32_t*)data = OCTOSPI_DR32;
+        }
+        dataSz -= 4;
+        data += 4;
+    }
+
+    /* Fill remainder bytes */
+    while (dataSz > 0U) {
+        if (fmode == 0) {
+            while ((OCTOSPI_SR & OCTOSPI_SR_FTF) == 0);
+            OCTOSPI_DR = *data;
+        }
+        else {
+            while ((OCTOSPI_SR & (OCTOSPI_SR_FTF | OCTOSPI_SR_TCF)) == 0);
+            *data = OCTOSPI_DR;
+        }
+        dataSz--;
+        data++;
+    }
+
+    /* wait for transfer complete */
+    while ((OCTOSPI_SR & OCTOSPI_SR_TCF) == 0);
+    OCTOSPI_FCR |= OCTOSPI_SR_TCF; /* clear transfer complete */
+
+    /* Disable QSPI */
+    OCTOSPI_CR &= ~OCTOSPI_CR_EN;
+
+    return 0;
+}
+#elif defined(QSPI_FLASH)
 int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     uint32_t addr, uint32_t addrSz, uint32_t addrMode,
     uint32_t alt, uint32_t altSz, uint32_t altMode,
@@ -232,7 +315,7 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
 
     /* Set optional alternate bytes */
     if (altSz > 0) {
-        QUADSPI_ABR = alt;
+        QUADSPI_ABR= alt;
     }
 
     /* Set command address 4 or 3 byte */
@@ -277,7 +360,6 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
 }
 #endif /* QSPI_FLASH */
 
-
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 uint8_t RAMFUNCTION spi_read(void)
 {
@@ -309,7 +391,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         initialized++;
 
         /* Setup clocks */
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
         /* Select QUADSPI clock source */
         RCC_D1CCIPR &= ~RCC_D1CCIPR_QSPISEL_MASK;
         RCC_D1CCIPR |= RCC_D1CCIPR_QSPISEL(QSPI_CLOCK_SEL);
@@ -337,9 +419,35 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         spi_cs_off(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
 #endif
 
+#ifdef OCTOSPI_FLASH
+        /* STM32 OCTOSPI Peripheral */
+        /* Configure OCTOSPI FIFO Threshold (4 bytes) */
+        OCTOSPI_CR &= ~OCTOSPI_CR_FTHRES_MASK;
+        OCTOSPI_CR |= OCTOSPI_CR_FTHRES(4);
 
-#ifdef QSPI_FLASH
-        /* Configure QSPI FIFO Threshold (1 byte) */
+        /* Wait till BUSY flag cleared */
+        while (OCTOSPI_SR & OCTOSPI_SR_BUSY) {};
+
+        /* Configure OCTOSPI Clock Prescaler (64/X), Flash ID 2 (IO4-7)
+         * Sample Shift=None */
+        OCTOSPI_DCR2 &= ~OCTOSPI_DCR2_PRESCALER_MASK;
+        OCTOSPI_DCR2 |= OCTOSPI_DCR2_PRESCALER((QSPI_CLOCK_BASE/QSPI_CLOCK_MHZ));
+        OCTOSPI_CR &= ~OCTOSPI_CR_FSEL;
+    #if QSPI_FLASH_BANK == 2
+        OCTOSPI_CR |= OCTOSPI_CR_FSEL;
+    #endif
+        OCTOSPI_TCR &= ~OCTOSPI_TCR_SSHIFT;
+
+        /* Configure OCTOSPI Flash Size (16MB), CS High Time (1 clock) and
+         * Clock Mode (0) */
+        OCTOSPI_DCR1 &= ~(OCTOSPI_DCR1_DEVSIZE_MASK | OCTOSPI_DCR1_CSHT_MASK |
+            OCTOSPI_DCR1_CKMODE_3);
+        OCTOSPI_DCR1 |= (OCTOSPI_DCR1_DEVSIZE(QSPI_FLASH_SIZE) |
+            OCTOSPI_DCR1_CSHT(0) | OCTOSPI_DCR1_CKMODE_0);
+
+#elif defined(QSPI_FLASH)
+        /* STM32 QSPI Peripheral */
+        /* Configure QSPI FIFO Threshold (4 bytes) */
         QUADSPI_CR &= ~QUADSPI_CR_FTHRES_MASK;
         QUADSPI_CR |= QUADSPI_CR_FTHRES(4);
 
@@ -351,14 +459,17 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         QUADSPI_CR &= ~(QUADSPI_CR_PRESCALER_MASK | QUADSPI_CR_FSEL |
             QUADSPI_CR_DFM | QUADSPI_CR_SSHIFT);
         QUADSPI_CR |= (QUADSPI_CR_PRESCALER((QSPI_CLOCK_BASE/QSPI_CLOCK_MHZ)));
+    #if QSPI_FLASH_BANK == 2
+        QUADSPI_CR |= QUADSPI_CR_FSEL;
+    #endif
 
         /* Configure QSPI Flash Size (16MB), CS High Time (1 clock) and
          * Clock Mode (0) */
         QUADSPI_DCR &= ~(QUADSPI_DCR_FSIZE_MASK | QUADSPI_DCR_CSHT_MASK |
             QUADSPI_DCR_CKMODE_3);
-        QUADSPI_DCR |= (QUADSPI_DCR_FSIZE(22) | QUADSPI_DCR_CSHT(0) |
-            QUADSPI_DCR_CKMODE_0);
-#endif /* QSPI_FLASH */
+        QUADSPI_DCR |= (QUADSPI_DCR_FSIZE(QSPI_FLASH_SIZE) |
+            QUADSPI_DCR_CSHT(0) | QUADSPI_DCR_CKMODE_0);
+#endif
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         /* Configure SPI1 for master mode */
 #   ifdef PLATFORM_stm32l0
@@ -388,4 +499,4 @@ void RAMFUNCTION spi_release(void)
     }
 }
 
-#endif /* SPI_FLASH || QSPI_FLASH || WOLFBOOT_TPM */
+#endif /* SPI_FLASH || WOLFBOOT_TPM || QSPI_FLASH || OCTOSPI_FLASH */

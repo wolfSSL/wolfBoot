@@ -32,7 +32,8 @@
 #include <stdint.h>
 #include "image.h"
 
-#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH)
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH) || \
+    defined(OCTOSPI_FLASH)
 
 #if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || \
     defined(PLATFORM_stm32wb) || defined(PLATFORM_stm32l0) || \
@@ -58,7 +59,7 @@ void spi_write(const char byte);
 uint8_t spi_read(void);
 #endif /* SPI_FLASH || WOLFBOOT_TPM */
 
-#ifdef QSPI_FLASH
+#if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 
 #define QSPI_MODE_WRITE 0
 #define QSPI_MODE_READ  1
@@ -75,8 +76,8 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     uint32_t dummySz,
     uint8_t* data, uint32_t dataSz, uint32_t dataMode
 );
-#endif /* QSPI_FLASH */
+#endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
-#endif /* SPI_FLASH || QSPI_FLASH */
+#endif /* SPI_FLASH || WOLFBOOT_TPM || QSPI_FLASH || OCTOSPI_FLASH */
 
 #endif /* !SPI_DRV_H_INCLUDED */
