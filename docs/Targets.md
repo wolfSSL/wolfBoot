@@ -244,7 +244,7 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
 4. flash wolfBoot.bin to 0x0c00 0000
     - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
-5. flash .\test-app\image_v1_signed.bin to 0x0804 0000
+5. flash .\test-app\image_v1_signed.bin to 0x08040000
     - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08100000`
 6. RED LD9 will be on
 

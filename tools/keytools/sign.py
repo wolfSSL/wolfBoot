@@ -569,6 +569,8 @@ if sign == 'none':
 elif not sha_only and not manual_sign:
     ''' import (decode) private key for signing '''
     if sign == 'ed25519':
+        print(wolfboot_key_buffer)
+        print(wolfboot_key_buffer_len)
         ed = ciphers.Ed25519Private(key = wolfboot_key_buffer)
         privkey, pubkey = ed.encode_key()
 
@@ -577,6 +579,7 @@ elif not sha_only and not manual_sign:
         if WOLFBOOT_HEADER_SIZE < 512:
             print("Ed448: header size increased to 512")
             WOLFBOOT_HEADER_SIZE = 512
+        print(wolfboot_key_buffer)
         ed = ciphers.Ed448Private(key = wolfboot_key_buffer)
         privkey, pubkey = ed.encode_key()
 

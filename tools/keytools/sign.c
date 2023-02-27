@@ -220,6 +220,19 @@ struct cmd_options {
     uint8_t partition_id;
 };
 
+typedef struct Partition {
+    uint8_t* headerBuf;
+    uint8_t* imageBuf;
+    uint8_t* digestBuf;
+    uint8_t* baseBuf;
+    char* baseVerP;
+    int headerSz;
+    int imageSz;
+    int digestSz;
+    int baseSz;
+    time_t timestamp;
+} Partition;
+
 static struct cmd_options CMD = {
     .sign = SIGN_AUTO,
     .encrypt  = ENC_OFF,
@@ -675,408 +688,63 @@ failure:
     return NULL;
 }
 
-static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
-        const char *image_file, const char *outfile,
-        uint32_t delta_base_version, uint16_t patch_len, uint32_t patch_inv_off,
-        uint16_t patch_inv_len)
+static int write_signed_image(Partition* partition)
 {
-    uint32_t header_idx;
-    uint8_t *header;
-    FILE *f, *f2, *fek, *fef;
-    uint32_t fw_version32;
-    struct stat attrib;
-    uint16_t image_type;
-    uint8_t* signature = NULL;
+    int i;
     int ret = -1;
-    uint8_t  buf[1024];
-    uint32_t read_sz, pos;
-    uint8_t  digest[48]; /* max digest */
-    uint32_t digest_sz = 0;
-    uint32_t image_sz = 0;
-    int io_sz;
-
-    header_idx = 0;
-    header = malloc(CMD.header_sz);
-    if (header == NULL) {
-        printf("Header malloc error!\n");
-        goto failure;
-    }
-    memset(header, 0xFF, CMD.header_sz);
-
-    /* Get size of image */
-    f = fopen(image_file, "rb");
-    if (f == NULL) {
-        printf("Open image file %s failed\n", image_file);
-        goto failure;
-    }
-    fseek(f, 0, SEEK_END);
-    image_sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    fclose(f);
-
-    /* Append Magic header (spells 'WOLF') */
-    header_append_u32(header, &header_idx, WOLFBOOT_MAGIC);
-    /* Append Image size */
-    header_append_u32(header, &header_idx, image_sz);
-
-    /* No pad bytes, version is aligned */
-
-    /* Append Version field */
-    fw_version32 = strtol(CMD.fw_version, NULL, 10);
-    header_append_tag(header, &header_idx, HDR_VERSION, HDR_VERSION_LEN,
-        &fw_version32);
-
-    /* Append pad bytes, so timestamp val field is 8-byte aligned */
-    while ((header_idx % 8) != 4)
-        header_idx++;
-    /* Append Timestamp field */
-    stat(image_file, &attrib);
-    header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
-        &attrib.st_ctime);
-
-    /* Append Image type field */
-    image_type = (uint16_t)CMD.sign & HDR_IMG_TYPE_AUTH_MASK;
-    image_type |= CMD.partition_id;
-    if (is_diff)
-        image_type |= HDR_IMG_TYPE_DIFF;
-    header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
-        &image_type);
-
-    if (is_diff) {
-        /* Append pad bytes, so fields are 4-byte aligned */
-        while ((header_idx % 4) != 0)
-            header_idx++;
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE, 4,
-                &delta_base_version);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 2,
-                &patch_len);
-
-        /* Append pad bytes, so fields are 4-byte aligned */
-        while ((header_idx % 4) != 0)
-            header_idx++;
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
-                &patch_inv_off);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 2,
-                &patch_inv_len);
-    }
-
-    /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
-    while ((header_idx % 8) != 4)
-        header_idx++;
-
-    /* Calculate hashes */
-    if (CMD.hash_algo == HASH_SHA256)
-    {
-    #ifndef NO_SHA256
-        wc_Sha256 sha;
-        printf("Calculating SHA256 digest...\n");
-        ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
-        if (ret == 0) {
-            /* Hash Header */
-            ret = wc_Sha256Update(&sha, header, header_idx);
-
-            /* Hash image file */
-            f = fopen(image_file, "rb");
-            pos = 0;
-            while (ret == 0 && pos < image_sz) {
-                read_sz = image_sz - pos;
-                if (read_sz > 32)
-                    read_sz = 32;
-                io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
-                    ret = -1;
-                    break;
-                }
-                ret = wc_Sha256Update(&sha, buf, read_sz);
-                pos += read_sz;
-            }
-            fclose(f);
-            if (ret == 0)
-                wc_Sha256Final(&sha, digest);
-            wc_Sha256Free(&sha);
-        }
-        /* pubkey hash calculation */
-        if (ret == 0) {
-            ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
-            if (ret == 0) {
-                ret = wc_Sha256Update(&sha, pubkey, pubkey_sz);
-                if (ret == 0)
-                    wc_Sha256Final(&sha, buf);
-                wc_Sha256Free(&sha);
-            }
-        }
-        if (ret == 0)
-            digest_sz = HDR_SHA256_LEN;
-    #endif
-    }
-    else if (CMD.hash_algo == HASH_SHA384)
-    {
-    #ifndef NO_SHA384
-        wc_Sha384 sha;
-        printf("Calculating SHA384 digest...\n");
-        ret = wc_InitSha384_ex(&sha, NULL, INVALID_DEVID);
-        if (ret == 0) {
-            /* Hash Header */
-            ret = wc_Sha384Update(&sha, header, header_idx);
-
-            /* Hash image file */
-            f = fopen(image_file, "rb");
-            pos = 0;
-            while (ret == 0 && pos < image_sz) {
-                read_sz = image_sz - pos;
-                if (read_sz > 32)
-                    read_sz = 32;
-                io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
-                    ret = -1;
-                    break;
-                }
-                ret = wc_Sha384Update(&sha, buf, read_sz);
-                pos += read_sz;
-            }
-            fclose(f);
-            if (ret == 0)
-                wc_Sha384Final(&sha, digest);
-            wc_Sha384Free(&sha);
-        }
-        /* pubkey hash calculation */
-        if (ret == 0) {
-            ret = wc_InitSha384_ex(&sha, NULL, INVALID_DEVID);
-            if (ret == 0) {
-                ret = wc_Sha384Update(&sha, pubkey, pubkey_sz);
-                if (ret == 0)
-                    wc_Sha384Final(&sha, buf);
-                wc_Sha384Free(&sha);
-            }
-        }
-        if (ret == 0)
-            digest_sz = HDR_SHA384_LEN;
-    #endif
-    }
-    else if (CMD.hash_algo == HASH_SHA3)
-    {
-    #ifdef WOLFSSL_SHA3
-        wc_Sha3 sha;
-
-        printf("Calculating SHA3 digest...\n");
-
-        ret = wc_InitSha3_384(&sha, NULL, INVALID_DEVID);
-        if (ret == 0) {
-            /* Hash Header */
-            ret = wc_Sha3_384_Update(&sha, header, header_idx);
-
-            /* Hash image file */
-            f = fopen(image_file, "rb");
-            pos = 0;
-            while (ret == 0 && pos < image_sz) {
-                read_sz = image_sz - pos;
-                if (read_sz > 128)
-                    read_sz = 128;
-                io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
-                    ret = -1;
-                    break;
-                }
-                ret = wc_Sha3_384_Update(&sha, buf, read_sz);
-                pos += read_sz;
-            }
-            fclose(f);
-            if (ret == 0)
-                ret = wc_Sha3_384_Final(&sha, digest);
-            wc_Sha3_384_Free(&sha);
-        }
-
-        /* pubkey hash calculation */
-        if (ret == 0) {
-            ret = wc_InitSha3_384(&sha, NULL, INVALID_DEVID);
-            if (ret == 0) {
-                ret = wc_Sha3_384_Update(&sha, pubkey, pubkey_sz);
-                if (ret == 0)
-                    ret = wc_Sha3_384_Final(&sha, buf);
-                wc_Sha3_384_Free(&sha);
-            }
-        }
-        if (ret == 0)
-            digest_sz = HDR_SHA3_384_LEN;
-    #endif
-    }
-    if (digest_sz == 0) {
-        printf("Hash algorithm error %d\n", ret);
-        goto failure;
-    }
-#ifdef DEBUG_SIGNTOOL
-    printf("Image hash %d\n", digest_sz);
-    WOLFSSL_BUFFER(digest, digest_sz);
-    printf("Pubkey hash %d\n", digest_sz);
-    WOLFSSL_BUFFER(buf, digest_sz);
+    int outFd = -1;
+    int encFd = -1;
+    uint8_t key[ENC_MAX_KEY_SZ], iv[ENC_MAX_IV_SZ];
+    int ivSz, keySz;
+    uint32_t encSize;
+    uint8_t encBuf[ENC_BLOCK_SIZE];
+    uint8_t aesPadding[ENC_BLOCK_SIZE] = {0xff};
+    Aes aes[1];
+#ifdef HAVE_CHACHA
+    ChaCha cha[1];
 #endif
 
-    /* Add image hash to header */
-    header_append_tag(header, &header_idx, CMD.hash_algo, digest_sz, digest);
-    if (CMD.sign != NO_SIGN) {
-        WC_RNG rng;
-        /* Add Pubkey Hash to header */
-        header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
-
-        /* If hash only, then save digest and exit */
-        if (CMD.sha_only) {
-            f = fopen(outfile, "wb");
-            if (f == NULL) {
-                printf("Open output file %s failed\n", outfile);
-                goto failure;
-            }
-            fwrite(digest, 1, digest_sz, f);
-            fclose(f);
-            printf("Digest image %s successfully created.\n", outfile);
-            exit(0);
-        }
-
-        /* Sign the digest */
-        ret = NOT_COMPILED_IN; /* default error */
-        signature = malloc(CMD.signature_sz);
-        if (signature == NULL) {
-            printf("Signature malloc error!\n");
-            goto failure;
-        }
-        memset(signature, 0, CMD.signature_sz);
-        if (!CMD.manual_sign) {
-            printf("Signing the digest...\n");
-#ifdef DEBUG_SIGTOOL
-            printf("Digest %d\n", digest_sz);
-            WOLFSSL_BUFFER(digest, digest_sz);
-#endif
-            wc_InitRng(&rng);
-            if (CMD.sign == SIGN_ED25519) {
-#ifdef HAVE_ED25519
-                ret = wc_ed25519_sign_msg(digest, digest_sz, signature,
-                        &CMD.signature_sz, key.ed);
-#endif
-            }
-            else if (CMD.sign == SIGN_ED448) {
-#ifdef HAVE_ED448
-                ret = wc_ed448_sign_msg(digest, digest_sz, signature,
-                        &CMD.signature_sz, key.ed4, NULL, 0);
-#endif
-            }
-#ifdef HAVE_ECC
-            else if (CMD.sign == SIGN_ECC256) {
-                mp_int r, s;
-                mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, key.ecc,
-                        &r, &s);
-                mp_to_unsigned_bin(&r, &signature[0]);
-                mp_to_unsigned_bin(&s, &signature[32]);
-                mp_clear(&r); mp_clear(&s);
-            }
-            else if (CMD.sign == SIGN_ECC384) {
-                mp_int r, s;
-                mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, key.ecc,
-                        &r, &s);
-                mp_to_unsigned_bin(&r, &signature[0]);
-                mp_to_unsigned_bin(&s, &signature[48]);
-                mp_clear(&r); mp_clear(&s);
-            }
-            else if (CMD.sign == SIGN_ECC521) {
-                mp_int r, s;
-                mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, key.ecc,
-                        &r, &s);
-                mp_to_unsigned_bin(&r, &signature[0]);
-                mp_to_unsigned_bin(&s, &signature[66]);
-                mp_clear(&r); mp_clear(&s);
-            }
-#endif
-            else if (CMD.sign == SIGN_RSA2048 || 
-                    CMD.sign == SIGN_RSA3072 ||
-                    CMD.sign == SIGN_RSA4096) {
-
-#ifndef NO_RSA
-                uint32_t enchash_sz = digest_sz;
-                uint8_t* enchash = digest;
-                if (CMD.sign_wenc) {
-                    /* add ASN.1 signature encoding */
-                    int hashOID = 0;
-                    if (CMD.hash_algo == HASH_SHA256)
-                        hashOID = SHA256h;
-                    else if (CMD.hash_algo == HASH_SHA3)
-                        hashOID = SHA3_384h;
-                    enchash_sz = wc_EncodeSignature(buf, digest, digest_sz,
-                            hashOID);
-                    enchash = buf;
-                }
-                ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature,
-                        CMD.signature_sz,
-                        key.rsa, &rng);
-                if (ret > 0) {
-                    CMD.signature_sz = ret;
-                    ret = 0;
-                }
-#endif
-            }
-            wc_FreeRng(&rng);
-
-            if (ret != 0) {
-                printf("Signing error %d\n", ret);
-                goto failure;
-            }
-        }
-        else {
-            printf("Opening signature file %s\n", CMD.signature_file);
-
-            f = fopen(CMD.signature_file, "rb");
-            if (f == NULL) {
-                printf("Open signature file %s failed\n", CMD.signature_file);
-                goto failure;
-            }
-            io_sz = (int)fread(signature, 1, CMD.signature_sz, f);
-            fclose(f);
-            if (io_sz != (int)CMD.signature_sz) {
-                printf("Error reading file %s\n", CMD.signature_file);
-                goto failure;
-            }
-        }
-#ifdef DEBUG_SIGNTOOL
-        printf("Signature %d\n", CMD.signature_sz);
-        WOLFSSL_BUFFER(signature, CMD.signature_sz);
-#endif
-
-        /* Add signature to header */
-        header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz,
-                signature);
-    } /* end if(sign != NO_SIGN) */
-
-    /* Add padded header at end */
-    while (header_idx < CMD.header_sz) {
-        header[header_idx++] = 0xFF;
+    if (partition == NULL || partition->headerBuf == NULL || partition->headerSz == 0 ||
+        partition->imageBuf == NULL || partition->imageSz == 0 ||
+        partition->digestBuf == NULL || partition->digestSz == 0) {
+        return BAD_FUNC_ARG;
     }
 
     /* Create output image */
-    f = fopen(outfile, "w+b");
-    if (f == NULL) {
-        printf("Open output image file %s failed\n", outfile);
-        goto failure;
-    }
-    fwrite(header, 1, header_idx, f);
-    /* Copy image to output */
-    f2 = fopen(image_file, "rb");
-    pos = 0;
-    while (pos < image_sz) {
-        read_sz = image_sz;
-        if (read_sz > sizeof(buf))
-            read_sz = sizeof(buf);
-        read_sz = (uint32_t)fread(buf, 1, read_sz, f2);
-        if ((read_sz == 0) && (feof(f2)))
-            break;
-        fwrite(buf, 1, read_sz, f);
-        pos += read_sz;
+    outFd = open(CMD.output_image_file, O_CREAT | O_TRUNC | O_WRONLY, 0666);
+
+    if (outFd < 0) {
+        printf("Failed to open signed image output file!\n");
+        return outFd;
     }
 
-    if ((CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
-        uint8_t key[ENC_MAX_KEY_SZ], iv[ENC_MAX_IV_SZ];
-        uint8_t enc_buf[ENC_BLOCK_SIZE];
-        int ivSz, keySz;
-        uint32_t fsize = 0;
+    if (CMD.sha_only) {
+        /* just write the digest */
+        ret = write(outFd, partition->digestBuf, partition->digestSz);
+
+        if (ret == partition->digestSz)
+            ret = 0;
+
+        close(outFd);
+
+        return ret;
+    }
+
+    /* write the header */
+    ret = write(outFd, partition->headerBuf, partition->headerSz);
+
+    if (ret == partition->headerSz)
+        ret = 0;
+
+    /* write the image */
+    if (ret == 0) {
+        ret = write(outFd, partition->imageBuf, partition->imageSz);
+
+        if (ret == partition->imageSz)
+            ret = 0;
+    }
+
+    if (ret == 0 && (CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
         switch (CMD.encrypt) {
             case ENC_CHACHA:
                 ivSz = CHACHA_IV_BYTES;
@@ -1092,102 +760,516 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 break;
             default:
                 printf("No valid encryption mode selected\n");
-                goto failure;
+                ret = -1;
 
         }
-        fek = fopen(CMD.encrypt_key_file, "rb");
-        if (fek == NULL) {
-            fprintf(stderr, "Open encryption key file %s: %s\n",
-                    CMD.encrypt_key_file, strerror(errno));
-            exit(1);
-        }
-        ret = (int)fread(key, 1, keySz, fek);
-        if (ret != keySz) {
-            fprintf(stderr, "Error reading key from %s\n", CMD.encrypt_key_file);
-            exit(1);
-        }
-        ret = (int)fread(iv, 1, ivSz, fek);
-        if (ret != ivSz) {
-            fprintf(stderr, "Error reading IV from %s\n", CMD.encrypt_key_file);
-            exit(1);
-        }
-        fclose(fek);
 
-        fef = fopen(CMD.output_encrypted_image_file, "wb");
-        if (!fef) {
-            fprintf(stderr, "Open encrypted output file %s: %s\n",
-                    CMD.encrypt_key_file, strerror(errno));
-        }
-        fsize = ftell(f);
-        fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
+        /* open encrypt key */
+        if (ret == 0) {
+            encFd = open(CMD.encrypt_key_file, O_RDONLY, 0666);
 
-        if (CMD.encrypt == ENC_CHACHA) {
-            ChaCha cha;
+            if (encFd < 0)
+                ret = encFd;
+        }
+
+        /* read the key */
+        if (ret == 0)
+            ret = read(encFd, key, keySz);
+
+        if (ret == keySz)
+            ret = 0;
+
+        /* read the iv */
+        if (ret == 0)
+            ret = read(encFd, iv, ivSz);
+
+        if (ret == ivSz)
+            ret = 0;
+
+        if (encFd > 0)
+            close(encFd);
+
+        /* open encrypted output file */
+        if (ret == 0) {
+            encFd = open(CMD.output_encrypted_image_file,
+                O_CREAT | O_TRUNC | O_WRONLY, 0666);
+
+            if (encFd < 0)
+                ret = encFd;
+        }
+
+        if (ret == 0) {
+            if (CMD.encrypt == ENC_CHACHA) {
 #ifndef HAVE_CHACHA
-            fprintf(stderr, "Encryption not supported: chacha support not found"
-                   "in wolfssl configuration.\n");
-            exit(100);
+                fprintf(stderr, "Encryption not supported: chacha support not found"
+                       "in wolfssl configuration.\n");
+                exit(100);
 #endif
-            wc_Chacha_SetKey(&cha, key, sizeof(key));
-            wc_Chacha_SetIV(&cha, iv, 0);
-            for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
-                int fread_retval;
-                fread_retval = (int)fread(buf, 1, ENC_BLOCK_SIZE, f);
-                if ((fread_retval == 0) && feof(f)) {
-                    break;
-                }
-                wc_Chacha_Process(&cha, enc_buf, buf, fread_retval);
-                fwrite(enc_buf, 1, fread_retval, fef);
+                wc_Chacha_SetKey(cha, key, sizeof(key));
+                wc_Chacha_SetIV(cha, iv, 0);
             }
-        } else if ((CMD.encrypt == ENC_AES128) || (CMD.encrypt == ENC_AES256)) {
-            Aes aes_e;
-            wc_AesInit(&aes_e, NULL, 0);
-            wc_AesSetKeyDirect(&aes_e, key, keySz, iv, AES_ENCRYPTION);
-            for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
-                int fread_retval;
-                fread_retval = (int)fread(buf, 1, ENC_BLOCK_SIZE, f);
-                if ((fread_retval == 0) && feof(f)) {
+            else if (CMD.encrypt == ENC_AES128 ||
+                CMD.encrypt == ENC_AES256) {
+                wc_AesInit(aes, NULL, 0);
+                wc_AesSetKeyDirect(aes, key, keySz, iv, AES_ENCRYPTION);
+            }
+
+            for (i = 0; i < partition->imageSz; i += ENC_BLOCK_SIZE) {
+                /* make sure we don't exceed the buffer size */
+                if (i + ENC_BLOCK_SIZE > partition->imageSz)
+                    encSize = partition->imageSz - i;
+                else
+                    encSize = ENC_BLOCK_SIZE;
+
+                if (CMD.encrypt == ENC_CHACHA)
+                    ret = wc_Chacha_Process(cha, encBuf, partition->imageBuf + i,
+                        encSize);
+                else if (CMD.encrypt == ENC_AES128 ||
+                    CMD.encrypt == ENC_AES256) {
+
+                    ret = wc_AesCtrEncrypt(aes, encBuf, partition->imageBuf + i,
+                        encSize);
+
+                    /* Pad with FF if input is too short */
+                    if (ret == 0 && encSize % ENC_BLOCK_SIZE != 0) {
+                        ret = wc_AesCtrEncrypt(aes, encBuf + encSize,
+                            aesPadding, ENC_BLOCK_SIZE - encSize);
+
+                        encSize = ENC_BLOCK_SIZE;
+                    }
+                }
+
+
+                if (ret == 0)
+                    ret = write(encFd, encBuf, encSize);
+
+                if (ret != (int)encSize) {
+                    ret = -1;
                     break;
                 }
-                /* Pad with FF if input is too short */
-                while((fread_retval % ENC_BLOCK_SIZE) != 0) {
-                    buf[fread_retval++] = 0xFF;
+                else {
+                    ret = 0;
                 }
-                wc_AesCtrEncrypt(&aes_e, enc_buf, buf, fread_retval);
-                fwrite(enc_buf, 1, fread_retval, fef);
             }
         }
-        fclose(fef);
+
+        close(encFd);
     }
-    printf("Output image(s) successfully created.\n");
-    ret = 0;
-    fclose(f2);
-    fclose(f);
-failure:
-    if (header)
-        free(header);
-    if (signature)
-        free(signature);
+
+    if (ret == 0)
+        printf("Output image(s) successfully created.\n");
+
+    close(outFd);
+
     return ret;
 }
 
-static int make_header(uint8_t *pubkey, uint32_t pubkey_sz,
-        const char *image_file, const char *outfile)
-{
-    return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0);
-}
-
-static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
+/*
+static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
-        uint32_t delta_base_version, uint16_t patch_len,
+        uint32_t delta_base_version, uint16_t patch_len, uint32_t patch_inv_off,
+        uint16_t patch_inv_len)
+*/
+static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkeySz,
+        Partition* partition, uint32_t delta_base_version, uint16_t patch_len,
         uint32_t patch_inv_off, uint16_t patch_inv_len)
 {
-    return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile,
-            delta_base_version, patch_len,
-            patch_inv_off, patch_inv_len);
+    int ret = 0;
+    uint32_t headerIdx;
+    uint32_t fw_version32;
+    uint16_t image_type;
+    uint8_t* signature = NULL;
+    uint8_t  buf[1024];
+    uint8_t  digest[48]; /* max digest */
+    uint32_t digestSz = 0;
+    int sigFd;
+
+    if (pubkey == NULL || pubkeySz == 0 || partition == NULL ||
+        partition->imageBuf == NULL || partition->imageSz == 0) {
+        printf("Invalid header input!\n");
+        ret = BAD_FUNC_ARG;
+    }
+
+    if (ret == 0) {
+        headerIdx = 0;
+        partition->headerBuf = malloc(partition->headerSz);
+
+        if (partition->headerBuf == NULL) {
+            printf("Failed to allocate header!\n");
+            ret = MEMORY_E;
+        }
+    }
+
+    if (ret != 0)
+        return ret;
+
+    memset(partition->headerBuf, 0xFF, partition->headerSz);
+
+    /* Append Magic header (spells 'WOLF') */
+    header_append_u32(partition->headerBuf, &headerIdx, WOLFBOOT_MAGIC);
+    /* Append Image size */
+    header_append_u32(partition->headerBuf, &headerIdx, partition->imageSz);
+
+    /* No pad bytes, version is aligned */
+
+    /* Append Version field */
+    fw_version32 = strtol(CMD.fw_version, NULL, 10);
+    header_append_tag(partition->headerBuf, &headerIdx, HDR_VERSION, HDR_VERSION_LEN,
+        &fw_version32);
+
+    /* Append pad bytes, so timestamp val field is 8-byte aligned */
+    while ((headerIdx % 8) != 4)
+        headerIdx++;
+
+    /* Append Timestamp field */
+    header_append_tag(partition->headerBuf, &headerIdx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
+        &partition->timestamp);
+
+    /* Append Image type field */
+    image_type = (uint16_t)CMD.sign & HDR_IMG_TYPE_AUTH_MASK;
+    image_type |= CMD.partition_id;
+    if (is_diff)
+        image_type |= HDR_IMG_TYPE_DIFF;
+    header_append_tag(partition->headerBuf, &headerIdx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
+        &image_type);
+
+    if (is_diff) {
+        /* Append pad bytes, so fields are 4-byte aligned */
+        while ((headerIdx % 4) != 0)
+            headerIdx++;
+        header_append_tag(partition->headerBuf, &headerIdx, HDR_IMG_DELTA_BASE, 4,
+                &delta_base_version);
+        header_append_tag(partition->headerBuf, &headerIdx, HDR_IMG_DELTA_SIZE, 2,
+                &patch_len);
+
+        /* Append pad bytes, so fields are 4-byte aligned */
+        while ((headerIdx % 4) != 0)
+            headerIdx++;
+        header_append_tag(partition->headerBuf, &headerIdx, HDR_IMG_DELTA_INVERSE, 4,
+                &patch_inv_off);
+        header_append_tag(partition->headerBuf, &headerIdx, HDR_IMG_DELTA_INVERSE_SIZE, 2,
+                &patch_inv_len);
+    }
+
+    /* Calculate hashes */
+    if (CMD.hash_algo == HASH_SHA256)
+    {
+#ifndef NO_SHA256
+        wc_Sha256 sha[1];
+        printf("Calculating SHA256 digest...\n");
+        ret = wc_InitSha256_ex(sha, NULL, INVALID_DEVID);
+
+        if (ret == 0) {
+            /* Hash Header */
+            ret = wc_Sha256Update(sha, partition->headerBuf, headerIdx);
+
+            /* Hash image */
+            if (ret == 0)
+                ret = wc_Sha256Update(sha, partition->imageBuf, partition->imageSz);
+
+            if (ret == 0)
+                ret = wc_Sha256Final(sha, digest);
+
+            wc_Sha256Free(sha);
+        }
+        /* pubkey hash calculation */
+        if (ret == 0) {
+            ret = wc_InitSha256_ex(sha, NULL, INVALID_DEVID);
+
+            if (ret == 0) {
+                ret = wc_Sha256Update(sha, pubkey, pubkeySz);
+
+                if (ret == 0)
+                    wc_Sha256Final(sha, buf);
+
+                wc_Sha256Free(sha);
+            }
+        }
+
+        if (ret == 0)
+            digestSz = HDR_SHA256_LEN;
+    #endif
+    }
+    else if (CMD.hash_algo == HASH_SHA384)
+    {
+    #ifndef NO_SHA384
+        wc_Sha384 sha[1];
+        printf("Calculating SHA384 digest...\n");
+        ret = wc_InitSha384_ex(sha, NULL, INVALID_DEVID);
+
+        if (ret == 0) {
+            /* Hash Header */
+            ret = wc_Sha384Update(sha, partition->headerBuf, headerIdx);
+
+            /* Hash image */
+            if (ret == 0)
+                ret = wc_Sha384Update(sha, partition->imageBuf, partition->imageSz);
+
+            if (ret == 0)
+                ret = wc_Sha384Final(sha, digest);
+
+            wc_Sha384Free(sha);
+        }
+        /* pubkey hash calculation */
+        if (ret == 0) {
+            ret = wc_InitSha384_ex(sha, NULL, INVALID_DEVID);
+
+            if (ret == 0) {
+                ret = wc_Sha384Update(sha, pubkey, pubkeySz);
+
+                if (ret == 0)
+                    ret = wc_Sha384Final(sha, buf);
+
+                wc_Sha384Free(sha);
+            }
+        }
+
+        if (ret == 0)
+            digestSz = HDR_SHA384_LEN;
+    #endif
+    }
+    else if (CMD.hash_algo == HASH_SHA3)
+    {
+    #ifdef WOLFSSL_SHA3
+        wc_Sha3 sha[1];
+
+        printf("Calculating SHA3 digest...\n");
+
+        ret = wc_InitSha3_384(sha, NULL, INVALID_DEVID);
+
+        if (ret == 0) {
+            /* Hash Header */
+            ret = wc_Sha3_384_Update(sha, partition->headerBuf, headerIdx);
+
+            /* Hash image */
+            if (ret == 0)
+                ret = wc_Sha3_384_Update(sha, partition->imageBuf, partition->imageSz);
+
+
+            if (ret == 0)
+                ret = wc_Sha3_384_Final(sha, digest);
+
+            wc_Sha3_384_Free(sha);
+        }
+
+        /* pubkey hash calculation */
+        if (ret == 0) {
+            ret = wc_InitSha3_384(sha, NULL, INVALID_DEVID);
+
+            if (ret == 0) {
+                ret = wc_Sha3_384_Update(sha, pubkey, pubkeySz);
+
+                if (ret == 0)
+                    ret = wc_Sha3_384_Final(sha, buf);
+
+                wc_Sha3_384_Free(sha);
+            }
+        }
+
+        if (ret == 0)
+            digestSz = HDR_SHA3_384_LEN;
+    #endif
+    }
+
+    if (digestSz == 0) {
+        printf("Hash algorithm error %d\n", ret);
+        ret = -1;
+    }
+    else {
+        partition->digestBuf = malloc(digestSz);
+
+        if (partition->digestBuf != NULL) {
+            memcpy(partition->digestBuf, digest, digestSz);
+            partition->digestSz = digestSz;
+        }
+        else {
+            ret = MEMORY_E;
+        }
+    }
+
+#ifdef DEBUG_SIGNTOOL
+    printf("Image hash %d\n", digestSz);
+    WOLFSSL_BUFFER(digest, digestSz);
+    printf("Pubkey hash %d\n", digestSz);
+    WOLFSSL_BUFFER(buf, digestSz);
+#endif
+
+    /* Add image hash to header */
+    if (ret == 0)
+        header_append_tag(partition->headerBuf, &headerIdx, CMD.hash_algo, digestSz,
+            digest);
+
+    /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
+    while ((headerIdx % 8) != 4)
+        headerIdx++;
+
+    if (ret == 0 && CMD.sign != NO_SIGN) {
+        WC_RNG rng[1];
+        /* Add Pubkey Hash to header */
+        header_append_tag(partition->headerBuf, &headerIdx, HDR_PUBKEY, digestSz, buf);
+
+        /* If hash only, then save digest and exit */
+        if (CMD.sha_only) {
+            goto finish;
+        }
+
+        /* Sign the digest */
+        signature = malloc(CMD.signature_sz);
+
+        ret = signature == NULL;
+
+        if (ret == 0) {
+            memset(signature, 0, CMD.signature_sz);
+
+            ret = NOT_COMPILED_IN; /* default error */
+
+            if (!CMD.manual_sign) {
+                printf("Signing the digest...\n");
+#ifdef DEBUG_SIGTOOL
+                printf("Digest %d\n", digestSz);
+                WOLFSSL_BUFFER(digest, digestSz);
+#endif
+                wc_InitRng(rng);
+                if (CMD.sign == SIGN_ED25519) {
+#ifdef HAVE_ED25519
+                    ret = wc_ed25519_sign_msg(digest, digestSz, signature,
+                            &CMD.signature_sz, key.ed);
+#endif
+                }
+                else if (CMD.sign == SIGN_ED448) {
+#ifdef HAVE_ED448
+                    ret = wc_ed448_sign_msg(digest, digestSz, signature,
+                            &CMD.signature_sz, key.ed4, NULL, 0);
+#endif
+                }
+#ifdef HAVE_ECC
+                else if (CMD.sign == SIGN_ECC256) {
+                    mp_int r, s;
+                    mp_init(&r); mp_init(&s);
+                    ret = wc_ecc_sign_hash_ex(digest, digestSz, rng, key.ecc,
+                            &r, &s);
+                    mp_to_unsigned_bin(&r, &signature[0]);
+                    mp_to_unsigned_bin(&s, &signature[32]);
+                    mp_clear(&r); mp_clear(&s);
+                }
+                else if (CMD.sign == SIGN_ECC384) {
+                    mp_int r, s;
+                    mp_init(&r); mp_init(&s);
+                    ret = wc_ecc_sign_hash_ex(digest, digestSz, rng, key.ecc,
+                            &r, &s);
+                    mp_to_unsigned_bin(&r, &signature[0]);
+                    mp_to_unsigned_bin(&s, &signature[48]);
+                    mp_clear(&r); mp_clear(&s);
+                }
+                else if (CMD.sign == SIGN_ECC521) {
+                    mp_int r, s;
+                    mp_init(&r); mp_init(&s);
+                    ret = wc_ecc_sign_hash_ex(digest, digestSz, rng, key.ecc,
+                            &r, &s);
+                    mp_to_unsigned_bin(&r, &signature[0]);
+                    mp_to_unsigned_bin(&s, &signature[66]);
+                    mp_clear(&r); mp_clear(&s);
+                }
+#endif
+                else if (CMD.sign == SIGN_RSA2048 || 
+                        CMD.sign == SIGN_RSA3072 ||
+                        CMD.sign == SIGN_RSA4096) {
+
+#ifndef NO_RSA
+                    uint32_t enchash_sz = digestSz;
+                    uint8_t* enchash = digest;
+                    if (CMD.sign_wenc) {
+                        /* add ASN.1 signature encoding */
+                        int hashOID = 0;
+                        if (CMD.hash_algo == HASH_SHA256)
+                            hashOID = SHA256h;
+                        else if (CMD.hash_algo == HASH_SHA3)
+                            hashOID = SHA3_384h;
+                        enchash_sz = wc_EncodeSignature(buf, digest, digestSz,
+                                hashOID);
+                        enchash = buf;
+                    }
+                    ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature,
+                            CMD.signature_sz,
+                            key.rsa, rng);
+                    if (ret > 0) {
+                        CMD.signature_sz = ret;
+                        ret = 0;
+                    }
+#endif
+                }
+
+                wc_FreeRng(rng);
+
+                if (ret != 0) {
+                    printf("Signing error %d\n", ret);
+                }
+            }
+            else {
+                printf("Opening signature file %s\n", CMD.signature_file);
+
+                sigFd = open(CMD.signature_file, O_RDONLY, 0666);
+
+                if (sigFd < 0) {
+                    printf("Open signature file %s failed\n", CMD.signature_file);
+                    ret = -1;
+                }
+
+                ret = read(sigFd, signature, CMD.signature_sz);
+
+                close(sigFd);
+
+                if (ret != (int)CMD.signature_sz) {
+                    printf("Error reading file %s\n", CMD.signature_file);
+                    ret = -1;
+                }
+            }
+        }
+
+#ifdef DEBUG_SIGNTOOL
+        printf("Signature %d\n", CMD.signature_sz);
+        WOLFSSL_BUFFER(signature, CMD.signature_sz);
+#endif
+
+        /* Add signature to header */
+        header_append_tag(partition->headerBuf, &headerIdx, HDR_SIGNATURE, CMD.signature_sz,
+                signature);
+    }
+
+    /* Add padded header at end */
+    while ((int)headerIdx < partition->headerSz) {
+        partition->headerBuf[headerIdx++] = 0xFF;
+    }
+
+finish:
+    if (ret != 0) {
+        if (partition->headerBuf)
+            free(partition->headerBuf);
+        if (partition->digestBuf)
+            free(partition->digestBuf);
+    }
+
+    if (signature)
+        free(signature);
+
+    return ret;
 }
 
-static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, int padding)
+static int make_header(uint8_t *pubkey, uint32_t pubkeySz,
+    Partition* partition)
+{
+    return make_header_ex(0, pubkey, pubkeySz, partition, 0, 0, 0, 0);
+}
+
+static int make_header_delta(uint8_t *pubkey, uint32_t pubkeySz,
+  Partition* partition, uint32_t delta_base_version, uint16_t patch_len,
+  uint32_t patch_inv_off, uint16_t patch_inv_len)
+{
+    return make_header_ex(1, pubkey, pubkeySz, partition, delta_base_version,
+        patch_len, patch_inv_off, patch_inv_len);
+}
+
+static int base_diff(uint8_t *pubkey, uint32_t pubkey_sz, int padding, Partition* partition)
 {
     int fd1 = -1, fd2 = -1, fd3 = -1;
     int len1 = 0, len2 = 0, len3 = 0;
@@ -1201,24 +1283,28 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     uint16_t patch_sz, patch_inv_sz;
     uint32_t patch_inv_off;
     uint32_t delta_base_version = 0;
-    char *base_ver_p, *base_ver_e;
+    char *base_ver_e;
     WB_DIFF_CTX diff_ctx;
     int ret = -1;
     int io_sz;
 
     /* Get source file size */
+    /*
     if (stat(f_base, &st) < 0) {
         printf("Cannot stat %s\n", f_base);
         goto cleanup;
     }
     len1 = st.st_size;
+    */
+    len1 = partition->baseSz;
 
     if (len1 > MAX_SRC_SIZE) {
-        printf("%s: file too large\n", f_base);
+        printf("file too large\n");
         goto cleanup;
     }
 
     /* Open base image */
+    /*
     fd1 = open(f_base, O_RDWR);
     if (fd1 < 0) {
         printf("Cannot open file %s\n", f_base);
@@ -1241,16 +1327,16 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
 #endif
-
+    */
+    base = partition->baseBuf;
 
     /* Check base image version */
-    base_ver_p = strstr(f_base, "_v");
-    if (base_ver_p) {
-        base_ver_p += 2;
-        base_ver_e = strchr(base_ver_p, '_');
+    if (partition->baseVerP) {
+        partition->baseVerP += 2;
+        base_ver_e = strchr(partition->baseVerP, '_');
         if (base_ver_e) {
             long long retval;
-            retval = strtoll(base_ver_p, NULL, 10);
+            retval = strtoll(partition->baseVerP, NULL, 10);
             if (retval < 0)
                 delta_base_version = 0;
             else
@@ -1259,14 +1345,14 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     }
 
     if (delta_base_version == 0) {
-        printf("Could not read firmware version from base file %s\n", f_base);
+        printf("Could not read firmware version from base file\n");
         goto cleanup;
     } else {
         printf("Delta base version: %u\n", delta_base_version);
     }
 
     /* Open second image file */
-    fd2 = open(CMD.output_image_file, O_RDONLY);
+    fd2 = open(CMD.output_image_file, O_RDONLY, 0666);
     if (fd2 < 0) {
         printf("Cannot open file %s\n", CMD.output_image_file);
         goto cleanup;
@@ -1362,7 +1448,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     printf("Successfully created output file %s\n", wolfboot_delta_file);
 
     /* Create delta file, with header, from the resulting patch */
-    ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
+    ret = make_header_delta(pubkey, pubkey_sz, partition,
             delta_base_version, patch_sz, patch_inv_off, patch_inv_sz);
 
 cleanup:
@@ -1409,9 +1495,13 @@ int main(int argc, char** argv)
     const char* hash_str = "SHA256";
     uint8_t  buf[1024];
     uint8_t *pubkey = NULL;
-    uint32_t pubkey_sz = 0;
+    uint32_t pubkeySz = 0;
     uint8_t *kbuf=NULL, *key_buffer;
     uint32_t key_buffer_sz;
+    Partition partition[1];
+    int imageFd;
+    int baseFd;
+    struct stat attrib;
 
 #ifdef DEBUG_SIGNTOOL
     wolfSSL_Debugging_ON();
@@ -1607,7 +1697,7 @@ int main(int argc, char** argv)
                 "*** Image will not be authenticated!\n"
                 "*** SECURE BOOT DISABLED.\n");
     } else {
-        kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkey_sz);
+        kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkeySz);
         if (!kbuf) {
             exit(1);
         }
@@ -1619,19 +1709,112 @@ int main(int argc, char** argv)
         exit(2);
     }
 
-    make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
+    memset(partition, 0, sizeof(partition));
+    partition->headerSz = CMD.header_sz;
 
-    if (CMD.delta) {
-        if (CMD.encrypt)
-            ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 64);
-        else
-            ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 16);
+    /* get the last modified time of the image */
+    stat(CMD.image_file, &attrib);
+    partition->timestamp = attrib.st_ctime;
+
+    /* read in the image */
+    imageFd = open(CMD.image_file, O_RDONLY, 0666);
+
+    if (imageFd < 0)
+        ret = imageFd;
+
+    if (ret == 0) {
+        partition->imageSz = lseek(imageFd, 0, SEEK_END);
+
+        if (partition->imageSz <= 0)
+            ret = -1;
     }
+
+    if (ret == 0)
+        ret = lseek(imageFd, 0, SEEK_SET);
+
+    if (ret == 0) {
+        partition->imageBuf = malloc(partition->imageSz);
+
+        if (partition->imageBuf == NULL)
+            ret = MEMORY_E;
+    }
+
+    if (ret == 0) {
+        ret = read(imageFd, partition->imageBuf, partition->imageSz);
+
+        if (ret == partition->imageSz)
+            ret = 0;
+    }
+
+    if (imageFd > 0)
+        close(imageFd);
+
+    /* make the header from the image */
+    if (ret == 0)
+        ret = make_header(pubkey, pubkeySz, partition);
+
+    /* write the image to file */
+    if (ret == 0)
+        ret = write_signed_image(partition);
+
+    if (ret == 0 && CMD.delta) {
+        /* read the base file */
+        baseFd = open(CMD.delta_base_file, O_RDONLY, 0666);
+
+        /* we should get version from tags, filename seems like a bad idea */
+        partition->baseVerP = strstr(CMD.delta_base_file, "_v");
+
+        if (baseFd < 0)
+            ret = -1;
+
+        if (ret == 0) {
+            partition->baseSz = lseek(baseFd, 0, SEEK_END);
+
+            if (partition->baseSz <= 0)
+                ret = -1;
+        }
+
+        if (ret == 0)
+            ret = lseek(baseFd, 0, SEEK_SET);
+
+        if (ret == 0) {
+            partition->baseBuf = malloc(partition->baseSz);
+
+            if (partition->baseBuf == NULL)
+                ret = MEMORY_E;
+        }
+
+        if (ret == 0) {
+            ret = read(baseFd, partition->baseBuf, partition->baseSz);
+
+            if (ret == partition->baseSz)
+                ret = 0;
+        }
+
+        if (ret == 0) {
+            if (CMD.encrypt)
+                ret = base_diff(pubkey, pubkeySz, 64, partition);
+            else
+                ret = base_diff(pubkey, pubkeySz, 16, partition);
+        }
+    }
+
+    if (ret != 0)
+        printf("Signing process failed, error %d\n", ret);
 
     if (kbuf)
         free(kbuf);
     if (pubkey && pubkey != kbuf)
         free(pubkey);
+    if (partition->headerBuf)
+        free(partition->headerBuf);
+    if (partition->imageBuf)
+        free(partition->imageBuf);
+    if (partition->digestBuf)
+        free(partition->digestBuf);
+    if (partition->baseBuf)
+        free(partition->baseBuf);
+
     if (CMD.sign == SIGN_ED25519) {
 #ifdef HAVE_ED25519
         wc_ed25519_free(key.ed);

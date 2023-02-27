@@ -82,6 +82,7 @@
 
 /* Globals */
 static FILE *fpub;
+static FILE *fimg;
 static int force = 0;
 static WC_RNG rng;
 
@@ -98,6 +99,7 @@ struct keystore_slot {
 };
 
 char pubkeyfile[PATH_MAX]= "src/keystore.c";
+char imagefile[PATH_MAX]= "keystore.img";
 char keystoreDir[PATH_MAX] = "\0";
 
 const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generated. Do not edit.  */\n"
@@ -249,14 +251,10 @@ static uint32_t get_pubkey_size(uint32_t keyType)
     return size;
 }
 
-void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile,
-    void* wcKey, int exportPub)
+void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile)
 {
-    int ret = 0;
     static int id_slot = 0;
     struct keystore_slot sl;
-    char* pubkeyFile;
-    FILE* pubkeyFd;
 
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
         fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
@@ -268,89 +266,20 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     fprintf(fpub, Slot_footer);
     printf("Associated key file:   %s\n", keyfile);
 
-    if (exportPub == 1) {
-        /* 8 for _pub.der, 1 for /, 1 for null terminator */
-        pubkeyFile = malloc(strlen(keystoreDir) + strlen(keyfile) + 10);
-
-        /* if we don't have a keystore dir use current dir */
-        if (strlen(keystoreDir) == 0)
-            sprintf(pubkeyFile, "%s_pub.der", keyfile);
-        else
-            sprintf(pubkeyFile, "%s/%s_pub.der", keystoreDir, keyfile);
-
-        printf("Exported public key:  %s\n", pubkeyFile);
-    }
-
     printf("Key type   :           %s\n", KName[ktype]);
     printf("Public key slot:       %u\n", id_slot);
 
     memset(&sl, 0, sizeof(sl));
+
+    /* write the slot to the img file */
     sl.slot_id = id_slot;
     sl.key_type = ktype;
     sl.part_id_mask = 0xFFFFFFFF;
-
     sl.pubkey_size = get_pubkey_size(ktype);
-
     memcpy(sl.pubkey, key, sz);
-
-    /* write the key in der format, already in der for rsa */
-    if (exportPub == 1) {
-        if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
-            ktype == KEYGEN_ECC521) {
-            ret = wc_EccPublicKeyToDer((ecc_key*)wcKey, sl.pubkey,
-                sizeof(sl.pubkey), 1);
-
-            if (ret < 0) {
-                printf("Failed to export ecc public key %d\n", ret);
-                exit(2);
-            }
-
-            sl.pubkey_size = ret;
-        }
-        else if (ktype == KEYGEN_ED25519) {
-            ret = wc_Ed25519PublicKeyToDer((ed25519_key*)wcKey, sl.pubkey,
-                sizeof(sl.pubkey), 1);
-
-            if (ret < 0) {
-                printf("Failed to export ed25519 public key %d\n", ret);
-                exit(2);
-            }
-
-            sl.pubkey_size = ret;
-        }
-        else if (ktype == KEYGEN_ED448) {
-            ret = wc_Ed448PublicKeyToDer((ed448_key*)wcKey, sl.pubkey,
-                sizeof(sl.pubkey), 1);
-
-            if (ret < 0) {
-                printf("Failed to export ed448 public key %d\n", ret);
-                exit(2);
-            }
-
-            sl.pubkey_size = ret;
-        }
-        else {
-            sl.pubkey_size = sz;
-        }
-
-        pubkeyFd = fopen(pubkeyFile, "wb");
-
-        if (pubkeyFd == NULL) {
-            printf("Failed to open %s\n", pubkeyFile);
-            exit(2);
-        }
-
-        ret = fwrite(sl.pubkey, sl.pubkey_size, 1, pubkeyFd);
-
-        if (ret <= 0) {
-            printf("Failed to write %s\n", pubkeyFile);
-            exit(2);
-        }
-
-        free(pubkeyFile);
-    }
-
     id_slot++;
+
+    fwrite(&sl, sizeof(sl), 1, fimg);
 }
 
 #if !defined(NO_RSA) && defined(WOLFSSL_KEY_GEN)
@@ -390,11 +319,11 @@ static void keygen_rsa(const char *keyfile, int kbits)
     fclose(fpriv);
 
     if (kbits == 2048)
-        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile, NULL, 1);
+        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile);
     else if (kbits == 3072)
-        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile, NULL, 1);
+        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile);
     else if (kbits == 4096)
-        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile, NULL, 1);
+        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile);
 }
 #endif
 
@@ -445,11 +374,11 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
 
     if (ecc_key_size == 32)
-        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, k, 1);
+        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname);
     else if (ecc_key_size == 48)
-        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, k, 1);
+        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname);
     else if (ecc_key_size == 66)
-        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, k, 1);
+        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname);
 
     wc_ecc_free(k);
 }
@@ -489,7 +418,7 @@ static void keygen_ed25519(const char *privkey)
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
-    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, k, 1);
+    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey);
 
     wc_ed25519_free(k);
 }
@@ -528,7 +457,7 @@ static void keygen_ed448(const char *privkey)
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
     fclose(fpriv);
-    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey, k, 1);
+    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey);
 
     wc_ed448_free(k);
 }
@@ -600,9 +529,7 @@ static void key_import(uint32_t ktype, const char *fname)
 {
     int ret = 0;
     /* so we don't try to free if it doesn't get used */
-    int initEcc = -1;
-    int init25519 = -1;
-    int init448 = -1;
+    int initKey = -1;
     uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
     FILE* file;
     int readLen = 0;
@@ -613,7 +540,6 @@ static void key_import(uint32_t ktype, const char *fname)
     uint32_t keySzOut = 0;
     uint32_t qxSz = ECC_MAXSIZE;
     uint32_t qySz = ECC_MAXSIZE;
-    void* anyKey = NULL;
 
     file = fopen(fname, "rb");
 
@@ -637,7 +563,7 @@ static void key_import(uint32_t ktype, const char *fname)
     if ((uint32_t)readLen > keySz) {
         if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
             ktype == KEYGEN_ECC521) {
-            initEcc = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey,
+            initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey,
                 readLen);
 
             if (ret == 0) {
@@ -645,25 +571,28 @@ static void key_import(uint32_t ktype, const char *fname)
                     buf + keySz / 2, &qySz);
             }
 
-            anyKey = eccKey;
+            if (initKey == 0)
+                wc_ecc_free(eccKey);
         }
         else if (ktype == KEYGEN_ED25519) {
-            init25519 = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
+            initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
                 ed25519Key, readLen);
 
             if (ret == 0)
                 ret = wc_ed25519_export_public(ed25519Key, buf, &qxSz);
 
-            anyKey = ed25519Key;
+            if (initKey == 0)
+                wc_ed25519_free(ed25519Key);
         }
         else if (ktype == KEYGEN_ED448) {
-            init448 = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
+            initKey = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
                 ed448Key, readLen);
 
             if (ret == 0)
                 ret = wc_ed448_export_public(ed448Key, buf, &qxSz);
 
-            anyKey = ed448Key;
+            if (initKey == 0)
+                wc_ed448_free(ed448Key);
         }
 
         readLen = keySz;
@@ -676,14 +605,7 @@ static void key_import(uint32_t ktype, const char *fname)
     }
 
     /* we don't want to export the public key because we are the public key */
-    keystore_add(ktype, buf, readLen, fname, anyKey, 0);
-
-    if (initEcc == 0)
-        wc_ecc_free(eccKey);
-    if (init25519 == 0)
-        wc_ed25519_free(ed25519Key);
-    if (init448 == 0)
-        wc_ed448_free(ed448Key);
+    keystore_add(ktype, buf, readLen, fname);
 }
 
 int main(int argc, char** argv)
@@ -742,6 +664,7 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "-keystoreDir") == 0) {
             i++;
             sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c"); 
+            sprintf(imagefile,"%s%s", argv[i], "/keystore.img"); 
             sprintf(keystoreDir, "%s", argv[i]);
             i++;
             continue;
@@ -759,6 +682,13 @@ int main(int argc, char** argv)
         fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkeyfile, strerror(errno));
         exit(4);
     }
+
+    fimg = fopen(imagefile, "wb");
+    if (fimg == NULL) {
+        fprintf(stderr, "Unable to open file '%s' for writing: %s", imagefile, strerror(errno));
+        exit(4);
+    }
+
     wc_InitRng(&rng);
     fprintf(fpub, Cfile_Banner, KName[keytype]);
     fprintf(fpub, Store_hdr, n_pubkeys);
@@ -779,6 +709,8 @@ int main(int argc, char** argv)
     fprintf(fpub, Keystore_API);
     if (fpub)
         fclose(fpub);
+    if (fimg)
+        fclose(fimg);
     printf("Done.\n");
     return 0;
 }
