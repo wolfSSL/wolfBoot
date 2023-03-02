@@ -29,16 +29,17 @@
 #include "fsl_iomuxc.h"
 #include "fsl_nor_flash.h"
 #include "fsl_flexspi.h"
-#include "fsl_flexspi_nor_flash.h"
+
 #ifdef CPU_MIMXRT1062DVL6A
-#include "imx_rt1060_nor.h"
+#include "evkmimxrt1060_flexspi_nor_config.h"
 #endif
 #ifdef CPU_MIMXRT1052DVJ6B
-#include "imx_rt1050_nor.h"
+#include "evkbimxrt1050_flexspi_nor_config.h"
 #endif
 #ifdef CPU_MIMXRT1064DVL6A
-#include "imx_rt1064_nor.h"
+#include "evkmimxrt1064_flexspi_nor_config.h"
 #endif
+
 #include "xip/fsl_flexspi_nor_boot.h"
 
 #ifdef __WOLFBOOT
@@ -180,12 +181,12 @@ flexspi_nor_config_t flexspi_config;
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1064DVL6A
-#define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
-#define CONFIG_FLASH_PAGE_SIZE 256UL        /* 256Bytes  */
-#define CONFIG_FLASH_SECTOR_SIZE (4 * 1024) /* 4KBytes   */
-#define CONFIG_FLASH_BLOCK_SIZE (64 * 1024) /* 64KBytes  */
-#define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
-#define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_100MHz
+    #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
+    #define CONFIG_FLASH_PAGE_SIZE 256UL        /* 256Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE (4 * 1024) /* 4KBytes   */
+    #define CONFIG_FLASH_BLOCK_SIZE (64 * 1024) /* 64KBytes  */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
+    #define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_100MHz
 const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
     .memConfig =
         {
@@ -245,12 +246,12 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 
 #ifdef CPU_MIMXRT1052DVJ6B
-    #define CONFIG_FLASH_SIZE                (64 * 1024 * 1024) /* 64MBytes  */
-    #define CONFIG_FLASH_PAGE_SIZE           512UL              /* 512Bytes  */
-    #define CONFIG_FLASH_SECTOR_SIZE         (256 * 1024)       /* 256KBytes */
-    #define CONFIG_FLASH_BLOCK_SIZE          (256 * 1024)       /* 256KBytes */
-    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE   true
-    #define CONFIG_SERIAL_CLK_FREQ  kFlexSpiSerialClk_30MHz
+    #define CONFIG_FLASH_SIZE (64 * 1024 * 1024)  /* 64MBytes  */
+    #define CONFIG_FLASH_PAGE_SIZE 512UL          /* 512Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE (256 * 1024) /* 256KBytes */
+    #define CONFIG_FLASH_BLOCK_SIZE (256 * 1024)  /* 256KBytes */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE true
+    #define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_30MHz
 const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
     .memConfig =
         {
