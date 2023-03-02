@@ -291,7 +291,7 @@ ifeq ($(TARGET),nxp_p1021)
 endif
 
 ifeq ($(TARGET),nxp_ls1028a)
-  CFLAGS+= -DTARGET_A72 -DMMU -g
+  CFLAGS+= -DCPU_A72 -DMMU -DTARGET_LS1028A
   LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT" 
 
   # Prune unused functions and data

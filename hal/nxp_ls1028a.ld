@@ -1,14 +1,15 @@
-OUTPUT_FORMAT("elf64-littleaarch64")
+OUTPUT_FORMAT("elf64-littleaarch64", "elf64-littleaarch64", "elf64-littleaarch64")
 OUTPUT_ARCH(aarch64)
-
-ENTRY( _vector_table )
+ENTRY(_vector_table)
 
 MEMORY
 {
     /*The flash address range on LS1028A RDB is 0x20000000 - 0x23FFFFFF.*/
-    FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 0x100000
+    FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
+
     /* DDR4 - 2GB */
-    DRAM (rwx) : ORIGIN = 0x80000000, LENGTH = 0x80000000
+    DRAM (rwx) : ORIGIN = 0x80000000 , LENGTH = 0x007FFFFFFF
+
     /* OCRAM 256K for startup RAM */
     OCRAM (rwx) : ORIGIN = 0x18000000, LENGTH = 256K
 }
@@ -16,62 +17,82 @@ MEMORY
 SECTIONS
 {
     PROVIDE (_DDR_ADDRESS = 0x80000000);
+    PROVIDE (_OCRAM_ADDRESS = 0x18000000);
+    PROVIDE (_FLASH_ADDRESS = @WOLFBOOT_ORIGIN@);
+    PROVIDE (_CORE_NUMBER = 0);
+    PROVIDE (_MEMORY_SIZE = LENGTH(OCRAM));
+    PROVIDE (_FLASH_SIZE = LENGTH(FLASH));
 
     /* Stack size per core */
-    PROVIDE (STACK_SIZE = 0x1000);
+    PROVIDE (STACK_SIZE = 50K);
 
     .boot :
     {
         PROVIDE(_vector_table = .);
         ._vector_table = .;
-        . = ALIGN(8);
+        . = ALIGN(0x800);
         KEEP(*(.vector_table))
         KEEP(*(.boot*))
-    } > OCRAM
+    } > FLASH
+
+
+    /* Read-only sections, merged into text segment: */
+    .interp         : { *(.interp) }
+    .note.gnu.build-id : { *(.note.gnu.build-id) }
+    .hash           : { *(.hash) }
+    .gnu.hash       : { *(.gnu.hash) }
+    .dynsym         : { *(.dynsym) }
+    .dynstr         : { *(.dynstr) }
+    .gnu.version    : { *(.gnu.version) }
+    .gnu.version_d  : { *(.gnu.version_d) }
+    .gnu.version_r  : { *(.gnu.version_r) }
+    .rela.init      : { *(.rela.init) }
+    .rela.text      : { *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*) }
+    .rela.fini      : { *(.rela.fini) }
+    .rela.rodata    : { *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*) }
+    .rela.data.rel.ro   : { *(.rela.data.rel.ro .rela.data.rel.ro.* .rela.gnu.linkonce.d.rel.ro.*) }
+    .rela.data      : { *(.rela.data .rela.data.* .rela.gnu.linkonce.d.*) }
+    .rela.tdata     : { *(.rela.tdata .rela.tdata.* .rela.gnu.linkonce.td.*) }
+    .rela.tbss      : { *(.rela.tbss .rela.tbss.* .rela.gnu.linkonce.tb.*) }
+    .rela.ctors     : { *(.rela.ctors) }
+    .rela.dtors     : { *(.rela.dtors) }
+    .rela.got       : { *(.rela.got) }
+    .rela.bss       : { *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*) }
 
     .text :
     {
         _start_text = .;
         *(.text*)
-        *(.rodata*)
         *(.note.*)
         . = ALIGN(8);
         _end_text = .;
-    } > OCRAM
+    } > FLASH
 
-    .edidx :
+    .rodata :
     {
+        _rodata_start = .;
+        *(.rodata)
+        *(.rodata.*)
         . = ALIGN(8);
-        *(.ARM.exidx*)
-    } > OCRAM
+        _rodata_end = .;
+    } > FLASH
 
-    /* Read-only sections, merged into text segment: */
-    .interp         : { *(.interp) }
-    .hash           : { *(.hash) }
-    .dynsym         : { *(.dynsym) }
-    .dynstr         : { *(.dynstr) }
-    .gnu.version    : { *(.gnu.version) }
-    .gnu.version_r  : { *(.gnu.version_r) }
-    .gnu.hash       : { *(.gnu.hash) }
-    .rela.dyn       : { *(.rela.dyn) }
-
-    _stored_data = .;
+    PROVIDE(_stored_data = .); 
 
     .data : AT (_stored_data)
     {
         _start_data = .;
-        KEEP(*(.data*))
-        . = ALIGN(4);
-        KEEP(*(.ramcode))
-        . = ALIGN(4);
+        KEEP(*(.data .data.* .gnu.linkonce.d.*))
+        . = ALIGN(8);
         _end_data = .;
     } > OCRAM
 
-    .bss (NOLOAD) :
+    .bss :
     {
         _start_bss = .;
         __bss_start__ = .;
-        *(.bss*)
+        *(.dynbss)
+        *(.bss .bss.* .gnu.linkonce.b.*)
         *(COMMON)
         . = ALIGN(4);
         _end_bss = .;
@@ -79,15 +100,13 @@ SECTIONS
         _end = .;
     } > OCRAM
 
-    /* Stack */
-    .stack :
+    . = ALIGN(16);
+    .stack : 
     {
-        . = ALIGN(16);
-        . += STACK_SIZE;
-        _stack = .;
-        *(.stack)
+        _start_stack = .;
+        . = . + STACK_SIZE;
+        _end_stack = .;
     } > OCRAM
 
-    PROVIDE(_stack_top = ADDR(.stack));
     PROVIDE(_stack_base = .);
 }

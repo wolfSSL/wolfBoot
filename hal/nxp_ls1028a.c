@@ -29,13 +29,8 @@
 #endif
 
 
-/* Fixed addresses */
-static const void* kernel_addr  = (void*)0x0140000;
-static const void* update_addr  = (void*)0x1140000;
-static const void* dts_addr     = (void*)0x00a0000;
-
 /* HAL options */
-//#define ENABLE_DDR
+#define ENABLE_DDR
 
 /* LS1028A */
 #define CCSRBAR    (0x1000000)
@@ -268,6 +263,7 @@ static const void* dts_addr     = (void*)0x00a0000;
 
 /* MT40A1G8SA-075:E --> DDR4: static, 1GB, 1600 MHz (1.6 GT/s) */
 #define DDR_ADDRESS            0x80000000
+#define DDR_FREQ               1600
 #define DDR_SIZE               (2 * 1024 * 1024 * 1024)
 #define DDR_N_RANKS            1
 #define DDR_RANK_DENS          0x100000000
@@ -297,54 +293,64 @@ static const void* dts_addr     = (void*)0x00a0000;
 #define DDR_TCCDL_PS           5000
 #define DDR_REF_RATE_PS        7800000
 
-#define DDR_CS0_BNDS_VAL       0x0000007F
-#define DDR_CS1_BNDS_VAL       0x0
-#define DDR_CS2_BNDS_VAL       0x0
-#define DDR_CS3_BNDS_VAL       0x0
-#define DDR_CS0_CONFIG_VAL     0x80040322
+#define DDR_CS0_BNDS_VAL       0x000000FF
+#define DDR_CS1_BNDS_VAL       0x00000000
+#define DDR_CS2_BNDS_VAL       0x00000000
+#define DDR_CS3_BNDS_VAL       0x00000000
+#define DDR_CS0_CONFIG_VAL     0x80040422
 #define DDR_CS1_CONFIG_VAL     0x00000000
 #define DDR_CS2_CONFIG_VAL     0x00000000
 #define DDR_CS3_CONFIG_VAL     0x00000000
 #define DDR_CS_CONFIG_2_VAL    0x00000000
-
 #define DDR_TIMING_CFG_0_VAL   0x91550018
-#define DDR_TIMING_CFG_1_VAL   0xBBB48C42
+#define DDR_TIMING_CFG_1_VAL   0xBAB40C42
 #define DDR_TIMING_CFG_2_VAL   0x0048C111
-#define DDR_TIMING_CFG_3_VAL   0x010C1000
+#define DDR_TIMING_CFG_3_VAL   0x01111000
 #define DDR_TIMING_CFG_4_VAL   0x00000002
 #define DDR_TIMING_CFG_5_VAL   0x03401400
 #define DDR_TIMING_CFG_6_VAL   0x00000000
-#define DDR_TIMING_CFG_7_VAL   0x13300000
-#define DDR_TIMING_CFG_8_VAL   0x02115600
-
+#define DDR_TIMING_CFG_7_VAL   0x23300000
+#define DDR_TIMING_CFG_8_VAL   0x02114600
+#define DDR_DQ_MAP_0_VAL       0x5b65b658
+#define DDR_DQ_MAP_1_VAL       0xd96d8000
+#define DDR_DQ_MAP_2_VAL       0x00000000
+#define DDR_DQ_MAP_3_VAL       0x01600000
 #define DDR_SDRAM_MODE_VAL     0x03010210
-#define DDR_SDRAM_MODE_2_VAL   0x00000000
-#define DDR_SDRAM_MODE_3_VAL   0x00001021
-#define DDR_SDRAM_MODE_9_VAL   0x00000500
-#define DDR_SDRAM_MODE_10_VAL  0x04000000
-#define DDR_SDRAM_MODE_11_VAL  0x00000400
+#define DDR_SDRAM_MODE_2_VAL   0x00010210
+#define DDR_SDRAM_MODE_3_VAL   0x00000000
+#define DDR_SDRAM_MODE_4_VAL   0x00010210
+#define DDR_SDRAM_MODE_6_VAL   0x00010210
+#define DDR_SDRAM_MODE_9_VAL   0x04000000
+#define DDR_SDRAM_MODE_8_VAL   0x00000500
+#define DDR_SDRAM_MODE_10_VAL  0x00000400
+#define DDR_SDRAM_MODE_11_VAL  0x04000000
+#define DDR_SDRAM_MODE_12_VAL  0x00000400
+#define DDR_SDRAM_MODE_13_VAL  0x04000000
+#define DDR_SDRAM_MODE_14_VAL  0x00000400
+#define DDR_SDRAM_MODE_15_VAL  0x04000000
 #define DDR_SDRAM_MD_CNTL_VAL  0x00000000
-
-#define DDR_SDRAM_CFG_VAL      0xC50C0008
+#define DDR_SDRAM_CFG_VAL      0xE50C0004
 #define DDR_SDRAM_CFG_2_VAL    0x00401100
-
+#define DDR_SDRAM_CFG_3_VAL    0x00000000
 #define DDR_SDRAM_INTERVAL_VAL 0x18600618
 #define DDR_DATA_INIT_VAL      0xDEADBEEF
-#define DDR_SDRAM_CLK_CNTL_VAL 0x03000000
+#define DDR_SDRAM_CLK_CNTL_VAL 0x02000000
 #define DDR_ZQ_CNTL_VAL        0x8A090705
-
-#define DDR_WRLVL_CNTL_VAL     0x8675F607
-#define DDR_WRLVL_CNTL_2_VAL   0x07090800
-#define DDR_WRLVL_CNTL_3_VAL   0x00000000
-
+#define DDR_WRLVL_CNTL_VAL     0x8675F605
+#define DDR_WRLVL_CNTL_2_VAL   0x06070700
+#define DDR_WRLVL_CNTL_3_VAL   0x00000008
 #define DDR_SDRAM_RCW_1_VAL    0x00000000
 #define DDR_SDRAM_RCW_2_VAL    0x00000000
-
+#define DDR_SDRAM_RCW_3_VAL    0x00000000
+#define DDR_SDRAM_RCW_4_VAL    0x00000000
+#define DDR_SDRAM_RCW_5_VAL    0x00000000
+#define DDR_SDRAM_RCW_6_VAL    0x00000000
 #define DDR_DDRCDR_1_VAL       0x80040000
 #define DDR_DDRCDR_2_VAL       0x0000A181
-
 #define DDR_ERR_INT_EN_VAL     0x00000000
 #define DDR_ERR_SBE_VAL        0x00000000
+
+#define DDR_SDRAM_CFG_BI	   0x00000001
 
 /* 12.4 DDR Memory Map */
 #define DDR_BASE           (0x1080000)
@@ -352,37 +358,35 @@ static const void* dts_addr     = (void*)0x00a0000;
 
 #define DDR_CS_BNDS(n)     *((volatile uint32_t*)(DDR_BASE + 0x000 + (n * 8))) /* Chip select n memory bounds */
 #define DDR_CS_CONFIG(n)   *((volatile uint32_t*)(DDR_BASE + 0x080 + (n * 4))) /* Chip select n configuration */
-#define DDR_SDRAM_CFG      *((volatile uint32_t*)(DDR_BASE + 0x110)) /* DDR SDRAM control configuration */
-#define DDR_SDRAM_CFG_2    *((volatile uint32_t*)(DDR_BASE + 0x114)) /* DDR SDRAM control configuration 2 */
-#define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
-#define DDR_INIT_ADDR      *((volatile uint32_t*)(DDR_BASE + 0x148)) /* DDR training initialization address */
-#define DDR_INIT_EXT_ADDR  *((volatile uint32_t*)(DDR_BASE + 0x14C)) /* DDR training initialization extended address */
-#define DDR_DATA_INIT      *((volatile uint32_t*)(DDR_BASE + 0x128)) /* DDR training initialization value */
 #define DDR_TIMING_CFG_3   *((volatile uint32_t*)(DDR_BASE + 0x100)) /* DDR SDRAM timing configuration 3 */
 #define DDR_TIMING_CFG_0   *((volatile uint32_t*)(DDR_BASE + 0x104)) /* DDR SDRAM timing configuration 0 */
 #define DDR_TIMING_CFG_1   *((volatile uint32_t*)(DDR_BASE + 0x108)) /* DDR SDRAM timing configuration 1 */
 #define DDR_TIMING_CFG_2   *((volatile uint32_t*)(DDR_BASE + 0x10C)) /* DDR SDRAM timing configuration 2 */
+#define DDR_SDRAM_CFG      *((volatile uint32_t*)(DDR_BASE + 0x110)) /* DDR SDRAM control configuration */
+#define DDR_SDRAM_CFG_2    *((volatile uint32_t*)(DDR_BASE + 0x114)) /* DDR SDRAM control configuration 2 */
+#define DDR_SDRAM_MODE     *((volatile uint32_t*)(DDR_BASE + 0x118)) /* DDR SDRAM mode configuration */
+#define DDR_SDRAM_MODE_2   *((volatile uint32_t*)(DDR_BASE + 0x11C)) /* DDR SDRAM mode configuration 2 */
+#define DDR_SDRAM_MD_CNTL  *((volatile uint32_t*)(DDR_BASE + 0x120)) /* DDR SDRAM mode control */
+#define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
+#define DDR_DATA_INIT      *((volatile uint32_t*)(DDR_BASE + 0x128)) /* DDR training initialization value */
+#define DDR_SDRAM_CLK_CNTL *((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
+#define DDR_INIT_ADDR      *((volatile uint32_t*)(DDR_BASE + 0x148)) /* DDR training initialization address */
+#define DDR_INIT_EXT_ADDR  *((volatile uint32_t*)(DDR_BASE + 0x14C)) /* DDR training initialization extended address */
 #define DDR_TIMING_CFG_4   *((volatile uint32_t*)(DDR_BASE + 0x160)) /* DDR SDRAM timing configuration 4 */
 #define DDR_TIMING_CFG_5   *((volatile uint32_t*)(DDR_BASE + 0x164)) /* DDR SDRAM timing configuration 5 */
 #define DDR_TIMING_CFG_6   *((volatile uint32_t*)(DDR_BASE + 0x168)) /* DDR SDRAM timing configuration 6 */
 #define DDR_TIMING_CFG_7   *((volatile uint32_t*)(DDR_BASE + 0x16C)) /* DDR SDRAM timing configuration 7 */
-#define DDR_TIMING_CFG_8   *((volatile uint32_t*)(DDR_BASE + 0x250)) /* DDR SDRAM timing configuration 8 */
 #define DDR_ZQ_CNTL        *((volatile uint32_t*)(DDR_BASE + 0x170)) /* DDR ZQ calibration control */
 #define DDR_WRLVL_CNTL     *((volatile uint32_t*)(DDR_BASE + 0x174)) /* DDR write leveling control */
-#define DDR_WRLVL_CNTL_2   *((volatile uint32_t*)(DDR_BASE + 0x190)) /* DDR write leveling control 2 */
-#define DDR_WRLVL_CNTL_3   *((volatile uint32_t*)(DDR_BASE + 0x194)) /* DDR write leveling control 3 */
 #define DDR_SR_CNTR        *((volatile uint32_t*)(DDR_BASE + 0x17C)) /* DDR Self Refresh Counter */
 #define DDR_SDRAM_RCW_1    *((volatile uint32_t*)(DDR_BASE + 0x180)) /* DDR Register Control Word 1 */
 #define DDR_SDRAM_RCW_2    *((volatile uint32_t*)(DDR_BASE + 0x184)) /* DDR Register Control Word 2 */
-#define DDR_DDRCDR_1       *((volatile uint32_t*)(DDR_BASE + 0xB28)) /* DDR Control Driver Register 1 */
-#define DDR_DDRCDR_2       *((volatile uint32_t*)(DDR_BASE + 0xB2C)) /* DDR Control Driver Register 2 */
-#define DDR_DDRDSR_1       *((volatile uint32_t*)(DDR_BASE + 0xB20)) /* DDR Debug Status Register 1 */
-#define DDR_DDRDSR_2       *((volatile uint32_t*)(DDR_BASE + 0xB24)) /* DDR Debug Status Register 2 */
-#define DDR_ERR_DISABLE    *((volatile uint32_t*)(DDR_BASE + 0xE44)) /* Memory error disable */
-#define DDR_ERR_INT_EN     *((volatile uint32_t*)(DDR_BASE + 0xE48)) /* Memory error interrupt enable */
-#define DDR_ERR_SBE        *((volatile uint32_t*)(DDR_BASE + 0xE58)) /* Single-Bit ECC memory error management */
-#define DDR_SDRAM_MODE     *((volatile uint32_t*)(DDR_BASE + 0x118)) /* DDR SDRAM mode configuration */
-#define DDR_SDRAM_MODE_2   *((volatile uint32_t*)(DDR_BASE + 0x11C)) /* DDR SDRAM mode configuration 2 */
+#define DDR_WRLVL_CNTL_2   *((volatile uint32_t*)(DDR_BASE + 0x190)) /* DDR write leveling control 2 */
+#define DDR_WRLVL_CNTL_3   *((volatile uint32_t*)(DDR_BASE + 0x194)) /* DDR write leveling control 3 */
+#define DDR_SDRAM_RCW_3    *((volatile uint32_t*)(DDR_BASE + 0x1A0)) /* DDR Register Control Word 3 */
+#define DDR_SDRAM_RCW_4    *((volatile uint32_t*)(DDR_BASE + 0x1A4)) /* DDR Register Control Word 4 */
+#define DDR_SDRAM_RCW_5    *((volatile uint32_t*)(DDR_BASE + 0x1A8)) /* DDR Register Control Word 5 */
+#define DDR_SDRAM_RCW_6    *((volatile uint32_t*)(DDR_BASE + 0x1AC)) /* DDR Register Control Word 6 */
 #define DDR_SDRAM_MODE_3   *((volatile uint32_t*)(DDR_BASE + 0x200)) /* DDR SDRAM mode configuration 3 */
 #define DDR_SDRAM_MODE_4   *((volatile uint32_t*)(DDR_BASE + 0x204)) /* DDR SDRAM mode configuration 4 */
 #define DDR_SDRAM_MODE_5   *((volatile uint32_t*)(DDR_BASE + 0x208)) /* DDR SDRAM mode configuration 5 */
@@ -397,9 +401,20 @@ static const void* dts_addr     = (void*)0x00a0000;
 #define DDR_SDRAM_MODE_14  *((volatile uint32_t*)(DDR_BASE + 0x234)) /* DDR SDRAM mode configuration 14 */
 #define DDR_SDRAM_MODE_15  *((volatile uint32_t*)(DDR_BASE + 0x238)) /* DDR SDRAM mode configuration 15 */
 #define DDR_SDRAM_MODE_16  *((volatile uint32_t*)(DDR_BASE + 0x23C)) /* DDR SDRAM mode configuration 16 */
-#define DDR_SDRAM_MD_CNTL  *((volatile uint32_t*)(DDR_BASE + 0x120)) /* DDR SDRAM mode control */
-#define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
-#define DDR_SDRAM_CLK_CNTL *((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
+#define DDR_TIMING_CFG_8   *((volatile uint32_t*)(DDR_BASE + 0x250)) /* DDR SDRAM timing configuration 8 */
+#define DDR_SDRAM_CFG_3    *((volatile uint32_t*)(DDR_BASE + 0x260)) /* DDR SDRAM configuration 3 */
+#define DDR_DQ_MAP_0       *((volatile uint32_t*)(DDR_BASE + 0x400)) /* DDR DQ Map 0 */
+#define DDR_DQ_MAP_1       *((volatile uint32_t*)(DDR_BASE + 0x404)) /* DDR DQ Map 1 */
+#define DDR_DQ_MAP_2       *((volatile uint32_t*)(DDR_BASE + 0x408)) /* DDR DQ Map 2 */
+#define DDR_DQ_MAP_3       *((volatile uint32_t*)(DDR_BASE + 0x40C)) /* DDR DQ Map 3 */
+#define DDR_DDRDSR_1       *((volatile uint32_t*)(DDR_BASE + 0xB20)) /* DDR Debug Status Register 1 */
+#define DDR_DDRDSR_2       *((volatile uint32_t*)(DDR_BASE + 0xB24)) /* DDR Debug Status Register 2 */
+#define DDR_DDRCDR_1       *((volatile uint32_t*)(DDR_BASE + 0xB28)) /* DDR Control Driver Register 1 */
+#define DDR_DDRCDR_2       *((volatile uint32_t*)(DDR_BASE + 0xB2C)) /* DDR Control Driver Register 2 */
+#define DDR_ERR_DISABLE    *((volatile uint32_t*)(DDR_BASE + 0xE44)) /* Memory error disable */
+#define DDR_ERR_INT_EN     *((volatile uint32_t*)(DDR_BASE + 0xE48)) /* Memory error interrupt enable */
+#define DDR_ERR_SBE        *((volatile uint32_t*)(DDR_BASE + 0xE58)) /* Single-Bit ECC memory error management */
+
 
 #define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
 #define DDR_SDRAM_CFG2_D_INIT  0x00000010 /* data initialization in progress */
@@ -411,7 +426,7 @@ static void uart_init(void)
 {
     /* calc divisor for UART
      * example config values:
-     *  clock_div, baud, base_clk  163 115200 300000000
+     *  clock_div, baud, base_clk  163 115200 400000000
      * +0.5 to round up
      */
     uint32_t div = (((SYS_CLK / 2.0) / (16 * BAUD_RATE)) + 0.5);
@@ -440,16 +455,6 @@ void uart_write(const char* buf, uint32_t sz)
     }
 }
 #endif /* DEBUG_UART */
-
-void* hal_get_primary_address(void)
-{
-    return (void*)kernel_addr;
-}
-
-void* hal_get_update_address(void)
-{
-  return (void*)update_addr;
-}
 
 void* hal_get_dts_address(void)
 {
@@ -533,7 +538,6 @@ void xspi_lut_unlock(void)
 
 void hal_flash_init()
 {
-
     /* Init base XSPI module */
     xspi_init();
 
@@ -569,17 +573,11 @@ void hal_flash_init()
     XSPI_LUT(18) = 0x0;
     XSPI_LUT(19) = 0x0;
 
-    /* LUT5 - Chip Erase */
-    XSPI_LUT(20) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_CE, LUT_ADDR, LUT_PAD(1), LUT_ADDR_3B);
+    /* LUT5 - Read ID */
+    XSPI_LUT(20) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_RID, LUT_STOP, LUT_PAD(1), 0);
     XSPI_LUT(21) = 0x0;
     XSPI_LUT(22) = 0x0;
     XSPI_LUT(23) = 0x0;
-
-    /* LUT6 - Read ID */
-    XSPI_LUT(24) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_RID, LUT_STOP, LUT_PAD(1), 0);
-    XSPI_LUT(25) = 0x0;
-    XSPI_LUT(26) = 0x0;
-    XSPI_LUT(27) = 0x0;
 
     xspi_lut_lock();
 
@@ -610,22 +608,26 @@ void hal_ddr_init() {
     DDR_TIMING_CFG_7 = DDR_TIMING_CFG_7_VAL;
     DDR_TIMING_CFG_8 = DDR_TIMING_CFG_8_VAL;
 
+    DDR_DQ_MAP_0 = DDR_DQ_MAP_0_VAL;
+    DDR_DQ_MAP_1 = DDR_DQ_MAP_1_VAL;
+    DDR_DQ_MAP_2 = DDR_DQ_MAP_2_VAL;
+    DDR_DQ_MAP_3 = DDR_DQ_MAP_3_VAL;
+
     /* DDR SDRAM mode configuration */
+    DDR_SDRAM_CFG_3  = DDR_SDRAM_CFG_3_VAL;
     DDR_SDRAM_MODE   = DDR_SDRAM_MODE_VAL;
     DDR_SDRAM_MODE_2 = DDR_SDRAM_MODE_2_VAL;
     DDR_SDRAM_MODE_3 = DDR_SDRAM_MODE_3_VAL;
-    DDR_SDRAM_MODE_4 = DDR_SDRAM_MODE_2_VAL;
-    DDR_SDRAM_MODE_5 = DDR_SDRAM_MODE_3_VAL;
-    DDR_SDRAM_MODE_6 = DDR_SDRAM_MODE_2_VAL;
-    DDR_SDRAM_MODE_7 = DDR_SDRAM_MODE_3_VAL;
-    DDR_SDRAM_MODE_8 = DDR_SDRAM_MODE_2_VAL;
+    DDR_SDRAM_MODE_4 = DDR_SDRAM_MODE_4_VAL;
+    DDR_SDRAM_MODE_6 = DDR_SDRAM_MODE_6_VAL;
+    DDR_SDRAM_MODE_8 = DDR_SDRAM_MODE_8_VAL;
     DDR_SDRAM_MODE_9 =  DDR_SDRAM_MODE_9_VAL;
     DDR_SDRAM_MODE_10 = DDR_SDRAM_MODE_10_VAL;
     DDR_SDRAM_MODE_11 = DDR_SDRAM_MODE_11_VAL;
-    DDR_SDRAM_MODE_12 = DDR_SDRAM_MODE_10_VAL;
-    DDR_SDRAM_MODE_13 = DDR_SDRAM_MODE_11_VAL;
-    DDR_SDRAM_MODE_14 = DDR_SDRAM_MODE_10_VAL;
-    DDR_SDRAM_MODE_15 = DDR_SDRAM_MODE_11_VAL;
+    DDR_SDRAM_MODE_12 = DDR_SDRAM_MODE_12_VAL;
+    DDR_SDRAM_MODE_13 = DDR_SDRAM_MODE_13_VAL;
+    DDR_SDRAM_MODE_14 = DDR_SDRAM_MODE_14_VAL;
+    DDR_SDRAM_MODE_15 = DDR_SDRAM_MODE_15_VAL;
 
     DDR_SDRAM_MD_CNTL = DDR_SDRAM_MD_CNTL_VAL;
 
@@ -640,7 +642,10 @@ void hal_ddr_init() {
     DDR_SR_CNTR = 0;
     DDR_SDRAM_RCW_1 = DDR_SDRAM_RCW_1_VAL;
     DDR_SDRAM_RCW_2 = DDR_SDRAM_RCW_2_VAL;
-
+    DDR_SDRAM_RCW_3 = DDR_SDRAM_RCW_3_VAL; 
+    DDR_SDRAM_RCW_4 = DDR_SDRAM_RCW_4_VAL;
+    DDR_SDRAM_RCW_5 = DDR_SDRAM_RCW_5_VAL;
+    DDR_SDRAM_RCW_6 = DDR_SDRAM_RCW_6_VAL;
 
     DDR_DDRCDR_1 = DDR_DDRCDR_1_VAL;
     DDR_DDRCDR_2 = DDR_DDRCDR_2_VAL;
@@ -655,10 +660,8 @@ void hal_ddr_init() {
     /* Set values, but do not enable the DDR yet */
     DDR_SDRAM_CFG = (DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN);
 
-    hal_delay_us(500);
-    asm volatile("isb");
-
     /* Enable controller */
+    DDR_SDRAM_CFG &= ~(DDR_SDRAM_CFG_BI);
     DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
     asm volatile("isb");
 
@@ -675,24 +678,9 @@ void hal_init(void)
 
     uart_init();
     uart_write("wolfBoot Init\n", 14);
-
 #endif
-
-    uint32_t* p = (uint32_t*)0x80001000;
-    *p = 0x12345678;
 
     //hal_flash_init();
-
-#ifdef ENABLE_CPLD
-    CPLD_DATA(CPLD_PROC_STATUS) = 1; /* Enable proc reset */
-    CPLD_DATA(CPLD_WR_TEMP_ALM_OVRD) = 0; /* Enable temp alarm */
-
-#ifdef DEBUG_UART
-    fw = CPLD_DATA(CPLD_FW_REV);
-    wolfBoot_printf("CPLD FW Rev: 0x%x\n", fw);
-#endif
-#endif /* ENABLE_CPLD */
-
 }
 
 /* NOR flash write */

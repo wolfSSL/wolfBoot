@@ -34,29 +34,16 @@
 #define GICC_PMR        0x0004
 
 
-.data
-.align 12
-ttb0_base:
-    .space 4096, 0
-.align 12
-level2_pagetable:
-    .space 4096, 0
+.equ TT_S1_DEVICE, 0x405
+.equ TT_S1_RW_DATA, 0x601
 
 
 #ifndef USE_BUILTIN_STARTUP 
-.section .boot, "ax"
+.section ".boot", "ax"
 .global _vector_table
 _vector_table:
    mov x21, x0        // read ATAG/FDT address
-
-   /* Initalize vec tables */
-   ldr x1, = _vector_table_el3
-   msr vbar_el3, x1
-   ldr x1, = _vector_table_el2
-   msr vbar_el2, x1
-   ldr x1, = _vector_table_el1
-   msr vbar_el1, x1
-
+  
 4: ldr x1, =_vector_table // get start of .text in x1
     // Read current EL
     mrs     x0, CurrentEL
@@ -91,159 +78,13 @@ _vector_table:
 7: wfi                // infinite sleep
    b    7b
 
-
 8: 
-/* Enable exception interrupts route to EL3 */
-init_exceptions:
-    mrs x0, scr_el3
-    orr x0, x0, #(1<<3) /* EA bit */ 
-    orr x0, x0, #(1<<1) /* IRQ bit */
-    orr x0, x0, #(1<<2) /* FIQ bit */
-    msr scr_el3, x0
 
-/* Initalize register bank */
-init_registers: 
-    mov x0, xzr
-    mov x1, xzr
-    mov x2, xzr
-    mov x3, xzr
-    mov x4, xzr
-    mov x5, xzr
-    mov x6, xzr
-    mov x7, xzr
-    mov x8, xzr
-    mov x9, xzr
-    mov x10, xzr
-    mov x11, xzr
-    mov x12, xzr
-    mov x13, xzr
-    mov x14, xzr
-    mov x15, xzr
-    mov x16, xzr
-    mov x17, xzr
-    mov x18, xzr
-    mov x19, xzr
-    mov x20, xzr
-    mov x21, xzr
-    mov x22, xzr
-    mov x23, xzr
-    mov x24, xzr
-    mov x25, xzr
-    mov x26, xzr
-    mov x27, xzr
-    mov x28, xzr
-    mov x29, xzr
-    mov x30, xzr
+#ifdef CPU_A72
+    bl  init_A72
+#endif
 
-/* Initialize stack pointer */
-init_stackpointer:
-    adr x1, _stack
-    mrs x2, mpidr_el1        /* Get CPU ID */
-    and x2, x2, #0xff
-    ldr x3, =STACK_SIZE
-    mul x3, x2, x3           /* Stack offset */
-    sub x1, x1, x3
-    mov sp, x1               /* Set stack pointer */
-
-    msr sp_el2, x1
-    msr sp_el1, x1
-    msr sp_el0, x1
-
-/* Initalize system control registers */
-init_systemctl:
-    msr hcr_el2, xzr
-    ldr x1, =0x30C50838     /* SA,C,A,M,EE and WXN bits */ 
-    msr sctlr_el2, x1
-    msr sctlr_el1, x1
-    msr sctlr_el3, x1
-
-/* Initalize MMU and Caches */
-init_mmu:
-    bl hal_ddr_init
-
-    /* Diable and invalidate caches */
-    mrs x0, sctlr_el3       
-    bic x0, x0, #(0x1 << 2)
-    msr sctlr_el3, x0
-    mov x0, #0x0
-    msr csselr_el1, x0
-    mrs x4, ccsidr_el1        /* read cache size */
-    and x1, x4, #0x7
-    and x1, x1, #0x4          /* cache line size */
-    ldr x3, =0x7ff
-    and x2, x3, x4, lsr #13   /* number of cache sets */
-    ldr x3, =0x3ff
-    and x3, x3, x4, lsr #3    /* cache associativity number */
-    clz w4, w3
-    mov x5, #0                /* loop counter */
-    way_loop:
-    mov x6, #0                /* loop counter */
-    set_loop:
-    lsl x7, x5, x4
-    orr x7, x0, x7
-    lsl x8, x6, x1
-    orr x7, x7, x8
-    dc cisw, x7               /* invalidate cache */
-    add x6, x6, #1      
-    cmp x6, x2
-    ble set_loop              /* loop until all sets are invalidated */
-    add x5, x5, #1
-    cmp x5, x3
-    ble way_loop              /* loop until all ways are invalidated */
-
-    /* Set up MMU, TCR, TTBRn */
-    ldr x1, =0x3520           /* 4GB, 4KB granularity, cacheable */
-    msr tcr_el3, x1
-
-    ldr x1, =0xff440400       /* ATTr0-3 */
-    msr mair_el3, x1
-
-    adr x0, ttb0_base
-    msr ttbr0_el3, x0
-    msr ttbr0_el2, x0
-    msr ttbr0_el1, x0
-
-    /* Translation tables */
-    ldr x1, =level2_pagetable /* first entry points to l2 */
-    ldr x2, =0xfffff000
-    and x2, x1, x2
-    orr x2, x2, 0x3
-    str x2, [x0], #8
-
-    ldr x2, =0x80000741    /* Second entry 1GB from 0x80000000 */
-    str x2, [x0], #8
-    ldr x2, =0xC0000741    /* Third entry 1GB from 0xC0000000 */
-    str x2, [x0], #8
-
-    /* Set level 2 table */
-    ldr x0, =level2_pagetable
-    ldr x2, =0x0000074d
-    mov x4, #512            /* 512 entreis */
-    ldr x5, =0x00200000     /* 2MB size */
-    loop:
-    str x2, [x0], #8        /* 2 words per entry */
-    add x2, x2, x5
-    subs x4, x4, #1
-    bne loop
-
-    /* Enable MMU */
-    mrs x0, S3_1_c15_c2_1
-    orr x0, x0, #(0x1 << 6) /* SMP bit */
-    msr S3_1_c15_c2_1, x0
-    isb
-
-    mrs x0, sctlr_el3
-    orr x0, x0, #(0x1 << 2)  /* C bit D cache */
-    orr x0, x0, #(0x1 << 12) /* I bit I cache */
-    orr x0, x0, #0x1         /* M bit MMU */
-
-    dsb sy
-    msr sctlr_el3, x0  
-    msr sctlr_el2, x0
-    msr sctlr_el1, x0
-    isb
-
-    bl boot_entry_C   // boot_entry_C never returns
+    bl  boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
 
 #endif /* USE_BUILTIN_STARTUP */
@@ -272,6 +113,199 @@ gicv2_init_secure:
     str	 w0, [x1, #4]        /* GICC_PMR */
 1:
 	ret
+
+
+/* Initalization code for NXP LS1028a (A72) */
+.global init_A72
+init_A72:
+    ldr x1, =_vector_table_el3  /* Initalize vec table */
+    msr vbar_el3, x1
+
+el3_state: 
+    mrs x0, scr_el3             /* scr_el3 config disable */
+    bic x0, x0, #(1 << 13)
+    bic x0, x0, #(1 << 12) 
+    bic x0, x0, #(1 << 11)
+    bic x0, x0, #(1 << 10)
+    bic x0, x0, #(1 << 9)
+    bic x0, x0, #(1 << 8)
+    bic x0, x0, #(1 << 7)
+    orr x0, x0, #0xf            /* IRQ|FIQ|EA to EL3 */
+    msr scr_el3, x0
+
+    mrs x0, sctlr_el3           /* sctlr_el3 config disable */
+    bic x0, x0, #(1 << 19)  
+    bic x0, x0, #(1 << 12)
+    bic x0, x0, #(1 << 3)
+    bic x0, x0, #(1 << 2)
+    bic x0, x0, #(1 << 1)
+    bic x0, x0, #(1 << 0)
+    msr sctlr_el3, x0
+    isb
+
+invalidate_cache:
+    msr csselr_el1, x0
+    mrs x4, ccsidr_el1          /* read cache size */
+    and x1, x4, #0x7
+    and x1, x1, #0x4            /* cache line size */
+    ldr x3, =0x7ff
+    and x2, x3, x4, lsr #13     /* number of cache sets */
+    ldr x3, =0x3ff
+    and x3, x3, x4, lsr #3      /* cache associativity number */
+    clz w4, w3
+    mov x5, #0                
+way_loop:
+    mov x6, #0                
+set_loop:
+    lsl x7, x5, x4
+    orr x7, x0, x7
+    lsl x8, x6, x1
+    orr x7, x7, x8
+    dc cisw, x7                  /* invalidate cache */
+    add x6, x6, #1      
+    cmp x6, x2
+    ble set_loop                 /* loop until all sets are invalidated */
+    add x5, x5, #1
+    cmp x5, x3
+    ble way_loop                 /* loop until all ways are invalidated */ 
+    msr cptr_el3, xzr
+invalidate_ivac:
+    ldr x0, =_OCRAM_ADDRESS
+    ldr x1, =_MEMORY_SIZE
+    add x1, x1, x0
+    mrs x2, ctr_el0
+    ubfx x4, x2, #16, #4
+    mov x3, #4
+    lsl x3, x3, x4
+    sub x4, x3, #1
+    bic x4, x0, x4
+    inval_loop:
+    dc ivac, x4
+    add x4, x4, x3
+    cmp x4, x1
+    blt inval_loop
+    dsb sy
+
+    ldr x0, =_stack_base
+    mov sp, x0
+
+    bl hal_ddr_init
+    bl copy_rom_to_ram
+
+init_table:
+    ldr x0, =ttb_l0
+    ldr x1, =ttb_l1_0
+    orr x1, x1, #0x3            
+    str x1, [x0], #8                /* point to l1_0 table */
+    ldr x1, =ttb_l1_1
+    orr x1, x1, #0x3            
+    str x1, [x0]                    /* point to l1_1 table */
+    ldr x0, =ttb_l1_0               /* level 1 entyr points to l2  */
+    ldr x1, =ttb_l2
+    orr x1, x1, #0x3           
+    str x1, [x0], #8                /* point to l2 table */
+    mov x2, #1
+    mov x3, #0x400                  /* span both l1 tables */
+next_l1_device_entry:
+    mov x1, TT_S1_DEVICE            /* page table attributes  */
+    orr x1, x1, x2, lsl #30         /* 1GB block */
+    str x1, [x0], #8
+    add x2, x2, #1
+    cmp x2, x3
+    bne next_l1_device_entry
+    ldr x1, =_DDR_ADDRESS           /* Phys address */
+    bic x1, x1, #(1 << 30) - 1      /* 1GB block alignment */
+    ldr x0, =ttb_l1_0
+    add x2, x0, x1, lsr #(30 - 3)   /* Offset in level 1 page tables */
+    mov x3, TT_S1_RW_DATA           /* page table attributes */
+    orr x1, x1, x3 
+    str x1, [x2], #8                /* 1st GB */
+    mov x3, #(1 << 30)              /* 1GB block */
+    add x1, x1, x3
+    str x1, [x2]                    /* 2nd GB (Add more RAM here) */
+    ldr x0, =ttb_l2                 /* level 2 all entries are device memory */
+    mov x2, xzr
+    mov x3, #0x200
+next_l2_device_entry:
+    mov x1, TT_S1_DEVICE            /* page table attributes */
+    orr x1, x1, x2, lsl #21         /* 2MB block */
+    str x1, [x0], #8
+    add x2, x2, #1
+    cmp x2, x3
+    bne next_l2_device_entry
+
+init_flat_map:
+    mrs x0, S3_1_c15_c2_1
+    orr x0, x0, #(1 << 6)         /* Must set SPMEN */
+    msr S3_1_c15_c2_1, x0
+    isb
+
+    tlbi alle3                    /* Invalidate table entries */
+    dsb sy
+    isb
+
+    ldr x0, =ttb_l0               /* Load and set tables */
+    msr ttbr0_el3, x0
+    msr ttbr0_el2, x0
+    msr ttbr0_el1, x0
+
+    ldr x0, =0                    /* Set Translation cntrl EL2/3 */
+    orr x0, x0, #24               /* Size of the memroy region */ 
+    orr x0, x0, #(4 << 16)        /* PS 44-bit */
+    orr x0, x0, #(2 << 12)        /* SH0 Outer Shareable */
+    orr x0, x0, #(1 << 10)        /* normal outer WBWA cacheable */
+    orr x0, x0, #(1 << 8)         /* normal inner WBWA cacheable */
+    msr tcr_el3, x0
+    msr tcr_el2, x0
+
+    ldr x0, =0                    /* Set Translation cntrl EL1 */
+    orr x0, x0, #24               /* Size of the memory region  */
+    orr x0, x0, #(4 << 32)        /* IPS, 44 bits */
+    orr x0, x0, #(1 << 23)        /* EDP1, No TLB walk */
+    orr x0, x0, #(2 << 12)        /* SH0 Outer Shareable */
+    orr x0, x0, #(1 << 10)        /* normal outer WBWA cacheable */
+    orr x0, x0, #(1 << 8)         /* normal inner WBWA cacheable */
+    msr tcr_el1, x0
+
+    mov x0, #0x00FF               /* Set Memory Attribute Indrection Register  */
+    msr mair_el3, x0
+    msr mair_el2, x0
+    msr mair_el1, x0
+    isb
+
+    mrs x0, S3_1_c11_c0_2
+    orr x0, x0, #(1 << 21)        /* Enable L2 ECC */
+    msr S3_1_c11_c0_2, x0
+
+    mrs x0, sctlr_el3
+    ldr x1, =0
+    orr x1, x1, #(1 << 3)        /* SA - stack alignment check enable */
+    orr x1, x1, #(1 << 0)        /* M - MMU enable */
+    orr x1, x1, #(1 << 1)        /* A - Alignment check enable */
+    orr x1, x1, #(1 << 12)       /* I - instruction cache enable */
+    orr x1, x1, #(1 << 2)        /* C - data & unified cache enable */
+    orr x0, x0, x1
+    dsb sy
+
+    msr sctlr_el1, x0
+    msr sctlr_el2, x0
+    msr sctlr_el3, x0
+    isb
+
+init_stack:
+    ldr x0, =_stack_base        /* Set and aling stack */
+    sub x0, x0, #16
+    and x0, x0, #-16
+    mov sp, x0
+    ldr x1, =STACK_SIZE
+    msr sp_el2, x0
+    msr sp_el1, x0
+    msr sp_el0, x0
+    mov x29, 0                  /* Setup an initial dummy frame with saved fp=0 and saved lr=0 */
+    stp x29, x29, [sp, #-16]!
+    mov x29, sp
+
+    b boot_entry_C
 
 
 /* Exception Vector Table EL3 */
@@ -325,105 +359,24 @@ lower_el3_aarch64_fiq:
 lower_el3_aarch64_serror:
     eret
 
-/* EL2 table */
-.balign 0x800
-.global _vector_table_el2
-_vector_table_el2: 
-el2_sp0_sync:        
-    eret 
 
-.balign 0x80
-el2_sp0_irq:
-    eret
+/* MMU Table data section */
+.section .data
+.align 4
+.global ttb_l0
+ttb_l0:
+    .fill  16, 1, 0
 
-.balign 0x80
-el2_spi_fiq:
-    eret
+.align 13
+.global ttb_l1_0
+ttb_l1_0:
+    .fill 4096, 1, 0
 
-.balign 0x80
-el2_sp0_serror:
-    eret
+.global ttb_l1_1
+ttb_l1_1:
+    .fill 4096, 1, 0
 
-.balign 0x80
-el2_spx_sync:
-    eret
-
-.balign 0x80
-el2_spx_irq:
-    eret
-
-.balign 0x80
-el2_spx_fiq:
-    eret
-
-.balign 0x80
-el2_spx_serror:
-    eret
-
-.balign 0x80
-lower_el2_aarch64_sync:
-    eret
-
-.balign 0x80
-lower_el2_aarch64_irq:
-    eret
-
-.balign 0x80
-lower_el2_aarch64_fiq:
-    eret
-
-.balign 0x80
-lower_el2_aarch64_serror:
-    eret
-
-/* EL1 Table  */
-.balign 0x800
-.global _vector_table_el1
-_vector_table_el1: 
-el1_sp0_sync:     
-    eret
-
-.balign 0x80
-el1_sp0_irq:
-    eret
-
-.balign 0x80
-el1_spi_fiq:
-    eret
-
-.balign 0x80
-el1_sp0_serror:
-    eret
-
-.balign 0x80
-el1_spx_sync:
-    eret
-
-.balign 0x80
-el1_spx_irq:
-    eret
-
-.balign 0x80
-el1_spx_fiq:
-    eret
-
-.balign 0x80
-el1_spx_serror:
-    eret
-
-.balign 0x80
-lower_el1_aarch64_sync:
-    eret
-
-.balign 0x80
-lower_el1_aarch64_irq:
-    eret
-
-.balign 0x80
-lower_el1_aarch64_fiq:
-    eret
-
-.balign 0x80
-lower_el1_aarch64_serror:
-    eret
-
+.align 12
+.global ttb_l2
+ttb_l2:
+    .fill 4096, 1, 0

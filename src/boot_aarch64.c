@@ -30,24 +30,30 @@ extern unsigned int __bss_end__;
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
+extern unsigned int _DDR_ADDRESS;
 
 extern void main(void);
 extern void gicv2_init_secure(void);
 
-void boot_entry_C(void) 
-{
-    register unsigned int *dst, *src;
 
-    /* Copy the .data section from flash to RAM */
-#ifdef ROM
+void copy_rom_to_ram(void) {
+
+    register unsigned int *dst, *src, *end;
+
+    /* Copy the .data section from flash to RAM */ 
     src = (unsigned int*)&_stored_data;
     dst = (unsigned int*)&_start_data;
-    while (dst < (unsigned int*)&_end_data) {
+    end = (unsigned int*)&_end_data;
+    while (dst < end) {
         *dst = *src;
         dst++;
         src++;
     }
-#endif
+}
+
+void boot_entry_C(void) 
+{
+    register unsigned int *dst, *src;
 
     /* Initialize the BSS section to 0 */
     dst = &__bss_start__;
@@ -115,3 +121,4 @@ void RAMFUNCTION arch_reboot(void)
 
 }
 #endif
+

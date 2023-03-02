@@ -38,11 +38,13 @@ void RAMFUNCTION wolfBoot_start(void)
 {
     int active, ret = 0;
     struct wolfBoot_image os_image;
-    uint8_t *image_ptr;
-    uint8_t p_state;
-    uint32_t *load_address;
+    uint8_t *image_ptr = NULL;
+    uint8_t p_state = 0;
+    uint32_t *load_address = NULL;
     uint8_t *dts_buf = NULL;
     uint32_t dts_size = 0;
+
+    memset(&os_image, 0, sizeof(os_image));
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     active = wolfBoot_dualboot_candidate();
