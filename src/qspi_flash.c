@@ -64,7 +64,7 @@
 #define QSPI_DUMMY_READ        8 /* Number of dummy clock cycles for reads */
 #endif
 #ifndef QSPI_FLASH_READY_TRIES
-#define QSPI_FLASH_READY_TRIES 5000
+#define QSPI_FLASH_READY_TRIES 10000
 #endif
 
 
