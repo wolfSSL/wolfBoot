@@ -48,7 +48,7 @@ ifeq ($(SIGN),ECC256)
       ifneq ($(SPMATH),1)
         STACK_USAGE=5008
       else
-        STACK_USAGE=5880
+        STACK_USAGE=7600
       endif
     endif
   endif
@@ -77,7 +77,7 @@ ifeq ($(SIGN),ECC384)
       ifneq ($(SPMATH),1)
         STACK_USAGE=11248
       else
-        STACK_USAGE=5880
+        STACK_USAGE=11216
       endif
     endif
   endif
@@ -192,7 +192,7 @@ ifeq ($(SIGN),RSA2048)
       ifneq ($(SPMATH),1)
         STACK_USAGE=35952
       else
-        STACK_USAGE=12288
+        STACK_USAGE=17568
       endif
     endif
   endif

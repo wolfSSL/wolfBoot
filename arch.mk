@@ -35,6 +35,7 @@ ifeq ($(ARCH),AARCH64)
   CFLAGS+=-DNO_QNX
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
   endif
 endif
 

@@ -86,13 +86,7 @@
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_HAVE_SP_ECC
-
-        /* SP Math needs to understand long long */
-#       ifndef ULLONG_MAX
-#           define ULLONG_MAX 18446744073709551615ULL
-#       endif
 #   endif
 
 /* ECC options disabled to reduce size */
@@ -139,7 +133,6 @@
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_NO_4096
 #   endif
@@ -158,7 +151,6 @@
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_4096
 #   endif
@@ -177,7 +169,6 @@
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_SP_4096
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_3072
@@ -196,6 +187,22 @@
 #   define WOLFSSL_SHA384
 #   ifdef NO_RSA
 #       define NO_SHA256
+#   endif
+#endif
+
+/* If SP math is enabled determine word size */
+#if defined(WOLFSSL_HAVE_SP_ECC) || defined(WOLFSSL_HAVE_SP_RSA)
+#   ifdef __aarch64__
+#       define HAVE___UINT128_T
+#       define WOLFSSL_SP_ARM64_ASM
+#       define SP_WORD_SIZE 64
+#   else
+#       define SP_WORD_SIZE 32
+#   endif
+
+        /* SP Math needs to understand long long */
+#   ifndef ULLONG_MAX
+#       define ULLONG_MAX 18446744073709551615ULL
 #   endif
 #endif
 
