@@ -48,9 +48,6 @@
 #include "hal/spi/spi_drv_nrf52.h"
 #endif
 
-#if defined(PLATFORM_ls1028a)
-#include "hal/spi/spi_drv_ls1028a.h"
-#endif
 
 void spi_init(int polarity, int phase);
 void spi_release(void);
