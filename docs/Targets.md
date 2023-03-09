@@ -1393,31 +1393,68 @@ make test-sim-internal-flash-with-update
 The LS1028A is a AARCH64 armv8-a Cortex-A72 based processor. Support has been tested with the NXP LS1028ARDB.
 
 Example configurations for this target are provided in:
-* NXP LS1028A: [/config/examples/nxp-ls1028A.config](/config/examples/LS1028A.config).
-
-Boot Configuration:
-SW2[1:4] -> `1111: XSPI serial NOR, 24-bit address (default setting)`
+* NXP LS1028A: [/config/examples/nxp-ls1028a.config](/config/examples/nxp-ls1028a.config).
 
 ### Building wolfBoot for NXP LS1028A
 
-wolfBoot can be built with aarch64-none-elf- tools setting `ARCH=AARCH64` in the `.config` will set the correct compiler command.
+1. Download `aarch64-none-elf-` toolchain.
 
+2. Copy the example `nxp_ls1028a.cofnig` file to root directory and rename to `.config`
+
+3. Build keytools and wolfboot
+   
 ```
 cp ./config/examples/nxp-ls1028a.config .config
 make distclean
 make keytools
-make wolfboot.elf
+make 
+```
+
+This should output 3 binary files, `wolfboot.bin`, `image_v1_signed.bin` and `factory.bin`
+- `wolfboot.bin` is the wolfboot binary 
+- `image_v1_signed.bin` is the signed application image and by default is `test-app/app_nxp_ls1028a`
+- `factory.bin` is the two binaries merged together 
+
+
+### Hardware Setup LS1028ARDB
+DIP Switch Configuraiton for XSPI_NOR_BOOT:
+```
+SW2 : 0xF8 = 11111000  SW3 : 0x70 = 01110000  SW5 : 0x20 = 00100000
+Where '1' = UP/ON
+```
+
+UART Configuraiton: 
+```
+Baud Rate: 115200
+Data Bits: 8
+Parity: None
+Stop Bits: 1
+Flow Control: None
+Specify device type - PC16552D
+Configured for UART1 DB9 Connector
 ```
 
 ### Programming NXP LS1028A
 
-#### Lauterbach
+Programming requires three components: 
+1. RCW binary - Distribured by NXP at `https://source.codeaurora.org/external/qoriq/qoriq-components/rcw` or can be generated (tested on `rcw_1300.bin`)
+2. Woflboot 
+3. Applicaiton - Test app found in `/test-app/app_nxp_ls1028a.c`
+
+Once you have all components, you can use a lauterbach to flash NOR flash. You must flash RCW, wolfboot and singed_image. `factory.bin` can be used which is wolfboot and the signed image merged. You will need to build a signed image for every update to the application code, which can be done by using keytools in `tools/keytools/sign` see `docs/Signing.md`. 
+
+#### Lauterbach Flashing and Debugging
+
+1. Launch lauterbach and open the demo script.
+2. Open any desired debug windows.
+3. Hit the play button on the demo script.
+4. It should pop up with a code window and at the reset startpoint. (May require a CPU reset if in bad state)
 
 ```
-~/t32/bin/macosx64/t32marm-qt -c /Users/davidgarske/t32/config_usb.t32
+./t32/bin/macosx64/t32marm-qt
 
+Open Script > debug_wolfboot.cmm
 ```
 
-### Debugging NXP LS1028A
-
-#### Lauterbach
+You can modify the Lauterbach NOR flash demo or use `debug_wolfboot.cmm` script, just make sure the flash offset for 
+the RCW is `0x0` and the address offset for wolboot is `0x1000`.

@@ -48,7 +48,7 @@ ifeq ($(SIGN),ECC256)
       ifneq ($(SPMATH),1)
         STACK_USAGE=5008
       else
-        STACK_USAGE=5880
+        STACK_USAGE=7600
       endif
     endif
   endif

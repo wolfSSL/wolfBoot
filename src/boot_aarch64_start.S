@@ -115,6 +115,54 @@ gicv2_init_secure:
 	ret
 
 
+.global invalidate_ivac
+invalidate_ivac:
+    ldr x0, =_OCRAM_ADDRESS
+    ldr x1, =_MEMORY_SIZE
+    add x1, x1, x0
+    mrs x2, ctr_el0
+    ubfx x4, x2, #16, #4
+    mov x3, #4
+    lsl x3, x3, x4
+    sub x4, x3, #1
+    bic x4, x0, x4
+    inval_loop:
+    dc ivac, x4
+    add x4, x4, x3
+    cmp x4, x1
+    blt inval_loop
+    dsb sy
+    ret
+
+.global switch_el3_to_el2
+switch_el3_to_el2:
+    mov x0, #0x531
+    msr scr_el3, x0
+    msr cptr_el3, xzr            /* Disable el3 traps */
+    mov x0, #0x33ff
+    msr cptr_el2, x0             /* Disable el2 traps */
+    mrs x0, sctlr_el2
+    ldr x1, =0
+    orr x1, x1, #(1 << 3)        /* SA - stack alignment check enable */
+    orr x1, x1, #(1 << 0)        /* M - MMU enable */
+    orr x1, x1, #(1 << 1)        /* A - Alignment check enable */
+    orr x1, x1, #(1 << 12)       /* I - instruction cache enable */
+    orr x1, x1, #(1 << 2)        /* C - data & unified cache enable */
+    orr x0, x0, x1
+    msr sctlr_el2, x0
+    bl invalidate_ivac
+    ldp x29, x30, [sp]
+    mrs x0, vbar_el3
+    msr vbar_el2, x0
+    mov x0, #0x3c9
+    msr spsr_el3, x0
+    msr elr_el3, x30
+    ret
+
+.global cortex_a72_erratta
+cortex_a72_erratta:
+
+
 /* Initalization code for NXP LS1028a (A72) */
 .global init_A72
 init_A72:
@@ -169,30 +217,25 @@ set_loop:
     cmp x5, x3
     ble way_loop                 /* loop until all ways are invalidated */ 
     msr cptr_el3, xzr
-invalidate_ivac:
-    ldr x0, =_OCRAM_ADDRESS
-    ldr x1, =_MEMORY_SIZE
-    add x1, x1, x0
-    mrs x2, ctr_el0
-    ubfx x4, x2, #16, #4
-    mov x3, #4
-    lsl x3, x3, x4
-    sub x4, x3, #1
-    bic x4, x0, x4
-    inval_loop:
-    dc ivac, x4
-    add x4, x4, x3
-    cmp x4, x1
-    blt inval_loop
-    dsb sy
 
-    ldr x0, =_stack_base
+init_stack:
+    ldr x0, =_stack_base        /* Set and aling stack */
+    sub x0, x0, #16
+    and x0, x0, #-16
     mov sp, x0
+    ldr x1, =STACK_SIZE
+    msr sp_el2, x0
+    msr sp_el1, x0
+    msr sp_el0, x0
+    mov x29, 0                  /* Setup an initial dummy frame with saved fp=0 and saved lr=0 */
+    stp x29, x29, [sp, #-16]!
+    mov x29, sp
 
-    bl hal_ddr_init
-    bl copy_rom_to_ram
+    bl invalidate_ivac
+    b boot_entry_C
 
-init_table:
+.global hal_ttb_init
+hal_ttb_init:
     ldr x0, =ttb_l0
     ldr x1, =ttb_l1_0
     orr x1, x1, #0x3            
@@ -233,8 +276,10 @@ next_l2_device_entry:
     add x2, x2, #1
     cmp x2, x3
     bne next_l2_device_entry
+    ret
 
-init_flat_map:
+.global init_MMU
+init_MMU:
     mrs x0, S3_1_c15_c2_1
     orr x0, x0, #(1 << 6)         /* Must set SPMEN */
     msr S3_1_c15_c2_1, x0
@@ -291,22 +336,7 @@ init_flat_map:
     msr sctlr_el2, x0
     msr sctlr_el3, x0
     isb
-
-init_stack:
-    ldr x0, =_stack_base        /* Set and aling stack */
-    sub x0, x0, #16
-    and x0, x0, #-16
-    mov sp, x0
-    ldr x1, =STACK_SIZE
-    msr sp_el2, x0
-    msr sp_el1, x0
-    msr sp_el0, x0
-    mov x29, 0                  /* Setup an initial dummy frame with saved fp=0 and saved lr=0 */
-    stp x29, x29, [sp, #-16]!
-    mov x29, sp
-
-    b boot_entry_C
-
+    ret
 
 /* Exception Vector Table EL3 */
 .balign 0x800
@@ -361,7 +391,7 @@ lower_el3_aarch64_serror:
 
 
 /* MMU Table data section */
-.section .data
+.section .bss
 .align 4
 .global ttb_l0
 ttb_l0:

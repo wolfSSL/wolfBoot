@@ -89,6 +89,7 @@ static void uart_write(const char* buf, uint32_t sz)
 
 static const char* hex_lut = "0123456789abcdef";
 
+__attribute__((section(".boot")))
 void main(void)
 {
     int i = 0;
@@ -100,8 +101,7 @@ void main(void)
 
     /* Wait for reboot */
     while(1) {
-        for (j=0; j<1000000; j++)
-            ;
+        for (j=0; j<1000000; j++);
         i++;
 
         uart_write("\r\n0x", 4);

@@ -1,7 +1,6 @@
 MEMORY
 {
-    FLASH (rx) : = ##WOLFBOOT_TEST_APP_ADDRESS##, LENGTH = ##WOLFBOOT_TEST_APP_SIZE##
-    DRAM (rwx) : ORIGIN = 0x80000000, LENGTH = 0xffffffff
+    FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = 256K
     OCRAM (rwx) : ORIGIN = 0x18000000, LENGTH = 256K
 }
 
@@ -24,13 +23,7 @@ SECTIONS
     {
         . = ALIGN(4);
         *(.ARM.exidx*)
-    } > OCRAM
-
-    .edidx :
-    {
-        . = ALIGN(4);
-        *(.ARM.exidx*)
-    } > OCRAM
+    } > FLASH
 
     .data :
     {
@@ -40,7 +33,7 @@ SECTIONS
         KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
-    } > OCRAM
+    } > FLASH
 
     .bss (NOLOAD) :
     {

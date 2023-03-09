@@ -86,8 +86,15 @@
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_HAVE_SP_ECC
+
+#       ifdef __aarch64__
+#           define HAVE___UINT128_T
+#           define WOLFSSL_SP_ARM64_ASM
+#           define SP_WORD_SIZE 64
+#       else
+#           define SP_WORD_SIZE 32
+#       endif
 
         /* SP Math needs to understand long long */
 #       ifndef ULLONG_MAX

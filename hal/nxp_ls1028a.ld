@@ -6,7 +6,7 @@ MEMORY
 {
     /*The flash address range on LS1028A RDB is 0x20000000 - 0x23FFFFFF.*/
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-
+    
     /* DDR4 - 2GB */
     DRAM (rwx) : ORIGIN = 0x80000000 , LENGTH = 0x007FFFFFFF
 
@@ -22,9 +22,7 @@ SECTIONS
     PROVIDE (_CORE_NUMBER = 0);
     PROVIDE (_MEMORY_SIZE = LENGTH(OCRAM));
     PROVIDE (_FLASH_SIZE = LENGTH(FLASH));
-
-    /* Stack size per core */
-    PROVIDE (STACK_SIZE = 50K);
+    PROVIDE (STACK_SIZE = 20K);
 
     .boot :
     {
@@ -47,7 +45,6 @@ SECTIONS
     .gnu.version_d  : { *(.gnu.version_d) }
     .gnu.version_r  : { *(.gnu.version_r) }
     .rela.init      : { *(.rela.init) }
-    .rela.text      : { *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*) }
     .rela.fini      : { *(.rela.fini) }
     .rela.rodata    : { *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*) }
     .rela.data.rel.ro   : { *(.rela.data.rel.ro .rela.data.rel.ro.* .rela.gnu.linkonce.d.rel.ro.*) }

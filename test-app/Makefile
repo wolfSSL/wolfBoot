@@ -118,12 +118,15 @@ ifeq ($(TARGET),stm32u5)
   LDFLAGS+=-mcpu=cortex-m33
 endif
 
-
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_TEMPLATE=ARM-r5be.ld
   LDFLAGS+=$(LSCRIPT) --map_file=image.map
 else
   LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+endif
+
+ifeq ($(TARGET),nxp_ls1028a)
+  LSCRIPT_TEMPLATE=AARCh64-ls1028a.ld
 endif
 
 ifeq ($(TARGET),sim)

@@ -34,7 +34,7 @@ ifeq ($(ARCH),AARCH64)
   OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
   CFLAGS+=-DNO_QNX
   ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
   endif
 endif
 
@@ -291,11 +291,10 @@ ifeq ($(TARGET),nxp_p1021)
 endif
 
 ifeq ($(TARGET),nxp_ls1028a)
-  CFLAGS+= -DCPU_A72 -DMMU -DTARGET_LS1028A
+  ARCH_FLAGS=-mcpu=cortex-a72
+  CFLAGS+= -DCPU_A72 -DTARGET_LS1028A  
   LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT" 
-
-  # Prune unused functions and data
-  CFLAGS +=-ffunction-sections -fdata-sections
+  CFLAGS +=-ffunction-sections -fdata-sections # Prune unused functions and data
   LDFLAGS+=-Wl,--gc-sections
 
   ifeq ($(DEBUG_UART),0)
@@ -433,7 +432,7 @@ BOOT_IMG?=test-app/image.bin
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-DWOLFBOOT_DUALBOOT -DMMU 
   UPDATE_OBJS:=src/update_ram.o
 endif
 ifeq ($(DUALBANK_SWAP),1)

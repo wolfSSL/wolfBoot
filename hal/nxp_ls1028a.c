@@ -147,15 +147,6 @@
 #define XSPI_MCR_SCKFREERUNEN_MASK  (0x1 << 14)    /* XSPI Serial Clock Free Run Enable */
 #define XSPI_MCR_LEARNEN_MASK       (0x1 << 15)    /* XSPI Learn Mode Enable */
 
-/* XSPI Configuration Bytes */
-//#define XSPI_MCR_CFG          0xFFFF80C0 /* MCR Configuraiton bytes */
-//#define XSPI_AHBCR_CFG        0x00000028 /* AHB Bus Configuration bytes */
-//#define XSPI_DLLACR_CFG       0x00000079 /* DLLA Control Configuration bytes */
-//#define XSPI_FLSHA1CR0_CFG    0x0003E800 /* Configure flash size to 256MB */
-//#define XSPI_FLSHA1CR1_CFG    0x00000063 /* Reset value, used for CS timing */
-//#define XSPI_FLSHA1CR2_CFG    0x00000000 /* Reset value, used for AHB mode confiugration */
-//#define XSPI_FLSHCR4_CFG      0x00000000 /* Reset value */
-
 /* XSPI Init */
 #define XSPI_MCR0_CFG         0xFFFF8000
 #define XSPI_MCR1_CFG         0xFFFFFFFF
@@ -211,35 +202,35 @@
 /* Calculate the number of PAD bits for LUT register*/
 #define LUT_PAD(x)              (x - 1)
 
-/* Instructions for the LUT register. */
-#define LUT_STOP                0x00
-#define LUT_CMD                 0x01
-#define LUT_ADDR                0x02
-#define LUT_CADDR_SDR           0x03
-#define LUT_MODE                0x04
-#define LUT_MODE2               0x05
-#define LUT_MODE4               0x06
-#define LUT_MODE8               0x07
-#define LUT_NXP_WRITE           0x08
-#define LUT_NXP_READ            0x09
-#define LUT_LEARN_SDR           0x0A
-#define LUT_DATSZ_SDR           0x0B
-#define LUT_DUMMY               0x0C
-#define LUT_DUMMY_RWDS_SDR      0x0D
-#define LUT_JMP_ON_CS           0x1F
-#define LUT_CMD_DDR             0x21
-#define LUT_ADDR_DDR            0x22
-#define LUT_CADDR_DDR           0x23
-#define LUT_MODE_DDR            0x24
-#define LUT_MODE2_DDR           0x25
-#define LUT_MODE4_DDR           0x26
-#define LUT_MODE8_DDR           0x27
-#define LUT_WRITE_DDR           0x28
-#define LUT_READ_DDR            0x29
-#define LUT_LEARN_DDR           0x2A
-#define LUT_DATSZ_DDR           0x2B
-#define LUT_DUMMY_DDR           0x2C
-#define LUT_DUMMY_RWDS_DDR      0x2D
+
+#define CMD_SDR        0x01
+#define CMD_DDR        0x21
+#define RADDR_SDR      0x02
+#define RADDR_DDR      0x22
+#define CADDR_SDR      0x03
+#define CADDR_DDR      0x23
+#define MODE1_SDR      0x04
+#define MODE1_DDR      0x24
+#define MODE2_SDR      0x05
+#define MODE2_DDR      0x25
+#define MODE4_SDR      0x06
+#define MODE4_DDR      0x26
+#define MODE8_SDR      0x07
+#define MODE8_DDR      0x27
+#define WRITE_SDR      0x08
+#define WRITE_DDR      0x28
+#define READ_SDR       0x09
+#define READ_DDR       0x29
+#define LEARN_SDR      0x0A
+#define LEARN_DDR      0x2A
+#define DATSZ_SDR      0x0B
+#define DATSZ_DDR      0x2B
+#define DUMMY_SDR      0x0C
+#define DUMMY_DDR      0x2C
+#define DUMMY_RWDS_SDR 0x0D
+#define DUMMY_RWDS_DDR 0x2D
+#define JMP_ON_CS      0x1F
+#define STOP           0
 
 /* MT35XU02GCBA1G12 Command definitions */
 #define LUT_CMD_WE              0x06 /* Write Enable */
@@ -476,15 +467,14 @@ void hal_delay_us(uint32_t us) {
 
 void erratum_err050568()
 {
-	/* Use IP bus only if systembus PLL is 300MHz */
+	/* Use IP bus only if systembus PLL is 300MHz (Dont use 300MHz) */
 }
 
 /* Application on Serial NOR Flash device 18.6.3 */
 void xspi_init()
 {
+    /* TODO: Check clocks and check initalization */
     /* Enable controller clocks (AHB clock/IP Bus clock/Serial root clock) in System level. */
-    /* Power FelxSPI SRAM */
-    /* Release FlexSPI from reset using PRSTCLR */
 
     /* Set MCR0[MDIS] to 0x1 (Make sure controller is configured in module stop mode) */
     XSPI_ENTER_STOP();
@@ -522,6 +512,8 @@ void xspi_init()
 
     /* set MCR0[MDIS] to 0x0 (Exit module stop mode) */
     XSPI_EXIT_STOP();
+
+    /* TODO: Look into read ID */
 }
 
 void xspi_lut_lock(void)
@@ -538,46 +530,16 @@ void xspi_lut_unlock(void)
 
 void hal_flash_init()
 {
-    /* Init base XSPI module */
-    xspi_init();
-
     xspi_lut_unlock();
 
-    /* LUT0 - Read Status 1 byte */
-    XSPI_LUT(0) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_RSR, LUT_NXP_READ, LUT_PAD(1), 0x1);
+    xspi_init();
+ 
+    /* TOOD: Document and update op codes */
+    XSPI_LUT(0) = XSPI_LUT_SEQ(RADDR_SDR, LUT_PAD(1), 0x18, CMD_SDR, LUT_PAD(1), 0x3);
     XSPI_LUT(1) = 0x0;
-    XSPI_LUT(2) = 0x0;
-    XSPI_LUT(3) = 0x0;
 
-    /* LUT1 - Write Enable */
-    XSPI_LUT(4) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_WE, LUT_STOP, LUT_PAD(1), 0);
-    XSPI_LUT(5) = 0x0;
-    XSPI_LUT(6) = 0x0;
-    XSPI_LUT(7) = 0x0;
-
-    /* LUT2 - Page Program */
-    XSPI_LUT(8) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_PP, LUT_ADDR, LUT_PAD(1), LUT_ADDR_3B);
-    XSPI_LUT(9) = XSPI_LUT_SEQ(LUT_NXP_WRITE, LUT_PAD(1), 0x1, LUT_STOP, LUT_PAD(1), 0);
+    XSPI_LUT(9) = XSPI_LUT_SEQ(CADDR_SDR, LUT_PAD(1), 0x3D, CADDR_DDR, LUT_PAD(1), 0xFD);
     XSPI_LUT(10) = 0x0;
-    XSPI_LUT(11) = 0x0;
-
-    /* LUT3 - Read */
-    XSPI_LUT(12) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_READ, LUT_ADDR, LUT_PAD(1), LUT_ADDR_3B);
-    XSPI_LUT(13) = XSPI_LUT_SEQ(LUT_NXP_READ, LUT_PAD(1), 0x1, LUT_STOP, LUT_PAD(1), 0);
-    XSPI_LUT(14) = 0x0;
-    XSPI_LUT(15) = 0x0;
-
-    /* LUT4 - Sector Erase */
-    XSPI_LUT(16) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_SE, LUT_ADDR, LUT_PAD(1), LUT_ADDR_3B);
-    XSPI_LUT(17) = 0x0;
-    XSPI_LUT(18) = 0x0;
-    XSPI_LUT(19) = 0x0;
-
-    /* LUT5 - Read ID */
-    XSPI_LUT(20) = XSPI_LUT_SEQ(LUT_CMD, LUT_PAD(1), LUT_CMD_RID, LUT_STOP, LUT_PAD(1), 0);
-    XSPI_LUT(21) = 0x0;
-    XSPI_LUT(22) = 0x0;
-    XSPI_LUT(23) = 0x0;
 
     xspi_lut_lock();
 
@@ -679,8 +641,6 @@ void hal_init(void)
     uart_init();
     uart_write("wolfBoot Init\n", 14);
 #endif
-
-    //hal_flash_init();
 }
 
 /* NOR flash write */
@@ -754,4 +714,9 @@ int hal_flash_erase(uint32_t address, int len)
 
 void hal_flash_unlock(void){}
 void hal_flash_lock(void){}
-void hal_prepare_boot(void){}
+
+
+void hal_prepare_boot(void) {
+    /* TODO: Addd EL exchange for el3 --> el2 before booting */
+}
+

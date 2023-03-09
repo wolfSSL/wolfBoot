@@ -34,13 +34,22 @@ extern unsigned int _DDR_ADDRESS;
 
 extern void main(void);
 extern void gicv2_init_secure(void);
+extern void hal_ttb_init(void);
+extern void init_MMU(void);
+extern void hal_ddr_init(void);
 
-
-void copy_rom_to_ram(void) {
-
+void boot_entry_C(void) 
+{
     register unsigned int *dst, *src, *end;
 
-    /* Copy the .data section from flash to RAM */ 
+    /* Initialize the BSS section to 0 */
+    dst = &__bss_start__;
+    while (dst < (unsigned int *)&__bss_end__) {
+        *dst = 0U;
+        dst++;
+    }
+
+    /* Copy data section from flash to RAM */
     src = (unsigned int*)&_stored_data;
     dst = (unsigned int*)&_start_data;
     end = (unsigned int*)&_end_data;
@@ -49,18 +58,15 @@ void copy_rom_to_ram(void) {
         dst++;
         src++;
     }
-}
 
-void boot_entry_C(void) 
-{
-    register unsigned int *dst, *src;
+    /* Init DDR hook function */
+    hal_ddr_init();
 
-    /* Initialize the BSS section to 0 */
-    dst = &__bss_start__;
-    while (dst < (unsigned int *)&__bss_end__) {
-        *dst = 0U;
-        dst++;
-    }
+    /* Init MMU tables hook function */
+    hal_ttb_init();
+
+    /* Init MMU */
+    init_MMU();
 
     /* Run wolfboot! */
     main();
