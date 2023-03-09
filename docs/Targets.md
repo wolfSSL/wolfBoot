@@ -854,6 +854,48 @@ qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_rasp
 ```
 
 
+### Testing with kernel encryption
+
+The raspberry pi target is used to demonstrate the end-to-end encryption when booting
+images from RAM. The image is encrypted after being signed. The bootloader uses 
+the same symmetric key to decrypt the image to RAM before performing the
+validity checks. Here are the steps to enable this feature:
+
+* Build wolfboot using the example configuration (RSA4096, SHA3, ENCRYPT=1)
+
+```
+cp config/examples/raspi3-encrypted.config .config
+make clean
+make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+* Create the decrypt key + nonce
+
+```
+printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
+```
+
+* Sign and encrypt Linux kernel image
+```
+make keytools
+./tools/keytools/sign --aes256 --encrypt /tmp/enc_key.der --rsa4096 --sha3 Image wolfboot_signing_private_key.der 1
+```
+
+* Compose the image
+
+```
+tools/bin-assemble/bin-assemble wolfboot_linux_raspi.bin 0x0 wolfboot.bin \
+                              0xc0000 Image_v1_signed_and_encrypted.bin
+dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
+```
+
+* Test boot using qemu
+
+```
+qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_raspi.bin -cpu cortex-a53
+```
+
+
 ## Xilinx Zynq UltraScale
 
 Xilinx UltraScale+ ZCU102 (Aarch64)

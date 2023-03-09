@@ -40,6 +40,8 @@
 #include <stddef.h> /* for size_t */
 
 #if defined(EXT_ENCRYPTED)
+static int encrypt_initialized = 0;
+static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
     #else
@@ -48,6 +50,9 @@
         #define XMEMCPY memcpy
         #define XMEMCMP memcmp
     #endif
+#endif
+
+#if defined(EXT_FLASH) && defined(EXT_ENCRYPTED)
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - \
                          (TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
     #define TRAILER_OVERHEAD (4 + 1 + (WOLFBOOT_PARTITION_SIZE  / \
@@ -56,7 +61,7 @@
     #define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
 #else
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
-#endif
+#endif /* EXT_FLASH && EXT_ENCRYPTED */
 
 #if !defined(__WOLFBOOT)
     #define XMEMSET memset
@@ -676,15 +681,44 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
 }
 #endif
 
+
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+static uint8_t dec_hdr[IMAGE_HEADER_SIZE];
+
+static int decrypt_header(uint8_t *src)
+{
+    int i;
+    uint32_t magic;
+    uint32_t len;
+    for (i = 0; i < IMAGE_HEADER_SIZE; i+=ENCRYPT_BLOCK_SIZE) {
+        crypto_set_iv(encrypt_iv_nonce, i / ENCRYPT_BLOCK_SIZE);
+        crypto_decrypt(dec_hdr + i, src + i, ENCRYPT_BLOCK_SIZE);
+    }
+    magic = *((uint32_t*)(dec_hdr));
+    len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
+    if (magic != WOLFBOOT_MAGIC)
+        return -1;
+    return 0;
+}
+
+#endif
+
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
     uint32_t *volatile version_field = NULL;
     uint32_t *magic = NULL;
-
-    magic = (uint32_t *)blob;
+    uint8_t *img_bin = blob;
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    if (!encrypt_initialized)
+        if (crypto_init() < 0)
+            return 0;
+    decrypt_header(blob);
+    img_bin = dec_hdr;
+#endif
+    magic = (uint32_t *)img_bin;
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
-    if (wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_VERSION,
+    if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
             (void *)&version_field) == 0)
         return 0;
     if (version_field)
@@ -696,10 +730,18 @@ uint32_t wolfBoot_get_blob_type(uint8_t *blob)
 {
     uint32_t *volatile type_field = NULL;
     uint32_t *magic = NULL;
-    magic = (uint32_t *)blob;
+    uint8_t *img_bin = blob;
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    if (!encrypt_initialized)
+        if (crypto_init() < 0)
+            return 0;
+    decrypt_header(blob);
+    img_bin = dec_hdr;
+#endif
+    magic = (uint32_t *)img_bin;
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
-    if (wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
+    if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
             (void *)&type_field) == 0)
         return 0;
     if (type_field)
@@ -712,10 +754,18 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
 {
     uint32_t *volatile delta_base = NULL;
     uint32_t *magic = NULL;
-    magic = (uint32_t *)blob;
+    uint8_t *img_bin = blob;
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    if (!encrypt_initialized)
+        if (crypto_init() < 0)
+            return 0;
+    decrypt_header(blob);
+    img_bin = dec_hdr;
+#endif
+    magic = (uint32_t *)img_bin;
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
-    if (wolfBoot_find_header(blob + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
+    if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
             (void *)&delta_base) == 0)
         return 0;
     if (delta_base)
@@ -862,8 +912,8 @@ int wolfBoot_fallback_is_possible(void)
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
-#ifndef EXT_FLASH
-#error option EXT_ENCRYPTED requires EXT_FLASH
+#if !defined(EXT_FLASH) && !defined(MMU)
+#error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
 #endif
 
 
@@ -874,17 +924,27 @@ int wolfBoot_fallback_is_possible(void)
 static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
 #endif
 
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+#endif
+
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
-    uint32_t addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    uint32_t addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    uint32_t addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    uint32_t addr, addr_align, addr_off;
     int ret = 0;
     int sel_sec = 0;
-#ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(PART_BOOT);
-    addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-#endif
+#ifdef MMU
+    XMEMCPY(ENCRYPT_KEY, k, ENCRYPT_KEY_SIZE);
+    XMEMCPY(ENCRYPT_KEY + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
+    return 0;
+#else
+    addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    #ifdef NVM_FLASH_WRITEONCE
+        sel_sec = nvm_select_fresh_sector(PART_BOOT);
+        addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
+    #endif
     hal_flash_unlock();
     /* casting to unsigned long to abide compilers on 64bit architectures */
     XMEMCPY(ENCRYPT_CACHE,
@@ -899,6 +959,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
     hal_flash_lock();
     return ret;
+#endif
 }
 
 int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
@@ -910,20 +971,28 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
 
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
+#if defined(MMU)
+    XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
+    XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
+#else
     uint8_t *mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS);
     int sel_sec = 0;
-#ifdef NVM_FLASH_WRITEONCE
+    #ifdef NVM_FLASH_WRITEONCE
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-#endif
+    #endif
     XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, mem + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
+#endif
     return 0;
 }
 
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
+#if defined(MMU)
+    ForceZero(ENCRYPT_KEY, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
+#else
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
     uint8_t *mem = (uint8_t *)ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -935,13 +1004,12 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
     if (XMEMCMP(mem, ff, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) != 0)
         hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+#endif
     return 0;
 }
 
 #ifdef __WOLFBOOT
 
-static int encrypt_initialized = 0;
-static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
 
 #ifdef ENCRYPT_WITH_CHACHA
 
@@ -949,8 +1017,12 @@ ChaCha chacha;
 
 int RAMFUNCTION chacha_init(void)
 {
+#if defined(MMU)
+    uint8_t *key = ENCRYPT_KEY;
+#else
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
         ENCRYPT_TMP_SECRET_OFFSET);
+#endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -976,8 +1048,12 @@ Aes aes_dec, aes_enc;
 
 int aes_init(void)
 {
+#if defined(MMU)
+    uint8_t *key = ENCRYPT_KEY;
+#else
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
         ENCRYPT_TMP_SECRET_OFFSET);
+#endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t iv_buf[ENCRYPT_BLOCK_SIZE];
     uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
@@ -1037,6 +1113,7 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 
 static uint8_t RAMFUNCTION part_address(uintptr_t a)
 {
+#ifdef WOLFBOOT_FIXED_PARTITIONS
     if ( 1 &&
 #if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
         (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
@@ -1049,9 +1126,11 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 #endif
         (a < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
         return PART_SWAP;
+#endif
     return PART_NONE;
 }
 
+#ifdef EXT_FLASH
 int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
@@ -1121,6 +1200,10 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     uint32_t row_address = address, row_offset, iv_counter = 0;
     int sz = len, i, step;
     uint8_t part;
+    uintptr_t base_address;
+
+    (void)base_address;
+    (void)part;
 
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
@@ -1153,7 +1236,6 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
         default:
             return -1;
     }
-
     /* decrypt blocks */
     if (sz > len) {
         step = ENCRYPT_BLOCK_SIZE - row_offset;
@@ -1191,6 +1273,39 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     }
     return len;
 }
-#endif
+#endif /* EXT_FLASH */
+#endif /* __WOLFBOOT */
 
+#if defined(MMU)
+int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
+{
+    uint8_t block[ENCRYPT_BLOCK_SIZE];
+    uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+    uint8_t *row_address = src;
+    uint32_t dst_offset = 0, iv_counter = 0;
+    uint32_t magic, len;
+
+
+    if (!encrypt_initialized) {
+        if (crypto_init() < 0)
+            return -1;
+    }
+    /* Attempt to decrypt firmware header */
+
+    if (decrypt_header(src) != 0)
+        return -1;
+    len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
+
+    /* decrypt content */
+    while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
+        crypto_set_iv(encrypt_iv_nonce, iv_counter);
+        crypto_decrypt(dec_block, row_address, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(dst + dst_offset, dec_block, ENCRYPT_BLOCK_SIZE);
+        row_address += ENCRYPT_BLOCK_SIZE;
+        dst_offset += ENCRYPT_BLOCK_SIZE;
+        iv_counter++;
+    }
+    return 0;
+}
+#endif
 #endif /* EXT_ENCRYPTED */

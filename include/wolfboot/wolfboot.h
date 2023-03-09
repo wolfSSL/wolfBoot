@@ -194,7 +194,6 @@ extern "C" {
 
 #endif /* defined WOLFBOOT */
 
-#ifdef WOLFBOOT_FIXED_PARTITIONS
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
@@ -203,7 +202,6 @@ extern "C" {
 #define PART_DTS (0x10)
 #define PART_DTS_BOOT       (PART_DTS | PART_BOOT)
 #define PART_DTS_UPDATE     (PART_DTS | PART_UPDATE)
-#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define IMG_STATE_NEW       0xFF
@@ -264,6 +262,8 @@ int wolfBoot_dualboot_candidate_addr(void**);
 #else
 #   error "Encryption ON, but no encryption algorithm selected."
 #endif
+
+int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst);
 
 #endif /* EXT_ENCRYPTED */
 

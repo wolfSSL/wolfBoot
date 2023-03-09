@@ -53,3 +53,12 @@ SECTIONS
 }
 
 END_STACK = _start_text;
+kernel_addr  = 0x0140000;
+update_addr  = 0x1140000;
+dts_addr     = 0x00a0000;
+kernel_load_addr = 0x20000000;
+dts_load_addr = 0x21000000;
+
+_wolfboot_partition_boot_address = kernel_addr;
+_wolfboot_partition_update_address = update_addr;
+
