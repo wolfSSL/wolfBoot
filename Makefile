@@ -83,6 +83,10 @@ ifeq ($(TARGET),library)
 	MAIN_TARGET:=test-lib
 endif
 
+ifeq ($(TARGET),raspi3)
+	MAIN_TARGET:=wolfboot.bin
+endif
+
 ifeq ($(TARGET),sim)
 	MAIN_TARGET:=wolfboot.elf tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
