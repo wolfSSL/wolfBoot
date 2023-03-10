@@ -115,6 +115,7 @@ void hal_tz_release_nonsecure_area(void)
 #define SET_GTZC_MPCBBx_S_VCTR(bank,n,val) \
     (*((volatile uint32_t *)(GTZC_MPCBB##bank##_S_VCTR_BASE ) + n ))= val
 
+
 void hal_gtzc_init(void)
 {
    int i;

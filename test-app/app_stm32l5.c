@@ -27,30 +27,32 @@
 #include <string.h>
 #include "system.h"
 #include "hal.h"
+#include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
 #include "wolfboot/wc_secure.h"
 
-#define LED_BOOT_PIN (12)  //PG12 - Discovery - Green Led
-#define LED_USR_PIN (3) //PD3  - Discovery  - Red Led
+#define LED_BOOT_PIN (9)  /* PA9 - Nucleo - Red Led */
+#define LED_USR_PIN (7)   /* PB7  - Nucleo  - Green Led */
+#define LED_EXTRA_PIN (7) /* PC7  - Nucleo  - Blue Led */
 
 /*Non-Secure */
-#define RCC_BASE            (0x40021000)   //RM0438 - Table 4
-#define PWR_BASE            (0x40007000)   //RM0438 - Table 4
-#define GPIOD_BASE 0x42020C00
-#define GPIOG_BASE 0x42021800
+#define RCC_BASE            (0x40021000)
+#define PWR_BASE            (0x40007000)
+#define GPIOA_BASE          0x42020000
+#define GPIOB_BASE          0x42020400
 
 
-#define GPIOG_MODER  (*(volatile uint32_t *)(GPIOG_BASE + 0x00))
-#define GPIOG_PUPDR  (*(volatile uint32_t *)(GPIOG_BASE + 0x0C))
-#define GPIOG_BSRR  (*(volatile uint32_t *)(GPIOG_BASE + 0x18))
+#define GPIOA_MODER  (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_PUPDR  (*(volatile uint32_t *)(GPIOA_BASE + 0x0C))
+#define GPIOA_BSRR  (*(volatile uint32_t *)(GPIOA_BASE + 0x18))
 
-#define GPIOD_MODER  (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
-#define GPIOD_PUPDR  (*(volatile uint32_t *)(GPIOD_BASE + 0x0C))
-#define GPIOD_BSRR  (*(volatile uint32_t *)(GPIOD_BASE + 0x18))
+#define GPIOB_MODER  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
+#define GPIOB_PUPDR  (*(volatile uint32_t *)(GPIOB_BASE + 0x0C))
+#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
 
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x4C ))
-#define GPIOG_AHB2_CLOCK_ER (1 << 6)
-#define GPIOD_AHB2_CLOCK_ER (1 << 3)
+#define GPIOA_AHB2_CLOCK_ER (1 << 0)
+#define GPIOB_AHB2_CLOCK_ER (1 << 2)
 
 #define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
 #define PWR_CR2_IOSV         (1 << 9)
@@ -60,20 +62,20 @@ static void boot_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_BOOT_PIN;
 
-    RCC_AHB2_CLOCK_ER|= GPIOG_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER|= GPIOA_AHB2_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
     reg = RCC_AHB2_CLOCK_ER;
     PWR_CR2 |= PWR_CR2_IOSV;
 
-    reg = GPIOG_MODER & ~(0x03 << (pin * 2));
-    GPIOG_MODER = reg | (1 << (pin * 2));
-    GPIOG_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOG_BSRR |= (1 << (pin + 16));
+    reg = GPIOA_MODER & ~(0x03 << (pin * 2));
+    GPIOA_MODER = reg | (1 << (pin * 2));
+    GPIOA_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOA_BSRR |= (1 << (pin + 16));
 }
 
 static void boot_led_off(void)
 {
-    GPIOG_BSRR |= (1 << (LED_BOOT_PIN));
+    GPIOA_BSRR |= (1 << (LED_BOOT_PIN));
 }
 
 void usr_led_on(void)
@@ -81,19 +83,19 @@ void usr_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_USR_PIN;
 
-    RCC_AHB2_CLOCK_ER|= GPIOD_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER|= GPIOB_AHB2_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
     reg = RCC_AHB2_CLOCK_ER;
 
-    reg = GPIOD_MODER & ~(0x03 << (pin * 2));
-    GPIOD_MODER = reg | (1 << (pin * 2));
-    GPIOD_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOD_BSRR |= (1 << (pin + 16));
+    reg = GPIOB_MODER & ~(0x03 << (pin * 2));
+    GPIOB_MODER = reg | (1 << (pin * 2));
+    GPIOB_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOB_BSRR |= (1 << (pin + 16));
 }
 
 void usr_led_off(void)
 {
-    GPIOD_BSRR |= (1 << (LED_USR_PIN));
+    GPIOB_BSRR |= (1 << (LED_USR_PIN));
 }
 
 static char CaBuf[2048];
@@ -109,12 +111,13 @@ void main(void)
     for (i = 0; i < (rand / 100000000); i++)
         ;
 
-    wcs_slot_read(0, CaBuf, 2048);
+    wcs_slot_read(0, (unsigned char *)CaBuf, 2048);
     wcs_ecc_getpublic(1, my_pubkey, &klen);
     wcs_ecc_import_public(4, my_pubkey, klen, 7);
 
 #endif
     hal_init();
+    uart_init(115200, 8, 'N', 1);
     boot_led_on();
     usr_led_on();
     boot_led_off();

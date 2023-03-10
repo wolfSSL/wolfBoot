@@ -104,6 +104,8 @@ ifeq ($(TARGET),stm32l5)
   endif
   CFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-mcpu=cortex-m33
+  CFLAGS+=-I..
+  APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
 endif
 
 ifeq ($(TARGET),stm32u5)

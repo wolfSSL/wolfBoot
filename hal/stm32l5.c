@@ -304,7 +304,35 @@ static void clock_pll_on(int powersave)
     DMB();
 }
 
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+static void periph_unsecure()
+{
+    uint32_t pin;
 
+    /*Enable clock for User LED GPIOs */
+    RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
+
+    /* Enable clock for LPUART1 */
+    RCC_APB1_CLOCK_ER |= UART1_APB1_CLOCK_ER_VAL;
+
+
+    PWR_CR2 |= PWR_CR2_IOSV;
+    /*Un-secure User LED GPIO pins */
+#ifdef STM32_DISCOVERY
+    GPIO_SECCFGR(GPIOD_BASE) &= ~(1<<LED_USR_PIN);
+    GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<LED_BOOT_PIN);
+#else /* Nucleo board */
+    GPIO_SECCFGR(GPIOA_BASE) &= ~(1<<LED_BOOT_PIN);
+    GPIO_SECCFGR(GPIOB_BASE) &= ~(1<<LED_USR_PIN);
+    GPIO_SECCFGR(GPIOC_BASE) &= ~(1<<LED_EXTRA_PIN);
+#endif
+
+    /* Unsecure LPUART1 */
+    TZSC_PRIVCFGR1 &= ~(TZSC_PRIVCFG1_LPUARTPRIV);
+    GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_TX_PIN);
+    GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_RX_PIN);
+}
+#endif
 
 
 #define OPTR_SWAP_BANK (1 << 20)
@@ -336,20 +364,6 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
     stm32l5_reboot();
 }
 
-static void led_unsecure()
-{
-    uint32_t pin;
-
-    /*Enable clock for User LED GPIOs */
-    RCC_AHB2_CLOCK_ER|= GPIOD_AHB2_CLOCK_ER;
-    RCC_AHB2_CLOCK_ER|= GPIOG_AHB2_CLOCK_ER;
-    PWR_CR2 |= PWR_CR2_IOSV;
-
-    /*Un-secure User LED GPIO pins */
-    GPIOD_SECCFGR&=~(1<<LED_USR_PIN);
-    GPIOG_SECCFGR&=~(1<<LED_BOOT_PIN);
-
-}
 
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
 static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
@@ -391,7 +405,7 @@ void hal_prepare_boot(void)
 {
     clock_pll_off();
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-    led_unsecure();
+    periph_unsecure();
 #endif
 }
 
