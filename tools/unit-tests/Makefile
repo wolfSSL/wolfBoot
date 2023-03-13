@@ -5,16 +5,24 @@ ifneq ($(UNAME_S),Darwin)
 	LDFLAGS+=-lrt -lsubunit
 endif
 
-CFLAGS=-I../../src -I../../include
+CFLAGS=-I. -I../../src -I../../include -I../../lib/wolfssl
+CFLAGS+=-g -ggdb
 
-all: unit-parser
+all: unit-parser unit-extflash
 
+../../include/target.h: FORCE
+	cp -f target.h $@
 
-unit-parser: unit-parser.o
+unit-parser: ../../include/target.h unit-parser.o
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+unit-extflash: ../../include/target.h unit-extflash.o
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
 
 clean:
-	rm -f unit-parser unit-parser.o
+	rm -f unit-parser unit-extflash *.o
+
+FORCE:

@@ -27,6 +27,7 @@
 #define WOLFBOOT_HASH_SHA256
 #define IMAGE_HEADER_SIZE 256
 #define UNIT_TEST
+#define WC_NO_HARDEN
 #include <stdio.h>
 #include "libwolfboot.c"
 #include <check.h>

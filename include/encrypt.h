@@ -23,7 +23,7 @@
 
 #ifndef ENCRYPT_H_INCLUDED
 #define ENCRYPT_H_INCLUDED
-#ifdef __WOLFBOOT
+#if defined(__WOLFBOOT) || defined(UNIT_TEST)
 #include <stdint.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha256.h>
@@ -67,5 +67,5 @@ void aes_set_iv(uint8_t *nonce, uint32_t address);
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
 
-#endif /* __WOLFBOOT */
+#endif /* __WOLFBOOT || UNIT_TEST */
 #endif /* ENCRYPT_H_INCLUDED */

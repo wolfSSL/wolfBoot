@@ -44,7 +44,7 @@ static int encrypt_initialized = 0;
 static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
-    #else
+    #elif !defined(XMEMSET)
         #include <string.h>
         #define XMEMSET memset
         #define XMEMCPY memcpy
@@ -63,7 +63,7 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
 #endif /* EXT_FLASH && EXT_ENCRYPTED */
 
-#if !defined(__WOLFBOOT)
+#if !defined(__WOLFBOOT) && !defined(UNIT_TEST)
     #define XMEMSET memset
     #define XMEMCPY memcpy
     #define XMEMCMP memcmp
@@ -89,7 +89,7 @@ static uint32_t ext_cache;
 #endif
 
 
-#ifdef __WOLFBOOT
+#if defined(__WOLFBOOT) || defined (UNIT_TEST)
 /* Inline use of ByteReverseWord32 */
 #define WOLFSSL_MISC_INCLUDED
 #include <wolfcrypt/src/misc.c>
@@ -969,6 +969,7 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     return 0;
 }
 
+#ifndef UNIT_TEST
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
 #if defined(MMU)
@@ -987,6 +988,7 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 #endif
     return 0;
 }
+#endif
 
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
@@ -1008,7 +1010,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
     return 0;
 }
 
-#ifdef __WOLFBOOT
+#if defined(__WOLFBOOT) || defined(UNIT_TEST)
 
 
 #ifdef ENCRYPT_WITH_CHACHA
@@ -1048,7 +1050,7 @@ Aes aes_dec, aes_enc;
 
 int aes_init(void)
 {
-#if defined(MMU)
+#if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +

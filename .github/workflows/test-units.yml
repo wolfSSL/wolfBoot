@@ -1,0 +1,33 @@
+name: Unit tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  footprint_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Build wolfboot and test footprint
+        run: |
+          make -C tools/unit-tests
+
+
+      - name: Run manifest header parser unit tests
+        run: |
+          ./tools/unit-tests/unit-parser
+      
+      - name: Run encrypted ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-extflash
