@@ -187,7 +187,7 @@ static int nvm_select_fresh_sector(int part)
         }
     }
     /* Erase the non-selected partition */
-    addr_align = (uint32_t)(base - ((!sel) * WOLFBOOT_SECTOR_SIZE))
+    addr_align = (uint32_t)(base - ((1 + (!sel)) * WOLFBOOT_SECTOR_SIZE))
         & (~(NVM_CACHE_SIZE - 1));
     if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED) {
