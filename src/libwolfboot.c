@@ -1057,7 +1057,7 @@ int aes_init(void)
         ENCRYPT_TMP_SECRET_OFFSET);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
-    uint8_t iv_buf[ENCRYPT_BLOCK_SIZE];
+    uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t *stored_nonce = key + ENCRYPT_KEY_SIZE;
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
@@ -1140,6 +1140,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
     uint32_t row_address = address, row_offset;
     int sz = len, i, step;
     uint8_t part;
+    uint32_t iv_counter;
 
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
@@ -1156,11 +1157,14 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
     part = part_address(address);
     switch (part) {
         case PART_UPDATE:
-            /* do not encrypt flag sector */
-            if (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS >=
-                    START_FLAGS_OFFSET) {
+            iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) /
+                ENCRYPT_BLOCK_SIZE;
+            /* Do not encrypt last sector */
+            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) /
+                    ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
             }
+            crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
             /* data is coming from update and is already encrypted */
