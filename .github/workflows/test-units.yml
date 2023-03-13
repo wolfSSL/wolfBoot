@@ -15,6 +15,9 @@ jobs:
         with:
           submodules: true
 
+      - name: install libcheck
+        run: sudo apt-get install --no-install-recommends -y -q check
+
       - name: make clean
         run: |
           make keysclean && make -C tools/keytools clean && rm -f include/target.h
