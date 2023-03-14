@@ -1,0 +1,91 @@
+name: Power-failure during update - test with simulator target
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  powerfail_simulator_tests:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+      
+      - name: Run update-revert test with power failures
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+
+      # TEST wit NVM_WRITEONCE enabled
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config with NVM_WRITEONCE
+        run: |
+          cp config/examples/sim-nvm-writeonce.config .config
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test (NVM_WRITEONCE)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test (NVM_WRITEONCE)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+      
+      - name: Run update-revert test with power failures (NVM_WRITEONCE)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
