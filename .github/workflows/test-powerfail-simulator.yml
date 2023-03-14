@@ -26,10 +26,14 @@ jobs:
       - name: Build key tools
         run: |
           make -C tools/keytools
+      
+      - name: Build bin assemble
+        run: |
+          make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-update
+          make && make test-sim-internal-flash-with-update
 
       - name: Run sunny day update test
         run: |
@@ -65,10 +69,14 @@ jobs:
       - name: Build key tools
         run: |
           make -C tools/keytools
+      
+      - name: Build bin assemble
+        run: |
+          make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-update
+          make && make test-sim-internal-flash-with-update
 
       - name: Run sunny day update test (NVM_WRITEONCE)
         run: |
