@@ -1019,7 +1019,7 @@ ChaCha chacha;
 
 int RAMFUNCTION chacha_init(void)
 {
-#if defined(MMU)
+#if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +

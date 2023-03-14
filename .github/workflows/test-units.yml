@@ -30,7 +30,19 @@ jobs:
       - name: Run manifest header parser unit tests
         run: |
           ./tools/unit-tests/unit-parser
-      
-      - name: Run encrypted ext_flash unit tests
+
+      - name: Run non-encrypted ext_flash unit tests
         run: |
           ./tools/unit-tests/unit-extflash
+
+      - name: Run aes128 ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-aes128
+
+      - name: Run aes256 ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-aes256
+
+      - name: Run chacha20 ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-chacha20

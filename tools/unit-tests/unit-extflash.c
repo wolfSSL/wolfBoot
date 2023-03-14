@@ -27,13 +27,18 @@
 #define FLASH_SIZE (33 * 1024)
 #define WOLFBOOT_HASH_SHA256
 #define IMAGE_HEADER_SIZE 256
-#define EXT_ENCRYPTED
 #define EXT_FLASH
-#define ENCRYPT_WITH_AES256
 
-#define WOLFSSL_AES_COUNTER 
-#define WOLFSSL_AES_DIRECT
-#define WOLFSSL_AES_256
+#if defined(ENCRYPT_WITH_AES256) || defined(ENCRYPT_WITH_AES128)
+    #define WOLFSSL_AES_COUNTER 
+    #define WOLFSSL_AES_DIRECT
+#endif
+#if defined(ENCRYPT_WITH_AES256)
+    #define WOLFSSL_AES_256
+#endif
+#if defined(ENCRYPT_WITH_CHACHA)
+    #define HAVE_CHACHA
+#endif
 #define WC_NO_HARDEN
 
 #define WOLFSSL_USER_SETTINGS
@@ -46,8 +51,15 @@
 #include <string.h>
 #include "user_settings.h"
 
-#include "wolfcrypt/src/aes.c"
 #include "libwolfboot.c"
+
+#if defined(ENCRYPT_WITH_AES256) || defined(ENCRYPT_WITH_AES128)
+    #include "wolfcrypt/src/aes.c"
+#endif
+
+#if defined(ENCRYPT_WITH_CHACHA)
+    #include "wolfcrypt/src/chacha.c"
+#endif
 
 /* Mocks */
 
@@ -163,16 +175,6 @@ static uint8_t test_buffer[512] = {
         /* End HDR */
     0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13,
 };
-
-
-int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce)
-{
-    printf("Called get_encrypt_key mock\r\n");
-            
-    memcpy(key, enc_key, ENCRYPT_KEY_SIZE);
-    memcpy(key, enc_key + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
-    return 0;
-}
 
 
 START_TEST(test_ext_flash_operations) {
