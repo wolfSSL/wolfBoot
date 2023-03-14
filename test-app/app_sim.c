@@ -76,4 +76,4 @@ int main(int argc, char *argv[]) {
     return 0;
 
 }
-#endif /** PLATFROM_sim **/
+#endif /** PLATFORM_sim **/
