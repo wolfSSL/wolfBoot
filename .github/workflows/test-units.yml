@@ -1,0 +1,48 @@
+name: Unit tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  unit_tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: install libcheck
+        run: sudo apt-get install --no-install-recommends -y -q check
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Build wolfboot and test footprint
+        run: |
+          make -C tools/unit-tests
+
+
+      - name: Run manifest header parser unit tests
+        run: |
+          ./tools/unit-tests/unit-parser
+
+      - name: Run non-encrypted ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-extflash
+
+      - name: Run aes128 ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-aes128
+
+      - name: Run aes256 ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-aes256
+
+      - name: Run chacha20 ext_flash unit tests
+        run: |
+          ./tools/unit-tests/unit-chacha20

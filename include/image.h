@@ -579,7 +579,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 #include "hal.h"
 
 
-#if defined(EXT_ENCRYPTED) && defined(__WOLFBOOT)
+#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
 #include "encrypt.h"
 #define ext_flash_check_write ext_flash_encrypt_write
 #define ext_flash_check_read ext_flash_decrypt_read
