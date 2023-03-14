@@ -35,6 +35,8 @@
 static uint8_t *ram_base;
 static uint8_t *flash_base;
 
+uint32_t erasefail_address = 0xFFFFFFFF;
+
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
 #define EXTERNAL_FLASH_FILE "./external_flash.dd"
 
@@ -108,6 +110,11 @@ int hal_flash_erase(uint32_t address, int len)
     uint8_t *ptr = 0;
 
     /* implicit cast abide compiler warning */
+    printf("hal_flash_erase addr %p len %d\n", address, len);
+    if (address == erasefail_address) {
+        printf("POWER FAILURE\n");
+        exit(0);
+    }
     memset(ptr + address, 0xff, len);
     return 0;
 }
@@ -116,6 +123,7 @@ void hal_init(void)
 {
     int ret;
     uint8_t *p;
+    int i;
     ret = mmap_file(INTERNAL_FLASH_FILE,
                     (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS, &p);
     if (ret != 0) {
@@ -130,6 +138,14 @@ void hal_init(void)
         exit(-1);
     }
 #endif /* EXT_FLASH */
+
+    for (i = 1; i < main_argc; i++) {
+        if (strcmp(main_argv[i], "powerfail") == 0) {
+            erasefail_address = strtol(main_argv[++i], NULL,  16);
+            printf("Set power fail to erase at address %p\n", erasefail_address);
+            break;
+        }
+    }
 }
 
 void ext_flash_lock(void)
