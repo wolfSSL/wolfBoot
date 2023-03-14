@@ -78,12 +78,12 @@ int hal_flash_erase(uint32_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    //fail_unless(locked, "Double unlock detected\n");
+    fail_unless(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    //fail_if(locked, "Double lock detected\n");
+    fail_if(locked, "Double lock detected\n");
     locked++;
 }
 
@@ -109,6 +109,8 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len) {
     printf("Called ext_flash_write %p %p %d\n", address, data, len);
+
+
     /* Check that the write address and size are within the bounds of the flash memory */
     ck_assert_int_le(address + len, FLASH_SIZE);
 
@@ -121,6 +123,13 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len) {
 int ext_flash_erase(uintptr_t address, int len) {
     /* Check that the erase address and size are within the bounds of the flash memory */
     ck_assert_int_le(address + len, FLASH_SIZE);
+
+    /* Check that address is aligned to WOLFBOOT_SECTOR_SIZE */
+    ck_assert_int_eq(address, address & ~(WOLFBOOT_SECTOR_SIZE - 1));
+
+    /* Check that len is aligned to WOLFBOOT_SECTOR_SIZE */
+    ck_assert_int_eq(len, len & ~(WOLFBOOT_SECTOR_SIZE - 1));
+
 
     /* Erase the flash memory by setting each byte to 0xFF, WOLFBOOT_SECTOR_SIZE bytes at a time */
     uint32_t i;
@@ -175,6 +184,8 @@ static uint8_t test_buffer[512] = {
         /* End HDR */
     0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13,
 };
+
+/* End Mocks */
 
 
 START_TEST(test_ext_flash_operations) {
@@ -252,7 +263,6 @@ START_TEST(test_ext_enc_flash_operations) {
 END_TEST
 
 
-/* End Mocks */
 
 Suite *wolfboot_suite(void)
 {
