@@ -1,0 +1,54 @@
+name: Renode Automated multi memory configurations
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  renode_automated_fastmath:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Select config
+        run: |
+          cp config/examples/nrf52840.config .config && make include/target.h
+
+##### FAST MATH tests
+
+# ECC256 TEST
+      - name: Renode Tests ECC256
+        run: ./tools/renode/docker-test.sh "SIGN=ECC256 SPMATH=0"
+
+
+# ECC384 TEST
+      - name: Renode Tests ECC384
+        run: ./tools/renode/docker-test.sh "SIGN=ECC384 SPMATH=0"
+
+
+# RSA2048 TEST
+      - name: Renode Tests RSA2048
+        run: ./tools/renode/docker-test.sh "SIGN=RSA2048 SPMATH=0"
+
+
+# RSA3072 TEST
+      - name: Renode Tests RSA3072
+        run: ./tools/renode/docker-test.sh "SIGN=RSA3072 SPMATH=0"
+
+
+# RSA4096 TEST
+      - name: Renode Tests RSA4096
+        run: ./tools/renode/docker-test.sh "SIGN=RSA4096 SPMATH=0"
+
+
+      - name: Upload Output Dir
+        uses: actions/upload-artifact@v2
+        with:
+          name: Renode Test Results
+          path: test_results/
+
