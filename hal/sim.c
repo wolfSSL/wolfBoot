@@ -110,7 +110,7 @@ int hal_flash_erase(uint32_t address, int len)
     uint8_t *ptr = 0;
 
     /* implicit cast abide compiler warning */
-    fprintf(stderr,"hal_flash_erase addr %u len %d\n", address, len);
+    fprintf(stderr,"hal_flash_erase addr %x len %d\n", address, len);
     if (address == erasefail_address) {
         fprintf(stderr,"POWER FAILURE\n");
         /* Corrupt page */
@@ -144,7 +144,7 @@ void hal_init(void)
     for (i = 1; i < main_argc; i++) {
         if (strcmp(main_argv[i], "powerfail") == 0) {
             erasefail_address = strtol(main_argv[++i], NULL,  16);
-            fprintf(stderr,"Set power fail to erase at address %u\n", erasefail_address);
+            fprintf(stderr,"Set power fail to erase at address %x\n", erasefail_address);
             break;
         }
     }
