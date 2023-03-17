@@ -99,6 +99,7 @@ endif
 ifeq ($(TARGET),stm32l5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld
+    APP_OBJS+=wcs/wolfcrypt_secure.o
   else
     LSCRIPT_TEMPLATE=ARM-stm32l5.ld
   endif

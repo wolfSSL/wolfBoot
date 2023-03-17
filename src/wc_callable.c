@@ -237,30 +237,48 @@ static int keyvault_init(void)
  * using WCS.
  */
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
-        uint8_t *pubkey, uint32_t key_size, int curve_id)
-{
-    ecc_key *key;
-    struct wcs_key *newkey;
 
-    if (slot_id >= WCS_SLOTS)
-        return -1; /* Id too big */
-    if (WCS_KV.slot_used[slot_id] == 0)
-        return -1;
-    newkey = keyvault_get_slot(slot_id);
-    if (newkey == KEYVAULT_INVALID_ADDRESS)
-        return -1;
-    if (newkey->provisioned != 0)
-        return -1;
-    if ((newkey->access_flags & WCS_ACCESS_WRITE) == 0)
-        return -1;
+int __attribute__((cmse_nonsecure_entry))
+wcs_ecc_import_public(int curve_id, uint8_t *pubkey, uint32_t key_size)
+{
+    int slot_id;
+    struct wcs_key *wk;
+    int ret;
+    ecc_key new_key;
+
     if ((curve_id < 0) || (wc_ecc_is_valid_idx(curve_id) == 0))
         return ECC_BAD_ARG_E;
-    key = &newkey->key.ecc;
-    if (wc_ecc_init(key) < 0)
+
+    slot_id = keyvault_new(WCS_TYPE_ECC, sizeof(ecc_key),
+            WCS_ACCESS_WRITE |
+            WCS_ACCESS_DERIVE | WCS_ACCESS_VERIFY | WCS_ACCESS_EXPORT_PUBLIC);
+    if (slot_id < 0)
         return -1;
-    return wc_ecc_import_unsigned(key, pubkey, pubkey + key_size, NULL,
-            curve_id);
+    if (slot_id >= WCS_SLOTS)
+        return -1;
+    if (WCS_KV.slot_used[slot_id] == 0)
+        return -1;
+    wk = keyvault_get_slot(slot_id);
+    if (wk == KEYVAULT_INVALID_ADDRESS)
+        return -1;
+    if (wk->type != WCS_TYPE_ECC)
+        return -1;
+    if ((wk->access_flags & WCS_ACCESS_WRITE) == 0)
+        return -1;
+    if (wk->size != sizeof(ecc_key))
+        return -1;
+    if (wc_ecc_init(&new_key) != 0)
+        return -1;
+    ret = wc_ecc_import_unsigned(&new_key, pubkey, pubkey + key_size,
+            NULL, curve_id);
+    if (ret < 0)
+        return -1;
+
+    memcpy(&wk->key.ecc, &new_key, sizeof(ecc_key));
+    wk->size = key_size;
+    wk->provisioned++;
+    wk->access_flags &= (~WCS_ACCESS_WRITE);
+    return slot_id;
 }
 
 int __attribute__((cmse_nonsecure_entry))
@@ -272,6 +290,7 @@ wcs_ecc_keygen(uint32_t key_size, int ecc_curve)
     WC_RNG wcs_rng;
     ecc_key new_key;
     slot_id = keyvault_new(WCS_TYPE_ECC, sizeof(ecc_key),
+            WCS_ACCESS_WRITE |
             WCS_ACCESS_DERIVE | WCS_ACCESS_SIGN | WCS_ACCESS_EXPORT_PUBLIC);
     if (slot_id < 0)
         return -1;
@@ -299,6 +318,7 @@ wcs_ecc_keygen(uint32_t key_size, int ecc_curve)
     memcpy(&wk->key.ecc, &new_key, sizeof(ecc_key));
     wk->size = key_size;
     wk->provisioned++;
+    wk->access_flags &= (~WCS_ACCESS_WRITE);
     return slot_id;
 }
 
@@ -400,9 +420,10 @@ wcs_ecc_getpublic(int slot_id, uint8_t *pubkey, uint32_t *pubkeySz)
 
 
 int __attribute__((cmse_nonsecure_entry))
-wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id, word32 *outlen)
+wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, word32 outlen)
 {
     struct wcs_key *priv, *pub, *shared;
+    int shared_slot_id = -1;
     byte outkey[WCS_MAX_DERIVED_KEY_SIZE];
 
     if (privkey_slot_id > WCS_SLOTS)
@@ -414,6 +435,7 @@ wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id, wor
 
     priv = keyvault_get_slot(privkey_slot_id);
     pub = keyvault_get_slot(pubkey_slot_id);
+
 
     if ((priv == KEYVAULT_INVALID_ADDRESS) || (pub == KEYVAULT_INVALID_ADDRESS))
         return -1;
@@ -428,8 +450,13 @@ wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id, wor
         return -1;
     }
 
-    if (shared_slot_id > WCS_SLOTS)
+    shared_slot_id = keyvault_new(WCS_TYPE_AES, outlen,
+            WCS_ACCESS_WRITE | WCS_ACCESS_READ | WCS_ACCESS_ENCDEC
+            );
+
+    if (shared_slot_id < 0)
         return -1;
+
     if (WCS_KV.slot_used[shared_slot_id] == 0)
         return -1;
 
@@ -442,16 +469,16 @@ wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, int shared_slot_id, wor
         return -1;
     if ((shared->access_flags & WCS_ACCESS_ENCDEC) == 0)
         return -1;
-    if (shared->size < *outlen)
+    if (shared->size < outlen)
         return -1;
-    if (WCS_MAX_DERIVED_KEY_SIZE < *outlen)
+    if (WCS_MAX_DERIVED_KEY_SIZE < outlen)
         return -1;
-    if (wc_ecc_shared_secret(&priv->key.ecc, &pub->key.ecc, outkey, outlen) != 0)
+    if (wc_ecc_shared_secret(&priv->key.ecc, &pub->key.ecc, outkey, &outlen) != 0)
         return -1;
 
-    XMEMCPY(&shared->key.raw, outkey, *outlen);
+    XMEMCPY(&shared->key.raw, outkey, outlen);
     shared->provisioned = 1;
-    return 0;
+    return shared_slot_id;
 }
 
 int __attribute__((cmse_nonsecure_entry))

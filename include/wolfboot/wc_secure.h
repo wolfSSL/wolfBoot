@@ -39,14 +39,17 @@ int __attribute__((cmse_nonsecure_entry)) wcs_slot_read(int slot_id,
 
 
 /* ECC */
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int slot_id,
-        uint8_t *pubkey, uint32_t key_size, int curve_id);
+int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int ecc_curve,
+        uint8_t *pubkey, uint32_t key_size);
+
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(uint32_t key_size,
         int ecc_curve);
+
 int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id,
         uint8_t *pubkey, uint32_t *pubkeySz);
+
 int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id,
-        int pubkey_slot_id, int shared_slot_id);
+        int pubkey_slot_id, uint32_t outlen);
 
 /*  ECC Calls with wrapper for arguments (ABI only allows 4 arguments) */
 int __attribute__((cmse_nonsecure_entry))

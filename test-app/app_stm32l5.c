@@ -107,13 +107,12 @@ void main(void)
     uint32_t rand;
     uint32_t i;
     uint32_t klen = 200;
+    int otherkey_slot;
     wcs_get_random((void*)&rand, 4);
     for (i = 0; i < (rand / 100000000); i++)
         ;
 
     wcs_slot_read(0, (unsigned char *)CaBuf, 2048);
-    wcs_ecc_getpublic(1, my_pubkey, &klen);
-    wcs_ecc_import_public(4, my_pubkey, klen, 7);
 
 #endif
     hal_init();
