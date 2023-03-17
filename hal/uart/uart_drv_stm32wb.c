@@ -51,6 +51,9 @@
 
 #define CLOCK_SPEED (64000000) /* 64 MHz (STM32WB55) */
 
+#define APB2_CLOCK_ER           (*(volatile uint32_t *)(0x58000060))
+#define UART1_APB2_CLOCK_ER_VAL 	(1 << 14)
+
 #define AHB2_CLOCK_ER (*(volatile uint32_t *)(0x5800004c))
 #define GPIOB_AHB2_CLOCK_ER (1 << 1)
 #define GPIOB_BASE 0x48000400
@@ -103,6 +106,8 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     /* Enable pins and configure for AF7 */
     uart_pins_setup();
     
+    /* Turn on the device */
+    APB2_CLOCK_ER |= UART1_APB2_CLOCK_ER_VAL;
     UART1_CR1 &= ~(UART_CR1_UART_ENABLE);
     UART1_CR1 &= ~(UART_CR1_FIFO_ENABLE);
 
