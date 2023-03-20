@@ -250,6 +250,7 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
 {
     static int id_slot = 0;
     struct keystore_slot sl;
+    size_t slot_size;
 
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
         fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
@@ -268,10 +269,10 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     sl.part_id_mask = 0xFFFFFFFF;
 
     sl.pubkey_size = get_pubkey_size(ktype);
-
-    memcpy(sl.pubkey, key, sz);
-    fwrite(&sl, sl.pubkey_size, 1, fpub_image);
-    sl.pubkey_size = sz;
+    memcpy(sl.pubkey, key, sl.pubkey_size);
+    slot_size = sizeof(struct keystore_slot) + sl.pubkey_size -
+        KEYSLOT_MAX_PUBKEY_SIZE;
+    fwrite(&sl, slot_size, 1, fpub_image);
     id_slot++;
 }
 
