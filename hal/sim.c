@@ -35,6 +35,8 @@
 static uint8_t *ram_base;
 static uint8_t *flash_base;
 
+uint32_t erasefail_address = 0xFFFFFFFF;
+
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
 #define EXTERNAL_FLASH_FILE "./external_flash.dd"
 
@@ -59,7 +61,7 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 
     fd = open(path, O_RDWR);
     if (fd == -1) {
-        printf("can't open %s\n", path);
+        fprintf(stderr,"can't open %s\n", path);
         return -1;
     }
 
@@ -108,6 +110,13 @@ int hal_flash_erase(uint32_t address, int len)
     uint8_t *ptr = 0;
 
     /* implicit cast abide compiler warning */
+    fprintf(stderr,"hal_flash_erase addr %x len %d\n", address, len);
+    if (address == erasefail_address) {
+        fprintf(stderr,"POWER FAILURE\n");
+        /* Corrupt page */
+        memset(ptr + address, 0xEE, len);
+        exit(0);
+    }
     memset(ptr + address, 0xff, len);
     return 0;
 }
@@ -116,20 +125,29 @@ void hal_init(void)
 {
     int ret;
     uint8_t *p;
+    int i;
     ret = mmap_file(INTERNAL_FLASH_FILE,
                     (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS, &p);
     if (ret != 0) {
-        printf("failed to load internal flash file\n");
+        fprintf(stderr,"failed to load internal flash file\n");
         exit(-1);
     }
 
 #ifdef EXT_FLASH
     ret = mmap_file(EXTERNAL_FLASH_FILE, NULL, &flash_base);
     if (ret != 0) {
-        printf("failed to load internal flash file\n");
+        fprintf(stderr,"failed to load internal flash file\n");
         exit(-1);
     }
 #endif /* EXT_FLASH */
+
+    for (i = 1; i < main_argc; i++) {
+        if (strcmp(main_argv[i], "powerfail") == 0) {
+            erasefail_address = strtol(main_argv[++i], NULL,  16);
+            fprintf(stderr,"Set power fail to erase at address %x\n", erasefail_address);
+            break;
+        }
+    }
 }
 
 void ext_flash_lock(void)
@@ -168,18 +186,18 @@ void do_boot(const uint32_t *app_offset)
 
     fd = memfd_create("test_app", 0);
     if (fd == -1) {
-        printf("memfd error\n");
+        fprintf(stderr,"memfd error\n");
         exit(-1);
     }
 
     ret = write(fd, app_offset, WOLFBOOT_PARTITION_SIZE);
     if (ret != WOLFBOOT_PARTITION_SIZE) {
-        printf("can't write test-app to memfd\n");
+        fprintf(stderr,"can't write test-app to memfd\n");
         exit(-1);
     }
 
     ret = fexecve(fd, main_argv, envp);
-    printf("fexecve error\n");
+    fprintf(stderr,"fexecve error\n");
     exit(1);
 }
 

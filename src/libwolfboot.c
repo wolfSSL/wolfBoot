@@ -153,21 +153,21 @@ static int nvm_select_fresh_sector(int part)
 {
     int sel;
     uint32_t off;
-    uint32_t base;
-    uint32_t addr_align;
+    uint8_t *base;
+    uint8_t *addr_align;
 
     if (part == PART_BOOT)
-        base = PART_BOOT_ENDFLAGS;
+        base = (uint8_t *)PART_BOOT_ENDFLAGS;
     else
-        base = PART_UPDATE_ENDFLAGS;
+        base = (uint8_t *)PART_UPDATE_ENDFLAGS;
 
     /* Default to last sector if no match is found */
     sel = 0;
 
     /* Select the sector with more flags set */
     for (off = 1; off < WOLFBOOT_SECTOR_SIZE; off++) {
-        uint8_t byte_0 = *(((uint8_t *)base) - off);
-        uint8_t byte_1 = *(((uint8_t *)base) - (WOLFBOOT_SECTOR_SIZE + off));
+        uint8_t byte_0 = *(base - off);
+        uint8_t byte_1 = *(base - (WOLFBOOT_SECTOR_SIZE + off));
 
         if (byte_0 == FLASH_BYTE_ERASED && byte_1 != FLASH_BYTE_ERASED) {
             sel = 1;
@@ -180,18 +180,18 @@ static int nvm_select_fresh_sector(int part)
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
                 (byte_1 == FLASH_BYTE_ERASED)) {
             /* Examine previous position one byte ahead */
-            byte_0 = *(((uint8_t *)base) + 1 - off);
-            byte_1 = *(((uint8_t *)base) + 1 - (WOLFBOOT_SECTOR_SIZE + off));
+            byte_0 = *(base + 1 - off);
+            byte_1 = *(base + 1 - (WOLFBOOT_SECTOR_SIZE + off));
             sel = FLAG_CMP(byte_0, byte_1);
             break;
         }
     }
     /* Erase the non-selected partition */
-    addr_align = (uint32_t)(base - ((1 + (!sel)) * WOLFBOOT_SECTOR_SIZE))
-        & (~(NVM_CACHE_SIZE - 1));
+    addr_align = (uint8_t *)((((uintptr_t)base - ((1 + (!sel)) * WOLFBOOT_SECTOR_SIZE)))
+        & ((~(NVM_CACHE_SIZE - 1))));
     if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED) {
-        hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+        hal_flash_erase((uintptr_t)addr_align, WOLFBOOT_SECTOR_SIZE);
     }
     return sel;
 }

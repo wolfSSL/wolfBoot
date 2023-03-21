@@ -141,14 +141,36 @@ test-update: test-app/image.bin FORCE
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-update.bin 0x08040000)
 
+
 test-sim-internal-flash-with-update: test-app/image.elf FORCE
+	$(Q)cp test-app/image.elf test-app/image.bak.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) 1
+	$(Q)cp test-app/image.bak.elf test-app/image.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
-	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) \
+		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)$(BINASSEMBLE) internal_flash.dd 0  test-app/image_v1_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(WOLFBOOT_PARTITION_BOOT_ADDRESS))) test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)+$(WOLFBOOT_PARTITION_SIZE)-$(WOLFBOOT_PARTITION_BOOT_ADDRESS))) erased_sec.dd
+
+test-sim-internal-flash-with-delta-update:
+	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
+	$(Q)$(BINASSEMBLE) internal_flash.dd 0  test-app/image_v1_signed.bin \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(WOLFBOOT_PARTITION_BOOT_ADDRESS))) test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff.bin \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)+$(WOLFBOOT_PARTITION_SIZE)-$(WOLFBOOT_PARTITION_BOOT_ADDRESS))) erased_sec.dd
+
+test-sim-update-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
+	$(Q)(test `./wolfboot.elf success update_trigger get_version` -eq 1)
+	$(Q)(test `./wolfboot.elf success get_version` -eq $(TEST_UPDATE_VERSION))
+
+test-sim-rollback-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
+	$(Q)(test `./wolfboot.elf success update_trigger get_version` -eq 1)
+	$(Q)(test `./wolfboot.elf get_version` -eq $(TEST_UPDATE_VERSION))
+	$(Q)(test `./wolfboot.elf success get_version` -eq 1)
+	$(Q)(test `./wolfboot.elf get_version` -eq 1)
 
 test-sim-update-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
 	$(Q)(test `./wolfboot.elf success update_trigger get_version` -eq 1)

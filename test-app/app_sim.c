@@ -35,6 +35,8 @@ void hal_init(void);
 
 int do_cmd(const char *cmd)
 {
+    if (strcmp(cmd, "powerfail") == 0)
+        return 1;
     if (strcmp(cmd, "get_version") == 0) {
         printf("%d", wolfBoot_current_firmware_version());
         return 0;
@@ -61,15 +63,17 @@ int do_cmd(const char *cmd)
 int main(int argc, char *argv[]) {
 
     int i;
+    int ret;
 
     hal_init();
 
     for (i = 1; i < argc; ++i) {
-        if (do_cmd(argv[i]) != 0)
+        ret = do_cmd(argv[i]);
+        if (ret < 0)
             return -1;
+        i+= ret;
     }
-
     return 0;
 
 }
-#endif /** PLATFROM_sim **/
+#endif /** PLATFORM_sim **/
