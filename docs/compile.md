@@ -162,6 +162,15 @@ is created at compile time to assist the allocation of the object needed by the 
 When compiled with `WOLFBOOT_SMALL_STACK=1`, wolfBoot reduces the stack usage considerably, and simulates dynamic
 memory allocations by assigning dedicated, statically allocated, pre-sized memory areas.
 
+### Allow bigger stack size allocation
+
+Some combinations of authentication algorithms, key sizes and math configuration in wolfCrypt require
+a large amount of memory to be allocated in the stack at runtime. By default, if your configuration
+falls in one of these cases, wolfBoot compilation will terminate with an explicit error.
+
+In some cases you might have enough memory available to allow large stack allocations. 
+To circumvent the compile-time checks on the maximum allowed stack size, use `WOLFBOOT_HUGE_STACK=1`.
+
 ### Disable Backup of current running firmware
 
 Optionally, it is possible to disable the backup copy of the current running firmware upon the installation of the
