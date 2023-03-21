@@ -179,11 +179,19 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 }
 #endif /* WOLFBOOT_SIGN_ECC256 */
 
+
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
         defined (WOLFBOOT_SIGN_RSA3072) || \
         defined (WOLFBOOT_SIGN_RSA4096)
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/rsa.h>
+
+#if defined(WOLFBOOT_SIGN_RSA4096) && \
+    (defined(USE_FAST_MATH) && \
+     !defined(WOLFSSL_SMALL_STACK) && !defined(WOLFBOOT_HUGE_STACK))
+#   error "TFM will allocate 70+ KB in the stack with this configuration." \
+   "If this is OK, please compile with WOLFBOOT_HUGE_STACK=1"
+#endif
 
 #ifndef NO_RSA_SIG_ENCODING /* option to reduce code size */
 static inline int DecodeAsn1Tag(const uint8_t* input, int inputSz, int* inOutIdx,

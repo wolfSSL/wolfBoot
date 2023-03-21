@@ -43,6 +43,8 @@
 #ifndef __MACH__
 #include <termio.h>
 #include <linux/serial.h>
+typedef void (*sighandler_t)(int);
+sighandler_t sigset(int sig, sighandler_t disp);
 #endif
 
 #define MSGLEN      (4 + 4 + 8)

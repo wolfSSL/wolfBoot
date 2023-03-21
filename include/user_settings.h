@@ -266,6 +266,9 @@
 #   endif
 #   define WOLFSSL_NO_MALLOC
 #else
+#   if defined(WOLFBOOT_HUGE_STACK)
+#       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
+#endif
 #   define WOLFSSL_SMALL_STACK
 #endif
 
