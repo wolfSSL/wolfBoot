@@ -179,6 +179,11 @@ static int nvm_select_fresh_sector(int part)
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
                 (byte_1 == FLASH_BYTE_ERASED)) {
+        	/* First time boot?  Assume no pending update*/
+            if(off==1) {
+                sel=0;
+                break;
+            }
             /* Examine previous position one byte ahead */
             byte_0 = *(base + 1 - off);
             byte_1 = *(base + 1 - (WOLFBOOT_SECTOR_SIZE + off));
