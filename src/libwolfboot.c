@@ -179,8 +179,8 @@ static int nvm_select_fresh_sector(int part)
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
                 (byte_1 == FLASH_BYTE_ERASED)) {
-        	/* First time boot?  Assume no pending update*/
-            if(off==1) {
+            /* First time boot?  Assume no pending update */
+            if(off == 1) {
                 sel=0;
                 break;
             }
