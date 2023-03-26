@@ -36,6 +36,8 @@ extern void (** const IV_RAM)(void);
 extern char **main_argv;
 extern int main_argc;
 int main(int argc, char *argv[])
+#elif defined(WOLFBOOT_LOADER_MAIN)
+int loader_main(void)
 #else
 int main(void)
 #endif
