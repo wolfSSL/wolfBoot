@@ -32,7 +32,9 @@ ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
   CFLAGS+=-DARCH_AARCH64 -march=armv8-a
   OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+  OBJS+=hal/mmu/ttbl_aarch64.o
   CFLAGS+=-DNO_QNX
+
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
   endif
@@ -291,11 +293,14 @@ ifeq ($(TARGET),nxp_p1021)
 endif
 
 ifeq ($(TARGET),nxp_ls1028a)
-  ARCH_FLAGS=-mcpu=cortex-a72
-  CFLAGS+= -DCPU_A72 -DTARGET_LS1028A  
+  ARCH_FLAGS=-mcpu=cortex-a72+crypto -mstrict-align -march=armv8-a+crypto -mtune=cortex-a72
+  CFLAGS+=$(ARCH_FLAGS) -DCPU_A72 -DTARGET_LS1028A #-DWOLFSSL_ARMASM -DWOLFSSL_NO_HASH_RAW
   LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT" 
-  CFLAGS +=-ffunction-sections -fdata-sections # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  CFLAGS +=-Ihal/mmu/
   LDFLAGS+=-Wl,--gc-sections
+
+  #WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf

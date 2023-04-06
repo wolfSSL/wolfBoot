@@ -134,6 +134,15 @@ invalidate_ivac:
     dsb sy
     ret
 
+.global disable_mmu
+disable_mmu:  
+    mrs x0, sctlr_el3
+    bic x0, x0, x1
+    msr sctlr_el3, x0
+    isb
+    dsb sy
+    ret
+
 .global switch_el3_to_el2
 switch_el3_to_el2:
     mov x0, #0x531
@@ -142,14 +151,12 @@ switch_el3_to_el2:
     mov x0, #0x33ff
     msr cptr_el2, x0             /* Disable el2 traps */
     mrs x0, sctlr_el2
-    ldr x1, =0
-    orr x1, x1, #(1 << 3)        /* SA - stack alignment check enable */
-    orr x1, x1, #(1 << 0)        /* M - MMU enable */
-    orr x1, x1, #(1 << 1)        /* A - Alignment check enable */
-    orr x1, x1, #(1 << 12)       /* I - instruction cache enable */
-    orr x1, x1, #(1 << 2)        /* C - data & unified cache enable */
-    orr x0, x0, x1
+    mov x1, #(1 << 0) | (1 << 2) | (1 << 12)
+    bic x0, x0, x1
     msr sctlr_el2, x0
+    mrs x0, sctlr_el3
+    bic x0, x0, x1
+    msr sctlr_el3, x0
     bl invalidate_ivac
     ldp x29, x30, [sp]
     mrs x0, vbar_el3
@@ -170,24 +177,24 @@ init_A72:
     msr vbar_el3, x1
 
 el3_state: 
-    mrs x0, scr_el3             /* scr_el3 config disable */
-    bic x0, x0, #(1 << 13)
-    bic x0, x0, #(1 << 12) 
-    bic x0, x0, #(1 << 11)
-    bic x0, x0, #(1 << 10)
-    bic x0, x0, #(1 << 9)
-    bic x0, x0, #(1 << 8)
-    bic x0, x0, #(1 << 7)
+    mrs x0, scr_el3             /* scr_el3 config */
+    bic x0, x0, #(1 << 13)      /* Trap WFE instruciton to EL3 off */
+    bic x0, x0, #(1 << 12)      /* Traps TWI ins to EL3 off */
+    bic x0, x0, #(1 << 11)      /* Traps EL1 access to physical secure timer to EL3 on */
+    orr x0, x0, #(1 << 10)      /* Next lower level is AArch64 */
+    bic x0, x0, #(1 << 9)       /* Secure state instuction fetches from non-secure memory are permitted */
+    bic x0, x0, #(1 << 8)       /* Hypervisor Call instruction disabled */
+    bic x0, x0, #(1 << 7)       /* Secure Monitor Call enabled */
     orr x0, x0, #0xf            /* IRQ|FIQ|EA to EL3 */
     msr scr_el3, x0
 
-    mrs x0, sctlr_el3           /* sctlr_el3 config disable */
-    bic x0, x0, #(1 << 19)  
-    bic x0, x0, #(1 << 12)
-    bic x0, x0, #(1 << 3)
-    bic x0, x0, #(1 << 2)
-    bic x0, x0, #(1 << 1)
-    bic x0, x0, #(1 << 0)
+    mrs x0, sctlr_el3           /* sctlr_el3 config */
+    bic x0, x0, #(1 << 19)      /* Disable EL3 translation XN */ 
+    bic x0, x0, #(1 << 12)      /* Disable I cache */
+    bic x0, x0, #(1 << 3)       /* Disable SP Alignment check */
+    bic x0, x0, #(1 << 2)       /* Disable D cache */
+    bic x0, x0, #(1 << 1)       /* Disable Alignmet check */
+    bic x0, x0, #(1 << 0)       /* Disable MMU */
     msr sctlr_el3, x0
     isb
 
@@ -219,7 +226,7 @@ set_loop:
     msr cptr_el3, xzr
 
 init_stack:
-    ldr x0, =_stack_base        /* Set and aling stack */
+    ldr x0, =_stack_base        /* Set and align stack */
     sub x0, x0, #16
     and x0, x0, #-16
     mov sp, x0
@@ -259,10 +266,10 @@ next_l1_device_entry:
     ldr x1, =_DDR_ADDRESS           /* Phys address */
     bic x1, x1, #(1 << 30) - 1      /* 1GB block alignment */
     ldr x0, =ttb_l1_0
-    add x2, x0, x1, lsr #(30 - 3)   /* Offset in level 1 page tables */
+    add x2, x0, x1, lsr #(30 - 3)   
     mov x3, TT_S1_RW_DATA           /* page table attributes */
     orr x1, x1, x3 
-    str x1, [x2], #8                /* 1st GB */
+    str x1, [x2], #8               
     mov x3, #(1 << 30)              /* 1GB block */
     add x1, x1, x3
     str x1, [x2]                    /* 2nd GB (Add more RAM here) */
@@ -289,52 +296,28 @@ init_MMU:
     dsb sy
     isb
 
-    ldr x0, =ttb_l0               /* Load and set tables */
+    ldr x0, =ttb_l0       
     msr ttbr0_el3, x0
     msr ttbr0_el2, x0
-    msr ttbr0_el1, x0
-
-    ldr x0, =0                    /* Set Translation cntrl EL2/3 */
-    orr x0, x0, #24               /* Size of the memroy region */ 
-    orr x0, x0, #(4 << 16)        /* PS 44-bit */
+    
+    /* Set tcr reg */
+    ldr x0, =0
+    orr x0, x0, #24               /* Size of the memory region */ 
+    orr x0, x0, #(1 << 17)        /* PS 40 bit */
+    orr x0, x0, #(1 << 16)        /* TG0 4KB */
     orr x0, x0, #(2 << 12)        /* SH0 Outer Shareable */
     orr x0, x0, #(1 << 10)        /* normal outer WBWA cacheable */
     orr x0, x0, #(1 << 8)         /* normal inner WBWA cacheable */
     msr tcr_el3, x0
-    msr tcr_el2, x0
 
-    ldr x0, =0                    /* Set Translation cntrl EL1 */
-    orr x0, x0, #24               /* Size of the memory region  */
-    orr x0, x0, #(4 << 32)        /* IPS, 44 bits */
-    orr x0, x0, #(1 << 23)        /* EDP1, No TLB walk */
-    orr x0, x0, #(2 << 12)        /* SH0 Outer Shareable */
-    orr x0, x0, #(1 << 10)        /* normal outer WBWA cacheable */
-    orr x0, x0, #(1 << 8)         /* normal inner WBWA cacheable */
-    msr tcr_el1, x0
-
-    mov x0, #0x00FF               /* Set Memory Attribute Indrection Register  */
-    msr mair_el3, x0
-    msr mair_el2, x0
-    msr mair_el1, x0
-    isb
-
-    mrs x0, S3_1_c11_c0_2
-    orr x0, x0, #(1 << 21)        /* Enable L2 ECC */
-    msr S3_1_c11_c0_2, x0
-
+    /* Set sctlr reg */
     mrs x0, sctlr_el3
-    ldr x1, =0
-    orr x1, x1, #(1 << 3)        /* SA - stack alignment check enable */
-    orr x1, x1, #(1 << 0)        /* M - MMU enable */
-    orr x1, x1, #(1 << 1)        /* A - Alignment check enable */
-    orr x1, x1, #(1 << 12)       /* I - instruction cache enable */
-    orr x1, x1, #(1 << 2)        /* C - data & unified cache enable */
-    orr x0, x0, x1
-    dsb sy
+    orr x1, x0, #(1 << 12)       /* I - instruction cache enable */
+    orr x1, x0, #(1 << 2)        /* C - data & unified cache enable */
+    orr x1, x0, #(1 << 0)        /* M - MMU enable */
+    msr sctlr_el3, x1
 
-    msr sctlr_el1, x0
-    msr sctlr_el2, x0
-    msr sctlr_el3, x0
+    dsb sy
     isb
     ret
 

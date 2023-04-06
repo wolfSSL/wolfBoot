@@ -30,13 +30,10 @@ extern unsigned int __bss_end__;
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
-extern unsigned int _DDR_ADDRESS;
 
 extern void main(void);
 extern void gicv2_init_secure(void);
-extern void hal_ttb_init(void);
-extern void init_MMU(void);
-extern void hal_ddr_init(void);
+
 
 void boot_entry_C(void) 
 {
@@ -58,15 +55,6 @@ void boot_entry_C(void)
         dst++;
         src++;
     }
-
-    /* Init DDR hook function */
-    hal_ddr_init();
-
-    /* Init MMU tables hook function */
-    hal_ttb_init();
-
-    /* Init MMU */
-    init_MMU();
 
     /* Run wolfboot! */
     main();

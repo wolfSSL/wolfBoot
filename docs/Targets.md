@@ -1390,7 +1390,7 @@ make test-sim-internal-flash-with-update
 
 ## NXP LS1028A
 
-The LS1028A is a AARCH64 armv8-a Cortex-A72 based processor. Support has been tested with the NXP LS1028ARDB.
+The LS1028A is a AARCH64 armv8-a Cortex-A72 processor. Support has been tested with the NXP LS1028ARDB.
 
 Example configurations for this target are provided in:
 * NXP LS1028A: [/config/examples/nxp-ls1028a.config](/config/examples/nxp-ls1028a.config).
@@ -1441,14 +1441,19 @@ Programming requires three components:
 2. Woflboot 
 3. Applicaiton - Test app found in `/test-app/app_nxp_ls1028a.c`
 
-Once you have all components, you can use a lauterbach to flash NOR flash. You must flash RCW, wolfboot and singed_image. `factory.bin` can be used which is wolfboot and the signed image merged. You will need to build a signed image for every update to the application code, which can be done by using keytools in `tools/keytools/sign` see `docs/Signing.md`. 
+Once you have all components, you can use a lauterbach or CW to flash NOR flash. You must flash RCW, wolfboot and singed_image. `factory.bin` can be used which is wolfboot and the signed image merged. You will need to build a signed image for every update to the application code, which can be done by using keytools in `tools/keytools/sign` see `docs/Signing.md` for more details
+and to sign a custom image.
 
-#### Lauterbach Flashing and Debugging
+```
+Usage: tools/keytools/sign [options] image key version
+```
 
-1. Launch lauterbach and open the demo script.
+## Lauterbach Flashing and Debugging
+
+1. Launch lauterbach and open the demo script `debug_wolfboot.cmm`.
 2. Open any desired debug windows.
 3. Hit the play button on the demo script.
-4. It should pop up with a code window and at the reset startpoint. (May require a CPU reset if in bad state)
+4. It should pop up with a code window and at the reset startpoint. (May requrie a reset or power cycle)
 
 ```
 ./t32/bin/macosx64/t32marm-qt
@@ -1458,3 +1463,16 @@ Open Script > debug_wolfboot.cmm
 
 You can modify the Lauterbach NOR flash demo or use `debug_wolfboot.cmm` script, just make sure the flash offset for 
 the RCW is `0x0` and the address offset for wolboot is `0x1000`.
+
+
+## Other Tools
+
+1. Make sure the memory addresses are alinged with the `.config` file.
+2. Note the important NOR flash addresses in the defualt config are as follows.
+3. RCW location is offset `0x0` or `0x20000000` memory mapped.
+4. Wolfboot location is offset `0x1000` or `0x20001000` where wolfboot starts.
+5. Application location is offset `0x20000` or `0x20020000` where application code goes.
+6. Update location is offset `0x40000` or `0x20040000` where the new or updated applciaiton goes. 
+7. Load Location is `0x18020100` which is OCRAM or where the applciaiton code is loaded if using RAM loading from
+8. DTS Location is
+9. Update memory locations as neeeded. 
