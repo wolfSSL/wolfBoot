@@ -68,6 +68,7 @@ extern "C" {
 #define HDR_IMG_DELTA_INVERSE       0x15
 #define HDR_IMG_DELTA_INVERSE_SIZE  0x16
 #define HDR_SIGNATURE               0x20
+#define HDR_POLICY_SIGNATURE        0x21
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */

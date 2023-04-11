@@ -502,6 +502,12 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_set_partition_state(PART_BOOT, st);
 #endif
 
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_KEYSTORE)
+    /* reseal the true pubkey after the image update */
+    if (wolfBoot_reseal_pubkey(&boot, &update) != 0)
+        return -1;
+#endif
+
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif

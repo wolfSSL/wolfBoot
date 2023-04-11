@@ -555,6 +555,12 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 /* Defined in libwolfboot */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 
+
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_KEYSTORE)
+int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
+    struct wolfBoot_image* backupImg);
+#endif
+
 #ifdef EXT_FLASH
 # ifdef PART_BOOT_EXT
 #  define BOOT_EXT 1

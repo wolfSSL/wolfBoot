@@ -5,6 +5,12 @@ ifeq ($(MEASURED_BOOT),1)
   CFLAGS+=-D"WOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)"
 endif
 
+## use tpm to store true pubkey
+ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
+  WOLFTPM:=1
+  CFLAGS+=-D"WOLFBOOT_TPM_KEYSTORE"
+endif
+
 ## DSA Settings
 
 ifeq ($(SIGN),NONE)
