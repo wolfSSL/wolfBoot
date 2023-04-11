@@ -142,6 +142,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
 #ifdef WOLFBOOT_TPM_KEYSTORE
     ret = wolfBoot_unseal_pubkey(img, pubkey, &tpmKey);
+    if (ret < 0)
+        return
 #endif
     ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey, sig,
             IMAGE_SIGNATURE_SIZE, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
