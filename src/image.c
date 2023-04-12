@@ -39,8 +39,6 @@ static WOLFTPM2_DEV wolftpm_dev;
 #ifdef WOLFBOOT_TPM_KEYSTORE
 static WOLFTPM2_SESSION wolftpm_session;
 static uint32_t wolftpmPcrArray[1] = {16};
-static const uint32_t wolftpmKeystoreIndex = 0x01800200;
-static const uint32_t wolftpmPolicyDigestIndex = 0x01800201;
 
 static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
     WOLFTPM2_KEY* tpmKey);
@@ -143,11 +141,13 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #ifdef WOLFBOOT_TPM_KEYSTORE
     ret = wolfBoot_unseal_pubkey(img, pubkey, &tpmKey);
     if (ret < 0)
-        return
+        return;
 #endif
     ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey, sig,
             IMAGE_SIGNATURE_SIZE, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
             TPM_ALG_ECDSA, TPM_ALG_SHA256);
+    if (ret != TPM_RC_SUCCESS)
+        return;
     wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
     if (ret == 0) {
         verify_res = 1; /* TPM does hash verify compare */
@@ -791,18 +791,19 @@ int wolfBoot_tpm2_init(void)
     /* start a policy session with parameter encryption */
     rc = wolfTPM2_StartSession(&wolftpm_dev, &wolftpm_session, NULL, NULL,
         TPM_SE_POLICY, TPM_ALG_CFB);
-    if (rc != 0)
+    if (rc != TPM_RC_SUCCESS)
         return rc;
 
     /* set the auth session for the device */
     rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &wolftpm_session,
         (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt | TPMA_SESSION_continueSession));
-    if (rc != 0)
+    if (rc != TPM_RC_SUCCESS)
         return rc;
 #endif
     return 0;
 }
 
+/* Currently only supports ecc256 */
 #ifdef WOLFBOOT_TPM_KEYSTORE
 /* when this is called, update is the backup image and boot is the new */
 int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
@@ -869,8 +870,8 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     /* unseal the NV pubkey */
     ret = wolfTPM2_UnsealWithAuthSigNV(&wolftpm_dev, &tpmKey, &wolftpm_session,
         TPM_ALG_SHA256, (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray), NULL,
-        0, policySignature, policySignatureSz, wolftpmKeystoreIndex,
-        wolftpmPolicyDigestIndex, tpmPubkey, (word32*)&tpmPubkeySz);
+        0, policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
+        WOLFTPM_POLICY_DIGEST_INDEX, tpmPubkey, (word32*)&tpmPubkeySz);
     if (ret != TPM_RC_SUCCESS)
         return -1;
 
@@ -899,8 +900,8 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     /* seal the NV key with the new policyDigest*/
     ret = wolfTPM2_SealWithAuthSigNV(&wolftpm_dev, &tpmKey, &wolftpm_session,
         TPM_ALG_SHA256, TPM_ALG_SHA256, tpmPubkey, sizeof(tpmPubkey), NULL, 0,
-        policySignature, policySignatureSz, wolftpmKeystoreIndex,
-        wolftpmPolicyDigestIndex);
+        policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
+        WOLFTPM_POLICY_DIGEST_INDEX);
     if (ret != TPM_RC_SUCCESS)
         return -1;
 
@@ -943,12 +944,12 @@ static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
     /* unseal the NV pubkey */
     ret = wolfTPM2_UnsealWithAuthSigNV(&wolftpm_dev, tpmKey, &wolftpm_session,
         TPM_ALG_SHA256, (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray), NULL,
-        0, policySignature, policySignatureSz, wolftpmKeystoreIndex,
-        wolftpmPolicyDigestIndex, tpmPubkey, (word32*)&tpmPubkeySz);
+        0, policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
+        WOLFTPM_POLICY_DIGEST_INDEX, tpmPubkey, (word32*)&tpmPubkeySz);
     if (ret != TPM_RC_SUCCESS)
         return -1;
 
-    /* unload the intermidate key */
+    /* unload the intermediate key */
     wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey->handle);
 
     /* load the NV key */
