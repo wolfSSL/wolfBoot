@@ -267,7 +267,7 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     uint32_t sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
-        nvm_select_fresh_sector(part);
+    sel_sec = nvm_select_fresh_sector(part);
 #endif
     if (part == PART_BOOT) {
         if (FLAGS_BOOT_EXT()){
