@@ -38,7 +38,7 @@ static WOLFTPM2_DEV wolftpm_dev;
 
 #ifdef WOLFBOOT_TPM_KEYSTORE
 static WOLFTPM2_SESSION wolftpm_session;
-static uint32_t wolftpmPcrArray[1] = {16};
+static uint8_t wolftpmPcrArray[1] = {16};
 
 static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
     WOLFTPM2_KEY* tpmKey);
@@ -846,20 +846,20 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     /* clear out the policy digest */
     ret = wolfTPM2_PolicyRestart(wolftpm_session.handle.hndl);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* extend the PCRs with the old image signature */
     ret = wolfTPM2_ExtendPCR(&wolftpm_dev, wolftpmPcrArray[0], TPM_ALG_SHA256,
         imageSignature, imageSignatureSz);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* Load public key into TPM */
     ret = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, &tpmKey, TPM_ECC_NIST_P256,
             pubkey, KEYSTORE_ECC_POINT_SIZE, pubkey + KEYSTORE_ECC_POINT_SIZE,
             KEYSTORE_ECC_POINT_SIZE);
     if (ret < 0)
-        return -1;
+        return -1 * ret;
 
     /* get the PolicySigned signature tlv */
     policySignatureSz = get_header(newImg, HDR_POLICY_SIGNATURE,
@@ -873,7 +873,7 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
         0, policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
         WOLFTPM_POLICY_DIGEST_INDEX, tpmPubkey, (word32*)&tpmPubkeySz);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* get the newImg signature */
     imageSignatureSz = get_header(newImg, HDR_SIGNATURE, &imageSignature);
@@ -883,19 +883,19 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     /* clear out the policy digest */
     ret = wolfTPM2_PolicyRestart(wolftpm_session.handle.hndl);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* extend the PCRs with the new image signature */
     ret = wolfTPM2_ExtendPCR(&wolftpm_dev, wolftpmPcrArray[0], TPM_ALG_SHA256,
         imageSignature, imageSignatureSz);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* add PolicyPCR to the policyDigest */
     ret = wolfTPM2_PolicyPCR(wolftpm_session.handle.hndl, TPM_ALG_SHA256,
         (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray));
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* seal the NV key with the new policyDigest*/
     ret = wolfTPM2_SealWithAuthSigNV(&wolftpm_dev, &tpmKey, &wolftpm_session,
@@ -903,7 +903,7 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
         policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
         WOLFTPM_POLICY_DIGEST_INDEX);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     return 0;
 }
@@ -928,13 +928,13 @@ static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
     /* clear out the policy digest */
     ret = wolfTPM2_PolicyRestart(wolftpm_session.handle.hndl);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* extend the PCRs with the old image signature */
     ret = wolfTPM2_ExtendPCR(&wolftpm_dev, wolftpmPcrArray[0], TPM_ALG_SHA256,
         imageSignature, imageSignatureSz);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* get the PolicySigned signature tlv */
     policySignatureSz = get_header(img, HDR_POLICY_SIGNATURE, &policySignature);
@@ -947,7 +947,7 @@ static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
         0, policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
         WOLFTPM_POLICY_DIGEST_INDEX, tpmPubkey, (word32*)&tpmPubkeySz);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     /* unload the intermediate key */
     wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey->handle);
@@ -957,7 +957,7 @@ static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
         tpmPubkey, KEYSTORE_ECC_POINT_SIZE, tpmPubkey + KEYSTORE_ECC_POINT_SIZE,
         KEYSTORE_ECC_POINT_SIZE);
     if (ret != TPM_RC_SUCCESS)
-        return -1;
+        return -1 * ret;
 
     return 0;
 }
