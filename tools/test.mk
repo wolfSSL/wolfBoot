@@ -172,16 +172,6 @@ test-sim-rollback-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
 	$(Q)(test `./wolfboot.elf success get_version` -eq 1)
 	$(Q)(test `./wolfboot.elf get_version` -eq 1)
 
-test-sim-update-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
-	$(Q)(test `./wolfboot.elf success update_trigger get_version` -eq 1)
-	$(Q)(test `./wolfboot.elf success get_version` -eq $(TEST_UPDATE_VERSION))
-
-test-sim-rollback-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
-	$(Q)(test `./wolfboot.elf success update_trigger get_version` -eq 1)
-	$(Q)(test `./wolfboot.elf get_version` -eq $(TEST_UPDATE_VERSION))
-	$(Q)(test `./wolfboot.elf success get_version` -eq 1)
-	$(Q)(test `./wolfboot.elf get_version` -eq 1)
-
 test-self-update: FORCE
 	@mv $(PRIVATE_KEY) private_key.old
 	@make clean factory.bin RAM_CODE=1 WOLFBOOT_VERSION=1 SIGN=$(SIGN)
