@@ -479,3 +479,16 @@ Use `make keysclean` or `make distclean` to delete keys and regenerate.
  * Github Actions: added build checks for most available configurations
  * Updated wolfTPM to v.2.7.0
  * Updated wolfCrypt to wolfSSL v.5.5.4
+
+### V1.15 (2023-04-13)
+ * Refactor powerfail-safe update for NVMs without consecutive write operations
+ * Support for SP math on AARCH64 targets
+ * Fixed keygen.c exported public key size
+ * Added more test cases and github actions
+ * Updated wolfSSL to v.5.6.0
+ * Hardware support:
+   * OCTOSPI support (STM32)
+   * Fixed STM32H7 UART, added UART debug
+   * New HAL: Renesas RA6M4 (with IDE example projects)
+   * New HAL: NXP i.MX-RT1064
+   * Unified common code for NXP i.MX-RT10XX targets
