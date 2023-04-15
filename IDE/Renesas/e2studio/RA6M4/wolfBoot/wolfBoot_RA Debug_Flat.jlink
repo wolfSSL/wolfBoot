@@ -1,7 +1,7 @@
 [BREAKPOINTS]
 ForceImpTypeAny = 0
 ShowInfoWin = 1
-EnableFlashBP = 1
+EnableFlashBP = 0
 BPDuringExecution = 0
 [CFI]
 CFISize = 0x00
@@ -15,6 +15,8 @@ OverrideMemMap = 0
 AllowSimulation = 1
 ScriptFile=""
 [FLASH]
+RMWThreshold = 0x200
+Loaders=""
 EraseType = 0x00
 CacheExcludeSize = 0x00
 CacheExcludeAddr = 0x00

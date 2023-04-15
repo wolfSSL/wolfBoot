@@ -133,9 +133,15 @@ void app_RA(void)
 
     hal_init();
 
+#ifndef WOLFBOOT_RENESAS_SCEPROTECT
     myprintf("| ------------------------------------------------------------------- |\n");
     myprintf("| Renesas RA User Application in BOOT partition started by wolfBoot   |\n");
     myprintf("| ------------------------------------------------------------------- |\n\n");
+#else
+    myprintf("| ----------------------------------------------------------------------- |\n");
+    myprintf("| Renesas RA SCE User Application in BOOT partition started by wolfBoot   |\n");
+    myprintf("| ----------------------------------------------------------------------- |\n\n");
+#endif
 
     myprintf("\n");
     myprintf("WOLFBOOT_PARTITION_SIZE:           0x%08x\n",

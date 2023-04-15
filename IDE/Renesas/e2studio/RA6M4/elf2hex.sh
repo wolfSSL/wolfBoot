@@ -6,23 +6,35 @@
 # This script is an example. You can update the script based on your environment.
 #
 # usage
-# elf2hex.sh <WOLFBOOT_DIR> <AARCH64_BIN_DIR>
+# elf2hex.sh <SCE:0,1> <WOLFBOOT_DIR> <AARCH64_BIN_DIR>
 #
 
 
-if [ $# -ne 2 ];then
-    echo "Usage: $0 $WOLFBOOT_DIR $AARCH64_BIN_DIR";
+if [ $# -ne 3 ];then
+    echo "Usage: $0 <0 or 1 for SCE use> WOLFBOOT_DIR AARCH64_BIN_DIR";
     exit 1
 fi
 
+SCEUSE_OFFSET=0x20000
+VER1_ADDR=0x00010000
+VER2_ADDR=0x00080000
+RSA_SIGN="--rsa2048"
 
-WOLFBOOT_DIR=$1
-AARCH64_BIN_DIR=$2
+SCEUSE=$1
+WOLFBOOT_DIR=$2
+AARCH64_BIN_DIR=$3
 CURRENT=$(cd $(dirname $0);pwd)
 APP_RA=${CURRENT}/app_RA
 AARCH64_OBJCPY_BIN=${AARCH64_BIN_DIR}/aarch64-none-elf-objcopy.exe
 
 PATH=$PATH:${WOLFBOOT_DIR}/tools/keytools
+
+if [ $SCEUSE -eq 1 ]; then
+ VER1_ADDR=0x00020000
+ VER2_ADDR=0x00090000
+ RSA_SIGN="--rsa2048enc"
+ echo $VER1_ADDR $VER2_ADDR $RSA_SIGN
+fi
 
 echo 
 echo COPY app_RA.elf to AARCH64_BIN_DIR to convert bin file
@@ -42,11 +54,11 @@ pushd ${WOLFBOOT_DIR}
 
 echo 
 echo sign app_RA.bin for version 1
-sign --rsa2048 app_RA.bin ./pri-rsa2048.der 1.0
+sign ${RSA_SIGN} app_RA.bin ./pri-rsa2048.der 1.0
 
 echo 
 echo sign app_RA.bin for version 2
-sign --rsa2048 app_RA.bin ./pri-rsa2048.der 2.0
+sign ${RSA_SIGN} app_RA.bin ./pri-rsa2048.der 2.0
 
 echo 
 echo copy app_RA_v1.0/v2.0_signed.bin AARCH64_BIN_DIR
@@ -57,11 +69,11 @@ popd
 
 echo 
 echo Run aarch64-none-elf-objcopy.exe to generate hex for version 1
-${AARCH64_OBJCPY_BIN} -I binary -O srec --change-addresses=0x00010000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
+${AARCH64_OBJCPY_BIN} -I binary -O srec --change-addresses=${VER1_ADDR} app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 
 echo 
 echo Run aarch64-none-elf-objcopy.exe to generate hex for version 2
-${AARCH64_OBJCPY_BIN} -I binary -O srec --change-addresses=0x00080000 app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
+${AARCH64_OBJCPY_BIN} -I binary -O srec --change-addresses=${VER2_ADDR} app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
 
 echo 
 echo move *.hex to ${CURRENT}

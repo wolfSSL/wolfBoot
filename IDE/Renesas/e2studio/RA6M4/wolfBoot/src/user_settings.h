@@ -28,6 +28,9 @@
 
 #define WOLFBOOT_LOADER_MAIN
 
+/* For SCE use, please enable the following line. */
+/* #define WOLFBOOT_RENESAS_SCEPROTECT */
+
 #define WOLFBOOT_SIGN_RSA2048
 /* #defube WOLFBOOT_SIGN_RSA3072 */
 /* #defube WOLFBOOT_SIGN_RSA4096 */
@@ -38,6 +41,19 @@
 /* #define WOLFBOOT_SIGN_ECC521  */
 
 #define WOLFBOOT_FIXED_PARTITIONS
+
+#define VECTOR_SP            ((uint32_t *) (0x00000))
+#define VECTOR_Reset_Handler ((uint32_t *) (0x10204))
+
+#ifdef WOLFBOOT_RENESAS_SCEPROTECT
+#   define WOLFSSL_RENESAS_SCEPROTECT_CRYPTONLY
+#   define WOLFBOOT_SMALL_STACK
+#   define WOLF_CRYPTO_CB
+#   define RENESAS_SCE_INSTALLEDKEY_ADDR 0x08001000U
+#   define SCE_ID 7890
+#   undef  VECTOR_Reset_Handler
+#   define VECTOR_Reset_Handler ((uint32_t *)(0x20204))
+#endif
 
 #ifdef WOLFBOOT_DUALBOOT
     #define FLASH_IN_DUAL_BANK_MODE (1)
@@ -156,7 +172,9 @@
 #ifdef WOLFBOOT_SIGN_RSA2048
 #   define RSA_LOW_MEM
 #   define WOLFSSL_RSA_VERIFY_INLINE
+# ifndef WOLFBOOT_RENESAS_SCEPROTECT
 #   define WOLFSSL_RSA_VERIFY_ONLY
+# endif
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */

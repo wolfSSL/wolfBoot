@@ -33,8 +33,17 @@
 
 #include "r_flash_hp.h"
 
+#if defined(WOLFSSL_RENESAS_SCEPROTECT_CRYPTONLY) && \
+	!defined(WOLFBOOT_RENESAS_APP)
 
-#define DEBUG_FLASH_WRITE_VERIFY
+#    include "wolfssl/wolfcrypt/wc_port.h"
+#    include "wolfssl/wolfcrypt/port/Renesas/renesas-sce-crypt.h"
+#    include "wolfssl/wolfcrypt/port/Renesas/renesas_sync.h"
+     User_SCEPKCbInfo pkInfo;
+     sce_rsa2048_public_wrapped_key_t wrapped_rsapub2048;
+#endif
+
+/* #define DEBUG_FLASH_WRITE_VERIFY */
 
 static inline void hal_panic(void)
 {
@@ -49,6 +58,10 @@ void hal_init(void)
 {
     fsp_err_t err;
 
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
+    /* retrive installed pubkey from flash */
+    uint32_t *pubkey = keystore_get_buffer(0);
+#endif
     err = R_FLASH_HP_Close(&g_flash0_ctrl);
     err = R_FLASH_HP_Open(&g_flash0_ctrl, &g_flash0_cfg);
     
@@ -63,6 +76,30 @@ void hal_init(void)
         printf("ERROR: %d\n", err);
         hal_panic();
     }
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
+    err = wolfCrypt_Init();
+    if (err != 0) {
+    	 printf("ERROR: wolfCrypt_Init %d\n", err);
+    	 hal_panic();
+    }
+
+    XMEMSET(&pkInfo, 0, sizeof(pkInfo));
+    pkInfo.sce_wrapped_key_rsapub2048 =
+    		(sce_rsa2048_public_wrapped_key_t*)&wrapped_rsapub2048;
+    XMEMCPY(&wrapped_rsapub2048.value, (uint32_t*)pubkey,
+    			sizeof(wrapped_rsapub2048.value));
+
+    wrapped_rsapub2048.type =SCE_KEY_INDEX_TYPE_RSA2048_PUBLIC;
+    pkInfo.flags2.bits.rsapub2048_installedkey_set = 1;
+    pkInfo.flags2.bits.message_type = 1;
+    err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
+
+    if (err < 0) {
+    	printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
+    	hal_panic();
+    }
+
+#endif
 }
 
 void hal_prepare_boot(void)

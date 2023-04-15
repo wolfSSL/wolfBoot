@@ -83,11 +83,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/spi_flash.c</locationURI>
 		</link>
 		<link>
-			<name>src/wolfboot/string.c</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/string.c</locationURI>
-		</link>
-		<link>
 			<name>src/wolfboot/uart_flash.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/uart_flash.c</locationURI>
@@ -116,6 +111,11 @@
 			<name>src/wolfcrypt/asn.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/asn.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/cryptocb.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/cryptocb.c</locationURI>
 		</link>
 		<link>
 			<name>src/wolfcrypt/ecc.c</name>
@@ -168,6 +168,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/hash.c</locationURI>
 		</link>
 		<link>
+			<name>src/wolfcrypt/memory.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/memory.c</locationURI>
+		</link>
+		<link>
 			<name>src/wolfcrypt/rsa.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/rsa.c</locationURI>
@@ -193,9 +198,39 @@
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/sp_int.c</locationURI>
 		</link>
 		<link>
+			<name>src/wolfcrypt/wc_port.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/wc_port.c</locationURI>
+		</link>
+		<link>
 			<name>src/wolfcrypt/wolfmath.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/wolfmath.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_common.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_sce_aes.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_sce_aes.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_sce_rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_sce_rsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_sce_sha.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_sce_sha.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_sce_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_sce_util.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -359,11 +359,11 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
     sel_sec = nvm_select_fresh_sector(part);
 #endif
     if (part == PART_BOOT) {
-        return (void *)(PART_BOOT_ENDFLAGS -
+    	return (void *)(PART_BOOT_ENDFLAGS -
                 (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
     }
     else if (part == PART_UPDATE) {
-        return (void *)(PART_UPDATE_ENDFLAGS -
+    	return (void *)(PART_UPDATE_ENDFLAGS -
                 (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
     }
 

@@ -195,7 +195,11 @@ extern "C" {
 
  /* KeyStore API */
  int keystore_num_pubkeys(void);
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT)
+ uint32_t *keystore_get_buffer(int id);
+#else
  uint8_t *keystore_get_buffer(int id);
+#endif
  int keystore_get_size(int id);
  uint32_t keystore_get_mask(int id);
 

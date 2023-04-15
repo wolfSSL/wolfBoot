@@ -78,8 +78,8 @@
       <property id="config.bsp.fsp.mcu.gpt.pin_count_source_channels" value="0xFFFF"/>
     </config>
     <config id="config.bsp.ra">
-      <property id="config.bsp.common.main" value="0x8000"/>
-      <property id="config.bsp.common.heap" value="0x4000"/>
+      <property id="config.bsp.common.main" value="0x2000"/>
+      <property id="config.bsp.common.heap" value="0x10000"/>
       <property id="config.bsp.common.vcc" value="3300"/>
       <property id="config.bsp.common.checking" value="config.bsp.common.checking.enabled"/>
       <property id="config.bsp.common.assert" value="config.bsp.common.assert.none"/>

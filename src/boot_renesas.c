@@ -35,8 +35,7 @@
  *
  */
 
-#define VECTOR_SP            ((uint32_t)(0x0))
-#define VECTOR_Reset_Handler ((uint32_t *)(0x10204))
+
 
 void do_boot(const uint32_t *app_offset)
 {

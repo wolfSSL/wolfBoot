@@ -129,6 +129,7 @@ const char Keystore_API[] =
                 "{\n"
                 "    return NUM_PUBKEYS;\n"
                 "}\n\n"
+ #if !defined(WOLFBOOT_RENESAS_SCEPROTECT)
                 "uint8_t *keystore_get_buffer(int id)\n"
                 "{\n"
                 "    if (id >= keystore_num_pubkeys())\n"
@@ -141,6 +142,16 @@ const char Keystore_API[] =
                 "        return -1;\n"
                 "    return (int)PubKeys[id].pubkey_size;\n"
                 "}\n\n"
+  #else
+                "uint32_t *keystore_get_buffer(int id)\n"
+                "{\n"
+                "    return (uint32_t *)RENESAS_SCE_INSTALLEDKEY_ADDR;\n"
+                "}\n\n"
+                "int keystore_get_size(int id)\n"
+                "{\n"
+                "    return (int)260;\n"
+                "}\n\n"
+  #endif
                 "uint32_t keystore_get_mask(int id)\n"
                 "{\n"
                 "    if (id >= keystore_num_pubkeys())\n"
