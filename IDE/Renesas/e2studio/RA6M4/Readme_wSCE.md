@@ -1,16 +1,14 @@
-# wolfBoot for Renesas RA6M4
+# wolfBoot for Renesas RA6M4 with SCE
 
 ## 1. Overview
 
-It demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+It demonstrates simple secure firmware update by wolfBoot and uses Renesas SCE. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
 You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
-board for the debugger and flash programmer.
-
-Please see `Readme_wSCE.md` for Renesas SCE use case.
+board for the debugger and flash programmer.It is only available RSA with Renesas SCE now.
 
 ## 2. Components and Tools
 
@@ -38,7 +36,7 @@ Please see `Readme_wSCE.md` for Renesas SCE use case.
 |Board support package for RA6M4|v3.6.0|
 |Board support package for RA6M4 - FSP Data|v3.6.0|
 |Flash Memory High Performance|v3.6.0|
-
+|Secure Cryptography Engine on RA6 Protected Mode (CAVP Certified) | v1.0.0+fsp.3.6.0 |
 
 
 e2Studio Project:\
@@ -55,11 +53,12 @@ Flash Allocation:
 | t |d|                     |d|                      |     |
 +---------------------------+------------------------+-----+
 0x00000000: wolfBoot
-0x00010000: Primary partition (Header)
-0x00010200: Primary partition (Application image)
-0x00080000: Update  partition (Header)
-0x00080200: Update  partition (Application image)
+0x00020000: Primary partition (Header)
+0x00020200: Primary partition (Application image)
+0x00090000: Update  partition (Header)
+0x00090200: Update  partition (Application image)
 0x000F0000: Swap sector
+0x08010000: Wrapped Key
 ```
 
 ## 2. How to build and use
@@ -72,8 +71,8 @@ For comiling the tools, follow the instruction described in the user manual.
 
 ```
 $ cd <wolfBoot>
+$ make keytools RENESAS_KEY=1
 $ export PATH=$PATH:<wolfBoot>/tools/keytools
-$ keygen --ecc256 -g ./pri-ecc256.der    # ECC256
 $ keygen --rsa2048 -g ./pri-rsa2048.der  # RSA2048
 ```
 
@@ -83,11 +82,6 @@ in "src/keystore.c" so that it can be compiled and linked with wolfBoot.
 If you have an existing key pair, you can use -i option to import the pablic
 key to the store.
 
-You can specify various signature algorithms such as 
-
-```les
---ed25519 --ed448 --ecc256 --ecc384 --ecc521 --rsa2048 --rsa3072 --rsa4096
-```
 
 ### 2) Compile wolfBoot
 
@@ -97,10 +91,11 @@ Project properties are preset for the demo.\
 WOLFBOOT_PARTION_INFO is for debug information about partitions.
 Eliminate them for operational use.
 
+Enabled `WOLFBOOT_RENESAS_SCEPROTECT` expects to use Renesas SCE.
 
 ### 3) Compile the sample application
 
-Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build the project.
+Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio. Open `script` folder and copy orignal `fsp.ld` to `fsp.ld.org`. Copy `fsp_wsce.ld` to `fsp.ld`, and then build the project.
 Project properties are preset for the demo.
 
  #### 3-1). Prepare SEGGER_RTT for logging
@@ -133,6 +128,28 @@ Need to set:
 
 Code Origin and entry point is "0x00010200". app_RA.elf is gnerated under Debug. 
 
+### 4) Generate Wrapped Key for SCE
+
+SCE needs to have a wrapped key for sign verification installed in advance.
+This section describes how to use wolfBoot with SCE. 
+Current version supports RSA2048. RSA Signature supports #PKCS 1, v1.5.
+You can generate a RSA key pair by wolfBoot "keygen" command along with Renesas Security Key Management Tool "skmt".
+
+"skmt" command wraps the RAW key and generates C language initial data and a header file for an application program with SCE. 
+Please refer SCE User Manual for generating product provisioning.
+
+```
+$ export PATH:$PATH:<wolfBoot>/tools/keytools
+$ export PATH:$PATH:<skmt>
+$ cd <wolfBoot>
+$ keygen --rsa2048 -g ./rsa-pri2048.der
+$ openssl rsa -in rsa-pri2048.der -pubout -out rsa-pub2058.pem
+$ skmt.exe /genkey /ufpk file=./ufpk.key /wufpk file=./ufpk.key_enc.key -key file=./pub-rsa2048.pem -mcu RA-SCE9 -keytype RSA-2048-public /output rsa_pub2048.rkey /filetype "rfp"
+```
+
+Please refer Renesas Manual to generate ufpk.key and upfk.key_enc.key.
+After generating "rfp" format key, you can download it to flash data area by using Renesas flash programmer.
+
 ### 4) Generate Signature for app V1
 You can derive bair binary file (app_RA.bin) by objcopy command as follows.
 
@@ -143,11 +160,10 @@ $ aarch64-none-elf-objcopy.exe -O binary -j .text -j .data app_RA.elf app_RA.bin
 "sign" command under tools/keytools benerates a signature for the binary with a specified version.
 It generates a file contain a partition header and application image. The partition header
 contain generated signature and other control fields. Output file name is made up from
-the input file name and version like app_RenesasRx01_v1.0_signed.bin.
+the input file name and version like app_RenesasRx01_v1.0_signed.bin. It needs to specify `--rsa2048enc` option to sign the image because SCE assumes to have DigestInfo structure before hashed data.
 
 ```
-$ sign --ecc256 app_RA.bin ../../../../../pri-ecc256.der 1.0
-$ sign --rsa2048 app_RA.bin ../../../../../pri-rsa2048.der 1.0
+$ sign --rsa2048enc app_RA.bin ../../../../../pri-rsa2048.der 1.0
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 10E0000
 Update type:          Firmware
@@ -165,10 +181,10 @@ Output image(s) successfully created.
 ### 5) Download the app V1
 
 You can convert the binary file to hex format and download it to the board by Flash Programmer.
-The partition starts at "0x00010000".
+The partition starts at "0x00020000".
 
 ```
-$ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00010000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
+$ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00020000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 ```
 
 
@@ -180,24 +196,24 @@ If the boot program succeeds integlity and authenticity check, it initiate the
 application V1.
 
 ```
-| ------------------------------------------------------------------- |
-| Renesas RA User Application in BOOT partition started by wolfBoot   |
-| ------------------------------------------------------------------- |
+| ----------------------------------------------------------------------- |
+| Renesas RA SCE User Application in BOOT partition started by wolfBoot   |
+| ----------------------------------------------------------------------- |
 
 
 WOLFBOOT_PARTITION_SIZE:           0x00060000
-WOLFBOOT_PARTITION_BOOT_ADDRESS:   0x00010000
-WOLFBOOT_PARTITION_UPDATE_ADDRESS: 0x00080000
+WOLFBOOT_PARTITION_BOOT_ADDRESS:   0x00020000
+WOLFBOOT_PARTITION_UPDATE_ADDRESS: 0x00090000
 
-Application Entry Address:         0x00010200
+Application Entry Address:         0x00020200
 
-=== Boot Partition[00010000] ===
+=== Boot Partition[00020000] ===
 Magic:    WOLF
 Version:  01
 Status:   FF
 Tail Mgc: 
 
-=== Update Partition[00080000] ===
+=== Update Partition[00090000] ===
 Magic:    
 Version:  00
 Status:   FF
@@ -213,13 +229,13 @@ The application is calling wolfBoot_success() to set boot partition state.
 
 ```
 Called wolfBoot_success()
-=== Boot Partition[00010000] ===
+=== Boot Partition[00020000] ===
 Magic:    WOLF
 Version:  01
 Status:   00
 Tail Mgc: BOOT
 
-=== Update Partition[00080000] ===
+=== Update Partition[00090000] ===
 Magic:    
 Version:  00
 Status:   FF
@@ -231,16 +247,15 @@ We are going to generate and download V2 application into "Update pertition".
 
 ### 7) Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x00080000".
+Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x00090000".
 You can download it by the flash programmer.
 
 Updtate partition:
--change-addresses=0x00080000
+-change-addresses=0x00090000
 
 ```
-$ sign --ecc256 app_RA.bin ../../../../../pri-ecc256.der 2.0
-$ sign --rsa2048 app_RA.bin ../../../../../pri-rsa2048.der 2.0
-$ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00080000 app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
+$ sign --rsa2048enc app_RA.bin ../../../../../pri-rsa2048.der 2.0
+$ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00090000 app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
 ```
 
 
@@ -251,24 +266,24 @@ safely and initiates V2. You will see following message after the partition
 information.
 
 ```
-| ------------------------------------------------------------------- |
-| Renesas RA User Application in BOOT partition started by wolfBoot   |
-| ------------------------------------------------------------------- |
+| ----------------------------------------------------------------------- |
+| Renesas RA SCE User Application in BOOT partition started by wolfBoot   |
+| ----------------------------------------------------------------------- |
 
 
 WOLFBOOT_PARTITION_SIZE:           0x00060000
-WOLFBOOT_PARTITION_BOOT_ADDRESS:   0x00010000
-WOLFBOOT_PARTITION_UPDATE_ADDRESS: 0x00080000
+WOLFBOOT_PARTITION_BOOT_ADDRESS:   0x00020000
+WOLFBOOT_PARTITION_UPDATE_ADDRESS: 0x00090000
 
-Application Entry Address:         0x00010200
+Application Entry Address:         0x00020200
 
-=== Boot Partition[00010000] ===
+=== Boot Partition[00020000] ===
 Magic:    WOLF
 Version:  02
-Status:   00
+Status:   10
 Tail Mgc: BOOT
 
-=== Update Partition[00080000] ===
+=== Update Partition[00090000] ===
 Magic:    WOLF
 Version:  01
 Status:   FF
@@ -277,17 +292,17 @@ Current Firmware Version : 2
 
 Calling wolfBoot_success()
 Called wolfBoot_success()
-=== Boot Partition[00010000] ===
+=== Boot Partition[00020000] ===
 Magic:    WOLF
 Version:  02
 Status:   00
 Tail Mgc: BOOT
 
-=== Update Partition[00080000] ===
+=== Update Partition[00090000] ===
 Magic:    WOLF
 Version:  01
-Status:   FF
-Tail Mgc: 
+Status:   70
+Tail Mgc: BOOT
 ```
 You can see "Current Firmware Version : 2". The state is Success("00") and Tail Magic number becomes "BOOT". 
 You can also see flashing each LED light in 5 second at this new version.

@@ -28,6 +28,10 @@ endif
 CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 CFLAGS+=-DDELTA_UPDATES
 
+ifeq ($(RENESAS_KEY),1)
+   CFLAGS+=-DWOLFBOOT_RENESAS_SCEPROTECT
+endif
+
 # Sources
 SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
 	$(WOLFDIR)wolfcrypt/src/aes.c \
