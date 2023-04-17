@@ -810,6 +810,7 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     struct wolfBoot_image* backupImg)
 {
     WOLFTPM2_KEY tpmKey;
+    PCR_Reset_In pcrReset;
     uint8_t* imageSignature;
     uint8_t* pubkeyHint;
     uint8_t* pubkey;
@@ -823,6 +824,7 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     uint8_t tpmPubkey[KEYSTORE_PUBKEY_SIZE_ECC256];
 
     XMEMSET(&tpmKey, 0, sizeof(tpmKey));
+    XMEMSET(&pcrReset, 0, sizeof(PCR_Reset_In));
 
     /* find the keyslot of the public key */
     pubkeyHintSize = get_header(newImg, HDR_PUBKEY, &pubkeyHint);
@@ -845,6 +847,13 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
 
     /* clear out the policy digest */
     ret = wolfTPM2_PolicyRestart(wolftpm_session.handle.hndl);
+    if (ret != TPM_RC_SUCCESS)
+        return -ret;
+
+    /* clear out the PCR digest */
+    pcrReset.pcrHandle = wolftpmPcrArray[0];
+
+    ret = TPM2_PCR_Reset(&pcrReset);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
@@ -885,21 +894,23 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
+    /* clear out the PCR digest */
+    pcrReset.pcrHandle = wolftpmPcrArray[0];
+
+    ret = TPM2_PCR_Reset(&pcrReset);
+    if (ret != TPM_RC_SUCCESS)
+        return -ret;
+
     /* extend the PCRs with the new image signature */
     ret = wolfTPM2_ExtendPCR(&wolftpm_dev, wolftpmPcrArray[0], TPM_ALG_SHA256,
         imageSignature, imageSignatureSz);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
-    /* add PolicyPCR to the policyDigest */
-    ret = wolfTPM2_PolicyPCR(wolftpm_session.handle.hndl, TPM_ALG_SHA256,
-        (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray));
-    if (ret != TPM_RC_SUCCESS)
-        return -ret;
-
     /* seal the NV key with the new policyDigest*/
     ret = wolfTPM2_SealWithAuthSigNV(&wolftpm_dev, &tpmKey, &wolftpm_session,
-        TPM_ALG_SHA256, TPM_ALG_SHA256, tpmPubkey, sizeof(tpmPubkey), NULL, 0,
+        TPM_ALG_SHA256, TPM_ALG_SHA256, (word32*)wolftpmPcrArray,
+        sizeof(wolftpmPcrArray), tpmPubkey, sizeof(tpmPubkey), NULL, 0,
         policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
         WOLFTPM_POLICY_DIGEST_INDEX);
     if (ret != TPM_RC_SUCCESS)
@@ -911,6 +922,7 @@ int wolfBoot_reseal_pubkey(struct wolfBoot_image* newImg,
 static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
     WOLFTPM2_KEY* tpmKey)
 {
+    PCR_Reset_In pcrReset;
     int ret;
     uint8_t* policySignature;
     uint8_t* imageSignature;
@@ -920,6 +932,8 @@ static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
     uint16_t imageSignatureSz;
     uint8_t tpmPubkey[KEYSTORE_PUBKEY_SIZE_ECC256];
 
+    XMEMSET(&pcrReset, 0, sizeof(PCR_Reset_In));
+
     /* get the backupImg signature */
     imageSignatureSz = get_header(img, HDR_SIGNATURE, &imageSignature);
     if (imageSignatureSz != IMAGE_SIGNATURE_SIZE)
@@ -927,6 +941,13 @@ static int wolfBoot_unseal_pubkey(struct wolfBoot_image *img, uint8_t* pubkey,
 
     /* clear out the policy digest */
     ret = wolfTPM2_PolicyRestart(wolftpm_session.handle.hndl);
+    if (ret != TPM_RC_SUCCESS)
+        return -ret;
+
+    /* clear out the PCR digest */
+    pcrReset.pcrHandle = wolftpmPcrArray[0];
+
+    ret = TPM2_PCR_Reset(&pcrReset);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
