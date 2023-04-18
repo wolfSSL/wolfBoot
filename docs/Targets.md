@@ -62,6 +62,48 @@ On other systems, the SWAP space can be as small as 512B, if multiple smaller fl
 
 More information about the geometry of the flash and in-application programming (IAP) can be found in the manufacturer manual of each target device.
 
+### Using the TPM to store the verification public key
+
+If you want to keep your public key in the TPM, wolfBoot can unseal and use the key through wolfTPM by defining the following arguments in your config:
+
+```
+SIGN?=ECC256
+WOLFBOOT_TPM_KEYSTORE?=1
+WOLFBOOT_TPM_KEYSTORE_NV_INDEX?=0x01800200
+WOLFBOOT_TPM_POLICY_NV_INDEX?=0x01800201
+```
+
+You can also set a custom PCR index to use if the default 16 is not desired:
+
+```
+WOLFBOOT_TPM_PCR_INDEX?=15
+```
+
+Using this feature also requires you that keep 2 keys and use --manual-sign, the verification key for which the public section is kept in wolfTPM and the PolicySigned key for which the public section is bundled with the wolfBoot partation when /tools/keytools/sign is called. To create the PolicySigned signature you need hash and sign an expiration time as per the TPM2's documentation like below:
+
+```
+$ echo -n -e '\x00\x00\x00\x00' > zeroExpiry
+$ openssl dgst -sha256 -sign policy_signed_ecc.pem -out policySigned zeroExpiry
+```
+
+The output `policySigned` is in DER format and we need the signature in raw format, to convert we run the following commands:
+
+```
+$ openssl asn1parse -inform DER -in policySigned
+    0:d=0  hl=2 l=  69 cons: SEQUENCE          
+    2:d=1  hl=2 l=  32 prim: INTEGER           :74BD2EAD183EE4B3A9A81ABC14B35DEB124148B9EF756C51B163A15CD9F37F7E
+   36:d=1  hl=2 l=  33 prim: INTEGER           :8A42B3E9CD1E7721B1697E08841D2982CC38756E6511938C2DB187FF16E5076C
+$ echo "74BD2EAD183EE4B3A9A81ABC14B35DEB124148B9EF756C51B163A15CD9F37F7E8A42B3E9CD1E7721B1697E08841D2982CC38756E6511938C2DB187FF16E5076C" | xxd -r -p - policySigned.raw
+```
+
+policySigned.raw will now only contain the raw signature as wolfBoot needs it. Then we can put everything together in our sign command with the --policy-signed and --manual-sign flags:
+
+```
+tools/keytools/sign --ecc256 --sha256 --manual-sign --policy-signed my_image.bin policy_signed_ecc.raw 1 my_image_sig policySigned.raw
+```
+
+#### NOTE: Currently tpm keystore only supports ECC256 as the key type
+
 ### STM32F4 Programming
 
 ```
