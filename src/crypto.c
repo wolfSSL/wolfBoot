@@ -24,7 +24,11 @@
     #include <wolfpkcs11/config.h>
 #endif
 
+#ifndef WOLFSSL_USER_SETTINGS
 #include <wolfssl/options.h>
+#else
+#include "user_settings.h"
+#endif
 #include <wolfssl/wolfcrypt/error-crypt.h>
 
 #include <wolfpkcs11/pkcs11.h>

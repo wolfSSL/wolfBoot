@@ -23,13 +23,20 @@
 #ifndef WOLFPKCS11_INTERNAL_H
 #define WOLFPKCS11_INTERNAL_H
 
+#ifndef WOLFSSL_USER_SETTINGS
 #include <wolfssl/options.h>
+#else
+#include "user_settings.h"
+#endif
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/wc_encrypt.h>
 
+#ifndef WOLFPKCS11_USER_SETTINGS
 #include <wolfpkcs11/options.h>
+#endif
+
 #include <wolfpkcs11/pkcs11.h>
 #include <wolfpkcs11/version.h>
 
