@@ -22,8 +22,9 @@
 #include "target.h"
 #include "printf.h"
 
+#include "nxp_ppc.h"
+
 /* T2080 */
-#define CCSRBAR (0xFE000000)
 #define SYS_CLK (600000000)
 
 /* T2080 PC16552D Dual UART */
@@ -103,64 +104,6 @@ enum law_sizes {
     LAW_SIZE_512GB,
     LAW_SIZE_1TB,
 };
-
-
-/* MMU Assist Registers E6500RM 2.13.10 */
-#define MAS0_TLBSEL_MSK 0x30000000
-#define MAS0_TLBSEL(x)  (((x) << 28) & MAS0_TLBSEL_MSK)
-#define MAS0_ESEL_MSK   0x0FFF0000
-#define MAS0_ESEL(x)    (((x) << 16) & MAS0_ESEL_MSK)
-#define MAS0_NV(x)      ((x) & 0x00000FFF)
-
-#define MAS1_VALID      0x80000000
-#define MAS1_IPROT      0x40000000
-#define MAS1_TID(x)     (((x) << 16) & 0x3FFF0000)
-#define MAS1_TS         0x00001000
-#define MAS1_TSIZE(x)   (((x) << 7) & 0x00000F80)
-#define TSIZE_TO_BYTES(x) (1ULL << ((x) + 10))
-
-#define MAS2_EPN        0xFFFFF000
-#define MAS2_X0         0x00000040
-#define MAS2_X1         0x00000020
-#define MAS2_W          0x00000010
-#define MAS2_I          0x00000008
-#define MAS2_M          0x00000004
-#define MAS2_G          0x00000002
-#define MAS2_E          0x00000001
-
-#define MAS3_RPN        0xFFFFF000
-#define MAS3_U0         0x00000200
-#define MAS3_U1         0x00000100
-#define MAS3_U2         0x00000080
-#define MAS3_U3         0x00000040
-#define MAS3_UX         0x00000020
-#define MAS3_SX         0x00000010
-#define MAS3_UW         0x00000008
-#define MAS3_SW         0x00000004
-#define MAS3_UR         0x00000002
-#define MAS3_SR         0x00000001
-
-#define MAS7_RPN        0xFFFFFFFF
-
-#define BOOKE_PAGESZ_4K    2
-#define BOOKE_PAGESZ_16M   14
-#define BOOKE_PAGESZ_256M  18
-#define BOOKE_PAGESZ_2G    21
-
-#define BOOKE_MAS0(tlbsel,esel,nv) \
-        (MAS0_TLBSEL(tlbsel) | MAS0_ESEL(esel) | MAS0_NV(nv))
-#define BOOKE_MAS1(v,iprot,tid,ts,tsize) \
-        ((((v) << 31) & MAS1_VALID)         | \
-        (((iprot) << 30) & MAS1_IPROT)      | \
-        (MAS1_TID(tid))                     | \
-        (((ts) << 12) & MAS1_TS)            | \
-        (MAS1_TSIZE(tsize)))
-#define BOOKE_MAS2(epn, wimge) \
-        (((epn) & MAS3_RPN) | (wimge))
-#define BOOKE_MAS3(rpn, user, perms) \
-        (((rpn) & MAS3_RPN) | (user) | (perms))
-#define BOOKE_MAS7(rpn) \
-        (((uint64_t)(rpn)) >> 32)
 
 
 /* T2080 IFC (Integrated Flash Controller) - RM 13.3 */
@@ -444,15 +387,8 @@ void uart_write(const char* buf, uint32_t sz)
 }
 #endif /* DEBUG_UART */
 
-/* called from boot_ppc_start.S */
 void law_init(void)
 {
-    /* IFC - NOR Flash */
-    LAWAR(1) = 0; /* reset */
-    LAWBARH(1) = GET_PHYS_HIGH(FLASH_BASE_PHYS);
-    LAWBARL(1) = FLASH_BASE;
-    LAWAR(1) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
-
     /* Buffer Manager (BMan) (control) - probably not required */
     LAWAR(3) = 0; /* reset */
     LAWBARH(3) = 0xF;
@@ -460,26 +396,18 @@ void law_init(void)
     LAWAR(3) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_BMAN) | LAW_SIZE_32MB;
 }
 
-extern void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
-    uint32_t mas7);
-
-void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
-             uint8_t perms, uint8_t wimge,
-             uint8_t ts, uint8_t tsize, uint8_t iprot)
-{
-    uint32_t _mas0, _mas1, _mas2, _mas3, _mas7;
-
-    _mas0 = BOOKE_MAS0(tlb, esel, 0);
-    _mas1 = BOOKE_MAS1(1, iprot, 0, ts, tsize);
-    _mas2 = BOOKE_MAS2(epn, wimge);
-    _mas3 = BOOKE_MAS3(rpn, 0, perms);
-    _mas7 = BOOKE_MAS7(rpn);
-
-    write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
-}
-
 static void hal_flash_init(void)
 {
+    /* Set up LAW to map IFC(flash) to 0xf_e800_0000
+     * This must be in place along with TLB before switching back to AS/TS=0
+     */
+
+    /* IFC - NOR Flash */
+    LAWAR(1) = 0; /* reset */
+    LAWBARH(1) = GET_PHYS_HIGH(FLASH_BASE_PHYS);
+    LAWBARL(1) = FLASH_BASE;
+    LAWAR(1) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
+
     /* NOR IFC Flash Timing Parameters */
     IFC_FTIM0(0) = (IFC_FTIM0_NOR_TACSE(4) | \
                     IFC_FTIM0_NOR_TEADC(5) | \
@@ -505,6 +433,11 @@ static void hal_flash_init(void)
 void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
+    /* If DDR is already enabled then just return */
+    if (DDR_SDRAM_CFG & DDR_SDRAM_CFG_MEM_EN) {
+        return;
+    }
+
     /* Setup DDR CS (chip select) bounds */
     DDR_CS_BNDS(0) = DDR_CS0_BNDS_VAL;
     DDR_CS_CONFIG(0) = DDR_CS0_CONFIG_VAL;
@@ -623,7 +556,11 @@ void hal_init(void)
 {
 #ifdef DEBUG_UART
     uint32_t fw;
+#endif
 
+    law_init();
+
+#ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot Init\n", 14);
 #endif

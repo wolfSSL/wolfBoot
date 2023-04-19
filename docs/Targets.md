@@ -857,7 +857,7 @@ qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_rasp
 ### Testing with kernel encryption
 
 The raspberry pi target is used to demonstrate the end-to-end encryption when booting
-images from RAM. The image is encrypted after being signed. The bootloader uses 
+images from RAM. The image is encrypted after being signed. The bootloader uses
 the same symmetric key to decrypt the image to RAM before performing the
 validity checks. Here are the steps to enable this feature:
 
@@ -1074,15 +1074,35 @@ WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x84000
 WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 ```
 
+
 ## NXP QorIQ P1021 PPC
 
 The NXP QorIQ P1021 is a PPC e500v2 based processor (two cores). This has been tested with a NAND boot source.
 
 wolfBoot supports loading from external flash using the eLBC FMC (Flash Machine) with NAND.
 
-When each e500 core comes out of reset, its MMU has one 4-Kbyte page defined at `0x0_FFFF_Fnnn`. For NAND boot the first 4KB is loaded to this region with the first offset jump instruction at `0x0_FFFF_FFFC`.
+When each e500 core comes out of reset, its MMU has one 4-Kbyte page defined at `0x0_FFFF_Fnnn`. For NAND boot the first 4KB is loaded to this region with the first offset jump instruction at `0x0_FFFF_FFFC`. The 4KB is mapped to the FCM buffers.
 
+This device defines the default boot ROM address range to be 8 Mbytes at address `0x0_FF80_0000` to `0x0_FFFF_FFFF`.
 
+cfg_rom_loc[0:3] = 1000 Local bus FCM-8-bit NAND flash small page
+cfg_rom_loc[0:3] = 1010 Local bus FCM-8-bit NAND flash large page
+
+If the boot sequencer is not enabled, the processor cores exit reset and fetches boot code in default configurations.
+
+A loader must reside in the 4KB page to handle early startup including DDR and then load wolfBoot into DDR for execution.
+
+### Building wolfBoot for NXP P1021 PPC
+
+By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
+
+The `make` creates a `factory.bin` image that can be programmed at `0x00000000`
+
+```
+cp ./config/examples/nxp-p1021.config .config
+make keytools
+make clean && make
+```
 
 
 ## NXP QorIQ T2080 PPC

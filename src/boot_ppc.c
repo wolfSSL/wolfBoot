@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 
+#include "hal/nxp_ppc.h"
 #include "image.h"
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
@@ -34,33 +35,44 @@ extern unsigned int _end_data;
 extern void main(void);
 extern void hal_ddr_init(void);
 
-#define MTSPR(rn, v) asm volatile("mtspr " rn ",%0" : : "r" (v))
-
-/* e6500 MPC85xx MMU Assist Registers */
-#define MAS0 "0x270"
-#define MAS1 "0x271"
-#define MAS2 "0x272"
-#define MAS3 "0x273"
-#define MAS7 "0x3B0"
-#define MMUCSR0 "0x3F4" /* MMU control and status register 0 */
+/* Stringification */
+#ifndef WC_STRINGIFY
+#define _WC_STRINGIFY_L2(str) #str
+#define WC_STRINGIFY(str) _WC_STRINGIFY_L2(str)
+#endif
 
 void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
     uint32_t mas7)
 {
-    MTSPR(MAS0, mas0);
-    MTSPR(MAS1, mas1);
-    MTSPR(MAS2, mas2);
-    MTSPR(MAS3, mas3);
-    MTSPR(MAS7, mas7);
+    MTSPR(WC_STRINGIFY(MAS0), mas0);
+    MTSPR(WC_STRINGIFY(MAS1), mas1);
+    MTSPR(WC_STRINGIFY(MAS2), mas2);
+    MTSPR(WC_STRINGIFY(MAS3), mas3);
+    MTSPR(WC_STRINGIFY(MAS7), mas7);
     asm volatile("isync;msync;tlbwe;isync");
+}
+
+void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
+             uint8_t perms, uint8_t wimge,
+             uint8_t ts, uint8_t tsize, uint8_t iprot)
+{
+    uint32_t _mas0, _mas1, _mas2, _mas3, _mas7;
+
+    _mas0 = BOOKE_MAS0(tlb, esel, 0);
+    _mas1 = BOOKE_MAS1(1, iprot, 0, ts, tsize);
+    _mas2 = BOOKE_MAS2(epn, wimge);
+    _mas3 = BOOKE_MAS3(rpn, 0, perms);
+    _mas7 = BOOKE_MAS7(rpn);
+
+    write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
 }
 
 void invalidate_tlb(int tlb)
 {
     if (tlb == 0)
-        MTSPR(MMUCSR0, 0x4);
+        MTSPR(WC_STRINGIFY(MMUCSR0), 0x4);
     else if (tlb == 1)
-        MTSPR(MMUCSR0, 0x2);
+        MTSPR(WC_STRINGIFY(MMUCSR0), 0x2);
 }
 
 void __attribute((weak)) hal_ddr_init(void)
@@ -70,14 +82,15 @@ void __attribute((weak)) hal_ddr_init(void)
 
 void boot_entry_C(void)
 {
-    register unsigned int *dst, *src;
+    register unsigned int *dst, *src, *end;
 
     hal_ddr_init();
 
     /* Copy the .data section from flash to RAM */
     src = (unsigned int*)&_stored_data;
     dst = (unsigned int*)&_start_data;
-    while (dst < (unsigned int*)&_end_data) {
+    end = (unsigned int*)&_end_data;
+    while (dst < end) {
         *dst = *src;
         dst++;
         src++;
@@ -85,12 +98,13 @@ void boot_entry_C(void)
 
     /* Initialize the BSS section to 0 */
     dst = (unsigned int*)&__bss_start__;
-    while (dst < (unsigned int*)&__bss_end__) {
+    end = (unsigned int*)&__bss_end__;
+    while (dst < end) {
         *dst = 0U;
         dst++;
     }
 
-    /* Run wolfboot! */
+    /* Run wolfBoot! */
     main();
 }
 

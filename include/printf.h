@@ -32,9 +32,13 @@
 #   define PRINTF_ENABLED
 #endif
 
-#if defined(DEBUG_UART) && !defined(PRINTF_ENABLED) && !defined(NO_PRINTF_UART)
-#   define PRINTF_ENABLED
+#if defined(DEBUG_UART)
     void uart_write(const char* buf, unsigned int sz);
+
+    /* turn on small printf support */
+    #if !defined(PRINTF_ENABLED) && !defined(NO_PRINTF_UART)
+        #define PRINTF_ENABLED
+    #endif
 #endif
 
 #ifdef PRINTF_ENABLED

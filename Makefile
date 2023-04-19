@@ -65,12 +65,12 @@ MAIN_TARGET=factory.bin
 TARGET_H_TEMPLATE:=include/target.h.in
 
 ifeq ($(TARGET),stm32l5)
-    # Don't build a contiguous image
+	# Don't build a contiguous image
 	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
 ifeq ($(TARGET),stm32u5)
-    # Don't build a contiguous image
+	# Don't build a contiguous image
 	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
@@ -91,10 +91,20 @@ ifeq ($(TARGET),sim)
 	MAIN_TARGET:=wolfboot.elf tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 
+ifeq ($(TARGET),nxp_p1021)
+	MAIN_TARGET:=loader_stage1.bin factory.bin
+endif
+
 ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 all: $(MAIN_TARGET)
+
+stage1: loader_stage1.bin
+loader_stage1: loader_stage1.bin
+loader_stage1.bin:
+	@echo "\t[BIN] $@"
+	$(Q)$(MAKE) -C stage1 $@
 
 test-lib: $(OBJS)
 	$(Q)$(CC) $(CFLAGS) -o $@ $^
@@ -196,7 +206,10 @@ $(LSCRIPT): FORCE
 		sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
-		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
+		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
+		sed -e "s/@WOLFBOOT_STAGE1_LOAD_ADDR@/$(WOLFBOOT_STAGE1_LOAD_ADDR)/g" | \
+		sed -e "s/@WOLFBOOT_STAGE1_FLASH_ADDR@/$(WOLFBOOT_STAGE1_FLASH_ADDR)/g" | \
+		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" \
 		> $@
 
 hex: wolfboot.hex
@@ -210,10 +223,11 @@ src/keystore.c: $(PRIVATE_KEY)
 keys: $(PRIVATE_KEY)
 
 clean:
-	@rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
-	@rm -f *.bin *.elf wolfboot.map test-update.rom *.hex config/target.ld
-	@$(MAKE) -C test-app clean
-	@$(MAKE) -C tools/check_config clean
+	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
+	$(Q)rm -f *.bin *.elf wolfboot.map test-update.rom *.hex $(LSCRIPT)
+	$(Q)$(MAKE) -C test-app clean
+	$(Q)$(MAKE) -C tools/check_config clean
+	$(Q)$(MAKE) -C stage1 clean
 
 utilsclean: clean
 	$(Q)$(MAKE) -C tools/keytools clean

@@ -12,8 +12,12 @@ BOOTSTRAP_ENTRY = 0xEFFFFFFC;
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    /* Note: If DDR not setup, can use L1 memory at 0xFDD00000 and 0x4000 length */
-    RAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF
+
+    /* L1 - 16KB */
+    RAM (rwx) : ORIGIN = 0xFDD00000, LENGTH = 0x4000
+
+    /* DDR - 2GB */
+    DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF
 }
 
 SECTIONS
@@ -59,7 +63,7 @@ SECTIONS
         KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
-    } > RAM
+    } > DRAM
 
     .bss (NOLOAD) :
     {
@@ -70,7 +74,11 @@ SECTIONS
         . = ALIGN(4);
         _end_bss = .;
         __bss_end__ = .;
+        . = ALIGN(16);
         _end = .;
-    } > RAM
+    } > DRAM
 
 }
+
+PROVIDE(_start_heap = ORIGIN(RAM));
+PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );

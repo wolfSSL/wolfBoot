@@ -1,11 +1,19 @@
 ## CPU Architecture selection via $ARCH
 
-# check for FASTMATH or SP_MATH
+# check for math library
 ifeq ($(SPMATH),1)
+  # SP Math
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
 else
-  CFLAGS+=-DUSE_FAST_MATH
-  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o ./lib/wolfssl/wolfcrypt/src/tfm.o
+  ifeq ($(SPMATHALL),1)
+    # SP Math all
+    CFLAGS+=-DWOLFSSL_SP_MATH_ALL
+    MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
+  else
+    # Fastmath
+    CFLAGS+=-DUSE_FAST_MATH
+    MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o ./lib/wolfssl/wolfcrypt/src/tfm.o
+  endif
 endif
 
 # Default flash offset
@@ -300,6 +308,9 @@ ifeq ($(TARGET),nxp_t2080)
   UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  else
+    # Use the SP math all assembly accelerations
+    CFLAGS+=-DWOLFSSL_SP_PPC
   endif
 endif
 
@@ -316,6 +327,9 @@ ifeq ($(TARGET),nxp_p1021)
   UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  else
+    # Use the SP math all assembly accelerations
+    CFLAGS+=-DWOLFSSL_SP_PPC
   endif
 endif
 
@@ -465,6 +479,8 @@ endif
 ifeq ($(WOLFBOOT_ORIGIN),)
   WOLFBOOT_ORIGIN=$(ARCH_FLASH_OFFSET)
 endif
+CFLAGS+=-DWOLFBOOT_ORIGIN=$(WOLFBOOT_ORIGIN)
+CFLAGS+=-DBOOTLOADER_PARTITION_SIZE=$(BOOTLOADER_PARTITION_SIZE)
 
 ## Debug
 ifeq ($(DEBUG),1)
