@@ -1,1 +1,1 @@
-# abide Makefile
+/* linker script not required */
