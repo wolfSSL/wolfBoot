@@ -222,7 +222,7 @@ ifeq ($(ARCH),PPC)
   endif
 
   # Prune unused functions and data
-  CFLAGS +=-ffunction-sections -fdata-sections
+  CFLAGS+=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
 
   OBJS+=src/boot_ppc_start.o src/boot_ppc.o
@@ -491,3 +491,5 @@ endif
 ifeq ($(DEBUG_UART),1)
   CFLAGS+=-DDEBUG_UART
 endif
+
+CFLAGS+=-DWOLFBOOT_ARCH=$(ARCH)

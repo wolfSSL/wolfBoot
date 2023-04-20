@@ -951,23 +951,6 @@ void hal_init(void)
     (void)svr;
 #endif
 
-#ifdef BUILD_LOADER_STAGE1
-    #ifdef WOLFBOOT_STAGE1_BASE_ADDR
-    /* if this is executing from boot 4KB region (FCM buffer) it must
-     * first be relocated to RAM before the eLBC NAND can be read */
-    if (((size_t)&hal_init & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
-        __attribute__((noreturn)) void (*wolfboot_start)(void) =
-            (void*)BOOT_ROM_ADDR + BOOT_ROM_SIZE - 0x04;
-
-        /* relocate 4KB code to DST and jump */
-        memmove((void*)WOLFBOOT_STAGE1_BASE_ADDR, (void*)BOOT_ROM_ADDR,
-            BOOT_ROM_SIZE);
-
-        wolfboot_start(); /* never returns */
-    }
-    #endif
-#endif
-
 #ifdef ENABLE_PCIE
     hal_pcie_init();
 #endif

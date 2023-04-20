@@ -2,17 +2,17 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
+HEAP_SIZE = 4K; /* heap not used */
+STACK_SIZE = 128K;
+
 MEMORY
 {
-    /* L2 as SRAM (up to 256KB) */
-    RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 64K
-
-    /* L1 as SRAM (up to 16KB) */
-    LRAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
-
     /* DDR3 - 512MB (offset by destination address and 4KB boot region) */
     DRAM (rwx) : ORIGIN = @WOLFBOOT_STAGE1_LOAD_ADDR@,
                  LENGTH = 0x1FFFFFFF - @WOLFBOOT_STAGE1_LOAD_ADDR@
+
+    /* L1 as SRAM (up to 16KB) */
+    RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
 }
 
 SECTIONS
@@ -77,5 +77,5 @@ SECTIONS
     } > DRAM
 }
 
-PROVIDE(_start_heap = ORIGIN(DRAM));
-PROVIDE(_end_stack  = ORIGIN(LRAM) + (LENGTH(LRAM)) );
+PROVIDE(_start_heap = _end);
+PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );

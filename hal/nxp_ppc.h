@@ -35,10 +35,6 @@
 /* Relocate CCSRBAR */
 #define CCSRBAR 0xFFE00000
 
-/* boot address */
-#define BOOT_ROM_ADDR 0xFFFFF000UL
-#define BOOT_ROM_SIZE (4*1024)
-
 /* Memory used for transferring blocks to/from NAND.
  * Maps to eLBC FCM internal 8KB region (by hardware) */
 #define FLASH_BASE_ADDR 0xFC000000
@@ -64,6 +60,10 @@
 #else
 #error Please define MMU version and CCSRBAR for platform
 #endif
+
+/* boot address */
+#define BOOT_ROM_ADDR 0xFFFFF000UL
+#define BOOT_ROM_SIZE (4*1024)
 
 #define RESET_VECTOR (BOOT_ROM_ADDR + (BOOT_ROM_SIZE - 4))
 

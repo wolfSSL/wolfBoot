@@ -28,20 +28,29 @@
 #include "spi_flash.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
+#include "string.h"
+
+#include <stdint.h>
 
 #ifndef EXT_FLASH
     #error The stage1 loader only supports use with external flash
 #endif
 
-#ifndef LOADER_STAGE1_SIZE
-    #define LOADER_STAGE1_SIZE (4*1024)
-#endif
-#ifndef LOADER_STAGE1_START_ADDR
-    /* default is end of 4KB region (0x0FFC) */
-    #define LOADER_STAGE1_START_ADDR \
-        (WOLFBOOT_STAGE1_LOAD_ADDR + LOADER_STAGE1_SIZE - 0x4)
+#ifndef WOLFBOOT_STAGE1_SIZE
+    #define WOLFBOOT_STAGE1_SIZE (4*1024)
 #endif
 
+#ifndef WOLFBOOT_STAGE1_START_ADDR
+    /* default is end of 4KB region (0x0FFC) */
+    #define WOLFBOOT_STAGE1_START_ADDR \
+        (WOLFBOOT_STAGE1_LOAD_ADDR + WOLFBOOT_STAGE1_SIZE - 0x4)
+#endif
+
+#ifdef BUILD_LOADER_STAGE1
+
+#if defined(WOLFBOOT_ARCH) && WOLFBOOT_ARCH == PPC
+#include "hal/nxp_ppc.h"
+#endif
 
 int main(void)
 {
@@ -58,15 +67,31 @@ int main(void)
     uart_write("Loader Stage 1\r\n", 16);
 #endif
 
+#ifdef BOOT_ROM_ADDR
+    /* if this is executing from boot 4KB region (FCM buffer) it must
+     * first be relocated to RAM before the eLBC NAND can be read */
+    if (((uintptr_t)&hal_init & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
+        wolfboot_start = (void*)WOLFBOOT_STAGE1_BASE_ADDR + BOOT_ROM_SIZE - 0x04;
+
+        /* relocate 4KB code to DST and jump */
+        memmove((void*)WOLFBOOT_STAGE1_BASE_ADDR, (void*)BOOT_ROM_ADDR,
+            BOOT_ROM_SIZE);
+
+        wolfboot_start(); /* never returns */
+    }
+#endif
+
     ret = ext_flash_read(
-        (uintptr_t)WOLFBOOT_ORIGIN,       /* flash offset */
-        (uint8_t*)WOLFBOOT_STAGE1_LOAD_ADDR, /* ram destination */
-        BOOTLOADER_PARTITION_SIZE         /* boot-loader partition (entire) */
+        (uintptr_t)WOLFBOOT_ORIGIN,         /* flash offset */
+        (uint8_t*)WOLFBOOT_STAGE1_LOAD_ADDR,/* ram destination */
+        BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
     );
     if (ret >= 0) {
-        wolfboot_start = (void*)LOADER_STAGE1_START_ADDR;
+        wolfboot_start = (void*)WOLFBOOT_STAGE1_START_ADDR;
         wolfboot_start(); /* never returns */
     }
 
     return 0;
 }
+
+#endif /* BUILD_LOADER_STAGE1 */

@@ -4,10 +4,6 @@
 
 CC=gcc
 CFLAGS+=-DBUILD_TOOL -Wall -g -ggdb -I../../include -I../../hal -Wextra
-Q?=@
-ifeq ($(V),1)
-   Q=
-endif
 
 EXE=ufserver
 

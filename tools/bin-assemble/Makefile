@@ -8,11 +8,6 @@ EXE=bin-assemble
 
 LIBS=
 
-Q?=@
-ifeq ($(V),1)
-   Q=
-endif
-
 $(EXE): $(EXE).o
 	$(Q)$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
