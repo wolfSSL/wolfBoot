@@ -5,25 +5,21 @@ ENTRY( _reset )
 BASE_ADDR = @WOLFBOOT_STAGE1_BASE_ADDR@;
 
 /* for flashing to NAND it must be 4KB */
-/* if debugging and running from RAM this can be increased */
-MAX_LOADER_SIZE = 0x1000; /* 4KB */
+LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
 
 /* Boot initialization code */
 BOOTSTRAP_TLB = BASE_ADDR;
 
 /* Entry point where boot executes from (end of region) */
-BOOTSTRAP_ENTRY = BASE_ADDR + MAX_LOADER_SIZE - 4;
+BOOTSTRAP_ENTRY = BASE_ADDR + LOADER_STAGE1_SIZE - 4;
 
 MEMORY
 {
     /* Boot Location */
-    FLASH (rx) : ORIGIN = BOOTSTRAP_TLB, LENGTH = MAX_LOADER_SIZE
-
-    /* L2 as SRAM (up to 256KB) */
-    RAM (rwx) : ORIGIN = BASE_ADDR + MAX_LOADER_SIZE, LENGTH = 128K - MAX_LOADER_SIZE
+    FLASH (rx) : ORIGIN = BOOTSTRAP_TLB, LENGTH = LOADER_STAGE1_SIZE
 
     /* L1 as SRAM (up to 16KB) */
-    L1RAM (rwx) : ORIGIN = 0xffd00000, LENGTH = 16K
+    RAM (rwx) : ORIGIN = 0xffd00000, LENGTH = 16K
 }
 
 SECTIONS
@@ -84,4 +80,4 @@ SECTIONS
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)) );
+PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );

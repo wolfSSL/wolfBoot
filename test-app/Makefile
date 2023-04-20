@@ -68,10 +68,6 @@ ifeq ($(ARCH),ARM_BE)
   CFLAGS+=-DSTACK_PAINTING=0
 endif
 
-ifeq ($(V),0)
-  Q=@
-endif
-
 ifeq ($(ENCRYPT),1)
     CFLAGS+=-D"EXT_ENCRYPTED=1"
 endif
@@ -264,26 +260,26 @@ standalone:CFLAGS+=-D"TEST_APP_STANDALONE"
 standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
 image.bin: image.elf
-	$(Q)echo "\t[BIN] $@"
+	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
-	$(Q)echo "\t[LD] $@"
+	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
 
 
 standalone: image.bin
 
 ../src/libwolfboot.o: ../src/libwolfboot.c FORCE
-	$(Q)echo "\t[CC-$(ARCH)] $@"
+	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
 %.o:%.c
-	$(Q)echo "\t[CC-$(ARCH)] $@"
+	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 %.o:%.S
-	$(Q)echo "\t[AS-$(ARCH)] $@"
+	@echo "\t[AS-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 clean:

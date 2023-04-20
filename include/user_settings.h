@@ -34,6 +34,12 @@
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
+#define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
+extern int toupper(int c);
+extern int tolower(int c);
+#define XTOUPPER(c)     toupper((c))
+#define XTOLOWER(c)     tolower((c))
+
 #ifdef USE_FAST_MATH
 #   define WC_NO_HARDEN
 #endif

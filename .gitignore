@@ -119,3 +119,6 @@ IDE/IAR/Release
 build/
 CMakeFiles/
 CMakeCache.txt
+
+# Stage 1
+stage1/loader_stage1.ld

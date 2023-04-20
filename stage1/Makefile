@@ -12,7 +12,7 @@ WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra
 LDFLAGS:=
-LSCRIPT:=../config/loader_stage1.ld
+LSCRIPT:=loader_stage1.ld
 LSCRIPT_IN:=../hal/$(TARGET)_stage1.ld
 LSCRIPT_FLAGS:=
 LD_START_GROUP:=-Wl,--start-group
@@ -24,7 +24,7 @@ DEBUG_UART?=0
 OBJS:= \
 	./hal/$(TARGET).o \
 	./src/string.o \
-	./src/loader_stage1.o
+	loader_stage1.o
 
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
@@ -55,11 +55,20 @@ TARGET_H_TEMPLATE:=../include/target.h.in
 ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
+ifeq ($(WOLFBOOT_STAGE1_SIZE),)
+	# default is end of 4KB region (0x0FFC)
+	WOLFBOOT_STAGE1_SIZE=0x1000
+endif
+
 CFLAGS+=\
-	-DBUILD_LOADER_STAGE1 -DNO_PRINTF_UART \
+	-DBUILD_LOADER_STAGE1 \
+	-DWOLFBOOT_STAGE1_SIZE=$(WOLFBOOT_STAGE1_SIZE) \
 	-DWOLFBOOT_STAGE1_LOAD_ADDR=$(WOLFBOOT_STAGE1_LOAD_ADDR) \
 	-DWOLFBOOT_STAGE1_FLASH_ADDR=$(WOLFBOOT_STAGE1_FLASH_ADDR) \
 	-DWOLFBOOT_STAGE1_BASE_ADDR=$(WOLFBOOT_STAGE1_BASE_ADDR)
+
+# For printf support (disable NO_PRINTF_UART) and increase WOLFBOOT_STAGE1_SIZE
+CFLAGS+=-DNO_PRINTF_UART
 
 BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
@@ -103,6 +112,7 @@ $(LSCRIPT): FORCE
 		sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
+		sed -e "s/@WOLFBOOT_STAGE1_SIZE@/$(WOLFBOOT_STAGE1_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_LOAD_ADDR@/$(WOLFBOOT_STAGE1_LOAD_ADDR)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_FLASH_ADDR@/$(WOLFBOOT_STAGE1_FLASH_ADDR)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" \
@@ -110,7 +120,7 @@ $(LSCRIPT): FORCE
 
 %.hex:%.elf
 	@echo "\t[ELF2HEX] $@"
-	@$(OBJCOPY) -O ihex $^ $@
+	$(Q)@$(OBJCOPY) -O ihex $^ $@
 
 ../include/target.h: $(TARGET_H_TEMPLATE) FORCE
 	@cat $(TARGET_H_TEMPLATE) | \
@@ -150,7 +160,7 @@ $(BUILD_DIR)/%.o: ../hal/%.S
 
 clean:
 	$(Q)rm -f *.o
-	$(Q)rm -f loader_stage1.bin loader_stage1.elf loader_stage1.map ../config/loader_stage1.ld
+	$(Q)rm -f loader_stage1.bin loader_stage1.elf loader_stage1.map loader_stage1.ld
 
 FORCE:
 

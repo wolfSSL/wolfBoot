@@ -412,7 +412,7 @@ setup_l2:
         stw     r4, 0(r6) /* write L2SC0 MMR to flash invalidate L2 cache and locks */
 l2loop:
         sync
-        lwz     r5, 0(6r) /* get current L2SC0 MMR value */
+        lwz     r5, 0(r6) /* get current L2SC0 MMR value */
         and.    r5, r5, r4 /* compare to mask to see if complete */
         bne     l2loop
         isync
