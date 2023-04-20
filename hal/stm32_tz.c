@@ -166,7 +166,7 @@ static void sau_init_region(uint32_t region, uint32_t start_addr,
 void hal_tz_sau_init(void)
 {
     /* Non-secure callable: NSC functions area */
-    sau_init_region(0, 0x0C020000, 0x0C040000, 1);
+    sau_init_region(0, 0x0C038000, 0x0C040000, 1);
 
     /* Non-secure: application flash area */
     sau_init_region(1, 0x08040000, 0x0804FFFF, 0);

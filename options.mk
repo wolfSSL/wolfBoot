@@ -536,6 +536,32 @@ ifeq ($(WOLFBOOT_HUGE_STACK),1)
   CFLAGS+=-DWOLFBOOT_HUGE_STACK
 endif
 
+ifeq ($(SECURE_PKCS11),1)
+  CFLAGS+=-DSECURE_PKCS11
+  CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
+  CFLAGS+=-DHAVE_PBKDF2
+  CFLAGS+=-DWOLFPKCS11_CUSTOM_STORE
+  CFLAGS+=-DWOLFBOOT_SECURE_PKCS11 -Ilib/wolfPKCS11
+  CFLAGS+=-DWOLFPKCS11_USER_SETTINGS
+  CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT -DWOLFSSL_AES_GCM
+  CFLAGS+=-DENCRYPT_WITH_AES128 -DWOLFSSL_AES_128
+  CFLAGS+=-DHAVE_SCRYPT
+  CFLAGS+=-DHAVE_AESGCM
+  CFLAGS+=-DNO_PKCS11_TIME
+  OBJS+=src/pkcs11_store.o
+  OBJS+=src/pkcs11_callable.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/pwdbased.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=./lib/wolfPKCS11/src/crypto.o \
+		./lib/wolfPKCS11/src/internal.o \
+		./lib/wolfPKCS11/src/slot.o \
+		./lib/wolfPKCS11/src/wolfpkcs11.o
+endif
+
+OBJS+=$(PUBLIC_KEY_OBJS)
+OBJS+=$(UPDATE_OBJS)
+
 ifeq ($(WOLFTPM),1)
   OBJS+=\
     ./src/tpm.o \

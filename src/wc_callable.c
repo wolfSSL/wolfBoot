@@ -9,6 +9,9 @@
 #include "hal.h"
 #include <stdint.h>
 
+
+#ifdef CRYPTO_CB_HSM
+
 /* From linker script, dedicated RAM area in secure mode */
 extern uint32_t _keyvault_origin, _keyvault_size;
 
@@ -482,17 +485,6 @@ wcs_ecdh_shared(int privkey_slot_id, int pubkey_slot_id, word32 outlen)
 }
 
 int __attribute__((cmse_nonsecure_entry))
-wcs_get_random(uint8_t *rand, uint32_t size)
-{
-    int ret;
-    WC_RNG wcs_rng;
-    wc_InitRng(&wcs_rng);
-    ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
-    wc_FreeRng(&wcs_rng);
-    return ret;
-}
-
-int __attribute__((cmse_nonsecure_entry))
 wcs_slot_read(int slot_id, uint8_t *buffer, uint32_t len)
 {
     struct wcs_key *item;
@@ -524,11 +516,26 @@ wcs_slot_read(int slot_id, uint8_t *buffer, uint32_t len)
     XMEMCPY(buffer, &item->key.raw, len);
     return len;
 }
+#endif /* CRYPTO_CB_HSM */
+
+int __attribute__((cmse_nonsecure_entry))
+wcs_get_random(uint8_t *rand, uint32_t size)
+{
+    int ret;
+    WC_RNG wcs_rng;
+    wc_InitRng(&wcs_rng);
+    ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
+    wc_FreeRng(&wcs_rng);
+    return ret;
+}
+
 
 void wcs_Init(void)
 {
     hal_trng_init();
+#ifdef CRYPTO_CB_HSM
     keyvault_init();
+#endif
 }
 
 #endif

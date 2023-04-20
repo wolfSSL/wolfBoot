@@ -112,8 +112,6 @@ void main(void)
     for (i = 0; i < (rand / 100000000); i++)
         ;
 
-    wcs_slot_read(0, (unsigned char *)CaBuf, 2048);
-
 #endif
     hal_init();
     uart_init(115200, 8, 'N', 1);

@@ -243,7 +243,7 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #   endif
 #endif
 
-#ifdef EXT_ENCRYPTED
+#if defined(EXT_ENCRYPTED) || defined(SECURE_PKCS11)
 #   define HAVE_PWDBASED
 #else
 #   define NO_PWDBASED
@@ -306,6 +306,16 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
     #define WC_NO_HASHDRBG
     #define NO_DEV_RANDOM
     #define NO_ECC_KEY_EXPORT
+#endif
+
+/* Disables - For minimum wolfCrypt build */
+#ifndef WOLFBOOT_TPM
+#   if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && !defined(WOLFCRYPT_SECURE_MODE)
+#       define NO_AES
+#   endif
+#   if !defined(SECURE_PKCS11)
+#       define NO_HMAC
+#   endif
 #endif
 
 #define NO_CMAC
@@ -381,5 +391,11 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
     void uart_printf(const char* fmt, ...);
     #define XPRINTF uart_printf
 #endif
+
+#ifdef SECURE_PKCS11
+typedef unsigned long time_t;
+
+#endif
+
 
 #endif /* !H_USER_SETTINGS_ */
