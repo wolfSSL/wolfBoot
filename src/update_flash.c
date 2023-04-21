@@ -371,6 +371,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
 #endif
+#ifdef DELTA_UPDATES
+    uint8_t interrupted = 0;
+#endif
 
     /* No Safety check on open: we might be in the middle of a broken update */
     wolfBoot_open_image(&update, PART_UPDATE);
@@ -392,7 +395,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     update_type = wolfBoot_get_image_type(PART_UPDATE);
 
-
     /* Check the first sector to detect interrupted update */
     if ((wolfBoot_get_update_sector_flag(0, &flag) < 0) ||
             (flag == SECT_FLAG_NEW))
@@ -413,18 +415,25 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 (wolfBoot_current_firmware_version() <
                  wolfBoot_update_firmware_version()) ) {
             VERIFY_VERSION_ALLOWED(fallback_allowed);
-        } else {
+        } else
             return -1;
-        }
 #endif
     }
 
 
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
+        /* if the first sector flag is not new but we are updating then we */
+        /* were interrupted and need to resume instead of inverting */
+        if (flag != SECT_FLAG_NEW &&
+            (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) &&
+            (st == IMG_STATE_UPDATING)) {
+            interrupted = 1;
+        }
+
         return wolfBoot_delta_update(&boot, &update, &swap,
                         (wolfBoot_current_firmware_version() >=
-                         wolfBoot_update_firmware_version()));
+                         wolfBoot_update_firmware_version() && !interrupted));
     }
 #endif
 
