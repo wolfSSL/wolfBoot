@@ -138,5 +138,5 @@ jobs:
       
       # DELTA update currently fails when patch is large enough
       - name: Run update-revert test with power failures (DELTA)
-          run: |
+        run: |
           tools/scripts/sim-update-powerfail-resume.sh

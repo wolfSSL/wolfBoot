@@ -192,7 +192,8 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
     #endif
 
 static int wolfBoot_delta_update(struct wolfBoot_image *boot,
-        struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse)
+    struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse,
+    int resume_inverse)
 {
     int sector = 0;
     int ret;
@@ -210,6 +211,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
     uint8_t enc_blk[DELTA_BLOCK_SIZE];
 #endif
+
     /* Use biggest size for the swap */
     total_size = boot->fw_size + IMAGE_HEADER_SIZE;
     if ((update->fw_size + IMAGE_HEADER_SIZE) > total_size)
@@ -231,7 +233,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         cur_v = wolfBoot_current_firmware_version();
         upd_v = wolfBoot_update_firmware_version();
         delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
-        if ((cur_v == upd_v) && (delta_base_v < cur_v)) {
+        if (((cur_v == upd_v) && (delta_base_v < cur_v)) || resume_inverse) {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
                     IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
         } else {
@@ -372,14 +374,16 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
 #endif
 #ifdef DELTA_UPDATES
-    uint8_t interrupted = 0;
+    int inverse = 0;
+    int inverse_resume = 0;
+    uint32_t cur_v;
+    uint32_t up_v;
 #endif
 
     /* No Safety check on open: we might be in the middle of a broken update */
     wolfBoot_open_image(&update, PART_UPDATE);
     wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_open_image(&swap, PART_SWAP);
-
 
     /* Use biggest size for the swap */
     total_size = boot.fw_size + IMAGE_HEADER_SIZE;
@@ -423,17 +427,26 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
-        /* if the first sector flag is not new but we are updating then we */
-        /* were interrupted and need to resume instead of inverting */
+        cur_v = wolfBoot_current_firmware_version();
+        up_v = wolfBoot_update_firmware_version();
+        inverse = cur_v >= up_v;
+
+        /* if the first sector flag is not new but we are updating then */
+        /* we were interrupted */
         if (flag != SECT_FLAG_NEW &&
-            (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) &&
-            (st == IMG_STATE_UPDATING)) {
-            interrupted = 1;
+            wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
+            st == IMG_STATE_UPDATING) {
+            if (cur_v == up_v) {
+                inverse = 0;
+            }
+            else if (cur_v < up_v) {
+                inverse = 1;
+                inverse_resume = 1;
+            }
         }
 
-        return wolfBoot_delta_update(&boot, &update, &swap,
-                        (wolfBoot_current_firmware_version() >=
-                         wolfBoot_update_firmware_version() && !interrupted));
+        return wolfBoot_delta_update(&boot, &update, &swap, inverse,
+            inverse_resume);
     }
 #endif
 
