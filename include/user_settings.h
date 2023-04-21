@@ -34,6 +34,12 @@
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
+#define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
+extern int toupper(int c);
+extern int tolower(int c);
+#define XTOUPPER(c)     toupper((c))
+#define XTOLOWER(c)     tolower((c))
+
 #ifdef USE_FAST_MATH
 #   define WC_NO_HARDEN
 #endif
@@ -82,7 +88,7 @@
 #   endif
 
 /* SP MATH */
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
@@ -102,7 +108,7 @@
 #elif defined(WOLFBOOT_SIGN_ECC384)
 #   define HAVE_ECC384
 #   define FP_MAX_BITS (384 * 2)
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_SP_384
 #       define WOLFSSL_SP_NO_256
 #   endif
@@ -110,7 +116,7 @@
 #elif defined(WOLFBOOT_SIGN_ECC521)
 #   define HAVE_ECC521
 #   define FP_MAX_BITS (528 * 2)
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_SP_521
 #       define WOLFSSL_SP_NO_256
 #   endif
@@ -128,7 +134,7 @@
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
@@ -146,7 +152,7 @@
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (3072 * 2)
     /* sp math */
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
@@ -164,7 +170,7 @@
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (4096 * 2)
     /* sp math */
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL

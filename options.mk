@@ -376,8 +376,9 @@ else
   endif
 endif
 
-ifeq ($(V),0)
-  Q=@
+Q?=@
+ifeq ($(V),1)
+  Q=
 endif
 
 ifeq ($(NO_MPU),1)
@@ -414,9 +415,6 @@ endif
 ifeq ($(WOLFBOOT_HUGE_STACK),1)
   CFLAGS+=-DWOLFBOOT_HUGE_STACK
 endif
-
-OBJS+=$(PUBLIC_KEY_OBJS)
-OBJS+=$(UPDATE_OBJS)
 
 ifeq ($(WOLFTPM),1)
   OBJS += lib/wolfTPM/src/tpm2.o \
@@ -466,7 +464,6 @@ ifeq ($(HASH),SHA3)
 endif
 
 CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
-OBJS+=$(WOLFCRYPT_OBJS)
 
 # check if both encryption and self update are on
 #

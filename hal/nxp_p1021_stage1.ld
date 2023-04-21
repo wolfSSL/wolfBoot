@@ -2,17 +2,24 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-HEAP_SIZE = 4K; /* heap not used */
-STACK_SIZE = 128K;
+BASE_ADDR = @WOLFBOOT_STAGE1_BASE_ADDR@;
+
+/* for flashing to NAND it must be 4KB */
+LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
+
+/* Boot initialization code */
+BOOTSTRAP_TLB = BASE_ADDR;
+
+/* Entry point where boot executes from (end of region) */
+BOOTSTRAP_ENTRY = BASE_ADDR + LOADER_STAGE1_SIZE - 4;
 
 MEMORY
 {
-    /* DDR3 - 512MB (offset by destination address and 4KB boot region) */
-    DRAM (rwx) : ORIGIN = @WOLFBOOT_STAGE1_LOAD_ADDR@,
-                 LENGTH = 0x1FFFFFFF - @WOLFBOOT_STAGE1_LOAD_ADDR@
+    /* Boot Location */
+    FLASH (rx) : ORIGIN = BOOTSTRAP_TLB, LENGTH = LOADER_STAGE1_SIZE
 
     /* L1 as SRAM (up to 16KB) */
-    RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
+    RAM (rwx) : ORIGIN = 0xffd00000, LENGTH = 16K
 }
 
 SECTIONS
@@ -21,25 +28,13 @@ SECTIONS
     .boot :
     {
         KEEP(*(.boot))
-    } > DRAM
-
-    . = ALIGN(4);
-
-    /* entry point branch offset to _reset */
-    .reset :
-    {
-        KEEP(*(.reset))
-    } > DRAM
-    . = ALIGN(4);
-
-    .text :
-    {
         _start_vector = .;
         KEEP(*(.isr_vector))
         *(.text*)
         *(.rodata*)
         *(.sdata*)
-    } > DRAM
+    } > FLASH
+    . = ALIGN(4);
 
     /* Read-only sections, merged into text segment: */
     .interp         : { *(.interp) }
@@ -53,6 +48,13 @@ SECTIONS
 
     _stored_data = .;
 
+    /* entry point branch offset to _reset */
+    .reset BOOTSTRAP_ENTRY :
+    {
+        KEEP(*(.reset))
+    } = 0x4
+    . = ALIGN(4);
+
     .data : AT (_stored_data)
     {
         _start_data = .;
@@ -61,7 +63,7 @@ SECTIONS
         KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
-    } > DRAM
+    } > RAM
 
     .bss (NOLOAD) :
     {
@@ -74,8 +76,8 @@ SECTIONS
         __bss_end__ = .;
         . = ALIGN(16);
         _end = .;
-    } > DRAM
+    } > RAM
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );
+PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );

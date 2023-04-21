@@ -37,6 +37,14 @@ size_t strlen(const char *s); /* forward declaration */
     #endif
 #endif
 
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
+/* for RAMFUNCTION */
+#include "image.h"
+#endif
+
+#if !defined(BUILD_LOADER_STAGE1) || \
+    (defined(PRINTF_ENABLED) && defined(DEBUG_UART))
+
 int islower(int c)
 {
     return (c >= 'a' && c <= 'z');
@@ -137,16 +145,6 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
     return diff;
 }
 
-size_t strlen(const char *s)
-{
-    size_t i = 0;
-
-    while (s[i] != 0)
-        i++;
-
-    return i;
-}
-
 char *strncat(char *dest, const char *src, size_t n)
 {
     size_t i = 0;
@@ -179,22 +177,6 @@ int strncmp(const char *s1, const char *s2, size_t n)
     return diff;
 }
 
-#if  !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
-#include "image.h"
-void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
-{
-    size_t i;
-    const char *s = (const char *)src;
-    char *d = (char *)dst;
-
-    for (i = 0; i < n; i++) {
-        d[i] = s[i];
-    }
-
-    return dst;
-}
-#endif /* IAR */
-
 char *strncpy(char *dst, const char *src, size_t n)
 {
     size_t i;
@@ -222,7 +204,6 @@ char *strcpy(char *dst, const char *src)
     return dst;
 }
 
-
 int memcmp(const void *_s1, const void *_s2, size_t n)
 {
     int diff = 0;
@@ -238,6 +219,35 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
 
     return diff;
 }
+
+#endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && DEBUG_UART) */
+
+#if !defined(BUILD_LOADER_STAGE1) || defined(DEBUG_UART)
+size_t strlen(const char *s)
+{
+    size_t i = 0;
+
+    while (s[i] != 0)
+        i++;
+
+    return i;
+}
+#endif
+
+#if  !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
+void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
+{
+    size_t i;
+    const char *s = (const char *)src;
+    char *d = (char *)dst;
+
+    for (i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+
+    return dst;
+}
+#endif /* IAR */
 
 #ifndef __IAR_SYSTEMS_ICC__
 void *memmove(void *dst, const void *src, size_t n)
@@ -257,6 +267,7 @@ void *memmove(void *dst, const void *src, size_t n)
     }
 }
 #endif
+
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
 void uart_writenum(int num, int base)
