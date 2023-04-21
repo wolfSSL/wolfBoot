@@ -134,7 +134,7 @@ static CK_TOKEN_INFO tokenInfoTemplate = {
  */
 CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
 {
-#ifndef NO_PKCS11_TIME
+#ifndef WOLFPKCS11_NO_TIME
     time_t now, expire;
     struct tm nowTM;
 #endif
@@ -153,7 +153,7 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
     pInfo->serialNumber[14] = ((slotID / 10) % 10) + '0';
     pInfo->serialNumber[15] = ((slotID /  1) % 10) + '0';
 
-#ifndef NO_PKCS11_TIME
+#ifndef WOLFPKCS11_NO_TIME
     now = XTIME(0);
     XMEMSET(&nowTM, 0, sizeof(nowTM));
     if (XGMTIME(&now, &nowTM) != NULL) {
@@ -181,27 +181,27 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
 #endif
 
     cnt = WP11_Slot_TokenFailedLogin(slot, WP11_LOGIN_SO);
-#ifndef NO_PKCS11_TIME
+#ifndef WOLFPKCS11_NO_TIME
     expire = WP11_Slot_TokenFailedExpire(slot, WP11_LOGIN_SO);
 #endif
     if (cnt > 0)
         pInfo->flags |= CKF_SO_PIN_COUNT_LOW;
     if (cnt == WP11_MAX_LOGIN_FAILS_SO - 1)
         pInfo->flags |= CKF_SO_PIN_FINAL_TRY;
-#ifndef NO_PKCS11_TIME
+#ifndef WOLFPKCS11_NO_TIME
     else if (cnt == WP11_MAX_LOGIN_FAILS_SO && now < expire)
         pInfo->flags |= CKF_SO_PIN_LOCKED;
 #endif
 
     cnt = WP11_Slot_TokenFailedLogin(slot, WP11_LOGIN_USER);
-#ifndef NO_PKCS11_TIME
+#ifndef WOLFPKCS11_NO_TIME
     expire = WP11_Slot_TokenFailedExpire(slot, WP11_LOGIN_USER);
 #endif
     if (cnt > 0)
         pInfo->flags |= CKF_USER_PIN_COUNT_LOW;
     if (cnt == WP11_MAX_LOGIN_FAILS_USER - 1)
         pInfo->flags |= CKF_USER_PIN_FINAL_TRY;
-#ifndef NO_PKCS11_TIME
+#ifndef WOLFPKCS11_NO_TIME
     else if (cnt == WP11_MAX_LOGIN_FAILS_USER && now < expire)
         pInfo->flags |= CKF_USER_PIN_LOCKED;
 #endif
