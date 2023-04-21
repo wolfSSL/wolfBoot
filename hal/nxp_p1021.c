@@ -269,7 +269,7 @@ enum elbc_amask_sizes {
 
 /* NAND Flash */
 #define FLASH_BANK        0 /* CS0 */
-#define FLASH_PAGE_SIZE   (2048) /* only 512 or 2048 (large) */
+#define FLASH_PAGE_SIZE   (512) /* only 512 or 2048 (large) */
 
 #define FLASH_TIMEOUT_TRIES 1000000
 
@@ -626,16 +626,11 @@ static int hal_flash_init(void)
     ret = hal_flash_reset();
     if (ret == 0) {
         /* Read Flash ID */
-        hal_flash_read_id(flash_id);
+        ret = hal_flash_read_id(flash_id);
     }
 
 #ifdef PRINTF_ENABLED
     wolfBoot_printf("Flash ID: Ret %d, 0x%08lx\r\n", ret, flash_id[0]);
-#elif defined(DEBUG_UART)
-    if (ret != 0) {
-        const char* errStr = "Flash reset/id failed!\r\n";
-        uart_write(errStr, strlen(errStr));
-    }
 #endif
 
 #endif /* ENABLE_ELBC */
