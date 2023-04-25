@@ -1399,7 +1399,7 @@ Example configurations for this target are provided in:
 
 1. Download `aarch64-none-elf-` toolchain.
 
-2. Copy the example `nxp_ls1028a.cofnig` file to root directory and rename to `.config`
+2. Copy the example `nxp_ls1028a.cofig` file to root directory and rename to `.config`
 
 3. Build keytools and wolfboot
    

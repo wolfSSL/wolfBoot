@@ -23,7 +23,7 @@
 #include <string.h>
 #include <target.h>
 #include "image.h"
-#include "ttbl_aarch64.h"
+#include "printf.h"
 
 #ifndef ARCH_AARCH64
 #   error "wolfBoot ls1028a HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
@@ -38,6 +38,40 @@
 #define SYS_CLK    (400000000) /* Sysclock = 400Mhz set by RCW */
 #define FLASH_FREQ (100000000) /* Flash clock = 100Mhz */
 #define NOR_BASE   (0x20000000)
+
+/* Trust Zone */
+#define TZASC_BASE              (0x1100000)
+#define TZASC_BUILD_CONFIG      *((volatile uint32_t*)(TZASC_BASE + 0x0))
+#define TZASC_ACTION            *((volatile uint32_t*)(TZASC_BASE + 0x4))
+#define TZASC_GATE_KEEPER       *((volatile uint32_t*)(TZASC_BASE + 0x8))
+#define TZASC_SPECULATION_CTRL  *((volatile uint32_t*)(TZASC_BASE + 0xC))
+#define TZASC_INT_STATUS        *((volatile uint32_t*)(TZASC_BASE + 0x10))
+#define TZASC_INT_CLEAR         *((volatile uint32_t*)(TZASC_BASE + 0x14))
+#define TZASC_FAIL_ADDRESS_LOW  *((volatile uint32_t*)(TZASC_BASE + 0x20))
+#define TZASC_FAIL_ADDRESS_HIGH *((volatile uint32_t*)(TZASC_BASE + 0x24))
+#define TZASC_FAIL_CONTROL      *((volatile uint32_t*)(TZASC_BASE + 0x28))
+#define TZASC_REGION_BASE_LOW   *((volatile uint32_t*)(TZASC_BASE + 0x100))
+#define TZASC_REGION_BASE_HIGH  *((volatile uint32_t*)(TZASC_BASE + 0x104))
+
+#define TZPC_OCRAM      (0x2200000)
+#define TZPCR0SIZE      *((volatile uint32_t*)(TZPC_OCRAM + 0x0))
+#define TZDECPROT0_STAT *((volatile uint32_t*)(TZPC_OCRAM + 0x800))
+#define TZDECPROT0_SET  *((volatile uint32_t*)(TZPC_OCRAM + 0x804))
+#define TZDECPROT0_CLR  *((volatile uint32_t*)(TZPC_OCRAM + 0x808))
+#define TZDECPROT1_STAT *((volatile uint32_t*)(TZPC_OCRAM + 0x80C))
+#define TZDECPROT1_SET  *((volatile uint32_t*)(TZPC_OCRAM + 0x810))
+#define TZDECPROT1_CLR  *((volatile uint32_t*)(TZPC_OCRAM + 0x814))
+#define TZPCPERIPHID0   *((volatile uint32_t*)(TZPC_OCRAM + 0xFE0))
+#define TZPCPERIPHID1   *((volatile uint32_t*)(TZPC_OCRAM + 0xFE4))
+#define TZPCPERIPHID2   *((volatile uint32_t*)(TZPC_OCRAM + 0xFE8))
+#define TZPCPERIPHID3   *((volatile uint32_t*)(TZPC_OCRAM + 0xFEC))
+#define TZPCPCELLID0    *((volatile uint32_t*)(TZPC_OCRAM + 0xFF0))
+#define TZPCPCELLID1    *((volatile uint32_t*)(TZPC_OCRAM + 0xFF4))
+#define TZPCPCELLID2    *((volatile uint32_t*)(TZPC_OCRAM + 0xFF8))
+#define TZPCPCELLID3    *((volatile uint32_t*)(TZPC_OCRAM + 0xFFC))
+
+#define TZWT_BASE  (0x23C0000)
+
 
 /* LS1028A PC16552D Dual UART */
 #define BAUD_RATE 115200
@@ -68,7 +102,7 @@
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
 /* LS1028 XSPI Flex SPI Memory map - RM 18.7.2.1 */
-#define XSPI_BASE              (0x20C0000)
+#define XSPI_BASE              (0x20C0000UL)
 #define XSPI_MCRn(x)           *((volatile uint32_t*)(XSPI_BASE + (x * 0x4))) /* Module Control Register */
 #define XSPI_MCR0              *((volatile uint32_t*)(XSPI_BASE + 0x0)) /* Module Control Register */
 #define XSPI_MCR1              *((volatile uint32_t*)(XSPI_BASE + 0x4)) /* Module Control Register */
@@ -107,6 +141,7 @@
 #define XSPI_IPRXFSTS          *((volatile uint32_t*)(XSPI_BASE + 0xF0)) /* IPC RX FIFO Status Register */
 #define XSPI_IPTXFSTS          *((volatile uint32_t*)(XSPI_BASE + 0xF4)) /* IPC TX FIFO Status Register */
 #define XSPI_RFD(x)            *((volatile uint32_t*)(XSPI_BASE + 0x100 + (x * 0x4))) /* RX FIFO Data Register */
+#define XSPI_TFD_BASE          (XSPI_BASE + 0x180) /* TX FIFO Data Register Base Address */
 #define XSPI_TFD(x)            *((volatile uint32_t*)(XSPI_BASE + 0x180 + (x * 0x4))) /* TX FIFO Data Register */
 #define XSPI_LUT(x)            *((volatile uint32_t*)(XSPI_BASE + 0x200 + (x * 0x4))) /* LUT Register */
 #define XSPI_SFAR              XSPI_IPCR0 /* Serial Flash Address Register determined by AHB burst address */
@@ -124,6 +159,12 @@
 #define XSPI_IPCMD_START()     (XSPI_IPCMD = 0x1)             /* Start IP Command */
 #define XSPI_IPCMDDONE         (0x1)
 #define XSPI_IPRXWA            (0x1 << 5)
+#define XSPI_IPRCFCR_FLUSH     (0x1)
+#define XSPI_IP_BUF_SIZE       (256)
+#define XSPI_IP_WM_SIZE        (8)
+#define XSPI_INTR_IPTXWE_MASK  (0x1 << 6)
+#define XSPI_SW_RESET          (0x1)
+
 
 /* XSPI Parameters */
 #define XSPI_MAX_BANKS         (8)
@@ -153,6 +194,7 @@
 #define XSPI_MCR0_CFG           0xFFFF80C0
 #define XSPI_MCR1_CFG           0xFFFFFFFF
 #define XSPI_MCR2_CFG           0x200081F7
+#define XSPI_INTEN_CFG          0x00000061
 #define XSPI_AHBCR_CFG          0x00000038
 #define XSPI_AHBRXBUF0CR_CFG    0x80000100
 #define XSPI_AHBRXBUF1CR_CFG    0x80010100
@@ -174,10 +216,10 @@
 #define XSPI_FLSHA2CR1_CFG      0x00000063
 #define XSPI_FLSHB1CR1_CFG      0x00000063
 #define XSPI_FLSHB2CR1_CFG      0x00000063
-#define XSPI_FLSHA1CR2_CFG      0x00000900
-#define XSPI_FLSHA2CR2_CFG      0x00000900
-#define XSPI_FLSHB1CR2_CFG      0x00000900
-#define XSPI_FLSHB2CR2_CFG      0x00000900
+#define XSPI_FLSHA1CR2_CFG      0x00000C00
+#define XSPI_FLSHA2CR2_CFG      0x00000C00
+#define XSPI_FLSHB1CR2_CFG      0x00000C00
+#define XSPI_FLSHB2CR2_CFG      0x00000C00
 #define XSPI_IPRXFCR_CFG        0x00000001
 #define XSPI_IPTXFCR_CFG        0x00000001
 #define XSPI_DLLACR_CFG         0x100
@@ -195,10 +237,12 @@
 /* NOR Flash parameters */
 #define FLASH_BANK_SIZE   (256 * 1024 * 1024)   /* 256MB total size */
 #define FLASH_PAGE_SIZE   (256)                 /* program size */
-#define FALSH_ERASE_SIZE  (128 * 1024)          /* erase sector size */
-#define FLASH_SECTORS     (FLASH_BANK_SIZE / FLASH_SECTOR_SIZE)
+#define FLASH_ERASE_SIZE  (128 * 1024)          /* erase sector size */
+#define FLASH_SECTOR_CNT  (FLASH_BANK_SIZE / FLASH_ERASE_SIZE)
 #define FLASH_ERASE_TOUT  60000 /* Flash Erase Timeout (ms) */
 #define FLASH_WRITE_TOUT  500   /* Flash Write Timeout (ms) */
+#define FLASH_READY_MSK   (0x1 << 0)
+#define MASK_32BIT        0xffffffff 
 
 /* LUT register helper */
 #define XSPI_LUT_SEQ(code1, pad1, op1, code0, pad0, op0) \
@@ -212,7 +256,6 @@
 #define LUT_PAD(x)              (x - 1)
 #define LUT_PAD_SINGLE          LUT_PAD(1)  
 #define LUT_PAD_OCTAl           LUT_PAD(4)
-
 
 #define CMD_SDR                 0x01
 #define CMD_DDR                 0x21
@@ -243,25 +286,40 @@
 #define JMP_ON_CS               0x1F
 #define STOP                    0
 
-/* MT35XU02GCBA1G12 Command definitions */
-#define LUT_CMD_WE              0x06 /* Write Enable */
-#define LUT_CMD_WD              0x04 /* Write Disable */
-#define LUT_CMD_WNVCR           0xB1 /* Write Non-Volatile Configuration Register */
-#define LUT_CMD_CLSFR           0x50 /* Clear Status Flag Register */
-#define LUT_CMD_WSR             0x01 /* Write Status Register */
-#define LUT_CMD_RSR             0x05 /* Read Status Register */
-#define LUT_CMD_RID             0x9F /* Read ID */
-#define LUT_CMD_PP              0x02 /* Page Program */
-#define LUT_CMD_4PP             0x12 /* 4 byte Page Program */
-#define LUT_CMD_SE              0xD8 /* Sector Erase */
-#define LUT_CMD_SE_4K           0x20 /* 4K Sector Erase */
-#define LUT_CMD_SE_32K          0x52 /* 32K Sector Erase */
-#define LUT_CMD_4SE             0xDC /* 4 byte Sector Erase */
-#define LUT_CMD_CE              0xC4 /* Chip Erase */
-#define LUT_CMD_READ            0x03 /* Read */
-#define LUT_CMD_4READ           0x13 /* 4 byte Read */
-#define LUT_ADDR_3B             0x18 /* 3 byte address */
-#define LUT_ADDR_4B             0x20 /* 4 byte address */
+/* MT35XU02GCBA1G12 Operation definitions */
+#define LUT_OP_WE              0x06 /* Write Enable */
+#define LUT_OP_WD              0x04 /* Write Disable */
+#define LUT_OP_WNVCR           0xB1 /* Write Non-Volatile Configuration Register */
+#define LUT_OP_CLSFR           0x50 /* Clear Status Flag Register */
+#define LUT_OP_WSR             0x01 /* Write Status Register */
+#define LUT_OP_RSR             0x05 /* Read Status Register */
+#define LUT_OP_RID             0x9F /* Read ID */
+#define LUT_OP_PP              0x02 /* Page Program */
+#define LUT_OP_PP4B            0x12 /* Page Program */
+#define LUT_OP_FPP             0x82 /* Fast Page Program */
+#define LUT_OP_SE              0xD8 /* Sector Erase */
+#define LUT_OP_SE_4K           0x20 /* 4K Sector Erase */
+#define LUT_OP_SE_4K4B         0x21 /* 4K Sector Erase */
+#define LUT_OP_SE_32K          0x52 /* 32K Sector Erase */
+#define LUT_OP_SE_32K4B        0x5C /* 32K Sector Erase */
+#define LUT_OP_4SE             0xDC /* 4 byte Sector Erase */
+#define LUT_OP_CE              0xC4 /* Chip Erase */
+#define LUT_OP_READ3B          0x03 /* Read */
+#define LUT_OP_READ4B          0x13 /* Read */
+#define LUT_OP_FAST_READ       0x0B /* Fast Read */
+#define LUT_OP_FAST_READ4B     0x0C /* Fast Read */
+#define LUT_OP_OCTAL_READ      0x8B /* Octal Read */
+#define LUT_OP_ADDR3B          0x18 /* 3 byte address */
+#define LUT_OP_ADDR4B          0x20 /* 4 byte address */
+#define LUT_OP_RDSR            0x05 /* Read Status Register */
+#define LUT_OP_1BYTE           0x01 /* 1 byte */
+
+#define LUT_INDEX_READ         0
+#define LUT_INDEX_WRITE_EN     4
+#define LUT_INDEX_SE           8
+#define LUT_INDEX_SSE4K        12
+#define LUT_INDEX_PP           16
+#define LUT_INDEX_RDSR         20
 
 /* MT40A1G8SA-075:E --> DDR4: static, 1GB, 1600 MHz (1.6 GT/s) */
 #define DDR_ADDRESS            0x80000000
@@ -362,7 +420,7 @@
 
 /* 12.4 DDR Memory Map */
 #define DDR_BASE           (0x1080000)
-#define DDR_BASE_PHYS      (0xF00000000ULL | DDR_BASE)
+#define DDR_PHY_BASE       (0x1400000)
 
 #define DDR_CS_BNDS(n)     *((volatile uint32_t*)(DDR_BASE + 0x000 + (n * 8))) /* Chip select n memory bounds */
 #define DDR_CS_CONFIG(n)   *((volatile uint32_t*)(DDR_BASE + 0x080 + (n * 4))) /* Chip select n configuration */
@@ -429,17 +487,47 @@
 #define DDR_ERR_INT_EN     *((volatile uint32_t*)(DDR_BASE + 0xE48)) /* Memory error interrupt enable */
 #define DDR_ERR_SBE        *((volatile uint32_t*)(DDR_BASE + 0xE58)) /* Single-Bit ECC memory error management */
 
-
 #define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
 #define DDR_SDRAM_CFG_BI       0x00000001   
 #define DDR_SDRAM_CFG2_D_INIT  0x00000010 /* data initialization in progress */
 #define DDR_MEM_TEST_EN        0x80000000 /* Memory test enable */
 #define DDR_MEM_TEST_FAIL      0x00000001 /* Memory test fail */
+#define TEST_DDR_SIZE          1024 * 5
+#define TEST_DDR_OFFSET        0x10000000
+
+/* MMU Access permission and shareability 
+   Device mem encoding 0b0000dd00 
+   dd = 00, 01, 10, 11
+   Nomral Mem encoding 0bxxxxiiii 
+   xxxx = 00RW, 0100, 01RW, 10RW, 11RW, where RW = Outer Read/Write policy  
+   iiii = 00RW, 0100, 01RW, 10RW, 11RW, where RW = Inner Read/Write policy
+   R or W is 0 for No alloc, 1 for alloc
+*/
+ #define ATTR_SH_IS               (0x3 << 8) /* Inner Shareable */
+ #define ATTR_SH_OS               (0x2 << 8) /* Outer Shareable */
+ #define ATTR_UXN                 (0x1 << 54) /* EL0 cannot execute */
+ #define ATTR_PXN                 (0x1 << 53) /* EL1 cannot execute */
+ #define ATTR_AF                  (0x1 << 10) /* Access Flag */
+ #define ATTR_AP_RW_PL1           (0x1 << 6) /* EL1 Read-Write */
+ #define ATTR_AP_RW_PL0           (0x0 << 6) /* EL0 Read-Write */
+ #define ATTR_AP_RO_PL1           (0x5 << 6) /* EL1 Read-Only */
+ #define ATTR_AP_RO_PL0           (0x4 << 6) /* EL0 Read-Only */
+ #define ATTR_NS                  (0x1 << 5) /* Non-secure */
+ #define ATTR_AP_RW               (ATTR_AP_RW_PL1 | ATTR_AP_RW_PL0)  
+
+ /* Memory attribute MAIR reg cfg */
+ #define ATTR_IDX_NORMAL_MEM      0
+ #define MAIR_ATTR_NORMAL_MEM     0xFF /* Normal, Write-Back, Read-Write-Allocate */
+ #define ATTR_IDX_DEVICE_MEM      1
+ #define MAIR_ATTR_DEVICE_MEM     0x04 /* Device-nGnRnE */
+
+ #define ATTRIBUTE_DEVICE        (ATTR_IDX_DEVICE_MEM << 2) | ATTR_AP_RW | ATTR_SH_IS
+ #define ATTRIBUTE_NORMAL_MEM    (ATTR_IDX_NORMAL_MEM << 2) | ATTR_AP_RW | ATTR_SH_IS
+
 
 void hal_flash_init(void);
 void switch_el3_to_el2(void);
-extern void hal_ttb_init(void);
-extern void init_MMU(void);
+extern void mmu_enable(void);
 
 #ifdef DEBUG_UART
 static void uart_init(void)
@@ -477,9 +565,9 @@ void uart_write(const char* buf, uint32_t sz)
 #endif /* DEBUG_UART */
 
 void hal_delay_us(uint32_t us) {
-    us = SYS_CLK * us / 1000000;
-    uint32_t i = 0;
-    for (i = 0; i < us; i++) {
+    uint64_t delay = (uint64_t)SYS_CLK * us / 1000000;
+    volatile uint32_t i = 0;
+    for (i = 0; i < delay; i++) {
         asm volatile("nop");
     }
 }
@@ -520,6 +608,10 @@ void xspi_init()
     XSPI_MCR0 = XSPI_MCR0_CFG;
     XSPI_MCR1 = XSPI_MCR1_CFG;
     XSPI_MCR2 = XSPI_MCR2_CFG;
+
+    /* Clear RX/TX fifos */
+    XSPI_IPRXFCR = XSPI_IPRXFCR_CFG; /* Note: RX/TX Water Mark can be set here default is 64bit */
+    XSPI_IPTXFCR = XSPI_IPTXFCR_CFG; /* Increase size to reduce transfer requests */
 
     /* Configure AHB bus control register (AHBCR) and AHB RX Buffer control register (AHBRXBUFxCR0) */
     XSPI_AHBCR = XSPI_AHBCR_CFG;
@@ -572,35 +664,56 @@ void hal_flash_init()
     xspi_init();
 
     /* Fast Read */
-    XSPI_LUT(0) = XSPI_LUT_SEQ(RADDR_SDR, LUT_PAD(1), 0x18, CMD_SDR, LUT_PAD(1), 0x8B);
-    XSPI_LUT(1) = XSPI_LUT_SEQ(READ_SDR, LUT_PAD(4), 0x04, DUMMY_SDR, LUT_PAD(4), 0x08);
+    XSPI_LUT(LUT_INDEX_READ) = XSPI_LUT_SEQ(RADDR_SDR, LUT_PAD_SINGLE, LUT_OP_ADDR3B, CMD_SDR, LUT_PAD_SINGLE, LUT_OP_READ3B);
+    XSPI_LUT(1) = XSPI_LUT_SEQ(STOP, LUT_PAD_SINGLE, 0x0, READ_SDR, LUT_PAD_SINGLE, 0x04);
     XSPI_LUT(2) = 0x0;
+    XSPI_LUT(3) = 0x0;
 
-    /* Write */
-    XSPI_LUT(9) = XSPI_LUT_SEQ(STOP, LUT_PAD(1), 0x0, WRITE_SDR, LUT_PAD(1), 0x0);
+    /* Write Enable */
+    XSPI_LUT(LUT_INDEX_WRITE_EN) = XSPI_LUT_SEQ(STOP, LUT_PAD_SINGLE, 0x0, CMD_SDR, LUT_PAD_SINGLE, LUT_OP_WE);
+    XSPI_LUT(5) = 0x0;
+    XSPI_LUT(6) = 0x0;
+    XSPI_LUT(7) = 0x0;
+
+    /* Erase */
+    XSPI_LUT(LUT_INDEX_SE) = XSPI_LUT_SEQ(RADDR_SDR, LUT_PAD_SINGLE, LUT_OP_ADDR3B, CMD_SDR, LUT_PAD_SINGLE, LUT_OP_SE);
+    XSPI_LUT(9) = 0x0;
     XSPI_LUT(10) = 0x0;
+    XSPI_LUT(11) = 0x0;
+
+    /* Subsector 4k Erase */
+    XSPI_LUT(LUT_INDEX_SSE4K) = XSPI_LUT_SEQ(RADDR_SDR, LUT_PAD_SINGLE, LUT_OP_ADDR3B, CMD_SDR, LUT_PAD_SINGLE, LUT_OP_SE_4K);
+    XSPI_LUT(13) = 0x0;
+    XSPI_LUT(14) = 0x0;
+    XSPI_LUT(15) = 0x0;
+
+    /* Page Program */
+    XSPI_LUT(LUT_INDEX_PP) = XSPI_LUT_SEQ(RADDR_SDR, LUT_PAD_SINGLE, LUT_OP_ADDR3B, CMD_SDR, LUT_PAD(1), LUT_OP_PP);
+    XSPI_LUT(17) = XSPI_LUT_SEQ(STOP, LUT_PAD_SINGLE, 0x0, WRITE_SDR, LUT_PAD_SINGLE, 0x1);
+    XSPI_LUT(18) = 0x0;
+    XSPI_LUT(19) = 0x0;
+
+    /* Read Flag Status Regsiter */
+    XSPI_LUT(LUT_INDEX_RDSR) = XSPI_LUT_SEQ(READ_SDR, LUT_PAD_SINGLE, LUT_OP_1BYTE, CMD_SDR, LUT_PAD_SINGLE, LUT_OP_RDSR);
+    XSPI_LUT(21) = 0x0;
+    XSPI_LUT(22) = 0x0;
+    XSPI_LUT(23) = 0x0;
 
     xspi_lut_lock();
-}
-
-
-
-void hal_ddr_ctlr() {
 }
 
 /* Called from boot_aarch64_start.S */
 void hal_ddr_init() {
 #ifdef ENABLE_DDR 
+    uint64_t counter = 0;
+    DDR_DDRCDR_1 = DDR_DDRCDR_1_VAL;
+    DDR_SDRAM_CLK_CNTL = DDR_SDRAM_CLK_CNTL_VAL;
+
     /* Setup DDR CS (chip select) bounds */
     DDR_CS_BNDS(0)   = DDR_CS0_BNDS_VAL;
     DDR_CS_BNDS(1)   = DDR_CS1_BNDS_VAL;
     DDR_CS_BNDS(2)   = DDR_CS2_BNDS_VAL;
     DDR_CS_BNDS(3)   = DDR_CS3_BNDS_VAL;
-
-    DDR_CS_CONFIG(0) = DDR_CS0_CONFIG_VAL;
-    DDR_CS_CONFIG(1) = DDR_CS1_CONFIG_VAL;
-    DDR_CS_CONFIG(2) = DDR_CS2_CONFIG_VAL;
-    DDR_CS_CONFIG(3) = DDR_CS3_CONFIG_VAL;
 
     /* DDR SDRAM timing configuration */
     DDR_TIMING_CFG_0 = DDR_TIMING_CFG_0_VAL;
@@ -613,15 +726,14 @@ void hal_ddr_init() {
     DDR_TIMING_CFG_7 = DDR_TIMING_CFG_7_VAL;
     DDR_TIMING_CFG_8 = DDR_TIMING_CFG_8_VAL;
 
-    /* DDR SDRAM mode configuration */
-    DDR_SDRAM_CFG_2 = DDR_SDRAM_CFG_2_VAL;
-    DDR_SDRAM_CFG_3  = DDR_SDRAM_CFG_3_VAL;
-    DDR_SDRAM_MD_CNTL = DDR_SDRAM_MD_CNTL_VAL;
-
+    DDR_ZQ_CNTL = DDR_ZQ_CNTL_VAL;
     DDR_DQ_MAP_0 = DDR_DQ_MAP_0_VAL;
     DDR_DQ_MAP_1 = DDR_DQ_MAP_1_VAL;
     DDR_DQ_MAP_2 = DDR_DQ_MAP_2_VAL;
     DDR_DQ_MAP_3 = DDR_DQ_MAP_3_VAL;
+
+    /* DDR SDRAM mode configuration */
+    DDR_SDRAM_CFG_3  = DDR_SDRAM_CFG_3_VAL;
 
     DDR_SDRAM_MODE   = DDR_SDRAM_MODE_VAL;
     DDR_SDRAM_MODE_2 = DDR_SDRAM_MODE_2_VAL;
@@ -639,15 +751,16 @@ void hal_ddr_init() {
     DDR_SDRAM_MODE_14 = DDR_SDRAM_MODE_14_VAL;
     DDR_SDRAM_MODE_15 = DDR_SDRAM_MODE_15_VAL;
     DDR_SDRAM_MODE_16 = DDR_SDRAM_MODE_16_VAL;
+    DDR_SDRAM_MD_CNTL = DDR_SDRAM_MD_CNTL_VAL;
 
     /* DDR Configuration */
     DDR_SDRAM_INTERVAL = DDR_SDRAM_INTERVAL_VAL;
     DDR_DATA_INIT = DDR_DATA_INIT_VAL;
-    DDR_SDRAM_CLK_CNTL = DDR_SDRAM_CLK_CNTL_VAL;
-    DDR_ZQ_CNTL = DDR_ZQ_CNTL_VAL;
+
     DDR_WRLVL_CNTL = DDR_WRLVL_CNTL_VAL;
     DDR_WRLVL_CNTL_2 = DDR_WRLVL_CNTL_2_VAL;
     DDR_WRLVL_CNTL_3 = DDR_WRLVL_CNTL_3_VAL;
+
     DDR_SR_CNTR = 0;
     DDR_SDRAM_RCW_1 = DDR_SDRAM_RCW_1_VAL;
     DDR_SDRAM_RCW_2 = DDR_SDRAM_RCW_2_VAL;
@@ -655,178 +768,379 @@ void hal_ddr_init() {
     DDR_SDRAM_RCW_4 = DDR_SDRAM_RCW_4_VAL;
     DDR_SDRAM_RCW_5 = DDR_SDRAM_RCW_5_VAL;
     DDR_SDRAM_RCW_6 = DDR_SDRAM_RCW_6_VAL;
-
-    DDR_DDRDSR_1 = DDR_DDRDSR_1_VAL;
-    DDR_DDRDSR_2 = DDR_DDRDSR_2_VAL;
-    DDR_DDRCDR_1 = DDR_DDRCDR_1_VAL;
     DDR_DDRCDR_2 = DDR_DDRCDR_2_VAL;
-
+    DDR_SDRAM_CFG_2 = DDR_SDRAM_CFG_2_VAL;
     DDR_INIT_ADDR = 0;
     DDR_INIT_EXT_ADDR = 0;
     DDR_ERR_DISABLE = 0;
     DDR_ERR_INT_EN = DDR_ERR_INT_EN_VAL;
+
+    DDR_DDRDSR_1 = DDR_DDRDSR_1_VAL;
+    DDR_DDRDSR_2 = DDR_DDRDSR_2_VAL;   
     DDR_ERR_SBE = DDR_ERR_SBE_VAL;
+
+    DDR_CS_CONFIG(0) = DDR_CS0_CONFIG_VAL;
+    DDR_CS_CONFIG(1) = DDR_CS1_CONFIG_VAL;
+    DDR_CS_CONFIG(2) = DDR_CS2_CONFIG_VAL;
+    DDR_CS_CONFIG(3) = DDR_CS3_CONFIG_VAL;
 
     /* Set values, but do not enable the DDR yet */
     DDR_SDRAM_CFG = (DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN);
 
-    asm volatile("isb");
     hal_delay_us(500);
+    asm volatile("isb");
 
     /* Enable controller */
     DDR_SDRAM_CFG &= ~(DDR_SDRAM_CFG_BI);
     DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
-
     asm volatile("isb");
 
     /* Wait for data initialization is complete */
-    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
+    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT)) {
+        counter++;
+    }
+
+    (void)counter;
 
  #endif
 }
 
-/* NOR flash write */
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
-{
-    uint32_t* ptr = 0;
-    memcpy(ptr + address, data, len); 
+void hal_flash_unlock(void) {}
+void hal_flash_lock(void) {}
+void ext_flash_lock(void) {}
+void ext_flash_unlock(void) {}
+
+
+void xspi_writereg(uint32_t* addr, uint32_t val) {
+    *(volatile uint32_t *)(addr) = val;
+}
+
+void xspi_write_en(uint32_t addr) {
+    XSPI_IPTXFCR = XSPI_IPRCFCR_FLUSH;
+    XSPI_IPCR0 = addr;
+    XSPI_IPCR1 =  XSPI_ISEQID(LUT_INDEX_WRITE_EN) | 1;
+    XSPI_IPCMD_START();
+
+    while(!(XSPI_INTR & XSPI_IPCMDDONE));
+
+    XSPI_INTR |= XSPI_IPCMDDONE;
+}
+
+void xspi_read_sr(uint8_t* rxbuf, uint32_t addr, uint32_t len) {
+    uint32_t data = 0;
+
+    /* Read IP CR regsiter */
+    uint32_t rxfcr = XSPI_IPRXFCR;
+
+    /* Flush RX fifo */
+    rxfcr = rxfcr | XSPI_IPRCFCR_FLUSH;
+    XSPI_IPTXFCR = rxfcr;
+
+    /* Trigger read SR command */
+    XSPI_IPCR0 = addr;
+    XSPI_IPCR1 = XSPI_ISEQID(LUT_INDEX_RDSR) | len;
+    XSPI_IPCMD_START();
+
+    while(!(XSPI_INTR & XSPI_IPCMDDONE));
+
+    XSPI_INTR |= XSPI_IPCMDDONE;
+
+    data = XSPI_RFD(0);
+    memcpy(rxbuf, &data, len);
+
+    XSPI_IPRXFCR = XSPI_IPRCFCR_FLUSH;
+    XSPI_INTR = XSPI_IPRXWA;
+    XSPI_INTR = XSPI_IPCMDDONE;
+}
+
+void xspi_sw_reset() {
+    XSPI_SWRESET();
+    while (XSPI_MCR0 & XSPI_SW_RESET);
+}
+
+void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len) {
+    uint32_t size = 0;
+    uint32_t tx_data = 0;
+    uint32_t size_wm = 0;
+    uint32_t loop_cnt = 0;
+    uint32_t remaining, rem_size = 0;
+    uint32_t i = 0, j = 0;
+
+    while(len) {
+        size = len > XSPI_IP_BUF_SIZE ? XSPI_IP_BUF_SIZE : len;
+
+        XSPI_IPCR0 = address;
+        loop_cnt = size / XSPI_IP_WM_SIZE; 
+
+        /* Fill TX fifos */
+        for(i = 0; i < loop_cnt; i++) {
+            /* Wait for TX fifo ready */
+            while(!(XSPI_INTR & XSPI_INTR_IPTXWE_MASK));
+
+            for(j = 0; j < XSPI_IP_WM_SIZE; j+=4) {
+                memcpy(&tx_data, data++, 4);
+                xspi_writereg((uint32_t*)XSPI_TFD_BASE + j, tx_data);
+            }
+
+            /* Reset fifo */
+            XSPI_INTR = XSPI_INTR_IPTXWE_MASK;
+        }
+
+        remaining = size % XSPI_IP_WM_SIZE;
+
+        /* Write remaining data for non aligned data */
+        if (remaining) {
+            /* Wait for fifo Empty */
+            while(!(XSPI_INTR & XSPI_INTR_IPTXWE_MASK));
+
+            for(j = 0; j < remaining; j+=4) {
+                tx_data = 0;
+                rem_size = (remaining < 4) ? remaining : 4;
+                memcpy(&tx_data, data++, rem_size);
+                xspi_writereg((uint32_t*)XSPI_TFD_BASE + j, tx_data);
+            }
+
+            /* Reset fifo */
+            XSPI_INTR = XSPI_INTR_IPTXWE_MASK;
+        }
+
+        XSPI_IPCR1 = XSPI_ISEQID(LUT_INDEX_PP) | size;
+        XSPI_IPCMD_START();
+
+        /* Wait command done */
+        while (!(XSPI_INTR & XSPI_IPCMDDONE))
+
+        /* Flush fifo, set done flag */
+        XSPI_IPTXFCR = XSPI_IPRCFCR_FLUSH;
+        XSPI_INTR = XSPI_IPCMDDONE;
+
+        len -= size;
+        address += size;
+    }
+}
+
+void xspi_flash_sec_erase(uintptr_t address) {
+    XSPI_IPCR0 = address;
+    XSPI_IPCR1 = XSPI_ISEQID(LUT_INDEX_SE) | FLASH_ERASE_SIZE;
+    XSPI_IPCMD_START();
+
+    while(!(XSPI_INTR & XSPI_IPCMDDONE));
+
+    XSPI_INTR &= ~XSPI_IPCMDDONE;
+}
+
+int hal_flash_write(uint32_t address, const uint8_t *data, int len) {
+    xspi_write_en(address);
+    xspi_flash_write(address, data, len);
+    //xspi_sw_reset();
+
     return len;
 }
 
-/* NOR Flash Erase */
-int hal_flash_erase(uint32_t address, int len)
-{
-    uint32_t* ptr = 0;
-    memset(ptr + address, 0xff, len);
+int hal_flash_erase(uint32_t address, int len) {
+    uint32_t num_sectors = 0;
+    uint32_t i = 0;
+    uint8_t status[4] = {0, 0, 0, 0};
+
+    num_sectors = len / FLASH_ERASE_SIZE;
+    num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
+
+    for (i = 0; i < num_sectors; i++) {
+        xspi_write_en(address + i * FLASH_ERASE_SIZE);
+        xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
+
+        while (!(status[0] & FLASH_READY_MSK))  {
+            xspi_read_sr(status, 0, 1);
+        }
+    }
+
+    xspi_sw_reset();
+
     return len;
 }
-
-void hal_flash_unlock(void){}
-void hal_flash_lock(void){}
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len) {
-    memcpy((void*)address, data, len);
+    xspi_write_en(address);
+    xspi_flash_write(address, data, len);
+    //xspi_sw_reset();
+
     return len;
 }
 
-int  ext_flash_read(uintptr_t address, uint8_t *data, int len) {
+int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
+    address = address & MASK_32BIT;
     memcpy(data, (void*)address, len);
     return len;
 }
 
-int  ext_flash_erase(uintptr_t address, int len) {
-    memset((void*)address, 0xff, len);
+int ext_flash_erase(uintptr_t address, int len) {
+    uint32_t num_sectors = 0;
+    uint32_t i = 0;
+    uint8_t status[4] = {0, 0, 0, 0};
+
+    num_sectors = len / FLASH_ERASE_SIZE;
+    num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
+
+    for (i = 0; i < num_sectors; i++) {
+        xspi_write_en(address + i * FLASH_ERASE_SIZE);
+        xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
+
+        while (!(status[0] & FLASH_READY_MSK))  {
+            xspi_read_sr(status, 0, 1);
+        }
+    }
+
+    xspi_sw_reset();
+
     return len;
 }
-
-void ext_flash_lock(void) {}
-void ext_flash_unlock(void) {}
 
 void hal_prepare_boot(void) {
     //switch_el3_to_el2();
 }
 
-int test_ddr(void) {
-    int status = 0;
-    const uint32_t test_pattern[10] = {
-        0x00000000,
-        0x00000001,
-        0x00000002,
-        0x00000003,
-        0x00000004,
-        0x00000005,
-        0x00000006,
-        0x00000007,
-        0x00000008,
-        0x00000009
-    };
-
-    DDR_MTPn(0) = test_pattern[0];
-    DDR_MTPn(1) = test_pattern[1];
-    DDR_MTPn(2) = test_pattern[2];
-    DDR_MTPn(3) = test_pattern[3];
-    DDR_MTPn(4) = test_pattern[4];
-    DDR_MTPn(5) = test_pattern[5];
-    DDR_MTPn(6) = test_pattern[6];
-    DDR_MTPn(7) = test_pattern[7];
-    DDR_MTPn(8) = test_pattern[8];
-    DDR_MTPn(9) = test_pattern[9];
+static int test_hw_ddr(void) {
+    int status = 0; 
+    uint64_t counter = 0;
+    
+    DDR_MTPn(0) = 0xffffffff;
+    DDR_MTPn(1) = 0x00000001;
+    DDR_MTPn(2) = 0x00000002;
+    DDR_MTPn(3) = 0x00000003;
+    DDR_MTPn(4) = 0x00000004;
+    DDR_MTPn(5) = 0x00000005;
+    DDR_MTPn(6) = 0xcccccccc;
+    DDR_MTPn(7) = 0xbbbbbbbb;
+    DDR_MTPn(8) = 0xaaaaaaaa;
+    DDR_MTPn(9) = 0xffffffff;
 
     DDR_MTCR = DDR_MEM_TEST_EN;
 
-    while (DDR_MTCR & DDR_MEM_TEST_EN) {
-        hal_delay_us(10);
-    }
+    while (DDR_MTCR & DDR_MEM_TEST_EN)
+        counter++;
 
     if (DDR_ERR_SBE & 0xffff || DDR_ERR_DETECT) {
         status = -1;
-        uart_write("DDR ECC error\n", 14);
+        wolfBoot_printf("DDR ECC error\n");
     }      
     if (DDR_MTCR & DDR_MEM_TEST_FAIL) {
         status = -1;
-        uart_write("DDR test failed\n", 16);
+        wolfBoot_printf("DDR self-test failed\n");
     } else {
         status = 0;
-        uart_write("DDR test passed\n", 16);
+        wolfBoot_printf("DDR self-test passed\n");
     }
 
     return status;
 }
 
-/* Note: in EL2/3 virtual and phsyical 
- * addresss must map directly 
- */
+static int test_ddr(void)
+{
+    int ret = 0;
+    int i;
+    uint32_t *ptr = (uint32_t*)(DDR_ADDRESS + TEST_DDR_OFFSET);
+    uint32_t tmp[TEST_DDR_SIZE/4];
+
+    memset(tmp, 0, sizeof(tmp));
+
+    /* test write to DDR */
+    for (i = 0; i < TEST_DDR_SIZE/4; i++) {
+        ptr[i] = (uint32_t)i;
+    }
+
+    /* test read from DDR */
+    for (i = 0; i < TEST_DDR_SIZE/4; i++) {
+        tmp[i] = ptr[i];
+    }
+
+    /* compare results */
+    for (i = 0; i < TEST_DDR_SIZE/4; i++) {
+        if (tmp[i] != (uint32_t)i) {
+            ret = -1;
+            break;
+        }
+    }
+
+    return ret;
+}
+
+#define TEST_ADDRESS 0x20012000 
+
+static int test_flash(void) {
+    int ret;
+    uint32_t i;
+    uint8_t pageData[FLASH_PAGE_SIZE];
+
+    /* Erase sector */
+    ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
+
+    /* Write Pages */
+    for (i=0; i<sizeof(pageData); i++) {
+        pageData[i] = (i & 0xff);
+    }
+    ret = ext_flash_write(TEST_ADDRESS, pageData, sizeof(pageData));
+    wolfBoot_printf("Write Page: Ret %d\n", ret);
+
+    /* Read page */
+    memset(pageData, 0, sizeof(pageData));
+    ret = ext_flash_read(TEST_ADDRESS, pageData, sizeof(pageData));
+    wolfBoot_printf("Read Page: Ret %d\n", ret);
+
+    wolfBoot_printf("Checking...\n");
+    /* Check data */
+    for (i=0; i<sizeof(pageData); i++) {
+        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
+        if (pageData[i] != (i & 0xff)) {
+            wolfBoot_printf("Check Data @ %d failed\n", i);
+            return -i;
+        }
+    }
+
+    wolfBoot_printf("Flash Test Passed\n");
+    return ret;
+}
+
+/* Function to set MMU MAIR memory attributes base on index */
+void set_memory_attribute(uint32_t attr_idx, uint64_t mair_value) {
+    uint64_t mair = 0;
+
+    asm volatile("mrs %0, mair_el3" : "=r"(mair));
+    mair &= ~(0xffUL << (attr_idx * 8));
+    mair |= (mair_value << (attr_idx * 8));
+    asm volatile("msr mair_el3, %0" : : "r"(mair));
+}
+
+void hal_init_tzpc() {
+    TZDECPROT0_SET = 0xff; //0x86;
+    TZDECPROT1_SET = 0xff; //0x00;
+    TZPCR0SIZE = 0x00; //0x200;
+}
+
 void hal_init(void) {
-    memory_region_t memory_layout[] = {
-        {
-            .virtual_base = 0x00000000,
-            .physical_base = 0x00000000,
-            .size = 0x10000000,
-            .attributes = ATTRIBUTE_DEVICE 
-        },
-        {
-            .virtual_base = 0x10000000,
-            .physical_base = 0x10000000,
-            .size = 0x8000000,
-            .attributes = ATTRIBUTE_DEVICE
-        },
-        {
-            .virtual_base = 0x18000000,
-            .physical_base = 0x18000000,
-            .size = 0x200000,
-            .attributes = ATTRIBUTE_NORMAL_MEM
-
-        },
-        {
-            .virtual_base = 0x80000000,
-            .physical_base = 0x80000000,
-            .size = 0x40000000,
-            .attributes = ATTRIBUTE_NORMAL_MEM 
-        }, 
-    };
-
 #ifdef DEBUG_UART
     uint32_t fw;
 
     uart_init();
-    uart_write("wolfBoot Init\n", 14);
+    wolfBoot_printf("wolfBoot Init\n");
 #endif
 
+    //hal_init_tzpc();
+
     hal_flash_init();
-    uart_write("Flash init done\n", 16);
-
-    //setup_ttbl(memory_layout, sizeof(memory_layout)/sizeof(memory_region_t));
-
-
-    /* Notes Try static DDR config, if this isn't working move to non static */
-    /* Check Warmboot case */
+    wolfBoot_printf("Flash init done\n");
+    //test_flash();
 
     hal_ddr_init();
-    uart_write("DDR init done\n", 14);
-    test_ddr();
+    wolfBoot_printf("DDR init done\n");
+    test_hw_ddr();
 
+    if(test_ddr() == -1) {
+        wolfBoot_printf("DDR R/W test failed\n");
+    } else {
+        wolfBoot_printf("DDR R/W test passed\n");
+    }
 
-    hal_ttb_init();
-    init_MMU();
-    uart_write("MMU init done\n", 14); 
+    mmu_enable();
+    wolfBoot_printf("MMU init done\n");
 }

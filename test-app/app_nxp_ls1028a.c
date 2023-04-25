@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include "wolfboot/wolfboot.h"
 
 /* P1021 */
 #define CCSRBAR (0x1000000)
@@ -96,6 +97,8 @@ void main(void)
     int j = 0;
     int k = 0;
     char snum[8];
+    uint32_t bootver;
+    uint32_t updv;
 
     uart_write("Test App\n", 9);
 

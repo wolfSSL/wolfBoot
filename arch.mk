@@ -32,7 +32,6 @@ ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
   CFLAGS+=-DARCH_AARCH64 -march=armv8-a
   OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
-  OBJS+=hal/mmu/ttbl_aarch64.o
   CFLAGS+=-DNO_QNX
 
   ifeq ($(SPMATH),1)

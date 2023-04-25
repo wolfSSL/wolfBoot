@@ -8,7 +8,7 @@ MEMORY
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
     
     /* DDR4 - 2GB */
-    DRAM (rwx) : ORIGIN = 0x80000000 , LENGTH = 0xBFFFFFFF
+    DRAM (rwx) : ORIGIN = 0x80001000 , LENGTH = 0xBFFFFFFF
 
     /* OCRAM 256K for startup RAM */
     OCRAM (rwx) : ORIGIN = 0x18000000, LENGTH = 256K
@@ -16,7 +16,7 @@ MEMORY
 
 SECTIONS
 {
-    PROVIDE (_DDR_ADDRESS = 0x80000000);
+    PROVIDE (_DDR_ADDRESS = 0x80001000);
     PROVIDE (_OCRAM_ADDRESS = 0x18000000);
     PROVIDE (_FLASH_ADDRESS = @WOLFBOOT_ORIGIN@);
     PROVIDE (_CORE_NUMBER = 0);
@@ -81,6 +81,8 @@ SECTIONS
         _start_data = .;
         KEEP(*(.data .data.* .gnu.linkonce.d.*))
         . = ALIGN(8);
+        KEEP(*(.ramcode))
+        . = ALIGN(8);
         _end_data = .;
     } > OCRAM AT > FLASH
 
@@ -91,7 +93,7 @@ SECTIONS
         *(.dynbss)
         *(.bss .bss.* .gnu.linkonce.b.*)
         *(COMMON)
-        . = ALIGN(4);
+        . = ALIGN(8);
         _end_bss = .;
         __bss_end__ = .;
         _end = .;

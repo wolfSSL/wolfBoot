@@ -33,10 +33,9 @@
 #define GICC_BASE       0xF9020000
 #define GICC_PMR        0x0004
 
-
-.equ TT_S1_DEVICE, 0x405
-.equ TT_S1_RW_DATA, 0x601
-
+.equ TZPCDECPROT0_SET_BASE, 0x02200804
+.equ TZPCDECPROT1_SET_BASE, 0x02200810
+.equ OCRAM_TZPC_ADDR      , 0x02200000
 
 #ifndef USE_BUILTIN_STARTUP 
 .section ".boot", "ax"
@@ -241,67 +240,14 @@ init_stack:
     bl invalidate_ivac
     b boot_entry_C
 
-.global hal_ttb_init
-hal_ttb_init:
-    ldr x0, =ttb_l0
-    ldr x1, =ttb_l1_0
-    orr x1, x1, #0x3            
-    str x1, [x0], #8                /* point to l1_0 table */
-    ldr x1, =ttb_l1_1
-    orr x1, x1, #0x3            
-    str x1, [x0]                    /* point to l1_1 table */
-    ldr x0, =ttb_l1_0               /* level 1 entyr points to l2  */
-    ldr x1, =ttb_l2
-    orr x1, x1, #0x3           
-    str x1, [x0], #8                /* point to l2 table */
-    mov x2, #1
-    mov x3, #0x400                  /* span both l1 tables */
-next_l1_device_entry:
-    mov x1, TT_S1_DEVICE            /* page table attributes  */
-    orr x1, x1, x2, lsl #30         /* 1GB block */
-    str x1, [x0], #8
-    add x2, x2, #1
-    cmp x2, x3
-    bne next_l1_device_entry
-    ldr x1, =_DDR_ADDRESS           /* Phys address */
-    bic x1, x1, #(1 << 30) - 1      /* 1GB block alignment */
-    ldr x0, =ttb_l1_0
-    add x2, x0, x1, lsr #(30 - 3)   
-    mov x3, TT_S1_RW_DATA           /* page table attributes */
-    orr x1, x1, x3 
-    str x1, [x2], #8               
-    mov x3, #(1 << 30)              /* 1GB block */
-    add x1, x1, x3
-    str x1, [x2]                    /* 2nd GB (Add more RAM here) */
-    ldr x0, =ttb_l2                 /* level 2 all entries are device memory */
-    mov x2, xzr
-    mov x3, #0x200
-next_l2_device_entry:
-    mov x1, TT_S1_DEVICE            /* page table attributes */
-    orr x1, x1, x2, lsl #21         /* 2MB block */
-    str x1, [x0], #8
-    add x2, x2, #1
-    cmp x2, x3
-    bne next_l2_device_entry
-    ret
-
-.global init_MMU
-init_MMU:
-    mrs x0, S3_1_c15_c2_1
-    orr x0, x0, #(1 << 6)         /* Must set SPMEN */
-    msr S3_1_c15_c2_1, x0
-    isb
-
+.global mmu_enable
+mmu_enable:
     tlbi alle3                    /* Invalidate table entries */
     dsb sy
     isb
-
-    ldr x0, =ttb_l0       
-    msr ttbr0_el3, x0
-    msr ttbr0_el2, x0
-    
+ 
     /* Set tcr reg */
-    ldr x0, =0
+    ldr x0, =0x0
     orr x0, x0, #24               /* Size of the memory region */ 
     orr x0, x0, #(1 << 17)        /* PS 40 bit */
     orr x0, x0, #(1 << 16)        /* TG0 4KB */
@@ -309,6 +255,17 @@ init_MMU:
     orr x0, x0, #(1 << 10)        /* normal outer WBWA cacheable */
     orr x0, x0, #(1 << 8)         /* normal inner WBWA cacheable */
     msr tcr_el3, x0
+
+    ldr x1, =0x44E048E000098AA4 //0xFF440C0400
+    msr mair_el3, x1
+
+    ldr x0, =ttb0_base       
+    msr ttbr0_el3, x0
+
+    mrs x0, S3_1_c15_c2_1
+    orr x0, x0, #(1 << 6)        /* Must set SPMEN */
+    msr S3_1_c15_c2_1, x0
+    isb
 
     /* Set sctlr reg */
     mrs x0, sctlr_el3
@@ -373,23 +330,37 @@ lower_el3_aarch64_serror:
     eret
 
 
-/* MMU Table data section */
-.section .bss
-.align 4
-.global ttb_l0
-ttb_l0:
-    .fill  16, 1, 0
+/* Memory Table Macros */
+.macro PUT_64BIT_WORD high, low
+    .word \low
+    .word \high
+.endm
 
-.align 13
-.global ttb_l1_0
-ttb_l1_0:
-    .fill 4096, 1, 0
+.macro TABLE_ENTRY PA, attributes
+PUT_64BIT_WORD \attributes, \PA + 0x3
+.endm
 
-.global ttb_l1_1
-ttb_l1_1:
-    .fill 4096, 1, 0
+.macro BLOCK_1GB PA, attr_hi, attr_lo
+PUT_64BIT_WORD \attr_hi, ((\PA) & 0xc0000000) | \attr_lo | 0x1
+.endm
+
+.macro BLOCK_2MB PA, attr_hi, attr_lo
+PUT_64BIT_WORD \attr_hi, ((\PA) & 0xffe00000) | \attr_lo | 0x1
+.endm
+
+/* Note: In EL3/2 has direct physical to virutal mapping */
+.align 12
+.global ttb0_base
+ttb0_base:
+TABLE_ENTRY level1_pagetable, 0
+BLOCK_1GB 0x80000000, 0, 0x740
+BLOCK_1GB 0xC0000000, 0, 0x740
 
 .align 12
-.global ttb_l2
-ttb_l2:
-    .fill 4096, 1, 0
+.global level1_pagetable
+level1_pagetable:
+.set ADDR, 0x0
+.rept 0x200
+BLOCK_2MB (ADDR << 20), 0, 0x74c
+.set ADDR, ADDR + 2
+.endr
