@@ -457,6 +457,7 @@ ifeq ($(TARGET),sim)
   LD_START_GROUP=
   LD_END_GROUP=
   BOOT_IMG=test-app/image.elf
+  CFLAGS+=-DARCH_SIM
 endif
 
 BOOT_IMG?=test-app/image.bin

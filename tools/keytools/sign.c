@@ -102,11 +102,12 @@
 
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 
-#define HDR_VERSION     0x01
-#define HDR_TIMESTAMP   0x02
-#define HDR_PUBKEY      0x10
-#define HDR_SIGNATURE   0x20
-#define HDR_IMG_TYPE    0x04
+#define HDR_VERSION           0x01
+#define HDR_TIMESTAMP         0x02
+#define HDR_PUBKEY            0x10
+#define HDR_SIGNATURE         0x20
+#define HDR_POLICY_SIGNATURE  0x21
+#define HDR_IMG_TYPE          0x04
 
 #define HDR_SHA256      0x03
 #define HDR_SHA3_384    0x13
@@ -204,6 +205,7 @@ static union {
 
 struct cmd_options {
     int manual_sign;
+    int policy_sign;
     int self_update;
     int sha_only;
     int encrypt;
@@ -215,6 +217,7 @@ struct cmd_options {
     const char *key_file;
     const char *fw_version;
     const char *signature_file;
+    const char* policy_signature_file;
     const char *encrypt_key_file;
     const char *delta_base_file;
     char output_image_file[PATH_MAX];
@@ -459,6 +462,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     struct stat attrib;
     uint16_t image_type;
     uint8_t* signature = NULL;
+    uint8_t* policy_signature = NULL;
     int ret = -1;
     uint8_t  buf[1024];
     uint32_t read_sz, pos;
@@ -711,6 +715,14 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             goto failure;
         }
         memset(signature, 0, CMD.signature_sz);
+        if (CMD.manual_sign && CMD.policy_sign) {
+            policy_signature = malloc(CMD.signature_sz);
+            if (policy_signature == NULL) {
+                printf("Policy Signature malloc error!\n");
+                goto failure;
+            }
+            memset(policy_signature, 0, CMD.signature_sz);
+        }
         if (!CMD.manual_sign) {
             printf("Signing the digest...\n");
 #ifdef DEBUG_SIGTOOL
@@ -807,15 +819,43 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 printf("Error reading file %s\n", CMD.signature_file);
                 goto failure;
             }
+
+            if (CMD.policy_sign) {
+                printf("Opening signature file %s\n",
+                    CMD.policy_signature_file);
+
+                f = fopen(CMD.policy_signature_file, "rb");
+                if (f == NULL) {
+                    printf("Open signature file %s failed\n",
+                        CMD.policy_signature_file);
+                    goto failure;
+                }
+                io_sz = (int)fread(policy_signature, 1, CMD.signature_sz, f);
+                fclose(f);
+                if (io_sz != (int)CMD.signature_sz) {
+                    printf("Error reading file %s\n",
+                        CMD.policy_signature_file);
+                    goto failure;
+                }
+            }
         }
 #ifdef DEBUG_SIGNTOOL
         printf("Signature %d\n", CMD.signature_sz);
         WOLFSSL_BUFFER(signature, CMD.signature_sz);
+        if (CMD.manual_sign && CMD.policy_sign) {
+            printf("Policy Signature %d\n", CMD.signature_sz);
+            WOLFSSL_BUFFER(policy_signature, CMD.signature_sz);
+        }
 #endif
 
         /* Add signature to header */
         header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz,
                 signature);
+
+        if (CMD.manual_sign && CMD.policy_sign) {
+            header_append_tag(header, &header_idx, HDR_POLICY_SIGNATURE,
+                CMD.signature_sz, policy_signature);
+        }
     } /* end if(sign != NO_SIGN) */
 
     /* Add padded header at end */
@@ -1298,6 +1338,9 @@ int main(int argc, char** argv)
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
         }
+        else if (strcmp(argv[i], "--policy-signed") == 0) {
+            CMD.policy_sign = 1;
+        }
         else {
             i--;
             break;
@@ -1310,6 +1353,10 @@ int main(int argc, char** argv)
         CMD.fw_version = argv[i+3];
         if (CMD.manual_sign) {
             CMD.signature_file = argv[i+4];
+
+            if (CMD.policy_sign) {
+                CMD.policy_signature_file = argv[i+5];
+            }
         }
     } else {
         CMD.image_file = argv[i+1];
