@@ -1162,6 +1162,22 @@ make clean && make
 | swap block                   | 0x02200000  |
 
 
+### Debugging NXP P1021 PPC
+
+Use `V=1` to show verbose output for build steps.
+Use `DEBUG=1` to enable debug symbols.
+
+The first stage loader must fit into 4KB. To build this in release and assemble a debug version of wolfBoot use the following steps:
+
+```
+make clean
+make stage1
+make DEBUG=1 wolfboot.bin
+make DEBUG=1 test-app/image_v1_signed.bin
+make factory_wstage1.bin
+```
+
+
 ## NXP QorIQ T2080 PPC
 
 The NXP QorIQ T2080 is a PPC e6500 based processor (four cores). Support has been tested with the NAII 68PPC2.

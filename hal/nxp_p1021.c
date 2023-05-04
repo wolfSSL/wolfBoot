@@ -34,6 +34,10 @@
     #define ENABLE_CONF_IO
 #endif
 
+#ifdef WOLFBOOT_TPM
+    #define ENABLE_ESPI
+#endif
+
 /* TODO */
 /* Ethernet */
 /* QUICC */
@@ -51,7 +55,8 @@ static int test_flash(void);
 
 
 /* P1021 Platform */
-#define SYS_CLK (533000000) /* 533MHz */
+//#define SYS_CLK (533000000) /* 533MHz */
+  #define SYS_CLK (400000000) /* 400MHz */
 
 #define RESET_BPTR ((volatile uint32_t*)(CCSRBAR + 0x42)) /* Boot page translation register */
 
@@ -380,6 +385,113 @@ enum elbc_amask_sizes {
 #define ECM_BASE   (CCSRBAR + 0x1000)
 #define ECM_EEBACR ((volatile uint32_t*)(ECM_BASE + 0x0)) /* ECM CCB address configuration register */
 
+/* eSPI */
+#define ESPI_MAX_CS_NUM      4
+#define ESPI_MAX_RX_LEN      (1 << 16)
+
+#define ESPI_BASE            (CCSRBAR + 0x7000)
+#define ESPI_SPMODE          ((volatile uint32_t*)(ESPI_BASE + 0x00)) /* controls eSPI general operation mode */
+#define ESPI_SPIE            ((volatile uint32_t*)(ESPI_BASE + 0x04)) /* controls interrupts and report events */
+#define ESPI_SPIM            ((volatile uint32_t*)(ESPI_BASE + 0x08)) /* enables/masks interrupts */
+#define ESPI_SPCOM           ((volatile uint32_t*)(ESPI_BASE + 0x0C)) /* command frame information */
+#define ESPI_SPITF           ((volatile uint32_t*)(ESPI_BASE + 0x10)) /* transmit FIFO access register */
+#define ESPI_SPIRF           ((volatile uint32_t*)(ESPI_BASE + 0x14)) /* 32-bit read-only receive data register */
+#define ESPI_SPCSMODE(x)     ((volatile uint32_t*)(ESPI_BASE + 0x20 + ((cs) * 4))) /* controls master operation with chip select 0-3 */
+
+#define ESPI_SPMODE_EN       (0x80000000) /* Enable eSPI */
+#define ESPI_SPMODE_TXTHR(x) ((x) << 8)   /* Tx FIFO threshold (1-32) */
+#define ESPI_SPMODE_RXTHR(x) ((x) << 0)   /* Rx FIFO threshold (0-31) */
+
+#define ESPI_SPCOM_CS(x)     ((x) << 30)       /* Chip select-chip select for which transaction is destined */
+#define ESPI_SPCOM_RXSKIP(x) ((x) << 16)       /* Number of characters skipped for reception from frame start */
+#define ESPI_SPCOM_TRANLEN(x) (((x) - 1) << 0) /* Transaction length */
+
+#define ESPI_SPIE_RNE        (1 << 9) /* recevie not empty */
+#define ESPI_SPIE_TNF        (1 << 8) /* transmit not full */
+
+#define ESPI_CSMODE_CI       0x80000000 /* Inactive high */
+#define ESPI_CSMODE_CP       0x40000000 /* Begin edge clock */
+#define ESPI_CSMODE_REV      0x20000000 /* MSB first */
+#define ESPI_CSMODE_DIV16    0x10000000 /* divide system clock by 16 */
+#define ESPI_CSMODE_PM(x)    (((x) & 0xF) << 24) /* presale modulus select */
+#define ESPI_CSMODE_POL      0x00100000  /* asserted low */
+#define ESPI_CSMODE_LEN(x)   ((((x) - 1) & 0xF) << 16) /* Character length in bits per character */
+#define ESPI_CSMODE_CSBEF(x) (((x) & 0xF) << 12) /* CS assertion time in bits before frame start */
+#define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
+#define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
+
+#ifdef ENABLE_ESPI
+void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
+{
+    uint32_t spibrg = SYS_CLK / 2, pm, csmode;
+
+    /* Enable eSPI with TX threadshold 4 and TX threshold 3 */
+    set32(ESPI_SPMODE, (ESPI_SPMODE_EN | ESPI_SPMODE_TXTHR(4) |
+        ESPI_SPMODE_RXTHR(3)));
+
+    set32(ESPI_SPIE, 0xffffffff); /* Clear all eSPI events */
+    set32(ESPI_SPIM, 0x00000000); /* Mask all eSPI interrupts */
+
+    csmode = (ESPI_CSMODE_REV | ESPI_CSMODE_POL | ESPI_CSMODE_LEN(8) |
+        ESPI_CSMODE_CSBEF(0) | ESPI_CSMODE_CSAFT(0) | ESPI_CSMODE_CSCG(1));
+
+    /* calculate clock divisor */
+    if (spibrg / clock_hz > 16) {
+        csmode |= ESPI_CSMODE_DIV16;
+        pm = (spibrg / (clock_hz * 16));
+    }
+    else {
+        pm = (spibrg / (clock_hz));
+    }
+    if (pm > 0)
+        pm--;
+    csmode |= ESPI_CSMODE_PM(pm);
+
+    if (mode & 1)
+        csmode |= ESPI_CSMODE_CP;
+    if (mode & 2)
+        csmode |= ESPI_CSMODE_CI;
+
+    /* configure CS */
+    set32(ESPI_SPCSMODE(cs), csmode);
+}
+int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
+{
+    uint32_t reg, blks;
+
+    /* assert CS */
+    set32(ESPI_SPCOM, ESPI_SPCOM_CS(cs) | ESPI_SPCOM_TRANLEN(sz));
+
+    set32(ESPI_SPIE, 0xffffffff); /* Clear all eSPI events */
+
+    /* calculate the number of 4 byte blocks rounded up */
+    blks = (sz + 3) / 4;
+    while (blks--) {
+        /* wait till TX fifo has room */
+        while ((get32(ESPI_SPIE) & ESPI_SPIE_TNF) == 0);
+        reg = *((uint32_t*)tx);
+        set32(ESPI_SPITF, reg);
+        tx += 4;
+
+        /* wait till RX has data */
+        while ((get32(ESPI_SPIE) & ESPI_SPIE_RNE) == 0);
+        reg = get32(ESPI_SPIRF);
+        *((uint32_t*)rx) = reg;
+        rx += 4;
+    }
+
+    /* toggle ESPI_SPMODE_EN - to deassert CS */
+    reg = get32(ESPI_SPMODE);
+    set32(ESPI_SPMODE, reg & ~ESPI_SPMODE_EN);
+    set32(ESPI_SPMODE, reg);
+
+    return 0;
+}
+void hal_espi_deinit(void)
+{
+    /* do nothing */
+}
+#endif /* ENABLE_ESPI */
 
 
 static void set_law(uint8_t idx, uint32_t addr, uint32_t trgt_id,
@@ -932,10 +1044,7 @@ void hal_init(void)
 
 #ifdef DEBUG_UART
     uart_init();
-
-    #ifdef DEBUG
-    uart_write("wolfBoot Init\r\n", 15);
-    #endif
+    uart_write("wolfBoot HAL Init\r\n", 19);
 #endif
 
 #ifdef GET_PSVR

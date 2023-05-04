@@ -40,12 +40,6 @@
     #define WOLFBOOT_STAGE1_SIZE (4*1024)
 #endif
 
-#ifndef WOLFBOOT_STAGE1_START_ADDR
-    /* default is end of 4KB region (0x0FFC) */
-    #define WOLFBOOT_STAGE1_START_ADDR \
-        (WOLFBOOT_STAGE1_LOAD_ADDR + WOLFBOOT_STAGE1_SIZE - 0x4)
-#endif
-
 #ifdef BUILD_LOADER_STAGE1
 
 #if defined(WOLFBOOT_ARCH) && WOLFBOOT_ARCH == PPC
@@ -87,7 +81,13 @@ int main(void)
         BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
     );
     if (ret >= 0) {
-        wolfboot_start = (void*)WOLFBOOT_STAGE1_START_ADDR;
+        wolfboot_start = (void*)WOLFBOOT_STAGE1_LOAD_ADDR;
+    #ifdef PRINTF_ENABLED
+        wolfBoot_printf("Jumping to %p\r\n", wolfboot_start);
+    #elif defined(DEBUG_UART)
+        uart_write("Jump to relocated wolfboot_start\r\n", 34);
+    #endif
+
         wolfboot_start(); /* never returns */
     }
 

@@ -29,6 +29,9 @@ OBJS:= \
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 
+# Forcefully disable TPM support in first stage loader
+WOLFTPM=0
+
 ## Architecture/CPU configuration
 include ../arch.mk
 

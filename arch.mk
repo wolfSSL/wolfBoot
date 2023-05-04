@@ -331,6 +331,7 @@ ifeq ($(TARGET),nxp_p1021)
     # Use the SP math all assembly accelerations
     CFLAGS+=-DWOLFSSL_SP_PPC
   endif
+  SPI_TARGET=nxp
 endif
 
 ifeq ($(TARGET),ti_hercules)
