@@ -12,7 +12,10 @@ MEMORY
                  LENGTH = 0x1FFFFFFF - @WOLFBOOT_STAGE1_LOAD_ADDR@
 
     /* L1 as SRAM (up to 16KB) */
-    RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
+    L1RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
+
+    /* L2 as SRAM (up to 256KB) */
+    L2RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 256K
 }
 
 SECTIONS
@@ -78,5 +81,9 @@ SECTIONS
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );
 
+/* If relocated to DDR already then use stack end from DDR */
+/* If debugging and DDR is not ready, use L1 or L2 */
+PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );
+/* PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)) ); */
+/* PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) ); */

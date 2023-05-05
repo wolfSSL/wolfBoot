@@ -2,6 +2,7 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
+/* Adjust base address to 0xF8F80000 is debugging (run from L2 cache) */
 BASE_ADDR = @WOLFBOOT_STAGE1_BASE_ADDR@;
 
 /* for flashing to NAND it must be 4KB */

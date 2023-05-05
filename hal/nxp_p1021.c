@@ -32,10 +32,8 @@
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
     #define ENABLE_CONF_IO
-#endif
 
-#ifdef WOLFBOOT_TPM
-    #define ENABLE_ESPI
+    #define ENABLE_ESPI /* TPM */
 #endif
 
 /* TODO */
@@ -45,12 +43,16 @@
 /* Tests */
 /* #define TEST_DDR */
 /* #define TEST_FLASH */
+/* #define TEST_TPM */
 
-#ifdef TEST_DDR
+#if defined(ENABLE_DDR) && defined(TEST_DDR)
 static int test_ddr(void);
 #endif
-#ifdef TEST_FLASH
+#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
 static int test_flash(void);
+#endif
+#if defined(ENABLE_ESPI) && defined(TEST_TPM)
+static int test_tpm(void);
 #endif
 
 
@@ -406,6 +408,7 @@ enum elbc_amask_sizes {
 #define ESPI_SPCOM_RXSKIP(x) ((x) << 16)       /* Number of characters skipped for reception from frame start */
 #define ESPI_SPCOM_TRANLEN(x) (((x) - 1) << 0) /* Transaction length */
 
+#define ESPI_SPIE_DON        (1 << 14) /* Last character was transmitted */
 #define ESPI_SPIE_RNE        (1 << 9) /* recevie not empty */
 #define ESPI_SPIE_TNF        (1 << 8) /* transmit not full */
 
@@ -419,6 +422,18 @@ enum elbc_amask_sizes {
 #define ESPI_CSMODE_CSBEF(x) (((x) & 0xF) << 12) /* CS assertion time in bits before frame start */
 #define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
 #define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
+
+#if defined(ENABLE_ESPI) || defined(ENABLE_DDR)
+static void udelay(uint32_t delay_us)
+{
+    uint32_t i;
+    static const uint32_t oneus = (SYS_CLK / 1000000);
+    delay_us *= oneus;
+    for (i=0; i<delay_us; i++) {
+        asm volatile("nop");
+    }
+}
+#endif
 
 #ifdef ENABLE_ESPI
 void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
@@ -445,6 +460,7 @@ void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
     }
     if (pm > 0)
         pm--;
+
     csmode |= ESPI_CSMODE_PM(pm);
 
     if (mode & 1)
@@ -455,6 +471,8 @@ void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
     /* configure CS */
     set32(ESPI_SPCSMODE(cs), csmode);
 }
+
+/* Note: This code assumes all input buffers are multiple of 4 */
 int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
 {
     uint32_t reg, blks;
@@ -472,12 +490,16 @@ int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
         reg = *((uint32_t*)tx);
         set32(ESPI_SPITF, reg);
         tx += 4;
+        set32(ESPI_SPIE, ESPI_SPIE_TNF); /* clear event */
+
+        udelay(5);
 
         /* wait till RX has data */
         while ((get32(ESPI_SPIE) & ESPI_SPIE_RNE) == 0);
         reg = get32(ESPI_SPIRF);
         *((uint32_t*)rx) = reg;
         rx += 4;
+        set32(ESPI_SPIE, ESPI_SPIE_RNE); /* clear event */
     }
 
     /* toggle ESPI_SPMODE_EN - to deassert CS */
@@ -576,8 +598,6 @@ static void hal_flash_set_addr(int col, int page)
     /* calculate buffer for FCM - there are 8 1KB pages */
     flash_buf = (uint8_t*)(FLASH_BASE_ADDR + (buf_num * 1024));
     flash_idx = col;
-
-    wolfBoot_printf("set addr %p, idx %d\r\n", flash_buf, flash_idx);
 }
 
 /* iswrite (read=0, write=1) */
@@ -752,7 +772,6 @@ static int hal_flash_init(void)
 void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
-    int i;
     uint32_t reg;
 
     /* Map LAW for DDR */
@@ -799,9 +818,7 @@ void hal_ddr_init(void)
         asm volatile("sync;isync");
 
         /* busy wait for ~500us */
-        for (i=0; i<5000000; i++) {
-            asm volatile("nop");
-        }
+        udelay(500);
 
         /* Enable controller */
         reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
@@ -811,9 +828,7 @@ void hal_ddr_init(void)
         /* Wait for data initialization to complete */
         while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
             /* busy wait loop - throttle polling */
-            for (i=0; i<50000; i++) {
-                asm volatile("nop");
-            }
+            udelay(1);
         }
     }
 
@@ -1066,15 +1081,21 @@ void hal_init(void)
 #endif
     hal_flash_init();
 
-#ifdef TEST_DDR
+#if defined(ENABLE_DDR) && defined(TEST_DDR)
     if (test_ddr() != 0) {
         wolfBoot_printf("DDR Test Failed!\r\n");
     }
 #endif
 
-#ifdef TEST_FLASH
+#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
     if (test_flash() != 0) {
         wolfBoot_printf("Flash Test Failed!\r\n");
+    }
+#endif
+
+#if defined(ENABLE_ESPI) && defined(TEST_TPM)
+    if (test_tpm() != 0) {
+        wolfBoot_printf("TPM Test Failed!\r\n");
     }
 #endif
 }
@@ -1378,11 +1399,11 @@ static int test_ddr(void)
 #endif
 /* #define TEST_FLASH_READONLY */
 
-static uint32_t pageData[FLASH_PAGE_SIZE/4]; /* force 32-bit alignment */
 static int test_flash(void)
 {
     int ret;
     uint32_t i;
+    uint32_t pageData[FLASH_PAGE_SIZE/4]; /* force 32-bit alignment */
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
@@ -1416,3 +1437,22 @@ static int test_flash(void)
     return ret;
 }
 #endif /* ENABLE_ELBC && TEST_FLASH */
+
+#if defined(ENABLE_ESPI) && defined(TEST_TPM)
+#ifndef SPI_CS_TPM
+#define SPI_CS_TPM 2
+#endif
+int test_tpm(void)
+{
+    /* Read 4 bytes at TIS addresss D40F00. Assumes 0 wait state on TPM */
+    uint8_t tx[8] = {0x83, 0xD4, 0x0F, 0x00,
+                     0x00, 0x00, 0x00, 0x00};
+    uint8_t rx[8] = {0};
+
+    hal_espi_init(SPI_CS_TPM, 2000000, 0);
+    hal_espi_xfer(SPI_CS_TPM, tx, rx, (uint32_t)sizeof(rx));
+
+    wolfBoot_printf("RX: 0x%x\r\n", *((uint32_t*)&rx[4]));
+    return rx[4] != 0xFF ? 0 : -1;
+}
+#endif
