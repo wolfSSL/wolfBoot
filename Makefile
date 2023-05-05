@@ -153,6 +153,9 @@ keytools:
 	@$(MAKE) -C tools/keytools clean
 	@$(MAKE) -C tools/keytools
 
+preseal:
+	@$(MAKE) -C tools/preseal
+
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)(test $(SIGN) = NONE) || $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
