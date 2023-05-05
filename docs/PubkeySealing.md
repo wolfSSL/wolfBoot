@@ -34,10 +34,10 @@ Next you need to create the image using the sign keytool with the --manual-sign 
 tools/keytools/sign --ecc256 --sha256 --manual-sign --policy-signed my_image policy-public-key.raw 1 imageSignature.raw policySigned.raw
 ```
 
-Lastly, the pubkey needs to be sealed to the TPM:
+Lastly, the pubkey needs to be sealed to the TPM. Note that the previous commands could be run from a seperate system, this one must be run on a system connected to the TPM:
 
 ```
-tools/preseal/preseal public-key.raw policy-public-key.raw policySigned.raw test-app/image_v1_digest.bin 0x01800200 0x01800201 16
+tools/preseal/preseal public-key.raw policy-public-key.raw policySigned.raw test-app/image_v1_digest.bin 25166336 25166337 16
 ```
 
 ## NOTE: the PolicySigned key is used in place of the real signing key and acts as an intermediate key to unseal the actual signing key form the TPM
