@@ -67,6 +67,7 @@ extern "C" {
 
 #ifdef WOLFBOOT_TPM
     int wolfBoot_tpm2_init(void);
+    void wolfBoot_tpm2_deinit(void);
 #endif
 
 void wolfBoot_start(void);

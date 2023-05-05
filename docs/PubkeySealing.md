@@ -19,7 +19,7 @@ openssl ec -in private-key.pem -text -noout
 echo "925a8a35dbe4bd419a35fbf9bd30ce1440380f6d3bcd9bc5558c1fa8adb88d92c88b797dfca39af80ca9729c61508813df8254575cef48674071cf75c30e6aa8" | xxd -r -p - public-key.raw
 ```
 
-Next we need to manually make the image signature, note that the header contains the policy pubkey instead of the real pubkey which will be sealed to the tpm:
+Next we need to manually make the image signature, note that the header contains the policy pubkey instead of the real pubkey which will be sealed to the TPM:
 
 ```
 tools/keytools/sign --ecc256 --sha256 --sha-only image.elf policy-public-key.raw 1

@@ -557,6 +557,9 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
     PART_SANITY_CHECK(&boot);
+#ifdef WOLFBOOT_TPM
+    wolfBoot_tpm2_deinit();
+#endif
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }
