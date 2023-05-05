@@ -1040,7 +1040,7 @@ int RAMFUNCTION chacha_init(void)
 #ifdef WOLFTPM_ENCRYPT_KEYSTORE
     wolfBoot_open_image(&boot, PART_BOOT);
 
-    if (wolfBoot_unseal_encryptkey(&boot, key, &keySz) != 0)
+    if (wolfBoot_unseal_encryptkey(key, &keySz) != 0)
         return -1;
 #endif
 
@@ -1086,7 +1086,7 @@ int aes_init(void)
 #ifdef WOLFTPM_ENCRYPT_KEYSTORE
     wolfBoot_open_image(&boot, PART_BOOT);
 
-    if (wolfBoot_unseal_encryptkey(&boot, key, &keySz) != 0)
+    if (wolfBoot_unseal_encryptkey(key, &keySz) != 0)
         return -1;
 #endif
 

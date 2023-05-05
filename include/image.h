@@ -567,8 +567,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 
 #if defined(WOLFBOOT_TPM) && defined(WOLFTPM_KEYSTORE)
     #if defined(WOLFTPM_ENCRYPT_KEYSTORE) && defined(EXT_ENCRYPTED)
-int wolfBoot_unseal_encryptkey(struct wolfBoot_image *img, uint8_t* key,
-    uint32_t* keySz);
+int wolfBoot_unseal_encryptkey(uint8_t* key, uint32_t* keySz);
     #endif
 
 int wolfBoot_reseal_keys(struct wolfBoot_image* newImg,
