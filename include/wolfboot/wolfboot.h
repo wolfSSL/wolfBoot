@@ -126,19 +126,25 @@ extern "C" {
 
  /* Hashing configuration */
  #if defined(WOLFBOOT_HASH_SHA256)
- #   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+ #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
+ #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
+ #   endif
  #   define WOLFBOOT_SHA_HDR HDR_SHA256
  #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
  #   define image_hash image_sha256
  #   define key_hash key_sha256
  #elif defined(WOLFBOOT_HASH_SHA384)
- #   define WOLFBOOT_SHA_BLOCK_SIZE (256)
+ #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
+ #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
+ #   endif
  #   define WOLFBOOT_SHA_HDR HDR_SHA384
  #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
  #   define image_hash image_sha384
  #   define key_hash key_sha384
  #elif defined(WOLFBOOT_HASH_SHA3_384)
- #   define WOLFBOOT_SHA_BLOCK_SIZE (128)
+ #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
+ #     define WOLFBOOT_SHA_BLOCK_SIZE (128)
+ #   endif
  #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
  #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
  #   define image_hash image_sha3_384

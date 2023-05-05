@@ -40,6 +40,9 @@
 /* Ethernet */
 /* QUICC */
 
+/* Debugging */
+/* #define DEBUG_EXT_FLASH */
+
 /* Tests */
 /* #define TEST_DDR */
 /* #define TEST_FLASH */
@@ -567,8 +570,13 @@ void uart_write(const char* buf, uint32_t sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {
+        char c = buf[pos++];
+        if (c == '\n') { /* handle CRLF */
+            while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
+            set8(UART_THR(UART_SEL), '\r');
+        }
         while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-        set8(UART_THR(UART_SEL), buf[pos++]);
+        set8(UART_THR(UART_SEL), c);
     }
 }
 #endif /* DEBUG_UART */
@@ -577,27 +585,33 @@ void uart_write(const char* buf, uint32_t sz)
 
 static volatile uint8_t* flash_buf;
 static uint32_t          flash_idx;
-static void hal_flash_set_addr(int col, int page)
+static void hal_flash_set_addr(int page, int col)
 {
     uint32_t buf_num;
+    uint32_t fbar, fpar;
 
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
     /* large page - ELBC_OR_PGS=1 */
-    set32(ELBC_FBAR, (page >> 6));
+    fbar = (page >> 6);
+    fpar = (ELBC_FPAR_LP_PI(page) | ELBC_FPAR_LP_CI(col));
     buf_num = (page & 1) << 2; /* 0 or 4 */
-
-    set32(ELBC_FPAR, ELBC_FPAR_LP_PI(page) | ELBC_FPAR_LP_CI(col));
 #else
     /* small page */
-    set32(ELBC_FBAR, (page >> 5));
+    fbar = (page >> 5);
+    fpar = (ELBC_FPAR_SP_PI(page) | ELBC_FPAR_SP_CI(col));
     buf_num = (page & 7); /* 0-7 */
-
-    set32(ELBC_FPAR, ELBC_FPAR_SP_PI(page) | ELBC_FPAR_SP_CI(col));
 #endif
+    set32(ELBC_FBAR, fbar);
+    set32(ELBC_FPAR, fpar);
 
     /* calculate buffer for FCM - there are 8 1KB pages */
     flash_buf = (uint8_t*)(FLASH_BASE_ADDR + (buf_num * 1024));
     flash_idx = col;
+
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("set addr %p, page %d, col %d, fbar 0x%x, fpar 0x%x\n",
+        flash_buf, page, col, fbar, fpar);
+#endif
 }
 
 /* iswrite (read=0, write=1) */
@@ -636,8 +650,10 @@ static int hal_flash_command(uint8_t iswrite)
 /* assume input/output buffers are 32-bit aligned */
 static void hal_flash_read_bytes(uint8_t* data, size_t len)
 {
-    wolfBoot_printf("read %p to %p, len %d\r\n",
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("read %p to %p, len %d\n",
         &flash_buf[flash_idx], data, len);
+#endif
     /* copy data from internal eLBC FCM buffer */
     while (flash_idx < len) {
         *((volatile uint32_t*)data) =
@@ -649,8 +665,10 @@ static void hal_flash_read_bytes(uint8_t* data, size_t len)
 /* assume input/output buffers are 32-bit aligned */
 static void hal_flash_write_bytes(const uint8_t* data, size_t len)
 {
-    wolfBoot_printf("write %p to %p, len %d\r\n",
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("write %p to %p, len %d\n",
         data, &flash_buf[flash_idx], len);
+#endif
     /* copy data to internal eLBC FCM buffer */
     while (flash_idx < len) {
         *(volatile uint32_t*)(&flash_buf[flash_idx]) =
@@ -761,10 +779,7 @@ static int hal_flash_init(void)
         ret = hal_flash_read_id(flash_id);
     }
 
-#ifdef PRINTF_ENABLED
-    wolfBoot_printf("Flash ID: Ret %d, 0x%08lx\r\n", ret, flash_id[0]);
-#endif
-
+    wolfBoot_printf("Flash Init: Ret %d, ID 0x%08lx\n", ret, flash_id[0]);
 #endif /* ENABLE_ELBC */
     return ret;
 }
@@ -1059,7 +1074,7 @@ void hal_init(void)
 
 #ifdef DEBUG_UART
     uart_init();
-    uart_write("wolfBoot HAL Init\r\n", 19);
+    uart_write("wolfBoot HAL Init\n", 19);
 #endif
 
 #ifdef GET_PSVR
@@ -1083,19 +1098,19 @@ void hal_init(void)
 
 #if defined(ENABLE_DDR) && defined(TEST_DDR)
     if (test_ddr() != 0) {
-        wolfBoot_printf("DDR Test Failed!\r\n");
+        wolfBoot_printf("DDR Test Failed!\n");
     }
 #endif
 
 #if defined(ENABLE_ELBC) && defined(TEST_FLASH)
     if (test_flash() != 0) {
-        wolfBoot_printf("Flash Test Failed!\r\n");
+        wolfBoot_printf("Flash Test Failed!\n");
     }
 #endif
 
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
     if (test_tpm() != 0) {
-        wolfBoot_printf("TPM Test Failed!\r\n");
+        wolfBoot_printf("TPM Test Failed!\n");
     }
 #endif
 }
@@ -1170,7 +1185,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     /* page write loop */
     while (pos < len) {
         /* Calculate page address */
-        uint32_t page = (address & (page_size - 1));
+        uint32_t page = (address / page_size);
         uint32_t col = (address % page_size);
         uint32_t status;
 
@@ -1180,7 +1195,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
             write_size = page_size;
         }
         /* set page and FCM buffer */
-        hal_flash_set_addr(col, page);
+        hal_flash_set_addr(page, col);
 
         set32(ELBC_FBCR, col); /* size of write (0=full page) */
 
@@ -1194,9 +1209,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 
         /* status returned in MDR */
         status = get32(ELBC_MDR) & 0xFF;
-        wolfBoot_printf("write page %d, col %d, status %x\r\n",
+#ifdef DEBUG_EXT_FLASH
+        wolfBoot_printf("write page %d, col %d, status %x\n",
             page, col, status);
-
+#endif
         address += page_size - col;
         pos += page_size - col;
         data += page_size - col;
@@ -1213,6 +1229,11 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     uint32_t block_size, page_size, read_size;
     int ret = 0, pos = 0, i = 0;
     int bad_marker;
+
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext read: addr 0x%x, dst 0x%x, len %d\n",
+        address, data, len);
+#endif
 
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
     /* large page - ELBC_OR_PGS=1 */
@@ -1238,15 +1259,15 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
                     ELBC_FIR_OP(3, ELBC_FIR_OP_RBW));
 #endif
 
-    set32(ELBC_FBCR, 0); /* always read full page including spare bits */
-
     /* total download loop */
     while (pos < len) {
         /* block loop */
         do {
             /* Calculate page address */
-            uint32_t page = (address & (page_size - 1));
+            uint32_t page = (address / page_size);
             uint32_t col = (address % page_size);
+
+            set32(ELBC_FBCR, col);
 
             /* bytes to read */
             read_size = len;
@@ -1255,7 +1276,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             }
 
             /* read page into FCM buffer */
-            hal_flash_set_addr(col, page);
+            hal_flash_set_addr(page, col);
             ret = hal_flash_command(0);
             if (ret != 0)
                 break;
@@ -1300,7 +1321,7 @@ int ext_flash_erase(uintptr_t address, int len)
 
     while (len > 0) {
         /* Calculate page address, however block will be erased */
-        uint32_t page = (address & (page_size - 1));
+        uint32_t page = (address / page_size);
         uint32_t status;
 
         /* Erase Block */
@@ -1313,15 +1334,16 @@ int ext_flash_erase(uintptr_t address, int len)
                         ELBC_FCR_CMD(1, NAND_CMD_STATUS) |
                         ELBC_FCR_CMD(2, NAND_CMD_BLOCK_ERASE2));
         set32(ELBC_FBCR, 0);
-        hal_flash_set_addr(0, page);
+        hal_flash_set_addr(page, 0);
         ret = hal_flash_command(1);
         if (ret != 0)
             break;
 
         /* status returned in MDR */
         status = get32(ELBC_MDR) & 0xFF;
-        wolfBoot_printf("erase page %d, status %x\r\n", page, status);
-
+#ifdef DEBUG_EXT_FLASH
+        wolfBoot_printf("erase page %d, status %x\n", page, status);
+#endif
         len -= block_size;
     }
 
@@ -1408,32 +1430,32 @@ static int test_flash(void)
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
     ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    wolfBoot_printf("Erase Sector: Ret %d\r\n", ret);
+    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
 
     /* Write Pages */
     for (i=0; i<sizeof(pageData); i++) {
         ((uint8_t*)pageData)[i] = (i & 0xff);
     }
     ret = ext_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Write Page: Ret %d\r\n", ret);
+    wolfBoot_printf("Write Page: Ret %d\n", ret);
 #endif /* !TEST_FLASH_READONLY */
 
     /* Read page */
     memset(pageData, 0, sizeof(pageData));
     ret = ext_flash_read(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Read Page: Ret %d\r\n", ret);
+    wolfBoot_printf("Read Page: Ret %d\n", ret);
 
-    wolfBoot_printf("Checking...\r\n");
+    wolfBoot_printf("Checking...\n");
     /* Check data */
     for (i=0; i<sizeof(pageData); i++) {
-        wolfBoot_printf("check[%3d] %02x\r\n", i, pageData[i]);
+        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
         if (((uint8_t*)pageData)[i] != (i & 0xff)) {
-            wolfBoot_printf("Check Data @ %d failed\r\n", i);
+            wolfBoot_printf("Check Data @ %d failed\n", i);
             return -i;
         }
     }
 
-    wolfBoot_printf("Flash Test Passed\r\n");
+    wolfBoot_printf("Flash Test Passed\n");
     return ret;
 }
 #endif /* ENABLE_ELBC && TEST_FLASH */
@@ -1452,7 +1474,7 @@ int test_tpm(void)
     hal_espi_init(SPI_CS_TPM, 2000000, 0);
     hal_espi_xfer(SPI_CS_TPM, tx, rx, (uint32_t)sizeof(rx));
 
-    wolfBoot_printf("RX: 0x%x\r\n", *((uint32_t*)&rx[4]));
+    wolfBoot_printf("RX: 0x%x\n", *((uint32_t*)&rx[4]));
     return rx[4] != 0xFF ? 0 : -1;
 }
 #endif
