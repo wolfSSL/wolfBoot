@@ -40,4 +40,12 @@ Lastly, the pubkey needs to be sealed to the TPM. Note that the previous command
 tools/preseal/preseal public-key.raw policy-public-key.raw policySigned.raw test-app/image_v1_digest.bin 25166336 25166337 16
 ```
 
+If you need to seal a pubkey to a system with no filesystem or command line you can compile preseal with the following environment variables and run it without arguments
+
+```
+NO_FILESYSTEM=1 PUBKEY="c46f95fab07b0ad2412f4b18ba14c37314feb058f106a0c21728985cd1636db9f5b73a477da4f552c1470f8c83769981f33e23ec772a2582f82ea765b221d417" POLICY_PUBKEY="925a8a35dbe4bd419a35fbf9bd30ce1440380f6d3bcd9bc5558c1fa8adb88d92c88b797dfca39af80ca9729c61508813df8254575cef48674071cf75c30e6aa8" POLICY_SIGNED="4BDAC51C517C0F3D8EDBB632B514262C256E289565A2F1CD8605A4F775302C0CD7BBFE0242CAA536A30C87A37756C390DB9A2B06037B15476A509CA06B857B6D" IMAGE_DIGEST="5b09b05afaf98e43fd59c0dc286fca8337604ec0815caad09fc0784c8a5e692b" SEAL_NV_INDEX=25166336 POLICY_DIGEST_NV_INDEX=25166337 PCR_INDEX=16 make
+# Then on the target system running the resulting binary
+./preseal
+```
+
 ## NOTE: the PolicySigned key is used in place of the real signing key and acts as an intermediate key to unseal the actual signing key form the TPM
