@@ -66,9 +66,39 @@ static int readFile(char* name, uint8_t* buf, uint32_t* bufSz)
     return ret;
 }
 
+static signed char HexCharToByte(signed char ch)
+{
+    signed char ret = (signed char)ch;
+    if (ret >= '0' && ret <= '9')
+        ret -= '0';
+    else if (ret >= 'A' && ret <= 'F')
+        ret -= 'A' - 10;
+    else if (ret >= 'a' && ret <= 'f')
+        ret -= 'a' - 10;
+    else
+        ret = -1; /* error case - return code must be signed */
+    return ret;
+}
+
+static int HexToByte(const char *hex, unsigned char *output, unsigned long sz)
+{
+    word32 i;
+    for (i = 0; i < sz; i++) {
+        signed char ch1, ch2;
+        ch1 = HexCharToByte(hex[i * 2]);
+        ch2 = HexCharToByte(hex[i * 2 + 1]);
+        if ((ch1 < 0) || (ch2 < 0)) {
+            return -1;
+        }
+        output[i] = (unsigned char)((ch1 << 4) + ch2);
+    }
+    return (int)sz;
+}
+
 static void usage()
 {
-    printf("preseal pubkey policypubkey policysignature imagedigest sealNVindex digestNVindex [pcrindex]\n");
+    printf("NOTE currently policy sealing only supports ecc256 keys");
+    printf("Expected usage: ./preseal pubkey policypubkey policysignature imagedigest sealNVindex digestNVindex [pcrindex]\n");
     printf("pubkey: the verification key to seal into the tpm\n");
     printf("policypubkey: the pubkey used sign the policy expiration date\n");
     printf("policysignature: the signature of the policy expiration date\n");
@@ -104,15 +134,16 @@ int main(int argc, char** argv)
     wolfSSL_Debugging_ON();
 #endif
 
-    if (argc < 7) {
-        usage();
-        return 0;
-    }
-
     XMEMSET(&dev, 0, sizeof(WOLFTPM2_DEV));
     XMEMSET(&tpmSession, 0, sizeof(WOLFTPM2_SESSION));
     XMEMSET(&authKey, 0, sizeof(WOLFTPM2_KEY));
     XMEMSET(&pcrReset, 0, sizeof(PCR_Reset_In));
+
+#ifndef NO_FILESYSTEM
+    if (argc < 7) {
+        usage();
+        return 0;
+    }
 
     rc = readFile(argv[1], pubkey, &pubkeySz);
     if (rc != 0) {
@@ -146,6 +177,44 @@ int main(int argc, char** argv)
         pcrArray[0] = atoi(argv[7]);
     else
         pcrArray[0] = DEFAULT_PCR_INDEX;
+#else
+    rc = HexToByte(PUBKEY, pubkey, strlen(PUBKEY) / 2);
+    if (rc < 0) {
+        printf("Failed to read pubkey\n");
+        return 1;
+    }
+    pubkeySz = strlen(PUBKEY) / 2;
+
+    rc = HexToByte(POLICY_PUBKEY, policyPubkey, strlen(POLICY_PUBKEY) / 2);
+    if (rc < 0) {
+        printf("Failed to read pubkey\n");
+        return 1;
+    }
+    policyPubkeySz = strlen(POLICY_PUBKEY) / 2;
+
+    rc = HexToByte(POLICY_SIGNED, policySigned, strlen(POLICY_SIGNED) / 2);
+    if (rc < 0) {
+        printf("Failed to read pubkey\n");
+        return 1;
+    }
+    policySignedSz = strlen(POLICY_SIGNED) / 2;
+
+    rc = HexToByte(IMAGE_DIGEST, imageDigest, strlen(IMAGE_DIGEST) / 2);
+    if (rc < 0) {
+        printf("Failed to read pubkey\n");
+        return 1;
+    }
+    imageDigestSz = strlen(IMAGE_DIGEST) / 2;
+
+    sealNvIndex = SEAL_NV_INDEX;
+    policyDigestNvIndex = POLICY_DIGEST_NV_INDEX;
+
+    #ifdef PCR_INDEX
+        pcrArray[0] = PCR_INDEX;
+    #else
+        pcrArray[0] = DEFAULT_PCR_INDEX;
+    #endif
+#endif
 
     rc = wolfTPM2_Init(&dev, NULL, NULL);
     if (rc != TPM_RC_SUCCESS) {

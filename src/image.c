@@ -142,15 +142,21 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
 #ifdef WOLFTPM_KEYSTORE
     ret = wolfBoot_unseal_pubkey(pubkey, &tpmKey);
-    if (ret < 0)
+    if (ret < 0) {
+        wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
+
         return;
+    }
 #endif
     ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey, sig,
             IMAGE_SIGNATURE_SIZE, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
             TPM_ALG_ECDSA, TPM_ALG_SHA256);
+
+    /* unload handlre regardless of result */
+    wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
+
     if (ret != TPM_RC_SUCCESS)
         return;
-    wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
     if (ret == 0) {
         verify_res = 1; /* TPM does hash verify compare */
     }
