@@ -3,9 +3,11 @@ OUTPUT_ARCH( "powerpc" )
 ENTRY( _reset )
 
 /* Adjust base address to 0xF8F80000 is debugging (run from L2 cache) */
-BASE_ADDR = @WOLFBOOT_STAGE1_BASE_ADDR@;
+/* Boot ROM out of reset mapped to 0xFFFF0000 */
+BASE_ADDR = 0xFFFF0000;
 
-/* for flashing to NAND it must be 4KB */
+/* Boot ROM requires it must be < 4KB */
+/* If debugging this can be increased */
 LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
 
 /* Boot initialization code */
@@ -20,7 +22,7 @@ MEMORY
     FLASH (rx) : ORIGIN = BOOTSTRAP_TLB, LENGTH = LOADER_STAGE1_SIZE
 
     /* L1 as SRAM (up to 16KB) */
-    RAM (rwx) : ORIGIN = 0xffd00000, LENGTH = 16K
+    L1RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
 }
 
 SECTIONS
@@ -64,7 +66,7 @@ SECTIONS
         KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
-    } > RAM
+    } > L1RAM
 
     .bss (NOLOAD) :
     {
@@ -77,8 +79,8 @@ SECTIONS
         __bss_end__ = .;
         . = ALIGN(16);
         _end = .;
-    } > RAM
+    } > L1RAM
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );
+PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)) );

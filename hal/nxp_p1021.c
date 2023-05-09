@@ -426,15 +426,13 @@ enum elbc_amask_sizes {
 #define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
 #define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
 
+
 #if defined(ENABLE_ESPI) || defined(ENABLE_DDR)
-static void udelay(uint32_t delay_us)
+static void udelay(unsigned long delay_us)
 {
-    uint32_t i;
     static const uint32_t oneus = (SYS_CLK / 1000000);
     delay_us *= oneus;
-    for (i=0; i<delay_us; i++) {
-        asm volatile("nop");
-    }
+    wait_ticks(delay_us);
 }
 #endif
 
@@ -533,7 +531,7 @@ static void set_law(uint8_t idx, uint32_t addr, uint32_t trgt_id,
 
 #ifdef DEBUG_UART
 
-static void uart_init(void)
+void uart_init(void)
 {
     /* calc divisor for UART
      * baud rate = CCSRBAR frequency ÷ (16 x [UDMB||UDLB])

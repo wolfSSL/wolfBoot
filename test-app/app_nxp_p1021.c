@@ -32,6 +32,8 @@ void main(void)
     int k = 0;
     char snum[8];
 
+    uart_init();
+
     uart_write("Test App\n", 9);
 
     /* Wait for reboot */

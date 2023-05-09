@@ -49,7 +49,7 @@
 int main(void)
 {
     int ret = -1;
-    __attribute__((noreturn)) void (*wolfboot_start)(void);
+    uint32_t* wolfboot_start;
 
     hal_init();
     spi_flash_probe(); /* make sure external flash is initialized */
@@ -65,13 +65,13 @@ int main(void)
     /* if this is executing from boot 4KB region (FCM buffer) it must
      * first be relocated to RAM before the eLBC NAND can be read */
     if (((uintptr_t)&hal_init & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
-        wolfboot_start = (void*)WOLFBOOT_STAGE1_BASE_ADDR + BOOT_ROM_SIZE - 0x04;
+        wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_BASE_ADDR;
 
         /* relocate 4KB code to DST and jump */
         memmove((void*)WOLFBOOT_STAGE1_BASE_ADDR, (void*)BOOT_ROM_ADDR,
             BOOT_ROM_SIZE);
 
-        wolfboot_start(); /* never returns */
+        do_boot(wolfboot_start); /* never returns */
     }
 #endif
 
@@ -81,14 +81,14 @@ int main(void)
         BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
     );
     if (ret >= 0) {
-        wolfboot_start = (void*)WOLFBOOT_STAGE1_LOAD_ADDR;
+        wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_LOAD_ADDR;
     #ifdef PRINTF_ENABLED
         wolfBoot_printf("Jumping to %p\r\n", wolfboot_start);
     #elif defined(DEBUG_UART)
         uart_write("Jump to relocated wolfboot_start\r\n", 34);
     #endif
 
-        wolfboot_start(); /* never returns */
+        do_boot(wolfboot_start); /* never returns */
     }
 
     return 0;

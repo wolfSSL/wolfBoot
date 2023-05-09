@@ -84,6 +84,6 @@ PROVIDE(_start_heap = _end);
 
 /* If relocated to DDR already then use stack end from DDR */
 /* If debugging and DDR is not ready, use L1 or L2 */
-PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );
+/* PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE ); */
 /* PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)) ); */
-/* PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) ); */
+PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) );

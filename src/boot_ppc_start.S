@@ -186,6 +186,7 @@ startup_init:
         mfspr   r1, SPRN_DBSR
         mtspr   SPRN_DBSR, r1
 
+#ifndef BUILD_LOADER_STAGE1
 shrink_default_tlb1:
         /* Shrink the current TLB1 entry */
         bl find_pc
@@ -259,6 +260,7 @@ find_pc:
 
 2:      cmpw    r3, r4
         blt     1b
+#endif /* !BUILD_LOADER_STAGE1 */
 
 #ifdef ENABLE_INTERRUPTS
 setup_interrupts:
@@ -510,12 +512,12 @@ l1_cache_init:
         set_tlb(1, 9, L2SRAM_ADDR, L2SRAM_ADDR, 0, MAS3_SX | MAS3_SW | MAS3_SR,
                 MAS2_G, 0, BOOKE_PAGESZ_256K, 1, r3);
 
-        /* Configure the L2 Cache as SRAM (2=128KB) */
+        /* Configure the L2 Cache as SRAM (1=256KB) */
         sync
         lis     r0, L2CTL@h
         ori     r0, r0, L2CTL@l
-        lis     r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(2))@h
-        ori     r1, r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(2))@l
+        lis     r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(1))@h
+        ori     r1, r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(1))@l
         sync
         stw     r1, 0(r0)
 
@@ -564,6 +566,43 @@ isr_empty:
         nop
         rfi
 #endif
+
+
+/*
+ * unsigned long long get_ticks(void);
+ *
+ * read timebase as "long long"
+ */
+        .globl  get_ticks
+get_ticks:
+1:      mftbu   r3
+        mftb    r4
+        mftbu   r5
+        cmp     0, r3, r5
+        bne     1b
+        blr
+
+/*
+ * Delay for a number of ticks
+ */
+        .globl  wait_ticks
+wait_ticks:
+        mflr    r8               /* save link register */
+        mr      r7, r3           /* save tick count */
+        bl      get_ticks        /* Get start time */
+
+        /* Calculate end time */
+        addc    r7, r4, r7       /* Compute end time lower */
+        addze   r6, r3           /*     and end time upper */
+
+1:      bl      get_ticks        /* Get current time */
+        subfc   r4, r4, r7       /* Subtract current time from end time */
+        subfe.  r3, r3, r6
+        bge     1b               /* Loop until time expired */
+
+        mtlr    r8               /* restore link register */
+        blr
+
 
 /* reset entry point - must be at end of .S */
 .section .reset, "ax"
