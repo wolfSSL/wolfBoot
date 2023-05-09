@@ -200,8 +200,6 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t flag, st;
     int hdr_size;
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
-    uint32_t offset = 0;
-    uint16_t ptr_len;
     uint32_t *img_offset;
     uint16_t *img_size;
     uint32_t total_size;
@@ -321,6 +319,12 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         }
         sector++;
     }
+
+#ifdef EXT_ENCRYPTED
+    /* before we erase the encrypt key, save it to swap */
+    wolfBoot_swap_encrypt_key(key, nonce);
+#endif
+
     ret = 0;
     while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
         hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS +
@@ -333,16 +337,18 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE,
             WOLFBOOT_SECTOR_SIZE);
 out:
+/* Save the encryption key after swapping */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key(key, nonce);
+#endif
+
     wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
+
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif
     hal_flash_lock();
 
-/* Save the encryption key after swapping */
-#ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(key, nonce);
-#endif
     return ret;
 }
 
@@ -493,14 +499,18 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         sector++;
     }
+
+#ifdef EXT_ENCRYPTED
+    /* before we erase the encrypt key, save it to swap */
+    wolfBoot_swap_encrypt_key(key, nonce);
+#endif
+
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
     }
-    wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
     st = IMG_STATE_TESTING;
-    wolfBoot_set_partition_state(PART_BOOT, st);
 #else /* DISABLE_BACKUP */
 #warning "Backup mechanism disabled! Update installation will not be interruptible"
     /* Directly copy the content of the UPDATE partition into the BOOT partition.
@@ -516,13 +526,27 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         sector++;
     }
+
+#ifdef EXT_ENCRYPTED
+    /* before we erase the encrypt key, save it to swap */
+    wolfBoot_swap_encrypt_key(key, nonce);
+#endif
+
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;
     }
     st = IMG_STATE_SUCCESS;
-    wolfBoot_set_partition_state(PART_BOOT, st);
 #endif
+
+    wolfBoot_set_partition_state(PART_BOOT, st);
+
+/* Save the encryption key after swapping */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key(key, nonce);
+#endif
+
+    wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
 
 #if defined(WOLFBOOT_TPM) && defined(WOLFTPM_KEYSTORE)
     /* reseal the true pubkey after the image update */
@@ -534,11 +558,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     ext_flash_lock();
 #endif
     hal_flash_lock();
-
-/* Save the encryption key after swapping */
-#ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(key, nonce);
-#endif
     return 0;
 }
 

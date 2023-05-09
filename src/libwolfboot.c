@@ -974,23 +974,69 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     return 0;
 }
 
+int RAMFUNCTION wolfBoot_swap_encrypt_key(const uint8_t *key,
+    const uint8_t *nonce)
+{
+    int offset;
+    uint32_t magic;
+
+    offset = 0;
+    hal_flash_write(WOLFBOOT_PARTITION_SWAP_ADDRESS, key, ENCRYPT_KEY_SIZE);
+    offset += ENCRYPT_KEY_SIZE;
+
+    hal_flash_write(WOLFBOOT_PARTITION_SWAP_ADDRESS + offset, nonce,
+        ENCRYPT_NONCE_SIZE);
+    offset += ENCRYPT_NONCE_SIZE;
+
+    /* write magic after it */
+    magic = WOLFBOOT_MAGIC;
+    hal_flash_write(WOLFBOOT_PARTITION_SWAP_ADDRESS + offset, (uint8_t*)&magic,
+        sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    magic = WOLFBOOT_MAGIC_TRAIL;
+    hal_flash_write(WOLFBOOT_PARTITION_SWAP_ADDRESS + offset, (uint8_t*)&magic,
+        sizeof(uint32_t));
+
+    return 0;
+}
+
 #ifndef UNIT_TEST
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
+    uint8_t* mem;
+
 #if defined(MMU)
-    XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
-    XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
+    mem = ENCRYPT_KEY;
 #else
-    uint8_t *mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-        WOLFBOOT_PARTITION_BOOT_ADDRESS);
-    int sel_sec = 0;
+    /* check for magic after the key and nonce */
+    mem = (uint8_t *)(WOLFBOOT_PARTITION_SWAP_ADDRESS + ENCRYPT_KEY_SIZE +
+        ENCRYPT_NONCE_SIZE);
+
+    /* if we match magic the preceeding bytes are the key and nonce */
+    if (((uint32_t*)mem)[0] == WOLFBOOT_MAGIC &&
+        ((uint32_t*)mem)[1] == WOLFBOOT_MAGIC_TRAIL) {
+        /* recover the swapped key */
+        mem = (uint8_t *)(WOLFBOOT_PARTITION_SWAP_ADDRESS);
+    }
+    /* otherwise, use the normal location in the footer */
+    else {
+        mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+            WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    }
+
     #ifdef NVM_FLASH_WRITEONCE
+    int sel_sec = 0;
+
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
     #endif
+
+#endif
+
     XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, mem + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
-#endif
+
     return 0;
 }
 #endif
