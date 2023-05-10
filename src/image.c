@@ -720,7 +720,9 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     int ret;
 
     memset(rxBuf, 0, xferSz);
-    ret = spi_xfer(SPI_CS_TPM, txBuf, rxBuf, xferSz);
+    ret = spi_xfer(SPI_CS_TPM, txBuf, rxBuf, xferSz, 0);
+
+    /* TODO: Add TIS wait states */
 
     /*
     printf("\r\nSPI TX: ");

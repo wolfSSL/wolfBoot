@@ -64,7 +64,9 @@ uint8_t spi_read(void);
 #endif
 
 #ifdef WOLFBOOT_TPM
-int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz);
+/* Perform a SPI transaction. Set cont!=0 to not let CS go low after this */
+/* cont 0=is last transfer and will de-assert CS, 1=leave CS asserted */
+int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont);
 #endif
 
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)

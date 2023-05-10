@@ -32,7 +32,7 @@
 #if defined(PLATFORM_nxp_p1021)
 /* functions from nxp_p1021.c hal */
 extern void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode);
-extern int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz);
+extern int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont);
 extern void hal_espi_deinit(void);
 #endif
 
@@ -55,8 +55,8 @@ void spi_release(void)
     hal_espi_deinit();
 }
 
-int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
+int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
 {
-    return hal_espi_xfer(cs, tx, rx, sz);
+    return hal_espi_xfer(cs, tx, rx, sz, cont);
 }
 #endif /* WOLFBOOT_TPM */

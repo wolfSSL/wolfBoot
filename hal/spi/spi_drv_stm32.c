@@ -500,7 +500,7 @@ void RAMFUNCTION spi_release(void)
 }
 
 #ifdef WOLFBOOT_TPM
-int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
+int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
 {
     uint32_t i;
     spi_cs_on(SPI_CS_TPM_PIO_BASE, cs);
@@ -508,7 +508,9 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
         spi_write((const char)tx[i]);
         rx[i] = spi_read();
     }
-    spi_cs_off(SPI_CS_TPM_PIO_BASE, cs);
+    if (!cont) {
+        spi_cs_off(SPI_CS_TPM_PIO_BASE, cs);
+    }
     return 0;
 }
 #endif /* WOLFBOOT_TPM */

@@ -488,7 +488,7 @@ void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
 }
 
 /* Note: This code assumes all input buffers are multiple of 4 */
-int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
+int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
 {
     uint32_t reg, blks;
 
@@ -517,10 +517,12 @@ int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz)
         set32(ESPI_SPIE, ESPI_SPIE_RNE); /* clear event */
     }
 
-    /* toggle ESPI_SPMODE_EN - to deassert CS */
-    reg = get32(ESPI_SPMODE);
-    set32(ESPI_SPMODE, reg & ~ESPI_SPMODE_EN);
-    set32(ESPI_SPMODE, reg);
+    if (!cont) {
+        /* toggle ESPI_SPMODE_EN - to deassert CS */
+        reg = get32(ESPI_SPMODE);
+        set32(ESPI_SPMODE, reg & ~ESPI_SPMODE_EN);
+        set32(ESPI_SPMODE, reg);
+    }
 
     return 0;
 }
@@ -1463,7 +1465,7 @@ int test_tpm(void)
     uint8_t rx[8] = {0};
 
     hal_espi_init(SPI_CS_TPM, 2000000, 0);
-    hal_espi_xfer(SPI_CS_TPM, tx, rx, (uint32_t)sizeof(rx));
+    hal_espi_xfer(SPI_CS_TPM, tx, rx, (uint32_t)sizeof(rx), 0);
 
     wolfBoot_printf("RX: 0x%x\n", *((uint32_t*)&rx[4]));
     return rx[4] != 0xFF ? 0 : -1;
