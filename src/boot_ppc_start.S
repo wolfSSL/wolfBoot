@@ -123,12 +123,10 @@ Also see MPC8544ERM
 
 _reset:
 
-#ifdef DEBUG
         /* CRM 9.9.2 and EREF 10.4 enable debug interrupt */
         /* Set MSR DE (Debug Interrupt Enable = 1) */
         li      r1, MSR_DE
         mtmsr   r1
-#endif
 
 #ifdef PLATFORM_nxp_p1021
         /* Errata: A-005125 - force the core to process all snoops of IO device
@@ -461,18 +459,16 @@ switch_as:
 #endif
 
 setup_l1:
+#ifdef ENABLE_L1_CACHE
         /* L1 Instruction Cache */
         l1_cache_invalidate(L1CSR1);
-        #ifdef ENABLE_L1_CACHE
         l1_cache_enable(L1CSR1);
-        #endif
+
         /* L1 Data Cache */
         l1_cache_invalidate(L1CSR0);
-        #ifdef ENABLE_L1_CACHE
         l1_cache_enable(L1CSR0);
-        #endif
+#endif
 
-#ifdef ENABLE_L1_CACHE
 l1_tlb:
 
         /* L1: TLB 0, Supervisor X/R/W, TS=0, 16K */
@@ -486,13 +482,15 @@ l1_tlb:
         set_tlb(0, 0, L1_CACHE_ADDR+0x3000, L1_CACHE_ADDR+0x1000, 0,
                 (MAS3_SX | MAS3_SW | MAS3_SR), 0, 0, BOOKE_PAGESZ_4K, 0, r3);
 
+#ifdef ENABLE_L1_CACHE
 l1_cache:
         /* setup L1 cache */
         lis     r3, L1_CACHE_ADDR@h
         ori     r3, r3, L1_CACHE_ADDR@l
+        /* read the cache size */
         mfspr   r2, L1CFG0
         andi.   r2, r2, 0x1FF
-        /* cache size * 1024 / (2 * L1 line size) */
+        /* calculate (cache size * 1024 / (2 * L1 line size)) */
         slwi    r2, r2, (10 - 1 - L1_CACHE_LINE_SHIFT)
         mtctr   r2
         li      r0, 0
@@ -500,7 +498,7 @@ l1_cache:
 l1_cache_init:
         dcbz    r0, r3
         dcbtls  0, r0, r3
-        addi    r3, r3, (1 << L1_CACHE_LINE_SHIFT)
+        addi    r3, r3, L1_CACHE_LINE_SIZE
         bdnz    l1_cache_init
 #endif /* ENABLE_L1_CACHE */
 

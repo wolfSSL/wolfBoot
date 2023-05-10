@@ -46,6 +46,14 @@
 #include "hal/nxp_ppc.h"
 #endif
 
+#ifndef DO_BOOT
+#ifdef MMU
+#define DO_BOOT(addr) do_boot((addr), NULL)
+#else
+#define DO_BOOT(addr) do_boot((addr))
+#endif
+#endif
+
 int main(void)
 {
     int ret = -1;
@@ -71,7 +79,7 @@ int main(void)
         memmove((void*)WOLFBOOT_STAGE1_BASE_ADDR, (void*)BOOT_ROM_ADDR,
             BOOT_ROM_SIZE);
 
-        do_boot(wolfboot_start); /* never returns */
+        DO_BOOT(wolfboot_start); /* never returns */
     }
 #endif
 
@@ -88,7 +96,7 @@ int main(void)
         uart_write("Jump to relocated wolfboot_start\r\n", 34);
     #endif
 
-        do_boot(wolfboot_start); /* never returns */
+        DO_BOOT(wolfboot_start); /* never returns */
     }
 
     return 0;

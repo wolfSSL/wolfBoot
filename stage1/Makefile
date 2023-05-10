@@ -46,9 +46,9 @@ CFLAGS+= \
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
-  CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
-  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=loader_stage1.map -ffreestanding -nostartfiles
+  CFLAGS+=-Wall -Wextra -Wno-main -Wno-unused
+  CFLAGS+=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=loader_stage1.map
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
 endif
 
@@ -72,6 +72,10 @@ CFLAGS+=\
 
 # For printf support (disable NO_PRINTF_UART) and increase WOLFBOOT_STAGE1_SIZE
 CFLAGS+=-DNO_PRINTF_UART
+
+# Use PIC (Position Independent Code) for first stage loader
+CFLAGS+=-fPIC
+
 
 BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))

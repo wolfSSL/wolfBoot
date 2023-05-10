@@ -26,8 +26,6 @@
 #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
 #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
 #define MMU_V1
-#define ENABLE_L1_CACHE
-#define ENABLE_L2_CACHE
 
 /* Memory used for transferring blocks to/from NAND.
  * Maps to eLBC FCM internal 8KB region (by hardware) */
@@ -35,6 +33,9 @@
 
 /* For full wolfBoot */
 #ifndef BUILD_LOADER_STAGE1
+    #define ENABLE_L1_CACHE
+    #define ENABLE_L2_CACHE
+
     /* Relocate CCSRBAR */
     #define CCSRBAR 0xFFE00000
 
@@ -132,6 +133,10 @@
 #endif
 #ifndef L1_CACHE_SZ
 #define L1_CACHE_SZ     (32 * 1024)
+#endif
+
+#ifndef L1_CACHE_LINE_SIZE
+#define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
 #endif
 
 

@@ -27,7 +27,7 @@
 
 #define ENABLE_ELBC
 #define ENABLE_DDR
-
+#define ENABLE_BUS_CLK_CALC
 #ifndef BUILD_LOADER_STAGE1
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
@@ -60,10 +60,11 @@ static int test_tpm(void);
 
 
 /* P1021 Platform */
-//#define SYS_CLK (533000000) /* 533MHz */
-  #define SYS_CLK (400000000) /* 400MHz */
+/* System input clock */
+#define SYS_CLK (66666666) /* 66.666666 MHz */
 
-#define RESET_BPTR ((volatile uint32_t*)(CCSRBAR + 0x42)) /* Boot page translation register */
+/* Boot page translation register */
+#define RESET_BPTR ((volatile uint32_t*)(CCSRBAR + 0x42))
 
 /* Global Utilities (GUTS) */
 #define GUTS_BASE      (CCSRBAR + 0xE0000)
@@ -426,12 +427,25 @@ enum elbc_amask_sizes {
 #define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
 #define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
 
+static uint32_t hal_get_bus_clk(void)
+{
+    uint32_t bus_clk;
+#ifdef ENABLE_BUS_CLK_CALC
+    /* compute bus clock (system input 66MHz * ratio */
+    uint32_t plat_ratio = get32(GUTS_PORPLLSR);
+    /* mask and shift by 1 to get platform ratio */
+    plat_ratio = ((plat_ratio & 0x3E) >> 1);
+    bus_clk = SYS_CLK * plat_ratio;
+    return bus_clk;
+#else
+    return (uint32_t)(SYS_CLK * 6); /* can also be 8 */
+#endif
+}
 
 #if defined(ENABLE_ESPI) || defined(ENABLE_DDR)
 static void udelay(unsigned long delay_us)
 {
-    static const uint32_t oneus = (SYS_CLK / 1000000);
-    delay_us *= oneus;
+    delay_us *= (hal_get_bus_clk() / 1000000);
     wait_ticks(delay_us);
 }
 #endif
@@ -439,7 +453,7 @@ static void udelay(unsigned long delay_us)
 #ifdef ENABLE_ESPI
 void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
 {
-    uint32_t spibrg = SYS_CLK / 2, pm, csmode;
+    uint32_t spibrg = hal_get_bus_clk() / 2, pm, csmode;
 
     /* Enable eSPI with TX threadshold 4 and TX threshold 3 */
     set32(ESPI_SPMODE, (ESPI_SPMODE_EN | ESPI_SPMODE_TXTHR(4) |
@@ -536,17 +550,8 @@ void uart_init(void)
     /* calc divisor for UART
      * baud rate = CCSRBAR frequency ÷ (16 x [UDMB||UDLB])
      */
-#if 1
-    /* build time computed UART divisor */
-    const uint32_t div = (SYS_CLK / 16 / BAUD_RATE) + 1; /* round up */
-#else
-    /* example for how to compute based on PORPLLSR */
-    uint32_t plat_ratio, bus_clk, div;
-    plat_ratio = (get32(GUTS_PORPLLSR) & 0x0000003E);
-    plat_ratio >>= 1; /* divide by two */
-    bus_clk = plat_ratio * SYS_CLK;
-    div = (bus_clk / 16 / BAUD_RATE);
-#endif
+    /* compute UART divisor - round up */
+    uint32_t div = (hal_get_bus_clk() + (16/2 * BAUD_RATE)) / (16 * BAUD_RATE);
 
     while (!(get8(UART_LSR(UART_SEL)) & UART_LSR_TEMT))
        ;
@@ -1066,21 +1071,9 @@ static void hal_io_init(void)
 
 void hal_init(void)
 {
-#ifdef GET_PSVR
-    uint32_t pvr, svr;
-#endif
-
 #ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot HAL Init\n", 19);
-#endif
-
-#ifdef GET_PSVR
-    /* Platform and System version information */
-    pvr = GUTS_PVR;
-    svr = GUTS_SVR;
-    (void)pvr;
-    (void)svr;
 #endif
 
 #ifdef ENABLE_PCIE
@@ -1361,7 +1354,7 @@ void ext_flash_unlock(void)
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
-    return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    return NULL; /* WOLFBOOT_LOAD_DTS_ADDRESS not required */
 }
 #endif
 

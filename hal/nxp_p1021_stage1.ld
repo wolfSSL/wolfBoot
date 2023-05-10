@@ -4,11 +4,11 @@ ENTRY( _reset )
 
 /* Adjust base address to 0xF8F80000 is debugging (run from L2 cache) */
 /* Boot ROM out of reset mapped to 0xFFFF0000 */
-BASE_ADDR = 0xFFFF0000;
+BASE_ADDR = 0xFFFF0000; /* 0xF8F80000 */
 
 /* Boot ROM requires it must be < 4KB */
 /* If debugging this can be increased */
-LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
+LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@; /* 0x4000 */
 
 /* Boot initialization code */
 BOOTSTRAP_TLB = BASE_ADDR;
@@ -61,6 +61,10 @@ SECTIONS
     .data : AT (_stored_data)
     {
         _start_data = .;
+        KEEP(*(.iplt*))
+        KEEP(*(.plt*))
+        KEEP(*(.got1*))
+        KEEP(*(.got2*))
         KEEP(*(.data*))
         . = ALIGN(4);
         KEEP(*(.ramcode))
