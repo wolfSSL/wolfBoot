@@ -316,9 +316,8 @@ endif
 
 ifeq ($(TARGET),nxp_p1021)
   # Power PC big endian
-  ARCH_FLAGS=-m32 -mhard-float -mcpu=e500mc -mno-powerpc64
+  ARCH_FLAGS=-m32 -mhard-float -mcpu=e500mc
   ARCH_FLAGS+=-fno-builtin -ffreestanding -nostartfiles
-  ARCH_FLAGS+=-mno-pointers-to-nested-functions
   CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
   CFLAGS+=-DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files

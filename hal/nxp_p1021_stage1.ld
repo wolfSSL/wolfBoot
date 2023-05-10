@@ -36,6 +36,9 @@ SECTIONS
         *(.text*)
         *(.rodata*)
         *(.sdata*)
+
+        /* For PIC the linker script variables come from here */
+        *(.got2)
     } > FLASH
     . = ALIGN(4);
 
@@ -61,10 +64,6 @@ SECTIONS
     .data : AT (_stored_data)
     {
         _start_data = .;
-        KEEP(*(.iplt*))
-        KEEP(*(.plt*))
-        KEEP(*(.got1*))
-        KEEP(*(.got2*))
         KEEP(*(.data*))
         . = ALIGN(4);
         KEEP(*(.ramcode))
