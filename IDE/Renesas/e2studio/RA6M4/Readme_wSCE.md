@@ -243,11 +243,11 @@ Tail Mgc:
 ```
 You can see the state is Success("00") and Tail Magic number becomes "BOOT". You can also see flashing each LED light in 1 second.
 Notable things about V1 application, it will also call wolfBoot_update_trigger() so that it tells wolfBoot that new version exists. 
-We are going to generate and download V2 application into "Update pertition".
+We are going to generate and download V2 application into "Update partition".
 
 ### 7) Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x00090000".
+Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0x00090000".
 You can download it by the flash programmer.
 
 Updtate partition:
@@ -259,7 +259,7 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00090000 a
 ```
 
 
-### 8) Re-boot and secure update to V2
+### 8) Reboot and secure update to V2
 
 The boot program checks integlity and authenticity of V2, swap the partition
 safely and initiates V2. You will see following message after the partition
