@@ -3,8 +3,8 @@ OUTPUT_ARCH( "powerpc" )
 ENTRY( _reset )
 
 /* Adjust base address to 0xF8F80000 is debugging (run from L2 cache) */
-/* Boot ROM out of reset mapped to 0xFFFF0000 */
-BASE_ADDR = 0xFFFF0000; /* 0xF8F80000 */
+/* Boot ROM out of reset mapped to 0xFFFFF000 */
+BASE_ADDR = 0xFFFFF000; /* 0xF8F80000 */
 
 /* Boot ROM requires it must be < 4KB */
 /* If debugging this can be increased */
