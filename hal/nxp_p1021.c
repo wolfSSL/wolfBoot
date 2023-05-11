@@ -27,33 +27,44 @@
 
 #define ENABLE_ELBC
 #define ENABLE_DDR
-
+#define ENABLE_BUS_CLK_CALC
 #ifndef BUILD_LOADER_STAGE1
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
     #define ENABLE_CONF_IO
+
+    #define ENABLE_ESPI /* TPM */
 #endif
 
 /* TODO */
 /* Ethernet */
 /* QUICC */
 
+/* Debugging */
+/* #define DEBUG_EXT_FLASH */
+
 /* Tests */
 /* #define TEST_DDR */
 /* #define TEST_FLASH */
+/* #define TEST_TPM */
 
-#ifdef TEST_DDR
+#if defined(ENABLE_DDR) && defined(TEST_DDR)
 static int test_ddr(void);
 #endif
-#ifdef TEST_FLASH
+#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
 static int test_flash(void);
+#endif
+#if defined(ENABLE_ESPI) && defined(TEST_TPM)
+static int test_tpm(void);
 #endif
 
 
 /* P1021 Platform */
-#define SYS_CLK (533000000) /* 533MHz */
+/* System input clock */
+#define SYS_CLK (66666666) /* 66.666666 MHz */
 
-#define RESET_BPTR ((volatile uint32_t*)(CCSRBAR + 0x42)) /* Boot page translation register */
+/* Boot page translation register */
+#define RESET_BPTR ((volatile uint32_t*)(CCSRBAR + 0x42))
 
 /* Global Utilities (GUTS) */
 #define GUTS_BASE      (CCSRBAR + 0xE0000)
@@ -380,6 +391,146 @@ enum elbc_amask_sizes {
 #define ECM_BASE   (CCSRBAR + 0x1000)
 #define ECM_EEBACR ((volatile uint32_t*)(ECM_BASE + 0x0)) /* ECM CCB address configuration register */
 
+/* eSPI */
+#define ESPI_MAX_CS_NUM      4
+#define ESPI_MAX_RX_LEN      (1 << 16)
+
+#define ESPI_BASE            (CCSRBAR + 0x7000)
+#define ESPI_SPMODE          ((volatile uint32_t*)(ESPI_BASE + 0x00)) /* controls eSPI general operation mode */
+#define ESPI_SPIE            ((volatile uint32_t*)(ESPI_BASE + 0x04)) /* controls interrupts and report events */
+#define ESPI_SPIM            ((volatile uint32_t*)(ESPI_BASE + 0x08)) /* enables/masks interrupts */
+#define ESPI_SPCOM           ((volatile uint32_t*)(ESPI_BASE + 0x0C)) /* command frame information */
+#define ESPI_SPITF           ((volatile uint32_t*)(ESPI_BASE + 0x10)) /* transmit FIFO access register */
+#define ESPI_SPIRF           ((volatile uint32_t*)(ESPI_BASE + 0x14)) /* 32-bit read-only receive data register */
+#define ESPI_SPCSMODE(x)     ((volatile uint32_t*)(ESPI_BASE + 0x20 + ((cs) * 4))) /* controls master operation with chip select 0-3 */
+
+#define ESPI_SPMODE_EN       (0x80000000) /* Enable eSPI */
+#define ESPI_SPMODE_TXTHR(x) ((x) << 8)   /* Tx FIFO threshold (1-32) */
+#define ESPI_SPMODE_RXTHR(x) ((x) << 0)   /* Rx FIFO threshold (0-31) */
+
+#define ESPI_SPCOM_CS(x)     ((x) << 30)       /* Chip select-chip select for which transaction is destined */
+#define ESPI_SPCOM_RXSKIP(x) ((x) << 16)       /* Number of characters skipped for reception from frame start */
+#define ESPI_SPCOM_TRANLEN(x) (((x) - 1) << 0) /* Transaction length */
+
+#define ESPI_SPIE_DON        (1 << 14) /* Last character was transmitted */
+#define ESPI_SPIE_RNE        (1 << 9) /* recevie not empty */
+#define ESPI_SPIE_TNF        (1 << 8) /* transmit not full */
+
+#define ESPI_CSMODE_CI       0x80000000 /* Inactive high */
+#define ESPI_CSMODE_CP       0x40000000 /* Begin edge clock */
+#define ESPI_CSMODE_REV      0x20000000 /* MSB first */
+#define ESPI_CSMODE_DIV16    0x10000000 /* divide system clock by 16 */
+#define ESPI_CSMODE_PM(x)    (((x) & 0xF) << 24) /* presale modulus select */
+#define ESPI_CSMODE_POL      0x00100000  /* asserted low */
+#define ESPI_CSMODE_LEN(x)   ((((x) - 1) & 0xF) << 16) /* Character length in bits per character */
+#define ESPI_CSMODE_CSBEF(x) (((x) & 0xF) << 12) /* CS assertion time in bits before frame start */
+#define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
+#define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
+
+static uint32_t hal_get_bus_clk(void)
+{
+    uint32_t bus_clk;
+#ifdef ENABLE_BUS_CLK_CALC
+    /* compute bus clock (system input 66MHz * ratio */
+    uint32_t plat_ratio = get32(GUTS_PORPLLSR);
+    /* mask and shift by 1 to get platform ratio */
+    plat_ratio = ((plat_ratio & 0x3E) >> 1);
+    bus_clk = SYS_CLK * plat_ratio;
+    return bus_clk;
+#else
+    return (uint32_t)(SYS_CLK * 6); /* can also be 8 */
+#endif
+}
+
+#if defined(ENABLE_ESPI) || defined(ENABLE_DDR)
+static void udelay(unsigned long delay_us)
+{
+    delay_us *= (hal_get_bus_clk() / 1000000);
+    wait_ticks(delay_us);
+}
+#endif
+
+#ifdef ENABLE_ESPI
+void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
+{
+    uint32_t spibrg = hal_get_bus_clk() / 2, pm, csmode;
+
+    /* Enable eSPI with TX threadshold 4 and TX threshold 3 */
+    set32(ESPI_SPMODE, (ESPI_SPMODE_EN | ESPI_SPMODE_TXTHR(4) |
+        ESPI_SPMODE_RXTHR(3)));
+
+    set32(ESPI_SPIE, 0xffffffff); /* Clear all eSPI events */
+    set32(ESPI_SPIM, 0x00000000); /* Mask all eSPI interrupts */
+
+    csmode = (ESPI_CSMODE_REV | ESPI_CSMODE_POL | ESPI_CSMODE_LEN(8) |
+        ESPI_CSMODE_CSBEF(0) | ESPI_CSMODE_CSAFT(0) | ESPI_CSMODE_CSCG(1));
+
+    /* calculate clock divisor */
+    if (spibrg / clock_hz > 16) {
+        csmode |= ESPI_CSMODE_DIV16;
+        pm = (spibrg / (clock_hz * 16));
+    }
+    else {
+        pm = (spibrg / (clock_hz));
+    }
+    if (pm > 0)
+        pm--;
+
+    csmode |= ESPI_CSMODE_PM(pm);
+
+    if (mode & 1)
+        csmode |= ESPI_CSMODE_CP;
+    if (mode & 2)
+        csmode |= ESPI_CSMODE_CI;
+
+    /* configure CS */
+    set32(ESPI_SPCSMODE(cs), csmode);
+}
+
+/* Note: This code assumes all input buffers are multiple of 4 */
+int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
+{
+    uint32_t reg, blks;
+
+    /* assert CS */
+    set32(ESPI_SPCOM, ESPI_SPCOM_CS(cs) | ESPI_SPCOM_TRANLEN(sz));
+
+    set32(ESPI_SPIE, 0xffffffff); /* Clear all eSPI events */
+
+    /* calculate the number of 4 byte blocks rounded up */
+    blks = (sz + 3) / 4;
+    while (blks--) {
+        /* wait till TX fifo has room */
+        while ((get32(ESPI_SPIE) & ESPI_SPIE_TNF) == 0);
+        reg = *((uint32_t*)tx);
+        set32(ESPI_SPITF, reg);
+        tx += 4;
+        set32(ESPI_SPIE, ESPI_SPIE_TNF); /* clear event */
+
+        udelay(5);
+
+        /* wait till RX has data */
+        while ((get32(ESPI_SPIE) & ESPI_SPIE_RNE) == 0);
+        reg = get32(ESPI_SPIRF);
+        *((uint32_t*)rx) = reg;
+        rx += 4;
+        set32(ESPI_SPIE, ESPI_SPIE_RNE); /* clear event */
+    }
+
+    if (!cont) {
+        /* toggle ESPI_SPMODE_EN - to deassert CS */
+        reg = get32(ESPI_SPMODE);
+        set32(ESPI_SPMODE, reg & ~ESPI_SPMODE_EN);
+        set32(ESPI_SPMODE, reg);
+    }
+
+    return 0;
+}
+void hal_espi_deinit(void)
+{
+    /* do nothing */
+}
+#endif /* ENABLE_ESPI */
 
 
 static void set_law(uint8_t idx, uint32_t addr, uint32_t trgt_id,
@@ -396,22 +547,13 @@ static void set_law(uint8_t idx, uint32_t addr, uint32_t trgt_id,
 
 #ifdef DEBUG_UART
 
-static void uart_init(void)
+void uart_init(void)
 {
     /* calc divisor for UART
      * baud rate = CCSRBAR frequency ÷ (16 x [UDMB||UDLB])
      */
-#if 1
-    /* build time computed UART divisor */
-    const uint32_t div = (SYS_CLK / 16 / BAUD_RATE) + 1; /* round up */
-#else
-    /* example for how to compute based on PORPLLSR */
-    uint32_t plat_ratio, bus_clk, div;
-    plat_ratio = (get32(GUTS_PORPLLSR) & 0x0000003E);
-    plat_ratio >>= 1; /* divide by two */
-    bus_clk = plat_ratio * SYS_CLK;
-    div = (bus_clk / 16 / BAUD_RATE);
-#endif
+    /* compute UART divisor - round up */
+    uint32_t div = (hal_get_bus_clk() + (16/2 * BAUD_RATE)) / (16 * BAUD_RATE);
 
     while (!(get8(UART_LSR(UART_SEL)) & UART_LSR_TEMT))
        ;
@@ -433,8 +575,13 @@ void uart_write(const char* buf, uint32_t sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {
+        char c = buf[pos++];
+        if (c == '\n') { /* handle CRLF */
+            while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
+            set8(UART_THR(UART_SEL), '\r');
+        }
         while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-        set8(UART_THR(UART_SEL), buf[pos++]);
+        set8(UART_THR(UART_SEL), c);
     }
 }
 #endif /* DEBUG_UART */
@@ -443,29 +590,33 @@ void uart_write(const char* buf, uint32_t sz)
 
 static volatile uint8_t* flash_buf;
 static uint32_t          flash_idx;
-static void hal_flash_set_addr(int col, int page)
+static void hal_flash_set_addr(int page, int col)
 {
     uint32_t buf_num;
+    uint32_t fbar, fpar;
 
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
     /* large page - ELBC_OR_PGS=1 */
-    set32(ELBC_FBAR, (page >> 6));
+    fbar = (page >> 6);
+    fpar = (ELBC_FPAR_LP_PI(page) | ELBC_FPAR_LP_CI(col));
     buf_num = (page & 1) << 2; /* 0 or 4 */
-
-    set32(ELBC_FPAR, ELBC_FPAR_LP_PI(page) | ELBC_FPAR_LP_CI(col));
 #else
     /* small page */
-    set32(ELBC_FBAR, (page >> 5));
+    fbar = (page >> 5);
+    fpar = (ELBC_FPAR_SP_PI(page) | ELBC_FPAR_SP_CI(col));
     buf_num = (page & 7); /* 0-7 */
-
-    set32(ELBC_FPAR, ELBC_FPAR_SP_PI(page) | ELBC_FPAR_SP_CI(col));
 #endif
+    set32(ELBC_FBAR, fbar);
+    set32(ELBC_FPAR, fpar);
 
     /* calculate buffer for FCM - there are 8 1KB pages */
     flash_buf = (uint8_t*)(FLASH_BASE_ADDR + (buf_num * 1024));
     flash_idx = col;
 
-    wolfBoot_printf("set addr %p, idx %d\r\n", flash_buf, flash_idx);
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("set addr %p, page %d, col %d, fbar 0x%x, fpar 0x%x\n",
+        flash_buf, page, col, fbar, fpar);
+#endif
 }
 
 /* iswrite (read=0, write=1) */
@@ -504,8 +655,10 @@ static int hal_flash_command(uint8_t iswrite)
 /* assume input/output buffers are 32-bit aligned */
 static void hal_flash_read_bytes(uint8_t* data, size_t len)
 {
-    wolfBoot_printf("read %p to %p, len %d\r\n",
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("read %p to %p, len %d\n",
         &flash_buf[flash_idx], data, len);
+#endif
     /* copy data from internal eLBC FCM buffer */
     while (flash_idx < len) {
         *((volatile uint32_t*)data) =
@@ -517,8 +670,10 @@ static void hal_flash_read_bytes(uint8_t* data, size_t len)
 /* assume input/output buffers are 32-bit aligned */
 static void hal_flash_write_bytes(const uint8_t* data, size_t len)
 {
-    wolfBoot_printf("write %p to %p, len %d\r\n",
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("write %p to %p, len %d\n",
         data, &flash_buf[flash_idx], len);
+#endif
     /* copy data to internal eLBC FCM buffer */
     while (flash_idx < len) {
         *(volatile uint32_t*)(&flash_buf[flash_idx]) =
@@ -629,10 +784,7 @@ static int hal_flash_init(void)
         ret = hal_flash_read_id(flash_id);
     }
 
-#ifdef PRINTF_ENABLED
-    wolfBoot_printf("Flash ID: Ret %d, 0x%08lx\r\n", ret, flash_id[0]);
-#endif
-
+    wolfBoot_printf("Flash Init: Ret %d, ID 0x%08lx\n", ret, flash_id[0]);
 #endif /* ENABLE_ELBC */
     return ret;
 }
@@ -640,7 +792,6 @@ static int hal_flash_init(void)
 void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
-    int i;
     uint32_t reg;
 
     /* Map LAW for DDR */
@@ -687,9 +838,7 @@ void hal_ddr_init(void)
         asm volatile("sync;isync");
 
         /* busy wait for ~500us */
-        for (i=0; i<5000000; i++) {
-            asm volatile("nop");
-        }
+        udelay(500);
 
         /* Enable controller */
         reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
@@ -699,9 +848,7 @@ void hal_ddr_init(void)
         /* Wait for data initialization to complete */
         while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
             /* busy wait loop - throttle polling */
-            for (i=0; i<50000; i++) {
-                asm volatile("nop");
-            }
+            udelay(1);
         }
     }
 
@@ -926,24 +1073,9 @@ static void hal_io_init(void)
 
 void hal_init(void)
 {
-#ifdef GET_PSVR
-    uint32_t pvr, svr;
-#endif
-
 #ifdef DEBUG_UART
     uart_init();
-
-    #ifdef DEBUG
-    uart_write("wolfBoot Init\r\n", 15);
-    #endif
-#endif
-
-#ifdef GET_PSVR
-    /* Platform and System version information */
-    pvr = GUTS_PVR;
-    svr = GUTS_SVR;
-    (void)pvr;
-    (void)svr;
+    uart_write("wolfBoot HAL Init\n", 19);
 #endif
 
 #ifdef ENABLE_PCIE
@@ -957,15 +1089,21 @@ void hal_init(void)
 #endif
     hal_flash_init();
 
-#ifdef TEST_DDR
+#if defined(ENABLE_DDR) && defined(TEST_DDR)
     if (test_ddr() != 0) {
-        wolfBoot_printf("DDR Test Failed!\r\n");
+        wolfBoot_printf("DDR Test Failed!\n");
     }
 #endif
 
-#ifdef TEST_FLASH
+#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
     if (test_flash() != 0) {
-        wolfBoot_printf("Flash Test Failed!\r\n");
+        wolfBoot_printf("Flash Test Failed!\n");
+    }
+#endif
+
+#if defined(ENABLE_ESPI) && defined(TEST_TPM)
+    if (test_tpm() != 0) {
+        wolfBoot_printf("TPM Test Failed!\n");
     }
 #endif
 }
@@ -1040,7 +1178,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     /* page write loop */
     while (pos < len) {
         /* Calculate page address */
-        uint32_t page = (address & (page_size - 1));
+        uint32_t page = (address / page_size);
         uint32_t col = (address % page_size);
         uint32_t status;
 
@@ -1050,7 +1188,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
             write_size = page_size;
         }
         /* set page and FCM buffer */
-        hal_flash_set_addr(col, page);
+        hal_flash_set_addr(page, col);
 
         set32(ELBC_FBCR, col); /* size of write (0=full page) */
 
@@ -1064,9 +1202,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 
         /* status returned in MDR */
         status = get32(ELBC_MDR) & 0xFF;
-        wolfBoot_printf("write page %d, col %d, status %x\r\n",
+#ifdef DEBUG_EXT_FLASH
+        wolfBoot_printf("write page %d, col %d, status %x\n",
             page, col, status);
-
+#endif
         address += page_size - col;
         pos += page_size - col;
         data += page_size - col;
@@ -1083,6 +1222,11 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     uint32_t block_size, page_size, read_size;
     int ret = 0, pos = 0, i = 0;
     int bad_marker;
+
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext read: addr 0x%x, dst 0x%x, len %d\n",
+        address, data, len);
+#endif
 
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
     /* large page - ELBC_OR_PGS=1 */
@@ -1108,15 +1252,15 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
                     ELBC_FIR_OP(3, ELBC_FIR_OP_RBW));
 #endif
 
-    set32(ELBC_FBCR, 0); /* always read full page including spare bits */
-
     /* total download loop */
     while (pos < len) {
         /* block loop */
         do {
             /* Calculate page address */
-            uint32_t page = (address & (page_size - 1));
+            uint32_t page = (address / page_size);
             uint32_t col = (address % page_size);
+
+            set32(ELBC_FBCR, col);
 
             /* bytes to read */
             read_size = len;
@@ -1125,7 +1269,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             }
 
             /* read page into FCM buffer */
-            hal_flash_set_addr(col, page);
+            hal_flash_set_addr(page, col);
             ret = hal_flash_command(0);
             if (ret != 0)
                 break;
@@ -1170,7 +1314,7 @@ int ext_flash_erase(uintptr_t address, int len)
 
     while (len > 0) {
         /* Calculate page address, however block will be erased */
-        uint32_t page = (address & (page_size - 1));
+        uint32_t page = (address / page_size);
         uint32_t status;
 
         /* Erase Block */
@@ -1183,15 +1327,16 @@ int ext_flash_erase(uintptr_t address, int len)
                         ELBC_FCR_CMD(1, NAND_CMD_STATUS) |
                         ELBC_FCR_CMD(2, NAND_CMD_BLOCK_ERASE2));
         set32(ELBC_FBCR, 0);
-        hal_flash_set_addr(0, page);
+        hal_flash_set_addr(page, 0);
         ret = hal_flash_command(1);
         if (ret != 0)
             break;
 
         /* status returned in MDR */
         status = get32(ELBC_MDR) & 0xFF;
-        wolfBoot_printf("erase page %d, status %x\r\n", page, status);
-
+#ifdef DEBUG_EXT_FLASH
+        wolfBoot_printf("erase page %d, status %x\n", page, status);
+#endif
         len -= block_size;
     }
 
@@ -1211,7 +1356,7 @@ void ext_flash_unlock(void)
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
-    return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    return NULL; /* WOLFBOOT_LOAD_DTS_ADDRESS not required */
 }
 #endif
 
@@ -1269,41 +1414,60 @@ static int test_ddr(void)
 #endif
 /* #define TEST_FLASH_READONLY */
 
-static uint32_t pageData[FLASH_PAGE_SIZE/4]; /* force 32-bit alignment */
 static int test_flash(void)
 {
     int ret;
     uint32_t i;
+    uint32_t pageData[FLASH_PAGE_SIZE/4]; /* force 32-bit alignment */
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
     ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    wolfBoot_printf("Erase Sector: Ret %d\r\n", ret);
+    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
 
     /* Write Pages */
     for (i=0; i<sizeof(pageData); i++) {
         ((uint8_t*)pageData)[i] = (i & 0xff);
     }
     ret = ext_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Write Page: Ret %d\r\n", ret);
+    wolfBoot_printf("Write Page: Ret %d\n", ret);
 #endif /* !TEST_FLASH_READONLY */
 
     /* Read page */
     memset(pageData, 0, sizeof(pageData));
     ret = ext_flash_read(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Read Page: Ret %d\r\n", ret);
+    wolfBoot_printf("Read Page: Ret %d\n", ret);
 
-    wolfBoot_printf("Checking...\r\n");
+    wolfBoot_printf("Checking...\n");
     /* Check data */
     for (i=0; i<sizeof(pageData); i++) {
-        wolfBoot_printf("check[%3d] %02x\r\n", i, pageData[i]);
+        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
         if (((uint8_t*)pageData)[i] != (i & 0xff)) {
-            wolfBoot_printf("Check Data @ %d failed\r\n", i);
+            wolfBoot_printf("Check Data @ %d failed\n", i);
             return -i;
         }
     }
 
-    wolfBoot_printf("Flash Test Passed\r\n");
+    wolfBoot_printf("Flash Test Passed\n");
     return ret;
 }
 #endif /* ENABLE_ELBC && TEST_FLASH */
+
+#if defined(ENABLE_ESPI) && defined(TEST_TPM)
+#ifndef SPI_CS_TPM
+#define SPI_CS_TPM 2
+#endif
+int test_tpm(void)
+{
+    /* Read 4 bytes at TIS addresss D40F00. Assumes 0 wait state on TPM */
+    uint8_t tx[8] = {0x83, 0xD4, 0x0F, 0x00,
+                     0x00, 0x00, 0x00, 0x00};
+    uint8_t rx[8] = {0};
+
+    hal_espi_init(SPI_CS_TPM, 2000000, 0);
+    hal_espi_xfer(SPI_CS_TPM, tx, rx, (uint32_t)sizeof(rx), 0);
+
+    wolfBoot_printf("RX: 0x%x\n", *((uint32_t*)&rx[4]));
+    return rx[4] != 0xFF ? 0 : -1;
+}
+#endif

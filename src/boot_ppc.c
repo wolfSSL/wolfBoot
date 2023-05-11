@@ -108,6 +108,31 @@ void boot_entry_C(void)
     main();
 }
 
+#ifndef BUILD_LOADER_STAGE1
+void flush_cache(uint32_t start_addr, uint32_t size)
+{
+    uint32_t addr, start, end;
+
+    start = start_addr & ~(L1_CACHE_LINE_SIZE - 1);
+    end = start_addr + size - 1;
+
+    for (addr = start; (addr <= end) && (addr >= start);
+            addr += L1_CACHE_LINE_SIZE) {
+        asm volatile("dcbst 0,%0" : : "r" (addr) : "memory");
+    }
+    /* wait for all dcbst to complete on bus */
+    asm volatile("sync" : : : "memory");
+
+    for (addr = start; (addr <= end) && (addr >= start);
+            addr += L1_CACHE_LINE_SIZE) {
+        asm volatile("icbi 0,%0" : : "r" (addr) : "memory");
+    }
+    asm volatile("sync" : : : "memory");
+    /* flush prefetch queue */
+    asm volatile("isync" : : : "memory");
+}
+#endif
+
 #ifdef MMU
 void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
@@ -119,6 +144,12 @@ void do_boot(const uint32_t *app_offset)
     (void)dts_offset;
 #endif
 
+#ifndef BUILD_LOADER_STAGE1
+    /* invalidate cache */
+    flush_cache((uint32_t)app_offset, L1_CACHE_SZ);
+#endif
+
+    /* do branch unconditionally */
     asm volatile("mtlr %0; blr":: "r"(app_offset));
 }
 

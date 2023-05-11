@@ -317,20 +317,21 @@ endif
 ifeq ($(TARGET),nxp_p1021)
   # Power PC big endian
   ARCH_FLAGS=-m32 -mhard-float -mcpu=e500mc
+  ARCH_FLAGS+=-fno-builtin -ffreestanding -nostartfiles
   CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
   CFLAGS+=-DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
-  CFLAGS+=-feliminate-unused-debug-types
   LDFLAGS+=$(ARCH_FLAGS)
-  LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   UPDATE_OBJS:=src/update_ram.o
+
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
   else
     # Use the SP math all assembly accelerations
     CFLAGS+=-DWOLFSSL_SP_PPC
   endif
+  SPI_TARGET=nxp
 endif
 
 ifeq ($(TARGET),ti_hercules)

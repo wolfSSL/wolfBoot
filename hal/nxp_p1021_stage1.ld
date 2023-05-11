@@ -2,10 +2,13 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-BASE_ADDR = @WOLFBOOT_STAGE1_BASE_ADDR@;
+/* Adjust base address to 0xF8F80000 is debugging (run from L2 cache) */
+/* Boot ROM out of reset mapped to 0xFFFFF000 */
+BASE_ADDR = 0xFFFFF000; /* 0xF8F80000 */
 
-/* for flashing to NAND it must be 4KB */
-LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
+/* Boot ROM requires it must be < 4KB */
+/* If debugging this can be increased */
+LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@; /* 0x4000 */
 
 /* Boot initialization code */
 BOOTSTRAP_TLB = BASE_ADDR;
@@ -19,7 +22,7 @@ MEMORY
     FLASH (rx) : ORIGIN = BOOTSTRAP_TLB, LENGTH = LOADER_STAGE1_SIZE
 
     /* L1 as SRAM (up to 16KB) */
-    RAM (rwx) : ORIGIN = 0xffd00000, LENGTH = 16K
+    L1RAM (rwx) : ORIGIN = 0xFFD00000, LENGTH = 16K
 }
 
 SECTIONS
@@ -33,6 +36,9 @@ SECTIONS
         *(.text*)
         *(.rodata*)
         *(.sdata*)
+
+        /* For PIC the linker script variables come from here */
+        *(.got2)
     } > FLASH
     . = ALIGN(4);
 
@@ -63,7 +69,7 @@ SECTIONS
         KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
-    } > RAM
+    } > L1RAM
 
     .bss (NOLOAD) :
     {
@@ -76,8 +82,8 @@ SECTIONS
         __bss_end__ = .;
         . = ALIGN(16);
         _end = .;
-    } > RAM
+    } > L1RAM
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );
+PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)) );

@@ -1,6 +1,10 @@
-/* spi_drv_zynq.c
+/* spi_drv_nxp.c
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Driver for the SPI back-end of the SPI_FLASH module.
+ *
+ * Pinout: see spi_drv_nxp.h
+ *
+ * Copyright (C) 2023 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -17,42 +21,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
- *
- * Driver for the SPI back-end of the SPI_FLASH module.
- *
- * Example implementation for Zynq, using QSPI.
- *
- * Pinout: see spi_drv_zynq.h
  */
-
 #include <stdint.h>
+#include <stddef.h>
 #include "spi_drv.h"
-#include "spi_drv_zynq.h"
+#include "spi_drv_nxp.h"
 
-#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
+#ifdef WOLFBOOT_TPM
 
-void spi_cs_off(uint32_t base, int pin)
-{
-    (void)base;
-    (void)pin;
-}
+#if defined(PLATFORM_nxp_p1021)
+/* functions from nxp_p1021.c hal */
+extern void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode);
+extern int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont);
+extern void hal_espi_deinit(void);
+#endif
 
-void spi_cs_on(uint32_t base, int pin)
-{
-    (void)base;
-    (void)pin;
-}
-
-uint8_t spi_read(void)
-{
-    return 0;
-}
-
-void spi_write(const char byte)
-{
-
-}
-
+#include <wolftpm/tpm2_types.h>
 
 void spi_init(int polarity, int phase)
 {
@@ -60,30 +44,19 @@ void spi_init(int polarity, int phase)
     if (!initialized) {
         initialized++;
 
-        (void)polarity;
-        (void)phase;
+        hal_espi_init(SPI_CS_TPM, TPM2_SPI_MAX_HZ, (polarity | (phase << 1)));
     }
+    (void)polarity;
+    (void)phase;
 }
 
 void spi_release(void)
 {
-
+    hal_espi_deinit();
 }
 
-#ifdef WOLFBOOT_TPM
 int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
 {
-    uint32_t i;
-    spi_cs_on(SPI_CS_TPM_PIO_BASE, cs);
-    for (i = 0; i < sz; i++) {
-        spi_write((const char)tx[i]);
-        rx[i] = spi_read();
-    }
-    if (!cont) {
-        spi_cs_off(SPI_CS_TPM_PIO_BASE, cs);
-    }
-    return 0;
+    return hal_espi_xfer(cs, tx, rx, sz, cont);
 }
 #endif /* WOLFBOOT_TPM */
-
-#endif /* SPI_FLASH | WOLFBOOT_TPM */

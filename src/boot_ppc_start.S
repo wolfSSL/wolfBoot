@@ -123,12 +123,10 @@ Also see MPC8544ERM
 
 _reset:
 
-#ifdef DEBUG
         /* CRM 9.9.2 and EREF 10.4 enable debug interrupt */
         /* Set MSR DE (Debug Interrupt Enable = 1) */
         li      r1, MSR_DE
         mtmsr   r1
-#endif
 
 #ifdef PLATFORM_nxp_p1021
         /* Errata: A-005125 - force the core to process all snoops of IO device
@@ -186,6 +184,7 @@ startup_init:
         mfspr   r1, SPRN_DBSR
         mtspr   SPRN_DBSR, r1
 
+#ifndef BUILD_LOADER_STAGE1
 shrink_default_tlb1:
         /* Shrink the current TLB1 entry */
         bl find_pc
@@ -259,6 +258,7 @@ find_pc:
 
 2:      cmpw    r3, r4
         blt     1b
+#endif /* !BUILD_LOADER_STAGE1 */
 
 #ifdef ENABLE_INTERRUPTS
 setup_interrupts:
@@ -459,18 +459,16 @@ switch_as:
 #endif
 
 setup_l1:
+#ifdef ENABLE_L1_CACHE
         /* L1 Instruction Cache */
         l1_cache_invalidate(L1CSR1);
-        #ifdef ENABLE_L1_CACHE
         l1_cache_enable(L1CSR1);
-        #endif
+
         /* L1 Data Cache */
         l1_cache_invalidate(L1CSR0);
-        #ifdef ENABLE_L1_CACHE
         l1_cache_enable(L1CSR0);
-        #endif
+#endif
 
-#ifdef ENABLE_L1_CACHE
 l1_tlb:
 
         /* L1: TLB 0, Supervisor X/R/W, TS=0, 16K */
@@ -484,13 +482,15 @@ l1_tlb:
         set_tlb(0, 0, L1_CACHE_ADDR+0x3000, L1_CACHE_ADDR+0x1000, 0,
                 (MAS3_SX | MAS3_SW | MAS3_SR), 0, 0, BOOKE_PAGESZ_4K, 0, r3);
 
+#ifdef ENABLE_L1_CACHE
 l1_cache:
         /* setup L1 cache */
         lis     r3, L1_CACHE_ADDR@h
         ori     r3, r3, L1_CACHE_ADDR@l
+        /* read the cache size */
         mfspr   r2, L1CFG0
         andi.   r2, r2, 0x1FF
-        /* cache size * 1024 / (2 * L1 line size) */
+        /* calculate (cache size * 1024 / (2 * L1 line size)) */
         slwi    r2, r2, (10 - 1 - L1_CACHE_LINE_SHIFT)
         mtctr   r2
         li      r0, 0
@@ -498,7 +498,7 @@ l1_cache:
 l1_cache_init:
         dcbz    r0, r3
         dcbtls  0, r0, r3
-        addi    r3, r3, (1 << L1_CACHE_LINE_SHIFT)
+        addi    r3, r3, L1_CACHE_LINE_SIZE
         bdnz    l1_cache_init
 #endif /* ENABLE_L1_CACHE */
 
@@ -510,12 +510,12 @@ l1_cache_init:
         set_tlb(1, 9, L2SRAM_ADDR, L2SRAM_ADDR, 0, MAS3_SX | MAS3_SW | MAS3_SR,
                 MAS2_G, 0, BOOKE_PAGESZ_256K, 1, r3);
 
-        /* Configure the L2 Cache as SRAM (2=128KB) */
+        /* Configure the L2 Cache as SRAM (1=256KB) */
         sync
         lis     r0, L2CTL@h
         ori     r0, r0, L2CTL@l
-        lis     r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(2))@h
-        ori     r1, r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(2))@l
+        lis     r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(1))@h
+        ori     r1, r1, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(1))@l
         sync
         stw     r1, 0(r0)
 
@@ -564,6 +564,43 @@ isr_empty:
         nop
         rfi
 #endif
+
+
+/*
+ * unsigned long long get_ticks(void);
+ *
+ * read timebase as "long long"
+ */
+        .globl  get_ticks
+get_ticks:
+1:      mftbu   r3
+        mftb    r4
+        mftbu   r5
+        cmp     0, r3, r5
+        bne     1b
+        blr
+
+/*
+ * Delay for a number of ticks
+ */
+        .globl  wait_ticks
+wait_ticks:
+        mflr    r8               /* save link register */
+        mr      r7, r3           /* save tick count */
+        bl      get_ticks        /* Get start time */
+
+        /* Calculate end time */
+        addc    r7, r4, r7       /* Compute end time lower */
+        addze   r6, r3           /*     and end time upper */
+
+1:      bl      get_ticks        /* Get current time */
+        subfc   r4, r4, r7       /* Subtract current time from end time */
+        subfe.  r3, r3, r6
+        bge     1b               /* Loop until time expired */
+
+        mtlr    r8               /* restore link register */
+        blr
+
 
 /* reset entry point - must be at end of .S */
 .section .reset, "ax"

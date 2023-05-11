@@ -49,15 +49,25 @@
 #include "hal/spi/spi_drv_nrf52.h"
 #endif
 
+#if defined(PLATFORM_nxp_p1021)
+#include "hal/spi/spi_drv_nxp.h"
+#endif
+
 void spi_init(int polarity, int phase);
 void spi_release(void);
 
-#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
+#ifdef SPI_FLASH
 void spi_cs_on(uint32_t base, int pin);
 void spi_cs_off(uint32_t base, int pin);
 void spi_write(const char byte);
 uint8_t spi_read(void);
-#endif /* SPI_FLASH || WOLFBOOT_TPM */
+#endif
+
+#ifdef WOLFBOOT_TPM
+/* Perform a SPI transaction. Set cont!=0 to not let CS go low after this */
+/* cont 0=is last transfer and will de-assert CS, 1=leave CS asserted */
+int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont);
+#endif
 
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 

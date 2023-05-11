@@ -1,8 +1,4 @@
-/* app_nxp_p1021.c
- *
- * Copyright (C) 2022 wolfSSL Inc.
- *
- * This file is part of wolfBoot.
+/* spi_drv_nxp.h
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,33 +15,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifndef SPI_DRV_NXP_H_INCLUDED
+#define SPI_DRV_NXP_H_INCLUDED
+
 #include <stdint.h>
-#include "../hal/nxp_ppc.h"
-#include "printf.h"
 
-static const char* hex_lut = "0123456789abcdef";
+#if defined(PLATFORM_nxp_p1021)
 
-void main(void)
-{
-    int i = 0;
-    int j = 0;
-    int k = 0;
-    char snum[8];
+/* Chip select for TPM */
+#ifndef SPI_CS_TPM
+#define SPI_CS_TPM 2
+#endif
 
-    uart_init();
+#endif
 
-    uart_write("Test App\n", 9);
-
-    /* Wait for reboot */
-    while(1) {
-        for (j=0; j<1000000; j++)
-            ;
-        i++;
-
-        uart_write("\r\n0x", 4);
-        for (k=0; k<8; k++) {
-            snum[7 - k] = hex_lut[(i >> 4*k) & 0xf];
-        }
-        uart_write(snum, 8);
-    }
-}
+#endif /* !SPI_DRV_NXP_H_INCLUDED */

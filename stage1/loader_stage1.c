@@ -40,22 +40,24 @@
     #define WOLFBOOT_STAGE1_SIZE (4*1024)
 #endif
 
-#ifndef WOLFBOOT_STAGE1_START_ADDR
-    /* default is end of 4KB region (0x0FFC) */
-    #define WOLFBOOT_STAGE1_START_ADDR \
-        (WOLFBOOT_STAGE1_LOAD_ADDR + WOLFBOOT_STAGE1_SIZE - 0x4)
-#endif
-
 #ifdef BUILD_LOADER_STAGE1
 
 #if defined(WOLFBOOT_ARCH) && WOLFBOOT_ARCH == PPC
 #include "hal/nxp_ppc.h"
 #endif
 
+#ifndef DO_BOOT
+#ifdef MMU
+#define DO_BOOT(addr) do_boot((addr), NULL)
+#else
+#define DO_BOOT(addr) do_boot((addr))
+#endif
+#endif
+
 int main(void)
 {
     int ret = -1;
-    __attribute__((noreturn)) void (*wolfboot_start)(void);
+    uint32_t* wolfboot_start;
 
     hal_init();
     spi_flash_probe(); /* make sure external flash is initialized */
@@ -71,13 +73,13 @@ int main(void)
     /* if this is executing from boot 4KB region (FCM buffer) it must
      * first be relocated to RAM before the eLBC NAND can be read */
     if (((uintptr_t)&hal_init & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
-        wolfboot_start = (void*)WOLFBOOT_STAGE1_BASE_ADDR + BOOT_ROM_SIZE - 0x04;
+        wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_BASE_ADDR;
 
         /* relocate 4KB code to DST and jump */
         memmove((void*)WOLFBOOT_STAGE1_BASE_ADDR, (void*)BOOT_ROM_ADDR,
             BOOT_ROM_SIZE);
 
-        wolfboot_start(); /* never returns */
+        DO_BOOT(wolfboot_start); /* never returns */
     }
 #endif
 
@@ -87,8 +89,14 @@ int main(void)
         BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
     );
     if (ret >= 0) {
-        wolfboot_start = (void*)WOLFBOOT_STAGE1_START_ADDR;
-        wolfboot_start(); /* never returns */
+        wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_LOAD_ADDR;
+    #ifdef PRINTF_ENABLED
+        wolfBoot_printf("Jumping to %p\r\n", wolfboot_start);
+    #elif defined(DEBUG_UART)
+        uart_write("Jump to relocated wolfboot_start\r\n", 34);
+    #endif
+
+        DO_BOOT(wolfboot_start); /* never returns */
     }
 
     return 0;

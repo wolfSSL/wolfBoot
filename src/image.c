@@ -722,17 +722,13 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
 static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     word16 xferSz, void* userCtx)
 {
-    (void)userCtx;
-    (void)ctx;
-    word16 i;
-    spi_cs_on(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
+    int ret;
+
     memset(rxBuf, 0, xferSz);
-    for (i = 0; i < xferSz; i++)
-    {
-        spi_write(txBuf[i]);
-        rxBuf[i] = spi_read();
-    }
-    spi_cs_off(SPI_CS_TPM_PIO_BASE, SPI_CS_TPM);
+    ret = spi_xfer(SPI_CS_TPM, txBuf, rxBuf, xferSz, 0);
+
+    /* TODO: Add TIS wait states */
+
     /*
     printf("\r\nSPI TX: ");
     printbin(txBuf, xferSz);
@@ -740,7 +736,11 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     printbin(rxBuf, xferSz);
     printf("\r\n");
     */
-    return 0;
+
+    (void)userCtx;
+    (void)ctx;
+
+    return ret;
 }
 #endif /* !ARCH_SIM */
 
@@ -793,17 +793,18 @@ int wolfBoot_tpm2_init(void)
 #else
     rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
 #endif
-    if (rc != 0)  {
-        return rc;
+    if (rc == 0)  {
+        /* Get device capabilities + options */
+        rc = wolfTPM2_GetCapabilities(&wolftpm_dev, &caps);
+    }
+    if (rc == 0) {
+        wolfBoot_printf("Mfg %s (%d), Vendor %s, Fw %u.%u (0x%x), "
+            "FIPS 140-2 %d, CC-EAL4 %d\n",
+            caps.mfgStr, caps.mfg, caps.vendorStr, caps.fwVerMajor,
+            caps.fwVerMinor, caps.fwVerVendor, caps.fips140_2, caps.cc_eal4);
     }
 
-    /* Get device capabilities + options */
-    rc = wolfTPM2_GetCapabilities(&wolftpm_dev, &caps);
-    if (rc != 0)  {
-        return rc;
-    }
-
-    return 0;
+    return rc;
 }
 
 void wolfBoot_tpm2_deinit(void)

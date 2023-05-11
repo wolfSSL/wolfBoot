@@ -351,7 +351,7 @@ enum ifc_amask_sizes {
 
 
 #ifdef DEBUG_UART
-static void uart_init(void)
+void uart_init(void)
 {
     /* calc divisor for UART
      * example config values:

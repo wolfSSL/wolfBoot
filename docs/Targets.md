@@ -90,7 +90,7 @@ The output `policySigned` is in DER format and we need the signature in raw form
 
 ```
 $ openssl asn1parse -inform DER -in policySigned
-    0:d=0  hl=2 l=  69 cons: SEQUENCE          
+    0:d=0  hl=2 l=  69 cons: SEQUENCE
     2:d=1  hl=2 l=  32 prim: INTEGER           :74BD2EAD183EE4B3A9A81ABC14B35DEB124148B9EF756C51B163A15CD9F37F7E
    36:d=1  hl=2 l=  33 prim: INTEGER           :8A42B3E9CD1E7721B1697E08841D2982CC38756E6511938C2DB187FF16E5076C
 $ echo "74BD2EAD183EE4B3A9A81ABC14B35DEB124148B9EF756C51B163A15CD9F37F7E8A42B3E9CD1E7721B1697E08841D2982CC38756E6511938C2DB187FF16E5076C" | xxd -r -p - policySigned.raw
@@ -1121,6 +1121,8 @@ WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
 
 The NXP QorIQ P1021 is a PPC e500v2 based processor (two cores). This has been tested with a NAND boot source.
 
+### Boot ROM NXP P1021
+
 wolfBoot supports loading from external flash using the eLBC FMC (Flash Machine) with NAND.
 
 When each e500 core comes out of reset, its MMU has one 4-Kbyte page defined at `0x0_FFFF_Fnnn`. For NAND boot the first 4KB is loaded to this region with the first offset jump instruction at `0x0_FFFF_FFFC`. The 4KB is mapped to the eLBC FCM buffers.
@@ -1134,6 +1136,18 @@ These pin determine if the boot ROM will use small or large flash page:
 If the boot sequencer is not enabled, the processor cores exit reset and fetches boot code in default configurations.
 
 A loader must reside in the 4KB page to handle early startup including DDR and then load wolfBoot into DDR for execution.
+
+### Design for NXP P1021
+
+1) First stage loader (4KB) resides in first block of NAND flash.
+2) Boot ROM loads this into eLBC FCM RAM and maps it to 0xFFFF0000 and sets PC to 0xFFFFFFFC
+3) wolfBoot boot assembly configures TLB MMU, LAW, DDR3 and UART (same for all boot stages)
+4) First stage loader relocates itself to DDR (to free FCM to allow reading NAND)
+5) First stage loader reads entire wolfBoot from NAND flash to DDR and jumps to it
+6) wolfBoot loads and parses the header for application partition
+7) wolfBoot performs SHA2-384 hash of the application
+8) wolfBoot performs a signature verification of the hash
+9) wolfBoot loads the application into DDR and jumps to it
 
 ### First Stage Loader (stage 1) for NXP P1021 PPC
 
@@ -1160,6 +1174,22 @@ make clean && make
 | test-app/image_v1_signed.bin | 0x00200000  |
 | update                       | 0x01200000  |
 | swap block                   | 0x02200000  |
+
+
+### Debugging NXP P1021 PPC
+
+Use `V=1` to show verbose output for build steps.
+Use `DEBUG=1` to enable debug symbols.
+
+The first stage loader must fit into 4KB. To build this in release and assemble a debug version of wolfBoot use the following steps:
+
+```
+make clean
+make stage1
+make DEBUG=1 wolfboot.bin
+make DEBUG=1 test-app/image_v1_signed.bin
+make factory_wstage1.bin
+```
 
 
 ## NXP QorIQ T2080 PPC

@@ -26,21 +26,23 @@
 #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
 #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
 #define MMU_V1
-#define ENABLE_L1_CACHE
-#define ENABLE_L2_CACHE
-
-/* Setup L2 as SRAM */
-//#define L2SRAM_ADDR  (0xF8F80000)
-
-/* Relocate CCSRBAR */
-#define CCSRBAR 0xFFE00000
 
 /* Memory used for transferring blocks to/from NAND.
  * Maps to eLBC FCM internal 8KB region (by hardware) */
 #define FLASH_BASE_ADDR 0xFC000000
 
+/* For full wolfBoot */
 #ifndef BUILD_LOADER_STAGE1
-#define ENABLE_INTERRUPTS
+    #define ENABLE_L1_CACHE
+    #define ENABLE_L2_CACHE
+
+    /* Relocate CCSRBAR */
+    #define CCSRBAR 0xFFE00000
+
+    #define ENABLE_INTERRUPTS
+
+    /* Setup L2 as SRAM */
+    #define L2SRAM_ADDR  (0xF8F80000)
 #endif
 
 #elif defined(PLATFORM_nxp_t2080)
@@ -71,7 +73,7 @@
 #define CCSRBAR_DEF 0xFE000000
 #endif
 #ifndef CCSRBAR
-#define CCSRBAR     0xFE000000
+#define CCSRBAR     CCSRBAR_DEF
 #endif
 
 
@@ -92,6 +94,8 @@
 
 #define MAS1_TSIZE_MASK    0x00000F00
 #define MAS1_TSIZE(x)      (((x) << 8) & MAS1_TSIZE_MASK)
+
+#define L1_CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
 
 #else
 /* MMU V2 - e6500 */
@@ -121,17 +125,18 @@
 #define MAS1_TSIZE_MASK    0x00000F80
 #define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
 
-#define L1_CACHE_LINE_SHIFT 6 /* bytes per L1 cache line */
-#endif
+#define L1_CACHE_LINE_SHIFT 4 /* 64 bytes per L1 cache line */
+#endif /* MMU V1/V2 */
 
 #ifndef L1_CACHE_ADDR
 #define L1_CACHE_ADDR   0xFFD00000
 #endif
 #ifndef L1_CACHE_SZ
-#define L1_CACHE_SZ     (16 * 1024)
+#define L1_CACHE_SZ     (32 * 1024)
 #endif
-#ifndef L1_CACHE_LINE_SHIFT
-#define L1_CACHE_LINE_SHIFT 5 /* bytes per L1 cache line */
+
+#ifndef L1_CACHE_LINE_SIZE
+#define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
 #endif
 
 
@@ -334,6 +339,12 @@ static inline void set32(volatile unsigned *addr, int val)
 /* C version in boot_ppc.c */
 extern void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
     uint8_t perms, uint8_t wimge, uint8_t ts, uint8_t tsize, uint8_t iprot);
+
+extern void uart_init(void);
+
+/* from boot_ppc_start.S */
+extern unsigned long long get_ticks(void);
+extern void	wait_ticks(unsigned long);
 
 #else
 /* Assembly version */
