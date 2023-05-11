@@ -39,7 +39,7 @@ To enable measured boot add `MEASURED_BOOT=1` setting in your wolfBoot config.
 
 It is also necessary to select the PCR (index) where the measurement will be stored.
 
-Selection is made using the `MEASURED_BOOT_PCR_A=[index]` setting. Add this
+Selection is made using the `MEASURED_PCR_A=[index]` setting. Add this
 setting in your wolfBoot config and replace `[index]` with a number between
 0 and 23. Below you will find guidelines for selecting a PCR index.
 
