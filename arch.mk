@@ -721,7 +721,7 @@ ifeq ($(DUALBANK_SWAP),1)
   UPDATE_OBJS:=src/update_flash_hwswap.o
 endif
 
-ifeq ("$(UPDATE_OBJS)","")
+ifeq ($(UPDATE_OBJS),)
   UPDATE_OBJS:=./src/update_flash.o
 endif
 

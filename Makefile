@@ -52,7 +52,6 @@ include options.mk
 
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
-OBJS+=$(UPDATE_OBJS)
 
 CFLAGS+= \
   -I"." -I"include/" -I"lib/wolfssl" \
