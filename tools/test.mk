@@ -146,11 +146,11 @@ test-sim-external-flash-with-enc-update:SIGN_ENC_ARGS=--encrypt /tmp/enc_key.der
 test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.elf test-app/image.bak.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
+	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) 1
 	$(Q)cp test-app/image.bak.elf test-app/image.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	# Assembling internal flash image
