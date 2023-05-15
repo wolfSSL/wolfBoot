@@ -92,7 +92,7 @@ ifeq ($(TARGET),raspi3)
 endif
 
 ifeq ($(TARGET),sim)
-	MAIN_TARGET:=wolfboot.elf tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
+	MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 
 ifeq ($(TARGET),nxp_p1021)
