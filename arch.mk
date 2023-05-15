@@ -414,7 +414,6 @@ ifeq ($(TARGET),psoc6)
 endif
 
 
-CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 
 USE_GCC?=1
 USE_GCC_HEADLESS?=1
@@ -452,6 +451,7 @@ ifeq ($(TARGET),x86_64_efi)
 endif
 
 ifeq ($(TARGET),sim)
+  ARCH_FLASH_OFFSET=0xC0000000
   USE_GCC_HEADLESS=0
   LD = gcc
   UPDATE_OBJS:=src/update_flash.o
@@ -461,6 +461,7 @@ ifeq ($(TARGET),sim)
   CFLAGS+=-DARCH_SIM
 endif
 
+CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 BOOT_IMG?=test-app/image.bin
 
 ## Update mechanism

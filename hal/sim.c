@@ -127,14 +127,14 @@ void hal_init(void)
     uint8_t *p;
     int i;
     ret = mmap_file(INTERNAL_FLASH_FILE,
-                    (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS, &p);
+                    (uint8_t*)ARCH_FLASH_OFFSET, &p);
     if (ret != 0) {
         fprintf(stderr,"failed to load internal flash file\n");
         exit(-1);
     }
 
 #ifdef EXT_FLASH
-    ret = mmap_file(EXTERNAL_FLASH_FILE, NULL, &flash_base);
+    ret = mmap_file(EXTERNAL_FLASH_FILE, (uint8_t*)ARCH_FLASH_OFFSET + 0x10000000, &flash_base);
     if (ret != 0) {
         fprintf(stderr,"failed to load internal flash file\n");
         exit(-1);
@@ -190,8 +190,8 @@ void do_boot(const uint32_t *app_offset)
         exit(-1);
     }
 
-    ret = write(fd, app_offset, WOLFBOOT_PARTITION_SIZE);
-    if (ret != WOLFBOOT_PARTITION_SIZE) {
+    ret = write(fd, app_offset, WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE);
+    if (ret != WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE) {
         fprintf(stderr,"can't write test-app to memfd\n");
         exit(-1);
     }

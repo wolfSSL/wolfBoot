@@ -31,6 +31,15 @@
 
 #ifdef PLATFORM_sim
 
+/* Matches all keys:
+ *    - chacha (32 + 12)
+ *    - aes128 (16 + 16)
+ *    - aes256 (32 + 16)
+ */
+/* Longest key possible: AES256 (32 key + 16 IV = 48) */
+char enc_key[] = "0123456789abcdef0123456789abcdef"
+		 "0123456789abcdef";
+
 void hal_init(void);
 
 int do_cmd(const char *cmd)
@@ -66,6 +75,10 @@ int main(int argc, char *argv[]) {
     int ret;
 
     hal_init();
+
+#if EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
+#endif
 
     for (i = 1; i < argc; ++i) {
         ret = do_cmd(argv[i]);
