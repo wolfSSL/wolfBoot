@@ -163,6 +163,11 @@ test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_and_encrypted.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
 
+test-sim-external-flash-with-enc-delta-update:
+	make test-sim-external-flash-with-enc-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
+	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff_encrypted.bin \
+		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
+
 test-sim-internal-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.elf test-app/image.bak.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc

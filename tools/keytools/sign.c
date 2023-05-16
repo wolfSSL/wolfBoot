@@ -1231,7 +1231,7 @@ int main(int argc, char** argv)
     printf("wolfBoot version %X\n", WOLFBOOT_VERSION);
 
     /* Check arguments and print usage */
-    if (argc < 4 || argc > 12) {
+    if (argc < 4 || argc > 14) {
         printf("Usage: %s [options] image key version\n", argv[0]);
         printf("For full usage manual, see 'docs/Signing.md'\n");
         exit(1);
