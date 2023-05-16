@@ -219,7 +219,7 @@ static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
     if (*((uint32_t *)(addr_write + NVM_CACHE_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED)
     {
-        hal_flash_erase(addr_read, NVM_CACHE_SIZE);
+        hal_flash_erase(addr_write, NVM_CACHE_SIZE);
     }
 #if FLASHBUFFER_SIZE != WOLFBOOT_SECTOR_SIZE
     addr_off = 0;
