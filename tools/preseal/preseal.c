@@ -23,6 +23,7 @@
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolftpm/tpm2_wrap.h>
+#include <hal/tpm_io.h>
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -216,7 +217,12 @@ int main(int argc, char** argv)
     #endif
 #endif
 
+#ifdef SIM
     rc = wolfTPM2_Init(&dev, NULL, NULL);
+#else
+    rc = wolfTPM2_Init(&dev, TPM2_IoCb, NULL);
+#endif
+
     if (rc != TPM_RC_SUCCESS) {
         printf("wolfTPM2_Init failed 0x%x: %s\n", rc, TPM2_GetRCString(rc));
         goto exit;
