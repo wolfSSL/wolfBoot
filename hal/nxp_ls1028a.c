@@ -722,8 +722,8 @@ static void spi_transaction(unsigned int sel, unsigned int pcs,
     }
 }
 
-
-#if 0
+/*#define TPM_TEST*/
+#ifdef TPM_TEST
 void read_tpm_id()
 {
     /*Read 4 bytes from offset D40F00.  Assumes 0 wait state on TPM*/
@@ -1354,6 +1354,12 @@ void hal_init(void) {
     hal_flash_init();
     wolfBoot_printf("Flash init done\n");
     //test_flash();
+
+#ifdef TPM_TEST
+    read_tpm_id();
+    wolfBoot_printf("TPM test done\n");
+
+#endif
 
     hal_ddr_init();
     wolfBoot_printf("DDR init done\n");

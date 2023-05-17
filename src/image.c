@@ -138,10 +138,12 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     ret = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, &tpmKey, TPM_ECC_NIST_P256,
             pubkey, KEYSTORE_ECC_POINT_SIZE, pubkey + KEYSTORE_ECC_POINT_SIZE,
             KEYSTORE_ECC_POINT_SIZE);
-    if (ret < 0)
+    wolfBoot_printf("LoadEccPublicKey ret: %d\n", ret);
+     if (ret < 0)
         return;
 #ifdef WOLFTPM_KEYSTORE
     ret = wolfBoot_unseal_pubkey(pubkey, &tpmKey);
+    wolfBoot_printf("Unseal PubKey ret: %d\n", ret);
     if (ret < 0) {
         wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
 
@@ -151,7 +153,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey, sig,
             IMAGE_SIGNATURE_SIZE, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
             TPM_ALG_ECDSA, TPM_ALG_SHA256);
-
+    wolfBoot_printf("Verify Hash Scheme ret: %d\n", ret);
     /* unload handlre regardless of result */
     wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
 
@@ -855,8 +857,10 @@ int wolfBoot_unseal_encryptkey(uint8_t* key, uint32_t* keySz)
         return ret;
 
     /* get the boot digest */
+    wolfBoot_printf("Unseal Enc- hash start\n");
     if (image_hash(&boot, bootDigest) != 0)
         return -1;
+    wolfBoot_printf("Unseal Enc- hash completed\n");
 
     /* find the keyslot of the public key */
     pubkeyHintSize = get_header(&boot, HDR_PUBKEY, &pubkeyHint);
@@ -972,8 +976,10 @@ int wolfBoot_reseal_keys(struct wolfBoot_image* newImg,
         return -1;
 
     /* get the backupImg hash */
+    wolfBoot_printf("Reseal keys- hash start\n");
     if (image_hash(backupImg, workingDigest) != 0)
         return -1;
+    wolfBoot_printf("Reseal keys- hash completed\n");
 
     /* clear out the PCR digest */
     pcrReset.pcrHandle = wolftpmPcrArray[0];
@@ -1053,8 +1059,10 @@ int wolfBoot_reseal_keys(struct wolfBoot_image* newImg,
     XMEMSET(&pcrReset, 0, sizeof(PCR_Reset_In));
 
     /* get the newImg hash */
+    wolfBoot_printf("Reseal keys- new hash start\n");
     if (image_hash(newImg, workingDigest) != 0)
         return -1;
+    wolfBoot_printf("Reseal keys- new hash completed\n");
 
     /* clear out the PCR digest */
     pcrReset.pcrHandle = wolftpmPcrArray[0];
@@ -1153,36 +1161,43 @@ static int wolfBoot_unseal_pubkey(uint8_t* pubkey, WOLFTPM2_KEY* tpmKey)
         return ret;
 
     /* get the boot digest */
+    wolfBoot_printf("Unseal pubkey- image hash start\n");
     if (image_hash(&boot, bootDigest) != 0)
         return -1;
+    wolfBoot_printf("Unseal pubkey- image hash completed\n");
 
     /* clear out the PCR digest */
     pcrReset.pcrHandle = wolftpmPcrArray[0];
 
     ret = TPM2_PCR_Reset(&pcrReset);
+    wolfBoot_printf("Unseal pubkey- reset pcr ret:%d\n",ret);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
     /* extend the PCRs with the image hash */
     ret = wolfTPM2_ExtendPCR(&wolftpm_dev, wolftpmPcrArray[0], TPM_ALG_SHA256,
         bootDigest, WOLFBOOT_SHA_DIGEST_SIZE);
+    wolfBoot_printf("Unseal pubkey- extend pcr ret:%d\n",ret);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
     /* start a policy session with parameter encryption */
     ret = wolfTPM2_StartSession(&wolftpm_dev, &wolftpm_session, NULL, NULL,
         TPM_SE_POLICY, TPM_ALG_CFB);
+    wolfBoot_printf("Unseal pubkey- start session with param enc ret:%d\n",ret);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
     /* set the auth session for the device */
     ret = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &wolftpm_session,
         (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt | TPMA_SESSION_continueSession));
+    wolfBoot_printf("Unseal pubkey- set auth session ret:%d\n",ret);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
     /* clear out the policy digest */
     ret = wolfTPM2_PolicyRestart(wolftpm_session.handle.hndl);
+    wolfBoot_printf("Unseal pubkey- policy restart:%d\n",ret);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
@@ -1196,7 +1211,8 @@ static int wolfBoot_unseal_pubkey(uint8_t* pubkey, WOLFTPM2_KEY* tpmKey)
         TPM_ALG_SHA256, (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray), NULL,
         0, policySignature, policySignatureSz, WOLFTPM_KEYSTORE_INDEX,
         WOLFTPM_POLICY_DIGEST_INDEX, tpmPubkey, (word32*)&tpmPubkeySz);
-    if (ret != TPM_RC_SUCCESS)
+    wolfBoot_printf("Unseal pubkey- unseal nv pubkey ret:%d\n",ret);
+   if (ret != TPM_RC_SUCCESS)
         return -ret;
 
     /* unload the intermediate key */
@@ -1206,6 +1222,7 @@ static int wolfBoot_unseal_pubkey(uint8_t* pubkey, WOLFTPM2_KEY* tpmKey)
     ret = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, tpmKey, TPM_ECC_NIST_P256,
         tpmPubkey, KEYSTORE_ECC_POINT_SIZE, tpmPubkey + KEYSTORE_ECC_POINT_SIZE,
         KEYSTORE_ECC_POINT_SIZE);
+    wolfBoot_printf("Unseal pubkey- load nv pubkey ret:%d\n",ret);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
@@ -1373,8 +1390,10 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     stored_sha_len = get_header(img, WOLFBOOT_SHA_HDR, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
+    wolfBoot_printf("Verify Integrity hash start\n");
     if (image_hash(img, digest) != 0)
         return -1;
+    wolfBoot_printf("Verify Integrity hash completed\n");
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
     /*
      * TPM measurement must be performed regardless of the
@@ -1437,8 +1456,10 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     if ((image_type & 0xFF00) != HDR_IMG_TYPE_AUTH)
         return -1;
     if (img->sha_hash == NULL) {
+        wolfBoot_printf("Verify Authenticity hash start\n");
         if (image_hash(img, digest) != 0)
             return -1;
+        wolfBoot_printf("Verify Integrity hash completed\n");
         img->sha_hash = digest;
     }
     key_mask = keystore_get_mask(key_slot);
