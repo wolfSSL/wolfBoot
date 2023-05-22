@@ -334,6 +334,22 @@ ifeq ($(TARGET),nxp_p1021)
   SPI_TARGET=nxp
 endif
 
+ifeq ($(TARGET),nxp_ls1028a)
+  ARCH_FLAGS=-mcpu=cortex-a72+crypto -mstrict-align -march=armv8-a+crypto -mtune=cortex-a72
+  CFLAGS+=$(ARCH_FLAGS) -DCPU_A72 -DTARGET_LS1028A #-DWOLFSSL_ARMASM -DWOLFSSL_NO_HASH_RAW
+  LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT" 
+  CFLAGS +=-ffunction-sections -fdata-sections
+  CFLAGS +=-Ihal/mmu/
+  LDFLAGS+=-Wl,--gc-sections
+
+  #WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o
+
+  ifeq ($(DEBUG_UART),0)
+    CFLAGS+=-fno-builtin-printf
+  endif
+  SPI_TARGET=nxp
+endif
+
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1

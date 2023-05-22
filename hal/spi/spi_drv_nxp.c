@@ -36,15 +36,31 @@ extern int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, in
 extern void hal_espi_deinit(void);
 #endif
 
+#if defined(PLATFORM_nxp_ls1028a)
+/* Functions from hal/nxp_ls1028a.c */
+extern void nxp_ls1028a_spi_init(unsigned int sel);
+extern int nxp_ls1028a_spi_xfer(unsigned int sel, unsigned int cs,
+        const unsigned char *out, unsigned char *in,
+        unsigned int size, int cont);
+extern void nxp_ls1028a_spi_deinit(unsigned int sel);
+#endif
+
 #include <wolftpm/tpm2_types.h>
+
+static int initialized = 0;
 
 void spi_init(int polarity, int phase)
 {
-    static int initialized = 0;
     if (!initialized) {
         initialized++;
 
+#if defined(PLATFORM_nxp_p1021)
         hal_espi_init(SPI_CS_TPM, TPM2_SPI_MAX_HZ, (polarity | (phase << 1)));
+#endif
+
+#if defined(PLATFORM_nxp_ls1028a)
+        nxp_ls1028a_spi_init(SPI_SEL_TPM);
+#endif
     }
     (void)polarity;
     (void)phase;
@@ -52,11 +68,29 @@ void spi_init(int polarity, int phase)
 
 void spi_release(void)
 {
-    hal_espi_deinit();
+    if(initialized) {
+        initialized--;
+
+#if defined(PLATFORM_nxp_p1021)
+        hal_espi_deinit();
+#endif
+
+#if defined(PLATFORM_nxp_ls1028a)
+        nxp_ls1028a_spi_deinit(SPI_SEL_TPM);
+#endif
+
+    }
 }
 
 int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
 {
+#if defined(PLATFORM_nxp_p1021)
     return hal_espi_xfer(cs, tx, rx, sz, cont);
+#endif
+
+#if defined(PLATFORM_nxp_ls1028a)
+    return nxp_ls1028a_spi_xfer(SPI_SEL_TPM, cs, tx, rx, sz, cont);
+#endif
+
 }
 #endif /* WOLFBOOT_TPM */

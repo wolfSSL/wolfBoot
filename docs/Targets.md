@@ -13,6 +13,7 @@ This README describes configuration of supported targets.
 * [NXP P1021 PPC](#nxp-p1021-ppc)
 * [NXP T2080 PPC](#nxp-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [NXP LS1028A](#nxp-ls1028a)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -1528,3 +1529,92 @@ make test-sim-internal-flash-with-update
 # it should print 2
 ./wolfboot.elf success get_version
 ```
+
+## NXP LS1028A
+
+The LS1028A is a AARCH64 armv8-a Cortex-A72 processor. Support has been tested with the NXP LS1028ARDB.
+
+Example configurations for this target are provided in:
+* NXP LS1028A: [/config/examples/nxp-ls1028a.config](/config/examples/nxp-ls1028a.config).
+
+### Building wolfBoot for NXP LS1028A
+
+1. Download `aarch64-none-elf-` toolchain.
+
+2. Copy the example `nxp_ls1028a.cofig` file to root directory and rename to `.config`
+
+3. Build keytools and wolfboot
+   
+```
+cp ./config/examples/nxp-ls1028a.config .config
+make distclean
+make keytools
+make 
+```
+
+This should output 3 binary files, `wolfboot.bin`, `image_v1_signed.bin` and `factory.bin`
+- `wolfboot.bin` is the wolfboot binary 
+- `image_v1_signed.bin` is the signed application image and by default is `test-app/app_nxp_ls1028a`
+- `factory.bin` is the two binaries merged together 
+
+
+### Hardware Setup LS1028ARDB
+DIP Switch Configuraiton for XSPI_NOR_BOOT:
+```
+SW2 : 0xF8 = 11111000  SW3 : 0x70 = 01110000  SW5 : 0x20 = 00100000
+Where '1' = UP/ON
+```
+
+UART Configuraiton: 
+```
+Baud Rate: 115200
+Data Bits: 8
+Parity: None
+Stop Bits: 1
+Flow Control: None
+Specify device type - PC16552D
+Configured for UART1 DB9 Connector
+```
+
+### Programming NXP LS1028A
+
+Programming requires three components: 
+1. RCW binary - Distribured by NXP at `https://source.codeaurora.org/external/qoriq/qoriq-components/rcw` or can be generated (tested on `rcw_1300.bin`)
+2. Woflboot 
+3. Applicaiton - Test app found in `/test-app/app_nxp_ls1028a.c`
+
+Once you have all components, you can use a lauterbach or CW to flash NOR flash. You must flash RCW, wolfboot and singed_image. `factory.bin` can be used which is wolfboot and the signed image merged. You will need to build a signed image for every update to the application code, which can be done by using keytools in `tools/keytools/sign` see `docs/Signing.md` for more details
+and to sign a custom image.
+
+```
+Usage: tools/keytools/sign [options] image key version
+```
+
+## Lauterbach Flashing and Debugging
+
+1. Launch lauterbach and open the demo script `debug_wolfboot.cmm`.
+2. Open any desired debug windows.
+3. Hit the play button on the demo script.
+4. It should pop up with a code window and at the reset startpoint. (May requrie a reset or power cycle)
+
+```
+./t32/bin/macosx64/t32marm-qt
+
+Open Script > debug_wolfboot.cmm
+```
+
+You can modify the Lauterbach NOR flash demo or use `debug_wolfboot.cmm` script, just make sure the flash offset for 
+the RCW is `0x0` and the address offset for wolboot is `0x1000`.
+
+
+## Other Tools
+
+1. Make sure the memory addresses are alinged with the `.config` file.
+2. Note the important NOR flash addresses in the defualt config are as follows.
+3. RCW location is offset `0x0` or `0x20000000` memory mapped.
+4. Wolfboot location is offset `0x1000` or `0x20001000` where wolfboot starts.
+5. Application location is offset `0x20000` or `0x20020000` where application code goes.
+6. Update location is offset `0x40000` or `0x20040000` where the new or updated applciaiton goes. 
+7. Load Location is `0x18020100` which is OCRAM or where the applciaiton code is loaded if using RAM loading from
+8. DTS Location is
+9. Update memory locations as neeeded. 

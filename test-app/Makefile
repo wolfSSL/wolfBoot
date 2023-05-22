@@ -253,6 +253,10 @@ ifeq ($(TARGET),psoc6)
   CFLAGS+=-DCY8C624ABZI_D44
 endif
 
+ifeq ($(TARGET),nxp_ls1028a)
+  LSCRIPT_TEMPLATE:=AARCH64-ls1028a.ld
+endif
+
 CFLAGS+=-I../lib/wolfssl
 
 
