@@ -70,9 +70,13 @@ tools/keytools/x64
 tools/keytools/Debug
 tools/keytools/Release
 
-# preseal binary
+# preseal binaries
 tools/preseal/preseal
 tools/preseal/preseal.exe
+tools/preseal/keygen
+tools/preseal/keygen.exe
+tools/preseal/sign
+tools/preseal/sign.exe
 
 # delta binaries
 tools/delta/bmdiff

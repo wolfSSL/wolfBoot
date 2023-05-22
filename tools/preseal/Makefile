@@ -1,9 +1,21 @@
-CC = gcc
-CFLAGS:=
+-include ../../.config
 
-ifneq ($(NO_FILESYSTEM),)
+CC      = gcc
+WOLFBOOTDIR = ../..
+WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl/
+WOLFTPMDIR = $(WOLFBOOTDIR)/lib/wolfTPM/
+CFLAGS  = -Wall -Wextra -Werror
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFTPMDIR)
+
+DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE -fsanitize=address
+
+ifeq ($(ARCH),sim)
+CFLAGS+=-DPRESEAL_SIM
+endif
+
+ifneq ($(NO_PRESEAL_FILESYSTEM),)
 CFLAGS+= \
-	-DNO_FILESYSTEM \
+	-DNO_PRESEAL_FILESYSTEM \
 	-DPUBKEY=\"$(PUBKEY)\" \
 	-DPOLICY_PUBKEY=\"$(POLICY_PUBKEY)\" \
 	-DPOLICY_SIGNED=\"$(POLICY_SIGNED)\" \
@@ -13,25 +25,55 @@ CFLAGS+= \
 	-DPCR_INDEX=$(PCR_INDEX)
 endif
 
-ifneq ($(SIM),)
-CFLAGS+=-DSIM
-endif
+# Sources
+SRC=$(WOLFDIR)wolfcrypt/src/asn.c \
+	$(WOLFDIR)wolfcrypt/src/aes.c \
+	$(WOLFDIR)wolfcrypt/src/ecc.c \
+	$(WOLFDIR)wolfcrypt/src/coding.c \
+	$(WOLFDIR)wolfcrypt/src/chacha.c \
+	$(WOLFDIR)wolfcrypt/src/ed25519.c \
+	$(WOLFDIR)wolfcrypt/src/ed448.c \
+	$(WOLFDIR)wolfcrypt/src/fe_operations.c \
+	$(WOLFDIR)wolfcrypt/src/ge_operations.c \
+	$(WOLFDIR)wolfcrypt/src/fe_448.c \
+	$(WOLFDIR)wolfcrypt/src/ge_448.c \
+	$(WOLFDIR)wolfcrypt/src/hash.c \
+	$(WOLFDIR)wolfcrypt/src/logging.c \
+	$(WOLFDIR)wolfcrypt/src/memory.c \
+	$(WOLFDIR)wolfcrypt/src/random.c \
+	$(WOLFDIR)wolfcrypt/src/rsa.c \
+	$(WOLFDIR)wolfcrypt/src/hmac.c \
+	$(WOLFDIR)wolfcrypt/src/sp_int.c \
+	$(WOLFDIR)wolfcrypt/src/sp_c32.c \
+	$(WOLFDIR)wolfcrypt/src/sp_c64.c \
+	$(WOLFDIR)wolfcrypt/src/sha3.c \
+	$(WOLFDIR)wolfcrypt/src/sha256.c \
+	$(WOLFDIR)wolfcrypt/src/sha512.c \
+	$(WOLFDIR)wolfcrypt/src/tfm.c \
+	$(WOLFDIR)wolfcrypt/src/wc_port.c \
+	$(WOLFDIR)wolfcrypt/src/wolfmath.c \
+	$(WOLFTPMDIR)src/tpm2_wrap.c \
+	$(WOLFTPMDIR)src/tpm2.c \
+	$(WOLFTPMDIR)src/tpm2_linux.c \
+	$(WOLFTPMDIR)src/tpm2_packet.c \
+	$(WOLFTPMDIR)src/tpm2_param_enc.c \
+	$(WOLFTPMDIR)src/tpm2_swtpm.c \
+	$(WOLFTPMDIR)src/tpm2_tis.c \
+	$(WOLFTPMDIR)src/tpm2_winapi.c \
 
 all: preseal keygen sign
 
+debug: CFLAGS+=$(DEBUG_FLAGS)
+debug: all
+
 preseal:
-	$(Q)$(CC) $(CFLAGS) -o $@ $@.c -l:libwolftpm.a -l:libwolfssl.a -lm
+	$(Q)$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
 
 keygen:
-	$(Q)$(CC) $(CFLAGS) -o $@ $@.c -lwolftpm -lwolfssl
+	$(Q)$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
 
 sign:
-	$(Q)$(CC) $(CFLAGS) -o $@ $@.c -lwolftpm -lwolfssl
-
-debug:
-	$(Q)$(CC) $(CFLAGS) -o preseal preseal.c -g -l:libwolftpm.a -l:libwolfssl.a -lm
-	$(Q)$(CC) $(CFLAGS) -o keygen keygen.c -g -lwolftpm -lwolfssl
-	$(Q)$(CC) $(CFLAGS) -o sign sign.c -g -lwolftpm -lwolfssl
+	$(Q)$(CC) -o $@ $@.c $(SRC) $< $(CFLAGS)
 
 clean:
 	rm -f preseal
