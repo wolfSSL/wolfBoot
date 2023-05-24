@@ -775,11 +775,6 @@
             <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
             <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
         </configuration>
-        <configuration inuse="true" name="r_tsip_rx">
-            <component description="依存モジュール: r_bsp バージョン 7.00&#10;Support functions: AES, GCM, CCM, CMAC, SHA, MD5, Triple-DES, ARC4, RSA, ECC, Random number generate, Key management, secure boot/secure firmware update.&#10;The &quot;.l&quot; in version number means library version." detailDescription="TSIP(Trusted Secure IP) driver." display="r_tsip_rx" id="r_tsip_rx1.15.l" version="1.15.l"/>
-            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
-            <source description="Components supporting Firmware Integration Technology" display="Firmware Integration Technology" id="com.renesas.smc.tools.swcomponent.fit.source"/>
-        </configuration>
     </tool>
     <tool id="System">
         <section id="ocd">
