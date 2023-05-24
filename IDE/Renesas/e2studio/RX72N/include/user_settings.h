@@ -4,7 +4,7 @@
  * Enabled via WOLFSSL_USER_SETTINGS.
  *
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2023 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -26,21 +26,15 @@
 #ifndef H_USER_SETTINGS_
 #define H_USER_SETTINGS_
 
-
-//#define WOLFBOOT_RENESAS_TSIP
-//#define WOLFBOOT_DUALBOOT
-
 #ifdef WOLFBOOT_RENESAS_TSIP
     #define WOLFSSL_RENESAS_TSIP_SIGNATURE // Current version support only RSA2048
     #define WOLFSSL_NO_SW_MATH
     #define WOLFBOOT_SIGN_RSA2048
 #else
-    /* #define WOLFBOOT_SIGN_RSA2048 */
-    /* #defube WOLFBOOT_SIGN_RSA3072 */
-    /* #defube WOLFBOOT_SIGN_RSA4096 */
+    #define WOLFBOOT_SIGN_RSA2048
+    /* #define WOLFBOOT_SIGN_RSA3072 */
     /* #define WOLFBOOT_SIGN_ED25519 */
-    /* #define WOLFBOOT_SIGN_ED488   */
-       #define WOLFBOOT_SIGN_ECC256
+    /* #define WOLFBOOT_SIGN_ECC256  */
     /* #define WOLFBOOT_SIGN_ECC384  */
     /* #define WOLFBOOT_SIGN_ECC521  */
 #endif
@@ -62,8 +56,7 @@
 #define WC_NO_RNG_SIMPLE
 
 #define WOLFSSL_USER_SETTINGS   /* for renesas-tsip-crypt.h */
-#define WOLFSSL_SP_MATH_ALL                /* for sp_int.c */
-//#define USE_FAST_MATH
+
 /* System */
 #define WOLFSSL_GENERAL_ALIGNMENT 4
 #define SINGLE_THREADED
@@ -75,7 +68,7 @@
 #endif
 
 #if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_ED448)
-    #define IMAGE_HEADER_SIZE 512
+#define IMAGE_HEADER_SIZE 512
 #elif defined(WOLFBOOT_SIGN_RSA4096)
     #define IMAGE_HEADER_SIZE 1024
 #endif
@@ -106,13 +99,13 @@
 #endif
 
 /* ECC and SHA256 */
-#if defined (WOLFBOOT_SIGN_ECC256) ||\
-    defined (WOLFBOOT_SIGN_ECC384) ||\
-    defined (WOLFBOOT_SIGN_ECC521)
+#if defined(WOLFBOOT_SIGN_ECC256) ||\
+    defined(WOLFBOOT_SIGN_ECC384) ||\
+    defined(WOLFBOOT_SIGN_ECC521)
+
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
-
-
+#   define ECC_USER_CURVES /* enables only 256-bit by default */
 
 /* Kinetis LTC support */
 #   ifdef FREESCALE_USE_LTC
@@ -124,15 +117,12 @@
 #   endif
 
 /* SP MATH */
-#ifndef WOLFSSL_NO_SW_MATH
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_HAVE_SP_ECC
 #   endif
-#endif
 
 /* ECC options disabled to reduce size */
 #   define NO_ECC_SIGN
@@ -141,25 +131,25 @@
 #   define NO_ECC_KEY_EXPORT
 
 /* Curve */
-#   define NO_ECC192
-#   define NO_ECC224
 #ifdef WOLFBOOT_SIGN_ECC256
 #   define HAVE_ECC256
 #   define FP_MAX_BITS (256 + 32)
-#   define NO_ECC384
-#   define NO_ECC521
-#elif defined WOLFBOOT_SIGN_ECC384
+#elif defined(WOLFBOOT_SIGN_ECC384)
 #   define HAVE_ECC384
-#   define FP_MAX_BITS (1024 + 32)
-#   define WOLFSSL_SP_384
-#   define WOLFSSL_SP_NO_256
+#   define FP_MAX_BITS (384 * 2)
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
+#       define WOLFSSL_SP_384
+#       define WOLFSSL_SP_NO_256
+#   endif
 #   define NO_ECC256
-#   define NO_ECC521
-#elif defined WOLFBOOT_SIGN_ECC521
+#elif defined(WOLFBOOT_SIGN_ECC521)
 #   define HAVE_ECC521
-#   define FP_MAX_BITS (544 + 32)
+#   define FP_MAX_BITS (528 * 2)
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
+#       define WOLFSSL_SP_521
+#       define WOLFSSL_SP_NO_256
+#   endif
 #   define NO_ECC256
-#   define NO_ECC384
 #endif
 
 #   define NO_RSA
@@ -169,62 +159,35 @@
 #ifdef WOLFBOOT_SIGN_RSA2048
 #   define RSA_LOW_MEM
 #   define WOLFSSL_RSA_VERIFY_INLINE
-#   define WOLFSSL_RSA_VERIFY_ONLY
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */
-#ifndef WOLFSSL_NO_SW_MATH
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_NO_4096
 #   endif
-#endif
+#   define WC_ASN_HASH_SHA256
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA3072
 #   define RSA_LOW_MEM
 #   define WOLFSSL_RSA_VERIFY_INLINE
-#   define WOLFSSL_RSA_VERIFY_ONLY
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (3072 * 2)
     /* sp math */
-#ifndef WOLFSSL_NO_SW_MATH
-#   ifndef USE_FAST_MATH
+#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_4096
 #   endif
-#endif
-#endif
-
-#ifdef WOLFBOOT_SIGN_RSA4096
-#   define RSA_LOW_MEM
-#   define WOLFSSL_RSA_VERIFY_INLINE
-#   define WOLFSSL_RSA_VERIFY_ONLY
-#   define WC_NO_RSA_OAEP
-#   define FP_MAX_BITS (4096 * 2)
-    /* sp math */
-#ifndef WOLFSSL_NO_SW_MATH
-#   ifndef USE_FAST_MATH
-#       define WOLFSSL_HAVE_SP_RSA
-#       define WOLFSSL_SP
-#       define WOLFSSL_SP_SMALL
-#       define WOLFSSL_SP_MATH
-#       define SP_WORD_SIZE 32
-#       define WOLFSSL_SP_4096
-#       define WOLFSSL_SP_NO_2048
-#       define WOLFSSL_SP_NO_3072
-#   endif
-#endif
+#   define WC_ASN_HASH_SHA256
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA3_384
@@ -299,6 +262,5 @@
 #else
 #   define WOLFSSL_SMALL_STACK
 #endif
-
 
 #endif /* !H_USER_SETTINGS_ */

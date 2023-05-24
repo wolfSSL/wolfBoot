@@ -513,8 +513,12 @@ struct wolfBoot_image {
 };
 
 /* do not warn if this is not used */
+#if !defined(__CCRX__)
 static void __attribute__ ((unused)) wolfBoot_image_confirm_signature_ok(
     struct wolfBoot_image *img)
+#else
+static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+#endif
 {
     img->signature_ok = 1;
 }

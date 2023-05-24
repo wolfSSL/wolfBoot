@@ -35,14 +35,22 @@
  *
  */
 
-
+#pragma inline_asm longJump
+static void longJump(const uint32_t *app_offset)
+{
+    jmp   r1;
+}
 
 void do_boot(const uint32_t *app_offset)
 {
      void (*app_entry)(void);
      uint32_t app_sp;
      (void) app_offset;
-
+     (void) app_sp;
+     (void) app_entry;
+#if defined(__CCRX__)
+     longJump(app_offset);
+#elif defined(_RENESAS_RA_)
      app_sp = VECTOR_SP;
 
      __asm__ ("ldr r3, [%0]" ::"r"(app_sp));
@@ -56,5 +64,6 @@ void do_boot(const uint32_t *app_offset)
     */
      app_entry = (void(*)(void))(*VECTOR_Reset_Handler);
      (*app_entry)();
+#endif
 }
 

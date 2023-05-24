@@ -51,8 +51,7 @@
 								<option id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.fpu.126437015" name="浮動小数点演算命令を使用する (-fpu/-nofpu)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.fpu" useByScannerDiscovery="false" value="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.fpu.yes" valueType="enumerated"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.include.2039443943" name="インクルード・ファイルを検索するフォルダ (-include)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.include" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../lib/wolfssl"/>
+									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="${TCINSTALL}/include"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src/smc_gen/general}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src/smc_gen/r_pincfg}&quot;"/>
@@ -83,7 +82,7 @@
 									<listOptionValue builtIn="false" value="../../include/target.h"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.define.1700820161" name="プリプロセッサ・マクロの定義 (-define)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.define" useByScannerDiscovery="false" valueType="definedSymbols"/>
-								<option id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.optimize.467816924" name="最適化レベル (-optimize)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.optimize" useByScannerDiscovery="false" value="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.optimize.level0" valueType="enumerated"/>
+								<option id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.optimize.467816924" name="最適化レベル (-optimize)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.optimize" useByScannerDiscovery="false" value="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.option.optimize.level2" valueType="enumerated"/>
 								<inputType id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.gcc.inputType.234428537" name="Compiler Input C" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.gcc.inputType"/>
 								<inputType id="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.gpp.inputType.1840988365" name="Compiler Input CPP" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.compiler.gpp.inputType"/>
 							</tool>
@@ -132,6 +131,47 @@
 								<option id="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.checkSection.140974100" name="セクションの割り付けアドレスをチェックする (-cpu)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.checkSection" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.memoryType.1210271160" name="アドレス範囲指定方法 (-cpu(アドレス範囲指定方法))" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.memoryType" useByScannerDiscovery="false" value="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.memoryType.autoSpecify" valueType="enumerated"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.noneLinkageOrderList.2135498774" name="(リンク順序のリスト) (-input/-library/-binary)" superClass="com.renesas.cdt.managedbuild.renesas.ccrx.linker.option.noneLinkageOrderList" useByScannerDiscovery="false" valueType="stringList">
+									<listOptionValue builtIn="false" value="&quot;.\src\app_RenesasRX01.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src\libwolfboot.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src\renesas-rx.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/general\r_cg_hardware_setup.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/general\r_smc_cgc.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/general\r_smc_cgc_user.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/general\r_smc_interrupt.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/board/generic_rx72n\hwsetup.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\dbsct.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\lowlvl.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\lowsrc.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\mcu_locks.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_bsp_common.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_bsp_cpu.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_bsp_interrupts.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_bsp_locking.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_bsp_mcu_startup.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_bsp_software_interrupt.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\r_rx_intrinsic_functions.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\resetprg.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/all\sbrk.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/rx72n\mcu_clocks.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/rx72n\mcu_init.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/rx72n\mcu_interrupts.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/rx72n\mcu_mapped_interrupts.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_bsp/mcu/rx72n\vecttbl.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_byteq/src\r_byteq.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src/flash_type_1\r_flash_type1.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src/flash_type_3\r_flash_type3.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src/flash_type_4\r_flash_type4.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src\r_flash_fcu.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src\r_flash_group.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src\r_flash_nofcu.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_flash_rx/src\r_flash_rx.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_pincfg\Pin.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_pincfg\r_sci_rx_pinset.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_sci_rx/src\r_sci_rx.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_sci_rx/src\r_sci_rx_dmaca.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_sci_rx/src\r_sci_rx_dtc.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_sci_rx/src/targets/rx72n\r_sci_rx72n.obj&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;.\src/smc_gen/r_sci_rx/src/targets/rx72n\r_sci_rx72n_data.obj&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;.\app_RenesasRX01.lib&quot;"/>
 								</option>
 							</tool>

@@ -2,7 +2,7 @@
  *
  * Test bare-metal application.
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2023 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -64,39 +64,45 @@ static void printPartitions(void)
     printf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
-    //printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
 }
-
 
 void main(void)
 {
     uint8_t firmware_version = 0;
 
-    hal_init();
-
     printf("| ------------------------------------------------------------------- |\n");
     printf("| Renesas RX User Application in BOOT partition started by wolfBoot   |\n");
     printf("| ------------------------------------------------------------------- |\n\n");
+
+
+    hal_init();
 
     printPartitions();
 
     /* The same as: wolfBoot_get_image_version(PART_BOOT); */
     firmware_version = wolfBoot_current_firmware_version();
 
-    printf("Current Firmware Version: %d\n", firmware_version);
+    printf("\nCurrent Firmware Version: %d\n", firmware_version);
 
     if (firmware_version >= 1) {
-        wolfBoot_success();
+    	if (firmware_version == 1) {
+    	    printf("Hit any key to call wolfBoot_success the firmware.\n");
+            getchar();
+
+            wolfBoot_success();
+            printPartitions();
+
+            printf("\nHit any key to update the firmware.\n");
+            getchar();
+
+            wolfBoot_update_trigger();
+            printf("Firmware Update is triggered\n");
+    	}
     } else {
         printf("Invalid Firmware Version\n");
         goto busy_idle;
     }
-
-    printf("Hit any key to update the firmware.\n");
-    getchar();
-
-    wolfBoot_update_trigger();
-    printf("Firmware Update is triggered\n");
 
     /* busy wait */
 busy_idle:

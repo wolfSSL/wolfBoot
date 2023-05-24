@@ -278,5 +278,4 @@ extern int tolower(int c);
 #   define WOLFSSL_SMALL_STACK
 #endif
 
-
 #endif /* !H_USER_SETTINGS_ */
