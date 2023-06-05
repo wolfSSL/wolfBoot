@@ -284,6 +284,13 @@ You can also manually override the fill bytes using `FILL_BYTE=` at build-time. 
 Note: if you are using an external FLASH (e.g. SPI) in combination with a flash with inverted logic, ensure that you store all the flags in one partition, by using the `FLAGS_HOME=1` option described above.
 
 
+### Workaround for setting flags to '0xFF' upon update
+
+Some flash memory devices (e.g. TMS520) does not correctly set the state of erased memory to "all ones". Since wolfBoot relies on the flags to be detected as non-initialized (all ones or all zeroes, depending on `FLAGS_INVERT`), a workaround is available to temporarily set the content of the last sector(s) for the UPDATE partition to its expected value, after an update has completed.
+
+This configuration option is available as `ERASE_SECTOR_WORKAROUND`.
+
+
 ### Using Mac OS/X
 
 If you see 0xC3 0xBF (C3BF) repeated in your factory.bin then your OS is using Unicode characters.

@@ -498,6 +498,47 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
     }
+
+#if defined(NVM_FLASH_WRITEONCE) && defined(ERASE_SECTOR_WORKAROUND)
+#ifndef TRAILER_SKIP
+#   define TRAILER_SKIP 0
+#endif
+    {
+    #ifdef FLAGS_INVERT
+        const uint32_t trailer_data = 0x00000000;
+    #else
+        const uint32_t trailer_data = 0xFFFFFFFF;
+    #endif
+        uint32_t start_addr;
+        uint32_t flash_addr;
+        uint32_t flags_total_len = sizeof(uint32_t) + /* Magic trailer */
+            sizeof(uint8_t) + /* Partition flag byte */
+            /* Sector flags, one per nibble, one byte = two sectors */
+            (WOLFBOOT_PARTITION_SIZE / (2 * WOLFBOOT_SECTOR_SIZE)) + 1;
+
+        /* Round up to next word */
+        flags_total_len = ((flags_total_len) / 4) * 4 + 4;
+
+        /* Last sector */
+        start_addr = WOLFBOOT_PARTITION_SIZE -
+            (TRAILER_SKIP + flags_total_len);
+        for (flash_addr = start_addr;
+                flash_addr < + WOLFBOOT_PARTITION_SIZE - TRAILER_SKIP;
+                flash_addr+= sizeof(uint32_t)) {
+            wb_flash_write(&update, flash_addr, (uint8_t *)&trailer_data, sizeof(uint32_t));
+        }
+        /* Second last sector */
+        start_addr = WOLFBOOT_PARTITION_SIZE -
+            (WOLFBOOT_SECTOR_SIZE + TRAILER_SKIP + flags_total_len);
+        for (flash_addr = start_addr;
+                flash_addr < + WOLFBOOT_PARTITION_SIZE - TRAILER_SKIP;
+                flash_addr+= sizeof(uint32_t)) {
+            wb_flash_write(&update, flash_addr, (uint8_t *)&trailer_data, sizeof(uint32_t));
+        }
+    }
+#endif
+
+
     wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
     st = IMG_STATE_TESTING;
     wolfBoot_set_partition_state(PART_BOOT, st);

@@ -438,6 +438,10 @@ ifeq ($(WOLFBOOT_HUGE_STACK),1)
   CFLAGS+=-DWOLFBOOT_HUGE_STACK
 endif
 
+ifeq ($(ERASE_SECTOR_WORKAROUND),1)
+  CFLAGS+=-DERASE_SECTOR_WORKAROUND
+endif
+
 ifeq ($(WOLFTPM),1)
   OBJS += lib/wolfTPM/src/tpm2.o \
     lib/wolfTPM/src/tpm2_packet.o \
