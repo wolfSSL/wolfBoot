@@ -25,6 +25,8 @@ This README describes configuration of supported targets.
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Renesas RX72N](#renesas-rx72n)
+* [Renesas RA6M4](#renesas-ra6m4)
 
 
 ## STM32F4
@@ -1528,3 +1530,60 @@ make test-sim-internal-flash-with-update
 # it should print 2
 ./wolfboot.elf success get_version
 ```
+## renesas-rx72n
+
+This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
+They are compiled by e2Studio and running on the target board.
+
+In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
+You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+board for the debugger and flash programmer.
+
+Flash Allocation:
+```
++---------------------------+------------------------+-----+
+| B |H|                     |H|                      |     |
+| o |e|   Primary           |e|   Update             |Swap |
+| o |a|   Partition         |a|   Partition          |Sect |
+| t |d|                     |d|                      |     |
++---------------------------+------------------------+-----+
+0xffc00000: wolfBoot
+0xffc10000: Primary partition (Header)
+0xffc10100: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 256, e.g. ED25519, EC256, EC384 or EC512 */
+0xffc10200: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 512, e.g. RSA2048, RSA3072 */
+0xffdf0000: Update  partition (Header)
+0xffdf0100: Update  partition (Application image)
+0xfffd0000: Swap sector
+
+```
+
+Detail steps can be found at [Readme](../IDE/Renesas/e2studio/RX72N/Readme.md).
+
+## renesas-ra6m4
+
+This example for `Renesas RA6M4` demonstrates a simple secure firmware update by wolfBoot. A sample application v1 is
+securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
+They are compiled by e2Studio and running on the target board.
+
+In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
+You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+board for the debugger and flash programmer.
+
+Flash Allocation:
+```
++---------------------------+------------------------+-----+
+| B |H|                     |H|                      |     |
+| o |e|   Primary           |e|   Update             |Swap |
+| o |a|   Partition         |a|   Partition          |Sect |
+| t |d|                     |d|                      |     |
++---------------------------+------------------------+-----+
+0x00000000: wolfBoot
+0x00010000: Primary partition (Header)
+0x00010200: Primary partition (Application image)
+0x00080000: Update  partition (Header)
+0x00080200: Update  partition (Application image)
+0x000F0000: Swap sector
+```
+
+Detail steps can be found at [Readme](../IDE/Renesas/e2studio/RA6M4/Readme.md).
