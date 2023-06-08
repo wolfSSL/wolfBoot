@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-It demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+This example demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
@@ -188,7 +188,7 @@ $ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc10000 app_Renesas
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
-If the boot program succeeds integlity and authenticity check, it initiate the
+If the boot program succeeds integrity and authenticity check, it initiate the
 application V1. 
 
 
@@ -218,7 +218,7 @@ After hitting any key, the application calls wolfBoot_success() to set boot part
 state and wait for any key again. 
 
 if you re-start the boot program at this moment, 
-after checking the integlity and authenticity, it jumps to the application.
+after checking the integrity and authenticity, it jumps to the application.
 You can see the state is Success("00").
 
 ```
@@ -252,7 +252,7 @@ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffdf0000 app_RenesasRx
 ### 3-9 Re-boot and secure update to V2
 
 Now the image is downloaded but note that the partition status is not changed yet.
-When it is re-boot, it checks integlity and authenticity of V1 and initiate V1 as in
+When it is re-boot, it checks integrity and authenticity of V1 and initiate V1 as in
 step 6. 
 
 ```
@@ -271,10 +271,10 @@ updating the firmware.
 
 Since this is just a trigger, the application can continue the process.
 In the demo application it outputs a message "Firmware Update is triggered" and enters
-a infinit loop of nop.
+a infinite loop of nop.
 
-Now you can re-boot it by start wolfBoot by e2Studion debugger. The boot
-program checks integlity and authenticity of V2 now, swap the partition
+Now you can reboot it by start wolfBoot by e2studio debugger. The boot
+program checks integrity and authenticity of V2 now, swap the partition
 safely and initiates V2. You will see following message after the partition
 information.
 

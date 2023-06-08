@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-It demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+This example demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
@@ -176,7 +176,7 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00010000 a
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
-If the boot program succeeds integlity and authenticity check, it initiate the
+If the boot program succeeds integrity and authenticity check, it initiate the
 application V1.
 
 ```
@@ -246,7 +246,7 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00080000 a
 
 ### 8) Re-boot and secure update to V2
 
-The boot program checks integlity and authenticity of V2, swap the partition
+The boot program checks integrity and authenticity of V2, swap the partition
 safely and initiates V2. You will see following message after the partition
 information.
 
