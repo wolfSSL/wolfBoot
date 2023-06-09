@@ -75,7 +75,7 @@ $ export PATH:$PATH:<wolfBoot>/tools/keytools
 $ keygen --ecc256 -g ./pri-ecc256.der
 ```
 
-It generates a pair of private and public key with -g option. The private key is stored 
+This generates a pair of private and public keys with -g option. The private key is stored 
 in the specified file. The public key is stored in a key store as a C source code 
 in "src/keystore.c" soo that it can be compiled and linked with wolfBoot.
 If you have an existing key pair, you can use -i option to import the pablic
@@ -153,9 +153,9 @@ $ rx-elf-objcopy.exe -O binary\
 
 ### 3-5 Generate Signature for app V1
 
-"sign" command under tools/keytools benerates a signature for the binary with a specified version.
-It generates a file contain a partition header and application image. The partition header
-contain generated signature and other control fields. Output file name is made up from
+The `sign` command under tools/keytools generates a signature for the binary with a specified version.
+It generates a file containing a partition header and application image. The partition header
+includes the generated signature and other control fields. Output file name is made up from
 the input file name and version like app_RenesasRx01_v1.0_signed.bin.
 
 ```
@@ -217,7 +217,7 @@ Hit any key to call wolfBoot_success the firmware.
 After hitting any key, the application calls wolfBoot_success() to set boot partition
 state and wait for any key again. 
 
-if you re-start the boot program at this moment, 
+If you re-start the boot program at this moment, 
 after checking the integrity and authenticity, it jumps to the application.
 You can see the state is Success("00").
 
@@ -300,4 +300,4 @@ Tail Mgc: ????
 Current Firmware Version: 2
 ```
 
-Not the application behavior is almost identical but the Version is "2" this time.
+Note That application behavior is almost identical but the Version is "2" this time.
