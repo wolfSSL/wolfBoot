@@ -1558,7 +1558,7 @@ Flash Allocation:
 
 ```
 
-Detail steps can be found at [Readme](../IDE/Renesas/e2studio/RX72N/Readme.md).
+Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RX72N/Readme.md).
 
 ## renesas-ra6m4
 
@@ -1586,4 +1586,4 @@ Flash Allocation:
 0x000F0000: Swap sector
 ```
 
-Detail steps can be found at [Readme](../IDE/Renesas/e2studio/RA6M4/Readme.md).
+Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RA6M4/Readme.md).
