@@ -5,10 +5,9 @@ if [ "x$V" != "x1" ]; then
     exit 1
 fi
 
-./wolfboot.elf powerfail 15000 get_version 2>/dev/null
-./wolfboot.elf powerfail 18000 get_version 2>/dev/null
-./wolfboot.elf powerfail 1a000 get_version 2>/dev/null
-./wolfboot.elf get_version 2>/dev/null
+./wolfboot.elf powerfail C0020000 get_version 2>/dev/null
+./wolfboot.elf powerfail C0022000 get_version 2>/dev/null
+./wolfboot.elf powerfail C0024000 get_version 2>/dev/null
 
 V=`./wolfboot.elf get_version 2>/dev/null`
 if [ "x$V" != "x2" ]; then
@@ -16,10 +15,9 @@ if [ "x$V" != "x2" ]; then
     exit 1
 fi
 
-./wolfboot.elf powerfail 11000 get_version 2>/dev/null
-./wolfboot.elf powerfail 14000 get_version 2>/dev/null
-./wolfboot.elf powerfail 1e000 get_version 2>/dev/null
-./wolfboot.elf get_version 2>/dev/null
+./wolfboot.elf powerfail C0021000 get_version 2>/dev/null
+./wolfboot.elf powerfail C0023000 get_version 2>/dev/null
+./wolfboot.elf powerfail C0025000 get_version 2>/dev/null
 
 V=`./wolfboot.elf get_version 2>/dev/null`
 if [ "x$V" != "x1" ]; then
