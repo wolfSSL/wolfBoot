@@ -496,7 +496,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
         /* headers that can be in different positions depending on when the
          * power fails are now in a known state, re-read and swap fw_size
-         * because the locations are correct but the metadata is now swapped */
+         * because the locations are correct but the metadata is now swapped
+         * also recalculate total_size since it could be invalid */
         if (sector == 1) {
             wolfBoot_open_image(&boot, PART_BOOT);
             wolfBoot_open_image(&update, PART_UPDATE);
@@ -505,6 +506,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             fw_size = boot.fw_size;
             boot.fw_size = update.fw_size;
             update.fw_size = fw_size;
+
+            total_size = boot.fw_size + IMAGE_HEADER_SIZE;
+            if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
+                    total_size = update.fw_size + IMAGE_HEADER_SIZE;
+
+            if (total_size <= IMAGE_HEADER_SIZE)
+                return -1;
         }
     }
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
