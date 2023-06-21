@@ -42,7 +42,7 @@ void main(void)
             ;
         i++;
 
-        uart_write("\r\n0x", 4);
+        uart_write("\n0x", 3);
         for (k=0; k<8; k++) {
             snum[7 - k] = hex_lut[(i >> 4*k) & 0xf];
         }

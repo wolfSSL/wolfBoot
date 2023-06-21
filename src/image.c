@@ -359,7 +359,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
             return;
         }
         XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
-        RSA_VERIFY_FN(ret, wc_RsaSSL_Verify, img->sha_hash, 
+        RSA_VERIFY_FN(ret, wc_RsaSSL_Verify, img->sha_hash,
             WOLFBOOT_SHA_DIGEST_SIZE, output, IMAGE_SIGNATURE_SIZE, &rsa);
         /* SCE SignatureVerify API has verified */
         if (ret == 0)
@@ -827,7 +827,7 @@ uint32_t wolfBoot_image_size(uint8_t *image)
     return im2n(*size);
 }
 
-int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
+int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC) {

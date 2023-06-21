@@ -25,9 +25,9 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "image.h"
+#include "printf.h"
 
 #ifdef UNIT_TEST
-#   include "printf.h"
 #   define unit_dbg wolfBoot_printf
 #else
 #   define unit_dbg(...) do{}while(0)
@@ -780,7 +780,8 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
 
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
-static uint8_t* wolfBoot_get_image_from_part(uint8_t part) {
+static uint8_t* wolfBoot_get_image_from_part(uint8_t part)
+{
     uint8_t *image = (uint8_t *)0x00000000;
 
     if (part == PART_UPDATE) {
@@ -839,6 +840,9 @@ int wolfBoot_dualboot_candidate(void)
     /* Find the candidate */
     boot_v = wolfBoot_current_firmware_version();
     update_v = wolfBoot_update_firmware_version();
+
+    wolfBoot_printf("Versions: Boot %d, Update %d\n", boot_v, update_v);
+
     /* -1 means  no images available */
     if ((boot_v == 0) && (update_v == 0))
         return -1;
@@ -1301,15 +1305,20 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     uint32_t dst_offset = 0, iv_counter = 0;
     uint32_t magic, len;
 
+    wolfBoot_printf("Decrypting %p to %p\n", src, dst);
 
     if (!encrypt_initialized) {
-        if (crypto_init() < 0)
+        if (crypto_init() < 0) {
+            wolfBoot_printf("Error initializing crypto!\n");
             return -1;
+        }
     }
-    /* Attempt to decrypt firmware header */
 
-    if (decrypt_header(src) != 0)
+    /* Attempt to decrypt firmware header */
+    if (decrypt_header(src) != 0) {
+        wolfBoot_printf("Error decrypting header at %p!\n", src);
         return -1;
+    }
     len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
 
     /* decrypt content */
@@ -1323,5 +1332,5 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     }
     return 0;
 }
-#endif
+#endif /* MMU */
 #endif /* EXT_ENCRYPTED */

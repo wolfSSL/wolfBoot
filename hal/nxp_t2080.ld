@@ -38,6 +38,8 @@ SECTIONS
 
     .text :
     {
+        _start_vector = .;
+        KEEP(*(.isr_vector))
         *(.text*)
         *(.rodata*)
         *(.sdata*)

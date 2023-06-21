@@ -28,8 +28,8 @@
 #include "spi_flash.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
-#include "string.h"
 
+#include <string.h>
 #include <stdint.h>
 
 #ifndef EXT_FLASH
@@ -54,6 +54,17 @@
 #endif
 #endif
 
+/* requires/assumes inputs and size to be 4-byte aligned */
+static void memcpy32(void *dst, const void *src, size_t n)
+{
+    size_t i;
+    const uint32_t *s = (const uint32_t*)src;
+    uint32_t *d = (uint32_t*)dst;
+    for (i = 0; i < n/4; i++) {
+        d[i] = s[i];
+    }
+}
+
 int main(void)
 {
     int ret = -1;
@@ -62,25 +73,35 @@ int main(void)
     hal_init();
     spi_flash_probe(); /* make sure external flash is initialized */
 
-#ifdef PRINTF_ENABLED
-    wolfBoot_printf("Loader Stage 1: Flash 0x%x to RAM 0x%x\r\n",
-        WOLFBOOT_ORIGIN, WOLFBOOT_STAGE1_LOAD_ADDR);
-#elif defined(DEBUG_UART)
-    uart_write("Loader Stage 1\r\n", 16);
-#endif
-
 #ifdef BOOT_ROM_ADDR
     /* if this is executing from boot 4KB region (FCM buffer) it must
      * first be relocated to RAM before the eLBC NAND can be read */
-    if (((uintptr_t)&hal_init & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
+    if ((get_pc() & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
         wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_BASE_ADDR;
+    #ifdef DEBUG_UART
+        uart_write("\nRelocating BOOT ROM to DDR\n", 28);
+    #endif
 
         /* relocate 4KB code to DST and jump */
-        memmove((void*)WOLFBOOT_STAGE1_BASE_ADDR, (void*)BOOT_ROM_ADDR,
-            BOOT_ROM_SIZE);
+        memcpy32((void*)wolfboot_start, (void*)BOOT_ROM_ADDR, BOOT_ROM_SIZE);
 
+    #if defined(WOLFBOOT_ARCH) && WOLFBOOT_ARCH == PPC
+        /* TODO: Fix hack and consider moving to hal_prepare_boot */
+        /* HACK: Fix up stack values modified with trap */
+        *((uint32_t*)(WOLFBOOT_STAGE1_BASE_ADDR + 0xC18)) = 0x9421FFF0;
+        *((uint32_t*)(WOLFBOOT_STAGE1_BASE_ADDR + 0xC74)) = 0x39200000;
+
+        /* call to relocate code does not return */
+        relocate_code(wolfboot_start, (void*)BOOT_ROM_ADDR, BOOT_ROM_SIZE);
+    #else
+        hal_prepare_boot();
         DO_BOOT(wolfboot_start); /* never returns */
+    #endif
     }
+#endif
+
+#ifdef DEBUG_UART
+    uart_write("Loading wolfBoot to DDR\n", 24);
 #endif
 
     ret = ext_flash_read(
@@ -91,11 +112,12 @@ int main(void)
     if (ret >= 0) {
         wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_LOAD_ADDR;
     #ifdef PRINTF_ENABLED
-        wolfBoot_printf("Jumping to %p\r\n", wolfboot_start);
+        wolfBoot_printf("Jumping to full wolfBoot at %p\n", wolfboot_start);
     #elif defined(DEBUG_UART)
-        uart_write("Jump to relocated wolfboot_start\r\n", 34);
+        uart_write("Jumping to full wolfBoot\n", 27);
     #endif
 
+        hal_prepare_boot();
         DO_BOOT(wolfboot_start); /* never returns */
     }
 

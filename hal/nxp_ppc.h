@@ -23,120 +23,137 @@
 #define _NXP_PPC_H_
 
 #ifdef PLATFORM_nxp_p1021
-#define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
-#define CCSRBAR_SIZE BOOKE_PAGESZ_1M
-#define MMU_V1
+    /* NXP P1021 */
+    #define CPU_NUMCORES 2
+    #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
+    #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
+    #define MMU_V1
 
-/* Memory used for transferring blocks to/from NAND.
- * Maps to eLBC FCM internal 8KB region (by hardware) */
-#define FLASH_BASE_ADDR 0xFC000000
-
-/* For full wolfBoot */
-#ifndef BUILD_LOADER_STAGE1
     #define ENABLE_L1_CACHE
-    #define ENABLE_L2_CACHE
 
-    /* Relocate CCSRBAR */
-    #define CCSRBAR 0xFFE00000
+    #define ENABLE_DDR
 
-    #define ENABLE_INTERRUPTS
+    #ifdef BUILD_LOADER_STAGE1
+        /* First stage loader features */
 
-    /* Setup L2 as SRAM */
-    #define L2SRAM_ADDR  (0xF8F80000)
-#endif
+        /* For Boot ROM FCM buffer */
+        #define FLASH_BASE_ADDR 0xFFF00000
+
+        /* L2 is not available while FMR[BOOT]=1 */
+        #define L1_CACHE_ADDR 0xFFD00000
+    #else
+        /* For wolfBoot features */
+        #define ENABLE_L2_CACHE
+
+        /* Memory used for transferring blocks to/from NAND.
+         * Maps to eLBC FCM internal 8KB region (by hardware) */
+        #define FLASH_BASE_ADDR 0xFC000000
+
+        /* Relocate CCSRBAR */
+        #define CCSRBAR 0xFFE00000
+
+        #define ENABLE_INTERRUPTS
+    #endif
 
 #elif defined(PLATFORM_nxp_t2080)
-#define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base */
-#define CCSRBAR_SIZE BOOKE_PAGESZ_16M
-#define MMU_V2
-#define ENABLE_L1_CACHE
-#define ENABLE_L2_CACHE
-#define L2SRAM_ADDR (0xFEC20000)
+    /* NXP T0280 */
+    #define CPU_NUMCORES 4
+    #define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base */
+    #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
+    #define MMU_V2
+    #define ENABLE_L1_CACHE
+    #define ENABLE_L2_CACHE
+    #define L2SRAM_ADDR (0xFEC20000) /* Setup L2 as SRAM */
 
-/* This flash mapping window is automatically enabled
- * T2080RM: 4.3.3 Boot Space Translation:
- * default boot window (8 MB at 0x0_FF80_0000 to 0x0_FFFF_FFFF)
- */
-#define FLASH_BASE_ADDR 0xEF800000
+    #define ENABLE_DDR
+
+    /* This flash mapping window is automatically enabled
+    * T2080RM: 4.3.3 Boot Space Translation:
+    * default boot window (8 MB at 0x0_FF80_0000 to 0x0_FFFF_FFFF)
+    */
+    #define FLASH_BASE_ADDR 0xEF800000
 
 #else
-#error Please define MMU version and CCSRBAR for platform
+    #error Please define MMU version and CCSRBAR for platform
 #endif
 
 /* boot address */
-#define BOOT_ROM_ADDR 0xFFFFF000UL
+#define BOOT_ROM_ADDR 0xFFFFF000
 #define BOOT_ROM_SIZE (4*1024)
 
 #define RESET_VECTOR (BOOT_ROM_ADDR + (BOOT_ROM_SIZE - 4))
 
 #ifndef CCSRBAR_DEF
-#define CCSRBAR_DEF 0xFE000000
+#define CCSRBAR_DEF  0xFE000000
 #endif
 #ifndef CCSRBAR
-#define CCSRBAR     CCSRBAR_DEF
+#define CCSRBAR      CCSRBAR_DEF
 #endif
 
+#ifndef DDR_ADDRESS
+#define DDR_ADDRESS            0x00000000
+#endif
 
 #ifdef MMU_V1
-/* MMU V1 - e500 */
-/* EREF: 7.5.3.2 - TLB Entry Page Size */
-#define BOOKE_PAGESZ_4K    1
-#define BOOKE_PAGESZ_16K   2
-#define BOOKE_PAGESZ_64K   3
-#define BOOKE_PAGESZ_256K  4
-#define BOOKE_PAGESZ_1M    5
-#define BOOKE_PAGESZ_4M    6
-#define BOOKE_PAGESZ_16M   7
-#define BOOKE_PAGESZ_64M   8
-#define BOOKE_PAGESZ_256M  9
-#define BOOKE_PAGESZ_1G    10
-#define BOOKE_PAGESZ_4G    11
+    /* MMU V1 - e500 */
+    /* EREF: 7.5.3.2 - TLB Entry Page Size */
+    #define BOOKE_PAGESZ_4K    1
+    #define BOOKE_PAGESZ_16K   2
+    #define BOOKE_PAGESZ_64K   3
+    #define BOOKE_PAGESZ_256K  4
+    #define BOOKE_PAGESZ_1M    5
+    #define BOOKE_PAGESZ_4M    6
+    #define BOOKE_PAGESZ_16M   7
+    #define BOOKE_PAGESZ_64M   8
+    #define BOOKE_PAGESZ_256M  9
+    #define BOOKE_PAGESZ_1G    10
+    #define BOOKE_PAGESZ_4G    11
 
-#define MAS1_TSIZE_MASK    0x00000F00
-#define MAS1_TSIZE(x)      (((x) << 8) & MAS1_TSIZE_MASK)
+    #define MAS1_TSIZE_MASK    0x00000F00
+    #define MAS1_TSIZE(x)      (((x) << 8) & MAS1_TSIZE_MASK)
 
-#define L1_CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
+    #define L1_CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
 
 #else
-/* MMU V2 - e6500 */
-/* EREF 2.0: 6.5.3.2 - TLB Entry Page Size */
-#define BOOKE_PAGESZ_4K    2
-#define BOOKE_PAGESZ_8K    3
-#define BOOKE_PAGESZ_16K   4
-#define BOOKE_PAGESZ_32K   5
-#define BOOKE_PAGESZ_64K   6
-#define BOOKE_PAGESZ_128K  7
-#define BOOKE_PAGESZ_256K  8
-#define BOOKE_PAGESZ_512K  9
-#define BOOKE_PAGESZ_1M    10
-#define BOOKE_PAGESZ_2M    11
-#define BOOKE_PAGESZ_4M    12
-#define BOOKE_PAGESZ_8M    13
-#define BOOKE_PAGESZ_16M   14
-#define BOOKE_PAGESZ_32M   15
-#define BOOKE_PAGESZ_64M   16
-#define BOOKE_PAGESZ_128M  17
-#define BOOKE_PAGESZ_256M  18
-#define BOOKE_PAGESZ_512M  19
-#define BOOKE_PAGESZ_1G    20
-#define BOOKE_PAGESZ_2G    21
-#define BOOKE_PAGESZ_4G    22
+    /* MMU V2 - e6500 */
+    /* EREF 2.0: 6.5.3.2 - TLB Entry Page Size */
+    #define BOOKE_PAGESZ_4K    2
+    #define BOOKE_PAGESZ_8K    3
+    #define BOOKE_PAGESZ_16K   4
+    #define BOOKE_PAGESZ_32K   5
+    #define BOOKE_PAGESZ_64K   6
+    #define BOOKE_PAGESZ_128K  7
+    #define BOOKE_PAGESZ_256K  8
+    #define BOOKE_PAGESZ_512K  9
+    #define BOOKE_PAGESZ_1M    10
+    #define BOOKE_PAGESZ_2M    11
+    #define BOOKE_PAGESZ_4M    12
+    #define BOOKE_PAGESZ_8M    13
+    #define BOOKE_PAGESZ_16M   14
+    #define BOOKE_PAGESZ_32M   15
+    #define BOOKE_PAGESZ_64M   16
+    #define BOOKE_PAGESZ_128M  17
+    #define BOOKE_PAGESZ_256M  18
+    #define BOOKE_PAGESZ_512M  19
+    #define BOOKE_PAGESZ_1G    20
+    #define BOOKE_PAGESZ_2G    21
+    #define BOOKE_PAGESZ_4G    22
 
-#define MAS1_TSIZE_MASK    0x00000F80
-#define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
+    #define MAS1_TSIZE_MASK    0x00000F80
+    #define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
 
-#define L1_CACHE_LINE_SHIFT 4 /* 64 bytes per L1 cache line */
-#endif /* MMU V1/V2 */
+    #define L1_CACHE_LINE_SHIFT 4 /* 64 bytes per L1 cache line */
+    #endif /* MMU V1/V2 */
 
-#ifndef L1_CACHE_ADDR
-#define L1_CACHE_ADDR   0xFFD00000
-#endif
-#ifndef L1_CACHE_SZ
-#define L1_CACHE_SZ     (32 * 1024)
-#endif
+    #ifndef L1_CACHE_ADDR
+    #define L1_CACHE_ADDR   0xFFD00000
+    #endif
+    #ifndef L1_CACHE_SZ
+    #define L1_CACHE_SZ     (32 * 1024)
+    #endif
 
-#ifndef L1_CACHE_LINE_SIZE
-#define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
+    #ifndef L1_CACHE_LINE_SIZE
+    #define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
 #endif
 
 
@@ -154,7 +171,7 @@
 #define L1CSR0   0x3F2 /* L1 Data */
 #define L1CSR1   0x3F3 /* L1 Instruction */
 #define L1CSR_CPE  0x00010000 /* cache parity enable */
-#define L1CSR_CLFR 0x00000100 /* cache lock bits flash reset */
+#define L1CSR_CLFC 0x00000100 /* cache lock bits flash clear */
 #define L1CSR_CFI  0x00000002 /* cache flash invalidate */
 #define L1CSR_CE   0x00000001 /* cache enable */
 
@@ -217,6 +234,12 @@
 #define BUCSR_BBFI    0x00000200 /* Branch buffer flash invalidate */
 #define BUCSR_BPEN    0x00000001 /* Branch prediction enable */
 #define BUCSR_ENABLE (BUCSR_STAC_EN | BUCSR_LS_EN | BUCSR_BBFI | BUCSR_BPEN)
+
+#define SPRN_PID      0x030 /* Process ID */
+#define SPRN_PIR      0x11E /* Processor Identification Register */
+
+#define SPRN_TBWL     0x11C /* Time Base Write Lower Register */
+#define SPRN_TBWU     0x11D /* Time Base Write Upper Register */
 
 
 /* MMU Assist Registers
@@ -281,19 +304,30 @@
 #define BOOKE_MAS7(rpn) \
         (((unsigned long long)(rpn) >> 32) & MAS7_RPN)
 
-#define MTSPR(rn, v) asm volatile("mtspr " rn ",%0" : : "r" (v))
+/* Stringification */
+#ifndef WC_STRINGIFY
+#define _WC_STRINGIFY_L2(str) #str
+#define WC_STRINGIFY(str) _WC_STRINGIFY_L2(str)
+#endif
 
+#define mtspr(rn, v) asm volatile("mtspr " WC_STRINGIFY(rn) ",%0" : : "r" (v))
+
+#define mfmsr() ({ \
+    unsigned int rval; \
+    asm volatile("mfmsr %0" : "=r" (rval)); rval; \
+})
+#define mtmsr(v)     asm volatile("mtmsr %0" : : "r" (v))
 
 
 /* L2 Cache */
 #define L2_BASE         (CCSRBAR + 0x20000)
-#define L2CTL           (L2_BASE + 0x000) /* 0xFFE20000 - L2 control register */
-#define L2SRBAR0        (L2_BASE + 0x100) /* 0xFFE20100 - L2 SRAM base address register */
+#define L2CTL           (volatile uint32_t*)(L2_BASE + 0x000) /* 0xFFE20000 - L2 control register */
+#define L2SRBAR0        (volatile uint32_t*)(L2_BASE + 0x100) /* 0xFFE20100 - L2 SRAM base address register */
 
 #define L2CTL_EN        (1 << 31) /* L2 enable */
 #define L2CTL_INV       (1 << 30) /* L2 invalidate */
+#define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
 #define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
-
 
 
 #ifndef __ASSEMBLER__
@@ -303,48 +337,84 @@ static inline int get8(const volatile unsigned char *addr)
 {
     int ret;
     __asm__ __volatile__(
-        "sync;"
+        "sync;\n"
         "lbz%U1%X1 %0,%1;\n"
         "twi 0,%0,0;\n"
-        "isync" : "=r" (ret) : "m" (*addr));
+        "isync"
+            : "=r" (ret) : "m" (*addr)
+    );
     return ret;
 }
 static inline void set8(volatile unsigned char *addr, int val)
 {
     __asm__ __volatile__(
-        "stb%U0%X0 %1,%0;"
-        "eieio" : "=m" (*addr) : "r" (val)
+        "stb%U0%X0 %1,%0;\n"
+        "eieio"
+            : "=m" (*addr) : "r" (val)
     );
 }
 
-static inline unsigned get32(const volatile unsigned *addr)
+static inline int get16(const volatile unsigned short *addr)
 {
-    unsigned ret;
+    int ret;
     __asm__ __volatile__(
-        "sync;"
-        "lwz%U1%X1 %0,%1;\n"
+        "sync;\n"
+        "lhz%U1%X1 %0,%1;\n"
         "twi 0,%0,0;\n"
-        "isync" : "=r" (ret) : "m" (*addr)
+        "isync"
+            : "=r" (ret) : "m" (*addr)
     );
     return ret;
 }
-static inline void set32(volatile unsigned *addr, int val)
+static inline void set16(volatile unsigned short *addr, int val)
+{
+    __asm__ __volatile__(
+        "sync;\n"
+        "sth%U0%X0 %1,%0"
+            : "=m" (*addr) : "r" (val)
+    );
+}
+
+static inline unsigned int get32(const volatile unsigned *addr)
+{
+    unsigned int ret;
+    __asm__ __volatile__(
+        "sync;\n"
+        "lwz%U1%X1 %0,%1;\n"
+        "twi 0,%0,0;\n"
+        "isync"
+            : "=r" (ret) : "m" (*addr)
+    );
+    return ret;
+}
+static inline void set32(volatile unsigned *addr, unsigned int val)
 {
     __asm__ __volatile__(
         "sync;"
-        "stw%U0%X0 %1,%0" : "=m" (*addr) : "r" (val)
+        "stw%U0%X0 %1,%0"
+            : "=m" (*addr) : "r" (val)
     );
 }
 
 /* C version in boot_ppc.c */
 extern void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
     uint8_t perms, uint8_t wimge, uint8_t ts, uint8_t tsize, uint8_t iprot);
+extern void disable_tlb1(uint8_t esel);
+extern void flush_cache(uint32_t start_addr, uint32_t size);
 
+/* from hal/nxp_*.c */
 extern void uart_init(void);
 
 /* from boot_ppc_start.S */
 extern unsigned long long get_ticks(void);
-extern void	wait_ticks(unsigned long);
+extern void wait_ticks(unsigned long);
+extern unsigned long get_pc(void);
+extern void relocate_code(uint32_t *dest, uint32_t *src, uint32_t length);
+extern void invalidate_dcache(void);
+extern void invalidate_icache(void);
+extern void icache_enable(void);
+extern void dcache_enable(void);
+extern void dcache_disable(void);
 
 #else
 /* Assembly version */
@@ -369,30 +439,53 @@ extern void	wait_ticks(unsigned long);
     tlbwe; \
     isync;
 
-/* L1 Cache: Invalidate/Reset
- * l1cstr: SPRN_L1CSR1=instruction, SPRN_L1CSR0=data */
-#define l1_cache_invalidate(l1csr) \
-        lis   2, (L1CSR_CFI | L1CSR_CLFR)@h; \
-        ori   2, 2, (L1CSR_CFI | L1CSR_CLFR)@l; \
-        mtspr l1csr, 2; \
-1: \
-        mfspr 3, l1csr; \
-        and.  1, 3, 2; \
-        bne   1b;
+    /* readability helpers for assembly to show register versus decimal */
+    #define r0 0
+    #define r1 1
+    #define r2 2
+    #define r3 3
+    #define r4 4
+    #define r5 5
+    #define r6 6
+    #define r7 7
+    #define r8 8
+    #define r9 9
+    #define r10 10
+    #define r11 11
+    #define r12 12
+    #define r13 13
+    #define r14 14
 
-/* L1 Cache: Enable with Parity
- * l1cstr: SPRN_L1CSR1=instruction, SPRN_L1CSR0=data */
-#define l1_cache_enable(l1csr) \
-        lis   3, (L1CSR_CPE | L1CSR_CE)@h; \
-        ori   3, 3, (L1CSR_CPE | L1CSR_CE)@l; \
-        mtspr l1csr, 3; \
-        isync; \
-1: \
-        mfspr 3, l1csr; \
-        andi. 1, 3, L1CSR_CE@l; \
-        beq 1b;
+    #define r15 15
+    #define r16 16
+    #define r17 17
+    #define r18 18
+    #define r19 19
+    #define r20 20
+    #define r21 21
+    #define r22 22
+    #define r23 23
 
+    #define r25 25
+    #define r26 26
+    #define r27 27
+    #define r28 28
+    #define r29 29
+    #define r30 30
+    #define r31 31
 #endif
+
+/* For multiple core spin table communication */
+#define EPAPR_MAGIC       (0x45504150)
+#define ENTRY_ADDR_UPPER  0
+#define ENTRY_ADDR_LOWER  4
+#define ENTRY_R3_UPPER    8
+#define ENTRY_R3_LOWER    12
+#define ENTRY_RESV        16
+#define ENTRY_PIR         20
+#define ENTRY_R6_UPPER    24
+#define ENTRY_R6_LOWER    28
+#define ENTRY_SIZE        32
 
 
 #endif /* !_NXP_PPC_H_ */
