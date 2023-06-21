@@ -144,7 +144,9 @@ reset_exceptions:
         mttbl   r0 /* prevent FIT and WDT exceptions */
         mttbu   r0
         mtspr   SPRN_TSR, r1 /* clear all timer exception status */
+#ifdef PLATFORM_nxp_p1021
         mtspr   SPRN_TCR, r0 /* disable all timers */
+#endif
         mtspr   SPRN_ESR, r0 /* clear exception syndrome register */
         mtspr   SPRN_MCSR, r0 /* clear machine check syndrome register */
         mtxer   r0 /* clear integer exception register */
@@ -155,7 +157,7 @@ hardware_reg:
         ori     r0, r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@l
         mtspr   SPRN_HID0, r0
 
-#ifndef BUILD_LOADER_STAGE1
+#if defined(PLATFORM_nxp_p1021) && !defined(BUILD_LOADER_STAGE1)
         /* Set addr streaming & broadcast
          * and optimized sync instruction (if rev 5.0 or greater) */
         li      r0, (HID1_ASTME | HID1_ABE)@l
@@ -223,6 +225,7 @@ find_pc:
         andc    r2, r2, r3
         or      r2, r2, r1
         mtspr   MAS2, r2 /* EPN */
+
         mfspr   r2, MAS3
         andc    r2, r2, r3
         or      r2, r2, r1
@@ -242,7 +245,7 @@ find_pc:
         li      r3, 0
         mtspr   MAS1, r3
 1:      cmpw    r3, r14
-        rlwinm  r5, r5, 16, MAS0_ESEL_MSK
+        rlwinm  r5, r3, 16, MAS0_ESEL_MSK
         addi    r3, r3, 1
         beq     2f /* skip the TLB in R14 */
 
@@ -397,78 +400,118 @@ flash_tlb:
                 BOOKE_PAGESZ_256M, 0, r3);
 #endif
 
-#ifdef ENABLE_L2_CACHE
+#if defined(ENABLE_L2_CACHE) && defined(MMU_V2)
 
-#ifdef MMU_V2
-
-/* e6500 - must have L2 initialized before L1 */
-/* E6500RM 5.6.2 Enabling and disabling the L1 caches:
- * "Note that enabling either L1 cache without first enabling the L2 cache
- * is not supported."
- */
 create_ccsr_l2_tlb:
-        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, G, TS=0, 256KB, IPROT */
+        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, IG, TS=0, 512KB, IPROT */
         set_tlb(1, 9,
                 L2SRAM_ADDR, L2SRAM_ADDR, 0,
-                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_G, 0,
-                BOOKE_PAGESZ_256K, 1, r3);
+                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+                BOOKE_PAGESZ_512K, 1, r3);
 
-/* CRM 11.7 */
-setup_l2:
+setup_l2_sram:
+        /* 8.2 CoreNet Platform Cache (CPC) Memory Map */
+        #define CPCCSR0             (0x000)
+        #define CPCSRCR1            (0x100)
+        #define CPCSRCR0            (0x104)
+        #define CPCHDBCR0           (0xF00)
 
-        /* L2 data cache invalidation & unlocking
-         * create flash invalidate & unlock bit mask (see Table 2-19)
-         */
-        lis     r4, 0x0020
-        ori     r4, r4, 0x0400
-        /* get base address of memory mapped registers */
-        mfspr   r5, SCCSRBAR
-        li      r7, 24 /* get shift count */
-        sld     r5, r5, r7
-        lis     r6, 0x00C2 /* block offset for desired cluster (see Table 2-4) */
-        /* subsequent cluster L2 caches may be invalidated & unlocked by adding 0x40000 to 6 */
-        add     r6, r6, r5
-        /* L2SC0 offset (see Table 2-5), included here only for example */
-        /*addi r6, r6, r0 */
-        /* ensure prior memory transactions are performed */
+        #define CPCCSR0_CPCE        (0x80000000 >> 0)
+        #define CPCCSR0_CPCPE       (0x80000000 >> 1)
+        #define CPCCSR0_CPCFI       (0x80000000 >> 10)
+        #define CPCCSR0_CPCLFC      (0x80000000 >> 21)
+        #define CPCCSR0_SRAM_ENABLE (CPCCSR0_CPCE | CPCCSR0_CPCPE)
+
+        #define CPCSRCR0_SRAMSZ_64  (0x1 << 1) /* ways 14-15 */
+        #define CPCSRCR0_SRAMSZ_256 (0x3 << 1) /* ways 8-15 */
+        #define CPCSRCR0_SRAMSZ_512 (0x4 << 1) /* ways 0-15 */
+        #define CPCSRCR0_SRAMEN     (0x1)
+
+        #define CPCHDBCR0_SPEC_DIS  (0x80000000 >> 4)
+
+        /* T2080RM: 8.4.2.2 Enabling the CPC after Power-On Reset */
+        /* R1 = CPC base */
+        lis     r1, CPC_BASE@h
+        ori     r1, r1, CPC_BASE@l
+
+        /* Set CPC SRAM control register */
+        /* SRAM high addrress 0x0 */
+        li      r0, 0
+        stw     r0, CPCSRCR1(r1)
+        /* SRAM low address */
+        lis     r0, L2SRAM_ADDR@h
+        ori     r0, r0, L2SRAM_ADDR@l
+        /* Enable SRAM and set size (must match L2SRAM_SIZE) */
+        ori     r0, r0, (CPCSRCR0_SRAMSZ_256 | CPCSRCR0_SRAMEN)
+        stw     r0, CPCSRCR0(r1)
+
+        /* Enable memory mapped SRAM */
+        lis     r0, CPCCSR0_SRAM_ENABLE@h
+        mbar
+        isync
+        stw     r0, CPCCSR0(r1)
+        mbar
+
+        /* Disable speculation */
+        lwz     r0, CPCHDBCR0(r1)
+        oris    r0, r0, CPCHDBCR0_SPEC_DIS@h
+        stw     r0, CPCHDBCR0(r1)
+
+setup_l2_cache:
+        /* L2 Cache Control - E6500CORERM 2.2.3 Memory-mapped registers (MMRs) */
+        #define L2_CLUSTER_BASE(n) (CCSRBAR + 0xC20000 + (n * 0x40000))
+        #define L2CSR0             (0x000) /* L2 Cache Control and Status 0 */
+        #define L2CSR1             (0x004) /* L2 Cache Control and Status 1 */
+        #define L2CFG0             (0x008) /* L2 Cache Configuration */
+        #define L2PID(n)           (0x200 + (n * 0x10)) /* L2 Cache Partitioning ID */
+        #define L2PIR(n)           (0x208 + (n * 0x10)) /* L2 Cache Partitioning Allocation */
+        #define L2PWR(n)           (0x20C + (n * 0x10)) /* L2 Cache Partitioning Way */
+
+        #define L2CSR0_L2FI        0x00200000 /* L2 Cache Flash Invalidate */
+        #define L2CSR0_L2FL        0x00000800 /* L2 Cache Flush */
+        #define L2CSR0_L2LFC       0x00000400 /* L2 Cache Lock Flash Clear */
+        #define L2CSR0_L2PE        0x40000000 /* L2 Cache Parity/ECC Enable */
+        #define L2CSR0_L2E         0x80000000 /* L2 Cache Enable */
+
+        /* E6500CORERM: 11.7 L2 cache state */
+        /* R5 = L2 cluster 1 base */
+        lis     r5, L2_CLUSTER_BASE(0)@h
+        ori     r5, r5, L2_CLUSTER_BASE(0)@l
+        /* Invalidate and clear locks */
+        lis     r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@h
+        ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
         sync
+        stw     r1, L2CSR0(r5)
 
-        // TODO is this required?
-        li      r5, 33
-        stw     r5, 4(r6)
-
-        sync
-        stw     r4, 0(r6) /* write L2SC0 MMR to flash invalidate L2 cache and locks */
-l2loop:
-        sync
-        lwz     r5, 0(r6) /* get current L2SC0 MMR value */
-        and.    r5, r5, r4 /* compare to mask to see if complete */
-        bne     l2loop
+        /* poll till invalidate and lock bits are cleared */
+poll_l2_invclear:
+        lwz     r4, L2CSR0(r5)
+        and.    r4, r1, r4
+        bne     poll_l2_invclear
         isync
 
-enable_l2_pe:
-        lis     r5, 0x4000
+        /* enable L2 with parity */
         sync
-        stw     r5, 0(r6)
-l2_pe_loop:
-        sync
-        lwz     r4, 0(r6)
-        cmplw   r4, r5
-        bne     l2_pe_loop
+        isync
+        lis     r4, (L2CSR0_L2E | L2CSR0_L2PE)@h
+        stw     r4, L2CSR0(r5)
         isync
 
-enable_l2e:
-        lis     r5, 0xC000
-        sync
-        stw     r5, 0(r6)
-l2e_loop:
-        sync
-        lwz     r4, 0(r6)
-        cmplw   r4, r5
-        bne     l2e_loop
-        isync
-#endif /* MMU_V2 */
-#endif /* ENABLE_L2_CACHE */
+        /* set stash id = 32 */
+        li      r4, 32
+        stw     r4, L2CSR1(r5)
+
+l2_sram_init:
+        /* clear 8 bytes at a time */
+        lis     r2, (L2SRAM_ADDR - 8)@h
+        ori     r2, r2, (L2SRAM_ADDR - 8)@l
+        lis     r3, (L2SRAM_SIZE / 8)@h
+        mtctr   r3
+        li      r3, 0
+l2_sram_init_loop:
+        stdu    r3, 8(r2)
+        bdnz    l2_sram_init_loop
+#endif /* ENABLE_L2_CACHE && MMU_V2 */
 
 #ifdef MMU_V2
 set_stack_as:

@@ -69,6 +69,7 @@
 enum law_target_id {
     LAW_TRGT_DDR_1 = 0x10,
     LAW_TRGT_BMAN  = 0x18, /* Buffer Manager (BMan) (control) */
+    LAW_TRGT_CORENET = 0x1E,
     LAW_TRGT_IFC   = 0x1F, /* Integrated Flash Controller */
 };
 
@@ -104,7 +105,6 @@ enum law_sizes {
     LAW_SIZE_512GB,
     LAW_SIZE_1TB,
 };
-
 
 /* T2080 IFC (Integrated Flash Controller) - RM 13.3 */
 #define IFC_BASE        (CCSRBAR + 0x00124000)
