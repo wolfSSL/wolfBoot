@@ -63,7 +63,9 @@
     #define MMU_V2
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
-    #define L2SRAM_ADDR (0xFEC20000) /* Setup L2 as SRAM */
+    #define L2SRAM_ADDR   (0xFEC20000) /* L2 as SRAM */
+    #define L2SRAM_SIZE   (256 * 1024)
+    #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
 
@@ -154,6 +156,8 @@
 
     #ifndef L1_CACHE_LINE_SIZE
     #define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
+
+    #define CPC_BASE        (CCSRBAR + 0x10000)
 #endif
 
 
@@ -317,18 +321,6 @@
     asm volatile("mfmsr %0" : "=r" (rval)); rval; \
 })
 #define mtmsr(v)     asm volatile("mtmsr %0" : : "r" (v))
-
-
-/* L2 Cache */
-#define L2_BASE         (CCSRBAR + 0x20000)
-#define L2CTL           (volatile uint32_t*)(L2_BASE + 0x000) /* 0xFFE20000 - L2 control register */
-#define L2SRBAR0        (volatile uint32_t*)(L2_BASE + 0x100) /* 0xFFE20100 - L2 SRAM base address register */
-
-#define L2CTL_EN        (1 << 31) /* L2 enable */
-#define L2CTL_INV       (1 << 30) /* L2 invalidate */
-#define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
-#define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
-
 
 #ifndef __ASSEMBLER__
 

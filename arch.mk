@@ -339,6 +339,11 @@ ifeq ($(TARGET),nxp_p1021)
   SPI_TARGET=nxp
 endif
 
+ifeq ($(TARGET),zynq)
+  # Support detection and skip of U-Boot legecy header */
+  CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+endif
+
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1

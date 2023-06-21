@@ -36,8 +36,8 @@
     #define ENABLE_ESPI /* SPI for TPM */
     #define ENABLE_MP   /* multi-core support */
     #define ENABLE_IRQ
-
-    /* TODO - Ethernet*/
+    /* #define ENABLE_QE_CRC32 */ /* CRC32 check on QE disabled by default */
+    /* #define ENABLE_ETHERNET */ /* Does not support Ethernet UEC */
 #endif
 
 /* Debugging */
@@ -91,6 +91,17 @@ static int test_tpm(void);
 
 #define GUTS_DEVDISR_TB0    0x00004000
 #define GUTS_DEVDISR_TB1    0x00001000
+
+
+/* L2 Cache */
+#define L2_BASE         (CCSRBAR + 0x20000)
+#define L2CTL           (volatile uint32_t*)(L2_BASE + 0x000) /* 0xFFE20000 - L2 control register */
+#define L2SRBAR0        (volatile uint32_t*)(L2_BASE + 0x100) /* 0xFFE20100 - L2 SRAM base address register */
+
+#define L2CTL_EN        (1 << 31) /* L2 enable */
+#define L2CTL_INV       (1 << 30) /* L2 invalidate */
+#define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
+#define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
 
 
 /* PIC */
@@ -1018,7 +1029,7 @@ static int hal_cpld_init(void)
         ELBC_ORG_CSCT | ELBC_ORG_XACS | ELBC_ORG_SCY | ELBC_ORG_TRLX |
         ELBC_ORG_EHTR | ELBC_ORG_EAD));
 
-#if 0 /* ethernet (uec) setup not required */
+#ifdef ENABLE_ETHERNET /* ethernet (uec) setup not required */
     /* reset micrel phy for each UEC */
     set8(BCSR11, get8(BCSR11) & ~BCSR11_ENET_MICRST);
     set8(BCSR11, get8(BCSR11) |  BCSR11_ENET_MICRST);
@@ -1267,7 +1278,7 @@ static void qe_upload_microcode(const struct qe_firmware *firmware,
 }
 
 /* Upload a microcode to the I-RAM at a specific address */
-int qe_upload_firmware(const struct qe_firmware *firmware)
+static int qe_upload_firmware(const struct qe_firmware *firmware)
 {
     unsigned int i, j;
     uint32_t crc;
@@ -1312,7 +1323,7 @@ int qe_upload_firmware(const struct qe_firmware *firmware)
         return -1;
     }
 
-#if 0 /* Disabled for wolfBoot */
+#ifdef ENABLE_QE_CRC32
     /* Validate the CRC */
     crc = *(uint32_t *)((void *)firmware + calc_size);
     if (crc != (crc32(-1, (const void *) firmware, calc_size) ^ -1)) {
@@ -1495,6 +1506,9 @@ static void hal_mp_init(void)
     uint32_t *fixup = (uint32_t*)&_mp_page_start;
     uint32_t bootpg;
     int i_tlb = 0; /* always 0 */
+    size_t i;
+    const uint32_t *s;
+    uint32_t *d;
 
     /* Assign virtual boot page at end of DDR */
     bootpg = DDR_ADDRESS + DDR_SIZE - BOOT_ROM_SIZE;
@@ -1509,18 +1523,12 @@ static void hal_mp_init(void)
         0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
 
     /* copy startup code to virtually mapped boot address */
-#if 0 /* not use memcpy due to compiler array bounds report (not valid) */
-     memcpy((void*)BOOT_ROM_ADDR, fixup, BOOT_ROM_SIZE);
-#else
-    {
-        size_t i;
-        const uint32_t *s = (const uint32_t*)fixup;
-        uint32_t *d = (uint32_t*)BOOT_ROM_ADDR;
-        for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
-            d[i] = s[i];
-        }
+    /* do not use memcpy due to compiler array bounds report (not valid) */
+    s = (const uint32_t*)fixup;
+    d = (uint32_t*)BOOT_ROM_ADDR;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
     }
-#endif
 
     /* start core and wait for it to be enabled */
     hal_mp_up(bootpg);
@@ -1538,11 +1546,6 @@ void hal_irq_init(void)
 
     set32(PIC_GCR, PIC_GCR_M); /* eanble mixed-mode */
     reg = get32(PIC_GCR); /* read back */
-
-#if 0 /* interrupt function not setup */
-    /* Decrement interrupt enable */
-    mtspr(SPRN_TCR, TCR_DIE);
-#endif
 }
 #endif
 

@@ -192,6 +192,7 @@ backup_on_failure:
     }
 #endif
 
+#ifdef WOLFBOOT_UBOOT_LEGACY
     /* Check for U-Boot Legacy format image header */
     image_ptr = wolfBoot_peek_image(&os_image, 0, NULL);
     if (image_ptr) {
@@ -199,10 +200,12 @@ backup_on_failure:
             /* Note: Could parse header and get load address at 0x10 */
 
             /* Skip 64 bytes (size of Legacy format image header) */
+            load_address += UBOOT_IMG_HDR_SZ;
             os_image.fw_base += UBOOT_IMG_HDR_SZ;
             os_image.fw_size -= UBOOT_IMG_HDR_SZ;
         }
     }
+#endif
 
 #ifdef __GNUC__
     /* WOLFBOOT_LOAD_ADDRESS can be 0 address.
