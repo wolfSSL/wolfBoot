@@ -1327,6 +1327,14 @@ void RAMFUNCTION ext_flash_unlock(void)
 
 }
 
+#ifdef MMU
+void* hal_get_dts_address(void)
+{
+    return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+}
+#endif
+
+
 #ifdef TEST_FLASH
 #define TEST_ADDRESS 0x2800000 /* 40MB */
 static int test_flash(QspiDev_t* dev)

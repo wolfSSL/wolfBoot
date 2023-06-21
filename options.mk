@@ -373,6 +373,9 @@ ifeq ($(EXT_FLASH),1)
   endif
 endif
 
+ifeq ($(NO_XIP),1)
+  CFLAGS+=-D"NO_XIP"
+endif
 
 
 ifeq ($(ALLOW_DOWNGRADE),1)
@@ -387,9 +390,10 @@ ifeq ($(DISABLE_BACKUP),1)
   CFLAGS+= -D"DISABLE_BACKUP"
 endif
 
-
+DEBUG_SYMBOLS?=0
 ifeq ($(DEBUG),1)
-  CFLAGS+=-O0 -g -ggdb3 -D"DEBUG"
+  CFLAGS+=-O0 -D"DEBUG"
+  DEBUG_SYMBOLS=1
 else
   ifeq ($(OPTIMIZATION_LEVEL),)
     CFLAGS+=-Os
@@ -397,6 +401,13 @@ else
     CFLAGS+=-O$(OPTIMIZATION_LEVEL)
   endif
 endif
+
+# allow elf inclusion of debug symbols even with optimizations enabled
+# make DEBUG_SYMBOLS=1
+ifeq ($(DEBUG_SYMBOLS),1)
+  CFLAGS+=-g -ggdb3
+endif
+
 
 Q?=@
 ifeq ($(V),1)
@@ -502,6 +513,12 @@ ifeq ($(RAM_CODE),1)
        LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
     endif
   endif
+endif
+
+# support for elf32 or elf64 loader
+ifeq ($(ELF),1)
+  CFLAGS+=-DWOLFBOOT_ELF
+  OBJS += src/elf.o
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)

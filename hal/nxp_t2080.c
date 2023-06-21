@@ -224,12 +224,8 @@ enum ifc_amask_sizes {
 #define SATA_ENBL (*(volatile uint32_t *)(0xB1003F4C)) /* also saw 0xB4003F4C */
 
 /* DDR */
-#if 1
-    #define ENABLE_DDR
-#endif
 /* NAII 68PPC2 - 8GB discrete DDR3 IM8G08D3EBDG-15E */
 /* 1333.333 MT/s data rate 8 GiB (DDR3, 64-bit, CL=9, ECC on) */
-#define DDR_ADDRESS     0x00000000
 #define DDR_SIZE        (8192 * 1024 * 1024)
 #define DDR_N_RANKS     2
 #define DDR_RANK_DENS   0x100000000

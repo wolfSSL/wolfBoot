@@ -216,6 +216,7 @@ endif
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
   LDFLAGS+=-Wl,--build-id=none
+  CFLAGS+=-DARCH_PPC
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf
@@ -324,6 +325,10 @@ ifeq ($(TARGET),nxp_p1021)
   LDFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   UPDATE_OBJS:=src/update_ram.o
+  UPDATE_OBJS+=src/boot_ppc_mp.o
+
+  # Use PPC stdlib for memcpy, etc.
+  #CFLAGS+=-DWOLFBOOT_USE_STDLIBC
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o

@@ -510,6 +510,7 @@ struct wolfBoot_image {
     uint8_t hdr_ok : 1;
     uint8_t signature_ok : 1;
     uint8_t sha_ok : 1;
+    uint8_t not_ext : 1; /* image is no longer external */
 };
 
 /* do not warn if this is not used */
@@ -595,10 +596,10 @@ int wolfBoot_reseal_keys(struct wolfBoot_image* newImg,
 #  define SWAP_EXT 0
 # endif
 # define PARTN_IS_EXT(pn) \
-    ((pn == PART_BOOT || pn == PART_DTS_BOOT)?BOOT_EXT: \
-        ((pn == PART_UPDATE || pn == PART_DTS_UPDATE)?UPDATE_EXT: \
-            ((pn == PART_SWAP)?SWAP_EXT:0)))
-# define PART_IS_EXT(x)  PARTN_IS_EXT(((x)->part))
+    ((pn == PART_BOOT || pn == PART_DTS_BOOT) ? BOOT_EXT: \
+        ((pn == PART_UPDATE || pn == PART_DTS_UPDATE) ? UPDATE_EXT : \
+            ((pn == PART_SWAP) ? SWAP_EXT : 0)))
+# define PART_IS_EXT(x) (!(x)->not_ext) && PARTN_IS_EXT(((x)->part))
 
 
 #if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
