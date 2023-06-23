@@ -120,6 +120,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/asn.c</locationURI>
 		</link>
 		<link>
+			<name>src/wolfcrypt/cryptocb.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/cryptocb.c</locationURI>
+		</link>
+		<link>
 			<name>src/wolfcrypt/ecc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/ecc.c</locationURI>
@@ -208,6 +213,31 @@
 			<name>src/wolfcrypt/tfm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/tfm.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/wc_port.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/wc_port.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_common.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_tsip_rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_rsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_tsip_sha.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_sha.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_tsip_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -35,11 +35,13 @@
  *
  */
 
+#if !defined(_RENESAS_RA_)
 #pragma inline_asm longJump
 static void longJump(const uint32_t *app_offset)
 {
     jmp   r1;
 }
+#endif
 
 void do_boot(const uint32_t *app_offset)
 {

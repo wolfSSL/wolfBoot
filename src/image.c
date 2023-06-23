@@ -334,8 +334,22 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         word32 in_out = 0;
         int res = 0;
 
-#if !defined(WOLFBOOT_RENESAS_SCEPROTECT)
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
+    defined(WOLFBOOT_RENESAS_TSIP)
+        ret = wc_InitRsaKey_ex(&rsa, NULL,
+                RENESAS_DEVID);
+        if (ret < 0) {
+            /* Failed to initialize key */
+            return;
+        }
+        XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
+        RSA_VERIFY_FN(ret, wc_RsaSSL_Verify, img->sha_hash,
+            WOLFBOOT_SHA_DIGEST_SIZE, output, IMAGE_SIGNATURE_SIZE, &rsa);
+        /* SCE SignatureVerify API has verified */
+        if (ret == 0)
+            wolfBoot_image_confirm_signature_ok(img);
 
+#else
         ret = wc_InitRsaKey(&rsa, NULL);
         if (ret < 0) {
             /* Failed to initialize key */
@@ -352,19 +366,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
         RSA_VERIFY_FN(ret, wc_RsaSSL_VerifyInline, output, IMAGE_SIGNATURE_SIZE,
                 &digest_out, &rsa);
-#else
-        ret = wc_InitRsaKey_ex(&rsa, NULL, SCE_ID);
-        if (ret < 0) {
-            /* Failed to initialize key */
-            return;
-        }
-        XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
-        RSA_VERIFY_FN(ret, wc_RsaSSL_Verify, img->sha_hash,
-            WOLFBOOT_SHA_DIGEST_SIZE, output, IMAGE_SIGNATURE_SIZE, &rsa);
-        /* SCE SignatureVerify API has verified */
-        if (ret == 0)
-            wolfBoot_image_confirm_signature_ok(img);
-#endif /* WOLFBOOT_RENESAS_SCEPROTECT_CRYPTONLY */
+#endif /* SCE || TSIP */
     }
 #endif /* WOLFBOOT_TPM */
 
@@ -1005,16 +1007,19 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
        return -1;
     pubkey_hint_size = get_header(img, HDR_PUBKEY, &pubkey_hint);
     if (pubkey_hint_size == WOLFBOOT_SHA_DIGEST_SIZE) {
-#if !defined(WOLFBOOT_RENESAS_SCEPROTECT)
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
+    defined(WOLFBOOT_RENESAS_TSIP)
+        /* SCE wrapped key is installed at
+         *    RENESAS_SCE_INSTALLEDKEY_ADDR
+         * TSIP encrypted key is installed ad
+         *    RENESAS_TSIP_INSTALLEDKEY_ADDR
+         */
+        key_slot = 0;
+#else
         key_slot = keyslot_id_by_sha(pubkey_hint);
         if (key_slot < 0) {
             return -1; /* Key was not found */
         }
-#else
-        /* SCE wrapped key is installed at
-         *    RENESAS_SCE_INSTALLEDKEY_ADDR
-		 */
-        key_slot = 0;
 #endif
     } else {
         return -1; /* Invalid hash size for public key hint */
