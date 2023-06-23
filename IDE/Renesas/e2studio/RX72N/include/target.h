@@ -36,7 +36,7 @@
 
 #if defined(WOLFBOOT_RENESAS_TSIP)
 
-    #define WOLFBOOT_BOOT_SIZE                  0x50000
+    #define WOLFBOOT_BOOT_SIZE                  0x70000
     #define WOLFBOOT_RX_EXCVECT                 0x10000
     #define WOLFBOOT_SECTOR_SIZE                0x20000
     
@@ -67,7 +67,7 @@
     #define WOLFBOOT_PARTITION_SWAP_ADDRESS     0x0
 
 #else
-    #define WOLFBOOT_BOOT_SIZE                  0x10000
+    #define WOLFBOOT_BOOT_SIZE                  0x20000
     #define WOLFBOOT_RX_EXCVECT                 0x10000
     #define WOLFBOOT_SECTOR_SIZE                0x20000
     

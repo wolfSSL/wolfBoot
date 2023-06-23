@@ -26,10 +26,20 @@
 #ifndef H_USER_SETTINGS_
 #define H_USER_SETTINGS_
 
+/* For TSIP use, please enable the following line. */
+#define WOLFBOOT_RENESAS_TSIP
+
 #ifdef WOLFBOOT_RENESAS_TSIP
-    #define WOLFSSL_RENESAS_TSIP_SIGNATURE // Current version support only RSA2048
-    #define WOLFSSL_NO_SW_MATH
-    #define WOLFBOOT_SIGN_RSA2048
+#   define WOLFSSL_RENESAS_TSIP
+#   define WOLFSSL_RENESAS_TSIP_VER  117
+#   define WOLFSSL_RENESAS_TSIP_CRYPT
+#   define WOLFSSL_RENESAS_TSIP_CRYPTONLY
+#   define WOLFSSL_NO_SW_MATH
+#   define WOLFBOOT_SIGN_RSA2048
+#   define WOLFBOOT_SMALL_STACK
+#   define WOLF_CRYPTO_CB
+#   define RENESAS_TSIP_INSTALLEDKEY_ADDR 0xFFFF0000
+#   define RENESAS_DEVID 7890
 #else
     #define WOLFBOOT_SIGN_RSA2048
     /* #define WOLFBOOT_SIGN_RSA3072 */

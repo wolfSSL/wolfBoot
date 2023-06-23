@@ -71,10 +71,19 @@ void main(void)
 {
     uint8_t firmware_version = 0;
 
+#if !defined(WOLFBOOT_RENESAS_TSIP)
     printf("| ------------------------------------------------------------------- |\n");
     printf("| Renesas RX User Application in BOOT partition started by wolfBoot   |\n");
     printf("| ------------------------------------------------------------------- |\n\n");
-
+#elif defined(WOLFBOOT_RENESAS_TSIP_SRCVERSION)
+    printf("| ------------------------------------------------------------------------------- |\n");
+    printf("| Renesas RX w/ TSIP(SRC) User Application in BOOT partition started by wolfBoot  |\n");
+    printf("| ------------------------------------------------------------------------------- |\n\n");
+#else
+    printf("| ------------------------------------------------------------------------------- |\n");
+    printf("| Renesas RX w/ TSIP(LIB) User Application in BOOT partition started by wolfBoot  |\n");
+    printf("| ------------------------------------------------------------------------------- |\n\n");
+#endif
 
     hal_init();
 
@@ -86,8 +95,8 @@ void main(void)
     printf("\nCurrent Firmware Version: %d\n", firmware_version);
 
     if (firmware_version >= 1) {
-    	if (firmware_version == 1) {
-    	    printf("Hit any key to call wolfBoot_success the firmware.\n");
+        if (firmware_version == 1) {
+            printf("Hit any key to call wolfBoot_success the firmware.\n");
             getchar();
 
             wolfBoot_success();
@@ -98,7 +107,7 @@ void main(void)
 
             wolfBoot_update_trigger();
             printf("Firmware Update is triggered\n");
-    	}
+        }
     } else {
         printf("Invalid Firmware Version\n");
         goto busy_idle;

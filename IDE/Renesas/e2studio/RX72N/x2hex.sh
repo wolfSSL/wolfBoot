@@ -11,7 +11,7 @@
 
 
 if [ $# -ne 4 ];then
-    echo "Usage: $0 <0 or 1 for TSIP use> WOLFBOOT_DIR RXELF_BIN_DIR <signature method>";
+    echo "Usage: $0 <0, 1 for TSIP LIB use or 2 for TSIP SRC use> WOLFBOOT_DIR RXELF_BIN_DIR <signature method>";
     echo " sig : 0,1 : rsa-2048 (Default)"
     echo "       2 : rsa-3072"
     echo "       3 : ed25519"
@@ -35,6 +35,7 @@ ECC384_SIGN="ecc384"
 ECC512_SIGN="ecc521"
 
 SIGN_METHOD=${RSA2048_SIGN}
+SIGN_METHOD_EX=""
 
 TSIPUSE=$1
 WOLFBOOT_DIR="$2"
@@ -44,11 +45,6 @@ APP_RX=${CURRENT}/app_RenesasRx01
 RXELF_OBJCPY_BIN="${RXELF_BIN_DIR}/rx-elf-objcopy.exe"
 
 PATH=$PATH:${WOLFBOOT_DIR}/tools/keytools
-
-if [ $TSIPUSE -eq 1 ]; then
- VER1_ADDR=0xffc50000
- VER2_ADDR=0xffe10000
-fi
 
 case $4 in
     0) ;;
@@ -62,6 +58,25 @@ case $4 in
     *) echo "invalid signature method $4. Please specify [0-8] for sign."
        exit 1 ;;
 esac
+
+if [ $TSIPUSE -eq 1 -o $TSIPUSE -eq 2 ]; then
+ if [ $TSIPUSE -eq 2 ]; then
+     VER1_ADDR=0xffc10000
+     VER2_ADDR=0xffdf0000
+ else
+     VER1_ADDR=0xffc70000
+     VER2_ADDR=0xffe20000
+ fi
+ # only support rsa2048 now
+ case $4 in
+    0) ;;
+    1) ;;
+    *) echo "invalid signature mehtod $4. Please specifiy [0-8] for sign."
+       exit 1 ;;
+ esac
+ SIGN_METHOD_EX="enc"
+
+fi
 
 echo "Version 1 app start address : " $VER1_ADDR 
 echo "Version 2 app start address : " $VER2_ADDR 
@@ -89,11 +104,11 @@ keygen --${SIGN_METHOD} -g ./pri-${SIGN_METHOD}.der
 
 echo 
 echo sign app_RenesasRx01.bin for version 1
-sign --${SIGN_METHOD} app_RenesasRx01.bin ./pri-${SIGN_METHOD}.der 1.0
+sign --${SIGN_METHOD}${SIGN_METHOD_EX} app_RenesasRx01.bin ./pri-${SIGN_METHOD}.der 1.0
 
 echo 
 echo sign app_RenesasRx01.bin for version 2
-sign --${SIGN_METHOD} app_RenesasRx01.bin ./pri-${SIGN_METHOD}.der 2.0
+sign --${SIGN_METHOD}${SIGN_METHOD_EX} app_RenesasRx01.bin ./pri-${SIGN_METHOD}.der 2.0
 
 echo 
 echo copy app_RenesasRx01_v1.0/v2.0_signed.bin RXELF_BIN_DIR

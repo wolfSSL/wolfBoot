@@ -106,6 +106,9 @@ const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generate
              " * used by wolfBoot to verify the updates.\n"
              " */" \
              "\n#include <stdint.h>\n#include \"wolfboot/wolfboot.h\"\n"
+             #if defined(WOLFBOOT_RENESAS_TSIP)
+             "#include \"key_data.h\"\n"
+             #endif
              "#ifdef WOLFBOOT_NO_SIGN\n\t#define NUM_PUBKEYS 0\n#else\n\n"
              "#if (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_%s)\n\t"
              "#error Key algorithm mismatch. Remove old keys via 'make distclean'\n"
@@ -129,7 +132,25 @@ const char Keystore_API[] =
                 "{\n"
                 "    return NUM_PUBKEYS;\n"
                 "}\n\n"
- #if !defined(WOLFBOOT_RENESAS_SCEPROTECT)
+ #if defined(WOLFBOOT_RENESAS_SCEPROTECT)
+                "uint32_t *keystore_get_buffer(int id)\n"
+                "{\n"
+                "    return (uint32_t *)RENESAS_SCE_INSTALLEDKEY_ADDR;\n"
+                "}\n\n"
+                "int keystore_get_size(int id)\n"
+                "{\n"
+                "    return (int)260;\n"
+                "}\n\n"
+  #elif defined(WOLFBOOT_RENESAS_TSIP)
+                "uint32_t *keystore_get_buffer(int id)\n"
+                "{\n"
+                "    return (uint32_t *)RENESAS_TSIP_INSTALLEDKEY_ADDR;\n"
+                "}\n\n"
+                "int keystore_get_size(int id)\n"
+                "{\n"
+                "    return (int)ENCRYPTED_KEY_BYTE_SIZE;\n"
+                "}\n\n"
+  #else
                 "uint8_t *keystore_get_buffer(int id)\n"
                 "{\n"
                 "    if (id >= keystore_num_pubkeys())\n"
@@ -142,15 +163,6 @@ const char Keystore_API[] =
                 "        return -1;\n"
                 "    return (int)PubKeys[id].pubkey_size;\n"
                 "}\n\n"
-  #else
-                "uint32_t *keystore_get_buffer(int id)\n"
-                "{\n"
-                "    return (uint32_t *)RENESAS_SCE_INSTALLEDKEY_ADDR;\n"
-                "}\n\n"
-                "int keystore_get_size(int id)\n"
-                "{\n"
-                "    return (int)260;\n"
-                "}\n\n"
   #endif
                 "uint32_t keystore_get_mask(int id)\n"
                 "{\n"
@@ -158,6 +170,11 @@ const char Keystore_API[] =
                 "        return -1;\n"
                 "    return (int)PubKeys[id].part_id_mask;\n"
                 "}\n\n"
+                "uint32_t keystore_get_key_type(int id)\n"
+                "{\n"
+                "   return PubKeys[id].key_type;\n"
+                "}\n\n"
+
                 "#endif /* Keystore public key size check */\n"
                 "#endif /* WOLFBOOT_NO_SIGN */\n";
 
@@ -450,14 +467,14 @@ static void keygen_ed448(const char *privkey)
 #endif
 
 
-static void key_generate(uint32_t ktype, const char *kfilename)
+static void key_gen_check(const char *kfilename)
 {
     FILE *f;
     f = fopen(kfilename, "rb");
     if (!force && (f != NULL)) {
         char reply[40];
         int replySz;
-        printf("** Warning: key file already exist! Are you sure you want to  generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        printf("** Warning: key file already exist! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
         fflush(stdout);
         replySz = scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
@@ -469,6 +486,10 @@ static void key_generate(uint32_t ktype, const char *kfilename)
             unlink(kfilename);
         }
     }
+}
+
+static void key_generate(uint32_t ktype, const char *kfilename)
+{
     printf("Generating key (type: %s)\n", KName[ktype]);
     fflush(stdout);
 
@@ -613,6 +634,7 @@ int main(int argc, char** argv)
             force = 1;
         }
         else if (strcmp(argv[i], "-g") == 0) {
+            key_gen_check(argv[i + 1]);
             i++;
             n_pubkeys++;
             continue;

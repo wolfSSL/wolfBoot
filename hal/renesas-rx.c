@@ -30,13 +30,14 @@
 #include "hal.h"
 #include "r_flash_rx.h"
 
-#ifdef WOLFBOOT_RENESAS_TSIP
-#include "r_tsip_rx_if.h"
-#include "key_data.h"
-
-tsip_tls_ca_certification_public_key_index_t g_key_index_1;
-tsip_update_key_ring_t g_key_index_2;
-
+#if defined(WOLFBOOT_RENESAS_TSIP)  && \
+    !defined(WOLFBOOT_RENESAS_APP)
+#    include "wolfssl/wolfcrypt/wc_port.h"
+#    include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
+#    include "wolfssl/wolfcrypt/port/Renesas/renesas_sync.h"
+#    include "key_data.h"
+#    include "wolfssl/wolfcrypt/port/Renesas/renesas_tsip_types.h"
+TsipUserCtx pkInfo;
 #endif
 
 static inline void hal_panic(void)
@@ -47,12 +48,72 @@ static inline void hal_panic(void)
 
 void hal_init(void)
 {
+#if defined(WOLFBOOT_RENESAS_TSIP) &&\
+    !defined(WOLFBOOT_RENESAS_APP)
+    int err;
+    uint32_t key_type = 0;
+    int tsip_key_type = -1;
+    /* retrive installed pubkey data from flash */
+    struct encrypted_user_key_data *encrypted_user_key_data =
+                    (struct encrypted_user_key_data*)keystore_get_buffer(0);
+#endif
+
     if(R_FLASH_Open() != FLASH_SUCCESS)
         hal_panic();
 
-#ifdef WOLFBOOT_RENESAS_TSIP
-	if(R_TSIP_Open(&g_key_index_1, &g_key_index_2)!= TSIP_SUCCESS)
+#if defined(WOLFBOOT_RENESAS_TSIP) && \
+    !defined(WOLFBOOT_RENESAS_APP)
+    err = wolfCrypt_Init();
+    if (err != 0) {
+       printf("ERROR: wolfCrypt_Init %d\n", err);
+       hal_panic();
+    }
+
+    key_type = keystore_get_key_type(0);
+    switch(key_type){
+
+        case AUTH_KEY_RSA2048:
+            tsip_key_type = TSIP_RSA2048;
+            break;
+        case AUTH_KEY_RSA4096:
+            tsip_key_type = TSIP_RSA4096;
+            break;
+        case AUTH_KEY_ED448:
+        case AUTH_KEY_ECC384:
+        case AUTH_KEY_ECC521:
+        case AUTH_KEY_ED25519:
+        case AUTH_KEY_ECC256:
+        case AUTH_KEY_RSA3072:
+        default:
+            tsip_key_type = -1;
+            break;
+    }
+
+    if (tsip_key_type == -1) {
+        printf("key type (%d) not supported\n", key_type);
         hal_panic();
+    }
+    /* inform user key */
+    tsip_inform_user_keys_ex((byte*)&encrypted_user_key_data->wufpk,
+                            (byte*)&encrypted_user_key_data->initial_vector,
+                            (byte*)&encrypted_user_key_data->encrypted_user_key,
+                            0/* dummy */);
+    /* TSIP specific RSA public key */
+    if (tsip_use_PublicKey_buffer(&pkInfo,
+                (const char*)&encrypted_user_key_data->encrypted_user_key,
+                 ENCRYPTED_KEY_BYTE_SIZE,
+                 tsip_key_type) != 0) {
+            printf("ERROR tsip_use_PublicKey_buffer\n");
+            hal_panic();
+    }
+    /* Init Crypt Callback */
+    pkInfo.sing_hash_type = sha256_mac;
+    pkInfo.keyflgs_crypt.bits.message_type = 1;
+    err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
+    if (err < 0) {
+        printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
+        hal_panic();
+    }
 #endif
 
 }
@@ -69,7 +130,7 @@ static uint8_t save[MIN_PROG];
 int blockWrite(const uint8_t *data, uint32_t addr, int len)
 {
     for(; len; len-=MIN_PROG, data+=MIN_PROG, addr+=MIN_PROG) {
-    	memcpy(save, data, MIN_PROG); /* for the case "data" ls a flash address */
+        memcpy(save, data, MIN_PROG); /* for the case "data" ls a flash address */
         if(R_FLASH_Write((uint32_t)save, addr, MIN_PROG) != FLASH_SUCCESS)
             return -1;
     }
@@ -100,7 +161,7 @@ int hal_flash_write(uint32_t addr, const uint8_t *data, int len)
         if(blockWrite(data, addr, ALIGN_FLASH(len)) < 0)
             goto error;
         addr += ALIGN_FLASH(len);
-        data += ALIGN_FLASH(len);    
+        data += ALIGN_FLASH(len);
         len  -= ALIGN_FLASH(len);
     }
 
@@ -130,7 +191,7 @@ int hal_flash_erase(uint32_t address, int len)
                 != FLASH_SUCCESS)
             return -1;
     }
-    return 0;    
+    return 0;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -163,9 +224,9 @@ void RAMFUNCTION hal_flash_lock(void)
 
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
-	flash_cmd_t cmd = FLASH_CMD_SWAPFLAG_TOGGLE;
-	printf("FLASH_CMD_SWAPFLAG_TOGGLE=%d\n", FLASH_CMD_SWAPFLAG_TOGGLE);
-	hal_flash_unlock();
+    flash_cmd_t cmd = FLASH_CMD_SWAPFLAG_TOGGLE;
+    printf("FLASH_CMD_SWAPFLAG_TOGGLE=%d\n", FLASH_CMD_SWAPFLAG_TOGGLE);
+    hal_flash_unlock();
     if(R_FLASH_Control(cmd, NULL) != FLASH_SUCCESS)
         hal_panic();
     hal_flash_lock();
