@@ -37,6 +37,10 @@ static uint8_t *flash_base;
 
 uint32_t erasefail_address = 0xFFFFFFFF;
 
+uint8_t* startWolfboot;
+uint8_t* endWolfboot;
+
+#define SELF_FLASH_FILE "./wolfboot.bin"
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
 #define EXTERNAL_FLASH_FILE "./external_flash.dd"
 
@@ -126,6 +130,7 @@ void hal_init(void)
     int ret;
     uint8_t *p;
     int i;
+
     ret = mmap_file(INTERNAL_FLASH_FILE,
                     (uint8_t*)ARCH_FLASH_OFFSET, &p);
     if (ret != 0) {
@@ -140,6 +145,25 @@ void hal_init(void)
         exit(-1);
     }
 #endif /* EXT_FLASH */
+
+#ifdef WOLFTPM_KEYSTORE
+    struct stat st = { 0 };
+
+    ret = mmap_file(SELF_FLASH_FILE,
+                    (uint8_t*)ARCH_FLASH_OFFSET + 0x20000000, &startWolfboot);
+    if (ret != 0) {
+        fprintf(stderr,"failed to load self flash file\n");
+        exit(-1);
+    }
+
+    ret = stat("./wolfboot.bin", &st);
+    if (ret != 0) {
+        fprintf(stderr,"failed to stat self flash file\n");
+        exit(-1);
+    }
+
+    endWolfboot = startWolfboot + st.st_size;
+#endif
 
     for (i = 1; i < main_argc; i++) {
         if (strcmp(main_argv[i], "powerfail") == 0) {

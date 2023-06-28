@@ -33,6 +33,7 @@
 
 #define DEFAULT_PCR_INDEX 16
 
+#ifndef NO_FILESYSTEM
 static int readFile(char* name, uint8_t* buf, uint32_t* bufSz)
 {
     int ret;
@@ -67,6 +68,18 @@ static int readFile(char* name, uint8_t* buf, uint32_t* bufSz)
     return ret;
 }
 
+static void usage()
+{
+    printf("NOTE currently policy sealing only supports ecc256 keys");
+    printf("Expected usage: ./preseal pubkey imagedigest sealNVindex digestNVindex [pcrindex]\n");
+    printf("pubkey: the verification key to seal into the tpm\n");
+    printf("imagedigest: the digest of the image that this pubkey verifies\n");
+    printf("sealNVindex: the NV index to seal the pubkey to\n");
+    printf("digestNVindex: the NV index to seal the policyDigest to\n");
+    printf("pcrindex: the pcrindex to extend with the imagedigest, defaults to 16\n");
+}
+#else
+
 static signed char HexCharToByte(signed char ch)
 {
     signed char ret = (signed char)ch;
@@ -95,19 +108,7 @@ static int HexToByte(const char *hex, unsigned char *output, unsigned long sz)
     }
     return (int)sz;
 }
-
-static void usage()
-{
-    printf("NOTE currently policy sealing only supports ecc256 keys");
-    printf("Expected usage: ./preseal pubkey policypubkey policysignature imagedigest sealNVindex digestNVindex [pcrindex]\n");
-    printf("pubkey: the verification key to seal into the tpm\n");
-    printf("policypubkey: the pubkey used sign the policy expiration date\n");
-    printf("policysignature: the signature of the policy expiration date\n");
-    printf("imagedigest: the digest of the image that this pubkey verifies\n");
-    printf("sealNVindex: the NV index to seal the pubkey to\n");
-    printf("digestNVindex: the NV index to seal the policyDigest to\n");
-    printf("pcrindex: the pcrindex to extend with the imagedigest, defaults to 16\n");
-}
+#endif /* !NO_FILESYSTEM */
 
 int main(int argc, char** argv)
 {
@@ -122,10 +123,6 @@ int main(int argc, char** argv)
     uint32_t pcrArraySz = 1;
     uint8_t pubkey[ECC_MAXSIZE];
     uint32_t pubkeySz = ECC_MAXSIZE;
-    uint8_t policyPubkey[ECC_MAXSIZE];
-    uint32_t policyPubkeySz = ECC_MAXSIZE;
-    uint8_t policySigned[ECC_MAXSIZE];
-    uint32_t policySignedSz = ECC_MAXSIZE;
     uint8_t imageDigest[WC_MAX_DIGEST_SIZE];
     uint32_t imageDigestSz = WC_MAX_DIGEST_SIZE;
     uint32_t sealNvIndex;
@@ -141,7 +138,7 @@ int main(int argc, char** argv)
     XMEMSET(&pcrReset, 0, sizeof(PCR_Reset_In));
 
 #ifndef NO_FILESYSTEM
-    if (argc < 7) {
+    if (argc < 5) {
         usage();
         return 0;
     }
@@ -152,30 +149,18 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    rc = readFile(argv[2], policyPubkey, &policyPubkeySz);
-    if (rc != 0) {
-        printf("Failed to read policypubkey\n");
-        return 1;
-    }
-
-    rc = readFile(argv[3], policySigned, &policySignedSz);
-    if (rc != 0) {
-        printf("Failed to read policysignature\n");
-        return 1;
-    }
-
-    rc = readFile(argv[4], imageDigest, &imageDigestSz);
+    rc = readFile(argv[2], imageDigest, &imageDigestSz);
     if (rc != 0) {
         printf("Failed to read imagedigest\n");
         return 1;
     }
 
-    sealNvIndex = atoi(argv[5]);
-    policyDigestNvIndex = atoi(argv[6]);
+    sealNvIndex = atoi(argv[3]);
+    policyDigestNvIndex = atoi(argv[4]);
 
     /* TODO change this to a loop when multiple pcr's are supported */
-    if (argc > 7 )
-        pcrArray[0] = atoi(argv[7]);
+    if (argc > 5 )
+        pcrArray[0] = atoi(argv[5]);
     else
         pcrArray[0] = DEFAULT_PCR_INDEX;
 #else
@@ -185,20 +170,6 @@ int main(int argc, char** argv)
         return 1;
     }
     pubkeySz = strlen(PUBKEY) / 2;
-
-    rc = HexToByte(POLICY_PUBKEY, policyPubkey, strlen(POLICY_PUBKEY) / 2);
-    if (rc < 0) {
-        printf("Failed to read pubkey\n");
-        return 1;
-    }
-    policyPubkeySz = strlen(POLICY_PUBKEY) / 2;
-
-    rc = HexToByte(POLICY_SIGNED, policySigned, strlen(POLICY_SIGNED) / 2);
-    if (rc < 0) {
-        printf("Failed to read pubkey\n");
-        return 1;
-    }
-    policySignedSz = strlen(POLICY_SIGNED) / 2;
 
     rc = HexToByte(IMAGE_DIGEST, imageDigest, strlen(IMAGE_DIGEST) / 2);
     if (rc < 0) {
@@ -216,12 +187,7 @@ int main(int argc, char** argv)
         pcrArray[0] = DEFAULT_PCR_INDEX;
     #endif
 #endif
-
-#ifdef SIM
-    rc = wolfTPM2_Init(&dev, NULL, NULL);
-#else
     rc = wolfTPM2_Init(&dev, TPM2_IoCb, NULL);
-#endif
 
     if (rc != TPM_RC_SUCCESS) {
         printf("wolfTPM2_Init failed 0x%x: %s\n", rc, TPM2_GetRCString(rc));
@@ -260,16 +226,9 @@ int main(int argc, char** argv)
         goto exit;
     }
 
-    rc = wolfTPM2_LoadEccPublicKey(&dev, (WOLFTPM2_KEY*)&authKey,
-        TPM_ECC_NIST_P256, policyPubkey, 32, policyPubkey + 32, 32);
-    if (rc != TPM_RC_SUCCESS) {
-        printf("wolfTPM2_LoadEccPublicKey failed\n");
-        goto exit;
-    }
-
-    rc = wolfTPM2_SealWithAuthSigNV(&dev, &authKey, &tpmSession, TPM_ALG_SHA256,
-        TPM_ALG_SHA256, (word32*)pcrArray, pcrArraySz, pubkey, pubkeySz, NULL,
-        0, policySigned, policySignedSz, sealNvIndex, policyDigestNvIndex);
+    rc = wolfTPM2_SealWithPCR_NV(&dev, &tpmSession, TPM_ALG_SHA256,
+        TPM_ALG_SHA256, (word32*)pcrArray, pcrArraySz, pubkey, pubkeySz,
+        sealNvIndex, policyDigestNvIndex);
     if (rc != TPM_RC_SUCCESS) {
         printf("wolfTPM2_SealWithAuthPolicyNV failed 0x%x: %s\n", rc,
             TPM2_GetRCString(rc));

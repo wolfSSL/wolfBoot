@@ -30,7 +30,6 @@
 #include "wolfboot/wolfboot.h"
 #include "delta.h"
 
-
 #ifdef RAM_CODE
 extern unsigned int _start_text;
 static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
@@ -522,12 +521,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
     st = IMG_STATE_SUCCESS;
     wolfBoot_set_partition_state(PART_BOOT, st);
-#endif
-
-#if defined(WOLFBOOT_TPM) && defined(WOLFTPM_KEYSTORE)
-    /* reseal the true pubkey after the image update */
-    if (wolfBoot_reseal_keys(&boot, &update) != 0)
-        return -1;
 #endif
 
 #ifdef EXT_FLASH

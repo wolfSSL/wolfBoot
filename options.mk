@@ -460,7 +460,10 @@ ifeq ($(WOLFTPM),1)
       WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
     endif
   endif
+  # leave this for ENCRYPT_WITH_AES128
+  ifneq ($(ENCRYPT_WITH_AES128),1)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+  endif
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
   ifeq ($(DEBUG),1)
     CFLAGS+=-DWOLFBOOT_DEBUG_TPM=1

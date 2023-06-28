@@ -73,6 +73,8 @@ tools/keytools/Release
 # preseal binary
 tools/preseal/preseal
 tools/preseal/preseal.exe
+tools/preseal/hash
+tools/preseal/hash.exe
 
 # delta binaries
 tools/delta/bmdiff
