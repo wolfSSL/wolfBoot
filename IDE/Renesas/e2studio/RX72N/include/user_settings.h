@@ -28,6 +28,8 @@
 
 /* For TSIP use, please enable the following line. */
 #define WOLFBOOT_RENESAS_TSIP
+/* For TSIP SRC version use, please enable the following line */
+/* #define WOLFBOOT_RENESAS_TSIP_SRCVERSION */
 
 #ifdef WOLFBOOT_RENESAS_TSIP
 #   define WOLFSSL_RENESAS_TSIP
