@@ -387,7 +387,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
             return;
         }
         XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
-        RSA_VERIFY_FN(ret, wc_RsaSSL_Verify, img->sha_hash, 
+        RSA_VERIFY_FN(ret, wc_RsaSSL_Verify, img->sha_hash,
             WOLFBOOT_SHA_DIGEST_SIZE, output, IMAGE_SIGNATURE_SIZE, &rsa);
         /* SCE SignatureVerify API has verified */
         if (ret == 0)
@@ -896,24 +896,25 @@ void wolfBoot_tpm2_deinit(void)
 #ifdef WOLFTPM_KEYSTORE
 int wolfBoot_unseal_at(uint32_t nvIndex, uint8_t* out, uint32_t* outSz)
 {
+    int ret;
     WOLFTPM2_SESSION wolftpm_session;
     PCR_Reset_In pcrReset;
-    int ret;
     uint8_t selfDigest[WOLFBOOT_SHA_DIGEST_SIZE];
 
     XMEMSET(&wolftpm_session, 0, sizeof(WOLFTPM2_SESSION));
     XMEMSET(&pcrReset, 0, sizeof(PCR_Reset_In));
 
     /* get the wolfBoot digest */
+    /* Note: We should use / extend additional PCR's from hardware details */
     if (self_hash(selfDigest) != 0)
         return -1;
 
     /* clear out the PCR digest */
     pcrReset.pcrHandle = wolftpmPcrArray[0];
-
     ret = TPM2_PCR_Reset(&pcrReset);
-    if (ret != TPM_RC_SUCCESS)
-        return -ret;
+    /* Note! use of this API is not always allowed and should not be fatal.
+     * Should rely on physical reset pin */
+    (void)ret; /* ignore return code check here */
 
     /* extend the PCRs with the image hash */
     ret = wolfTPM2_ExtendPCR(&wolftpm_dev, wolftpmPcrArray[0], TPM_ALG_SHA256,
@@ -929,7 +930,8 @@ int wolfBoot_unseal_at(uint32_t nvIndex, uint8_t* out, uint32_t* outSz)
 
     /* set the auth session for the device */
     ret = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &wolftpm_session,
-        (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt | TPMA_SESSION_continueSession));
+        (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
+         TPMA_SESSION_continueSession));
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
@@ -939,9 +941,9 @@ int wolfBoot_unseal_at(uint32_t nvIndex, uint8_t* out, uint32_t* outSz)
         return -ret;
 
     /* unseal the NV pubkey */
-    ret = wolfTPM2_UnsealWithPCR_NV(&wolftpm_dev, &wolftpm_session, TPM_ALG_SHA256,
-        (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray), nvIndex,
-        WOLFTPM_POLICY_DIGEST_INDEX, out, outSz);
+    ret = wolfTPM2_UnsealWithPCR_NV(&wolftpm_dev, &wolftpm_session,
+        TPM_ALG_SHA256, (word32*)wolftpmPcrArray, sizeof(wolftpmPcrArray),
+        nvIndex, WOLFTPM_POLICY_DIGEST_INDEX, out, outSz);
     if (ret != TPM_RC_SUCCESS)
         return -ret;
 
