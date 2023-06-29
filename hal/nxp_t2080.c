@@ -24,6 +24,8 @@
 
 #include "nxp_ppc.h"
 
+/* Tested on T2080E Rev 1.1, e6500 core 2.0, PVR 8040_0120 and SVR 8538_0011 */
+
 /* T2080 */
 #define SYS_CLK (600000000)
 
@@ -55,56 +57,6 @@
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
 #define GET_PHYS_HIGH(addr) (((uint64_t)(addr)) >> 32)
-
-/* T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
-#define LAWBAR_BASE(n) (CCSRBAR + 0xC00 + (n * 0x10))
-#define LAWBARH(n)     *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
-#define LAWBARL(n)     *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x4))
-#define LAWAR(n)       *((volatile uint32_t*)(LAWBAR_BASE(n) + 0x8))
-
-#define LAWAR_ENABLE      (1<<31)
-#define LAWAR_TRGT_ID(id) (id<<20)
-
-/* T2080 Global Source/Target ID Assignments - RM Table 2-1 */
-enum law_target_id {
-    LAW_TRGT_DDR_1 = 0x10,
-    LAW_TRGT_BMAN  = 0x18, /* Buffer Manager (BMan) (control) */
-    LAW_TRGT_CORENET = 0x1E,
-    LAW_TRGT_IFC   = 0x1F, /* Integrated Flash Controller */
-};
-
-/* T2080 2.4.3 - size is equal to 2^(enum + 1) */
-enum law_sizes {
-    LAW_SIZE_4KB = 0x0B,
-    LAW_SIZE_8KB,
-    LAW_SIZE_16KB,
-    LAW_SIZE_32KB,
-    LAW_SIZE_64KB,
-    LAW_SIZE_128KB, /* 0x10 */
-    LAW_SIZE_256KB,
-    LAW_SIZE_512KB,
-    LAW_SIZE_1MB,
-    LAW_SIZE_2MB,
-    LAW_SIZE_4MB,
-    LAW_SIZE_8MB,
-    LAW_SIZE_16MB,
-    LAW_SIZE_32MB,
-    LAW_SIZE_64MB,
-    LAW_SIZE_128MB,
-    LAW_SIZE_256MB, /* 0x1B */
-    LAW_SIZE_512MB,
-    LAW_SIZE_1GB,
-    LAW_SIZE_2GB,
-    LAW_SIZE_4GB,
-    LAW_SIZE_8GB, /* 0x20 */
-    LAW_SIZE_16GB,
-    LAW_SIZE_32GB,
-    LAW_SIZE_64GB,
-    LAW_SIZE_128GB,
-    LAW_SIZE_256GB,
-    LAW_SIZE_512GB,
-    LAW_SIZE_1TB,
-};
 
 /* T2080 IFC (Integrated Flash Controller) - RM 13.3 */
 #define IFC_BASE        (CCSRBAR + 0x00124000)

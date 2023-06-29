@@ -301,18 +301,19 @@ setup_interrupts:
 #endif
 
 /* If needed, relocate CCSRBAR */
-#if CCSRBAR_DEF != CCSRBAR
+#if CCSRBAR_DEF != CCSRBAR_PHYS
+
         /* Use R8 = new, R9 = old virtual */
-        lis    r8, CCSRBAR@h
-        ori    r8, r8, CCSRBAR@l
-        lis    r9, (CCSRBAR + 0x1000)@h
-        ori    r9, r9, (CCSRBAR + 0x1000)@l
+        lis     r8, CCSRBAR@h
+        ori     r8, r8, CCSRBAR@l
+        lis     r9, (CCSRBAR + 0x1000)@h
+        ori     r9, r9, (CCSRBAR + 0x1000)@l
 
 create_temp_ccsr:
         /* Create a temporary TLB entry for new and old location  */
         /* CCSRBAR: TLB 0, Entry 0, Supervisor R/W, IG, TS=0, 4KB */
         set_tlb(0, 0,
-                CCSRBAR, CCSRBAR, 0,
+                CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
                 MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_4K, 0, r3);
 
@@ -325,20 +326,63 @@ verify_old_ccsr:
         /* verify the TLB is for old one */
         lis     r0, CCSRBAR_DEF@h
         ori     r0, r0, CCSRBAR_DEF@l
-        lwz     r1, 0(r9)
+#ifdef USE_CORENET_INTERFACE
+        lwz     r1, 4(r9) /* CCSRBARL */
+#else
+        lwz     r1, 0(r9) /* CCSRBAR, shifted right by 12 */
         slwi    r1, r1, 12
+#endif
         cmpl    0, r0, r1
 infinite_debug_loop:
         bne     infinite_debug_loop /* should not get here */
 
+#ifdef USE_CORENET_INTERFACE
+ccsr_temp_law:
+        /* CCSR - LAW0 (Temp CoreNet 4K) */
+        #define CCSR_TEMP_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_CORENET) | LAW_SIZE_4KB)
+        lis     r0, CCSRBAR_PHYS_HIGH@h
+        ori     r0, r0, CCSRBAR_PHYS_HIGH@l
+        lis     r1, CCSRBAR_DEF@h
+        ori     r1, r1, CCSRBAR_DEF@l
+        lis     r2, CCSR_TEMP_LAW@h
+        ori     r2, r2, CCSR_TEMP_LAW@l
+        stw     r0, LAWBAR_BASE(0)(r9) /* LAWBARH */
+        stw     r1, LAWBAR_BASE(0)+4(r9) /* LAWBARL */
+        sync
+        stw     r2, LAWBAR_BASE(0)+8(r9) /* LAWAR */
+        lwz     r2, LAWBAR_BASE(0)+8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        isync
+
+read_old_ccsr:
+        lwz     r0, 0(r9)
+        lwz     r0, 4(r9)
+        isync
+
+write_new_ccsrbar:
+        lis     r0, CCSRBAR_PHYS_HIGH@h
+        ori     r0, r0, CCSRBAR_PHYS_HIGH@l
+        lis     r1, CCSRBAR@h
+        ori     r1, r1, CCSRBAR@l
+        #define CCSRAR_C 0x80000000 /* Commit */
+        lis     r2, CCSRAR_C@h
+        ori     r2, r2, CCSRAR_C@l
+        stw     r0, 0(r9) /* CCSRBARH */
+        sync
+        stw     r1, 4(r9) /* CCSRBARL */
+        sync
+
+        stw     r2, 8(r9) /* commit */
+        sync
+
+#else
 write_new_ccsrbar:
         /* Read current value of CCSBAR - forces all accesses to complete */
         sync
         lwz     r0, 0(r9)
         isync
         /* write new CCSBAR */
-        lis     r0, (CCSRBAR >> 12)@h
-        ori     r0, r0, (CCSRBAR >> 12)@l
+        lis     r0, (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@h
+        ori     r0, r0, (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@l
         stw     r0, 0(r9)
         sync
         isync
@@ -346,11 +390,14 @@ write_new_ccsrbar:
         /* Read current value of CCSRBAR from new location */
         lwz     r0, 0(r8)
         isync
+#endif
 
+invalidate_temp_tlb:
         /* invalidate TLB 0 */
         li      r3, 0x04 /* L2TLB0_FI: TLB0 flash invalidate (write 1 to invalidate) */
         mtspr   MMUCSR0, r3
-#endif
+#endif /* CCSRBAR_DEF != CCSRBAR_PHYS */
+
 
 #ifndef BUILD_LOADER_STAGE1
 /* TLBs */
@@ -370,7 +417,53 @@ ccsr_tlb:
                 MAS3_SX | MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 CCSRBAR_SIZE, 1, r3);
 
+#ifdef CORE_E6500
+ccsr_law:
+        /* CCSR - LAW0 (CoreNet 16MB) */
+        #define CCSR_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_CORENET) | LAW_SIZE_16MB)
+        lis     r9, CCSRBAR + LAWBAR_BASE(0)@h
+        ori     r9, r9, CCSRBAR + LAWBAR_BASE(0)@l
+        lis     r0, CCSRBAR_PHYS_HIGH@h
+        ori     r0, r0, CCSRBAR_PHYS_HIGH@l
+        lis     r1, CCSRBAR@h
+        ori     r1, r1, CCSRBAR@l
+        lis     r2, CCSR_LAW@h
+        ori     r2, r2, CCSR_LAW@l
+        stw     r0, 0(r9) /* LAWBARH */
+        stw     r1, 4(r9) /* LAWBARL */
+        sync
+        stw     r2, 8(r9) /* LAWAR */
+        lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        isync
+#endif /* CORE_E6500 */
+
 #ifdef FLASH_BASE_ADDR
+#ifdef CORE_E6500
+        /* Memory Mapped NOR Flash (128MB) at 0xE8000000 */
+flash_law:
+        /* FLASH - LAW1 (IFC 128MB) */
+        #define FLASH_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB)
+        lis     r9, CCSRBAR + LAWBAR_BASE(1)@h
+        ori     r9, r9, CCSRBAR + LAWBAR_BASE(1)@l
+        lis     r0, FLASH_BASE_PHYS_HIGH@h
+        ori     r0, r0, FLASH_BASE_PHYS_HIGH@l
+        lis     r1, FLASH_BASE_ADDR@h
+        ori     r1, r1, FLASH_BASE_ADDR@l
+        lis     r2, FLASH_LAW@h
+        ori     r2, r2, FLASH_LAW@l
+        stw     r0, 0(r9) /* LAWBARH */
+        stw     r1, 4(r9) /* LAWBARL */
+        sync
+        stw     r2, 8(r9) /* LAWAR */
+        lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        isync
+flash_tlb:
+        /* Flash: TLB 1, Entry 7, Super X/R, W, TS=0, 128M, IPROT */
+        set_tlb(1, 7,
+                FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+                MAS3_SX | MAS3_SR, MAS2_W, 0,
+                BOOKE_PAGESZ_128M, 1, r3);
+#else
 flash_tlb:
         /* For TS/AS=1 map boot ROM */
         /* Flash: TLB 1, Entry 7, Super X/R/W, IG, TS=0, 1M, IPROT */
@@ -378,7 +471,8 @@ flash_tlb:
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_1M, 1, r3);
-#endif
+#endif /* CORE_E6500 */
+#endif /* FLASH_BASE_ADDR */
 
 #ifdef ENABLE_DDR
         #ifdef BUILD_LOADER_STAGE1
@@ -400,16 +494,36 @@ flash_tlb:
                 BOOKE_PAGESZ_256M, 0, r3);
 #endif
 
-#if defined(ENABLE_L2_CACHE) && defined(MMU_V2)
+#ifdef CORE_E6500
 
-create_ccsr_l2_tlb:
-        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, IG, TS=0, 512KB, IPROT */
+#ifdef ENABLE_L2_CACHE
+
+#ifdef L2SRAM_ADDR
+l2_sram_law:
+        /* L2 SRAM - LAW2 (DDR 256KB) */
+        #define L2SRAM_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_256KB)
+        lis     r9, CCSRBAR + LAWBAR_BASE(2)@h
+        ori     r9, r9, CCSRBAR + LAWBAR_BASE(2)@l
+        li      r0, 0
+        lis     r1, L2SRAM_ADDR@h
+        ori     r1, r1, L2SRAM_ADDR@l
+        lis     r2, L2SRAM_LAW@h
+        ori     r2, r2, L2SRAM_LAW@l
+        stw     r0, 0(r9) /* LAWBARH */
+        stw     r1, 4(r9) /* LAWBARL */
+        sync
+        stw     r2, 8(r9) /* LAWAR */
+        lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        isync
+
+l2_sram_tlb:
+        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, 512KB, IPROT */
         set_tlb(1, 9,
                 L2SRAM_ADDR, L2SRAM_ADDR, 0,
-                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
                 BOOKE_PAGESZ_512K, 1, r3);
 
-setup_l2_sram:
+l2_setup_sram:
         /* 8.2 CoreNet Platform Cache (CPC) Memory Map */
         #define CPCCSR0             (0x000)
         #define CPCSRCR1            (0x100)
@@ -451,13 +565,14 @@ setup_l2_sram:
         isync
         stw     r0, CPCCSR0(r1)
         mbar
+#endif
 
         /* Disable speculation */
         lwz     r0, CPCHDBCR0(r1)
         oris    r0, r0, CPCHDBCR0_SPEC_DIS@h
         stw     r0, CPCHDBCR0(r1)
 
-setup_l2_cache:
+l2_setup_cache:
         /* L2 Cache Control - E6500CORERM 2.2.3 Memory-mapped registers (MMRs) */
         #define L2_CLUSTER_BASE(n) (CCSRBAR + 0xC20000 + (n * 0x40000))
         #define L2CSR0             (0x000) /* L2 Cache Control and Status 0 */
@@ -484,10 +599,10 @@ setup_l2_cache:
         stw     r1, L2CSR0(r5)
 
         /* poll till invalidate and lock bits are cleared */
-poll_l2_invclear:
+l2_poll_invclear:
         lwz     r4, L2CSR0(r5)
         and.    r4, r1, r4
-        bne     poll_l2_invclear
+        bne     l2_poll_invclear
         isync
 
         /* enable L2 with parity */
@@ -501,34 +616,21 @@ poll_l2_invclear:
         li      r4, 32
         stw     r4, L2CSR1(r5)
 
+#ifdef L2SRAM_ADDR
 l2_sram_init:
         /* clear 8 bytes at a time */
         lis     r2, (L2SRAM_ADDR - 8)@h
         ori     r2, r2, (L2SRAM_ADDR - 8)@l
         lis     r3, (L2SRAM_SIZE / 8)@h
+        ori     r3, r3, (L2SRAM_SIZE / 8)@l
         mtctr   r3
         li      r3, 0
 l2_sram_init_loop:
         stdu    r3, 8(r2)
         bdnz    l2_sram_init_loop
-#endif /* ENABLE_L2_CACHE && MMU_V2 */
-
-#ifdef MMU_V2
-set_stack_as:
-
-        lis     r6, (MSR_IS | MSR_DS | MSR_DE)@h
-        ori     r6, r6, (MSR_IS | MSR_DS | MSR_DE)@l
-        lis     r7, switch_as@h
-        ori     r7, r7, switch_as@l
-
-        mtspr   SRR0, r7
-        mtspr   SRR1, r6
-
-        /* return from interrupt call and switch to AS=1 (aka TS=1) */
-        rfi
-
-switch_as:
-#endif /* MMU_V2 */
+#endif /* L2SRAM_ADDR */
+#endif /* ENABLE_L2_CACHE */
+#endif /* CORE_E6500 */
 
 setup_l1:
 #ifdef ENABLE_L1_CACHE
@@ -601,19 +703,20 @@ setup_ts0:
         GET_GOT
 #endif
 
+#ifdef USE_LONG_JUMP
+        /* load absolute address into "LR" and branch return to it */
+        /* Enables long jump in 32-bit */
+        lis     r3, boot_entry_C@h
+        ori     r3, r3, boot_entry_C@l
+        mtlr    r3
+        blr
+#else
         /* jump to wolfboot */
         b       boot_entry_C /* no return */
-
-#ifdef ENABLE_INTERRUPTS
-/* Interrupt functions */
-.section .isr_vector
-.align 8
-isr_empty:
-        nop
-        rfi
 #endif
 
 
+/* -- Assembly Functions -- */
 /*
  * unsigned long long get_ticks(void);
  *
@@ -658,6 +761,7 @@ get_pc:
         mtlr    r0
         blr
 
+/* L1 Cache Helpers */
 .global invalidate_icache
 invalidate_icache:
         mfspr   r4, L1CSR1
@@ -823,6 +927,15 @@ in_ram:
         b       boot_entry_C /* no return */
 
 #endif /* USE_GOT */
+
+#ifdef ENABLE_INTERRUPTS
+/* Interrupt functions */
+.section .isr_vector
+.align 8
+isr_empty:
+        nop
+        rfi
+#endif
 
 /* reset entry point - must be at end of .S */
 .section .reset, "ax"

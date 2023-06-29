@@ -25,9 +25,10 @@
 #ifdef PLATFORM_nxp_p1021
     /* NXP P1021 */
     #define CPU_NUMCORES 2
+    #define CORE_E500
+
     #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
-    #define MMU_V1
 
     #define ENABLE_L1_CACHE
 
@@ -58,46 +59,74 @@
 #elif defined(PLATFORM_nxp_t2080)
     /* NXP T0280 */
     #define CPU_NUMCORES 4
-    #define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base */
+    #define CORE_E6500
+
+    #define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base - 0xFF000000 */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
-    #define MMU_V2
+
+    /* relocate to 64-bit 0xE_ */
+    //#define CCSRBAR_PHYS_HIGH 0xE
+    //#define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
+
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
-    #define L2SRAM_ADDR   (0xFEC20000) /* L2 as SRAM */
+    #define L2SRAM_ADDR   (0xF8F80000) /* L2 as SRAM */
     #define L2SRAM_SIZE   (256 * 1024)
     #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
 
-    /* This flash mapping window is automatically enabled
-    * T2080RM: 4.3.3 Boot Space Translation:
-    * default boot window (8 MB at 0x0_FF80_0000 to 0x0_FFFF_FFFF)
-    */
-    #define FLASH_BASE_ADDR 0xEF800000
+    #define FLASH_BASE_ADDR 0xE8000000
+    #define FLASH_BASE_PHYS_HIGH 0x0
 
+    #define USE_LONG_JUMP
 #else
-    #error Please define MMU version and CCSRBAR for platform
+    #error Please define platform PowerPC core version and CCSRBAR
 #endif
 
-/* boot address */
-#define BOOT_ROM_ADDR 0xFFFFF000
-#define BOOT_ROM_SIZE (4*1024)
 
+
+/* boot address */
+#ifndef BOOT_ROM_ADDR
+#define BOOT_ROM_ADDR 0xFFFFF000
+#endif
+#ifndef BOOT_ROM_SIZE
+#define BOOT_ROM_SIZE (4*1024)
+#endif
+
+/* reset vector */
 #define RESET_VECTOR (BOOT_ROM_ADDR + (BOOT_ROM_SIZE - 4))
 
+/* CCSRBAR */
 #ifndef CCSRBAR_DEF
 #define CCSRBAR_DEF  0xFE000000
 #endif
 #ifndef CCSRBAR
 #define CCSRBAR      CCSRBAR_DEF
 #endif
-
-#ifndef DDR_ADDRESS
-#define DDR_ADDRESS            0x00000000
+#ifndef CCSRBAR_PHYS
+#define CCSRBAR_PHYS CCSRBAR
+#endif
+#ifndef CCSRBAR_PHYS_HIGH
+#define CCSRBAR_PHYS_HIGH 0
 #endif
 
-#ifdef MMU_V1
-    /* MMU V1 - e500 */
+/* DDR */
+#ifndef DDR_ADDRESS
+#define DDR_ADDRESS  0x00000000
+#endif
+
+/* L1 */
+#ifndef L1_CACHE_ADDR
+#define L1_CACHE_ADDR   0xFFD00000
+#endif
+#ifndef L1_CACHE_SZ
+#define L1_CACHE_SZ     (32 * 1024)
+#endif
+
+
+#ifdef CORE_E500
+    /* PowerPC e500 */
     /* EREF: 7.5.3.2 - TLB Entry Page Size */
     #define BOOKE_PAGESZ_4K    1
     #define BOOKE_PAGESZ_16K   2
@@ -116,8 +145,53 @@
 
     #define L1_CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
 
-#else
-    /* MMU V2 - e6500 */
+    /* P1021 LAW - Local Access Window (Memory Map) - RM 2.4 */
+    #define LAWBAR_BASE(n) (0xC08 + (n * 0x20))
+    #define LAWBAR(n)      ((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x0))
+    #define LAWAR(n)       ((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x8))
+
+    #define LAWAR_ENABLE      (1<<31)
+    #define LAWAR_TRGT_ID(id) (id<<20)
+
+    /* P1021 Global Source/Target ID Assignments - RM Table 2-7 */
+    #define LAW_TRGT_PCIE2 0x01
+    #define LAW_TRGT_PCIE1 0x02
+    #define LAW_TRGT_ELBC  0x04 /* eLBC (Enhanced Local Bus Controller) */
+    #define LAW_TRGT_DDR   0x0F  /* DDR Memory Controller */
+
+    /* P1021 2.4.2 - size is equal to 2^(enum + 1) */
+    #define LAW_SIZE_4KB   0x0B
+    #define LAW_SIZE_8KB   0x0C
+    #define LAW_SIZE_16KB  0x0D
+    #define LAW_SIZE_32KB  0x0E
+    #define LAW_SIZE_64KB  0x0F
+    #define LAW_SIZE_128KB 0x10
+    #define LAW_SIZE_256KB 0x11
+    #define LAW_SIZE_512KB 0x12
+    #define LAW_SIZE_1MB   0x13
+    #define LAW_SIZE_2MB   0x14
+    #define LAW_SIZE_4MB   0x15
+    #define LAW_SIZE_8MB   0x16
+    #define LAW_SIZE_16MB  0x17
+    #define LAW_SIZE_32MB  0x18
+    #define LAW_SIZE_64MB  0x19
+    #define LAW_SIZE_128MB 0x1A
+    #define LAW_SIZE_256MB 0x1B
+    #define LAW_SIZE_512MB 0x1C
+    #define LAW_SIZE_1GB   0x1D
+    #define LAW_SIZE_2GB   0x1E
+    #define LAW_SIZE_4GB   0x1F
+    #define LAW_SIZE_8GB   0x20
+    #define LAW_SIZE_16GB  0x21
+    #define LAW_SIZE_32GB  0x22
+
+
+#elif defined(CORE_E6500)
+    /* PowerPC e6500 */
+
+    /* CoreNet on-chip interface between the core cluster and rest of SoC */
+    #define USE_CORENET_INTERFACE
+
     /* EREF 2.0: 6.5.3.2 - TLB Entry Page Size */
     #define BOOKE_PAGESZ_4K    2
     #define BOOKE_PAGESZ_8K    3
@@ -144,24 +218,68 @@
     #define MAS1_TSIZE_MASK    0x00000F80
     #define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
 
-    #define L1_CACHE_LINE_SHIFT 4 /* 64 bytes per L1 cache line */
-    #endif /* MMU V1/V2 */
+    #define L1_CACHE_LINE_SHIFT 6 /* 64 bytes per L1 cache line */
 
-    #ifndef L1_CACHE_ADDR
-    #define L1_CACHE_ADDR   0xFFD00000
-    #endif
-    #ifndef L1_CACHE_SZ
-    #define L1_CACHE_SZ     (32 * 1024)
-    #endif
-
-    #ifndef L1_CACHE_LINE_SIZE
-    #define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
-
+    /* CoreNet Platform Cache Base */
     #define CPC_BASE        (CCSRBAR + 0x10000)
+
+    /* T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
+    #define LAWBAR_BASE(n) (0xC00 + (n * 0x10))
+    #define LAWBARH(n)     *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x0))
+    #define LAWBARL(n)     *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x4))
+    #define LAWAR(n)       *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x8))
+
+    #define LAWAR_ENABLE      (1<<31)
+    #define LAWAR_TRGT_ID(id) (id<<20)
+
+    /* T2080 Global Source/Target ID Assignments - RM Table 2-1 */
+    #define LAW_TRGT_DDR_1   0x10
+    #define LAW_TRGT_BMAN    0x18 /* Buffer Manager (BMan) (control) */
+    #define LAW_TRGT_CORENET 0x1E
+    #define LAW_TRGT_IFC     0x1F /* Integrated Flash Controller */
+
+    /* T2080 2.4.3 - size is equal to 2^(enum + 1) */
+    #define LAW_SIZE_4KB   0x0B
+    #define LAW_SIZE_8KB   0x0C
+    #define LAW_SIZE_16KB  0x0D
+    #define LAW_SIZE_32KB  0x0E
+    #define LAW_SIZE_64KB  0x0F
+    #define LAW_SIZE_128KB 0x10
+    #define LAW_SIZE_256KB 0x11
+    #define LAW_SIZE_512KB 0x12
+    #define LAW_SIZE_1MB   0x13
+    #define LAW_SIZE_2MB   0x14
+    #define LAW_SIZE_4MB   0x15
+    #define LAW_SIZE_8MB   0x16
+    #define LAW_SIZE_16MB  0x17
+    #define LAW_SIZE_32MB  0x18
+    #define LAW_SIZE_64MB  0x19
+    #define LAW_SIZE_128MB 0x1A
+    #define LAW_SIZE_256MB 0x1B
+    #define LAW_SIZE_512MB 0x1C
+    #define LAW_SIZE_1GB   0x1D
+    #define LAW_SIZE_2GB   0x1E
+    #define LAW_SIZE_4GB   0x1F
+    #define LAW_SIZE_8GB   0x20
+    #define LAW_SIZE_16GB  0x21
+    #define LAW_SIZE_32GB  0x22
+    #define LAW_SIZE_64GB  0x23
+    #define LAW_SIZE_128GB 0x24
+    #define LAW_SIZE_256GB 0x25
+    #define LAW_SIZE_512GB 0x26
+    #define LAW_SIZE_1TB   0x27
+
+#endif
+
+#ifndef L1_CACHE_LINE_SIZE
+#define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
 #endif
 
 
-/* MMU Assist Registers */
+/* MMU Assist Registers
+ * E6500RM 2.13.10
+ * E500CORERM 2.12.5
+ */
 #define MAS0     0x270
 #define MAS1     0x271
 #define MAS2     0x272
@@ -169,6 +287,43 @@
 #define MAS6     0x276
 #define MAS7     0x3B0
 #define MMUCSR0  0x3F4 /* MMU control and status register 0 */
+
+#define MAS0_TLBSEL_MSK 0x30000000
+#define MAS0_TLBSEL(x)  (((x) << 28) & MAS0_TLBSEL_MSK)
+#define MAS0_ESEL_MSK   0x0FFF0000
+#define MAS0_ESEL(x)    (((x) << 16) & MAS0_ESEL_MSK)
+#define MAS0_NV(x)      ((x) & 0x00000FFF)
+
+#define MAS1_VALID      0x80000000
+#define MAS1_IPROT      0x40000000 /* can not be invalidated by tlbivax */
+#define MAS1_TID(x)     (((x) << 16) & 0x3FFF0000)
+#define MAS1_TS         0x00001000
+
+#define MAS2_EPN        0xFFFFF000 /* Effective page number */
+#define MAS2_X0         0x00000040
+#define MAS2_X1         0x00000020
+#define MAS2_W          0x00000010 /* Write-through */
+#define MAS2_I          0x00000008 /* Caching-inhibited */
+#define MAS2_M          0x00000004 /* Memory coherency required */
+#define MAS2_G          0x00000002 /* Guarded */
+#define MAS2_E          0x00000001 /* Endianness - 0=big, 1=little */
+
+#define MAS3_RPN        0xFFFFF000 /* Real page number */
+/* User attribute bits */
+#define MAS3_U0         0x00000200
+#define MAS3_U1         0x00000100
+#define MAS3_U2         0x00000080
+#define MAS3_U3         0x00000040
+#define MAS3_UX         0x00000020
+/* User and supervisor read, write, and execute permission bits */
+#define MAS3_SX         0x00000010
+#define MAS3_UW         0x00000008
+#define MAS3_SW         0x00000004
+#define MAS3_UR         0x00000002
+#define MAS3_SR         0x00000001
+
+#define MAS7_RPN        0xFF000000 /* Real page number - upper 8-bits */
+
 
 /* L1 Cache */
 #define L1CFG0   0x203 /* L1 Cache Configuration Register 0 */
@@ -244,47 +399,6 @@
 
 #define SPRN_TBWL     0x11C /* Time Base Write Lower Register */
 #define SPRN_TBWU     0x11D /* Time Base Write Upper Register */
-
-
-/* MMU Assist Registers
- * E6500RM 2.13.10
- * E500CORERM 2.12.5
- */
-#define MAS0_TLBSEL_MSK 0x30000000
-#define MAS0_TLBSEL(x)  (((x) << 28) & MAS0_TLBSEL_MSK)
-#define MAS0_ESEL_MSK   0x0FFF0000
-#define MAS0_ESEL(x)    (((x) << 16) & MAS0_ESEL_MSK)
-#define MAS0_NV(x)      ((x) & 0x00000FFF)
-
-#define MAS1_VALID      0x80000000
-#define MAS1_IPROT      0x40000000 /* can not be invalidated by tlbivax */
-#define MAS1_TID(x)     (((x) << 16) & 0x3FFF0000)
-#define MAS1_TS         0x00001000
-
-#define MAS2_EPN        0xFFFFF000 /* Effective page number */
-#define MAS2_X0         0x00000040
-#define MAS2_X1         0x00000020
-#define MAS2_W          0x00000010 /* Write-through */
-#define MAS2_I          0x00000008 /* Caching-inhibited */
-#define MAS2_M          0x00000004 /* Memory coherency required */
-#define MAS2_G          0x00000002 /* Guarded */
-#define MAS2_E          0x00000001 /* Endianness - 0=big, 1=little */
-
-#define MAS3_RPN        0xFFFFF000 /* Real page number */
-/* User attribute bits */
-#define MAS3_U0         0x00000200
-#define MAS3_U1         0x00000100
-#define MAS3_U2         0x00000080
-#define MAS3_U3         0x00000040
-#define MAS3_UX         0x00000020
-/* User and supervisor read, write, and execute permission bits */
-#define MAS3_SX         0x00000010
-#define MAS3_UW         0x00000008
-#define MAS3_SW         0x00000004
-#define MAS3_UR         0x00000002
-#define MAS3_SR         0x00000001
-
-#define MAS7_RPN        0xFF000000 /* Real page number - upper 8-bits */
 
 #define SPRN_TLB0CFG    0x2B0 /* TLB 0 Config Register */
 #define SPRN_TLB1CFG    0x2B1 /* TLB 1 Config Register */
