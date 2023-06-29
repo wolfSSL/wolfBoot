@@ -2,13 +2,9 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
-securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
-They are compiled by e2Studio and running on the target board.
+This example demonstrates simple secure firmware update by wolfBoot. A sample application v1 is securely updated to v2. Both versions behave the same except displaying its version of v1 or v2. They are compiled by e2Studio and running on the target board.
 
-In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
-board for the debugger and flash programmer.
+In this demo, you may download two versions of application binary file by Renesas Flash Programmer. You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
 
 Please see `Readme_wSCE.md` for Renesas SCE use case.
 
@@ -66,8 +62,7 @@ Flash Allocation:
 This section describes about how to build wolfBoot and application and use them.
 
 ### 1) Key generation
-It has key tools running under the host environment such as Linux, Windows or MacOS.
-For comiling the tools, follow the instruction described in the user manual.
+It has key tools running under the host environment such as Linux, Windows or MacOS. For comiling the tools, follow the instruction described in the user manual.
 
 
 ```
@@ -77,11 +72,7 @@ $ keygen --ecc256 -g ./pri-ecc256.der    # ECC256
 $ keygen --rsa2048 -g ./pri-rsa2048.der  # RSA2048
 ```
 
-It generates a pair of private and public key with -g option. The private key is stored 
-in the specified file. The public key is stored in a key store as a C source code 
-in "src/keystore.c" so that it can be compiled and linked with wolfBoot.
-If you have an existing key pair, you can use -i option to import the pablic
-key to the store.
+The `keygen` tool generates a pair of private and public key with -g option. The private key is stored in the specified file. The public key is stored in a key store as a C source code in "src/keystore.c" so that it can be compiled and linked with wolfBoot. If you have an existing key pair, you can use -i option to import the pablic key to the store.
 
 You can specify various signature algorithms such as 
 
@@ -91,17 +82,14 @@ You can specify various signature algorithms such as
 
 ### 2) Compile wolfBoot
 
-Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build the project.
-Project properties are preset for the demo.\
+Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build the project. Project properties are preset for the demo.
 
-WOLFBOOT_PARTION_INFO is for debug information about partitions.
-Eliminate them for operational use.
+`WOLFBOOT_PARTION_INFO` is for debug information about partitions. Eliminate them for operational use.
 
 
 ### 3) Compile the sample application
 
-Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build the project.
-Project properties are preset for the demo.
+Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build the project. Project properties are preset for the demo.
 
  #### 3-1). Prepare SEGGER_RTT for logging
   + Download J-Link software from [Segger](https://www.segger.com/downloads/jlink)
@@ -113,7 +101,7 @@ Project properties are preset for the demo.
     SEGGER_RTT_Conf.h\
     SEGGER_RTT_printf.c
   + Open `SEGGER_RTT_Conf.h` and Set `SEGGER_RTT_MEMCPY_USE_BYTELOOP` to `1`
-  + To connect RTT block, you can configure RTT viewer configuration based on where RTT block is in map file\
+  + To connect RTT block, you can configure RTT viewer configuration based on where RTT block is in map file
 
   e.g.[app_RA.map]
 
@@ -129,7 +117,9 @@ Project properties are preset for the demo.
     
 
 Need to set:
-#define BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW          (1)\
+```
+#define BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW          (1)
+```
 
 Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug. 
 
@@ -140,10 +130,7 @@ You can derive bair binary file (app_RA.bin) by objcopy command as follows.
 $ aarch64-none-elf-objcopy.exe -O binary -j .text -j .data app_RA.elf app_RA.bin
 ```
 
-"sign" command under tools/keytools benerates a signature for the binary with a specified version.
-It generates a file contain a partition header and application image. The partition header
-contain generated signature and other control fields. Output file name is made up from
-the input file name and version like app_RenesasRx01_v1.0_signed.bin.
+"sign" command under tools/keytools benerates a signature for the binary with a specified version. It generates a file contain a partition header and application image. The partition header contain generated signature and other control fields. Output file name is made up from the input file name and version like app_RenesasRx01_v1.0_signed.bin.
 
 ```
 $ sign --ecc256 app_RA.bin ../../../../../pri-ecc256.der 1.0
@@ -164,20 +151,15 @@ Output image(s) successfully created.
 
 ### 5) Download the app V1
 
-You can convert the binary file to hex format and download it to the board by Flash Programmer.
-The partition starts at "0x00010000".
+You can convert the binary file to hex format and download it to the board by Flash Programmer. The partition starts at "0x00010000".
 
 ```
 $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00010000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 ```
 
+### 6) Execute inital boot
 
-### 6) Execute initial boot
-
-Now, you can download and start wolfBoot program by e2Studio debugger.
-After starting the program, you can see the partition information as follows.
-If the boot program succeeds integrity and authenticity check, it initiate the
-application V1.
+Now, you can download and start wolfBoot program by e2Studio debugger. After starting the program, you can see the partition information as follows. If the boot program succeeds integrity and authenticity check, it initiate the application V1.
 
 ```
 | ------------------------------------------------------------------- |
@@ -210,7 +192,6 @@ Calling wolfBoot_success()
 
 The application is calling wolfBoot_success() to set boot partition state.
 
-
 ```
 Called wolfBoot_success()
 === Boot Partition[00010000] ===
@@ -225,14 +206,12 @@ Version:  00
 Status:   FF
 Tail Mgc:
 ```
-You can see the state is Success("00") and Tail Magic number becomes "BOOT". You can also see flashing each LED light in 1 second.
-Notable things about V1 application, it will also call wolfBoot_update_trigger() so that it tells wolfBoot that new version exists. 
-We are going to generate and download V2 application into "Update pertition".
+
+You can see the state is Success("00") and Tail Magic number becomes "BOOT". You can also see flashing each LED light in 1 second. Notable things about V1 application, it will also call wolfBoot_update_trigger() so that it tells wolfBoot that new version exists. We are going to generate and download V2 application into "Update pertition".
 
 ### 7) Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x00080000".
-You can download it by the flash programmer.
+Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x00080000". You can download it by the flash programmer.
 
 Updtate partition:
 -change-addresses=0x00080000
@@ -246,11 +225,11 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00080000 a
 
 ### 8) Re-boot and secure update to V2
 
-The boot program checks integrity and authenticity of V2, swap the partition
-safely and initiates V2. You will see following message after the partition
+The boot program checks integrity and authenticity of V2, swap the partition safely and initiates V2. You will see following message after the partition
 information.
 
 ```
+
 | ------------------------------------------------------------------- |
 | Renesas RA User Application in BOOT partition started by wolfBoot   |
 | ------------------------------------------------------------------- |
@@ -289,7 +268,5 @@ Version:  01
 Status:   FF
 Tail Mgc: 
 ```
-You can see "Current Firmware Version : 2". The state is Success("00") and Tail Magic number becomes "BOOT". 
-You can also see flashing each LED light in 5 second at this new version.
 
-
+You can see "Current Firmware Version : 2". The state is Success("00") and Tail Magic number becomes "BOOT". You can also see flashing each LED light in 5 second at this new version.

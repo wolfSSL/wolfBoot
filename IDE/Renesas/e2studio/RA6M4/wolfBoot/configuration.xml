@@ -169,9 +169,9 @@
       <description>Flash Memory High Performance</description>
       <originalPack>Renesas.RA.3.6.0.pack</originalPack>
     </component>
-    <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_sce9_ra6_protected_cavp" variant="" vendor="Renesas" version="1.0.0+fsp.3.6.0">
-      <description>Secure Cryptography Engine on RA6 Protected Mode (CAVP Certified)</description>
-      <originalPack>Renesas.Cavp.1.0.0+fsp.3.6.0.pack</originalPack>
+    <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_sce9_ra6_protected" variant="" vendor="Renesas" version="3.6.0">
+      <description>Secure Cryptography Engine on RA6 Protected Mode</description>
+      <originalPack>Renesas.RA.3.6.0.pack</originalPack>
     </component>
   </raComponentSelection>
   <raElcConfiguration/>
@@ -189,7 +189,6 @@
       <property id="module.driver.ioport.elc_trigger_ioporte" value="_disabled"/>
       <property id="module.driver.ioport.pincfg" value="g_bsp_pin_cfg"/>
     </module>
-    <module id="module.driver.sce_protected_cavp.2082848091"/>
     <module id="module.driver.flash_on_flash_hp.1802084103">
       <property id="module.driver.flash.name" value="g_flash0"/>
       <property id="module.driver.flash.data_flash_bgo" value="module.driver.flash.data_flash_bgo.disabled"/>
@@ -197,10 +196,11 @@
       <property id="module.driver.flash.ipl" value="_disabled"/>
       <property id="module.driver.flash.err_ipl" value="_disabled"/>
     </module>
+    <module id="module.driver.sce_protected.51849023"/>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>
-      <stack module="module.driver.sce_protected_cavp.2082848091"/>
       <stack module="module.driver.flash_on_flash_hp.1802084103"/>
+      <stack module="module.driver.sce_protected.51849023"/>
     </context>
     <config id="config.driver.flash_hp">
       <property id="config.driver.flash_hp.param_checking_enable" value="config.driver.flash_hp.param_checking_enable.enabled"/>
@@ -210,10 +210,10 @@
     <config id="config.driver.ioport">
       <property id="config.driver.ioport.checking" value="config.driver.ioport.checking.system"/>
     </config>
-    <config id="config.driver.sce_cavp">
-      <property id="config.driver.sce_cavp.rsa_key_generation_retry_count" value="10240"/>
-      <property id="config.driver.sce_cavp.sha384" value="config.driver.sce_cavp.sha384.disabled"/>
-      <property id="config.driver.sce_cavp.sha_384_function" value="crypto_sha384_user_function"/>
+    <config id="config.driver.sce">
+      <property id="config.driver.sce.rsa_key_generation_retry_count" value="10240"/>
+      <property id="config.driver.sce.sha384" value="config.driver.sce.sha384.disabled"/>
+      <property id="config.driver.sce.sha_384_function" value="crypto_sha384_user_function"/>
     </config>
   </raModuleConfiguration>
   <raPinConfiguration>
