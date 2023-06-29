@@ -199,51 +199,6 @@ static int test_tpm(void);
 #define UART_LSR_TEMT (0x40) /* Transmitter empty */
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
-
-/* P1021 LAW - Local Access Window (Memory Map) - RM 2.4 */
-#define LAWBAR_BASE(n) (CCSRBAR + 0xC08 + (n * 0x20))
-#define LAWBAR(n)      ((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
-#define LAWAR(n)       ((volatile uint32_t*)(LAWBAR_BASE(n) + 0x8))
-
-#define LAWAR_ENABLE      (1<<31)
-#define LAWAR_TRGT_ID(id) (id<<20)
-
-/* P1021 Global Source/Target ID Assignments - RM Table 2-7 */
-enum law_target_id {
-    LAW_TRGT_PCIE2 = 0x01,
-    LAW_TRGT_PCIE1 = 0x02,
-    LAW_TRGT_ELBC = 0x4, /* eLBC (Enhanced Local Bus Controller) */
-    LAW_TRGT_DDR = 0xF,  /* DDR Memory Controller */
-};
-
-/* P1021 2.4.2 - size is equal to 2^(enum + 1) */
-enum law_sizes {
-    LAW_SIZE_4KB = 0x0B,
-    LAW_SIZE_8KB,
-    LAW_SIZE_16KB,
-    LAW_SIZE_32KB,
-    LAW_SIZE_64KB,
-    LAW_SIZE_128KB, /* 0x10 */
-    LAW_SIZE_256KB,
-    LAW_SIZE_512KB,
-    LAW_SIZE_1MB,
-    LAW_SIZE_2MB,
-    LAW_SIZE_4MB,
-    LAW_SIZE_8MB,
-    LAW_SIZE_16MB,
-    LAW_SIZE_32MB,
-    LAW_SIZE_64MB,
-    LAW_SIZE_128MB,
-    LAW_SIZE_256MB, /* 0x1B */
-    LAW_SIZE_512MB,
-    LAW_SIZE_1GB,
-    LAW_SIZE_2GB,
-    LAW_SIZE_4GB,
-    LAW_SIZE_8GB, /* 0x20 */
-    LAW_SIZE_16GB,
-    LAW_SIZE_32GB,
-};
-
 /* P1021 eLBC (Enhanced Local Bus Controller) - RM 12.3 */
 #define ELBC_BASE        (CCSRBAR + 0x5000)
 #define ELBC_MAX_BANKS   8
