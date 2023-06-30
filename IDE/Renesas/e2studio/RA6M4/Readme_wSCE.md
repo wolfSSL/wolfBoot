@@ -74,9 +74,34 @@ Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build 
 
 Enabled `WOLFBOOT_RENESAS_SCEPROTECT` expects to use Renesas SCE.
 
+
+#### 2-1) Create `dummy_library` Static Library
++ Click File->New->`RA C/C++ Project`.
++ Select `EK-RA6M4` from Drop-down list.
++ Check `Static Library`.
++ Select `No RTOS` from RTOS selection. Click Next.
++ Check `Bare Metal Minimal`. Click Finish.
++ Open Smart Configurator by clicking configuration.xml in the project
++ Go to `BSP` tab and increase Main Stack Size under `RA Common` on Properties page, e.g. 0x2000
++ Go to `BSP` tab and increase Heap Size under `RA Common` on Properties page, e.g. 0x10000
++ Go to `Stacks` tab
++ Add `SCE Protected Mode` stack from `New Stack` -> `Security`
++ Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
+
+Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+|Property|Value|
+|:--|:--|
+|Data Flash Background Operation|Disabled|
+
++ Save `dummy_library` FSP configuration
++ Copy <u>configuration.xml</u> and pincfg under `dummy_library` to `wolfBoot`
++ Open Smart Configurator by clicking copied configuration.xml
++ Click `Generate Project Content` on Smart Configurator
++ Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
++ Build `wolfBoot` projet
 ### 3) Compile the sample application
 
-Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio. Open `script` folder and copy orignal `fsp.ld` to `fsp.ld.org`. Copy `fsp_wsce.ld` to `fsp.ld`, and then build the project. Project properties are preset for the demo.
+Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio.
 
  #### 3-1). Prepare SEGGER_RTT for logging
   + Download J-Link software from [Segger](https://www.segger.com/downloads/jlink)
@@ -102,12 +127,30 @@ Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio. Open `script
       OR
     you can specify "RTT control block" to 0x20000000 0x1000 by Search Range
     
+ 
+ #### 3-2). Create `dummy_application`
++ Click File->New->`RA C/C++ Project`.
++ Select `EK-RA6M4` from Drop-down list.
++ Check `Executable`.
++ Select `No RTOS` from RTOS selection. Click Next.
++ Check `Bare Metal Minimal`. Click Finish.
++ Go to `BSP` tab and Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
 
-Need to set:
-#define BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW          (1)\
+Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+|Property|Value|
+|:--|:--|
+|Data Flash Background Operation|Disabled|
 
-Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug. 
++ Save `dummy_application` FSP configuration
++ Copy <u>configuration.xml</u> and pincfg under `dummy_application` to `app_RA`
++ Open Smart Configurator by clicking copied configuration.xml
++ Click `Generate Project Content` on Smart Configurator
++ Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
++ Linker option update, Click project->`Properties`->`C/C++ Build`->`Settings`->`GNU Arm Cross Linker`->`Miscellaneous`. Modify `--defsym=FLASH_IMAGE_START=0x10200` to `--defsym=FLASH_IMAGE_START=0x10200`
++ Build `app_RA` projet
 
+
+Code Origin and entry point is "0x00020200". app_RA.elf is gnerated under Debug.
 ### 4) Generate Wrapped Key for SCE
 
 SCE needs to have a wrapped key for sign verification installed in advance. This section describes how to use wolfBoot with SCE. Current version supports RSA2048. SCE RSA Signature supports #PKCS 1, v1.5. You can generate a RSA key pair by wolfBoot "keygen" command along with Renesas Security Key Management Tool `skmt`. `skmt` command wraps the RAW key and generates C language initial data and a header file for an application program with SCE.
@@ -159,12 +202,14 @@ You can convert the binary file to hex format and download it to the board by Fl
 ```
 $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00020000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 ```
-
-
-### 6) Execute initial boot
+### 6) Execute inital boot
 
 Now, you can download and start wolfBoot program by e2Studio debugger. After starting the program, you can see the partition information as follows.
-If the boot program succeeds integlity and authenticity check, it initiate the application V1.
+If the boot program succeeds integlity and authenticity check, it initiate the application V1. To initially run `wolfBoot` project,
+1.) Right-Click the Project name.
+2.) Select `Debug As` -> `Renesas GDB Hardware Debugging`
+3.) Select `J-Link ARM`. Click OK.
+4.) Select `R7FA6M4AF`. Click OK.
 
 ```
 | ----------------------------------------------------------------------- |
@@ -230,7 +275,7 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00090000 a
 ### 8) Reboot and secure update to V2
 
 The boot program checks integlity and authenticity of V2, swap the partition safely and initiates V2. You will see following message after the partition
-information.
+information. You can also see flashing each LED light in 5 second.
 
 ```
 | ----------------------------------------------------------------------- |

@@ -86,7 +86,30 @@ Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build 
 
 `WOLFBOOT_PARTION_INFO` is for debug information about partitions. Eliminate them for operational use.
 
+#### 2-1) Create `dummy_library` Static Library
++ Click File->New->`RA C/C++ Project`.
++ Select `EK-RA6M4` from Drop-down list.
++ Check `Static Library`.
++ Select `No RTOS` from RTOS selection. Click Next.
++ Check `Bare Metal Minimal`. Click Finish.
++ Open Smart Configurator by clicking configuration.xml in the project
++ Go to `BSP` tab and increase Main Stack Size under `RA Common` on Properties page, e.g. 0x2000
++ Go to `BSP` tab and increase Heap Size under `RA Common` on Properties page, e.g. 0x10000
++ Go to `Stacks` tab
++ Add `SCE Protected Mode` stack from `New Stack` -> `Security`
++ Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
 
+Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+|Property|Value|
+|:--|:--|
+|Data Flash Background Operation|Disabled|
+
++ Save `dummy_library` FSP configuration
++ Copy <u>configuration.xml</u> and pincfg under `dummy_library` to `wolfBoot`
++ Open Smart Configurator by clicking copied configuration.xml
++ Click `Generate Project Content` on Smart Configurator
++ Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
++ Build `wolfBoot` projet
 ### 3) Compile the sample application
 
 Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build the project. Project properties are preset for the demo.
@@ -115,11 +138,25 @@ Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build th
       OR
     you can specify "RTT control block" to 0x20000000 0x1000 by Search Range
     
+ #### 3-2). Create `dummy_application`
++ Click File->New->`RA C/C++ Project`.
++ Select `EK-RA6M4` from Drop-down list.
++ Check `Executable`.
++ Select `No RTOS` from RTOS selection. Click Next.
++ Check `Bare Metal Minimal`. Click Finish.
++ Go to `BSP` tab and Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
 
-Need to set:
-```
-#define BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW          (1)
-```
+Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+|Property|Value|
+|:--|:--|
+|Data Flash Background Operation|Disabled|
+
++ Save `dummy_application` FSP configuration
++ Copy <u>configuration.xml</u> and pincfg under `dummy_application` to `app_RA`
++ Open Smart Configurator by clicking copied configuration.xml
++ Click `Generate Project Content` on Smart Configurator
++ Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
++ Build `app_RA` projet
 
 Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug. 
 
@@ -159,7 +196,11 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00010000 a
 
 ### 6) Execute inital boot
 
-Now, you can download and start wolfBoot program by e2Studio debugger. After starting the program, you can see the partition information as follows. If the boot program succeeds integrity and authenticity check, it initiate the application V1.
+Now, you can download and start wolfBoot program by e2Studio debugger. After starting the program, you can see the partition information as follows. If the boot program succeeds integrity and authenticity check, it initiate the application V1. To initially run `wolfBoot` project,
+1.) Right-Click the Project name.
+2.) Select `Debug As` -> `Renesas GDB Hardware Debugging`
+3.) Select `J-Link ARM`. Click OK.
+4.) Select `R7FA6M4AF`. Click OK.
 
 ```
 | ------------------------------------------------------------------- |
@@ -226,7 +267,7 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00080000 a
 ### 8) Re-boot and secure update to V2
 
 The boot program checks integrity and authenticity of V2, swap the partition safely and initiates V2. You will see following message after the partition
-information.
+information. You can also see flashing each LED light in 5 second.
 
 ```
 
