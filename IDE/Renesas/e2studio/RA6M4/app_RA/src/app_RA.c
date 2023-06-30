@@ -175,7 +175,7 @@ void app_RA(void)
 
     if (firmware_version == 1) {
         wolfBoot_update_trigger();
-        blink(2);
+        blink(1);
     }
     else if (firmware_version == 2) {
         blink(5);
