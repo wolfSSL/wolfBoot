@@ -116,7 +116,7 @@ int main(int argc, char** argv)
     WOLFTPM2_SESSION tpmSession;
     WOLFTPM2_KEY authKey;
     PCR_Reset_In pcrReset;
-    /* default to aes since parm encryption is required */
+    /* default to aes since param encryption is required */
     TPM_ALG_ID paramEncAlg = TPM_ALG_CFB;
     uint8_t pcrArray[48];
     uint32_t pcrArraySz = 1;

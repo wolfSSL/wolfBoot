@@ -57,7 +57,7 @@ void do_boot(const uint32_t *app_offset)
      __asm__ ("mov sp, r3");
 
    /*
-    * address of Reset Hander is stored in Vector table[] that is defined in startup.c.
+    * address of Reset Handler is stored in Vector table[] that is defined in startup.c.
     * The vector for Reset Handler is placed right after Initial Stack Pointer.
     * The application assumes to start from 0x10200.
     *

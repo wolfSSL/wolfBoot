@@ -257,7 +257,7 @@ void BOARD_BootClockHSRUN(void)
  * 1.set CLKDIV1 to safe divider value.
     * 2.set the PLL or FLL output target frequency for HSRUN mode.
     * 3.switch to HSRUN mode.
-    * 4.switch to HSRUN mode target requency value.
+    * 4.switch to HSRUN mode target frequency value.
     */
 
     /* Set the system clock dividers in SIM to safe value. */

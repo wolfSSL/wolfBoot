@@ -469,7 +469,7 @@
 #define OCTOSPI_CR_FMODE_MASK     (0x3 << 28)
 #define OCTOSPI_CR_FMODE(fmode)   (((fmode) & 0x3) << 28)  /* Functional Mode (0=indirect write, 1=indirect read, 2=auto poll, 3=mem mapped) */
 #define OCTOSPI_CR_FTIE           (1 << 18)                /* FIFO threshold interrupt enable */
-#define OCTOSPI_CR_TCIE           (1 << 17)                /* Transfer complete inerrupt enable */
+#define OCTOSPI_CR_TCIE           (1 << 17)                /* Transfer complete interrupt enable */
 #define OCTOSPI_CR_FTHRES_MASK    (0x1F << 8)
 #define OCTOSPI_CR_FTHRES(thr)    ((((thr)-1) & 0x1F) << 8) /* FIFO threshold level */
 #define OCTOSPI_CR_FSEL           (1 << 7)                 /* 0=Flash 1 or 1=Flash 2 */

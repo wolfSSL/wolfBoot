@@ -14,7 +14,7 @@ of 256B from the beginning of the flash partition.
 
 ## Firmware image header
 
-Each (signed) firmware image is pre-pended with a fixed-size **image header**, containing
+Each (signed) firmware image is prepended with a fixed-size **image header**, containing
 useful information about the firmware. The **image header** is padded to fit in 256B, in order
 to guarantee that the entry point of the actual firmware is stored on the flash starting from
 a 256-Bytes aligned address. This ensures that the bootloader can relocate the vector table before

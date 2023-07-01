@@ -7,7 +7,7 @@ securely updated to v2. Both versions behave the same except displaying its vers
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer.It is only available RSA with Renesas SCE now.
 
 ## 2. Components and Tools
@@ -95,7 +95,7 @@ Enabled `WOLFBOOT_RENESAS_SCEPROTECT` expects to use Renesas SCE.
 
 ### 3) Compile the sample application
 
-Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio. Open `script` folder and copy orignal `fsp.ld` to `fsp.ld.org`. Copy `fsp_wsce.ld` to `fsp.ld`, and then build the project.
+Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio. Open `script` folder and copy original `fsp.ld` to `fsp.ld.org`. Copy `fsp_wsce.ld` to `fsp.ld`, and then build the project.
 Project properties are preset for the demo.
 
  #### 3-1). Prepare SEGGER_RTT for logging
@@ -126,7 +126,7 @@ Project properties are preset for the demo.
 Need to set:
 #define BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW          (1)\
 
-Code Origin and entry point is "0x00010200". app_RA.elf is gnerated under Debug. 
+Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug. 
 
 ### 4) Generate Wrapped Key for SCE
 
@@ -188,7 +188,7 @@ $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00020000 a
 ```
 
 
-### 6) Execute inital boot
+### 6) Execute initial boot
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.

@@ -133,7 +133,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 /* Some internal FLASH memory models don't allow
  * multiple writes after erase in the same page/area.
  *
- * NVM_FLASH_WRITEONCE uses a redundand two-sector model
+ * NVM_FLASH_WRITEONCE uses a redundant two-sector model
  * to mitigate the effect of power failures.
  *
  */

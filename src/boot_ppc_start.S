@@ -29,7 +29,7 @@ MPC8544ERM - https://www.nxp.com/docs/en/reference-manual/MPC8544ERM.pdf
 
 ## Address Space (AS)
 
-There are two adress spaces. For privledged (0) and non-privlaged (1) spaces.
+There are two address spaces. For privledged (0) and non-privlaged (1) spaces.
 Out of reset the AS=0.
 
 ## Early boot
@@ -328,7 +328,7 @@ infinite_debug_loop:
         bne     infinite_debug_loop /* should not get here */
 
 write_new_ccsrbar:
-        /* Read current value of CCSBAR - forces all acesses to complete */
+        /* Read current value of CCSBAR - forces all accesses to complete */
         sync
         lwz     r0, 0(r9)
         isync
