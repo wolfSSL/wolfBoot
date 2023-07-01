@@ -7,7 +7,7 @@ securely updated to v2. Both versions behave the same except displaying its vers
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer.
 
 ## 2. Components and Tools
@@ -63,7 +63,7 @@ cerurely updated to v2. Both versions behave the same except displaying its vers
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer.
 
 
@@ -140,7 +140,7 @@ Pre-Include
 Code Origin and entry point (PResetPRG) is "0xffc10200" (See Section Viewer of Linker Section).
 ```
 
-app_RenesasRx01.x in ELF is gnerated under HardwareDebug. You can derive bair binary file 
+app_RenesasRx01.x in ELF is generated under HardwareDebug. You can derive bair binary file 
 (app_RenesasRx01.bin) by rx-elf-objcopy.exe command as follows. -R are for eliminate unnecessary
 secrions.
 
@@ -184,7 +184,7 @@ $ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc10000 app_Renesas
 ```
 
 
-### 3-7 Execute inital boot
+### 3-7 Execute initial boot
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
@@ -266,7 +266,7 @@ Firmware Update is triggered
 ```
 
 After you see the message, hit any key so that the application calls
-wolfBoot_update_trigger() whcih changes the partition status and triggers
+wolfBoot_update_trigger() which changes the partition status and triggers
 updating the firmware.
 
 Since this is just a trigger, the application can continue the process.

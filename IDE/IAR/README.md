@@ -76,7 +76,7 @@ Using the ST-LINK Utility, perform the following steps:
 *Erase the entire flash memory before uploading the binary files*
 
 
-	2. Upload `wolfboot.bin` to addess 0x08000000
+	2. Upload `wolfboot.bin` to address 0x08000000
 
 ![Upload bootloader](../../docs/png/windows_upload_1.png)
 

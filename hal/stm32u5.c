@@ -515,7 +515,7 @@ static void clock_pll_on(int powersave)
     PWR_VOSR &= ~( (PWR_VOSR_VOS_1 << PWR_VOSR_VOS_SHIFT) | PWR_VOSR_BOOSTEN );
     PWR_VOSR|= ((PWR_VOSR_VOS_1<< PWR_VOSR_VOS_SHIFT) | PWR_VOSR_BOOSTEN);
 
-    /* Wait until VOSRDY is rised */
+    /* Wait until VOSRDY is raised */
     reg32 = PWR_VOSR;
     while ((PWR_VOSR & PWR_VOSR_VOSRDY) == 0) {};
 

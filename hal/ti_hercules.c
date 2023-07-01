@@ -65,7 +65,7 @@ void hal_init(void)
             wolfBoot_printf("msg and flash don't match\n");
         }
 
-        /* stall here to prevent accidently including this in production */
+        /* stall here to prevent accidentally including this in production */
         while (1)
             ;
     }

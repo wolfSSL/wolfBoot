@@ -59,7 +59,7 @@ case $4 in
     5) SIGN_METHOD=${ECC256_SIGN} ;;
     6) SIGN_METHOD=${ECC384_SIGN} ;;
     7) SIGN_METHOD=${ECC512_SIGN} ;;
-    *) echo "invalid signature mehtod $4. Please specifiy [0-8] for sign."
+    *) echo "invalid signature method $4. Please specify [0-8] for sign."
        exit 1 ;;
 esac
 

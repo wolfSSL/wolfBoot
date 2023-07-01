@@ -413,7 +413,7 @@ enum elbc_amask_sizes {
 #define ESPI_SPCOM_TRANLEN(x) (((x) - 1) << 0) /* Transaction length */
 
 #define ESPI_SPIE_DON        (1 << 14) /* Last character was transmitted */
-#define ESPI_SPIE_RNE        (1 << 9) /* recevie not empty */
+#define ESPI_SPIE_RNE        (1 << 9) /* receive not empty */
 #define ESPI_SPIE_TNF        (1 << 8) /* transmit not full */
 
 #define ESPI_CSMODE_CI       0x80000000 /* Inactive high */
@@ -965,7 +965,7 @@ static void config_io_pin(uint8_t port, uint8_t pin, int dir, int open_drain,
     uint32_t pin_2bit_mask, pin_2bit_dir, pin_2bit_assign;
     uint32_t pin_1bit_mask, tmp_val;
 
-    /* Caculate pin location and 2bit mask and dir */
+    /* Calculate pin location and 2bit mask and dir */
     pin_2bit_mask = (uint32_t)(0x3 << (NUM_OF_PINS -
         (pin % (NUM_OF_PINS / 2) + 1) * 2));
     pin_2bit_dir =  (uint32_t)(dir << (NUM_OF_PINS -
@@ -1459,7 +1459,7 @@ static int test_flash(void)
 #endif
 int test_tpm(void)
 {
-    /* Read 4 bytes at TIS addresss D40F00. Assumes 0 wait state on TPM */
+    /* Read 4 bytes at TIS address D40F00. Assumes 0 wait state on TPM */
     uint8_t tx[8] = {0x83, 0xD4, 0x0F, 0x00,
                      0x00, 0x00, 0x00, 0x00};
     uint8_t rx[8] = {0};

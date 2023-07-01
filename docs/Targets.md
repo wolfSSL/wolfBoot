@@ -743,7 +743,7 @@ The STM32H7 build can be built using:
 make TARGET=stm32h7 SIGN=ECC256
 ```
 
-The STM32H7 also supports using the QSPI for external flash. To enable use `QSPI_FLASH=1` in your configuration. The pins are defined in `hal/spi/spi_drv_stm32.h`. A built-in alternate pin configuration can be used with `QSPI_ALT_CONFIGURATION`. The flash and QSPI parameters are defined in `src/qspi_flash.c` and can be overrriden at build time.
+The STM32H7 also supports using the QSPI for external flash. To enable use `QSPI_FLASH=1` in your configuration. The pins are defined in `hal/spi/spi_drv_stm32.h`. A built-in alternate pin configuration can be used with `QSPI_ALT_CONFIGURATION`. The flash and QSPI parameters are defined in `src/qspi_flash.c` and can be overridden at build time.
 
 ### STM32H7 Programming
 
@@ -840,7 +840,7 @@ arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 
 Tested using `https://github.com/raspberrypi/linux` on Ubuntu 20
 
-Prerequsites: `sudo apt install gcc-aarch64-linux-gnu qemu-system-aarch64`
+Prerequisites: `sudo apt install gcc-aarch64-linux-gnu qemu-system-aarch64`
 
 ### Compiling the kernel
 
@@ -1100,7 +1100,7 @@ Firmware can be directly uploaded to the target by copying `factory.bin` to the 
 
 Supports K64 and K82 with crypto hardware acceleration.
 
-### Buld options
+### Build options
 
 See [/config/examples/kinetis-k82f.config](/config/examples/kinetis-k82f.config) for example configuration.
 
@@ -1108,7 +1108,7 @@ The TARGET is `kinetis`. For LTC PKA support set `PKA=`.
 
 Set `MCUXPRESSO`, `MCUXPRESSO_CPU`, `MCUXPRESSO_DRIVERS` and `MCUXPRESSO_CMSIS` for MCUXpresso configuration.
 
-### Example partioning for K82
+### Example partitioning for K82
 
 ```
 WOLFBOOT_PARTITION_SIZE?=0x7A000
@@ -1256,7 +1256,7 @@ Flash Layout (with files):
 | ----------- | ---- | ------- |
 | Reset Configuration Word (RCW) | `68PPC2_RCW_v0p7.bin` | `0xE8000000` |
 | Frame Manager Microcode | `fsl_fman_ucode_t2080_r1.0.bin` | `0xE8020000` |
-| Signed Aplication | `test-app/image_v1_signed.bin` | `0xE8080000` |
+| Signed Application | `test-app/image_v1_signed.bin` | `0xE8080000` |
 | wolfBoot | `wolfboot.bin` | `0xEFF40000` |
 | Boot Entry Point (with offset jump to init code) |  | `0xEFFFFFFC` |
 
@@ -1509,7 +1509,7 @@ optionally an external flash. The build will produce an executable ELF file
 `wolfBoot.elf`. You can provide another executable ELF as firmware image and it
 will be executed. The command-line arguments of `wolfBoot.elf` are forwarded to
 the application. The example application `test-app\app_sim.c` uses the arguments
-to interact with `libwolfboot.c` and automatize functional testing.  You can
+to interact with `libwolfboot.c` and automate functional testing.  You can
 find an example configuration in `config/examples/sim.config`.
 
 An example of using the `test-app/sim.c` to test firmware update:
@@ -1537,7 +1537,7 @@ securely updated to v2. Both versions behave the same except displaying its vers
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer.
 
 Flash Allocation:
@@ -1567,7 +1567,7 @@ securely updated to v2. Both versions behave the same except displaying its vers
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer.
 
 Flash Allocation:

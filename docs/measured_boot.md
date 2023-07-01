@@ -15,16 +15,16 @@ during and after boot.
 
 ## Concept
 
-Typically, systems use Secure Boot to guarantee that the correct and geniune
+Typically, systems use Secure Boot to guarantee that the correct and genuine
 firmware is booted by verifying its signature. Afterwards, this knowledge is
-unknown to the sytem. The application does not know if the system started in
+unknown to the system. The application does not know if the system started in
 a good known state. Sometimes, this guarantee is needed by the firmware itself.
 To provide such mechanism the concept of Measured Boot exist.
 
 Measured Boot can be used to check every start-up component, including settings
 and user information(user partition). The result of the checks is then stored
 into special registers called PCR. This process is called PCR Extend and is
-refered to as a TPM measurement. PCR registers can be reset only on TPM power-on.
+referred to as a TPM measurement. PCR registers can be reset only on TPM power-on.
 
 Having TPM measurements provide a way for the firmware or Operating System(OS),
 like Windows or Linux, to know that the software loaded before it gained control
@@ -64,7 +64,7 @@ Any TPM has a minimum of 24 PCR registers. Their typical use is as follows:
 
 Recommendations for choosing a PCR index:
 
-- During development it is recommended to use PCR16 that is intented for testing.
+- During development it is recommended to use PCR16 that is intended for testing.
 - In production, if you are running a bare-metal firmware or RTOS, you could use
 almost all PCRs(PCR0-15), except the one for DRTM and Trusted OS(PCR17-23).
 - If you are running Linux or Windows, PCR12-15 can be chosen for production
