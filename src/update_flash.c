@@ -376,13 +376,13 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 
     /* copy the last sector of boot  which has the encrypt key and partition
      * state to swap */
-    wolfBoot_copy_sector(&boot, &swap, sector);
+    wolfBoot_copy_sector(boot, swap, sector);
 
     /* set the UPDATE state as FINAL_SWAP */
     st = IMG_STATE_FINAL_SWAP;
     wolfBoot_set_partition_state(PART_UPDATE, st);
 
-    wolfBoot_finalize(&boot, &update, &swap);
+    wolfBoot_finalize(boot, update, swap);
 out:
     return ret;
 }
