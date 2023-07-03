@@ -70,10 +70,6 @@ tools/keytools/x64
 tools/keytools/Debug
 tools/keytools/Release
 
-# preseal binary
-tools/preseal/preseal
-tools/preseal/preseal.exe
-
 # delta binaries
 tools/delta/bmdiff
 tools/delta/bmpatch
