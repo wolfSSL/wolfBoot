@@ -25,6 +25,8 @@ This README describes configuration of supported targets.
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Renesas RX72N](#renesas-rx72n)
+* [Renesas RA6M4](#renesas-ra6m4)
 
 
 ## STM32F4
@@ -61,48 +63,6 @@ In this particular case, due to the flash geometry, the swap space must be as bi
 On other systems, the SWAP space can be as small as 512B, if multiple smaller flash blocks are used.
 
 More information about the geometry of the flash and in-application programming (IAP) can be found in the manufacturer manual of each target device.
-
-### Using the TPM to store the verification public key
-
-If you want to keep your public key in the TPM, wolfBoot can unseal and use the key through wolfTPM by defining the following arguments in your config:
-
-```
-SIGN?=ECC256
-WOLFBOOT_TPM_KEYSTORE?=1
-WOLFBOOT_TPM_KEYSTORE_NV_INDEX?=0x01800200
-WOLFBOOT_TPM_POLICY_NV_INDEX?=0x01800201
-```
-
-You can also set a custom PCR index to use if the default 16 is not desired:
-
-```
-WOLFBOOT_TPM_PCR_INDEX?=15
-```
-
-Using this feature also requires you that keep 2 keys and use --manual-sign, the verification key for which the public section is kept in wolfTPM and the PolicySigned key for which the public section is bundled with the wolfBoot partation when /tools/keytools/sign is called. To create the PolicySigned signature you need hash and sign an expiration time as per the TPM2's documentation like below:
-
-```
-$ echo -n -e '\x00\x00\x00\x00' > zeroExpiry
-$ openssl dgst -sha256 -sign policy_signed_ecc.pem -out policySigned zeroExpiry
-```
-
-The output `policySigned` is in DER format and we need the signature in raw format, to convert we run the following commands:
-
-```
-$ openssl asn1parse -inform DER -in policySigned
-    0:d=0  hl=2 l=  69 cons: SEQUENCE
-    2:d=1  hl=2 l=  32 prim: INTEGER           :74BD2EAD183EE4B3A9A81ABC14B35DEB124148B9EF756C51B163A15CD9F37F7E
-   36:d=1  hl=2 l=  33 prim: INTEGER           :8A42B3E9CD1E7721B1697E08841D2982CC38756E6511938C2DB187FF16E5076C
-$ echo "74BD2EAD183EE4B3A9A81ABC14B35DEB124148B9EF756C51B163A15CD9F37F7E8A42B3E9CD1E7721B1697E08841D2982CC38756E6511938C2DB187FF16E5076C" | xxd -r -p - policySigned.raw
-```
-
-policySigned.raw will now only contain the raw signature as wolfBoot needs it. Then we can put everything together in our sign command with the --policy-signed and --manual-sign flags:
-
-```
-tools/keytools/sign --ecc256 --sha256 --manual-sign --policy-signed my_image.bin policy_signed_ecc.raw 1 my_image_sig policySigned.raw
-```
-
-#### NOTE: Currently tpm keystore only supports ECC256 as the key type
 
 ### STM32F4 Programming
 
@@ -741,7 +701,7 @@ The STM32H7 build can be built using:
 make TARGET=stm32h7 SIGN=ECC256
 ```
 
-The STM32H7 also supports using the QSPI for external flash. To enable use `QSPI_FLASH=1` in your configuration. The pins are defined in `hal/spi/spi_drv_stm32.h`. A built-in alternate pin configuration can be used with `QSPI_ALT_CONFIGURATION`. The flash and QSPI parameters are defined in `src/qspi_flash.c` and can be overrriden at build time.
+The STM32H7 also supports using the QSPI for external flash. To enable use `QSPI_FLASH=1` in your configuration. The pins are defined in `hal/spi/spi_drv_stm32.h`. A built-in alternate pin configuration can be used with `QSPI_ALT_CONFIGURATION`. The flash and QSPI parameters are defined in `src/qspi_flash.c` and can be overridden at build time.
 
 ### STM32H7 Programming
 
@@ -838,7 +798,7 @@ arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 
 Tested using `https://github.com/raspberrypi/linux` on Ubuntu 20
 
-Prerequsites: `sudo apt install gcc-aarch64-linux-gnu qemu-system-aarch64`
+Prerequisites: `sudo apt install gcc-aarch64-linux-gnu qemu-system-aarch64`
 
 ### Compiling the kernel
 
@@ -1098,7 +1058,7 @@ Firmware can be directly uploaded to the target by copying `factory.bin` to the 
 
 Supports K64 and K82 with crypto hardware acceleration.
 
-### Buld options
+### Build options
 
 See [/config/examples/kinetis-k82f.config](/config/examples/kinetis-k82f.config) for example configuration.
 
@@ -1106,7 +1066,7 @@ The TARGET is `kinetis`. For LTC PKA support set `PKA=`.
 
 Set `MCUXPRESSO`, `MCUXPRESSO_CPU`, `MCUXPRESSO_DRIVERS` and `MCUXPRESSO_CMSIS` for MCUXpresso configuration.
 
-### Example partioning for K82
+### Example partitioning for K82
 
 ```
 WOLFBOOT_PARTITION_SIZE?=0x7A000
@@ -1254,7 +1214,7 @@ Flash Layout (with files):
 | ----------- | ---- | ------- |
 | Reset Configuration Word (RCW) | `68PPC2_RCW_v0p7.bin` | `0xE8000000` |
 | Frame Manager Microcode | `fsl_fman_ucode_t2080_r1.0.bin` | `0xE8020000` |
-| Signed Aplication | `test-app/image_v1_signed.bin` | `0xE8080000` |
+| Signed Application | `test-app/image_v1_signed.bin` | `0xE8080000` |
 | wolfBoot | `wolfboot.bin` | `0xEFF40000` |
 | Boot Entry Point (with offset jump to init code) |  | `0xEFFFFFFC` |
 
@@ -1507,7 +1467,7 @@ optionally an external flash. The build will produce an executable ELF file
 `wolfBoot.elf`. You can provide another executable ELF as firmware image and it
 will be executed. The command-line arguments of `wolfBoot.elf` are forwarded to
 the application. The example application `test-app\app_sim.c` uses the arguments
-to interact with `libwolfboot.c` and automatize functional testing.  You can
+to interact with `libwolfboot.c` and automate functional testing.  You can
 find an example configuration in `config/examples/sim.config`.
 
 An example of using the `test-app/sim.c` to test firmware update:
@@ -1528,3 +1488,60 @@ make test-sim-internal-flash-with-update
 # it should print 2
 ./wolfboot.elf success get_version
 ```
+## renesas-rx72n
+
+This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
+They are compiled by e2Studio and running on the target board.
+
+In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+board for the debugger and flash programmer.
+
+Flash Allocation:
+```
++---------------------------+------------------------+-----+
+| B |H|                     |H|                      |     |
+| o |e|   Primary           |e|   Update             |Swap |
+| o |a|   Partition         |a|   Partition          |Sect |
+| t |d|                     |d|                      |     |
++---------------------------+------------------------+-----+
+0xffc00000: wolfBoot
+0xffc10000: Primary partition (Header)
+0xffc10100: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 256, e.g. ED25519, EC256, EC384 or EC512 */
+0xffc10200: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 512, e.g. RSA2048, RSA3072 */
+0xffdf0000: Update  partition (Header)
+0xffdf0100: Update  partition (Application image)
+0xfffd0000: Swap sector
+
+```
+
+Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RX72N/Readme.md).
+
+## renesas-ra6m4
+
+This example for `Renesas RA6M4` demonstrates a simple secure firmware update by wolfBoot. A sample application v1 is
+securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
+They are compiled by e2Studio and running on the target board.
+
+In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+board for the debugger and flash programmer.
+
+Flash Allocation:
+```
++---------------------------+------------------------+-----+
+| B |H|                     |H|                      |     |
+| o |e|   Primary           |e|   Update             |Swap |
+| o |a|   Partition         |a|   Partition          |Sect |
+| t |d|                     |d|                      |     |
++---------------------------+------------------------+-----+
+0x00000000: wolfBoot
+0x00010000: Primary partition (Header)
+0x00010200: Primary partition (Application image)
+0x00080000: Update  partition (Header)
+0x00080200: Update  partition (Application image)
+0x000F0000: Swap sector
+```
+
+Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RA6M4/Readme.md).

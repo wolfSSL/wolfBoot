@@ -133,7 +133,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 /* Some internal FLASH memory models don't allow
  * multiple writes after erase in the same page/area.
  *
- * NVM_FLASH_WRITEONCE uses a redundand two-sector model
+ * NVM_FLASH_WRITEONCE uses a redundant two-sector model
  * to mitigate the effect of power failures.
  *
  */
@@ -1057,23 +1057,12 @@ int RAMFUNCTION chacha_init(void)
 {
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
-#elif defined(WOLFTPM_ENCRYPT_KEYSTORE)
-    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
-    uint32_t keySz = sizeof(key);
-    struct wolfBoot_image boot;
 #else
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
         ENCRYPT_TMP_SECRET_OFFSET);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t* stored_nonce;
-
-#ifdef WOLFTPM_ENCRYPT_KEYSTORE
-    wolfBoot_open_image(&boot, PART_BOOT);
-
-    if (wolfBoot_unseal_encryptkey(key, &keySz) != 0)
-        return -1;
-#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -1102,10 +1091,6 @@ int aes_init(void)
 {
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
-#elif defined(WOLFTPM_ENCRYPT_KEYSTORE)
-    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
-    uint32_t keySz = sizeof(key);
-    struct wolfBoot_image boot;
 #else
     uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
         ENCRYPT_TMP_SECRET_OFFSET);
@@ -1113,13 +1098,6 @@ int aes_init(void)
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t* stored_nonce;
-
-#ifdef WOLFTPM_ENCRYPT_KEYSTORE
-    wolfBoot_open_image(&boot, PART_BOOT);
-
-    if (wolfBoot_unseal_encryptkey(key, &keySz) != 0)
-        return -1;
-#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 

@@ -70,6 +70,7 @@ int isalpha(int c)
     return (isupper(c) || islower(c));
 }
 
+#if !defined(__CCRX__) /* Renesas CCRX */
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
@@ -108,6 +109,7 @@ int strcmp(const char *s1, const char *s2)
 
     return diff;
 }
+#endif /* Renesas CCRX */
 
 int strcasecmp(const char *s1, const char *s2)
 {
@@ -145,6 +147,7 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
     return diff;
 }
 
+#if !defined(__CCRX__) /* Renesas CCRX */
 char *strncat(char *dest, const char *src, size_t n)
 {
     size_t i = 0;
@@ -219,9 +222,10 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
 
     return diff;
 }
-
+#endif /* __CCRX__ Renesas CCRX */
 #endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && DEBUG_UART) */
 
+#if !defined(__CCRX__) /* Renesas CCRX */
 #if !defined(BUILD_LOADER_STAGE1) || defined(DEBUG_UART)
 size_t strlen(const char *s)
 {
@@ -267,7 +271,7 @@ void *memmove(void *dst, const void *src, size_t n)
     }
 }
 #endif
-
+#endif /* __CCRX__ Renesas CCRX */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
 void uart_writenum(int num, int base)

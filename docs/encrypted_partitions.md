@@ -13,7 +13,7 @@ Encryption of external partition works at the level of the external flash interf
 All write calls to external partitions from the bootloader perform an additional encryption step
 to hide the actual content of the external non-volatile memory.
 
-Viceversa, all read operations will decrypt the data stored when the feature is enabled.
+Vice-versa, all read operations will decrypt the data stored when the feature is enabled.
 
 An extra option is provided to the `sign.py` sign tool to encrypt the firmware update after signing it, so
 that it can be stored as is in the external memory by the application, and will be decrypted by the bootloader

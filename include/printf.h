@@ -55,6 +55,8 @@
         /* use minimal printf support in string.h */
         void uart_printf(const char* fmt, ...);
 #       define wolfBoot_printf(_f_, ...) uart_printf(_f_, ##__VA_ARGS__)
+#   elif defined(__CCRX__)
+#       define wolfBoot_printf printf
 #   else
 #       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
 #   endif

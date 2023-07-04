@@ -141,7 +141,7 @@
 #define GPIOD_AFRL  (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
 #define GPIOD_AFRH  (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
 
-/* UART/USART: Defining register bit placement for CR1 and ISR register for readabilty. */
+/* UART/USART: Defining register bit placement for CR1 and ISR register for readability. */
 #define UART_CR1_UART_ENABLE                (1 << 0)
 #define UART_CR1_TX_ENABLE                  (1 << 3)
 #define UART_CR1_RX_ENABLE                  (1 << 2)
@@ -153,7 +153,7 @@
 #define UART_ISR_TRANSMISSION_COMPLETE      (1 << 6)
 #define UART_ISR_TX_DATA_REGISTER_EMPTY     (1 << 7)
 
-/* RCC: Defining register bit placement for APB1, APB2, AHB1 and AHB4 register for readabilty. */
+/* RCC: Defining register bit placement for APB1, APB2, AHB1 and AHB4 register for readability. */
 #define RCC_APB1_USART2_EN                  (1 << 17)
 #define RCC_APB1_USART3_EN                  (1 << 18)
 #define RCC_APB1_UART4_EN                   (1 << 19)

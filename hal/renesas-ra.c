@@ -59,7 +59,7 @@ void hal_init(void)
     fsp_err_t err;
 
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
-    /* retrive installed pubkey from flash */
+    /* retrieve installed pubkey from flash */
     uint32_t *pubkey = keystore_get_buffer(0);
 #endif
     err = R_FLASH_HP_Close(&g_flash0_ctrl);

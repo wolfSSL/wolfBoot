@@ -71,7 +71,7 @@ operates almost the same as firmware update with a few key
 differences. The header of the update is marked as a bootloader
 update (use `--wolfboot-update` for the sign tools).
 
-The new signed wolfBoot image is loaded into the UPDATE parition and
+The new signed wolfBoot image is loaded into the UPDATE partition and
 triggered the same as a firmware update. Instead of performing a swap,
 after the image is validated and signature verified, the bootloader is
 erased and the new image is written to flash. This operation is _not_

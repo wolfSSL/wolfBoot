@@ -57,7 +57,7 @@ Xilinx uses a `bootgen` tool for generating a boot binary image that has Xilinx 
 3. Import example project for programming eFuses:
     * New BSP project (program efuses , ZCU102_hw_platform, standalone, CPU: PSU_cortexa53_0)
     * Goto Xilinx Board Support Packet Settings.
-    * Scroll down to Supported Libraries and Check the xiskey libray
+    * Scroll down to Supported Libraries and Check the xiskey library
     * In the system.mss pane, scroll down to Libraries and click Import Examples.
     * Check the xilskey_esfuseps_zynqmp_example
 4. Edit `xilskey_efuseps_zynqmp_input.h`
