@@ -980,12 +980,13 @@ int RAMFUNCTION wolfBoot_backup_encrypt_key(const uint8_t* key,
 #ifndef MMU
     uint32_t magic[2] = {WOLFBOOT_MAGIC, WOLFBOOT_MAGIC_TRAIL};
 
-    XMEMCPY((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS, key, ENCRYPT_KEY_SIZE);
-    XMEMCPY((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_KEY_SIZE, nonce,
-        ENCRYPT_NONCE_SIZE);
+    hal_flash_write((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS, key,
+        ENCRYPT_KEY_SIZE);
+    hal_flash_write((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
     /* write magic so we know we finished in case of a powerfail */
-    XMEMCPY((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_KEY_SIZE +
-        ENCRYPT_NONCE_SIZE, magic, sizeof(magic));
+    hal_flash_write((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE, magic, sizeof(magic));
 #endif
     return 0;
 }
