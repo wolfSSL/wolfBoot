@@ -974,6 +974,22 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     return 0;
 }
 
+int RAMFUNCTION wolfBoot_backup_encrypt_key(const uint8_t* key,
+    const uint8_t* nonce)
+{
+#ifndef MMU
+    uint32_t magic[2] = {WOLFBOOT_MAGIC, WOLFBOOT_MAGIC_TRAIL};
+
+    XMEMCPY((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS, key, ENCRYPT_KEY_SIZE);
+    XMEMCPY((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_KEY_SIZE, nonce,
+        ENCRYPT_NONCE_SIZE);
+    /* write magic so we know we finished in case of a powerfail */
+    XMEMCPY((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + ENCRYPT_KEY_SIZE +
+        ENCRYPT_NONCE_SIZE, magic, sizeof(magic));
+#endif
+    return 0;
+}
+
 #ifndef UNIT_TEST
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
@@ -981,13 +997,27 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
     XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #else
-    uint8_t *mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-        WOLFBOOT_PARTITION_BOOT_ADDRESS);
-    int sel_sec = 0;
-    #ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(PART_BOOT);
-    mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-    #endif
+    uint8_t* mem;
+    uint32_t magic[2];
+
+    /* see if we've backed up the key, this will only matter for final swap */
+    XMEMCPY(magic, (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE, sizeof(magic));
+
+    if (magic[0] == WOLFBOOT_MAGIC && magic[1] == WOLFBOOT_MAGIC_TRAIL) {
+        mem = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    }
+    else {
+        mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+            WOLFBOOT_PARTITION_BOOT_ADDRESS);
+
+#ifdef NVM_FLASH_WRITEONCE
+        int sel_sec = 0;
+        sel_sec = nvm_select_fresh_sector(PART_BOOT);
+        mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
+#endif
+    }
+
     XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, mem + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #endif

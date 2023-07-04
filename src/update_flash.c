@@ -116,7 +116,8 @@ void wolfBoot_check_self_update(void)
 }
 #endif /* RAM_CODE for self_update */
 
-static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct wolfBoot_image *dst, uint32_t sector)
+static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
+    struct wolfBoot_image *dst, uint32_t sector, uint32_t skipEncrypt)
 {
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
@@ -157,7 +158,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src, struct w
           if (src_sector_offset + pos <
               (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
               /* bypass decryption, copy encrypted data into swap */
-              if (dst->part == PART_SWAP) {
+              if (dst->part == PART_SWAP || skipEncrypt == 1) {
                   ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos,
                                  (void *)buffer, FLASHBUFFER_SIZE);
               } else {
@@ -193,22 +194,38 @@ static int wolfBoot_finalize(struct wolfBoot_image *boot,
 #ifdef EXT_ENCRYPTED
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
-#endif
 
-#ifdef EXT_ENCRYPTED
+    /* get the encryption key, this will check the backup */
     wolfBoot_get_encrypt_key(key, nonce);
+
+    hal_flash_lock();
+
+    /* set the encryption key, we need to do this since the backup may be the
+     * only copy at this point if the power failed */
+    wolfBoot_set_encrypt_key(key, nonce);
+
+    hal_flash_unlock();
+
+    /* erase the first sector of boot */
+    wb_flash_erase(boot, 0, WOLFBOOT_SECTOR_SIZE);
+
+    /* backup the key */
+    wolfBoot_backup_encrypt_key(key, nonce);
 #endif
 
     /* erase the last sector of boot */
     wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
 
 #ifdef EXT_ENCRYPTED
-    /* Save the encryption key */
     hal_flash_lock();
 
+    /* write the key back to the last sector */
     wolfBoot_set_encrypt_key(key, nonce);
 
     hal_flash_unlock();
+
+    /* copy the first sector back to boot, don't encrypt */
+    wolfBoot_copy_sector(swap, boot, 0, 1);
 #endif
 
     /* set the boot state to testing */
@@ -338,7 +355,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             }
         }
         if (flag == SECT_FLAG_SWAPPING) {
-           wolfBoot_copy_sector(swap, boot, sector);
+           wolfBoot_copy_sector(swap, boot, sector, 0);
            flag = SECT_FLAG_UPDATED;
            if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
                wolfBoot_set_update_sector_flag(sector, flag);
@@ -374,14 +391,17 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         sector++;
     }
 
-    /* copy the last sector of boot  which has the encrypt key and partition
-     * state to swap */
-    wolfBoot_copy_sector(boot, swap, sector);
+#ifdef EXT_ENCRYPTED
+    /* copy the first sector of boot to swap so we can use it for the final
+     * swap */
+    wolfBoot_copy_sector(boot, swap, 0, 1);
+#endif
 
     /* set the UPDATE state as FINAL_SWAP */
     st = IMG_STATE_FINAL_SWAP;
     wolfBoot_set_partition_state(PART_UPDATE, st);
 
+    /* finalize the boot sector */
     wolfBoot_finalize(boot, update, swap);
 out:
     return ret;
@@ -436,8 +456,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         return -1;
 
 #ifndef DISABLE_BACKUP
-    /* if we were on the final swap just finish it, wow wouldn't it be great if
-     * if the whole update process worked like that? */
+    /* if we were on the final swap just finish it */
     if (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
         st == IMG_STATE_FINAL_SWAP) {
         sector = (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE) - 1;
@@ -446,9 +465,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef EXT_FLASH
         ext_flash_unlock();
 #endif
-
-        /* restore the last sector since it has the encrypt key */
-        wolfBoot_copy_sector(&swap, &boot, sector);
 
         wolfBoot_finalize(&boot, &update, &swap);
 
@@ -526,7 +542,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     while ((sector * sector_size) < total_size) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
-           wolfBoot_copy_sector(&update, &swap, sector);
+           wolfBoot_copy_sector(&update, &swap, sector, 0);
            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                wolfBoot_set_update_sector_flag(sector, flag);
         }
@@ -535,7 +551,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             if (size > sector_size)
                 size = sector_size;
             flag = SECT_FLAG_BACKUP;
-            wolfBoot_copy_sector(&boot, &update, sector);
+            wolfBoot_copy_sector(&boot, &update, sector, 0);
            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                 wolfBoot_set_update_sector_flag(sector, flag);
         }
@@ -544,7 +560,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             if (size > sector_size)
                 size = sector_size;
             flag = SECT_FLAG_UPDATED;
-            wolfBoot_copy_sector(&swap, &boot, sector);
+            wolfBoot_copy_sector(&swap, &boot, sector, 0);
             if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                 wolfBoot_set_update_sector_flag(sector, flag);
         }
@@ -579,14 +595,17 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         sector++;
     }
 
-    /* copy the last sector of boot  which has the encrypt key and partition
-     * state to swap */
-    wolfBoot_copy_sector(&boot, &swap, sector);
+#ifdef EXT_ENCRYPTED
+    /* copy the first sector of boot to swap so we can use it for the final
+     * swap */
+    wolfBoot_copy_sector(&boot, &swap, 0, 1);
+#endif
 
     /* set the UPDATE state as FINAL_SWAP */
     st = IMG_STATE_FINAL_SWAP;
     wolfBoot_set_partition_state(PART_UPDATE, st);
 
+    /* finalize the boot sector */
     wolfBoot_finalize(&boot, &update, &swap);
 #else /* DISABLE_BACKUP */
 #warning "Backup mechanism disabled! Update installation will not be interruptible"
@@ -597,7 +616,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     while ((sector * sector_size) < total_size) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
-           wolfBoot_copy_sector(&update, &boot, sector);
+           wolfBoot_copy_sector(&update, &boot, sector, 0);
            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                wolfBoot_set_update_sector_flag(sector, flag);
         }
