@@ -106,32 +106,32 @@ struct xmalloc_slot {
     #endif
 #else
     /* TFM */
-    #define MP_INT_SIZE ((sizeof (fp_int)))
+    #define MP_INT_TYPE_SIZE ((sizeof (fp_int)))
     #ifdef WOLFBOOT_SIGN_ECC256
-        #define MP_CURVE_SPECS_SIZE (MP_INT_SIZE)
+        #define MP_CURVE_SPECS_SIZE (MP_INT_TYPE_SIZE)
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
         #define ECC_POINT_SIZE (228)
-        #define MP_INT_BUFFER_SIZE (MP_INT_SIZE * 6)
+        #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif
     #ifdef WOLFBOOT_SIGN_ECC384
-        #define MP_CURVE_SPECS_SIZE (MP_INT_SIZE)
+        #define MP_CURVE_SPECS_SIZE (MP_INT_TYPE_SIZE)
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
         #define ECC_POINT_SIZE (408)
-        #define MP_INT_BUFFER_SIZE (MP_INT_SIZE * 5)
-        #define MP_INT_BUFFER_SIZE_1 (MP_INT_SIZE * 6)
+        #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
+        #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif
 
     static uint8_t mp_curve_field_count[MP_CURVE_FIELD_COUNT_SIZE];
-    static uint8_t mp_int_v[MP_INT_SIZE];
-    static uint8_t mp_int_w[MP_INT_SIZE];
-    static uint8_t mp_int_u1[MP_INT_SIZE];
-    static uint8_t mp_int_u2[MP_INT_SIZE];
-    static uint8_t mp_int_t[MP_INT_SIZE];
-    static uint8_t mp_int_tmp0[MP_INT_SIZE];
-    static uint8_t mp_int_tmp1[MP_INT_SIZE];
-    static uint8_t mp_int_q[MP_INT_SIZE * 5];
+    static uint8_t mp_int_v[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_w[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_u1[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_u2[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_t[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_tmp0[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_tmp1[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_q[MP_INT_TYPE_SIZE * 5];
     static uint8_t ecc_point0[ECC_POINT_SIZE];
     static uint8_t ecc_point1[ECC_POINT_SIZE];
     static uint8_t ecc_point2[ECC_POINT_SIZE];
@@ -176,14 +176,14 @@ static struct xmalloc_slot xmalloc_pool[] = {
     #endif
 #else
     { mp_curve_field_count, MP_CURVE_FIELD_COUNT_SIZE, 0},
-    { mp_int_v, MP_INT_SIZE, 0},
-    { mp_int_w, MP_INT_SIZE, 0},
-    { mp_int_u1, MP_INT_SIZE, 0},
-    { mp_int_u2, MP_INT_SIZE, 0},
-    { mp_int_t, MP_INT_SIZE, 0},
-    { mp_int_tmp0, MP_INT_SIZE, 0},
-    { mp_int_tmp1, MP_INT_SIZE, 0},
-    { mp_int_q, MP_INT_SIZE * 5, 0},
+    { mp_int_v, MP_INT_TYPE_SIZE, 0},
+    { mp_int_w, MP_INT_TYPE_SIZE, 0},
+    { mp_int_u1, MP_INT_TYPE_SIZE, 0},
+    { mp_int_u2, MP_INT_TYPE_SIZE, 0},
+    { mp_int_t, MP_INT_TYPE_SIZE, 0},
+    { mp_int_tmp0, MP_INT_TYPE_SIZE, 0},
+    { mp_int_tmp1, MP_INT_TYPE_SIZE, 0},
+    { mp_int_q, MP_INT_TYPE_SIZE * 5, 0},
     { ecc_point0, ECC_POINT_SIZE, 0},
     { ecc_point1, ECC_POINT_SIZE, 0},
     { ecc_point2, ECC_POINT_SIZE, 0},
@@ -282,23 +282,23 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
         { NULL, 0, 0}
     };
 #else
-    #define MP_INT_SIZE (sizeof(mp_int))
+    #define MP_INT_TYPE_SIZE (sizeof(mp_int))
     #define MP_MONT_REDUCE_BUF_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
-    static uint8_t mp_int_buffer0[MP_INT_SIZE];
-    static uint8_t mp_int_buffer1[MP_INT_SIZE * 3];
-    static uint8_t mp_int_buffer2[MP_INT_SIZE];
-    static uint8_t mp_int_buffer3[MP_INT_SIZE];
-    static uint8_t mp_int_buffer4[MP_INT_SIZE * 5];
+    static uint8_t mp_int_buffer0[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_buffer1[MP_INT_TYPE_SIZE * 3];
+    static uint8_t mp_int_buffer2[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_buffer3[MP_INT_TYPE_SIZE];
+    static uint8_t mp_int_buffer4[MP_INT_TYPE_SIZE * 5];
     static uint8_t mp_mont_reduce_buffer[MP_MONT_REDUCE_BUF_SIZE];
     static struct xmalloc_slot xmalloc_pool[] = {
     #if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
         { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
     #endif
-        { mp_int_buffer0, MP_INT_SIZE, 0},
-        { mp_int_buffer1, MP_INT_SIZE * 3, 0},
-        { mp_int_buffer2, MP_INT_SIZE, 0},
-        { mp_int_buffer3, MP_INT_SIZE, 0},
-        { mp_int_buffer4, MP_INT_SIZE * 5, 0},
+        { mp_int_buffer0, MP_INT_TYPE_SIZE, 0},
+        { mp_int_buffer1, MP_INT_TYPE_SIZE * 3, 0},
+        { mp_int_buffer2, MP_INT_TYPE_SIZE, 0},
+        { mp_int_buffer3, MP_INT_TYPE_SIZE, 0},
+        { mp_int_buffer4, MP_INT_TYPE_SIZE * 5, 0},
         { mp_mont_reduce_buffer, MP_MONT_REDUCE_BUF_SIZE, 0 },
         { NULL, 0, 0}
     };
