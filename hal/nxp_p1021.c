@@ -37,7 +37,6 @@
     #define ENABLE_MP   /* multi-core support */
     #define ENABLE_IRQ
     /* #define ENABLE_QE_CRC32 */ /* CRC32 check on QE disabled by default */
-    /* #define ENABLE_ETHERNET */ /* Does not support Ethernet UEC */
 #endif
 
 /* Debugging */
@@ -984,12 +983,6 @@ static int hal_cpld_init(void)
         ELBC_ORG_CSCT | ELBC_ORG_XACS | ELBC_ORG_SCY | ELBC_ORG_TRLX |
         ELBC_ORG_EHTR | ELBC_ORG_EAD));
 
-#ifdef ENABLE_ETHERNET /* ethernet (uec) setup not required */
-    /* reset micrel phy for each UEC */
-    set8(BCSR11, get8(BCSR11) & ~BCSR11_ENET_MICRST);
-    set8(BCSR11, get8(BCSR11) |  BCSR11_ENET_MICRST);
-#endif
-
     return 0;
 }
 #endif
@@ -1491,7 +1484,7 @@ static void hal_mp_init(void)
 #endif /* ENABLE_MP */
 
 #ifdef ENABLE_IRQ
-void hal_irq_init(void)
+static void hal_irq_init(void)
 {
     uint32_t reg;
 
@@ -1505,7 +1498,7 @@ void hal_irq_init(void)
 #endif
 
 #ifdef ENABLE_L2_CACHE
-void hal_l2_init(void)
+static void hal_l2_init(void)
 {
     uint32_t reg;
 
