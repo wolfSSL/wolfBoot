@@ -158,7 +158,7 @@ test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > v1_part.dd
 	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
 	$(Q)$(BINASSEMBLE) internal_flash.dd 0 wolfboot.bin \
-		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd 
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_and_encrypted.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
@@ -923,27 +923,27 @@ test-all: clean
 test-size-all:
 	make test-size SIGN=NONE LIMIT=4683
 	make keysclean
-	make test-size SIGN=ED25519 LIMIT=11312
+	make test-size SIGN=ED25519 LIMIT=11350
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=22174
+	make test-size SIGN=ECC256  LIMIT=22212
 	make keysclean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13608
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13646
 	make keysclean
-	make test-size SIGN=RSA2048 LIMIT=11106
+	make test-size SIGN=RSA2048 LIMIT=11144
 	make keysclean
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11074
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11112
 	make keysclean
-	make test-size SIGN=RSA4096 LIMIT=11464
+	make test-size SIGN=RSA4096 LIMIT=11502
 	make keysclean
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11384
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11422
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=17512
+	make test-size SIGN=ECC384 LIMIT=17550
 	make keysclean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15044
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15082
 	make keysclean
-	make test-size SIGN=ED448 LIMIT=13355
+	make test-size SIGN=ED448 LIMIT=13394
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=11304
+	make test-size SIGN=RSA3072 LIMIT=11342
 	make keysclean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11178
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11216
 	make keysclean
