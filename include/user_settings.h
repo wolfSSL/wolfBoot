@@ -266,7 +266,7 @@ extern int tolower(int c);
 
 /* Memory model */
 
-#ifdef WOLFSSL_SP_MATH
+#if defined(WOLFSSL_SP_MATH) || defined(WOLFSSL_SP_MATH_ALL)
     /* Disable VLAs */
     #define WOLFSSL_SP_NO_DYN_STACK
 #endif
