@@ -245,15 +245,15 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make test-sim-external-flash-with-enc-delta-update
+          make test-sim-external-flash-with-enc-update
 
-      - name: Run sunny day update test (AES128 DELTA)
+      - name: Run sunny day update test (AES128 NVM_WRITEONCE)
         run: |
           tools/scripts/sim-sunnyday-update.sh
 
       - name: Rebuild wolfboot.elf
         run: |
-          make clean && make test-sim-external-flash-with-enc-delta-update
+          make clean && make test-sim-external-flash-with-enc-update
 
       - name: Run update-revert test (AES128 DELTA)
         run: |
@@ -261,7 +261,7 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make clean && make test-sim-external-flash-with-enc-delta-update
+          make clean && make test-sim-external-flash-with-enc-update
 
       - name: Run update-revert test with power failures (AES128 DELTA)
         run: |
