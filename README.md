@@ -492,3 +492,23 @@ Use `make keysclean` or `make distclean` to delete keys and regenerate.
    * New HAL: Renesas RA6M4 (with IDE example projects)
    * New HAL: NXP i.MX-RT1064
    * Unified common code for NXP i.MX-RT10XX targets
+
+### V1.16 (2023-07-06)
+ * New formats supported
+    * Added ELF/ELF64 loader
+ * Extended support for NXP P1021
+    * eSPI support to access TPM
+    * TPM root of trust
+    * fixes to eLBC NAND driver
+ * Improvements on PowerPC architecture
+    * fixed PIC execution
+    * support booting from RAM
+    * refactor of `update_ram.c` logic
+    * moved wolfBoot stack to DDR after DDR initialization
+ * Rework of Renesas examples, adding HSM support
+    * RA6M4 example project using SCE
+    * RA72N example project using TSIP
+    * Extended documentation
+ * Bug fix: fix wrong partition selection with `NVM_FLASH_WRITEONCE` introduced in v.1.15
+ * Testing: added test cases (delta + encrypt)
+ * Documentation: fixed several spelling errors
