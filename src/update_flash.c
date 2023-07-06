@@ -403,8 +403,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         * 2
 #endif
     ) {
-        wb_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-                sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
+        wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
         sector++;
     }
 
