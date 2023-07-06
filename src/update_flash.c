@@ -213,6 +213,12 @@ static int wolfBoot_finalize(struct wolfBoot_image *boot,
     wolfBoot_backup_encrypt_key(key, nonce);
 #endif
 
+#ifdef NVM_FLASH_WRITEONCE
+    /* erase the alternate sector */
+    wb_flash_erase(boot, (sector - 1) * WOLFBOOT_SECTOR_SIZE,
+        WOLFBOOT_SECTOR_SIZE);
+#endif
+
     /* erase the last sector of boot */
     wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
 
@@ -231,6 +237,12 @@ static int wolfBoot_finalize(struct wolfBoot_image *boot,
     /* set the boot state to testing */
     st = IMG_STATE_TESTING;
     wolfBoot_set_partition_state(PART_BOOT, st);
+
+#ifdef NVM_FLASH_WRITEONCE
+    /* erase the alternate sector */
+    wb_flash_erase(update, (sector - 1) * WOLFBOOT_SECTOR_SIZE,
+        WOLFBOOT_SECTOR_SIZE);
+#endif
 
     /* erase the last sector of update */
     wb_flash_erase(update, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
@@ -384,9 +396,14 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     }
     ret = 0;
 
-    /* erase to the last sector */
-    while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
-        hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+    /* erase to the last sector, writeonce has 2 sectors */
+    while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE -
+        WOLFBOOT_SECTOR_SIZE
+#ifdef NVM_FLASH_WRITEONCE
+        * 2
+#endif
+    ) {
+        wb_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS +
                 sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
         sector++;
     }
@@ -588,8 +605,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
     }
 
-    /* erase up to the last sector */
-    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE - sector_size) {
+    /* erase to the last sector, writeonce has 2 sectors */
+    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
+        sector_size
+#ifdef NVM_FLASH_WRITEONCE
+        * 2
+#endif
+    ) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;

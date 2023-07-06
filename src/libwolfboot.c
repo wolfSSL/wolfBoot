@@ -191,8 +191,9 @@ static int nvm_select_fresh_sector(int part)
             break;
         }
     }
+
     /* Erase the non-selected partition */
-    addr_align = (uint8_t *)((((uintptr_t)base - ((1 + (!sel)) * WOLFBOOT_SECTOR_SIZE)))
+    addr_align = (uint8_t *)((((uintptr_t)base - (!sel * WOLFBOOT_SECTOR_SIZE)))
         & ((~(NVM_CACHE_SIZE - 1))));
     if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED) {
@@ -247,7 +248,7 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uint32_t addr)
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
     addr_write = base - (!nvm_cached_sector * NVM_CACHE_SIZE);
-    XMEMCPY(NVM_CACHE, (void*)base, NVM_CACHE_SIZE);
+    XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(addr_write, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
     nvm_cached_sector = !nvm_cached_sector;
@@ -266,15 +267,17 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uint32_t addr)
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     uint32_t sel_sec = 0;
-#ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(part);
-#endif
     if (part == PART_BOOT) {
         if (FLAGS_BOOT_EXT()){
             ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
                 (void *)&ext_cache, sizeof(uint32_t));
             return (uint8_t *)&ext_cache;
         } else {
+            /* only internal flash should be writeonce */
+#ifdef NVM_FLASH_WRITEONCE
+            sel_sec = nvm_select_fresh_sector(part);
+#endif
+
             return (void *)(PART_BOOT_ENDFLAGS -
                     (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
         }
@@ -285,6 +288,11 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
                 (void *)&ext_cache, sizeof(uint32_t));
             return (uint8_t *)&ext_cache;
         } else {
+            /* only internal flash should be writeonce */
+#ifdef NVM_FLASH_WRITEONCE
+            sel_sec = nvm_select_fresh_sector(part);
+#endif
+
             return (void *)(PART_UPDATE_ENDFLAGS -
                     (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
         }

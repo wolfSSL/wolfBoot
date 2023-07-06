@@ -172,7 +172,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     return len;
 }
 
-int  ext_flash_erase(uintptr_t address, int len)
+int ext_flash_erase(uintptr_t address, int len)
 {
     memset(flash_base + address, 0xff, len);
     return 0;
