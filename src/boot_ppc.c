@@ -35,20 +35,14 @@ extern unsigned int _end_data;
 extern void main(void);
 extern void hal_ddr_init(void);
 
-/* Stringification */
-#ifndef WC_STRINGIFY
-#define _WC_STRINGIFY_L2(str) #str
-#define WC_STRINGIFY(str) _WC_STRINGIFY_L2(str)
-#endif
-
 void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
     uint32_t mas7)
 {
-    MTSPR(WC_STRINGIFY(MAS0), mas0);
-    MTSPR(WC_STRINGIFY(MAS1), mas1);
-    MTSPR(WC_STRINGIFY(MAS2), mas2);
-    MTSPR(WC_STRINGIFY(MAS3), mas3);
-    MTSPR(WC_STRINGIFY(MAS7), mas7);
+    mtspr(MAS0, mas0);
+    mtspr(MAS1, mas1);
+    mtspr(MAS2, mas2);
+    mtspr(MAS3, mas3);
+    mtspr(MAS7, mas7);
     asm volatile("isync;msync;tlbwe;isync");
 }
 
@@ -67,12 +61,25 @@ void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
     write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
 }
 
+void disable_tlb1(uint8_t esel)
+{
+    uint32_t _mas0, _mas1, _mas2, _mas3, _mas7;
+
+    _mas0 = BOOKE_MAS0(1, esel, 0);
+    _mas1 = 0;
+    _mas2 = 0;
+    _mas3 = 0;
+    _mas7 = 0;
+
+    write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
+}
+
 void invalidate_tlb(int tlb)
 {
     if (tlb == 0)
-        MTSPR(WC_STRINGIFY(MMUCSR0), 0x4);
+        mtspr(MMUCSR0, 0x4);
     else if (tlb == 1)
-        MTSPR(WC_STRINGIFY(MMUCSR0), 0x2);
+        mtspr(MMUCSR0, 0x2);
 }
 
 void __attribute((weak)) hal_ddr_init(void)
@@ -139,6 +146,10 @@ void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void do_boot(const uint32_t *app_offset)
 #endif
 {
+#ifndef BUILD_LOADER_STAGE1
+    uint32_t msr;
+#endif
+
 #ifdef MMU
     /* TODO: Determine if the dts_offset needs passed as argument */
     (void)dts_offset;
@@ -147,6 +158,11 @@ void do_boot(const uint32_t *app_offset)
 #ifndef BUILD_LOADER_STAGE1
     /* invalidate cache */
     flush_cache((uint32_t)app_offset, L1_CACHE_SZ);
+
+    /* Disable all async interrupts */
+    msr = mfmsr();
+    msr &= ~(MSR_CE | MSR_ME | MSR_DE);
+    mtmsr(msr);
 #endif
 
     /* do branch unconditionally */

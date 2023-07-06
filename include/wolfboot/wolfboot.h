@@ -106,12 +106,12 @@ extern "C" {
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 
- #define KEYSTORE_PUBKEY_SIZE_NONE 0
+ #define KEYSTORE_PUBKEY_SIZE_NONE    0
  #define KEYSTORE_PUBKEY_SIZE_ED25519 32
- #define KEYSTORE_PUBKEY_SIZE_ED448 57
- #define KEYSTORE_PUBKEY_SIZE_ECC256 64
- #define KEYSTORE_PUBKEY_SIZE_ECC384 96
- #define KEYSTORE_PUBKEY_SIZE_ECC521 132
+ #define KEYSTORE_PUBKEY_SIZE_ED448   57
+ #define KEYSTORE_PUBKEY_SIZE_ECC256  64
+ #define KEYSTORE_PUBKEY_SIZE_ECC384  96
+ #define KEYSTORE_PUBKEY_SIZE_ECC521  132
  #define KEYSTORE_PUBKEY_SIZE_RSA2048 320
  #define KEYSTORE_PUBKEY_SIZE_RSA3072 448
  #define KEYSTORE_PUBKEY_SIZE_RSA4096 576
@@ -171,7 +171,8 @@ extern "C" {
  #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC384
  #elif defined(WOLFBOOT_SIGN_ECC521)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ECC521
- #   error "ECC521 curves not yet supported in this version of wolfBoot. Please select a valid SIGN= option."
+ #   error "ECC521 curves not yet supported in this version of wolfBoot. " \
+           "Please select a valid SIGN= option."
  #elif defined(WOLFBOOT_SIGN_RSA2048)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA2048
  #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA2048
@@ -182,8 +183,9 @@ extern "C" {
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA4096
  #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
  #else
- #   error "no valid authentication mechanism selected. Please select a valid SIGN= option."
- #endif /* defined WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ED25519 */
+ #   error "No valid authentication mechanism selected. " \
+           "Please select a valid SIGN= option."
+ #endif /* authentication options */
 
  struct keystore_slot {
      uint32_t slot_id;
@@ -249,8 +251,10 @@ void wolfBoot_erase_partition(uint8_t part);
 uint32_t wolfBoot_get_image_version(uint8_t part);
 uint16_t wolfBoot_get_image_type(uint8_t part);
 uint32_t wolfBoot_get_diffbase_version(uint8_t part);
-#define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
-#define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
+#define wolfBoot_current_firmware_version() \
+    wolfBoot_get_image_version(PART_BOOT)
+#define wolfBoot_update_firmware_version() \
+    wolfBoot_get_image_version(PART_UPDATE)
 #endif
 
 int wolfBoot_fallback_is_possible(void);
@@ -262,23 +266,25 @@ int wolfBoot_dualboot_candidate_addr(void**);
 /* Encryption support */
 #if defined(ENCRYPT_WITH_CHACHA)
     #define ENCRYPT_BLOCK_SIZE 64
-    #define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
+    #define ENCRYPT_KEY_SIZE   32 /* Chacha20 - 256bit */
     #define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
 #elif defined(ENCRYPT_WITH_AES128)
     #define ENCRYPT_BLOCK_SIZE 16
-    #define ENCRYPT_KEY_SIZE 16 /* AES128  */
+    #define ENCRYPT_KEY_SIZE   16 /* AES128  */
     #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
 #elif defined(ENCRYPT_WITH_AES256)
     #define ENCRYPT_BLOCK_SIZE 16
-    #define ENCRYPT_KEY_SIZE 32 /* AES256 */
+    #define ENCRYPT_KEY_SIZE   32 /* AES256 */
     #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
 #else
 #   error "Encryption ON, but no encryption algorithm selected."
 #endif
 
-int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst);
-
 #endif /* EXT_ENCRYPTED */
+
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst);
+#endif
 
 #ifdef DELTA_UPDATES
 int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);

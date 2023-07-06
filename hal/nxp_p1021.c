@@ -20,25 +20,24 @@
  */
 #include <stdint.h>
 #include "target.h"
+#include "image.h"
 #include "printf.h"
 #include <string.h>
 
 #include "nxp_ppc.h"
 
 #define ENABLE_ELBC
-#define ENABLE_DDR
 #define ENABLE_BUS_CLK_CALC
 #ifndef BUILD_LOADER_STAGE1
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
     #define ENABLE_CONF_IO
-
-    #define ENABLE_ESPI /* TPM */
+    #define ENABLE_QE   /* QUICC Engine */
+    #define ENABLE_ESPI /* SPI for TPM */
+    #define ENABLE_MP   /* multi-core support */
+    #define ENABLE_IRQ
+    /* #define ENABLE_QE_CRC32 */ /* CRC32 check on QE disabled by default */
 #endif
-
-/* TODO */
-/* Ethernet */
-/* QUICC */
 
 /* Debugging */
 /* #define DEBUG_EXT_FLASH */
@@ -61,10 +60,12 @@ static int test_tpm(void);
 
 /* P1021 Platform */
 /* System input clock */
-#define SYS_CLK (66666666) /* 66.666666 MHz */
+#define SYS_CLK (66666667) /* 66.666666 MHz */
 
 /* Boot page translation register */
-#define RESET_BPTR ((volatile uint32_t*)(CCSRBAR + 0x42))
+#define RESET_BPTR           ((volatile uint32_t*)(CCSRBAR + 0x20))
+#define RESET_BPTR_EN        0x80000000
+#define RESET_BPTR_BOOTPG(n) ((n) >> 12)
 
 /* Global Utilities (GUTS) */
 #define GUTS_BASE      (CCSRBAR + 0xE0000)
@@ -72,6 +73,7 @@ static int test_tpm(void);
 #define GUTS_PMUXCR    ((volatile uint32_t*)(GUTS_BASE + 0x60UL))
 #define GUTS_PVR       ((volatile uint32_t*)(GUTS_BASE + 0xA0UL))
 #define GUTS_SVR       ((volatile uint32_t*)(GUTS_BASE + 0xA4UL))
+#define GUTS_DEVDISR   ((volatile uint32_t*)(GUTS_BASE + 0x70UL)) /* Device disable register */
 #define GUTS_CPODR(n)  ((volatile uint32_t*)(GUTS_BASE + 0x100 + (n * 32))) /* Open drain register */
 #define GUTS_CPDAT(n)  ((volatile uint32_t*)(GUTS_BASE + 0x104 + (n * 32))) /* Data register */
 #define GUTS_CPDIR1(n) ((volatile uint32_t*)(GUTS_BASE + 0x108 + (n * 32))) /* Direction register 1 */
@@ -83,6 +85,89 @@ static int test_tpm(void);
 #define GUTS_PMUXCR_SDHC_WP 0x20000000
 #define GUTS_PMUXCR_QE0     0x00008000
 #define GUTS_PMUXCR_QE3     0x00001000
+#define GUTS_PMUXCR_QE9     0x00000040
+#define GUTS_PMUXCR_QE12    0x00000008
+
+#define GUTS_DEVDISR_TB0    0x00004000
+#define GUTS_DEVDISR_TB1    0x00001000
+
+
+/* L2 Cache */
+#define L2_BASE         (CCSRBAR + 0x20000)
+#define L2CTL           (volatile uint32_t*)(L2_BASE + 0x000) /* 0xFFE20000 - L2 control register */
+#define L2SRBAR0        (volatile uint32_t*)(L2_BASE + 0x100) /* 0xFFE20100 - L2 SRAM base address register */
+
+#define L2CTL_EN        (1 << 31) /* L2 enable */
+#define L2CTL_INV       (1 << 30) /* L2 invalidate */
+#define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
+#define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
+
+
+/* PIC */
+#define PIC_BASE    (CCSRBAR + 0x40000)
+#define PIC_WHOAMI  ((volatile uint32_t*)(PIC_BASE + 0x0090UL)) /* Returns the ID of the processor core reading this register */
+#define PIC_GCR     ((volatile uint32_t*)(PIC_BASE + 0x1020UL)) /* Global configuration register (controls PIC operating mode) */
+#define PIC_GCR_RST 0x80000000
+#define PIC_GCR_M   0x20000000
+
+
+/* QUICC Engine */
+#define QE_MAX_RISC  1
+
+/* QE microcode/firmware address */
+#ifndef QE_FW_NAND
+#define QE_FW_NAND   0x01F00000 /* location in NAND flash */
+#endif
+#ifndef QE_FW_ADDR
+#define QE_FW_ADDR   0x10000000 /* location to load into DDR */
+#endif
+#ifndef QE_FW_LENGTH
+#define QE_FW_LENGTH 0x10000    /* Size of microcode (64KB) */
+#endif
+
+
+#define QE_BASE     (CCSRBAR + 0xF000)
+#define QE_CEPIER   ((volatile uint32_t*)(QE_BASE + 0x00CUL))
+#define QE_CEPIMR   ((volatile uint32_t*)(QE_BASE + 0x010UL))
+#define QE_CEPICR   ((volatile uint32_t*)(QE_BASE + 0x014UL))
+
+#define QE_ENGINE_BASE         (CCSRBAR + 0x80000)
+#define QE_IRAM                (QE_ENGINE_BASE + 0x000UL) /* Instruction RAM registers */
+#define QE_IRAM_IADD           ((volatile uint32_t*)(QE_IRAM + 0x000UL))
+#define QE_IRAM_IDATA          ((volatile uint32_t*)(QE_IRAM + 0x004UL))
+#define QE_IRAM_IREADY         ((volatile uint32_t*)(QE_IRAM + 0x00CUL))
+
+#define QE_CP                  (QE_ENGINE_BASE + 0x100UL)  /* Configuration register */
+#define QE_CP_CECR             ((volatile uint32_t*)(QE_CP + 0x00)) /* command register */
+#define QE_CP_CECDR            ((volatile uint32_t*)(QE_CP + 0x08)) /* data register */
+#define QE_CP_CERCR            ((volatile uint16_t*)(QE_CP + 0x38)) /* RAM control register */
+
+#define QE_SDMA                (QE_ENGINE_BASE + 0x4000UL) /* Serial DMA */
+#define QE_SDMA_SDSR           ((volatile uint32_t*)(QE_SDMA + 0x00))
+#define QE_SDMA_SDMR           ((volatile uint32_t*)(QE_SDMA + 0x04))
+#define QE_SDMA_SDAQR          ((volatile uint32_t*)(QE_SDMA + 0x38))
+#define QE_SDMA_SDAQMR         ((volatile uint32_t*)(QE_SDMA + 0x3C))
+#define QE_SDMA_SDEBCR         ((volatile uint32_t*)(QE_SDMA + 0x44))
+
+#define QE_RSP                 (QE_ENGINE_BASE + 0x4100UL) /* Special Registers */
+#define QE_RSP_TIBCR(n, i)     ((volatile uint32_t*)(QE_RSP + ((n) * 0x100) + (i)))
+#define QE_RSP_ECCR(n)         ((volatile uint32_t*)(QE_RSP + ((n) * 0x100) + 0xF0))
+
+#define QE_IRAM_IADD_AIE       0x80000000 /* Auto Increment Enable */
+#define QE_IRAM_IADD_BADDR     0x00080000 /* Base Address */
+#define QE_IRAM_READY          0x80000000
+
+#define QE_CP_CERCR_CIR        0x0800 /* Common instruction RAM */
+
+#define QE_CR_FLG              0x00010000
+#define QE_CR_PROTOCOL_SHIFT   6
+
+#define QE_SDMR_GLB_1_MSK      0x80000000
+#define QE_SDMR_CEN_SHIFT      13
+#define QE_SDEBCR_BA_MASK      0x01FFFFFF
+
+/* QE Commands */
+#define QE_RESET               0x80000000
 
 
 /* P1021 PC16552D Dual UART */
@@ -112,51 +197,6 @@ static int test_tpm(void);
 #define UART_LCR_WLS  (0x03) /* Word length select: 8-bits */
 #define UART_LSR_TEMT (0x40) /* Transmitter empty */
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
-
-
-/* P1021 LAW - Local Access Window (Memory Map) - RM 2.4 */
-#define LAWBAR_BASE(n) (CCSRBAR + 0xC08 + (n * 0x20))
-#define LAWBAR(n)      ((volatile uint32_t*)(LAWBAR_BASE(n) + 0x0))
-#define LAWAR(n)       ((volatile uint32_t*)(LAWBAR_BASE(n) + 0x8))
-
-#define LAWAR_ENABLE      (1<<31)
-#define LAWAR_TRGT_ID(id) (id<<20)
-
-/* P1021 Global Source/Target ID Assignments - RM Table 2-7 */
-enum law_target_id {
-    LAW_TRGT_PCIE2 = 0x01,
-    LAW_TRGT_PCIE1 = 0x02,
-    LAW_TRGT_ELBC = 0x4, /* eLBC (Enhanced Local Bus Controller) */
-    LAW_TRGT_DDR = 0xF,  /* DDR Memory Controller */
-};
-
-/* P1021 2.4.2 - size is equal to 2^(enum + 1) */
-enum law_sizes {
-    LAW_SIZE_4KB = 0x0B,
-    LAW_SIZE_8KB,
-    LAW_SIZE_16KB,
-    LAW_SIZE_32KB,
-    LAW_SIZE_64KB,
-    LAW_SIZE_128KB, /* 0x10 */
-    LAW_SIZE_256KB,
-    LAW_SIZE_512KB,
-    LAW_SIZE_1MB,
-    LAW_SIZE_2MB,
-    LAW_SIZE_4MB,
-    LAW_SIZE_8MB,
-    LAW_SIZE_16MB,
-    LAW_SIZE_32MB,
-    LAW_SIZE_64MB,
-    LAW_SIZE_128MB,
-    LAW_SIZE_256MB, /* 0x1B */
-    LAW_SIZE_512MB,
-    LAW_SIZE_1GB,
-    LAW_SIZE_2GB,
-    LAW_SIZE_4GB,
-    LAW_SIZE_8GB, /* 0x20 */
-    LAW_SIZE_16GB,
-    LAW_SIZE_32GB,
-};
 
 /* P1021 eLBC (Enhanced Local Bus Controller) - RM 12.3 */
 #define ELBC_BASE        (CCSRBAR + 0x5000)
@@ -191,16 +231,28 @@ enum law_sizes {
                                                *   4=UPMA, 5=UPMB, 6=UPMC (User Programmable Machines) */
 #define ELBC_BR_V         (1 << 0)            /* bank valid */
 
+/* eLBC OR */
 #define ELBC_OR_AMASK(n)  (((uint32_t)n) & 0xFFFF8000) /* Address mask - upper 17-bits */
-#define ELBC_OR_BCTLD     (1 << 12) /* buffer control disable */
-#define ELBC_OR_PGS       (1 << 10) /* page size 0=512, 1=2048 bytes */
-#define ELBC_OR_CSCT      (1 << 9)  /* chip select to command time - TRLX=0 (0=1, 1=4), TRLX=1 (0=2, 1=8) clock cycles */
-#define ELBC_OR_CST       (1 << 8)  /* command setup time - TRLX=0 (0=0 or 1=0.25) TRLX=1 (0=0.5 or 1=1) clock cycles */
-#define ELBC_OR_CHT       (1 << 7)  /* command hold time - TRLX=0 (0=0.5 or 1=1) TRLX=1 (0=1.5 or 1=2) clock cycles */
-#define ELBC_OR_SCY(n)    (((n) & 0x7) << 4) /* cycle length in bus clocks (0-7 bus clock cycle wait states) */
-#define ELBC_OR_RST       (1 << 3)  /* read time setup - read enable asserted 1 clock */
-#define ELBC_OR_TRLX      (1 << 2)  /* timing related */
-#define ELBC_OR_EHTR      (1 << 1)  /* extended hold time - LRLX=0 (0=1 or 1=2), LRLX=1 (0=2 or 1=8) inserted idle clock cycles */
+
+/* eLBC OR (FCM) */
+#define ELBC_ORF_BCTLD    (1 << 12) /* buffer control disable */
+#define ELBC_ORF_PGS      (1 << 10) /* page size 0=512, 1=2048 bytes */
+#define ELBC_ORF_CSCT     (1 << 9)  /* chip select to command time - TRLX=0 (0=1, 1=4), TRLX=1 (0=2, 1=8) clock cycles */
+#define ELBC_ORF_CST      (1 << 8)  /* command setup time - TRLX=0 (0=0 or 1=0.25) TRLX=1 (0=0.5 or 1=1) clock cycles */
+#define ELBC_ORF_CHT      (1 << 7)  /* command hold time - TRLX=0 (0=0.5 or 1=1) TRLX=1 (0=1.5 or 1=2) clock cycles */
+#define ELBC_ORF_SCY(n)   (((n) & 0x7) << 4) /* cycle length in bus clocks (0-7 bus clock cycle wait states) */
+#define ELBC_ORF_RST      (1 << 3)  /* read time setup - read enable asserted 1 clock */
+#define ELBC_ORF_TRLX     (1 << 2)  /* timing related */
+#define ELBC_ORF_EHTR     (1 << 1)  /* extended hold time - LRLX=0 (0=1 or 1=2), LRLX=1 (0=2 or 1=8) inserted idle clock cycles */
+
+/* eLBC OR (GPCM) */
+#define ELBC_ORG_CSCT (1 << 11)
+#define ELBC_ORG_XACS (1 << 8)
+#define ELBC_ORG_SCY  (1 << 4)
+#define ELBC_ORG_TRLX (1 << 2)
+#define ELBC_ORG_EHTR (1 << 1)
+#define ELBC_ORG_EAD  (1 << 0)
+
 
 #define ELBC_LSOR_BANK(n) ((n) & (ELBC_MAX_BANKS-1)) /* flash bank 0-7 */
 
@@ -299,12 +351,9 @@ enum elbc_amask_sizes {
 #define NAND_CMD_READSTART    0x30 /* Extended command for large page devices */
 
 
-
 /* DDR */
 /* DDR3: 512MB, 333.333 MHz (666.667 MT/s) */
-#define DDR_ADDRESS            0x00000000
 #define DDR_SIZE               (512 * 1024 * 1024)
-
 #define DDR_CS0_BNDS_VAL       0x0000001F
 #define DDR_CS0_CONFIG_VAL     0x80014202
 #define DDR_CS_CONFIG_2_VAL    0x00000000
@@ -320,15 +369,14 @@ enum elbc_amask_sizes {
 #define DDR_SDRAM_MODE_2_VAL   0x8000C000
 #define DDR_SDRAM_MD_CNTL_VAL  0x00000000
 
-#define DDR_SDRAM_CFG_VAL      0x470C0008
-#define DDR_SDRAM_CFG_32_BE    0x00080000
-#define DDR_SDRAM_CFG_ECC_EN   0x20000000
-
-#define DDR_SDRAM_CFG_2_VAL    0x04401040
+#define DDR_SDRAM_CFG_VAL      0x670C0000
+#define DDR_SDRAM_CFG_2_VAL    0x04401050
 
 #define DDR_SDRAM_INTERVAL_VAL 0x0A280000
 
-#define DDR_DATA_INIT_VAL      0xDEADBEEF
+#ifndef DDR_DATA_INIT_VAL
+#define DDR_DATA_INIT_VAL      0x1021BABE
+#endif
 #define DDR_SDRAM_CLK_CNTL_VAL 0x03000000
 #define DDR_ZQ_CNTL_VAL        0x89080600
 
@@ -385,11 +433,17 @@ enum elbc_amask_sizes {
 #define DDR_SDRAM_CFG_2_D_INIT 0x00000010 /* data initialization in progress */
 #define DDR_SDRAM_CFG_BI       0x00000001 /* Bypass initialization */
 
-/* CPLD - Board Configuration and Status Registers */
-#define BCSR_BASE 0xF8000000
 
-#define ECM_BASE   (CCSRBAR + 0x1000)
-#define ECM_EEBACR ((volatile uint32_t*)(ECM_BASE + 0x0)) /* ECM CCB address configuration register */
+/* CPLD - Board Configuration and Status Registers */
+#define BCSR_BASE            0xF8000000
+#define BCSR11               ((volatile uint8_t*)(BCSR_BASE + 11))
+#define BCSR11_ENET_MICRST   0x20
+
+#define ECM_BASE             (CCSRBAR + 0x1000)
+#define ECM_EEBACR           ((volatile uint32_t*)(ECM_BASE + 0x00)) /* ECM CCB address configuration register */
+#define ECM_EEBPCR           ((volatile uint32_t*)(ECM_BASE + 0x10)) /* ECM CCB port configuration register */
+#define ECM_EEBPCR_CPU_EN(n) ((n) << 24)
+
 
 /* eSPI */
 #define ESPI_MAX_CS_NUM      4
@@ -427,6 +481,18 @@ enum elbc_amask_sizes {
 #define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
 #define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
 
+
+#ifdef ENABLE_ELBC
+
+static volatile uint8_t* flash_buf;
+static uint32_t          flash_idx;
+
+/* forward declaration */
+int ext_flash_read(uintptr_t address, uint8_t *data, int len);
+#endif
+
+
+/* local functions */
 static uint32_t hal_get_bus_clk(void)
 {
     uint32_t bus_clk;
@@ -450,6 +516,7 @@ static void udelay(unsigned long delay_us)
 }
 #endif
 
+/* ---- eSPI Driver ---- */
 #ifdef ENABLE_ESPI
 void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
 {
@@ -544,7 +611,7 @@ static void set_law(uint8_t idx, uint32_t addr, uint32_t trgt_id,
     (void)get32(LAWAR(idx));
 }
 
-
+/* ---- DUART Driver ---- */
 #ifdef DEBUG_UART
 
 void uart_init(void)
@@ -586,17 +653,15 @@ void uart_write(const char* buf, uint32_t sz)
 }
 #endif /* DEBUG_UART */
 
+/* ---- eLBC Driver ---- */
 #ifdef ENABLE_ELBC
-
-static volatile uint8_t* flash_buf;
-static uint32_t          flash_idx;
 static void hal_flash_set_addr(int page, int col)
 {
     uint32_t buf_num;
     uint32_t fbar, fpar;
 
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
-    /* large page - ELBC_OR_PGS=1 */
+    /* large page - ELBC_ORF_PGS=1 */
     fbar = (page >> 6);
     fpar = (ELBC_FPAR_LP_PI(page) | ELBC_FPAR_LP_CI(col));
     buf_num = (page & 1) << 2; /* 0 or 4 */
@@ -629,7 +694,7 @@ static int hal_flash_command(uint8_t iswrite)
         ELBC_FMR_AL(2) |          /* 4 byte address */
         ELBC_FMR_OP(2 + iswrite); /* execute FIR with write support */
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
-    /* large page - ELBC_OR_PGS=1 */
+    /* large page - ELBC_ORF_PGS=1 */
     fmr |= ELBC_FMR_ECCM; /* large page should have ECCM=1 */
 #endif
 
@@ -744,6 +809,13 @@ static int hal_flash_init(void)
     /* eLBC - NAND Flash */
     set_law(4, FLASH_BASE_ADDR, LAW_TRGT_ELBC, LAW_SIZE_1MB);
 
+#ifdef BOOT_ROM_ADDR
+    /* if this code is executing from BOOT ROM we cannot init eLBC yet */
+    if ((get_pc() & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
+        return -1;
+    }
+#endif
+
     /* Set eLBC clock divisor = 8 */
     reg = get32(ELBC_LCRR);
     reg &= ~ELBC_LCRR_CLKDIV_MASK;
@@ -756,11 +828,11 @@ static int hal_flash_init(void)
 
     /* Set address mask, page size, relaxed timing */
     set32(ELBC_OR(FLASH_BANK), (
-        ELBC_OR_CSCT | ELBC_OR_CST | ELBC_OR_CHT | ELBC_OR_SCY(1) |
-        ELBC_OR_TRLX | ELBC_OR_EHTR
+        ELBC_ORF_CSCT | ELBC_ORF_CST | ELBC_ORF_CHT | ELBC_ORF_SCY(1) |
+        ELBC_ORF_TRLX | ELBC_ORF_EHTR
     #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
         /* Large page size and 256KB address mask */
-        | ELBC_OR_PGS | ELBC_OR_AMASK(ELBC_AMASK_256KB)
+        | ELBC_ORF_PGS | ELBC_OR_AMASK(ELBC_AMASK_256KB)
     #else
         /* Small page size and 32KB address mask */
         | ELBC_OR_AMASK(ELBC_AMASK_32KB)
@@ -784,7 +856,11 @@ static int hal_flash_init(void)
         ret = hal_flash_read_id(flash_id);
     }
 
+#ifdef PRINTF_ENABLED
     wolfBoot_printf("Flash Init: Ret %d, ID 0x%08lx\n", ret, flash_id[0]);
+#elif defined(DEBUG_UART) && !defined(BUILD_LOADER_STAGE1)
+    uart_write("Flash Init\n", 11);
+#endif
 #endif /* ENABLE_ELBC */
     return ret;
 }
@@ -794,11 +870,11 @@ void hal_ddr_init(void)
 #ifdef ENABLE_DDR
     uint32_t reg;
 
-    /* Map LAW for DDR */
-    set_law(6, DDR_ADDRESS, LAW_TRGT_DDR, LAW_SIZE_512MB);
-
     /* If DDR is not already enabled */
     if ((get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN) == 0) {
+        /* Map LAW for DDR */
+        set_law(6, DDR_ADDRESS, LAW_TRGT_DDR, LAW_SIZE_512MB);
+
         /* Setup DDR CS (chip select) bounds */
         set32(DDR_CS_BNDS(0), DDR_CS0_BNDS_VAL);
         set32(DDR_CS_CONFIG(0), DDR_CS0_CONFIG_VAL);
@@ -851,14 +927,6 @@ void hal_ddr_init(void)
             udelay(1);
         }
     }
-
-    /* DDR - TBL=1, Entry 11 and 12 (256MB each) = 512MB total */
-    set_tlb(1, 11, DDR_ADDRESS, DDR_ADDRESS,
-        MAS3_SX | MAS3_SW | MAS3_SR, 0,
-        0, BOOKE_PAGESZ_256M, 1);
-    set_tlb(1, 12, DDR_ADDRESS + (256*1024*1024), DDR_ADDRESS + (256*1024*1024),
-        MAS3_SX | MAS3_SW | MAS3_SR, 0,
-        0, BOOKE_PAGESZ_256M, 1);
 #endif /* ENABLE_DDR */
 }
 
@@ -898,6 +966,7 @@ static int hal_pcie_init(void)
 }
 #endif
 
+
 #ifdef ENABLE_CPLD
 static int hal_cpld_init(void)
 {
@@ -906,6 +975,14 @@ static int hal_cpld_init(void)
     /* Setup TLB MMU (Translation Lookaside Buffer) for CPLD/BCSR */
     set_tlb(1, 8, BCSR_BASE, BCSR_BASE, MAS3_SX | MAS3_SW | MAS3_SR,
         MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256K, 1);
+
+    /* setup eLBC for CPLD (CS1), 8-bit */
+    set32(ELBC_BR(1), (ELBC_BR_ADDR(BCSR_BASE) | ELBC_BR_MSEL(0) |
+        ELBC_BR_PS(1) | ELBC_BR_V));
+    set32(ELBC_OR(1), (ELBC_OR_AMASK(ELBC_AMASK_32KB) |
+        ELBC_ORG_CSCT | ELBC_ORG_XACS | ELBC_ORG_SCY | ELBC_ORG_TRLX |
+        ELBC_ORG_EHTR | ELBC_ORG_EAD));
+
     return 0;
 }
 #endif
@@ -1058,26 +1135,413 @@ static void hal_io_init(void)
         assign     = io_pin_conf[i].assign;
         config_io_pin(port, pin, dir, open_drain, assign);
     }
-#if 0
+#ifdef ENABLE_UART_RTS
     write_io_pin(2, 0, 0x0); /* RTS enable */
 #else
     write_io_pin(2, 0, 0x1); /* RTS disable */
 #endif
 
-    /* Enable signal multiplex control for SDHC and QE0/3 */
+    /* Enable signal multiplex control:
+     *   SDHC: WP and CD
+     *   QE0/QE3:  Ethernet UCC1 and UCC5
+     *   QE9/QE12: QE MII managment signals */
     set32(GUTS_PMUXCR, (GUTS_PMUXCR_SDHC_CD | GUTS_PMUXCR_SDHC_WP |
-                        GUTS_PMUXCR_QE0 | GUTS_PMUXCR_QE3));
+                        GUTS_PMUXCR_QE0 | GUTS_PMUXCR_QE3 |
+                        GUTS_PMUXCR_QE9 | GUTS_PMUXCR_QE12));
 }
 #endif /* ENABLE_CONF_IO */
 
+
+/* ---- QUICC Engine Driver ---- */
+#ifdef ENABLE_QE
+
+/* Structure packing */
+#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
+    defined(__GNUC__)
+    #define QE_PACKED __attribute__ ((packed))
+#else
+    #define QE_PACKED
+#endif
+
+/* QE based on work from Shlomi Gridish and Dave Liu at Freescale/NXP */
+
+struct qe_header {
+    uint32_t length;      /* Length of the entire structure, in bytes */
+    uint8_t  magic[3];    /* Set to { 'Q', 'E', 'F' } */
+    uint8_t  version;     /* Version of this layout. First ver is '1' */
+} QE_PACKED;
+
+struct qe_soc {
+    uint16_t model;       /* The SOC model  */
+    uint8_t  major;       /* The SOC revision major */
+    uint8_t  minor;       /* The SOC revision minor */
+} QE_PACKED;
+
+struct qe_microcode {
+    uint8_t  id[32];      /* Null-terminated identifier */
+    uint32_t traps[16];   /* Trap addresses, 0 == ignore */
+    uint32_t eccr;        /* The value for the ECCR register */
+    uint32_t iram_offset; /* Offset into I-RAM for the code */
+    uint32_t count;       /* Number of 32-bit words of the code */
+    uint32_t code_offset; /* Offset of the actual microcode */
+    uint8_t  major;       /* The microcode version major */
+    uint8_t  minor;       /* The microcode version minor */
+    uint8_t  revision;    /* The microcode version revision */
+    uint8_t  padding;     /* Reserved, for alignment */
+    uint8_t  reserved[4]; /* Reserved, for future expansion */
+} QE_PACKED;
+
+struct qe_firmware {
+    struct qe_header    header;
+    uint8_t             id[62];         /* Null-terminated identifier string */
+    uint8_t             split;          /* 0 = shared I-RAM, 1 = split I-RAM */
+    uint8_t             count;          /* Number of microcode[] structures */
+    struct qe_soc       soc;
+    uint8_t             padding[4];     /* Reserved, for alignment */
+    uint64_t            extended_modes; /* Extended modes */
+    uint32_t            vtraps[8];      /* Virtual trap addresses */
+    uint8_t             reserved[4];    /* Reserved, for future expansion */
+    struct qe_microcode microcode[1];
+    /* All microcode binaries should be located here */
+    /* CRC32 should be located here, after the microcode binaries */
+} QE_PACKED;
+
+static void qe_upload_microcode(const struct qe_firmware *firmware,
+    const struct qe_microcode *ucode)
+{
+    const uint32_t *code = (void*)firmware + ucode->code_offset;
+    unsigned int i;
+
+    wolfBoot_printf("QE: uploading '%s' version %u.%u.%u\n",
+        ucode->id, ucode->major, ucode->minor, ucode->revision);
+
+    /* Use auto-increment */
+    set32(QE_IRAM_IADD, ucode->iram_offset |
+        QE_IRAM_IADD_AIE | QE_IRAM_IADD_BADDR);
+
+    /* Copy 32-bits at a time to iRAM */
+    for (i = 0; i < ucode->count; i++) {
+        set32(QE_IRAM_IDATA, code[i]);
+    }
+}
+
+/* Upload a microcode to the I-RAM at a specific address */
+static int qe_upload_firmware(const struct qe_firmware *firmware)
+{
+    unsigned int i, j;
+    uint32_t crc;
+    size_t calc_size = sizeof(struct qe_firmware);
+    size_t length;
+    const struct qe_header *hdr;
+
+    hdr = &firmware->header;
+    length = hdr->length;
+
+    /* Check the magic */
+    if ((hdr->magic[0] != 'Q') || (hdr->magic[1] != 'E') ||
+        (hdr->magic[2] != 'F')) {
+        wolfBoot_printf("QE firmware header invalid!\n");
+        return -1;
+    }
+
+    /* Check the version */
+    if (hdr->version != 1) {
+        wolfBoot_printf("QE version %d unsupported!\n", hdr->version);
+        return -1;
+    }
+
+    /* Validate some of the fields */
+    if ((firmware->count < 1) || (firmware->count > QE_MAX_RISC)) {
+        wolfBoot_printf("QE count %d invalid!\n", firmware->count);
+        return -1;
+    }
+
+    /* Validate the length and check if there's a CRC */
+    calc_size += (firmware->count - 1) * sizeof(struct qe_microcode);
+    for (i = 0; i < firmware->count; i++) {
+        /* For situations where the second RISC uses the same microcode
+         * as the first, the 'code_offset' and 'count' fields will be
+         * zero, so it's okay to add those. */
+        calc_size += sizeof(uint32_t) * firmware->microcode[i].count;
+    }
+
+    /* Validate the length */
+    if (length != calc_size + sizeof(uint32_t)) {
+        wolfBoot_printf("QE length %d invalid!\n", length);
+        return -1;
+    }
+
+#ifdef ENABLE_QE_CRC32
+    /* Validate the CRC */
+    crc = *(uint32_t *)((void *)firmware + calc_size);
+    if (crc != (crc32(-1, (const void *) firmware, calc_size) ^ -1)) {
+        wolfBoot_printf("QE firmware CRC is invalid\n");
+        return -1;
+    }
+#endif
+
+    /* Use common instruction RAM if not split (default is split) */
+    if (!firmware->split) {
+        set16(QE_CP_CERCR, get16(QE_CP_CERCR) | QE_CP_CERCR_CIR);
+    }
+
+    wolfBoot_printf("QE: Length %d, Count %d\n", length, firmware->count);
+
+    /* Loop through each microcode. */
+    for (i = 0; i < firmware->count; i++) {
+        const struct qe_microcode *ucode = &firmware->microcode[i];
+        uint32_t trapCount = 0;
+
+        /* Upload a microcode if it's present */
+        if (ucode->code_offset) {
+            qe_upload_microcode(firmware, ucode);
+        }
+
+        /* Program the traps for this processor (max 16) */
+        for (j = 0; j < 16; j++) {
+            uint32_t trap = ucode->traps[j];
+            if (trap) {
+                trapCount++;
+                set32(QE_RSP_TIBCR(i, j), trap);
+            }
+        }
+
+        /* Enable traps */
+        set32(QE_RSP_ECCR(i), ucode->eccr);
+        wolfBoot_printf("QE: Traps %d\n", trapCount);
+    }
+
+    return 0;
+}
+
+static void qe_issue_cmd(uint32_t cmd, uint32_t sbc, uint8_t mcn,
+    uint32_t cmd_data)
+{
+    set32(QE_CP_CECDR, cmd_data);
+    set32(QE_CP_CECR,
+        sbc |       /* sub block code */
+        QE_CR_FLG | /* flag: set by software, cleared by hardware */
+        ((uint32_t)mcn << QE_CR_PROTOCOL_SHIFT) | /* MCC/QMC channel number */
+        cmd         /* opcode (reset sets 0x8000_0000) */
+    );
+
+    /* Wait for the command semaphore flag to clear */
+    while (get32(QE_CP_CECR) & QE_CR_FLG);
+}
+
+static int hal_qe_init(void)
+{
+    int ret;
+    uint32_t sdma_base;
+
+    /* Load microcode from NAND to DDR */
+    ret = ext_flash_read(QE_FW_NAND, (uint8_t*)QE_FW_ADDR, QE_FW_LENGTH);
+    if (ret == QE_FW_LENGTH) {
+        /* Upload microcode to IRAM */
+        ret = qe_upload_firmware((const struct qe_firmware *)QE_FW_ADDR);
+    }
+    if (ret == 0) {
+        /* enable the microcode in IRAM */
+        set32(QE_IRAM_IREADY, QE_IRAM_READY);
+
+        /* Serial DMA */
+        /* All of DMA transaction in bus 1 */
+        set32(QE_SDMA_SDAQR, 0);
+        set32(QE_SDMA_SDAQMR, 0);
+
+        /* Allocate 2KB temporary buffer for sdma */
+        sdma_base = 0;
+        set32(QE_SDMA_SDEBCR, sdma_base & QE_SDEBCR_BA_MASK);
+
+        /* Clear sdma status */
+        set32(QE_SDMA_SDSR, 0x03000000);
+
+        /* Enable global mode on bus 1, and 2KB buffer size */
+        set32(QE_SDMA_SDMR, QE_SDMR_GLB_1_MSK | (0x3 << QE_SDMR_CEN_SHIFT));
+
+        /* Reset QUICC Engine */
+        qe_issue_cmd(QE_RESET, 0, 0, 0);
+    }
+
+    return ret;
+}
+#endif /* ENABLE_QUICC */
+
+
+/* SMP Multi-Processor Driver */
+#ifdef ENABLE_MP
+
+/* from boot_ppc_core.S */
+extern uint32_t _mp_page_start;
+extern uint32_t _spin_table;
+extern uint32_t _bootpg_addr;
+
+/* Startup additional cores with spin table and synchronize the timebase */
+static void hal_mp_up(uint32_t bootpg)
+{
+    uint32_t up, cpu_up_mask, whoami, bpcr, devdisr;
+    uint8_t *spin_table_addr;
+    int timeout = 50, i;
+
+    /* Get current running core number */
+    whoami = get32(PIC_WHOAMI);
+
+    /* Calculate location of spin table in BPTR */
+    spin_table_addr = (uint8_t*)(BOOT_ROM_ADDR +
+        ((uint32_t)&_spin_table - (uint32_t)&_mp_page_start));
+
+    wolfBoot_printf("MP: Starting core 2 (spin table %p)\n",
+        spin_table_addr);
+
+    /* Set the boot page translation reigster */
+    set32(RESET_BPTR, RESET_BPTR_EN | RESET_BPTR_BOOTPG(bootpg));
+
+    /* Disable time base on inactive core */
+    devdisr = get32(GUTS_DEVDISR);
+    if (whoami)
+        devdisr |= GUTS_DEVDISR_TB0;
+    else
+        devdisr |= GUTS_DEVDISR_TB1;
+    set32(GUTS_DEVDISR, devdisr);
+
+    /* Enable the CPU core(s) */
+    up = ((1 << CPU_NUMCORES) - 1);
+    bpcr = get32(ECM_EEBPCR);
+    bpcr |= ECM_EEBPCR_CPU_EN(up);
+    set32(ECM_EEBPCR, bpcr);
+    asm volatile("sync; isync; msync");
+
+    /* wait for other core to start */
+    cpu_up_mask = (1 << whoami);
+    while (timeout) {
+        for (i = 0; i < CPU_NUMCORES; i++) {
+            uint32_t* entry = (uint32_t*)(spin_table_addr +
+                (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
+            if (*entry) {
+                cpu_up_mask |= (1 << i);
+            }
+        }
+        if ((cpu_up_mask & up) == up) {
+            break;
+        }
+
+        udelay(100);
+        timeout--;
+    }
+
+    if (timeout == 0) {
+        wolfBoot_printf("MP: Timeout enabling additional cores!\n");
+    }
+
+    /* Disable our timebase */
+    if (whoami)
+        devdisr |= GUTS_DEVDISR_TB1;
+    else
+        devdisr |= GUTS_DEVDISR_TB0;
+    set32(GUTS_DEVDISR, devdisr);
+
+    /* Reset our timebase */
+    mtspr(SPRN_TBWU, 0);
+    mtspr(SPRN_TBWL, 0);
+
+    /* Enable timebase for all cores */
+    devdisr &= ~(GUTS_DEVDISR_TB0 | GUTS_DEVDISR_TB1);
+    set32(GUTS_DEVDISR, devdisr);
+}
+
+static void hal_mp_init(void)
+{
+    uint32_t *fixup = (uint32_t*)&_mp_page_start;
+    uint32_t bootpg;
+    int i_tlb = 0; /* always 0 */
+    size_t i;
+    const uint32_t *s;
+    uint32_t *d;
+
+    /* Assign virtual boot page at end of DDR */
+    bootpg = DDR_ADDRESS + DDR_SIZE - BOOT_ROM_SIZE;
+
+    /* Store the boot page address for use by additional CPU cores */
+    _bootpg_addr = bootpg;
+
+    /* map reset page to bootpg so we can copy code there */
+    disable_tlb1(i_tlb);
+    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, /* tlb, epn, rpn */
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I, /* perms, wimge */
+        0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
+
+    /* copy startup code to virtually mapped boot address */
+    /* do not use memcpy due to compiler array bounds report (not valid) */
+    s = (const uint32_t*)fixup;
+    d = (uint32_t*)BOOT_ROM_ADDR;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
+    }
+
+    /* start core and wait for it to be enabled */
+    hal_mp_up(bootpg);
+}
+#endif /* ENABLE_MP */
+
+#ifdef ENABLE_IRQ
+static void hal_irq_init(void)
+{
+    uint32_t reg;
+
+    /* Reset the Programmable Interrupt Controller */
+    set32(PIC_GCR, PIC_GCR_RST);
+    while (get32(PIC_GCR) & PIC_GCR_RST);
+
+    set32(PIC_GCR, PIC_GCR_M); /* eanble mixed-mode */
+    reg = get32(PIC_GCR); /* read back */
+}
+#endif
+
+#ifdef ENABLE_L2_CACHE
+static void hal_l2_init(void)
+{
+    uint32_t reg;
+
+    /* e500v2 L2 Cache */
+#ifdef L2SRAM_ADDR
+    /* L2 L2SRAM_ADDR: TLB 1, Entry 9, Supervisor X/R/W, G, TS=0, 256KB, IPROT */
+    set_tlb(1, 9,
+            L2SRAM_ADDR, L2SRAM_ADDR, 0,
+            MAS3_SX | MAS3_SW | MAS3_SR, MAS2_G, 0,
+            BOOKE_PAGESZ_256K, 1, r3);
+#endif
+
+    /* Configure the L2 Cache */
+    asm volatile("mbar; isync");
+#ifdef L2SRAM_ADDR /* as SRAM (1=256KB) */
+    set32(L2CTL, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(1)));
+#else
+    set32(L2CTL, (L2CTL_EN | L2CTL_INV | L2CTL_SIZ(2)));
+#endif
+    reg = get32(L2CTL); /* read back (per P1021 RM) */
+    asm volatile("mbar");
+
+#ifdef L2SRAM_ADDR
+    /* Set the L2SRAM base address */
+    asm volatile("mbar; isync");
+    set32(L2SRBAR0, L2SRAM_ADDR);
+    reg = get32(L2SRBAR0);
+    asm volatile("mbar");
+#endif
+}
+#endif /* ENABLE_L2_CACHE */
 
 void hal_init(void)
 {
 #ifdef DEBUG_UART
     uart_init();
+    #if !defined(BUILD_LOADER_STAGE1)
     uart_write("wolfBoot HAL Init\n", 19);
+    #endif
 #endif
-
+#ifdef ENABLE_L2_CACHE
+    hal_l2_init();
+#endif
 #ifdef ENABLE_PCIE
     hal_pcie_init();
 #endif
@@ -1087,8 +1551,20 @@ void hal_init(void)
 #ifdef ENABLE_CPLD
     hal_cpld_init();
 #endif
+#ifdef ENABLE_IRQ
+    hal_irq_init();
+#endif
     hal_flash_init();
+#ifdef ENABLE_QE
+    if (hal_qe_init() != 0) {
+        wolfBoot_printf("QE: Engine init failed!\n");
+    }
+#endif
+#ifdef ENABLE_MP
+    hal_mp_init();
+#endif
 
+    /* Hardware Tests */
 #if defined(ENABLE_DDR) && defined(TEST_DDR)
     if (test_ddr() != 0) {
         wolfBoot_printf("DDR Test Failed!\n");
@@ -1146,8 +1622,13 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     int ret = 0, pos = 0;
     uint32_t block_size, page_size, write_size;
 
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext write: addr 0x%x, dst 0x%x, len %d\n",
+        address, data, len);
+#endif
+
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
-    /* large page - ELBC_OR_PGS=1 */
+    /* large page - ELBC_ORF_PGS=1 */
     block_size = (128 * 1024);
     page_size = 2048;
     set32(ELBC_FCR, ELBC_FCR_CMD(0, NAND_CMD_PAGE_PROG1) |
@@ -1229,7 +1710,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 #endif
 
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
-    /* large page - ELBC_OR_PGS=1 */
+    /* large page - ELBC_ORF_PGS=1 */
     block_size = (128 * 1024);
     page_size = 2048;
     bad_marker = page_size;
@@ -1293,6 +1774,11 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         } while ((address & (block_size - 1)) && (pos < len));
     };
 
+    /* on success return size read */
+    if (ret == 0) {
+        ret = len;
+    }
+
     return ret;
 }
 
@@ -1302,8 +1788,12 @@ int ext_flash_erase(uintptr_t address, int len)
     int ret = 0;
     uint32_t block_size, page_size;
 
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext erase: addr 0x%x, len %d\n", address, len);
+#endif
+
 #if defined(FLASH_PAGE_SIZE) && FLASH_PAGE_SIZE == 2048
-    /* large page - ELBC_OR_PGS=1 */
+    /* large page - ELBC_ORF_PGS=1 */
     block_size = (128 * 1024);
     page_size = 2048;
 #else

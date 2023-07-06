@@ -42,6 +42,8 @@ size_t strlen(const char *s); /* forward declaration */
 #include "image.h"
 #endif
 
+/* allow using built-in libc if WOLFBOOT_USE_STDLIBC is defined */
+#ifndef WOLFBOOT_USE_STDLIBC
 #if !defined(BUILD_LOADER_STAGE1) || \
     (defined(PRINTF_ENABLED) && defined(DEBUG_UART))
 
@@ -272,6 +274,7 @@ void *memmove(void *dst, const void *src, size_t n)
 }
 #endif
 #endif /* __CCRX__ Renesas CCRX */
+#endif /* WOLFBOOT_USE_STDLIBC */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
 void uart_writenum(int num, int base)
@@ -337,8 +340,10 @@ void uart_vprintf(const char* fmt, va_list argp)
                 uart_writenum(n, 10);
                 break;
             }
-            case 'x':
             case 'p':
+                uart_write("0x", 2);
+                /* fall through */
+            case 'x':
             {
                 int n = (int)va_arg(argp, int);
                 uart_writenum(n, 16);

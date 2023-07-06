@@ -163,7 +163,7 @@ $(PRIVATE_KEY):
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 
 keytools:
-	@$(MAKE) -C tools/keytools clean
+	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools
 
 test-app/image_v1_signed.bin: $(BOOT_IMG)
@@ -175,28 +175,28 @@ test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
 	$(Q)$(SIZE) test-app/image.elf
 
-internal_flash.dd: test-app/image_v1_signed.bin wolfboot.elf $(BINASSEMBLE)
+internal_flash.dd: $(BINASSEMBLE) wolfboot.elf test-app/image_v1_signed.bin
 	@echo "\t[MERGE] internal_flash.dd"
 	$(Q)dd if=/dev/zero bs=1 count=$$(($(WOLFBOOT_SECTOR_SIZE))) > /tmp/swap
 	$(Q)$(BINASSEMBLE) $@ 0 test-app/image_v1_signed.bin \
 		$(WOLFBOOT_PARTITION_SIZE) /tmp/swap \
 		$$(($(WOLFBOOT_PARTITION_SIZE)*2)) /tmp/swap
 
-factory.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE)
+factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] $@"
 	$(Q)$(BINASSEMBLE) $@ \
 		$(WOLFBOOT_ORIGIN) wolfboot.bin \
 		$(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
-factory_wstage1.bin: $(BOOT_IMG) wolfboot.bin $(PRIVATE_KEY) test-app/image_v1_signed.bin $(BINASSEMBLE) stage1/loader_stage1.bin
+factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] $@"
 	$(Q)$(BINASSEMBLE) $@ \
 		$(WOLFBOOT_STAGE1_FLASH_ADDR) stage1/loader_stage1.bin \
 		$(WOLFBOOT_ORIGIN) wolfboot.bin \
 		$(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
-wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
-	$(Q)(test $(SIGN) = NONE) || (grep $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
+wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
+	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
@@ -236,28 +236,28 @@ keys: $(PRIVATE_KEY)
 
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
-	$(Q)rm -f *.bin *.elf wolfboot.map test-update.rom *.hex $(LSCRIPT)
-	$(Q)$(MAKE) -C test-app clean
-	$(Q)$(MAKE) -C tools/check_config clean
-	$(Q)$(MAKE) -C stage1 clean
+	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom *.hex $(LSCRIPT)
+	$(Q)rm -f $(MAIN_TARGET)
+	$(Q)$(MAKE) -C test-app -s clean
+	$(Q)$(MAKE) -C tools/check_config -s clean
+	$(Q)$(MAKE) -C stage1 -s clean
 
 utilsclean: clean
-	$(Q)$(MAKE) -C tools/keytools clean
-	$(Q)$(MAKE) -C tools/delta clean
-	$(Q)$(MAKE) -C tools/bin-assemble clean
-	$(Q)$(MAKE) -C tools/check_config clean
-	$(Q)$(MAKE) -C tools/test-expect-version clean
-	$(Q)$(MAKE) -C tools/test-update-server clean
-	$(Q)$(MAKE) -C tools/uart-flash-server clean
-	$(Q)$(MAKE) -C tools/unit-tests clean
+	$(Q)$(MAKE) -C tools/keytools -s clean
+	$(Q)$(MAKE) -C tools/delta -s clean
+	$(Q)$(MAKE) -C tools/bin-assemble -s clean
+	$(Q)$(MAKE) -C tools/elf-parser -s clean
+	$(Q)$(MAKE) -C tools/check_config -s clean
+	$(Q)$(MAKE) -C tools/test-expect-version -s clean
+	$(Q)$(MAKE) -C tools/test-update-server -s clean
+	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
+	$(Q)$(MAKE) -C tools/unit-tests -s clean
 
 keysclean: clean
-	@rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
-
-
+	$(Q)rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
 
 distclean: clean keysclean utilsclean
-
+	$(Q)rm -f *.bin *.elf
 
 include/target.h: $(TARGET_H_TEMPLATE) FORCE
 	@cat $(TARGET_H_TEMPLATE) | \
@@ -280,6 +280,9 @@ tools/delta/bmdiff: FORCE
 delta-test: FORCE
 	$(Q)$(MAKE) -C tools/delta $@
 
+elf-parser:
+	@$(MAKE) -C tools/elf-parser -s clean
+	@$(MAKE) -C tools/elf-parser
 
 config: FORCE
 	$(MAKE) -C config

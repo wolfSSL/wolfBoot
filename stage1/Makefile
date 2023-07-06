@@ -31,6 +31,7 @@ PUBLIC_KEY_OBJS:=
 
 # Forcefully disable TPM support in first stage loader
 WOLFTPM=0
+ELF=0
 
 ## Architecture/CPU configuration
 include ../arch.mk
@@ -94,7 +95,7 @@ loader_stage1.bin: loader_stage1.elf
 	$(Q)$(SIZE) loader_stage1.elf
 	@echo
 
-loader_stage1.elf: ../include/target.h $(LS1_OBJS) $(LSCRIPT)
+loader_stage1.elf: ../include/target.h $(LSCRIPT) $(LS1_OBJS)
 	@echo "\t[LD] $@"
 	@echo $(LS1_OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(LS1_OBJS) $(LD_END_GROUP) -o $@
@@ -167,7 +168,7 @@ $(BUILD_DIR)/%.o: ../hal/%.S
 
 clean:
 	$(Q)rm -f *.o
-	$(Q)rm -f loader_stage1.bin loader_stage1.elf loader_stage1.map loader_stage1.ld
+	$(Q)rm -f loader_stage1.bin loader_stage1.elf loader_stage1.map $(LSCRIPT)
 
 FORCE:
 

@@ -13,8 +13,8 @@ MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
 
-    /* L1 - 16KB */
-    RAM (rwx) : ORIGIN = 0xFDD00000, LENGTH = 0x4000
+    /* L2 as SRAM - 256KB */
+    RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x40000
 
     /* DDR - 2GB */
     DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF
@@ -38,6 +38,8 @@ SECTIONS
 
     .text :
     {
+        _start_vector = .;
+        KEEP(*(.isr_vector))
         *(.text*)
         *(.rodata*)
         *(.sdata*)

@@ -98,6 +98,7 @@ tools/test-update-server/server
 tools/uart-flash-server/ufserver
 tools/unit-tests/unit-parser
 tools/bin-assemble/bin-assemble
+tools/elf-parser/elf-parser
 config/*.ld
 
 # Generated confiuguration file

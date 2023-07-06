@@ -10,8 +10,8 @@ This README describes configuration of supported targets.
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
-* [NXP P1021 PPC](#nxp-p1021-ppc)
-* [NXP T2080 PPC](#nxp-t2080-ppc)
+* [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
+* [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
@@ -1113,28 +1113,55 @@ A loader must reside in the 4KB page to handle early startup including DDR and t
 
 A first stage loader is required to load the wolfBoot image into DDR for execution. This is because only 4KB of code space is available on boot. The stage 1 loader must also copy iteslf from the FCM buffer to DDR (or L2SRAM) to allow using of the eLBC to read NAND blocks.
 
-### Building wolfBoot for NXP P1021 PPC
-
-By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
-
-The `make` creates a `factory_wstage1.bin` image that can be programmed at `0x00000000`
-
-```
-cp ./config/examples/nxp-p1021.config .config
-make keytools
-make clean && make
-```
-
 #### Flash Layout for NXP P1021 PPC (default)
 
 | File                         | NAND offset |
 | ---------------------------- | ----------- |
 | stage1/loader_stage1.bin     | 0x00000000  |
-| wolfboot.bin                 | 0x00004000  |
+| wolfboot.bin                 | 0x00008000  |
 | test-app/image_v1_signed.bin | 0x00200000  |
 | update                       | 0x01200000  |
+| fsl_qe_ucode_1021_10_A.bin   | 0x01F00000  |
 | swap block                   | 0x02200000  |
 
+### Building wolfBoot for NXP P1021 PPC
+
+By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
+
+The `make` creates a `factory_wstage1.bin` image that can be programmed at `0x00000000`, that include the first stage loader, wolfBoot and a signed test application.
+
+To build the first stage load, wolfBoot, sign a custom application and assembly a single factory image use:
+
+```
+cp config/examples/nxp-p1021.config .config
+
+# build the C version of the key tools (instead of using the python ones)
+make keytools
+
+make clean
+make stage1
+
+# Build wolfBoot (with or without DEBUG)
+make DEBUG=1 wolfboot.bin
+# OR
+make wolfboot.bin
+
+# Sign application
+# 1=version (can be any 32-bit value)
+./tools/keytools/sign \
+    --ecc384 \
+    --sha384 \
+    test-app/image.bin \
+    wolfboot_signing_private_key.der \
+    1
+
+./tools/bin-assemble/bin-assemble \
+  factory.bin \
+    0x0        hal/nxp_p1021_stage1.bin \
+    0x8000     wolfboot.bin \
+    0x200000   test-app/image.bin \
+    0x01F00000 fsl_qe_ucode_1021_10_A.bin
+```
 
 ### Debugging NXP P1021 PPC
 

@@ -33,8 +33,11 @@ if [ $SCEUSE -eq 1 ]; then
  VER1_ADDR=0x00020000
  VER2_ADDR=0x00090000
  RSA_SIGN="--rsa2048enc"
- echo $VER1_ADDR $VER2_ADDR $RSA_SIGN
 fi
+
+echo "Version 1 app start address : " $VER1_ADDR 
+echo "Version 2 app start address : " $VER2_ADDR 
+echo "Signature method : " $RSA_SIGN
 
 echo 
 echo COPY app_RA.elf to AARCH64_BIN_DIR to convert bin file

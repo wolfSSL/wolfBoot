@@ -38,8 +38,8 @@ int myprintf(const char * sFormat, ...);
 static void blink(int interval)
 {
 
-	/* LED type structure */
-	bsp_leds_t leds = g_bsp_leds;
+    /* LED type structure */
+    bsp_leds_t leds = g_bsp_leds;
     
 #if BSP_TZ_SECURE_BUILD
 
@@ -110,7 +110,7 @@ static void printPart(uint8_t *part)
     v = (uint32_t *)part;
     for(i = 0; i < 0x100/4; i++) {
         if(i % 4 == 0)
-        	myprintf("\n%08x: ", (uint32_t)v+i*4);
+            myprintf("\n%08x: ", (uint32_t)v+i*4);
         myprintf("%08x ", v[i]);
     }
 #endif
@@ -119,7 +119,7 @@ static void printPart(uint8_t *part)
 
 static void printPartitions(void)
 {
-	myprintf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    myprintf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     myprintf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
     printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
@@ -162,12 +162,12 @@ void app_RA(void)
     myprintf("Current Firmware Version : %d\n", firmware_version);
 
     if (firmware_version >= 1) {
-    	myprintf("\n");
-    	myprintf("Calling wolfBoot_success()");
+        myprintf("\n");
+        myprintf("Calling wolfBoot_success()");
         wolfBoot_success();
-    	myprintf("\n");
-    	myprintf("Called wolfBoot_success()");
-    	printPartitions();
+        myprintf("\n");
+        myprintf("Called wolfBoot_success()");
+        printPartitions();
 
     } else {
         goto busy_idle;
@@ -175,7 +175,7 @@ void app_RA(void)
 
     if (firmware_version == 1) {
         wolfBoot_update_trigger();
-        blink(2);
+        blink(1);
     }
     else if (firmware_version == 2) {
         blink(5);
