@@ -117,7 +117,7 @@ void wolfBoot_check_self_update(void)
 #endif /* RAM_CODE for self_update */
 
 static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
-    struct wolfBoot_image *dst, uint32_t sector, uint32_t skipEncrypt)
+    struct wolfBoot_image *dst, uint32_t sector, int forcedEncrypt)
 {
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
@@ -155,20 +155,20 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 #endif
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
-          if (src_sector_offset + pos <
-              (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
-              /* bypass decryption, copy encrypted data into swap */
-              if (dst->part == PART_SWAP || skipEncrypt == 1) {
-                  ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos,
-                                 (void *)buffer, FLASHBUFFER_SIZE);
-              } else {
-                  ext_flash_check_read((uintptr_t)(src->hdr) + src_sector_offset +
-                                         pos,
-                                     (void *)buffer, FLASHBUFFER_SIZE);
-              }
+            if (src_sector_offset + pos <
+                (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
+                /* bypass decryption, copy encrypted data into swap */
+                if (dst->part == PART_SWAP) {
+                    ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset +
+                        pos, (void *)buffer, FLASHBUFFER_SIZE);
+                } else {
+                    ext_flash_check_read((uintptr_t)(src->hdr) +
+                        src_sector_offset + pos, (void *)buffer,
+                        FLASHBUFFER_SIZE);
+                }
 
-              wb_flash_write(dst,
-                             dst_sector_offset + pos, buffer, FLASHBUFFER_SIZE);
+                wb_flash_write(dst, dst_sector_offset + pos, buffer,
+                    FLASHBUFFER_SIZE, forcedEncrypt);
             }
             pos += FLASHBUFFER_SIZE;
         }
@@ -177,9 +177,11 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 #endif
     wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
     while (pos < WOLFBOOT_SECTOR_SIZE) {
-        if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
+        if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE +
+            FLASHBUFFER_SIZE))  {
             uint8_t *orig = (uint8_t*)(src->hdr + src_sector_offset + pos);
-            wb_flash_write(dst, dst_sector_offset + pos, orig, FLASHBUFFER_SIZE);
+            wb_flash_write(dst, dst_sector_offset + pos, orig, FLASHBUFFER_SIZE,
+                forcedEncrypt);
         }
         pos += FLASHBUFFER_SIZE;
     }
@@ -192,19 +194,22 @@ static int wolfBoot_finalize(struct wolfBoot_image *boot,
     uint8_t st;
     uint32_t sector = (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE) - 1;
 #ifdef EXT_ENCRYPTED
+    int ret = 0;
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
 
     /* get the encryption key, this will check the backup */
-    wolfBoot_get_encrypt_key(key, nonce);
+    ret = wolfBoot_get_encrypt_key(key, nonce);
 
-    hal_flash_lock();
+    /* key came from the backup, this means it's safe and neccassary to erase
+     * and re-write the key to the normal spot */
+    if (ret == 1) {
+        hal_flash_lock();
 
-    /* set the encryption key, we need to do this since the backup may be the
-     * only copy at this point if the power failed */
-    wolfBoot_set_encrypt_key(key, nonce);
+        wolfBoot_set_encrypt_key(key, nonce);
 
-    hal_flash_unlock();
+        hal_flash_unlock();
+    }
 
     /* erase the first sector of boot */
     wb_flash_erase(boot, 0, WOLFBOOT_SECTOR_SIZE);
@@ -230,8 +235,8 @@ static int wolfBoot_finalize(struct wolfBoot_image *boot,
 
     hal_flash_unlock();
 
-    /* copy the first sector back to boot, don't encrypt */
-    wolfBoot_copy_sector(swap, boot, 0, 1);
+    /* decrypt and copy the first sector back to boot */
+    wolfBoot_copy_sector(swap, boot, 0, 0);
 #endif
 
     /* set the boot state to testing */
@@ -342,7 +347,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                         goto out;
                     }
 #else
-                    wb_flash_write(swap, len, delta_blk, ret);
+                    wb_flash_write(swap, len, delta_blk, ret, 0);
 #endif
                     len += ret;
                 } else if (ret == 0) {
@@ -409,7 +414,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 
 #ifdef EXT_ENCRYPTED
     /* copy the first sector of boot to swap so we can use it for the final
-     * swap */
+     * swap, force encryption */
     wolfBoot_copy_sector(boot, swap, 0, 1);
 #endif
 
@@ -476,17 +481,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_open_image(&swap, PART_SWAP);
 
-    /* get total size */
-    total_size = wolfBoot_get_total_size(&boot, &update);
-
-    if (total_size <= IMAGE_HEADER_SIZE)
-        return -1;
-
 #ifndef DISABLE_BACKUP
     /* if we were on the final swap just finish it */
     if (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
         st == IMG_STATE_FINAL_SWAP) {
-        sector = (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE) - 1;
 
         hal_flash_unlock();
 #ifdef EXT_FLASH
@@ -498,6 +496,12 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         return 0;
     }
 #endif
+
+    /* get total size */
+    total_size = wolfBoot_get_total_size(&boot, &update);
+
+    if (total_size <= IMAGE_HEADER_SIZE)
+        return -1;
 
     /* In case this is a new update, do the required
      * checks on the firmware update
@@ -628,7 +632,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
 #ifdef EXT_ENCRYPTED
     /* copy the first sector of boot to swap so we can use it for the final
-     * swap */
+     * swap, force encryption */
     wolfBoot_copy_sector(&boot, &swap, 0, 1);
 #endif
 

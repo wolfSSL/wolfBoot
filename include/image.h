@@ -612,10 +612,18 @@ static inline int wb_flash_erase(struct wolfBoot_image *img, uint32_t off,
 }
 
 static inline int wb_flash_write(struct wolfBoot_image *img, uint32_t off,
-    const void *data, uint32_t size)
+    const void *data, uint32_t size, int forcedEncrypt)
 {
-    if (PART_IS_EXT(img))
-        return ext_flash_check_write((uintptr_t)(img->hdr) + off, data, size);
+    if (PART_IS_EXT(img)) {
+#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
+        if (forcedEncrypt == 1)
+            ext_flash_encrypt_write_ex((uintptr_t)(img->hdr) + off, data,
+                size, forcedEncrypt);
+        else
+#endif
+            return ext_flash_check_write((uintptr_t)(img->hdr) + off, data,
+                size);
+    }
     else
         return hal_flash_write((uintptr_t)(img->hdr) + off, data, size);
 }
@@ -653,7 +661,7 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 # define PARTN_IS_EXT(x) (0)
 # define wb_flash_erase(im, of, siz) \
     hal_flash_erase(((uintptr_t)(((im)->hdr)) + of), siz)
-# define wb_flash_write(im, of, dat, siz) \
+# define wb_flash_write(im, of, dat, siz, I) \
     hal_flash_write(((uintptr_t)((im)->hdr)) + of, dat, siz)
 
 #endif /* EXT_FLASH */

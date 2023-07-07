@@ -185,11 +185,14 @@ static int nvm_select_fresh_sector(int part)
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
                 (byte_1 == FLASH_BYTE_ERASED)) {
+/* we can't assume this because sel 1 might have the key */
+#ifndef EXT_ENCRYPTED
             /* First time boot?  Assume no pending update */
             if(off == 1) {
                 sel=0;
                 break;
             }
+#endif
             /* Examine previous position one byte ahead */
             byte_0 = *(base + 1 - off);
             byte_1 = *(base + 1 - (WOLFBOOT_SECTOR_SIZE + off));
@@ -973,6 +976,12 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     XMEMCPY(ENCRYPT_CACHE,
             (void*)(unsigned long)(addr_align) ,
                 WOLFBOOT_SECTOR_SIZE);
+    #ifdef NVM_FLASH_WRITEONCE
+        /* we read from the fresh sector, now write to the erased sector */
+        addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+        addr_align -= (!sel_sec * WOLFBOOT_SECTOR_SIZE);
+    #endif
+
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
         return ret;
@@ -1012,6 +1021,8 @@ int RAMFUNCTION wolfBoot_backup_encrypt_key(const uint8_t* key,
 #ifndef UNIT_TEST
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
+    int ret = 0;
+
 #if defined(MMU)
     XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
@@ -1025,6 +1036,9 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 
     if (magic[0] == WOLFBOOT_MAGIC && magic[1] == WOLFBOOT_MAGIC_TRAIL) {
         mem = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        /* not a failure but finalize needs to know that it's safe to erase and
+         * write the key to the normal spot */
+        ret = 1;
     }
     else {
         mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
@@ -1040,7 +1054,7 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
     XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, mem + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #endif
-    return 0;
+    return ret;
 }
 #endif
 
@@ -1073,14 +1087,14 @@ ChaCha chacha;
 
 int RAMFUNCTION chacha_init(void)
 {
+    uint8_t ff[ENCRYPT_KEY_SIZE];
+    uint8_t* stored_nonce;
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
+    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
 #endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-    uint8_t* stored_nonce;
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -1107,15 +1121,15 @@ Aes aes_dec, aes_enc;
 
 int aes_init(void)
 {
-#if defined(MMU) || defined(UNIT_TEST)
-    uint8_t *key = ENCRYPT_KEY;
-#else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
-#endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t* stored_nonce;
+#if defined(MMU) || defined(UNIT_TEST)
+    uint8_t *key = ENCRYPT_KEY;
+#else
+    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
+#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -1192,7 +1206,8 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 }
 
 #ifdef EXT_FLASH
-int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
+int RAMFUNCTION ext_flash_encrypt_write_ex(uintptr_t address,
+    const uint8_t *data, int len, int forcedEnc)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
@@ -1227,7 +1242,9 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
             break;
         case PART_SWAP:
             /* data is coming from update and is already encrypted */
-            return ext_flash_write(address, data, len);
+            if (forcedEnc == 0)
+                return ext_flash_write(address, data, len);
+            break;
         default:
             return -1;
     }
@@ -1256,6 +1273,11 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
     }
 
     return ext_flash_write(address, ENCRYPT_CACHE, step);
+}
+
+int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
+{
+    return ext_flash_encrypt_write_ex(address, data, len, 0);
 }
 
 int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
