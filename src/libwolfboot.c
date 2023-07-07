@@ -154,12 +154,18 @@ static int nvm_select_fresh_sector(int part)
     int sel;
     uint32_t off;
     uint8_t *base;
-    uint8_t *addr_align;
+    uint8_t* addrErase;
 
-    if (part == PART_BOOT)
+    if (part == PART_BOOT) {
         base = (uint8_t *)PART_BOOT_ENDFLAGS;
-    else
+        addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+    }
+    else {
         base = (uint8_t *)PART_UPDATE_ENDFLAGS;
+        addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+    }
 
     /* Default to last sector if no match is found */
     sel = 0;
@@ -192,18 +198,12 @@ static int nvm_select_fresh_sector(int part)
         }
     }
 
-    /* Erase the non-selected partition, alginment differs when we have a key
-     * and nonce */
-#ifdef EXT_ENCRYPTED
-    addr_align = (uint8_t *)((((uintptr_t)base - (!sel * WOLFBOOT_SECTOR_SIZE)))
-        & ((~(NVM_CACHE_SIZE - 1))));
-#else
-    addr_align = (uint8_t *)((((uintptr_t)base - ((1 + (!sel)) * WOLFBOOT_SECTOR_SIZE)))
-        & ((~(NVM_CACHE_SIZE - 1))));
-#endif
-    if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
+    /* Erase the non-selected partition */
+    addrErase -= WOLFBOOT_SECTOR_SIZE * (!sel);
+
+    if (*((uint32_t*)(addrErase + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED) {
-        hal_flash_erase((uintptr_t)addr_align, WOLFBOOT_SECTOR_SIZE);
+        hal_flash_erase((uintptr_t)addrErase, WOLFBOOT_SECTOR_SIZE);
     }
     return sel;
 }
