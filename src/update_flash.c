@@ -438,6 +438,19 @@ out:
     #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
 
+static int RAMFUNCTION wolfBoot_get_total_size(struct wolfBoot_image* boot,
+    struct wolfBoot_image* update)
+{
+    uint32_t total_size = 0;
+
+    /* Use biggest size for the swap */
+    total_size = boot->fw_size + IMAGE_HEADER_SIZE;
+    if ((update->fw_size + IMAGE_HEADER_SIZE) > total_size)
+            total_size = update->fw_size + IMAGE_HEADER_SIZE;
+
+    return total_size;
+}
+
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -463,10 +476,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_open_image(&swap, PART_SWAP);
 
-    /* Use biggest size for the swap */
-    total_size = boot.fw_size + IMAGE_HEADER_SIZE;
-    if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
-            total_size = update.fw_size + IMAGE_HEADER_SIZE;
+    /* get total size */
+    total_size = wolfBoot_get_total_size(&boot, &update);
 
     if (total_size <= IMAGE_HEADER_SIZE)
         return -1;
@@ -595,9 +606,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             boot.fw_size = update.fw_size;
             update.fw_size = fw_size;
 
-            total_size = boot.fw_size + IMAGE_HEADER_SIZE;
-            if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
-                    total_size = update.fw_size + IMAGE_HEADER_SIZE;
+            /* get total size */
+            total_size = wolfBoot_get_total_size(&boot, &update);
 
             if (total_size <= IMAGE_HEADER_SIZE)
                 return -1;
