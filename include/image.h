@@ -617,7 +617,7 @@ static inline int wb_flash_write(struct wolfBoot_image *img, uint32_t off,
     if (PART_IS_EXT(img)) {
 #if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
         if (forcedEncrypt == 1)
-            ext_flash_encrypt_write_ex((uintptr_t)(img->hdr) + off, data,
+            return ext_flash_encrypt_write_ex((uintptr_t)(img->hdr) + off, data,
                 size, forcedEncrypt);
         else
 #endif
