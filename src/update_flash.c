@@ -676,12 +676,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
 #endif /* DISABLE_BACKUP */
 
-#if defined(WOLFBOOT_TPM) && defined(WOLFTPM_KEYSTORE)
-    /* reseal the true pubkey after the image update */
-    if (wolfBoot_reseal_keys(&boot, &update) != 0)
-        return -1;
-#endif
-
     return 0;
 }
 
