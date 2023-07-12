@@ -24,7 +24,12 @@
     #include <wolfpkcs11/config.h>
 #endif
 
+#ifndef WOLFSSL_USER_SETTINGS
 #include <wolfssl/options.h>
+#else
+#include "user_settings.h"
+#endif
+
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
@@ -3386,12 +3391,16 @@ int WP11_Slot_SOLogin(WP11_Slot* slot, char* pin, int pinLen)
 {
     int ret = 0;
     WP11_Session* curr;
+#ifndef WOLFPKCS11_NO_TIME
     time_t now;
     time_t allowed;
+#endif
     int state;
 
+#ifndef WOLFPKCS11_NO_TIME
     if (wc_GetTime(&now, sizeof(now)) != 0)
         ret = PIN_INVALID_E;
+#endif
 
     WP11_Lock_LockRO(&slot->lock);
     if (ret == 0) {
@@ -3402,6 +3411,7 @@ int WP11_Slot_SOLogin(WP11_Slot* slot, char* pin, int pinLen)
             ret = LOGGED_IN_E;
         }
     }
+#ifndef WOLFPKCS11_NO_TIME
     /* Check for too many fails and timeout. */
     if (ret == 0 && slot->token.soFailedLogin == WP11_MAX_LOGIN_FAILS_SO) {
         allowed = slot->token.soLastFailedLogin +
@@ -3411,6 +3421,9 @@ int WP11_Slot_SOLogin(WP11_Slot* slot, char* pin, int pinLen)
         else
             ret = PIN_INVALID_E;
     }
+#else
+    slot->token.soFailedLogin = 0;
+#endif
     if (ret == 0) {
         for (curr = slot->session; curr != NULL; curr = curr->next) {
             if (curr->inUse == WP11_SESSION_RO)
@@ -3426,11 +3439,13 @@ int WP11_Slot_SOLogin(WP11_Slot* slot, char* pin, int pinLen)
         WP11_Lock_LockRW(&slot->lock);
         /* PIN Failed - Update failure info. */
         if (ret == PIN_INVALID_E) {
+#ifndef WOLFPKCS11_NO_TIME
             slot->token.soFailedLogin++;
             if (slot->token.soFailedLogin == WP11_MAX_LOGIN_FAILS_SO) {
                 slot->token.soLastFailedLogin = now;
                 slot->token.soFailLoginTimeout += WP11_SO_LOGIN_FAIL_TIMEOUT;
             }
+#endif
         }
         /* Worked - clear failure info. */
         else if (ret == 0) {
@@ -3465,13 +3480,17 @@ int WP11_Slot_SOLogin(WP11_Slot* slot, char* pin, int pinLen)
 int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
 {
     int ret = 0;
+#ifndef WOLFPKCS11_NO_TIME
     time_t now;
     time_t allowed;
+#endif
     int state;
     WP11_Token* token = &slot->token;
 
+#ifndef WOLFPKCS11_NO_TIME
     if (wc_GetTime(&now, sizeof(now)) != 0)
         ret = PIN_INVALID_E;
+#endif
 
     WP11_Lock_LockRW(&slot->lock);
     /* Have we already logged in? */
@@ -3483,6 +3502,7 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
             ret = LOGGED_IN_E;
         }
     }
+#ifndef WOLFPKCS11_NO_TIME
     /* Check for too many fails */
     if (ret == 0 && token->userFailedLogin == WP11_MAX_LOGIN_FAILS_USER) {
         allowed = token->userLastFailedLogin + token->userFailLoginTimeout;
@@ -3491,6 +3511,9 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
         else
             ret = PIN_INVALID_E;
     }
+#else
+    token->userFailedLogin = 0;
+#endif
     WP11_Lock_UnlockRW(&slot->lock);
 
     if (ret == 0) {
@@ -3504,11 +3527,13 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
         WP11_Lock_LockRW(&slot->lock);
         /* PIN Failed - Update failure info. */
         if (ret == PIN_INVALID_E) {
+#ifndef WOLFPKCS11_NO_TIME
             token->userFailedLogin++;
             if (token->userFailedLogin == WP11_MAX_LOGIN_FAILS_USER) {
                 token->userLastFailedLogin = now;
                 token->userFailLoginTimeout += WP11_USER_LOGIN_FAIL_TIMEOUT;
             }
+#endif
         }
         /* Worked - clear failure info. */
         else if (ret == 0) {
