@@ -507,7 +507,7 @@ Use `make keysclean` or `make distclean` to delete keys and regenerate.
     * moved wolfBoot stack to DDR after DDR initialization
  * Rework of Renesas examples, adding HSM support
     * RA6M4 example project using SCE
-    * RA72N example project using TSIP
+    * RX72N example project using TSIP
     * Extended documentation
  * Bug fix: fix wrong partition selection with `NVM_FLASH_WRITEONCE` introduced in v.1.15
  * Testing: added test cases (delta + encrypt)
