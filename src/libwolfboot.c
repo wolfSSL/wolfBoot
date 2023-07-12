@@ -149,7 +149,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
 static int nvm_cached_sector = 0;
 
-static int nvm_select_fresh_sector(int part)
+static int RAMFUNCTION nvm_select_fresh_sector(int part)
 {
     int sel;
     uint32_t off;
@@ -211,7 +211,8 @@ static int nvm_select_fresh_sector(int part)
     return sel;
 }
 
-static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
+static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val)
+{
     size_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
     size_t addr_read, addr_write;
     uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
