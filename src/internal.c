@@ -3420,8 +3420,9 @@ int WP11_Slot_SOLogin(WP11_Slot* slot, char* pin, int pinLen)
             slot->token.soFailedLogin = 0;
         else
             ret = PIN_INVALID_E;
-        slot->token.soFailedLogin = 0;
     }
+#else
+    slot->token.soFailedLogin = 0;
 #endif
     if (ret == 0) {
         for (curr = slot->session; curr != NULL; curr = curr->next) {
@@ -3509,8 +3510,9 @@ int WP11_Slot_UserLogin(WP11_Slot* slot, char* pin, int pinLen)
             token->userFailedLogin = 0;
         else
             ret = PIN_INVALID_E;
-        token->userFailedLogin = 0;
     }
+#else
+    token->userFailedLogin = 0;
 #endif
     WP11_Lock_UnlockRW(&slot->lock);
 
