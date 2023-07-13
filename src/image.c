@@ -714,7 +714,7 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
 #endif /* SHA3-384 */
 
 #ifdef WOLFBOOT_TPM
-#ifndef ARCH_SIM
+#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
 static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     word16 xferSz, void* userCtx)
 {
@@ -778,13 +778,13 @@ int wolfBoot_tpm2_init(void)
     int rc;
     word32 idx;
     WOLFTPM2_CAPS caps;
-#ifndef ARCH_SIM
+#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
     spi_init(0,0);
 #endif
 
     /* Init the TPM2 device */
     /* simulator should use the network connection, not spi */
-#ifdef ARCH_SIM
+#if defined(ARCH_SIM) || defined(WOLFTPM_MMIO)
     rc = wolfTPM2_Init(&wolftpm_dev, NULL, NULL);
 #else
     rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);

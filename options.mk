@@ -445,8 +445,15 @@ ifeq ($(WOLFTPM),1)
     ifeq ($(SIM_TPM),1)
       CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0
       OBJS+=./lib/wolfTPM/src/tpm2_swtpm.o
+	# Use memory-mapped WOLFTPM on x86-64
     else
-      WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+       ifeq ($(ARCH),x86_64)
+          CFLAGS+=-DWOLFTPM_MMIO -DWOLFTPM_EXAMPLE_HAL -DWOLFTPM_INCLUDE_IO_FILE
+          OBJS+=./lib/wolfTPM/hal/tpm_io_mmio.o
+        # By default, on other architectures, provide SPI driver
+        else
+          WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+        endif
     endif
   endif
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o

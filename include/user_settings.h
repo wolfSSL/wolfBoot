@@ -289,4 +289,14 @@ extern int tolower(int c);
 #   define WOLFSSL_SMALL_STACK
 #endif
 
+
+#ifdef WOLFTPM_MMIO
+    void delay(int msec);
+    #define XTPM_WAIT() delay(1000);
+    #define DEBUG_WOLFTPM
+    #define WOLFTPM_ADV_IO
+    void uart_printf(const char* fmt, ...);
+    #define XPRINTF uart_printf
+#endif
+
 #endif /* !H_USER_SETTINGS_ */
