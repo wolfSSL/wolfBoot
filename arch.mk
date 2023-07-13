@@ -29,9 +29,28 @@ UART_TARGET=$(TARGET)
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
 ifeq ($(ARCH),x86_64)
-  OBJS+=src/boot_x86_64.o
-  ifeq ($(DEBUG),1)
-    CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+  CFLAGS+=-DARCH_x86_64
+  ifeq ($(FORCE_32BIT),1)
+    NO_ASM=1
+    CFLAGS+=-DFORCE_32BIT
+  endif
+  ifeq ($(SPMATH),1)
+    ifeq ($(NO_ASM),1)
+      ifeq ($(FORCE_32BIT),1)
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+      else
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c64.o
+      endif
+    else
+      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_x86_64.o
+    endif
+  endif
+  ifeq ($(TARGET),x86_64_efi)
+     OBJS+=src/boot_x86_64.o
+    ifeq ($(DEBUG),1)
+      CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+    endif
   endif
 endif
 
