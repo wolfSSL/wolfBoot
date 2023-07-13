@@ -506,6 +506,11 @@ ifeq ($(ELF),1)
   OBJS += src/elf.o
 endif
 
+ifeq ($(MULTIBOOT2),1)
+  CFLAGS+=-DWOLFBOOT_MULTIBOOT2
+  OBJS += src/multiboot.o
+endif
+
 ifeq ($(LINUX_PAYLOAD),1)
   CFLAGS+=-DWOLFBOOT_LINUX_PAYLOAD
   ifeq ($(ARCH),x86_64)
