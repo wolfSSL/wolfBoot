@@ -200,6 +200,10 @@ static void clockconfig(int powersave)
 
     uint32_t hpre,ppre1,ppre2,flash_waitstates;
 
+    uint32_t pllm = 0;  /* No division */
+    uint32_t plln = 10; /* Multiply by 10 */
+    uint32_t pllr = 0;  /* Divide by 2 */
+
     /* Enable Power controller */
     RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
 
@@ -216,10 +220,34 @@ static void clockconfig(int powersave)
     DMB();
     while ((RCC->CR & RCC_CR_HSIRDY)==0);
 
-    /* select HSI as SYSCLK source*/
+    /* Configure the PLL for 80 Mhz operation. */
+    reg32 = RCC->PLLCFGR;
+    /* Set the value of PLLR and enable it */
+    reg32 &= ~RCC_PLLCFGR_PLLR;
+    reg32 |= (pllr << RCC_PLLCFGR_PLLR_Pos);
+    reg32 |= (1 << RCC_PLLCFGR_PLLREN_Pos);
+    /* Set the value of PLLN */
+    reg32 &= ~RCC_PLLCFGR_PLLN;
+    reg32 |= (plln << RCC_PLLCFGR_PLLN_Pos);
+    /* Set the value of PLLM */
+    reg32 &= ~RCC_PLLCFGR_PLLM;
+    reg32 |= (pllm << RCC_PLLCFGR_PLLM_Pos);
+    /* Set the PLL clock source to HSI16 */
+    reg32 &= ~RCC_PLLCFGR_PLLSRC;
+    reg32 |= (0x2 << RCC_PLLCFGR_PLLSRC_Pos);
+
+    RCC->PLLCFGR = reg32;
+    DMB();
+
+    /* Turn the PLL on */
+    RCC->CR |= RCC_CR_PLLON;
+    DMB();
+    while ((RCC->CR & RCC_CR_PLLRDY) == 0);
+
+    /* select PLL as SYSCLK source*/
     reg32 = RCC->CFGR;
-    reg32 &= ~((1 << 1) | (1 << 0));
-    RCC->CFGR = (reg32 | RCC_CFGR_SW_HSI);
+    reg32 &= ~RCC_PLLCFGR_PLLSRC_Msk;
+    RCC->CFGR = (reg32 | RCC_CFGR_SW_PLL);
     DMB();
 
     /* Set prescalers for AHB, ADC, ABP1, ABP2 */
