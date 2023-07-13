@@ -34,7 +34,11 @@
 
 /* support for elf parsing debug printf */
 #if defined(DEBUG) || defined(ELF_PARSER)
+#if DEBUG_ELF == 0
+#undef DEBUG_ELF
+#else
 #define DEBUG_ELF
+#endif
 #endif
 
 /* support byte swapping if testing/reading an elf with different endianess */
