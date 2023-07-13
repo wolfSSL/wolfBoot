@@ -67,7 +67,7 @@
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */
-int elf_load_image(uint8_t *image, uintptr_t *entry)
+int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 {
     elf32_header* h32 = (elf32_header*)image;
     elf64_header* h64 = (elf64_header*)image;
@@ -134,6 +134,17 @@ int elf_load_image(uint8_t *image, uintptr_t *entry)
 #endif
 
 #ifndef ELF_PARSER
+        if (mmu_cb != NULL) {
+            if (mmu_cb(vaddr, paddr, mem_size) != 0) {
+#ifdef DEBUG_ELF
+            wolfBoot_printf(
+                "\tFail to map %u bytes to %p (p %p)\n",
+                (uint32_t)mem_size, (void*)vaddr, (void*)paddr);
+#endif
+            continue;
+            }
+        }
+
         memcpy((void*)(uintptr_t)vaddr, image + offset, file_size);
         if (mem_size > file_size) {
             memset((void*)(uintptr_t)(vaddr + file_size), 0,
@@ -151,6 +162,12 @@ int elf_load_image(uint8_t *image, uintptr_t *entry)
 #endif
 
     return 0;
+}
+
+int elf_load_image(uint8_t *image, uintptr_t *entry)
+{
+
+    return elf_load_image_mmu(image, entry, NULL);
 }
 
 #endif /* WOLFBOOT_ELF */
