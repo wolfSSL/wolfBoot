@@ -30,9 +30,13 @@ endif
 
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
+# make mk scripts aware that we are building stage1
+STAGE1=1
 # Forcefully disable TPM support in first stage loader
 WOLFTPM=0
 ELF=0
+MULTIBOOT2=0
+LINUX_PAYLOAD=0
 
 ## Architecture/CPU configuration
 include ../arch.mk
@@ -85,6 +89,13 @@ LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
 vpath %.c ../src
 vpath %.c ../hal
 vpath %.c ../lib/wolfssl/wolfcrypt/src
+vpath %.c ../src/x86
+vpath %.S ../src
+
+# x86-64 FSP targets
+ifeq ($(FSP), 1)
+include ./x86_fsp.mk
+endif
 
 all: $(MAIN_TARGET)
 
@@ -104,7 +115,7 @@ loader_stage1.elf: ../include/target.h $(LSCRIPT) $(LS1_OBJS)
 stage1: loader_stage1.bin
 loader_stage1: loader_stage1.bin
 
-$(LSCRIPT): FORCE
+$(LSCRIPT): $(LSCRIPT_IN) FORCE
 	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
 		"configuration found. If you selected Encryption and RAM_CODE, then maybe" \
 		"the encryption algorithm is not yet supported with bootloader updates." \

@@ -1,0 +1,26 @@
+From 02a7cbecca40b68e0bca684e70f3a1b6ddb8c192 Mon Sep 17 00:00:00 2001
+From: Marco Oliverio <marco@wolfssl.com>
+Date: Thu, 26 Jan 2023 10:20:57 +0000
+Subject: [PATCH] fix: PatchFv: make regex match both 8 and 16 length address
+ on Linux
+
+---
+ IntelFsp2Pkg/Tools/PatchFv.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/IntelFsp2Pkg/Tools/PatchFv.py b/IntelFsp2Pkg/Tools/PatchFv.py
+index fe6d29426e..74ef586120 100644
+--- a/IntelFsp2Pkg/Tools/PatchFv.py
++++ b/IntelFsp2Pkg/Tools/PatchFv.py
+@@ -419,7 +419,7 @@ class Symbols:
+         if reportLine.strip().find("Archive member included") != -1:
+             #GCC
+             #                0x0000000000001d55                IoRead8
+-            patchMapFileMatchString = "\s+(0x[0-9a-fA-F]{16})\s+([^\s][^0x][_a-zA-Z0-9\-]+)\s"
++            patchMapFileMatchString = "\s+(0x[0-9a-fA-F]{8,16})\s+([^\s][^0x][_a-zA-Z0-9\-]+)\s"
+             matchKeyGroupIndex = 2
+             matchSymbolGroupIndex  = 1
+             prefix = '_'
+-- 
+2.39.1
+

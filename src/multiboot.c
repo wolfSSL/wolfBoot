@@ -125,21 +125,115 @@ static int mb2_start_mem_map(uint8_t *tag)
     return 0;
 }
 
+#ifdef WOLFBOOT_FSP
+
+struct mb2_mem_map_cb_info {
+    struct mb2_mem_map_header *map_hdr;
+    unsigned *max_size;
+};
+
+static int mb2_add_mem_entry_cb(uint64_t baseAddr, uint64_t length,
+                                uint32_t type, void *ctx) {
+    struct mb2_mem_map_header *mem_map;
+    struct mb2_mem_map_cb_info *info;
+    struct mb2_mem_map_entry *e;
+
+    info = (struct mb2_mem_map_cb_info *)ctx;
+    if (*info->max_size < sizeof(struct mb2_mem_map_entry)) {
+        MB2_DEBUG_PRINTF("Not enough size to build mb2 mep map\r\n");
+        return -1;
+    }
+    *info->max_size = *info->max_size - sizeof(struct mb2_mem_map_entry);
+    mem_map = info->map_hdr;
+    e = (struct mb2_mem_map_entry*)((uint8_t*)mem_map + mem_map->size);
+    e->base_addr = baseAddr;
+    e->length = length;
+    e->type =
+        (type == EFI_RESOURCE_SYSTEM_MEMORY) ? MB2_MEM_INFO_MEM_RAM : MB2_MEM_INFO_MEM_RESERVED;
+    e->reserved = 0;
+    mem_map->size += sizeof(struct mb2_mem_map_entry);
+
+    return 0;
+}
+
+static int mb2_add_mem_basic_info_cb(uint64_t baseAddr, uint64_t length,
+                              uint32_t type, void *ctx)
+{
+    struct mb2_basic_memory_info *mem_info =
+        (struct mb2_basic_memory_info *)ctx;
+
+    (void)type;
+    if (baseAddr == 0)
+        mem_info->mem_lower = length / 1024;
+    if (baseAddr == 1 * 1024 * 1024)
+        mem_info->mem_upper = length / 1024;
+    return 0;
+}
+#endif /* WOLFBOOT_FSP */
+
 static int mb2_add_basic_mem_info(uint8_t **idx, void *stage2_param,
                                   unsigned *max_size)
 {
+#ifdef WOLFBOOT_FSP
+    struct mb2_basic_memory_info *meminfo = (struct mb2_basic_memory_info*)(*idx);
+    struct stage2_parameter *p = (struct stage2_parameter*)stage2_param;
+    struct efi_hob *hobs = (struct efi_hob*)(uintptr_t)p->hobList;
+    int r;
+
+    if (*max_size < sizeof(struct mb2_basic_memory_info)) {
+        MB2_DEBUG_PRINTF("Not enough size to build mb2 basic info\r\n");
+        return -1;
+    }
+    *max_size -= sizeof(struct mb2_basic_memory_info);
+
+    meminfo->type = MB2_REQ_TAG_BASIC_MEM_INFO;
+    meminfo->size = sizeof(*meminfo);
+    meminfo->mem_lower = 0;
+    meminfo->mem_upper = 0;
+    r = hob_iterate_memory_map(hobs,
+                               mb2_add_mem_basic_info_cb, (void*)meminfo);
+    if (r != 0)
+        return r;
+    *idx += sizeof(*meminfo);
+    return 0;
+#else
     (void)idx;
     (void)stage2_param;
     (void)max_size;
     return -1;
+#endif /* WOLFBOOT_FSP */
 }
 
 static int mb2_add_mem_map(uint8_t **idx, void *stage2_param, unsigned *max_size)
 {
+#ifdef WOLFBOOT_FSP
+    struct mb2_mem_map_header *map_hdr = (struct mb2_mem_map_header*)(*idx);
+    struct stage2_parameter *p = (struct stage2_parameter*)stage2_param;
+    struct efi_hob *hobs = (struct efi_hob*)(uintptr_t)p->hobList;
+    struct mb2_mem_map_cb_info info;
+    int r;
+
+    if (*max_size < sizeof(struct mb2_mem_map_header)) {
+        MB2_DEBUG_PRINTF("Not enough size to build mb2 map header\r\n");
+        return -1;
+    }
+    info.map_hdr = map_hdr;
+    info.max_size = max_size;
+    *info.max_size = *info.max_size - sizeof(struct mb2_mem_map_header);
+    r = mb2_start_mem_map(*idx);
+    if (r != 0)
+        return r;
+    r = hob_iterate_memory_map(hobs, mb2_add_mem_entry_cb, (void *)&info);
+    if (r != 0)
+        return r;
+    *idx += map_hdr->size;
+    return 0;
+#else
     (void)idx;
     (void)stage2_param;
     (void)max_size;
     return -1;
+#endif /* WOLFBOOT_FSP */
 }
 
 int mb2_build_boot_info_header(uint8_t *mb2_boot_info,

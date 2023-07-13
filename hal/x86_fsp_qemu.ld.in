@@ -1,0 +1,35 @@
+MEM_SIZE = 536870912;
+WOLFBOOT_LOAD_BASE = @WOLFBOOT_LOAD_BASE@;
+
+MEMORY
+{
+    RAM (rwx) : ORIGIN = 0x0 LENGTH = MEM_SIZE
+}
+
+SECTIONS
+{
+   .text WOLFBOOT_LOAD_BASE :
+    {
+       _start_wolfboot = .;
+       _start_text = .;
+       *(.text*)
+       *(.rodata*)
+       *(.data*)
+       . = ALIGN(4);
+       _end_text = .;
+       _end_wolfboot = .;
+    }
+
+    .bss WOLFBOOT_LOAD_BASE + SIZEOF(.text) (NOLOAD):
+    {
+       _start_bss = .;
+       __bss_start__ = .;
+       *(.bss*)
+       *(COMMON)
+       . = ALIGN(4);
+       _end_bss = .;
+       __bss_end__ = .;
+       _end = .;
+       _stage2_params = .;
+    }
+}

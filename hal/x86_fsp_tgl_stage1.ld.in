@@ -1,0 +1,82 @@
+FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
+FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
+RESETVECTOR_START = 0xffffffec;
+FSP_T_BASE = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
+FSP_M_BASE = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
+FSP_S_BASE = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
+WOLFBOOT_LOAD_BASE = @WOLFBOOT_LOAD_BASE@;
+FIT_TABLE_PTR = 0xffffffc0;
+UCODE0_BASE = @UCODE0_BASE@;
+FSP_S_UPD_DATA_BASE = @FSP_S_UPD_DATA_BASE@;
+WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
+
+OUTPUT_FORMAT(elf32-i386)
+
+MEMORY
+{
+    FLASH (rx) : ORIGIN = FLASH_START LENGTH = FLASH_SIZE
+    RAM (rwx) : ORIGIN = 0x0 LENGTH = FLASH_START
+}
+
+SECTIONS
+{
+    .fit_table_tr FIT_TABLE_PTR :
+    {
+        QUAD(fit_table);
+    }
+
+    .reset_vector RESETVECTOR_START :
+    {
+        KEEP(*(.reset_vector))
+    }
+
+    .ucode_update0 UCODE0_BASE :
+    {
+        *(.ucode0)
+    }
+
+    .bootloader WOLFBOOT_ORIGIN :
+    {
+       _off_boot = ABSOLUTE(.) & 0xffff;
+       KEEP(./boot_x86_fsp_start.o(.boot*))
+       KEEP(./tgl_fsp.o(.boot))
+       *(.boot*)
+       *(.text*)
+       *(.rodata*)
+       *(.eh_frame*)
+       *(.data*)
+       . = ALIGN(4);
+    }
+
+    .fsps_upd FSP_S_UPD_DATA_BASE :
+    {
+    	KEEP(./fsp_tgl_s_upd.o(.fsps_upd))
+    }
+
+   .text FLASH_START :
+    {
+       _wolfboot_flash_start = ABSOLUTE(FLASH_START);
+       *(.wolfboot)
+       _wolfboot_flash_end = .;
+    }
+
+    .fsp_t FSP_T_BASE :
+    AT(FSP_T_BASE)
+    {
+       _start_fsp_t = .;
+       *(.fsp_t)
+    }
+
+    .fsp_s FSP_S_BASE :
+    {
+       _start_fsp_s = .;
+       *(.fsp_s)
+    }
+
+    .fsp_m FSP_M_BASE :
+    {
+       _start_fsp_m = .;
+       *(.fsp_m)
+    }
+
+}

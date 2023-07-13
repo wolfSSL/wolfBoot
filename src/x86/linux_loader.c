@@ -28,6 +28,11 @@
 
 #include <x86/linux_loader.h>
 
+#ifdef WOLFBOOT_FSP
+#include <x86/hob.h>
+#include <stage1.h>
+#endif /* WOLFBOOT_FSP */
+
 #define ENDLINE "\r\n"
 
 #ifdef WOLFBOOT_64BIT
@@ -50,13 +55,52 @@ static void jump_to_linux(uint32_t kernel_addr, struct boot_params *p)
 #endif /* WOLFBOOT_64BIT */
 }
 
+#ifdef WOLFBOOT_FSP
+
+#ifdef DEBUG
+static void print_e820_entry(struct boot_e820_entry *e)
+{
+    wolfBoot_printf("start: %x" ENDLINE, (uint32_t)e->addr);
+    wolfBoot_printf("size: %x" ENDLINE, (uint32_t)e->size);
+    wolfBoot_printf("type: %s" ENDLINE,
+                    ((uint32_t)e->type == E820_TYPE_RAM ? "ram" : "reserved"));
+}
+#else
+static inline void print_e820_entry(struct boot_e820_entry *e) {}
+#endif /* DEBUG */
+
+static int e820_add_entry_cb(uint64_t start, uint64_t length, uint32_t type,
+                             void *ctx)
+{
+    struct boot_params *bp = (struct boot_params*)ctx;
+    struct boot_e820_entry *map = bp->e820_table + bp->e820_entries;
+
+    map->addr = start;
+    map->size = length;
+    map->type = (type == EFI_RESOURCE_SYSTEM_MEMORY) ? E820_TYPE_RAM :
+        E820_TYPE_RESERVED;
+    bp->e820_entries++;
+    return 0;
+}
+
+static int memory_map_from_hoblist(struct boot_params *bp,
+                                   struct efi_hob *hobList)
+{
+    return hob_iterate_memory_map(hobList, e820_add_entry_cb, (void *)bp);
+}
+#endif /* WOLFBOOT_FSP */
 
 static int linux_boot_params_fill_memory_map(struct boot_params *bp,
                                              void *stage2_params)
 {
+#ifdef WOLFBOOT_FSP
+    struct stage2_parameter *p = (struct stage2_parameter *)stage2_params;
+    return memory_map_from_hoblist(bp, (struct efi_hob*)(uintptr_t)p->hobList);
+#else
     (void)bp;
     (void)stage2_params;
     return -1;
+#endif /* WOLFBOOT_FSP */
 }
 
 #define KERNEL_LOAD_ADDRESS 0x100000

@@ -522,4 +522,20 @@ ifeq ($(64BIT),1)
   CFLAGS+=-DWOLFBOOT_64BIT
 endif
 
+ifeq ($(FSP), 1)
+  X86_FSP_OPTIONS := \
+    X86_UART_BASE \
+    X86_UART_REG_WIDTH \
+    X86_UART_MMIO \
+    PCH_HAS_PCR \
+    PCI_USE_ECAM \
+    PCH_PCR_BASE \
+    PCI_ECAM_BASE \
+    FSP_S_UPD_DATA_BASE \
+    WOLFBOOT_LOAD_BASE
+
+    # set CFLAGS defines for each x86_fsp option
+    $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))
+endif
+
 CFLAGS+=$(CFLAGS_EXTRA)

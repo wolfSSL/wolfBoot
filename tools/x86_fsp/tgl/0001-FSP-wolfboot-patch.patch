@@ -1,0 +1,92 @@
+From 06d9db222435007ef36bf5f72b4a757ec0f8ba51 Mon Sep 17 00:00:00 2001
+From: Marco Oliverio <marco@wolfssl.com>
+Date: Mon, 17 Apr 2023 11:00:12 +0000
+Subject: [PATCH] FSP wolfboot patch
+
+---
+ TigerLakeFspBinPkg/TGL_IOT/Include/FspUpd.h     | 2 --
+ TigerLakeFspBinPkg/TGL_IOT/Include/FspmUpd.h    | 5 +++--
+ TigerLakeFspBinPkg/TGL_IOT/Include/FspsUpd.h    | 3 ++-
+ TigerLakeFspBinPkg/TGL_IOT/Include/FsptUpd.h    | 4 +++-
+ TigerLakeFspBinPkg/TGL_IOT/Include/MemInfoHob.h | 3 +++
+ 5 files changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/TigerLakeFspBinPkg/TGL_IOT/Include/FspUpd.h b/TigerLakeFspBinPkg/TGL_IOT/Include/FspUpd.h
+index f9b0ed8..c7a37c3 100644
+--- a/TigerLakeFspBinPkg/TGL_IOT/Include/FspUpd.h
++++ b/TigerLakeFspBinPkg/TGL_IOT/Include/FspUpd.h
+@@ -33,8 +33,6 @@ are permitted provided that the following conditions are met:
+ #ifndef __FSPUPD_H__
+ #define __FSPUPD_H__
+ 
+-#include <FspEas.h>
+-
+ #pragma pack(1)
+ 
+ #define FSPT_UPD_SIGNATURE               0x545F4450554C4754        /* 'TGLUPD_T' */
+diff --git a/TigerLakeFspBinPkg/TGL_IOT/Include/FspmUpd.h b/TigerLakeFspBinPkg/TGL_IOT/Include/FspmUpd.h
+index 4d752fd..bdf2147 100644
+--- a/TigerLakeFspBinPkg/TGL_IOT/Include/FspmUpd.h
++++ b/TigerLakeFspBinPkg/TGL_IOT/Include/FspmUpd.h
+@@ -33,12 +33,13 @@ are permitted provided that the following conditions are met:
+ #ifndef __FSPMUPD_H__
+ #define __FSPMUPD_H__
+ 
+-#include <FspUpd.h>
++#include "stdtype_mapping.h"
++#include "FspUpd.h"
+ 
+ #pragma pack(1)
+ 
+ 
+-#include <MemInfoHob.h>
++#include "MemInfoHob.h"
+ 
+ ///
+ /// The ChipsetInit Info structure provides the information of ME ChipsetInit CRC and BIOS ChipsetInit CRC.
+diff --git a/TigerLakeFspBinPkg/TGL_IOT/Include/FspsUpd.h b/TigerLakeFspBinPkg/TGL_IOT/Include/FspsUpd.h
+index 4859db3..31e9dcd 100644
+--- a/TigerLakeFspBinPkg/TGL_IOT/Include/FspsUpd.h
++++ b/TigerLakeFspBinPkg/TGL_IOT/Include/FspsUpd.h
+@@ -33,7 +33,8 @@ are permitted provided that the following conditions are met:
+ #ifndef __FSPSUPD_H__
+ #define __FSPSUPD_H__
+ 
+-#include <FspUpd.h>
++#include "stdtype_mapping.h"
++#include "FspUpd.h"
+ 
+ #pragma pack(1)
+ 
+diff --git a/TigerLakeFspBinPkg/TGL_IOT/Include/FsptUpd.h b/TigerLakeFspBinPkg/TGL_IOT/Include/FsptUpd.h
+index 48a73ff..1d2ed3f 100644
+--- a/TigerLakeFspBinPkg/TGL_IOT/Include/FsptUpd.h
++++ b/TigerLakeFspBinPkg/TGL_IOT/Include/FsptUpd.h
+@@ -33,7 +33,9 @@ are permitted provided that the following conditions are met:
+ #ifndef __FSPTUPD_H__
+ #define __FSPTUPD_H__
+ 
+-#include <FspUpd.h>
++#include "stdtype_mapping.h"
++#include "FspUpd.h"
++#include "FspCommon.h"
+ 
+ #pragma pack(1)
+ 
+diff --git a/TigerLakeFspBinPkg/TGL_IOT/Include/MemInfoHob.h b/TigerLakeFspBinPkg/TGL_IOT/Include/MemInfoHob.h
+index 2a4043f..95e5289 100644
+--- a/TigerLakeFspBinPkg/TGL_IOT/Include/MemInfoHob.h
++++ b/TigerLakeFspBinPkg/TGL_IOT/Include/MemInfoHob.h
+@@ -18,6 +18,9 @@
+ #ifndef _MEM_INFO_HOB_H_
+ #define _MEM_INFO_HOB_H_
+ 
++#include "stdtype_mapping.h"
++#include "FspCommon.h"
++
+ #pragma pack (push, 1)
+ 
+ extern EFI_GUID gSiMemoryS3DataGuid;
+-- 
+2.40.0
+

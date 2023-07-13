@@ -82,6 +82,10 @@ ifeq ($(TARGET),x86_64_efi)
 	MAIN_TARGET:=wolfboot.efi
 endif
 
+ifeq ($(FSP), 1)
+	MAIN_TARGET:=wolfboot_stage1.bin
+endif
+
 ifeq ($(TARGET),library)
 	CFLAGS+=-g
 	MAIN_TARGET:=test-lib
@@ -195,13 +199,17 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 		$(WOLFBOOT_ORIGIN) wolfboot.bin \
 		$(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
+# stage1 linker script embed wolfboot.bin inside stage1/loader_stage1.bin
+wolfboot_stage1.bin: wolfboot.bin stage1/loader_stage1.bin
+	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
+
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
 
-$(LSCRIPT): FORCE
+$(LSCRIPT): $(LSCRIPT_IN) FORCE
 	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
 		"configuration found. If you selected Encryption and RAM_CODE, then maybe" \
 		"the encryption algorithm is not yet supported with bootloader updates." \
@@ -221,7 +229,9 @@ $(LSCRIPT): FORCE
 		sed -e "s/@WOLFBOOT_STAGE1_SIZE@/$(WOLFBOOT_STAGE1_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_LOAD_ADDR@/$(WOLFBOOT_STAGE1_LOAD_ADDR)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_FLASH_ADDR@/$(WOLFBOOT_STAGE1_FLASH_ADDR)/g" | \
-		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" \
+		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" | \
+		sed -e "s/@WOLFBOOT_LOAD_BASE@/$(WOLFBOOT_LOAD_BASE)/g" | \
+		sed -e "s/@BOOTLOADER_START@/$(BOOTLOADER_START)/g" \
 		> $@
 
 hex: wolfboot.hex
@@ -236,8 +246,9 @@ keys: $(PRIVATE_KEY)
 
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
-	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom *.hex $(LSCRIPT)
-	$(Q)rm -f $(MAIN_TARGET)
+	$(Q)rm -f *.bin *.elf wolfboot.map test-update.rom *.hex $(LSCRIPT)
+	$(Q)rm -f src/x86/*.o $(MACHINE_OBJ) $(MAIN_TARGET)
+	$(Q)rm -f lib/wolfTPM/src/*.o
 	$(Q)$(MAKE) -C test-app -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
