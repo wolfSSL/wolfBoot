@@ -518,4 +518,8 @@ ifeq ($(LINUX_PAYLOAD),1)
   endif
 endif
 
+ifeq ($(64BIT),1)
+  CFLAGS+=-DWOLFBOOT_64BIT
+endif
+
 CFLAGS+=$(CFLAGS_EXTRA)

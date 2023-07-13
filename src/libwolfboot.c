@@ -383,7 +383,7 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
-        partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
+        partition_magic_write(part, (uint32_t)(PART_BOOT_ENDFLAGS - sizeof(uint32_t)));
     }
     else if (part == PART_UPDATE) {
         partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
