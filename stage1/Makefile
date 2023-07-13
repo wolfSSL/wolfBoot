@@ -21,14 +21,15 @@ V?=0
 DEBUG?=0
 DEBUG_UART?=0
 
+ifeq ($(ARCH),PPC)
 OBJS:= \
 	./hal/$(TARGET).o \
 	./src/string.o \
 	loader_stage1.o
+endif
 
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
-
 # Forcefully disable TPM support in first stage loader
 WOLFTPM=0
 ELF=0
@@ -72,10 +73,11 @@ CFLAGS+=\
 	-DWOLFBOOT_STAGE1_BASE_ADDR=$(WOLFBOOT_STAGE1_BASE_ADDR)
 
 # For printf support (disable NO_PRINTF_UART) and increase WOLFBOOT_STAGE1_SIZE
-CFLAGS+=-DNO_PRINTF_UART
-
-# Use PIC (Position Independent Code) for first stage loader
-CFLAGS+=-fPIC
+ifeq ($(ARCH),PPC)
+  CFLAGS+=-DNO_PRINTF_UART
+  # Use PIC (Position Independent Code) for first stage loader
+  CFLAGS+=-fPIC
+endif
 
 
 BUILD_DIR=.
