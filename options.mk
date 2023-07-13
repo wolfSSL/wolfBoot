@@ -506,4 +506,11 @@ ifeq ($(ELF),1)
   OBJS += src/elf.o
 endif
 
+ifeq ($(LINUX_PAYLOAD),1)
+  CFLAGS+=-DWOLFBOOT_LINUX_PAYLOAD
+  ifeq ($(ARCH),x86_64)
+    OBJS+=src/x86/linux_loader.o
+  endif
+endif
+
 CFLAGS+=$(CFLAGS_EXTRA)
