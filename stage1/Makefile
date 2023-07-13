@@ -82,10 +82,9 @@ endif
 
 BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
-vpath %.c $(dir ../src)
-vpath %.c $(dir ../hal)
-vpath %.c $(dir ../lib/wolfssl/wolfcrypt/src)
-
+vpath %.c ../src
+vpath %.c ../hal
+vpath %.c ../lib/wolfssl/wolfcrypt/src
 
 all: $(MAIN_TARGET)
 
