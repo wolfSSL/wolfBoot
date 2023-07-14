@@ -54,8 +54,8 @@ void hal_init(void)
     uint32_t key_type = 0;
     int tsip_key_type = -1;
     /* retrive installed pubkey data from flash */
-    struct encrypted_user_key_data *encrypted_user_key_data =
-                    (struct encrypted_user_key_data*)keystore_get_buffer(0);
+    struct rsa2048_pub *encrypted_user_key_data =
+                    (struct rsa2048_pub*)keystore_get_buffer(0);
 #endif
 
     if(R_FLASH_Open() != FLASH_SUCCESS)
@@ -101,7 +101,7 @@ void hal_init(void)
     /* TSIP specific RSA public key */
     if (tsip_use_PublicKey_buffer(&pkInfo,
                 (const char*)&encrypted_user_key_data->encrypted_user_key,
-                 ENCRYPTED_KEY_BYTE_SIZE,
+                 RSA2048_PUB_SIZE,
                  tsip_key_type) != 0) {
             printf("ERROR tsip_use_PublicKey_buffer\n");
             hal_panic();

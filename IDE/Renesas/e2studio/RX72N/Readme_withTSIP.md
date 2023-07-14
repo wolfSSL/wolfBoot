@@ -194,7 +194,7 @@ $ export PATH:$PATH:<wolfBoot>/tools/keytools
 $ export PATH:$PATH:<skmt>
 $ cd <wolfBoot>
 $ keygen --rsa2048 -g ./rsa-pri2048.der
-$ openssl rsa -in rsa-pri2048.der -pubout -out rsa-pub2058.pem
+$ openssl rsa -in rsa-pri2048.der -pubout -out rsa-pub2048.pem
 ```
 
 Generate a c header and source file from PEM file :
@@ -202,7 +202,9 @@ Generate a c header and source file from PEM file :
 $ skmt.exe /genkey /ufpk file=./sample.key /wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public /output key_data.c /filetype csource /keyname rsa2048_pub
 ```
 
-Copy a generated c header file, which is `key_data.h` to `<wolfBoot>/IDE/Renesas/e2studio/RX72N/wolfBoot/key_data` folder
+The value of option `/keyname` becomes structure name and macro definition defined in key_data.h.  Therefore, please specify `rsa2048_pub` like above unless there is some particular reason.
+ 
+Copy a generated c header file, which is `key_data.h` to `<wolfBoot>/include/` folder
 
 Generate Motorola hex file to write it to flash memory from PEM file :
 ```
