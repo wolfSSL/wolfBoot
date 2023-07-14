@@ -1082,11 +1082,8 @@ int RAMFUNCTION chacha_init(void)
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
-#ifdef NVM_FLASH_WRITEONCE
-    key -= (nvm_select_fresh_sector(PART_BOOT) * WOLFBOOT_SECTOR_SIZE);
-#endif
+    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
 #endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
@@ -1120,11 +1117,8 @@ int aes_init(void)
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
-#ifdef NVM_FLASH_WRITEONCE
-    key -= (nvm_select_fresh_sector(PART_BOOT) * WOLFBOOT_SECTOR_SIZE);
-#endif
+    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
 #endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
