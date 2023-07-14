@@ -26,6 +26,11 @@
 #ifndef H_USER_SETTINGS_
 #define H_USER_SETTINGS_
 
+#ifdef WOLFBOOT_PKCS11_APP
+# include "test-app/wcs/user_settings.h"
+#else
+
+
 #include <target.h>
 
 /* System */
@@ -394,8 +399,8 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 
 #ifdef SECURE_PKCS11
 typedef unsigned long time_t;
-
 #endif
 
+#endif /* WOLFBOOT_PKCS11_APP */
 
 #endif /* !H_USER_SETTINGS_ */

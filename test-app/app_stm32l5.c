@@ -31,6 +31,15 @@
 #include "wolfboot/wolfboot.h"
 #include "wolfboot/wc_secure.h"
 
+#ifdef SECURE_PKCS11
+#include "wcs/user_settings.h"
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/wc_pkcs11.h>
+#include <wolfssl/wolfcrypt/random.h>
+extern const char pkcs11_library_name[];
+extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
+#endif
+
 #define LED_BOOT_PIN (9)  /* PA9 - Nucleo - Red Led */
 #define LED_USR_PIN (7)   /* PB7  - Nucleo  - Green Led */
 #define LED_EXTRA_PIN (7) /* PC7  - Nucleo  - Blue Led */
@@ -101,18 +110,24 @@ void usr_led_off(void)
 static char CaBuf[2048];
 static uint8_t my_pubkey[200];
 
+extern int ecdsa_sign_verify(int devId);
+
+
 void main(void)
 {
-#ifdef WOLFBOOT_SECURE_CALLS
+    int ret;
     uint32_t rand;
     uint32_t i;
     uint32_t klen = 200;
     int otherkey_slot;
+    unsigned int devId = 0;
+    WC_RNG rng;
+    Pkcs11Token token;
+    Pkcs11Dev PKCS11_d;
+
     wcs_get_random((void*)&rand, 4);
     for (i = 0; i < (rand / 100000000); i++)
         ;
-
-#endif
     hal_init();
     uart_init(115200, 8, 'N', 1);
     boot_led_on();
@@ -121,6 +136,36 @@ void main(void)
     if (wolfBoot_current_firmware_version() > 1)
         boot_led_on();
 
+    wolfCrypt_Init();
+    PKCS11_d.heap = NULL,
+    PKCS11_d.func = &wolfpkcs11nsFunctionList;
+
+    ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 0, NULL,
+            NULL, 0);
+    if (ret != 0) {
+        while(1)
+            ;
+    }
+    if (ret == 0) {
+        ret = wc_CryptoDev_RegisterDevice(devId, wc_Pkcs11_CryptoDevCb,
+                &token);
+        if (ret != 0) {
+            while(1)
+                ;
+        }
+        if (ret == 0) {
+
+#ifdef HAVE_ECC
+            ret = ecdsa_sign_verify(devId);
+            if (ret != 0)
+                ret = 1;
+#endif
+        }
+        wc_Pkcs11Token_Final(&token);
+    }
     while(1)
         ;
+
+    wolfCrypt_Cleanup();
+    /* Never reached */
 }

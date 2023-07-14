@@ -1,10 +1,13 @@
 -include ../.config
 -include ../tools/config.mk
 -include ../options.mk
+-include ./wcs/pkcs11.mk
 
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
+CFLAGS+=-I.
+CFLAGS+=-I./wcs
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -51,6 +54,35 @@ ifeq ($(TZEN),1)
     APP_OBJS+=../hal/$(TARGET)_ns.o
     ifeq ($(WCSM),1)
         APP_OBJS+=../src/wc_secure_calls.o
+        ifeq ($(SECURE_PKCS11),1)
+            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP
+            CFLAGS+=-I../lib/wolfPKCS11
+            APP_OBJS+=./wcs/pkcs11_test_ecc.o
+            APP_OBJS+=./wcs/pkcs11_stub.o
+            APP_OBJS+=./wcs/ecc.o
+            APP_OBJS+=./wcs/rsa.o
+            APP_OBJS+=./wcs/asn.o
+            APP_OBJS+=./wcs/aes.o
+            APP_OBJS+=./wcs/hmac.o
+            APP_OBJS+=./wcs/pwdbased.o
+            APP_OBJS+=./wcs/hash.o
+            APP_OBJS+=./wcs/sha256.o
+            APP_OBJS+=./wcs/sha512.o
+            APP_OBJS+=./wcs/sha3.o
+            APP_OBJS+=./wcs/integer.o
+            APP_OBJS+=./wcs/tfm.o
+            APP_OBJS+=./wcs/sp_c32.o
+            APP_OBJS+=./wcs/sp_int.o
+            APP_OBJS+=./wcs/cryptocb.o
+            APP_OBJS+=./wcs/wc_pkcs11.o
+            APP_OBJS+=./wcs/memory.o
+            APP_OBJS+=./wcs/wolfmath.o
+            APP_OBJS+=./wcs/dh.o
+            APP_OBJS+=./wcs/random.o
+            APP_OBJS+=./wcs/coding.o
+            APP_OBJS+=./wcs/wc_encrypt.o
+            APP_OBJS+=./wcs/wc_port.o
+        endif
         CFLAGS+=-DWOLFBOOT_SECURE_CALLS
     endif
 else
@@ -103,8 +135,9 @@ ifeq ($(TARGET),stm32l5)
   else
     LSCRIPT_TEMPLATE=ARM-stm32l5.ld
   endif
-  CFLAGS+=-mcpu=cortex-m33
+  CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
   LDFLAGS+=-mcpu=cortex-m33
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..
   APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
 endif
@@ -310,7 +343,7 @@ standalone: image.bin
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 clean:
-	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS)
+	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset

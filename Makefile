@@ -55,6 +55,7 @@ OBJS+=$(PUBLIC_KEY_OBJS)
 
 CFLAGS+= \
   -I"." -I"include/" -I"lib/wolfssl" \
+  -Wno-array-bounds \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS" \
   -D"PLATFORM_$(TARGET)"
