@@ -105,7 +105,7 @@ BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLAS
 all: $(MAIN_TARGET)
 
 stage1: stage1/loader_stage1.bin
-stage1/loader_stage1.bin:
+stage1/loader_stage1.bin: FORCE
 	@echo "\t[BIN] $@"
 	$(Q)$(MAKE) -C $(dir $@) $(notdir $@)
 
