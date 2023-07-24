@@ -36,6 +36,8 @@ static uint8_t *ram_base;
 static uint8_t *flash_base;
 
 uint32_t erasefail_address = 0xFFFFFFFF;
+int eraseProgressive = 0;
+int eraseNext = 0;
 
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
 #define EXTERNAL_FLASH_FILE "./external_flash.dd"
@@ -107,17 +109,30 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 int hal_flash_erase(uint32_t address, int len)
 {
+    int i;
+    int eNext = 0;
     uint8_t *ptr = 0;
 
     /* implicit cast abide compiler warning */
     fprintf(stderr,"hal_flash_erase addr %x len %d\n", address, len);
-    if (address == erasefail_address) {
+    if (eraseProgressive == 1) {
+        for (i = 0; i < len; i++) {
+            if (*(ptr + address + i) != 0xEE)
+                break;
+        }
+
+        if (i >= len)
+            eNext = 1;
+    }
+
+    if (address == erasefail_address || eraseNext == 1) {
         fprintf(stderr,"POWER FAILURE\n");
         /* Corrupt page */
         memset(ptr + address, 0xEE, len);
         exit(0);
     }
     memset(ptr + address, 0xff, len);
+    eraseNext = eNext;
     return 0;
 }
 
@@ -145,6 +160,11 @@ void hal_init(void)
         if (strcmp(main_argv[i], "powerfail") == 0) {
             erasefail_address = strtol(main_argv[++i], NULL,  16);
             fprintf(stderr,"Set power fail to erase at address %x\n", erasefail_address);
+            break;
+        }
+        else if (strcmp(main_argv[i], "powerfail_progressive") == 0) {
+            eraseProgressive = 1;
+            fprintf(stderr,"Set power fail to erase after the corrupt address is found\n");
             break;
         }
     }

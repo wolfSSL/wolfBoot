@@ -55,7 +55,6 @@ jobs:
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
 
-
       # TEST with NVM_WRITEONCE enabled
 
       - name: make clean
@@ -97,6 +96,64 @@ jobs:
       - name: Run update-revert test with power failures (NVM_WRITEONCE)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with progressive power failures (NVM_WRITEONCE)
+        run: |
+          tools/scripts/sim-update-powerfail-resume-nvm-writeonce.sh
+
+      # TEST with NVM_WRITEONCE AND FLAGS_HOME enabled
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config with NVM_WRITEONCE and FLAGS_HOME
+        run: |
+          cp config/examples/sim-nvm-writeonce-flags-home.config .config
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build bin assemble
+        run: |
+          make -C tools/bin-assemble
+
+      - name: Build wolfboot.elf
+        run: |
+          make && make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with power failures (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with progressive power failures (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-powerfail-resume-nvm-writeonce.sh
 
       # TEST with DELTA updates
 
@@ -255,7 +312,7 @@ jobs:
         run: |
           make clean && make test-sim-external-flash-with-enc-update
 
-      - name: Run update-revert test (AES128 DELTA)
+      - name: Run update-revert test (AES128 NVM_WRITEONCE)
         run: |
           tools/scripts/sim-update-fallback.sh
 
@@ -263,6 +320,64 @@ jobs:
         run: |
           make clean && make test-sim-external-flash-with-enc-update
 
-      - name: Run update-revert test with power failures (AES128 DELTA)
+      - name: Run update-revert test with power failures (AES128 NVM_WRITEONCE)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-enc-update
+
+      - name: Run update-revert test with progressive power failures (AES128 NVM_WRITEONCE)
+        run: |
+          tools/scripts/sim-update-powerfail-resume-nvm-writeonce.sh
+
+     # TEST with encryption (aes128) and NVM_WRITEONCE and FLAGS_HOME
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config with encrypted updates
+        run: |
+          cp config/examples/sim-encrypt-nvm-writeonce-flags-home-update.config .config
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build bin assemble
+        run: |
+          make -C tools/bin-assemble
+
+      - name: Build wolfboot.elf
+        run: |
+          make test-sim-external-flash-with-enc-update
+
+      - name: Run sunny day update test (AES128 NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-enc-update
+
+      - name: Run update-revert test (AES128 NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-enc-update
+
+      - name: Run update-revert test with power failures (AES128 NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-enc-update
+
+      - name: Run update-revert test with progressive power failures (AES128 NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-powerfail-resume-nvm-writeonce.sh
