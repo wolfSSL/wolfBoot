@@ -728,7 +728,11 @@ void RAMFUNCTION wolfBoot_start(void)
      * to trigger fallback.
      */
     if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
-        wolfBoot_update_trigger();
+        /* only call wolfBoot_update_trigger if we're not on the final swap */
+        if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) &&
+            st != IMG_STATE_FINAL_SWAP) {
+            wolfBoot_update_trigger();
+        }
         wolfBoot_update(1);
     /* Check for new updates in the UPDATE partition or if we were
      * interrupted during the final sector write */
