@@ -155,20 +155,57 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     uint32_t off;
     uint8_t *base;
     uint8_t* addrErase;
+    uint32_t word_0;
+    uint32_t word_1;
 
-    if (part == PART_BOOT) {
+#ifndef FLAGS_HOME
+    if (part == PART_BOOT)
+#endif
+    {
         base = (uint8_t *)PART_BOOT_ENDFLAGS;
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
             WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
     }
+#ifndef FLAGS_HOME
     else {
         base = (uint8_t *)PART_UPDATE_ENDFLAGS;
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
             WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
     }
+#endif
 
     /* Default to last sector if no match is found */
     sel = 0;
+
+    /* check magic in case the sector is corrupt */
+    word_0 = *((uint32_t*)(base - sizeof(uint32_t)));
+    word_1 = *((uint32_t*)(base - WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)));
+
+    if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
+        sel = 0;
+        goto finish;
+    }
+    else if (word_0 != WOLFBOOT_MAGIC_TRAIL && word_1 == WOLFBOOT_MAGIC_TRAIL) {
+        sel = 1;
+        goto finish;
+    }
+
+/* try the update magic as well */
+#ifdef FLAGS_HOME
+    /* check magic in case the sector is corrupt */
+    word_0 = *((uint32_t*)(PART_UPDATE_ENDFLAGS - sizeof(uint32_t)));
+    word_1 = *((uint32_t*)(PART_UPDATE_ENDFLAGS - WOLFBOOT_SECTOR_SIZE -
+        sizeof(uint32_t)));
+
+    if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
+        sel = 0;
+        goto finish;
+    }
+    else if (word_0 != WOLFBOOT_MAGIC_TRAIL && word_1 == WOLFBOOT_MAGIC_TRAIL) {
+        sel = 1;
+        goto finish;
+    }
+#endif
 
     /* Select the sector with more flags set */
     for (off = 1; off < WOLFBOOT_SECTOR_SIZE; off++) {
@@ -185,14 +222,46 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
                 (byte_1 == FLASH_BYTE_ERASED)) {
-/* we can't assume this because sel 1 might have the key */
-#ifndef EXT_ENCRYPTED
+#ifdef FLAGS_HOME
+            /* if we're still checking boot flags, check update flags */
+            if (base - off > (uint8_t*)PART_UPDATE_ENDFLAGS) {
+                base = (uint8_t *)PART_UPDATE_ENDFLAGS;
+                off = 1;
+                continue;
+            }
+#endif
+
+/* we can't assume sel 0 because sel 1 might have the key */
+#ifdef EXT_ENCRYPTED
+/* always try key on FLAGS_HOME since update shares the same partition */
+#ifndef FLAGS_HOME
+            if (part == PART_BOOT)
+#endif
+            {
+                word_0 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+                    WOLFBOOT_PARTITION_BOOT_ADDRESS));
+                word_1 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+                    WOLFBOOT_PARTITION_BOOT_ADDRESS - WOLFBOOT_SECTOR_SIZE));
+
+                if (word_0 == FLASH_WORD_ERASED && word_1 !=
+                    FLASH_WORD_ERASED) {
+                    sel = 1;
+                    break;
+                }
+                else if (word_0 != FLASH_WORD_ERASED && word_1 ==
+                    FLASH_WORD_ERASED) {
+                    sel = 0;
+                    break;
+                }
+            }
+#endif /* EXT_ENCRYPTED */
+
             /* First time boot?  Assume no pending update */
             if(off == 1) {
                 sel=0;
                 break;
             }
-#endif
+
             /* Examine previous position one byte ahead */
             byte_0 = *(base + 1 - off);
             byte_1 = *(base + 1 - (WOLFBOOT_SECTOR_SIZE + off));
@@ -201,6 +270,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
         }
     }
 
+finish:
     /* Erase the non-selected partition */
     addrErase -= WOLFBOOT_SECTOR_SIZE * (!sel);
 
@@ -967,18 +1037,28 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
             (void*)(unsigned long)(addr_align) ,
                 WOLFBOOT_SECTOR_SIZE);
     #ifdef NVM_FLASH_WRITEONCE
-        /* we read from the fresh sector, now write to the erased sector */
+        /* we read from the populated sector, now write to the erased sector */
         addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
         addr_align -= (!sel_sec * WOLFBOOT_SECTOR_SIZE);
+    #else
+        /* erase the old key */
+        ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+        if (ret != 0)
+            return ret;
     #endif
 
-    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
-    if (ret != 0)
-        return ret;
     XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
     XMEMCPY(ENCRYPT_CACHE + addr_off + ENCRYPT_KEY_SIZE, nonce,
         ENCRYPT_NONCE_SIZE);
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
+    #ifdef NVM_FLASH_WRITEONCE
+        /* now erase the old populated sector */
+        if (ret != 0)
+            return ret;
+        addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+        addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
+        ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    #endif
     hal_flash_lock();
     return ret;
 #endif
@@ -1391,3 +1471,39 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 }
 #endif /* MMU */
 #endif /* EXT_ENCRYPTED */
+
+#ifdef FLAGS_HOME
+/* we need to write a marker to update since the boot and update flags are all
+ * in the same sector so write magic to the first sector of boot */
+int wolfBoot_flags_home_set_final_swap()
+{
+/* EXT_ENCRYPTED uses the first sector to store the key and magic, don't
+ * overwrite it */
+#ifndef EXT_ENCRYPTED
+    uint32_t magic[2] = {WOLFBOOT_MAGIC, WOLFBOOT_MAGIC_TRAIL};
+    uintptr_t addr = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+
+    hal_flash_write(addr, (uint8_t*)magic, sizeof(magic));
+#endif /* !EXT_ENCRYPTED */
+
+    return 0;
+}
+
+int wolfBoot_flags_home_get_final_swap()
+{
+    uint32_t magic[2];
+    uintptr_t addr = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+
+/* if encryption is on magic will be after the key and nonce */
+#ifdef EXT_ENCRYPTED
+    addr += ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE;
+#endif
+
+    XMEMCPY((uint8_t*)magic, (uint8_t*)addr, sizeof(magic));
+
+    if (magic[0] == WOLFBOOT_MAGIC && magic[1] == WOLFBOOT_MAGIC_TRAIL)
+        return 1;
+
+    return 0;
+}
+#endif /* FLAGS_HOME */
