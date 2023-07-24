@@ -44,7 +44,7 @@ size_t strlen(const char *s); /* forward declaration */
 
 /* allow using built-in libc if WOLFBOOT_USE_STDLIBC is defined */
 #ifndef WOLFBOOT_USE_STDLIBC
-#if !defined(BUILD_LOADER_STAGE1) || \
+#if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || \
     (defined(PRINTF_ENABLED) && defined(DEBUG_UART))
 
 int islower(int c)
@@ -228,7 +228,7 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
 #endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && DEBUG_UART) */
 
 #if !defined(__CCRX__) /* Renesas CCRX */
-#if !defined(BUILD_LOADER_STAGE1) || defined(DEBUG_UART)
+#if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || defined(DEBUG_UART)
 size_t strlen(const char *s)
 {
     size_t i = 0;

@@ -202,6 +202,11 @@ extern int tolower(int c);
 #       define HAVE___UINT128_T
 #       define WOLFSSL_SP_ARM64_ASM
 #       define SP_WORD_SIZE 64
+#   elif defined(ARCH_x86_64) && !defined(FORCE_32BIT)
+#       define SP_WORD_SIZE 64
+#       ifndef NO_ASM
+#           define WOLFSSL_SP_X86_64_ASM
+#       endif
 #   else
 #       define SP_WORD_SIZE 32
 #   endif
@@ -282,6 +287,16 @@ extern int tolower(int c);
 #       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
 #endif
 #   define WOLFSSL_SMALL_STACK
+#endif
+
+
+#ifdef WOLFTPM_MMIO
+    void delay(int msec);
+    #define XTPM_WAIT() delay(1000);
+    #define DEBUG_WOLFTPM
+    #define WOLFTPM_ADV_IO
+    void uart_printf(const char* fmt, ...);
+    #define XPRINTF uart_printf
 #endif
 
 #endif /* !H_USER_SETTINGS_ */

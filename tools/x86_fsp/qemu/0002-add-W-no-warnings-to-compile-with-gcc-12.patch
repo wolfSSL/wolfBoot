@@ -1,0 +1,26 @@
+From d2c998df1e99d1bc5ee2a8ea81ed2c512def1458 Mon Sep 17 00:00:00 2001
+From: Marco Oliverio <marco@wolfssl.com>
+Date: Mon, 12 Dec 2022 12:52:15 +0000
+Subject: [PATCH v2] add -W-no warnings to compile with gcc 12
+
+---
+ BaseTools/Source/C/Makefiles/header.makefile | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/BaseTools/Source/C/Makefiles/header.makefile b/BaseTools/Source/C/Makefiles/header.makefile
+index 0df728f327..0c01c76f3a 100644
+--- a/BaseTools/Source/C/Makefiles/header.makefile
++++ b/BaseTools/Source/C/Makefiles/header.makefile
+@@ -94,7 +94,8 @@ else
+ BUILD_CFLAGS = -MD -fshort-wchar -fno-strict-aliasing -fwrapv \
+ -fno-delete-null-pointer-checks -Wall -Werror \
+ -Wno-deprecated-declarations -Wno-stringop-truncation -Wno-restrict \
+--Wno-unused-result -nostdlib -g
++-Wno-unused-result -nostdlib -g -Wno-use-after-free -Wno-stringop-overflow \
++-Wno-dangling-pointer
+ endif
+ endif
+ ifeq ($(CXX), llvm)
+-- 
+2.38.1
+

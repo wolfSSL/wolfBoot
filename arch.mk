@@ -29,9 +29,28 @@ UART_TARGET=$(TARGET)
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
 ifeq ($(ARCH),x86_64)
-  OBJS+=src/boot_x86_64.o
-  ifeq ($(DEBUG),1)
-    CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+  CFLAGS+=-DARCH_x86_64
+  ifeq ($(FORCE_32BIT),1)
+    NO_ASM=1
+    CFLAGS+=-DFORCE_32BIT
+  endif
+  ifeq ($(SPMATH),1)
+    ifeq ($(NO_ASM),1)
+      ifeq ($(FORCE_32BIT),1)
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+      else
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c64.o
+      endif
+    else
+      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_x86_64.o
+    endif
+  endif
+  ifeq ($(TARGET),x86_64_efi)
+     OBJS+=src/boot_x86_64.o
+    ifeq ($(DEBUG),1)
+      CFLAGS+=-DWOLFBOOT_DEBUG_EFI=1
+    endif
   endif
 endif
 
@@ -437,6 +456,95 @@ ifeq ($(USE_GCC),1)
   OUTPUT_FLAG=-o
 endif
 
+ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
+  FSP=1
+  CFLAGS+=-DWOLFBOOT_FSP=1
+  ifeq ($(TARGET), kontron_vx3060_s2)
+    FSP_TGL=1
+    CFLAGS+=-DWOLFBOOT_TGL=1
+  endif
+endif
+
+ifeq ($(TARGET),x86_fsp_qemu)
+  ifeq ($(filter-out $(STAGE1),1),)
+    OBJS+=src/x86/qemu_fsp.o
+  endif
+endif
+
+# x86-64 FSP targets
+ifeq ("${FSP}", "1")
+  USE_GCC_HEADLESS=0
+  LD_START_GROUP =
+  LD_END_GROUP =
+  LD := ld
+  ifeq ($(filter-out $(STAGE1),1),)
+    # building stage1
+    ifeq ($(FSP_TGL), 1)
+      LSCRIPT_IN = ../hal/x86_fsp_tgl_stage1.ld
+    else
+      LSCRIPT_IN = ../hal/$(TARGET)_stage1.ld
+    endif
+    # using ../wolfboot.map as stage1 is built from stage1 sub-directory
+    LDFLAGS = --defsym main=`grep main ../wolfboot.map | awk '{print $$1}'` \
+              --defsym wb_start_bss=`grep _start_bss ../wolfboot.map | awk '{print $$1}'` \
+              --defsym wb_end_bss=`grep _end_bss ../wolfboot.map | awk '{print $$1}'` \
+              --defsym _stage2_params=`grep _stage2_params ../wolfboot.map | awk '{print $$1}'`
+    LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader.map
+    OBJS += src/boot_x86_fsp.o
+    OBJS += src/boot_x86_fsp_start.o
+    OBJS += src/fsp_m.o
+    OBJS += src/fsp_s.o
+    OBJS += src/fsp_t.o
+    OBJS += src/wolfboot_raw.o
+    OBJS += src/x86/common.o
+    OBJS += src/x86/hob.o
+    OBJS += src/pci.o
+    OBJS += hal/x86_uart.o
+    OBJS += src/string.o
+    CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART
+    ifeq ($(FSP_TGL), 1)
+      OBJS+=src/x86/tgl_fsp.o
+      OBJS+=src/fsp_tgl_s_upd.o
+      OBJS+=src/ucode0.o
+      OBJS+=$(MATH_OBJS)
+      CFLAGS += -DUCODE0_ADDRESS=$(UCODE0_BASE)
+    endif
+    ifeq ($(TARGET),x86_fsp_qemu)
+      OBJS += hal/x86_fsp_qemu_loader.o
+    endif
+  else
+    # building wolfBoot
+    ifeq ($(FSP_TGL), 1)
+      OBJS+=hal/x86_fsp_tgl.o
+      LSCRIPT_IN = hal/x86_fsp_tgl.ld.in
+    else
+      LSCRIPT_IN = hal/$(TARGET).ld.in
+    endif
+    LDFLAGS =  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -Map=wolfboot.map
+    CFLAGS += -fno-stack-protector -fno-PIC -fno-pie -mno-mmx -mno-sse -Os -DDEBUG_UART
+    OBJS += hal/x86_uart.o
+    OBJS += src/boot_x86_fsp_payload.o
+    OBJS += src/x86/common.o
+    OBJS += src/x86/hob.o
+    OBJS += src/pci.o
+    OBJS += src/x86/ahci.o
+    OBJS += src/x86/ata.o
+    OBJS += src/x86/gpt.o
+    OBJS += src/x86/mptable.o
+    UPDATE_OBJS := src/update_disk.o
+    ifeq ($(64BIT),1)
+      LDFLAGS += -m elf_x86_64 --oformat elf64-x86-64
+      CFLAGS += -m64
+    else
+      CFLAGS += -m32
+      LDFLAGS += -m elf_i386 --oformat elf32-i386
+     endif
+  endif
+  ifeq ($(64BIT),1)
+    OBJS += src/x86/paging.o
+  endif
+endif
+
 ifneq ($(CROSS_COMPILE_PATH),)
   # optional path for cross compiler includes
   CFLAGS+=-I$(CROSS_COMPILE_PATH)/usr/include --sysroot=$(CROSS_COMPILE_PATH)
@@ -506,3 +614,4 @@ ifeq ($(DEBUG_UART),1)
 endif
 
 CFLAGS+=-DWOLFBOOT_ARCH=$(ARCH)
+CFLAGS+=-DTARGET_$(TARGET)

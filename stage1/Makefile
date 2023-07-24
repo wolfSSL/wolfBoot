@@ -21,17 +21,22 @@ V?=0
 DEBUG?=0
 DEBUG_UART?=0
 
+ifeq ($(ARCH),PPC)
 OBJS:= \
 	./hal/$(TARGET).o \
 	./src/string.o \
 	loader_stage1.o
+endif
 
 WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
-
+# make mk scripts aware that we are building stage1
+STAGE1=1
 # Forcefully disable TPM support in first stage loader
 WOLFTPM=0
 ELF=0
+MULTIBOOT2=0
+LINUX_PAYLOAD=0
 
 ## Architecture/CPU configuration
 include ../arch.mk
@@ -60,8 +65,8 @@ ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 ifeq ($(WOLFBOOT_STAGE1_SIZE),)
-	# default is end of 4KB region (0x0FFC)
-	WOLFBOOT_STAGE1_SIZE=0x1000
+  # default is end of 4KB region (0x0FFC)
+  WOLFBOOT_STAGE1_SIZE=0x1000
 endif
 
 CFLAGS+=\
@@ -72,18 +77,25 @@ CFLAGS+=\
 	-DWOLFBOOT_STAGE1_BASE_ADDR=$(WOLFBOOT_STAGE1_BASE_ADDR)
 
 # For printf support (disable NO_PRINTF_UART) and increase WOLFBOOT_STAGE1_SIZE
-CFLAGS+=-DNO_PRINTF_UART
-
-# Use PIC (Position Independent Code) for first stage loader
-CFLAGS+=-fPIC
+ifeq ($(ARCH),PPC)
+  CFLAGS+=-DNO_PRINTF_UART
+  # Use PIC (Position Independent Code) for first stage loader
+  CFLAGS+=-fPIC
+endif
 
 
 BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
-vpath %.c $(dir ../src)
-vpath %.c $(dir ../hal)
-vpath %.c $(dir ../lib/wolfssl/wolfcrypt/src)
+vpath %.c ../src
+vpath %.c ../hal
+vpath %.c ../lib/wolfssl/wolfcrypt/src
+vpath %.c ../src/x86
+vpath %.S ../src
 
+# x86-64 FSP targets
+ifeq ($(FSP), 1)
+include ./x86_fsp.mk
+endif
 
 all: $(MAIN_TARGET)
 
@@ -103,7 +115,7 @@ loader_stage1.elf: ../include/target.h $(LSCRIPT) $(LS1_OBJS)
 stage1: loader_stage1.bin
 loader_stage1: loader_stage1.bin
 
-$(LSCRIPT): FORCE
+$(LSCRIPT): $(LSCRIPT_IN) FORCE
 	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
 		"configuration found. If you selected Encryption and RAM_CODE, then maybe" \
 		"the encryption algorithm is not yet supported with bootloader updates." \

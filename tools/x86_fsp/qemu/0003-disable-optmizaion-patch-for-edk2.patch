@@ -1,0 +1,50 @@
+From 0b78b085c58d6fa335b6de61f277a26f14b29073 Mon Sep 17 00:00:00 2001
+From: Marco Oliverio <marco@wolfssl.com>
+Date: Thu, 15 Dec 2022 17:15:16 +0000
+Subject: [PATCH v2] disable optmizaion patch for edk2
+
+---
+ IntelFsp2Pkg/FspSecCore/FspSecCoreM.inf                    | 5 +++++
+ IntelFsp2Pkg/IntelFsp2Pkg.dsc                              | 3 +++
+ IntelFsp2Pkg/Library/BaseFspCommonLib/BaseFspCommonLib.inf | 4 ++++
+ 3 files changed, 12 insertions(+)
+
+diff --git a/IntelFsp2Pkg/FspSecCore/FspSecCoreM.inf b/IntelFsp2Pkg/FspSecCore/FspSecCoreM.inf
+index 61b7ddca4c..c67a6fbb84 100644
+--- a/IntelFsp2Pkg/FspSecCore/FspSecCoreM.inf
++++ b/IntelFsp2Pkg/FspSecCore/FspSecCoreM.inf
+@@ -63,3 +63,8 @@
+ [Ppis]
+   gEfiTemporaryRamSupportPpiGuid                              ## PRODUCES
+   gFspInApiModePpiGuid                                        ## PRODUCES
++
++[BuildOptions]
++  GCC:*_*_*_CC_FLAGS   = -O0
++  INTEL:*_*_*_CC_FLAGS = /Od
++  MSFT:*_*_*_CC_FLAGS  = /Od
+diff --git a/IntelFsp2Pkg/IntelFsp2Pkg.dsc b/IntelFsp2Pkg/IntelFsp2Pkg.dsc
+index 309411630d..e486b6cf57 100644
+--- a/IntelFsp2Pkg/IntelFsp2Pkg.dsc
++++ b/IntelFsp2Pkg/IntelFsp2Pkg.dsc
+@@ -76,3 +76,6 @@
+ 
+ [BuildOptions]
+   *_*_*_CC_FLAGS = -D DISABLE_NEW_DEPRECATED_INTERFACES
++  GCC:*_*_*_CC_FLAGS   = -O0
++  INTEL:*_*_*_CC_FLAGS = /Od
++  MSFT:*_*_*_CC_FLAGS  = /Od
+diff --git a/IntelFsp2Pkg/Library/BaseFspCommonLib/BaseFspCommonLib.inf b/IntelFsp2Pkg/Library/BaseFspCommonLib/BaseFspCommonLib.inf
+index 8badd924dc..c605cb25ec 100644
+--- a/IntelFsp2Pkg/Library/BaseFspCommonLib/BaseFspCommonLib.inf
++++ b/IntelFsp2Pkg/Library/BaseFspCommonLib/BaseFspCommonLib.inf
+@@ -28,3 +28,7 @@
+ [Pcd]
+   gIntelFsp2PkgTokenSpaceGuid.PcdGlobalDataPointerAddress      ## CONSUMES
+ 
++[BuildOptions]
++  GCC:*_*_*_CC_FLAGS   = -O0
++  INTEL:*_*_*_CC_FLAGS = /Od
++  MSFT:*_*_*_CC_FLAGS  = /Od
+-- 
+2.38.1
+

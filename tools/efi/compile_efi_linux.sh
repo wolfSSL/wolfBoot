@@ -1,7 +1,7 @@
 #!/bin/sh
 
 WORK_DIR=/tmp/wolfBoot_efi
-BR_VER=2021.08.2
+BR_VER=2022.08.3
 BR_DIR=buildroot-$BR_VER
 IMAGE_DIR=$WORK_DIR/output
 

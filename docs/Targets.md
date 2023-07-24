@@ -27,7 +27,7 @@ This README describes configuration of supported targets.
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 * [Renesas RX72N](#renesas-rx72n)
 * [Renesas RA6M4](#renesas-ra6m4)
-
+* [Intel x86-64 Intel FSP](#Intel-x86_64-with-Intel-FSP-support)
 
 ## STM32F4
 
@@ -1572,3 +1572,252 @@ Flash Allocation:
 ```
 
 Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RA6M4/Readme.md).
+
+
+## Intel x86_64 with Intel FSP support
+
+This feature is experimental. Intel FSP provides a set of common firmware
+services that can be used for memory initialization, power management, and
+silicon initialization. Wolfboot accesses these services by invoking
+machine-dependent binary code provided by the Intel FSP in the form of binary
+blobs.
+
+To use this feature, you will need to configure the following variables:
+
+- `ARCH` = `x86_64`
+- `TARGET` = A useful name for the target you want to support. You can refer to
+  x86_fsp_qemu or kontron_vx3060_s2 for reference
+- `FSP_T_BASE`: the base address where the FSP-T binary blob will be loaded.
+- `FSP_M_BASE`: the base address where the FSP-M binary blob will be loaded.
+- `FSP_S_BASE`: the base address where the FSP-S binary blob will be loaded.
+- `FSP_T_BIN`: path to the FSP-T binary blob
+- `FSP_M_BIN`: path to the FSP-M binary blob
+- `FSP_S_BIN`: path to the FSP-S binary blob
+- `WOLFBOOT_ORIGIN`: the start address of wolfBoot inside the flash (flash is mapped so that it ends at the 4GB boundary)
+- `BOOTLOADER_PARTITION_SIZE`: the size of the partition that stores wolfBoot in the flash
+- `WOLFBOOT_LOAD_BASE`: the address where wolfboot will be loaded in RAM after the first initialization phase
+
+While Intel FSP aims to abstract away specific machine details, you still need
+some machine-specific code. Refer to the Intel Integration Guide of the selected
+silicon for more information.
+
+Note:
+- This feature is experimental, so it may have bugs or limitations.
+
+- This feature requires NASM
+
+
+### Running on 64-bit Qemu
+
+An example configuration file is available in `config/examples/x86_fsp_qemu.config`.
+
+Assuming that you have compiled a linux kernel that can boot on qemu, you can verify
+and stage it by running the following commands:
+
+```
+# Copy the example configuration for this target
+cp config/examples/x86_fsp_qemu.config .config
+
+# Create necessary Intel FSP binaries from edk2 repo
+tools/x86_fsp/qemu/qemu_build_fsp.sh
+
+# build wolfboot
+make
+
+# The next script needs to be run from wolboot root folder and assumes your
+# kernel is in th root folder, named bzImage
+# If this is not the case, change the path in the script accordingly
+tools/x86_64/qemu/make_hd.sh
+
+# Run wolfBoot + Linux in qemu
+tools/scripts/qemu64/qemu64.sh
+
+```
+
+#### Sample boot output
+```
+Cache-as-RAM initialized
+calling FspMemInit...
+
+============= FSP Spec v2.0 Header Revision v3 ($QEMFSP$ v0.0.10.0) =============
+Fsp BootFirmwareVolumeBase - 0xFFE30000
+Fsp BootFirmwareVolumeSize - 0x22000
+Fsp TemporaryRamBase       - 0x4
+Fsp TemporaryRamSize       - 0x20000
+Fsp PeiTemporaryRamBase    - 0x4
+Fsp PeiTemporaryRamSize    - 0x14CCC
+Fsp StackBase              - 0x14CD0
+Fsp StackSize              - 0xB334
+Register PPI Notify: DCD0BE23-9586-40F4-B643-06522CED4EDE
+Install PPI: 8C8CE578-8A3D-4F1C-9935-896185C32DD3
+Install PPI: 5473C07A-3DCB-4DCA-BD6F-1E9689E7349A
+The 0th FV start address is 0x000FFE30000, size is 0x00022000, handle is 0xFFE30000
+Register PPI Notify: 49EDB1C1-BF21-4761-BB12-EB0031AABB39
+Register PPI Notify: EA7CA24B-DED5-4DAD-A389-BF827E8F9B38
+Install PPI: B9E0ABFE-5979-4914-977F-6DEE78C278A6
+Install PPI: A1EEAB87-C859-479D-89B5-1461F4061A3E
+Install PPI: DBE23AA9-A345-4B97-85B6-B226F1617389
+DiscoverPeimsAndOrderWithApriori(): Found 0x2 PEI FFS files in the 0th FV
+Loading PEIM 9B3ADA4F-AE56-4C24-8DEA-F03B7558AE50
+Loading PEIM at 0x000FFE3D8C8 EntryPoint=0x000FFE3EC4C PcdPeim.efi
+Install PPI: 06E81C58-4AD7-44BC-8390-F10265F72480
+Install PPI: 01F34D25-4DE2-23AD-3FF3-36353FF323F1
+Install PPI: 4D8B155B-C059-4C8F-8926-06FD4331DB8A
+Install PPI: A60C6B59-E459-425D-9C69-0BCC9CB27D81
+Register PPI Notify: 605EA650-C65C-42E1-BA80-91A52AB618C6
+Loading PEIM 9E1CC850-6731-4848-8752-6673C7005EEE
+Loading PEIM at 0x000FFE3F114 EntryPoint=0x000FFE411DF FspmInit.efi
+FspmInitPoint() - Begin
+BootMode : 0x0
+Install PPI: 7408D748-FC8C-4EE6-9288-C4BEC092A410
+Register PPI Notify: F894643D-C449-42D1-8EA8-85BDD8C65BDE
+PeiInstallPeiMemory MemoryBegin 0x3EF00000, MemoryLength 0x100000
+FspmInitPoint() - End
+Temp Stack : BaseAddress=0x14CD0 Length=0xB334
+Temp Heap  : BaseAddress=0x4 Length=0x14CCC
+Total temporary memory:    131072 bytes.
+  temporary memory stack ever used:       3360 bytes.
+  temporary memory heap used for HobList: 2104 bytes.
+  temporary memory heap occupied by memory pages: 0 bytes.
+Old Stack size 45876, New stack size 131072
+Stack Hob: BaseAddress=0x3EF00000 Length=0x20000
+Heap Offset = 0x3EF1FFFC Stack Offset = 0x3EEFFFFC
+Loading PEIM 52C05B14-0B98-496C-BC3B-04B50211D680
+Loading PEIM at 0x0003EFF5150 EntryPoint=0x0003EFFBBC6 PeiCore.efi
+Reinstall PPI: 8C8CE578-8A3D-4F1C-9935-896185C32DD3
+Reinstall PPI: 5473C07A-3DCB-4DCA-BD6F-1E9689E7349A
+Reinstall PPI: B9E0ABFE-5979-4914-977F-6DEE78C278A6
+Install PPI: F894643D-C449-42D1-8EA8-85BDD8C65BDE
+Notify: PPI Guid: F894643D-C449-42D1-8EA8-85BDD8C65BDE, Peim notify entry point: FFE40AB2
+Memory Discovered Notify invoked ...
+FSP TOLM = 0x3F000000
+Migrate FSP-M UPD from 7F548 to 3EFF4000 
+FspMemoryInitApi() - [Status: 0x00000000] - End
+success
+top reserved 0_3EF00000h
+hoblist@0x3EF20000
+TempRamExitApi() - Begin
+Memory Discovered Notify completed ...
+TempRamExitApi() - [Status: 0x00000000] - End
+call silicon...
+SiliconInitApi() - Begin
+Install PPI: 49EDB1C1-BF21-4761-BB12-EB0031AABB39
+Notify: PPI Guid: 49EDB1C1-BF21-4761-BB12-EB0031AABB39, Peim notify entry point: FFE370A2
+The 1th FV start address is 0x000FFED6000, size is 0x00015000, handle is 0xFFED6000
+DiscoverPeimsAndOrderWithApriori(): Found 0x4 PEI FFS files in the 1th FV
+Loading PEIM 86D70125-BAA3-4296-A62F-602BEBBB9081
+Loading PEIM at 0x0003EFEE150 EntryPoint=0x0003EFF15B9 DxeIpl.efi
+Install PPI: 1A36E4E7-FAB6-476A-8E75-695A0576FDD7
+Install PPI: 0AE8CE5D-E448-4437-A8D7-EBF5F194F731
+Loading PEIM 131B73AC-C033-4DE1-8794-6DAB08E731CF
+Loading PEIM at 0x0003EFE6000 EntryPoint=0x0003EFE702B FspsInit.efi
+FspInitEntryPoint() - start
+Register PPI Notify: 605EA650-C65C-42E1-BA80-91A52AB618C6
+Register PPI Notify: BD44F629-EAE7-4198-87F1-39FAB0FD717E
+Register PPI Notify: 7CE88FB3-4BD7-4679-87A8-A8D8DEE50D2B
+Register PPI Notify: 6ECD1463-4A4A-461B-AF5F-5A33E3B2162B
+Register PPI Notify: 30CFE3E7-3DE1-4586-BE20-DEABA1B3B793
+FspInitEntryPoint() - end
+Loading PEIM BA37F2C5-B0F3-4A95-B55F-F25F4F6F8452
+Loading PEIM at 0x0003EFDC000 EntryPoint=0x0003EFDDA67 QemuVideo.efi
+NO valid graphics config data found!
+Loading PEIM 29CBB005-C972-49F3-960F-292E2202CECD
+Loading PEIM at 0x0003EFD2000 EntryPoint=0x0003EFD3265 FspNotifyPhasePeim.efi
+The entry of FspNotificationPeim
+Reinstall PPI: 0AE8CE5D-E448-4437-A8D7-EBF5F194F731
+DXE IPL Entry
+FSP HOB is located at 0x3EF20000
+Install PPI: 605EA650-C65C-42E1-BA80-91A52AB618C6
+Notify: PPI Guid: 605EA650-C65C-42E1-BA80-91A52AB618C6, Peim notify entry point: FFE3EB9A
+Notify: PPI Guid: 605EA650-C65C-42E1-BA80-91A52AB618C6, Peim notify entry point: 3EFE6EE0
+FspInitEndOfPeiCallback++
+FspInitEndOfPeiCallback--
+FSP is waiting for NOTIFY
+FspSiliconInitApi() - [Status: 0x00000000] - End
+success
+NotifyPhaseApi() - Begin  [Phase: 00000020]
+FSP Post PCI Enumeration ...
+Install PPI: 30CFE3E7-3DE1-4586-BE20-DEABA1B3B793
+Notify: PPI Guid: 30CFE3E7-3DE1-4586-BE20-DEABA1B3B793, Peim notify entry point: 3EFE6F12
+FspInitAfterPciEnumerationCallback++
+FspInitAfterPciEnumerationCallback--
+NotifyPhaseApi() - End  [Status: 0x00000000]
+NotifyPhaseApi() - Begin  [Phase: 00000040]
+FSP Ready To Boot ...
+Install PPI: 7CE88FB3-4BD7-4679-87A8-A8D8DEE50D2B
+Notify: PPI Guid: 7CE88FB3-4BD7-4679-87A8-A8D8DEE50D2B, Peim notify entry point: 3EFE6F44
+FspReadyToBootCallback++
+FspReadyToBootCallback--
+NotifyPhaseApi() - End  [Status: 0x00000000]
+NotifyPhaseApi() - Begin  [Phase: 000000F0]
+FSP End of Firmware ...
+Install PPI: BD44F629-EAE7-4198-87F1-39FAB0FD717E
+Notify: PPI Guid: BD44F629-EAE7-4198-87F1-39FAB0FD717E, Peim notify entry point: 3EFE6F76
+FspEndOfFirmwareCallback++
+FspEndOfFirmwareCallback--
+NotifyPhaseApi() - End  [Status: 0x00000000]
+CPUID(0):D 68747541 444D4163
+loading wolfboot at 2000000...
+load wolfboot end
+AHCI port 0: No disk detected
+AHCI port 1: No disk detected
+AHCI port 2: No disk detected
+AHCI port 3: No disk detected
+AHCI port 4: No disk detected
+AHCI port 5: Disk detected (det: 3 ipm: 1)
+SATA disk drive detected on AHCI port 5
+Reading MBR...
+Found GPT PTE at sector 1
+Found valid boot signature in MBR
+Valid GPT partition table
+Current LBA: 0x1 
+Backup LBA: 0x1FFFF 
+Max number of partitions: 128
+Software limited: only allowing up to 16 partitions per disk.
+Disk size: 66043392
+disk0.p0 (0_1000000h@ 0_100000)
+disk0.p1 (0_1000000h@ 0_1100000)
+Total partitions on disk0: 2
+Checking primary OS image in 0,0...
+Checking secondary OS image in 0,1...
+Versions, A:1 B:2
+Attempting boot from partition B
+Image size 11982512
+Firmware Valid
+Booting at 5000100
+linux payload
+booting...
+Linux version 5.17.15 (arch@wb-hg-2) (x86_64-linux-gcc.br_real (Buildroot toolchains.bootlin.com-2021.11-5) 11.2.0, GNU ld (GNU Binutils) 2.37) #24 PREEMPT Wed May 17 13:47:24 UTC 2023
+```
+
+
+### Running on 64-bit Qemu with swtpm (TPM emulator)
+
+The example configuration for this setup can be found in 
+`config/examples/x86_fsp_qemu_tpm.config`.
+
+First step: [clone and install swtpm](https://github.com/stefanberger/swtpm), a TPM emulator that can be connected to qemu
+guest VMs. This TPM emulator will create a memory-mapped I/O device.
+
+The other steps to follow are:
+
+```
+# Copy the example configuration for this target
+cp config/examples/x86_fsp_qemu_tpm.config .config
+
+# Create necessary Intel FSP binaries from edk2 repo
+tools/x86_fsp/qemu/qemu_build_fsp.sh
+
+# Compile wolfBoot and assemble the loader image
+make
+
+# The next script needs to be run from wolboot root folder and assumes your
+# kernel is in th root folder, named bzImage
+# If this is not the case, change the path in the script accordingly
+tools/x86_64/qemu/make_hd.sh
+
+# Run wolfBoot + linux in qemu, with swTPM connected to the guest machine.
+# The script will take care of starting the emulator before launching the VM.
+tools/scripts/qemu64/qemu64-tpm.sh
+```
+

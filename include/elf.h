@@ -136,6 +136,8 @@ typedef struct elf64_program_header {
 } elf64_program_header;
 
 
+typedef int (*elf_mmu_map_cb)(uint64_t, uint64_t, uint32_t);
+int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb);
 int elf_load_image(uint8_t *image, uintptr_t *entry);
 
 

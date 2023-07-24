@@ -445,8 +445,15 @@ ifeq ($(WOLFTPM),1)
     ifeq ($(SIM_TPM),1)
       CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0
       OBJS+=./lib/wolfTPM/src/tpm2_swtpm.o
+	# Use memory-mapped WOLFTPM on x86-64
     else
-      WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+       ifeq ($(ARCH),x86_64)
+          CFLAGS+=-DWOLFTPM_MMIO -DWOLFTPM_EXAMPLE_HAL -DWOLFTPM_INCLUDE_IO_FILE
+          OBJS+=./lib/wolfTPM/hal/tpm_io_mmio.o
+        # By default, on other architectures, provide SPI driver
+        else
+          WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+        endif
     endif
   endif
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
@@ -497,6 +504,38 @@ endif
 ifeq ($(ELF),1)
   CFLAGS+=-DWOLFBOOT_ELF
   OBJS += src/elf.o
+endif
+
+ifeq ($(MULTIBOOT2),1)
+  CFLAGS+=-DWOLFBOOT_MULTIBOOT2
+  OBJS += src/multiboot.o
+endif
+
+ifeq ($(LINUX_PAYLOAD),1)
+  CFLAGS+=-DWOLFBOOT_LINUX_PAYLOAD
+  ifeq ($(ARCH),x86_64)
+    OBJS+=src/x86/linux_loader.o
+  endif
+endif
+
+ifeq ($(64BIT),1)
+  CFLAGS+=-DWOLFBOOT_64BIT
+endif
+
+ifeq ($(FSP), 1)
+  X86_FSP_OPTIONS := \
+    X86_UART_BASE \
+    X86_UART_REG_WIDTH \
+    X86_UART_MMIO \
+    PCH_HAS_PCR \
+    PCI_USE_ECAM \
+    PCH_PCR_BASE \
+    PCI_ECAM_BASE \
+    FSP_S_UPD_DATA_BASE \
+    WOLFBOOT_LOAD_BASE
+
+    # set CFLAGS defines for each x86_fsp option
+    $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
