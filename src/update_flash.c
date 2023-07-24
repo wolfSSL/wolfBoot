@@ -507,8 +507,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
 #ifndef DISABLE_BACKUP
     /* if we were on the final swap just finish it */
-    if (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
-        st == IMG_STATE_FINAL_SWAP
+    if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
+        st == IMG_STATE_FINAL_SWAP)
 #ifdef FLAGS_HOME
         || wolfBoot_flags_home_get_final_swap()
 #endif
@@ -736,8 +736,8 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_update(1);
     /* Check for new updates in the UPDATE partition or if we were
      * interrupted during the final sector write */
-    } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) &&
-        (st == IMG_STATE_UPDATING || st == IMG_STATE_FINAL_SWAP)
+    } else if (((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) &&
+        (st == IMG_STATE_UPDATING || st == IMG_STATE_FINAL_SWAP))
 #ifdef FLAGS_HOME
         || wolfBoot_flags_home_get_final_swap()
 #endif
