@@ -38,6 +38,8 @@ jobs:
       arch: host
       config-file: ./config/examples/library.config
 
+
+
   # TODO: lpc54606j512.config requires MCUXPRESSO files
   # lpc54606j512_test
   #   uses: ./.github/workflows/test-build.yml
@@ -81,6 +83,11 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim.config
+
+  keytools_test:
+    uses: ./.github/workflows/test-keytools.yml
+    with:
+      arch: host
 
   stm32f4_small_blocks_uart_update_test:
     uses: ./.github/workflows/test-build.yml
