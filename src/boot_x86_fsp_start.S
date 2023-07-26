@@ -50,7 +50,7 @@ extern _off_boot
 extern _start_fsp_t
 extern TempRamInitParams
 extern start
-[section .boot]
+[section .jmpto32]
 ;; If the offset to the segment selector code_sel_long is changed, make sure to
 ;; update the corresponding code in src/x86/common.c accordingly.
 gdt:

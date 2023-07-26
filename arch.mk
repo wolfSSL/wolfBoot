@@ -501,6 +501,13 @@ ifeq ("${FSP}", "1")
     OBJS += src/pci.o
     OBJS += hal/x86_uart.o
     OBJS += src/string.o
+    ifeq ($(filter-out $(STAGE1_AUTH),1),)
+      OBJS += src/libwolfboot.o
+      OBJS += src/image.o
+      OBJS += src/keystore.o
+      OBJS += $(WOLFCRYPT_OBJS)
+    endif
+
     CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART
     ifeq ($(FSP_TGL), 1)
       OBJS+=src/x86/tgl_fsp.o
