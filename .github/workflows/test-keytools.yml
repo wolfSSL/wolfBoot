@@ -111,11 +111,11 @@ jobs:
 
       - name: Sign the digest with the external key
         run: |
-          openssl pkeyutl -sign -keyform der -inkey private-key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
+          openssl pkeyutl -sign -keyform der -inkey private-key.der -rawin -in test-app/image_v1_digest.bin > test-app/image_v1.sig
 
       - name: Generate final signed binary
         run: |
-          ./tools/keytools/sign --ecc256 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
+          ./tools/keytools/sign --ed25519 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
 
       # RSA
       - name: Select config
