@@ -1,0 +1,155 @@
+name: Wolfboot keytools test workflow
+
+on:
+
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      make-args:
+        required: false
+        type: string
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Workaround for sources.list
+        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+
+      - name: Update repository
+        run: sudo apt-get update
+
+      - name: make clean
+        run: |
+          make distclean && make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Install wolfSSL
+        run: |
+          sudo apt-get install --no-install-recommends -y -q make libwolfssl-dev
+
+      # ECC
+      - name: make clean
+        run: |
+          make distclean && make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/sim-ecc.config .config && make include/target.h
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}}
+
+      - name: Generate external key
+        run: |
+          openssl ecparam -name prime256v1 -genkey -noout -outform DER -out private-key.der
+
+      - name: Export external public key
+        run: |
+          openssl ec -in private-key.der -inform DER -pubout -out public-key.der -outform DER
+
+      - name: Import external public key
+        run: |
+          ./tools/keytools/keygen --ecc256 -i public-key.der
+
+      - name: Hash the image elf
+        run: |
+          ./tools/keytools/sign --ecc256 --sha-only --sha256 test-app/image.elf public-key.der 1
+
+      - name: Sign the digest with the external key
+        run: |
+          openssl pkeyutl -sign -keyform der -inkey private-key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
+
+      - name: Generate final signed binary
+        run: |
+          ./tools/keytools/sign --ecc256 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
+
+      # ED25519
+      - name: make clean
+        run: |
+          make distclean && make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config && make include/target.h
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}}
+
+      - name: Generate external key
+        run: |
+          openssl genpkey -algorithm ed25519 -out private-key.der -outform DER
+
+      - name: Export external public key
+        run: |
+          openssl pkey -in private-key.der -inform DER -pubout -out public-key.der -outform DER
+
+      - name: Import external public key
+        run: |
+          ./tools/keytools/keygen --ed25519 -i public-key.der
+
+      - name: Hash the image elf
+        run: |
+          ./tools/keytools/sign --ed25519 --sha-only --sha256 test-app/image.elf public-key.der 1
+
+      - name: Sign the digest with the external key
+        run: |
+          openssl pkeyutl -sign -keyform der -inkey private-key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
+
+      - name: Generate final signed binary
+        run: |
+          ./tools/keytools/sign --ecc256 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
+
+      # RSA
+      - name: Select config
+        run: |
+          cp config/examples/sim-rsa.config .config && make include/target.h
+
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}}
+
+      - name: Generate external key
+        run: |
+            openssl genrsa -outform DER -out private-key.der 2048
+
+      - name: Export external public key
+        run: |
+          openssl rsa -inform DER -outform DER -in private-key.der -out public-key.der -pubout
+
+      - name: Import external public key
+        run: |
+          ./tools/keytools/keygen --rsa2048 -i public-key.der
+
+      - name: Hash the image elf
+        run: |
+          ./tools/keytools/sign --rsa2048 --sha-only --sha256 test-app/image.elf public-key.der 1
+
+      - name: Sign the digest with the external key
+        run: |
+          openssl pkeyutl -sign -keyform der -inkey private-key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
+
+      - name: Generate final signed binary
+        run: |
+          ./tools/keytools/sign --rsa2048 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
