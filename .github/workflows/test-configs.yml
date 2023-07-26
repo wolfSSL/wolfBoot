@@ -38,8 +38,6 @@ jobs:
       arch: host
       config-file: ./config/examples/library.config
 
-
-
   # TODO: lpc54606j512.config requires MCUXPRESSO files
   # lpc54606j512_test
   #   uses: ./.github/workflows/test-build.yml
