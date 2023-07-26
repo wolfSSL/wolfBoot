@@ -127,7 +127,11 @@ jobs:
 
       - name: Generate external key
         run: |
-            openssl genrsa -outform DER -out private-key.der 2048
+            openssl genrsa -out private-key.pem 2048
+
+      - name: Convert to DER
+        run: |
+          openssl rsa -in private-key.pem -inform PEM -out private-key.der -outform DER
 
       - name: Export external public key
         run: |
