@@ -22,10 +22,6 @@ jobs:
       - name: Update repository
         run: sudo apt-get update
 
-      - name: make clean
-        run: |
-          make distclean && make keysclean && make -C tools/keytools clean && rm -f include/target.h
-
       - name: Install wolfSSL
         run: |
           sudo apt-get install --no-install-recommends -y -q make libwolfssl-dev
@@ -113,6 +109,10 @@ jobs:
           ./tools/keytools/sign --ed25519 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
 
       # RSA
+      - name: make clean
+        run: |
+          make distclean && make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
       - name: Select config
         run: |
           cp config/examples/sim-rsa.config .config && make include/target.h
