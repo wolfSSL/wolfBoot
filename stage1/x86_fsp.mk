@@ -20,11 +20,7 @@ $(LSCRIPT_IN): $(WOLFBOOT_ROOT)/hal/$(LSCRIPT_IN).in FORCE
 	$(Q)nasm -f elf32 -o $@ $^
 
 fsp_t.o: ../$(FSP_T_BIN)
-	$(SIGN_TOOL) $(SIGN_OPTIONS) $^ $(SIGN_KEY) 1
-	@dd if=$(X86FSP_PATH)/fsp_t_v1_signed.bin of=$(X86FSP_PATH)/fsp_t_signature.bin bs=256 count=1
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_fsp_t $(X86FSP_PATH)/fsp_t_signature.bin sig_fsp_t.o
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsp_t $^ $@
-	@rm -f $(X86FSP_PATH)/fsp_t_v1_signed.bin $(X86FSP_PATH)/fsp_t_signature.bin
 
 fsp_m.o: ../$(FSP_M_BIN)
 	$(SIGN_TOOL) $(SIGN_OPTIONS) $^ $(SIGN_KEY) 1
