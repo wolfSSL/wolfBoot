@@ -35,10 +35,8 @@
 #include <target.h>
 #include <stage1.h>
 
-#ifdef STAGE1_AUTH
 #include "wolfboot/wolfboot.h"
 #include "image.h"
-#endif
 
 #define WOLFBOOT_X86_STACK_SIZE 0x10000
 
@@ -47,7 +45,7 @@
 /* When STAGE1_AUTH is disabled, create dummy images to fill
  * the space used by wolfBoot manifest headers to authenticate FSPs
  */
-#define HEADER_SIZE 0x100
+#define HEADER_SIZE IMAGE_HEADER_SIZE
 const uint8_t __attribute__((section(".sig_fsp_t"))) empty_sig_fsp_t[HEADER_SIZE];
 const uint8_t __attribute__((section(".sig_fsp_m"))) empty_sig_fsp_m[HEADER_SIZE];
 const uint8_t __attribute__((section(".sig_fsp_s"))) empty_sig_fsp_s[HEADER_SIZE];

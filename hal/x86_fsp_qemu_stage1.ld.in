@@ -7,6 +7,8 @@ FSP_M_BASE = @FSP_M_BASE@ - 0x1000; /* default base:size 0xfffdd000:0x22000 [0xf
 FSP_S_BASE = @FSP_S_BASE@ - 0x1000; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
 WOLFBOOT_LOAD_BASE = @WOLFBOOT_LOAD_BASE@;
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
+IMAGE_HEADER_SIZE = @IMAGE_HEADER_SIZE@;
+PRE_HEADER_FILL_SIZE = 0x1000 - IMAGE_HEADER_SIZE;
 OUTPUT_FORMAT(elf32-i386)
 
 MEMORY
@@ -47,7 +49,7 @@ SECTIONS
     .fsp_t FSP_T_BASE :
     AT(FSP_T_BASE)
     {
-        . += 0x0F00;
+        . += PRE_HEADER_FILL_SIZE;
        _fsp_t_hdr = .;
        KEEP(*(.sig_fsp_t*))
        _start_fsp_t = .;
@@ -56,7 +58,7 @@ SECTIONS
 
     .fsp_s FSP_S_BASE :
     {
-        . += 0x0F00;
+        . += PRE_HEADER_FILL_SIZE;
        _fsp_s_hdr = .;
        KEEP(*(.sig_fsp_s*))
        _start_fsp_s = .;
@@ -65,7 +67,7 @@ SECTIONS
 
     .fsp_m FSP_M_BASE :
     {
-        . += 0x0F00;
+        . += PRE_HEADER_FILL_SIZE;
        _fsp_m_hdr = .;
        KEEP(*(.sig_fsp_m*))
        _start_fsp_m = .;
