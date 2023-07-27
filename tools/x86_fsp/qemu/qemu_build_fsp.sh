@@ -9,7 +9,6 @@ SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
 WOLFBOOT_DIR="${SCRIPT_DIR}/../../.."
 FSP_NAME=QEMU_FSP_DEBUG
 CONFIG_FILE=${CONFIG_FILE:-"${WOLFBOOT_DIR}/.config"}
-IMAGE_HEADER_SIZE=256
 
 set -e
 
@@ -19,10 +18,6 @@ fi
 
 if [ -f "${CONFIG_FILE}" ]
 then
-    IMAGE_HEADER_SIZE=$(grep -Eo '^IMAGE_HEADER_SIZE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
-    if [ -z "${IMAGE_HEADER_SIZE}" ]; then
-        IMAGE_HEADER_SIZE=256
-    fi
     FSP_T_BASE=$(grep -Eo '^FSP_T_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
     FSP_M_LOAD_BASE=$(grep -Eo '^FSP_M_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
     FSP_S_LOAD_BASE=$(grep -Eo '^FSP_S_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
