@@ -41,7 +41,9 @@ SECTIONS
 
     .wolfboot FLASH_START :
     {
+        . += PRE_HEADER_FILL_SIZE;
         _wolfboot_flash_start = .;
+        KEEP(*(.sig_wolfboot_raw*))
         *(.wolfboot)
         _wolfboot_flash_end = .;
     }

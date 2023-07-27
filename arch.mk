@@ -506,6 +506,7 @@ ifeq ("${FSP}", "1")
       OBJS += src/image.o
       OBJS += src/keystore.o
       OBJS += src/sig_fsp_m.o
+      OBJS += src/sig_wolfboot_raw.o
       OBJS += src/sig_fsp_s.o
       OBJS += $(WOLFCRYPT_OBJS)
       CFLAGS+=-DSTAGE1_AUTH

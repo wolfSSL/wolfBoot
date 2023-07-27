@@ -46,8 +46,12 @@
  * the space used by wolfBoot manifest headers to authenticate FSPs
  */
 #define HEADER_SIZE IMAGE_HEADER_SIZE
-const uint8_t __attribute__((section(".sig_fsp_m"))) empty_sig_fsp_m[HEADER_SIZE];
-const uint8_t __attribute__((section(".sig_fsp_s"))) empty_sig_fsp_s[HEADER_SIZE];
+const uint8_t __attribute__((section(".sig_fsp_m")))
+    empty_sig_fsp_m[HEADER_SIZE] = {};
+const uint8_t __attribute__((section(".sig_fsp_s")))
+    empty_sig_fsp_s[HEADER_SIZE] = {};
+const uint8_t __attribute__((section(".sig_wolfboot_raw")))
+    empty_sig_wolfboot_raw[HEADER_SIZE] = {};
 #endif
 
 /* info can be retrieved from the CfgRegionSize of FSP info header. we need to
@@ -93,7 +97,6 @@ int post_temp_ram_init_cb(void);
 extern uint8_t _start_fsp_t[];
 extern uint8_t _start_fsp_m[];
 extern uint8_t _start_fsp_s[];
-extern uint8_t _fsp_t_hdr[];
 extern uint8_t _fsp_m_hdr[];
 extern uint8_t _fsp_s_hdr[];
 extern uint8_t _wolfboot_flash_start[];
@@ -128,10 +131,9 @@ static void change_stack_and_invoke(uint32_t new_stack,
                      : "%eax");
 }
 
-static void load_wolfboot()
+static void load_wolfboot(void)
 {
     size_t wolfboot_size, bss_size;
-
     wolfBoot_printf("loading wolfboot at %x..." ENDLINE,
                     (uint32_t)WOLFBOOT_LOAD_BASE);
     wolfboot_size = _wolfboot_flash_end - _wolfboot_flash_start;
@@ -140,6 +142,7 @@ static void load_wolfboot()
     bss_size = wb_end_bss - wb_start_bss;
     memset(wb_start_bss, 0, bss_size);
     wolfBoot_printf("load wolfboot end" ENDLINE);
+
 }
 
 extern uint8_t _stage2_params[];
@@ -150,7 +153,7 @@ static void set_stage2_parameter(struct stage2_parameter *p)
 }
 
 #ifdef WOLFBOOT_64BIT
-static void jump_into_wolfboot()
+static void jump_into_wolfboot(void)
 {
     struct stage2_parameter *params = (struct stage2_parameter*)_stage2_params;
     uint32_t cr3;
@@ -184,11 +187,13 @@ static void memory_ready_entry(void *ptr)
     silicon_init_cb SiliconInit;
     notify_phase_cb notifyPhase;
     NOTIFY_PHASE_PARAMS param;
+    uint32_t info[4];
     uint32_t status;
     unsigned int i;
     int ret;
 #ifdef STAGE1_AUTH
     struct wolfBoot_image fsp_s;
+    struct wolfBoot_image wolfboot_raw;
 #endif
 
     fsp_info_header =
@@ -260,10 +265,33 @@ static void memory_ready_entry(void *ptr)
         wolfBoot_printf("failed %d: %x\n", __LINE__, status);
         panic();
     }
-    uint32_t info[4];
     cpuid(0, &info[0], &info[1], &info[2], NULL);
     wolfBoot_printf("CPUID(0):%x %x %x\r\n", info[0], info[1], info[2]);
     load_wolfboot();
+
+#ifdef STAGE1_AUTH
+    /* Verify wolfBoot */
+    wolfBoot_printf("Authenticating wolfboot at %x..." ENDLINE,
+            WOLFBOOT_LOAD_BASE);
+    ret = wolfBoot_open_image_address(&wolfboot_raw, (void *)WOLFBOOT_LOAD_BASE);
+    if (ret < 0) {
+        wolfBoot_printf("Failed to open wolfBoot image" ENDLINE);
+        panic();
+    }
+    wolfBoot_printf("wolfBoot open successfully." ENDLINE);
+    ret = wolfBoot_verify_integrity(&wolfboot_raw);
+    if (ret < 0) {
+        wolfBoot_printf("Failed integrity check on wolfBoot" ENDLINE);
+        panic();
+    }
+    wolfBoot_printf("wolfBoot is valid. Checking signature." ENDLINE);
+    ret = wolfBoot_verify_authenticity(&wolfboot_raw);
+    if (ret < 0) {
+        wolfBoot_printf("Failed signature check on wolfBoot" ENDLINE);
+        panic();
+    }
+    wolfBoot_printf("wolfBoot: verified OK." ENDLINE);
+#endif
     set_stage2_parameter(stage2_params);
     jump_into_wolfboot();
 }
