@@ -505,7 +505,11 @@ ifeq ("${FSP}", "1")
       OBJS += src/libwolfboot.o
       OBJS += src/image.o
       OBJS += src/keystore.o
+      OBJS += src/sig_fsp_m.o
+      OBJS += src/sig_fsp_s.o
+      OBJS += src/sig_fsp_t.o
       OBJS += $(WOLFCRYPT_OBJS)
+      CFLAGS+=-DSTAGE1_AUTH
     endif
 
     CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART

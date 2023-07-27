@@ -180,6 +180,7 @@ $(BUILD_DIR)/%.o: ../hal/%.S
 
 clean:
 	$(Q)rm -f *.o
+	$(Q)rm -f *.bin
 	$(Q)rm -f loader_stage1.bin loader_stage1.elf loader_stage1.map $(LSCRIPT)
 
 FORCE:
