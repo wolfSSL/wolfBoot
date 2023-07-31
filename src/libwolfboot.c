@@ -174,6 +174,30 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     }
 #endif
 
+#ifdef EXT_ENCRYPTED
+/* always try key on FLAGS_HOME since update shares the same partition */
+#ifndef FLAGS_HOME
+    if (part == PART_BOOT)
+#endif
+    {
+        word_0 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+            WOLFBOOT_PARTITION_BOOT_ADDRESS));
+        word_1 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+            WOLFBOOT_PARTITION_BOOT_ADDRESS - WOLFBOOT_SECTOR_SIZE));
+
+        if (word_0 == FLASH_WORD_ERASED && word_1 !=
+            FLASH_WORD_ERASED) {
+            sel = 1;
+            goto finish;
+        }
+        else if (word_0 != FLASH_WORD_ERASED && word_1 ==
+            FLASH_WORD_ERASED) {
+            sel = 0;
+            goto finish;
+        }
+    }
+#endif /* EXT_ENCRYPTED */
+
     /* Default to last sector if no match is found */
     sel = 0;
 
@@ -226,35 +250,10 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
             /* if we're still checking boot flags, check update flags */
             if (base - off > (uint8_t*)PART_UPDATE_ENDFLAGS) {
                 base = (uint8_t *)PART_UPDATE_ENDFLAGS;
-                off = 1;
+                off = 0;
                 continue;
             }
 #endif
-
-/* we can't assume sel 0 because sel 1 might have the key */
-#ifdef EXT_ENCRYPTED
-/* always try key on FLAGS_HOME since update shares the same partition */
-#ifndef FLAGS_HOME
-            if (part == PART_BOOT)
-#endif
-            {
-                word_0 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-                    WOLFBOOT_PARTITION_BOOT_ADDRESS));
-                word_1 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-                    WOLFBOOT_PARTITION_BOOT_ADDRESS - WOLFBOOT_SECTOR_SIZE));
-
-                if (word_0 == FLASH_WORD_ERASED && word_1 !=
-                    FLASH_WORD_ERASED) {
-                    sel = 1;
-                    break;
-                }
-                else if (word_0 != FLASH_WORD_ERASED && word_1 ==
-                    FLASH_WORD_ERASED) {
-                    sel = 0;
-                    break;
-                }
-            }
-#endif /* EXT_ENCRYPTED */
 
             /* First time boot?  Assume no pending update */
             if(off == 1) {
@@ -602,7 +601,14 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
+    int i;
     uint8_t st = IMG_STATE_UPDATING;
+
+    /* mark all the sectors as new, need to this in case the fill byte is not
+     * the same as the SECT_FLAG_NEW flag */
+    for (i = 0; i < (int)(MAX_UPDATE_SIZE / WOLFBOOT_SECTOR_SIZE); i++) {
+        wolfBoot_set_update_sector_flag(i, SECT_FLAG_NEW);
+    }
 
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_unlock();

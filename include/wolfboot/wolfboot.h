@@ -282,6 +282,13 @@ int wolfBoot_dualboot_candidate_addr(void**);
 
 #endif /* EXT_ENCRYPTED */
 
+/* Reserve space for two sectors in case of NVM_FLASH_WRITEONCE, for redundancy */
+#ifndef NVM_FLASH_WRITEONCE
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE))
+#else
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
+#endif
+
 #if defined(EXT_ENCRYPTED) && defined(MMU)
 int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst);
 #endif

@@ -460,13 +460,6 @@ out:
 #    pragma GCC optimize("O0")
 #endif
 
-/* Reserve space for two sectors in case of NVM_FLASH_WRITEONCE, for redundancy */
-#ifndef NVM_FLASH_WRITEONCE
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE))
-#else
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
-#endif
-
 static int RAMFUNCTION wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
@@ -728,9 +721,11 @@ void RAMFUNCTION wolfBoot_start(void)
      * to trigger fallback.
      */
     if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
-        /* only call wolfBoot_update_trigger if we're not on the final swap */
-        if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) &&
-            st != IMG_STATE_FINAL_SWAP) {
+        /* only call wolfBoot_update_trigger if we're not on the final swap and
+         * are not resuming an update since wolfBoot_update_trigger now resets
+         * the flags */
+        if ((wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) ||
+            (st != IMG_STATE_FINAL_SWAP && st != IMG_STATE_UPDATING)) {
             wolfBoot_update_trigger();
         }
         wolfBoot_update(1);
