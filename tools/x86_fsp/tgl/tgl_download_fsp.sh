@@ -22,8 +22,8 @@ fi
 if [ -f "${CONFIG_FILE}" ]
 then
     FSP_T_BASE=$(grep -Eo '^FSP_T_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
-    FSP_M_BASE=$(grep -Eo '^FSP_M_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
-    FSP_S_BASE=$(grep -Eo '^FSP_S_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
+    FSP_M_LOAD_BASE=$(grep -Eo '^FSP_M_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
+    FSP_S_LOAD_BASE=$(grep -Eo '^FSP_S_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
 else
     echo "Error: ${CONFIG_FILE} file not found in current directory"
     exit
@@ -94,11 +94,11 @@ copy_tgl_fsp
 download_split_tool
 split_fsp
 rebase_fsp_component "T" ${FSP_T_BASE}
-rebase_fsp_component "M" ${FSP_M_BASE}
-rebase_fsp_component "S" ${FSP_S_BASE}
+rebase_fsp_component "M" ${FSP_M_LOAD_BASE}
+rebase_fsp_component "S" ${FSP_S_LOAD_BASE}
 copy_fsp_component "T" ${FSP_T_BASE}
-copy_fsp_component "M" ${FSP_M_BASE}
-copy_fsp_component "S" ${FSP_S_BASE}
+copy_fsp_component "M" ${FSP_M_LOAD_BASE}
+copy_fsp_component "S" ${FSP_S_LOAD_BASE}
 patch_tgl_fsp
 copy_fsp_headers
 download_ucode
