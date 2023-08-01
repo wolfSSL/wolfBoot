@@ -604,19 +604,23 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     int i;
     uint8_t st = IMG_STATE_UPDATING;
 
-    /* mark all the sectors as new, need to this in case the fill byte is not
+    if (FLAGS_UPDATE_EXT()) {
+        ext_flash_unlock();
+    } else {
+        hal_flash_unlock();
+    }
+
+    /* mark all the sectors as new, need to do this in case the fill byte is not
      * the same as the SECT_FLAG_NEW flag */
     for (i = 0; i < (int)(MAX_UPDATE_SIZE / WOLFBOOT_SECTOR_SIZE); i++) {
         wolfBoot_set_update_sector_flag(i, SECT_FLAG_NEW);
     }
 
+    wolfBoot_set_partition_state(PART_UPDATE, st);
+
     if (FLAGS_UPDATE_EXT()) {
-        ext_flash_unlock();
-        wolfBoot_set_partition_state(PART_UPDATE, st);
         ext_flash_lock();
     } else {
-        hal_flash_unlock();
-        wolfBoot_set_partition_state(PART_UPDATE, st);
         hal_flash_lock();
     }
 }
