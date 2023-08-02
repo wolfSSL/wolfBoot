@@ -154,11 +154,7 @@ include tools/test-delta.mk
 include tools/test-renode.mk
 
 PYTHON?=python3
-keytools_check:
-	$(Q)(test -x "$(KEYGEN_TOOL)") || \
-	($(PYTHON) -c "import wolfcrypt"  > /dev/null 2>&1) || \
-	 (echo "ERROR: Key tool unavailable '$(KEYGEN_TOOL)'.\n"\
-		"Run 'make keytools' or install wolfcrypt 'pip3 install wolfcrypt'"  && false)
+keytools_check: keytools FORCE
 
 
 $(PRIVATE_KEY):

@@ -194,10 +194,16 @@ parser.add_argument('-i', dest='pubfile', nargs='+', action='extend')
 parser.add_argument('-g', dest='keyfile', nargs='+', action='extend')
 parser.add_argument('-keystoreDir', dest='storeDir', nargs='+', action='extend')
 
+print("            *** WARNING ***")
+print("Python key tools are now deprecated")
+print("and will be removed in future versions.")
+print("Please ensure that your scripts are using")
+print("the compiled C version of these tools")
+print("(e.g. by running 'make keytools').")
+print("            *** ******* ***")
+print("")
 
 args=parser.parse_args()
-
-#sys.exit(0) #test
 
 if (type(args.storeDir) == list):
     pubkey_cfile = "".join(args.storeDir)+"/keystore.c"

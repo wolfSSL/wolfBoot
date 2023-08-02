@@ -15,7 +15,7 @@ to hide the actual content of the external non-volatile memory.
 
 Vice-versa, all read operations will decrypt the data stored when the feature is enabled.
 
-An extra option is provided to the `sign.py` sign tool to encrypt the firmware update after signing it, so
+An extra option is provided to the `sign` tool to encrypt the firmware update after signing it, so
 that it can be stored as is in the external memory by the application, and will be decrypted by the bootloader
 in order to verify the update and begin the installation.
 
@@ -76,7 +76,7 @@ select `ENCRYPT_WITH_AES128=1` or `ENCRYPT_WITH_AES256=1`.
 
 ### Signing and encrypting the update bundle with ChaCha20-256
 
-The `sign.py` tool can sign and encrypt the image with a single command.
+The `sign` tool can sign and encrypt the image with a single command.
 In case of chacha20, the encryption secret is provided in a binary file that should contain a concatenation of
 a 32B ChaCha-256 key and a 12B nonce.
 
@@ -93,11 +93,11 @@ So it is easy to prepare the encryption secret in the test scripts or from the c
 echo -n "0123456789abcdef0123456789abcdef0123456789ab" > enc_key.der
 ```
 
-The `sign.py` script can now be invoked to produce a signed+encrypted image, by using the extra argument `--encrypt` followed by the
+The `sign` tool can now be invoked to produce a signed+encrypted image, by using the extra argument `--encrypt` followed by the
 secret file:
 
 ```
-./tools/keytools/sign.py --encrypt enc_key.der test-app/image.bin wolfboot_signing_private_key.der 24
+./tools/keytools/sign --encrypt enc_key.der test-app/image.bin wolfboot_signing_private_key.der 24
 
 ```
 
@@ -121,11 +121,11 @@ So it is easy to prepare the encryption secret in the test scripts or from the c
 echo -n "0123456789abcdef0123456789abcdef0123456789abcdef" > enc_key.der
 ```
 
-The `sign.py` script can now be invoked to produce a signed+encrypted image, by using the extra argument `--encrypt` followed by the
+The `sign` tool can now be invoked to produce a signed+encrypted image, by using the extra argument `--encrypt` followed by the
 secret file. To select AES-256, use the `--aes256` option.
 
 ```
-./tools/keytools/sign.py --aes256 --encrypt enc_key.der test-app/image.bin wolfboot_signing_private_key.der 24
+./tools/keytools/sign --aes256 --encrypt enc_key.der test-app/image.bin wolfboot_signing_private_key.der 24
 
 ```
 
