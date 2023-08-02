@@ -27,7 +27,7 @@
 #define H_USER_SETTINGS_
 
 /* For TSIP use, please enable the following line. */
-#define WOLFBOOT_RENESAS_TSIP
+/* #define WOLFBOOT_RENESAS_TSIP */
 /* For TSIP SRC version use, please enable the following line */
 /* #define WOLFBOOT_RENESAS_TSIP_SRCVERSION */
 
@@ -183,6 +183,9 @@
 #       define WOLFSSL_SP_NO_4096
 #   endif
 #   define WC_ASN_HASH_SHA256
+#   if defined(WOLFBOOT_RENESAS_TSIP)
+#       define ENCRYPTED_KEY_BYTE_SIZE RSA2048_PUB_SIZE
+#   endif
 #endif
 
 #ifdef WOLFBOOT_SIGN_RSA3072

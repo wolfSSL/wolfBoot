@@ -99,7 +99,7 @@ void hal_init(void)
                             (byte*)&encrypted_user_key_data->encrypted_user_key,
                             0/* dummy */);
     /* TSIP specific RSA public key */
-    if (tsip_use_PublicKey_buffer(&pkInfo,
+    if (tsip_use_PublicKey_buffer_crypt(&pkInfo,
                 (const char*)&encrypted_user_key_data->encrypted_user_key,
                  RSA2048_PUB_SIZE,
                  tsip_key_type) != 0) {
