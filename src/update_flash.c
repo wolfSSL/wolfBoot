@@ -57,8 +57,8 @@ static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 
 static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
 {
-    uint32_t pos = 0;
-    uint32_t src_offset = IMAGE_HEADER_SIZE;
+    uintptr_t pos = 0;
+    uintptr_t src_offset = IMAGE_HEADER_SIZE;
 
     hal_flash_unlock();
     wolfBoot_erase_bootloader();
@@ -67,8 +67,8 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         while (pos < src->fw_size) {
             uint8_t buffer[FLASHBUFFER_SIZE];
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-                uint32_t opos = pos + ((uint32_t)&_start_text);
-                ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void *)buffer, FLASHBUFFER_SIZE);
+                uintptr_t opos = pos + ((uintptr_t)&_start_text);
+                ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void*)buffer, FLASHBUFFER_SIZE);
                 hal_flash_write(opos, buffer, FLASHBUFFER_SIZE);
             }
             pos += FLASHBUFFER_SIZE;
@@ -79,7 +79,7 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
     while (pos < src->fw_size) {
         if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
             uint8_t *orig = (uint8_t*)(src->hdr + src_offset + pos);
-            hal_flash_write(pos + (uint32_t)&_start_text, orig, FLASHBUFFER_SIZE);
+            hal_flash_write(pos + (uintptr_t)&_start_text, orig, FLASHBUFFER_SIZE);
         }
         pos += FLASHBUFFER_SIZE;
     }
@@ -414,7 +414,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
-        if ( ((fallback_allowed==1) && 
+        if ( ((fallback_allowed==1) &&
                     (~(uint32_t)fallback_allowed == 0xFFFFFFFE)) ||
                 (wolfBoot_current_firmware_version() <
                  wolfBoot_update_firmware_version()) ) {

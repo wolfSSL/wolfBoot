@@ -30,7 +30,7 @@
 #define EXT_FLASH
 
 #if defined(ENCRYPT_WITH_AES256) || defined(ENCRYPT_WITH_AES128)
-    #define WOLFSSL_AES_COUNTER 
+    #define WOLFSSL_AES_COUNTER
     #define WOLFSSL_AES_DIRECT
 #endif
 #if defined(ENCRYPT_WITH_AES256)
@@ -68,11 +68,11 @@ static int locked = 0;
 void hal_init(void)
 {
 }
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     return 0;
 }
-int hal_flash_erase(uint32_t address, int len)
+int hal_flash_erase(uintptr_t address, int len)
 {
     return 0;
 }
@@ -211,7 +211,7 @@ START_TEST(test_ext_flash_operations) {
     /* Erase the first sector */
     eres = ext_flash_erase(address, WOLFBOOT_SECTOR_SIZE);
     ck_assert_int_eq(eres, 0);
-    
+
     /* Read first sector from the flash memory */
     rres = ext_flash_read(address, data, WOLFBOOT_SECTOR_SIZE);
     ck_assert_int_eq(rres, WOLFBOOT_SECTOR_SIZE);
@@ -255,7 +255,7 @@ START_TEST(test_ext_enc_flash_operations) {
     /* Read data from the flash memory */
     rres = ext_flash_check_read(address, data, size);
     ck_assert_int_eq(rres, size);
-    
+
     /* Check that the data read from the flash memory matches the data that was written */
     ck_assert_mem_eq(&flash[address], test_buffer, size);
 

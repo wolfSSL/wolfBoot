@@ -152,7 +152,7 @@ static int nvm_cached_sector = 0;
 static int nvm_select_fresh_sector(int part)
 {
     int sel;
-    uint32_t off;
+    uintptr_t off;
     uint8_t *base;
     uint8_t *addr_align;
 
@@ -201,10 +201,11 @@ static int nvm_select_fresh_sector(int part)
     return sel;
 }
 
-static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
-    size_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
-    size_t addr_read, addr_write;
-    uint32_t addr_off = addr & (NVM_CACHE_SIZE - 1);
+static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
+{
+    uintptr_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
+    uintptr_t addr_read, addr_write;
+    uintptr_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
 
     nvm_cached_sector = nvm_select_fresh_sector(part);
@@ -238,11 +239,11 @@ static int RAMFUNCTION trailer_write(uint8_t part, uint32_t addr, uint8_t val) {
     return ret;
 }
 
-static int RAMFUNCTION partition_magic_write(uint8_t part, uint32_t addr)
+static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
 {
-    uint32_t off = addr % NVM_CACHE_SIZE;
-    size_t base = (size_t)addr - off;
-    size_t addr_read, addr_write;
+    uintptr_t off = addr % NVM_CACHE_SIZE;
+    uintptr_t base = (uintptr_t)addr - off;
+    uintptr_t addr_read, addr_write;
     int ret;
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
@@ -265,6 +266,7 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uint32_t addr)
 
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
+    uint8_t *ret = NULL;
     uint32_t sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
     sel_sec = nvm_select_fresh_sector(part);
@@ -273,9 +275,9 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
         if (FLAGS_BOOT_EXT()){
             ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
                 (void *)&ext_cache, sizeof(uint32_t));
-            return (uint8_t *)&ext_cache;
+            ret = (uint8_t *)&ext_cache;
         } else {
-            return (void *)(PART_BOOT_ENDFLAGS -
+            ret = (void *)(PART_BOOT_ENDFLAGS -
                     (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
         }
     }
@@ -283,13 +285,13 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
         if (FLAGS_UPDATE_EXT()) {
             ext_flash_check_read(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
                 (void *)&ext_cache, sizeof(uint32_t));
-            return (uint8_t *)&ext_cache;
+            ret = (uint8_t *)&ext_cache;
         } else {
-            return (void *)(PART_UPDATE_ENDFLAGS -
+            ret = (void *)(PART_UPDATE_ENDFLAGS -
                     (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
         }
-    } else
-        return NULL;
+    }
+    return ret;
 }
 
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
@@ -354,20 +356,20 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 #else
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
+    uint8_t *ret = NULL;
     uint32_t sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
     sel_sec = nvm_select_fresh_sector(part);
 #endif
     if (part == PART_BOOT) {
-    	return (void *)(PART_BOOT_ENDFLAGS -
+    	ret = (void *)(PART_BOOT_ENDFLAGS -
                 (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
     }
     else if (part == PART_UPDATE) {
-    	return (void *)(PART_UPDATE_ENDFLAGS -
+    	ret = (void *)(PART_UPDATE_ENDFLAGS -
                 (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
     }
-
-    return NULL;
+    return ret;
 }
 
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
@@ -383,7 +385,7 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
-        partition_magic_write(part, (uint32_t)(PART_BOOT_ENDFLAGS - sizeof(uint32_t)));
+        partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
     }
     else if (part == PART_UPDATE) {
         partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
@@ -489,15 +491,15 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
     int size = 0;
 
     if (part == PART_BOOT) {
-        address = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        address = (uint32_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
         size = WOLFBOOT_PARTITION_SIZE;
     }
     if (part == PART_UPDATE) {
-        address = WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+        address = (uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
         size = WOLFBOOT_PARTITION_SIZE;
     }
     if (part == PART_SWAP) {
-        address = WOLFBOOT_PARTITION_SWAP_ADDRESS;
+        address = (uint32_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
         size = WOLFBOOT_SECTOR_SIZE;
     }
 
@@ -939,7 +941,7 @@ static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
 
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
-    uint32_t addr, addr_align, addr_off;
+    uintptr_t addr, addr_align, addr_off;
     int ret = 0;
     int sel_sec = 0;
 #ifdef MMU
@@ -950,10 +952,10 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
     addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
-    #ifdef NVM_FLASH_WRITEONCE
-        sel_sec = nvm_select_fresh_sector(PART_BOOT);
-        addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-    #endif
+#ifdef NVM_FLASH_WRITEONCE
+    sel_sec = nvm_select_fresh_sector(PART_BOOT);
+    addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
+#endif
     hal_flash_unlock();
     /* casting to unsigned long to abide compilers on 64bit architectures */
     XMEMCPY(ENCRYPT_CACHE,
@@ -1131,14 +1133,18 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 {
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if ( 1 &&
-#if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
+#if !defined(WOLFBOOT_PART_USE_ARCH_OFFSET) && !defined(PULL_LINKER_DEFINES)
+    #if WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0
         (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
+    #endif
 #endif
         (a < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
         return PART_UPDATE;
     if ( 1 &&
-#if WOLFBOOT_PARTITION_SWAP_ADDRESS != 0
+#if !defined(WOLFBOOT_PART_USE_ARCH_OFFSET) && !defined(PULL_LINKER_DEFINES)
+    #if WOLFBOOT_PARTITION_SWAP_ADDRESS != 0
         (a >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
+    #endif
 #endif
         (a < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
         return PART_SWAP;

@@ -28,42 +28,38 @@ else
 	endif
 endif
 
+# Make sign algorithm argument
 ifeq ($(SIGN),NONE)
-  SIGN_ARGS+=--no-sign
+	SIGN_ARGS+=--no-sign
 endif
-
 ifeq ($(SIGN),ED25519)
-  SIGN_ARGS+= --ed25519
+	SIGN_ARGS+= --ed25519
 endif
-
 ifeq ($(SIGN),ED448)
-  SIGN_ARGS+= --ed448
+	SIGN_ARGS+= --ed448
 endif
-
 ifeq ($(SIGN),ECC256)
-  SIGN_ARGS+= --ecc256
+	SIGN_ARGS+= --ecc256
 endif
-
 ifeq ($(SIGN),RSA2048)
-  SIGN_ARGS+= --rsa2048
+	SIGN_ARGS+= --rsa2048
 endif
-
 ifeq ($(SIGN),RSA3072)
-  SIGN_ARGS+= --rsa3072
+	SIGN_ARGS+= --rsa3072
 endif
-
 ifeq ($(SIGN),RSA4096)
-  SIGN_ARGS+= --rsa4096
+	SIGN_ARGS+= --rsa4096
 endif
 
+# Make sign hash argument
 ifeq ($(HASH),SHA256)
-  SIGN_ARGS+= --sha256
+	SIGN_ARGS+= --sha256
 endif
 ifeq ($(HASH),SHA384)
-  SIGN_ARGS+= --sha384
+	SIGN_ARGS+= --sha384
 endif
 ifeq ($(HASH),SHA3)
-  SIGN_ARGS+= --sha3
+	SIGN_ARGS+= --sha3
 endif
 
 $(EXPVER):
@@ -145,11 +141,11 @@ test-update: test-app/image.bin FORCE
 test-sim-external-flash-with-enc-update:SIGN_ENC_ARGS=--encrypt /tmp/enc_key.der --aes128
 test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.elf test-app/image.bak.elf
-	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) 1
 	$(Q)cp test-app/image.bak.elf test-app/image.elf
-	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
@@ -157,7 +153,8 @@ test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 	#
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > v1_part.dd
 	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
-	$(Q)$(BINASSEMBLE) internal_flash.dd 0 wolfboot.bin \
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
 		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_and_encrypted.bin \
@@ -170,23 +167,25 @@ test-sim-external-flash-with-enc-delta-update:
 
 test-sim-internal-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.elf test-app/image.bak.elf
-	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) 1
 	$(Q)cp test-app/image.bak.elf test-app/image.elf
-	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1K count=16 oflag=append conv=notrunc
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
 	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	$(Q)$(BINASSEMBLE) internal_flash.dd 0  wolfboot.bin \
-	    $$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
 
 test-sim-internal-flash-with-delta-update:
 	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
-	$(Q)$(BINASSEMBLE) internal_flash.dd 0  wolfboot.bin \
-	    $$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff.bin \
 		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
 

@@ -22,6 +22,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef __APPLE__
+#define _FORTIFY_SOURCE 0
+#endif
 
 #include <stddef.h>
 #ifndef PLATFORM_library

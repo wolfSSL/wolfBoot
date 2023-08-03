@@ -37,11 +37,11 @@ static int locked = 0;
 void hal_init(void)
 {
 }
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     return 0;
 }
-int hal_flash_erase(uint32_t address, int len)
+int hal_flash_erase(uintptr_t address, int len)
 {
     return 0;
 }
@@ -108,7 +108,7 @@ START_TEST (test_parser_sunny)
     /* Check version */
     fail_if(wolfBoot_find_header(test_buffer + 8, HDR_VERSION, &p) != 4, "Parser error: cannot locate version");
     fail_if((p[0] != 0x0d) || (p[1] != 0x0c) || (p[2] != 0x0b) || (p[3] != 0x0a), "Parser error: version doesn't match");
-    
+
     /* Check timestamp */
     fail_if(wolfBoot_find_header(test_buffer + 8, HDR_TIMESTAMP, &p) != 8, "Parser error: cannot locate timestamp");
     fail_if((p[0] != 0x07) || (p[1] != 0x06) || (p[2] != 0x05) || (p[3] != 0x04), "Parser error: timestamp doesn't match");
@@ -116,7 +116,7 @@ START_TEST (test_parser_sunny)
 
     /* Check sha256 field */
     fail_if(wolfBoot_find_header(test_buffer + 8, HDR_SHA256, &p) != 32, "Parser error: cannot locate hash");
-    for (i = 0; i < 32; i++) 
+    for (i = 0; i < 32; i++)
         fail_unless(p[i] == i, "Parser error: hash does not match");
 
     /* Check non-existing field */
@@ -144,7 +144,7 @@ START_TEST (test_parser_borders)
     bad_buff[10]  = 0xF8;
     bad_buff[11]  = 0x00;
     fail_if(wolfBoot_find_header(bad_buff + 8, HDR_VERSION, &p) != 0, "Parser error: accessing version field out of bounds");
-    
+
     /* Second field too large */
     bad_buff[8]  = 0x01;
     bad_buff[9]  = 0x00;

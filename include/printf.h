@@ -27,8 +27,10 @@
 #if defined(DEBUG_ZYNQ) && !defined(PRINTF_ENABLED)
 #   define PRINTF_ENABLED
 #endif
-
 #if defined(WOLFBOOT_DEBUG_EFI) && !defined(PRINTF_ENABLED)
+#   define PRINTF_ENABLED
+#endif
+#if defined(ARCH_SIM) && !defined(PRINTF_ENABLED)
 #   define PRINTF_ENABLED
 #endif
 

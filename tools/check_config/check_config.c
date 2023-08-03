@@ -1,6 +1,6 @@
-/* unit-parser.c
+/* check_config.c
  *
- * Unit test for parser functions in libwolfboot.c
+ * Show configuration
  *
  *
  * Copyright (C) 2021 wolfSSL Inc.
@@ -32,11 +32,11 @@ static int locked = 0;
 void hal_init(void)
 {
 }
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     return 0;
 }
-int hal_flash_erase(uint32_t address, int len)
+int hal_flash_erase(uintptr_t address, int len)
 {
     return 0;
 }
@@ -102,5 +102,4 @@ int main(void)
            );
 #endif
     return 0;
-
 }
