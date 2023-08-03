@@ -9,18 +9,8 @@ firmware and all the updates for the target.
 The tools are distributed in two versions, using the same command line syntax,
 for portability reasons.
 
-By default, if no C keytools are compiled, the makefiles and scripts in this
-repository will use the Python tools.
-
-### Python key tools
-
-In order to use the python key tools, ensure that the `wolfcrypt` package is
-installed in your python environment. In most systems it's sufficient to run a
-command similar to:
-
-`pip install wolfcrypt`
-
-to ensure that the dependencies are met.
+By default, C keytools are compiled. The makefiles and scripts in this
+repository will use the C tools.
 
 ### C Key Tools
 
@@ -34,12 +24,23 @@ If the C version of the key tools exists they will be used by wolfBoot's makefil
 
 Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe` and `keygen.exe` tools for use on Windows.
 
+### Python key tools
+
+**Please note that the Python tools are deprecated and will be removed in future versions.**
+
+In order to use the python key tools, ensure that the `wolfcrypt` package is
+installed in your python environment. In most systems it's sufficient to run a
+command similar to:
+
+`pip install wolfcrypt`
+
+to ensure that the dependencies are met.
 
 ## Command Line Usage
 
 ### Keygen tool
 
-Usage: `keygen[.py] [OPTIONS] [-g new-keypair.der] [-i existing-pubkey.der] [...]`
+Usage: `keygen [OPTIONS] [-g new-keypair.der] [-i existing-pubkey.der] [...]`
 
 `keygen` is used to populate a keystore with existing and new public keys.
 Two options are supported:
@@ -62,10 +63,10 @@ For more information about the keystore mechanism, see [keystore.md](keystore.md
 
 ### Sign tool
 
-`sign` and `sign.py` produce a signed firmware image by creating a manifest header
+`sign` produces a signed firmware image by creating a manifest header
 in the format supported by wolfBoot.
 
-Usage: `sign[.py] [OPTIONS] IMAGE.BIN KEY.DER VERSION`
+Usage: `sign [OPTIONS] IMAGE.BIN KEY.DER VERSION`
 
 `IMAGE.BIN`:  A file containing the binary firmware/software to sign
 `KEY.DER`:    Private key file, in DER format, to sign the binary image
@@ -161,7 +162,7 @@ An incremental update is created using the sign tool when the following option
 is provided:
 
   * `--delta BASE_SIGNED_IMG.BIN` This option creates a binary diff file between
-    BASE_SIGNED_IMG.BIN and the new image signed starting from IMAGE.BIN. The
+    `BASE_SIGNED_IMG.BIN` and the new image signed starting from `IMAGE.BIN`. The
 result is stored in a file ending in `_signed_diff.bin`.
 
 #### Three-steps signing using external provisioning tools
@@ -190,7 +191,7 @@ its raw format and copied to a file, e.g. IMAGE_SIGNATURE.SIG
     the public part of the key that was used to sign the firmware in Phase 2.
 This option requires one extra argument at the end, after VERSION, which should
 be the filename of the signature that was the output of the previous phase, so
-IMAGE_SIGNATURE.SIG
+`IMAGE_SIGNATURE.SIG`
 
 For a real-life example, see the section below.
 
@@ -203,8 +204,6 @@ For a real-life example, see the section below.
 
 ```sh
 ./tools/keytools/sign --rsa2048 --sha256 test-app/image.bin wolfboot_signing_private_key.der 1
-# OR
-python3 ./tools/keytools/sign.py --rsa2048 --sha256 test-app/image.bin wolfboot_signing_private_key.der 1
 ```
 
 Note: The last argument is the “version” number.
@@ -219,21 +218,15 @@ openssl rsa -inform DER -outform DER -in my_key.der -out rsa2048_pub.der -pubout
 
 # Add the public key to the wolfBoot keystore using `keygen -i`
 ./tools/keytools/keygen --rsa2048 -i rsa2048_pub.der
-# OR
-python3 ./tools/keytools/keygen.py --rsa2048 -i rsa4096_pub.der
 
 # Generate Hash to Sign
 ./tools/keytools/sign            --rsa2048 --sha-only --sha256 test-app/image.bin rsa2048_pub.der 1
-# OR
-python3 ./tools/keytools/sign.py --rsa2048 --sha-only --sha256 test-app/image.bin rsa4096_pub.der 1
 
 # Sign hash Example (here is where you would use an HSM)
 openssl pkeyutl -sign -keyform der -inkey my_key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
 
 # Generate final signed binary
 ./tools/keytools/sign            --rsa2048 --sha256 --manual-sign test-app/image.bin rsa2048_pub.der 1 test-app/image_v1.sig
-# OR
-python3 ./tools/keytools/sign.py --rsa2048 --sha256 --manual-sign test-app/image.bin rsa4096_pub.der 1 test-app/image_v1.sig
 
 # Combine into factory image (0xc0000 is the WOLFBOOT_PARTITION_BOOT_ADDRESS)
 tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \

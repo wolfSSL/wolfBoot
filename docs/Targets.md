@@ -643,10 +643,10 @@ reset
 resume 0x0000001
 ```
 
-To sign the same application image as new version (2), use the python script `sign.py` provided:
+To sign the same application image as new version (2), use the `sign` tool provided:
 
 ```
-tools/keytools/sign.py test-app/image.bin wolfboot_signing_private_key.der 2
+tools/keytools/sign test-app/image.bin wolfboot_signing_private_key.der 2
 ```
 
 From OpenOCD, the updated image (version 2) can be flashed to the second bank:
@@ -717,9 +717,9 @@ st-flash write test-app/image_v1_signed.bin 0x08020000
 
 ### STM32H7 Testing
 
-To sign the same application image as new version (2), use the sign tools
+To sign the same application image as new version (2), use the sign tool
 
-Python: `tools/keytools/sign.py --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2`
+Python: `tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2`
 
 C Tool: `tools/keytools/sign    --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2`
 
@@ -928,7 +928,7 @@ make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 
 #### Signing
 
-`tools/keytools/sign.py --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin wolfboot_signing_private_key.der 1`
+`tools/keytools/sign --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin wolfboot_signing_private_key.der 1`
 
 
 ## Cypress PSoC-6
@@ -1135,7 +1135,7 @@ To build the first stage load, wolfBoot, sign a custom application and assembly 
 ```
 cp config/examples/nxp-p1021.config .config
 
-# build the C version of the key tools (instead of using the python ones)
+# build the key tools
 make keytools
 
 make clean

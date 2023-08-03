@@ -63,7 +63,7 @@ Two arguments:
 
 Example of creation of a keystore with two ED25519 keys:
 
-`./tools/keytools/keygen.py --ed25519 -g first.der -g second.der`
+`./tools/keytools/keygen --ed25519 -g first.der -g second.der`
 
 will create the following files:
 

@@ -291,8 +291,14 @@ def make_header(image_file, fw_version, extra_fields=[]):
 print("wolfBoot KeyTools (Python version)")
 print("wolfcrypt-py version: " + wolfcrypt.__version__)
 
-
-
+print("            *** WARNING ***")
+print("Python key tools are now deprecated")
+print("and will be removed in future versions.")
+print("Please ensure that your scripts are using")
+print("the compiled C version of these tools")
+print("(e.g. by running 'make keytools').")
+print("            *** ******* ***")
+print("")
 
 if (argc < 4) or (argc > 12):
     print("Usage: "+argv[0]+" [options] image key version");
