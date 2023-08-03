@@ -30,25 +30,22 @@
     #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
 
-    #define ENABLE_L1_CACHE
-
     #define ENABLE_DDR
+
+    /* Memory used for transferring blocks to/from NAND.
+     * Maps to eLBC FCM internal 8KB region (by hardware) */
+    #define FLASH_BASE_ADDR 0xFC000000
 
     #ifdef BUILD_LOADER_STAGE1
         /* First stage loader features */
 
-        /* For Boot ROM FCM buffer */
-        #define FLASH_BASE_ADDR 0xFFF00000
-
-        /* L2 is not available while FMR[BOOT]=1 */
-        #define L1_CACHE_ADDR 0xFFD00000
+        #define ENABLE_L2_CACHE
+        #define L2SRAM_ADDR    (0xF8F80000) /* L2 as SRAM */
+        #define L2SRAM_SIZE    (256 * 1024)
     #else
         /* For wolfBoot features */
+        #define ENABLE_L1_CACHE
         #define ENABLE_L2_CACHE
-
-        /* Memory used for transferring blocks to/from NAND.
-         * Maps to eLBC FCM internal 8KB region (by hardware) */
-        #define FLASH_BASE_ADDR 0xFC000000
 
         /* Relocate CCSRBAR */
         #define CCSRBAR 0xFFE00000
@@ -117,13 +114,9 @@
 #endif
 
 /* L1 */
-#ifndef L1_CACHE_ADDR
-#define L1_CACHE_ADDR   0xFFD00000
-#endif
 #ifndef L1_CACHE_SZ
 #define L1_CACHE_SZ     (32 * 1024)
 #endif
-
 
 #ifdef CORE_E500
     /* PowerPC e500 */
@@ -143,7 +136,7 @@
     #define MAS1_TSIZE_MASK    0x00000F00
     #define MAS1_TSIZE(x)      (((x) << 8) & MAS1_TSIZE_MASK)
 
-    #define L1_CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
+    #define CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
 
     /* P1021 LAW - Local Access Window (Memory Map) - RM 2.4 */
     #define LAWBAR_BASE(n) (0xC08 + (n * 0x20))
@@ -157,7 +150,7 @@
     #define LAW_TRGT_PCIE2 0x01
     #define LAW_TRGT_PCIE1 0x02
     #define LAW_TRGT_ELBC  0x04 /* eLBC (Enhanced Local Bus Controller) */
-    #define LAW_TRGT_DDR   0x0F  /* DDR Memory Controller */
+    #define LAW_TRGT_DDR   0x0F /* DDR Memory Controller */
 
     /* P1021 2.4.2 - size is equal to 2^(enum + 1) */
     #define LAW_SIZE_4KB   0x0B
@@ -218,7 +211,7 @@
     #define MAS1_TSIZE_MASK    0x00000F80
     #define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
 
-    #define L1_CACHE_LINE_SHIFT 6 /* 64 bytes per L1 cache line */
+    #define CACHE_LINE_SHIFT 6 /* 64 bytes per L1 cache line */
 
     /* CoreNet Platform Cache Base */
     #define CPC_BASE        (CCSRBAR + 0x10000)
@@ -271,8 +264,8 @@
 
 #endif
 
-#ifndef L1_CACHE_LINE_SIZE
-#define L1_CACHE_LINE_SIZE (1 << L1_CACHE_LINE_SHIFT)
+#ifndef CACHE_LINE_SIZE
+#define CACHE_LINE_SIZE (1 << CACHE_LINE_SHIFT)
 #endif
 
 

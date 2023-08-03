@@ -104,5 +104,5 @@ SECTIONS
     } > DRAM
 }
 
-PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)) );
+PROVIDE(_start_heap = ORIGIN(L2RAM));
+PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) );

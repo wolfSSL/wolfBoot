@@ -64,9 +64,13 @@ uint8_t spi_read(void);
 #endif
 
 #ifdef WOLFBOOT_TPM
-/* Perform a SPI transaction. Set cont!=0 to not let CS go low after this */
-/* cont 0=is last transfer and will de-assert CS, 1=leave CS asserted */
-int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont);
+/* SPI transfer flags */
+#define SPI_XFER_FLAG_NONE     0x0
+#define SPI_XFER_FLAG_CONTINUE 0x1 /* keep CS asserted */
+
+/* Perform a SPI transaction.
+ * Set flags == SPI_XFER_FLAG_CONTINUE to keep CS asserted after transfer. */
+int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags);
 #endif
 
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)

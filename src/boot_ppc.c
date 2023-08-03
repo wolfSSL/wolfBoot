@@ -120,18 +120,18 @@ void flush_cache(uint32_t start_addr, uint32_t size)
 {
     uint32_t addr, start, end;
 
-    start = start_addr & ~(L1_CACHE_LINE_SIZE - 1);
+    start = start_addr & ~(CACHE_LINE_SIZE - 1);
     end = start_addr + size - 1;
 
     for (addr = start; (addr <= end) && (addr >= start);
-            addr += L1_CACHE_LINE_SIZE) {
+            addr += CACHE_LINE_SIZE) {
         asm volatile("dcbst 0,%0" : : "r" (addr) : "memory");
     }
     /* wait for all dcbst to complete on bus */
     asm volatile("sync" : : : "memory");
 
     for (addr = start; (addr <= end) && (addr >= start);
-            addr += L1_CACHE_LINE_SIZE) {
+            addr += CACHE_LINE_SIZE) {
         asm volatile("icbi 0,%0" : : "r" (addr) : "memory");
     }
     asm volatile("sync" : : : "memory");

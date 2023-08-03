@@ -126,7 +126,7 @@ void spi_release(void)
 }
 
 #ifdef WOLFBOOT_TPM
-int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
+int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags)
 {
     uint32_t i;
     spi_cs_on(SPI_CS_TPM_PIO_BASE, cs);
@@ -134,7 +134,7 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
         spi_write((const char)tx[i]);
         rx[i] = spi_read();
     }
-    if (!cont) {
+    if (!(flags & SPI_XFER_FLAG_CONTINUE)) {
         spi_cs_off(SPI_CS_TPM_PIO_BASE, cs);
     }
     return 0;

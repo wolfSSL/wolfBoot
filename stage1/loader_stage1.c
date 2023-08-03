@@ -42,7 +42,7 @@
 
 #ifdef BUILD_LOADER_STAGE1
 
-#if defined(WOLFBOOT_ARCH) && WOLFBOOT_ARCH == PPC
+#ifdef WOLFBOOT_ARCH_PPC
 #include "hal/nxp_ppc.h"
 #endif
 
@@ -85,11 +85,11 @@ int main(void)
         /* relocate 4KB code to DST and jump */
         memcpy32((void*)wolfboot_start, (void*)BOOT_ROM_ADDR, BOOT_ROM_SIZE);
 
-    #if defined(WOLFBOOT_ARCH) && WOLFBOOT_ARCH == PPC
+    #ifdef WOLFBOOT_ARCH_PPC
         /* TODO: Fix hack and consider moving to hal_prepare_boot */
         /* HACK: Fix up stack values modified with trap */
-        *((uint32_t*)(WOLFBOOT_STAGE1_BASE_ADDR + 0xC18)) = 0x9421FFF0;
-        *((uint32_t*)(WOLFBOOT_STAGE1_BASE_ADDR + 0xC74)) = 0x39200000;
+        *((uint32_t*)(WOLFBOOT_STAGE1_BASE_ADDR + 0xB70)) = 0x9421FFF0; /* main() */
+        *((uint32_t*)(WOLFBOOT_STAGE1_BASE_ADDR + 0xBCC)) = 0x39200000; /* instruction above */
 
         /* call to relocate code does not return */
         relocate_code(wolfboot_start, (void*)BOOT_ROM_ADDR, BOOT_ROM_SIZE);
