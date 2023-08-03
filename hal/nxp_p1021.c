@@ -26,26 +26,29 @@
 
 #include "nxp_ppc.h"
 
-#define ENABLE_ELBC
+/* Debugging */
+/* #define DEBUG_EXT_FLASH */
+/* #define DEBUG_ESPI 1 */
+
+/* Tests */
+/* #define TEST_DDR */
+/* #define TEST_FLASH */
+/* #define TEST_TPM */
+
+#define ENABLE_ELBC /* Flash Controller */
 #define ENABLE_BUS_CLK_CALC
 #ifndef BUILD_LOADER_STAGE1
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
     #define ENABLE_CONF_IO
     #define ENABLE_QE   /* QUICC Engine */
-    #define ENABLE_ESPI /* SPI for TPM */
+    #if defined(WOLFBOOT_TPM) || defined(TEST_TPM)
+        #define ENABLE_ESPI /* SPI for TPM */
+    #endif
     #define ENABLE_MP   /* multi-core support */
     #define ENABLE_IRQ
     /* #define ENABLE_QE_CRC32 */ /* CRC32 check on QE disabled by default */
 #endif
-
-/* Debugging */
-/* #define DEBUG_EXT_FLASH */
-
-/* Tests */
-/* #define TEST_DDR */
-/* #define TEST_FLASH */
-/* #define TEST_TPM */
 
 #if defined(ENABLE_DDR) && defined(TEST_DDR)
 static int test_ddr(void);
@@ -57,6 +60,9 @@ static int test_flash(void);
 static int test_tpm(void);
 #endif
 
+#ifdef ENABLE_ESPI
+#include "spi_drv.h" /* for transfer flags */
+#endif
 
 /* P1021 Platform */
 /* System input clock */
@@ -90,17 +96,6 @@ static int test_tpm(void);
 
 #define GUTS_DEVDISR_TB0    0x00004000
 #define GUTS_DEVDISR_TB1    0x00001000
-
-
-/* L2 Cache */
-#define L2_BASE         (CCSRBAR + 0x20000)
-#define L2CTL           (volatile uint32_t*)(L2_BASE + 0x000) /* 0xFFE20000 - L2 control register */
-#define L2SRBAR0        (volatile uint32_t*)(L2_BASE + 0x100) /* 0xFFE20100 - L2 SRAM base address register */
-
-#define L2CTL_EN        (1 << 31) /* L2 enable */
-#define L2CTL_INV       (1 << 30) /* L2 invalidate */
-#define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
-#define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
 
 
 /* PIC */
@@ -448,14 +443,17 @@ enum elbc_amask_sizes {
 /* eSPI */
 #define ESPI_MAX_CS_NUM      4
 #define ESPI_MAX_RX_LEN      (1 << 16)
+#define ESPI_FIFO_WORD       4
 
 #define ESPI_BASE            (CCSRBAR + 0x7000)
 #define ESPI_SPMODE          ((volatile uint32_t*)(ESPI_BASE + 0x00)) /* controls eSPI general operation mode */
 #define ESPI_SPIE            ((volatile uint32_t*)(ESPI_BASE + 0x04)) /* controls interrupts and report events */
 #define ESPI_SPIM            ((volatile uint32_t*)(ESPI_BASE + 0x08)) /* enables/masks interrupts */
 #define ESPI_SPCOM           ((volatile uint32_t*)(ESPI_BASE + 0x0C)) /* command frame information */
-#define ESPI_SPITF           ((volatile uint32_t*)(ESPI_BASE + 0x10)) /* transmit FIFO access register */
-#define ESPI_SPIRF           ((volatile uint32_t*)(ESPI_BASE + 0x14)) /* 32-bit read-only receive data register */
+#define ESPI_SPITF           ((volatile uint32_t*)(ESPI_BASE + 0x10)) /* transmit FIFO access register (32-bit) */
+#define ESPI_SPIRF           ((volatile uint32_t*)(ESPI_BASE + 0x14)) /* read-only receive data register (32-bit) */
+#define ESPI_SPITF8          ((volatile uint8_t*)( ESPI_BASE + 0x10)) /* transmit FIFO access register (8-bit) */
+#define ESPI_SPIRF8          ((volatile uint8_t*)( ESPI_BASE + 0x14)) /* read-only receive data register (8-bit) */
 #define ESPI_SPCSMODE(x)     ((volatile uint32_t*)(ESPI_BASE + 0x20 + ((cs) * 4))) /* controls master operation with chip select 0-3 */
 
 #define ESPI_SPMODE_EN       (0x80000000) /* Enable eSPI */
@@ -466,9 +464,12 @@ enum elbc_amask_sizes {
 #define ESPI_SPCOM_RXSKIP(x) ((x) << 16)       /* Number of characters skipped for reception from frame start */
 #define ESPI_SPCOM_TRANLEN(x) (((x) - 1) << 0) /* Transaction length */
 
+#define ESPI_SPIE_TXE        (1 << 15) /* transmit empty */
 #define ESPI_SPIE_DON        (1 << 14) /* Last character was transmitted */
-#define ESPI_SPIE_RNE        (1 << 9) /* receive not empty */
-#define ESPI_SPIE_TNF        (1 << 8) /* transmit not full */
+#define ESPI_SPIE_RXT        (1 << 13) /* Rx FIFO has more than RXTHR bytes */
+#define ESPI_SPIE_RNE        (1 << 9)  /* receive not empty */
+#define ESPI_SPIE_TNF        (1 << 8)  /* transmit not full */
+#define ESPI_SPIE_RXCNT(n)   (((n) >> 24) & 0x3F) /* The current number of full Rx FIFO bytes */
 
 #define ESPI_CSMODE_CI       0x80000000 /* Inactive high */
 #define ESPI_CSMODE_CP       0x40000000 /* Begin edge clock */
@@ -509,7 +510,10 @@ static uint32_t hal_get_bus_clk(void)
 }
 
 #if defined(ENABLE_ESPI) || defined(ENABLE_DDR)
-static void udelay(unsigned long delay_us)
+#ifdef BUILD_LOADER_STAGE1
+static
+#endif
+void udelay(unsigned long delay_us)
 {
     delay_us *= (hal_get_bus_clk() / 1000000);
     wait_ticks(delay_us);
@@ -522,7 +526,7 @@ void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
 {
     uint32_t spibrg = hal_get_bus_clk() / 2, pm, csmode;
 
-    /* Enable eSPI with TX threadshold 4 and TX threshold 3 */
+    /* Enable eSPI with TX threadshold 4 and RX threshold 3 */
     set32(ESPI_SPMODE, (ESPI_SPMODE_EN | ESPI_SPMODE_TXTHR(4) |
         ESPI_SPMODE_RXTHR(3)));
 
@@ -554,41 +558,75 @@ void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
     set32(ESPI_SPCSMODE(cs), csmode);
 }
 
-/* Note: This code assumes all input buffers are multiple of 4 */
-int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int cont)
+int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz,
+    int flags)
 {
-    uint32_t reg, blks;
+    uint32_t mosi, miso, xfer, event;
 
-    /* assert CS */
-    set32(ESPI_SPCOM, ESPI_SPCOM_CS(cs) | ESPI_SPCOM_TRANLEN(sz));
+#ifdef DEBUG_ESPI
+    wolfBoot_printf("CS %d, Sz %d, Flags %x\n", cs, sz, flags);
+#endif
 
-    set32(ESPI_SPIE, 0xffffffff); /* Clear all eSPI events */
+    if (sz > 0) {
+        /* assert CS - use max length and control CS with mode enable toggle */
+        set32(ESPI_SPCOM, ESPI_SPCOM_CS(cs) | ESPI_SPCOM_TRANLEN(0x10000));
+        set32(ESPI_SPIE, 0xffffffff); /* Clear all eSPI events */
+    }
+    while (sz > 0) {
+        xfer = ESPI_FIFO_WORD;
+        if (xfer > sz)
+            xfer = sz;
 
-    /* calculate the number of 4 byte blocks rounded up */
-    blks = (sz + 3) / 4;
-    while (blks--) {
-        /* wait till TX fifo has room */
-        while ((get32(ESPI_SPIE) & ESPI_SPIE_TNF) == 0);
-        reg = *((uint32_t*)tx);
-        set32(ESPI_SPITF, reg);
-        tx += 4;
-        set32(ESPI_SPIE, ESPI_SPIE_TNF); /* clear event */
+        /* Transfer 4 or 1 */
+        if (xfer == ESPI_FIFO_WORD) {
+            set32(ESPI_SPITF, *((uint32_t*)tx));
+        }
+        else {
+            xfer = 1;
+            set8(ESPI_SPITF8, *((uint8_t*)tx));
+        }
 
-        udelay(5);
+        /* wait till TX fifo is empty or done */
+        while (1) {
+            event = get32(ESPI_SPIE);
+            if (event & (ESPI_SPIE_TXE | ESPI_SPIE_DON)) {
+                /* clear events */
+                set32(ESPI_SPIE, (ESPI_SPIE_TXE | ESPI_SPIE_DON));
+                break;
+            }
+        }
 
-        /* wait till RX has data */
-        while ((get32(ESPI_SPIE) & ESPI_SPIE_RNE) == 0);
-        reg = get32(ESPI_SPIRF);
-        *((uint32_t*)rx) = reg;
-        rx += 4;
-        set32(ESPI_SPIE, ESPI_SPIE_RNE); /* clear event */
+        /* wait till RX has enough data */
+        while (1) {
+            event = get32(ESPI_SPIE);
+            if ((event & ESPI_SPIE_RNE) == 0)
+                continue;
+        #if defined(DEBUG_ESPI) && DEBUG_ESPI > 1
+            wolfBoot_printf("event %x\n", event);
+        #endif
+            if (ESPI_SPIE_RXCNT(event) >= xfer)
+                break;
+        }
+        if (xfer == ESPI_FIFO_WORD) {
+            *((uint32_t*)rx) = get32(ESPI_SPIRF);
+        }
+        else {
+            *((uint8_t*)rx) = get8(ESPI_SPIRF8);
+        }
+
+#ifdef DEBUG_ESPI
+        wolfBoot_printf("MOSI %x, MISO %x\n",
+            *((uint32_t*)tx), *((uint32_t*)rx));
+#endif
+        tx += xfer;
+        rx += xfer;
+        sz -= xfer;
     }
 
-    if (!cont) {
+    if (!(flags & SPI_XFER_FLAG_CONTINUE)) {
         /* toggle ESPI_SPMODE_EN - to deassert CS */
-        reg = get32(ESPI_SPMODE);
-        set32(ESPI_SPMODE, reg & ~ESPI_SPMODE_EN);
-        set32(ESPI_SPMODE, reg);
+        set32(ESPI_SPMODE, get32(ESPI_SPMODE) & ~ESPI_SPMODE_EN);
+        set32(ESPI_SPMODE, get32(ESPI_SPMODE) | ESPI_SPMODE_EN);
     }
 
     return 0;
@@ -1497,40 +1535,6 @@ static void hal_irq_init(void)
 }
 #endif
 
-#ifdef ENABLE_L2_CACHE
-static void hal_l2_init(void)
-{
-    uint32_t reg;
-
-    /* e500v2 L2 Cache */
-#ifdef L2SRAM_ADDR
-    /* L2 L2SRAM_ADDR: TLB 1, Entry 9, Supervisor X/R/W, G, TS=0, 256KB, IPROT */
-    set_tlb(1, 9,
-            L2SRAM_ADDR, L2SRAM_ADDR, 0,
-            MAS3_SX | MAS3_SW | MAS3_SR, MAS2_G, 0,
-            BOOKE_PAGESZ_256K, 1, r3);
-#endif
-
-    /* Configure the L2 Cache */
-    asm volatile("mbar; isync");
-#ifdef L2SRAM_ADDR /* as SRAM (1=256KB) */
-    set32(L2CTL, (L2CTL_EN | L2CTL_INV | L2CTL_L2SRAM(1)));
-#else
-    set32(L2CTL, (L2CTL_EN | L2CTL_INV | L2CTL_SIZ(2)));
-#endif
-    reg = get32(L2CTL); /* read back (per P1021 RM) */
-    asm volatile("mbar");
-
-#ifdef L2SRAM_ADDR
-    /* Set the L2SRAM base address */
-    asm volatile("mbar; isync");
-    set32(L2SRBAR0, L2SRAM_ADDR);
-    reg = get32(L2SRBAR0);
-    asm volatile("mbar");
-#endif
-}
-#endif /* ENABLE_L2_CACHE */
-
 void hal_init(void)
 {
 #ifdef DEBUG_UART
@@ -1538,9 +1542,6 @@ void hal_init(void)
     #if !defined(BUILD_LOADER_STAGE1)
     uart_write("wolfBoot HAL Init\n", 19);
     #endif
-#endif
-#ifdef ENABLE_L2_CACHE
-    hal_l2_init();
 #endif
 #ifdef ENABLE_PCIE
     hal_pcie_init();

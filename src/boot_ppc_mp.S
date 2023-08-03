@@ -235,7 +235,7 @@ _mp_page_start:
 _bootpg_addr:
         .long        0
 
-        .align L1_CACHE_LINE_SHIFT
+        .align CACHE_LINE_SHIFT
 
         /* Reserve space for spin table entries */
         .globl _spin_table

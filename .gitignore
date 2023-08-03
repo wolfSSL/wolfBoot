@@ -123,3 +123,5 @@ CMakeCache.txt
 
 # Stage 1
 stage1/loader_stage1.ld
+
+debug/lauterbach

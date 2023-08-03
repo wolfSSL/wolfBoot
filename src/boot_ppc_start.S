@@ -494,14 +494,13 @@ flash_tlb:
                 BOOKE_PAGESZ_256M, 0, r3);
 #endif
 
-#ifdef CORE_E6500
-
 #ifdef ENABLE_L2_CACHE
-
+#ifdef CORE_E6500 /* --- L2 E6500 --- */
 #ifdef L2SRAM_ADDR
 l2_sram_law:
         /* L2 SRAM - LAW2 (DDR 256KB) */
-        #define L2SRAM_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_256KB)
+        #define L2SRAM_LAW \
+            (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_256KB)
         lis     r9, CCSRBAR + LAWBAR_BASE(2)@h
         ori     r9, r9, CCSRBAR + LAWBAR_BASE(2)@l
         li      r0, 0
@@ -517,11 +516,11 @@ l2_sram_law:
         isync
 
 l2_sram_tlb:
-        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, 512KB, IPROT */
+        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, 256KB, IPROT */
         set_tlb(1, 9,
                 L2SRAM_ADDR, L2SRAM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
-                BOOKE_PAGESZ_512K, 1, r3);
+                BOOKE_PAGESZ_256K, 1, r3);
 
 l2_setup_sram:
         /* 8.2 CoreNet Platform Cache (CPC) Memory Map */
@@ -565,7 +564,7 @@ l2_setup_sram:
         isync
         stw     r0, CPCCSR0(r1)
         mbar
-#endif
+#endif /* L2SRAM_ADDR */
 
         /* Disable speculation */
         lwz     r0, CPCHDBCR0(r1)
@@ -616,24 +615,78 @@ l2_poll_invclear:
         li      r4, 32
         stw     r4, L2CSR1(r5)
 
-#ifdef L2SRAM_ADDR
-l2_sram_init:
-        /* clear 8 bytes at a time */
-        lis     r2, (L2SRAM_ADDR - 8)@h
-        ori     r2, r2, (L2SRAM_ADDR - 8)@l
-        lis     r3, (L2SRAM_SIZE / 8)@h
-        ori     r3, r3, (L2SRAM_SIZE / 8)@l
-        mtctr   r3
-        li      r3, 0
-l2_sram_init_loop:
-        stdu    r3, 8(r2)
-        bdnz    l2_sram_init_loop
-#endif /* L2SRAM_ADDR */
-#endif /* ENABLE_L2_CACHE */
-#endif /* CORE_E6500 */
+#elif defined(CORE_E500) /* --- L2 E500 --- */
 
-setup_l1:
+#ifdef L2SRAM_ADDR
+l2_sram_law:
+        /* L2 SRAM - LAW2 (eLBC 256KB) */
+        #define L2SRAM_LAW \
+            (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_ELBC) | LAW_SIZE_256KB)
+        lis     r9, CCSRBAR + LAWBAR_BASE(2)@h
+        ori     r9, r9, CCSRBAR + LAWBAR_BASE(2)@l
+        lis     r1, L2SRAM_ADDR@h
+        ori     r1, r1, L2SRAM_ADDR@l
+        lis     r2, L2SRAM_LAW@h
+        ori     r2, r2, L2SRAM_LAW@l
+        stw     r1, 0(r9) /* LAWBAR */
+        sync
+        stw     r2, 8(r9) /* LAWAR */
+        lwz     r2, 8(r9) /* read back LAWAR */
+        isync
+
+l2_sram_tlb:
+        /* L2 0xF8F80000: TLB 1, Entry 9, Supervisor X/R/W, G, TS=0, 256KB, IPROT */
+        set_tlb(1, 9,
+                L2SRAM_ADDR, L2SRAM_ADDR, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_G, 0,
+                BOOKE_PAGESZ_256K, 1, r3);
+#endif
+
+        /* e500 - L2 Cache */
+l2_setup_cache:
+        #define L2_BASE         (CCSRBAR + 0x20000)
+        #define L2CTL           0x000 /* 0xFFE20000 - L2 control register */
+        #define L2SRBAR0        0x100 /* 0xFFE20100 - L2 SRAM base address register */
+
+        #define L2CTL_EN        (1 << 31) /* L2 enable */
+        #define L2CTL_INV       (1 << 30) /* L2 invalidate */
+        #define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
+        #define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
+
+    #ifdef L2SRAM_ADDR /* as SRAM (1=256KB) */
+        #define L2CTL_VAL (L2CTL_EN | L2CTL_INV | L2CTL_SIZ(2) | L2CTL_L2SRAM(1))
+    #else
+        #define L2CTL_VAL (L2CTL_EN | L2CTL_INV | L2CTL_SIZ(2))
+    #endif
+        /* Configure the L2 Cache */
+        lis     r5, L2_BASE@h
+        ori     r5, r5, L2_BASE@l
+        lis     r1, L2CTL_VAL@h
+        ori     r1, r1, L2CTL_VAL@l
+        msync
+        isync
+        stw     r1, L2CTL(r5)
+        msync
+        isync
+        lwz     r1, L2CTL(r5) /* read back (per P1021 RM) */
+
+#ifdef L2SRAM_ADDR
+l2_setup_sram:
+        /* Set the L2SRAM base address */
+        mbar
+        isync
+        lis     r1, L2SRAM_ADDR@h
+        ori     r1, r1, L2SRAM_ADDR@l
+        stw     r1, L2SRBAR0(r5)
+        mbar
+#endif /* L2SRAM_ADDR */
+
+#endif /* CORE_* */
+#endif /* ENABLE_L2_CACHE */
+
+
 #ifdef ENABLE_L1_CACHE
+setup_l1:
 #ifndef BUILD_LOADER_STAGE1
         /* L1 Instruction Cache */
         bl icache_enable;
@@ -655,27 +708,38 @@ l1_tlb:
         set_tlb(0, 0, L1_CACHE_ADDR+0x3000, L1_CACHE_ADDR+0x3000, 0,
                 (MAS3_SX | MAS3_SW | MAS3_SR), 0, 0, BOOKE_PAGESZ_4K, 0, r3);
 
-l1_cache:
-        /* setup L1 cache */
-        lis     r3, L1_CACHE_ADDR@h
-        ori     r3, r3, L1_CACHE_ADDR@l
+        #define CACHE_SRAM_ADDR L1_CACHE_ADDR
+#elif defined(L2SRAM_ADDR)
+        #define CACHE_SRAM_ADDR L2SRAM_ADDR
+#endif
+#endif /* ENABLE_L1_CACHE */
+
+#ifdef CACHE_SRAM_ADDR
+cache_sram_init:
+        lis     r3, CACHE_SRAM_ADDR@h
+        ori     r3, r3, CACHE_SRAM_ADDR@l
         /* read the cache size */
         mfspr   r2, L1CFG0
         andi.   r2, r2, 0x1FF
         /* calculate (cache size * 1024 / (2 * L1 line size)) */
-        slwi    r2, r2, (10 - 1 - L1_CACHE_LINE_SHIFT)
-        mtctr   r2
+        slwi    r2, r2, (10 - 1 - CACHE_LINE_SHIFT)
+        mtctr   r2 /* load counter */
         li      r0, 0
+cache_sram_init_loop:
+        /* Data cache block zero */
+        dcbz    r0, r3
+        /* Data cache block touch and lock set */
+#ifdef CORE_E6500
+        dcbtls  2, r0, r3
+        dcbtls  0, r0, r3
+#else
+        dcbtls  0, r0, r3
+#endif
+        addi    r3, r3, CACHE_LINE_SIZE
+        bdnz    cache_sram_init_loop
+#endif /* CACHE_SRAM_ADDR */
 
-l1_cache_init:
-        dcbz    r0, r3    /* Data cache block zero */
-        dcbtls  0, r0, r3 /* Data cache block touch and lock set */
-        addi    r3, r3, L1_CACHE_LINE_SIZE
-        bdnz    l1_cache_init
-#endif /* L1_CACHE_ADDR */
-#endif /* ENABLE_L1_CACHE */
-
-setup_ts0:
+setup_stack:
         /* Build top of stack address */
         /* Reserve 64 bytes of initial data (must be 16 byte aligned) */
         lis     r1, (_end_stack-64)@h
@@ -839,7 +903,7 @@ dcache_disable:
 relocate_code:
         mr      r9,  r3 /* Save copy of Destination Address */
         mr      r10, r4 /* Save copy of Source Address */
-        li      r6, L1_CACHE_LINE_SIZE /* Cache Line size */
+        li      r6, CACHE_LINE_SIZE /* Cache Line size */
 
         /* Fix GOT pointer */
         GET_GOT
