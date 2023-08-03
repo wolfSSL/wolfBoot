@@ -46,8 +46,13 @@ void hal_deinit();
 #endif
 
 void hal_init(void);
+#if !defined(FORCE_32BIT) && INTPTR_MAX == INT64_MAX /* 64-bit platform */
+int hal_flash_write(uintptr_t address, const uint8_t *data, int len);
+int hal_flash_erase(uintptr_t address, int len);
+#else
 int hal_flash_write(uint32_t address, const uint8_t *data, int len);
 int hal_flash_erase(uint32_t address, int len);
+#endif
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
 void hal_prepare_boot(void);

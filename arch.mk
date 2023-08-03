@@ -451,7 +451,7 @@ ifeq ($(USE_GCC),1)
   CC=$(CROSS_COMPILE)gcc
   LD=$(CROSS_COMPILE)gcc
   AS=$(CROSS_COMPILE)gcc
-  OBJCOPY=$(CROSS_COMPILE)objcopy
+  OBJCOPY?=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
   OUTPUT_FLAG=-o
 endif
@@ -569,7 +569,6 @@ ifeq ($(TARGET),x86_64_efi)
 endif
 
 ifeq ($(TARGET),sim)
-  ARCH_FLASH_OFFSET=0xC0000000
   USE_GCC_HEADLESS=0
   LD = gcc
   UPDATE_OBJS:=src/update_flash.o

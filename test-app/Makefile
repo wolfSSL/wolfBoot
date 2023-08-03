@@ -6,11 +6,6 @@ TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 
-
-ifeq ($(TARGET),sim)
-  LDFLAGS=-Wl,-gc-sections -Wl,-Map=image.map
-endif
-
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
 endif
@@ -35,15 +30,18 @@ endif
 
 
 ifeq ($(TARGET),ti_hercules)
-  APP_OBJS:=app_$(TARGET).o ../src/libwolfboot.o
+  APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
   CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
-  APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../src/libwolfboot.o
+  APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
 endif
 
 
 include ../arch.mk
+
+# Setup default linker flags
+LDFLAGS=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(DEBUG_UART),1)
     APP_OBJS+=../src/string.o
@@ -114,17 +112,16 @@ ifeq ($(TARGET),stm32u5)
   LDFLAGS+=-mcpu=cortex-m33
 endif
 
-
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_TEMPLATE=ARM-r5be.ld
-  LDFLAGS+=$(LSCRIPT) --map_file=image.map
-else
-  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+  # Override linker flags
+  LDFLAGS=$(LSCRIPT) --map_file=image.map
 endif
 
 ifeq ($(TARGET),sim)
-  LDFLAGS=-Wl,-gc-sections -Wl,-Map=image.map
-  APP_OBJS=app_$(TARGET).o ../src/libwolfboot.o ../hal/$(TARGET).o
+  APP_OBJS=app_$(TARGET).o ../test-app/libwolfboot.o ../hal/$(TARGET).o
+  # Override linker flags
+  LDFLAGS=
 endif
 
 ifeq ($(EXT_FLASH),1)
@@ -270,7 +267,7 @@ image.elf: $(APP_OBJS) $(LSCRIPT)
 
 standalone: image.bin
 
-../src/libwolfboot.o: ../src/libwolfboot.c FORCE
+../test-app/libwolfboot.o: ../src/libwolfboot.c FORCE
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 

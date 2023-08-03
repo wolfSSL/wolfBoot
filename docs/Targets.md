@@ -1516,6 +1516,8 @@ make test-sim-internal-flash-with-update
 ./wolfboot.elf success get_version
 ```
 
+Note: This also works on Mac OS, but `objcopy` does not exist. Install with `brew install binutils` and make using `OBJCOPY=/usr/local/Cellar//binutils/2.41/bin/objcopy make`.
+
 
 ## Renesas RX72N
 

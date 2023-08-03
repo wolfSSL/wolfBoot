@@ -52,7 +52,7 @@ static EFI_HANDLE *gImageHandle;
 EFI_PHYSICAL_ADDRESS kernel_addr;
 EFI_PHYSICAL_ADDRESS update_addr;
 
-int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     return 0;
 }
@@ -65,7 +65,7 @@ void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
-int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uintptr_t address, int len)
 {
     return 0;
 }

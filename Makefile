@@ -175,12 +175,14 @@ test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
 	$(Q)$(SIZE) test-app/image.elf
 
-internal_flash.dd: $(BINASSEMBLE) wolfboot.elf test-app/image_v1_signed.bin
+internal_flash.dd: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] internal_flash.dd"
 	$(Q)dd if=/dev/zero bs=1 count=$$(($(WOLFBOOT_SECTOR_SIZE))) > /tmp/swap
-	$(Q)$(BINASSEMBLE) $@ 0 test-app/image_v1_signed.bin \
-		$(WOLFBOOT_PARTITION_SIZE) /tmp/swap \
-		$$(($(WOLFBOOT_PARTITION_SIZE)*2)) /tmp/swap
+	$(Q)$(BINASSEMBLE) $@ \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) /tmp/swap \
+		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) /tmp/swap
 
 factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] $@"

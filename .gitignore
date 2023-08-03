@@ -93,6 +93,7 @@ include/target.h
 .bootloader-partition-size
 
 # Test tools
+tools/check_config/check_config
 tools/test-expect-version/test-expect-version
 tools/test-update-server/server
 tools/uart-flash-server/ufserver

@@ -19,6 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+/* Note: All logging must use stderr to avoid issue with scripts
+ * printing version information */
+
 #define _GNU_SOURCE
 #include <stdint.h>
 #include <string.h>
@@ -29,10 +32,17 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <mach-o/loader.h>
+#include <mach-o/nlist.h>
+#include <mach-o/dyld.h>
+#endif
+
 #include "wolfboot/wolfboot.h"
 #include "target.h"
 
-static uint8_t *ram_base;
+/* Global pointer to the internal and external flash base */
+uint8_t *sim_ram_base;
 static uint8_t *flash_base;
 
 uint32_t erasefail_address = 0xFFFFFFFF;
@@ -61,7 +71,7 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 
     fd = open(path, O_RDWR);
     if (fd == -1) {
-        fprintf(stderr,"can't open %s\n", path);
+        fprintf(stderr, "can't open %s\n", path);
         return -1;
     }
 
@@ -70,10 +80,7 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
     if (mmaped_addr == MAP_FAILED)
         return -1;
 
-    if (address != NULL && mmaped_addr != address) {
-        munmap(address, st.st_size);
-        return -1;
-    }
+    fprintf(stderr, "Simulator assigned %s to base %p\n", path, mmaped_addr);
 
     *ret_address = mmaped_addr;
 
@@ -96,47 +103,44 @@ void hal_prepare_boot(void)
     /* no op */
 }
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    uint8_t *ptr = 0;
-
     /* implicit cast abide compiler warning */
-    memcpy(ptr + address, data, len);
+    memcpy((void*)address, data, len);
     return 0;
 }
 
-int hal_flash_erase(uint32_t address, int len)
+int hal_flash_erase(uintptr_t address, int len)
 {
-    uint8_t *ptr = 0;
-
     /* implicit cast abide compiler warning */
-    fprintf(stderr,"hal_flash_erase addr %x len %d\n", address, len);
+    fprintf(stderr, "hal_flash_erase addr %p len %d\n", (void*)address, len);
     if (address == erasefail_address) {
-        fprintf(stderr,"POWER FAILURE\n");
+        fprintf(stderr, "POWER FAILURE\n");
         /* Corrupt page */
-        memset(ptr + address, 0xEE, len);
+        memset((void*)address, 0xEE, len);
         exit(0);
     }
-    memset(ptr + address, 0xff, len);
+    memset((void*)address, 0xff, len);
     return 0;
 }
 
 void hal_init(void)
 {
     int ret;
-    uint8_t *p;
     int i;
+
     ret = mmap_file(INTERNAL_FLASH_FILE,
-                    (uint8_t*)ARCH_FLASH_OFFSET, &p);
+        (uint8_t*)ARCH_FLASH_OFFSET, &sim_ram_base);
     if (ret != 0) {
-        fprintf(stderr,"failed to load internal flash file\n");
+        fprintf(stderr, "failed to load internal flash file\n");
         exit(-1);
     }
 
 #ifdef EXT_FLASH
-    ret = mmap_file(EXTERNAL_FLASH_FILE, (uint8_t*)ARCH_FLASH_OFFSET + 0x10000000, &flash_base);
+    ret = mmap_file(EXTERNAL_FLASH_FILE,
+        (uint8_t*)ARCH_FLASH_OFFSET + 0x10000000, &flash_base);
     if (ret != 0) {
-        fprintf(stderr,"failed to load internal flash file\n");
+        fprintf(stderr, "failed to load internal flash file\n");
         exit(-1);
     }
 #endif /* EXT_FLASH */
@@ -144,7 +148,8 @@ void hal_init(void)
     for (i = 1; i < main_argc; i++) {
         if (strcmp(main_argv[i], "powerfail") == 0) {
             erasefail_address = strtol(main_argv[++i], NULL,  16);
-            fprintf(stderr,"Set power fail to erase at address %x\n", erasefail_address);
+            fprintf(stderr, "Set power fail to erase at address %x\n",
+                erasefail_address);
             break;
         }
     }
@@ -160,7 +165,7 @@ void ext_flash_unlock(void)
     /* no op */
 }
 
-int  ext_flash_write(uintptr_t address, const uint8_t *data, int len)
+int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     memcpy(flash_base + address, data, len);
     return 0;
@@ -172,34 +177,105 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     return len;
 }
 
-int  ext_flash_erase(uintptr_t address, int len)
+int ext_flash_erase(uintptr_t address, int len)
 {
     memset(flash_base + address, 0xff, len);
     return 0;
 }
 
+#ifdef __APPLE__
+#ifdef __GNUC__
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+/* Find the MachO entry point */
+static int find_epc(void *base, struct entry_point_command **entry)
+{
+    struct mach_header_64 *mh;
+    struct load_command *lc;
+    int i;
+    unsigned long text = 0;
+
+    *entry = NULL;
+
+    mh = (struct mach_header_64*)base;
+    lc = (struct load_command*)(base + sizeof(struct mach_header_64));
+    for (i=0; i<(int)mh->ncmds; i++) {
+        if (lc->cmd == LC_MAIN) { /* 0x80000028 */
+            *entry = (struct entry_point_command *)lc;
+            return 1;
+        }
+        lc = (struct load_command*)((unsigned long)lc + lc->cmdsize);
+    }
+    return 0;
+}
+#endif
+
 void do_boot(const uint32_t *app_offset)
 {
-    char *envp[1] = {NULL};
     int ret;
-    int fd;
+    size_t app_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
 
-    fd = memfd_create("test_app", 0);
-    if (fd == -1) {
-        fprintf(stderr,"memfd error\n");
+#ifdef __APPLE__
+    typedef int (*main_entry)(int, char**, char**, char**);
+    NSObjectFileImage fileImage = NULL;
+    NSModule module = NULL;
+    NSSymbol symbol = NULL;
+    void *pSymbolAddress = NULL;
+    struct entry_point_command *epc;
+    main_entry main;
+    uint32_t *app_buf = (uint32_t*)app_offset;
+    uint32_t typeVal;
+
+    /* change to mh_bundle type - workaround to load object */
+    typeVal = app_buf[3];
+    if (typeVal != MH_BUNDLE)
+        app_buf[3] = MH_BUNDLE;
+
+    ret = NSCreateObjectFileImageFromMemory(app_buf, app_size, &fileImage);
+    if (ret != 1 || fileImage == NULL) {
+        fprintf(stderr, "Error loading object memory!\n");
+        exit(-1);
+    }
+    module = NSLinkModule(fileImage, "module",
+        (NSLINKMODULE_OPTION_PRIVATE | NSLINKMODULE_OPTION_BINDNOW));
+    symbol = NSLookupSymbolInModule(module, "__mh_execute_header");
+    pSymbolAddress = NSAddressOfSymbol(symbol);
+    if (!find_epc(pSymbolAddress, &epc)) {
+        fprintf(stderr, "Error finding entry point!\n");
         exit(-1);
     }
 
-    ret = write(fd, app_offset, WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE);
-    if (ret != WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE) {
-        fprintf(stderr,"can't write test-app to memfd\n");
+    /* restore mh_bundle type to allow hash to remain valid */
+    app_buf[3] = typeVal;
+
+    main = (main_entry)(void*)(pSymbolAddress + epc->entryoff);
+    main(main_argc, main_argv, NULL, NULL);
+#else
+    char *envp[1] = {NULL};
+    int fd = memfd_create("test_app", 0);
+    if (fd == -1) {
+        fprintf(stderr, "memfd error\n");
+        exit(-1);
+    }
+
+    if ((size_t)write(fd, app_offset, app_size) != app_size) {
+        fprintf(stderr, "can't write test-app to memfd\n");
         exit(-1);
     }
 
     ret = fexecve(fd, main_argv, envp);
-    fprintf(stderr,"fexecve error\n");
+    fprintf(stderr, "fexecve error\n");
+#endif
     exit(1);
 }
+
+#ifdef __APPLE__
+#ifdef __GNUC__
+    #pragma GCC diagnostic pop
+#endif
+#endif
 
 int wolfBoot_fallback_is_possible(void)
 {
