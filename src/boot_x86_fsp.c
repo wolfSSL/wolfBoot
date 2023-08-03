@@ -144,15 +144,19 @@ static void load_wolfboot(void)
 
 }
 
-static void load_fsp_to_ram(void)
+static void load_fsp_m_to_ram(void)
 {
-    size_t fsp_m_size, fsp_s_size;
+    size_t fsp_m_size;
     wolfBoot_printf("loading FSP_M at %x..." ENDLINE,
                     (uint32_t)(FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE));
     fsp_m_size = _end_fsp_m - _fsp_m_hdr;
     memcpy((uint8_t*)FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE,
             _fsp_m_hdr, fsp_m_size);
+}
 
+static void load_fsp_s_to_ram(void)
+{
+    size_t fsp_s_size;
     wolfBoot_printf("loading FSP_S at %x..." ENDLINE,
                     (uint32_t)(FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE));
     fsp_s_size = _end_fsp_s - _fsp_s_hdr;
@@ -193,6 +197,31 @@ static void jump_into_wolfboot()
 }
 #endif /* WOLFBOOT_64BIT */
 
+static inline int verify_payload(uint8_t *base_addr)
+{
+    int ret = -1;
+    struct wolfBoot_image wb_img;
+    memset(&wb_img, 0, sizeof(struct wolfBoot_image));
+    ret = wolfBoot_open_image_address(&wb_img, base_addr);
+    if (ret < 0) {
+        wolfBoot_printf("verify_payload: Failed to open image" ENDLINE);
+        panic();
+    }
+    wolfBoot_printf("verify_payload: image open successfully." ENDLINE);
+    ret = wolfBoot_verify_integrity(&wb_img);
+    if (ret < 0) {
+        wolfBoot_printf("verify_payload: Failed integrity check" ENDLINE);
+        panic();
+    }
+    wolfBoot_printf("verify_payload: integrity OK. Checking signature." ENDLINE);
+    ret = wolfBoot_verify_authenticity(&wb_img);
+    if (ret < 0) {
+        wolfBoot_printf("verify_payload: Failed signature check" ENDLINE);
+        panic();
+    }
+    return ret;
+}
+
 static void memory_ready_entry(void *ptr)
 {
     struct stage2_parameter *stage2_params = (struct stage2_parameter *)ptr;
@@ -208,11 +237,6 @@ static void memory_ready_entry(void *ptr)
     int ret;
     uint8_t *fsp_s_base;
     uint8_t *fsp_m_base;
-#ifdef STAGE1_AUTH
-    struct wolfBoot_image fsp_s;
-    struct wolfBoot_image wolfboot_raw;
-#endif
-
 
     fsp_s_base = (uint8_t *)(FSP_S_LOAD_BASE);
     fsp_m_base = (uint8_t *)(FSP_M_LOAD_BASE);
@@ -227,26 +251,19 @@ static void memory_ready_entry(void *ptr)
         panic();
     }
 
+    /* Load FSP_S to RAM */
+    load_fsp_s_to_ram();
+
 #ifdef STAGE1_AUTH
     /* Verify FSP_S */
-    ret = wolfBoot_open_image_address(&fsp_s, (fsp_s_base - IMAGE_HEADER_SIZE));
-    if (ret < 0) {
-        wolfBoot_printf("Failed to open FSP_S image" ENDLINE);
+    wolfBoot_printf("Authenticating FSP_S at %x..." ENDLINE,
+            fsp_s_base - IMAGE_HEADER_SIZE);
+
+    if (verify_payload(fsp_s_base - IMAGE_HEADER_SIZE) == 0)
+        wolfBoot_printf("FSP_S: verified OK." ENDLINE);
+    else {
         panic();
     }
-    wolfBoot_printf("FSP_S open successfully." ENDLINE);
-    ret = wolfBoot_verify_integrity(&fsp_s);
-    if (ret < 0) {
-        wolfBoot_printf("Failed integrity check on FSP_S" ENDLINE);
-        panic();
-    }
-    wolfBoot_printf("FSP_S is valid. Checking signature." ENDLINE);
-    ret = wolfBoot_verify_authenticity(&fsp_s);
-    if (ret < 0) {
-        wolfBoot_printf("Failed signature check on FSP_S" ENDLINE);
-        panic();
-    }
-    wolfBoot_printf("FSP_S: verified OK." ENDLINE);
 #endif
 
     memcpy(silicon_init_parameter, fsp_s_base + fsp_info_header->CfgRegionOffset,
@@ -294,24 +311,11 @@ static void memory_ready_entry(void *ptr)
     /* Verify wolfBoot */
     wolfBoot_printf("Authenticating wolfboot at %x..." ENDLINE,
             WOLFBOOT_LOAD_BASE);
-    ret = wolfBoot_open_image_address(&wolfboot_raw, (void *)WOLFBOOT_LOAD_BASE);
-    if (ret < 0) {
-        wolfBoot_printf("Failed to open wolfBoot image" ENDLINE);
+    if (verify_payload((uint8_t *)WOLFBOOT_LOAD_BASE) == 0)
+        wolfBoot_printf("FSP_S: verified OK." ENDLINE);
+    else {
         panic();
     }
-    wolfBoot_printf("wolfBoot open successfully." ENDLINE);
-    ret = wolfBoot_verify_integrity(&wolfboot_raw);
-    if (ret < 0) {
-        wolfBoot_printf("Failed integrity check on wolfBoot" ENDLINE);
-        panic();
-    }
-    wolfBoot_printf("wolfBoot is valid. Checking signature." ENDLINE);
-    ret = wolfBoot_verify_authenticity(&wolfboot_raw);
-    if (ret < 0) {
-        wolfBoot_printf("Failed signature check on wolfBoot" ENDLINE);
-        panic();
-    }
-    wolfBoot_printf("wolfBoot: verified OK." ENDLINE);
 #endif
     set_stage2_parameter(stage2_params);
     jump_into_wolfboot();
@@ -352,8 +356,8 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     (void)stack_top;
     (void)timestamp;
     (void)bist;
-
     fsp_m_base = (uint8_t *)(FSP_M_LOAD_BASE);
+
 
     status = post_temp_ram_init_cb();
     if (status != 0) {
@@ -362,28 +366,17 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     }
     wolfBoot_printf("Cache-as-RAM initialized" ENDLINE);
 
-    load_fsp_to_ram();
+    load_fsp_m_to_ram();
 
 #ifdef STAGE1_AUTH
     /* Verify FSP_M */
-    ret = wolfBoot_open_image_address(&fsp_m, fsp_m_base - IMAGE_HEADER_SIZE);
-    if (ret < 0) {
-        wolfBoot_printf("Failed to open FSP_M image" ENDLINE);
+    //wolfBoot_printf("Authenticating FSP_M at %x..." ENDLINE,
+    //        FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE);
+    if (verify_payload((uint8_t *)(FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE)) == 0)
+        wolfBoot_printf("FSP_M: verified OK." ENDLINE);
+    else {
         panic();
     }
-    wolfBoot_printf("FSP_M open successfully." ENDLINE);
-    ret = wolfBoot_verify_integrity(&fsp_m);
-    if (ret < 0) {
-        wolfBoot_printf("Failed integrity check on FSP_M" ENDLINE);
-        panic();
-    }
-    wolfBoot_printf("FSP_M is valid. Checking signature." ENDLINE);
-    ret = wolfBoot_verify_authenticity(&fsp_m);
-    if (ret < 0) {
-        wolfBoot_printf("Failed signature check on FSP_M" ENDLINE);
-        panic();
-    }
-    wolfBoot_printf("FSP_M: verified OK." ENDLINE);
 #endif
 
     fsp_m_info_header =

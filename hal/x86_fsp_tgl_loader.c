@@ -1,4 +1,4 @@
-/* x86_fsp_qemu_loader.c
+/* x86_fsp_tgl_loader.c
  *
  * Copyright (C) 2023 wolfSSL Inc.
  *

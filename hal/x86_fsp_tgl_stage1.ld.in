@@ -45,7 +45,6 @@ SECTIONS
 
     .bootloader WOLFBOOT_ORIGIN :
     {
-       _off_boot = ABSOLUTE(.) & 0xffff;
        KEEP(./boot_x86_fsp_start.o(.boot*))
        KEEP(./tgl_fsp.o(.boot))
        *(.boot*)
