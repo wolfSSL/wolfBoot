@@ -111,7 +111,7 @@ const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generate
              #endif
              "#ifdef WOLFBOOT_NO_SIGN\n\t#define NUM_PUBKEYS 0\n#else\n\n"
              "#if (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_%s)\n\t"
-             "#error Key algorithm mismatch. Remove old keys via 'make distclean'\n"
+             "#error Key algorithm mismatch. Remove old keys via 'make keysclean'\n"
              "#else\n";
 
 const char Store_hdr[] = "#define NUM_PUBKEYS %d\nconst struct keystore_slot PubKeys[NUM_PUBKEYS] = {\n\n";
@@ -646,8 +646,8 @@ int main(int argc, char** argv)
         }
         else if (strcmp(argv[i], "-keystoreDir") == 0) {
             i++;
-            sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c"); 
-            sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der"); 
+            sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c");
+            sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der");
             i++;
             continue;
         }

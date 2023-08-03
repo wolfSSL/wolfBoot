@@ -280,8 +280,8 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
 
 2. Key algorithm mismatch:
 
-The error `Key algorithm mismatch. Remove old keys via 'make distclean'` indicates the current `.config` `SIGN` algorithm does not match what is in the generated `src/keystore.c` file.
-Use `make keysclean` or `make distclean` to delete keys and regenerate.
+The error `Key algorithm mismatch. Remove old keys via 'make keysclean'` indicates the current `.config` `SIGN` algorithm does not match what is in the generated `src/keystore.c` file.
+Use `make keysclean` to delete keys and regenerate.
 
 
 ## Release Notes
