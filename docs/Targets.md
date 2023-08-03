@@ -1515,7 +1515,9 @@ make test-sim-internal-flash-with-update
 # it should print 2
 ./wolfboot.elf success get_version
 ```
-## renesas-rx72n
+
+
+## Renesas RX72N
 
 This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
@@ -1543,9 +1545,10 @@ Flash Allocation:
 
 ```
 
-Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RX72N/Readme.md).
+Detailed steps can be found at [Readme.md](../IDE/Renesas/e2studio/RX72N/Readme.md).
 
-## renesas-ra6m4
+
+## Renesas RA6M4
 
 This example for `Renesas RA6M4` demonstrates a simple secure firmware update by wolfBoot. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
@@ -1571,7 +1574,7 @@ Flash Allocation:
 0x000F0000: Swap sector
 ```
 
-Detailed steps can be found at [Readme](../IDE/Renesas/e2studio/RA6M4/Readme.md).
+Detailed steps can be found at [Readme.md](../IDE/Renesas/e2studio/RA6M4/Readme.md).
 
 
 ## Intel x86_64 with Intel FSP support
@@ -1691,7 +1694,7 @@ Install PPI: F894643D-C449-42D1-8EA8-85BDD8C65BDE
 Notify: PPI Guid: F894643D-C449-42D1-8EA8-85BDD8C65BDE, Peim notify entry point: FFE40AB2
 Memory Discovered Notify invoked ...
 FSP TOLM = 0x3F000000
-Migrate FSP-M UPD from 7F548 to 3EFF4000 
+Migrate FSP-M UPD from 7F548 to 3EFF4000
 FspMemoryInitApi() - [Status: 0x00000000] - End
 success
 top reserved 0_3EF00000h
@@ -1770,8 +1773,8 @@ Reading MBR...
 Found GPT PTE at sector 1
 Found valid boot signature in MBR
 Valid GPT partition table
-Current LBA: 0x1 
-Backup LBA: 0x1FFFF 
+Current LBA: 0x1
+Backup LBA: 0x1FFFF
 Max number of partitions: 128
 Software limited: only allowing up to 16 partitions per disk.
 Disk size: 66043392
@@ -1793,7 +1796,7 @@ Linux version 5.17.15 (arch@wb-hg-2) (x86_64-linux-gcc.br_real (Buildroot toolch
 
 ### Running on 64-bit Qemu with swtpm (TPM emulator)
 
-The example configuration for this setup can be found in 
+The example configuration for this setup can be found in
 `config/examples/x86_fsp_qemu_tpm.config`.
 
 First step: [clone and install swtpm](https://github.com/stefanberger/swtpm), a TPM emulator that can be connected to qemu

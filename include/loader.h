@@ -74,6 +74,7 @@ void wolfBoot_start(void);
 
 #if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
 
+/* attempt to jump 5 times to self, causing loop that cannot be glitched past */
 #define wolfBoot_panic() \
     asm volatile("b ."); \
     asm volatile("b .-2"); \

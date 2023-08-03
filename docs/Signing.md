@@ -100,8 +100,8 @@ file is in this format.
 file is in this format.
 
   * `--no-sign` Disable secure boot signature verification. No signature
-    verification is performed in the bootloader, and the KEY.DER argument is
-    ignored.
+    verification is performed in the bootloader, and the KEY.DER argument should
+    not be supplied.
 
 #### Hash digest options
 

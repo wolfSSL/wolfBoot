@@ -139,7 +139,7 @@ Cfile_Banner="/* Keystore file for wolfBoot, automatically generated. Do not edi
              "\n#include <stdint.h>\n#include \"wolfboot/wolfboot.h\"\n" \
              "#ifdef WOLFBOOT_NO_SIGN\n\t#define NUM_PUBKEYS 0\n#else\n\n" \
              "#if (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_%s)\n\t" \
-             "#error Key algorithm mismatch. Remove old keys via 'make distclean'\n" \
+             "#error Key algorithm mismatch. Remove old keys via 'make keysclean'\n" \
              "#else\n"
 
 
@@ -211,7 +211,7 @@ if (type(args.storeDir) == list):
 else:
     pubkey_cfile = "src/keystore.c"
     keystore_imgfile = "keystore.der"
-    
+
 key_files = args.keyfile
 pubkey_files = args.pubfile
 
