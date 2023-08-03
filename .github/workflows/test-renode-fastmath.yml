@@ -36,9 +36,12 @@ jobs:
         run: ./tools/renode/docker-test.sh "SIGN=RSA2048 SPMATH=0"
 
 
+
+# RSA4096 TEST: RSA with TFM requires a very large stack (>64KB) total
+# This test has been disabled.
 # RSA3072 TEST
-      - name: Renode Tests RSA3072
-        run: ./tools/renode/docker-test.sh "SIGN=RSA3072 SPMATH=0"
+#      - name: Renode Tests RSA3072
+#        run: ./tools/renode/docker-test.sh "SIGN=RSA3072 SPMATH=0"
 
 
 # RSA4096 TEST: RSA with TFM requires the possibility to allocate
