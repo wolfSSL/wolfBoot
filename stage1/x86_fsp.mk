@@ -23,27 +23,34 @@ fsp_t.o: ../$(FSP_T_BIN)
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsp_t $^ $@
 
 fsp_m.o: ../$(FSP_M_BIN)
-	$(SIGN_TOOL) $(SIGN_OPTIONS) $^ $(SIGN_KEY) 1
-	@dd if=$(X86FSP_PATH)/fsp_m_v1_signed.bin of=$(X86FSP_PATH)/fsp_m_signature.bin bs=256 count=1
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_fsp_m $(X86FSP_PATH)/fsp_m_signature.bin sig_fsp_m.o
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsp_m $^ $@
-	@rm -f $(X86FSP_PATH)/fsp_m_v1_signed.bin $(X86FSP_PATH)/fsp_m_signature.bin
 
 fsp_s.o: ../$(FSP_S_BIN)
-	$(SIGN_TOOL) $(SIGN_OPTIONS) $^ $(SIGN_KEY) 1
-	@dd if=$(X86FSP_PATH)/fsp_s_v1_signed.bin of=$(X86FSP_PATH)/fsp_s_signature.bin bs=256 count=1
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_fsp_s $(X86FSP_PATH)/fsp_s_signature.bin sig_fsp_s.o
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsp_s $^ $@
-	@rm -f $(X86FSP_PATH)/fsp_s_v1_signed.bin $(X86FSP_PATH)/fsp_s_signature.bin
 
 wolfboot_raw.bin: ../wolfboot.elf
 	$(Q)$(OBJCOPY) -j .text -O binary $^ $@
 
 wolfboot_raw.o: wolfboot_raw.bin
-	$(SIGN_TOOL) $(SIGN_OPTIONS) $^ $(SIGN_KEY) 1
+	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.wolfboot $^ $@
+
+sig_fsp_m.o: fsp_m.o $(SIGN_KEY) ../$(FSP_M_BIN)
+	$(SIGN_TOOL) $(SIGN_OPTIONS) ../$(FSP_M_BIN) $(SIGN_KEY) 1
+	@dd if=$(X86FSP_PATH)/fsp_m_v1_signed.bin of=$(X86FSP_PATH)/fsp_m_signature.bin bs=256 count=1
+	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_fsp_m $(X86FSP_PATH)/fsp_m_signature.bin sig_fsp_m.o
+	@rm -f $(X86FSP_PATH)/fsp_m_v1_signed.bin $(X86FSP_PATH)/fsp_m_signature.bin
+
+sig_fsp_s.o: fsp_s.o $(SIGN_KEY) ../$(FSP_S_BIN)
+	$(SIGN_TOOL) $(SIGN_OPTIONS) ../$(FSP_S_BIN) $(SIGN_KEY) 1
+	@dd if=$(X86FSP_PATH)/fsp_s_v1_signed.bin of=$(X86FSP_PATH)/fsp_s_signature.bin bs=256 count=1
+	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_fsp_s $(X86FSP_PATH)/fsp_s_signature.bin sig_fsp_s.o
+	@rm -f $(X86FSP_PATH)/fsp_s_v1_signed.bin $(X86FSP_PATH)/fsp_s_signature.bin
+
+sig_wolfboot_raw.o: wolfboot_raw.bin $(SIGN_KEY)
+	$(SIGN_TOOL) $(SIGN_OPTIONS) wolfboot_raw.bin $(SIGN_KEY) 1
 	@dd if=wolfboot_raw_v1_signed.bin of=wolfboot_raw_signature.bin bs=256 count=1
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_wolfboot_raw wolfboot_raw_signature.bin sig_wolfboot_raw.o
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.wolfboot $^ $@
+
 
 fsp_tgl_s_upd.o: ../$(FSP_S_UPD_DATA_BIN)
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsps_upd $^ $@
