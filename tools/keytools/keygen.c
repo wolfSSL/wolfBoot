@@ -535,12 +535,14 @@ static void key_generate(uint32_t ktype, const char *kfilename)
 static void key_import(uint32_t ktype, const char *fname)
 {
     int ret = 0;
-    int initRet = 0;
+    int initKey = 0;
     uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
     FILE* file;
     int readLen = 0;
     uint32_t keySz = 0;
     ecc_key eccKey[1];
+    ed25519_key ed25519Key[1];
+    ed448_key ed448Key[1];
     uint32_t keySzOut = 0;
     uint32_t qxSz = MAX_ECC_KEY_SIZE;
     uint32_t qySz = MAX_ECC_KEY_SIZE;
@@ -564,21 +566,41 @@ static void key_import(uint32_t ktype, const char *fname)
     /* parse the key if it has a header */
     keySz = get_pubkey_size(ktype);
 
-    if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
-        ktype == KEYGEN_ECC521) {
-        if ((uint32_t)readLen > keySz) {
-            initRet = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
+    if (readLen > (int)keySz) {
+        if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
+            ktype == KEYGEN_ECC521) {
+            initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
 
             if (ret == 0) {
                 ret = wc_ecc_export_public_raw(eccKey, buf, &qxSz,
                     buf + keySz / 2, &qySz);
             }
 
-            if (initRet == 0)
+            if (initKey == 0)
                 wc_ecc_free(eccKey);
-
-            readLen = keySz;
         }
+        else if (ktype == KEYGEN_ED25519) {
+            initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
+                ed25519Key, readLen);
+
+            if (ret == 0)
+                ret = wc_ed25519_export_public(ed25519Key, buf, &qxSz);
+
+            if (initKey == 0)
+                wc_ed25519_free(ed25519Key);
+        }
+        else if (ktype == KEYGEN_ED448) {
+            initKey = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
+                ed448Key, readLen);
+
+            if (ret == 0)
+                ret = wc_ed448_export_public(ed448Key, buf, &qxSz);
+
+            if (initKey == 0)
+                wc_ed448_free(ed448Key);
+        }
+
+        readLen = keySz;
     }
 
     if (ret != 0) {
