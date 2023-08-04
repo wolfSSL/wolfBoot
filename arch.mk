@@ -510,6 +510,9 @@ ifeq ("${FSP}", "1")
       OBJS += src/sig_fsp_m.o
       OBJS += src/sig_wolfboot_raw.o
       OBJS += src/sig_fsp_s.o
+      ifeq ($(TARGET), kontron_vx3060_s2)
+        OBJS += hal/kontron_vx3060_s2_loader.o
+      endif
       OBJS += $(WOLFCRYPT_OBJS)
       CFLAGS+=-DSTAGE1_AUTH
     endif
@@ -519,7 +522,6 @@ ifeq ("${FSP}", "1")
       OBJS+=src/x86/tgl_fsp.o
       OBJS+=src/fsp_tgl_s_upd.o
       OBJS+=src/ucode0.o
-      OBJS += hal/x86_fsp_tgl_loader.o
       CFLAGS += -DUCODE0_ADDRESS=$(UCODE0_BASE)
     endif
     ifeq ($(TARGET),x86_fsp_qemu)
