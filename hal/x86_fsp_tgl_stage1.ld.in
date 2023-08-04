@@ -1,11 +1,10 @@
 FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
 FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
-RESETVECTOR_START = 0xffffffec;
 BOOTLOADER_JUMP32_START = 0xfffff000;
-FSP_T_BASE = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
-FSP_M_BASE = @FSP_M_BASE@ - 0x1000; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
-FSP_S_BASE = @FSP_S_BASE@ - 0x1000; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
-WOLFBOOT_LOAD_BASE = @WOLFBOOT_LOAD_BASE@;
+RESETVECTOR_START = 0xffffffec;
+FSP_T_ORIGIN = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
+FSP_M_ORIGIN = @FSP_M_BASE@ - 0x1000; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
+FSP_S_ORIGIN = @FSP_S_BASE@ - 0x1000; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
 FIT_TABLE_PTR = 0xffffffc0;
 UCODE0_BASE = @UCODE0_BASE@;
 FSP_S_UPD_DATA_BASE = @FSP_S_UPD_DATA_BASE@;
@@ -69,14 +68,14 @@ SECTIONS
         _wolfboot_flash_end = .;
     }
 
-    .fsp_t FSP_T_BASE :
-    AT(FSP_T_BASE)
+    .fsp_t FSP_T_ORIGIN :
+    AT(FSP_T_ORIGIN)
     {
        _start_fsp_t = .;
        *(.fsp_t)
     }
 
-    .fsp_s FSP_S_BASE :
+    .fsp_s FSP_S_ORIGIN :
     {
         . += PRE_HEADER_FILL_SIZE;
        _fsp_s_hdr = .;
@@ -86,7 +85,7 @@ SECTIONS
        _end_fsp_s = .;
     }
 
-    .fsp_m FSP_M_BASE :
+    .fsp_m FSP_M_ORIGIN :
     {
         . += PRE_HEADER_FILL_SIZE;
        _fsp_m_hdr = .;
