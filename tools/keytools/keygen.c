@@ -566,7 +566,7 @@ static void key_import(uint32_t ktype, const char *fname)
     /* parse the key if it has a header */
     keySz = get_pubkey_size(ktype);
 
-    if (readLen > keySz) {
+    if (readLen > (int)keySz) {
         if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
             ktype == KEYGEN_ECC521) {
             initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
