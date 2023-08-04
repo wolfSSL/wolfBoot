@@ -489,7 +489,7 @@ ifeq ("${FSP}", "1")
               --defsym wb_start_bss=`grep _start_bss ../wolfboot.map | awk '{print $$1}'` \
               --defsym wb_end_bss=`grep _end_bss ../wolfboot.map | awk '{print $$1}'` \
               --defsym _stage2_params=`grep _stage2_params ../wolfboot.map | awk '{print $$1}'`
-    LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader.map
+    LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader_stage1.map
     CFLAGS+=-DFSP_M_LOAD_BASE=$(FSP_M_LOAD_BASE)
     CFLAGS+=-DFSP_S_LOAD_BASE=$(FSP_S_LOAD_BASE)
     OBJS += src/boot_x86_fsp.o
