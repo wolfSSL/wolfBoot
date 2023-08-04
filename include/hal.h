@@ -45,13 +45,20 @@ void hal_set_external_flash_file(const char* file);
 void hal_deinit();
 #endif
 
+#if !defined(ARCH_64BIT) && \
+    (defined(ARCH_x86_64) || defined(ARCH_AARCH64) || defined(ARCH_SIM))
+    #define ARCH_64BIT
+#endif
+
 void hal_init(void);
-#if !defined(FORCE_32BIT) && INTPTR_MAX == INT64_MAX /* 64-bit platform */
-int hal_flash_write(uintptr_t address, const uint8_t *data, int len);
-int hal_flash_erase(uintptr_t address, int len);
+#ifdef ARCH_64BIT
+    typedef uintptr_t haladdr_t; /* 64-bit platforms */
+    int hal_flash_write(uintptr_t address, const uint8_t *data, int len);
+    int hal_flash_erase(uintptr_t address, int len);
 #else
-int hal_flash_write(uint32_t address, const uint8_t *data, int len);
-int hal_flash_erase(uint32_t address, int len);
+    typedef uint32_t haladdr_t; /* original 32-bit */
+    int hal_flash_write(uint32_t address, const uint8_t *data, int len);
+    int hal_flash_erase(uint32_t address, int len);
 #endif
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
