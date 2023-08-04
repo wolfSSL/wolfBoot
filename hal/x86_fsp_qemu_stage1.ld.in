@@ -3,11 +3,9 @@ FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
 BOOTLOADER_JUMP32_START = 0xfffff000;
 RESETVECTOR_START = 0xffffffec;
 FSP_T_ORIGIN = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
-FSP_M_ORIGIN = @FSP_M_BASE@ - 0x1000; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
-FSP_S_ORIGIN = @FSP_S_BASE@ - 0x1000; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
+FSP_M_ORIGIN = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
+FSP_S_ORIGIN = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
-IMAGE_HEADER_SIZE = @IMAGE_HEADER_SIZE@;
-PRE_HEADER_FILL_SIZE = 0x1000 - IMAGE_HEADER_SIZE;
 OUTPUT_FORMAT(elf32-i386)
 
 MEMORY
@@ -40,7 +38,6 @@ SECTIONS
 
     .wolfboot FLASH_START :
     {
-        . += PRE_HEADER_FILL_SIZE;
         _wolfboot_flash_start = .;
         KEEP(*(.sig_wolfboot_raw*))
         *(.wolfboot)
@@ -56,7 +53,6 @@ SECTIONS
 
     .fsp_s FSP_S_ORIGIN :
     {
-        . += PRE_HEADER_FILL_SIZE;
        _fsp_s_hdr = .;
        KEEP(*(.sig_fsp_s*))
        _start_fsp_s = .;
@@ -66,7 +62,6 @@ SECTIONS
 
     .fsp_m FSP_M_ORIGIN :
     {
-        . += PRE_HEADER_FILL_SIZE;
        _fsp_m_hdr = .;
        KEEP(*(.sig_fsp_m*))
        _start_fsp_m = .;
