@@ -19,7 +19,7 @@ fi
 if [ -f "${CONFIG_FILE}" ]
 then
     FSP_T_BASE=$(grep -Eo '^FSP_T_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
-    FSP_M_LOAD_BASE=$(grep -Eo '^FSP_M_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
+    FSP_M_BASE=$(grep -Eo '^FSP_M_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
     FSP_S_LOAD_BASE=$(grep -Eo '^FSP_S_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
 else
     echo "Error: ${CONFIG_FILE} file not found in current directory"
@@ -87,9 +87,9 @@ download_edkii
 download_sbl_patch_and_patch_edkii
 build_qemu_fsp
 rebase_fsp_component "T" ${FSP_T_BASE}
-rebase_fsp_component "M" ${FSP_M_LOAD_BASE}
+rebase_fsp_component "M" ${FSP_M_BASE}
 rebase_fsp_component "S" ${FSP_S_LOAD_BASE}
 copy_fsp_component "T" ${FSP_T_BASE}
-copy_fsp_component "M" ${FSP_M_LOAD_BASE}
+copy_fsp_component "M" ${FSP_M_BASE}
 copy_fsp_component "S" ${FSP_S_LOAD_BASE}
 copy_fsp_headers

@@ -22,7 +22,7 @@ fi
 if [ -f "${CONFIG_FILE}" ]
 then
     FSP_T_BASE=$(grep -Eo '^FSP_T_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
-    FSP_M_LOAD_BASE=$(grep -Eo '^FSP_M_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
+    FSP_M_BASE=$(grep -Eo '^FSP_M_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
     FSP_S_LOAD_BASE=$(grep -Eo '^FSP_S_LOAD_BASE=.*' ${CONFIG_FILE} | cut -d "=" -f 2)
 else
     echo "Error: ${CONFIG_FILE} file not found in current directory"

@@ -84,7 +84,6 @@ SECTIONS
     .fsp_m FSP_M_ORIGIN :
     {
        _fsp_m_hdr = .;
-       KEEP(*(.sig_fsp_m*))
        _start_fsp_m = .;
        *(.fsp_m)
        _end_fsp_m = .;

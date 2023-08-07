@@ -46,8 +46,6 @@
  * the space used by wolfBoot manifest headers to authenticate FSPs
  */
 #define HEADER_SIZE IMAGE_HEADER_SIZE
-const uint8_t __attribute__((section(".sig_fsp_m")))
-    empty_sig_fsp_m[HEADER_SIZE] = {};
 const uint8_t __attribute__((section(".sig_fsp_s")))
     empty_sig_fsp_s[HEADER_SIZE] = {};
 const uint8_t __attribute__((section(".sig_wolfboot_raw")))
@@ -94,7 +92,7 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params);
 int post_temp_ram_init_cb(void);
 
 /* from the linker */
-extern uint8_t _fsp_m_hdr[];
+extern uint8_t _start_fsp_m[];
 extern uint8_t _fsp_s_hdr[];
 extern uint8_t _end_fsp_m[];
 extern uint8_t _end_fsp_s[];
@@ -142,16 +140,6 @@ static void load_wolfboot(void)
     memset(wb_start_bss, 0, bss_size);
     wolfBoot_printf("load wolfboot end" ENDLINE);
 
-}
-
-static void load_fsp_m_to_ram(void)
-{
-    size_t fsp_m_size;
-    wolfBoot_printf("loading FSP_M at %x..." ENDLINE,
-                    (uint32_t)(FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE));
-    fsp_m_size = _end_fsp_m - _fsp_m_hdr;
-    memcpy((uint8_t*)FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE,
-            _fsp_m_hdr, fsp_m_size);
 }
 
 static void load_fsp_s_to_ram(void)
@@ -238,8 +226,8 @@ static void memory_ready_entry(void *ptr)
     uint8_t *fsp_s_base;
     uint8_t *fsp_m_base;
 
+    fsp_m_base = _start_fsp_m;
     fsp_s_base = (uint8_t *)(FSP_S_LOAD_BASE);
-    fsp_m_base = (uint8_t *)(FSP_M_LOAD_BASE);
 
     fsp_info_header =
         (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);
@@ -356,7 +344,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     (void)stack_top;
     (void)timestamp;
     (void)bist;
-    fsp_m_base = (uint8_t *)(FSP_M_LOAD_BASE);
+    fsp_m_base = (uint8_t *)(_start_fsp_m);
 
 
     status = post_temp_ram_init_cb();
@@ -365,19 +353,6 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
         panic();
     }
     wolfBoot_printf("Cache-as-RAM initialized" ENDLINE);
-
-    load_fsp_m_to_ram();
-
-#ifdef STAGE1_AUTH
-    /* Verify FSP_M */
-    //wolfBoot_printf("Authenticating FSP_M at %x..." ENDLINE,
-    //        FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE);
-    if (verify_payload((uint8_t *)(FSP_M_LOAD_BASE - IMAGE_HEADER_SIZE)) == 0)
-        wolfBoot_printf("FSP_M: verified OK." ENDLINE);
-    else {
-        panic();
-    }
-#endif
 
     fsp_m_info_header =
         (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);

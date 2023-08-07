@@ -507,7 +507,6 @@ ifeq ("${FSP}", "1")
       OBJS += src/libwolfboot.o
       OBJS += src/image.o
       OBJS += src/keystore.o
-      OBJS += src/sig_fsp_m.o
       OBJS += src/sig_wolfboot_raw.o
       OBJS += src/sig_fsp_s.o
       ifeq ($(TARGET), kontron_vx3060_s2)
