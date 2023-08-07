@@ -163,8 +163,9 @@ $(PRIVATE_KEY):
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 
 keytools:
+	@echo "Building key tools"
 	@$(MAKE) -C tools/keytools -s clean
-	@$(MAKE) -C tools/keytools
+	@$(MAKE) -C tools/keytools -j
 
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
