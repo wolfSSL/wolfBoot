@@ -29,6 +29,7 @@
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
 #include "delta.h"
+#include "printf.h"
 
 
 #ifdef RAM_CODE
@@ -583,22 +584,34 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_update_trigger();
         wolfBoot_update(1);
     } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
-    /* Check for new updates in the UPDATE partition */
+        /* Check for new updates in the UPDATE partition */
         wolfBoot_update(0);
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0)
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
             ) {
+        wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
+            boot.hdr_ok, boot.sha_ok, boot.signature_ok);
+        wolfBoot_printf("Trying emergency update\n");
         if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
+            wolfBoot_printf("Boot failed! No boot option available!\n");
+        #ifdef WOLFBOOT_TPM
+            wolfBoot_tpm2_deinit();
+        #endif
             wolfBoot_panic();
         } else {
             /* Emergency update successful, try to re-open boot image */
             if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
                     (wolfBoot_verify_authenticity(&boot) < 0)))) {
+                wolfBoot_printf("Boot (try 2) failed: Hdr %d, Hash %d, Sig %d\n",
+                    boot.hdr_ok, boot.sha_ok, boot.signature_ok);
                 /* panic: something went wrong after the emergency update */
+            #ifdef WOLFBOOT_TPM
+                wolfBoot_tpm2_deinit();
+            #endif
                 wolfBoot_panic();
             }
         }

@@ -5,8 +5,19 @@ ifeq ($(MEASURED_BOOT),1)
   CFLAGS+=-D"WOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)"
 endif
 
-## DSA Settings
+## TPM keystore
+ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
+  ifneq ($(WOLFBOOT_TPM_KEYSTORE_NV_INDEX),)
+    ifneq ($(WOLFBOOT_TPM_POLICY_NV_INDEX),)
+      WOLFTPM:=1
+      CFLAGS+=-DWOLFBOOT_TPM_KEYSTORE
+      CFLAGS+=-DWOLFBOOT_TPM_KEYSTORE_NV_INDEX=$(WOLFBOOT_TPM_KEYSTORE_NV_INDEX)
+    endif
+  endif
+endif
 
+
+## DSA Settings
 ifeq ($(SIGN),NONE)
   SIGN_OPTIONS+=--no-sign
   ifeq ($(HASH),SHA384)
@@ -441,15 +452,16 @@ ifeq ($(WOLFTPM),1)
     -D"MAX_SESSION_NUM=2" -D"MAX_DIGEST_BUFFER=973" \
     -D"WOLFTPM_SMALL_STACK"
   CFLAGS+=-D"WOLFTPM_AUTODETECT"
-  # Use TPM for hashing (slow)
-  #CFLAGS+=-D"WOLFBOOT_HASH_TPM"
   ifneq ($(SPI_FLASH),1)
     # don't use spi if we're using simulator
+    ifeq ($(TARGET),sim)
+      SIM_TPM=1
+    endif
     ifeq ($(SIM_TPM),1)
       CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0
       OBJS+=./lib/wolfTPM/src/tpm2_swtpm.o
-	# Use memory-mapped WOLFTPM on x86-64
     else
+      # Use memory-mapped WOLFTPM on x86-64
        ifeq ($(ARCH),x86_64)
           CFLAGS+=-DWOLFTPM_MMIO -DWOLFTPM_EXAMPLE_HAL -DWOLFTPM_INCLUDE_IO_FILE
           OBJS+=./lib/wolfTPM/hal/tpm_io_mmio.o

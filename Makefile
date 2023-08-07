@@ -245,10 +245,10 @@ src/keystore.c: $(PRIVATE_KEY)
 keys: $(PRIVATE_KEY)
 
 clean:
-	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o lib/wolfssl/wolfcrypt/src/*.o test-app/*.o
-	$(Q)rm -f *.bin *.elf wolfboot.map test-update.rom *.hex $(LSCRIPT)
-	$(Q)rm -f src/x86/*.o $(MACHINE_OBJ) $(MAIN_TARGET)
-	$(Q)rm -f lib/wolfTPM/src/*.o
+	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o test-app/*.o src/x86/*.o
+	$(Q)rm -f lib/wolfssl/wolfcrypt/src/*.o lib/wolfTPM/src/*.o
+	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
+	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)$(MAKE) -C test-app -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean

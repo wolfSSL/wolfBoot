@@ -129,8 +129,10 @@ extern int tolower(int c);
 
 #ifdef WOLFBOOT_SIGN_RSA2048
 #   define RSA_LOW_MEM
-#   define WOLFSSL_RSA_VERIFY_INLINE
-#   define WOLFSSL_RSA_VERIFY_ONLY
+#   ifndef WOLFBOOT_TPM
+#       define WOLFSSL_RSA_VERIFY_INLINE
+#       define WOLFSSL_RSA_VERIFY_ONLY
+#   endif
 #   define WC_NO_RSA_OAEP
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */
@@ -184,14 +186,14 @@ extern int tolower(int c);
 
 #ifdef WOLFBOOT_HASH_SHA3_384
 #   define WOLFSSL_SHA3
-#   ifdef NO_RSA
+#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_KEYSTORE)
 #       define NO_SHA256
 #   endif
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA384
 #   define WOLFSSL_SHA384
-#   ifdef NO_RSA
+#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_KEYSTORE)
 #       define NO_SHA256
 #   endif
 #endif
@@ -223,12 +225,45 @@ extern int tolower(int c);
 #   define NO_PWDBASED
 #endif
 
+#ifdef WOLFBOOT_TPM
+    #ifdef WOLFBOOT_TPM_KEYSTORE
+        /* Enable AES CFB (parameter encryption) and HMAC (for KDF) */
+        #define WOLFSSL_AES_CFB
+
+        /* Get access to mp_* math API's for ECC encrypt */
+        #define WOLFSSL_PUBLIC_MP
+        #define HAVE_HASHDRBG
+    #endif
+
+    #ifdef WOLFTPM_MMIO
+        /* IO callback it above TIS and includes Address and if read/write */
+        #define WOLFTPM_ADV_IO
+    #endif
+
+    /* add delay */
+    #if !defined(XTPM_WAIT) && defined(WOLFTPM_MMIO)
+        void delay(int msec);
+        #define XTPM_WAIT() delay(1000);
+    #endif
+    #ifndef XTPM_WAIT
+        #define XTPM_WAIT() /* no delay */
+    #endif
+
+    /* TPM remap printf */
+    #if defined(DEBUG_WOLFTPM) && !defined(ARCH_SIM)
+        #include "printf.h"
+        #define printf wolfBoot_printf
+    #endif
+#endif
+
 /* Disables - For minimum wolfCrypt build */
-#ifndef WOLFBOOT_TPM
-#   if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256)
-#       define NO_AES
-#   endif
-#   define NO_HMAC
+#if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
+    !defined(WOLFBOOT_TPM_KEYSTORE)
+    #define NO_AES
+#endif
+#if !defined(WOLFBOOT_TPM_KEYSTORE)
+    #define NO_HMAC
+    #define WC_NO_RNG
 #endif
 
 #define NO_CMAC
@@ -247,7 +282,6 @@ extern int tolower(int c);
 #define NO_SESSION_CACHE
 #define NO_HC128
 #define NO_DES3
-#define WC_NO_RNG
 #define WC_NO_HASHDRBG
 #define NO_WRITEV
 #define NO_DEV_RANDOM
@@ -258,6 +292,7 @@ extern int tolower(int c);
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
+#define NO_AES_CBC
 
 #define BENCH_EMBEDDED
 #define NO_CRYPT_TEST
@@ -287,16 +322,6 @@ extern int tolower(int c);
 #       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
 #endif
 #   define WOLFSSL_SMALL_STACK
-#endif
-
-
-#ifdef WOLFTPM_MMIO
-    void delay(int msec);
-    #define XTPM_WAIT() delay(1000);
-    #define DEBUG_WOLFTPM
-    #define WOLFTPM_ADV_IO
-    void uart_printf(const char* fmt, ...);
-    #define XPRINTF uart_printf
 #endif
 
 #endif /* !H_USER_SETTINGS_ */

@@ -153,6 +153,16 @@ extern "C" {
  #   error "No valid hash algorithm defined!"
  #endif
 
+#ifdef WOLFBOOT_TPM
+    #if defined(WOLFBOOT_HASH_SHA256)
+        #define WOLFBOOT_TPM_HASH_ALG TPM_ALG_SHA256
+    #elif defined(WOLFBOOT_HASH_SHA384)
+        #define WOLFBOOT_TPM_HASH_ALG TPM_ALG_SHA384
+    #else
+        #error TPM does not support hash algorithm selection
+    #endif
+#endif
+
  /* Authentication configuration */
  #if defined(WOLFBOOT_NO_SIGN)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_NONE
