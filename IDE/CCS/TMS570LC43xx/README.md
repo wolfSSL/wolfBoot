@@ -97,7 +97,7 @@ MEMORY
 In order to generate a signed image, the application is copied to a binary format and signed with the following commands
 ```
 "c:\ti\ccs1031\ccs\tools\compiler\ti-cgt-arm_20.2.4.LTS\bin\armobjcopy.exe" -O binary application.out application.bin
-".\tools\keytools\sign.exe" --ecc256 --sha256 application.bin ecc256.der 1
+".\tools\keytools\sign.exe" --ecc256 --sha256 application.bin wolfboot_signing_private_key.der 1
 ```
 
 Output should resemble:
@@ -106,7 +106,7 @@ Update type:          Firmware
 Input image:          application.bin
 Selected cipher:      ECC256
 Selected hash  :      SHA256
-Public key:           ecc256.der
+Public key:           wolfboot_signing_private_key.der
 Output  image:        application_v1_signed.bin
 Calculating SHA256 digest...
 Signing the firmware...
@@ -116,7 +116,7 @@ Output image(s) successfully created.
 To flash the signed image the following command can be used.
 
 ```
-"c:\ti\ccs1031\ccs\ccs_base\scripting\examples\uniflash\cmdLine\uniflash.bat" -ccxml "IDE\CCS\TMS570LC43xx\flashHercules.ccxml"  -setOptions FlashEraseSelection="Necessary Sectors Only (for Program Load)" -programBin application_v1_signed.bin 0x20000 
+"c:\ti\ccs1031\ccs\ccs_base\scripting\examples\uniflash\cmdLine\uniflash.bat" -ccxml "IDE\CCS\TMS570LC43xx\flashHercules.ccxml"  -setOptions FlashEraseSelection="Necessary Sectors Only (for Program Load)" -programBin application_v1_signed.bin 0x20000
 ```
 
 # Implementation notes
