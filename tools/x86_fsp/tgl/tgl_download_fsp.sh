@@ -94,10 +94,10 @@ copy_tgl_fsp
 download_split_tool
 split_fsp
 rebase_fsp_component "T" ${FSP_T_BASE}
-rebase_fsp_component "M" ${FSP_M_LOAD_BASE}
+rebase_fsp_component "M" ${FSP_M_BASE}
 rebase_fsp_component "S" ${FSP_S_LOAD_BASE}
 copy_fsp_component "T" ${FSP_T_BASE}
-copy_fsp_component "M" ${FSP_M_LOAD_BASE}
+copy_fsp_component "M" ${FSP_M_BASE}
 copy_fsp_component "S" ${FSP_S_LOAD_BASE}
 patch_tgl_fsp
 copy_fsp_headers
