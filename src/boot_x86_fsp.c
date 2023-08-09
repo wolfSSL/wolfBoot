@@ -300,7 +300,7 @@ static void memory_ready_entry(void *ptr)
     wolfBoot_printf("Authenticating wolfboot at %x..." ENDLINE,
             WOLFBOOT_LOAD_BASE);
     if (verify_payload((uint8_t *)WOLFBOOT_LOAD_BASE) == 0)
-        wolfBoot_printf("FSP_S: verified OK." ENDLINE);
+        wolfBoot_printf("wolfBoot: verified OK." ENDLINE);
     else {
         panic();
     }
