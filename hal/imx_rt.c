@@ -181,45 +181,12 @@ flexspi_nor_config_t flexspi_config;
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1064DVL6A
-    #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
-    #define CONFIG_FLASH_PAGE_SIZE 256UL        /* 256Bytes  */
-    #define CONFIG_FLASH_SECTOR_SIZE (4 * 1024) /* 4KBytes   */
-    #define CONFIG_FLASH_BLOCK_SIZE (64 * 1024) /* 64KBytes  */
+    #define CONFIG_FLASH_SIZE              (4 * 1024 * 1024) /* 4MBytes   */
+    #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
+    #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
     #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
-    #define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_100MHz
-const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
-    .memConfig =
-        {
-            .tag              = FLEXSPI_CFG_BLK_TAG,
-            .version          = FLEXSPI_CFG_BLK_VERSION,
-            .readSampleClkSrc = kFlexSPIReadSampleClk_LoopbackFromDqsPad,
-            .csHoldTime       = 3u,
-            .csSetupTime      = 3u,
-            .sflashPadType    = kSerialFlash_4Pads,
-            .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
-            .sflashA1Size     = CONFIG_FLASH_SIZE,
-            .lookupTable =
-                {
-                    FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
-                    FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
-                },
-        },
-    .pageSize           = CONFIG_FLASH_PAGE_SIZE,
-    .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
-    .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
-    .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
-};
-#endif
-
-
-/** Flash configuration in the .flash_config section of flash **/
-#ifdef CPU_MIMXRT1062DVL6A
-    #define CONFIG_FLASH_SIZE                (8 * 1024 * 1024)  /* 8MBytes   */
-    #define CONFIG_FLASH_PAGE_SIZE           256UL              /* 256Bytes  */
-    #define CONFIG_FLASH_SECTOR_SIZE         (4 * 1024)         /* 4KBytes   */
-    #define CONFIG_FLASH_BLOCK_SIZE          (64 * 1024)        /* 64KBytes  */
-    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE   false
-    #define CONFIG_SERIAL_CLK_FREQ  kFlexSpiSerialClk_100MHz
+    #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
 const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
     .memConfig =
     {
@@ -231,8 +198,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         .sflashPadType    = kSerialFlash_4Pads,
         .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
         .sflashA1Size     = CONFIG_FLASH_SIZE,
-        .lookupTable =
-        {
+        .lookupTable = {
             FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
             FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
         },
@@ -245,42 +211,68 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 #endif
 
 
-#ifdef CPU_MIMXRT1052DVJ6B
-    #define CONFIG_FLASH_SIZE (64 * 1024 * 1024)  /* 64MBytes  */
-    #define CONFIG_FLASH_PAGE_SIZE 512UL          /* 512Bytes  */
-    #define CONFIG_FLASH_SECTOR_SIZE (256 * 1024) /* 256KBytes */
-    #define CONFIG_FLASH_BLOCK_SIZE (256 * 1024)  /* 256KBytes */
-    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE true
-    #define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_30MHz
+/** Flash configuration in the .flash_config section of flash **/
+#ifdef CPU_MIMXRT1062DVL6A
+    #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes   */
+    #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
+    #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
+    #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
 const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
     .memConfig =
-        {
-            .tag                = FLEXSPI_CFG_BLK_TAG,
-            .version            = FLEXSPI_CFG_BLK_VERSION,
-            .readSampleClkSrc   = kFlexSPIReadSampleClk_ExternalInputFromDqsPad,
-            .csHoldTime         = 3u,
-            .csSetupTime        = 3u,
-            .columnAddressWidth = 3u,
-            .controllerMiscOption =
-                (1u << kFlexSpiMiscOffset_DdrModeEnable) | (1u << kFlexSpiMiscOffset_WordAddressableEnable) |
-                (1u << kFlexSpiMiscOffset_SafeConfigFreqEnable) | (1u << kFlexSpiMiscOffset_DiffClkEnable),
-            .sflashPadType = kSerialFlash_8Pads,
-            .serialClkFreq = kFlexSpiSerialClk_133MHz,
-            .sflashA1Size  = 64u * 1024u * 1024u,
-            .dataValidTime = {16u, 16u},
-            .lookupTable =
-                {
-                    FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0xA0, RADDR_DDR, FLEXSPI_8PAD, 0x18),
-                    FLEXSPI_LUT_SEQ(CADDR_DDR, FLEXSPI_8PAD, 0x10, DUMMY_DDR, FLEXSPI_8PAD, 0x06),
-                    FLEXSPI_LUT_SEQ(READ_DDR, FLEXSPI_8PAD, 0x04, STOP, FLEXSPI_1PAD, 0x0),
-                },
+    {
+        .tag              = FLEXSPI_CFG_BLK_TAG,
+        .version          = FLEXSPI_CFG_BLK_VERSION,
+        .readSampleClkSrc = kFlexSPIReadSampleClk_LoopbackFromDqsPad,
+        .csHoldTime       = 3u,
+        .csSetupTime      = 3u,
+        .sflashPadType    = kSerialFlash_4Pads,
+        .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
+        .sflashA1Size     = CONFIG_FLASH_SIZE,
+        .lookupTable = {
+            FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
+            FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
         },
-    .pageSize           = 512u,
-    .sectorSize         = 256u * 1024u,
-    .blockSize          = 256u * 1024u,
-    .isUniformBlockSize = true,
+    },
+    .pageSize           = CONFIG_FLASH_PAGE_SIZE,
+    .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
+    .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
+    .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
 };
+#endif
 
+/** Flash configuration in the .flash_config section of flash **/
+#ifdef CPU_MIMXRT1052DVJ6B
+    #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes  */
+    #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4Bytes */
+    #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
+    #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
+    /* Note: By default the RT1050-EVKB uses HyperFlex.
+     *       To use QSPI flash a rework is required. See AN12183 */
+const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+    .memConfig =
+    {
+        .tag              = FLEXSPI_CFG_BLK_TAG,
+        .version          = FLEXSPI_CFG_BLK_VERSION,
+        .readSampleClkSrc = kFlexSPIReadSampleClk_LoopbackFromDqsPad,
+        .csHoldTime       = 3u,
+        .csSetupTime      = 3u,
+        .sflashPadType    = kSerialFlash_4Pads,
+        .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
+        .sflashA1Size     = CONFIG_FLASH_SIZE,
+        .lookupTable = { /* ISSI IS25WP064A - Quad SPI mode */
+            FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
+            FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
+        },
+    },
+    .pageSize           = CONFIG_FLASH_PAGE_SIZE,
+    .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
+    .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
+    .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
+};
 #endif
 
 #ifndef __FLASH_BASE
