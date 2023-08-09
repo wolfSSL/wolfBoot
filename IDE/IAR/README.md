@@ -40,14 +40,14 @@ generate_key.bat
 
 ```
 
-The script will generate a keypair. The file `ecc256.der` in the root of the repository contains the private key that will be used
-to sign valid firmware images. The file `src/ecc256_pub_key.c` now contains the public key that the bootloader embeds in its codebase
+The script will generate a keypair. The file `wolfboot_signing_private_key.der` in the root of the repository contains the private key that will be used
+to sign valid firmware images. The file `src/keystore.c` now contains the public key that the bootloader embeds in its codebase
 to use it later to verify the image.
 
 
 ### Compiling and linking the images
 
-Now both projects (wolfboot and wolfboot-test-app) can be compiled and linked. 
+Now both projects (wolfboot and wolfboot-test-app) can be compiled and linked.
 The two resulting images will be placed in the output directory `Debug/Exe`:
   - wolfboot.bin
   - wolfboot-test-app.bin

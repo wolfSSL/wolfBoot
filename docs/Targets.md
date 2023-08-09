@@ -1053,6 +1053,31 @@ DCP support (hardware acceleration for SHA256 operations) can be enabled by usin
 
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
 
+### Testing Update
+
+```sh
+tools/scripts/prepare_update.sh
+
+# HyperFlash
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A"
+# QSPI
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A?BankAddr=0x60000000&Loader=QSPI"
+
+loadbin factory.bin 0x60000000
+loadbin update.bin 0x60030000
+```
+
+### NXP iMX-RT Debugging JTAG / JLINK
+
+```sh
+JLinkGDBServer -Device MIMXRT1052xxx6A -speed 5000 -if swd -port 3333
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x60010000
+mon reset init
+b main
+c
+```
+
 
 ## NXP Kinetis
 
