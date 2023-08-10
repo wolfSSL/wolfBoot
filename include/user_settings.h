@@ -99,7 +99,6 @@ extern int tolower(int c);
 #   define NO_ECC_SIGN
 #   define NO_ECC_EXPORT
 #   define NO_ECC_DHE
-#   define NO_ECC_KEY_EXPORT
 
 /* Curve */
 #ifdef WOLFBOOT_SIGN_ECC256
@@ -112,7 +111,9 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_384
 #       define WOLFSSL_SP_NO_256
 #   endif
-#   define NO_ECC256
+#   if !defined(WOLFBOOT_TPM_KEYSTORE)
+#       define NO_ECC256
+#   endif
 #elif defined(WOLFBOOT_SIGN_ECC521)
 #   define HAVE_ECC521
 #   define FP_MAX_BITS (528 * 2)
@@ -120,7 +121,9 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_521
 #       define WOLFSSL_SP_NO_256
 #   endif
-#   define NO_ECC256
+#   if !defined(WOLFBOOT_TPM_KEYSTORE)
+#       define NO_ECC256
+#   endif
 #endif
 
 #   define NO_RSA
@@ -232,7 +235,6 @@ extern int tolower(int c);
 
         /* Get access to mp_* math API's for ECC encrypt */
         #define WOLFSSL_PUBLIC_MP
-        #define HAVE_HASHDRBG
     #endif
 
     #ifdef WOLFTPM_MMIO
@@ -264,6 +266,9 @@ extern int tolower(int c);
 #if !defined(WOLFBOOT_TPM_KEYSTORE)
     #define NO_HMAC
     #define WC_NO_RNG
+    #define WC_NO_HASHDRBG
+    #define NO_DEV_RANDOM
+    #define NO_ECC_KEY_EXPORT
 #endif
 
 #define NO_CMAC
@@ -282,9 +287,7 @@ extern int tolower(int c);
 #define NO_SESSION_CACHE
 #define NO_HC128
 #define NO_DES3
-#define WC_NO_HASHDRBG
 #define NO_WRITEV
-#define NO_DEV_RANDOM
 #define NO_FILESYSTEM
 #define NO_MAIN_DRIVER
 #define NO_OLD_RNGNAME

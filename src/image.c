@@ -793,6 +793,14 @@ static int measure_boot(struct wolfBoot_image *img)
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
+#if defined(WOLFBOOT_TPM_KEYSTORE) && defined(WC_RNG_SEED_CB)
+static int wolfRNG_GetSeedCB(OS_Seed* os, byte* seed, word32 sz)
+{
+    (void)os;
+    return wolfTPM2_GetRandom(&wolftpm_dev, seed, sz);
+}
+#endif
+
 int wolfBoot_tpm2_init(void)
 {
     int rc;
@@ -814,6 +822,10 @@ int wolfBoot_tpm2_init(void)
     rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
 #endif
     if (rc == 0)  {
+    #ifdef WC_RNG_SEED_CB
+        /* setup callback for RNG seed to use TPM */
+        wc_SetSeed_Cb(wolfRNG_GetSeedCB);
+    #endif
         /* Get device capabilities + options */
         rc = wolfTPM2_GetCapabilities(&wolftpm_dev, &caps);
     }
@@ -845,7 +857,7 @@ int wolfBoot_tpm2_init(void)
             NULL, TPM_SE_HMAC, TPM_ALG_CFB);
     }
     if (rc != 0) {
-        wolfBoot_printf("TPM Create SRK or Start Session rrror %d (%s)!\n",
+        wolfBoot_printf("TPM Create SRK or Start Session error %d (%s)!\n",
             rc, wolfTPM2_GetRCString(rc));
         wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_session.handle);
         wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_srk.handle);
