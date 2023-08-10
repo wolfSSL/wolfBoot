@@ -1,4 +1,4 @@
-/* x86_fsp_tgl_loader.c
+/* kontron_vx3060_s2_loader.c
  *
  * Copyright (C) 2023 wolfSSL Inc.
  *
