@@ -42,7 +42,6 @@ SECTIONS
 
     .bootloader WOLFBOOT_ORIGIN :
     {
-       KEEP(./boot_x86_fsp_start.o(.boot*))
        KEEP(./tgl_fsp.o(.boot))
        *(.boot*)
        *(.text*)
