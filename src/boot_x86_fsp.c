@@ -132,14 +132,13 @@ static void load_wolfboot(void)
 {
     size_t wolfboot_size, bss_size;
     wolfBoot_printf("loading wolfboot at %x..." ENDLINE,
-                    (uint32_t)WOLFBOOT_LOAD_BASE);
+                    (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE);
     wolfboot_size = _wolfboot_flash_end - _wolfboot_flash_start;
-    memcpy((uint8_t*)WOLFBOOT_LOAD_BASE,
+    memcpy((uint8_t*)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE,
             _wolfboot_flash_start, wolfboot_size);
     bss_size = wb_end_bss - wb_start_bss;
     memset(wb_start_bss, 0, bss_size);
     wolfBoot_printf("load wolfboot end" ENDLINE);
-
 }
 
 static void load_fsp_s_to_ram(void)
@@ -299,7 +298,7 @@ static void memory_ready_entry(void *ptr)
     /* Verify wolfBoot */
     wolfBoot_printf("Authenticating wolfboot at %x..." ENDLINE,
             WOLFBOOT_LOAD_BASE);
-    if (verify_payload((uint8_t *)WOLFBOOT_LOAD_BASE) == 0)
+    if (verify_payload((uint8_t *)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE) == 0)
         wolfBoot_printf("wolfBoot: verified OK." ENDLINE);
     else {
         panic();
