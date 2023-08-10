@@ -110,7 +110,7 @@ __attribute__((__section__(".boot"))) const struct fit_table_entry fit_table[FIT
     },
 };
 
-__attribute__((__section__(".boot"))) const
+__attribute__((__section__(".jmpto32"))) const
 FSPT_UPD TempRamInitParams = {
   .FspUpdHeader = {
     .Signature = FSPT_UPD_SIGNATURE,

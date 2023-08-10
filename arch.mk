@@ -489,7 +489,9 @@ ifeq ("${FSP}", "1")
               --defsym wb_start_bss=`grep _start_bss ../wolfboot.map | awk '{print $$1}'` \
               --defsym wb_end_bss=`grep _end_bss ../wolfboot.map | awk '{print $$1}'` \
               --defsym _stage2_params=`grep _stage2_params ../wolfboot.map | awk '{print $$1}'`
-    LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader.map
+    LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader_stage1.map
+    CFLAGS+=-DFSP_M_LOAD_BASE=$(FSP_M_LOAD_BASE)
+    CFLAGS+=-DFSP_S_LOAD_BASE=$(FSP_S_LOAD_BASE)
     OBJS += src/boot_x86_fsp.o
     OBJS += src/boot_x86_fsp_start.o
     OBJS += src/fsp_m.o
@@ -501,12 +503,24 @@ ifeq ("${FSP}", "1")
     OBJS += src/pci.o
     OBJS += hal/x86_uart.o
     OBJS += src/string.o
+    ifeq ($(filter-out $(STAGE1_AUTH),1),)
+      OBJS += src/libwolfboot.o
+      OBJS += src/image.o
+      OBJS += src/keystore.o
+      OBJS += src/sig_wolfboot_raw.o
+      OBJS += src/sig_fsp_s.o
+      ifeq ($(TARGET), kontron_vx3060_s2)
+        OBJS += hal/kontron_vx3060_s2_loader.o
+      endif
+      OBJS += $(WOLFCRYPT_OBJS)
+      CFLAGS+=-DSTAGE1_AUTH
+    endif
+
     CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART
     ifeq ($(FSP_TGL), 1)
       OBJS+=src/x86/tgl_fsp.o
       OBJS+=src/fsp_tgl_s_upd.o
       OBJS+=src/ucode0.o
-      OBJS+=$(MATH_OBJS)
       CFLAGS += -DUCODE0_ADDRESS=$(UCODE0_BASE)
     endif
     ifeq ($(TARGET),x86_fsp_qemu)

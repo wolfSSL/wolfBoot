@@ -1,10 +1,10 @@
 FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
 FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
+BOOTLOADER_JUMP32_START = 0xfffff000;
 RESETVECTOR_START = 0xffffffec;
-FSP_T_BASE = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
-FSP_M_BASE = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
-FSP_S_BASE = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
-WOLFBOOT_LOAD_BASE = @WOLFBOOT_LOAD_BASE@;
+FSP_T_ORIGIN = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
+FSP_M_ORIGIN = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
+FSP_S_ORIGIN = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
 OUTPUT_FORMAT(elf32-i386)
 
@@ -16,6 +16,11 @@ MEMORY
 
 SECTIONS
 {
+    .jmpto32 BOOTLOADER_JUMP32_START : 
+    {
+       _off_boot = ABSOLUTE(.) & 0xffff;
+       KEEP(*(.jmpto32))
+    }
     .reset_vector RESETVECTOR_START :
     {
        KEEP(*(.reset_vector))
@@ -23,39 +28,43 @@ SECTIONS
 
     .bootloader WOLFBOOT_ORIGIN :
     {
-       _off_boot = ABSOLUTE(.) & 0xffff;
        KEEP(*(.boot*))
        *(.text*)
        *(.rodata*)
        *(.eh_frame*)
        *(.data*)
-       . = ALIGN(4);
+       . = ALIGN(256);
     }
 
     .wolfboot FLASH_START :
     {
         _wolfboot_flash_start = .;
+        KEEP(*(.sig_wolfboot_raw*))
         *(.wolfboot)
         _wolfboot_flash_end = .;
     }
 
-    .fsp_t FSP_T_BASE :
-    AT(FSP_T_BASE)
+    .fsp_t FSP_T_ORIGIN :
+    AT(FSP_T_ORIGIN)
     {
        _start_fsp_t = .;
        *(.fsp_t)
     }
 
-    .fsp_s FSP_S_BASE :
+    .fsp_s FSP_S_ORIGIN :
     {
+       _fsp_s_hdr = .;
+       KEEP(*(.sig_fsp_s*))
        _start_fsp_s = .;
        *(.fsp_s)
+       _end_fsp_s = .;
     }
 
-    .fsp_m FSP_M_BASE :
+    .fsp_m FSP_M_ORIGIN :
     {
        _start_fsp_m = .;
        *(.fsp_m)
+       _end_fsp_m = .;
     }
 
 }

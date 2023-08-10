@@ -135,7 +135,8 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_STAGE1_SIZE@/$(WOLFBOOT_STAGE1_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_LOAD_ADDR@/$(WOLFBOOT_STAGE1_LOAD_ADDR)/g" | \
 		sed -e "s/@WOLFBOOT_STAGE1_FLASH_ADDR@/$(WOLFBOOT_STAGE1_FLASH_ADDR)/g" | \
-		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" \
+		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" | \
+		sed -e "s/@IMAGE_HEADER_SIZE@/$(IMAGE_HEADER_SIZE)/g"  \
 		> $@
 
 %.hex:%.elf
@@ -180,7 +181,8 @@ $(BUILD_DIR)/%.o: ../hal/%.S
 
 clean:
 	$(Q)rm -f *.o
-	$(Q)rm -f loader_stage1.bin loader_stage1.elf loader_stage1.map $(LSCRIPT)
+	$(Q)rm -f *.bin
+	$(Q)rm -f loader_stage1.bin loader_stage1.elf *.map $(LSCRIPT)
 
 FORCE:
 

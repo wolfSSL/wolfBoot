@@ -1,4 +1,4 @@
-/* fsp_tgl.c
+/* kontron_vx3060_s2_loader.c
  *
  * Copyright (C) 2023 wolfSSL Inc.
  *
@@ -21,30 +21,75 @@
 
 #include <wolfboot/wolfboot.h>
 #include <stdint.h>
+#include <string.h>
 #include <uart_drv.h>
-#include <printf.h>
-#include <x86/ahci.h>
-#include <x86/ata.h>
-#include <x86/common.h>
 
 #ifdef __WOLFBOOT
+#include <printf.h>
 
-#define PCI_AHCI_BUS 0
-#define PCI_AHCI_DEV 0x17
-#define PCI_AHCI_FUN 0
+extern uint8_t* _stage2_params[];
 
-void x86_fsp_tgl_init_sata(void)
+static void panic(void);
+
+void hal_init(void)
 {
-    uint32_t sata_bar;
-    uint32_t version;
-    sata_bar = ahci_enable(PCI_AHCI_BUS, PCI_AHCI_DEV, PCI_AHCI_FUN);
-    version = mmio_read32(AHCI_HBA_VS(sata_bar));
-    if (version < 0x10000) {
-        wolfBoot_printf("bad version\r\n");
-        panic();
-    }
-    sata_enable(sata_bar);
 }
 
+void hal_prepare_boot(void)
+{
+}
 #endif
 
+int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    return 0;
+}
+
+void hal_flash_unlock(void)
+{
+}
+
+void hal_flash_lock(void)
+{
+}
+
+int hal_flash_erase(uint32_t address, int len)
+{
+    return 0;
+}
+
+int wolfBoot_fallback_is_possible(void)
+{
+    return 0;
+
+}
+
+int wolfBoot_dualboot_candidate(void)
+{
+    return PART_BOOT;
+}
+
+void* hal_get_primary_address(void)
+{
+    return (void*)0;
+}
+
+void* hal_get_update_address(void)
+{
+  return (void*)0;
+}
+
+void *hal_get_dts_address(void)
+{
+    return 0;
+}
+
+void *hal_get_dts_update_address(void)
+{
+    return 0;
+}
+
+static void panic(void)
+{
+    while(1) {}
+}
