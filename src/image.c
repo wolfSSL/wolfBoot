@@ -42,6 +42,10 @@ static WOLFTPM2_KEY     wolftpm_srk;
 #endif
 #endif /* WOLFBOOT_TPM */
 
+#if defined(WOLFBOOT_TPM_KEYSTORE) && !defined(WOLFBOOT_TPM)
+#error For TPM keystore please make sure WOLFBOOT_TPM is also defined
+#endif
+
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
@@ -638,9 +642,7 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
 #endif /* SHA3-384 */
 
 #ifdef WOLFBOOT_TPM
-#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
-
-#ifdef WOLFTPM_DEBUG_IO
+#if defined(WOLFTPM_DEBUG_IO) || defined(WOLFBOOT_DEBUG_TPM)
 #define LINE_LEN 16
 static void wolfBoot_PrintBin(const byte* buffer, word32 length)
 {
@@ -676,8 +678,9 @@ static void wolfBoot_PrintBin(const byte* buffer, word32 length)
         length -= sz;
     }
 }
-#endif /* WOLFTPM_DEBUG_IO */
+#endif /* WOLFTPM_DEBUG_IO || WOLFBOOT_DEBUG_TPM */
 
+#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
 #ifdef WOLFTPM_ADV_IO
 static int TPM2_IoCb(TPM2_CTX* ctx, int isRead, word32 addr, byte* buf,
     word16 size, void* userCtx)
@@ -761,9 +764,10 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
 #endif /* !ARCH_SIM */
 
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
-static int measure_boot(struct wolfBoot_image *img)
+#define measure_boot(hash) measure_boot_at((hash), __LINE__)
+static int measure_boot_at(uint8_t* hash, int line)
 {
-    int rc = -1;
+    int rc;
     PCR_Extend_In pcrExtend;
 #ifdef WOLFBOOT_DEBUG_TPM
     PCR_Read_In pcrReadCmd;
@@ -774,20 +778,31 @@ static int measure_boot(struct wolfBoot_image *img)
     pcrExtend.digests.count = 1;
     pcrExtend.digests.digests[0].hashAlg = TPM_ALG_SHA256;
     XMEMCPY(pcrExtend.digests.digests[0].digest.H,
-            hash, TPM_SHA256_DIGEST_SIZE);
+        hash, TPM_SHA256_DIGEST_SIZE);
 
     rc = TPM2_PCR_Extend(&pcrExtend);
-    if (rc == TPM_RC_SUCCESS) {
-        rc = 0;
-    }
+#ifdef DEBUG_WOLFTPM
+    wolfBoot_printf("Measured boot: Res %d, Index %d, Line %d\n",
+        rc, pcrExtend.pcrHandle, line);
+#endif
 
 #ifdef WOLFBOOT_DEBUG_TPM
-    /* Test prcRead helps debug TPM communication and print PCR value in gdb */
-    memset(&pcrReadCmd, 0, sizeof(pcrReadCmd));
-    TPM2_SetupPCRSel(&pcrReadCmd.pcrSelectionIn, TPM_ALG_SHA256,
-                     pcrExtend.pcrHandle);
-    TPM2_PCR_Read(&pcrReadCmd, &pcrReadResp);
+    if (rc == 0) {
+        memset(&pcrReadCmd, 0, sizeof(pcrReadCmd));
+        memset(&pcrReadResp, 0, sizeof(pcrReadResp));
+        TPM2_SetupPCRSel(&pcrReadCmd.pcrSelectionIn, TPM_ALG_SHA256,
+                        pcrExtend.pcrHandle);
+        rc = TPM2_PCR_Read(&pcrReadCmd, &pcrReadResp);
+
+        wolfBoot_printf("PCR %d: Res %d, Digest Sz %d, Update Counter %d\n",
+            pcrExtend.pcrHandle, rc,
+            (int)pcrReadResp.pcrValues.digests[0].size,
+            (int)pcrReadResp.pcrUpdateCounter);
+        wolfBoot_PrintBin(pcrReadResp.pcrValues.digests[0].buffer,
+                          pcrReadResp.pcrValues.digests[0].size);
+    }
 #endif
+    (void)line;
 
     return rc;
 }
@@ -822,10 +837,6 @@ int wolfBoot_tpm2_init(void)
     rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
 #endif
     if (rc == 0)  {
-    #ifdef WC_RNG_SEED_CB
-        /* setup callback for RNG seed to use TPM */
-        wc_SetSeed_Cb(wolfRNG_GetSeedCB);
-    #endif
         /* Get device capabilities + options */
         rc = wolfTPM2_GetCapabilities(&wolftpm_dev, &caps);
     }
@@ -841,6 +852,11 @@ int wolfBoot_tpm2_init(void)
 
 #ifdef WOLFBOOT_TPM_KEYSTORE
     memset(&wolftpm_session, 0, sizeof(wolftpm_session));
+
+#ifdef WC_RNG_SEED_CB
+    /* setup callback for RNG seed to use TPM */
+    wc_SetSeed_Cb(wolfRNG_GetSeedCB);
+#endif
 
     /* Create a primary storage key - no auth (used for parameter encryption) */
 #ifdef HAVE_ECC
