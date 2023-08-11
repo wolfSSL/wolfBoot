@@ -540,6 +540,7 @@ ifeq ($(SECURE_PKCS11),1)
   CFLAGS+=-DSECURE_PKCS11
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-Ilib/wolfPKCS11
+  CFLAGS+=-DWP11_HASH_PIN_COST=3
   OBJS+=src/pkcs11_store.o
   OBJS+=src/pkcs11_callable.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o

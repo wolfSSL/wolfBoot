@@ -119,12 +119,12 @@ void hal_tz_release_nonsecure_area(void)
 void hal_gtzc_init(void)
 {
    int i;
-  /* Configure lower half of SRAM1 as secure */
-   for (i = 0; i < 12; i++) {
+  /* Configure lower half of total RAM as secure */
+   for (i = 0; i < 16; i++) {
        SET_GTZC_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
    }
-   /* Configure upper half of SRAM1 as non-secure */
-   for (i = 12; i < 24; i++) {
+   /* Configure rest of SRAM1 as non-secure */
+   for (i = 16; i < 24; i++) {
        SET_GTZC_MPCBBx_S_VCTR(1, i, 0x0);
    }
 

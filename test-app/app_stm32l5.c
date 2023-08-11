@@ -154,9 +154,13 @@ void main(void)
             (const byte*)TokenPin, strlen(TokenPin));
 
     if (ret == 0) {
-        ret = wolfpkcs11nsFunctionList.C_OpenSession(1, 
+        ret = wolfpkcs11nsFunctionList.C_OpenSession(1,
                 CKF_SERIAL_SESSION | CKF_RW_SESSION,
                 NULL, NULL, &session);
+    }
+    if (ret == 0) {
+        ret = wolfpkcs11nsFunctionList.C_InitToken(1,
+                (const byte *)TokenPin, strlen(TokenPin), "SO-PIN");
     }
 
     if (ret == 0) {
