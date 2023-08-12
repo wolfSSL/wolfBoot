@@ -179,9 +179,6 @@ typedef struct
 bootloader_api_entry_t *g_bootloaderTree;
 flexspi_nor_config_t flexspi_config;
 
-#define NUM_CUSTOM_LUT_SEQ                2
-#define CUSTOM_LUT_SEQ_START              3
-
 /* FlexSPI LUT Sequence Instruction index offset */
 #define LUT_SEQ_INS_0_1                   (0x00U)
 #define LUT_SEQ_INS_2_3                   (0x01U)
@@ -271,118 +268,95 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1052DVJ6B
-
     #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes  */
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4Bytes */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes */
     #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
     #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
+    #define CONFIG_FLASH_ADDR_WIDTH        24u /* Width of flash addresses (either 24 or 32) */
 
     /* Please define one of these */
-    //#define CONFIG_FLASH_IS25WP064A
-    //#define CONFIG_FLASH_W25Q64JV
+    //#define CONFIG_FLASH_IS25WP064A /* ISSI IS25WP064A */
+    //#define CONFIG_FLASH_W25Q64JV   /* Winbond W25Q64JV */
+
+    #ifdef CONFIG_FLASH_W25Q64JV
+        #define ERASE_SECTOR_CMD 0x20
+        #define WRITE_STATUS_CMD 0x31
+        #define QE_ENABLE        0x02 /* S9 */
+
+    #else
+        #define ERASE_SECTOR_CMD 0xD7
+        #define WRITE_STATUS_CMD 0x1
+        #define QE_ENABLE        0x40 /* S6 */
+    #endif
 
     /* Note: By default the RT1050-EVKB uses HyperFlex.
-     *       To use QSPI flash a rework is required. See AN12183 */
+     *       To use QSPI flash a rework is required. See AN12183
+     */
 
-    #ifdef CONFIG_FLASH_IS25WP064A
-    /* QSPI boot header (ISSI IS25WP064A) */
-    const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
-        .memConfig =
-        {
-            .tag                  = FLEXSPI_CFG_BLK_TAG,
-            .version              = FLEXSPI_CFG_BLK_VERSION,
-            .readSampleClkSrc     = kFlexSPIReadSampleClk_LoopbackFromDqsPad,
-            .csHoldTime           = 3,
-            .csSetupTime          = 3,
-            .columnAddressWidth   = 0,
-            .deviceModeCfgEnable  = 0,
-            .waitTimeCfgCommands  = 0,    /* Default 10 (1ms), [NEW] set to evaluate the status register */
-            .deviceModeSeq        = {
-                NUM_CUSTOM_LUT_SEQ,       /* Number of LUT sequences used for device configuration */
-                CUSTOM_LUT_SEQ_START,     /* Starting LUT sequence index */
-                0
-            },
-            .deviceModeArg        = 0x02, /* Will be used by NOR_CMD_LUT_SEQ_IDX_CUSTOM_QE_EN in order to set the QE bit in the status register */
-            .controllerMiscOption = 0,
-            .sflashPadType        = kSerialFlash_4Pads,
-            .serialClkFreq        = CONFIG_SERIAL_CLK_FREQ,
-            .lutCustomSeqEnable   = 0,
-            .sflashA1Size         = CONFIG_FLASH_SIZE,
-            .dataValidTime        = {16, 16},
-            .busyOffset           = 1,
-            .busyBitPolarity      = 0,
-            .lookupTable = {
-                /* Read LUTs */
-                [0] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x0B, RADDR_SDR, FLEXSPI_1PAD, 0x18),
-                [1] = FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_1PAD, 0x08, READ_SDR, FLEXSPI_1PAD, 0x04),
-                [2] = FLEXSPI_LUT_SEQ(STOP, FLEXSPI_1PAD, 0x00, 0x00,  0x00, 0x00)
-            },
-        },
-        .pageSize           = CONFIG_FLASH_PAGE_SIZE,
-        .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
-        .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
-        .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
-        .ipcmdSerialClkFreq = 0,
-    };
-    #elif defined(CONFIG_FLASH_W25Q64JV)
-    /* QSPI boot header (Winbond W25Q64JV) */
+    /* QSPI boot header */
+    /* Credit to: https://community.nxp.com/t5/i-MX-RT/RT1050-Debugging-with-QSPI-flash-on-secondary-pinmux/m-p/934745 */
     const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
         .memConfig = {
             .tag                  = FLEXSPI_CFG_BLK_TAG,
             .version              = FLEXSPI_CFG_BLK_VERSION,
             .readSampleClkSrc     = kFlexSPIReadSampleClk_LoopbackInternally,
-            .csHoldTime           = 5,
-            .csSetupTime          = 3,
-            .columnAddressWidth   = 0,
-            .deviceModeCfgEnable  = 1,    /* Enable device configuration */
-            .waitTimeCfgCommands  = 0,    /* Default 10 (1ms), [NEW] set to evaluate the status register */
-            .deviceModeSeq        = {
-                NUM_CUSTOM_LUT_SEQ,       /* Number of LUT sequences used for device configuration */
-                CUSTOM_LUT_SEQ_START,     /* Starting LUT sequence index */
-                0
-            },
-            .deviceModeArg        = 0x02, /* Will be used by LUT_SEQ_IDX_4 in order to set the QE bit in the status register */
-            .controllerMiscOption = 0,
             .deviceType           = kFlexSpiDeviceType_SerialNOR,
             .sflashPadType        = kSerialFlash_4Pads,
             .serialClkFreq        = CONFIG_SERIAL_CLK_FREQ,
-            .lutCustomSeqEnable   = 0,
             .sflashA1Size         = CONFIG_FLASH_SIZE,
-            .dataValidTime        = {0},
-            .busyOffset           = 1,
-            .busyBitPolarity      = 0,
+            .csHoldTime           = 3,
+            .csSetupTime          = 3,
+            .columnAddressWidth   = 0,
+            .waitTimeCfgCommands  = 0, /* 0=use read status (or #*100us) wait instead */
+            .deviceModeCfgEnable  = 1,
+            .deviceModeSeq.seqNum = 2, /* issue 2 commands starting at index 3 */
+            .deviceModeSeq.seqId  = 3, /* issue write enable and write status */
+            .deviceModeArg        = QE_ENABLE,
+            .lutCustomSeqEnable   = 0,
+            .dataValidTime        = {16u, 16u},
+            .busyOffset           = 0, /* WIP/Busy bit=0 (read status busy bit offset */
+            .busyBitPolarity      = 0, /* 0 – Busy bit=1 (device is busy) */
             .lookupTable = {
-                /* Read QSPI LUTs */
-                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x6B, RADDR_SDR, FLEXSPI_1PAD, 0x18),
-                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x08, READ_SDR, FLEXSPI_4PAD, 0x04),
-                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_4_5] = FLEXSPI_LUT_SEQ(STOP, FLEXSPI_1PAD, 0x00, STOP,  FLEXSPI_1PAD, 0x00),
-            #if 0
-                /* Read SPI LUTs (deprecated) */
-                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x0B, RADDR_SDR, FLEXSPI_1PAD, 0x18),
-                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_1PAD, 0x08, READ_SDR, FLEXSPI_1PAD, 0x04),
-                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_4_5] = FLEXSPI_LUT_SEQ(STOP, FLEXSPI_1PAD, 0x00, 0x00,  0x00, 0x00),
-            #endif
-                /* Read Status LUTs */
-                [LUT_SEQ_IDX_1 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x05, READ_SDR, FLEXSPI_1PAD, 0x01),
-                [LUT_SEQ_IDX_1 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(STOP, FLEXSPI_1PAD, 0x00, STOP,  FLEXSPI_1PAD, 0x00),
-                /* Write Enable LUTs */
-                [LUT_SEQ_IDX_3 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x06, STOP, FLEXSPI_1PAD, 0x00),
-                /* RESERVED - Custom QSPI Enable (device initialization) */
-                [LUT_SEQ_IDX_4 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x31, WRITE_SDR, FLEXSPI_1PAD, 0x01),
-                [LUT_SEQ_IDX_4 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(STOP, FLEXSPI_1PAD, 0x00, STOP,  FLEXSPI_1PAD, 0x00),
-                /* Erase Sector LUTs (assumption, the WE LUT sequence is automatically called before this sequence) */
-                [LUT_SEQ_IDX_5 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x20, RADDR_SDR, FLEXSPI_1PAD, 0x18),
-                [LUT_SEQ_IDX_5 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(STOP, FLEXSPI_1PAD, 0x00, STOP,  FLEXSPI_1PAD, 0x00),
-                /* Quad Page Program LUTs */
-                [LUT_SEQ_IDX_6 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x32, RADDR_SDR, FLEXSPI_1PAD, 0x18),
-                [LUT_SEQ_IDX_6 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(WRITE_SDR, FLEXSPI_4PAD, 0x04, STOP, FLEXSPI_1PAD, 0x00),
-                /* Page Program LUTs */
-                [LUT_SEQ_IDX_9 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x02, RADDR_SDR, FLEXSPI_1PAD, 0x18),
-                [LUT_SEQ_IDX_9 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(WRITE_SDR, FLEXSPI_4PAD, 0x04, STOP, FLEXSPI_1PAD, 0x00),
-                /* Chip Erase LUTs */
-                [LUT_SEQ_IDX_11 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xC7, STOP, FLEXSPI_1PAD, 0x00),
+                /* These are predefined LUT indexes */
+                /* Quad Input/output read sequence - with optimized XIP support */
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0xEB,
+                    RADDR_SDR, FLEXSPI_4PAD, CONFIG_FLASH_ADDR_WIDTH),
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
+                    MODE8_SDR, FLEXSPI_4PAD, 0xA0, /* 2 dummy cycles */
+                    DUMMY_SDR, FLEXSPI_4PAD, 0x04  /* 4 dummy cycles */ ),
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_4_5] = FLEXSPI_LUT_SEQ(
+                    READ_SDR,  FLEXSPI_4PAD, 0x04,
+                    JMP_ON_CS, FLEXSPI_1PAD, 0x01),
+                /* Read Status */
+                [LUT_SEQ_IDX_1 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0x05,
+                    READ_SDR,  FLEXSPI_1PAD, 0x01 /* Read 1 byte */ ),
+                /* Write Enable */
+                [LUT_SEQ_IDX_3 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0x06,
+                    STOP,      FLEXSPI_1PAD, 0x00),
+                /* Write Status */
+                [LUT_SEQ_IDX_4 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, WRITE_STATUS_CMD,
+                    WRITE_SDR, FLEXSPI_1PAD, 0x01 /* Write 1 byte */ ),
+                /* Erase Sector */
+                [LUT_SEQ_IDX_5 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, ERASE_SECTOR_CMD /* Sector Erase, 1-bit */,
+                    RADDR_SDR, FLEXSPI_1PAD, CONFIG_FLASH_ADDR_WIDTH),
+                /* Page Program */
+                [LUT_SEQ_IDX_9 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0x02,
+                    RADDR_SDR, FLEXSPI_1PAD, CONFIG_FLASH_ADDR_WIDTH),
+                [LUT_SEQ_IDX_9 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
+                    WRITE_SDR, FLEXSPI_1PAD, 0x04 /* any non-zero value */,
+                    STOP,      FLEXSPI_1PAD, 0x00),
+                /* Chip Erase */
+                [LUT_SEQ_IDX_11 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0xC7,
+                    STOP,      FLEXSPI_1PAD, 0x00),
             },
         },
         .pageSize           = CONFIG_FLASH_PAGE_SIZE,
@@ -391,9 +365,6 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
         .ipcmdSerialClkFreq = 0,
     };
-    #else
-        #error Please define CONFIG_FLASH_IS25WP064A or CONFIG_FLASH_W25Q64JV
-    #endif
 #endif /* CPU_MIMXRT1052DVJ6B */
 
 #ifndef __FLASH_BASE
@@ -465,9 +436,6 @@ const clock_video_pll_config_t videoPllConfig_BOARD_BootClockRUN =
         .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
     };
 
-
-static int nor_flash_init(void);
-
 static void clock_init(void)
 {
     if (CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK)
@@ -533,6 +501,7 @@ static void clock_init(void)
 
 extern void ARM_MPU_Disable(void);
 extern int wc_dcp_init(void);
+static int hal_flash_init(void);
 
 void hal_init(void)
 {
@@ -540,9 +509,8 @@ void hal_init(void)
     wc_dcp_init();
 #endif
     ARM_MPU_Disable();
-    g_bootloaderTree = (bootloader_api_entry_t *)*(uint32_t *)0x0020001c;
     clock_init();
-    nor_flash_init();
+    hal_flash_init();
 }
 
 void hal_prepare_boot(void)
@@ -554,26 +522,32 @@ void hal_prepare_boot(void)
 static nor_handle_t norHandle = {NULL};
 static serial_nor_config_option_t flexspi_cfg_option = {};
 
-static int nor_flash_init(void)
+static int hal_flash_init(void)
 {
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
-    flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
-    g_bootloaderTree->flexSpiNorDriver->get_config(0, &flexspi_config, &flexspi_cfg_option);
-#endif
-    g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
+    if (g_bootloaderTree == NULL) {
+        g_bootloaderTree = (bootloader_api_entry_t *)*(uint32_t *)0x0020001c;
+    #if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
+        flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
+        g_bootloaderTree->flexSpiNorDriver->get_config(0,
+            &flexspi_config,
+            &flexspi_cfg_option);
+    #endif
+        g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
+    }
     return 0;
 }
 
-#define FLASH_PAGE_SIZE 0x100
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     status_t status;
-    uint32_t wbuf[FLASH_PAGE_SIZE / 4];
+    uint32_t wbuf[CONFIG_FLASH_PAGE_SIZE / sizeof(uint32_t)];
     int i;
-    for (i = 0; i < len; i+= FLASH_PAGE_SIZE) {
-        memcpy(wbuf, data + i, FLASH_PAGE_SIZE);
-        status = g_bootloaderTree->flexSpiNorDriver->program(0, &flexspi_config, (address + i) - FLASH_BASE, wbuf);
-        if (kStatus_Success != status)
+    hal_flash_init(); /* make sure g_bootloaderTree is set */
+    for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
+        memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
+        status = g_bootloaderTree->flexSpiNorDriver->program(0, &flexspi_config,
+            (address + i) - FLASH_BASE, wbuf);
+        if (status != kStatus_Success)
             return -1;
     }
     return 0;
@@ -590,9 +564,10 @@ void RAMFUNCTION hal_flash_lock(void)
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     status_t status;
-    status = g_bootloaderTree->flexSpiNorDriver->erase(0, &flexspi_config, address - FLASH_BASE, len);
+    hal_flash_init(); /* make sure g_bootloaderTree is set */
+    status = g_bootloaderTree->flexSpiNorDriver->erase(0, &flexspi_config,
+        address - FLASH_BASE, len);
     if (status != kStatus_Success)
         return -1;
     return 0;
 }
-
