@@ -32,12 +32,14 @@
 
 #ifdef CPU_MIMXRT1062DVL6A
 #include "evkmimxrt1060_flexspi_nor_config.h"
+#define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1052DVJ6B
 #include "evkbimxrt1050_flexspi_nor_config.h"
 #endif
 #ifdef CPU_MIMXRT1064DVL6A
 #include "evkmimxrt1064_flexspi_nor_config.h"
+#define USE_GET_CONFIG
 #endif
 
 #include "xip/fsl_flexspi_nor_boot.h"
@@ -177,7 +179,13 @@ typedef struct
 } bootloader_api_entry_t;
 
 bootloader_api_entry_t *g_bootloaderTree;
-flexspi_nor_config_t flexspi_config;
+#ifdef USE_GET_CONFIG
+    flexspi_nor_config_t flexspi_config;
+    #define FLEXSPI_CONFIG &flexspi_config
+#else
+    #define FLEXSPI_CONFIG (flexspi_nor_config_t*)&qspiflash_config
+#endif
+
 
 /* FlexSPI LUT Sequence Instruction index offset */
 #define LUT_SEQ_INS_0_1                   (0x00U)
@@ -199,7 +207,7 @@ flexspi_nor_config_t flexspi_config;
 #define LUT_SEQ_IDX_10                    (0x28U)   /* RESERVED */
 #define LUT_SEQ_IDX_11                    (0x2CU)   /* Full Chip Erase */
 #define LUT_SEQ_IDX_12                    (0x30U)   /* RESERVED */
-#define LUT_SEQ_IDX_13                    (0x34U)   /* RESERVED */
+#define LUT_SEQ_IDX_13                    (0x34U)   /* SFDP */
 #define LUT_SEQ_IDX_14                    (0x38U)   /* RESERVED */
 #define LUT_SEQ_IDX_15                    (0x3CU)   /* Dummy */
 
@@ -275,18 +283,16 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
     #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
     #define CONFIG_FLASH_ADDR_WIDTH        24u /* Width of flash addresses (either 24 or 32) */
+    #define CONFIG_FLASH_QE_ENABLE         1
 
     /* Please define one of these */
     //#define CONFIG_FLASH_IS25WP064A /* ISSI IS25WP064A */
     //#define CONFIG_FLASH_W25Q64JV   /* Winbond W25Q64JV */
 
     #ifdef CONFIG_FLASH_W25Q64JV
-        #define ERASE_SECTOR_CMD 0x20
         #define WRITE_STATUS_CMD 0x31
         #define QE_ENABLE        0x02 /* S9 */
-
     #else
-        #define ERASE_SECTOR_CMD 0xD7
         #define WRITE_STATUS_CMD 0x1
         #define QE_ENABLE        0x40 /* S6 */
     #endif
@@ -301,51 +307,77 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         .memConfig = {
             .tag                  = FLEXSPI_CFG_BLK_TAG,
             .version              = FLEXSPI_CFG_BLK_VERSION,
-            .readSampleClkSrc     = kFlexSPIReadSampleClk_LoopbackInternally,
+            .readSampleClkSrc     = kFlexSPIReadSampleClk_LoopbackFromDqsPad,
             .deviceType           = kFlexSpiDeviceType_SerialNOR,
             .sflashPadType        = kSerialFlash_4Pads,
             .serialClkFreq        = CONFIG_SERIAL_CLK_FREQ,
             .sflashA1Size         = CONFIG_FLASH_SIZE,
             .csHoldTime           = 3,
             .csSetupTime          = 3,
+            .controllerMiscOption = (1u << kFlexSpiMiscOffset_SafeConfigFreqEnable),
             .columnAddressWidth   = 0,
             .waitTimeCfgCommands  = 0, /* 0=use read status (or #*100us) wait instead */
+        #if CONFIG_FLASH_QE_ENABLE == 1
             .deviceModeCfgEnable  = 1,
+            .deviceModeType       = kDeviceConfigCmdType_QuadEnable,
             .deviceModeSeq.seqNum = 2, /* issue 2 commands starting at index 3 */
             .deviceModeSeq.seqId  = 3, /* issue write enable and write status */
             .deviceModeArg        = QE_ENABLE,
+        #endif
             .lutCustomSeqEnable   = 0,
             .dataValidTime        = {16u, 16u},
             .busyOffset           = 0, /* WIP/Busy bit=0 (read status busy bit offset */
             .busyBitPolarity      = 0, /* 0 – Busy bit=1 (device is busy) */
             .lookupTable = {
-                /* These are predefined LUT indexes */
+            #if CONFIG_FLASH_QE_ENABLE == 1
                 /* Quad Input/output read sequence - with optimized XIP support */
                 [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, 0xEB,
                     RADDR_SDR, FLEXSPI_4PAD, CONFIG_FLASH_ADDR_WIDTH),
                 [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
-                    MODE8_SDR, FLEXSPI_4PAD, 0xA0, /* 2 dummy cycles */
-                    DUMMY_SDR, FLEXSPI_4PAD, 0x04  /* 4 dummy cycles */ ),
+                    MODE8_SDR, FLEXSPI_4PAD, 0xA0 /* continuous read mode - 2 dummy cycles */,
+                    DUMMY_SDR, FLEXSPI_4PAD, 0x04  /* 4 dummy cycles (6 total) */ ),
                 [LUT_SEQ_IDX_0 + LUT_SEQ_INS_4_5] = FLEXSPI_LUT_SEQ(
-                    READ_SDR,  FLEXSPI_4PAD, 0x04,
+                    READ_SDR,  FLEXSPI_4PAD, 0x04  /* any non-zero value */,
                     JMP_ON_CS, FLEXSPI_1PAD, 0x01),
+            #else
+                /* Quad Input/output read sequence */
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0xEB,
+                    RADDR_SDR, FLEXSPI_4PAD, CONFIG_FLASH_ADDR_WIDTH),
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
+                    DUMMY_SDR, FLEXSPI_4PAD, 0x06  /* 6 dummy cycles */,
+                    READ_SDR,  FLEXSPI_4PAD, 0x04  /* any non-zero value */ ),
+            #endif
                 /* Read Status */
                 [LUT_SEQ_IDX_1 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, 0x05,
-                    READ_SDR,  FLEXSPI_1PAD, 0x01 /* Read 1 byte */ ),
+                    READ_SDR,  FLEXSPI_1PAD, 0x04 /* Read 4 bytes */ ),
                 /* Write Enable */
                 [LUT_SEQ_IDX_3 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, 0x06,
                     STOP,      FLEXSPI_1PAD, 0x00),
-                /* Write Status */
+                /* Write Status - Custom LUT (QE Enable) */
                 [LUT_SEQ_IDX_4 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, WRITE_STATUS_CMD,
                     WRITE_SDR, FLEXSPI_1PAD, 0x01 /* Write 1 byte */ ),
                 /* Erase Sector */
                 [LUT_SEQ_IDX_5 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
-                    CMD_SDR,   FLEXSPI_1PAD, ERASE_SECTOR_CMD /* Sector Erase, 1-bit */,
+                    CMD_SDR,   FLEXSPI_1PAD, 0x20 /* Sector Erase, 1-bit */,
                     RADDR_SDR, FLEXSPI_1PAD, CONFIG_FLASH_ADDR_WIDTH),
+                /* Erase Block - Custom LUT */
+                [LUT_SEQ_IDX_8 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0xD8 /* Block Erase, 1-bit */,
+                    RADDR_SDR, FLEXSPI_1PAD, CONFIG_FLASH_ADDR_WIDTH),
+            #if CONFIG_FLASH_QE_ENABLE == 1
+                /* Quad Page Program */
+                [LUT_SEQ_IDX_9 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0x32,
+                    RADDR_SDR, FLEXSPI_1PAD, CONFIG_FLASH_ADDR_WIDTH),
+                [LUT_SEQ_IDX_9 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
+                    WRITE_SDR, FLEXSPI_4PAD, 0x04 /* any non-zero value */,
+                    STOP,      FLEXSPI_1PAD, 0x00),
+            #else
                 /* Page Program */
                 [LUT_SEQ_IDX_9 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, 0x02,
@@ -353,10 +385,18 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
                 [LUT_SEQ_IDX_9 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
                     WRITE_SDR, FLEXSPI_1PAD, 0x04 /* any non-zero value */,
                     STOP,      FLEXSPI_1PAD, 0x00),
+            #endif
                 /* Chip Erase */
                 [LUT_SEQ_IDX_11 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
-                    CMD_SDR,   FLEXSPI_1PAD, 0xC7,
+                    CMD_SDR,   FLEXSPI_1PAD, 0x60,
                     STOP,      FLEXSPI_1PAD, 0x00),
+                /* SFDP - Required for get_config */
+                [LUT_SEQ_IDX_13 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
+                    CMD_SDR,   FLEXSPI_1PAD, 0x5A,
+                    RADDR_SDR, FLEXSPI_1PAD, CONFIG_FLASH_ADDR_WIDTH ),
+                [LUT_SEQ_IDX_13 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
+                    DUMMY_SDR, FLEXSPI_1PAD, 0x08  /* 8 dummy cycles */,
+                    READ_SDR,  FLEXSPI_4PAD, 0xFF /* Read 255 bytes */),
             },
         },
         .pageSize           = CONFIG_FLASH_PAGE_SIZE,
@@ -511,6 +551,7 @@ void hal_init(void)
     ARM_MPU_Disable();
     clock_init();
     hal_flash_init();
+    //SCB_EnableICache();
 }
 
 void hal_prepare_boot(void)
@@ -519,20 +560,22 @@ void hal_prepare_boot(void)
 
 #endif /* __WOLFBOOT */
 
-static nor_handle_t norHandle = {NULL};
-static serial_nor_config_option_t flexspi_cfg_option = {};
-
 static int hal_flash_init(void)
 {
+#ifdef USE_GET_CONFIG
+    serial_nor_config_option_t flexspi_cfg_option;
+#endif
     if (g_bootloaderTree == NULL) {
         g_bootloaderTree = (bootloader_api_entry_t *)*(uint32_t *)0x0020001c;
-    #if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
+    #ifdef USE_GET_CONFIG
+        memset(&flexspi_cfg_option, 0, sizeof(flexspi_cfg_option));
         flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
         g_bootloaderTree->flexSpiNorDriver->get_config(0,
             &flexspi_config,
             &flexspi_cfg_option);
-    #endif
         g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
+        g_bootloaderTree->flexSpiNorDriver->clear_cache(0);
+    #endif
     }
     return 0;
 }
@@ -545,7 +588,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     hal_flash_init(); /* make sure g_bootloaderTree is set */
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
-        status = g_bootloaderTree->flexSpiNorDriver->program(0, &flexspi_config,
+        status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
         if (status != kStatus_Success)
             return -1;
@@ -565,7 +608,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     status_t status;
     hal_flash_init(); /* make sure g_bootloaderTree is set */
-    status = g_bootloaderTree->flexSpiNorDriver->erase(0, &flexspi_config,
+    status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
     if (status != kStatus_Success)
         return -1;
