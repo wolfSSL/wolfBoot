@@ -523,17 +523,6 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
 
-#ifdef FLAGS_HOME
-    /* Erase last sector of boot partition prior to
-     * setting the partition state.
-     */
-    uint32_t last_sector = PART_UPDATE_ENDFLAGS -
-        (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE);
-    hal_flash_unlock();
-    hal_flash_erase(last_sector, WOLFBOOT_SECTOR_SIZE);
-    hal_flash_lock();
-#endif
-
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_unlock();
         wolfBoot_set_partition_state(PART_UPDATE, st);
