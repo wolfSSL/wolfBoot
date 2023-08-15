@@ -361,7 +361,7 @@ out:
     #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
 
-static int RAMFUNCTION wolfBoot_get_total_size(struct wolfBoot_image* boot,
+static inline int wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
     uint32_t total_size = 0;
@@ -369,7 +369,7 @@ static int RAMFUNCTION wolfBoot_get_total_size(struct wolfBoot_image* boot,
     /* Use biggest size for the swap */
     total_size = boot->fw_size + IMAGE_HEADER_SIZE;
     if ((update->fw_size + IMAGE_HEADER_SIZE) > total_size)
-            total_size = update->fw_size + IMAGE_HEADER_SIZE;
+        total_size = update->fw_size + IMAGE_HEADER_SIZE;
 
     return total_size;
 }
