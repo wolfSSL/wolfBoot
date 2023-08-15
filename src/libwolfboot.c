@@ -248,7 +248,7 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
     addr_write = base - (!nvm_cached_sector * NVM_CACHE_SIZE);
-    XMEMCPY(NVM_CACHE, (void*)base, NVM_CACHE_SIZE);
+    XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(addr_write, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
     nvm_cached_sector = !nvm_cached_sector;
