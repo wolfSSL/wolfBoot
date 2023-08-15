@@ -8,7 +8,6 @@ fi
 ./wolfboot.elf powerfail 15000 get_version 2>/dev/null
 ./wolfboot.elf powerfail 18000 get_version 2>/dev/null
 ./wolfboot.elf powerfail 1a000 get_version 2>/dev/null
-./wolfboot.elf get_version 2>/dev/null
 
 V=`./wolfboot.elf get_version 2>/dev/null`
 if [ "x$V" != "x2" ]; then
@@ -19,7 +18,6 @@ fi
 ./wolfboot.elf powerfail 11000 get_version 2>/dev/null
 ./wolfboot.elf powerfail 14000 get_version 2>/dev/null
 ./wolfboot.elf powerfail 1e000 get_version 2>/dev/null
-./wolfboot.elf get_version 2>/dev/null
 
 V=`./wolfboot.elf get_version 2>/dev/null`
 if [ "x$V" != "x1" ]; then

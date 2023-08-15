@@ -114,7 +114,7 @@ int hal_flash_erase(uintptr_t address, int len)
 {
     /* implicit cast abide compiler warning */
     fprintf(stderr, "hal_flash_erase addr %p len %d\n", (void*)address, len);
-    if (address == erasefail_address) {
+    if (address == erasefail_address + WOLFBOOT_PARTITION_BOOT_ADDRESS) {
         fprintf(stderr, "POWER FAILURE\n");
         /* Corrupt page */
         memset((void*)address, 0xEE, len);
