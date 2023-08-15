@@ -285,14 +285,10 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     #define CONFIG_FLASH_ADDR_WIDTH        24u /* Width of flash addresses (either 24 or 32) */
     #define CONFIG_FLASH_QE_ENABLE         1
 
-    /* Please define one of these */
-    //#define CONFIG_FLASH_IS25WP064A /* ISSI IS25WP064A */
-    //#define CONFIG_FLASH_W25Q64JV   /* Winbond W25Q64JV */
-
-    #ifdef CONFIG_FLASH_W25Q64JV
+    #ifdef CONFIG_FLASH_W25Q64JV /* Winbond W25Q64JV */
         #define WRITE_STATUS_CMD 0x31
         #define QE_ENABLE        0x02 /* S9 */
-    #else
+    #else /* Default - ISSI IS25WP064A (on EVKB) */
         #define WRITE_STATUS_CMD 0x1
         #define QE_ENABLE        0x40 /* S6 */
     #endif
@@ -551,7 +547,6 @@ void hal_init(void)
     ARM_MPU_Disable();
     clock_init();
     hal_flash_init();
-    //SCB_EnableICache();
 }
 
 void hal_prepare_boot(void)
