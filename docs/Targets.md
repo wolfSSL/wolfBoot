@@ -1053,6 +1053,8 @@ DCP support (hardware acceleration for SHA256 operations) can be enabled by usin
 
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
 
+For the RT1050 board it comes wired to use the HyperFlash, but wolfBoot is setup for QSPI. There is a rework that can be performed (see AN12183) to use the onboard 8MB ISSI IS25WP064A. Optionally you can define `CONFIG_FLASH_W25Q64JV` for the Winbond W25Q64JV.
+
 ### Testing Update
 
 ```sh
@@ -1072,7 +1074,7 @@ loadbin update.bin 0x60030000
 ```sh
 JLinkGDBServer -Device MIMXRT1052xxx6A -speed 5000 -if swd -port 3333
 arm-none-eabi-gdb
-add-symbol-file test-app/image.elf 0x60010000
+add-symbol-file test-app/image.elf 0x60010100
 mon reset init
 b main
 c
