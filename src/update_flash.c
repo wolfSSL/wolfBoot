@@ -361,6 +361,19 @@ out:
     #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
 
+static int RAMFUNCTION wolfBoot_get_total_size(struct wolfBoot_image* boot,
+    struct wolfBoot_image* update)
+{
+    uint32_t total_size = 0;
+
+    /* Use biggest size for the swap */
+    total_size = boot->fw_size + IMAGE_HEADER_SIZE;
+    if ((update->fw_size + IMAGE_HEADER_SIZE) > total_size)
+            total_size = update->fw_size + IMAGE_HEADER_SIZE;
+
+    return total_size;
+}
+
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -369,6 +382,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint8_t flag, st;
     struct wolfBoot_image boot, update, swap;
     uint16_t update_type;
+    uint32_t fw_size;
 #ifdef EXT_ENCRYPTED
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
@@ -385,10 +399,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_open_image(&swap, PART_SWAP);
 
-    /* Use biggest size for the swap */
-    total_size = boot.fw_size + IMAGE_HEADER_SIZE;
-    if ((update.fw_size + IMAGE_HEADER_SIZE) > total_size)
-            total_size = update.fw_size + IMAGE_HEADER_SIZE;
+    /* get total size */
+    total_size = wolfBoot_get_total_size(&boot, &update);
 
     if (total_size <= IMAGE_HEADER_SIZE)
         return -1;
@@ -492,6 +504,25 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 wolfBoot_set_update_sector_flag(sector, flag);
         }
         sector++;
+        /* headers that can be in different positions depending on when the
+         * power fails are now in a known state, re-read and swap fw_size
+         * because the locations are correct but the metadata is now swapped
+         * also recalculate total_size since it could be invalid */
+        if (sector == 1) {
+            wolfBoot_open_image(&boot, PART_BOOT);
+            wolfBoot_open_image(&update, PART_UPDATE);
+
+            /* swap the fw_size since they're now swapped */
+            fw_size = boot.fw_size;
+            boot.fw_size = update.fw_size;
+            update.fw_size = fw_size;
+
+            /* get total size */
+            total_size = wolfBoot_get_total_size(&boot, &update);
+
+            if (total_size <= IMAGE_HEADER_SIZE)
+                return -1;
+        }
     }
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
