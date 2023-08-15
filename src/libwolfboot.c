@@ -154,6 +154,18 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
 static int nvm_cached_sector = 0;
 
+#ifdef __GNUC__
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
+{
+    return *(base - off); /* ignore array bounds error */
+}
+#ifdef __GNUC__
+    #pragma GCC diagnostic pop
+#endif
+
 static int nvm_select_fresh_sector(int part)
 {
     int sel;
@@ -171,8 +183,8 @@ static int nvm_select_fresh_sector(int part)
 
     /* Select the sector with more flags set */
     for (off = 1; off < WOLFBOOT_SECTOR_SIZE; off++) {
-        uint8_t byte_0 = *(base - off);
-        uint8_t byte_1 = *(base - (WOLFBOOT_SECTOR_SIZE + off));
+        uint8_t byte_0 = get_base_offset(base, off);
+        uint8_t byte_1 = get_base_offset(base, (WOLFBOOT_SECTOR_SIZE + off));
 
         if (byte_0 == FLASH_BYTE_ERASED && byte_1 != FLASH_BYTE_ERASED) {
             sel = 1;
@@ -183,15 +195,17 @@ static int nvm_select_fresh_sector(int part)
             break;
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
-                (byte_1 == FLASH_BYTE_ERASED)) {
+                 (byte_1 == FLASH_BYTE_ERASED))
+        {
             /* First time boot?  Assume no pending update */
-            if(off == 1) {
+            if (off == 1) {
                 sel=0;
                 break;
             }
             /* Examine previous position one byte ahead */
-            byte_0 = *(base + 1 - off);
-            byte_1 = *(base + 1 - (WOLFBOOT_SECTOR_SIZE + off));
+            byte_0 = get_base_offset(base, (1 - off));
+            byte_1 = get_base_offset(base, (1 - (WOLFBOOT_SECTOR_SIZE + off)));
+
             sel = FLAG_CMP(byte_0, byte_1);
             break;
         }
