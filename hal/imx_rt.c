@@ -276,6 +276,153 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1052DVJ6B
+
+    #ifdef CONFIG_FLASH_W25Q64JV
+        /* Winbond W25Q64JV */
+        #define WRITE_STATUS_CMD 0x31
+        #define QE_ENABLE        0x02 /* S9 */
+    #elif defined(CONFIG_FLASH_IS25WP064A)
+        /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
+        #define WRITE_STATUS_CMD 0x1
+        #define QE_ENABLE        0x40 /* S6 */
+    #else
+        /* Hyperflash - Default on RT1050-EVKB */
+        #define CONFIG_HYPERFLASH
+    #endif
+
+    #ifdef CONFIG_HYPERFLASH
+    #define CONFIG_FLASH_SIZE        (64 * 1024 * 1024) /* 64MBytes  */
+    #define CONFIG_FLASH_PAGE_SIZE   512UL              /* 512Bytes  */
+    #define CONFIG_FLASH_SECTOR_SIZE (256 * 1024)       /* 256KBytes */
+    #define CONFIG_FLASH_BLOCK_SIZE  (256 * 1024)       /* 256KBytes */
+    #define CONFIG_FLASH_UNIFORM_BLOCKSIZE true
+    #define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_133MHz
+
+    const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+        .memConfig = {
+            .tag                = FLEXSPI_CFG_BLK_TAG,
+            .version            = FLEXSPI_CFG_BLK_VERSION,
+            .readSampleClkSrc   = kFlexSPIReadSampleClk_ExternalInputFromDqsPad,
+            .csHoldTime         = 3u,
+            .csSetupTime        = 3u,
+            .columnAddressWidth = 3u,
+            /* Enable DDR mode, Word-addressable, Safe configuration, Differential clock */
+            .controllerMiscOption =
+                (1u << kFlexSpiMiscOffset_DdrModeEnable) | (1u << kFlexSpiMiscOffset_WordAddressableEnable) |
+                (1u << kFlexSpiMiscOffset_SafeConfigFreqEnable) | (1u << kFlexSpiMiscOffset_DiffClkEnable),
+            .deviceType         = kFlexSpiDeviceType_SerialNOR,
+            .sflashPadType      = kSerialFlash_8Pads,
+            .serialClkFreq      = CONFIG_SERIAL_CLK_FREQ,
+            .lutCustomSeqEnable = 0x1,
+            .sflashA1Size       = CONFIG_FLASH_SIZE,
+            .dataValidTime      = {15u, 0u},
+            .busyOffset         = 15u,
+            .busyBitPolarity    = 1u,
+            .lookupTable = {
+                /* Read LUTs */
+                [0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0xA0, RADDR_DDR, FLEXSPI_8PAD, 0x18),
+                [1] = FLEXSPI_LUT_SEQ(CADDR_DDR, FLEXSPI_8PAD, 0x10, DUMMY_DDR, FLEXSPI_8PAD, 0x0C),
+                [2] = FLEXSPI_LUT_SEQ(READ_DDR, FLEXSPI_8PAD, 0x04, STOP, FLEXSPI_1PAD, 0x0),
+
+                /* Read Status LUTs - 0 */
+                [4 * 1 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 1 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 1 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 1 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x70),
+
+                /* Read Status LUTs - 1 */
+                [4 * 2 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0xA0, RADDR_DDR, FLEXSPI_8PAD, 0x18),
+                [4 * 2 + 1] = FLEXSPI_LUT_SEQ(CADDR_DDR, FLEXSPI_8PAD, 0x10, DUMMY_RWDS_DDR, FLEXSPI_8PAD, 0x0B),
+                [4 * 2 + 2] = FLEXSPI_LUT_SEQ(READ_DDR, FLEXSPI_8PAD, 0x4, STOP, FLEXSPI_1PAD, 0x0),
+
+                /* Write Enable LUTs - 0 */
+                [4 * 3 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 3 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 3 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 3 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+
+                /* Write Enable LUTs - 1 */
+                [4 * 4 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 4 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x55),
+                [4 * 4 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x02),
+                [4 * 4 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x55),
+
+                /* Erase Sector LUTs - 0 */
+                [4 * 5 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 5 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 5 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 5 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x80),
+
+                /* Erase Sector LUTs - 1 */
+                [4 * 6 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 6 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 6 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 6 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+
+                /* Erase Sector LUTs - 2 */
+                [4 * 7 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 7 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x55),
+                [4 * 7 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x02),
+                [4 * 7 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x55),
+
+                /* Erase Sector LUTs - 3 */
+                [4 * 8 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, RADDR_DDR, FLEXSPI_8PAD, 0x18),
+                [4 * 8 + 1] = FLEXSPI_LUT_SEQ(CADDR_DDR, FLEXSPI_8PAD, 0x10, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 8 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x30, STOP, FLEXSPI_1PAD, 0x0),
+
+                /* Page Program LUTs - 0 */
+                [4 * 9 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 9 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 9 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 9 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xA0),
+
+                /* Page Program LUTs - 1 */
+                [4 * 10 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, RADDR_DDR, FLEXSPI_8PAD, 0x18),
+                [4 * 10 + 1] = FLEXSPI_LUT_SEQ(CADDR_DDR, FLEXSPI_8PAD, 0x10, WRITE_DDR, FLEXSPI_8PAD, 0x80),
+
+                /* Erase Chip LUTs - 0 */
+                [4 * 11 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 11 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 11 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 11 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x80),
+
+                /* Erase Chip LUTs - 1 */
+                [4 * 12 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 12 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 12 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 12 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+
+                /* Erase Chip LUTs - 2 */
+                [4 * 13 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 13 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x55),
+                [4 * 13 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x02),
+                [4 * 13 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x55),
+
+                /* Erase Chip LUTs - 3 */
+                [4 * 14 + 0] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x0),
+                [4 * 14 + 1] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0xAA),
+                [4 * 14 + 2] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x05),
+                [4 * 14 + 3] = FLEXSPI_LUT_SEQ(CMD_DDR, FLEXSPI_8PAD, 0x0, CMD_DDR, FLEXSPI_8PAD, 0x10),
+            },
+            /* LUT customized sequence */
+            .lutCustomSeq = {
+                {.seqNum   = 0, .seqId    = 0,  .reserved = 0},
+                {.seqNum   = 2, .seqId    = 1,  .reserved = 0},
+                {.seqNum   = 2, .seqId    = 3,  .reserved = 0},
+                {.seqNum   = 4, .seqId    = 5,  .reserved = 0},
+                {.seqNum   = 2, .seqId    = 9,  .reserved = 0},
+                {.seqNum   = 4, .seqId    = 11, .reserved = 0}
+            },
+        },
+        .pageSize           = CONFIG_FLASH_PAGE_SIZE,
+        .sectorSize         = CONFIG_FLASH_SECTOR_SIZE,
+        .ipcmdSerialClkFreq = 1u,
+        .serialNorType      = 1u,
+        .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
+        .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
+    };
+    #else /* QSPI */
+
     #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes  */
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4Bytes */
@@ -284,14 +431,6 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
     #define CONFIG_FLASH_ADDR_WIDTH        24u /* Width of flash addresses (either 24 or 32) */
     #define CONFIG_FLASH_QE_ENABLE         1
-
-    #ifdef CONFIG_FLASH_W25Q64JV /* Winbond W25Q64JV */
-        #define WRITE_STATUS_CMD 0x31
-        #define QE_ENABLE        0x02 /* S9 */
-    #else /* Default - ISSI IS25WP064A (on EVKB) */
-        #define WRITE_STATUS_CMD 0x1
-        #define QE_ENABLE        0x40 /* S6 */
-    #endif
 
     /* Note: By default the RT1050-EVKB uses HyperFlex.
      *       To use QSPI flash a rework is required. See AN12183
@@ -401,6 +540,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
         .ipcmdSerialClkFreq = 0,
     };
+    #endif
 #endif /* CPU_MIMXRT1052DVJ6B */
 
 #ifndef __FLASH_BASE
