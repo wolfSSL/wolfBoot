@@ -268,15 +268,16 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     uint8_t *ret = NULL;
     uint32_t sel_sec = 0;
-#ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(part);
-#endif
     if (part == PART_BOOT) {
         if (FLAGS_BOOT_EXT()){
             ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
                 (void *)&ext_cache, sizeof(uint32_t));
             ret = (uint8_t *)&ext_cache;
         } else {
+            /* only internal flash should be writeonce */
+#ifdef NVM_FLASH_WRITEONCE
+            sel_sec = nvm_select_fresh_sector(part);
+#endif
             ret = (void *)(PART_BOOT_ENDFLAGS -
                     (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
         }
@@ -287,6 +288,10 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
                 (void *)&ext_cache, sizeof(uint32_t));
             ret = (uint8_t *)&ext_cache;
         } else {
+            /* only internal flash should be writeonce */
+#ifdef NVM_FLASH_WRITEONCE
+            sel_sec = nvm_select_fresh_sector(part);
+#endif
             ret = (void *)(PART_UPDATE_ENDFLAGS -
                     (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
         }
