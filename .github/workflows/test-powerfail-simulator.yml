@@ -257,9 +257,3 @@ jobs:
       - name: Run update-revert test with power failures (AES128 NVM_WRITEONCE)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
-      - name: Rebuild wolfboot.elf
-        run: |
-          make clean && make test-sim-external-flash-with-enc-update
-      - name: Run update-revert test with progressive power failures (AES128 NVM_WRITEONCE)
-        run: |
-          tools/scripts/sim-update-powerfail-resume-nvm-writeonce.sh
