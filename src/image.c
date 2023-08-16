@@ -247,7 +247,7 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 }
 #endif /* !NO_RSA_SIG_ENCODING */
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TPM_KEYSTORE)
 /* RSA PKCSV15 un-padding with RSA_BLOCK_TYPE_1 (public) */
 /* UnPad plaintext, set start to *output, return length of plaintext or error */
 static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
@@ -270,7 +270,7 @@ static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
     ret = pkcsBlockLen - i;
     return ret;
 }
-#endif /* WOLFBOOT_TPM */
+#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_KEYSTORE */
 
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
@@ -446,7 +446,7 @@ static uint8_t *get_img_hdr(struct wolfBoot_image *img)
 #ifdef WOLFBOOT_MEASURED_BOOT
 static int self_sha256(uint8_t *hash)
 {
-    void *p = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uintptr_t p = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
     uint32_t blksz, position = 0;
     wc_Sha256 sha256_ctx;
@@ -456,7 +456,14 @@ static int self_sha256(uint8_t *hash)
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (position + blksz > sz)
             blksz = sz - position;
-        wc_Sha256Update(&sha256_ctx, p, blksz);
+    #if defined(EXT_FLASH) && defined(NO_XIP)
+        rc = ext_flash_read(p, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
+        if (rc != WOLFBOOT_SHA_BLOCK_SIZE)
+            return -1;
+        wc_Sha256Update(&sha256_ctx, ext_hash_block, blksz);
+    #else
+        wc_Sha256Update(&sha256_ctx, (uint8_t*)p, blksz);
+    #endif
         position += blksz;
         p += blksz;
     } while (position < sz);
@@ -537,7 +544,7 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
 #ifdef WOLFBOOT_MEASURED_BOOT
 static int self_sha384(uint8_t *hash)
 {
-    void *p = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uintptr_t p = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
     uint32_t blksz, position = 0;
     wc_Sha384 sha384_ctx;
@@ -547,7 +554,14 @@ static int self_sha384(uint8_t *hash)
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (position + blksz > sz)
             blksz = sz - position;
-        wc_Sha384Update(&sha384_ctx, p, blksz);
+    #if defined(EXT_FLASH) && defined(NO_XIP)
+        rc = ext_flash_read(p, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
+        if (rc != WOLFBOOT_SHA_BLOCK_SIZE)
+            return -1;
+        wc_Sha384Update(&sha384_ctx, ext_hash_block, blksz);
+    #else
+        wc_Sha384Update(&sha384_ctx, (uint8_t*)p, blksz);
+    #endif
         position += blksz;
         p += blksz;
     } while (position < sz);
