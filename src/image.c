@@ -442,6 +442,30 @@ static uint8_t *get_img_hdr(struct wolfBoot_image *img)
 
 #if defined(WOLFBOOT_HASH_SHA256)
 #include <wolfssl/wolfcrypt/sha256.h>
+
+#ifdef WOLFBOOT_MEASURED_BOOT
+static int self_sha256(uint8_t *hash)
+{
+    void *p = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
+    uint32_t blksz, position = 0;
+    wc_Sha256 sha256_ctx;
+
+    wc_InitSha256(&sha256_ctx);
+    do {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (position + blksz > sz)
+            blksz = sz - position;
+        wc_Sha256Update(&sha256_ctx, p, blksz);
+        position += blksz;
+        p += blksz;
+    } while (position < sz);
+    wc_Sha256Final(&sha256_ctx, hash);
+
+    return 0;
+}
+#endif /* WOLFBOOT_MEASURED_BOOT */
+
 static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
@@ -508,8 +532,31 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
 #endif /* SHA2-256 */
 
 #if defined(WOLFBOOT_HASH_SHA384)
-
 #include <wolfssl/wolfcrypt/sha512.h>
+
+#ifdef WOLFBOOT_MEASURED_BOOT
+static int self_sha384(uint8_t *hash)
+{
+    void *p = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
+    uint32_t blksz, position = 0;
+    wc_Sha384 sha384_ctx;
+
+    wc_InitSha384(&sha384_ctx);
+    do {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (position + blksz > sz)
+            blksz = sz - position;
+        wc_Sha384Update(&sha384_ctx, p, blksz);
+        position += blksz;
+        p += blksz;
+    } while (position < sz);
+    wc_Sha384Final(&sha384_ctx, hash);
+
+    return 0;
+}
+#endif /* WOLFBOOT_MEASURED_BOOT */
+
 static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
@@ -782,7 +829,7 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
 }
 #endif /* !ARCH_SIM */
 
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
+#ifdef WOLFBOOT_MEASURED_BOOT
 #define measure_boot(hash) wolfBoot_tpm2_extend((hash), __LINE__)
 static int wolfBoot_tpm2_extend(uint8_t* hash, int line)
 {
@@ -896,6 +943,17 @@ int wolfBoot_tpm2_init(void)
             rc, wolfTPM2_GetRCString(rc));
         wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_session.handle);
         wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_srk.handle);
+    }
+#endif
+
+#ifdef WOLFBOOT_MEASURED_BOOT
+    /* hash wolfBoot and extend PCR */
+    rc = self_hash(digest);
+    if (rc == 0) {
+        rc = measure_boot(digest);
+    }
+    if (rc != 0) {
+        wolfBoot_printf("Error %d performing wolfBoot measurement!\n", rc);
     }
 #endif
 
@@ -1082,15 +1140,6 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_MEASURED_BOOT)
-    /*
-     * TPM measurement must be performed regardless of the
-     * verification outcome afterwards, because the purpose
-     * of a Measured Boot is to record the current boot state
-     */
-    if (measure_boot(digest) != 0)
-        return -1;
-#endif
     if (memcmp(digest, stored_sha, stored_sha_len) != 0)
         return -1;
     img->sha_ok = 1;

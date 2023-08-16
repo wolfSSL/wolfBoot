@@ -133,6 +133,7 @@ extern "C" {
  #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
  #   define image_hash image_sha256
  #   define key_hash key_sha256
+ #   define self_hash self_sha256
  #elif defined(WOLFBOOT_HASH_SHA384)
  #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
  #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
@@ -141,6 +142,7 @@ extern "C" {
  #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
  #   define image_hash image_sha384
  #   define key_hash key_sha384
+ #   define self_hash self_sha384
  #elif defined(WOLFBOOT_HASH_SHA3_384)
  #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
  #     define WOLFBOOT_SHA_BLOCK_SIZE (128)
