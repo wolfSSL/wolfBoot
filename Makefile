@@ -167,6 +167,11 @@ keytools:
 	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j
 
+tpmtools:
+	@echo "Building TPM tools"
+	@$(MAKE) -C tools/tpm -s clean
+	@$(MAKE) -C tools/tpm -j
+
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)(test $(SIGN) = NONE) || $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1

@@ -1,0 +1,81 @@
+name: Test TPM Configs
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+
+  sim_tpm_debug:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm.config
+      make-args: DEBUG=1
+
+  sim_tpm_ecc256:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm.config
+      make-args: SIGN=ECC256 HASH=SHA256
+
+  sim_tpm_ecc384:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm.config
+      make-args: SIGN=ECC384 HASH=SHA384
+
+  sim_tpm_rsa2048:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm.config
+      make-args: SIGN=RSA2048 HASH=SHA256
+
+  sim_tpm_measured_ecc256:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-measured.config
+      make-args: SIGN=ECC256 HASH=SHA256
+
+  sim_tpm_measured_ecc384:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-measured.config
+      make-args: SIGN=ECC384 HASH=SHA384
+
+  sim_tpm_measured_rsa2048:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-measured.config
+      make-args: SIGN=RSA2048 HASH=SHA256
+
+
+  sim_tpm_keystore_ecc256:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-keystore.config
+      make-args: SIGN=ECC256 HASH=SHA256
+
+  sim_tpm_keystore_ecc384:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-keystore.config
+      make-args: SIGN=ECC384 HASH=SHA384
+      rot-args: -sha384
+
+  sim_tpm_keystore_rsa2048:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-keystore.config
+      make-args: SIGN=RSA2048 HASH=SHA256

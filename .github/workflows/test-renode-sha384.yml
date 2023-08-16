@@ -2,9 +2,9 @@ name: Renode Automated multi SHA algorithms
 
 on:
   push:
-    branches: [master]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
-    branches: [master]
+    branches: [ '*' ]
 
 jobs:
   renode_automated_multi_sha:

@@ -136,9 +136,9 @@ Cfile_Banner="/* Keystore file for wolfBoot, automatically generated. Do not edi
              " * This file has been generated and contains the public keys\n"+ \
              " * used by wolfBoot to verify the updates.\n"+ \
              " */" \
-             "\n#include <stdint.h>\n#include \"wolfboot/wolfboot.h\"\n" \
+             "\n#include <stdint.h>\n#include \"wolfboot/wolfboot.h\"\n#include \"keystore.h\"\n" \
              "#ifdef WOLFBOOT_NO_SIGN\n\t#define NUM_PUBKEYS 0\n#else\n\n" \
-             "#if (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_%s)\n\t" \
+             "#if !defined(KEYSTORE_ANY) && (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_%s)\n\t" \
              "#error Key algorithm mismatch. Remove old keys via 'make keysclean'\n" \
              "#else\n"
 

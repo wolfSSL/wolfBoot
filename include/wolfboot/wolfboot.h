@@ -199,23 +199,7 @@ extern "C" {
            "Please select a valid SIGN= option."
  #endif /* authentication options */
 
- struct keystore_slot {
-     uint32_t slot_id;
-     uint32_t key_type;
-     uint32_t part_id_mask;
-     uint32_t pubkey_size;
-     uint8_t  pubkey[KEYSTORE_PUBKEY_SIZE];
- };
-
- /* KeyStore API */
- int keystore_num_pubkeys(void);
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT)
- uint32_t *keystore_get_buffer(int id);
-#else
- uint8_t *keystore_get_buffer(int id);
-#endif
- int keystore_get_size(int id);
- uint32_t keystore_get_mask(int id);
+ #include "keystore.h"
 
 #endif /* defined WOLFBOOT */
 

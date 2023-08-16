@@ -1,0 +1,67 @@
+name: Wolfboot Reusable Build Workflow for TPM with Simulator
+
+on:
+
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      config-file:
+        required: true
+        type: string
+      make-args:
+        required: false
+        type: string
+      rot-args:
+        required: false
+        type: string
+
+jobs:
+
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      # setup ibmswtpm2
+      - uses: actions/checkout@master
+        with:
+          repository: kgoldman/ibmswtpm2
+          path: ibmswtpm2
+      - name: ibmswtpm2 make
+        working-directory: ./ibmswtpm2/src
+        run: |
+          make
+          ./tpm_server &
+
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: make distclean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp ${{inputs.config-file}} .config
+
+      - name: Build tools
+        run: |
+          make keytools
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}}
+
+      - name: Build TPM tools
+        run: |
+          make tpmtools
+
+      - name: Write TPM ROT to TPM
+        run: |
+          ./tools/tpm/rot -write ${{inputs.rot-args}}
+
+      - name: Run wolfBoot
+        run: |
+          ./wolfboot.elf get_version
