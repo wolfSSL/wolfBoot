@@ -2,9 +2,9 @@ name: Power-failure during update - test with simulator target
 
 on:
   push:
-    branches: [master]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
-    branches: [master]
+    branches: [ '*' ]
 
 jobs:
   powerfail_simulator_tests:

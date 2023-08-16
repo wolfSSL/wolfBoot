@@ -140,7 +140,7 @@ void hal_init(void)
     ret = mmap_file(EXTERNAL_FLASH_FILE,
         (uint8_t*)ARCH_FLASH_OFFSET + 0x10000000, &flash_base);
     if (ret != 0) {
-        fprintf(stderr, "failed to load internal flash file\n");
+        fprintf(stderr, "failed to load external flash file\n");
         exit(-1);
     }
 #endif /* EXT_FLASH */

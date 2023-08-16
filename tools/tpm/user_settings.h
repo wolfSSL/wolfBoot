@@ -1,10 +1,9 @@
 /* user_settings.h
  *
- * wolfCrypt build settings for signing tool
+ * Configuration for wolfBoot TPM tools.
  * Enabled via WOLFSSL_USER_SETTINGS.
  *
- *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2023 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -23,69 +22,53 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef H_USER_SETTINGS_
-#define H_USER_SETTINGS_
+#ifndef _WOLFBOOT_TPM_SETTING_H
+#define _WOLFBOOT_TPM_SETTING_H
 
 #include <stdint.h>
+
+/* TPM Specific Options */
+#define WOLFSSL_PUBLIC_MP
+#define WOLFSSL_AES_CFB
+#define DEBUG_WOLFTPM /* for TPM2_PrintBin */
 
 /* System */
 #define SINGLE_THREADED
 #define WOLFCRYPT_ONLY
 
 /* Math */
-#if 1
-    #define USE_FAST_MATH
-    #define FP_MAX_BITS (4096 * 2)
-#else
-    #define WOLFSSL_SP_MATH
-    #define WOLFSSL_HAVE_SP_ECC
-    #define WOLFSSL_SP_384
-    #define WOLFSSL_SP_521
-    #define WOLFSSL_HAVE_SP_RSA
-    #define WOLFSSL_SP_4096
-#endif
-
+#define WOLFSSL_SP_MATH
 #define TFM_TIMING_RESISTANT
 
 /* ECC */
 #define HAVE_ECC
+#define WOLFSSL_HAVE_SP_ECC
+#define WOLFSSL_SP_384
+#define WOLFSSL_SP_521
 #define ECC_TIMING_RESISTANT
 #define ECC_USER_CURVES
-#undef  NO_ECC256
+#define HAVE_ECC256
 #define HAVE_ECC384
 #define HAVE_ECC521
 
-/* ED25519 */
-#define HAVE_ED25519
-
-/* ED448 */
-#define HAVE_ED448
-#define WOLFSSL_SHAKE256
-
 /* RSA */
 #define HAVE_RSA
+#define WOLFSSL_HAVE_SP_RSA
+#define WOLFSSL_SP_4096
 #define WC_RSA_BLINDING
 #define WOLFSSL_KEY_GEN
 
 /* Hashing */
-#define WOLFSSL_SHA512 /* Required for ED25519 */
-#define WOLFSSL_SHA384 /* Required for ED25519 */
-#define WOLFSSL_SHA3
+#define WOLFSSL_SHA384
 #undef  NO_SHA256
 
 /* ASN */
 #define WOLFSSL_ASN_TEMPLATE
-
-/* Chacha stream cipher */
-#define HAVE_CHACHA
-
-/* AES */
-#define WOLFSSL_AES_COUNTER
-#define WOLFSSL_AES_DIRECT
+#define WOLFSSL_PEM_TO_DER
+#define WOLFSSL_PUB_PEM_TO_DER
 
 /* Disables */
 #define NO_CMAC
-#define NO_HMAC
 #define NO_RC4
 #define NO_SHA
 #define NO_DH
@@ -100,7 +83,6 @@
 #define NO_DES3
 #define NO_PWDBASED
 #define NO_WRITEV
-#define NO_FILESYSTEM
 #define NO_MAIN_DRIVER
 #define NO_OLD_RNGNAME
 #define NO_WOLFSSL_DIR
@@ -111,4 +93,4 @@
 #define NO_CRYPT_TEST
 #define NO_CRYPT_BENCHMARK
 
-#endif /* !H_USER_SETTINGS_ */
+#endif /* !_WOLFBOOT_TPM_SETTING_H */

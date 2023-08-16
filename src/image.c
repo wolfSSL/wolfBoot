@@ -712,7 +712,7 @@ static void wolfBoot_PrintBin(const byte* buffer, word32 length)
     word32 i, sz;
 
     if (!buffer) {
-        wolfBoot_printf("\tNULL");
+        wolfBoot_printf("\tNULL\n");
         return;
     }
 
