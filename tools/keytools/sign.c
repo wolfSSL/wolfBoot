@@ -45,11 +45,16 @@
 #include <io.h>
 #define HAVE_MMAP 0
 #define ftruncate(fd, len) _chsize(fd, len)
+static inline int fp_truncate(FILE *f, size_t len)
+{
+    int fd;
+    if (f == NULL)
+        return -1;
+    fd = _fileno(f);
+    return _chsize_s(fd, len);
+}
 #else
 #define HAVE_MMAP 1
-#endif
-
-#if HAVE_MMAP
 #include <sys/mman.h>
 #include <unistd.h>
 #endif
@@ -1009,7 +1014,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 mp_clear(&r); mp_clear(&s);
             }
 #endif
-            else if (CMD.sign == SIGN_RSA2048 || 
+            else if (CMD.sign == SIGN_RSA2048 ||
                     CMD.sign == SIGN_RSA3072 ||
                     CMD.sign == SIGN_RSA4096) {
 
@@ -1237,7 +1242,11 @@ static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
 
 static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, int padding)
 {
+#if HAVE_MMAP
     int fd1 = -1, fd2 = -1, fd3 = -1;
+#else
+    FILE *f1 = NULL, *f2 = NULL, *f3 = NULL;
+#endif
     int len1 = 0, len2 = 0, len3 = 0;
     struct stat st;
     void *base = NULL;
@@ -1266,30 +1275,34 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
 
+#if HAVE_MMAP
     /* Open base image */
     fd1 = open(f_base, O_RDWR);
     if (fd1 < 0) {
         printf("Cannot open file %s\n", f_base);
         goto cleanup;
     }
-#if HAVE_MMAP
     base = mmap(NULL, len1, PROT_READ|PROT_WRITE, MAP_SHARED, fd1, 0);
     if (base == (void *)(-1)) {
         perror("mmap");
         goto cleanup;
     }
 #else
+    f1 = fopen(f_base, "wb");
+    if (f1 == NULL) {
+        printf("Cannot open file %s\n", f_base);
+        goto cleanup;
+    }
     base = malloc(len1);
     if (base == NULL) {
         fprintf(stderr, "Error malloc for base %d\n", len1);
         goto cleanup;
     }
-    if (len1 != read(fd1, base, len1)) {
+    if (len1 != (int)fread(base, len1, 1, f1)) {
         perror("read of base");
         goto cleanup;
     }
 #endif
-
 
     /* Check base image version */
     base_ver_p = strstr(f_base, "_v");
@@ -1313,6 +1326,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         printf("Delta base version: %u\n", delta_base_version);
     }
 
+#if HAVE_MMAP
     /* Open second image file */
     fd2 = open(CMD.output_image_file, O_RDONLY);
     if (fd2 < 0) {
@@ -1325,23 +1339,11 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
     len2 = st.st_size;
-#if HAVE_MMAP
     buffer = mmap(NULL, len2, PROT_READ, MAP_SHARED, fd2, 0);
     if (buffer == (void *)(-1)) {
         perror("mmap");
         goto cleanup;
     }
-#else
-    buffer = malloc(len2);
-    if (buffer == NULL) {
-        fprintf(stderr, "Error malloc for buffer %d\n", len2);
-        goto cleanup;
-    }
-    if (len2 != read(fd2, buffer, len2)) {
-        perror("fread of buffer");
-        goto cleanup;
-    }
-#endif
 
     /* Open output file */
     fd3 = open(wolfboot_delta_file, O_RDWR|O_CREAT|O_TRUNC, 0660);
@@ -1359,6 +1361,43 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     }
     lseek(fd3, 0, SEEK_SET);
     len3 = 0;
+#else
+    /* Open second image file */
+    f2 = fopen(CMD.output_image_file, "rb");
+    if (f2 == NULL) {
+        printf("Cannot open file %s\n", CMD.output_image_file);
+        goto cleanup;
+    }
+    /* Get second file size */
+    fseek(f2, 0L, SEEK_END);
+    len2 = ftell(f2);
+    fseek(f2, 0L, SEEK_SET);
+    buffer = malloc(len2);
+    if (buffer == NULL) {
+        fprintf(stderr, "Error malloc for buffer %d\n", len2);
+        goto cleanup;
+    }
+    if (len2 != (int)fread(buffer, len2, 1, f2)) {
+        perror("fread of buffer");
+        goto cleanup;
+    }
+    /* Open output file */
+    f3 = fopen(wolfboot_delta_file, "wb");
+    if (f3 == NULL) {
+        printf("Cannot open file %s for writing\n", wolfboot_delta_file);
+        goto cleanup;
+    }
+    if (len2 <= 0) {
+        goto cleanup;
+    }
+    fseek(f3, MAX_SRC_SIZE -1, SEEK_SET);
+    io_sz = fwrite(&ff, 1, 1, f3);
+    if (io_sz != 1) {
+        goto cleanup;
+    }
+    fseek(f3, 0, SEEK_SET);
+    len3 = 0;
+#endif
 
     /* Direct base->second patch */
     if (wb_diff_init(&diff_ctx, base, len1, buffer, len2) < 0) {
@@ -1368,7 +1407,11 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         r = wb_diff(&diff_ctx, dest, blksz);
         if (r < 0)
             goto cleanup;
+#if HAVE_MMAP
         io_sz = write(fd3, dest, r);
+#else
+        io_sz = (int)fwrite(dest, r, 1, f3);
+#endif
         if (io_sz != r) {
             goto cleanup;
         }
@@ -1377,7 +1420,11 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     patch_sz = len3;
     while ((len3 % padding) != 0) {
         uint8_t zero = 0;
+#if HAVE_MMAP
         io_sz = write(fd3, &zero, 1);
+#else
+        io_sz = (int)fwrite(&zero, 1, 1, f3);
+#endif
         if (io_sz != 1) {
             goto cleanup;
         }
@@ -1394,26 +1441,30 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         r = wb_diff(&diff_ctx, dest, blksz);
         if (r < 0)
             goto cleanup;
+#if HAVE_MMAP
         io_sz = write(fd3, dest, r);
+#else
+        io_sz = (int)fwrite(dest, r, 1, f3);
+#endif
         if (io_sz != r) {
             goto cleanup;
         }
         patch_inv_sz += r;
         len3 += r;
     } while (r > 0);
-    ret = ftruncate(fd3, len3);
     if (ret != 0) {
         goto cleanup;
     }
-    close(fd3);
-    fd3 = -1;
     printf("Successfully created output file %s\n", wolfboot_delta_file);
-
     /* Create delta file, with header, from the resulting patch */
     ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
             delta_base_version, patch_sz, patch_inv_off, patch_inv_sz);
 
 cleanup:
+    /* Unlink output file */
+    unlink(wolfboot_delta_file);
+    /* Cleanup/close */
+#if HAVE_MMAP
     if (fd3 >= 0) {
         if (len3 > 0) {
             io_sz = ftruncate(fd3, len3);
@@ -1422,29 +1473,40 @@ cleanup:
         close(fd3);
         fd3 = -1;
     }
-    /* Unlink output file */
-    unlink(wolfboot_delta_file);
-    /* Cleanup/close */
     if (fd2 >= 0) {
         if (len2 > 0) {
-#if HAVE_MMAP
             munmap(buffer, len2);
-#else
-            free(buffer);
-#endif
         }
         close(fd2);
     }
     if (fd1 >= 0) {
         if (len1 > 0) {
-#if HAVE_MMAP
             munmap(base, len1);
-#else
-            free(base);
-#endif
         }
         close(fd1);
     }
+#else
+    if (f3 != NULL) {
+        if (len3 > 0) {
+            io_sz = fp_truncate(f3, len3);
+            (void)io_sz; /* ignore failure */
+        }
+        fclose(f3);
+        f3 = NULL;
+    }
+    if (f2 != NULL) {
+        if (len2 > 0) {
+            free(buffer);
+        }
+        fclose(f2);
+    }
+    if (f1 != NULL) {
+        if (len1 > 0) {
+            free(base);
+        }
+        fclose(f1);
+    }
+#endif
     return ret;
 }
 
