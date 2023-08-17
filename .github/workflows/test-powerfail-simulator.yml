@@ -33,7 +33,7 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make && make test-sim-internal-flash-with-update
+          make clean && make test-sim-internal-flash-with-update
 
       - name: Run sunny day update test
         run: |
@@ -41,7 +41,7 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-update
+          make clean && make test-sim-internal-flash-with-update
 
       - name: Run update-revert test
         run: |
@@ -49,12 +49,11 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-update
+          make clean && make test-sim-internal-flash-with-update
 
       - name: Run update-revert test with power failures
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
-
 
       # TEST with NVM_WRITEONCE enabled
 
@@ -76,7 +75,7 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make && make test-sim-internal-flash-with-update
+          make clean && make test-sim-internal-flash-with-update
 
       - name: Run sunny day update test (NVM_WRITEONCE)
         run: |
@@ -84,7 +83,7 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-update
+          make clean && make test-sim-internal-flash-with-update
 
       - name: Run update-revert test (NVM_WRITEONCE)
         run: |
@@ -92,9 +91,75 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-update
+          make clean && make test-sim-internal-flash-with-update
 
       - name: Run update-revert test with power failures (NVM_WRITEONCE)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+      # TEST with NVM_WRITEONCE AND FLAGS_HOME enabled
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+      - name: Select config with NVM_WRITEONCE and FLAGS_HOME
+        run: |
+          cp config/examples/sim-nvm-writeonce-flags-home.config .config
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+      - name: Build bin assemble
+        run: |
+          make -C tools/bin-assemble
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+      - name: Run sunny day update test (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+      - name: Run update-revert test (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+      - name: Run update-revert test with power failures (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+      # TEST with NVM_WRITEONCE AND FLAGS_HOME AND FLAGS_INVERT enabled
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+      - name: Select config with NVM_WRITEONCE and FLAGS_HOME and FLAGS_INVERT
+        run: |
+          cp config/examples/sim-nvm-writeonce-flags-home-invert.config .config
+      - name: Build key tools
+        run: |
+          make -C tools/keytools
+      - name: Build bin assemble
+        run: |
+          make -C tools/bin-assemble
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-update
+      - name: Run sunny day update test (NVM_WRITEONCE FLAGS_HOME FLAGS_INVERT)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-update
+      - name: Run update-revert test (NVM_WRITEONCE FLAGS_HOME)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-external-flash-with-update
+      - name: Run update-revert test with power failures (NVM_WRITEONCE FLAGS_HOME FLAGS_INVERT)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
 
@@ -161,7 +226,7 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make test-sim-external-flash-with-enc-update
+          make clean && make test-sim-external-flash-with-enc-update
 
       - name: Run sunny day update test (AES128)
         run: |
@@ -203,7 +268,7 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make test-sim-external-flash-with-enc-delta-update
+          make clean && make test-sim-external-flash-with-enc-delta-update
 
       - name: Run sunny day update test (AES128 DELTA)
         run: |
