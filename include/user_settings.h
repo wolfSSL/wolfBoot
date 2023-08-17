@@ -136,7 +136,9 @@ extern int tolower(int c);
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
 #   endif
-#   define WC_NO_RSA_OAEP
+#   ifndef WOLFBOOT_TPM_KEYSTORE
+#       define WC_NO_RSA_OAEP
+#   endif
 #   define FP_MAX_BITS (2048 * 2)
     /* sp math */
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
@@ -229,6 +231,9 @@ extern int tolower(int c);
 #endif
 
 #ifdef WOLFBOOT_TPM
+    /* Do not use heap */
+    #define WOLFTPM2_NO_HEAP
+
     #ifdef WOLFBOOT_TPM_KEYSTORE
         /* Enable AES CFB (parameter encryption) and HMAC (for KDF) */
         #define WOLFSSL_AES_CFB
@@ -319,7 +324,9 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
-#   define WOLFSSL_NO_MALLOC
+#   ifndef ARCH_SIM
+#       define WOLFSSL_NO_MALLOC
+#   endif
 #else
 #   if defined(WOLFBOOT_HUGE_STACK)
 #       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
