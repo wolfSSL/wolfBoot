@@ -57,10 +57,15 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
                          (TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
     #define TRAILER_OVERHEAD (4 + 1 + (WOLFBOOT_PARTITION_SIZE  / \
                              (2 * WOLFBOOT_SECTOR_SIZE)))
-                             /* MAGIC + PART_FLAG (1B) + (N_SECTORS / 2) */
+                             /* MAGIC (4B) + PART_FLAG (1B) + (N_SECTORS / 2) */
     #define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
+    #define SECTOR_FLAGS_SIZE WOLFBOOT_SECTOR_SIZE - (4 + 1 + \
+        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)
+    /* MAGIC (4B) + PART_FLAG (1B) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE */
 #else
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
+    #define SECTOR_FLAGS_SIZE WOLFBOOT_SECTOR_SIZE - (4 + 1)
+    /* MAGIC (4B) + PART_FLAG (1B) */
 #endif /* EXT_FLASH && EXT_ENCRYPTED */
 
 #if !defined(__WOLFBOOT) && !defined(UNIT_TEST)
@@ -138,7 +143,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
  *
  */
 
-#ifndef FLAGS_INVERT
+#ifndef WOLFBOOT_FLAGS_INVERT
 #define FLAG_CMP(a,b) ((a < b)? 0 : 1)
 #else
 #define FLAG_CMP(a,b) ((a > b)? 0 : 1)
@@ -522,14 +527,52 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
+#if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
+    uintptr_t lastSector = PART_UPDATE_ENDFLAGS -
+        (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE);
+#endif
+#ifdef NVM_FLASH_WRITEONCE
+    uint8_t selSec = 0;
+#endif
 
+    /* erase the sector flags */
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_unlock();
-        wolfBoot_set_partition_state(PART_UPDATE, st);
-        ext_flash_lock();
     } else {
         hal_flash_unlock();
-        wolfBoot_set_partition_state(PART_UPDATE, st);
+    }
+
+    /* NVM_FLASH_WRITEONCE needs erased flags since it selects the fresh
+     * partition based on how many flags are non-erased
+     * FLAGS_INVERT needs erased flags because the bin-assemble's fill byte may
+     * not match what's in wolfBoot */
+#if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
+    if (FLAGS_UPDATE_EXT()) {
+        ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+    } else {
+#ifdef NVM_FLASH_WRITEONCE
+        selSec = nvm_select_fresh_sector(PART_UPDATE);
+        XMEMCPY(NVM_CACHE,
+            (uint8_t*)(lastSector - WOLFBOOT_SECTOR_SIZE * selSec),
+            WOLFBOOT_SECTOR_SIZE);
+        XMEMSET(NVM_CACHE, FLASH_BYTE_ERASED, SECTOR_FLAGS_SIZE);
+        /* write to the non selected sector */
+        hal_flash_write(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec, NVM_CACHE,
+            WOLFBOOT_SECTOR_SIZE);
+        /* erase the previously selected sector */
+        hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
+            WOLFBOOT_SECTOR_SIZE);
+#elif defined(WOLFBOOT_FLAGS_INVERT)
+        hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+#endif
+    }
+#endif
+
+    wolfBoot_set_partition_state(PART_UPDATE, st);
+
+    if (FLAGS_UPDATE_EXT()) {
+        ext_flash_lock();
+    } else {
         hal_flash_lock();
     }
 }

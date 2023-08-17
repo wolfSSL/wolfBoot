@@ -580,7 +580,15 @@ void RAMFUNCTION wolfBoot_start(void)
      * to trigger fallback.
      */
     if ((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) && (st == IMG_STATE_TESTING)) {
-        wolfBoot_update_trigger();
+        /* these flags require erasing the sector flags when
+         * wolfBoot_update_trigger is called and thus it shouldn't be called
+         * if an update is already in progress */
+#if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
+        if ((wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) || (st != IMG_STATE_UPDATING))
+#endif
+        {
+            wolfBoot_update_trigger();
+        }
         wolfBoot_update(1);
     } else if ((wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) && (st == IMG_STATE_UPDATING)) {
     /* Check for new updates in the UPDATE partition */
