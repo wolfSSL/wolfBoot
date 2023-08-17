@@ -19,6 +19,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
  */
+/**
+ * @file common.c
+ *
+ * @brief Common functions and macros for wolfBoot
+ *
+ * This file contains common functions and macros used in wolfBoot for
+ * x86 architecture. These functions include memory-mapped I/O access,
+ * I/O port access, CPUID instruction, and reset control functions.
+ */
+#ifndef COMMON_H_
+#define COMMON_H_
 
 #include <stdint.h>
 
@@ -39,6 +50,12 @@
 #define NULL 0
 #endif
 
+/**
+ * @brief Memory-mapped write access to a 32-bit register.
+ *
+ * @param address The memory address of the register to write to.
+ * @param value The 32-bit value to write.
+ */
 void mmio_write32(uintptr_t address, uint32_t value)
 {
     volatile uint32_t *_addr = (uint32_t*)address;
@@ -46,6 +63,13 @@ void mmio_write32(uintptr_t address, uint32_t value)
     barrier();
 }
 
+
+/**
+ * @brief Memory-mapped read access to a 32-bit register.
+ *
+ * @param address The memory address of the register to read from.
+ * @return The 32-bit value read from the register.
+ */
 uint32_t mmio_read32(uintptr_t address)
 {
     volatile uint32_t *_addr = (uint32_t*)address;
@@ -55,6 +79,13 @@ uint32_t mmio_read32(uintptr_t address)
     barrier();
     return ret;
 }
+
+/**
+ * @brief Memory-mapped write access to a 16-bit register.
+ *
+ * @param address The memory address of the register to write to.
+ * @param value The 16-bit value to write.
+ */
 void mmio_write16(uintptr_t address, uint16_t value)
 {
     volatile uint16_t *_addr = (uint16_t*)address;
@@ -63,6 +94,12 @@ void mmio_write16(uintptr_t address, uint16_t value)
     barrier();
 }
 
+/**
+ * @brief Memory-mapped read access to a 16-bit register.
+ *
+ * @param address The memory address of the register to read from.
+ * @return The 16-bit value read from the register.
+ */
 uint16_t mmio_read16(uintptr_t address)
 {
     volatile uint16_t *_addr = (uint16_t*)address;
@@ -73,6 +110,12 @@ uint16_t mmio_read16(uintptr_t address)
     return ret;
 }
 
+/**
+ * @brief Memory-mapped write access to an 8-bit register.
+ *
+ * @param address The memory address of the register to write to.
+ * @param value The 8-bit value to write.
+ */
 void mmio_write8(uintptr_t address, uint8_t value)
 {
     volatile uint8_t *_addr = (uint8_t*)address;
@@ -81,6 +124,12 @@ void mmio_write8(uintptr_t address, uint8_t value)
     barrier();
 }
 
+/**
+ * @brief Memory-mapped read access to an 8-bit register.
+ *
+ * @param address The memory address of the register to read from.
+ * @return The 8-bit value read from the register.
+ */
 uint8_t mmio_read8(uintptr_t address)
 {
     volatile uint8_t *_addr = (uint8_t*)address;
@@ -91,16 +140,34 @@ uint8_t mmio_read8(uintptr_t address)
     return ret;
 }
 
+/**
+ * @brief I/O port write access to an 8-bit register.
+ *
+ * @param port The I/O port address of the register to write to.
+ * @param value The 8-bit value to write.
+ */
 void io_write8(uint16_t port, uint8_t value)
 {
     asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
+/**
+ * @brief I/O port write access to a 32-bit register.
+ *
+ * @param port The I/O port address of the register to write to.
+ * @param value The 32-bit value to write.
+ */
 void io_write32(uint16_t port, uint32_t value)
 {
     __asm__ __volatile__ ("outl %0,%w1": :"a" (value), "Nd" (port));
 }
 
+/**
+ * @brief I/O port read access to a 32-bit register.
+ *
+ * @param port The I/O port address of the register to read from.
+ * @return The 32-bit value read from the register.
+ */
 uint32_t io_read32(uint16_t port)
 {
     unsigned int _v;
@@ -109,11 +176,23 @@ uint32_t io_read32(uint16_t port)
     return _v;
 }
 
+/**
+ * @brief I/O port write access to a 16-bit register.
+ *
+ * @param port The I/O port address of the register to write to.
+ * @param value The 16-bit value to write.
+ */
 void io_write16(uint16_t port, uint16_t value)
 {
     __asm__ __volatile__ ("outw %0,%w1": :"a" (value), "Nd" (port));
 }
 
+/**
+ * @brief I/O port read access to a 16-bit register.
+ *
+ * @param port The I/O port address of the register to read from.
+ * @return The 16-bit value read from the register.
+ */
 uint16_t io_read16(uint16_t port)
 {
     uint16_t _v;
@@ -122,6 +201,16 @@ uint16_t io_read16(uint16_t port)
     return _v;
 }
 
+/**
+ * @brief Memory-mapped OR operation with a 32-bit register.
+ *
+ * Reads the 32-bit register at the given address, performs a bitwise OR operation
+ * with the provided value, and writes the result back to the register.
+ *
+ * @param address The memory address of the register.
+ * @param value The 32-bit value to OR with the register contents.
+ * @return The updated 32-bit value of the register after the OR operation.
+ */
 uint32_t mmio_or32(uintptr_t address, uint32_t value)
 {
     uint32_t reg;
@@ -140,6 +229,11 @@ uint8_t io_read8(uint16_t port)
     return v;
 }
 
+/**
+ * @brief Reset the system.
+ *
+ * @param warm Set to 1 for a warm reset, 0 for a cold reset.
+ */
 void reset(uint8_t warm)
 {
     uint8_t value;
@@ -150,6 +244,11 @@ void reset(uint8_t warm)
     while(1){};
 }
 
+/**
+ * @brief Delay the execution for a specified number of milliseconds.
+ *
+ * @param msec The number of milliseconds to delay.
+ */
 void delay(int msec)
 {
     int i;
@@ -157,6 +256,12 @@ void delay(int msec)
         io_write8(0x80, 0x41);
 }
 
+/**
+ * @brief Enter an infinite loop, causing a panic state.
+ *
+ * This function is used for error handling when the system encounters an unrecoverable issue.
+ * It enters an infinite loop, causing a panic state.
+ */
 void panic()
 {
     while (1) {
@@ -164,6 +269,15 @@ void panic()
     }
 }
 
+/**
+ * @brief Execute the CPUID instruction and retrieve the result.
+ *
+ * @param eax_param The value to set in the EAX register before executing CPUID.
+ * @param eax Pointer to store the output value of the EAX register.
+ * @param ebx Pointer to store the output value of the EBX register.
+ * @param ecx Pointer to store the output value of the ECX register.
+ * @param edx Pointer to store the output value of the EDX register.
+ */
 void cpuid(uint32_t eax_param,
            uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx)
 {
@@ -189,6 +303,11 @@ void cpuid(uint32_t eax_param,
         *edx = _edx;
 }
 
+/**
+ * @brief Check if 1GB page is supported by the CPU.
+ *
+ * @return 1 if 1GB page is supported, 0 otherwise.
+ */
 int cpuid_is_1gb_page_supported()
 {
     uint32_t edx;
@@ -200,7 +319,15 @@ int cpuid_is_1gb_page_supported()
 /* Needs to match the code_sel_long offset inside the GDT. The GDT is populated
  * in src/x86 */
 #define CODE_SEL_LONG 0x18
-
+/**
+ * @brief Switch the CPU to long mode.
+ *
+ * This function switches the CPU to long mode with the provided entry point
+ * and page table.
+ *
+ * @param entry The entry point of the long mode code.
+ * @param page_table The page table address to use in long mode.
+ */
 void switch_to_long_mode(uint64_t *entry, uint32_t page_table)
 {
     /* refer to Intel Software Developer's Manual Vol 3 sec 9.8.5*/
@@ -235,3 +362,4 @@ void switch_to_long_mode(uint64_t *entry, uint32_t page_table)
     _entry();
 }
 #endif /* BUILD_LOADER_STAGE1 */
+#endif /* COMMON_H_ */

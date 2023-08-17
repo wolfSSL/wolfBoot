@@ -101,6 +101,16 @@ extern uint8_t _wolfboot_flash_end[];
 extern uint8_t wb_end_bss[], wb_start_bss[];
 extern int main(void);
 
+/*!
+ * \brief Get the top address from the EFI HOB (Hand-Off Block) list.
+ *
+ * This function retrieves the top address from the EFI Hand-Off Block (HOB) list
+ * and stores it in the 'top' parameter.
+ *
+ * \param top Pointer to a variable where the top address will be stored.
+ * \param hoblist Pointer to the EFI HOB list.
+ * \return 0 if the top address is successfully retrieved, -1 otherwise.
+ */
 static int get_top_address(uint64_t *top, struct efi_hob *hoblist)
 {
     struct efi_hob_resource_descriptor *fsp_reserved;
@@ -115,6 +125,16 @@ static int get_top_address(uint64_t *top, struct efi_hob *hoblist)
     return 0;
 }
 
+/*!
+ * \brief Change the stack and invoke a function with the new stack.
+ *
+ * This function changes the stack to the specified 'new_stack' value and then
+ * calls the function pointed to by 'other_func', passing the 'ptr' parameter as an argument.
+ *
+ * \param new_stack The new stack address.
+ * \param other_func Pointer to the function to be invoked with the new stack.
+ * \param ptr Pointer to the parameter to be passed to the invoked function.
+ */
 static void change_stack_and_invoke(uint32_t new_stack,
                                     void (*other_func)(void *), void *ptr)
 {
@@ -127,7 +147,12 @@ static void change_stack_and_invoke(uint32_t new_stack,
                      : "r"(new_stack), "r"(ptr), "r"(other_func)
                      : "%eax");
 }
-
+/*!
+ * \brief Load the WolfBoot bootloader into memory.
+ *
+ * This static function loads the WolfBoot bootloader into memory at the specified
+ * address (WOLFBOOT_LOAD_BASE) from the flash memory.
+ */
 static void load_wolfboot(void)
 {
     size_t wolfboot_size, bss_size;
@@ -153,12 +178,26 @@ static void load_fsp_s_to_ram(void)
 
 extern uint8_t _stage2_params[];
 
+/*!
+ * \brief Set the stage 2 parameter for the WolfBoot bootloader.
+ *
+ * This static function sets the stage 2 parameter for the WolfBoot bootloader,
+ * which will be used by the bootloader during its execution.
+ *
+ * \param p Pointer to the stage 2 parameter structure.
+ */
 static void set_stage2_parameter(struct stage2_parameter *p)
 {
     memcpy((uint8_t*)_stage2_params, (uint8_t*)p, sizeof(*p));
 }
 
 #ifdef WOLFBOOT_64BIT
+/*!
+ * \brief Jump into the WolfBoot bootloader.
+ *
+ * This static function transfers control to the WolfBoot bootloader by calling
+ * the main() function or switch_to_long_mode() for 64-bit systems.
+ */
 static void jump_into_wolfboot(void)
 {
     struct stage2_parameter *params = (struct stage2_parameter*)_stage2_params;
@@ -183,7 +222,15 @@ static void jump_into_wolfboot()
     main();
 }
 #endif /* WOLFBOOT_64BIT */
-
+/*!
+ * \brief Check if the payload is valid.
+ *
+ * This static function checks if the given payload is valid by verifying
+ * its signature.
+ *
+ * \param base_addr Pointer to the payload
+ * \return 0 if the payload is successfully retrieved, -1 otherwise.
+ */
 static inline int verify_payload(uint8_t *base_addr)
 {
     int ret = -1;
@@ -208,7 +255,14 @@ static inline int verify_payload(uint8_t *base_addr)
     }
     return ret;
 }
-
+/*!
+ * \brief Entry point after memory initialization.
+ *
+ * This static function serves as the entry point for further execution after the
+ * memory initialization is completed.
+ *
+ * \param ptr Pointer to a parameter structure.
+ */
 static void memory_ready_entry(void *ptr)
 {
     struct stage2_parameter *stage2_params = (struct stage2_parameter *)ptr;
@@ -308,6 +362,15 @@ static void memory_ready_entry(void *ptr)
     jump_into_wolfboot();
 }
 
+/*!
+ * \brief Check if the FSP info header is valid.
+ *
+ * This static function checks if the given FSP info header is valid by verifying
+ * its signature.
+ *
+ * \param hdr Pointer to the FSP info header structure.
+ * \return 1 if the FSP info header is valid, 0 otherwise.
+ */
 static int fsp_info_header_is_ok(struct fsp_info_header *hdr)
 {
     uint8_t *raw_signature;
@@ -320,6 +383,18 @@ static int fsp_info_header_is_ok(struct fsp_info_header *hdr)
     return 1;
 }
 
+/*!
+ * \brief Entry point for the FSP-M (Firmware Support Package - Memory) module.
+ *
+ * This function serves as the entry point for the FSP-M module, which is executed
+ * during the boot process. It takes the stack base, stack top, timestamp, and BIST
+ * (Built-In Self Test) as input arguments.
+ *
+ * \param stack_base The base address of the stack.
+ * \param stack_top The top address of the stack.
+ * \param timestamp A timestamp value.
+ * \param bist Built-In Self Test value.
+ */
 void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
            uint32_t bist)
 {

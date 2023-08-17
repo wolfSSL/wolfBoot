@@ -20,6 +20,18 @@
  *
  * Machine dependent code for TigerLake x86 with FSP
  */
+/**
+ * @file tgl_fsp.c
+ *
+ * @brief Machine dependent code for TigerLake x86 with FSP
+ *
+ * This file contains machine dependent code for TigerLake x86 platform
+ * with Firmware Support Package (FSP).
+ */
+
+#ifndef TGL_FSP_H
+#define TGL_FSP_H
+
 #include <stdint.h>
 #include <stddef.h>
 #include <x86/hob.h>
@@ -405,6 +417,15 @@ static int disable_watchdog_tco()
     return 0;
 }
 
+/**
+ * @brief Update S parameters in FSPS_UPD structure.
+ *
+ * This function updates the S parameters in the FSPS_UPD structure for
+ * TigerLake x86 platform with FSP.
+ *
+ * @param[in,out] default_s_params Pointer to the default S parameters data.
+ * @return 0 on success, -1 on failure.
+ */
 int fsp_machine_update_s_parameters(uint8_t *default_s_params)
 {
     FSP_S_CONFIG *upd;
@@ -442,7 +463,16 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
     upd->EnableMultiPhaseSiliconInit = 0;
     return 0;
 }
-
+/**
+ * @brief Configure GPIO settings for a specific device.
+ *
+ * This function configures GPIO settings for a specific device on TigerLake x86
+ * platform.
+ *
+ * @param[in,out] gpio Pointer to the tgl_gpio_info structure containing GPIO
+ * information.
+ * @return void
+ */
 static int tgl_setup_lpc_decode(uint32_t address, uint32_t length,
                                 uint32_t range)
 {
@@ -477,6 +507,15 @@ struct tgl_gpio_info {
     uint8_t pad_reset:2;
 };
 
+/**
+ * @brief Configure GPIO settings for a specific device.
+ * @details This function configures GPIO settings for a specific device on
+ * TigerLake x86 platform.
+ *
+ * @param[in,out] gpio Pointer to the tgl_gpio_info structure containing
+ * GPIO information.
+ * @return void
+ */
 static void tgl_gpio_configure(struct tgl_gpio_info *gpio)
 {
     uint16_t off;
@@ -495,6 +534,13 @@ static void tgl_gpio_configure(struct tgl_gpio_info *gpio)
 }
 
 #ifdef TARGET_kontron_vx3060_s2
+/**
+ * @brief Set up ECE1200 device on Kontron VX3060-S2 board.
+ *
+ * This function sets up the ECE1200 device on the Kontron VX3060-S2 board.
+ *
+ * @return void
+ */
 static void setup_ece1200()
 {
     uint8_t reg;
@@ -515,7 +561,14 @@ static void setup_ece1200()
     io_write8(ECE1200_DATA, reg);
     io_write8(ECE1200_INDEX, 0xaa); /* close conf mode */
 }
-
+/**
+ * @brief Configure Kontron CPLD for special settings.
+ *
+ * This function configures the Kontron CPLD for special settings on the Kontron
+ * VX3060-S2 board.
+ *
+ * @return 0 on success, -1 on failure.
+ */
 static int configure_kontron_cpld()
 {
     uint8_t reg;
@@ -543,6 +596,13 @@ static int configure_kontron_cpld()
 
 #define CPLD_I2C_MISC 0x78
 #define CPLD_I2C_MISC_FORCE_RESCUE (1 << 7)
+/**
+ * @brief Ask for recovery mode using CPLD.
+ *
+ * This function asks for recovery mode using CPLD on the Kontron VX3060-S2 board.
+ *
+ * @return void
+ */
 static void kontron_ask_for_recovery() {
    uint32_t reg;
    uint8_t ch;
@@ -566,6 +626,13 @@ static void kontron_ask_for_recovery() {
 }
 #endif /* TARGET_kontron_vx3060_s2 */
 
+/**
+ * @brief Callback function after temporary RAM initialization.
+ *
+ * This function is a callback after temporary RAM initialization on TigerLake x86.
+ *
+ * @return 0 on success, -1 on failure.
+ */
 int post_temp_ram_init_cb(void)
 {
     disable_watchdog_tco();
@@ -598,6 +665,17 @@ int post_temp_ram_init_cb(void)
     return 0;
 }
 
+/**
+ * @brief Update M parameters in FSPM_UPD structure.
+ *
+ * This function updates the M parameters in the FSPM_UPD structure for
+ * TigerLake x86 platform with FSP.
+ *
+ * @param[in,out] default_m_params Pointer to the default M parameters data.
+ * @param[in] mem_base Base address of memory.
+ * @param[in] mem_size Size of memory.
+ * @return 0 on success, -1 on failure.
+ */
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
                                     uint32_t mem_base,
                                     uint32_t mem_size)
@@ -619,3 +697,5 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
 
     return 0;
 }
+
+#endif /* TGL_FSP_H */

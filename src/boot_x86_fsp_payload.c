@@ -18,6 +18,16 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+/**
+ * @file boot_x86_fsp_payload.c
+ *
+ * @brief Boot functions for x86 FSP payload
+ *
+ * This file contains the boot functions for the x86 FSP payload of wolfBoot.
+ * These functions include booting into Linux payload or ELF binaries.
+ */
+#ifndef BOOT_X86_FSP_PAYLOAD_H_
+#define BOOT_X86_FSP_PAYLOAD_H_
 
 #include <stdint.h>
 #include <string.h>
@@ -35,7 +45,13 @@
 #include <elf.h>
 #include <multiboot.h>
 
+/**
+ * @brief Maximum size of Multiboot2 boot info data structure.
+ */
 #define MAX_MB2_BOOT_INFO_SIZE 0x2000
+/**
+ * @brief Multiboot2 boot info data structure.
+ */
 uint8_t mb2_boot_info[MAX_MB2_BOOT_INFO_SIZE];
 #endif
 #ifdef WOLFBOOT_64BIT
@@ -52,6 +68,13 @@ static char *cmdline = "console=ttyS0,115200 pci=earlydump debug";
 static char *cmdline = "auto";
 #endif /* TARGET_kontron_vx3060_s2 */
 
+/**
+ * @brief Jump to the specified entry point.
+ *
+ * This function performs an unconditional jump to the provided entry point.
+ *
+ * @param entry The entry point address to jump to.
+ */
 void jump(uintptr_t entry)
 {
     __asm__(
@@ -60,7 +83,15 @@ void jump(uintptr_t entry)
             : "g"(entry));
 }
 
-
+/**
+ * @brief Perform the boot process for the given application.
+ *
+ * This function performs the boot process for the specified application.
+ * It either loads and boots a Linux payload or an ELF binary, depending on the
+ * configuration.
+ *
+ * @param app Pointer to the start of the application.
+ */
 void do_boot(const uint32_t *app)
 {
 
@@ -112,3 +143,4 @@ void do_boot(const uint32_t *app)
 #error "No payload compiled in"
 #endif /* WOLFBOOT_LINUX_PAYLOAD */
 }
+#endif /* BOOT_X86_FSP_PAYLOAD_H_ */

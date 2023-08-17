@@ -33,6 +33,9 @@
 #define PCI_AHCI_DEV 0x17
 #define PCI_AHCI_FUN 0
 
+/*!
+ * \brief Initializes the SATA controller.
+ */
 void x86_fsp_tgl_init_sata(void)
 {
     uint32_t sata_bar;
