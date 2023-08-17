@@ -41,7 +41,7 @@ endif
 include ../arch.mk
 
 # Setup default linker flags
-LDFLAGS=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
 ifeq ($(DEBUG_UART),1)
     APP_OBJS+=../src/string.o
