@@ -9,6 +9,8 @@ Due to the minimalist design of the bootloader and the tiny HAL API, wolfBoot is
 from any OS or bare-metal application, and can be easily ported and integrated in existing embedded software
 projects to provide a secure firmware update mechanism.
 
+Design based on [RFC 9019](https://datatracker.ietf.org/doc/rfc9019/) - A Firmware Update Architecture for Internet of Things.
+
 ## Features
    - Multi-slot partitioning of the flash device
    - Integrity verification of the firmware image(s)

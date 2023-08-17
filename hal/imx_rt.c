@@ -29,6 +29,9 @@
 #include "fsl_iomuxc.h"
 #include "fsl_nor_flash.h"
 #include "fsl_flexspi.h"
+#ifdef DEBUG_UART
+#include "fsl_lpuart.h"
+#endif
 
 #ifdef CPU_MIMXRT1062DVL6A
 #include "evkmimxrt1060_flexspi_nor_config.h"
@@ -675,6 +678,32 @@ static void clock_init(void)
 }
 
 
+#ifdef DEBUG_UART
+
+#define UART_BASEADDR LPUART1
+#define UART_BAUDRATE (115200U)
+
+void uart_init(void)
+{
+    lpuart_config_t config;
+    uint32_t uartClkSrcFreq = 20000000U; /* 20 MHz */
+
+    LPUART_GetDefaultConfig(&config);
+    config.baudRate_Bps = UART_BAUDRATE;
+    config.enableTx     = true;
+    config.enableRx     = true;
+
+    LPUART_Init(UART_BASEADDR, &config, uartClkSrcFreq);
+}
+
+void uart_write(const char* buf, uint32_t sz)
+{
+    LPUART_WriteBlocking(UART_BASEADDR, (const uint8_t*)buf, sz);
+}
+
+#endif /* DEBUG_UART */
+
+
 extern void ARM_MPU_Disable(void);
 extern int wc_dcp_init(void);
 static int hal_flash_init(void);
@@ -686,6 +715,10 @@ void hal_init(void)
 #endif
     ARM_MPU_Disable();
     clock_init();
+#ifdef DEBUG_UART
+    uart_init();
+    uart_write("wolfBoot HAL Init\n", 19);
+#endif
     hal_flash_init();
 }
 
