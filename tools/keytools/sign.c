@@ -1352,11 +1352,13 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
     if (len2 <= 0) {
+        printf("Invalid file size: %d\n", len2);
         goto cleanup;
     }
     lseek(fd3, MAX_SRC_SIZE -1, SEEK_SET);
     io_sz = write(fd3, &ff, 1);
     if (io_sz != 1) {
+        printf("Could not write to output file: %s\n", strerror(errno));
         goto cleanup;
     }
     lseek(fd3, 0, SEEK_SET);
@@ -1452,6 +1454,25 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         patch_inv_sz += r;
         len3 += r;
     } while (r > 0);
+#if HAVE_MMAP
+    if (fd3 >= 0) {
+        if (len3 > 0) {
+            ret = ftruncate(fd3, len3);
+        }
+        close(fd3);
+        fd3 = -1;
+    }
+#else
+    if (f3 != NULL) {
+        if (len3 > 0) {
+            ret = fp_truncate(f3, len3);
+        }
+        fclose(f3);
+        f3 = NULL;
+    }
+#endif
+
+
     if (ret != 0) {
         goto cleanup;
     }
@@ -1463,16 +1484,8 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
 cleanup:
     /* Unlink output file */
     unlink(wolfboot_delta_file);
-    /* Cleanup/close */
 #if HAVE_MMAP
-    if (fd3 >= 0) {
-        if (len3 > 0) {
-            io_sz = ftruncate(fd3, len3);
-            (void)io_sz; /* ignore failure */
-        }
-        close(fd3);
-        fd3 = -1;
-    }
+    /* Cleanup/close */
     if (fd2 >= 0) {
         if (len2 > 0) {
             munmap(buffer, len2);
@@ -1486,14 +1499,6 @@ cleanup:
         close(fd1);
     }
 #else
-    if (f3 != NULL) {
-        if (len3 > 0) {
-            io_sz = fp_truncate(f3, len3);
-            (void)io_sz; /* ignore failure */
-        }
-        fclose(f3);
-        f3 = NULL;
-    }
     if (f2 != NULL) {
         if (len2 > 0) {
             free(buffer);
