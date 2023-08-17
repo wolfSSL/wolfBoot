@@ -1,0 +1,10 @@
+C
+    filter remove_matches ^\s*[{}]\s*$
+    filter rm_comments_in_strings " /* */
+    filter rm_comments_in_strings " //
+    filter call_regexp_common C++
+    extension c
+    extension ec
+    extension pgc
+    3rd_gen_scale 0.77
+    end_of_line_continuation \\$

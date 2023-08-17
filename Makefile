@@ -308,6 +308,15 @@ config: FORCE
 check_config:
 	$(MAKE) -C tools/check_config run
 
+line-count:
+	cloc --force-lang-def cloc_lang_def.txt src/boot_arm.c src/image.c src/libwolfboot.c src/loader.c src/update_flash.c
+
+line-count-nrf52:
+	cloc --force-lang-def cloc_lang_def.txt src/boot_arm.c src/image.c src/libwolfboot.c src/loader.c src/update_flash.c hal/nrf52.c
+
+line-count-x86:
+	cloc --force-lang-def cloc_lang_def.txt src/boot_x86_fsp.c src/boot_x86_fsp_payload.c src/boot_x86_fsp_start.S src/image.c src/keystore.c src/libwolfboot.c src/loader.c src/string.c src/update_disk.c src/x86/ahci.c src/x86/ata.c src/x86/common.c src/x86/gpt.c src/x86/hob.c src/pci.c src/x86/tgl_fsp.c hal/x86_fsp_tgl.c hal/x86_uart.c
+
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
