@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <target.h>
 #include "image.h"
+#include "printf.h"
 #include "fsl_common.h"
 #include "fsl_iomuxc.h"
 #include "fsl_nor_flash.h"
@@ -47,6 +48,14 @@
 
 #include "xip/fsl_flexspi_nor_boot.h"
 
+/* #define DEBUG_EXT_FLASH */
+/* #define TEST_FLASH */
+
+#ifdef TEST_FLASH
+static int test_flash(void);
+#endif
+
+
 #ifdef __WOLFBOOT
 
 /** Built-in ROM API for bootloaders **/
@@ -55,8 +64,7 @@ typedef void rtwdog_config_t;
 typedef void wdog_config_t;
 
 /* Watchdog structures */
-typedef struct
-{
+typedef struct {
     void (*RTWDOG_GetDefaultConfig)(rtwdog_config_t *config);
     void (*RTWDOG_Init)(RTWDOG_Type *base, const rtwdog_config_t *config);
     void (*RTWDOG_Deinit)(RTWDOG_Type *base);
@@ -73,8 +81,7 @@ typedef struct
     uint16_t (*RTWDOG_GetCounterValue)(RTWDOG_Type *base);
 } rtwdog_driver_interface_t;
 
-typedef struct
-{
+typedef struct {
     void (*WDOG_GetDefaultConfig)(wdog_config_t *config);
     void (*WDOG_Init)(WDOG_Type *base, const wdog_config_t *config);
     void (*WDOG_Deinit)(WDOG_Type *base);
@@ -90,8 +97,7 @@ typedef struct
 } wdog_driver_interface_t;
 
 /* Flex SPI op */
-typedef enum _FlexSPIOperationType
-{
+typedef enum _FlexSPIOperationType {
     kFlexSpiOperation_Command,
     kFlexSpiOperation_Config,
     kFlexSpiOperation_Write,
@@ -100,8 +106,7 @@ typedef enum _FlexSPIOperationType
 } flexspi_operation_t;
 
 /* FLEX SPI Xfer */
-typedef struct _FlexSpiXfer
-{
+typedef struct _FlexSpiXfer {
     flexspi_operation_t operation;
     uint32_t baseAddress;
     uint32_t seqId;
@@ -114,12 +119,9 @@ typedef struct _FlexSpiXfer
 } flexspi_xfer_t;
 
 /* Serial NOR config option */
-typedef struct _serial_nor_config_option
-{
-    union
-    {
-        struct
-        {
+typedef struct _serial_nor_config_option {
+    union {
+        struct {
             uint32_t max_freq : 4; /*  Maximum supported Frequency */
             uint32_t misc_mode : 4; /* miscellaneous mode */
             uint32_t quad_mode_setting : 4; /* Quad mode setting */
@@ -131,10 +133,8 @@ typedef struct _serial_nor_config_option
         } B;
         uint32_t U;
     } option0;
-    union
-    {
-        struct
-        {
+    union {
+        struct {
             uint32_t dummy_cycles : 8;  /* Dummy cycles before read */
             uint32_t reserved0 : 8;     /* Reserved for future use */
             uint32_t pinmux_group : 4;  /* The pinmux group selection */
@@ -146,8 +146,7 @@ typedef struct _serial_nor_config_option
 } serial_nor_config_option_t;
 
 /* NOR flash API */
-typedef struct
-{
+typedef struct {
     uint32_t version;
     status_t (*init)(uint32_t instance, flexspi_nor_config_t *config);
     status_t (*program)(uint32_t instance, flexspi_nor_config_t *config, uint32_t
@@ -168,8 +167,7 @@ typedef struct
 
 
 /* Root pointer */
-typedef struct
-{
+typedef struct {
     const uint32_t version;                 /* Bootloader version number */
     const char *copyright;                  /* Bootloader Copyright */
     void (*runBootloader)(void *arg);       /* Function to start the bootloader executing */
@@ -276,6 +274,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
 };
 #endif
+
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1052DVJ6B
@@ -546,8 +545,8 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     #endif
 #endif /* CPU_MIMXRT1052DVJ6B */
 
-#ifndef __FLASH_BASE
 
+#ifndef __FLASH_BASE
 #if defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1062DVL6A)
 #define __FLASH_BASE 0x60000000
 #elif defined(CPU_MIMXRT1064DVL6A)
@@ -555,120 +554,131 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 #else
 #error "Please define MCUXPRESSO SDK CPU variant macro (e.g. CPU_MIMXRT1062DVL6A)"
 #endif
-
 #endif
-
 
 #ifndef FLASH_BASE
 #define FLASH_BASE __FLASH_BASE
 #define PLUGIN_FLAG 0x0UL
 #endif
 
+const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
+    FLASH_BASE,                 /* boot start location */
+    CONFIG_FLASH_SIZE,          /* size */
+    PLUGIN_FLAG,                /* Plugin flag*/
+    0xFFFFFFFF                  /* empty - extra data word */
+};
+
 const uint8_t dcd_data[1] = {0};
 extern void isr_reset(void);
 
-
-const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
-  FLASH_BASE,                 /* boot start location */
-  CONFIG_FLASH_SIZE,          /* size */
-  PLUGIN_FLAG,                /* Plugin flag*/
-  0xFFFFFFFF                  /* empty - extra data word */
-};
-
 const ivt __attribute__((section(".image_vt"))) image_vector_table = {
-  IVT_HEADER,                         /* IVT Header */
-  (uint32_t)isr_reset,               /* Image Entry Function */
-  IVT_RSVD,                           /* Reserved = 0 */
-  (uint32_t)dcd_data,                 /* Address where DCD information is stored */
-  (uint32_t)&boot_data,               /* Address where BOOT Data Structure is stored */
-  (uint32_t)&image_vector_table,      /* Pointer to IVT Self (absolute address */
-  (uint32_t)CSF_ADDRESS,              /* Address where CSF file is stored */
-  IVT_RSVD                            /* Reserved = 0 */
+    IVT_HEADER,                         /* IVT Header */
+    (uint32_t)isr_reset,                /* Image Entry Function */
+    IVT_RSVD,                           /* Reserved = 0 */
+    (uint32_t)dcd_data,                 /* Address where DCD information is stored */
+    (uint32_t)&boot_data,               /* Address where BOOT Data Structure is stored */
+    (uint32_t)&image_vector_table,      /* Pointer to IVT Self (absolute address */
+    (uint32_t)CSF_ADDRESS,              /* Address where CSF file is stored */
+    IVT_RSVD                            /* Reserved = 0 */
 };
 
 /*******************************************************************************
  * Variables for BOARD_BootClockRUN configuration
  ******************************************************************************/
-const clock_arm_pll_config_t armPllConfig_BOARD_BootClockRUN =
-    {
-        .loopDivider = 100,                       /* PLL loop divider, Fout = Fin * 50 */
-        .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-    };
-const clock_sys_pll_config_t sysPllConfig_BOARD_BootClockRUN =
-    {
-        .loopDivider = 1,                         /* PLL loop divider, Fout = Fin * ( 20 + loopDivider*2 + numerator / denominator ) */
-        .numerator = 0,                           /* 30 bit numerator of fractional loop divider */
-        .denominator = 1,                         /* 30 bit denominator of fractional loop divider */
-        .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-    };
-const clock_usb_pll_config_t usb1PllConfig_BOARD_BootClockRUN =
-    {
-        .loopDivider = 0,                         /* PLL loop divider, Fout = Fin * 20 */
-        .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-    };
-const clock_video_pll_config_t videoPllConfig_BOARD_BootClockRUN =
-    {
-        .loopDivider = 31,                        /* PLL loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
-        .postDivider = 8,                         /* Divider after PLL */
-        .numerator = 0,                           /* 30 bit numerator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
-        .denominator = 1,                         /* 30 bit denominator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
-        .src = 0,                                 /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-    };
+const clock_arm_pll_config_t armPllConfig_BOARD_BootClockRUN = {
+    .loopDivider = 100,                 /* PLL loop divider, Fout = Fin * 50 */
+    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
+};
+const clock_sys_pll_config_t sysPllConfig_BOARD_BootClockRUN = {
+    .loopDivider = 1,                   /* PLL loop divider, Fout = Fin * ( 20 + loopDivider*2 + numerator / denominator ) */
+    .numerator = 0,                     /* 30 bit numerator of fractional loop divider */
+    .denominator = 1,                   /* 30 bit denominator of fractional loop divider */
+    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
+};
+const clock_usb_pll_config_t usb1PllConfig_BOARD_BootClockRUN = {
+    .loopDivider = 0,                   /* PLL loop divider, Fout = Fin * 20 */
+    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
+};
+const clock_video_pll_config_t videoPllConfig_BOARD_BootClockRUN = {
+    .loopDivider = 31,                  /* PLL loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
+    .postDivider = 8,                   /* Divider after PLL */
+    .numerator = 0,                     /* 30 bit numerator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
+    .denominator = 1,                   /* 30 bit denominator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
+    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
+};
 
 static void clock_init(void)
 {
-    if (CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK)
-    {
+    if (CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK) {
         /* Configure ARM_PLL */
         CCM_ANALOG->PLL_ARM =
-            CCM_ANALOG_PLL_ARM_BYPASS(1) | CCM_ANALOG_PLL_ARM_ENABLE(1) | CCM_ANALOG_PLL_ARM_DIV_SELECT(24);
+            CCM_ANALOG_PLL_ARM_BYPASS(1) |
+            CCM_ANALOG_PLL_ARM_ENABLE(1) |
+            CCM_ANALOG_PLL_ARM_DIV_SELECT(24);
         /* Wait Until clock is locked */
-        while ((CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_LOCK_MASK) == 0)
-        {
-        }
+        while ((CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_LOCK_MASK) == 0);
 
         /* Configure PLL_SYS */
         CCM_ANALOG->PLL_SYS &= ~CCM_ANALOG_PLL_SYS_POWERDOWN_MASK;
         /* Wait Until clock is locked */
-        while ((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_LOCK_MASK) == 0)
-        {
-        }
+        while ((CCM_ANALOG->PLL_SYS & CCM_ANALOG_PLL_SYS_LOCK_MASK) == 0);
 
         /* Configure PFD_528 */
-        CCM_ANALOG->PFD_528 = CCM_ANALOG_PFD_528_PFD0_FRAC(24) | CCM_ANALOG_PFD_528_PFD1_FRAC(24) |
-            CCM_ANALOG_PFD_528_PFD2_FRAC(19) | CCM_ANALOG_PFD_528_PFD3_FRAC(24);
+        CCM_ANALOG->PFD_528 =
+            CCM_ANALOG_PFD_528_PFD0_FRAC(24) |
+            CCM_ANALOG_PFD_528_PFD1_FRAC(24) |
+            CCM_ANALOG_PFD_528_PFD2_FRAC(19) |
+            CCM_ANALOG_PFD_528_PFD3_FRAC(24);
 
         /* Configure USB1_PLL */
         CCM_ANALOG->PLL_USB1 =
-            CCM_ANALOG_PLL_USB1_DIV_SELECT(0) | CCM_ANALOG_PLL_USB1_POWER(1) | CCM_ANALOG_PLL_USB1_ENABLE(1);
-        while ((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_LOCK_MASK) == 0)
-        {
-        }
+            CCM_ANALOG_PLL_USB1_DIV_SELECT(0) |
+            CCM_ANALOG_PLL_USB1_POWER(1) |
+            CCM_ANALOG_PLL_USB1_ENABLE(1);
+        while ((CCM_ANALOG->PLL_USB1 & CCM_ANALOG_PLL_USB1_LOCK_MASK) == 0);
         CCM_ANALOG->PLL_USB1 &= ~CCM_ANALOG_PLL_USB1_BYPASS_MASK;
 
         /* Configure PFD_480 */
-        CCM_ANALOG->PFD_480 = CCM_ANALOG_PFD_480_PFD0_FRAC(35) | CCM_ANALOG_PFD_480_PFD1_FRAC(35) |
-            CCM_ANALOG_PFD_480_PFD2_FRAC(26) | CCM_ANALOG_PFD_480_PFD3_FRAC(15);
+        CCM_ANALOG->PFD_480 =
+            CCM_ANALOG_PFD_480_PFD0_FRAC(35) |
+            CCM_ANALOG_PFD_480_PFD1_FRAC(35) |
+            CCM_ANALOG_PFD_480_PFD2_FRAC(26) |
+            CCM_ANALOG_PFD_480_PFD3_FRAC(15);
 
         /* Configure Clock PODF */
         CCM->CACRR = CCM_CACRR_ARM_PODF(1);
 
-        CCM->CBCDR = (CCM->CBCDR & (~(CCM_CBCDR_SEMC_PODF_MASK | CCM_CBCDR_AHB_PODF_MASK | CCM_CBCDR_IPG_PODF_MASK))) |
-            CCM_CBCDR_SEMC_PODF(2) | CCM_CBCDR_AHB_PODF(2) | CCM_CBCDR_IPG_PODF(2);
+        CCM->CBCDR =
+            (CCM->CBCDR &
+                (~(CCM_CBCDR_SEMC_PODF_MASK |
+                  CCM_CBCDR_AHB_PODF_MASK |
+                  CCM_CBCDR_IPG_PODF_MASK))) |
+            CCM_CBCDR_SEMC_PODF(2) |
+            CCM_CBCDR_AHB_PODF(2) |
+            CCM_CBCDR_IPG_PODF(2);
 
 #if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
         /* Configure FLEXSPI2 CLOCKS */
         CCM->CBCMR =
             (CCM->CBCMR &
-             (~(CCM_CBCMR_PRE_PERIPH_CLK_SEL_MASK | CCM_CBCMR_FLEXSPI2_CLK_SEL_MASK | CCM_CBCMR_FLEXSPI2_PODF_MASK))) |
-            CCM_CBCMR_PRE_PERIPH_CLK_SEL(3) | CCM_CBCMR_FLEXSPI2_CLK_SEL(1) | CCM_CBCMR_FLEXSPI2_PODF(7);
+                 (~(CCM_CBCMR_PRE_PERIPH_CLK_SEL_MASK |
+                    CCM_CBCMR_FLEXSPI2_CLK_SEL_MASK |
+                    CCM_CBCMR_FLEXSPI2_PODF_MASK))) |
+            CCM_CBCMR_PRE_PERIPH_CLK_SEL(3) |
+            CCM_CBCMR_FLEXSPI2_CLK_SEL(1) |
+            CCM_CBCMR_FLEXSPI2_PODF(7);
 #endif
 
         /* Configure FLEXSPI CLOCKS */
-        CCM->CSCMR1 = ((CCM->CSCMR1 &
-                    ~(CCM_CSCMR1_FLEXSPI_CLK_SEL_MASK | CCM_CSCMR1_FLEXSPI_PODF_MASK | CCM_CSCMR1_PERCLK_PODF_MASK |
-                        CCM_CSCMR1_PERCLK_CLK_SEL_MASK)) |
-                CCM_CSCMR1_FLEXSPI_CLK_SEL(3) | CCM_CSCMR1_FLEXSPI_PODF(7) | CCM_CSCMR1_PERCLK_PODF(1));
+        CCM->CSCMR1 =
+            ((CCM->CSCMR1 &
+                ~(CCM_CSCMR1_FLEXSPI_CLK_SEL_MASK |
+                  CCM_CSCMR1_FLEXSPI_PODF_MASK |
+                  CCM_CSCMR1_PERCLK_PODF_MASK |
+                  CCM_CSCMR1_PERCLK_CLK_SEL_MASK)) |
+            CCM_CSCMR1_FLEXSPI_CLK_SEL(3) |
+            CCM_CSCMR1_FLEXSPI_PODF(7) |
+            CCM_CSCMR1_PERCLK_PODF(1));
 
         /* Finally, Enable PLL_ARM, PLL_SYS and PLL_USB1 */
         CCM_ANALOG->PLL_ARM &= ~CCM_ANALOG_PLL_ARM_BYPASS_MASK;
@@ -680,8 +690,13 @@ static void clock_init(void)
 
 #ifdef DEBUG_UART
 
+/* The UART interface (LPUART1 - LPUART8) */
+#ifndef UART_BASEADDR
 #define UART_BASEADDR LPUART1
+#endif
+#ifndef UART_BAUDRATE
 #define UART_BAUDRATE (115200U)
+#endif
 
 void uart_init(void)
 {
@@ -696,9 +711,18 @@ void uart_init(void)
     LPUART_Init(UART_BASEADDR, &config, uartClkSrcFreq);
 }
 
-void uart_write(const char* buf, uint32_t sz)
+void uart_write(const char* buf, unsigned int sz)
 {
+    int doCrlf = 0;
+    if (buf[sz-1] == '\n') { /* handle CRLF */
+        doCrlf = 1;
+        sz--;
+    }
     LPUART_WriteBlocking(UART_BASEADDR, (const uint8_t*)buf, sz);
+    if (doCrlf) {
+        const char* kCrlf = "\r\n";
+        LPUART_WriteBlocking(UART_BASEADDR, (const uint8_t*)kCrlf, 2);
+    }
 }
 
 #endif /* DEBUG_UART */
@@ -717,9 +741,14 @@ void hal_init(void)
     clock_init();
 #ifdef DEBUG_UART
     uart_init();
-    uart_write("wolfBoot HAL Init\n", 19);
+    uart_write("wolfBoot HAL Init\n", 18);
 #endif
     hal_flash_init();
+#ifdef TEST_FLASH
+    if (test_flash() != 0) {
+        wolfBoot_printf("Flash Test Failed!\n");
+    }
+#endif
 }
 
 void hal_prepare_boot(void)
@@ -754,6 +783,10 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t wbuf[CONFIG_FLASH_PAGE_SIZE / sizeof(uint32_t)];
     int i;
     hal_flash_init(); /* make sure g_bootloaderTree is set */
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("flash write: addr 0x%x, len %d\n",
+        address - FLASH_BASE, len);
+#endif
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
@@ -776,9 +809,53 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     status_t status;
     hal_flash_init(); /* make sure g_bootloaderTree is set */
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("flash erase: addr 0x%x, len %d\n",
+        address - FLASH_BASE, len);
+#endif
     status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
     if (status != kStatus_Success)
         return -1;
     return 0;
 }
+
+#ifdef TEST_FLASH
+
+#ifndef TEST_ADDRESS
+#define TEST_ADDRESS (FLASH_BASE + 0x700000) /* 7MB */
+#endif
+/* #define TEST_FLASH_READONLY */
+
+static uint32_t pageData[WOLFBOOT_SECTOR_SIZE/4]; /* force 32-bit alignment */
+
+static int test_flash(void)
+{
+    int ret;
+    uint32_t i;
+
+#ifndef TEST_FLASH_READONLY
+    /* Erase sector */
+    ret = hal_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
+
+    /* Fill data into the page_buffer */
+    for (i=0; i<sizeof(pageData)/sizeof(pageData[0]); i++) {
+        pageData[i] = (i << 24) | (i << 16) | (i << 8) | i;
+    }
+    /* Write Page */
+    ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
+    wolfBoot_printf("Write Page: Ret %d\n", ret);
+#endif /* !TEST_FLASH_READONLY */
+
+    /* Compare Page */
+    ret = memcmp((void*)TEST_ADDRESS, pageData, sizeof(pageData));
+    if (ret != 0) {
+        wolfBoot_printf("Check Data @ %d failed\n", ret);
+        return ret;
+    }
+
+    wolfBoot_printf("Flash Test Passed\n");
+    return ret;
+}
+#endif /* TEST_FLASH */
