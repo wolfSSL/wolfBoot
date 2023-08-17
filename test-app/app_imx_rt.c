@@ -55,7 +55,7 @@ static uint32_t debug_console_get_freq(void)
 }
 /* Initialize debug console. */
 #define UART_TYPE     kSerialPort_Uart
-#define UART_BASEADDR (uint32_t)LPUART1
+#define UART_BASEADDR LPUART1_BASE
 #define UART_INSTANCE 1U
 #define UART_BAUDRATE (115200U)
 void init_debug_console(void)
@@ -78,12 +78,14 @@ void rt1060_init_pins(void)
 
     GPIO_PinInit(USER_LED_GPIO, USER_LED_PIN, &USER_LED_config);
 
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_09_GPIO1_IO09, 0U);
     IOMUXC_SetPinMux( /* GPIO_AD_B0_10 is configured as ARM_TRACE_SWO */
         IOMUXC_GPIO_AD_B0_10_ARM_TRACE_SWO, 0U);
     IOMUXC_SetPinMux( /* GPIO_AD_B0_12 is configured as LPUART1_TX */
         IOMUXC_GPIO_AD_B0_12_LPUART1_TX,    0U);
     IOMUXC_SetPinMux( /* GPIO_AD_B0_13 is configured as LPUART1_RX */
         IOMUXC_GPIO_AD_B0_13_LPUART1_RX,    0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_09_GPIO1_IO09, 0x10B0U);
     IOMUXC_SetPinConfig( /* GPIO_AD_B0_10 PAD functional properties : */
         IOMUXC_GPIO_AD_B0_10_ARM_TRACE_SWO, 0x90B1U);
     IOMUXC_SetPinConfig( /* GPIO_AD_B0_12 PAD functional properties : */
@@ -91,7 +93,6 @@ void rt1060_init_pins(void)
     IOMUXC_SetPinConfig( /* GPIO_AD_B0_13 PAD functional properties : */
         IOMUXC_GPIO_AD_B0_13_LPUART1_RX,    0x10B0U);
 }
-
 #endif
 
 #ifdef CPU_MIMXRT1052DVJ6B
@@ -107,10 +108,12 @@ void rt1050_init_pins(void)
 
     GPIO_PinInit(USER_LED_GPIO, USER_LED_PIN, &USER_LED_config);
 
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_09_GPIO1_IO09, 0U);
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_12_LPUART1_TXD, 0U);
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_13_LPUART1_RXD, 0U);
     IOMUXC_SetPinMux(IOMUXC_GPIO_SD_B0_04_CCM_CLKO1, 0U);
     IOMUXC_SetPinMux(IOMUXC_GPIO_SD_B0_05_CCM_CLKO2, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_09_GPIO1_IO09, 0x10B0U);
     IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_12_LPUART1_TXD, 0x10B0U);
     IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_13_LPUART1_RXD, 0x10B0U);
     IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_B0_04_CCM_CLKO1, 0x10B0U);
