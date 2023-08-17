@@ -466,7 +466,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
             .busyOffset           = 0, /* WIP/Busy bit=0 (read status busy bit offset */
             .busyBitPolarity      = 0, /* 0 – Busy bit=1 (device is busy) */
             .lookupTable = {
-            #if CONFIG_FLASH_QE_ENABLE == 1
+            #if 0 /* disabled for now, causes issue with page program */
                 /* Quad Input/output read sequence - with optimized XIP support */
                 [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, 0xEB,
