@@ -120,7 +120,7 @@ int hal_flash_erase(uintptr_t address, int len)
         memset((void*)address, 0xEE, len);
         exit(0);
     }
-    memset((void*)address, 0xff, len);
+    memset((void*)address, FLASH_BYTE_ERASED, len);
     return 0;
 }
 
@@ -179,7 +179,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 int ext_flash_erase(uintptr_t address, int len)
 {
-    memset(flash_base + address, 0xff, len);
+    memset(flash_base + address, FLASH_BYTE_ERASED, len);
     return 0;
 }
 
