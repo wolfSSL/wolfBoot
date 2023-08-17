@@ -18,7 +18,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-
+/**
+ * @file libwolfboot.c
+ *
+ * @brief wolfBoot library implementation.
+ *
+ * This file contains the implementation of the wolfBoot library.
+ */
 #include <stdint.h>
 
 
@@ -28,12 +34,30 @@
 #include "printf.h"
 
 #ifdef UNIT_TEST
+/**
+ * @def unit_dbg
+ * @brief Conditional debug macro for unit tests.
+ *
+ * Conditional debug macro for unit tests, redirects to wolfBoot_printf.
+ */
 #   define unit_dbg wolfBoot_printf
 #else
+/**
+ * @def unit_dbg
+ * @brief Empty macro for unit_dbg in non-test builds.
+ *
+ * Empty macro for unit_dbg in non-test builds.
+ */
 #   define unit_dbg(...) do{}while(0)
 #endif
 
 #ifndef TRAILER_SKIP
+/**
+ * @def TRAILER_SKIP
+ * @brief Trailer skip value for partition encryption.
+ *
+ * Trailer skip value for partition encryption, defaults to 0 if not defined.
+ */
 #   define TRAILER_SKIP 0
 #endif
 
@@ -206,6 +230,16 @@ static int nvm_select_fresh_sector(int part)
     return sel;
 }
 
+/**
+ * @brief Write the trailer in a non-volatile memory.
+ *
+ * This function writes the trailer in a non-volatile memory.
+ *
+ * @param[in] part Partition number.
+ * @param[in] addr Address of the trailer.
+ * @param[in] val New value to write in the trailer.
+ * @return 0 on success, -1 on failure.
+ */
 static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 {
     uintptr_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
@@ -244,6 +278,15 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
     return ret;
 }
 
+/**
+ * @brief Write the partition magic in a non-volatile memory.
+ *
+ * This function writes the partition magic in a non-volatile memory.
+ *
+ * @param[in] part Partition number.
+ * @param[in] addr Address of the magic trailer.
+ * @return 0 on success, -1 on failure.
+ */
 static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
 {
     uintptr_t off = addr % NVM_CACHE_SIZE;
@@ -269,6 +312,15 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
 
 #ifdef EXT_FLASH
 
+/**
+ * @brief Get the trailer at a specific address in a fixed partition.
+ *
+ * This function retrieves the trailer at a specific address in a fixed partition.
+ *
+ * @param[in] part Partition number.
+ * @param[in] at Address offset.
+ * @return Pointer to the trailer at the specified address.
+ */
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     uint8_t *ret = NULL;
@@ -304,6 +356,15 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
     return ret;
 }
 
+/**
+ * @brief Set the trailer at a specific address in an external flash.
+ *
+ * This function sets the trailer at a specific address in an external flash.
+ *
+ * @param[in] part Partition number.
+ * @param[in] at Address offset.
+ * @param[in] val New value to set in the trailer.
+ */
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
@@ -324,6 +385,13 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
     }
 }
 
+/**
+ * @brief Set the partition magic trailer in an external flash.
+ *
+ * This function sets the partition magic trailer in an external flash.
+ *
+ * @param[in] part Partition number.
+ */
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
@@ -406,6 +474,14 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
+/**
+ * @brief Get the magic trailer of a partition.
+ *
+ * This function retrieves the magic trailer of a fixed partition.
+ *
+ * @param[in] part Partition number.
+ * @return Pointer to the magic trailer of the partition.
+ */
 static uint32_t* RAMFUNCTION get_partition_magic(uint8_t part)
 {
     return (uint32_t *)get_trailer_at(part, 0);
@@ -422,16 +498,42 @@ static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
     set_trailer_at(part, 1, val);
 }
 
+/**
+ * @brief Set the flags of an update sector.
+ *
+ * This function sets the flags of an update sector in a fixed partition.
+ *
+ * @param[in] pos Update sector position.
+ * @param[in] val New flags value to set.
+ * @return 0 on success, -1 on failure.
+ */
 static void RAMFUNCTION set_update_sector_flags(uint32_t pos, uint8_t val)
 {
     set_trailer_at(PART_UPDATE, 2 + pos, val);
 }
 
+/**
+ * @brief Get the flags of an update sector.
+ *
+ * This function retrieves the flags of an update sector in a fixed partition.
+ *
+ * @param[in] pos Update sector position.
+ * @return Pointer to the flags of the update sector.
+ */
 static uint8_t* RAMFUNCTION get_update_sector_flags(uint32_t pos)
 {
     return (uint8_t *)get_trailer_at(PART_UPDATE, 2 + pos);
 }
 
+/**
+ * @brief Set the state of a partition.
+ *
+ * This function sets the state of a fixed partition.
+ *
+ * @param[in] part Partition number.
+ * @param[in] newst New state value to set.
+ * @return 0 on success, -1 on failure.
+ */
 int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
 {
     uint32_t *magic;
@@ -466,6 +568,15 @@ int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag
     return 0;
 }
 
+/**
+ * @brief Get the state of a partition.
+ *
+ * This function retrieves the state of a fixed partition.
+ *
+ * @param[in] part Partition number.
+ * @param[out] st Pointer to store the partition state.
+ * @return 0 on success, -1 on failure.
+ */
 int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
 {
     uint32_t *magic;
@@ -494,7 +605,13 @@ int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag)
     return 0;
 }
 
-
+/**
+ * @brief Erase a partition.
+ *
+ * This function erases a partition.
+ *
+ * @param[in] part Partition number.
+ */
 void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 {
     uint32_t address = 0;
@@ -524,6 +641,15 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
     }
 }
 
+/**
+ * @brief Update trigger function.
+ *
+ * This function updates the boot partition state to "IMG_STATE_UPDATING".
+ * If the FLAGS_HOME macro is defined, it erases the last sector of the boot
+ * partition before updating the partition state. It also checks FLAGS_UPDATE_EXT
+ * and calls the appropriate flash unlock and lock functions before
+ * updating the partition state.
+ */
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
@@ -577,6 +703,14 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     }
 }
 
+/**
+ * @brief Success function.
+ *
+ * This function updates the boot partition state to "IMG_STATE_SUCCESS".
+ * If the FLAGS_BOOT_EXT macro is defined, it calls the appropriate flash unlock
+ * and lock functions before updating the partition state. If the EXT_ENCRYPTED
+ * macro is defined, it calls wolfBoot_erase_encrypt_key function.
+ */
 void RAMFUNCTION wolfBoot_success(void)
 {
     uint8_t st = IMG_STATE_SUCCESS;
@@ -595,6 +729,19 @@ void RAMFUNCTION wolfBoot_success(void)
 }
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
+/**
+ * @brief Find header function.
+ *
+ * This function searches for a specific header type in the given buffer.
+ * It returns the length of the header and sets the 'ptr' parameter to the
+ * position of the header if found.
+ * @param haystack Pointer to the buffer to search for the header.
+ * @param type The type of header to search for.
+ * @param ptr Pointer to store the position of the header.
+ *
+ * @return uint16_t The length of the header found, or 0 if not found.
+ *
+ */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
@@ -647,6 +794,16 @@ static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
 static uint32_t hdr_cpy_done = 0;
 #endif
 
+/**
+ * @brief Convert little-endian to native-endian (uint32_t).
+ *
+ * This function converts a little-endian 32-bit value to the native-endian format.
+ * It is used to handle endianness differences when reading data from memory.
+ *
+ * @param val The value to convert.
+ *
+ * @return The converted value.
+ */
 static inline uint32_t im2n(uint32_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -658,7 +815,16 @@ static inline uint32_t im2n(uint32_t val)
   return val;
 }
 
+/**
+ * @brief Convert little-endian to native-endian (uint16_t).
+ *
+ * This function converts a little-endian 16-bit value to the native-endian format.
+ * It is used to handle endianness differences when reading data from memory.
+ *
+ * @param val The value to convert.
+ * @return uint16_t The converted value.
 
+ */
 static inline uint16_t im2ns(uint16_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -669,6 +835,22 @@ static inline uint16_t im2ns(uint16_t val)
 }
 
 #ifdef DELTA_UPDATES
+/**
+ * @brief Get delta update information.
+ *
+ * This function retrieves the delta update information for a given partition.
+ * It checks if the partition is extended, reads the image header, and returns
+ * the delta image offset and size. The 'inverse' flag indicates whether to get
+ * the inverse delta information or regular delta information.
+ *
+ * @param part The partition to check for delta update information.
+ * @param inverse Flag to indicate if the delta update is inverse.
+ * @param img_offset Pointer to store the delta image offset.
+ * @param img_size Pointer to store the delta image size.
+ *
+ * @return int 0 if successful, -1 if not found or an error occurred.
+ *
+ */
 int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
     uint16_t **img_size)
 {
@@ -746,7 +928,18 @@ static int decrypt_header(uint8_t *src)
 }
 
 #endif
-
+/**
+ * @brief Get blob version.
+ *
+ * This function retrieves the version number from the blob.
+ * It checks the magic number in the blob to ensure it is valid before reading
+ * the version field.
+ *
+ * @param blob Pointer to the buffer containing the blob.
+ *
+ * @return The version number of the blob, or 0 if the blob is invalid.
+ *
+ */
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
     uint32_t *volatile version_field = NULL;
@@ -770,6 +963,17 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     return 0;
 }
 
+/**
+ * @brief Get blob type.
+ *
+ * This function retrieves the type of the blob.
+ * It checks the magic number in the blob to ensure it is valid before reading
+ * the type field.
+ *
+ * @param blob Pointer to the buffer containing the blob.
+ *
+ * @return The type of the blob, or 0 if the blob is invalid.
+ */
 uint32_t wolfBoot_get_blob_type(uint8_t *blob)
 {
     uint32_t *volatile type_field = NULL;
@@ -793,6 +997,20 @@ uint32_t wolfBoot_get_blob_type(uint8_t *blob)
 
     return 0;
 }
+
+/**
+ * @brief Get blob difference base version.
+ *
+ * This function retrieves the difference base version from the blob.
+ * It checks the magic number in the blob to ensure it is valid before reading
+ * the difference base field.
+ *
+ * @param blob Pointer to the buffer containing the blob.
+ *
+ * @return The difference base version of the blob, or 0 if not found
+ * or the blob is invalid.
+ *
+ */
 
 uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
 {
@@ -819,6 +1037,19 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
 
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
+/**
+ * @brief Get image pointer from a partition.
+ *
+ * This function retrieves the pointer to the image in the specified partition.
+ * It handles both regular and extended partitions by reading from memory or
+ * external flash if needed.
+ *
+ * @param part The partition to get the image pointer for.
+ *
+ * @return uint8_t* Pointer to the image in the specified partition, or
+ * NULL if the partition is invalid or empty.
+ *
+ */
 static uint8_t* wolfBoot_get_image_from_part(uint8_t part)
 {
     uint8_t *image = (uint8_t *)0x00000000;
@@ -840,6 +1071,19 @@ static uint8_t* wolfBoot_get_image_from_part(uint8_t part)
     return image;
 }
 
+/**
+ * @brief Get image version for a partition.
+ *
+ * This function retrieves the version number of the image in the specified
+ * partition. It uses the 'wolfBoot_get_blob_version' function to extract the
+ * version from the image blob.
+ *
+ * @param part The partition to get the image version for.
+ *
+ * @return The version number of the image in the partition,
+ * or 0 if the partition is invalid or empty.
+ *
+ */
 
 uint32_t wolfBoot_get_image_version(uint8_t part)
 {
@@ -847,13 +1091,39 @@ uint32_t wolfBoot_get_image_version(uint8_t part)
     return wolfBoot_get_blob_version(wolfBoot_get_image_from_part(part));
 }
 
+/**
+ * @brief Get difference base version for a partition.
+ *
+ * This function retrieves the difference base version from the image in the
+ * specified partition. It uses the 'wolfBoot_get_blob_diffbase_version'
+ * function to extract the difference base version from the image blob.
+ *
+ * @param part The partition to get the difference base version for.
+ *
+ * @return The difference base version of the image in the partition, or
+ * 0 if not found or the partition is invalid or empty.
+ *
+ */
+
 uint32_t wolfBoot_get_diffbase_version(uint8_t part)
 {
     /* Don't check image against NULL to allow using address 0x00000000 */
     return wolfBoot_get_blob_diffbase_version(
                 wolfBoot_get_image_from_part(part));
 }
-
+/**
+ * @brief Get image type for a partition.
+ *
+ * This function retrieves the image type from the image in the specified
+ * partition. It uses the 'wolfBoot_get_blob_type' function to extract the image
+ * type from the image blob.
+ *
+ * @param part The partition to get the image type for.
+ *
+ * @return uint16_t The image type of the image in the partition, or
+ * 0 if the partition is invalid or empty.
+ *
+ */
 uint16_t wolfBoot_get_image_type(uint8_t part)
 {
     uint8_t *image = wolfBoot_get_image_from_part(part);
@@ -869,7 +1139,21 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
 #if defined(WOLFBOOT_DUALBOOT)
 
 #if defined(WOLFBOOT_FIXED_PARTITIONS)
-
+/**
+ * @brief Find the dual-boot candidate partition.
+ *
+ * This function determines the dual-boot candidate partition based on the
+ * current firmware versions and states. If both primary and update images
+ * are present, it chooses the one with a higher version.
+ * If no primary image is present, it selects the update partition.
+ * It also handles the case where the current partition is in "IMG_STATE_TESTING"
+ * and switches to the other partition if available.
+ *
+ * @return The partition number (PART_BOOT or PART_UPDATE) to be used as
+ * the dual-boot candidate.
+ * Returns -1 if no valid candidate is found.
+ *
+ */
 int wolfBoot_dualboot_candidate(void)
 {
     int candidate = PART_BOOT;
@@ -946,7 +1230,15 @@ int wolfBoot_dualboot_candidate_addr(void** addr)
     return retval;
 }
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
-
+/**
+ * @brief Check if fallback is possible.
+ *
+ * This function checks if fallback is possible, i.e., both primary and
+ * update images are present.
+ *
+ * @return 1 if fallback is possible, 0 otherwise.
+ *
+ */
 int wolfBoot_fallback_is_possible(void)
 {
     uint32_t boot_v, update_v;
@@ -1009,7 +1301,18 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     return ret;
 #endif
 }
-
+/**
+ * @brief Set the encryption key.
+ *
+ * This function sets the encryption key and nonce used for encrypting the
+ * firmware image. It stores the key and nonce in the designated memory location.
+ *
+ * @param key Pointer to the encryption key.
+ * @param nonce Pointer to the encryption nonce.
+ *
+ * @return 0 if successful.
+ *
+ */
 int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     const uint8_t *nonce)
 {
@@ -1018,6 +1321,18 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
 }
 
 #ifndef UNIT_TEST
+/**
+ * @brief Set the encryption key.
+ *
+ * This function sets the encryption key and nonce used for encrypting the
+ * firmware image. It stores the key and nonce in the designated memory location.
+ *
+ * @param key Pointer to the encryption key.
+ * @param nonce Pointer to the encryption nonce.
+ *
+ * @return 0 if successful.
+ *
+ */
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
 #if defined(MMU)
@@ -1037,7 +1352,15 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
     return 0;
 }
 #endif
-
+/**
+ * @brief Erase the encryption key.
+ *
+ * This function erases the encryption key and nonce, resetting them to all 0xFF
+ * bytes.It ensures that the key and nonce cannot be accessed after erasure.
+ *
+ * @return 0 if successful.
+ *
+ */
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
 #if defined(MMU)
@@ -1098,7 +1421,15 @@ int RAMFUNCTION chacha_init(void)
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
 
 Aes aes_dec, aes_enc;
-
+/**
+ * @brief Initialize AES encryption.
+ *
+ * This function initializes the AES encryption by setting the encryption key
+ * and encryption nonce, checking for valid keys, and copying the encryption
+ * nonce from the key buffer.
+ *
+ * @return 0 if successful, -1 on failure.
+ */
 int aes_init(void)
 {
 #if defined(MMU) || defined(UNIT_TEST)
@@ -1135,6 +1466,17 @@ int aes_init(void)
     return 0;
 }
 
+/**
+ * @brief Set the AES initialization vector (IV) for CTR mode.
+ *
+ * This function sets the AES initialization vector (IV) for the Counter (CTR)
+ * mode encryption. It takes a 12-byte nonce and a 32-bit IV counter value to
+ * construct the 16-byte IV used for encryption.
+ *
+ * @param nonce Pointer to the 12-byte nonce (IV) buffer.
+ * @param iv_ctr The IV counter value.
+ *
+ */
 void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
@@ -1165,7 +1507,19 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 
 #endif
 
+/**
+ * @brief Determine the partition address type.
+ *
+ * This function determines the partition type based on the provided address.
+ * If the address belongs to the update partition or swap partition (if defined),
+ * the corresponding partition type is returned.
+ * Otherwise, PART_NONE is returned.
+ *
+ * @param a The address to check for its partition type.
+ *
+ * @return The partition type (PART_UPDATE, PART_SWAP, or PART_NONE).
 
+ */
 static uint8_t RAMFUNCTION part_address(uintptr_t a)
 {
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -1190,6 +1544,18 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 }
 
 #ifdef EXT_FLASH
+/**
+ * @brief Write encrypted data to an external flash.
+ *
+ * This function encrypts the provided data using the AES encryption algorithm
+ * and writes it to the external flash.
+ *
+ * @param address The address in the external flash to write the data to.
+ * @param data Pointer to the data buffer to be written.
+ * @param len The length of the data to be written.
+ *
+ *  @return int 0 if successful, -1 on failure.
+ */
 int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
@@ -1255,7 +1621,20 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, 
 
     return ext_flash_write(address, ENCRYPT_CACHE, step);
 }
+/**
+ * @brief Read and decrypt data from an external flash.
+ *
+ * This function reads the encrypted data from the external flash,
+ * decrypts it using the AES decryption algorithm, and stores the decrypted data
+ * in the provided buffer.
 
+ * @param address The address in the external flash to read the encrypted data from.
+ * @param data Pointer to the buffer to store the decrypted data.
+ * @param len The length of the data to be read and decrypted.
+ *
+ * @return The number of decrypted bytes read, or -1 on failure.
+ *
+ */
 int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
@@ -1340,6 +1719,17 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
 #endif /* __WOLFBOOT */
 
 #if defined(MMU)
+/**
+ * @brief Decrypt data from RAM.
+ *
+ * This function decrypts data from the RAM using the AES decryption algorithm.
+ *
+ * @param src Pointer to the source buffer containing the encrypted data.
+ * @param dst Pointer to the destination buffer to store the decrypted data.
+ *
+ *  @return int 0 if successful, -1 on failure.
+ *
+ */
 int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];

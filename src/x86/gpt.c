@@ -19,6 +19,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
  */
+/**
+ * @file gpt.c
+ * @brief GPT (GUID Partition Table) driver implementation.
+ *
+ * This file contains the implementation of the GPT driver used for interacting
+ * with GPT partitioned disks. It provides functions for disk initialization,
+ * partition reading, and writing.
+ */
+#ifndef GPT_C
+#define GPT_C
 #include <x86/common.h>
 #include <x86/ahci.h>
 #include <x86/ata.h>
@@ -36,7 +46,10 @@
 #define P_ENTRY_START     0x01BE
 #define P_BOOTSIG_OFFSET  0x01FE
 
-
+/**
+ * @brief This packed structure defines the layout of an MBR partition table entry
+ * used to identify GPT partitions.
+ */
 struct __attribute__((packed)) mbr_ptable_entry {
     uint8_t stat;
     uint8_t chs_first[3];
@@ -46,6 +59,9 @@ struct __attribute__((packed)) mbr_ptable_entry {
     uint32_t lba_size;
 };
 
+/**
+ * @brief Structure representing a GPT (GUID Partition Table) header.
+ */
 struct __attribute__((packed)) guid_ptable
 {
     uint64_t signature;
@@ -65,6 +81,10 @@ struct __attribute__((packed)) guid_ptable
     uint8_t  res1[SECTOR_SIZE - 0x5C];
 };
 
+/**
+ * @brief This packed structure defines the layout of a GPT partition entry
+ * used to describe individual partitions on the disk.
+ */
 struct __attribute__((packed)) guid_part_array
 {
     uint64_t type[2];
@@ -75,6 +95,10 @@ struct __attribute__((packed)) guid_part_array
     int16_t name[72];
 };
 
+/**
+ * @brief This structure holds information about a disk partition, including
+ * the drive it belongs to, partition number, start, and end offsets.
+ */
 struct disk_partition
 {
     int drv;
@@ -83,6 +107,11 @@ struct disk_partition
     uint64_t end;
 };
 
+/**
+ * @brief This structure holds information about a disk drive, including its
+ * drive number, open status, the number of partitions, and an array of disk
+ * partitions.
+ */
 struct disk_drive {
     int drv;
     int is_open;
@@ -90,8 +119,24 @@ struct disk_drive {
     struct disk_partition part[MAX_PARTITIONS];
 };
 
-static struct disk_drive Drives[MAX_DISKS] = { };
+/**
+ * @brief This array holds instances of the `struct disk_drive` representing
+ * multiple disk drives (up to `MAX_DISKS`).
+ */
+static struct disk_drive Drives[MAX_DISKS] = {0};
 
+/**
+ * @brief Opens a disk drive and initializes its partitions.
+ *
+ * This function opens a disk drive with the specified drive number, reads its
+ * MBR (Master Boot Record) to identify GPT partitions, and initializes the
+ * disk_drive structure for further operations.
+ *
+ * @param[in] drv The drive number to open (0 to `MAX_DISKS - 1`).
+ *
+ * @return The number of partitions found and initialized on success, or -1 if
+ * the drive cannot be opened or no valid GPT partition table is found.
+ */
 int disk_open(int drv)
 {
     int r;
@@ -185,7 +230,19 @@ int disk_open(int drv)
     wolfBoot_printf("Total partitions on disk%u: %u\r\n", drv, Drives[drv].n_parts);
     return Drives[drv].n_parts;
 }
-
+/**
+ * @brief Opens a disk partition and returns a pointer to its structure.
+ *
+ * This function opens a disk partition with the specified drive number and
+ * partition number and returns a pointer to its disk_partition structure.
+ * It is a static helper function used internally by the disk_read and disk_write
+ * functions to validate the partition before performing read/write operations.
+ *
+ * @param[in] drv The drive number of the disk containing the partition (0 to `MAX_DISKS - 1`).
+ * @param[in] part The partition number on the disk (0 to `MAX_PARTITIONS - 1`).
+ *
+ * @return A pointer to the disk_partition structure on success, or NULL if an error occurs.
+ */
 static struct disk_partition *open_part(int drv, int part)
 {
     if ((drv < 0) || (drv > MAX_DISKS)) {
@@ -207,6 +264,20 @@ static struct disk_partition *open_part(int drv, int part)
     return &Drives[drv].part[part];
 }
 
+/**
+ * @brief Reads data from a disk partition into the provided buffer.
+ *
+ * This function reads data from the specified disk partition starting from the
+ * given offset and copies it into the provided buffer.
+ *
+ * @param[in] drv The drive number of the disk containing the partition (0 to `MAX_DISKS - 1`).
+ * @param[in] part The partition number on the disk (0 to `MAX_PARTITIONS - 1`).
+ * @param[in] off The offset in bytes from the start of the partition to read from.
+ * @param[in] sz The size of the data to read in bytes.
+ * @param[out] buf The buffer to store the read data.
+ *
+ * @return The number of bytes read into the buffer on success, or -1 if an error occurs.
+ */
 int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
@@ -225,6 +296,20 @@ int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
     return ret;
 }
 
+/**
+ * @brief Writes data to a disk partition from the provided buffer.
+ *
+ * This function writes data from the provided buffer to the specified disk
+ * partition starting from the given offset.
+ *
+ * @param[in] drv The drive number of the disk containing the partition (0 to `MAX_DISKS - 1`).
+ * @param[in] part The partition number on the disk (0 to `MAX_PARTITIONS - 1`).
+ * @param[in] off The offset in bytes from the start of the partition to write to.
+ * @param[in] sz The size of the data to write in bytes.
+ * @param[in] buf The buffer containing the data to write.
+ *
+ * @return The number of bytes written to the partition on success, or -1 if an error occurs.
+ */
 int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
@@ -242,3 +327,4 @@ int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
     ret = ata_drive_write(drv, p->start + off, len, buf);
     return ret;
 }
+#endif /* GPT_C */

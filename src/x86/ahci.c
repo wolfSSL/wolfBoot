@@ -19,7 +19,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
  */
+/**
+ * @file ahci.c
+ *
+ * @brief AHCI (Advanced Host Controller Interface) Implementation.
+ *
+ * This file contains the implementation of the AHCI (Advanced Host Controller
+ * Interface) driver. It includes functions to enable and disable the AHCI
+ * controller, detect SATA disks, and initialize ATA drives for detected disks.
+ */
 
+#ifndef AHCI_H_
+#define AHCI_H_
 #include <stdint.h>
 
 #include <x86/common.h>
@@ -60,13 +71,32 @@
 #define AHCI_DEBUG_PRINTF(...) do {} while(0)
 #endif /* DEBUG_AHCI */
 
-
+/**
+ * @brief Sets the AHCI Base Address Register (ABAR) for the given device.
+ *
+ * @param bus The PCI bus number of the AHCI device.
+ * @param dev The PCI device number of the AHCI device.
+ * @param fun The PCI function number of the AHCI device.
+ * @param addr The address to set as the ABAR.
+ */
 static inline void ahci_set_bar(uint32_t bus, uint32_t dev,
                                 uint32_t func, uint32_t addr)
 {
     pci_config_write32(bus, dev, func, AHCI_ABAR_OFFSET, addr);
 }
 
+/**
+ * @brief Initializes the SATA controller for the given device.
+ *
+ * This function initializes the SATA controller for the specified AHCI device
+ * and detects connected SATA disks. It sets up the necessary registers and
+ * configurations for the controller to function properly.
+ *
+ * @param bus The PCI bus number of the AHCI device.
+ * @param dev The PCI device number of the AHCI device.
+ * @param fun The PCI function number of the AHCI device.
+ * @return 0 on success, or a negative value on failure.
+ */
 int init_sata_controller(uint32_t bus, uint32_t dev, uint32_t fun)
 {
     uint16_t reg16;
@@ -89,6 +119,17 @@ int init_sata_controller(uint32_t bus, uint32_t dev, uint32_t fun)
     return 0;
 }
 
+/**
+ * @brief Enables the AHCI controller for the given device.
+ *
+ * This function enables the AHCI controller for the specified AHCI device
+ * and returns the AHCI Base Address Register (ABAR) for accessing AHCI registers.
+ *
+ * @param bus The PCI bus number of the AHCI device.
+ * @param dev The PCI device number of the AHCI device.
+ * @param fun The PCI function number of the AHCI device.
+ * @return The ABAR address on success, or 0 on failure.
+ */
 uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
 {
     uint16_t reg16;
@@ -118,6 +159,15 @@ uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
     return bar;
 }
 
+/**
+ * @brief Dumps the status of the specified AHCI port.
+ *
+ * This function dumps the status of the AHCI port with the given index.
+ * It prints the status of various port registers for debugging purposes.
+ *
+ * @param base The AHCI Base Address Register (ABAR) for accessing AHCI registers.
+ * @param i The index of the AHCI port to dump status for.
+ */
 void ahci_dump_port(uint32_t base, int i)
 {
     uint32_t cmd, ci, is, tfd, serr, ssst;
@@ -132,6 +182,14 @@ void ahci_dump_port(uint32_t base, int i)
                     i, cmd, ci, is, tfd, serr, ssst);
 }
 
+/**
+ * @brief Enables SATA ports and detects connected SATA disks.
+ *
+ * This function enables SATA ports in the AHCI controller and detects connected SATA disks.
+ * It initializes the ATA drives for the detected disks.
+ *
+ * @param base The AHCI Base Address Register (ABAR) for accessing AHCI registers.
+ */
 void sata_enable(uint32_t base) {
     volatile uint32_t count;
     uint32_t cap, ports_impl;
@@ -337,6 +395,14 @@ void sata_enable(uint32_t base) {
     }
 }
 
+/**
+ * @brief Disables SATA ports in the AHCI controller.
+ *
+ * This function disables SATA ports in the AHCI controller and stops any DMA operation.
+ * It clears status registers and puts the AHCI ports into an inactive state.
+ *
+ * @param base The AHCI Base Address Register (ABAR) for accessing AHCI registers.
+ */
 void sata_disable(uint32_t base)
 {
     uint32_t i, reg;
@@ -398,3 +464,5 @@ void sata_disable(uint32_t base)
     /* mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_HR | HBA_GHC_IE); */
     /* memset((void *)SATA_BASE, 0, 0x1000000); */
 }
+#endif /* AHCI_H_ */
+

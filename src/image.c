@@ -18,6 +18,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+/**
+ * @file image.c
+ * @brief This file contains functions related to image handling and
+ * verification.
+ */
+#ifndef IMAGE_H_
+#define IMAGE_H_
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
@@ -50,6 +57,12 @@ static WOLFTPM2_KEY     wolftpm_srk;
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
 /* Forward declarations */
+/**
+ * @brief Find the key slot ID based on the SHA hash of the key.
+ *
+ * @param hint The SHA hash to find the key slot ID for.
+ * @return The key slot ID corresponding to the provided SHA hash.
+ */
 static int keyslot_id_by_sha(const uint8_t *hint);
 
 #ifdef WOLFBOOT_SIGN_ED25519
@@ -116,6 +129,14 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     #define ECC_KEY_TYPE ECC_SECP521R1
 #endif
 
+/**
+ * @brief Verify the ECC signature of the image using the provided key slot
+ * and signature.
+ *
+ * @param key_slot The key slot ID to use for verification.
+ * @param img The image to verify.
+ * @param sig The ECC signature to use for verification.
+ */
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
@@ -372,10 +393,25 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_3072 || \
         * WOLFBOOT_SIGN_RSA4096 */
 
-
+/**
+ * @brief Get the specified header type from the extended flash image.
+ *
+ * @param img The image to retrieve the header from.
+ * @param type The type of header to retrieve.
+ * @param ptr A pointer to the header data.
+ * @return The size of the header if found, otherwise 0.
+ */
 static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type,
         uint8_t **ptr);
 
+/**
+ * @brief Get the specified header type from the image.
+ *
+ * @param img The image to retrieve the header from.
+ * @param type The type of header to retrieve.
+ * @param ptr A pointer to the header data.
+ * @return The size of the header if found, otherwise 0.
+ */
 static uint16_t get_header(struct wolfBoot_image *img, uint16_t type,
         uint8_t **ptr)
 {
@@ -388,6 +424,13 @@ static uint16_t get_header(struct wolfBoot_image *img, uint16_t type,
 #ifdef EXT_FLASH
 static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
 #endif
+/**
+ * @brief Get a block of data from the SHA256 hash of the image.
+ *
+ * @param img The image to retrieve the data from.
+ * @param offset The offset to start reading the data from.
+ * @return A pointer to the data block.
+ */
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
     if (offset > img->fw_size)
@@ -406,6 +449,12 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
 static int hdr_cpy_done = 0;
 
+/**
+ * @brief Get a copy of the image header.
+ *
+ * @param img The image to retrieve the header from.
+ * @return A pointer to the copied header data.
+ */
 static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
 {
     if (!hdr_cpy_done) {
@@ -473,6 +522,13 @@ static int self_sha256(uint8_t *hash)
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
+/**
+ * @brief Calculate the SHA256 hash of the image.
+ *
+ * @param img The image to calculate the hash for.
+ * @param hash A pointer to store the resulting SHA256 hash.
+ * @return 0 on success, -1 on failure.
+ */
 static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
@@ -514,6 +570,13 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 }
 
 #ifndef WOLFBOOT_NO_SIGN
+
+/**
+ * @brief Calculate the SHA256 hash of the RSA key.
+ *
+ * @param key_slot The key slot ID to calculate the hash for.
+ * @param hash A pointer to store the resulting SHA256 hash.
+ */
 static void key_sha256(uint8_t key_slot, uint8_t *hash)
 {
     int blksz;
@@ -571,6 +634,15 @@ static int self_sha384(uint8_t *hash)
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
+/**
+ * @brief Calculate SHA-384 hash of the image.
+ *
+ * This function calculates the SHA-384 hash of the given image.
+ *
+ * @param img The pointer to the wolfBoot_image structure representing the image.
+ * @param hash The buffer to store the SHA-384 hash (48 bytes).
+ * @return 0 on success, -1 on error.
+ */
 static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
@@ -612,6 +684,18 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 }
 
 #ifndef WOLFBOOT_NO_SIGN
+
+/**
+ * @brief Calculate SHA-384 hash of a public key in the keystore.
+ *
+ * This function calculates the SHA-384 hash of the public key stored in
+ * the keystore at the specified key slot.
+ *
+ * @param key_slot The key slot ID where the public key is stored in the
+ * keystore.
+ * @param hash The buffer to store the SHA-384 hash (48 bytes).
+ * @return None.
+ */
 static void key_sha384(uint8_t key_slot, uint8_t *hash)
 {
     int blksz;
@@ -640,6 +724,15 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
 
 #include <wolfssl/wolfcrypt/sha3.h>
 
+/**
+ * @brief Calculate SHA3-384 hash of the image.
+ *
+ * This function calculates the SHA3-384 hash of the given image.
+ *
+ * @param img The pointer to the wolfBoot_image structure representing the image.
+ * @param hash The buffer to store the SHA3-384 hash (48 bytes).
+ * @return 0 on success, -1 on error.
+ */
 static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
 {
     uint8_t *stored_sha, *end_sha;
@@ -680,6 +773,18 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 #ifndef WOLFBOOT_NO_SIGN
+
+/**
+ * @brief Calculate SHA3-384 hash of a public key in the keystore.
+ *
+ * This function calculates the SHA3-384 hash of the public key stored
+ * in the keystore at the specified key slot.
+ *
+ * @param key_slot The key slot ID where the public key is stored in the
+ * keystore.
+ * @param hash The buffer to store the SHA3-384 hash (48 bytes).
+ * @return None.
+ */
 static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
 {
     int blksz;
@@ -748,6 +853,21 @@ static void wolfBoot_PrintBin(const byte* buffer, word32 length)
 static int TPM2_IoCb(TPM2_CTX* ctx, int isRead, word32 addr, byte* buf,
     word16 size, void* userCtx)
 #else
+
+/**
+ * @brief TPM2 I/O callback function for communication with TPM2 device.
+ *
+ * This function is used as the I/O callback function for communication
+ * with the TPM2 device. It is called during TPM operations to send and
+ * receive data from the TPM2 device.
+ *
+ * @param ctx The pointer to the TPM2 context.
+ * @param txBuf The buffer containing data to be sent to the TPM2 device.
+ * @param rxBuf The buffer to store the received data from the TPM2 device.
+ * @param xferSz The size of the data to be transferred.
+ * @param userCtx The user context (not used in this implementation).
+ * @return The return code from the TPM2 device operation.
+ */
 static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
     word16 xferSz, void* userCtx)
 #endif
@@ -846,6 +966,17 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
 #ifdef WOLFBOOT_MEASURED_BOOT
 #define measure_boot(hash) wolfBoot_tpm2_extend((hash), __LINE__)
 static int wolfBoot_tpm2_extend(uint8_t* hash, int line)
+
+/**
+ * @brief Measure the boot state using TPM2 PCR extend operation.
+ *
+ * This function measures the boot state by extending the SHA-256 digest of
+ * the image into the TPM2 Platform Configuration Registers (PCRs).
+ *
+ * @param img The pointer to the wolfBoot_image structure representing the image.
+ * @return 0 on success, -1 on error.
+ */
+static int measure_boot(struct wolfBoot_image *img)
 {
     int rc;
     PCR_Extend_In pcrExtend;
@@ -896,6 +1027,13 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, byte* seed, word32 sz)
 }
 #endif
 
+/**
+ * @brief Initialize the TPM2 device and retrieve its capabilities.
+ *
+ * This function initializes the TPM2 device and retrieves its capabilities.
+ *
+ * @return 0 on success, an error code on failure.
+ */
 int wolfBoot_tpm2_init(void)
 {
     int rc;
@@ -974,6 +1112,13 @@ int wolfBoot_tpm2_init(void)
     return rc;
 }
 
+/**
+ * @brief Deinitialize the TPM2 device.
+ *
+ * This function deinitializes the TPM2 device and cleans up any resources.
+ *
+ * @return None.
+ */
 void wolfBoot_tpm2_deinit(void)
 {
 #ifdef WOLFBOOT_TPM_KEYSTORE
@@ -996,6 +1141,15 @@ void wolfBoot_tpm2_deinit(void)
 
 #endif /* WOLFBOOT_TPM */
 
+/**
+ * @brief Convert a 32-bit integer from little-endian to native byte order.
+ *
+ * This function converts a 32-bit integer from little-endian byte order to
+ * the native byte order of the machine.
+ *
+ * @param val The 32-bit integer value in little-endian byte order.
+ * @return The 32-bit integer value in native byte order.
+ */
 static inline uint32_t im2n(uint32_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -1007,12 +1161,30 @@ static inline uint32_t im2n(uint32_t val)
   return val;
 }
 
+/**
+ * @brief Get the size of the image from the image header.
+ *
+ * This function retrieves the size of the image from the image header.
+ *
+ * @param image The pointer to the image header.
+ * @return The size of the image in bytes.
+ */
 uint32_t wolfBoot_image_size(uint8_t *image)
 {
     uint32_t *size = (uint32_t *)(image + sizeof (uint32_t));
     return im2n(*size);
 }
 
+/**
+ * @brief Open an image using the provided image address.
+ *
+ * This function opens an image using the provided image address and initializes
+ * the wolfBoot_image structure.
+ *
+ * @param img The pointer to the wolfBoot_image structure to be initialized.
+ * @param image The pointer to the image address.
+ * @return 0 on success, -1 on error.
+ */
 int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
@@ -1054,6 +1226,15 @@ static uint32_t wb_reverse_word32(uint32_t x)
     return ByteReverseWord32(x);
 }
 
+/**
+ * @brief Get the size of the Device Tree Blob (DTB).
+ *
+ * This function retrieves the size of the Device Tree Blob (DTB) from
+ * the given DTB address.
+ *
+ * @param dts_addr The pointer to the Device Tree Blob (DTB) address.
+ * @return The size of the DTB in bytes, or -1 if the magic number is invalid.
+ */
 int wolfBoot_get_dts_size(void *dts_addr)
 {
     uint32_t hdr[2];
@@ -1076,6 +1257,17 @@ int wolfBoot_get_dts_size(void *dts_addr)
 #endif
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
+
+/**
+ * @brief Open an image in a specified partition.
+ *
+ * This function opens an image in the specified partition and initializes
+ * the wolfBoot_image structure.
+ *
+ * @param img The pointer to the wolfBoot_image structure to be initialized.
+ * @param part The partition ID (PART_BOOT, PART_UPDATE, PART_SWAP, etc.).
+ * @return 0 on success, -1 on error.
+ */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
 #ifdef MMU
@@ -1141,6 +1333,15 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 }
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
+/**
+ * @brief Verify the integrity of the image using the stored SHA hash.
+ *
+ * This function verifies the integrity of the image by calculating its SHA hash
+ * and comparing it with the stored hash.
+ *
+ * @param img The pointer to the wolfBoot_image structure representing the image.
+ * @return 0 on success, -1 on error.
+ */
 int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
@@ -1162,6 +1363,15 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 }
 
 #ifdef WOLFBOOT_NO_SIGN
+/**
+ * @brief Verify the authenticity of the image using a digital signature.
+ *
+ * This function verifies the authenticity of the image by verifying its digital
+ * signature.
+ *
+ * @param img The pointer to the wolfBoot_image structure representing the image.
+ * @return 0 on success, -1 on error, -2 if the signature verification fails.
+ */
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 {
     wolfBoot_image_confirm_signature_ok(img);
@@ -1242,8 +1452,17 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 }
 #endif
 
-/* Peek at image offset and return static pointer */
-/* sz: optional and returns length of peek */
+/**
+ * @brief Peek at the content of the image at a specific offset.
+ *
+ * This function allows peeking at the content of the image at a specific offset
+ * without modifying the image.
+ *
+ * @param img The pointer to the wolfBoot_image structure representing the image.
+ * @param offset The offset within the image to peek at.
+ * @param sz Optional pointer to store the size of the peeked data.
+ * @return The pointer to the peeked data, or NULL if the offset is out of bounds.
+ */
 uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
     uint32_t* sz)
 {
@@ -1254,6 +1473,16 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 }
 
 #if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT)
+
+/**
+ * @brief Get the key slot ID by SHA hash.
+ *
+ * This function retrieves the key slot ID from the keystore that matches the
+ * provided SHA hash.
+ *
+ * @param hint The SHA hash of the public key to search for.
+ * @return The key slot ID if found, -1 if the key was not found.
+ */
 static int keyslot_id_by_sha(const uint8_t *hint)
 {
 #ifdef STAGE1_AUTH
@@ -1301,3 +1530,4 @@ static int keyslot_id_by_sha(const uint8_t *hint)
     return -1;
 }
 #endif
+#endif /* IMAGE_H_ */

@@ -22,7 +22,20 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+/**
+ * @file update_disk.c
+ *
+ * @brief Implementation for RAM based updater, for systems that provide
+ * drives and partition mapping.
+ *
+ * This file contains the implementation for the RAM-based updater for systems
+ * that offer drives and partition mapping. It includes functions to read
+ * and load OS images from disk partitions, validate their integrity and
+ * authenticity, and perform the boot process.
+ */
 
+#ifndef UPDATE_DISK_H_
+#define UPDATE_DISK_H_
 #include "image.h"
 #include "loader.h"
 #include "hal.h"
@@ -50,7 +63,13 @@
 #define MAX_FAILURES 4
 
 #define IMAGE_PRELOAD_ADDRESS 0x5000100
-
+/**
+ * @brief RAM function for starting the boot process.
+ *
+ * This function starts the boot process by attempting to read and load
+ * the OS image from disk partitions. It then verifies the integrity and
+ * authenticity of the loaded image before initiating the boot.
+ */
 void RAMFUNCTION wolfBoot_start(void)
 {
     struct wolfBoot_image os_image;
@@ -170,3 +189,4 @@ void RAMFUNCTION wolfBoot_start(void)
     do_boot((uint32_t*)os_image.fw_base);
 
 }
+#endif /* UPDATE_DISK_H_ */

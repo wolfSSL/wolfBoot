@@ -18,6 +18,16 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+/**
+ * @file loader.c
+ *
+ * @brief Loader implementation for wolfBoot.
+ *
+ * This file contains the implementation of the loader for wolfBoot. It includes
+ * functions to initialize the hardware, probe SPI flash,
+ * initialize UART (if applicable), initialize TPM2 (if applicable), and
+ * start the wolfBoot process.
+ */
 
 #include "loader.h"
 #include "image.h"
@@ -27,16 +37,51 @@
 #include "wolfboot/wolfboot.h"
 
 #ifdef RAM_CODE
+/**
+ * @brief Start address of the text section in RAM code.
+ */
 extern unsigned int _start_text;
+/**
+ * @brief wolfBoot version number (used in RAM code).
+ */
 static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
+/**
+ * @brief RAM Interrupt Vector table.
+ */
 extern void (** const IV_RAM)(void);
 #endif
 
 #ifdef PLATFORM_sim
+/**
+ * @brief Command line arguments for the test-app in sim mode.
+ */
 extern char **main_argv;
+/**
+ * @brief Number of command line arguments for the test-app in sim mode.
+ */
 extern int main_argc;
+
+/**
+ * @brief Main function in sim platform.
+ *
+ * This function is the entry point for the simulator platform. It forwards the
+ * command line arguments to the test-app for testing purposes.
+ *
+ * @param argc Number of command line arguments.
+ * @param argv Array of command line arguments.
+ * @return The return code of the test-app.
+ */
 int main(int argc, char *argv[])
 #elif defined(WOLFBOOT_LOADER_MAIN)
+/**
+ * @brief Main function for the wolfBoot loader.
+ *
+ * This function is the entry point for the wolfBoot loader. It initializes
+ * the hardware, probes SPI flash, initializes UART (if applicable), initializes
+ * TPM2 (if applicable), and starts the wolfBoot process.
+ *
+ * @return The return code of the wolfBoot process (should not return).
+ */
 int loader_main(void)
 #else
 int main(void)
