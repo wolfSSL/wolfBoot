@@ -153,47 +153,70 @@ else
 endif
 
 ifeq ($(TARGET),kinetis)
-  CFLAGS+= -I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DNVM_FLASH_WRITEONCE=1
-  APP_OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_flash.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_cache.o \
-  $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_controller.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
+  APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
+  ifeq ($(MCUXSDK),1)
+    APP_OBJS+=\
+      $(MCUXPRESSO)/drivers/flash/fsl_ftfx_flash.o \
+      $(MCUXPRESSO)/drivers/flash/fsl_ftfx_cache.o \
+      $(MCUXPRESSO)/drivers/flash/fsl_ftfx_controller.o
+  else
+    APP_OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_flash.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_cache.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_controller.o
+  endif
 endif
 
 ifeq ($(TARGET),imx_rt)
-  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DXIP_EXTERNAL_FLASH=1 \
-          -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ -I$(MCUXPRESSO)/components/serial_manager \
-          -I$(MCUXPRESSO)/components/uart/ -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
-		  -I$(MCUXPRESSO)/components/flash/nor \
-		  -I$(MCUXPRESSO)/components/flash/nor/flexspi \
-          -DPRINTF_ADVANCED_ENABLE=1 -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
-  LDFLAGS+=-mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections -ffreestanding -fno-builtin -mthumb -mapcs -Xlinker --gc-sections -Xlinker -static -Xlinker -z -Xlinker muldefs -Xlinker -Map=output.map -static -lm -lc -lnosys
+  LDFLAGS+=\
+    -mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections \
+    -ffreestanding -fno-builtin -mthumb -mapcs -Xlinker --gc-sections -Xlinker -static -Xlinker -z \
+    -Xlinker muldefs -Xlinker -Map=output.map -static -lm -lc -lnosys
   LSCRIPT_TEMPLATE=imx_rt.ld
-  APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-			$(MCUXPRESSO_DRIVERS)/drivers/fsl_common_arm.o \
-            imx_rt_clock_config.o \
-		    $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o \
-            $(MCUXPRESSO_DRIVERS)/utilities/str/fsl_str.o \
-            $(MCUXPRESSO)/components/uart/fsl_adapter_lpuart.o \
-            $(MCUXPRESSO)/components/serial_manager/fsl_component_serial_manager.o \
-            $(MCUXPRESSO)/components/lists/fsl_component_generic_list.o \
-            $(MCUXPRESSO)/components/serial_manager/fsl_component_serial_port_uart.o \
-            $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o \
-			$(MCUXPRESSO)/components/flash/nor/flexspi/fsl_flexspi_nor_flash.o \
-            $(MCUXPRESSO_DRIVERS)/utilities/debug_console/fsl_debug_console.o
+  APP_OBJS+=\
+    imx_rt_clock_config.o \
+    $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+    $(MCUXPRESSO)/components/uart/fsl_adapter_lpuart.o \
+    $(MCUXPRESSO)/components/serial_manager/fsl_component_serial_manager.o \
+    $(MCUXPRESSO)/components/lists/fsl_component_generic_list.o \
+    $(MCUXPRESSO)/components/serial_manager/fsl_component_serial_port_uart.o \
+    $(MCUXPRESSO)/components/flash/nor/flexspi/fsl_flexspi_nor_flash.o
+  ifeq ($(MCUXSDK),1)
+    APP_OBJS+=\
+      $(MCUXPRESSO)/drivers/igpio/fsl_gpio.o \
+      $(MCUXPRESSO)/drivers/common/fsl_common.o \
+      $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
+      $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o \
+      $(MCUXPRESSO)/utilities/str/fsl_str.o \
+      $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o \
+      $(MCUXPRESSO)/utilities/debug_console/fsl_debug_console.o
+  else
+    APP_OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_common_arm.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o \
+      $(MCUXPRESSO_DRIVERS)/utilities/str/fsl_str.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o \
+      $(MCUXPRESSO_DRIVERS)/utilities/debug_console/fsl_debug_console.o
+  endif
 
-
-    ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
-        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
-        APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1052.o
-    else
-      ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
-          CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
-          APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
-      endif
-      ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
-          CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ -I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
-          APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1064.o
-      endif
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
+    CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+            -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1052.o
+  else
+    ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
+      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+              -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+      APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
     endif
+    ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
+      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+              -I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+      APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1064.o
+    endif
+  endif
 endif
 
 ifeq ($(TARGET),stm32g0)
@@ -280,7 +303,7 @@ standalone: image.bin
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 clean:
-	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT)
+	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset

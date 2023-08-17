@@ -287,7 +287,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
         #define WRITE_STATUS_CMD 0x1
         #define QE_ENABLE        0x40 /* S6 */
-    #else
+    #elif !defined(CONFIG_HYPERFLASH)
         /* Hyperflash - Default on RT1050-EVKB */
         #define CONFIG_HYPERFLASH
     #endif

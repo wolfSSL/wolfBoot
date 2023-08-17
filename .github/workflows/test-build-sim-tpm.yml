@@ -48,7 +48,7 @@ jobs:
 
       - name: Build tools
         run: |
-          make keytools
+          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot
         run: |

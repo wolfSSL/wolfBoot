@@ -321,8 +321,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             uint32_t address_align = address - (address & 0x07);
             uint32_t start_off = address - address_align;
             int i;
-            memcpy(aligned_dword, address_align, 8);
-            for (i = start_off; ((i < 8) && (i < len + start_off)); i++)
+            memcpy(aligned_dword, (void*)address_align, 8);
+            for (i = start_off; ((i < 8) && (i < len + (int)start_off)); i++)
                 aligned_dword[i] = data[w++];
             if (memcmp(aligned_dword, empty_dword, 8) != 0) {
                     ret = FLASH_Program(&pflash, address_align, aligned_dword, 8);
@@ -333,7 +333,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             len -= i;
         } else {
             uint32_t len_align = len - (len & 0x07);
-            ret = FLASH_Program(&pflash, address, data + w, len_align);
+            ret = FLASH_Program(&pflash, address, (uint8_t*)data + w, len_align);
             if (ret != kStatus_FTFx_Success)
                 return -1;
             len -= len_align;

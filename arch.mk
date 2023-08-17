@@ -249,13 +249,47 @@ ifeq ($(ARCH),PPC)
 endif
 
 ifeq ($(TARGET),kinetis)
-  CFLAGS+= -I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_flash.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_cache.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_controller.o
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=\
+      -DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DNVM_FLASH_WRITEONCE=1
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
+
+  ifeq ($(MCUXSDK),1)
+    CFLAGS+=\
+      -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/sysmpu \
+      -I$(MCUXPRESSO)/drivers/ltc \
+      -I$(MCUXPRESSO)/drivers/port \
+      -I$(MCUXPRESSO)/drivers/gpio
+
+    OBJS+=\
+      $(MCUXPRESSO)/drivers/flash/fsl_ftfx_flash.o \
+      $(MCUXPRESSO)/drivers/flash/fsl_ftfx_cache.o \
+      $(MCUXPRESSO)/drivers/flash/fsl_ftfx_controller.o
+  else
+    OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_flash.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_cache.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ftfx_controller.o
+  endif
+
   ## The following lines can be used to enable HW acceleration
   ifeq ($(MCUXPRESSO_CPU),MK82FN256VLL15)
     ifeq ($(PKA),1)
-      PKA_EXTRA_CFLAGS+=-DFREESCALE_LTC_ECC -DFREESCALE_USE_LTC -DFREESCALE_LTC_TFM
-      PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_ltc.o
+      PKA_EXTRA_CFLAGS+=-DFREESCALE_USE_LTC
+      PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o
+      ifeq ($(MCUXSDK),1)
+        PKA_EXTRA_OBJS+=$(MCUXPRESSO)/drivers/ltc/fsl_ltc.o
+      else
+        PKA_EXTRA_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_ltc.o
+      endif
     endif
   endif
 endif
@@ -263,24 +297,46 @@ endif
 ifeq ($(TARGET),imx_rt)
   CORTEX_M7=1
   CFLAGS+=\
-      -I$(MCUXPRESSO_DRIVERS)/drivers \
       -I$(MCUXPRESSO_DRIVERS) \
-      -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console/ \
-      -I$(MCUXPRESSO_DRIVERS)/utilities/str/ \
-      -I$(MCUXPRESSO)/components/uart/ \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO)/drivers/flexspi \
+      -I$(MCUXPRESSO)/drivers/lpuart \
+      -I$(MCUXPRESSO)/drivers/igpio \
+      -I$(MCUXPRESSO)/components/uart \
       -I$(MCUXPRESSO)/components/flash/nor \
       -I$(MCUXPRESSO)/components/flash/nor/flexspi \
-      -I$(MCUXPRESSO)/components/serial_manager/ \
+      -I$(MCUXPRESSO)/components/serial_manager \
+      -I$(MCUXPRESSO_DRIVERS)/project_template \
       -I$(MCUXPRESSO_CMSIS)/Include \
-      -I$(MCUXPRESSO_CMSIS)/Core/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=\
       -DCPU_$(MCUXPRESSO_CPU) \
-      -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -I$(MCUXPRESSO_DRIVERS)/project_template/ \
+      -DDEBUG_CONSOLE_ASSERT_DISABLE=1 \
       -DXIP_EXTERNAL_FLASH=1 -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DPRINTF_ADVANCED_ENABLE=1 \
       -DSCANF_ADVANCED_ENABLE=1 -DSERIAL_PORT_TYPE_UART=1 -DNDEBUG=1
 
-  OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
-  ifeq ($(DEBUG_UART),1)
-    OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o
+  ifeq ($(MCUXSDK),1)
+    CFLAGS+=\
+      -I$(MCUXPRESSO)/utilities/str \
+      -I$(MCUXPRESSO)/utilities/debug_console
+    OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o
+    ifeq ($(DEBUG_UART),1)
+      OBJS+= $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o
+    endif
+  else
+    CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS)/utilities/str \
+      -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console
+    OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
+    ifeq ($(DEBUG_UART),1)
+      OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o
+    endif
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
@@ -299,7 +355,11 @@ ifeq ($(TARGET),imx_rt)
   endif
 
   ifeq ($(PKA),1)
-    PKA_EXTRA_OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o
+    ifeq ($(MCUXSDK),1)
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/drivers/fsl_dcp.o
+    else
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o
+    endif
     PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
     PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
   endif
@@ -392,40 +452,70 @@ ifeq ($(TARGET),ti_hercules)
 endif
 
 ifeq ($(TARGET),lpc)
-  CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flashiap.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
-  OBJS+=$(MCUXPRESSO_DRIVERS)/mcuxpresso/libpower_softabi.a $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o
-  OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=\
+      -DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
+  LIBS+=\
+      $(MCUXPRESSO_DRIVERS)/mcuxpresso/libpower_softabi.a
+  ifeq ($(MCUXSDK),1)
+    CFLAGS+=\
+      -I$(MCUXPRESSO)/drivers/flashiap
+    OBJS+=\
+      $(MCUXPRESSO)/drivers/common/fsl_common.o \
+      $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
+      $(MCUXPRESSO)/drivers/flashiap/fsl_flashiap.o \
+      $(MCUXPRESSO)/drivers/flexcomm/fsl_usart.o \
+      $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o
+  else
+    OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flashiap.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
+  endif
 endif
 
 ifeq ($(TARGET),psoc6)
     CORTEX_M0=1
-    OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_device.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
-                     $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
-                     $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
-    PSOC6_CRYPTO_OBJS=./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v1.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw_v1.o \
-                     $(CYPRESS_PDL)/drivers/source/cy_crypto.o
+    OBJS+=\
+        $(CYPRESS_PDL)/drivers/source/cy_flash.o \
+        $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
+        $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
+        $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
+        $(CYPRESS_PDL)/drivers/source/cy_device.o \
+        $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
+        $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
+        $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
+        $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
+        $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
+        $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
+        $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
+    PSOC6_CRYPTO_OBJS=\
+        ./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v1.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw_v1.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto.o
 
-    CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
+    CFLAGS+=\
+        -I$(CYPRESS_PDL)/drivers/include \
         -I$(CYPRESS_PDL)/devices/include \
         -I$(CYPRESS_PDL)/cmsis/include \
         -I$(CYPRESS_TARGET_LIB) \
