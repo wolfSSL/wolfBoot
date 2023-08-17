@@ -20,6 +20,7 @@ LSCRIPT_IN:=hal/$(TARGET).ld
 V?=0
 DEBUG?=0
 DEBUG_UART?=0
+LIBS=
 
 OBJS:= \
 	./hal/$(TARGET).o \
@@ -207,11 +208,11 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 wolfboot_stage1.bin: wolfboot.bin stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
-wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
+wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
-	@echo $(OBJS)
-	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LD_END_GROUP) -o $@
+	@echo $(OBJS) $(LIBS)
+	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LIBS) $(LD_END_GROUP) -o $@
 
 $(LSCRIPT): $(LSCRIPT_IN) FORCE
 	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
@@ -254,6 +255,7 @@ clean:
 	$(Q)rm -f lib/wolfssl/wolfcrypt/src/*.o lib/wolfTPM/src/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
+	$(Q)rm -f $(OBJS)
 	$(Q)$(MAKE) -C test-app -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
