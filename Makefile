@@ -10,7 +10,7 @@ include tools/config.mk
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT"
-CFLAGS+=-Werror -Wextra
+CFLAGS+=-Werror -Wextra -Wno-array-bounds
 LSCRIPT:=config/target.ld
 LSCRIPT_FLAGS:=
 LDFLAGS:=
@@ -159,7 +159,7 @@ keytools_check: keytools FORCE
 
 $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
-	$(Q)(test $(SIGN) = NONE) || ($(KEYGEN_TOOL) $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
+	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 
 keytools:
@@ -174,8 +174,8 @@ tpmtools:
 
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
-	$(Q)(test $(SIGN) = NONE) || $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
-	$(Q)(test $(SIGN) = NONE) && $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
+	$(Q)(test $(SIGN) = NONE) || "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+	$(Q)(test $(SIGN) = NONE) && "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf

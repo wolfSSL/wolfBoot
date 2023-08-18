@@ -26,6 +26,10 @@
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
 //#define DEBUG_SIGNTOOL
 
+#ifdef _WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_NONSTDC_NO_DEPRECATE /* unlink */
+#endif
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -554,7 +558,7 @@ static void key_import(uint32_t ktype, const char *fname)
         exit(6);
     }
 
-    readLen = fread(buf, 1, sizeof(buf), file);
+    readLen = (int)fread(buf, 1, sizeof(buf), file);
 
     if (readLen <= 0) {
         printf("Fatal error: could not find valid key in file %s\n", fname);
