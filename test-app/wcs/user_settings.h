@@ -26,6 +26,7 @@
 #define H_USER_SETTINGS_
 
 #include <target.h>
+#include "wolfboot/wc_secure.h"
 
 #define WOLFCRYPT_ONLY
 #define WOLFSSL_SMALL_CERT_VERIFY
@@ -48,27 +49,17 @@ extern int tolower(int c);
 #define HAVE_PKCS11_STATIC
 #define WOLF_CRYPTO_CB
 
-#define NO_RSA
-#define NO_HMAC
-#define NO_PWDBASED
-
-
 
 /* ECC */
 #define HAVE_ECC
-//#define ECC_TIMING_RESISTANT
-//#define ECC_USER_CURVES /* enables only 256-bit by default */
-//#define HAVE_ECC_SIGN
-//#define HAVE_ECC_CDH
 #define HAVE_ECC256
-//#define HAVE_ECC384
-//#define HAVE_ECC521
+#define HAVE_ECC384
 
 
 #ifndef NO_RSA
   /* RSA */
-  #define WOLFSSL_KEY_GEN
   #define HAVE_RSA
+  #define WOLFSSL_KEY_GEN
   #define RSA_LOW_MEM
   #define WOLFSSL_RSA_VERIFY_INLINE
   #define WC_ASN_HASH_SHA256
@@ -77,43 +68,41 @@ extern int tolower(int c);
 
 
 /* SHA */
-//#define WOLFSSL_SHA3
-//#define WOLFSSL_SHA384
+#define WOLFSSL_SHA3
+#define WOLFSSL_SHA384
 
 /* HMAC */
-//#define WOLFSSL_HMAC
-//#define HAVE_HKDF
+#define WOLFSSL_HMAC
+#define HAVE_HKDF
 
 
 /* PWDBASED */
-//#define HAVE_PWDBASED
+#define HAVE_PWDBASED
 
 /* BASE64 */
 #define WOLFSSL_BASE64_DECODE
 #define WOLFSSL_BASE64_ENCODE
 
 
-#if 0
 /* AES */
 #ifndef WOLFSSL_AES_128
 #define WOLFSSL_AES_128
 #endif
 
-//#ifndef WOLFSSL_AES_256
-//#define WOLFSSL_AES_256
-//#endif
+#ifndef WOLFSSL_AES_256
+#define WOLFSSL_AES_256
+#endif
 #ifndef WOLFSSL_AES_COUNTER
 #define WOLFSSL_AES_COUNTER
 #endif
 #ifndef WOLFSSL_AES_DIRECT
 #define WOLFSSL_AES_DIRECT
 #endif
-#endif
 
 /* Hardening */
-//#define TFM_TIMING_RESISTANT
-//#define ECC_TIMING_RESISTANT
-//#define WC_RSA_BLINDING
+#define TFM_TIMING_RESISTANT
+#define ECC_TIMING_RESISTANT
+#define WC_RSA_BLINDING
 
 /* Exclude */
 #define NO_CMAC
@@ -146,6 +135,9 @@ extern int tolower(int c);
 #define NO_CRYPT_BENCHMARK
 
 #define CUSTOM_RAND_GENERATE_BLOCK wcs_get_random
+
+/* Disable VLAs */
+#define WOLFSSL_SP_NO_DYN_STACK
 
 
 

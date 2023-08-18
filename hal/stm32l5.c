@@ -328,12 +328,10 @@ static void periph_unsecure()
 #endif
 
 
-#if 0
     /* Unsecure LPUART1 */
     TZSC_PRIVCFGR1 &= ~(TZSC_PRIVCFG1_LPUARTPRIV);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_TX_PIN);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_RX_PIN);
-#endif
 
 }
 #endif

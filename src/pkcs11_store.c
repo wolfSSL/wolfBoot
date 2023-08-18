@@ -135,10 +135,12 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         obj->hdr.object_id = id2;
         obj->hdr.size = 0;
         obj->read = 0;
+        hal_flash_unlock();
         hal_flash_erase((uint32_t)(vault_base + vault_idx * KEYVAULT_OBJ_SIZE),
                 KEYVAULT_OBJ_SIZE);
         hal_flash_write((uint32_t)(vault_base + vault_idx * KEYVAULT_OBJ_SIZE), (void *)obj,
                 sizeof(struct obj_hdr));
+        hal_flash_lock();
         *store = obj;
     }
     hdr->off = 0;
@@ -178,6 +180,7 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
     if (obj->vault_idx > KEYVAULT_MAX_ITEMS)
         return -1;
     obj->hdr.size += len;
+    hal_flash_unlock();
     if (obj->hdr.off == 0) 
         hal_flash_erase((uint32_t)(vault_base + obj->vault_idx * KEYVAULT_OBJ_SIZE),
             KEYVAULT_OBJ_SIZE);
@@ -194,6 +197,7 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
         hal_flash_write(base + STORE_PRIV_HDR_SIZE + pos, buffer + pos + obj->hdr.off, sz);
         pos += sz;
     }
+    hal_flash_lock();
     obj->hdr.off += len;
     return len;
 }

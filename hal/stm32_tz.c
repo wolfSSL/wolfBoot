@@ -169,7 +169,7 @@ void hal_tz_sau_init(void)
     sau_init_region(0, 0x0C038000, 0x0C040000, 1);
 
     /* Non-secure: application flash area */
-    sau_init_region(1, 0x08040000, 0x0804FFFF, 0);
+    sau_init_region(1, 0x08040000, 0x0807FFFF, 0);
 
     /* Non-secure RAM region in SRAM1 */
     sau_init_region(2, 0x20018000, 0x2002FFFF, 0);

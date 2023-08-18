@@ -150,9 +150,9 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #       define NO_ECC256
 #   endif
 #endif
-
 #   define NO_RSA
-#endif
+
+#endif /* WOLFBOOT_SIGN_ECC521 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC256 */
 
 #ifdef WOLFBOOT_SIGN_RSA2048
 #   define RSA_LOW_MEM
@@ -270,8 +270,6 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #else
 #   define NO_HMAC
 #endif
-
-
 
 #ifndef HAVE_PWDBASED
 #   define NO_PWDBASED

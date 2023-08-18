@@ -127,13 +127,14 @@ void main(void)
     Pkcs11Token token;
     Pkcs11Dev PKCS11_d;
     unsigned long session;
-    const char TokenPin[] = "0123456789ABCDEF";
-    const char UserPin[] = "ABCDEF0123456789";
+    char TokenPin[] = "0123456789ABCDEF";
+    char UserPin[] = "ABCDEF0123456789";
+    char SoPinName[] = "SO-PIN";
 
     wolfCrypt_Init();
 
     PKCS11_d.heap = NULL,
-    PKCS11_d.func = &wolfpkcs11nsFunctionList;
+    PKCS11_d.func = (CK_FUNCTION_LIST *)&wolfpkcs11nsFunctionList;
 
     ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 1, "EccKey",
             (const byte*)TokenPin, strlen(TokenPin));
@@ -145,17 +146,17 @@ void main(void)
     }
     if (ret == 0) {
         ret = wolfpkcs11nsFunctionList.C_InitToken(1,
-                (const byte *)TokenPin, strlen(TokenPin), "SO-PIN");
+                (byte *)TokenPin, strlen(TokenPin), (byte *)SoPinName);
     }
 
     if (ret == 0) {
         ret = wolfpkcs11nsFunctionList.C_Login(session, CKU_SO,
-                TokenPin,
+                (byte *)TokenPin,
                 strlen(TokenPin));
     }
     if (ret == 0) {
         ret = wolfpkcs11nsFunctionList.C_InitPIN(session,
-                TokenPin,
+                (byte *)TokenPin,
                 strlen(TokenPin));
     }
     if (ret == 0) {

@@ -175,7 +175,7 @@
 #define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
 #define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
 
-#define TZSC_PRIVCFGR1   *((uint32_t *)(0x500032020))
+#define TZSC_PRIVCFGR1   *((uint32_t *)(0x50032420))
 #define TZSC_PRIVCFG1_LPUARTPRIV (1 << 21)
 
 
