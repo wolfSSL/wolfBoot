@@ -211,7 +211,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
 
         pa_start = (WOLFBOOT_SECTOR_SIZE + 1) * page_start;
         pa = ctx->src_a + pa_start;
-        while (((pa - ctx->src_a) < ctx->size_a ) && (p_off < len)) {
+        while (((uintptr_t)(pa - ctx->src_a) < (uintptr_t)ctx->size_a) && (p_off < len)) {
             if ((uintptr_t)(ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
                 break;
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
