@@ -173,11 +173,9 @@ void main(void)
                 TokenPin,
                 strlen(TokenPin));
     }
-
     if (ret == 0) {
         ret = wolfpkcs11nsFunctionList.C_Logout(session);
     }
-
     if (ret != 0) {
         while(1)
             ;

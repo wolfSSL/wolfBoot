@@ -118,6 +118,8 @@ extern int tolower(int c);
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
 //#   define WOLFSSL_SP_MATH_ALL
+#  define WOLFSSL_KEY_GEN
+#  define HAVE_ECC_KEY_EXPORT
 
 int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #   define CUSTOM_RAND_GENERATE_SEED hal_trng_get_entropy
@@ -365,11 +367,11 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
-#define NO_AES_CBC
 
 #ifndef WOLFCRYPT_SECURE_MODE
     #define WC_NO_RNG
     #define WC_NO_HASHDRBG
+    #define NO_AES_CBC
 #else
     #define HAVE_HASHDRBG
 #endif
