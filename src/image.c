@@ -965,18 +965,19 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
 
 #ifdef WOLFBOOT_MEASURED_BOOT
 #define measure_boot(hash) wolfBoot_tpm2_extend((hash), __LINE__)
-static int wolfBoot_tpm2_extend(uint8_t* hash, int line)
-
 /**
- * @brief Measure the boot state using TPM2 PCR extend operation.
+ * @brief Extends a PCR in the TPM with a hash.
  *
- * This function measures the boot state by extending the SHA-256 digest of
- * the image into the TPM2 Platform Configuration Registers (PCRs).
+ * Extends a specified PCR's value in the TPM with a given hash. Uses
+ * TPM2_PCR_Extend. Optionally, if DEBUG_WOLFTPM or WOLFBOOT_DEBUG_TPM defined,
+ * prints debug info.
  *
- * @param img The pointer to the wolfBoot_image structure representing the image.
- * @return 0 on success, -1 on error.
+ * @param[in] hash Pointer to the hash value to extend into the PCR.
+ * @param[in] line Line number where the function is called (for debugging).
+ * @return 0 on success, an error code on failure.
+ *
  */
-static int measure_boot(struct wolfBoot_image *img)
+static int wolfBoot_tpm2_extend(uint8_t* hash, int line)
 {
     int rc;
     PCR_Extend_In pcrExtend;
