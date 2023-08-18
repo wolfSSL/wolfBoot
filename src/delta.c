@@ -187,19 +187,19 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     int found;
     uint8_t *pa, *pb;
     uint16_t match_len;
-    uint32_t blk_start;
-    uint32_t p_off = 0;
+    uintptr_t blk_start;
+    uintptr_t p_off = 0;
     if (ctx->off_b >= ctx->size_b)
         return 0;
     if (len < BLOCK_HDR_SIZE)
         return -1;
 
     while ((ctx->off_b + BLOCK_HDR_SIZE < ctx->size_b) && (len > p_off + BLOCK_HDR_SIZE)) {
-        uint32_t page_start = ctx->off_b / WOLFBOOT_SECTOR_SIZE;
-        uint32_t pa_start;
+        uintptr_t page_start = ctx->off_b / WOLFBOOT_SECTOR_SIZE;
+        uintptr_t pa_start;
         found = 0;
         if (p_off + BLOCK_HDR_SIZE >  len)
-            return p_off;
+            return (int)p_off;
 
         /* 'A' Patch base is valid for addresses in blocks ahead.
          * For matching previous blocks, 'B' is used as base instead.
@@ -211,15 +211,15 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
 
         pa_start = (WOLFBOOT_SECTOR_SIZE + 1) * page_start;
         pa = ctx->src_a + pa_start;
-        while (((uint32_t)(pa - ctx->src_a) < ctx->size_a ) && (p_off < len)) {
-            if ((uint32_t)(ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
+        while (((pa - ctx->src_a) < ctx->size_a ) && (p_off < len)) {
+            if ((uintptr_t)(ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
                 break;
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                 break;
             if ((WOLFBOOT_SECTOR_SIZE - (ctx->off_b % WOLFBOOT_SECTOR_SIZE)) < BLOCK_HDR_SIZE)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
-                uint32_t b_start;
+                uintptr_t b_start;
                 /* Identical areas of BLOCK_HDR_SIZE bytes match between the images.
                  * initialize match_len; blk_start is the relative offset within
                  * the src image.
@@ -261,13 +261,13 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         }
         if (!found) {
             /* Try matching an earlier section in the resulting image */
-            uint32_t pb_end = page_start * WOLFBOOT_SECTOR_SIZE;
+            uintptr_t pb_end = page_start * WOLFBOOT_SECTOR_SIZE;
             pb = ctx->src_b;
-            while (((uint32_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
+            while (((uintptr_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
                 /* Check image boundary */
                 if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                     break;
-                if ((uint32_t)(ctx->size_b - (pb - ctx->src_b)) < BLOCK_HDR_SIZE)
+                if ((uintptr_t)(ctx->size_b - (pb - ctx->src_b)) < BLOCK_HDR_SIZE)
                     break;
 
                 /* Don't try matching backwards if the distance between the two
@@ -334,7 +334,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         }
         ctx->off_b++;
     }
-    return (p_off);
+    return (int)p_off;
 }
 
 #endif /* DELTA_UPDATES */
