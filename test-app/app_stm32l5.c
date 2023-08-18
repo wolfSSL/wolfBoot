@@ -130,25 +130,10 @@ void main(void)
     const char TokenPin[] = "0123456789ABCDEF";
     const char UserPin[] = "ABCDEF0123456789";
 
-    wcs_get_random((void*)&rand, 4);
-    for (i = 0; i < (rand / 100000000); i++)
-        ;
-
-#if 0
-    hal_init();
-    uart_init(115200, 8, 'N', 1);
-    boot_led_on();
-    usr_led_on();
-    boot_led_off();
-    if (wolfBoot_current_firmware_version() > 1)
-        boot_led_on();
-#endif
-
     wolfCrypt_Init();
 
     PKCS11_d.heap = NULL,
     PKCS11_d.func = &wolfpkcs11nsFunctionList;
-//    ret = wc_Pkcs11Token_Init_NoLogin(&token, &PKCS11_d, 1, "EccKey");
 
     ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 1, "EccKey",
             (const byte*)TokenPin, strlen(TokenPin));
