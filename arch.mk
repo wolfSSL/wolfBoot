@@ -76,12 +76,13 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),samr21)
     CORTEX_M0=1
   endif
-
+  ifeq ($(TARGET),imx_rt)
+    CORTEX_M7=1
+  endif
   ifeq ($(TARGET),stm32l0)
     CORTEX_M0=1
     SPI_TARGET=stm32
   endif
-
   ifeq ($(TARGET),stm32g0)
     CORTEX_M0=1
     ARCH_FLASH_OFFSET=0x08000000
@@ -193,6 +194,7 @@ ifeq ($(ARCH),ARM)
       endif
     endif
   else
+    # default Cortex M3/M4
     ifeq ($(NO_ASM),1)
       ifeq ($(SPMATH),1)
         MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
@@ -295,7 +297,6 @@ ifeq ($(TARGET),kinetis)
 endif
 
 ifeq ($(TARGET),imx_rt)
-  CORTEX_M7=1
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \
