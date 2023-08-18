@@ -37,6 +37,9 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stddef.h>
+/* target.h is a generated file based on .config (see target.h.in)
+ * Provides: WOLFBOOT_SECTOR_SIZE */
+#include <target.h>
 #include <delta.h>
 
 #include "wolfboot/version.h"
@@ -1393,7 +1396,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
     fseek(f3, MAX_SRC_SIZE -1, SEEK_SET);
-    io_sz = fwrite(&ff, 1, 1, f3);
+    io_sz = (int)fwrite(&ff, 1, 1, f3);
     if (io_sz != 1) {
         goto cleanup;
     }
