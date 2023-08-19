@@ -1269,9 +1269,9 @@ static int keyslot_id_by_sha(const uint8_t *hint)
     XMEMSET(&nv, 0, sizeof(nv));
     nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_INDEX;
 
-#if 0 /* TODO: Add auth */
-    nv.handle.auth.size = sizeof(authBuf);
-    XMEMCPY(nv.handle.auth.buffer, authBuf, sizeof(authBuf));
+#ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
+    nv.handle.auth.size = (UINT16)strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
+    memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH, nv.handle.auth.size);
 #endif
 
     rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, WOLFBOOT_TPM_KEYSTORE_NV_INDEX,

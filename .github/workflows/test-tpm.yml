@@ -64,6 +64,7 @@ jobs:
       arch: host
       config-file: ./config/examples/sim-tpm-keystore.config
       make-args: SIGN=ECC256 HASH=SHA256
+      authstr: TestAuth
 
   sim_tpm_keystore_ecc384:
     uses: ./.github/workflows/test-build-sim-tpm.yml
@@ -72,6 +73,7 @@ jobs:
       config-file: ./config/examples/sim-tpm-keystore.config
       make-args: SIGN=ECC384 HASH=SHA384
       rot-args: -sha384
+      authstr: TestAuth
 
   sim_tpm_keystore_rsa2048:
     uses: ./.github/workflows/test-build-sim-tpm.yml
@@ -79,3 +81,4 @@ jobs:
       arch: host
       config-file: ./config/examples/sim-tpm-keystore.config
       make-args: SIGN=RSA2048 HASH=SHA256
+      authstr: TestAuth
