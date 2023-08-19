@@ -16,6 +16,9 @@ on:
       rot-args:
         required: false
         type: string
+      authstr:
+        required: false
+        type: string
 
 jobs:
 
@@ -52,7 +55,7 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}}
+          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.authstr}}"
 
       - name: Build TPM tools
         run: |
@@ -60,7 +63,7 @@ jobs:
 
       - name: Write TPM ROT to TPM
         run: |
-          ./tools/tpm/rot -write ${{inputs.rot-args}}
+          ./tools/tpm/rot -write ${{inputs.rot-args}} -auth="${{inputs.authstr}}"
 
       - name: Run wolfBoot
         run: |
