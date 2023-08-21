@@ -123,7 +123,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     int point_sz = pubkey_sz/2;
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#ifdef WOLFBOOT_TPM
     WOLFTPM2_KEY tpmKey;
 #else
     ecc_key ecc;
@@ -134,7 +134,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#ifdef WOLFBOOT_TPM
     /* Use TPM for ECC verify */
     /* Load public key into TPM */
     memset(&tpmKey, 0, sizeof(tpmKey));
@@ -247,7 +247,7 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 }
 #endif /* !NO_RSA_SIG_ENCODING */
 
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#ifdef WOLFBOOT_TPM
 /* RSA PKCSV15 un-padding with RSA_BLOCK_TYPE_1 (public) */
 /* UnPad plaintext, set start to *output, return length of plaintext or error */
 static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
@@ -270,7 +270,7 @@ static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
     ret = pkcsBlockLen - i;
     return ret;
 }
-#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_KEYSTORE */
+#endif /* WOLFBOOT_TPM */
 
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
@@ -282,7 +282,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     word32 inOutIdx = 0;
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#ifdef WOLFBOOT_TPM
     WOLFTPM2_KEY tpmKey;
     const byte *n = NULL, *e = NULL;
     word32 nSz = 0, eSz = 0;
@@ -294,7 +294,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#ifdef WOLFBOOT_TPM
     /* Extract DER RSA key struct */
     memset(&tpmKey, 0, sizeof(tpmKey));
     ret = wc_RsaPublicKeyDecode_ex(pubkey, &inOutIdx, pubkey_sz,
