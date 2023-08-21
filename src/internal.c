@@ -4722,7 +4722,7 @@ int WP11_Object_SetEcKey(WP11_Object* object, unsigned char** data,
             ret = EcSetParams(key, data[0], (int)len[0]);
         if (ret == 0 && data[1] != NULL) {
             key->type = ECC_PRIVATEKEY_ONLY;
-            ret = SetMPI(&key->k, data[1], (int)len[1]);
+            ret = SetMPI(key->k, data[1], (int)len[1]);
         }
         if (ret == 0 && data[2] != NULL) {
             if (key->type == ECC_PRIVATEKEY_ONLY)
@@ -5212,7 +5212,7 @@ static int EcObject_GetAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
             if (noPriv)
                 *len = CK_UNAVAILABLE_INFORMATION;
             else
-                ret = GetMPIData(&object->data.ecKey.k, data, len);
+                ret = GetMPIData(object->data.ecKey.k, data, len);
             break;
         case CKA_EC_POINT:
             if (noPub)
