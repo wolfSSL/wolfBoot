@@ -130,12 +130,12 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #endif
 
 /**
- * @brief Verify the ECC signature of the image using the provided key slot
+ * @brief Verify the signature of the image using the provided key slot
  * and signature.
  *
  * @param key_slot The key slot ID to use for verification.
  * @param img The image to verify.
- * @param sig The ECC signature to use for verification.
+ * @param sig The signature to use for verification.
  */
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
@@ -394,7 +394,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         * WOLFBOOT_SIGN_RSA4096 */
 
 /**
- * @brief Get the specified header type from the extended flash image.
+ * @brief Get the specified header type from the external flash image.
  *
  * @param img The image to retrieve the header from.
  * @param type The type of header to retrieve.
@@ -405,12 +405,13 @@ static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type,
         uint8_t **ptr);
 
 /**
- * @brief Get the specified header type from the image.
+ * @brief This function searches for the TLV entry in the header and provides
+ * a pointer to the corresponding data.
  *
- * @param img The image to retrieve the header from.
+ * @param img The image to retrieve the data from.
  * @param type The type of header to retrieve.
- * @param ptr A pointer to the header data.
- * @return The size of the header if found, otherwise 0.
+ * @param ptr A pointer to store the position of the header.
+ * @return The size of the data if found, otherwise 0.
  */
 static uint16_t get_header(struct wolfBoot_image *img, uint16_t type,
         uint8_t **ptr)
@@ -425,7 +426,7 @@ static uint16_t get_header(struct wolfBoot_image *img, uint16_t type,
 static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
 #endif
 /**
- * @brief Get a block of data from the SHA256 hash of the image.
+ * @brief Get a block of data to be hashed.
  *
  * @param img The image to retrieve the data from.
  * @param offset The offset to start reading the data from.
@@ -572,7 +573,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 #ifndef WOLFBOOT_NO_SIGN
 
 /**
- * @brief Calculate the SHA256 hash of the RSA key.
+ * @brief Calculate the SHA256 hash of the key.
  *
  * @param key_slot The key slot ID to calculate the hash for.
  * @param hash A pointer to store the resulting SHA256 hash.

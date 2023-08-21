@@ -64,7 +64,7 @@
 
 #define IMAGE_PRELOAD_ADDRESS 0x5000100
 /**
- * @brief RAM function for starting the boot process.
+ * @brief function for starting the boot process.
  *
  * This function starts the boot process by attempting to read and load
  * the OS image from disk partitions. It then verifies the integrity and
