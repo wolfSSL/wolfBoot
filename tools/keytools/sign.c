@@ -674,6 +674,13 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         goto failure;
     }
 
+    if (CMD.header_sz < IMAGE_HEADER_SIZE) {
+        printf("image header size overridden by config value (%u bytes)\n", IMAGE_HEADER_SIZE);
+        CMD.header_sz = IMAGE_HEADER_SIZE;
+    } else {
+        printf("image header size calculated at runtime (%u bytes)\n", IMAGE_HEADER_SIZE);
+    }
+
 #ifdef DEBUG_SIGNTOOL
     printf("Pubkey %d\n", *pubkey_sz);
     WOLFSSL_BUFFER(*pubkey, *pubkey_sz);
@@ -1724,6 +1731,7 @@ int main(int argc, char** argv)
         else
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 16);
     }
+
 
     if (kbuf)
         free(kbuf);
