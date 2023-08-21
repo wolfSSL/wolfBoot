@@ -24,6 +24,8 @@ If the C version of the key tools exists they will be used by wolfBoot's makefil
 
 Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe` and `keygen.exe` tools for use on Windows.
 
+If you see any error about missing `target.h` this is a generated file based on your .config using the make process. It is needed for `WOLFBOOT_SECTOR_SIZE` used in delta updates.
+
 ### Python key tools
 
 **Please note that the Python tools are deprecated and will be removed in future versions.**

@@ -1540,7 +1540,7 @@ void hal_init(void)
 #ifdef DEBUG_UART
     uart_init();
     #if !defined(BUILD_LOADER_STAGE1)
-    uart_write("wolfBoot HAL Init\n", 19);
+    uart_write("wolfBoot HAL Init\n", 18);
     #endif
 #endif
 #ifdef ENABLE_PCIE
@@ -1909,7 +1909,7 @@ static int test_flash(void)
 {
     int ret;
     uint32_t i;
-    uint32_t pageData[FLASH_PAGE_SIZE/4]; /* force 32-bit alignment */
+    uint32_t pageData[WOLFBOOT_SECTOR_SIZE/4]; /* force 32-bit alignment */
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */

@@ -80,11 +80,10 @@ extern int tolower(int c);
 
 /* Kinetis LTC support */
 #   ifdef FREESCALE_USE_LTC
-#      define LTC_MAX_ECC_BITS (256)
-#      define LTC_MAX_INT_BYTES (128)
-#      ifndef LTC_BASE
-#      define LTC_BASE ((LTC_Type *)LTC0_BASE)
-#      endif
+#      define FREESCALE_COMMON
+#      define FSL_HW_CRYPTO_MANUAL_SELECTION
+#      define FREESCALE_LTC_ECC
+#      define FREESCALE_LTC_TFM
 #   endif
 
 /* SP MATH */

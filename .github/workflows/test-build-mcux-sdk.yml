@@ -1,4 +1,4 @@
-name: Wolfboot Reusable Build Workflow
+name: Wolfboot Reusable Build Workflow for MCUXpresso SDK
 
 on:
 
@@ -24,6 +24,16 @@ jobs:
         with:
           submodules: true
 
+      - uses: actions/checkout@main
+        with:
+          repository: nxp-mcuxpresso/mcux-sdk
+          path: mcux-sdk
+
+      - uses: actions/checkout@main
+        with:
+          repository: nxp-mcuxpresso/CMSIS_5
+          path: CMSIS_5
+
       - name: Workaround for sources.list
         run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
 
@@ -32,9 +42,9 @@ jobs:
 
       - name: Install cross compilers
         run: |
-          sudo apt-get install -y gcc-arm-none-eabi gcc-aarch64-linux-gnu gcc-powerpc-linux-gnu gnu-efi
+          sudo apt-get install -y gcc-arm-none-eabi
 
-      - name: make clean
+      - name: make distclean
         run: |
           make distclean
 
@@ -48,4 +58,4 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}}
+          make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcux-sdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS" ${{inputs.make-args}} V=1

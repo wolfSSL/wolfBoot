@@ -1047,11 +1047,43 @@ A package can be obtained from the [MCUXpresso SDK Builder](https://mcuxpresso.n
 
 Set the wolfBoot `MCUXPRESSO` configuration variable to the path where the SDK package is extracted, then build wolfBoot normally by running `make`.
 
-wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK version 2.11.1. Support for the iMX-RT1064 has been tested using MCUXpresso SDK version 2.13.0
+wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK version 2.14.0. Support for the iMX-RT1064 has been tested using MCUXpresso SDK version 2.13.0
 
 DCP support (hardware acceleration for SHA256 operations) can be enabled by using PKA=1 in the configuration file.
 
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
+
+The RT1050 EVKB board comes wired to use the 64MB HyperFlash. If you'd like to use QSPI there is a rework that can be performed (see AN12183). The default onboard QSPI 8MB ISSI IS25WP064A (`CONFIG_FLASH_IS25WP064A`). To use a Winbond W25Q64JV define `CONFIG_FLASH_W25Q64JV`.
+
+You can also get the SDK and CMSIS bundles using these repositories:
+* https://github.com/nxp-mcuxpresso/mcux-sdk
+* https://github.com/nxp-mcuxpresso/CMSIS_5
+Use MCUXSDK=1 with this option, since the pack paths are different.
+
+### Testing Update
+
+```sh
+tools/scripts/prepare_update.sh
+
+# HyperFlash
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A"
+# QSPI
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A?BankAddr=0x60000000&Loader=QSPI"
+
+loadbin factory.bin 0x60000000
+loadbin update.bin 0x60030000
+```
+
+### NXP iMX-RT Debugging JTAG / JLINK
+
+```sh
+JLinkGDBServer -Device MIMXRT1052xxx6A -speed 5000 -if swd -port 3333
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x60010100
+mon reset init
+b main
+c
+```
 
 
 ## NXP Kinetis

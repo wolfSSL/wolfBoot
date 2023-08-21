@@ -22,15 +22,35 @@ jobs:
   #     arch: riscv
   #     config-file: ./config/examples/hifive.config
 
-  # TODO: imx-rt1050.config
-  # TODO: imx-rt1060.config
+  imx_rt1050_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1050.config
 
-  # TODO: kinetis-k82f.config requires the KSDK
-  # kinetis_k82f_test:
-  #   uses: ./.github/workflows/test-build.yml
-  #   with:
-  #     arch: arm
-  #     config-file: ./config/examples/kinetis-k82f.config
+  imx_rt1060_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1060.config
+
+  imx_rt1064_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1064.config
+
+  kinetis_k64f_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/kinetis-k64f.config
+
+  kinetis_k82f_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/kinetis-k82f.config
 
   library_test:
     uses: ./.github/workflows/test-build.yml
@@ -38,12 +58,11 @@ jobs:
       arch: host
       config-file: ./config/examples/library.config
 
-  # TODO: lpc54606j512.config requires MCUXPRESSO files
-  # lpc54606j512_test
-  #   uses: ./.github/workflows/test-build.yml
-  #   with:
-  #     arch: arm
-  #     config-file: ./config/examples/lpc54606j512.config
+  lpc54606j512_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc54606j512.config
 
   nrf52840_test:
     uses: ./.github/workflows/test-build.yml

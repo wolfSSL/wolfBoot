@@ -44,6 +44,8 @@ SECTIONS
     .data : AT (_stored_data)
     {
         _start_data = .;
+        KEEP(*(.ramcode*))
+        . = ALIGN(4);
         KEEP(*(.data*))
         . = ALIGN(4);
         _end_data = .;
