@@ -166,17 +166,55 @@ static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
     #pragma GCC diagnostic pop
 #endif
 
-static int nvm_select_fresh_sector(int part)
+static int RAMFUNCTION nvm_select_fresh_sector(int part)
 {
     int sel;
     uintptr_t off;
     uint8_t *base;
-    uint8_t *addr_align;
+    uint8_t* addrErase;
 
-    if (part == PART_BOOT)
+    /* if FLAGS_HOME check both boot and update for changes */
+#ifdef FLAGS_HOME
+    base = (uint8_t *)PART_BOOT_ENDFLAGS;
+    addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+#else
+    if (part == PART_BOOT) {
         base = (uint8_t *)PART_BOOT_ENDFLAGS;
-    else
+        addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+    }
+    else {
         base = (uint8_t *)PART_UPDATE_ENDFLAGS;
+        addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+    }
+#endif
+
+#ifdef EXT_ENCRYPTED
+    uint32_t word_0;
+    uint32_t word_1;
+#ifndef FLAGS_HOME
+    if (part == PART_BOOT)
+#endif
+    {
+        word_0 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+            WOLFBOOT_PARTITION_BOOT_ADDRESS));
+        word_1 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+            WOLFBOOT_PARTITION_BOOT_ADDRESS - WOLFBOOT_SECTOR_SIZE));
+
+        if (word_0 == FLASH_WORD_ERASED && word_1 !=
+            FLASH_WORD_ERASED) {
+            sel = 1;
+            goto finish;
+        }
+        else if (word_0 != FLASH_WORD_ERASED && word_1 ==
+            FLASH_WORD_ERASED) {
+            sel = 0;
+            goto finish;
+        }
+    }
+#endif
 
     /* Default to last sector if no match is found */
     sel = 0;
@@ -195,8 +233,15 @@ static int nvm_select_fresh_sector(int part)
             break;
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
-                 (byte_1 == FLASH_BYTE_ERASED))
-        {
+                (byte_1 == FLASH_BYTE_ERASED)) {
+#ifdef FLAGS_HOME
+            /* if we're still checking boot flags, check update flags */
+            if (base - off > (uint8_t*)PART_UPDATE_ENDFLAGS) {
+                base = (uint8_t *)PART_UPDATE_ENDFLAGS;
+                off = 0;
+                continue;
+            }
+#endif
             /* First time boot?  Assume no pending update */
             if (off == 1) {
                 sel=0;
@@ -210,12 +255,12 @@ static int nvm_select_fresh_sector(int part)
             break;
         }
     }
+finish:
     /* Erase the non-selected partition */
-    addr_align = (uint8_t *)((((uintptr_t)base - ((1 + (!sel)) * WOLFBOOT_SECTOR_SIZE)))
-        & ((~(NVM_CACHE_SIZE - 1))));
-    if (*((uint32_t*)(addr_align + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
+    addrErase -= WOLFBOOT_SECTOR_SIZE * (!sel);
+    if (*((uint32_t*)(addrErase + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED) {
-        hal_flash_erase((uintptr_t)addr_align, WOLFBOOT_SECTOR_SIZE);
+        hal_flash_erase((uintptr_t)addrErase, WOLFBOOT_SECTOR_SIZE);
     }
     return sel;
 }
@@ -1090,6 +1135,10 @@ int RAMFUNCTION chacha_init(void)
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t* stored_nonce;
 
+#ifdef NVM_FLASH_WRITEONCE
+    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+#endif
+
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
     XMEMSET(&chacha, 0, sizeof(chacha));
@@ -1124,6 +1173,10 @@ int aes_init(void)
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t* stored_nonce;
+
+#ifdef NVM_FLASH_WRITEONCE
+    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
