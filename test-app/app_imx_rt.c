@@ -131,16 +131,16 @@ void main(void)
     rt1050_init_pins();
 #endif
     SystemCoreClockUpdate();
-    SysTick_Config(SystemCoreClock / 1000U);
     init_debug_console();
 
     PRINTF("wolfBoot Test app, version = %d\r\n",
         wolfBoot_current_firmware_version());
 
-    /* enable to test update trigger on reboot */
-#if 0
-    wolfBoot_update_trigger();
-#endif
+    if (wolfBoot_current_firmware_version() == 1) {
+        wolfBoot_update_trigger();
+    } else {
+        wolfBoot_success();
+    }
 
     while (1) {
         /* 100ms delay */
