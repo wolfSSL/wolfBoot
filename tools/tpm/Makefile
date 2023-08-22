@@ -27,6 +27,8 @@ CFLAGS+=$(OPTIMIZE)
 
 ifeq ($(TARGET),sim)
 	CFLAGS+=-D"WOLFTPM_SWTPM"
+else
+	CFLAGS+=-D"WOLFTPM_EXAMPLE_HAL"
 endif
 
 # Sources

@@ -32,8 +32,11 @@ WOLFCRYPT_OBJS:=
 PUBLIC_KEY_OBJS:=
 # make mk scripts aware that we are building stage1
 STAGE1=1
-# Forcefully disable TPM support in first stage loader
-WOLFTPM=0
+# Forcefully disable TPM support in first stage loader for PPC
+ifeq ($(ARCH),PPC)
+	WOLFTPM=0
+	WOLFBOOT_TPM_KEYSTORE=0
+endif
 ELF=0
 MULTIBOOT2=0
 LINUX_PAYLOAD=0
@@ -45,10 +48,13 @@ include ../arch.mk
 include ../options.mk
 
 CFLAGS+= \
-  -I".." -I"../include/" -I"../lib/wolfssl" \
+  -I".." -I"../include/" -I"../lib/wolfssl" -I"../lib/wolfTPM" \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS" \
-  -D"PLATFORM_$(TARGET)"
+  -D"PLATFORM_$(TARGET)" \
+
+# Do not change platform auth in stage 1
+CFLAGS+=-D"WOLFBOOT_TPM_NO_CHG_PLAT_AUTH"
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
@@ -89,6 +95,7 @@ LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
 vpath %.c ../src
 vpath %.c ../hal
 vpath %.c ../lib/wolfssl/wolfcrypt/src
+vpath %.c ../lib/wolfTPM/src
 vpath %.c ../src/x86
 vpath %.S ../src
 
