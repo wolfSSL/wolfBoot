@@ -258,63 +258,133 @@ static inline int verify_payload(uint8_t *base_addr)
     }
     return ret;
 }
+
+
 /*!
- * \brief Entry point after memory initialization.
+ * \brief Initialization of .data and .bss sections after memory initialization.
  *
- * This static function serves as the entry point for further execution after the
- * memory initialization is completed.
+ * This static function copies initial values for .data to the corresponding
+ * section in the linker script, and initializes the .bss section to zero.
  *
- * \param ptr Pointer to a parameter structure.
+ * This function is called after memory initialization is completed and the stack
+ * has been remapped.
+ *
  */
-static void memory_ready_entry(void *ptr)
+static inline void memory_init_data_bss(void)
 {
-    struct stage2_parameter *stage2_params = (struct stage2_parameter *)ptr;
-    uint8_t silicon_init_parameter[FSP_S_PARAM_SIZE];
-    struct fsp_info_header *fsp_info_header;
-    temp_ram_exit_cb TempRamExit;
-    silicon_init_cb SiliconInit;
-    notify_phase_cb notifyPhase;
-    NOTIFY_PHASE_PARAMS param;
-    uint32_t info[4];
-    uint32_t status;
-    unsigned int i;
-    int ret;
-    uint8_t *fsp_s_base;
-    uint8_t *fsp_m_base;
     uint32_t *datamem_p;
     uint32_t *dataflash_p;
-
-    fsp_m_base = _start_fsp_m;
-    fsp_s_base = (uint8_t *)(FSP_S_LOAD_BASE);
-
-    fsp_info_header =
-        (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);
-    TempRamExit = (temp_ram_exit_cb)(fsp_m_base +
-                                     fsp_info_header->TempRamExitEntryOffset);
-    status = TempRamExit(NULL);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("temp ram exit failed" ENDLINE);
-        panic();
-    }
-
-    /* Copy data / zero bss */
     datamem_p = (uint32_t *)_start_data;
     dataflash_p = (uint32_t *)_stored_data;
     while(datamem_p < (uint32_t *)_end_data) {
         *(datamem_p++) = *(dataflash_p++);
     }
     memset(_start_bss, 0, (_end_bss - _start_bss));
+}
 
 
+/*!
+ * \brief Staging of FSP_S after verification
+ *
+ * Setpu the parameters and call FSP Silicon Initialization.
+ *
+ * \param fsp_info FSP information header
+ * \param fsp_s_base the area in RAM where FSP_S has been loaded and verified
+ * \return EFI_SUCCESS in case of success, -1 otherwise
+ */
+static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_base)
+{
+    uint8_t silicon_init_parameter[FSP_S_PARAM_SIZE];
+    silicon_init_cb SiliconInit;
+    notify_phase_cb notifyPhase;
+    NOTIFY_PHASE_PARAMS param;
+    uint32_t status;
+    unsigned int i;
+    int ret;
+
+    memcpy(silicon_init_parameter, fsp_s_base + fsp_info->CfgRegionOffset,
+            FSP_S_PARAM_SIZE);
+    status = fsp_machine_update_s_parameters(silicon_init_parameter);
+    fsp_info = (struct fsp_info_header *)(fsp_s_base + FSP_INFO_HEADER_OFFSET);
+    SiliconInit = (silicon_init_cb)(fsp_s_base + fsp_info->FspSiliconInitEntryOffset);
+
+    wolfBoot_printf("call silicon..." ENDLINE);
+    status = SiliconInit(silicon_init_parameter);
+    if (status != EFI_SUCCESS) {
+        wolfBoot_printf("failed %x\n", status);
+        return -1;
+    }
+    wolfBoot_printf("success" ENDLINE);
+    pci_enum_do();
+    notifyPhase = (notify_phase_cb)(fsp_s_base +
+                                        fsp_info->NotifyPhaseEntryOffset);
+    param.Phase = EnumInitPhaseAfterPciEnumeration;
+    status = notifyPhase(&param);
+    if (status != EFI_SUCCESS) {
+        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
+        return -1;
+    }
+    param.Phase = EnumInitPhaseReadyToBoot;
+    status = notifyPhase(&param);
+    if (status != EFI_SUCCESS) {
+        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
+        return -1;
+    }
+    param.Phase = EnumInitPhaseEndOfFirmware;
+    status = notifyPhase(&param);
+    if (status != EFI_SUCCESS) {
+        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
+        return -1;
+    }
+    return EFI_SUCCESS;
+}
+
+
+/*!
+ * \brief Entry point after memory initialization.
+ *
+ * This static function serves as the entry point for further execution after the
+ * memory initialization is completed and the stack has been remapped.
+ *
+ * \param ptr Pointer to a parameter structure.
+ */
+static void memory_ready_entry(void *ptr)
+{
+    struct stage2_parameter *stage2_params = (struct stage2_parameter *)ptr;
+    struct fsp_info_header *fsp_info;
+    temp_ram_exit_cb TempRamExit;
+    uint8_t *fsp_s_base;
+    uint8_t *fsp_m_base;
+    uint32_t cpu_info[4];
+    uint32_t status;
+    /* FSP_M is located in flash */
+    fsp_m_base = _start_fsp_m;
+    /* fsp_s is loaded to RAM for validation */
+    fsp_s_base = (uint8_t *)(FSP_S_LOAD_BASE);
+    fsp_info =
+        (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);
+    TempRamExit = (temp_ram_exit_cb)(fsp_m_base +
+            fsp_info->TempRamExitEntryOffset);
+    status = TempRamExit(NULL);
+    if (status != EFI_SUCCESS) {
+        wolfBoot_printf("temp ram exit failed" ENDLINE);
+        panic();
+    }
+    /* Confirmed memory initialization complete.
+     * TempRamExit was successful.
+     *
+     * Copy .data section to RAM and initialize .bss
+     */
+    memory_init_data_bss();
+
+    /* Global variables are accessible after this point */
 #if defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM)
-    /* TODO: Call TPM Init for STAGE1 */
+    /* TPM initialization */
     wolfBoot_printf("Initializing WOLFBOOT_TPM" ENDLINE);
     wolfBoot_tpm2_init();
 #endif
-
     /* Load FSP_S to RAM */
     load_fsp_s_to_ram();
-
 #ifdef STAGE1_AUTH
     /* Verify FSP_S */
     wolfBoot_printf("Authenticating FSP_S at %x..." ENDLINE,
@@ -327,49 +397,16 @@ static void memory_ready_entry(void *ptr)
     }
 #endif
 
-    memcpy(silicon_init_parameter, fsp_s_base + fsp_info_header->CfgRegionOffset,
-            FSP_S_PARAM_SIZE);
-    status = fsp_machine_update_s_parameters(silicon_init_parameter);
-
-    fsp_info_header =
-        (struct fsp_info_header *)(fsp_s_base + FSP_INFO_HEADER_OFFSET);
-    SiliconInit = (silicon_init_cb)(fsp_s_base +
-                                    fsp_info_header->FspSiliconInitEntryOffset);
-
-    wolfBoot_printf("call silicon..." ENDLINE);
-    status = SiliconInit(silicon_init_parameter);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %x\n", status);
+    /* Call FSP_S initialization */
+    if (fsp_silicon_init(fsp_info, fsp_s_base) != EFI_SUCCESS)
         panic();
-    }
-    wolfBoot_printf("success" ENDLINE);
-    pci_enum_do();
-    notifyPhase = (notify_phase_cb)(fsp_s_base +
-                                        fsp_info_header->NotifyPhaseEntryOffset);
-    param.Phase = EnumInitPhaseAfterPciEnumeration;
-    status = notifyPhase(&param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
-        panic();
-    }
-    param.Phase = EnumInitPhaseReadyToBoot;
-    status = notifyPhase(&param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
-        panic();
-    }
-    param.Phase = EnumInitPhaseEndOfFirmware;
-    status = notifyPhase(&param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
-        panic();
-    }
-    cpuid(0, &info[0], &info[1], &info[2], NULL);
-    wolfBoot_printf("CPUID(0):%x %x %x\r\n", info[0], info[1], info[2]);
+    /* Get CPUID */
+    cpuid(0, &cpu_info[0], &cpu_info[1], &cpu_info[2], NULL);
+    wolfBoot_printf("CPUID(0):%x %x %x\r\n", cpu_info[0], cpu_info[1], cpu_info[2]);
+    /* Load stage2 wolfBoot to RAM */
     load_wolfboot();
-
 #ifdef STAGE1_AUTH
-    /* Verify wolfBoot */
+    /* Verify stage2 wolfBoot */
     wolfBoot_printf("Authenticating wolfboot at %x..." ENDLINE,
             WOLFBOOT_LOAD_BASE);
     if (verify_payload((uint8_t *)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE) == 0)
@@ -378,6 +415,7 @@ static void memory_ready_entry(void *ptr)
         panic();
     }
 #endif
+    /* Finalize staging to stage2 */
     set_stage2_parameter(stage2_params);
     jump_into_wolfboot();
 }
@@ -439,7 +477,6 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     (void)timestamp;
     (void)bist;
     fsp_m_base = (uint8_t *)(_start_fsp_m);
-
 
     status = post_temp_ram_init_cb();
     if (status != 0) {
@@ -503,7 +540,6 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     wolfBoot_printf("hoblist@0x%x" ENDLINE, (uint32_t)hobList);
     stage2_params->hobList = (uint32_t)hobList;
 
-
 #ifdef WOLFBOOT_64BIT
     stage2_params->page_table = ((uint32_t)(stage2_params) -
         x86_paging_get_page_table_size());
@@ -511,9 +547,17 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     memset((uint8_t*)stage2_params->page_table, 0, x86_paging_get_page_table_size());
 #endif /* WOLFBOOT_64BIT */
 
+    /* change_stack_and_invoke() never returns.
+     *
+     * Execution here is eventually transferred to memory_ready_entry
+     * after the stack has been remapped.
+     */
     change_stack_and_invoke(new_stack, memory_ready_entry,
                             (void*)stage2_params);
 
+    /* Returning from change_stack_and_invoke() implies a fatal error
+     * while attempting to remap the stack.
+     */
     wolfBoot_printf("FAIL" ENDLINE);
     panic();
 }
