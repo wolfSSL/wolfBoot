@@ -962,7 +962,7 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
 
     return ret;
 }
-#endif /* !ARCH_SIM */
+#endif /* !ARCH_SIM && !WOLFTPM_MMIO */
 
 #ifdef WOLFBOOT_MEASURED_BOOT
 #define measure_boot(hash) wolfBoot_tpm2_extend((hash), __LINE__)

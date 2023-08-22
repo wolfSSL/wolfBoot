@@ -239,6 +239,11 @@ extern int tolower(int c);
 
         /* Get access to mp_* math API's for ECC encrypt */
         #define WOLFSSL_PUBLIC_MP
+
+        /* Configure RNG seed */
+        #define CUSTOM_RAND_GENERATE_SEED(buf, sz) 0 /* stub, not used */
+        #define WC_RNG_SEED_CB
+        #define HAVE_HASHDRBG
     #endif
 
     #ifdef WOLFTPM_MMIO
