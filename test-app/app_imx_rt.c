@@ -124,12 +124,6 @@ void rt1050_init_pins(void)
 
 void main(void)
 {
-    hal_init();
-    if (wolfBoot_current_firmware_version() == 1) {
-        wolfBoot_update_trigger();
-       return;
-    }
-
     imx_rt_init_boot_clock();
 #if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
     rt1060_init_pins();
@@ -137,11 +131,17 @@ void main(void)
     rt1050_init_pins();
 #endif
     SystemCoreClockUpdate();
-    SysTick_Config(SystemCoreClock / 1000U);
-    init_debug_console();
 
     PRINTF("wolfBoot Test app, version = %d\r\n",
         wolfBoot_current_firmware_version());
+
+    if (wolfBoot_current_firmware_version() == 1) {
+        wolfBoot_update_trigger();
+       return;
+    }
+
+    SysTick_Config(SystemCoreClock / 1000U);
+    init_debug_console();
 
     while (1) {
         /* 100ms delay */
