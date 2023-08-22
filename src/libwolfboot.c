@@ -715,6 +715,13 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
 #if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
     uintptr_t lastSector = PART_UPDATE_ENDFLAGS -
         (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE);
+
+#ifndef FLAGS_HOME
+    /* if PART_UPDATE_ENDFLAGS stradles a sector, (all non FLAGS_HOME builds)
+     * align it to the correct sector */
+    if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE == 0)
+        lastSector -= WOLFBOOT_SECTOR_SIZE;
+#endif
 #endif
 #ifdef NVM_FLASH_WRITEONCE
     uint8_t selSec = 0;
