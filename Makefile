@@ -175,6 +175,11 @@ tpmtools: keys
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j
 
+swtpmtools:
+	@echo "Building TPM tools"
+	@$(MAKE) -C tools/tpm -s clean
+	@$(MAKE) -C tools/tpm -j swtpm
+
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	$(Q)(test $(SIGN) = NONE) || "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1

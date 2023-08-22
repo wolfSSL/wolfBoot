@@ -24,6 +24,7 @@
 
 #ifdef WOLFBOOT_TPM
 
+#include <image.h>
 #include "wolftpm/tpm2.h"
 #include "wolftpm/tpm2_wrap.h"
 

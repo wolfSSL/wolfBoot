@@ -71,7 +71,11 @@ static int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvBase
     /* setup the parent handle OWNER/PLATFORM */
     parent.hndl = authHandle;
 
+    #ifndef WOLFTPM_ADV_IO
     rc = wolfTPM2_Init(&dev, TPM2_IoCb, NULL);
+    #else
+    rc = wolfTPM2_Init(&dev, NULL, NULL);
+    #endif
     if (rc != TPM_RC_SUCCESS) {
         printf("\nwolfTPM2_Init failed\n");
         goto exit;

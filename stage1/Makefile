@@ -43,14 +43,27 @@ ELF=0
 MULTIBOOT2=0
 LINUX_PAYLOAD=0
 
+
 ## Architecture/CPU configuration
 include ../arch.mk
 
 # Parse config options
 include ../options.mk
 
+ifeq ($(WOLFTPM),1)
+  LS1_OBJS += \
+    tpm_io.o \
+    tpm2.o \
+    tpm2_packet.o \
+    tpm2_tis.o \
+    tpm2_wrap.o \
+    tpm2_param_enc.o \
+    image.o
+endif
+
 CFLAGS+= \
-  -I".." -I"../include/" -I"../lib/wolfssl" -I"../lib/wolfTPM" \
+  -I".." -I"../include/" -I"../lib/wolfssl" \
+  -I"../lib/wolfTPM" \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS" \
   -D"PLATFORM_$(TARGET)" \
@@ -96,8 +109,7 @@ BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
 vpath %.c ../src
 vpath %.c ../hal
-vpath %.c ../lib/wolfssl/wolfcrypt/src
-vpath %.c ../lib/wolfTPM/src
+vpath %.c ../lib/wolfssl/wolfcrypt/src ../lib/wolfTPM/src
 vpath %.c ../src/x86
 vpath %.S ../src
 

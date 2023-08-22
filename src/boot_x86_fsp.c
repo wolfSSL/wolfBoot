@@ -37,6 +37,10 @@
 
 #include "wolfboot/wolfboot.h"
 #include "image.h"
+#ifdef WOLFBOOT_TPM
+#include <loader.h>
+#endif
+
 
 #define WOLFBOOT_X86_STACK_SIZE 0x10000
 
