@@ -81,6 +81,9 @@ all: rot policy_create pcr_extend pcr_read pcr_reset
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
 
+swtpm:CFLAGS+=-DWOLFTPM_SWTPM
+swtpm:all
+
 # build objects
 $(OBJDIR)/%.o: %.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
