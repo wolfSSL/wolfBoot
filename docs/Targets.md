@@ -1062,14 +1062,33 @@ Use MCUXSDK=1 with this option, since the pack paths are different.
 
 ### Testing Update
 
+First make the update partition, pre-triggered for update
+
 ```sh
 tools/scripts/prepare_update.sh
+```
 
+Then connect to the board with JLinkExe, for the rt1050 do:
+
+```sh
 # HyperFlash
 JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A"
 # QSPI
 JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A?BankAddr=0x60000000&Loader=QSPI"
+```
 
+For the rt-1060:
+
+```sh
+# HyperFlash
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1062XXX6B"
+# QSPI
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1062XXX6B?BankAddr=0x60000000&Loader=QSPI"
+```
+
+Now flash the board:
+
+```sh
 loadbin factory.bin 0x60000000
 loadbin update.bin 0x60030000
 ```
@@ -1077,7 +1096,10 @@ loadbin update.bin 0x60030000
 ### NXP iMX-RT Debugging JTAG / JLINK
 
 ```sh
+# rt-1050
 JLinkGDBServer -Device MIMXRT1052xxx6A -speed 5000 -if swd -port 3333
+# rt-1060
+JLinkGDBServer -Device MIMXRT1062xxx6B -speed 5000 -if swd -port 3333
 arm-none-eabi-gdb
 add-symbol-file test-app/image.elf 0x60010100
 mon reset init
