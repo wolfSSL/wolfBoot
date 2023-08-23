@@ -942,29 +942,29 @@ test-all: clean
 
 
 test-size-all:
-	make test-size SIGN=NONE LIMIT=4732
+	make test-size SIGN=NONE LIMIT=4778
 	make keysclean
-	make test-size SIGN=ED25519 LIMIT=11398
+	make test-size SIGN=ED25519 LIMIT=11462
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=22270
+	make test-size SIGN=ECC256  LIMIT=22322
 	make keysclean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13706
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13758
 	make keysclean
-	make test-size SIGN=RSA2048 LIMIT=11948
+	make test-size SIGN=RSA2048 LIMIT=11242
 	make keysclean
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11202
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11218
 	make keysclean
-	make test-size SIGN=RSA4096 LIMIT=13307
+	make test-size SIGN=RSA4096 LIMIT=11602
 	make keysclean
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11502
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11522
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=17566
+	make test-size SIGN=ECC384 LIMIT=17618
 	make keysclean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15172
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15190
 	make keysclean
-	make test-size SIGN=ED448 LIMIT=13420
+	make test-size SIGN=ED448 LIMIT=13470
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=12612
+	make test-size SIGN=RSA3072 LIMIT=11442
 	make keysclean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11294
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11314
 	make keysclean
