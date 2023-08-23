@@ -853,7 +853,7 @@ void RAMFUNCTION wolfBoot_start(void)
          * wolfBoot_update_trigger is called and thus it shouldn't be called
          * if an update is already in progress */
 #if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
-        if ((wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) || (st != IMG_STATE_UPDATING))
+        if ((wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) || (st != IMG_STATE_UPDATING && st != IMG_STATE_FINAL_SWAP))
 #endif
         {
             wolfBoot_update_trigger();
