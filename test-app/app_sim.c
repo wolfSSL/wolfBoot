@@ -56,6 +56,9 @@ int do_cmd(const char *cmd)
         return 0;
     }
     if (strcmp(cmd, "update_trigger") == 0) {
+#if EXT_ENCRYPTED
+        wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
+#endif
         wolfBoot_update_trigger();
         return 0;
     }
@@ -73,10 +76,6 @@ int main(int argc, char *argv[]) {
     int ret;
 
     hal_init();
-
-#if EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
-#endif
 
     for (i = 1; i < argc; ++i) {
         ret = do_cmd(argv[i]);
