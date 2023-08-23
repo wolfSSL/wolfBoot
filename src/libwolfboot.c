@@ -1539,15 +1539,11 @@ int RAMFUNCTION chacha_init(void)
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
+    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t* stored_nonce;
-
-#ifdef NVM_FLASH_WRITEONCE
-    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
-#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -1585,16 +1581,12 @@ int aes_init(void)
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
+    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
+    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t* stored_nonce;
-
-#ifdef NVM_FLASH_WRITEONCE
-    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
-#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
