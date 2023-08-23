@@ -64,6 +64,8 @@ void aes_set_iv(uint8_t *nonce, uint32_t address);
 #endif /* ENCRYPT_WITH_CHACHA */
 
 /* Internal read/write functions (not exported in the libwolfboot API) */
+int ext_flash_encrypt_write_ex(uintptr_t address,
+    const uint8_t *data, int len, int forcedEnc);
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
 
