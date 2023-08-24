@@ -138,7 +138,7 @@ uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
     uint32_t bar;
 
     AHCI_DEBUG_PRINTF("ahci: enabling %x:%x.%x\r\n", bus, dev, fun);
-    reg = pci_config_read32(bus, dev, fun, PCI_COMMAND_OFFSET);
+    reg = pci_config_read16(bus, dev, fun, PCI_COMMAND_OFFSET);
 
     bar = pci_config_read32(bus, dev, fun, AHCI_ABAR_OFFSET);
     AHCI_DEBUG_PRINTF("PCI BAR: %08x\r\n", bar);
@@ -147,7 +147,7 @@ uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
 
     reg |= PCI_COMMAND_BUS_MASTER;
     reg |= PCI_COMMAND_MEM_SPACE;
-    pci_config_write32(bus, dev, fun, PCI_COMMAND_OFFSET, reg);
+    pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, reg);
 
     reg = pci_config_read32(bus, dev, fun, PCI_INTR_OFFSET);
     AHCI_DEBUG_PRINTF("Interrupt pin for AHCI controller: %02x\r\n",
