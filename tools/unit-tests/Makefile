@@ -39,6 +39,9 @@ unit-aes256: ../../include/target.h unit-extflash.c
 unit-chacha20: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
+unit-pci:  unit-pci.c ../../src/pci.c
+	gcc -o $@ $< $(CFLAGS) $(LDFLAGS)
+
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
 
