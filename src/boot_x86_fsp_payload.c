@@ -61,7 +61,7 @@ uint8_t mb2_boot_info[MAX_MB2_BOOT_INFO_SIZE];
 extern uint8_t *_stage2_params[];
 
 #ifdef TARGET_kontron_vx3060_s2
-static char *cmdline = "earlyprintk=pciserial,force,00:1e.0,115200 apic=verbose console=ttyS0,115200 pci=earlydump debug";
+static char *cmdline = "apic=verbose acpi=no pci=debug console=ttyS0,115200 debug";
 #elif TARGET_x86_fsp_qemu
 static char *cmdline = "console=ttyS0,115200 pci=earlydump debug";
 #else
