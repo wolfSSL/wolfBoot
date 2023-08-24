@@ -147,9 +147,9 @@ enum mp_irq_source_types {
 
 #ifdef TARGET_kontron_vx3060_s2
     #define MP_IOAPIC_NUM_ENTRY 1
-    #define MP_INTSRC_NUM_ENTRY 19
-    #define MP_LINTSRC_NUM_ENTRY 2
-    #define MP_BUS_NUM_ENTRY 5
+    #define MP_INTSRC_NUM_ENTRY 17
+    #define MP_LINTSRC_NUM_ENTRY 0
+    #define MP_BUS_NUM_ENTRY 2
     #define MP_CPU_NUM_ENTRY 4
 #endif
 

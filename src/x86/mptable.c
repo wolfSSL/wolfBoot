@@ -50,7 +50,8 @@ static struct mptable _mptable = {
             sizeof(struct mp_conf_entry_processor) * MP_CPU_NUM_ENTRY +
             sizeof(struct mp_conf_entry_bus) * MP_BUS_NUM_ENTRY +
             sizeof(struct mp_conf_entry_ioapic) * MP_IOAPIC_NUM_ENTRY +
-            sizeof(struct mp_conf_entry_interrupt) * MP_INTSRC_NUM_ENTRY,
+            sizeof(struct mp_conf_entry_interrupt) * MP_INTSRC_NUM_ENTRY +
+            sizeof(struct mp_conf_entry_local_interrupt) * MP_LINTSRC_NUM_ENTRY,
         .spec = 0x01,
         .checksum = 0x55,
         .oem_id_string = { 0 },
@@ -73,21 +74,6 @@ static struct mptable _mptable = {
         {
             .entry_type = MP_BUS,
             .bus_id = 1,
-            .bus_type_string = "PCI"
-        },
-        {
-            .entry_type = MP_BUS,
-            .bus_id = 2,
-            .bus_type_string = "PCI"
-        },
-        {
-            .entry_type = MP_BUS,
-            .bus_id = 3,
-            .bus_type_string = "PCI"
-        },
-        {
-            .entry_type = MP_BUS,
-            .bus_id = 4,
             .bus_type_string = "ISA"
         },
     },
@@ -105,8 +91,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x0,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x0,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x2,
         },
@@ -114,8 +100,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_ACTIVE_HIGH | MP_IRQTRIG_LEVEL,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x9,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x9,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x9,
         },
@@ -123,8 +109,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x1,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x1,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x1,
         },
@@ -132,8 +118,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x3,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x3,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x3,
         },
@@ -141,8 +127,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x4,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x4,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x4,
         },
@@ -150,8 +136,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x5,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x5,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x5,
         },
@@ -159,8 +145,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x6,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x6,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x6,
         },
@@ -168,8 +154,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x7,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x7,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x7,
         },
@@ -177,8 +163,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x8,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x8,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x8,
         },
@@ -186,8 +172,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0x9,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0x9,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0x9,
         },
@@ -195,8 +181,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0xa,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0xa,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0xa,
         },
@@ -204,8 +190,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0xb,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0xb,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0xb,
         },
@@ -213,8 +199,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0xc,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0xc,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0xc,
         },
@@ -222,8 +208,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0xd,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0xd,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0xd,
         },
@@ -231,8 +217,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0xe,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0xe,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0xe,
         },
@@ -240,8 +226,8 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_DEFAULT | MP_IRQTRIG_DEFAULT,
-            .src_bus_id = ISA_BUS,
-            .src_bus_irq = 0xf,
+            .src_bus_id= 0x1,
+            .src_bus_irq= 0xf,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 0xf,
         },
@@ -249,56 +235,17 @@ static struct mptable _mptable = {
             .entry_type = MP_INTSRC,
             .int_type = mp_INT,
             .int_flag = MP_IRQPOL_ACTIVE_LOW | MP_IRQTRIG_LEVEL,
-            .src_bus_id = 0x0,
-            .src_bus_irq = (30 << 2) | 0x0,
+            .src_bus_id= 0x0,
+            .src_bus_irq= (30 << 2) | 0x0,
             .dst_apic_id = 0x2,
             .dst_apic_irq = 16,
-        },
-        {
-            .entry_type = MP_INTSRC,
-            .int_type = mp_INT,
-            .int_flag = MP_IRQPOL_ACTIVE_LOW | MP_IRQTRIG_LEVEL,
-            .src_bus_id = 0x0,
-            .src_bus_irq = (0x17 << 2) | 0x0,
-            .dst_apic_id = 0x2,
-            .dst_apic_irq = 16,
-        },
-        {
-            .entry_type = MP_INTSRC,
-            .int_type = mp_INT,
-            .int_flag = MP_IRQPOL_ACTIVE_LOW | MP_IRQTRIG_LEVEL,
-            .src_bus_id = 0x2,
-            .src_bus_irq = (0x00 << 2) | 0x0,
-            .dst_apic_id = 0x2,
-            .dst_apic_irq = 17,
         },
     },
-    .lintsrc = {
-        {
-            .entry_type = MP_LINTSRC,
-            .int_type = mp_ExtINT,
-            .int_flag = 0,
-            .src_bus_id = 0x0,
-            .src_bus_irq = (0x00 << 2) | 0x0,
-            .dst_apic_id = 0xff,
-            .dst_apic_lintin = 0x00,
-        },
-        {
-            .entry_type = MP_LINTSRC,
-            .int_type = mp_NMI,
-            .int_flag = 0,
-            .src_bus_id = 0x0,
-            .src_bus_irq = (0x00 << 2) | 0x0,
-            .dst_apic_id = 0xFF,
-            .dst_apic_lintin = 0x01,
-        }
-    }
 };
 #endif
 
 #ifdef TARGET_x86_fsp_qemu
 /* MPtables for qemu */
-
 struct mptable _mptable = {
     .mpf = {
         .signature = "_MP_",
@@ -521,11 +468,25 @@ static void calc_checksum(struct mptable *mp)
 
     mp->mpc_table.checksum = 0;
     ptr = (uint8_t*)&mp->mpc_table;
-
     for (i = 0; i < sizeof(struct mptable) - sizeof(struct mp_float); i++, ptr++) {
         checksum += *ptr;
     }
     mp->mpc_table.checksum = (uint8_t)(-((int8_t)checksum));
+
+    checksum = 0;
+    mp->mpf.checksum = 0;
+    ptr = (uint8_t*)&mp->mpf;
+    for (i = 0; i < sizeof(struct mp_float); i++, ptr++) {
+        checksum += *ptr;
+    }
+    mp->mpf.checksum  = (uint8_t)(-((int8_t)checksum));
+
+    ptr = (uint8_t*)&mp->mpc_table;
+    checksum = 0;
+    for (i = 0; i < sizeof(struct mptable) - sizeof(struct mp_float); i++) {
+        checksum += *ptr;
+        ptr++;
+    }
 }
 
 void mptable_setup(void)
@@ -536,7 +497,6 @@ void mptable_setup(void)
 
     _mp = (struct mptable *)MPTABLE_LOAD_BASE;
     memcpy(_mp, (void*)&_mptable, sizeof(struct mptable));
-
     apic_id = mmio_read32(LOCAL_APIC_ID);
     apic_ver = mmio_read32(LOCAL_APIC_VER);
 
@@ -564,7 +524,6 @@ void mptable_setup(void)
             _mp->mpce_processor[i]._res[0] = _mp->mpce_processor[i]._res[1] = 0;
         }
     }
-
 #endif /* TARGET_kontron_vx3060_s2 */
 
     calc_checksum(_mp);
