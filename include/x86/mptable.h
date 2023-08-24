@@ -22,35 +22,38 @@
 #ifndef MPTABLE_H
 #define MPTABLE_H
 
+#include <stdint.h>
+
 /* Intel MP Floating Pointer Structure */
 struct mp_float {
-    char signature[4];          /* _MP_     */
-    unsigned int phy_addr;
-    unsigned char length;
-    unsigned char spec_rev;
-    unsigned char checksum;
-    unsigned char feature1;
-    unsigned char feature2;
-    unsigned char feature3;
-    unsigned char feature4;
-    unsigned char feature5;
-};
-
+    char signature[4];          /* _MP_ */
+    uint32_t phy_addr;
+    uint8_t length;
+    uint8_t spec_rev;
+    uint8_t checksum;
+    uint8_t feature1;
+    uint8_t feature2;
+    uint8_t feature3;
+    uint8_t feature4;
+    uint8_t feature5;
+} __attribute__((packed));
 #define MPC_SIGNATURE "PCMP"
+
+#include <stdint.h>
 
 struct mp_conf_table_header {
     char signature[4];
-    unsigned short base_table_len;
+    uint16_t base_table_len;
     char spec;
     char checksum;
     char oem_id_string[8];
     char product_id_string[12];
-    unsigned int oem_table_ptr;
-    unsigned short oem_table_size;
-    unsigned short oem_entry_count;
-    unsigned int lapic;
-    unsigned int _res;
-};
+    uint32_t oem_table_ptr;
+    uint16_t oem_table_size;
+    uint16_t oem_entry_count;
+    uint32_t lapic;
+    uint32_t _res;
+}__attribute__((packed));
 
 /* Followed by entries */
 #define     MP_PROCESSOR        0
@@ -70,56 +73,58 @@ struct mp_conf_table_header {
 
 #define MPC_APIC_USABLE         0x01
 
+#include <stdint.h>
+
 struct mp_conf_entry_processor {
-    unsigned char entry_type;
-    unsigned char apic_id;
-    unsigned char apic_ver;
-    unsigned char cpu_flags;
-    unsigned int cpu_signature;
-    unsigned int feature_flags;
-    unsigned int _res[2];
-};
+    uint8_t entry_type;
+    uint8_t apic_id;
+    uint8_t apic_ver;
+    uint8_t cpu_flags;
+    uint32_t cpu_signature;
+    uint32_t feature_flags;
+    uint32_t _res[2];
+} __attribute__((packed));
 
 struct mp_conf_entry_ioapic {
-    unsigned char entry_type;
-    unsigned char apic_id;
-    unsigned char apic_ver;
-    unsigned char flags;
-    unsigned int apic_addr;
-};
+    uint8_t entry_type;
+    uint8_t apic_id;
+    uint8_t apic_ver;
+    uint8_t flags;
+    uint32_t apic_addr;
+} __attribute__((packed));
 
 struct mp_conf_entry_bus {
-    unsigned char entry_type;
-    unsigned char bus_id;
-    unsigned char bus_type_string[6];
-};
+    uint8_t entry_type;
+    uint8_t bus_id;
+    char bus_type_string[6];
+} __attribute__((packed));
 
 struct mp_conf_entry_interrupt {
-    unsigned char entry_type;
-    unsigned char int_type;
-    unsigned short int_flag;
-    unsigned char src_bus_id;
-    unsigned char src_bus_irq;
-    unsigned char dst_apic_id;
-    unsigned char dst_apic_irq;
-};
+    uint8_t entry_type;
+    uint8_t int_type;
+    uint16_t int_flag;
+    uint8_t src_bus_id;
+    uint8_t src_bus_irq;
+    uint8_t dst_apic_id;
+    uint8_t dst_apic_irq;
+} __attribute__((packed));
 
 struct mp_conf_entry_local_interrupt {
-    unsigned char entry_type;
-    unsigned char int_type;
-    unsigned short int_flag;
-    unsigned char src_bus_id;
-    unsigned char src_bus_irq;
-    unsigned char dst_apic_id;
-    unsigned char dst_apic_lintin;
-};
+    uint8_t entry_type;
+    uint8_t int_type;
+    uint16_t int_flag;
+    uint8_t src_bus_id;
+    uint8_t src_bus_irq;
+    uint8_t dst_apic_id;
+    uint8_t dst_apic_lintin;
+} __attribute__((packed));
 
 enum mp_irq_source_types {
     mp_INT = 0,
     mp_NMI = 1,
     mp_SMI = 2,
     mp_ExtINT = 3
-};
+} __attribute__((packed));
 
 #define MP_IRQPOL_DEFAULT   0x0
 #define MP_IRQPOL_ACTIVE_HIGH   0x1
