@@ -72,6 +72,14 @@
 
 #ifdef PCH_HAS_PCR
 
+static inline uint32_t align_up(uint32_t address, uint32_t alignment) {
+    return (address + alignment - 1) & ~(alignment - 1);
+}
+
+static inline uint32_t align_down(uint32_t address, uint32_t alignment) {
+    return address & ~(alignment - 1);
+}
+
 static uint32_t pch_make_address(uint8_t port_id, uint16_t offset)
 {
     return (PCH_PCR_BASE + (port_id << 16 | offset));
@@ -272,6 +280,35 @@ void pci_config_write16(uint8_t bus,
 #endif /* PCI_HAS_ECAM */
 }
 
+void pci_config_write8(uint8_t bus,
+                        uint8_t dev, uint8_t fun, uint8_t off, uint8_t value)
+{
+    uint32_t off_aligned;
+    uint32_t shift, mask;
+    uint32_t reg;
+
+    off_aligned = align_down(off, 4);
+    shift = (off & PCI_ADDR_32BIT_ALIGNED_MASK) * 8;
+    mask = 0xff << shift;
+    reg = pci_config_read32(bus, dev, fun, off_aligned);
+    reg &= ~(mask);
+    reg |= (value << shift);
+    pci_config_write32(bus, dev, fun, off_aligned, reg);
+}
+
+uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off)
+{
+    uint32_t off_aligned;
+    uint32_t shift, mask;
+    uint32_t reg;
+
+    off_aligned = align_down(off, 4);
+    shift = (off & PCI_ADDR_32BIT_ALIGNED_MASK) * 8;
+    mask = 0xff << shift;
+    reg = pci_config_read32(bus, dev, fun, off_aligned);
+    reg &= mask;
+    return (reg >> shift);
+}
 static int pci_enum_is_64bit(uint32_t value)
 {
     uint8_t type = (value & PCI_ENUM_TYPE_MASK) >> PCI_ENUM_TYPE_SHIFT;

@@ -69,5 +69,8 @@ void pci_config_write32(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
 uint16_t pci_config_read16(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off);
 void pci_config_write16(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
                         uint16_t value);
+uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off);
+void pci_config_write8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
+                       uint8_t value);
 int pci_enum_do();
 #endif /* PCI_H */
