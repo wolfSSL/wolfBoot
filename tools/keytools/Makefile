@@ -15,6 +15,15 @@ CFLAGS  = -Wall -Wextra -Werror
 CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include -DWOLFBOOT_KEYTOOLS
 LDFLAGS =
 OBJDIR = ./
+LIBS =
+
+ifeq ($(SIGN),LMS)
+  LMSDIR = $(WOLFBOOTDIR)/lib/hash-sigs
+  LIBS += $(LMSDIR)/lib/hss_lib.a
+  CFLAGS  +=-DWOLFBOOT_SIGN_LMS -DWOLFSSL_HAVE_LMS -DHAVE_LIBLMS -I$(LMSDIR)/src \
+            -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
+            -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
+endif
 
 # option variables
 DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE -fsanitize=address
@@ -63,7 +72,8 @@ OBJS_REAL=\
 	$(WOLFDIR)/wolfcrypt/src/sha512.o \
 	$(WOLFDIR)/wolfcrypt/src/tfm.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_port.o \
-	$(WOLFDIR)/wolfcrypt/src/wolfmath.o
+	$(WOLFDIR)/wolfcrypt/src/wolfmath.o \
+	$(WOLFDIR)/wolfcrypt/src/ext_lms.o
 
 OBJS_REAL+=\
 	$(WOLFBOOTDIR)/src/delta.o
@@ -103,13 +113,22 @@ $(OBJDIR)/%.o: $(WOLFDIR)/wolfcrypt/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 # build templates
-sign: $(OBJS_VIRT) sign.o
+sign: $(OBJS_VIRT) $(LIBS) sign.o
 	@echo "Building signing tool"
-	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LDFLAGS)
+	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LIBS) $(LDFLAGS)
 
-keygen: $(OBJS_VIRT) keygen.o
+keygen: $(OBJS_VIRT) $(LIBS) keygen.o
 	@echo "Building keygen tool"
-	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LDFLAGS)
+	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LIBS) $(LDFLAGS)
 
 clean:
 	rm -f sign keygen *.o
+
+# The final make clean is to ensure a subsequent LMS wolfboot
+# hash-sigs build is separate from keytools.
+$(LMSDIR)/lib/hss_lib.a:
+	@echo "Building hss_lib.a"
+	$(Q)@$(MAKE) -C $(LMSDIR)/src/ -s clean
+	$(Q)@$(MAKE) -C $(LMSDIR)/src/ hss_lib.a
+	$(Q)cp $(LMSDIR)/src/hss_lib.a $(LMSDIR)/lib/
+	$(Q)@$(MAKE) -C $(LMSDIR)/src/ -s clean

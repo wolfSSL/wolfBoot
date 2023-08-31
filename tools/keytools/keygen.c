@@ -61,6 +61,13 @@
 #include <wolfssl/wolfcrypt/ed448.h>
 #endif
 
+#if defined(WOLFSSL_HAVE_LMS)
+    #include <wolfssl/wolfcrypt/lms.h>
+    #ifdef HAVE_LIBLMS
+        #include <wolfssl/wolfcrypt/ext_lms.h>
+    #endif
+#endif
+
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #ifdef DEBUG_SIGNTOOL
@@ -82,7 +89,8 @@
 #define KEYGEN_ED448   5
 #define KEYGEN_ECC384  6
 #define KEYGEN_ECC521  7
-#define KEYGEN_RSA3072  8
+#define KEYGEN_RSA3072 8
+#define KEYGEN_LMS     9
 
 /* Globals */
 static FILE *fpub, *fpub_image;
@@ -218,7 +226,8 @@ const char KType[][17] = {
     "AUTH_KEY_ED448",
     "AUTH_KEY_ECC384",
     "AUTH_KEY_ECC521",
-    "AUTH_KEY_RSA3072"
+    "AUTH_KEY_RSA3072",
+    "AUTH_KEY_LMS"
 };
 
 const char KSize[][29] = {
@@ -230,7 +239,8 @@ const char KSize[][29] = {
     "KEYSTORE_PUBKEY_SIZE_ED448",
     "KEYSTORE_PUBKEY_SIZE_ECC384",
     "KEYSTORE_PUBKEY_SIZE_ECC521",
-    "KEYSTORE_PUBKEY_SIZE_RSA3072"
+    "KEYSTORE_PUBKEY_SIZE_RSA3072",
+    "KEYSTORE_PUBKEY_SIZE_LMS"
 };
 
 const char KName[][8] = {
@@ -242,7 +252,8 @@ const char KName[][8] = {
     "ED448",
     "ECC384",
     "ECC521",
-    "RSA3072"
+    "RSA3072",
+    "LMS"
 };
 
 static uint32_t get_pubkey_size(uint32_t keyType)
@@ -270,6 +281,9 @@ static uint32_t get_pubkey_size(uint32_t keyType)
             break;
         case KEYGEN_RSA4096:
             size = KEYSTORE_PUBKEY_SIZE_RSA4096;
+            break;
+        case KEYGEN_LMS:
+            size = KEYSTORE_PUBKEY_SIZE_LMS;
             break;
         default:
             size = 0;
@@ -470,6 +484,87 @@ static void keygen_ed448(const char *privkey)
 }
 #endif
 
+#if defined(WOLFSSL_HAVE_LMS)
+#include "../lms/lms_common.h"
+
+static void keygen_lms(const char *priv_fname)
+{
+    FILE *  fpriv;
+    LmsKey  key;
+    int     ret;
+    byte    lms_pub[HSS_MAX_PUBLIC_KEY_LEN];
+    word32  pub_len = sizeof(lms_pub);
+
+    ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_LmsKey_SetParameters(&key, LMS_LEVELS, LMS_HEIGHT, LMS_WINTERNITZ);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
+                " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
+                LMS_WINTERNITZ, ret);
+        exit(1);
+    }
+
+    printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
+           LMS_HEIGHT, LMS_WINTERNITZ);
+
+    ret = wc_LmsKey_SetWriteCb(&key, lms_write_key);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_SetWriteCb returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_LmsKey_SetReadCb(&key, lms_read_key);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_SetReadCb returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_LmsKey_SetContext(&key, (void *) priv_fname);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_SetContext returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_LmsKey_MakeKey(&key, &rng);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_MakeKey returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_LmsKey_ExportPubRaw(&key, lms_pub, &pub_len);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned %d\n", ret);
+        exit(1);
+    }
+
+    if (pub_len != sizeof(lms_pub)) {
+        fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned pub_len=%d\n" \
+                        ", expected %zu\n", pub_len, sizeof(lms_pub));
+        exit(1);
+    }
+
+    /* Append the public key to the private keyfile. */
+    fpriv = fopen(priv_fname, "r+");
+    if (!fpriv) {
+        fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
+                ret);
+        exit(1);
+    }
+
+    fseek(fpriv, 64, SEEK_SET);
+    fwrite(lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, 1, fpriv);
+    fclose(fpriv);
+
+    keystore_add(KEYGEN_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname);
+
+    wc_LmsKey_Free(&key);
+}
+#endif /* if defined(WOLFSSL_HAVE_LMS) */
 
 static void key_gen_check(const char *kfilename)
 {
@@ -531,6 +626,12 @@ static void key_generate(uint32_t ktype, const char *kfilename)
             break;
         case KEYGEN_RSA4096:
             keygen_rsa(kfilename, 4096);
+            break;
+#endif
+
+#ifdef WOLFSSL_HAVE_LMS
+        case KEYGEN_LMS:
+            keygen_lms(kfilename);
             break;
 #endif
     } /* end switch */
@@ -656,6 +757,11 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--rsa4096") == 0) {
             keytype = KEYGEN_RSA4096;
         }
+#if defined(WOLFSSL_HAVE_LMS)
+        else if (strcmp(argv[i], "--lms") == 0) {
+            keytype = KEYGEN_LMS;
+        }
+#endif
         else if (strcmp(argv[i], "--force") == 0) {
             force = 1;
         }

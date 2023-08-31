@@ -1,0 +1,118 @@
+From 18c00c8b44f786c0ad3dabd4ec48f25519b944b4 Mon Sep 17 00:00:00 2001
+From: jordan <jordan@wolfssl.com>
+Date: Thu, 31 Aug 2023 13:38:44 -0500
+Subject: [PATCH 1/1] Patch to support wolfBoot LMS build.
+
+---
+ endian.c            | 2 +-
+ hss_common.c        | 1 +
+ hss_thread_single.c | 6 ++++++
+ lm_ots_verify.c     | 2 +-
+ sha256.h            | 2 +-
+ 5 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/endian.c b/endian.c
+index acd2d36..29e5f6d 100644
+--- a/endian.c
++++ b/endian.c
+@@ -13,7 +13,7 @@ void put_bigendian( void *target, unsigned long long value, size_t bytes ) {
+ unsigned long long get_bigendian( const void *target, size_t bytes ) {
+     const unsigned char *b = target;
+     unsigned long long result = 0;
+-    int i;
++    size_t i;
+ 
+     for (i=0; i<bytes; i++) {
+         result = 256 * result + (b[i] & 0xff);
+diff --git a/hss_common.c b/hss_common.c
+index 392509b..705c943 100644
+--- a/hss_common.c
++++ b/hss_common.c
+@@ -13,6 +13,7 @@
+ size_t hss_get_public_key_len(unsigned levels,
+                    const param_set_t *lm_type,
+                    const param_set_t *lm_ots_type) {
++    (void) lm_ots_type;
+     if (levels < MIN_HSS_LEVELS || levels > MAX_HSS_LEVELS) return 0;
+ 
+     size_t first_pubkey = lm_get_public_key_len(lm_type[0]);
+diff --git a/hss_thread_single.c b/hss_thread_single.c
+index 44309fb..723ced8 100644
+--- a/hss_thread_single.c
++++ b/hss_thread_single.c
+@@ -10,6 +10,7 @@
+  * no threads, hence we don't need such an object
+  */
+ struct thread_collection *hss_thread_init(int num_thread) {
++    (void) num_thread;
+     return 0;
+ }
+ 
+@@ -22,6 +23,7 @@ void hss_thread_issue_work(struct thread_collection *collect,
+                              struct thread_collection *col),
+             const void *detail, size_t size_detail_structure) {
+         /* If we were asked to make sure something is done, just do it */
++    (void) size_detail_structure;
+     function( detail, collect );
+ }
+ 
+@@ -31,6 +33,7 @@ void hss_thread_issue_work(struct thread_collection *collect,
+  * requested, and we never allocated a collection object in the first place
+  */
+ void hss_thread_done(struct thread_collection *collect) {
++    (void) collect;
+     ;
+ }
+ 
+@@ -40,6 +43,7 @@ void hss_thread_done(struct thread_collection *collect) {
+  * there is no need to lock
+  */
+ void hss_thread_before_write(struct thread_collection *collect) {
++    (void) collect;
+     ;
+ }
+ 
+@@ -47,6 +51,7 @@ void hss_thread_before_write(struct thread_collection *collect) {
+  * This releases the above lock
+  */
+ void hss_thread_after_write(struct thread_collection *collect) {
++    (void) collect;
+     ;
+ }
+ 
+@@ -55,5 +60,6 @@ void hss_thread_after_write(struct thread_collection *collect) {
+  * (the main one)
+  */
+ unsigned hss_thread_num_tracks(int num_thread) {
++    (void) num_thread;
+     return 1;
+ }
+diff --git a/lm_ots_verify.c b/lm_ots_verify.c
+index 9706edd..1c79659 100644
+--- a/lm_ots_verify.c
++++ b/lm_ots_verify.c
+@@ -89,7 +89,7 @@ bool lm_ots_validate_signature_compute(
+                                 PBLC_PREFIX_LEN );
+     }
+ 
+-    int i;
++    size_t i;
+     unsigned char tmp[ITER_MAX_LEN];
+ 
+     /* Preset the parts of tmp that don't change */
+diff --git a/sha256.h b/sha256.h
+index e4c8a9c..3282c90 100644
+--- a/sha256.h
++++ b/sha256.h
+@@ -5,7 +5,7 @@
+ #include EXT_SHA256_H
+ #else
+ 
+-#define USE_OPENSSL 1   /* We use the OpenSSL implementation for SHA-256 */
++#define USE_OPENSSL 0   /* We use the OpenSSL implementation for SHA-256 */
+                         /* (which is quite a bit faster than our portable */
+                         /* C version) */
+ 
+-- 
+2.40.0
+
