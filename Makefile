@@ -154,9 +154,7 @@ include tools/test-enc.mk
 include tools/test-delta.mk
 include tools/test-renode.mk
 
-PYTHON?=python3
 keytools_check: keytools FORCE
-
 
 $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check

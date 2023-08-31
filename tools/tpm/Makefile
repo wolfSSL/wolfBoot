@@ -13,16 +13,19 @@ WOLFBOOTDIR = ../..
 WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl/
 WOLFTPMDIR = $(WOLFBOOTDIR)/lib/wolfTPM/
 CFLAGS = -Wall -Wextra -Werror
-CFLAGS += -I. -DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFTPMDIR) -I$(WOLFBOOTDIR)/include
+CFLAGS += -DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM
+CFLAGS += -I. -I$(WOLFDIR) -I$(WOLFTPMDIR) -I$(WOLFBOOTDIR)/include
 LDFLAGS =
 OBJDIR = ./
 
 # option variables
-DEBUG_FLAGS = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE -fsanitize=address
+DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_WOLFTPM -DDEBUG_WOLFSSL -DWOLFTPM_DEBUG_VERBOSE
+SANITIZE_FLAGS  = -fsanitize=address
 OPTIMIZE        = -O2
 
 # Options
 #CFLAGS+=$(DEBUG_FLAGS)
+#CFLAGS+=$(SANITIZE_FLAGS)
 CFLAGS+=$(OPTIMIZE)
 
 ifeq ($(TARGET),sim)
@@ -68,11 +71,12 @@ vpath %.c $(WOLFDIR)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c $(WOLFTPMDIR)/src/
 vpath %.c $(WOLFTPMDIR)/hal/
+vpath %.c $(WOLFTPMDIR)/examples/pcr
 vpath %.c ./
 
 .PHONY: clean all
 
-all: rot
+all: rot policy_create pcr_extend pcr_read pcr_reset
 
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
@@ -94,5 +98,21 @@ rot: $(OBJS_VIRT) rot.o
 	@echo "Building Root of Trust (ROT) tool"
 	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LDFLAGS)
 
+policy_create: $(OBJS_VIRT) policy_create.o
+	@echo "Building Policy Creation Tool"
+	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LDFLAGS)
+
+pcr_extend: $(OBJS_VIRT) $(WOLFTPMDIR)/examples/pcr/extend.o
+	@echo "Building PCR Extend Tool"
+	$(Q)$(LD) -o $@ $(WOLFTPMDIR)/examples/pcr/extend.o $(OBJS_VIRT) $(LDFLAGS)
+
+pcr_read: $(OBJS_VIRT) $(WOLFTPMDIR)/examples/pcr/read_pcr.o
+	@echo "Building PCR Read Tool"
+	$(Q)$(LD) -o $@ $(WOLFTPMDIR)/examples/pcr/read_pcr.o $(OBJS_VIRT) $(LDFLAGS)
+
+pcr_reset: $(OBJS_VIRT) $(WOLFTPMDIR)/examples/pcr/reset.o
+	@echo "Building PCR Reset Tool"
+	$(Q)$(LD) -o $@ $(WOLFTPMDIR)/examples/pcr/reset.o $(OBJS_VIRT) $(LDFLAGS)
+
 clean:
-	rm -f rot *.o
+	rm -f rot policy_create pcr_extend pcr_read pcr_reset *.o

@@ -101,7 +101,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
     #include <wolfssl/wolfcrypt/lms.h>
     #ifdef HAVE_LIBLMS
         #include <wolfssl/wolfcrypt/ext_lms.h>
@@ -199,7 +199,7 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
     *idx += len;
 }
 
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
 #include "../lms/lms_common.h"
 #endif
 
@@ -219,7 +219,7 @@ static union {
 #ifndef NO_RSA
     RsaKey rsa;
 #endif
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
     LmsKey lms;
 #endif
 } key;
@@ -238,7 +238,7 @@ struct cmd_options {
     const char *key_file;
     const char *fw_version;
     const char *signature_file;
-    const char* policy_signature_file;
+    const char *policy_file;
     const char *encrypt_key_file;
     const char *delta_base_file;
     char output_image_file[PATH_MAX];
@@ -247,6 +247,7 @@ struct cmd_options {
     uint32_t pubkey_sz;
     uint32_t header_sz;
     uint32_t signature_sz;
+    uint32_t policy_sz;
     uint8_t partition_id;
 };
 
@@ -691,7 +692,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     break;
                 }
             }
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
             FALL_THROUGH;
         case SIGN_LMS:
             ret = -1;
@@ -728,7 +729,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                            *key_buffer_sz );
                 }
             }
-#endif /* defined(WOLFSSL_HAVE_LMS)  */
+#endif /* WOLFSSL_HAVE_LMS */
             break;
     } /* end switch (CMD.sign) */
 
@@ -759,6 +760,115 @@ failure:
     return NULL;
 }
 
+/* Sign the digest */
+static int sign_digest(int sign, int hash_algo,
+    uint8_t* signature, uint32_t* signature_sz,
+    uint8_t* digest, uint32_t digest_sz)
+{
+    int ret;
+    WC_RNG rng;
+
+    if ((ret = wc_InitRng(&rng)) != 0) {
+        return ret;
+    }
+
+#ifdef HAVE_ED25519
+    if (sign == SIGN_ED25519) {
+        ret = wc_ed25519_sign_msg(digest, digest_sz, signature,
+                signature_sz, &key.ed);
+    }
+    else
+#endif
+#ifdef HAVE_ED448
+    if (sign == SIGN_ED448) {
+        ret = wc_ed448_sign_msg(digest, digest_sz, signature,
+                signature_sz, &key.ed4, NULL, 0);
+    }
+    else
+#endif
+#ifdef HAVE_ECC
+    if (sign == SIGN_ECC256 ||
+        sign == SIGN_ECC384 ||
+        sign == SIGN_ECC521)
+    {
+        mp_int r, s;
+        int sigSz;
+        if (sign == SIGN_ECC256) sigSz = 32;
+        if (sign == SIGN_ECC384) sigSz = 48;
+        if (sign == SIGN_ECC521) sigSz = 66;
+
+        mp_init(&r); mp_init(&s);
+        ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
+                &r, &s);
+        mp_to_unsigned_bin(&r, &signature[0]);
+        mp_to_unsigned_bin(&s, &signature[sigSz]);
+        mp_clear(&r); mp_clear(&s);
+        *signature_sz = sigSz*2;
+    }
+    else
+#endif
+#ifndef NO_RSA
+    if (sign == SIGN_RSA2048 ||
+        sign == SIGN_RSA3072 ||
+        sign == SIGN_RSA4096)
+    {
+        #ifndef WC_MAX_ENCODED_DIG_ASN_SZ
+        #define WC_MAX_ENCODED_DIG_ASN_SZ 9 /* enum(bit or octet) + length(4) */
+        #endif
+        uint8_t  buf[WC_MAX_DIGEST_SIZE + WC_MAX_ENCODED_DIG_ASN_SZ];
+        uint32_t enchash_sz = digest_sz;
+        uint8_t* enchash = digest;
+        if (CMD.sign_wenc) {
+            /* add ASN.1 signature encoding */
+            int hashOID = 0;
+            if (hash_algo == HASH_SHA256)
+                hashOID = SHA256h;
+            else if (hash_algo == HASH_SHA384)
+                hashOID = SHA384h;
+            else if (hash_algo == HASH_SHA3)
+                hashOID = SHA3_384h;
+            enchash_sz = wc_EncodeSignature(buf, digest, digest_sz, hashOID);
+            enchash = buf;
+        }
+        ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, *signature_sz,
+                &key.rsa, &rng);
+        if (ret > 0) {
+            *signature_sz = ret;
+            ret = 0;
+        }
+    }
+    else
+#endif
+#ifdef WOLFSSL_HAVE_LMS
+    if (sign == SIGN_LMS) {
+        /* Set the callbacks, so LMS can update the private key while signing */
+        ret = wc_LmsKey_SetWriteCb(&key.lms, lms_write_key);
+        if (ret == 0) {
+            ret = wc_LmsKey_SetReadCb(&key.lms, lms_read_key);
+        }
+        if (ret == 0) {
+            ret = wc_LmsKey_SetContext(&key.lms, (void*)CMD.key_file);
+        }
+        if (ret == 0) {
+            ret = wc_LmsKey_Reload(&key.lms);
+        }
+        if (ret == 0) {
+            ret = wc_LmsKey_Sign(&key.lms, signature, signature_sz, digest,
+                                 digest_sz);
+        }
+        if (ret != 0) {
+            fprintf(stderr, "error signing with LMS: %d\n", ret);
+        }
+    }
+    else
+#endif /* WOLFSSL_HAVE_LMS */
+    {
+        ret = NOT_COMPILED_IN;
+    }
+    wc_FreeRng(&rng);
+    return ret;
+}
+
 static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint32_t patch_len, uint32_t patch_inv_off,
@@ -771,7 +881,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     struct stat attrib;
     uint16_t image_type;
     uint8_t* signature = NULL;
-    uint8_t* policy_signature = NULL;
+    uint8_t* policy = NULL;
     int ret = -1;
     uint8_t  buf[1024];
     uint32_t read_sz, pos;
@@ -999,7 +1109,6 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     /* Add image hash to header */
     header_append_tag(header, &header_idx, CMD.hash_algo, digest_sz, digest);
     if (CMD.sign != NO_SIGN) {
-        WC_RNG rng;
         /* Add Pubkey Hash to header */
         header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
 
@@ -1015,137 +1124,27 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             printf("Digest image %s successfully created.\n", outfile);
             exit(0);
         }
+        /* save max sig size */
+        CMD.policy_sz = CMD.signature_sz;
 
-        /* Sign the digest */
-        ret = NOT_COMPILED_IN; /* default error */
+        /* Signing Image */
         signature = malloc(CMD.signature_sz);
         if (signature == NULL) {
             printf("Signature malloc error!\n");
             goto failure;
         }
         memset(signature, 0, CMD.signature_sz);
-        if (CMD.manual_sign && CMD.policy_sign) {
-            policy_signature = malloc(CMD.signature_sz);
-            if (policy_signature == NULL) {
-                printf("Policy Signature malloc error!\n");
-                goto failure;
-            }
-            memset(policy_signature, 0, CMD.signature_sz);
-        }
+
         if (!CMD.manual_sign) {
             printf("Signing the digest...\n");
-#ifdef DEBUG_SIGTOOL
+#ifdef DEBUG_SIGNTOOL
             printf("Digest %d\n", digest_sz);
             WOLFSSL_BUFFER(digest, digest_sz);
 #endif
-            wc_InitRng(&rng);
-            if (CMD.sign == SIGN_ED25519) {
-#ifdef HAVE_ED25519
-                ret = wc_ed25519_sign_msg(digest, digest_sz, signature,
-                        &CMD.signature_sz, &key.ed);
-#endif
-            }
-            else if (CMD.sign == SIGN_ED448) {
-#ifdef HAVE_ED448
-                ret = wc_ed448_sign_msg(digest, digest_sz, signature,
-                        &CMD.signature_sz, &key.ed4, NULL, 0);
-#endif
-            }
-#ifdef HAVE_ECC
-            else if (CMD.sign == SIGN_ECC256) {
-                mp_int r, s;
-                mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
-                        &r, &s);
-                mp_to_unsigned_bin(&r, &signature[0]);
-                mp_to_unsigned_bin(&s, &signature[32]);
-                mp_clear(&r); mp_clear(&s);
-            }
-            else if (CMD.sign == SIGN_ECC384) {
-                mp_int r, s;
-                mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
-                        &r, &s);
-                mp_to_unsigned_bin(&r, &signature[0]);
-                mp_to_unsigned_bin(&s, &signature[48]);
-                mp_clear(&r); mp_clear(&s);
-            }
-            else if (CMD.sign == SIGN_ECC521) {
-                mp_int r, s;
-                mp_init(&r); mp_init(&s);
-                ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
-                        &r, &s);
-                mp_to_unsigned_bin(&r, &signature[0]);
-                mp_to_unsigned_bin(&s, &signature[66]);
-                mp_clear(&r); mp_clear(&s);
-            }
-#endif
-            else if (CMD.sign == SIGN_RSA2048 ||
-                    CMD.sign == SIGN_RSA3072 ||
-                    CMD.sign == SIGN_RSA4096) {
 
-#ifndef NO_RSA
-                uint32_t enchash_sz = digest_sz;
-                uint8_t* enchash = digest;
-                if (CMD.sign_wenc) {
-                    /* add ASN.1 signature encoding */
-                    int hashOID = 0;
-                    if (CMD.hash_algo == HASH_SHA256)
-                        hashOID = SHA256h;
-                    else if (CMD.hash_algo == HASH_SHA3)
-                        hashOID = SHA3_384h;
-                    enchash_sz = wc_EncodeSignature(buf, digest, digest_sz,
-                            hashOID);
-                    enchash = buf;
-                }
-                ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature,
-                        CMD.signature_sz,
-                        &key.rsa, &rng);
-                if (ret > 0) {
-                    CMD.signature_sz = ret;
-                    ret = 0;
-                }
-#endif
-            }
-            else if (CMD.sign == SIGN_LMS) {
-#if defined(WOLFSSL_HAVE_LMS)
-                /* Set the callbacks, so LMS can update the private key
-                 * while signing. */
-                ret = wc_LmsKey_SetWriteCb(&key.lms, lms_write_key);
-                if (ret != 0) {
-                    fprintf(stderr, "error: wc_LmsKey_SetWriteCb returned %d\n", ret);
-                    goto failure;
-                }
-
-                ret = wc_LmsKey_SetReadCb(&key.lms, lms_read_key);
-                if (ret != 0) {
-                    fprintf(stderr, "error: wc_LmsKey_SetReadCb returned %d\n", ret);
-                    goto failure;
-                }
-
-                ret = wc_LmsKey_SetContext(&key.lms, (void *) CMD.key_file);
-                if (ret != 0) {
-                    fprintf(stderr, "error: wc_LmsKey_SetContext returned %d\n", ret);
-                    goto failure;
-                }
-
-                ret = wc_LmsKey_Reload(&key.lms);
-                if (ret != 0) {
-                    fprintf(stderr, "error: wc_LmsKey_Reload returned %d\n", ret);
-                    goto failure;
-                }
-
-                ret = wc_LmsKey_Sign(&key.lms, signature, &CMD.signature_sz, digest,
-                                     digest_sz);
-                if (ret != 0) {
-                    fprintf(stderr, "error: wc_LmsKey_Sign returned %d\n", ret);
-                    goto failure;
-                }
-#endif /* defined(WOLFSSL_HAVE_LMS) */
-            }
-
-            wc_FreeRng(&rng);
-
+            /* Sign the digest */
+            ret = sign_digest(CMD.sign, CMD.hash_algo,
+                signature, &CMD.signature_sz, digest, digest_sz);
             if (ret != 0) {
                 printf("Signing error %d\n", ret);
                 goto failure;
@@ -1161,36 +1160,83 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
             io_sz = (int)fread(signature, 1, CMD.signature_sz, f);
             fclose(f);
-            if (io_sz != (int)CMD.signature_sz) {
+            if (io_sz <= 0) {
                 printf("Error reading file %s\n", CMD.signature_file);
                 goto failure;
             }
+            CMD.signature_sz = io_sz;
+        }
 
-            if (CMD.policy_sign) {
-                printf("Opening signature file %s\n",
-                    CMD.policy_signature_file);
+        /* Signing Policy */
+        if (CMD.policy_sign) {
+            /* Policy is always SHA2-256 */
+            digest_sz = HDR_SHA256_LEN;
 
-                f = fopen(CMD.policy_signature_file, "rb");
-                if (f == NULL) {
-                    printf("Open signature file %s failed\n",
-                        CMD.policy_signature_file);
+            policy = malloc(CMD.policy_sz + sizeof(uint32_t));
+            if (policy == NULL) {
+                printf("Policy Signature malloc error!\n");
+                goto failure;
+            }
+            memset(policy, 0, CMD.policy_sz);
+
+            /* open policy file */
+            printf("Opening policy file %s\n", CMD.policy_file);
+            f = fopen(CMD.policy_file, "rb");
+            if (f == NULL) {
+                printf("Open policy digest file %s failed\n", CMD.policy_file);
+                goto failure;
+            }
+            /* policy file starts with 4 byte PCR mask */
+            io_sz = (int)fread(policy, 1, sizeof(uint32_t), f);
+            if (io_sz != sizeof(uint32_t)) {
+                printf("Error reading file %s\n", CMD.policy_file);
+                fclose(f);
+                goto failure;
+            }
+
+            if (!CMD.manual_sign) {
+                /* in normal sign mode PCR digest (32 bytes) */
+                io_sz = (int)fread(digest, 1, digest_sz, f);
+                fclose(f);
+                if (io_sz != (int)digest_sz) {
+                    printf("Error reading file %s\n", CMD.policy_file);
                     goto failure;
                 }
-                io_sz = (int)fread(policy_signature, 1, CMD.signature_sz, f);
-                fclose(f);
-                if (io_sz != (int)CMD.signature_sz) {
-                    printf("Error reading file %s\n",
-                        CMD.policy_signature_file);
+
+                printf("Signing the policy digest...\n");
+#ifdef DEBUG_SIGNTOOL
+                printf("Policy Digest %d\n", digest_sz);
+                WOLFSSL_BUFFER(digest, digest_sz);
+#endif
+
+                /* Policy is always SHA2-256 */
+                ret = sign_digest(CMD.sign, HASH_SHA256,
+                    policy + sizeof(uint32_t), &CMD.policy_sz,
+                    digest, digest_sz);
+                if (ret != 0) {
+                    printf("Signing policy error %d\n", ret);
                     goto failure;
                 }
             }
+            else {
+                /* in manual mode PCR signature */
+                io_sz = (int)fread(policy, 1, CMD.policy_sz, f);
+                fclose(f);
+                if (io_sz <= 0) {
+                    printf("Error reading file %s\n", CMD.policy_file);
+                    goto failure;
+                }
+                CMD.policy_sz = io_sz;
+            }
         }
+
 #ifdef DEBUG_SIGNTOOL
         printf("Signature %d\n", CMD.signature_sz);
         WOLFSSL_BUFFER(signature, CMD.signature_sz);
-        if (CMD.manual_sign && CMD.policy_sign) {
-            printf("Policy Signature %d\n", CMD.signature_sz);
-            WOLFSSL_BUFFER(policy_signature, CMD.signature_sz);
+        if (CMD.policy_sign) {
+            printf("PCR Mask 0x%08x\n", *((uint32_t*)policy));
+            printf("Policy Signature %d\n", CMD.policy_sz);
+            WOLFSSL_BUFFER(policy + sizeof(uint32_t), CMD.policy_sz);
         }
 #endif
 
@@ -1198,9 +1244,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz,
                 signature);
 
-        if (CMD.manual_sign && CMD.policy_sign) {
+        if (CMD.policy_sign) {
+            /* Add policy signature to header */
             header_append_tag(header, &header_idx, HDR_POLICY_SIGNATURE,
-                CMD.signature_sz, policy_signature);
+                CMD.policy_sz + sizeof(uint32_t), policy);
         }
     } /* end if(sign != NO_SIGN) */
 
@@ -1322,6 +1369,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     fclose(f2);
     fclose(f);
 failure:
+    if (policy)
+        free(policy);
     if (header)
         free(header);
     return ret;
@@ -1697,7 +1746,7 @@ int main(int argc, char** argv)
             CMD.sign = SIGN_RSA4096;
             sign_str = "RSA4096";
         }
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
         else if (strcmp(argv[i], "--lms") == 0) {
             CMD.sign = SIGN_LMS;
             sign_str = "LMS";
@@ -1753,8 +1802,9 @@ int main(int argc, char** argv)
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
         }
-        else if (strcmp(argv[i], "--policy-signed") == 0) {
+        else if (strcmp(argv[i], "--policy") == 0) {
             CMD.policy_sign = 1;
+            CMD.policy_file = argv[++i];
         }
         else {
             i--;
@@ -1768,10 +1818,6 @@ int main(int argc, char** argv)
         CMD.fw_version = argv[i+3];
         if (CMD.manual_sign) {
             CMD.signature_file = argv[i+4];
-
-            if (CMD.policy_sign) {
-                CMD.policy_signature_file = argv[i+5];
-            }
         }
     } else {
         CMD.image_file = argv[i+1];
@@ -1877,7 +1923,7 @@ int main(int argc, char** argv)
             CMD.header_sz = 1024;
         CMD.signature_sz = 512;
     }
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
     else if (CMD.sign == SIGN_LMS) {
         int    lms_ret = 0;
         word32 sig_sz = 0;
@@ -1912,7 +1958,7 @@ int main(int argc, char** argv)
         CMD.header_sz = 2 * sig_sz;
         CMD.signature_sz = sig_sz;
     }
-#endif /* defined(WOLFSSL_HAVE_LMS) */
+#endif /* WOLFSSL_HAVE_LMS */
 
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
             CMD.header_sz == 0) {
@@ -1959,7 +2005,7 @@ int main(int argc, char** argv)
         wc_FreeRsaKey(&key.rsa);
 #endif
     } else if (CMD.sign == SIGN_LMS) {
-#if defined(WOLFSSL_HAVE_LMS)
+#ifdef WOLFSSL_HAVE_LMS
         wc_LmsKey_Free(&key.lms);
 #endif
     }

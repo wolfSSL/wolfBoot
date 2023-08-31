@@ -8,23 +8,23 @@ SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDAT
 SIGN_ARGS=
 SIGN_ENC_ARGS=
 
-ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
-	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
-else
+# python version only supported using
+# KEYGEN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py"
+ifeq ("$(KEYGEN_TOOL)","")
 	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
 		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
 	else
-		KEYGEN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py
+		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
 	endif
 endif
 
-ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
-	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
-else
+# python version only supported using
+# SIGN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py"
+ifeq ("$(SIGN_TOOL)","")
 	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
 		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
 	else
-		SIGN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py
+		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
 	endif
 endif
 
@@ -74,7 +74,7 @@ $(BINASSEMBLE):
 test-size: FORCE
 	$(Q)make clean
 	$(Q)make wolfboot.bin
-	$(Q)FP=`$(SIZE) -A wolfboot.elf | awk -e ' /Total/ {print $$2;}'`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
+	$(Q)FP=`$(SIZE) -A wolfboot.elf | awk ' /Total/ {print $$2;}'`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
 
 # Testbed actions
 #
@@ -941,29 +941,29 @@ test-all: clean
 
 
 test-size-all:
-	make test-size SIGN=NONE LIMIT=4722
+	make test-size SIGN=NONE LIMIT=4730
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=11398
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=22266
+	make test-size SIGN=ECC256  LIMIT=22270
 	make keysclean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13702
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13706
 	make keysclean
-	make test-size SIGN=RSA2048 LIMIT=11182
+	make test-size SIGN=RSA2048 LIMIT=11186
 	make keysclean
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11162
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11166
 	make keysclean
-	make test-size SIGN=RSA4096 LIMIT=11546
+	make test-size SIGN=RSA4096 LIMIT=11550
 	make keysclean
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11462
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11466
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=17562
+	make test-size SIGN=ECC384 LIMIT=17566
 	make keysclean
 	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15172
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=13414
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=11382
+	make test-size SIGN=RSA3072 LIMIT=11386
 	make keysclean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11254
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11258
 	make keysclean

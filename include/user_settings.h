@@ -44,6 +44,10 @@ extern int tolower(int c);
 #   define WC_NO_HARDEN
 #endif
 
+#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+#   define WOLFBOOT_TPM_PARMENC /* used in this file to gate features */
+#endif
+
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
 #   define HAVE_ED25519
@@ -110,7 +114,7 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_384
 #       define WOLFSSL_SP_NO_256
 #   endif
-#   if !defined(WOLFBOOT_TPM_KEYSTORE)
+#   if !defined(WOLFBOOT_TPM_PARMENC)
 #       define NO_ECC256
 #   endif
 #elif defined(WOLFBOOT_SIGN_ECC521)
@@ -120,7 +124,7 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_521
 #       define WOLFSSL_SP_NO_256
 #   endif
-#   if !defined(WOLFBOOT_TPM_KEYSTORE)
+#   if !defined(WOLFBOOT_TPM_PARMENC)
 #       define NO_ECC256
 #   endif
 #endif
@@ -135,7 +139,7 @@ extern int tolower(int c);
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
 #   endif
-#   ifndef WOLFBOOT_TPM_KEYSTORE
+#   if !defined(WOLFBOOT_TPM_PARMENC)
 #       define WC_NO_RSA_OAEP
 #   endif
 #   define FP_MAX_BITS (2048 * 2)
@@ -190,14 +194,14 @@ extern int tolower(int c);
 
 #ifdef WOLFBOOT_HASH_SHA3_384
 #   define WOLFSSL_SHA3
-#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_PARMENC)
 #       define NO_SHA256
 #   endif
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA384
 #   define WOLFSSL_SHA384
-#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_KEYSTORE)
+#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_PARMENC)
 #       define NO_SHA256
 #   endif
 #endif
@@ -232,8 +236,16 @@ extern int tolower(int c);
 #ifdef WOLFBOOT_TPM
     /* Do not use heap */
     #define WOLFTPM2_NO_HEAP
+    /* small stack options */
+    #ifdef WOLFTPM_SMALL_STACK
+        #define MAX_COMMAND_SIZE 1024
+        #define MAX_RESPONSE_SIZE 1350
+        #define WOLFTPM2_MAX_BUFFER 1500
+        #define MAX_SESSION_NUM 2
+        #define MAX_DIGEST_BUFFER 973
+    #endif
 
-    #ifdef WOLFBOOT_TPM_KEYSTORE
+    #ifdef WOLFBOOT_TPM_PARMENC
         /* Enable AES CFB (parameter encryption) and HMAC (for KDF) */
         #define WOLFSSL_AES_CFB
 
@@ -241,7 +253,7 @@ extern int tolower(int c);
         #define WOLFSSL_PUBLIC_MP
 
         /* Configure RNG seed */
-        #define CUSTOM_RAND_GENERATE_SEED(buf, sz) 0 /* stub, not used */
+        #define CUSTOM_RAND_GENERATE_SEED(buf, sz) ({(void)buf; (void)sz; 0;}) /* stub, not used */
         #define WC_RNG_SEED_CB
         #define HAVE_HASHDRBG
     #endif
@@ -269,10 +281,10 @@ extern int tolower(int c);
 
 /* Disables - For minimum wolfCrypt build */
 #if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
-    !defined(WOLFBOOT_TPM_KEYSTORE)
+    !defined(WOLFBOOT_TPM_PARMENC)
     #define NO_AES
 #endif
-#if !defined(WOLFBOOT_TPM_KEYSTORE)
+#if !defined(WOLFBOOT_TPM_PARMENC)
     #define NO_HMAC
     #define WC_NO_RNG
     #define WC_NO_HASHDRBG

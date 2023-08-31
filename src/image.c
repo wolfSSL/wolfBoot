@@ -25,45 +25,24 @@
  */
 #ifndef IMAGE_H_
 #define IMAGE_H_
+
+#include <wolfssl/wolfcrypt/settings.h> /* for wolfCrypt hash/sign routines */
+
+#include <stddef.h>
+#include <string.h>
+
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
 #include "spi_drv.h"
-#include <stddef.h>
 #include "printf.h"
-
-#include <wolfssl/wolfcrypt/settings.h>
-#include <string.h>
-
-#include "image.h"
-
 #ifdef WOLFBOOT_TPM
-#include <stdlib.h>
-#include "wolftpm/tpm2.h"
-#include "wolftpm/tpm2_wrap.h"
-#include "wolftpm/tpm2_tis.h" /* for TIS header size and wait state */
-static WOLFTPM2_DEV     wolftpm_dev;
-#ifdef WOLFBOOT_TPM_KEYSTORE
-static WOLFTPM2_SESSION wolftpm_session;
-static WOLFTPM2_KEY     wolftpm_srk;
-#endif
-#endif /* WOLFBOOT_TPM */
-
-#if defined(WOLFBOOT_TPM_KEYSTORE) && !defined(WOLFBOOT_TPM)
-#error For TPM keystore please make sure WOLFBOOT_TPM is also defined
+#include "tpm.h"
 #endif
 
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
-/* Forward declarations */
-/**
- * @brief Find the key slot ID based on the SHA hash of the key.
- *
- * @param hint The SHA hash to find the key slot ID for.
- * @return The key slot ID corresponding to the provided SHA hash.
- */
-static int keyslot_id_by_sha(const uint8_t *hint);
 
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
@@ -144,7 +123,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     int point_sz = pubkey_sz/2;
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
     WOLFTPM2_KEY tpmKey;
 #else
     ecc_key ecc;
@@ -155,7 +134,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
     /* Use TPM for ECC verify */
     /* Load public key into TPM */
     memset(&tpmKey, 0, sizeof(tpmKey));
@@ -203,10 +182,10 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         }
         wc_ecc_free(&ecc);
     }
-#endif /* WOLFBOOT_TPM */
+#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY*/
 }
 
-#endif /* WOLFBOOT_SIGN_ECC256 */
+#endif /* WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC521 */
 
 
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
@@ -268,7 +247,7 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 }
 #endif /* !NO_RSA_SIG_ENCODING */
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
 /* RSA PKCSV15 un-padding with RSA_BLOCK_TYPE_1 (public) */
 /* UnPad plaintext, set start to *output, return length of plaintext or error */
 static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
@@ -291,7 +270,7 @@ static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
     ret = pkcsBlockLen - i;
     return ret;
 }
-#endif /* WOLFBOOT_TPM */
+#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY*/
 
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
@@ -303,7 +282,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     word32 inOutIdx = 0;
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
     WOLFTPM2_KEY tpmKey;
     const byte *n = NULL, *e = NULL;
     word32 nSz = 0, eSz = 0;
@@ -315,7 +294,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
     /* Extract DER RSA key struct */
     memset(&tpmKey, 0, sizeof(tpmKey));
     ret = wc_RsaPublicKeyDecode_ex(pubkey, &inOutIdx, pubkey_sz,
@@ -378,7 +357,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     }
 #endif /* SCE || TSIP */
     wc_FreeRsaKey(&rsa);
-#endif /* WOLFBOOT_TPM */
+#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY*/
 
 #ifndef NO_RSA_SIG_ENCODING
     if (ret > WOLFBOOT_SHA_DIGEST_SIZE) {
@@ -480,7 +459,8 @@ static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type,
  * @param ptr A pointer to store the position of the header.
  * @return The size of the data if found, otherwise 0.
  */
-static uint16_t get_header(struct wolfBoot_image *img, uint16_t type,
+#define get_header wolfBoot_get_header /* internal reference to function */
+uint16_t wolfBoot_get_header(struct wolfBoot_image *img, uint16_t type,
         uint8_t **ptr)
 {
     if (PART_IS_EXT(img))
@@ -559,36 +539,6 @@ static uint8_t *get_img_hdr(struct wolfBoot_image *img)
 
 #if defined(WOLFBOOT_HASH_SHA256)
 #include <wolfssl/wolfcrypt/sha256.h>
-
-#ifdef WOLFBOOT_MEASURED_BOOT
-static int self_sha256(uint8_t *hash)
-{
-    uintptr_t p = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
-    uint32_t blksz, position = 0;
-    wc_Sha256 sha256_ctx;
-
-    wc_InitSha256(&sha256_ctx);
-    do {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (position + blksz > sz)
-            blksz = sz - position;
-    #if defined(EXT_FLASH) && defined(NO_XIP)
-        rc = ext_flash_read(p, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
-        if (rc != WOLFBOOT_SHA_BLOCK_SIZE)
-            return -1;
-        wc_Sha256Update(&sha256_ctx, ext_hash_block, blksz);
-    #else
-        wc_Sha256Update(&sha256_ctx, (uint8_t*)p, blksz);
-    #endif
-        position += blksz;
-        p += blksz;
-    } while (position < sz);
-    wc_Sha256Final(&sha256_ctx, hash);
-
-    return 0;
-}
-#endif /* WOLFBOOT_MEASURED_BOOT */
 
 /**
  * @brief Calculate the SHA256 hash of the image.
@@ -671,36 +621,6 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
 
 #if defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
-
-#ifdef WOLFBOOT_MEASURED_BOOT
-static int self_sha384(uint8_t *hash)
-{
-    uintptr_t p = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
-    uint32_t blksz, position = 0;
-    wc_Sha384 sha384_ctx;
-
-    wc_InitSha384(&sha384_ctx);
-    do {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (position + blksz > sz)
-            blksz = sz - position;
-    #if defined(EXT_FLASH) && defined(NO_XIP)
-        rc = ext_flash_read(p, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
-        if (rc != WOLFBOOT_SHA_BLOCK_SIZE)
-            return -1;
-        wc_Sha384Update(&sha384_ctx, ext_hash_block, blksz);
-    #else
-        wc_Sha384Update(&sha384_ctx, (uint8_t*)p, blksz);
-    #endif
-        position += blksz;
-        p += blksz;
-    } while (position < sz);
-    wc_Sha384Final(&sha384_ctx, hash);
-
-    return 0;
-}
-#endif /* WOLFBOOT_MEASURED_BOOT */
 
 /**
  * @brief Calculate SHA-384 hash of the image.
@@ -875,340 +795,6 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
 }
 #endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA3-384 */
-
-#ifdef WOLFBOOT_TPM
-#if defined(DEBUG_WOLFTPM) || defined(WOLFTPM_DEBUG_IO) || \
-    defined(WOLFBOOT_DEBUG_TPM)
-#define LINE_LEN 16
-static void wolfBoot_PrintBin(const byte* buffer, word32 length)
-{
-    word32 i, sz;
-
-    if (!buffer) {
-        wolfBoot_printf("\tNULL\n");
-        return;
-    }
-
-    while (length > 0) {
-        sz = length;
-        if (sz > LINE_LEN)
-            sz = LINE_LEN;
-
-        wolfBoot_printf("\t");
-        for (i = 0; i < LINE_LEN; i++) {
-            if (i < length)
-                wolfBoot_printf("%02x ", buffer[i]);
-            else
-                wolfBoot_printf("   ");
-        }
-        wolfBoot_printf("| ");
-        for (i = 0; i < sz; i++) {
-            if (buffer[i] > 31 && buffer[i] < 127)
-                wolfBoot_printf("%c", buffer[i]);
-            else
-                wolfBoot_printf(".");
-        }
-        wolfBoot_printf("\r\n");
-
-        buffer += sz;
-        length -= sz;
-    }
-}
-#endif /* WOLFTPM_DEBUG_IO || WOLFBOOT_DEBUG_TPM */
-
-#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
-#ifdef WOLFTPM_ADV_IO
-static int TPM2_IoCb(TPM2_CTX* ctx, int isRead, word32 addr, byte* buf,
-    word16 size, void* userCtx)
-#else
-
-/**
- * @brief TPM2 I/O callback function for communication with TPM2 device.
- *
- * This function is used as the I/O callback function for communication
- * with the TPM2 device. It is called during TPM operations to send and
- * receive data from the TPM2 device.
- *
- * @param ctx The pointer to the TPM2 context.
- * @param txBuf The buffer containing data to be sent to the TPM2 device.
- * @param rxBuf The buffer to store the received data from the TPM2 device.
- * @param xferSz The size of the data to be transferred.
- * @param userCtx The user context (not used in this implementation).
- * @return The return code from the TPM2 device operation.
- */
-static int TPM2_IoCb(TPM2_CTX* ctx, const byte* txBuf, byte* rxBuf,
-    word16 xferSz, void* userCtx)
-#endif
-{
-    int ret;
-#ifdef WOLFTPM_CHECK_WAIT_STATE
-    int timeout = TPM_SPI_WAIT_RETRY;
-#endif
-#ifdef WOLFTPM_ADV_IO
-    byte txBuf[MAX_SPI_FRAMESIZE+TPM_TIS_HEADER_SZ];
-    byte rxBuf[MAX_SPI_FRAMESIZE+TPM_TIS_HEADER_SZ];
-    int xferSz = TPM_TIS_HEADER_SZ + size;
-
-#ifdef WOLFTPM_DEBUG_IO
-    wolfBoot_printf("TPM2_IoCb (Adv): Read %d, Addr %x, Size %d\n",
-        isRead ? 1 : 0, addr, size);
-    if (!isRead) {
-        wolfBoot_PrintBin(buf, size);
-    }
-#endif
-
-    /* Build TPM header */
-    txBuf[1] = (addr>>16) & 0xFF;
-    txBuf[2] = (addr>>8)  & 0xFF;
-    txBuf[3] = (addr)     & 0xFF;
-    if (isRead) {
-        txBuf[0] = TPM_TIS_READ | ((size & 0xFF) - 1);
-        memset(&txBuf[TPM_TIS_HEADER_SZ], 0, size);
-    }
-    else {
-        txBuf[0] = TPM_TIS_WRITE | ((size & 0xFF) - 1);
-        memcpy(&txBuf[TPM_TIS_HEADER_SZ], buf, size);
-    }
-    memset(rxBuf, 0, sizeof(rxBuf));
-#endif /* WOLFTPM_ADV_IO */
-
-#ifdef WOLFTPM_CHECK_WAIT_STATE /* Handle TIS wait states */
-    /* Send header - leave CS asserted */
-    ret = spi_xfer(SPI_CS_TPM, txBuf, rxBuf, TPM_TIS_HEADER_SZ,
-        0x1 /* 1=SPI_XFER_FLAG_CONTINUE */
-    );
-
-    /* Handle wait states */
-    while (ret == 0 &&
-        --timeout > 0 &&
-        (rxBuf[TPM_TIS_HEADER_SZ-1] & TPM_TIS_READY_MASK) == 0)
-    {
-        /* clock additional byte until 0x01 LSB is set (keep CS asserted) */
-        ret = spi_xfer(SPI_CS_TPM,
-            &txBuf[TPM_TIS_HEADER_SZ-1],
-            &rxBuf[TPM_TIS_HEADER_SZ-1], 1,
-            0x1 /* 1=SPI_XFER_FLAG_CONTINUE */
-        );
-    }
-    /* Check for timeout */
-    if (ret == 0 && timeout <= 0) {
-        ret = TPM_RC_FAILURE;
-    }
-
-    /* Transfer remainder of payload (command / response) */
-    if (ret == 0) {
-        ret = spi_xfer(SPI_CS_TPM,
-            &txBuf[TPM_TIS_HEADER_SZ],
-            &rxBuf[TPM_TIS_HEADER_SZ],
-            xferSz-TPM_TIS_HEADER_SZ,
-            0 /* de-assert CS*/ );
-    }
-    /* On error make sure SPI is de-asserted */
-    else {
-        spi_xfer(SPI_CS_TPM, NULL, NULL, 0, 0);
-        return ret;
-    }
-#else /* Send Entire Message - no wait states */
-    ret = spi_xfer(SPI_CS_TPM, txBuf, rxBuf, xferSz, 0);
-
-    #ifdef WOLFTPM_DEBUG_IO
-    wolfBoot_printf("TPM2_IoCb: Ret %d, Sz %d\n", ret, xferSz);
-    wolfBoot_PrintBin(txBuf, xferSz);
-    wolfBoot_PrintBin(rxBuf, xferSz);
-    #endif
-#endif /* !WOLFTPM_CHECK_WAIT_STATE */
-
-#ifdef WOLFTPM_ADV_IO
-    if (isRead) {
-        memcpy(buf, &rxBuf[TPM_TIS_HEADER_SZ], size);
-    #ifdef WOLFTPM_DEBUG_IO
-        wolfBoot_PrintBin(buf, size);
-    #endif
-    }
-#endif
-
-    return ret;
-}
-#endif /* !ARCH_SIM && !WOLFTPM_MMIO */
-
-#ifdef WOLFBOOT_MEASURED_BOOT
-#define measure_boot(hash) wolfBoot_tpm2_extend((hash), __LINE__)
-/**
- * @brief Extends a PCR in the TPM with a hash.
- *
- * Extends a specified PCR's value in the TPM with a given hash. Uses
- * TPM2_PCR_Extend. Optionally, if DEBUG_WOLFTPM or WOLFBOOT_DEBUG_TPM defined,
- * prints debug info.
- *
- * @param[in] hash Pointer to the hash value to extend into the PCR.
- * @param[in] line Line number where the function is called (for debugging).
- * @return 0 on success, an error code on failure.
- *
- */
-static int wolfBoot_tpm2_extend(uint8_t* hash, int line)
-{
-    int rc;
-    PCR_Extend_In pcrExtend;
-#ifdef WOLFBOOT_DEBUG_TPM
-    PCR_Read_In pcrReadCmd;
-    PCR_Read_Out pcrReadResp;
-#endif
-
-    pcrExtend.pcrHandle = WOLFBOOT_MEASURED_PCR_A;
-    pcrExtend.digests.count = 1;
-    pcrExtend.digests.digests[0].hashAlg = TPM_ALG_SHA256;
-    XMEMCPY(pcrExtend.digests.digests[0].digest.H,
-        hash, TPM_SHA256_DIGEST_SIZE);
-
-    rc = TPM2_PCR_Extend(&pcrExtend);
-#ifdef DEBUG_WOLFTPM
-    wolfBoot_printf("Measured boot: Res %d, Index %d, Line %d\n",
-        rc, pcrExtend.pcrHandle, line);
-#endif
-
-#ifdef WOLFBOOT_DEBUG_TPM
-    if (rc == 0) {
-        memset(&pcrReadCmd, 0, sizeof(pcrReadCmd));
-        memset(&pcrReadResp, 0, sizeof(pcrReadResp));
-        TPM2_SetupPCRSel(&pcrReadCmd.pcrSelectionIn, TPM_ALG_SHA256,
-                        pcrExtend.pcrHandle);
-        rc = TPM2_PCR_Read(&pcrReadCmd, &pcrReadResp);
-
-        wolfBoot_printf("PCR %d: Res %d, Digest Sz %d, Update Counter %d\n",
-            pcrExtend.pcrHandle, rc,
-            (int)pcrReadResp.pcrValues.digests[0].size,
-            (int)pcrReadResp.pcrUpdateCounter);
-        wolfBoot_PrintBin(pcrReadResp.pcrValues.digests[0].buffer,
-                          pcrReadResp.pcrValues.digests[0].size);
-    }
-#endif
-    (void)line;
-
-    return rc;
-}
-#endif /* WOLFBOOT_MEASURED_BOOT */
-
-#if defined(WOLFBOOT_TPM_KEYSTORE) && defined(WC_RNG_SEED_CB)
-static int wolfRNG_GetSeedCB(OS_Seed* os, byte* seed, word32 sz)
-{
-    (void)os;
-    return wolfTPM2_GetRandom(&wolftpm_dev, seed, sz);
-}
-#endif
-
-/**
- * @brief Initialize the TPM2 device and retrieve its capabilities.
- *
- * This function initializes the TPM2 device and retrieves its capabilities.
- *
- * @return 0 on success, an error code on failure.
- */
-int wolfBoot_tpm2_init(void)
-{
-    int rc;
-    word32 idx;
-    WOLFTPM2_CAPS caps;
-#ifdef WOLFBOOT_TPM_KEYSTORE
-    TPM_ALG_ID alg;
-#endif
-
-#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
-    spi_init(0,0);
-#endif
-
-    /* Init the TPM2 device */
-    /* simulator should use the network connection, not spi */
-#if defined(ARCH_SIM) || defined(WOLFTPM_MMIO)
-    rc = wolfTPM2_Init(&wolftpm_dev, NULL, NULL);
-#else
-    rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
-#endif
-    if (rc == 0)  {
-        /* Get device capabilities + options */
-        rc = wolfTPM2_GetCapabilities(&wolftpm_dev, &caps);
-    }
-    if (rc == 0) {
-        wolfBoot_printf("Mfg %s (%d), Vendor %s, Fw %u.%u (0x%x), "
-            "FIPS 140-2 %d, CC-EAL4 %d\n",
-            caps.mfgStr, caps.mfg, caps.vendorStr, caps.fwVerMajor,
-            caps.fwVerMinor, caps.fwVerVendor, caps.fips140_2, caps.cc_eal4);
-    }
-    else {
-        wolfBoot_printf("TPM Init failed! %d\n", rc);
-    }
-
-#ifdef WOLFBOOT_TPM_KEYSTORE
-    memset(&wolftpm_session, 0, sizeof(wolftpm_session));
-
-#ifdef WC_RNG_SEED_CB
-    /* setup callback for RNG seed to use TPM */
-    wc_SetSeed_Cb(wolfRNG_GetSeedCB);
-#endif
-
-    /* Create a primary storage key - no auth (used for parameter encryption) */
-#ifdef HAVE_ECC
-    alg = TPM_ALG_ECC;
-#elif !defined(NO_RSA)
-    alg = TPM_ALG_RSA;
-#else
-    alg = TPM_ALG_NULL;
-#endif
-    rc = wolfTPM2_CreateSRK(&wolftpm_dev, &wolftpm_srk, alg, NULL, 0);
-    if (rc == 0) {
-        /* Setup a TPM session that can be used for parameter encryption */
-        rc = wolfTPM2_StartSession(&wolftpm_dev, &wolftpm_session, &wolftpm_srk,
-            NULL, TPM_SE_HMAC, TPM_ALG_CFB);
-    }
-    if (rc != 0) {
-        wolfBoot_printf("TPM Create SRK or Start Session error %d (%s)!\n",
-            rc, wolfTPM2_GetRCString(rc));
-        wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_session.handle);
-        wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_srk.handle);
-    }
-#endif
-
-#ifdef WOLFBOOT_MEASURED_BOOT
-    /* hash wolfBoot and extend PCR */
-    rc = self_hash(digest);
-    if (rc == 0) {
-        rc = measure_boot(digest);
-    }
-    if (rc != 0) {
-        wolfBoot_printf("Error %d performing wolfBoot measurement!\n", rc);
-    }
-#endif
-
-    return rc;
-}
-
-/**
- * @brief Deinitialize the TPM2 device.
- *
- * This function deinitializes the TPM2 device and cleans up any resources.
- *
- * @return None.
- */
-void wolfBoot_tpm2_deinit(void)
-{
-#ifdef WOLFBOOT_TPM_KEYSTORE
-    #if !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH)
-    /* Change platform auth to random value, to prevent application from being
-     * able to use platform hierarchy. This is defined in section 10 of the
-     * TCG PC Client Platform specification.
-     */
-    int rc = wolfTPM2_ChangePlatformAuth(&wolftpm_dev, &wolftpm_session);
-    if (rc != 0) {
-        wolfBoot_printf("Error %d setting platform auth\n", rc);
-    }
-    #endif
-    wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_session.handle);
-    wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_srk.handle);
-#endif /* WOLFBOOT_TPM_KEYSTORE */
-
-    wolfTPM2_Cleanup(&wolftpm_dev);
-}
-
-#endif /* WOLFBOOT_TPM */
 
 /**
  * @brief Convert a 32-bit integer from little-endian to native byte order.
@@ -1482,8 +1068,15 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         if (key_slot < 0) {
             return -1; /* Key was not found */
         }
+
+    #ifdef WOLFBOOT_TPM_KEYSTORE
+        if (wolfBoot_check_rot(key_slot, pubkey_hint) != 0) {
+            return -1; /* TPM root of trust failed! */
+        }
+    #endif
 #endif
-    } else {
+    }
+    else {
         return -1; /* Invalid hash size for public key hint */
     }
     image_type_size = get_header(img, HDR_IMG_TYPE, &image_type_buf);
@@ -1501,8 +1094,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     image_part = image_type & HDR_IMG_TYPE_PART_MASK;
 
     /* Check if the key permission mask matches the current partition id */
-    if (((1U << image_part) & key_mask) != (1U << image_part))
+    if (((1U << image_part) & key_mask) != (1U << image_part)) {
         return -1; /* Key not allowed to verify this partition id */
+    }
 
     CONFIRM_MASK_VALID(image_part, key_mask);
 
@@ -1552,51 +1146,22 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
  * @param hint The SHA hash of the public key to search for.
  * @return The key slot ID if found, -1 if the key was not found.
  */
-static int keyslot_id_by_sha(const uint8_t *hint)
+int keyslot_id_by_sha(const uint8_t *hint)
 {
+    int id;
 #ifdef STAGE1_AUTH
     /* Override global */
     uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 #endif
 
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_KEYSTORE)
-    /* use public key hash (hint) */
-    int rc;
-    WOLFTPM2_NV nv;
-    word32 digestSz = (word32)TPM2_GetHashDigestSize(WOLFBOOT_TPM_HASH_ALG);
-    XMEMSET(&nv, 0, sizeof(nv));
-    nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_INDEX;
-
-#ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
-    nv.handle.auth.size = (UINT16)strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
-    memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH, nv.handle.auth.size);
-#endif
-
-    rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, WOLFBOOT_TPM_KEYSTORE_NV_INDEX,
-        digest, &digestSz, 0);
-    if (rc == 0 && memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
-    #ifdef DEBUG_WOLFTPM
-        wolfBoot_printf("TPM Root of Trust valid\n");
-    #endif
-        return 0;
-    }
-    else {
-    #ifdef DEBUG_WOLFTPM
-        wolfBoot_printf("TPM Root of Trust failed! %d (%s)\n",
-            rc, wolfTPM2_GetRCString(rc));
-        wolfBoot_printf("Expected Hash %d\n", WOLFBOOT_SHA_DIGEST_SIZE);
-        wolfBoot_PrintBin(hint, WOLFBOOT_SHA_DIGEST_SIZE);
-    #endif
-    }
-#else
-    int id = 0;
     for (id = 0; id < keystore_num_pubkeys(); id++) {
         key_hash(id, digest);
-        if (memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0)
+        if (memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
             return id;
+        }
     }
-#endif
     return -1;
 }
-#endif
+#endif /* !WOLFBOOT_NO_SIGN && !WOLFBOOT_RENESAS_SCEPROTECT */
+
 #endif /* IMAGE_H_ */

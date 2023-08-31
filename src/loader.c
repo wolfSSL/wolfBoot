@@ -36,6 +36,10 @@
 #include "uart_flash.h"
 #include "wolfboot/wolfboot.h"
 
+#ifdef WOLFBOOT_TPM
+#include "tpm.h"
+#endif
+
 #ifdef RAM_CODE
 /**
  * @brief Start address of the text section in RAM code.
