@@ -37,7 +37,8 @@ Note: If not using Position Independent Code (PIC) the linker script `ldscript.l
 ## Signing Example
 
 ```sh
-python3 ./tools/keytools/sign.py --rsa4096 --sha3 ../helloworld/Debug/helloworld.elf ./rsa4096.der 1
+make keytools
+./tools/keytools/sign --rsa4096 --sha3 ../helloworld/Debug/helloworld.elf ./rsa4096.der 1
 ```
 
 ## Bootgen

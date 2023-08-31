@@ -1,3 +1,8 @@
+ifeq ($(WOLFBOOT_TPM_VERIFY),1)
+  WOLFTPM:=1
+  CFLAGS+=-D"WOLFBOOT_TPM_VERIFY"
+endif
+
 ## Measured boot requires TPM to be present
 ifeq ($(MEASURED_BOOT),1)
   WOLFTPM:=1
@@ -7,15 +12,28 @@ endif
 
 ## TPM keystore
 ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
-  ifneq ($(WOLFBOOT_TPM_KEYSTORE_NV_INDEX),)
-    WOLFTPM:=1
-    CFLAGS+=-DWOLFBOOT_TPM_KEYSTORE
-    CFLAGS+=-DWOLFBOOT_TPM_KEYSTORE_NV_INDEX=$(WOLFBOOT_TPM_KEYSTORE_NV_INDEX)
+  WOLFTPM:=1
+  CFLAGS+=-D"WOLFBOOT_TPM_KEYSTORE"
+  ifneq ($(WOLFBOOT_TPM_KEYSTORE_AUTH),)
     CFLAGS+=-DWOLFBOOT_TPM_KEYSTORE_AUTH='"$(WOLFBOOT_TPM_KEYSTORE_AUTH)"'
+  endif
+  ifneq ($(WOLFBOOT_TPM_KEYSTORE_NV_BASE),)
+    CFLAGS+=-D"WOLFBOOT_TPM_KEYSTORE_NV_BASE=$(WOLFBOOT_TPM_KEYSTORE_NV_BASE)"
   endif
 endif
 
+## Sealing a secret into the TPM
+ifeq ($(WOLFBOOT_TPM_SEAL),1)
+  WOLFTPM:=1
+  CFLAGS+=-D"WOLFBOOT_TPM_SEAL"
+  ifneq ($(WOLFBOOT_TPM_SEAL_NV_BASE),)
+    CFLAGS+=-D"WOLFBOOT_TPM_SEAL_NV_BASE=$(WOLFBOOT_TPM_SEAL_NV_BASE)"
+  endif
+
+  ifneq ($(POLICY_FILE),)
+    SIGN_OPTIONS+=--policy $(POLICY_FILE)
+  endif
+endif
 
 ## DSA Settings
 ifeq ($(SIGN),NONE)
@@ -503,15 +521,16 @@ ifeq ($(WOLFBOOT_HUGE_STACK),1)
 endif
 
 ifeq ($(WOLFTPM),1)
-  OBJS += lib/wolfTPM/src/tpm2.o \
+  OBJS+=\
+    ./src/tpm.o \
+    lib/wolfTPM/src/tpm2.o \
     lib/wolfTPM/src/tpm2_packet.o \
     lib/wolfTPM/src/tpm2_tis.o \
     lib/wolfTPM/src/tpm2_wrap.o \
     lib/wolfTPM/src/tpm2_param_enc.o
-  CFLAGS+=-D"WOLFBOOT_TPM" -D"SIZEOF_LONG=4" -Ilib/wolfTPM \
-    -D"MAX_COMMAND_SIZE=1024" -D"MAX_RESPONSE_SIZE=1024" -D"WOLFTPM2_MAX_BUFFER=1500" \
-    -D"MAX_SESSION_NUM=2" -D"MAX_DIGEST_BUFFER=973" \
-    -D"WOLFTPM_SMALL_STACK"
+  CFLAGS+=-Ilib/wolfTPM
+  CFLAGS+=-D"WOLFBOOT_TPM"
+  CFLAGS+=-D"WOLFTPM_SMALL_STACK"
   CFLAGS+=-D"WOLFTPM_AUTODETECT"
   ifneq ($(SPI_FLASH),1)
     # don't use spi if we're using simulator
@@ -534,6 +553,7 @@ ifeq ($(WOLFTPM),1)
   endif
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
   ifeq ($(DEBUG),1)
     CFLAGS+=-DWOLFBOOT_DEBUG_TPM=1
   endif

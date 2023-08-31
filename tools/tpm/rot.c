@@ -24,7 +24,8 @@
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolftpm/tpm2_wrap.h>
 #include <hal/tpm_io.h>
-#include <keystore.h>
+#include "keystore.h"
+#include "tpm.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -32,13 +33,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#define TPM2_DEMO_NV_SECURE_ROT_INDEX   0x01400200
-
 static void usage(void)
 {
     printf("Expected usage:\n");
-    printf("./tools/tpm/rot [-nvindex] [-write] [-auth] [-sha384] [-lock]\n");
-    printf("* -nvindex=[handle] (default 0x%x)\n", TPM2_DEMO_NV_SECURE_ROT_INDEX);
+    printf("./tools/tpm/rot [-nvbase] [-write] [-auth] [-sha384] [-lock]\n");
+    printf("* -nvbase=[handle] (default 0x%x)\n", WOLFBOOT_TPM_KEYSTORE_NV_BASE);
     printf("* -write: Using keystore.c API's hashes each public key and stores into NV\n");
     printf("* -auth=password: Optional password for NV\n");
     printf("* -sha384: Use SHA2-384 (default is SHA2-256)\n");
@@ -48,7 +47,7 @@ static void usage(void)
     printf("\t./tools/tpm/rot -write\n");
 }
 
-int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvIndex,
+static int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvBaseIdx,
     enum wc_HashType hashType, int doWrite, int doLock,
     const char *authBuf, int authBufSz)
 {
@@ -93,17 +92,17 @@ int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvIndex,
     if (rc != 0) goto exit;
 
     printf("NV Auth (%d)\n", authBufSz);
-    TPM2_PrintBin((const byte*)authBuf, authBufSz);
+    TPM2_PrintBin((const uint8_t*)authBuf, authBufSz);
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
-        TPM_HANDLE handle = nvIndex + id;
+        TPM_HANDLE handle = nvBaseIdx + id;
         uint32_t keyType = keystore_get_key_type(id);
         int bufSz = keystore_get_size(id);
-        byte *buf = keystore_get_buffer(id);
+        uint8_t*buf = keystore_get_buffer(id);
 
         (void)keyType; /* not used */
 
-        printf("Computing keystore has for index %d\n", id);
+        printf("Computing keystore hash for index %d\n", id);
 
         /* hash public key */
         digestSz = wc_HashGetDigestSize(hashType);
@@ -124,7 +123,7 @@ int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvIndex,
 
                 /* Create NV - NV struct populated */
                 rc = wolfTPM2_NVCreateAuth(&dev, &parent, &nv, handle,
-                    nvAttributes, digestSz, (const byte*)authBuf, authBufSz);
+                    nvAttributes, digestSz, (const uint8_t*)authBuf, authBufSz);
                 if (rc == TPM_RC_NV_DEFINED) {
                     printf("Warning: NV Index 0x%x already exists!\n", handle);
                     rc = 0;
@@ -192,7 +191,7 @@ int main(int argc, char *argv[])
 {
     /* use platform handle to prevent TPM2_Clear from removing */
     TPMI_RH_NV_AUTH authHandle = TPM_RH_PLATFORM;
-    word32 nvIndex = TPM2_DEMO_NV_SECURE_ROT_INDEX;
+    word32 nvBaseIdx = WOLFBOOT_TPM_KEYSTORE_NV_BASE;
     int doWrite = 0, doLock = 0;
     enum wc_HashType hashType = WC_HASH_TYPE_SHA256;
     const char* authBuf = NULL;
@@ -207,17 +206,17 @@ int main(int argc, char *argv[])
         }
     }
     while (argc > 1) {
-        if (XSTRNCMP(argv[argc-1], "-nvindex=", XSTRLEN("-nvindex=")) == 0) {
-            const char* nvIndexStr = argv[argc-1] + XSTRLEN("-nvindex=");
-            nvIndex = (word32)XSTRTOL(nvIndexStr, NULL, 0);
+        if (XSTRNCMP(argv[argc-1], "-nvbase=", XSTRLEN("-nvbase=")) == 0) {
+            const char* nvBaseIdxStr = argv[argc-1] + XSTRLEN("-nvbase=");
+            nvBaseIdx = (word32)XSTRTOL(nvBaseIdxStr, NULL, 0);
             if (!(authHandle == TPM_RH_PLATFORM && (
-                    nvIndex > TPM_20_PLATFORM_MFG_NV_SPACE &&
-                    nvIndex < TPM_20_OWNER_NV_SPACE)) &&
+                    nvBaseIdx > TPM_20_PLATFORM_MFG_NV_SPACE &&
+                    nvBaseIdx < TPM_20_OWNER_NV_SPACE)) &&
                 !(authHandle == TPM_RH_OWNER && (
-                    nvIndex > TPM_20_OWNER_NV_SPACE &&
-                    nvIndex < TPM_20_TCG_NV_SPACE)))
+                    nvBaseIdx > TPM_20_OWNER_NV_SPACE &&
+                    nvBaseIdx < TPM_20_TCG_NV_SPACE)))
             {
-                fprintf(stderr, "Invalid NV Index %s\n", nvIndexStr);
+                fprintf(stderr, "Invalid NV Index %s\n", nvBaseIdxStr);
                 fprintf(stderr, "\tPlatform Range: 0x%x -> 0x%x\n",
                     TPM_20_PLATFORM_MFG_NV_SPACE, TPM_20_OWNER_NV_SPACE);
                 fprintf(stderr, "\tOwner Range: 0x%x -> 0x%x\n",
@@ -247,7 +246,7 @@ int main(int argc, char *argv[])
 
     return TPM2_Boot_SecureROT_Example(
         authHandle,
-        nvIndex,
+        nvBaseIdx,
         hashType,
         doWrite,
         doLock,

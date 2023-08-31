@@ -30,7 +30,7 @@
 #include "wolfboot/wolfboot.h"
 #include "delta.h"
 #include "printf.h"
-
+#include "tpm.h"
 
 #ifdef RAM_CODE
 extern unsigned int _start_text;
@@ -568,10 +568,88 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     return 0;
 }
 
+
+
+#if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
+int wolfBoot_unlock_disk(void)
+{
+    int ret;
+    struct wolfBoot_image img;
+    WOLFTPM2_KEYBLOB seal_blob;
+    uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
+    int     secretSz;
+    uint8_t* policy = NULL;
+    uint16_t policySz = 0;
+
+    memset(&seal_blob, 0, sizeof(seal_blob));
+    memset(secret, 0, sizeof(secret));
+
+    wolfBoot_printf("Unlocking disk...\n");
+
+    /* check policy */
+    ret = wolfBoot_open_image(&img, PART_BOOT);
+    if (ret == 0) {
+        ret = wolfBoot_get_policy(&img, &policy, &policySz);
+        if (ret == -TPM_RC_POLICY_FAIL) {
+            /* the image is not signed with a policy */
+            wolfBoot_printf("Image policy signature missing!\n");
+            return ret;
+        }
+    }
+    if (ret == 0) {
+        /* for testing seal and unseal */
+        /* create secret to seal */
+        secretSz = 32;
+        ret = wolfBoot_get_random(secret, secretSz);
+        if (ret == 0) {
+            wolfBoot_printf("Sealing %d bytes\n", secretSz);
+            wolfBoot_print_hexstr(secret, secretSz, 0);
+
+            /* seal new secret */
+            ret = wolfBoot_seal_blob(&img, &seal_blob, secret, secretSz);
+        }
+        if (ret == 0) {
+            uint8_t secretCheck[WOLFBOOT_MAX_SEAL_SZ];
+            int     secretCheckSz = 0;
+
+            /* unseal again to make sure it works */
+            memset(secretCheck, 0, sizeof(secretCheck));
+            ret = wolfBoot_unseal_blob(&img, &seal_blob, secretCheck, &secretCheckSz);
+            if (ret == 0) {
+                if (secretSz != secretCheckSz || memcmp(secret, secretCheck, secretSz) != 0) {
+                    wolfBoot_printf("secret check mismatch!\n");
+                    ret = -1;
+                }
+            }
+
+            wolfBoot_printf("Unsealed %d bytes\n", secretCheckSz);
+            wolfBoot_print_hexstr(secretCheck, secretCheckSz, 0);
+            TPM2_ForceZero(secretCheck, sizeof(secretCheck));
+        }
+    }
+
+    if (ret == 0) {
+        /* TODO: Unlock disk */
+
+    }
+    else {
+        wolfBoot_printf("unlock disk failed! %d (%s)\n",
+            ret, wolfTPM2_GetRCString(ret));
+    }
+    TPM2_ForceZero(secret, sizeof(secretSz));
+    return ret;
+}
+#endif
+
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t st;
     struct wolfBoot_image boot;
+
+#if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
+    wolfBoot_unlock_disk();
+#endif
 
 #ifdef RAM_CODE
     wolfBoot_check_self_update();

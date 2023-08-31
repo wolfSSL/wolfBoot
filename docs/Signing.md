@@ -157,7 +157,6 @@ be used for the key, 16 for the initialization of the IV.
     SHAREDKEY.BIN is expected to be exactly 48 bytes in size, of which 32 will
 be used for the key, 16 for the initialization of the IV.
 
-
 #### Delta updates (incremental updates from a known version)
 
 An incremental update is created using the sign tool when the following option
@@ -166,6 +165,16 @@ is provided:
   * `--delta BASE_SIGNED_IMG.BIN` This option creates a binary diff file between
     `BASE_SIGNED_IMG.BIN` and the new image signed starting from `IMAGE.BIN`. The
 result is stored in a file ending in `_signed_diff.bin`.
+
+#### Policy signing (for sealing/unsealing with a TPM)
+
+Provides a PCR mask and digest to be signed and included in the header. The signing key is used to sign the digest.
+
+  * `--policy policy.bin`: This argument is multi-purpose.
+  By default the file should contain a 4-byte PCR mask and SHA2-256 PCR digest to be signed.
+  If using `--manual-sign` then the file should contain the 4-byte PCR mask and signature.
+  The PCR mask and signature will be included in the `HDR_POLICY_SIGNATURE` header tag.
+  Note: This may require increasing the `IMAGE_HEADER_SIZE` as two signatures will be stored in the header.
 
 #### Three-steps signing using external provisioning tools
 
@@ -222,13 +231,13 @@ openssl rsa -inform DER -outform DER -in my_key.der -out rsa2048_pub.der -pubout
 ./tools/keytools/keygen --rsa2048 -i rsa2048_pub.der
 
 # Generate Hash to Sign
-./tools/keytools/sign            --rsa2048 --sha-only --sha256 test-app/image.bin rsa2048_pub.der 1
+./tools/keytools/sign --rsa2048 --sha-only --sha256 test-app/image.bin rsa2048_pub.der 1
 
 # Sign hash Example (here is where you would use an HSM)
 openssl pkeyutl -sign -keyform der -inkey my_key.der -in test-app/image_v1_digest.bin > test-app/image_v1.sig
 
 # Generate final signed binary
-./tools/keytools/sign            --rsa2048 --sha256 --manual-sign test-app/image.bin rsa2048_pub.der 1 test-app/image_v1.sig
+./tools/keytools/sign --rsa2048 --sha256 --manual-sign test-app/image.bin rsa2048_pub.der 1 test-app/image_v1.sig
 
 # Combine into factory image (0xc0000 is the WOLFBOOT_PARTITION_BOOT_ADDRESS)
 tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \

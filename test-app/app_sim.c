@@ -44,23 +44,21 @@ void hal_init(void);
 
 int do_cmd(const char *cmd)
 {
-    if (strcmp(cmd, "powerfail") == 0)
+    if (strcmp(cmd, "powerfail") == 0) {
         return 1;
+    }
     if (strcmp(cmd, "get_version") == 0) {
         printf("%d\n", wolfBoot_current_firmware_version());
         return 0;
     }
-
     if (strcmp(cmd, "success") == 0) {
         wolfBoot_success();
         return 0;
     }
-
     if (strcmp(cmd, "update_trigger") == 0) {
         wolfBoot_update_trigger();
         return 0;
     }
-
     if (strcmp(cmd, "reset") == 0) {
         exit(0);
     }

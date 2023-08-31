@@ -20,23 +20,23 @@ RENODE_BINASSEMBLE=tools/bin-assemble/bin-assemble
 LMS_OPTS=LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 WOLFBOOT_SMALL_STACK=0 \
          IMAGE_SIGNATURE_SIZE=2644 IMAGE_HEADER_SIZE=5288
 
-ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen)","")
-	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
-else
+# python version only supported using
+# KEYGEN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py"
+ifeq ("$(KEYGEN_TOOL)","")
 	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
 		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
 	else
-		KEYGEN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py
+		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
 	endif
 endif
 
-ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign)","")
-	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
-else
+# python version only supported using
+# SIGN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py"
+ifeq ("$(SIGN_TOOL)","")
 	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
 		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
 	else
-		SIGN_TOOL=python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py
+		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
 	endif
 endif
 
@@ -139,7 +139,7 @@ $(RENODE_UPDATE_FILE): test-app/image.bin FORCE
 		of=$@ bs=1 conv=notrunc
 	${Q}printf "pBOOT" >> $@
 
-renode-factory: factory.bin test-app/image.bin $(RENODE_UPDATE_FILE) $(EXPVER) FORCE 
+renode-factory: factory.bin test-app/image.bin $(RENODE_UPDATE_FILE) $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UART)
 	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
 	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
@@ -346,7 +346,7 @@ renode-corrupted-lms: FORCE
 	make renode-corrupted SIGN=LMS $(LMS_OPTS)
 
 renode-boot-time-all: FORCE
-	tools/scripts/renode-test-all.sh 2>/dev/null |grep "BOOT TIME" 
+	tools/scripts/renode-test-all.sh 2>/dev/null |grep "BOOT TIME"
 
 renode-update-all: FORCE
 	${Q}make keysclean

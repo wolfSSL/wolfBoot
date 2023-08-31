@@ -209,6 +209,7 @@ extern "C" {
 
 #endif /* defined WOLFBOOT */
 
+
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2

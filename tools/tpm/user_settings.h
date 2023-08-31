@@ -83,7 +83,6 @@
 #define NO_DES3
 #define NO_PWDBASED
 #define NO_WRITEV
-#define NO_MAIN_DRIVER
 #define NO_OLD_RNGNAME
 #define NO_WOLFSSL_DIR
 #define WOLFSSL_NO_SOCK

@@ -53,9 +53,10 @@ jobs:
         run: |
           make -C tools/keytools && make -C tools/bin-assemble
 
-      - name: Build wolfboot
+      # needed for tpm tools
+      - name: Build keystore.c
         run: |
-          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.authstr}}"
+          make keys ${{inputs.make-args}}
 
       - name: Build TPM tools
         run: |
@@ -64,6 +65,16 @@ jobs:
       - name: Write TPM ROT to TPM
         run: |
           ./tools/tpm/rot -write ${{inputs.rot-args}} -auth="${{inputs.authstr}}"
+
+      - name: Create a PCR Policy
+        run: |
+          echo aaa > aaa.bin
+          ./tools/tpm/pcr_extend 0 aaa.bin
+          ./tools/tpm/policy_create -pcr=0 -out=policy.bin
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.authstr}}"
 
       - name: Run wolfBoot
         run: |

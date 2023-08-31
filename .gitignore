@@ -101,6 +101,10 @@ tools/unit-tests/unit-parser
 tools/bin-assemble/bin-assemble
 tools/elf-parser/elf-parser
 tools/tpm/rot
+tools/tpm/pcr_read
+tools/tpm/pcr_reset
+tools/tpm/pcr_extend
+tools/tpm/policy_create
 config/*.ld
 
 # Generated confiuguration file
