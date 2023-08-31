@@ -10,6 +10,9 @@ FSP_M_ORIGIN = @FSP_M_BASE@;
 JMPTO32_ORIGIN = 0xfffffe00;
 FIT_TABLE_PTR = 0xffffffc0;
 RESETVECTOR_START = 0xffffffec;
+DATA_MEM_START = 0x800000; /* 8 MB */
+KEYSTORE_START = 0xffffe000;
+
 OUTPUT_FORMAT(elf32-i386)
 
 MEMORY
@@ -20,23 +23,23 @@ MEMORY
 
 SECTIONS
 {
-   .text FLASH_START :
+   .stage2 FLASH_START :
     {
         _wolfboot_flash_start = .;
         KEEP(*(.sig_wolfboot_raw*))
         *(.wolfboot)
         _wolfboot_flash_end = .;
-    }
+    } > FLASH
 
     .fsps_upd FSP_S_UPD_DATA_BASE :
     {
     	KEEP(./fsp_tgl_s_upd.o(.fsps_upd))
-    }
+    } > FLASH
 
     .ucode_update0 UCODE0_BASE :
     {
         *(.ucode0)
-    }
+    } > FLASH
 
     .fit_table FIT_TABLE :
     {
@@ -51,47 +54,71 @@ SECTIONS
        _start_fsp_s = .;
        *(.fsp_s)
        _end_fsp_s = .;
-    }
+    } > FLASH
 
     .bootloader WOLFBOOT_ORIGIN :
     {
        KEEP(./tgl_fsp.o(.boot))
        *(.boot*)
+       KEYSTORE_START = .;
+       *(.keystore*)
        *(.text*)
        *(.rodata*)
        *(.eh_frame*)
-       *(.data*)
-       . = ALIGN(4);
-    }
+       . = ALIGN(256);
+    } > FLASH
+    
+
+    _stored_data = .;
+    .data DATA_MEM_START : AT (_stored_data)
+    {
+        _start_data = .;
+        KEEP(*(.data*))
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
+        _end_data = .;
+    } > RAM
+
+    .bss(NOLOAD) : AT (_end_data)
+    {
+        _start_bss = .;
+        __bss_start__ = .;
+        *(.bss*)
+        . = ALIGN(4);
+        _end_bss = .;
+        __bss_end__ = .;
+        _end = .;
+    } > RAM
 
     .fsp_t FSP_T_ORIGIN :
     AT(FSP_T_ORIGIN)
     {
        _start_fsp_t = .;
        *(.fsp_t)
-    }
+    } > FLASH
 
     .fsp_m FSP_M_ORIGIN :
     {
        _start_fsp_m = .;
        *(.fsp_m)
        _end_fsp_m = .;
-    }
+    } > FLASH
 
     .jmpto32 JMPTO32_ORIGIN :
     {
        _off_boot = ABSOLUTE(.) & 0xffff;
        KEEP(*boot_x86_fsp_start.o(.jmpto32*));
        KEEP(*(.jmpto32));
-    }
+    } > FLASH
 
     .fit_table_tr FIT_TABLE_PTR :
     {
         QUAD(fit_table);
-    }
+    } > FLASH
 
     .reset_vector RESETVECTOR_START :
     {
         KEEP(*(.reset_vector))
-    }
+    } > FLASH
 }
