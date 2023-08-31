@@ -470,12 +470,13 @@ ifeq ($(TARGET),lpc)
       $(MCUXPRESSO_DRIVERS)/mcuxpresso/libpower_softabi.a
   ifeq ($(MCUXSDK),1)
     CFLAGS+=\
-      -I$(MCUXPRESSO)/drivers/flashiap
+      -I$(MCUXPRESSO)/drivers/flashiap \
+      -I$(MCUXPRESSO)/drivers/flexcomm
     OBJS+=\
       $(MCUXPRESSO)/drivers/common/fsl_common.o \
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/flashiap/fsl_flashiap.o \
-      $(MCUXPRESSO)/drivers/flexcomm/fsl_usart.o \
+      $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o \
       $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o
   else
     OBJS+=\
