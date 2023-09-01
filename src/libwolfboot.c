@@ -958,14 +958,14 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
         }
         if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
                     HDR_IMG_DELTA_INVERSE_SIZE, (uint8_t **)img_size)
-                        != sizeof(uint16_t)) {
+                        != sizeof(uint32_t)) {
             return -1;
         }
     } else {
         *img_offset = 0x0000000;
         if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
                     HDR_IMG_DELTA_SIZE, (uint8_t **)img_size)
-                        != sizeof(uint16_t)) {
+                        != sizeof(uint32_t)) {
             return -1;
         }
     }
