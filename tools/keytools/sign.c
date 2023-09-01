@@ -709,8 +709,8 @@ failure:
 
 static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
-        uint32_t delta_base_version, uint16_t patch_len, uint32_t patch_inv_off,
-        uint16_t patch_inv_len)
+        uint32_t delta_base_version, uint32_t patch_len, uint32_t patch_inv_off,
+        uint32_t patch_inv_len)
 {
     uint32_t header_idx;
     uint8_t *header;
@@ -781,7 +781,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             header_idx++;
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE, 4,
                 &delta_base_version);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 2,
+        header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 4,
                 &patch_len);
 
         /* Append pad bytes, so fields are 4-byte aligned */
@@ -789,7 +789,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             header_idx++;
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
                 &patch_inv_off);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 2,
+        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 4,
                 &patch_inv_len);
     }
 
@@ -1246,8 +1246,8 @@ static int make_header(uint8_t *pubkey, uint32_t pubkey_sz,
 
 static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
-        uint32_t delta_base_version, uint16_t patch_len,
-        uint32_t patch_inv_off, uint16_t patch_inv_len)
+        uint32_t delta_base_version, uint32_t patch_len,
+        uint32_t patch_inv_off, uint32_t patch_inv_len)
 {
     return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile,
             delta_base_version, patch_len,
@@ -1269,7 +1269,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     uint8_t ff = 0xff;
     int r;
     uint32_t blksz = WOLFBOOT_SECTOR_SIZE;
-    uint16_t patch_sz, patch_inv_sz;
+    uint32_t patch_sz, patch_inv_sz;
     uint32_t patch_inv_off;
     uint32_t delta_base_version = 0;
     char *base_ver_p, *base_ver_e;
@@ -1492,6 +1492,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     }
     printf("Successfully created output file %s\n", wolfboot_delta_file);
     /* Create delta file, with header, from the resulting patch */
+
     ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
             delta_base_version, patch_sz, patch_inv_off, patch_inv_sz);
 

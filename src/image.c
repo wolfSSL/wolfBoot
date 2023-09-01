@@ -1192,15 +1192,15 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     uint32_t *magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC) {
         wolfBoot_printf("Boot header magic 0x%08x invalid at %p\n",
-            *magic, image);
+            (unsigned int)*magic, image);
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
-    wolfBoot_printf("Image size %d\n", img->fw_size);
+    wolfBoot_printf("Image size %d\n", (unsigned int)img->fw_size);
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Image size %d > max %d\n",
-            img->fw_size, (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
+            (unsigned int)img->fw_size, (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
         img->fw_size = 0;
         return -1;
     }
