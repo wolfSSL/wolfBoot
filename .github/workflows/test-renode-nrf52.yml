@@ -54,6 +54,10 @@ jobs:
       - name: Renode Tests RSA4096
         run: ./tools/renode/docker-test.sh "SIGN=RSA4096"
 
+# LMS TEST
+      - name: Renode Tests LMS-8-5-5
+        run: ./tools/renode/docker-test.sh "SIGN=LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 IMAGE_HEADER_SIZE=5288"
+
       - name: Upload Output Dir
         uses: actions/upload-artifact@v2
         with:
