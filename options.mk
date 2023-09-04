@@ -536,8 +536,14 @@ ifeq ($(LINUX_PAYLOAD),1)
   endif
 endif
 
+
 ifeq ($(64BIT),1)
   CFLAGS+=-DWOLFBOOT_64BIT
+endif
+
+ifeq ($(DISK_LOCK),1)
+  CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK
+  CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK_PASSWORD=\"$(DISK_LOCK_PASSWORD)\"
 endif
 
 ifeq ($(FSP), 1)
