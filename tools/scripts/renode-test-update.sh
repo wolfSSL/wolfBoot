@@ -24,7 +24,9 @@ if (echo $TEST_OPTIONS | grep "LMS" &>/dev/null); then
     apt install -y git
     mkdir -p lib/hss-lib/lib
     git clone https://github.com/cisco/hash-sigs.git lib/hash-sigs/src
-    cd lib/hash-sigs/src && git checkout b0631b8891295bf2929e68761205337b7c031726
+    cd lib/hash-sigs/src && git checkout b0631b8891295bf2929e68761205337b7c031726 && \
+        git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch &&\
+        cd ../../..
 fi
 
 make distclean
