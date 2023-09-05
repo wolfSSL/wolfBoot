@@ -19,6 +19,24 @@ quit_renode() {
 
 
 rm -f $RENODE_UART
+
+if (echo $TEST_OPTIONS | grep "LMS" &>/dev/null); then
+    # Need git.
+    apt install -y git
+
+    # wolfSSL needs to be on latest master for LMS support. Also, we need to
+    # add the wolfssl module as a safe directory so docker can use it.
+    git config --global --add safe.directory /workspace/lib/wolfssl || exit 2
+    cd lib/wolfssl && git checkout master && git pull && cd ../.. || exit 2
+
+    # Need to clone the hash-sigs repo, and patch it for wolfBoot build.
+    mkdir -p lib/hash-sigs/lib || exit 2
+    git clone https://github.com/cisco/hash-sigs.git lib/hash-sigs/src || exit 2
+    cd lib/hash-sigs/src && git checkout b0631b8891295bf2929e68761205337b7c031726 && \
+        git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch &&\
+        cd ../../.. || exit 2
+fi
+
 make distclean
 make -C tools/keytools
 make -C tools/test-expect-version

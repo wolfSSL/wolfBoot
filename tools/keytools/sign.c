@@ -100,6 +100,14 @@ static inline int fp_truncate(FILE *f, size_t len)
 #endif
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
+
+#if defined(WOLFSSL_HAVE_LMS)
+    #include <wolfssl/wolfcrypt/lms.h>
+    #ifdef HAVE_LIBLMS
+        #include <wolfssl/wolfcrypt/ext_lms.h>
+    #endif
+#endif
+
 #ifdef DEBUG_SIGNTOOL
     #include <wolfssl/wolfcrypt/logging.h>
 #endif
@@ -160,6 +168,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define SIGN_ED448     HDR_IMG_TYPE_AUTH_ED448
 #define SIGN_ECC384    HDR_IMG_TYPE_AUTH_ECC384
 #define SIGN_ECC521    HDR_IMG_TYPE_AUTH_ECC521
+#define SIGN_LMS       HDR_IMG_TYPE_AUTH_LMS
 
 
 #define ENC_OFF 0
@@ -190,6 +199,9 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
     *idx += len;
 }
 
+#if defined(WOLFSSL_HAVE_LMS)
+#include "../lms/lms_common.h"
+#endif
 
 /* Globals */
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
@@ -206,6 +218,9 @@ static union {
 #endif
 #ifndef NO_RSA
     RsaKey rsa;
+#endif
+#if defined(WOLFSSL_HAVE_LMS)
+    LmsKey lms;
 #endif
 } key;
 
@@ -676,9 +691,26 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     break;
                 }
             }
+#if defined(WOLFSSL_HAVE_LMS)
+            FALL_THROUGH;
+        case SIGN_LMS:
+            ret = -1;
 
+            if (CMD.sign == SIGN_AUTO) {
+                printf("error: SIGN_AUTO with LMS is not supported\n");
+            }
+            else {
+                /* Set the public key only.
+                 * The LMS file callbacks will write/read the private key.
+                 * The first 64 bytes is the private key.
+                 * The next 60 bytes is the public key.*/
+                *pubkey = (*key_buffer) + 64;
+                *pubkey_sz = (*key_buffer_sz) - 64;
+                ret = 0;
+            }
+#endif /* defined(WOLFSSL_HAVE_LMS)  */
             break;
-    }
+    } /* end switch (CMD.sign) */
 
     if (ret != 0) {
         printf("Key decode error %d\n", ret);
@@ -1055,6 +1087,43 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 }
 #endif
             }
+            else if (CMD.sign == SIGN_LMS) {
+#if defined(WOLFSSL_HAVE_LMS)
+                /* Set the callbacks, so LMS can update the private key
+                 * while signing. */
+                ret = wc_LmsKey_SetWriteCb(&key.lms, lms_write_key);
+                if (ret != 0) {
+                    fprintf(stderr, "error: wc_LmsKey_SetWriteCb returned %d\n", ret);
+                    goto failure;
+                }
+
+                ret = wc_LmsKey_SetReadCb(&key.lms, lms_read_key);
+                if (ret != 0) {
+                    fprintf(stderr, "error: wc_LmsKey_SetReadCb returned %d\n", ret);
+                    goto failure;
+                }
+
+                ret = wc_LmsKey_SetContext(&key.lms, (void *) CMD.key_file);
+                if (ret != 0) {
+                    fprintf(stderr, "error: wc_LmsKey_SetContext returned %d\n", ret);
+                    goto failure;
+                }
+
+                ret = wc_LmsKey_Reload(&key.lms);
+                if (ret != 0) {
+                    fprintf(stderr, "error: wc_LmsKey_Reload returned %d\n", ret);
+                    goto failure;
+                }
+
+                ret = wc_LmsKey_Sign(&key.lms, signature, &CMD.signature_sz, digest,
+                                     digest_sz);
+                if (ret != 0) {
+                    fprintf(stderr, "error: wc_LmsKey_Sign returned %d\n", ret);
+                    goto failure;
+                }
+#endif /* defined(WOLFSSL_HAVE_LMS) */
+            }
+
             wc_FreeRng(&rng);
 
             if (ret != 0) {
@@ -1608,6 +1677,12 @@ int main(int argc, char** argv)
             CMD.sign = SIGN_RSA4096;
             sign_str = "RSA4096";
         }
+#if defined(WOLFSSL_HAVE_LMS)
+        else if (strcmp(argv[i], "--lms") == 0) {
+            CMD.sign = SIGN_LMS;
+            sign_str = "LMS";
+        }
+#endif
         else if (strcmp(argv[i], "--sha256") == 0) {
             CMD.hash_algo = HASH_SHA256;
             hash_str = "SHA256";
@@ -1782,6 +1857,43 @@ int main(int argc, char** argv)
             CMD.header_sz = 1024;
         CMD.signature_sz = 512;
     }
+#if defined(WOLFSSL_HAVE_LMS)
+    else if (CMD.sign == SIGN_LMS) {
+        int    lms_ret = 0;
+        word32 sig_sz = 0;
+
+        lms_ret = wc_LmsKey_Init(&key.lms, NULL, INVALID_DEVID);
+        if (lms_ret != 0) {
+            fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", lms_ret);
+            exit(1);
+        }
+
+        lms_ret = wc_LmsKey_SetParameters(&key.lms, LMS_LEVELS,
+                                          LMS_HEIGHT, LMS_WINTERNITZ);
+        if (lms_ret != 0) {
+            fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
+                    " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
+                    LMS_WINTERNITZ, ret);
+            exit(1);
+        }
+
+        printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
+               LMS_HEIGHT, LMS_WINTERNITZ);
+
+        lms_ret = wc_LmsKey_GetSigLen(&key.lms, &sig_sz);
+        if (lms_ret != 0) {
+            fprintf(stderr, "error: wc_LmsKey_GetSigLen returned %d\n",
+                    lms_ret);
+            exit(1);
+        }
+
+        printf("info: LMS signature size: %d\n", sig_sz);
+
+        CMD.header_sz = 2 * sig_sz;
+        CMD.signature_sz = sig_sz;
+    }
+#endif /* defined(WOLFSSL_HAVE_LMS) */
+
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
             CMD.header_sz == 0) {
         printf("Invalid hash or signature type!\n");
@@ -1825,6 +1937,10 @@ int main(int argc, char** argv)
     } else if (CMD.sign == SIGN_RSA4096 || CMD.sign == SIGN_RSA4096) {
 #ifndef NO_RSA
         wc_FreeRsaKey(&key.rsa);
+#endif
+    } else if (CMD.sign == SIGN_LMS) {
+#if defined(WOLFSSL_HAVE_LMS)
+        wc_LmsKey_Free(&key.lms);
 #endif
     }
     return ret;

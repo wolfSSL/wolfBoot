@@ -50,6 +50,9 @@ endif
 ifeq ($(SIGN),RSA4096)
 	SIGN_ARGS+= --rsa4096
 endif
+ifeq ($(SIGN),LMS)
+	SIGN_ARGS+= --lms
+endif
 
 # Make sign hash argument
 ifeq ($(HASH),SHA256)

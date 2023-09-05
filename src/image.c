@@ -393,6 +393,73 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_3072 || \
         * WOLFBOOT_SIGN_RSA4096 */
 
+#ifdef WOLFBOOT_SIGN_LMS
+#include <wolfssl/wolfcrypt/lms.h>
+#ifdef HAVE_LIBLMS
+    #include <wolfssl/wolfcrypt/ext_lms.h>
+#endif
+
+static void wolfBoot_verify_signature(uint8_t key_slot,
+        struct wolfBoot_image *img, uint8_t *sig)
+{
+    int       ret = 0;
+    LmsKey    lms;
+    word32    pub_len = 0;
+    uint8_t * pubkey = NULL;
+
+    wolfBoot_printf("info: LMS wolfBoot_verify_signature\n");
+
+    pubkey = keystore_get_buffer(key_slot);
+    if (pubkey == NULL) {
+        wolfBoot_printf("error: Lms pubkey not found\n");
+        return;
+    }
+
+    ret = wc_LmsKey_Init(&lms, NULL, INVALID_DEVID);
+    if (ret != 0) {
+        wolfBoot_printf("error: wc_LmsKey_Init returned %d\n", ret);
+        return;
+    }
+
+    /* Set the LMS parameters. */
+    ret = wc_LmsKey_SetParameters(&lms, LMS_LEVELS, LMS_HEIGHT,
+                                  LMS_WINTERNITZ);
+    if (ret != 0) {
+        /* Something is wrong with the pub key or LMS parameters. */
+        wolfBoot_printf("error: wc_LmsKey_SetParameters(%d, %d, %d)" \
+                        " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
+                        LMS_WINTERNITZ, ret);
+        return;
+    }
+
+    wolfBoot_printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
+                    LMS_HEIGHT, LMS_WINTERNITZ);
+
+    /* Set the public key. */
+    ret = wc_LmsKey_ImportPubRaw(&lms, pubkey, KEYSTORE_PUBKEY_SIZE);
+    if (ret != 0) {
+        /* Something is wrong with the pub key or LMS parameters. */
+        wolfBoot_printf("error: wc_LmsKey_ImportPubRaw" \
+                        " returned %d\n", ret);
+        return;
+    }
+
+    ret = wc_LmsKey_Verify(&lms, sig, IMAGE_SIGNATURE_SIZE, img->sha_hash,
+                           WOLFBOOT_SHA_DIGEST_SIZE);
+
+    if (ret == 0) {
+        wolfBoot_printf("info: wc_LmsKey_Verify returned OK\n");
+        wolfBoot_image_confirm_signature_ok(img);
+    }
+    else {
+        wolfBoot_printf("error: wc_LmsKey_Verify returned %d\n", ret);
+    }
+
+    wc_LmsKey_Free(&lms);
+}
+#endif /* WOLFBOOT_SIGN_LMS */
+
+
 /**
  * @brief Get the specified header type from the external flash image.
  *
