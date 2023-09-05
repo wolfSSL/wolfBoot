@@ -80,6 +80,7 @@ extern "C" {
 #define AUTH_KEY_ECC384  0x06
 #define AUTH_KEY_ECC521  0x07
 #define AUTH_KEY_RSA3072 0x08
+#define AUTH_KEY_LMS     0x09
 
 
 
@@ -99,6 +100,7 @@ extern "C" {
 #define HDR_IMG_TYPE_AUTH_ECC384  (AUTH_KEY_ECC384  << 8)
 #define HDR_IMG_TYPE_AUTH_ECC521  (AUTH_KEY_ECC521  << 8)
 #define HDR_IMG_TYPE_AUTH_RSA3072 (AUTH_KEY_RSA3072 << 8)
+#define HDR_IMG_TYPE_AUTH_LMS     (AUTH_KEY_LMS     << 8)
 
 #define HDR_IMG_TYPE_DIFF         0x00D0
 
@@ -115,6 +117,7 @@ extern "C" {
  #define KEYSTORE_PUBKEY_SIZE_RSA2048 320
  #define KEYSTORE_PUBKEY_SIZE_RSA3072 448
  #define KEYSTORE_PUBKEY_SIZE_RSA4096 576
+ #define KEYSTORE_PUBKEY_SIZE_LMS     60
 
 /* Mask for key permissions */
  #define KEY_VERIFY_ALL         (0xFFFFFFFFU)
@@ -194,6 +197,9 @@ extern "C" {
  #elif defined(WOLFBOOT_SIGN_RSA4096)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA4096
  #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
+ #elif defined(WOLFBOOT_SIGN_LMS)
+ #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_LMS
+ #   define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_LMS
  #else
  #   error "No valid authentication mechanism selected. " \
            "Please select a valid SIGN= option."

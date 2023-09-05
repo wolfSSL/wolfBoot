@@ -287,6 +287,64 @@ ifeq ($(SIGN),RSA4096)
   endif
 endif
 
+ifeq ($(SIGN),LMS)
+  # For LMS the signature size is a function of the LMS parameters.
+  # All five of these parms must be set in the LMS .config file:
+  #   LMS_LEVELS, LMS_HEIGHT, LMS_WINTERNITZ, IMAGE_SIGNATURE_SIZE,
+  #   IMAGE_HEADER_SIZE
+
+  ifndef LMS_LEVELS
+    $(error LMS_LEVELS not set)
+  endif
+
+  ifndef LMS_HEIGHT
+    $(error LMS_HEIGHT not set)
+  endif
+
+  ifndef LMS_WINTERNITZ
+    $(error LMS_WINTERNITZ not set)
+  endif
+
+  ifndef IMAGE_SIGNATURE_SIZE
+    $(error IMAGE_SIGNATURE_SIZE not set)
+  endif
+
+  ifndef IMAGE_HEADER_SIZE
+    $(error IMAGE_HEADER_SIZE not set)
+  endif
+
+  LMSDIR = lib/hash-sigs
+  KEYGEN_OPTIONS+=--lms
+  SIGN_OPTIONS+=--lms
+  WOLFCRYPT_OBJS+= \
+    ./$(LMSDIR)/src/hss_verify.o \
+    ./$(LMSDIR)/src/hss_verify_inc.o \
+    ./$(LMSDIR)/src/hss_common.o \
+    ./$(LMSDIR)/src/hss_thread_single.o \
+    ./$(LMSDIR)/src/hss_zeroize.o \
+    ./$(LMSDIR)/src/lm_common.o \
+    ./$(LMSDIR)/src/lm_ots_common.o \
+    ./$(LMSDIR)/src/lm_ots_verify.o \
+    ./$(LMSDIR)/src/lm_verify.o \
+    ./$(LMSDIR)/src/endian.o \
+    ./$(LMSDIR)/src/hash.o \
+    ./$(LMSDIR)/src/sha256.o \
+    ./lib/wolfssl/wolfcrypt/src/ext_lms.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_LMS" -D"WOLFSSL_HAVE_LMS" -D"HAVE_LIBLMS" \
+    -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
+    -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" -I$(LMSDIR)/src \
+    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+    -D"WOLFSSL_LMS_VERIFY_ONLY"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    $(error WOLFBOOT_SMALL_STACK with LMS not supported)
+  else
+    STACK_USAGE=18064
+  endif
+endif
+
 
 ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
