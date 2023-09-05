@@ -65,8 +65,6 @@
 #define PCI_REG_MAP_AHCI_MODE (0x1 << 6)
 #define PCI_REG_MAP_ALL_PORTS (0x1 << 5)
 
-#define DEBUG_AHCI
-
 #ifdef DEBUG_AHCI
 #define AHCI_DEBUG_PRINTF(...) wolfBoot_printf(__VA_ARGS__)
 #else
@@ -395,12 +393,15 @@ void sata_enable(uint32_t base) {
 
 #ifdef WOLFBOOT_ATA_DISK_LOCK
                         ata_st = ata_security_get_state(drv);
+                        wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
                         if (ata_st == ATA_SEC1) {
                             AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
                             r = ata_security_freeze_lock(drv);
                             AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
                             r = ata_identify_device(drv);
                             AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+                            ata_st = ata_security_get_state(drv);
+                            wolfBoot_printf("ATA: Security disabled. State SEC%d\r\n", ata_st);
                         }
                         else if (ata_st == ATA_SEC4) {
                             AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
@@ -420,6 +421,8 @@ void sata_enable(uint32_t base) {
                             if (ata_st != ATA_SEC6) {
                                 panic();
                             }
+                            ata_st = ata_security_get_state(drv);
+                            wolfBoot_printf("ATA: Security enabled. State SEC%d\r\n", ata_st);
                         }
 #endif
                     }

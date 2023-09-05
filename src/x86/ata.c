@@ -41,8 +41,6 @@
 
 #define CACHE_INVALID 0xBADF00DBADC0FFEEULL
 
-#define DEBUG_ATA
-
 #ifdef DEBUG_ATA
 /**
  * @brief This macro is used to conditionally print debug messages for the ATA
@@ -162,36 +160,6 @@ struct __attribute__((packed)) fis_reg_d2h {
     uint32_t _res4;
 };
 
-/**
- * @brief This packed structure defines the format of a Data FIS used for
- * PIO transfer setup.
- */
-struct __attribute__((packed)) fis_pio_setup {
-    uint8_t  fis_type;
-    uint8_t pmport:4, _res0:1, dir:1,  i:1, _res1:1;
-
-    uint8_t status;
-    uint8_t error;
-
-    uint8_t  lba0;
-	uint8_t  lba1;
-	uint8_t  lba2;
-    uint8_t  device;
-
-
-	uint8_t  lba3;
-	uint8_t  lba4;
-	uint8_t  lba5;
-	uint8_t  _res2;
-
-	uint8_t  count_l;
-	uint8_t  count_h;
-	uint8_t  _res3;
-	uint8_t  e_status;
-
-	uint16_t transfer_count;
-	uint8_t  _res4[2];
-};
 
 /**
  * @brief This packed structure defines the format of a Data FIS used for
@@ -382,7 +350,7 @@ static int security_command(int drv, uint8_t ata_cmd)
     struct fis_reg_h2d *cmdfis;
     struct ata_drive *ata = &ATA_Drv[drv];
     int ret;
-    int slot = prepare_cmd_h2d_slot(drv, buffer, 512, 0);
+    int slot = prepare_cmd_h2d_slot(drv, buffer, ATA_SECURITY_COMMAND_LEN, 0);
     if (slot < 0) {
         return slot;
     }
@@ -420,9 +388,10 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     struct fis_reg_h2d *cmdfis;
     struct ata_drive *ata = &ATA_Drv[drv];
     int ret;
-    int slot = prepare_cmd_h2d_slot(drv, buffer, 512, 1);
-    memset(buffer, 0, 512);
-    memcpy(buffer + 2, passphrase, strlen(passphrase));
+    int slot = prepare_cmd_h2d_slot(drv, buffer,
+            ATA_SECURITY_COMMAND_LEN, 1);
+    memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
+    memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase, strlen(passphrase));
     if (slot < 0) {
         return slot;
     }
@@ -543,12 +512,12 @@ int ata_identify_device(int drv)
     uint8_t serial_no[ATA_ID_SERIAL_NO_LEN];
     uint8_t model_no[ATA_ID_MODEL_NO_LEN];
     int ret = 0;
-    int slot = prepare_cmd_h2d_slot(drv, buffer, 512, 0);
+    int slot = prepare_cmd_h2d_slot(drv, buffer,
+            ATA_IDENTIFY_DEVICE_COMMAND_LEN, 0);
     int s_locked, s_frozen, s_enabled, s_supported;
 
     if (slot < 0)
         return slot;
-
 
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;

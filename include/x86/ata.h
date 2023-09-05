@@ -87,11 +87,19 @@ enum ata_security_state ata_security_get_state(int);
 #define ATA_CMD_WRITE_DMA 0xCA
 #define ATA_CMD_IDENTIFY_DEVICE 0xEC
 
+#define ATA_IDENTIFY_DEVICE_COMMAND_LEN          (256 * 2)
+
+
+/* Security feature set */
 #define ATA_CMD_SECURITY_SET_PASSWORD       0xF1
 #define ATA_CMD_SECURITY_UNLOCK             0xF2
 #define ATA_CMD_SECURITY_ERASE_PREPARE      0xF3
 #define ATA_CMD_SECURITY_ERASE_UNIT         0xF4
 #define ATA_CMD_SECURITY_FREEZE_LOCK        0xF5
 #define ATA_CMD_SECURITY_DISABLE_PASSWORD   0xF6
+
+/* Constants for security set commands */
+#define ATA_SECURITY_COMMAND_LEN                (256 * 2)
+#define ATA_SECURITY_PASSWORD_OFFSET            (1 * 2)
 
 #endif
