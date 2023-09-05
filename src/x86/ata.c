@@ -71,6 +71,7 @@ struct ata_drive {
     uint32_t sector_size_shift;
     uint8_t  sector_cache[MAX_SECTOR_SIZE];
     uint64_t cached;
+    enum ata_security_state sec;
 };
 
 /**
@@ -89,7 +90,6 @@ struct __attribute__((packed)) hba_prdt_entry {
     uint32_t dbau;
     uint32_t _res0;
     uint32_t dbc:22, _res1:9, i:1;
-
 };
 
 /**
@@ -123,7 +123,7 @@ struct __attribute__((packed)) fis_reg_h2d {
     uint8_t lba3;
     uint8_t lba4;
     uint8_t lba5;
-    uint8_t featureh;
+    uint8_t feature_h;
 
     uint16_t count;
     uint8_t icc;
@@ -159,6 +159,7 @@ struct __attribute__((packed)) fis_reg_d2h {
 
     uint32_t _res4;
 };
+
 
 /**
  * @brief This packed structure defines the format of a Data FIS used for
@@ -239,7 +240,7 @@ static int find_cmd_slot(int drv)
  * @return The index of the prepared command slot if successful, or -1 if an error
  * occurs.
  */
-static int prepare_cmd_slot(int drv, const uint8_t *buf, int sz)
+static int prepare_cmd_h2d_slot(int drv, const uint8_t *buf, int sz, int w)
 {
     struct hba_cmd_header *cmd;
     struct hba_cmd_table *tbl;
@@ -252,12 +253,12 @@ static int prepare_cmd_slot(int drv, const uint8_t *buf, int sz)
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
     memset(cmd, 0, sizeof(struct hba_cmd_header));
-
     cmd->cfl = FIS_LEN_H2D / 4;
     cmd->ctba = (uint32_t)(ata->ctable_port);
     tbl = (struct hba_cmd_table *)(uintptr_t)(ata->ctable_port);
     memset(tbl, 0, sizeof(struct hba_cmd_table));
     cmd->prdtl = 1;
+    cmd->w = w;
     tbl->prdt_entry[0].dba = (uint32_t)(uintptr_t)buf;
     tbl->prdt_entry[0].dbc = sz - 1;
     return slot;
@@ -296,10 +297,6 @@ static int exec_cmd_slot(int drv, int slot)
     return 0;
 }
 
-#ifndef ATA_BUF_SIZE
-#define ATA_BUF_SIZE 8192
-#endif
-static uint8_t buffer[ATA_BUF_SIZE];
 
 static void invert_buf(uint8_t *src, uint8_t *dst, unsigned len)
 {
@@ -312,11 +309,190 @@ static void invert_buf(uint8_t *src, uint8_t *dst, unsigned len)
     dst[len - 1]  = 0;
 }
 
-#define ATA_ID_SERIAL_NO_POS 20
+static void noninvert_buf(uint8_t *src, uint8_t *dst, unsigned len)
+{
+    memcpy(dst, src, len);
+}
+
+#ifndef ATA_BUF_SIZE
+#define ATA_BUF_SIZE 8192
+#endif
+static uint8_t buffer[ATA_BUF_SIZE];
+
+#define ATA_ID_SERIAL_NO_POS 10 * 2
 #define ATA_ID_SERIAL_NO_LEN 20
-#define ATA_ID_MODEL_NO_POS  54
+#define ATA_ID_MODEL_NO_POS  27 * 2
 #define ATA_ID_MODEL_NO_LEN  40
 
+
+#define ATA_ID_COMMAND_SET_SUPPORTED_POS 82 * 2
+#define ATA_ID_SECURITY_STATUS_POS 128 * 2
+
+
+#ifdef WOLFBOOT_ATA_DISK_LOCK
+
+/**
+ * @brief Helper function to execute an ATA command from the security set.
+ * This function groups the common code among all the API in the ATA security
+ * set sending the same arguments.
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] ata_cmd The ATA command to execute from the ATA security set.
+ *
+ * @return 0 on success, or -1 if an error occurs while preparing or executing
+ * the ATA command.
+ *
+ */
+static int security_command(int drv, uint8_t ata_cmd)
+{
+    struct hba_cmd_header *cmd;
+    struct hba_cmd_table *tbl;
+    struct fis_reg_h2d *cmdfis;
+    struct ata_drive *ata = &ATA_Drv[drv];
+    int ret;
+    int slot = prepare_cmd_h2d_slot(drv, buffer, ATA_SECURITY_COMMAND_LEN, 0);
+    if (slot < 0) {
+        return slot;
+    }
+    cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
+    cmd += slot;
+    tbl = (struct hba_cmd_table *)(uintptr_t)cmd->ctba;
+    cmdfis = (struct fis_reg_h2d *)(&tbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ata_cmd;
+    ret = exec_cmd_slot(drv, slot);
+    return ret;
+}
+
+/**
+ * @brief Helper function to execute an ATA command from the security set that
+ * require transmitting a passphrase.
+ * This function groups the common code among all the API in the ATA security
+ * set sending the same arguments.
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] ata_cmd The ATA command to execute from the ATA security set.
+ * @param[in] passphrase The passphrase to transmit as argument in the buffer
+ * entry.
+ *
+ * @return 0 on success, or -1 if an error occurs while preparing or executing
+ * the ATA command.
+ *
+ */
+static int security_command_passphrase(int drv, uint8_t ata_cmd,
+        const char *passphrase)
+{
+    struct hba_cmd_header *cmd;
+    struct hba_cmd_table *tbl;
+    struct fis_reg_h2d *cmdfis;
+    struct ata_drive *ata = &ATA_Drv[drv];
+    int ret;
+    int slot = prepare_cmd_h2d_slot(drv, buffer,
+            ATA_SECURITY_COMMAND_LEN, 1);
+    memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
+    memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase, strlen(passphrase));
+    if (slot < 0) {
+        return slot;
+    }
+    cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
+    cmd += slot;
+    tbl = (struct hba_cmd_table *)(uintptr_t)cmd->ctba;
+    cmdfis = (struct fis_reg_h2d *)(&tbl->cfis);
+    cmdfis->fis_type = FIS_TYPE_REG_H2D;
+    cmdfis->c = 1;
+    cmdfis->command = ata_cmd;
+    cmdfis->count = 1;
+    ret = exec_cmd_slot(drv, slot);
+    return ret;
+}
+
+
+/**
+ * @brief This function initiates the ATA command SECURITY FREEZE LOCK
+ * as defined in specs ATA8-ACS Sec. 7.47.
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ *
+ * @return 0 on success, or -1 if an error occurred.
+ */
+int ata_security_freeze_lock(int drv)
+{
+    return security_command(drv, ATA_CMD_SECURITY_FREEZE_LOCK);
+}
+
+/**
+ * @brief This function initiates the ATA command SECURITY ERASE PREPARE
+ * as defined in specs ATA8-ACS Sec. 7.45
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ *
+ * @return 0 on success, or -1 if an error occurred.
+ */
+int ata_security_erase_prepare(int drv)
+{
+    return security_command(drv, ATA_CMD_SECURITY_ERASE_PREPARE);
+}
+
+/**
+ * @brief This function unlocks the access to the disk, using the the ATA
+ * command SECURITY UNLOCK, as defined in specs ATA8-ACS Sec. 7.49
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] passphrase The USER passphrase of the disk unit.
+ *
+ * @return 0 on success, or -1 if an error occurred.
+ */
+int ata_security_unlock_device(int drv, const char *passphrase)
+{
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_UNLOCK, passphrase);
+}
+
+/**
+ * @brief This function enables security features on the disk, by setting a new
+ * USER password to access the disk unit. This function uses the the ATA
+ * command SECURITY SET PASSWORD, as defined in specs ATA8-ACS Sec. 7.48
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] passphrase The new USER passphrase for the disk unit.
+ *
+ * @return 0 on success, or -1 if an error occurred.
+ */
+int ata_security_set_password(int drv, int master, const char *passphrase)
+{
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase);
+}
+
+/**
+ * @brief This function disables security features on the disk, by resetting
+ * the USER password used to access the disk unit. This function uses the the ATA
+ * command SECURITY DISABLE PASSWORD, as defined in specs ATA8-ACS Sec. 7.44
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] passphrase The old USER passphrase for the disk unit to reset.
+ *
+ * @return 0 on success, or -1 if an error occurred.
+ */
+int ata_security_disable_password(int drv, const char *passphrase)
+{
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_DISABLE_PASSWORD, passphrase);
+}
+
+/**
+ * @brief This function initiates the ATA command SECURITY ERASE UNIT, as defined
+ * in specs ATA8-ACS Sec. 7.46
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] passphrase The USER passphrase for the disk unit to erase.
+ *
+ * @return 0 on success, or -1 if an error occurred.
+ */
+int ata_security_erase_unit(int drv, const char *passphrase)
+{
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_ERASE_UNIT, passphrase);
+}
+
+#endif /* WOLFBOOT_SATA_DISK_LOCK */
 
 /**
  * @brief This function identifies the ATA device connected to the specified
@@ -335,8 +511,14 @@ int ata_identify_device(int drv)
     struct fis_reg_h2d *cmdfis;
     uint8_t serial_no[ATA_ID_SERIAL_NO_LEN];
     uint8_t model_no[ATA_ID_MODEL_NO_LEN];
-    int slot = prepare_cmd_slot(drv, buffer, 512);
     int ret = 0;
+    int slot = prepare_cmd_h2d_slot(drv, buffer,
+            ATA_IDENTIFY_DEVICE_COMMAND_LEN, 0);
+    int s_locked, s_frozen, s_enabled, s_supported;
+
+    if (slot < 0)
+        return slot;
+
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
 
@@ -348,6 +530,8 @@ int ata_identify_device(int drv)
     ret = exec_cmd_slot(drv, slot);
     if (ret == 0) {
         uint16_t *id_buf = (uint16_t *)buffer;
+        uint16_t cmd_set_supported;
+        uint16_t sec_status;
         ATA_DEBUG_PRINTF("Device identified\r\n");
         ATA_DEBUG_PRINTF("Cylinders: %d\r\n", id_buf[1]);
         ATA_DEBUG_PRINTF("Heads: %d\r\n", id_buf[3]);
@@ -361,8 +545,65 @@ int ata_identify_device(int drv)
         invert_buf(&buffer[ATA_ID_MODEL_NO_POS], model_no,
                 ATA_ID_MODEL_NO_LEN);
         ATA_DEBUG_PRINTF("Model: %s\r\n", model_no);
+
+
+        ATA_DEBUG_PRINTF("Security mode information:\r\n");
+        memcpy(&cmd_set_supported, buffer + ATA_ID_COMMAND_SET_SUPPORTED_POS, 2);
+
+        s_supported = cmd_set_supported & (1 << 1);
+
+        ATA_DEBUG_PRINTF(" - Security Mode feature set: %ssupported\r\n",
+                s_supported ? "":"not ");
+
+        ata->sec = ATA_SEC0;
+        if (s_supported) {
+            memcpy(&sec_status, buffer + ATA_ID_SECURITY_STATUS_POS, 2);
+            ATA_DEBUG_PRINTF(" = Security Level: %s\r\n",
+                    sec_status & (1 << 8) ? "Maximum":"High");
+
+            if (sec_status & (1 << 5)) {
+                ATA_DEBUG_PRINTF("Enhanced security erase supported\r\n");
+            }
+            if (sec_status & (1 << 4)) {
+                ATA_DEBUG_PRINTF("Security: count expired\r\n");
+            }
+            if (sec_status & (1 << 3)) {
+                ATA_DEBUG_PRINTF("Security: frozen\r\n");
+                s_frozen = 1;
+            }
+            if (sec_status & (1 << 2)) {
+                ATA_DEBUG_PRINTF("Security: locked\r\n");
+                s_locked = 1;
+            }
+            if (sec_status & (1 << 1)) {
+                ATA_DEBUG_PRINTF("Security: enabled\r\n");
+                s_enabled = 1;
+            }
+            if (sec_status & (1 << 0)) {
+                ATA_DEBUG_PRINTF("Security: supported\r\n");
+                s_supported = 1;
+            }
+            if (!s_enabled && !s_frozen)
+                ata->sec = ATA_SEC1;
+            else if (!s_enabled && s_frozen)
+                ata->sec = ATA_SEC2;
+            else if (s_enabled && s_locked)
+                ata->sec = ATA_SEC4;
+            else if (!s_locked && !s_frozen)
+                ata->sec = ATA_SEC5;
+            else if (!s_locked && s_frozen)
+                ata->sec = ATA_SEC6;
+        }
+        ATA_DEBUG_PRINTF(" - Security state: SEC%d\r\n",
+                (int)ata->sec);
     }
     return ret;
+}
+
+enum ata_security_state ata_security_get_state(int drv)
+{
+    struct ata_drive *ata = &ATA_Drv[drv];
+    return ata->sec;
 }
 
 static int ata_drive_read_sector(int drv, uint64_t start, uint32_t count,
@@ -373,7 +614,7 @@ static int ata_drive_read_sector(int drv, uint64_t start, uint32_t count,
     struct hba_cmd_table *tbl;
     struct fis_reg_h2d *cmdfis;
     int i;
-    int slot = prepare_cmd_slot(drv, buf, count << ata->sector_size_shift);
+    int slot = prepare_cmd_h2d_slot(drv, buf, count << ata->sector_size_shift, 0);
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
 
@@ -403,7 +644,7 @@ static int ata_drive_write_sector(int drv, uint64_t start, uint32_t count,
     struct fis_reg_h2d *cmdfis;
     uint8_t *buf_ptr;
     int i;
-    int slot = prepare_cmd_slot(drv, buf, count << ata->sector_size_shift);
+    int slot = prepare_cmd_h2d_slot(drv, buf, count << ata->sector_size_shift, 1);
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
     tbl = (struct hba_cmd_table *)(uintptr_t)cmd->ctba;

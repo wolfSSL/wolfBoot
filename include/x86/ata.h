@@ -29,7 +29,7 @@ struct __attribute__((packed)) hba_cmd_header {
     uint8_t r:1, b:1, c:1, _res0:1, pmp:4;
     uint16_t prdtl;
 
-    uint32_t prbdc;
+    volatile uint32_t prbdc;
 
     uint32_t ctba;
     uint32_t ctbau;
@@ -41,6 +41,25 @@ int ata_drive_read(int drv, uint64_t start, uint32_t count, uint8_t *buf);
 int ata_drive_write(int drv, uint64_t start, uint32_t count,
         const uint8_t *buf);
 int ata_identify_device(int drv);
+
+int ata_device_config_identify(int drv);
+int ata_security_freeze_lock(int drv);
+int ata_security_unlock_device(int drv, const char *passphrase);
+
+/* @brief Enum with the possible state for each drive.
+ * See ATA/ATAPI Command Set (ATA8-ACS) section 4.7.4
+ */
+enum ata_security_state {
+    ATA_SEC0 = 0,   /* SEC0: Powered down/Security disabled */
+    ATA_SEC1,       /* SEC1: Security disabled/not Frozen */
+    ATA_SEC2,       /* SEC2: Security disabled/Frozen */
+    _ATA_POFF3,     /* SEC3: Powered down/Security enabled */
+    ATA_SEC4,       /* SEC4: Security enabled/Locked */
+    ATA_SEC5,       /* SEC5: Unlocked/not Frozen */
+    ATA_SEC6        /* SEC6: Unlocked/ Frozen    */
+};
+
+enum ata_security_state ata_security_get_state(int);
 
 #define ATA_DEV_BUSY (1 << 7)
 #define ATA_DEV_DRQ  (1 << 3)
@@ -59,11 +78,28 @@ int ata_identify_device(int drv);
 #define FIS_LEN_H2D         20
 #define FIS_H2D_CMD         (1 << 7)
 
+
 /* ATA commands */
 
 #define ATA_CMD_READ_DMA_EX 0x25
 #define ATA_CMD_WRITE_DMA_EX 0x35
+#define ATA_CMD_DEVICE_CONFIGURATION_IDENTIFY 0xB1
 #define ATA_CMD_WRITE_DMA 0xCA
 #define ATA_CMD_IDENTIFY_DEVICE 0xEC
+
+#define ATA_IDENTIFY_DEVICE_COMMAND_LEN          (256 * 2)
+
+
+/* Security feature set */
+#define ATA_CMD_SECURITY_SET_PASSWORD       0xF1
+#define ATA_CMD_SECURITY_UNLOCK             0xF2
+#define ATA_CMD_SECURITY_ERASE_PREPARE      0xF3
+#define ATA_CMD_SECURITY_ERASE_UNIT         0xF4
+#define ATA_CMD_SECURITY_FREEZE_LOCK        0xF5
+#define ATA_CMD_SECURITY_DISABLE_PASSWORD   0xF6
+
+/* Constants for security set commands */
+#define ATA_SECURITY_COMMAND_LEN                (256 * 2)
+#define ATA_SECURITY_PASSWORD_OFFSET            (1 * 2)
 
 #endif
