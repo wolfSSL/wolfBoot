@@ -697,16 +697,36 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             ret = -1;
 
             if (CMD.sign == SIGN_AUTO) {
+                /* LMS is stateful and requires additional config, and is not
+                 * compatible with SIGN_AUTO. */
                 printf("error: SIGN_AUTO with LMS is not supported\n");
             }
             else {
-                /* Set the public key only.
-                 * The LMS file callbacks will write/read the private key.
-                 * The first 64 bytes is the private key.
-                 * The next 60 bytes is the public key.*/
-                *pubkey = (*key_buffer) + 64;
-                *pubkey_sz = (*key_buffer_sz) - 64;
-                ret = 0;
+                /* The LMS file callbacks will handle writing and reading the
+                 * private key. We only need to set the public key here.
+                 *
+                 * If both priv/pub are present:
+                 *  - The first 64 bytes is the private key.
+                 *  - The next 60 bytes is the public key. */
+
+                if (*key_buffer_sz == (HSS_MAX_PRIVATE_KEY_LEN +
+                    KEYSTORE_PUBKEY_SIZE_LMS)) {
+                    /* priv + pub */
+                    *pubkey = (*key_buffer) + HSS_MAX_PRIVATE_KEY_LEN;
+                    *pubkey_sz = (*key_buffer_sz) - HSS_MAX_PRIVATE_KEY_LEN;
+                    ret = 0;
+                }
+                else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_LMS) {
+                    /* pub only. */
+                    *pubkey = (*key_buffer);
+                    *pubkey_sz = KEYSTORE_PUBKEY_SIZE_LMS;
+                    ret = 0;
+                }
+                else {
+                    /* We don't recognize this as an LMS pub or private key. */
+                    printf("error: unrecognized LMS key size: %d\n",
+                           *key_buffer_sz );
+                }
             }
 #endif /* defined(WOLFSSL_HAVE_LMS)  */
             break;
