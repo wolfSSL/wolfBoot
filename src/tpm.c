@@ -308,18 +308,16 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
 
     rc = wolfTPM2_ExtendPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG, hash,
         TPM2_GetHashDigestSize(WOLFBOOT_TPM_PCR_ALG));
-#ifdef DEBUG_WOLFTPM
+#ifdef WOLFBOOT_DEBUG_TPM
     if (rc == 0) {
         wolfBoot_printf("Measured boot: Index %d, Line %d\n", pcrIndex, line);
 
-    #ifdef WOLFBOOT_DEBUG_TPM
         rc = wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
             digest, &digestSz);
 
         wolfBoot_printf("PCR %d: Res %d, Digest Sz %d\n",
             pcrIndex, rc, digestSz);
         wolfBoot_print_bin(digest, digestSz);
-    #endif
     }
     else {
         wolfBoot_printf("Measure boot failed! Index %d, %x (%s)\n",
@@ -331,6 +329,83 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
     return rc;
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
+
+#if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
+int wolfBoot_load_pubkey(struct wolfBoot_image* img, WOLFTPM2_KEY* pubKey,
+    TPM_ALG_ID* pAlg)
+{
+    int rc = 0;
+    uint32_t key_type;
+    int key_slot = -1;
+    uint8_t *hdr;
+    uint16_t hdrSz;
+
+    *pAlg = TPM_ALG_NULL;
+
+    /* get public key */
+    hdrSz = wolfBoot_get_header(img, HDR_PUBKEY, &hdr);
+    if (hdrSz == WOLFBOOT_SHA_DIGEST_SIZE)
+        key_slot = keyslot_id_by_sha(hdr);
+    if (key_slot < 0)
+        rc = -1;
+
+    if (rc == 0) {
+        key_type = keystore_get_key_type(key_slot);
+        hdr = keystore_get_buffer(key_slot);
+        hdrSz = keystore_get_size(key_slot);
+        if (hdr == NULL || hdrSz <= 0)
+            rc = -1;
+    }
+    /* Parse public key to TPM public key. Note: this loads as temp handle,
+     *   however we don't use the handle. We still need to unload it. */
+    if (rc == 0) {
+    #if defined(WOLFBOOT_SIGN_ECC256) || \
+        defined(WOLFBOOT_SIGN_ECC384) || \
+        defined(WOLFBOOT_SIGN_ECC521)
+        int tpmcurve;
+        int point_sz = hdrSz/2;
+        if (     key_type == AUTH_KEY_ECC256) tpmcurve = TPM_ECC_NIST_P256;
+        else if (key_type == AUTH_KEY_ECC384) tpmcurve = TPM_ECC_NIST_P384;
+        else if (key_type == AUTH_KEY_ECC521) tpmcurve = TPM_ECC_NIST_P521;
+        else rc = -1; /* not supported algorithm */
+        if (rc == 0) {
+            *pAlg = TPM_ALG_ECC;
+            rc = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, pubKey,
+                tpmcurve,                   /* Curve */
+                hdr, point_sz,           /* Public X */
+                hdr + point_sz, point_sz /* Public Y */
+            );
+        }
+    #elif defined(WOLFBOOT_SIGN_RSA2048) || \
+          defined(WOLFBOOT_SIGN_RSA3072) || \
+          defined(WOLFBOOT_SIGN_RSA4096)
+        uint32_t inOutIdx = 0;
+        const uint8_t*n = NULL, *e = NULL;
+        uint32_t nSz = 0, eSz = 0;
+        if (key_type != AUTH_KEY_RSA2048 && key_type != AUTH_KEY_RSA3072 &&
+            key_type != AUTH_KEY_RSA4096) {
+            rc = -1;
+        }
+        if (rc == 0) {
+            *pAlg = TPM_ALG_RSA;
+            rc = wc_RsaPublicKeyDecode_ex(hdr, &inOutIdx, hdrSz,
+                &n, &nSz, /* modulus */
+                &e, &eSz  /* exponent */
+            );
+        }
+        if (rc == 0) {
+            /* Load public key into TPM */
+            rc = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, pubKey,
+                n, nSz, *((uint32_t*)e),
+                TPM_ALG_NULL, WOLFBOOT_TPM_HASH_ALG);
+        }
+    #else
+        rc = -1; /* not supported */
+    #endif
+    }
+    return rc;
+}
+#endif /* WOLFBOOT_TPM_VERIFY || WOLFBOOT_TPM_SEAL */
 
 #ifdef WOLFBOOT_TPM_SEAL
 int wolfBoot_get_random(uint8_t* buf, int sz)
@@ -495,77 +570,136 @@ int wolfBoot_get_policy(struct wolfBoot_image* img,
     return rc;
 }
 
-int wolfBoot_load_pubkey(struct wolfBoot_image* img, WOLFTPM2_KEY* pubKey,
-    TPM_ALG_ID* pAlg)
+/* authHandle = TPM_RH_PLATFORM or TPM_RH_OWNER */
+/* auth is optional */
+int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
+    word32 nvAttributes, WOLFTPM2_KEYBLOB* blob,
+    const uint8_t* auth, uint32_t authSz)
 {
-    int rc = 0;
-    uint32_t key_type;
-    int key_slot = -1;
-    uint8_t *hdr;
-    uint16_t hdrSz;
+    int rc;
+    WOLFTPM2_HANDLE parent;
+    WOLFTPM2_NV nv;
+    uint8_t  pubAreaBuffer[sizeof(TPM2B_PUBLIC)]; /* oversized buffer */
+    int      nvSz, pos, pubAreaSize;
 
-    *pAlg = TPM_ALG_NULL;
+    memset(&parent, 0, sizeof(parent));
+    memset(&nv, 0, sizeof(nv));
 
-    /* get public key */
-    hdrSz = wolfBoot_get_header(img, HDR_PUBKEY, &hdr);
-    if (hdrSz == WOLFBOOT_SHA_DIGEST_SIZE)
-        key_slot = keyslot_id_by_sha(hdr);
-    if (key_slot < 0)
-        rc = -1;
+    nv.handle.hndl = nvIndex;
+    nv.handle.auth.size = authSz;
+    memcpy(nv.handle.auth.buffer, auth, authSz);
 
+    parent.hndl = authHandle;
+
+    /* encode public for smaller storage */
+    rc = TPM2_AppendPublic(pubAreaBuffer, (word32)sizeof(pubAreaBuffer),
+        &pubAreaSize, &blob->pub);
     if (rc == 0) {
-        key_type = keystore_get_key_type(key_slot);
-        hdr = keystore_get_buffer(key_slot);
-        hdrSz = keystore_get_size(key_slot);
-        if (hdr == NULL || hdrSz <= 0)
-            rc = -1;
+        blob->pub.size = pubAreaSize;
+
+        nvSz  = (uint32_t)sizeof(blob->pub.size)  + blob->pub.size;
+        nvSz += (uint32_t)sizeof(blob->priv.size) + blob->priv.size;
+
+        /* Create NV - no auth required, blob encrypted by TPM already */
+        rc = wolfTPM2_NVCreateAuth(&wolftpm_dev, &parent, &nv,
+            nv.handle.hndl, nvAttributes, nvSz, NULL, 0);
+        if (rc == TPM_RC_NV_DEFINED) {
+            /* allow use of existing handle - ignore this error */
+            rc = 0;
+        }
     }
-    /* Parse public key to TPM public key. Note: this loads as temp handle,
-     *   however we don't use the handle. We still need to unload it. */
+    /* write sealed blob to NV */
     if (rc == 0) {
-    #if defined(WOLFBOOT_SIGN_ECC256) || \
-        defined(WOLFBOOT_SIGN_ECC384) || \
-        defined(WOLFBOOT_SIGN_ECC521)
-        int tpmcurve;
-        int point_sz = hdrSz/2;
-        if (     key_type == AUTH_KEY_ECC256) tpmcurve = TPM_ECC_NIST_P256;
-        else if (key_type == AUTH_KEY_ECC384) tpmcurve = TPM_ECC_NIST_P384;
-        else if (key_type == AUTH_KEY_ECC521) tpmcurve = TPM_ECC_NIST_P521;
-        else rc = -1; /* not supported algorithm */
-        if (rc == 0) {
-            *pAlg = TPM_ALG_ECC;
-            rc = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, pubKey,
-                tpmcurve,                   /* Curve */
-                hdr, point_sz,           /* Public X */
-                hdr + point_sz, point_sz /* Public Y */
-            );
-        }
-    #elif defined(WOLFBOOT_SIGN_RSA2048) || \
-          defined(WOLFBOOT_SIGN_RSA3072) || \
-          defined(WOLFBOOT_SIGN_RSA4096)
-        uint32_t inOutIdx = 0;
-        const uint8_t*n = NULL, *e = NULL;
-        uint32_t nSz = 0, eSz = 0;
-        if (key_type != AUTH_KEY_RSA2048 && key_type != AUTH_KEY_RSA3072 &&
-            key_type != AUTH_KEY_RSA4096) {
-            rc = -1;
-        }
-        if (rc == 0) {
-            *pAlg = TPM_ALG_RSA;
-            rc = wc_RsaPublicKeyDecode_ex(hdr, &inOutIdx, hdrSz,
-                &n, &nSz, /* modulus */
-                &e, &eSz  /* exponent */
-            );
-        }
-        if (rc == 0) {
-            /* Load public key into TPM */
-            rc = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, pubKey,
-                n, nSz, *((uint32_t*)e),
-                TPM_ALG_NULL, WOLFBOOT_TPM_HASH_ALG);
-        }
-    #else
-        rc = -1; /* not supported */
-    #endif
+        pos = 0;
+        /* write pub size */
+        rc = wolfTPM2_NVWriteAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            (uint8_t*)&blob->pub.size,
+            (uint32_t)sizeof(blob->pub.size), pos);
+    }
+    if (rc == 0) {
+        pos += sizeof(blob->pub.size);
+        /* write pub */
+        rc = wolfTPM2_NVWriteAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            pubAreaBuffer, blob->pub.size, pos);
+    }
+    if (rc == 0) {
+        pos += blob->pub.size;
+        /* write priv size */
+        rc = wolfTPM2_NVWriteAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            (uint8_t*)&blob->priv.size,
+            (uint32_t)sizeof(blob->priv.size), pos);
+    }
+    if (rc == 0) {
+        pos += sizeof(blob->priv.size);
+        /* write priv */
+        rc = wolfTPM2_NVWriteAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            blob->priv.buffer, blob->priv.size, pos);
+    }
+    if (rc == 0) {
+        pos += blob->priv.size;
+    }
+    if (rc == 0) {
+        wolfBoot_printf("Wrote %d bytes to NV index 0x%x\n",
+            pos, nv.handle.hndl);
+    }
+    else {
+        wolfBoot_printf("Error %d writing blob to NV index %x (error %s)\n",
+            rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
+    }
+    return rc;
+}
+
+int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
+    const uint8_t* auth, uint32_t authSz)
+{
+    int rc;
+    WOLFTPM2_NV nv;
+    uint8_t  pubAreaBuffer[sizeof(TPM2B_PUBLIC)];
+    uint32_t readSz;
+    int      nvSz, pubAreaSize = 0, pos;
+
+    memset(&nv, 0, sizeof(nv));
+
+    nv.handle.hndl = nvIndex;
+    nv.handle.auth.size = authSz;
+    memcpy(nv.handle.auth.buffer, auth, authSz);
+
+    pos = 0;
+    readSz = sizeof(blob->pub.size);
+    rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+        (uint8_t*)&blob->pub.size, &readSz, pos);
+    if (rc == 0) {
+        pos += readSz;
+        readSz = blob->pub.size;
+        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            pubAreaBuffer, &readSz, pos);
+    }
+    if (rc == 0) {
+        pos += readSz;
+        rc = TPM2_ParsePublic(&blob->pub, pubAreaBuffer,
+            (word32)sizeof(pubAreaBuffer), &pubAreaSize);
+    }
+    if (rc == 0) {
+        readSz = sizeof(blob->priv.size);
+        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            (uint8_t*)&blob->priv.size, &readSz, pos);
+    }
+    if (rc == 0) {
+        pos += sizeof(blob->priv.size);
+        readSz = blob->priv.size;
+        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+            blob->priv.buffer, &readSz, pos);
+    }
+    if (rc == 0) {
+        pos += blob->priv.size;
+    }
+    if (rc == 0) {
+        wolfBoot_printf("Read %d bytes from NV index 0x%x\n",
+            pos, nv.handle.hndl);
+    }
+    else {
+        wolfBoot_printf("Error %d reading blob from NV index %x (error %s)\n",
+            rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
     }
     return rc;
 }
@@ -642,6 +776,7 @@ int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
     }
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
 
     return rc;
 }
@@ -653,22 +788,31 @@ int wolfBoot_seal(struct wolfBoot_image* img, int index,
 {
     int rc;
     WOLFTPM2_KEYBLOB seal_blob;
+    word32 nvAttributes;
+
     memset(&seal_blob, 0, sizeof(seal_blob));
 
+    /* creates a sealed keyed hash object (not loaded to TPM) */
     rc = wolfBoot_seal_blob(img, &seal_blob, secret, secret_sz);
     if (rc == 0) {
     #ifdef WOLFBOOT_DEBUG_TPM
         wolfBoot_printf("Sealed keyed hash (pub %d, priv %d bytes):\n",
             seal_blob.pub.size, seal_blob.priv.size);
-        //wolfBoot_print_bin((uint8_t*)&seal_blob.pub, (uint32_t)sizeof(seal_blob.pub));
-        //wolfBoot_print_bin(seal_blob.priv.buffer, seal_blob.priv.size);
     #endif
 
-        /* TODO: store sealed blob in TPM NV */
-        (void)index;
-        //wolfTPM2_GetNvAttributesTemplate
-        //wolfTPM2_NVCreateAuth
-        //wolfTPM2_NVWriteAuth
+        /* Get NV attributes amd allow it to be locked (if desired) */
+        wolfTPM2_GetNvAttributesTemplate(TPM_RH_PLATFORM, &nvAttributes);
+        nvAttributes |= TPMA_NV_WRITEDEFINE;
+
+        rc = wolfBoot_store_blob(TPM_RH_PLATFORM,
+            WOLFBOOT_TPM_SEAL_NV_BASE + index,
+            nvAttributes, &seal_blob,
+            NULL, 0 /* auth is not required as sealed blob is already encrypted */
+        );
+    }
+    if (rc != 0) {
+        wolfBoot_printf("Error %d sealing secret! (%s)\n",
+            rc, wolfTPM2_GetRCString(rc));
     }
     return rc;
 }
@@ -817,29 +961,34 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
 
     return rc;
 }
 
-int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret, int* secret_sz)
+int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret,
+    int* secret_sz)
 {
     int rc;
     WOLFTPM2_KEYBLOB seal_blob;
+
     memset(&seal_blob, 0, sizeof(seal_blob));
 
-    /* TODO: get sealed blob in TPM NV */
-    (void)index;
-    //wolfTPM2_NVReadPublic
-    //wolfTPM2_NVReadAuth
-
-    rc = wolfBoot_unseal_blob(img, &seal_blob, secret, secret_sz);
+    rc = wolfBoot_read_blob(WOLFBOOT_TPM_SEAL_NV_BASE + index, &seal_blob,
+        NULL, 0 /* auth is not required as sealed blob is already encrypted */
+    );
     if (rc == 0) {
+        rc = wolfBoot_unseal_blob(img, &seal_blob, secret, secret_sz);
     #ifdef WOLFBOOT_DEBUG_TPM
-        wolfBoot_printf("Unsealed keyed hash (pub %d, priv %d bytes):\n",
-            seal_blob.pub.size, seal_blob.priv.size);
-        //wolfBoot_print_bin((uint8_t*)&seal_blob.pub, (uint32_t)sizeof(seal_blob.pub));
-        //wolfBoot_print_bin(seal_blob.priv.buffer, seal_blob.priv.size);
+        if (rc == 0) {
+            wolfBoot_printf("Unsealed keyed hash (pub %d, priv %d bytes):\n",
+                seal_blob.pub.size, seal_blob.priv.size);
+        }
     #endif
+    }
+    if (rc != 0) {
+        wolfBoot_printf("Error %d unsealing secret! (%s)\n",
+            rc, wolfTPM2_GetRCString(rc));
     }
     return rc;
 }
@@ -1009,8 +1158,7 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 1, &wolftpm_session,
             (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
              TPMA_SESSION_continueSession));
-    if (rc == 0)
-    {
+    if (rc == 0) {
         /* find index with matching digest */
         nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
         rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
@@ -1020,11 +1168,11 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
             wolfBoot_printf("TPM Root of Trust valid (id %d)\n", key_slot);
         }
         else {
+            if (rc >= 0) rc = -1; /* failure */
             wolfBoot_printf("TPM Root of Trust failed! %d (%s)\n",
                 rc, wolfTPM2_GetRCString(rc));
             wolfBoot_printf("Expected Hash %d\n", digestSz);
             wolfBoot_print_hexstr(pubkey_hint, digestSz, 0);
-            if (rc >= 0) rc = -1; /* failure */
         }
     }
     wolfTPM2_UnsetAuth(&wolftpm_dev, 1);

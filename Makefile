@@ -21,6 +21,7 @@ V?=0
 DEBUG?=0
 DEBUG_UART?=0
 LIBS=
+SIGN_ALG=
 
 OBJS:= \
 	./hal/$(TARGET).o \
@@ -207,7 +208,8 @@ wolfboot_stage1.bin: wolfboot.bin stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
-	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN) src/keystore.c) || (echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
+	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN_ALG) src/keystore.c) || \
+		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS) $(LIBS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(LD_START_GROUP) $(OBJS) $(LIBS) $(LD_END_GROUP) -o $@

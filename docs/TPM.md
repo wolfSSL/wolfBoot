@@ -23,7 +23,8 @@ The design uses a platform NV handle that has been locked. The NV stores a hash 
 
 ## Cryptographic offloading
 
-The RSA2048 and ECC256/384 bit verification can be offloaded to a TPM for code size reduction or performance improvement. Enabled using `WOLFBOOT_TPM_VERIFY`
+The RSA2048 and ECC256/384 bit verification can be offloaded to a TPM for code size reduction or performance improvement. Enabled using `WOLFBOOT_TPM_VERIFY`.
+NOTE: The TPM's RSA verify requires ASN.1 encoding, so use SIGN=RSA2048ENC
 
 ## Measured Boot
 
@@ -45,33 +46,57 @@ int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret, int*
 By default this index will be based on an NV Index at `(0x01400300 + index)`.
 The default NV base can be overridden with `WOLFBOOT_TPM_SEAL_NV_BASE`.
 
+NOTE: The TPM's RSA verify requires ASN.1 encoding, so use SIGN=RSA2048ENC
 
 ### Testing seal/unseal with simulator
 
 ```sh
-cp config/examples/sim-tpm-seal.config .config
-make keytools
-make tpmtools
-echo aaa > aaa.bin
-./tools/tpm/pcr_extend 0 aaa.bin
-./tools/tpm/policy_create -pcr=0
+% cp config/examples/sim-tpm-seal.config .config
+% make keytools
+% make tpmtools
+% echo aaa > aaa.bin
+% ./tools/tpm/pcr_extend 0 aaa.bin
+% ./tools/tpm/policy_create -pcr=0
 # if ROT enabled
-./tools/tpm/rot -write
-make clean && make POLICY_FILE=policy.bin
-./wolfboot.elf get_version
-Simulator assigned ./internal_flash.dd to base 0x103797000
+% ./tools/tpm/rot -write
+% make clean && make POLICY_FILE=policy.bin
+
+% ./wolfboot.elf get_version
+Simulator assigned ./internal_flash.dd to base 0x103378000
 Mfg IBM  (0), Vendor SW   TPM, Fw 8217.4131 (0x163636), FIPS 140-2 1, CC-EAL4 0
 Unlocking disk...
-Boot partition: 0x103817000
+Boot partition: 0x1033f8000
 Image size 54400
-Sealing 32 bytes
-11c6ac0ec972ae567c541750c6ecccd426f131dad3eeca5e6540d901d9f0c336
-Unsealed 32 bytes
-11c6ac0ec972ae567c541750c6ecccd426f131dad3eeca5e6540d901d9f0c336
-Boot partition: 0x103817000
+Error 395 reading blob from NV index 1400300 (error TPM_RC_HANDLE)
+Error 395 unsealing secret! (TPM_RC_HANDLE)
+Sealed secret does not exist!
+Creating new secret (32 bytes)
+430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
+Wrote 210 bytes to NV index 0x1400300
+Read 210 bytes from NV index 0x1400300
+Secret Check 32 bytes
+430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
+Secret 32 bytes
+430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
+Boot partition: 0x1033f8000
 Image size 54400
 TPM Root of Trust valid (id 0)
-Simulator assigned ./internal_flash.dd to base 0x103962000
+Simulator assigned ./internal_flash.dd to base 0x103543000
+1
+
+% ./wolfboot.elf get_version
+Simulator assigned ./internal_flash.dd to base 0x10c01c000
+Mfg IBM  (0), Vendor SW   TPM, Fw 8217.4131 (0x163636), FIPS 140-2 1, CC-EAL4 0
+Unlocking disk...
+Boot partition: 0x10c09c000
+Image size 54400
+Read 210 bytes from NV index 0x1400300
+Secret 32 bytes
+430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
+Boot partition: 0x10c09c000
+Image size 54400
+TPM Root of Trust valid (id 0)
+Simulator assigned ./internal_flash.dd to base 0x10c1e7000
 1
 ```
 
