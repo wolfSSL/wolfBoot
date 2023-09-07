@@ -43,7 +43,47 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
+/* TPM based verify */
+#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
+static void wolfBoot_verify_signature(uint8_t key_slot,
+        struct wolfBoot_image *img, uint8_t *sig)
+{
+    int ret, verify_res = 0;
+    WOLFTPM2_KEY tpmKey;
+    TPM_ALG_ID alg, sigAlg;
 
+    /* Load public key into TPM */
+    memset(&tpmKey, 0, sizeof(tpmKey));
+
+    /* get public key for policy authorization */
+    ret = wolfBoot_load_pubkey(img, &tpmKey, &alg);
+    if (ret == 0) {
+        sigAlg = (alg == TPM_ALG_RSA) ? TPM_ALG_RSASSA : TPM_ALG_ECDSA;
+        ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey,
+            sig, IMAGE_SIGNATURE_SIZE,               /* Signature */
+            img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, /* Hash */
+            sigAlg, WOLFBOOT_TPM_HASH_ALG);
+    }
+    /* unload handle regardless of result */
+    wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
+
+    if (ret == 0) {
+        verify_res = 1; /* TPM does hash verify compare */
+
+        if ((~(uint32_t)ret == 0xFFFFFFFF) && (verify_res == 1) &&
+            (~(uint32_t)verify_res == 0xFFFFFFFE)) {
+            wolfBoot_image_confirm_signature_ok(img);
+        }
+    }
+    else {
+        wolfBoot_printf("TPM verify signature error %d (%s)\n",
+            ret, wolfTPM2_GetRCString(ret));
+    }
+    (void)key_slot;
+}
+#else
+
+/* wolfCrypt software verify */
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
 static void wolfBoot_verify_signature(uint8_t key_slot,
@@ -123,54 +163,18 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     int point_sz = pubkey_sz/2;
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
-    WOLFTPM2_KEY tpmKey;
-#else
     ecc_key ecc;
     mp_int r, s;
-#endif
 
     if (pubkey == NULL || pubkey_sz <= 0) {
         return;
     }
 
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
-    /* Use TPM for ECC verify */
-    /* Load public key into TPM */
-    memset(&tpmKey, 0, sizeof(tpmKey));
-    ret = wolfTPM2_LoadEccPublicKey(&wolftpm_dev, &tpmKey,
-        TPM2_GetTpmCurve(ECC_KEY_TYPE), /* Curve */
-        pubkey, point_sz,               /* Public X */
-        pubkey + point_sz, point_sz     /* Public Y */
-    );
-    if (ret == 0) {
-        ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey,
-            sig, IMAGE_SIGNATURE_SIZE,               /* Signature */
-            img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, /* Hash */
-            TPM_ALG_ECDSA, WOLFBOOT_TPM_HASH_ALG);
-    }
-    /* unload handle regardless of result */
-    wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
-
-    if (ret == 0) {
-        verify_res = 1; /* TPM does hash verify compare */
-
-        if ((~(uint32_t)ret == 0xFFFFFFFF) && (verify_res == 1) &&
-            (~(uint32_t)verify_res == 0xFFFFFFFE)) {
-            wolfBoot_image_confirm_signature_ok(img);
-        }
-    }
-    else {
-        wolfBoot_printf("TPM ECC verify error %d (%s)\n",
-            ret, wolfTPM2_GetRCString(ret));
-    }
-#else
-    /* wolfCrypt software ECC verify */
     ret = wc_ecc_init(&ecc);
     if (ret == 0) {
         /* Import public key */
-        ret = wc_ecc_import_unsigned(&ecc, pubkey,
-            (byte*)(pubkey + point_sz), NULL, ECC_KEY_TYPE);
+        ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
+            ECC_KEY_TYPE);
         if (ret == 0 && ecc.type == ECC_PUBLICKEY) {
             /* Import signature into r,s */
             mp_init(&r);
@@ -182,7 +186,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         }
         wc_ecc_free(&ecc);
     }
-#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY*/
 }
 
 #endif /* WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC521 */
@@ -247,31 +250,6 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 }
 #endif /* !NO_RSA_SIG_ENCODING */
 
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
-/* RSA PKCSV15 un-padding with RSA_BLOCK_TYPE_1 (public) */
-/* UnPad plaintext, set start to *output, return length of plaintext or error */
-static int RsaUnPad(const byte *pkcsBlock, int pkcsBlockLen, byte **output)
-{
-    int ret = BAD_FUNC_ARG, i;
-    if (output == NULL || pkcsBlockLen < 2 || pkcsBlockLen > 0xFFFF) {
-        return BAD_FUNC_ARG;
-    }
-    /* First byte must be 0x00 and Second byte, block type, 0x01 */
-    if (pkcsBlock[0] != 0 || pkcsBlock[1] != RSA_BLOCK_TYPE_1) {
-        return RSA_PAD_E;
-    }
-    /* check the padding until we find the separator */
-    for (i = 2; i < pkcsBlockLen && pkcsBlock[i++] == 0xFF; ) { }
-    /* Minimum of 11 bytes of pre-message data and must have separator. */
-    if (i < RSA_MIN_PAD_SZ || pkcsBlock[i-1] != 0) {
-        return RSA_PAD_E;
-    }
-    *output = (byte *)(pkcsBlock + i);
-    ret = pkcsBlockLen - i;
-    return ret;
-}
-#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY*/
-
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
@@ -282,53 +260,12 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     word32 inOutIdx = 0;
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
-    WOLFTPM2_KEY tpmKey;
-    const byte *n = NULL, *e = NULL;
-    word32 nSz = 0, eSz = 0;
-#else
     struct RsaKey rsa;
-#endif
 
     if (pubkey == NULL || pubkey_sz < 0) {
         return;
     }
 
-#if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
-    /* Extract DER RSA key struct */
-    memset(&tpmKey, 0, sizeof(tpmKey));
-    ret = wc_RsaPublicKeyDecode_ex(pubkey, &inOutIdx, pubkey_sz,
-        &n, &nSz, /* modulus */
-        &e, &eSz  /* exponent */
-    );
-    if (ret == 0) {
-        /* Load public key into TPM */
-        memset(&tpmKey, 0, sizeof(tpmKey));
-        ret = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, &tpmKey,
-            n, nSz, *((word32*)e),
-            TPM_ALG_NULL, WOLFBOOT_TPM_HASH_ALG);
-    }
-    if (ret == 0) {
-        /* Perform public decrypt and manually un-pad */
-        ret = wolfTPM2_RsaEncrypt(&wolftpm_dev, &tpmKey,
-            TPM_ALG_NULL, /* no padding */
-            sig, IMAGE_SIGNATURE_SIZE,
-            output, &output_sz);
-    }
-    if (ret == 0) {
-        /* Perform PKCSv1.5 UnPadding */
-        ret = RsaUnPad(output, output_sz, &digest_out);
-    }
-
-    if (ret < 0) {
-        wolfBoot_printf("TPM RSA error %d (%s)\n",
-            ret, wolfTPM2_GetRCString(ret));
-        return;
-    }
-
-    wolfTPM2_UnloadHandle(&wolftpm_dev, &tpmKey.handle);
-
-#else
     /* wolfCrypt software RSA verify */
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
     defined(WOLFBOOT_RENESAS_TSIP)
@@ -357,7 +294,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     }
 #endif /* SCE || TSIP */
     wc_FreeRsaKey(&rsa);
-#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY*/
 
 #ifndef NO_RSA_SIG_ENCODING
     if (ret > WOLFBOOT_SHA_DIGEST_SIZE) {
@@ -437,6 +373,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     wc_LmsKey_Free(&lms);
 }
 #endif /* WOLFBOOT_SIGN_LMS */
+
+#endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY */
 
 
 /**

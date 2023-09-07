@@ -197,9 +197,14 @@ ifeq ($(SIGN),ED448)
   endif
 endif
 
-ifeq ($(SIGN),RSA2048)
+ifneq ($(findstring RSA2048,$(SIGN)),)
   KEYGEN_OPTIONS+=--rsa2048
-  SIGN_OPTIONS+=--rsa2048
+  ifeq ($(SIGN),RSA2048ENC)
+    SIGN_OPTIONS+=--rsa2048enc
+  else
+    SIGN_OPTIONS+=--rsa2048
+  endif
+  SIGN_ALG=RSA2048 # helps keystore.c check
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
@@ -232,9 +237,14 @@ ifeq ($(SIGN),RSA2048)
   endif
 endif
 
-ifeq ($(SIGN),RSA3072)
+ifneq ($(findstring RSA3072,$(SIGN)),)
   KEYGEN_OPTIONS+=--rsa3072
-  SIGN_OPTIONS+=--rsa3072
+  ifeq ($(SIGN),RSA3072ENC)
+    SIGN_OPTIONS+=--rsa3072enc
+  else
+    SIGN_OPTIONS+=--rsa3072
+  endif
+  SIGN_ALG=RSA3072 # helps keystore.c check
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
@@ -270,9 +280,15 @@ ifeq ($(SIGN),RSA3072)
   endif
 endif
 
-ifeq ($(SIGN),RSA4096)
+ifneq ($(findstring RSA4096,$(SIGN)),)
+  SIGN:=RSA4096
   KEYGEN_OPTIONS+=--rsa4096
-  SIGN_OPTIONS+=--rsa4096
+  ifeq ($(SIGN),RSA4096ENC)
+    SIGN_OPTIONS+=--rsa4096enc
+  else
+    SIGN_OPTIONS+=--rsa4096
+  endif
+  SIGN_ALG=RSA4096 # helps keystore.c check
   WOLFCRYPT_OBJS+= \
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
@@ -640,3 +656,7 @@ ifeq ($(FSP), 1)
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
+
+ifeq ($(SIGN_ALG),)
+  SIGN_ALG=$(SIGN)
+endif

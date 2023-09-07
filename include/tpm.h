@@ -51,6 +51,11 @@ extern WOLFTPM2_KEY     wolftpm_srk;
 int  wolfBoot_tpm2_init(void);
 void wolfBoot_tpm2_deinit(void);
 
+#if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
+int wolfBoot_load_pubkey(struct wolfBoot_image* img, WOLFTPM2_KEY* pubKey,
+    TPM_ALG_ID* pAlg);
+#endif
+
 #ifdef WOLFBOOT_TPM_KEYSTORE
 int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint);
 #endif
@@ -58,12 +63,26 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint);
 #ifdef WOLFBOOT_TPM_SEAL
 int wolfBoot_get_random(uint8_t* buf, int sz);
 int wolfBoot_get_pcr_active(uint8_t pcrAlg, uint32_t* pcrMask, uint8_t pcrMax);
-int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask, uint8_t* policy, uint32_t* policySz, uint8_t* policyRef, uint32_t policyRefSz);
-int wolfBoot_get_policy(struct wolfBoot_image* img, uint8_t** policy, uint16_t* policySz);
-int wolfBoot_seal(struct wolfBoot_image* img, int index, const uint8_t* secret, int secret_sz);
-int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz);
-int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret, int* secret_sz);
-int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz);
+int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask,
+    uint8_t* policy, uint32_t* policySz,
+    uint8_t* policyRef, uint32_t policyRefSz);
+int wolfBoot_get_policy(struct wolfBoot_image* img,
+    uint8_t** policy, uint16_t* policySz);
+
+int wolfBoot_seal(struct wolfBoot_image* img, int index,
+    const uint8_t* secret, int secret_sz);
+int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
+    const uint8_t* secret, int secret_sz);
+int wolfBoot_unseal(struct wolfBoot_image* img, int index,
+    uint8_t* secret, int* secret_sz);
+int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
+    uint8_t* secret, int* secret_sz);
+
+int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
+    const uint8_t* auth, uint32_t authSz);
+int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
+    word32 nvAttributes, WOLFTPM2_KEYBLOB* blob,
+    const uint8_t* auth, uint32_t authSz);
 #endif
 
 #ifdef WOLFBOOT_MEASURED_BOOT

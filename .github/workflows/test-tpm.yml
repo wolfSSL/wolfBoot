@@ -34,7 +34,7 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim-tpm.config
-      make-args: SIGN=RSA2048 HASH=SHA256
+      make-args: SIGN=RSA2048ENC HASH=SHA256
 
 
   sim_tpm_measured_ecc256:
@@ -107,5 +107,5 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim-tpm-seal.config
-      make-args: SIGN=RSA2048 HASH=SHA256 POLICY_FILE=policy.bin
+      make-args: SIGN=RSA2048ENC HASH=SHA256 POLICY_FILE=policy.bin
       authstr: TestAuth

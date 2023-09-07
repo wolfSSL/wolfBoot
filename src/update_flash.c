@@ -575,13 +575,12 @@ int wolfBoot_unlock_disk(void)
 {
     int ret;
     struct wolfBoot_image img;
-    WOLFTPM2_KEYBLOB seal_blob;
     uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
     int     secretSz;
     uint8_t* policy = NULL;
     uint16_t policySz = 0;
+    int      nvIndex = 0; /* where the sealed blob is stored in NV */
 
-    memset(&seal_blob, 0, sizeof(seal_blob));
     memset(secret, 0, sizeof(secret));
 
     wolfBoot_printf("Unlocking disk...\n");
@@ -597,38 +596,49 @@ int wolfBoot_unlock_disk(void)
         }
     }
     if (ret == 0) {
-        /* for testing seal and unseal */
-        /* create secret to seal */
-        secretSz = 32;
-        ret = wolfBoot_get_random(secret, secretSz);
-        if (ret == 0) {
-            wolfBoot_printf("Sealing %d bytes\n", secretSz);
-            wolfBoot_print_hexstr(secret, secretSz, 0);
-
-            /* seal new secret */
-            ret = wolfBoot_seal_blob(&img, &seal_blob, secret, secretSz);
-        }
-        if (ret == 0) {
-            uint8_t secretCheck[WOLFBOOT_MAX_SEAL_SZ];
-            int     secretCheckSz = 0;
-
-            /* unseal again to make sure it works */
-            memset(secretCheck, 0, sizeof(secretCheck));
-            ret = wolfBoot_unseal_blob(&img, &seal_blob, secretCheck, &secretCheckSz);
-            if (ret == 0) {
-                if (secretSz != secretCheckSz || memcmp(secret, secretCheck, secretSz) != 0) {
-                    wolfBoot_printf("secret check mismatch!\n");
-                    ret = -1;
-                }
+        /* try to unseal the secret */
+        ret = wolfBoot_unseal(&img, nvIndex, secret, &secretSz);
+        if (ret != 0) { /* if secret does not exist, expect TPM_RC_HANDLE here */
+            if ((ret & RC_MAX_FMT1) == TPM_RC_HANDLE) {
+                wolfBoot_printf("Sealed secret does not exist!\n");
             }
+            /* create secret to seal */
+            secretSz = 32;
+            ret = wolfBoot_get_random(secret, secretSz);
+            if (ret == 0) {
+                wolfBoot_printf("Creating new secret (%d bytes)\n", secretSz);
+                wolfBoot_print_hexstr(secret, secretSz, 0);
 
-            wolfBoot_printf("Unsealed %d bytes\n", secretCheckSz);
-            wolfBoot_print_hexstr(secretCheck, secretCheckSz, 0);
-            TPM2_ForceZero(secretCheck, sizeof(secretCheck));
+                /* seal new secret */
+                ret = wolfBoot_seal(&img, nvIndex, secret, secretSz);
+            }
+            if (ret == 0) {
+                uint8_t secretCheck[WOLFBOOT_MAX_SEAL_SZ];
+                int     secretCheckSz = 0;
+
+                /* unseal again to make sure it works */
+                memset(secretCheck, 0, sizeof(secretCheck));
+                ret = wolfBoot_unseal(&img, nvIndex, secretCheck, &secretCheckSz);
+                if (ret == 0) {
+                    if (secretSz != secretCheckSz ||
+                        memcmp(secret, secretCheck, secretSz) != 0)
+                    {
+                        wolfBoot_printf("secret check mismatch!\n");
+                        ret = -1;
+                    }
+                }
+
+                wolfBoot_printf("Secret Check %d bytes\n", secretCheckSz);
+                wolfBoot_print_hexstr(secretCheck, secretCheckSz, 0);
+                TPM2_ForceZero(secretCheck, sizeof(secretCheck));
+            }
         }
     }
 
     if (ret == 0) {
+        wolfBoot_printf("Secret %d bytes\n", secretSz);
+        wolfBoot_print_hexstr(secret, secretSz, 0);
+
         /* TODO: Unlock disk */
 
     }
