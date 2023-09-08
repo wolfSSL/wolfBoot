@@ -53,14 +53,9 @@ jobs:
         run: |
           make -C tools/keytools && make -C tools/bin-assemble
 
-      # needed for tpm tools
-      - name: Build keystore.c
-        run: |
-          make keys ${{inputs.make-args}}
-
       - name: Build TPM tools
         run: |
-          make tpmtools
+          make tpmtools ${{inputs.make-args}}
 
       - name: Write TPM ROT to TPM
         run: |

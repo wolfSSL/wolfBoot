@@ -107,5 +107,6 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim-tpm-seal.config
-      make-args: SIGN=RSA2048ENC HASH=SHA256 POLICY_FILE=policy.bin
+      # use larger image header size for two 2048-bit signatures
+      make-args: SIGN=RSA2048ENC HASH=SHA256 POLICY_FILE=policy.bin IMAGE_HEADER_SIZE=1024
       authstr: TestAuth

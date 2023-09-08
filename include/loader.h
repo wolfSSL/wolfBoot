@@ -83,6 +83,12 @@ void wolfBoot_start(void);
     asm volatile("b .-6"); \
     asm volatile("b .-8");
 
+#elif defined(ARCH_SIM)
+#include <stdlib.h>
+static inline void wolfBoot_panic(void)
+{
+    exit(1);
+}
 #else
 static inline void wolfBoot_panic(void)
 {
