@@ -167,7 +167,7 @@ keytools:
 	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j
 
-tpmtools:
+tpmtools: keys
 	@echo "Building TPM tools"
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j

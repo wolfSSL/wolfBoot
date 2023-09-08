@@ -614,19 +614,22 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
                 if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA2048) {
                     CMD.sign = SIGN_RSA2048;
-                    CMD.header_sz = 512;
-                    CMD.signature_sz = 256;
-                }
-                else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA3072) {
-                    CMD.sign = SIGN_RSA3072;
-
-                    if(CMD.hash_algo != HASH_SHA256) {
+                    if (CMD.policy_sign) {
                         CMD.header_sz = 1024;
                     }
                     else {
                         CMD.header_sz = 512;
                     }
-
+                    CMD.signature_sz = 256;
+                }
+                else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA3072) {
+                    CMD.sign = SIGN_RSA3072;
+                    if (CMD.hash_algo != HASH_SHA256 || CMD.policy_sign) {
+                        CMD.header_sz = 1024;
+                    }
+                    else {
+                        CMD.header_sz = 512;
+                    }
                     CMD.signature_sz = 384;
                 }
                 else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA4096) {
@@ -673,22 +676,24 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     }
                     else if (keySzOut == 384) {
                         CMD.sign = SIGN_RSA3072;
-
-                        if(CMD.hash_algo != HASH_SHA256) {
+                        if (CMD.hash_algo != HASH_SHA256 || CMD.policy_sign) {
                             CMD.header_sz = 1024;
                         }
                         else {
                             CMD.header_sz = 512;
                         }
-
                         CMD.signature_sz = 384;
                     }
                     else {
                         CMD.sign = SIGN_RSA2048;
-                        CMD.header_sz = 512;
+                        if (CMD.policy_sign) {
+                            CMD.header_sz = 1024;
+                        }
+                        else {
+                            CMD.header_sz = 512;
+                        }
                         CMD.signature_sz = 256;
                     }
-
                     break;
                 }
             }
@@ -743,7 +748,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         printf("image header size overridden by config value (%u bytes)\n", IMAGE_HEADER_SIZE);
         CMD.header_sz = IMAGE_HEADER_SIZE;
     } else {
-        printf("image header size calculated at runtime (%u bytes)\n", IMAGE_HEADER_SIZE);
+        printf("image header size calculated at runtime (%u bytes)\n", CMD.header_sz);
     }
 
 #ifdef DEBUG_SIGNTOOL

@@ -104,6 +104,9 @@ static int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvBase
 
         printf("Computing keystore hash for index %d\n", id);
 
+        printf("Public Key (%d)\n", bufSz);
+        TPM2_PrintBin(buf, bufSz);
+
         /* hash public key */
         digestSz = wc_HashGetDigestSize(hashType);
         rc = wc_Hash(hashType, buf, (word32)bufSz, digest, digestSz);

@@ -824,7 +824,6 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
     int rc, i;
     WOLFTPM2_SESSION policy_session;
     uint32_t key_type;
-    int key_slot = -1;
     TPM_ALG_ID pcrAlg = WOLFBOOT_TPM_PCR_ALG;
     TPM_ALG_ID alg = TPM_ALG_NULL, sigAlg;
     TPMT_PUBLIC template;
@@ -868,6 +867,7 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
     memset(&authKey, 0, sizeof(authKey));
     memset(&template, 0, sizeof(template));
     memset(&policy_session, 0, sizeof(policy_session));
+    memset(&checkTicket, 0, sizeof(checkTicket));
 
     /* Setup a TPM session that can be used for parameter encryption */
     rc = wolfTPM2_StartSession(&wolftpm_dev, &policy_session, &wolftpm_srk,
@@ -1152,6 +1152,7 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     #ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
     nv.handle.auth.size = (UINT16)strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
     memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH, nv.handle.auth.size);
+    wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &nv.handle);
     #endif
 
     /* Enable parameter encryption for session - to protect auth */
@@ -1163,12 +1164,16 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
         nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
         rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
             digest, &digestSz, 0);
-        if (rc == 0 && digestSz == WOLFBOOT_SHA_DIGEST_SIZE &&
-            memcmp(digest, pubkey_hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
-            wolfBoot_printf("TPM Root of Trust valid (id %d)\n", key_slot);
+        if (rc == 0) {
+            if (digestSz == WOLFBOOT_SHA_DIGEST_SIZE &&
+                memcmp(digest, pubkey_hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
+                wolfBoot_printf("TPM Root of Trust valid (id %d)\n", key_slot);
+            }
+            else {
+                rc = -1; /* digest match failure */
+            }
         }
-        else {
-            if (rc >= 0) rc = -1; /* failure */
+        if (rc != 0) {
             wolfBoot_printf("TPM Root of Trust failed! %d (%s)\n",
                 rc, wolfTPM2_GetRCString(rc));
             wolfBoot_printf("Expected Hash %d\n", digestSz);
