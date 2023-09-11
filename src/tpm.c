@@ -801,7 +801,7 @@ int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
         rc = wolfBoot_store_blob(TPM_RH_PLATFORM,
             WOLFBOOT_TPM_SEAL_NV_BASE + index,
             nvAttributes, &seal_blob,
-            NULL, 0 /* auth is not required as sealed blob is already encrypted */
+            NULL, 0 /* auth is not required as blob is already encrypted */
         );
     }
     if (rc != 0) {
@@ -812,7 +812,8 @@ int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
 }
 
 /* The unseal requires a signed policy from HDR_POLICY_SIGNATURE */
-int wolfBoot_unseal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_unseal_blob(uint8_t* pubkey_hint,
+    uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz)
 {
     int rc, i;
@@ -835,7 +836,8 @@ int wolfBoot_unseal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policyS
     uint8_t* policyRef = NULL; /* optional nonce */
     uint32_t policyRefSz = 0;
 
-    if (secret == NULL || secret_sz == NULL) {
+    if (policy == NULL || policySz <= 0 || secret == NULL ||
+            secret_sz == NULL) {
         return -1;
     }
 
