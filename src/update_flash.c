@@ -646,6 +646,24 @@ int wolfBoot_unlock_disk(void)
         wolfBoot_printf("unlock disk failed! %d (%s)\n",
             ret, wolfTPM2_GetRCString(ret));
     }
+
+    /* Extend a PCR from the mask to prevent future unsealing */
+    {
+        uint32_t pcrMask;
+        uint32_t pcrArraySz;
+        uint8_t  pcrArray[1];
+        /* random value to extend the first PCR mask */
+        const uint8_t digest[WOLFBOOT_TPM_PCR_DIG_SZ] = {
+            0xEA, 0xA7, 0x5C, 0xF6, 0x91, 0x7C, 0x77, 0x91,
+            0xC5, 0x33, 0x16, 0x6D, 0x74, 0xFF, 0xCE, 0xCD,
+            0x27, 0xE3, 0x47, 0xF6, 0x82, 0x1D, 0x4B, 0xB1,
+            0x32, 0x70, 0x88, 0xFC, 0x69, 0xFF, 0x6C, 0x02,
+        };
+        memcpy(&pcrMask, policy, sizeof(pcrMask));
+        pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask, pcrArray, sizeof(pcrArray));
+        wolfBoot_tpm2_extend(pcrArray[0], (uint8_t*)digest, __LINE__);
+    }
+
     TPM2_ForceZero(secret, sizeof(secretSz));
     return ret;
 }

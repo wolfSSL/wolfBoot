@@ -109,20 +109,20 @@ static void printHexString(const unsigned char* bin, unsigned long sz,
     printf("\n");
 }
 
-static void tpm_mask_sel_pcr(uint32_t pcrMask, uint8_t* pcrArray,
-    uint32_t* pcrArraySz)
+uint32_t wolfBoot_tpm_pcrmask_sel(uint32_t pcrMask, uint8_t* pcrArray,
+    uint32_t pcrArraySz)
 {
     int i;
-    *pcrArraySz = 0;
+    uint32_t pcrArraySzAct = 0;
     for (i=0; i<IMPLEMENTATION_PCR; i++) {
         if (pcrMask & (1 << i)) {
-            pcrArray[(*pcrArraySz)++] = i;
-            /* make sure we have room */
-            if (*pcrArraySz >= PCR_SELECT_MAX*2) {
+            pcrArray[pcrArraySzAct++] = i;
+            if (pcrArraySzAct < pcrArraySz) { /* make sure we have room */
                 break;
             }
         }
     }
+    return pcrArraySzAct;
 }
 
 int TPM2_PCR_Policy_Create(TPM_ALG_ID pcrAlg,
@@ -263,7 +263,8 @@ int main(int argc, char *argv[])
             pcrArray[pcrArraySz++] = DEFAULT_PCR;
         }
         else {
-            tpm_mask_sel_pcr(pcrMask, pcrArray, &pcrArraySz);
+            pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask,
+                pcrArray, sizeof(pcrArray));
         }
     }
 

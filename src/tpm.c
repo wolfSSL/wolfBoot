@@ -467,20 +467,20 @@ int wolfBoot_get_pcr_active(uint8_t pcrAlg, uint32_t* pcrMask, uint8_t pcrMax)
     return rc;
 }
 
-static void tpm_mask_sel_pcr(uint32_t pcrMask, uint8_t* pcrArray,
-    uint32_t* pcrArraySz)
+uint32_t wolfBoot_tpm_pcrmask_sel(uint32_t pcrMask, uint8_t* pcrArray,
+    uint32_t pcrArraySz)
 {
     int i;
-    *pcrArraySz = 0;
+    uint32_t pcrArraySzAct = 0;
     for (i=0; i<IMPLEMENTATION_PCR; i++) {
         if (pcrMask & (1 << i)) {
-            pcrArray[(*pcrArraySz)++] = i;
-            /* make sure we have room */
-            if (*pcrArraySz >= PCR_SELECT_MAX*2) {
+            pcrArray[pcrArraySzAct++] = i;
+            if (pcrArraySzAct < pcrArraySz) { /* make sure we have room */
                 break;
             }
         }
     }
+    return pcrArraySzAct;
 }
 
 int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask,
@@ -497,7 +497,7 @@ int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask,
 
     /* populate PCR selection array */
     memset(pcrArray, 0, sizeof(pcrArray));
-    tpm_mask_sel_pcr(pcrMask, pcrArray, &pcrArraySz);
+    pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask, pcrArray, sizeof(pcrArray));
 
     /* Create a Policy PCR digest to sign externally */
     memcpy(policy, (uint8_t*)&pcrMask, sizeof(pcrMask));
@@ -858,7 +858,7 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
     /* extract pcrMask and populate PCR selection array */
     memcpy(&pcrMask, hdr, sizeof(pcrMask));
     memset(pcrArray, 0, sizeof(pcrArray));
-    tpm_mask_sel_pcr(pcrMask, pcrArray, &pcrArraySz);
+    pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask, pcrArray, sizeof(pcrArray));
 
     /* skip to signature */
     hdr += sizeof(pcrMask);
