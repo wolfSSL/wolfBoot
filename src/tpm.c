@@ -331,7 +331,7 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
-int wolfBoot_load_pubkey(struct wolfBoot_image* img, WOLFTPM2_KEY* pubKey,
+int wolfBoot_load_pubkey(uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     TPM_ALG_ID* pAlg)
 {
     int rc = 0;
@@ -343,9 +343,7 @@ int wolfBoot_load_pubkey(struct wolfBoot_image* img, WOLFTPM2_KEY* pubKey,
     *pAlg = TPM_ALG_NULL;
 
     /* get public key */
-    hdrSz = wolfBoot_get_header(img, HDR_PUBKEY, &hdr);
-    if (hdrSz == WOLFBOOT_SHA_DIGEST_SIZE)
-        key_slot = keyslot_id_by_sha(hdr);
+    key_slot = keyslot_id_by_sha(pubkey_hint);
     if (key_slot < 0)
         rc = -1;
 
@@ -705,8 +703,8 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
 }
 
 /* The secret is sealed based on a policy authorization from a public key. */
-int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
-    const uint8_t* secret, int secret_sz)
+int wolfBoot_seal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+    WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz)
 {
     int rc;
     WOLFTPM2_SESSION policy_session;
@@ -717,17 +715,9 @@ int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
     uint8_t *hdr;
     uint16_t hdrSz;
 
-    if (secret == NULL || secret_sz > WOLFBOOT_MAX_SEAL_SZ) {
+    if (policy == NULL || policySz <= 0 || secret == NULL ||
+            secret_sz > WOLFBOOT_MAX_SEAL_SZ) {
         return -1;
-    }
-
-    /* make sure we have a HDR_POLICY_SIGNATURE defined */
-    rc = wolfBoot_get_policy(img, &hdr, &hdrSz);
-    if (rc != 0) {
-        /* Technically we can seal a secret without the signed policy, but it
-         * can't be unsealed until a signed policy exists. For now consider this
-         * a failure */
-        return rc;
     }
 
     memset(&authKey, 0, sizeof(authKey));
@@ -735,7 +725,7 @@ int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
     memset(&policy_session, 0, sizeof(policy_session));
 
     /* get public key for policy authorization */
-    rc = wolfBoot_load_pubkey(img, &authKey, &alg);
+    rc = wolfBoot_load_pubkey(pubkey_hint, &authKey, &alg);
 
     /* The handle for the public key if not needed, so unload it.
      * For seal only a populated TPM2B_PUBLIC is required */
@@ -783,8 +773,8 @@ int wolfBoot_seal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
 
 /* Index (0-X) determines location in NV from WOLFBOOT_TPM_SEAL_NV_BASE to
  * store sealed blob */
-int wolfBoot_seal(struct wolfBoot_image* img, int index,
-    const uint8_t* secret, int secret_sz)
+int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+    int index, const uint8_t* secret, int secret_sz)
 {
     int rc;
     WOLFTPM2_KEYBLOB seal_blob;
@@ -793,7 +783,8 @@ int wolfBoot_seal(struct wolfBoot_image* img, int index,
     memset(&seal_blob, 0, sizeof(seal_blob));
 
     /* creates a sealed keyed hash object (not loaded to TPM) */
-    rc = wolfBoot_seal_blob(img, &seal_blob, secret, secret_sz);
+    rc = wolfBoot_seal_blob(pubkey_hint, policy, policySz, &seal_blob,
+        secret, secret_sz);
     if (rc == 0) {
     #ifdef WOLFBOOT_DEBUG_TPM
         wolfBoot_printf("Sealed keyed hash (pub %d, priv %d bytes):\n",
@@ -818,8 +809,8 @@ int wolfBoot_seal(struct wolfBoot_image* img, int index,
 }
 
 /* The unseal requires a signed policy from HDR_POLICY_SIGNATURE */
-int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob,
-    uint8_t* secret, int* secret_sz)
+int wolfBoot_unseal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+    WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz)
 {
     int rc, i;
     WOLFTPM2_SESSION policy_session;
@@ -831,8 +822,6 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
     TPMT_TK_VERIFIED checkTicket;
     Unseal_In  unsealIn;
     Unseal_Out unsealOut;
-    uint8_t *hdr;
-    uint16_t hdrSz;
     uint32_t pcrMask;
     uint8_t  pcrDigest[WOLFBOOT_TPM_PCR_DIG_SZ];
     uint32_t pcrDigestSz;
@@ -849,20 +838,14 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
 
     *secret_sz = 0; /* init */
 
-    /* make sure we have a HDR_POLICY_SIGNATURE defined */
-    rc = wolfBoot_get_policy(img, &hdr, &hdrSz);
-    if (rc != 0) {
-        return rc;
-    }
-
     /* extract pcrMask and populate PCR selection array */
-    memcpy(&pcrMask, hdr, sizeof(pcrMask));
+    memcpy(&pcrMask, policy, sizeof(pcrMask));
     memset(pcrArray, 0, sizeof(pcrArray));
     pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask, pcrArray, sizeof(pcrArray));
 
     /* skip to signature */
-    hdr += sizeof(pcrMask);
-    hdrSz -= sizeof(pcrMask);
+    policy += sizeof(pcrMask);
+    policySz -= sizeof(pcrMask);
 
     memset(&authKey, 0, sizeof(authKey));
     memset(&template, 0, sizeof(template));
@@ -907,12 +890,12 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
     #endif
 
         /* get public key for policy authorization */
-        rc = wolfBoot_load_pubkey(img, &authKey, &alg);
+        rc = wolfBoot_load_pubkey(pubkey_hint, &authKey, &alg);
     }
     if (rc == 0) {
         sigAlg = alg == TPM_ALG_RSA ? TPM_ALG_RSASSA : TPM_ALG_ECDSA;
         rc = wolfTPM2_VerifyHashTicket(&wolftpm_dev, &authKey,
-            hdr, hdrSz, policyDigest, policyDigestSz,
+            policy, policySz, policyDigest, policyDigestSz,
             sigAlg, pcrAlg, &checkTicket);
     }
     if (rc == 0) {
@@ -966,8 +949,8 @@ int wolfBoot_unseal_blob(struct wolfBoot_image* img, WOLFTPM2_KEYBLOB* seal_blob
     return rc;
 }
 
-int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret,
-    int* secret_sz)
+int wolfBoot_unseal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+    int index, uint8_t* secret, int* secret_sz)
 {
     int rc;
     WOLFTPM2_KEYBLOB seal_blob;
@@ -978,7 +961,8 @@ int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret,
         NULL, 0 /* auth is not required as sealed blob is already encrypted */
     );
     if (rc == 0) {
-        rc = wolfBoot_unseal_blob(img, &seal_blob, secret, secret_sz);
+        rc = wolfBoot_unseal_blob(pubkey_hint, policy, policySz, &seal_blob,
+            secret, secret_sz);
     #ifdef WOLFBOOT_DEBUG_TPM
         if (rc == 0) {
             wolfBoot_printf("Unsealed keyed hash (pub %d, priv %d bytes):\n",

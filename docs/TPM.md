@@ -40,8 +40,10 @@ If a signed policy is not in the header then a value cannot be sealed. Instead t
 
 This exposes two new wolfBoot API's for sealing and unsealing data with blob stored to NV index:
 ```c
-int wolfBoot_seal(struct wolfBoot_image* img, int index, const uint8_t* secret, int secret_sz);
-int wolfBoot_unseal(struct wolfBoot_image* img, int index, uint8_t* secret, int* secret_sz);
+int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+    int index, const uint8_t* secret, int secret_sz);
+int wolfBoot_unseal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+    int index, uint8_t* secret, int* secret_sz);
 ```
 
 By default this index will be based on an NV Index at `(0x01400300 + index)`.
