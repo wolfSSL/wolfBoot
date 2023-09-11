@@ -174,6 +174,7 @@ Provides a PCR mask and digest to be signed and included in the header. The sign
   By default the file should contain a 4-byte PCR mask and SHA2-256 PCR digest to be signed.
   If using `--manual-sign` then the file should contain the 4-byte PCR mask and signature.
   The PCR mask and signature will be included in the `HDR_POLICY_SIGNATURE` header tag.
+  A copy of the final signed policy (including 4 byte PCR mask) will be output to `[inputname].sig`.
   Note: This may require increasing the `IMAGE_HEADER_SIZE` as two signatures will be stored in the header.
 
 #### Three-steps signing using external provisioning tools

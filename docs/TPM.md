@@ -10,6 +10,7 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | `WOLFBOOT_TPM_VERIFY=1` | `WOLFBOOT_TPM_VERIFY` | Enables cryptographic offloading for RSA2048 and ECC256/384 to the TPM. |
 | `WOLFBOOT_TPM_KEYSTORE=1` | `WOLFBOOT_TPM_KEYSTORE` | Enables TPM based root of trust. NV Index must store a hash of the trusted public key. |
 | `WOLFBOOT_TPM_KEYSTORE_NV_BASE=0x` | `WOLFBOOT_TPM_KEYSTORE_NV_BASE=0x` | NV index in platform range 0x1400000 - 0x17FFFFF. |
+| `WOLFBOOT_TPM_KEYSTORE_AUTH=secret` | `WOLFBOOT_TPM_KEYSTORE_AUTH` | Password for NV access |
 | `MEASURED_BOOT=1` | `WOLFBOOT_MEASURED_BOOT` | Enable measured boot. Extend PCR with wolfBoot hash. |
 | `MEASURED_PCR_A=16` | `WOLFBOOT_MEASURED_PCR_A=16` | The PCR index to use. See [docs/measured_boot.md](/docs/measured_boot.md). |
 | `WOLFBOOT_TPM_SEAL=1` | `WOLFBOOT_TPM_SEAL` | Enables support for sealing/unsealing based on PCR policy signed externally. |

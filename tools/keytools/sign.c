@@ -1224,7 +1224,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 }
             }
             else {
-                /* in manual mode PCR signature */
+                /* in manual mode remainder is PCR signature */
                 io_sz = (int)fread(policy, 1, CMD.policy_sz, f);
                 fclose(f);
                 if (io_sz <= 0) {
@@ -1232,6 +1232,15 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     goto failure;
                 }
                 CMD.policy_sz = io_sz;
+            }
+
+            /* save copy of signed policy including 4 byte header to file */
+            snprintf((char*)buf, sizeof(buf), "%s.sig", CMD.policy_file);
+            printf("Saving policy signature to %s\n", (char*)buf);
+            f = fopen((char*)buf, "w+b");
+            if (f != NULL) {
+                fwrite(policy, 1, CMD.policy_sz + sizeof(uint32_t), f);
+                fclose(f);
             }
         }
 
