@@ -481,6 +481,7 @@ uint32_t wolfBoot_tpm_pcrmask_sel(uint32_t pcrMask, uint8_t* pcrArray,
     return pcrArraySzAct;
 }
 
+/* Builds a policy digest that can be signed based on selected PCR's */
 int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask,
     uint8_t* policy, uint32_t* policySz,
     uint8_t* policyRef, uint32_t policyRefSz)
@@ -527,6 +528,8 @@ int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask,
     return rc;
 }
 
+/* Get the signed policy from the image header. If not found get active PCR's
+ * and build expected policy for current state */
 int wolfBoot_get_policy(struct wolfBoot_image* img,
     uint8_t** policy, uint16_t* policySz)
 {
@@ -910,13 +913,13 @@ int wolfBoot_unseal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policyS
             policyRef, policyRefSz);
     }
     else {
+        /* A failure here means the signed policy did not match expected policy.
+         * Use this PCR mask and policy digest with the sign tool --policy=
+         * argument to sign */
         wolfBoot_printf("Policy signature failed!\n");
-        wolfBoot_printf("Expected PCR Mask (0x%08x) and PCR Digest (%d)\n",
-            pcrMask, pcrDigestSz);
-        wolfBoot_print_hexstr(pcrDigest, pcrDigestSz, 0);
-
-        wolfBoot_printf("PCR Policy (%d bytes):\n", policyDigestSz);
-        wolfBoot_print_hexstr(policyDigest, policyDigestSz, policyDigestSz);
+        wolfBoot_printf("Expected PCR Mask (0x%08x) and PCR Policy (%d)\n",
+            pcrMask, policyDigestSz);
+        wolfBoot_print_hexstr(policyDigest, policyDigestSz, 0);
     }
 
     /* done with authorization public key */
@@ -1124,6 +1127,7 @@ void wolfBoot_tpm2_deinit(void)
 
 
 #ifdef WOLFBOOT_TPM_KEYSTORE
+/* check root of trust based on key_slot (index) and public key hint */
 int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
 {
     int rc;
