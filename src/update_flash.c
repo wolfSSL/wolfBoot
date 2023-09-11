@@ -577,7 +577,7 @@ int wolfBoot_unlock_disk(void)
     struct wolfBoot_image img;
     uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
     int     secretSz;
-    uint8_t* policy = NULL;
+    uint8_t* policy = NULL, *pubkey_hint = NULL;
     uint16_t policySz = 0;
     int      nvIndex = 0; /* where the sealed blob is stored in NV */
 
@@ -588,16 +588,20 @@ int wolfBoot_unlock_disk(void)
     /* check policy */
     ret = wolfBoot_open_image(&img, PART_BOOT);
     if (ret == 0) {
+        ret = wolfBoot_get_header(&img, HDR_PUBKEY, &pubkey_hint);
+        ret = (ret  == WOLFBOOT_SHA_DIGEST_SIZE) ? 0 : -1;
+    }
+    if (ret == 0) {
         ret = wolfBoot_get_policy(&img, &policy, &policySz);
         if (ret == -TPM_RC_POLICY_FAIL) {
             /* the image is not signed with a policy */
             wolfBoot_printf("Image policy signature missing!\n");
-            return ret;
         }
     }
     if (ret == 0) {
         /* try to unseal the secret */
-        ret = wolfBoot_unseal(&img, nvIndex, secret, &secretSz);
+        ret = wolfBoot_unseal(pubkey_hint, policy, policySz, nvIndex,
+            secret, &secretSz);
         if (ret != 0) { /* if secret does not exist, expect TPM_RC_HANDLE here */
             if ((ret & RC_MAX_FMT1) == TPM_RC_HANDLE) {
                 wolfBoot_printf("Sealed secret does not exist!\n");
@@ -610,7 +614,8 @@ int wolfBoot_unlock_disk(void)
                 wolfBoot_print_hexstr(secret, secretSz, 0);
 
                 /* seal new secret */
-                ret = wolfBoot_seal(&img, nvIndex, secret, secretSz);
+                ret = wolfBoot_seal(pubkey_hint, policy, policySz, nvIndex,
+                    secret, secretSz);
             }
             if (ret == 0) {
                 uint8_t secretCheck[WOLFBOOT_MAX_SEAL_SZ];
@@ -618,7 +623,8 @@ int wolfBoot_unlock_disk(void)
 
                 /* unseal again to make sure it works */
                 memset(secretCheck, 0, sizeof(secretCheck));
-                ret = wolfBoot_unseal(&img, nvIndex, secretCheck, &secretCheckSz);
+                ret = wolfBoot_unseal(pubkey_hint, policy, policySz, nvIndex,
+                    secretCheck, &secretCheckSz);
                 if (ret == 0) {
                     if (secretSz != secretCheckSz ||
                         memcmp(secret, secretCheck, secretSz) != 0)
@@ -641,17 +647,12 @@ int wolfBoot_unlock_disk(void)
 
         /* TODO: Unlock disk */
 
-    }
-    else {
-        wolfBoot_printf("unlock disk failed! %d (%s)\n",
-            ret, wolfTPM2_GetRCString(ret));
-    }
 
-    /* Extend a PCR from the mask to prevent future unsealing */
-    {
+        /* Extend a PCR from the mask to prevent future unsealing */
+        {
         uint32_t pcrMask;
         uint32_t pcrArraySz;
-        uint8_t  pcrArray[1];
+        uint8_t  pcrArray[1]; /* get one PCR from mask */
         /* random value to extend the first PCR mask */
         const uint8_t digest[WOLFBOOT_TPM_PCR_DIG_SZ] = {
             0xEA, 0xA7, 0x5C, 0xF6, 0x91, 0x7C, 0x77, 0x91,
@@ -660,8 +661,15 @@ int wolfBoot_unlock_disk(void)
             0x32, 0x70, 0x88, 0xFC, 0x69, 0xFF, 0x6C, 0x02,
         };
         memcpy(&pcrMask, policy, sizeof(pcrMask));
-        pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask, pcrArray, sizeof(pcrArray));
+        pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask,
+            pcrArray, sizeof(pcrArray)); /* get first PCR from mask */
         wolfBoot_tpm2_extend(pcrArray[0], (uint8_t*)digest, __LINE__);
+    }
+
+    }
+    else {
+        wolfBoot_printf("unlock disk failed! %d (%s)\n",
+            ret, wolfTPM2_GetRCString(ret));
     }
 
     TPM2_ForceZero(secret, sizeof(secretSz));

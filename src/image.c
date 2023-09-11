@@ -48,15 +48,23 @@ static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
-    int ret, verify_res = 0;
+    int ret = 0, verify_res = 0;
     WOLFTPM2_KEY tpmKey;
     TPM_ALG_ID alg, sigAlg;
+    uint8_t *hdr;
+    uint16_t hdrSz;
 
     /* Load public key into TPM */
     memset(&tpmKey, 0, sizeof(tpmKey));
 
     /* get public key for policy authorization */
-    ret = wolfBoot_load_pubkey(img, &tpmKey, &alg);
+    hdrSz = wolfBoot_get_header(img, HDR_PUBKEY, &hdr);
+    if (hdrSz != WOLFBOOT_SHA_DIGEST_SIZE) {
+        ret = -1;
+    }
+    if (ret == 0) {
+        ret = wolfBoot_load_pubkey(hdr /* pubkey_hint */, &tpmKey, &alg);
+    }
     if (ret == 0) {
         sigAlg = (alg == TPM_ALG_RSA) ? TPM_ALG_RSASSA : TPM_ALG_ECDSA;
         ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey,
