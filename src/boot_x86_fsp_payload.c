@@ -58,8 +58,6 @@ uint8_t mb2_boot_info[MAX_MB2_BOOT_INFO_SIZE];
 #include <x86/paging.h>
 #endif /* WOLFBOOT_64BIT */
 
-extern uint8_t *_stage2_params[];
-
 #ifdef TARGET_kontron_vx3060_s2
 static char *cmdline = "apic=verbose acpi=no pci=debug console=ttyS0,115200 debug";
 #elif TARGET_x86_fsp_qemu
@@ -67,6 +65,10 @@ static char *cmdline = "console=ttyS0,115200 pci=earlydump debug";
 #else
 static char *cmdline = "auto";
 #endif /* TARGET_kontron_vx3060_s2 */
+
+/* must be global so the linker will export the symbol. It's used from loader 1
+ * to fill the parameters */
+struct stage2_parameter _stage2_params;
 
 /**
  * @brief Jump to the specified entry point.
@@ -83,6 +85,11 @@ void jump(uintptr_t entry)
             : "g"(entry));
 }
 
+struct stage2_parameter *stage2_get_parameters()
+{
+    return &_stage2_params;
+}
+
 /**
  * @brief Perform the boot process for the given application.
  *
@@ -94,11 +101,12 @@ void jump(uintptr_t entry)
  */
 void do_boot(const uint32_t *app)
 {
+    struct stage2_parameter *stage2_params;
 
+    stage2_params = stage2_get_parameters();
 #if defined(WOLFBOOT_LINUX_PAYLOAD)
     mptable_setup();
-    load_linux((uint8_t *)app, (struct stage2_parameter*)_stage2_params,
-               cmdline);
+    load_linux((uint8_t *)app, stage2_params, cmdline);
 #elif defined(WOLFBOOT_ELF)
     int r;
     uint64_t e;
@@ -129,7 +137,7 @@ void do_boot(const uint32_t *app)
     wolfBoot_printf("mb2 header found at %x\r\n",
                     (uint32_t)(uintptr_t)mb2_header);
     r = mb2_build_boot_info_header(mb2_boot_info, mb2_header,
-                                   (struct stage2_parameter*)_stage2_params,
+                                   stage2_params,
                                    MAX_MB2_BOOT_INFO_SIZE);
     if (r != 0) {
         wolfBoot_printf("can't build multiboot2 header, panicking\r\n");

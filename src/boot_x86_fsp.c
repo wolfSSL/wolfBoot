@@ -102,7 +102,10 @@ extern uint8_t wb_end_bss[], wb_start_bss[];
 extern uint8_t _stored_data[], _start_data[], _end_data[];
 extern uint8_t _start_bss[], _end_bss[];
 
+/* wolfboot symbols */
 extern int main(void);
+extern uint8_t _stage2_params[];
+
 
 /*!
  * \brief Get the top address from the EFI HOB (Hand-Off Block) list.
@@ -178,8 +181,6 @@ static void load_fsp_s_to_ram(void)
     memcpy((uint8_t*)FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE,
             _fsp_s_hdr, fsp_s_size);
 }
-
-extern uint8_t _stage2_params[];
 
 /*!
  * \brief Set the stage 2 parameter for the WolfBoot bootloader.
