@@ -546,11 +546,16 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     stage2_params->hobList = (uint32_t)hobList;
 
 #ifdef WOLFBOOT_64BIT
-    stage2_params->page_table = ((uint32_t)(stage2_params) -
+    stage2_params->page_table = ((uint32_t)(top_address) -
         x86_paging_get_page_table_size());
     stage2_params->page_table = (((uint32_t)stage2_params->page_table) & ~((1 << 12) - 1));
     memset((uint8_t*)stage2_params->page_table, 0, x86_paging_get_page_table_size());
+    wolfBoot_printf("page table @ 0x%x [length: %x]" ENDLINE, (uint32_t)stage2_params->page_table, x86_paging_get_page_table_size());
+    top_address = stage2_params->page_table;
 #endif /* WOLFBOOT_64BIT */
+
+    stage2_params->tolum = top_address;
+
 
     /* change_stack_and_invoke() never returns.
      *

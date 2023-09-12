@@ -27,6 +27,7 @@ struct stage2_parameter {
 #if WOLFBOOT_FSP
     uint32_t hobList;
     uint32_t page_table;
+    uint32_t tolum;
 #endif
 };
 
