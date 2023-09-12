@@ -197,6 +197,10 @@ static void x86_paging_map_page(uint64_t vaddress, uint64_t paddress)
     if (paddress == 0) {
         paddress = (uint64_t)mem;
         mem += PAGE_TABLE_PAGE_SIZE;
+        if (mem >= _mem + MEM_SIZE) {
+            wolfBoot_printf("No more pages to satisfy virtual allocation");
+            panic();
+        }
     }
     x86_paging_setup_entry(pl1e, paddress);
 }
