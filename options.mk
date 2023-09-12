@@ -1,3 +1,5 @@
+WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
+
 ifeq ($(WOLFBOOT_TPM_VERIFY),1)
   WOLFTPM:=1
   CFLAGS+=-D"WOLFBOOT_TPM_VERIFY"
@@ -187,6 +189,9 @@ ifeq ($(SIGN),ED448)
     endif
   endif
 
+ifeq ($(SECURE_PKCS11),1)
+endif
+
 
   ifneq ($(HASH),SHA3)
     WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
@@ -209,7 +214,6 @@ ifneq ($(findstring RSA2048,$(SIGN)),)
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -249,7 +253,6 @@ ifneq ($(findstring RSA3072,$(SIGN)),)
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -293,7 +296,6 @@ ifneq ($(findstring RSA4096,$(SIGN)),)
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -377,11 +379,6 @@ ifeq ($(SIGN),LMS)
   else
     STACK_USAGE=18064
   endif
-endif
-
-
-ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
 endif
 
 ifeq ($(RAM_CODE),1)
@@ -544,12 +541,15 @@ ifeq ($(SECURE_PKCS11),1)
   OBJS+=src/pkcs11_store.o
   OBJS+=src/pkcs11_callable.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/rsa.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/dh.o
   WOLFCRYPT_OBJS+=./lib/wolfPKCS11/src/crypto.o \
 		./lib/wolfPKCS11/src/internal.o \
 		./lib/wolfPKCS11/src/slot.o \
 		./lib/wolfPKCS11/src/wolfpkcs11.o
+  STACK_USAGE=12596
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
@@ -677,6 +677,10 @@ ifeq ($(FSP), 1)
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
+
+ifeq ($(USE_GCC_HEADLESS),1)
+  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+endif
 
 ifeq ($(SIGN_ALG),)
   SIGN_ALG=$(SIGN)

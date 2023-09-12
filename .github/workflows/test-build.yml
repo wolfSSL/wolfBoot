@@ -40,7 +40,7 @@ jobs:
 
       - name: Select config
         run: |
-          cp ${{inputs.config-file}} .config && make include/target.h
+          cp ${{inputs.config-file}} .config
 
       - name: Build tools
         run: |

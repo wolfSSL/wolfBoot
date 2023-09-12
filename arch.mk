@@ -146,6 +146,9 @@ ifeq ($(ARCH),ARM)
     else
       WOLFBOOT_ORIGIN=0x08000000
     endif
+    ifneq ($(TZEN),1)
+      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    endif
   endif
 
   ifeq ($(TARGET),stm32u5)

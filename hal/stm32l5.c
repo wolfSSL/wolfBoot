@@ -97,8 +97,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         *cr &= ~FLASH_CR_PG;
         i+=8;
     }
-
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
     hal_tz_release_nonsecure_area();
+#endif
     return 0;
 }
 

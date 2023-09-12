@@ -218,15 +218,15 @@ wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(SECURE_LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LIBS) $(LD_END_GROUP) -o $@
 
 $(LSCRIPT): $(LSCRIPT_IN) FORCE
-	@(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
+	$(Q)(test $(LSCRIPT_IN) != NONE) || (echo "Error: no linker script" \
 		"configuration found. If you selected Encryption and RAM_CODE, then maybe" \
 		"the encryption algorithm is not yet supported with bootloader updates." \
 		&& false)
-	@(test -r $(LSCRIPT_IN)) || (echo "Error: no RAM/ChaCha linker script found." \
+	$(Q)(test -r $(LSCRIPT_IN)) || (echo "Error: no RAM/ChaCha linker script found." \
 		"If you selected Encryption and RAM_CODE, ensure that you have a" \
 		"custom linker script (i.e. $(TARGET)_chacha_ram.ld). Please read " \
 		"docs/encrypted_partitions.md for more information" && false)
-	@cat $(LSCRIPT_IN) | \
+	$(Q)cat $(LSCRIPT_IN) | \
 		sed -e "s/@ARCH_FLASH_OFFSET@/$(ARCH_FLASH_OFFSET)/g" | \
 		sed -e "s/@BOOTLOADER_PARTITION_SIZE@/$(BOOTLOADER_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_ORIGIN@/$(WOLFBOOT_ORIGIN)/g" | \
