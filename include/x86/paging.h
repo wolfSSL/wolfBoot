@@ -33,6 +33,7 @@ int x86_paging_set_page_table();
 
 #if !defined(BUILD_LOADER_STAGE1)
 int x86_paging_map_memory(uint64_t va, uint64_t pa, uint32_t size);
+int x86_paging_dump_info();
 #endif /* !BUILD_LOADER_STAGE1 */
 
 #endif /* WOLFBOOT_64BIT */

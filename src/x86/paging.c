@@ -219,4 +219,22 @@ int x86_paging_map_memory(uint64_t va, uint64_t pa, uint32_t size)
 
     return 0;
 }
+
+#ifdef DEBUG_PAGING
+void x86_paging_dump_info()
+{
+    wolfBoot_printf("page_table_pages @ %x %xh\r\n",
+                    (uint32_t)((uintptr_t)page_table_pages >> 32),
+                    (uint32_t)(uintptr_t)page_table_pages);
+    wolfBoot_printf("page_table_pages used: %d\r\n", page_table_page_used);
+    wolfBoot_printf("mem start @ %x %xh\r\n",
+                    (uint32_t)((uintptr_t)_mem >> 32),
+                    (uint32_t)(uintptr_t)_mem);
+    wolfBoot_printf("mem curr @ %x %xh\r\n",
+                    (uint32_t)((uintptr_t)mem >> 32),
+                    (uint32_t)(uintptr_t)mem);
+}
+#else
+void x86_paging_dump_info() {}
+#endif /* DEBUG_PAGING */
 #endif /* !BUILD_LOADER_STAGE1 */

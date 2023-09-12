@@ -528,6 +528,10 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
         panic();
     }
 
+#ifdef DEBUG
+    hob_dump_memory_map(hobList);
+#endif /* DEBUG */
+
     if (top_address > MEMORY_4GB) {
         panic();
     }

@@ -176,4 +176,29 @@ int hob_iterate_memory_map(struct efi_hob *hobList, hob_mem_map_cb cb,
 
     return 0;
 }
+
+#ifdef DEBUG_HOB_LIST
+typedef int (*hob_mem_map_cb)(uint64_t start, uint64_t length, uint32_t type,
+                              void *ctx);
+int hob_print_entry(uint64_t start, uint64_t length, uint32_t type, void *ctx)
+{
+    (void)ctx;
+    wolfBoot_printf("entry type: %x\r\n", type);
+    wolfBoot_printf("start: %x_%x\r\n", (uint32_t)(start >> 32),
+                    (uint32_t)start);
+    wolfBoot_printf("end: %x_%x\r\n", (uint32_t)((start+length) >> 32),
+                    (uint32_t)(start+length));
+    return 0;
+}
+
+void hob_dump_memory_map(struct efi_hob *hobList)
+{
+    hob_iterate_memory_map(hobList, hob_print_entry, NULL);
+}
+#else
+void hob_dump_memory_map(struct efi_hob *hb) {}
+#endif /* DEBUG_HOB_LIST */
+
+
+
 #endif /* HOB_C */
