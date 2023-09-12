@@ -27,7 +27,6 @@
 #ifdef __WOLFBOOT
 #include <printf.h>
 
-extern uint8_t* _stage2_params[];
 
 static void panic(void);
 
