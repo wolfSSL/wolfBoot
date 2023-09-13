@@ -1,14 +1,15 @@
 FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
 FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
-BOOTLOADER_JUMP32_START = 0xfffff000;
-RESETVECTOR_START = 0xffffffec;
-FSP_T_ORIGIN = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
-FSP_M_ORIGIN = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
-FSP_S_ORIGIN = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
-FIT_TABLE_PTR = 0xffffffc0;
-UCODE0_BASE = @UCODE0_BASE@;
 FSP_S_UPD_DATA_BASE = @FSP_S_UPD_DATA_BASE@;
+UCODE0_BASE = @UCODE0_BASE@;
+FIT_TABLE = 0xffe00000;
+FSP_S_ORIGIN = @FSP_S_BASE@;
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
+FSP_T_ORIGIN = @FSP_T_BASE@;
+FSP_M_ORIGIN = @FSP_M_BASE@;
+JMPTO32_ORIGIN = 0xfffffe00;
+FIT_TABLE_PTR = 0xffffffc0;
+RESETVECTOR_START = 0xffffffec;
 OUTPUT_FORMAT(elf32-i386)
 
 MEMORY
@@ -19,25 +20,37 @@ MEMORY
 
 SECTIONS
 {
-    .jmpto32 BOOTLOADER_JUMP32_START :
+   .text FLASH_START :
     {
-       _off_boot = ABSOLUTE(.) & 0xffff;
-       KEEP(*(.jmpto32))
+        _wolfboot_flash_start = .;
+        KEEP(*(.sig_wolfboot_raw*))
+        *(.wolfboot)
+        _wolfboot_flash_end = .;
     }
 
-    .fit_table_tr FIT_TABLE_PTR :
+    .fsps_upd FSP_S_UPD_DATA_BASE :
     {
-        QUAD(fit_table);
-    }
-
-    .reset_vector RESETVECTOR_START :
-    {
-        KEEP(*(.reset_vector))
+    	KEEP(./fsp_tgl_s_upd.o(.fsps_upd))
     }
 
     .ucode_update0 UCODE0_BASE :
     {
         *(.ucode0)
+    }
+
+    .fit_table FIT_TABLE :
+    {
+        KEEP(*(.fit));
+        . = ALIGN(256*1024);
+    }
+
+    .fsp_s FSP_S_ORIGIN :
+    {
+       _fsp_s_hdr = .;
+       KEEP(*(.sig_fsp_s*))
+       _start_fsp_s = .;
+       *(.fsp_s)
+       _end_fsp_s = .;
     }
 
     .bootloader WOLFBOOT_ORIGIN :
@@ -51,19 +64,6 @@ SECTIONS
        . = ALIGN(4);
     }
 
-    .fsps_upd FSP_S_UPD_DATA_BASE :
-    {
-    	KEEP(./fsp_tgl_s_upd.o(.fsps_upd))
-    }
-
-   .text FLASH_START :
-    {
-        _wolfboot_flash_start = .;
-        KEEP(*(.sig_wolfboot_raw*))
-        *(.wolfboot)
-        _wolfboot_flash_end = .;
-    }
-
     .fsp_t FSP_T_ORIGIN :
     AT(FSP_T_ORIGIN)
     {
@@ -71,21 +71,27 @@ SECTIONS
        *(.fsp_t)
     }
 
-    .fsp_s FSP_S_ORIGIN :
-    {
-       _fsp_s_hdr = .;
-       KEEP(*(.sig_fsp_s*))
-       _start_fsp_s = .;
-       *(.fsp_s)
-       _end_fsp_s = .;
-    }
-
     .fsp_m FSP_M_ORIGIN :
     {
-       _fsp_m_hdr = .;
        _start_fsp_m = .;
        *(.fsp_m)
        _end_fsp_m = .;
     }
 
+    .jmpto32 JMPTO32_ORIGIN :
+    {
+       _off_boot = ABSOLUTE(.) & 0xffff;
+       KEEP(*boot_x86_fsp_start.o(.jmpto32*));
+       KEEP(*(.jmpto32));
+    }
+
+    .fit_table_tr FIT_TABLE_PTR :
+    {
+        QUAD(fit_table);
+    }
+
+    .reset_vector RESETVECTOR_START :
+    {
+        KEEP(*(.reset_vector))
+    }
 }
