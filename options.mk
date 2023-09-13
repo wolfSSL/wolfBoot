@@ -189,9 +189,6 @@ ifeq ($(SIGN),ED448)
     endif
   endif
 
-ifeq ($(SECURE_PKCS11),1)
-endif
-
 
   ifneq ($(HASH),SHA3)
     WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
@@ -533,7 +530,7 @@ ifeq ($(WOLFBOOT_HUGE_STACK),1)
   CFLAGS+=-DWOLFBOOT_HUGE_STACK
 endif
 
-ifeq ($(SECURE_PKCS11),1)
+ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DSECURE_PKCS11
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-Ilib/wolfPKCS11
@@ -549,7 +546,10 @@ ifeq ($(SECURE_PKCS11),1)
 		./lib/wolfPKCS11/src/internal.o \
 		./lib/wolfPKCS11/src/slot.o \
 		./lib/wolfPKCS11/src/wolfpkcs11.o
-  STACK_USAGE=12596
+endif
+
+ifeq ($(WOLFCRYPT_TZ),1)
+  STACK_USAGE=16688
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)

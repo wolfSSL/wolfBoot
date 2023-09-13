@@ -41,14 +41,15 @@ extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 #endif
 
 #define LED_BOOT_PIN (9)  /* PA9 - Nucleo - Red Led */
-#define LED_USR_PIN (7)   /* PB7  - Nucleo  - Green Led */
-#define LED_EXTRA_PIN (7) /* PC7  - Nucleo  - Blue Led */
+#define LED_USR_PIN (7)   /* PC7  - Nucleo  - Green Led */
+#define LED_EXTRA_PIN (7) /* PB7  - Nucleo  - Blue Led */
 
 /*Non-Secure */
 #define RCC_BASE            (0x40021000)
 #define PWR_BASE            (0x40007000)
 #define GPIOA_BASE          0x42020000
 #define GPIOB_BASE          0x42020400
+#define GPIOC_BASE          0x42020800
 
 
 #define GPIOA_MODER  (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
@@ -59,9 +60,14 @@ extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 #define GPIOB_PUPDR  (*(volatile uint32_t *)(GPIOB_BASE + 0x0C))
 #define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
 
+#define GPIOC_MODER  (*(volatile uint32_t *)(GPIOC_BASE + 0x00))
+#define GPIOC_PUPDR  (*(volatile uint32_t *)(GPIOC_BASE + 0x0C))
+#define GPIOC_BSRR  (*(volatile uint32_t *)(GPIOC_BASE + 0x18))
+
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x4C ))
 #define GPIOA_AHB2_CLOCK_ER (1 << 0)
-#define GPIOB_AHB2_CLOCK_ER (1 << 2)
+#define GPIOB_AHB2_CLOCK_ER (1 << 1)
+#define GPIOC_AHB2_CLOCK_ER (1 << 2)
 
 #define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
 #define PWR_CR2_IOSV         (1 << 9)
@@ -79,18 +85,38 @@ static void boot_led_on(void)
     reg = GPIOA_MODER & ~(0x03 << (pin * 2));
     GPIOA_MODER = reg | (1 << (pin * 2));
     GPIOA_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOA_BSRR |= (1 << (pin + 16));
+    GPIOA_BSRR |= (1 << (LED_BOOT_PIN));
 }
 
 static void boot_led_off(void)
 {
-    GPIOA_BSRR |= (1 << (LED_BOOT_PIN));
+    GPIOA_BSRR |= (1 << (LED_BOOT_PIN + 16));
 }
 
 void usr_led_on(void)
 {
     uint32_t reg;
     uint32_t pin = LED_USR_PIN;
+
+    RCC_AHB2_CLOCK_ER|= GPIOC_AHB2_CLOCK_ER;
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_AHB2_CLOCK_ER;
+
+    reg = GPIOC_MODER & ~(0x03 << (pin * 2));
+    GPIOC_MODER = reg | (1 << (pin * 2));
+    GPIOC_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOC_BSRR |= (1 << (LED_USR_PIN));
+}
+
+void usr_led_off(void)
+{
+    GPIOC_BSRR |= (1 << (LED_USR_PIN + 16));
+}
+
+void extra_led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_EXTRA_PIN;
 
     RCC_AHB2_CLOCK_ER|= GPIOB_AHB2_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
@@ -99,12 +125,12 @@ void usr_led_on(void)
     reg = GPIOB_MODER & ~(0x03 << (pin * 2));
     GPIOB_MODER = reg | (1 << (pin * 2));
     GPIOB_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOB_BSRR |= (1 << (pin + 16));
+    GPIOB_BSRR |= (1 << (LED_EXTRA_PIN));
 }
 
-void usr_led_off(void)
+void extra_led_off(void)
 {
-    GPIOB_BSRR |= (1 << (LED_USR_PIN));
+    GPIOB_BSRR |= (1 << (LED_EXTRA_PIN + 16));
 }
 
 static char CaBuf[2048];
@@ -131,6 +157,8 @@ void main(void)
     char UserPin[] = "ABCDEF0123456789";
     char SoPinName[] = "SO-PIN";
 
+    boot_led_on();
+
     wolfCrypt_Init();
 
     PKCS11_d.heap = NULL,
@@ -150,6 +178,7 @@ void main(void)
     }
 
     if (ret == 0) {
+        extra_led_on();
         ret = wolfpkcs11nsFunctionList.C_Login(session, CKU_SO,
                 (byte *)TokenPin,
                 strlen(TokenPin));
@@ -178,6 +207,8 @@ void main(void)
             ret = ecdsa_sign_verify(devId);
             if (ret != 0)
                 ret = 1;
+            else
+                usr_led_on();
 #endif
         }
         wc_Pkcs11Token_Final(&token);

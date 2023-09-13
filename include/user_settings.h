@@ -165,6 +165,8 @@ extern int tolower(int c);
     defined(WOLFBOOT_SIGN_RSA3072) || \
     defined(WOLFBOOT_SIGN_RSA4096) || \
     defined(WOLFCRYPT_SECURE_MODE)
+
+
 #   define WC_RSA_BLINDING 
 #   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
@@ -197,6 +199,13 @@ extern int tolower(int c);
 #       define FP_MAX_BITS (4096 * 2)
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_3072
+#       define WOLFSSL_SP_4096
+#   endif
+#   ifdef WOLFCRYPT_SECURE_MODE
+#       undef FP_MAX_BITS
+#       define FP_MAX_BITS (4096 * 2)
+#       define WOLFSSL_SP_2048
+#       define WOLFSSL_SP_3072
 #       define WOLFSSL_SP_4096
 #   endif
 #else
@@ -383,7 +392,7 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
-#   if !defined(ARCH_SIM) && !defined(WOLFCRYPT_SECURE_MODE)
+#   if !defined(ARCH_SIM) && !defined(SECURE_PKCS11)
 #       define WOLFSSL_NO_MALLOC
 #   endif
 #else

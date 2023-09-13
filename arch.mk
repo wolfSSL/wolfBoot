@@ -170,10 +170,9 @@ ifeq ($(CORTEX_M33),1)
   ifeq ($(TZEN),1)
     OBJS+=hal/stm32_tz.o
     CFLAGS+=-mcmse
-    ifeq ($(WCSM),1)
+    ifeq ($(WOLFCRYPT_TZ),1)
       SECURE_OBJS+=./src/wc_callable.o
       SECURE_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
-      SECURE_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
       CFLAGS+=-DWOLFCRYPT_SECURE_MODE
       SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
     endif

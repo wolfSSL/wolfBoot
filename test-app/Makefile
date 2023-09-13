@@ -8,7 +8,7 @@ ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 CFLAGS+=-I.
 CFLAGS+=-I./wcs
-DEBUG=0
+DEBUG=1
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -53,10 +53,10 @@ endif
 
 ifeq ($(TZEN),1)
     APP_OBJS+=../hal/$(TARGET)_ns.o
-    ifeq ($(WCSM),1)
+    ifeq ($(WOLFCRYPT_TZ),1)
         APP_OBJS+=../src/wc_secure_calls.o
-        ifeq ($(SECURE_PKCS11),1)
-            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP
+        ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
+            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
             CFLAGS+=-I../lib/wolfPKCS11
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
             APP_OBJS+=./wcs/pkcs11_stub.o

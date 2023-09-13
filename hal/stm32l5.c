@@ -328,7 +328,6 @@ static void periph_unsecure()
     GPIO_SECCFGR(GPIOC_BASE) &= ~(1<<LED_EXTRA_PIN);
 #endif
 
-
     /* Unsecure LPUART1 */
     TZSC_PRIVCFGR1 &= ~(TZSC_PRIVCFG1_LPUARTPRIV);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_TX_PIN);
