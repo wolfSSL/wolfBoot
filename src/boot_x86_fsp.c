@@ -99,6 +99,9 @@ extern uint8_t _end_fsp_s[];
 extern uint8_t _wolfboot_flash_start[];
 extern uint8_t _wolfboot_flash_end[];
 extern uint8_t wb_end_bss[], wb_start_bss[];
+extern uint8_t _stored_data[], _start_data[], _end_data[];
+extern uint8_t _start_bss[], _end_bss[];
+
 extern int main(void);
 
 /*!
@@ -278,6 +281,8 @@ static void memory_ready_entry(void *ptr)
     int ret;
     uint8_t *fsp_s_base;
     uint8_t *fsp_m_base;
+    uint32_t *datamem_p;
+    uint32_t *dataflash_p;
 
     fsp_m_base = _start_fsp_m;
     fsp_s_base = (uint8_t *)(FSP_S_LOAD_BASE);
@@ -291,6 +296,21 @@ static void memory_ready_entry(void *ptr)
         wolfBoot_printf("temp ram exit failed" ENDLINE);
         panic();
     }
+
+    /* Copy data / zero bss */
+    datamem_p = (uint32_t *)_start_data;
+    dataflash_p = (uint32_t *)_stored_data;
+    while(datamem_p < (uint32_t *)_end_data) {
+        *(datamem_p++) = *(dataflash_p++);
+    }
+    memset(_start_bss, 0, (_end_bss - _start_bss));
+
+
+#if defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM)
+    /* TODO: Call TPM Init for STAGE1 */
+    wolfBoot_printf("Initializing WOLFBOOT_TPM" ENDLINE);
+    wolfBoot_tpm2_init();
+#endif
 
     /* Load FSP_S to RAM */
     load_fsp_s_to_ram();
