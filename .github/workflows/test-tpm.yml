@@ -85,6 +85,29 @@ jobs:
       authstr: TestAuth
 
 
+  sim_tpm_keystore_noauth_ecc256:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-keystore.config
+      make-args: SIGN=ECC256 HASH=SHA256
+
+  sim_tpm_keystore_noauth_ecc384:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-keystore.config
+      make-args: SIGN=ECC384 HASH=SHA384
+      rot-args: -sha384
+
+  sim_tpm_keystore_noauth_rsa2048:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-keystore.config
+      make-args: SIGN=RSA2048 HASH=SHA256
+
+
   sim_tpm_seal_ecc256:
     uses: ./.github/workflows/test-build-sim-tpm.yml
     with:
