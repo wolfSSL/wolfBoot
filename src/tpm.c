@@ -1138,23 +1138,23 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     WOLFTPM2_NV nv;
 
     memset(&nv, 0, sizeof(nv));
-
-    #ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
+    nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
+#ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
     nv.handle.auth.size = (UINT16)strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
     memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH, nv.handle.auth.size);
+#endif
     wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &nv.handle);
-    #endif
 
     /* Enable parameter encryption for session - to protect auth */
     rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 1, &wolftpm_session,
             (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
              TPMA_SESSION_continueSession));
     if (rc == 0) {
-        /* find index with matching digest */
-        nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
+        /* read index */
         rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
             digest, &digestSz, 0);
         if (rc == 0) {
+            /* verify the hint (hash) matches */
             if (digestSz == WOLFBOOT_SHA_DIGEST_SIZE &&
                 memcmp(digest, pubkey_hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
                 wolfBoot_printf("TPM Root of Trust valid (id %d)\n", key_slot);
