@@ -611,6 +611,7 @@ int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     }
     /* write sealed blob to NV */
     if (rc == 0) {
+        wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
         pos = 0;
         /* write pub size */
         rc = wolfTPM2_NVWriteAuth(&wolftpm_dev, &nv, nv.handle.hndl,
@@ -664,6 +665,7 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     nv.handle.hndl = nvIndex;
     nv.handle.auth.size = authSz;
     memcpy(nv.handle.auth.buffer, auth, authSz);
+    wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &nv.handle);
 
     pos = 0;
     readSz = sizeof(blob->pub.size);
@@ -769,7 +771,7 @@ int wolfBoot_seal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
     }
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
-    wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
+    wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
 
     return rc;
 }
@@ -949,7 +951,7 @@ int wolfBoot_unseal_blob(uint8_t* pubkey_hint,
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
-    wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
+    wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
 
     return rc;
 }
@@ -996,6 +998,7 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
     if (rc == 0) {
         rc = wolfTPM2_GetRandom(&wolftpm_dev, seed, sz);
     }
+    wolfTPM2_UnsetAuthSession(&wolftpm_dev, 0, &wolftpm_session);
     return rc;
 }
 #endif
@@ -1141,7 +1144,8 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
 #ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
     nv.handle.auth.size = (UINT16)strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
-    memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH, nv.handle.auth.size);
+    memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH,
+        nv.handle.auth.size);
 #endif
     wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &nv.handle);
 
@@ -1150,6 +1154,8 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
             (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
              TPMA_SESSION_continueSession));
     if (rc == 0) {
+        wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
+
         /* read index */
         rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
             digest, &digestSz, 0);
@@ -1170,7 +1176,7 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
             wolfBoot_print_hexstr(pubkey_hint, digestSz, 0);
         }
     }
-    wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
+    wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
 
     return rc;
 }
