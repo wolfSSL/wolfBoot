@@ -553,7 +553,9 @@ ifeq ($(WOLFCRYPT_TZ),1)
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
-OBJS+=$(UPDATE_OBJS)
+ifneq ($(STAGE1),1)
+  OBJS+=$(UPDATE_OBJS)
+endif
 
 ifeq ($(WOLFTPM),1)
   OBJS+=\
