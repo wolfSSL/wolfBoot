@@ -532,6 +532,7 @@ endif
 
 ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DSECURE_PKCS11
+  CFLAGS+=-DWOLFSSL_PKCS11_RW_TOKENS
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-Ilib/wolfPKCS11
   CFLAGS+=-DWP11_HASH_PIN_COST=3
