@@ -4456,7 +4456,7 @@ void WP11_Object_Free(WP11_Object* object)
     if (object->type == CKK_EC)
         wc_ecc_free(&object->data.ecKey);
 #endif
-#ifndef NO_RSA
+#ifndef NO_DH
     if (object->type == CKK_DH)
         wc_FreeDhKey(&object->data.dhKey.params);
 #endif
