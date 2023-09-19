@@ -32,8 +32,6 @@
 #include <x86/gpt.h>
 #include <pci.h>
 
-extern uint8_t* _stage2_params[];
-
 #define PCI_AHCI_BUS 0
 #define PCI_AHCI_DEV 31
 #define PCI_AHCI_FUN 2

@@ -162,7 +162,7 @@ $(PRIVATE_KEY):
 	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 
-keytools:
+keytools: include/target.h
 	@echo "Building key tools"
 	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j

@@ -204,4 +204,7 @@ struct efi_hob_resource_descriptor *
 hob_find_fsp_reserved(struct efi_hob *hoblist);
 int hob_iterate_memory_map(struct efi_hob *hobList, hob_mem_map_cb cb,
                            void* ctx);
+#ifdef DEBUG
+void hob_dump_memory_map(struct efi_hob *hobList);
+#endif /* DEBUG */
 #endif

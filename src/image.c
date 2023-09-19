@@ -795,7 +795,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
-    wolfBoot_printf("Image size %d\n", (unsigned int)img->fw_size);
+    wolfBoot_printf("Image size %d\r\n", (unsigned int)img->fw_size);
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Image size %d > max %d\n",
@@ -947,10 +947,6 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
     uint16_t stored_sha_len;
-#ifdef STAGE1_AUTH
-    /* Override global */
-    uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
-#endif
     stored_sha_len = get_header(img, WOLFBOOT_SHA_HDR, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
@@ -991,10 +987,6 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     uint32_t key_mask = 0U;
     uint32_t image_part = 1U;
     int key_slot;
-#ifdef STAGE1_AUTH
-    /* Override global */
-    uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
-#endif
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);
     if (stored_signature_size != IMAGE_SIGNATURE_SIZE)
@@ -1095,10 +1087,6 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 int keyslot_id_by_sha(const uint8_t *hint)
 {
     int id;
-#ifdef STAGE1_AUTH
-    /* Override global */
-    uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
-#endif
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
         key_hash(id, digest);

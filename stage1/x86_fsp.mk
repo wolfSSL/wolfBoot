@@ -1,5 +1,5 @@
 SIGN_TOOL?=../tools/keytools/sign
-SIGN_OPTIONS?=--ecc256 --sha256
+SIGN_OPTIONS?=--ecc384 --sha384
 SIGN_KEY?=../wolfboot_signing_private_key.der
 X86FSP_PATH?=../`dirname $(FSP_M_BIN)`
 

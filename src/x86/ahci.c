@@ -47,15 +47,18 @@
 #define SATA_BASE 0x02200000
 #endif /* TARGET_qemu_fsp */
 
-#define HBA_FIS_BASE (SATA_BASE + 0x100)
-#define HBA_CLB_BASE (SATA_BASE + 0x1000)
-#define HBA_TBL_BASE (SATA_BASE + 0x200000)
 
 #define HBA_FIS_SIZE 0x100
 #define HBA_CLB_SIZE 0x400
 #define HBA_TBL_SIZE 0x800
+#define HBA_TBL_ALIGN 0x80
 
-#define HBA_FIS_PORT_SIZE 0x80
+static uint8_t ahci_hba_fis[HBA_FIS_SIZE * AHCI_MAX_PORTS]
+__attribute__((aligned(HBA_FIS_SIZE)));
+static uint8_t ahci_hba_clb[HBA_CLB_SIZE * AHCI_MAX_PORTS]
+__attribute__((aligned(HBA_CLB_SIZE)));
+static uint8_t ahci_hba_tbl[HBA_TBL_SIZE * AHCI_MAX_PORTS]
+__attribute__((aligned(HBA_TBL_ALIGN)));
 
 #define PCI_REG_PCS 0x92
 #define PCI_REG_CLK 0x94
@@ -193,6 +196,7 @@ void ahci_dump_port(uint32_t base, int i)
 void sata_enable(uint32_t base) {
     volatile uint32_t count;
     uint32_t cap, ports_impl;
+    uint32_t fis, clb, tbl;
     uint8_t sata_only;
     uint8_t cap_sud;
     uint32_t n_ports;
@@ -200,6 +204,7 @@ void sata_enable(uint32_t base) {
     uint64_t data64;
     uint32_t data;
     uint32_t reg;
+
 
     mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_AE);
 
@@ -341,19 +346,21 @@ void sata_enable(uint32_t base) {
                 } while ((reg & AHCI_PORT_CMD_FR) != 0);
                 AHCI_DEBUG_PRINTF("AHCI port: FIS disabled.\r\n");
 
+                clb = (uint32_t)(uintptr_t)(ahci_hba_clb + i * HBA_CLB_SIZE);
+                fis = (uint32_t)(uintptr_t)(ahci_hba_fis + i * HBA_FIS_SIZE);
+                tbl = (uint32_t)(uintptr_t)(ahci_hba_tbl + i * HBA_TBL_SIZE);
+
                 /* Initialize FIS and CLB address */
                 mmio_write32(AHCI_PxCLB(base, i),
-                        HBA_CLB_BASE + i * HBA_CLB_SIZE);
+                             (uint32_t)(uintptr_t)(clb));
                 mmio_write32(AHCI_PxCLBH(base, i), 0);
 
                 mmio_write32(AHCI_PxFB(base, i),
-                        HBA_FIS_BASE + i * HBA_FIS_SIZE);
+                             (uint32_t)(uintptr_t)(fis));
                 mmio_write32(AHCI_PxFBH(base, i), 0);
 
-                memset((void*)(uintptr_t)(HBA_CLB_BASE + i * HBA_CLB_SIZE),
-                       0, HBA_CLB_SIZE);
-                memset((void*)(uintptr_t)(HBA_FIS_BASE + i * HBA_FIS_SIZE),
-                       0, HBA_FIS_SIZE);
+                memset((uint8_t*)(uintptr_t)clb, 0, HBA_CLB_SIZE);
+                memset((uint8_t*)(uintptr_t)fis, 0, HBA_FIS_SIZE);
 
                 /* Wait until CR is cleared */
                 do {
@@ -377,8 +384,7 @@ void sata_enable(uint32_t base) {
                     int drv;
                     wolfBoot_printf("SATA disk drive detected on AHCI port %d\r\n",
                             i);
-                    drv = ata_drive_new(base, i, HBA_CLB_BASE + i * HBA_CLB_SIZE,
-                          HBA_TBL_BASE + i * HBA_TBL_SIZE, HBA_FIS_BASE + i * HBA_FIS_SIZE);
+                    drv = ata_drive_new(base, i, clb, tbl, fis);
                     if (drv < 0) {
                         wolfBoot_printf("Failed to associate ATA drive to disk\r\n");
                     } else {

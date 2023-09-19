@@ -27,7 +27,11 @@ struct stage2_parameter {
 #if WOLFBOOT_FSP
     uint32_t hobList;
     uint32_t page_table;
+    uint32_t tolum;
 #endif
 };
+
+/* implemented in src/boot_x86_fsp_payload.c */
+struct stage2_parameter *stage2_get_parameters();
 
 #endif /* STAGE1_H */

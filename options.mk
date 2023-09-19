@@ -649,7 +649,8 @@ ifeq ($(FSP), 1)
     PCH_PCR_BASE \
     PCI_ECAM_BASE \
     FSP_S_UPD_DATA_BASE \
-    WOLFBOOT_LOAD_BASE
+    WOLFBOOT_LOAD_BASE \
+    FSP_S_LOAD_BASE
 
     # set CFLAGS defines for each x86_fsp option
     $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))

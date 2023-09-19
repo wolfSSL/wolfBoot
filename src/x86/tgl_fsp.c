@@ -330,7 +330,7 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->DdiPort2Ddc = 1;
     mem_cfg->DdiPort4Ddc = 1;
     mem_cfg->EnableC6Dram = 0;
-    mem_cfg->HyperThreading = 1;
+    mem_cfg->HyperThreading = 0;
     mem_cfg->CpuRatio = 0;
     mem_cfg->FClkFrequency = 1;
     mem_cfg->VmxEnable = 0;

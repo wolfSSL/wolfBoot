@@ -14,6 +14,7 @@ SECTIONS
        _start_text = .;
        *(.text*)
        *(.rodata*)
+       *(.keystore*)
        *(.data*)
        . = ALIGN(4);
        _end_text = .;
@@ -29,7 +30,6 @@ SECTIONS
        . = ALIGN(4);
        _end_bss = .;
        __bss_end__ = .;
-       _end = .;
-       _stage2_params = .;
+       _end_wb = .;
     }
 }

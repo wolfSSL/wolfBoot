@@ -41,7 +41,9 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "printf.h"
+#include "stage1.h"
 #include "wolfboot/wolfboot.h"
+#include <stdint.h>
 #include <string.h>
 #include <x86/common.h>
 #include <x86/ahci.h>
@@ -62,7 +64,9 @@
 
 #define MAX_FAILURES 4
 
-#define IMAGE_PRELOAD_ADDRESS 0x5000100
+/* from the linker, where wolfBoot ends */
+extern uint8_t _end_wb[];
+
 /**
  * @brief function for starting the boot process.
  *
@@ -72,6 +76,7 @@
  */
 void RAMFUNCTION wolfBoot_start(void)
 {
+    struct stage2_parameter *stage2_params;
     struct wolfBoot_image os_image;
     uint8_t p_hdr[IMAGE_HEADER_SIZE];
     int pA_ver = 0, pB_ver = 0;
@@ -110,14 +115,15 @@ void RAMFUNCTION wolfBoot_start(void)
 
     wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver, pB_ver);
 
-    
     if (pB_ver > pA_ver)
         selected = 1;
     else
         selected = 0;
 
-    load_address = (uint32_t *)(IMAGE_PRELOAD_ADDRESS - IMAGE_HEADER_SIZE);
-
+    stage2_params = stage2_get_parameters();
+    /* load the image just after wolfboot */
+    load_address = (uint32_t *)(_end_wb);
+    wolfBoot_printf("Load address %x\r\n", load_address);
     do {
         failures++;
         if (selected)
@@ -139,7 +145,14 @@ void RAMFUNCTION wolfBoot_start(void)
         /* Dereference img_size from header */
         img_size = *( ((uint32_t *)p_hdr) + 1);
 
+        if (img_size >
+            ((uint32_t)(stage2_params->tolum) - (uint32_t)(uintptr_t)load_address)) {
+                wolfBoot_printf("Image size %d doesn't fit in low memory\r\n", img_size);
+                break;
+        }
+
         /* Read the image into RAM */
+        wolfBoot_printf("Loading image from disk...");
         load_off = 0;
         do {
             ret = disk_read(BOOT_DISK, cur_part, load_off, 512,
@@ -155,25 +168,30 @@ void RAMFUNCTION wolfBoot_start(void)
             selected ^= 1;
             continue;
         }
-        
+        wolfBoot_printf("done.\r\n");
         ret = wolfBoot_open_image_address(&os_image, (void *)load_address);
         if (ret < 0) {
             wolfBoot_printf("Error parsing loaded image\r\n");
             selected ^= 1;
             continue;
         }
+
+        wolfBoot_printf("Checking image integrity...");
         if (wolfBoot_verify_integrity(&os_image) != 0) {
             wolfBoot_printf("Error validating integrity for partition %c\r\n",
                     'A' + selected);
             selected ^= 1;
             continue;
         }
+        wolfBoot_printf("done.\r\n");
+        wolfBoot_printf("Verifying image signature...");
         if (wolfBoot_verify_authenticity(&os_image) != 0) {
             wolfBoot_printf("Error validating authenticity for partition %c\r\n",
                     'A' + selected);
             selected ^= 1;
             continue;
         } else {
+            wolfBoot_printf("done.\r\n");
             failures = 0;
             break; /* Success case */
         }
@@ -183,8 +201,8 @@ void RAMFUNCTION wolfBoot_start(void)
         panic();
     }
 
-    wolfBoot_printf("Firmware Valid\n");
-    wolfBoot_printf("Booting at %08lx\n", IMAGE_PRELOAD_ADDRESS);
+    wolfBoot_printf("Firmware Valid.\r\n");
+    wolfBoot_printf("Booting at %08lx\r\n", os_image.fw_base);
     hal_prepare_boot();
     do_boot((uint32_t*)os_image.fw_base);
 
