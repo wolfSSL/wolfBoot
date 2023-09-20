@@ -174,10 +174,18 @@ To run flash `./test-app/image.bin` to `0x08000000`.
 Or program each partition using:
 1. flash `wolfboot.bin` to 0x08000000:
     - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.elf`
-2. flash wolfBoot.bin to 0x0c00 0000
-    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08008000`
+2. flash main application to 0x0800 a000
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x0800a000`
 
-RED LD9 will be on indicating successful boot ()
+RED LD9 will be on indicating successful boot ().
+
+Updates can be flashed at 0x0804a000:
+
+- `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v2_signed.bin 0x0804a000`
+
+The two partition are logically remapped by using BANK_SWAP capabilities. This partition
+swap is immediate and does not require a SWAP partition.
+
 
 ### Debugging
 
