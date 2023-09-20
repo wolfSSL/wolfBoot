@@ -105,6 +105,9 @@ extern uint8_t _wolfboot_flash_end[];
 extern uint8_t wb_end_bss[], wb_start_bss[];
 extern uint8_t _stored_data[], _start_data[], _end_data[];
 extern uint8_t _start_bss[], _end_bss[];
+extern const uint8_t _start_policy[], _end_policy[];
+extern const uint32_t _policy_size_u32[];
+extern const uint8_t _start_keystore[];
 
 /* wolfboot symbols */
 extern int main(void);
@@ -560,6 +563,16 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
 
     stage2_params->tolum = top_address;
 
+#ifdef WOLFBOOT_TPM_SEAL
+    stage2_params->tpm_policy = (uint32_t)_start_policy;
+
+    stage2_params->tpm_policy_size = *_policy_size_u32;
+    if (stage2_params->tpm_policy_size > _end_policy - _start_policy)
+        stage2_params->tpm_policy_size = 0;
+    wolfBoot_printf("setting policy @%x (%d bytes)\r\n",
+                    (uint32_t)(uintptr_t)stage2_params->tpm_policy,
+                    stage2_params->tpm_policy_size);
+#endif
 
     /* change_stack_and_invoke() never returns.
      *

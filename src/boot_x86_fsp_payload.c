@@ -90,6 +90,21 @@ struct stage2_parameter *stage2_get_parameters()
     return &_stage2_params;
 }
 
+#if defined(WOLFBOOT_TPM_SEAL)
+int stage2_get_tpm_policy(const uint8_t **policy, uint16_t *policy_sz)
+{
+#if defined(WOLFBOOT_FSP) && !defined(BUILD_LOADER_STAGE1)
+    struct stage2_parameter *p;
+    p = stage2_get_parameters();
+    *policy = (const uint8_t*)(uintptr_t)p->tpm_policy;
+    *policy_sz = p->tpm_policy_size;
+    return 0;
+#else
+#error "wolfBoot_get_tpm_policy is not implemented"
+#endif
+}
+#endif /* WOLFBOOT_TPM_SEAL */
+
 /**
  * @brief Perform the boot process for the given application.
  *

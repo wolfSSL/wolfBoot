@@ -12,6 +12,7 @@ FIT_TABLE_PTR = 0xffffffc0;
 RESETVECTOR_START = 0xffffffec;
 DATA_MEM_START = 0x800000; /* 8 MB */
 KEYSTORE_START = 0xffffe000;
+MAX_POLICY_SIZE = 512;
 
 OUTPUT_FORMAT(elf32-i386)
 
@@ -29,6 +30,16 @@ SECTIONS
         KEEP(*(.sig_wolfboot_raw*))
         *(.wolfboot)
         _wolfboot_flash_end = .;
+    } > FLASH
+
+    .policy :
+    {
+        . = ALIGN(4);
+        _policy_size_u32 = .;
+        . += 4;
+        _start_policy = .;
+	    . += MAX_POLICY_SIZE;
+        _end_policy = .;
     } > FLASH
 
     .fsps_upd FSP_S_UPD_DATA_BASE :
