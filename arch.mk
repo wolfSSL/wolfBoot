@@ -167,7 +167,12 @@ ifeq ($(ARCH),ARM)
       CFLAGS += -mcmse
     endif
     ifeq ($(SPMATH),1)
-      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+      ifeq ($(NO_ASM),1)
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+      else
+        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+      endif
     endif
   else
   ifeq ($(CORTEX_M7),1)
