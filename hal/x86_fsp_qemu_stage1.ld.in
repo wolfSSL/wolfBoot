@@ -8,6 +8,7 @@ FSP_M_ORIGIN = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000
 FSP_S_ORIGIN = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
 DATA_MEM_START = 0x800000; /* 8 MB */
+MAX_POLICY_SIZE = 512;
 
 OUTPUT_FORMAT(elf32-i386)
 
@@ -19,19 +20,39 @@ MEMORY
 
 SECTIONS
 {
+    .wolfboot FLASH_START :
+    {
+        _wolfboot_flash_start = .;
+        KEEP(*(.sig_wolfboot_raw*))
+        *(.wolfboot)
+        _wolfboot_flash_end = .;
+    } > FLASH
+
+    .policy :
+    {
+        . = ALIGN(4);
+        _policy_size_u32 = .;
+        . += 4;
+        _start_policy = .;
+    	. += MAX_POLICY_SIZE;
+        _end_policy = .;
+    } > FLASH
+
+    .keystore KEYSTORE_START :
+    {
+        _start_keystore = .;
+        *(.keystore*)
+    } > FLASH
+
     .jmpto32 BOOTLOADER_JUMP32_START :
     {
        _off_boot = ABSOLUTE(.) & 0xffff;
        KEEP(*(.jmpto32))
     } > FLASH
+
     .reset_vector RESETVECTOR_START :
     {
        KEEP(*(.reset_vector))
-    } > FLASH
-
-    .keystore KEYSTORE_START :
-    {
-        *(.keystore*)
     } > FLASH
 
     .bootloader WOLFBOOT_ORIGIN :
@@ -65,14 +86,6 @@ SECTIONS
         _end = .;
     } > RAM
 
-    .wolfboot FLASH_START :
-    {
-        _wolfboot_flash_start = .;
-        KEEP(*(.sig_wolfboot_raw*))
-        *(.wolfboot)
-        _wolfboot_flash_end = .;
-    }
-
     .fsp_t FSP_T_ORIGIN :
     AT(FSP_T_ORIGIN)
     {
@@ -95,7 +108,4 @@ SECTIONS
        *(.fsp_m)
        _end_fsp_m = .;
     }
-
-
-
 }

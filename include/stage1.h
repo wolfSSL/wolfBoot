@@ -28,10 +28,18 @@ struct stage2_parameter {
     uint32_t hobList;
     uint32_t page_table;
     uint32_t tolum;
+#ifdef WOLFBOOT_TPM_SEAL
+    uint32_t tpm_policy;
+    uint16_t tpm_policy_size;
 #endif
-};
+#endif
+} __attribute__((packed));
 
 /* implemented in src/boot_x86_fsp_payload.c */
 struct stage2_parameter *stage2_get_parameters();
+
+#if defined(WOLFBOOT_TPM_SEAL)
+int stage2_get_tpm_policy(const uint8_t **policy, uint16_t *policy_size);
+#endif /* defined(WOLFBOOT_TPM_SEAL) */
 
 #endif /* STAGE1_H */
