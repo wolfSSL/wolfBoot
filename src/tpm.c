@@ -331,7 +331,7 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
-int wolfBoot_load_pubkey(uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
+int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     TPM_ALG_ID* pAlg)
 {
     int rc = 0;
@@ -708,7 +708,7 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
 }
 
 /* The secret is sealed based on a policy authorization from a public key. */
-int wolfBoot_seal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz)
 {
     int rc;
@@ -778,7 +778,7 @@ int wolfBoot_seal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
 
 /* Index (0-X) determines location in NV from WOLFBOOT_TPM_SEAL_NV_BASE to
  * store sealed blob */
-int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, const uint8_t* secret, int secret_sz)
 {
     int rc;
@@ -814,8 +814,8 @@ int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
 }
 
 /* The unseal requires a signed policy from HDR_POLICY_SIGNATURE */
-int wolfBoot_unseal_blob(uint8_t* pubkey_hint,
-    uint8_t* policy, uint16_t policySz,
+int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
+    const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz)
 {
     int rc, i;
@@ -956,7 +956,7 @@ int wolfBoot_unseal_blob(uint8_t* pubkey_hint,
     return rc;
 }
 
-int wolfBoot_unseal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_unseal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, uint8_t* secret, int* secret_sz)
 {
     int rc;

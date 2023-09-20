@@ -53,7 +53,7 @@ int  wolfBoot_tpm2_init(void);
 void wolfBoot_tpm2_deinit(void);
 
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
-int wolfBoot_load_pubkey(uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
+int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     TPM_ALG_ID* pAlg);
 #endif
 
@@ -70,13 +70,13 @@ int wolfBoot_build_policy(uint8_t pcrAlg, uint32_t pcrMask,
 int wolfBoot_get_policy(struct wolfBoot_image* img,
     uint8_t** policy, uint16_t* policySz);
 
-int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, const uint8_t* secret, int secret_sz);
-int wolfBoot_seal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz);
-int wolfBoot_unseal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_unseal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, uint8_t* secret, int* secret_sz);
-int wolfBoot_unseal_blob(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
+int wolfBoot_unseal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz);
 
 int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
