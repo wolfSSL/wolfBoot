@@ -199,22 +199,36 @@ ifeq ($(ARCH),ARM)
       endif
     endif
   else
-    # default Cortex M3/M4
+  ifeq ($(CORTEX_M3),1)
+    CFLAGS+=-mcpu=cortex-m3
+    LDFLAGS+=-mcpu=cortex-m3
     ifeq ($(NO_ASM),1)
       ifeq ($(SPMATH),1)
         MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
       endif
-      CFLAGS+=-mcpu=cortex-m3
-      LDFLAGS+=-mcpu=cortex-m3
     else
-      CFLAGS+=-mcpu=cortex-m3 -fomit-frame-pointer
-      LDFLAGS+=-mcpu=cortex-m3
+      ifeq ($(SPMATH),1)
+        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+      endif
+    endif
+  else
+    # default Cortex M4
+    CFLAGS+=-mcpu=cortex-m4
+    LDFLAGS+=-mcpu=cortex-m4
+    ifeq ($(NO_ASM),1)
+      ifeq ($(SPMATH),1)
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+      endif
+    else
+      CFLAGS+=-fomit-frame-pointer # required with debug builds only
       ifeq ($(SPMATH),1)
         CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
         MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
       endif
     endif
   endif
+endif
 endif
 endif
 endif

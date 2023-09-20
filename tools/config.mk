@@ -19,6 +19,7 @@ ifeq ($(ARCH),)
   CORTEX_M0?=0
   CORTEX_M33?=0
   CORTEX_M7?=0
+  CORTEX_M3?=0
   NO_ASM?=0
   EXT_FLASH?=0
   SPI_FLASH?=0
