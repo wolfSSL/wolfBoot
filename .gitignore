@@ -131,3 +131,6 @@ CMakeCache.txt
 stage1/loader_stage1.ld
 
 debug/lauterbach
+
+#cland cache
+.cache/*
