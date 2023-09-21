@@ -214,6 +214,7 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
 
 #ifdef WOLFBOOT_MEASURED_BOOT
 
+#ifndef WOLFBOOT_NO_PARTITIONS
 #ifdef WOLFBOOT_HASH_SHA256
 #include <wolfssl/wolfcrypt/sha256.h>
 static int self_sha256(uint8_t *hash)
@@ -274,6 +275,7 @@ static int self_sha384(uint8_t *hash)
     return 0;
 }
 #endif /* HASH type */
+#endif /* WOLFBOOT_NO_PARTITIONS */
 
 /**
  * @brief Extends a PCR in the TPM with a hash.
@@ -1082,7 +1084,7 @@ int wolfBoot_tpm2_init(void)
     }
 #endif /* WOLFBOOT_TPM_KEYSTORE | WOLFBOOT_TPM_SEAL */
 
-#ifdef WOLFBOOT_MEASURED_BOOT
+#if defined(WOLFBOOT_MEASURED_BOOT) && !defined(WOLFBOOT_NO_PARTITIONS)
     /* hash wolfBoot and extend PCR */
     if (rc == 0) {
         rc = self_hash(digest);
@@ -1093,7 +1095,7 @@ int wolfBoot_tpm2_init(void)
             wolfBoot_printf("Error %d performing wolfBoot measurement!\n", rc);
         }
     }
-#endif
+#endif /* defined(WOLFBOOT_MEASURED_BOOT) && !defined(WOLFBOOT_NO_PARTITIONS) */
 
     return rc;
 }
