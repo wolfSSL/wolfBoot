@@ -26,6 +26,11 @@
 #ifndef H_USER_SETTINGS_
 #define H_USER_SETTINGS_
 
+#ifdef WOLFBOOT_PKCS11_APP
+# include "test-app/wcs/user_settings.h"
+#else
+
+
 #include <target.h>
 
 /* System */
@@ -48,6 +53,11 @@ extern int tolower(int c);
 #   define WOLFBOOT_TPM_PARMENC /* used in this file to gate features */
 #endif
 
+#ifdef WOLFCRYPT_SECURE_MODE
+    int hal_trng_get_entropy(unsigned char *out, unsigned len);
+    #define CUSTOM_RAND_GENERATE_SEED hal_trng_get_entropy
+#endif
+
 /* ED25519 and SHA512 */
 #ifdef WOLFBOOT_SIGN_ED25519
 #   define HAVE_ED25519
@@ -56,8 +66,6 @@ extern int tolower(int c);
 #   define NO_ED25519_EXPORT
 #   define WOLFSSL_SHA512
 #   define USE_SLOW_SHA512
-#   define NO_RSA
-#   define NO_ASN
 #endif
 
 /* ED448 */
@@ -67,16 +75,15 @@ extern int tolower(int c);
 #   define ED448_SMALL
 #   define NO_ED448_SIGN
 #   define NO_ED448_EXPORT
-#   define NO_RSA
-#   define NO_ASN
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
 #endif
 
-/* ECC and SHA256 */
-#if defined(WOLFBOOT_SIGN_ECC256) ||\
-    defined(WOLFBOOT_SIGN_ECC384) ||\
-    defined(WOLFBOOT_SIGN_ECC521)
+/* ECC */
+#if defined(WOLFBOOT_SIGN_ECC256) || \
+    defined(WOLFBOOT_SIGN_ECC384) || \
+    defined(WOLFBOOT_SIGN_ECC521) || \
+    defined(WOLFCRYPT_SECURE_MODE)
 
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
@@ -90,7 +97,30 @@ extern int tolower(int c);
 #      define FREESCALE_LTC_TFM
 #   endif
 
-/* SP MATH */
+
+/* Some ECC options are disabled to reduce size */
+#   if !defined(WOLFCRYPT_SECURE_MODE)
+#       if !defined(WOLFBOOT_TPM)
+#          define NO_ECC_SIGN
+#          define NO_ECC_DHE
+#          define NO_ECC_EXPORT
+#          define NO_ECC_KEY_EXPORT
+#       else
+#           define HAVE_ECC_KEY_EXPORT
+#       endif
+#   else
+#       define HAVE_ECC_SIGN
+#       define HAVE_ECC_CDH
+#       define WOLFSSL_SP
+#       define WOLFSSL_SP_MATH
+#       define WOLFSSL_SP_SMALL
+#       define SP_WORD_SIZE 32
+#       define WOLFSSL_HAVE_SP_ECC
+#       define WOLFSSL_KEY_GEN
+#       define HAVE_ECC_KEY_EXPORT
+#   endif
+
+    /* SP MATH */
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
@@ -98,110 +128,102 @@ extern int tolower(int c);
 #       define WOLFSSL_HAVE_SP_ECC
 #   endif
 
-/* ECC options disabled to reduce size */
-#   define NO_ECC_SIGN
-#   define NO_ECC_EXPORT
-#   define NO_ECC_DHE
 
 /* Curve */
-#ifdef WOLFBOOT_SIGN_ECC256
-#   define HAVE_ECC256
-#   define FP_MAX_BITS (256 + 32)
-#elif defined(WOLFBOOT_SIGN_ECC384)
-#   define HAVE_ECC384
-#   define FP_MAX_BITS (384 * 2)
-#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_SP_384
-#       define WOLFSSL_SP_NO_256
+#   ifdef WOLFBOOT_SIGN_ECC256
+#       define HAVE_ECC256
+#       define FP_MAX_BITS (256 + 32)
+#       if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
+#           define WOLFSSL_SP_NO_384
+#           define WOLFSSL_SP_NO_521
+#       endif
+#   elif defined(WOLFBOOT_SIGN_ECC384)
+#       define HAVE_ECC384
+#       define FP_MAX_BITS (384 * 2)
+#       if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
+#           define WOLFSSL_SP_384
+#           define WOLFSSL_SP_NO_256
+#       endif
+#       if !defined(WOLFBOOT_TPM_PARMENC)
+#           define NO_ECC256
+#       endif
+#   elif defined(WOLFBOOT_SIGN_ECC521)
+#       define HAVE_ECC521
+#       define FP_MAX_BITS (528 * 2)
+#       if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
+#           define WOLFSSL_SP_521
+#           define WOLFSSL_SP_NO_256
+#       endif
+#       if !defined(WOLFBOOT_TPM_PARMENC)
+#           define NO_ECC256
+#       endif
 #   endif
-#   if !defined(WOLFBOOT_TPM_PARMENC)
-#       define NO_ECC256
-#   endif
-#elif defined(WOLFBOOT_SIGN_ECC521)
-#   define HAVE_ECC521
-#   define FP_MAX_BITS (528 * 2)
-#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_SP_521
-#       define WOLFSSL_SP_NO_256
-#   endif
-#   if !defined(WOLFBOOT_TPM_PARMENC)
-#       define NO_ECC256
-#   endif
-#endif
+#endif /* WOLFBOOT_SIGN_ECC521 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC256 */
 
-#   define NO_RSA
-#   define NO_ASN
-#endif
 
-#ifdef WOLFBOOT_SIGN_RSA2048
+#if defined(WOLFBOOT_SIGN_RSA2048) || \
+    defined(WOLFBOOT_SIGN_RSA3072) || \
+    defined(WOLFBOOT_SIGN_RSA4096) || \
+    defined(WOLFCRYPT_SECURE_MODE)
+
+
+#   define WC_RSA_BLINDING 
+#   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
-#   ifndef WOLFBOOT_TPM
+#   define WC_ASN_HASH_SHA256
+#   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
-#   endif
-#   if !defined(WOLFBOOT_TPM_PARMENC)
 #       define WC_NO_RSA_OAEP
 #   endif
-#   define FP_MAX_BITS (2048 * 2)
-    /* sp math */
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
+#   endif
+#   ifdef WOLFBOOT_SIGN_RSA2048
+#       define FP_MAX_BITS (2048 * 2)
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_NO_4096
+#       define WOLFSSL_SP_2048
 #   endif
-#   define WC_ASN_HASH_SHA256
-#endif
-
-#ifdef WOLFBOOT_SIGN_RSA3072
-#   define RSA_LOW_MEM
-#   define WOLFSSL_RSA_VERIFY_INLINE
-#   define WOLFSSL_RSA_VERIFY_ONLY
-#   define WC_NO_RSA_OAEP
-#   define FP_MAX_BITS (3072 * 2)
-    /* sp math */
-#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_HAVE_SP_RSA
-#       define WOLFSSL_SP
-#       define WOLFSSL_SP_SMALL
-#       define WOLFSSL_SP_MATH
+#   ifdef WOLFBOOT_SIGN_RSA3072
+#       define FP_MAX_BITS (3072 * 2)
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_4096
+#       define WOLFSSL_SP_3072
 #   endif
-#   define WC_ASN_HASH_SHA256
-#endif
 
-#ifdef WOLFBOOT_SIGN_RSA4096
-#   define RSA_LOW_MEM
-#   define WOLFSSL_RSA_VERIFY_INLINE
-#   define WOLFSSL_RSA_VERIFY_ONLY
-#   define WC_NO_RSA_OAEP
-#   define FP_MAX_BITS (4096 * 2)
-    /* sp math */
-#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_HAVE_SP_RSA
-#       define WOLFSSL_SP
-#       define WOLFSSL_SP_SMALL
-#       define WOLFSSL_SP_MATH
+#   ifdef WOLFBOOT_SIGN_RSA4096
+#       define FP_MAX_BITS (4096 * 2)
+#       define WOLFSSL_SP_NO_2048
+#       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_4096
-#       define WOLFSSL_SP_NO_2048
-#       define WOLFSSL_SP_NO_3072
 #   endif
-#   define WC_ASN_HASH_SHA256
-#endif
+#   ifdef WOLFCRYPT_SECURE_MODE
+#       undef FP_MAX_BITS
+#       define FP_MAX_BITS (4096 * 2)
+#       define WOLFSSL_SP_2048
+#       define WOLFSSL_SP_3072
+#       define WOLFSSL_SP_4096
+#   endif
+#else
+#   define NO_RSA
+#endif /* RSA */
 
 #ifdef WOLFBOOT_HASH_SHA3_384
 #   define WOLFSSL_SHA3
-#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_PARMENC)
+#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM) && \
+    !defined(WOLFCRYPT_SECURE_MODE)
 #       define NO_SHA256
 #   endif
 #endif
 
 #ifdef WOLFBOOT_HASH_SHA384
 #   define WOLFSSL_SHA384
-#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM_PARMENC)
+#   if defined(NO_RSA) && !defined(WOLFBOOT_TPM) && \
+    !defined(WOLFCRYPT_SECURE_MODE)
 #       define NO_SHA256
 #   endif
 #endif
@@ -227,9 +249,28 @@ extern int tolower(int c);
 #   endif
 #endif
 
-#ifdef EXT_ENCRYPTED
+#if defined(EXT_ENCRYPTED)
 #   define HAVE_PWDBASED
-#else
+#endif
+
+#if defined(SECURE_PKCS11)
+#   define HAVE_PWDBASED
+#	define HAVE_PBKDF2
+#	define WOLFPKCS11_CUSTOM_STORE
+# 	define WOLFBOOT_SECURE_PKCS11
+#	define WOLFPKCS11_USER_SETTINGS
+# 	define WOLFPKCS11_NO_TIME
+# 	define WOLFSSL_AES_COUNTER
+#   define WOLFSSL_AES_DIRECT
+#   define WOLFSSL_AES_GCM
+# 	define ENCRYPT_WITH_AES128
+#   define WOLFSSL_AES_128
+# 	define HAVE_SCRYPT
+# 	define HAVE_AESGCM
+	typedef unsigned long time_t;
+#endif
+
+#ifndef HAVE_PWDBASED
 #   define NO_PWDBASED
 #endif
 
@@ -255,7 +296,6 @@ extern int tolower(int c);
         /* Configure RNG seed */
         #define CUSTOM_RAND_GENERATE_SEED(buf, sz) ({(void)buf; (void)sz; 0;}) /* stub, not used */
         #define WC_RNG_SEED_CB
-        #define HAVE_HASHDRBG
     #endif
 
     #ifdef WOLFTPM_MMIO
@@ -279,26 +319,39 @@ extern int tolower(int c);
     #endif
 #endif
 
-/* Disables - For minimum wolfCrypt build */
-#if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
-    !defined(WOLFBOOT_TPM_PARMENC)
-    #define NO_AES
-#endif
-#if !defined(WOLFBOOT_TPM_PARMENC)
-    #define NO_HMAC
+#if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC)
     #define WC_NO_RNG
     #define WC_NO_HASHDRBG
-    #define NO_DEV_RANDOM
-    #define NO_ECC_KEY_EXPORT
+    #define NO_AES_CBC
+#else
+    #define HAVE_HASHDRBG
+    #define WOLFSSL_AES_CFB
+#endif
+
+
+#if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
+    !defined(WOLFBOOT_TPM_PARMENC) && !defined(WOLFCRYPT_SECURE_MODE)
+    #define NO_AES
+#endif
+
+#if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
+#   define NO_HMAC
+#   define WC_NO_RNG
+#   define WC_NO_HASHDRBG
+#   define NO_DEV_RANDOM
+#   define NO_ECC_KEY_EXPORT
+#   ifdef NO_RSA
+#       define NO_ASN
+#   endif
 #endif
 
 #define NO_CMAC
+#define NO_DH
 #define NO_CODING
 #define WOLFSSL_NO_PEM
 #define NO_ASN_TIME
 #define NO_RC4
 #define NO_SHA
-#define NO_DH
 #define NO_DSA
 #define NO_MD4
 #define NO_RABBIT
@@ -316,7 +369,6 @@ extern int tolower(int c);
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
-#define NO_AES_CBC
 
 #define BENCH_EMBEDDED
 #define NO_CRYPT_TEST
@@ -340,7 +392,7 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
-#   ifndef ARCH_SIM
+#   if !defined(ARCH_SIM) && !defined(SECURE_PKCS11)
 #       define WOLFSSL_NO_MALLOC
 #   endif
 #else
@@ -349,5 +401,20 @@ extern int tolower(int c);
 #endif
 #   define WOLFSSL_SMALL_STACK
 #endif
+
+#ifdef WOLFTPM_MMIO
+    void delay(int msec);
+    #define XTPM_WAIT() delay(1000);
+    #define DEBUG_WOLFTPM
+    #define WOLFTPM_ADV_IO
+    void uart_printf(const char* fmt, ...);
+    #define XPRINTF uart_printf
+#endif
+
+#ifdef WOLFCRYPT_SECURE_MODE
+typedef unsigned long time_t;
+#endif
+
+#endif /* WOLFBOOT_PKCS11_APP */
 
 #endif /* !H_USER_SETTINGS_ */

@@ -105,6 +105,7 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     uint32_t reg;
     /* Enable pins and configure for AF7 */
     uart_pins_setup();
+    
     /* Turn on the device */
     APB2_CLOCK_ER |= UART1_APB2_CLOCK_ER_VAL;
     UART1_CR1 &= ~(UART_CR1_UART_ENABLE);

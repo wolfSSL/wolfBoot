@@ -1,3 +1,5 @@
+WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
+
 ifeq ($(WOLFBOOT_TPM_VERIFY),1)
   WOLFTPM:=1
   CFLAGS+=-D"WOLFBOOT_TPM_VERIFY"
@@ -209,7 +211,6 @@ ifneq ($(findstring RSA2048,$(SIGN)),)
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -249,7 +250,6 @@ ifneq ($(findstring RSA3072,$(SIGN)),)
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -293,7 +293,6 @@ ifneq ($(findstring RSA4096,$(SIGN)),)
     $(RSA_EXTRA_OBJS) \
     $(MATH_OBJS) \
     ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/asn.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o \
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
@@ -377,11 +376,6 @@ ifeq ($(SIGN),LMS)
   else
     STACK_USAGE=18064
   endif
-endif
-
-
-ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
 endif
 
 ifeq ($(RAM_CODE),1)
@@ -536,6 +530,34 @@ ifeq ($(WOLFBOOT_HUGE_STACK),1)
   CFLAGS+=-DWOLFBOOT_HUGE_STACK
 endif
 
+ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
+  CFLAGS+=-DSECURE_PKCS11
+  CFLAGS+=-DWOLFSSL_PKCS11_RW_TOKENS
+  CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
+  CFLAGS+=-Ilib/wolfPKCS11
+  CFLAGS+=-DWP11_HASH_PIN_COST=3
+  OBJS+=src/pkcs11_store.o
+  OBJS+=src/pkcs11_callable.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/rsa.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/pwdbased.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/dh.o
+  WOLFCRYPT_OBJS+=./lib/wolfPKCS11/src/crypto.o \
+		./lib/wolfPKCS11/src/internal.o \
+		./lib/wolfPKCS11/src/slot.o \
+		./lib/wolfPKCS11/src/wolfpkcs11.o
+endif
+
+ifeq ($(WOLFCRYPT_TZ),1)
+  STACK_USAGE=16688
+endif
+
+OBJS+=$(PUBLIC_KEY_OBJS)
+ifneq ($(STAGE1),1)
+  OBJS+=$(UPDATE_OBJS)
+endif
+
 ifeq ($(WOLFTPM),1)
   OBJS+=\
     ./src/tpm.o \
@@ -599,6 +621,7 @@ ifeq ($(HASH),SHA3)
 endif
 
 CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
+OBJS+=$(SECURE_OBJS)
 
 # check if both encryption and self update are on
 #
@@ -657,6 +680,10 @@ ifeq ($(FSP), 1)
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
+
+ifeq ($(USE_GCC_HEADLESS),1)
+  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+endif
 
 ifeq ($(SIGN_ALG),)
   SIGN_ALG=$(SIGN)

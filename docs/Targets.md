@@ -109,6 +109,9 @@ Example 1MB partitioning on STM32L4
 
 ### Scenario 1: TrustZone Enabled
 
+__NOTE__: to run wolfBoot in secure mode with wolfCrypt as secure crypto engine,
+please refer to [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
+
 #### Example Description
 
 The implementation shows how to switch from secure application to non-secure application,
@@ -149,6 +152,7 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 * Windows: `C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe`
 * Linux: `/usr/local/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI`
 * Mac OS/X: `/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI`
+
 
 ### Scenario 2: Trustzone Disabled
 

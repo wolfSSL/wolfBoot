@@ -136,6 +136,7 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
+
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
     CFLAGS+=-Ihal
@@ -144,6 +145,9 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
+    endif
+    ifneq ($(TZEN),1)
+      LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
   endif
 
@@ -160,12 +164,20 @@ ifeq ($(ARCH),ARM)
   endif
 
   ## Cortex-M CPU
-  ifeq ($(CORTEX_M33),1)
-    CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
-    LDFLAGS+=-mcpu=cortex-m33
-    ifeq ($(TZEN),1)
-      CFLAGS += -mcmse
+ifeq ($(CORTEX_M33),1)
+  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
+  LDFLAGS+=-mcpu=cortex-m33
+  ifeq ($(TZEN),1)
+    OBJS+=hal/stm32_tz.o
+    CFLAGS+=-mcmse
+    ifeq ($(WOLFCRYPT_TZ),1)
+      SECURE_OBJS+=./src/wc_callable.o
+      SECURE_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+      CFLAGS+=-DWOLFCRYPT_SECURE_MODE
+      SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
     endif
+  endif # TZEN=1
+  ifeq ($(NO_ASM),1)
     ifeq ($(SPMATH),1)
       ifeq ($(NO_ASM),1)
         MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
@@ -175,6 +187,12 @@ ifeq ($(ARCH),ARM)
       endif
     endif
   else
+    ifeq ($(SPMATH),1)
+      CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+    endif
+  endif
+else
   ifeq ($(CORTEX_M7),1)
     CFLAGS+=-mcpu=cortex-m7
     LDFLAGS+=-mcpu=cortex-m7
@@ -187,48 +205,49 @@ ifeq ($(ARCH),ARM)
       endif
     endif
   else
-  ifeq ($(CORTEX_M0),1)
-    CFLAGS+=-mcpu=cortex-m0
-    LDFLAGS+=-mcpu=cortex-m0
-    ifeq ($(SPMATH),1)
+    ifeq ($(CORTEX_M0),1)
+      CFLAGS+=-mcpu=cortex-m0
+      LDFLAGS+=-mcpu=cortex-m0
+      ifeq ($(SPMATH),1)
+        ifeq ($(NO_ASM),1)
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        else
+          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
+        endif
+      endif
+    else
+      ifeq ($(CORTEX_M3),1)
+
+        CFLAGS+=-mcpu=cortex-m3
+        LDFLAGS+=-mcpu=cortex-m3
+        ifeq ($(NO_ASM),1)
+          ifeq ($(SPMATH),1)
+            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+          endif
+        else
+          ifeq ($(SPMATH),1)
+            CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
+            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+          endif
+        endif
+    else
+      # default Cortex M4
+      CFLAGS+=-mcpu=cortex-m4
+      LDFLAGS+=-mcpu=cortex-m4
       ifeq ($(NO_ASM),1)
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        ifeq ($(SPMATH),1)
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        endif
       else
-        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
-      endif
-    endif
-  else
-  ifeq ($(CORTEX_M3),1)
-    CFLAGS+=-mcpu=cortex-m3
-    LDFLAGS+=-mcpu=cortex-m3
-    ifeq ($(NO_ASM),1)
-      ifeq ($(SPMATH),1)
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-      endif
-    else
-      ifeq ($(SPMATH),1)
-        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
-      endif
-    endif
-  else
-    # default Cortex M4
-    CFLAGS+=-mcpu=cortex-m4
-    LDFLAGS+=-mcpu=cortex-m4
-    ifeq ($(NO_ASM),1)
-      ifeq ($(SPMATH),1)
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-      endif
-    else
-      CFLAGS+=-fomit-frame-pointer # required with debug builds only
-      ifeq ($(SPMATH),1)
-        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+        CFLAGS+=-fomit-frame-pointer # required with debug builds only
+        ifeq ($(SPMATH),1)
+          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+        endif
       endif
     endif
   endif
-endif
 endif
 endif
 endif
@@ -712,7 +731,7 @@ ifeq ($(DUALBANK_SWAP),1)
   UPDATE_OBJS:=src/update_flash_hwswap.o
 endif
 
-ifeq ("$(UPDATE_OBJS)","")
+ifeq ($(UPDATE_OBJS),)
   UPDATE_OBJS:=./src/update_flash.o
 endif
 

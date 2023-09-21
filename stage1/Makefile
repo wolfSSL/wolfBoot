@@ -10,7 +10,7 @@ include ../tools/config.mk
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
 CFLAGS:=-D"__WOLFBOOT"
-CFLAGS+=-Werror -Wextra
+CFLAGS+=-Werror -Wextra -nostdlib
 LDFLAGS:=
 LSCRIPT:=loader_stage1.ld
 LSCRIPT_IN:=../hal/$(TARGET)_stage1.ld
@@ -36,6 +36,8 @@ STAGE1=1
 ifeq ($(ARCH),PPC)
 	WOLFTPM=0
 	WOLFBOOT_TPM_KEYSTORE=0
+	RAM_CODE=0
+	UPDATE_OBJS:=
 endif
 ELF=0
 MULTIBOOT2=0

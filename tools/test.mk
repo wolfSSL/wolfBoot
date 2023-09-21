@@ -74,6 +74,7 @@ $(BINASSEMBLE):
 test-size: FORCE
 	$(Q)make clean
 	$(Q)make wolfboot.bin
+	$(Q)$(CROSS_COMPILE)strip wolfboot.elf
 	$(Q)FP=`$(SIZE) -A wolfboot.elf | awk ' /Total/ {print $$2;}'`; echo SIZE: $$FP LIMIT: $$LIMIT; test $$FP -le $$LIMIT
 
 # Testbed actions
@@ -941,7 +942,7 @@ test-all: clean
 
 
 test-size-all:
-	make test-size SIGN=NONE LIMIT=4730
+	make test-size SIGN=NONE LIMIT=4732
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=11398
 	make keysclean
@@ -949,13 +950,13 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13706
 	make keysclean
-	make test-size SIGN=RSA2048 LIMIT=11186
+	make test-size SIGN=RSA2048 LIMIT=11948
 	make keysclean
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11166
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=11202
 	make keysclean
-	make test-size SIGN=RSA4096 LIMIT=11550
+	make test-size SIGN=RSA4096 LIMIT=13307
 	make keysclean
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11466
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=11502
 	make keysclean
 	make test-size SIGN=ECC384 LIMIT=17566
 	make keysclean
@@ -963,7 +964,7 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=13420
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=11386
+	make test-size SIGN=RSA3072 LIMIT=12612
 	make keysclean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11258
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11294
 	make keysclean

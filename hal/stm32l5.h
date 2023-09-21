@@ -1,6 +1,6 @@
-/* stm32l5.c
+/* stm32l5.h
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2023 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -19,17 +19,26 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdint.h>
-#include <image.h>
+
+#ifndef STM32L5_DEF_INCLUDED
+#define STM32L5_DEF_INCLUDED
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
 #define ISB() __asm__ volatile ("isb")
 #define DSB() __asm__ volatile ("dsb")
 
 /* STM32 L5 register configuration */
+/*** RCC ***/
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+/*Secure */
+#define RCC_BASE            (0x50021000)   //RM0438 - Table 4
+#else
 /*Non-Secure */
 #define RCC_BASE            (0x40021000)   //RM0438 - Table 4
+#endif
+
+#define FLASH_SECURE_MMAP_BASE (0x0C000000)
 
 #define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  //RM0438 - Table 77
 #define RCC_CR_PLLRDY               (1 << 25) //RM0438 - 9.8.1
@@ -106,11 +115,24 @@
 #define RCC_APB2ENR         (*(volatile uint32_t *)(RCC_BASE + 0x60))
 #define RCC_APB2ENR_SYSCFGEN      (1 << 0)
 
+#define RCC_CCIPR1          (*(volatile uint32_t *)(RCC_BASE + 0x88))
+#define RCC_CCIPR1_LPUART1SEL_SHIFT (10)
+#define RCC_CCIPR1_LPUART1SEL_MASK (0x3)
+
+
+#define RCC_CRRCR         (*(volatile uint32_t *)(RCC_BASE + 0x98))
+#define RCC_CRRCR_HSI48ON      (1 << 0)
+#define RCC_CRRCR_HSI48RDY     (1 << 1)
 
 /*** PWR ***/
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+/*Secure */
+#define PWR_BASE            (0x50007000)   //RM0438 - Table 4
+#else
 /*Non-Secure */
 #define PWR_BASE            (0x40007000)   //RM0438 - Table 4
+#endif
 
 #define PWR_CR1              (*(volatile uint32_t *)(PWR_BASE + 0x00))
 #define PWR_CR1_VOS_SHIFT    (9)
@@ -135,13 +157,38 @@
 /*** FLASH ***/
 #define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) //RM0438 - RCC_APB2ENR - SYSCFGEN
 
-/*Non-Secure*/
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+/*Secure*/
+#define FLASH_BASE          (0x50022000)   //RM0438 - Table 4
+#define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
+#define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x24))
+#define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
+
+#define FLASH_SECBB1       ((volatile uint32_t *)(FLASH_BASE + 0x80)) /* Array */
+#define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0xA0)) /* Array */
+#define FLASH_SECBB_NREGS  4    /* Array length for the two above */
+
+#define FLASH_NS_BASE          (0x40022000)   //RM0438 - Table 4
+#define FLASH_NS_KEYR        (*(volatile uint32_t *)(FLASH_NS_BASE + 0x08))
+#define FLASH_NS_OPTKEYR     (*(volatile uint32_t *)(FLASH_NS_BASE + 0x10))
+#define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
+#define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
+
+#define TZSC_PRIVCFGR1   *((uint32_t *)(0x50032420))
+#define TZSC_PRIVCFG1_LPUARTPRIV (1 << 21)
+
+
+#else
+/* Non-Secure only */
 #define FLASH_BASE          (0x40022000)   //RM0438 - Table 4
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x08))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
+#endif
 
-/* Register values */
+/* Register values (for both secure and non secure registers) */
 #define FLASH_SR_EOP                        (1 << 0)
 #define FLASH_SR_OPERR                      (1 << 1)
 #define FLASH_SR_PROGERR                    (1 << 3)
@@ -164,240 +211,63 @@
 #define FLASH_CR_EOPIE                      (1 << 24)
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_OBL_LAUNCH                 (1 << 27)
+#define FLASH_CR_INV                        (1 << 29)
 #define FLASH_CR_OPTLOCK                    (1 << 30)
 #define FLASH_CR_LOCK                       (1 << 31)
+
 
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
 
+#define FLASH_OPTR          (*(volatile uint32_t *)(FLASH_BASE + 0x40))
+#define FLASH_OPTR_DBANK     (1 << 22)
+#define FLASH_OPTR_SWAP_BANK (1 << 20)
+
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
-#define FLASH_PAGE_SIZE           (0x800) /* 2KB */
+#define FLASH_PAGE_SIZE           (0x800)      /* 2KB */
 #define FLASH_BANK2_BASE          (0x08040000) /*!< Base address of Flash Bank2     */
+#define BOOTLOADER_SIZE           (0x8000)
 #define FLASH_TOP                 (0x0807FFFF) /*!< FLASH end address  */
 
 #define FLASH_KEY1                            (0x45670123)
 #define FLASH_KEY2                            (0xCDEF89AB)
+#define FLASH_OPTKEY1                         (0x08192A3BU)
+#define FLASH_OPTKEY2                         (0x4C5D6E7FU)
 
+/* GPIO*/
+#define GPIOA_BASE 0x52020000
+#define GPIOB_BASE 0x52020400
+#define GPIOC_BASE 0x52020800
+#define GPIOD_BASE 0x52020C00
+#define GPIOG_BASE 0x52021800
 
-static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
-{
-    uint32_t reg = FLASH_ACR;
-    if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates)
-        FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates ;
-}
+#define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x4C ))
+#define GPIOA_AHB2_CLOCK_ER (1 << 0)
+#define GPIOB_AHB2_CLOCK_ER (1 << 1)
+#define GPIOC_AHB2_CLOCK_ER (1 << 2)
+#define GPIOD_AHB2_CLOCK_ER (1 << 3)
+#define GPIOG_AHB2_CLOCK_ER (1 << 6)
+#define TRNG_AHB2_CLOCK_ER  (1 << 18)
 
-static RAMFUNCTION void flash_wait_complete(uint8_t bank)
-{
-   while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY);
+#define RCC_APB1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x5C ))
+#define UART1_APB1_CLOCK_ER_VAL (1 << 0)
 
-}
+#define UART1_PIN_AF 8
+#define UART1_RX_PIN 8
+#define UART1_TX_PIN 7
 
-static void RAMFUNCTION flash_clear_errors(uint8_t bank)
-{
+#define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30))
 
-  FLASH_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR | FLASH_SR_OPTWERR ) ;
+#ifdef STM32_DISCOVERY
+    #define LED_AHB2_ENABLE (GPIOD_AHB2_CLOCK_ER | GPIOG_AHB2_CLOCK_ER)
+    #define LED_BOOT_PIN (12)  /* PG12 - Discovery - Green Led */
+    #define LED_USR_PIN (3) /* PD3  - Discovery  - Red Led */
+#else
+    #define LED_AHB2_ENABLE (GPIOA_AHB2_CLOCK_ER | GPIOB_AHB2_CLOCK_ER | \
+            GPIOC_AHB2_CLOCK_ER)
+    #define LED_BOOT_PIN (9)  /* PA9 - Nucleo board - Red Led */
+    #define LED_USR_PIN (7)   /* PC7  - Nucleo board  - Green Led */
+    #define LED_EXTRA_PIN (7) /* PB7 - Nucleo board - Blue Led */
+#endif
 
-}
-
-
-int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
-{
-  int i = 0;
-  uint32_t *src, *dst;
-
-  flash_clear_errors(0);
-
-  src = (uint32_t *)data;
-  dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
-
-  while (i < len) {
-    FLASH_CR |= FLASH_CR_PG;
-    dst[i >> 2] = src[i >> 2];
-    dst[(i >> 2) + 1] = src[(i >> 2) + 1];
-    flash_wait_complete(0);
-    FLASH_CR &= ~FLASH_CR_PG;
-    i+=8;
-  }
-
-  return 0;
-}
-
-void RAMFUNCTION hal_flash_unlock(void)
-{
-    flash_wait_complete(0);
-    if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
-        FLASH_KEYR = FLASH_KEY1;
-        DMB();
-        FLASH_KEYR = FLASH_KEY2;
-        DMB();
-        while ((FLASH_CR & FLASH_CR_LOCK) != 0)
-            ;
-    }
-
-}
-
-void RAMFUNCTION hal_flash_lock(void)
-{
-    flash_wait_complete(0);
-    if ((FLASH_CR & FLASH_CR_LOCK) == 0)
-        FLASH_CR |= FLASH_CR_LOCK;
-}
-
-int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
-{
-    uint32_t end_address;
-    uint32_t p;
-
-    flash_clear_errors(0);
-
-    if (len == 0)
-        return -1;
-    end_address = address + len - 1;
-    for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
-       // considering DBANK = 1
-        if (p < (FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) )
-        {
-          FLASH_CR &= ~FLASH_CR_BKER;
-        }
-        if(p>=(FLASH_BANK2_BASE -FLASHMEM_ADDRESS_SPACE) && (p <= (FLASH_TOP -FLASHMEM_ADDRESS_SPACE) ))
-        {
-          FLASH_CR |= FLASH_CR_BKER;
-        }
-
-        uint32_t reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT)| FLASH_CR_PER));
-        FLASH_CR = reg | (((p >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER );
-        DMB();
-        FLASH_CR |= FLASH_CR_STRT;
-        flash_wait_complete(0);
-    }
-
-   /* If the erase operation is completed, disable the associated bits */
-    FLASH_CR &= ~FLASH_CR_PER ;
-
-  return 0;
-}
-
-static void clock_pll_off(void)
-{
-    uint32_t reg32;
-
-     /* Select MSI as SYSCLK source. */
-    reg32 = RCC_CFGR;
-    reg32 &= ~((1 << 1) | (1 << 0));
-    RCC_CFGR = (reg32 | RCC_CFGR_SW_MSI);
-    DMB();
-
-    /* Wait for MSI clock to be selected. */
-    while ((RCC_CFGR & ((1 << 1) | (1 << 0))) != RCC_CFGR_SW_MSI) {};
-
-    /* Turn off PLL */
-    RCC_CR &= ~RCC_CR_PLLON;
-    DMB();
-}
-
-/*This implementation will setup MSI 48 MHz as PLL Source Mux, PLLCLK as System Clock Source*/
-
-static void clock_pll_on(int powersave)
-{
-    uint32_t reg32;
-    uint32_t plln, pllm, pllq, pllp, pllr, hpre, apb1pre, apb2pre , flash_waitstates;
-
-    RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;
-    RCC_APB1ENR |= RCC_APB1ENR_PWREN;
-    PWR_CR3 |= PWR_CR3_UCPD_DBDIS;
-
-    PWR_CR1 &= ~((1 << 10) | (1 << 9));
-    PWR_CR1 |= (PWR_CR1_VOS_0 << PWR_CR1_VOS_SHIFT);
-    /* Delay after setting the voltage scaling */
-    reg32 = PWR_CR1;
-    while ((PWR_SR2 & PWR_SR2_VOSF) != 0) {};
-
-    while ((RCC_CR & RCC_CR_MSIRDY) == 0) {};
-    flash_waitstates = 2;
-    flash_set_waitstates(flash_waitstates);
-
-    RCC_CR |= RCC_CR_MSIRGSEL;
-
-    reg32 = RCC_CR;
-    reg32 &= ~((1 << 7) | (1 << 6) | (1 << 5) | (1 << 4));
-    reg32 |= (RCC_CR_MSIRANGE_11 << RCC_CR_MSIRANGE_SHIFT);
-    RCC_CR = reg32;
-    reg32 = RCC_CR;
-    DMB();
-
-
-    /* Select clock parameters (CPU Speed = 110 MHz) */
-    pllm = 12;
-    plln = 55;
-    pllp = 7;
-    pllq = RCC_PLLCFGR_QR_DIV_2;
-    pllr = RCC_PLLCFGR_QR_DIV_2;
-    hpre  = RCC_AHB_PRESCALER_DIV_NONE;
-    apb1pre = RCC_APB_PRESCALER_DIV_NONE;
-    apb2pre = RCC_APB_PRESCALER_DIV_NONE;
-    flash_waitstates = 5;
-
-   RCC_CR &= ~RCC_CR_PLLON;
-   while ((RCC_CR & RCC_CR_PLLRDY) != 0) {};
-
-   /*PLL Clock source selection*/
-    reg32 = RCC_PLLCFGR ;
-    reg32 |= RCC_PLLCKSELR_PLLSRC_MSI;
-    reg32 |= ((pllm-1) << RCC_PLLCFGR_PLLM_SHIFT);
-    reg32 |= ((plln) << RCC_PLLCFGR_PLLN_SHIFT);
-    reg32 |= ((pllp) << RCC_PLLCFGR_PLLP_SHIFT);
-    reg32 |= ((pllq) << RCC_PLLCFGR_PLLQ_SHIFT);
-    reg32 |= ((pllr) << RCC_PLLCFGR_PLLR_SHIFT);
-    RCC_PLLCFGR = reg32;
-    DMB();
-
-   RCC_CR |= RCC_CR_PLLON;
-   while ((RCC_CR & RCC_CR_PLLRDY) == 0) {};
-
-   RCC_PLLCFGR |= RCC_PLLCFGR_PLLREN;
-
-  flash_set_waitstates(flash_waitstates);
-
-  /*step down HPRE before going to >80MHz*/
-  reg32 = RCC_CFGR ;
-  reg32 &= ~((1 << 7) | (1 << 6) | (1 << 5) | (1 << 4));
-  reg32 |= ((RCC_AHB_PRESCALER_DIV_2) << RCC_CFGR_HPRE_SHIFT) ;
-  RCC_CFGR = reg32;
-  DMB();
-
-  /* Select PLL as SYSCLK source. */
-  reg32 = RCC_CFGR;
-  reg32 &= ~((1 << 1) | (1 << 0));
-  RCC_CFGR = (reg32 | RCC_CFGR_SW_PLL);
-  DMB();
-
-  /* Wait for PLL clock to be selected. */
-  while ((RCC_CFGR & ((1 << 1) | (1 << 0))) != RCC_CFGR_SW_PLL) {};
-
-  /*step-up HPRE to go > 80MHz*/
-  reg32 = RCC_CFGR ;
-  reg32 &= ~((1 << 7) | (1 << 6) | (1 << 5) | (1 << 4));
-  reg32 |= ((hpre) << RCC_CFGR_HPRE_SHIFT) ;
-  RCC_CFGR = reg32;
-  DMB();
-
-  /*PRE1 and PRE2 conf*/
-  reg32 = RCC_CFGR ;
-  reg32 &= ~((1 << 10) | (1 << 9) | (1 << 8));
-  reg32 |= ((apb1pre) << RCC_CFGR_PPRE1_SHIFT) ;
-  reg32 &= ~((1 << 13) | (1 << 12) | (1 << 11));
-  reg32 |= ((apb2pre) << RCC_CFGR_PPRE2_SHIFT) ;
-  RCC_CFGR = reg32;
-  DMB();
-
-}
-
-void hal_init(void)
-{
-    clock_pll_on(0);
-}
-
-void hal_prepare_boot(void)
-{
-    clock_pll_off();
-}
+#endif /* STM32L5_DEF_INCLUDED */
