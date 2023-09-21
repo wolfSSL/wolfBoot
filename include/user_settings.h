@@ -104,22 +104,20 @@ extern int tolower(int c);
 
 /* ECC options disabled to reduce size */
 #ifndef WOLFCRYPT_SECURE_MODE
+#   define HAVE_ECC
 #   define NO_ECC_SIGN
 #   define NO_ECC_EXPORT
-#   define NO_ECC_DHE
 #   define NO_ECC_KEY_EXPORT
 #   define NO_ASN
 #else
-
-
 #   define HAVE_ECC_SIGN
-#   define HAVE_ECC_CDH
+//#   define HAVE_ECC_CDH
 #   define WOLFSSL_SP
 #   define WOLFSSL_SP_MATH
 #   define WOLFSSL_SP_SMALL
 #   define SP_WORD_SIZE 32
 #   define WOLFSSL_HAVE_SP_ECC
-#   define WOLFSSL_SP_MATH_ALL
+//#   define WOLFSSL_SP_MATH_ALL
 
 int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #   define CUSTOM_RAND_GENERATE_SEED hal_trng_get_entropy
@@ -248,9 +246,32 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #   endif
 #endif
 
-#if defined(EXT_ENCRYPTED) || defined(SECURE_PKCS11)
+#if defined(EXT_ENCRYPTED)
 #   define HAVE_PWDBASED
+#endif
+
+#if defined(SECURE_PKCS11)
+#   define HAVE_PWDBASED
+#	define HAVE_PBKDF2
+#	define WOLFPKCS11_CUSTOM_STORE
+# 	define WOLFBOOT_SECURE_PKCS11
+#	define WOLFPKCS11_USER_SETTINGS
+# 	define WOLFPKCS11_NO_TIME
+# 	define WOLFSSL_AES_COUNTER
+#   define WOLFSSL_AES_DIRECT
+#   define WOLFSSL_AES_GCM
+# 	define ENCRYPT_WITH_AES128
+#   define WOLFSSL_AES_128
+# 	define HAVE_SCRYPT
+# 	define HAVE_AESGCM
+	typedef unsigned long time_t;
 #else
+#   define NO_HMAC
+#endif
+
+
+
+#ifndef HAVE_PWDBASED
 #   define NO_PWDBASED
 #endif
 
@@ -318,9 +339,6 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #   if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && !defined(WOLFCRYPT_SECURE_MODE)
 #       define NO_AES
 #   endif
-#   if !defined(SECURE_PKCS11)
-#       define NO_HMAC
-#   endif
 #endif
 
 #define NO_CMAC
@@ -378,7 +396,7 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
-#   ifndef ARCH_SIM
+#   if !defined(ARCH_SIM) && !defined(SECURE_PKCS11)
 #       define WOLFSSL_NO_MALLOC
 #   endif
 #else

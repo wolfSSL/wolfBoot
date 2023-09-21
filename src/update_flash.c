@@ -28,9 +28,15 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
+
 #include "delta.h"
 #include "printf.h"
+#ifdef WOLFBOOT_TPM
 #include "tpm.h"
+#endif
+#ifdef SECURE_PKCS11
+int WP11_Library_Init(void);
+#endif
 
 #ifdef RAM_CODE
 extern unsigned int _start_text;
@@ -742,6 +748,11 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef WOLFBOOT_TPM
     wolfBoot_tpm2_deinit();
 #endif
+
+#ifdef SECURE_PKCS11
+    WP11_Library_Init();
+#endif
+
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }

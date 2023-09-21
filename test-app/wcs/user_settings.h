@@ -28,8 +28,6 @@
 #include <target.h>
 
 #define WOLFCRYPT_ONLY
-#define WOLFSSL_SP_MATH_ALL
-//#define NO_RSA
 #define WOLFSSL_SMALL_CERT_VERIFY
 #define WOLFSSL_LEAN_PSK
 
@@ -47,44 +45,40 @@ extern int tolower(int c);
 /* PKCS11 */
 #define HAVE_PKCS11
 #define HAVE_WOLF_BIGINT
-//#define WOLFSSL_SP_MATH
-//#define USE_FAST_MATH
 #define HAVE_PKCS11_STATIC
 #define WOLF_CRYPTO_CB
 
 #define NO_RSA
+#define NO_HMAC
+#define NO_PWDBASED
+
+
 
 /* ECC */
 #define HAVE_ECC
-#define ECC_TIMING_RESISTANT
-#define ECC_USER_CURVES /* enables only 256-bit by default */
-#define HAVE_ECC_SIGN
-#define HAVE_ECC_CDH
+//#define ECC_TIMING_RESISTANT
+//#define ECC_USER_CURVES /* enables only 256-bit by default */
+//#define HAVE_ECC_SIGN
+//#define HAVE_ECC_CDH
 #define HAVE_ECC256
-#define HAVE_ECC384
-#define HAVE_ECC521
-#ifdef WOLFSSL_SP_MATH
-#define WOLFSSL_HAVE_SP_ECC
-#endif
+//#define HAVE_ECC384
+//#define HAVE_ECC521
 
 
 #ifndef NO_RSA
-    /* RSA */
-    #define WOLFSSL_KEY_GEN
-    #define HAVE_RSA
-    #define RSA_LOW_MEM
-    #define WOLFSSL_RSA_VERIFY_INLINE
-    #define WC_ASN_HASH_SHA256
-    #define FP_MAX_BITS (4096 * 2)
-    #ifdef WOLFSSL_SP_MATH
-        #define WOLFSSL_HAVE_SP_RSA
-    #endif
+  /* RSA */
+  #define WOLFSSL_KEY_GEN
+  #define HAVE_RSA
+  #define RSA_LOW_MEM
+  #define WOLFSSL_RSA_VERIFY_INLINE
+  #define WC_ASN_HASH_SHA256
+  #define FP_MAX_BITS (4096 * 2)
 #endif
 
 
 /* SHA */
 //#define WOLFSSL_SHA3
-#define WOLFSSL_SHA384
+//#define WOLFSSL_SHA384
 
 /* HMAC */
 //#define WOLFSSL_HMAC
@@ -98,25 +92,28 @@ extern int tolower(int c);
 #define WOLFSSL_BASE64_DECODE
 #define WOLFSSL_BASE64_ENCODE
 
+
+#if 0
 /* AES */
 #ifndef WOLFSSL_AES_128
 #define WOLFSSL_AES_128
 #endif
 
-#ifndef WOLFSSL_AES_256
-#define WOLFSSL_AES_256
-#endif
+//#ifndef WOLFSSL_AES_256
+//#define WOLFSSL_AES_256
+//#endif
 #ifndef WOLFSSL_AES_COUNTER
 #define WOLFSSL_AES_COUNTER
 #endif
 #ifndef WOLFSSL_AES_DIRECT
 #define WOLFSSL_AES_DIRECT
 #endif
+#endif
 
 /* Hardening */
-#define TFM_TIMING_RESISTANT
-#define ECC_TIMING_RESISTANT
-#define WC_RSA_BLINDING
+//#define TFM_TIMING_RESISTANT
+//#define ECC_TIMING_RESISTANT
+//#define WC_RSA_BLINDING
 
 /* Exclude */
 #define NO_CMAC
@@ -128,7 +125,7 @@ extern int tolower(int c);
 #define NO_MD4
 #define NO_RABBIT
 #define NO_MD5
-//#define NO_SIG_WRAPPER
+#define NO_SIG_WRAPPER
 #define NO_CERT
 #define NO_SESSION_CACHE
 #define NO_HC128

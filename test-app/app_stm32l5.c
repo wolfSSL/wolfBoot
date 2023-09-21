@@ -121,13 +121,20 @@ void main(void)
     uint32_t klen = 200;
     int otherkey_slot;
     unsigned int devId = 0;
+
+#ifdef SECURE_PKCS11
     WC_RNG rng;
     Pkcs11Token token;
     Pkcs11Dev PKCS11_d;
+    unsigned long session;
+    const char TokenPin[] = "0123456789ABCDEF";
+    const char UserPin[] = "ABCDEF0123456789";
 
     wcs_get_random((void*)&rand, 4);
     for (i = 0; i < (rand / 100000000); i++)
         ;
+
+#if 0
     hal_init();
     uart_init(115200, 8, 'N', 1);
     boot_led_on();
@@ -135,13 +142,38 @@ void main(void)
     boot_led_off();
     if (wolfBoot_current_firmware_version() > 1)
         boot_led_on();
+#endif
 
     wolfCrypt_Init();
+
     PKCS11_d.heap = NULL,
     PKCS11_d.func = &wolfpkcs11nsFunctionList;
+//    ret = wc_Pkcs11Token_Init_NoLogin(&token, &PKCS11_d, 1, "EccKey");
 
-    ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 0, NULL,
-            NULL, 0);
+    ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 1, "EccKey",
+            (const byte*)TokenPin, strlen(TokenPin));
+
+    if (ret == 0) {
+        ret = wolfpkcs11nsFunctionList.C_OpenSession(1, 
+                CKF_SERIAL_SESSION | CKF_RW_SESSION,
+                NULL, NULL, &session);
+    }
+
+    if (ret == 0) {
+        ret = wolfpkcs11nsFunctionList.C_Login(session, CKU_SO,
+                TokenPin,
+                strlen(TokenPin));
+    }
+    if (ret == 0) {
+        ret = wolfpkcs11nsFunctionList.C_InitPIN(session,
+                TokenPin,
+                strlen(TokenPin));
+    }
+
+    if (ret == 0) {
+        ret = wolfpkcs11nsFunctionList.C_Logout(session);
+    }
+
     if (ret != 0) {
         while(1)
             ;
@@ -154,7 +186,6 @@ void main(void)
                 ;
         }
         if (ret == 0) {
-
 #ifdef HAVE_ECC
             ret = ecdsa_sign_verify(devId);
             if (ret != 0)
@@ -163,9 +194,9 @@ void main(void)
         }
         wc_Pkcs11Token_Final(&token);
     }
+#endif
     while(1)
         ;
 
-    wolfCrypt_Cleanup();
     /* Never reached */
 }

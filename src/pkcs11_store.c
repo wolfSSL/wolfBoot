@@ -30,6 +30,9 @@
 extern uint32_t *_flash_keyvault; /* From linker script: origin of vault flash */
 extern uint32_t *_flash_keyvault_size; /* From linker script: size of vault */
 
+extern unsigned int _start_heap; /* From linker script: heap memory */
+extern unsigned int _heap_size;  /* From linker script: heap limit */
+
 #define KEYVAULT_OBJ_SIZE 0x1000 /* 4KB per object */
 #define KEYVAULT_MAX_ITEMS 0x18 /* Total memory: 0x18000, 24 items */
 
@@ -48,6 +51,26 @@ extern uint32_t *_flash_keyvault_size; /* From linker script: size of vault */
 static uint8_t *vault_base = (uint8_t *)&_flash_keyvault;
 static int vault_idx = -1;
 
+
+/* Back-end for malloc, used for token handling */
+void * _sbrk(unsigned int incr)
+{
+    static unsigned char *heap = (unsigned char *)&_start_heap;
+    static uint32_t heapsize = (uint32_t)(&_heap_size);
+    void *old_heap = heap;
+    if (((incr >> 2) << 2) != incr)
+        incr = ((incr >> 2) + 1) << 2;
+
+    if (heap == NULL)
+        heap = (unsigned char *)&_start_heap;
+    else
+        heap += incr;
+    if (((uint32_t)heap - (uint32_t)(&_start_heap)) > heapsize) {
+        heap -= incr;
+        return NULL;
+    }
+    return old_heap;
+}
 
 struct obj_hdr
 {
@@ -72,11 +95,11 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     void** store)
 {
     unsigned int i;
-    int found = -1;
+    unsigned int found = 0;
     struct obj_hdr *hdr;
     struct store_object *obj;
 
-    for (i = 0; i < KEYVAULT_MAX_ITEMS; i++) {
+    for (i = 1; i < KEYVAULT_MAX_ITEMS; i++) {
         hdr = (struct obj_hdr*)(vault_base + i * KEYVAULT_OBJ_SIZE);
         if ((type == hdr->type) && (id1 == hdr->token_id) &&
                 (id2 == hdr->object_id)) {
@@ -84,7 +107,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
             break;
         }
     }
-    if (!found && read) {
+    if ((!found) && read) {
         *store = NULL;
         return NOT_AVAILABLE_E;
     } else if (found) {
