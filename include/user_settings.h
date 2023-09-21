@@ -274,6 +274,12 @@ extern int tolower(int c);
 #   define NO_PWDBASED
 #endif
 
+#if defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)
+#define WOLFSSL_BASE64_ENCODE
+#else
+#define NO_CODING
+#endif
+
 #ifdef WOLFBOOT_TPM
     /* Do not use heap */
     #define WOLFTPM2_NO_HEAP
@@ -347,7 +353,6 @@ extern int tolower(int c);
 
 #define NO_CMAC
 #define NO_DH
-#define NO_CODING
 #define WOLFSSL_NO_PEM
 #define NO_ASN_TIME
 #define NO_RC4

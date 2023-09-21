@@ -40,6 +40,35 @@
 #include <x86/ata.h>
 #include <string.h>
 
+#if defined(WOLFBOOT_TPM_SEAL)
+#include <image.h>
+#include <tpm.h>
+
+#if defined(WOLFBOOT_FSP)
+#include <stage1.h>
+#endif
+
+#include <wolfssl/wolfcrypt/coding.h>
+/* hardcode to ecc256 algo for now */
+#define TPM_MAX_POLICY_SIZE (512)
+#ifndef ATA_UNLOCK_DISK_KEY_NV_INDEX
+#define ATA_UNLOCK_DISK_KEY_NV_INDEX 0
+#endif
+
+#define ATA_SECRET_RANDOM_BYTES 21
+
+#endif /* WOLFBOOT_TPM_SEAL */
+
+#if defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) || defined(WOLFBOOT_TPM_SEAL)
+#ifndef ATA_UNLOCK_DISK_KEY_SZ
+#define ATA_UNLOCK_DISK_KEY_SZ 32
+#endif
+#endif /* defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) || defined(WOLFBOOT_TPM_SEAL) */
+
+#if defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) && defined(WOLFBOOT_TPM_SEAL)
+#error "The secret to unlock the disk must be either a password or sealed with TPM, not both"
+#endif
+
 #define AHCI_ABAR_OFFSET     0x24
 #ifdef TARGET_x86_fsp_qemu
 #define SATA_BASE 0x02200000
@@ -185,6 +214,7 @@ void ahci_dump_port(uint32_t base, int i)
                     i, cmd, ci, is, tfd, serr, ssst);
 }
 
+#ifdef WOLFBOOT_ATA_DISK_LOCK
 #ifdef WOLFBOOT_ATA_DISK_LOCK_PASSWORD
 static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 {
@@ -194,8 +224,149 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
     memcpy(secret, (uint8_t*)WOLFBOOT_ATA_DISK_LOCK_PASSWORD, *secret_size);
     return 0;
 }
+#endif /* WOLFBOOT_ATA_DISK_LOCK_PASSWORD */
+
+#ifdef WOLFBOOT_TPM_SEAL
+
+/**
+ * @brief Calculate the SHA256 hash of the key.
+ *
+ * @param key_slot The key slot ID to calculate the hash for.
+ * @param hash A pointer to store the resulting SHA256 hash.
+ */
+static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
+{
+    int blksz;
+    unsigned int i = 0;
+    uint8_t *pubkey = keystore_get_buffer(key_slot);
+    int pubkey_sz = keystore_get_size(key_slot);
+    wc_Sha256 sha256_ctx;
+
+    if (!pubkey || (pubkey_sz < 0))
+        return;
+
+    wc_InitSha256(&sha256_ctx);
+    while (i < (uint32_t)pubkey_sz) {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if ((i + blksz) > (uint32_t)pubkey_sz)
+            blksz = pubkey_sz - i;
+        wc_Sha256Update(&sha256_ctx, (pubkey + i), blksz);
+        i += blksz;
+    }
+    wc_Sha256Final(&sha256_ctx, hash);
+}
+
+static int sata_get_random_base64(uint8_t *out, int *out_size)
+{
+    uint8_t rand[ATA_SECRET_RANDOM_BYTES];
+    word32 _out_size;
+    int ret;
+
+    ret = wolfBoot_get_random(rand, ATA_SECRET_RANDOM_BYTES);
+    if (ret != 0)
+        return ret;
+    _out_size = *out_size;
+    ret = Base64_Encode(rand, ATA_SECRET_RANDOM_BYTES, out, &_out_size);
+    if (ret != 0)
+        return ret;
+
+    /* double check we have a NULL-terminated string */
+    *out_size = (int)_out_size;
+    out[*out_size] = '\0';
+    return 0;
+}
+
+static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
+                                              const uint8_t *policy,
+                                              int policy_size,
+                                              uint8_t *secret,
+                                              int *secret_size)
+{
+    uint8_t secret_check[WOLFBOOT_MAX_SEAL_SZ];
+    int secret_check_sz;
+    int ret;
+
+    if (*secret_size < ATA_UNLOCK_DISK_KEY_SZ)
+        return -1;
+
+    ret = sata_get_random_base64(secret, secret_size);
+    if (ret == 0) {
+        wolfBoot_printf("Creating new secret (%d bytes)\r\n", *secret_size);
+        wolfBoot_printf("%s\r\n", secret);
+            /* seal new secret */
+        ret = wolfBoot_seal(pubkey_hint, policy, policy_size,
+                            ATA_UNLOCK_DISK_KEY_NV_INDEX,
+                            secret, *secret_size);
+    }
+ 
+    if (ret == 0) {
+        /* unseal again to make sure it works */
+        memset(secret_check, 0, sizeof(secret_check));
+        ret = wolfBoot_unseal(pubkey_hint, policy, policy_size,
+                              ATA_UNLOCK_DISK_KEY_NV_INDEX,
+                              secret_check, &secret_check_sz);
+        if (ret == 0) {
+            if (*secret_size != secret_check_sz ||
+                memcmp(secret, secret_check, secret_check_sz) != 0)
+                {
+                    wolfBoot_printf("secret check mismatch!\n");
+                    ret = -1;
+                }
+        }
+
+        wolfBoot_printf("Secret Check %d bytes\n", secret_check_sz);
+        wolfBoot_printf("%s\r\n", secret_check);
+        TPM2_ForceZero(secret_check, sizeof(secret_check));
+    }
+
+    if (ret == 0) {
+        wolfBoot_printf("Secret %d bytes\n", *secret_size);
+        wolfBoot_printf("%s\r\n", secret);
+    }
+
+    return ret;
+}
+
+static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
+{
+    uint8_t pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t policy[TPM_MAX_POLICY_SIZE];
+    uint16_t policy_size;
+    const uint8_t *pol;
+    int secretCheckSz;
+    int ret;
+
+    if (*secret_size < ATA_UNLOCK_DISK_KEY_SZ)
+        return -1;
+
+#if defined(WOLFBOOT_FSP)
+    ret = stage2_get_tpm_policy(&pol, &policy_size);
+#else
+#error "implement get_tpm_policy "
 #endif
-#ifdef WOLFBOOT_ATA_DISK_LOCK
+
+    if (policy_size > TPM_MAX_POLICY_SIZE)
+        return -1;
+
+    memcpy(policy, pol, policy_size);
+    get_key_sha256(0, pubkey_hint);
+    ret = wolfBoot_unseal(pubkey_hint, policy, policy_size,
+                          ATA_UNLOCK_DISK_KEY_NV_INDEX,
+                          secret, secret_size);
+    if (ret != 0 && ((ret & RC_MAX_FMT1) == TPM_RC_HANDLE)) {
+            wolfBoot_printf("Sealed secret does not exist!\r\n");
+            ret = sata_create_and_seal_unlock_secret(pubkey_hint, policy, policy_size, secret,
+                                                     secret_size);
+    }
+    if (ret != 0) {
+        wolfBoot_printf("get sealed unlock secret failed! %d (%s)\n", ret,
+                        wolfTPM2_GetRCString(ret));
+        return ret;
+    }
+    return ret;
+}
+#endif /* WOLFBOOT_TPM_SEAL */
+
 static int sata_unlock_disk(int drv)
 {
     int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
@@ -244,7 +415,7 @@ static int sata_unlock_disk(int drv)
     }
     return 0;
 }
-#endif
+#endif /* WOLFBOOT_ATA_DISK_LOCK */
 /**
  * @brief Enables SATA ports and detects connected SATA disks.
  *

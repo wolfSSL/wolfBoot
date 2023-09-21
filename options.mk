@@ -659,7 +659,10 @@ endif
 
 ifeq ($(DISK_LOCK),1)
   CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK
-  CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK_PASSWORD=\"$(DISK_LOCK_PASSWORD)\"
+  ifneq ($(DISK_LOCK_PASSWORD),)
+    CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK_PASSWORD=\"$(DISK_LOCK_PASSWORD)\"
+  endif
+  OBJS+=./lib/wolfssl/wolfcrypt/src/coding.o
 endif
 
 ifeq ($(FSP), 1)
