@@ -185,6 +185,66 @@ void ahci_dump_port(uint32_t base, int i)
                     i, cmd, ci, is, tfd, serr, ssst);
 }
 
+#ifdef WOLFBOOT_ATA_DISK_LOCK_PASSWORD
+static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
+{
+    int password_len;
+
+    *secret_size = strlen(WOLFBOOT_ATA_DISK_LOCK_PASSWORD);
+    memcpy(secret, (uint8_t*)WOLFBOOT_ATA_DISK_LOCK_PASSWORD, *secret_size);
+    return 0;
+}
+#endif
+#ifdef WOLFBOOT_ATA_DISK_LOCK
+static int sata_unlock_disk(int drv)
+{
+    int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
+    uint8_t secret[ATA_UNLOCK_DISK_KEY_SZ];
+    enum ata_security_state ata_st;
+    int r;
+
+    r = sata_get_unlock_secret(secret, &secret_size);
+    if (r != 0)
+        return r;
+#ifdef TARGET_x86_fsp_qemu
+    wolfBoot_printf("DISK LOCK SECRET: %s\r\n", secret);
+#endif
+
+    ata_st = ata_security_get_state(drv);
+    wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
+    if (ata_st == ATA_SEC1) {
+        AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
+        r = ata_security_freeze_lock(drv);
+        AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
+        r = ata_identify_device(drv);
+        AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+        ata_st = ata_security_get_state(drv);
+        wolfBoot_printf("ATA: Security disabled. State SEC%d\r\n", ata_st);
+    }
+    else if (ata_st == ATA_SEC4) {
+        AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
+        r = ata_security_unlock_device(drv, (char*)secret);
+        AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
+        r = ata_identify_device(drv);
+        AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+        ata_st = ata_security_get_state(drv);
+        if (ata_st == ATA_SEC5) {
+            AHCI_DEBUG_PRINTF("ATA identify: calling device freeze\r\n", r);
+            r = ata_security_freeze_lock(drv);
+            AHCI_DEBUG_PRINTF("ATA device freeze: returned %d\r\n", r);
+            r = ata_identify_device(drv);
+            AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+        }
+        ata_st = ata_security_get_state(drv);
+        if (ata_st != ATA_SEC6) {
+            panic();
+        }
+        ata_st = ata_security_get_state(drv);
+        wolfBoot_printf("ATA: Security enabled. State SEC%d\r\n", ata_st);
+    }
+    return 0;
+}
+#endif
 /**
  * @brief Enables SATA ports and detects connected SATA disks.
  *
@@ -193,7 +253,8 @@ void ahci_dump_port(uint32_t base, int i)
  *
  * @param base The AHCI Base Address Register (ABAR) for accessing AHCI registers.
  */
-void sata_enable(uint32_t base) {
+void sata_enable(uint32_t base)
+{
     volatile uint32_t count;
     uint32_t cap, ports_impl;
     uint32_t fis, clb, tbl;
@@ -204,7 +265,8 @@ void sata_enable(uint32_t base) {
     uint64_t data64;
     uint32_t data;
     uint32_t reg;
-
+    int drv;
+    int r;
 
     mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_AE);
 
@@ -250,9 +312,7 @@ void sata_enable(uint32_t base) {
             uint8_t ipm = (ssts >> 8) & 0xFF;
             uint8_t det = ssts & 0x0F;
             volatile struct hba_cmd_header *hdr;
-#ifdef WOLFBOOT_ATA_DISK_LOCK
-            const char user_passphrase[] = WOLFBOOT_ATA_DISK_LOCK_PASSWORD;
-#endif
+
 
             data = mmio_read32(AHCI_PxCMD(base, i));
             /* Detect POD */
@@ -381,56 +441,20 @@ void sata_enable(uint32_t base) {
                 AHCI_DEBUG_PRINTF("SATA disk drive detected on AHCI. Sign: %x\r\n",
                             reg);
                 if (reg == AHCI_PORT_SIG_SATA) {
-                    int drv;
                     wolfBoot_printf("SATA disk drive detected on AHCI port %d\r\n",
                             i);
                     drv = ata_drive_new(base, i, clb, tbl, fis);
                     if (drv < 0) {
                         wolfBoot_printf("Failed to associate ATA drive to disk\r\n");
                     } else {
-                        char buf[512] ="";
-                        int r;
-                        enum ata_security_state ata_st;
                         AHCI_DEBUG_PRINTF("ATA%d associated to AHCI port %d\r\n",
                                 drv, i);
                         r = ata_identify_device(drv);
                         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
-
-
 #ifdef WOLFBOOT_ATA_DISK_LOCK
-                        ata_st = ata_security_get_state(drv);
-                        wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
-                        if (ata_st == ATA_SEC1) {
-                            AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
-                            r = ata_security_freeze_lock(drv);
-                            AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
-                            r = ata_identify_device(drv);
-                            AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
-                            ata_st = ata_security_get_state(drv);
-                            wolfBoot_printf("ATA: Security disabled. State SEC%d\r\n", ata_st);
-                        }
-                        else if (ata_st == ATA_SEC4) {
-                            AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
-                            r = ata_security_unlock_device(drv, user_passphrase);
-                            AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
-                            r = ata_identify_device(drv);
-                            AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
-                            ata_st = ata_security_get_state(drv);
-                            if (ata_st == ATA_SEC5) {
-                                AHCI_DEBUG_PRINTF("ATA identify: calling device freeze\r\n", r);
-                                r = ata_security_freeze_lock(drv);
-                                AHCI_DEBUG_PRINTF("ATA device freeze: returned %d\r\n", r);
-                                r = ata_identify_device(drv);
-                                AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
-                            }
-                            ata_st = ata_security_get_state(drv);
-                            if (ata_st != ATA_SEC6) {
-                                panic();
-                            }
-                            ata_st = ata_security_get_state(drv);
-                            wolfBoot_printf("ATA: Security enabled. State SEC%d\r\n", ata_st);
-                        }
-#endif
+                        if (r == 0)
+                            r = sata_unlock_disk(drv);
+#endif /* WOLFBOOT_ATA_DISK_LOCK */
                     }
                 } else {
                     AHCI_DEBUG_PRINTF("AHCI port %d: device with signature %08x is not supported\r\n",
