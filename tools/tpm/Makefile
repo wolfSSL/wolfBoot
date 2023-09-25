@@ -76,7 +76,7 @@ vpath %.c ./
 
 .PHONY: clean all
 
-all: rot policy_create pcr_extend pcr_read pcr_reset
+all: rot policy_create pcr_extend pcr_read pcr_reset policy_sign
 
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
@@ -103,6 +103,10 @@ rot: $(OBJS_VIRT) rot.o
 
 policy_create: $(OBJS_VIRT) policy_create.o
 	@echo "Building Policy Creation Tool"
+	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LDFLAGS)
+
+policy_sign: $(OBJS_VIRT) policy_sign.o
+	@echo "Building Policy Sign Tool"
 	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LDFLAGS)
 
 pcr_extend: $(OBJS_VIRT) $(WOLFTPMDIR)/examples/pcr/extend.o
