@@ -1,4 +1,7 @@
 #!/bin/bash
+SIGN=${SIGN:-"--ecc256"}
+HASH=${HASH:-"--sha256"}
+
 IMAGE=bzImage
 
 dd if=/dev/zero of=app.bin bs=1M count=64
@@ -15,7 +18,7 @@ n
 w
 EOF
 # copy bzImage in the root folder
-tools/keytools/sign --ecc384 --sha384 ${IMAGE} wolfboot_signing_private_key.der 1
-tools/keytools/sign --ecc384 --sha384 ${IMAGE} wolfboot_signing_private_key.der 2
+tools/keytools/sign $SIGN $HASH ${IMAGE} wolfboot_signing_private_key.der 1
+tools/keytools/sign $SIGN $HASH ${IMAGE} wolfboot_signing_private_key.der 2
 dd if=${IMAGE}_v1_signed.bin of=app.bin bs=512 seek=2048 conv=notrunc
 dd if=${IMAGE}_v2_signed.bin of=app.bin bs=512 seek=34816 conv=notrunc
