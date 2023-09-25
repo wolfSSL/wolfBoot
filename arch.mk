@@ -655,13 +655,13 @@ ifeq ("${FSP}", "1")
   else
     # building wolfBoot
     ifeq ($(FSP_TGL), 1)
-      OBJS+=hal/x86_fsp_tgl.o
       LSCRIPT_IN = hal/x86_fsp_tgl.ld.in
     else
       LSCRIPT_IN = hal/$(TARGET).ld.in
     endif
     LDFLAGS =  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -Map=wolfboot.map
     CFLAGS += -fno-stack-protector -fno-PIC -fno-pie -mno-mmx -mno-sse -Os -DDEBUG_UART
+    OBJS += hal/x86_fsp_tgl.o
     OBJS += hal/x86_uart.o
     OBJS += src/boot_x86_fsp_payload.o
     OBJS += src/x86/common.o

@@ -29,25 +29,36 @@
 
 #ifdef __WOLFBOOT
 
+#if defined(TARGET_kontron_vx3060_s2)
 #define PCI_AHCI_BUS 0
 #define PCI_AHCI_DEV 0x17
 #define PCI_AHCI_FUN 0
+#elif defined(TARGET_x86_fsp_qemu)
+#define PCI_AHCI_BUS 0
+#define PCI_AHCI_DEV 31
+#define PCI_AHCI_FUN 2
+#endif
 
 /*!
  * \brief Initializes the SATA controller.
+ *
+ * \param bar Pointer to store the SATA BAR.
+ * \return 0 on success, -1 if the AHCI version is invalid.
  */
-void x86_fsp_tgl_init_sata(void)
+int x86_fsp_tgl_init_sata(uint32_t *bar)
 {
     uint32_t sata_bar;
     uint32_t version;
     sata_bar = ahci_enable(PCI_AHCI_BUS, PCI_AHCI_DEV, PCI_AHCI_FUN);
     version = mmio_read32(AHCI_HBA_VS(sata_bar));
     if (version < 0x10000) {
-        wolfBoot_printf("bad version\r\n");
-        panic();
+        wolfBoot_printf("SATA: bad version: %d\r\n", (int)version);
+        return -1;
     }
     sata_enable(sata_bar);
+    if (bar != NULL)
+        *bar = sata_bar;
+    return 0;
 }
-
 #endif
 
