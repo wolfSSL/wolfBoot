@@ -51,6 +51,9 @@
 #include <x86/gpt.h>
 #include <pci.h>
 
+#if defined(WOLFBOOT_FSP)
+#include <x86/tgl_fsp.h>
+#endif
 
 #ifdef TARGET_x86_fsp_qemu
 #define BOOT_DISK 0
@@ -87,7 +90,13 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t *load_address;
     int failures = 0;
     uint32_t load_off;
+    uint32_t sata_bar;
 
+#if defined(WOLFBOOT_FSP)
+    ret = x86_fsp_tgl_init_sata(&sata_bar);
+    if (ret != 0)
+        panic();
+#endif
 
     if (disk_open(BOOT_DISK) < 0)
         panic();
@@ -203,6 +212,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
     wolfBoot_printf("Firmware Valid.\r\n");
     wolfBoot_printf("Booting at %08lx\r\n", os_image.fw_base);
+    sata_disable(sata_bar);
     hal_prepare_boot();
     do_boot((uint32_t*)os_image.fw_base);
 

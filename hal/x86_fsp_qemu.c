@@ -32,32 +32,12 @@
 #include <x86/gpt.h>
 #include <pci.h>
 
-#define PCI_AHCI_BUS 0
-#define PCI_AHCI_DEV 31
-#define PCI_AHCI_FUN 2
-
-static uint32_t sata_bar = 0;
-
-static void init_sata(void)
-{
-    uint32_t version;
-    sata_bar = ahci_enable(PCI_AHCI_BUS, PCI_AHCI_DEV, PCI_AHCI_FUN);
-    version = mmio_read32(AHCI_HBA_VS(sata_bar));
-    if (version < 0x10000) {
-        wolfBoot_printf("bad version\r\n");
-        panic();
-    }
-    sata_enable(sata_bar);
-}
-
 void hal_init(void)
 {
-    init_sata();
 }
 
 void hal_prepare_boot(void)
 {
-    sata_disable(sata_bar);
 }
 #endif
 

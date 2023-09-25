@@ -21,6 +21,8 @@
 #ifndef TGL_FSP_H
 #define TGL_FSP_H
 
-void x86_fsp_tgl_init_sata(void);
+#include <stdint.h>
+
+int x86_fsp_tgl_init_sata(uint32_t *bar);
 
 #endif /* TGL_FSP_H */

@@ -29,7 +29,6 @@
 
 void hal_init(void)
 {
-    x86_fsp_tgl_init_sata();
 }
 
 void hal_prepare_boot(void)
