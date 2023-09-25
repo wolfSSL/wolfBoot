@@ -39,6 +39,7 @@
 #include "image.h"
 #ifdef WOLFBOOT_TPM
 #include <loader.h>
+#include <tpm.h>
 #endif
 
 
@@ -233,6 +234,21 @@ static void jump_into_wolfboot()
     main();
 }
 #endif /* WOLFBOOT_64BIT */
+
+#if defined(WOLFBOOT_MEASURED_BOOT)
+/* The image needs to be already verified */
+int wolfBoot_image_measure(uint8_t *image)
+{
+    uint16_t hash_len;
+    uint8_t *hash;
+
+    hash_len = wolfBoot_find_header(image + IMAGE_HEADER_OFFSET,
+                                    WOLFBOOT_SHA_HDR, &hash);
+    wolfBoot_print_hexstr(hash, hash_len, 0);
+    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, hash, __LINE__);
+}
+#endif /* WOLFBOOT_MEASURED_BOOT */
+
 /*!
  * \brief Check if the payload is valid.
  *
@@ -347,6 +363,43 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
     return EFI_SUCCESS;
 }
 
+#if defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT)
+/*!
+ * \brief Extend the PCR with stage1 compoments
+ *
+ * This function calculates the SHA-256 hash differents compoment of the
+ * bootloader: keystore, stage1 code, reset vector, FSP_T, FSP_M and FSP_S. The
+ * layout of these components in the flash is consecutive, it start at keystore
+ * up to the end of the flash, that is at 4GB.
+ *
+ *
+ * \return 0 on success, error code on failure
+ */
+static int self_extend_pcr(void)
+{
+    uint8_t hash[SHA256_DIGEST_SIZE];
+    uint32_t blksz, position = 0;
+    wc_Sha256 sha256_ctx;
+    uint32_t sz;
+    uintptr_t p;
+
+    p  = (uintptr_t)_start_keystore;
+    /* The flash is memory mapped so that it ends at 4GB */
+    sz = ((MEMORY_4GB) - (uint64_t)p);
+    wc_InitSha256(&sha256_ctx);
+    do {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (position + blksz > sz)
+            blksz = sz - position;
+        wc_Sha256Update(&sha256_ctx, (uint8_t*)p, blksz);
+        position += blksz;
+        p += blksz;
+    } while (position < sz);
+    wc_Sha256Final(&sha256_ctx, hash);
+    wolfBoot_print_hexstr(hash, SHA256_DIGEST_SIZE, 0);
+    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, hash, __LINE__);
+}
+#endif
 
 /*!
  * \brief Entry point after memory initialization.
@@ -365,6 +418,7 @@ static void memory_ready_entry(void *ptr)
     uint8_t *fsp_m_base;
     uint32_t cpu_info[4];
     uint32_t status;
+    int ret;
     /* FSP_M is located in flash */
     fsp_m_base = _start_fsp_m;
     /* fsp_s is loaded to RAM for validation */
@@ -385,12 +439,22 @@ static void memory_ready_entry(void *ptr)
      */
     memory_init_data_bss();
 
-    /* Global variables are accessible after this point */
-#if defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM)
-    /* TPM initialization */
+#if (defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT)) || \
+    (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM))
     wolfBoot_printf("Initializing WOLFBOOT_TPM" ENDLINE);
-    wolfBoot_tpm2_init();
+    ret = wolfBoot_tpm2_init();
+    if (ret != 0) {
+        wolfBoot_printf("tpm init failed" ENDLINE);
+        panic();
+    }
 #endif
+
+#if (defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT))
+    ret = self_extend_pcr();
+    if (ret != 0)
+        wolfBoot_printf("fail to extend PCR" ENDLINE);
+#endif
+
     /* Load FSP_S to RAM */
     load_fsp_s_to_ram();
 #ifdef STAGE1_AUTH
@@ -404,6 +468,14 @@ static void memory_ready_entry(void *ptr)
         panic();
     }
 #endif
+
+#if defined(WOLFBOOT_MEASURED_BOOT)
+    ret = wolfBoot_image_measure((uint8_t*)fsp_s_base - IMAGE_HEADER_SIZE);
+    if (ret != 0) {
+        wolfBoot_printf("Fail to measure FSP_S image\r\n");
+        panic();
+    }
+#endif /* WOLFBOOT_MEASURED_BOOT */
 
     /* Call FSP_S initialization */
     if (fsp_silicon_init(fsp_info, fsp_s_base) != EFI_SUCCESS)
@@ -422,6 +494,20 @@ static void memory_ready_entry(void *ptr)
     else {
         panic();
     }
+#endif
+
+#if defined(WOLFBOOT_MEASURED_BOOT)
+    ret = wolfBoot_image_measure((uint8_t*)WOLFBOOT_LOAD_BASE
+                                 - IMAGE_HEADER_SIZE);
+    if (ret != 0) {
+        wolfBoot_printf("Fail to measure WOLFBOOT image\r\n");
+        panic();
+    }
+#endif /* WOLFBOOT_MEASURED_BOOT */
+
+#if (defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT)) || \
+    (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM))
+    wolfBoot_tpm2_deinit();
 #endif
     /* Finalize staging to stage2 */
     set_stage2_parameter(stage2_params);
