@@ -41,6 +41,10 @@
 #include <x86/linux_loader.h>
 #endif /* defined(WOLFBOOT_LINUX_PAYLOAD) */
 
+#if defined(WOLFBOOT_TPM)
+#include <tpm.h>
+#endif /* WOLFBOOT_TPM */
+
 #if defined(WOLFBOOT_ELF)
 #include <elf.h>
 #include <multiboot.h>
@@ -117,6 +121,10 @@ int stage2_get_tpm_policy(const uint8_t **policy, uint16_t *policy_sz)
 void do_boot(const uint32_t *app)
 {
     struct stage2_parameter *stage2_params;
+
+#ifdef WOLFBOOT_TPM
+    wolfBoot_tpm2_deinit();
+#endif /* WOLFBOOT_TPM */
 
     stage2_params = stage2_get_parameters();
 #if defined(WOLFBOOT_LINUX_PAYLOAD)
