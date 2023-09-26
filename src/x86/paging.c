@@ -41,7 +41,7 @@
 
 #define PAGE_2MB_SHIFT 21
 
-#if !defined(WOLFBOOT_LOADER)
+#if !defined(BUILD_LOADER_STAGE1)
 #define WOLFBOOT_PTP_NUM 128
 static uint8_t page_table_pages[WOLFBOOT_PTP_NUM * PAGE_TABLE_PAGE_SIZE]
 __attribute__((aligned(PAGE_TABLE_PAGE_SIZE)));
