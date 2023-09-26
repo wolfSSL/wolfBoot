@@ -39,16 +39,12 @@
 #define PAGE_ENTRIES_PER_PAGE (512)
 
 #define PAGE_2MB_SHIFT 21
-#define MEM_SIZE 256 * 1024 * 1024
 
 #if !defined(WOLFBOOT_LOADER)
 #define WOLFBOOT_PTP_NUM 128
 static uint8_t page_table_pages[WOLFBOOT_PTP_NUM * PAGE_TABLE_PAGE_SIZE]
 __attribute__((aligned(PAGE_TABLE_PAGE_SIZE)));
 static int page_table_page_used;
-/* TODO: reserve space in the linker? check amount of memory space? */
-uint8_t _mem[MEM_SIZE] __attribute__((aligned(PAGE_TABLE_PAGE_SIZE)));
-uint8_t *mem = &_mem[0];
 #endif /* !BUILD_LOADER_STAGE1 */
 
 static inline void x86_paging_clear_pte(uint64_t *pte)
@@ -194,14 +190,6 @@ static void x86_paging_map_page(uint64_t vaddress, uint64_t paddress)
     /* already mapped */
     if (*pl1e != 0)
         return;
-    if (paddress == 0) {
-        paddress = (uint64_t)mem;
-        mem += PAGE_TABLE_PAGE_SIZE;
-        if (mem >= _mem + MEM_SIZE) {
-            wolfBoot_printf("No more pages to satisfy virtual allocation");
-            panic();
-        }
-    }
     x86_paging_setup_entry(pl1e, paddress);
 }
 
@@ -209,6 +197,10 @@ int x86_paging_map_memory(uint64_t va, uint64_t pa, uint32_t size)
 {
     uint64_t start, end, page;
 
+    if ((pa & PAGE_MASK) == 0) {
+        wolfBoot_printf("can't satisfy mapping request at pa address 0\r\n");
+        return -1;
+    }
     end = va + size;
     start = va & PAGE_MASK;
     pa = pa & PAGE_MASK;
