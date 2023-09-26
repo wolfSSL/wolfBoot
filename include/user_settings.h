@@ -312,7 +312,7 @@ extern int tolower(int c);
     /* add delay */
     #if !defined(XTPM_WAIT) && defined(WOLFTPM_MMIO)
         void delay(int msec);
-        #define XTPM_WAIT() delay(1000);
+        #define XTPM_WAIT() delay(1);
     #endif
     #ifndef XTPM_WAIT
         #define XTPM_WAIT() /* no delay */
