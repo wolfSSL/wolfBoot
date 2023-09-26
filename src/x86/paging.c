@@ -25,7 +25,8 @@
 
 #define PAGE_TABLE_PAGE_SIZE (0x1000)
 #ifndef PAGE_TABLE_PAGE_NUM
-#define PAGE_TABLE_PAGE_NUM 100
+/* 7 pages are enough to identity map al 4GB */
+#define PAGE_TABLE_PAGE_NUM 7
 #endif /* PAGE_TABLE_PAGE_NUM */
 
 #define PAGE_TABLE_SIZE (PAGE_TABLE_PAGE_SIZE * PAGE_TABLE_PAGE_NUM)
