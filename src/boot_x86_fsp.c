@@ -161,6 +161,36 @@ static void change_stack_and_invoke(uint32_t new_stack,
                      : "r"(new_stack), "r"(ptr), "r"(other_func)
                      : "%eax");
 }
+static int range_overlaps(uint32_t start1, uint32_t end1, uint32_t start2,
+                          uint32_t end2)
+{
+    return !(end1 <= start2 || end2 <= start1);
+}
+
+static int check_memory_ranges()
+{
+    uint32_t wb_start, wb_end;
+
+    wb_start = (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE;
+    wb_end = wb_start + (_wolfboot_flash_end - _wolfboot_flash_start);
+    if (range_overlaps(wb_start, wb_end, (uint32_t)_start_data,
+                       (uint32_t)_end_data))
+        return -1;
+    if (range_overlaps(wb_start, wb_end, (uint32_t)_start_bss,
+                       (uint32_t)_end_bss))
+        return -1;
+    if (range_overlaps((uint32_t)wb_start_bss,
+                       (uint32_t)wb_end_bss,
+                       (uint32_t)_start_data,
+                       (uint32_t)_end_data))
+        return -1;
+    if (range_overlaps((uint32_t)wb_start_bss,
+                       (uint32_t)wb_end_bss,
+                       (uint32_t)_start_bss,
+                       (uint32_t)_end_bss))
+        return -1;
+    return 0;
+}
 /*!
  * \brief Load the WolfBoot bootloader into memory.
  *
@@ -170,6 +200,12 @@ static void change_stack_and_invoke(uint32_t new_stack,
 static void load_wolfboot(void)
 {
     size_t wolfboot_size, bss_size;
+
+    if (check_memory_ranges() != 0) {
+        wolfBoot_printf("wolfboot overlaps with loader data...stop" ENDLINE);
+        panic();
+    }
+
     wolfBoot_printf("loading wolfboot at %x..." ENDLINE,
                     (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE);
     wolfboot_size = _wolfboot_flash_end - _wolfboot_flash_start;
