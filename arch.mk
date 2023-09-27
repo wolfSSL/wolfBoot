@@ -716,6 +716,10 @@ ifeq ($(TARGET),sim)
   LD_END_GROUP=
   BOOT_IMG=test-app/image.elf
   CFLAGS+=-DARCH_SIM
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+  endif
 endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
@@ -731,8 +735,11 @@ ifeq ($(DUALBANK_SWAP),1)
   UPDATE_OBJS:=src/update_flash_hwswap.o
 endif
 
+# Set default update object (if not library)
+ifneq ($(TARGET),library)
 ifeq ($(UPDATE_OBJS),)
   UPDATE_OBJS:=./src/update_flash.o
+endif
 endif
 
 ## wolfBoot origin

@@ -23,7 +23,7 @@ jobs:
 
       - name: Select config
         run: |
-          cp config/examples/sim-ecc.config .config && make include/target.h
+          cp config/examples/sim.config .config && make include/target.h
 
       - name: Build tools
         run: |
@@ -31,7 +31,7 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}}
+          make SIGN=ECC256 HASH=SHA256
 
       - name: Generate external key
         run: |
@@ -73,7 +73,7 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}}
+          make SIGN=ED25519 HASH=SHA256
 
       - name: Generate external key
         run: |
@@ -107,7 +107,7 @@ jobs:
 
       - name: Select config
         run: |
-          cp config/examples/sim-rsa.config .config && make include/target.h
+          cp config/examples/sim.config .config && make include/target.h
 
       - name: Build tools
         run: |
@@ -115,7 +115,7 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}}
+          make SIGN=RSA2048 HASH=SHA256
 
       - name: Generate external key
         run: |

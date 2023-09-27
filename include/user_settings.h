@@ -30,12 +30,12 @@
 # include "test-app/wcs/user_settings.h"
 #else
 
-
 #include <target.h>
 
 /* System */
 #define WOLFSSL_GENERAL_ALIGNMENT 4
 #define SINGLE_THREADED
+#define WOLFSSL_USER_MUTEX /* avoid wc_port.c wc_InitAndAllocMutex */
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
@@ -166,14 +166,14 @@ extern int tolower(int c);
     defined(WOLFBOOT_SIGN_RSA4096) || \
     defined(WOLFCRYPT_SECURE_MODE)
 
-
-#   define WC_RSA_BLINDING 
+#   define WC_RSA_BLINDING
 #   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
 #   define WC_ASN_HASH_SHA256
 #   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
+#       define WOLFSSL_RSA_PUBLIC_ONLY
 #       define WC_NO_RSA_OAEP
 #   endif
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
@@ -369,6 +369,9 @@ extern int tolower(int c);
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
+#define NO_PKCS12
+#define NO_PKCS8
+#define NO_CHECK_PRIVATE_KEY
 
 #define BENCH_EMBEDDED
 #define NO_CRYPT_TEST
@@ -392,13 +395,13 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
-#   if !defined(ARCH_SIM) && !defined(SECURE_PKCS11)
+#   if !defined(SECURE_PKCS11)
 #       define WOLFSSL_NO_MALLOC
 #   endif
 #else
 #   if defined(WOLFBOOT_HUGE_STACK)
 #       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
-#endif
+#   endif
 #   define WOLFSSL_SMALL_STACK
 #endif
 

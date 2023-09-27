@@ -117,8 +117,8 @@ stage1/loader_stage1.bin: FORCE
 	@echo "\t[BIN] $@"
 	$(Q)$(MAKE) -C $(dir $@) $(notdir $@)
 
-test-lib: $(OBJS)
-	$(Q)$(CC) $(CFLAGS) -o $@ $^
+test-lib: include/target.h $(OBJS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(OBJS)
 
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"

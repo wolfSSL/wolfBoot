@@ -95,11 +95,42 @@ jobs:
       config-file: ./config/examples/raspi3.config
       make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 
-  sim_test:
+  sim_tfm_smallstack_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: host
       config-file: ./config/examples/sim.config
+      make-args: WOLFBOOT_SMALL_STACK=1
+
+  sim_tfm_bigstack_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: WOLFBOOT_SMALL_STACK=0 WOLFBOOT_HUGE_STACK=1
+
+  sim_spmathall_smallstack_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: SPMATHALL=1 WOLFBOOT_SMALL_STACK=1
+
+  sim_spmathall_bigsack_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: SPMATHALL=1 WOLFBOOT_SMALL_STACK=0 WOLFBOOT_HUGE_STACK=1
+
+  sim_spmath_bigstack_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: SPMATH=1 WOLFBOOT_SMALL_STACK=0 WOLFBOOT_HUGE_STACK=1
+
+  # TODO: SP math with small stack has issues
 
   stm32f4_small_blocks_uart_update_test:
     uses: ./.github/workflows/test-build.yml
