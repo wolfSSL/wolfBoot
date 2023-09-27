@@ -18,10 +18,17 @@ QEMU_TPM_OPTIONS=" \
     -chardev socket,id=chrtpm,path=/tmp/swtpm/swtpm-sock \
     -tpmdev emulator,id=tpm0,chardev=chrtpm \
     -device tpm-tis,tpmdev=tpm0"
+
 QEMU_OPTIONS=" \
     -m 1G -machine q35 -serial mon:stdio -nographic \
     -pflash wolfboot_stage1.bin -drive id=mydisk,format=raw,file=app.bin,if=none \
     -device ide-hd,drive=mydisk"
+
+QEMU=qemu-system-x86_64
+if [ "$DEBUG" = "1" ]; then
+    QEMU_OPTIONS="${QEMU_OPTIONS} -S -s"
+    QEMU=qemu-system-i386
+fi
 
 killall swtpm
 sleep 1
@@ -32,5 +39,5 @@ swtpm socket --tpm2 --tpmstate dir=/tmp/swtpm \
 sleep .5
 echo Running QEMU...
 
-qemu-system-x86_64 $QEMU_OPTIONS $QEMU_TPM_OPTIONS
+$QEMU $QEMU_OPTIONS $QEMU_TPM_OPTIONS
 
