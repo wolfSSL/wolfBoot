@@ -126,8 +126,15 @@ const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generate
              "#error Key algorithm mismatch. Remove old keys via 'make keysclean'\n"
              "#else\n";
 
-const char Store_hdr[] = "#define NUM_PUBKEYS %d\nconst __attribute__((section(\".keystore\"))) struct keystore_slot PubKeys[NUM_PUBKEYS] = {\n\n";
-const char Slot_hdr[] = "\t /* Key associated to file '%s' */\n"
+const char Store_hdr[] = "\n"
+            "#if defined(__APPLE__) && defined(__MACH__)\n"
+            "#define KEYSTORE_SECTION __attribute__((section (\"__KEYSTORE,__keystore\")))\n"
+            "#else\n"
+            "#define KEYSTORE_SECTION __attribute__((section (\".keystore\")))\n"
+            "#endif\n\n"
+            "#define NUM_PUBKEYS %d\n"
+            "const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {\n\n";
+const char Slot_hdr[] = "\t/* Key associated to file '%s' */\n"
             "\t{\n\t\t.slot_id = %d,\n\t\t.key_type = %s,\n"
             "\t\t.part_id_mask = KEY_VERIFY_ALL,\n\t\t.pubkey_size = %s,\n"
             "\t\t.pubkey = {\n\t\t\t";
