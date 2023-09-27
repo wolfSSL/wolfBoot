@@ -84,6 +84,8 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
 int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     word32 nvAttributes, WOLFTPM2_KEYBLOB* blob,
     const uint8_t* auth, uint32_t authSz);
+int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
+    const uint8_t* auth, uint32_t authSz);
 
 uint32_t wolfBoot_tpm_pcrmask_sel(uint32_t pcrMask, uint8_t* pcrArray,
     uint32_t pcrArraySz);

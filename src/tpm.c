@@ -711,6 +711,33 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     return rc;
 }
 
+int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
+    const uint8_t* auth, uint32_t authSz)
+{
+    int rc;
+    WOLFTPM2_HANDLE parent;
+    WOLFTPM2_NV nv;
+
+    memset(&parent, 0, sizeof(parent));
+    memset(&nv, 0, sizeof(nv));
+
+    nv.handle.hndl = nvIndex;
+    nv.handle.auth.size = authSz;
+    memcpy(nv.handle.auth.buffer, auth, authSz);
+
+    parent.hndl = authHandle;
+
+    rc = wolfTPM2_NVOpen(&wolftpm_dev, &nv, nvIndex, auth, authSz);
+    if (rc == 0) {
+        rc = wolfTPM2_NVDeleteAuth(&wolftpm_dev, &parent, nvIndex);
+    }
+    if (rc != 0) {
+        wolfBoot_printf("Error %d deleting blob from NV index %x (error %s)\n",
+            rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
+    }
+    return rc;
+}
+
 /* The secret is sealed based on a policy authorization from a public key. */
 int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz)
@@ -803,6 +830,10 @@ int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t po
         /* Get NV attributes amd allow it to be locked (if desired) */
         wolfTPM2_GetNvAttributesTemplate(TPM_RH_PLATFORM, &nvAttributes);
         nvAttributes |= TPMA_NV_WRITEDEFINE;
+
+        /* delete if already exists */
+        (void)wolfBoot_delete_blob(TPM_RH_PLATFORM,
+            WOLFBOOT_TPM_SEAL_NV_BASE + index, NULL, 0);
 
         rc = wolfBoot_store_blob(TPM_RH_PLATFORM,
             WOLFBOOT_TPM_SEAL_NV_BASE + index,
