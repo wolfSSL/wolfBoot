@@ -50,7 +50,9 @@ void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,
     unsigned long i;
     if (maxLine == 0) maxLine = sz;
     for (i = 0; i < sz; i++) {
-        wolfBoot_printf("%02x", bin[i]);
+        if (bin[i]<=15)
+            wolfBoot_printf("0");
+        wolfBoot_printf("%x", bin[i]);
         if (((i+1) % maxLine) == 0 && i+1 != sz)
             wolfBoot_printf("\n");
     }
