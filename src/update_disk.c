@@ -132,7 +132,7 @@ void RAMFUNCTION wolfBoot_start(void)
     stage2_params = stage2_get_parameters();
     /* load the image just after wolfboot */
     load_address = (uint32_t *)(_end_wb);
-    wolfBoot_printf("Load address %x\r\n", load_address);
+    wolfBoot_printf("Load address 0x%x\r\n", load_address);
     do {
         failures++;
         if (selected)
@@ -161,6 +161,9 @@ void RAMFUNCTION wolfBoot_start(void)
         }
 
         /* Read the image into RAM */
+        x86_log_memory_load((uint32_t)(uintptr_t)load_address,
+                            (uint32_t)(uintptr_t)load_address + img_size,
+                            "ELF");
         wolfBoot_printf("Loading image from disk...");
         load_off = 0;
         do {

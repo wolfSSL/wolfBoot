@@ -31,6 +31,7 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include <printf.h>
 #include <stdint.h>
 
 #include <x86/common.h>
@@ -362,4 +363,9 @@ void switch_to_long_mode(uint64_t *entry, uint32_t page_table)
     _entry();
 }
 #endif /* BUILD_LOADER_STAGE1 */
+
+void x86_log_memory_load(uint32_t start, uint32_t end, const char *name)
+{
+    wolfBoot_printf("mem: [ 0x%x, 0x%x ] - %s (0x%x) \n\r", start, end, name, end - start);
+}
 #endif /* COMMON_H_ */

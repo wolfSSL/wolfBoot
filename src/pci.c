@@ -424,7 +424,7 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
     orig_bar = pci_config_read32(bus, dev, fun, bar_off);
     pci_config_write32(bus, dev, fun, bar_off, 0xffffffff);
     bar_value = pci_config_read32(bus, dev,fun, bar_off);
-    PCI_DEBUG_PRINTF("bar value: 0x%x\r\n", bar_value);
+    PCI_DEBUG_PRINTF("bar value after writing 0xff..ff: 0x%x\r\n", bar_value);
 
     if (bar_value == 0) {
         PCI_DEBUG_PRINTF("PCI enum: %x:%x.%x bar: %d val: %x - skipping\r\n",
@@ -437,13 +437,12 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
         bar_align = bar_value & PCI_ENUM_MM_BAR_MASK;
         is_prefetch = pci_enum_is_prefetch(bar_value);
         if (pci_enum_is_64bit(bar_value)) {
-            PCI_DEBUG_PRINTF("bar is 64bit\r\n");
             orig_bar2 = pci_config_read32(bus, dev, fun, bar_off + 4);
             pci_config_write32(bus, dev, fun, bar_off + 4, 0xffffffff);
             reg = pci_config_read32(bus, dev, fun, bar_off + 4);
             PCI_DEBUG_PRINTF("bar high 32bit: %d\r\n", reg);
             if (reg != 0xffffffff) {
-                PCI_DEBUG_PRINTF("Too big BAR, skipping\r\n");
+                PCI_DEBUG_PRINTF("Device wants too much memory, skipping\r\n");
                 pci_config_write32(bus, dev, fun, bar_off + 4, orig_bar2);
                 goto restore_bar;
             }
@@ -477,8 +476,10 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
 
     /* check max length */
     ret = pci_enum_next_aligned32(*base, &bar_value, align, limit);
-    if (ret != 0)
+    if (ret != 0) {
+        wolfBoot_printf("Not memory space for mapping the PCI device... skipping\r\n");
         goto restore_bar;
+    }
 
     pci_config_write32(bus, dev, fun, bar_off, bar_value);
     if (*is_64bit)

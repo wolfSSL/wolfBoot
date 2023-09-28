@@ -200,18 +200,22 @@ static int check_memory_ranges()
 static void load_wolfboot(void)
 {
     size_t wolfboot_size, bss_size;
+    uint32_t wolfboot_start;
 
     if (check_memory_ranges() != 0) {
         wolfBoot_printf("wolfboot overlaps with loader data...stop" ENDLINE);
         panic();
     }
 
-    wolfBoot_printf("loading wolfboot at %x..." ENDLINE,
-                    (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE);
+    wolfboot_start = (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE;
     wolfboot_size = _wolfboot_flash_end - _wolfboot_flash_start;
-    memcpy((uint8_t*)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE,
-            _wolfboot_flash_start, wolfboot_size);
+    x86_log_memory_load(wolfboot_start, wolfboot_start + wolfboot_size,
+                        "wolfboot");
+    memcpy((uint8_t*)wolfboot_start,_wolfboot_flash_start, wolfboot_size);
     bss_size = wb_end_bss - wb_start_bss;
+    x86_log_memory_load((uint32_t)(uintptr_t)wb_start_bss,
+                        (uint32_t)(uintptr_t)(wb_start_bss + bss_size),
+                        "wolfboot .bss");
     memset(wb_start_bss, 0, bss_size);
     wolfBoot_printf("load wolfboot end" ENDLINE);
 }
@@ -219,11 +223,11 @@ static void load_wolfboot(void)
 static void load_fsp_s_to_ram(void)
 {
     size_t fsp_s_size;
-    wolfBoot_printf("loading FSP_S at %x..." ENDLINE,
-                    (uint32_t)(FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE));
+    uint32_t fsp_start;
+    fsp_start = FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE;
     fsp_s_size = _end_fsp_s - _fsp_s_hdr;
-    memcpy((uint8_t*)FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE,
-            _fsp_s_hdr, fsp_s_size);
+    x86_log_memory_load(fsp_start, fsp_start + fsp_s_size, "FSPS");
+    memcpy((uint8_t*)fsp_start, _fsp_s_hdr, fsp_s_size);
 }
 
 /*!
@@ -252,8 +256,8 @@ static void jump_into_wolfboot(void)
     uint32_t cr3;
     int ret;
 
-    wolfBoot_printf("building identity map at %x...\r\n",
-                    (uint32_t)params->page_table);
+    x86_log_memory_load((uint32_t)(uintptr_t)params->page_table,params->page_table + x86_paging_get_page_table_size(),
+                        "IdentityPageTablePage");
     ret = x86_paging_build_identity_mapping(MEMORY_4GB,
                                             (uint8_t*)(uintptr_t)params->page_table);
     if (ret != 0) {
@@ -334,11 +338,15 @@ static inline void memory_init_data_bss(void)
 {
     uint32_t *datamem_p;
     uint32_t *dataflash_p;
+    x86_log_memory_load((uint32_t)(uintptr_t)_start_data,
+                         (uint32_t)(uintptr_t)_end_data, "stage1 .data");
     datamem_p = (uint32_t *)_start_data;
     dataflash_p = (uint32_t *)_stored_data;
     while(datamem_p < (uint32_t *)_end_data) {
         *(datamem_p++) = *(dataflash_p++);
     }
+    x86_log_memory_load((uint32_t)(uintptr_t)_start_bss,
+                          (uint32_t)(uintptr_t)_end_bss, "stage1 .bss");
     memset(_start_bss, 0, (_end_bss - _start_bss));
 }
 
@@ -696,6 +704,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
                     stage2_params->tpm_policy_size);
 #endif
 
+    wolfBoot_printf("TOLUM: 0x%x\r\n", stage2_params->tolum);
     /* change_stack_and_invoke() never returns.
      *
      * Execution here is eventually transferred to memory_ready_entry
