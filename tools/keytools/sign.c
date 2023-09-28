@@ -233,6 +233,7 @@ struct cmd_options {
     int hash_algo;
     int sign;
     int delta;
+    int no_ts;
     int sign_wenc;
     const char *image_file;
     const char *key_file;
@@ -929,10 +930,13 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     /* Append pad bytes, so timestamp val field is 8-byte aligned */
     while ((header_idx % 8) != 4)
         header_idx++;
-    /* Append Timestamp field */
-    stat(image_file, &attrib);
-    header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
-        &attrib.st_ctime);
+
+    if (!CMD.no_ts) {
+        /* Append Timestamp field */
+        stat(image_file, &attrib);
+        header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
+            &attrib.st_ctime);
+    }
 
     /* Append Image type field */
     image_type = (uint16_t)CMD.sign & HDR_IMG_TYPE_AUTH_MASK;
@@ -1815,6 +1819,9 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--delta") == 0) {
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
+        }
+        else if (strcmp(argv[i], "--no-ts") == 0) {
+            CMD.no_ts = 1;
         }
         else if (strcmp(argv[i], "--policy") == 0) {
             CMD.policy_sign = 1;
