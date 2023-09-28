@@ -124,7 +124,7 @@ partition with `--id 3` would require turning on bit '3' in the mask, i.e. addin
 
 To restrict the permissions for single keys, it would be sufficient to change the value
 of each key `part_id_mask`. This is done via the `--id` command line option for keygen.
-Each generated or imported key can be associatd with a number of partition by passing the
+Each generated or imported key can be associated with a number of partition by passing the
 partition IDs in a comma-separated list, e.g.:
 
 ```
@@ -176,7 +176,7 @@ The API consists of a few functions described below.
 
 Returns the number of slots in the keystore. At least one slot
 should be populated if you want to authenticate your firmware today.
-The interface assumes that the slots are numbered sequentially, from zero to 
+The interface assumes that the slots are numbered sequentially, from zero to
 `keystore_num_pubkeys() - 1`. Accessing those slots through this API should always
  return a valid public key.
 
@@ -198,5 +198,3 @@ public key associated to the slot `id`.
 `uint32_t keystore_get_mask(int id)`
 
 Returns the permissions mask, as a 32-bit word, for the public key stored in the slot `id`.
-
-

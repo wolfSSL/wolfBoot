@@ -105,6 +105,7 @@ tools/tpm/pcr_read
 tools/tpm/pcr_reset
 tools/tpm/pcr_extend
 tools/tpm/policy_create
+tools/tpm/policy_sign
 config/*.ld
 
 # Generated confiuguration file

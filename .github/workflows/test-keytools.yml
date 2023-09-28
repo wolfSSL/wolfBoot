@@ -144,3 +144,9 @@ jobs:
       - name: Generate final signed binary
         run: |
           ./tools/keytools/sign --rsa2048 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
+
+
+    # TODO: Test WOLFBOOT_UNIVERSAL_KEYSTORE
+    # TODO: Test sign "--no-ts"
+    # TODO: Test keygen with --id "keygen --ecc256 -g generic.key --id 1,2,3 -g restricted.key"
+    # TODO: Test keygen with -i   "keygen --ecc256 -g a.key  --ecc384 -g b.key --rsa2048 -i rsa-pub.der"
