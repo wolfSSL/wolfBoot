@@ -117,19 +117,25 @@ By default, when a new keystore is created, the permissions mask is set
 to `KEY_VERIFY_ALL`, which means that the key can be used to verify a firmware
 targeting any partition id.
 
-To restrict the permissions for single keys, it would be sufficient to change the value
-of their `part_id_mask` attributes.
-
 The `part_id_mask` value is a bitmask, where each bit represent a different partition.
 The bit '0' is reserved for wolfBoot self-update, while typically the main firmware partition
 is associated to id 1, so it requires a key with the bit '1' set. In other words, signing a
 partition with `--id 3` would require turning on bit '3' in the mask, i.e. adding (1U << 3) to it.
 
-Beside `KEY_VERIFY_ALL`, pre-defined mask values can also be used here:
+To restrict the permissions for single keys, it would be sufficient to change the value
+of each key `part_id_mask`. This is done via the `--id` command line option for keygen.
+Each generated or imported key can be associatd with a number of partition by passing the
+partition IDs in a comma-separated list, e.g.:
 
-- `KEY_VERIFY_APP_ONLY` only verifies the main application, with partition id 1
-- `KEY_VERIFY_SELF_ONLY` this key can only be used to authenticate wolfBoot self-updates (id = 0)
-- `KEY_VERIFY_ONLY_ID(N)` macro that can be used to restrict the usage of the key to a specific partition id `N`
+```
+keygen --ecc256 -g generic.key --id 1,2,3 -g restricted.key
+```
+
+Generates two keypairs, `generic.key` and `restricted.key`. The former assumes the
+default mask `KEY_VERIFY_ALL`, which makes it possible to use it to authenticate any
+of the system components. The latter instead, will carry a mask with only the bits
+'1', '2', and '3' set (mask = b00001110 =0x000e), allowing the usage only with the assigned
+partition IDs.
 
 
 ### Importing public keys

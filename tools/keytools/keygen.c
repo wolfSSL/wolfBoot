@@ -98,7 +98,7 @@ static int force = 0;
 static WC_RNG rng;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
-    #define KEYSLOT_MAX_PUBKEY_SIZE 576 
+    #define KEYSLOT_MAX_PUBKEY_SIZE 576
 #endif
 
 struct keystore_slot {
@@ -136,11 +136,11 @@ const char Store_hdr[] = "\n"
             "const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {\n\n";
 const char Slot_hdr[] = "\t/* Key associated to file '%s' */\n"
             "\t{\n\t\t.slot_id = %d,\n\t\t.key_type = %s,\n"
-            "\t\t.part_id_mask = KEY_VERIFY_ALL,\n\t\t.pubkey_size = %s,\n"
+            "\t\t.part_id_mask = 0x%08X,\n\t\t.pubkey_size = %s,\n"
             "\t\t.pubkey = {\n\t\t\t";
 const char Slot_hdr_int_size[] = "\t /* Key associated to file '%s' */\n"
             "\t{\n\t\t.slot_id = %d,\n\t\t.key_type = %s,\n"
-            "\t\t.part_id_mask = KEY_VERIFY_ALL,\n\t\t.pubkey_size = %u,\n"
+            "\t\t.part_id_mask = 0x%08X,\n\t\t.pubkey_size = %u,\n"
             "\t\t.pubkey = {\n\t\t\t";
 const char Pubkey_footer[] = "\n\t\t},";
 const char Slot_footer[] = "\n\t},\n\n";
@@ -203,7 +203,7 @@ static void usage(const char *pname) /* implies exit */
 {
     printf("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 "
            "| --ecc521 | --rsa2048 | --rsa3072 "
-           "| --rsa4096 ] [-g privkey] [-i pubkey] [-keystoreDir dir] \n", pname);
+           "| --rsa4096 ] [-g privkey] [-i pubkey] [-keystoreDir dir] [--id {list}] \n", pname);
     exit(125);
 }
 
@@ -264,13 +264,15 @@ const char KName[][8] = {
 };
 
 #define MAX_PUBKEYS 64
-#define MAX_KEYPAIRS 64
 static char *imported_pubkeys[MAX_PUBKEYS];
 static int imported_pubkeys_type[MAX_PUBKEYS];
+static uint32_t imported_pubkeys_id_mask[MAX_PUBKEYS];
 static int n_imported = 0;
 
+#define MAX_KEYPAIRS 64
 static char *generated_keypairs[MAX_KEYPAIRS];
 static int generated_keypairs_type[MAX_KEYPAIRS];
+static uint32_t generated_keypairs_id_mask[MAX_KEYPAIRS];
 static int n_generated = 0;
 
 static uint32_t get_pubkey_size(uint32_t keyType)
@@ -309,27 +311,29 @@ static uint32_t get_pubkey_size(uint32_t keyType)
     return size;
 }
 
-void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile)
+void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile,
+        uint32_t id_mask)
 {
     static int id_slot = 0;
     struct keystore_slot sl;
     size_t slot_size;
 
     if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
-        fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], sz);
+        fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], id_mask, sz);
     else
-        fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], KSize[ktype]);
+        fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], id_mask, KSize[ktype]);
     fwritekey(key, sz, fpub);
     fprintf(fpub, Pubkey_footer);
     fprintf(fpub, Slot_footer);
     printf("Associated key file:   %s\n", keyfile);
+    printf("Partition ids mask:   %08x\n", id_mask);
     printf("Key type   :           %s\n", KName[ktype]);
     printf("Public key slot:       %u\n", id_slot);
 
     memset(&sl, 0, sizeof(sl));
     sl.slot_id = id_slot;
     sl.key_type = ktype;
-    sl.part_id_mask = 0xFFFFFFFF;
+    sl.part_id_mask = id_mask;
 
     sl.pubkey_size = get_pubkey_size(ktype);
     memcpy(sl.pubkey, key, sl.pubkey_size);
@@ -341,7 +345,7 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
 
 
 #if !defined(NO_RSA) && defined(WOLFSSL_KEY_GEN)
-static void keygen_rsa(const char *keyfile, int kbits)
+static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
 {
     RsaKey k;
     uint8_t priv_der[4096], pub_der[2048];
@@ -377,18 +381,19 @@ static void keygen_rsa(const char *keyfile, int kbits)
     fclose(fpriv);
 
     if (kbits == 2048)
-        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile);
+        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile, id_mask);
     else if (kbits == 3072)
-        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile);
+        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile, id_mask);
     else if (kbits == 4096)
-        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile);
+        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile, id_mask);
 }
 #endif
 
 #ifdef HAVE_ECC
 #define MAX_ECC_KEY_SIZE 66
 
-static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
+static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
+        uint32_t id_mask)
 {
     ecc_key k;
     uint8_t Qx[MAX_ECC_KEY_SIZE], Qy[MAX_ECC_KEY_SIZE], d[MAX_ECC_KEY_SIZE];
@@ -403,12 +408,14 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
         exit(1);
     }
 
-    if (wc_ecc_export_private_raw(&k, Qx, &qxsize, Qy, &qysize, d, &dsize) != 0) {
+    if (wc_ecc_export_private_raw(&k, Qx, &qxsize, Qy, &qysize, d, &dsize) != 0)
+    {
         fprintf(stderr, "Unable to export private key to DER\n");
         exit(2);
     }
 
-    if (wc_ecc_export_public_raw(&k, Qx, &qxsize, Qy, &qysize ) != 0) {
+    if (wc_ecc_export_public_raw(&k, Qx, &qxsize, Qy, &qysize ) != 0)
+    {
         fprintf(stderr, "Unable to export public key\n");
         exit(3);
     }
@@ -417,7 +424,8 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
 
     fpriv = fopen(priv_fname, "wb");
     if (fpriv == NULL) {
-        fprintf(stderr, "Unable to open file '%s' for writing: %s", priv_fname,  strerror(errno));
+        fprintf(stderr, "Unable to open file '%s' for writing: %s", priv_fname,
+                strerror(errno));
         exit(3);
     }
 
@@ -430,17 +438,17 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size)
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
 
     if (ecc_key_size == 32)
-        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname);
+        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
     else if (ecc_key_size == 48)
-        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname);
+        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
     else if (ecc_key_size == 66)
-        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname);
+        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
 }
 #endif
 
 
 #ifdef HAVE_ED25519
-static void keygen_ed25519(const char *privkey)
+static void keygen_ed25519(const char *privkey, uint32_t id_mask)
 {
     ed25519_key k;
     uint8_t priv[32], pub[32];
@@ -466,12 +474,12 @@ static void keygen_ed25519(const char *privkey)
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
-    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey);
+    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
 }
 #endif
 
 #ifdef HAVE_ED448
-static void keygen_ed448(const char *privkey)
+static void keygen_ed448(const char *privkey, uint32_t id_mask)
 {
     ed448_key k;
     uint8_t priv[ED448_KEY_SIZE], pub[ED448_PUB_KEY_SIZE];
@@ -497,14 +505,14 @@ static void keygen_ed448(const char *privkey)
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
     fclose(fpriv);
-    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey);
+    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
 }
 #endif
 
 #if defined(WOLFSSL_HAVE_LMS)
 #include "../lms/lms_common.h"
 
-static void keygen_lms(const char *priv_fname)
+static void keygen_lms(const char *priv_fname, uint32_t id_mask)
 {
     FILE *  fpriv;
     LmsKey  key;
@@ -577,7 +585,7 @@ static void keygen_lms(const char *priv_fname)
     fwrite(lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, 1, fpriv);
     fclose(fpriv);
 
-    keystore_add(KEYGEN_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname);
+    keystore_add(KEYGEN_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
     wc_LmsKey_Free(&key);
 }
@@ -604,7 +612,7 @@ static void key_gen_check(const char *kfilename)
     }
 }
 
-static void key_generate(uint32_t ktype, const char *kfilename)
+static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask)
 {
     printf("Generating key (type: %s)\n", KName[ktype]);
     fflush(stdout);
@@ -612,49 +620,49 @@ static void key_generate(uint32_t ktype, const char *kfilename)
     switch (ktype) {
 #ifdef HAVE_ED25519
         case KEYGEN_ED25519:
-            keygen_ed25519(kfilename);
+            keygen_ed25519(kfilename, id_mask);
             break;
 #endif
 
 #ifdef HAVE_ED448
         case KEYGEN_ED448:
-            keygen_ed448(kfilename);
+            keygen_ed448(kfilename, id_mask);
             break;
 #endif
 
 #ifdef HAVE_ECC
         case KEYGEN_ECC256:
-            keygen_ecc(kfilename, 32);
+            keygen_ecc(kfilename, 32, id_mask);
             break;
         case KEYGEN_ECC384:
-            keygen_ecc(kfilename, 48);
+            keygen_ecc(kfilename, 48, id_mask);
             break;
         case KEYGEN_ECC521:
-            keygen_ecc(kfilename, 66);
+            keygen_ecc(kfilename, 66, id_mask);
             break;
 #endif
 
 #ifndef NO_RSA
         case KEYGEN_RSA2048:
-            keygen_rsa(kfilename, 2048);
+            keygen_rsa(kfilename, 2048, id_mask);
             break;
         case KEYGEN_RSA3072:
-            keygen_rsa(kfilename, 3072);
+            keygen_rsa(kfilename, 3072, id_mask);
             break;
         case KEYGEN_RSA4096:
-            keygen_rsa(kfilename, 4096);
+            keygen_rsa(kfilename, 4096, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_HAVE_LMS
         case KEYGEN_LMS:
-            keygen_lms(kfilename);
+            keygen_lms(kfilename, id_mask);
             break;
 #endif
     } /* end switch */
 }
 
-static void key_import(uint32_t ktype, const char *fname)
+static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
 {
     int ret = 0;
     int initKey = 0;
@@ -731,7 +739,31 @@ static void key_import(uint32_t ktype, const char *fname)
     }
 
     /* needs to be r - rawOffset because rsa keys are not exactly keysize */
-    keystore_add(ktype, buf, readLen, fname);
+    keystore_add(ktype, buf, readLen, fname, id_mask);
+}
+
+static uint32_t parse_id(char *idstr)
+{
+    uint32_t mask = 0;
+    uint32_t n;
+    char *p = idstr;
+    char *end = NULL;
+    do {
+        end = strchr(p, ',');
+        if (end)
+            *end = 0;
+        n = strtol(p, NULL, 10);
+        if (n == (uint32_t)(-1))
+            return 0;
+        if (n > 31)
+            return 0;
+        mask |= (1 << n);
+        if (end)
+            p = end + 1;
+        else
+            p = NULL;
+    } while (p && *p);
+    return mask;
 }
 
 int main(int argc, char** argv)
@@ -739,6 +771,7 @@ int main(int argc, char** argv)
     int i;
     int  keytype = 0;
     uint32_t n_pubkeys = 0;
+    uint32_t part_id_mask = 0xFFFFFFFF; /* Default: key verify all */
 
 #ifdef DEBUG_SIGNTOOL
     wolfSSL_Debugging_ON();
@@ -788,6 +821,7 @@ int main(int argc, char** argv)
             n_pubkeys++;
             generated_keypairs[n_generated] = argv[i];
             generated_keypairs_type[n_generated] = keytype;
+            generated_keypairs_id_mask[n_generated] = part_id_mask;
             n_generated++;
             continue;
         }
@@ -796,6 +830,7 @@ int main(int argc, char** argv)
             n_pubkeys++;
             imported_pubkeys[n_imported] = argv[i];
             imported_pubkeys_type[n_imported] = keytype;
+            imported_pubkeys_id_mask[n_imported] = part_id_mask;
             n_imported++;
             continue;
         }
@@ -805,6 +840,15 @@ int main(int argc, char** argv)
             sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der");
             i++;
             continue;
+        }
+        else if (strcmp(argv[i], "--id") == 0) {
+            i++;
+            part_id_mask = parse_id(argv[i]);
+            if (part_id_mask == 0) {
+                fprintf(stderr, "Invalid list of partition ids.\n");
+                usage(argv[0]);
+            }
+
         }
         else {
             fprintf(stderr, "Invalid argument '%s'.", argv[i]);
@@ -829,10 +873,12 @@ int main(int argc, char** argv)
     fprintf(fpub, Store_hdr, n_pubkeys);
 
     for (i = 0; i < n_imported; i++) {
-        key_import(imported_pubkeys_type[i], imported_pubkeys[i]);
+        key_import(imported_pubkeys_type[i], imported_pubkeys[i],
+                imported_pubkeys_id_mask[i]);
     }
     for (i = 0; i < n_generated; i++) {
-        key_generate(generated_keypairs_type[i], generated_keypairs[i]);
+        key_generate(generated_keypairs_type[i], generated_keypairs[i],
+                generated_keypairs_id_mask[i]);
     }
     wc_FreeRng(&rng);
     fprintf(fpub, Store_footer);
