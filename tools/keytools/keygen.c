@@ -98,7 +98,7 @@ static int force = 0;
 static WC_RNG rng;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
-    #define KEYSLOT_MAX_PUBKEY_SIZE 2048
+    #define KEYSLOT_MAX_PUBKEY_SIZE 576 
 #endif
 
 struct keystore_slot {
@@ -262,6 +262,16 @@ const char KName[][8] = {
     "RSA3072",
     "LMS"
 };
+
+#define MAX_PUBKEYS 64
+#define MAX_KEYPAIRS 64
+static char *imported_pubkeys[MAX_PUBKEYS];
+static int imported_pubkeys_type[MAX_PUBKEYS];
+static int n_imported = 0;
+
+static char *generated_keypairs[MAX_KEYPAIRS];
+static int generated_keypairs_type[MAX_KEYPAIRS];
+static int n_generated = 0;
 
 static uint32_t get_pubkey_size(uint32_t keyType)
 {
@@ -776,11 +786,17 @@ int main(int argc, char** argv)
             key_gen_check(argv[i + 1]);
             i++;
             n_pubkeys++;
+            generated_keypairs[n_generated] = argv[i];
+            generated_keypairs_type[n_generated] = keytype;
+            n_generated++;
             continue;
         }
         else if (strcmp(argv[i], "-i") == 0) {
             i++;
             n_pubkeys++;
+            imported_pubkeys[n_imported] = argv[i];
+            imported_pubkeys_type[n_imported] = keytype;
+            n_imported++;
             continue;
         }
         else if (strcmp(argv[i], "-keystoreDir") == 0) {
@@ -811,17 +827,12 @@ int main(int argc, char** argv)
     wc_InitRng(&rng);
     fprintf(fpub, Cfile_Banner, KName[keytype]);
     fprintf(fpub, Store_hdr, n_pubkeys);
-    for (i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], "-i") == 0) {
-            printf("Imp %s\n", argv[i + 1]);
-            key_import(keytype, argv[i + 1]);
-            i++;
-        }
-        else if (strcmp(argv[i], "-g") == 0) {
-            printf("Gen %s\n", argv[i + 1]);
-            key_generate(keytype, argv[i + 1]);
-            i++;
-        }
+
+    for (i = 0; i < n_imported; i++) {
+        key_import(imported_pubkeys_type[i], imported_pubkeys[i]);
+    }
+    for (i = 0; i < n_generated; i++) {
+        key_generate(generated_keypairs_type[i], generated_keypairs[i]);
     }
     wc_FreeRng(&rng);
     fprintf(fpub, Store_footer);
