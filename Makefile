@@ -212,7 +212,7 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 		$(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
 # stage1 linker script embed wolfboot.bin inside stage1/loader_stage1.bin
-wolfboot_stage1.bin: wolfboot.bin stage1/loader_stage1.bin
+wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
