@@ -646,10 +646,17 @@ void sata_enable(uint32_t base)
  */
 void sata_disable(uint32_t base)
 {
+    uint32_t ports_impl;
     uint32_t i, reg;
     volatile uint32_t count;
+    AHCI_DEBUG_PRINTF("SATA: disabling sata controller at 0x%x\r\n", base);
+
+    ports_impl = mmio_read32(AHCI_HBA_PI(base));
 
     for (i = 0; i < AHCI_MAX_PORTS; i++) {
+        if ((ports_impl & (1 << i)) == 0)
+            continue;
+        AHCI_DEBUG_PRINTF("AHCI: disabling port %d\r\n", i);
         /* Clear port SERR */
         reg = mmio_read32(AHCI_PxSERR(base, i));
         mmio_write32(AHCI_PxSERR(base,i), reg);
