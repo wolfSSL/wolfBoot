@@ -134,7 +134,25 @@ Beside `KEY_VERIFY_ALL`, pre-defined mask values can also be used here:
 
 ### Importing public keys
 
-Work in progress.
+The "-i" option is used to import existing public keys into the keyvault. The usage is identical to the '-g' option, except that
+the file provided must exist and contain a valid public key of the given algorithm and key size.
+
+### Generating and importing keys of different types
+
+By default, wolfBoot hardcodes the type of key used for all the signature verification operations into the keystore format.
+
+Alternatively, wolfBoot can be compiled with the option `WOLFBOOT_UNIVERSAL_KEYSTORE=1`, which disables the check at compile
+time and allows adding keys of different types to the keystore. For example, if we want to create two keypairs with different ECC curves,
+and additionally store a pre-existing RSA2048 public key file `rsa-pub.der`, we could run the following:
+
+`keygen --ecc256 -g a.key  --ecc384 -g b.key --rsa2048 -i rsa-pub.der`
+
+The command above generates a keystore with three public keys that are accessible by the bootloader at runtime.
+
+Please note that by default wolfBoot does not include any public key algorithm implementations besides the one
+selected via the option `SIGN=`, so usually this feature is reserved to specific use cases where other policies or components
+in the chain-of-trust require to store different key types for different purposes.
+
 
 ## Using KeyStore with external Key Vaults
 
