@@ -496,6 +496,9 @@ void mptable_setup(void)
     struct mptable *_mp;
 
     _mp = (struct mptable *)MPTABLE_LOAD_BASE;
+    x86_log_memory_load((uint32_t)MPTABLE_LOAD_BASE,
+                        (uint32_t)MPTABLE_LOAD_BASE + sizeof(struct mptable), 
+                        "MPTABLE");
     memcpy(_mp, (void*)&_mptable, sizeof(struct mptable));
     apic_id = mmio_read32(LOCAL_APIC_ID);
     apic_ver = mmio_read32(LOCAL_APIC_VER);
