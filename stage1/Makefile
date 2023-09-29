@@ -100,8 +100,10 @@ CFLAGS+=\
 # For printf support (disable NO_PRINTF_UART) and increase WOLFBOOT_STAGE1_SIZE
 ifeq ($(ARCH),PPC)
   CFLAGS+=-DNO_PRINTF_UART
-  # Use PIC (Position Independent Code) for first stage loader
-  CFLAGS+=-fPIC
+  ifeq ($(NO_XIP),1)
+    # Use PIC (Position Independent Code) for first stage loader
+    CFLAGS+=-fPIC
+   endif
 endif
 
 

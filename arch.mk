@@ -412,9 +412,30 @@ ifeq ($(ARCH),ARM_BE)
   endif
 endif
 
+ifeq ($(TARGET),nxp_t1024)
+  # Power PC big endian
+  ARCH_FLAGS=-mhard-float -mcpu=e5500
+  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-pipe # use pipes instead of temp files
+  CFLAGS+=-feliminate-unused-debug-types
+  LDFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
+  LDFLAGS+=-Wl,--as-needed # remove weak functions not used
+  OBJS+=src/boot_ppc_mp.o # support for spin table
+  UPDATE_OBJS:=src/update_ram.o
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  else
+    # Use the SP math all assembly accelerations
+    CFLAGS+=-DWOLFSSL_SP_PPC
+  endif
+  SPI_TARGET=nxp
+endif
+
 ifeq ($(TARGET),nxp_t2080)
   # Power PC big endian
-  ARCH_FLAGS=-m32 -mhard-float -mcpu=e6500
+  ARCH_FLAGS=-mhard-float -mcpu=e6500
   CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
@@ -440,8 +461,8 @@ ifeq ($(TARGET),nxp_p1021)
   CFLAGS+=-pipe # use pipes instead of temp files
   LDFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
+  OBJS+=src/boot_ppc_mp.o # support for spin table
   UPDATE_OBJS:=src/update_ram.o
-  UPDATE_OBJS+=src/boot_ppc_mp.o
 
   # Use PPC stdlib for memcpy, etc.
   #CFLAGS+=-DWOLFBOOT_USE_STDLIBC

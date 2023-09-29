@@ -419,7 +419,6 @@ enum elbc_amask_sizes {
 #define DDR_SDRAM_MODE     ((volatile uint32_t*)(DDR_BASE + 0x118)) /* DDR SDRAM mode configuration */
 #define DDR_SDRAM_MODE_2   ((volatile uint32_t*)(DDR_BASE + 0x11C)) /* DDR SDRAM mode configuration 2 */
 #define DDR_SDRAM_MD_CNTL  ((volatile uint32_t*)(DDR_BASE + 0x120)) /* DDR SDRAM mode control */
-#define DDR_SDRAM_INTERVAL ((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
 #define DDR_SDRAM_CLK_CNTL ((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
 
 #define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
@@ -482,7 +481,6 @@ enum elbc_amask_sizes {
 #define ESPI_CSMODE_CSAFT(x) (((x) & 0xF) << 8)  /* CS assertion time in bits after frame end */
 #define ESPI_CSMODE_CSCG(x)  (((x) & 0xF) << 3)  /* Clock gaps between transmitted frames according to this size */
 
-
 #ifdef ENABLE_ELBC
 
 static volatile uint8_t* flash_buf;
@@ -492,33 +490,31 @@ static uint32_t          flash_idx;
 int ext_flash_read(uintptr_t address, uint8_t *data, int len);
 #endif
 
+/* generic share NXP QorIQ driver code */
+#include "nxp_ppc.c"
+
 
 /* local functions */
+#ifdef ENABLE_BUS_CLK_CALC
 static uint32_t hal_get_bus_clk(void)
 {
+    /* compute bus clock (system input 66MHz * ratio) */
     uint32_t bus_clk;
-#ifdef ENABLE_BUS_CLK_CALC
-    /* compute bus clock (system input 66MHz * ratio */
     uint32_t plat_ratio = get32(GUTS_PORPLLSR);
     /* mask and shift by 1 to get platform ratio */
     plat_ratio = ((plat_ratio & 0x3E) >> 1);
     bus_clk = SYS_CLK * plat_ratio;
     return bus_clk;
+}
 #else
-    return (uint32_t)(SYS_CLK * 6); /* can also be 8 */
+#define hal_get_bus_clk() (uint32_t)(SYS_CLK * 6)
 #endif
-}
 
-#if defined(ENABLE_ESPI) || defined(ENABLE_DDR)
-#ifdef BUILD_LOADER_STAGE1
-static
-#endif
-void udelay(unsigned long delay_us)
+#define DELAY_US (hal_get_bus_clk() / 1000000)
+static void udelay(uint32_t delay_us)
 {
-    delay_us *= (hal_get_bus_clk() / 1000000);
-    wait_ticks(delay_us);
+    wait_ticks(delay_us * DELAY_US);
 }
-#endif
 
 /* ---- eSPI Driver ---- */
 #ifdef ENABLE_ESPI
@@ -903,7 +899,7 @@ static int hal_flash_init(void)
     return ret;
 }
 
-void hal_ddr_init(void)
+static void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
     uint32_t reg;
@@ -968,6 +964,12 @@ void hal_ddr_init(void)
 #endif /* ENABLE_DDR */
 }
 
+void hal_early_init(void)
+{
+    hal_ddr_init();
+}
+
+
 #ifdef ENABLE_PCIE
 #define CONFIG_SYS_PCIE1_MEM_PHYS 0xc0000000
 #define CONFIG_SYS_PCIE1_IO_PHYS  0xffc20000
@@ -987,18 +989,18 @@ static int hal_pcie_init(void)
     set_law(3, CONFIG_SYS_PCIE2_IO_PHYS,  LAW_TRGT_PCIE2, LAW_SIZE_64KB),
 
     /* Map TLB for PCIe */
-    set_tlb(1, 2, CONFIG_SYS_PCIE2_MEM_VIRT, CONFIG_SYS_PCIE2_MEM_PHYS,
+    set_tlb(1, 2, CONFIG_SYS_PCIE2_MEM_VIRT, CONFIG_SYS_PCIE2_MEM_PHYS, 0,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256M, 1);
     set_tlb(1, 3, (CONFIG_SYS_PCIE2_MEM_VIRT + 0x10000000),
-                  (CONFIG_SYS_PCIE2_MEM_PHYS + 0x10000000),
+                  (CONFIG_SYS_PCIE2_MEM_PHYS + 0x10000000), 0,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256M, 1);
-    set_tlb(1, 4, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS,
+    set_tlb(1, 4, CONFIG_SYS_PCIE1_MEM_VIRT, CONFIG_SYS_PCIE1_MEM_PHYS, 0,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256M, 1);
     set_tlb(1, 5, (CONFIG_SYS_PCIE1_MEM_VIRT + 0x10000000),
-                  (CONFIG_SYS_PCIE1_MEM_PHYS + 0x10000000),
+                  (CONFIG_SYS_PCIE1_MEM_PHYS + 0x10000000), 0,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256M, 1);
 
-    set_tlb(1, 6, CONFIG_SYS_PCIE2_IO_VIRT, CONFIG_SYS_PCIE2_IO_PHYS,
+    set_tlb(1, 6, CONFIG_SYS_PCIE2_IO_VIRT, CONFIG_SYS_PCIE2_IO_PHYS, 0,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256K, 1);
     return 0;
 }
@@ -1011,7 +1013,7 @@ static int hal_cpld_init(void)
     /* Setup Local Access Window (LAW) for CPLD/BCSR */
     set_law(5, BCSR_BASE, LAW_TRGT_ELBC, LAW_SIZE_256KB);
     /* Setup TLB MMU (Translation Lookaside Buffer) for CPLD/BCSR */
-    set_tlb(1, 8, BCSR_BASE, BCSR_BASE, MAS3_SX | MAS3_SW | MAS3_SR,
+    set_tlb(1, 8, BCSR_BASE, BCSR_BASE, 0, MAS3_SX | MAS3_SW | MAS3_SR,
         MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256K, 1);
 
     /* setup eLBC for CPLD (CS1), 8-bit */
@@ -1504,7 +1506,7 @@ static void hal_mp_init(void)
 
     /* map reset page to bootpg so we can copy code there */
     disable_tlb1(i_tlb);
-    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, /* tlb, epn, rpn */
+    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn */
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I, /* perms, wimge */
         0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
 

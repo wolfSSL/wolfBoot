@@ -47,7 +47,7 @@ extern uint32_t dts_load_addr;
     #define WOLFBOOT_USE_RAMBOOT
 #endif
 
-#if defined(EXT_FLASH) && defined(NO_XIP)
+#ifdef WOLFBOOT_USE_RAMBOOT
 /* Function to load image from flash to ram */
 int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
@@ -57,11 +57,15 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     /* read header into RAM */
     wolfBoot_printf("Loading header %d bytes to %p\n",
         IMAGE_HEADER_SIZE, dst);
+#if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src, dst, IMAGE_HEADER_SIZE);
     if (ret != IMAGE_HEADER_SIZE){
         wolfBoot_printf("Error reading header at %p\n", img);
         return -1;
     }
+#else
+    memcpy(dst, src, IMAGE_HEADER_SIZE);
+#endif
 
     /* check for valid header and version */
     ret = wolfBoot_get_blob_version((uint8_t*)dst);
@@ -76,12 +80,16 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     /* Read the entire image into RAM */
     wolfBoot_printf("Loading image %d bytes to %p\n",
         img_size, dst + IMAGE_HEADER_SIZE);
+#if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src + IMAGE_HEADER_SIZE,
                                     dst + IMAGE_HEADER_SIZE, img_size);
     if (ret < 0) {
         wolfBoot_printf("Error reading image at %p\n", src);
         return -1;
     }
+#else
+    memcpy(dst + IMAGE_HEADER_SIZE, src + IMAGE_HEADER_SIZE, img_size);
+#endif
 
     /* mark image as no longer external */
     img->not_ext = 1;
@@ -133,13 +141,13 @@ void RAMFUNCTION wolfBoot_start(void)
     #ifdef WOLFBOOT_USE_RAMBOOT
         load_address = (uint32_t*)(WOLFBOOT_LOAD_ADDRESS -
             IMAGE_HEADER_SIZE);
-        #if defined(EXT_FLASH) && defined(NO_XIP)
-        ret = wolfBoot_ramboot(&os_image, (uint8_t*)source_address,
-            (uint8_t*)load_address);
-        #elif defined(EXT_ENCRYPTED) && defined(MMU)
+      #if defined(EXT_ENCRYPTED) && defined(MMU)
         ret = wolfBoot_ram_decrypt((uint8_t*)source_address,
             (uint8_t*)load_address);
-        #endif
+      #else
+        ret = wolfBoot_ramboot(&os_image, (uint8_t*)source_address,
+            (uint8_t*)load_address);
+      #endif
         if (ret != 0) {
             goto backup_on_failure;
         }
@@ -159,9 +167,15 @@ void RAMFUNCTION wolfBoot_start(void)
             goto backup_on_failure;
 
         } else {
-            /* Success */
+            /* Success - integrity and signature valid */
+        #ifdef WOLFBOOT_LOAD_ADDRESS
             load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
-        	break;
+        #elif !defined(NO_XIP)
+            load_address = (uint32_t*)os_image.fw_base;
+        #else
+            #error missing WOLFBOOT_LOAD_ADDRESS or XIP
+        #endif
+            break;
         }
 
 backup_on_failure:
@@ -179,7 +193,7 @@ backup_on_failure:
 
     wolfBoot_printf("Firmware Valid\n");
 
-	/* First time we boot this update, set to TESTING to await
+    /* First time we boot this update, set to TESTING to await
      * confirmation from the system
      */
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -214,18 +228,18 @@ backup_on_failure:
     #pragma GCC diagnostic ignored "-Wnonnull"
 #endif
 
-#ifdef WOLFBOOT_ELF
-    /* Load elf */
-    if (elf_load_image((uint8_t*)load_address, (uintptr_t*)&load_address) != 0){
-        wolfBoot_printf("Invalid elf, falling back to raw binary\n");
-    }
-#endif
-
 #ifndef WOLFBOOT_USE_RAMBOOT
     /* if needed copy image to RAM */
     wolfBoot_printf("Loading %d bytes to RAM at %p\n", os_image.fw_size,
             load_address);
     memcpy((void*)load_address, os_image.fw_base, os_image.fw_size);
+#endif
+
+#ifdef WOLFBOOT_ELF
+    /* Load elf */
+    if (elf_load_image((uint8_t*)load_address, (uintptr_t*)&load_address) != 0){
+        wolfBoot_printf("Invalid elf, falling back to raw binary\n");
+    }
 #endif
 
 #ifdef MMU
@@ -252,11 +266,13 @@ backup_on_failure:
                 /* Allow failure, continue booting */
             }
             else {
+                /* relocate DTS to RAM */
+                uint8_t* dts_dst = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
                 dts_size = (uint32_t)ret;
-                wolfBoot_printf("Loading DTB (size %d) to RAM at %08lx\n",
-                        dts_size, dts_addr);
-                memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, dts_addr, dts_size);
-                dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+                wolfBoot_printf("Loading DTB (size %d) from %p to RAM at %p\n",
+                        dts_size, dts_addr, WOLFBOOT_LOAD_DTS_ADDRESS);
+                memcpy(dts_dst, dts_addr, dts_size);
+                dts_addr = dts_dst;
             }
         }
     }

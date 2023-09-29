@@ -26,6 +26,7 @@
     /* NXP P1021 */
     #define CPU_NUMCORES 2
     #define CORE_E500
+    #define LAW_MAX_ENTRIES 12
 
     #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
@@ -40,8 +41,13 @@
         /* First stage loader features */
 
         #define ENABLE_L2_CACHE
-        #define L2SRAM_ADDR    (0xF8F80000) /* L2 as SRAM */
-        #define L2SRAM_SIZE    (256 * 1024)
+        #define L2SRAM_ADDR   (0xF8F80000) /* L2 as SRAM */
+        #define L2SRAM_SIZE   (256 * 1024)
+
+        #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
+        #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
+        #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_ELBC
+        #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_256K
     #else
         /* For wolfBoot features */
         #define ENABLE_L1_CACHE
@@ -53,28 +59,72 @@
         #define ENABLE_INTERRUPTS
     #endif
 
+#elif defined(PLATFORM_nxp_t1024)
+    /* NXP T1024 */
+    #define CPU_NUMCORES 2
+    #define CORE_E5500
+    #define LAW_MAX_ENTRIES 16
+
+    #define CCSRBAR_DEF (0xFE000000) /* T1024RM 4.4.1 default base */
+    #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
+
+    #define INITIAL_SRAM_ADDR     0xFDFC0000
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
+    #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_PSRAM
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_256K
+
+    #define ENABLE_L1_CACHE
+    #define ENABLE_INTERRUPTS
+
+    #ifdef BUILD_LOADER_STAGE1
+        #define ENABLE_L2_CACHE /* setup and enable L2 in first stage only */
+    #else
+        /* relocate to 64-bit 0xF_ */
+        #define CCSRBAR_PHYS_HIGH 0xFULL
+        #define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
+    #endif
+
+    #define ENABLE_DDR
+
+    #define FLASH_BASE_ADDR      0xEC000000
+    #define FLASH_BASE_PHYS_HIGH 0xFULL
+    #define FLASH_LAW_SIZE       LAW_SIZE_64MB
+    #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_64M
+
+    #define USE_LONG_JUMP
+
 #elif defined(PLATFORM_nxp_t2080)
     /* NXP T0280 */
     #define CPU_NUMCORES 4
     #define CORE_E6500
+    #define LAW_MAX_ENTRIES 32
 
-    #define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base - 0xFF000000 */
+    #define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
 
     /* relocate to 64-bit 0xE_ */
-    //#define CCSRBAR_PHYS_HIGH 0xE
+    //#define CCSRBAR_PHYS_HIGH 0xEULL
     //#define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
 
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
+
     #define L2SRAM_ADDR   (0xF8F80000) /* L2 as SRAM */
     #define L2SRAM_SIZE   (256 * 1024)
+
+    #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
+    #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_DDR_1
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_256K
+
     #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
 
-    #define FLASH_BASE_ADDR 0xE8000000
-    #define FLASH_BASE_PHYS_HIGH 0x0
+    #define FLASH_BASE_ADDR      0xE8000000
+    #define FLASH_BASE_PHYS_HIGH 0x0ULL
+    #define FLASH_LAW_SIZE       LAW_SIZE_128MB
+    #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_128M
 
     #define USE_LONG_JUMP
 #else
@@ -118,9 +168,9 @@
 #define L1_CACHE_SZ     (32 * 1024)
 #endif
 
-#ifdef CORE_E500
-    /* PowerPC e500 */
-    /* EREF: 7.5.3.2 - TLB Entry Page Size */
+#if defined(CORE_E500) || defined(CORE_E5500)
+    /* E500CORERM: 2.12.5.2 MAS Register 1 (MAS1)
+     * E5500RM: 2.16.6.2 MAS Register 1 (MAS1) */
     #define BOOKE_PAGESZ_4K    1
     #define BOOKE_PAGESZ_16K   2
     #define BOOKE_PAGESZ_64K   3
@@ -135,6 +185,37 @@
 
     #define MAS1_TSIZE_MASK    0x00000F00
     #define MAS1_TSIZE(x)      (((x) << 8) & MAS1_TSIZE_MASK)
+#elif defined(CORE_E6500)
+    /* E6500RM: 2.13.10.2 MMU Assist 1 (MAS1)
+     * EREF 2.0: 6.5.3.2 - TLB Entry Page Size */
+    #define BOOKE_PAGESZ_4K    2
+    #define BOOKE_PAGESZ_8K    3
+    #define BOOKE_PAGESZ_16K   4
+    #define BOOKE_PAGESZ_32K   5
+    #define BOOKE_PAGESZ_64K   6
+    #define BOOKE_PAGESZ_128K  7
+    #define BOOKE_PAGESZ_256K  8
+    #define BOOKE_PAGESZ_512K  9
+    #define BOOKE_PAGESZ_1M    10
+    #define BOOKE_PAGESZ_2M    11
+    #define BOOKE_PAGESZ_4M    12
+    #define BOOKE_PAGESZ_8M    13
+    #define BOOKE_PAGESZ_16M   14
+    #define BOOKE_PAGESZ_32M   15
+    #define BOOKE_PAGESZ_64M   16
+    #define BOOKE_PAGESZ_128M  17
+    #define BOOKE_PAGESZ_256M  18
+    #define BOOKE_PAGESZ_512M  19
+    #define BOOKE_PAGESZ_1G    20
+    #define BOOKE_PAGESZ_2G    21
+    #define BOOKE_PAGESZ_4G    22
+
+    #define MAS1_TSIZE_MASK    0x00000F80
+    #define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
+#endif
+
+#ifdef CORE_E500
+    /* PowerPC e500 */
 
     #define CACHE_LINE_SHIFT 5 /* 32 bytes per L1 cache line */
 
@@ -179,44 +260,45 @@
     #define LAW_SIZE_32GB  0x22
 
 
-#elif defined(CORE_E6500)
-    /* PowerPC e6500 */
+#elif defined(CORE_E6500) || defined(CORE_E5500)
+    /* PowerPC e5500/e6500 */
 
     /* CoreNet on-chip interface between the core cluster and rest of SoC */
     #define USE_CORENET_INTERFACE
-
-    /* EREF 2.0: 6.5.3.2 - TLB Entry Page Size */
-    #define BOOKE_PAGESZ_4K    2
-    #define BOOKE_PAGESZ_8K    3
-    #define BOOKE_PAGESZ_16K   4
-    #define BOOKE_PAGESZ_32K   5
-    #define BOOKE_PAGESZ_64K   6
-    #define BOOKE_PAGESZ_128K  7
-    #define BOOKE_PAGESZ_256K  8
-    #define BOOKE_PAGESZ_512K  9
-    #define BOOKE_PAGESZ_1M    10
-    #define BOOKE_PAGESZ_2M    11
-    #define BOOKE_PAGESZ_4M    12
-    #define BOOKE_PAGESZ_8M    13
-    #define BOOKE_PAGESZ_16M   14
-    #define BOOKE_PAGESZ_32M   15
-    #define BOOKE_PAGESZ_64M   16
-    #define BOOKE_PAGESZ_128M  17
-    #define BOOKE_PAGESZ_256M  18
-    #define BOOKE_PAGESZ_512M  19
-    #define BOOKE_PAGESZ_1G    20
-    #define BOOKE_PAGESZ_2G    21
-    #define BOOKE_PAGESZ_4G    22
-
-    #define MAS1_TSIZE_MASK    0x00000F80
-    #define MAS1_TSIZE(x)      (((x) << 7) & MAS1_TSIZE_MASK)
+    #define HAS_EMBEDDED_HYPERVISOR /* E.HV Supported */
 
     #define CACHE_LINE_SHIFT 6 /* 64 bytes per L1 cache line */
 
     /* CoreNet Platform Cache Base */
-    #define CPC_BASE        (CCSRBAR + 0x10000)
+    #define CPC_BASE            (CCSRBAR + 0x10000)
+    /* 8.2 CoreNet Platform Cache (CPC) Memory Map */
+    #define CPCCSR0             (0x000)
+    #define CPCSRCR1            (0x100)
+    #define CPCSRCR0            (0x104)
+    #define CPCHDBCR0           (0xF00)
 
-    /* T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
+    #define CPCCSR0_CPCE        (0x80000000 >> 0)
+    #define CPCCSR0_CPCPE       (0x80000000 >> 1)
+    #define CPCCSR0_CPCFI       (0x80000000 >> 10)
+    #define CPCCSR0_CPCLFC      (0x80000000 >> 21)
+    #define CPCCSR0_SRAM_ENABLE (CPCCSR0_CPCE | CPCCSR0_CPCPE)
+
+    #ifdef CORE_E6500
+        #define CPCSRCR0_SRAMSZ_64  (0x1 << 1) /* ways 14-15 */
+        #define CPCSRCR0_SRAMSZ_256 (0x3 << 1) /* ways 8-15 */
+        #define CPCSRCR0_SRAMSZ_512 (0x4 << 1) /* ways 0-15 */
+    #else /* CORE E5500 */
+        #define CPCSRCR0_SRAMSZ_64  (0x1 << 1) /* ways 6-7 */
+        #define CPCSRCR0_SRAMSZ_128 (0x2 << 1) /* ways 4-7 */
+        #define CPCSRCR0_SRAMSZ_256 (0x3 << 1) /* ways 0-7 */
+    #endif
+    #define CPCSRCR0_SRAMEN     (0x1)
+
+    #define CPCHDBCR0_SPEC_DIS  (0x80000000 >> 4)
+
+    #define CORENET_DCSR_SZ_1G  0x3
+
+    /* T1024/T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
     #define LAWBAR_BASE(n) (0xC00 + (n * 0x10))
     #define LAWBARH(n)     *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x0))
     #define LAWBARL(n)     *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x4))
@@ -225,13 +307,20 @@
     #define LAWAR_ENABLE      (1<<31)
     #define LAWAR_TRGT_ID(id) (id<<20)
 
-    /* T2080 Global Source/Target ID Assignments - RM Table 2-1 */
-    #define LAW_TRGT_DDR_1   0x10
-    #define LAW_TRGT_BMAN    0x18 /* Buffer Manager (BMan) (control) */
-    #define LAW_TRGT_CORENET 0x1E
+    /* T1024/T2080 Global Source/Target ID Assignments - RM Table 2-1 */
+    #define LAW_TRGT_PCIE1   0x00
+    #define LAW_TRGT_PCIE2   0x01
+    #define LAW_TRGT_PCIE3   0x02
+    #define LAW_TRGT_DDR_1   0x10 /* Memory Complex 1 */
+    #define LAW_TRGT_DDR_2   0x11
+    #define LAW_TRGT_BMAN    0x18 /* Buffer Manager (control) */
+    #define LAW_TRGT_DCSR    0x1D /* debug facilities */
+    #define LAW_TRGT_CORENET 0x1E /* CCSR */
     #define LAW_TRGT_IFC     0x1F /* Integrated Flash Controller */
+    #define LAW_TRGT_QMAN    0x3C /* Queue Manager (control) */
+    #define LAW_TRGT_PSRAM   0x4A /* 160 KB Platform SRAM */
 
-    /* T2080 2.4.3 - size is equal to 2^(enum + 1) */
+    /* T1024/T2080 2.4.3 - size is equal to 2^(enum + 1) */
     #define LAW_SIZE_4KB   0x0B
     #define LAW_SIZE_8KB   0x0C
     #define LAW_SIZE_16KB  0x0D
@@ -261,7 +350,6 @@
     #define LAW_SIZE_256GB 0x25
     #define LAW_SIZE_512GB 0x26
     #define LAW_SIZE_1TB   0x27
-
 #endif
 
 #ifndef CACHE_LINE_SIZE
@@ -271,6 +359,7 @@
 
 /* MMU Assist Registers
  * E6500RM 2.13.10
+ * E5500RM 2.16.6
  * E500CORERM 2.12.5
  */
 #define MAS0     0x270
@@ -279,6 +368,7 @@
 #define MAS3     0x273
 #define MAS6     0x276
 #define MAS7     0x3B0
+#define MAS8     0x155
 #define MMUCSR0  0x3F4 /* MMU control and status register 0 */
 
 #define MAS0_TLBSEL_MSK 0x30000000
@@ -319,13 +409,44 @@
 
 
 /* L1 Cache */
-#define L1CFG0   0x203 /* L1 Cache Configuration Register 0 */
-#define L1CSR0   0x3F2 /* L1 Data */
-#define L1CSR1   0x3F3 /* L1 Instruction */
+#define L1CFG0     0x203 /* L1 Cache Configuration Register 0 */
+#define L1CSR2     0x25E /* L1 Data Cache Control and Status Register 2 */
+#define L1CSR0     0x3F2 /* L1 Data */
+#define L1CSR1     0x3F3 /* L1 Instruction */
+
 #define L1CSR_CPE  0x00010000 /* cache parity enable */
 #define L1CSR_CLFC 0x00000100 /* cache lock bits flash clear */
 #define L1CSR_CFI  0x00000002 /* cache flash invalidate */
 #define L1CSR_CE   0x00000001 /* cache enable */
+
+/* L2 Cache */
+#if defined(CORE_E6500)
+    /* MMRs */
+    #define L2CSR0    0x000 /* L2 Cache Control and Status 0 */
+    #define L2CSR1    0x004 /* L2 Cache Control and Status 1 */
+    #define L2CFG0    0x008 /* L2 Cache Configuration */
+#else
+    /* SPR */
+    #define L2CFG0    0x207 /* L2 Cache Configuration Register 0 */
+    #define L2CSR0    0x3F9 /* L2 Data Cache Control and Status Register 0 */
+    #define L2CSR1    0x3FA /* L2 Data Cache Control and Status Register 1 */
+#endif
+
+#define L2CSR0_L2FI  0x00200000 /* L2 Cache Flash Invalidate */
+#define L2CSR0_L2FL  0x00000800 /* L2 Cache Flush */
+#define L2CSR0_L2LFC 0x00000400 /* L2 Cache Lock Flash Clear */
+#define L2CSR0_L2PE  0x40000000 /* L2 Cache Parity/ECC Enable */
+#define L2CSR0_L2E   0x80000000 /* L2 Cache Enable */
+
+#define L2CSR0_L2E   0x80000000 /* L2 Cache Enable */
+#define L2CSR0_L2PE  0x40000000 /* L2 Cache Parity/ECC Enable */
+#define L2CSR0_L2WP  0x1c000000 /* L2 I/D Way Partioning */
+#define L2CSR0_L2CM  0x03000000 /* L2 Cache Coherency Mode */
+#define L2CSR0_L2FI  0x00200000 /* L2 Cache Flash Invalidate */
+#define L2CSR0_L2IO  0x00100000 /* L2 Cache Instruction Only */
+#define L2CSR0_L2DO  0x00010000 /* L2 Cache Data Only */
+#define L2CSR0_L2REP 0x00003000 /* L2 Line Replacement Algo */
+
 
 #define SCCSRBAR  0x3FE /* Shifted CCSRBAR */
 
@@ -361,10 +482,10 @@
 #define IVPR     0x03F   /* Interrupt Vector Prefix Register */
 
 /* Guest Interrupt Vectors */
-#define GIVOR2 (0x1B8)
-#define GIVOR3 (0x1B9)
-#define GIVOR4 (0x1BA)
-#define GIVOR8 (0x1BB)
+#define GIVOR2  (0x1B8)
+#define GIVOR3  (0x1B9)
+#define GIVOR4  (0x1BA)
+#define GIVOR8  (0x1BB)
 #define GIVOR13 (0x1BC)
 #define GIVOR14 (0x1BD)
 #define GIVOR35 (0x1D1)
@@ -376,6 +497,7 @@
 #define MSR_IS   (1<<5)  /* Book E Instruction address space */
 #define MSR_DE   (1<<9)  /* Debug Exception Enable */
 #define MSR_ME   (1<<12) /* Machine check enable */
+#define MSR_EE   (1<<15) /* External Interrupt enable */
 #define MSR_CE   (1<<17) /* Critical interrupt enable */
 #define MSR_PR   (1<<14) /* User mode (problem state) */
 
@@ -412,8 +534,7 @@
         (((epn) & MAS2_EPN) | (wimge))
 #define BOOKE_MAS3(rpn, user, perms) \
         (((rpn) & MAS3_RPN) | (user) | (perms))
-#define BOOKE_MAS7(rpn) \
-        (((unsigned long long)(rpn) >> 32) & MAS7_RPN)
+#define BOOKE_MAS7(urpn) (urpn)
 
 /* Stringification */
 #ifndef WC_STRINGIFY
@@ -428,6 +549,7 @@
     asm volatile("mfmsr %0" : "=r" (rval)); rval; \
 })
 #define mtmsr(v)     asm volatile("mtmsr %0" : : "r" (v))
+
 
 #ifndef __ASSEMBLER__
 
@@ -474,7 +596,7 @@ static inline void set16(volatile unsigned short *addr, int val)
     );
 }
 
-static inline unsigned int get32(const volatile unsigned *addr)
+static inline unsigned int get32(const volatile unsigned int *addr)
 {
     unsigned int ret;
     __asm__ __volatile__(
@@ -486,7 +608,7 @@ static inline unsigned int get32(const volatile unsigned *addr)
     );
     return ret;
 }
-static inline void set32(volatile unsigned *addr, unsigned int val)
+static inline void set32(volatile unsigned int *addr, unsigned int val)
 {
     __asm__ __volatile__(
         "sync;"
@@ -496,8 +618,9 @@ static inline void set32(volatile unsigned *addr, unsigned int val)
 }
 
 /* C version in boot_ppc.c */
-extern void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
-    uint8_t perms, uint8_t wimge, uint8_t ts, uint8_t tsize, uint8_t iprot);
+extern void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint32_t rpn,
+    uint32_t urpn, uint8_t perms, uint8_t wimge, uint8_t ts, uint8_t tsize,
+    uint8_t iprot);
 extern void disable_tlb1(uint8_t esel);
 extern void flush_cache(uint32_t start_addr, uint32_t size);
 
@@ -506,7 +629,7 @@ extern void uart_init(void);
 
 /* from boot_ppc_start.S */
 extern unsigned long long get_ticks(void);
-extern void wait_ticks(unsigned long);
+extern void wait_ticks(unsigned long long);
 extern unsigned long get_pc(void);
 extern void relocate_code(uint32_t *dest, uint32_t *src, uint32_t length);
 extern void invalidate_dcache(void);

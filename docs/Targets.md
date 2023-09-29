@@ -11,6 +11,7 @@ This README describes configuration of supported targets.
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
+* [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
@@ -1243,6 +1244,92 @@ make DEBUG=1 wolfboot.bin
 make DEBUG=1 test-app/image_v1_signed.bin
 make factory_wstage1.bin
 ```
+
+
+## NXP QorIQ T1024 PPC
+
+The NXP QorIQ T1024 is a two core 64-bit PPC e5500 based processor at 1400MHz. Each core has 256KB L2 cache.
+
+Board: T1024RDB
+Board rev: 0x3031
+CPLD ver: 0x42
+
+T1024E, Version: 1.0, (0x8548_0010)
+e5500, Version: 2.1, (0x8024_1021)
+
+Reset Configuration Word (RCW):
+00000000: 0810000e 00000000 00000000 00000000
+00000010: 2d800003 40408812 fc027000 21000000
+00000020: 00000000 00000000 60000000 00036800
+00000030: 00000100 484a5808 00000000 00000006
+
+Flash is NOR on IFC CS0 (0x0_EC00_0000) 64MB (default).
+
+Default NOR Flash Memory Layout (64MB):
+
+| Description       | Address    | Size                |
+| ----------------- | ---------- | ------------------- |
+| RCW               | 0xEC000000 | 0x00020000 (128 KB) |
+| Primary (FDT)     | 0xEC020000 | 0x00020000 (128 KB) |
+| Update (FDT)      | 0xEC040000 | 0x00020000 (128 KB) |
+| Free              | 0xEC060000 | 0x00090000 (576 KB) |
+| Swap Sector       | 0xEC0F0000 | 0x00010000 ( 64 KB) |
+| Free              | 0xEC100000 | 0x00100000 (  1 MB) |
+| Update (OS)       | 0xEC200000 | 0x01E00000 ( 30 MB) |
+| Application (OS)  | 0xEE000000 | 0x01E00000 ( 30 MB) |
+| QUICC             | 0xEFE00000 | 0x00100000 (  1 MB) |
+| DPAA (FMAN)       | 0xEFF00000 | 0x00020000 (128 KB) |
+| wolfBoot          | 0xEFF40000 | 0x000BC000 (752 KB) |
+| wolfBoot Stage 1  | 0xEFFFC000 | 0x00004000 ( 16 KB) |
+
+QE: uploading microcode 'Microcode for T1024 r1.0' version 0.0.1
+
+DDR4 2GB
+
+### Building wolfBoot for NXP T1024 PPC
+
+By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
+
+The `make` creates a `factory_stage1.bin` image that can be programmed at `0xEC000000`
+
+```
+cp ./config/examples/nxp-t1024.config .config
+make clean
+make keytools
+make
+```
+
+Or each `make` component can be manually built using:
+
+```
+make stage1
+make wolfboot.elf
+make test-app/image_v1_signed.bin
+```
+
+If getting errors with keystore then you can reset things using `make distclean`.
+
+### Signing Custom application
+
+```
+./tools/keytools/sign --ecc384 --sha384 custom.elf wolfboot_signing_private_key.der 1
+```
+
+### Assembly of custom firmware image
+
+```
+./tools/bin-assemble/bin-assemble factory_custom.bin \
+    0xEC000000 RCW_CTS.bin \
+    0xEC020000 custom.dtb \
+    0xEE000000 custom_v1_signed.bin \
+    0xEFE00000 iram_Type_A_T1024_r1.0.bin \
+    0xEFF00000 fsl_fman_ucode_t1024_r1.0_108_4_5.bin \
+    0xEFF40000 wolfboot.bin \
+    0xEFFFC000 stage1/loader_stage1.bin
+```
+
+Flash factory_custom.bin to NOR base 0xEC00_0000
+
 
 
 ## NXP QorIQ T2080 PPC

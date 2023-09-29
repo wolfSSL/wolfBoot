@@ -1330,7 +1330,7 @@ void RAMFUNCTION ext_flash_unlock(void)
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
-    return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 }
 #endif
 

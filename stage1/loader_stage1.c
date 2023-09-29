@@ -32,8 +32,9 @@
 #include <string.h>
 #include <stdint.h>
 
-#ifndef EXT_FLASH
-    #error The stage1 loader only supports use with external flash
+
+#if !defined(EXT_FLASH) && defined(NO_XIP)
+    #error Using first stage loader requires XIP or External Flash (EXT_FLASH)
 #endif
 
 #ifndef WOLFBOOT_STAGE1_SIZE
@@ -73,7 +74,7 @@ int main(void)
     hal_init();
     spi_flash_probe(); /* make sure external flash is initialized */
 
-#ifdef BOOT_ROM_ADDR
+#if defined(NO_XIP) && defined(BOOT_ROM_ADDR)
     /* if this is executing from boot 4KB region (FCM buffer) it must
      * first be relocated to RAM before the eLBC NAND can be read */
     if ((get_pc() & BOOT_ROM_ADDR) == BOOT_ROM_ADDR) {
@@ -104,11 +105,21 @@ int main(void)
     uart_write("Loading wolfBoot to DDR\n", 24);
 #endif
 
+#ifdef EXT_FLASH
     ret = ext_flash_read(
         (uintptr_t)WOLFBOOT_ORIGIN,         /* flash offset */
         (uint8_t*)WOLFBOOT_STAGE1_LOAD_ADDR,/* ram destination */
         BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
     );
+#else
+    /* copy from flash to ram */
+    memcpy32(
+        (uint8_t*)WOLFBOOT_STAGE1_LOAD_ADDR,/* ram destination */
+        (uint8_t*)WOLFBOOT_ORIGIN,          /* flash offset */
+        BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
+    );
+    ret = 0;
+#endif
     if (ret >= 0) {
         wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_LOAD_ADDR;
     #ifdef PRINTF_ENABLED

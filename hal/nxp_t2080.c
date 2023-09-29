@@ -21,13 +21,13 @@
 #include <stdint.h>
 #include "target.h"
 #include "printf.h"
-
+#include "image.h" /* for RAMFUNCTION */
 #include "nxp_ppc.h"
 
 /* Tested on T2080E Rev 1.1, e6500 core 2.0, PVR 8040_0120 and SVR 8538_0011 */
 
 /* T2080 */
-#define SYS_CLK (600000000)
+#define SYS_CLK (600000000) /* 100MHz PLL with 6:1 = 600 MHz */
 
 /* T2080 PC16552D Dual UART */
 #define BAUD_RATE 115200
@@ -56,7 +56,6 @@
 #define UART_LSR_TEMT (0x40) /* Transmitter empty */
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
-#define GET_PHYS_HIGH(addr) (((uint64_t)(addr)) >> 32)
 
 /* T2080 IFC (Integrated Flash Controller) - RM 13.3 */
 #define IFC_BASE        (CCSRBAR + 0x00124000)
@@ -128,7 +127,6 @@ enum ifc_amask_sizes {
 
 /* NOR Flash */
 #define FLASH_BASE        0xE8000000
-#define FLASH_BASE_PHYS  (0xF00000000ULL | FLASH_BASE)
 
 #define FLASH_BANK_SIZE   (128*1024*1024)
 #define FLASH_PAGE_SIZE   (1024) /* program buffer */
@@ -146,7 +144,7 @@ enum ifc_amask_sizes {
 #endif
 /* CPLD */
 #define CPLD_BASE               0xFFDF0000
-#define CPLD_BASE_PHYS         (0xF00000000ULL | CPLD_BASE)
+#define CPLD_BASE_PHYS_HIGH     0xFULL
 
 #define CPLD_SPARE              0x00
 #define CPLD_SATA_MUX_SEL       0x02
@@ -250,7 +248,6 @@ enum ifc_amask_sizes {
 
 /* 12.4 DDR Memory Map */
 #define DDR_BASE           (CCSRBAR + 0x8000)
-#define DDR_BASE_PHYS      (0xF00000000ULL | DDR_BASE)
 
 #define DDR_CS_BNDS(n)     *((volatile uint32_t*)(DDR_BASE + 0x000 + (n * 8))) /* Chip select n memory bounds */
 #define DDR_CS_CONFIG(n)   *((volatile uint32_t*)(DDR_BASE + 0x080 + (n * 4))) /* Chip select n configuration */
@@ -291,11 +288,14 @@ enum ifc_amask_sizes {
 #define DDR_SDRAM_MODE_7   *((volatile uint32_t*)(DDR_BASE + 0x210)) /* DDR SDRAM mode configuration 7 */
 #define DDR_SDRAM_MODE_8   *((volatile uint32_t*)(DDR_BASE + 0x214)) /* DDR SDRAM mode configuration 8 */
 #define DDR_SDRAM_MD_CNTL  *((volatile uint32_t*)(DDR_BASE + 0x120)) /* DDR SDRAM mode control */
-#define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
 #define DDR_SDRAM_CLK_CNTL *((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
 
 #define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
-#define DDR_SDRAM_CFG2_D_INIT  0x00000010 /* data initialization in progress */
+#define DDR_SDRAM_CFG_2_D_INIT 0x00000010 /* data initialization in progress */
+
+
+/* generic share NXP QorIQ driver code */
+#include "nxp_ppc.c"
 
 
 #ifdef DEBUG_UART
@@ -328,33 +328,40 @@ void uart_write(const char* buf, uint32_t sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {
-        while (!(UART_LSR(UART_SEL) & UART_LSR_THRE))
-            ;
-        UART_THR(UART_SEL) = buf[pos++];
+        char c = buf[pos++];
+        if (c == '\n') { /* handle CRLF */
+            while ((UART_LSR(UART_SEL) & UART_LSR_THRE) == 0);
+            UART_THR(UART_SEL) = '\r';
+        }
+        while ((UART_LSR(UART_SEL) & UART_LSR_THRE) == 0);
+        UART_THR(UART_SEL) = c;
     }
 }
 #endif /* DEBUG_UART */
 
+static void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
+    uint32_t trgt_id, uint32_t law_sz)
+{
+    LAWAR(idx) = 0; /* reset */
+    LAWBARH(idx) = addr_h;
+    LAWBARL(idx) = addr_l;
+    LAWAR(idx) = (LAWAR_ENABLE | LAWAR_TRGT_ID(trgt_id) | law_sz);
+
+    /* Read back so that we sync the writes */
+    (void)LAWAR(idx);
+}
+
 void law_init(void)
 {
     /* Buffer Manager (BMan) (control) - probably not required */
-    LAWAR(3) = 0; /* reset */
-    LAWBARH(3) = 0xF;
-    LAWBARL(3) = 0xF4000000;
-    LAWAR(3) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_BMAN) | LAW_SIZE_32MB;
+    set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB);
 }
 
 static void hal_flash_init(void)
 {
-    /* Set up LAW to map IFC(flash) to 0xf_e800_0000
-     * This must be in place along with TLB before switching back to AS/TS=0
-     */
-
     /* IFC - NOR Flash */
-    LAWAR(1) = 0; /* reset */
-    LAWBARH(1) = GET_PHYS_HIGH(FLASH_BASE_PHYS);
-    LAWBARL(1) = FLASH_BASE;
-    LAWAR(1) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB;
+    /* LAW is also set in boot_ppc_start.S:flash_law */
+    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE, LAW_TRGT_IFC, LAW_SIZE_128MB);
 
     /* NOR IFC Flash Timing Parameters */
     IFC_FTIM0(0) = (IFC_FTIM0_NOR_TACSE(4) | \
@@ -378,7 +385,7 @@ static void hal_flash_init(void)
     IFC_CSOR(0) = 0x0000000C; /* TRHZ (80 clocks for read enable high) */
 }
 
-void hal_ddr_init(void)
+static void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
     /* If DDR is already enabled then just return */
@@ -449,19 +456,21 @@ void hal_ddr_init(void)
     asm volatile("sync;isync");
 
     /* Map LAW for DDR */
-    LAWAR (4) = 0; /* reset */
-    LAWBARH(4) = 0;
-    LAWBARL(4) = 0x0000000;
-    LAWAR (4) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_8GB;
+    set_law(4, 0, 0, LAW_TRGT_DDR_1, LAW_SIZE_2GB);
 
     /* Wait for data initialization is complete */
-    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG2_D_INIT));
+    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG_2_D_INIT));
 
     /* DDR - TBL=1, Entry 19 */
-    set_tlb(1, 19, DDR_ADDRESS, 0,
+    set_tlb(1, 19, DDR_ADDRESS, DDR_ADDRESS, 0,
         MAS3_SX | MAS3_SW | MAS3_SR, 0,
         0, BOOKE_PAGESZ_2G, 1);
 #endif
+}
+
+void hal_early_init(void)
+{
+    hal_ddr_init();
 }
 
 static void hal_cpld_init(void)
@@ -479,7 +488,7 @@ static void hal_cpld_init(void)
     IFC_FTIM3(3) = 0;
 
     /* CPLD IFC Definitions (CS3) */
-    IFC_CSPR_EXT(3) = (0xF);
+    IFC_CSPR_EXT(3) = CPLD_BASE_PHYS_HIGH;
     IFC_CSPR(3) =     (IFC_CSPR_PHYS_ADDR(CPLD_BASE) |
                        IFC_CSPR_PORT_SIZE_16 |
                        IFC_CSPR_MSEL_GPCM |
@@ -488,13 +497,11 @@ static void hal_cpld_init(void)
     IFC_CSOR(3) = 0;
 
     /* IFC - CPLD */
-    LAWAR (2) = 0; /* reset */
-    LAWBARH(2) = GET_PHYS_HIGH(CPLD_BASE_PHYS);
-    LAWBARL(2) = CPLD_BASE;
-    LAWAR (2) = LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_4KB;
+    set_law(2, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
+        LAW_TRGT_IFC, LAW_SIZE_4KB);
 
     /* CPLD - TBL=1, Entry 17 */
-    set_tlb(1, 17, CPLD_BASE, CPLD_BASE_PHYS,
+    set_tlb(1, 17, CPLD_BASE, CPLD_BASE, CPLD_BASE_PHYS_HIGH,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G,
         0, BOOKE_PAGESZ_4K, 1);
 #endif
@@ -587,6 +594,6 @@ void hal_prepare_boot(void)
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
-    return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 }
 #endif
