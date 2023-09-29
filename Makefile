@@ -106,6 +106,9 @@ endif
 ifeq ($(TARGET),nxp_p1021)
 	MAIN_TARGET:=factory_wstage1.bin
 endif
+ifeq ($(TARGET),nxp_t1024)
+	MAIN_TARGET:=factory_wstage1.bin
+endif
 
 ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))

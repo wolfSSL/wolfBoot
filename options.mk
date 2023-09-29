@@ -639,6 +639,10 @@ endif
 ifeq ($(ELF),1)
   CFLAGS+=-DWOLFBOOT_ELF
   OBJS += src/elf.o
+
+  ifneq ($(DEBUG_ELF),)
+    CFLAGS+=-DDEBUG_ELF=$(DEBUG_ELF)
+  endif
 endif
 
 ifeq ($(MULTIBOOT2),1)

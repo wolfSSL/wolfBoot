@@ -30,7 +30,7 @@
 #ifndef INTVEC_ADDR
 /* workaround to use isr_empty for all interrupts, for real IRQ's adjust the
  * offset and define additional interrupts at those offsets */
-#define INTVEC_ADDR(n) (BOOT_ROM_SIZE + (n * 0x0))
+#define INTVEC_ADDR(n) isr_empty@l
 #endif
 
 /* Additional cores (mp) assembly code for core minimum startup and spin table.
@@ -40,12 +40,12 @@
 .align        12
 _mp_page_start:
         /* Time base, MAS7 and machine check pin enable */
-        lis     r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@h
+        lis     r0,     (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@h
         ori     r0, r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@l
         mtspr   SPRN_HID0, r0
 
         /* enable branch prediction */
-        lis     r0, (BUCSR_ENABLE)@h
+        lis     r0,     (BUCSR_ENABLE)@h
         ori     r0, r0, (BUCSR_ENABLE)@l
         mtspr   SPRN_BUCSR, r0
 
@@ -55,7 +55,7 @@ _mp_page_start:
         mttbu   r3
 
         /* Enable/invalidate the I-Cache */
-        lis     r2, (L1CSR_CFI|L1CSR_CLFC)@h
+        lis     r2,     (L1CSR_CFI|L1CSR_CLFC)@h
         ori     r2, r2, (L1CSR_CFI|L1CSR_CLFC)@l
         mtspr   L1CSR1, r2
 1:
@@ -63,7 +63,7 @@ _mp_page_start:
         and.    r1, r3, r2
         bne     1b
 
-        lis     r3, (L1CSR_CPE|L1CSR_CE)@h
+        lis     r3,     (L1CSR_CPE|L1CSR_CE)@h
         ori     r3, r3, (L1CSR_CPE|L1CSR_CE)@l
         mtspr   L1CSR1,r3
         isync
@@ -81,7 +81,7 @@ _mp_page_start:
         and.    r1, r3, r2
         bne     1b
 
-        lis     r3, (L1CSR_CPE|L1CSR_CE)@h
+        lis     r3,     (L1CSR_CPE|L1CSR_CE)@h
         ori     r3, r3, (L1CSR_CPE|L1CSR_CE)@l
         mtspr   L1CSR0, r3
         isync
@@ -91,7 +91,7 @@ _mp_page_start:
         beq     2b
 
         /* Get our PIR to figure out our table entry */
-        lis     r3, TORESET(_spin_table)@h
+        lis     r3,     TORESET(_spin_table)@h
         ori     r3, r3, TORESET(_spin_table)@l
 
         /* Determine base address for the core (use r10) */

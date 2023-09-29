@@ -2,8 +2,12 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-/* On initial start, only a limited space(4k) is accessible.
- * Code here bootstraps to enable access to other needed address spaces */
+/* Boot ROM out of reset mapped to 0xEFFFF000 */
+BASE_ADDR = @WOLFBOOT_STAGE1_FLASH_ADDR@;
+
+LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
+
+/* Boot initialization code */
 BOOTSTRAP_TLB = 0xEFFFF000;
 
 /* Entry point where RCW directs code to execute from */
@@ -11,13 +15,17 @@ BOOTSTRAP_ENTRY = 0xEFFFFFFC;
 
 MEMORY
 {
-    FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
+    /* Boot Location */
+    FLASH (rx) : ORIGIN = BASE_ADDR, LENGTH = LOADER_STAGE1_SIZE
 
-    /* L2 as SRAM - 256KB */
-    RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x40000
+    /* L1 SRAM - 16KB */
+    L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
 
-    /* DDR - 2GB */
-    DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF
+    /* L2 SRAM - 160KB */
+    L2RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
+
+    /* DDR - 2GB: Start at 16MB to avoid using 0x0 (NULL) addresses */
+    DRAM (rwx) : ORIGIN = 0x1000000, LENGTH = 0x7FFFFFFF - 0x1000000
 }
 
 SECTIONS
@@ -41,6 +49,7 @@ SECTIONS
         _start_vector = .;
         KEEP(*(.isr_vector))
         . = ALIGN(256);
+        _start_text = .;
         *(.text*)
         *(.rodata*)
         *(.sdata*)
@@ -56,6 +65,19 @@ SECTIONS
     .gnu.hash       : { *(.gnu.hash) }
     .rela.dyn       : { *(.rela.dyn) }
 
+
+    .reloc :
+    {
+        _GOT2_TABLE_ = .;
+        *(.got2)
+        _FIXUP_TABLE_ = .;
+        *(.fixup)
+    } > FLASH
+    __got2_entries = (_FIXUP_TABLE_ - _GOT2_TABLE_) >> 2;
+    __fixup_entries = (. - _FIXUP_TABLE_) >> 2;
+
+    __init_end = .;
+    . = ALIGN(8);
     _stored_data = .;
 
     .data : AT (_stored_data)
@@ -83,5 +105,5 @@ SECTIONS
 
 }
 
-PROVIDE(_start_heap = ORIGIN(RAM));
-PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );
+PROVIDE(_start_heap = ORIGIN(L2RAM));
+PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) );

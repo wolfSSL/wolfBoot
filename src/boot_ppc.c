@@ -33,7 +33,7 @@ extern unsigned int _start_data;
 extern unsigned int _end_data;
 
 extern void main(void);
-extern void hal_ddr_init(void);
+extern void hal_early_init(void);
 
 void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
     uint32_t mas7)
@@ -46,9 +46,9 @@ void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
     asm volatile("isync;msync;tlbwe;isync");
 }
 
-void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
-             uint8_t perms, uint8_t wimge,
-             uint8_t ts, uint8_t tsize, uint8_t iprot)
+void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint32_t rpn,
+    uint32_t urpn, uint8_t perms, uint8_t wimge, uint8_t ts, uint8_t tsize,
+    uint8_t iprot)
 {
     uint32_t _mas0, _mas1, _mas2, _mas3, _mas7;
 
@@ -56,7 +56,7 @@ void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint64_t rpn,
     _mas1 = BOOKE_MAS1(1, iprot, 0, ts, tsize);
     _mas2 = BOOKE_MAS2(epn, wimge);
     _mas3 = BOOKE_MAS3(rpn, 0, perms);
-    _mas7 = BOOKE_MAS7(rpn);
+    _mas7 = BOOKE_MAS7(urpn);
 
     write_tlb(_mas0, _mas1, _mas2, _mas3, _mas7);
 }
@@ -82,7 +82,7 @@ void invalidate_tlb(int tlb)
         mtspr(MMUCSR0, 0x2);
 }
 
-void __attribute((weak)) hal_ddr_init(void)
+void __attribute((weak)) hal_early_init(void)
 {
 
 }
@@ -91,7 +91,7 @@ void boot_entry_C(void)
 {
     register unsigned int *dst, *src, *end;
 
-    hal_ddr_init();
+    hal_early_init();
 
     /* Copy the .data section from flash to RAM */
     src = (unsigned int*)&_stored_data;
@@ -149,11 +149,9 @@ void do_boot(const uint32_t *app_offset)
 #ifndef BUILD_LOADER_STAGE1
     uint32_t msr;
 #endif
-
-#ifdef MMU
-    /* TODO: Determine if the dts_offset needs passed as argument */
-    (void)dts_offset;
-#endif
+    typedef void (*boot_entry)(uintptr_t r3, uintptr_t r4, uintptr_t r5, uintptr_t r6,
+                               uintptr_t r7, uintptr_t r8, uintptr_t r9);
+    boot_entry entry = (boot_entry)app_offset;
 
 #ifndef BUILD_LOADER_STAGE1
     /* invalidate cache */
@@ -165,8 +163,20 @@ void do_boot(const uint32_t *app_offset)
     mtmsr(msr);
 #endif
 
-    /* do branch unconditionally */
-    asm volatile("mtlr %0; blr":: "r"(app_offset));
+    /* ePAPR (Embedded Power Architecture Platform Requirements)
+     * https://elinux.org/images/c/cf/Power_ePAPR_APPROVED_v1.1.pdf
+     */
+    entry(
+    #ifdef MMU
+        (uintptr_t)dts_offset,   /* r3 = dts address */
+    #else
+        0,
+    #endif
+        0, 0,
+        EPAPR_MAGIC,             /* r6 = ePAPR magic */
+        WOLFBOOT_PARTITION_SIZE, /* r7 = Size of Initial Mapped Area (IMA) */
+        0, 0
+    );
 }
 
 void arch_reboot(void) {}

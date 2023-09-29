@@ -77,8 +77,8 @@ All TLBs for boot will be in TLB1 and supervisor mode (not user)
 .global isr_empty
 .global _end_stack
 
-/* NXP P1021 First stage loader requires GOT for PIC and relocation */
-#if defined(PLATFORM_nxp_p1021) && defined(BUILD_LOADER_STAGE1)
+/* First stage loader requires GOT for PIC and relocation */
+#if defined(NO_XIP) && defined(BUILD_LOADER_STAGE1)
 #define USE_GOT
 #endif
 
@@ -113,7 +113,7 @@ GOT_ENTRY(__init_end)
 #ifndef INTVEC_ADDR
 /* workaround to use isr_empty for all interrupts, for real IRQ's adjust the
  * offset and define additional interrupts at those offsets */
-#define INTVEC_ADDR(n) (BOOT_ROM_SIZE + (n * 0x0))
+#define INTVEC_ADDR(n) isr_empty@l
 #endif
 
 
@@ -144,20 +144,22 @@ reset_exceptions:
         mttbl   r0 /* prevent FIT and WDT exceptions */
         mttbu   r0
         mtspr   SPRN_TSR, r1 /* clear all timer exception status */
-#ifdef PLATFORM_nxp_p1021
         mtspr   SPRN_TCR, r0 /* disable all timers */
-#endif
         mtspr   SPRN_ESR, r0 /* clear exception syndrome register */
         mtspr   SPRN_MCSR, r0 /* clear machine check syndrome register */
         mtxer   r0 /* clear integer exception register */
 
+#if defined(CORE_E5500) || defined(CORE_E6500)
+        mtspr MAS8, r0 /* clear MAS8 used with Embedded Hypervisor */
+#endif
+
 hardware_reg:
         /* Time base, MAS7 and machine check pin enable */
-        lis     r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@h
+        lis     r0,     (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@h
         ori     r0, r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@l
         mtspr   SPRN_HID0, r0
 
-#if defined(PLATFORM_nxp_p1021) && !defined(BUILD_LOADER_STAGE1)
+#if defined(CORE_E500) && !defined(BUILD_LOADER_STAGE1)
         /* Set addr streaming & broadcast
          * and optimized sync instruction (if rev 5.0 or greater) */
         li      r0, (HID1_ASTME | HID1_ABE)@l
@@ -172,15 +174,17 @@ hardware_reg:
 #ifndef BUILD_LOADER_STAGE1
 branch_prediction:
         /* enable branch prediction */
-        lis     r0, (BUCSR_ENABLE)@h
+        lis     r0,     (BUCSR_ENABLE)@h
         ori     r0, r0, (BUCSR_ENABLE)@l
         mtspr   SPRN_BUCSR, r0
 #endif
 
 startup_init:
+
         /* Invalidate L1 instruction and data cache */
-        bl invalidate_icache;
-        bl invalidate_dcache;
+        li      r0, L1CSR_CFI
+        mtspr   L1CSR1, r0
+        mtspr   L1CSR0, r0
 
         /* Clear debug status register - read and write */
         mfspr   r1, SPRN_DBSR
@@ -264,7 +268,7 @@ setup_interrupts:
 
         /* Setup interrupt vectors */
         lis     r1, (_start_vector)@h
-        mtspr   IVPR, r1
+        mtspr   IVPR, r1 /* set the 48-bit high-order prefix address */
 
 #ifdef ENABLE_INTERRUPTS
         li      r1, INTVEC_ADDR(0)
@@ -304,9 +308,9 @@ setup_interrupts:
 #if CCSRBAR_DEF != CCSRBAR_PHYS
 
         /* Use R8 = new, R9 = old virtual */
-        lis     r8, CCSRBAR@h
+        lis     r8,     CCSRBAR@h
         ori     r8, r8, CCSRBAR@l
-        lis     r9, (CCSRBAR + 0x1000)@h
+        lis     r9,     (CCSRBAR + 0x1000)@h
         ori     r9, r9, (CCSRBAR + 0x1000)@l
 
 create_temp_ccsr:
@@ -340,13 +344,13 @@ infinite_debug_loop:
 ccsr_temp_law:
         /* CCSR - LAW0 (Temp CoreNet 4K) */
         #define CCSR_TEMP_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_CORENET) | LAW_SIZE_4KB)
-        lis     r0, CCSRBAR_PHYS_HIGH@h
+        lis     r0,     CCSRBAR_PHYS_HIGH@h
         ori     r0, r0, CCSRBAR_PHYS_HIGH@l
-        lis     r1, CCSRBAR_DEF@h
+        lis     r1,     CCSRBAR_DEF@h
         ori     r1, r1, CCSRBAR_DEF@l
-        lis     r2, CCSR_TEMP_LAW@h
+        lis     r2,     CCSR_TEMP_LAW@h
         ori     r2, r2, CCSR_TEMP_LAW@l
-        stw     r0, LAWBAR_BASE(0)(r9) /* LAWBARH */
+        stw     r0, LAWBAR_BASE(0)(r9)   /* LAWBARH */
         stw     r1, LAWBAR_BASE(0)+4(r9) /* LAWBARL */
         sync
         stw     r2, LAWBAR_BASE(0)+8(r9) /* LAWAR */
@@ -359,12 +363,12 @@ read_old_ccsr:
         isync
 
 write_new_ccsrbar:
-        lis     r0, CCSRBAR_PHYS_HIGH@h
+        lis     r0,     CCSRBAR_PHYS_HIGH@h
         ori     r0, r0, CCSRBAR_PHYS_HIGH@l
-        lis     r1, CCSRBAR@h
+        lis     r1,     CCSRBAR@h
         ori     r1, r1, CCSRBAR@l
         #define CCSRAR_C 0x80000000 /* Commit */
-        lis     r2, CCSRAR_C@h
+        lis     r2,     CCSRAR_C@h
         ori     r2, r2, CCSRAR_C@l
         stw     r0, 0(r9) /* CCSRBARH */
         sync
@@ -381,7 +385,7 @@ write_new_ccsrbar:
         lwz     r0, 0(r9)
         isync
         /* write new CCSBAR */
-        lis     r0, (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@h
+        lis     r0,     (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@h
         ori     r0, r0, (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@l
         stw     r0, 0(r9)
         sync
@@ -413,21 +417,21 @@ boot_page:
 ccsr_tlb:
         /* CCSRBAR: TLB 1, Entry 1, Supervisor R/W, IG, TS=0, 1M/16M, IPROT */
         set_tlb(1, 1,
-                CCSRBAR, CCSRBAR, 0,
+                CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
                 MAS3_SX | MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 CCSRBAR_SIZE, 1, r3);
 
-#ifdef CORE_E6500
+#if defined(CORE_E5500) || defined(CORE_E6500)
 ccsr_law:
         /* CCSR - LAW0 (CoreNet 16MB) */
         #define CCSR_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_CORENET) | LAW_SIZE_16MB)
-        lis     r9, CCSRBAR + LAWBAR_BASE(0)@h
+        lis     r9,     CCSRBAR + LAWBAR_BASE(0)@h
         ori     r9, r9, CCSRBAR + LAWBAR_BASE(0)@l
-        lis     r0, CCSRBAR_PHYS_HIGH@h
+        lis     r0,     CCSRBAR_PHYS_HIGH@h
         ori     r0, r0, CCSRBAR_PHYS_HIGH@l
-        lis     r1, CCSRBAR@h
+        lis     r1,     CCSRBAR@h
         ori     r1, r1, CCSRBAR@l
-        lis     r2, CCSR_LAW@h
+        lis     r2,     CCSR_LAW@h
         ori     r2, r2, CCSR_LAW@l
         stw     r0, 0(r9) /* LAWBARH */
         stw     r1, 4(r9) /* LAWBARL */
@@ -435,21 +439,21 @@ ccsr_law:
         stw     r2, 8(r9) /* LAWAR */
         lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
         isync
-#endif /* CORE_E6500 */
+#endif /* CORE_E5500 || CORE_E6500 */
 
 #ifdef FLASH_BASE_ADDR
-#ifdef CORE_E6500
-        /* Memory Mapped NOR Flash (128MB) at 0xE8000000 */
+#if defined(CORE_E5500) || defined(CORE_E6500)
+        /* Memory Mapped NOR Flash (64/128MB) at 0xEC000000/0xE8000000 */
 flash_law:
-        /* FLASH - LAW1 (IFC 128MB) */
-        #define FLASH_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | LAW_SIZE_128MB)
-        lis     r9, CCSRBAR + LAWBAR_BASE(1)@h
+        /* FLASH - LAW1 (IFC 64/128MB) */
+        #define FLASH_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | FLASH_LAW_SIZE)
+        lis     r9,     CCSRBAR + LAWBAR_BASE(1)@h
         ori     r9, r9, CCSRBAR + LAWBAR_BASE(1)@l
-        lis     r0, FLASH_BASE_PHYS_HIGH@h
+        lis     r0,     FLASH_BASE_PHYS_HIGH@h
         ori     r0, r0, FLASH_BASE_PHYS_HIGH@l
-        lis     r1, FLASH_BASE_ADDR@h
+        lis     r1,     FLASH_BASE_ADDR@h
         ori     r1, r1, FLASH_BASE_ADDR@l
-        lis     r2, FLASH_LAW@h
+        lis     r2,     FLASH_LAW@h
         ori     r2, r2, FLASH_LAW@l
         stw     r0, 0(r9) /* LAWBARH */
         stw     r1, 4(r9) /* LAWBARL */
@@ -458,11 +462,12 @@ flash_law:
         lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
         isync
 flash_tlb:
-        /* Flash: TLB 1, Entry 7, Super X/R, W, TS=0, 128M, IPROT */
+        /* Flash: TLB 1, Entry 7, Super X/R/W, W, TS=0, 64/128M, IPROT */
+        /* Write is required for Write/Erase using CFI commands to base */
         set_tlb(1, 7,
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
-                MAS3_SX | MAS3_SR, MAS2_W, 0,
-                BOOKE_PAGESZ_128M, 1, r3);
+                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_W | MAS2_G, 0,
+                FLASH_TLB_PAGESZ, 1, r3);
 #else
 flash_tlb:
         /* For TS/AS=1 map boot ROM */
@@ -471,13 +476,14 @@ flash_tlb:
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_1M, 1, r3);
-#endif /* CORE_E6500 */
+#endif /* CORE_E5500 || CORE_E6500 */
 #endif /* FLASH_BASE_ADDR */
 
-#ifdef ENABLE_DDR
+/* Enable use of the DDR if available (like 2nd stage) */
+#if defined(CORE_E500) && defined(ENABLE_DDR)
         #ifdef BUILD_LOADER_STAGE1
             /* use cache inhibited for first stage loader to avoid
-            * L1 cache as SRAM issues */
+             * L1 cache as SRAM issues */
             #define DDR_WING (MAS2_I | MAS2_G)
         #else
             #define DDR_WING (MAS2_G)
@@ -492,22 +498,21 @@ flash_tlb:
                 DDR_ADDRESS + (256*1024*1024), DDR_ADDRESS + (256*1024*1024), 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING, 0,
                 BOOKE_PAGESZ_256M, 0, r3);
-#endif
+#endif /* CORE_E500 && ENABLE_DDR */
 
-#ifdef ENABLE_L2_CACHE
-#ifdef CORE_E6500 /* --- L2 E6500 --- */
-#ifdef L2SRAM_ADDR
-l2_sram_law:
-        /* L2 SRAM - LAW2 (DDR 256KB) */
-        #define L2SRAM_LAW \
-            (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_DDR_1) | LAW_SIZE_256KB)
-        lis     r9, CCSRBAR + LAWBAR_BASE(2)@h
+#ifdef INITIAL_SRAM_ADDR
+init_sram_law:
+        /* Intial SRAM LAW 2 */
+        #define INITIAL_SRAM_LAW (LAWAR_ENABLE | \
+                                  LAWAR_TRGT_ID(INITIAL_SRAM_LAW_TRGT) | \
+                                  INITIAL_SRAM_LAW_SZ)
+        lis     r9,     CCSRBAR + LAWBAR_BASE(2)@h
         ori     r9, r9, CCSRBAR + LAWBAR_BASE(2)@l
-        li      r0, 0
-        lis     r1, L2SRAM_ADDR@h
-        ori     r1, r1, L2SRAM_ADDR@l
-        lis     r2, L2SRAM_LAW@h
-        ori     r2, r2, L2SRAM_LAW@l
+        li      r0,     0 /* UPPER=0 */
+        lis     r1,     INITIAL_SRAM_ADDR@h
+        ori     r1, r1, INITIAL_SRAM_ADDR@l
+        lis     r2,     INITIAL_SRAM_LAW@h
+        ori     r2, r2, INITIAL_SRAM_LAW@l
         stw     r0, 0(r9) /* LAWBARH */
         stw     r1, 4(r9) /* LAWBARL */
         sync
@@ -515,36 +520,23 @@ l2_sram_law:
         lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
         isync
 
-l2_sram_tlb:
-        /* L2 0xFEC20000: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, 256KB, IPROT */
+init_sram_tlb:
+        /* Inital SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT */
         set_tlb(1, 9,
-                L2SRAM_ADDR, L2SRAM_ADDR, 0,
+                INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
-                BOOKE_PAGESZ_256K, 1, r3);
+                INITIAL_SRAM_BOOKE_SZ, 1, r3);
+#endif
 
+#ifdef ENABLE_L2_CACHE
+
+#if defined(CORE_E5500) || defined(CORE_E6500) /* --- L2 E5500/E6500 --- */
+#ifdef L2SRAM_ADDR
 l2_setup_sram:
-        /* 8.2 CoreNet Platform Cache (CPC) Memory Map */
-        #define CPCCSR0             (0x000)
-        #define CPCSRCR1            (0x100)
-        #define CPCSRCR0            (0x104)
-        #define CPCHDBCR0           (0xF00)
-
-        #define CPCCSR0_CPCE        (0x80000000 >> 0)
-        #define CPCCSR0_CPCPE       (0x80000000 >> 1)
-        #define CPCCSR0_CPCFI       (0x80000000 >> 10)
-        #define CPCCSR0_CPCLFC      (0x80000000 >> 21)
-        #define CPCCSR0_SRAM_ENABLE (CPCCSR0_CPCE | CPCCSR0_CPCPE)
-
-        #define CPCSRCR0_SRAMSZ_64  (0x1 << 1) /* ways 14-15 */
-        #define CPCSRCR0_SRAMSZ_256 (0x3 << 1) /* ways 8-15 */
-        #define CPCSRCR0_SRAMSZ_512 (0x4 << 1) /* ways 0-15 */
-        #define CPCSRCR0_SRAMEN     (0x1)
-
-        #define CPCHDBCR0_SPEC_DIS  (0x80000000 >> 4)
-
-        /* T2080RM: 8.4.2.2 Enabling the CPC after Power-On Reset */
+        /* T2080RM: 8.4.2.2 or T1024RM 13.4.2.2
+         * Enabling the CPC after Power-On Reset */
         /* R1 = CPC base */
-        lis     r1, CPC_BASE@h
+        lis     r1,     CPC_BASE@h
         ori     r1, r1, CPC_BASE@l
 
         /* Set CPC SRAM control register */
@@ -552,7 +544,7 @@ l2_setup_sram:
         li      r0, 0
         stw     r0, CPCSRCR1(r1)
         /* SRAM low address */
-        lis     r0, L2SRAM_ADDR@h
+        lis     r0,     L2SRAM_ADDR@h
         ori     r0, r0, L2SRAM_ADDR@l
         /* Enable SRAM and set size (must match L2SRAM_SIZE) */
         ori     r0, r0, (CPCSRCR0_SRAMSZ_256 | CPCSRCR0_SRAMEN)
@@ -564,35 +556,27 @@ l2_setup_sram:
         isync
         stw     r0, CPCCSR0(r1)
         mbar
-#endif /* L2SRAM_ADDR */
 
         /* Disable speculation */
         lwz     r0, CPCHDBCR0(r1)
         oris    r0, r0, CPCHDBCR0_SPEC_DIS@h
         stw     r0, CPCHDBCR0(r1)
+#endif /* L2SRAM_ADDR */
 
+#if defined(CORE_E6500) /* --- L2 E6500 --- */
 l2_setup_cache:
         /* L2 Cache Control - E6500CORERM 2.2.3 Memory-mapped registers (MMRs) */
         #define L2_CLUSTER_BASE(n) (CCSRBAR + 0xC20000 + (n * 0x40000))
-        #define L2CSR0             (0x000) /* L2 Cache Control and Status 0 */
-        #define L2CSR1             (0x004) /* L2 Cache Control and Status 1 */
-        #define L2CFG0             (0x008) /* L2 Cache Configuration */
         #define L2PID(n)           (0x200 + (n * 0x10)) /* L2 Cache Partitioning ID */
         #define L2PIR(n)           (0x208 + (n * 0x10)) /* L2 Cache Partitioning Allocation */
         #define L2PWR(n)           (0x20C + (n * 0x10)) /* L2 Cache Partitioning Way */
 
-        #define L2CSR0_L2FI        0x00200000 /* L2 Cache Flash Invalidate */
-        #define L2CSR0_L2FL        0x00000800 /* L2 Cache Flush */
-        #define L2CSR0_L2LFC       0x00000400 /* L2 Cache Lock Flash Clear */
-        #define L2CSR0_L2PE        0x40000000 /* L2 Cache Parity/ECC Enable */
-        #define L2CSR0_L2E         0x80000000 /* L2 Cache Enable */
-
         /* E6500CORERM: 11.7 L2 cache state */
         /* R5 = L2 cluster 1 base */
-        lis     r5, L2_CLUSTER_BASE(0)@h
+        lis     r5,     L2_CLUSTER_BASE(0)@h
         ori     r5, r5, L2_CLUSTER_BASE(0)@l
         /* Invalidate and clear locks */
-        lis     r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@h
+        lis     r1,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
         ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
         sync
         stw     r1, L2CSR0(r5)
@@ -604,6 +588,10 @@ l2_poll_invclear:
         bne     l2_poll_invclear
         isync
 
+        /* set stash id to (coreID) * 2 + 32 + L2 (1) */
+        li      r4, (32 + 1)
+        stw     r4, L2CSR1(r5)
+
         /* enable L2 with parity */
         sync
         isync
@@ -611,37 +599,43 @@ l2_poll_invclear:
         stw     r4, L2CSR0(r5)
         isync
 
-        /* set stash id = 32 */
-        li      r4, 32
-        stw     r4, L2CSR1(r5)
+#elif defined(CORE_E5500) /* --- L2 E5500 --- */
+l2_setup_cache:
+        /* L2 Cache Control - E5500RM 2.15 L2 Cache Registers */
+        #define L2_BASE         (CCSRBAR + 0x20000)
 
-#elif defined(CORE_E500) /* --- L2 E500 --- */
-
-#ifdef L2SRAM_ADDR
-l2_sram_law:
-        /* L2 SRAM - LAW2 (eLBC 256KB) */
-        #define L2SRAM_LAW \
-            (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_ELBC) | LAW_SIZE_256KB)
-        lis     r9, CCSRBAR + LAWBAR_BASE(2)@h
-        ori     r9, r9, CCSRBAR + LAWBAR_BASE(2)@l
-        lis     r1, L2SRAM_ADDR@h
-        ori     r1, r1, L2SRAM_ADDR@l
-        lis     r2, L2SRAM_LAW@h
-        ori     r2, r2, L2SRAM_LAW@l
-        stw     r1, 0(r9) /* LAWBAR */
+        /* Invalidate and clear locks */
+        lis     r1,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
+        ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
         sync
-        stw     r2, 8(r9) /* LAWAR */
-        lwz     r2, 8(r9) /* read back LAWAR */
+        isync
+        mtspr   L2CSR0, r1
         isync
 
-l2_sram_tlb:
-        /* L2 0xF8F80000: TLB 1, Entry 9, Supervisor X/R/W, G, TS=0, 256KB, IPROT */
-        set_tlb(1, 9,
-                L2SRAM_ADDR, L2SRAM_ADDR, 0,
-                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_G, 0,
-                BOOKE_PAGESZ_256K, 1, r3);
-#endif
+        /* poll till invalidate and lock bits are cleared */
+l2_poll_invclear:
+        mfspr   r4, L2CSR0
+        and.    r4, r1, r4
+        bne     l2_poll_invclear
 
+        /* set stash id to (coreID) * 2 + 32 + L2 (1) */
+        li      r4, (32 + 1)
+        sync
+        isync
+        mtspr   L2CSR1, r4
+        isync
+        sync
+
+        /* enable L2 with no parity */
+        lis     r4, (L2CSR0_L2E)@h
+        sync
+        isync
+        mtspr   L2CSR0, r4
+        isync
+#endif
+#endif /* CORE_E5500 || CORE_E6500 */
+
+#if defined(CORE_E500) /* --- L2 E500 --- */
         /* e500 - L2 Cache */
 l2_setup_cache:
         #define L2_BASE         (CCSRBAR + 0x20000)
@@ -659,9 +653,9 @@ l2_setup_cache:
         #define L2CTL_VAL (L2CTL_EN | L2CTL_INV | L2CTL_SIZ(2))
     #endif
         /* Configure the L2 Cache */
-        lis     r5, L2_BASE@h
+        lis     r5,     L2_BASE@h
         ori     r5, r5, L2_BASE@l
-        lis     r1, L2CTL_VAL@h
+        lis     r1,     L2CTL_VAL@h
         ori     r1, r1, L2CTL_VAL@l
         msync
         isync
@@ -675,18 +669,22 @@ l2_setup_sram:
         /* Set the L2SRAM base address */
         mbar
         isync
-        lis     r1, L2SRAM_ADDR@h
+        lis     r1,     L2SRAM_ADDR@h
         ori     r1, r1, L2SRAM_ADDR@l
         stw     r1, L2SRBAR0(r5)
         mbar
 #endif /* L2SRAM_ADDR */
-
-#endif /* CORE_* */
+#endif /* CORE_E500 */
 #endif /* ENABLE_L2_CACHE */
 
 
 #ifdef ENABLE_L1_CACHE
 setup_l1:
+#if defined(CORE_E5500) || defined(CORE_E6500)
+        /* set L1 stash id = 32: (coreID * 2) + 32 + L1 CT (0) */
+        li      r2, 32
+        mtspr   L1CSR2, r2
+#endif
 #ifndef BUILD_LOADER_STAGE1
         /* L1 Instruction Cache */
         bl icache_enable;
@@ -716,7 +714,7 @@ l1_tlb:
 
 #ifdef CACHE_SRAM_ADDR
 cache_sram_init:
-        lis     r3, CACHE_SRAM_ADDR@h
+        lis     r3,     CACHE_SRAM_ADDR@h
         ori     r3, r3, CACHE_SRAM_ADDR@l
         /* read the cache size */
         mfspr   r2, L1CFG0
@@ -729,7 +727,7 @@ cache_sram_init_loop:
         /* Data cache block zero */
         dcbz    r0, r3
         /* Data cache block touch and lock set */
-#ifdef CORE_E6500
+#if defined(CORE_E6500)
         dcbtls  2, r0, r3
         dcbtls  0, r0, r3
 #else
@@ -752,13 +750,13 @@ setup_stack:
         stwu    r0, -4(r1)
         stwu    r0, -4(r1)   /* Terminate Back chain */
         stwu    r1, -8(r1)   /* Save back chain and move SP */
-        lis     r0, RESET_VECTOR@h /* Address of reset vector */
+        lis     r0,     RESET_VECTOR@h /* Address of reset vector */
         ori     r0, r0, RESET_VECTOR@l
         stwu    r1, -8(r1)   /* Save back chain and move SP */
         stw     r0, +12(r1)  /* Save return addr (underflow vect) */
 
         /* switch back to AS/TS=0 */
-        lis     r3, (MSR_CE | MSR_ME | MSR_DE)@h
+        lis     r3,     (MSR_CE | MSR_ME | MSR_DE)@h
         ori     r3, r3, (MSR_CE | MSR_ME | MSR_DE)@l
         mtmsr   r3
         isync
@@ -770,7 +768,7 @@ setup_stack:
 #ifdef USE_LONG_JUMP
         /* load absolute address into "LR" and branch return to it */
         /* Enables long jump in 32-bit */
-        lis     r3, boot_entry_C@h
+        lis     r3,     boot_entry_C@h
         ori     r3, r3, boot_entry_C@l
         mtlr    r3
         blr

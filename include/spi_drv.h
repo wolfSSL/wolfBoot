@@ -32,6 +32,11 @@
 #include <stdint.h>
 #include "image.h"
 
+/* SPI transfer flags */
+#define SPI_XFER_FLAG_NONE     0x0
+#define SPI_XFER_FLAG_CONTINUE 0x1 /* keep CS asserted */
+
+
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH) || \
     defined(OCTOSPI_FLASH)
 
@@ -64,10 +69,6 @@ uint8_t spi_read(void);
 #endif
 
 #ifdef WOLFBOOT_TPM
-/* SPI transfer flags */
-#define SPI_XFER_FLAG_NONE     0x0
-#define SPI_XFER_FLAG_CONTINUE 0x1 /* keep CS asserted */
-
 /* Perform a SPI transaction.
  * Set flags == SPI_XFER_FLAG_CONTINUE to keep CS asserted after transfer. */
 int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags);

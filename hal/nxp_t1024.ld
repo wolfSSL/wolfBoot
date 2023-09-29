@@ -2,38 +2,36 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-/* On initial start, only a limited space(4k) is accessible.
- * Code here bootstraps to enable access to other needed address spaces */
-BOOTSTRAP_TLB = 0xEFFFF000;
-
-/* Entry point where RCW directs code to execute from */
-BOOTSTRAP_ENTRY = 0xEFFFFFFC;
+HEAP_SIZE = 4K; /* heap not used */
+STACK_SIZE = 128K;
 
 MEMORY
 {
-    FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
+    /* DDR4 - 2GB (offset by destination address and 4KB boot region) */
+    DRAM (rwx) : ORIGIN = @WOLFBOOT_STAGE1_LOAD_ADDR@,
+                 LENGTH = 0x7FFFFFFF - @WOLFBOOT_STAGE1_LOAD_ADDR@
 
-    /* L2 as SRAM - 256KB */
-    RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x40000
+    /* L1 SRAM - 16KB */
+    L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
 
-    /* DDR - 2GB */
-    DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF
+    /* L2 SRAM - 160KB */
+    L2RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
 }
 
 SECTIONS
 {
     /* boot code boot_ppc_start.S for _reset */
-    .boot BOOTSTRAP_TLB :
+    .boot :
     {
         KEEP(*(.boot))
-    } = 0xFFFC
+    } > DRAM
     . = ALIGN(4);
 
     /* entry point branch offset to _reset */
-    .reset BOOTSTRAP_ENTRY :
+    .reset :
     {
         KEEP(*(.reset))
-    } = 0x4
+    } > DRAM
     . = ALIGN(4);
 
     .text :
@@ -41,10 +39,11 @@ SECTIONS
         _start_vector = .;
         KEEP(*(.isr_vector))
         . = ALIGN(256);
+        _start_text = .;
         *(.text*)
         *(.rodata*)
         *(.sdata*)
-    } > FLASH
+    } > DRAM
 
     /* Read-only sections, merged into text segment: */
     .interp         : { *(.interp) }
@@ -83,5 +82,9 @@ SECTIONS
 
 }
 
-PROVIDE(_start_heap = ORIGIN(RAM));
-PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );
+PROVIDE(_start_heap = _end);
+
+/* If relocated to DDR already then use stack end from DDR */
+/* If debugging and DDR is not ready, use L1 or L2 */
+PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );
+/* PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) ); */
