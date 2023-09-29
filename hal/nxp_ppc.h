@@ -32,6 +32,7 @@
     #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
 
     #define ENABLE_DDR
+    #define DDR_SIZE (512 * 1024 * 1024)
 
     /* Memory used for transferring blocks to/from NAND.
      * Maps to eLBC FCM internal 8KB region (by hardware) */
@@ -85,6 +86,7 @@
     #endif
 
     #define ENABLE_DDR
+    #define DDR_SIZE (2048ULL * 1024ULL * 1024ULL)
 
     #define FLASH_BASE_ADDR      0xEC000000
     #define FLASH_BASE_PHYS_HIGH 0xFULL
@@ -120,6 +122,7 @@
     #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
+    #define DDR_SIZE (8192 * 1024 * 1024)
 
     #define FLASH_BASE_ADDR      0xE8000000
     #define FLASH_BASE_PHYS_HIGH 0x0ULL
@@ -300,9 +303,9 @@
 
     /* T1024/T2080 LAW - Local Access Window (Memory Map) - RM 2.4 */
     #define LAWBAR_BASE(n) (0xC00 + (n * 0x10))
-    #define LAWBARH(n)     *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x0))
-    #define LAWBARL(n)     *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x4))
-    #define LAWAR(n)       *((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x8))
+    #define LAWBARH(n)     ((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x0))
+    #define LAWBARL(n)     ((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x4))
+    #define LAWAR(n)       ((volatile uint32_t*)(CCSRBAR + LAWBAR_BASE(n) + 0x8))
 
     #define LAWAR_ENABLE      (1<<31)
     #define LAWAR_TRGT_ID(id) (id<<20)
@@ -623,6 +626,8 @@ extern void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint32_t rpn,
     uint8_t iprot);
 extern void disable_tlb1(uint8_t esel);
 extern void flush_cache(uint32_t start_addr, uint32_t size);
+extern void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
+    uint32_t trgt_id, uint32_t law_sz, int reset);
 
 /* from hal/nxp_*.c */
 extern void uart_init(void);

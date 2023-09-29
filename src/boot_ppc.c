@@ -82,6 +82,24 @@ void invalidate_tlb(int tlb)
         mtspr(MMUCSR0, 0x2);
 }
 
+void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l, uint32_t trgt_id,
+    uint32_t law_sz, int reset)
+{
+    if (reset)
+        set32(LAWAR(idx), 0); /* reset */
+    #ifdef CORE_E500
+        (void)addr_h; /* not used */
+        set32(LAWBAR(idx), addr_l >> 12);
+    #else
+        set32(LAWBARH(idx), addr_h);
+        set32(LAWBARL(idx), addr_l);
+    #endif
+    set32(LAWAR(idx), LAWAR_ENABLE | LAWAR_TRGT_ID(trgt_id) | law_sz);
+
+    /* Read back so that we sync the writes */
+    (void)get32(LAWAR(idx));
+}
+
 void __attribute((weak)) hal_early_init(void)
 {
 

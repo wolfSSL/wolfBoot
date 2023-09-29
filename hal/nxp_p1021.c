@@ -348,7 +348,6 @@ enum elbc_amask_sizes {
 
 /* DDR */
 /* DDR3: 512MB, 333.333 MHz (666.667 MT/s) */
-#define DDR_SIZE               (512 * 1024 * 1024)
 #define DDR_CS0_BNDS_VAL       0x0000001F
 #define DDR_CS0_CONFIG_VAL     0x80014202
 #define DDR_CS_CONFIG_2_VAL    0x00000000
@@ -633,18 +632,6 @@ void hal_espi_deinit(void)
 }
 #endif /* ENABLE_ESPI */
 
-
-static void set_law(uint8_t idx, uint32_t addr, uint32_t trgt_id,
-    uint32_t law_sz)
-{
-    set32(LAWAR(idx), 0); /* reset */
-    set32(LAWBAR(idx), addr >> 12);
-    set32(LAWAR(idx), LAWAR_ENABLE | LAWAR_TRGT_ID(trgt_id) | law_sz);
-
-    /* Read back so that we sync the writes */
-    (void)get32(LAWAR(idx));
-}
-
 /* ---- DUART Driver ---- */
 #ifdef DEBUG_UART
 
@@ -841,7 +828,7 @@ static int hal_flash_init(void)
     uint32_t flash_id[1] = {0};
 
     /* eLBC - NAND Flash */
-    set_law(4, FLASH_BASE_ADDR, LAW_TRGT_ELBC, LAW_SIZE_1MB);
+    set_law(4, 0, FLASH_BASE_ADDR, LAW_TRGT_ELBC, LAW_SIZE_1MB, 1);
 
 #ifdef BOOT_ROM_ADDR
     /* if this code is executing from BOOT ROM we cannot init eLBC yet */
@@ -904,62 +891,64 @@ static void hal_ddr_init(void)
 #ifdef ENABLE_DDR
     uint32_t reg;
 
+    /* Map LAW for DDR */
+    set_law(6, 0, DDR_ADDRESS, LAW_TRGT_DDR, LAW_SIZE_512MB, 0);
+
     /* If DDR is not already enabled */
-    if ((get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN) == 0) {
-        /* Map LAW for DDR */
-        set_law(6, DDR_ADDRESS, LAW_TRGT_DDR, LAW_SIZE_512MB);
+    if ((get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN)) {
+        return;
+    }
 
-        /* Setup DDR CS (chip select) bounds */
-        set32(DDR_CS_BNDS(0), DDR_CS0_BNDS_VAL);
-        set32(DDR_CS_CONFIG(0), DDR_CS0_CONFIG_VAL);
-        set32(DDR_CS_CONFIG_2(0), DDR_CS_CONFIG_2_VAL);
+    /* Setup DDR CS (chip select) bounds */
+    set32(DDR_CS_BNDS(0), DDR_CS0_BNDS_VAL);
+    set32(DDR_CS_CONFIG(0), DDR_CS0_CONFIG_VAL);
+    set32(DDR_CS_CONFIG_2(0), DDR_CS_CONFIG_2_VAL);
 
-        /* DDR SDRAM timing configuration */
-        set32(DDR_TIMING_CFG_3, DDR_TIMING_CFG_3_VAL);
-        set32(DDR_TIMING_CFG_0, DDR_TIMING_CFG_0_VAL);
-        set32(DDR_TIMING_CFG_1, DDR_TIMING_CFG_1_VAL);
-        set32(DDR_TIMING_CFG_2, DDR_TIMING_CFG_2_VAL);
+    /* DDR SDRAM timing configuration */
+    set32(DDR_TIMING_CFG_3, DDR_TIMING_CFG_3_VAL);
+    set32(DDR_TIMING_CFG_0, DDR_TIMING_CFG_0_VAL);
+    set32(DDR_TIMING_CFG_1, DDR_TIMING_CFG_1_VAL);
+    set32(DDR_TIMING_CFG_2, DDR_TIMING_CFG_2_VAL);
 
-        set32(DDR_SDRAM_MODE,   DDR_SDRAM_MODE_VAL);
-        set32(DDR_SDRAM_MODE_2, DDR_SDRAM_MODE_2_VAL);
-        set32(DDR_SDRAM_MD_CNTL, DDR_SDRAM_MD_CNTL_VAL);
-        set32(DDR_SDRAM_INTERVAL, DDR_SDRAM_INTERVAL_VAL);
-        set32(DDR_DATA_INIT, DDR_DATA_INIT_VAL);
-        set32(DDR_SDRAM_CLK_CNTL, DDR_SDRAM_CLK_CNTL_VAL);
-        set32(DDR_TIMING_CFG_4, DDR_TIMING_CFG_4_VAL);
-        set32(DDR_TIMING_CFG_5, DDR_TIMING_CFG_5_VAL);
-        set32(DDR_ZQ_CNTL, DDR_ZQ_CNTL_VAL);
-        set32(DDR_WRLVL_CNTL, DDR_WRLVL_CNTL_VAL);
+    set32(DDR_SDRAM_MODE,   DDR_SDRAM_MODE_VAL);
+    set32(DDR_SDRAM_MODE_2, DDR_SDRAM_MODE_2_VAL);
+    set32(DDR_SDRAM_MD_CNTL, DDR_SDRAM_MD_CNTL_VAL);
+    set32(DDR_SDRAM_INTERVAL, DDR_SDRAM_INTERVAL_VAL);
+    set32(DDR_DATA_INIT, DDR_DATA_INIT_VAL);
+    set32(DDR_SDRAM_CLK_CNTL, DDR_SDRAM_CLK_CNTL_VAL);
+    set32(DDR_TIMING_CFG_4, DDR_TIMING_CFG_4_VAL);
+    set32(DDR_TIMING_CFG_5, DDR_TIMING_CFG_5_VAL);
+    set32(DDR_ZQ_CNTL, DDR_ZQ_CNTL_VAL);
+    set32(DDR_WRLVL_CNTL, DDR_WRLVL_CNTL_VAL);
 
-        set32(DDR_SR_CNTR, 0);
-        set32(DDR_SDRAM_RCW_1, 0);
-        set32(DDR_SDRAM_RCW_2, 0);
+    set32(DDR_SR_CNTR, 0);
+    set32(DDR_SDRAM_RCW_1, 0);
+    set32(DDR_SDRAM_RCW_2, 0);
 
-        set32(DDR_DDRCDR_1, DDR_DDRCDR_1_VAL);
+    set32(DDR_DDRCDR_1, DDR_DDRCDR_1_VAL);
 
 
-        set32(DDR_SDRAM_CFG_2, DDR_SDRAM_CFG_2_VAL);
-        set32(DDR_INIT_ADDR, 0);
-        set32(DDR_INIT_EXT_ADDR, 0);
-        set32(DDR_DDRCDR_2, DDR_DDRCDR_2_VAL);
+    set32(DDR_SDRAM_CFG_2, DDR_SDRAM_CFG_2_VAL);
+    set32(DDR_INIT_ADDR, 0);
+    set32(DDR_INIT_EXT_ADDR, 0);
+    set32(DDR_DDRCDR_2, DDR_DDRCDR_2_VAL);
 
-        /* Set values, but do not enable the DDR yet */
-        set32(DDR_SDRAM_CFG, ((DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN)));
-        asm volatile("sync;isync");
+    /* Set values, but do not enable the DDR yet */
+    set32(DDR_SDRAM_CFG, ((DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN)));
+    asm volatile("sync;isync");
 
-        /* busy wait for ~500us */
-        udelay(500);
+    /* busy wait for ~500us */
+    udelay(500);
 
-        /* Enable controller */
-        reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
-        set32(DDR_SDRAM_CFG, reg | DDR_SDRAM_CFG_MEM_EN);
-        asm volatile("sync;isync");
+    /* Enable controller */
+    reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
+    set32(DDR_SDRAM_CFG, reg | DDR_SDRAM_CFG_MEM_EN);
+    asm volatile("sync;isync");
 
-        /* Wait for data initialization to complete */
-        while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
-            /* busy wait loop - throttle polling */
-            udelay(1);
-        }
+    /* Wait for data initialization to complete */
+    while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
+        /* busy wait loop - throttle polling */
+        udelay(1);
     }
 #endif /* ENABLE_DDR */
 }
@@ -983,10 +972,10 @@ void hal_early_init(void)
 static int hal_pcie_init(void)
 {
     /* Map LAW for PCIe */
-    set_law(0, CONFIG_SYS_PCIE1_MEM_PHYS, LAW_TRGT_PCIE1, LAW_SIZE_512MB),
-    set_law(1, CONFIG_SYS_PCIE1_IO_PHYS,  LAW_TRGT_PCIE1, LAW_SIZE_64KB),
-    set_law(2, CONFIG_SYS_PCIE2_MEM_PHYS, LAW_TRGT_PCIE2, LAW_SIZE_512MB),
-    set_law(3, CONFIG_SYS_PCIE2_IO_PHYS,  LAW_TRGT_PCIE2, LAW_SIZE_64KB),
+    set_law(0, 0, CONFIG_SYS_PCIE1_MEM_PHYS, LAW_TRGT_PCIE1, LAW_SIZE_512MB, 1),
+    set_law(1, 0, CONFIG_SYS_PCIE1_IO_PHYS,  LAW_TRGT_PCIE1, LAW_SIZE_64KB, 1),
+    set_law(2, 0, CONFIG_SYS_PCIE2_MEM_PHYS, LAW_TRGT_PCIE2, LAW_SIZE_512MB, 1),
+    set_law(3, 0, CONFIG_SYS_PCIE2_IO_PHYS,  LAW_TRGT_PCIE2, LAW_SIZE_64KB, 1),
 
     /* Map TLB for PCIe */
     set_tlb(1, 2, CONFIG_SYS_PCIE2_MEM_VIRT, CONFIG_SYS_PCIE2_MEM_PHYS, 0,
@@ -1011,7 +1000,7 @@ static int hal_pcie_init(void)
 static int hal_cpld_init(void)
 {
     /* Setup Local Access Window (LAW) for CPLD/BCSR */
-    set_law(5, BCSR_BASE, LAW_TRGT_ELBC, LAW_SIZE_256KB);
+    set_law(5, 0, BCSR_BASE, LAW_TRGT_ELBC, LAW_SIZE_256KB, 1);
     /* Setup TLB MMU (Translation Lookaside Buffer) for CPLD/BCSR */
     set_tlb(1, 8, BCSR_BASE, BCSR_BASE, 0, MAS3_SX | MAS3_SW | MAS3_SR,
         MAS2_I | MAS2_G, 0, BOOKE_PAGESZ_256K, 1);
