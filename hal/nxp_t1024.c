@@ -419,8 +419,6 @@ enum ifc_amask_sizes {
 
 /* DDR4 - 2GB */
 /* 1600 MT/s (64-bit, CL=12, ECC on) */
-#define DDR_SIZE               (2048ULL * 1024ULL * 1024ULL)
-
 #define DDR_CS0_BNDS_VAL       0x0000007F
 #define DDR_CS1_BNDS_VAL       0x008000BF
 #define DDR_CS2_BNDS_VAL       0x0100013F
@@ -612,22 +610,10 @@ static void udelay(uint32_t delay_us)
     wait_ticks(delay_us * DELAY_US);
 }
 
-static void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
-    uint32_t trgt_id, uint32_t law_sz)
-{
-    LAWAR(idx) = 0; /* reset */
-    LAWBARH(idx) = addr_h;
-    LAWBARL(idx) = addr_l;
-    LAWAR(idx) = (LAWAR_ENABLE | LAWAR_TRGT_ID(trgt_id) | law_sz);
-
-    /* Read back so that we sync the writes */
-    (void)LAWAR(idx);
-}
-
 static void law_init(void)
 {
     /* Buffer Manager (BMan) (control) - probably not required */
-    set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB);
+    set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
 }
 
 
@@ -876,13 +862,13 @@ static void hal_ddr_init(void)
 #ifdef ENABLE_DDR
     uint32_t reg;
 
+    /* Map LAW for DDR */
+    set_law(15, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
+
     /* If DDR is already enabled then just return */
-    if (get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN) {
+    if ((get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN)) {
         return;
     }
-
-    /* Map LAW for DDR */
-    set_law(15, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB);
 
     /* Set early for clock / pin */
     set32(DDR_SDRAM_CLK_CNTL, DDR_SDRAM_CLK_CNTL_VAL);
@@ -945,7 +931,7 @@ static void hal_ddr_init(void)
     set32(DDR_SDRAM_RCW_5, 0);
     set32(DDR_SDRAM_RCW_6, 0);
     set32(DDR_DDRCDR_1, DDR_DDRCDR_1_VAL);
-    set32(DDR_SDRAM_CFG_2, DDR_SDRAM_CFG_2_VAL);
+    set32(DDR_SDRAM_CFG_2, (DDR_SDRAM_CFG_2_VAL | DDR_SDRAM_CFG_2_D_INIT));
     set32(DDR_INIT_ADDR, 0);
     set32(DDR_INIT_EXT_ADDR, 0);
     set32(DDR_DDRCDR_2, DDR_DDRCDR_2_VAL);
@@ -1001,14 +987,6 @@ static void hal_ddr_init(void)
     /* Errata A-009663 - Write real precharge interval */
     set32(DDR_SDRAM_INTERVAL, DDR_SDRAM_INTERVAL_VAL);
 #endif
-
-    /* DDR - TBL=1, Entry 12/13 */
-    set_tlb(1, 12, DDR_ADDRESS, DDR_ADDRESS, 0,
-        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M,
-        0, BOOKE_PAGESZ_1G, 1);
-    set_tlb(1, 13, DDR_ADDRESS + 0x40000000, DDR_ADDRESS + 0x40000000, 0,
-        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M,
-        0, BOOKE_PAGESZ_1G, 1);
 #endif
 }
 
@@ -1067,7 +1045,7 @@ static void hal_cpld_init(void)
 
     /* IFC - CPLD */
     set_law(2, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
-        LAW_TRGT_IFC, LAW_SIZE_4KB);
+        LAW_TRGT_IFC, LAW_SIZE_4KB, 1);
 
     /* CPLD - TBL=1, Entry 11 */
     set_tlb(1, 11, CPLD_BASE, CPLD_BASE, CPLD_BASE_PHYS_HIGH,

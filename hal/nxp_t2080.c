@@ -176,7 +176,6 @@ enum ifc_amask_sizes {
 /* DDR */
 /* NAII 68PPC2 - 8GB discrete DDR3 IM8G08D3EBDG-15E */
 /* 1333.333 MT/s data rate 8 GiB (DDR3, 64-bit, CL=9, ECC on) */
-#define DDR_SIZE        (8192 * 1024 * 1024)
 #define DDR_N_RANKS     2
 #define DDR_RANK_DENS   0x100000000
 #define DDR_SDRAM_WIDTH 64
@@ -339,29 +338,17 @@ void uart_write(const char* buf, uint32_t sz)
 }
 #endif /* DEBUG_UART */
 
-static void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
-    uint32_t trgt_id, uint32_t law_sz)
-{
-    LAWAR(idx) = 0; /* reset */
-    LAWBARH(idx) = addr_h;
-    LAWBARL(idx) = addr_l;
-    LAWAR(idx) = (LAWAR_ENABLE | LAWAR_TRGT_ID(trgt_id) | law_sz);
-
-    /* Read back so that we sync the writes */
-    (void)LAWAR(idx);
-}
-
 void law_init(void)
 {
     /* Buffer Manager (BMan) (control) - probably not required */
-    set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB);
+    set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
 }
 
 static void hal_flash_init(void)
 {
     /* IFC - NOR Flash */
     /* LAW is also set in boot_ppc_start.S:flash_law */
-    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE, LAW_TRGT_IFC, LAW_SIZE_128MB);
+    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE, LAW_TRGT_IFC, LAW_SIZE_128MB, 1);
 
     /* NOR IFC Flash Timing Parameters */
     IFC_FTIM0(0) = (IFC_FTIM0_NOR_TACSE(4) | \
@@ -388,6 +375,9 @@ static void hal_flash_init(void)
 static void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
+    /* Map LAW for DDR */
+    set_law(4, 0, 0, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
+
     /* If DDR is already enabled then just return */
     if (DDR_SDRAM_CFG & DDR_SDRAM_CFG_MEM_EN) {
         return;
@@ -455,16 +445,8 @@ static void hal_ddr_init(void)
     DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
     asm volatile("sync;isync");
 
-    /* Map LAW for DDR */
-    set_law(4, 0, 0, LAW_TRGT_DDR_1, LAW_SIZE_2GB);
-
     /* Wait for data initialization is complete */
     while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG_2_D_INIT));
-
-    /* DDR - TBL=1, Entry 19 */
-    set_tlb(1, 19, DDR_ADDRESS, DDR_ADDRESS, 0,
-        MAS3_SX | MAS3_SW | MAS3_SR, 0,
-        0, BOOKE_PAGESZ_2G, 1);
 #endif
 }
 
@@ -498,7 +480,7 @@ static void hal_cpld_init(void)
 
     /* IFC - CPLD */
     set_law(2, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
-        LAW_TRGT_IFC, LAW_SIZE_4KB);
+        LAW_TRGT_IFC, LAW_SIZE_4KB, 1);
 
     /* CPLD - TBL=1, Entry 17 */
     set_tlb(1, 17, CPLD_BASE, CPLD_BASE, CPLD_BASE_PHYS_HIGH,

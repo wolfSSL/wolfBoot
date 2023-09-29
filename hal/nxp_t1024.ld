@@ -2,9 +2,6 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-HEAP_SIZE = 4K; /* heap not used */
-STACK_SIZE = 128K;
-
 MEMORY
 {
     /* DDR4 - 2GB (offset by destination address and 4KB boot region) */
@@ -14,8 +11,8 @@ MEMORY
     /* L1 SRAM - 16KB */
     L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
 
-    /* L2 SRAM - 160KB */
-    L2RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
+    /* Platform SRAM - 160KB */
+    PSRAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
 }
 
 SECTIONS
@@ -82,9 +79,10 @@ SECTIONS
 
 }
 
+/* DDR heap/stack */
 PROVIDE(_start_heap = _end);
+PROVIDE(_end_stack  = ORIGIN(DRAM) + (LENGTH(DRAM)));
 
-/* If relocated to DDR already then use stack end from DDR */
-/* If debugging and DDR is not ready, use L1 or L2 */
-PROVIDE(_end_stack  = _end + HEAP_SIZE + STACK_SIZE );
-/* PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) ); */
+/* Platform SRAM heap/stack */
+/* PROVIDE(_start_heap = ORIGIN(PSRAM)); */
+/* PROVIDE(_end_stack  = ORIGIN(PSRAM) + (LENGTH(PSRAM))); */

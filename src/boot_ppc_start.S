@@ -479,8 +479,9 @@ flash_tlb:
 #endif /* CORE_E5500 || CORE_E6500 */
 #endif /* FLASH_BASE_ADDR */
 
-/* Enable use of the DDR if available (like 2nd stage) */
-#if defined(CORE_E500) && defined(ENABLE_DDR)
+/* Enable use of the DDR (like 2nd stage) so it can be used for stack */
+#ifdef ENABLE_DDR
+    #ifdef CORE_E500
         #ifdef BUILD_LOADER_STAGE1
             /* use cache inhibited for first stage loader to avoid
              * L1 cache as SRAM issues */
@@ -488,17 +489,21 @@ flash_tlb:
         #else
             #define DDR_WING (MAS2_G)
         #endif
+    #else
+        #define DDR_WING (MAS2_M)
+    #endif
 
-        /* DDR - TBL=1, Entry 11 and 12, Super X/R/W, IG, TS=0, 512MB */
-        set_tlb(1, 11,
-                DDR_ADDRESS, DDR_ADDRESS, 0,
-                MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING, 0,
-                BOOKE_PAGESZ_256M, 0, r3);
-        set_tlb(1, 12,
-                DDR_ADDRESS + (256*1024*1024), DDR_ADDRESS + (256*1024*1024), 0,
-                MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING, 0,
-                BOOKE_PAGESZ_256M, 0, r3);
-#endif /* CORE_E500 && ENABLE_DDR */
+        /* Map initial DDR, but can be adjusted later in hal_ddr_init() */
+        /* DDR - TBL=1, Entry 12/13 */
+        set_tlb(1, 12, DDR_ADDRESS, DDR_ADDRESS, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING,
+                0, BOOKE_PAGESZ_1G, 1, r3);
+    #if DDR_SIZE > 0x40000000
+        set_tlb(1, 13, DDR_ADDRESS + 0x40000000, DDR_ADDRESS + 0x40000000, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING,
+                0, BOOKE_PAGESZ_1G, 1, r3);
+    #endif
+#endif /* ENABLE_DDR */
 
 #ifdef INITIAL_SRAM_ADDR
 init_sram_law:

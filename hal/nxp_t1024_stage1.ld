@@ -21,8 +21,8 @@ MEMORY
     /* L1 SRAM - 16KB */
     L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
 
-    /* L2 SRAM - 160KB */
-    L2RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
+    /* Platform SRAM - 160KB */
+    PSRAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
 
     /* DDR - 2GB: Start at 16MB to avoid using 0x0 (NULL) addresses */
     DRAM (rwx) : ORIGIN = 0x1000000, LENGTH = 0x7FFFFFFF - 0x1000000
@@ -105,5 +105,6 @@ SECTIONS
 
 }
 
-PROVIDE(_start_heap = ORIGIN(L2RAM));
-PROVIDE(_end_stack  = ORIGIN(L2RAM) + (LENGTH(L2RAM)) );
+/* Platform SRAM heap/stack */
+PROVIDE(_start_heap = ORIGIN(PSRAM));
+PROVIDE(_end_stack  = ORIGIN(PSRAM) + (LENGTH(PSRAM)));

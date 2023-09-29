@@ -48,6 +48,17 @@ extern uint32_t dts_load_addr;
 #endif
 
 #ifdef WOLFBOOT_USE_RAMBOOT
+/* requires/assumes inputs and size to be 4-byte aligned */
+static void memcpy32(void *dst, const void *src, size_t n)
+{
+    size_t i;
+    const uint32_t *s = (const uint32_t*)src;
+    uint32_t *d = (uint32_t*)dst;
+    for (i = 0; i < n/4; i++) {
+        d[i] = s[i];
+    }
+}
+
 /* Function to load image from flash to ram */
 int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
@@ -55,8 +66,8 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     uint32_t img_size;
 
     /* read header into RAM */
-    wolfBoot_printf("Loading header %d bytes to %p\n",
-        IMAGE_HEADER_SIZE, dst);
+    wolfBoot_printf("Loading header %d bytes from %p to %p\n",
+        IMAGE_HEADER_SIZE, src, dst);
 #if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src, dst, IMAGE_HEADER_SIZE);
     if (ret != IMAGE_HEADER_SIZE){
@@ -64,7 +75,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
         return -1;
     }
 #else
-    memcpy(dst, src, IMAGE_HEADER_SIZE);
+    memcpy32(dst, src, IMAGE_HEADER_SIZE);
 #endif
 
     /* check for valid header and version */
@@ -78,8 +89,8 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     img_size = wolfBoot_image_size((uint8_t*)dst);
 
     /* Read the entire image into RAM */
-    wolfBoot_printf("Loading image %d bytes to %p\n",
-        img_size, dst + IMAGE_HEADER_SIZE);
+    wolfBoot_printf("Loading image %d bytes from %p to %p\n",
+        img_size, src + IMAGE_HEADER_SIZE, dst + IMAGE_HEADER_SIZE);
 #if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src + IMAGE_HEADER_SIZE,
                                     dst + IMAGE_HEADER_SIZE, img_size);
@@ -88,7 +99,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
         return -1;
     }
 #else
-    memcpy(dst + IMAGE_HEADER_SIZE, src + IMAGE_HEADER_SIZE, img_size);
+    memcpy32(dst + IMAGE_HEADER_SIZE, src + IMAGE_HEADER_SIZE, img_size);
 #endif
 
     /* mark image as no longer external */
