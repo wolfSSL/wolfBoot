@@ -144,3 +144,97 @@ jobs:
       - name: Generate final signed binary
         run: |
           ./tools/keytools/sign --rsa2048 --sha256 --manual-sign test-app/image.elf public-key.der 1 test-app/image_v1.sig
+
+      # SIGN tool options
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config && make include/target.h
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot
+        run: |
+          make SIGN=ECC256 HASH=SHA256
+
+      - name: Sign without timestamp
+        run: |
+          ./tools/keytools/sign --ecc256 --sha256 --no-ts test-app/image.elf wolfboot_signing_private_key.der 2
+
+     # TODO: requires hexdump
+     #- name: Check that timestamp is not included in the signed image
+     #  run: |
+     #  ! (hexdump -C -n 256 test-app/image_v3_signed.bin |grep "02 00 08 00")
+
+     # Universal keystore
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config && make include/target.h
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Generate external RSA2048 key
+        run: |
+            openssl genrsa -out private-key.pem 2048
+
+      - name: Convert to DER
+        run: |
+          openssl rsa -in private-key.pem -inform PEM -out private-key.der -outform DER
+
+      - name: Export external public key
+        run: |
+          openssl rsa -inform DER -outform DER -in private-key.der -out public-rsa2048-key.der -pubout
+
+      - name: Add different keys to the keystore (two generated ECC with different curves, one imported RSA)
+        run: |
+          ./tools/keytools/keygen --rsa2048 -i public-rsa2048-key.der --ecc256 -g wolfboot_signing_private_key.der --ecc384 -g ecc384-priv-key.der
+
+      - name: Build wolfboot with universal keystore
+        run: |
+          make SIGN=ECC256 HASH=SHA256 WOLFBOOT_UNIVERSAL_KEYSTORE=1
+
+    # keygen option: masks
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config && make include/target.h
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Run keygen with no specific mask
+        run: |
+          ./tools/keytools/keygen --ecc256 -g wolfboot_signing_private_key.der | grep "mask" | grep "ffffffff"
+
+      - name: Delete generated key
+        run: |
+          rm -f wolfboot_signing_private_key.der
+
+      - name: Run keygen with --id 0
+        run: |
+          ./tools/keytools/keygen --id 0 --ecc256 -g wolfboot_signing_private_key.der | grep "mask" | grep "00000001"
+
+      - name: Delete generated key
+        run: |
+          rm -f wolfboot_signing_private_key.der
+
+      - name: Run keygen with test id set
+        run: |
+          ./tools/keytools/keygen --id 1,3,5,10,11,13,14 --ecc256 -g wolfboot_signing_private_key.der | grep "mask" | grep "00006c2a"
+
+
