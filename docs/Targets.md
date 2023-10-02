@@ -1265,7 +1265,7 @@ Reset Configuration Word (RCW):
 
 Flash is NOR on IFC CS0 (0x0_EC00_0000) 64MB (default).
 
-Default NOR Flash Memory Layout (64MB):
+Default NOR Flash Memory Layout (64MB) (128KB block, 1K page)
 
 | Description       | Address    | Size                |
 | ----------------- | ---------- | ------------------- |

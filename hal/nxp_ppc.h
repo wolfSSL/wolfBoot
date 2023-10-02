@@ -545,13 +545,13 @@
 #define WC_STRINGIFY(str) _WC_STRINGIFY_L2(str)
 #endif
 
-#define mtspr(rn, v) asm volatile("mtspr " WC_STRINGIFY(rn) ",%0" : : "r" (v))
+#define mtspr(rn, v) __asm__ __volatile__("mtspr " WC_STRINGIFY(rn) ",%0" : : "r" (v))
 
 #define mfmsr() ({ \
     unsigned int rval; \
-    asm volatile("mfmsr %0" : "=r" (rval)); rval; \
+    __asm__ __volatile__("mfmsr %0" : "=r" (rval)); rval; \
 })
-#define mtmsr(v)     asm volatile("mtmsr %0" : : "r" (v))
+#define mtmsr(v)     __asm__ __volatile__("mtmsr %0" : : "r" (v))
 
 
 #ifndef __ASSEMBLER__
