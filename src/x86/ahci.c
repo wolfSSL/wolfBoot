@@ -97,6 +97,9 @@ __attribute__((aligned(HBA_TBL_ALIGN)));
 #define PCI_REG_MAP_AHCI_MODE (0x1 << 6)
 #define PCI_REG_MAP_ALL_PORTS (0x1 << 5)
 
+#define SATA_MAX_TRIES (5)
+#define SATA_DELAY (100)
+
 #ifdef DEBUG_AHCI
 #define AHCI_DEBUG_PRINTF(...) wolfBoot_printf(__VA_ARGS__)
 #else
@@ -416,6 +419,40 @@ static int sata_unlock_disk(int drv)
     return 0;
 }
 #endif /* WOLFBOOT_ATA_DISK_LOCK */
+
+/**
+ * @brief Waits until a specific address is cleared by a given mask.
+ *
+ * This function waits until a specific 32-bit PCI memory address is cleared by a given
+ * mask. After SATA_DELAY * SATA_MAX_TRIES ms, if the address in memory is not
+ * cleared, the function returns -1. *
+ * @param[in] address The memory address to monitor.
+ * @param[in] mask The mask to apply to the value at the address.
+ *
+ * @return 0 if the masked bits are cleared within the specified number of
+ * tries, 1 otherwise.
+ */
+static int sata_wait_until_clear(uint32_t address, uint32_t mask)
+{
+    int count = SATA_MAX_TRIES;
+    uint32_t reg;
+    int ret = -1;
+
+    while (1) {
+        if (count-- == 0)
+            break;
+
+        reg = mmio_read32(address);
+        if ((reg & mask) == 0) {
+            ret = 0;
+            break;
+        }
+        delay(SATA_DELAY);
+    }
+    
+    return ret;
+}
+
 /**
  * @brief Enables SATA ports and detects connected SATA disks.
  *
@@ -451,12 +488,15 @@ void sata_enable(uint32_t base)
     mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_HR | HBA_GHC_IE);
 
     /* Wait until reset is complete */
-    while ((mmio_read32(AHCI_HBA_GHC(base)) & HBA_GHC_HR) != 0)
-        ;
-
+    r = sata_wait_until_clear(AHCI_HBA_GHC(base), HBA_GHC_HR);
+    if (r != 0)  {
+        wolfBoot_printf("ACHI: timeout waiting reset\r\n");
+        panic();
+    }
+    
     /* Wait until enabled. */
     if ((mmio_read32(AHCI_HBA_GHC(base)) & HBA_GHC_AE) == 0)
-          mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_AE);;
+          mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_AE);
 
     AHCI_DEBUG_PRINTF("AHCI reset complete.\r\n");
 
@@ -502,8 +542,6 @@ void sata_enable(uint32_t base)
             mmio_or32(AHCI_PxSCTL(base, i), (0x03 << 8));
 
             /* Disable interrupt reporting to SW */
-            //mmio_write32(AHCI_PxIE(base, i), 0);
-
             count = 0;
             while (1) {
                 ssts = mmio_read32(AHCI_PxSSTS(base, i));
@@ -511,11 +549,11 @@ void sata_enable(uint32_t base)
                 ssts &= AHCI_SSTS_DET_MASK;
                 if (ssts == AHCI_PORT_SSTS_DET_PCE)
                     break;
-                if (count++ > 5) {
+                if (count++ > SATA_MAX_TRIES) {
                     AHCI_DEBUG_PRINTF("AHCI port %d: Timeout occurred.\r\n", i);
                     break;
                 }
-                delay(1000);
+                delay(SATA_DELAY);
             };
 
             if (ssts == 0) {
@@ -544,15 +582,12 @@ void sata_enable(uint32_t base)
                 AHCI_DEBUG_PRINTF("AHCI port: Sending STOP ...\r\n");
 
                 /* Wait for CR to be cleared */
-                count = 0;
-                do {
-                    reg = mmio_read32(AHCI_PxCMD(base, i));
-                    if (count++ > 5) {
-                        AHCI_DEBUG_PRINTF("AHCI Error: Port did not clear CR!\r\n");
-                        break;
-                    }
-                    delay(1000);
-                } while ((reg & AHCI_PORT_CMD_CR) != 0);
+                r = sata_wait_until_clear(AHCI_PxCMD(base, i), AHCI_PORT_CMD_CR);
+                if (r != 0) {
+                    wolfBoot_printf("AHCI Error: Port did not clear CR!\r\n");
+                    panic();
+                }
+                
                 AHCI_DEBUG_PRINTF("AHCI port: Sent STOP.\r\n");
 
                 AHCI_DEBUG_PRINTF("AHCI port: Disabling FIS ...\r\n");
@@ -566,15 +601,12 @@ void sata_enable(uint32_t base)
                 }
 
                 /* Wait for FR to be cleared */
-                count = 0;
-                do {
-                    reg = mmio_read32(AHCI_PxCMD(base, i));
-                    if (count++ > 5) {
-                        wolfBoot_printf("AHCI Error: Port did not clear FR!\r\n");
-                        break;
-                    }
-                    delay(1000);
-                } while ((reg & AHCI_PORT_CMD_FR) != 0);
+                r = sata_wait_until_clear(AHCI_PxCMD(base, i), AHCI_PORT_CMD_FR);
+                if (r != 0 ) {
+                    wolfBoot_printf("AHCI Error: Port did not clear FR!\r\n");
+                    panic();
+                }
+                
                 AHCI_DEBUG_PRINTF("AHCI port: FIS disabled.\r\n");
 
                 clb = (uint32_t)(uintptr_t)(ahci_hba_clb + i * HBA_CLB_SIZE);
@@ -594,9 +626,11 @@ void sata_enable(uint32_t base)
                 memset((uint8_t*)(uintptr_t)fis, 0, HBA_FIS_SIZE);
 
                 /* Wait until CR is cleared */
-                do {
-                    reg = mmio_read32(AHCI_PxCMD(base, i));
-                } while(reg & AHCI_PORT_CMD_CR);
+                r = sata_wait_until_clear(AHCI_PxCMD(base, i), AHCI_PORT_CMD_CR);
+                if (r != 0) {
+                    wolfBoot_printf("AHCI error: CR clear error\r\n");
+                    panic();
+                }
 
                 reg |= AHCI_PORT_CMD_FRE | AHCI_PORT_CMD_START;
                 mmio_write32(AHCI_PxCMD(base, i), reg);
@@ -649,6 +683,8 @@ void sata_disable(uint32_t base)
     uint32_t ports_impl;
     uint32_t i, reg;
     volatile uint32_t count;
+    int r;
+    
     AHCI_DEBUG_PRINTF("SATA: disabling sata controller at 0x%x\r\n", base);
 
     ports_impl = mmio_read32(AHCI_HBA_PI(base));
@@ -674,15 +710,12 @@ void sata_disable(uint32_t base)
         }
 
         /* Wait for CR to be cleared */
-        count = 0;
-        do {
-            reg = mmio_read32(AHCI_PxCMD(base, i));
-            if (count++ > 5) {
-                break;
-            }
-            delay(1000);
-        } while ((reg & AHCI_PORT_CMD_CR) != 0);
-
+        r = sata_wait_until_clear(AHCI_PxCMD(base, i), AHCI_PORT_CMD_CR);
+        if (r != 0) {
+            wolfBoot_printf("AHCI error: CR clear error\r\n");
+            panic();
+        }
+        
         /* Disable FIS RX */
         reg = mmio_read32(AHCI_PxCMD(base, i));
         if (reg & (AHCI_PORT_CMD_CR | AHCI_PORT_CMD_START)) {
@@ -693,24 +726,17 @@ void sata_disable(uint32_t base)
         }
 
         /* Wait for FR to be cleared */
-        count = 0;
-        do {
-            reg = mmio_read32(AHCI_PxCMD(base, i));
-            if (count++ > 5) {
-                wolfBoot_printf("AHCI Error: Port did not clear FR!\r\n"); 
-                break;
-            }
-            delay(1000);
-        } while ((reg & AHCI_PORT_CMD_FR) != 0);
+        r = sata_wait_until_clear(AHCI_PxCMD(base, i), AHCI_PORT_CMD_FR);
+        if (r != 0) {
+            wolfBoot_printf("AHCI error: FR clear error\r\n");
+            panic();
+        }
         reg = mmio_read32(AHCI_PxCMD(base, i));
         mmio_write32(AHCI_PxCMD(base, i),
                 reg & (~AHCI_PORT_CMD_ICC_ACTIVE));
 
     }
-    /* reg = mmio_read32(AHCI_HBA_GHC(base)); */
-    /* mmio_write32(AHCI_HBA_GHC(base), reg & (~HBA_GHC_AE)); */
-    /* mmio_or32(AHCI_HBA_GHC(base), HBA_GHC_HR | HBA_GHC_IE); */
-    /* memset((void *)SATA_BASE, 0, 0x1000000); */
+
 }
 #endif /* AHCI_H_ */
 
