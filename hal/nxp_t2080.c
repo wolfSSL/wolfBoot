@@ -443,7 +443,7 @@ static void hal_ddr_init(void)
 
     /* Enable controller */
     DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
-    asm volatile("sync;isync");
+    __asm__ __volatile__("sync;isync");
 
     /* Wait for data initialization is complete */
     while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG_2_D_INIT));

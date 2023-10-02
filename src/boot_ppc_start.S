@@ -462,11 +462,18 @@ flash_law:
         lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
         isync
 flash_tlb:
-        /* Flash: TLB 1, Entry 7, Super X/R/W, W, TS=0, 64/128M, IPROT */
+        /* Flash: TLB 1, Entry 7, Super X/R/W, W/I/G, TS=0, 64/128M, IPROT */
         /* Write is required for Write/Erase using CFI commands to base */
+    #ifdef BUILD_LOADER_STAGE1
+        /* Using XIP from this flash, so cannot use cache inhibit */
+        #define FLASH_TLB_WING (MAS2_W | MAS2_G)
+    #else
+        /* IFC polling requires cache inhibit */
+        #define FLASH_TLB_WING (MAS2_I | MAS2_G)
+    #endif
         set_tlb(1, 7,
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
-                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_W | MAS2_G, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, FLASH_TLB_WING, 0,
                 FLASH_TLB_PAGESZ, 1, r3);
 #else
 flash_tlb:

@@ -935,7 +935,7 @@ static void hal_ddr_init(void)
 
     /* Set values, but do not enable the DDR yet */
     set32(DDR_SDRAM_CFG, ((DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN)));
-    asm volatile("sync;isync");
+    __asm__ __volatile__("sync;isync");
 
     /* busy wait for ~500us */
     udelay(500);
@@ -943,7 +943,7 @@ static void hal_ddr_init(void)
     /* Enable controller */
     reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
     set32(DDR_SDRAM_CFG, reg | DDR_SDRAM_CFG_MEM_EN);
-    asm volatile("sync;isync");
+    __asm__ __volatile__("sync;isync");
 
     /* Wait for data initialization to complete */
     while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
@@ -1438,7 +1438,7 @@ static void hal_mp_up(uint32_t bootpg)
     bpcr = get32(ECM_EEBPCR);
     bpcr |= ECM_EEBPCR_CPU_EN(up);
     set32(ECM_EEBPCR, bpcr);
-    asm volatile("sync; isync; msync");
+    __asm__ __volatile__("sync; isync; msync");
 
     /* wait for other core to start */
     cpu_up_mask = (1 << whoami);

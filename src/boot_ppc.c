@@ -43,7 +43,7 @@ void write_tlb(uint32_t mas0, uint32_t mas1, uint32_t mas2, uint32_t mas3,
     mtspr(MAS2, mas2);
     mtspr(MAS3, mas3);
     mtspr(MAS7, mas7);
-    asm volatile("isync;msync;tlbwe;isync");
+    __asm__ __volatile__("isync;msync;tlbwe;isync");
 }
 
 void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint32_t rpn,
@@ -85,15 +85,16 @@ void invalidate_tlb(int tlb)
 void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l, uint32_t trgt_id,
     uint32_t law_sz, int reset)
 {
-    if (reset)
+    if (reset) {
         set32(LAWAR(idx), 0); /* reset */
-    #ifdef CORE_E500
-        (void)addr_h; /* not used */
-        set32(LAWBAR(idx), addr_l >> 12);
-    #else
-        set32(LAWBARH(idx), addr_h);
-        set32(LAWBARL(idx), addr_l);
-    #endif
+    }
+#ifdef CORE_E500
+    (void)addr_h; /* not used */
+    set32(LAWBAR(idx), addr_l >> 12);
+#else
+    set32(LAWBARH(idx), addr_h);
+    set32(LAWBARL(idx), addr_l);
+#endif
     set32(LAWAR(idx), LAWAR_ENABLE | LAWAR_TRGT_ID(trgt_id) | law_sz);
 
     /* Read back so that we sync the writes */
@@ -143,18 +144,18 @@ void flush_cache(uint32_t start_addr, uint32_t size)
 
     for (addr = start; (addr <= end) && (addr >= start);
             addr += CACHE_LINE_SIZE) {
-        asm volatile("dcbst 0,%0" : : "r" (addr) : "memory");
+        __asm__ __volatile__("dcbst 0,%0" : : "r" (addr) : "memory");
     }
     /* wait for all dcbst to complete on bus */
-    asm volatile("sync" : : : "memory");
+    __asm__ __volatile__("sync" : : : "memory");
 
     for (addr = start; (addr <= end) && (addr >= start);
             addr += CACHE_LINE_SIZE) {
-        asm volatile("icbi 0,%0" : : "r" (addr) : "memory");
+        __asm__ __volatile__("icbi 0,%0" : : "r" (addr) : "memory");
     }
-    asm volatile("sync" : : : "memory");
+    __asm__ __volatile__("sync" : : : "memory");
     /* flush prefetch queue */
-    asm volatile("isync" : : : "memory");
+    __asm__ __volatile__("isync" : : : "memory");
 }
 #endif
 
