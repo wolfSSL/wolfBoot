@@ -63,6 +63,9 @@
 #ifndef ATA_UNLOCK_DISK_KEY_SZ
 #define ATA_UNLOCK_DISK_KEY_SZ 32
 #endif
+#ifndef WOLFBOOT_TPM_SEAL_KEY_ID
+#define WOLFBOOT_TPM_SEAL_KEY_ID (0)
+#endif
 #endif /* defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) || defined(WOLFBOOT_TPM_SEAL) */
 
 #if defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) && defined(WOLFBOOT_TPM_SEAL)
@@ -352,7 +355,7 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
         return -1;
 
     memcpy(policy, pol, policy_size);
-    get_key_sha256(0, pubkey_hint);
+    get_key_sha256(WOLFBOOT_TPM_SEAL_KEY_ID, pubkey_hint);
     ret = wolfBoot_unseal(pubkey_hint, policy, policy_size,
                           ATA_UNLOCK_DISK_KEY_NV_INDEX,
                           secret, secret_size);
