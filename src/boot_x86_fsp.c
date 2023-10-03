@@ -483,8 +483,8 @@ static void memory_ready_entry(void *ptr)
      */
     memory_init_data_bss();
 
-#if (defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT)) || \
-    (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM))
+#if (defined(WOLFBOOT_MEASURED_BOOT)) || \
+    (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY))
     wolfBoot_printf("Initializing WOLFBOOT_TPM" ENDLINE);
     ret = wolfBoot_tpm2_init();
     if (ret != 0) {
@@ -549,8 +549,8 @@ static void memory_ready_entry(void *ptr)
     }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
-#if (defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT)) || \
-    (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM))
+#if (defined(WOLFBOOT_MEASURED_BOOT)) || \
+    (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY))
     wolfBoot_tpm2_deinit();
 #endif
     /* Finalize staging to stage2 */
