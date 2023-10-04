@@ -61,7 +61,7 @@ static int test_tpm(void);
 #endif
 
 #ifdef ENABLE_ESPI
-#include "spi_drv.h" /* for transfer flags */
+#include "spi_drv.h" /* for transfer flags and chip select */
 #endif
 
 /* P1021 Platform */
@@ -1936,9 +1936,6 @@ static int test_flash(void)
 #endif /* ENABLE_ELBC && TEST_FLASH */
 
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
-#ifndef SPI_CS_TPM
-#define SPI_CS_TPM 2
-#endif
 int test_tpm(void)
 {
     /* Read 4 bytes at TIS address D40F00. Assumes 0 wait state on TPM */

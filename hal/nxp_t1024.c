@@ -37,19 +37,19 @@
 #define ENABLE_BUS_CLK_CALC
 #define ENABLE_IFC
 #ifndef BUILD_LOADER_STAGE1
+    /* Tests */
+    #if 0
+        #define TEST_DDR
+        #define TEST_FLASH
+        #define TEST_TPM
+    #endif
+
     //#define ENABLE_CPLD
     #define ENABLE_QE   /* QUICC Engine */
     //#define ENABLE_FMAN
     //#define ENABLE_MP   /* multi-core support */
     #if defined(WOLFBOOT_TPM) || defined(TEST_TPM)
         #define ENABLE_ESPI /* SPI for TPM */
-    #endif
-
-    /* Tests */
-    #if 1
-        //#define TEST_DDR
-        //#define TEST_FLASH
-        //#define TEST_TPM
     #endif
 #endif
 
@@ -72,7 +72,7 @@ static int test_tpm(void);
 static void hal_flash_unlock_sector(uint32_t sector);
 
 #ifdef ENABLE_ESPI
-#include "spi_drv.h" /* for transfer flags */
+#include "spi_drv.h" /* for transfer flags and chip select */
 #endif
 
 /* T1024 */
@@ -1697,9 +1697,6 @@ static int test_flash(void)
 #endif /* ENABLE_IFC && TEST_FLASH */
 
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
-#ifndef SPI_CS_TPM
-#define SPI_CS_TPM 2
-#endif
 int test_tpm(void)
 {
     /* Read 4 bytes at TIS address D40F00. Assumes 0 wait state on TPM */

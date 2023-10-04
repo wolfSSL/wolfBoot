@@ -29,12 +29,10 @@
 
 #ifdef WOLFBOOT_TPM
 
-#if defined(PLATFORM_nxp_p1021)
-/* functions from nxp_p1021.c hal */
+/* functions from nxp_p1021.c and nxp_t1024.c hal */
 extern void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode);
-extern int hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags);
+extern int  hal_espi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags);
 extern void hal_espi_deinit(void);
-#endif
 
 #include <wolftpm/tpm2_types.h>
 

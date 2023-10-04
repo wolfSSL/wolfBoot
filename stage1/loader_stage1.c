@@ -125,7 +125,7 @@ int main(void)
     #ifdef PRINTF_ENABLED
         wolfBoot_printf("Jumping to full wolfBoot at %p\n", wolfboot_start);
     #elif defined(DEBUG_UART)
-        uart_write("Jumping to full wolfBoot\n", 27);
+        uart_write("Jumping to full wolfBoot\n", 25);
     #endif
 
         hal_prepare_boot();

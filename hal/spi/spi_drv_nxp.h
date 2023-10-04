@@ -20,13 +20,13 @@
 
 #include <stdint.h>
 
-#if defined(PLATFORM_nxp_p1021)
-
-/* Chip select for TPM */
+/* Chip select for TPM - defaults */
 #ifndef SPI_CS_TPM
-#define SPI_CS_TPM 2
-#endif
-
+    #if defined(PLATFORM_nxp_p1021)
+        #define SPI_CS_TPM 2
+    #elif defined(PLATFORM_nxp_t1024)
+        #define SPI_CS_TPM 1
+    #endif
 #endif
 
 #endif /* !SPI_DRV_NXP_H_INCLUDED */
