@@ -819,9 +819,10 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 }
 
 #ifdef MMU
-/* Inline use of ByteReverseWord32 */
-#define WOLFSSL_MISC_INCLUDED
-#include <wolfcrypt/src/misc.c>
+#ifndef WOLFBOOT_TPM /* tpm2_types.h has ByteReverseWord32 */
+    #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
+    #include <wolfcrypt/src/misc.c> /* for ByteReverseWord32 */
+#endif /* !WOLFBOOT_TPM */
 static uint32_t wb_reverse_word32(uint32_t x)
 {
     return ByteReverseWord32(x);
