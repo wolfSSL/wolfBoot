@@ -91,6 +91,9 @@
 #define GPIO_MODE_SHIFT 10
 #define GPIO_RESET_MASK (0x3) << 30
 #define GPIO_RESET_SHIFT 30
+#define PCR_INTERRUPT_PORT_ID (0xc4)
+#define GIC_OFFSET (0x31FC)
+#define GIC_SHUTDOWN_STATUS_BIT (1 << 0)
 
 
 SI_PCH_DEVICE_INTERRUPT_CONFIG mPchHDevIntConfig[] = {
@@ -646,6 +649,14 @@ int post_temp_ram_init_cb(void)
     uint8_t reg;
     int err;
     int i;
+
+    reg = pch_read32(PCR_INTERRUPT_PORT_ID, GIC_OFFSET);
+    if (reg & GIC_SHUTDOWN_STATUS_BIT) {
+        /* CPU is in shutdown mode, probably after a triple fault. Force a full reset. */
+        wolfBoot_printf("CPU Shutdown mode detected. Force reset.\r\n");
+        reset(0);
+        panic();
+    }
 
     err = configure_kontron_cpld();
     if (err != 0)
