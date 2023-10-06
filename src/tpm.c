@@ -763,6 +763,10 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16
     /* get public key for policy authorization */
     rc = wolfBoot_load_pubkey(pubkey_hint, &authKey, &alg);
 
+#ifdef WOLFBOOT_DEBUG_TPM
+    wolfBoot_printf("Seal: Pub Key %d\n", alg);
+#endif
+
     /* The handle for the public key if not needed, so unload it.
      * For seal only a populated TPM2B_PUBLIC is required */
     wolfTPM2_UnloadHandle(&wolftpm_dev, &authKey.handle);
@@ -884,6 +888,10 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     memcpy(&pcrMask, policy, sizeof(pcrMask));
     memset(pcrArray, 0, sizeof(pcrArray));
     pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask, pcrArray, sizeof(pcrArray));
+
+#ifdef WOLFBOOT_DEBUG_TPM
+    wolfBoot_printf("Unseal: PCR mask 0x%x (sz %d)\n", pcrMask, pcrArraySz);
+#endif
 
     /* skip to signature */
     policy += sizeof(pcrMask);

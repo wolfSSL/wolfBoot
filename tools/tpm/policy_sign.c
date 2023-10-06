@@ -24,30 +24,31 @@
  */
 
 
-#include "wolfssl/wolfcrypt/types.h"
-#include <wolftpm/tpm2.h>
-#include <wolftpm/tpm2_wrap.h>
 
-#include <stdio.h>
-
-#include <hal/tpm_io.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/hash.h>
+#include <wolftpm/tpm2_wrap.h>
+#include "tpm.h"
+
+/* Default PCR (test) */
+#define DEFAULT_PCR 16
 
 /* Prefer SHA2-256 for PCR's, and all TPM 2.0 devices support it */
 #define USE_PCR_ALG   TPM_ALG_SHA256
-enum sign_alg {
-    ECC256 = 0,
-};
 
 static void usage(void)
 {
     printf("Expected usage:\n");
-    printf("./examples/pcr/policy_sign [-ecc256] [-key=pem/der] [-pcr] [-pcrdisgest] [-outpolicy=] policy_file\n");
-    printf("* -ecc256: Use ECC256P1 key\n");
-    printf("* -key=keyfile: Private key to sign PCR policy (PEM or DER)\n");
-    printf("* -pcr=index: PCR index < 24 (multiple can be supplied) (default 0)\n");
+    printf("./examples/pcr/policy_sign [-ecc256/-ecc384] [-key=pem/der] [-pcr=] [-pcrdigest=] [-policydigest=][-outpolicy=]\n");
+    printf("* -ecc256/-ecc384: Key type (currently only ECC) (default SECP256R1)\n");
+    printf("* -key=keyfile: Private key to sign PCR policy (PEM or DER) (default wolfboot_signing_private_key.der)\n");
+    printf("* -pcr=index: PCR index < 24 (multiple can be supplied) (default %d)\n", DEFAULT_PCR);
     printf("* -pcrdigest=hexstr: PCR Digest (default=Read actual PCR's)\n");
-    printf("* -out=file: Signature file (default policy.bin.sig)\n");
+    printf("* -policydigest=hexstr: Policy Digest (policy based on PCR digest and PCR(s)\n");
+    printf("* -outpolicy=file: Signature file (default policy.bin.sig)\n");
+    printf("Example:\n");
+    printf("\t./tools/tpm/policy_sign -ecc256 -pcr=0 -pcrdigest=eca4e8eda468b8667244ae972b8240d3244ea72341b2bf2383e79c66643bbecc\n");
 }
 
 
@@ -98,8 +99,8 @@ static int loadFile(const char* fname, byte** buf, size_t* bufLen)
 }
 
 /* Function to sign policy with external key */
-static int PolicySign(enum sign_alg alg, const char* keyFile, byte* hash,
-                      word32 hashSz, byte* sig, word32* sigSz)
+static int PolicySign(int alg, const char* keyFile, byte* hash, word32 hashSz,
+    byte* sig, word32* sigSz)
 {
     int rc = 0;
     byte* buf = NULL;
@@ -114,8 +115,8 @@ static int PolicySign(enum sign_alg alg, const char* keyFile, byte* hash,
     #endif
     } key;
 
-    XMEMSET(&key, 0, sizeof(key));
-    XMEMSET(&rng, 0, sizeof(rng));
+    memset(&key, 0, sizeof(key));
+    memset(&rng, 0, sizeof(rng));
 
     rc = wc_InitRng(&rng);
     if (rc != 0) {
@@ -124,12 +125,14 @@ static int PolicySign(enum sign_alg alg, const char* keyFile, byte* hash,
     }
 
     rc = loadFile(keyFile, &buf, &bufSz);
-    if (rc == 0 && alg == ECC256) {
+    if (rc == 0 && (alg == ECC_SECP256R1 || alg == ECC_SECP384R1)) {
+        word32 keySz = 32;
+        if (alg == ECC_SECP384R1)
+            keySz = 48;
         rc = wc_ecc_init(&key.ecc);
         if (rc == 0) {
             rc = wc_ecc_import_unsigned(&key.ecc, buf,
-                        (buf) + 32, buf + 64,
-                        ECC_SECP256R1);
+                (buf) + keySz, buf + (keySz*2), alg);
             if (rc == 0) {
                 mp_int r, s;
                 rc = mp_init_multi(&r, &s, NULL, NULL, NULL, NULL);
@@ -137,7 +140,6 @@ static int PolicySign(enum sign_alg alg, const char* keyFile, byte* hash,
                     rc = wc_ecc_sign_hash_ex(hash, hashSz, &rng, &key.ecc, &r, &s);
                 }
                 if (rc == 0) {
-                    word32 keySz = key.ecc.dp->size;
                     mp_to_unsigned_bin(&r, sig);
                     mp_to_unsigned_bin(&s, sig + keySz);
                     mp_clear(&r);
@@ -231,10 +233,10 @@ int policy_sign(int argc, char *argv[])
     int i;
     int rc = -1;
     TPM_ALG_ID pcrAlg = USE_PCR_ALG;
-    enum sign_alg alg;
+    int alg = ECC_SECP256R1;
     byte pcrArray[PCR_SELECT_MAX*2];
     word32 pcrArraySz = 0;
-    const char* keyFile = NULL;
+    const char* keyFile = "wolfboot_signing_private_key.der";
     const char* outPolicyFile = "policy.bin.sig";
     byte pcrDigest[WC_MAX_DIGEST_SIZE];
     word32 pcrDigestSz = 0;
@@ -257,7 +259,10 @@ int policy_sign(int argc, char *argv[])
     }
     while (argc > 1) {
         if (XSTRCMP(argv[argc-1], "-ecc256") == 0) {
-            alg = ECC256;
+            alg = ECC_SECP256R1;
+        }
+        else if (XSTRCMP(argv[argc-1], "-ecc384") == 0) {
+            alg = ECC_SECP384R1;
         }
         else if (strncmp(argv[argc-1], "-pcr=", strlen("-pcr=")) == 0) {
             const char* pcrStr = argv[argc-1] + strlen("-pcr=");
@@ -310,7 +315,18 @@ int policy_sign(int argc, char *argv[])
         argc--;
     }
 
-    printf("Sign PCR Policy Example\n");
+    printf("Sign PCR Policy Tool\n");
+
+    if (pcrArraySz == 0) {
+        pcrArray[pcrArraySz] = DEFAULT_PCR;
+        pcrArraySz++;
+    }
+
+    printf("Signing Algorithm: %s\n",
+        (alg == ECC_SECP256R1) ? "ECC256" :
+        (alg == ECC_SECP384R1) ? "ECC384" :
+        "Unknown"
+    );
 
     printf("PCR Index(s) (%s): ", TPM2_GetAlgName(pcrAlg));
     for (i = 0; i < (int)pcrArraySz; i++) {
@@ -327,20 +343,18 @@ int policy_sign(int argc, char *argv[])
         printf("Policy Signing Key: %s\n", keyFile);
     }
 
-    /* PCR Hash - Use provided hash or read PCR's and get hash */
+    /* PCR Hash - Use provided PCR digest or Policy digest */
     if (pcrDigestSz == 0 && digestSz == 0) {
-        printf("Error: Specificy PCR's or Policy hash!\n");
-        goto exit;
+        printf("Error: Must supply either PCR or Policy digest!\n");
+        usage();
+        return -1;
     }
-
-    if (pcrDigestSz > 0) {
-        printf("PCR Digest (%d bytes):\n", pcrDigestSz);
-        printHexString(pcrDigest, pcrDigestSz, pcrDigestSz);
-    }
+    printf("PCR Digest (%d bytes):\n", pcrDigestSz);
+    printHexString(pcrDigest, pcrDigestSz, pcrDigestSz);
 
     if (digestSz == 0) {
-        /* Build PCR Policy to Sign */
-        XMEMSET(digest, 0, sizeof(digest));
+        /* If not supplied, build PCR Policy to Sign */
+        memset(digest, 0, sizeof(digest));
         digestSz = TPM2_GetHashDigestSize(pcrAlg);
         rc = wolfTPM2_PolicyPCRMake(pcrAlg, pcrArray, pcrArraySz,
                                     pcrDigest, pcrDigestSz, digest, &digestSz);
@@ -358,27 +372,23 @@ int policy_sign(int argc, char *argv[])
     printHexString(digest, digestSz, digestSz);
 
     /* Sign the PCR policy (use private key provided or do externally) */
-    if (keyFile != NULL) {
-        rc = PolicySign(alg, keyFile, digest, digestSz, sig, &sigSz);
-        if (rc == 0) {
-            pcrMask = 0;
-            for (i = 0; i < (int)pcrArraySz; i++)
-                pcrMask |= (1 << pcrArray[i]);
+    rc = PolicySign(alg, keyFile, digest, digestSz, sig, &sigSz);
+    if (rc == 0) {
+        pcrMask = 0;
+        for (i = 0; i < (int)pcrArraySz; i++)
+            pcrMask |= (1 << pcrArray[i]);
 
-            memcpy(policy, &pcrMask, sizeof(pcrMask));
-            memcpy(policy + sizeof(pcrMask), sig, sigSz);
-            printf("PCR Mask (0x%x) and Policy Signature (%d bytes):\n", (int)pcrMask,
-                   (int)(sigSz + sizeof(pcrMask)));
-            printHexString(policy, sigSz+sizeof(pcrMask), 32);
-            rc = writeBin(outPolicyFile, policy, sigSz+sizeof(pcrMask));
+        memcpy(policy, &pcrMask, sizeof(pcrMask));
+        memcpy(policy + sizeof(pcrMask), sig, sigSz);
+        printf("PCR Mask (0x%x) and Policy Signature (%d bytes):\n",
+            (int)pcrMask, (int)(sigSz + sizeof(pcrMask)));
+        printHexString(policy, sizeof(pcrMask), 0);
+        printHexString(policy + sizeof(pcrMask), sigSz, 32);
+        rc = writeBin(outPolicyFile, policy, sigSz+sizeof(pcrMask));
+        if (rc == 0) {
+            printf("Wrote PCR Mask + Signature (%d bytes) to %s\n",
+                (int)(sigSz + sizeof(pcrMask)), outPolicyFile);
         }
-    }
-    else {
-        /* Print policy hash to sign externally and exit early */
-        printf("No private key to sign policy!\n");
-        printf("Externally sign the PCR Policy digest\n");
-        rc = 0;
-        goto exit;
     }
 
 exit:

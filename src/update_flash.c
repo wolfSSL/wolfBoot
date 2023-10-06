@@ -655,6 +655,7 @@ int wolfBoot_unlock_disk(void)
 
 
         /* Extend a PCR from the mask to prevent future unsealing */
+    #if !defined(ARCH_SIM) && !defined(WOLFBOOT_NO_UNSEAL_PCR_EXTEND)
         {
         uint32_t pcrMask;
         uint32_t pcrArraySz;
@@ -670,8 +671,8 @@ int wolfBoot_unlock_disk(void)
         pcrArraySz = wolfBoot_tpm_pcrmask_sel(pcrMask,
             pcrArray, sizeof(pcrArray)); /* get first PCR from mask */
         wolfBoot_tpm2_extend(pcrArray[0], (uint8_t*)digest, __LINE__);
-    }
-
+        }
+    #endif
     }
     else {
         wolfBoot_printf("unlock disk failed! %d (%s)\n",
