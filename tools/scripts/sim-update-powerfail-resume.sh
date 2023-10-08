@@ -11,9 +11,12 @@ fi
 ./wolfboot.elf powerfail 1a000 get_version 2>/dev/null
 # fail on the last sector to stop the encrypt key save and state update
 ./wolfboot.elf powerfail 3e000 get_version 2>/dev/null
-./wolfboot.elf powerfail 3f000 get_version 2>/dev/null
+# may not trigger on non NVM_FLASH_WRITEONCE
+V=`./wolfboot.elf powerfail 3f000 get_version` 2>/dev/null
+if [ "x$V" != "x2" ]; then
+    V=`./wolfboot.elf get_version 2>/dev/null`
+fi
 
-V=`./wolfboot.elf get_version 2>/dev/null`
 if [ "x$V" != "x2" ]; then
     echo "Failed update (V: $V)"
     exit 1
@@ -24,9 +27,12 @@ fi
 ./wolfboot.elf powerfail 14000 get_version 2>/dev/null
 ./wolfboot.elf powerfail 1e000 get_version 2>/dev/null
 ./wolfboot.elf powerfail 3e000 get_version 2>/dev/null
-./wolfboot.elf powerfail 3f000 get_version 2>/dev/null
+# may not trigger on non NVM_FLASH_WRITEONCE
+V=`./wolfboot.elf powerfail 3f000 get_version` 2>/dev/null
+if [ "x$V" != "x1" ]; then
+    V=`./wolfboot.elf get_version 2>/dev/null`
+fi
 
-V=`./wolfboot.elf get_version 2>/dev/null`
 if [ "x$V" != "x1" ]; then
     echo "Failed fallback (V: $V)"
     exit 1
