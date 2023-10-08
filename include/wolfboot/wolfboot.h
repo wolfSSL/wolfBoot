@@ -244,7 +244,7 @@ extern "C" {
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define IMG_STATE_NEW       0xFF
 #define IMG_STATE_UPDATING  0x70
-#define IMG_STATE_FINAL_SWAP  0x30
+#define IMG_STATE_FINAL_FLAGS  0x30
 #define IMG_STATE_TESTING   0x10
 #define IMG_STATE_SUCCESS   0x00
 #define FLASH_BYTE_ERASED   0xFF
@@ -252,7 +252,7 @@ extern "C" {
 #else
 #define IMG_STATE_NEW       0x00
 #define IMG_STATE_UPDATING  0x8F
-#define IMG_STATE_FINAL_SWAP  0xBF
+#define IMG_STATE_FINAL_FLAGS  0xBF
 #define IMG_STATE_TESTING   0xEF
 #define IMG_STATE_SUCCESS   0xFF
 #define FLASH_BYTE_ERASED   0x00
@@ -316,14 +316,8 @@ int wolfBoot_get_diffbase_hdr(uint8_t part, uint8_t **ptr);
 #endif
 
 int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
-int wolfBoot_backup_encrypt_key(const uint8_t* key, const uint8_t* nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
-
-#ifdef FLAGS_HOME
-int wolfBoot_flags_home_set_final_swap();
-int wolfBoot_flags_home_get_final_swap();
-#endif
 
 #ifdef __cplusplus
 }

@@ -741,20 +741,16 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
-#if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
     uintptr_t lastSector = PART_UPDATE_ENDFLAGS -
         (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE);
+#ifdef NVM_FLASH_WRITEONCE
+    uint8_t selSec = 0;
+#endif
 
-#ifndef FLAGS_HOME
     /* if PART_UPDATE_ENDFLAGS stradles a sector, (all non FLAGS_HOME builds)
      * align it to the correct sector */
     if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE == 0)
         lastSector -= WOLFBOOT_SECTOR_SIZE;
-#endif
-#endif
-#ifdef NVM_FLASH_WRITEONCE
-    uint8_t selSec = 0;
-#endif
 
     /* erase the sector flags */
     if (FLAGS_UPDATE_EXT()) {
@@ -767,11 +763,12 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
      * partition based on how many flags are non-erased
      * FLAGS_INVERT needs erased flags because the bin-assemble's fill byte may
      * not match what's in wolfBoot */
-#if defined(NVM_FLASH_WRITEONCE) || defined(WOLFBOOT_FLAGS_INVERT)
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
     } else {
-#ifdef NVM_FLASH_WRITEONCE
+#ifndef NVM_FLASH_WRITEONCE
+        hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+#else
         selSec = nvm_select_fresh_sector(PART_UPDATE);
         XMEMCPY(NVM_CACHE,
             (uint8_t*)(lastSector - WOLFBOOT_SECTOR_SIZE * selSec),
@@ -783,11 +780,8 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         /* erase the previously selected sector */
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
             WOLFBOOT_SECTOR_SIZE);
-#elif defined(WOLFBOOT_FLAGS_INVERT)
-        hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
 #endif
     }
-#endif
 
     wolfBoot_set_partition_state(PART_UPDATE, st);
 
@@ -812,10 +806,16 @@ void RAMFUNCTION wolfBoot_success(void)
     if (FLAGS_BOOT_EXT()) {
         ext_flash_unlock();
         wolfBoot_set_partition_state(PART_BOOT, st);
+        /* set update so IMG_STATE_FINAL_FLAGS isn't triggering pointless calls
+         * to wolfBoot update */
+        wolfBoot_set_partition_state(PART_UPDATE, st);
         ext_flash_lock();
     } else {
         hal_flash_unlock();
         wolfBoot_set_partition_state(PART_BOOT, st);
+        /* set update so IMG_STATE_FINAL_FLAGS isn't triggering pointless calls
+         * to wolfBoot update */
+        wolfBoot_set_partition_state(PART_UPDATE, st);
         hal_flash_lock();
     }
 #ifdef EXT_ENCRYPTED
@@ -1431,23 +1431,6 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     return 0;
 }
 
-int RAMFUNCTION wolfBoot_backup_encrypt_key(const uint8_t* key,
-    const uint8_t* nonce)
-{
-#ifndef MMU
-    uint32_t magic[2] = {WOLFBOOT_MAGIC, WOLFBOOT_MAGIC_TRAIL};
-
-    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS, key,
-        ENCRYPT_KEY_SIZE);
-    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
-    /* write magic so we know we finished in case of a powerfail */
-    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE, (uint8_t*)magic, sizeof(magic));
-#endif
-    return 0;
-}
-
 #ifndef UNIT_TEST
 /**
  * @brief Get the encryption key.
@@ -1463,39 +1446,21 @@ int RAMFUNCTION wolfBoot_backup_encrypt_key(const uint8_t* key,
  */
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
-    int ret = 0;
 #if defined(MMU)
     XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #else
-    uint8_t* mem;
-    uint32_t magic[2];
-
-    /* see if we've backed up the key, this will only matter for final swap */
-    XMEMCPY(magic, (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE, sizeof(magic));
-
-    if (magic[0] == WOLFBOOT_MAGIC && magic[1] == WOLFBOOT_MAGIC_TRAIL) {
-        mem = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        /* not a failure but finalize needs to know that it's safe to erase and
-         * write the key to the normal spot */
-        ret = 1;
-    }
-    else {
-        mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-            WOLFBOOT_PARTITION_BOOT_ADDRESS);
-
-#ifdef NVM_FLASH_WRITEONCE
-        int sel_sec = 0;
-        sel_sec = nvm_select_fresh_sector(PART_BOOT);
-        mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-#endif
-    }
-
+    uint8_t *mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
+        WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    int sel_sec = 0;
+    #ifdef NVM_FLASH_WRITEONCE
+    sel_sec = nvm_select_fresh_sector(PART_BOOT);
+    mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
+    #endif
     XMEMCPY(k, mem, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, mem + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #endif
-    return ret;
+    return 0;
 }
 #endif
 /**
@@ -1539,11 +1504,15 @@ int RAMFUNCTION chacha_init(void)
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
-    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
+    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        ENCRYPT_TMP_SECRET_OFFSET);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t* stored_nonce;
+
+#ifdef NVM_FLASH_WRITEONCE
+    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -1581,12 +1550,16 @@ int aes_init(void)
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
-    uint8_t key[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
-    wolfBoot_get_encrypt_key(key, key + ENCRYPT_KEY_SIZE);
+    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        ENCRYPT_TMP_SECRET_OFFSET);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
     uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t* stored_nonce;
+
+#ifdef NVM_FLASH_WRITEONCE
+    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+#endif
 
     stored_nonce = key + ENCRYPT_KEY_SIZE;
 
@@ -1703,8 +1676,8 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
  *
  *  @return int 0 if successful, -1 on failure.
  */
-int RAMFUNCTION ext_flash_encrypt_write_ex(uintptr_t address,
-    const uint8_t *data, int len, int forcedEnc)
+int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
+    int len)
 {
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
@@ -1739,9 +1712,7 @@ int RAMFUNCTION ext_flash_encrypt_write_ex(uintptr_t address,
             break;
         case PART_SWAP:
             /* data is coming from update and is already encrypted */
-            if (forcedEnc == 0)
-                return ext_flash_write(address, data, len);
-            break;
+            return ext_flash_write(address, data, len);
         default:
             return -1;
     }
@@ -1770,22 +1741,6 @@ int RAMFUNCTION ext_flash_encrypt_write_ex(uintptr_t address,
     }
 
     return ext_flash_write(address, ENCRYPT_CACHE, step);
-}
-
-/**
- * @brief Write encrypted data to an external flash.
- *
- * This function calls ext_flash_encrypt_write_ex with forced encryption off
- *
- * @param address The address in the external flash to write the data to.
- * @param data Pointer to the data buffer to be written.
- * @param len The length of the data to be written.
- *
- *  @return int 0 if successful, -1 on failure.
- */
-int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len)
-{
-    return ext_flash_encrypt_write_ex(address, data, len, 0);
 }
 
 /**
@@ -1934,39 +1889,3 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 }
 #endif /* MMU */
 #endif /* EXT_ENCRYPTED */
-
-#ifdef FLAGS_HOME
-/* we need to write a marker to update since the boot and update flags are all
- * in the same sector so write magic to the first sector of boot */
-int wolfBoot_flags_home_set_final_swap()
-{
-/* EXT_ENCRYPTED uses the first sector to store the key and magic, don't
- * overwrite it */
-#ifndef EXT_ENCRYPTED
-    uint32_t magic[2] = {WOLFBOOT_MAGIC, WOLFBOOT_MAGIC_TRAIL};
-    uintptr_t addr = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-
-    hal_flash_write(addr, (uint8_t*)magic, sizeof(magic));
-#endif /* !EXT_ENCRYPTED */
-
-    return 0;
-}
-
-int wolfBoot_flags_home_get_final_swap()
-{
-    uint32_t magic[2];
-    uintptr_t addr = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-
-/* if encryption is on magic will be after the key and nonce */
-#ifdef EXT_ENCRYPTED
-    addr += ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE;
-#endif
-
-    XMEMCPY((uint8_t*)magic, (uint8_t*)addr, sizeof(magic));
-
-    if (magic[0] == WOLFBOOT_MAGIC && magic[1] == WOLFBOOT_MAGIC_TRAIL)
-        return 1;
-
-    return 0;
-}
-#endif /* FLAGS_HOME */
