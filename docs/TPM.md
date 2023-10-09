@@ -61,7 +61,7 @@ NOTE: The TPM's RSA verify requires ASN.1 encoding, so use SIGN=RSA2048ENC
 % ./tools/tpm/pcr_extend 0 aaa.bin
 % ./tools/tpm/policy_create -pcr=0
 # if ROT enabled
-% ./tools/tpm/rot -write
+% ./tools/tpm/rot -write [-auth=TestAuth]
 % make clean && make POLICY_FILE=policy.bin
 
 % ./wolfboot.elf get_version
@@ -168,7 +168,31 @@ Building firmware with the policy digest to sign:
 % make POLICY_FILE=policy.bin
 ```
 
-OR manually using:
+OR manually sign the policy using the `tools/tpm/policy_sign` or `tools/keytools/sign` tools.
+These tools do not need access to a TPM, they are signing a policy digest. The result is a 32-bit PCR mask + signature.
+
+Sign with policy_sign tool:
+
+```sh
+% ./tools/tpm/policy_sign -pcr=0 -pcrdigest=eca4e8eda468b8667244ae972b8240d3244ea72341b2bf2383e79c66643bbecc
+Sign PCR Policy Tool
+Signing Algorithm: ECC256
+PCR Index(s) (SHA256): 0
+Policy Signing Key: wolfboot_signing_private_key.der
+PCR Digest (32 bytes):
+	eca4e8eda468b8667244ae972b8240d3244ea72341b2bf2383e79c66643bbecc
+PCR Policy Digest (32 bytes):
+	2d401eb05f45ba2b15c35f628b5896cc7de9745bb6e722363e2dbee804e0500f
+PCR Policy Digest (w/PolicyRef) (32 bytes):
+	749b3139ece21449a7828f11ee05303b0473ff1a26cf41d6f9ff28b24c717f02
+PCR Mask (0x1) and Policy Signature (68 bytes):
+	01000000
+	5b5f875b3f7ce78b5935abe4fc5a4d8a6e87c4b4ac0836fbab909e232b6d7ca2
+	3ecfc6be723b695b951ba2886d3c7b83ab2f8cc0e96d766bc84276eaf3f213ee
+Wrote PCR Mask + Signature (68 bytes) to policy.bin.sig
+```
+
+Sign using the signing key tool:
 
 ```sh
 % ./tools/keytools/sign --ecc256 --policy policy.bin test-app/image.elf wolfboot_signing_private_key.der 1
@@ -186,5 +210,6 @@ Calculating SHA256 digest...
 Signing the digest...
 Opening policy file policy.bin
 Signing the policy digest...
+Saving policy signature to policy.bin.sig
 Output image(s) successfully created.
 ```
