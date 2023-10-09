@@ -77,7 +77,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
     int is_elf32, is_le, i;
 
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Loading elf at %p\n", (void*)image);
+    wolfBoot_printf("Loading elf at %p\r\n", (void*)image);
 #endif
 
     /* Verify ELF header */
@@ -95,7 +95,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
     }
 
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Found valid elf%d (%s endian)\n",
+    wolfBoot_printf("Found valid elf%d (%s endian)\r\n",
         is_elf32 ? 32 : 64, is_le ? "little" : "big");
 #endif
 
@@ -104,7 +104,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
     entry_size = GET_H16(ph_entry_size);
     entry_count = GET_H16(ph_entry_count);
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Program Headers %d (size %d)\n", entry_count, entry_size);
+    wolfBoot_printf("Program Headers %d (size %d)\r\n", entry_count, entry_size);
 #endif
     for (i = 0; i < entry_count; i++) {
         uint8_t *ptr = ((uint8_t*)entry_off) + (i * entry_size);
@@ -124,12 +124,12 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 #ifdef DEBUG_ELF
         if (file_size > 0) {
             wolfBoot_printf(
-                "\tLoad %u bytes (offset %p) to %p (p %p)\n",
+                "Load %u bytes (offset %p) to %p (p %p)\r\n",
                 (uint32_t)mem_size, (void*)offset, (void*)vaddr, (void*)paddr);
         }
         if (mem_size > file_size) {
             wolfBoot_printf(
-                "\tClear %u bytes at %p (p %p)\n",
+                "Clear %u bytes at %p (p %p)\r\n",
                 (uint32_t)(mem_size - file_size), (void*)vaddr, (void*)paddr);
         }
 #endif
@@ -139,7 +139,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
             if (mmu_cb(vaddr, paddr, mem_size) != 0) {
 #ifdef DEBUG_ELF
             wolfBoot_printf(
-                "\tFail to map %u bytes to %p (p %p)\n",
+                "Fail to map %u bytes to %p (p %p)\r\n",
                 (uint32_t)mem_size, (void*)vaddr, (void*)paddr);
 #endif
             continue;
@@ -159,7 +159,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 
     *entry = GET_H64(entry);
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Entry point %p\n", (void*)*entry);
+    wolfBoot_printf("Entry point %p\r\n", (void*)*entry);
 #endif
 
     return 0;
