@@ -92,11 +92,6 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),stm32g0)
     CORTEX_M0=1
     ARCH_FLASH_OFFSET=0x08000000
-
-    # Enable this feature for secure memory support
-    # Makes the flash sectors for the bootloader unaccessible from the application
-    # Requires using the STM32CubeProgrammer to set FLASH_SECR -> SEC_SIZE pages
-    CFLAGS+=-DFLASH_SECURABLE_MEMORY_SUPPORT
   endif
 
   ifeq ($(TARGET),stm32f4)
