@@ -26,9 +26,6 @@
 #   error "wolfBoot STM32C0 HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
 #endif
 
-/* XXX Debug only! */
-#define NO_FLASH_SEC_SIZE_CHECK 1
-
 /* STM32 C0 register configuration */
 
 /* Assembly helpers */
@@ -138,8 +135,6 @@ static void RAMFUNCTION flash_clear_errors(void)
 {
     /* Consider only writing here as there is no reason to read first (rc_w1),
      * unless other error bits are set*/
-    /* FLASH_SR = (FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR |
-                 FLASH_SR_PROGERR); */
     FLASH_SR |= (FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR |
                  FLASH_SR_PROGERR);
 }
@@ -233,17 +228,11 @@ static void clock_pll_off(void)
     reg32 &= ~((1 << 1) | (1 << 0));
     RCC_CFGR = (reg32 | RCC_CFGR_SW_HSISYS);
     DMB();
-#if 0
-    /* Turn off PLL */
-    RCC_CR &= ~RCC_CR_PLLON;
-    DMB();
-#endif
 }
 
 /* This implementation will setup HSI RC 48 MHz as System Clock Source, set
- * flash wait state to 2, and set all peripherals to 16MHz (div4)
- *
- * */
+ * flash wait state to 1, and set all peripherals to 16MHz (div4)
+ */
 static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
@@ -276,45 +265,6 @@ static void clock_pll_on(int powersave)
     RCC_CFGR = (reg32 | RCC_CFGR_SW_HSISYS);
     DMB();
 
-    #if 0
-    /* Disable PLL */
-    RCC_CR &= ~RCC_CR_PLLON;
-
-    /* Set prescalers for AHB, ADC, ABP1, ABP2. */
-    reg32 = RCC_CFGR;
-    reg32 &= ~(0xF0); /* don't change bits [0-3] that were previously set */
-    RCC_CFGR = (reg32 | (hpre << 8)); /* RM0444 - 5.4.3 - RCC_CFGR */
-    DMB();
-    reg32 = RCC_CFGR;
-    reg32 &= ~(0x1C00); /* don't change bits [0-14] */
-    RCC_CFGR = (reg32 | (ppre << 12));  /* RM0444 - 5.4.3 - RCC_CFGR */
-    DMB();
-
-    /* Set PLL config */
-    reg32 = RCC_PLLCFGR;
-    reg32 |= RCC_PLLCFGR_PLLSRC_HSI16;
-    reg32 |= ((pllm - 1) << 4);
-    reg32 |= plln << 8;
-    reg32 |= ((pllp - 1) << 17);
-    reg32 |= ((pllr - 1) << 29);
-    RCC_PLLCFGR = reg32;
-
-    DMB();
-    /* Enable PLL oscillator and wait for it to stabilize. */
-    RCC_PLLCFGR |= RCC_PLLCFGR_PLLR_EN;
-    RCC_CR |= RCC_CR_PLLON;
-    DMB();
-    while ((RCC_CR & RCC_CR_PLLRDY) == 0) {};
-
-    /* Select PLL as SYSCLK source. */
-    reg32 = RCC_CFGR;
-    reg32 &= ~((1 << 1) | (1 << 0));
-    RCC_CFGR = (reg32 | RCC_CFGR_SW_PLL);
-    DMB();
-
-    /* Wait for PLL clock to be selected. */
-    while ((RCC_CFGR & ((1 << 1) | (1 << 0))) != RCC_CFGR_SW_PLL) {};
-#endif
     /* SYSCFG, COMP and VREFBUF clock enable */
     APB2_CLOCK_ER |= SYSCFG_APB2_CLOCK_ER_VAL;
 }

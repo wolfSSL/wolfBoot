@@ -427,50 +427,46 @@ mon reset init
 
 ## STM32C0
 
-Supports STM32C0x0/STM32C0x1.
+Supports STM32C0x0/STM32C0x1. Instructions are for the STM Nucleo-C031C6 dev board.
 
-Example and instructions are for the STM Nucleo-C031C6 dev board using the 
-STM32Cube 
+Tested build configurations:
+* With RSA2048 and SHA2-256 the code size is 9724 and it boots in under 1 second.
+* With ED25519 and SHA2-384 the code size is 10024 and takes about 10 seconds for the LED to turn on.
 
 Example 32KB partitioning on STM32-G070:
 
 - Sector size: 2KB
-- Wolfboot partition size: 14KB
-- Application partition size: 8 KB
+- Wolfboot partition size: 10KB
+- Application partition size: 10 KB
 - Swap size 2KB
 
 ```C
 #define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08004000 /* offset 16kB to 24kB */
-#define WOLFBOOT_PARTITION_SIZE              0x2000  /* 8 KB */
-#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08006000 /* offset 24kB to 32kB */
-#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08003800 /* offset 14kB to 16kB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08002800 /* at 10KB */
+#define WOLFBOOT_PARTITION_SIZE              0x2800  /* 10 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005000 /* at 20KB */
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
 ```
 
 ### Building STM32C0
-xxx
-Reference configuration (see [/config/examples/stm32g0.config](/config/examples/stm32g0.config)).
-You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32g0.config .config`.
+
+Reference configuration (see [/config/examples/stm32c0.config](/config/examples/stm32c0.config)).
+
+You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32c0.config .config`.
 To build you can use `make`.
 
-The TARGET for this is `stm32g0`: `make TARGET=stm32g0`.
+The TARGET for this is `stm32c0`: `make TARGET=stm32c0`.
 The option `CORTEX_M0` is automatically selected for this target.
 The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
 multiple writes after each erase operation.
-
-This target also supports secure memory protection on the bootloader region
-using the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the
-number of 2KB pages to block access to from the 0x8000000 base address.
 
 ```
 STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
 ```
 
-For RAMFUNCTION support (required for SEC_PROT) make sure `RAM_CODE=1`.
-
 ### STM32C0 Programming
-xxx
-Compile requirements: `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
+
+Compile requirements: `make TARGET=stm32c0 NVM_FLASH_WRITEONCE=1`
 
 The output is a single `factory.bin` that includes `wolfboot.bin` and `test-app/image_v1_signed.bin` combined together.
 This should be programmed to the flash start address `0x08000000`.
@@ -482,7 +478,7 @@ STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
 ```
 
 ### STM32C0 Debugging
-xxx
+
 Use `make DEBUG=1` and program firmware again.
 
 Start GDB server on port 3333:

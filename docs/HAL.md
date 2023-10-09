@@ -8,18 +8,18 @@ and the application initiating the firmware upgrade through the application libr
 ensuring that the MCU is running at full speed during boot (to optimize the
 verification of the signatures).
 
-The implementation of the hardware-specific calls for each platform are grouped in 
+The implementation of the hardware-specific calls for each platform are grouped in
 a single c file in the [hal](../hal) directory.
 
-The directory also contains a platform-specific linker script for each supported MCU,  
-with the same name and the `.ld` extension. This is used to link the bootloader's 
-firmware on the specific hardware, exporting all the necessary symbols for flash 
+The directory also contains a platform-specific linker script for each supported MCU,
+with the same name and the `.ld` extension. This is used to link the bootloader's
+firmware on the specific hardware, exporting all the necessary symbols for flash
 and RAM boundaries.
 
 ## Supported platforms
 
 The following platforms are supported in the current version:
-  - STM32F4, STM32L5, STM32L0, STM32F7, STM32H7, STM32G0, STM32C0
+  - STM32C0, STM32F4, STM32F7, STM32G0, STM32H7, STM32L5, STM32L0, STM32U5, STM32WB55
   - nRF52
   - Atmel samR21
   - TI cc26x2
@@ -34,8 +34,8 @@ be implemented for each supported target:
 `void hal_init(void)`
 
 This function is called by the bootloader at the very beginning of the execution.
-Ideally, the implementation provided configures the clock settings for the target 
-microcontroller, to ensure that it runs at at the required speed to shorten the 
+Ideally, the implementation provided configures the clock settings for the target
+microcontroller, to ensure that it runs at at the required speed to shorten the
 time required for the cryptography primitives to verify the firmware images.
 
 `void hal_flash_unlock(void)`
@@ -76,11 +76,11 @@ that the state of the microcontroller is restored to its original settings.
 
 WolfBoot can be compiled with the makefile option `EXT_FLASH=1`. When the external flash support is
 enabled, update and swap partitions can be associated to an external memory, and will use alternative
-HAL function for read/write/erase access. 
-To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or 
+HAL function for read/write/erase access.
+To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or
 `PART_SWAP_EXT`, respectively.
 
-The following functions are used to access the external memory, and must be defined when `EXT\_FLASH` 
+The following functions are used to access the external memory, and must be defined when `EXT\_FLASH`
 is on:
 
 `int  ext_flash_write(uintptr_t address, const uint8_t *data, int len)`
@@ -96,15 +96,15 @@ or a negative value in case of failure.
 This function provides an indirect read of the external memory, using the
 driver's specific interface. `address` is the offset from the beginning of the
 addressable space in the device, `data` is a pointer where payload is stored upon a successful
-call, and `len` is the maximum size allowed for the payload. `ext_flash_read` should return 0 
+call, and `len` is the maximum size allowed for the payload. `ext_flash_read` should return 0
 upon success, or a negative value in case of failure.
 
 `int  ext_flash_erase(uintptr_t address, int len)`
 
 Called by the bootloader to erase part of the external memory.
 Erase operations must be performed via the specific interface of the target driver (e.g. SPI flash).
-`address` marks the start of the area relative to the device, that the bootloader wants to erase, 
-and `len` specifies the size of the area to be erased. This function must take into account the 
+`address` marks the start of the area relative to the device, that the bootloader wants to erase,
+and `len` specifies the size of the area to be erased. This function must take into account the
 geometry of the sectors, and erase all the sectors in between.
 
 `void ext_flash_lock(void)`
