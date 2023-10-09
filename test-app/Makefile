@@ -119,6 +119,10 @@ ifeq ($(TARGET),stm32h7)
   LSCRIPT_TEMPLATE=ARM-stm32h7.ld
 endif
 
+ifeq ($(TARGET),stm32c0)
+  LSCRIPT_TEMPLATE=ARM-stm32c0.ld
+endif
+
 ifeq ($(TARGET),stm32l4)
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
