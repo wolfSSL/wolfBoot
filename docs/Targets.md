@@ -382,15 +382,21 @@ The option `CORTEX_M0` is automatically selected for this target.
 The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
 multiple writes after each erase operation.
 
-This target also supports secure memory protection on the bootloader region
-using the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the
+#### STM32G0 Secure Hide Protection Feature (Optional)
+
+This part supports a "secure memory protection" feature makes the wolfBoot partition unaccessible after jump to application.
+
+It uses the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the
 number of 2KB pages to block access to from the 0x8000000 base address.
+
+Command example to enable this for 32KB bootloader:
 
 ```
 STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
 ```
 
-For RAMFUNCTION support (required for SEC_PROT) make sure `RAM_CODE=1`.
+Enabled with `CFLAGS_EXTRA+=-DFLASH_SECURABLE_MEMORY_SUPPORT`.
+Requires `RAM_CODE=1` to enable RAMFUNCTION support.
 
 ### STM32G0 Programming
 
@@ -460,9 +466,21 @@ The option `CORTEX_M0` is automatically selected for this target.
 The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
 multiple writes after each erase operation.
 
+#### STM32C0 Secure Hide Protection Feature (Optional)
+
+This part supports a "secure memory protection" feature makes the wolfBoot partition unaccessible after jump to application.
+
+It uses the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the
+number of 2KB pages to block access to from the 0x8000000 base address.
+
+Command example to enable this for 10KB bootloader:
+
 ```
-STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
+STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x05
 ```
+
+Enabled with `CFLAGS_EXTRA+=-DFLASH_SECURABLE_MEMORY_SUPPORT`.
+Requires `RAM_CODE=1` to enable RAMFUNCTION support.
 
 ### STM32C0 Programming
 
