@@ -19,8 +19,9 @@ n
 +16M
 w
 EOF
-# copy bzImage in the root folder
-tools/keytools/sign $SIGN $HASH ${IMAGE} wolfboot_signing_private_key.der 1
-tools/keytools/sign $SIGN $HASH ${IMAGE} wolfboot_signing_private_key.der 2
-dd if=${IMAGE}_v1_signed.bin of=app.bin bs=512 seek=2048 conv=notrunc
-dd if=${IMAGE}_v2_signed.bin of=app.bin bs=512 seek=34816 conv=notrunc
+
+cp ${IMAGE} "image.bin"
+tools/keytools/sign $SIGN $HASH image.bin wolfboot_signing_private_key.der 1
+tools/keytools/sign $SIGN $HASH image.bin wolfboot_signing_private_key.der 2
+dd if=image_v1_signed.bin of=app.bin bs=512 seek=2048 conv=notrunc
+dd if=image_v2_signed.bin of=app.bin bs=512 seek=34816 conv=notrunc
