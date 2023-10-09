@@ -146,6 +146,43 @@ void boot_led_on(void)
 
 #endif /** PLATFORM_stm32g0 **/
 
+#ifdef PLATFORM_stm32c0
+#include <stdint.h>
+#include "wolfboot/wolfboot.h"
+
+
+/*GPIOA5 on Nucleo C031C6*/
+#define RCC_IOPENR (*(volatile uint32_t *)(0x40021034)) // 40021034
+#define RCC_IOPENR_GPIOAEN (1 << 0)
+
+#define GPIOA_BASE 0x50000000
+#define GPIOA_MODE  (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_OTYPE (*(volatile uint32_t *)(GPIOA_BASE + 0x04))
+#define GPIOA_OSPD  (*(volatile uint32_t *)(GPIOA_BASE + 0x08))
+#define GPIOA_PUPD  (*(volatile uint32_t *)(GPIOA_BASE + 0x0c))
+#define GPIOA_ODR   (*(volatile uint32_t *)(GPIOA_BASE + 0x14))
+#define GPIOA_BSRR  (*(volatile uint32_t *)(GPIOA_BASE + 0x18))
+#define GPIOA_AFL   (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
+#define GPIOA_AFH   (*(volatile uint32_t *)(GPIOA_BASE + 0x24))
+#define LED_PIN (5)
+#define LED_BOOT_PIN (5)
+#define GPIO_OSPEED_100MHZ (0x03)
+
+void boot_led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_BOOT_PIN;
+    RCC_IOPENR |= RCC_IOPENR_GPIOAEN;
+    reg = GPIOA_MODE & ~(0x03 << (pin * 2));
+    GPIOA_MODE = reg | (1 << (pin * 2)); // general purpose output mode
+    reg = GPIOA_PUPD & ~(0x03 << (pin * 2));
+    GPIOA_PUPD = reg | (1 << (pin * 2)); // pull-up
+    GPIOA_BSRR |= (1 << pin); // set pin
+}
+
+#endif /** PLATFORM_stm32c0 **/
+
+
 #ifdef PLATFORM_stm32wb
 #define LED_BOOT_PIN (0)
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(0x5800004C))

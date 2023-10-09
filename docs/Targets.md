@@ -21,6 +21,7 @@ This README describes configuration of supported targets.
 * [STM32L4](#stm32l4)
 * [STM32L5](#stm32l5)
 * [STM32G0](#stm32g0)
+* [STM32C0](#stm32c0)
 * [STM32H7](#stm32h7)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
@@ -406,6 +407,82 @@ STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
 
 ### STM32G0 Debugging
 
+Use `make DEBUG=1` and program firmware again.
+
+Start GDB server on port 3333:
+
+```
+ST-LINK_gdbserver -d -e -r 1 -p 3333
+OR
+st-util -p 3333
+```
+
+wolfBoot has a .gdbinit to configure GDB
+
+```
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x08008100
+mon reset init
+```
+
+## STM32C0
+
+Supports STM32C0x0/STM32C0x1.
+
+Example and instructions are for the STM Nucleo-C031C6 dev board using the 
+STM32Cube 
+
+Example 32KB partitioning on STM32-G070:
+
+- Sector size: 2KB
+- Wolfboot partition size: 14KB
+- Application partition size: 8 KB
+- Swap size 2KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08004000 /* offset 16kB to 24kB */
+#define WOLFBOOT_PARTITION_SIZE              0x2000  /* 8 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08006000 /* offset 24kB to 32kB */
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08003800 /* offset 14kB to 16kB */
+```
+
+### Building STM32C0
+xxx
+Reference configuration (see [/config/examples/stm32g0.config](/config/examples/stm32g0.config)).
+You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32g0.config .config`.
+To build you can use `make`.
+
+The TARGET for this is `stm32g0`: `make TARGET=stm32g0`.
+The option `CORTEX_M0` is automatically selected for this target.
+The option `NVM_FLASH_WRITEONCE=1` is mandatory on this target, since the IAP driver does not support
+multiple writes after each erase operation.
+
+This target also supports secure memory protection on the bootloader region
+using the `FLASH_CR:SEC_PROT` and `FLASH_SECT:SEC_SIZE` registers. This is the
+number of 2KB pages to block access to from the 0x8000000 base address.
+
+```
+STM32_Programmer_CLI -c port=swd mode=hotplug -ob SEC_SIZE=0x10
+```
+
+For RAMFUNCTION support (required for SEC_PROT) make sure `RAM_CODE=1`.
+
+### STM32C0 Programming
+xxx
+Compile requirements: `make TARGET=stm32g0 NVM_FLASH_WRITEONCE=1`
+
+The output is a single `factory.bin` that includes `wolfboot.bin` and `test-app/image_v1_signed.bin` combined together.
+This should be programmed to the flash start address `0x08000000`.
+
+Flash using the STM32CubeProgrammer CLI:
+
+```
+STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
+```
+
+### STM32C0 Debugging
+xxx
 Use `make DEBUG=1` and program firmware again.
 
 Start GDB server on port 3333:
