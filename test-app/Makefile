@@ -343,6 +343,12 @@ ifeq ($(TARGET),psoc6)
   CFLAGS+=-DCY8C624ABZI_D44
 endif
 
+ifeq ($(TARGET),x86_fsp_qemu)
+  APP_OBJS:=app_$(TARGET).o ../hal/x86_uart.o ../src/x86/common.o ../src/string.o
+  LSCRIPT_TEMPLATE:=x86_fsp.ld
+  LDFLAGS=
+endif
+
 CFLAGS+=-I../lib/wolfssl
 
 
