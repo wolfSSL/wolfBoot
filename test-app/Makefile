@@ -267,6 +267,9 @@ endif
 ifeq ($(TARGET),stm32g0)
   CFLAGS+=-DNVM_FLASH_WRITEONCE=1
 endif
+ifeq ($(TARGET),stm32c0)
+  CFLAGS+=-DNVM_FLASH_WRITEONCE=1
+endif
 
 ifeq ($(TARGET),hifive1.freedom)
   CFLAGS+=-I$(FREEDOM_E_SDK)/freedom-metal/ -D__METAL_MACHINE_HEADER=\"$(FREEDOM_E_SDK)/bsp/sifive-hifive1/metal.h\"

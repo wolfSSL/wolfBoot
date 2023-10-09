@@ -1,4 +1,4 @@
-/* main.c
+/* app_stm32c0.c
  *
  * Test bare-metal boot-led-on application
  *
@@ -36,4 +36,3 @@ void main(void) {
         ;
 }
 #endif /* PLATFORM_stm32c0 */
-
