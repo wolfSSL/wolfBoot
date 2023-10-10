@@ -27,10 +27,18 @@ else
 fi
 
 download_edkii() {
-    (cd "$WORK_DIR" &&
-         git clone "${EDKII_REPO}" edk2 &&
-         cd edk2 &&
-         git checkout "${EDKII_TAG}")
+    if [ ! -d "$WORK_DIR/edk2" ]; then
+        (cd "$WORK_DIR" &&
+        git clone "${EDKII_REPO}" edk2)
+    else
+        (cd "$WORK_DIR/edk2" &&
+        git stash save --include-untracked "Auto-stashed on $(date)" &&
+        git clean -fd) # This will remove untracked files/directories
+    fi
+
+    # Now, checkout the desired tag/branch
+    (cd "$WORK_DIR/edk2" &&
+    git checkout "${EDKII_TAG}")
 }
 
 download_sbl_patch_and_patch_edkii() {
