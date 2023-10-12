@@ -52,7 +52,7 @@ extern "C" {
 #endif
 
 #ifdef BIG_ENDIAN_ORDER
-#    define WOLFBOOT_MAGIC          0X574F4C46 /* WOLF */
+#    define WOLFBOOT_MAGIC          0x574F4C46 /* WOLF */
 #    define WOLFBOOT_MAGIC_TRAIL    0x424F4F54 /* BOOT */
 #else
 #    define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
