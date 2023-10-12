@@ -181,7 +181,7 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make && make test-sim-internal-flash-with-delta-update
+          make clean && make test-sim-internal-flash-with-delta-update
 
       - name: Run sunny day update test (DELTA)
         run: |
