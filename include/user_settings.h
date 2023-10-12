@@ -300,7 +300,8 @@ extern int tolower(int c);
         #define WOLFSSL_PUBLIC_MP
 
         /* Configure RNG seed */
-        #define CUSTOM_RAND_GENERATE_SEED(buf, sz) ({(void)buf; (void)sz; 0;}) /* stub, not used */
+        #include "loader.h"
+        #define CUSTOM_RAND_GENERATE_SEED(buf, sz) ({(void)buf; (void)sz; wolfBoot_panic(); 0;}) /* stub, not used */
         #define WC_RNG_SEED_CB
     #endif
 
