@@ -138,6 +138,12 @@ jobs:
 
   # TODO: SP math with small stack has issues
 
+  stm32c0:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32c0.config
+
   stm32f4_small_blocks_uart_update_test:
     uses: ./.github/workflows/test-build.yml
     with:
