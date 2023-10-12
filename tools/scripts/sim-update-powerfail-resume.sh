@@ -15,6 +15,10 @@ fi
 V=`./wolfboot.elf powerfail 3f000 get_version` 2>/dev/null
 if [ "x$V" != "x2" ]; then
     V=`./wolfboot.elf get_version 2>/dev/null`
+    # if we failed on the final boot state write we need to double fallback
+    if [ "x$V" == "x1" ]; then
+        V=`./wolfboot.elf get_version 2>/dev/null`
+    fi
 fi
 
 if [ "x$V" != "x2" ]; then
