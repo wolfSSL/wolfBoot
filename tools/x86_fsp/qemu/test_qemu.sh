@@ -9,6 +9,7 @@ make distclean
 cp "config/examples/${CONFIG}" .config
 ./tools/x86_fsp/qemu/qemu_build_fsp.sh
 make keytools
+rm -f tpm_seal_key.key
 # generate one key for images and one for the TPM
 ./tools/keytools/keygen --ecc384 -g wolfboot_signing_private_key.der --ecc256 -g tpm_seal_key.key -keystoreDir src/
 
@@ -24,7 +25,6 @@ make tpmtools
 
 ./tools/x86_fsp/tpm_install_policy.sh policy.bin.sig
 IMAGE=test-app/image.elf SIGN=--ecc384 ./tools/x86_fsp/qemu/make_hd.sh
-./tools/x86_fsp/qemu/make_hd.sh
 
 # run w/ ./tools/scripts/qemu64/qemu64-tpm.sh
 # copy the value of PCR eg:
