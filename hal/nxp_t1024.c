@@ -1124,7 +1124,7 @@ struct qe_firmware {
 static void qe_upload_microcode(const struct qe_firmware *firmware,
     const struct qe_microcode *ucode)
 {
-    const uint32_t *code = (void*)firmware + ucode->code_offset;
+    const uint32_t *code = (uint32_t*)((uint8_t *)firmware + ucode->code_offset);
     unsigned int i;
 
     wolfBoot_printf("QE: uploading '%s' version %u.%u.%u\n",

@@ -444,7 +444,7 @@ int spi_flash_write(uint32_t address, const void *data, int len)
                 addr, QSPI_ADDR_SZ, QSPI_DATA_MODE_SPI,    /* Address */
                 0, 0, QSPI_DATA_MODE_NONE,                 /* Alternate Bytes */
                 0,                                         /* Dummy */
-                (uint8_t*)(data + (page * FLASH_PAGE_SIZE)),
+                ((uint8_t*)data + (page * FLASH_PAGE_SIZE)),
                 xferSz, QSPI_DATA_MODE                     /* Data */
             );
 #ifdef DEBUG_QSPI
