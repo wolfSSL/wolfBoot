@@ -38,24 +38,24 @@
 #define FLASH_SECURE_MMAP_BASE (0x0C000000)
 
 #define RCC_CR (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0456 - Table 108 */
-#define RCC_CR_PLL3RDY              (1 << 29)
-#define RCC_CR_PLL3ON               (1 << 28)
-#define RCC_CR_PLL2RDY              (1 << 27)
-#define RCC_CR_PLL2ON               (1 << 26)
-#define RCC_CR_PLL1RDY              (1 << 25)
-#define RCC_CR_PLL1ON               (1 << 24)
-#define RCC_CR_CSSON                (1 << 19)
-#define RCC_CR_HSEBYP               (1 << 18)
-#define RCC_CR_HSERDY               (1 << 17)
-#define RCC_CR_HSEON                (1 << 16)
-#define RCC_CR_HSIRDY               (1 << 10)
-#define RCC_CR_HSION                (1 << 8)
-#define RCC_CR_MSIPLLEN             (1 << 3)
-#define RCC_CR_MSIRDY               (1 << 2)
-#define RCC_CR_MSISON               (1 << 0)
+#define RCC_CR_PLL3RDY              (1UL << 29)
+#define RCC_CR_PLL3ON               (1UL << 28)
+#define RCC_CR_PLL2RDY              (1UL << 27)
+#define RCC_CR_PLL2ON               (1UL << 26)
+#define RCC_CR_PLL1RDY              (1UL << 25)
+#define RCC_CR_PLL1ON               (1UL << 24)
+#define RCC_CR_CSSON                (1UL << 19)
+#define RCC_CR_HSEBYP               (1UL << 18)
+#define RCC_CR_HSERDY               (1UL << 17)
+#define RCC_CR_HSEON                (1UL << 16)
+#define RCC_CR_HSIRDY               (1UL << 10)
+#define RCC_CR_HSION                (1UL << 8)
+#define RCC_CR_MSIPLLEN             (1UL << 3)
+#define RCC_CR_MSIRDY               (1UL << 2)
+#define RCC_CR_MSISON               (1UL << 0)
 
 #define RCC_CFGR1 (*(volatile uint32_t *)(RCC_BASE + 0x1C)) /* RM0456 - Table 108 */
-#define RCC_CFGR1_SWS               (1 << 2)
+#define RCC_CFGR1_SWS               (1UL << 2)
 
 /*** APB1&2 PRESCALER ***/
 #define RCC_APB_PRESCALER_DIV_NONE  0x0  /* 0xx: HCLK not divided */
@@ -78,21 +78,21 @@
 #define RCC_CFGR3_PPRE3_SHIFT       (0x04)
 
 #define RCC_PLL1CFGR (*(volatile uint32_t *)(RCC_BASE + 0x28)) /* RM0456 - Table 108 */
-#define RCC_PLL1CFGR_PLL1REN          (1 << 18)
-#define RCC_PLL1CFGR_PLL1QEN          (1 << 17)
-#define RCC_PLL1CFGR_PLL1PEN          (1 << 16)
-#define RCC_PLL1CFGR_PLL1FRACEN       (1 << 4)
+#define RCC_PLL1CFGR_PLL1REN          (1UL << 18)
+#define RCC_PLL1CFGR_PLL1QEN          (1UL << 17)
+#define RCC_PLL1CFGR_PLL1PEN          (1UL << 16)
+#define RCC_PLL1CFGR_PLL1FRACEN       (1UL << 4)
 #define RCC_PLL1CFGR_PLL1RGE_SHIFT    (2)
 #define RCC_PLL1VCIRANGE_1            0x03
 
 #define RCC_PLL1CFGR_PLLM_SHIFT       (8)
 #define RCC_PLL1CFGR_PLL1MBOOST_SHIFT (12)
-#define RCC_PLL1CFGR_PLL1MBOOST_DIV4  0x02
+#define RCC_PLL1CFGR_PLL1MBOOST_DIV4  0x02UL
 
-#define RCC_PLLCKSELR_PLLSRC_NONE   0x0
-#define RCC_PLLCKSELR_PLLSRC_MSI    0x1
-#define RCC_PLLCKSELR_PLLSRC_HSI16  0x2
-#define RCC_PLLCKSELR_PLLSRC_HSE    0x3
+#define RCC_PLLCKSELR_PLLSRC_NONE   0x0UL
+#define RCC_PLLCKSELR_PLLSRC_MSI    0x1UL
+#define RCC_PLLCKSELR_PLLSRC_HSI16  0x2UL
+#define RCC_PLLCKSELR_PLLSRC_HSE    0x3UL
 
 
 #define RCC_PLL1DIVR (*(volatile uint32_t *)(RCC_BASE + 0x34)) /* RM0456 - Table 108 */
@@ -107,36 +107,36 @@
 #define RCC_CIER (*(volatile uint32_t *)(RCC_BASE + 0x50)) /* RM0456 - Table 108 */
 
 #define RCC_AHB1ENR (*(volatile uint32_t *)(RCC_BASE + 0x88)) /* RM0456 - Table 108 */
-#define RCC_AHB1ENR_GTZC1EN         (1 << 24)
+#define RCC_AHB1ENR_GTZC1EN         (1UL << 24)
 
 #define RCC_AHB3ENR (*(volatile uint32_t *)(RCC_BASE + 0x94)) /* RM0456 - Table 108 */
-#define RCC_AHB3ENR_GTZC2EN         (1 << 12)
-#define RCC_AHB3ENR_PWREN           (1 << 2)
+#define RCC_AHB3ENR_GTZC2EN         (1UL << 12)
+#define RCC_AHB3ENR_PWREN           (1UL << 2)
 
 #define RCC_ICSCR1 (*(volatile uint32_t *)(RCC_BASE + 0x08))
 #define RCC_ICSCR1_MSIRANGE_SHIFT   (28)
-#define RCC_ICSCR1_MSIRGSEL         (1 << 23)
+#define RCC_ICSCR1_MSIRGSEL         (1UL << 23)
 #define RCC_ICSCR1_MSIRG_0          (0)
 
 #define RCC_ICSCR2 (*(volatile uint32_t *)(RCC_BASE + 0x0C))
 #define RCC_ICSCR2_MSITRIM0_SHIFT   (15)
-#define RCC_ICSCR2_MSITRIM0_DEFAULT (0x10)
+#define RCC_ICSCR2_MSITRIM0_DEFAULT (0x10UL)
 
 #define RCC_ICSCR3 (*(volatile uint32_t *)(RCC_BASE + 0x10))
 #define RCC_ICSCR3_HSITRIM_SHIFT    (16)
-#define RCC_ICSCR3_HSITRIM_DEFAULT  (0x10)
+#define RCC_ICSCR3_HSITRIM_DEFAULT  (0x10UL)
 
 /*** PWR ***/
 /*!< Memory & Instance aliases and base addresses for Non-Secure peripherals */
 #define PWR_BASE              (0x46020800)   /* RM0456 - Table 4 */
 
 #define PWR_VOSR              (*(volatile uint32_t *)(PWR_BASE + 0x0C))
-#define PWR_VOSR_BOOSTEN      (1 << 18)
+#define PWR_VOSR_BOOSTEN      (1UL << 18)
 #define PWR_VOSR_VOS_SHIFT    (16)
-#define PWR_VOSR_VOS_4        (0x0)
-#define PWR_VOSR_VOS_3        (0x1)
-#define PWR_VOSR_VOS_2        (0x2)
-#define PWR_VOSR_VOS_1        (0x3)
+#define PWR_VOSR_VOS_4        (0x0UL)
+#define PWR_VOSR_VOS_3        (0x1UL)
+#define PWR_VOSR_VOS_2        (0x2UL)
+#define PWR_VOSR_VOS_1        (0x3UL)
 
 #define PWR_VOSR_VOSRDY       (1 << 15)
 #define PWR_VOSR_BOOSTRDY     (1 << 14)
@@ -181,13 +181,13 @@
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_OBL_LAUNCH                 (1 << 27)
 #define FLASH_CR_INV                        (1 << 29)
-#define FLASH_CR_OPTLOCK                    (1 << 30)
-#define FLASH_CR_LOCK                       (1 << 31)
+#define FLASH_CR_OPTLOCK                    (1UL << 30)
+#define FLASH_CR_LOCK                       (1UL << 31)
 
 
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
-#define FLASH_ACR_PRFTEN    (1<<8)
+#define FLASH_ACR_PRFTEN    (1UL << 8)
 
 #define FLASH_OPTR          (*(volatile uint32_t *)(FLASH_BASE + 0x40))
 #define FLASH_OPTR_DBANK     (1 << 21)
@@ -394,7 +394,7 @@ static void clock_pll_on(int powersave)
 
     RCC_ICSCR1|= RCC_ICSCR1_MSIRGSEL;
     reg32 = RCC_ICSCR1;
-    reg32 &= ~( (0xF << RCC_ICSCR1_MSIRANGE_SHIFT));
+    reg32 &= ~( (0xFUL << RCC_ICSCR1_MSIRANGE_SHIFT));
     reg32|= (RCC_ICSCR1_MSIRG_0 << RCC_ICSCR1_MSIRANGE_SHIFT);
     RCC_ICSCR1 = reg32;
     reg32 = RCC_ICSCR1;
@@ -402,7 +402,7 @@ static void clock_pll_on(int powersave)
 
     /* Adjusts the Multiple Speed oscillator (MSI) calibration value */
     reg32 = RCC_ICSCR2;
-    reg32 &= ~((0x1F << RCC_ICSCR2_MSITRIM0_SHIFT));
+    reg32 &= ~((0x1FUL << RCC_ICSCR2_MSITRIM0_SHIFT));
     reg32 |= (RCC_ICSCR2_MSITRIM0_DEFAULT << RCC_ICSCR2_MSITRIM0_SHIFT);
     RCC_ICSCR2 = reg32;
     reg32 = RCC_ICSCR2;

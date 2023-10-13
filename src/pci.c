@@ -202,7 +202,7 @@ static void pci_ecam_config_write16(uint8_t bus, uint8_t dev, uint8_t fun,
 
 #define PCI_IO_CONFIG_ADDR(bus, dev, fn, off) \
     (uint32_t)( \
-           (1   << PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT) | \
+           (1UL   << PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT) | \
            (bus << PCI_CONFIG_ADDRESS_BUS_SHIFT) | \
            (dev << PCI_CONFIG_ADDRESS_DEVICE_SHIFT) | \
            (fn  << PCI_CONFIG_ADDRESS_FUNCTION_SHIFT) | \

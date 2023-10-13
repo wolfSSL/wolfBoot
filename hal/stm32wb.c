@@ -94,31 +94,31 @@ PKA_HandleTypeDef hpka = { };
 #define FLASH_PAGE_SIZE     (0x1000) /* 4KB */
 
 /* Register values */
-#define FLASH_ACR_LATENCY_MASK                (0x07)
+#define FLASH_ACR_LATENCY_MASK                (0x07UL)
 
 #ifndef WOLFSSL_STM32_PKA
-#define FLASH_SR_BSY                          (1 << 16)
-#define FLASH_SR_CFGBSY                       (1 << 18)
-#define FLASH_SR_SIZERR                       (1 << 6)
-#define FLASH_SR_PGAERR                       (1 << 5)
-#define FLASH_SR_WRPERR                       (1 << 4)
-#define FLASH_SR_PROGERR                      (1 << 3)
-#define FLASH_SR_EOP                          (1 << 0)
+#define FLASH_SR_BSY                          (1UL << 16)
+#define FLASH_SR_CFGBSY                       (1UL << 18)
+#define FLASH_SR_SIZERR                       (1UL << 6)
+#define FLASH_SR_PGAERR                       (1UL << 5)
+#define FLASH_SR_WRPERR                       (1UL << 4)
+#define FLASH_SR_PROGERR                      (1UL << 3)
+#define FLASH_SR_EOP                          (1UL << 0)
 
-#define FLASH_CR_LOCK                         (1 << 31)
-#define FLASH_CR_STRT                         (1 << 16)
+#define FLASH_CR_LOCK                         (1UL << 31)
+#define FLASH_CR_STRT                         (1UL << 16)
 
-#define FLASH_CR_PER                          (1 << 1)
-#define FLASH_CR_PG                           (1 << 0)
-#define FLASH_CR_FSTPG                        (1 << 18)
+#define FLASH_CR_PER                          (1UL << 1)
+#define FLASH_CR_PG                           (1UL << 0)
+#define FLASH_CR_FSTPG                        (1UL << 18)
 
 #endif /* !WOLFSSL_STM32_PKA */
 
 #define FLASH_CR_PNB_SHIFT                     3
-#define FLASH_CR_PNB_MASK                      0xFF
+#define FLASH_CR_PNB_MASK                      0xFFUL
 
-#define FLASH_KEY1                            (0x45670123)
-#define FLASH_KEY2                            (0xCDEF89AB)
+#define FLASH_KEY1                            (0x45670123UL)
+#define FLASH_KEY2                            (0xCDEF89ABUL)
 
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)

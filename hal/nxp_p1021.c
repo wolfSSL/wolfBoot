@@ -194,7 +194,7 @@ static int test_tpm(void);
 #define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
 
 /* P1021 eLBC (Enhanced Local Bus Controller) - RM 12.3 */
-#define ELBC_BASE        (CCSRBAR + 0x5000)
+#define ELBC_BASE        (CCSRBAR + 0x5000UL)
 #define ELBC_MAX_BANKS   8
 #define ELBC_BANK_SZ     8192
 
@@ -216,40 +216,40 @@ static int test_tpm(void);
 #define ELBC_LTEATR ((volatile uint32_t*)(ELBC_BASE + 0xBC))  /* transfer error attributes register */
 
 
-#define ELBC_BR_ADDR(n)   (((uint32_t)n) & 0xFFFF8000) /* Physical base address - upper 17-bits */
-#define ELBC_BR_PS(n)     (((n) & 0x3) << 11) /* port size - 1=8-bit, 2=16-bit */
-#define ELBC_BR_DECC(n)   (((n) & 0x3) << 9)  /* data error checking - 0=disabled, 1=ECC check enable / gen disabled, 2=ECC check/gen enabled */
-#define ELBC_BR_WP        (1 << 8)            /* write protect */
-#define ELBC_BR_MSEL(n)   (((n) & 0x7) << 5)  /* machine select:
+#define ELBC_BR_ADDR(n)   (((uint32_t)n) & 0xFFFF8000UL) /* Physical base address - upper 17-bits */
+#define ELBC_BR_PS(n)     (((n) & 0x3UL) << 11) /* port size - 1=8-bit, 2=16-bit */
+#define ELBC_BR_DECC(n)   (((n) & 0x3UL) << 9)  /* data error checking - 0=disabled, 1=ECC check enable / gen disabled, 2=ECC check/gen enabled */
+#define ELBC_BR_WP        (1UL << 8)            /* write protect */
+#define ELBC_BR_MSEL(n)   (((n) & 0x7UL) << 5)  /* machine select:
                                                *   0=GPCM (General Purpose Chip-Select Machine)
                                                *   1=FCM (Flash Control Machine),
                                                *   4=UPMA, 5=UPMB, 6=UPMC (User Programmable Machines) */
-#define ELBC_BR_V         (1 << 0)            /* bank valid */
+#define ELBC_BR_V         (1UL << 0)            /* bank valid */
 
 /* eLBC OR */
 #define ELBC_OR_AMASK(n)  (((uint32_t)n) & 0xFFFF8000) /* Address mask - upper 17-bits */
 
 /* eLBC OR (FCM) */
-#define ELBC_ORF_BCTLD    (1 << 12) /* buffer control disable */
-#define ELBC_ORF_PGS      (1 << 10) /* page size 0=512, 1=2048 bytes */
-#define ELBC_ORF_CSCT     (1 << 9)  /* chip select to command time - TRLX=0 (0=1, 1=4), TRLX=1 (0=2, 1=8) clock cycles */
-#define ELBC_ORF_CST      (1 << 8)  /* command setup time - TRLX=0 (0=0 or 1=0.25) TRLX=1 (0=0.5 or 1=1) clock cycles */
-#define ELBC_ORF_CHT      (1 << 7)  /* command hold time - TRLX=0 (0=0.5 or 1=1) TRLX=1 (0=1.5 or 1=2) clock cycles */
-#define ELBC_ORF_SCY(n)   (((n) & 0x7) << 4) /* cycle length in bus clocks (0-7 bus clock cycle wait states) */
-#define ELBC_ORF_RST      (1 << 3)  /* read time setup - read enable asserted 1 clock */
-#define ELBC_ORF_TRLX     (1 << 2)  /* timing related */
-#define ELBC_ORF_EHTR     (1 << 1)  /* extended hold time - LRLX=0 (0=1 or 1=2), LRLX=1 (0=2 or 1=8) inserted idle clock cycles */
+#define ELBC_ORF_BCTLD    (1UL << 12) /* buffer control disable */
+#define ELBC_ORF_PGS      (1UL << 10) /* page size 0=512, 1=2048 bytes */
+#define ELBC_ORF_CSCT     (1UL << 9)  /* chip select to command time - TRLX=0 (0=1, 1=4), TRLX=1 (0=2, 1=8) clock cycles */
+#define ELBC_ORF_CST      (1UL << 8)  /* command setup time - TRLX=0 (0=0 or 1=0.25) TRLX=1 (0=0.5 or 1=1) clock cycles */
+#define ELBC_ORF_CHT      (1UL << 7)  /* command hold time - TRLX=0 (0=0.5 or 1=1) TRLX=1 (0=1.5 or 1=2) clock cycles */
+#define ELBC_ORF_SCY(n)   (((n) & 0x7UL) << 4) /* cycle length in bus clocks (0-7 bus clock cycle wait states) */
+#define ELBC_ORF_RST      (1UL << 3)  /* read time setup - read enable asserted 1 clock */
+#define ELBC_ORF_TRLX     (1UL << 2)  /* timing related */
+#define ELBC_ORF_EHTR     (1UL << 1)  /* extended hold time - LRLX=0 (0=1 or 1=2), LRLX=1 (0=2 or 1=8) inserted idle clock cycles */
 
 /* eLBC OR (GPCM) */
-#define ELBC_ORG_CSCT (1 << 11)
-#define ELBC_ORG_XACS (1 << 8)
-#define ELBC_ORG_SCY  (1 << 4)
-#define ELBC_ORG_TRLX (1 << 2)
-#define ELBC_ORG_EHTR (1 << 1)
-#define ELBC_ORG_EAD  (1 << 0)
+#define ELBC_ORG_CSCT (1UL << 11)
+#define ELBC_ORG_XACS (1UL << 8)
+#define ELBC_ORG_SCY  (1UL << 4)
+#define ELBC_ORG_TRLX (1UL << 2)
+#define ELBC_ORG_EHTR (1UL << 1)
+#define ELBC_ORG_EAD  (1UL << 0)
 
 
-#define ELBC_LSOR_BANK(n) ((n) & (ELBC_MAX_BANKS-1)) /* flash bank 0-7 */
+#define ELBC_LSOR_BANK(n) ((n) & (ELBC_MAX_BANKS-1UL)) /* flash bank 0-7 */
 
 #define ELBC_LBCR_ABSWP    (1 << 19)    /* Address byte swap for 16-bit port size */
 #define ELBC_LBCR_BMTPS(n) ((n) & 0xF) /* Bus monitor timer prescale */
@@ -257,10 +257,10 @@ static int test_tpm(void);
 #define ELBC_FMR_CWTO(n)  (((n) & 0xF) << 12) /* command wait timeout 0=256 cycles, 15=8,388,608 cycles of LCLK */
 #define ELBC_FMR_BOOT     (1 << 11) /* flash auto-boot lead mode 0=FCM is op normal, 1=eLBC autoload 4-Kbyte boot block */
 #define ELBC_FMR_ECCM     (1 << 8)  /* ECC mode 0=ECC is checked/calc 6/8 spare, 1=8/10 spare */
-#define ELBC_FMR_AL(n)    (((n) & 0x3) << 4) /* address length 0=2 bytes, 1=3 bytes, 2=4 bytes issued for page address */
-#define ELBC_FMR_OP(n)    (((n) & 0x3) << 0) /* flash operation 0=normal, 1=sim auto-boot block load, 2=exe FIR cmd w/write protect enable, 3=exe FIR cmd */
+#define ELBC_FMR_AL(n)    (((n) & 0x3UL) << 4) /* address length 0=2 bytes, 1=3 bytes, 2=4 bytes issued for page address */
+#define ELBC_FMR_OP(n)    (((n) & 0x3UL) << 0) /* flash operation 0=normal, 1=sim auto-boot block load, 2=exe FIR cmd w/write protect enable, 3=exe FIR cmd */
 
-#define ELBC_FIR_OP(s,op) ((op) & 0xF) << (28 - ((s % 8) * 4)) /* up to 8 sequences of instructions */
+#define ELBC_FIR_OP(s,op) ((op) & 0xFUL) << (28 - ((s % 8) * 4)) /* up to 8 sequences of instructions */
 #define ELBC_FIR_OP_NOP 0  /* No-operation and end of operation sequence */
 #define ELBC_FIR_OP_CA  1  /* Issue current column address as set in FPAR, with length set by ORx[PGS] */
 #define ELBC_FIR_OP_PA  2  /* Issue current block+page address as set in FBAR and FPAR, with length set by FMR[AL] */
@@ -277,7 +277,7 @@ static int test_tpm(void);
 #define ELBC_FIR_OP_CW1 13 /* Wait for LFRB to return high or time-out, then issue command from FCR[CMD1] */
 #define ELBC_FIR_OP_RBW 14 /* Wait for LFRB to return high or time-out, then read FBCR bytes of data from Flash device into current FCM RAM buffer */
 #define ELBC_FIR_OP_RSW 15 /* Wait for LFRB to return high or time-out, then read one byte (8b port) of data from Flash device into next AS field of MDR */
-#define ELBC_FCR_CMD(s,cmd) (((cmd) & 0xFF) << (24 - ((s % 4) * 8))) /* up to 4 command opcodes */
+#define ELBC_FCR_CMD(s,cmd) (((cmd) & 0xFFUL) << (24 - ((s % 4) * 8))) /* up to 4 command opcodes */
 
 #define ELBC_LCRR_CLKDIV_MASK 0x0000001F
 #define ELBC_LCRR_CLKDIV_4  0x2

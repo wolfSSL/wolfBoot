@@ -177,7 +177,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end_address;
     uint32_t p;
-    volatile uint32_t *cr;
+    volatile uint32_t *cr = &FLASH_NS_CR;
 
     flash_clear_errors(0);
     if (len == 0)

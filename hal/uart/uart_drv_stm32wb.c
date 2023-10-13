@@ -67,15 +67,15 @@ static void uart_pins_setup(void)
     uint32_t reg;
     AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
     /* Set mode = AF */
-    reg = GPIOB_MODE & ~ (0x03 << (UART1_RX_PIN * 2));
+    reg = GPIOB_MODE & ~ (0x03UL << (UART1_RX_PIN * 2));
     GPIOB_MODE = reg | (2 << (UART1_RX_PIN * 2));
-    reg = GPIOB_MODE & ~ (0x03 << (UART1_TX_PIN * 2));
+    reg = GPIOB_MODE & ~ (0x03UL << (UART1_TX_PIN * 2));
     GPIOB_MODE = reg | (2 << (UART1_TX_PIN * 2));
 
     /* Alternate function: use low pins (6 and 7) */
-    reg = GPIOB_AFL & ~(0xf << ((UART1_TX_PIN) * 4));
+    reg = GPIOB_AFL & ~(0xfUL << ((UART1_TX_PIN) * 4));
     GPIOB_AFL = reg | (UART1_PIN_AF << ((UART1_TX_PIN) * 4));
-    reg = GPIOB_AFL & ~(0xf << ((UART1_RX_PIN) * 4));
+    reg = GPIOB_AFL & ~(0xfUL << ((UART1_RX_PIN) * 4));
     GPIOB_AFL = reg | (UART1_PIN_AF << ((UART1_RX_PIN) * 4));
 }
 

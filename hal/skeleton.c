@@ -40,6 +40,7 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
+    return 0; /* on success. */
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -52,5 +53,6 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+    return 0; /* on success. */
 }
 
