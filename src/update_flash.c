@@ -128,7 +128,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 {
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
-    uint32_t dst_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
+    uint32_t dst_sector_offset = src_sector_offset;
 #ifdef EXT_ENCRYPTED
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
