@@ -22,27 +22,10 @@ jobs:
         run: |
           make keysclean && make -C tools/keytools clean && rm -f include/target.h
 
-      - name: Build wolfboot and test footprint
+      - name: Build unit tests
         run: |
           make -C tools/unit-tests
 
-
-      - name: Run manifest header parser unit tests
+      - name: Run unit tests
         run: |
-          ./tools/unit-tests/unit-parser
-
-      - name: Run non-encrypted ext_flash unit tests
-        run: |
-          ./tools/unit-tests/unit-extflash
-
-      - name: Run aes128 ext_flash unit tests
-        run: |
-          ./tools/unit-tests/unit-aes128
-
-      - name: Run aes256 ext_flash unit tests
-        run: |
-          ./tools/unit-tests/unit-aes256
-
-      - name: Run chacha20 ext_flash unit tests
-        run: |
-          ./tools/unit-tests/unit-chacha20
+          make -C tools/unit-tests run
