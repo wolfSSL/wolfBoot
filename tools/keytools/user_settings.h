@@ -33,7 +33,7 @@
 #define WOLFCRYPT_ONLY
 
 /* Math */
-#if 1
+#if 0
     #define USE_FAST_MATH
     #define FP_MAX_BITS (4096 * 2)
 #else

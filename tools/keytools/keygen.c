@@ -403,6 +403,8 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     uint8_t k_buffer[2 * MAX_ECC_KEY_SIZE];
     FILE *fpriv;
 
+    wc_ecc_init(&k);
+
     if (wc_ecc_make_key(&rng, ecc_key_size, &k) != 0) {
         fprintf(stderr, "Unable to create ecc key\n");
         exit(1);
