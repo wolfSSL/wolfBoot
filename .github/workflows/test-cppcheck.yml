@@ -1,0 +1,23 @@
+name: Cppcheck static analysis
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: false
+
+      - name: install cppcheck
+        run: sudo apt-get install --no-install-recommends -y -q cppcheck
+
+      - name: Run cppcheck static analysis
+        run: |
+          make cppcheck
