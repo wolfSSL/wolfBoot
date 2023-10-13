@@ -398,6 +398,7 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
                                 (void*)&wolfboot_magic_trail, sizeof(uint32_t));
 #endif
 
+#ifndef MOCK_PARTITION_TRAILER
 #ifdef EXT_FLASH
 
 /**
@@ -558,6 +559,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
     }
 }
 #endif /* EXT_FLASH */
+#endif /* MOCK_PARTITION_TRAILER */
 
 
 
@@ -626,6 +628,8 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
 {
     uint32_t *magic;
     uint8_t *state;
+    if (part == PART_NONE)
+        return -1;
     magic = get_partition_magic(part);
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
         set_partition_magic(part);
@@ -669,6 +673,8 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
 {
     uint32_t *magic;
     uint8_t *state;
+    if (part == PART_NONE)
+        return -1;
     magic = get_partition_magic(part);
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
         return -1;
