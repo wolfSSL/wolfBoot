@@ -200,7 +200,7 @@ static int find_epc(void *base, struct entry_point_command **entry)
     *entry = NULL;
 
     mh = (struct mach_header_64*)base;
-    lc = (struct load_command*)(base + sizeof(struct mach_header_64));
+    lc = (struct load_command*)((uint8_t *)base + sizeof(struct mach_header_64));
     for (i=0; i<(int)mh->ncmds; i++) {
         if (lc->cmd == LC_MAIN) { /* 0x80000028 */
             *entry = (struct entry_point_command *)lc;
@@ -250,7 +250,7 @@ void do_boot(const uint32_t *app_offset)
     /* restore mh_bundle type to allow hash to remain valid */
     app_buf[3] = typeVal;
 
-    main = (main_entry)(void*)(pSymbolAddress + epc->entryoff);
+    main = (main_entry)((uint8_t*)pSymbolAddress + epc->entryoff);
     main(main_argc, main_argv, NULL, NULL);
 #else
     char *envp[1] = {NULL};

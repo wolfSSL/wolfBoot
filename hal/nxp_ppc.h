@@ -28,22 +28,22 @@
     #define CORE_E500
     #define LAW_MAX_ENTRIES 12
 
-    #define CCSRBAR_DEF (0xFF700000) /* P1021RM 4.3 default base */
+    #define CCSRBAR_DEF (0xFF700000UL) /* P1021RM 4.3 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
 
     #define ENABLE_DDR
-    #define DDR_SIZE (512 * 1024 * 1024)
+    #define DDR_SIZE (512UL * 1024UL * 1024UL)
 
     /* Memory used for transferring blocks to/from NAND.
      * Maps to eLBC FCM internal 8KB region (by hardware) */
-    #define FLASH_BASE_ADDR 0xFC000000
+    #define FLASH_BASE_ADDR 0xFC000000UL
 
     #ifdef BUILD_LOADER_STAGE1
         /* First stage loader features */
 
         #define ENABLE_L2_CACHE
-        #define L2SRAM_ADDR   (0xF8F80000) /* L2 as SRAM */
-        #define L2SRAM_SIZE   (256 * 1024)
+        #define L2SRAM_ADDR   (0xF8F80000UL) /* L2 as SRAM */
+        #define L2SRAM_SIZE   (256UL * 1024UL)
 
         #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
         #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
@@ -55,7 +55,7 @@
         #define ENABLE_L2_CACHE
 
         /* Relocate CCSRBAR */
-        #define CCSRBAR 0xFFE00000
+        #define CCSRBAR 0xFFE00000UL
 
         #define ENABLE_INTERRUPTS
     #endif
@@ -88,7 +88,7 @@
     #define ENABLE_DDR
     #define DDR_SIZE (2048ULL * 1024ULL * 1024ULL)
 
-    #define FLASH_BASE_ADDR      0xEC000000
+    #define FLASH_BASE_ADDR      0xEC000000UL
     #define FLASH_BASE_PHYS_HIGH 0xFULL
     #define FLASH_LAW_SIZE       LAW_SIZE_64MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_64M
@@ -101,7 +101,7 @@
     #define CORE_E6500
     #define LAW_MAX_ENTRIES 32
 
-    #define CCSRBAR_DEF (0xFE000000) /* T2080RM 4.3.1 default base */
+    #define CCSRBAR_DEF (0xFE000000UL) /* T2080RM 4.3.1 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
 
     /* relocate to 64-bit 0xE_ */
@@ -111,8 +111,8 @@
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
 
-    #define L2SRAM_ADDR   (0xF8F80000) /* L2 as SRAM */
-    #define L2SRAM_SIZE   (256 * 1024)
+    #define L2SRAM_ADDR   (0xF8F80000UL) /* L2 as SRAM */
+    #define L2SRAM_SIZE   (256UL * 1024UL)
 
     #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
     #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
@@ -122,9 +122,9 @@
     #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
-    #define DDR_SIZE (8192 * 1024 * 1024)
+    #define DDR_SIZE (8192UL * 1024UL * 1024UL)
 
-    #define FLASH_BASE_ADDR      0xE8000000
+    #define FLASH_BASE_ADDR      0xE8000000UL
     #define FLASH_BASE_PHYS_HIGH 0x0ULL
     #define FLASH_LAW_SIZE       LAW_SIZE_128MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_128M
@@ -138,10 +138,10 @@
 
 /* boot address */
 #ifndef BOOT_ROM_ADDR
-#define BOOT_ROM_ADDR 0xFFFFF000
+#define BOOT_ROM_ADDR 0xFFFFF000UL
 #endif
 #ifndef BOOT_ROM_SIZE
-#define BOOT_ROM_SIZE (4*1024)
+#define BOOT_ROM_SIZE (4UL*1024UL)
 #endif
 
 /* reset vector */
@@ -149,7 +149,7 @@
 
 /* CCSRBAR */
 #ifndef CCSRBAR_DEF
-#define CCSRBAR_DEF  0xFE000000
+#define CCSRBAR_DEF  0xFE000000UL
 #endif
 #ifndef CCSRBAR
 #define CCSRBAR      CCSRBAR_DEF
@@ -163,7 +163,7 @@
 
 /* DDR */
 #ifndef DDR_ADDRESS
-#define DDR_ADDRESS  0x00000000
+#define DDR_ADDRESS  0x00000000UL
 #endif
 
 /* L1 */

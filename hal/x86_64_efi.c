@@ -147,8 +147,10 @@ static UINT64 FileSize(EFI_FILE_HANDLE FileHandle)
     UINT64 ret;
 
     FileInfo = LibFileInfo(FileHandle);
-    if (FileInfo == NULL)
+    if (FileInfo == NULL) {
         panic();
+        return 0; /* Never reached, for static analyzer */
+    }
 
     ret = FileInfo->FileSize;
     FreePool(FileInfo);

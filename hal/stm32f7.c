@@ -86,7 +86,7 @@
 #define FLASH_SR_OPERR                        (1 << 1)
 #define FLASH_SR_EOP                          (1 << 0)
 
-#define FLASH_CR_LOCK                         (1 << 31)
+#define FLASH_CR_LOCK                         (1UL << 31)
 #define FLASH_CR_ERRIE                        (1 << 25)
 #define FLASH_CR_EOPIE                        (1 << 24)
 #define FLASH_CR_STRT                         (1 << 16)

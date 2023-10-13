@@ -80,7 +80,7 @@
 #define FLASH_SR_PROGERR                      (1 << 3)
 #define FLASH_SR_EOP                          (1 << 0)  /* RM0444 - 3.7.4 - FLASH_SR */
 
-#define FLASH_CR_LOCK                         (1 << 31) /* RM0444 - 3.7.5 - FLASH_CR */
+#define FLASH_CR_LOCK                         (1UL << 31) /* RM0444 - 3.7.5 - FLASH_CR */
 #define FLASH_CR_STRT                         (1 << 16) /* RM0444 - 3.7.5 - FLASH_CR */
 
 #define FLASH_CR_PER                          (1 << 1)  /* RM0444 - 3.7.5 - FLASH_CR */

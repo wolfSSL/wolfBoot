@@ -55,9 +55,9 @@
 
 /* QSPI Fields */
 #define FESPI_IP_TXWM             0x1
-#define FESPI_RXDATA_FIFO_EMPTY   (1 << 31)
-#define FESPI_TXDATA_FIFO_FULL    (1 << 31)
-#define FESPI_FMT_DIR_TX          (1 << 3)
+#define FESPI_RXDATA_FIFO_EMPTY   (1UL << 31)
+#define FESPI_TXDATA_FIFO_FULL    (1UL << 31)
+#define FESPI_FMT_DIR_TX          (1UL << 3)
 
 #define FESPI_CSMODE_AUTO         0x0UL
 #define FESPI_CSMODE_HOLD         0x2UL
@@ -65,18 +65,18 @@
 
 #define FESPI_FCTRL_MODE_SEL      0x1UL
 
-#define FESPI_FFMT_CMD_EN         0x1
-#define FESPI_FFMT_ADDR_LEN(x)    (((x) & 0x7) << 1)
-#define FESPI_FFMT_PAD_CNT(x)     (((x) & 0xf) << 4)
-#define FESPI_FFMT_CMD_PROTO(x)   (((x) & 0x3) << 8)
-#define FESPI_FFMT_ADDR_PROTO(x)  (((x) & 0x3) << 10)
-#define FESPI_FFMT_DATA_PROTO(x)  (((x) & 0x3) << 12)
-#define FESPI_FFMT_CMD_CODE(x)    (((x) & 0xff) << 16)
-#define FESPI_FFMT_PAD_CODE(x)    (((x) & 0xff) << 24)
+#define FESPI_FFMT_CMD_EN         0x1UL
+#define FESPI_FFMT_ADDR_LEN(x)    (((x) & 0x7) << 1UL)
+#define FESPI_FFMT_PAD_CNT(x)     (((x) & 0xf) << 4UL)
+#define FESPI_FFMT_CMD_PROTO(x)   (((x) & 0x3) << 8UL)
+#define FESPI_FFMT_ADDR_PROTO(x)  (((x) & 0x3) << 10UL)
+#define FESPI_FFMT_DATA_PROTO(x)  (((x) & 0x3) << 12UL)
+#define FESPI_FFMT_CMD_CODE(x)    (((x) & 0xff) << 16UL)
+#define FESPI_FFMT_PAD_CODE(x)    (((x) & 0xff) << 24UL)
 
-#define FESPI_SCKDIV_MASK         0xFFF
+#define FESPI_SCKDIV_MASK         0xFFFUL
 
-#define FESPI_TXMARK_MASK         0x3
+#define FESPI_TXMARK_MASK         0x3UL
 
 /* FESPI_REG_FMT Fields */
 /* SPI I/O direction */
@@ -104,11 +104,11 @@
 #endif
 
 /* SPI flash status fields (from FESPI_READ_STATUS command) */
-#define FESPI_RX_BSY              (1 << 0)
-#define FESPI_RX_WE               (1 << 1)
+#define FESPI_RX_BSY              (1 << 0UL)
+#define FESPI_RX_WE               (1 << 1UL)
 
 /* QSPI Flash Sector Size */
-#define FESPI_FLASH_SECTOR_SIZE   (4 * 1024)
+#define FESPI_FLASH_SECTOR_SIZE   (4 * 1024UL)
 
 
 /* PRCI Registers */
@@ -135,8 +135,8 @@
 
 #define HFROSCCFG_DIV            0x0000001FUL
 #define HFROSCCFG_TRIM           0x001F0000UL
-#define HFROSCCFG_EN             (1UL << 30)
-#define HFROSCCFG_READY          (1UL << 31)
+#define HFROSCCFG_EN             (1UL << 30UL)
+#define HFROSCCFG_READY          (1UL << 31UL)
 #define HFROSCCFG_DIV_SHIFT(d)   ((d << 0) & HFROSCCFG_TRIM)
 #define HFROSCCFG_TRIM_SHIFT(t)  ((t << 16) & HFROSCCFG_TRIM)
 
@@ -154,19 +154,19 @@
 #define UART_REG_DIV            (*(volatile uint32_t *)(UART0_BASE + 0x18))
 
 /* TXDATA Fields */
-#define UART_TXEN               (1 <<  0)
-#define UART_TXFULL             (1 << 31)
+#define UART_TXEN               (1UL <<  0)
+#define UART_TXFULL             (1UL << 31)
 
 /* RXDATA Fields */
-#define UART_RXEN               (1 <<  0)
-#define UART_RXEMPTY            (1 << 31)
+#define UART_RXEN               (1UL <<  0)
+#define UART_RXEMPTY            (1UL << 31)
 
 /* TXCTRL Fields */
-#define UART_NSTOP              (1 <<  1)
-#define UART_TXCNT(count)       ((0x7 & count) << 16)
+#define UART_NSTOP              (1UL <<  1)
+#define UART_TXCNT(count)       ((0x7UL & count) << 16)
 
 /* IP Fields */
-#define UART_TXWM               (1 <<  0)
+#define UART_TXWM               (1UL <<  0)
 
 
 /* Configuration Defaults */
@@ -183,16 +183,16 @@
 /* PLL Configuration */
 /* R and Q are fixed values for this PLL code */
 #define PLL_R (1)  /* First Divisor: By 2 (takes 16Mhz PLLREF / 2 = 8MHz) */
-#define PLL_F(cpuHz) (((cpuHz / PLLREF_FREQ) * 2) - 1) /* Multiplier */
+#define PLL_F(cpuHz) (((cpuHz / PLLREF_FREQ) * 2U) - 1U) /* Multiplier */
 #define PLL_Q (1)  /* Second Divisor: By 2 */
 
 /* SPI Serial clock divisor */
-#define FESPI_SCKDIV_DEFAULT   0x03
-#define FESPI_SCKDIV_VAL(cpuHz, flashHz) (cpuHz / ((2 * flashHz) - 1))
+#define FESPI_SCKDIV_DEFAULT   0x03U
+#define FESPI_SCKDIV_VAL(cpuHz, flashHz) (cpuHz / ((2U * flashHz) - 1U))
 
 /* UART baud initialize value */
 #ifndef UART_BAUD_INIT
-#define UART_BAUD_INIT 115200
+#define UART_BAUD_INIT 115200U
 #endif
 
 

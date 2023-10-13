@@ -165,7 +165,7 @@
 #define FLASH_CR_ERRIE                      (1 << 25)
 #define FLASH_CR_OBL_LAUNCH                 (1 << 27)
 #define FLASH_CR_OPTLOCK                    (1 << 30)
-#define FLASH_CR_LOCK                       (1 << 31)
+#define FLASH_CR_LOCK                       (1UL << 31)
 
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)

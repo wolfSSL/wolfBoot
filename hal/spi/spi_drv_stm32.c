@@ -84,32 +84,32 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
     RCC_GPIO_CLOCK_ER |= (1 << base_num);
 
     /* Set Mode and Alternate Function */
-    reg = GPIO_MODE(base) & ~(0x03 << (pin * 2));
+    reg = GPIO_MODE(base) & ~(0x03UL << (pin * 2));
     GPIO_MODE(base) = reg | (mode << (pin * 2));
     if (mode < 2) {
         if (pin < 8)
-            GPIO_AFL(base) &= ~(0xf << (pin * 4));
+            GPIO_AFL(base) &= ~(0xfUL << (pin * 4));
         else
-            GPIO_AFH(base) &= ~(0xf << ((pin - 8) * 4));
+            GPIO_AFH(base) &= ~(0xfUL << ((pin - 8) * 4));
     }
     else if (mode == 2) {
         /* alternate mode */
         if (pin < 8) {
-            reg = GPIO_AFL(base) & ~(0xf << (pin * 4));
+            reg = GPIO_AFL(base) & ~(0xfUL << (pin * 4));
             GPIO_AFL(base) = reg | (af << (pin * 4));
         }
         else {
-            reg = GPIO_AFH(base) & ~(0xf << ((pin - 8) * 4));
+            reg = GPIO_AFH(base) & ~(0xfUL << ((pin - 8) * 4));
             GPIO_AFH(base) = reg | (af << ((pin - 8) * 4));
         }
     }
 
     /* configure for pull 0=float, 1=pull up, 2=pull down */
-    reg = GPIO_PUPD(base) & ~(0x03 << (pin * 2));
+    reg = GPIO_PUPD(base) & ~(0x03UL << (pin * 2));
     GPIO_PUPD(base) = reg | (pull << (pin * 2));
 
     /* configure output speed 0=low, 1=med, 2=high, 3=very high */
-    reg = GPIO_OSPD(base) & ~(0x03 << (pin * 2));
+    reg = GPIO_OSPD(base) & ~(0x03UL << (pin * 2));
     GPIO_OSPD(base) |= (speed << (pin * 2));
 }
 
