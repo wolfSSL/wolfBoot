@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Prints the LMS signature length given 3 LMS parameters.
 # This assumes the LMS parameters are the same per each level tree.

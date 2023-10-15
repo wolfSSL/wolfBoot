@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 export RENODE_UART=/tmp/wolfboot.uart
 export RENODE_PIDFILE=/tmp/renode.pid

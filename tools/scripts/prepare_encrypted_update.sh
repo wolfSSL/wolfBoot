@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SIGN_TOOL="python3 ./tools/keytools/sign.py"
 if [ -f "./tools/keytools/sign" ]; then

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 V=`./wolfboot.elf update_trigger get_version 2>/dev/null`
 if [ "x$V" != "x1" ]; then

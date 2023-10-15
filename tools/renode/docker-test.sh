@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 declare -r HOST_ROOT_DIR=`pwd`
 declare -r HOST_TEST_RESULTS_PATH=${HOST_ROOT_DIR}/test_results
 declare -r HOST_LOG_PATH=${HOST_TEST_RESULTS_PATH}
@@ -23,7 +23,7 @@ if ! docker run \
   --env RENODE_CHECKOUT=/home/developer/renode \
   --workdir ${DOCKER_WORKSPACE} \
   ${DOCKER_TAG} \
-  /bin/bash -c "tools/scripts/renode-test-update.sh $@ 2>&1 > ${DOCKER_TEST_RESULTS_PATH}/logs.txt"
+  /usr/bin/env bash -c "tools/scripts/renode-test-update.sh $@ 2>&1 > ${DOCKER_TEST_RESULTS_PATH}/logs.txt"
 then
   echo "FAILED"
   exit_code=1

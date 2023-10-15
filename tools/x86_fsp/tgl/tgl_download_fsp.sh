@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 WORK_DIR=/tmp/tgl_fsp
 EDK2_COMMIT_ID=df25a5457f04ec465dce97428cfee96f462676e7

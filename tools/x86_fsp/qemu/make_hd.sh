@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 SIGN=${SIGN:-"--ecc256"}
 HASH=${HASH:-"--sha256"}
 

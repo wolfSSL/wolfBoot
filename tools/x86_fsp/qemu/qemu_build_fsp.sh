@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 WORK_DIR=/tmp/qemu_fsp
 EDKII_TAG=edk2-stable202011

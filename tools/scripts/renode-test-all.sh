@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 TARGETS="stm32f4 stm32f7 nrf52840 hifive1"
 
