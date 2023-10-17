@@ -110,4 +110,6 @@
 #define NO_CRYPT_TEST
 #define NO_CRYPT_BENCHMARK
 
+#define XSNPRINTF /* not used */
+
 #endif /* !H_USER_SETTINGS_ */
