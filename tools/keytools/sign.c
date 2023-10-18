@@ -1693,7 +1693,7 @@ int main(int argc, char** argv)
     char* tmpstr;
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
-    uint8_t  buf[1024];
+    uint8_t  buf[PATH_MAX-32]; /* leave room to avoid "directive output may be truncated" */
     uint8_t *pubkey = NULL;
     uint32_t pubkey_sz = 0;
     uint8_t *kbuf=NULL, *key_buffer;
