@@ -239,8 +239,9 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
  *
  * @param key_slot The key slot ID to calculate the hash for.
  * @param hash A pointer to store the resulting SHA256 hash.
+ * @return 0 on success, -1 on failure
  */
-static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
+static int get_key_sha256(uint8_t key_slot, uint8_t *hash)
 {
     int blksz;
     unsigned int i = 0;
@@ -249,7 +250,7 @@ static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
     wc_Sha256 sha256_ctx;
 
     if (!pubkey || (pubkey_sz < 0))
-        return;
+        return -1;
 
     wc_InitSha256(&sha256_ctx);
     while (i < (uint32_t)pubkey_sz) {
@@ -260,6 +261,7 @@ static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
         i += blksz;
     }
     wc_Sha256Final(&sha256_ctx, hash);
+    return 0;
 }
 
 static int sata_get_random_base64(uint8_t *out, int *out_size)
@@ -299,6 +301,7 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
     if (ret == 0) {
         wolfBoot_printf("Creating new secret (%d bytes)\r\n", *secret_size);
         wolfBoot_printf("%s\r\n", secret);
+        
             /* seal new secret */
         ret = wolfBoot_seal(pubkey_hint, policy, policy_size,
                             ATA_UNLOCK_DISK_KEY_NV_INDEX,
@@ -355,7 +358,11 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
         return -1;
 
     memcpy(policy, pol, policy_size);
-    get_key_sha256(WOLFBOOT_TPM_SEAL_KEY_ID, pubkey_hint);
+    ret = get_key_sha256(WOLFBOOT_TPM_SEAL_KEY_ID, pubkey_hint);
+    if (ret != 0) {
+        wolfBoot_printf("failed to find key id %d\r\n", WOLFBOOT_TPM_SEAL_KEY_ID);
+        return ret;
+    }
     ret = wolfBoot_unseal(pubkey_hint, policy, policy_size,
                           ATA_UNLOCK_DISK_KEY_NV_INDEX,
                           secret, secret_size);
