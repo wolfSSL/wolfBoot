@@ -20,21 +20,36 @@ make CFLAGS_EXTRA="-DHAVE_ECC256"
 make test-app/image.elf
 make tpmtools
 
-# fake policy (redo with the value obtained for a run)
-./tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -policydigest=3373F61EF59E71D7F40881F5A4A44D4360EFA0B7540130199FDAF98A2E20E8BA
+# compute pcr0 value
+PCR0=$(python ./tools/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
+echo $PCR0
+./tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -pcrdigest=$PCR0
 
 ./tools/x86_fsp/tpm_install_policy.sh policy.bin.sig
 IMAGE=test-app/image.elf SIGN=--ecc384 ./tools/x86_fsp/qemu/make_hd.sh
 
-# run w/ ./tools/scripts/qemu64/qemu64-tpm.sh
-# copy the value of PCR eg:
-# Policy signature failed!
-# Expected PCR Mask (0x1) and PCR Policy (32)
-# 651CC3EDC7D5AD395BB7EF441FC067EAAC325735050071D6406BA49CE9F16B64 
+echo "RUNNING QEMU"
+# launch qemu in background
+./tools/scripts/qemu64/qemu64-tpm.sh -p > /tmp/qemu_output &
+echo "WAITING FOR QEMU TO RUN"
+sleep 5
 
-# sign the correct policy
-# ./tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -policydigest=651CC3EDC7D5AD395BB7EF441FC067EAAC325735050071D6406BA49CE9F16B64 
-# ./tools/x86_fsp/tpm_install_policy.sh policy.bin.sig
+# close qemu
+timeout 5 echo 'quit' > /tmp/qemu_mon.in
+output=$(cat /tmp/qemu_output)
+app=$(echo "$output" | grep -m 1 "wolfBoot QEMU x86 FSP test app")
+if [ -n "$app" ]; then
+  echo "Found 'wolfBoot QEMU x86 FSP test app' in the output."
+else
+  echo -e "\e[31mTEST FAILED\e[0m"
+  exit 255
+fi
 
-# test again
-# ./tools/scripts/qemu64/qemu64-tpm.sh
+output=$(echo "$output" | grep -m 1 "DISK LOCK SECRET:")
+if [ -n "$output" ]; then
+  echo -e "\e[32mTEST OK\e[0m"
+  exit 0
+else
+  echo -e "\e[31mTEST FAILED\e[0m"
+  exit 255
+fi

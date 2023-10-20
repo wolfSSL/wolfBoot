@@ -34,8 +34,13 @@
 DEBUG_STAGE="DEBUG_STAGE2"
 WAIT_FOR_GDB=false
 
+echo "Running wolfBoot on QEMU"
+
+set -e
+set -x
+
 # Parse command line options
-while getopts "d:w" opt; do
+while getopts "d:wp" opt; do
     case "$opt" in
         d)
             DEBUG_STAGE="$OPTARG"
@@ -43,8 +48,12 @@ while getopts "d:w" opt; do
         w)
             WAIT_FOR_GDB=true
             ;;
+        p)
+            CREATE_PIPE=true
+            ;;
         *)
-            echo "Usage: $0 [-d DEBUG_STAGE1 | DEBUG_STAGE2] [-w]"
+            echo "Usage: $0 [-d DEBUG_STAGE1 | DEBUG_STAGE2] [-w] [-p]"
+            echo "-p : create /tmp/qemu_mon.in and /tmp/qemu_mon.out pipes for monitor qemu"
             exit 1
             ;;
     esac
@@ -63,12 +72,24 @@ fi
 QEMU_TPM_OPTIONS=" \
     -chardev socket,id=chrtpm,path=/tmp/swtpm/swtpm-sock \
     -tpmdev emulator,id=tpm0,chardev=chrtpm \
-    -device tpm-tis,tpmdev=tpm0"
+    -device tpm-tis,tpmdev=tpm0 \
+    "
 
 QEMU_OPTIONS=" \
-    -m 1G -machine q35 -serial mon:stdio -nographic \
+    -m 1G -machine q35 -nographic \
     -pflash wolfboot_stage1.bin -drive id=mydisk,format=raw,file=app.bin,if=none \
-    -device ide-hd,drive=mydisk"
+    -device ide-hd,drive=mydisk \
+    "
+
+if [ "$CREATE_PIPE" = true ]; then
+    rm /tmp/qemu_mon.in /tmp/qemu_mon.out || true &> /dev/null
+    mkfifo /tmp/qemu_mon.in /tmp/qemu_mon.out
+    QEMU_OPTIONS+="\
+       -chardev pipe,id=qemu_mon,path=/tmp/qemu_mon \
+       -mon chardev=qemu_mon \
+       -serial stdio \
+    "
+fi
 
 # If waiting for GDB is true, append options to QEMU_OPTIONS
 if [ "$WAIT_FOR_GDB" = true ]; then
@@ -81,7 +102,7 @@ else
     QEMU=qemu-system-x86_64
 fi
 
-killall swtpm
+killall swtpm || true
 sleep 1
 echo TPM Emulation ON
 mkdir -p /tmp/swtpm

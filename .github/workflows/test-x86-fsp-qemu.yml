@@ -1,0 +1,23 @@
+name: X86 FSP QEMU test
+
+on:
+  pull_request:
+    branches: [ '*' ]
+jobs:
+  fsp_qemu_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: install req
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y -q nasm gcc-multilib qemu-system-x86 swtpm
+      - name: setup git
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+      - name: run test
+        run: |
+          ./tools/x86_fsp/qemu/test_qemu.sh
