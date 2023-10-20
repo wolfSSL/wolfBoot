@@ -44,9 +44,10 @@ Flash Allocation:
 0xffc10000: Primary partition (Header)
 0xffc10100: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 256, e.g. ED25519, EC256, EC384 or EC512 */
 0xffc10200: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 512, e.g. RSA2048, RSA3072 */
-0xffdf0000: Update  partition (Header)
-0xffdf0100: Update  partition (Application image)
-0xfffd0000: Swap sector
+0xffdf8000: Update  partition (Header)
+0xffdf8100: Update  partition (Application image) /* When it uses IMAGE_HEADER_SIZE 256, e.g. ED25519, EC256, EC384 or EC512 */
+0xffdf8200: Update  partition (Application image) /* When it uses IMAGE_HEADER_SIZE 512, e.g. RSA2048, RSA3072 */
+0xfffe0000: Swap sector
 
 ```
 
@@ -75,13 +76,13 @@ $ export PATH:$PATH:<wolfBoot>/tools/keytools
 $ keygen --ecc256 -g ./pri-ecc256.der
 ```
 
-This generates a pair of private and public keys with -g option. The private key is stored 
-in the specified file. The public key is stored in a key store as a C source code 
+This generates a pair of private and public keys with -g option. The private key is stored
+in the specified file. The public key is stored in a key store as a C source code
 in "src/keystore.c" soo that it can be compiled and linked with wolfBoot.
 If you have an existing key pair, you can use -i option to import the pablic
 key to the store.
 
-You can specify various signature algorithms such as 
+You can specify various signature algorithms such as
 
 ```
 --ed25519 --ed448 --ecc256 --ecc384 --ecc521 --rsa2048 --rsa3072
@@ -140,7 +141,7 @@ Pre-Include
 Code Origin and entry point (PResetPRG) is "0xffc10200" (See Section Viewer of Linker Section).
 ```
 
-app_RenesasRx01.x in ELF is generated under HardwareDebug. You can derive bair binary file 
+app_RenesasRx01.x in ELF is generated under HardwareDebug. You can derive bair binary file
 (app_RenesasRx01.bin) by rx-elf-objcopy.exe command as follows. -R are for eliminate unnecessary
 secrions.
 
@@ -189,7 +190,7 @@ $ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc10000 app_Renesas
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
 If the boot program succeeds integrity and authenticity check, it initiate the
-application V1. 
+application V1.
 
 
 ```
@@ -201,51 +202,47 @@ application V1.
 === Boot Partition[ffc10000] ===
 Magic:    WOLF
 Version:  01
-Status:   ff
-Tail Mgc: ????
+Status:   ff (New)
+Tail Mgc: ����
 
-=== Update Partition[ffdf0000] ===
-Magic:    WOLF
-Version:  02
-Status:   ff
-Tail Mgc: ????
+=== Update Partition[ffdf8000] ===
+Magic:    ����
+Version:  00
+Status:   ff (New)
+Tail Mgc: ����
 
 Current Firmware Version: 1
 Hit any key to call wolfBoot_success the firmware.
 ```
 
 After hitting any key, the application calls wolfBoot_success() to set boot partition
-state and wait for any key again. 
-
-If you re-start the boot program at this moment, 
-after checking the integrity and authenticity, it jumps to the application.
-You can see the state is Success("00").
+state and wait for any key again.
 
 ```
 === Boot Partition[ffc10000] ===
 Magic:    WOLF
 Version:  01
-Status:   00
+Status:   00 (Success)
 Tail Mgc: BOOT
 
-=== Update Partition[ffdf0000] ===
-Magic:    WOLF
-Version:  02
-Status:   ff
-Tail Mgc: ????
+=== Update Partition[ffdf8000] ===
+Magic:    ����
+Version:  00
+Status:   00 (Success)
+Tail Mgc: BOOT
 
-Hit any key to update the firmware.
 ```
+You can see the state is Success("00").
 
 ### 3-8 Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0xffdf0000".
+Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0xffdf8000".
 You can download it by the flash programmer.
 
 
 ```
 $ sign --ecc256 app_RenesasRx01.bin ../../../../../pri-ecc256.der 2.0
-rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffdf0000 app_RenesasRx01_v2.0_signed.bin app_RenesasRx01_v2.0_signed.hex
+rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffdf8000 app_RenesasRx01_v2.0_signed.bin app_RenesasRx01_v2.0_signed.hex
 ```
 
 
@@ -253,7 +250,7 @@ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffdf0000 app_RenesasRx
 
 Now the image is downloaded but note that the partition status is not changed yet.
 When it is re-boot, it checks integrity and authenticity of V1 and initiate V1 as in
-step 6. 
+step 8.
 
 ```
 | ------------------------------------------------------------------- |
@@ -261,13 +258,28 @@ step 6.
 | ------------------------------------------------------------------- |
 
 Current Firmware Version: 1
+....
 Hit any key to update the firmware.
-Firmware Update is triggered
 ```
 
 After you see the message, hit any key so that the application calls
 wolfBoot_update_trigger() which changes the partition status and triggers
-updating the firmware.
+updating the firmware. You will see the following messages.
+
+```
+Firmware Update is triggered
+=== Boot Partition[ffc10000] ===
+Magic:    WOLF
+Version:  01
+Status:   00 (Success)
+Tail Mgc: BOOT
+
+=== Update Partition[ffdf8000] ===
+Magic:    ����
+Version:  00
+Status:   70 (Updating)
+Tail Mgc: BOOT
+```
 
 Since this is just a trigger, the application can continue the process.
 In the demo application it outputs a message "Firmware Update is triggered" and enters
@@ -291,11 +303,11 @@ Version:  02
 Status:   10
 Tail Mgc: BOOT
 
-=== Update Partition[ffdf0000] ===
+=== Update Partition[ffdf8000] ===
 Magic:    WOLF
 Version:  01
-Status:   ff
-Tail Mgc: ????
+Status:   30
+Tail Mgc: BOOT
 
 Current Firmware Version: 2
 ```
