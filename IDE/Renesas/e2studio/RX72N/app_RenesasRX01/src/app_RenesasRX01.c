@@ -28,6 +28,17 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 
+static const char* state2str(uint8_t s)
+{
+    switch(s) {
+        case IMG_STATE_NEW: return "New";
+        case IMG_STATE_UPDATING: return "Updating";
+        case IMG_STATE_TESTING: return "Testing";
+        case IMG_STATE_SUCCESS: return "Success";
+        default: return "Unknown";
+    }
+}
+
 static void printPart(uint8_t *part)
 {
 #ifdef WOLFBOOT_DEBUG_PARTION
@@ -43,7 +54,7 @@ static void printPart(uint8_t *part)
     ver = wolfBoot_get_blob_version(part);
     printf("Version:  %02x\n", ver);
     state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
-    printf("Status:   %02x\n", state);
+    printf("Status:   %02x (%s)\n", state,state2str(state));
     magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
     printf("Tail Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
 
@@ -107,6 +118,14 @@ void main(void)
 
             wolfBoot_update_trigger();
             printf("Firmware Update is triggered\n");
+            printPartitions();
+
+        } else if (firmware_version == 2) {
+            printf("Hit any key to call wolfBoot_success the firmware.\n");
+            getchar();
+
+            wolfBoot_success();
+            printPartitions();
         }
     } else {
         printf("Invalid Firmware Version\n");

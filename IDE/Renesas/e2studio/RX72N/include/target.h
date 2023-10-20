@@ -67,9 +67,9 @@
     #define WOLFBOOT_PARTITION_SWAP_ADDRESS     0x0
 
 #else
-    #define WOLFBOOT_BOOT_SIZE                  0x20000
+    #define WOLFBOOT_BOOT_SIZE                  0x10000
     #define WOLFBOOT_RX_EXCVECT                 0x10000
-    #define WOLFBOOT_SECTOR_SIZE                0x20000
+    #define WOLFBOOT_SECTOR_SIZE                0x10000
     
     #define WOLFBOOT_PARTITION_SIZE\
             ((WOLFBOOT_FLASH_SIZE - WOLFBOOT_BOOT_SIZE -\
