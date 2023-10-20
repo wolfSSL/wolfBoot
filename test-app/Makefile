@@ -8,7 +8,8 @@ ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 CFLAGS+=-I.
 CFLAGS+=-I./wcs
-DEBUG=1
+DEBUG?=1
+DELTA_DATA_SIZE?=2000
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -166,7 +167,7 @@ endif
 ifeq ($(TARGET),sim)
   APP_OBJS=app_$(TARGET).o ../test-app/libwolfboot.o ../hal/$(TARGET).o
   # Override linker flags
-  LDFLAGS=
+  LDFLAGS=-Wl,-Map=image.map
 endif
 
 ifeq ($(EXT_FLASH),1)
@@ -327,6 +328,9 @@ CFLAGS+=-I../lib/wolfssl
 standalone:CFLAGS+=-D"TEST_APP_STANDALONE"
 standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
 
+delta-extra-data:CFLAGS+=-D"TEST_DELTA_DATA=$(DELTA_DATA_SIZE)" -ffunction-sections -fdata-sections
+delta-extra-data:LDFLAGS=-Wl,-Map=image.map
+
 image.bin: image.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
@@ -337,6 +341,8 @@ image.elf: $(APP_OBJS) $(LSCRIPT)
 
 
 standalone: image.bin
+
+delta-extra-data: image.bin
 
 ../test-app/libwolfboot.o: ../src/libwolfboot.c FORCE
 	@echo "\t[CC-$(ARCH)] $@"

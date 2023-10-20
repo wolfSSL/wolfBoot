@@ -40,6 +40,11 @@
 char enc_key[] = "0123456789abcdef0123456789abcdef"
 		 "0123456789abcdef";
 
+#ifdef TEST_DELTA_DATA
+static volatile char __attribute__((used)) garbage[TEST_DELTA_DATA] = {0x01, 0x02, 0x03, 0x04 };
+
+#endif
+
 void hal_init(void);
 
 int do_cmd(const char *cmd)
