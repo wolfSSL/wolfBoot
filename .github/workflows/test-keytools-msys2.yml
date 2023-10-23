@@ -1,0 +1,39 @@
+name: Wolfboot keytools with MSYS2
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: base-devel git
+          pacboy: toolchain:p
+
+      - name: git config
+        shell: bash
+        run: |
+          git config --global core.autocrlf input
+
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Build tools
+        shell: msys2 {0}
+        run: |
+          make distclean
+          cp config/examples/sim.config .config
+          make include/target.h
+          make -C tools/keytools
+          make -C tools/bin-assemble
