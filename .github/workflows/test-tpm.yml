@@ -65,7 +65,7 @@ jobs:
       arch: host
       config-file: ./config/examples/sim-tpm-keystore.config
       make-args: SIGN=ECC256 HASH=SHA256
-      authstr: TestAuth
+      keyauthstr: TestAuth
 
   sim_tpm_keystore_ecc384:
     uses: ./.github/workflows/test-build-sim-tpm.yml
@@ -74,7 +74,7 @@ jobs:
       config-file: ./config/examples/sim-tpm-keystore.config
       make-args: SIGN=ECC384 HASH=SHA384
       rot-args: -sha384
-      authstr: TestAuth
+      keyauthstr: TestAuth
 
   sim_tpm_keystore_rsa2048:
     uses: ./.github/workflows/test-build-sim-tpm.yml
@@ -82,7 +82,7 @@ jobs:
       arch: host
       config-file: ./config/examples/sim-tpm-keystore.config
       make-args: SIGN=RSA2048 HASH=SHA256
-      authstr: TestAuth
+      keyauthstr: TestAuth
 
 
   sim_tpm_keystore_noauth_ecc256:
@@ -114,7 +114,8 @@ jobs:
       arch: host
       config-file: ./config/examples/sim-tpm-seal.config
       make-args: SIGN=ECC256 HASH=SHA256 POLICY_FILE=policy.bin
-      authstr: TestAuth
+      keyauthstr: TestAuth
+      sealauthstr: SealAuth
 
   sim_tpm_seal_ecc384:
     uses: ./.github/workflows/test-build-sim-tpm.yml
@@ -123,7 +124,8 @@ jobs:
       config-file: ./config/examples/sim-tpm-seal.config
       make-args: SIGN=ECC384 HASH=SHA384 POLICY_FILE=policy.bin
       rot-args: -sha384
-      authstr: TestAuth
+      keyauthstr: TestAuth
+      sealauthstr: SealAuth
 
   sim_tpm_seal_rsa2048:
     uses: ./.github/workflows/test-build-sim-tpm.yml
@@ -132,4 +134,32 @@ jobs:
       config-file: ./config/examples/sim-tpm-seal.config
       # use larger image header size for two 2048-bit signatures
       make-args: SIGN=RSA2048ENC HASH=SHA256 POLICY_FILE=policy.bin IMAGE_HEADER_SIZE=1024
-      authstr: TestAuth
+      keyauthstr: TestAuth
+      sealauthstr: SealAuth
+
+
+  sim_tpm_seal_noauth_ecc256:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-seal.config
+      make-args: SIGN=ECC256 HASH=SHA256 POLICY_FILE=policy.bin
+      keyauthstr: TestAuth
+
+  sim_tpm_seal_noauth_ecc384:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-seal.config
+      make-args: SIGN=ECC384 HASH=SHA384 POLICY_FILE=policy.bin
+      rot-args: -sha384
+      keyauthstr: TestAuth
+
+  sim_tpm_seal_noauth_rsa2048:
+    uses: ./.github/workflows/test-build-sim-tpm.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm-seal.config
+      # use larger image header size for two 2048-bit signatures
+      make-args: SIGN=RSA2048ENC HASH=SHA256 POLICY_FILE=policy.bin IMAGE_HEADER_SIZE=1024
+      keyauthstr: TestAuth

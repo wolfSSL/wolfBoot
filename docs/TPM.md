@@ -15,6 +15,7 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | `MEASURED_PCR_A=16` | `WOLFBOOT_MEASURED_PCR_A=16` | The PCR index to use. See [docs/measured_boot.md](/docs/measured_boot.md). |
 | `WOLFBOOT_TPM_SEAL=1` | `WOLFBOOT_TPM_SEAL` | Enables support for sealing/unsealing based on PCR policy signed externally. |
 | `WOLFBOOT_TPM_SEAL_NV_BASE=0x01400300` | `WOLFBOOT_TPM_SEAL_NV_BASE` | To override the default sealed blob storage location in the platform hierarchy. |
+| `WOLFBOOT_TPM_SEAL_AUTH=secret` | `WOLFBOOT_TPM_SEAL_AUTH` | Password for sealing/unsealing secrets |
 
 ## Root of Trust (ROT)
 
@@ -36,14 +37,14 @@ The wolfBoot image is hashed and extended to the indicated PCR. This can be used
 See the wolfTPM Sealing/Unsealing example [here](https://github.com/wolfSSL/wolfTPM/tree/secret_seal/examples/boot#secure-boot-encryption-key-storage)
 
 Known PCR values must be signed to seal/unseal a secret. The signature for the authorization policy resides in the signed header using the `--policy` argument.
-If a signed policy is not in the header then a value cannot be sealed. Instead the PCR(s) and a digest to sign will be printed for use with the sign tool.
+If a signed policy is not in the header then a value cannot be sealed. Instead the PCR(s) values and a PCR policy digest will be printed to sign. You can use `./tools/keytools/sign` or `./tools/tpm/policy_sign` to sign the policy externally.
 
 This exposes two new wolfBoot API's for sealing and unsealing data with blob stored to NV index:
 ```c
-int wolfBoot_seal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
-    int index, const uint8_t* secret, int secret_sz);
-int wolfBoot_unseal(uint8_t* pubkey_hint, uint8_t* policy, uint16_t policySz,
-    int index, uint8_t* secret, int* secret_sz);
+int wolfBoot_seal_auth(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
+    int index, const uint8_t* secret, int secret_sz, const byte* auth, int authSz);
+int wolfBoot_unseal_auth(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
+    int index, uint8_t* secret, int* secret_sz, const byte* auth, int authSz);
 ```
 
 By default this index will be based on an NV Index at `(0x01400300 + index)`.
@@ -62,7 +63,8 @@ NOTE: The TPM's RSA verify requires ASN.1 encoding, so use SIGN=RSA2048ENC
 % ./tools/tpm/policy_create -pcr=0
 # if ROT enabled
 % ./tools/tpm/rot -write [-auth=TestAuth]
-% make clean && make POLICY_FILE=policy.bin
+% make clean
+$ make POLICY_FILE=policy.bin [WOLFBOOT_TPM_KEYSTORE_AUTH=TestAuth] [WOLFBOOT_TPM_SEAL_AUTH=SealAuth]
 
 % ./wolfboot.elf get_version
 Simulator assigned ./internal_flash.dd to base 0x103378000
