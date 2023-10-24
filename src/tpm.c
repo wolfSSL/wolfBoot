@@ -605,9 +605,9 @@ int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
         nvSz  = (uint32_t)sizeof(blob->pub.size)  + blob->pub.size;
         nvSz += (uint32_t)sizeof(blob->priv.size) + blob->priv.size;
 
-        /* Create NV - no auth required, blob encrypted by TPM already */
+        /* Create NV */
         rc = wolfTPM2_NVCreateAuth(&wolftpm_dev, &parent, &nv,
-            nv.handle.hndl, nvAttributes, nvSz, NULL, 0);
+            nv.handle.hndl, nvAttributes, nvSz, auth, authSz);
         if (rc == TPM_RC_NV_DEFINED) {
             /* allow use of existing handle - ignore this error */
             rc = 0;
@@ -739,7 +739,8 @@ int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
 }
 
 /* The secret is sealed based on a policy authorization from a public key. */
-int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
+int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
+    const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz)
 {
     int rc;
@@ -801,8 +802,9 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16
         /* Create a new key for sealing using external signing auth */
         wolfTPM2_GetKeyTemplate_KeySeal(&template, pcrAlg);
         rc = wolfTPM2_CreateKeySeal_ex(&wolftpm_dev, seal_blob,
-            &wolftpm_srk.handle, &template, NULL, 0, pcrAlg, NULL, 0,
-            secret, secret_sz);
+            &wolftpm_srk.handle, &template,
+            seal_blob->handle.auth.buffer, seal_blob->handle.auth.size,
+            pcrAlg, NULL, 0, secret, secret_sz);
     }
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
@@ -813,14 +815,19 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16
 
 /* Index (0-X) determines location in NV from WOLFBOOT_TPM_SEAL_NV_BASE to
  * store sealed blob */
-int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
-    int index, const uint8_t* secret, int secret_sz)
+int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
+    const uint8_t* policy, uint16_t policySz,
+    int index, const uint8_t* secret, int secret_sz,
+    const uint8_t* auth, int authSz)
 {
     int rc;
     WOLFTPM2_KEYBLOB seal_blob;
     word32 nvAttributes;
 
     memset(&seal_blob, 0, sizeof(seal_blob));
+
+    seal_blob.handle.auth.size = authSz;
+    XMEMCPY(seal_blob.handle.auth.buffer, auth, authSz);
 
     /* creates a sealed keyed hash object (not loaded to TPM) */
     rc = wolfBoot_seal_blob(pubkey_hint, policy, policySz, &seal_blob,
@@ -841,8 +848,7 @@ int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t po
 
         rc = wolfBoot_store_blob(TPM_RH_PLATFORM,
             WOLFBOOT_TPM_SEAL_NV_BASE + index,
-            nvAttributes, &seal_blob,
-            NULL, 0 /* auth is not required as blob is already encrypted */
+            nvAttributes, &seal_blob, auth, authSz
         );
     }
     if (rc != 0) {
@@ -850,6 +856,19 @@ int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t po
             rc, wolfTPM2_GetRCString(rc));
     }
     return rc;
+}
+int wolfBoot_seal(const uint8_t* pubkey_hint,
+    const uint8_t* policy, uint16_t policySz,
+    int index, const uint8_t* secret, int secret_sz)
+{
+    const char* auth = NULL;
+    int authSz = 0;
+#ifdef WOLFBOOT_TPM_SEAL_AUTH
+    auth = WOLFBOOT_TPM_SEAL_AUTH;
+    authSz = (int)strlen(auth);
+#endif
+    return wolfBoot_seal_auth(pubkey_hint, policy, policySz, index,
+        secret, secret_sz, (const uint8_t*)auth, authSz);
 }
 
 /* The unseal requires a signed policy from HDR_POLICY_SIGNATURE */
@@ -999,8 +1018,10 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     return rc;
 }
 
-int wolfBoot_unseal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
-    int index, uint8_t* secret, int* secret_sz)
+int wolfBoot_unseal_auth(const uint8_t* pubkey_hint,
+    const uint8_t* policy, uint16_t policySz,
+    int index, uint8_t* secret, int* secret_sz,
+    const uint8_t* auth, int authSz)
 {
     int rc;
     WOLFTPM2_KEYBLOB seal_blob;
@@ -1008,8 +1029,7 @@ int wolfBoot_unseal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t 
     memset(&seal_blob, 0, sizeof(seal_blob));
 
     rc = wolfBoot_read_blob(WOLFBOOT_TPM_SEAL_NV_BASE + index, &seal_blob,
-        NULL, 0 /* auth is not required as sealed blob is already encrypted */
-    );
+        auth, authSz);
     if (rc == 0) {
         rc = wolfBoot_unseal_blob(pubkey_hint, policy, policySz, &seal_blob,
             secret, secret_sz);
@@ -1025,6 +1045,19 @@ int wolfBoot_unseal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t 
             rc, wolfTPM2_GetRCString(rc));
     }
     return rc;
+}
+int wolfBoot_unseal(const uint8_t* pubkey_hint,
+    const uint8_t* policy, uint16_t policySz,
+    int index, uint8_t* secret, int* secret_sz)
+{
+    const char* auth = NULL;
+    int authSz = 0;
+#ifdef WOLFBOOT_TPM_SEAL_AUTH
+    auth = WOLFBOOT_TPM_SEAL_AUTH;
+    authSz = (int)strlen(auth);
+#endif
+    return wolfBoot_unseal_auth(pubkey_hint, policy, policySz, index,
+        secret, secret_sz, (const uint8_t*)auth, authSz);
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 

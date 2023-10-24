@@ -16,7 +16,10 @@ on:
       rot-args:
         required: false
         type: string
-      authstr:
+      keyauthstr:
+        required: false
+        type: string
+      sealauthstr:
         required: false
         type: string
 
@@ -59,7 +62,7 @@ jobs:
 
       - name: Write TPM ROT to TPM
         run: |
-          ./tools/tpm/rot -write ${{inputs.rot-args}} -auth="${{inputs.authstr}}"
+          ./tools/tpm/rot -write ${{inputs.rot-args}} -auth="${{inputs.keyauthstr}}"
 
       - name: Create a PCR Policy
         run: |
@@ -69,7 +72,7 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.authstr}}"
+          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.keykeyauthstr}}" WOLFBOOT_TPM_SEAL_AUTH="${{inputs.sealauthstr}}"
 
       - name: Run wolfBoot
         run: |
