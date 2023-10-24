@@ -75,13 +75,13 @@ int wolfBoot_seal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t po
 int wolfBoot_seal_auth(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, const uint8_t* secret, int secret_sz, const uint8_t* auth, int authSz);
 int wolfBoot_seal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
-    WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz);
+    WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz, const uint8_t* auth, int authSz);
 int wolfBoot_unseal(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, uint8_t* secret, int* secret_sz);
 int wolfBoot_unseal_auth(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     int index, uint8_t* secret, int* secret_sz, const uint8_t* auth, int authSz);
 int wolfBoot_unseal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
-    WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz);
+    WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz, const uint8_t* auth, int authSz);
 
 int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     const uint8_t* auth, uint32_t authSz);

@@ -741,7 +741,8 @@ int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
 /* The secret is sealed based on a policy authorization from a public key. */
 int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
     const uint8_t* policy, uint16_t policySz,
-    WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz)
+    WOLFTPM2_KEYBLOB* seal_blob, const uint8_t* secret, int secret_sz,
+    const uint8_t* auth, int authSz)
 {
     int rc;
     WOLFTPM2_SESSION policy_session;
@@ -802,8 +803,7 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
         /* Create a new key for sealing using external signing auth */
         wolfTPM2_GetKeyTemplate_KeySeal(&template, pcrAlg);
         rc = wolfTPM2_CreateKeySeal_ex(&wolftpm_dev, seal_blob,
-            &wolftpm_srk.handle, &template,
-            seal_blob->handle.auth.buffer, seal_blob->handle.auth.size,
+            &wolftpm_srk.handle, &template, auth, authSz,
             pcrAlg, NULL, 0, secret, secret_sz);
     }
 
@@ -831,7 +831,7 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
 
     /* creates a sealed keyed hash object (not loaded to TPM) */
     rc = wolfBoot_seal_blob(pubkey_hint, policy, policySz, &seal_blob,
-        secret, secret_sz);
+        secret, secret_sz, auth, authSz);
     if (rc == 0) {
     #ifdef WOLFBOOT_DEBUG_TPM
         wolfBoot_printf("Sealed keyed hash (pub %d, priv %d bytes):\n",
@@ -878,7 +878,8 @@ int wolfBoot_seal(const uint8_t* pubkey_hint,
 /* The unseal requires a signed policy from HDR_POLICY_SIGNATURE */
 int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     const uint8_t* policy, uint16_t policySz,
-    WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz)
+    WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz,
+    const uint8_t* auth, int authSz)
 {
     int rc, i;
     WOLFTPM2_SESSION policy_session;
@@ -1004,6 +1005,8 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
         wolfBoot_printf("Loaded seal blob to 0x%x\n",
             (uint32_t)seal_blob->handle.hndl);
     #endif
+        seal_blob->handle.auth.size = authSz;
+        memcpy(seal_blob->handle.auth.buffer, auth, authSz);
         wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
 
         /* unseal */
@@ -1038,10 +1041,8 @@ int wolfBoot_unseal_auth(const uint8_t* pubkey_hint,
     rc = wolfBoot_read_blob(WOLFBOOT_TPM_SEAL_NV_BASE + index, &seal_blob,
         NULL, 0);
     if (rc == 0) {
-        seal_blob.handle.auth.size = authSz;
-        memcpy(seal_blob.handle.auth.buffer, auth, authSz);
         rc = wolfBoot_unseal_blob(pubkey_hint, policy, policySz, &seal_blob,
-            secret, secret_sz);
+            secret, secret_sz, auth, authSz);
     #ifdef WOLFBOOT_DEBUG_TPM
         if (rc == 0) {
             wolfBoot_printf("Unsealed keyed hash (pub %d, priv %d bytes):\n",
