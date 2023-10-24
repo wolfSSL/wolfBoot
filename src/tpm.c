@@ -848,7 +848,11 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
 
         rc = wolfBoot_store_blob(TPM_RH_PLATFORM,
             WOLFBOOT_TPM_SEAL_NV_BASE + index,
-            nvAttributes, &seal_blob, auth, authSz
+            nvAttributes, &seal_blob,
+            /* do not use NV auth to store blob, since the password cannot be
+             * encrypted and sealed blob is already symmetrically encrypted
+             * using the a derived key from the seed */
+            NULL, 0
         );
     }
     if (rc != 0) {
@@ -1028,9 +1032,14 @@ int wolfBoot_unseal_auth(const uint8_t* pubkey_hint,
 
     memset(&seal_blob, 0, sizeof(seal_blob));
 
+    /* Do not use NV auth, since it cannot be encrypted on transport. The
+     * sealed blob is already encrypted and can optionally require a password
+     * to unseal */
     rc = wolfBoot_read_blob(WOLFBOOT_TPM_SEAL_NV_BASE + index, &seal_blob,
-        auth, authSz);
+        NULL, 0);
     if (rc == 0) {
+        seal_blob.handle.auth.size = authSz;
+        memcpy(seal_blob.handle.auth.buffer, auth, authSz);
         rc = wolfBoot_unseal_blob(pubkey_hint, policy, policySz, &seal_blob,
             secret, secret_sz);
     #ifdef WOLFBOOT_DEBUG_TPM
