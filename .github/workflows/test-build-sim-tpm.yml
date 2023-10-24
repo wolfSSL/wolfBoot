@@ -72,7 +72,7 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.keykeyauthstr}}" WOLFBOOT_TPM_SEAL_AUTH="${{inputs.sealauthstr}}"
+          make ${{inputs.make-args}} WOLFBOOT_TPM_KEYSTORE_AUTH="${{inputs.keyauthstr}}" WOLFBOOT_TPM_SEAL_AUTH="${{inputs.sealauthstr}}"
 
       - name: Run wolfBoot
         run: |
