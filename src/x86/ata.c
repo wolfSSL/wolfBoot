@@ -712,6 +712,9 @@ int ata_drive_read(int drv, uint64_t start, uint32_t size, uint8_t *buf)
     sect_start = start >> ata->sector_size_shift;
     sect_off = start - (sect_start << ata->sector_size_shift);
 
+    if (drv > ata_drive_count)
+        return -1;
+
     if (sect_off > 0) {
         uint32_t len = MAX_SECTOR_SIZE - sect_off;
         if (len > size)
