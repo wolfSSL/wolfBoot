@@ -96,7 +96,12 @@ void RAMFUNCTION wolfBoot_start(void)
     ret = x86_fsp_tgl_init_sata(&sata_bar);
     if (ret != 0)
         panic();
-#endif
+#if defined(WOLFBOOT_ATA_DISK_LOCK)
+    ret = sata_unlock_disk(BOOT_DISK);
+    if (ret != 0)
+        panic();
+#endif /* WOLFBOOT_ATA_DISK_LOCK */
+#endif /* WOLFBOOT_FSP */
 
     if (disk_open(BOOT_DISK) < 0)
         panic();
@@ -218,6 +223,5 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_printf("Booting at %08lx\r\n", os_image.fw_base);
     hal_prepare_boot();
     do_boot((uint32_t*)os_image.fw_base);
-
 }
 #endif /* UPDATE_DISK_H_ */

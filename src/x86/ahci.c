@@ -380,7 +380,7 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 
-static int sata_unlock_disk(int drv)
+int sata_unlock_disk(int drv)
 {
     int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
     uint8_t secret[ATA_UNLOCK_DISK_KEY_SZ];
@@ -666,10 +666,6 @@ void sata_enable(uint32_t base)
                                 drv, i);
                         r = ata_identify_device(drv);
                         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
-#ifdef WOLFBOOT_ATA_DISK_LOCK
-                        if (r == 0)
-                            r = sata_unlock_disk(drv);
-#endif /* WOLFBOOT_ATA_DISK_LOCK */
                     }
                 } else {
                     AHCI_DEBUG_PRINTF("AHCI port %d: device with signature %08x is not supported\r\n",
