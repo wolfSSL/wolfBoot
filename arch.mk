@@ -733,6 +733,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/ata.o
     OBJS += src/x86/gpt.o
     OBJS += src/x86/mptable.o
+    OBJS += src/stage1.o
     UPDATE_OBJS := src/update_disk.o
     ifeq ($(64BIT),1)
       LDFLAGS += -m elf_x86_64 --oformat elf64-x86-64

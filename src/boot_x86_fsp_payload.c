@@ -70,10 +70,6 @@ static char *cmdline = "console=ttyS0,115200 pci=earlydump debug";
 static char *cmdline = "auto";
 #endif /* TARGET_kontron_vx3060_s2 */
 
-/* must be global so the linker will export the symbol. It's used from loader 1
- * to fill the parameters */
-struct stage2_parameter _stage2_params;
-
 /**
  * @brief Jump to the specified entry point.
  *
@@ -88,26 +84,6 @@ void jump(uintptr_t entry)
             :
             : "g"(entry));
 }
-
-struct stage2_parameter *stage2_get_parameters()
-{
-    return &_stage2_params;
-}
-
-#if defined(WOLFBOOT_TPM_SEAL)
-int stage2_get_tpm_policy(const uint8_t **policy, uint16_t *policy_sz)
-{
-#if defined(WOLFBOOT_FSP) && !defined(BUILD_LOADER_STAGE1)
-    struct stage2_parameter *p;
-    p = stage2_get_parameters();
-    *policy = (const uint8_t*)(uintptr_t)p->tpm_policy;
-    *policy_sz = p->tpm_policy_size;
-    return 0;
-#else
-#error "wolfBoot_get_tpm_policy is not implemented"
-#endif
-}
-#endif /* WOLFBOOT_TPM_SEAL */
 
 /**
  * @brief Perform the boot process for the given application.
