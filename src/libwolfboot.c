@@ -1690,7 +1690,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     uint32_t row_address = address, row_offset;
     int sz = len, i, step;
     uint8_t part;
-    uint32_t iv_counter;
+    uint32_t iv_counter = 0;
 
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
@@ -1768,7 +1768,10 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
     uint32_t row_address = address, row_offset, iv_counter = 0;
-    int sz = len, i, step;
+    int i;
+    int flash_read_size;
+    int read_remaining = len;
+    int unaligned_head_size, unaligned_tail_size;
     uint8_t part;
     uintptr_t base_address;
 
@@ -1778,10 +1781,6 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
         row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
-        sz += ENCRYPT_BLOCK_SIZE - row_offset;
-    }
-    if (sz < ENCRYPT_BLOCK_SIZE) {
-        sz = ENCRYPT_BLOCK_SIZE;
     }
     if (!encrypt_initialized) {
         if (crypto_init() < 0)
@@ -1806,42 +1805,54 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
         default:
             return -1;
     }
-    /* decrypt blocks */
-    if (sz > len) {
-        step = ENCRYPT_BLOCK_SIZE - row_offset;
+    /* Decrypt block. If the address does not align with the encryption block,
+     * decrypt then copy only the bytes from the requested address.
+     */
+    if (row_offset != 0) {
+        unaligned_head_size = ENCRYPT_BLOCK_SIZE - row_offset;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;
         }
         crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
-        XMEMCPY(data, dec_block + row_offset, step);
-        address += step;
-        data += step;
-        sz = len - step;
+        XMEMCPY(data, dec_block + row_offset, unaligned_head_size);
+        address += unaligned_head_size;
+        data += unaligned_head_size;
+        read_remaining -= unaligned_head_size;
+        iv_counter++;
+    }
+    /* Trim the read size to align with the Encryption Blocks. Read the
+     * remaining unaligned tail bytes after, since the `data` buffer won't have
+     * enough space to handle the extra bytes.
+     */
+    flash_read_size = read_remaining & ~(ENCRYPT_BLOCK_SIZE - 1);
+    if (ext_flash_read(address, data, flash_read_size) != flash_read_size)
+        return -1;
+    for (i = 0; i < flash_read_size / ENCRYPT_BLOCK_SIZE; i++)
+    {
+        XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
+        crypto_decrypt(data + (ENCRYPT_BLOCK_SIZE * i), block,
+                ENCRYPT_BLOCK_SIZE);
         iv_counter++;
     }
 
-    /* decrypt remainder */
-    step = sz & ~(ENCRYPT_BLOCK_SIZE - 1);
-    if (ext_flash_read(address, data, step) != step)
-        return -1;
-    for (i = 0; i < step / ENCRYPT_BLOCK_SIZE; i++) {
-        XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        crypto_decrypt(data + (ENCRYPT_BLOCK_SIZE * i), block,
-            ENCRYPT_BLOCK_SIZE);
-        iv_counter++;
-    }
-    sz -= step;
-    if (sz > 0) {
-        if (ext_flash_read(address + step, block, ENCRYPT_BLOCK_SIZE)
-                != ENCRYPT_BLOCK_SIZE) {
+    address += flash_read_size;
+    data += flash_read_size;
+    read_remaining -= flash_read_size;
+
+    /* Read the unaligned tail bytes. */
+    unaligned_tail_size = read_remaining;
+    if (unaligned_tail_size > 0)
+    {
+        uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+        if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
+                != ENCRYPT_BLOCK_SIZE)
             return -1;
-        }
         crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
-            XMEMCPY(data + step, dec_block, sz);
-        iv_counter++;
+        XMEMCPY(data, dec_block, unaligned_tail_size);
+        read_remaining -= unaligned_tail_size;
     }
-    return len;
+    return (len - read_remaining);
 }
 #endif /* EXT_FLASH */
 #endif /* __WOLFBOOT */
