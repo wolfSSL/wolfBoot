@@ -371,6 +371,13 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
             ret = sata_create_and_seal_unlock_secret(pubkey_hint, policy, policy_size, secret,
                                                      secret_size);
     }
+#if defined(WOLFBOOT_DEBUG_REMOVE_SEALED_ON_ERROR)
+    if (ret != 0) {
+        wolfBoot_printf("deleting secret and panic!\r\n");
+        wolfBoot_delete_seal(ATA_UNLOCK_DISK_KEY_NV_INDEX);
+        panic();
+    }
+#endif
     if (ret != 0) {
         wolfBoot_printf("get sealed unlock secret failed! %d (%s)\n", ret,
                         wolfTPM2_GetRCString(ret));
