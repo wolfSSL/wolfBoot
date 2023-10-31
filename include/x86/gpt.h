@@ -24,4 +24,5 @@
 int disk_open(int drv);
 int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf);
 int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf);
+int disk_find_partion_by_label(int drv, const char *label);
 #endif

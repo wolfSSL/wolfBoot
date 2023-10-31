@@ -29,6 +29,7 @@
  */
 #ifndef GPT_C
 #define GPT_C
+#include <stdint.h>
 #include <x86/common.h>
 #include <x86/ahci.h>
 #include <x86/ata.h>
@@ -45,6 +46,7 @@
 #define PTYPE_GPT         0xEE
 #define P_ENTRY_START     0x01BE
 #define P_BOOTSIG_OFFSET  0x01FE
+#define GPT_PART_NAME_SIZE (36)
 
 /**
  * @brief This packed structure defines the layout of an MBR partition table entry
@@ -92,7 +94,7 @@ struct __attribute__((packed)) guid_part_array
     uint64_t first;
     uint64_t last;
     uint64_t flags;
-    int16_t name[72];
+    uint16_t name[GPT_PART_NAME_SIZE];
 };
 
 /**
@@ -105,6 +107,7 @@ struct disk_partition
     int part_no;
     uint64_t start;
     uint64_t end;
+    uint16_t name[GPT_PART_NAME_SIZE];
 };
 
 /**
@@ -124,6 +127,30 @@ struct disk_drive {
  * multiple disk drives (up to `MAX_DISKS`).
  */
 static struct disk_drive Drives[MAX_DISKS] = {0};
+
+static int disk_u16_ascii_eq(const uint16_t *utf16, const char *ascii)
+{
+    unsigned int utf16_idx;
+    unsigned int i;
+
+    if (strlen(ascii) > GPT_PART_NAME_SIZE)
+        return 0;
+
+    utf16_idx = 0;
+    /* skip BOM if present */
+    if (utf16[utf16_idx] == 0xfeff)
+        utf16_idx = 1;
+    for (i = 0; i < strlen(ascii); i++, utf16_idx++) {
+        /* non-ascii character*/
+        if (utf16[utf16_idx] != (uint16_t)ascii[i])
+            return 0;
+    }
+
+    if (utf16_idx < GPT_PART_NAME_SIZE && utf16[utf16_idx] != 0x0)
+        return 0;
+
+    return 1;
+}
 
 /**
  * @brief Opens a disk drive and initializes its partitions.
@@ -220,6 +247,7 @@ int disk_open(int drv)
             Drives[drv].part[part_count].drv = drv;
             Drives[drv].part[part_count].start = pa.first * SECTOR_SIZE;
             Drives[drv].part[part_count].end = (pa.last * SECTOR_SIZE - 1);
+            memcpy(&Drives[drv].part[part_count].name, (uint8_t*)&pa.name, sizeof(pa.name));
             wolfBoot_printf("disk%d.p%u ", drv, part_count);
             wolfBoot_printf("(%x_%xh", (uint32_t)(size>>32), (uint32_t)size);
             wolfBoot_printf("@ %x_%x)\r\n", (uint32_t)((pa.first * SECTOR_SIZE) >> 32),
@@ -326,5 +354,24 @@ int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
     }
     ret = ata_drive_write(drv, p->start + off, len, buf);
     return ret;
+}
+
+int disk_find_partion_by_label(int drv, const char *label)
+{
+    struct disk_partition *p;
+    int i;
+
+    if ((drv < 0) || (drv > MAX_DISKS))
+        return -1;
+
+    if (Drives[drv].is_open == 0)
+        return -1;
+
+    for (i = 0; i < Drives[drv].n_parts; i++) {
+        p = open_part(drv, i);
+        if (disk_u16_ascii_eq(p->name, label) == 1)
+            return i;
+    }
+    return -1;
 }
 #endif /* GPT_C */
