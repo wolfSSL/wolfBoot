@@ -17,6 +17,14 @@ n
 
 
 +16M
+x
+n
+1
+OFP_A
+n
+2
+OFP_B
+r
 w
 EOF
 
