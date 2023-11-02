@@ -243,7 +243,7 @@ static CK_RV test_object(void* args)
     CK_ATTRIBUTE keyTypeZeroLen[] = {
         { CKA_KEY_TYPE,          &genericKeyType,   0,                        }
     };
-    CK_ULONG badKeyType = -1; 
+    CK_ULONG badKeyType = -1;
     CK_ATTRIBUTE keyTypeBadValue[] = {
         { CKA_KEY_TYPE,          &badKeyType,       sizeof(&badKeyType)       }
     };
@@ -272,7 +272,7 @@ static CK_RV test_object(void* args)
     CK_OBJECT_HANDLE objOnToken = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE copyObj = CK_INVALID_HANDLE;
     CK_ULONG size;
-    
+
 
     ret = funcList->C_CreateObject(CK_INVALID_HANDLE, tmpl, tmplCnt, &obj);
     CHECK_CKR_FAIL(ret, CKR_SESSION_HANDLE_INVALID,
@@ -1316,7 +1316,7 @@ static CK_RV test_sign_verify(void* args)
         mech.mechanism = CKM_AES_CBC;
         ret = funcList->C_SignInit(session, &mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                              "HMAC Sign Init wrong mechansim");
+                                              "HMAC Sign Init wrong mechanism");
         mech.mechanism = CKM_SHA256_HMAC;
     }
     if (ret == CKR_OK) {
@@ -1382,7 +1382,7 @@ static CK_RV test_sign_verify(void* args)
         mech.mechanism = CKM_AES_CBC;
         ret = funcList->C_VerifyInit(session, &mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                            "HMAC Verify Init wrong mechansim");
+                                            "HMAC Verify Init wrong mechanism");
         mech.mechanism = CKM_SHA256_HMAC;
     }
     if (ret == CKR_OK) {
@@ -1590,7 +1590,7 @@ static CK_RV test_encdec_digest(void* args)
     }
 
     if (ret == CKR_OK) {
-        ret = funcList->C_DecryptDigestUpdate(CK_INVALID_HANDLE, enc, encSz, 
+        ret = funcList->C_DecryptDigestUpdate(CK_INVALID_HANDLE, enc, encSz,
                                                                  data, &dataSz);
         CHECK_CKR_FAIL(ret, CKR_SESSION_HANDLE_INVALID,
                                 "Decrypt Digest Update invalid session handle");
@@ -1658,7 +1658,7 @@ static CK_RV test_encdec_signverify(void* args)
     }
 
     if (ret == CKR_OK) {
-        ret = funcList->C_DecryptVerifyUpdate(CK_INVALID_HANDLE, enc, encSz, 
+        ret = funcList->C_DecryptVerifyUpdate(CK_INVALID_HANDLE, enc, encSz,
                                                                  data, &dataSz);
         CHECK_CKR_FAIL(ret, CKR_SESSION_HANDLE_INVALID,
                                 "Decrypt Verify Update invalid session handle");
@@ -1847,7 +1847,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
     if (ret == CKR_OK) {
         ret = funcList->C_WrapKey(session, &mech, CK_INVALID_HANDLE, key,
                                                     wrappedKey, &wrappedKeyLen);
-        CHECK_CKR_FAIL(ret, CKR_OBJECT_HANDLE_INVALID,
+        CHECK_CKR_FAIL(ret, CKR_WRAPPING_KEY_HANDLE_INVALID,
                                         "Wrap Key invalid wrapping key handle");
     }
     if (ret == CKR_OK) {
@@ -1864,10 +1864,9 @@ static CK_RV test_wrap_unwrap_key(void* args)
     if (ret == CKR_OK) {
         ret = funcList->C_WrapKey(session, &mech, wrappingKey, key, wrappedKey,
                                                                 &wrappedKeyLen);
-        CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                            "Wrap Key mechansim not supported");
+        CHECK_CKR_FAIL(ret, CKR_KEY_NOT_WRAPPABLE,
+                                            "Wrap Key mechanism not supported");
     }
-
     if (ret == CKR_OK) {
         ret = funcList->C_UnwrapKey(CK_INVALID_HANDLE, &mech, wrappingKey,
                                        wrappedKey, wrappedKeyLen, tmpl, tmplCnt,
@@ -1884,7 +1883,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
         ret = funcList->C_UnwrapKey(session, &mech, CK_INVALID_HANDLE,
                                        wrappedKey, wrappedKeyLen, tmpl, tmplCnt,
                                        &key);
-        CHECK_CKR_FAIL(ret, CKR_OBJECT_HANDLE_INVALID,
+        CHECK_CKR_FAIL(ret, CKR_UNWRAPPING_KEY_HANDLE_INVALID,
                                       "Unwrap Key invalid wrapping key handle");
     }
     if (ret == CKR_OK) {
@@ -1912,7 +1911,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
         ret = funcList->C_UnwrapKey(session, &mech, wrappingKey, wrappedKey,
                                             wrappedKeyLen, tmpl, tmplCnt, &key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                          "Unwrap Key mechansim not supported");
+                                          "Unwrap Key mechanism not supported");
     }
 
     funcList->C_DestroyObject(session, wrappingKey);
@@ -2720,7 +2719,7 @@ static CK_RV test_rsa_fixed_keys_raw(void* args)
         ret = get_rsa_pub_key(session, NULL, 0, &pub);
     if (ret == CKR_OK)
         ret = rsa_raw_test(session, priv, pub);
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -2739,7 +2738,7 @@ static CK_RV test_rsa_fixed_keys_pkcs15_enc(void* args)
         ret = get_rsa_pub_key(session, NULL, 0, &pub);
     if (ret == CKR_OK)
         ret = rsa_pkcs15_enc_test(session, priv, pub);
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -2787,7 +2786,7 @@ static CK_RV test_rsa_fixed_keys_oaep(void* args)
                                                                        NULL, 0);
         CHECK_CKR(ret, "SHA512 No AAD");
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -2821,7 +2820,7 @@ static CK_RV test_rsa_fixed_keys_pkcs15_sig(void* args)
         ret = rsa_pkcs15_sig_test(session, priv, pub, 64);
         CHECK_CKR(ret, "RSA PKCS#1.5 - 64 byte hash");
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -2859,7 +2858,7 @@ static CK_RV test_rsa_fixed_keys_pss(void* args)
         ret = rsa_pss_test(session, priv, pub, CKM_SHA512, CKG_MGF1_SHA512, 64);
         CHECK_CKR(ret, "RSA PKCS#1 PSS - SHA512");
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -2947,7 +2946,7 @@ static CK_RV rsa_encdec_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
     }
 
     funcList->C_DestroyObject(session, key);
-    
+
     return ret;
 }
 
@@ -2997,10 +2996,10 @@ static CK_RV test_rsa_x_509_fail(void* args)
                                        "RSA Decrypt Init bad parameter length");
         mech.ulParameterLen = 0;
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
-    
+
     return ret;
 }
 
@@ -3050,7 +3049,7 @@ static CK_RV test_rsa_pkcs_encdec_fail(void* args)
                                        "RSA Decrypt Init bad parameter length");
         mech.ulParameterLen = 0;
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -3124,7 +3123,7 @@ static CK_RV test_rsa_pkcs_oaep_encdec_fail(void* args)
                                                  "RSA Decrypt Init bad source");
         params.source = CKZ_DATA_SPECIFIED;
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -3178,7 +3177,7 @@ static CK_RV test_rsa_pkcs_sig_fail(void* args)
                                             "Verify Init bad parameter length");
         mech.ulParameterLen = 0;
     }
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -3311,7 +3310,7 @@ static CK_RV test_rsa_gen_keys(void* args)
     if (ret == CKR_OK)
         ret = rsa_pss_test(session, priv, pub, CKM_SHA256, CKG_MGF1_SHA256, 32);
 #endif
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -3346,7 +3345,7 @@ static CK_RV test_rsa_gen_keys_id(void* args)
     if (ret == CKR_OK)
         ret = rsa_pss_test(session, priv, pub, CKM_SHA256, CKG_MGF1_SHA256, 32);
 #endif
-    
+
     funcList->C_DestroyObject(session, pub);
     funcList->C_DestroyObject(session, priv);
 
@@ -3752,7 +3751,7 @@ static CK_RV ecdh_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE privKey,
                                        "EC Derive Key zero public data length");
         params.ulPublicDataLen = pointLen;
     }
-    
+
     funcList->C_DestroyObject(session, secret);
 
     return ret;
@@ -3821,7 +3820,7 @@ static CK_RV test_ecc_create_key_fail(void* args)
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret = CKR_OK;
     CK_OBJECT_HANDLE obj = CK_INVALID_HANDLE;
-    CK_ATTRIBUTE ecc_p256_priv_key[] = {     
+    CK_ATTRIBUTE ecc_p256_priv_key[] = {
         { CKA_CLASS,             &privKeyClass,     sizeof(privKeyClass)      },
         { CKA_KEY_TYPE,          &eccKeyType,       sizeof(eccKeyType)        },
         { CKA_VERIFY,            &ckTrue,           sizeof(ckTrue)            },

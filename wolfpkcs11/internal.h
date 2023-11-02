@@ -386,7 +386,7 @@ int WP11_AesGcm_DecryptFinal(unsigned char* dec, word32* decSz,
                              WP11_Object* secret, WP11_Session* session);
 
 int WP11_Hmac_SigLen(WP11_Session* session);
-int WP11_Hmac_Init(CK_MECHANISM_TYPE mechansim, WP11_Object* secret,
+int WP11_Hmac_Init(CK_MECHANISM_TYPE mechanism, WP11_Object* secret,
                    WP11_Session* session);
 int WP11_Hmac_Sign(unsigned char* data, word32 dataLen, unsigned char* sig,
                    word32* sigLen, WP11_Session* session);
