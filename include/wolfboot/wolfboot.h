@@ -85,6 +85,7 @@ extern "C" {
 #define AUTH_KEY_ECC521  0x07
 #define AUTH_KEY_RSA3072 0x08
 #define AUTH_KEY_LMS     0x09
+#define AUTH_KEY_XMSS    0x10
 
 
 
@@ -105,6 +106,7 @@ extern "C" {
 #define HDR_IMG_TYPE_AUTH_ECC521  (AUTH_KEY_ECC521  << 8)
 #define HDR_IMG_TYPE_AUTH_RSA3072 (AUTH_KEY_RSA3072 << 8)
 #define HDR_IMG_TYPE_AUTH_LMS     (AUTH_KEY_LMS     << 8)
+#define HDR_IMG_TYPE_AUTH_XMSS    (AUTH_KEY_XMSS    << 8)
 
 #define HDR_IMG_TYPE_DIFF         0x00D0
 
@@ -122,6 +124,7 @@ extern "C" {
  #define KEYSTORE_PUBKEY_SIZE_RSA3072 448
  #define KEYSTORE_PUBKEY_SIZE_RSA4096 576
  #define KEYSTORE_PUBKEY_SIZE_LMS     60
+ #define KEYSTORE_PUBKEY_SIZE_XMSS    68
 
 /* Mask for key permissions */
  #define KEY_VERIFY_ALL         (0xFFFFFFFFU)
@@ -221,6 +224,11 @@ extern "C" {
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_LMS
  #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
  #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_LMS
+ #   endif
+ #elif defined(WOLFBOOT_SIGN_XMSS)
+ #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_XMSS
+ #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
+ #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_XMSS
  #   endif
  #else
  #   error "No valid authentication mechanism selected. " \

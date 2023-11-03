@@ -25,6 +25,15 @@ ifeq ($(SIGN),LMS)
             -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
 endif
 
+ifeq ($(SIGN),XMSS)
+  $(info xmss params: $(XMSS_PARAMS))
+  XMSSDIR = $(WOLFBOOTDIR)/lib/xmss
+  CFLAGS  +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS -DHAVE_LIBXMSS -I$(XMSSDIR) \
+            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+            -DXMSS_PARAMS=\"$(XMSS_PARAMS)\"
+endif
+
+
 # option variables
 DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE
 SANITIZE_FLAGS  = -fsanitize=address
@@ -75,15 +84,32 @@ OBJS_REAL=\
 	$(WOLFDIR)/wolfcrypt/src/tfm.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_port.o \
 	$(WOLFDIR)/wolfcrypt/src/wolfmath.o \
-	$(WOLFDIR)/wolfcrypt/src/ext_lms.o
+	$(WOLFDIR)/wolfcrypt/src/ext_lms.o \
+	$(WOLFDIR)/wolfcrypt/src/ext_xmss.o
 
 OBJS_REAL+=\
 	$(WOLFBOOTDIR)/src/delta.o
+
+ifeq ($(SIGN),XMSS)
+OBJS_REAL+=\
+	$(XMSSDIR)/params.o \
+	$(XMSSDIR)/thash.o \
+	$(XMSSDIR)/hash_address.o \
+	$(XMSSDIR)/wots.o \
+	$(XMSSDIR)/xmss.o \
+	$(XMSSDIR)/xmss_core_fast.o \
+	$(XMSSDIR)/xmss_commons.o \
+	$(XMSSDIR)/utils.o
+endif
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 vpath %.c $(WOLFDIR)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c ./
+
+ifeq ($(SIGN),XMSS)
+    vpath %.c $(XMSSDIR)/
+endif
 
 .PHONY: clean all
 
@@ -112,6 +138,9 @@ $(OBJDIR)/%.o: %.c
 $(OBJDIR)/%.o: $(WOLFBOOTDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFDIR)/wolfcrypt/src/%.c
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+
+$(XMSSDIR)/src/%.o: $(XMSSDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 # build templates

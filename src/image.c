@@ -382,6 +382,71 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 }
 #endif /* WOLFBOOT_SIGN_LMS */
 
+#ifdef WOLFBOOT_SIGN_XMSS
+#include <wolfssl/wolfcrypt/xmss.h>
+#ifdef HAVE_LIBXMSS
+    #include <wolfssl/wolfcrypt/ext_xmss.h>
+#endif
+
+static void wolfBoot_verify_signature(uint8_t key_slot,
+        struct wolfBoot_image *img, uint8_t *sig)
+{
+    int       ret = 0;
+    XmssKey   xmss;
+    word32    pub_len = 0;
+    uint8_t * pubkey = NULL;
+
+    wolfBoot_printf("info: XMSS wolfBoot_verify_signature\n");
+
+    pubkey = keystore_get_buffer(key_slot);
+    if (pubkey == NULL) {
+        wolfBoot_printf("error: Xmss pubkey not found\n");
+        return;
+    }
+
+    ret = wc_XmssKey_Init(&xmss, NULL, INVALID_DEVID);
+    if (ret != 0) {
+        wolfBoot_printf("error: wc_XmssKey_Init returned %d\n", ret);
+        return;
+    }
+
+    wolfBoot_printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+
+    /* Set the XMSS parameters. */
+    ret = wc_XmssKey_SetParamStr(&xmss, XMSS_PARAMS);
+    if (ret != 0) {
+        /* Something is wrong with the pub key or XMSS parameters. */
+        wolfBoot_printf("error: wc_XmssKey_SetParamStr(%s)" \
+                        " returned %d\n", XMSS_PARAMS, ret);
+        return;
+    }
+
+    wolfBoot_printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+
+    /* Set the public key. */
+    ret = wc_XmssKey_ImportPubRaw(&xmss, pubkey, KEYSTORE_PUBKEY_SIZE);
+    if (ret != 0) {
+        /* Something is wrong with the pub key or LMS parameters. */
+        wolfBoot_printf("error: wc_XmssKey_ImportPubRaw" \
+                        " returned %d\n", ret);
+        return;
+    }
+
+    ret = wc_XmssKey_Verify(&xmss, sig, IMAGE_SIGNATURE_SIZE, img->sha_hash,
+                           WOLFBOOT_SHA_DIGEST_SIZE);
+
+    if (ret == 0) {
+        wolfBoot_printf("info: wc_XmssKey_Verify returned OK\n");
+        wolfBoot_image_confirm_signature_ok(img);
+    }
+    else {
+        wolfBoot_printf("error: wc_XmssKey_Verify returned %d\n", ret);
+    }
+
+    wc_XmssKey_Free(&xmss);
+}
+#endif /* WOLFBOOT_SIGN_XMSS */
+
 #endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY */
 
 
