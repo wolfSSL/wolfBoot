@@ -67,6 +67,9 @@ extern "C" {
      * options.mk from the .config file. */
     extern const unsigned char lms_pub_key[];
     extern unsigned int lms_pub_key_len;
+#elif defined(WOLFBOOT_SIGN_XMSS)
+    extern const unsigned char xmss_pub_key[];
+    extern unsigned int xmss_pub_key_len;
 #elif !defined(WOLFBOOT_NO_SIGN)
 #   error "No public key available for given signing algorithm."
 #endif /* Algorithm selection */

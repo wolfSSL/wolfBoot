@@ -53,6 +53,9 @@ endif
 ifeq ($(SIGN),LMS)
 	SIGN_ARGS+= --lms
 endif
+ifeq ($(SIGN),XMSS)
+	SIGN_ARGS+= --xmss
+endif
 
 # Make sign hash argument
 ifeq ($(HASH),SHA256)

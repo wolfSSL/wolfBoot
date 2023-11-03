@@ -108,6 +108,13 @@ static inline int fp_truncate(FILE *f, size_t len)
     #endif
 #endif
 
+#if defined(WOLFSSL_HAVE_XMSS)
+    #include <wolfssl/wolfcrypt/xmss.h>
+    #ifdef HAVE_LIBXMSS
+        #include <wolfssl/wolfcrypt/ext_xmss.h>
+    #endif
+#endif
+
 #ifdef DEBUG_SIGNTOOL
     #include <wolfssl/wolfcrypt/logging.h>
 #endif
@@ -169,6 +176,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define SIGN_ECC384    HDR_IMG_TYPE_AUTH_ECC384
 #define SIGN_ECC521    HDR_IMG_TYPE_AUTH_ECC521
 #define SIGN_LMS       HDR_IMG_TYPE_AUTH_LMS
+#define SIGN_XMSS      HDR_IMG_TYPE_AUTH_XMSS
 
 
 #define ENC_OFF 0
@@ -203,6 +211,10 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
 #include "../lms/lms_common.h"
 #endif
 
+#ifdef WOLFSSL_HAVE_XMSS
+#include "../xmss/xmss_common.h"
+#endif
+
 /* Globals */
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
 
@@ -221,6 +233,9 @@ static union {
 #endif
 #ifdef WOLFSSL_HAVE_LMS
     LmsKey lms;
+#endif
+#ifdef WOLFSSL_HAVE_XMSS
+    XmssKey xmss;
 #endif
 } key;
 
@@ -736,6 +751,57 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 }
             }
 #endif /* WOLFSSL_HAVE_LMS */
+
+#ifdef WOLFSSL_HAVE_XMSS
+            FALL_THROUGH;
+        case SIGN_XMSS:
+            ret = -1;
+
+            if (CMD.sign == SIGN_AUTO) {
+                /* XMSS is stateful and requires additional config, and is not
+                 * compatible with SIGN_AUTO. */
+                printf("error: SIGN_AUTO with XMSS is not supported\n");
+            }
+            else {
+                /* The XMSS file callbacks will handle writing and reading the
+                 * private key. We only need to set the public key here.
+                 *
+                 * If both priv/pub are present:
+                 *  - The first ?? bytes is the private key.
+                 *  - The next 60 bytes is the public key. */
+                word32 priv_sz = 0;
+                int    xmss_ret = 0;
+
+                xmss_ret = wc_XmssKey_GetPrivLen(&key.xmss, &priv_sz);
+                if (xmss_ret != 0 || priv_sz <= 0) {
+                    printf("error: wc_XmssKey_GetPrivLen returned %d\n",
+                            xmss_ret);
+                    break;
+                }
+
+                printf("info: xmss sk len: %d\n", priv_sz);
+                printf("info: xmss pk len: %d\n", KEYSTORE_PUBKEY_SIZE_XMSS);
+
+                if (*key_buffer_sz == (priv_sz + KEYSTORE_PUBKEY_SIZE_XMSS)) {
+                    /* priv + pub */
+                    *pubkey = (*key_buffer) + priv_sz;
+                    *pubkey_sz = (*key_buffer_sz) - priv_sz;
+                    ret = 0;
+                }
+                else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_XMSS) {
+                    /* pub only. */
+                    *pubkey = (*key_buffer);
+                    *pubkey_sz = KEYSTORE_PUBKEY_SIZE_XMSS;
+                    ret = 0;
+                }
+                else {
+                    /* We don't recognize this as an XMSS pub or private key. */
+                    printf("error: unrecognized XMSS key size: %d\n",
+                           *key_buffer_sz );
+                }
+            }
+#endif /* WOLFSSL_HAVE_XMSS */
+
             break;
     } /* end switch (CMD.sign) */
 
@@ -868,6 +934,35 @@ static int sign_digest(int sign, int hash_algo,
     }
     else
 #endif /* WOLFSSL_HAVE_LMS */
+#ifdef WOLFSSL_HAVE_XMSS
+    if (sign == SIGN_XMSS) {
+        ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
+        /* Set the callbacks, so XMSS can update the private key while signing */
+        if (ret == 0) {
+            ret = wc_XmssKey_SetWriteCb(&key.xmss, xmss_write_key);
+        }
+        if (ret == 0) {
+            ret = wc_XmssKey_SetReadCb(&key.xmss, xmss_read_key);
+        }
+        if (ret == 0) {
+            ret = wc_XmssKey_SetContext(&key.xmss, (void*)CMD.key_file);
+        }
+        if (ret == 0) {
+            ret = wc_XmssKey_SetParamStr(&key.xmss, XMSS_PARAMS);
+        }
+        if (ret == 0) {
+            ret = wc_XmssKey_Reload(&key.xmss);
+        }
+        if (ret == 0) {
+            ret = wc_XmssKey_Sign(&key.xmss, signature, signature_sz, digest,
+                                 digest_sz);
+        }
+        if (ret != 0) {
+            fprintf(stderr, "error signing with XMSS: %d\n", ret);
+        }
+    }
+    else
+#endif /* WOLFSSL_HAVE_XMSS */
     {
         ret = NOT_COMPILED_IN;
     }
@@ -1770,6 +1865,12 @@ int main(int argc, char** argv)
             sign_str = "LMS";
         }
 #endif
+#ifdef WOLFSSL_HAVE_XMSS
+        else if (strcmp(argv[i], "--xmss") == 0) {
+            CMD.sign = SIGN_XMSS;
+            sign_str = "XMSS";
+        }
+#endif
         else if (strcmp(argv[i], "--sha256") == 0) {
             CMD.hash_algo = HASH_SHA256;
             hash_str = "SHA256";
@@ -1980,6 +2081,39 @@ int main(int argc, char** argv)
         CMD.signature_sz = sig_sz;
     }
 #endif /* WOLFSSL_HAVE_LMS */
+#ifdef WOLFSSL_HAVE_XMSS
+    else if (CMD.sign == SIGN_XMSS) {
+        int    xmss_ret = 0;
+        word32 sig_sz = 0;
+
+        xmss_ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
+        if (xmss_ret != 0) {
+            fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", xmss_ret);
+            exit(1);
+        }
+
+        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, XMSS_PARAMS);
+        if (xmss_ret != 0) {
+            fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
+                    " returned %d\n", XMSS_PARAMS, ret);
+            exit(1);
+        }
+
+        printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+
+        xmss_ret = wc_XmssKey_GetSigLen(&key.xmss, &sig_sz);
+        if (xmss_ret != 0) {
+            fprintf(stderr, "error: wc_XmssKey_GetSigLen returned %d\n",
+                    xmss_ret);
+            exit(1);
+        }
+
+        printf("info: XMSS signature size: %d\n", sig_sz);
+
+        CMD.header_sz = 2 * sig_sz;
+        CMD.signature_sz = sig_sz;
+    }
+#endif /* WOLFSSL_HAVE_XMSS */
 
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
             CMD.header_sz == 0) {

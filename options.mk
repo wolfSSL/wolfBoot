@@ -381,6 +381,46 @@ ifeq ($(SIGN),LMS)
   endif
 endif
 
+ifeq ($(SIGN),XMSS)
+  ifndef XMSS_PARAMS
+    $(error XMSS_PARAMS not set)
+  endif
+
+  ifndef IMAGE_SIGNATURE_SIZE
+    $(error IMAGE_SIGNATURE_SIZE not set)
+  endif
+
+  ifndef IMAGE_HEADER_SIZE
+    $(error IMAGE_HEADER_SIZE not set)
+  endif
+
+  XMSSDIR = lib/xmss
+  KEYGEN_OPTIONS+=--xmss
+  SIGN_OPTIONS+=--xmss
+  WOLFCRYPT_OBJS+= \
+    ./$(XMSSDIR)/params.o \
+    ./$(XMSSDIR)/thash.o \
+    ./$(XMSSDIR)/hash_address.o \
+    ./$(XMSSDIR)/wots.o \
+    ./$(XMSSDIR)/xmss.o \
+    ./$(XMSSDIR)/xmss_core_fast.o \
+    ./$(XMSSDIR)/xmss_commons.o \
+    ./$(XMSSDIR)/utils.o \
+    ./lib/wolfssl/wolfcrypt/src/ext_xmss.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" -D"WOLFSSL_HAVE_XMSS" -D"HAVE_LIBXMSS" \
+    -DXMSS_PARAMS=\"$(XMSS_PARAMS)\" -I$(XMSSDIR) \
+    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+    -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"XMSS_VERIFY_ONLY"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
+  else
+    STACK_USAGE=18064
+  endif
+endif
+
 ifeq ($(RAM_CODE),1)
   CFLAGS+= -D"RAM_CODE"
 endif

@@ -68,6 +68,13 @@
     #endif
 #endif
 
+#if defined(WOLFSSL_HAVE_XMSS)
+    #include <wolfssl/wolfcrypt/xmss.h>
+    #ifdef HAVE_LIBXMSS
+        #include <wolfssl/wolfcrypt/ext_xmss.h>
+    #endif
+#endif
+
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #ifdef DEBUG_SIGNTOOL
@@ -91,6 +98,7 @@
 #define KEYGEN_ECC521  7
 #define KEYGEN_RSA3072 8
 #define KEYGEN_LMS     9
+#define KEYGEN_XMSS    10
 
 /* Globals */
 static FILE *fpub, *fpub_image;
@@ -236,7 +244,8 @@ const char KType[][17] = {
     "AUTH_KEY_ECC384",
     "AUTH_KEY_ECC521",
     "AUTH_KEY_RSA3072",
-    "AUTH_KEY_LMS"
+    "AUTH_KEY_LMS",
+    "AUTH_KEY_XMSS"
 };
 
 const char KSize[][29] = {
@@ -249,7 +258,8 @@ const char KSize[][29] = {
     "KEYSTORE_PUBKEY_SIZE_ECC384",
     "KEYSTORE_PUBKEY_SIZE_ECC521",
     "KEYSTORE_PUBKEY_SIZE_RSA3072",
-    "KEYSTORE_PUBKEY_SIZE_LMS"
+    "KEYSTORE_PUBKEY_SIZE_LMS",
+    "KEYSTORE_PUBKEY_SIZE_XMSS"
 };
 
 const char KName[][8] = {
@@ -262,7 +272,8 @@ const char KName[][8] = {
     "ECC384",
     "ECC521",
     "RSA3072",
-    "LMS"
+    "LMS",
+    "XMSS"
 };
 
 #define MAX_PUBKEYS 64
@@ -305,6 +316,9 @@ static uint32_t get_pubkey_size(uint32_t keyType)
             break;
         case KEYGEN_LMS:
             size = KEYSTORE_PUBKEY_SIZE_LMS;
+            break;
+        case KEYGEN_XMSS:
+            size = KEYSTORE_PUBKEY_SIZE_XMSS;
             break;
         default:
             size = 0;
@@ -595,6 +609,97 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
 }
 #endif /* if defined(WOLFSSL_HAVE_LMS) */
 
+#if defined(WOLFSSL_HAVE_XMSS)
+#include "../xmss/xmss_common.h"
+
+static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
+{
+    FILE *  fpriv;
+    XmssKey key;
+    int     ret;
+    word32  priv_sz = 0;
+    byte    xmss_pub[XMSS_SHA256_PUBLEN];
+    word32  pub_len = sizeof(xmss_pub);
+
+    ret = wc_XmssKey_Init(&key, NULL, INVALID_DEVID);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_XmssKey_SetParamStr(&key, XMSS_PARAMS);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
+                " returned %d\n", XMSS_PARAMS, ret);
+        exit(1);
+    }
+
+    printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+
+    ret = wc_XmssKey_SetWriteCb(&key, xmss_write_key);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_SetWriteCb returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_XmssKey_SetReadCb(&key, xmss_read_key);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_SetReadCb returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_XmssKey_SetContext(&key, (void *) priv_fname);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_SetContext returned %d\n", ret);
+        exit(1);
+    }
+
+    /* Make the key pair. */
+    ret = wc_XmssKey_MakeKey(&key, &rng);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_MakeKey returned %d\n", ret);
+        exit(1);
+    }
+
+    /* Get the XMSS/XMSS^MT secret key length. */
+    ret = wc_XmssKey_GetPrivLen(&key, &priv_sz);
+    if (ret != 0 || priv_sz <= 0) {
+        printf("error: wc_XmssKey_GetPrivLen returned %d\n",
+                ret);
+        exit(1);
+    }
+
+    ret = wc_XmssKey_ExportPubRaw(&key, xmss_pub, &pub_len);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned %d\n", ret);
+        exit(1);
+    }
+
+    if (pub_len != sizeof(xmss_pub)) {
+        fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned pub_len=%d\n" \
+                        ", expected %zu\n", pub_len, sizeof(xmss_pub));
+        exit(1);
+    }
+
+    /* Append the public key to the private keyfile. */
+    fpriv = fopen(priv_fname, "r+");
+    if (!fpriv) {
+        fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
+                ret);
+        exit(1);
+    }
+
+    fseek(fpriv, priv_sz, SEEK_SET);
+    fwrite(xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, 1, fpriv);
+    fclose(fpriv);
+
+    keystore_add(KEYGEN_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
+
+    wc_XmssKey_Free(&key);
+}
+#endif /* if defined(WOLFSSL_HAVE_XMSS) */
+
+
 static void key_gen_check(const char *kfilename)
 {
     FILE *f;
@@ -661,6 +766,12 @@ static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask
 #ifdef WOLFSSL_HAVE_LMS
         case KEYGEN_LMS:
             keygen_lms(kfilename, id_mask);
+            break;
+#endif
+
+#ifdef WOLFSSL_HAVE_XMSS
+        case KEYGEN_XMSS:
+            keygen_xmss(kfilename, id_mask);
             break;
 #endif
     } /* end switch */
@@ -814,6 +925,11 @@ int main(int argc, char** argv)
 #if defined(WOLFSSL_HAVE_LMS)
         else if (strcmp(argv[i], "--lms") == 0) {
             keytype = KEYGEN_LMS;
+        }
+#endif
+#if defined(WOLFSSL_HAVE_XMSS)
+        else if (strcmp(argv[i], "--xmss") == 0) {
+            keytype = KEYGEN_XMSS;
         }
 #endif
         else if (strcmp(argv[i], "--force") == 0) {
