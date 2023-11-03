@@ -3856,7 +3856,6 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
 
         case CKK_RSA:
             ret = WP11_Rsa_SerializeKeyPTPKC8(key, NULL, &serialSize);
-
             if (ret != 0)
                 return CKR_FUNCTION_FAILED;
 
@@ -3865,13 +3864,15 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
                 return CKR_HOST_MEMORY;
 
             ret = WP11_Rsa_SerializeKeyPTPKC8(key, serialBuff, &serialSize);
-
-            if (ret != 0)
-                return CKR_FUNCTION_FAILED;
+            if (ret != 0) {
+                rv = CKR_FUNCTION_FAILED;
+                goto err_out;
+            }
 
             break;
         default:
-            return CKR_KEY_NOT_WRAPPABLE;
+            rv = CKR_KEY_NOT_WRAPPABLE;
+            goto err_out;
     }
 
     switch (pMechanism->mechanism) {
@@ -3893,7 +3894,8 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
 
             break;
         default:
-            return CKR_MECHANISM_INVALID;
+            rv = CKR_MECHANISM_INVALID;
+            break;
     }
 
 err_out:
@@ -3951,7 +3953,7 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
     if (WP11_Session_Get(hSession, &session) != 0)
         return CKR_SESSION_HANDLE_INVALID;
 
-    if (! WP11_Session_IsRW(session))
+    if (!WP11_Session_IsRW(session))
         return CKR_SESSION_READ_ONLY;
 
     if (pMechanism == NULL || pWrappedKey == NULL || ulWrappedKeyLen == 0 ||
@@ -4017,7 +4019,8 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
 
             break;
         default:
-            return CKR_MECHANISM_INVALID;
+            rv = CKR_MECHANISM_INVALID;
+            goto err_out;
     }
 
     switch (keyType) {
@@ -4031,7 +4034,7 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
             goto err_out;
     }
 
-    err_out:
+err_out:
 
     if (workBuffer != NULL) {
         XMEMSET(workBuffer, 0, ulWrappedKeyLen);
