@@ -102,7 +102,7 @@ $ ls
 CMakeLists.txt  wolfPKCS11  wolfTPM  wolfssl  xmss
 $ cd xmss
 $ git checkout 171ccbd26f098542a67eb5d2b128281c80bd71a6
-$ git apply ../../../tools/xmss/0001-Patch-to-support-wolfSSL-xmss-reference-integration.patch
+$ git apply ../../tools/xmss/0001-Patch-to-support-wolfSSL-xmss-reference-integration.patch
 ```
 
 The patch creates an addendum readme, `patch_readme.md`, with further comments.
