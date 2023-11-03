@@ -35,6 +35,7 @@
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/hmac.h>
 #include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/rsa.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
 #include <wolfssl/wolfcrypt/aes.h>
 
@@ -1451,6 +1452,106 @@ static int wp11_Object_Encode_RsaKey(WP11_Object* object)
         object->keyData = NULL;
         object->keyDataLen = 0;
     }
+
+    return ret;
+}
+
+/**
+ * Export the RSA key.
+ *
+ * Keys are encoded in DER.
+ *
+ * @param [in, out]  object  RSA key object.
+ * @param [out]  output  holds encoded key and can be null.
+ * @param [in/out]  poutsz  in and out size of output buffer
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+int WP11_Rsa_SerializeKey(WP11_Object* object, byte* output, word32* poutsz)
+{
+    int ret;
+    word32 insz, outsz;
+
+    if (object == NULL || poutsz == NULL)
+        return PARAM_E;
+
+    insz = *poutsz;
+
+    if (object->type != CKK_RSA)
+        return OBJ_TYPE_E;
+
+    if (object->objClass == CKO_PRIVATE_KEY) {
+        /* Get length of encoded private key. */
+        ret = wc_RsaKeyToDer(&object->data.rsaKey, output, insz);
+        if (ret >= 0) {
+            outsz = ret;
+            ret = 0;
+        }
+    }
+    else {
+        /* Get length of encoded public key. */
+        ret = wc_RsaKeyToPublicDer(&object->data.rsaKey, output, insz);
+        if (ret >= 0) {
+            outsz = ret;
+            ret = 0;
+        }
+    }
+
+    if (ret == 0)
+        *poutsz = outsz;
+
+    return ret;
+}
+
+/**
+ * Export the RSA key in plain-text PKCS8.
+ *
+ * Keys are encoded in PKCS8 w/o encryption
+ *
+ * @param [in, out]  object  RSA key object.
+ * @param [out]  output  holds encoded key and can be null.
+ * @param [in/out]  poutsz  in and out size of output buffer
+ * @return  0 on success.
+ * @return  -ve on failure.
+ */
+int WP11_Rsa_SerializeKeyPTPKC8(WP11_Object* object, byte* output, word32* poutsz)
+{
+    int ret;
+    word32 dersz = 0;
+    byte* der = NULL;
+
+    if (object == NULL || poutsz == NULL)
+        return PARAM_E;
+
+    if (object->type != CKK_RSA)
+        return OBJ_TYPE_E;
+
+    if (object->objClass != CKO_PRIVATE_KEY)
+        return OBJ_TYPE_E;
+
+    ret = WP11_Rsa_SerializeKey(object, NULL, &dersz);
+    if (ret != 0)
+        return ret;
+
+    der = (unsigned char*)XMALLOC(dersz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (der == NULL)
+        return MEMORY_E;
+
+    ret = WP11_Rsa_SerializeKey(object, der, &dersz);
+
+    if ( ret != 0) {
+        goto end_func;
+    }
+
+    /* Get length of encoded private key. */
+    ret = wc_CreatePKCS8Key(output, poutsz, der,
+                            dersz, RSAk, NULL, 0);
+    if ( ret == LENGTH_ONLY_E || ret > 0)
+        ret = 0;
+
+end_func:
+    if (NULL != der)
+        XFREE(der, NULL, DYNAMIC_TYPE_TMP_BUFFER);
 
     return ret;
 }
@@ -4493,6 +4594,17 @@ CK_KEY_TYPE WP11_Object_GetType(WP11_Object* object)
     return object->type;
 }
 
+/**
+ * Get the object's class.
+ *
+ * @param  object  [in]  Object object.
+ * @return  Object's class.
+ */
+CK_OBJECT_CLASS WP11_Object_GetClass(WP11_Object* object)
+{
+    return object->objClass;
+}
+
 #if !defined(NO_RSA) || defined(HAVE_ECC)
 /**
  * Set the multi-precision integer from the data.
@@ -5833,6 +5945,59 @@ int WP11_Object_MatchAttr(WP11_Object* object, CK_ATTRIBUTE_TYPE type,
 }
 
 #ifndef NO_RSA
+
+/**
+ * Internalize an RSA private key from DER form.
+ *
+ * @param  data   [in]  Buffer to parse
+ * @param  dataLen [in] size of buffer
+ * @param  privKey  [in/out]  Private key object.
+ * @return  -ve when key parse fails.
+ *          0 on success.
+ */
+int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey)
+{
+    int ret = 0;
+    word32 idx = 0;
+
+    ret = wc_InitRsaKey(&privKey->data.rsaKey, NULL);
+    if (ret == 0) {
+        ret = wc_RsaPrivateKeyDecode(data, &idx, &privKey->data.rsaKey, dataLen);
+    }
+    return ret;
+}
+
+/**
+ * Transfer public parts to RSA public key.
+ *
+ * @param  privKey   [in] holds modulus and pub exponent
+ * @param  pubKey [in/out] to be populated
+ * @param  workbuf  [in/out] used to serialize/parse.
+ * @param  worksz  [in] size of workbuf.
+ * @return  -ve when key parse fails.
+ *          0 on success.
+ */
+int WP11_Rsa_PrivKey2PubKey(WP11_Object* privKey, WP11_Object* pubKey,
+    byte* workbuf, word32 worksz)
+{
+    int ret;
+    word32 idx = 0;
+
+    ret = wc_InitRsaKey(&pubKey->data.rsaKey, NULL);
+    if (ret == 0) {
+        ret = wc_RsaKeyToPublicDer(&privKey->data.rsaKey, workbuf, worksz);
+        if (ret >= 0) {
+            worksz = (word32)ret;
+            ret = 0;
+        }
+    }
+    if (ret == 0) {
+        ret = wc_RsaPublicKeyDecode(workbuf, &idx, &pubKey->data.rsaKey, worksz);
+    }
+
+    return ret;
+}
+
 #ifdef WOLFSSL_KEY_GEN
 /**
  * Generate an RSA key pair.

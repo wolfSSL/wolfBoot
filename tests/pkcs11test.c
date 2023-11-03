@@ -560,7 +560,7 @@ static CK_RV test_slot(void* args)
     if (ret == CKR_OK) {
         for (i = 0; ret == CKR_OK && i < (int)count; i++) {
             ret = funcList->C_GetMechanismInfo(slot, list[i], &info);
-            CHECK_CKR(ret, "Get Mechansim info");
+            CHECK_CKR(ret, "Get mechanism info");
         }
     }
 
@@ -2146,7 +2146,7 @@ static CK_RV test_sign_verify(void* args)
         mech.mechanism = CKM_AES_CBC;
         ret = funcList->C_SignInit(session, &mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                              "HMAC Sign Init wrong mechansim");
+                                              "HMAC Sign Init wrong mechanism");
         mech.mechanism = CKM_SHA256_HMAC;
     }
     if (ret == CKR_OK) {
@@ -2212,7 +2212,7 @@ static CK_RV test_sign_verify(void* args)
         mech.mechanism = CKM_AES_CBC;
         ret = funcList->C_VerifyInit(session, &mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                            "HMAC Verify Init wrong mechansim");
+                                            "HMAC Verify Init wrong mechanism");
         mech.mechanism = CKM_SHA256_HMAC;
     }
     if (ret == CKR_OK) {
@@ -2668,7 +2668,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
     if (ret == CKR_OK) {
         ret = funcList->C_WrapKey(session, &mech, CK_INVALID_HANDLE, key,
                                                     wrappedKey, &wrappedKeyLen);
-        CHECK_CKR_FAIL(ret, CKR_OBJECT_HANDLE_INVALID,
+        CHECK_CKR_FAIL(ret, CKR_WRAPPING_KEY_HANDLE_INVALID,
                                         "Wrap Key invalid wrapping key handle");
     }
     if (ret == CKR_OK) {
@@ -2685,8 +2685,8 @@ static CK_RV test_wrap_unwrap_key(void* args)
     if (ret == CKR_OK) {
         ret = funcList->C_WrapKey(session, &mech, wrappingKey, key, wrappedKey,
                                                                 &wrappedKeyLen);
-        CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                            "Wrap Key mechansim not supported");
+        CHECK_CKR_FAIL(ret, CKR_KEY_NOT_WRAPPABLE,
+                                            "Wrap Key mechanism not supported");
     }
 
     if (ret == CKR_OK) {
@@ -2705,7 +2705,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
         ret = funcList->C_UnwrapKey(session, &mech, CK_INVALID_HANDLE,
                                        wrappedKey, wrappedKeyLen, tmpl, tmplCnt,
                                        &key);
-        CHECK_CKR_FAIL(ret, CKR_OBJECT_HANDLE_INVALID,
+        CHECK_CKR_FAIL(ret, CKR_UNWRAPPING_KEY_HANDLE_INVALID,
                                       "Unwrap Key invalid wrapping key handle");
     }
     if (ret == CKR_OK) {
@@ -2733,7 +2733,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
         ret = funcList->C_UnwrapKey(session, &mech, wrappingKey, wrappedKey,
                                             wrappedKeyLen, tmpl, tmplCnt, &key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
-                                          "Unwrap Key mechansim not supported");
+                                          "Unwrap Key mechanism not supported");
     }
 
     return ret;
