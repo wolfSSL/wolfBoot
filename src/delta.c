@@ -209,7 +209,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
          * base for the sectors that have already been updated.
          */
 
-        pa_start = (WOLFBOOT_SECTOR_SIZE + 1) * page_start;
+        pa_start = WOLFBOOT_SECTOR_SIZE  * page_start;
         pa = ctx->src_a + pa_start;
         while (((uintptr_t)(pa - ctx->src_a) < (uintptr_t)ctx->size_a) && (p_off < len)) {
             if ((uintptr_t)(ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
@@ -273,7 +273,8 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 /* Don't try matching backwards if the distance between the two
                  * blocks is smaller than one sector.
                  */
-                if (WOLFBOOT_SECTOR_SIZE > (pb - ctx->src_b) - (page_start * WOLFBOOT_SECTOR_SIZE))
+                if (WOLFBOOT_SECTOR_SIZE > (page_start * WOLFBOOT_SECTOR_SIZE)
+                        - (pb - ctx->src_b))
                     break;
 
                 if ((memcmp(pb, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {

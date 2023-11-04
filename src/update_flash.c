@@ -212,7 +212,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint32_t offset = 0;
     uint16_t ptr_len;
     uint32_t *img_offset;
-    uint16_t *img_size;
+    uint32_t *img_size;
     uint32_t total_size;
     WB_PATCH_CTX ctx;
 #ifdef EXT_ENCRYPTED
