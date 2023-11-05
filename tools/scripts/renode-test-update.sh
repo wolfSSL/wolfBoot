@@ -37,6 +37,24 @@ if (echo $TEST_OPTIONS | grep "LMS" &>/dev/null); then
         cd ../../.. || exit 2
 fi
 
+if (echo $TEST_OPTIONS | grep "XMSS" &>/dev/null); then
+    # Need git.
+    apt install -y git
+
+    # wolfSSL needs to be on latest master for XMSS support. Also, we need to
+    # add the wolfssl module as a safe directory so docker can use it.
+    git config --global --add safe.directory /workspace/lib/wolfssl || exit 2
+    cd lib/wolfssl && git checkout master && git pull && cd ../.. || exit 2
+
+
+    # Need to clone the hash-sigs repo, and patch it for wolfBoot build.
+    cd lib || exit 2
+    git clone https://github.com/XMSS/xmss-reference.git xmss || exit 2
+    cd xmss && git checkout 171ccbd26f098542a67eb5d2b128281c80bd71a6 && \
+        git apply ../../tools/xmss/0001-Patch-to-support-wolfSSL-xmss-reference-integration.patch &&\
+        cd ../../ || exit 2
+fi
+
 make distclean
 make -C tools/keytools
 make -C tools/test-expect-version
