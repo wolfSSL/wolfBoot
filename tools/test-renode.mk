@@ -20,6 +20,9 @@ RENODE_BINASSEMBLE=tools/bin-assemble/bin-assemble
 LMS_OPTS=LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 WOLFBOOT_SMALL_STACK=0 \
          IMAGE_SIGNATURE_SIZE=2644 IMAGE_HEADER_SIZE=5288
 
+XMSS_OPTS=XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 \
+         IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000
+
 # python version only supported using
 # KEYGEN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py"
 ifeq ("$(KEYGEN_TOOL)","")
@@ -95,6 +98,10 @@ endif
 
 ifeq ($(SIGN),LMS)
   SIGN_ARGS+= --lms
+endif
+
+ifeq ($(SIGN),XMSS)
+  SIGN_ARGS+= --xmss
 endif
 
 ifeq ($(HASH),SHA256)
@@ -260,6 +267,9 @@ renode-factory-rsa4096: FORCE
 renode-factory-lms: FORCE
 	make renode-factory SIGN=LMS $(LMS_OPTS)
 
+renode-factory-xmss: FORCE
+	make renode-factory SIGN=XMSS $(XMSS_OPTS)
+
 renode-factory-all: FORCE
 	${Q}make keysclean
 	${Q}make renode-factory-ed25519
@@ -303,6 +313,9 @@ renode-update-rsa4096: FORCE
 renode-update-lms: FORCE
 	make renode-update SIGN=LMS $(LMS_OPTS)
 
+renode-update-xmss: FORCE
+	make renode-update SIGN=XMSS $(XMSS_OPTS)
+
 renode-no-downgrade-ed25519: FORCE
 	make renode-no-downgrade SIGN=ED448
 
@@ -324,6 +337,9 @@ renode-no-downgrade-rsa4096: FORCE
 renode-no-downgrade-lms: FORCE
 	make renode-no-downgrade SIGN=LMS $(LMS_OPTS)
 
+renode-no-downgrade-xmss: FORCE
+	make renode-no-downgrade SIGN=XMSS $(XMSS_OPTS)
+
 renode-corrupted-ed25519: FORCE
 	make renode-corrupted SIGN=ED448
 
@@ -344,6 +360,9 @@ renode-corrupted-rsa4096: FORCE
 
 renode-corrupted-lms: FORCE
 	make renode-corrupted SIGN=LMS $(LMS_OPTS)
+
+renode-corrupted-xmss: FORCE
+	make renode-corrupted SIGN=XMSS $(XMSS_OPTS)
 
 renode-boot-time-all: FORCE
 	tools/scripts/renode-test-all.sh 2>/dev/null |grep "BOOT TIME"
@@ -368,6 +387,7 @@ renode-update-all: FORCE
 	${Q}make keysclean
 	${Q}make renode-update-lms RENODE_PORT=55164
 	${Q}make keysclean
+	${Q}make renode-update-xmss RENODE_PORT=55165
 	${Q}echo All tests in $@ OK!
 
 renode-no-downgrade-all: FORCE
@@ -389,6 +409,8 @@ renode-no-downgrade-all: FORCE
 	${Q}make renode-no-downgrade SIGN=NONE RENODE_PORT=55163
 	${Q}make keysclean
 	${Q}make renode-no-downgrade-lms RENODE_PORT=55164
+	${Q}make keysclean
+	${Q}make renode-no-downgrade-xmss RENODE_PORT=55165
 	${Q}echo All tests in $@ OK!
 
 renode-corrupted-all: FORCE
@@ -410,6 +432,8 @@ renode-corrupted-all: FORCE
 	${Q}make renode-corrupted SIGN=NONE RENODE_PORT=55163
 	${Q}make keysclean
 	${Q}make renode-corrupted-lms RENODE_PORT=55164
+	${Q}make keysclean
+	${Q}make renode-corrupted-xmss RENODE_PORT=55165
 	${Q}echo All tests in $@ OK!
 
 renode-update-all-armored: FORCE
