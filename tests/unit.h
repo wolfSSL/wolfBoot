@@ -144,7 +144,7 @@ static int lockCnt;
 static int stop = 0;
 static int secs = 10;
 
-static int LockInit()
+static int LockInit(void)
 {
     int ret;
 
@@ -154,7 +154,7 @@ static int LockInit()
         if (ret != 0)
             wc_FreeMutex(&readMutex);
     }
-    if (ret == 0) 
+    if (ret == 0)
         lockCnt = 0;
     if (ret != 0)
         ret = -1;
@@ -162,23 +162,23 @@ static int LockInit()
     return ret;
 }
 
-static void LockFree()
+static void LockFree(void)
 {
     wc_FreeMutex(&writeMutex);
     wc_FreeMutex(&readMutex);
 }
 
-static int LockRW()
+static int LockRW(void)
 {
     return wc_LockMutex(&writeMutex);
 }
 
-static int UnlockRW()
+static int UnlockRW(void)
 {
     return wc_UnLockMutex(&writeMutex);
 }
 
-static int LockRO()
+static int LockRO(void)
 {
     int ret;
 
@@ -195,7 +195,7 @@ static int LockRO()
     return ret;
 }
 
-static int UnlockRO()
+static int UnlockRO(void)
 {
     int ret;
 
