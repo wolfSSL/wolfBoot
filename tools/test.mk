@@ -7,6 +7,7 @@ SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
 SIGN_ARGS=
 SIGN_ENC_ARGS=
+DELTA_DATA_SIZE?=2000
 
 # python version only supported using
 # KEYGEN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py"
@@ -161,6 +162,28 @@ test-sim-external-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
+
+test-sim-external-flash-with-enc-delta-update-extradata:DELTA_UPDATE_OPTIONS=--delta test-app/image_v1_signed.bin
+test-sim-external-flash-with-enc-delta-update-extradata:SIGN_ENC_ARGS=--encrypt /tmp/enc_key.der --aes128
+test-sim-external-flash-with-enc-delta-update-extradata: wolfboot.bin test-app/image.elf FORCE
+	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
+	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) 1
+	$(Q)cp test-app/image_v1_signed.bin test-app/image_v1_signed.bak
+	$(Q)rm -f test-app/image.elf test-app/app_sim.o
+	$(Q)make -C test-app delta-extra-data DELTA_DATA_SIZE=$(DELTA_DATA_SIZE)
+	$(Q)cp test-app/image_v1_signed.bak test-app/image_v1_signed.bin
+	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
+		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > v1_part.dd
+	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
+	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff_encrypted.bin \
+		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
+	$(Q)ls -l test-app/*.bin
 
 
 test-sim-external-flash-with-enc-update:SIGN_ENC_ARGS=--encrypt /tmp/enc_key.der --aes128
