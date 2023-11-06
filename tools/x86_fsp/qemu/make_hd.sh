@@ -2,10 +2,12 @@
 SIGN=${SIGN:-"--ecc256"}
 HASH=${HASH:-"--sha256"}
 
-IMAGE=bzImage
+IMAGE=${IMAGE:-"bzImage"}
+
+set -e
 
 dd if=/dev/zero of=app.bin bs=1M count=64
-fdisk app.bin <<EOF 
+/sbin/fdisk app.bin <<EOF
 g
 n
 1

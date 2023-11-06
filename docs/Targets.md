@@ -13,7 +13,6 @@ This README describes configuration of supported targets.
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
-* [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -29,6 +28,7 @@ This README describes configuration of supported targets.
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 * [Renesas RX72N](#renesas-rx72n)
 * [Renesas RA6M4](#renesas-ra6m4)
+* [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [Intel x86-64 Intel FSP](#Intel-x86_64-with-Intel-FSP-support)
 
 ## STM32F4
@@ -1627,84 +1627,6 @@ thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu
 See [/config/examples/ti-tms570lc435.config](/config/examples/ti-tms570lc435.config) for example configuration.
 
 
-## Qemu x86-64 UEFI
-
-x86-64bit machine with UEFI bios can run wolfBoot as EFI application.
-
-### Prerequisites:
-
- * qemu-system-x86_64
- * [GNU-EFI] (https://sourceforge.net/projects/gnu-efi/)
- * Open Virtual Machine firmware bios images (OVMF) by [Tianocore](https://tianocore.org)
-
-On a debian-like system it is sufficient to install the packages as follows:
-
-```
-# for wolfBoot and others
-apt install git make gcc
-
-# for test scripts
-apt install sudo dosfstools curl
-apt install qemu qemu-system-x86 ovmf gnu-efi
-
-# for buildroot
-apt install file bzip2 g++ wget cpio unzip rsync bc
-```
-
-### Configuration
-
-An example configuration is provided in [config/examples/x86_64_efi.config](config/examples/x86_64_efi.config)
-
-### Building and running on qemu
-
-The bootloader and the initialization script `startup.nsh` for execution in the EFI environment are stored in a loopback FAT partition.
-
-The script [tools/efi/prepare_uefi_partition.sh](tools/efi/prepare_uefi_partition.sh) creates a new empty
-FAT loopback partitions and adds `startup.nsh`.
-
-A kernel with an embedded rootfs partition can be now created and added to the image, via the
-script [tools/efi/compile_efi_linux.sh](tools/efi/compile_efi_linux.sh). The script actually adds two instances
-of the target systems: `kernel.img` and `update.img`, both signed for authentication, and tagged with version
-`1` and `2` respectively.
-
-Compiling with `make` will produce the bootloader image in `wolfboot.efi`.
-
-
-The script [tools/efi/run_efi.sh](tools/efi/run_efi.sh) will add `wolfboot.efi` to the bootloader loopback
-partition, and run the system on qemu. If both kernel images are present and valid, wolfBoot will choose the image
-with the higher version number, so `update.img` will be staged as it's tagged with version `2`.
-
-The sequence is summarized below:
-
-```
-cp config/examples/x86_64_efi.config .config
-tools/efi/prepare_efi_partition.sh
-make
-tools/efi/compile_efi_linux.sh
-tools/efi/run_efi.sh
-```
-
-```
-EFI v2.70 (EDK II, 0x00010000)
-[700/1832]
-Mapping table
-      FS0: Alias(s):F0a:;BLK0:
-          PciRoot(0x0)/Pci(0x1,0x1)/Ata(0x0)
-     BLK1: Alias(s):
-               PciRoot(0x0)/Pci(0x1,0x1)/Ata(0x0)
-Press ESC in 1 seconds to skip startup.nsh or any other key to continue.
-Starting wolfBoot EFI...
-Image base: 0xE3C6000
-Opening file: kernel.img, size: 6658272
-Opening file: update.img, size: 6658272
-Active Part 1
-Firmware Valid
-Booting at 0D630000
-Staging kernel at address D630100, size: 6658016
-```
-
-You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
-
 
 ## Nordic nRF52840
 
@@ -1822,16 +1744,108 @@ Flash Allocation:
 
 Detailed steps can be found at [Readme.md](../IDE/Renesas/e2studio/RA6M4/Readme.md).
 
+## Qemu x86-64 UEFI
+
+The simplest option to compile wolfBoot as a bootloader for x86-64bit machines is
+the UEFI mode. This mechanism requires an UEFI bios, which stages wolfBoot
+by running the binary as an EFI application.
+
+The following instructions describe the procedure to configure wolfBoot as EFI
+application and run it on qemu using tianocore as main firmware. A GNU/Linux system
+built via buildroot is then authenticated and staged by wolfBoot.
+
+### Prerequisites:
+
+ * qemu-system-x86_64
+ * [GNU-EFI] (https://sourceforge.net/projects/gnu-efi/)
+ * Open Virtual Machine firmware bios images (OVMF) by [Tianocore](https://tianocore.org)
+
+On a debian-like system it is sufficient to install the packages as follows:
+
+```
+# for wolfBoot and others
+apt install git make gcc
+
+# for test scripts
+apt install sudo dosfstools curl
+apt install qemu qemu-system-x86 ovmf gnu-efi
+
+# for buildroot
+apt install file bzip2 g++ wget cpio unzip rsync bc
+```
+
+### Configuration
+
+An example configuration is provided in [config/examples/x86_64_efi.config](config/examples/x86_64_efi.config)
+
+### Building and running on qemu
+
+The bootloader and the initialization script `startup.nsh` for execution in the EFI environment are stored in a loopback FAT partition.
+
+The script [tools/efi/prepare_uefi_partition.sh](tools/efi/prepare_uefi_partition.sh) creates a new empty
+FAT loopback partitions and adds `startup.nsh`.
+
+A kernel with an embedded rootfs partition can be now created and added to the image, via the
+script [tools/efi/compile_efi_linux.sh](tools/efi/compile_efi_linux.sh). The script actually adds two instances
+of the target systems: `kernel.img` and `update.img`, both signed for authentication, and tagged with version
+`1` and `2` respectively.
+
+Compiling with `make` will produce the bootloader image in `wolfboot.efi`.
+
+
+The script [tools/efi/run_efi.sh](tools/efi/run_efi.sh) will add `wolfboot.efi` to the bootloader loopback
+partition, and run the system on qemu. If both kernel images are present and valid, wolfBoot will choose the image
+with the higher version number, so `update.img` will be staged as it's tagged with version `2`.
+
+The sequence is summarized below:
+
+```
+cp config/examples/x86_64_efi.config .config
+tools/efi/prepare_efi_partition.sh
+make
+tools/efi/compile_efi_linux.sh
+tools/efi/run_efi.sh
+```
+
+```
+EFI v2.70 (EDK II, 0x00010000)
+[700/1832]
+Mapping table
+      FS0: Alias(s):F0a:;BLK0:
+          PciRoot(0x0)/Pci(0x1,0x1)/Ata(0x0)
+     BLK1: Alias(s):
+               PciRoot(0x0)/Pci(0x1,0x1)/Ata(0x0)
+Press ESC in 1 seconds to skip startup.nsh or any other key to continue.
+Starting wolfBoot EFI...
+Image base: 0xE3C6000
+Opening file: kernel.img, size: 6658272
+Opening file: update.img, size: 6658272
+Active Part 1
+Firmware Valid
+Booting at 0D630000
+Staging kernel at address D630100, size: 6658016
+```
+
+You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
+
+
 
 ## Intel x86_64 with Intel FSP support
 
-This feature is experimental. Intel FSP provides a set of common firmware
-services that can be used for memory initialization, power management, and
-silicon initialization. Wolfboot accesses these services by invoking
-machine-dependent binary code provided by the Intel FSP in the form of binary
-blobs.
+This setup is more complex than the UEFI approach described earlier, but allows
+for complete control of the machine since the very first stage after poweron.
 
-To use this feature, you will need to configure the following variables:
+In other words, wolfBoot can run as a secure replacement of the system BIOS, thanks to the
+integration with the Intel Firmware Support Package (FSP). FSP provides services
+for target-specific initial configuration (memory and silicon initialization,
+power management, etc.). These services are designed to be accessed and invoked
+by the bootloader.
+
+If wolfBoot is compiled with FSP support, it invokes the necessary machine-dependent
+binary code, which that can be obtained from the chip manufacturer.
+
+The following variables must be set in your `.config` file when using this feature:
+
 
 - `ARCH` = `x86_64`
 - `TARGET` = A useful name for the target you want to support. You can refer to
@@ -1847,13 +1861,13 @@ To use this feature, you will need to configure the following variables:
 - `WOLFBOOT_LOAD_BASE`: the address where wolfboot will be loaded in RAM after the first initialization phase
 
 While Intel FSP aims to abstract away specific machine details, you still need
-some machine-specific code. Refer to the Intel Integration Guide of the selected
+some machine-specific code. In the next section we show how to retrieve the
+target-specific code for qemu. Refer to the Intel Integration Guide of the selected
 silicon for more information.
 
 Note:
-- This feature is experimental, so it may have bugs or limitations.
 
-- This feature requires NASM
+- This feature requires `NASM` to be installed on the machine building wolfBoot.
 
 
 ### Running on 64-bit Qemu
@@ -2039,7 +2053,6 @@ booting...
 Linux version 5.17.15 (arch@wb-hg-2) (x86_64-linux-gcc.br_real (Buildroot toolchains.bootlin.com-2021.11-5) 11.2.0, GNU ld (GNU Binutils) 2.37) #24 PREEMPT Wed May 17 13:47:24 UTC 2023
 ```
 
-
 ### Running on 64-bit Qemu with swtpm (TPM emulator)
 
 The example configuration for this setup can be found in
@@ -2061,12 +2074,16 @@ tools/x86_fsp/qemu/qemu_build_fsp.sh
 make
 
 # The next script needs to be run from wolboot root folder and assumes your
-# kernel is in th root folder, named bzImage
+# kernel is in wolfBoot's root folder. The file should be named `bzImage`.
 # If this is not the case, change the path in the script accordingly
-tools/x86_64/qemu/make_hd.sh
+
+tools/x86_fsp/qemu/make_hd.sh
 
 # Run wolfBoot + linux in qemu, with swTPM connected to the guest machine.
-# The script will take care of starting the emulator before launching the VM.
+# The script will start the TPM emulator before launching the VM.
 tools/scripts/qemu64/qemu64-tpm.sh
 ```
+
+For more advanced uses of TPM, please check [TPM.md](TPM.md) to configure wolfBoot
+according to your secure boot strategy.
 
