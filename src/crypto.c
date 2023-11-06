@@ -1,6 +1,6 @@
 /* crypto.c
  *
- * Copyright (C) 2006-2022 wolfSSL Inc.
+ * Copyright (C) 2006-2023 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -488,6 +488,7 @@ static CK_RV AddObject(WP11_Session* session, WP11_Object* object,
     return CKR_OK;
 }
 
+#ifndef NO_RSA
 /**
  * Create an RSA private key object in the session or on the token associated with the session.
  *
@@ -606,6 +607,7 @@ err_out:
 
     return rv;
 }
+#endif
 
 /**
  * Create an object in the session or on the token associated with the session.
@@ -3853,7 +3855,7 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
         return rv;
 
     switch (keyType) {
-
+#if !defined(NO_RSA) && !defined(WOLFPKCS11_NO_STORE)
         case CKK_RSA:
             ret = WP11_Rsa_SerializeKeyPTPKC8(key, NULL, &serialSize);
             if (ret != 0)
@@ -3868,17 +3870,17 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
                 rv = CKR_FUNCTION_FAILED;
                 goto err_out;
             }
-
             break;
+#endif
         default:
             rv = CKR_KEY_NOT_WRAPPABLE;
             goto err_out;
     }
 
     switch (pMechanism->mechanism) {
+#ifndef NO_AES
         /* These unwrap mechanisms can be supported with high level C_Encrypt */
         case CKM_AES_CBC_PAD:
-
             if (wrapkeyType != CKK_AES) {
                 rv = CKR_WRAPPING_KEY_TYPE_INCONSISTENT;
                 goto err_out;
@@ -3893,10 +3895,12 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
                 goto err_out;
 
             break;
+#endif
         default:
             rv = CKR_MECHANISM_INVALID;
             break;
     }
+    (void)pWrappedKey;
 
 err_out:
 
@@ -4024,11 +4028,12 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
     }
 
     switch (keyType) {
+#ifndef NO_RSA
         case CKK_RSA:
-
             rv = AddRSAPrivateKeyObject(session, pTemplate, ulAttributeCount,
                 workBuffer, ulUnwrappedLen, phKey);
             break;
+#endif
         default:
             rv = CKR_KEY_NOT_WRAPPABLE;
             goto err_out;

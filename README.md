@@ -9,7 +9,7 @@ PKCS#11 library that implements cryptographic algorithms using wolfSSL.
 
 Build wolfSSL:
 
-```
+```sh
 git clone https://github.com/wolfSSL/wolfssl.git
 cd wolfssl
 ./autogen.sh
@@ -24,7 +24,7 @@ autogen.sh requires: automake and libtool: `sudo apt-get install automake libtoo
 
 Build wolfPKCS11:
 
-```
+```sh
 git clone https://github.com/wolfSSL/wolfPKCS11.git
 cd wolfPKCS11
 ./autogen.sh

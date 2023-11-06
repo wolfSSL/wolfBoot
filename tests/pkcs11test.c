@@ -1,6 +1,6 @@
 /* pkcs11test.c - unit tests
  *
- * Copyright (C) 2006-2022 wolfSSL Inc.
+ * Copyright (C) 2006-2023 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -3031,6 +3031,7 @@ static CK_RV find_rsa_priv_key(CK_SESSION_HANDLE session,
     return ret;
 }
 
+#ifdef WOLFSSL_KEY_GEN
 static CK_RV find_rsa_pub_key_label(CK_SESSION_HANDLE session,
                                     CK_OBJECT_HANDLE* pubKey)
 {
@@ -3093,6 +3094,7 @@ static CK_RV find_rsa_priv_key_label(CK_SESSION_HANDLE session,
 
     return ret;
 }
+#endif
 
 static CK_RV test_attributes_rsa(void* args)
 {
