@@ -164,7 +164,7 @@ static CK_KEY_TYPE aesKeyType  = CKK_AES;
 static CK_KEY_TYPE genericKeyType  = CKK_GENERIC_SECRET;
 
 
-static CK_RV pkcs11_lib_init()
+static CK_RV pkcs11_lib_init(void)
 {
     CK_RV ret;
     CK_C_INITIALIZE_ARGS args;
@@ -177,7 +177,7 @@ static CK_RV pkcs11_lib_init()
     return ret;
 }
 
-static CK_RV pkcs11_init_token()
+static CK_RV pkcs11_init_token(void)
 {
     CK_RV ret;
     unsigned char label[32];

@@ -1,0 +1,62 @@
+name: wolfPKCS11 Build Tests
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+#pull wolfPKCS11
+    - uses: actions/checkout@v3
+
+#setup wolfssl
+    - uses: actions/checkout@v3
+      with:
+        repository: wolfssl/wolfssl
+        path: wolfssl
+    - name: wolfssl autogen
+      working-directory: ./wolfssl
+      run: ./autogen.sh
+    - name: wolfssl configure
+      working-directory: ./wolfssl
+      run: |
+        ./configure --enable-wolftpm --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt \
+            C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"
+    - name: wolfssl make install
+      working-directory: ./wolfssl
+      run: make
+    - name: wolfssl make install
+      working-directory: ./wolfssl
+      run: |
+          sudo make install
+          sudo ldconfig
+
+#setup wolfPKCS11
+    - name: wolfpkcs11 autogen
+      run: ./autogen.sh
+    - name: wolfpkcs11 configure
+      run: ./configure
+    - name: wolfpkcs11 make
+      run: make
+    - name: wolfpkcs11 make check
+      run: make check
+    - name: wolfpkcs11 make install
+      run: sudo make install
+    - name: wolfpkcs11 make dist
+      run: make dist
+
+# capture logs on failure
+    - name: Upload failure logs
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: wolfpkcs11-test-logs
+        path: |
+          test-suite.log
+        retention-days: 5

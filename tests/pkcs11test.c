@@ -2689,6 +2689,9 @@ static CK_RV test_wrap_unwrap_key(void* args)
                                             "Wrap Key mechanism not supported");
     }
 
+    /* done with key, destroy now, since uwrap returns new handle */
+    funcList->C_DestroyObject(session, key);
+
     if (ret == CKR_OK) {
         ret = funcList->C_UnwrapKey(CK_INVALID_HANDLE, &mech, wrappingKey,
                                        wrappedKey, wrappedKeyLen, tmpl, tmplCnt,
@@ -2735,6 +2738,9 @@ static CK_RV test_wrap_unwrap_key(void* args)
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_INVALID,
                                           "Unwrap Key mechanism not supported");
     }
+
+    funcList->C_DestroyObject(session, wrappingKey);
+    funcList->C_DestroyObject(session, key);
 
     return ret;
 }
@@ -7556,7 +7562,7 @@ static CK_RV test_random(void* args)
 }
 
 
-static CK_RV pkcs11_lib_init()
+static CK_RV pkcs11_lib_init(void)
 {
     CK_RV ret;
     CK_C_INITIALIZE_ARGS args;
@@ -7569,7 +7575,7 @@ static CK_RV pkcs11_lib_init()
     return ret;
 }
 
-static CK_RV pkcs11_init_token()
+static CK_RV pkcs11_init_token(void)
 {
     CK_RV ret;
     unsigned char label[32];
