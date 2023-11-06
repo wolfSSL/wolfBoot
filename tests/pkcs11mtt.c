@@ -1867,6 +1867,10 @@ static CK_RV test_wrap_unwrap_key(void* args)
         CHECK_CKR_FAIL(ret, CKR_KEY_NOT_WRAPPABLE,
                                             "Wrap Key mechanism not supported");
     }
+
+    /* done with key, destroy now, since uwrap returns new handle */
+    funcList->C_DestroyObject(session, key);
+
     if (ret == CKR_OK) {
         ret = funcList->C_UnwrapKey(CK_INVALID_HANDLE, &mech, wrappingKey,
                                        wrappedKey, wrappedKeyLen, tmpl, tmplCnt,
