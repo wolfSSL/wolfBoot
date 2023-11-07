@@ -514,3 +514,46 @@ Use `make keysclean` to delete keys and regenerate.
  * Bug fix: fix wrong partition selection with `NVM_FLASH_WRITEONCE` introduced in v.1.15
  * Testing: added test cases (delta + encrypt)
  * Documentation: fixed several spelling errors
+
+### V 2.0.0 - (2023-11-07)
+ * New feature: post-quantum stateful hash-based signature schemes.
+    * Support for LMS/HSS
+    * Support for XMSS/XMSS^MT
+ * New feature: PKCS11 engine in TrustZone-M secure mode
+    * wolfBoot as secure-mode supervisor on ARMv8-M
+ * New TPM features
+    * TPM NV as root of trust
+    * Password-based access to NV slots
+    * Measured boot via PCR extensions
+    * Sealing/unsealing NV based on externally signed PCR policy and/or password
+ * New architecture: x86-64bit using FSP
+    * Intel FSP support
+    * Integration with TPM
+    * Two-stages model with support for PCI enumeration, AHCI drivers, SATA lock mechanism
+    * Multiboot2/ELF payload support
+ * New hardware targets
+    * Intel TigerLake in FSP mode
+    * STM32C0
+ * Bug fixing: core
+    * Fixed several bugs in `NVM_FLASH_WRITEONCE` mode
+    * Fixed bugs in delta updates
+ * Improved support to existing targets
+    * Fixed issues in TSIP project
+    * Improved support for NXP QoriQ/p1021
+    * Improved support for NXP T1084
+    * Reworked SPI support for NXP RT1050
+    * STM32L4: Fixed clock speed
+    * ARMv7-m: improved assembly support for Cortex-M4
+    * ARMv8-m: enabled assembly optimizations by default
+ * Reworked keytools and build environment
+    * Improved build experience for MacOS users
+    * Fix for building in windows/minGW
+    * Deprecated python keytools
+    * Keytools: support multiple key formats, don't assume raw keys
+    * Fixed bug in delta image generation
+    * Keystore improvements: support multiple key format in the same keystore
+ * Testing
+    * Added new sets of power-failure automated tests on simulator target
+    * Simulator: tests can now run on MacOS
+    * Unit tests: improved coverage. Added gcov reports
+    * Static analysis: added cppcheck tests, fixed all relevant warnings
