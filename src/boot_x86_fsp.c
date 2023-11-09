@@ -92,7 +92,8 @@ typedef uint32_t (*notify_phase_cb)(NOTIFY_PHASE_PARAMS *p);
 
 /* need to be implemented by machine dependent code */
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
-                                    uint32_t mem_base, uint32_t mem_size);
+                                    uint32_t mem_base, uint32_t mem_size,
+                                    struct stage2_parameter *params);
 int fsp_machine_update_s_parameters(uint8_t *default_s_params);
 int post_temp_ram_init_cb(void);
 
@@ -597,6 +598,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     uint8_t udp_m_parameter[FSP_M_UDP_MAX_SIZE], *udp_m_default;
     struct fsp_info_header *fsp_m_info_header;
     struct stage2_parameter *stage2_params;
+    struct stage2_parameter temp_params;
     uint8_t *fsp_m_base, done = 0;
     struct efi_hob *hobList, *it;
     memory_init_cb MemoryInit;
@@ -621,7 +623,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
         wolfBoot_printf("post temp ram init cb failed" ENDLINE);
         panic();
     }
+    memset(&temp_params, 0, sizeof(temp_params));
     wolfBoot_printf("Cache-as-RAM initialized" ENDLINE);
+
 
     fsp_m_info_header =
         (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);
@@ -638,7 +642,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
 
     memcpy(udp_m_parameter, udp_m_default, fsp_m_info_header->CfgRegionSize);
     status = fsp_machine_update_m_parameters(udp_m_parameter, stack_base + 0x4,
-                                             FSP_M_CAR_MEM_SIZE);
+                                             FSP_M_CAR_MEM_SIZE, &temp_params);
     if (status != 0) {
         panic();
     }
@@ -678,7 +682,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     top_address =
         new_stack - WOLFBOOT_X86_STACK_SIZE - sizeof(struct stage2_parameter);
     stage2_params = (struct stage2_parameter *)(uint32_t)top_address;
-    memset((uint8_t *)stage2_params, 0, sizeof(struct stage2_parameter));
+    memcpy((uint8_t *)stage2_params, (uint8_t*)&temp_params, sizeof(struct stage2_parameter));
     wolfBoot_printf("hoblist@0x%x" ENDLINE, (uint32_t)hobList);
     stage2_params->hobList = (uint32_t)hobList;
 

@@ -45,8 +45,8 @@
 #include <x86/fsp/FsptUpd.h>
 #include <x86/fsp/FspmUpd.h>
 #include <x86/fsp/FspsUpd.h>
-
 #include <x86/ahci.h>
+#include <stage1.h>
 
 #define PCR_DMI_PORT_ID 0x88
 #define PCR_DMI_LPCLGIR1 0x2730
@@ -689,11 +689,12 @@ int post_temp_ram_init_cb(void)
  */
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
                                     uint32_t mem_base,
-                                    uint32_t mem_size)
+                                    uint32_t mem_size,
+                                    struct stage2_parameter *params)
 {
     FSPM_UPD *new_udp;
-    int i;
 
+    (void)params;
     wolfBoot_printf("machine_update_m_params" ENDLINE);
 
     new_udp = (FSPM_UPD*)default_m_params;
