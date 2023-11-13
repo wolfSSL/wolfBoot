@@ -1,6 +1,6 @@
 /* pkcs11str.c - unit tests
  *
- * Copyright (C) 2006-2022 wolfSSL Inc.
+ * Copyright (C) 2006-2023 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -145,8 +145,9 @@ int userPinLen;
 static CK_OBJECT_CLASS pubKeyClass     = CKO_PUBLIC_KEY;
 #endif
 static CK_OBJECT_CLASS privKeyClass    = CKO_PRIVATE_KEY;
+#ifndef NO_AES
 static CK_OBJECT_CLASS secretKeyClass  = CKO_SECRET_KEY;
-
+#endif
 static CK_BBOOL ckTrue  = CK_TRUE;
 
 #ifndef NO_RSA
@@ -583,6 +584,7 @@ static CK_RV find_dh_pub_key(CK_SESSION_HANDLE session,
 }
 #endif
 
+#ifndef NO_AES
 static CK_RV create_aes_128_key(CK_SESSION_HANDLE session, unsigned char* id,
                                 int idLen, CK_OBJECT_HANDLE* key)
 {
@@ -611,7 +613,6 @@ static CK_RV create_aes_128_key(CK_SESSION_HANDLE session, unsigned char* id,
     return ret;
 }
 
-#ifndef NO_AES
 static CK_RV find_aes_key(CK_SESSION_HANDLE session, unsigned char* id,
                           int idLen, CK_OBJECT_HANDLE* key)
 {
@@ -650,20 +651,28 @@ static CK_RV pkcs11_test(int slotId, int setPin, int closeDl)
     CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
+#ifndef NO_RSA
     unsigned char* privId = (unsigned char *)"123rsafixedpriv";
     int privIdLen = (int)strlen((char*)privId);
     unsigned char* pubId = (unsigned char *)"123rsafixedpub";
     int pubIdLen = (int)strlen((char*)pubId);
+#endif
+#ifdef HAVE_ECC
     unsigned char* eccPrivId = (unsigned char *)"123eccfixedpriv";
     int eccPrivIdLen = (int)strlen((char*)eccPrivId);
     unsigned char* eccPubId = (unsigned char *)"123eccfixedpub";
     int eccPubIdLen = (int)strlen((char*)eccPubId);
+#endif
+#ifndef NO_DH
     unsigned char* dhPrivId = (unsigned char *)"123dhfixedpriv";
     int dhPrivIdLen = (int)strlen((char*)dhPrivId);
     unsigned char* dhPubId = (unsigned char *)"123dhfixedpub";
     int dhPubIdLen = (int)strlen((char*)dhPubId);
+#endif
+#ifndef NO_AES
     unsigned char* aesKeyId = (unsigned char *)"123aes128key";
     int aesKeyIdLen = (int)strlen((char*)aesKeyId);
+#endif
 
     /* Set it global. */
     slot = slotId;
@@ -739,8 +748,10 @@ static CK_RV pkcs11_test(int slotId, int setPin, int closeDl)
 #endif
             (void)genericKeyType;
 #ifndef NO_AES
+    #ifdef HAVE_AESGCM
             (void)aes_128_gcm_exp_tag;
             (void)aes_128_gcm_exp;
+    #endif
             (void)aes_128_cbc_pad_exp;
             (void)aes_128_cbc_exp;
             if (ret == CKR_OK) {

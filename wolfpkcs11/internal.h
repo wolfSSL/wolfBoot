@@ -1,6 +1,6 @@
 /* internal.h
  *
- * Copyright (C) 2006-2022 wolfSSL Inc.
+ * Copyright (C) 2006-2023 wolfSSL Inc.
  *
  * This file is part of wolfPKCS11.
  *
@@ -39,6 +39,13 @@
 
 #include <wolfpkcs11/pkcs11.h>
 #include <wolfpkcs11/version.h>
+
+/* store requires AES */
+#ifdef NO_AES
+    #undef  WOLFPKCS11_NO_STORE
+    #define WOLFPKCS11_NO_STORE
+#endif
+
 
 #ifdef __cplusplus
 extern "C" {

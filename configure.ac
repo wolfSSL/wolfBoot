@@ -1,11 +1,11 @@
 # configure.ac
 #
-# Copyright (C) 2018 wolfSSL Inc.
+# Copyright (C) 2023 wolfSSL Inc.
 # All right reserved.
 #
 # This file is part of wolfPKCS11.
 #
-AC_COPYRIGHT([Copyright (C) 2014-2018 wolfSSL Inc.])
+AC_COPYRIGHT([Copyright (C) 2014-2023 wolfSSL Inc.])
 AC_PREREQ([2.63])
 AC_INIT([wolfpkcs11],[1.1.0],[https://github.com/wolfssl/wolfpkcs11/issues],[wolfpkcs11],[http://www.wolfssl.com])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -367,7 +367,7 @@ rm -f $OPTION_FILE
 echo "/* wolfpkcs11 options.h" > $OPTION_FILE
 echo " * generated from configure options" >> $OPTION_FILE
 echo " *" >> $OPTION_FILE
-echo " * Copyright (C) 2006-2021 wolfSSL Inc." >> $OPTION_FILE
+echo " * Copyright (C) 2006-2023 wolfSSL Inc." >> $OPTION_FILE
 echo " *" >> $OPTION_FILE
 echo " * * This file is part of wolfPKCS11." >> $OPTION_FILE
 echo " *" >> $OPTION_FILE
@@ -479,7 +479,7 @@ echo "   * AES:                        $ENABLED_AES"
 echo "   * AES-CBC:                    $ENABLED_AESCBC"
 echo "   * AES-GCM:                    $ENABLED_AESGCM"
 echo "   * MD5:                        $ENABLED_MD5"
-echo "   * SHA:                        $ENABLED_SHA"
+echo "   * SHA:                        $ENABLED_SHA1"
 echo "   * SHA-224:                    $ENABLED_SHA224"
 echo "   * SHA-256:                    $ENABLED_SHA256"
 echo "   * SHA-384:                    $ENABLED_SHA384"
