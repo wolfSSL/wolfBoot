@@ -80,21 +80,67 @@
 #define CPLD_SERIAL_LINES_CTL 0x07
 #define CPLD_SERIAL1_TXEN (1<<2)
 #define GPIO_COMM_4_PORT_ID 0x6a
-#define GPIO_PAD_CONF_OFF 0x700
-#define GPIO_C_8_OFF 0x8
-#define GPIO_C_9_OFF 0x9
-#define GPIO_C_10_OFF 0x10
-#define GPIO_C_11_OFF 0x11
 #define GPIO_MODE_NATIVE_1 0x01
+#define GPIO_MODE_GPIO (0x0)
 #define GPIO_RESET_PLTRST 0x02
-#define GPIO_MODE_MASK (0x7) << 10
+#define GPIO_DIR_INPUT (0x1)
+#define GPIO_DIR_OUTPUT (0x2)
+#define GPIO_INTERRUPT_DISABLE (0x0)
+#define GPIO_TERM_NONE (0x0)
 #define GPIO_MODE_SHIFT 10
-#define GPIO_RESET_MASK (0x3) << 30
+#define GPIO_MODE_MASK (0x7) << GPIO_MODE_SHIFT
 #define GPIO_RESET_SHIFT 30
+#define GPIO_RESET_MASK (0x3) << GPIO_RESET_SHIFT
+#define GPIO_DIR_SHIFT (0x8)
+#define GPIO_DIR_MASK (0x3) << GPIO_DIR_SHIFT
+#define GPIO_RXINV_SHIFT (23)
+#define GPIO_RXINV_MASK (0x1) << 23
+#define GPIO_INTERRUPT_SHIFT (17)
+#define GPIO_INTERRUPT_MASK (0xf) << GPIO_INTERRUPT_SHIFT
+#define GPIO_TERM_SHIFT (10)
+#define GPIO_TERM_MASK (0xf) << GPIO_TERM_SHIFT
+#define GPIO_RXEVCONF_SHIFT (25)
+#define GPIO_RXEVCONF_MASK (0x3) << GPIO_RXEVCONF_SHIFT
 #define PCR_INTERRUPT_PORT_ID (0xc4)
 #define GIC_OFFSET (0x31FC)
 #define GIC_SHUTDOWN_STATUS_BIT (1 << 0)
 
+
+#define GPIO_GPPC_B9_CFG_OFF (0x790)
+#define GPIO_GPPC_B10_CFG_OFF (0x7a0)
+#define GPIO_GPPC_C6_CFG_OFF (0x760)
+#define GPIO_GPPC_C7_CFG_OFF (0x770)
+#define GPIO_GPPC_C8_CFG_OFF (0x780)
+#define GPIO_GPPC_C9_CFG_OFF (0x790)
+#define GPIO_GPPC_C10_CFG_OFF (0x7a0)
+#define GPIO_GPPC_C11_CFG_OFF (0x7b0)
+#define GPIO_GPPC_C12_CFG_OFF (0x7c0)
+#define GPIO_GPPC_C13_CFG_OFF (0x7d0)
+#define GPIO_GPPC_C14_CFG_OFF (0x7e0)
+#define GPIO_GPPC_C15_CFG_OFF (0x7f0)
+#define GPIO_GPPC_C20_CFG_OFF (0x840)
+#define GPIO_GPPC_C21_CFG_OFF (0x850)
+#define GPIO_GPPC_C22_CFG_OFF (0x860)
+#define GPIO_GPPC_D0_CFG_OFF (0x900)
+#define GPIO_GPPC_D1_CFG_OFF (0x910)
+#define GPIO_GPPC_D2_CFG_OFF (0x920)
+#define GPIO_GPP_R0_CFG_OFF (0x700)
+#define GPIO_GPP_R1_CFG_OFF (0x710)
+#define GPIO_GPP_R2_CFG_OFF (0x720)
+#define GPIO_GPP_R3_CFG_OFF (0x730)
+#define GPIO_GPP_R4_CFG_OFF (0x740)
+#define GPIO_GPP_R5_CFG_OFF (0x750)
+#define GPIO_GPPC_A8_CFG_OFF (0xa20)
+#define GPIO_GPPC_E12_CFG_OFF (0xb30)
+#define GPIO_GPPC_E15_CFG_OFF (0xb60)
+#define GPIO_GPPC_E16_CFG_OFF (0xb70)
+#define GPIO_GPPC_F2_CFG_OFF (0xba0)
+#define GPIO_GPPC_F4_CFG_OFF (0xbc0)
+#define GPIO_GPPC_F5_CFG_OFF (0xbd0)
+#define GPIO_GPPC_F9_CFG_OFF (0x910)
+#define GPIO_GPPC_A9_CFG_OFF (0xa30)
+#define GPIO_GPPC_T2_CFG_OFF (0x8c0)
+#define GPIO_GPPC_T3_CFG_OFF (0x8d0)
 
 SI_PCH_DEVICE_INTERRUPT_CONFIG mPchHDevIntConfig[] = {
     {30, 0, SiPchIntA, 16},
@@ -502,12 +548,80 @@ static int tgl_setup_lpc_decode(uint32_t address, uint32_t length,
     return 0;
 }
 
-/* only support native mode */
-struct tgl_gpio_info {
+#define GPIO_OWN_MASK (0x3)
+struct tgl_gpio {
     uint8_t comm_port_id;
-    uint8_t gpio_pad_off;
-    uint8_t pad_mode:3;
-    uint8_t pad_reset:2;
+    uint32_t cfg_offset;
+};
+
+enum gpio_config_flags {
+    GPIO_SET_MODE = (1 << 0),
+    GPIO_SET_OWN = (1 << 1),
+    GPIO_SET_INTERRUPT = (1 << 2),
+    GPIO_SET_DIRECTION = (1 << 3),
+    GPIO_SET_RXINV = (1 << 4),
+    GPIO_SET_RESET = (1 << 5),
+    GPIO_SET_TERM = (1 << 6),
+    GPIO_SET_RXEVCONF = (1 << 7)
+};
+
+struct tgl_gpio_conf {
+    struct tgl_gpio gpio;
+    enum gpio_config_flags flags;
+    uint8_t gpio_mode;
+    uint8_t gpio_own;
+    uint8_t gpio_interrupt;
+    uint8_t gpio_dir;
+    uint8_t gpio_reset;
+    uint8_t gpio_term;
+    uint8_t gpio_rxevconf;
+    uint8_t gpio_rxinv;
+};
+
+#if defined (TARGET_kontron_vx3060_s2)
+static const struct tgl_gpio_conf gpio_table[] = {
+    {.gpio =
+         {
+             /* PAD C8 */
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C8_CFG_OFF,
+         },
+     .flags = (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             /* PAD C9 */
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C9_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+     {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C10_CFG_OFF,
+         },
+     .flags = (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C11_CFG_OFF,
+         },
+     .flags = (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_reset = GPIO_RESET_PLTRST},
 };
 
 /**
@@ -519,21 +633,46 @@ struct tgl_gpio_info {
  * GPIO information.
  * @return void
  */
-static void tgl_gpio_configure(struct tgl_gpio_info *gpio)
+static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
 {
-    uint16_t off;
-    uint32_t dw0;
+    uint32_t dw0, _dw0, dw1, _dw1;
+    struct tgl_gpio g;
 
-    off = gpio->gpio_pad_off * 16 + GPIO_PAD_CONF_OFF;
-    dw0 = pch_read32(gpio->comm_port_id, off);
+    g = gpio->gpio;
 
-    dw0 &= ~(GPIO_MODE_MASK);
-    dw0 |= gpio->pad_mode << GPIO_MODE_SHIFT;
+    dw0 = _dw0 = pch_read32(g.comm_port_id, g.cfg_offset);
+    dw1 = _dw1 = pch_read32(g.comm_port_id, g.cfg_offset + 4);
 
-    dw0 &= ~(GPIO_RESET_MASK);
-    dw0 |= gpio->pad_reset << GPIO_RESET_SHIFT;
-
-    pch_write32(gpio->comm_port_id, off, dw0);
+    if (gpio->flags & GPIO_SET_MODE) {
+        dw0 &= ~(GPIO_MODE_MASK);
+        dw0 |= gpio->gpio_mode << GPIO_MODE_SHIFT;
+    }
+    if (gpio->flags & GPIO_SET_RESET) {
+        dw0 &= ~(GPIO_RESET_MASK);
+        dw0 |= gpio->gpio_reset << GPIO_RESET_SHIFT;
+    }
+    if (gpio->flags & GPIO_SET_DIRECTION) {
+        dw0 &= ~(GPIO_DIR_MASK);
+        dw0 |= gpio->gpio_dir << GPIO_DIR_SHIFT;
+    }
+    if (gpio->flags & GPIO_SET_INTERRUPT) {
+        dw0 &= ~(GPIO_INTERRUPT_MASK);
+        dw0 |= gpio->gpio_interrupt << GPIO_INTERRUPT_SHIFT;
+    }
+    if (gpio->flags & GPIO_SET_TERM) {
+        dw1 &= ~(GPIO_TERM_MASK);
+        dw1 |= gpio->gpio_term << GPIO_TERM_SHIFT;
+    }
+    if (gpio->flags & GPIO_SET_RXEVCONF) {
+        dw0 &= ~(GPIO_RXEVCONF_MASK);
+        dw0 |= gpio->gpio_rxevconf << GPIO_RXEVCONF_SHIFT;
+    }
+    if (_dw1 != dw1) {
+        pch_write32(g.comm_port_id, g.cfg_offset + 4, dw1);
+    }
+    if (_dw0 != dw0) {
+        pch_write32(g.comm_port_id, g.cfg_offset, dw0);
+    }
 }
 
 #ifdef TARGET_kontron_vx3060_s2
@@ -641,14 +780,9 @@ int post_temp_ram_init_cb(void)
     disable_watchdog_tco();
 
 #ifdef TARGET_kontron_vx3060_s2
-    struct tgl_gpio_info uart_gpio =  {
-            .comm_port_id = GPIO_COMM_4_PORT_ID,
-            .pad_mode = GPIO_MODE_NATIVE_1,
-            .pad_reset = GPIO_RESET_PLTRST,
-    };
     uint8_t reg;
     int err;
-    int i;
+    unsigned int i;
 
     reg = pch_read32(PCR_INTERRUPT_PORT_ID, GIC_OFFSET);
     if (reg & GIC_SHUTDOWN_STATUS_BIT) {
@@ -662,11 +796,11 @@ int post_temp_ram_init_cb(void)
     if (err != 0)
         return err;
 
-    /* setup uart gpios */
-    for (i = 0; i < 4; i++) {
-        uart_gpio.gpio_pad_off = GPIO_C_8_OFF + i;
-        tgl_gpio_configure(&uart_gpio);
+    /* setup GPIOs */
+    for (i = 0; i < sizeof(gpio_table)/sizeof(gpio_table[0]); i++) {
+        tgl_gpio_configure(&gpio_table[i]);
     }
+
 
     kontron_ask_for_recovery();
 #else
