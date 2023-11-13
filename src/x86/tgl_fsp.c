@@ -80,13 +80,19 @@
 #define CPLD_SERIAL_LINES_CTL 0x07
 #define CPLD_SERIAL1_TXEN (1<<2)
 #define GPIO_COMM_4_PORT_ID 0x6a
+#define GPIO_COMM_0_PORT_ID (0x6e)
+#define GPIO_COMM_1_PORT_ID (0x6d)
+#define GPIO_COMM_5_PORT_ID (0x69)
 #define GPIO_MODE_NATIVE_1 0x01
 #define GPIO_MODE_GPIO (0x0)
 #define GPIO_RESET_PLTRST 0x02
+#define GPIO_RESET_HOSTDEEPRESET (0x01)
 #define GPIO_DIR_INPUT (0x1)
 #define GPIO_DIR_OUTPUT (0x2)
 #define GPIO_INTERRUPT_DISABLE (0x0)
+#define GPIO_INTERRUPT_SCI (1 << 2)
 #define GPIO_TERM_NONE (0x0)
+#define GPIO_RXEVCONF_LEVEL (0)
 #define GPIO_MODE_SHIFT 10
 #define GPIO_MODE_MASK (0x7) << GPIO_MODE_SHIFT
 #define GPIO_RESET_SHIFT 30
@@ -580,13 +586,15 @@ struct tgl_gpio_conf {
 
 #if defined (TARGET_kontron_vx3060_s2)
 static const struct tgl_gpio_conf gpio_table[] = {
+    /* UART 0 */
     {.gpio =
          {
              /* PAD C8 */
              .comm_port_id = GPIO_COMM_4_PORT_ID,
              .cfg_offset = GPIO_GPPC_C8_CFG_OFF,
          },
-     .flags = (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
      .gpio_mode = GPIO_MODE_NATIVE_1,
      .gpio_dir = GPIO_DIR_INPUT,
      .gpio_term = GPIO_TERM_NONE,
@@ -597,17 +605,19 @@ static const struct tgl_gpio_conf gpio_table[] = {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
              .cfg_offset = GPIO_GPPC_C9_CFG_OFF,
          },
-     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET | GPIO_SET_TERM),
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET | GPIO_SET_TERM),
      .gpio_mode = GPIO_MODE_NATIVE_1,
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_reset = GPIO_RESET_PLTRST},
-     {.gpio =
+    {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
              .cfg_offset = GPIO_GPPC_C10_CFG_OFF,
          },
-     .flags = (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
      .gpio_mode = GPIO_MODE_NATIVE_1,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_dir = GPIO_DIR_OUTPUT,
@@ -617,13 +627,391 @@ static const struct tgl_gpio_conf gpio_table[] = {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
              .cfg_offset = GPIO_GPPC_C11_CFG_OFF,
          },
-     .flags = (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
      .gpio_mode = GPIO_MODE_NATIVE_1,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_dir = GPIO_DIR_INPUT,
      .gpio_reset = GPIO_RESET_PLTRST},
-};
+    /* UART - 1*/
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C12_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C13_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C14_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C15_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* UART - 2*/
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C20_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_DIRECTION | GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C21_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* set to GPIO mode as native functino aren't used */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_A8_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_E12_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_E15_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_E16_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_F2_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
 
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_F9_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* test points */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_A9_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_F4_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_F5_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_T2_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_T3_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* TPM */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C22_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RXINV | GPIO_SET_RESET |
+          GPIO_SET_RXEVCONF | GPIO_SET_TERM | GPIO_SET_INTERRUPT),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_rxinv = 1,
+     .gpio_rxevconf = GPIO_RXEVCONF_LEVEL,
+     .gpio_interrupt = GPIO_INTERRUPT_SCI,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET,
+     .gpio_term = GPIO_TERM_NONE},
+    /* PCH I2C5 */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B10_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_INTERRUPT | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B9_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    /* SMLINK1 to PD */
+    {/* SM1 CLK */
+     .gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C6_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             /* SM1 DATA */
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C7_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    /* watchdog */
+    {.gpio =
+         {
+             /* PLD_WDT_IRQ0 */
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_D1_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             /* PLD_WDT_IRQ0 */
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_D1_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             /* PLD_WDT_IRQ1 */
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_D0_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET,
+     .gpio_term = GPIO_TERM_NONE},
+    /* wake from i225/E810/i210/M2_TOP/M2_BOT/XMC */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_D2_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET,
+     .gpio_term = GPIO_TERM_NONE},
+    /* Audio, disabled */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_5_PORT_ID,
+             .cfg_offset = GPIO_GPP_R0_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_5_PORT_ID,
+             .cfg_offset = GPIO_GPP_R1_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_5_PORT_ID,
+             .cfg_offset = GPIO_GPP_R2_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_5_PORT_ID,
+             .cfg_offset = GPIO_GPP_R3_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_5_PORT_ID,
+             .cfg_offset = GPIO_GPP_R4_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_5_PORT_ID,
+             .cfg_offset = GPIO_GPP_R5_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET | GPIO_SET_TERM),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST,
+     .gpio_term = GPIO_TERM_NONE},
+
+};
+#endif /* TARGET_kontron_vx3060_s2 */
 /**
  * @brief Configure GPIO settings for a specific device.
  * @details This function configures GPIO settings for a specific device on
