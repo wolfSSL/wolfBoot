@@ -236,7 +236,7 @@ static uint16_t _find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
     return 0;
 }
 
-uint32_t wolfBoot_get_blob_type(uint8_t *addr)
+uint16_t wolfBoot_get_blob_type(uint8_t *addr)
 {
     return HDR_IMG_TYPE_APP;
 }

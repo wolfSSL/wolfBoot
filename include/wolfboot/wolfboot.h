@@ -271,7 +271,7 @@ void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);
 uint32_t wolfBoot_image_size(uint8_t *image);
 uint32_t wolfBoot_get_blob_version(uint8_t *blob);
-uint32_t wolfBoot_get_blob_type(uint8_t *blob);
+uint16_t wolfBoot_get_blob_type(uint8_t *blob);
 uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob);
 
 /* Get partition ID from manifest header */

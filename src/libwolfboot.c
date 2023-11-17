@@ -1075,9 +1075,9 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
  *
  * @return The type of the blob, or 0 if the blob is invalid.
  */
-uint32_t wolfBoot_get_blob_type(uint8_t *blob)
+uint16_t wolfBoot_get_blob_type(uint8_t *blob)
 {
-    uint32_t *volatile type_field = NULL;
+    uint16_t *volatile type_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
