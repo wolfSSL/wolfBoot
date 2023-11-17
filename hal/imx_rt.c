@@ -568,14 +568,23 @@ const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
     0xFFFFFFFF                  /* empty - extra data word */
 };
 
-const uint8_t dcd_data[1] = {0};
+
 extern void isr_reset(void);
+extern const uint32_t __dcd_data_start;
+const uint32_t dcd_data_addr = (uint32_t) &__dcd_data_start;
+
+#ifndef NXP_CUSTOM_DCD
+/* If a DCD section is populated, it should be mapped to the .dcd_data section.
+ * By default, provide an empty section.
+ */
+const uint8_t __attribute__((section(".dcd_data"))) dcd_data[sizeof(uint32_t)] = { 0 };
+#endif
 
 const ivt __attribute__((section(".image_vt"))) image_vector_table = {
     IVT_HEADER,                         /* IVT Header */
     (uint32_t)isr_reset,                /* Image Entry Function */
     IVT_RSVD,                           /* Reserved = 0 */
-    (uint32_t)dcd_data,                 /* Address where DCD information is stored */
+    (uint32_t)dcd_data_addr,            /* Address where DCD information is stored */
     (uint32_t)&boot_data,               /* Address where BOOT Data Structure is stored */
     (uint32_t)&image_vector_table,      /* Pointer to IVT Self (absolute address */
     (uint32_t)CSF_ADDRESS,              /* Address where CSF file is stored */

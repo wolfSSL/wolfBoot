@@ -15,6 +15,7 @@ SECTIONS
         . = ORIGIN(FLASH) + 0x1000;
         KEEP(*(.image_vt))
         KEEP(*(.boot_data))
+        __dcd_data_start = .;
         KEEP(*(.dcd_data))
         . = ORIGIN(FLASH) + 0x2000;
         KEEP(*(.isr_vector))

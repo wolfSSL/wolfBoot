@@ -1164,6 +1164,20 @@ You can also get the SDK and CMSIS bundles using these repositories:
 * https://github.com/nxp-mcuxpresso/CMSIS_5
 Use MCUXSDK=1 with this option, since the pack paths are different.
 
+### Custom Device Configuration Data (DCD)
+
+On iMX-RT10xx it is possible to load a custom DCD section from an external
+source file. A customized DCD section should be declared within the `.dcd_data`
+section, e.g.:
+
+
+`const uint8_t __attribute__((section(".dcd_data"))) dcd_data[] = { /* ... */ };`
+
+
+If an external `.dcd_data` section is provided, the option `NXP_CUSTOM_DCD=1` must
+be added to the configuration.
+
+
 ### Testing Update
 
 First make the update partition, pre-triggered for update
