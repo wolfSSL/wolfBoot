@@ -374,7 +374,6 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
     memcpy(silicon_init_parameter, fsp_s_base + fsp_info->CfgRegionOffset,
             FSP_S_PARAM_SIZE);
     status = fsp_machine_update_s_parameters(silicon_init_parameter);
-    fsp_info = (struct fsp_info_header *)(fsp_s_base + FSP_INFO_HEADER_OFFSET);
     SiliconInit = (silicon_init_cb)(fsp_s_base + fsp_info->FspSiliconInitEntryOffset);
 
     wolfBoot_printf("call silicon..." ENDLINE);
@@ -523,6 +522,8 @@ static void memory_ready_entry(void *ptr)
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
     /* Call FSP_S initialization */
+    fsp_info =
+        (struct fsp_info_header *)(fsp_s_base + FSP_INFO_HEADER_OFFSET);
     if (fsp_silicon_init(fsp_info, fsp_s_base) != EFI_SUCCESS)
         panic();
     /* Get CPUID */

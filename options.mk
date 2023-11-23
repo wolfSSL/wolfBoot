@@ -733,7 +733,6 @@ ifeq ($(FSP), 1)
     PCI_USE_ECAM \
     PCH_PCR_BASE \
     PCI_ECAM_BASE \
-    FSP_S_UPD_DATA_BASE \
     WOLFBOOT_LOAD_BASE \
     FSP_S_LOAD_BASE
 

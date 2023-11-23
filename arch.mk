@@ -707,7 +707,6 @@ ifeq ("${FSP}", "1")
     CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART
     ifeq ($(FSP_TGL), 1)
       OBJS+=src/x86/tgl_fsp.o
-      OBJS+=src/fsp_tgl_s_upd.o
       OBJS+=src/ucode0.o
       CFLAGS += -DUCODE0_ADDRESS=$(UCODE0_BASE)
     endif

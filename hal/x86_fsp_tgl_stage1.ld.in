@@ -1,6 +1,5 @@
 FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
 FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
-FSP_S_UPD_DATA_BASE = @FSP_S_UPD_DATA_BASE@;
 UCODE0_BASE = @UCODE0_BASE@;
 FIT_TABLE = 0xffe00000;
 FSP_S_ORIGIN = @FSP_S_BASE@;
@@ -40,11 +39,6 @@ SECTIONS
         _start_policy = .;
 	    . += MAX_POLICY_SIZE;
         _end_policy = .;
-    } > FLASH
-
-    .fsps_upd FSP_S_UPD_DATA_BASE :
-    {
-    	KEEP(./fsp_tgl_s_upd.o(.fsps_upd))
     } > FLASH
 
     .ucode_update0 UCODE0_BASE :

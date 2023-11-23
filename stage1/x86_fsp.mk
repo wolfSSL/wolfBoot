@@ -11,8 +11,7 @@ $(LSCRIPT_IN): $(WOLFBOOT_ROOT)/hal/$(LSCRIPT_IN).in FORCE
 		sed -e "s/@FSP_S_BASE@/$(FSP_S_BASE)/g" | \
 		sed -e "s/@WOLFBOOT_LOAD_BASE@/$(WOLFBOOT_LOAD_BASE)/g" | \
 		sed -e "s/@UCODE0_BASE@/$(UCODE0_BASE)/g" | \
-		sed -e "s/@UCODE1_BASE@/$(UCODE1_BASE)/g" | \
-		sed -e "s/@FSP_S_UPD_DATA_BASE@/$(FSP_S_UPD_DATA_BASE)/g" \
+		sed -e "s/@UCODE1_BASE@/$(UCODE1_BASE)/g" \
 		> $@
 
 ./boot_x86_fsp_start.o: boot_x86_fsp_start.S
@@ -44,10 +43,6 @@ sig_wolfboot_raw.o: wolfboot_raw.bin $(SIGN_KEY)
 	$(SIGN_TOOL) $(SIGN_OPTIONS) wolfboot_raw.bin $(SIGN_KEY) 1
 	@dd if=wolfboot_raw_v1_signed.bin of=wolfboot_raw_signature.bin bs=$(IMAGE_HEADER_SIZE) count=1
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_wolfboot_raw wolfboot_raw_signature.bin sig_wolfboot_raw.o
-
-
-fsp_tgl_s_upd.o: ../$(FSP_S_UPD_DATA_BIN)
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsps_upd $^ $@
 
 ucode0.o: ../$(UCODE0_BIN)
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.ucode0 $^ $@
