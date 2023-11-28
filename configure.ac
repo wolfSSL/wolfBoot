@@ -324,6 +324,20 @@ if test "$enable_shared" = "no"; then
     AM_CFLAGS="$AM_CFLAGS -DHAVE_PKCS11_STATIC"
 fi
 
+
+AC_ARG_ENABLE([wolftpm],
+    [AS_HELP_STRING([--enable-wolftpm],[Enable wolfTPM keystore support (default: disabled)])],
+    [ ENABLED_TPM=$enableval ],
+    [ ENABLED_TPM=no ]
+    )
+if test "$ENABLED_TPM" = "yes"
+then
+    LIBS="$LIBS -lwolftpm"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPKCS11_TPM"
+fi
+
+
+
 AM_CONDITIONAL([BUILD_STATIC],[test "x$enable_shared" = "xno"])
 
 

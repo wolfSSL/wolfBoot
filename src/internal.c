@@ -48,6 +48,17 @@
         "--enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"`
 #endif
 
+#ifdef WOLFPKCS11_TPM
+    #include <wolftpm/tpm2_wrap.h>
+
+    #ifndef WOLFPKCS11_TPM_CUST_IO
+        #include <hal/tpm_io.h>
+        #ifndef TPM2_IOCB_CTX
+        #define TPM2_IOCB_CTX NULL
+        #endif
+    #endif
+#endif
+
 /* Size of hash calculated from PIN. */
 #define PIN_HASH_SZ                    32
 /* Size of seed used when calculating hash from PIN. */
@@ -102,12 +113,12 @@
 /* Disable locking. */
 typedef int WP11_Lock;
 
-#define WP11_Lock_Init(l)              0
+#define WP11_Lock_Init(l)              ({ 0; })
 #define WP11_Lock_Free(l)
-#define WP11_Lock_LockRW(l)            0
-#define WP11_Lock_UnlockRW(l)          0
-#define WP11_Lock_LockRO(l)            0
-#define WP11_Lock_UnlockRO(l)          0
+#define WP11_Lock_LockRW(l)            ({ 0; })
+#define WP11_Lock_UnlockRW(l)          ({ 0; })
+#define WP11_Lock_LockRO(l)            ({ 0; })
+#define WP11_Lock_UnlockRO(l)          ({ 0; })
 
 #else
 typedef struct WP11_Lock {
@@ -145,6 +156,9 @@ struct WP11_Object {
     #endif
         WP11_Data symmKey;             /* Symmetric key object                */
     } data;
+#ifdef WOLFPKCS11_TPM
+    WOLFTPM2_KEYBLOB tpmKey;
+#endif
     CK_KEY_TYPE type;                  /* Key type of this object             */
     word32 size;                       /* Size of the key in bits or bytes    */
 #ifndef WOLFPKCS11_NO_STORE
@@ -272,6 +286,7 @@ struct WP11_Session {
 #endif
     } params;
 
+    int devId;
     WP11_Session* next;                /* Next session for slot               */
 };
 
@@ -307,6 +322,14 @@ struct WP11_Slot {
     WP11_Token token;                  /* Token information for slot          */
     WP11_Session* session;             /* Linked list of sessions             */
     WP11_Lock lock;                    /* Lock for access to slot info        */
+
+    int devId;
+#ifdef WOLFPKCS11_TPM
+    WOLFTPM2_DEV tpmDev;
+    WOLFTPM2_KEY tpmSrk;
+    WOLFTPM2_SESSION tpmSession;
+    TpmCryptoDevCtx  tpmCtx;
+#endif
 };
 
 
@@ -464,6 +487,7 @@ static int Rng_New(WC_RNG* baseRng, WP11_Lock* lock, WC_RNG* rng)
     WP11_Lock_LockRW(lock);
     ret = wc_RNG_GenerateBlock(baseRng, seed, sizeof(seed));
     WP11_Lock_UnlockRW(lock);
+    (void)lock;
 
     if (ret == 0)
         ret = wc_InitRngNonce_ex(rng, seed, sizeof(seed), NULL, INVALID_DEVID);
@@ -501,6 +525,7 @@ static int wp11_Session_New(WP11_Slot* slot, CK_OBJECT_HANDLE handle,
         sess->slotId = slot->id;
         sess->slot = slot;
         sess->handle = handle;
+        sess->devId = slot->devId;
         *session = sess;
     }
 
@@ -1662,7 +1687,7 @@ static int wp11_Object_Decode_EccKey(WP11_Object* object)
                                     sizeof(object->iv));
         }
         if (ret == 0) {
-            ret = wc_ecc_init(&object->data.ecKey);
+            ret = wc_ecc_init_ex(&object->data.ecKey, NULL, object->slot->devId);
         }
         if (ret == 0) {
             /* Decode ECC private key. */
@@ -2967,6 +2992,73 @@ static void wp11_Slot_FreeSession(WP11_Slot* slot, WP11_Session* session)
     }
 }
 
+
+#ifdef WOLFPKCS11_TPM
+static int wp11_TpmInit(WP11_Slot* slot)
+{
+    int ret;
+    WOLFTPM2_CAPS caps;
+    TPM_ALG_ID alg;
+
+    ret = wolfTPM2_Init(&slot->tpmDev, TPM2_IoCb, TPM2_IOCB_CTX);
+    if (ret == 0) {
+        /* Get device capabilities + options */
+        ret = wolfTPM2_GetCapabilities(&slot->tpmDev, &caps);
+    }
+    if (ret == 0) {
+        printf("Mfg %s (%d), Vendor %s, Fw %u.%u (0x%x), "
+            "FIPS 140-2 %d, CC-EAL4 %d\n",
+            caps.mfgStr, caps.mfg, caps.vendorStr, caps.fwVerMajor,
+            caps.fwVerMinor, caps.fwVerVendor, caps.fips140_2, caps.cc_eal4);
+    }
+    if (ret == 0) {
+        ret = wolfTPM2_SetCryptoDevCb(&slot->tpmDev, wolfTPM2_CryptoDevCb,
+            &slot->tpmCtx, &slot->devId);
+    }
+    if (ret == 0) {
+        /* Create a primary storage key - no auth needed for param enc to work */
+        /* Prefer ECC as its faster */
+    #ifdef HAVE_ECC
+        alg = TPM_ALG_ECC;
+    #elif !defined(NO_RSA)
+        alg = TPM_ALG_RSA;
+    #else
+        alg = TPM_ALG_NULL;
+    #endif
+        ret = wolfTPM2_CreateSRK(&slot->tpmDev, &slot->tpmSrk, alg, NULL, 0);
+        if (ret == 0) {
+            /* set values needed for crypto callback */
+            slot->tpmCtx.dev = &slot->tpmDev;
+            slot->tpmCtx.storageKey = &slot->tpmSrk;
+
+            /* Setup a TPM session that can be used for parameter encryption */
+            ret = wolfTPM2_StartSession(&slot->tpmDev, &slot->tpmSession,
+                &slot->tpmSrk, NULL, TPM_SE_HMAC, TPM_ALG_CFB);
+        }
+        if (ret != 0) {
+            printf("TPM Create SRK or Session error %d (%s)!\n",
+                ret, wolfTPM2_GetRCString(ret));
+        }
+    }
+
+    if (ret != 0) {
+        printf("TPM Init failed! %d (%s)\n", ret, wolfTPM2_GetRCString(ret));
+    }
+    return ret;
+}
+
+static void wp11_TpmFinal(WP11_Slot* slot)
+{
+#ifdef WOLFPKCS11_TPM
+    wolfTPM2_UnloadHandle(&slot->tpmDev, &slot->tpmSession.handle);
+    wolfTPM2_UnloadHandle(&slot->tpmDev, &slot->tpmSrk.handle);
+#endif
+
+    wolfTPM2_Cleanup(&slot->tpmDev);
+}
+#endif /* WOLFPKCS11_TPM */
+
+
 /**
  * Free dynamic memory associated with the slot.
  *
@@ -2974,9 +3066,13 @@ static void wp11_Slot_FreeSession(WP11_Slot* slot, WP11_Session* session)
  */
 static void wp11_Slot_Final(WP11_Slot* slot)
 {
+    if (slot == NULL) return;
     while (slot->session != NULL)
         wp11_Slot_FreeSession(slot, slot->session);
     wp11_Token_Final(&slot->token);
+#ifdef WOLFPKCS11_TPM
+    wp11_TpmFinal(slot);
+#endif
     WP11_Lock_Free(&slot->lock);
 }
 
@@ -3001,6 +3097,11 @@ static int wp11_Slot_Init(WP11_Slot* slot, int id)
 
     ret = WP11_Lock_Init(&slot->lock);
     if (ret == 0) {
+    #ifdef WOLFPKCS11_TPM
+        if (ret == 0) {
+            ret = wp11_TpmInit(slot);
+        }
+    #endif
         /* Create the minimum number of unused sessions. */
         for (i = 0; ret == 0 && i < WP11_SESSION_CNT_MIN; i++)
             ret = wp11_Slot_AddSession(slot, &curr);
@@ -4544,6 +4645,10 @@ void WP11_Session_FindFinal(WP11_Session* session)
  */
 void WP11_Object_Free(WP11_Object* object)
 {
+#ifdef WOLFPKCS11_TPM
+    wolfTPM2_UnloadHandle(&object->slot->tpmDev, &object->tpmKey.handle);
+#endif
+
     /* Release dynamic memory. */
     if (object->label != NULL)
         XFREE(object->label, NULL, DYNAMIC_TYPE_TMP_BUFFER);
@@ -4650,7 +4755,7 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
         WP11_Lock_LockRW(object->lock);
 
     key = &object->data.rsaKey;
-    ret = wc_InitRsaKey_ex(key, NULL, INVALID_DEVID);
+    ret = wc_InitRsaKey_ex(key, NULL, object->slot->devId);
     if (ret == 0) {
         ret = SetMPI(&key->n, data[0], (int)len[0]);
         if (ret == 0)
@@ -4681,6 +4786,15 @@ int WP11_Object_SetRsaKey(WP11_Object* object, unsigned char** data,
                 key->type = RSA_PRIVATE;
             }
         }
+    #ifdef WOLFPKCS11_TPM
+        if (ret == 0 && key->type == RSA_PRIVATE) {
+            /* load private key - populates handle */
+            object->slot->tpmCtx.rsaKey = (WOLFTPM2_KEY*)&object->tpmKey;
+            ret = wolfTPM2_RsaKey_WolfToTpm_ex(&object->slot->tpmDev,
+                &object->slot->tpmSrk, &object->data.rsaKey,
+                (WOLFTPM2_KEY*)&object->tpmKey);
+        }
+    #endif
 
         if (ret != 0)
             wc_FreeRsaKey(key);
@@ -4828,7 +4942,7 @@ int WP11_Object_SetEcKey(WP11_Object* object, unsigned char** data,
         WP11_Lock_LockRW(object->lock);
 
     key = &object->data.ecKey;
-    ret = wc_ecc_init_ex(key, NULL, INVALID_DEVID);
+    ret = wc_ecc_init_ex(key, NULL, object->slot->devId);
     if (ret == 0) {
         if (ret == 0 && data[0] != NULL)
             ret = EcSetParams(key, data[0], (int)len[0]);
@@ -4843,6 +4957,16 @@ int WP11_Object_SetEcKey(WP11_Object* object, unsigned char** data,
                 key->type = ECC_PUBLICKEY;
             ret = EcSetPoint(key, data[2], (int)len[2]);
         }
+    #ifdef WOLFPKCS11_TPM
+        if (ret == 0 &&
+            (key->type == ECC_PRIVATEKEY_ONLY || key->type == ECC_PRIVATEKEY)) {
+            /* load private key */
+            object->slot->tpmCtx.eccKey = (WOLFTPM2_KEY*)&object->tpmKey;
+            ret = wolfTPM2_EccKey_WolfToTpm_ex(&object->slot->tpmDev,
+                &object->slot->tpmSrk, &object->data.ecKey,
+                (WOLFTPM2_KEY*)&object->tpmKey);
+        }
+    #endif
 
         if (ret != 0)
             wc_ecc_free(key);
@@ -5960,7 +6084,7 @@ int WP11_Rsa_ParsePrivKey(byte* data, word32 dataLen, WP11_Object* privKey)
     int ret = 0;
     word32 idx = 0;
 
-    ret = wc_InitRsaKey(&privKey->data.rsaKey, NULL);
+    ret = wc_InitRsaKey_ex(&privKey->data.rsaKey, NULL, privKey->slot->devId);
     if (ret == 0) {
         ret = wc_RsaPrivateKeyDecode(data, &idx, &privKey->data.rsaKey, dataLen);
     }
@@ -5983,7 +6107,7 @@ int WP11_Rsa_PrivKey2PubKey(WP11_Object* privKey, WP11_Object* pubKey,
     int ret;
     word32 idx = 0;
 
-    ret = wc_InitRsaKey(&pubKey->data.rsaKey, NULL);
+    ret = wc_InitRsaKey_ex(&pubKey->data.rsaKey, NULL, pubKey->slot->devId);
     if (ret == 0) {
         ret = wc_RsaKeyToPublicDer(&privKey->data.rsaKey, workbuf, worksz);
         if (ret >= 0) {
@@ -6041,8 +6165,19 @@ int WP11_Rsa_GenerateKeyPair(WP11_Object* pub, WP11_Object* priv,
     if (ret == 0) {
         ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
         if (ret == 0) {
-            /* Generate into the private key. */
-            ret = wc_MakeRsaKey(&priv->data.rsaKey, pub->size, e, &rng);
+            ret = wc_InitRsaKey_ex(&priv->data.rsaKey, NULL, priv->slot->devId);
+            if (ret == 0) {
+            #ifdef WOLFPKCS11_TPM
+                priv->slot->tpmCtx.rsaKeyGen = &priv->tpmKey;
+                priv->slot->tpmCtx.rsaKey = (WOLFTPM2_KEY*)&priv->tpmKey;
+            #endif
+
+                /* Generate into the private key. */
+                ret = wc_MakeRsaKey(&priv->data.rsaKey, pub->size, e, &rng);
+                if (ret != 0) {
+                    wc_FreeRsaKey(&priv->data.rsaKey);
+                }
+            }
             Rng_Free(&rng);
         }
     }
@@ -6635,21 +6770,38 @@ int WP11_Ec_GenerateKeyPair(WP11_Object* pub, WP11_Object* priv,
     int ret = 0;
     WC_RNG rng;
 
-    /* Copy parameters from public key into private key. */
-    priv->data.ecKey.dp = pub->data.ecKey.dp;
+    ret = wc_ecc_init_ex(&priv->data.ecKey, NULL, priv->slot->devId);
+    if (ret == 0) {
+    #ifdef WOLFPKCS11_TPM
+        CK_BBOOL isSign = CK_FALSE;
+        CK_ULONG len = sizeof(isSign);
+        ret = WP11_Object_GetAttr(priv, CKA_SIGN, &isSign, &len);
+        if (isSign)
+            priv->slot->tpmCtx.eccKey = (WOLFTPM2_KEY*)&priv->tpmKey;
+        else
+            priv->slot->tpmCtx.ecdhKey = (WOLFTPM2_KEY*)&priv->tpmKey;
+    #endif
 
-    /* Generate into the private key. */
-    ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
-    if (ret == 0) {
-        ret = wc_ecc_make_key(&rng, priv->data.ecKey.dp->size,
-                                                             &priv->data.ecKey);
-        Rng_Free(&rng);
-    }
-    if (ret == 0) {
-        /* Copy the public part into public key. */
-        ret = wc_ecc_copy_point(&priv->data.ecKey.pubkey,
+        /* Copy parameters from public key into private key. */
+        priv->data.ecKey.dp = pub->data.ecKey.dp;
+
+        /* Generate into the private key. */
+        ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
+        if (ret == 0) {
+            ret = wc_ecc_make_key_ex(&rng, priv->data.ecKey.dp->size,
+                                    &priv->data.ecKey, priv->data.ecKey.dp->id);
+            Rng_Free(&rng);
+        }
+        if (ret == 0) {
+            /* Copy the public part into public key. */
+            ret = wc_ecc_copy_point(&priv->data.ecKey.pubkey,
                                                        &pub->data.ecKey.pubkey);
+        }
+        if (ret != 0) {
+            wc_ecc_free(&priv->data.ecKey);
+        }
     }
+
     if (ret == 0) {
         priv->data.ecKey.type = ECC_PRIVATEKEY;
         pub->data.ecKey.type = ECC_PUBLICKEY;

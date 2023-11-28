@@ -28,9 +28,12 @@
 #endif
 
 #include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/misc.h>
-
 #include <wolfpkcs11/options.h>
+
+#include <stdio.h>
+
+#ifdef _POSIX_THREADS
+#include <wolfssl/wolfcrypt/misc.h>
 #include <wolfpkcs11/pkcs11.h>
 
 #define TEST_MULTITHREADED
@@ -5686,7 +5689,7 @@ static CK_RV test_hmac_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
         mech->pParameter = data;
         ret = funcList->C_SignInit(session, mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
-                                               "HMAC Sign Init bad parametere");
+                                               "HMAC Sign Init bad parameter");
         mech->pParameter = NULL;
     }
     if (ret == CKR_OK) {
@@ -5707,7 +5710,7 @@ static CK_RV test_hmac_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
         mech->pParameter = data;
         ret = funcList->C_VerifyInit(session, mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
-                                             "HMAC Verify Init bad parametere");
+                                             "HMAC Verify Init bad parameter");
         mech->pParameter = NULL;
     }
     if (ret == CKR_OK) {
@@ -6596,3 +6599,14 @@ int main(int argc, char* argv[])
     return ret;
 }
 
+#else
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    fprintf(stderr, "%s: multi-threaded example not compiled in!\n", argv[0]);
+    return 0;
+}
+
+#endif /* _POSIX_THREADS */

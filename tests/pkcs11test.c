@@ -3824,6 +3824,7 @@ static CK_RV test_rsa_fixed_keys_store_token(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
     CK_RV ret;
+    CK_SESSION_HANDLE sessionRO = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
     unsigned char* privId = (unsigned char *)"123rsafixedpriv";
@@ -3835,26 +3836,21 @@ static CK_RV test_rsa_fixed_keys_store_token(void* args)
     if (ret == CKR_OK)
         ret = get_rsa_pub_key(session, pubId, pubIdLen, &pub);
 
-    return ret;
-}
-
-static CK_RV test_rsa_token_keys_raw(void* args)
-{
-    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
-    CK_RV ret;
-    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
-    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
-    unsigned char* privId = (unsigned char *)"123rsafixedpriv";
-    int privIdLen = (int)strlen((char*)privId);
-    unsigned char* pubId = (unsigned char *)"123rsafixedpub";
-    int pubIdLen = (int)strlen((char*)pubId);
-
-    ret = find_rsa_priv_key(session, &priv, privId, privIdLen);
+    if (ret == CKR_OK) {
+        ret = funcList->C_OpenSession(slot, CKF_SERIAL_SESSION, NULL, NULL,
+                                                                    &sessionRO);
+        CHECK_CKR(ret, "Open Session read only");
+    }
+    if (ret == CKR_OK)
+        ret = find_rsa_priv_key(session, &priv, privId, privIdLen);
     if (ret == CKR_OK)
         ret = find_rsa_pub_key(session, &pub, pubId, pubIdLen);
     if (ret == CKR_OK)
         ret = rsa_raw_test(session, priv, pub);
 
+    funcList->C_CloseSession(sessionRO);
+    funcList->C_DestroyObject(session, pub);
+    funcList->C_DestroyObject(session, priv);
     return ret;
 }
 
@@ -7120,7 +7116,7 @@ static CK_RV test_hmac_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
         mech->pParameter = data;
         ret = funcList->C_SignInit(session, mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
-                                               "HMAC Sign Init bad parametere");
+                                               "HMAC Sign Init bad parameter");
         mech->pParameter = NULL;
     }
     if (ret == CKR_OK) {
@@ -7141,7 +7137,7 @@ static CK_RV test_hmac_fail(CK_SESSION_HANDLE session, CK_MECHANISM* mech,
         mech->pParameter = data;
         ret = funcList->C_VerifyInit(session, mech, key);
         CHECK_CKR_FAIL(ret, CKR_MECHANISM_PARAM_INVALID,
-                                             "HMAC Verify Init bad parametere");
+                                             "HMAC Verify Init bad parameter");
         mech->pParameter = NULL;
     }
     if (ret == CKR_OK) {
@@ -7701,7 +7697,6 @@ static TEST_FUNC testFunc[] = {
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_pss),
 #endif
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_store_token),
-    PKCS11TEST_FUNC_SESS_DECL(test_rsa_token_keys_raw),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_x_509_fail),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_pkcs_encdec_fail),
 #ifndef WC_NO_RSA_OAEP

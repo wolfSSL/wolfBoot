@@ -13,7 +13,7 @@ Build wolfSSL:
 git clone https://github.com/wolfSSL/wolfssl.git
 cd wolfssl
 ./autogen.sh
-./configure --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"
+./configure --enable-aescfb --enable-cryptocb --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"
 make
 make check
 sudo make install
@@ -35,6 +35,18 @@ make check
 
 ### Build options and defines
 
+#### TPM support with wolfTPM
+
+Enables using a TPM for cryptography and keystore.
+Tested using `./configure --enable-singlethreaded --enable-wolftpm --disable-dh CFLAGS="-DWOLFPKCS11_TPM_STORE" && make`.
+
+Note: The TPM does not support DH, so only RSA and ECC are supported.
+
+##### Define WOLFPKCS11_TPM_STORE
+
+Use `WOLFPKCS11_TPM_STORE` storing objects in TPM NV.
+
+
 #### Define WOLFPKCS11_NO_STORE
 
 Disables storage of tokens.
@@ -47,6 +59,7 @@ See wolfpkcs11/store.h for prototypes of functions to implement.
 #### Define WOLFPKCS11_KEYPAIR_GEN_COMMON_LABEL
 
 Sets the private key's label against the public key when generating key pairs.
+
 
 ## Environment variables
 

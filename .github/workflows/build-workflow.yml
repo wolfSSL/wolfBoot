@@ -7,6 +7,10 @@ on:
         config:
           required: false
           type: string
+        check:
+          required: false
+          type: string
+          default: 'make check'
 
 jobs:
   build:
@@ -30,13 +34,45 @@ jobs:
     - name: wolfssl configure
       working-directory: ./wolfssl
       run: |
-        ./configure --enable-cryptonly --enable-aescfb --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt \
+        ./configure --enable-cryptocb --enable-aescfb --enable-rsapss --enable-keygen --enable-pwdbased --enable-scrypt \
             C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"
     - name: wolfssl make install
       working-directory: ./wolfssl
       run: make
     - name: wolfssl make install
       working-directory: ./wolfssl
+      run: |
+          sudo make install
+          sudo ldconfig
+
+#setup ibmswtpm2
+    - uses: actions/checkout@v3
+      with:
+        repository: kgoldman/ibmswtpm2
+        path: ibmswtpm2
+    - name: ibmswtpm2 make
+      working-directory: ./ibmswtpm2/src
+      run: |
+          make
+          ./tpm_server &
+
+#setup wolftpm
+    - uses: actions/checkout@v3
+      with:
+        repository: wolfssl/wolftpm
+        path: wolftpm
+    - name: wolftpm autogen
+      working-directory: ./wolftpm
+      run: ./autogen.sh
+    - name: wolftpm configure
+      working-directory: ./wolftpm
+      run: |
+        ./configure --enable-swtpm
+    - name: wolftpm make install
+      working-directory: ./wolftpm
+      run: make
+    - name: wolftpm make install
+      working-directory: ./wolftpm
       run: |
           sudo make install
           sudo ldconfig
@@ -49,7 +85,7 @@ jobs:
     - name: wolfpkcs11 make
       run: make
     - name: wolfpkcs11 make check
-      run: make check
+      run: ${{inputs.check}}
     - name: wolfpkcs11 make install
       run: sudo make install
     - name: wolfpkcs11 make dist
