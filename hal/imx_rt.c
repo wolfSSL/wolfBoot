@@ -570,7 +570,7 @@ const BOOT_DATA_T __attribute__((section(".boot_data"))) boot_data = {
 
 
 extern void isr_reset(void);
-extern const uint32_t __dcd_data_start;
+extern const uint8_t __dcd_data_start;
 const uint32_t dcd_data_addr = (uint32_t) &__dcd_data_start;
 
 #ifndef NXP_CUSTOM_DCD
