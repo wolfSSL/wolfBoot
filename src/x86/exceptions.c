@@ -76,7 +76,7 @@ static struct idt_descriptor idt_descriptor;
                    "call common_exception_handler\r\n"                         \
                    "iretq\r\n"                                                 \
                    :                                                           \
-                   : ""(X));                                                   \
+                   : "Z"(X));                                                  \
     }
 
 __attribute__((used)) static void common_exception_handler(uint64_t vector_number)
@@ -144,7 +144,7 @@ static void __attribute__((__naked__)) timer_handler() {
                  "sti\r\n"
                  "mov %0, %%eax\r\n"
                  "movl $0, (%%eax)\r\n"
-                 "iretq\r\n"::""(LAPIC_EOI));
+                 "iretq\r\n"::"i"((uint32_t)LAPIC_EOI));
 }
 
 static void setup_apic_timer()

@@ -501,6 +501,8 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
     memcpy(silicon_init_parameter, fsp_s_base + fsp_info->CfgRegionOffset,
             FSP_S_PARAM_SIZE);
     status = fsp_machine_update_s_parameters(silicon_init_parameter);
+    if (status != 0)
+        panic();
     SiliconInit = (silicon_init_cb)(fsp_s_base + fsp_info->FspSiliconInitEntryOffset);
 
 #if defined(WOLFBOOT_DUMP_FSP_UPD)

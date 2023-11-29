@@ -601,6 +601,7 @@ int ata_identify_device(int drv)
     if (slot < 0)
         return slot;
 
+    s_locked = s_frozen = s_enabled = 0;
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
 
@@ -612,6 +613,7 @@ int ata_identify_device(int drv)
     ret = exec_cmd_slot(drv, slot);
     if (ret == 0) {
         uint16_t *id_buf = (uint16_t *)buffer;
+        (void)id_buf;
         uint16_t cmd_set_supported;
         uint16_t sec_status;
         ATA_DEBUG_PRINTF("Device identified\r\n");
@@ -663,7 +665,6 @@ int ata_identify_device(int drv)
             }
             if (sec_status & (1 << 0)) {
                 ATA_DEBUG_PRINTF("Security: supported\r\n");
-                s_supported = 1;
             }
             if (!s_enabled && !s_frozen)
                 ata->sec = ATA_SEC1;
@@ -697,6 +698,8 @@ static int ata_drive_read_sector(int drv, uint64_t start, uint32_t count,
     struct fis_reg_h2d *cmdfis;
     int i;
     int slot = prepare_cmd_h2d_slot(drv, buf, count << ata->sector_size_shift, 0);
+    if (slot < 0)
+        return -1;
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
 
@@ -727,6 +730,8 @@ static int ata_drive_write_sector(int drv, uint64_t start, uint32_t count,
     uint8_t *buf_ptr;
     int i;
     int slot = prepare_cmd_h2d_slot(drv, buf, count << ata->sector_size_shift, 1);
+    if (slot < 0)
+        return -1;
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
     cmd += slot;
     tbl = (struct hba_cmd_table *)(uintptr_t)cmd->ctba;
@@ -848,6 +853,9 @@ int ata_drive_write(int drv, uint64_t start, uint32_t size,
     sect_start = start >> ata->sector_size_shift;
     sect_off = start - (sect_start << ata->sector_size_shift);
 
+    if (size == 0)
+        return 0;
+
     if (sect_off > 0) {
         uint32_t len = MAX_SECTOR_SIZE - sect_off;
         if (len > size)
@@ -861,6 +869,7 @@ int ata_drive_write(int drv, uint64_t start, uint32_t size,
         buffer_off += len;
         sect_start++;
     }
+    count = 0;
     if (size > 0)
         count = size >> ata->sector_size_shift;
     if (count > 0) {
