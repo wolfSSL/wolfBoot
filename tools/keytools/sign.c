@@ -864,18 +864,26 @@ static int sign_digest(int sign, int hash_algo,
         sign == SIGN_ECC521)
     {
         mp_int r, s;
-        int sigSz;
-        if (sign == SIGN_ECC256) sigSz = 32;
-        if (sign == SIGN_ECC384) sigSz = 48;
-        if (sign == SIGN_ECC521) sigSz = 66;
+        int keySz;
+        if (sign == SIGN_ECC256) keySz = 32;
+        if (sign == SIGN_ECC384) keySz = 48;
+        if (sign == SIGN_ECC521) keySz = 66;
+
+        *signature_sz = keySz*2;
+        memset(signature, 0, *signature_sz);
 
         mp_init(&r); mp_init(&s);
         ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
                 &r, &s);
-        mp_to_unsigned_bin(&r, &signature[0]);
-        mp_to_unsigned_bin(&s, &signature[sigSz]);
+        if (ret == 0) {
+            word32 rSz, sSz;
+            /* export sign r/s - zero pad to key size */
+            rSz = mp_unsigned_bin_size(&r);
+            mp_to_unsigned_bin(&r, &signature[keySz - rSz]);
+            sSz = mp_unsigned_bin_size(&s);
+            mp_to_unsigned_bin(&s, &signature[keySz + (keySz - sSz)]);
+        }
         mp_clear(&r); mp_clear(&s);
-        *signature_sz = sigSz*2;
     }
     else
 #endif
