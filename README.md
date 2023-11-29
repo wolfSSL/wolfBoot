@@ -33,23 +33,28 @@ make
 make check
 ```
 
-### Build options and defines
 
-#### TPM support with wolfTPM
+### TPM support with wolfTPM
 
 Enables using a TPM for cryptography and keystore.
 Tested using `./configure --enable-singlethreaded --enable-wolftpm --disable-dh CFLAGS="-DWOLFPKCS11_TPM_STORE" && make`.
 
 Note: The TPM does not support DH, so only RSA and ECC are supported.
 
-##### Define WOLFPKCS11_TPM_STORE
+
+### Build options and defines
+
+#### Define WOLFPKCS11_TPM_STORE
 
 Use `WOLFPKCS11_TPM_STORE` storing objects in TPM NV.
-
 
 #### Define WOLFPKCS11_NO_STORE
 
 Disables storage of tokens.
+
+#### Define WOLFPKCS11_DEBUG_STORE
+
+Enables debugging printf's for store.
 
 #### Define WOLFPKCS11_CUSTOM_STORE
 
