@@ -690,6 +690,9 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     void** store)
 {
     int ret = 0;
+#if defined(XGETENV) || !defined(WOLFPKCS11_TPM_STORE)
+    const char* str = NULL;
+#endif
 #ifdef WOLFPKCS11_TPM_STORE
     WP11_Slot* slot = &slotList[0];
     WP11_TpmStore* tpmStore = &tpmStores[0];
@@ -700,12 +703,18 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 #else
     char name[120] = "\0";
     XFILE file;
-    const char* str;
 #endif
 
 #ifdef WOLFPKCS11_DEBUG_STORE
     printf("Store open: Type %d, id1 %ld, id2 %ld, read %d\n",
         type, id1, id2, read);
+#endif
+
+#ifdef XGETENV
+    str = XGETENV("WOLFPKCS11_NO_STORE");
+    if (str != NULL) {
+        return NOT_AVAILABLE_E;
+    }
 #endif
 
 #ifdef WOLFPKCS11_TPM_STORE
@@ -751,18 +760,14 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 
 #else
     #ifdef XGETENV
-    str = XGETENV("WOLFPKCS11_NO_STORE");
-    if (str != NULL) {
-        return NOT_AVAILABLE_E;
-    }
     str = XGETENV("WOLFPKCS11_TOKEN_PATH");
+    #endif
     if (str == NULL) {
         str = "/tmp";
     }
-    #endif
 
     /* 47 is maximum number of character to a filename and path separator. */
-    else if (XSTRLEN(str) > sizeof(name) - 47) {
+    if (str == NULL || (XSTRLEN(str) > sizeof(name) - 47)) {
        return -1;
     }
 
