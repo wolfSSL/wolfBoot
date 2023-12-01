@@ -48,7 +48,8 @@ size_t strlen(const char *s); /* forward declaration */
 /* allow using built-in libc if WOLFBOOT_USE_STDLIBC is defined */
 #ifndef WOLFBOOT_USE_STDLIBC
 #if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || \
-    (defined(PRINTF_ENABLED) && defined(DEBUG_UART))
+    (defined(PRINTF_ENABLED) && defined(DEBUG_UART)) \
+    || defined(TARGET_same51)
 
 int islower(int c)
 {

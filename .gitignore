@@ -91,6 +91,7 @@ include/target.h
 .wolfboot-offset
 .wolfboot-partition-size
 .bootloader-partition-size
+MPLabX/wolfBoot-SAME51.X/.generated_files/
 
 # Test tools
 tools/check_config/check_config
@@ -142,3 +143,7 @@ debug/lauterbach
 *.gcda
 *.gcno
 coverage.*
+IDE/MPLAB/test-app/test-usb-updater.same51.X/dist/
+IDE/MPLAB/test-app/test-usb-updater.same51.X/.generated_files/
+IDE/MPLAB/bootloader/wolfboot-same51.dualbank.X/dist/
+IDE/MPLAB/bootloader/wolfboot-same51.dualbank.X/.generated_files/

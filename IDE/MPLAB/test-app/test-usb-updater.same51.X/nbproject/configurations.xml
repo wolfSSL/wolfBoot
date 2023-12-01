@@ -1,0 +1,431 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configurationDescriptor version="65">
+  <logicalFolder name="root" displayName="root" projectFiles="true">
+    <logicalFolder name="HeaderFiles"
+                   displayName="Header Files"
+                   projectFiles="true">
+      <logicalFolder name="config" displayName="config" projectFiles="true">
+        <logicalFolder name="default" displayName="default" projectFiles="true">
+          <logicalFolder name="peripheral" displayName="peripheral" projectFiles="true">
+            <logicalFolder name="clock" displayName="clock" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/clock/plib_clock.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="cmcc" displayName="cmcc" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/cmcc/plib_cmcc.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="evsys" displayName="evsys" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/evsys/plib_evsys.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="nvic" displayName="nvic" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/nvic/plib_nvic.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="nvmctrl" displayName="nvmctrl" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/nvmctrl/plib_nvmctrl.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="port" displayName="port" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/port/plib_port.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="sercom" displayName="sercom" projectFiles="true">
+              <logicalFolder name="usart" displayName="usart" projectFiles="true">
+                <itemPath>../src/config/default/peripheral/sercom/usart/plib_sercom5_usart.h</itemPath>
+                <itemPath>../src/config/default/peripheral/sercom/usart/plib_sercom_usart_common.h</itemPath>
+              </logicalFolder>
+            </logicalFolder>
+          </logicalFolder>
+          <itemPath>../src/config/default/device_vectors.h</itemPath>
+          <itemPath>../src/config/default/device.h</itemPath>
+          <itemPath>../src/config/default/device_cache.h</itemPath>
+          <itemPath>../src/config/default/interrupts.h</itemPath>
+          <itemPath>../src/config/default/definitions.h</itemPath>
+          <itemPath>../src/config/default/toolchain_specifics.h</itemPath>
+        </logicalFolder>
+      </logicalFolder>
+      <logicalFolder name="packs" displayName="packs" projectFiles="true">
+        <logicalFolder name="ATSAME51J20A_DFP"
+                       displayName="ATSAME51J20A_DFP"
+                       projectFiles="true">
+          <logicalFolder name="component" displayName="component" projectFiles="true">
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/wdt.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/usb.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/icm.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/nvmctrl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/eic.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/ac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/pac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/tc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/port.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/dsu.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/cmcc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/gclk.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/adc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/pm.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/pdec.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/pcc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/mclk.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/sdhc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/i2s.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/fuses.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/evsys.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/freqm.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/ccl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/dac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/can.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/tcc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/qspi.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/osc32kctrl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/pukcc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/ramecc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/oscctrl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/dmac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/hmatrixb.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/rstc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/trng.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/rtc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/supc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/sercom.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/component/aes.h</itemPath>
+          </logicalFolder>
+          <logicalFolder name="instance" displayName="instance" projectFiles="true">
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/ramecc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/dac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom7.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc2.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc6.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/osc32kctrl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/qspi.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/adc0.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom3.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/rstc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/i2s.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tcc3.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/can1.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/mclk.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/gclk.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/cmcc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom4.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc5.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/rtc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/pm.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/aes.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/oscctrl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom0.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/freqm.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/fuses.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tcc2.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/ccl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc1.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/can0.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sdhc0.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/pdec.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom5.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc4.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/nvmctrl.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/wdt.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom1.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/dmac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/icm.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/ac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tcc1.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/port.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc0.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/pac.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/supc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom6.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc3.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/hmatrix.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tc7.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/dsu.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/adc1.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/sercom2.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/evsys.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/eic.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tcc0.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/tcc4.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/pcc.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/trng.h</itemPath>
+            <itemPath>../src/packs/ATSAME51J20A_DFP/instance/usb.h</itemPath>
+          </logicalFolder>
+          <logicalFolder name="pio" displayName="pio" projectFiles="true">
+            <itemPath>../src/packs/ATSAME51J20A_DFP/pio/same51j20a.h</itemPath>
+          </logicalFolder>
+          <itemPath>../src/packs/ATSAME51J20A_DFP/same51j20a.h</itemPath>
+        </logicalFolder>
+        <logicalFolder name="CMSIS" displayName="CMSIS" projectFiles="true">
+          <logicalFolder name="CMSIS" displayName="CMSIS" projectFiles="true">
+            <logicalFolder name="Core" displayName="Core" projectFiles="true">
+              <logicalFolder name="Include" displayName="Include" projectFiles="true">
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_gcc.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_compiler.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/core_cm4.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cachel1_armv7.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_iccarm.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_armclang_ltm.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_armcc.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_version.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/cmsis_armclang.h</itemPath>
+                <itemPath>../src/packs/CMSIS/CMSIS/Core/Include/mpu_armv7.h</itemPath>
+              </logicalFolder>
+            </logicalFolder>
+          </logicalFolder>
+        </logicalFolder>
+      </logicalFolder>
+    </logicalFolder>
+    <logicalFolder name="ExternalFiles"
+                   displayName="Important Files"
+                   projectFiles="true">
+      <itemPath>Makefile</itemPath>
+      <itemPath>test-usb-updater.same51.mc3</itemPath>
+    </logicalFolder>
+    <logicalFolder name="LinkerScript"
+                   displayName="Linker Files"
+                   projectFiles="true">
+      <logicalFolder name="config" displayName="config" projectFiles="true">
+        <logicalFolder name="default" displayName="default" projectFiles="true">
+          <itemPath>../src/config/default/ATSAME51J20A.ld</itemPath>
+        </logicalFolder>
+      </logicalFolder>
+    </logicalFolder>
+    <logicalFolder name="SourceFiles"
+                   displayName="Source Files"
+                   projectFiles="true">
+      <logicalFolder name="config" displayName="config" projectFiles="true">
+        <logicalFolder name="default" displayName="default" projectFiles="true">
+          <logicalFolder name="peripheral" displayName="peripheral" projectFiles="true">
+            <logicalFolder name="clock" displayName="clock" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/clock/plib_clock.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="cmcc" displayName="cmcc" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/cmcc/plib_cmcc.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="evsys" displayName="evsys" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/evsys/plib_evsys.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="nvic" displayName="nvic" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/nvic/plib_nvic.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="nvmctrl" displayName="nvmctrl" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/nvmctrl/plib_nvmctrl.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="port" displayName="port" projectFiles="true">
+              <itemPath>../src/config/default/peripheral/port/plib_port.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="sercom" displayName="sercom" projectFiles="true">
+              <logicalFolder name="usart" displayName="usart" projectFiles="true">
+                <itemPath>../src/config/default/peripheral/sercom/usart/plib_sercom5_usart.c</itemPath>
+              </logicalFolder>
+            </logicalFolder>
+          </logicalFolder>
+          <logicalFolder name="stdio" displayName="stdio" projectFiles="true">
+            <itemPath>../src/config/default/stdio/xc32_monitor.c</itemPath>
+          </logicalFolder>
+          <itemPath>../src/config/default/startup_xc32.c</itemPath>
+          <itemPath>../src/config/default/libc_syscalls.c</itemPath>
+          <itemPath>../src/config/default/initialization.c</itemPath>
+          <itemPath>../src/config/default/exceptions.c</itemPath>
+          <itemPath>../src/config/default/interrupts.c</itemPath>
+        </logicalFolder>
+      </logicalFolder>
+      <logicalFolder name="f1" displayName="wolfboot" projectFiles="true">
+        <itemPath>../../../../src/libwolfboot.c</itemPath>
+        <itemPath>../../../../hal/same51.c</itemPath>
+      </logicalFolder>
+      <itemPath>app.c</itemPath>
+      <itemPath>main.c</itemPath>
+      <itemPath>../src/config/default/pin_configurations.csv</itemPath>
+      <itemPath>../src/main.c</itemPath>
+    </logicalFolder>
+  </logicalFolder>
+  <sourceRootList>
+    <Elem>.</Elem>
+    <Elem>../../../../src</Elem>
+    <Elem>../../../../hal</Elem>
+  </sourceRootList>
+  <projectmakefile>Makefile</projectmakefile>
+  <confs>
+    <conf name="default" type="2">
+      <toolsSet>
+        <developmentServer>localhost</developmentServer>
+        <targetDevice>ATSAME51J20A</targetDevice>
+        <targetHeader></targetHeader>
+        <targetPluginBoard></targetPluginBoard>
+        <platformTool>noID</platformTool>
+        <languageToolchain>XC32</languageToolchain>
+        <languageToolchainVersion>4.35</languageToolchainVersion>
+        <platform>2</platform>
+      </toolsSet>
+      <packs>
+        <pack name="SAME51_DFP" vendor="Microchip" version="3.7.242"/>
+        <pack name="CMSIS" vendor="ARM" version="5.4.0"/>
+      </packs>
+      <ScriptingSettings>
+      </ScriptingSettings>
+      <compileType>
+        <linkerTool>
+          <linkerLibItems>
+          </linkerLibItems>
+        </linkerTool>
+        <archiverTool>
+        </archiverTool>
+        <loading>
+          <useAlternateLoadableFile>false</useAlternateLoadableFile>
+          <parseOnProdLoad>false</parseOnProdLoad>
+          <alternateLoadableFile></alternateLoadableFile>
+        </loading>
+        <subordinates>
+        </subordinates>
+      </compileType>
+      <makeCustomizationType>
+        <makeCustomizationPreStepEnabled>false</makeCustomizationPreStepEnabled>
+        <makeUseCleanTarget>false</makeUseCleanTarget>
+        <makeCustomizationPreStep></makeCustomizationPreStep>
+        <makeCustomizationPostStepEnabled>false</makeCustomizationPostStepEnabled>
+        <makeCustomizationPostStep></makeCustomizationPostStep>
+        <makeCustomizationPutChecksumInUserID>false</makeCustomizationPutChecksumInUserID>
+        <makeCustomizationEnableLongLines>false</makeCustomizationEnableLongLines>
+        <makeCustomizationNormalizeHexFile>false</makeCustomizationNormalizeHexFile>
+      </makeCustomizationType>
+      <C32>
+        <property key="additional-warnings" value="false"/>
+        <property key="addresss-attribute-use" value="false"/>
+        <property key="appendMe" value=""/>
+        <property key="enable-app-io" value="false"/>
+        <property key="enable-omit-frame-pointer" value="false"/>
+        <property key="enable-symbols" value="true"/>
+        <property key="enable-unroll-loops" value="false"/>
+        <property key="exclude-floating-point" value="false"/>
+        <property key="extra-include-directories"
+                  value="../src;../src/config/default;../src/packs/ATSAME51J20A_DFP;../src/packs/CMSIS/;../src/packs/CMSIS/CMSIS/Core/Include;..\..\..\..\include;..\..\..\..\include\MPLAB"/>
+        <property key="generate-16-bit-code" value="false"/>
+        <property key="generate-micro-compressed-code" value="false"/>
+        <property key="isolate-each-function" value="false"/>
+        <property key="make-warnings-into-errors" value="false"/>
+        <property key="optimization-level" value=""/>
+        <property key="place-data-into-section" value="false"/>
+        <property key="post-instruction-scheduling" value="default"/>
+        <property key="pre-instruction-scheduling" value="default"/>
+        <property key="preprocessor-macros" value=""/>
+        <property key="strict-ansi" value="false"/>
+        <property key="support-ansi" value="false"/>
+        <property key="tentative-definitions" value="-fno-common"/>
+        <property key="toplevel-reordering" value=""/>
+        <property key="unaligned-access" value=""/>
+        <property key="use-cci" value="false"/>
+        <property key="use-iar" value="false"/>
+        <property key="use-indirect-calls" value="false"/>
+      </C32>
+      <C32-AR>
+        <property key="additional-options-chop-files" value="false"/>
+      </C32-AR>
+      <C32-AS>
+        <property key="assembler-symbols" value=""/>
+        <property key="enable-symbols" value="true"/>
+        <property key="exclude-floating-point-library" value="false"/>
+        <property key="expand-macros" value="false"/>
+        <property key="extra-include-directories-for-assembler" value=""/>
+        <property key="extra-include-directories-for-preprocessor" value=""/>
+        <property key="false-conditionals" value="false"/>
+        <property key="generate-16-bit-code" value="false"/>
+        <property key="generate-micro-compressed-code" value="false"/>
+        <property key="keep-locals" value="false"/>
+        <property key="list-assembly" value="false"/>
+        <property key="list-source" value="false"/>
+        <property key="list-symbols" value="false"/>
+        <property key="oXC32asm-list-to-file" value="false"/>
+        <property key="omit-debug-dirs" value="false"/>
+        <property key="omit-forms" value="false"/>
+        <property key="preprocessor-macros" value=""/>
+        <property key="warning-level" value=""/>
+      </C32-AS>
+      <C32-CO>
+        <property key="coverage-enable" value=""/>
+        <property key="stack-guidance" value="false"/>
+      </C32-CO>
+      <C32-LD>
+        <property key="additional-options-use-response-files" value="false"/>
+        <property key="additional-options-write-sla" value="false"/>
+        <property key="allocate-dinit" value="false"/>
+        <property key="appendMe" value=""/>
+        <property key="code-dinit" value="false"/>
+        <property key="ebase-addr" value=""/>
+        <property key="enable-check-sections" value="false"/>
+        <property key="exclude-floating-point-library" value="false"/>
+        <property key="exclude-standard-libraries" value="false"/>
+        <property key="extra-lib-directories" value=""/>
+        <property key="fill-flash-options-addr" value=""/>
+        <property key="fill-flash-options-const" value=""/>
+        <property key="fill-flash-options-how" value="0"/>
+        <property key="fill-flash-options-inc-const" value="1"/>
+        <property key="fill-flash-options-increment" value=""/>
+        <property key="fill-flash-options-seq" value=""/>
+        <property key="fill-flash-options-what" value="0"/>
+        <property key="generate-16-bit-code" value="false"/>
+        <property key="generate-cross-reference-file" value="false"/>
+        <property key="generate-micro-compressed-code" value="false"/>
+        <property key="heap-size" value="512"/>
+        <property key="input-libraries" value=""/>
+        <property key="kseg-length" value=""/>
+        <property key="kseg-origin" value=""/>
+        <property key="linker-symbols" value=""/>
+        <property key="map-file" value="${DISTDIR}/${PROJECTNAME}.${IMAGE_TYPE}.map"/>
+        <property key="no-device-startup-code" value="true"/>
+        <property key="no-startup-files" value="false"/>
+        <property key="oXC32ld-extra-opts" value=""/>
+        <property key="optimization-level" value=""/>
+        <property key="preprocessor-macros" value=""/>
+        <property key="remove-unused-sections" value="false"/>
+        <property key="report-memory-usage" value="false"/>
+        <property key="serial-length" value=""/>
+        <property key="serial-origin" value=""/>
+        <property key="stack-size" value=""/>
+        <property key="symbol-stripping" value=""/>
+        <property key="trace-symbols" value=""/>
+        <property key="warn-section-align" value="false"/>
+      </C32-LD>
+      <C32CPP>
+        <property key="additional-warnings" value="false"/>
+        <property key="addresss-attribute-use" value="false"/>
+        <property key="appendMe" value=""/>
+        <property key="check-new" value="false"/>
+        <property key="eh-specs" value="true"/>
+        <property key="enable-app-io" value="false"/>
+        <property key="enable-omit-frame-pointer" value="false"/>
+        <property key="enable-symbols" value="true"/>
+        <property key="enable-unroll-loops" value="false"/>
+        <property key="exceptions" value="true"/>
+        <property key="exclude-floating-point" value="false"/>
+        <property key="extra-include-directories"
+                  value="../src;../src/config/default;../src/packs/ATSAME51J20A_DFP;../src/packs/CMSIS/;../src/packs/CMSIS/CMSIS/Core/Include"/>
+        <property key="generate-16-bit-code" value="false"/>
+        <property key="generate-micro-compressed-code" value="false"/>
+        <property key="isolate-each-function" value="false"/>
+        <property key="make-warnings-into-errors" value="false"/>
+        <property key="optimization-level" value=""/>
+        <property key="place-data-into-section" value="false"/>
+        <property key="post-instruction-scheduling" value="default"/>
+        <property key="pre-instruction-scheduling" value="default"/>
+        <property key="preprocessor-macros" value=""/>
+        <property key="rtti" value="true"/>
+        <property key="strict-ansi" value="false"/>
+        <property key="toplevel-reordering" value=""/>
+        <property key="unaligned-access" value=""/>
+        <property key="use-cci" value="false"/>
+        <property key="use-iar" value="false"/>
+        <property key="use-indirect-calls" value="false"/>
+      </C32CPP>
+      <C32Global>
+        <property key="appendMe" value=""/>
+        <property key="common-include-directories" value=""/>
+        <property key="gp-relative-option" value=""/>
+        <property key="legacy-libc" value="false"/>
+        <property key="mdtcm" value=""/>
+        <property key="mitcm" value=""/>
+        <property key="mstacktcm" value="false"/>
+        <property key="omit-pack-options" value="1"/>
+        <property key="relaxed-math" value="false"/>
+        <property key="save-temps" value="false"/>
+        <property key="stack-smashing" value=""/>
+        <property key="wpo-lto" value="false"/>
+      </C32Global>
+    </conf>
+  </confs>
+</configurationDescriptor>

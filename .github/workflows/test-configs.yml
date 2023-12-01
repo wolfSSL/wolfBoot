@@ -21,6 +21,18 @@ jobs:
   #   with:
   #     arch: riscv
   #     config-file: ./config/examples/hifive.config
+  #
+  same51_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/same51.config
+
+  same51_dbank_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/same51-dualbank.config
 
   imx_rt1050_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml

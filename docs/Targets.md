@@ -6,6 +6,7 @@ This README describes configuration of supported targets.
 
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cypress PSoC-6](#cypress-psoc-6)
+* [Microchip SAME51](#microchip-same51)
 * [Nordic nRF52840](#nordic-nrf52840)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP iMX-RT](#nxp-imx-rt)
@@ -1132,6 +1133,60 @@ the monitor command sequence below:
 (gdb) mon reset init
 (gdb) mon psoc6 reset_halt
 ```
+
+## Microchip SAME51
+
+SAME51 is a Cortex-M4 microcontroller with a dual-bank, 1MB flash memory divided
+in blocks of 8KB.
+
+### Toolchain
+
+Although it is possible to build wolfBoot with xc32 compilers,
+we recommend to use gcc for building wolfBoot for best results in terms of
+footprint and performance, due to some assembly optimizations in wolfCrypt, being
+available for gcc only. There is no limitation however on the toolchain used
+to compile the application firmware or RTOS as the two binary files are independent.
+
+
+### Building using gcc/makefile
+
+The following configurations have been tested using ATSAME51J20A development kit.
+
+  * `config/examples/same51.config` - example configuration with swap partition (dual-bank disabled)
+  * `config/examples/same51-dualbank.config` - configuration with two banks (no swap partition)
+
+To build wolfBoot, copy the selected configuration into `.config` and run `make`.
+
+
+### Building using MPLAB IDE
+
+Example projects are provided to build wolfBoot and a test application using MPLAB.
+These projects are configured to build both stages using xc32-gcc, and have been
+tested with MpLab IDE v. 6.20.
+
+The example application can be used to update the firmware over USB.
+
+More details about building the example projects can be found in the
+[IDE/MPLAB](/IDE/MPLAB) directory in this repository.
+
+
+### Uploading the bootloader and the firmware image
+
+Secure boot and updates have been tested on the SAM E51 Curiosity Nano evaluation
+board, connecting to a Pro debugger to the D0/D1 pads.
+
+The two firmware images can be uploaded separately using the JLinkExe utility:
+
+```
+$ JLinkExe -if swd -speed 1000 -Device ATSAME51J20
+
+J-Link> loadbin wolfboot.bin 0x0
+
+J-Link> loadbin test-app/image_v1_signed.bin 0x8000
+```
+
+The above is assuming the default configuration where the BOOT partition starts at
+address `0x8000`.
 
 
 ## NXP iMX-RT
