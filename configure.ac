@@ -322,6 +322,8 @@ fi
 
 if test "$enable_shared" = "no"; then
     AM_CFLAGS="$AM_CFLAGS -DHAVE_PKCS11_STATIC"
+else
+    LIBS="$LIBS -ldl"
 fi
 
 
@@ -347,7 +349,7 @@ AX_HARDEN_CC_COMPILER_FLAGS
 
 OPTION_FLAGS="$CFLAGS $CPPFLAGS $AM_CFLAGS"
 
-LIBS="$LIBS -lwolfssl -ldl -lm"
+LIBS="$LIBS -lwolfssl -lm"
 
 CREATE_HEX_VERSION
 AC_SUBST([AM_CPPFLAGS])

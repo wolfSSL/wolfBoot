@@ -53,6 +53,11 @@
     #endif
 #endif
 
+#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
+    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+#define WOLFPKCS11_NEED_RSA_RNG
+#endif
+
 /* Size of hash calculated from PIN. */
 #define PIN_HASH_SZ                    32
 /* Size of seed used when calculating hash from PIN. */
@@ -6503,26 +6508,23 @@ int WP11_RsaPkcs15_PrivateDecrypt(unsigned char* in, word32 inLen,
                                   WP11_Object* priv, WP11_Slot* slot)
 {
     int ret = 0;
-#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
-    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+#ifdef WOLFPKCS11_NEED_RSA_RNG
     WC_RNG rng;
 #endif
     /* A random number generator is needed for blinding. */
     if (priv->onToken)
         WP11_Lock_LockRW(priv->lock);
-#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
-    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+#ifdef WOLFPKCS11_NEED_RSA_RNG
     ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
-    if (ret == 0) {
-        priv->data.rsaKey.rng = &rng;
-    }
 #endif
     if (ret == 0) {
+    #ifdef WOLFPKCS11_NEED_RSA_RNG
+        priv->data.rsaKey.rng = &rng;
+    #endif
         ret = wc_RsaPrivateDecrypt_ex(in, inLen, out, *outLen,
                                        &priv->data.rsaKey, WC_RSA_PKCSV15_PAD,
                                        WC_HASH_TYPE_NONE, WC_MGF1NONE, NULL, 0);
-    #if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
-        (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+    #ifdef WOLFPKCS11_NEED_RSA_RNG
         priv->data.rsaKey.rng = NULL;
         Rng_Free(&rng);
     #endif
@@ -6607,28 +6609,25 @@ int WP11_RsaOaep_PrivateDecrypt(unsigned char* in, word32 inLen,
     int ret = 0;
     WP11_OaepParams* oaep = &session->params.oaep;
     WP11_Slot* slot = WP11_Session_GetSlot(session);
-#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
-    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+#ifdef WOLFPKCS11_NEED_RSA_RNG
     WC_RNG rng;
 #endif
 
     /* A random number generator is needed for blinding. */
     if (priv->onToken)
         WP11_Lock_LockRW(priv->lock);
-#if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
-    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+#ifdef WOLFPKCS11_NEED_RSA_RNG
     ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
-    if (ret == 0) {
-        priv->data.rsaKey.rng = &rng;
-    }
 #endif
     if (ret == 0) {
+    #ifdef WOLFPKCS11_NEED_RSA_RNG
+        priv->data.rsaKey.rng = &rng;
+    #endif
         ret = wc_RsaPrivateDecrypt_ex(in, inLen, out, *outLen,
                                             &priv->data.rsaKey, WC_RSA_OAEP_PAD,
                                             oaep->hashType, oaep->mgf,
                                             oaep->label, oaep->labelSz);
-    #if defined(WC_RSA_BLINDING) && (!defined(HAVE_FIPS) || \
-    (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
+    #ifdef WOLFPKCS11_NEED_RSA_RNG
         priv->data.rsaKey.rng = NULL;
         Rng_Free(&rng);
     #endif

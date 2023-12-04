@@ -7908,7 +7908,9 @@ int main(int argc, char* argv[])
     int closeDl = 1;
     int i;
 
+#ifndef WOLFPKCS11_NO_ENV
     setenv("WOLFPKCS11_NO_STORE", "1", 1);
+#endif
 
     argc--;
     argv++;
