@@ -918,9 +918,11 @@ int main(int argc, char* argv[])
     int setPin = 1;
     int closeDl = 1;
 
+#ifndef WOLFPKCS11_NO_ENV
     if (!getenv("WOLFPKCS11_TOKEN_PATH")) {
         setenv("WOLFPKCS11_TOKEN_PATH", "./tests", 1);
     }
+#endif
 
     argc--;
     argv++;

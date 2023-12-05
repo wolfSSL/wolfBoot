@@ -322,7 +322,23 @@ fi
 
 if test "$enable_shared" = "no"; then
     AM_CFLAGS="$AM_CFLAGS -DHAVE_PKCS11_STATIC"
+else
+    LIBS="$LIBS -ldl"
 fi
+
+
+AC_ARG_ENABLE([wolftpm],
+    [AS_HELP_STRING([--enable-wolftpm],[Enable wolfTPM keystore support (default: disabled)])],
+    [ ENABLED_TPM=$enableval ],
+    [ ENABLED_TPM=no ]
+    )
+if test "$ENABLED_TPM" = "yes"
+then
+    LIBS="$LIBS -lwolftpm"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFPKCS11_TPM"
+fi
+
+
 
 AM_CONDITIONAL([BUILD_STATIC],[test "x$enable_shared" = "xno"])
 
@@ -333,7 +349,7 @@ AX_HARDEN_CC_COMPILER_FLAGS
 
 OPTION_FLAGS="$CFLAGS $CPPFLAGS $AM_CFLAGS"
 
-LIBS="$LIBS -lwolfssl -ldl -lm"
+LIBS="$LIBS -lwolfssl -lm"
 
 CREATE_HEX_VERSION
 AC_SUBST([AM_CPPFLAGS])

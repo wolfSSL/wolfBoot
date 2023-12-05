@@ -2,7 +2,7 @@ name: wolfPKCS11 Build Tests
 
 on:
   push:
-    branches: [ '*' ]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
 
@@ -10,6 +10,17 @@ jobs:
 
   defaults_all:
     uses: ./.github/workflows/build-workflow.yml
+
+  single_theaded:
+    uses: ./.github/workflows/build-workflow.yml
+    with:
+      config: --enable-singlethreaded
+
+  tpm:
+    uses: ./.github/workflows/build-workflow.yml
+    with:
+      config: --enable-singlethreaded --enable-wolftpm --disable-dh CFLAGS="-DWOLFPKCS11_TPM_STORE"
+      check: ./tests/pkcs11str && ./tests/pkcs11test
 
   no_rsa:
     uses: ./.github/workflows/build-workflow.yml
