@@ -34,7 +34,7 @@ The wolfBoot image is hashed and extended to the indicated PCR. This can be used
 
 ## Sealing and Unsealing a secret
 
-See the wolfTPM Sealing/Unsealing example [here](https://github.com/wolfSSL/wolfTPM/tree/secret_seal/examples/boot#secure-boot-encryption-key-storage)
+See the wolfTPM Sealing/Unsealing example [here](https://github.com/wolfSSL/wolfTPM/tree/master/examples/boot#secure-boot-encryption-key-storage)
 
 Known PCR values must be signed to seal/unseal a secret. The signature for the authorization policy resides in the signed header using the `--policy` argument.
 If a signed policy is not in the header then a value cannot be sealed. Instead the PCR(s) values and a PCR policy digest will be printed to sign. You can use `./tools/keytools/sign` or `./tools/tpm/policy_sign` to sign the policy externally.
