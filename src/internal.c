@@ -670,7 +670,7 @@ static int wolfPKCS11_Store_GetMaxSize(int type)
         case WOLFPKCS11_STORE_DHKEY_PRIV:
         case WOLFPKCS11_STORE_DHKEY_PUB:
         default:
-            maxSz = -1;
+            maxSz = BAD_FUNC_ARG;
             break;
     }
     return maxSz;
@@ -3240,9 +3240,12 @@ static void wp11_TpmFinal(WP11_Slot* slot)
  */
 static void wp11_Slot_Final(WP11_Slot* slot)
 {
-    if (slot == NULL) return;
-    while (slot->session != NULL)
+    if (slot == NULL) {
+        return;
+    }
+    while (slot->session != NULL) {
         wp11_Slot_FreeSession(slot, slot->session);
+    }
     wp11_Token_Final(&slot->token);
 #ifdef WOLFPKCS11_TPM
     wp11_TpmFinal(slot);
@@ -3272,21 +3275,20 @@ static int wp11_Slot_Init(WP11_Slot* slot, int id)
     ret = WP11_Lock_Init(&slot->lock);
     if (ret == 0) {
     #ifdef WOLFPKCS11_TPM
-        if (ret == 0) {
-            ret = wp11_TpmInit(slot);
-        }
+        ret = wp11_TpmInit(slot);
     #endif
         /* Create the minimum number of unused sessions. */
-        for (i = 0; ret == 0 && i < WP11_SESSION_CNT_MIN; i++)
+        for (i = 0; ret == 0 && i < WP11_SESSION_CNT_MIN; i++) {
             ret = wp11_Slot_AddSession(slot, &curr);
-
+        }
         if (ret == 0) {
             ret = wp11_Token_Init(&slot->token, label);
             slot->token.state = WP11_TOKEN_STATE_UNKNOWN;
         }
 
-        if (ret != 0)
+        if (ret != 0) {
             wp11_Slot_Final(slot);
+        }
     }
 
     return ret;
