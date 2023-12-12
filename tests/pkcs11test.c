@@ -59,14 +59,14 @@ static void* dlib;
 #endif
 static CK_FUNCTION_LIST* funcList;
 static int slot = 0;
-const char* tokenName = "wolfpkcs11";
+static const char* tokenName = "wolfpkcs11";
 
 /* FIPS requires pin to be at least 14 characters, since it is used for
  * the HMAC key */
 static byte* soPin = (byte*)"password123456";
 static int soPinLen = 14;
-byte* userPin = (byte*)"wolfpkcs11-test";
-int userPinLen;
+static byte* userPin = (byte*)"wolfpkcs11-test";
+static int userPinLen;
 
 #if !defined(NO_RSA) || defined(HAVE_ECC) || !defined(NO_DH)
 static CK_OBJECT_CLASS pubKeyClass     = CKO_PUBLIC_KEY;
@@ -7896,7 +7896,11 @@ static void Usage(void)
     printf("<num>              Test case number to try\n");
 }
 
+#ifndef NO_MAIN_DRIVER
 int main(int argc, char* argv[])
+#else
+int pkcs11test_test(int argc, char* argv[])
+#endif
 {
     int ret;
     CK_RV rv;
@@ -7974,7 +7978,7 @@ int main(int argc, char* argv[])
                 fprintf(stderr, "%d: %s\n", i + 1, testFunc[i].name);
             return 0;
         }
-        else if (isdigit(argv[0][0])) {
+        else if (isdigit((int)argv[0][0])) {
             testCase = atoi(*argv);
             if (testCase <= 0 || testCase > testFuncCnt) {
                 fprintf(stderr, "Test case out of range: %s\n", *argv);

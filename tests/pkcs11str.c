@@ -132,14 +132,14 @@ static void* dlib;
 #endif
 static CK_FUNCTION_LIST* funcList;
 static int slot = 0;
-const char* tokenName = "wolfpkcs11";
+static const char* tokenName = "wolfpkcs11";
 
 /* FIPS requires pin to be at least 14 characters, since it is used for
  * the HMAC key */
 static byte* soPin = (byte*)"password123456";
 static int soPinLen = 14;
-byte* userPin = (byte*)"wolfpkcs11-test";
-int userPinLen;
+static byte* userPin = (byte*)"wolfpkcs11-test";
+static int userPinLen;
 
 #if !defined(NO_RSA) || defined(HAVE_ECC) || !defined(NO_DH)
 static CK_OBJECT_CLASS pubKeyClass     = CKO_PUBLIC_KEY;
@@ -909,7 +909,11 @@ static int string_matches(const char* arg, const char* str)
     return XSTRNCMP(arg, str, len) == 0;
 }
 
+#ifndef NO_MAIN_DRIVER
 int main(int argc, char* argv[])
+#else
+int pkcs11test_str(int argc, char* argv[])
+#endif
 {
     int ret;
     CK_RV rv;
