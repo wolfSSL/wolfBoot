@@ -32,7 +32,7 @@
 
 #include <stdio.h>
 
-#ifdef _POSIX_THREADS
+#if defined(_POSIX_THREADS) && !defined(SINGLE_THREADED)
 #include <wolfssl/wolfcrypt/misc.h>
 #include <wolfpkcs11/pkcs11.h>
 
@@ -49,14 +49,14 @@ static void* dlib;
 #endif
 static CK_FUNCTION_LIST* funcList;
 static int slot;
-const char* tokenName = "wolfpkcs11";
+static const char* tokenName = "wolfpkcs11";
 
 /* FIPS requires pin to be at least 14 characters, since it is used for
  * the HMAC key */
 static byte* soPin = (byte*)"password123456";
 static int soPinLen = 14;
-byte* userPin = (byte*)"wolfpkcs11-test";
-int userPinLen;
+static byte* userPin = (byte*)"wolfpkcs11-test";
+static int userPinLen;
 
 #if !defined(NO_RSA) || defined(HAVE_ECC) || !defined(NO_DH)
 static CK_OBJECT_CLASS pubKeyClass     = CKO_PUBLIC_KEY;
@@ -6482,7 +6482,11 @@ static void Usage(void)
     printf("<num>              Test case number to try\n");
 }
 
+#ifndef NO_MAIN_DRIVER
 int main(int argc, char* argv[])
+#else
+int pkcs11test_mtt(int argc, char* argv[])
+#endif
 {
     int ret;
     CK_RV rv;
@@ -6603,7 +6607,11 @@ int main(int argc, char* argv[])
 
 #else
 
+#ifndef NO_MAIN_DRIVER
 int main(int argc, char* argv[])
+#else
+int pkcs11test_mtt(int argc, char* argv[])
+#endif
 {
     (void)argc;
     (void)argv;
@@ -6611,4 +6619,4 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-#endif /* _POSIX_THREADS */
+#endif /* _POSIX_THREADS && !SINGLE_THREADED */
