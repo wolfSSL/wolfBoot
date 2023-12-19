@@ -8056,6 +8056,7 @@ int WP11_AesGcm_DecryptUpdate(unsigned char* enc, word32 encSz,
     unsigned char* newEnc;
     WP11_GcmParams* gcm = &session->params.gcm;
 
+#ifdef XREALLOC
     newEnc = (unsigned char*)XREALLOC(gcm->enc, gcm->encSz + encSz, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
     if (newEnc == NULL)
@@ -8065,6 +8066,20 @@ int WP11_AesGcm_DecryptUpdate(unsigned char* enc, word32 encSz,
         XMEMCPY(gcm->enc + gcm->encSz, enc, encSz);
         gcm->encSz += encSz;
     }
+#else
+    newEnc = (unsigned char*)XMALLOC(gcm->encSz + encSz, NULL,
+                                                       DYNAMIC_TYPE_TMP_BUFFER);
+    if (newEnc == NULL)
+        ret = MEMORY_E;
+    if (ret == 0) {
+        if (gcm->enc != NULL)
+            XMEMCPY(newEnc, gcm->enc, gcm->encSz);
+        XFREE(gcm->enc, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        gcm->enc = newEnc;
+        XMEMCPY(gcm->enc + gcm->encSz, enc, encSz);
+        gcm->encSz += encSz;
+    }
+#endif /* !XREALLOC */
 
     return ret;
 }
