@@ -7791,8 +7791,10 @@ static CK_RV pkcs11_test(int slotId, int setPin, int onlySet, int closeDl)
         ret = pkcs11_lib_init();
 
     /* Do tests after library initialization but without SO PIN. */
-    if (ret == CKR_OK)
+    if (ret == CKR_OK) {
+        inited = 1;
         ret = run_tests(testFunc, testFuncCnt, onlySet, TEST_FLAG_INIT);
+    }
 
     if (ret == CKR_OK)
         ret = pkcs11_init_token();
@@ -7805,7 +7807,6 @@ static CK_RV pkcs11_test(int slotId, int setPin, int onlySet, int closeDl)
 
     /* Set user PIN. */
     if (ret == CKR_OK) {
-        inited = 1;
         if (setPin)
             ret = pkcs11_set_user_pin(slotId);
     }
