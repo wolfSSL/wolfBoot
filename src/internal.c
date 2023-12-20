@@ -33,6 +33,7 @@
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
+#include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/hmac.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/rsa.h>
@@ -3639,6 +3640,12 @@ static int HashPIN(char* pin, int pinLen, byte* seed, int seedLen, byte* hash,
     return wc_scrypt(hash, (byte*)pin, pinLen, seed, seedLen,
                                     WP11_HASH_PIN_COST, WP11_HASH_PIN_BLOCKSIZE,
                                     WP11_HASH_PIN_PARALLEL, hashLen);
+#elif !defined(NO_SHA256)
+    /* fallback to simple SHA2-256 hash of pin */
+    (void)seed;
+    (void)seedLen;
+    XMEMSET(hash, 0, hashLen);
+    return wc_Sha256Hash((const byte*)pin, pinLen, hash);
 #else
     (void)pin;
     (void)pinLen;
