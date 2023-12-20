@@ -97,7 +97,7 @@ void RAMFUNCTION wolfBoot_start(void)
     if (ret != 0)
         panic();
 #if defined(WOLFBOOT_ATA_DISK_LOCK)
-    ret = sata_unlock_disk(BOOT_DISK);
+    ret = sata_unlock_disk(BOOT_DISK, 1);
     if (ret != 0)
         panic();
 #endif /* WOLFBOOT_ATA_DISK_LOCK */

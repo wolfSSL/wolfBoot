@@ -387,7 +387,7 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 
-int sata_unlock_disk(int drv)
+int sata_unlock_disk(int drv, int freeze)
 {
     int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
     uint8_t secret[ATA_UNLOCK_DISK_KEY_SZ];
@@ -404,9 +404,15 @@ int sata_unlock_disk(int drv)
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
     if (ata_st == ATA_SEC1) {
-        AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
-        r = ata_security_freeze_lock(drv);
-        AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
+        if (freeze) {
+            AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
+            r = ata_security_freeze_lock(drv);
+            AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
+            if (r != 0)
+                return -1;
+        } else {
+            AHCI_DEBUG_PRINTF("ATA security freeze skipped\r\n");
+        }
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         ata_st = ata_security_get_state(drv);
@@ -420,14 +426,22 @@ int sata_unlock_disk(int drv)
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         ata_st = ata_security_get_state(drv);
         if (ata_st == ATA_SEC5) {
-            AHCI_DEBUG_PRINTF("ATA identify: calling device freeze\r\n", r);
-            r = ata_security_freeze_lock(drv);
-            AHCI_DEBUG_PRINTF("ATA device freeze: returned %d\r\n", r);
+            if (freeze) {
+                AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
+                r = ata_security_freeze_lock(drv);
+                AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n",
+                                  r);
+                if (r != 0)
+                    return -1;
+            } else {
+                AHCI_DEBUG_PRINTF("ATA security freeze skipped\r\n");
+            }
             r = ata_identify_device(drv);
             AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         }
         ata_st = ata_security_get_state(drv);
-        if (ata_st != ATA_SEC6) {
+        AHCI_DEBUG_PRINTF("ATA: Security enabled. State SEC%d\r\n", ata_st);
+        if ((freeze && ata_st != ATA_SEC6) || (!freeze && ata_st != ATA_SEC5)) {
             panic();
         }
         ata_st = ata_security_get_state(drv);

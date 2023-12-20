@@ -174,6 +174,6 @@ struct ahci_received_fis {
 uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun);
 void sata_enable(uint32_t base);
 void sata_disable(uint32_t base);
-int sata_unlock_disk(int drv);
+int sata_unlock_disk(int drv, int freeze);
 
 #endif /* AHCI_H */
