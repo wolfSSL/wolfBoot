@@ -923,8 +923,8 @@ int pkcs11test_str(int argc, char* argv[])
     int closeDl = 1;
 
 #ifndef WOLFPKCS11_NO_ENV
-    if (!getenv("WOLFPKCS11_TOKEN_PATH")) {
-        setenv("WOLFPKCS11_TOKEN_PATH", "./tests", 1);
+    if (!XGETENV("WOLFPKCS11_TOKEN_PATH")) {
+        XSETENV("WOLFPKCS11_TOKEN_PATH", "./tests", 1);
     }
 #endif
 

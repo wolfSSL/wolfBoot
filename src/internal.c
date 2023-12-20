@@ -695,7 +695,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     void** store)
 {
     int ret = 0;
-#if defined(XGETENV) || !defined(WOLFPKCS11_TPM_STORE)
+#ifndef WOLFPKCS11_NO_ENV
     const char* str = NULL;
 #endif
 #ifdef WOLFPKCS11_TPM_STORE
@@ -715,7 +715,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         type, id1, id2, read);
 #endif
 
-#ifdef XGETENV
+#ifndef WOLFPKCS11_NO_ENV
     str = XGETENV("WOLFPKCS11_NO_STORE");
     if (str != NULL) {
         return NOT_AVAILABLE_E;
@@ -764,7 +764,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     #endif
 
 #else
-    #ifdef XGETENV
+    #ifndef WOLFPKCS11_NO_ENV
     str = XGETENV("WOLFPKCS11_TOKEN_PATH");
     #endif
     if (str == NULL) {

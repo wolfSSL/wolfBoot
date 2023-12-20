@@ -7913,7 +7913,7 @@ int pkcs11test_test(int argc, char* argv[])
     int i;
 
 #ifndef WOLFPKCS11_NO_ENV
-    setenv("WOLFPKCS11_NO_STORE", "1", 1);
+    XSETENV("WOLFPKCS11_NO_STORE", "1", 1);
 #endif
 
     argc--;
