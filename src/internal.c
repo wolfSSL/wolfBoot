@@ -33,6 +33,7 @@
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
+#include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/hmac.h>
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/rsa.h>
@@ -695,7 +696,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     void** store)
 {
     int ret = 0;
-#if defined(XGETENV) || !defined(WOLFPKCS11_TPM_STORE)
+#ifndef WOLFPKCS11_NO_ENV
     const char* str = NULL;
 #endif
 #ifdef WOLFPKCS11_TPM_STORE
@@ -715,7 +716,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         type, id1, id2, read);
 #endif
 
-#ifdef XGETENV
+#ifndef WOLFPKCS11_NO_ENV
     str = XGETENV("WOLFPKCS11_NO_STORE");
     if (str != NULL) {
         return NOT_AVAILABLE_E;
@@ -764,7 +765,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     #endif
 
 #else
-    #ifdef XGETENV
+    #ifndef WOLFPKCS11_NO_ENV
     str = XGETENV("WOLFPKCS11_TOKEN_PATH");
     #endif
     if (str == NULL) {
@@ -3639,6 +3640,12 @@ static int HashPIN(char* pin, int pinLen, byte* seed, int seedLen, byte* hash,
     return wc_scrypt(hash, (byte*)pin, pinLen, seed, seedLen,
                                     WP11_HASH_PIN_COST, WP11_HASH_PIN_BLOCKSIZE,
                                     WP11_HASH_PIN_PARALLEL, hashLen);
+#elif !defined(NO_SHA256)
+    /* fallback to simple SHA2-256 hash of pin */
+    (void)seed;
+    (void)seedLen;
+    XMEMSET(hash, 0, hashLen);
+    return wc_Sha256Hash((const byte*)pin, pinLen, hash);
 #else
     (void)pin;
     (void)pinLen;
@@ -8056,6 +8063,7 @@ int WP11_AesGcm_DecryptUpdate(unsigned char* enc, word32 encSz,
     unsigned char* newEnc;
     WP11_GcmParams* gcm = &session->params.gcm;
 
+#ifdef XREALLOC
     newEnc = (unsigned char*)XREALLOC(gcm->enc, gcm->encSz + encSz, NULL,
                                                        DYNAMIC_TYPE_TMP_BUFFER);
     if (newEnc == NULL)
@@ -8065,6 +8073,20 @@ int WP11_AesGcm_DecryptUpdate(unsigned char* enc, word32 encSz,
         XMEMCPY(gcm->enc + gcm->encSz, enc, encSz);
         gcm->encSz += encSz;
     }
+#else
+    newEnc = (unsigned char*)XMALLOC(gcm->encSz + encSz, NULL,
+                                                       DYNAMIC_TYPE_TMP_BUFFER);
+    if (newEnc == NULL)
+        ret = MEMORY_E;
+    if (ret == 0) {
+        if (gcm->enc != NULL)
+            XMEMCPY(newEnc, gcm->enc, gcm->encSz);
+        XFREE(gcm->enc, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        gcm->enc = newEnc;
+        XMEMCPY(gcm->enc + gcm->encSz, enc, encSz);
+        gcm->encSz += encSz;
+    }
+#endif /* !XREALLOC */
 
     return ret;
 }

@@ -28,6 +28,17 @@
 extern "C" {
 #endif
 
+/* Helpers for setenv/getenv */
+#if !defined(WOLFPKCS11_USER_ENV) && !defined(WOLFPKCS11_NO_ENV)
+    #include <stdlib.h>
+    #ifndef XSETENV
+        #define XSETENV setenv
+    #endif
+    #ifndef XGETENV
+        #define XGETENV getenv
+    #endif
+#endif
+
 #ifndef NULL_PTR
 #define NULL_PTR        0
 #endif
