@@ -102,14 +102,14 @@ Adds backend support for TPM 2.0 using wolfTPM. Adds AES CBC key wrap / unwrap s
 * Added CI testing for wolfPKCS11 with wolfTPM backend and single threaded. (PR #23)
 * Added PKCS11 TPM NV store (enabled with `WOLFPKCS11_TPM_STORE`). Allow `WOLFPKCS11_NO_STORE` for TPM use case. (PR #23)
 * Fixed compiler warnings from mingw. (PR #23)
-* Added portability macro `WOLFPKCS11_NO_ENV` when setenv/getenv is not available. (PR #23)
+* Added portability macro `WOLFPKCS11_NO_ENV` when setenv/getenv are not available. (PR #23)
 * Fix to only require `-ldl` for non-static builds. (PR #23)
 * Portability fixes. Added `NO_MAIN_DRIVER`. Support for `SINGLE_THREADED`. Add `static` to some globals. (PR #24)
 * Fixes for portability where `XREALLOC` is not available. (PR #25)
 * Added support for custom setenv/get env using `WOLFPKCS11_USER_ENV`. (PR #25)
 * Fix for final not being called after init in edge case pin failure. (PR #25)
 * Added support for hashing PIN with SHA2-256.
-  - PKS11 uses scrypt, which uses multiple MB of memory and is not practical. (PR #25)
+  - PKS11 uses scrypt, which uses multiple MB of memory and is not practical for embedded systems. (PR #25)
 
 ### wolfPKCS11 Release 1.1 (May 6, 2022)
 

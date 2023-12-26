@@ -6527,6 +6527,12 @@ int pkcs11test_mtt(int argc, char* argv[])
                 return 1;
             }
             testCase = atoi(*argv);
+            if (testCase <= 0 || testCase > testFuncCnt) {
+                fprintf(stderr, "Test case out of range: %s\n", *argv);
+                return 1;
+            }
+            testFunc[testCase - 1].run = 1;
+            onlySet = 1;
         }
         else if (string_matches(*argv, "-token")) {
             argc--;

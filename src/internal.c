@@ -6953,7 +6953,7 @@ int WP11_Ec_GenerateKeyPair(WP11_Object* pub, WP11_Object* priv,
         CK_BBOOL isSign = CK_FALSE;
         CK_ULONG len = sizeof(isSign);
         ret = WP11_Object_GetAttr(priv, CKA_SIGN, &isSign, &len);
-        if (isSign)
+        if (ret == 0 && isSign)
             priv->slot->tpmCtx.eccKey = (WOLFTPM2_KEY*)&priv->tpmKey;
         else
             priv->slot->tpmCtx.ecdhKey = (WOLFTPM2_KEY*)&priv->tpmKey;
