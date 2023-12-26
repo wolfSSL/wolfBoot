@@ -2647,6 +2647,7 @@ static CK_RV test_wrap_unwrap_key(void* args)
 
     memset(wrappingKeyData, 9, sizeof(wrappingKeyData));
     memset(keyData, 7, sizeof(keyData));
+    memset(&mech, 0, sizeof(mech));
     wrappedKeyLen = sizeof(wrappedKey);
 
     ret = get_generic_key(session, wrappingKeyData, sizeof(wrappingKeyData),
