@@ -82,7 +82,11 @@ Set to any value to stop storage of token data.
 
 ### wolfPKCS11 Release 1.2 (Dec 26, 2023)
 
+**Summary**
+
 Adds backend support for TPM 2.0 using wolfTPM. Adds AES CBC key wrap / unwrap support. Portability improvements. Improved testing with GitHub Actions.
+
+**Detail**
 
 * Cleanups for minor cast warning, spelling and ignore for generated test files (PR #14)
 * Added support for wrap/unwrap RSA with aes_cbc_pad. (PR #15)
