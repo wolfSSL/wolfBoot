@@ -29,6 +29,7 @@
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolftpm/tpm2_wrap.h>
+#include <wolfssl/error-ssl.h>
 #include "tpm.h"
 
 /* Default PCR (test) */
