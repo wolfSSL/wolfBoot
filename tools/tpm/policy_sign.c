@@ -29,7 +29,6 @@
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolftpm/tpm2_wrap.h>
-#include <wolfssl/error-ssl.h>
 #include "tpm.h"
 
 /* Default PCR (test) */
@@ -83,7 +82,7 @@ static int loadFile(const char* fname, byte** buf, size_t* bufLen)
                 ret = MEMORY_E;
         }
         else if (*buf != NULL && fileSz > (ssize_t)*bufLen) {
-            ret = INPUT_SIZE_E;
+            ret = BUFFER_E;
         }
         *bufLen = (size_t)fileSz;
         if (ret == 0) {
