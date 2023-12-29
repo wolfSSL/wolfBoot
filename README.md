@@ -557,3 +557,8 @@ Use `make keysclean` to delete keys and regenerate.
     * Simulator: tests can now run on MacOS
     * Unit tests: improved coverage. Added gcov reports
     * Static analysis: added cppcheck tests, fixed all relevant warnings
+
+### V 2.0.2 - (2023-12-29)
+ * Fixed bug in sign tool when using ECC keys
+ * Improved documentation
+ * Added customizable DCD for NXP targets

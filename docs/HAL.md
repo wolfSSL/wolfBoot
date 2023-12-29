@@ -18,13 +18,8 @@ and RAM boundaries.
 
 ## Supported platforms
 
-The following platforms are supported in the current version:
-  - STM32C0, STM32F4, STM32F7, STM32G0, STM32H7, STM32L5, STM32L0, STM32U5, STM32WB55
-  - nRF52
-  - Atmel samR21
-  - TI cc26x2
-  - Kinetis
-  - SiFive HiFive1 RISC-V
+Please see [Targets](Targets.md)
+
 
 ## API
 
