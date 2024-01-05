@@ -4,15 +4,15 @@
 
 CC=gcc
 CFLAGS=-Wall -g -ggdb
-CFLAGS+=-I../../include -DWOLFBOOT_ELF -DELF_PARSER -DDEBUG_ELF -DPRINTF_ENABLED
-EXE=elf-parser
+CFLAGS+=-I../../include -DMMU -DPRINTF_ENABLED
+EXE=fdt-parser
 
 LIBS=
 
 all: $(EXE)
 
 $(EXE):
-	$(CC) -o $@ $(CFLAGS) $(LIBS) elf-parser.c ../../src/elf.c
+	$(CC) -o $@ $(CFLAGS) $(LIBS) fdt-parser.c ../../src/fdt.c
 
 clean:
 	rm -f *.o $(EXE)

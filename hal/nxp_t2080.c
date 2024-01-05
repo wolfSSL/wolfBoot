@@ -459,14 +459,14 @@ static void hal_cpld_init(void)
 {
 #ifdef ENABLE_CPLD
     /* CPLD IFC Timing Parameters */
-    IFC_FTIM0(3) = (IFC_FTIM0_GPCM_TACSE(16) |
-                    IFC_FTIM0_GPCM_TEADC(16) |
-                    IFC_FTIM0_GPCM_TEAHC(16));
-    IFC_FTIM1(3) = (IFC_FTIM1_GPCM_TACO(16) |
-                    IFC_FTIM1_GPCM_TRAD(31));
-    IFC_FTIM2(3) = (IFC_FTIM2_GPCM_TCS(16) |
-                    IFC_FTIM2_GPCM_TCH(8) |
-                    IFC_FTIM2_GPCM_TWP(31));
+    IFC_FTIM0(3) = (IFC_FTIM0_GPCM_TACSE(16UL) |
+                    IFC_FTIM0_GPCM_TEADC(16UL) |
+                    IFC_FTIM0_GPCM_TEAHC(16UL));
+    IFC_FTIM1(3) = (IFC_FTIM1_GPCM_TACO(16UL) |
+                    IFC_FTIM1_GPCM_TRAD(31UL));
+    IFC_FTIM2(3) = (IFC_FTIM2_GPCM_TCS(16UL) |
+                    IFC_FTIM2_GPCM_TCH(8UL) |
+                    IFC_FTIM2_GPCM_TWP(31UL));
     IFC_FTIM3(3) = 0;
 
     /* CPLD IFC Definitions (CS3) */

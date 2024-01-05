@@ -32,7 +32,9 @@
     #define CCSRBAR_SIZE BOOKE_PAGESZ_1M
 
     #define ENABLE_DDR
+    #ifndef DDR_SIZE
     #define DDR_SIZE (512UL * 1024UL * 1024UL)
+    #endif
 
     /* Memory used for transferring blocks to/from NAND.
      * Maps to eLBC FCM internal 8KB region (by hardware) */
@@ -62,8 +64,9 @@
 
 #elif defined(PLATFORM_nxp_t1024)
     /* NXP T1024 */
-    #define CPU_NUMCORES 2
     #define CORE_E5500
+    #define CPU_NUMCORES 2
+    #define CORES_PER_CLUSTER 1
     #define LAW_MAX_ENTRIES 16
 
     #define CCSRBAR_DEF (0xFE000000) /* T1024RM 4.4.1 default base */
@@ -86,7 +89,9 @@
     #endif
 
     #define ENABLE_DDR
+    #ifndef DDR_SIZE
     #define DDR_SIZE (2048ULL * 1024ULL * 1024ULL)
+    #endif
 
     #define FLASH_BASE_ADDR      0xEC000000UL
     #define FLASH_BASE_PHYS_HIGH 0xFULL
@@ -97,9 +102,11 @@
 
 #elif defined(PLATFORM_nxp_t2080)
     /* NXP T0280 */
-    #define CPU_NUMCORES 4
     #define CORE_E6500
+    #define CPU_NUMCORES 4
+    #define CORES_PER_CLUSTER 4
     #define LAW_MAX_ENTRIES 32
+    #define ENABLE_PPC64
 
     #define CCSRBAR_DEF (0xFE000000UL) /* T2080RM 4.3.1 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
@@ -122,7 +129,9 @@
     #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
+    #ifndef DDR_SIZE
     #define DDR_SIZE (8192UL * 1024UL * 1024UL)
+    #endif
 
     #define FLASH_BASE_ADDR      0xE8000000UL
     #define FLASH_BASE_PHYS_HIGH 0x0ULL
@@ -424,11 +433,32 @@
 
 /* L2 Cache */
 #if defined(CORE_E6500)
+    /* L2 Cache Control - E6500CORERM 2.2.3 Memory-mapped registers (MMRs) */
+    #define L2_CLUSTER_BASE(n) (CCSRBAR + 0xC20000 + (n * 0x40000))
+    #define L2PID(n)           (0x200 + (n * 0x10)) /* L2 Cache Partitioning ID */
+    #define L2PIR(n)           (0x208 + (n * 0x10)) /* L2 Cache Partitioning Allocation */
+    #define L2PWR(n)           (0x20C + (n * 0x10)) /* L2 Cache Partitioning Way */
+
     /* MMRs */
     #define L2CSR0    0x000 /* L2 Cache Control and Status 0 */
     #define L2CSR1    0x004 /* L2 Cache Control and Status 1 */
     #define L2CFG0    0x008 /* L2 Cache Configuration */
 #else
+    #ifdef CORE_E5500
+        /* L2 Cache Control - E5500RM 2.15 L2 Cache Registers */
+        #define L2_BASE         (CCSRBAR + 0x20000)
+    #else
+        /* E500 */
+        #define L2_BASE         (CCSRBAR + 0x20000)
+        #define L2CTL           0x000 /* 0xFFE20000 - L2 control register */
+        #define L2SRBAR0        0x100 /* 0xFFE20100 - L2 SRAM base address register */
+
+        #define L2CTL_EN        (1 << 31) /* L2 enable */
+        #define L2CTL_INV       (1 << 30) /* L2 invalidate */
+        #define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
+        #define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
+    #endif
+
     /* SPR */
     #define L2CFG0    0x207 /* L2 Cache Configuration Register 0 */
     #define L2CSR0    0x3F9 /* L2 Data Cache Control and Status Register 0 */
@@ -441,8 +471,6 @@
 #define L2CSR0_L2PE  0x40000000 /* L2 Cache Parity/ECC Enable */
 #define L2CSR0_L2E   0x80000000 /* L2 Cache Enable */
 
-#define L2CSR0_L2E   0x80000000 /* L2 Cache Enable */
-#define L2CSR0_L2PE  0x40000000 /* L2 Cache Parity/ECC Enable */
 #define L2CSR0_L2WP  0x1c000000 /* L2 I/D Way Partioning */
 #define L2CSR0_L2CM  0x03000000 /* L2 Cache Coherency Mode */
 #define L2CSR0_L2FI  0x00200000 /* L2 Cache Flash Invalidate */
@@ -702,17 +730,24 @@ extern void dcache_disable(void);
     #define r31 31
 #endif
 
+/* ePAPR 1.1 spin table */
 /* For multiple core spin table communication */
-#define EPAPR_MAGIC       (0x45504150)
+/* The spin table must be WING 0b001x (memory-coherence required) */
+/* For older PPC compat use dcbf to flush spin table entry */
+/* Note: spin-table must be cache-line aligned in memory */
+#define EPAPR_MAGIC       (0x45504150) /* Book III-E CPUs */
 #define ENTRY_ADDR_UPPER  0
 #define ENTRY_ADDR_LOWER  4
 #define ENTRY_R3_UPPER    8
 #define ENTRY_R3_LOWER    12
 #define ENTRY_RESV        16
 #define ENTRY_PIR         20
+
+/* not used for ePAPR 1.1 */
 #define ENTRY_R6_UPPER    24
 #define ENTRY_R6_LOWER    28
-#define ENTRY_SIZE        32
 
+
+#define ENTRY_SIZE        64
 
 #endif /* !_NXP_PPC_H_ */

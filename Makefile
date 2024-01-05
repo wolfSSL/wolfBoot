@@ -276,6 +276,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/delta -s clean
 	$(Q)$(MAKE) -C tools/bin-assemble -s clean
 	$(Q)$(MAKE) -C tools/elf-parser -s clean
+	$(Q)$(MAKE) -C tools/fdt-parser -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C tools/test-expect-version -s clean
 	$(Q)$(MAKE) -C tools/test-update-server -s clean
@@ -312,6 +313,10 @@ delta-test: FORCE
 elf-parser:
 	@$(MAKE) -C tools/elf-parser -s clean
 	@$(MAKE) -C tools/elf-parser
+
+fdt-parser:
+	@$(MAKE) -C tools/fdt-parser -s clean
+	@$(MAKE) -C tools/fdt-parser
 
 config: FORCE
 	$(MAKE) -C config

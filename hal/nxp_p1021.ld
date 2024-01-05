@@ -39,6 +39,8 @@ SECTIONS
     {
         _start_vector = .;
         KEEP(*(.isr_vector))
+        . = ALIGN(256);
+        KEEP(*(.bootmp))
         *(.text*)
         *(.rodata*)
         *(.sdata*)

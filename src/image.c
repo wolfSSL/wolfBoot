@@ -884,14 +884,6 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 }
 
 #ifdef MMU
-#ifndef WOLFBOOT_TPM /* tpm2_types.h has ByteReverseWord32 */
-    #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
-    #include <wolfcrypt/src/misc.c> /* for ByteReverseWord32 */
-#endif /* !WOLFBOOT_TPM */
-static uint32_t wb_reverse_word32(uint32_t x)
-{
-    return ByteReverseWord32(x);
-}
 
 /**
  * @brief Get the size of the Device Tree Blob (DTB).
@@ -904,20 +896,14 @@ static uint32_t wb_reverse_word32(uint32_t x)
  */
 int wolfBoot_get_dts_size(void *dts_addr)
 {
-    uint32_t hdr[2], magic, size;
-
-    memcpy(hdr, dts_addr, sizeof(hdr));
-
-#ifdef BIG_ENDIAN_ORDER
-    magic = wb_reverse_word32(hdr[0]);
-    size = hdr[1];
-#else
-    magic = hdr[0];
-    size = wb_reverse_word32(hdr[1]);
-#endif
-    return (magic == UBOOT_FDT_MAGIC) ? (int)size : -1;
+    int ret = fdt_check_header(dts_addr);
+    if (ret == 0) {
+        ret = fdt_totalsize(dts_addr);
+    }
+    return ret;
 }
-#endif
+
+#endif /* MMU */
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 
