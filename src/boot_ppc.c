@@ -105,6 +105,12 @@ void __attribute((weak)) hal_early_init(void)
 {
 
 }
+#ifdef MMU
+int __attribute((weak))  hal_dts_fixup(void* dts_addr)
+{
+    return 0;
+}
+#endif
 
 void boot_entry_C(void)
 {
@@ -171,6 +177,10 @@ void do_boot(const uint32_t *app_offset)
     typedef void (*boot_entry)(uintptr_t r3, uintptr_t r4, uintptr_t r5, uintptr_t r6,
                                uintptr_t r7, uintptr_t r8, uintptr_t r9);
     boot_entry entry = (boot_entry)app_offset;
+
+#ifdef MMU
+    hal_dts_fixup((uint32_t*)dts_offset);
+#endif
 
 #ifndef BUILD_LOADER_STAGE1
     /* invalidate cache */

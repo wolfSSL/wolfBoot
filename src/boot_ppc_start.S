@@ -343,7 +343,9 @@ infinite_debug_loop:
 #ifdef USE_CORENET_INTERFACE
 ccsr_temp_law:
         /* CCSR - LAW0 (Temp CoreNet 4K) */
-        #define CCSR_TEMP_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_CORENET) | LAW_SIZE_4KB)
+        #define CCSR_TEMP_LAW (LAWAR_ENABLE | \
+                               LAWAR_TRGT_ID(LAW_TRGT_CORENET) | \
+                               LAW_SIZE_4KB)
         lis     r0,     CCSRBAR_PHYS_HIGH@h
         ori     r0, r0, CCSRBAR_PHYS_HIGH@l
         lis     r1,     CCSRBAR_DEF@h
@@ -354,7 +356,8 @@ ccsr_temp_law:
         stw     r1, LAWBAR_BASE(0)+4(r9) /* LAWBARL */
         sync
         stw     r2, LAWBAR_BASE(0)+8(r9) /* LAWAR */
-        lwz     r2, LAWBAR_BASE(0)+8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        lwz     r2, LAWBAR_BASE(0)+8(r9)
         isync
 
 read_old_ccsr:
@@ -398,7 +401,8 @@ write_new_ccsrbar:
 
 invalidate_temp_tlb:
         /* invalidate TLB 0 */
-        li      r3, 0x04 /* L2TLB0_FI: TLB0 flash invalidate (write 1 to invalidate) */
+        /* L2TLB0_FI: TLB0 flash invalidate (write 1 to invalidate) */
+        li      r3, 0x04
         mtspr   MMUCSR0, r3
 #endif /* CCSRBAR_DEF != CCSRBAR_PHYS */
 
@@ -424,7 +428,9 @@ ccsr_tlb:
 #if defined(CORE_E5500) || defined(CORE_E6500)
 ccsr_law:
         /* CCSR - LAW0 (CoreNet 16MB) */
-        #define CCSR_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_CORENET) | LAW_SIZE_16MB)
+        #define CCSR_LAW (LAWAR_ENABLE | \
+                          LAWAR_TRGT_ID(LAW_TRGT_CORENET) | \
+                          LAW_SIZE_16MB)
         lis     r9,     CCSRBAR + LAWBAR_BASE(0)@h
         ori     r9, r9, CCSRBAR + LAWBAR_BASE(0)@l
         lis     r0,     CCSRBAR_PHYS_HIGH@h
@@ -437,7 +443,8 @@ ccsr_law:
         stw     r1, 4(r9) /* LAWBARL */
         sync
         stw     r2, 8(r9) /* LAWAR */
-        lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        lwz     r2, 8(r9)
         isync
 #endif /* CORE_E5500 || CORE_E6500 */
 
@@ -446,7 +453,9 @@ ccsr_law:
         /* Memory Mapped NOR Flash (64/128MB) at 0xEC000000/0xE8000000 */
 flash_law:
         /* FLASH - LAW1 (IFC 64/128MB) */
-        #define FLASH_LAW (LAWAR_ENABLE | LAWAR_TRGT_ID(LAW_TRGT_IFC) | FLASH_LAW_SIZE)
+        #define FLASH_LAW (LAWAR_ENABLE | \
+                           LAWAR_TRGT_ID(LAW_TRGT_IFC) | \
+                           FLASH_LAW_SIZE)
         lis     r9,     CCSRBAR + LAWBAR_BASE(1)@h
         ori     r9, r9, CCSRBAR + LAWBAR_BASE(1)@l
         lis     r0,     FLASH_BASE_PHYS_HIGH@h
@@ -459,10 +468,11 @@ flash_law:
         stw     r1, 4(r9) /* LAWBARL */
         sync
         stw     r2, 8(r9) /* LAWAR */
-        lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        lwz     r2, 8(r9)
         isync
 flash_tlb:
-        /* Flash: TLB 1, Entry 7, Super X/R/W, W/I/G, TS=0, 64/128M, IPROT */
+        /* Flash: TLB 1, Entry 2, Super X/R/W, W/I/G, TS=0, 64/128M, IPROT */
         /* Write is required for Write/Erase using CFI commands to base */
     #ifdef BUILD_LOADER_STAGE1
         /* Using XIP from this flash, so cannot use cache inhibit */
@@ -471,7 +481,7 @@ flash_tlb:
         /* IFC polling requires cache inhibit */
         #define FLASH_TLB_WING (MAS2_I | MAS2_G)
     #endif
-        set_tlb(1, 7,
+        set_tlb(1, 2,
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
                 MAS3_SX | MAS3_SW | MAS3_SR, FLASH_TLB_WING, 0,
                 FLASH_TLB_PAGESZ, 1, r3);
@@ -529,7 +539,8 @@ init_sram_law:
         stw     r1, 4(r9) /* LAWBARL */
         sync
         stw     r2, 8(r9) /* LAWAR */
-        lwz     r2, 8(r9) /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
+        lwz     r2, 8(r9)
         isync
 
 init_sram_tlb:
@@ -577,12 +588,6 @@ l2_setup_sram:
 
 #if defined(CORE_E6500) /* --- L2 E6500 --- */
 l2_setup_cache:
-        /* L2 Cache Control - E6500CORERM 2.2.3 Memory-mapped registers (MMRs) */
-        #define L2_CLUSTER_BASE(n) (CCSRBAR + 0xC20000 + (n * 0x40000))
-        #define L2PID(n)           (0x200 + (n * 0x10)) /* L2 Cache Partitioning ID */
-        #define L2PIR(n)           (0x208 + (n * 0x10)) /* L2 Cache Partitioning Allocation */
-        #define L2PWR(n)           (0x20C + (n * 0x10)) /* L2 Cache Partitioning Way */
-
         /* E6500CORERM: 11.7 L2 cache state */
         /* R5 = L2 cluster 1 base */
         lis     r5,     L2_CLUSTER_BASE(0)@h
@@ -600,7 +605,7 @@ l2_poll_invclear:
         bne     l2_poll_invclear
         isync
 
-        /* set stash id to (coreID) * 2 + 32 + L2 (1) */
+        /* set stash id to (coreID * 2) + 32 + L2 (1) - only core 0 here */
         li      r4, (32 + 1)
         stw     r4, L2CSR1(r5)
 
@@ -613,9 +618,6 @@ l2_poll_invclear:
 
 #elif defined(CORE_E5500) /* --- L2 E5500 --- */
 l2_setup_cache:
-        /* L2 Cache Control - E5500RM 2.15 L2 Cache Registers */
-        #define L2_BASE         (CCSRBAR + 0x20000)
-
         /* Invalidate and clear locks */
         lis     r1,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
         ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
@@ -630,13 +632,9 @@ l2_poll_invclear:
         and.    r4, r1, r4
         bne     l2_poll_invclear
 
-        /* set stash id to (coreID) * 2 + 32 + L2 (1) */
+        /* set stash id to (coreID * 2) + 32 + L2 (1) - only core 0 here */
         li      r4, (32 + 1)
-        sync
-        isync
         mtspr   L2CSR1, r4
-        isync
-        sync
 
         /* enable L2 with no parity */
         lis     r4, (L2CSR0_L2E)@h
@@ -650,15 +648,6 @@ l2_poll_invclear:
 #if defined(CORE_E500) /* --- L2 E500 --- */
         /* e500 - L2 Cache */
 l2_setup_cache:
-        #define L2_BASE         (CCSRBAR + 0x20000)
-        #define L2CTL           0x000 /* 0xFFE20000 - L2 control register */
-        #define L2SRBAR0        0x100 /* 0xFFE20100 - L2 SRAM base address register */
-
-        #define L2CTL_EN        (1 << 31) /* L2 enable */
-        #define L2CTL_INV       (1 << 30) /* L2 invalidate */
-        #define L2CTL_SIZ(n)    (((n) & 0x3) << 28) /* 2=256KB (always) */
-        #define L2CTL_L2SRAM(n) (((n) & 0x7) << 16) /* 1=all 256KB, 2=128KB */
-
     #ifdef L2SRAM_ADDR /* as SRAM (1=256KB) */
         #define L2CTL_VAL (L2CTL_EN | L2CTL_INV | L2CTL_SIZ(2) | L2CTL_L2SRAM(1))
     #else

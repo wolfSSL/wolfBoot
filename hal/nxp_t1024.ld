@@ -6,7 +6,7 @@ MEMORY
 {
     /* DDR4 - 2GB (offset by destination address and 4KB boot region) */
     DRAM (rwx) : ORIGIN = @WOLFBOOT_STAGE1_LOAD_ADDR@,
-                 LENGTH = 0x7FFFFFFF - @WOLFBOOT_STAGE1_LOAD_ADDR@
+                 LENGTH = 0x7FFFFFFF - 4K - @WOLFBOOT_STAGE1_LOAD_ADDR@
 
     /* L1 SRAM - 16KB */
     L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
@@ -37,6 +37,7 @@ SECTIONS
         KEEP(*(.isr_vector))
         . = ALIGN(256);
         _start_text = .;
+        KEEP(*(.bootmp))
         *(.text*)
         *(.rodata*)
         *(.sdata*)

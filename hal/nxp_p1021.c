@@ -22,7 +22,7 @@
 #include "target.h"
 #include "image.h"
 #include "printf.h"
-#include <string.h>
+#include "string.h"
 
 #include "nxp_ppc.h"
 
@@ -30,14 +30,16 @@
 /* #define DEBUG_EXT_FLASH */
 /* #define DEBUG_ESPI 1 */
 
-/* Tests */
-/* #define TEST_DDR */
-/* #define TEST_FLASH */
-/* #define TEST_TPM */
-
 #define ENABLE_ELBC /* Flash Controller */
 #define ENABLE_BUS_CLK_CALC
+
 #ifndef BUILD_LOADER_STAGE1
+    /* Tests */
+    #if 0
+        #define TEST_DDR
+        #define TEST_FLASH
+        #define TEST_TPM
+    #endif
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
     #define ENABLE_CONF_IO
@@ -50,6 +52,7 @@
     /* #define ENABLE_QE_CRC32 */ /* CRC32 check on QE disabled by default */
 #endif
 
+/* Foward declarations */
 #if defined(ENABLE_DDR) && defined(TEST_DDR)
 static int test_ddr(void);
 #endif
@@ -421,8 +424,8 @@ enum elbc_amask_sizes {
 #define DDR_SDRAM_CLK_CNTL ((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
 
 #define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
-#define DDR_SDRAM_CFG_32_BE    0x00080000
 #define DDR_SDRAM_CFG_ECC_EN   0x20000000
+#define DDR_SDRAM_CFG_32_BE    0x00080000
 #define DDR_SDRAM_CFG_2_D_INIT 0x00000010 /* data initialization in progress */
 #define DDR_SDRAM_CFG_BI       0x00000001 /* Bypass initialization */
 
@@ -894,7 +897,7 @@ static void hal_ddr_init(void)
     /* Map LAW for DDR */
     set_law(6, 0, DDR_ADDRESS, LAW_TRGT_DDR, LAW_SIZE_512MB, 0);
 
-    /* If DDR is not already enabled */
+    /* If DDR is already enabled then just return */
     if ((get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN)) {
         return;
     }
@@ -1379,7 +1382,7 @@ static int hal_qe_init(void)
         set32(QE_SDMA_SDAQMR, 0);
 
         /* Allocate 2KB temporary buffer for sdma */
-        sdma_base = 0;
+        sdma_base = 0; /* offset in QE_MURAM */
         set32(QE_SDMA_SDEBCR, sdma_base & QE_SDEBCR_BA_MASK);
 
         /* Clear sdma status */
@@ -1401,28 +1404,25 @@ static int hal_qe_init(void)
 #ifdef ENABLE_MP
 
 /* from boot_ppc_core.S */
-extern uint32_t _mp_page_start;
+extern uint32_t _secondary_start_page;
+extern uint32_t _second_half_boot_page;
 extern uint32_t _spin_table;
+extern uint32_t _spin_table_addr;
 extern uint32_t _bootpg_addr;
 
 /* Startup additional cores with spin table and synchronize the timebase */
 static void hal_mp_up(uint32_t bootpg)
 {
     uint32_t up, cpu_up_mask, whoami, bpcr, devdisr;
-    uint8_t *spin_table_addr;
     int timeout = 50, i;
 
     /* Get current running core number */
     whoami = get32(PIC_WHOAMI);
 
-    /* Calculate location of spin table in BPTR */
-    spin_table_addr = (uint8_t*)(BOOT_ROM_ADDR +
-        ((uint32_t)&_spin_table - (uint32_t)&_mp_page_start));
+    wolfBoot_printf("MP: Starting core 2 (boot page %p, spin table %p)\n",
+        bootpg, (uint32_t)&_spin_table);
 
-    wolfBoot_printf("MP: Starting core 2 (spin table %p)\n",
-        spin_table_addr);
-
-    /* Set the boot page translation reigster */
+    /* Set the boot page translation register */
     set32(RESET_BPTR, RESET_BPTR_EN | RESET_BPTR_BOOTPG(bootpg));
 
     /* Disable time base on inactive core */
@@ -1444,8 +1444,8 @@ static void hal_mp_up(uint32_t bootpg)
     cpu_up_mask = (1 << whoami);
     while (timeout) {
         for (i = 0; i < CPU_NUMCORES; i++) {
-            uint32_t* entry = (uint32_t*)(spin_table_addr +
-                (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
+            uint32_t* entry = (uint32_t*)(
+                  (uint8_t*)&_spin_table + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
             if (*entry) {
                 cpu_up_mask |= (1 << i);
             }
@@ -1480,23 +1480,29 @@ static void hal_mp_up(uint32_t bootpg)
 
 static void hal_mp_init(void)
 {
-    uint32_t *fixup = (uint32_t*)&_mp_page_start;
+    uint32_t *fixup = (uint32_t*)&_secondary_start_page;
     uint32_t bootpg;
     int i_tlb = 0; /* always 0 */
     size_t i;
-    const uint32_t *s;
-    uint32_t *d;
+    const volatile uint32_t *s;
+    volatile uint32_t *d;
 
     /* Assign virtual boot page at end of DDR */
     bootpg = DDR_ADDRESS + DDR_SIZE - BOOT_ROM_SIZE;
 
     /* Store the boot page address for use by additional CPU cores */
-    _bootpg_addr = bootpg;
+    _bootpg_addr = (uint32_t)&_second_half_boot_page;
 
-    /* map reset page to bootpg so we can copy code there */
+    /* Store location of spin table for other cores */
+    _spin_table_addr = (uint32_t)&_spin_table;
+
+    /* Flush bootpg before copying to invalidate any stale cache lines */
+    flush_cache(bootpg, BOOT_ROM_SIZE);
+
+    /* Map reset page to bootpg so we can copy code there */
     disable_tlb1(i_tlb);
-    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn */
-        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I, /* perms, wimge */
+    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn, urpn */
+        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), /* perms, wimge */
         0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
 
     /* copy startup code to virtually mapped boot address */

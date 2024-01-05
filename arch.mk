@@ -424,6 +424,7 @@ ifeq ($(TARGET),nxp_t1024)
   LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   OBJS+=src/boot_ppc_mp.o # support for spin table
+  OBJS+=src/fdt.o
   UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
@@ -445,6 +446,7 @@ ifeq ($(TARGET),nxp_t2080)
   LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   UPDATE_OBJS:=src/update_ram.o
+  OBJS+=src/fdt.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
   else
@@ -750,6 +752,7 @@ BOOT_IMG?=test-app/image.bin
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  OBJS+=src/fdt.o
   UPDATE_OBJS:=src/update_ram.o
 endif
 ifeq ($(DUALBANK_SWAP),1)

@@ -166,8 +166,13 @@ endif
 
 ifeq ($(TARGET),sim)
   APP_OBJS=app_$(TARGET).o ../test-app/libwolfboot.o ../hal/$(TARGET).o
-  # Override linker flags
-  LDFLAGS=-Wl,-Map=image.map
+  # LD on MacOS does not support "-Map="
+  LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
+  LDFLAGS=
+  ifeq ($(LDMAPSUPPORTED),)
+    # Override linker flags
+    LDFLAGS+=-Wl,-Map=image.map
+  endif
 endif
 
 ifeq ($(EXT_FLASH),1)

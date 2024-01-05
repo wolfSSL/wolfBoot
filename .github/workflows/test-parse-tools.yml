@@ -1,0 +1,46 @@
+name: Test parsing tools (elf and fdt)
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Install cross compilers
+        run: |
+          sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu
+
+      - name: make distclean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp config/examples/nxp-t1024.config .config
+
+      - name: Build wolfBoot
+        run: |
+          make
+
+      - name: Build tools
+        run: |
+          make elf-parser
+          make fdt-parser
+
+      - name: Run elf-parser test
+        run: |
+          ./tools/elf-parser/elf-parser
+
+      - name: Run fdt-parser test (nxp_t1024.dtb)
+        run: |
+          ./tools/fdt-parser/fdt-parser ./tools/fdt-parser/nxp_t1024.dtb -t

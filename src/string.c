@@ -227,6 +227,19 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
 
     return diff;
 }
+
+void* memchr(void const *s, int c_in, size_t n)
+{
+    unsigned char c = (unsigned char)c_in;
+    unsigned char *char_ptr = (unsigned char*)s;
+    for (; n > 0; --n, ++char_ptr) {
+        if (*char_ptr == c) {
+            return (void*)char_ptr;
+        }
+    }
+    return NULL;
+}
+
 #endif /* __CCRX__ Renesas CCRX */
 #endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && DEBUG_UART) */
 

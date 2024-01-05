@@ -25,46 +25,54 @@
 
 #include "hal/nxp_ppc.h"
 
-#define TORESET(x)     (x - _mp_page_start + BOOT_ROM_ADDR)
-
-#ifndef INTVEC_ADDR
-/* workaround to use isr_empty for all interrupts, for real IRQ's adjust the
- * offset and define additional interrupts at those offsets */
-#define INTVEC_ADDR(n) isr_empty@l
-#endif
+#define TORESET(x)     (x - _secondary_start_page + BOOT_ROM_ADDR)
 
 /* Additional cores (mp) assembly code for core minimum startup and spin table.
  * All code must fit in 4KB, which gets virtually mapped via the TLB1 (MMU) and
- * loaded by core 0. Spin table entry TLB1(0) mapped for work is 64MB. */
-.globl        _mp_page_start
-.align        12
-_mp_page_start:
+ * loaded by core 0. Spin table entry TLB1(0) mapped for work is 64MB.
+ */
+        .section .bootmp, "ax"
+        .globl        _secondary_start_page
+_secondary_start_page:
         /* Time base, MAS7 and machine check pin enable */
         lis     r0,     (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@h
         ori     r0, r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@l
         mtspr   SPRN_HID0, r0
 
+#ifdef CORE_E500
+        /* Set addr streaming & broadcast
+         * and optimized sync instruction (if rev 5.0 or greater) */
+        li      r0, (HID1_ASTME | HID1_ABE)@l
+        mfspr   r3, SPRN_PVR
+        andi.   r3, r3, 0xFF
+        cmpwi   r3, 0x50@l /* if rev 5.0 or greater set MBDD */
+        blt     1f
+        ori     r0, r0, HID1_MBDD@l
+1:      mtspr   SPRN_HID1, r0
+#endif
+
+branch_prediction:
         /* enable branch prediction */
         lis     r0,     (BUCSR_ENABLE)@h
         ori     r0, r0, (BUCSR_ENABLE)@l
         mtspr   SPRN_BUCSR, r0
 
-        /* Ensure TB is 0 */
+        /* Ensure Timebase is reset to 0 */
         li      r3, 0
         mttbl   r3
         mttbu   r3
 
         /* Enable/invalidate the I-Cache */
-        lis     r2,     (L1CSR_CFI|L1CSR_CLFC)@h
-        ori     r2, r2, (L1CSR_CFI|L1CSR_CLFC)@l
+        lis     r2,     (L1CSR_CFI | L1CSR_CLFC)@h
+        ori     r2, r2, (L1CSR_CFI | L1CSR_CLFC)@l
         mtspr   L1CSR1, r2
 1:
         mfspr   r3, L1CSR1
         and.    r1, r3, r2
         bne     1b
 
-        lis     r3,     (L1CSR_CPE|L1CSR_CE)@h
-        ori     r3, r3, (L1CSR_CPE|L1CSR_CE)@l
+        lis     r3,     (L1CSR_CPE | L1CSR_CE)@h
+        ori     r3, r3, (L1CSR_CPE | L1CSR_CE)@l
         mtspr   L1CSR1,r3
         isync
 2:
@@ -73,16 +81,16 @@ _mp_page_start:
         beq     2b
 
         /* Enable/invalidate the D-Cache */
-        lis     r2, (L1CSR_CFI|L1CSR_CLFC)@h
-        ori     r2, r2, (L1CSR_CFI|L1CSR_CLFC)@l
+        lis     r2, (L1CSR_CFI | L1CSR_CLFC)@h
+        ori     r2, r2, (L1CSR_CFI | L1CSR_CLFC)@l
         mtspr   L1CSR0, r2
 1:
         mfspr   r3, L1CSR0
         and.    r1, r3, r2
         bne     1b
 
-        lis     r3,     (L1CSR_CPE|L1CSR_CE)@h
-        ori     r3, r3, (L1CSR_CPE|L1CSR_CE)@l
+        lis     r3,     (L1CSR_CPE | L1CSR_CE)@h
+        ori     r3, r3, (L1CSR_CPE | L1CSR_CE)@l
         mtspr   L1CSR0, r3
         isync
 2:
@@ -91,98 +99,183 @@ _mp_page_start:
         beq     2b
 
         /* Get our PIR to figure out our table entry */
-        lis     r3,     TORESET(_spin_table)@h
-        ori     r3, r3, TORESET(_spin_table)@l
+        lis     r3,     TORESET(_spin_table_addr)@h
+        ori     r3, r3, TORESET(_spin_table_addr)@l
+        lwz     r3, 0(r3)
 
-        /* Determine base address for the core (use r10) */
+        /* Use PIR to determine cluster/core for spin table base at r10 */
         mfspr   r0, SPRN_PIR
+#if defined(CORE_E5500) || defined(CORE_E6500)
+        rlwinm  r8, r0, 29, 0x03 /* r8 = core within cluster */
+        srwi    r10, r0, 5       /* r10 = cluster */
+
+        mulli   r5, r10, CORES_PER_CLUSTER
+        add     r5, r5, r8
+        mulli   r4, r5, CORES_PER_CLUSTER
+#elif defined(CORE_E500MC) /* BOOKE e500mc family */
+        rlwinm  r4, r0, 27, 27, 31
+        mr      r5, r4
+#else /* BOOKE e500 family (like P1021) */
         mr      r4, r0
-        slwi    r8, r4, 5 /* core number * ENTRY_SIZE */
+        mr      r5, r4
+#endif
+        slwi    r8, r5, 6 /* spin table is padded to 64 bytes */
+        /* use r10 for the spin table base address */
         add     r10, r3, r8
 
-        /* Setup the spin table entry */
-        li      r3, 0
-        li      r8, 1
-        stw     r0, ENTRY_PIR(r10)
-        stw     r3, ENTRY_ADDR_UPPER(r10)
-        stw     r8, ENTRY_ADDR_LOWER(r10)
-        stw     r3, ENTRY_R3_UPPER(r10)
-        stw     r4, ENTRY_R3_LOWER(r10)
-        stw     r3, ENTRY_R6_UPPER(r10)
-        stw     r3, ENTRY_R6_LOWER(r10)
+        mtspr   SPRN_PIR, r4 /* Set processor information cluster/core (PIT) */
 
-        /* Load r13 with the address of the boot page */
-        lis     r13, TORESET(_bootpg_addr)@h
-        ori     r13, r13, TORESET(_bootpg_addr)@l
+#if defined(CORE_E5500) || defined(CORE_E6500)
+        /* set L1 stash id = 32: (coreID * 2) + 32 + L1 CT (0) */
+        slwi    r8, r4, 1
+        addi    r8, r8, 32
+        mtspr   L1CSR2, r8
+
+#if defined(CORE_E6500) /* --- L2 E6500 --- */
+l2_setup_cache:
+        /* E6500CORERM: 11.7 L2 cache state */
+        /* R5 = L2 cluster 1 base */
+        lis     r5,     L2_CLUSTER_BASE(0)@h
+        ori     r5, r5, L2_CLUSTER_BASE(0)@l
+        /* Invalidate and clear locks */
+        lis     r1,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
+        ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
+        sync
+        stw     r1, L2CSR0(r5)
+
+        /* poll till invalidate and lock bits are cleared */
+l2_poll_invclear:
+        lwz     r4, L2CSR0(r5)
+        and.    r4, r1, r4
+        bne     l2_poll_invclear
+        isync
+
+        /* set stash id to (coreID * 2) + 32 + L2 (1) */
+        addi    r3, r8,1
+        stw     r3, L2CSR1(r5)
+
+        /* enable L2 with parity */
+        sync
+        isync
+        lis     r4, (L2CSR0_L2E | L2CSR0_L2PE)@h
+        stw     r4, L2CSR0(r5)
+        isync
+
+#elif defined(CORE_E5500) /* --- L2 E5500 --- */
+l2_setup_cache:
+        /* Invalidate and clear locks */
+        msync
+        lis     r2,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
+        ori     r2, r2, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
+        mtspr   L2CSR0, r2
+
+        /* poll till invalidate and lock bits are cleared */
+l2_poll_invclear:
+        mfspr   r3, L2CSR0
+        and.    r1, r3, r2
+        bne     l2_poll_invclear
+
+        /* set stash id to (coreID * 2) + 32 + L2 (1) */
+        addi    r3, r8, 1
+        mtspr   L2CSR1, r3
+
+        /* enable L2 with no parity */
+        lis     r3, (L2CSR0_L2E)@h
+        mtspr   L2CSR0, r3
+        isync
+2:
+        mfspr   r3, L2CSR0
+        andis.  r1, r3, (L2CSR0_L2E)@h
+        beq 2b
+#endif
+#endif /* CORE_E5500 || CORE_E6500 */
+3:
+        /* setup mapping for the spin table, WIMGE=0b00100 */
+        lis     r13, TORESET(_spin_table_addr)@h
+        ori     r13, r13, TORESET(_spin_table_addr)@l
         lwz     r13, 0(r13)
+        /* mask by 4K */
+        rlwinm  r13, r13, 0, 0, 19
 
-        /* Write TLB1 entry 1 4KB for boot page */
         lis     r11, (MAS0_TLBSEL(1) | MAS0_ESEL(1))@h
         mtspr   MAS0, r11
         lis     r11, (MAS1_VALID | MAS1_IPROT)@h
         ori     r11, r11, (MAS1_TS | MAS1_TSIZE(BOOKE_PAGESZ_4K))@l
         mtspr   MAS1, r11
-        oris    r11, r13, (MAS2_I)@h
-        ori     r11, r13, (MAS2_I)@l
+        oris    r11, r13, (MAS2_M | MAS2_G)@h
+        ori     r11, r13, (MAS2_M | MAS2_G)@l
         mtspr   MAS2, r11
         oris    r11, r13, (MAS3_SX | MAS3_SW | MAS3_SR)@h
         ori     r11, r13, (MAS3_SX | MAS3_SW | MAS3_SR)@l
         mtspr   MAS3, r11
+        li      r11, 0
+        mtspr   MAS7, r11
         tlbwe
 
-        bl      1f
-1:      mflr    r11
-        /* Create a boot page mask to fixup the spin table */
-        ori     r13, r13, 0xfff
-        and     r11, r11, r13
-        and     r10, r10, r13
-
-        addi    r11, r11, (2f-1b)
+        /* _bootpg_addr has the address of _second_half_boot_page
+         * jump there in AS=1 space with cache enabled
+         */
+        lis     r13, TORESET(_bootpg_addr)@h
+        ori     r13, r13, TORESET(_bootpg_addr)@l
+        lwz     r11, 0(r13)
+        mtspr   SRR0, r11
         mfmsr   r13
         ori     r12, r13, (MSR_IS | MSR_DS)@l
-
-        mtspr   SRR0, r11
         mtspr   SRR1, r12
         rfi
 
-2:      /* spin waiting for addr */
+        /* Reserve memory to store physical boot page address */
+        .align CACHE_LINE_SHIFT
+        .globl _bootpg_addr
+_bootpg_addr:
+        .long   0
+
+        .global _spin_table_addr
+_spin_table_addr:
+        .long   0
+
+        /* Fill in the empty space.  The actual reset vector is
+         * the last word of the page */
+_secondary_start_code_end:
+        .space (BOOT_ROM_SIZE - 4) - (_secondary_start_code_end - _secondary_start_page)
+_secondary_reset_vector:
+        b        _secondary_start_page
+
+
+        /* this is a separated page for the spin table and cacheable boot code */
+        .align CACHE_LINE_SHIFT
+        .global _second_half_boot_page
+_second_half_boot_page:
+        lis     r3, (spin_table_compat - _second_half_boot_page)@h
+        ori     r3, r3, (spin_table_compat - _second_half_boot_page)@l
+        add     r3, r3, r11 /* r11 has the address of _second_half_boot_page */
+        lwz     r14, 0(r3)
+
+        /* Setup the spin table entry */
+        li      r3, 0
+        li      r8, 1
+        mfspr   r4, SPRN_PIR
+        stw     r3, ENTRY_ADDR_UPPER(r10)
+        stw     r3, ENTRY_R3_UPPER(r10)
+        stw     r4, ENTRY_R3_LOWER(r10)
+        stw     r3, ENTRY_RESV(r10)
+        stw     r4, ENTRY_PIR(r10)
+        msync
+        stw     r8, ENTRY_ADDR_LOWER(r10)
+
+        /* spin waiting for addr */
+3:
+
+        cmpwi   r14, 0
+        beq     4f
+        dcbf    0, r10
+        sync
+4:
+
         lwz     r4, ENTRY_ADDR_LOWER(r10)
         andi.   r11, r4, 1
-        bne     2b
+        bne     3b
         isync
-
-        /* setup interrupts */
-        li      r3, INTVEC_ADDR(0)
-        mtspr   IVOR(0), r3        /* 0: Critical input */
-        li      r3, INTVEC_ADDR(1)
-        mtspr   IVOR(1), r3        /* 1: Machine check */
-        li      r3, INTVEC_ADDR(2)
-        mtspr   IVOR(2), r3        /* 2: Data storage */
-        li      r3, INTVEC_ADDR(3)
-        mtspr   IVOR(3), r3        /* 3: Instruction storage */
-        li      r3, INTVEC_ADDR(4)
-        mtspr   IVOR(4), r3        /* 4: External interrupt */
-        li      r3, INTVEC_ADDR(5)
-        mtspr   IVOR(5), r3        /* 5: Alignment */
-        li      r3, INTVEC_ADDR(6)
-        mtspr   IVOR(6), r3        /* 6: Program check */
-        li      r3, INTVEC_ADDR(7)
-        mtspr   IVOR(7), r3        /* 7: floating point unavailable */
-        li      r3, INTVEC_ADDR(8)
-        mtspr   IVOR(8), r3        /* 8: System call */
-        /* 9: Auxiliary processor unavailable(unsupported) */
-        li      r3, INTVEC_ADDR(10)
-        mtspr   IVOR(10), r3        /* 10: Decrementer */
-        li      r3, INTVEC_ADDR(11)
-        mtspr   IVOR(11), r3        /* 11: Interval timer */
-        li      r3, INTVEC_ADDR(12)
-        mtspr   IVOR(12), r3        /* 12: Watchdog timer */
-        li      r3, INTVEC_ADDR(13)
-        mtspr   IVOR(13), r3        /* 13: Data TLB error */
-        li      r3, INTVEC_ADDR(14)
-        mtspr   IVOR(14), r3        /* 14: Instruction TLB error */
-        li      r3, INTVEC_ADDR(15)
-        mtspr   IVOR(15), r3        /* 15: Debug */
 
         /* get the upper bits of the addr */
         lwz     r11, ENTRY_ADDR_UPPER(r10)
@@ -198,10 +291,14 @@ _mp_page_start:
         rlwinm  r12, r4, 0, 0, 5
 
         /* setup registers before jump */
+    #ifdef ENABLE_PPC64
+        ld      r3, ENTRY_R3_UPPER(r10)
+    #else
         lwz     r3, ENTRY_R3_LOWER(r10)
+    #endif
         li      r4, 0
         li      r5, 0
-        lwz     r6, ENTRY_R6_LOWER(r10)
+        li      r6, 0
         lis     r7, (64 * 1024 * 1024)@h
         li      r8, 0
         li      r9, 0
@@ -230,20 +327,18 @@ _mp_page_start:
         mtspr   SRR1, r13
         rfi
 
-        /* Reserve memory to store physical boot page address */
-        .globl _bootpg_addr
-_bootpg_addr:
-        .long        0
-
-        .align CACHE_LINE_SHIFT
-
         /* Reserve space for spin table entries */
+        .align 6 /* 64-bytes */
         .globl _spin_table
 _spin_table:
         .space CPU_NUMCORES * ENTRY_SIZE
 
+        /* enable spin table compatibility for older ePAPR 1.1 */
+        .align CACHE_LINE_SHIFT
+        .global spin_table_compat
+spin_table_compat:
+        .long        1
+
         /* Fill remainder of page */
-_mp_page_end:
-        .space 4092 - (_mp_page_end - _mp_page_start)
-_mp_reset:
-        b        _mp_page_start
+_spin_table_end:
+        .space BOOT_ROM_SIZE - (_spin_table_end - _spin_table)
