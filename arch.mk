@@ -433,6 +433,7 @@ ifeq ($(TARGET),nxp_t1024)
     CFLAGS+=-DWOLFSSL_SP_PPC
   endif
   SPI_TARGET=nxp
+  OPTIMIZATION_LEVEL=0 # using default -Os causes issues with alignment
 endif
 
 ifeq ($(TARGET),nxp_t2080)
