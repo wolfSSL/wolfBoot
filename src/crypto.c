@@ -243,13 +243,13 @@ static CK_RV CheckAttributes(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount, int set)
             return CKR_ATTRIBUTE_TYPE_INVALID;
 
         if (attrType[j].type == ATTR_TYPE_ULONG) {
-            if (attr->pValue == NULL)
+            if (attr->pValue == NULL && set)
                 return CKR_ATTRIBUTE_VALUE_INVALID;
             if (attr->ulValueLen != sizeof(CK_ULONG))
                 return CKR_BUFFER_TOO_SMALL;
         }
         else if (attrType[j].type == ATTR_TYPE_BOOL) {
-            if (attr->pValue == NULL)
+            if (attr->pValue == NULL && set)
                 return CKR_ATTRIBUTE_VALUE_INVALID;
             if (attr->ulValueLen != sizeof(CK_BBOOL))
                 return CKR_BUFFER_TOO_SMALL;
@@ -259,7 +259,7 @@ static CK_RV CheckAttributes(CK_ATTRIBUTE* pTemplate, CK_ULONG ulCount, int set)
             }
         }
         else if (attrType[j].type == ATTR_TYPE_DATE) {
-            if (attr->pValue == NULL)
+            if (attr->pValue == NULL && set)
                 return CKR_ATTRIBUTE_VALUE_INVALID;
             if (attr->ulValueLen != sizeof(CK_DATE))
                 return CKR_BUFFER_TOO_SMALL;
