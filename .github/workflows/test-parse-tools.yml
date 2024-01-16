@@ -18,6 +18,8 @@ jobs:
 
       - name: Install cross compilers
         run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu
 
       - name: make distclean
