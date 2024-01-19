@@ -226,7 +226,10 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 {
     int password_len;
 
-    *secret_size = strlen(WOLFBOOT_ATA_DISK_LOCK_PASSWORD);
+    password_len = strlen(WOLFBOOT_ATA_DISK_LOCK_PASSWORD);
+    if (*secret_size < password_len)
+        return -1;
+    *secret_size = password_len;
     memcpy(secret, (uint8_t*)WOLFBOOT_ATA_DISK_LOCK_PASSWORD, *secret_size);
     return 0;
 }
@@ -301,13 +304,13 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
     if (ret == 0) {
         wolfBoot_printf("Creating new secret (%d bytes)\r\n", *secret_size);
         wolfBoot_printf("%s\r\n", secret);
-        
-            /* seal new secret */
+
+        /* seal new secret */
         ret = wolfBoot_seal(pubkey_hint, policy, policy_size,
                             ATA_UNLOCK_DISK_KEY_NV_INDEX,
                             secret, *secret_size);
     }
- 
+
     if (ret == 0) {
         /* unseal again to make sure it works */
         memset(secret_check, 0, sizeof(secret_check));
