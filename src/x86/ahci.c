@@ -270,20 +270,25 @@ static int get_key_sha256(uint8_t key_slot, uint8_t *hash)
 static int sata_get_random_base64(uint8_t *out, int *out_size)
 {
     uint8_t rand[ATA_SECRET_RANDOM_BYTES];
-    word32 _out_size;
+    word32 base_64_len;
     int ret;
 
     ret = wolfBoot_get_random(rand, ATA_SECRET_RANDOM_BYTES);
     if (ret != 0)
         return ret;
-    _out_size = *out_size;
-    ret = Base64_Encode(rand, ATA_SECRET_RANDOM_BYTES, out, &_out_size);
+    base_64_len = *out_size;
+    ret = Base64_Encode_NoNl(rand, ATA_SECRET_RANDOM_BYTES, out, &base_64_len);
     if (ret != 0)
         return ret;
 
     /* double check we have a NULL-terminated string */
-    *out_size = (int)_out_size;
-    out[*out_size] = '\0';
+    if ((int)base_64_len < *out_size) {
+        out[base_64_len] = '\0';
+        base_64_len += 1;
+    } else {
+        out[base_64_len-1] = '\0';
+    }
+    *out_size = (int)base_64_len;
     return 0;
 }
 
