@@ -444,7 +444,6 @@ int sata_unlock_disk(int drv, int freeze)
 #ifdef TARGET_x86_fsp_qemu
     wolfBoot_printf("DISK LOCK SECRET: %s\r\n", secret);
 #endif
-
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
 #if defined(TARGET_x86_fsp_qemu)
@@ -452,19 +451,21 @@ int sata_unlock_disk(int drv, int freeze)
         return 0;
 #endif
     if (ata_st == ATA_SEC1) {
+        AHCI_DEBUG_PRINTF("ATA: calling set passphrase\r\n", r);
+        r = ata_security_set_password(drv, 0, (char*)secret);
+        if (r != 0)
+            return -1;
+        AHCI_DEBUG_PRINTF("ATA: calling freeze lock\r\n", r);
         if (freeze) {
-            AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
             r = ata_security_freeze_lock(drv);
             AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
             if (r != 0)
                 return -1;
-        } else {
-            AHCI_DEBUG_PRINTF("ATA security freeze skipped\r\n");
         }
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         ata_st = ata_security_get_state(drv);
-        wolfBoot_printf("ATA: Security disabled. State SEC%d\r\n", ata_st);
+        wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
     }
     else if (ata_st == ATA_SEC4) {
         AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
@@ -487,14 +488,15 @@ int sata_unlock_disk(int drv, int freeze)
             r = ata_identify_device(drv);
             AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         }
-        ata_st = ata_security_get_state(drv);
-        AHCI_DEBUG_PRINTF("ATA: Security enabled. State SEC%d\r\n", ata_st);
-        if ((freeze && ata_st != ATA_SEC6) || (!freeze && ata_st != ATA_SEC5)) {
-            panic();
-        }
-        ata_st = ata_security_get_state(drv);
-        wolfBoot_printf("ATA: Security enabled. State SEC%d\r\n", ata_st);
     }
+    ata_st = ata_security_get_state(drv);
+    if ((freeze && ata_st != ATA_SEC6) || (!freeze && ata_st != ATA_SEC5)) {
+        AHCI_DEBUG_PRINTF("ATA: Security is not enabled/locked (State SEC%d)\r\n",
+                          ata_st);
+        panic();
+    }
+    AHCI_DEBUG_PRINTF("ATA: Security enabled. State SEC%d\r\n", ata_st);
+
     return 0;
 }
 #endif /* WOLFBOOT_ATA_DISK_LOCK */
