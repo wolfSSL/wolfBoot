@@ -390,6 +390,37 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 
+#if 0
+static int sata_disable_password(int drv)
+{
+    enum ata_security_state ata_st;
+    int r;
+    wolfBoot_printf("DISK DISABLE PASSWORD\r\n");
+    ata_st = ata_security_get_state(drv);
+    wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
+    if (ata_st == ATA_SEC4) {
+        r = ata_security_unlock_device(drv, "master", 1);
+        AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
+        r = ata_security_disable_password(drv, "master", 1);
+        AHCI_DEBUG_PRINTF("ATA disable password: returned %d\r\n", r);
+    }
+    panic();
+    return 0;
+}
+#endif
+
+/**
+ * @brief Unlocks a SATA disk for a given drive.
+ *
+ * This function unlocks a SATA disk identified by the specified drive number.
+ * If the SATA disk has no user password set, this function locks the disk.
+ *
+ * @param drv The drive number of the SATA disk to be unlocked.
+ * @return An integer indicating the success or failure of the unlocking
+ * operation.
+ *         - 0: Success (disk unlocked).
+ *         - -1: Failure (unable to unlock the disk).
+ */
 int sata_unlock_disk(int drv, int freeze)
 {
     int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
