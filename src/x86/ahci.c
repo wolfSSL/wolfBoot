@@ -423,7 +423,7 @@ int sata_unlock_disk(int drv, int freeze)
     }
     else if (ata_st == ATA_SEC4) {
         AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
-        r = ata_security_unlock_device(drv, (char*)secret);
+        r = ata_security_unlock_device(drv, (char*)secret, 0);
         AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);

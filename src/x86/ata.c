@@ -449,13 +449,14 @@ static int security_command(int drv, uint8_t ata_cmd)
  * @param[in] passphrase The passphrase to transmit as argument in the buffer
  * entry.
  * @param[in] async if the command will be executed in asynchronous mode
+ * @param[in] master if the passphrase should compare with master
  * @return
  *   - 0: ATA command completed successfully.
  *   - ATA_ERR_OP_NOT_IN_PROGRESS: If async = 1 but no asynchronous operation in progress.
  *   - ATA_ERR_BUSY: If async = 1. To get cmd status invoke `ata_cmd_complete_async()`.
  */
 static int security_command_passphrase(int drv, uint8_t ata_cmd,
-                                       const char *passphrase, int async)
+                                       const char *passphrase, int async, int master)
 {
     struct hba_cmd_header *cmd;
     struct hba_cmd_table *tbl;
@@ -465,6 +466,8 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     int slot = prepare_cmd_h2d_slot(drv, buffer,
             ATA_SECURITY_COMMAND_LEN, 1);
     memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
+    if (master)
+        buffer[0] = 0x1;
     memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase, strlen(passphrase));
     if (slot < 0) {
         return slot;
@@ -513,13 +516,14 @@ int ata_security_erase_prepare(int drv)
  * command SECURITY UNLOCK, as defined in specs ATA8-ACS Sec. 7.49
  *
  * @param[in] drv The index of the ATA drive in the ATA_Drv array.
- * @param[in] passphrase The USER passphrase of the disk unit.
+ * @param[in] passphrase The passphrase of the disk unit.
+ * @param[in] master if true compare with MASTER otherwise USER
  *
  * @return 0 on success, or -1 if an error occurred.
  */
-int ata_security_unlock_device(int drv, const char *passphrase)
+int ata_security_unlock_device(int drv, const char *passphrase, int master)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_UNLOCK, passphrase, 0);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_UNLOCK, passphrase, 0, master);
 }
 
 /**
@@ -534,7 +538,8 @@ int ata_security_unlock_device(int drv, const char *passphrase)
  */
 int ata_security_set_password(int drv, int master, const char *passphrase)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase, 0);
+    (void)master;
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase, 0, 0);
 }
 
 /**
@@ -544,12 +549,13 @@ int ata_security_set_password(int drv, int master, const char *passphrase)
  *
  * @param[in] drv The index of the ATA drive in the ATA_Drv array.
  * @param[in] passphrase The old USER passphrase for the disk unit to reset.
+ * @param[in] master if true compare with MASTER otherwise USER
  *
  * @return 0 on success, or -1 if an error occurred.
  */
-int ata_security_disable_password(int drv, const char *passphrase)
+int ata_security_disable_password(int drv, const char *passphrase, int master)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_DISABLE_PASSWORD, passphrase, 0);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_DISABLE_PASSWORD, passphrase, 0, master);
 }
 
 /**
@@ -564,7 +570,7 @@ int ata_security_disable_password(int drv, const char *passphrase)
 int ata_security_erase_unit(int drv, const char *passphrase)
 {
     return security_command_passphrase(drv, ATA_CMD_SECURITY_ERASE_UNIT,
-                                       passphrase, 1);
+                                       passphrase, 1, 0);
 }
 
 #endif /* WOLFBOOT_SATA_DISK_LOCK */

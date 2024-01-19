@@ -44,10 +44,11 @@ int ata_identify_device(int drv);
 int ata_security_erase_prepare(int drv);
 int ata_security_erase_unit(int drv, const char *passphrase);
 int ata_security_set_password(int drv, int master, const char *passphrase);
+int ata_security_disable_password(int drv, const char *passphrase, int master);
 
 int ata_device_config_identify(int drv);
 int ata_security_freeze_lock(int drv);
-int ata_security_unlock_device(int drv, const char *passphrase);
+int ata_security_unlock_device(int drv, const char *passphrase, int master);
 int ata_cmd_complete_async();
 
 /* @brief Enum with the possible state for each drive.
