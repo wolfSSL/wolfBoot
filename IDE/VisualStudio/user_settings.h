@@ -76,7 +76,10 @@ extern "C" {
 
 /* PKCS11 TPM */
 #define WOLFPKCS11_TPM
-#define WOLFPKCS11_TPM_STORE
+#ifndef WOLFTPM_WINAPI
+    /* Windows does not allow TPM NV use */
+    #define WOLFPKCS11_TPM_STORE
+#endif
 
 /* TLS */
 #if 0
@@ -124,7 +127,9 @@ extern "C" {
 
 /* RNG */
 #define HAVE_HASHDRBG
-#define WC_RNG_SEED_CB
+#ifdef HAVE_FIPS
+    #define WC_RNG_SEED_CB
+#endif
 
 /* Asymmetric */
 #define HAVE_ECC

@@ -709,7 +709,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     WOLFTPM2_HANDLE parent;
 #else
     char name[120] = "\0";
-    XFILE file;
+    XFILE file = XBADFILE;
 #endif
 
 #ifdef WOLFPKCS11_DEBUG_STORE
@@ -841,7 +841,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         *store = file;
     }
     #ifdef WOLFPKCS11_DEBUG_STORE
-    printf("Store Open %p: ret %d, name %s, ret %d\n", *store, ret, name);
+    printf("Store Open %p: ret %d, name %s\n", *store, ret, name);
     #endif
 #endif
     return ret;
@@ -3398,12 +3398,16 @@ void WP11_Library_Final(void)
  */
 int WP11_Library_IsInitialized(void)
 {
-    int ret;
-
-    WP11_Lock_LockRO(&globalLock);
+    int ret, locked = 0;
+    if (libraryInitCount > 0) {
+        /* cannot used globalLock before init */
+        WP11_Lock_LockRO(&globalLock);
+        locked = 1;
+    }
     ret = libraryInitCount > 0;
-    WP11_Lock_UnlockRO(&globalLock);
-
+    if (locked) {
+        WP11_Lock_UnlockRO(&globalLock);
+    }
     return ret;
 }
 
