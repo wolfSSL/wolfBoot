@@ -19,19 +19,24 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef HAVE_PKCS11_STATIC
-#include <dlfcn.h>
-#endif
-
 #ifdef HAVE_CONFIG_H
     #include <wolfpkcs11/config.h>
 #endif
 
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/misc.h>
+#ifndef WOLFSSL_USER_SETTINGS
+    #include <wolfssl/options.h>
+#endif
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/types.h>
 
-#include <wolfpkcs11/options.h>
+#ifndef WOLFPKCS11_USER_SETTINGS
+    #include <wolfpkcs11/options.h>
+#endif
 #include <wolfpkcs11/pkcs11.h>
+
+#ifndef HAVE_PKCS11_STATIC
+#include <dlfcn.h>
+#endif
 
 #include "testdata.h"
 

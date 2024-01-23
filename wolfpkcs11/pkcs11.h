@@ -22,6 +22,10 @@
 #ifndef _PKCS11_H_
 #define _PKCS11_H_
 
+#ifdef WOLFPKCS11_USER_SETTINGS
+    #include "user_settings.h"
+#endif
+
 #include <wolfpkcs11/visibility.h>
 
 #ifdef __cplusplus

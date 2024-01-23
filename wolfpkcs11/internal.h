@@ -32,9 +32,6 @@
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/wc_encrypt.h>
 
-#ifndef WOLFPKCS11_USER_SETTINGS
-    #include <wolfpkcs11/options.h>
-#endif
 #include <wolfpkcs11/pkcs11.h>
 #include <wolfpkcs11/version.h>
 
