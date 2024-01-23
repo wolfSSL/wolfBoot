@@ -205,17 +205,21 @@
 /*** QSPI ***/
 /* See hal/spi/spi_drv_stm32.c */
 
+
 /*** FLASH ***/
 #define SYSCFG_APB4_CLOCK_ER_VAL    (1 << 0) /* RM0433 - 7.7.48 - RCC_APB4ENR - SYSCFGEN */
 
 #define FLASH_BASE          (0x52002000)   /* RM0433 - Table 8 */
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) /* RM0433 - 3.9.1 - FLASH_ACR */
-#define FLASH_OPTSR_CUR     (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
+
+#define FLASH_OPTKEYR       (*(volatile uint32_t *)(FLASH_BASE + 0x08)) /* FLASH option key register */
+#define FLASH_OPTCR         (*(volatile uint32_t *)(FLASH_BASE + 0x18)) /* FLASH option control register */
+#define FLASH_OPTSR_CUR     (*(volatile uint32_t *)(FLASH_BASE + 0x1C)) /* FLASH option status register */
 
 /* Bank 1 */
 #define FLASH_KEYR1         (*(volatile uint32_t *)(FLASH_BASE + 0x04)) /* RM0433 - 3.9.2 - FLASH_KEYR 1 */
-#define FLASH_SR1           (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0433 - 3.9.5 - FLASH_SR 1 */
 #define FLASH_CR1           (*(volatile uint32_t *)(FLASH_BASE + 0x0C)) /* RM0433 - 3.9.4 - FLASH_CR 1 */
+#define FLASH_SR1           (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0433 - 3.9.5 - FLASH_SR 1 */
 
 /* Bank 2 */
 #define FLASH_KEYR2         (*(volatile uint32_t *)(FLASH_BASE + 0x104)) /* RM0433 - 3.9.24 - FLASH_KEYR 2 */
@@ -255,12 +259,38 @@
 
 #define FLASH_OPTSR_CUR_BSY                 (1 << 0)
 
+#define FLASH_OPTCR_OPTLOCK                 (1 << 0)  /* lock option configuration bit */
+#define FLASH_OPTCR_OPTSTART                (1 << 1)  /* Option byte start change option configuration bit */
+#define FLASH_OPTCR_MER                     (1 << 4)  /* Mass erase request */
+#define FLASH_OPTCR_PG_OTP                  (1 << 5)  /* OTP program control bit */
+#define FLASH_OPTCR_OPTCHANGEERRIE          (1 << 30) /* Option byte change error interrupt enable bit */
+#define FLASH_OPTCR_SWAP_BANK               (1 << 31) /* Bank swapping option configuration bit */
+
 #define FLASH_CR_SNB_SHIFT                  8     /* SNB bits 10:8 */
 #define FLASH_CR_SNB_MASK                   0x7   /* SNB bits 10:8 - 3 bits */
 
-#define FLASH_KEY1                          (0x45670123)
-#define FLASH_KEY2                          (0xCDEF89AB)
+#define FLASH_KEY1                          (0x45670123U)
+#define FLASH_KEY2                          (0xCDEF89ABU)
 
+#define FLASH_OPT_KEY1                      (0x08192A3BU)
+#define FLASH_OPT_KEY2                      (0x4C5D6E7FU)
+
+#ifdef FLASH_OTP_ROT
+    #ifndef FLASH_OTP_BASE
+    #define FLASH_OTP_BASE 0x08FFF000
+    #endif
+    #ifndef FLASH_OTP_END
+    #define FLASH_OTP_END  0x08FFF3FF
+    #endif
+    #ifndef OTP_SIZE
+    #define OTP_SIZE       1024
+    #endif
+    #ifndef OTP_BLOCKS
+    #define OTP_BLOCKS     16
+    #endif
+
+    #define OTP_BLOCK_SIZE (OTP_SIZE / OTP_BLOCKS) /* 64 bytes */
+#endif
 
 /* STM32H7: Due to ECC functionality, it is not possible to write partition/sector
  * flags and signature more than once. This flags_cache is used to intercept write operations and
@@ -777,3 +807,98 @@ void hal_prepare_boot(void)
 #endif
     clock_pll_off();
 }
+
+#ifdef FLASH_OTP_ROT
+
+static void hal_flash_wait_otp(void)
+{
+    /* Wait for the FLASH operation to complete by polling on QW flag to be reset. */
+    while ( (FLASH_SR1 & FLASH_SR_QW) == FLASH_SR_QW ) {
+        /* TODO: check timeout */
+    }
+
+    /* Check FLASH End of Operation flag */
+    if ( (FLASH_SR1 & FLASH_SR_EOP) == FLASH_SR_EOP ) {
+        FLASH_SR1 &= FLASH_SR_EOP; /* Clear FLASH End of Operation pending bit */
+    }
+}
+
+static void hal_flash_otp_unlock(void)
+{
+    if ((FLASH_OPTCR & FLASH_OPTCR_OPTLOCK) != 0U) {
+        FLASH_OPTKEYR = FLASH_OPT_KEY1;
+        FLASH_OPTKEYR = FLASH_OPT_KEY2;
+    }
+}
+
+static void hal_flash_otp_lock(void)
+{
+    /* Set the OPTLOCK Bit to lock the FLASH Option Byte Registers access */
+    FLASH_OPTCR |= FLASH_OPTCR_OPTLOCK;
+}
+
+int hal_flash_otp_write(uint32_t flashAddress, uint16_t* data, uint16_t length)
+{
+    volatile uint16_t tmp;
+    uint16_t idx = 0;
+    if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
+        return -1;
+    }
+
+    hal_flash_unlock();
+    hal_flash_otp_unlock();
+
+    while (idx < length && flashAddress <= FLASH_OTP_END-1) {
+        /* Clear errors */
+        flash_clear_errors(0); /* bank 1 */
+        /* Wait for last operation to be completed */
+        hal_flash_wait_otp();
+
+        FLASH_OPTCR &= ~(FLASH_OPTCR_OPTLOCK); /* unlock FLASH_OPTCR register */
+
+        /* Set OTP_PG bit */
+        FLASH_OPTCR |= FLASH_OPTCR_PG_OTP;
+
+        ISB();
+        DSB();
+
+        /* Program an OTP word (16 bits) */
+        *(volatile uint16_t*)flashAddress = *(volatile uint16_t*)data;
+
+        /* Read it back */
+        tmp = *(volatile uint16_t*)flashAddress;
+        (void)tmp; /* avoid unused warnings */
+        flashAddress += sizeof(uint16_t);
+        data++;
+        idx += sizeof(uint16_t);
+
+        /* Wait for last operation to be completed */
+        hal_flash_wait_otp();
+
+        /* clear OTP_PG bit */
+        FLASH_OPTCR &= ~FLASH_OPTCR_PG_OTP;
+    }
+
+    hal_flash_otp_lock();
+    hal_flash_lock();
+    return 0;
+}
+
+int hal_flash_otp_read(uint32_t flashAddress, uint16_t* data, uint32_t length)
+{
+    uint32_t i;
+    if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
+        return -1;
+    }
+    for (i = 0;
+        (i < length) && (flashAddress <= (FLASH_OTP_END-1));
+        i += sizeof(uint16_t))
+    {
+        *data = *(volatile uint16_t*)flashAddress;
+        flashAddress += sizeof(uint16_t);
+        data++;
+    }
+    return 0;
+}
+
+#endif /* FLASH_OTP_ROT */
