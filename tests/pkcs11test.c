@@ -19,19 +19,24 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef HAVE_PKCS11_STATIC
-#include <dlfcn.h>
-#endif
-
 #ifdef HAVE_CONFIG_H
     #include <wolfpkcs11/config.h>
 #endif
 
-#include <wolfssl/options.h>
+#ifndef WOLFSSL_USER_SETTINGS
+    #include <wolfssl/options.h>
+#endif
+#include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/misc.h>
 
-#include <wolfpkcs11/options.h>
+#ifndef WOLFPKCS11_USER_SETTINGS
+    #include <wolfpkcs11/options.h>
+#endif
 #include <wolfpkcs11/pkcs11.h>
+
+#ifndef HAVE_PKCS11_STATIC
+#include <dlfcn.h>
+#endif
 
 #include "unit.h"
 #include "testdata.h"
@@ -1084,7 +1089,9 @@ static CK_RV test_object(void* args)
     };
     CK_ULONG copyTmplCnt = sizeof(copyTmpl) / sizeof(*copyTmpl);
     CK_ULONG count;
+#ifndef _WIN32
     CK_ATTRIBUTE empty[] = { };
+#endif
     CK_ATTRIBUTE keyTypeNull[] = {
         { CKA_KEY_TYPE,          NULL,              sizeof(CK_KEY_TYPE)       }
     };
@@ -1131,11 +1138,13 @@ static CK_RV test_object(void* args)
         ret = funcList->C_CreateObject(session, tmpl, tmplCnt, NULL);
         CHECK_CKR_FAIL(ret, CKR_ARGUMENTS_BAD, "Create Object no object");
     }
+#ifndef _WIN32
     if (ret == CKR_OK) {
         ret = funcList->C_CreateObject(session, empty, 0, &obj);
         CHECK_CKR_FAIL(ret, CKR_TEMPLATE_INCOMPLETE,
                                                    "Create Object no key type");
     }
+#endif
     if (ret == CKR_OK) {
         count = sizeof(keyTypeNull) / sizeof(*keyTypeNull);
         ret = funcList->C_CreateObject(session, keyTypeNull, count, &obj);
@@ -5573,7 +5582,7 @@ static CK_RV test_aes_cbc_update(CK_SESSION_HANDLE session, unsigned char* exp,
     CK_RV ret;
     byte plain[32], enc[32], dec[32], iv[16];
     byte* pIn;
-    byte* pOut;
+    byte* pOut = NULL;
     CK_ULONG plainSz, encSz, decSz, ivSz, remSz, cumSz, partSz, inRemSz;
     CK_MECHANISM mech;
 
@@ -6031,7 +6040,7 @@ static CK_RV test_aes_cbc_pad_update(CK_SESSION_HANDLE session,
     CK_RV ret;
     byte plain[32], enc[sizeof(plain)+16], dec[32], iv[16];
     byte* pIn;
-    byte* pOut;
+    byte* pOut = NULL;
     CK_ULONG plainSz, encSz, decSz, ivSz, remSz, cumSz, partSz, inRemSz;
     CK_MECHANISM mech;
 
@@ -6198,7 +6207,7 @@ static CK_RV test_aes_cbc_pad(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE key,
     CK_RV ret;
     byte plain[32], enc[sizeof(plain)+16], dec[32], iv[16];
     byte* pIn;
-    byte* pOut;
+    byte* pOut = NULL;
     CK_ULONG encSz, decSz, ivSz, remSz, cumSz, partSz, inRemSz;
     CK_MECHANISM mech;
 

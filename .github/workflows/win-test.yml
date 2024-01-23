@@ -1,0 +1,67 @@
+name: Windows Build Test
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    # This should be a safe limit for the tests to run.
+    timeout-minutes: 6
+
+    env:
+      # Path to the solution file relative to the root of the project.
+      SOLUTION_FILE_PATH: wolfpkcs11\IDE\VisualStudio\wolfpkcs11.sln
+
+      # Configuration type to build.
+      # You can convert this to a build matrix if you need coverage of multiple configuration types.
+      # https://docs.github.com/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+      BUILD_CONFIGURATION: Debug
+      BUILD_PLATFORM: x64
+
+    steps:
+        - name: Pull wolfPKCS11
+          uses: actions/checkout@master
+          with:
+            repository: wolfssl/wolfpkcs11
+            path: wolfpkcs11
+
+        - name: Pull wolfTPM
+          uses: actions/checkout@master
+          with:
+            repository: wolfssl/wolftpm
+            path: wolftpm
+
+        - name: Pull wolfSSL
+          uses: actions/checkout@master
+          with:
+            repository: wolfssl/wolfssl
+            path: wolfssl
+        - name: Create FIPS stub files (autogen)
+          working-directory: wolfssl
+          run: |
+            echo $null >> wolfcrypt\src\fips.c
+            echo $null >> wolfcrypt\src\fips_test.c
+            echo $null >> wolfcrypt\src\wolfcrypt_first.c
+            echo $null >> wolfcrypt\src\wolfcrypt_last.c
+
+        - name: Add MSBuild to PATH
+          uses: microsoft/setup-msbuild@v1
+
+        - name: Build
+          working-directory: ${{env.GITHUB_WORKSPACE}}
+          # Add additional options to the MSBuild command line here (like platform or verbosity level).
+          # See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
+          run: msbuild /m /p:PlatformToolset=v142 /p:Platform=${{env.BUILD_PLATFORM}} /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
+
+        # The GitHub CI runners do not have a TPM.
+        # Failure 0x8028400f: unknown error number
+        # TBS_E_TPM_NOT_FOUND (0x8028400F) A compatible Trusted Platform Module (TPM) Security Device cannot be found on this computer.
+        #- name: Run Wrap Test
+        #  working-directory: ${{env.GITHUB_WORKSPACE}}
+        #  run: wolfpkcs11\IDE\VisualStudio\Debug\x64\pkcs11test.exe

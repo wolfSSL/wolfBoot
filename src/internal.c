@@ -30,6 +30,7 @@
 #include "user_settings.h"
 #endif
 
+#include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/version.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 #include <wolfssl/wolfcrypt/asn.h>
@@ -708,7 +709,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     WOLFTPM2_HANDLE parent;
 #else
     char name[120] = "\0";
-    XFILE file;
+    XFILE file = XBADFILE;
 #endif
 
 #ifdef WOLFPKCS11_DEBUG_STORE
@@ -840,7 +841,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         *store = file;
     }
     #ifdef WOLFPKCS11_DEBUG_STORE
-    printf("Store Open %p: ret %d, name %s, ret %d\n", *store, ret, name);
+    printf("Store Open %p: ret %d, name %s\n", *store, ret, name);
     #endif
 #endif
     return ret;
@@ -1224,7 +1225,7 @@ static int wp11_storage_write_ulong(void* storage, CK_ULONG val)
 
     /* Convert unsigned long number to big-endian byte array. */
     for (i = 0; i < (int)sizeof(num); i++) {
-        num[i] = val >> ((sizeof(num) - 1 - i) * 8);
+        num[i] = (unsigned char)(val >> ((sizeof(num) - 1 - i) * 8));
     }
 
     /* Write big-endian byte array. */
@@ -1273,7 +1274,7 @@ static int wp11_storage_write_time(void* storage, time_t timeVal)
 
     /* Convert time_t number to big-endian byte array. */
     for (i = 0; i < (int)sizeof(num); i++) {
-        num[i] = timeVal >> ((sizeof(num) - 1 - i) * 8);
+        num[i] = (unsigned char)(timeVal >> ((sizeof(num) - 1 - i) * 8));
     }
 
     /* Write big-endian byte array. */
@@ -2925,7 +2926,7 @@ static int wp11_Token_Load(WP11_Slot* slot, int tokenId, WP11_Token* token)
     int ret;
     int i;
     void* storage = NULL;
-    WP11_Object* object;
+    WP11_Object* object = NULL;
     WP11_Object** current;
     int objCnt = 0;
     word32 len;
@@ -3397,12 +3398,16 @@ void WP11_Library_Final(void)
  */
 int WP11_Library_IsInitialized(void)
 {
-    int ret;
-
-    WP11_Lock_LockRO(&globalLock);
+    int ret, locked = 0;
+    if (libraryInitCount > 0) {
+        /* cannot used globalLock before init */
+        WP11_Lock_LockRO(&globalLock);
+        locked = 1;
+    }
     ret = libraryInitCount > 0;
-    WP11_Lock_UnlockRO(&globalLock);
-
+    if (locked) {
+        WP11_Lock_UnlockRO(&globalLock);
+    }
     return ret;
 }
 
@@ -3488,7 +3493,7 @@ int WP11_Slot_OpenSession(WP11_Slot* slot, unsigned long flags, void* app,
                           CK_NOTIFY notify, CK_SESSION_HANDLE* session)
 {
     int ret = 0;
-    WP11_Session* curr;
+    WP11_Session* curr = NULL;
 
     WP11_Lock_LockRW(&slot->lock);
     /* Cannot open a read-only session if SO is logged in. */
@@ -5557,7 +5562,7 @@ static int GetEcParams(ecc_key* key, byte* data, CK_ULONG* len)
     else {
         *len = dataLen;
         data[0] = ASN_OBJECT_ID;
-        data[1] = dataLen - 2;
+        data[1] = (byte)(dataLen - 2);
         XMEMCPY(data + 2, key->dp->oid, data[1]);
     }
 
@@ -7093,7 +7098,7 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
     /* Check INT */
     if (ret == 0 && in[i++] != ASN_INTEGER)
         ret = ASN_PARSE_E;
-    if (ret == 0 && (len = in[i++]) > sz + 1)
+    if (ret == 0 && (len = in[i++]) > (int)sz + 1)
         ret = ASN_PARSE_E;
     /* Check there is space for INT data */
     if (ret == 0 && i + len > inSz)
@@ -7115,7 +7120,7 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
     /* Check INT */
     if (ret == 0 && in[i++] != ASN_INTEGER)
         ret = ASN_PARSE_E;
-    if (ret == 0 && (len = in[i++]) > sz + 1)
+    if (ret == 0 && (len = in[i++]) > (int)sz + 1)
         ret = ASN_PARSE_E;
     /* Check there is space for INT data */
     if (ret == 0 && i + len > inSz)

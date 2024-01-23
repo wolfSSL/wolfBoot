@@ -34,6 +34,7 @@ ACLOCAL_AMFLAGS= -I m4
 include src/include.am
 include wolfpkcs11/include.am
 include tests/include.am
+include IDE/include.am
 
 EXTRA_DIST+= README.md
 EXTRA_DIST+= LICENSE

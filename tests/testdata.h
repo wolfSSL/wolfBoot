@@ -448,14 +448,14 @@ static unsigned char aes_128_gcm_exp_tag[] = {
 
 #if defined(__MINGW32__) || defined(_MSC_VER)
 /* Windows/MinGw does not support setenv, but does have putenv and getenv */
-extern int putenv(const char *);
+extern int _putenv(const char *);
 static inline int setenv(const char *name, const char *value, int overwrite)
 {
     char env[255];
     size_t len = strlen(name) + 1 + strlen(value) + 1;
     if (len < sizeof(env)) {
         sprintf(env, "%s=%s", name, value);
-        return putenv(env);
+        return _putenv(env);
     }
     (void)overwrite;
     return EXIT_FAILURE;
