@@ -31,7 +31,7 @@
 #define PCI_HEADER_TYPE_OFFSET 0x0E
 #define PCI_BAR0_OFFSET (0x10)
 #define PCI_BAR5_OFFSET 0x24
-#define PCI_BAR5_MASK (~0x3)
+#define PCI_BAR_MASK (~0x3)
 #define PCI_INTR_OFFSET   0x3C
 #define PCI_HEADER_TYPE_MULTIFUNC_MASK 0x80
 #define PCI_HEADER_TYPE_TYPE_MASK 0x7F
@@ -50,7 +50,8 @@
 #define PCI_MMIO_LIMIT_OFF 0x22
 #define PCI_IO_BASE_OFF 0x30
 #define PCI_IO_LIMIT_OFF 0x32
-
+#define PCI_PWR_MGMT_CTRL_STATUS 0x84
+#define PCI_POWER_STATE_MASK 0x3
 /* Shifts & masks for CONFIG_ADDRESS register */
 #define PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT 31
 #define PCI_CONFIG_ADDRESS_BUS_SHIFT    16
@@ -70,9 +71,33 @@
 #define PCI_COMMAND_MEM_SPACE       (1 << 1)
 #define PCI_COMMAND_IO_SPACE        (1 << 0)
 
+typedef struct {
+    int bus;
+    int device;
+    int function;
+    uint32_t device_id;
+} pci_ctrlr_info_t;
 
+struct pci_enum_info {
+    uint32_t mem;
+    uint32_t mem_limit;
+    uint32_t io;
+    uint32_t mem_pf;
+    uint32_t mem_pf_limit;
+    uint8_t curr_bus_number;
+};
+
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#ifdef PCH_HAS_PCR
 uint32_t pch_read32(uint8_t port_id, uint16_t offset);
 void pch_write32(uint8_t port_id, uint16_t offset, uint32_t val);
+#endif
+
 uint32_t pci_config_read32(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off);
 void pci_config_write32(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
                         uint32_t value);
@@ -82,5 +107,15 @@ void pci_config_write16(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
 uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off);
 void pci_config_write8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
                        uint8_t value);
-int pci_enum_do();
+uint64_t pci_get_mmio_addr(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t bar);
+
+uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info);
+
+int pci_enum_do(void);
+int pci_pre_enum(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* PCI_H */

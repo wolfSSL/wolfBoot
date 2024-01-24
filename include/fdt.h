@@ -91,7 +91,12 @@ struct fdt_property {
 #define FDT_ERR_NOSPACE      7
 #define FDT_ERR_TRUNCATED    8
 #define FDT_ERR_INTERNAL     9
+#define FDT_ERR_EXISTS       10
 
+#define FDT_PCI_PREFETCH    (0x40000000)
+#define FDT_PCI_MEM32       (0x02000000)
+#define FDT_PCI_IO          (0x01000000)
+#define FDT_PCI_MEM64       (0x03000000)
 
 uint32_t cpu_to_fdt32(uint32_t x);
 uint64_t cpu_to_fdt64(uint64_t x);
@@ -137,6 +142,7 @@ int fdt_setprop(void *fdt, int nodeoffset, const char *name, const void *val, in
 int fdt_find_devtype(void* fdt, int startoff, const char* node);
 int fdt_node_check_compatible(const void *fdt, int nodeoffset, const char *compatible);
 int fdt_node_offset_by_compatible(const void *fdt, int startoffset, const char *compatible);
+int fdt_add_subnode(void* fdt, int parentoff, const char* name);
 
 /* helpers to fix/append a property to a node */
 int fdt_fixup_str(void* fdt, int off, const char* node, const char* name, const char* str);

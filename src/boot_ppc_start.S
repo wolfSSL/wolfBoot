@@ -544,7 +544,7 @@ init_sram_law:
         isync
 
 init_sram_tlb:
-        /* Inital SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT */
+        /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT */
         set_tlb(1, 9,
                 INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
