@@ -425,6 +425,7 @@ ifeq ($(TARGET),nxp_t1024)
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   OBJS+=src/boot_ppc_mp.o # support for spin table
   OBJS+=src/fdt.o
+  OBJS+=src/pci.o
   UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o

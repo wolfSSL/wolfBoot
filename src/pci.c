@@ -77,17 +77,14 @@
 #define PCI_ENUM_MM_BAR_MASK ~(0xf)
 #define PCI_ENUM_IO_BAR_MASK ~(0x3)
 
+#define CAPID0_A_0_0_0_PCI (0xE4)
+#define DEVICE_ENABLE (0x54)
+#define DTT_DEVICE_DISABLE (1 << 15)
 #define ONE_MB (1024 * 1024)
 #define FOUR_KB (4 * 1024)
 
-struct pci_enum_info {
-    uint32_t mem;
-    uint32_t mem_limit;
-    uint32_t io;
-    uint32_t mem_pf;
-    uint32_t mem_pf_limit;
-    uint8_t curr_bus_number;
-};
+static int pci_enum_is_64bit(uint32_t value);
+static int pci_enum_is_mmio(uint32_t value);
 
 static inline uint32_t align_up(uint32_t address, uint32_t alignment) {
     return (address + alignment - 1) & ~(alignment - 1);
@@ -202,7 +199,7 @@ static void pci_ecam_config_write16(uint8_t bus, uint8_t dev, uint8_t fun,
 
 #define PCI_IO_CONFIG_ADDR(bus, dev, fn, off) \
     (uint32_t)( \
-           (1UL   << PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT) | \
+           (1   << PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT) | \
            (bus << PCI_CONFIG_ADDRESS_BUS_SHIFT) | \
            (dev << PCI_CONFIG_ADDRESS_DEVICE_SHIFT) | \
            (fn  << PCI_CONFIG_ADDRESS_FUNCTION_SHIFT) | \
@@ -340,6 +337,36 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off)
     return (reg >> shift);
 }
 
+uint64_t pci_get_mmio_addr(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t bar)
+{
+    uint32_t reg;
+    uint64_t addr = 0;
+
+    if (bar >= PCI_ENUM_MAX_BARS)
+    {
+        return addr;
+    }
+
+    reg = pci_config_read32(bus, dev, fun, PCI_BAR0_OFFSET + (bar * 8));
+    wolfBoot_printf("BAR%d[0x%x] reg value = 0x%x\r\n", bar, PCI_BAR0_OFFSET + (bar * 8), reg);
+
+    if (!pci_enum_is_mmio(reg))
+    {
+        return addr;
+    }
+
+    addr = reg & 0xFFFFFFF0;
+
+    if (pci_enum_is_64bit(reg))
+    {
+        reg = pci_config_read32(bus, dev, fun, (PCI_BAR0_OFFSET + 4) + (bar * 8));
+        wolfBoot_printf("BAR%d_HIGH[0x%x] reg value = 0x%x\r\n", bar, (PCI_BAR0_OFFSET + 4) + (bar * 8), reg);
+        addr |= ((uint64_t)reg << 32);
+    }
+
+    return addr;
+}
+
 static int pci_enum_is_64bit(uint32_t value)
 {
     uint8_t type = (value & PCI_ENUM_TYPE_MASK) >> PCI_ENUM_TYPE_SHIFT;
@@ -380,7 +407,8 @@ static int pci_pre_enum_cb(uint8_t bus, uint8_t dev, uint8_t fun)
 #ifdef WOLFBOOT_TGL
     if (bus != 0)
         return 0;
-    if (dev == 0x1e) {
+    /* don't change UART mapping */
+    if (dev == 0x1e && (fun == 0 || fun == 1)) {
         return 1;
     }
     /* PMC BARs shouldn't be programmed as per FSP integration guide */
@@ -420,6 +448,7 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
         return -1;
 
     is_prefetch = 0;
+    (void)is_prefetch;
     bar_off = PCI_BAR0_OFFSET + bar_idx * 4;
     orig_bar = pci_config_read32(bus, dev, fun, bar_off);
     pci_config_write32(bus, dev, fun, bar_off, 0xffffffff);
@@ -498,6 +527,7 @@ restore_bar:
     return ret;
 }
 
+#if defined(DEBUG_PCI)
 static void pci_dump_id(uint8_t bus, uint8_t dev, uint8_t fun)
 {
     uint16_t vid, did;
@@ -505,9 +535,17 @@ static void pci_dump_id(uint8_t bus, uint8_t dev, uint8_t fun)
     vid = pci_config_read16(bus, dev, fun, PCI_VENDOR_ID_OFFSET);
     did = pci_config_read16(bus, dev, fun, PCI_DEVICE_ID_OFFSET);
 
-    PCI_DEBUG_PRINTF("PCI enum: dev: %x:%x.%x vid: %x did: %x\r\n",
+    PCI_DEBUG_PRINTF("\r\n\r\nPCI: %x:%x.%x %x:%x\r\n",
                     bus, dev, fun, (int)vid, (int)did);
 }
+#else
+static inline void pci_dump_id(uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    (void)bus;
+    (void)dev;
+    (void)fun;
+};
+#endif
 
 static int pci_program_bars(uint8_t bus, uint8_t dev, uint8_t fun,
                             struct pci_enum_info *info)
@@ -534,8 +572,6 @@ static int pci_program_bars(uint8_t bus, uint8_t dev, uint8_t fun,
 
     return 0;
 }
-
-static uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info);
 
 #ifdef DEBUG_PCI
 static void pci_dump_bridge(uint8_t bus, uint8_t dev, uint8_t fun)
@@ -579,12 +615,12 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
     uint32_t orig_cmd;
     int ret;
 
-    PCI_DEBUG_PRINTF("bridge: %x.%x.%x\r\n",
-                     (int)bus, (int)dev, (int)fun);
     orig_cmd = pci_config_read16(bus, dev, fun, PCI_COMMAND_OFFSET);
     pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, 0);
 
     info->curr_bus_number++;
+    PCI_DEBUG_PRINTF("Bridge: %x.%x.%x (using bus number: %d)\r\n",
+                     (int)bus, (int)dev, (int)fun, info->curr_bus_number);
     pci_config_write8(bus, dev, fun, PCI_PRIMARY_BUS, bus);
     pci_config_write8(bus, dev, fun, PCI_SECONDARY_BUS, info->curr_bus_number);
 
@@ -691,27 +727,33 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
     return -1;
 }
 
-static uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info)
+uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info)
 {
     uint16_t vendor_id, device_id, header_type;
     uint32_t vd_code, reg;
     uint32_t dev, fun;
     int ret;
 
+    PCI_DEBUG_PRINTF("enumerating bus %d\r\n", bus);
+
     for (dev = 0; dev < PCI_ENUM_MAX_DEV; dev++) {
 
-        vd_code = pci_config_read32(bus, dev, 0, 0x0);
+        vd_code = pci_config_read32(bus, dev, 0, PCI_VENDOR_ID_OFFSET);
         if (vd_code == 0xFFFFFFFF) {
+            PCI_DEBUG_PRINTF("Skipping %x:%x\r\n", bus, dev);
             /* No device here. */
             continue;
         }
 
         for (fun = 0; fun < PCI_ENUM_MAX_FUN; fun++) {
-            if (pci_pre_enum_cb(bus, dev, fun))
+            if (pci_pre_enum_cb(bus, dev, fun)) {
+                PCI_DEBUG_PRINTF("skipping fun %x:%x.%x\r\n", bus, dev, fun);
                 continue;
+            }
 
             vd_code = pci_config_read32(bus, dev, fun, PCI_VENDOR_ID_OFFSET);
             if (vd_code == 0xFFFFFFFF) {
+                PCI_DEBUG_PRINTF("Skipping %x:%x.%x\r\n", bus, dev, fun);
                 /* No device here, try next function*/
                 continue;
             }
@@ -725,8 +767,10 @@ static uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info)
                 pci_program_bridge(bus, dev, fun, info);
             }
             /* just one function */
-            if (!(header_type & PCI_HEADER_TYPE_MULTIFUNC_MASK))
+            if ((fun == 0) && !(header_type & PCI_HEADER_TYPE_MULTIFUNC_MASK)) {
+                PCI_DEBUG_PRINTF("one function only device\r\n");
                 break;
+            }
         }
     }
 
@@ -734,7 +778,26 @@ static uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info)
     return 0;
 }
 
-int pci_enum_do()
+int pci_pre_enum(void)
+{
+    uint32_t reg;
+
+    reg = pci_config_read32(0, 0, 0, CAPID0_A_0_0_0_PCI);
+    wolfBoot_printf("cap a %d\r\n", reg);
+    wolfBoot_printf("ddt disabled %d\r\n", reg & DTT_DEVICE_DISABLE);
+    reg &= ~(DTT_DEVICE_DISABLE);
+    pci_config_write32(0, 0, 0, CAPID0_A_0_0_0_PCI, reg);
+    reg = pci_config_read32(0, 0, 0, DEVICE_ENABLE);
+    wolfBoot_printf("device enable: %d\r\n", reg);
+    reg |= (1 << 7);
+    pci_config_write32(0, 0, 0, DEVICE_ENABLE, reg);
+     reg = pci_config_read32(0, 0, 0, DEVICE_ENABLE);
+    wolfBoot_printf("device enable: %d\r\n", reg);
+
+    return 0;
+}
+
+int pci_enum_do(void)
 {
     struct pci_enum_info enum_info;
     int ret;
@@ -746,6 +809,12 @@ int pci_enum_do()
         (PCI_MMIO32_PREFETCH_LENGTH - 1);
     enum_info.io = PCI_IO32_BASE;
     enum_info.curr_bus_number = 0;
+
+    ret = pci_pre_enum();
+    if (ret != 0) {
+        wolfBoot_printf("pci_pre_enum error: %d\r\n", ret);
+        return ret;
+    }
 
     ret = pci_enum_bus(0, &enum_info);
 

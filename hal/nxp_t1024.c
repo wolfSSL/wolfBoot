@@ -25,6 +25,7 @@
 #include "hal.h"
 #include "nxp_ppc.h"
 #include "fdt.h"
+#include "pci.h"
 
 /* Tested on T1024E Rev 1.0, e5500 core 2.1, PVR 8024_1021 and SVR 8548_0010 */
 /* IFC: CS0 NOR, CS1 MRAM, CS2 APU CPLD, CS3, MPU CPLD */
@@ -118,8 +119,34 @@ static void hal_flash_unlock_sector(uint32_t sector);
 #define DCFG_DMA2LIODNR   ((volatile uint32_t*)(DCFG_BASE + 0x584))
 
 /* PCI Express LIODN base register */
-#define PCI_BASE(n)     (0x240000 + ((n) * 0x10000))
-#define PCIE_LIODN(n) ((volatile uint32_t*)(PCI_BASE(n) + 0x40)) /* PEXx_PEX_LBR */
+#define PCI_BASE(n)         (CCSRBAR + 0x240000 + ((n-1) * 0x10000))
+#define PCIE_CONFIG_ADDR(n) ((volatile uint32_t*)(PCI_BASE(n) + 0x00)) /* PEXx_PEX_CONFIG_ADDR - configuration address */
+#define PCIE_CONFIG_DATA(n) ((volatile uint32_t*)(PCI_BASE(n) + 0x04)) /* PEXx_PEX_CONFIG_DATA - configuration data */
+#define PCIE_LIODN(n)       ((volatile uint32_t*)(PCI_BASE(n) + 0x40)) /* PEXx_PEX_LBR */
+#define PCIE_BLK_REV1(n)    ((volatile uint32_t*)(PCI_BASE(n) + 0xBF8)) /* PEXx_PEX_IP_BLK_REV1 */
+#define PCIE_BLK_REV2(n)    ((volatile uint32_t*)(PCI_BASE(n) + 0xBFC)) /* PEXx_PEX_IP_BLK_REV1 */
+
+/* PCIe Output Windows (max 5) */
+#define PCIE_OTAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xC00 + ((w) * 32)))  /* PEXx_PEXOTARn  - outbound translation address */
+#define PCIE_OTEAR(n, w)    ((volatile uint32_t*)(PCI_BASE(n) + 0xC04 + ((w) * 32)))  /* PEXx_PEXOTEARn - outbound translation extended address */
+#define PCIE_OWBAR(n, w)    ((volatile uint32_t*)(PCI_BASE(n) + 0xC08 + ((w) * 32)))  /* PEXx_PEXOWBARn - outbound window base address */
+#define PCIE_OWAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xC10 + ((w) * 32)))  /* PEXx_PEXOWARn  - outbound window attributes */
+#define POWAR_EN            0x80000000
+#define POWAR_IO_READ       0x00080000
+#define POWAR_MEM_READ      0x00040000
+#define POWAR_IO_WRITE      0x00008000
+#define POWAR_MEM_WRITE     0x00004000
+
+/* PCIe Input Windows (max 4 - seq is 3,2,1,0) */
+#define PCIE_ITAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xD80 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXITARn  - inbound translation address */
+#define PCIE_IWBAR(n, w)    ((volatile uint32_t*)(PCI_BASE(n) + 0xD88 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWBARn - inbound window base address */
+#define PCIE_IWBEAR(n, w)   ((volatile uint32_t*)(PCI_BASE(n) + 0xD8C + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWBEARn- inbound window base extended address */
+#define PCIE_IWAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xD90 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWARn  - inbound window attributes */
+#define PIWAR_EN            0x80000000
+#define PIWAR_PF            0x20000000
+#define PIWAR_LOCAL         0x00f00000
+#define PIWAR_READ_SNOOP    0x00050000
+#define PIWAR_WRITE_SNOOP   0x00005000
 
 /* Buffer Manager */
 #define BMAN_LIODNR  ((volatile uint32_t*)(BMAN_CCSR_BASE + 0xD08))
@@ -128,7 +155,7 @@ static void hal_flash_unlock_sector(uint32_t sector);
 /* Frame Queue Descriptor (FQD) */
 #define FQD_BAR      ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC04))
 #define FQD_AR       ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC10))
-/* Packed Frame Desc riptor Record (PFDR) */
+/* Packed Frame Descriptor Record (PFDR) */
 #define PFDR_BARE    ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC20))
 #define PFDR_BAR     ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC24))
 #define PFDR_AR      ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC30))
@@ -300,10 +327,13 @@ static void hal_flash_unlock_sector(uint32_t sector);
 
 /* Hardware Ports (0-63) 4KB each (256KB total) */
 #define FMAN_BMI(n)            ((FMAN_BASE + 0x80000) + ((n) * 0x1000))
+#define FMAN_BMI_SPLIODN(n, p) ((volatile uint32_t*)(FMAN_BMI(n) + 0x304 + ((((p) - 1) & 0x3F) * 4)))
 
 #define FMAN_QMI(n)            ((FMAN_BASE + 0x80000) + ((n) * 0x1000) + 0x400)
 
 #define FMAN_DMA               (FMAN_BASE + 0xC2000UL) /* FMan DMA */
+#define FMAN_DMA_ENTRIES       (32)
+#define FMAN_DMA_PORT_LIODN(n) ((volatile uint32_t*)(FMAN_DMA + 0x60 + (((n) & 0x1F) * 4))) /* FMan DMA portID-LIODN #0..31 register */
 
 #define FMAN_FPM               (FMAN_BASE + 0xC3000UL) /* Frame processing manager (FPM) */
 
@@ -1141,37 +1171,178 @@ void hal_early_init(void)
 }
 
 #ifdef ENABLE_PCIE
+
+/* PCI IO read/write functions */
+/* Intel PCI addr/data mappings for compatibility with our PCI driver */
+#define PCI_CONFIG_ADDR_PORT 0xcf8
+#define PCI_CONFIG_DATA_PORT 0xcfc
+static int pcie_bus = 0;
+void io_write32(uint16_t port, uint32_t value)
+{
+    if (port == PCI_CONFIG_ADDR_PORT) {
+        set32(PCIE_CONFIG_ADDR(pcie_bus), value);
+    }
+    else if (port == PCI_CONFIG_DATA_PORT) {
+        set32(PCIE_CONFIG_DATA(pcie_bus), value);
+    }
+}
+uint32_t io_read32(uint16_t port)
+{
+    uint32_t value = 0;
+    if (port == PCI_CONFIG_ADDR_PORT) {
+        value = get32(PCIE_CONFIG_ADDR(1));
+    }
+    else if (port == PCI_CONFIG_DATA_PORT) {
+        value = get32(PCIE_CONFIG_DATA(1));
+    }
+    return value;
+}
+
+#define PCI_MMIO32_LENGTH          (1024UL * 1024U * 1024U)
+#define PCI_MMIO32_PREFETCH_LENGTH (1024UL * 1024U * 1024U)
+
 #define CONFIG_SYS_PCIE1_MEM_PHYS_HIGH 0xC
-#define CONFIG_SYS_PCIE1_MEM_PHYS 0x00000000
-#define CONFIG_SYS_PCIE1_MEM_VIRT 0x80000000
-#define CONFIG_SYS_PCIE1_IO_PHYS_HIGH 0xF
-#define CONFIG_SYS_PCIE1_IO_PHYS  0xF8000000
-#define CONFIG_SYS_PCIE1_IO_VIRT  CONFIG_SYS_PCIE1_IO_PHYS
+#define CONFIG_SYS_PCIE1_MEM_PHYS      0x00000000
+#define CONFIG_SYS_PCIE1_MEM_VIRT      0x80000000
+#define CONFIG_SYS_PCIE1_IO_PHYS_HIGH  0xF
+#define CONFIG_SYS_PCIE1_IO_PHYS       0xF8000000
+#define CONFIG_SYS_PCIE1_IO_VIRT       CONFIG_SYS_PCIE1_IO_PHYS
 
 #define CONFIG_SYS_PCIE2_MEM_PHYS_HIGH 0xC
-#define CONFIG_SYS_PCIE2_MEM_PHYS 0x10000000
-#define CONFIG_SYS_PCIE2_MEM_VIRT 0x90000000
+#define CONFIG_SYS_PCIE2_MEM_PHYS      0x10000000
+#define CONFIG_SYS_PCIE2_MEM_VIRT      0x90000000
 #define CONFIG_SYS_PCIE2_IO_PHYS_HIGHT 0xF
-#define CONFIG_SYS_PCIE2_IO_PHYS  0xF8010000
-#define CONFIG_SYS_PCIE2_IO_VIRT  CONFIG_SYS_PCIE2_IO_PHYS
+#define CONFIG_SYS_PCIE2_IO_PHYS       0xF8010000
+#define CONFIG_SYS_PCIE2_IO_VIRT       CONFIG_SYS_PCIE2_IO_PHYS
 
 #define CONFIG_SYS_PCIE3_MEM_PHYS_HIGH 0xC
-#define CONFIG_SYS_PCIE3_MEM_PHYS 0x20000000
-#define CONFIG_SYS_PCIE3_MEM_VIRT 0xA0000000
-#define CONFIG_SYS_PCIE3_IO_PHYS_HIGH 0xF
-#define CONFIG_SYS_PCIE3_IO_PHYS  0xF8020000
-#define CONFIG_SYS_PCIE3_IO_VIRT  CONFIG_SYS_PCIE3_IO_PHYS
+#define CONFIG_SYS_PCIE3_MEM_PHYS      0x20000000
+#define CONFIG_SYS_PCIE3_MEM_VIRT      0xA0000000
+#define CONFIG_SYS_PCIE3_IO_PHYS_HIGH  0xF
+#define CONFIG_SYS_PCIE3_IO_PHYS       0xF8020000
+#define CONFIG_SYS_PCIE3_IO_VIRT       CONFIG_SYS_PCIE3_IO_PHYS
+
 static int hal_pcie_init(void)
 {
-    /* Map TLB for PCIe */
-    set_tlb(1, 3, CONFIG_SYS_PCIE1_MEM_VIRT,
-                  CONFIG_SYS_PCIE1_MEM_PHYS, CONFIG_SYS_PCIE1_MEM_PHYS_HIGH,
-        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
-    set_tlb(1, 4, CONFIG_SYS_PCIE1_MEM_VIRT,
-                  CONFIG_SYS_PCIE1_MEM_PHYS, CONFIG_SYS_PCIE1_MEM_PHYS_HIGH,
-        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+    int ret;
+    int bus, i;
+    int law_start = 14;
+    struct pci_enum_info enum_info;
 
-    return 0;
+    for (pcie_bus=1; pcie_bus<=3; pcie_bus++) {
+        /* Check device disable register */
+        if (get32(DCFG_DEVDISR3) & (1 << (32-pcie_bus))) {
+            wolfBoot_printf("PCIe %d: Disabled\n", pcie_bus);
+            continue;
+        }
+
+        /* Read block revision */
+        wolfBoot_printf("PCIe %d: Base 0x%x, Rev 0x%x\n",
+            pcie_bus, PCI_BASE(pcie_bus),
+            get32(PCIE_BLK_REV1(pcie_bus)));
+
+        /* Setup PCIe memory regions */
+        memset(&enum_info, 0, sizeof(enum_info));
+        if (pcie_bus == 1) {
+            enum_info.mem = CONFIG_SYS_PCIE1_MEM_VIRT;
+            enum_info.io = CONFIG_SYS_PCIE1_IO_VIRT;
+
+            /* Map TLB for PCIe */
+            set_tlb(1, law_start++, CONFIG_SYS_PCIE1_MEM_VIRT,
+                        CONFIG_SYS_PCIE1_MEM_PHYS, CONFIG_SYS_PCIE1_MEM_PHYS_HIGH,
+                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
+            set_tlb(1, law_start++, CONFIG_SYS_PCIE1_MEM_VIRT,
+                        CONFIG_SYS_PCIE1_MEM_PHYS, CONFIG_SYS_PCIE1_MEM_PHYS_HIGH,
+                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+        }
+        else if (pcie_bus == 2) {
+            enum_info.mem = CONFIG_SYS_PCIE2_MEM_VIRT;
+            enum_info.io = CONFIG_SYS_PCIE2_IO_VIRT;
+
+            /* Map TLB for PCIe */
+            set_tlb(1, law_start++, CONFIG_SYS_PCIE2_MEM_VIRT,
+                        CONFIG_SYS_PCIE2_MEM_PHYS, CONFIG_SYS_PCIE2_MEM_PHYS_HIGH,
+                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
+            set_tlb(1, law_start++, CONFIG_SYS_PCIE2_MEM_VIRT,
+                        CONFIG_SYS_PCIE2_MEM_PHYS, CONFIG_SYS_PCIE2_MEM_PHYS_HIGH,
+                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+        }
+        else if (pcie_bus == 3) {
+            enum_info.mem = CONFIG_SYS_PCIE3_MEM_VIRT;
+            enum_info.io = CONFIG_SYS_PCIE3_IO_VIRT;
+
+            /* Map TLB for PCIe */
+            set_tlb(1, law_start++, CONFIG_SYS_PCIE3_MEM_VIRT,
+                        CONFIG_SYS_PCIE3_MEM_PHYS, CONFIG_SYS_PCIE3_MEM_PHYS_HIGH,
+                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
+            set_tlb(1, law_start++, CONFIG_SYS_PCIE3_MEM_VIRT,
+                        CONFIG_SYS_PCIE3_MEM_PHYS, CONFIG_SYS_PCIE3_MEM_PHYS_HIGH,
+                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+        }
+        enum_info.mem_limit = enum_info.mem + (PCI_MMIO32_LENGTH - 1);
+        enum_info.mem_pf = (enum_info.mem + PCI_MMIO32_PREFETCH_LENGTH);
+        enum_info.mem_pf_limit = PCI_MMIO32_PREFETCH_LENGTH;
+
+        /* Setup PCIe Output Windows */
+        if (pcie_bus == 1) {
+            set32( PCIE_OTAR(pcie_bus, 0), 0x0);
+            set32(PCIE_OTEAR(pcie_bus, 0), 0x0);
+            set32( PCIE_OWAR(pcie_bus, 0), 0x80044027);
+
+            set32( PCIE_OTAR(pcie_bus, 1), 0xE0000);
+            set32(PCIE_OTEAR(pcie_bus, 1), 0x0);
+            set32(PCIE_OWBAR(pcie_bus, 1), 0xC00000); /* MEM_PHYS >> 12 */
+            set32( PCIE_OWAR(pcie_bus, 1), 0x8004401B);
+
+            set32( PCIE_OTAR(pcie_bus, 2), 0x0);
+            set32(PCIE_OTEAR(pcie_bus, 2), 0x0);
+            set32(PCIE_OWBAR(pcie_bus, 2), 0xFF8000); /* IO_PHYS >> 12 */
+            set32( PCIE_OWAR(pcie_bus, 2), 0x8008800F);
+
+        }
+        else if (pcie_bus == 3) {
+            set32( PCIE_OTAR(pcie_bus, 0), 0x0);
+            set32(PCIE_OWBAR(pcie_bus, 0), 0x0);
+            set32( PCIE_OWAR(pcie_bus, 0), 0x80044027);
+
+            set32( PCIE_OTAR(pcie_bus, 1), 0xE0000);
+            set32(PCIE_OTEAR(pcie_bus, 1), 0x0);
+            set32(PCIE_OWBAR(pcie_bus, 1), 0xC20000); /* MEM_PHYS >> 12 */
+            set32( PCIE_OWAR(pcie_bus, 1), 0x8004401B);
+
+            set32( PCIE_OTAR(pcie_bus, 2), 0x0);
+            set32(PCIE_OTEAR(pcie_bus, 2), 0x0);
+            set32(PCIE_OWBAR(pcie_bus, 2), 0xFF8020); /* IO_PHYS >> 12 */
+            set32( PCIE_OWAR(pcie_bus, 2), 0x8008800F);
+        }
+
+        /* Setup PCIe Input Windows */
+        set32(  PCIE_ITAR(pcie_bus, 0), 0xFFE000);
+        set32(  PCIE_IWAR(pcie_bus, 0), 0x80E44017);
+
+        set32(  PCIE_ITAR(pcie_bus, 1), 0x0);
+        set32( PCIE_IWBAR(pcie_bus, 1), 0x0);
+        set32(  PCIE_IWAR(pcie_bus, 1), 0xA0F5501E);
+
+        set32(  PCIE_ITAR(pcie_bus, 2), 0x0);
+        set32( PCIE_IWBAR(pcie_bus, 2), 0x1000000);
+        set32(PCIE_IWBEAR(pcie_bus, 2), 0x0);
+        set32(  PCIE_IWAR(pcie_bus, 2), 0xA0F5501E);
+
+        set32(  PCIE_ITAR(pcie_bus, 3), 0x0);
+        set32( PCIE_IWBAR(pcie_bus, 3), 0x0);
+        set32(PCIE_IWBEAR(pcie_bus, 3), 0x0);
+        set32(  PCIE_IWAR(pcie_bus, 3), 0x20F44027);
+
+        /* TODO: setup PCSRBAR/PEXCSRBAR */
+
+
+        ret = pci_enum_bus(0, &enum_info);
+        if (ret != 0) {
+            wolfBoot_printf("PCIe %d: Enum failed %d\n", pcie_bus, ret);
+        }
+    }
+    return ret;
 }
 #endif
 
@@ -1368,23 +1539,27 @@ static const struct liodn_id_table liodn_tbl[] = {
     SET_LIODN("fsl,qe", 559, DCFG_QELIODNR),
     SET_LIODN("fsl,elo3-dma", 147, DCFG_DMA1LIODNR),
     SET_LIODN("fsl,elo3-dma", 227, DCFG_DMA2LIODNR),
-
+    SET_LIODN("fsl,fman-port-1g-rx", 0x425, NULL),
+    SET_LIODN("fsl,fman-port-1g-rx", 0x426, NULL),
+    SET_LIODN("fsl,fman-port-1g-rx", 0x427, NULL),
+    SET_LIODN("fsl,fman-port-1g-rx", 0x428, NULL),
     SET_LIODN("fsl,qman", 62, QMAN_LIODNR),
     SET_LIODN("fsl,bman", 63, BMAN_LIODNR),
-    SET_LIODN("fsl,qoriq-pcie-v2.4", 148, PCIE_LIODN(1)),
-    SET_LIODN("fsl,qoriq-pcie-v2.4", 228, PCIE_LIODN(2)),
-    SET_LIODN("fsl,qoriq-pcie-v2.4", 308, PCIE_LIODN(3)),
+    SET_LIODN("fsl,qoriq-pcie", 148, PCIE_LIODN(1)),
+    SET_LIODN("fsl,qoriq-pcie", 228, PCIE_LIODN(2)),
+    SET_LIODN("fsl,qoriq-pcie", 308, PCIE_LIODN(3)),
 };
-
 
 /* Logical I/O Device Number */
 void hal_liodn_init(void)
 {
     int i;
     for (i=0; i<(int)(sizeof(liodn_tbl)/sizeof(struct liodn_id_table)); i++) {
-        wolfBoot_printf("LIODN %s: %p=%d\n",
-            liodn_tbl[i].compat, liodn_tbl[i].reg_offset, liodn_tbl[i].id);
-        set32(liodn_tbl[i].reg_offset, liodn_tbl[i].id);
+        if (liodn_tbl[i].reg_offset != NULL) {
+            wolfBoot_printf("LIODN %s: %p=%d\n",
+                liodn_tbl[i].compat, liodn_tbl[i].reg_offset, liodn_tbl[i].id);
+            set32(liodn_tbl[i].reg_offset, liodn_tbl[i].id);
+        }
     }
 }
 
@@ -1609,9 +1784,11 @@ static int fman_upload_firmware(const struct qe_firmware *firmware)
     return 0;
 }
 
+#define FMAN_DMA_LIODN 973
+
 static int hal_fman_init(void)
 {
-    int ret;
+    int ret, i;
     const struct qe_firmware* fw = (const struct qe_firmware*)FMAN_FW_ADDR;
 
     /* Upload microcode to IRAM */
@@ -1620,7 +1797,17 @@ static int hal_fman_init(void)
         ret = fman_upload_firmware(fw);
     }
     if (ret == 0) {
+        /* Setup FMAN LIDON */
+        set32(FMAN_BMI_SPLIODN(0, 0+8), 88); /* RX_10G_TYPE2 */
+        set32(FMAN_BMI_SPLIODN(0, 1+8), 89); /* RX_1G */
+        set32(FMAN_BMI_SPLIODN(0, 2+8), 90); /* RX_1G */
+        set32(FMAN_BMI_SPLIODN(0, 3+8), 91); /* RX_1G */
 
+        /* Setup FMAN DMA LIODN - use same base for all */
+        for (i=0; i<FMAN_DMA_ENTRIES; i++) {
+            set32(FMAN_DMA_PORT_LIODN(i),
+                ((FMAN_DMA_LIODN << 16) | FMAN_DMA_LIODN));
+        }
     }
     return ret;
 }
@@ -1752,7 +1939,9 @@ void hal_init(void)
     hal_flash_init();
     hal_cpld_init();
 #ifdef ENABLE_PCIE
-    hal_pcie_init();
+    if (hal_pcie_init() != 0) {
+        wolfBoot_printf("PCIe: init failed!\n");
+    }
 #endif
 
 #ifdef ENABLE_QE
@@ -1947,6 +2136,10 @@ int hal_dts_fixup(void* dts_addr)
     struct fdt_header *fdt = (struct fdt_header *)dts_addr;
     int off, i;
     uint32_t *reg;
+    const char* prev_compat;
+
+    /* TODO: Ethenet MAC should be dynamic value */
+    uint8_t mac_addr[6] = {0xDC, 0xA7, 0xD9, 0x00, 0x07, 0x10};
 
     /* verify the FTD is valid */
     off = fdt_check_header(dts_addr);
@@ -1960,8 +2153,8 @@ int hal_dts_fixup(void* dts_addr)
         fdt_version(fdt), fdt_totalsize(fdt));
 
     /* expand total size */
-    fdt->totalsize += 1024; /* expand by 1KB */
-    wolfBoot_printf("FDT: Expanded (1KB) to %d bytes\n", fdt->totalsize);
+    fdt->totalsize += 2048; /* expand by 2KB */
+    wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n", fdt->totalsize);
 
     /* fixup the memory region - single bank */
     off = fdt_find_devtype(fdt, -1, "memory");
@@ -2027,18 +2220,24 @@ int hal_dts_fixup(void* dts_addr)
     }
 
     /* fixup the LIODN */
+    prev_compat = NULL;
     for (i=0; i<(int)(sizeof(liodn_tbl)/sizeof(struct liodn_id_table)); i++) {
-        off = fdt_node_offset_by_compatible(fdt, -1, liodn_tbl[i].compat);
+        if (prev_compat == NULL || strcmp(prev_compat, liodn_tbl[i].compat) != 0) {
+            off = -1;
+        }
+        off = fdt_node_offset_by_compatible(fdt, off, liodn_tbl[i].compat);
         if (off >= 0) {
             fdt_fixup_val(fdt, off, liodn_tbl[i].compat, "fsl,liodn",
                 liodn_tbl[i].id);
         }
+        prev_compat = liodn_tbl[i].compat;
     }
 
     /* fixup the QMAN portals */
     off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qman-portal");
     while (off != -FDT_ERR_NOTFOUND) {
         uint32_t liodns[2];
+        int childoff;
 
         reg = (uint32_t*)fdt_getprop(fdt, off, "cell-index", NULL);
         if (reg == NULL)
@@ -2054,13 +2253,72 @@ int hal_dts_fixup(void* dts_addr)
             "qman-portal", i, off, "fsl,liodn", liodns[0], liodns[1]);
         fdt_setprop(fdt, off, "fsl,liodn", liodns, sizeof(liodns));
 
+        /* Add fman@0 node and fsl,liodon = FMAN_DMA_LIODN + index */
+        childoff = fdt_add_subnode(fdt, off, "fman@0");
+        if (childoff > 0) {
+            liodns[0] = FMAN_DMA_LIODN + i + 1;
+            wolfBoot_printf("FDT: Set %s@%d/%s (%d), %s=%d\n",
+                "qman-portal", i, "fman@0", childoff, "fsl,liodn", liodns[0]);
+            fdt_setprop(fdt, childoff, "fsl,liodn", liodns, sizeof(liodns[0]));
+            off = childoff;
+        }
+
         off = fdt_node_offset_by_compatible(fdt, off, "fsl,qman-portal");
     }
 
-    /* mpic clock */
-    off = fdt_find_devtype(fdt, -1, "open-pic");
-    if (off != -FDT_ERR_NOTFOUND) {
-        fdt_fixup_val(fdt, off, "open-pic", "clock-frequency", hal_get_bus_clk());
+    /* fixup the fman clock */
+    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,fman");
+    if (off != !FDT_ERR_NOTFOUND) {
+        fdt_fixup_val(fdt, off, "fman@", "clock-frequency", hal_get_bus_clk());
+    }
+
+    /* Ethernet Devices */
+    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,fman-memac");
+    while (off != -FDT_ERR_NOTFOUND) {
+        reg = (uint32_t*)fdt_getprop(fdt, off, "cell-index", NULL);
+        if (reg == NULL)
+            break;
+        i = (int)fdt32_to_cpu(*reg);
+
+        wolfBoot_printf("FDT: Ethernet%d: Offset %d\n", i, off);
+
+        /* Set Ethernet MAC addresses (incrementing) */
+        wolfBoot_printf("FDT: Set %s@%d (%d), %s=%x:%x:%x:%x:%x:%x\n",
+                "ethernet", i, off, "local-mac-address",
+                mac_addr[0], mac_addr[1], mac_addr[2],
+                mac_addr[3], mac_addr[4], mac_addr[5]);
+        fdt_setprop(fdt, off, "local-mac-address", mac_addr, sizeof(mac_addr));
+
+        mac_addr[5]++;
+        off = fdt_node_offset_by_compatible(fdt, off, "fsl,fman-memac");
+    }
+
+    /* PCIe Ranges */
+    i = 0;
+    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qoriq-pcie");
+    while (off != -FDT_ERR_NOTFOUND) {
+        uint32_t dma_ranges[] = {
+        /* TYPE         BUS START         PHYS              SIZE */
+           (FDT_PCI_MEM32),
+                        0x00, 0xff000000, 0x0f, 0xfe000000, 0x00, 0x01000000,
+           (FDT_PCI_PREFETCH | FDT_PCI_MEM32),
+                        0x00, 0x00,       0x00, 0x00,       0x00, 0x80000000,
+           (FDT_PCI_PREFETCH | FDT_PCI_MEM32),
+                        0x10, 0x00,       0x00, 0x00,       0x00, 0x80000000
+        };
+        uint32_t bus_range[2];
+        bus_range[0] = 0;
+        bus_range[1] = i;
+
+        wolfBoot_printf("FDT: PCI%d: Offset %d\n", i, off);
+
+        /* Set "dma-ranges" */
+        fdt_setprop(fdt, off, "dma-ranges", dma_ranges, sizeof(dma_ranges));
+        /* Set "bus-range" */
+        fdt_setprop(fdt, off, "bus-range", bus_range, sizeof(bus_range));
+
+        i++;
+        off = fdt_node_offset_by_compatible(fdt, off, "fsl,qoriq-pcie");
     }
 #endif /* !BUILD_LOADER_STAGE1 */
     return 0;

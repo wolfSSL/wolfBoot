@@ -364,6 +364,41 @@ static int fdt_add_property_(void *fdt, int nodeoffset, const char *name,
     return 0;
 }
 
+/* return: 0=no match, 1=matched */
+static int fdt_nodename_eq_(const void *fdt, int offset, const char *s,
+    int len)
+{
+    const char *p = fdt_offset_ptr(fdt, offset + FDT_TAGSIZE, len+1);
+    if (p == NULL || memcmp(p, s, len) != 0) {
+        return 0;
+    }
+    if (p[len] == '\0') {
+        return 1;
+    } else if (!memchr(s, '@', len) && (p[len] == '@')) {
+        return 1;
+    }
+    return 0;
+}
+
+static int fdt_subnode_offset_namelen(const void *fdt, int offset,
+    const char *name, int namelen)
+{
+    int depth;
+    for (depth = 0;
+        (offset >= 0) && (depth >= 0);
+         offset = fdt_next_node(fdt, offset, &depth))
+    {
+        if ((depth == 1) && fdt_nodename_eq_(fdt, offset, name, namelen)) {
+            return offset;
+        }
+    }
+    if (depth < 0) {
+        return -FDT_ERR_NOTFOUND;
+    }
+    return offset; /* error */
+}
+
+
 
 /* Public Functions */
 int fdt_check_header(const void *fdt)
@@ -514,6 +549,10 @@ int fdt_setprop(void *fdt, int nodeoffset, const char *name, const void *val,
             memcpy(prop_data, val, len);
         }
     }
+    if (err != 0) {
+        wolfBoot_printf("FDT: Set prop failed! %d (name %d, off %d)\n",
+            err, name, nodeoffset);
+    }
     return err;
 }
 
@@ -580,6 +619,49 @@ int fdt_node_offset_by_compatible(const void *fdt, int startoffset,
     }
     return offset;
 }
+
+int fdt_add_subnode(void* fdt, int parentoff, const char *name)
+{
+    int err;
+    struct fdt_node_header *nh;
+    int offset, nextoffset;
+    int nodelen;
+    uint32_t tag, *endtag;
+    int namelen = (int)strlen(name);
+
+    err = fdt_check_header(fdt);
+    if (err != 0)
+        return err;
+
+    offset = fdt_subnode_offset_namelen(fdt, parentoff, name, namelen);
+    if (offset >= 0)
+        return -FDT_ERR_EXISTS;
+    else if (offset != -FDT_ERR_NOTFOUND)
+        return offset;
+
+    /* Find the node after properties */
+    /* skip the first node (BEGIN_NODE) */
+    fdt_next_tag(fdt, parentoff, &nextoffset);
+    do {
+        offset = nextoffset;
+        tag = fdt_next_tag(fdt, offset, &nextoffset);
+    } while ((tag == FDT_PROP) || (tag == FDT_NOP));
+
+    nh = (struct fdt_node_header*)fdt_offset_ptr_(fdt, offset);
+    nodelen = sizeof(*nh) + FDT_TAGALIGN(namelen+1) + FDT_TAGSIZE;
+
+    err = fdt_splice_struct_(fdt, nh, 0, nodelen);
+    if (err == 0) {
+        nh->tag = cpu_to_fdt32(FDT_BEGIN_NODE);
+        memset(nh->name, 0, FDT_TAGALIGN(namelen+1));
+        memcpy(nh->name, name, namelen);
+        endtag = (uint32_t*)((char *)nh + nodelen - FDT_TAGSIZE);
+        *endtag = cpu_to_fdt32(FDT_END_NODE);
+        err = offset;
+    }
+    return err;
+}
+
 
 /* adjust the actual total size in the FDT header */
 int fdt_shrink(void* fdt)
