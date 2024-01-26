@@ -64,16 +64,16 @@
 #define PCI_IO32_BASE 0x2000
 #endif /* PCI_IO32_BASE */
 
-#define PCI_ENUM_MAX_DEV 32
-#define PCI_ENUM_MAX_FUN 8
+#define PCI_ENUM_MAX_DEV  32
+#define PCI_ENUM_MAX_FUN  8
 #define PCI_ENUM_MAX_BARS 6
 
-#define PCI_ENUM_MMIND_MASK (0x1)
-#define PCI_ENUM_TYPE_MASK (0x1 << 1 | 0x1 << 2)
-#define PCI_ENUM_TYPE_SHIFT 1
-#define PCI_ENUM_TYPE_64bit (0x1 << 1)
-#define PCI_ENUM_TYPE_32bit (0x1)
-#define PCI_ENUM_IS_PREFETCH (0x1 << 3)
+#define PCI_ENUM_MMIND_MASK   (0x1)
+#define PCI_ENUM_TYPE_MASK    (0x1 << 1 | 0x1 << 2)
+#define PCI_ENUM_TYPE_SHIFT   1
+#define PCI_ENUM_TYPE_64bit   (0x1 << 1)
+#define PCI_ENUM_TYPE_32bit   (0x1)
+#define PCI_ENUM_IS_PREFETCH  (0x1 << 3)
 #define PCI_ENUM_MM_BAR_MASK ~(0xf)
 #define PCI_ENUM_IO_BAR_MASK ~(0x3)
 
@@ -189,21 +189,14 @@ static void pci_ecam_config_write16(uint8_t bus, uint8_t dev, uint8_t fun,
 #define PCI_CONFIG_ADDR_PORT 0xcf8
 #define PCI_CONFIG_DATA_PORT 0xcfc
 
-/* Shifts & masks for CONFIG_ADDRESS register */
-
-#define PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT 31
-#define PCI_CONFIG_ADDRESS_BUS_SHIFT    16
-#define PCI_CONFIG_ADDRESS_DEVICE_SHIFT 11
-#define PCI_CONFIG_ADDRESS_FUNCTION_SHIFT 8
-#define PCI_CONFIG_ADDRESS_OFFSET_MASK 0xFF
-
 #define PCI_IO_CONFIG_ADDR(bus, dev, fn, off) \
     (uint32_t)( \
-           (1   << PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT) | \
+           (1UL << PCI_CONFIG_ADDRESS_ENABLE_BIT_SHIFT) | \
            (bus << PCI_CONFIG_ADDRESS_BUS_SHIFT) | \
            (dev << PCI_CONFIG_ADDRESS_DEVICE_SHIFT) | \
            (fn  << PCI_CONFIG_ADDRESS_FUNCTION_SHIFT) | \
-           (off & PCI_CONFIG_ADDRESS_OFFSET_MASK))
+           ((off & 0xF00) << 16) | \
+            (off & PCI_CONFIG_ADDRESS_OFFSET_MASK))
 
 static uint32_t pci_io_config_read32(uint32_t bus, uint32_t dev, uint32_t func,
                                     uint32_t off)
@@ -238,11 +231,12 @@ static uint16_t pci_io_config_read16(uint32_t bus, uint32_t dev, uint32_t func,
 
     address = pci_align32_address(address, &aligned32);
     data = pci_io_config_read32(bus, dev, func, address);
+    //PCI_DEBUG_PRINTF("CONFIG_READ16: address %x, data %x (aligned32 %d)\n", address, data, aligned32);
     if (!aligned32)
         data >>= PCI_DATA_HI16_SHIFT;
     else
         data &= PCI_DATA_LO16_MASK;
-
+    //PCI_DEBUG_PRINTF("\tCONFIG_READ16: data %x\n", data);
     return (uint16_t)data;
 }
 
@@ -256,8 +250,10 @@ static void pci_io_config_write16(uint32_t bus, uint32_t dev, uint32_t func,
     /* off must be 16 bit aligned */
     if ((dst_addr & PCI_ADDR_16BIT_ALIGNED_MASK) != 0)
         return;
+
     dst_addr = pci_align32_address(dst_addr, &aligned32);
     reg = pci_io_config_read32(bus, dev, func, dst_addr);
+    //PCI_DEBUG_PRINTF("CONFIG_WRITE16: address %x, data %x (aligned32 %d)\n", dst_addr, val, aligned32);
     if (aligned32) {
         reg &= PCI_DATA_HI16_MASK;
         reg |= val;
@@ -265,6 +261,7 @@ static void pci_io_config_write16(uint32_t bus, uint32_t dev, uint32_t func,
         reg &= PCI_DATA_LO16_MASK;
         reg |= (val << PCI_DATA_HI16_SHIFT);
     }
+    //PCI_DEBUG_PRINTF("\tCONFIG_WRITE16: data %x\n", reg);
     pci_io_config_write32(bus, dev, func, dst_addr, reg);
 }
 #endif /* PCI_USE_ECAM */
@@ -315,11 +312,13 @@ void pci_config_write8(uint8_t bus,
     uint32_t reg;
 
     off_aligned = align_down(off, 4);
+    reg = pci_config_read32(bus, dev, fun, off_aligned);
     shift = (off & PCI_ADDR_32BIT_ALIGNED_MASK) * 8;
     mask = 0xff << shift;
-    reg = pci_config_read32(bus, dev, fun, off_aligned);
+    //PCI_DEBUG_PRINTF("CONFIG_WRITE8: address %x, data %x (mask %x, shift %d)\n", off_aligned, value, mask, shift);
     reg &= ~(mask);
     reg |= (value << shift);
+    //PCI_DEBUG_PRINTF("\tCONFIG_WRITE8: data %x\n", reg);
     pci_config_write32(bus, dev, fun, off_aligned, reg);
 }
 
@@ -330,11 +329,14 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off)
     uint32_t reg;
 
     off_aligned = align_down(off, 4);
+    reg = pci_config_read32(bus, dev, fun, off_aligned);
     shift = (off & PCI_ADDR_32BIT_ALIGNED_MASK) * 8;
     mask = 0xff << shift;
-    reg = pci_config_read32(bus, dev, fun, off_aligned);
+    //PCI_DEBUG_PRINTF("CONFIG_READ8: address %x, data %x (mask %x, shift %d)\n", off_aligned, reg, mask, shift);
     reg &= mask;
-    return (reg >> shift);
+    reg = (reg >> shift);
+    //PCI_DEBUG_PRINTF("\tCONFIG_READ8: data %x\n", reg);
+    return reg;
 }
 
 uint64_t pci_get_mmio_addr(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t bar)
@@ -623,6 +625,9 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
                      (int)bus, (int)dev, (int)fun, info->curr_bus_number);
     pci_config_write8(bus, dev, fun, PCI_PRIMARY_BUS, bus);
     pci_config_write8(bus, dev, fun, PCI_SECONDARY_BUS, info->curr_bus_number);
+
+    PCI_DEBUG_PRINTF("Info: bus %d, mem %p-%p, io %p, pf %p-%p\n",
+        info->curr_bus_number, info->mem, info->mem_limit, info->io, info->mem_pf, info->mem_pf_limit);
 
     /* temporarly allows all conf transaction on the bus range
      * (curr_bus_number,0xff) to scan the bus behind the bridge */

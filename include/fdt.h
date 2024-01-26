@@ -143,6 +143,7 @@ int fdt_find_devtype(void* fdt, int startoff, const char* node);
 int fdt_node_check_compatible(const void *fdt, int nodeoffset, const char *compatible);
 int fdt_node_offset_by_compatible(const void *fdt, int startoffset, const char *compatible);
 int fdt_add_subnode(void* fdt, int parentoff, const char* name);
+int fdt_del_node(void *fdt, int nodeoffset);
 
 /* helpers to fix/append a property to a node */
 int fdt_fixup_str(void* fdt, int off, const char* node, const char* name, const char* str);
