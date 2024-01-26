@@ -69,6 +69,10 @@ static inline const void *fdt_offset_ptr_(const void *fdt, int offset)
 {
     return (const char*)fdt + fdt_off_dt_struct(fdt) + offset;
 }
+static inline void *fdt_offset_ptr_w_(const void *fdt, int offset)
+{
+    return (char*)fdt + fdt_off_dt_struct(fdt) + offset;
+}
 static inline int fdt_data_size_(void *fdt)
 {
     /* the last portion of a FDT is the DT string, so use its offset and size to
@@ -347,7 +351,7 @@ static int fdt_add_property_(void *fdt, int nodeoffset, const char *name,
         return namestroff;
     }
 
-    *prop = (void*)(uintptr_t)fdt_offset_ptr_(fdt, nextoffset);
+    *prop = fdt_offset_ptr_w_(fdt, nextoffset);
     proplen = sizeof(**prop) + FDT_TAGALIGN(len);
 
     err = fdt_splice_struct_(fdt, *prop, 0, proplen);
@@ -647,7 +651,7 @@ int fdt_add_subnode(void* fdt, int parentoff, const char *name)
         tag = fdt_next_tag(fdt, offset, &nextoffset);
     } while ((tag == FDT_PROP) || (tag == FDT_NOP));
 
-    nh = (struct fdt_node_header*)fdt_offset_ptr_(fdt, offset);
+    nh = (struct fdt_node_header*)fdt_offset_ptr_w_(fdt, offset);
     nodelen = sizeof(*nh) + FDT_TAGALIGN(namelen+1) + FDT_TAGSIZE;
 
     err = fdt_splice_struct_(fdt, nh, 0, nodelen);
@@ -660,6 +664,28 @@ int fdt_add_subnode(void* fdt, int parentoff, const char *name)
         err = offset;
     }
     return err;
+}
+
+int fdt_del_node(void *fdt, int nodeoffset)
+{
+    int err;
+    int offset, endoffset;
+    int depth = 0;
+
+    err = fdt_check_header(fdt);
+    if (err != 0)
+        return err;
+
+    /* find end of node */
+    endoffset = nodeoffset;
+    while ((endoffset >= 0) && (depth >= 0)) {
+        endoffset = fdt_next_node(fdt, endoffset, &depth);
+    }
+    if (endoffset < 0)
+        return endoffset;
+
+    return fdt_splice_struct_(fdt, fdt_offset_ptr_w_(fdt, nodeoffset),
+                  endoffset - nodeoffset, 0);
 }
 
 

@@ -119,18 +119,19 @@ static void hal_flash_unlock_sector(uint32_t sector);
 #define DCFG_DMA2LIODNR   ((volatile uint32_t*)(DCFG_BASE + 0x584))
 
 /* PCI Express LIODN base register */
-#define PCI_BASE(n)         (CCSRBAR + 0x240000 + ((n-1) * 0x10000))
-#define PCIE_CONFIG_ADDR(n) ((volatile uint32_t*)(PCI_BASE(n) + 0x00)) /* PEXx_PEX_CONFIG_ADDR - configuration address */
-#define PCIE_CONFIG_DATA(n) ((volatile uint32_t*)(PCI_BASE(n) + 0x04)) /* PEXx_PEX_CONFIG_DATA - configuration data */
-#define PCIE_LIODN(n)       ((volatile uint32_t*)(PCI_BASE(n) + 0x40)) /* PEXx_PEX_LBR */
-#define PCIE_BLK_REV1(n)    ((volatile uint32_t*)(PCI_BASE(n) + 0xBF8)) /* PEXx_PEX_IP_BLK_REV1 */
-#define PCIE_BLK_REV2(n)    ((volatile uint32_t*)(PCI_BASE(n) + 0xBFC)) /* PEXx_PEX_IP_BLK_REV1 */
+#define PCIE_MAX_CONTROLLERS 3
+#define PCIE_BASE(n)        (CCSRBAR + 0x240000 + ((n-1) * 0x10000))
+#define PCIE_CONFIG_ADDR(n) ((volatile uint32_t*)(PCIE_BASE(n) + 0x00)) /* PEXx_PEX_CONFIG_ADDR - configuration address */
+#define PCIE_CONFIG_DATA(n) ((volatile uint32_t*)(PCIE_BASE(n) + 0x04)) /* PEXx_PEX_CONFIG_DATA - configuration data */
+#define PCIE_LIODN(n)       ((volatile uint32_t*)(PCIE_BASE(n) + 0x40)) /* PEXx_PEX_LBR */
+#define PCIE_BLK_REV1(n)    ((volatile uint32_t*)(PCIE_BASE(n) + 0xBF8)) /* PEXx_PEX_IP_BLK_REV1 */
+#define PCIE_BLK_REV2(n)    ((volatile uint32_t*)(PCIE_BASE(n) + 0xBFC)) /* PEXx_PEX_IP_BLK_REV1 */
 
 /* PCIe Output Windows (max 5) */
-#define PCIE_OTAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xC00 + ((w) * 32)))  /* PEXx_PEXOTARn  - outbound translation address */
-#define PCIE_OTEAR(n, w)    ((volatile uint32_t*)(PCI_BASE(n) + 0xC04 + ((w) * 32)))  /* PEXx_PEXOTEARn - outbound translation extended address */
-#define PCIE_OWBAR(n, w)    ((volatile uint32_t*)(PCI_BASE(n) + 0xC08 + ((w) * 32)))  /* PEXx_PEXOWBARn - outbound window base address */
-#define PCIE_OWAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xC10 + ((w) * 32)))  /* PEXx_PEXOWARn  - outbound window attributes */
+#define PCIE_OTAR(n, w)     ((volatile uint32_t*)(PCIE_BASE(n) + 0xC00 + ((w) * 32)))  /* PEXx_PEXOTARn  - outbound translation address */
+#define PCIE_OTEAR(n, w)    ((volatile uint32_t*)(PCIE_BASE(n) + 0xC04 + ((w) * 32)))  /* PEXx_PEXOTEARn - outbound translation extended address */
+#define PCIE_OWBAR(n, w)    ((volatile uint32_t*)(PCIE_BASE(n) + 0xC08 + ((w) * 32)))  /* PEXx_PEXOWBARn - outbound window base address */
+#define PCIE_OWAR(n, w)     ((volatile uint32_t*)(PCIE_BASE(n) + 0xC10 + ((w) * 32)))  /* PEXx_PEXOWARn  - outbound window attributes */
 #define POWAR_EN            0x80000000
 #define POWAR_IO_READ       0x00080000
 #define POWAR_MEM_READ      0x00040000
@@ -138,14 +139,21 @@ static void hal_flash_unlock_sector(uint32_t sector);
 #define POWAR_MEM_WRITE     0x00004000
 
 /* PCIe Input Windows (max 4 - seq is 3,2,1,0) */
-#define PCIE_ITAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xD80 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXITARn  - inbound translation address */
-#define PCIE_IWBAR(n, w)    ((volatile uint32_t*)(PCI_BASE(n) + 0xD88 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWBARn - inbound window base address */
-#define PCIE_IWBEAR(n, w)   ((volatile uint32_t*)(PCI_BASE(n) + 0xD8C + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWBEARn- inbound window base extended address */
-#define PCIE_IWAR(n, w)     ((volatile uint32_t*)(PCI_BASE(n) + 0xD90 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWARn  - inbound window attributes */
+#define PCIE_ITAR(n, w)     ((volatile uint32_t*)(PCIE_BASE(n) + 0xD80 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXITARn  - inbound translation address */
+#define PCIE_IWBAR(n, w)    ((volatile uint32_t*)(PCIE_BASE(n) + 0xD88 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWBARn - inbound window base address */
+#define PCIE_IWBEAR(n, w)   ((volatile uint32_t*)(PCIE_BASE(n) + 0xD8C + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWBEARn- inbound window base extended address */
+#define PCIE_IWAR(n, w)     ((volatile uint32_t*)(PCIE_BASE(n) + 0xD90 + ((3-((w) & 0x3)) * 32)))  /* PEXx_PEXIWARn  - inbound window attributes */
 #define PIWAR_EN            0x80000000
+#define PIWAR_DIEN          0x40000000
 #define PIWAR_PF            0x20000000
-#define PIWAR_LOCAL         0x00f00000
+#define PIWAR_TRGT_PCI1     0x00000000
+#define PIWAR_TRGT_PCI2     0x00100000
+#define PIWAR_TRGT_PCI3     0x00200000
+#define PIWAR_TRGT_CCSR     0x00E00000
+#define PIWAR_TRGT_LOCAL    0x00F00000
+#define PIWAR_READ          0x00040000
 #define PIWAR_READ_SNOOP    0x00050000
+#define PIWAR_WRITE         0x00004000
 #define PIWAR_WRITE_SNOOP   0x00005000
 
 /* Buffer Manager */
@@ -1167,6 +1175,10 @@ void hal_early_init(void)
          (1 << 2)    /* DIU (LCD) */
     ));
 
+    set32(DCFG_DEVDISR3,
+        (1 << 30) /* Disable PEX2 (PCIe2) */
+    );
+
     hal_ddr_init();
 }
 
@@ -1177,12 +1189,16 @@ void hal_early_init(void)
 #define PCI_CONFIG_ADDR_PORT 0xcf8
 #define PCI_CONFIG_DATA_PORT 0xcfc
 static int pcie_bus = 0;
+/* See T1024RM 27.12.1.2.3 Byte order for configuration transactions */
 void io_write32(uint16_t port, uint32_t value)
 {
     if (port == PCI_CONFIG_ADDR_PORT) {
         set32(PCIE_CONFIG_ADDR(pcie_bus), value);
     }
     else if (port == PCI_CONFIG_DATA_PORT) {
+    #ifdef BIG_ENDIAN_ORDER
+        value = __builtin_bswap32(value);
+    #endif
         set32(PCIE_CONFIG_DATA(pcie_bus), value);
     }
 }
@@ -1190,46 +1206,55 @@ uint32_t io_read32(uint16_t port)
 {
     uint32_t value = 0;
     if (port == PCI_CONFIG_ADDR_PORT) {
-        value = get32(PCIE_CONFIG_ADDR(1));
+        value = get32(PCIE_CONFIG_ADDR(pcie_bus));
     }
     else if (port == PCI_CONFIG_DATA_PORT) {
-        value = get32(PCIE_CONFIG_DATA(1));
+        value = get32(PCIE_CONFIG_DATA(pcie_bus));
+    #ifdef BIG_ENDIAN_ORDER
+        value = __builtin_bswap32(value);
+    #endif
     }
     return value;
 }
 
-#define PCI_MMIO32_LENGTH          (1024UL * 1024U * 1024U)
-#define PCI_MMIO32_PREFETCH_LENGTH (1024UL * 1024U * 1024U)
+#define CONFIG_PCIE_MEM_BUS              0xE0000000
+#define CONFIG_PCIE_IO_BASE              0x2000
+#define CONFIG_PCIE_MEM_LENGTH          (0x10000000)
+#define CONFIG_PCIE_MEM_PREFETCH_LENGTH (0x100000)
 
-#define CONFIG_SYS_PCIE1_MEM_PHYS_HIGH 0xC
-#define CONFIG_SYS_PCIE1_MEM_PHYS      0x00000000
-#define CONFIG_SYS_PCIE1_MEM_VIRT      0x80000000
-#define CONFIG_SYS_PCIE1_IO_PHYS_HIGH  0xF
-#define CONFIG_SYS_PCIE1_IO_PHYS       0xF8000000
-#define CONFIG_SYS_PCIE1_IO_VIRT       CONFIG_SYS_PCIE1_IO_PHYS
+#define CONFIG_PCIE1_MEM_PHYS_HIGH      0xCULL
+#define CONFIG_PCIE1_MEM_PHYS           0x00000000
+#define CONFIG_PCIE1_MEM_VIRT           0x80000000
+#define CONFIG_PCIE1_IO_PHYS_HIGH       0xFULL
+#define CONFIG_PCIE1_IO_PHYS            0xF8000000
+#define CONFIG_PCIE1_IO_VIRT            CONFIG_PCIE1_IO_PHYS
 
-#define CONFIG_SYS_PCIE2_MEM_PHYS_HIGH 0xC
-#define CONFIG_SYS_PCIE2_MEM_PHYS      0x10000000
-#define CONFIG_SYS_PCIE2_MEM_VIRT      0x90000000
-#define CONFIG_SYS_PCIE2_IO_PHYS_HIGHT 0xF
-#define CONFIG_SYS_PCIE2_IO_PHYS       0xF8010000
-#define CONFIG_SYS_PCIE2_IO_VIRT       CONFIG_SYS_PCIE2_IO_PHYS
+#define CONFIG_PCIE2_MEM_PHYS_HIGH      0xCULL
+#define CONFIG_PCIE2_MEM_PHYS           0x10000000
+#define CONFIG_PCIE2_MEM_VIRT           0x90000000
+#define CONFIG_PCIE2_IO_PHYS_HIGH       0xFULL
+#define CONFIG_PCIE2_IO_PHYS            0xF8010000
+#define CONFIG_PCIE2_IO_VIRT            CONFIG_PCIE2_IO_PHYS
 
-#define CONFIG_SYS_PCIE3_MEM_PHYS_HIGH 0xC
-#define CONFIG_SYS_PCIE3_MEM_PHYS      0x20000000
-#define CONFIG_SYS_PCIE3_MEM_VIRT      0xA0000000
-#define CONFIG_SYS_PCIE3_IO_PHYS_HIGH  0xF
-#define CONFIG_SYS_PCIE3_IO_PHYS       0xF8020000
-#define CONFIG_SYS_PCIE3_IO_VIRT       CONFIG_SYS_PCIE3_IO_PHYS
+#define CONFIG_PCIE3_MEM_PHYS_HIGH      0xCULL
+#define CONFIG_PCIE3_MEM_PHYS           0x20000000
+#define CONFIG_PCIE3_MEM_VIRT           0xA0000000
+#define CONFIG_PCIE3_IO_PHYS_HIGH       0xFULL
+#define CONFIG_PCIE3_IO_PHYS            0xF8020000
+#define CONFIG_PCIE3_IO_VIRT            CONFIG_PCIE3_IO_PHYS
 
 static int hal_pcie_init(void)
 {
     int ret;
     int bus, i;
-    int law_start = 14;
+    int law_idx = 7;
+    int tlb_idx = 14; /* next available TLB (after DDR) */
     struct pci_enum_info enum_info;
+    uint64_t mem_phys_h, io_phys_h;
+    uint32_t mem_phys, io_phys;
+    uint32_t mem_virt, io_virt;
 
-    for (pcie_bus=1; pcie_bus<=3; pcie_bus++) {
+    for (pcie_bus=1; pcie_bus<=PCIE_MAX_CONTROLLERS; pcie_bus++) {
         /* Check device disable register */
         if (get32(DCFG_DEVDISR3) & (1 << (32-pcie_bus))) {
             wolfBoot_printf("PCIe %d: Disabled\n", pcie_bus);
@@ -1238,110 +1263,126 @@ static int hal_pcie_init(void)
 
         /* Read block revision */
         wolfBoot_printf("PCIe %d: Base 0x%x, Rev 0x%x\n",
-            pcie_bus, PCI_BASE(pcie_bus),
+            pcie_bus, PCIE_BASE(pcie_bus),
             get32(PCIE_BLK_REV1(pcie_bus)));
 
         /* Setup PCIe memory regions */
-        memset(&enum_info, 0, sizeof(enum_info));
         if (pcie_bus == 1) {
-            enum_info.mem = CONFIG_SYS_PCIE1_MEM_VIRT;
-            enum_info.io = CONFIG_SYS_PCIE1_IO_VIRT;
-
-            /* Map TLB for PCIe */
-            set_tlb(1, law_start++, CONFIG_SYS_PCIE1_MEM_VIRT,
-                        CONFIG_SYS_PCIE1_MEM_PHYS, CONFIG_SYS_PCIE1_MEM_PHYS_HIGH,
-                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
-            set_tlb(1, law_start++, CONFIG_SYS_PCIE1_MEM_VIRT,
-                        CONFIG_SYS_PCIE1_MEM_PHYS, CONFIG_SYS_PCIE1_MEM_PHYS_HIGH,
-                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+            mem_virt = CONFIG_PCIE1_MEM_VIRT;
+            io_virt = CONFIG_PCIE1_IO_VIRT;
+            mem_phys_h = CONFIG_PCIE1_MEM_PHYS_HIGH;
+            mem_phys = CONFIG_PCIE1_MEM_PHYS;
+            io_phys_h = CONFIG_PCIE1_IO_PHYS_HIGH;
+            io_phys = CONFIG_PCIE1_IO_PHYS;
         }
         else if (pcie_bus == 2) {
-            enum_info.mem = CONFIG_SYS_PCIE2_MEM_VIRT;
-            enum_info.io = CONFIG_SYS_PCIE2_IO_VIRT;
-
-            /* Map TLB for PCIe */
-            set_tlb(1, law_start++, CONFIG_SYS_PCIE2_MEM_VIRT,
-                        CONFIG_SYS_PCIE2_MEM_PHYS, CONFIG_SYS_PCIE2_MEM_PHYS_HIGH,
-                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
-            set_tlb(1, law_start++, CONFIG_SYS_PCIE2_MEM_VIRT,
-                        CONFIG_SYS_PCIE2_MEM_PHYS, CONFIG_SYS_PCIE2_MEM_PHYS_HIGH,
-                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+            mem_virt = CONFIG_PCIE2_MEM_VIRT;
+            io_virt = CONFIG_PCIE2_IO_VIRT;
+            mem_phys_h = CONFIG_PCIE2_MEM_PHYS_HIGH;
+            mem_phys = CONFIG_PCIE2_MEM_PHYS;
+            io_phys_h = CONFIG_PCIE2_IO_PHYS_HIGH;
+            io_phys = CONFIG_PCIE2_IO_PHYS;
         }
         else if (pcie_bus == 3) {
-            enum_info.mem = CONFIG_SYS_PCIE3_MEM_VIRT;
-            enum_info.io = CONFIG_SYS_PCIE3_IO_VIRT;
-
-            /* Map TLB for PCIe */
-            set_tlb(1, law_start++, CONFIG_SYS_PCIE3_MEM_VIRT,
-                        CONFIG_SYS_PCIE3_MEM_PHYS, CONFIG_SYS_PCIE3_MEM_PHYS_HIGH,
-                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1G, 1);
-            set_tlb(1, law_start++, CONFIG_SYS_PCIE3_MEM_VIRT,
-                        CONFIG_SYS_PCIE3_MEM_PHYS, CONFIG_SYS_PCIE3_MEM_PHYS_HIGH,
-                (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
+            mem_virt = CONFIG_PCIE3_MEM_VIRT;
+            io_virt = CONFIG_PCIE3_IO_VIRT;
+            mem_phys_h = CONFIG_PCIE3_MEM_PHYS_HIGH;
+            mem_phys = CONFIG_PCIE3_MEM_PHYS;
+            io_phys_h = CONFIG_PCIE3_IO_PHYS_HIGH;
+            io_phys = CONFIG_PCIE3_IO_PHYS;
         }
-        enum_info.mem_limit = enum_info.mem + (PCI_MMIO32_LENGTH - 1);
-        enum_info.mem_pf = (enum_info.mem + PCI_MMIO32_PREFETCH_LENGTH);
-        enum_info.mem_pf_limit = PCI_MMIO32_PREFETCH_LENGTH;
+
+        /* LAW_TRGT_PCIE1 = 0, LAW_TRGT_PCIE2 = 1, LAW_TRGT_PCIE1 = 2 */
+        set_law(law_idx++, mem_phys_h, mem_phys, pcie_bus-1, LAW_SIZE_256MB, 1);
+        set_law(law_idx++, io_phys_h, io_phys,  pcie_bus-1, LAW_SIZE_64KB, 1);
+
+        /* Map TLB for PCIe */
+        set_tlb(1, tlb_idx++, mem_virt,
+            mem_phys, mem_phys_h,
+            (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0,
+            BOOKE_PAGESZ_256M, 1);
+        set_tlb(1, tlb_idx++, io_virt,
+            io_phys, io_phys_h,
+            (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), 0,
+            BOOKE_PAGESZ_64K, 1);
+
+        /* PCI I/O Base */
+        memset(&enum_info, 0, sizeof(enum_info));
+        enum_info.curr_bus_number = 0;
+        enum_info.mem = CONFIG_PCIE_MEM_BUS;
+        enum_info.mem_limit = enum_info.mem + (CONFIG_PCIE_MEM_LENGTH - 1);
+        enum_info.mem_pf = (enum_info.mem + CONFIG_PCIE_MEM_PREFETCH_LENGTH);
+        enum_info.mem_pf_limit = enum_info.mem_pf +
+            (CONFIG_PCIE_MEM_PREFETCH_LENGTH - 1);
+        enum_info.io = CONFIG_PCIE_IO_BASE;
 
         /* Setup PCIe Output Windows */
-        if (pcie_bus == 1) {
-            set32( PCIE_OTAR(pcie_bus, 0), 0x0);
-            set32(PCIE_OTEAR(pcie_bus, 0), 0x0);
-            set32( PCIE_OWAR(pcie_bus, 0), 0x80044027);
+        /* See T1024RM: 27.12.1.5 PCI Express outbound ATMUs */
+        set32( PCIE_OTAR(pcie_bus, 0), 0x0);
+        set32(PCIE_OTEAR(pcie_bus, 0), 0x0);
+        set32( PCIE_OWAR(pcie_bus, 0), (POWAR_EN | POWAR_MEM_READ |
+            POWAR_MEM_WRITE | LAW_SIZE_1TB));
 
-            set32( PCIE_OTAR(pcie_bus, 1), 0xE0000);
-            set32(PCIE_OTEAR(pcie_bus, 1), 0x0);
-            set32(PCIE_OWBAR(pcie_bus, 1), 0xC00000); /* MEM_PHYS >> 12 */
-            set32( PCIE_OWAR(pcie_bus, 1), 0x8004401B);
+        /* Outbound Memory */
+        set32( PCIE_OTAR(pcie_bus, 1), (CONFIG_PCIE_MEM_BUS >> 12));
+        set32(PCIE_OTEAR(pcie_bus, 1), 0x0);
+        set32(PCIE_OWBAR(pcie_bus, 1), ((mem_phys_h << 32 | mem_phys) >> 12));
+        set32( PCIE_OWAR(pcie_bus, 1), (POWAR_EN | POWAR_MEM_READ |
+            POWAR_MEM_WRITE | LAW_SIZE_256MB));
 
-            set32( PCIE_OTAR(pcie_bus, 2), 0x0);
-            set32(PCIE_OTEAR(pcie_bus, 2), 0x0);
-            set32(PCIE_OWBAR(pcie_bus, 2), 0xFF8000); /* IO_PHYS >> 12 */
-            set32( PCIE_OWAR(pcie_bus, 2), 0x8008800F);
+        /* Outbound IO */
+        set32( PCIE_OTAR(pcie_bus, 2), 0x0);
+        set32(PCIE_OTEAR(pcie_bus, 2), 0x0);
+        set32(PCIE_OWBAR(pcie_bus, 2), ((io_phys_h << 32) | io_phys) >> 12);
+        set32( PCIE_OWAR(pcie_bus, 2), (POWAR_EN | POWAR_IO_READ |
+            POWAR_IO_WRITE | LAW_SIZE_64KB));
 
-        }
-        else if (pcie_bus == 3) {
-            set32( PCIE_OTAR(pcie_bus, 0), 0x0);
-            set32(PCIE_OWBAR(pcie_bus, 0), 0x0);
-            set32( PCIE_OWAR(pcie_bus, 0), 0x80044027);
-
-            set32( PCIE_OTAR(pcie_bus, 1), 0xE0000);
-            set32(PCIE_OTEAR(pcie_bus, 1), 0x0);
-            set32(PCIE_OWBAR(pcie_bus, 1), 0xC20000); /* MEM_PHYS >> 12 */
-            set32( PCIE_OWAR(pcie_bus, 1), 0x8004401B);
-
-            set32( PCIE_OTAR(pcie_bus, 2), 0x0);
-            set32(PCIE_OTEAR(pcie_bus, 2), 0x0);
-            set32(PCIE_OWBAR(pcie_bus, 2), 0xFF8020); /* IO_PHYS >> 12 */
-            set32( PCIE_OWAR(pcie_bus, 2), 0x8008800F);
-        }
+        /* Disabled */
+        set32( PCIE_OTAR(pcie_bus, 3), 0x0);
+        set32(PCIE_OTEAR(pcie_bus, 3), 0x0);
+        set32(PCIE_OWBAR(pcie_bus, 3), 0x0);
+        set32( PCIE_OWAR(pcie_bus, 3), 0x0);
 
         /* Setup PCIe Input Windows */
-        set32(  PCIE_ITAR(pcie_bus, 0), 0xFFE000);
-        set32(  PCIE_IWAR(pcie_bus, 0), 0x80E44017);
+        /* See T1024RM: 27.12.1.6 PCI Express inbound ATMUs */
+        /* CCSRBAR */
+        set32(  PCIE_ITAR(pcie_bus, 0), (CCSRBAR_PHYS >> 12));
+        set32(  PCIE_IWAR(pcie_bus, 0), (PIWAR_EN | PIWAR_TRGT_CCSR |
+            PIWAR_READ | PIWAR_WRITE | LAW_SIZE_16MB));
 
-        set32(  PCIE_ITAR(pcie_bus, 1), 0x0);
-        set32( PCIE_IWBAR(pcie_bus, 1), 0x0);
-        set32(  PCIE_IWAR(pcie_bus, 1), 0xA0F5501E);
+        /* Map DDR to PCIe */
+        set32(  PCIE_ITAR(pcie_bus, 1), (DDR_ADDRESS >> 12));
+        set32( PCIE_IWBAR(pcie_bus, 1), (DDR_ADDRESS >> 12));
+        set32(PCIE_IWBEAR(pcie_bus, 1), 0x0);
+        set32(  PCIE_IWAR(pcie_bus, 1), (PIWAR_EN | PIWAR_PF |
+            PIWAR_TRGT_LOCAL | PIWAR_READ_SNOOP | PIWAR_WRITE_SNOOP | LAW_SIZE_2GB));
 
-        set32(  PCIE_ITAR(pcie_bus, 2), 0x0);
-        set32( PCIE_IWBAR(pcie_bus, 2), 0x1000000);
+        /* Map DDR High (64GB) to PCIe */
+        set32(  PCIE_ITAR(pcie_bus, 2), (DDR_ADDRESS >> 12));
+        set32( PCIE_IWBAR(pcie_bus, 2), ((64ull*1024*1024*1024) >> 12));
         set32(PCIE_IWBEAR(pcie_bus, 2), 0x0);
-        set32(  PCIE_IWAR(pcie_bus, 2), 0xA0F5501E);
+        set32(  PCIE_IWAR(pcie_bus, 2), (PIWAR_EN | PIWAR_PF |
+            PIWAR_TRGT_LOCAL | PIWAR_READ_SNOOP | PIWAR_WRITE_SNOOP | LAW_SIZE_2GB));
 
+        /* Disabled */
         set32(  PCIE_ITAR(pcie_bus, 3), 0x0);
         set32( PCIE_IWBAR(pcie_bus, 3), 0x0);
         set32(PCIE_IWBEAR(pcie_bus, 3), 0x0);
-        set32(  PCIE_IWAR(pcie_bus, 3), 0x20F44027);
+        set32(  PCIE_IWAR(pcie_bus, 3), (PIWAR_PF | PIWAR_TRGT_LOCAL |
+            PIWAR_READ | PIWAR_WRITE | LAW_SIZE_1TB));
 
-        /* TODO: setup PCSRBAR/PEXCSRBAR */
+        /* Check if link is active */
 
 
-        ret = pci_enum_bus(0, &enum_info);
-        if (ret != 0) {
-            wolfBoot_printf("PCIe %d: Enum failed %d\n", pcie_bus, ret);
-        }
     }
+
+    /* Only enumerate PCIe 3 */
+    pcie_bus = 3;
+    ret = pci_enum_bus(0, &enum_info);
+    if (ret != 0) {
+        wolfBoot_printf("PCIe %d: Enum failed %d\n", pcie_bus, ret);
+    }
+
     return ret;
 }
 #endif
@@ -2165,9 +2206,9 @@ int hal_dts_fixup(void* dts_addr)
         p += sizeof(uint64_t);
         *(uint64_t*)p = cpu_to_fdt64(DDR_SIZE);
         p += sizeof(uint64_t);
-        fdt_setprop(fdt, off, "reg", ranges, (int)(p - ranges));
         wolfBoot_printf("FDT: Set memory, start=0x%x, size=0x%x\n",
             DDR_ADDRESS, (uint32_t)DDR_SIZE);
+        fdt_setprop(fdt, off, "reg", ranges, (int)(p - ranges));
     }
 
     /* fixup CPU status and, release address and enable method */
@@ -2294,9 +2335,7 @@ int hal_dts_fixup(void* dts_addr)
     }
 
     /* PCIe Ranges */
-    i = 0;
-    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qoriq-pcie");
-    while (off != -FDT_ERR_NOTFOUND) {
+    for (i=1; i<=PCIE_MAX_CONTROLLERS; i++) {
         uint32_t dma_ranges[] = {
         /* TYPE         BUS START         PHYS              SIZE */
            (FDT_PCI_MEM32),
@@ -2306,19 +2345,43 @@ int hal_dts_fixup(void* dts_addr)
            (FDT_PCI_PREFETCH | FDT_PCI_MEM32),
                         0x10, 0x00,       0x00, 0x00,       0x00, 0x80000000
         };
-        uint32_t bus_range[2];
+        uint32_t bus_range[2], base;
         bus_range[0] = 0;
-        bus_range[1] = i;
+        bus_range[1] = i-1;
 
-        wolfBoot_printf("FDT: PCI%d: Offset %d\n", i, off);
+        /* find offset for pci controlller base register */
+        off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qoriq-pcie");
+        while (off != -FDT_ERR_NOTFOUND) {
+            reg = (uint32_t*)fdt_getprop(fdt, off, "reg", NULL);
+            if (reg == NULL)
+                break;
+            reg++; /* skip first part of 64-bit */
+            base = fdt32_to_cpu(*reg);
+            if (base == (uint32_t)PCIE_BASE(i)) {
+                break;
+            }
+            off = fdt_node_offset_by_compatible(fdt, off, "fsl,qoriq-pcie");
+        }
+        if (off == -FDT_ERR_NOTFOUND)
+            break;
 
-        /* Set "dma-ranges" */
-        fdt_setprop(fdt, off, "dma-ranges", dma_ranges, sizeof(dma_ranges));
-        /* Set "bus-range" */
-        fdt_setprop(fdt, off, "bus-range", bus_range, sizeof(bus_range));
-
-        i++;
-        off = fdt_node_offset_by_compatible(fdt, off, "fsl,qoriq-pcie");
+        /* Set ranges or disable if not enabled */
+        wolfBoot_printf("FDT: pcie%d@%x, Offset %d\n", i, base, off);
+        if (get32(DCFG_DEVDISR3) & (1 << (32-i))) {
+            /* If device disabled, remove node */
+            wolfBoot_printf("FDT: PCI%d Disabled, removing\n", i);
+            off = fdt_del_node(fdt, off);
+        }
+        else {
+            /* Set "dma-ranges" */
+            wolfBoot_printf("FDT: Set %s@%d (%d), %s\n",
+                "pcie", i, off, "dma-ranges");
+            fdt_setprop(fdt, off, "dma-ranges", dma_ranges, sizeof(dma_ranges));
+            /* Set "bus-range" */
+            wolfBoot_printf("FDT: Set %s@%d (%d), %s\n",
+                "pcie", i, off, "bus-ranges");
+            fdt_setprop(fdt, off, "bus-range", bus_range, sizeof(bus_range));
+        }
     }
 #endif /* !BUILD_LOADER_STAGE1 */
     return 0;
