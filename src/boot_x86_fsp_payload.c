@@ -120,7 +120,7 @@ void do_boot(const uint32_t *app)
     mptable_setup();
     x86_paging_dump_info();
     r = elf_load_image_mmu((uint8_t *)app, &e, mmu_cb);
-    wolfBoot_printf("Elf loaded (ret %d), entry 0x%x_%x\r\n", 0,
+    wolfBoot_printf("Elf loaded (ret %d), entry 0x%x_%x\r\n", r,
                     (uint32_t)(e >> 32),
                     (uint32_t)(e));
     x86_paging_dump_info();
