@@ -1,11 +1,33 @@
 # TMS750LC43xx
 
+# Prerequisites
+
+Download and install:
+1) "Code Composer Studio" - https://www.ti.com/tool/CCSTUDIO
+2) "F021 Flash API - Software" - https://www.ti.com/tool/F021FLASHAPI
+
+Note: Avoid using spaces in the paths. Consider renaming "F021 Flash API" to "F021_Flash_API".
+
 # Build
 
 ## Build from command line (msys, cygwin, etc)
 
+1) Setup default configuration:
+
 ```
-make CCS_ROOT=/c/ti/ccs1031/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS F021_DIR=/c/ti/Hercules/F021\ Flash\ API/02.01.01
+cp config/examples/ti-tms570lc435.config .config
+```
+
+2) Build passing in CCS_ROOT and F021_DIR make variables:
+
+Windows:
+```
+make CCS_ROOT=/c/ti/ccs1250/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS F021_DIR=/c/ti/Hercules/F021\ Flash\ API/02.01.01
+```
+
+Mac OS:
+```
+make CCS_ROOT=/Applications/ti/ccs1250/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS F021_DIR=/Applications/ti/Hercules/F021_Flash_API/02.01.01
 ```
 
 ## Build using Code Composer Studio (CCS)
