@@ -491,6 +491,7 @@ ifeq ($(TARGET),ti_hercules)
   CFLAGS+=-D"CORTEX_R5" -D"BIG_ENDIAN_ORDER" -D"NVM_FLASH_WRITEONCE" -D"FLASHBUFFER_SIZE=32"
   STACK_USAGE=0
   USE_GCC=0
+  USE_GCC_HEADLESS=0
 
   ifeq ($(CCS_ROOT),)
     $(error "CCS_ROOT must be defined to root of tools")
@@ -510,7 +511,7 @@ ifeq ($(TARGET),ti_hercules)
   CFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=$(ARCH_FLAGS) -i"$(CCS_ROOT)/lib" -i"$(F021_DIR)" -z --be32 --map_file=wolfboot.map --reread_libs --diag_wrap=off --display_error_number --warn_sections --heap_size=0 --stack_size=0x800 --ram_model
   LD_START_GROUP= #--start-group
-  LD_END_GROUP= -llibc.a -l"$(F021_DIR)\\F021_API_CortexR4_BE_L2FMC_V3D16.lib" $(LSCRIPT)
+  LD_END_GROUP= -llibc.a -l"$(F021_DIR)/F021_API_CortexR4_BE_L2FMC_V3D16.lib"
 
   OPTIMIZATION_LEVEL=2
 endif

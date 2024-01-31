@@ -23,6 +23,7 @@ DEBUG?=0
 DEBUG_UART?=0
 LIBS=
 SIGN_ALG=
+OBJCOPY_FLAGS=
 
 OBJS:= \
 	./hal/$(TARGET).o \
@@ -67,7 +68,12 @@ ifeq ($(USE_GCC_HEADLESS),1)
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
   # Not setting LDFLAGS directly since it is passed to the test-app
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
+  OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
+ifeq ($(TARGET),ti_hercules)
+  LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
+endif
+
 
 MAIN_TARGET=factory.bin
 TARGET_H_TEMPLATE:=include/target.h.in
@@ -136,7 +142,7 @@ wolfboot.efi: wolfboot.elf
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
@@ -153,7 +159,7 @@ standalone:
 	MCUXPRESSO=$(MCUXPRESSO) MCUXPRESSO_CPU=$(MCUXPRESSO_CPU) MCUXPRESSO_DRIVERS=$(MCUXPRESSO_DRIVERS) \
 	MCUXPRESSO_CMSIS=$(MCUXPRESSO_CMSIS) NVM_FLASH_WRITEONCE=$(NVM_FLASH_WRITEONCE) \
 	FREEDOM_E_SDK=$(FREEDOM_E_SDK) standalone
-	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary test-app/image.elf standalone.bin
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary test-app/image.elf standalone.bin
 	$(Q)$(SIZE) test-app/image.elf
 
 include tools/test.mk

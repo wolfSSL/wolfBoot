@@ -48,6 +48,9 @@ include ../arch.mk
 # Setup default linker flags
 LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
+# Setup default objcopy flags
+OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
+
 ifeq ($(DEBUG_UART),1)
     APP_OBJS+=../src/string.o
 endif
@@ -161,7 +164,8 @@ endif
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_TEMPLATE=ARM-r5be.ld
   # Override linker flags
-  LDFLAGS=$(LSCRIPT) --map_file=image.map
+  LDFLAGS=--run_linker $(LSCRIPT) --map_file=image.map
+  OBJCOPY_FLAGS=
 endif
 
 ifeq ($(TARGET),sim)
@@ -338,7 +342,7 @@ delta-extra-data:LDFLAGS=-Wl,-Map=image.map
 
 image.bin: image.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"

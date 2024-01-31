@@ -77,6 +77,7 @@ ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=loader_stage1.map
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
+  OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
 
 MAIN_TARGET=loader_stage1.bin
@@ -124,7 +125,7 @@ all: $(MAIN_TARGET)
 
 loader_stage1.bin: loader_stage1.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) --gap-fill $(FILL_BYTE) -O binary $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) loader_stage1.elf
