@@ -50,6 +50,7 @@
     #define ENABLE_CPLD
     #define ENABLE_QE   /* QUICC Engine */
     #define ENABLE_FMAN
+    #define ENABLE_MRAM
 
     #if defined(WOLFBOOT_TPM) || defined(TEST_TPM)
         #define ENABLE_ESPI /* SPI for TPM */
@@ -692,8 +693,13 @@ enum ifc_amask_sizes {
 #define CPLD_OVERRIDE_MUX_EN  0x02 /* PCIE/2.5G-SGMII mux override enable */
 
 #define CPLD_DATA(n) ((volatile uint16_t*)(CPLD_BASE + (n)))
-#define CPLD_READ(reg)         get16(CPLD_DATA(((reg))))
-#define CPLD_WRITE(reg, value) set16(CPLD_DATA((reg), (value)))
+#define CPLD_READ(reg)         get16(CPLD_DATA(reg))
+#define CPLD_WRITE(reg, value) set16(CPLD_DATA(reg), value)
+
+/* MRAM */
+#define MRAM_BASE               0xFF800000
+#define MRAM_BASE_PHYS_HIGH     0xFULL
+
 
 
 /* eSPI */
@@ -1257,7 +1263,7 @@ static int hal_pcie_init(void)
 {
     int ret;
     int bus, i;
-    int law_idx = 7;
+    int law_idx = 8;
     int tlb_idx = 14; /* next available TLB (after DDR) */
     struct pci_enum_info enum_info;
     uint64_t mem_phys_h, io_phys_h;
@@ -1274,12 +1280,12 @@ static int hal_pcie_init(void)
         cpld_pci, rcw4, srds_prtcl_s1);
     if (srds_prtcl_s1 == 0x95) {
         /* Route Lane B to PCIE */
-        set16(CPLD_DATA(PCI_STATUS_ADDR), cpld_pci & ~CPLD_PCIE_SGMII_MUX);
+        CPLD_WRITE(PCI_STATUS_ADDR, cpld_pci & ~CPLD_PCIE_SGMII_MUX);
         wolfBoot_printf("Route Lane B->PCIE\n");
     }
     else {
         /* Route Lane B to SGMII */
-        set16(CPLD_DATA(PCI_STATUS_ADDR), cpld_pci | CPLD_PCIE_SGMII_MUX);
+        CPLD_WRITE(PCI_STATUS_ADDR, cpld_pci | CPLD_PCIE_SGMII_MUX);
         wolfBoot_printf("Route Lane B->SGMII\n");
     }
     cpld_pci = CPLD_READ(PCI_STATUS_ADDR);
@@ -1418,28 +1424,45 @@ static int hal_pcie_init(void)
 }
 #endif
 
-#ifdef ENABLE_CPLD
-static void hal_cpld_ifc_init(uint32_t base, uint32_t base_high, uint8_t ifc)
+#if defined(ENABLE_CPLD) || defined(ENABLE_MRAM)
+static void hal_ifc_init(uint8_t ifc, uint32_t base, uint32_t base_high,
+    uint32_t port_sz, uint32_t amask)
 {
     /* CPLD IFC Timing Parameters */
     set32(IFC_FTIM0(ifc), (IFC_FTIM0_GPCM_TACSE(14UL) |
-                         IFC_FTIM0_GPCM_TEADC(14UL) |
-                         IFC_FTIM0_GPCM_TEAHC(14UL)));
+                           IFC_FTIM0_GPCM_TEADC(14UL) |
+                           IFC_FTIM0_GPCM_TEAHC(14UL)));
     set32(IFC_FTIM1(ifc), (IFC_FTIM1_GPCM_TACO(14UL) |
-                         IFC_FTIM1_GPCM_TRAD(31UL)));
+                           IFC_FTIM1_GPCM_TRAD(31UL)));
     set32(IFC_FTIM2(ifc), (IFC_FTIM2_GPCM_TCS(14UL) |
-                         IFC_FTIM2_GPCM_TCH(8UL) |
-                         IFC_FTIM2_GPCM_TWP(31UL)));
+                           IFC_FTIM2_GPCM_TCH(8UL) |
+                           IFC_FTIM2_GPCM_TWP(31UL)));
     set32(IFC_FTIM3(ifc), 0);
 
     /* CPLD IFC Definitions (CS2) */
     set32(IFC_CSPR_EXT(ifc), base_high);
     set32(IFC_CSPR(ifc),     (IFC_CSPR_PHYS_ADDR(base) |
-                            IFC_CSPR_PORT_SIZE_16 |
-                            IFC_CSPR_MSEL_GPCM |
-                            IFC_CSPR_V));
-    set32(IFC_AMASK(ifc), IFC_AMASK_64KB);
+                              port_sz |
+                              IFC_CSPR_MSEL_GPCM |
+                              IFC_CSPR_V));
+    set32(IFC_AMASK(ifc), amask);
     set32(IFC_CSOR(ifc), 0);
+}
+#endif
+
+#ifdef ENABLE_MRAM
+static void hal_mram_init(void)
+{
+    /* MRAM IFC Timing Parameters */
+    hal_ifc_init(1, MRAM_BASE, MRAM_BASE_PHYS_HIGH,
+        IFC_CSPR_PORT_SIZE_8, IFC_AMASK_1MB);
+
+    /* MRAM IFC 1 - LAW 7, TLB 1.4 */
+    set_law(7, MRAM_BASE_PHYS_HIGH, MRAM_BASE, LAW_TRGT_IFC, LAW_SIZE_1MB, 1);
+    set_tlb(1, 4, MRAM_BASE,
+                  MRAM_BASE, MRAM_BASE_PHYS_HIGH,
+        (MAS3_SX | MAS3_SW | MAS3_SR),
+        (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_1M, 1);
 }
 #endif
 
@@ -1470,7 +1493,8 @@ static void hal_cpld_init(void)
     uint32_t reg;
 
     /* CPLD (APU) IFC 2 - LAW 2, TLB 1.11 */
-    hal_cpld_ifc_init(CPLD_BASE, CPLD_BASE_PHYS_HIGH, 2);
+    hal_ifc_init(2, CPLD_BASE, CPLD_BASE_PHYS_HIGH,
+        IFC_CSPR_PORT_SIZE_16, IFC_AMASK_64KB);
     set_law(2, CPLD_BASE_PHYS_HIGH, CPLD_BASE, LAW_TRGT_IFC, LAW_SIZE_64KB, 1);
     set_tlb(1, 11, CPLD_BASE,
                    CPLD_BASE, CPLD_BASE_PHYS_HIGH,
@@ -1478,7 +1502,8 @@ static void hal_cpld_init(void)
         (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
 
     /* CPLD (MPU) IFC 3 - LAW 6, TLB 1.10 */
-    hal_cpld_ifc_init(CPLD_MPU_BASE, CPLD_MPU_BASE_PHYS_HIGH, 3);
+    hal_ifc_init(3, CPLD_MPU_BASE, CPLD_MPU_BASE_PHYS_HIGH,
+        IFC_CSPR_PORT_SIZE_16, IFC_AMASK_64KB);
     set_law(6, CPLD_MPU_BASE_PHYS_HIGH, CPLD_MPU_BASE, LAW_TRGT_IFC,
         LAW_SIZE_64KB, 1);
     set_tlb(1, 10, CPLD_MPU_BASE,
@@ -2032,6 +2057,9 @@ void hal_init(void)
     hal_liodn_init();
     hal_flash_init();
     hal_cpld_init();
+#ifdef ENABLE_MRAM
+    hal_mram_init();
+#endif
 #ifdef ENABLE_PCIE
     if (hal_pcie_init() != 0) {
         wolfBoot_printf("PCIe: init failed!\n");
