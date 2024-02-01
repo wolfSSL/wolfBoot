@@ -104,8 +104,13 @@ static void hal_flash_unlock_sector(uint32_t sector);
 #define DCFG_DEVDISR4  ((volatile uint32_t*)(DCFG_BASE + 0x7CUL)) /* Device disable register */
 #define DCFG_DEVDISR5  ((volatile uint32_t*)(DCFG_BASE + 0x80UL)) /* Device disable register */
 #define DCFG_COREDISR  ((volatile uint32_t*)(DCFG_BASE + 0x94UL)) /* Core Enable/Disable */
+#define DCFG_RCWSR(n)  ((volatile uint32_t*)(DCFG_BASE + 0x100UL + ((n) * 4))) /* Reset Control Word Status Register (0-15) */
 #define DCFG_BRR       ((volatile uint32_t*)(DCFG_BASE + 0xE4UL))  /* Boot Release Register (DCFG_CCSR_BRR) */
 #define DCFG_DCSR      ((volatile uint32_t*)(DCFG_BASE + 0x704UL)) /* Debug configuration and status */
+
+/* RCW */
+#define RCWSR4_SRDS1_PRTCL       0xFF800000
+#define RCWSR4_SRDS1_PRTCL_SHIFT 23
 
 /* Logical I/O Device Number */
 #define DCFG_USB1LIODNR   ((volatile uint32_t*)(DCFG_BASE + 0x520))
@@ -666,13 +671,12 @@ enum ifc_amask_sizes {
 #define POWER_STATUS_ADDRR  0x0400
 #define MPU_INT_STATUS_ADDR 0x0402
 #define MPU_INT_ENABLE_ADDR 0x0404
-#define MPU_CONTROL_ADDR    0x042E
-#define MPU_RESET_ADDR      0x0430
-#define PCI_STATUS_ADDR     0x0432
-#define HS_CSR_ADDR         0x103C
-#define CPCI_GA_ADDRS       0x103E
-#define CPCI_INTX_ADDR      0x1040
-#define PLD_CURRENT_VERSION 0x1042
+#define MPU_CONTROL_ADDR    0x0430
+#define MPU_RESET_ADDR      0x0432
+#define PCI_STATUS_ADDR     0x0434
+#define HS_CSR_ADDR         0x1040
+#define CPCI_GA_ADDRS       0x1042
+#define CPCI_INTX_ADDR      0x1044
 
 #define CPLD_LBMAP_MASK       0x3F
 #define CPLD_BANK_SEL_MASK    0x07
@@ -687,7 +691,9 @@ enum ifc_amask_sizes {
 #define CPLD_OVERRIDE_BOOT_EN 0x01
 #define CPLD_OVERRIDE_MUX_EN  0x02 /* PCIE/2.5G-SGMII mux override enable */
 
-#define CPLD_DATA(n) ((volatile uint16_t*)(CPLD_BASE + n))
+#define CPLD_DATA(n) ((volatile uint16_t*)(CPLD_BASE + (n)))
+#define CPLD_READ(reg)         get16(CPLD_DATA(((reg))))
+#define CPLD_WRITE(reg, value) set16(CPLD_DATA((reg), (value)))
 
 
 /* eSPI */
@@ -1193,9 +1199,11 @@ static int pcie_bus = 0;
 void io_write32(uint16_t port, uint32_t value)
 {
     if (port == PCI_CONFIG_ADDR_PORT) {
+        //wolfBoot_printf("WRITE32 Addr %x\n", value);
         set32(PCIE_CONFIG_ADDR(pcie_bus), value);
     }
     else if (port == PCI_CONFIG_DATA_PORT) {
+        //wolfBoot_printf("WRITE32 Data %x\n", value);
     #ifdef BIG_ENDIAN_ORDER
         value = __builtin_bswap32(value);
     #endif
@@ -1207,12 +1215,14 @@ uint32_t io_read32(uint16_t port)
     uint32_t value = 0;
     if (port == PCI_CONFIG_ADDR_PORT) {
         value = get32(PCIE_CONFIG_ADDR(pcie_bus));
+        //wolfBoot_printf("READ32 Addr %x\n", value);
     }
     else if (port == PCI_CONFIG_DATA_PORT) {
         value = get32(PCIE_CONFIG_DATA(pcie_bus));
     #ifdef BIG_ENDIAN_ORDER
         value = __builtin_bswap32(value);
     #endif
+        //wolfBoot_printf("READ32 Data %x\n", value);
     }
     return value;
 }
@@ -1253,6 +1263,27 @@ static int hal_pcie_init(void)
     uint64_t mem_phys_h, io_phys_h;
     uint32_t mem_phys, io_phys;
     uint32_t mem_virt, io_virt;
+    uint32_t rcw4, srds_prtcl_s1;
+    uint16_t cpld_pci;
+
+    /* Configure Lane B */
+    cpld_pci = CPLD_READ(PCI_STATUS_ADDR);
+    rcw4 = get32(DCFG_RCWSR(4));
+    srds_prtcl_s1 = (rcw4 & RCWSR4_SRDS1_PRTCL) >> RCWSR4_SRDS1_PRTCL_SHIFT;
+    wolfBoot_printf("CPLD PCI 0x%x, RCW4 0x%x, SRDS1_PRTCL 0x%x\n",
+        cpld_pci, rcw4, srds_prtcl_s1);
+    if (srds_prtcl_s1 == 0x95) {
+        /* Route Lane B to PCIE */
+        set16(CPLD_DATA(PCI_STATUS_ADDR), cpld_pci & ~CPLD_PCIE_SGMII_MUX);
+        wolfBoot_printf("Route Lane B->PCIE\n");
+    }
+    else {
+        /* Route Lane B to SGMII */
+        set16(CPLD_DATA(PCI_STATUS_ADDR), cpld_pci | CPLD_PCIE_SGMII_MUX);
+        wolfBoot_printf("Route Lane B->SGMII\n");
+    }
+    cpld_pci = CPLD_READ(PCI_STATUS_ADDR);
+    wolfBoot_printf("CPLD PCI 0x%x\n", cpld_pci);
 
     for (pcie_bus=1; pcie_bus<=PCIE_MAX_CONTROLLERS; pcie_bus++) {
         /* Check device disable register */
@@ -1411,12 +1442,32 @@ static void hal_cpld_ifc_init(uint32_t base, uint32_t base_high, uint8_t ifc)
     set32(IFC_CSOR(ifc), 0);
 }
 #endif
+
+#if defined(ENABLE_CPLD) && defined(DEBUG)
+void hal_cpld_dump(void)
+{
+    wolfBoot_printf("\n--------------------\n");
+    wolfBoot_printf("CPLD Dump\n");
+    wolfBoot_printf("BOARD_ID_L_Addr     = 0x%04x\n", CPLD_READ(BOARD_ID_L_ADDR));
+    wolfBoot_printf("BOARD_ID_H_Addr     = 0x%04x\n", CPLD_READ(BOARD_ID_H_ADDR));
+    wolfBoot_printf("PLD_VER_Addr        = 0x%04x\n", CPLD_READ(PLD_VER_ADDR));
+    wolfBoot_printf("Power_Status_Addrr  = 0x%04x\n", CPLD_READ(POWER_STATUS_ADDRR));
+    wolfBoot_printf("MPU_Int_Status_Addr = 0x%04x\n", CPLD_READ(MPU_INT_STATUS_ADDR));
+    wolfBoot_printf("MPU_Int_Enable_Addr = 0x%04x\n", CPLD_READ(MPU_INT_ENABLE_ADDR));
+    wolfBoot_printf("MPU_Control_Addr    = 0x%04x\n", CPLD_READ(MPU_CONTROL_ADDR));
+    wolfBoot_printf("MPU_Reset_Addr      = 0x%04x\n", CPLD_READ(MPU_RESET_ADDR));
+    wolfBoot_printf("PCI_Status_Addr     = 0x%04x\n", CPLD_READ(PCI_STATUS_ADDR));
+    wolfBoot_printf("HS_CSR_Addr         = 0x%04x\n", CPLD_READ(HS_CSR_ADDR));
+    wolfBoot_printf("CPCI_GA_Addr        = 0x%04x\n", CPLD_READ(CPCI_GA_ADDRS));
+    wolfBoot_printf("CPCI_INTx_Addr      = 0x%04x\n", CPLD_READ(CPCI_INTX_ADDR));
+    wolfBoot_printf("\n--------------------\n");
+}
+#endif
+
 static void hal_cpld_init(void)
 {
 #ifdef ENABLE_CPLD
-    #ifdef DEBUG
-    uint32_t fw;
-    #endif
+    uint32_t reg;
 
     /* CPLD (APU) IFC 2 - LAW 2, TLB 1.11 */
     hal_cpld_ifc_init(CPLD_BASE, CPLD_BASE_PHYS_HIGH, 2);
@@ -1435,12 +1486,14 @@ static void hal_cpld_init(void)
         (MAS3_SX | MAS3_SW | MAS3_SR),
         (MAS2_I | MAS2_G), 0, BOOKE_PAGESZ_256K, 1);
 
+    reg  = CPLD_READ(BOARD_ID_L_ADDR) << 16;
+    reg |= CPLD_READ(BOARD_ID_H_ADDR);
+    wolfBoot_printf("CPLD BOARD_ID: 0x%x\n", reg);
+    reg = CPLD_READ(PLD_VER_ADDR);
+    wolfBoot_printf("CPLD PLD_VER: 0x%x\n", reg);
+
 #ifdef DEBUG
-    fw  = get16(CPLD_DATA(BOARD_ID_L_ADDR)) << 16;
-    fw |= get16(CPLD_DATA(BOARD_ID_H_ADDR));
-    wolfBoot_printf("CPLD BOARD_ID: 0x%x\n", fw);
-    fw = get16(CPLD_DATA(PLD_VER_ADDR));
-    wolfBoot_printf("CPLD PLD_VER: 0x%x\n", fw);
+    hal_cpld_dump();
 #endif
 #endif /* ENABLE_CPLD */
 }
