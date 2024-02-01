@@ -108,6 +108,7 @@ void __attribute((weak)) hal_early_init(void)
 #ifdef MMU
 int __attribute((weak))  hal_dts_fixup(void* dts_addr)
 {
+    (void)dts_addr;
     return 0;
 }
 #endif

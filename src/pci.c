@@ -235,12 +235,10 @@ static uint16_t pci_io_config_read16(uint32_t bus, uint32_t dev, uint32_t func,
 
     address = pci_align32_address(address, &aligned32);
     data = pci_io_config_read32(bus, dev, func, address);
-    //PCI_DEBUG_PRINTF("CONFIG_READ16: address %x, data %x (aligned32 %d)\n", address, data, aligned32);
     if (!aligned32)
         data >>= PCI_DATA_HI16_SHIFT;
     else
         data &= PCI_DATA_LO16_MASK;
-    //PCI_DEBUG_PRINTF("\tCONFIG_READ16: data %x\n", data);
     return (uint16_t)data;
 }
 
@@ -257,7 +255,6 @@ static void pci_io_config_write16(uint32_t bus, uint32_t dev, uint32_t func,
 
     dst_addr = pci_align32_address(dst_addr, &aligned32);
     reg = pci_io_config_read32(bus, dev, func, dst_addr);
-    //PCI_DEBUG_PRINTF("CONFIG_WRITE16: address %x, data %x (aligned32 %d)\n", dst_addr, val, aligned32);
     if (aligned32) {
         reg &= PCI_DATA_HI16_MASK;
         reg |= val;
@@ -265,7 +262,6 @@ static void pci_io_config_write16(uint32_t bus, uint32_t dev, uint32_t func,
         reg &= PCI_DATA_LO16_MASK;
         reg |= (val << PCI_DATA_HI16_SHIFT);
     }
-    //PCI_DEBUG_PRINTF("\tCONFIG_WRITE16: data %x\n", reg);
     pci_io_config_write32(bus, dev, func, dst_addr, reg);
 }
 #endif /* PCI_USE_ECAM */
@@ -319,10 +315,8 @@ void pci_config_write8(uint8_t bus,
     reg = pci_config_read32(bus, dev, fun, off_aligned);
     shift = (off & PCI_ADDR_32BIT_ALIGNED_MASK) * 8;
     mask = 0xff << shift;
-    //PCI_DEBUG_PRINTF("CONFIG_WRITE8: address %x, data %x (mask %x, shift %d)\n", off_aligned, value, mask, shift);
     reg &= ~(mask);
     reg |= (value << shift);
-    //PCI_DEBUG_PRINTF("\tCONFIG_WRITE8: data %x\n", reg);
     pci_config_write32(bus, dev, fun, off_aligned, reg);
 }
 
@@ -336,10 +330,8 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off)
     reg = pci_config_read32(bus, dev, fun, off_aligned);
     shift = (off & PCI_ADDR_32BIT_ALIGNED_MASK) * 8;
     mask = 0xff << shift;
-    //PCI_DEBUG_PRINTF("CONFIG_READ8: address %x, data %x (mask %x, shift %d)\n", off_aligned, reg, mask, shift);
     reg &= mask;
     reg = (reg >> shift);
-    //PCI_DEBUG_PRINTF("\tCONFIG_READ8: data %x\n", reg);
     return reg;
 }
 
@@ -420,6 +412,10 @@ static int pci_pre_enum_cb(uint8_t bus, uint8_t dev, uint8_t fun)
     /* PMC BARs shouldn't be programmed as per FSP integration guide */
     if (dev == 31 && fun == 2)
         return 1;
+#else
+    (void)bus;
+    (void)dev;
+    (void)fun;
 #endif /* WOLFBOOT_TGL */
     return 0;
 }
@@ -629,9 +625,6 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
                      (int)bus, (int)dev, (int)fun, info->curr_bus_number);
     pci_config_write8(bus, dev, fun, PCI_PRIMARY_BUS, bus);
     pci_config_write8(bus, dev, fun, PCI_SECONDARY_BUS, info->curr_bus_number);
-
-    PCI_DEBUG_PRINTF("Info: bus %d, mem %p-%p, io %p, pf %p-%p\n",
-        info->curr_bus_number, info->mem, info->mem_limit, info->io, info->mem_pf, info->mem_pf_limit);
 
     /* temporarly allows all conf transaction on the bus range
      * (curr_bus_number,0xff) to scan the bus behind the bridge */

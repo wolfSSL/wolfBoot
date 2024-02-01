@@ -1408,9 +1408,14 @@ static int hal_pcie_init(void)
         set32(  PCIE_IWAR(pcie_bus, 3), (PIWAR_PF | PIWAR_TRGT_LOCAL |
             PIWAR_READ | PIWAR_WRITE | LAW_SIZE_1TB));
 
-        /* Check if link is active */
+        #define PCI_LTSSM    0x404  /* PCIe Link Training, Status State Machine */
+        #define PCI_LTSSM_L0 0x16   /* L0 state */
 
-
+        /* TODO: Check if link is active. Read config PCI_LTSSM */
+    #if 0
+        link = pci_config_read16(0, 0, 0, PCI_LTSSM);
+		enabled = (link >= PCI_LTSSM_L0);
+    #endif
     }
 
     /* Only enumerate PCIe 3 */
@@ -2465,6 +2470,7 @@ int hal_dts_fixup(void* dts_addr)
         }
     }
 #endif /* !BUILD_LOADER_STAGE1 */
+    (void)dts_addr;
     return 0;
 }
 #endif /* MMU */
