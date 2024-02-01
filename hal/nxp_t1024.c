@@ -430,23 +430,23 @@ static void hal_flash_unlock_sector(uint32_t sector);
 
 /* IFC AMASK - RM Table 13-3 - Count of MSB minus 1 */
 enum ifc_amask_sizes {
-    IFC_AMASK_64KB =  0xFFFF,
-    IFC_AMASK_128KB = 0xFFFE,
-    IFC_AMASK_256KB = 0xFFFC,
-    IFC_AMASK_512KB = 0xFFF8,
-    IFC_AMASK_1MB   = 0xFFF0,
-    IFC_AMASK_2MB   = 0xFFE0,
-    IFC_AMASK_4MB   = 0xFFC0,
-    IFC_AMASK_8MB   = 0xFF80,
-    IFC_AMASK_16MB  = 0xFF00,
-    IFC_AMASK_32MB  = 0xFE00,
-    IFC_AMASK_64MB  = 0xFC00,
-    IFC_AMASK_128MB = 0xF800,
-    IFC_AMASK_256MB = 0xF000,
-    IFC_AMASK_512MB = 0xE000,
-    IFC_AMASK_1GB   = 0xC000,
-    IFC_AMASK_2GB   = 0x8000,
-    IFC_AMASK_4GB   = 0x0000,
+    IFC_AMASK_64KB =  0xFFFF0000,
+    IFC_AMASK_128KB = 0xFFFE0000,
+    IFC_AMASK_256KB = 0xFFFC0000,
+    IFC_AMASK_512KB = 0xFFF80000,
+    IFC_AMASK_1MB   = 0xFFF00000,
+    IFC_AMASK_2MB   = 0xFFE00000,
+    IFC_AMASK_4MB   = 0xFFC00000,
+    IFC_AMASK_8MB   = 0xFF800000,
+    IFC_AMASK_16MB  = 0xFF000000,
+    IFC_AMASK_32MB  = 0xFE000000,
+    IFC_AMASK_64MB  = 0xFC000000,
+    IFC_AMASK_128MB = 0xF8000000,
+    IFC_AMASK_256MB = 0xF0000000,
+    IFC_AMASK_512MB = 0xE0000000,
+    IFC_AMASK_1GB   = 0xC0000000,
+    IFC_AMASK_2GB   = 0x80000000,
+    IFC_AMASK_4GB   = 0x00000000,
 };
 
 /* NOR Flash */
@@ -1404,7 +1404,7 @@ static void hal_cpld_ifc_init(uint32_t base, uint32_t base_high, uint8_t ifc)
     /* CPLD IFC Definitions (CS2) */
     set32(IFC_CSPR_EXT(ifc), base_high);
     set32(IFC_CSPR(ifc),     (IFC_CSPR_PHYS_ADDR(base) |
-                            IFC_CSPR_PORT_SIZE_8 |
+                            IFC_CSPR_PORT_SIZE_16 |
                             IFC_CSPR_MSEL_GPCM |
                             IFC_CSPR_V));
     set32(IFC_AMASK(ifc), IFC_AMASK_64KB);
