@@ -50,14 +50,18 @@
 #define PCI_DATA_HI16_MASK (0xffff0000)
 #define PCI_DATA_HI16_SHIFT (16)
 
+/* PCI address space starts at 0x80000000 (2GB), on TGL ECAM starts at
+ * 0xC0000000 (3GB). So there is 1 GB under the 4GB boundary available. By
+ * default allocate 128MB for normal memory and 896MB for prefetchable
+ * memory. */
 #ifndef PCI_MMIO32_BASE
 #define PCI_MMIO32_BASE 0x80000000ULL
-#define PCI_MMIO32_LENGTH (1024U * 1024U * 1024U)
+#define PCI_MMIO32_LENGTH (128U * 1024U * 1024U)
 #endif /* PCI_MMIO32_BASE */
 
 #ifndef PCI_MMIO32_PREFETCH_BASE
-#define PCI_MMIO32_PREFETCH_BASE (PCI_MMIO32_BASE + (1024ULL * 1024ULL * 1024ULL))
-#define PCI_MMIO32_PREFETCH_LENGTH (1024UL * 1024U * 1024U)
+#define PCI_MMIO32_PREFETCH_BASE (PCI_MMIO32_BASE + PCI_MMIO32_LENGTH)
+#define PCI_MMIO32_PREFETCH_LENGTH (896U * 1024U * 1024U)
 #endif /* PCI_MMIO32_PREFETCH_BASE */
 
 #ifndef PCI_IO32_BASE
