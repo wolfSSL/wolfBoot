@@ -788,6 +788,8 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
         /* build authorization policy based on public key */
         /* digest here is input and output, must be zero'd */
         uint32_t digestSz = TPM2_GetHashDigestSize(pcrAlg);
+        /* Create a new key for sealing using external signing auth */
+        wolfTPM2_GetKeyTemplate_KeySeal(&template, pcrAlg);
         memset(template.authPolicy.buffer, 0, digestSz);
         rc = wolfTPM2_PolicyAuthorizeMake(pcrAlg, &authKey.pub,
             template.authPolicy.buffer, &digestSz, NULL, 0);
@@ -800,8 +802,15 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
         wolfBoot_print_hexstr(template.authPolicy.buffer,
             template.authPolicy.size, 0);
     #endif
-        /* Create a new key for sealing using external signing auth */
-        wolfTPM2_GetKeyTemplate_KeySeal(&template, pcrAlg);
+
+        if (auth != NULL && authSz > 0) {
+            /* allow password based sealing */
+            template.objectAttributes |= TPMA_OBJECT_userWithAuth;
+        }
+        else {
+            /* disable password based sealing, require policy */
+            template.objectAttributes &= ~TPMA_OBJECT_userWithAuth;
+        }
         rc = wolfTPM2_CreateKeySeal_ex(&wolftpm_dev, seal_blob,
             &wolftpm_srk.handle, &template, auth, authSz,
             pcrAlg, NULL, 0, secret, secret_sz);
@@ -1005,9 +1014,21 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
         wolfBoot_printf("Loaded seal blob to 0x%x\n",
             (uint32_t)seal_blob->handle.hndl);
     #endif
-        seal_blob->handle.auth.size = authSz;
-        memcpy(seal_blob->handle.auth.buffer, auth, authSz);
-        wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
+
+        /* if using password auth, set it otherwise use policy auth */
+        if (auth != NULL && authSz > 0) {
+            seal_blob->handle.auth.size = authSz;
+            memcpy(seal_blob->handle.auth.buffer, auth, authSz);
+            wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
+        }
+        else {
+            /* use the policy session for unseal */
+            rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &policy_session,
+                (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
+                TPMA_SESSION_continueSession));
+            /* set the sealed object name 0 (required) */
+            wolfTPM2_SetAuthHandleName(&wolftpm_dev, 0, &seal_blob->handle);
+        }
 
         /* unseal */
         unsealIn.itemHandle = seal_blob->handle.hndl;

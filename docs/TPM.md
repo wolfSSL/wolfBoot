@@ -15,7 +15,7 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | `MEASURED_PCR_A=16` | `WOLFBOOT_MEASURED_PCR_A=16` | The PCR index to use. See [docs/measured_boot.md](/docs/measured_boot.md). |
 | `WOLFBOOT_TPM_SEAL=1` | `WOLFBOOT_TPM_SEAL` | Enables support for sealing/unsealing based on PCR policy signed externally. |
 | `WOLFBOOT_TPM_SEAL_NV_BASE=0x01400300` | `WOLFBOOT_TPM_SEAL_NV_BASE` | To override the default sealed blob storage location in the platform hierarchy. |
-| `WOLFBOOT_TPM_SEAL_AUTH=secret` | `WOLFBOOT_TPM_SEAL_AUTH` | Password for sealing/unsealing secrets |
+| `WOLFBOOT_TPM_SEAL_AUTH=secret` | `WOLFBOOT_TPM_SEAL_AUTH` | Password for sealing/unsealing secrets, if omitted the PCR policy will be used |
 
 ## Root of Trust (ROT)
 
