@@ -52,6 +52,8 @@ extern WOLFTPM2_KEY     wolftpm_srk;
 int  wolfBoot_tpm2_init(void);
 void wolfBoot_tpm2_deinit(void);
 
+int wolfBoot_tpm2_clear(void);
+
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
 int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     TPM_ALG_ID* pAlg);
@@ -83,6 +85,7 @@ int wolfBoot_unseal_auth(const uint8_t* pubkey_hint, const uint8_t* policy, uint
 int wolfBoot_unseal_blob(const uint8_t* pubkey_hint, const uint8_t* policy, uint16_t policySz,
     WOLFTPM2_KEYBLOB* seal_blob, uint8_t* secret, int* secret_sz, const uint8_t* auth, int authSz);
 
+int wolfBoot_delete_seal(int index);
 int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     const uint8_t* auth, uint32_t authSz);
 int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
