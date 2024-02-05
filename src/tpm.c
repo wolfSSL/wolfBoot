@@ -591,8 +591,12 @@ int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     memset(&nv, 0, sizeof(nv));
 
     nv.handle.hndl = nvIndex;
-    nv.handle.auth.size = authSz;
-    memcpy(nv.handle.auth.buffer, auth, authSz);
+    if (authSz > 0) {
+        if (auth == NULL)
+            return BAD_FUNC_ARG;
+        nv.handle.auth.size = authSz;
+        memcpy(nv.handle.auth.buffer, auth, authSz);
+    }
 
     parent.hndl = authHandle;
 
@@ -667,8 +671,12 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     memset(&nv, 0, sizeof(nv));
 
     nv.handle.hndl = nvIndex;
-    nv.handle.auth.size = authSz;
-    memcpy(nv.handle.auth.buffer, auth, authSz);
+    if (authSz > 0) {
+        if (auth == NULL)
+            return BAD_FUNC_ARG;
+        nv.handle.auth.size = authSz;
+        memcpy(nv.handle.auth.buffer, auth, authSz);
+    }
     wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &nv.handle);
 
     pos = 0;
@@ -722,8 +730,12 @@ int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     memset(&nv, 0, sizeof(nv));
 
     nv.handle.hndl = nvIndex;
-    nv.handle.auth.size = authSz;
-    memcpy(nv.handle.auth.buffer, auth, authSz);
+    if (authSz > 0) {
+        if (auth == NULL)
+            return BAD_FUNC_ARG;
+        nv.handle.auth.size = authSz;
+        memcpy(nv.handle.auth.buffer, auth, authSz);
+    }
 
     parent.hndl = authHandle;
 
@@ -788,6 +800,8 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
         /* build authorization policy based on public key */
         /* digest here is input and output, must be zero'd */
         uint32_t digestSz = TPM2_GetHashDigestSize(pcrAlg);
+        /* Create a new key for sealing using external signing auth */
+        wolfTPM2_GetKeyTemplate_KeySeal(&template, pcrAlg);
         memset(template.authPolicy.buffer, 0, digestSz);
         rc = wolfTPM2_PolicyAuthorizeMake(pcrAlg, &authKey.pub,
             template.authPolicy.buffer, &digestSz, NULL, 0);
@@ -800,8 +814,15 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
         wolfBoot_print_hexstr(template.authPolicy.buffer,
             template.authPolicy.size, 0);
     #endif
-        /* Create a new key for sealing using external signing auth */
-        wolfTPM2_GetKeyTemplate_KeySeal(&template, pcrAlg);
+
+        if (auth != NULL && authSz > 0) {
+            /* allow password based sealing */
+            template.objectAttributes |= TPMA_OBJECT_userWithAuth;
+        }
+        else {
+            /* disable password based sealing, require policy */
+            template.objectAttributes &= ~TPMA_OBJECT_userWithAuth;
+        }
         rc = wolfTPM2_CreateKeySeal_ex(&wolftpm_dev, seal_blob,
             &wolftpm_srk.handle, &template, auth, authSz,
             pcrAlg, NULL, 0, secret, secret_sz);
@@ -811,6 +832,12 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
 
     return rc;
+}
+
+int wolfBoot_delete_seal(int index)
+{
+    return wolfBoot_delete_blob(TPM_RH_PLATFORM,
+            WOLFBOOT_TPM_SEAL_NV_BASE + index, NULL, 0);
 }
 
 /* Index (0-X) determines location in NV from WOLFBOOT_TPM_SEAL_NV_BASE to
@@ -982,15 +1009,15 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
         rc = wolfTPM2_PolicyAuthorize(&wolftpm_dev, policy_session.handle.hndl,
             &authKey.pub, &checkTicket, pcrDigest, pcrDigestSz,
             policyRef, policyRefSz);
-    }
-    else {
-        /* A failure here means the signed policy did not match expected policy.
-         * Use this PCR mask and policy digest with the sign tool --policy=
-         * argument to sign */
-        wolfBoot_printf("Policy signature failed!\n");
-        wolfBoot_printf("Expected PCR Mask (0x%08x) and PCR Policy (%d)\n",
-            pcrMask, policyDigestSz);
-        wolfBoot_print_hexstr(policyDigest, policyDigestSz, 0);
+        if (rc != 0) {
+            /* A failure here means the signed policy did not match expected
+             * policy. Use this PCR mask and policy digest with the sign tool
+             * --policy= argument to sign */
+            wolfBoot_printf("Policy signature failed!\n");
+            wolfBoot_printf("Expected PCR Mask (0x%08x) and PCR Policy (%d)\n",
+                            pcrMask, policyDigestSz);
+            wolfBoot_print_hexstr(policyDigest, policyDigestSz, 0);
+        }
     }
 
     /* done with authorization public key */
@@ -1005,9 +1032,21 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
         wolfBoot_printf("Loaded seal blob to 0x%x\n",
             (uint32_t)seal_blob->handle.hndl);
     #endif
-        seal_blob->handle.auth.size = authSz;
-        memcpy(seal_blob->handle.auth.buffer, auth, authSz);
-        wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
+
+        /* if using password auth, set it otherwise use policy auth */
+        if (auth != NULL && authSz > 0) {
+            seal_blob->handle.auth.size = authSz;
+            memcpy(seal_blob->handle.auth.buffer, auth, authSz);
+            wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
+        }
+        else {
+            /* use the policy session for unseal */
+            rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &policy_session,
+                (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
+                TPMA_SESSION_continueSession));
+            /* set the sealed object name 0 (required) */
+            wolfTPM2_SetAuthHandleName(&wolftpm_dev, 0, &seal_blob->handle);
+        }
 
         /* unseal */
         unsealIn.itemHandle = seal_blob->handle.hndl;
@@ -1214,6 +1253,20 @@ void wolfBoot_tpm2_deinit(void)
 #endif /* WOLFBOOT_TPM_KEYSTORE */
 
     wolfTPM2_Cleanup(&wolftpm_dev);
+}
+
+/**
+ * @brief Clear the content of the TPM2 device.
+ *
+ * This function clears the TPM2 device and remove all stored secrets.
+ *
+ * @return BAD_FUNC_ARG if any of the underlying functions has passed an invalid
+ *          argument, e.g. wolftpm_dev is not initialized
+ * @return TPM_RC_SUCCESS in case of success
+ */
+int wolfBoot_tpm2_clear(void)
+{
+    return wolfTPM2_Clear(&wolftpm_dev);
 }
 
 
