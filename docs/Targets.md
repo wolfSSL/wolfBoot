@@ -1381,6 +1381,7 @@ Default NOR Flash Memory Layout (64MB) (128KB block, 1K page)
 | Swap Sector       | 0xEC0F0000 | 0x00010000 ( 64 KB) |
 | Free              | 0xEC100000 | 0x00100000 (  1 MB) |
 | Update (OS)       | 0xEC200000 | 0x01E00000 ( 30 MB) |
+|   Ethenet Config  | 0xED0E0000 | 0x00000400 (  1 KB) |
 | Application (OS)  | 0xEE000000 | 0x01E00000 ( 30 MB) |
 | QUICC             | 0xEFE00000 | 0x00100000 (  1 MB) |
 | DPAA (FMAN)       | 0xEFF00000 | 0x00020000 (128 KB) |
