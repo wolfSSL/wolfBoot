@@ -192,8 +192,16 @@ static void hal_flash_unlock_sector(uint32_t sector);
 
 
 /* T1024RM: 4.6.5 */
-#define CLOCKING_BASE    (CCSRBAR + 0xE1000)
-#define CLOCKING_PLLPGSR ((volatile uint32_t*)(CLOCKING_BASE + 0xC00UL)) /* Platform PLL general status register */
+#define CLOCKING_BASE           (CCSRBAR + 0xE1000)
+#define CLOCKING_CLKCCSR(n)     ((volatile uint32_t*)(CLOCKING_BASE + 0x000UL + ((n) * 0x20))) /* Core cluster n clock control/status register */
+#define CLOCKING_CLKCGHWACSR(n) ((volatile uint32_t*)(CLOCKING_BASE + 0x010UL + ((n) * 0x20))) /* Clock generator n hardware accelerator control/status */
+#define CLOCKING_PLLCNGSR(n)    ((volatile uint32_t*)(CLOCKING_BASE + 0x800UL + ((n) * 0x20))) /* PLL cluster n general status register */
+#define CLOCKING_CLKPCSR        ((volatile uint32_t*)(CLOCKING_BASE + 0xA00UL)) /* Platform clock domain control/status register */
+#define CLOCKING_PLLPGSR        ((volatile uint32_t*)(CLOCKING_BASE + 0xC00UL)) /* Platform PLL general status register */
+#define CLOCKING_PLLDGSR        ((volatile uint32_t*)(CLOCKING_BASE + 0xC20UL)) /* DDR PLL general status register */
+
+#define CLKC0CSR_CLKSEL(n)      (((n) >> 27) & 0xF) /* 0000=Cluster PLL1 Output, 0001=Cluster PKK1 divide-by-2 */
+#define PLLCGSR_CGF(n)          (((n) >> 1) & 0x3F) /* Reflects the current PLL multiplier configuration. Indicates the frequency for this PLL */
 
 #define RCPM_BASE       (CCSRBAR + 0xE2000)
 #define RCPM_PCTBENR    ((volatile uint32_t*)(RCPM_BASE + 0x1A0)) /* Physical Core Time Base Enable Bit 0=Core 0 */
@@ -749,17 +757,26 @@ enum ifc_amask_sizes {
 
 
 #ifdef ENABLE_BUS_CLK_CALC
+static uint32_t hal_get_core_clk(void)
+{
+    /* compute core clock (system input * ratio) */
+    uint32_t core_clk;
+    uint32_t core_ratio = get32(CLOCKING_PLLCNGSR(0)); /* see CGA_PLL1_RAT in RCW */
+    /* shift by 1 and mask */
+    core_ratio = ((core_ratio >> 1) & 0x3F);
+    core_clk = SYS_CLK * core_ratio;
+    return core_clk;
+}
 static uint32_t hal_get_plat_clk(void)
 {
-    /* compute platform clock (system input * ratio) */
+    /* compute core clock (system input * ratio) */
     uint32_t plat_clk;
     uint32_t plat_ratio = get32(CLOCKING_PLLPGSR); /* see SYS_PLL_RAT in RCW */
-    /* mask and shift by 1 to get platform ratio */
-    plat_ratio = ((plat_ratio & 0x3E) >> 1); /* default is 4 (4:1) */
+    /* shift by 1 and mask */
+    plat_ratio = ((plat_ratio >> 1) & 0x1F);
     plat_clk = SYS_CLK * plat_ratio;
     return plat_clk;
 }
-
 static uint32_t hal_get_bus_clk(void)
 {
     /* compute bus clock (platform clock / 2) */
@@ -767,8 +784,9 @@ static uint32_t hal_get_bus_clk(void)
     return bus_clk;
 }
 #else
+#define hal_get_core_clk() (uint32_t)(SYS_CLK * 14)
 #define hal_get_plat_clk() (uint32_t)(SYS_CLK * 4)
-#define hal_get_bus_clk() (uint32_t)(hal_get_plat_clk() / 2)
+#define hal_get_bus_clk()  (uint32_t)(hal_get_plat_clk() / 2)
 #endif
 
 #define TIMEBASE_CLK_DIV 16
@@ -2319,7 +2337,7 @@ int hal_dts_fixup(void* dts_addr)
         fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr", core_spin_table);
         fdt_fixup_str(fdt, off, "cpu", "enable-method", "spin-table");
         fdt_fixup_val(fdt, off, "cpu", "timebase-frequency", TIMEBASE_HZ);
-        fdt_fixup_val(fdt, off, "cpu", "clock-frequency", hal_get_plat_clk());
+        fdt_fixup_val(fdt, off, "cpu", "clock-frequency", hal_get_core_clk());
         fdt_fixup_val(fdt, off, "cpu", "bus-frequency", hal_get_plat_clk());
 
         off = fdt_find_devtype(fdt, off, "cpu");
