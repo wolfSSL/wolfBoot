@@ -708,6 +708,9 @@ enum ifc_amask_sizes {
 #define MRAM_BASE               0xFF800000
 #define MRAM_BASE_PHYS_HIGH     0xFULL
 
+/* eSDHC */
+#define ESDHC_BASE            (CCSRBAR + 0x114000)
+
 
 
 /* eSPI */
@@ -715,7 +718,7 @@ enum ifc_amask_sizes {
 #define ESPI_MAX_RX_LEN      (1 << 16)
 #define ESPI_FIFO_WORD       4
 
-#define ESPI_BASE            (CCSRBAR + 0x7000)
+#define ESPI_BASE            (CCSRBAR + 0x110000)
 #define ESPI_SPMODE          ((volatile uint32_t*)(ESPI_BASE + 0x00)) /* controls eSPI general operation mode */
 #define ESPI_SPIE            ((volatile uint32_t*)(ESPI_BASE + 0x04)) /* controls interrupts and report events */
 #define ESPI_SPIM            ((volatile uint32_t*)(ESPI_BASE + 0x08)) /* enables/masks interrupts */
@@ -1432,7 +1435,7 @@ static int hal_pcie_init(void)
         /* TODO: Check if link is active. Read config PCI_LTSSM */
     #if 0
         link = pci_config_read16(0, 0, 0, PCI_LTSSM);
-		enabled = (link >= PCI_LTSSM_L0);
+        enabled = (link >= PCI_LTSSM_L0);
     #endif
     }
 
@@ -2487,6 +2490,14 @@ int hal_dts_fixup(void* dts_addr)
             fdt_setprop(fdt, off, "bus-range", bus_range, sizeof(bus_range));
         }
     }
+
+    /* fix SDHC */
+    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,esdhc");
+    if (off != !FDT_ERR_NOTFOUND) {
+        fdt_fixup_val(fdt, off, "sdhc@", "clock-frequency", hal_get_bus_clk());
+        fdt_fixup_str(fdt, off, "cpu", "status", "okay");
+    }
+
 #endif /* !BUILD_LOADER_STAGE1 */
     (void)dts_addr;
     return 0;
