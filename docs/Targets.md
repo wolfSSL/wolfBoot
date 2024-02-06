@@ -1375,14 +1375,16 @@ Default NOR Flash Memory Layout (64MB) (128KB block, 1K page)
 | Description       | Address    | Size                |
 | ----------------- | ---------- | ------------------- |
 | RCW               | 0xEC000000 | 0x00020000 (128 KB) |
-| Primary (FDT)     | 0xEC020000 | 0x00020000 (128 KB) |
-| Update (FDT)      | 0xEC040000 | 0x00020000 (128 KB) |
-| Free              | 0xEC060000 | 0x00090000 (576 KB) |
+| Free              | 0xEC020000 | 0x000D0000 (832 KB) |
 | Swap Sector       | 0xEC0F0000 | 0x00010000 ( 64 KB) |
-| Free              | 0xEC100000 | 0x00100000 (  1 MB) |
-| Update (OS)       | 0xEC200000 | 0x01E00000 ( 30 MB) |
-|   Ethenet Config  | 0xED0E0000 | 0x00000400 (  1 KB) |
-| Application (OS)  | 0xEE000000 | 0x01E00000 ( 30 MB) |
+| Free              | 0xEC100000 | 0x00700000 (  7 MB) |
+| FDT (Primary)     | 0xEC800000 | 0x00020000 (128 KB) |
+| FDT (Update)      | 0xEC820000 | 0x00020000 (128 KB) |
+| Free              | 0xEC840000 | 0x008A0000 (   8MB) |
+| Ethenet Config    | 0xED0E0000 | 0x00000400 (  1 KB) |
+| Free              | 0xED100000 | 0x00F00000 ( 15 MB) |
+| Application (OS)  | 0xEE000000 | 0x00F00000 ( 15 MB) |
+| Update (OS)       | 0xEEF00000 | 0x00F00000 ( 15 MB) |
 | QUICC             | 0xEFE00000 | 0x00100000 (  1 MB) |
 | DPAA (FMAN)       | 0xEFF00000 | 0x00020000 (128 KB) |
 | wolfBoot          | 0xEFF40000 | 0x000BC000 (752 KB) |
