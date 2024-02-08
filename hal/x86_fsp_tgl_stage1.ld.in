@@ -69,7 +69,6 @@ SECTIONS
        KEEP(*(.keystore*))
        *(.text*)
        *(.rodata*)
-       *(.eh_frame*)
        . = ALIGN(256);
     } > FLASH
     

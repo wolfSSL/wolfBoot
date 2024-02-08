@@ -60,7 +60,6 @@ SECTIONS
        KEEP(*(.boot*))
        *(.text*)
        *(.rodata*)
-       *(.eh_frame*)
        . = ALIGN(256);
     } > FLASH
 
