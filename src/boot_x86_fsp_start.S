@@ -151,6 +151,7 @@ TempRamInitSuccess:
 [section .reset_vector]
 BITS 16
 ALIGN 16
+global reset_vector
 reset_vector:
 	nop
 	nop

@@ -649,6 +649,7 @@ endif
 ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
   FSP=1
   CFLAGS+=-DWOLFBOOT_FSP=1
+  CFLAGS+=-ffunction-sections -fdata-sections
   ifeq ($(TARGET), kontron_vx3060_s2)
     FSP_TGL=1
     CFLAGS+=-DWOLFBOOT_TGL=1
@@ -679,7 +680,7 @@ ifeq ("${FSP}", "1")
               --defsym wb_start_bss=0x`nm ../wolfboot.elf | grep -w _start_bss | awk '{print $$1}'` \
               --defsym wb_end_bss=0x`nm ../wolfboot.elf | grep -w _end_bss | awk '{print $$1}'` \
               --defsym _stage2_params=0x`nm ../wolfboot.elf | grep -w _stage2_params | awk '{print $$1}'`
-    LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader_stage1.map
+    LDFLAGS +=  --gc-sections --print-gc-sections --entry=reset_vector -T $(LSCRIPT) -m elf_i386  -Map=loader_stage1.map
     OBJS += src/boot_x86_fsp.o
     OBJS += src/boot_x86_fsp_start.o
     OBJS += src/fsp_m.o
@@ -720,7 +721,7 @@ ifeq ("${FSP}", "1")
     else
       LSCRIPT_IN = hal/$(TARGET).ld.in
     endif
-    LDFLAGS =  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -Map=wolfboot.map
+    LDFLAGS = --gc-sections --print-gc-sections --entry=main  -T $(LSCRIPT) -Map=wolfboot.map
     CFLAGS += -fno-stack-protector -fno-PIC -fno-pie -mno-mmx -mno-sse -Os -DDEBUG_UART
     OBJS += hal/x86_fsp_tgl.o
     OBJS += hal/x86_uart.o
