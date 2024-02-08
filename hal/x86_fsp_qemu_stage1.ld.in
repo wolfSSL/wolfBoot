@@ -24,7 +24,7 @@ SECTIONS
     {
         _wolfboot_flash_start = .;
         KEEP(*(.sig_wolfboot_raw*))
-        *(.wolfboot)
+        KEEP(*(.wolfboot))
         _wolfboot_flash_end = .;
     } > FLASH
 
@@ -41,7 +41,7 @@ SECTIONS
     .keystore KEYSTORE_START :
     {
         _start_keystore = .;
-        *(.keystore*)
+        KEEP(*(.keystore*))
     } > FLASH
 
     .jmpto32 BOOTLOADER_JUMP32_START :
@@ -90,7 +90,7 @@ SECTIONS
     AT(FSP_T_ORIGIN)
     {
        _start_fsp_t = .;
-       *(.fsp_t)
+       KEEP(*(.fsp_t))
     }
 
     .fsp_s FSP_S_ORIGIN :
@@ -98,14 +98,14 @@ SECTIONS
        _fsp_s_hdr = .;
        KEEP(*(.sig_fsp_s*))
        _start_fsp_s = .;
-       *(.fsp_s)
+       KEEP(*(.fsp_s))
        _end_fsp_s = .;
     }
 
     .fsp_m FSP_M_ORIGIN :
     {
        _start_fsp_m = .;
-       *(.fsp_m)
+       KEEP(*(.fsp_m))
        _end_fsp_m = .;
     }
 }

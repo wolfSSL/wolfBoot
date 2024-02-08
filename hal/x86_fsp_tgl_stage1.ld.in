@@ -27,7 +27,7 @@ SECTIONS
     {
         _wolfboot_flash_start = .;
         KEEP(*(.sig_wolfboot_raw*))
-        *(.wolfboot)
+	KEEP(*(.wolfboot))
         _wolfboot_flash_end = .;
     } > FLASH
 
@@ -37,13 +37,13 @@ SECTIONS
         _policy_size_u32 = .;
         . += 4;
         _start_policy = .;
-	    . += MAX_POLICY_SIZE;
+        . += MAX_POLICY_SIZE;
         _end_policy = .;
     } > FLASH
 
     .ucode_update0 UCODE0_BASE :
     {
-        *(.ucode0)
+        KEEP(*(.ucode0))
     } > FLASH
 
     .fit_table FIT_TABLE :
@@ -57,16 +57,16 @@ SECTIONS
        _fsp_s_hdr = .;
        KEEP(*(.sig_fsp_s*))
        _start_fsp_s = .;
-       *(.fsp_s)
+       KEEP(*(.fsp_s))
        _end_fsp_s = .;
     } > FLASH
 
     .bootloader WOLFBOOT_ORIGIN :
     {
        KEEP(./tgl_fsp.o(.boot))
-       *(.boot*)
+       KEEP(*(.boot*))
        KEYSTORE_START = .;
-       *(.keystore*)
+       KEEP(*(.keystore*))
        *(.text*)
        *(.rodata*)
        *(.eh_frame*)
@@ -100,13 +100,13 @@ SECTIONS
     AT(FSP_T_ORIGIN)
     {
        _start_fsp_t = .;
-       *(.fsp_t)
+       KEEP(*(.fsp_t))
     } > FLASH
 
     .fsp_m FSP_M_ORIGIN :
     {
        _start_fsp_m = .;
-       *(.fsp_m)
+       KEEP(*(.fsp_m))
        _end_fsp_m = .;
     } > FLASH
 
