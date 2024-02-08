@@ -675,10 +675,10 @@ ifeq ("${FSP}", "1")
       LSCRIPT_IN = ../hal/$(TARGET)_stage1.ld
     endif
     # using ../wolfboot.map as stage1 is built from stage1 sub-directory
-    LDFLAGS = --defsym main=`grep main ../wolfboot.map | awk '{print $$1}'` \
-              --defsym wb_start_bss=`grep _start_bss ../wolfboot.map | awk '{print $$1}'` \
-              --defsym wb_end_bss=`grep _end_bss ../wolfboot.map | awk '{print $$1}'` \
-              --defsym _stage2_params=`grep _stage2_params ../wolfboot.map | awk '{print $$1}'`
+    LDFLAGS = --defsym main=0x`nm ../wolfboot.elf | grep -w main | awk '{print $$1}'` \
+              --defsym wb_start_bss=0x`nm ../wolfboot.elf | grep -w _start_bss | awk '{print $$1}'` \
+              --defsym wb_end_bss=0x`nm ../wolfboot.elf | grep -w _end_bss | awk '{print $$1}'` \
+              --defsym _stage2_params=0x`nm ../wolfboot.elf | grep -w _stage2_params | awk '{print $$1}'`
     LDFLAGS +=  --no-gc-sections --print-gc-sections -T $(LSCRIPT) -m elf_i386  -Map=loader_stage1.map
     OBJS += src/boot_x86_fsp.o
     OBJS += src/boot_x86_fsp_start.o
