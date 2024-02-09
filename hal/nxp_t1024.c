@@ -34,6 +34,7 @@
 /* Debugging */
 /* #define DEBUG_FLASH */
 /* #define DEBUG_ESPI 1 */
+/* #define DEBUG_PHY */
 
 #define ENABLE_IFC
 #define ENABLE_BUS_CLK_CALC
@@ -50,6 +51,7 @@
     #define ENABLE_CPLD
     #define ENABLE_QE   /* QUICC Engine */
     #define ENABLE_FMAN
+    #define ENABLE_PHY
     #define ENABLE_MRAM
 
     #if defined(WOLFBOOT_TPM) || defined(TEST_TPM)
@@ -185,8 +187,10 @@ static void hal_flash_unlock_sector(uint32_t sector);
 #define QCSP_ISDR(n)    ((volatile uint32_t*)(QMAN_BASE_PHYS + 0x1000E08 + ((n) * 0x1000)))
 
 /* SCGG (Supplemental Configuration Unit) T1024RM 6.1 */
-#define SCFG_BASE      (CCSRBAR + 0xFC000)
-#define SCFG_QEIOCLKCR ((volatile uint32_t*)(DCFG_BASE + 0x400UL))
+#define SCFG_BASE       (CCSRBAR + 0xFC000)
+#define SCFG_QEIOCLKCR  ((volatile uint32_t*)(DCFG_BASE + 0x400UL))
+#define SCFG_EMIIOCR    ((volatile uint32_t*)(DCFG_BASE + 0x404UL))
+#define SCFG_SDHCIOVSEL ((volatile uint32_t*)(DCFG_BASE + 0x408UL))
 
 #define SCFG_QEIOCLKCR_CLK11 0x04000000 /* IO_CLK[11] = GPIO_4[16] */
 
@@ -366,6 +370,64 @@ static void hal_flash_unlock_sector(uint32_t sector);
 
 #define FMAN_IRAM_IADD_AIE     0x80000000 /* Auto Increment Enable */
 #define FMAN_IRAM_READY        0x80000000
+
+/* mEMAC (Multirate Ethernet Media Access Controller) 1-4 */
+#define FMAN_MEMAC_BASE(n)       (FMAN_BASE + 0xE0000UL + (((n-1) & 0x3) * 0x2000))
+#define FMAN_MEMAC_CMD_CFG(n)    ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x008))
+#define FMAN_MEMAC_MAC_ADDR_0(n) ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x00C))
+#define FMAN_MEMAC_MAC_ADDR_1(n) ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x010))
+#define FMAN_MEMAC_MAXFRMG(n)    ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x014))
+#define FMAN_MEMAC_HTBLE_CTRL(n) ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x02C))
+#define FMAN_MEMAC_IEVENT(n)     ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x040))
+#define FMAN_MEMAC_IMASK(n)      ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x04C))
+
+#define FMAN_MEMAC_IF_MODE(n)    ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x300))
+#define FMAN_MEMAC_IF_STATUS(n)  ((volatile uint32_t*)(FMAN_MEMAC_BASE(n) + 0x304))
+
+/* FMAN_MEMAC_CMD_CFG - Command and configuration register */
+#define MEMAC_CMD_CFG_RX_EN       0x00000002 /* MAC RX path enable */
+#define MEMAC_CMD_CFG_TX_EN       0x00000001 /* MAC TX path enable */
+#define MEMAC_CMD_CFG_NO_LEN_CHK  0x00020000 /* Payload length check disable */
+
+/* FMAN_MEMAC_IF_MODE - Interface Mode Register */
+#define IF_MODE_EN_AUTO     0x00008000 /* 1 - Enable automatic speed selection */
+#define IF_MODE_SETSP_100M  0x00000000 /* 00 - 100Mbps  RGMII */
+#define IF_MODE_SETSP_10M   0x00002000 /* 01 - 10Mbps   RGMII */
+#define IF_MODE_SETSP_1000M 0x00004000 /* 10 - 1000Mbps RGMII */
+#define IF_MODE_SETSP_MASK  0x00006000 /* setsp mask bits */
+#define IF_MODE_XGMII       0x00000000 /* 00- XGMII(10) interface mode */
+#define IF_MODE_GMII        0x00000002 /* 10- GMII interface mode */
+#define IF_MODE_MASK        0x00000003 /* mask for mode interface mode */
+#define IF_MODE_RG          0x00000004 /* 1- RGMII */
+#define IF_MODE_RM          0x00000008 /* 1- RGMII */
+
+/* Dedicated MDIO EM1/EM2 Interface for PHY configurion */
+#define FMAC_MDIO_BASE(n)      (FMAN_BASE + 0xFC000UL + (((n-1) & 0x1) * 0x1000))
+#define FMAN_MDIO_CFG(n)       ((volatile uint32_t*)(FMAC_MDIO_BASE(n) + 0x030))
+#define FMAN_MDIO_CTRL(n)      ((volatile uint32_t*)(FMAC_MDIO_BASE(n) + 0x034))
+#define FMAN_MDIO_DATA(n)      ((volatile uint32_t*)(FMAC_MDIO_BASE(n) + 0x038))
+#define FMAN_MDIO_ADDR(n)      ((volatile uint32_t*)(FMAC_MDIO_BASE(n) + 0x03C))
+
+#define MDIO_STAT_CLKDIV(x)    ((((x)>>1) & 0xFF) << 8) /* valid range 5-511: ratio = (2 * CLKDIV) + 1 */
+#define MDIO_STAT_BSY          (1 << 0)
+#define MDIO_STAT_RD_ER        (1 << 1)
+#define MDIO_STAT_PRE          (1 << 5)
+#define MDIO_STAT_EN_C45       (1 << 6) /* Enable Clause 45 support. */
+#define MDIO_STAT_HOLD_15_CLK  (7 << 2)
+#define MDIO_STAT_NEG          (1 << 23) /* MDIO is driven by master on MDC negative edge */
+
+#define MDIO_CTL_DEV_ADDR(x)   ( (x) & 0x1F)
+#define MDIO_CTL_PORT_ADDR(x)  (((x) & 0x1F) << 5)
+#define MDIO_CTL_PRE_DIS       (1 << 10)
+#define MDIO_CTL_SCAN_EN       (1 << 11)
+#define MDIO_CTL_POST_INC      (1 << 14)
+#define MDIO_CTL_READ          (1 << 15)
+
+#define MDIO_ADDR(x)           ((x) & 0xFFFF)
+
+#define MDIO_DATA(x)           ((x) & 0xFFFF)
+#define MDIO_DATA_BSY          (1UL << 31)
+
 
 
 /* T1024 PC16552D Dual UART */
@@ -1907,7 +1969,6 @@ static void fman_upload_microcode(const struct qe_firmware *firmware,
 
     /* Enable microcode */
     set32(FMAN_IRAM_IREADY, FMAN_IRAM_READY);
-
 }
 
 /* Upload a microcode to the I-RAM at a specific address */
@@ -1928,6 +1989,596 @@ static int fman_upload_firmware(const struct qe_firmware *firmware)
 
     return 0;
 }
+
+/* ----------- PHY ----------- */
+#ifdef ENABLE_PHY
+/* TI DP83867 */
+/* PHY CTRL bits */
+#define DP83867_PHYCR_FIFO_DEPTH_3_B_NIB 0x00
+#define DP83867_PHYCR_FIFO_DEPTH_4_B_NIB 0x01
+#define DP83867_PHYCR_FIFO_DEPTH_6_B_NIB 0x02
+#define DP83867_PHYCR_FIFO_DEPTH_8_B_NIB 0x03
+
+/* RGMIIDCTL internal delay for rx and tx */
+#define DP83867_RGMIIDCTL_250_PS  0x0
+#define DP83867_RGMIIDCTL_500_PS  0x1
+#define DP83867_RGMIIDCTL_750_PS  0x2
+#define DP83867_RGMIIDCTL_1_NS    0x3
+#define DP83867_RGMIIDCTL_1_25_NS 0x4
+#define DP83867_RGMIIDCTL_1_50_NS 0x5
+#define DP83867_RGMIIDCTL_1_75_NS 0x6
+#define DP83867_RGMIIDCTL_2_00_NS 0x7
+#define DP83867_RGMIIDCTL_2_25_NS 0x8
+#define DP83867_RGMIIDCTL_2_50_NS 0x9
+#define DP83867_RGMIIDCTL_2_75_NS 0xA
+#define DP83867_RGMIIDCTL_3_00_NS 0xB
+#define DP83867_RGMIIDCTL_3_25_NS 0xC
+#define DP83867_RGMIIDCTL_3_50_NS 0xD
+#define DP83867_RGMIIDCTL_3_75_NS 0xE
+#define DP83867_RGMIIDCTL_4_00_NS 0xF
+
+#define DP83867_DEVADDR        0x1F
+
+#define MII_DP83867_PHYCTRL 0x10
+#define MII_DP83867_MICR    0x12
+#define MII_DP83867_CFG2    0x14
+#define MII_DP83867_BISCR   0x16
+#define DP83867_CTRL        0x1f
+
+/* Extended Registers */
+#define DP83867_RGMIICTL    0x0032
+#define DP83867_RGMIIDCTL   0x0086
+#define DP83867_IO_MUX_CFG  0x0170
+
+#define DP83867_SW_RESET    (1 << 15)
+#define DP83867_SW_RESTART  (1 << 14)
+
+/* MICR Interrupt bits */
+#define MII_DP83867_MICR_AN_ERR_INT_EN          (1 << 15)
+#define MII_DP83867_MICR_SPEED_CHNG_INT_EN      (1 << 14)
+#define MII_DP83867_MICR_DUP_MODE_CHNG_INT_EN   (1 << 13)
+#define MII_DP83867_MICR_PAGE_RXD_INT_EN        (1 << 12)
+#define MII_DP83867_MICR_AUTONEG_COMP_INT_EN    (1 << 11)
+#define MII_DP83867_MICR_LINK_STS_CHNG_INT_EN   (1 << 10)
+#define MII_DP83867_MICR_FALSE_CARRIER_INT_EN   (1 << 8)
+#define MII_DP83867_MICR_SLEEP_MODE_CHNG_INT_EN (1 << 4)
+#define MII_DP83867_MICR_WOL_INT_EN             (1 << 3)
+#define MII_DP83867_MICR_XGMII_ERR_INT_EN       (1 << 2)
+#define MII_DP83867_MICR_POL_CHNG_INT_EN        (1 << 1)
+#define MII_DP83867_MICR_JABBER_INT_EN          (1 << 0)
+
+/* RGMIICTL bits */
+#define DP83867_RGMII_TX_CLK_DELAY_EN        (1 << 1)
+#define DP83867_RGMII_RX_CLK_DELAY_EN        (1 << 0)
+
+/* PHY CTRL bits */
+#define DP83867_PHYCR_FIFO_DEPTH_SHIFT     14
+#define DP83867_MDI_CROSSOVER              5
+#define DP83867_MDI_CROSSOVER_AUTO         2
+#define DP83867_MDI_CROSSOVER_MDIX         2
+#define DP83867_PHYCTRL_SGMIIEN            0x0800
+#define DP83867_PHYCTRL_RXFIFO_SHIFT       12
+#define DP83867_PHYCTRL_TXFIFO_SHIFT       14
+
+/* RGMIIDCTL bits */
+#define DP83867_RGMII_TX_CLK_DELAY_SHIFT    4
+
+/* CFG2 bits */
+#define MII_DP83867_CFG2_SPEEDOPT_10EN      0x0040
+#define MII_DP83867_CFG2_SGMII_AUTONEGEN    0x0080
+#define MII_DP83867_CFG2_SPEEDOPT_ENH       0x0100
+#define MII_DP83867_CFG2_SPEEDOPT_CNT       0x0800
+#define MII_DP83867_CFG2_SPEEDOPT_INTLOW    0x2000
+#define MII_DP83867_CFG2_MASK               0x003F
+
+#define MII_MMD_CTRL    0x0D /* MMD Access Control Register */
+#define MII_MMD_DATA    0x0E /* MMD Access Data Register */
+
+/* MMD Access Control register fields */
+#define MII_MMD_CTRL_DEVAD_MASK  0x1F /* Mask MMD DEVAD*/
+#define MII_MMD_CTRL_ADDR        0x0000 /* Address */
+#define MII_MMD_CTRL_NOINCR      0x4000 /* no post increment */
+#define MII_MMD_CTRL_INCR_RDWT   0x8000 /* post increment on reads & writes */
+#define MII_MMD_CTRL_INCR_ON_WT  0xC000 /* post increment on writes only */
+
+/* User setting - can be taken from DTS */
+#define DEFAULT_RX_ID_DELAY    DP83867_RGMIIDCTL_2_25_NS
+#define DEFAULT_TX_ID_DELAY    DP83867_RGMIIDCTL_2_75_NS
+#define DEFAULT_FIFO_DEPTH     DP83867_PHYCR_FIFO_DEPTH_4_B_NIB
+
+/* IO_MUX_CFG bits */
+#define DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL   0x1F
+
+#define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX    0x0
+#define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN    0x1F
+
+/* Generic MII registers */
+#define MII_BMCR          0x00      /* Basic mode control register */
+#define MII_BMSR          0x01      /* Basic mode status register  */
+#define MII_PHYIDR1       0x02      /* PHYS ID 1                   */
+#define MII_PHYIDR2       0x03      /* PHYS ID 2                   */
+
+/* Basic mode control register */
+#define BMCR_SPEED1000    0x0040    /* MSB of Speed (1000)          */
+#define BMCR_CTST         0x0080    /* Collision test               */
+#define BMCR_FULLDPLX     0x0100    /* Full duplex                  */
+#define BMCR_ANRESTART    0x0200    /* Auto negotiation restart     */
+#define BMCR_ISOLATE      0x0400    /* Disconnect DP83840 from MII  */
+#define BMCR_PDOWN        0x0800    /* Powerdown the DP83840        */
+#define BMCR_ANENABLE     0x1000    /* Enable auto negotiation      */
+#define BMCR_SPEED100     0x2000    /* Select 100Mbps               */
+#define BMCR_LOOPBACK     0x4000    /* TXD loopback bits            */
+#define BMCR_RESET        0x8000    /* Reset the DP83840            */
+
+/* Basic mode status register */
+#define BMSR_ERCAP        0x0001    /* Ext-reg capability           */
+#define BMSR_JCD          0x0002    /* Jabber detected              */
+#define BMSR_LSTATUS      0x0004    /* Link status                  */
+#define BMSR_ANEGCAPABLE  0x0008    /* Able to do auto-negotiation  */
+#define BMSR_RFAULT       0x0010    /* Remote fault detected        */
+#define BMSR_ANEGCOMPLETE 0x0020    /* Auto-negotiation complete    */
+#define BMSR_RESV         0x00c0    /* Unused...                    */
+#define BMSR_ESTATEN      0x0100    /* Extended Status in R15       */
+#define BMSR_100HALF2     0x0200    /* Can do 100BASE-T2 HDX        */
+#define BMSR_100FULL2     0x0400    /* Can do 100BASE-T2 FDX        */
+#define BMSR_10HALF       0x0800    /* Can do 10mbps, half-duplex   */
+#define BMSR_10FULL       0x1000    /* Can do 10mbps, full-duplex   */
+#define BMSR_100HALF      0x2000    /* Can do 100mbps, half-duplex  */
+#define BMSR_100FULL      0x4000    /* Can do 100mbps, full-duplex  */
+#define BMSR_100BASE4     0x8000    /* Can do 100mbps, 4k packets   */
+
+
+enum phy_interface {
+    PHY_INTERFACE_MODE_NONE,
+    PHY_INTERFACE_MODE_MII,
+    PHY_INTERFACE_MODE_GMII,
+    PHY_INTERFACE_MODE_SGMII,
+    PHY_INTERFACE_MODE_SGMII_2500,
+    PHY_INTERFACE_MODE_QSGMII,
+    PHY_INTERFACE_MODE_TBI,
+    PHY_INTERFACE_MODE_RMII,
+    PHY_INTERFACE_MODE_RGMII,
+    PHY_INTERFACE_MODE_RGMII_ID,
+    PHY_INTERFACE_MODE_RGMII_RXID,
+    PHY_INTERFACE_MODE_RGMII_TXID,
+    PHY_INTERFACE_MODE_RTBI,
+    PHY_INTERFACE_MODE_XGMII,
+};
+
+/* TODO: Ethenet MAC should be dynamic value */
+static const uint8_t DEFAULT_MAC_ADDR[6] = {0xDC, 0xA7, 0xD9, 0x00, 0x06, 0xF4};
+
+struct phy_device {
+    uint8_t phyaddr;
+    enum phy_interface interface;
+    uint8_t mac_addr[6];
+};
+static struct phy_device phydevs[5];
+
+#define MDIO_PRTAD_NONE (-1)
+#define MDIO_DEVAD_NONE (-1)
+
+/* Use EMI1 */
+#define MDIO_PHY_EMI  1
+
+/* IEEE 802.3: Clause 45 (XFI/1000Base-KX) and Clause 22 (SGMII, QSGMII) */
+static int hal_phy_write(struct phy_device *phydev, int dev_addr, int regnum,
+    uint16_t value)
+{
+    uint32_t reg, clause = 45;
+
+#ifdef DEBUG_PHY
+    wolfBoot_printf("EM%d MDIO%d Write: Dev %d, Reg %d, Val 0x%x\n",
+        MDIO_PHY_EMI, phydev->phyaddr, dev_addr, regnum, value);
+#endif
+
+    reg = get32(FMAN_MDIO_CFG(MDIO_PHY_EMI));
+    if (dev_addr == MDIO_DEVAD_NONE) {
+        clause = 22;
+        dev_addr = regnum;
+        set32(FMAN_MDIO_CFG(MDIO_PHY_EMI), reg &= ~MDIO_STAT_EN_C45);
+    }
+    else {
+        set32(FMAN_MDIO_CFG(MDIO_PHY_EMI), reg |= MDIO_STAT_EN_C45);
+    }
+    /* Wait till bus is available */
+    while (get32(FMAN_MDIO_CFG(MDIO_PHY_EMI)) & MDIO_STAT_BSY);
+
+    /* Set the port and dev addresses */
+    reg = MDIO_CTL_PORT_ADDR(phydev->phyaddr) | MDIO_CTL_DEV_ADDR(dev_addr);
+    set32(FMAN_MDIO_CTRL(MDIO_PHY_EMI), reg);
+
+    /* Set register address */
+    if (clause == 45) {
+        set32(FMAN_MDIO_ADDR(MDIO_PHY_EMI), MDIO_ADDR(regnum));
+    }
+
+    /* Wait till bus is available */
+    while (get32(FMAN_MDIO_CFG(MDIO_PHY_EMI)) & MDIO_STAT_BSY);
+
+    /* Write value */
+    set32(FMAN_MDIO_DATA(MDIO_PHY_EMI), MDIO_DATA(value));
+
+    /* Wait till write is complete */
+    while (get32(FMAN_MDIO_DATA(MDIO_PHY_EMI)) & MDIO_DATA_BSY);
+
+    return 0;
+}
+
+static int hal_phy_read(struct phy_device *phydev, int dev_addr, int regnum)
+{
+    uint32_t reg, clause = 45, mdio_dev_addr = dev_addr;
+
+    reg = get32(FMAN_MDIO_CFG(MDIO_PHY_EMI));
+    if (dev_addr == MDIO_DEVAD_NONE) {
+        clause = 22;
+        mdio_dev_addr = regnum;
+        set32(FMAN_MDIO_CFG(MDIO_PHY_EMI), reg &= ~MDIO_STAT_EN_C45);
+    }
+    else {
+        set32(FMAN_MDIO_CFG(MDIO_PHY_EMI), reg |= MDIO_STAT_EN_C45);
+    }
+    /* Wait till bus is available */
+    while (get32(FMAN_MDIO_CFG(MDIO_PHY_EMI)) & MDIO_STAT_BSY);
+
+    /* Set the port and dev addresses */
+    reg = MDIO_CTL_PORT_ADDR(phydev->phyaddr) | MDIO_CTL_DEV_ADDR(mdio_dev_addr);
+    set32(FMAN_MDIO_CTRL(MDIO_PHY_EMI), reg);
+
+    /* Set register address */
+    if (clause == 45) {
+        set32(FMAN_MDIO_ADDR(MDIO_PHY_EMI), MDIO_ADDR(regnum));
+    }
+
+    /* Wait till bus is available */
+    while (get32(FMAN_MDIO_CFG(MDIO_PHY_EMI)) & MDIO_STAT_BSY);
+
+    /* Start read */
+    reg |= MDIO_CTL_READ;
+    set32(FMAN_MDIO_CTRL(MDIO_PHY_EMI), reg);
+
+    /* Wait till read is complete */
+    while (get32(FMAN_MDIO_DATA(MDIO_PHY_EMI)) & MDIO_DATA_BSY);
+
+    /* Check for error */
+    reg = get32(FMAN_MDIO_CFG(MDIO_PHY_EMI));
+    if (reg & MDIO_STAT_RD_ER) {
+        return 0xFFFF; /* Failure */
+    }
+
+    /* Get data */
+    reg = get32(FMAN_MDIO_DATA(MDIO_PHY_EMI));
+
+#ifdef DEBUG_PHY
+    wolfBoot_printf("EM%d MDIO%d Read: Dev %d, Reg %d, Val 0x%x\n",
+        MDIO_PHY_EMI, phydev->phyaddr, dev_addr, regnum, MDIO_DATA(reg));
+#endif
+
+    return MDIO_DATA(reg);
+}
+
+static inline int phy_interface_is_rgmii(struct phy_device *phydev)
+{
+    return (phydev->interface >= PHY_INTERFACE_MODE_RGMII &&
+            phydev->interface <= PHY_INTERFACE_MODE_RGMII_TXID);
+}
+
+static inline int phy_interface_is_sgmii(struct phy_device *phydev)
+{
+    return (phydev->interface >= PHY_INTERFACE_MODE_SGMII &&
+            phydev->interface <= PHY_INTERFACE_MODE_QSGMII);
+}
+
+int hal_phy_read_indirect(struct phy_device *phydev,
+    int port_addr, int dev_addr)
+{
+    uint16_t value = -1;
+
+    /* Write the desired MMD Devad */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_CTRL, DP83867_DEVADDR);
+
+    /* Write the desired MMD register address */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_DATA, port_addr);
+
+    /* Select the Function : DATA with no post increment */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_CTRL,
+        (DP83867_DEVADDR | MII_MMD_CTRL_NOINCR));
+
+    /* Read the content of the MMD's selected register */
+    value = hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_MMD_DATA);
+
+#ifdef DEBUG_PHY
+    wolfBoot_printf("PHY Ind Read: port_addr=%d, dev_addr=%d, value=0x%x\n",
+        port_addr, dev_addr, value);
+#endif
+    return value;
+}
+
+void hal_phy_write_indirect(struct phy_device *phydev,
+    int port_addr, int dev_addr, uint16_t value)
+{
+    /* Write the desired MMD Devad */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_CTRL, dev_addr);
+
+    /* Write the desired MMD register address */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_DATA, port_addr);
+
+    /* Select the Function : DATA with no post increment */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_CTRL,
+        (dev_addr | MII_MMD_CTRL_NOINCR));
+
+    /* Write the data into MMD's selected register */
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_MMD_DATA, value);
+
+#ifdef DEBUG_PHY
+    wolfBoot_printf("PHY Ind Write: port_addr=%d, dev_addr=%d, value=0x%x\n",
+        port_addr, dev_addr, value);
+#endif
+}
+
+static const char* hal_phy_interface_str(enum phy_interface interface)
+{
+    switch (interface) {
+        case PHY_INTERFACE_MODE_RGMII:
+            return "RGMII";
+        case PHY_INTERFACE_MODE_XGMII:
+            return "XGMII";
+        case PHY_INTERFACE_MODE_SGMII:
+            return "SGMII";
+        default:
+            break;
+    }
+    return "Unknown";
+}
+
+static const char* hal_phy_vendor_str(uint32_t id)
+{
+    switch (id) {
+        case 0x2000a231:
+            return "TI DP83867";
+        default:
+            break;
+    }
+    return "Unknown";
+}
+
+/* Support for TI DP83867IS */
+static int hal_phy_init(struct phy_device *phydev)
+{
+    int ret = 0;
+    uint32_t val, val2;
+
+    /* Set MAC address */
+    /* Example MAC 0x12345678ABCD is:
+     * MAC_ADDR0 of 0x78563412
+     * MAC_ADDR1 of 0x0000CDAB */
+    memcpy(phydev->mac_addr, DEFAULT_MAC_ADDR, sizeof(DEFAULT_MAC_ADDR));
+    phydev->mac_addr[5] += phydev->phyaddr;
+
+    wolfBoot_printf("PHY %d: %s, Mac %x:%x:%x:%x:%x:%x\n",
+        phydev->phyaddr, hal_phy_interface_str(phydev->interface),
+        phydev->mac_addr[0], phydev->mac_addr[1],
+        phydev->mac_addr[2], phydev->mac_addr[3],
+        phydev->mac_addr[4], phydev->mac_addr[5]);
+
+    /* Mask all interrupt */
+    set32(FMAN_MEMAC_IMASK(phydev->phyaddr), 0x00000000);
+
+    /* Clear all events */
+    set32(FMAN_MEMAC_IEVENT(phydev->phyaddr), 0xFFFFFFFF);
+
+    /* Set maximum RX length */
+    set32(FMAN_MEMAC_MAXFRMG(phydev->phyaddr), 0x800);
+
+    /* Disable multi-cast */
+    set32(FMAN_MEMAC_HTBLE_CTRL(phydev->phyaddr), 0);
+
+    /* Setup mEMAC */
+    val = (MEMAC_CMD_CFG_RX_EN | MEMAC_CMD_CFG_TX_EN | MEMAC_CMD_CFG_NO_LEN_CHK);
+    set32(FMAN_MEMAC_CMD_CFG(phydev->phyaddr), val);
+
+    /* Set MAC Addresss */
+    val =  ((phydev->mac_addr[3] << 24) | (phydev->mac_addr[2] << 16) | \
+            (phydev->mac_addr[1] << 8)  |  phydev->mac_addr[0]);
+    val2 = ((phydev->mac_addr[5] << 8)  |  phydev->mac_addr[4]);
+    set32(FMAN_MEMAC_MAC_ADDR_0(phydev->phyaddr), val);
+    set32(FMAN_MEMAC_MAC_ADDR_1(phydev->phyaddr), val2);
+
+    /* Set interface mode */
+    val =  get32(FMAN_MEMAC_IF_MODE(phydev->phyaddr));
+    switch (phydev->interface) {
+        case PHY_INTERFACE_MODE_GMII:
+            val &= ~IF_MODE_MASK;
+            val |= IF_MODE_GMII;
+            break;
+        case PHY_INTERFACE_MODE_RGMII:
+            val |= (IF_MODE_GMII | IF_MODE_RG);
+            break;
+        case PHY_INTERFACE_MODE_RMII:
+            val |= (IF_MODE_GMII | IF_MODE_RM);
+            break;
+        case PHY_INTERFACE_MODE_SGMII:
+        case PHY_INTERFACE_MODE_QSGMII:
+            val &= ~IF_MODE_MASK;
+            val |= IF_MODE_GMII;
+            break;
+        case PHY_INTERFACE_MODE_XGMII:
+            val &= ~IF_MODE_MASK;
+            val |= IF_MODE_XGMII;
+            break;
+        default:
+            break;
+    }
+    /* Enable automatic speed selection */
+    val |= IF_MODE_EN_AUTO;
+    set32(FMAN_MEMAC_IF_MODE(phydev->phyaddr), val);
+
+    /* Set clock div = 258 and neg = 1 */
+    set32(FMAN_MDIO_CFG(MDIO_PHY_EMI), (MDIO_STAT_CLKDIV(258) | MDIO_STAT_NEG));
+
+    /* Read the PHY ID's */
+    val =  (uint16_t)hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_PHYIDR1);
+    val <<= 16;
+    val |= (uint16_t)hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_PHYIDR2);
+    //0x2000a231
+    wolfBoot_printf("PHY %d: %s (OUI %x, Mdl %x, Rev %x)\n",
+        phydev->phyaddr, hal_phy_vendor_str(val),
+        (val >> 10), ((val >> 4) & 0x3F), (val & 0xF)
+    );
+
+    /* Reset the PHY */
+    val = hal_phy_read(phydev, MDIO_DEVAD_NONE, DP83867_CTRL);
+    val |= DP83867_SW_RESTART;
+    hal_phy_write(phydev, MDIO_DEVAD_NONE, DP83867_CTRL, val);
+    val = hal_phy_read(phydev, MDIO_DEVAD_NONE, DP83867_CTRL);
+#ifdef DEBUG_PHY
+    wolfBoot_printf("DP83867_CTRL=0x%x\n", val);
+#endif
+
+    if (phy_interface_is_rgmii(phydev)) {
+        val = ((DP83867_MDI_CROSSOVER_AUTO << DP83867_MDI_CROSSOVER) |
+               (DP83867_PHYCR_FIFO_DEPTH_4_B_NIB << DP83867_PHYCR_FIFO_DEPTH_SHIFT));
+        ret = hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL);
+        wolfBoot_printf("MII_DP83867_PHYCTRL=0x%x\n", val);
+    #endif
+    }
+    else if (phy_interface_is_sgmii(phydev)) {
+        val = (BMCR_ANENABLE | BMCR_FULLDPLX | BMCR_SPEED1000);
+        hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_BMCR);
+        wolfBoot_printf("MII_BMCR=0x%x\n", val);
+    #endif
+
+        val = hal_phy_read(phydev, phydev->phyaddr, MII_DP83867_CFG2);
+        val &= MII_DP83867_CFG2_MASK;
+        val |= (MII_DP83867_CFG2_SPEEDOPT_10EN |
+                MII_DP83867_CFG2_SGMII_AUTONEGEN |
+                MII_DP83867_CFG2_SPEEDOPT_ENH |
+                MII_DP83867_CFG2_SPEEDOPT_CNT |
+                MII_DP83867_CFG2_SPEEDOPT_INTLOW);
+        hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_DP83867_CFG2, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_DP83867_CFG2);
+        wolfBoot_printf("MII_DP83867_CFG2=0x%x\n", val);
+    #endif
+        hal_phy_write_indirect(phydev, DP83867_RGMIICTL, DP83867_DEVADDR, 0x0);
+        val = (DP83867_PHYCTRL_SGMIIEN |
+              (DP83867_MDI_CROSSOVER_MDIX << DP83867_MDI_CROSSOVER) |
+              (DP83867_PHYCR_FIFO_DEPTH_4_B_NIB << DP83867_PHYCTRL_RXFIFO_SHIFT) |
+              (DP83867_PHYCR_FIFO_DEPTH_4_B_NIB << DP83867_PHYCTRL_TXFIFO_SHIFT));
+        hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL);
+        wolfBoot_printf("MII_DP83867_PHYCTRL=0x%x\n", val);
+    #endif
+        hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_DP83867_BISCR, 0x0);
+    }
+
+    if (ret == 0 && phy_interface_is_rgmii(phydev)) {
+        val = hal_phy_read_indirect(phydev, DP83867_RGMIICTL, MDIO_DEVAD_NONE);
+        if (phydev->interface == PHY_INTERFACE_MODE_RGMII_ID) {
+            val |= (DP83867_RGMII_TX_CLK_DELAY_EN |
+                    DP83867_RGMII_RX_CLK_DELAY_EN);
+        }
+        else if (phydev->interface == PHY_INTERFACE_MODE_RGMII_TXID) {
+            val |= DP83867_RGMII_TX_CLK_DELAY_EN;
+        }
+        else if (phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID) {
+            val |= DP83867_RGMII_RX_CLK_DELAY_EN;
+        }
+        hal_phy_write_indirect(phydev, DP83867_RGMIICTL, DP83867_DEVADDR, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read_indirect(phydev, DP83867_RGMIICTL, MDIO_DEVAD_NONE);
+        wolfBoot_printf("DP83867_RGMIICTL=0x%x\n", val);
+    #endif
+
+        val = (DP83867_RGMIIDCTL_1_75_NS |
+              (DP83867_RGMIIDCTL_1_75_NS << DP83867_RGMII_TX_CLK_DELAY_SHIFT));
+        hal_phy_write_indirect(phydev, DP83867_RGMIIDCTL, DP83867_DEVADDR, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read_indirect(phydev, DP83867_RGMIIDCTL, MDIO_DEVAD_NONE);
+        wolfBoot_printf("RGMIIDCTL delay=0x%x\n", val);
+    #endif
+
+#if DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN >= 0
+    #ifdef DEBUG_PHY
+        wolfBoot_printf("Impedance Match 0x%x\n", DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN);
+    #endif
+    #ifdef DEBUG_PHY
+        val = hal_phy_read_indirect(phydev, DP83867_IO_MUX_CFG, MDIO_DEVAD_NONE);
+        wolfBoot_printf("IOMUX (before)=0x%x\n", val);
+    #endif
+
+        /* CLK_O_SEL=Channel D transmit clock, IO_IMPEDANCE_CTRL=0x1F (max) */
+        val = 0x0B1F;
+        hal_phy_write_indirect(phydev, DP83867_IO_MUX_CFG, DP83867_DEVADDR, val);
+    #ifdef DEBUG_PHY
+        val = hal_phy_read_indirect(phydev, DP83867_IO_MUX_CFG, MDIO_DEVAD_NONE);
+        wolfBoot_printf("IOMUX (after)=%x\n", val);
+    #endif
+#endif
+    }
+    return ret;
+}
+
+
+#define RGMII_PHY1_ADDR        0x4
+#define RGMII_PHY2_ADDR        0x3
+#define SGMII_PHY2_ADDR        0x1
+#define SGMII_PHY1_ADDR        0x2
+#define SGMII_AQR_PHY_ADDR     0x2
+#define FM1_10GEC1_PHY_ADDR    0x1
+
+#define FM1_DTSEC1 0
+#define FM1_DTSEC2 1
+#define FM1_DTSEC3 2
+#define FM1_DTSEC4 3
+#define FM1_10GEC1 4
+
+static int hal_ethernet_init(void)
+{
+    int ret, i;
+    uint32_t reg;
+
+    memset(phydevs, 0, sizeof(phydevs));
+
+    /* Set the on-board RGMII PHY addresses */
+    phydevs[FM1_DTSEC4].interface = PHY_INTERFACE_MODE_RGMII;
+    phydevs[FM1_DTSEC4].phyaddr = RGMII_PHY1_ADDR;
+    phydevs[FM1_DTSEC3].interface = PHY_INTERFACE_MODE_RGMII;
+    phydevs[FM1_DTSEC3].phyaddr = RGMII_PHY2_ADDR;
+
+    reg = get32(DCFG_RCWSR(4));
+    reg = (reg & RCWSR4_SRDS1_PRTCL) >> RCWSR4_SRDS1_PRTCL_SHIFT;
+    if (reg == 0x95) {
+        /* Use 10G XFI with Aquantia AQR105 PHY */
+        phydevs[FM1_10GEC1].interface = PHY_INTERFACE_MODE_XGMII;
+        phydevs[FM1_10GEC1].phyaddr = FM1_10GEC1_PHY_ADDR;
+    }
+    else { /* 0x5b or 0x119 */
+        /* Use SGMII */
+        phydevs[FM1_DTSEC1].interface = PHY_INTERFACE_MODE_SGMII;
+        phydevs[FM1_DTSEC1].phyaddr = SGMII_PHY1_ADDR;
+        phydevs[FM1_DTSEC2].interface = PHY_INTERFACE_MODE_SGMII;
+        phydevs[FM1_DTSEC2].phyaddr = SGMII_PHY2_ADDR;
+    }
+
+    /* Init PHY for each device */
+    for (i=0; i<(int)(sizeof(phydevs)/sizeof(struct phy_device)); i++) {
+        if (phydevs[i].phyaddr != 0) {
+            ret = hal_phy_init(&phydevs[i]);
+            if (ret != 0) {
+                wolfBoot_printf("PHY %d: Failed! %d\n", phydevs[i].phyaddr, ret);
+            }
+        }
+    }
+
+    return 0;
+}
+#endif /* ENABLE_PHY */
 
 #define FMAN_DMA_LIODN 973
 
@@ -1954,6 +2605,11 @@ static int hal_fman_init(void)
                 ((FMAN_DMA_LIODN << 16) | FMAN_DMA_LIODN));
         }
     }
+
+#ifdef ENABLE_PHY
+    hal_ethernet_init();
+#endif
+
     return ret;
 }
 #endif /* ENABLE_FMAN */
@@ -2286,9 +2942,6 @@ int hal_dts_fixup(void* dts_addr)
     uint32_t *reg;
     const char* prev_compat;
 
-    /* TODO: Ethenet MAC should be dynamic value */
-    uint8_t mac_addr[6] = {0xDC, 0xA7, 0xD9, 0x00, 0x07, 0x10};
-
     /* verify the FTD is valid */
     off = fdt_check_header(dts_addr);
     if (off != 0) {
@@ -2430,14 +3083,15 @@ int hal_dts_fixup(void* dts_addr)
 
         wolfBoot_printf("FDT: Ethernet%d: Offset %d\n", i, off);
 
-        /* Set Ethernet MAC addresses (incrementing) */
+        /* Set Ethernet MAC addresses */
         wolfBoot_printf("FDT: Set %s@%d (%d), %s=%x:%x:%x:%x:%x:%x\n",
                 "ethernet", i, off, "local-mac-address",
-                mac_addr[0], mac_addr[1], mac_addr[2],
-                mac_addr[3], mac_addr[4], mac_addr[5]);
-        fdt_setprop(fdt, off, "local-mac-address", mac_addr, sizeof(mac_addr));
+                phydevs[i].mac_addr[0], phydevs[i].mac_addr[1],
+                phydevs[i].mac_addr[2], phydevs[i].mac_addr[3],
+                phydevs[i].mac_addr[4], phydevs[i].mac_addr[5]);
+        fdt_setprop(fdt, off, "local-mac-address",
+            phydevs[i].mac_addr, sizeof(phydevs[i].mac_addr));
 
-        mac_addr[5]++;
         off = fdt_node_offset_by_compatible(fdt, off, "fsl,fman-memac");
     }
 
