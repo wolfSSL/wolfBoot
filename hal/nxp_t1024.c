@@ -2331,10 +2331,11 @@ static const char* hal_phy_interface_str(enum phy_interface interface)
     return "Unknown";
 }
 
+#define PHY_TIDP83867_PHYIDR 0x2000A231
 static const char* hal_phy_vendor_str(uint32_t id)
 {
     switch (id) {
-        case 0x2000a231:
+        case PHY_TIDP83867_PHYIDR:
             return "TI DP83867";
         default:
             break;
@@ -2506,8 +2507,6 @@ static int hal_phy_init(struct phy_device *phydev)
 #if DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN >= 0
     #ifdef DEBUG_PHY
         wolfBoot_printf("Impedance Match 0x%x\n", DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN);
-    #endif
-    #ifdef DEBUG_PHY
         val = hal_phy_read_indirect(phydev, DP83867_IO_MUX_CFG, MDIO_DEVAD_NONE);
         wolfBoot_printf("IOMUX (before)=0x%x\n", val);
     #endif
@@ -2538,6 +2537,7 @@ static int hal_phy_init(struct phy_device *phydev)
 #define FM1_DTSEC4 3
 #define FM1_10GEC1 4
 
+
 static int hal_ethernet_init(void)
 {
     int ret, i;
@@ -2551,15 +2551,19 @@ static int hal_ethernet_init(void)
     phydevs[FM1_DTSEC3].interface = PHY_INTERFACE_MODE_RGMII;
     phydevs[FM1_DTSEC3].phyaddr = RGMII_PHY2_ADDR;
 
+    /* SRDS_PRTCL_S1 Bits 128-183 - SerDes protocol select - SerDes 1 */
+    /* See T1024RM - 30.1.1.1.2 SerDes Protocols
+     * Figure 30-1 Supported SerDes Options  */
     reg = get32(DCFG_RCWSR(4));
     reg = (reg & RCWSR4_SRDS1_PRTCL) >> RCWSR4_SRDS1_PRTCL_SHIFT;
     if (reg == 0x95) {
-        /* Use 10G XFI with Aquantia AQR105 PHY */
+        /* 0x095: A=XFI1 10G Aquantia AQR105 PHY, B=PCIe3, C=PCIe2, D=PCIe1 */
         phydevs[FM1_10GEC1].interface = PHY_INTERFACE_MODE_XGMII;
         phydevs[FM1_10GEC1].phyaddr = FM1_10GEC1_PHY_ADDR;
     }
-    else { /* 0x5b or 0x119 */
-        /* Use SGMII */
+    else {
+        /* 0x05B: A=PCIe1,  B=PCIe3, C=SGMII2, D=SGMII1 */
+        /* 0x119: A=Aurora, B=PCIe3, C=SGMII2, D=PCIe1 */
         phydevs[FM1_DTSEC1].interface = PHY_INTERFACE_MODE_SGMII;
         phydevs[FM1_DTSEC1].phyaddr = SGMII_PHY1_ADDR;
         phydevs[FM1_DTSEC2].interface = PHY_INTERFACE_MODE_SGMII;
