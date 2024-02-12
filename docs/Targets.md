@@ -1907,7 +1907,7 @@ make
 # The next script needs to be run from wolboot root folder and assumes your
 # kernel is in th root folder, named bzImage
 # If this is not the case, change the path in the script accordingly
-tools/x86_64/qemu/make_hd.sh
+tools/x86_fsp/qemu/make_hd.sh
 
 # Run wolfBoot + Linux in qemu
 tools/scripts/qemu64/qemu64.sh

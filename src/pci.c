@@ -541,12 +541,7 @@ static void pci_dump_id(uint8_t bus, uint8_t dev, uint8_t fun)
                     bus, dev, fun, (int)vid, (int)did);
 }
 #else
-static inline void pci_dump_id(uint8_t bus, uint8_t dev, uint8_t fun)
-{
-    (void)bus;
-    (void)dev;
-    (void)fun;
-};
+#define pci_dump_id(bus, dev, fun) do{}while(0)
 #endif
 
 static int pci_program_bars(uint8_t bus, uint8_t dev, uint8_t fun,
