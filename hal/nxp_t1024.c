@@ -58,6 +58,9 @@
         #define ENABLE_ESPI /* SPI for TPM */
     #endif
     #define ENABLE_MP   /* multi-core support */
+
+    /* Booting Integrity OS */
+    #define RTOS_INTEGRITY_OS
 #endif
 
 #define USE_ERRATA_DDRA008378
@@ -2145,8 +2148,37 @@ enum phy_interface {
     PHY_INTERFACE_MODE_XGMII,
 };
 
-/* TODO: Ethenet MAC should be dynamic value */
-static const uint8_t DEFAULT_MAC_ADDR[6] = {0xDC, 0xA7, 0xD9, 0x00, 0x06, 0xF4};
+static int hal_get_mac_addr(int phy_addr, uint8_t* mac_addr)
+{
+    int ret = 0;
+    phy_addr--; /* convert to zero based */
+    if (phy_addr < 0 || phy_addr > 3) {
+        return -1;
+    }
+#ifdef RTOS_INTEGRITY_OS
+    /* Integrity OS Ethernet Configuration in Flash */
+    #ifndef ETHERNET_CONFIG_ADDR
+    #define ETHERNET_CONFIG_ADDR 0xED0E0000
+    #endif
+    /* Mac Addr offsets for each port */
+    static const uint32_t etherAdd[4] = {
+        ETHERNET_CONFIG_ADDR + 408,
+        ETHERNET_CONFIG_ADDR + 372,
+        ETHERNET_CONFIG_ADDR + 336,
+        ETHERNET_CONFIG_ADDR + 300
+    };
+    memcpy(mac_addr, (void*)etherAdd[phy_addr], 6);
+#else
+    #ifndef DEFAULT_MAC_ADDR
+    #define DEFAULT_MAC_ADDR {0xDC, 0xA7, 0xD9, 0x00, 0x06, 0xF4}
+    #endif
+    static const uint8_t defaultMacAddr[6] = DEFAULT_MAC_ADDR;
+    memcpy(mac_addr, defaultMacAddr, sizeof(defaultMacAddr));
+    mac_addr[5] += phy_addr; /* increment by port number */
+#endif
+    return ret;
+}
+
 
 struct phy_device {
     uint8_t phyaddr;
@@ -2346,21 +2378,24 @@ static const char* hal_phy_vendor_str(uint32_t id)
 /* Support for TI DP83867IS */
 static int hal_phy_init(struct phy_device *phydev)
 {
-    int ret = 0;
+    int ret;
     uint32_t val, val2;
 
     /* Set MAC address */
     /* Example MAC 0x12345678ABCD is:
      * MAC_ADDR0 of 0x78563412
      * MAC_ADDR1 of 0x0000CDAB */
-    memcpy(phydev->mac_addr, DEFAULT_MAC_ADDR, sizeof(DEFAULT_MAC_ADDR));
-    phydev->mac_addr[5] += phydev->phyaddr;
+    ret = hal_get_mac_addr(phydev->phyaddr, phydev->mac_addr);
 
     wolfBoot_printf("PHY %d: %s, Mac %x:%x:%x:%x:%x:%x\n",
         phydev->phyaddr, hal_phy_interface_str(phydev->interface),
         phydev->mac_addr[0], phydev->mac_addr[1],
         phydev->mac_addr[2], phydev->mac_addr[3],
         phydev->mac_addr[4], phydev->mac_addr[5]);
+
+    if (ret != 0) {
+        return ret;
+    }
 
     /* Mask all interrupt */
     set32(FMAN_MEMAC_IMASK(phydev->phyaddr), 0x00000000);
@@ -2421,7 +2456,6 @@ static int hal_phy_init(struct phy_device *phydev)
     val =  (uint16_t)hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_PHYIDR1);
     val <<= 16;
     val |= (uint16_t)hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_PHYIDR2);
-    //0x2000a231
     wolfBoot_printf("PHY %d: %s (OUI %x, Mdl %x, Rev %x)\n",
         phydev->phyaddr, hal_phy_vendor_str(val),
         (val >> 10), ((val >> 4) & 0x3F), (val & 0xF)
@@ -2439,7 +2473,7 @@ static int hal_phy_init(struct phy_device *phydev)
     if (phy_interface_is_rgmii(phydev)) {
         val = ((DP83867_MDI_CROSSOVER_AUTO << DP83867_MDI_CROSSOVER) |
                (DP83867_PHYCR_FIFO_DEPTH_4_B_NIB << DP83867_PHYCR_FIFO_DEPTH_SHIFT));
-        ret = hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL, val);
+        hal_phy_write(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL, val);
     #ifdef DEBUG_PHY
         val = hal_phy_read(phydev, MDIO_DEVAD_NONE, MII_DP83867_PHYCTRL);
         wolfBoot_printf("MII_DP83867_PHYCTRL=0x%x\n", val);
