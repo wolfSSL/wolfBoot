@@ -252,7 +252,11 @@ ifeq ($(TARGET),imx_rt)
       $(MCUXPRESSO_DRIVERS)/utilities/debug_console/fsl_debug_console.o
   endif
 
-  ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1042XJM5B)
+    CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+            -I$(MCUXPRESSO)/boards/evkmimxrt1040/xip/
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1042.o
+  else ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
     CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
             -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1052.o

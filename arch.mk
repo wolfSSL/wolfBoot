@@ -394,6 +394,11 @@ ifeq ($(TARGET),imx_rt)
     CFLAGS+=-I$(MCUXPRESSO)/boards/evkbimxrt1050/xip/
   endif
 
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1042XJM5B)
+    ARCH_FLASH_OFFSET=0x60000000
+    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1040/xip/
+  endif
+
   ifeq ($(PKA),1)
     ifeq ($(MCUXSDK),1)
       PKA_EXTRA_OBJS+= $(MCUXPRESSO)/drivers/fsl_dcp.o

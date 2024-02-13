@@ -121,6 +121,32 @@ void rt1050_init_pins(void)
 }
 #endif
 
+#ifdef CPU_MIMXRT1042XJM5B
+void rt1040_init_pins(void)
+{
+    gpio_pin_config_t USER_LED_config = {
+        .direction = kGPIO_DigitalOutput,
+        .outputLogic = 0U,
+        .interruptMode = kGPIO_NoIntmode
+    };
+
+    CLOCK_EnableClock(kCLOCK_Iomuxc);
+
+    GPIO_PinInit(USER_LED_GPIO, USER_LED_PIN, &USER_LED_config);
+
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_09_GPIO1_IO09, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_B0_04_CCM_CLKO1, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_SD_B0_05_CCM_CLKO2, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_09_GPIO1_IO09, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_B0_04_CCM_CLKO1, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_SD_B0_05_CCM_CLKO2, 0x10B0U);
+}
+#endif
+
 
 void main(void)
 {
@@ -129,6 +155,8 @@ void main(void)
     rt1060_init_pins();
 #elif defined(CPU_MIMXRT1052DVJ6B)
     rt1050_init_pins();
+#elif defined(CPU_MIMXRT1042XJM5B)
+    rt1040_init_pins();
 #endif
     SystemCoreClockUpdate();
     init_debug_console();
