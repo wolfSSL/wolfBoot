@@ -241,7 +241,7 @@ static void clock_pll_off(void)
     DMB();
 }
 
-/* This implementation will setup MSI 48 MHz as PLL Source Mux, PLLCLK as 
+/* This implementation will setup MSI 48 MHz as PLL Source Mux, PLLCLK as
  * System Clock Source */
 static void clock_pll_on(int powersave)
 {
@@ -489,6 +489,10 @@ static void RAMFUNCTION fork_bootloader(void)
     uint32_t dst  = FLASH_BANK2_BASE;
     uint32_t r = 0, w = 0;
     int i;
+
+    /* Return if content already matches */
+    if (memcmp(data, (void *)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)
+        return;
 
     /* Read the wolfBoot image in RAM */
     memcpy(bootloader_copy_mem, data, BOOTLOADER_SIZE);
