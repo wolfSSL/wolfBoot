@@ -715,6 +715,17 @@ void uart_init(void)
     lpuart_config_t config;
     uint32_t uartClkSrcFreq = 20000000U; /* 20 MHz */
 
+#if UART_BASEADDR == LPUART1
+    /* Configure the UART IO pins for LPUART1
+     * Tested with RT1040, RT1050, RT1062 and RT1064
+     */
+    CLOCK_EnableClock(kCLOCK_Iomuxc);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0x10B0U);
+#endif
+
     LPUART_GetDefaultConfig(&config);
     config.baudRate_Bps = UART_BAUDRATE;
     config.enableTx     = true;

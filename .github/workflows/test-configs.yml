@@ -22,6 +22,12 @@ jobs:
   #     arch: riscv
   #     config-file: ./config/examples/hifive.config
 
+  imx_rt1040_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1040.config
+
   imx_rt1050_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml
     with:
