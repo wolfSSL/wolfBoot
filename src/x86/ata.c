@@ -562,14 +562,16 @@ int ata_security_disable_password(int drv, const char *passphrase, int master)
  * in specs ATA8-ACS Sec. 7.46
  *
  * @param[in] drv The index of the ATA drive in the ATA_Drv array.
- * @param[in] passphrase The USER passphrase for the disk unit to erase.
+ * @param[in] passphrase The USER/MASTER passphrase for the disk unit to erase.
+ * @param[in] master if 1 compare againts the MASTER password instead of USER
+ * password
  *
  * @return 0 on success, or -1 if an error occurred.
  */
-int ata_security_erase_unit(int drv, const char *passphrase)
+int ata_security_erase_unit(int drv, const char *passphrase, int master)
 {
     return security_command_passphrase(drv, ATA_CMD_SECURITY_ERASE_UNIT,
-                                       passphrase, 1, 0);
+                                       passphrase, 1, master);
 }
 
 #endif /* WOLFBOOT_SATA_DISK_LOCK */
