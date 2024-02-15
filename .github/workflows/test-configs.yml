@@ -34,6 +34,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/same51-dualbank.config
 
+  imx_rt1040_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1040.config
+
   imx_rt1050_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml
     with:

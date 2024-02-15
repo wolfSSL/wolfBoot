@@ -154,17 +154,21 @@ void imx_rt_init_boot_clock(void)
     /* Set Flexspi clock source. */
     CLOCK_SetMux(kCLOCK_FlexspiMux, 3);
 #endif
+#if !defined(CPU_MIMXRT1042XJM5B)
     /* Disable CSI clock gate. */
     CLOCK_DisableClock(kCLOCK_Csi);
     /* Set CSI_PODF. */
     CLOCK_SetDiv(kCLOCK_CsiDiv, 1);
     /* Set Csi clock source. */
     CLOCK_SetMux(kCLOCK_CsiMux, 0);
+#endif
     /* Disable LPSPI clock gate. */
     CLOCK_DisableClock(kCLOCK_Lpspi1);
     CLOCK_DisableClock(kCLOCK_Lpspi2);
     CLOCK_DisableClock(kCLOCK_Lpspi3);
+#if !defined(CPU_MIMXRT1042XJM5B)
     CLOCK_DisableClock(kCLOCK_Lpspi4);
+#endif
     /* Set LPSPI_PODF. */
     CLOCK_SetDiv(kCLOCK_LpspiDiv, 4);
     /* Set Lpspi clock source. */
@@ -350,12 +354,14 @@ void imx_rt_init_boot_clock(void)
 #endif
     /* Enable Enet25M output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENET_25M_REF_EN_MASK;
+#if !defined(CPU_MIMXRT1042XJM5B)
     /* DeInit Usb2 PLL. */
     CLOCK_DeinitUsb2Pll();
     /* Bypass Usb2 PLL. */
     CLOCK_SetPllBypass(CCM_ANALOG, kCLOCK_PllUsb2, 1);
     /* Enable Usb2 PLL output. */
     CCM_ANALOG->PLL_USB2 |= CCM_ANALOG_PLL_USB2_ENABLE_MASK;
+#endif
     /* Set preperiph clock source. */
     CLOCK_SetMux(kCLOCK_PrePeriphMux, 3);
     /* Set periph clock source. */

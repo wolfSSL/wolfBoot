@@ -38,6 +38,9 @@
 #include "evkmimxrt1060_flexspi_nor_config.h"
 #define USE_GET_CONFIG
 #endif
+#ifdef CPU_MIMXRT1042XJM5B
+#include "evkmimxrt1040_flexspi_nor_config.h"
+#endif
 #ifdef CPU_MIMXRT1052DVJ6B
 #include "evkbimxrt1050_flexspi_nor_config.h"
 #endif
@@ -277,7 +280,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 
 /** Flash configuration in the .flash_config section of flash **/
-#ifdef CPU_MIMXRT1052DVJ6B
+#if defined(CPU_MIMXRT1042XJM5B) || defined(CPU_MIMXRT1052DVJ6B)
 
     #ifdef CONFIG_FLASH_W25Q64JV
         /* Winbond W25Q64JV */
@@ -543,11 +546,11 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
         .ipcmdSerialClkFreq = 0,
     };
     #endif
-#endif /* CPU_MIMXRT1052DVJ6B */
+#endif /* CPU_MIMXRT1042XJM5B || CPU_MIMXRT1052DVJ6B */
 
 
 #ifndef __FLASH_BASE
-#if defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1062DVL6A)
+#if defined(CPU_MIMXRT1042XJM5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1062DVL6A)
 #define __FLASH_BASE 0x60000000
 #elif defined(CPU_MIMXRT1064DVL6A)
 #define __FLASH_BASE 0x70000000
@@ -711,6 +714,17 @@ void uart_init(void)
 {
     lpuart_config_t config;
     uint32_t uartClkSrcFreq = 20000000U; /* 20 MHz */
+
+#if UART_BASEADDR == LPUART1
+    /* Configure the UART IO pins for LPUART1
+     * Tested with RT1040, RT1050, RT1062 and RT1064
+     */
+    CLOCK_EnableClock(kCLOCK_Iomuxc);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0x10B0U);
+#endif
 
     LPUART_GetDefaultConfig(&config);
     config.baudRate_Bps = UART_BAUDRATE;

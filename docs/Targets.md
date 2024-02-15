@@ -1241,7 +1241,16 @@ First make the update partition, pre-triggered for update
 tools/scripts/prepare_update.sh
 ```
 
-Then connect to the board with JLinkExe, for the rt1050 do:
+Then connect to the board with JLinkExe, for the rt1040 do:
+
+```sh
+# HyperFlash
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1042xxxxB"
+# QSPI
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1042xxxxB?BankAddr=0x60000000&Loader=QSPI"
+```
+
+For the rt1050 do:
 
 ```sh
 # HyperFlash
@@ -1269,6 +1278,8 @@ loadbin update.bin 0x60030000
 ### NXP iMX-RT Debugging JTAG / JLINK
 
 ```sh
+# rt-1040
+JLinkGDBServer -Device MIMXRT1042xxxxB -speed 5000 -if swd -port 3333
 # rt-1050
 JLinkGDBServer -Device MIMXRT1052xxx6A -speed 5000 -if swd -port 3333
 # rt-1060
