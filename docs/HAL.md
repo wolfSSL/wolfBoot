@@ -114,3 +114,24 @@ by the bootloader at the end of every write and erase operations on the external
 If the IAP interface of the external memory requires it, this function
 is called before every write and erase operations to unlock write access to the
 device. On some drivers, this function may be empty.
+
+
+### Additional functions required by `DUALBANK_SWAP` option
+
+If the target device supports hardware-assisted bank swapping, it is appropriate
+to provide two additional functions in the port:
+
+`void hal_flash_dualbank_swap(void)`
+
+Called by the bootloader when the two banks must be swapped. On some architectures
+this operation implies a reboot, so this function may also never return.
+
+
+`void fork_bootloader(void)`
+
+This function is called to provide a second copy of the bootloader. Wolfboot will
+clone itself if the content does not already match. `fork_bootloader()`
+implementation in new ports must return immediately without performing any actions
+if the content of the bootloader partition in the two banks already match.
+
+

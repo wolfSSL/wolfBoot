@@ -461,6 +461,10 @@ void RAMFUNCTION fork_bootloader(void)
     uint32_t r = 0, w = 0;
     int i;
 
+    /* Return if content already matches */
+    if (memcmp(data, (void *)WOLFBOOT_COPY_BOOTLOADER, BOOTLOADER_SIZE) == 0)
+        return;
+
     /* Read the wolfBoot image in RAM */
     memcpy(bootloader_copy_mem, data, BOOTLOADER_SIZE);
 
