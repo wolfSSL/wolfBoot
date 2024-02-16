@@ -269,6 +269,33 @@ ifeq ($(TZEN),1)
   CFLAGS+=-DTZEN
 endif
 
+
+## Renesas RX
+ifeq ($(ARCH),RENESAS_RX)
+  RX_GCC_PATH?=~/toolchains/gcc_8.3.0.202311_rx_elf
+  CROSS_COMPILE=$(RX_GCC_PATH)/bin/rx-elf-
+
+  OBJS+=src/boot_renesas.o src/boot_renesas_start.o
+  # Entry point
+  CFLAGS+=-Wl,-e_PowerON_Reset -nostartfiles
+
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
+
+  ifeq ($(TARGET),rx65n)
+    CFLAGS+=-misa=v2 -mlittle-endian-data -nofpu
+  endif
+  ifeq ($(TARGET),rx72n)
+    CFLAGS+=-misa=v3 -mlittle-endian-data -nofpu
+  endif
+
+  ifeq ($(TSIP),1)
+    CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
+  endif
+endif
+
+
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-

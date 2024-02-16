@@ -29,6 +29,7 @@ This README describes configuration of supported targets.
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Renesas RX65N](#renesas-rx65n)
 * [Renesas RX72N](#renesas-rx72n)
 * [Renesas RA6M4](#renesas-ra6m4)
 * [Renesas RZN2L](#renesas-rzn2l)
@@ -2016,6 +2017,105 @@ make test-sim-internal-flash-with-update
 Note: This also works on Mac OS, but `objcopy` does not exist. Install with `brew install binutils` and make using `OBJCOPY=/usr/local/Cellar//binutils/2.41/bin/objcopy make`.
 
 
+## Renesas RX65N
+
+Tested on the RX65N Target Board that includes an onboard E2 Lite emulator.
+
+Default UART Serial output on PC3 via PMOD1-IO0 at Pin 9. This requires an external TTL UART to USB adapter. This feaure is enabled with `DEBUG_UART=1`.
+
+Default Onboard Flash Memory Layout (2MB) (64KB sector):
+
+| Description       | Address    | Size                |
+| ----------------- | ---------- | ------------------- |
+| OFSM Option Mem   | 0xFE7F5D00 | 0x00000080 (128 B ) |
+| Application       | 0xFFE00000 | 0x000F0000 (960 KB) |
+| Update            | 0xFFEF0000 | 0x000F0000 (960 KB) |
+| Swap              | 0xFFFE0000 | 0x00010000 ( 64 KB) |
+| wolfBoot          | 0xFFFF0000 | 0x00010000 ( 64 KB) |
+
+## Building Renesas RX65N
+
+Building RX wolfBoot requires the RX-ELF compiler. Please Download and install the Renesas RX GCC toolchain:
+https://llvm-gcc-renesas.com/rx-download-toolchains/
+
+Default installation path (Linux): `~/toolchains/gcc_8.3.0.202311_rx_elf`
+
+Configuration:
+Use `./config/examples/renesas-rx65n.config` as a starting point by copying it to the wolfBoot root as `.config`.
+
+```sh
+cp ./config/examples/renesas-rx65n.config .config
+make
+```
+
+Toolchain:
+`make CROSS_COMPILE="~/toolchains/gcc_8.3.0.202311_rx_elf/bin/rx-elf-"`
+OR
+`make RX_GCC_PATH="~/toolchains/gcc_8.3.0.202311_rx_elf"`
+
+
+TSIP: To enable TSIP use `make PKA=1`
+
+## Flashing Renesas RX65N
+
+Download the Renesas Flashing Tool: https://www.renesas.com/us/en/software-tool/renesas-flash-programmer-programming-gui
+Download the Renesas E2 Lite Linux Driver: https://www.renesas.com/us/en/document/swo/e2-emulator-e2-emulator-lite-linux-driver?r=488806
+
+Default Flash ID Code: FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+Flash Using:
+
+```
+rfp-cli -if fine -t e2l -device RX65x -auto -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF \
+    -bin FFFF0000 wolfboot.bin \
+    -bin FFE00000 test-app/image_v1_signed.bin \
+    -run
+```
+
+Note: Linux Install E2 Lite USB Driver:
+
+```sh
+sudo cp 99-renesas-emu.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+```
+
+## Debugging Renesas RX65N
+
+### Debugging Renesas RX65N in e2Studio:
+
+Create a new "Renesas Debug" project. Choose the "E2 Lite" emulator and the built `wolfboot.elf`. After project is created open the "Debug Configuration" and change the debugger interface from "JTAG" to "FINE". Run debug and it will stop in the "reset" code in `boot_renesas_start.S`.
+
+### Debugging Renesas RX65N in terminal:
+
+Requirements:
+* `e2-server-gdb`: Included with e2Studio
+* `rx-elf-gdb`: Included with e2Studio or rx-elf toolchain.
+
+Note: On Ubuntu 22 `rx-elf-gdb` requires ncurses5 (use `apt-get install libncurses5`).
+Note: The GDB server is inside an Eclipse plugin "com.renesas.platform_1733799057.jar" and will not be extrated until first used in e2Studio.
+
+```sh
+pushd ~/.eclipse/com.renesas.platform_1733799057/DebugComp/RX/
+./e2-server-gdb -g E2LITE -t R5F565NE -uConnectionTimeout=0 -uClockSrcHoco= 1 -uAllowClockSourceInternal= 1 -uUseFine= 1 -uFineBaudRate= 1.50 -w 1 -z 0 -uRegisterSetting= 0 -uModePin= 0 -uChangeStartupBank= 0 -uStartupBank= 0 -uDebugMode= 0 -uExecuteProgram= 0 -uIdCode= FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -uresetOnReload= 1 -n 0 -uWorkRamAddress= 1000 -uverifyOnWritingMemory= 0 -uProgReWriteIRom= 0 -uProgReWriteDFlash= 0 -uhookWorkRamAddr= 0x3fdd0 -uhookWorkRamSize= 0x230 -uOSRestriction= 0 -l -uCore="SINGLE_CORE|enabled|1|main" -uSyncMode=async -uFirstGDB=main --english --gdbVersion=7.2
+```
+
+Capture the "GDB: ######" port number and replace in GDB client command below.
+
+In another console from the wolfBoot directory:
+
+```sh
+rx-elf-gdb -rx-force-v2
+set breakpoint always-inserted on
+symbol-file wolfboot.elf
+inferior 1
+target extended-remote-rx localhost:######
+monitor set_target,R5F565NE
+monitor reset
+b main
+c
+```
+
+
 ## Renesas RX72N
 
 This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
@@ -2027,6 +2127,7 @@ You can download and execute wolfBoot by e2Studio debugger. Use a USB connection
 board for the debugger and flash programmer.
 
 Flash Allocation:
+
 ```
 +---------------------------+------------------------+-----+
 | B |H|                     |H|                      |     |
@@ -2041,7 +2142,6 @@ Flash Allocation:
 0xffdf0000: Update  partition (Header)
 0xffdf0100: Update  partition (Application image)
 0xfffd0000: Swap sector
-
 ```
 
 Detailed steps can be found at [Readme.md](../IDE/Renesas/e2studio/RX72N/Readme.md).
