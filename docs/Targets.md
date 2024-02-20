@@ -2048,7 +2048,7 @@ cp ./config/examples/renesas-rx65n.config .config
 make
 ```
 
-Toolchain:
+With RX GCC or or custom cross compiler:
 `make CROSS_COMPILE="~/toolchains/gcc_8.3.0.202311_rx_elf/bin/rx-elf-"`
 OR
 `make RX_GCC_PATH="~/toolchains/gcc_8.3.0.202311_rx_elf"`

@@ -23,11 +23,28 @@
 #define _WOLFBOOT_RENESAS_RX_H_
 
 #ifdef BIG_ENDIAN_ORDER
-    #define ENDIAN_BIT(n) (1 << (8-(n)))
+    #define ENDIAN_BIT8( n, bits)      (1 << (8- (n)))
+    #define ENDIAN_BIT16(n, bits)      (1 << (16-(n)))
+    #define ENDIAN_BIT32(n, bits)      (1 << (32-(n)))
+    #define ENDIAN_VAL8( val, n, bits) ((val) << (8- (n)))
+    #define ENDIAN_VAL16(val, n, bits) ((val) << (16-(n)))
+    #define ENDIAN_VAL32(val, n, bits) ((val) << (32-(n)))
 #else
-    #define ENDIAN_BIT(n) (1 << (n))
+    #define ENDIAN_BIT8( n)      (1 << (n))
+    #define ENDIAN_BIT16(n)      (1 << (n))
+    #define ENDIAN_BIT32(n)      (1 << (n))
+    #define ENDIAN_VAL8( val, n) ((val) << (n))
+    #define ENDIAN_VAL16(val, n) ((val) << (n))
+    #define ENDIAN_VAL32(val, n) ((val) << (n))
 #endif
 
+#if defined(__CCRX__)
+    #define RX_NOP() nop()
+#elif defined(__GNUC__)
+    #define RX_NOP() __asm("nop")
+#elif defined(__ICCRX__)
+    #define RX_NOP() __no_operation()
+#endif
 
 
 #endif /* !_WOLFBOOT_RENESAS_RX_H_ */
