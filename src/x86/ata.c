@@ -538,8 +538,7 @@ int ata_security_unlock_device(int drv, const char *passphrase, int master)
  */
 int ata_security_set_password(int drv, int master, const char *passphrase)
 {
-    (void)master;
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase, 0, 0);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase, 0, master);
 }
 
 /**
