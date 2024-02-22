@@ -2023,6 +2023,14 @@ Tested on the RX65N Target Board that includes an onboard E2 Lite emulator.
 
 Default UART Serial output on PC3 via PMOD1-IO0 at Pin 9. This requires an external TTL UART to USB adapter. This feaure is enabled with `DEBUG_UART=1`.
 
+Example Boot Output (with DEBUG_UART=1):
+
+```
+wolfBoot HAL Init
+Boot partition: 0xFFE00000
+Image size 27108
+```
+
 Default Onboard Flash Memory Layout (2MB) (64KB sector):
 
 | Description       | Address    | Size                |

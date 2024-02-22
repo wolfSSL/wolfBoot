@@ -54,7 +54,7 @@ void do_boot(const uint32_t *app_offset)
     (void) app_sp;
     (void) app_entry;
 #if defined(__RX__)
-
+    /* TOOD: Add jump */
 #elif defined(__CCRX__)
     longJump(app_offset);
 #elif defined(_RENESAS_RA_)
