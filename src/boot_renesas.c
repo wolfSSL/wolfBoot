@@ -38,7 +38,7 @@ extern uint32_t IMAGE_APP_RAM_start;
  *
  */
 
-#if defined(__CCRX__)
+#if defined(__RX__) && defined(__CCRX__)
 #pragma inline_asm longJump
 static void longJump(const uint32_t *app_offset)
 {
@@ -54,9 +54,12 @@ void do_boot(const uint32_t *app_offset)
     (void) app_sp;
     (void) app_entry;
 #if defined(__RX__)
-    /* TOOD: Add jump */
-#elif defined(__CCRX__)
-    longJump(app_offset);
+    /* Do unconditional jump (r1 = app_offset) */
+    #if defined(__CCRX__)
+        longJump(app_offset);
+    #else
+        __asm("jmp   r1");
+    #endif
 #elif defined(_RENESAS_RA_)
     app_sp = VECTOR_SP;
 

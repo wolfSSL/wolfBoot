@@ -109,17 +109,7 @@ SECTIONS
         _mdata = .;
     } > ROM
 
-    .ustack 0x200: AT(0x200)
-    {
-        _ustack = .;
-    } > RAM
-
-    .istack 0x100: AT(0x100)
-    {
-        _istack = .;
-    } > RAM
-
-    .data 0x204: AT(_mdata)
+    .data : AT(_mdata)
     {
         _data = .;
         *(.data)
@@ -142,7 +132,7 @@ SECTIONS
         _ebss = .;
         . = ALIGN(128);
         _end = .;
-    } > RAM AT>RAM
+    } > RAM
 
     .ofs1 0xFE7F5D00: AT(0xFE7F5D00)
     {
@@ -177,6 +167,12 @@ SECTIONS
         KEEP(*(.ofs8))
     } > OFS
 }
+
+
+/* reserve 16KB user stack */
+PROVIDE(_ustack  = ORIGIN(RAM) + LENGTH(RAM) - 0x4000 );
+/* reserve 4KB interrupt stack */
+PROVIDE(_istack  = ORIGIN(RAM) + LENGTH(RAM) - 0x4000 - 0x1000 );
 
 _wolfboot_partition_boot_address = @WOLFBOOT_PARTITION_BOOT_ADDRESS@;
 _wolfboot_partition_size = @WOLFBOOT_PARTITION_SIZE@;
