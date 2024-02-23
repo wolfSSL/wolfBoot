@@ -2558,12 +2558,24 @@ static int hal_phy_init(struct phy_device *phydev)
 }
 
 
+#ifndef RGMII_PHY1_ADDR
 #define RGMII_PHY1_ADDR        0x4
+#endif
+#ifndef RGMII_PHY2_ADDR
 #define RGMII_PHY2_ADDR        0x3
-#define SGMII_PHY2_ADDR        0x1
-#define SGMII_PHY1_ADDR        0x2
+#endif
+#ifndef SGMII_PHY2_ADDR
+#define SGMII_PHY2_ADDR        0x2
+#endif
+#ifndef SGMII_PHY1_ADDR
+#define SGMII_PHY1_ADDR        0x1
+#endif
+#ifndef SGMII_AQR_PHY_ADDR
 #define SGMII_AQR_PHY_ADDR     0x2
+#endif
+#ifndef FM1_10GEC1_PHY_ADDR
 #define FM1_10GEC1_PHY_ADDR    0x1
+#endif
 
 #define FM1_DTSEC1 0
 #define FM1_DTSEC2 1
