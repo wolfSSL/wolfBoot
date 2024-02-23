@@ -284,10 +284,19 @@ ifeq ($(ARCH),RENESAS_RX)
   endif
 
   ifeq ($(TARGET),rx65n)
-    CFLAGS+=-misa=v2 -mlittle-endian-data -nofpu
+    CFLAGS+=-misa=v2 -nofpu
   endif
   ifeq ($(TARGET),rx72n)
-    CFLAGS+=-misa=v3 -mlittle-endian-data -nofpu
+    CFLAGS+=-misa=v3 -nofpu
+  endif
+
+  # RX parts support big or little endian data depending on MDE register
+  ifeq ($(BIG_ENDIAN),1)
+    CFLAGS+=-mbig-endian-data
+    LDFLAGS+=-mbig-endian-data
+  else
+    CFLAGS+=-mlittle-endian-data
+    LDFLAGS+=-mlittle-endian-data
   endif
 
   ifeq ($(TSIP),1)

@@ -2041,6 +2041,12 @@ Default Onboard Flash Memory Layout (2MB) (64KB sector):
 | Swap              | 0xFFFE0000 | 0x00010000 ( 64 KB) |
 | wolfBoot          | 0xFFFF0000 | 0x00010000 ( 64 KB) |
 
+To switch RX parts to big endian data use:
+
+```sh
+rfp-cli -if fine -t e2l -device RX65x -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -write32 0xFE7F5D00 0xFFFFFFF8
+```
+
 ## Building Renesas RX65N
 
 Building RX wolfBoot requires the RX-ELF compiler. Please Download and install the Renesas RX GCC toolchain:

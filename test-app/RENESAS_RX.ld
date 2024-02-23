@@ -1,7 +1,9 @@
+OUTPUT_ARCH(rx)
+ENTRY(_start)
+
 MEMORY
 {
     RAM : ORIGIN = 0x0, LENGTH = 262144 - 16384
-    STACK : ORIGIN = 0x3C000, LENGTH = 16384
     RAM2 : ORIGIN = 0x00800000, LENGTH = 393216
     ROM : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@ /* 0xFFE00000 */, LENGTH = @WOLFBOOT_TEST_APP_SIZE@ /* 2097152 */
     OFS : ORIGIN = 0xFE7F5D00, LENGTH = 128
@@ -9,13 +11,9 @@ MEMORY
 
 SECTIONS
 {
-    .vectors (0xFFFFFFD0) :
-    {
-        PROVIDE (__vectors = .);
-    }
-
     .text :
     {
+        PROVIDE (_start = .);
         *(.text)
         *(.text.*)
         *(P)
@@ -98,10 +96,10 @@ SECTIONS
         PROVIDE(__romdatastart = .);
     } > ROM
 
-    .ustack :
+    .vectors :
     {
-        __stack = .;
-    } > STACK
+        PROVIDE (__vectors = .);
+    } > ROM
 
     .data : AT(_mdata)
     {
@@ -133,7 +131,11 @@ SECTIONS
         _end = .;
     } > RAM
     PROVIDE (__bsssize = SIZEOF(.bss) / 4);
-}
 
-END_STACK = ORIGIN(RAM) + LENGTH(RAM);
-PROVIDE(stack = END_STACK);
+    /* user stack is last 16KB */
+    .stack ORIGIN(RAM) + LENGTH(RAM) - 0x4000:
+    {
+        PROVIDE (__stack = .);
+        *(.stack)
+    } > RAM
+}

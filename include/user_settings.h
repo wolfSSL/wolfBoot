@@ -39,12 +39,6 @@
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
-/* Endianess */
-/* Renesas RX Endianess */
-#ifdef __RX_BIG_ENDIAN__ /* or !__RX_LITTLE_ENDIAN__ */
-    #define BIG_ENDIAN_ORDER
-#endif
-
 /* Stdlib Types */
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
 #ifndef toupper

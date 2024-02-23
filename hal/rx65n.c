@@ -38,133 +38,133 @@
 #define SYSTEM_BASE (0x80000)
 
 #define SYS_SYSCR0  (*(volatile uint16_t *)(SYSTEM_BASE + 0x06))
-#define SYS_SYSCR0_EXBE ENDIAN_BIT16(1) /* External Bus Enable */
+#define SYS_SYSCR0_EXBE (1 << 1) /* External Bus Enable */
 
 #define SYS_MSTPCRB (*(volatile uint32_t *)(SYSTEM_BASE + 0x14)) /* Module Stop Control 0=release, 1=stop */
 
 #define SYS_SCKCR   (*(volatile uint32_t *)(SYSTEM_BASE + 0x20)) /* System Clock Control Register */
-#define SYS_SCKCR_FCK(n)  ENDIAN_VAL32(n, 28)
-#define SYS_SCKCR_ICK(n)  ENDIAN_VAL32(n, 24)
-#define SYS_SCKCR_PSTOP1  ENDIAN_BIT32(23)
-#define SYS_SCKCR_PSTOP0  ENDIAN_BIT32(22)
-#define SYS_SCKCR_BCK(n)  ENDIAN_VAL32(n, 16)
-#define SYS_SCKCR_PCKA(n) ENDIAN_VAL32(n, 12)
-#define SYS_SCKCR_PCKB(n) ENDIAN_VAL32(n,  8)
-#define SYS_SCKCR_PCKC(n) ENDIAN_VAL32(n,  4)
-#define SYS_SCKCR_PCKD(n) ENDIAN_VAL32(n,  0)
+#define SYS_SCKCR_FCK(n)  ((n) << 28)
+#define SYS_SCKCR_ICK(n)  ((n) << 24)
+#define SYS_SCKCR_PSTOP1    (1 << 23)
+#define SYS_SCKCR_PSTOP0    (1 << 22)
+#define SYS_SCKCR_BCK(n)  ((n) << 16)
+#define SYS_SCKCR_PCKA(n) ((n) << 12)
+#define SYS_SCKCR_PCKB(n) ((n) <<  8)
+#define SYS_SCKCR_PCKC(n) ((n) <<  4)
+#define SYS_SCKCR_PCKD(n) ((n) <<  0)
 
 #define SYS_SCKCR2 (*(volatile uint16_t *)(SYSTEM_BASE + 0x24)) /* System Clock Control Register 2 */
-#define SYS_SCKCR2_UCK(n) ENDIAN_VAL16(n, 4)
+#define SYS_SCKCR2_UCK(n) ((n) << 4)
 
 #define SYS_SCKCR3 (*(volatile uint16_t *)(SYSTEM_BASE + 0x26)) /* System Clock Control Register 3 */
-#define SYS_SCKCR3_CKSEL(n) ENDIAN_VAL16(n, 8) /* 0=LOCO, 1=HOCO, 2=Main, 3=Sub, 4=PLL */
+#define SYS_SCKCR3_CKSEL(n) ((n) << 8) /* 0=LOCO, 1=HOCO, 2=Main, 3=Sub, 4=PLL */
 
 #define SYS_PLLCR (*(volatile uint16_t *)(SYSTEM_BASE + 0x28))
-#define SYS_PLLCR_PLIDIV(n) ENDIAN_VAL16(n, 0) /* 0=x1, 1=x1/2, 2=x1/3 */
-#define SYS_PLLCR_PLLSRCSEL ENDIAN_BIT16(4)    /* 0=main, 1=HOCO */
-#define SYS_PLLCR_STC(n)    ENDIAN_VAL16(n, 8) /* Frequency Multiplication Factor */
+#define SYS_PLLCR_PLIDIV(n) ((n) << 0) /* 0=x1, 1=x1/2, 2=x1/3 */
+#define SYS_PLLCR_PLLSRCSEL   (1 << 4)    /* 0=main, 1=HOCO */
+#define SYS_PLLCR_STC(n)    ((n) << 8) /* Frequency Multiplication Factor */
 
 #define SYS_PLLCR2 (*(volatile uint8_t *)(SYSTEM_BASE + 0x2A))
-#define SYS_PLLCR2_PLLEN ENDIAN_BIT8(0) /* PLL Stop Control: 0=PLL operating, 1=PLL stopped */
+#define SYS_PLLCR2_PLLEN  (1 << 0) /* PLL Stop Control: 0=PLL operating, 1=PLL stopped */
 
 #define SYS_BCKCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x30))
-#define SYS_BCKCR_BCLKDIV ENDIAN_BIT8(0) /* 0=BCLK, 1= 1/2 BCLK */
+#define SYS_BCKCR_BCLKDIV (1 << 0) /* 0=BCLK, 1= 1/2 BCLK */
 
 #define SYS_MOSCCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x32))
-#define SYS_MOSCCR_MOSTP ENDIAN_BIT8(0) /* Main-clock osc: 0=operating, 1=stopped */
+#define SYS_MOSCCR_MOSTP (1 << 0) /* Main-clock osc: 0=operating, 1=stopped */
 
 #define SYS_SOSCCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x33)) /* Sub-Clock Oscillator Control */
-#define SYS_SOSCCR_SOSTP ENDIAN_BIT8(0) /* Sub-clock osc: 0=operating, 1=stopped */
+#define SYS_SOSCCR_SOSTP (1 << 0) /* Sub-clock osc: 0=operating, 1=stopped */
 
 #define SYS_LOCOCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x34))
-#define SYS_LOCOCR_LCSTP ENDIAN_BIT8(0) /* Low-Speed On-Chip Oscillator Control: 0=On, 1=Off */
+#define SYS_LOCOCR_LCSTP (1 << 0) /* Low-Speed On-Chip Oscillator Control: 0=On, 1=Off */
 
 #define SYS_HOCOCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x36))
-#define SYS_HOCOCR_HCSTP     ENDIAN_BIT8(0) /* High Speed On-Chip Osc - 1=STOPPED */
+#define SYS_HOCOCR_HCSTP (1 << 0) /* High Speed On-Chip Osc - 1=STOPPED */
 #define SYS_HOCOCR2  (*(volatile uint8_t *)(SYSTEM_BASE + 0x37))
-#define SYS_HOCOCR2_HCFRQ(n) ENDIAN_VAL8(n, 0) /* 0=16MHz, 1=18MHz, 2=20MHz */
+#define SYS_HOCOCR2_HCFRQ(n) ((n) << 0) /* 0=16MHz, 1=18MHz, 2=20MHz */
 
 #define SYS_OSCOVFSR (*(volatile uint8_t *)(SYSTEM_BASE + 0x3C))
-#define SYS_OSCOVFSR_MOOVF  ENDIAN_BIT8(0) /* Main clock */
-#define SYS_OSCOVFSR_SOOVF  ENDIAN_BIT8(1) /* Sub clock */
-#define SYS_OSCOVFSR_PLOVF  ENDIAN_BIT8(2) /* PLL */
-#define SYS_OSCOVFSR_HCOVF  ENDIAN_BIT8(3) /* HOCO */
-#define SYS_OSCOVFSR_ILCOVF ENDIAN_BIT8(4) /* IWDT */
+#define SYS_OSCOVFSR_MOOVF  (1 << 0) /* Main clock */
+#define SYS_OSCOVFSR_SOOVF  (1 << 1) /* Sub clock */
+#define SYS_OSCOVFSR_PLOVF  (1 << 2) /* PLL */
+#define SYS_OSCOVFSR_HCOVF  (1 << 3) /* HOCO */
+#define SYS_OSCOVFSR_ILCOVF (1 << 4) /* IWDT */
 
 #define SYS_MOSCWTCR (*(volatile uint8_t *)(SYSTEM_BASE + 0xA2))
-#define SYS_MOSCWTCR_MSTS(n) ENDIAN_VAL8(n, 0)
+#define SYS_MOSCWTCR_MSTS(n) ((n) << 0)
 
 /* Register Write Protection Function */
 #define SYS_PRCR       (*(volatile uint16_t *)(SYSTEM_BASE + 0x3FE))
-#define SYS_PRCR_PRKEY (0xA500)
-#define SYS_PRCR_PRC0  ENDIAN_BIT16(0) /* Enables writing to clock generation circuit */
-#define SYS_PRCR_PRC1  ENDIAN_BIT16(1) /* Enables writing to operating modes, clock R/W generation circuit, low power consumption, and software reset */
-#define SYS_PRCR_PRC3  ENDIAN_BIT16(3) /* Enables writing to LVD */
+#define SYS_PRCR_PRKEY (0xA5 << 8)
+#define SYS_PRCR_PRC0  (1 << 0) /* Enables writing to clock generation circuit */
+#define SYS_PRCR_PRC1  (1 << 1) /* Enables writing to operating modes, clock R/W generation circuit, low power consumption, and software reset */
+#define SYS_PRCR_PRC3  (1 << 3) /* Enables writing to LVD */
 
 #define PROTECT_OFF() SYS_PRCR = (SYS_PRCR_PRKEY | SYS_PRCR_PRC0 | SYS_PRCR_PRC1 | SYS_PRCR_PRC3)
 #define PROTECT_ON()  SYS_PRCR = (SYS_PRCR_PRKEY)
 
 #define SYS_MOFCR   (*(volatile uint8_t *)(0x8C293))
-#define SYS_MOFCR_MOFXIN    ENDIAN_BIT8(0)    /* OSC Force Oscillation: 0=not controlled, 1=main clock forced */
-#define SYS_MOFCR_MODRV2(n) ENDIAN_VAL8(n, 4) /* OSC MHz: 0=20.1-24, 1=16.1-20, 2=8.1-16, 3=8 */
-#define SYS_MOFCR_MOSEL     ENDIAN_BIT8(6)    /* 0=resonator, 1=external clk in*/
+#define SYS_MOFCR_MOFXIN      (1 << 0)  /* OSC Force Oscillation: 0=not controlled, 1=main clock forced */
+#define SYS_MOFCR_MODRV2(n) ((n) << 4)  /* OSC MHz: 0=20.1-24, 1=16.1-20, 2=8.1-16, 3=8 */
+#define SYS_MOFCR_MOSEL       (1 << 6)  /* 0=resonator, 1=external clk in*/
 
 #define SYS_HOCOPCR  (*(volatile uint8_t *)(0x8C294))
-#define SYS_HOCOPCR_HOCOPCNT ENDIAN_BIT8(0) /* High-Speed On-Chip Oscillator Power Supply Control: 0=On, 1=Off */
+#define SYS_HOCOPCR_HOCOPCNT (1 << 0) /* High-Speed On-Chip Oscillator Power Supply Control: 0=On, 1=Off */
 
 #define SYS_RSTSR1  (*(volatile uint8_t *)(0x8C291))
-#define SYS_RSTSR1_CWSF ENDIAN_BIT8(0) /* 0=Cold Start, 1=Warm Start */
+#define SYS_RSTSR1_CWSF (1 << 0) /* 0=Cold Start, 1=Warm Start */
 
 /* RTC */
 #define RTC_BASE 0x8C400
 #define RTC_RCR3 (*(volatile uint8_t *)(RTC_BASE + 0x26))
-#define RTC_RCR3_RTCEN    ENDIAN_BIT8(0) /* Sub Clock Osc: 0=stopped, 1=operating */
-#define RTC_RCR3_RTCDV(n) ENDIAN_VAL8(n, 1)
+#define RTC_RCR3_RTCEN      (1 << 0) /* Sub Clock Osc: 0=stopped, 1=operating */
+#define RTC_RCR3_RTCDV(n) ((n) << 1)
 #define RTC_RCR4 (*(volatile uint8_t *)(RTC_BASE + 0x28))
-#define RTC_RCR4_RCKSEL   ENDIAN_BIT8(0) /* 0=Sub Clock, 1=Main Clock */
+#define RTC_RCR4_RCKSEL     (1 << 0) /* 0=Sub Clock, 1=Main Clock */
 
 /* Flash */
 #define FLASH_BASE  0x81000
 #define FLASH_ROMWT (*(volatile uint8_t *)(FLASH_BASE + 0x1C))
-#define FLASH_ROMWT_ROMWT(n) ENDIAN_VAL8(n, 0) /* 0=no wait, 1=one wait cycle, 2=two wait cycles */
+#define FLASH_ROMWT_ROMWT(n) ((n) << 0) /* 0=no wait, 1=one wait cycle, 2=two wait cycles */
 
 /* Serial Communication Interface */
 #define SCI_BASE(n) (0x8A000 + ((n) * 0x20))
 #define SCI_SMR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x00))
 #define SCI_SMR_CKS(clk) (clk & 0x3) /* 0=PCLK, 1=PCLK/4, 2=PCLK/16, 3=PCLK/64 */
-#define SCI_SMR_STOP  ENDIAN_BIT8(3) /* 0=1 stop bit */
-#define SCI_SMR_CHR   ENDIAN_BIT8(6) /* 0=8-bit */
+#define SCI_SMR_STOP  (1 << 3) /* 0=1 stop bit */
+#define SCI_SMR_CHR   (1 << 6) /* 0=8-bit */
 #define SCI_BRR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x01)) /* Bit Rate Reg < 255 */
 #define SCI_SCR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x02))
-#define SCI_SCR_RE    ENDIAN_BIT8(4)
-#define SCI_SCR_TE    ENDIAN_BIT8(5)
+#define SCI_SCR_RE    (1 << 4)
+#define SCI_SCR_TE    (1 << 5)
 #define SCI_TDR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x03)) /* Transmit Data Register */
 #define SCI_SSR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x04))
-#define SCI_SSR_TEND  ENDIAN_BIT8(2) /* Transmit End Flag */
-#define SCI_SSR_RDRF  ENDIAN_BIT8(6) /* Receive Data Full Flag */
-#define SCI_SSR_TDRE  ENDIAN_BIT8(7) /* Transmit Data Empty Flag */
+#define SCI_SSR_TEND  (1 << 2) /* Transmit End Flag */
+#define SCI_SSR_RDRF  (1 << 6) /* Receive Data Full Flag */
+#define SCI_SSR_TDRE  (1 << 7) /* Transmit Data Empty Flag */
 #define SCI_RDR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x05)) /* Receive Data Register */
 #define SCI_SCMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x06))
-#define SCI_SCMR_CHR1 ENDIAN_BIT8(4) /* 1=8-bit */
+#define SCI_SCMR_CHR1 (1 << 4) /* 1=8-bit */
 #define SCI_SEMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x08))
-#define SCI_SEMR_ASC0    ENDIAN_BIT8(0) /* Asynchronous Mode Clock Source Select 0=external clock input */
-#define SCI_SEMR_BRME    ENDIAN_BIT8(2) /* Bit Rate Modulation Enable */
-#define SCI_SEMR_ABCS    ENDIAN_BIT8(4) /* Asynchronous Mode Base Clock Select */
-#define SCI_SEMR_NFEN    ENDIAN_BIT8(5) /* Digital Noise Filter Function Enable */
-#define SCI_SEMR_BGDM    ENDIAN_BIT8(6) /* Baud Rate Generator Double-Speed Mode Select */
-#define SCI_SEMR_RXDESEL ENDIAN_BIT8(7) /* Asynchronous Start Bit Edge Detection Select */
+#define SCI_SEMR_ASC0    (1 << 0) /* Asynchronous Mode Clock Source Select 0=external clock input */
+#define SCI_SEMR_BRME    (1 << 2) /* Bit Rate Modulation Enable */
+#define SCI_SEMR_ABCS    (1 << 4) /* Asynchronous Mode Base Clock Select */
+#define SCI_SEMR_NFEN    (1 << 5) /* Digital Noise Filter Function Enable */
+#define SCI_SEMR_BGDM    (1 << 6) /* Baud Rate Generator Double-Speed Mode Select */
+#define SCI_SEMR_RXDESEL (1 << 7) /* Asynchronous Start Bit Edge Detection Select */
 
 /* MPC (Multi-Function Pin Controller) */
 #define MPC_PWPR   (*(volatile uint8_t *)(0x8C11F))
-#define MPC_PWPR_B0WI  ENDIAN_BIT8(7)
-#define MPC_PWPR_PFSWE ENDIAN_BIT8(6)
+#define MPC_PWPR_B0WI  (1 << 7)
+#define MPC_PWPR_PFSWE (1 << 6)
 
 #define MPC_PFS(n) (*(volatile uint8_t *)(0x8C0E0 + (n)))
 
 /* Ports */
-#define PORT_BASE(n)  (0x8C000 + (n))
-#define PORT_PDR(n)   (*(volatile uint8_t*)(0x8C000 + (n)))
-#define PORT_PMR(n)   (*(volatile uint8_t*)(0x8C060 + (n))) /* 0=General, 1=Peripheral */
+#define PORT_BASE(n) (0x8C000 + (n))
+#define PORT_PDR(n)  (*(volatile uint8_t*)(0x8C000 + (n)))
+#define PORT_PMR(n)  (*(volatile uint8_t*)(0x8C060 + (n))) /* 0=General, 1=Peripheral */
 
 
 static void hal_delay_us(uint32_t us)
@@ -190,14 +190,14 @@ void uart_init(void)
     /* Release SCI5 module stop (clear bit) */
     /* bit 31=SCI0, 30=SCI1, 29=SCI2, 28=SCI3, 27=SCI4, 26=SCI5, 25=SCI6, 24=SCI7 */
     PROTECT_OFF();
-    SYS_MSTPCRB &= ~ENDIAN_BIT32(26);
+    SYS_MSTPCRB &= ~(1 << 26);
     PROTECT_ON();
 
     /* Disable RX/TX */
     SCI_SCR(DEBUG_UART_SCI) = 0;
 
     /* Configure PC3 for UART (TXD5) and PC2 UART (RXD5) */
-    PORT_PMR(0xC) |= (ENDIAN_BIT32(2) | ENDIAN_BIT32(3));
+    PORT_PMR(0xC) |= ((1 << 2) | (1 << 3));
 
     /* Disable MPC Write Protect for PFS */
     MPC_PWPR &= ~MPC_PWPR_B0WI;
