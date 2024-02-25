@@ -98,6 +98,7 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params);
 int post_temp_ram_init_cb(void);
 
 /* from the linker */
+extern uint8_t _start_fsp_t[];
 extern uint8_t _start_fsp_m[];
 extern uint8_t _fsp_s_hdr[];
 extern uint8_t _end_fsp_m[];
@@ -351,6 +352,64 @@ static inline void memory_init_data_bss(void)
     memset(_start_bss, 0, (_end_bss - _start_bss));
 }
 
+/*!
+ * \brief Check if the FSP info header is valid.
+ *
+ * This static function checks if the given FSP info header is valid by verifying
+ * its signature.
+ *
+ * \param hdr Pointer to the FSP info header structure.
+ * \return 1 if the FSP info header is valid, 0 otherwise.
+ */
+static int fsp_info_header_is_ok(struct fsp_info_header *hdr)
+{
+    uint8_t *raw_signature;
+
+    raw_signature = (uint8_t *)&hdr->Signature;
+    if (raw_signature[0] != 'F' || raw_signature[1] != 'S' ||
+        raw_signature[2] != 'P' || raw_signature[3] != 'H') {
+        return 0;
+    }
+    return 1;
+}
+
+static int fsp_get_image_revision(struct fsp_info_header *h, int *build,
+                                  int *rev, int *maj, int *min)
+{
+    uint16_t ext_revision;
+    uint32_t revision;
+
+    if (!fsp_info_header_is_ok(h)) {
+        wolfBoot_printf("Wrong FSP Header\r\n");
+        return -1;
+    }
+
+    revision = h->ImageRevision;
+
+    *build = revision & 0xff;
+    *rev = (revision >> 8) & 0xff;
+    *min = (revision >> 16) & 0xff;
+    *maj = (revision >> 24) & 0xff;
+
+    if (h->HeaderRevision >= 6) {
+        *build = *build | ((h->ExtendedImageRevision & 0xff) << 8);
+        *rev = *rev | (h->ExtendedImageRevision & 0xff00);
+    }
+
+    return 0;
+}
+
+static void print_fsp_image_revision(struct fsp_info_header *h)
+{
+    int build, rev, maj, min;
+    int r;
+    r = fsp_get_image_revision(h, &build, &rev, &maj, &min);
+    if (r != 0) {
+        wolfBoot_printf("failed to get fsp image revision\r\n");
+        return;
+    }
+    wolfBoot_printf("%x.%x.%x build %x\r\n", maj, min, rev, build);
+}
 
 /*!
  * \brief Staging of FSP_S after verification
@@ -524,6 +583,8 @@ static void memory_ready_entry(void *ptr)
     /* Call FSP_S initialization */
     fsp_info =
         (struct fsp_info_header *)(fsp_s_base + FSP_INFO_HEADER_OFFSET);
+    wolfBoot_printf("FSP-S:");
+    print_fsp_image_revision((struct fsp_info_header *)fsp_info);
     if (fsp_silicon_init(fsp_info, fsp_s_base) != EFI_SUCCESS)
         panic();
     /* Get CPUID */
@@ -560,27 +621,28 @@ static void memory_ready_entry(void *ptr)
     jump_into_wolfboot();
 }
 
-/*!
- * \brief Check if the FSP info header is valid.
- *
- * This static function checks if the given FSP info header is valid by verifying
- * its signature.
- *
- * \param hdr Pointer to the FSP info header structure.
- * \return 1 if the FSP info header is valid, 0 otherwise.
- */
-static int fsp_info_header_is_ok(struct fsp_info_header *hdr)
+static void print_ucode_revision(void)
 {
-    uint8_t *raw_signature;
+#if !defined(TARGET_x86_fsp_qemu)
+    /* incomplete */
+    struct ucode_header {
+        uint32_t header_version;
+        uint32_t update_revision;
+        uint32_t date;
+        /* other fields not needed */
+    } __attribute__((packed));
+    struct ucode_header *h;
 
-    raw_signature = (uint8_t *)&hdr->Signature;
-    if (raw_signature[0] != 'F' || raw_signature[1] != 'S' ||
-        raw_signature[2] != 'P' || raw_signature[3] != 'H') {
-        return 0;
-    }
-    return 1;
+    h = (struct ucode_header *)UCODE0_ADDRESS;
+    wolfBoot_printf("microcode revision: %x, date: %x-%x-%x\r\n",
+                    (int)h->update_revision,
+                    (int)((h->date >> 24) & 0xff), /* month */
+                    (int)((h->date >> 16) & 0xff), /* day */
+                    (int)(h->date & 0xffff)); /* year */
+#else
+    wolfBoot_printf("no microcode for QEMU target\r\n");
+#endif
 }
-
 /*!
  * \brief Entry point for the FSP-M (Firmware Support Package - Memory) module.
  *
@@ -627,6 +689,14 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     memset(&temp_params, 0, sizeof(temp_params));
     wolfBoot_printf("Cache-as-RAM initialized" ENDLINE);
 
+    wolfBoot_printf("FSP-T:");
+    print_fsp_image_revision((struct fsp_info_header *)
+                             (_start_fsp_t + FSP_INFO_HEADER_OFFSET));
+    wolfBoot_printf("FSP-M:");
+    print_fsp_image_revision((struct fsp_info_header *)
+                             (_start_fsp_m + FSP_INFO_HEADER_OFFSET));
+
+    print_ucode_revision();
 
     fsp_m_info_header =
         (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);
