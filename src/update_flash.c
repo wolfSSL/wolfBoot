@@ -553,23 +553,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
     hal_flash_lock();
 #else /* DISABLE_BACKUP */
-#warning "Backup mechanism disabled! Update installation will not be interruptible"
-    /* Read encryption key/IV before starting the update */
 #ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
 
     /* Directly copy the content of the UPDATE partition into the BOOT partition.
-     * This mechanism is not fail-safe, and will brick your device if interrupted
-     * before the copy is finished.
      */
     while ((sector * sector_size) < total_size) {
-        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
-           flag = SECT_FLAG_SWAPPING;
-           wolfBoot_copy_sector(&update, &boot, sector);
-           if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-               wolfBoot_set_update_sector_flag(sector, flag);
-        }
+        wolfBoot_copy_sector(&update, &boot, sector);
         sector++;
     }
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
@@ -578,7 +569,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
     st = IMG_STATE_SUCCESS;
     wolfBoot_set_partition_state(PART_BOOT, st);
-
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif
