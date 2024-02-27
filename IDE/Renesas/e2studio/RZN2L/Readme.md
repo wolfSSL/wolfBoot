@@ -6,7 +6,7 @@ This example demonstrates simple secure firmware boot from extarnal flash by wol
 A sample application v1 is securely loaded into internal RAM if there is not higher version in update region. A sample application v2 will be loaded when it is in update region.Both versions behave the same except blinking LED Red(v1) or Yello(v2). They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of the application binary file.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
 
 ## 2. Components, Tools and Board Settings
 
@@ -102,7 +102,7 @@ Open project under IDE/Renesas/e2studio/RZN2L/wolfBoot with e2Studio, and build 
 + Copy <u>configuration.xml</u> and pincfg under `dummy_loader` to `wolfBoot`
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
-+ Righ click on the projet and Open property of the project
++ Righ click on the project and Open property of the project
 + Go to Cross ARM Lincer
 + Change Script files(-T) from `fsp_xspi0_boot.ld` to `fsp_xspi0_boot_loader.ld`
 + Add/Modify FSP generated code :
@@ -179,7 +179,7 @@ if BSP_CFG_C_RUNTIME_INIT && !defined(EXTERNAL_LOADER)
 ```
 
 
-+ Build `wolfBoot` projet
++ Build `wolfBoot` project
 ### 6) Compile the sample application
 
 Open project under IDE/Renesas/e2studio/RZN2L/app_RZ with e2Studio, and build the project.
@@ -199,7 +199,7 @@ Open project under IDE/Renesas/e2studio/RZN2L/app_RZ with e2Studio, and build th
 + Copy <u>configuration.xml</u> and pincfg under `dummy_application` to `app_RZ`
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
-+ Righ click on the projet and Open property of the project
++ Righ click on the project and Open property of the project
 + Go to Cross ARM Lincer
 + Change Script files(-T) from `fsp_xspi0_boot.ld` to `fsp_xspi0_boot_app.ld`
 + Add/Modify FSP generated code :
@@ -266,14 +266,14 @@ if BSP_CFG_C_RUNTIME_INIT && !defined(EXTERNAL_LOADER_APP)
 }
 ```
 
-+ Build `app_RZ` projet
++ Build `app_RZ` project
 
 Code Origin and entry point is "0x10010000". app_RZ.bin is generated under Debug.
 
 
 ### 7) Generate Signature for app V1
 
-"sign" command under tools/keytools benerates a signature for the binary with a specified version.
+The sign tool (`tools/keytools/sign`) generates a signature for the binary with a specified version.
 It generates a file contain a partition header and application image.
 The partition header contain generated signature and other control fields.
 Output file name is made up from the input file name and version like app_RenesasRx01_v1.0_signed.bin.
@@ -309,10 +309,10 @@ Open project under IDE/Renesas/e2studio/RZN2L/flash_app with e2Studio, and build
 + Select `INTCPU0` interrupts and remove it
 + Click `Generate Project Content` on Smart Configurator
 + Go to `BSP` tab and disable C Runtime Initialization under `RZN2L` on Properties page
-+ Righ click on the projet and Open property of the project
++ Righ click on the project and Open property of the project
 + Go to Cross ARM Lincer
 + Change Script files(-T) from `fsp_xspi0_boot.ld` to `fsp_xspi0_boot_loader.ld`
-+ Build `flash_simple_loader` projet
++ Build `flash_simple_loader` project
 
 To run the application,
 
@@ -330,11 +330,11 @@ Flash_update.s
 /* .incbin "../../app_RZ/Debug/app_RZ_v2.0_signed.bin" */
 ```
 
-### 9) Execute inital boot
+### 9) Execute initial boot
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
-If the boot program succeeds integrity and authenticity check, it initiate the application V1. To initially run `wolfBoot` project,
+If the boot program succeeds successfully and authenticity check then start application V1. To initially run `wolfBoot` project,
 1.) Right-Click the Project name.
 2.) Select `Debug As` -> `Renesas GDB Hardware Debugging`
 3.) Select `J-Link ARM`. Click OK.
@@ -344,7 +344,7 @@ You can see RED LED blinking on the board.
 
 ### 10) Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x60180000".
+Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0x60180000".
 
 ```
 $ sign --rsa2048 app_RA.bin ../../../../../pri-rsa2048.der 2.0
