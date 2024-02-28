@@ -3,7 +3,7 @@
 ## 1. Overview
 
 This example demonstrates simple secure firmware boot from extarnal flash by wolfBoot.
-A sample application v1 is securely loaded into internal RAM if there is not higher version in update region. A sample application v2 will be loaded when it is in update region.Both versions behave the same except blinking LED Red(v1) or Yello(v2). They are compiled by e2Studio and running on the target board.
+A sample application v1 is securely loaded into internal RAM if there is not higher version in update region. A sample application v2 will be loaded when it is in update region.Both versions behave the same except blinking LED Red(v1) or Yellow(v2). They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of the application binary file.
 You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
@@ -42,7 +42,7 @@ Flash Simple Loader IDE/Renesas/e2studio/RZN2L/flash_app
 
 
 ### 2-3. Board Settings
-The switch and jumber settings required to run the sample program from external flash are shown below. For details on each setting, see the Renesas Starter Kit+ for RZN2L User's Manual.
+The switch and jumper settings required to run the sample program from external flash are shown below. For details on each setting, see the Renesas Starter Kit+ for RZN2L User's Manual.
 
 |Project|SW4-1|SW4-2|SW4-3|SW4-4|SW4-7|
 |:--|:--|:--|:--|:--|:--|
@@ -275,7 +275,7 @@ Code Origin and entry point is "0x10010000". app_RZ.bin is generated under Debug
 
 The sign tool (`tools/keytools/sign`) generates a signature for the binary with a specified version.
 It generates a file contain a partition header and application image.
-The partition header contain generated signature and other control fields.
+The partition header contains the generated signature and other control fields.
 Output file name is made up from the input file name and version like app_RenesasRx01_v1.0_signed.bin.
 
 ```
@@ -321,7 +321,7 @@ To run the application,
 + Select `J-Link ARM`. Click OK.
 + Select `R9A07G084M04`. Click OK.
 
-This simple application jsut downloads binaly files defiend in `Flash_section.s` and `Flash_updaet.s` through J-Link Flash Downloader. `Flash_update.s` doesn't includes `the app v2` initially.
+This simple application just downloads binaly files defiend in `Flash_section.s` and `Flash_updaet.s` through J-Link Flash Downloader. `Flash_update.s` doesn't includes `the app v2` initially.
 
 Flash_update.s
 
