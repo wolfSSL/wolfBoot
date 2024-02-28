@@ -177,6 +177,18 @@ Provides a PCR mask and digest to be signed and included in the header. The sign
   A copy of the final signed policy (including 4 byte PCR mask) will be output to `[inputname].sig`.
   Note: This may require increasing the `IMAGE_HEADER_SIZE` as two signatures will be stored in the header.
 
+#### Adding custom fields to the manifest header
+
+Provides a value to be set with a custom tag
+
+   * `--custom-tlv tag len val`: Adds a TLV entry to the manifest header, corresponding
+   to the type identified by `tag`, with lenght `len` bytes, and assigns the value `val`.
+   Values can be decimal or hex numbers (prefixed by '0x').  The tag is a 16-bit number.
+   Valid tags are in the range between 0x0030 and 0xFEFE.
+
+   The extra numeric field (can be 1, 2, 4, or 8 bytes long) is stored in the manifest
+   header and can be retrieved at runtime by wolfBoot, using `wolfBoot_find_header()`.
+
 #### Three-steps signing using external provisioning tools
 
 If the private key is not accessible, while it's possible to sign payloads using

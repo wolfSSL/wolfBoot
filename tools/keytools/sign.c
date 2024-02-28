@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stddef.h>
+#include <inttypes.h>
 /* target.h is a generated file based on .config (see target.h.in)
  * Provides: WOLFBOOT_SECTOR_SIZE */
 #include <target.h>
@@ -67,6 +68,8 @@ static inline int fp_truncate(FILE *f, size_t len)
 #endif
 
 #define MAX_SRC_SIZE (1 << 24)
+
+#define MAX_CUSTOM_TLVS (16)
 
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/asn.h>
@@ -265,6 +268,12 @@ struct cmd_options {
     uint32_t signature_sz;
     uint32_t policy_sz;
     uint8_t partition_id;
+    uint32_t custom_tlvs;
+    struct cmd_tlv {
+        uint16_t tag;
+        uint16_t len;
+        uint64_t val;
+    } custom_tlv[MAX_CUSTOM_TLVS];
 };
 
 static struct cmd_options CMD = {
@@ -273,6 +282,7 @@ static struct cmd_options CMD = {
     .hash_algo = HASH_SHA256,
     .header_sz = IMAGE_HEADER_SIZE,
     .partition_id = HDR_IMG_TYPE_APP
+
 };
 
 static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
@@ -1067,6 +1077,23 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 &patch_inv_len);
     }
 
+    /* Add custom TLVs */
+    if (CMD.custom_tlvs > 0) {
+        uint32_t i;
+        for (i = 0; i < CMD.custom_tlvs; i++) {
+            if (CMD.custom_tlv[i].len == 8) {
+                /* This field requires 8-byte alignment */
+                while((header_idx % 8) != 4)
+                    header_idx++;
+            }
+            header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
+                CMD.custom_tlv[i].len, &CMD.custom_tlv[i].val);
+        }
+        /* Align for next field */
+        while ((header_idx % 4) != 0)
+            header_idx++;
+    }
+
     /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
     while ((header_idx % 8) != 4)
         header_idx++;
@@ -1789,6 +1816,31 @@ cleanup:
     return ret;
 }
 
+uint64_t arg2num(const char *arg, size_t len)
+{
+    uint64_t ret = (uint64_t) -1;
+    if (strncmp(arg, "0x", 2) == 0) {
+       ret = strtoll(arg + 2, NULL, 16);
+    } else {
+        ret = strtoll(arg, NULL, 10);
+    }
+    switch (len) {
+        case 1:
+            ret &= 0xFF;
+            break;
+        case 2:
+            ret &= 0xFFFF;
+            break;
+        case 4:
+            ret &= 0xFFFFFFFF;
+        case 8:
+            break;
+        default:
+            ret = (uint64_t) (-1);
+    }
+    return ret;
+}
+
 int main(int argc, char** argv)
 {
     int ret = 0;
@@ -1936,6 +1988,35 @@ int main(int argc, char** argv)
             CMD.policy_sign = 1;
             CMD.policy_file = argv[++i];
         }
+        else if (strcmp(argv[i], "--custom-tlv") == 0) {
+            int p = CMD.custom_tlvs;
+            uint16_t tag, len;
+            if (p >= MAX_CUSTOM_TLVS) {
+                fprintf(stderr, "Too many custom TLVs.\n");
+                exit(16);
+            }
+            if (argc < (i + 3)) {
+                fprintf(stderr, "Invalid custom TLV fields. \n");
+                exit(16);
+            }
+            tag = (uint16_t)arg2num(argv[i + 1], 2);
+            len = (uint16_t)arg2num(argv[i + 2], 2);
+
+            if ((tag < 0x0030) || (tag > 0xFEFE)) {
+                fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
+                exit(16);
+            }
+            if ((len != 1) && (len != 2) && (len != 4) && (len != 8)) {
+                fprintf(stderr, "Invalid custom tag len: %s\n", argv[i + 2]);
+                fprintf(stderr, "Accepted len: 1, 2, 4 or 8\n");
+                exit(16);
+            }
+            CMD.custom_tlv[p].tag = tag;
+            CMD.custom_tlv[p].len = len;
+            CMD.custom_tlv[p].val = arg2num(argv[i+3], len);
+            CMD.custom_tlvs++;
+            i += 3;
+        }
         else {
             i--;
             break;
@@ -2009,6 +2090,18 @@ int main(int argc, char** argv)
     if (CMD.partition_id == HDR_IMG_TYPE_WOLFBOOT)
         printf("(bootloader)");
     printf("\n");
+
+    if (CMD.custom_tlvs > 0) {
+        uint32_t i;
+        printf("Custom TLVS: %u\n", CMD.custom_tlvs);
+        for (i = 0; i < CMD.custom_tlvs; i++) {
+            printf("TLV %u\n", i);
+            printf("----\n");
+            printf("Tag: %04X Len: %hu Val: %" PRIu64 "\n", CMD.custom_tlv[i].tag,
+                CMD.custom_tlv[i].len, CMD.custom_tlv[i].val);
+            printf("-----\n");
+        }
+    }
 
     /* get header and signature sizes */
     if (CMD.sign == SIGN_ED25519) {

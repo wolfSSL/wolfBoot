@@ -42,15 +42,53 @@ Each **Type** has a different meaning, and integrate information about the firmw
 
   - A 'version' Tag (type: 0x0001, size: 4 Bytes) indicating the version number for the firmware stored in the image
   - A 'timestamp' Tag (type: 0x0002, size 8 Bytes) indicating the timestamp in unix seconds for the creation of the firmware
-  - A 'sha256 digest' Tag (type: 0x0003, size: 32 Bytes) used for integrity check of the firmware
+  - A 'sha digest' Tag (type: 0x0003, size: digest size (32 Bytes for SHA256)) used for integrity check of the firmware
   - A 'firmware signature' Tag (type: 0x0020, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
   - A 'firmware type' Tag (type: 0x0030, size: 2 Bytes) used to identify the type of firmware, and the authentication mechanism in use.
 
-Optionally, a 'public key hint digest' Tag can be transmitted in the header (type: 0x10, size:32 Bytes). This Tag contains the SHA256 digest of the public key used 
+A 'public key hint digest' tag is transmitted in the header (type: 0x10, size:32 Bytes). This tag contains the SHA digest of the public key used 
 by the signing tool. The bootloader may use this field to locate the correct public key in case of multiple keys available.
 
 wolfBoot will, in all cases, refuse to boot an image that cannot be verified and authenticated using the built-in digital signature authentication mechanism.
 
+### Adding custom fields to the manifest header
+
+It is possible to add custom fields to the manifest header, by using the `--custom-tlv` option in the signing tool.
+
+In order for the fields to be secured (checked by wolfBoot for integrity and authenticity),
+their value is placed in the manifest header before the signature is calculated. The signing tool takes care of the alignment and padding of the fields.
+
+The custom fields are identified by a 16-bit tag, and their size is indicated by a 16-bit length field. The tag and length fields are stored in little-endian format.
+
+At runtime, the values stored in the manifest header can be accessed using the `wolfBoot_find_header` function.
+
+The syntax for `--custom-tlv` option is also documented in [docs/Signing.md](/docs/Signing.md#adding-custom-fields-to-the-manifest-header).
+
+### Image header: Example
+
+This example adds a custom field when the signing tool is used to sign the firmware image:
+
+```bash
+./tools/keytools/sign --ed25519 --custom-tlv 0x34 4 0xAABBCCDD test-app/image.bin wolfboot_signing_private_key.der 4
+```
+
+The output image `test-app/image_v4_signed.bin` will contain the custom field with tag `0x34` with length `4` and value `0xAABBCCDD`.
+
+From the bootloader code, we can then retrieve the value of the custom field using the `wolfBoot_find_header` function:
+
+```c
+uint32_t custom_code34_field;
+const uint16_t custom_code34_field_size = 4;
+const uint16_t custom_code34_tag = 0x34;
+int size;
+
+size = wolfBoot_find_header(0x34, &custom_code34_field, sizeof(custom_code34_value));
+if (size != custom_code34_field_size) {
+    /* Error: the field is not present or has the wrong size */
+}
+
+/* From here, the value 0xAABBCCDD is stored in custom_code34_value */
+```
 
 ### Image signing tool
 
