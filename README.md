@@ -90,6 +90,7 @@ For more detailed information about firmware update implementation, see [Firmwar
 ### Additional features
    - [Remote external flash interface](docs/remote_flash.md)
    - [External encrypted partitions](docs/encrypted_partitions.md)
+   - [Delta updates](docs/firmware_update.md#incremental-updates-aka-delta-updates)
 
 ## Building
 

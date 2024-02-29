@@ -237,4 +237,30 @@ jobs:
         run: |
           ./tools/keytools/keygen --id 1,3,5,10,11,13,14 --ecc256 -g wolfboot_signing_private_key.der | grep "mask" | grep "00006c2a"
 
+     # Custom TLVs
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config && make include/target.h
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot with ECC256/SHA256
+        run: |
+          make SIGN=ECC256 HASH=SHA256
+
+      - name: Sign app with custom numeric TLV included
+        run: |
+          ./tools/keytools/sign --ecc256 --sha256 --custom-tlv 0x45 4 0x6f616943 test-app/image.elf wolfboot_signing_private_key.der 2
+          grep "Ciao" test-app/image_v2_signed.bin
+      
+      - name: Sign app with custom buffer TLV included
+        run: |
+          ./tools/keytools/sign --ecc256 --sha256 --custom-tlv-buffer 0x46 48656C6C6F20776F726C64 test-app/image.elf wolfboot_signing_private_key.der 3
+          grep "Hello world" test-app/image_v3_signed.bin
 
