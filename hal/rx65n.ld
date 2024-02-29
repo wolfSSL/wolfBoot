@@ -1,3 +1,6 @@
+OUTPUT_ARCH(rx)
+ENTRY(_PowerON_Reset)
+
 MEMORY
 {
     RAM : ORIGIN = 0x0, LENGTH = 262144
