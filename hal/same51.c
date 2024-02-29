@@ -391,6 +391,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         while(!(NVMCTRL_INTFLAG & NVMCTRL_INTFLAG_CMD_DONE))
             ;
         len -= WOLFBOOT_SECTOR_SIZE;
+        address += WOLFBOOT_SECTOR_SIZE;
     }
     return 0;
 }
