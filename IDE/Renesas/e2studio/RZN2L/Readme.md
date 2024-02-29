@@ -2,8 +2,11 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware boot from extarnal flash by wolfBoot.
+This example demonstrates simple secure firmware boot from extarnal flash by wolfBoot. The exmaple uses SPI boot mode with external flash on the evaluation board.
+
+
 A sample application v1 is securely loaded into internal RAM if there is not higher version in update region. A sample application v2 will be loaded when it is in update region.Both versions behave the same except blinking LED Red(v1) or Yellow(v2). They are compiled by e2Studio and running on the target board.
+
 
 In this demo, you may download two versions of the application binary file.
 You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
@@ -53,7 +56,7 @@ The switch and jumper settings required to run the sample program from external 
 |xSPI0 boot mode|Short 2-3|Short2-3|
 
 ## 3. Operation Overview
-On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the application program from external flash memory to RAM(System RAM) if its integrity and authenticity are OK. As final step of wolfBoot the entry point of the copied applicatin program is called.
+The exmaple uses SPI boot mode with external flash on the evaluation board. On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the application program from external flash memory to RAM(System RAM). As final step of wolfBoot the entry point of the copied applicatin program is called if its integrity and authenticity are OK.
 
 ![Operation Overview](./doc/image1.png)
 
