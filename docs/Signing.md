@@ -186,8 +186,13 @@ Provides a value to be set with a custom tag
    Values can be decimal or hex numbers (prefixed by '0x').  The tag is a 16-bit number.
    Valid tags are in the range between 0x0030 and 0xFEFE.
 
-   The extra numeric field (can be 1, 2, 4, or 8 bytes long) is stored in the manifest
-   header and can be retrieved at runtime by wolfBoot, using `wolfBoot_find_header()`.
+   * `--custom-tlv-buffer tag value`: Adds a TLV entry with arbitrary length to the manifest
+   header, corresponding to the type identified by `tag`, and assigns the value `value`. The
+   tag is a 16-bit number. Valid tags are in the range between 0x0030 and 0xFEFE. The length
+   is implicit, and is the length of the value.
+   Value argument is in the form of a hex string, e.g. `--custom-tlv-buffer 0x0030 AABBCCDDEE`
+   will add a TLV entry with tag 0x0030, length 5 and value 0xAABBCCDDEE.
+
 
 #### Three-steps signing using external provisioning tools
 

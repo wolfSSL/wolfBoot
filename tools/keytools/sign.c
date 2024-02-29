@@ -273,6 +273,7 @@ struct cmd_options {
         uint16_t tag;
         uint16_t len;
         uint64_t val;
+        uint8_t *buffer;
     } custom_tlv[MAX_CUSTOM_TLVS];
 };
 
@@ -1086,8 +1087,13 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 while((header_idx % 8) != 4)
                     header_idx++;
             }
-            header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
-                CMD.custom_tlv[i].len, &CMD.custom_tlv[i].val);
+            if (CMD.custom_tlv[i].buffer == NULL) {
+                header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
+                    CMD.custom_tlv[i].len, &CMD.custom_tlv[i].val);
+            } else {
+                header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
+                    CMD.custom_tlv[i].len, CMD.custom_tlv[i].buffer);
+            }
         }
         /* Align for next field */
         while ((header_idx % 4) != 0)
@@ -2014,8 +2020,40 @@ int main(int argc, char** argv)
             CMD.custom_tlv[p].tag = tag;
             CMD.custom_tlv[p].len = len;
             CMD.custom_tlv[p].val = arg2num(argv[i+3], len);
+            CMD.custom_tlv[p].buffer = NULL;
             CMD.custom_tlvs++;
             i += 3;
+        } else if (strcmp(argv[i], "--custom-tlv-buffer") == 0) {
+            int p = CMD.custom_tlvs;
+            uint16_t tag, len;
+            uint32_t j;
+            if (p >= MAX_CUSTOM_TLVS) {
+                fprintf(stderr, "Too many custom TLVs.\n");
+                exit(16);
+            }
+            if (argc < (i + 3)) {
+                fprintf(stderr, "Invalid custom TLV fields. \n");
+                exit(16);
+            }
+            tag = (uint16_t)arg2num(argv[i + 1], 2);
+            len = (uint16_t)strlen(argv[i + 2]) / 2;
+            if (len > 255) {
+                fprintf(stderr, "custom tlv buffer size too big: %s\n", argv[i + 2]);
+                exit(16);
+            }
+            CMD.custom_tlv[p].tag = tag;
+            CMD.custom_tlv[p].len = len;
+            CMD.custom_tlv[p].buffer = malloc(len);
+            if (CMD.custom_tlv[p].buffer == NULL) {
+                fprintf(stderr, "Error malloc for custom tlv buffer %d\n", len);
+                exit(16);
+            }
+            for (j = 0; j < len; j++) {
+                char c[3] = {argv[i + 2][j * 2], argv[i + 2][j * 2 + 1], 0};
+                CMD.custom_tlv[p].buffer[j] = (uint8_t)strtol(c, NULL, 16);
+            }
+            CMD.custom_tlvs++;
+            i += 2;
         }
         else {
             i--;
@@ -2092,13 +2130,23 @@ int main(int argc, char** argv)
     printf("\n");
 
     if (CMD.custom_tlvs > 0) {
-        uint32_t i;
+        uint32_t i, j;
         printf("Custom TLVS: %u\n", CMD.custom_tlvs);
         for (i = 0; i < CMD.custom_tlvs; i++) {
             printf("TLV %u\n", i);
             printf("----\n");
-            printf("Tag: %04X Len: %hu Val: %" PRIu64 "\n", CMD.custom_tlv[i].tag,
-                CMD.custom_tlv[i].len, CMD.custom_tlv[i].val);
+            if (CMD.custom_tlv[i].buffer) {
+                printf("Tag: %04X Len: %hu Val: ", CMD.custom_tlv[i].tag,
+                        CMD.custom_tlv[i].len);
+                for (j = 0; j < CMD.custom_tlv[i].len; j++) {
+                    printf("%02X", CMD.custom_tlv[i].buffer[j]);
+                }
+                printf("\n");
+
+            } else {
+                printf("Tag: %04X Len: %hu Val: %" PRIu64 "\n", CMD.custom_tlv[i].tag,
+                        CMD.custom_tlv[i].len, CMD.custom_tlv[i].val);
+            }
             printf("-----\n");
         }
     }
