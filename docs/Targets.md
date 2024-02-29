@@ -2044,7 +2044,11 @@ Default Onboard Flash Memory Layout (2MB) (64KB sector):
 To switch RX parts to big endian data use:
 
 ```sh
+# Big Endian
 rfp-cli -if fine -t e2l -device RX65x -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -write32 0xFE7F5D00 0xFFFFFFF8
+OR
+# Little Endian
+rfp-cli -if fine -t e2l -device RX65x -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -write32 0xFE7F5D00 0xFFFFFFFF
 ```
 
 ## Building Renesas RX65N
@@ -2062,7 +2066,7 @@ cp ./config/examples/renesas-rx65n.config .config
 make
 ```
 
-With RX GCC or or custom cross compiler:
+With RX GCC path or or custom cross compiler directly:
 `make CROSS_COMPILE="~/toolchains/gcc_8.3.0.202311_rx_elf/bin/rx-elf-"`
 OR
 `make RX_GCC_PATH="~/toolchains/gcc_8.3.0.202311_rx_elf"`
@@ -2085,6 +2089,8 @@ rfp-cli -if fine -t e2l -device RX65x -auto -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFF
     -bin FFE00000 test-app/image_v1_signed.bin \
     -run
 ```
+
+Note: Endianess: if using big endian add `-endian big`
 
 Note: Linux Install E2 Lite USB Driver:
 

@@ -276,8 +276,6 @@ ifeq ($(ARCH),RENESAS_RX)
   CROSS_COMPILE=$(RX_GCC_PATH)/bin/rx-elf-
 
   OBJS+=src/boot_renesas.o src/boot_renesas_start.o
-  # Entry point
-  CFLAGS+=-Wl,-e_PowerON_Reset -nostartfiles
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
@@ -509,7 +507,8 @@ endif
 ifeq ($(TARGET),nxp_t1024)
   # Power PC big endian
   ARCH_FLAGS=-mhard-float -mcpu=e5500
-  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
@@ -533,7 +532,8 @@ endif
 ifeq ($(TARGET),nxp_t2080)
   # Power PC big endian
   ARCH_FLAGS=-mhard-float -mcpu=e6500
-  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
@@ -554,7 +554,8 @@ ifeq ($(TARGET),nxp_p1021)
   # Power PC big endian
   ARCH_FLAGS=-m32 -mhard-float -mcpu=e500mc
   ARCH_FLAGS+=-fno-builtin -ffreestanding -nostartfiles
-  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
   CFLAGS+=-DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   LDFLAGS+=$(ARCH_FLAGS)
@@ -582,7 +583,8 @@ endif
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1
-  CFLAGS+=-D"CORTEX_R5" -D"BIG_ENDIAN_ORDER" -D"NVM_FLASH_WRITEONCE" -D"FLASHBUFFER_SIZE=32"
+  CFLAGS+=-D"CORTEX_R5" -D"NVM_FLASH_WRITEONCE" -D"FLASHBUFFER_SIZE=32"
+  BIG_ENDIAN=1
   STACK_USAGE=0
   USE_GCC=0
   USE_GCC_HEADLESS=0
@@ -889,6 +891,10 @@ endif
 ifeq ($(NXP_CUSTOM_DCD),1)
   CFLAGS+=-DNXP_CUSTOM_DCD
   OBJS+=$(NXP_CUSTOM_DCD_OBJS)
+endif
+
+ifeq ($(BIG_ENDIAN),1)
+  CFLAGS+=-D"BIG_ENDIAN_ORDER"
 endif
 
 CFLAGS+=-DWOLFBOOT_ARCH_$(ARCH)
