@@ -92,6 +92,9 @@ file is in this format.
   * `--ecc384` Use ecc384 for signing the firmware. Assume that the given KEY.DER
 file is in this format.
 
+  * `--ecc521` Use ecc521 for signing the firmware. Assume that the given KEY.DER
+file is in this format.
+
   * `--rsa2048` Use rsa2048 for signing the firmware. Assume that the given KEY.DER
 file is in this format.
 

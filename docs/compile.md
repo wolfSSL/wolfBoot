@@ -90,21 +90,17 @@ performance and activated features are affected by compile-time flags.
 By default, wolfBoot is compiled to use Ed25519 DSA. The implementation of ed25519 is smaller,
 while giving a good compromise in terms of boot-up time.
 
-Better performance can be achieved using ECDSA with curve p-256. To activate ECC256 support, use
+Better performance can be achieved using ECDSA with curve p-256.
+To activate ECC256, ECC384 or ECC521 support, use:
 
-`SIGN=ECC256`
+`SIGN=ECC256` or `SIGN=ECC384` or `SIGN=ECC521` respectively.
 
 when invoking `make`.
 
-RSA is also supported, with different key length. To activate RSA2048 or RSA4096, use:
+RSA is also supported, with different key length.
+To activate RSA2048, RSA3072 or RSA4096, use:
 
-`SIGN=RSA2048`
-
-or
-
-`SIGN=RSA4096`
-
-respectively.
+`SIGN=RSA2048` or `SIGN=RSA3072` or `SIGN=RSA4096` respectively.
 
 Ed448 is also supported via `SIGN=ED448`.
 
@@ -135,7 +131,7 @@ For more information and examples, see the [firmware update](firmware_update.md)
 
 ### Enable debug symbols
 
-To debug the bootloader, simply compile with `DEBUG=1`. The size of the bootloade will increase
+To debug the bootloader, simply compile with `DEBUG=1`. The size of the bootloader will increase
 consistently, so ensure that you have enough space at the beginning of the flash before
 `WOLFBOOT_PARTITION_BOOT_ADDRESS`.
 
@@ -168,7 +164,7 @@ Some combinations of authentication algorithms, key sizes and math configuration
 a large amount of memory to be allocated in the stack at runtime. By default, if your configuration
 falls in one of these cases, wolfBoot compilation will terminate with an explicit error.
 
-In some cases you might have enough memory available to allow large stack allocations. 
+In some cases you might have enough memory available to allow large stack allocations.
 To circumvent the compile-time checks on the maximum allowed stack size, use `WOLFBOOT_HUGE_STACK=1`.
 
 ### Disable Backup of current running firmware
