@@ -78,8 +78,6 @@ ifeq ($(SIGN),ECC384)
   SIGN_ARGS+= --ecc384
 endif
 
-# Already supported in sign tools, not yet in wolfBoot.
-# Currently, a compile-time error is produced if selected.
 ifeq ($(SIGN),ECC521)
   SIGN_ARGS+= --ecc521
 endif
@@ -255,6 +253,9 @@ renode-factory-ecc256: FORCE
 renode-factory-ecc384: FORCE
 	make renode-factory SIGN=ECC384
 
+renode-factory-ecc521: FORCE
+	make renode-factory SIGN=ECC521
+
 renode-factory-rsa2048: FORCE
 	make renode-factory SIGN=RSA2048
 
@@ -287,6 +288,8 @@ renode-factory-all: FORCE
 	${Q}make renode-factory-rsa4096 RENODE_PORT=55162
 	${Q}make keysclean
 	${Q}make renode-factory SIGN=NONE RENODE_PORT=55163
+	${Q}make keysclean
+	${Q}make renode-factory-ecc521 RENODE_PORT=55166
 	${Q}echo All tests in $@ OK!
 
 renode-update-ed25519: FORCE
@@ -300,6 +303,9 @@ renode-update-ecc256: FORCE
 
 renode-update-ecc384: FORCE
 	make renode-update SIGN=ECC384
+
+renode-update-ecc521: FORCE
+	make renode-update SIGN=ECC521
 
 renode-update-rsa2048: FORCE
 	make renode-update SIGN=RSA2048
@@ -328,6 +334,9 @@ renode-no-downgrade-ecc256: FORCE
 renode-no-downgrade-ecc384: FORCE
 	make renode-no-downgrade SIGN=ECC384
 
+renode-no-downgrade-ecc521: FORCE
+	make renode-no-downgrade SIGN=ECC521
+
 renode-no-downgrade-rsa2048: FORCE
 	make renode-no-downgrade SIGN=RSA2048
 
@@ -351,6 +360,9 @@ renode-corrupted-ecc256: FORCE
 
 renode-corrupted-ecc384: FORCE
 	make renode-corrupted SIGN=ECC384
+
+renode-corrupted-ecc521: FORCE
+	make renode-corrupted SIGN=ECC521
 
 renode-corrupted-rsa2048: FORCE
 	make renode-corrupted SIGN=RSA2048
@@ -388,6 +400,8 @@ renode-update-all: FORCE
 	${Q}make renode-update-lms RENODE_PORT=55164
 	${Q}make keysclean
 	${Q}make renode-update-xmss RENODE_PORT=55165
+	${Q}make keysclean
+	${Q}make renode-update-ecc521 RENODE_PORT=55166
 	${Q}echo All tests in $@ OK!
 
 renode-no-downgrade-all: FORCE
@@ -411,6 +425,8 @@ renode-no-downgrade-all: FORCE
 	${Q}make renode-no-downgrade-lms RENODE_PORT=55164
 	${Q}make keysclean
 	${Q}make renode-no-downgrade-xmss RENODE_PORT=55165
+	${Q}make keysclean
+	${Q}make renode-no-downgrade-ecc521 RENODE_PORT=55166
 	${Q}echo All tests in $@ OK!
 
 renode-corrupted-all: FORCE
@@ -434,6 +450,8 @@ renode-corrupted-all: FORCE
 	${Q}make renode-corrupted-lms RENODE_PORT=55164
 	${Q}make keysclean
 	${Q}make renode-corrupted-xmss RENODE_PORT=55165
+	${Q}make keysclean
+	${Q}make renode-corrupted-ecc521 RENODE_PORT=55166
 	${Q}echo All tests in $@ OK!
 
 renode-update-all-armored: FORCE

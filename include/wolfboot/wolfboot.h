@@ -203,8 +203,9 @@ extern "C" {
  #   endif
  #elif defined(WOLFBOOT_SIGN_ECC521)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_ECC521
- #   error "ECC521 curves not yet supported in this version of wolfBoot. " \
-           "Please select a valid SIGN= option."
+ #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
+ #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC521
+ #   endif
  #elif defined(WOLFBOOT_SIGN_RSA2048)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA2048
  #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
