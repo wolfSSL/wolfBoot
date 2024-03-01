@@ -31,6 +31,9 @@ jobs:
       - name: Renode Tests ECC384
         run: ./tools/renode/docker-test.sh "SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 NO_ASM=1"
 
+# ECC521 TEST
+      - name: Renode Tests ECC521
+        run: ./tools/renode/docker-test.sh "SIGN=ECC521 WOLFBOOT_SMALL_STACK=1 NO_ASM=1"
 
 # RSA2048 TEST
       - name: Renode Tests RSA2048

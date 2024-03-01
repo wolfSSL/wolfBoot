@@ -30,6 +30,10 @@ jobs:
       - name: Renode Tests ECC384
         run: ./tools/renode/docker-test.sh "SIGN=ECC384 SPMATH=0"
 
+# ECC521 TEST
+      - name: Renode Tests ECC521
+        run: ./tools/renode/docker-test.sh "SIGN=ECC521 SPMATH=0"
+
 
 # RSA2048 TEST
       - name: Renode Tests RSA2048

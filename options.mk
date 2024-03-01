@@ -138,9 +138,9 @@ ifeq ($(SIGN),ECC521)
       STACK_USAGE=6680
     else
       ifneq ($(SPMATH),1)
-        STACK_USAGE=7352
+        STACK_USAGE=11256
       else
-        STACK_USAGE=3896
+        STACK_USAGE=8288
       endif
     endif
   endif
