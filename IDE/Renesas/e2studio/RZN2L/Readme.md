@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware boot from extarnal flash by wolfBoot. The exmaple uses SPI boot mode with external flash on the evaluation board.
+This example demonstrates simple secure firmware boot from external flash by wolfBoot. The example uses SPI boot mode with external flash on the evaluation board.
 
 
 A sample application v1 is securely loaded into internal RAM if there is not higher version in update region. A sample application v2 will be loaded when it is in update region.Both versions behave the same except blinking LED Red(v1) or Yellow(v2). They are compiled by e2Studio and running on the target board.
@@ -56,7 +56,7 @@ The switch and jumper settings required to run the sample program from external 
 |xSPI0 boot mode|Short 2-3|Short2-3|
 
 ## 3. Operation Overview
-The exmaple uses SPI boot mode with external flash on the evaluation board. On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the application program from external flash memory to RAM(System RAM). As final step of wolfBoot the entry point of the copied applicatin program is called if its integrity and authenticity are OK.
+The example uses SPI boot mode with external flash on the evaluation board. On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the application program from external flash memory to RAM(System RAM). As final step of wolfBoot the entry point of the copied application program is called if its integrity and authenticity are OK.
 
 ![Operation Overview](./doc/image1.png)
 
@@ -106,7 +106,7 @@ Open project under IDE/Renesas/e2studio/RZN2L/wolfBoot with e2Studio, and build 
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
 + Righ click on the project and Open property of the project
-+ Go to Cross ARM Lincer
++ Go to Cross ARM Linker
 + Change Script files(-T) from `fsp_xspi0_boot.ld` to `fsp_xspi0_boot_loader.ld`
 + Add/Modify FSP generated code :
 + fsp/src/bsp/cmsis/Device/RENESAS/Source/startup.c
@@ -181,8 +181,8 @@ if BSP_CFG_C_RUNTIME_INIT && !defined(EXTERNAL_LOADER)
 }
 ```
 
-
 + Build `wolfBoot` project
+
 ### 6) Compile the sample application
 
 Open project under IDE/Renesas/e2studio/RZN2L/app_RZ with e2Studio, and build the project.
@@ -202,8 +202,8 @@ Open project under IDE/Renesas/e2studio/RZN2L/app_RZ with e2Studio, and build th
 + Copy <u>configuration.xml</u> and pincfg under `dummy_application` to `app_RZ`
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
-+ Righ click on the project and Open property of the project
-+ Go to Cross ARM Lincer
++ Right click on the project and Open property of the project
++ Go to Cross ARM Linker
 + Change Script files(-T) from `fsp_xspi0_boot.ld` to `fsp_xspi0_boot_app.ld`
 + Add/Modify FSP generated code :
 + fsp/src/bsp/cmsis/Device/RENESAS/Source/startup.c
@@ -312,8 +312,8 @@ Open project under IDE/Renesas/e2studio/RZN2L/flash_app with e2Studio, and build
 + Select `INTCPU0` interrupts and remove it
 + Click `Generate Project Content` on Smart Configurator
 + Go to `BSP` tab and disable C Runtime Initialization under `RZN2L` on Properties page
-+ Righ click on the project and Open property of the project
-+ Go to Cross ARM Lincer
++ Right click on the project and Open property of the project
++ Go to Cross ARM Linker
 + Change Script files(-T) from `fsp_xspi0_boot.ld` to `fsp_xspi0_boot_loader.ld`
 + Build `flash_simple_loader` project
 
@@ -324,7 +324,7 @@ To run the application,
 + Select `J-Link ARM`. Click OK.
 + Select `R9A07G084M04`. Click OK.
 
-This simple application just downloads binaly files defiend in `Flash_section.s` and `Flash_updaet.s` through J-Link Flash Downloader. `Flash_update.s` doesn't includes `the app v2` initially.
+This simple application just downloads binary files defined in `Flash_section.s` and `Flash_update.s` through J-Link Flash Downloader. `Flash_update.s` doesn't includes `the app v2` initially.
 
 Flash_update.s
 
@@ -433,4 +433,4 @@ Example Programs:
 
 [RZ/T2, RZ/N2 Group Device Setup Guide for Flash boot Sample program](https://www.renesas.com/jp/ja/document/scd/rzt2-and-rzn2-group-device-setup-guide-flash-boot-sample-program?language=ja&r=1622651)
 
-[RZ/N2L Group Example of separating loader program and application programprojects](https://www.renesas.com/us/en/document/scd/rzn2l-group-example-separating-loader-program-and-application-program-projects?r=1622651)
+[RZ/N2L Group Example of separating loader program and application program projects](https://www.renesas.com/us/en/document/scd/rzn2l-group-example-separating-loader-program-and-application-program-projects?r=1622651)
