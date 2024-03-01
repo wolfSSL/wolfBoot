@@ -35,7 +35,7 @@ jobs:
 
 # ECC521 TEST
       - name: Renode Tests ECC521
-        run: ./tools/renode/docker-test.sh "SIGN=ECC521 HASH=SHA521"
+        run: ./tools/renode/docker-test.sh "SIGN=ECC521 HASH=SHA384"
 
 # ED25519 TEST
       - name: Renode Tests ED25519
