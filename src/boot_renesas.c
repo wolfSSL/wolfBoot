@@ -24,6 +24,9 @@
 #include "wolfboot/wolfboot.h"
 #include "hal.h"
 
+#ifdef _RENESAS_RZN_
+extern uint32_t IMAGE_APP_RAM_start;
+#endif
 /* This is the main loop for the bootloader.
  *
  * It performs the following actions:
@@ -35,7 +38,7 @@
  *
  */
 
-#if !defined(_RENESAS_RA_)
+#if !defined(_RENESAS_RA_) && !defined(_RENESAS_RZN_)
 #pragma inline_asm longJump
 static void longJump(const uint32_t *app_offset)
 {
@@ -66,6 +69,10 @@ void do_boot(const uint32_t *app_offset)
     */
      app_entry = (void(*)(void))(*VECTOR_Reset_Handler);
      (*app_entry)();
+#elif defined(_RENESAS_RZN_)
+     app_entry = (void(*))(&IMAGE_APP_RAM_start);
+     /* Jump to the application project */
+     app_entry();
 #endif
 }
 
