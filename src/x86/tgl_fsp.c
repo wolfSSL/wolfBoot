@@ -379,7 +379,9 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->VtdBaseAddress[8] = 0;
     mem_cfg->UserBd = 5;
     mem_cfg->RMT = 1;
+    mem_cfg->NModeSupport = 2;
     mem_cfg->PchHdaEnable = 0;
+    mem_cfg->GttMmAdr = 2147483648;
     mem_cfg->DdiPort2Hpd = 1;
     mem_cfg->DdiPort4Hpd = 1;
     mem_cfg->DdiPort2Ddc = 1;
@@ -394,7 +396,6 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->TxtDprMemorySize = 4194304;
     mem_cfg->BiosAcmBase = 4285267968;
     mem_cfg->ConfigTdpLevel = 2;
-    mem_cfg->PchNumRsvdSmbusAddresses = 4;
     mem_cfg->PcieClkSrcUsage[0] = 128;
     mem_cfg->PcieClkSrcUsage[1] = 128;
     mem_cfg->PcieClkSrcUsage[2] = 128;
@@ -411,7 +412,7 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->PcieClkSrcUsage[13] = 128;
     mem_cfg->PcieClkSrcUsage[14] = 128;
     mem_cfg->PcieClkSrcUsage[15] = 128;
-    mem_cfg->RsvdSmbusAddressTablePtr = 4277460020;
+    mem_cfg->PcieRpEnableMask = 1520787455;
     mem_cfg->PcdDebugInterfaceFlags = 16;
     mem_cfg->SerialIoUartDebugControllerNumber = 0;
     mem_cfg->MrcSafeConfig = 1;
@@ -419,10 +420,11 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->TcssItbtPcie1En = 0;
     mem_cfg->TcssItbtPcie2En = 0;
     mem_cfg->TcssItbtPcie3En = 0;
-    mem_cfg->TcssXhciEn = 0;
+    mem_cfg->TcssXdciEn = 1;
     mem_cfg->TcssDma0En = 0;
     mem_cfg->TcssDma1En = 0;
     mem_cfg->RMC = 0;
+    mem_cfg->EccSupport = 0;
     mem_cfg->Ibecc = 1;
     mem_cfg->IbeccParity = 1;
     mem_cfg->RankInterleave = 0;
