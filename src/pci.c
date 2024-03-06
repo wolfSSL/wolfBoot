@@ -775,6 +775,77 @@ uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info)
     return 0;
 }
 
+static int pci_get_capability(uint8_t bus, uint8_t dev, uint8_t fun,
+                              uint8_t cap_id, uint8_t *cap_off)
+{
+    uint8_t r8, id;
+    uint32_t r32;
+
+    r32 = pci_config_read16(bus, dev, fun, PCI_STATUS_OFFSET);
+    if (!(r32 & PCI_STATUS_CAP_LIST))
+        return -1;
+    r8 = pci_config_read8(bus, dev, fun, PCI_CAP_OFFSET);
+    while (r8 != 0) {
+        id = pci_config_read8(bus, dev, fun, r8);
+        if (id == cap_id) {
+            *cap_off = r8;
+            return 0;
+        }
+        r8 = pci_config_read8(bus, dev, fun, r8 + 1);
+    }
+    return -1;
+}
+
+int pcie_retraining_link(uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    uint16_t link_status, link_control;
+    uint8_t pcie_cap_off;
+    int ret, tries;
+
+    PCI_DEBUG_PRINTF("retraining link: %x:%x.%x\r\n", bus, dev, fun);
+    ret = pci_get_capability(bus, dev, fun, PCI_PCIE_CAP_ID, &pcie_cap_off);
+    if (ret != 0) {
+        PCI_DEBUG_PRINTF("can't find PCIE cap pointer\r\n");
+        return -1;
+    }
+
+    PCI_DEBUG_PRINTF("pcie cap off: 0x%x\r\n", pcie_cap_off);
+    link_status = pci_config_read16(bus, dev, fun,
+                                    pcie_cap_off + PCIE_LINK_STATUS_OFF);
+    if (link_status & PCIE_LINK_STATUS_TRAINING) {
+        PCI_DEBUG_PRINTF("link already training, waiting...\r\n");
+        delay(PCIE_TRAINING_TIMEOUT_MS);
+        link_status = pci_config_read16(bus, dev, fun,
+                                        pcie_cap_off + PCIE_LINK_STATUS_OFF);
+        if (link_status & PCIE_LINK_STATUS_TRAINING) {
+            PCI_DEBUG_PRINTF("link training error: timeout\r\n");
+            return -1;
+        }
+    }
+
+    link_control = pci_config_read16(bus, dev, fun,
+                                         pcie_cap_off + PCIE_LINK_CONTROL_OFF);
+    link_control |= PCIE_LINK_CONTROL_RETRAINING;
+    pci_config_write16(bus, dev, fun, pcie_cap_off + PCIE_LINK_CONTROL_OFF,
+                       link_control);
+    tries = PCIE_TRAINING_TIMEOUT_MS / 10;
+    do {
+        link_status = pci_config_read16(bus, dev, fun,
+                                        pcie_cap_off + PCIE_LINK_STATUS_OFF);
+        if (!(link_status & PCIE_LINK_STATUS_TRAINING))
+            break;
+        delay(10);
+    } while(tries--);
+
+    if ((link_status & PCIE_LINK_STATUS_TRAINING)) {
+        PCI_DEBUG_PRINTF("Timeout reached during retraining\r\n");
+        return -1;
+    }
+
+    PCI_DEBUG_PRINTF("retraining complete\r\n");
+    return 0;
+}
+
 int pci_pre_enum(void)
 {
     uint32_t reg;

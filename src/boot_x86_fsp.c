@@ -85,6 +85,8 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define MEMORY_4GB (4ULL * 1024 * 1024 * 1024)
 #define ENDLINE "\r\n"
 
+#define PCI_DEVICE_CONTROLLER_TO_PEX 0x6
+
 typedef uint32_t (*memory_init_cb)(void *udp, struct efi_hob **HobList);
 typedef uint32_t (*temp_ram_exit_cb)(void *udp);
 typedef uint32_t (*silicon_init_cb)(void *udp);
@@ -442,6 +444,10 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
         return -1;
     }
     wolfBoot_printf("success" ENDLINE);
+    status = pcie_retraining_link(0, PCI_DEVICE_CONTROLLER_TO_PEX, 0);
+    if (status != 0)
+        wolfBoot_printf("pcie retraining failed %x\n", status);
+
     pci_enum_do();
     notifyPhase = (notify_phase_cb)(fsp_s_base +
                                         fsp_info->NotifyPhaseEntryOffset);

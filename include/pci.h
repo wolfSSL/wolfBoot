@@ -25,7 +25,9 @@
 
 #define PCI_VENDOR_ID_OFFSET 0x00
 #define PCI_DEVICE_ID_OFFSET 0x02
-#define PCI_COMMAND_OFFSET   0x04
+#define PCI_COMMAND_OFFSET 0x04
+#define PCI_STATUS_OFFSET 0x06
+#define PCI_CAP_OFFSET 0x34
 /* Programming interface, Rev. ID and class code */
 #define PCI_RID_CC_OFFSET 0x08
 #define PCI_HEADER_TYPE_OFFSET 0x0E
@@ -69,9 +71,18 @@
 #define PCI_COMMAND_SPECIAL_CYCLE   (1 << 3)
 #define PCI_COMMAND_BUS_MASTER      (1 << 2)
 #define PCI_COMMAND_MEM_SPACE       (1 << 1)
-#define PCI_COMMAND_IO_SPACE        (1 << 0)
+#define PCI_COMMAND_IO_SPACE (1 << 0)
 
-typedef struct {
+/* STATUS bits */
+#define PCI_STATUS_CAP_LIST (1 << 4)
+
+#define PCI_PCIE_CAP_ID (0x10)
+#define PCIE_LINK_STATUS_OFF (0x12)
+#define PCIE_LINK_CONTROL_OFF (0x10)
+#define PCIE_LINK_STATUS_TRAINING (1 << 11)
+#define PCIE_LINK_CONTROL_RETRAINING (1 << 5)
+#define PCIE_TRAINING_TIMEOUT_MS (100)
+typedef  struct {
     int bus;
     int device;
     int function;
@@ -113,6 +124,7 @@ uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info);
 
 int pci_enum_do(void);
 int pci_pre_enum(void);
+int pcie_retraining_link(uint8_t bus, uint8_t dev, uint8_t fun);
 
 #ifdef __cplusplus
 }
