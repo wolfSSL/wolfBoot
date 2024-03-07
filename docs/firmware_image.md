@@ -9,7 +9,7 @@ application. This corresponds to the first partition in the flash memory.
 Multiple firmware images can be created this way, and stored in two different partitions. The bootloader
 will take care of moving the selected firmware to the first (BOOT) partition before chain-loading the image.
 
-Due to the presence of an image header, the entry point of the application has a fixed additional offset 
+Due to the presence of an image header, the entry point of the application has a fixed additional offset
 of 256B from the beginning of the flash partition.
 
 ## Firmware image header
@@ -26,7 +26,7 @@ chain-loading the firmware the interrupt continue to work properly after the boo
 
 ### Image header: Tags
 
-The **image header** is prepended with a single 4-byte magic number, followed by a 4-byte field indicating the 
+The **image header** is prepended with a single 4-byte magic number, followed by a 4-byte field indicating the
 firmware image size (excluding the header). All numbers in the header are stored in Little-endian format.
 
 The two fixed fields are followed by one or more tags. Each TAG is structured as follows:
@@ -46,7 +46,7 @@ Each **Type** has a different meaning, and integrate information about the firmw
   - A 'firmware signature' Tag (type: 0x0020, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
   - A 'firmware type' Tag (type: 0x0030, size: 2 Bytes) used to identify the type of firmware, and the authentication mechanism in use.
 
-A 'public key hint digest' tag is transmitted in the header (type: 0x10, size:32 Bytes). This tag contains the SHA digest of the public key used 
+A 'public key hint digest' tag is transmitted in the header (type: 0x10, size:32 Bytes). This tag contains the SHA digest of the public key used
 by the signing tool. The bootloader may use this field to locate the correct public key in case of multiple keys available.
 
 wolfBoot will, in all cases, refuse to boot an image that cannot be verified and authenticated using the built-in digital signature authentication mechanism.
@@ -77,17 +77,18 @@ The output image `test-app/image_v4_signed.bin` will contain the custom field wi
 From the bootloader code, we can then retrieve the value of the custom field using the `wolfBoot_find_header` function:
 
 ```c
-uint32_t custom_code34_field;
-const uint16_t custom_code34_field_size = 4;
-const uint16_t custom_code34_tag = 0x34;
-int size;
-
-size = wolfBoot_find_header(0x34, &custom_code34_field, sizeof(custom_code34_value));
-if (size != custom_code34_field_size) {
+uint32_t value;
+uint8_t* ptr = NULL;
+uint16_t tlv = 0x34;
+uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS; /* WOLFBOOT_PARTITION_UPDATE_ADDRESS */
+uint16_t size = wolfBoot_find_header(imageHdr, tlv, &ptr);
+if (size != sizeof(uint32_t) || ptr == NULL) {
     /* Error: the field is not present or has the wrong size */
 }
 
-/* From here, the value 0xAABBCCDD is stored in custom_code34_value */
+/* From here, the value 0xAABBCCDD is at ptr */
+memcpy(&value, ptr, size);
+printf("TLV 0x%x=0x%x\n", tlv, value);
 ```
 
 ### Image signing tool
