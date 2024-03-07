@@ -69,7 +69,9 @@ static inline int fp_truncate(FILE *f, size_t len)
 
 #define MAX_SRC_SIZE (1 << 24)
 
+#ifndef MAX_CUSTOM_TLVS
 #define MAX_CUSTOM_TLVS (16)
+#endif
 
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/asn.h>
@@ -1082,11 +1084,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     if (CMD.custom_tlvs > 0) {
         uint32_t i;
         for (i = 0; i < CMD.custom_tlvs; i++) {
-            if (CMD.custom_tlv[i].len == 8) {
-                /* This field requires 8-byte alignment */
-                while((header_idx % 8) != 4)
-                    header_idx++;
-            }
+            /* require 8-byte alignment */
+            while ((header_idx % 8) != 0)
+                header_idx++;
+
             if (CMD.custom_tlv[i].buffer == NULL) {
                 header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
                     CMD.custom_tlv[i].len, &CMD.custom_tlv[i].val);
@@ -1095,13 +1096,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     CMD.custom_tlv[i].len, CMD.custom_tlv[i].buffer);
             }
         }
-        /* Align for next field */
-        while ((header_idx % 4) != 0)
-            header_idx++;
     }
 
     /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
-    while ((header_idx % 8) != 4)
+    while ((header_idx % 8) != 0)
         header_idx++;
 
     /* Calculate hashes */
