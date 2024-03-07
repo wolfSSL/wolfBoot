@@ -185,7 +185,7 @@ Provides a PCR mask and digest to be signed and included in the header. The sign
 Provides a value to be set with a custom tag
 
    * `--custom-tlv tag len val`: Adds a TLV entry to the manifest header, corresponding
-   to the type identified by `tag`, with lenght `len` bytes, and assigns the value `val`.
+   to the type identified by `tag`, with length `len` bytes, and assigns the value `val`.
    Values can be decimal or hex numbers (prefixed by '0x').  The tag is a 16-bit number.
    Valid tags are in the range between 0x0030 and 0xFEFE.
 
