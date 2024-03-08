@@ -85,15 +85,18 @@ int do_cmd(const char *cmd)
         printf("Get TLV %04x\r\n", tlv);
 
         size = wolfBoot_find_header(imageHdr + IMAGE_HEADER_OFFSET, tlv, &ptr);
-        if (size >= 0 && ptr != NULL) {
+        if (size > 0 && ptr != NULL) {
             /* From here, the value 0xAABBCCDD is at ptr */
-            printf("TLV 0x%x:\n", tlv);
+            printf("TLV 0x%x: found. Size: %d\n", tlv, size);
             for (i=0; i<size; i++) {
                 printf("%02X", ptr[i]);
             }
             printf("\n");
+            return 0;
+        } else {
+            printf("TLV: not found!\r\n");
+            return -1;
         }
-        return 0;
     }
     /* wrong command */
     return -1;
