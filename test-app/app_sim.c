@@ -70,7 +70,31 @@ int do_cmd(const char *cmd)
     if (strcmp(cmd, "reset") == 0) {
         exit(0);
     }
+    if (strncmp(cmd, "get_tlv",7) == 0) {
+        uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        uint8_t* ptr = NULL;
+        uint16_t tlv = 0x34; /* default */
+        int size;
+        int i;
 
+        const char* tlvStr = strstr(cmd, "get_tlv=");
+        if (tlvStr) {
+            tlvStr += strlen("get_tlv=");
+            tlv = (uint16_t)atoi(tlvStr);
+        }
+        printf("Get TLV %04x\r\n", tlv);
+
+        size = wolfBoot_find_header(imageHdr + IMAGE_HEADER_OFFSET, tlv, &ptr);
+        if (size >= 0 && ptr != NULL) {
+            /* From here, the value 0xAABBCCDD is at ptr */
+            printf("TLV 0x%x:\n", tlv);
+            for (i=0; i<size; i++) {
+                printf(" 0x%02X ", ptr[i]);
+            }
+            printf("\n");
+        }
+        return 0;
+    }
     /* wrong command */
     return -1;
 }
