@@ -89,7 +89,7 @@ int do_cmd(const char *cmd)
             /* From here, the value 0xAABBCCDD is at ptr */
             printf("TLV 0x%x:\n", tlv);
             for (i=0; i<size; i++) {
-                printf(" 0x%02X ", ptr[i]);
+                printf("%02X", ptr[i]);
             }
             printf("\n");
         }
