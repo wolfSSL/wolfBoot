@@ -1085,7 +1085,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         uint32_t i;
         for (i = 0; i < CMD.custom_tlvs; i++) {
             /* require 8-byte alignment */
-            while ((header_idx % 8) != 0)
+            /* The offset '4' takes into account 2B Tag + 2B Len, so that the 
+             * Value starts at (addr % 8 == 0) position.
+             */
+            while ((header_idx % 8) != 4)
                 header_idx++;
 
             if (CMD.custom_tlv[i].buffer == NULL) {
@@ -1099,7 +1102,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     }
 
     /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
-    while ((header_idx % 8) != 0)
+    /* The offset '4' takes into account 2B Tag + 2B Len, so that the Value 
+     * starts at (addr % 8 == 0) position.
+     */
+    while ((header_idx % 8) != 4)
         header_idx++;
 
     /* Calculate hashes */

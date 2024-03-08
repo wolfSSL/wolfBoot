@@ -1,0 +1,44 @@
+name: Custom TLV - test with simulator target
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  custom_tlv_simulator_tests:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp config/examples/sim.config .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot.elf and test-app/image.elf
+        run: |
+          make clean && make
+
+      - name: Sign the image with a custom TLV
+        run: |
+          tools/keytools/sign --ed25519 --custom-tlv-buffer 0x0034 AABBCCDDEEFF0011223344 test-app/image.elf wolfboot_signing_private_key.der 1
+      
+      - name: Re-assemble the internal_flash.dd image file
+        run: |
+          make assemble_internal_flash.dd
+
+      - name: Run get_tlv simulator test
+        run: |
+          [ x`./wolfboot.elf get_tlv 2>/dev/null| tail -1` =  xAABBCCDDEEFF0011223344 ]

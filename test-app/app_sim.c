@@ -70,7 +70,33 @@ int do_cmd(const char *cmd)
     if (strcmp(cmd, "reset") == 0) {
         exit(0);
     }
+    if (strncmp(cmd, "get_tlv",7) == 0) {
+        /* boot partition and skip the image header offset (8 bytes) */
+        uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_OFFSET;
+        uint8_t* ptr = NULL;
+        uint16_t tlv = 0x34; /* default */
+        int size;
+        int i;
 
+        const char* tlvStr = strstr(cmd, "get_tlv=");
+        if (tlvStr) {
+            tlvStr += strlen("get_tlv=");
+            tlv = (uint16_t)atoi(tlvStr);
+        }
+
+        size = wolfBoot_find_header(imageHdr, tlv, &ptr);
+        if (size > 0 && ptr != NULL) {
+            /* From here, the value 0xAABBCCDD is at ptr */
+            printf("TLV 0x%x: found (size %d):\n", tlv, size);
+            for (i=0; i<size; i++) {
+                printf("%02X", ptr[i]);
+            }
+            printf("\n");
+            return 0;
+        } else {
+            printf("TLV 0x%x: not found!\r\n", tlv);
+        }
+    }
     /* wrong command */
     return -1;
 }
