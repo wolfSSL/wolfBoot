@@ -80,15 +80,16 @@ From the bootloader code, we can then retrieve the value of the custom field usi
 uint32_t value;
 uint8_t* ptr = NULL;
 uint16_t tlv = 0x34;
-uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS; /* WOLFBOOT_PARTITION_UPDATE_ADDRESS */
+uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_OFFSET;
 uint16_t size = wolfBoot_find_header(imageHdr, tlv, &ptr);
-if (size != sizeof(uint32_t) || ptr == NULL) {
-    /* Error: the field is not present or has the wrong size */
+if (size > 0 && ptr != NULL) {
+  /* Found field and ptr points to value 0xAABBCCDD */
+  memcpy(&value, ptr, size);
+  printf("TLV 0x%x=0x%x\n", tlv, value);
 }
-
-/* From here, the value 0xAABBCCDD is at ptr */
-memcpy(&value, ptr, size);
-printf("TLV 0x%x=0x%x\n", tlv, value);
+else {
+    /* Error: the field is not found */
+}
 ```
 
 ### Image signing tool

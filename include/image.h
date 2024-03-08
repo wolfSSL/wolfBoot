@@ -565,10 +565,6 @@ int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
 uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
         uint32_t* sz);
 
-
-/* Defined in libwolfboot */
-uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
-
 /* get header type for image */
 uint16_t wolfBoot_get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
 

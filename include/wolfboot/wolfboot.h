@@ -275,6 +275,8 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob);
 uint16_t wolfBoot_get_blob_type(uint8_t *blob);
 uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob);
 
+uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
+
 /* Get partition ID from manifest header */
 static inline uint8_t wolfBoot_get_blob_partition_id(uint8_t *blob) {
     return wolfBoot_get_blob_type(blob) & HDR_IMG_TYPE_PART_MASK;
