@@ -10,16 +10,17 @@ are accessible from any software staged in non-secure domain.
 
 ### Compiling wolfBoot with wolfCrypt in TrustZone-M secure domain
 
-When wolfBoot is compiled with the options `TZEN=1` and `WOLFCRYPT_TZ_ENGINE=1`,
+When wolfBoot is compiled with the options `TZEN=1` and `WOLFCRYPT_TZ=1`,
 a more complete set of components of the wolfCrypt crypto library are built-in
 the bootloader, and they can be accessed by applications or OSs running in 
 non-secure domain through non-secure callable APIs.
 
-This feature is used to isolate the core crypto operations from the applications.
+This feature is used to isolate the core crypto operations and key storage from the 
+applications.
 
 ### PKCS11 API in non-secure world
 
-The `WOLFCRYPT_TZ_PKCS11` provides a standard PKCS11 interface,
+A `WOLFCRYPT_TZ_PKCS11=1` config option provides a standard PKCS11 interface,
 including a storage for PKCS11 objects in a dedicated flash area in secure mode.
 
 This means that applications, TLS libraries and operating systems running in 
