@@ -47,7 +47,7 @@ void APP_Initialize(void) {
     wolfBoot_success();
     ver = wolfBoot_current_firmware_version();
 #else
-    #define WOLFBOOT_SECTOR_SIZE (0x8000)
+    #define WOLFBOOT_SECTOR_SIZE (0x2000)
     #define WOLFBOOT_PARTITION_SIZE (0x20000)
     #define WOLFBOOT_PARTITION_UPDATE_ADDRESS (0x088000)
     ver = 1U;
