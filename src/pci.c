@@ -871,6 +871,84 @@ int pci_pre_enum(void)
     return 0;
 }
 
+#if defined(DEBUG_PCI)
+void pci_dump(uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    uint32_t reg[256/4];
+    uint8_t *ptr;
+    int i;
+
+    for (i = 0; i < 256 / 4; i++) {
+        reg[i] = pci_config_read32(bus, dev, fun, i * 4);
+    }
+
+    ptr = (uint8_t*)reg;
+    for (i = 0; i < 256; i++) {
+        if (i % 0x10 == 0x0) {
+            if (i < 0x10) {
+                wolfBoot_printf("0");
+            }
+            wolfBoot_printf("%x: ", (int)i);
+        }
+        wolfBoot_printf("%s%x%s", (ptr[i] < 0x10 ? "0" :""), (int)ptr[i],
+                        (i % 0x10 == 0xf ? "\n":" "));
+    }
+}
+
+static void pci_dump_bus(uint8_t bus)
+{
+    uint16_t vendor_id, device_id, header_type;
+    uint8_t dev, fun, sec_bus;
+    uint32_t vd_code, reg;
+    int ret;
+
+    for (dev = 0; dev < PCI_ENUM_MAX_DEV; dev++) {
+        vd_code = pci_config_read32(bus, dev, 0, PCI_VENDOR_ID_OFFSET);
+        if (vd_code == 0xFFFFFFFF) {
+            /* No device here. */
+            continue;
+        }
+
+        for (fun = 0; fun < PCI_ENUM_MAX_FUN; fun++) {
+            vd_code = pci_config_read32(bus, dev, fun, PCI_VENDOR_ID_OFFSET);
+            if (vd_code == 0xFFFFFFFF) {
+                /* No device here. */
+                continue;
+            }
+
+            if (bus < 0x10)
+                wolfBoot_printf("0");
+            wolfBoot_printf("%x:", bus);
+            if (dev < 0x10)
+                wolfBoot_printf("0");
+            wolfBoot_printf("%x.", dev);
+            wolfBoot_printf("%d \n", fun);
+            pci_dump(bus, dev, fun);
+            header_type = pci_config_read16(bus, dev, fun,
+                                            PCI_HEADER_TYPE_OFFSET);
+
+            if ((header_type & PCI_HEADER_TYPE_TYPE_MASK) == PCI_HEADER_TYPE_BRIDGE) {
+                sec_bus = pci_config_read8(bus, dev, fun, PCI_SECONDARY_BUS);
+                if (sec_bus != 0)
+                    pci_dump_bus(sec_bus);
+            }
+
+            /* just one function */
+            if ((fun == 0) && !(header_type & PCI_HEADER_TYPE_MULTIFUNC_MASK)) {
+                break;
+            }
+        }
+    }
+}
+
+void pci_dump_config_space()
+{
+    return pci_dump_bus(0);
+}
+#else
+void pci_dump_config_space() {};
+#endif
+
 int pci_enum_do(void)
 {
     struct pci_enum_info enum_info;

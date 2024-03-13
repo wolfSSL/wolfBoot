@@ -125,6 +125,7 @@ uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info);
 int pci_enum_do(void);
 int pci_pre_enum(void);
 int pcie_retraining_link(uint8_t bus, uint8_t dev, uint8_t fun);
+void pci_dump_config_space(void);
 
 #ifdef __cplusplus
 }

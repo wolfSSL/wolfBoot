@@ -449,6 +449,7 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
         wolfBoot_printf("pcie retraining failed %x\n", status);
 
     pci_enum_do();
+    pci_dump_config_space();
     notifyPhase = (notify_phase_cb)(fsp_s_base +
                                         fsp_info->NotifyPhaseEntryOffset);
     param.Phase = EnumInitPhaseAfterPciEnumeration;
