@@ -1,7 +1,7 @@
-/* remesas-rx.c
+/* renesas-rx.c
  *
- * Stubs for custom HAL implementation. Defines the 
- * functions used by wolfboot for a specific target.
+ * Stubs for custom HAL implementation. Defines the
+ * functions used by wolfBoot for a specific target.
  *
  * Copyright (C) 2022 wolfSSL Inc.
  *
@@ -28,6 +28,8 @@
 #include <target.h>
 #include "image.h"
 #include "hal.h"
+#include "renesas-rx.h"
+
 #include "r_flash_rx.h"
 
 #if defined(WOLFBOOT_RENESAS_TSIP)  && \
@@ -181,7 +183,7 @@ error:
 
 int hal_flash_erase(uint32_t address, int len)
 {
-    int block_size = address >= 0xffff0000 ? 
+    int block_size = address >= 0xffff0000 ?
          FLASH_CF_SMALL_BLOCK_SIZE :  FLASH_CF_MEDIUM_BLOCK_SIZE;
 
     if(len % block_size != 0)
@@ -198,9 +200,9 @@ void RAMFUNCTION hal_flash_unlock(void)
 {
     flash_access_window_config_t info;
 
-    info.start_addr = (uint32_t) FLASH_CF_BLOCK_132; 
-    info.end_addr   = (uint32_t) FLASH_CF_BLOCK_0; 
-    R_BSP_InterruptsDisable(); 
+    info.start_addr = (uint32_t) FLASH_CF_BLOCK_132;
+    info.end_addr   = (uint32_t) FLASH_CF_BLOCK_0;
+    R_BSP_InterruptsDisable();
     if(R_FLASH_Control(FLASH_CMD_ACCESSWINDOW_SET, (void *)&info)
         != FLASH_SUCCESS)
         hal_panic();
@@ -211,9 +213,9 @@ void RAMFUNCTION hal_flash_unlock(void)
 void RAMFUNCTION hal_flash_lock(void)
 {
     flash_access_window_config_t info;
-    info.start_addr = (uint32_t) FLASH_CF_BLOCK_END; 
+    info.start_addr = (uint32_t) FLASH_CF_BLOCK_END;
     info.end_addr   = (uint32_t) FLASH_CF_BLOCK_END;
-    R_BSP_InterruptsDisable(); 
+    R_BSP_InterruptsDisable();
     if(R_FLASH_Control(FLASH_CMD_ACCESSWINDOW_SET, (void *)&info)
         != FLASH_SUCCESS)
         hal_panic();

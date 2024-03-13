@@ -35,6 +35,7 @@
 #endif
 
 #if defined(DEBUG_UART)
+    void uart_init(void);
     void uart_write(const char* buf, unsigned int sz);
 
     /* turn on small printf support */

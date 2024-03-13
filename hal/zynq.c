@@ -342,7 +342,7 @@ static int test_flash(QspiDev_t* dev);
 #define DEBUG_UART_BAUD         115200
 #define DEBUG_UART_DIV          4
 
-static void uart_init(void)
+void uart_init(void)
 {
     /* Enable TX/RX and Reset */
     ZYNQMP_UART_CR = (ZYNQMP_UART_CR_TX_EN | ZYNQMP_UART_CR_RX_EN |
@@ -355,7 +355,7 @@ static void uart_init(void)
     ZYNQMP_UART_BR_GEN = UART_MASTER_CLOCK / DEBUG_UART_BAUD / (DEBUG_UART_DIV+1);
 }
 
-static void uart_write(const char* buf, uint32_t sz)
+void uart_write(const char* buf, uint32_t sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {

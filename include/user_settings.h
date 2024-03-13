@@ -23,8 +23,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef H_USER_SETTINGS_
-#define H_USER_SETTINGS_
+#ifndef _WOLFBOOT_USER_SETTINGS_H_
+#define _WOLFBOOT_USER_SETTINGS_H_
 
 #ifdef WOLFBOOT_PKCS11_APP
 # include "test-app/wcs/user_settings.h"
@@ -39,6 +39,7 @@
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
 
+/* Stdlib Types */
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
 extern int toupper(int c);
 extern int tolower(int c);
@@ -46,10 +47,13 @@ extern int tolower(int c);
 #define XTOLOWER(c)     tolower((c))
 
 #ifdef USE_FAST_MATH
+    /* wolfBoot only does public asymmetric operations,
+     * so timing resistenace and hardening is not required */
 #   define WC_NO_HARDEN
 #endif
 
 #if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+    /* TPM Parameter Encryption */
 #   define WOLFBOOT_TPM_PARMENC /* used in this file to gate features */
 #endif
 
@@ -68,7 +72,7 @@ extern int tolower(int c);
 #   define USE_SLOW_SHA512
 #endif
 
-/* ED448 */
+/* ED448 and SHA3/SHAKE256 */
 #ifdef WOLFBOOT_SIGN_ED448
 #   define HAVE_ED448
 #   define HAVE_ED448_VERIFY
@@ -89,7 +93,7 @@ extern int tolower(int c);
 #   define ECC_TIMING_RESISTANT
 #   define ECC_USER_CURVES /* enables only 256-bit by default */
 
-/* Kinetis LTC support */
+    /* Kinetis LTC support */
 #   ifdef FREESCALE_USE_LTC
 #      define FREESCALE_COMMON
 #      define FSL_HW_CRYPTO_MANUAL_SELECTION
@@ -98,7 +102,7 @@ extern int tolower(int c);
 #   endif
 
 
-/* Some ECC options are disabled to reduce size */
+    /* Some ECC options are disabled to reduce size */
 #   if !defined(WOLFCRYPT_SECURE_MODE)
 #       if !defined(WOLFBOOT_TPM)
 #          define NO_ECC_SIGN
@@ -129,7 +133,7 @@ extern int tolower(int c);
 #   endif
 
 
-/* Curve */
+    /* Curve */
 #   ifdef WOLFBOOT_SIGN_ECC256
 #       define HAVE_ECC256
 #       define FP_MAX_BITS (256 + 32)
@@ -161,6 +165,7 @@ extern int tolower(int c);
 #endif /* WOLFBOOT_SIGN_ECC521 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC256 */
 
 
+/* RSA */
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
     defined(WOLFBOOT_SIGN_RSA3072) || \
     defined(WOLFBOOT_SIGN_RSA4096) || \
@@ -243,7 +248,7 @@ extern int tolower(int c);
 #       define SP_WORD_SIZE 32
 #   endif
 
-        /* SP Math needs to understand long long */
+    /* SP Math needs to understand long long */
 #   ifndef ULLONG_MAX
 #       define ULLONG_MAX 18446744073709551615ULL
 #   endif
@@ -275,9 +280,9 @@ extern int tolower(int c);
 #endif
 
 #if defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)
-#define WOLFSSL_BASE64_ENCODE
+#   define WOLFSSL_BASE64_ENCODE
 #else
-#define NO_CODING
+#   define NO_CODING
 #endif
 
 #ifdef WOLFBOOT_TPM
@@ -390,10 +395,9 @@ extern int tolower(int c);
 
 
 /* Memory model */
-
 #if defined(WOLFSSL_SP_MATH) || defined(WOLFSSL_SP_MATH_ALL)
     /* Disable VLAs */
-    #define WOLFSSL_SP_NO_DYN_STACK
+#   define WOLFSSL_SP_NO_DYN_STACK
 #endif
 
 #ifndef WOLFBOOT_SMALL_STACK
@@ -412,9 +416,9 @@ extern int tolower(int c);
 #endif
 
 #ifdef WOLFCRYPT_SECURE_MODE
-typedef unsigned long time_t;
+    typedef unsigned long time_t;
 #endif
 
 #endif /* WOLFBOOT_PKCS11_APP */
 
-#endif /* !H_USER_SETTINGS_ */
+#endif /* !_WOLFBOOT_USER_SETTINGS_H_ */

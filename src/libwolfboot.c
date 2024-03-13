@@ -846,7 +846,7 @@ void RAMFUNCTION wolfBoot_success(void)
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
-    uint16_t len;
+    uint16_t len, htype;
     const volatile uint8_t *max_p = (haystack - IMAGE_HEADER_OFFSET) +
                                                     IMAGE_HEADER_SIZE;
     *ptr = NULL;
@@ -855,37 +855,46 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
         return 0;
     }
     while ((p + 4) < max_p) {
-        if ((p[0] == 0) && (p[1] == 0)) {
+        htype = p[0] | (p[1] << 8);
+        if (htype == 0) {
             unit_dbg("Explicit end of options reached\n");
             break;
         }
-        if (*p == HDR_PADDING) {
-            /* Padding byte (skip one position) */
+        /* skip padding bytes */
+        if (p[0] == HDR_PADDING) {
             p++;
             continue;
         }
-        /* Sanity check to prevent dereferencing unaligned half-words */
+        /* skip unaligned half-words */
         if ((((size_t)p) & 0x01) != 0) {
             p++;
             continue;
         }
+
         len = p[2] | (p[3] << 8);
+        /* check len */
         if ((4 + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
             unit_dbg("This field is too large (bigger than the space available "
                      "in the current header)\n");
             unit_dbg("%d %d %d\n", len, IMAGE_HEADER_SIZE, IMAGE_HEADER_OFFSET);
             break;
         }
+        /* check max pointer */
         if (p + 4 + len > max_p) {
             unit_dbg("This field is too large and would overflow the image "
                      "header\n");
             break;
         }
-        if ((p[0] | (p[1] << 8)) == type) {
-            *ptr = (p + 4);
+
+        /* skip header [type|len] */
+        p += 4;
+
+        if (htype == type) {
+            /* found, return pointer to data portion */
+            *ptr = p;
             return len;
         }
-        p += 4 + len;
+        p += len;
     }
     return 0;
 }

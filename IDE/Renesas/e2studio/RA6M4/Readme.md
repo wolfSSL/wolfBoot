@@ -2,16 +2,16 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware update by wolfBoot. 
-A sample application v1 is securely updated to v2. Both versions behave the same except displaying its version of v1 or v2. 
+This example demonstrates simple secure firmware update by wolfBoot.
+A sample application v1 is securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
-In this demo, you may download two versions of the application binary file by Renesas Flash Programmer. 
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
+In this demo, you may download two versions of the application binary file by Renesas Flash Programmer.
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.
 
 Please see `Readme_wSCE.md` for Renesas SCE use case.
-## 2. Components and Tools
 
+## 2. Components and Tools
 
 |Item|Name/Version|Note|
 |:--|:--|:--|
@@ -25,7 +25,6 @@ Please see `Readme_wSCE.md` for Renesas SCE use case.
 |Key tool|keygen and sign|Included in wolfBoot|
 
 
-
 |FIT Components|Version|
 |:--|:--|
 |Board Support Package Common Files|v3.6.0|
@@ -36,7 +35,6 @@ Please see `Readme_wSCE.md` for Renesas SCE use case.
 |Board support package for RA6M4|v3.6.0|
 |Board support package for RA6M4 - FSP Data|v3.6.0|
 |Flash Memory High Performance|v3.6.0|
-
 
 
 e2Studio Project:\
@@ -80,7 +78,7 @@ The private key is stored in the specified file.
 The public key is stored in a key store as a C source code in "src/keystore.c" so that it can be compiled and linked with wolfBoot.
 If you have an existing key pair, you can use -i option to import the public key to the store.
 
-You can specify various signature algorithms such as 
+You can specify various signature algorithms such as
 
 ```les
 --ed25519 --ed448 --ecc256 --ecc384 --ecc521 --rsa2048 --rsa3072 --rsa4096
@@ -90,7 +88,7 @@ You can specify various signature algorithms such as
 
 Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build the project. Project properties are preset for the demo.
 
-`WOLFBOOT_PARTION_INFO` is for debug information about partitions. Eliminate them for operational use.
+`PRINTF_ENABLED` is for debug information about partitions. Eliminate them for operational use.
 
 #### 2-1) Create `dummy_library` Static Library
 + Click File->New->`RA C/C++ Project`.
@@ -103,9 +101,9 @@ Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build 
 + Go to `BSP` tab and increase Heap Size under `RA Common` on Properties page, e.g. 0x10000
 + Go to `Stacks` tab
 + Add `SCE Protected Mode` stack from `New Stack` -> `Security`
-+ Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
++ Add `g_flash0 Flash(r_flash_hp)` stack from  `New Stack` -> `Storage`
 
-Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+Modify `g_flash0 Flash(r_flash_hp)` properties as follows:
 |Property|Value|
 |:--|:--|
 |Data Flash Background Operation|Disabled|
@@ -115,7 +113,8 @@ Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
 + Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
-+ Build `wolfBoot` projet
++ Build `wolfBoot` project
+
 ### 3) Compile the sample application
 
 Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build the project.
@@ -140,20 +139,20 @@ Project properties are preset for the demo.
                 0x2000094c       0xa8 ./src/SEGGER_RTT/SEGGER_RTT.o
                 0x2000094c                _SEGGER_RTT
     ````
-    
+
     you can specify "RTT control block" to 0x2000094c by Address
       OR
     you can specify "RTT control block" to 0x20000000 0x1000 by Search Range
-    
+
  #### 3-2). Create `dummy_application`
 + Click File->New->`RA C/C++ Project`.
 + Select `EK-RA6M4` from Drop-down list.
 + Check `Executable`.
 + Select `No RTOS` from RTOS selection. Click Next.
 + Check `Bare Metal Minimal`. Click Finish.
-+ Go to `BSP` tab and Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
++ Go to `BSP` tab and Add `g_flash0 Flash(r_flash_hp)` stack from  `New Stack` -> `Storage`
 
-Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+Modify `g_flash0 Flash(r_flash_hp)` properties as follows:
 |Property|Value|
 |:--|:--|
 |Data Flash Background Operation|Disabled|
@@ -163,18 +162,18 @@ Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
 + Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
-+ Build `app_RA` projet
++ Build `app_RA` project
 
-Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug. 
+Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug.
 
 ### 4) Generate Signature for app V1
-You can derive bair binary file (app_RA.bin) by objcopy command as follows.
+You can derive the binary file (app_RA.bin) using objcopy command as follows:
 
 ```
 $ aarch64-none-elf-objcopy.exe -O binary -j .text -j .data app_RA.elf app_RA.bin
 ```
 
-"sign" command under tools/keytools benerates a signature for the binary with a specified version.
+"sign" command under tools/keytools generates a signature for the binary with a specified version.
 It generates a file contain a partition header and application image.
 The partition header contain generated signature and other control fields.
 Output file name is made up from the input file name and version like app_RenesasRx01_v1.0_signed.bin.
@@ -204,10 +203,10 @@ You can convert the binary file to hex format and download it to the board by Fl
 $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00010000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 ```
 
-### 6) Execute inital boot
+### 6) Execute initial boot
 
-Now, you can download and start wolfBoot program by e2Studio debugger. 
-After starting the program, you can see the partition information as follows. 
+Now, you can download and start wolfBoot program by e2Studio debugger.
+After starting the program, you can see the partition information as follows.
 If the boot program succeeds integrity and authenticity check, it initiate the application V1. To initially run `wolfBoot` project,
 1.) Right-Click the Project name.
 2.) Select `Debug As` -> `Renesas GDB Hardware Debugging`
@@ -230,13 +229,13 @@ Application Entry Address:         0x00010200
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 
 === Update Partition[00080000] ===
-Magic:    
+Magic:
 Version:  00
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 Current Firmware Version : 1
 
 Calling wolfBoot_success()
@@ -254,7 +253,7 @@ Status:   00
 Tail Mgc: BOOT
 
 === Update Partition[00080000] ===
-Magic:    
+Magic:
 Version:  00
 Status:   FF
 Tail Mgc:
@@ -267,7 +266,7 @@ We are going to generate and download V2 application into "Update partition".
 
 ### 7) Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0x00080000".
+Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0x00080000".
 You can download it by the flash programmer.
 
 Updtate partition:
@@ -309,7 +308,7 @@ Tail Mgc: BOOT
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 Current Firmware Version : 2
 
 Calling wolfBoot_success()
@@ -324,7 +323,7 @@ Tail Mgc: BOOT
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 ```
 
 You can see "Current Firmware Version : 2". The state is Success("00") and Tail Magic number becomes "BOOT".

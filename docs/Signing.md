@@ -169,6 +169,9 @@ is provided:
     `BASE_SIGNED_IMG.BIN` and the new image signed starting from `IMAGE.BIN`. The
 result is stored in a file ending in `_signed_diff.bin`.
 
+The compression scheme used is Bentley–McIlroy.
+
+
 #### Policy signing (for sealing/unsealing with a TPM)
 
 Provides a PCR mask and digest to be signed and included in the header. The signing key is used to sign the digest.

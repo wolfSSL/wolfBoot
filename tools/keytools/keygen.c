@@ -137,7 +137,7 @@ const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generate
 const char Store_hdr[] = "\n"
             "#if defined(__APPLE__) && defined(__MACH__)\n"
             "#define KEYSTORE_SECTION __attribute__((section (\"__KEYSTORE,__keystore\")))\n"
-            "#elif defined(__CCRX__)\n"
+            "#elif defined(__CCRX__) /* Renesas RX */\n"
             "#define KEYSTORE_SECTION\n"
             "#else\n"
             "#define KEYSTORE_SECTION __attribute__((section (\".keystore\")))\n"
