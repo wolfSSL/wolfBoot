@@ -74,7 +74,7 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 /* Amount of car memory to provide to FSP-M, machine dependent, find the value
  * in the integration guide */
 #ifndef FSP_M_CAR_MEM_SIZE
-#define FSP_M_CAR_MEM_SIZE 0x20000
+#define FSP_M_CAR_MEM_SIZE 0x50000
 #endif
 
 /* offset of the header from the base image  */

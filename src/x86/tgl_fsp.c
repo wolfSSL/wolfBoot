@@ -454,7 +454,6 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->SkipCpuReplacementCheck = 1;
     mem_cfg->SerialIoUartDebugMode = 4;
     mem_cfg->PcieRefPllSsc = 0;
-
     return 0;
 }
 
@@ -937,22 +936,21 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
     upd->SataSalpSupport = 0;
     upd->EnableMultiPhaseSiliconInit = 0;
     upd->Enable8254ClockGating = 0;
-    memset(upd->SataPortsEnable, 1, sizeof(upd->SataPortsEnable));
-/*
-     upd->SataRstRaid0 = 1;
-    upd->SataRstRaid1 = 1;
-    upd->SataRstRaid10 = 1;
-    upd->SataRstRaid5 = 1;
- */
+    memset(upd->SataPortsEnable, 0, sizeof(upd->SataPortsEnable));
+    upd->SataPortsEnable[0] = upd->SataPortsEnable[1] = 1;
+    upd->PortUsb30Enable[0] = upd->PortUsb30Enable[1] = upd->PortUsb30Enable[2] = upd->PortUsb30Enable[3] = 1;
 
 
     for (i = 0; i < sizeof(upd->SerialIoUartMode); i++)
-        upd->SerialIoUartMode[i] = 0x1;
-
-    upd->SerialIoDebugUartNumber = 0x0;
+        upd->SerialIoUartMode[i] = 0x0;
     upd->SerialIoUartMode[0] = 0x4;
 
     upd->EnableMultiPhaseSiliconInit = 0;
+    upd->SerialIoUartMode[1] = upd->SerialIoUartMode[2] = 0x1;
+    upd->SerialIoDebugUartNumber = 0x0;
+
+    memset(upd->PcieRpHotPlug, 0, sizeof(upd->PcieRpHotPlug));
+    memset(upd->CpuPcieRpHotPlug, 0, sizeof(upd->CpuPcieRpHotPlug));
     return 0;
 }
 /**
