@@ -798,11 +798,17 @@ static int pci_get_capability(uint8_t bus, uint8_t dev, uint8_t fun,
 
 int pcie_retraining_link(uint8_t bus, uint8_t dev, uint8_t fun)
 {
-    uint16_t link_status, link_control;
+    uint16_t link_status, link_control, vid;
     uint8_t pcie_cap_off;
     int ret, tries;
 
     PCI_DEBUG_PRINTF("retraining link: %x:%x.%x\r\n", bus, dev, fun);
+    vid = pci_config_read16(bus, dev, 0, PCI_VENDOR_ID_OFFSET);
+    if (vid == 0xffff) {
+        PCI_DEBUG_PRINTF("can't find dev: %x:%x.%d\r\n", bus, dev, fun);
+        return -1;
+    }
+    
     ret = pci_get_capability(bus, dev, fun, PCI_PCIE_CAP_ID, &pcie_cap_off);
     if (ret != 0) {
         PCI_DEBUG_PRINTF("can't find PCIE cap pointer\r\n");
