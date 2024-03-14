@@ -30,7 +30,7 @@
 
 #ifdef WOLFBOOT_FSP
 #include <x86/hob.h>
-#include <stage1.h>
+#include <stage2_params.h>
 #endif /* WOLFBOOT_FSP */
 
 #define ENDLINE "\r\n"

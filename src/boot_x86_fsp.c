@@ -33,7 +33,7 @@
 #include <x86/paging.h>
 #include <pci.h>
 #include <target.h>
-#include <stage1.h>
+#include <stage2_params.h>
 
 #include "wolfboot/wolfboot.h"
 #include "image.h"

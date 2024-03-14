@@ -733,7 +733,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/ata.o
     OBJS += src/x86/gpt.o
     OBJS += src/x86/mptable.o
-    OBJS += src/stage1.o
+    OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o
     UPDATE_OBJS := src/update_disk.o
     ifeq ($(64BIT),1)

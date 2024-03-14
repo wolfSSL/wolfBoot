@@ -28,7 +28,7 @@
 #include <multiboot.h>
 
 #ifdef WOLFBOOT_FSP
-#include <stage1.h>
+#include <stage2_params.h>
 #endif
 
 #define MB2_HEADER_MAX_OFF (32768 - 4)

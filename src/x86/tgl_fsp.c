@@ -46,7 +46,7 @@
 #include <x86/fsp/FspmUpd.h>
 #include <x86/fsp/FspsUpd.h>
 #include <x86/ahci.h>
-#include <stage1.h>
+#include <stage2_params.h>
 
 #define PCR_DMI_PORT_ID 0x88
 #define PCR_DMI_LPCLGIR1 0x2730

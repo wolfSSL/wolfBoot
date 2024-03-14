@@ -45,7 +45,7 @@
 #include <tpm.h>
 
 #if defined(WOLFBOOT_FSP)
-#include <stage1.h>
+#include <stage2_params.h>
 #endif
 
 #include <wolfssl/wolfcrypt/coding.h>

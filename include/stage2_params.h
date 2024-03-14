@@ -1,4 +1,4 @@
-/* stage1.h
+/* stage2_params.h
  *
  * Copyright (C) 2023 wolfSSL Inc.
  *

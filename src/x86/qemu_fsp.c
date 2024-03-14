@@ -25,6 +25,7 @@
 #include <x86/hob.h>
 #include <uart_drv.h>
 #include <x86/ahci.h>
+#include <stage2_params.h>
 
 #define FSPM_UPD_SIGNATURE 0x4D5F4450554D4551 /* 'QEMUPD_M' */
 #define FSPT_UPD_SIGNATURE 0x545F4450554D4551 /* 'QEMUPD_T' */

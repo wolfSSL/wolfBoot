@@ -34,7 +34,7 @@
 #include <x86/common.h>
 
 #include <printf.h>
-#include <stage1.h>
+#include <stage2_params.h>
 #include <x86/mptable.h>
 
 #if defined(WOLFBOOT_LINUX_PAYLOAD)

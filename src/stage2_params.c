@@ -1,4 +1,4 @@
-/* stage1.h
+/* stage2_params.h
  *
  * Copyright (C) 2023 wolfSSL Inc.
  *
@@ -18,7 +18,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include <stage1.h>
+#include <stage2_params.h>
 
 /* must be global so the linker will export the symbol. It's used from loader 1
  * to fill the parameters */

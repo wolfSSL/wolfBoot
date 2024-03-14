@@ -41,7 +41,7 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "printf.h"
-#include "stage1.h"
+#include "stage2_params.h"
 #include "wolfboot/wolfboot.h"
 #include <stdint.h>
 #include <string.h>
