@@ -447,6 +447,10 @@ int sata_unlock_disk(int drv, int freeze)
 
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
+#if defined(TARGET_x86_fsp_qemu)
+    if (ata_st == ATA_SEC0)
+        return 0;
+#endif
     if (ata_st == ATA_SEC1) {
         if (freeze) {
             AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
