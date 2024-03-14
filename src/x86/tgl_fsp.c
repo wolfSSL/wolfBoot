@@ -1646,12 +1646,10 @@ int post_temp_ram_init_cb(void)
  */
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
                                     uint32_t mem_base,
-                                    uint32_t mem_size,
-                                    struct stage2_parameter *params)
+                                    uint32_t mem_size)
 {
     FSPM_UPD *new_udp;
 
-    (void)params;
     wolfBoot_printf("machine_update_m_params" ENDLINE);
 
     new_udp = (FSPM_UPD*)default_m_params;

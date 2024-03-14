@@ -114,12 +114,11 @@ int post_temp_ram_init_cb(void)
 
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
                                     uint32_t mem_base,
-                                    uint32_t mem_size,
-                                    struct stage2_parameter *params)
+                                    uint32_t mem_size)
 {
+    struct stage2_parameter *params;
     struct fspm_upd *new_udp;
 
-    (void)params;
     new_udp = (struct fspm_upd*)default_m_params;
     new_udp->FspmArchUpd.BootLoaderTolumSize = 0;
     new_udp->FspmArchUpd.BootMode = BOOT_WITH_FULL_CONFIGURATION;

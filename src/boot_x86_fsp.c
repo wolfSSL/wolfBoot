@@ -94,8 +94,7 @@ typedef uint32_t (*notify_phase_cb)(NOTIFY_PHASE_PARAMS *p);
 
 /* need to be implemented by machine dependent code */
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
-                                    uint32_t mem_base, uint32_t mem_size,
-                                    struct stage2_parameter *params);
+                                    uint32_t mem_base, uint32_t mem_size);
 int fsp_machine_update_s_parameters(uint8_t *default_s_params);
 int post_temp_ram_init_cb(void);
 
@@ -114,10 +113,8 @@ extern const uint8_t _start_policy[], _end_policy[];
 extern const uint32_t _policy_size_u32[];
 extern const uint8_t _start_keystore[];
 
-/* wolfboot symbols */
+/* wolfboot symbol */
 extern int main(void);
-extern uint8_t _stage2_params[];
-
 
 /*!
  * \brief Get the top address from the EFI HOB (Hand-Off Block) list.
@@ -154,15 +151,13 @@ static int get_top_address(uint64_t *top, struct efi_hob *hoblist)
  * \param ptr Pointer to the parameter to be passed to the invoked function.
  */
 static void change_stack_and_invoke(uint32_t new_stack,
-                                    void (*other_func)(void *), void *ptr)
+                                    void (*other_func)(void *))
 {
     __asm__ volatile("movl %0, %%eax\n"
-                     "subl $4, %%eax\n"
-                     "movl %1, (%%eax)\n"
                      "mov %%eax, %%esp\n"
-                     "call *%2\n"
+                     "call *%1\n"
                      :
-                     : "r"(new_stack), "r"(ptr), "r"(other_func)
+                     : "r"(new_stack), "r"(other_func)
                      : "%eax");
 }
 static int range_overlaps(uint32_t start1, uint32_t end1, uint32_t start2,
@@ -234,19 +229,6 @@ static void load_fsp_s_to_ram(void)
     memcpy((uint8_t*)fsp_start, _fsp_s_hdr, fsp_s_size);
 }
 
-/*!
- * \brief Set the stage 2 parameter for the WolfBoot bootloader.
- *
- * This static function sets the stage 2 parameter for the WolfBoot bootloader,
- * which will be used by the bootloader during its execution.
- *
- * \param p Pointer to the stage 2 parameter structure.
- */
-static void set_stage2_parameter(struct stage2_parameter *p)
-{
-    memcpy((uint8_t*)_stage2_params, (uint8_t*)p, sizeof(*p));
-}
-
 #ifdef WOLFBOOT_64BIT
 /*!
  * \brief Jump into the WolfBoot bootloader.
@@ -256,25 +238,28 @@ static void set_stage2_parameter(struct stage2_parameter *p)
  */
 static void jump_into_wolfboot(void)
 {
-    struct stage2_parameter *params = (struct stage2_parameter*)_stage2_params;
+    struct stage2_parameter *params;
     uint32_t cr3;
     int ret;
 
-    x86_log_memory_load((uint32_t)(uintptr_t)params->page_table,params->page_table + x86_paging_get_page_table_size(),
-                        "IdentityPageTablePage");
+    params = stage2_get_parameters();
     ret = x86_paging_build_identity_mapping(MEMORY_4GB,
                                             (uint8_t*)(uintptr_t)params->page_table);
     if (ret != 0) {
         wolfBoot_printf("can't build identity mapping\r\n");
         panic();
     }
+
+    stage2_copy_parameter(params);
     wolfBoot_printf("starting wolfboot 64bit\r\n");
     switch_to_long_mode((uint64_t*)&main, params->page_table);
     panic();
 }
 #else
-static void jump_into_wolfboot()
+static void jump_into_wolfboot(void)
 {
+    struct stage2_parameter *params = stage2_get_parameters();
+    stage2_copy_parameter(params);
     main();
 }
 #endif /* WOLFBOOT_64BIT */
@@ -519,9 +504,9 @@ static int self_extend_pcr(void)
  *
  * \param ptr Pointer to a parameter structure.
  */
-static void memory_ready_entry(void *ptr)
+static void memory_ready_entry()
 {
-    struct stage2_parameter *stage2_params = (struct stage2_parameter *)ptr;
+    struct stage2_parameter *stage2_params;
     struct fsp_info_header *fsp_info;
     temp_ram_exit_cb TempRamExit;
     uint8_t *fsp_s_base;
@@ -529,6 +514,8 @@ static void memory_ready_entry(void *ptr)
     uint32_t cpu_info[4];
     uint32_t status;
     int ret;
+
+    stage2_params = stage2_get_parameters();
     /* FSP_M is located in flash */
     fsp_m_base = _start_fsp_m;
     /* fsp_s is loaded to RAM for validation */
@@ -630,7 +617,6 @@ static void memory_ready_entry(void *ptr)
     wolfBoot_tpm2_deinit();
 #endif
     /* Finalize staging to stage2 */
-    set_stage2_parameter(stage2_params);
     jump_into_wolfboot();
 }
 
@@ -672,8 +658,10 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
            uint32_t bist)
 {
     uint8_t udp_m_parameter[FSP_M_UDP_MAX_SIZE], *udp_m_default;
+    struct stage2_ptr_holder *mem_stage2_holder;
     struct fsp_info_header *fsp_m_info_header;
     struct stage2_parameter *stage2_params;
+    struct stage2_ptr_holder stage2_holder;
     struct stage2_parameter temp_params;
     uint8_t *fsp_m_base, done = 0;
     struct efi_hob *hobList, *it;
@@ -700,6 +688,8 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
         panic();
     }
     memset(&temp_params, 0, sizeof(temp_params));
+
+    stage2_set_parameters(&temp_params, &stage2_holder);
     wolfBoot_printf("Cache-as-RAM initialized" ENDLINE);
 
     wolfBoot_printf("FSP-T:");
@@ -726,7 +716,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
 
     memcpy(udp_m_parameter, udp_m_default, fsp_m_info_header->CfgRegionSize);
     status = fsp_machine_update_m_parameters(udp_m_parameter, stack_base + 0x4,
-                                             FSP_M_CAR_MEM_SIZE, &temp_params);
+                                             FSP_M_CAR_MEM_SIZE);
     if (status != 0) {
         panic();
     }
@@ -763,6 +753,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     }
 
     new_stack = top_address;
+    x86_log_memory_load(new_stack - WOLFBOOT_X86_STACK_SIZE, new_stack, "stack");
+    x86_log_memory_load(new_stack - WOLFBOOT_X86_STACK_SIZE - sizeof(struct stage2_parameter), 
+                        new_stack - WOLFBOOT_X86_STACK_SIZE, "stage2 parameter");
     top_address =
         new_stack - WOLFBOOT_X86_STACK_SIZE - sizeof(struct stage2_parameter);
     stage2_params = (struct stage2_parameter *)(uint32_t)top_address;
@@ -774,10 +767,14 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     stage2_params->page_table = ((uint32_t)(top_address) -
         x86_paging_get_page_table_size());
     stage2_params->page_table = (((uint32_t)stage2_params->page_table) & ~((1 << 12) - 1));
+    x86_log_memory_load(stage2_params->page_table, top_address, "page tables");
     memset((uint8_t*)stage2_params->page_table, 0, x86_paging_get_page_table_size());
     wolfBoot_printf("page table @ 0x%x [length: %x]" ENDLINE, (uint32_t)stage2_params->page_table, x86_paging_get_page_table_size());
     top_address = stage2_params->page_table;
 #endif /* WOLFBOOT_64BIT */
+    x86_log_memory_load(top_address - sizeof(struct stage2_ptr_holder), top_address, "stage2 ptr holder");
+    top_address = top_address - sizeof(struct stage2_ptr_holder);
+    mem_stage2_holder = (struct stage2_ptr_holder*)(uintptr_t)top_address;
 
     stage2_params->tolum = top_address;
 
@@ -792,14 +789,14 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
                     stage2_params->tpm_policy_size);
 #endif
 
+    stage2_set_parameters(stage2_params, mem_stage2_holder);
     wolfBoot_printf("TOLUM: 0x%x\r\n", stage2_params->tolum);
     /* change_stack_and_invoke() never returns.
      *
      * Execution here is eventually transferred to memory_ready_entry
      * after the stack has been remapped.
      */
-    change_stack_and_invoke(new_stack, memory_ready_entry,
-                            (void*)stage2_params);
+    change_stack_and_invoke(new_stack, memory_ready_entry);
 
     /* Returning from change_stack_and_invoke() implies a fatal error
      * while attempting to remap the stack.

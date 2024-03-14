@@ -35,8 +35,15 @@ struct stage2_parameter {
 #endif
 } __attribute__((packed));
 
-/* implemented in src/boot_x86_fsp_payload.c */
+#define DUMMY_IDT_DESC_SIZE 4
+struct stage2_ptr_holder {
+    struct stage2_parameter *ptr;
+    uint8_t dummy_idt[DUMMY_IDT_DESC_SIZE];
+} __attribute__((packed));
+
 struct stage2_parameter *stage2_get_parameters();
+void stage2_set_parameters(struct stage2_parameter *p, struct stage2_ptr_holder *holder);
+void stage2_copy_parameter(struct stage2_parameter *p);
 
 #if defined(WOLFBOOT_TPM_SEAL)
 int stage2_get_tpm_policy(const uint8_t **policy, uint16_t *policy_size);

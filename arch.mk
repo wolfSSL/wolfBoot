@@ -692,6 +692,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/pci.o
     OBJS += hal/x86_uart.o
     OBJS += src/string.o
+    OBJS += src/stage2_params.o
     ifeq ($(filter-out $(STAGE1_AUTH),1),)
       OBJS += src/libwolfboot.o
       OBJS += src/image.o
