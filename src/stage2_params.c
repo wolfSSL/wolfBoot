@@ -21,6 +21,30 @@
 #include <stage2_params.h>
 #include <string.h>
 
+/*
+* The storage of the stage2_params variable during memory initialization
+* involves several changes of locations. Initially, before memory becomes
+* available, it is stored inside the Cache-As-RAM, more precisely as the stack
+* variable `temp_params` in `boot_x86_fsp.c:start()`. Once memory initialization
+* occurs in stage1, the stage2_params is copied into memory. In stage2, when
+* writable data sections are available, stage2_params resides in the .data
+* section.
+*
+* The function `stage2_get_parameters()` is utilized throughout the code to
+* obtain the correct address of stage2_params. It's important to note that
+* whenever the location changes, the structure is copied verbatim. References to
+* the struct must be updated manually. Additionally, during the transition to
+* stage2, all references to function pointers will not be valid anymore.
+*
+* Internals:
+* During stage1, the pointer to the parameter is stored just before the IDT
+* (Interrupt Descriptor Table) table, and it can be recovered using the sidt
+* instruction. This necessitates the presence of a dummy table with a single
+* NULL descriptor. In stage2, stage2_get_parameter() serves as a wrapper
+* function that simply returns the address of the _stage2_parameter global
+* variable.
+*/
+
 #if defined(WOLFBOOT_TPM_SEAL)
 int stage2_get_tpm_policy(const uint8_t **policy, uint16_t *policy_sz)
 {
