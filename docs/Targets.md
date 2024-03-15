@@ -229,6 +229,10 @@ mon reset init
 
 ## STM32U5
 
+The STM32U5 is a Cortex-M33 (ARMv8-M).
+
+Note: We have seen issues with vector table alignment, so the default image header size (IMAGE_HEADER_SIZE) has been increased to 1024 bytes to avoid potential issues.
+
 ### Scenario 1: TrustZone Enabled
 
 #### Example Description
