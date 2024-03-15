@@ -20,7 +20,6 @@
  */
 
 #include <stdint.h>
-#include <wolfssl/wolfcrypt/settings.h>
 #include "wolfboot/wolfboot.h"
 #include "hal.h"
 

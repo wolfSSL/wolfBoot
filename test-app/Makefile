@@ -38,11 +38,11 @@ ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
+  CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
   ifeq ($(ARCH),RENESAS_RX)
-    CFLAGS+=-g -ggdb -Wall -Wno-unused -DPLATFORM_$(TARGET) -I../include
-    APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o
+    APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o
+    LDFLAGS+=-ffreestanding -nostartfiles
   else
-    CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
     APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
   endif
 endif

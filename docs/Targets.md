@@ -2031,7 +2031,7 @@ Boot partition: 0xFFE00000
 Image size 27108
 ```
 
-Default Onboard Flash Memory Layout (2MB) (64KB sector):
+Default Onboard Flash Memory Layout (2MB) (32KB sector):
 
 | Description       | Address    | Size                |
 | ----------------- | ---------- | ------------------- |
@@ -2057,6 +2057,7 @@ Building RX wolfBoot requires the RX-ELF compiler. Please Download and install t
 https://llvm-gcc-renesas.com/rx-download-toolchains/
 
 Default installation path (Linux): `~/toolchains/gcc_8.3.0.202311_rx_elf`
+Default installation path (Windows): `C:\ProgramData\GCC for Renesas RX 8.3.0.202305-GNURX-ELF\rx-elf\rx-elf`
 
 Configuration:
 Use `./config/examples/renesas-rx65n.config` as a starting point by copying it to the wolfBoot root as `.config`.

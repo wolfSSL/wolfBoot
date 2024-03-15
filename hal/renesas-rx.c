@@ -30,6 +30,7 @@
 #include "hal.h"
 #include "renesas-rx.h"
 
+#include "r_flash_rx_if.h"
 #include "r_flash_rx.h"
 
 #if defined(WOLFBOOT_RENESAS_TSIP)  && \
@@ -55,9 +56,7 @@ void hal_init(void)
     int err;
     uint32_t key_type = 0;
     int tsip_key_type = -1;
-    /* retrive installed pubkey data from flash */
-    struct rsa2048_pub *encrypted_user_key_data =
-                    (struct rsa2048_pub*)keystore_get_buffer(0);
+    struct rsa2048_pub *encrypted_user_key_data;
 #endif
 
     if(R_FLASH_Open() != FLASH_SUCCESS)
@@ -70,6 +69,9 @@ void hal_init(void)
        printf("ERROR: wolfCrypt_Init %d\n", err);
        hal_panic();
     }
+
+    /* retrive installed pubkey data from flash */
+    encrypted_user_key_data = (struct rsa2048_pub*)keystore_get_buffer(0);
 
     key_type = keystore_get_key_type(0);
     switch(key_type){
@@ -146,7 +148,7 @@ int hal_flash_write(uint32_t addr, const uint8_t *data, int len)
     uint32_t save_len = 0;
 
     if(addr != ALIGN_FLASH(addr)) {
-        save_len = (addr - ALIGN_FLASH(addr)) < len ? (addr - ALIGN_FLASH(addr)) : len;
+        save_len = (addr - ALIGN_FLASH(addr)) < (uint32_t)len ? (addr - ALIGN_FLASH(addr)) : (uint32_t)len;
         memcpy(save, (const void *)ALIGN_FLASH(addr), MIN_PROG);
         memcpy(save + (addr - ALIGN_FLASH(addr)), data, save_len);
         addr   = ALIGN_FLASH(addr);
@@ -200,7 +202,7 @@ void RAMFUNCTION hal_flash_unlock(void)
 {
     flash_access_window_config_t info;
 
-    info.start_addr = (uint32_t) FLASH_CF_BLOCK_132;
+    info.start_addr = (uint32_t) FLASH_CF_BLOCK_INVALID;
     info.end_addr   = (uint32_t) FLASH_CF_BLOCK_0;
     R_BSP_InterruptsDisable();
     if(R_FLASH_Control(FLASH_CMD_ACCESSWINDOW_SET, (void *)&info)
