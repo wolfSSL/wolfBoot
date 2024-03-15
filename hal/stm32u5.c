@@ -481,7 +481,7 @@ static void led_unsecure()
     GPIOH_SECCFGR&=~(1<<LED_BOOT_PIN);
 }
 
-#if (TZ_SECURE())
+#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
 static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
 static void RAMFUNCTION fork_bootloader(void)
 {
