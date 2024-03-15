@@ -29,6 +29,10 @@
     #include "hal/stm32u5.h"
 #endif
 
+#ifdef PLATFORM_stm32h5
+    #include "hal/stm32h5.h"
+#endif
+
 #include "image.h"
 #include "hal.h"
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && (!defined(FLAGS_HOME) || !defined(DISABLE_BACKUP))
@@ -81,15 +85,25 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         hal_flash_wait_complete(0);
         hal_flash_nonsecure_lock();
         /* Erase claimed non-secure page, in secure mode */
+#ifndef PLATFORM_stm32h5
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
-        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER);
+        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
+#else
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER));
+        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER);
+#endif
+
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         ISB();
         hal_flash_wait_complete(0);
         address += FLASH_PAGE_SIZE;
     }
+#ifndef PLATFORM_stm32h5
     FLASH_CR &= ~FLASH_CR_PER ;
+#else
+    FLASH_CR &= ~FLASH_CR_SER ;
+#endif
 }
 #else
 #define claim_nonsecure_area(...) do{}while(0)

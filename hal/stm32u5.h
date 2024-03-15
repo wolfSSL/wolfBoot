@@ -24,10 +24,16 @@
 #define ISB() __asm__ volatile ("isb")
 #define DSB() __asm__ volatile ("dsb")
 
+#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && !defined(NONSECURE_APP))
+#   define TZ_SECURE() (1)
+#else
+#   define TZ_SECURE() (0)
+#endif
+
 /* STM32 U5 register configuration */
 /*** RCC ***/
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if (TZ_SECURE())
 /*Secure */
 #define RCC_BASE            (0x56020C00)   /* RM0456 - Table 4 */
 #else
@@ -130,7 +136,7 @@
 
 /*** PWR ***/
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if (TZ_SECURE())
 /*Secure */
 #define PWR_BASE            (0x56020800)   /* RM0456 - Table 4 */
 #else
@@ -158,7 +164,7 @@
 /*** FLASH ***/
 #define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) /* <<RM0438>> - RCC_APB2ENR - SYSCFGEN */
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if (TZ_SECURE())
 /*Secure*/
 #define FLASH_BASE          (0x50022000)   /* RM0456 - Table 4 */
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
