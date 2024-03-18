@@ -37,10 +37,10 @@
 /*** RCC ***/
 #if TZ_SECURE()
 /*Secure */
-#define RCC_BASE            (0x50020c00)   /* RM0481 - Table 3 */
+#define RCC_BASE            (0x54020c00)   /* RM0481 - Table 3 */
 #else
 /*Non-Secure */
-#define RCC_BASE            (0x40020C00)   /* RM0481 - Table 3 */
+#define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
 #endif
 
 #define FLASH_SECURE_MMAP_BASE (0x0C000000)
@@ -78,6 +78,7 @@
 #define RCC_CFGR1_SW_CSI        (0x1)
 #define RCC_CFGR1_SW_HSE        (0x2)
 #define RCC_CFGR1_SW_PLL1       (0x3)
+#define RCC_CFGR1_SW_MASK       (0x3)
 
 /* HPRE - PPRE1 - PPRE2 - PPRE3 */
 #define RCC_CFGR2_HPRE_SHIFT        (0x0)
@@ -186,7 +187,7 @@
 #define PWR_VOS_SCALE_0      (0x3 << 4)   //RM0481 - 10.11.3
 #define PWR_VOS_SCALE_3      (0x0 << 4)   //RM0481 - 10.11.3 - Default on power up
 #define PWR_VOS_MASK         (0x3 << 4)   //RM0481 - 10.11.3
-#define PWR_VOSRDY           (1 << 2)     //RM0481 - 10.11.4 - Voltage scaling ready
+#define PWR_VOSRDY           (1 << 3)     //RM0481 - 10.11.4 - Voltage scaling ready
 
 #define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
 #define PWR_CR2_IOSV         (1 << 9)
@@ -224,7 +225,7 @@
 /* Non-Secure only */
 #define FLASH_BASE          (0x40022000)   //RM0481 - Table 3
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x04))
-#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
 #endif

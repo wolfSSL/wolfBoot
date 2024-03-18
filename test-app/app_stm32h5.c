@@ -29,48 +29,52 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 
-#define LED_BOOT_PIN (7) /* PH7 - Discovery - Green Led */
-#define LED_USR_PIN  (6) /* PH6 - Discovery - Red Led */
+#define LED_BOOT_PIN (4) /* PG4 - Nucleo - Red Led */
+#define LED_USR_PIN  (0) /* PB0 - Nucleo - Green Led */
+#define LED_USR2_PIN  (4) /* PF4 - Nucleo - Orange Led */
 
 /*Non-Secure */
-#define RCC_BASE            (0x46020C00)   /* RM0456 - Table 4 */
-#define PWR_BASE            (0x46020800)   /* RM0456 - Table 4 */
-#define GPIOH_BASE 0x42021C00
+#define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
+#define GPIOG_BASE 0x42021800
+#define GPIOB_BASE 0x42020400
+#define GPIOF_BASE 0x42021400
 
 
-#define GPIOH_MODER (*(volatile uint32_t *)(GPIOH_BASE + 0x00)) 
-#define GPIOH_PUPDR (*(volatile uint32_t *)(GPIOH_BASE + 0x0C)) 
-#define GPIOH_BSRR  (*(volatile uint32_t *)(GPIOH_BASE + 0x18)) 
+#define GPIOG_MODER (*(volatile uint32_t *)(GPIOG_BASE + 0x00)) 
+#define GPIOG_PUPDR (*(volatile uint32_t *)(GPIOG_BASE + 0x0C)) 
+#define GPIOG_BSRR  (*(volatile uint32_t *)(GPIOG_BASE + 0x18)) 
+
+#define GPIOB_MODER (*(volatile uint32_t *)(GPIOB_BASE + 0x00)) 
+#define GPIOB_PUPDR (*(volatile uint32_t *)(GPIOB_BASE + 0x0C)) 
+#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18)) 
+
+#define GPIOF_MODER (*(volatile uint32_t *)(GPIOF_BASE + 0x00)) 
+#define GPIOF_PUPDR (*(volatile uint32_t *)(GPIOF_BASE + 0x0C)) 
+#define GPIOF_BSRR  (*(volatile uint32_t *)(GPIOF_BASE + 0x18)) 
 
 #define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
-#define GPIOH_AHB2ENR1_CLOCK_ER (1 << 7)
-
-#define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
-#define PWR_CR2_IOSV         (1 << 9)
+#define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
+#define GPIOF_AHB2ENR1_CLOCK_ER (1 << 5)
+#define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
 
 static void boot_led_on(void)
 {
     uint32_t reg;
     uint32_t pin = LED_BOOT_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOH_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR1_CLOCK_ER|= GPIOG_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
     reg = RCC_AHB2ENR1_CLOCK_ER;
 
-#if 0
-    /* Disabled, may not need it */
-    PWR_CR2 |= PWR_CR2_IOSV;
-#endif
-
-    reg = GPIOH_MODER & ~(0x03 << (pin * 2));
-    GPIOH_MODER = reg | (1 << (pin * 2));
-    GPIOH_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOH_BSRR |= (1 << (pin + 16));
+    reg = GPIOG_MODER & ~(0x03 << (pin * 2));
+    GPIOG_MODER = reg | (1 << (pin * 2));
+    GPIOG_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOG_BSRR |= (1 << (pin));
 }
 
 static void boot_led_off(void)
 {
-    GPIOH_BSRR |= (1 << (LED_BOOT_PIN));
+    GPIOG_BSRR |= (1 << (LED_BOOT_PIN + 16));
 }
 
 void usr_led_on(void)
@@ -78,19 +82,39 @@ void usr_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_USR_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOH_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR1_CLOCK_ER|= GPIOB_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
     reg = RCC_AHB2ENR1_CLOCK_ER;
 
-    reg = GPIOH_MODER & ~(0x03 << (pin * 2));
-    GPIOH_MODER = reg | (1 << (pin * 2));
-    GPIOH_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOH_BSRR |= (1 << (pin + 16));
+    reg = GPIOB_MODER & ~(0x03 << (pin * 2));
+    GPIOB_MODER = reg | (1 << (pin * 2));
+    GPIOB_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOB_BSRR |= (1 << (pin));
 }
 
 void usr_led_off(void)
 {
-    GPIOH_BSRR |= (1 << (LED_USR_PIN));
+    GPIOB_BSRR |= (1 << (LED_USR_PIN + 16));
+}
+
+void usr2_led_on(void)
+{
+    uint32_t reg;
+    uint32_t pin = LED_USR2_PIN;
+
+    RCC_AHB2ENR1_CLOCK_ER|= GPIOF_AHB2ENR1_CLOCK_ER;
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_AHB2ENR1_CLOCK_ER;
+
+    reg = GPIOF_MODER & ~(0x03 << (pin * 2));
+    GPIOF_MODER = reg | (1 << (pin * 2));
+    GPIOF_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOF_BSRR |= (1 << (pin));
+}
+
+void usr2_led_off(void)
+{
+    GPIOF_BSRR |= (1 << (LED_USR2_PIN + 16));
 }
 
 void main(void)
@@ -100,7 +124,7 @@ void main(void)
     usr_led_on();
     boot_led_off();
     if (wolfBoot_current_firmware_version() > 1)
-        boot_led_on();
+        usr2_led_on();
     while(1)
         ;
 }

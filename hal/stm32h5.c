@@ -29,8 +29,11 @@
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
-    if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates)
-        FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates ;
+    if ((reg & FLASH_ACR_LATENCY_MASK) < waitstates)
+        do {
+            FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates ;
+        }
+        while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != waitstates);
 }
 
 void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
@@ -47,7 +50,7 @@ void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
 void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 {
     FLASH_SR |= ( FLASH_SR_WBNE | FLASH_SR_DBNE );
-             
+
 #if (TZ_SECURE())
     FLASH_NS_SR |= ( FLASH_SR_WBNE | FLASH_SR_DBNE );
 #endif
@@ -207,27 +210,14 @@ static void clock_pll_on(void)
 {
     uint32_t reg32;
     uint32_t plln, pllm, pllq, pllp, pllr, hpre, apb1pre, apb2pre, apb3pre, flash_waitstates;
-    
-    /* Select clock parameters (CPU Speed = 250 MHz) */
+
+    /* Select clock parameters (CPU Speed = 125 MHz) */
     pllm = 4;
-    plln = 250;
+    plln = 125; /* TODO: increase to 250 MHz */
     pllp = 2;
     pllq = 2;
     pllr = 2;
     flash_waitstates = 5;
-
-    /* Set Vcore scale to 0 */ 
-    PWR_VOSCR &= ~PWR_VOS_MASK;
-    PWR_VOSCR |= PWR_VOS_SCALE_0;
-    while ((PWR_VOSSR & PWR_VOSRDY) == 0)
-        ;
-
-    /* PLL Oscillator configuration */
-    RCC_CR |= RCC_CR_HSEON | RCC_CR_HSEBYP | RCC_CR_HSEEXT;
-
-    /* Wait until HSE is Ready */
-    while ((RCC_CR & RCC_CR_HSERDY) == 0)
-        ;
 
     /* Disable PLL1 */
     RCC_CR &= ~RCC_CR_PLL1ON;
@@ -236,8 +226,19 @@ static void clock_pll_on(void)
     while ((RCC_CR & RCC_CR_PLL1RDY) != 0)
         ;
 
+    /* Set flash wait states */
+    flash_set_waitstates(flash_waitstates);
+
+    /* PLL Oscillator configuration */
+    RCC_CR |= RCC_CR_HSEON | RCC_CR_HSEBYP | RCC_CR_HSEEXT;
+
+    /* Wait until HSE is Ready */
+    while ((RCC_CR & RCC_CR_HSERDY) == 0)
+        ;
+
     /* Configure PLL1 div/mul factors */
     reg32 = RCC_PLL1CFGR;
+    reg32 &= ~((0x3F << RCC_PLL1CFGR_PLL1M_SHIFT) | (0x03));
     reg32 |= (pllm << RCC_PLL1CFGR_PLL1M_SHIFT) | RCC_PLL1CFGR_PLL1SRC_HSE;
     RCC_PLL1CFGR = reg32;
     DMB();
@@ -273,9 +274,6 @@ static void clock_pll_on(void)
     /* Enable PLL1 */
     RCC_CR |= RCC_CR_PLL1ON;
 
-    /* Set flash wait states */
-    flash_set_waitstates(flash_waitstates);
-    
     /* Set up APB3, 2, 1 and AHB prescalers */
     hpre = RCC_AHB_PRESCALER_DIV_NONE;
     apb1pre = RCC_APB_PRESCALER_DIV_NONE;
@@ -296,7 +294,8 @@ static void clock_pll_on(void)
         ;
 
     /* Set PLL as clock source */
-    RCC_CFGR1 |= RCC_CFGR1_SW_PLL1;
+    reg32 = RCC_CFGR1 & (~RCC_CFGR1_SW_MASK);
+    RCC_CFGR1 = reg32 | RCC_CFGR1_SW_PLL1;
     DMB();
 
     /* Wait until selection of PLL as source is complete */
@@ -396,16 +395,16 @@ static void RAMFUNCTION fork_bootloader(void)
 void hal_init(void)
 {
 
-#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
-    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_CUR_SWAP_BANK)) == 0)
-        fork_bootloader();
-#endif
 
 #if TZ_SECURE()
     hal_tz_sau_init();
     hal_gtzc_init();
 #endif
     clock_pll_on();
+#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
+    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_CUR_SWAP_BANK)) == 0)
+        fork_bootloader();
+#endif
 
 }
 
