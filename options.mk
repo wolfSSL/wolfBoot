@@ -421,6 +421,12 @@ ifeq ($(SIGN),XMSS)
   endif
 endif
 
+# Only needed if using 3rd party integration. This can be
+# removed when wc_lms and wc_xmss become default in wolfboot.
+ifneq (,$(filter $(SIGN), LMS XMSS))
+  CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
+endif
+
 ifeq ($(RAM_CODE),1)
   CFLAGS+= -D"RAM_CODE"
 endif
