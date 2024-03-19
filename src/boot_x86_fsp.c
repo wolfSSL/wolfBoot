@@ -506,7 +506,6 @@ static int self_extend_pcr(void)
  */
 static void memory_ready_entry()
 {
-    struct stage2_parameter *stage2_params;
     struct fsp_info_header *fsp_info;
     temp_ram_exit_cb TempRamExit;
     uint8_t *fsp_s_base;
@@ -515,7 +514,6 @@ static void memory_ready_entry()
     uint32_t status;
     int ret;
 
-    stage2_params = stage2_get_parameters();
     /* FSP_M is located in flash */
     fsp_m_base = _start_fsp_m;
     /* fsp_s is loaded to RAM for validation */
