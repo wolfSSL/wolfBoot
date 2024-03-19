@@ -213,21 +213,27 @@
 
 #define FLASH_NS_BASE          (0x40022000)   //RM0481 - Table 3
 #define FLASH_NS_KEYR        (*(volatile uint32_t *)(FLASH_NS_BASE + 0x08))
-#define FLASH_NS_OPTKEYR     (*(volatile uint32_t *)(FLASH_NS_BASE + 0x10))
+#define FLASH_NS_OPTKEYR     (*(volatile uint32_t *)(FLASH_NS_BASE + 0x0C))
 #define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
 #define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
 
-#define TZSC_PRIVCFGR2   *((uint32_t *)(0x50036424))
+#define TZSC_PRIVCFGR2   *((volatile uint32_t *)(0x50036424))
 #define TZSC_PRIVCFG2_LPUARTPRIV (1 << 25) /* LPUART1 */
 
+/* Mapping FLASH_SECCR for bank swapping */
+#define FLASH_CCR            (*(volatile uint32_t *)(FLASH_BASE + 0x34))
 
 #else
 /* Non-Secure only */
 #define FLASH_BASE          (0x40022000)   //RM0481 - Table 3
 #define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x04))
-#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x10))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
+
+/* Mapping FLASH_NSCCR for bank swapping */
+#define FLASH_CCR            (*(volatile uint32_t *)(FLASH_BASE + 0x30))
+
 #endif
 
 /* Both secure + non secure */
@@ -252,11 +258,9 @@
 
 
 #if defined(DUALBANK_SWAP) && defined (__WOLFBOOT)
-    /* Mapping FLASH_SECCR for bank swapping */
     #define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
-    #define FLASH_SECCR       (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
-    #define FLASH_SECCR_BKSEL (1 << 31)
-    #define FLASH_OPTSR_CUR_SWAP_BANK (1 << 31)
+    #define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
+    #define FLASH_OPTSR_SWAP_BANK (1 << 31)
 #endif
 
 /* Register values (for both secure and non secure registers) 
@@ -266,12 +270,23 @@
 #define FLASH_SR_WBNE                       (1 << 1)
 #define FLASH_SR_DBNE                       (1 << 3)
 #define FLASH_SR_EOP                        (1 << 16)
-#define FLASH_SR_WRPERR                     (1 << 17)
-#define FLASH_SR_PGSERR                     (1 << 18)
-#define FLASH_SR_STRBERR                    (1 << 19)
-#define FLASH_SR_INCERR                     (1 << 20)
-#define FLASH_SR_OPTERR                     (1 << 21)
-#define FLASH_SR_OPTWERR                    (1 << 22)
+#define FLASH_SR_WRPE                       (1 << 17)
+#define FLASH_SR_PGSE                       (1 << 18)
+#define FLASH_SR_STRBE                      (1 << 19)
+#define FLASH_SR_INCE                       (1 << 20)
+#define FLASH_SR_OPTE                       (1 << 21)
+#define FLASH_SR_OPTWE                      (1 << 22)
+
+#define FLASH_CCR_CLR_BUSY                  (1 << 0) 
+#define FLASH_CCR_CLR_WBNE                  (1 << 1)
+#define FLASH_CCR_CLR_DBNE                  (1 << 3)
+#define FLASH_CCR_CLR_EOP                   (1 << 16)
+#define FLASH_CCR_CLR_WRPE                  (1 << 17)
+#define FLASH_CCR_CLR_PGSE                  (1 << 18)
+#define FLASH_CCR_CLR_STRBE                 (1 << 19)
+#define FLASH_CCR_CLR_INCE                  (1 << 20)
+#define FLASH_CCR_CLR_OPTE                  (1 << 21)
+#define FLASH_CCR_CLR_OPTWE                 (1 << 22)
 
 #define FLASH_CR_LOCK                       (1 << 0)
 #define FLASH_CR_PG                         (1 << 1)
@@ -295,6 +310,9 @@
 
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
 #define FLASH_ACR_LATENCY_MASK              (0x0F)
+#define FLASH_ACR_WRHIGHFREQ_MASK           (0x03)
+#define FLASH_ACR_WRHIGHFREQ_SHIFT          (4)
+
 
 #define FLASH_OPTCR          (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
 #define FLASH_OPTCR_OPTSTRT   (1 << 1)
@@ -305,7 +323,7 @@
 #define FLASH_PAGE_SIZE           (0x2000)      /* 8KB */
 #define FLASH_BANK2_BASE          (0x08100000) /*!< Base address of Flash Bank2     */
 #define BOOTLOADER_SIZE           (0x8000)
-#define FLASH_TOP                 (0x080FFFFF) /*!< FLASH end address (sector 127)  */
+#define FLASH_TOP                 (0x081FFFFF) /*!< FLASH end address (sector 127)  */
 
 #define FLASH_KEY1                            (0x45670123U)
 #define FLASH_KEY2                            (0xCDEF89ABU)
