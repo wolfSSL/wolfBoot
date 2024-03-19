@@ -166,7 +166,7 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),stm32h5)
     CORTEX_M33=1
-    CFLAGS+=-Ihal -DWOLFBOOT_USE_STDLIBC
+    CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x08000000
     ifeq ($(TZEN),1)
       WOLFBOOT_ORIGIN=0x0C000000
