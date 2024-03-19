@@ -31,7 +31,8 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
     uint32_t reg = FLASH_ACR;
     if ((reg & FLASH_ACR_LATENCY_MASK) < waitstates)
         do {
-            FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates ;
+            FLASH_ACR =  (reg & ~(FLASH_ACR_LATENCY_MASK | (FLASH_ACR_WRHIGHFREQ_MASK << FLASH_ACR_WRHIGHFREQ_SHIFT))) |
+                         waitstates | (0x02 << FLASH_ACR_WRHIGHFREQ_SHIFT) ;
         }
         while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != waitstates);
 }
@@ -49,11 +50,9 @@ void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
 
 void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 {
-    FLASH_SR |= ( FLASH_SR_WBNE | FLASH_SR_DBNE );
-
-#if (TZ_SECURE())
-    FLASH_NS_SR |= ( FLASH_SR_WBNE | FLASH_SR_DBNE );
-#endif
+    FLASH_CCR |= ( FLASH_CCR_CLR_WBNE | FLASH_CCR_CLR_DBNE | FLASH_CCR_CLR_INCE|
+            FLASH_CCR_CLR_PGSE | FLASH_CCR_CLR_OPTE | FLASH_CCR_CLR_OPTWE |
+            FLASH_CCR_CLR_WRPE | FLASH_CCR_CLR_EOP);
 
 }
 
@@ -156,25 +155,23 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
         uint32_t base;
-        uint32_t bker = 0;
-        if ((((FLASH_OPTCR & FLASH_OPTCR_SWAP_BANK) == 0) && (p <= FLASH_TOP)) ||
-                (p < FLASH_BANK2_BASE)) {
-            base = FLASHMEM_ADDRESS_SPACE;
-        }
-        else if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        uint32_t bnksel = 0;
+        base = FLASHMEM_ADDRESS_SPACE;
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BER));
+
+        if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
 #if TZ_SECURE()
             /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
             return 0;
 #endif
-            bker = FLASH_CR_BER;
             base = FLASH_BANK2_BASE;
+            bnksel = 1;
         } else {
             FLASH_CR &= ~FLASH_CR_SER ;
             return 0; /* Address out of range */
         }
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BER));
-        reg |= ((((p - base)  >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | bker );
+        reg |= ((((p - base)  >> 13) << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bnksel << 31));
         FLASH_CR = reg;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
@@ -336,8 +333,6 @@ static void periph_unsecure()
 #endif
 
 
-#define OPTR_SWAP_BANK (1 << 20)
-
 #define AIRCR *(volatile uint32_t *)(0xE000ED0C)
 #define AIRCR_VKEY (0x05FA << 16)
 #define AIRCR_SYSRESETREQ (1 << 2)
@@ -356,13 +351,17 @@ static void RAMFUNCTION stm32h5_reboot(void)
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
     uint32_t cur_opts;
+    cur_opts = (FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31;
+    hal_flash_clear_errors(0);
     hal_flash_unlock();
     hal_flash_opt_unlock();
-    cur_opts = (FLASH_OPTCR & FLASH_OPTCR_SWAP_BANK) >> 31;
     if (cur_opts)
-        FLASH_SECCR &= ~(FLASH_SECCR_BKSEL);
+        FLASH_OPTSR_PRG &= ~(FLASH_OPTSR_SWAP_BANK);
     else
-        FLASH_SECCR |= FLASH_SECCR_BKSEL;
+        FLASH_OPTSR_PRG |= FLASH_OPTSR_SWAP_BANK;
+
+    FLASH_OPTCR |= FLASH_OPTCR_OPTSTRT;
+    DMB();
     hal_flash_opt_lock();
     hal_flash_lock();
     stm32h5_reboot();
@@ -370,7 +369,7 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
 
 static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
 
-static void RAMFUNCTION fork_bootloader(void)
+static void fork_bootloader(void)
 {
     uint8_t *data = (uint8_t *) FLASHMEM_ADDRESS_SPACE;
     uint32_t dst  = FLASH_BANK2_BASE;
@@ -378,7 +377,7 @@ static void RAMFUNCTION fork_bootloader(void)
     int i;
 
     /* Return if content already matches */
-    if (memcmp(data, (void *)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)
+    if (memcmp(data, (const char*)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)
         return;
 
     /* Read the wolfBoot image in RAM */
@@ -395,16 +394,16 @@ static void RAMFUNCTION fork_bootloader(void)
 void hal_init(void)
 {
 
+#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
+    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)
+        fork_bootloader();
+#endif
 
 #if TZ_SECURE()
     hal_tz_sau_init();
     hal_gtzc_init();
 #endif
     clock_pll_on();
-#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
-    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_CUR_SWAP_BANK)) == 0)
-        fork_bootloader();
-#endif
 
 }
 

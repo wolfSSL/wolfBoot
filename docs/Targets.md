@@ -23,6 +23,7 @@ This README describes configuration of supported targets.
 * [STM32L5](#stm32l5)
 * [STM32G0](#stm32g0)
 * [STM32C0](#stm32c0)
+* [STM32H5](#stm32h5)
 * [STM32H7](#stm32h7)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
@@ -806,6 +807,59 @@ From another console, connect using gdb, e.g.:
 arm-none-eabi-gdb
 (gdb) target remote:3333
 ```
+
+## STM32H5
+
+### DUALBANK mode (Trustzone disabled)
+
+The STM32H5 can be configured to use hardware-assisted bank swapping to facilitate the update.
+The configuration file to copy into `.config` is `config/examples/stm32h5-dualbank.config`.
+
+DUALBANK configuration (Tested on NUCLEO-STM32H563ZI):
+
+BANK A: 0x08000000 to 0x080FFFFFF (1MB)
+BANK B: 0x08100000 to 0x081FFFFFF (1MB)
+
+First of all, ensure that the `SWAP_BANK` option byte is off when running wolfBoot
+for the first time:
+
+```
+STM32_Programmer_CLI -c port=swd -ob SWAP_BANK=0
+```
+
+It is a good idea to start with an empty flash, by erasing all sectors via:
+
+```
+STM32_Programmer_CLI -c port=swd -e 0 255
+```
+Compile wolfBoot with `make`. The file `factory.bin` contains both wolfboot and the
+version 1 of the application, and can be uploaded to the board at the beginning
+of the first bank using `STM32_Programmer_CLI` tool:
+
+```
+STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
+```
+
+Optionally, you can upload another copy of wolfboot.bin to the beginning of the second bank.
+Wolfboot should take care of copying itself to the second bank upon first boot if you don't.:
+
+```
+STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x08100000
+```
+
+After uploading the images, reboot your board. The green LED should indicate that v1 of the
+test application is running.
+
+To initiate an update, sign a new version of the app and upload the v3 to the update partition
+on the second bank:
+
+```
+tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 3
+STM32_Programmer_CLI -c port=swd -d test-app/image_v3_signed.bin 0x08110000
+```
+
+Reboot the board to initiate an update via DUALBANK hw-assisted swap.
+Any version except the first one will also turn on the orange LED.
 
 
 ## STM32H7
