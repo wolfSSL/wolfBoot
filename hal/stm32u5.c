@@ -37,7 +37,7 @@ static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 {
     while ((FLASH_NS_SR & (FLASH_SR_BSY | FLASH_SR_WDW)) != 0)
         ;
-#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if (TZ_SECURE())
     while ((FLASH_SR & (FLASH_SR_BSY | FLASH_SR_WDW)) != 0)
         ;
 #endif
@@ -49,11 +49,11 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 
     FLASH_NS_SR |= (FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
                     FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR
-#if !(defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if !(TZ_SECURE())
                     | FLASH_SR_OPTWERR
 #endif
             );
-#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if (TZ_SECURE())
     FLASH_SR |= (FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
                  FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR |
                  FLASH_SR_OPTWERR);
@@ -72,7 +72,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     src = (uint32_t*)data;
     dst = (uint32_t*)address;
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if (TZ_SECURE())
     if ((((FLASH_OPTR & FLASH_OPTR_DBANK) == 0) && (address <= FLASH_TOP)) || (address < FLASH_BANK2_BASE)) {
         cr = &FLASH_CR;
         sr = &FLASH_SR;
@@ -118,7 +118,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 void RAMFUNCTION hal_flash_unlock(void)
 {
     flash_wait_complete(0);
-#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if (TZ_SECURE())
     if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR = FLASH_KEY1;
         DMB();
@@ -141,7 +141,7 @@ void RAMFUNCTION hal_flash_unlock(void)
 void RAMFUNCTION hal_flash_lock(void)
 {
     flash_wait_complete(0);
-#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if (TZ_SECURE())
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
 #endif
@@ -194,7 +194,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         cr = &FLASH_NS_CR;
 
         if ((((FLASH_OPTR & FLASH_OPTR_DBANK) == 0) && (p <= FLASH_TOP)) || (p < FLASH_BANK2_BASE)) {
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if (TZ_SECURE())
             cr = &FLASH_CR;
 #endif
             base = FLASHMEM_ADDRESS_SPACE;
@@ -512,7 +512,7 @@ void hal_init(void)
         fork_bootloader();
 #endif
     clock_pll_on(0);
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
     hal_tz_sau_init();
     hal_gtzc_init();
 #endif
@@ -522,7 +522,7 @@ void hal_prepare_boot(void)
 {
     clock_pll_off();
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
     led_unsecure();
 #endif
 }
