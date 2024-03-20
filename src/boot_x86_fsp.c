@@ -556,6 +556,12 @@ static void memory_ready_entry(void *ptr)
         wolfBoot_printf("tpm init failed" ENDLINE);
         panic();
     }
+
+    ret = wolfBoot_tpm_self_test();
+    if (ret != 0) {
+        wolfBoot_printf("tpm self test failed" ENDLINE);
+        panic();
+    }
 #endif
 
 #if (defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT))
