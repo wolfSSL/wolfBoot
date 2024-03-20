@@ -502,7 +502,6 @@ static int self_extend_pcr(void)
  * This static function serves as the entry point for further execution after the
  * memory initialization is completed and the stack has been remapped.
  *
- * \param ptr Pointer to a parameter structure.
  */
 static void memory_ready_entry(void)
 {

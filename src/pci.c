@@ -872,6 +872,13 @@ int pci_pre_enum(void)
 }
 
 #if defined(DEBUG_PCI)
+/**
+ * @brief Dump PCI configuration space
+ *
+ * @param bus PCI bus number
+ * @param dev PCI device number
+ * @param fun PCI function number
+*/
 void pci_dump(uint8_t bus, uint8_t dev, uint8_t fun)
 {
     uint32_t reg[256/4];
@@ -895,6 +902,14 @@ void pci_dump(uint8_t bus, uint8_t dev, uint8_t fun)
     }
 }
 
+/**
+ * @brief Dump PCI configuration space for all devices in the bus
+ *
+ * This function will dump the PCI configuration space for all devices in the
+ * bus, it will recursively dump buses behind bridges.
+ *
+ * @param bus PCI bus number
+*/
 static void pci_dump_bus(uint8_t bus)
 {
     uint16_t vendor_id, device_id, header_type;
@@ -941,6 +956,9 @@ static void pci_dump_bus(uint8_t bus)
     }
 }
 
+/**
+ * @brief Dump full PCI configuration space
+*/
 void pci_dump_config_space(void)
 {
     return pci_dump_bus(0);

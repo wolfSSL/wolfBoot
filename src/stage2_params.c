@@ -67,6 +67,16 @@ struct idt_descriptor {
     uint32_t base;
 } __attribute__ ((packed));
 
+/**
+ * @brief Set the stage 2 parameter pointer during stage 1.
+ *
+ * @param p Pointer to the stage 2 parameter structure.
+ * @param holder Pointer to the stage 2 parameter holder structure.
+ *
+ * This function sets the stage 2 parameter pointer during stage 1. The pointer
+ * is stored just before a dummy IDTR table, that is defined inside the holder
+ * struct.
+*/
 void stage2_set_parameters(struct stage2_parameter *p, struct stage2_ptr_holder *holder)
 {
     struct idt_descriptor idt;
@@ -79,6 +89,14 @@ void stage2_set_parameters(struct stage2_parameter *p, struct stage2_ptr_holder 
     asm ("lidt %0\r\n" : : "m"(idt));
 }
 
+/**
+ * @brief Get the stage 2 parameter pointer during stage 1.
+ *
+ * This function gets the stage 2 parameter pointer during stage 1. The pointer
+ * is stored just before a dummy IDTR table, stored in the IDT register.
+ *
+ * @return Pointer to the stage 2 parameter structure.
+ */
 struct stage2_parameter *stage2_get_parameters(void)
 {
     struct stage2_parameter **ptr;
