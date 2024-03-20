@@ -1320,5 +1320,17 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     return rc;
 }
 #endif
+/**
+ * @brief Perform TPM2 self test.
+ *
+ * This function performs the TPM2 self test.
+ *
+ * @return TPM_RC_SUCCESS in case of success
+ *
+*/
+int wolfBoot_tpm_self_test(void)
+{
+    return wolfTPM2_SelfTest(&wolftpm_dev);
+}
 
 #endif /* WOLFBOOT_TPM */

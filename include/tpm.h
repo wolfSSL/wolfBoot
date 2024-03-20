@@ -106,6 +106,8 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line);
     wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, (hash), __LINE__)
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
+int wolfBoot_tpm_self_test(void);
+
 /* debugging */
 void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,
     unsigned long maxLine);
