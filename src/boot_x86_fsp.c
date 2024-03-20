@@ -151,7 +151,7 @@ static int get_top_address(uint64_t *top, struct efi_hob *hoblist)
  * \param ptr Pointer to the parameter to be passed to the invoked function.
  */
 static void change_stack_and_invoke(uint32_t new_stack,
-                                    void (*other_func)(void *))
+                                    void (*other_func)(void))
 {
     __asm__ volatile("movl %0, %%eax\n"
                      "mov %%eax, %%esp\n"
@@ -504,7 +504,7 @@ static int self_extend_pcr(void)
  *
  * \param ptr Pointer to a parameter structure.
  */
-static void memory_ready_entry()
+static void memory_ready_entry(void)
 {
     struct fsp_info_header *fsp_info;
     temp_ram_exit_cb TempRamExit;

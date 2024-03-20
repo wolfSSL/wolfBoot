@@ -41,7 +41,7 @@ struct stage2_ptr_holder {
     uint8_t dummy_idt[DUMMY_IDT_DESC_SIZE];
 } __attribute__((packed));
 
-struct stage2_parameter *stage2_get_parameters();
+struct stage2_parameter *stage2_get_parameters(void);
 void stage2_set_parameters(struct stage2_parameter *p, struct stage2_ptr_holder *holder);
 void stage2_copy_parameter(struct stage2_parameter *p);
 

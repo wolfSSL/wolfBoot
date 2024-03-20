@@ -941,12 +941,12 @@ static void pci_dump_bus(uint8_t bus)
     }
 }
 
-void pci_dump_config_space()
+void pci_dump_config_space(void)
 {
     return pci_dump_bus(0);
 }
 #else
-void pci_dump_config_space() {};
+void pci_dump_config_space(void) {};
 #endif
 
 int pci_enum_do(void)
