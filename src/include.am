@@ -12,7 +12,7 @@ src_libwolfpkcs11_la_SOURCES = \
 
 src_libwolfpkcs11_la_CFLAGS       = -DBUILDING_WOLFPKCS11 $(AM_CFLAGS)
 src_libwolfpkcs11_la_CPPFLAGS     = -DBUILDING_WOLFPKCS11 $(AM_CPPFLAGS)
-src_libwolfpkcs11_la_LDFLAGS      = ${AM_LDFLAGS} -no-undefined -version-info ${WOLFPKCS11_LIBRARY_VERSION} 
+src_libwolfpkcs11_la_LDFLAGS      = ${AM_LDFLAGS} -no-undefined -version-number ${WOLFPKCS11_LIBRARY_VERSION}
 
 #src_libwolfpkcs11_la_DEPENDENCIES =
 #EXTRA_DIST +=

@@ -7,7 +7,7 @@
 #
 AC_COPYRIGHT([Copyright (C) 2014-2023 wolfSSL Inc.])
 AC_PREREQ([2.63])
-AC_INIT([wolfpkcs11],[1.2.0],[https://github.com/wolfssl/wolfpkcs11/issues],[wolfpkcs11],[http://www.wolfssl.com])
+AC_INIT([wolfpkcs11],[1.3.0],[https://github.com/wolfssl/wolfpkcs11/issues],[wolfpkcs11],[http://www.wolfssl.com])
 AC_CONFIG_AUX_DIR([build-aux])
 
 # The following sets CFLAGS to empty if unset on command line.
@@ -32,18 +32,25 @@ AC_ARG_PROGRAM
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([wolfpkcs11/config.h])
 
-WOLFPKCS11_LIBRARY_VERSION=3:0:0
-#                        | | |
-#                 +------+ | +---+
-#                 |        |     |
-#                current:revision:age
-#                 |        |     |
-#                 |        |     +- increment if interfaces have been added
-#                 |        |        set to zero if interfaces have been removed
-#                 |        |        or changed
-#                 |        +- increment if source code has changed
-#                 |           set to zero if current is incremented
-#                 +- increment if interfaces have been added, removed or changed
+# shared library versioning
+# The three numbers in the libpkcs11.so.*.*.* file name. Unfortunately
+
+# increment if interfaces have been removed or changed
+WOLFPKCS11_LIBRARY_VERSION_FIRST=3
+
+# increment if interfaces have been added
+# set to zero if WOLFPKCS11_LIBRARY_VERSION_FIRST is incremented
+WOLFPKCS11_LIBRARY_VERSION_SECOND=1
+
+# increment if source code has changed
+# set to zero if WOLFPKCS11_LIBRARY_VERSION_FIRST is incremented or
+# WOLFPKCS11_LIBRARY_VERSION_SECOND is incremented
+WOLFPKCS11_LIBRARY_VERSION_THIRD=0
+
+WOLFPKCS11_LIBRARY_VERSION=${WOLFPKCS11_LIBRARY_VERSION_FIRST}:${WOLFPKCS11_LIBRARY_VERSION_SECOND}:${WOLFPKCS11_LIBRARY_VERSION_THIRD}
+AC_SUBST([WOLFPKCS11_LIBRARY_VERSION_FIRST])
+AC_SUBST([WOLFPKCS11_LIBRARY_VERSION_SECOND])
+AC_SUBST([WOLFPKCS11_LIBRARY_VERSION_THIRD])
 AC_SUBST([WOLFPKCS11_LIBRARY_VERSION])
 
 

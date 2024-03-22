@@ -3862,7 +3862,8 @@ CK_RV C_WrapKey(CK_SESSION_HANDLE hSession,
             if (ret != 0)
                 return CKR_FUNCTION_FAILED;
 
-            serialBuff = XMALLOC(serialSize, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            serialBuff = (byte*)XMALLOC(serialSize, NULL,
+                DYNAMIC_TYPE_TMP_BUFFER);
             if (serialBuff == NULL)
                 return CKR_HOST_MEMORY;
 
@@ -4009,7 +4010,8 @@ CK_RV C_UnwrapKey(CK_SESSION_HANDLE hSession,
             if (wrapkeyType != CKK_AES)
                 return CKR_UNWRAPPING_KEY_TYPE_INCONSISTENT;
 
-            workBuffer = XMALLOC(ulWrappedKeyLen, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            workBuffer = (byte*)XMALLOC(ulWrappedKeyLen, NULL,
+                DYNAMIC_TYPE_TMP_BUFFER);
             if (workBuffer == NULL)
                 return CKR_HOST_MEMORY;
 
