@@ -80,6 +80,21 @@ Set to any value to stop storage of token data.
 
 ## Release Notes
 
+### wolfPKCS11 Release 1.3 (Mar 22, 2024)
+
+**Summary**
+
+Added Visual Studio support for wolfPKCS11. Fixes for cast warnings and portability.
+
+**Detail**
+
+* Fixed `C_GetAttributeValue` incorrectly erroring with `CKR_ATTRIBUTE_VALUE_INVALID` when data == NULL. The `C_GetAttributeValue` should set length if data field is NULL. (PR #27)
+* Fixed several cast warnings and possible use of uninitialized. (PR #28)
+* Fixed portability issues with `WOLFPKCS11_USER_SETTINGS`. (PR #28)
+* Added Visual Studio support for wolfPKCS11. (PR #28)
+  - This includes wolfTPM support with Windows TBS interface
+
+
 ### wolfPKCS11 Release 1.2 (Dec 26, 2023)
 
 **Summary**
