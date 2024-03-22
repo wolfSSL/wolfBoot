@@ -93,6 +93,7 @@ Added Visual Studio support for wolfPKCS11. Fixes for cast warnings and portabil
 * Fixed portability issues with `WOLFPKCS11_USER_SETTINGS`. (PR #28)
 * Added Visual Studio support for wolfPKCS11. (PR #28)
   - This includes wolfTPM support with Windows TBS interface
+* Reworked shared library versioning. (PR #29)
 
 
 ### wolfPKCS11 Release 1.2 (Dec 26, 2023)
