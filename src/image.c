@@ -276,7 +276,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     /* wolfCrypt software RSA verify */
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
-    defined(WOLFBOOT_RENESAS_TSIP)
+    defined(WOLFBOOT_RENESAS_TSIP) ||\
+    defined(WOLFBOOT_RENESAS_RSIP)
     ret = wc_InitRsaKey_ex(&rsa, NULL, RENESAS_DEVID);
     if (ret == 0) {
         XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
@@ -1044,7 +1045,8 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     pubkey_hint_size = get_header(img, HDR_PUBKEY, &pubkey_hint);
     if (pubkey_hint_size == WOLFBOOT_SHA_DIGEST_SIZE) {
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
-    defined(WOLFBOOT_RENESAS_TSIP)
+    defined(WOLFBOOT_RENESAS_TSIP) ||\
+    defined(WOLFBOOT_RENESAS_RSIP)
         /* SCE wrapped key is installed at
          *    RENESAS_SCE_INSTALLEDKEY_ADDR
          * TSIP encrypted key is installed ad

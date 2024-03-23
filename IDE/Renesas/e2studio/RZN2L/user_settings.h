@@ -31,19 +31,42 @@
 #define NO_XIP
 #define WOLFBOOT_DUALBOOT
 
+/* For RSIP use, please enable the following line. */
+/* #define  WOLFBOOT_RENESAS_RSIP */
+
 #define WOLFBOOT_SIGN_RSA2048
-/* #defube WOLFBOOT_SIGN_RSA3072 */
-/* #defube WOLFBOOT_SIGN_RSA4096 */
+/* #define WOLFBOOT_SIGN_RSA3072 */
+/* #define WOLFBOOT_SIGN_RSA4096 */
 /* #define WOLFBOOT_SIGN_ED25519 */
 /* #define WOLFBOOT_SIGN_ED488   */
 /* #define WOLFBOOT_SIGN_ECC256  */
 /* #define WOLFBOOT_SIGN_ECC384  */
 /* #define WOLFBOOT_SIGN_ECC521  */
 
-/*#ifdef WOLFBOOT_DUALBOOT
-    #define FLASH_IN_DUAL_BANK_MODE (1)
-    #define DUALBANK_SWAP
-#endif*/
+
+#ifdef WOLFBOOT_RENESAS_RSIP
+    #define WOLFSSL_RENESAS_RSIP
+    #define WOLFSSL_RENESAS_FSPSM
+    #define WOLFSSL_RENESAS_RSIP_CRYPTONLY
+    #undef  WOLFSSL_RENESAS_FSPSM_TLS
+    #define WOLFSSL_RENESAS_FSPSM_CRYPTONLY
+
+    #define WOLFBOOT_SMALL_STACK
+    #define WOLF_CRYPTO_CB
+    #define RENESAS_RSIP_INSTALLEDKEY_FLASH_ADDR  0x60200000
+    #define RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR    0x10000100
+    #define RENESAS_DEVID 7890
+    
+    #if defined(WOLFBOOT_SIGN_RSA3072) ||\
+        defined(WOLFBOOT_SIGN_RSA4096) ||\
+        defined(WOLFBOOT_SIGN_ED25519) ||\
+        defined(WOLFBOOT_SIGN_ED488)   ||\
+        defined(WOLFBOOT_SIGN_ECC256)  ||\
+        defined(WOLFBOOT_SIGN_ECC384)  ||\
+        defined(WOLFBOOT_SIGN_ECC521)
+        #error "wolfBoot with RSIP supports RSA 2048 only."
+    #endif
+#endif
 
 #define WOLFBOOT_HASH_SHA256
 
@@ -156,7 +179,7 @@
 #ifdef WOLFBOOT_SIGN_RSA2048
 #   define RSA_LOW_MEM
 #   define WOLFSSL_RSA_VERIFY_INLINE
-# ifndef WOLFBOOT_RENESAS_SCEPROTECT
+# ifndef WOLFBOOT_RENESAS_RSIP
 #   define WOLFSSL_RSA_VERIFY_ONLY
 # endif
 #   define WC_NO_RSA_OAEP

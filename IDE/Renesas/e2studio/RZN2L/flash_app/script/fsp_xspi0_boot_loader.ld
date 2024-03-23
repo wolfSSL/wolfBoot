@@ -28,6 +28,11 @@ MEMORY
 
 SECTIONS
 {
+    .PUBKEY_RAM 0x10000100 : AT(0x10000100)
+	{
+		PUBKEY_RAM_start = .;
+        KEEP(*(PUBKEY_RAM))
+	}
     .IMAGE_APP_RAM 0x10010000 : AT (0x10010000)
     {
         IMAGE_APP_RAM_start = .;
@@ -44,6 +49,12 @@ SECTIONS
         IMAGE_APP_FLASH_update_start = .;
         KEEP(./src/Flash_update.o(.IMAGE_APP_FLASH_update))
         IMAGE_APP_FLASH_update_end = .;
+    }
+    .WRAPPED_KEY_FLASH_PUB 0x60200000 : AT (0x60200000)
+    {
+        WRAPPED_KEY_FLASH_PUB_start = .;
+        KEEP(./src/Flash_wrappedkey_public.o(.WRAPPED_KEY_FLASH_PUB))
+        WRAPPED_KEY_FLASH_PUB_end = .;
     }
     .loader_param 0x60000000 : AT (0x60000000)
     {
