@@ -939,7 +939,7 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
     memset(upd->SataPortsEnable, 0, sizeof(upd->SataPortsEnable));
     upd->SataPortsEnable[0] = upd->SataPortsEnable[1] = 1;
     upd->PortUsb30Enable[0] = upd->PortUsb30Enable[1] = upd->PortUsb30Enable[2] = upd->PortUsb30Enable[3] = 1;
-
+    upd->XdciEnable = 1;
 
     for (i = 0; i < sizeof(upd->SerialIoUartMode); i++)
         upd->SerialIoUartMode[i] = 0x0;
