@@ -898,7 +898,7 @@ void pci_dump(uint8_t bus, uint8_t dev, uint8_t fun)
             wolfBoot_printf("%x: ", (int)i);
         }
         wolfBoot_printf("%s%x%s", (ptr[i] < 0x10 ? "0" :""), (int)ptr[i],
-                        (i % 0x10 == 0xf ? "\n":" "));
+                        (i % 0x10 == 0xf ? "\r\n":" "));
     }
 }
 
@@ -937,7 +937,7 @@ static void pci_dump_bus(uint8_t bus)
             if (dev < 0x10)
                 wolfBoot_printf("0");
             wolfBoot_printf("%x.", dev);
-            wolfBoot_printf("%d \n", fun);
+            wolfBoot_printf("%d \r\n", fun);
             pci_dump(bus, dev, fun);
             header_type = pci_config_read16(bus, dev, fun,
                                             PCI_HEADER_TYPE_OFFSET);
