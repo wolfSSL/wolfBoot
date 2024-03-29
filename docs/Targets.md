@@ -14,6 +14,7 @@ This README describes configuration of supported targets.
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
+* [NXP MCXA153](#nxp-mcxa153)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -1709,6 +1710,35 @@ Connected to gdbserver t2080-tap-01:2345
 Executing Initialization File: /opt/Freescale/CodeWarrior_PA_10.5.1/PA/PA_Support/Initialization_Files/QorIQ_T2/68PPC2_init_sram.tcl
 thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu, target)
 ```
+
+## NXP MCXA153
+
+NXP MCXA153 is a Cortex-M33 microcontroller running at 96MHz.
+The support has been tested using FRDM-MCXA153 with the onboard MCU-Link
+configured in JLink mode.
+
+### Configuring and compiling
+
+Copy the example configuration file:
+
+`cp config/examples/mcxa.config .config`
+
+Compile via:
+
+`make`
+
+### Loading the firmware
+
+Use JLinkExe tool to upload the initial firmware:
+
+`JLinkExe -if swd -Device MCXA153`
+
+At the Jlink prompt, type:
+
+```
+J-Link>loadbin factory.bin 0
+```
+
 
 
 ## TI Hercules TMS570LC435

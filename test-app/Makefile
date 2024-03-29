@@ -222,6 +222,13 @@ ifeq ($(TARGET),kinetis)
   endif
 endif
 
+ifeq ($(TARGET),mcxa)
+    LSCRIPT_TEMPLATE=ARM-mcxa.ld
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
+endif
+
 ifeq ($(TARGET),imx_rt)
   LDFLAGS+=\
     -mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections \
