@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
-    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 24K 
+    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 24K
 }
 
 SECTIONS
@@ -17,7 +17,7 @@ SECTIONS
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
-    
+
     .ARM :
     {
       __exidx_start = .;

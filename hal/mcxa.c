@@ -32,10 +32,10 @@
 /* Flash driver */
 #include "fsl_romapi.h"
 
-#define BOARD_BOOTCLOCKFRO96M_CORE_CLOCK           96000000U  /*!< Core clock frequency: 96000000Hz */
+/*!< Core clock frequency: 96000000Hz */
+#define BOARD_BOOTCLOCKFRO96M_CORE_CLOCK 96000000UL
 
 static flash_config_t pflash;
-//static ftfx_cache_config_t pcache;
 static int flash_init = 0;
 
 #ifdef __WOLFBOOT
@@ -70,11 +70,11 @@ void BOARD_BootClockFRO96M(void)
         (void)SPC_SetSRAMOperateVoltage(SPC0, &sramOption);
     }
 
-    CLOCK_SetupFROHFClocking(96000000U);               /*!< Enable FRO HF(96MHz) output */
+    CLOCK_SetupFROHFClocking(96000000U);         /*!< Enable FRO HF(96MHz) output */
 
-    CLOCK_SetupFRO12MClocking();                /*!< Setup FRO12M clock */
+    CLOCK_SetupFRO12MClocking();                 /*!< Setup FRO12M clock */
 
-    CLOCK_AttachClk(kFRO_HF_to_MAIN_CLK);       /* !< Switch MAIN_CLK to FRO_HF */
+    CLOCK_AttachClk(kFRO_HF_to_MAIN_CLK);        /* !< Switch MAIN_CLK to FRO_HF */
 
     /* The flow of decreasing voltage and frequency */
     if (coreFreq > BOARD_BOOTCLOCKFRO96M_CORE_CLOCK) {
@@ -93,10 +93,9 @@ void BOARD_BootClockFRO96M(void)
     /*!< Set up clock selectors - Attach clocks to the peripheries */
 
     /*!< Set up dividers */
-    CLOCK_SetClockDiv(kCLOCK_DivAHBCLK, 1U);               /* !< Set AHBCLKDIV divider to value 1 */
-    CLOCK_SetClockDiv(kCLOCK_DivFRO_HF_DIV, 1U);           /* !< Set FROHFDIV divider to value 1 */
+    CLOCK_SetClockDiv(kCLOCK_DivAHBCLK, 1U);     /* !< Set AHBCLKDIV divider to value 1 */
+    CLOCK_SetClockDiv(kCLOCK_DivFRO_HF_DIV, 1U); /* !< Set FROHFDIV divider to value 1 */
 }
-
 
 void hal_init(void)
 {
@@ -113,15 +112,16 @@ void hal_prepare_boot(void)
 {
 }
 
-
-#endif
+#endif /* __WOLFBOOT */
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int w = 0;
     int ret;
-    const uint8_t empty_qword[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                                     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    int w = 0;
+    const uint8_t empty_qword[16] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    };
 
     while (len > 0) {
         if ((len < 16) || address & 0x0F) {
@@ -129,17 +129,20 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             uint32_t address_align = address - (address & 0x0F);
             uint32_t start_off = address - address_align;
             int i;
+
             memcpy(aligned_qword, (void*)address_align, 16);
-            for (i = start_off; ((i < 16) && (i < len + (int)start_off)); i++)
+            for (i = start_off; ((i < 16) && (i < len + (int)start_off)); i++) {
                 aligned_qword[i] = data[w++];
+            }
             if (memcmp(aligned_qword, empty_qword, 16) != 0) {
-                    ret = FLASH_ProgramPhrase(&pflash, address_align, aligned_qword, 16);
+                ret = FLASH_ProgramPhrase(&pflash, address_align, aligned_qword, 16);
                 if (ret != kStatus_Success)
                     return -1;
             }
             address += i;
             len -= i;
-        } else {
+        }
+        else {
             uint32_t len_align = len - (len & 0x0F);
             ret = FLASH_ProgramPhrase(&pflash, address, (uint8_t*)data + w, len_align);
             if (ret != kStatus_Success)
@@ -168,5 +171,3 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         return -1;
     return 0;
 }
-
-
