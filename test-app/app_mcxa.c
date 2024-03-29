@@ -32,6 +32,8 @@
 
 #include "wolfboot/wolfboot.h"
 
+extern void hal_init(void);
+
 /* init gpio for port 3 */
 void gpio_port3_init(int pin)
 {
@@ -70,6 +72,8 @@ void main(void)
     uint8_t* bootPart = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint32_t bootVer = wolfBoot_get_blob_version(bootPart);
 
+    hal_init();
+
     /* If application version 1 then GREEN, else BLUE */
     /* RGB LED D15 (RED=P3_12, GREEN=P3_13, BLUE=P3_0) */
     if (bootVer == 1) {
@@ -80,6 +84,9 @@ void main(void)
         gpio_port3_init(0);
         GPIO_PinWrite(GPIO3, 0, 0);
     }
+
+    /* mark boot successful */
+    wolfBoot_success();
 
     /* busy wait */
     while (1) {

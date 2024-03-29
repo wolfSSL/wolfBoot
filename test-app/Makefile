@@ -227,6 +227,7 @@ ifeq ($(TARGET),mcxa)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o
 endif
 
 ifeq ($(TARGET),imx_rt)

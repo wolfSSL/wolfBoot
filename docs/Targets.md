@@ -1778,11 +1778,17 @@ Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trig
 
 Debugging with JLink:
 
-In one terminal:
-`JLinkGDBServer -if swd -Device MCXA153 -port 3333`
+Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
 
-We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files:
-In another terminal use `gdb`.
+In one terminal: `JLinkGDBServer -if swd -Device MCXA153 -port 3333`
+
+In another terminal use `gdb`:
+
+```
+b main
+mon reset
+c
+```
 
 
 ## TI Hercules TMS570LC435
