@@ -14,6 +14,7 @@ This README describes configuration of supported targets.
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
+* [NXP MCXA153](#nxp-mcxa153)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -1708,6 +1709,85 @@ Connected to gdbserver t2080-tap-01:2345
 
 Executing Initialization File: /opt/Freescale/CodeWarrior_PA_10.5.1/PA/PA_Support/Initialization_Files/QorIQ_T2/68PPC2_init_sram.tcl
 thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu, target)
+```
+
+## NXP MCXA153
+
+NXP MCXA153 is a Cortex-M33 microcontroller running at 96MHz.
+The support has been tested using FRDM-MCXA153 with the onboard MCU-Link configured in JLink mode.
+
+This requires the MCXA SDK from the NXP MCUXpresso SDK Builder. We tested using `SDK_2.14.2_MCXA153` and placed into `../NXP/MCXA153` by default (see .config or set with `MCUXPRESSO`).
+MCUXpresso SDK Builder
+
+### MCX A: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cp config/examples/mcxa.config .config`
+make
+```
+
+### MCX A: Loading the firmware
+
+The NXP Freedom MCX A board debugger comes loaded with MCU Link, but it can be updated to JLink. See https://docs.nxp.com/bundle/UM12012/page/topics/Updating_MCU_Link_firmware.html
+
+Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXA153`
+
+At the Jlink prompt, type:
+
+```
+loadbin factory.bin 0
+Downloading file [factory.bin]...
+J-Link: Flash download: Bank 0 @ 0x00000000: Skipped. Contents already match
+O.K.
+```
+
+Reset or power cycle board.
+
+Once wolfBoot has performaed validation of the partition and booted the D15 Green LED on P3_13 will illuminate.
+
+### MCX A: Testing firmware update
+
+1) Sign the test-app with version 2:
+
+```sh
+./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+2) Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
+
+```sh
+echo -n "pBOOT" > trigger_magic.bin
+```
+
+3) Assembly new factory update.bin:
+
+```sh
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0    test-app/image_v2_signed.bin \
+    0xAFFB trigger_magic.bin
+```
+
+4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`). The D15 RGB LED Blue P3_0 will show if version is > 1.
+
+Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trigger_magic.bin at `0x9FFB`.
+
+### MCX A: Debugging
+
+Debugging with JLink:
+
+Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
+
+In one terminal: `JLinkGDBServer -if swd -Device MCXA153 -port 3333`
+
+In another terminal use `gdb`:
+
+```
+b main
+mon reset
+c
 ```
 
 
