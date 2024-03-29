@@ -1719,36 +1719,25 @@ The support has been tested using FRDM-MCXA153 with the onboard MCU-Link configu
 This requires the MCXA SDK from the NXP MCUXpresso SDK Builder. We tested using `SDK_2.14.2_MCXA153` and placed into `../NXP/MCXA153` by default (see .config or set with `MCUXPRESSO`).
 MCUXpresso SDK Builder
 
-### Configuring and compiling
+### MCX A: Configuring and compiling
 
-Copy the example configuration file:
+Copy the example configuration file and build with make:
 
-`cp config/examples/mcxa.config .config`
+```sh
+cp config/examples/mcxa.config .config`
+make
+```
 
-Compile via:
-
-`make`
-
-### Loading the firmware
+### MCX A: Loading the firmware
 
 The NXP Freedom MCX A board debugger comes loaded with MCU Link, but it can be updated to JLink. See https://docs.nxp.com/bundle/UM12012/page/topics/Updating_MCU_Link_firmware.html
 
-Use JLinkExe tool to upload the initial firmware:
-
-`JLinkExe -if swd -Device MCXA153`
+Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXA153`
 
 At the Jlink prompt, type:
 
 ```
 loadbin factory.bin 0
-'loadbin': Performing implicit reset & halt of MCU.
-ResetTarget() start
-Reset via SYSRESETREQ and reset pin + halt after bootloader
-ResetTarget() end - Took 111ms
-AfterResetTarget() start
-  SRAM_XEN set to RWX
-  FLASH and IFR set to RWX
-AfterResetTarget() end - Took 7.40ms
 Downloading file [factory.bin]...
 J-Link: Flash download: Bank 0 @ 0x00000000: Skipped. Contents already match
 O.K.
@@ -1758,17 +1747,17 @@ Reset or power cycle board.
 
 Once wolfBoot has performaed validation of the partition and booted the D15 Green LED on P3_13 will illuminate.
 
-### Testing firmware update
+### MCX A: Testing firmware update
 
 1) Sign the test-app with version 2:
 
-```
+```sh
 ./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
 ```
 
 2) Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
 
-```
+```sh
 echo -n "pBOOT" > trigger_magic.bin
 ```
 
@@ -1781,7 +1770,19 @@ echo -n "pBOOT" > trigger_magic.bin
     0xAFFB trigger_magic.bin
 ```
 
-4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`). The D15 GDB LED Blue P3_0 will show if version is > 1.
+4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`). The D15 RGB LED Blue P3_0 will show if version is > 1.
+
+Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trigger_magic.bin at `0x9FFB`.
+
+### MCX A: Debugging
+
+Debugging with JLink:
+
+In one terminal:
+`JLinkGDBServer -if swd -Device MCXA153 -port 3333`
+
+We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files:
+In another terminal use `gdb`.
 
 
 ## TI Hercules TMS570LC435
