@@ -629,7 +629,36 @@ enum ifc_amask_sizes {
 #define DDR_TIMING_CFG_5_VAL   0x05401400
 #define DDR_TIMING_CFG_8_VAL   0x03115800
 
-#define DDR_SDRAM_MODE_VAL     0x01010215
+
+/* ESDMODE 0x0101 */
+/* SDMODE  0x0215
+ * | 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2   | 1 | 0 |
+ * [   WR/RTP    ]       [   CL3-0   ][BT][CL0][   BL  ]
+ * Burst Length (BL) = 00 (fixed 8), 01 (on the fly), 02 (fixed 4)
+ * Burst Type (BT) = 0 (nibble sequential), 1 (interleave)
+ * CAS Latency (CL):
+ *   00000 (9 clocks)
+ *   00001 (10 clocks) (works)
+ *   00010 (11 clocks) (works)
+ *   00011 (12 clocks) (original)
+ *   00100 (13 clocks) (fails)
+ *   00101 (14 clocks)
+ *   00110 (15 clocks)
+ *   00111 (16 clocks) (fails)
+ *   10111 (32 clocks)
+ * WRITE recovery (WR)/READ-to-PRECHARGE(RTP):
+ *   0000 (10/5 clocks) (works)
+ *   0001 (12/6 clocks) (original)
+ *   0010 (14/7 clocks) (works)
+ *   0011 (16/8 clocks) (works)
+ *   0100 (18/9 clocks) (works)
+ *   0101 (20/10 clocks)
+ *   0110 (24/12 clocks)
+ *   0111 (22/11 clocks)
+ *   1000 (26/13 clocks)
+ *   1001 (28/14 clocks)
+ */
+#define DDR_SDRAM_MODE_VAL     0x01010211
 #define DDR_SDRAM_MODE_2_VAL   0x00000000
 #define DDR_SDRAM_MODE_9_VAL   0x00000500 /* Extended SDRAM mode 5 */
 #define DDR_SDRAM_MODE_10_VAL  0x04000000 /* Extended SDRAM mode 7 */
