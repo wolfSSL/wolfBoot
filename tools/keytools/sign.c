@@ -2072,6 +2072,44 @@ int main(int argc, char** argv)
             }
             CMD.custom_tlvs++;
             i += 2;
+        } else if (strcmp(argv[i], "--custom-tlv-string") == 0) {
+            int p = CMD.custom_tlvs;
+            uint16_t tag, len;
+            uint32_t j;
+            if (p >= MAX_CUSTOM_TLVS) {
+                fprintf(stderr, "Too many custom TLVs.\n");
+                exit(16);
+            }
+            if (argc < (i + 2)) {
+                fprintf(stderr, "Invalid custom TLV fields. \n");
+                exit(16);
+            }
+			tag = (uint16_t)arg2num(argv[i + 1], 2);
+			len = (uint16_t)strlen(argv[i + 2]);
+            if (tag < 0x0030) {
+                fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
+                exit(16);
+            }
+            if ( ((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF) ) {
+                fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
+                exit(16);
+            }
+            if (len > 255) {
+                fprintf(stderr, "custom tlv buffer size too big: %s\n", argv[i + 2]);
+                exit(16);
+            }
+            CMD.custom_tlv[p].tag = tag;
+            CMD.custom_tlv[p].len = len;
+            CMD.custom_tlv[p].buffer = malloc(len);
+            if (CMD.custom_tlv[p].buffer == NULL) {
+                fprintf(stderr, "Error malloc for custom tlv buffer %d\n", len);
+                exit(16);
+            }
+            for (j = 0; j < len; j++) {
+                CMD.custom_tlv[p].buffer[j] = (uint8_t)argv[i+2][j];
+            }
+            CMD.custom_tlvs++;
+            i += 2;
         }
         else {
             i--;
