@@ -851,10 +851,15 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
     WOLFTPM2_KEYBLOB seal_blob;
     word32 nvAttributes;
 
+    if (auth == NULL && authSz > 0)
+        return BAD_FUNC_ARG;
+
     memset(&seal_blob, 0, sizeof(seal_blob));
 
     seal_blob.handle.auth.size = authSz;
-    XMEMCPY(seal_blob.handle.auth.buffer, auth, authSz);
+
+    if (auth != NULL)
+        XMEMCPY(seal_blob.handle.auth.buffer, auth, authSz);
 
     /* creates a sealed keyed hash object (not loaded to TPM) */
     rc = wolfBoot_seal_blob(pubkey_hint, policy, policySz, &seal_blob,
