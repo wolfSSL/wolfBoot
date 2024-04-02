@@ -2084,8 +2084,8 @@ int main(int argc, char** argv)
                 fprintf(stderr, "Invalid custom TLV fields. \n");
                 exit(16);
             }
-			tag = (uint16_t)arg2num(argv[i + 1], 2);
-			len = (uint16_t)strlen(argv[i + 2]);
+            tag = (uint16_t)arg2num(argv[i + 1], 2);
+            len = (uint16_t)strlen(argv[i + 2]);
             if (tag < 0x0030) {
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
