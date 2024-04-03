@@ -1026,7 +1026,7 @@ struct tgl_gpio_conf {
 };
 
 #if defined (TARGET_kontron_vx3060_s2)
-static const struct tgl_gpio_conf gpio_table[] = {
+static const struct tgl_gpio_conf gpio_table_tempram[] = {
     /* UART 0 */
     {.gpio =
          {
@@ -1142,7 +1142,26 @@ static const struct tgl_gpio_conf gpio_table[] = {
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_reset = GPIO_RESET_PLTRST},
-    /* set to GPIO mode as native functino aren't used */
+};
+
+static const struct tgl_gpio_conf gpio_table_premem[] = {
+    /* Disable CNVi (Bluetooth Radio Interface) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_F2_CFG_OFF,
+         },
+     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
+               GPIO_SET_RESET),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
+     .gpio_reset = GPIO_RESET_PLTRST},
+};
+
+static const struct tgl_gpio_conf gpio_table_presilicon[] = {
+
+    /* set to GPIO mode as native functions aren't used */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_0_PORT_ID,
@@ -1185,17 +1204,6 @@ static const struct tgl_gpio_conf gpio_table[] = {
                GPIO_SET_RESET),
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_INPUT,
-     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
-     .gpio_reset = GPIO_RESET_PLTRST},
-    {.gpio =
-         {
-             .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F2_CFG_OFF,
-         },
-     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
-               GPIO_SET_RESET),
-     .gpio_mode = GPIO_MODE_GPIO,
-     .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
      .gpio_reset = GPIO_RESET_PLTRST},
 
@@ -1620,8 +1628,8 @@ int post_temp_ram_init_cb(void)
         return err;
 
     /* setup GPIOs */
-    for (i = 0; i < sizeof(gpio_table)/sizeof(gpio_table[0]); i++) {
-        tgl_gpio_configure(&gpio_table[i]);
+    for (i = 0; i < sizeof(gpio_table_tempram)/sizeof(gpio_table_tempram[0]); i++) {
+        tgl_gpio_configure(&gpio_table_tempram[i]);
     }
 
 
@@ -1667,11 +1675,23 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
 
 int fsp_pre_mem_init_cb(void)
 {
+    unsigned int i;
+
+    for (i = 0; i < sizeof(gpio_table_premem)/sizeof(gpio_table_premem[0]); i++) {
+        tgl_gpio_configure(&gpio_table_premem[i]);
+    }
+
     return 0;
 }
 
 int fsp_pre_silicon_init_cb(void)
 {
+    unsigned int i;
+
+    for (i = 0; i < sizeof(gpio_table_presilicon)/sizeof(gpio_table_presilicon[0]); i++) {
+        tgl_gpio_configure(&gpio_table_presilicon[i]);
+    }
+
     return 0;
 }
 #endif /* TGL_FSP_H */
