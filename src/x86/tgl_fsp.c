@@ -148,6 +148,12 @@
 #define GPIO_GPPC_T2_CFG_OFF (0x8c0)
 #define GPIO_GPPC_T3_CFG_OFF (0x8d0)
 
+#ifdef DEBUG_GPIO
+#define GPIO_DEBUG_PRINTF(...) wolfBoot_printf(__VA_ARGS__)
+#else
+#define GPIO_DEBUG_PRINTF(...) do {} while(0)
+#endif /* DEBUG_GPIO */
+
 SI_PCH_DEVICE_INTERRUPT_CONFIG mPchHDevIntConfig[] = {
     {30, 0, SiPchIntA, 16},
 };
@@ -1463,6 +1469,9 @@ static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
 
     g = gpio->gpio;
 
+    GPIO_DEBUG_PRINTF("Gpio port: %d off: 0x%x :\r\n", i, g.comm_port_id,
+                      g.cfg_offset);
+
     dw0 = _dw0 = pch_read32(g.comm_port_id, g.cfg_offset);
     dw1 = _dw1 = pch_read32(g.comm_port_id, g.cfg_offset + 4);
 
@@ -1490,6 +1499,9 @@ static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
         dw0 &= ~(GPIO_RXEVCONF_MASK);
         dw0 |= gpio->gpio_rxevconf << GPIO_RXEVCONF_SHIFT;
     }
+
+    GPIO_DEBUG_PRINTF("dw0: 0x%x -> 0x%x, dw1: 0x%x->0x%x\r\n", 
+                      _dw0, dw0, _dw1, dw1);
     if (_dw1 != dw1) {
         pch_write32(g.comm_port_id, g.cfg_offset + 4, dw1);
     }
