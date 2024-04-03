@@ -1244,7 +1244,8 @@ static const struct tgl_gpio_conf gpio_table[] = {
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
      .gpio_reset = GPIO_RESET_PLTRST},
-    {.gpio =
+     /* FUSA_DIAGTEST_PCHMODE and FUSA_DIAGTEST_EN, disabled in SBL*/
+/*     {.gpio =
          {
              .comm_port_id = GPIO_COMM_0_PORT_ID,
              .cfg_offset = GPIO_GPPC_T2_CFG_OFF,
@@ -1265,7 +1266,7 @@ static const struct tgl_gpio_conf gpio_table[] = {
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
-     .gpio_reset = GPIO_RESET_PLTRST},
+     .gpio_reset = GPIO_RESET_PLTRST}, */
     /* TPM */
     {.gpio =
          {
