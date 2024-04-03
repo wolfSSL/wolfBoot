@@ -1665,4 +1665,13 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
     return 0;
 }
 
+int fsp_pre_mem_init_cb(void)
+{
+    return 0;
+}
+
+int fsp_pre_silicon_init_cb(void)
+{
+    return 0;
+}
 #endif /* TGL_FSP_H */

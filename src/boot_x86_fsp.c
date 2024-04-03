@@ -97,6 +97,8 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
                                     uint32_t mem_base, uint32_t mem_size);
 int fsp_machine_update_s_parameters(uint8_t *default_s_params);
 int post_temp_ram_init_cb(void);
+int fsp_pre_mem_init_cb(void);
+int fsp_pre_silicon_init_cb(void);
 
 /* from the linker */
 extern uint8_t _start_fsp_t[];
@@ -422,6 +424,15 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
     status = fsp_machine_update_s_parameters(silicon_init_parameter);
     SiliconInit = (silicon_init_cb)(fsp_s_base + fsp_info->FspSiliconInitEntryOffset);
 
+#if defined(WOLFBOOT_DUMP_FSP_UPD)
+    wolfBoot_printf("Dumping fsps upd (%d bytes)" ENDLINE, (int)fsp_info->CfgRegionSize);
+    wolfBoot_print_hexstr(silicon_init_parameter, fsp_info->CfgRegionSize, 16);
+#endif
+    status = fsp_pre_silicon_init_cb();
+    if (status != 0) {
+        wolfBoot_printf("pre silicon init cb returns %d", status);
+        panic();
+    }
     wolfBoot_printf("call silicon..." ENDLINE);
     status = SiliconInit(silicon_init_parameter);
     if (status != EFI_SUCCESS) {
@@ -715,6 +726,16 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     status = fsp_machine_update_m_parameters(udp_m_parameter, stack_base + 0x4,
                                              FSP_M_CAR_MEM_SIZE);
     if (status != 0) {
+        panic();
+    }
+
+#if defined(WOLFBOOT_DUMP_FSP_UPD)
+    wolfBoot_printf("Dumping fspm udp (%d bytes)" ENDLINE, (int)fsp_m_info_header->CfgRegionSize);
+    wolfBoot_print_hexstr(udp_m_parameter, fsp_m_info_header->CfgRegionSize, 16);
+#endif
+    status = fsp_pre_mem_init_cb();
+    if (status != 0) {
+        wolfBoot_printf("pre mem init cb returns %d", status);
         panic();
     }
 
