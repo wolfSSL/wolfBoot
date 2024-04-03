@@ -1340,19 +1340,6 @@ static const struct tgl_gpio_conf gpio_table[] = {
      .gpio_term = GPIO_TERM_NONE},
     {.gpio =
          {
-             /* PLD_WDT_IRQ0 */
-             .comm_port_id = GPIO_COMM_1_PORT_ID,
-             .cfg_offset = GPIO_GPPC_D1_CFG_OFF,
-         },
-     .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
-               GPIO_SET_RESET | GPIO_SET_TERM),
-     .gpio_mode = GPIO_MODE_GPIO,
-     .gpio_dir = GPIO_DIR_INPUT,
-     .gpio_interrupt = GPIO_INTERRUPT_DISABLE,
-     .gpio_reset = GPIO_RESET_HOSTDEEPRESET,
-     .gpio_term = GPIO_TERM_NONE},
-    {.gpio =
-         {
              /* PLD_WDT_IRQ1 */
              .comm_port_id = GPIO_COMM_1_PORT_ID,
              .cfg_offset = GPIO_GPPC_D0_CFG_OFF,
