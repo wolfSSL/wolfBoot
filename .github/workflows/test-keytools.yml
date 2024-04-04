@@ -264,3 +264,9 @@ jobs:
           ./tools/keytools/sign --ecc256 --sha256 --custom-tlv-buffer 0x46 48656C6C6F20776F726C64 test-app/image.elf wolfboot_signing_private_key.der 3
           grep "Hello world" test-app/image_v3_signed.bin
 
+      - name: Sign app with custom string TLV included
+        run: |
+          ./tools/keytools/sign --ecc256 --sha256 --custom-tlv-string 0x46 "Hello world" test-app/image.elf wolfboot_signing_private_key.der 3
+          grep "Hello world" test-app/image_v3_signed.bin
+                   
+
