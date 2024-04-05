@@ -31,7 +31,9 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+project(wolfBoot)
+
+if("${PROJECT_SOURCE_DIR}" STREQUAL "${PROJECT_BINARY_DIR}")
     message(
         FATAL_ERROR
             "In-source builds are not allowed.\
@@ -39,8 +41,6 @@ if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
      NOTE: cmake will now create CMakeCache.txt and CMakeFiles/*.\
      You must delete them, or cmake will refuse to work.")
 endif()
-
-project(wolfBoot)
 
 include(cmake/utils.cmake)
 include(cmake/functions.cmake)
