@@ -627,8 +627,10 @@ static void clock_pll_on(int powersave)
     uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, d1cpre, d1ppre;
     uint32_t d2ppre1, d2ppre2, d3ppre, flash_waitstates;
 
-    PWR_CR3 |= PWR_CR3_LDOEN;
-    while ((PWR_CSR1 & PWR_CSR1_ACTVOSRDY) == 0) {};
+    if((PWR_CR3 & (PWR_CR3_LDOEN | PWR_CR3_SCUEN)) == (PWR_CR3_LDOEN | PWR_CR3_SCUEN)) {
+        PWR_CR3 |= PWR_CR3_LDOEN;
+        while ((PWR_CSR1 & PWR_CSR1_ACTVOSRDY) == 0) {};
+    }
 
     PWR_D3CR |= (PWR_D3CR_VOS_SCALE_1 << PWR_D3CR_VOS_SHIFT);
     /* Delay after setting the voltage scaling */
