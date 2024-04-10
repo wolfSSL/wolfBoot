@@ -132,6 +132,8 @@ CMakeCache.txt
 
 # Stage 1
 stage1/loader_stage1.ld
+hal/x86_fsp_tgl_stage1.ld
+hal/x86_fsp_qemu_stage1.ld
 
 debug/lauterbach
 
@@ -177,3 +179,12 @@ IDE/Renesas/e2studio/RZN2L/wolfboot/.secure_azone
 IDE/Renesas/e2studio/RZN2L/wolfboot/.secure_xml
 IDE/Renesas/e2studio/RZN2L/wolfboot/configuration.xml
 
+
+tpm_seal_key.key
+
+# FSP downloaded headers
+include/x86/fsp/FspUpd.h
+include/x86/fsp/FspmUpd.h
+include/x86/fsp/FspsUpd.h
+include/x86/fsp/FsptUpd.h
+include/x86/fsp/MemInfoHob.h
