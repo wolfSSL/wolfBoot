@@ -146,8 +146,6 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
-    endif
-    ifneq ($(TZEN),1)
       LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
   endif
@@ -160,6 +158,7 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
+      LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
     SPI_TARGET=stm32
   endif
@@ -172,8 +171,6 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
-    endif
-    ifneq ($(TZEN),1)
       LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
     SPI_TARGET=stm32

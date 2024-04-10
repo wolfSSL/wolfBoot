@@ -48,6 +48,7 @@ extern int tolower(int c);
 #define HAVE_WOLF_BIGINT
 #define HAVE_PKCS11_STATIC
 #define WOLF_CRYPTO_CB
+#define MAX_CRYPTO_DEVID_CALLBACKS 2
 
 
 /* ECC */

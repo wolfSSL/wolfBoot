@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x08000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    RAM (rwx) : ORIGIN = 0x0A000000, LENGTH = 0x00020000 /* mapping TCM only */
+    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping TCM only */
 }
 
 SECTIONS

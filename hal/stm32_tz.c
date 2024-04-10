@@ -33,12 +33,12 @@
     #include "hal/stm32h5.h"
 #endif
 
+#include "hal/stm32_tz.h"
+
 #include "image.h"
 #include "hal.h"
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && (!defined(FLAGS_HOME) || !defined(DISABLE_BACKUP))
 
-#define SCB_SHCSR     (*(volatile uint32_t *)(0xE000ED24))
-#define SCB_SHCSR_SECUREFAULT_EN            (1<<19)
 
 static void RAMFUNCTION hal_flash_nonsecure_unlock(void)
 {
@@ -120,6 +120,42 @@ void hal_tz_release_nonsecure_area(void)
 #define release_nonsecure_area(...) do{}while(0)
 #endif
 
+
+
+#ifdef PLATFORM_stm32h5
+#define GTZC1_BASE             (0x50032400)
+#define GTZC1_TZSC             (*(volatile uint32_t *)(GTZC1_BASE + 0x00))
+#define GTZC1_TZIC             (*(volatile uint32_t *)(GTZC1_BASE + 0x0400))
+#define GTZC1_MPCBB1_S         ((volatile uint32_t *)(GTZC1_BASE + 0x0800 + 0x100))
+#define GTZC1_MPCBB2_S         ((volatile uint32_t *)(GTZC1_BASE + 0x0C00 + 0x100))
+#define GTZC1_MPCBB3_S         ((volatile uint32_t *)(GTZC1_BASE + 0x1000 + 0x100))
+
+#define SET_GTZC1_MPCBBx_S_VCTR(bank,n,val) \
+    (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_S) + n ))= val
+
+void hal_gtzc_init(void)
+{
+    int i;
+    /* One bit in the bitmask: 512B */
+
+    /* Configure SRAM1 as secure (Low 256 KB) */
+    for (i = 0; i < 16; i++) {
+        SET_GTZC1_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
+    }
+
+    /* Configure SRAM2 as secure (64 KB) */
+    for (i = 0; i < 4; i++) {
+        SET_GTZC1_MPCBBx_S_VCTR(2, i, 0xFFFFFFFF);
+    }
+
+    /* Configure SRAM3 as non-secure (320 KB) */
+    for (i = 0; i < 20; i++) {
+        SET_GTZC1_MPCBBx_S_VCTR(3, i, 0x0);
+    }
+}
+
+#else
+
 #define GTZC_MPCBB1_S_BASE        (0x50032C00)
 #define GTZC_MPCBB1_S_VCTR_BASE   (GTZC_MPCBB1_S_BASE + 0x100)
 
@@ -129,13 +165,14 @@ void hal_tz_release_nonsecure_area(void)
 #define SET_GTZC_MPCBBx_S_VCTR(bank,n,val) \
     (*((volatile uint32_t *)(GTZC_MPCBB##bank##_S_VCTR_BASE ) + n ))= val
 
-
 void hal_gtzc_init(void)
 {
    int i;
-  /* Configure lower half of total RAM as secure
-   * 0x3000 0000 : 0x3001 FFFF - 128KB
-   */
+   /* One bit in the bitmask: 256B */
+
+   /* Configure lower half of total RAM as secure
+    * 0x3000 0000 : 0x3001 FFFF - 128KB
+    */
    for (i = 0; i < 16; i++) {
        SET_GTZC_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
    }
@@ -147,43 +184,47 @@ void hal_gtzc_init(void)
        SET_GTZC_MPCBBx_S_VCTR(1, i, 0x0);
    }
 
-  /* Configure SRAM2 as non-secure
-   * 0x2003 0000 : 0x2003 FFFF - 64 KB
-   */
+   /* Configure SRAM2 as non-secure
+    * 0x2003 0000 : 0x2003 FFFF - 64 KB
+    */
    for (i = 0; i < 8; i++) {
        SET_GTZC_MPCBBx_S_VCTR(2, i, 0x0);
    }
 }
+#endif
 
-/* SAU registers, used to define memory mapped regions */
-#define SAU_CTRL   (*(volatile uint32_t *)(0xE000EDD0))
-#define SAU_RNR (*(volatile uint32_t *)(0xE000EDD8)) /** SAU_RNR - region number register **/
-#define SAU_RBAR (*(volatile uint32_t *)(0xE000EDDC)) /** SAU_RBAR - region base address register **/
-#define SAU_RLAR (*(volatile uint32_t *)(0xE000EDE0)) /** SAU_RLAR - region limit address register **/
+#ifdef PLATFORM_stm32h5
 
-#define SAU_REGION_MASK 0x000000FF
-#define SAU_ADDR_MASK 0xFFFFFFE0 /* LS 5 bit are reserved or used for flags */
-
-/* Flag for the SAU region limit register */
-#define SAU_REG_ENABLE (1 << 0) /* Indicates that the region is enabled. */
-#define SAU_REG_SECURE (1 << 1) /* When on, the region is S or NSC */
-
-#define SAU_INIT_CTRL_ENABLE (1 << 0)
-#define SAU_INIT_CTRL_ALLNS  (1 << 1)
-
-static void sau_init_region(uint32_t region, uint32_t start_addr,
-        uint32_t end_addr, int secure)
+void hal_tz_sau_init(void)
 {
-    uint32_t secure_flag = 0;
-    if (secure)
-        secure_flag = SAU_REG_SECURE;
-    SAU_RNR = region & SAU_REGION_MASK;
-    SAU_RBAR = start_addr & SAU_ADDR_MASK;
-    SAU_RLAR = (end_addr & SAU_ADDR_MASK)
-        | secure_flag | SAU_REG_ENABLE;
+    uint32_t page_n = 0;
+    /* WIP: SAU is set up before staging */
+    /* Non-secure callable: NSC functions area */
+    sau_init_region(0, 0x0C038000, 0x0C040000, 1);
+
+    /* Non-Secure: application flash area (first bank) */
+    sau_init_region(1, 0x08040000, 0x080FFFFF, 0);
+
+    /* Non-Secure: application flash area (second bank) */
+    sau_init_region(2, 0x08140000, 0x081FFFFF, 0);
+
+    /* Secure RAM regions in SRAM1/SRAM2 */
+    sau_init_region(3, 0x30000000, 0x3004FFFF, 1);
+
+    /* Non-secure RAM region in SRAM3 */
+    sau_init_region(4, 0x20050000, 0x2008FFFF, 0);
+
+    /* Non-secure: internal peripherals */
+    sau_init_region(5, 0x40000000, 0x4FFFFFFF, 0);
+
+    /* Enable SAU */
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+
+    /* Enable securefault handler */
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
 }
 
-
+#else
 void hal_tz_sau_init(void)
 {
     /* Non-secure callable: NSC functions area */
@@ -205,6 +246,7 @@ void hal_tz_sau_init(void)
     SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
 
 }
+#endif
 
 #ifdef WOLFCRYPT_SECURE_MODE
 
@@ -229,22 +271,17 @@ static void hsi48_on(void)
     RCC_CRRCR |= RCC_CRRCR_HSI48ON;
     while ((RCC_CRRCR & RCC_CRRCR_HSI48RDY) == 0)
         ;
-#endif
-#ifdef PLATFORM_stm32u5
+#else /* U5 and H5 */
     RCC_CR |= RCC_CR_HSI48ON;
     while ((RCC_CR & RCC_CR_HSI48RDY) == 0)
         ;
 #endif
 }
 
-
 void hal_trng_init(void)
 {
     uint32_t reg_val;
     hsi48_on();
-#ifdef PLATFORM_stm32u5
-    #define RCC_AHB2_CLOCK_ER RCC_AHB2ENR1_CLOCK_ER
-#endif
     RCC_AHB2_CLOCK_ER |= TRNG_AHB2_CLOCK_ER;
 
     reg_val = TRNG_CR;
@@ -252,9 +289,9 @@ void hal_trng_init(void)
     reg_val &= ~(0x7 << TRNG_CR_CLKDIV_SHIFT);
     reg_val &= ~(0x3 << TRNG_CR_CONFIG2_SHIFT);
     reg_val &= ~(0x7 << TRNG_CR_CONFIG3_SHIFT);
-
     reg_val |= 0x0F << TRNG_CR_CONFIG1_SHIFT;
     reg_val |= 0x0D << TRNG_CR_CONFIG3_SHIFT;
+
 #ifdef PLATFORM_stm32u5 /* RM0456 40.6.2 */
     reg_val |= 0x06 << TRNG_CR_CLKDIV_SHIFT;
 #endif

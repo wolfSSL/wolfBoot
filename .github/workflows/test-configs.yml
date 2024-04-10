@@ -239,11 +239,23 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32g0.config
 
+  stm32h5_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32h5.config
+
   stm32h5_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
       config-file: ./config/examples/stm32h5-dualbank.config
+
+  stm32h5_wolfcrypt_tz:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32h5-wolfcrypt-tz.config
 
   stm32h7_test:
     uses: ./.github/workflows/test-build.yml
@@ -289,6 +301,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32l5.config
 
+  stm32l5_wolfcrypt_tz:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32l5-wolfcrypt-tz.config
+
   stm32u5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:
@@ -300,6 +318,12 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/stm32u5.config
+
+  stm32u5_wolfcrypt_tz:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32u5-wolfcrypt-tz.config
 
   stm32wb_delta_enc_ext_test:
     uses: ./.github/workflows/test-build.yml

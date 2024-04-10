@@ -71,7 +71,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     dst = (uint32_t *)address;
 
 #if (TZ_SECURE())
-    if (address >= FLASH_BANK2_BASE)
+    if ( ((address < FLASH_BANK2_BASE) && (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS)) ||
+        (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS))
         hal_tz_claim_nonsecure_area(address, len);
     /* Convert into secure address space */
     dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
@@ -301,8 +302,8 @@ static void clock_pll_on(void)
 
 }
 
-#if TZ_SECURE()
-static void periph_unsecure()
+#if (TZ_SECURE())
+static void periph_unsecure(void)
 {
     uint32_t pin;
 
@@ -315,19 +316,16 @@ static void periph_unsecure()
 
     PWR_CR2 |= PWR_CR2_IOSV;
     /*Un-secure User LED GPIO pins */
-#ifdef STM32_DISCOVERY
-    GPIO_SECCFGR(GPIOD_BASE) &= ~(1<<LED_USR_PIN);
-    GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<LED_BOOT_PIN);
-#else /* Nucleo board */
-    GPIO_SECCFGR(GPIOA_BASE) &= ~(1<<LED_BOOT_PIN);
-    GPIO_SECCFGR(GPIOB_BASE) &= ~(1<<LED_USR_PIN);
-    GPIO_SECCFGR(GPIOC_BASE) &= ~(1<<LED_EXTRA_PIN);
-#endif
+    GPIO_SECCFGR(GPIOG_BASE) &= ~(1 << 4);
+    GPIO_SECCFGR(GPIOB_BASE) &= ~(1 << 0);
+    GPIO_SECCFGR(GPIOF_BASE) &= ~(1 << 4);
 
+#if 0
     /* Unsecure LPUART1 */
     TZSC_PRIVCFGR2 &= ~(TZSC_PRIVCFG2_LPUARTPRIV);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_TX_PIN);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_RX_PIN);
+#endif
 
 }
 #endif
@@ -371,17 +369,22 @@ static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
 
 static void fork_bootloader(void)
 {
-    uint8_t *data = (uint8_t *) FLASHMEM_ADDRESS_SPACE;
+    uint32_t data = (uint32_t) FLASHMEM_ADDRESS_SPACE;
     uint32_t dst  = FLASH_BANK2_BASE;
     uint32_t r = 0, w = 0;
     int i;
 
+#if TZ_SECURE()
+    data = (uint32_t)((data & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
+    dst = (uint32_t)((dst & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
+#endif
+
     /* Return if content already matches */
-    if (memcmp(data, (const char*)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)
+    if (memcmp((void *)data, (const char*)dst, BOOTLOADER_SIZE) == 0)
         return;
 
     /* Read the wolfBoot image in RAM */
-    memcpy(bootloader_copy_mem, data, BOOTLOADER_SIZE);
+    memcpy(bootloader_copy_mem, (void*)data, BOOTLOADER_SIZE);
 
     /* Mass-erase */
     hal_flash_unlock();
@@ -393,24 +396,27 @@ static void fork_bootloader(void)
 
 void hal_init(void)
 {
-
-#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
-    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)
-        fork_bootloader();
-#endif
-
 #if TZ_SECURE()
     hal_tz_sau_init();
     hal_gtzc_init();
 #endif
     clock_pll_on();
 
+
+
+#if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
+    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)
+        fork_bootloader();
+#endif
+
+
 }
+
 
 void hal_prepare_boot(void)
 {
     clock_pll_off();
-#if TZ_SECURE()
+#if (TZ_SECURE())
     periph_unsecure();
 #endif
 }

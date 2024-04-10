@@ -78,6 +78,7 @@ endif
 MAIN_TARGET=factory.bin
 TARGET_H_TEMPLATE:=include/target.h.in
 
+ifeq ($(TZEN),1)
 ifeq ($(TARGET),stm32l5)
 	# Don't build a contiguous image
 	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
@@ -87,6 +88,12 @@ ifeq ($(TARGET),stm32u5)
 	# Don't build a contiguous image
 	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
+
+ifeq ($(TARGET),stm32h5)
+	# Don't build a contiguous image
+	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+endif # TZEN=1
 
 ifeq ($(TARGET),x86_64_efi)
 	MAIN_TARGET:=wolfboot.efi

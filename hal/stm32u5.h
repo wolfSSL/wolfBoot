@@ -164,6 +164,7 @@
 /*** FLASH ***/
 #define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) /* <<RM0438>> - RCC_APB2ENR - SYSCFGEN */
 
+
 #if (TZ_SECURE())
 /*Secure*/
 #define FLASH_BASE          (0x50022000)   /* RM0456 - Table 4 */
@@ -252,6 +253,8 @@
 #define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
 #define GPIOH_AHB2ENR1_CLOCK_ER (1 << 7)
 #define TRNG_AHB2_CLOCK_ER      (1 << 18)
+
+#define RCC_AHB2_CLOCK_ER RCC_AHB2ENR1_CLOCK_ER
 
 /* Reset */
 #define OPTR_SWAP_BANK (1 << 20)

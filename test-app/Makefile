@@ -90,7 +90,7 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/wc_encrypt.o
             APP_OBJS+=./wcs/wc_port.o
         endif
-        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=12940
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=12944
     endif
 else
     APP_OBJS+=../hal/$(TARGET).o

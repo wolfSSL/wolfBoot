@@ -116,16 +116,16 @@ Example 1MB partitioning on STM32L4
 
 ### Scenario 1: TrustZone Enabled
 
-__NOTE__: to run wolfBoot in secure mode with wolfCrypt as secure crypto engine,
-please refer to [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
 
 #### Example Description
 
 The implementation shows how to switch from secure application to non-secure application,
 thanks to the system isolation performed, which splits the internal Flash and internal
-SRAM memories into two halves:
- - the first half for secure application
- - the second half for non-secure application
+SRAM memories into two parts:
+ - the first half is used by wolfboot running in secure mode and the secure application
+ - the remaining available space is used for non-secure application and update partition
+
+The example configuration for this scenario is available in [/config/examples/stm32l5.config](/config/examples/stm32l5.config).
 
 #### Hardware and Software environment
 
@@ -145,7 +145,7 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 #### How to use it
 
 1. `cp ./config/examples/stm32l5.config .config`
-2. `make TZEN=1`
+2. `make`
 3. Prepare board with option bytes configuration reported above
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
@@ -160,12 +160,25 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 * Linux: `/usr/local/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI`
 * Mac OS/X: `/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI`
 
+### Scenario 2: Trustzone Enabled, wolfCrypt as secure engine for NS applications
 
-### Scenario 2: Trustzone Disabled
+This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
+that can be accessed via PKCS11 interface by non-secure applications.
+
+This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
+options in your configuration. This enables a PKCS11 accessible from NS domain via
+non-secure callables (NSC).
+
+The example configuration for this scenario is available in [/config/examples/stm32l5-wolfcrypt-tz.config](/config/examples/stm32l5-wolfcrypt-tz.config).
+
+For more information, see [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
+
+
+### Scenario 3: Trustzone Disabled, using DUAL BANK
 
 #### Example Description
 
-The implementation shows how to use STM32L5xx in DUAL_BANK mode, with TrustZone disabled.
+The implementation shows how to use STM32L5xx in DUAL BANK mode, with TrustZone disabled.
 The DUAL_BANK option is only available on this target when TrustZone is disabled (TZEN = 0).
 
 The flash memory is segmented into two different banks:
@@ -235,13 +248,23 @@ The STM32U5 is a Cortex-M33 (ARMv8-M).
 
 Note: We have seen issues with vector table alignment, so the default image header size (IMAGE_HEADER_SIZE) has been increased to 1024 bytes to avoid potential issues.
 
-### Scenario 1: TrustZone Enabled
+### Scenario 1: TrustZone enabled, staging non-secure application
+
+#### Example description
+
+The implementation shows how to switch from secure application to non-secure application,
+thanks to the system isolation performed, which splits the internal Flash and internal
+SRAM memories into two parts:
+ - the first 256KB are used by wolfboot running in secure mode and the secure application
+ - the remaining available space is used for non-secure application and update partition
+
+The example configuration for this scenario is available in [/config/examples/stm32u5.config](/config/examples/stm32u5.config).
 
 #### Example Description
 
 The implementation shows how to switch from secure application to non-secure application,
 thanks to the system isolation performed, which splits the internal Flash and internal
-SRAM memories into two halves:
+SRAM memories into two parts:
  - the first half for secure application
  - the second half for non-secure application
 
@@ -278,7 +301,21 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 * Linux: `/usr/local/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI`
 * Mac OS/X: `/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI`
 
-### Scenario 2: TrustZone Disabled
+### Scenario 2: TrustZone Enabled, wolfCrypt as secure engine for NS applications
+
+This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
+that can be accessed via PKCS11 interface by non-secure applications.
+
+This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
+options in your configuration. This enables a PKCS11 accessible from NS domain via
+non-secure callables (NSC).
+
+The example configuration for this scenario is available in [/config/examples/stm32u5-wolfcrypt-tz.config](/config/examples/stm32u5-wolfcrypt-tz.config).
+
+For more information, see [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
+
+
+### Scenario 3: TrustZone Disabled (DUAL BANK mode)
 
 #### Example Description
 
@@ -810,7 +847,52 @@ arm-none-eabi-gdb
 
 ## STM32H5
 
-### DUALBANK mode (Trustzone disabled)
+Like [STM32L5](#stm32l5) and [STM32U5](#stm32u5), STM32H5 support is also demonstrated
+through different scenarios.
+
+### Scenario 1: TrustZone enabled, staging non-secure application
+
+#### Example description
+
+The implementation shows how to switch from secure application to non-secure application,
+thanks to the system isolation performed, which splits the internal Flash and internal
+SRAM memories into two parts:
+ - the first 256KB are used by wolfboot running in secure mode and the secure application
+ - the remaining available space is used for non-secure application and update partition
+
+The example configuration for this scenario is available in [/config/examples/stm32h5.config](/config/examples/stm32h5.config).
+
+#### How to use it
+
+- set the option bytes to enable trustzone:
+
+`STM32_Programmer_CLI -c port=swd -ob TZEN=0xB4`
+
+- set the option bytes to enable flash secure protection of first 256KB:
+`STM32_Programmer_CLI -c port=swd -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x1F SECWM2_PSTRT=0x1F SECWM2_PEND=0x0`
+
+- flash the wolfboot image to the secure partition:
+`STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000`
+
+- flash the application image to the non-secure partition:
+`STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08040000`
+
+For a full list of all the option bytes tested with this configuration, refer to [STM32-TZ.md](/docs/STM32-TZ.md).
+
+### Scenario 2: Trustzone Enabled, wolfCrypt as secure engine for NS applications
+
+This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
+that can be accessed via PKCS11 interface by non-secure applications.
+
+This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
+options in your configuration. This enables a PKCS11 accessible from NS domain via
+non-secure callables (NSC).
+
+The example configuration for this scenario is available in [/config/examples/stm32h5-wolfcrypt-tz.config](/config/examples/stm32h5-wolfcrypt-tz.config).
+
+For more information, see [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
+
+### Scenario 3: DUALBANK mode (Trustzone disabled)
 
 The STM32H5 can be configured to use hardware-assisted bank swapping to facilitate the update.
 The configuration file to copy into `.config` is `config/examples/stm32h5-dualbank.config`.

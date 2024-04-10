@@ -34,7 +34,7 @@ extern void isr_tim2(void);
 #endif
 
 #ifndef STACK_PAINTING
-#define STACK_PAINTING 1
+#define STACK_PAINTING 0
 #endif
 
 static volatile unsigned int avail_mem = 0;

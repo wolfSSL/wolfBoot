@@ -263,7 +263,7 @@
     #define FLASH_OPTSR_SWAP_BANK (1 << 31)
 #endif
 
-/* Register values (for both secure and non secure registers) 
+/* Register values (for both secure and non secure registers)
  * RM0481 Table 75 */
 
 #define FLASH_SR_BSY                        (1 << 0)
@@ -277,7 +277,7 @@
 #define FLASH_SR_OPTE                       (1 << 21)
 #define FLASH_SR_OPTWE                      (1 << 22)
 
-#define FLASH_CCR_CLR_BUSY                  (1 << 0) 
+#define FLASH_CCR_CLR_BUSY                  (1 << 0)
 #define FLASH_CCR_CLR_WBNE                  (1 << 1)
 #define FLASH_CCR_CLR_DBNE                  (1 << 3)
 #define FLASH_CCR_CLR_EOP                   (1 << 16)
@@ -335,6 +335,7 @@
 #define GPIOB_BASE 0x52020400
 #define GPIOC_BASE 0x52020800
 #define GPIOD_BASE 0x52020C00
+#define GPIOF_BASE 0x52021400
 #define GPIOG_BASE 0x52021800
 
 /* RCC AHB2 Clock Enable Register */
@@ -343,8 +344,13 @@
 #define GPIOB_AHB2_CLOCK_ER (1 << 1)
 #define GPIOC_AHB2_CLOCK_ER (1 << 2)
 #define GPIOD_AHB2_CLOCK_ER (1 << 3)
+#define GPIOF_AHB2_CLOCK_ER (1 << 5)
 #define GPIOG_AHB2_CLOCK_ER (1 << 6)
 #define TRNG_AHB2_CLOCK_ER  (1 << 18)
+#define PKA_AHB2_CLOCK_ER   (1 << 19)
+#define SAES_AHB2_CLOCK_ER  (1 << 20)
+#define SRAM2_AHB2_CLOCK_ER  (1 << 30)
+#define SRAM3_AHB2_CLOCK_ER  (1 << 31)
 
 #define RCC_APB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xA4))
 #define UART1_APB2_CLOCK_ER_VAL (1 << 14)
@@ -355,16 +361,12 @@
 
 #define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30))
 
-#ifdef STM32_DISCOVERY
-    #define LED_AHB2_ENABLE (GPIOD_AHB2_CLOCK_ER | GPIOG_AHB2_CLOCK_ER)
-    #define LED_BOOT_PIN (12)  /* PG12 - Discovery - Green Led */
-    #define LED_USR_PIN (3) /* PD3  - Discovery  - Red Led */
-#else
-    #define LED_AHB2_ENABLE (GPIOA_AHB2_CLOCK_ER | GPIOB_AHB2_CLOCK_ER | \
-            GPIOC_AHB2_CLOCK_ER)
-    #define LED_BOOT_PIN (9)  /* PA9 - Nucleo board - Red Led */
-    #define LED_USR_PIN (7)   /* PC7  - Nucleo board  - Green Led */
-    #define LED_EXTRA_PIN (7) /* PB7 - Nucleo board - Blue Led */
-#endif
+
+
+#define LED_AHB2_ENABLE (GPIOG_AHB2_CLOCK_ER | GPIOB_AHB2_CLOCK_ER | \
+        GPIOF_AHB2_CLOCK_ER)
+#define LED_BOOT_PIN (4)  /* PG4 - Nucleo board - Orange Led */
+#define LED_USR_PIN (0)   /* PB0  - Nucleo board  - Green Led */
+#define LED_EXTRA_PIN (4) /* PF4 - Nucleo board - Blue Led */
 
 #endif /* STM32H5_DEF_INCLUDED */
