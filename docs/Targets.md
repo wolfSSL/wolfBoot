@@ -445,11 +445,11 @@ Supports STM32C0x0/STM32C0x1. Instructions are for the STM Nucleo-C031C6 dev boa
 Tested build configurations:
 * With RSA2048 and SHA2-256 the code size is 10988 and it boots in under 1 second.
 * With ED25519 and SHA2-384 the code size is 10024 and takes about 10 seconds for the LED to turn on.
-* With LMS-8-10-1 and SHA2-256 the code size is 8164
+* With LMS-8-10-1 and SHA2-256 the code size is 8164 on gcc-13 (could fit in 8KB partition)
 
 ### Example 32KB partitioning on STM32-G070
 
-with ED25519:
+with ED25519 or LMS-8-10-1:
 
 - Sector size: 2KB
 - Wolfboot partition size: 10KB
@@ -460,21 +460,6 @@ with ED25519:
 #define WOLFBOOT_SECTOR_SIZE                 0x800   /* 2 KB */
 #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08002800 /* at 10KB */
 #define WOLFBOOT_PARTITION_SIZE              0x2800  /* 10 KB */
-#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005000 /* at 20KB */
-#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
-```
-
-with LMS:
-
-- Sector size: 2KB
-- Wolfboot partition size: 8KB
-- Application partition size: 10 KB
-- Swap size 2KB
-
-```C
-#define WOLFBOOT_SECTOR_SIZE                 0x800      /* 2 KB */
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08002000 /* at 8KB */
-#define WOLFBOOT_PARTITION_SIZE              0x2800     /* 10 KB */
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005000 /* at 20KB */
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
 ```
