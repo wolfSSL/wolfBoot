@@ -279,6 +279,10 @@ static struct xmalloc_slot xmalloc_pool[] = {
       defined(WOLFBOOT_SIGN_RSA3072)
 
 static uint32_t sha_block[HASH_BLOCK_SIZE];
+
+#define ASNCHECK_BUF_SIZE (224)
+static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
+
 #ifndef USE_FAST_MATH
     #ifdef WOLFBOOT_SIGN_RSA2048
         #define MP_SCHEME "SP RSA2048"
@@ -315,6 +319,7 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
     #if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
         { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
     #endif
+        { asncheck_buf, ASNCHECK_BUF_SIZE, 0 },
         { mp_digit_buf0, MPDIGIT_BUF0_SIZE, 0},
     #ifndef WOLFSSL_SP_ARM_CORTEX_M_ASM
         { mp_digit_buf1, MPDIGIT_BUF1_SIZE, 0},
@@ -335,6 +340,7 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
     #if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
         { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
     #endif
+        { asncheck_buf, ASNCHECK_BUF_SIZE, 0 },
         { mp_int_buffer0, MP_INT_TYPE_SIZE, 0},
         { mp_int_buffer1, MP_INT_TYPE_SIZE * 3, 0},
         { mp_int_buffer2, MP_INT_TYPE_SIZE, 0},

@@ -625,7 +625,7 @@ ifeq ($(WOLFTPM),1)
       SIM_TPM=1
     endif
     ifeq ($(SIM_TPM),1)
-      CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0
+      CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0 -DHAVE_NETDB_H
       OBJS+=./lib/wolfTPM/src/tpm2_swtpm.o
     else
       # Use memory-mapped WOLFTPM on x86-64

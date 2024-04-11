@@ -1,0 +1,62 @@
+name: Wolfboot Reusable Build Workflow
+
+on:
+
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      config-file:
+        required: true
+        type: string
+      make-args:
+        required: false
+        type: string
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Workaround for sources.list
+        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+
+      - name: Update repository
+        run: sudo apt-get update
+
+      - name: Install cross compilers
+        run: |
+          sudo apt-get install -y gcc-arm-none-eabi gcc-aarch64-linux-gnu gcc-powerpc-linux-gnu gnu-efi
+
+      - name: Create lib hash-sigs
+        run: |
+          mkdir -p lib/hash-sigs/lib
+
+      - name: Clone hash-sigs repository
+        run: |
+          git clone https://github.com/cisco/hash-sigs.git lib/hash-sigs/src && \
+          cd lib/hash-sigs/src && git checkout b0631b8891295bf2929e68761205337b7c031726 && \
+          git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch && \
+          cd ../../.. 
+
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp ${{inputs.config-file}} .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}}
