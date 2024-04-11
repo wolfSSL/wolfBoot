@@ -134,13 +134,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("mov r2, #0":::"r2"); \
     /* Loading hdr_ok flag, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->hdr_ok):"r2"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-12"); \
     /* Redundant set of r2=0 */ \
     asm volatile("mov r2, #0":::"r2"); \
@@ -150,13 +150,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("mov r2, #0":::"r2"); \
     /* Loading hdr_ok flag, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->sha_ok):"r2"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-12"); \
     /* Redundant set of r2=0 */ \
     asm volatile("mov r2, #0":::"r2"); \
@@ -166,13 +166,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("mov r2, #0":::"r2"); \
     /* Loading signature_ok flag, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->signature_ok):"r2"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne .-12"); \
     /* Redundant set of r2=0 */ \
     asm volatile("mov r2, #0"); \
@@ -182,13 +182,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("mov r2, #0"); \
     /* Loading ~(signature_ok) flag, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->not_signature_ok):"r2"); \
-    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, #0xFFFFFFFE"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
     asm volatile("bne .-12"); \
     /* Redundant set of r2=0 */ \
     asm volatile("mov r2, #0":::"r2"); \
@@ -199,13 +199,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     /* Loading canary value, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->canary_FEED6789):"r2"); \
     asm volatile("mov r0, %0" ::"r"(0xFEED6789):"r0"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-12"); \
     /* Redundant set of r2=0 */ \
     asm volatile("mov r2, #0":::"r2"); \
@@ -216,13 +216,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     /* Loading canary value, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->canary_FEED4567):"r2"); \
     asm volatile("mov r0, %0" ::"r"(0xFEED4567):"r0"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-12"); \
     /* Redundant set of r2=0 */ \
     asm volatile("mov r2, #0":::"r2"); \
@@ -233,13 +233,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     /* Loading canary value, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->canary_FEED89AB):"r2"); \
     asm volatile("mov r0, %0" ::"r"(0xFEED89AB):"r0"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r2, r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-12")
 
 /**
@@ -262,13 +262,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
         asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE):"r2"); \
         asm volatile("mov r2, %0" ::"r"(WOLFBOOT_SHA_DIGEST_SIZE):"r2"); \
         /* Redundant check for fn() return value >= r2 */ \
-        asm volatile("cmp r0, r2"); \
+        asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("blt nope"); \
-        asm volatile("cmp r0, r2"); \
+        asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("blt nope"); \
-        asm volatile("cmp r0, r2"); \
+        asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("blt nope"); \
-        asm volatile("cmp r0, r2"); \
+        asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("blt nope"); \
         /* Return value is set here in case of success */ \
         ret = tmp_ret; \
@@ -293,24 +293,24 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
         asm volatile("mov r0, #50":::"r0"); \
         compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
         /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne hnope":::"cc"); \
         asm volatile("cmp r0, #0"); \
+        asm volatile("bne hnope":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
-        asm volatile("cmp r0, #0"); \
-        asm volatile("bne hnope"); \
-        asm volatile("cmp r0, #0"); \
-        asm volatile("bne hnope"); \
-        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
         /* Repeat memcmp call */ \
         compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
         /* Redundant checks that ensure the function actually returned 0 */ \
-        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
-        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
-        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
-        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
         /* Confirm that the signature is OK */ \
         wolfBoot_image_confirm_signature_ok(img); \
@@ -336,26 +336,26 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     /* Call the verify function */ \
     fn(__VA_ARGS__); \
     /* Redundant checks that ensure the function actually returned 0 */ \
-    asm volatile("cmp r0, #0"); \
+    asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("bne nope"); \
-    asm volatile("cmp r0, #0"); \
+    asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("bne nope"); \
-    asm volatile("cmp r0, #0"); \
+    asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("bne nope"); \
-    asm volatile("cmp r0, #0"); \
+    asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("bne nope"); \
     /* Check that res = 1, a few times, reading the value from memory */ \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
-    asm volatile("cmp r2, #1"); \
+    asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne nope"); \
     /* Confirm that the signature is OK */ \
     wolfBoot_image_confirm_signature_ok(img); \
@@ -397,11 +397,11 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     /* Read the fb_ok flag, jump to end_check  \
      * if proven fb_ok == 1 */ \
     asm volatile("mov r0, %0" ::"r"(fb_ok):"r0"); \
-    asm volatile("cmp r0, #1"); \
+    asm volatile("cmp r0, #1":::"cc"); \
     asm volatile("bne do_check"); \
-    asm volatile("cmp r0, #1"); \
+    asm volatile("cmp r0, #1":::"cc"); \
     asm volatile("bne do_check"); \
-    asm volatile("cmp r0, #1"); \
+    asm volatile("cmp r0, #1":::"cc"); \
     asm volatile("bne do_check"); \
     asm volatile("b end_check"); \
     /* Do the actual version check: */ \
@@ -422,13 +422,13 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("mov r7, r0":::"r7"); \
     asm volatile("mov r7, r0":::"r7"); \
     /* Compare r5 and r7, if not equal, something went very wrong, */ \
-    asm volatile("cmp r5, r7"); \
+    asm volatile("cmp r5, r7":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r5, r7"); \
+    asm volatile("cmp r5, r7":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r5, r7"); \
+    asm volatile("cmp r5, r7":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r5, r7"); \
+    asm volatile("cmp r5, r7":::"cc"); \
     asm volatile("bne .-12"); \
     /* Read current versions to reg r4 and r6 */ \
     asm volatile("mov r0, #0":::"r0"); \
@@ -445,25 +445,25 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("mov r6, r0":::"r6"); \
     asm volatile("mov r6, r0":::"r6"); \
     asm volatile("mov r6, r0":::"r6"); \
-    asm volatile("cmp r4, r6"); \
+    asm volatile("cmp r4, r6":::"cc"); \
     asm volatile("bne ."); \
-    asm volatile("cmp r4, r6"); \
+    asm volatile("cmp r4, r6":::"cc"); \
     asm volatile("bne .-4"); \
-    asm volatile("cmp r4, r6"); \
+    asm volatile("cmp r4, r6":::"cc"); \
     asm volatile("bne .-8"); \
-    asm volatile("cmp r4, r6"); \
+    asm volatile("cmp r4, r6":::"cc"); \
     asm volatile("bne .-12"); \
     asm volatile("mov r0, #0":::"r0"); \
     asm volatile("mov r0, #0":::"r0"); \
     asm volatile("mov r0, #0":::"r0"); \
     /* Compare the two versions in registries */ \
-    asm volatile("cmp r4, r5"); \
+    asm volatile("cmp r4, r5":::"cc"); \
     asm volatile("bge ."); \
-    asm volatile("cmp r6, r7"); \
+    asm volatile("cmp r6, r7":::"cc"); \
     asm volatile("bge .-4"); \
-    asm volatile("cmp r4, r5"); \
+    asm volatile("cmp r4, r5":::"cc"); \
     asm volatile("bge .-8"); \
-    asm volatile("cmp r6, r7"); \
+    asm volatile("cmp r6, r7":::"cc"); \
     asm volatile("bge .-12"); \
     asm volatile("end_check:"); \
     /* Restore previously saved registry values */ \
@@ -475,27 +475,27 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     asm volatile("and.w r1, r1, #15":::"r1"); \
     asm volatile("mov r0, %0" :: "r"(mask):"r0"); \
     asm volatile("movs r2, #1":::"r2"); \
-    asm volatile("lsls r2, r1":::"r2"); \
-    asm volatile("ands r2, r0":::"r2"); \
-    asm volatile("movs r0, #1":::"r0"); \
-    asm volatile("lsls r0, r1":::"r0"); \
+    asm volatile("lsls r2, r1":::"r2","cc"); \
+    asm volatile("ands r2, r0":::"r2","cc"); \
+    asm volatile("movs r0, #1":::"cc"); \
+    asm volatile("lsls r0, r1":::"r0","cc"); \
     asm volatile("cmp r0, r2"); \
     asm volatile("bne ."); \
     asm volatile("mov r0, %0" :: "r"(mask)); \
     asm volatile("movs r2, #1":::"r2"); \
-    asm volatile("lsls r2, r1":::"r2"); \
-    asm volatile("ands r2, r0":::"r2"); \
+    asm volatile("lsls r2, r1":::"r2", "cc"); \
+    asm volatile("ands r2, r0":::"r2", "cc"); \
     asm volatile("movs r0, #1":::"r0"); \
-    asm volatile("lsls r0, r1":::"r0"); \
-    asm volatile("cmp r0, r2"); \
+    asm volatile("lsls r0, r1":::"r0", "cc"); \
+    asm volatile("cmp r0, r2":::"cc"); \
     asm volatile("bne ."); \
     asm volatile("mov r0, %0" :: "r"(mask):"r0"); \
     asm volatile("movs r2, #1":::"r2"); \
-    asm volatile("lsls r2, r1":::"r2"); \
-    asm volatile("ands r2, r0":::"r2"); \
+    asm volatile("lsls r2, r1":::"r2", "cc"); \
+    asm volatile("ands r2, r0":::"r2", "cc"); \
     asm volatile("movs r0, #1":::"r0"); \
-    asm volatile("lsls r0, r1":::"r0"); \
-    asm volatile("cmp r0, r2"); \
+    asm volatile("lsls r0, r1":::"r0", "cc"); \
+    asm volatile("cmp r0, r2":::"cc"); \
     asm volatile("bne ."); \
 
 #else
