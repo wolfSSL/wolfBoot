@@ -443,10 +443,13 @@ mon reset init
 Supports STM32C0x0/STM32C0x1. Instructions are for the STM Nucleo-C031C6 dev board.
 
 Tested build configurations:
-* With RSA2048 and SHA2-256 the code size is 9724 and it boots in under 1 second.
+* With RSA2048 and SHA2-256 the code size is 10988 and it boots in under 1 second.
 * With ED25519 and SHA2-384 the code size is 10024 and takes about 10 seconds for the LED to turn on.
+* With LMS-8-10-1 and SHA2-256 the code size is 8164
 
-Example 32KB partitioning on STM32-G070:
+### Example 32KB partitioning on STM32-G070
+
+with ED25519:
 
 - Sector size: 2KB
 - Wolfboot partition size: 10KB
@@ -461,11 +464,43 @@ Example 32KB partitioning on STM32-G070:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
 ```
 
+with LMS:
+
+- Sector size: 2KB
+- Wolfboot partition size: 8KB
+- Application partition size: 10 KB
+- Swap size 2KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x800      /* 2 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08002000 /* at 8KB */
+#define WOLFBOOT_PARTITION_SIZE              0x2800     /* 10 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005000 /* at 20KB */
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
+```
+
+with RSA2048:
+
+- Sector size: 2KB
+- Wolfboot partition size: 12KB
+- Application partition size: 8 KB
+- Swap size 2KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x800      /* 2 KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08003000 /* at 12KB */
+#define WOLFBOOT_PARTITION_SIZE              0x2000     /* 8 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005000 /* at 20KB */
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
+```
+
 ### Building STM32C0
 
-Reference configuration (see [/config/examples/stm32c0.config](/config/examples/stm32c0.config)).
+Reference configuration files (see [config/examples/stm32c0.config](/config/examples/stm32c0.config),
+[config/examples/stm32c0-rsa2048.config](/config/examples/stm32c0-rsa2048.config) and
+[config/examples/stm32c0-lms-8-10-1.config](/config/examples/stm32c0-lms-8-10-1.config)).
 
-You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32c0.config .config`.
+You can copy one of these to wolfBoot root as `.config`: `cp ./config/examples/stm32c0.config .config`.
 To build you can use `make`.
 
 The TARGET for this is `stm32c0`: `make TARGET=stm32c0`.
