@@ -563,3 +563,28 @@ Use `make keysclean` to delete keys and regenerate.
  * Fixed bug in sign tool when using ECC keys
  * Improved documentation
  * Added customizable DCD for NXP targets
+
+### V 2.1.0 - (2024-04-16)
+ * New features
+    * Custom TLVs in manifest header for custom authenticated options
+ * Bug fixes and improvements:
+    * DUALBANK: fork bootloader only once
+    * Improved `NO_BACKUP` mode, DISABLE BACKUP mode is now powerfail-safe
+    * Fault-injection mitigation: added clobbers to assembly code
+    * Post-quantum algorithms: fixed build issue with conflicting wolfCrypt version
+ * New signature verification algorithm:
+    * Added support for ECC521
+ * New hardware targets:
+    * Microchip ATSAM-E51, including DUALBANK support
+    * Renesas RZN2L
+    * NXP i.MX-RT1040
+    * NXP MCXA-153
+ * Improved support to existing targets:
+    * Build fixes for TI-Hercules
+    * Improved support for Integrity OS on NXP T1024
+ * wolfTPM integration
+    * Fixes in sealing/unsealing mechanism
+ * Updated modules
+    * wolfSSL v5.7.0
+    * wolfPKCS11 v1.3.0
+    * wolfTPM v3.2.0
