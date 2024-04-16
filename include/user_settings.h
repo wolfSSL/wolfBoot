@@ -255,19 +255,20 @@ extern int tolower(int c);
 
 #if defined(SECURE_PKCS11)
 #   define HAVE_PWDBASED
-#	define HAVE_PBKDF2
-#	define WOLFPKCS11_CUSTOM_STORE
-# 	define WOLFBOOT_SECURE_PKCS11
-#	define WOLFPKCS11_USER_SETTINGS
-# 	define WOLFPKCS11_NO_TIME
-# 	define WOLFSSL_AES_COUNTER
+#   define HAVE_PBKDF2
+#   define WOLFPKCS11_CUSTOM_STORE
+#   define WOLFBOOT_SECURE_PKCS11
+#   define WOLFPKCS11_USER_SETTINGS
+#   define WOLFPKCS11_NO_TIME
+#   define WOLFSSL_AES_COUNTER
 #   define WOLFSSL_AES_DIRECT
 #   define WOLFSSL_AES_GCM
-# 	define ENCRYPT_WITH_AES128
+#   define ENCRYPT_WITH_AES128
 #   define WOLFSSL_AES_128
-# 	define HAVE_SCRYPT
-# 	define HAVE_AESGCM
-	typedef unsigned long time_t;
+#   define HAVE_SCRYPT
+#   define HAVE_AESGCM
+#   define HAVE_PKCS8
+    typedef unsigned long time_t;
 #endif
 
 #ifndef HAVE_PWDBASED
