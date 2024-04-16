@@ -240,8 +240,8 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
 #endif
 
     /* check magic in case the sector is corrupt */
-    word_0 = *((uint32_t*)(base - sizeof(uint32_t)));
-    word_1 = *((uint32_t*)(base - WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)));
+    word_0 = *((uint32_t*)((uint32_t)base - sizeof(uint32_t)));
+    word_1 = *((uint32_t*)((uint32_t)base - WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)));
 
     if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
         sel = 0;
