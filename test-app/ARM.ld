@@ -18,6 +18,13 @@ SECTIONS
         _end_text = .;
     } > FLASH
 
+    .ARM :
+    {
+      __exidx_start = .;
+      *(.ARM.exidx*)
+      __exidx_end = .;
+    } > FLASH
+
     _stored_data = .;
 
     .data : AT (_stored_data)
