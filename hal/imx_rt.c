@@ -282,12 +282,39 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 /** Flash configuration in the .flash_config section of flash **/
 #if defined(CPU_MIMXRT1042XJM5B) || defined(CPU_MIMXRT1052DVJ6B)
 
-    #ifdef CONFIG_FLASH_W25Q64JV
+    #if defined(CONFIG_FLASH_W25Q16JV)
+        /* Winbond W25Q16JV */
+        #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
+        #define WRITE_STATUS_CMD  0x31
+        #define QE_ENABLE         0x02 /* S9 */
+    #elif defined(CONFIG_FLASH_W25Q32JV)
+        /* Winbond W25Q32JV */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes  */
+        #define WRITE_STATUS_CMD  0x31
+        #define QE_ENABLE         0x02 /* S9 */
+    #elif defined(CONFIG_FLASH_W25Q64JV)
         /* Winbond W25Q64JV */
-        #define WRITE_STATUS_CMD 0x31
-        #define QE_ENABLE        0x02 /* S9 */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+        #define WRITE_STATUS_CMD  0x31
+        #define QE_ENABLE         0x02 /* S9 */
+    #elif defined(CONFIG_FLASH_W25Q128JV)
+        /* Winbond W25Q128JV */
+        #define CONFIG_FLASH_SIZE (16 * 1024 * 1024) /* 16MBytes  */
+        #define WRITE_STATUS_CMD  0x31
+        #define QE_ENABLE         0x02 /* S9 */
+    #elif defined(CONFIG_FLASH_W25Q256JV)
+        /* Winbond W25Q256JV */
+        #define CONFIG_FLASH_SIZE (32 * 1024 * 1024) /* 32MBytes  */
+        #define WRITE_STATUS_CMD  0x31
+        #define QE_ENABLE         0x02 /* S9 */
+    #elif defined(CONFIG_FLASH_W25Q512JV)
+        /* Winbond W25Q512JV */
+        #define CONFIG_FLASH_SIZE (64 * 1024 * 1024) /* 64MBytes  */
+        #define WRITE_STATUS_CMD  0x31
+        #define QE_ENABLE         0x02 /* S9 */
     #elif defined(CONFIG_FLASH_IS25WP064A)
         /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
         #define WRITE_STATUS_CMD 0x1
         #define QE_ENABLE        0x40 /* S6 */
     #elif !defined(CONFIG_HYPERFLASH)
@@ -428,7 +455,6 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     };
     #else /* QSPI */
 
-    #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes  */
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4Bytes */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes */
