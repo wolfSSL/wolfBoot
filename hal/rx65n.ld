@@ -126,6 +126,7 @@ SECTIONS
     .bss :
     {
         _bss = .;
+        *(.dynbss)
         *(.bss)
         *(.bss.**)
         *(COMMON)

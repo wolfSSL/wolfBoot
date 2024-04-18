@@ -809,7 +809,9 @@ endif
 CFLAGS+=$(CFLAGS_EXTRA)
 
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+  ifneq ($(ARCH),RENESAS_RX)
+    CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+  endif
 endif
 
 ifeq ($(SIGN_ALG),)

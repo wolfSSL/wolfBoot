@@ -282,10 +282,15 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		> $@
 
 hex: wolfboot.hex
+srec: wolfboot.srec
 
 %.hex:%.elf
 	@echo "\t[ELF2HEX] $@"
 	@$(OBJCOPY) -O ihex $^ $@
+
+%.srec:%.elf
+	@echo "\t[ELF2SREC] $@"
+	@$(OBJCOPY) -O srec $^ $@
 
 src/keystore.c: $(PRIVATE_KEY)
 

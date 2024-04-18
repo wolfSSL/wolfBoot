@@ -381,6 +381,14 @@ image.bin: image.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
 
+image.hex: image.elf
+	@echo "\t[HEX] $@"
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O ihex $^ $@
+
+image.srec: image.elf
+	@echo "\t[SREC] $@"
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O srec $^ $@
+
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@

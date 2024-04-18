@@ -162,9 +162,16 @@
 #define MPC_PFS(n) (*(volatile uint8_t *)(0x8C0E0 + (n)))
 
 /* Ports */
-#define PORT_BASE(n) (0x8C000 + (n))
-#define PORT_PDR(n)  (*(volatile uint8_t*)(0x8C000 + (n)))
-#define PORT_PMR(n)  (*(volatile uint8_t*)(0x8C060 + (n))) /* 0=General, 1=Peripheral */
+#define PORT_BASE    (0x8C000)
+#define PORT_PDR(n)  (*(volatile uint8_t*)(PORT_BASE + 0x00 + (n))) /* Port Direction Register: 0=Input, 1=Output */
+#define PORT_PODR(n) (*(volatile uint8_t*)(PORT_BASE + 0x20 + (n))) /* Port Output Data Register: 0=Low, 1=High */
+#define PORT_PIDR(n) (*(volatile uint8_t*)(PORT_BASE + 0x40 + (n))) /* Port Input Register: 0=Low input, 1=Hight Input */
+#define PORT_PMR(n)  (*(volatile uint8_t*)(PORT_BASE + 0x60 + (n))) /* Port Mode Register: 0=General, 1=Peripheral */
+#define PORT_ODR(n)  (*(volatile uint8_t*)(PORT_BASE + 0x80 + (n))) /* Open-Drain Control Register: 0=CMOS, 1=NMOS open-drain */
+#define PORT_PCR(n)  (*(volatile uint8_t*)(PORT_BASE + 0xC0 + (n))) /* Pull-Up Resistor Control Register: 0=Disable pull-up, 1=Enable input pull-up */
+#define PORT_DSCR(n) (*(volatile uint8_t*)(PORT_BASE + 0xE0 + (n))) /* Drive Capacity Control Register: 0=Normal, 1=High-drive output */
+
+/* SPI Flash (N25Q032) on SCI1 SCK=P27, MOSI=P26, MISO=P30, SS=P31 */
 
 
 static void hal_delay_us(uint32_t us)

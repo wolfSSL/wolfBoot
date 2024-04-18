@@ -57,7 +57,10 @@ void do_boot(const uint32_t *app_offset)
     #if defined(__CCRX__)
         longJump(app_offset);
     #else
-        __asm("jmp   r1");
+        /* address at r1 is the function table, so load value from r1 */
+        __asm("mov.l [r1], r2");
+        /* jump to address */
+        __asm("jmp   r2");
     #endif
 #elif defined(_RENESAS_RA_)
     app_sp = VECTOR_SP;
@@ -781,19 +784,19 @@ const unsigned long __ofsm_sec_ofs1[] OFS_REG = {
     __OFS1_VALUE,
 };
 
-// TMINF register
+/* TMINF register */
 const unsigned long __TMINFreg OFS_TMINF = 0xffffffff;
 
-// BANKSEL register
+/* BANKSEL register */
 const unsigned long __BANKSELreg OFS_BANKSEL = 0xffffffff;
 
-// SPCC register
+/* SPCC register */
 const unsigned long __SPCCreg OFS_SPCC = 0xffffffff;
 
-// TMEF register
+/* TMEF register */
 const unsigned long __TMEFreg OFS_TMEF = 0xffffffff;
 
-// OSIS register (ID codes)
+/* OSIS register (ID codes) */
 const unsigned long __OSISreg[4] OFS_OSIS = {
     0xffffffff,
     0xffffffff,
@@ -801,10 +804,10 @@ const unsigned long __OSISreg[4] OFS_OSIS = {
     0xffffffff,
 };
 
-// FAW register
+/* FAW register */
 const unsigned long __FAWreg OFS_FAW = 0xffffffff;
 
-// RCP register
+/* RCP register */
 const unsigned long __RCPreg OFS_RCP = 0xffffffff;
 #endif /* WOLFBOOT_RENESAS_OSM */
 

@@ -65,12 +65,14 @@ _PowerON_Reset :
 2:
 #endif
 
-/* setup PSW */
-    mvtc    #10000h, psw   /* Set Ubit & Ibit for PSW */
-
-/* change PSW PM to user-mode */
+/* check and skip PSW setup if already in "user mode" */
     mvfc   psw, r1
-    or     #00100000h, r1
+    btst   #20, r1 /* Processor Mode: 0=Supervisor, 1=User */
+    bne    skip_psw_setup
+
+/* change PSW Processor Mode (PM) to user-mode */
+    mvtc   #10000h, psw   /* Set Interupt Enable bit */
+    or     #00100000h, r1 /* Set PM = 1 (user mode) */
     push.l r1
     mvfc   pc, r1
     add    #10, r1
@@ -78,6 +80,7 @@ _PowerON_Reset :
     rte
     nop
     nop
+skip_psw_setup:
 
 /* start user program */
     mov    #_main, r7
