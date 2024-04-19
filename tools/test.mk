@@ -54,7 +54,7 @@ endif
 ifeq ($(SIGN),LMS)
 	SIGN_ARGS+= --lms
 endif
-ifeq ($(SIGN),XMSS)
+ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
 	SIGN_ARGS+= --xmss
 endif
 

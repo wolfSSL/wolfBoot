@@ -25,17 +25,25 @@ ifeq ($(SIGN),LMS)
             -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
 endif
 
-ifeq ($(SIGN),XMSS)
+ifeq ($(SIGN),ext_XMSS)
   $(info xmss params: $(XMSS_PARAMS))
   XMSSDIR = $(WOLFBOOTDIR)/lib/xmss
   CFLAGS  +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS -DHAVE_LIBXMSS -I$(XMSSDIR) \
             -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-            -DXMSS_PARAMS=\"$(XMSS_PARAMS)\"
+            -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
+endif
+
+ifeq ($(SIGN),XMSS)
+  $(info xmss params: $(XMSS_PARAMS))
+  CFLAGS  +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS -D"WOLFSSL_WC_XMSS" \
+            -D"WOLFSSL_XMSS_MAX_HEIGHT=32" \
+            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+            -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
 endif
 
 # Only needed if using 3rd party integration. This can be
 # removed when wc_lms and wc_xmss become default in wolfboot.
-ifneq (,$(filter $(SIGN), LMS XMSS))
+ifneq (,$(filter $(SIGN), LMS ext_XMSS))
   CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
 endif
 
@@ -89,14 +97,20 @@ OBJS_REAL=\
 	$(WOLFDIR)/wolfcrypt/src/tfm.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_port.o \
 	$(WOLFDIR)/wolfcrypt/src/wolfmath.o \
-	$(WOLFDIR)/wolfcrypt/src/ext_lms.o \
-	$(WOLFDIR)/wolfcrypt/src/ext_xmss.o
+	$(WOLFDIR)/wolfcrypt/src/ext_lms.o
 
 OBJS_REAL+=\
 	$(WOLFBOOTDIR)/src/delta.o
 
 ifeq ($(SIGN),XMSS)
 OBJS_REAL+=\
+	$(WOLFDIR)/wolfcrypt/src/wc_xmss.o \
+	$(WOLFDIR)/wolfcrypt/src/wc_xmss_impl.o
+endif
+
+ifeq ($(SIGN),ext_XMSS)
+OBJS_REAL+=\
+	$(WOLFDIR)/wolfcrypt/src/ext_xmss.o \
 	$(XMSSDIR)/params.o \
 	$(XMSSDIR)/thash.o \
 	$(XMSSDIR)/hash_address.o \
@@ -112,7 +126,7 @@ vpath %.c $(WOLFDIR)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c ./
 
-ifeq ($(SIGN),XMSS)
+ifeq ($(SIGN),ext_XMSS)
     vpath %.c $(XMSSDIR)/
 endif
 

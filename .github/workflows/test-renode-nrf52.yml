@@ -64,7 +64,7 @@ jobs:
 
 # XMSS TEST
       - name: Renode Tests XMSS-SHA2_10_256
-        run: ./tools/renode/docker-test.sh "SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000"
+        run: ./tools/renode/docker-test.sh "SIGN=ext_XMSS XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000"
 
       - name: Upload Output Dir
         uses: actions/upload-artifact@v2

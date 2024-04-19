@@ -72,6 +72,8 @@
     #include <wolfssl/wolfcrypt/xmss.h>
     #ifdef HAVE_LIBXMSS
         #include <wolfssl/wolfcrypt/ext_xmss.h>
+    #else
+        #include <wolfssl/wolfcrypt/wc_xmss.h>
     #endif
 #endif
 
@@ -627,14 +629,14 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
         exit(1);
     }
 
-    ret = wc_XmssKey_SetParamStr(&key, XMSS_PARAMS);
+    ret = wc_XmssKey_SetParamStr(&key, WOLFBOOT_XMSS_PARAMS);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
-                " returned %d\n", XMSS_PARAMS, ret);
+                " returned %d\n", WOLFBOOT_XMSS_PARAMS, ret);
         exit(1);
     }
 
-    printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+    printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
 
     ret = wc_XmssKey_SetWriteCb(&key, xmss_write_key);
     if (ret != 0) {
