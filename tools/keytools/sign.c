@@ -117,6 +117,8 @@ static inline int fp_truncate(FILE *f, size_t len)
     #include <wolfssl/wolfcrypt/xmss.h>
     #ifdef HAVE_LIBXMSS
         #include <wolfssl/wolfcrypt/ext_xmss.h>
+    #else
+        #include <wolfssl/wolfcrypt/wc_xmss.h>
     #endif
 #endif
 
@@ -781,7 +783,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                  *
                  * If both priv/pub are present:
                  *  - The first ?? bytes is the private key.
-                 *  - The next 60 bytes is the public key. */
+                 *  - The next 68 bytes is the public key. */
                 word32 priv_sz = 0;
                 int    xmss_ret = 0;
 
@@ -969,7 +971,7 @@ static int sign_digest(int sign, int hash_algo,
             ret = wc_XmssKey_SetContext(&key.xmss, (void*)CMD.key_file);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_SetParamStr(&key.xmss, XMSS_PARAMS);
+            ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
         }
         if (ret == 0) {
             ret = wc_XmssKey_Reload(&key.xmss);
@@ -2297,14 +2299,14 @@ int main(int argc, char** argv)
             exit(1);
         }
 
-        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, XMSS_PARAMS);
+        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
         if (xmss_ret != 0) {
             fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
-                    " returned %d\n", XMSS_PARAMS, ret);
+                    " returned %d\n", WOLFBOOT_XMSS_PARAMS, ret);
             exit(1);
         }
 
-        printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+        printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
 
         xmss_ret = wc_XmssKey_GetSigLen(&key.xmss, &sig_sz);
         if (xmss_ret != 0) {
@@ -2322,7 +2324,7 @@ int main(int argc, char** argv)
 
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
             CMD.header_sz == 0) {
-        printf("Invalid hash or signature type!\n");
+        printf("Invalid hash or signature type! %d\n", CMD.sign);
         exit(2);
     }
 

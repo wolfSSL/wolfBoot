@@ -386,6 +386,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #include <wolfssl/wolfcrypt/xmss.h>
 #ifdef HAVE_LIBXMSS
     #include <wolfssl/wolfcrypt/ext_xmss.h>
+#else
+    #include <wolfssl/wolfcrypt/wc_xmss.h>
 #endif
 
 static void wolfBoot_verify_signature(uint8_t key_slot,
@@ -410,18 +412,16 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-    wolfBoot_printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
-
     /* Set the XMSS parameters. */
-    ret = wc_XmssKey_SetParamStr(&xmss, XMSS_PARAMS);
+    ret = wc_XmssKey_SetParamStr(&xmss, WOLFBOOT_XMSS_PARAMS);
     if (ret != 0) {
         /* Something is wrong with the pub key or XMSS parameters. */
         wolfBoot_printf("error: wc_XmssKey_SetParamStr(%s)" \
-                        " returned %d\n", XMSS_PARAMS, ret);
+                        " returned %d\n", WOLFBOOT_XMSS_PARAMS, ret);
         return;
     }
 
-    wolfBoot_printf("info: using XMSS parameters: %s\n", XMSS_PARAMS);
+    wolfBoot_printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
 
     /* Set the public key. */
     ret = wc_XmssKey_ImportPubRaw(&xmss, pubkey, KEYSTORE_PUBKEY_SIZE);

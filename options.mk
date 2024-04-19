@@ -381,7 +381,7 @@ ifeq ($(SIGN),LMS)
   endif
 endif
 
-ifeq ($(SIGN),XMSS)
+ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
   ifndef XMSS_PARAMS
     $(error XMSS_PARAMS not set)
   endif
@@ -393,7 +393,32 @@ ifeq ($(SIGN),XMSS)
   ifndef IMAGE_HEADER_SIZE
     $(error IMAGE_HEADER_SIZE not set)
   endif
+endif
 
+ifeq ($(SIGN),XMSS)
+  # Use wc_xmss implementation.
+  KEYGEN_OPTIONS+=--xmss
+  SIGN_OPTIONS+=--xmss
+  WOLFCRYPT_OBJS+= \
+    ./lib/wolfssl/wolfcrypt/src/wc_xmss.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_xmss_impl.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" -D"WOLFSSL_HAVE_XMSS" \
+    -D"WOLFSSL_WC_XMSS" -D"WOLFSSL_WC_XMSS_SMALL" \
+    -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"  \
+    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+    -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
+  else
+    STACK_USAGE=2688
+  endif
+endif
+
+ifeq ($(SIGN),ext_XMSS)
+  # Use ext_xmss implementation.
   XMSSDIR = lib/xmss
   KEYGEN_OPTIONS+=--xmss
   SIGN_OPTIONS+=--xmss
@@ -411,19 +436,19 @@ ifeq ($(SIGN),XMSS)
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o
   CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" -D"WOLFSSL_HAVE_XMSS" -D"HAVE_LIBXMSS" \
-    -DXMSS_PARAMS=\"$(XMSS_PARAMS)\" -I$(XMSSDIR) \
+    -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\" -I$(XMSSDIR) \
     -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
     -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"XMSS_VERIFY_ONLY"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
   else
-    STACK_USAGE=18064
+    STACK_USAGE=2712
   endif
 endif
 
 # Only needed if using 3rd party integration. This can be
 # removed when wc_lms and wc_xmss become default in wolfboot.
-ifneq (,$(filter $(SIGN), LMS XMSS))
+ifneq (,$(filter $(SIGN), LMS ext_XMSS))
   CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
 endif
 
@@ -747,4 +772,8 @@ endif
 
 ifeq ($(SIGN_ALG),)
   SIGN_ALG=$(SIGN)
+endif
+
+ifeq ($(SIGN_ALG),ext_XMSS)
+  SIGN_ALG=XMSS
 endif
