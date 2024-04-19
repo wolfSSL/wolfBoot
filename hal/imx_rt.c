@@ -731,6 +731,7 @@ static void clock_init(void)
 /* The UART interface (LPUART1 - LPUART8) */
 #ifndef UART_BASEADDR
 #define UART_BASEADDR LPUART1
+#define UART_BASE LPUART1_BASE
 #endif
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE (115200U)
@@ -741,7 +742,7 @@ void uart_init(void)
     lpuart_config_t config;
     uint32_t uartClkSrcFreq = 20000000U; /* 20 MHz */
 
-#if UART_BASEADDR == LPUART1
+#if UART_BASE == LPUART1_BASE
     /* Configure the UART IO pins for LPUART1
      * Tested with RT1040, RT1050, RT1062 and RT1064
      */
@@ -750,6 +751,17 @@ void uart_init(void)
     IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0U);
     IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_12_LPUART1_TX, 0x10B0U);
     IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B0_13_LPUART1_RX, 0x10B0U);
+#elif UART_BASE == LPUART4_BASE
+    /* Configure the UART IO pins for one combination for LPUART4
+     * Tested with RT1040
+     */
+    CLOCK_EnableClock(kCLOCK_Iomuxc);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_B1_00_LPUART4_TX, 0U);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_B1_01_LPUART4_RX, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_B1_00_LPUART4_TX, 0x10B0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_B1_01_LPUART4_RX, 0x10B0U);
+#else
+    #error Unsupported UART_BASEADDR/UART_BASE
 #endif
 
     LPUART_GetDefaultConfig(&config);
