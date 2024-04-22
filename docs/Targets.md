@@ -1220,7 +1220,7 @@ address `0x8000`.
 
 The NXP iMX-RT10xx family of devices contain a Cortex-M7 with a DCP coprocessor for SHA256 acceleration.
 
-WolfBoot currently supports the NXP RT1050, RT1060/1062, and RT1064 devices.
+WolfBoot currently supports the NXP RT1040, RT1050, RT1060/1061/1062, and RT1064 devices.
 
 ### Building wolfBoot
 
@@ -1240,7 +1240,7 @@ DCP support (hardware acceleration for SHA256 operations) can be enabled by usin
 
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
 
-The RT1050 EVKB board comes wired to use the 64MB HyperFlash. If you'd like to use QSPI there is a rework that can be performed (see AN12183). The default onboard QSPI 8MB ISSI IS25WP064A (`CONFIG_FLASH_IS25WP064A`). To use a 64Mbit Winbond W25Q64JV define `CONFIG_FLASH_W25Q64JV` (16Mbit, 32Mbit, 128Mbit, 256Mbit and 512Mbit versions are also available). These options are also available for the RT1040 target.
+The RT1050 EVKB board comes wired to use the 64MB HyperFlash. If you'd like to use QSPI there is a rework that can be performed (see AN12183). The default onboard QSPI 8MB ISSI IS25WP064A (`CONFIG_FLASH_IS25WP064A`). To use a 64Mbit Winbond W25Q64JV define `CONFIG_FLASH_W25Q64JV` (16Mbit, 32Mbit, 128Mbit, 256Mbit and 512Mbit versions are also available). These options are also available for the RT1042 and RT1061 target.
 
 You can also get the SDK and CMSIS bundles using these repositories:
 * https://github.com/nxp-mcuxpresso/mcux-sdk

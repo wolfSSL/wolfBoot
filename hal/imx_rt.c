@@ -34,19 +34,22 @@
 #include "fsl_lpuart.h"
 #endif
 
+#ifdef CPU_MIMXRT1064DVL6A
+#include "evkmimxrt1064_flexspi_nor_config.h"
+#define USE_GET_CONFIG
+#endif
 #ifdef CPU_MIMXRT1062DVL6A
 #include "evkmimxrt1060_flexspi_nor_config.h"
 #define USE_GET_CONFIG
 #endif
-#ifdef CPU_MIMXRT1042XJM5B
-#include "evkmimxrt1040_flexspi_nor_config.h"
+#ifdef CPU_MIMXRT1061CVJ5B
+#include "evkmimxrt1060_flexspi_nor_config.h"
 #endif
 #ifdef CPU_MIMXRT1052DVJ6B
 #include "evkbimxrt1050_flexspi_nor_config.h"
 #endif
-#ifdef CPU_MIMXRT1064DVL6A
-#include "evkmimxrt1064_flexspi_nor_config.h"
-#define USE_GET_CONFIG
+#ifdef CPU_MIMXRT1042XJM5B
+#include "evkmimxrt1040_flexspi_nor_config.h"
 #endif
 
 #include "xip/fsl_flexspi_nor_boot.h"
@@ -280,7 +283,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 
 /** Flash configuration in the .flash_config section of flash **/
-#if defined(CPU_MIMXRT1042XJM5B) || defined(CPU_MIMXRT1052DVJ6B)
+#if defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1042XJM5B)
 
     #if defined(CONFIG_FLASH_W25Q16JV)
         /* Winbond W25Q16JV */
@@ -576,7 +579,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
 
 #ifndef __FLASH_BASE
-#if defined(CPU_MIMXRT1042XJM5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1062DVL6A)
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1042XJM5B)
 #define __FLASH_BASE 0x60000000
 #elif defined(CPU_MIMXRT1064DVL6A)
 #define __FLASH_BASE 0x70000000
@@ -695,7 +698,7 @@ static void clock_init(void)
             CCM_CBCDR_AHB_PODF(2) |
             CCM_CBCDR_IPG_PODF(2);
 
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1064DVL6A)
+#if defined(CPU_MIMXRT1064DVL6A) || defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1061CVJ5B)
         /* Configure FLEXSPI2 CLOCKS */
         CCM->CBCMR =
             (CCM->CBCMR &
