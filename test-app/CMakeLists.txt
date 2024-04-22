@@ -104,38 +104,41 @@ else()
     gen_wolfboot_platform_target(${PLATFORM_NAME} bootloader_linker_script)
 endif()
 
-add_executable(image)
+if(BUILD_TEST_APPS)
+    message(STATUS "Building wolfBoot test apps")
+    add_executable(image)
 
-target_sources(image PRIVATE ${APP_SOURCES})
+    target_sources(image PRIVATE ${APP_SOURCES})
 
-target_include_directories(image PRIVATE
-    ../
-    ../include
-    ${CMAKE_CURRENT_BINARY_DIR})
+    target_include_directories(image PRIVATE
+        ../
+        ../include
+        ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(image wolfboot target)
+    target_link_libraries(image wolfboot target)
 
-target_compile_definitions(image PRIVATE PLATFORM_${WOLFBOOT_TARGET}
-                                            ${TEST_APP_COMPILE_DEFINITIONS} ${WOLFBOOT_DEFS})
+    target_compile_definitions(image PRIVATE PLATFORM_${WOLFBOOT_TARGET}
+                                                ${TEST_APP_COMPILE_DEFINITIONS} ${WOLFBOOT_DEFS})
 
-target_compile_options(image PRIVATE -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused
-                                        -nostartfiles)
+    target_compile_options(image PRIVATE -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused
+                                            -nostartfiles)
 
-if(WOLFBOOT_TARGET STREQUAL "sim")
-    target_link_options(image PRIVATE -Wl,-gc-sections -Wl,-Map=image.map)
-else()
-    target_link_options(image PRIVATE -T${APP_LSCRIPT} -Wl,-gc-sections -Wl,-Map=image.map)
-endif()
+    if(WOLFBOOT_TARGET STREQUAL "sim")
+        target_link_options(image PRIVATE -Wl,-gc-sections -Wl,-Map=image.map)
+    else()
+        target_link_options(image PRIVATE -T${APP_LSCRIPT} -Wl,-gc-sections -Wl,-Map=image.map)
+    endif()
 
-if(WOLFBOOT_TARGET IN_LIST ARM_TARGETS)
-    message(STATUS "Binary output products will be generated")
-    gen_bin_target_outputs(image)
+    if(WOLFBOOT_TARGET IN_LIST ARM_TARGETS)
+        message(STATUS "Binary output products will be generated")
+        gen_bin_target_outputs(image)
 
-    # add boot address to cache
-    unset(${PLATFORM_NAME}_BOOT_ADDRESS CACHE)
-    set(${PLATFORM_NAME}_BOOT_ADDRESS ${WOLFBOOT_PARTITION_BOOT_ADDRESS} CACHE INTERNAL "")
+        # add boot address to cache
+        unset(${PLATFORM_NAME}_BOOT_ADDRESS CACHE)
+        set(${PLATFORM_NAME}_BOOT_ADDRESS ${WOLFBOOT_PARTITION_BOOT_ADDRESS} CACHE INTERNAL "")
 
-    gen_wolfboot_factory_image(${PLATFORM_NAME} image)
-else()
-    gen_wolfboot_signed_image(image)
+        gen_wolfboot_factory_image(${PLATFORM_NAME} image)
+    else()
+        gen_wolfboot_signed_image(image)
+    endif()
 endif()

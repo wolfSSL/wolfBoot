@@ -126,7 +126,8 @@ add_option(
     "no"
     "yes;no")
 add_option("DEBUG_UART" "Enable trace debugging over a UART (default: disabled)" "no" "yes;no")
-add_option("BUILD_TEST_APPS" "Build the wolfBoot test apps (default: disabled)" "no" "yes;no")
+add_option("BUILD_TEST_APPS" "Build the wolfBoot image and test apps (default: disabled)" "no" "yes;no")
+add_option("BUILD_IMAGE" "Build the wolfBoot image (default: disabled)" "no" "yes;no")
 add_option("PYTHON_KEYTOOLS" "Use wolfCrypt-py for key generation and signing (default: disabled)"
            "no" "yes;no")
 add_option(
@@ -650,9 +651,8 @@ set(WOLFBOOT_LSCRIPT_TEMPLATE hal/${WOLFBOOT_TARGET}.ld)
 # wolfcrypt
 add_subdirectory(lib)
 
-if(BUILD_TEST_APPS)
-    # test applications
-    message(STATUS "Building wolfboot test apps")
+if(BUILD_TEST_APPS OR BUILD_IMAGE)
+    message(STATUS "Building wolfBoot image")
     add_subdirectory(test-app)
 endif()
 
