@@ -19,42 +19,18 @@ See these links for more info on stateful HBS support and wolfSSL/wolfCrypt:
 - https://www.wolfssl.com/documentation/manuals/wolfssl/appendix07.html#post-quantum-stateful-hash-based-signatures
 - https://github.com/wolfSSL/wolfssl-examples/tree/master/pq/stateful_hash_sig
 
+## Supported PQ Signature Methods
 
-## LMS/HSS
+These four PQ signature options are supported:
+- LMS: uses wolfcrypt implementation from `wc_lms.c`, and `wc_lms_impl.c`.
+- XMSS: uses wolfcrypt implementation from `wc_xmss.c`, and `wc_xmss_impl.c`.
+- ext_LMS: uses external integration from `ext_lms.c`.
+- ext_XMSS: uses external integration from `ext_xmss.c`.
 
+The wolfcrypt implementations are more performant and are recommended.
+The external integrations are experimental and for testing interoperability.
 
-### Building with LMS Support
-
-LMS/HSS support in wolfCrypt requires the hash-sigs library ( https://github.com/cisco/hash-sigs ).
-Use the following procedure to prepare hash-sigs for building with wolfBoot:
-
-```
-$ cd lib
-$ mkdir hash-sigs
-$ls
- CMakeLists.txt  hash-sigs  wolfssl  wolfTPM
-$ cd hash-sigs
-$ mkdir lib
-$ git clone https://github.com/cisco/hash-sigs.git src
-$ cd src
-$ git checkout b0631b8891295bf2929e68761205337b7c031726
-$ git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch
-```
-
-Nothing more is needed, as wolfBoot will automatically produce the required
-hash-sigs build artifacts.
-
-Note: the hash-sigs project only builds static libraries:
-- hss_verify.a: a single-threaded verify-only static lib.
-- hss_lib.a: a single-threaded static lib.
-- hss_lib_thread.a: a multi-threaded static lib.
-
-The keytools utility links against `hss_lib.a`, as it needs full
-keygen, signing, and verifying functionality. However wolfBoot
-links directly with the subset of objects in the `hss_verify.a`
-build rule, as it only requires verify functionality.
-
-### LMS Config
+### LMS/HSS Config
 
 A new LMS sim example has been added here:
 ```
@@ -86,31 +62,8 @@ winternitz: 8
 signature length: 2644
 ```
 
-## XMSS/XMSS^MT
+### XMSS/XMSS^MT Config
 
-### Building with XMSS Support
-
-XMSS/XMSS^MT support in wolfCrypt requires a patched version of the
-xmss-reference library ( https://github.com/XMSS/xmss-reference.git ).
-Use the following procedure to prepare xmss-reference for building with
-wolfBoot:
-
-```
-$ cd lib
-$ git clone https://github.com/XMSS/xmss-reference.git xmss
-$ ls
-CMakeLists.txt  wolfPKCS11  wolfTPM  wolfssl  xmss
-$ cd xmss
-$ git checkout 171ccbd26f098542a67eb5d2b128281c80bd71a6
-$ git apply ../../tools/xmss/0001-Patch-to-support-wolfSSL-xmss-reference-integration.patch
-```
-
-The patch creates an addendum readme, `patch_readme.md`, with further comments.
-
-Nothing more is needed beyond the patch step, as wolfBoot will handle building
-the xmss build artifacts it requires.
-
-### XMSS Config
 A new XMSS sim example has been added here:
 ```
 config/examples/sim-xmss.config
@@ -142,3 +95,59 @@ $ ./tools/xmss/xmss_siglen.sh XMSSMT-SHA2_20/2_256
 parameter set:    XMSSMT-SHA2_20/2_256
 signature length: 4963
 ```
+
+## Building the external PQ Integrations
+
+### ext_LMS Support
+
+The external LMS/HSS support in wolfCrypt requires the hash-sigs library ( https://github.com/cisco/hash-sigs ).
+Use the following procedure to prepare hash-sigs for building with wolfBoot:
+
+```
+$ cd lib
+$ mkdir hash-sigs
+$ls
+ CMakeLists.txt  hash-sigs  wolfssl  wolfTPM
+$ cd hash-sigs
+$ mkdir lib
+$ git clone https://github.com/cisco/hash-sigs.git src
+$ cd src
+$ git checkout b0631b8891295bf2929e68761205337b7c031726
+$ git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch
+```
+
+Nothing more is needed, as wolfBoot will automatically produce the required
+hash-sigs build artifacts.
+
+Note: the hash-sigs project only builds static libraries:
+- hss_verify.a: a single-threaded verify-only static lib.
+- hss_lib.a: a single-threaded static lib.
+- hss_lib_thread.a: a multi-threaded static lib.
+
+The keytools utility links against `hss_lib.a`, as it needs full
+keygen, signing, and verifying functionality. However wolfBoot
+links directly with the subset of objects in the `hss_verify.a`
+build rule, as it only requires verify functionality.
+
+
+### ext_XMSS Support
+
+The external XMSS/XMSS^MT support in wolfCrypt requires a patched version of the
+xmss-reference library ( https://github.com/XMSS/xmss-reference.git ).
+Use the following procedure to prepare xmss-reference for building with
+wolfBoot:
+
+```
+$ cd lib
+$ git clone https://github.com/XMSS/xmss-reference.git xmss
+$ ls
+CMakeLists.txt  wolfPKCS11  wolfTPM  wolfssl  xmss
+$ cd xmss
+$ git checkout 171ccbd26f098542a67eb5d2b128281c80bd71a6
+$ git apply ../../tools/xmss/0001-Patch-to-support-wolfSSL-xmss-reference-integration.patch
+```
+
+The patch creates an addendum readme, `patch_readme.md`, with further comments.
+
+Nothing more is needed beyond the patch step, as wolfBoot will handle building
+the xmss build artifacts it requires.

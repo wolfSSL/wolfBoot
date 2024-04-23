@@ -104,6 +104,12 @@ file is in this format.
   * `--rsa4096` Use rsa4096 for signing the firmware. Assume that the given KEY.DER
 file is in this format.
 
+  * `--lms` Use LMS/HSS for signing the firmware. Assume that the given KEY.DER
+file is in this format.
+
+  * `--xmss` Use XMSS/XMSS^MT for signing the firmware. Assume that the given KEY.DER
+file is in this format.
+
   * `--no-sign` Disable secure boot signature verification. No signature
     verification is performed in the bootloader, and the KEY.DER argument should
     not be supplied.
