@@ -85,6 +85,8 @@
 #define HBA_TBL_SIZE 0x800
 #define HBA_TBL_ALIGN 0x80
 
+#define MASTER_PASSWORD "master"
+
 static uint8_t ahci_hba_fis[HBA_FIS_SIZE * AHCI_MAX_PORTS]
 __attribute__((aligned(HBA_FIS_SIZE)));
 static uint8_t ahci_hba_clb[HBA_CLB_SIZE * AHCI_MAX_PORTS]
@@ -395,7 +397,7 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 
-#if 0
+#ifdef WOLFBOOT_ATA_DISABLE_USER_PASSWORD
 static int sata_disable_password(int drv)
 {
     enum ata_security_state ata_st;
@@ -404,10 +406,12 @@ static int sata_disable_password(int drv)
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
     if (ata_st == ATA_SEC4) {
-        r = ata_security_unlock_device(drv, "master", 1);
-        AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
-        r = ata_security_disable_password(drv, "master", 1);
-        AHCI_DEBUG_PRINTF("ATA disable password: returned %d\r\n", r);
+        r = ata_security_unlock_device(drv, MASTER_PASSWORD, 1);
+        wolfBoot_printf("ATA device unlock: returned %d\r\n", r);
+        if (r == 0) {
+            r = ata_security_disable_password(drv, MASTER_PASSWORD, 1);
+            wolfBoot_printf("ATA disable password: returned %d\r\n", r);
+        }
     }
     panic();
     return 0;
@@ -433,6 +437,9 @@ int sata_unlock_disk(int drv, int freeze)
     enum ata_security_state ata_st;
     int r;
 
+#ifdef WOLFBOOT_ATA_DISABLE_USER_PASSWORD
+    sata_disable_password(0);
+#endif
     r = sata_get_unlock_secret(secret, &secret_size);
     if (r != 0)
         return r;
