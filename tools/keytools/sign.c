@@ -110,6 +110,8 @@ static inline int fp_truncate(FILE *f, size_t len)
     #include <wolfssl/wolfcrypt/lms.h>
     #ifdef HAVE_LIBLMS
         #include <wolfssl/wolfcrypt/ext_lms.h>
+    #else
+        #include <wolfssl/wolfcrypt/wc_lms.h>
     #endif
 #endif
 

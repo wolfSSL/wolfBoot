@@ -320,6 +320,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 #include <wolfssl/wolfcrypt/lms.h>
 #ifdef HAVE_LIBLMS
     #include <wolfssl/wolfcrypt/ext_lms.h>
+#else
+    #include <wolfssl/wolfcrypt/wc_lms.h>
 #endif
 
 static void wolfBoot_verify_signature(uint8_t key_slot,

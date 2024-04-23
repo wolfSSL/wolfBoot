@@ -17,33 +17,47 @@ LDFLAGS =
 OBJDIR = ./
 LIBS =
 
-ifeq ($(SIGN),LMS)
+# Common to wc_lms and ext_lms.
+ifneq (,$(filter $(SIGN), LMS ext_LMS))
+  CFLAGS +=-DWOLFBOOT_SIGN_LMS -DWOLFSSL_HAVE_LMS \
+           -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
+           -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
+endif
+
+# Specific to ext_lms.
+ifeq ($(SIGN),ext_LMS)
   LMSDIR = $(WOLFBOOTDIR)/lib/hash-sigs
   LIBS += $(LMSDIR)/lib/hss_lib.a
-  CFLAGS  +=-DWOLFBOOT_SIGN_LMS -DWOLFSSL_HAVE_LMS -DHAVE_LIBLMS -I$(LMSDIR)/src \
-            -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
-            -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
+  CFLAGS +=-DHAVE_LIBLMS -I$(LMSDIR)/src
 endif
 
+# Specific to wc_lms.
+ifeq ($(SIGN),LMS)
+  CFLAGS +=-DWOLFSSL_WC_LMS
+endif
+
+# Common to wc_xmss and ext_xmss.
+ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
+  $(info xmss params: $(XMSS_PARAMS))
+  CFLAGS +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS \
+           -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+           -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
+endif
+
+# Specific to ext_xmss.
 ifeq ($(SIGN),ext_XMSS)
-  $(info xmss params: $(XMSS_PARAMS))
   XMSSDIR = $(WOLFBOOTDIR)/lib/xmss
-  CFLAGS  +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS -DHAVE_LIBXMSS -I$(XMSSDIR) \
-            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-            -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
+  CFLAGS +=-DHAVE_LIBXMSS -I$(XMSSDIR)
 endif
 
+# Specific to wc_xmss.
 ifeq ($(SIGN),XMSS)
-  $(info xmss params: $(XMSS_PARAMS))
-  CFLAGS  +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS -D"WOLFSSL_WC_XMSS" \
-            -D"WOLFSSL_XMSS_MAX_HEIGHT=32" \
-            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-            -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
+  CFLAGS +=-D"WOLFSSL_WC_XMSS" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
 endif
 
 # Only needed if using 3rd party integration. This can be
-# removed when wc_lms and wc_xmss become default in wolfboot.
-ifneq (,$(filter $(SIGN), LMS ext_XMSS))
+# removed if ext_lms and ext_xmss are deprecated.
+ifneq (,$(filter $(SIGN), ext_LMS ext_XMSS))
   CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
 endif
 
@@ -96,18 +110,31 @@ OBJS_REAL=\
 	$(WOLFDIR)/wolfcrypt/src/sha512.o \
 	$(WOLFDIR)/wolfcrypt/src/tfm.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_port.o \
-	$(WOLFDIR)/wolfcrypt/src/wolfmath.o \
-	$(WOLFDIR)/wolfcrypt/src/ext_lms.o
+	$(WOLFDIR)/wolfcrypt/src/wolfmath.o
 
 OBJS_REAL+=\
 	$(WOLFBOOTDIR)/src/delta.o
 
+# Add wolfcrypt lms implementation.
+ifeq ($(SIGN),LMS)
+OBJS_REAL+=\
+	$(WOLFDIR)/wolfcrypt/src/wc_lms.o \
+	$(WOLFDIR)/wolfcrypt/src/wc_lms_impl.o
+endif
+
+# Add external lms integration.
+ifeq ($(SIGN),ext_LMS)
+OBJS_REAL+= $(WOLFDIR)/wolfcrypt/src/ext_lms.o
+endif
+
+# Add wolfcrypt xmss implementation.
 ifeq ($(SIGN),XMSS)
 OBJS_REAL+=\
 	$(WOLFDIR)/wolfcrypt/src/wc_xmss.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_xmss_impl.o
 endif
 
+# Add external xmss integration.
 ifeq ($(SIGN),ext_XMSS)
 OBJS_REAL+=\
 	$(WOLFDIR)/wolfcrypt/src/ext_xmss.o \
