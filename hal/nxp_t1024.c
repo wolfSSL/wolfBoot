@@ -610,48 +610,240 @@ enum ifc_amask_sizes {
 
 /* DDR4 - 2GB */
 /* 1600 MT/s (64-bit, CL=12, ECC on) */
+
+/* SA[0-15]:  0000: Starting address for chip select (bank)n
+ * EA[16-31]: 007F: Ending address for chip select (bank)n
+ */
 #define DDR_CS0_BNDS_VAL       0x0000007F
 #define DDR_CS1_BNDS_VAL       0x008000BF
 #define DDR_CS2_BNDS_VAL       0x0100013F
 #define DDR_CS3_BNDS_VAL       0x0140017F
-#define DDR_CS0_CONFIG_VAL     0x80010312
+
+/* 15=row bits, 10 column bits, 1 bank group bit, 2 logical bank bits, ODT only during writes */
+/* CS_EN      [0]: 1   Chip select n enable
+ * AP_EN      [8]: 1   Chip select nauto-precharge enable
+ * ODT_RD_CFG [9-11]:  ODT for reads configuration
+ * ODT_WR_CFG [13-15]: ODT for writes configuration
+ * BA_BITS_CS [16-17]: Number of bank bits for SDRAM on chip selectn
+ * ROW_BITS_CS[21-23]: Number of row bits for SDRAM on chip selectn
+ * BG_BITS_CS [26-27]: Number of bank group bits for SDRAM on chip selectn
+ * COL_BITS_CS[29-31]: Number of column bits for SDRAM on chip selectn
+ */
+#define DDR_CS0_CONFIG_VAL     0x80810312 /* was 0x80010312 */
 #define DDR_CS1_CONFIG_VAL     0x00000202
 #define DDR_CS2_CONFIG_VAL     0x00000202
 #define DDR_CS3_CONFIG_VAL     0x00010202
+
+/* PASR_DEC[0]: Partial array decoding
+ * PASR_CFG[5-7]: Partial array self refresh config
+ */
 #define DDR_CS_CONFIG_2_VAL    0x00000000
 
+/* RWT            [0-1]:      10:  2 clocks: Read-to-write turnaround (tRTW)
+ * WRT            [2-3]:      00:  0 clocks: Write-to-read turnaround
+ * RRT            [4-5]:      00:  0 clocks: Read-to-read turnaround
+ * WWT            [6-7]:      00:  0 clocks: Write-to-write turnaround
+ * ACT_PD_EXIT    [8-11]:   0101:  5 clocks: Active powerdown exit timing (tXP)
+ * PRE_PD_EXIT    [12-15]:  0100:  4 clocks: Precharge powerdown exit timing (tXP)
+ * EXT_PRE_PD_EXIT[16-17]:    01: 16 clocks: Extended precharge powerdown exit timing (tXP)
+ * MRS_CYC        [27-31]: 01100: 12 clocks: Mode register set cycle time (tMRD, tMOD)
+ */
 #define DDR_TIMING_CFG_0_VAL   0x8055000C
-#define DDR_TIMING_CFG_1_VAL   0x2E268E44
-#define DDR_TIMING_CFG_2_VAL   0x0049111C
-#define DDR_TIMING_CFG_3_VAL   0x114C1000
 
-#define DDR_TIMING_CFG_4_VAL   0x00220001
+/* PRETOACT      [0-3]:    0011:  3 clocks: Precharge-to-activate interval (tRP)
+ * ACTTOPRE      [4-7]:    1110: 14 clocks (30 total): Activate to precharge interval (tRAS)
+ * ACTTORW       [8-11]:   0010:  2 clocks (18 total): Activate to read/write interval for SDRAM (tRCD)
+ * CASLAT        [12-14]:   011:  4 clocks: MCAS_B latency from READ command
+ * REFREC        [16-19]:  1100: 12 clocks (240+12+8 total): Refresh recovery time (tRFC)
+ * WRREC         [20-23]:  1110: 14 clocks: Last data to precharge minimum interval (tWR)
+ * ACTTOACT      [24-27]:  0100:  4 clocks: Activate-to-activate interval (tRRD)
+ * WRTORD        [28-31]:  0100:  4 clocks: Last write data pair to read command issue interval (tWTR)
+ */
+#define DDR_TIMING_CFG_1_VAL   0x3E26CE44 /* was 0x2E268E44 */
+
+/* ADD_LAT       [0-3]:     0000: 0 clocks Additive latency
+ * WR_LAT        [9-12]:    1001: 9 clocks Write latency
+ * EXT_WR_LAT    [13]:         0: 0 clocks Extended Write Latency (1=16 clocks)
+ * RD_TO_PRE     [15-18]:   1000: 8 clocks Read to precharge (tRTP).
+ * WR_DATA_DELAY [19-22]:   1000: 1 clock delay Write command to write data strobe timing adjustment.
+ * CKE_PLS       [23-25]:    100: 4 clocks Minimum CKE pulse width (tCKE).
+ * FOUR_ACT      [26-31]: 011100: 28 Window for four activates (tFAW).
+ */
+#define DDR_TIMING_CFG_2_VAL   0x0049111C /* tried 0x00491124 */
+
+/* EXT_PRETOACT  [3]:          1: 16 clocks: Extended precharge-to-activate interval (0=0, 1=16 clocks)
+ * EXT_ACTTOPRE  [6-7]:       01: 16 clocks: Extended Activate to precharge interval (tRAS)
+ * EXT_ACTTORW   [9]:          1: 16 clocks: Extended activate to read/write interval for SDRAM (tRCD) (ACTTORW[5])
+ * EXT_REFREC    [10-15]: 001111: 240 Extended refresh recovery time (tRFC).
+ * EXT_CASLAT    [18-19]:     01: 8 clocks Extended MCAS_B latency from READ command
+ * EXT_ADD_LAT   [21]:         0: 0 clocks Extended Additive Latency
+ * EXT_WRREC     [23]:         1: 16 clocks Extended last data to precharge minimum interval (tWR)
+ * CNTL_ADJ      [29-31]:    000: MODTn, MCSn_B, and MCKEn will be launched aligned with the other DRAM address and control signals.
+ */
+#define DDR_TIMING_CFG_3_VAL   0x114F1100 /* was 0x114C1000 */
+
+/* RWT           [0-3]:     0000: 0 clocks: Read-to-write  turnaround for same chip select.
+ * WRT           [4-7]:     0000: 0 clocks: Write-to-read  turnaround for same chip select
+ * RRT           [8-11]:    0010: 2 clocks: Read-to-read   turnaround for same chip select
+ * WWT           [12-15]:   0010: 2 clocks: Write-to-write turnaround for same chip select.
+ * EXT_RWT       [16-17]:     00: Extended read-to-write turnaround (tRTW)
+ * EXT_WRT       [19]:         0: Extended write-to-read turnaround
+ * EXT_RRT       [21]:         0: Extended read-to-read turnaround
+ * EXT_WWT       [23]:         0: Extended write-to-write turnaround
+ * EXT_REFINT    [27]:         0: Refresh interval (0=0,1=65,536 clocks)
+ * DLL_LOCK      [30-31]:     10: 1024 clocks: DDR SDRAM DLL Lock Time (0=200, 1=512, 2=1024 clocks)
+ */
+#define DDR_TIMING_CFG_4_VAL   0x00220002 /* was 0x00220001 */
+
+/* RODT_ON       [3-7]:     0101: 4 clocks: Read to ODT on (0=CASLAT-WR_LAT, 1=0, 2=1, 12=11 clocks)
+ * RODT_OFF      [9-11]:     100: 4 clocks: Read to ODT off (0=4, 1=1, 7=7 clocks)
+ * WODT_ON       [15-19]:  00001: 1 clock:  Write to ODT off (1=0, 2=1, 6=5 clocks)
+ * WODT_OFF      [21-23]:    100: 4 clocks: Write to ODT off (0=4, 1=1, 7=7 clocks)
+ */
 #define DDR_TIMING_CFG_5_VAL   0x05401400
+
+#define DDR_TIMING_CFG_6_VAL   0x00000000
+
+/* CKE_RST       [2-3]:      00: 200 clocks: CKE reset time (tXPR) (0=200, 1=256, 2=512, 3=1024 clocks)
+ * CKSRE         [4-7]:    0000:  15 clocks: Valid clock after Self Refresh entry (tCKSRE) (0=15, 1=6, )
+ * CKSRX         [8-11]:   0000:  15 clocks: Valid clock after Self Refresh exit (tCKSRX)
+ * PAR_LAT       [12-15]:  0000:   0 clocks
+ * CS_TO_CMD     [24-27]:  0000:   0 clocks: Chip select to command latency
+ */
+#define DDR_TIMING_CFG_7_VAL   0x00000000 /* tried 0x00050000 */
+
+/* RWT_BG         [0-3]:    0000: Read-to-write turnaround for same chip select and same bank group
+ * WRT_BG         [4-7]:    0011: Write-to-read turnaround for same chip select and same bank group
+ * RRT_BG         [8-11]:   0001: Read-to-read turnaround for same chip select and same bank group
+ * WWT_BG         [12-15]:  0001: Write-to-write turnaround for same chip select and same bank group
+ * ACTTOACT_BG    [16-19]:  0101: Activate-to-activate interval for the same bank group(tRRD_L).
+ * WRTORD_BG      [20-23]:  1000: Last write data pair to read command issue interval for the same bank group(tWTR_L)
+ * PRE_ALL_REC    [27-31]: 00000: Precharge all-to-activate interval
+ */
 #define DDR_TIMING_CFG_8_VAL   0x03115800
 
+/* MR1 | MR0
+ * MR0 0x0215
+ * | 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2   | 1 | 0 |
+ * [   WR/RTP    ]       [   CL3-1   ][BT][CL0][   BL  ]
+ * Burst Length (BL) = 01: 00 (fixed 8), 01 (on the fly), 02 (fixed 4)
+ * Burst Type (BT) = 0 (nibble sequential), 1 (interleave)
+ * CAS Latency (CL):
+ *   00000 (9 clocks)
+ *   00001 (10 clocks)
+ *   00010 (11 clocks)
+ *   00011 (12 clocks) (original)
+ *   00100 (13 clocks)
+ *   00101 (14 clocks)
+ *   00110 (15 clocks)
+ *   00111 (16 clocks)
+ *   10111 (32 clocks)
+ * WRITE recovery (WR)/READ-to-PRECHARGE(RTP):
+ *   0000 (10/5 clocks)
+ *   0001 (12/6 clocks) (original)
+ *   0010 (14/7 clocks)
+ *   0011 (16/8 clocks)
+ *   0100 (18/9 clocks)
+ *   0101 (20/10 clocks)
+ *   0110 (24/12 clocks)
+ *   0111 (22/11 clocks)
+ *   1000 (26/13 clocks)
+ *   1001 (28/14 clocks)
+ *
+ * MR1 0x0101
+ * | 11 | 10 | 9 | 8 | 7   | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
+ * [TDQS][  RTT_NOM  ][Wlev]       [   AL  ][ ODI ][DLL]
+ * DLL=1, RTT_NOM=001 (RZQ/4 60ohm), ODI=00 (RZQ/7 34ohm)
+ */
 #define DDR_SDRAM_MODE_VAL     0x01010215
+
+/* MR2 | MR3
+ * MR2
+ * | 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2   | 1 | 0 |
+ * [    RTT_WR   ]           [    CWL    ]
+ *
+ * MR3
+ * | 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2   | 1 | 0 |
+ *      [ WR_CMD_LAT]
+ */
 #define DDR_SDRAM_MODE_2_VAL   0x00000000
-#define DDR_SDRAM_MODE_9_VAL   0x00000500 /* Extended SDRAM mode 5 */
-#define DDR_SDRAM_MODE_10_VAL  0x04000000 /* Extended SDRAM mode 7 */
+
+/* Not applicable (reuse other MRs) */
 #define DDR_SDRAM_MODE_3_8_VAL 0x00000000
+
+/* MR4 | MR5
+ * MR4: 0x0100
+ * MR5: 0x013F: RTT_PARK=000 disabled, CA Parity Latency=010 (5 clocks) */
+#define DDR_SDRAM_MODE_9_VAL   0x00000500
+
+/* MR6 | MR7:
+ * MR7: CCD_L 010=6 clocks, VREF Range 1 */
+#define DDR_SDRAM_MODE_10_VAL  0x04000000
+
 #define DDR_SDRAM_MD_CNTL_VAL  0x03001000
 
 #define DDR_SDRAM_CFG_VAL      0xE5200000 /* DDR4 w/ECC */
+
+/* ODT_CFG [9-10]:     10: Assert ODT to internal IOs only
+ * NUM_PR  [16-19]: 00001: 1 refresh
+ * OBC_CFG [25]:        1: On-the-fly Burst Chop mode will be used
+ * D_INIT  [27]:        1: The memory controller will initialize memory once it is enabled
+ */
 #define DDR_SDRAM_CFG_2_VAL    0x00401050
 
-#define DDR_SDRAM_INTERVAL_VAL 0x18600618
+/* REF_MODE[22-23]: Refresh Mode */
+#define DDR_SDRAM_CFG_3_VAL    0x00000000
+
+/* REFINT  [0-15]:   6240: Refresh interval  12480=0x30C0
+ * BSTOPRE [18-31]:  1560: Precharge interval
+ */
+#define DDR_SDRAM_INTERVAL_VAL 0x18600000 /* was 0x18600618 */
+
 #define DDR_DATA_INIT_VAL      0xDEADBEEF
-#define DDR_SDRAM_CLK_CNTL_VAL 0x02400000
+
+/* CLK_ADJUST[5-9]: applied cycle after address/command
+ * 00000 = aligned
+ * 00001 = 1/16
+ * 00100 = 1/4
+ * 00110 = 3/8
+ * 01001 = 9/16
+ * 01000 = 1/2 (configured)
+ * 01010 = 5/8
+ * 10000 = 1
+ */
+#define DDR_SDRAM_CLK_CNTL_VAL 0x02000000 /* was 0x02400000 */
+
+/* ZQ_EN */
 #define DDR_ZQ_CNTL_VAL        0x8A090705
 
+/* WRLVL_EN   [0]:        1: Write Leveling Enable
+ * WRLVL_MRD  [5-7]:    110 0x6:  64 clocks
+ * WRLVL_ODTEN[9-11]:   111 0x7: 128 clocks ODT delay after margining mode is programmed (tWL_ODTEN).
+ * WRLVL_DQSEN[13-15]:  101 0x5:  32 clocks DQS/DQS_B delay after margining mode is programmed (tWL_DQSEN).
+ * WRLVL_SMPL [16-19]: 1111 0xF:  15 clocks Write leveling sample time
+ * WRLVL_WLR  [21-23]:  110 0x6:  64 clocks Write leveling repetition time.
+ * WRLVL_START[27-31]: 1000 0x8: 3/4 clocks Write leveling start time for DQS[0].
+ */
 #define DDR_WRLVL_CNTL_VAL     0x8675F606
+/* WRLVL_START_1  [3-7]: 3/4 Write leveling start time for DQS[1]
+ * WRLVL_START_2[11-15]: 7/8 Write leveling start time for DQS[2]
+ * WRLVL_START_3[19-23]: 7/8 Write leveling start time for DQS[3]
+ * WRLVL_START_4[27-31]: 9/8 Write leveling start time for DQS[4]
+ */
 #define DDR_WRLVL_CNTL_2_VAL   0x06070709
+/* WRLVL_START_5  [3-7]: 9/8 Write leveling start time for DQS[5]
+ * WRLVL_START_6[11-15]: 9/8 Write leveling start time for DQS[6]
+ * WRLVL_START_7[19-23]: 9/8 Write leveling start time for DQS[7]
+ * WRLVL_START_8[27-31]: 1   Write leveling start time for DQS[8]
+ */
 #define DDR_WRLVL_CNTL_3_VAL   0x09090908
 
 #define DDR_SDRAM_RCW_1_VAL    0x00000000
 #define DDR_SDRAM_RCW_2_VAL    0x00000000
 
-#define DDR_DDRCDR_1_VAL       0x80080000
+
+/* DHC_EN[0]=1, ODT[12-13]=120 Ohms, VREF_OVRD 37% */
+#define DDR_DDRCDR_1_VAL       0x80000000 /* was 0x80080000 */
 #define DDR_DDRCDR_2_VAL       0x00000000
 
 #define DDR_ERR_INT_EN_VAL     0x0000001D
@@ -1153,10 +1345,12 @@ static void hal_ddr_init(void)
     set32(DDR_TIMING_CFG_2, DDR_TIMING_CFG_2_VAL);
     set32(DDR_TIMING_CFG_4, DDR_TIMING_CFG_4_VAL);
     set32(DDR_TIMING_CFG_5, DDR_TIMING_CFG_5_VAL);
+    set32(DDR_TIMING_CFG_6, DDR_TIMING_CFG_6_VAL);
+    set32(DDR_TIMING_CFG_7, DDR_TIMING_CFG_7_VAL);
     set32(DDR_TIMING_CFG_8, DDR_TIMING_CFG_8_VAL);
 
     set32(DDR_ZQ_CNTL, DDR_ZQ_CNTL_VAL);
-    set32(DDR_SDRAM_CFG_3, 0);
+    set32(DDR_SDRAM_CFG_3, DDR_SDRAM_CFG_3_VAL);
 
     /* DDR SDRAM mode configuration */
     set32(DDR_SDRAM_MODE,   DDR_SDRAM_MODE_VAL);
