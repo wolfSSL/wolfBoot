@@ -1766,7 +1766,7 @@ O.K.
 
 Reset or power cycle board.
 
-Once wolfBoot has performaed validation of the partition and booted the D15 Green LED on P3_13 will illuminate.
+Once wolfBoot has performed validation of the partition and booted the D15 Green LED on P3_13 will illuminate.
 
 ### MCX A: Testing firmware update
 
@@ -1935,10 +1935,10 @@ Flash Allocation:
 Detailed steps can be found at [Readme.md](../IDE/Renesas/e2studio/RA6M4/Readme.md).
 
 ## Renesas RZN2L
-This example demonstrates simple secure firmware boot from extarnal flash by wolfBoot.
+This example demonstrates simple secure firmware boot from external flash by wolfBoot.
 A sample application v1 is securely loaded into internal RAM if there is not higher version in update region. A sample application v2 will be loaded when it is in update region.Both versions behave the same except blinking LED Red(v1) or Yellow(v2). They are compiled by e2Studio and running on the target board.
 
-The exmaple uses SPI boot mode with external flash on the evaluation board. On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the application program from external flash memory to RAM(System RAM). As final step of wolfBoot the entry point of the copied applicatin program is called if its integrity and authenticity are OK.
+The example uses SPI boot mode with external flash on the evaluation board. On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the application program from external flash memory to RAM(System RAM). As final step of wolfBoot the entry point of the copied application program is called if its integrity and authenticity are OK.
 
 ![Operation Overview](../IDE/Renesas/e2studio/RZN2L/doc/image1.png)
 

@@ -53,7 +53,7 @@ OPTION BYTES BANK: 0
      nRST_STOP    : 0x1 (No reset generated when entering Stop mode) 
      nRST_STDBY   : 0x1 (No reset generated when entering Standby mode) 
      nRST_SHDW    : 0x1 (No reset generated when entering the Shutdown mode) 
-     IWDG_SW      : 0x1 (Software independant watchdog) 
+     IWDG_SW      : 0x1 (Software independent watchdog)
      IWDG_STOP    : 0x1 (IWDG counter active in stop mode) 
      IWDG_STDBY   : 0x1 (IWDG counter active in standby mode) 
      WWDG_SW      : 0x1 (Software window watchdog) 
