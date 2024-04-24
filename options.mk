@@ -359,7 +359,10 @@ ifeq ($(SIGN),LMS)
     ./lib/wolfssl/wolfcrypt/src/memory.o \
     ./lib/wolfssl/wolfcrypt/src/wc_port.o \
     ./lib/wolfssl/wolfcrypt/src/hash.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_LMS" -D"WOLFSSL_HAVE_LMS" -D"WOLFSSL_WC_LMS" \
+  CFLAGS+=-D"WOLFBOOT_SIGN_LMS" -D"WOLFSSL_HAVE_LMS" \
+    -D"WOLFSSL_WC_LMS" -D"WOLFSSL_WC_LMS_SMALL" \
+    -D"WOLFSSL_LMS_MAX_LEVELS=$(LMS_LEVELS)" \
+    -D"WOLFSSL_LMS_MAX_HEIGHT=$(LMS_HEIGHT)" \
     -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
     -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" -I$(LMSDIR)/src \
     -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
