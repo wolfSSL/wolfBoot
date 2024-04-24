@@ -2350,3 +2350,21 @@ IMAGE=test-app/image.elf SIGN=--ecc384 tools/x86_fsp/qemu/make_hd.sh
 For more advanced uses of TPM, please check [TPM.md](TPM.md) to configure wolfBoot
 according to your secure boot strategy.
 
+### Running on Kontron VX3060-S2
+
+A reference configuration and helper scripts are provided to run wolfBoot on
+Kontron VX3060-S2 board.
+A flash dump of the original Flash BIOS is needed.
+To compile a flashable image run the following steps:
+
+```
+cp config/examples/kontron_vx3060_s2.config .config
+./tools/x86_fsp/tgl/tgl_download_fsp.sh
+make tpmtools
+./tools/x86_fsp/tgl/assemble_image.sh -k 
+make CFLAGS_EXTRA="-DHAVE_ECC256"
+./tools/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
+```
+
+they produce a file named `final_image.bin` inside the root folder of the
+repository that can be directly flashed into the BIOS flash of the board.
