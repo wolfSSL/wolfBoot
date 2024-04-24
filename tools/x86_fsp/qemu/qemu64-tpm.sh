@@ -40,7 +40,7 @@ set -e
 set -x
 
 # Parse command line options
-while getopts "d:wp" opt; do
+while getopts "d:wpt" opt; do
     case "$opt" in
         d)
             DEBUG_STAGE="$OPTARG"
@@ -51,9 +51,13 @@ while getopts "d:wp" opt; do
         p)
             CREATE_PIPE=true
             ;;
+        t)  ENABLE_TPM=true
+            ;;
         *)
             echo "Usage: $0 [-d DEBUG_STAGE1 | DEBUG_STAGE2] [-w] [-p]"
             echo "-p : create /tmp/qemu_mon.in and /tmp/qemu_mon.out pipes for monitor qemu"
+            echo "-w : wait for GDB to connect to the QEMU gdb server"
+            echo "-t : enable TPM emulation (requires swtpm)"
             exit 1
             ;;
     esac
@@ -102,14 +106,17 @@ else
     QEMU=qemu-system-x86_64
 fi
 
-killall swtpm || true
-sleep 1
-echo TPM Emulation ON
-mkdir -p /tmp/swtpm
-swtpm socket --tpm2 --tpmstate dir=/tmp/swtpm \
-    --ctrl type=unixio,path=/tmp/swtpm/swtpm-sock --log level=20 &
-sleep .5
-echo Running QEMU...
+if [ "$ENABLE_TPM" = true ]; then
+    killall swtpm || true
+    sleep 1
+    echo TPM Emulation ON
+    mkdir -p /tmp/swtpm
+    swtpm socket --tpm2 --tpmstate dir=/tmp/swtpm \
+        --ctrl type=unixio,path=/tmp/swtpm/swtpm-sock --log level=20 &
+    sleep .5
+    QEMU_OPTIONS+=$QEMU_TPM_OPTIONS
+fi
 
-echo "$QEMU $QEMU_OPTIONS $QEMU_TPM_OPTIONS"
-$QEMU $QEMU_OPTIONS $QEMU_TPM_OPTIONS
+echo Running QEMU...
+echo "$QEMU $QEMU_OPTIONS"
+$QEMU $QEMU_OPTIONS
