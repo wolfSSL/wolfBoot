@@ -46,7 +46,7 @@ IMAGE=test-app/image.elf SIGN=--ecc384 ./tools/x86_fsp/qemu/make_hd.sh
 
 echo "RUNNING QEMU"
 # launch qemu in background
-./tools/x86_fsp/qemu/qemu64-tpm.sh -p | tee /tmp/qemu_output &
+./tools/x86_fsp/qemu/qemu.sh -p | tee /tmp/qemu_output &
 echo "WAITING FOR QEMU TO RUN"
 sleep 5
 

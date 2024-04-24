@@ -7,10 +7,10 @@
 # Usage:
 
 
-# For DEBUG_STAGE1 without waiting for GDB: ./qemu64-tpm.sh -d DEBUG_STAGE1
-# For DEBUG_STAGE2 without waiting for GDB (default): ./qemu64-tpm.sh
-# For DEBUG_STAGE1 with waiting for GDB: ./qemu64-tpm.sh -d DEBUG_STAGE1 -w
-# For DEBUG_STAGE2 with waiting for GDB: ./qemu64-tpm.sh -w
+# For DEBUG_STAGE1 without waiting for GDB: ./qemu.sh -d DEBUG_STAGE1
+# For DEBUG_STAGE2 without waiting for GDB (default): ./qemu.sh
+# For DEBUG_STAGE1 with waiting for GDB: ./qemu.sh -d DEBUG_STAGE1 -w
+# For DEBUG_STAGE2 with waiting for GDB: ./qemu.sh -w
 
 
 # To DEBUG_STAGE1
