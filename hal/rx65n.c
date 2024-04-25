@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include "printf.h"
 
 #include "user_settings.h"
 
@@ -42,6 +43,7 @@
 #define SYS_SYSCR0_EXBE (1 << 1) /* External Bus Enable */
 
 #define SYS_MSTPCRB (*(volatile uint32_t *)(SYSTEM_BASE + 0x14)) /* Module Stop Control 0=release, 1=stop */
+#define SYS_MSTPCRC (*(volatile uint32_t *)(SYSTEM_BASE + 0x18)) /* Module Stop Control 0=release, 1=stop */
 
 #define SYS_SCKCR   (*(volatile uint32_t *)(SYSTEM_BASE + 0x20)) /* System Clock Control Register */
 #define SYS_SCKCR_FCK(n)  ((n) << 28)
@@ -160,7 +162,7 @@
 #define SCI_SEMR_RXDESEL (1 << 7) /* Asynchronous Start Bit Edge Detection Select */
 
 /* SPI */
-#define SCI_SPMR (*(volatile uint8_t *)(SCI_BASE(n) + 0x0D))
+#define SCI_SPMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x0D))
 #define SCI_SPMR_SSE   (1 << 0) /* 0=SSn# pin func disabled, 1=enabled */
 #define SCI_SPMR_MSS   (1 << 2) /* Master slave select: 0=master, 1=slave */
 #define SCI_SPMR_CKPOL (1 << 6) /* Clock Polarity: 0=not inverted, 1=inverted */
@@ -245,29 +247,28 @@ static void hal_delay_us(uint32_t us)
 }
 
 #ifdef SPI_FLASH
-/* SPI Flash (N25Q032) on SCI1 SCK=P27, MOSI=P26, MISO=P30, SS=P31 */
-#ifndef SPI_FLASH_SCI
-#define SPI_FLASH_SCI 1 /* SCI1 */
+
+/* ISSI IS25WP256E: 4MB QSPI Serial Flash */
+/* RSPI1: P27: RSPCKB-A, P26: MOSIB-A, P30: MISOB-A, P31 SSLB0-A */
+#ifndef FLASH_RSPI_PORT
+#define FLASH_RSPI_PORT 1 /* RSPI1 */
 #endif
-#ifndef SPI_FLASH_CLK_HZ
-#define SPI_FLASH_CLK_HZ 15000000
+#ifndef FLASH_CLK_HZ
+#define FLASH_CLK_HZ 15000000
 #endif
-//#define SPI_USE_HW_CS
+#define FLASH_SPI_USE_HW_CS
 void spi_init(int polarity, int phase)
 {
-    /* Release SCII module stop (clear bit) */
-    /* bit 31=SCI0, 30=SCI1, 29=SCI2, 28=SCI3, 27=SCI4, 26=SCI5, 25=SCI6, 24=SCI7 */
+    /* Release RSPI1 module stop (clear bit) */
+    /* SYS_MSTPCRB: bit 17=RSPI0, 16=RSPI1, SYS_MSTPCRC: bit 22=RSPI2 */
     PROTECT_OFF();
-    SYS_MSTPCRB &= ~(1 << 30);
+    SYS_MSTPCRB &= ~(1 << 16);
     PROTECT_ON();
 
-    /* Disable RX/TX */
-    SCI_SCR(SPI_FLASH_SCI) = 0;
-
-    /* Configure P26-27 and P30-31 for SPI */
+    /* Configure P26-27 and P30-31 for alt mode */
     PORT_PMR(0x2) |= ((1 << 6) | (1 << 7));
-    PORT_PMR(0x3) |=  (1 << 0);
-#ifdef SPI_USE_HW_CS
+    PORT_PMR(0x3) |= (1 << 0);
+#ifdef FLASH_SPI_USE_HW_CS
     PORT_PMR(0x3) |= (1 << 1);
 #endif
 
@@ -275,60 +276,57 @@ void spi_init(int polarity, int phase)
     MPC_PWPR &= ~MPC_PWPR_B0WI;
     MPC_PWPR |=  MPC_PWPR_PFSWE;
 
-    /* SCI1 Function Select = 0xA */
-    MPC_PFS(0x76) = 0xA; /* P26 = MOSI */
-    MPC_PFS(0x77) = 0xA; /* P27 = SCK */
-    MPC_PFS(0x78) = 0xA; /* P30 = MISO */
-#ifdef SPI_USE_HW_CS
-    MPC_PFS(0x79) = 0xA; /* P31 = SS */
+    /* Pin Function Select */
+    MPC_PFS(0x76) = 0xD; /* P26 = MOSIB-A */
+    MPC_PFS(0x77) = 0xD; /* P27 = RSPCKB-A */
+    MPC_PFS(0x78) = 0xD; /* P30 = MISOB-A */
+#ifdef FLASH_SPI_USE_HW_CS
+    MPC_PFS(0x79) = 0xD; /* P31 = SSLB0-A */
 #endif
 
     /* Enable MPC Write Protect for PFS */
     MPC_PWPR &= ~(MPC_PWPR_PFSWE | MPC_PWPR_B0WI);
     MPC_PWPR |=   MPC_PWPR_PFSWE;
 
-    /* baud rate table: */
-    /* divisor, abcs, bgdm, cks
-     * 4,       0,    0,    0 (using this one: 60MHZ/4=15MHz)
-     * 16,      0,    0,    1
-     * 64,      0,    0,    2
-     * 256,     0,    0,    3
-     */
-
-    /* 8-bit, cks=0 (/4), bgdm=0, abcs=0 */
-    SCI_BRR(SPI_FLASH_SCI) = 0; /* not used */
-    SCI_SEMR(SPI_FLASH_SCI) &= ~SCI_SEMR_ABCS;
-    SCI_SEMR(SPI_FLASH_SCI) &= ~SCI_SEMR_BGDM;
-    SCI_SMR(SPI_FLASH_SCI) = SCI_SMR_CKS(0) | SCI_SMR_CM;
-    SCI_SCMR(SPI_FLASH_SCI) |= SCI_SCMR_CHR1;
+    /* Configure RSPI */
+    RSPI_SPPCR(FLASH_RSPI_PORT) = (RSPI_SPPCR_MOIFV | RSPI_SPPCR_MOIDE); /* enable idle fixing */
+    RSPI_SPSCR(FLASH_RSPI_PORT) = RSPI_SPSCR_SPSLN(0); /* seq len 1 */
+    RSPI_SPBR(FLASH_RSPI_PORT)  = 3; /* 15Mbps */
+    RSPI_SPDCR(FLASH_RSPI_PORT) = (RSPI_SPDCR_SPFC(0) | RSPI_SPDCR_SPLW); /* frames=1, SPDR=longwords */
+    RSPI_SPCKD(FLASH_RSPI_PORT) = RSPI_SPCKD_SCKDL(0); /* 1 clock delay (SSL assert and first clock cycle) */
+    RSPI_SSLND(FLASH_RSPI_PORT) = RSPI_SSLND_SLNDL(0); /* 1 clock delay (last clock cycle and SSL negation) */
+    RSPI_SPND(FLASH_RSPI_PORT)  = RSPI_SPND_SPNDL(0); /* Next-Access Delay: 1RSPCK+2PCLK */
+    RSPI_SPCR2(FLASH_RSPI_PORT) = 0; /* no parity */
+    RSPI_SPCMD(FLASH_RSPI_PORT, 0) = (
+        RSPI_SPCMD_BRDV(0) | /* no div */
+        RSPI_SPCMD_SSLA(0) | /* slave select 0 */
+        RSPI_SPCMD_SSLKP |   /* keep signal level between transfers */
+        RSPI_SPCMD_SPB(7) |  /* 8-bit data */
+        RSPI_SPCMD_SPNDEN |  /* enable Next-Access Delay */
+        RSPI_SPCMD_SCKDEN    /* enable RSPCK Delay */
+    );
     if (polarity)
-        SCI_SPMR(SPI_FLASH_SCI) |= SCI_SPMR_CKPOL;
+        RSPI_SPCMD(FLASH_RSPI_PORT, 0) |= RSPI_SPCMD_CPOL;
     if (phase)
-        SCI_SPMR(SPI_FLASH_SCI) |= SCI_SPMR_CKPH;
+        RSPI_SPCMD(FLASH_RSPI_PORT, 0) |= RSPI_SPCMD_CPHA;
 
-    /* Enable SS control */
-#ifdef SPI_USE_HW_CS
-    SCI_SPMR(SPI_FLASH_SCI) = (SCI_SPMR_SSE)
-#else
-    PORT_PDR(0x3) |= (1 << 1); /* enable SS as output */
-    PORT_PODR(0x3) |= (1 << 1); /* drive high */
-#endif
-
-    /* Enable TX/RX */
-    SCI_SCR(SPI_FLASH_SCI) = (SCI_SCR_RE | SCI_SCR_TE);
+    /* Enable Master SPI operation (4-wire method) */
+    RSPI_SPCR(FLASH_RSPI_PORT) = (RSPI_SPCR_MSTR | RSPI_SPCR_SPE);
 }
 
 void spi_release(void)
 {
-    /* Disable RX/TX */
-    SCI_SCR(SPI_FLASH_SCI) = 0;
+    /* Disable SPI master */
+    RSPI_SPCR(FLASH_RSPI_PORT) &= ~RSPI_SPCR_SPE;
 }
 
 void spi_cs_on(uint32_t base, int pin)
 {
     (void)base;
     (void)pin;
-#ifndef SPI_USE_HW_CS
+#ifdef FLASH_SPI_USE_HW_CS
+    RSPI_SPCMD(FLASH_RSPI_PORT, 0) |= RSPI_SPCMD_SSLKP;
+#else
     PORT_PODR(0x3) &= ~(1 << 1); /* drive low */
 #endif
 }
@@ -336,22 +334,25 @@ void spi_cs_off(uint32_t base, int pin)
 {
     (void)base;
     (void)pin;
-#ifndef SPI_USE_HW_CS
+#ifdef FLASH_SPI_USE_HW_CS
+    RSPI_SPCMD(FLASH_RSPI_PORT, 0) &= ~RSPI_SPCMD_SSLKP;
+#else
     PORT_PODR(0x3) |= (1 << 1); /* drive high */
 #endif
 }
 
 void spi_write(const char byte)
 {
-    while ((SCI_SSR(SPI_FLASH_SCI) & SCI_SSR_TEND) == 0);
-    SCI_TDR(SPI_FLASH_SCI) = byte;
+    while ((RSPI_SPSR(FLASH_RSPI_PORT) & RSPI_SPSR_SPTEF) == 0);
+    RSPI_SPSR8(FLASH_RSPI_PORT) = byte;
 }
 uint8_t spi_read(void)
 {
-    while ((SCI_SSR(SPI_FLASH_SCI) & SCI_SSR_RDRF) == 0);
-    return SCI_RDR(SPI_FLASH_SCI);
+    while ((RSPI_SPSR(FLASH_RSPI_PORT) & RSPI_SPSR_SPTEF) == 0);
+    return RSPI_SPSR8(FLASH_RSPI_PORT);
 }
-#endif
+#endif /* SPI_FLASH */
+
 
 #ifdef DEBUG_UART
 
@@ -412,7 +413,7 @@ void uart_init(void)
     /* Enable TX/RX */
     SCI_SCR(DEBUG_UART_SCI) = (SCI_SCR_RE | SCI_SCR_TE);
 }
-void uart_write(const char* buf, uint32_t sz)
+void uart_write(const char* buf, unsigned int sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {
@@ -637,3 +638,47 @@ int ext_flash_erase(uintptr_t address, int len)
     return 0;
 }
 #endif /* EXT_FLASH */
+
+#if defined(EXT_FLASH) && defined(TEST_FLASH)
+#ifndef TEST_ADDRESS
+#define TEST_ADDRESS 0x200000 /* 2MB */
+#endif
+/* #define TEST_FLASH_READONLY */
+static int test_flash(void)
+{
+    int ret;
+    uint32_t i;
+    uint32_t pageData[WOLFBOOT_SECTOR_SIZE/4]; /* force 32-bit alignment */
+
+#ifndef TEST_FLASH_READONLY
+    /* Erase sector */
+    ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
+
+    /* Write Pages */
+    for (i=0; i<sizeof(pageData); i++) {
+        ((uint8_t*)pageData)[i] = (i & 0xff);
+    }
+    ret = ext_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
+    wolfBoot_printf("Write Page: Ret %d\n", ret);
+#endif /* !TEST_FLASH_READONLY */
+
+    /* Read page */
+    memset(pageData, 0, sizeof(pageData));
+    ret = ext_flash_read(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
+    wolfBoot_printf("Read Page: Ret %d\n", ret);
+
+    wolfBoot_printf("Checking...\n");
+    /* Check data */
+    for (i=0; i<sizeof(pageData); i++) {
+        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
+        if (((uint8_t*)pageData)[i] != (i & 0xff)) {
+            wolfBoot_printf("Check Data @ %d failed\n", i);
+            return -i;
+        }
+    }
+
+    wolfBoot_printf("Flash Test Passed\n");
+    return ret;
+}
+#endif /* EXT_FLASH && TEST_FLASH */
