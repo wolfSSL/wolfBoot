@@ -62,7 +62,7 @@ The switch and jumper settings required to run the sample program from external 
 ## 3. Operation Overview
 The example uses SPI boot mode with external flash on the evaluation board. On this boot mode, the loader program, which is wolfBoot, is copied to the internal RAM(B-TCM). wolfBoot copies the encrypted RSIP key on flash memory and the application program from external flash memory to RAM(System RAM). As final step of wolfBoot the entry point of the copied application program is called if its integrity and authenticity are OK.
 
-![Operation Overview](./doc/image2_RSIPKey.png)
+![Operation Overview](./doc/image2_RSIPkey.png)
 
 ## 4. How to build and use
 This section describes about how to build wolfBoot and application and use them.
