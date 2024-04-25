@@ -2028,7 +2028,28 @@ Example Boot Output (with DEBUG_UART=1):
 ```
 wolfBoot HAL Init
 Boot partition: 0xFFE00000
-Image size 27108
+Image size 25932
+
+| ------------------------------------------------------------------- |
+| Renesas RX User Application in BOOT partition started by wolfBoot   |
+| ------------------------------------------------------------------- |
+
+wolfBoot HAL Init
+
+=== Boot Partition[ffe00000] ===
+Magic:    WOLF
+Version:  01
+Status:   ff (New)
+Tail Mgc: ˇˇˇˇ
+
+=== Update Partition[ffef0000] ===
+Magic:    ˇˇˇˇ
+Version:  00
+Status:   ff (New)
+Tail Mgc: ˇˇˇˇ
+
+Current Firmware Version: 1
+Hit any key to call wolfBoot_success the firmware.
 ```
 
 Default Onboard Flash Memory Layout (2MB) (32KB sector):

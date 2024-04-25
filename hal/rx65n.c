@@ -32,6 +32,7 @@
 #include "hal/renesas-rx.h"
 
 #define SYS_CLK (240000000) /* 240MHz */
+#define PCLKA   (120000000) /* 120MHz */
 #define PCLKB   (60000000)  /* 60MHz */
 
 /* System Registers */
@@ -134,6 +135,7 @@
 #define SCI_SMR_CKS(clk) (clk & 0x3) /* 0=PCLK, 1=PCLK/4, 2=PCLK/16, 3=PCLK/64 */
 #define SCI_SMR_STOP  (1 << 3) /* 0=1 stop bit */
 #define SCI_SMR_CHR   (1 << 6) /* 0=8-bit */
+#define SCI_SMR_CM    (1 << 7) /* Mode: 0=Async/Simple I2C, 1=Sync/simple SPI */
 #define SCI_BRR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x01)) /* Bit Rate Reg < 255 */
 #define SCI_SCR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x02))
 #define SCI_SCR_RE    (1 << 4)
@@ -146,6 +148,9 @@
 #define SCI_RDR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x05)) /* Receive Data Register */
 #define SCI_SCMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x06))
 #define SCI_SCMR_CHR1 (1 << 4) /* 1=8-bit */
+#define SCI_SCMR_SDIR (1 << 3) /* Transmitted/Received Data Transfer Direction */
+#define SCI_SCMR_SINV (1 << 2) /* Transmitted/Received Data Invert */
+
 #define SCI_SEMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x08))
 #define SCI_SEMR_ASC0    (1 << 0) /* Asynchronous Mode Clock Source Select 0=external clock input */
 #define SCI_SEMR_BRME    (1 << 2) /* Bit Rate Modulation Enable */
@@ -153,6 +158,13 @@
 #define SCI_SEMR_NFEN    (1 << 5) /* Digital Noise Filter Function Enable */
 #define SCI_SEMR_BGDM    (1 << 6) /* Baud Rate Generator Double-Speed Mode Select */
 #define SCI_SEMR_RXDESEL (1 << 7) /* Asynchronous Start Bit Edge Detection Select */
+
+/* SPI */
+#define SCI_SPMR (*(volatile uint8_t *)(SCI_BASE(n) + 0x0D))
+#define SCI_SPMR_SSE   (1 << 0) /* 0=SSn# pin func disabled, 1=enabled */
+#define SCI_SPMR_MSS   (1 << 2) /* Master slave select: 0=master, 1=slave */
+#define SCI_SPMR_CKPOL (1 << 6) /* Clock Polarity: 0=not inverted, 1=inverted */
+#define SCI_SPMR_CKPH  (1 << 7) /* Clock Phase: 0=not delayed, 1=delayed */
 
 /* MPC (Multi-Function Pin Controller) */
 #define MPC_PWPR   (*(volatile uint8_t *)(0x8C11F))
@@ -171,7 +183,57 @@
 #define PORT_PCR(n)  (*(volatile uint8_t*)(PORT_BASE + 0xC0 + (n))) /* Pull-Up Resistor Control Register: 0=Disable pull-up, 1=Enable input pull-up */
 #define PORT_DSCR(n) (*(volatile uint8_t*)(PORT_BASE + 0xE0 + (n))) /* Drive Capacity Control Register: 0=Normal, 1=High-drive output */
 
-/* SPI Flash (N25Q032) on SCI1 SCK=P27, MOSI=P26, MISO=P30, SS=P31 */
+/* RSPI */
+#define RSPI_BASE(n)     (0xD0100 + ((n) * 0x40)) /* n=0-2 (RSPI0,RSPI1,RSPI2) */
+#define RSPI_SPCR(n)     (*(volatile uint8_t *)(RSPI_BASE(n) + 0x00)) /* Control */
+#define RSPI_SPCR_SPMS      (1 << 0) /* RSPI Mode Select 0=SPI operation (4-wire method) */
+#define RSPI_SPCR_TXMD      (1 << 1)
+#define RSPI_SPCR_MSTR      (1 << 3) /* 0=Slave, 1=Master */
+#define RSPI_SPCR_SPE       (1 << 6) /* 1=Enable RSPI */
+#define RSPI_SPPCR(n)    (*(volatile uint8_t *)(RSPI_BASE(n) + 0x02)) /* Pin Control */
+#define RSPI_SPPCR_MOIFV    (1 << 4) /* MOSI Idle Fixed Value */
+#define RSPI_SPPCR_MOIDE    (1 << 5) /* MOSI Idle Value Fixing Enable */
+#define RSPI_SPSR(n)     (*(volatile uint8_t *)(RSPI_BASE(n) + 0x03)) /* Status */
+#define RSPI_SPSR_OVRF      (1 << 0) /* Overrun Error Flag */
+#define RSPI_SPSR_IDLNF     (1 << 1) /* Idle Flag */
+#define RSPI_SPSR_MODF      (1 << 2) /* Mode Fault Error Flag */
+#define RSPI_SPSR_PERF      (1 << 3) /* Parity Error Flag */
+#define RSPI_SPSR_UDRF      (1 << 4) /* Underrun Error Flag */
+#define RSPI_SPSR_SPTEF     (1 << 5) /* Transmit Buffer Empty Flag */
+#define RSPI_SPSR_SPRF      (1 << 7) /* Receive Buffer Full Flag */
+#define RSPI_SPSR8(n)    (*(volatile uint8_t  *)(RSPI_BASE(n) + 0x04)) /* Data */
+#define RSPI_SPSR16(n)   (*(volatile uint16_t *)(RSPI_BASE(n) + 0x04)) /* Data */
+#define RSPI_SPSR32(n)   (*(volatile uint32_t *)(RSPI_BASE(n) + 0x04)) /* Data */
+#define RSPI_SPSCR(n)    (*(volatile uint32_t *)(RSPI_BASE(n) + 0x08)) /* Sequence Control */
+#define RSPI_SPSCR_SPSLN(s) ((s) & 0x7) /* Sequence Length Specification: 0=seq len 1 */
+#define RSPI_SPBR(n)     (*(volatile uint8_t *)(RSPI_BASE(n) + 0x0A)) /* Bit Rate = PCLKA / (2 x (n + 1) X 2^n): 1=30 Mbps, 2=20Mpbs, 3=15Mbps, 4=12Mbps, 5=10Mbps */
+#define RSPI_SPDCR(n)    (*(volatile uint8_t *)(RSPI_BASE(n) + 0x0B)) /* Data Control */
+#define RSPI_SPDCR_SPFC(f)  ((f) & 0x3) /* Number of Frames Specification: 0=1 frame, 1=2 frames */
+#define RSPI_SPDCR_SPRDTD   (1 << 4) /* Receive/Transmit Data Select */
+#define RSPI_SPDCR_SPLW     (1 << 5) /* Longword Access/ Word Access Specification */
+#define RSPI_SPDCR_SPBYT    (1 << 6) /* Byte Access Specification */
+#define RSPI_SPCKD(n)    (*(volatile uint8_t *)(RSPI_BASE(n) + 0x0C)) /* Clock Delay */
+#define RSPI_SPCKD_SCKDL(d) ((d) & 0x7) /* RSPCK Delay Setting: 0=1 RSPCK, 1=2 RSPCK */
+#define RSPI_SSLND(n)    (*(volatile uint8_t *)(RSPI_BASE(n) + 0x0D)) /* Slave Select Negation Delay */
+#define RSPI_SSLND_SLNDL(d) ((d) & 0x7) /* RSPCK Delay Setting: 0=1 RSPCK, 1=2 RSPCK */
+#define RSPI_SPND(n)     (*(volatile uint8_t *)(RSPI_BASE(n) + 0x0D)) /* Next-Access Delay */
+#define RSPI_SPND_SPNDL(d)  ((d) & 0x7) /*  Next-Access Delay Setting: 0=1RSPCK+2PCLK, 1=2RSPCK+2PCLK */
+#define RSPI_SPCR2(n)    (*(volatile uint8_t *)(RSPI_BASE(n) + 0x0F)) /* Control 2 */
+#define RSPI_SPCR2_SPPE     (1 << 0) /* Parity Enable */
+#define RSPI_SPCR2_SPOE     (1 << 1) /* Parity Mode */
+#define RSPI_SPCMD(n, m) (*(volatile uint16_t *)(RSPI_BASE(n) + 0x10 + (((m) & 0x7)*2))) /* Command Register m */
+#define RSPI_SPCMD_CPHA     (1 << 0) /* Phase: 0=Data sampling on odd edge, data variation on even edge */
+#define RSPI_SPCMD_CPOL     (1 << 1) /* Polarity: 0=RSPCK is low when idle, 1=High when idle */
+#define RSPI_SPCMD_BRDV(d)  (((d) & 0x3) << 2) /* Bit Rate Division : 0=none,1=div2,2=div4,3=div8 */
+#define RSPI_SPCMD_SSLA(s)  (((s) & 0x7) << 4) /* Signal Assert 0=SSL0, 1=SSL1 */
+#define RSPI_SPCMD_SSLKP    (1 << 7) /* Signal Level Keeping: 0=Deassert on transfer complete, 1=Keep asserted */
+#define RSPI_SPCMD_SPB(l)   (((l) & 0xF) << 8) /* Data Length: 7=8bits, 15=16=bits, 1=24bits, 3=32bits */
+#define RSPI_SPCMD_LSBF     (1 << 12) /* LSB First: 0=MSB First, 1=LSB First */
+#define RSPI_SPCMD_SPNDEN   (1 << 13) /* Next-Access Delay Enable */
+#define RSPI_SPCMD_SLNDEN   (1 << 14) /* SSL Negation Delay Setting Enable */
+#define RSPI_SPCMD_SCKDEN   (1 << 15) /* RSPCK Delay Setting Enable */
+#define RSPI_SPDCR2(n)   (*(volatile uint8_t *)(RSPI_BASE(n) + 0x20)) /* Data Control 2 */
+#define RSPI_SPDCR2_BYSW    (1 << 0) /* Byte Swap: 0=Byte swapping of SPDR data disabled, 1=Byte swapping of SPDR data enabled */
 
 
 static void hal_delay_us(uint32_t us)
@@ -181,6 +243,115 @@ static void hal_delay_us(uint32_t us)
         RX_NOP();
     }
 }
+
+#ifdef SPI_FLASH
+/* SPI Flash (N25Q032) on SCI1 SCK=P27, MOSI=P26, MISO=P30, SS=P31 */
+#ifndef SPI_FLASH_SCI
+#define SPI_FLASH_SCI 1 /* SCI1 */
+#endif
+#ifndef SPI_FLASH_CLK_HZ
+#define SPI_FLASH_CLK_HZ 15000000
+#endif
+//#define SPI_USE_HW_CS
+void spi_init(int polarity, int phase)
+{
+    /* Release SCII module stop (clear bit) */
+    /* bit 31=SCI0, 30=SCI1, 29=SCI2, 28=SCI3, 27=SCI4, 26=SCI5, 25=SCI6, 24=SCI7 */
+    PROTECT_OFF();
+    SYS_MSTPCRB &= ~(1 << 30);
+    PROTECT_ON();
+
+    /* Disable RX/TX */
+    SCI_SCR(SPI_FLASH_SCI) = 0;
+
+    /* Configure P26-27 and P30-31 for SPI */
+    PORT_PMR(0x2) |= ((1 << 6) | (1 << 7));
+    PORT_PMR(0x3) |=  (1 << 0);
+#ifdef SPI_USE_HW_CS
+    PORT_PMR(0x3) |= (1 << 1);
+#endif
+
+    /* Disable MPC Write Protect for PFS */
+    MPC_PWPR &= ~MPC_PWPR_B0WI;
+    MPC_PWPR |=  MPC_PWPR_PFSWE;
+
+    /* SCI1 Function Select = 0xA */
+    MPC_PFS(0x76) = 0xA; /* P26 = MOSI */
+    MPC_PFS(0x77) = 0xA; /* P27 = SCK */
+    MPC_PFS(0x78) = 0xA; /* P30 = MISO */
+#ifdef SPI_USE_HW_CS
+    MPC_PFS(0x79) = 0xA; /* P31 = SS */
+#endif
+
+    /* Enable MPC Write Protect for PFS */
+    MPC_PWPR &= ~(MPC_PWPR_PFSWE | MPC_PWPR_B0WI);
+    MPC_PWPR |=   MPC_PWPR_PFSWE;
+
+    /* baud rate table: */
+    /* divisor, abcs, bgdm, cks
+     * 4,       0,    0,    0 (using this one: 60MHZ/4=15MHz)
+     * 16,      0,    0,    1
+     * 64,      0,    0,    2
+     * 256,     0,    0,    3
+     */
+
+    /* 8-bit, cks=0 (/4), bgdm=0, abcs=0 */
+    SCI_BRR(SPI_FLASH_SCI) = 0; /* not used */
+    SCI_SEMR(SPI_FLASH_SCI) &= ~SCI_SEMR_ABCS;
+    SCI_SEMR(SPI_FLASH_SCI) &= ~SCI_SEMR_BGDM;
+    SCI_SMR(SPI_FLASH_SCI) = SCI_SMR_CKS(0) | SCI_SMR_CM;
+    SCI_SCMR(SPI_FLASH_SCI) |= SCI_SCMR_CHR1;
+    if (polarity)
+        SCI_SPMR(SPI_FLASH_SCI) |= SCI_SPMR_CKPOL;
+    if (phase)
+        SCI_SPMR(SPI_FLASH_SCI) |= SCI_SPMR_CKPH;
+
+    /* Enable SS control */
+#ifdef SPI_USE_HW_CS
+    SCI_SPMR(SPI_FLASH_SCI) = (SCI_SPMR_SSE)
+#else
+    PORT_PDR(0x3) |= (1 << 1); /* enable SS as output */
+    PORT_PODR(0x3) |= (1 << 1); /* drive high */
+#endif
+
+    /* Enable TX/RX */
+    SCI_SCR(SPI_FLASH_SCI) = (SCI_SCR_RE | SCI_SCR_TE);
+}
+
+void spi_release(void)
+{
+    /* Disable RX/TX */
+    SCI_SCR(SPI_FLASH_SCI) = 0;
+}
+
+void spi_cs_on(uint32_t base, int pin)
+{
+    (void)base;
+    (void)pin;
+#ifndef SPI_USE_HW_CS
+    PORT_PODR(0x3) &= ~(1 << 1); /* drive low */
+#endif
+}
+void spi_cs_off(uint32_t base, int pin)
+{
+    (void)base;
+    (void)pin;
+#ifndef SPI_USE_HW_CS
+    PORT_PODR(0x3) |= (1 << 1); /* drive high */
+#endif
+}
+
+void spi_write(const char byte)
+{
+    while ((SCI_SSR(SPI_FLASH_SCI) & SCI_SSR_TEND) == 0);
+    SCI_TDR(SPI_FLASH_SCI) = byte;
+}
+uint8_t spi_read(void)
+{
+    while ((SCI_SSR(SPI_FLASH_SCI) & SCI_SSR_RDRF) == 0);
+    return SCI_RDR(SPI_FLASH_SCI);
+}
+#endif
 
 #ifdef DEBUG_UART
 
@@ -404,6 +575,7 @@ void hal_clk_init(void)
 void hal_init(void)
 {
     hal_clk_init();
+
 #ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot HAL Init\n", 18);
@@ -435,3 +607,33 @@ void hal_prepare_boot(void)
 {
     return;
 }
+
+#if defined(EXT_FLASH) && !defined(SPI_FLASH) && !defined(QSPI_FLASH)
+void ext_flash_lock(void)
+{
+    /* no op */
+}
+
+void ext_flash_unlock(void)
+{
+    /* no op */
+}
+
+int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
+{
+    //memcpy(flash_base + address, data, len);
+    return 0;
+}
+
+int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+{
+    //memcpy(data, flash_base + address, len);
+    return len;
+}
+
+int ext_flash_erase(uintptr_t address, int len)
+{
+    //memset(flash_base + address, FLASH_BYTE_ERASED, len);
+    return 0;
+}
+#endif /* EXT_FLASH */
