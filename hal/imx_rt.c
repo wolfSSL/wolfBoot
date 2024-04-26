@@ -218,6 +218,16 @@ bootloader_api_entry_t *g_bootloaderTree;
 #define LUT_SEQ_IDX_14                    (0x38U)   /* RESERVED */
 #define LUT_SEQ_IDX_15                    (0x3CU)   /* Dummy */
 
+#ifdef TARGET_library
+    /* For wolfBoot as library (built from application) the flash configuration
+     * can be located anywhere */
+    #define FLASH_CONFIG_SECTION
+#else
+    /* For wolfBoot this flash configuration needs to be placed at start of
+     * flash. See imx_rt.ld */
+    #define FLASH_CONFIG_SECTION __attribute__((section(".flash_config")))
+#endif
+
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1064DVL6A
     #define CONFIG_FLASH_SIZE              (4 * 1024 * 1024) /* 4MBytes   */
@@ -226,7 +236,7 @@ bootloader_api_entry_t *g_bootloaderTree;
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
     #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
     #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
-const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
     .memConfig =
     {
         .tag              = FLEXSPI_CFG_BLK_TAG,
@@ -258,7 +268,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
     #define CONFIG_FLASH_UNIFORM_BLOCKSIZE false
     #define CONFIG_SERIAL_CLK_FREQ         kFlexSpiSerialClk_100MHz
-const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
     .memConfig =
     {
         .tag              = FLEXSPI_CFG_BLK_TAG,
@@ -333,7 +343,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
     #define CONFIG_FLASH_UNIFORM_BLOCKSIZE true
     #define CONFIG_SERIAL_CLK_FREQ kFlexSpiSerialClk_133MHz
 
-    const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+    const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         .memConfig = {
             .tag                = FLEXSPI_CFG_BLK_TAG,
             .version            = FLEXSPI_CFG_BLK_VERSION,
@@ -472,7 +482,7 @@ const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_c
 
     /* QSPI boot header */
     /* Credit to: https://community.nxp.com/t5/i-MX-RT/RT1050-Debugging-with-QSPI-flash-on-secondary-pinmux/m-p/934745 */
-    const flexspi_nor_config_t __attribute__((section(".flash_config"))) qspiflash_config = {
+    const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         .memConfig = {
             .tag                  = FLEXSPI_CFG_BLK_TAG,
             .version              = FLEXSPI_CFG_BLK_VERSION,
