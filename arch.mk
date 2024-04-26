@@ -431,12 +431,17 @@ ifeq ($(TARGET),imx_rt)
 
   ifeq ($(PKA),1)
     ifeq ($(MCUXSDK),1)
-      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/drivers/fsl_dcp.o
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/drivers/cache/armv7-m7/fsl_cache.o
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO)/drivers/dcp/fsl_dcp.o
     else
+      PKA_EXTRA_OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_cache.o
       PKA_EXTRA_OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o
     endif
     PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
-    PKA_EXTRA_CFLAGS+=-DWOLFSSL_IMXRT_DCP
+    PKA_EXTRA_CFLAGS+=\
+        -DWOLFSSL_IMXRT_DCP \
+        -I$(MCUXPRESSO)/drivers/cache/armv7-m7 \
+        -I$(MCUXPRESSO)/drivers/dcp
   endif
 endif
 
