@@ -137,10 +137,10 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_384
 #   elif defined(WOLFBOOT_SIGN_ECC521)
 #       define HAVE_ECC521
-#       define WOLFSSL_SP_512
+#       define WOLFSSL_SP_521
 #   endif
   /* FP MAX BITS */
-#   if defined(HAVE_ECC512)
+#   if defined(HAVE_ECC521)
 #   define FP_MAX_BITS ((528 * 2))
 #   elif defined(HAVE_ECC384)
 #   define FP_MAX_BITS ((384 * 2))
@@ -153,11 +153,11 @@ extern int tolower(int c);
 #   endif
 
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#      if !defined(HAVE_ECC512)
-#      define WOLFSSL_SP_NO_512
+#      if !defined(HAVE_ECC521)
+#      define WOLFSSL_SP_NO_521
 #      endif
 #      if !defined(HAVE_ECC384)
-#      define WOLFSSL_SP_NO_383
+#      define WOLFSSL_SP_NO_384
 #      endif
 #      if !defined(HAVE_ECC256)
 #      define WOLFSSL_SP_NO_256
