@@ -8,12 +8,17 @@ FSP_URL=https://github.com/intel/FSP/raw/${FSP_COMMIT_ID}/TigerLakeFspBinPkg/TGL
 FSP_REPO=https://github.com/intel/FSP.git
 UCODE_URL=https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/raw/6f36ebde4519f8a21a047c3433b80a3fb41361e1/intel-ucode/06-8c-01
 SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
-WOLFBOOT_DIR="${SCRIPT_DIR}/../../.."
+WOLFBOOT_DIR="$(pwd)"
 FSP_PREFIX=Fsp
 CONFIG_FILE=${CONFIG_FILE:-"${WOLFBOOT_DIR}/.config"}
 PATCH="${SCRIPT_DIR}/0001-FSP-wolfboot-patch.patch"
 
 set -e
+
+if [ ! -f "${WOLFBOOT_DIR}/arch.mk" ]; then
+    echo "Error: Current directory is not the root directory of the source tree"
+    exit 1
+fi
 
 if [ ! -d "$WORK_DIR" ]; then
   mkdir -p "$WORK_DIR"

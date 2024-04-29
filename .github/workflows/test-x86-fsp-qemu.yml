@@ -20,4 +20,4 @@ jobs:
           git config --global user.name "Your Name"
       - name: run test
         run: |
-          ./tools/x86_fsp/qemu/test_qemu.sh
+          ./tools/scripts/x86_fsp/qemu/test_qemu.sh

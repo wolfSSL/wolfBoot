@@ -6,11 +6,16 @@ EDKII_REPO=https://github.com/tianocore/edk2.git
 SBL_COMMIT_ID=c80d8d592cf127616daca5df03ac7731e78ffcc1
 SBL_PATCH_URL=https://github.com/slimbootloader/slimbootloader/raw/${SBL_COMMIT_ID}/Silicon/QemuSocPkg/FspBin/Patches/0001-Build-QEMU-FSP-2.0-binaries.patch
 SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
-WOLFBOOT_DIR="${SCRIPT_DIR}/../../.."
+WOLFBOOT_DIR="$(pwd)"
 FSP_NAME=QEMU_FSP_DEBUG
 CONFIG_FILE=${CONFIG_FILE:-"${WOLFBOOT_DIR}/.config"}
 
 set -e
+
+if [ ! -f "${WOLFBOOT_DIR}/arch.mk" ]; then
+    echo "Error: Current directory is not the root directory of the source tree"
+    exit 1
+fi
 
 if [ ! -d "$WORK_DIR" ]; then
   mkdir -p "$WORK_DIR"

@@ -2084,7 +2084,7 @@ A test ELF/Multiboot2 image is provided as well. To test `config/examples/x86_fs
 cp config/examples/x86_fsp_qemu.config .config
 
 # Create necessary Intel FSP binaries from edk2 repo
-./tools/x86_fsp/qemu/qemu_build_fsp.sh
+./tools/scripts/x86_fsp/qemu/qemu_build_fsp.sh
 
 # build wolfboot
 make
@@ -2093,10 +2093,10 @@ make
 make test-app/image.elf
 
 # make_hd.sh sign the image, creates a file-based hard disk image with GPT table and raw partitions and then copies the signed images into the partitions.
-IMAGE=test-app/image.elf tools/x86_fsp/qemu/make_hd.sh
+IMAGE=test-app/image.elf tools/scripts/x86_fsp/qemu/make_hd.sh
 
 # run wolfBoot + test-image
-./tools/x86_fsp/qemu/qemu.sh
+./tools/scripts/x86_fsp/qemu/qemu.sh
 ```
 
 #### Sample boot output using config/examples/x86_fsp_qemu.config
@@ -2316,7 +2316,7 @@ The correct steps to run the example:
 cp config/examples/x86_fsp_qemu_seal.config .config
 
 # create necessary Intel FSP binaries from edk2 repo
-tools/x86_fsp/qemu/qemu_build_fsp.sh
+tools/scripts/x86_fsp/qemu/qemu_build_fsp.sh
 
 # make keytools and tpmtools
 make keytools
@@ -2329,22 +2329,22 @@ make tpmtools
 make CFLAGS_EXTRA="-DHAVE_ECC256"
 
 # compute the value of PCR0 to sign with TPM key
-PCR0=$(python ./tools/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
+PCR0=$(python ./tools/scripts/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
 
 # sign the policy
 ./tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -pcrdigest=$PCR0
 
 # install the policy
-./tools/x86_fsp/tpm_install_policy.sh policy.bin.sig
+./tools/scripts/x86_fsp/tpm_install_policy.sh policy.bin.sig
 
 # make test-app
 make test-app/image.elf
 
 # make_hd.sh sign the image, creates a file-based hard disk image with GPT table and raw partitions and then copy the signed images into the partitions.
-IMAGE=test-app/image.elf SIGN=--ecc384 tools/x86_fsp/qemu/make_hd.sh
+IMAGE=test-app/image.elf SIGN=--ecc384 tools/scripts/x86_fsp/qemu/make_hd.sh
 
 # run wolfBoot + test-image, use -t to emulate a TPM (requires swtpm)
-./tools/x86_fsp/qemu/qemu.sh -t
+./tools/scripts/x86_fsp/qemu/qemu.sh -t
 ```
 
 For more advanced uses of TPM, please check [TPM.md](TPM.md) to configure wolfBoot
@@ -2359,11 +2359,11 @@ To compile a flashable image run the following steps:
 
 ```
 cp config/examples/kontron_vx3060_s2.config .config
-./tools/x86_fsp/tgl/tgl_download_fsp.sh
+./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh
 make tpmtools
-./tools/x86_fsp/tgl/assemble_image.sh -k 
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -k 
 make CFLAGS_EXTRA="-DHAVE_ECC256"
-./tools/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
 ```
 
 they produce a file named `final_image.bin` inside the root folder of the

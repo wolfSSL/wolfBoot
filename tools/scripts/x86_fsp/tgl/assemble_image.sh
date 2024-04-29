@@ -26,9 +26,9 @@ build_and_sign_image()
     cp "$FLASH_DUMP" "$WOLFBOOT_DIR/temp_image.bin"
     truncate -s $SIZE "$WOLFBOOT_DIR/temp_image.bin"
     cat "$WOLFBOOT_DIR/temp_image.bin" "$BIOS_REGION_PATH" > "$WOLFBOOT_DIR/final_image.bin"
-    PCR0=$(python ./tools/x86_fsp/compute_pcr.py "$WOLFBOOT_DIR"/final_image.bin | tail -n 1)
+    PCR0=$(python ./tools/scripts/x86_fsp/compute_pcr.py "$WOLFBOOT_DIR"/final_image.bin | tail -n 1)
     "$WOLFBOOT_DIR"/tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -pcrdigest=$PCR0
-    IMAGE_FILE="$WOLFBOOT_DIR"/final_image.bin "$WOLFBOOT_DIR"/tools/x86_fsp/tpm_install_policy.sh policy.bin.sig
+    IMAGE_FILE="$WOLFBOOT_DIR"/final_image.bin "$WOLFBOOT_DIR"/tools/scripts/x86_fsp/tpm_install_policy.sh policy.bin.sig
 }
 
 assemble()

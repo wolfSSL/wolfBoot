@@ -23,7 +23,7 @@ if [ "$REBUILD_ONLY" != true ]; then
 
   make distclean
   cp "config/examples/${CONFIG}" .config
-  ./tools/x86_fsp/qemu/qemu_build_fsp.sh
+  ./tools/scripts/x86_fsp/qemu/qemu_build_fsp.sh
   make keytools
   make tpmtools
   # generate one key for images and one for the TPM
@@ -37,16 +37,16 @@ make CFLAGS_EXTRA="-DHAVE_ECC256"
 make test-app/image.elf
 
 # compute pcr0 value
-PCR0=$(python ./tools/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
+PCR0=$(python ./tools/scripts/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
 echo $PCR0
 ./tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -pcrdigest=$PCR0
 
-./tools/x86_fsp/tpm_install_policy.sh policy.bin.sig
-IMAGE=test-app/image.elf SIGN=--ecc384 ./tools/x86_fsp/qemu/make_hd.sh
+./tools/scripts/x86_fsp/tpm_install_policy.sh policy.bin.sig
+IMAGE=test-app/image.elf SIGN=--ecc384 ./tools/scripts/x86_fsp/qemu/make_hd.sh
 
 echo "RUNNING QEMU"
 # launch qemu in background
-./tools/x86_fsp/qemu/qemu.sh -p | tee /tmp/qemu_output &
+./tools/scripts/x86_fsp/qemu/qemu.sh -t -p | tee /tmp/qemu_output &
 echo "WAITING FOR QEMU TO RUN"
 sleep 5
 
