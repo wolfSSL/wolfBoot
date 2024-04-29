@@ -53,6 +53,7 @@ sleep 5
 # close qemu
 timeout 5 echo 'quit' > /tmp/qemu_mon.in
 output=$(cat /tmp/qemu_output)
+set +e
 app=$(echo "$output" | grep -m 1 "wolfBoot QEMU x86 FSP test app")
 if [ -n "$app" ]; then
   echo "Found 'wolfBoot QEMU x86 FSP test app' in the output."
