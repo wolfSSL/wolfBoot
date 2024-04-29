@@ -58,6 +58,34 @@ jobs:
       arch: arm
       config-file: ./config/examples/imx-rt1064.config
 
+  imx_rt1040_test_pka:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1040.config
+      make-args: PKA=1
+
+  imx_rt1050_test_pka:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1050.config
+      make-args: PKA=1
+
+  imx_rt1060_test_pka:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1060.config
+      make-args: PKA=1
+
+  imx_rt1064_test_pka:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1064.config
+      make-args: PKA=1
+
   kinetis_k64f_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml
     with:
