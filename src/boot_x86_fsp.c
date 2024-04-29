@@ -86,6 +86,7 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define ENDLINE "\r\n"
 
 #define PCI_DEVICE_CONTROLLER_TO_PEX 0x6
+#define PCIE_TRAINING_TIMEOUT_MS (100)
 
 typedef uint32_t (*memory_init_cb)(void *udp, struct efi_hob **HobList);
 typedef uint32_t (*temp_ram_exit_cb)(void *udp);
@@ -398,6 +399,75 @@ static void print_fsp_image_revision(struct fsp_info_header *h)
         return;
     }
     wolfBoot_printf("%x.%x.%x build %x\r\n", maj, min, rev, build);
+}
+
+static int pci_get_capability(uint8_t bus, uint8_t dev, uint8_t fun,
+                              uint8_t cap_id, uint8_t *cap_off)
+{
+    uint8_t r8, id;
+    uint32_t r32;
+
+    r32 = pci_config_read16(bus, dev, fun, PCI_STATUS_OFFSET);
+    if (!(r32 & PCI_STATUS_CAP_LIST))
+        return -1;
+    r8 = pci_config_read8(bus, dev, fun, PCI_CAP_OFFSET);
+    while (r8 != 0) {
+        id = pci_config_read8(bus, dev, fun, r8);
+        if (id == cap_id) {
+            *cap_off = r8;
+            return 0;
+        }
+        r8 = pci_config_read8(bus, dev, fun, r8 + 1);
+    }
+    return -1;
+}
+
+int pcie_retraining_link(uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    uint16_t link_status, link_control, vid;
+    uint8_t pcie_cap_off;
+    int ret, tries;
+
+    vid = pci_config_read16(bus, dev, 0, PCI_VENDOR_ID_OFFSET);
+    if (vid == 0xffff) {
+        return -1;
+    }
+    
+    ret = pci_get_capability(bus, dev, fun, PCI_PCIE_CAP_ID, &pcie_cap_off);
+    if (ret != 0) {
+        return -1;
+    }
+
+    link_status = pci_config_read16(bus, dev, fun,
+                                    pcie_cap_off + PCIE_LINK_STATUS_OFF);
+    if (link_status & PCIE_LINK_STATUS_TRAINING) {
+        delay(PCIE_TRAINING_TIMEOUT_MS);
+        link_status = pci_config_read16(bus, dev, fun,
+                                        pcie_cap_off + PCIE_LINK_STATUS_OFF);
+        if (link_status & PCIE_LINK_STATUS_TRAINING) {
+            return -1;
+        }
+    }
+
+    link_control = pci_config_read16(bus, dev, fun,
+                                         pcie_cap_off + PCIE_LINK_CONTROL_OFF);
+    link_control |= PCIE_LINK_CONTROL_RETRAINING;
+    pci_config_write16(bus, dev, fun, pcie_cap_off + PCIE_LINK_CONTROL_OFF,
+                       link_control);
+    tries = PCIE_TRAINING_TIMEOUT_MS / 10;
+    do {
+        link_status = pci_config_read16(bus, dev, fun,
+                                        pcie_cap_off + PCIE_LINK_STATUS_OFF);
+        if (!(link_status & PCIE_LINK_STATUS_TRAINING))
+            break;
+        delay(10);
+    } while(tries--);
+
+    if ((link_status & PCIE_LINK_STATUS_TRAINING)) {
+        return -1;
+    }
+
+    return 0;
 }
 
 /*!
