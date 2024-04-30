@@ -1405,7 +1405,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         if (CMD.policy_sign) {
             /* Add policy signature to header */
             header_append_tag(header, &header_idx, HDR_POLICY_SIGNATURE,
-                CMD.policy_sz + sizeof(uint32_t), policy);
+                CMD.policy_sz + (uint16_t)sizeof(uint32_t), policy);
         }
     } /* end if(sign != NO_SIGN) */
 
