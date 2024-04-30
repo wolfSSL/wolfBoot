@@ -25,10 +25,11 @@
 
 #include "spi_drv.h"
 #include "spi_flash.h"
+#include "printf.h"
 
 #ifdef SPI_FLASH
 
-#define MDID            0x90
+#define MDID            0x9F
 #define RDSR            0x05
 #define WRSR            0x01
 #   define ST_BUSY (1 << 0)
@@ -197,6 +198,7 @@ uint16_t spi_flash_probe(void)
     spi_read();
     spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
 #endif
+    wolfBoot_printf("SPI Probe: Manuf 0x%x, Product 0x%x\n", manuf, product);
     return (uint16_t)(manuf << 8 | product);
 }
 

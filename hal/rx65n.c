@@ -268,8 +268,11 @@ void spi_init(int polarity, int phase)
     /* Configure P26-27 and P30-31 for alt mode */
     PORT_PMR(0x2) |= ((1 << 6) | (1 << 7));
     PORT_PMR(0x3) |= (1 << 0);
+    PORT_PDR(0x3) &= ~(1 << 0); /* input */
 #ifdef FLASH_SPI_USE_HW_CS
     PORT_PMR(0x3) |= (1 << 1);
+#else
+    PORT_PDR(0x3) |= (1 << 1); /* output */
 #endif
 
     /* Disable MPC Write Protect for PFS */
@@ -291,14 +294,14 @@ void spi_init(int polarity, int phase)
     /* Configure RSPI */
     RSPI_SPPCR(FLASH_RSPI_PORT) = (RSPI_SPPCR_MOIFV | RSPI_SPPCR_MOIDE); /* enable idle fixing */
     RSPI_SPSCR(FLASH_RSPI_PORT) = RSPI_SPSCR_SPSLN(0); /* seq len 1 */
-    RSPI_SPBR(FLASH_RSPI_PORT)  = 3; /* 15Mbps */
-    RSPI_SPDCR(FLASH_RSPI_PORT) = (RSPI_SPDCR_SPFC(0) | RSPI_SPDCR_SPLW); /* frames=1, SPDR=longwords */
+    RSPI_SPBR(FLASH_RSPI_PORT)  = 5; /* 5Mbps */
+    RSPI_SPDCR(FLASH_RSPI_PORT) = (RSPI_SPDCR_SPFC(0) | RSPI_SPDCR_SPBYT); /* frames=1, SPDR=byte */
     RSPI_SPCKD(FLASH_RSPI_PORT) = RSPI_SPCKD_SCKDL(0); /* 1 clock delay (SSL assert and first clock cycle) */
     RSPI_SSLND(FLASH_RSPI_PORT) = RSPI_SSLND_SLNDL(0); /* 1 clock delay (last clock cycle and SSL negation) */
     RSPI_SPND(FLASH_RSPI_PORT)  = RSPI_SPND_SPNDL(0); /* Next-Access Delay: 1RSPCK+2PCLK */
     RSPI_SPCR2(FLASH_RSPI_PORT) = 0; /* no parity */
     RSPI_SPCMD(FLASH_RSPI_PORT, 0) = (
-        RSPI_SPCMD_BRDV(0) | /* no div */
+        RSPI_SPCMD_BRDV(1) | /* div/1 */
         RSPI_SPCMD_SSLA(0) | /* slave select 0 */
         RSPI_SPCMD_SSLKP |   /* keep signal level between transfers */
         RSPI_SPCMD_SPB(7) |  /* 8-bit data */
@@ -310,8 +313,8 @@ void spi_init(int polarity, int phase)
     if (phase)
         RSPI_SPCMD(FLASH_RSPI_PORT, 0) |= RSPI_SPCMD_CPHA;
 
-    /* Enable Master SPI operation (4-wire method) */
-    RSPI_SPCR(FLASH_RSPI_PORT) = (RSPI_SPCR_MSTR | RSPI_SPCR_SPE);
+    /* Master SPI operation (4-wire method) */
+    RSPI_SPCR(FLASH_RSPI_PORT) = RSPI_SPCR_MSTR;
 }
 
 void spi_release(void)
@@ -325,6 +328,8 @@ void spi_cs_on(uint32_t base, int pin)
     (void)base;
     (void)pin;
 #ifdef FLASH_SPI_USE_HW_CS
+    /* Enable SPI Master */
+    RSPI_SPCR(FLASH_RSPI_PORT) |= RSPI_SPCR_SPE;
     RSPI_SPCMD(FLASH_RSPI_PORT, 0) |= RSPI_SPCMD_SSLKP;
 #else
     PORT_PODR(0x3) &= ~(1 << 1); /* drive low */
@@ -336,6 +341,7 @@ void spi_cs_off(uint32_t base, int pin)
     (void)pin;
 #ifdef FLASH_SPI_USE_HW_CS
     RSPI_SPCMD(FLASH_RSPI_PORT, 0) &= ~RSPI_SPCMD_SSLKP;
+    RSPI_SPCR(FLASH_RSPI_PORT) &= ~RSPI_SPCR_SPE;
 #else
     PORT_PODR(0x3) |= (1 << 1); /* drive high */
 #endif
