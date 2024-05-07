@@ -273,28 +273,51 @@ endif
 ## Renesas RX
 ifeq ($(ARCH),RENESAS_RX)
   RX_GCC_PATH?=~/toolchains/gcc_8.3.0.202311_rx_elf
-  CROSS_COMPILE=$(RX_GCC_PATH)/bin/rx-elf-
+  CROSS_COMPILE?=$(RX_GCC_PATH)/bin/rx-elf-
 
+  ## Toolchain setup
+  ifeq ($(USE_GCC),0)
+    CC=$(CROSS_COMPILE)gcc
+    # Must use LD directly (gcc link calls LD with sysroot and is not supported)
+    LD=$(CROSS_COMPILE)ld
+    AS=$(CROSS_COMPILE)gcc
+    OBJCOPY?=$(CROSS_COMPILE)objcopy
+    SIZE=$(CROSS_COMPILE)size
+
+    # Override flags
+    USE_GCC_HEADLESS=0
+    LD_START_GROUP=--start-group
+    LD_END_GROUP=--end-group
+    CFLAGS+=-Wall -Wextra -ffreestanding -Wno-unused -nostartfiles -fno-common
+    CFLAGS+=-ffunction-sections -fdata-sections
+    CFLAGS+=-B$(dir $(CROSS_COMPILE))
+    LDFLAGS+=-gc-sections -Map=wolfboot.map
+    LDFLAGS+=-T $(LSCRIPT) -L$(dir $(CROSS_COMPILE))../lib
+    LIBS+=-lgcc
+  endif
+
+  # Renesas specific files
   OBJS+=src/boot_renesas.o src/boot_renesas_start.o
-
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
   endif
 
-  ifeq ($(TARGET),rx65n)
-    #CFLAGS+=-misa=v2 -nofpu
-  endif
-  ifeq ($(TARGET),rx72n)
-    #CFLAGS+=-misa=v3 -nofpu
-  endif
-
   # RX parts support big or little endian data depending on MDE register
+  CFLAGS+=-fomit-frame-pointer -nofpu
   ifeq ($(BIG_ENDIAN),1)
-    CFLAGS+=-mbig-endian-data -fno-use-linker-plugin
-    LDFLAGS+=-mbig-endian-data -fno-use-linker-plugin -Wl,--oformat=elf32-rx-be
+    CFLAGS+=-mbig-endian-data
+    ifeq ($(USE_GCC),1)
+      LDFLAGS+=-Wl,--oformat=elf32-rx-be
+    else
+      LDFLAGS+=--oformat=elf32-rx-be
+    endif
   else
-    CFLAGS+=-mlittle-endian-data -fno-use-linker-plugin
-    LDFLAGS+=-mlittle-endian-data -fno-use-linker-plugin -Wl,--oformat=elf32-rx-le
+    CFLAGS+=-mlittle-endian-data
+    ifeq ($(USE_GCC),1)
+      LDFLAGS+=-Wl,--oformat=elf32-rx-le
+    else
+      LDFLAGS+=--oformat=elf32-rx-le
+    endif
   endif
 
   ifeq ($(TSIP),1)
@@ -692,10 +715,6 @@ ifeq ($(TARGET),psoc6)
     endif
 endif
 
-
-
-USE_GCC?=1
-USE_GCC_HEADLESS?=1
 ifeq ($(USE_GCC),1)
   ## Toolchain setup
   CC=$(CROSS_COMPILE)gcc
@@ -703,8 +722,8 @@ ifeq ($(USE_GCC),1)
   AS=$(CROSS_COMPILE)gcc
   OBJCOPY?=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
-  OUTPUT_FLAG=-o
 endif
+OUTPUT_FLAG?=-o
 
 ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
   FSP=1

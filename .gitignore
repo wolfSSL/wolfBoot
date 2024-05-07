@@ -209,3 +209,5 @@ IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug
 IDE/Renesas/e2studio/RX72N/app_RenesasRX01/src/smc_gen
 IDE/Renesas/e2studio/RX72N/wolfBoot/HardwareDebug
 IDE/Renesas/e2studio/RX72N/wolfBoot/src/smc_gen
+lib/r_bsp_v7.42
+lib/r_flash_rx_v5.11

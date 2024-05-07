@@ -52,15 +52,18 @@ void do_boot(const uint32_t *app_offset)
     (void) app_offset;
     (void) app_sp;
     (void) app_entry;
+    #ifndef BOOT_ENTRY_OFFSET
+    #define BOOT_ENTRY_OFFSET 0x00
+    #endif
+    /* add byte offset to uint32_t */
+    app_offset += BOOT_ENTRY_OFFSET/sizeof(uint32_t);
 #if defined(__RX__)
     /* Do unconditional jump (r1 = app_offset) */
     #if defined(__CCRX__)
         longJump(app_offset);
     #else
-        /* address at r1 is the function table, so load value from r1 */
-        __asm("mov.l [r1], r2");
-        /* jump to address */
-        __asm("jmp   r2");
+        app_entry = (void(*))(*app_offset);
+        app_entry();
     #endif
 #elif defined(_RENESAS_RA_)
     app_sp = VECTOR_SP;
@@ -89,8 +92,11 @@ void do_boot(const uint32_t *app_offset)
 /* Interrupt Handling and Linker Sections for RX */
 #if defined(__RX__)
 typedef void (*fp) (void); /* generic interrupt function pointer typedef */
-extern void PowerON_Reset(void) __attribute__ ((interrupt));
+#ifdef NO_LEADING_UNDERSCORE
+extern void _PowerON_Reset(void);
+#else
 extern void PowerON_Reset(void);
+#endif
 
 #define EXVECT_SECT __attribute__ ((section (".exvectors")))
 #define FVECT_SECT  __attribute__ ((section (".fvectors")))
@@ -248,7 +254,11 @@ const void *ExceptVectors[] EXVECT_SECT = {
 };
 
 const void *HardwareVectors[] FVECT_SECT = {
-     PowerON_Reset
+#ifdef NO_LEADING_UNDERSCORE
+    _PowerON_Reset
+#else
+    PowerON_Reset
+#endif
 };
 
 const fp RelocatableVectors[] RVECT_SECT = {

@@ -25,6 +25,8 @@ LIBS=
 SIGN_ALG=
 OBJCOPY_FLAGS=
 BIG_ENDIAN?=0
+USE_GCC?=1
+USE_GCC_HEADLESS?=1
 
 OBJS:= \
 	./src/string.o \
@@ -248,7 +250,7 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
-wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
+wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"

@@ -11,7 +11,11 @@
     .extern _ustack
     .extern _istack
     .extern _rvectors
+#ifdef NO_LEADING_UNDERSCORE
+    .extern main
+#else
     .extern _main
+#endif
 
     .global _PowerON_Reset         /* global Start routine */
     .type   _PowerON_Reset, @function
@@ -83,7 +87,11 @@ _PowerON_Reset :
 skip_psw_setup:
 
 /* start user program */
+#ifdef NO_LEADING_UNDERSCORE
+    mov    #main, r7
+#else
     mov    #_main, r7
+#endif
     jsr    r7
     mov    #_exit, r7
     jsr    r7
@@ -99,7 +107,9 @@ __rx_fini:
 /* call to exit */
 _exit:
     mov    #0, r2
+#ifndef NO_LEADING_UNDERSCORE
     mov    #___call_exitprocs, r7
+#endif
     jsr    r7
 _loop_here:
     bra    _loop_here

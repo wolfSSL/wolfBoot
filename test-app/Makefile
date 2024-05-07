@@ -10,6 +10,8 @@ CFLAGS+=-I. -I..
 CFLAGS+=-I./wcs
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
+USE_GCC?=1
+USE_GCC_HEADLESS?=1
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -38,7 +40,14 @@ ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
-  CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+  CFLAGS+=-Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+  CFLAGS+=-g
+  ifeq ($(USE_GCC),1)
+    CFLAGS+=-ggdb3
+  else
+    CFLAGS+=-gstabs
+  endif
+
   ifeq ($(ARCH),RENESAS_RX)
     APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o
     LDFLAGS+=-ffreestanding -nostartfiles

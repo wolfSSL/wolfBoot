@@ -119,7 +119,6 @@ extern int tolower(int c);
 #   else
 #       define HAVE_ECC_SIGN
 #       define HAVE_ECC_CDH
-#       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
 #       define SP_WORD_SIZE 32
@@ -130,7 +129,6 @@ extern int tolower(int c);
 
     /* SP MATH */
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_HAVE_SP_ECC

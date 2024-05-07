@@ -501,11 +501,11 @@ void hal_clk_init(void)
             reg = RTC_RCR4; /* dummy read (required) */
         }
         while (RTC_RCR4 != 0) { RX_NOP(); }
-        RTC_RCR3 = 0;
+        RTC_RCR3 &= ~RTC_RCR3_RTCEN; /* stop osc */
         for (i=0; i<4; i++) {
             reg = RTC_RCR3; /* dummy read (required) */
         }
-        while (RTC_RCR3 != 0) { RX_NOP(); }
+        while ((RTC_RCR3 & RTC_RCR3_RTCEN) != RTC_RCR3_RTCEN) { RX_NOP(); }
     }
 
     /* ---- Sub-Clock OSC ---- */

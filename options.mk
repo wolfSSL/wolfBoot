@@ -594,7 +594,12 @@ endif
 # allow elf inclusion of debug symbols even with optimizations enabled
 # make DEBUG_SYMBOLS=1
 ifeq ($(DEBUG_SYMBOLS),1)
-  CFLAGS+=-g -ggdb3
+  CFLAGS+=-g
+  ifeq ($(USE_GCC),1)
+    CFLAGS+=-ggdb3
+  else
+    CFLAGS+=-gstabs
+  endif
 endif
 
 
