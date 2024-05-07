@@ -34,17 +34,6 @@ jobs:
         run: |
           sudo apt-get install -y gcc-arm-none-eabi gcc-aarch64-linux-gnu gcc-powerpc-linux-gnu gnu-efi
 
-      - name: Create lib hash-sigs
-        run: |
-          mkdir -p lib/hash-sigs/lib
-
-      - name: Clone hash-sigs repository
-        run: |
-          git clone https://github.com/cisco/hash-sigs.git lib/hash-sigs/src && \
-          cd lib/hash-sigs/src && git checkout b0631b8891295bf2929e68761205337b7c031726 && \
-          git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch && \
-          cd ../../.. 
-
       - name: make clean
         run: |
           make distclean
