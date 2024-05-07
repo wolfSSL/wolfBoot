@@ -20,20 +20,11 @@ quit_renode() {
 
 rm -f $RENODE_UART
 
-#
-# LMS and ext_LMS
-#
-if (echo $TEST_OPTIONS | grep "LMS" &>/dev/null); then
+# external LMS test
+if (echo $TEST_OPTIONS | grep "ext_LMS" &>/dev/null); then
     # Need git.
     apt install -y git
 
-    # wolfSSL needs to be on latest master for LMS support. Also, we need to
-    # add the wolfssl module as a safe directory so docker can use it.
-    git config --global --add safe.directory /workspace/lib/wolfssl || exit 2
-    cd lib/wolfssl && git checkout master && git pull && cd ../.. || exit 2
-fi
-
-if (echo $TEST_OPTIONS | grep "ext_LMS" &>/dev/null); then
     # Extra steps needed for external LMS support.
     # Need to clone the hash-sigs repo, and patch it for wolfBoot build.
     mkdir -p lib/hash-sigs/lib || exit 2
@@ -43,22 +34,13 @@ if (echo $TEST_OPTIONS | grep "ext_LMS" &>/dev/null); then
         cd ../../.. || exit 2
 fi
 
-#
-# XMSS and ext_XMSS
-#
-if (echo $TEST_OPTIONS | grep "XMSS" &>/dev/null); then
+# external XMSS test
+if (echo $TEST_OPTIONS | grep "ext_XMSS" &>/dev/null); then
     # Need git.
     apt install -y git
 
-    # wolfSSL needs to be on latest master for XMSS support. Also, we need to
-    # add the wolfssl module as a safe directory so docker can use it.
-    git config --global --add safe.directory /workspace/lib/wolfssl || exit 2
-    cd lib/wolfssl && git checkout master && git pull && cd ../.. || exit 2
-fi
-
-if (echo $TEST_OPTIONS | grep "ext_XMSS" &>/dev/null); then
     # Extra steps needed for external XMSS support.
-    # Need to clone the hash-sigs repo, and patch it for wolfBoot build.
+    # Need to clone the xmss-reference repo, and patch it for wolfBoot build.
     cd lib || exit 2
     git clone https://github.com/XMSS/xmss-reference.git xmss || exit 2
     cd xmss && git checkout 171ccbd26f098542a67eb5d2b128281c80bd71a6 && \
