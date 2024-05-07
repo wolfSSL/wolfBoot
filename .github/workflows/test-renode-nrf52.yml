@@ -66,7 +66,7 @@ jobs:
         run: ./tools/renode/docker-test.sh "SIGN=LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 IMAGE_HEADER_SIZE=5288"
 
 # ext_LMS TEST
-      - name: Renode Tests LMS-8-5-5
+      - name: Renode Tests ext_LMS-8-5-5
         run: ./tools/renode/docker-test.sh "SIGN=ext_LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 IMAGE_HEADER_SIZE=5288"
 
 #
@@ -77,7 +77,7 @@ jobs:
         run: ./tools/renode/docker-test.sh "SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000"
 
 # ext_XMSS TEST
-      - name: Renode Tests XMSS-SHA2_10_256
+      - name: Renode Tests ext_XMSS-SHA2_10_256
         run: ./tools/renode/docker-test.sh "SIGN=ext_XMSS XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000"
 
 
