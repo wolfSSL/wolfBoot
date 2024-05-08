@@ -21,7 +21,8 @@ DISK_LOCK_PASSWORD=hardcoded_password
 If the ATA disk has no password set, the disk will be locked with the password provided at the first boot.
 
 ## Unlocking the Disk with a TPM-Sealed Secret
-wolfBoot allows to seal secret safely in the TPM in a way that it can be unsealed only under specific conditions. Please refer to files TPM.md and measured_boot.md for more information. If the option `WOLFBOOT_TPM_SEAL` is enabled and `DISK_LOCK` is enabled, wolfBoot will use a TPM sealed secret as the password to unlock the disk. The following options controls the sealing and unsealing of the secret:
+wolfBoot allows to seal secret safely in the TPM in a way that it can be unsealed only under specific conditions. Please refer to files TPM.md and measured_boot.md for more information. 
+If the options `WOLFBOOT_TPM_SEAL` and `DISK_LOCK` are enabled, wolfBoot will use a TPM sealed secret as the password to unlock the disk. The following options controls the sealing and unsealing of the secret:
 
 | Option | Description |
 |--------|-------------|
@@ -34,7 +35,7 @@ In case the ATA drive is not locked, it will be locked at the first boot with th
 
 ## Disabling the password
 
-If you need to disable the password, a master password should be already set on the device. Then you can use the following option to compile wolfBoot so that it will disable the password from the drive and panic:
+If you need to disable the password, a master password should be already set on the device. Then you can use the following options to compile wolfBoot so that it will disable the password from the drive and panic:
 
 ```
 WOLFBOOT_ATA_DISABLE_USER_PASSWORD=1
