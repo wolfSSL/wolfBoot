@@ -1,8 +1,4 @@
-/* Flash_sections.s
- *
- * Custom configuration for wolfCrypt/wolfSSL.
- * Enabled via WOLFSSL_USER_SETTINGS.
- *
+/* Flash_wrappedkey_public.s
  *
  * Copyright (C) 2024 wolfSSL Inc.
  *
@@ -26,5 +22,5 @@
 the loader project. */
 
 .section .WRAPPED_KEY_FLASH_PUB, "ax", %progbits
-/* To download the encrypted rsip key, please remove comment out.  */
+/* To download the encrypted rsip key, please enable the line below.  */
 /* .incbin "../rsa_pub2048.bin" */

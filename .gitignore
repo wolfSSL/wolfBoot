@@ -158,6 +158,8 @@ IDE/Renesas/e2studio/RZN2L/app_RZ/.api_xml
 IDE/Renesas/e2studio/RZN2L/app_RZ/.secure_azone
 IDE/Renesas/e2studio/RZN2L/app_RZ/.secure_xml
 IDE/Renesas/e2studio/RZN2L/app_RZ/configuration.xml
+IDE/Renesas/e2studio/RZN2L/app_RZ/rzn_cfg.txt
+IDE/Release/e2Studio/RZN2L/app_RZ/JLinkLog.log
 IDE/Renesas/e2studio/RZN2L/flash_app/Debug
 IDE/Renesas/e2studio/RZN2L/flash_app/rzn
 IDE/Renesas/e2studio/RZN2L/flash_app/rzn_gen
@@ -167,6 +169,10 @@ IDE/Renesas/e2studio/RZN2L/flash_app/.api_xml
 IDE/Renesas/e2studio/RZN2L/flash_app/.secure_azone
 IDE/Renesas/e2studio/RZN2L/flash_app/.secure_xml
 IDE/Renesas/e2studio/RZN2L/flash_app/configuration.xml
+IDE/Renesas/e2studio/RZN2L/flash_app/rzn_cfg.txt
+IDE/Release/e2Studio/RZN2L/flash_app/JLinkLog.log
+IDE/Renesas/e2studio/RZN2L/flash_app/flash_simple_loader.elf.jlink
+IDE/Renesas/e2studio/RZN2L/flash_app/flash_simple_loader.elf.launch
 IDE/Renesas/e2studio/RZN2L/wolfboot/Debug
 IDE/Renesas/e2studio/RZN2L/wolfboot/rzn
 IDE/Renesas/e2studio/RZN2L/wolfboot/rzn_gen
@@ -176,4 +182,11 @@ IDE/Renesas/e2studio/RZN2L/wolfboot/.api_xml
 IDE/Renesas/e2studio/RZN2L/wolfboot/.secure_azone
 IDE/Renesas/e2studio/RZN2L/wolfboot/.secure_xml
 IDE/Renesas/e2studio/RZN2L/wolfboot/configuration.xml
+IDE/Renesas/e2studio/RZN2L/wolfboot/rzn_cfg.txt
+IDE/Release/e2Studio/RZN2L/wolfboot/JLinkLog.log
+IDE/Renesas/e2studio/RZN2L/wolfboot/wolfBoot_RZ.elf.jlink
+IDE/Renesas/e2studio/RZN2L/wolfboot/wolfBoot_RZ.elf.launch
+IDE/Renesas/e2studio/RZN2L/wolfboot/.cache/*
+IDE/Renesas/e2studio/RZN2L/flash_app/.cache/*
+IDE/Release/e2studio/RZN2L/app_RZ/.cache/*
 
