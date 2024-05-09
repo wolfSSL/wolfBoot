@@ -24,8 +24,8 @@
 
 #ifdef PLATFORM_x86_fsp_qemu
 
-#include<printf.h>
-#include<stdint.h>
+#include <printf.h>
+#include <stdint.h>
 
 struct mb2_header {
     uint32_t magic;
