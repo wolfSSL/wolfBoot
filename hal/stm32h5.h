@@ -1,0 +1,372 @@
+/* stm32h5.h
+ *
+ * Copyright (C) 2024 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+
+#ifndef STM32H5_DEF_INCLUDED
+#define STM32H5_DEF_INCLUDED
+/* Assembly helpers */
+#define DMB() __asm__ volatile ("dmb")
+#define ISB() __asm__ volatile ("isb")
+#define DSB() __asm__ volatile ("dsb")
+
+#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && !defined(NONSECURE_APP))
+#   define TZ_SECURE() (1)
+#else
+#   define TZ_SECURE() (0)
+#endif
+
+/* STM32 H5 register configuration */
+/*** RCC ***/
+#if TZ_SECURE()
+/*Secure */
+#define RCC_BASE            (0x54020c00)   /* RM0481 - Table 3 */
+#else
+/*Non-Secure */
+#define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
+#endif
+
+#define FLASH_SECURE_MMAP_BASE (0x0C000000)
+
+#define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0481 - Table 108 */
+#define RCC_CR_PLL3RDY               (1 << 29) /*    RM0481 - Table 108 */
+#define RCC_CR_PLL3ON                (1 << 28) /*    RM0481 - Table 108 */
+#define RCC_CR_PLL2RDY               (1 << 27) /*    RM0481 - Table 108 */
+#define RCC_CR_PLL2ON                (1 << 26) /*    RM0481 - Table 108 */
+#define RCC_CR_PLL1RDY               (1 << 25) /*    RM0481 - Table 108 */
+#define RCC_CR_PLL1ON                (1 << 24) /*    RM0481 - Table 108 */
+#define RCC_CR_HSEEXT                (1 << 20) /*    RM0481 - Table 108 */
+#define RCC_CR_HSECSSON              (1 << 19) /*    RM0481 - Table 108 */
+#define RCC_CR_HSEBYP               (1 << 18) /*    RM0481 - Table 108 */
+#define RCC_CR_HSERDY               (1 << 17) /*    RM0481 - Table 108 */
+#define RCC_CR_HSEON                (1 << 16) /*    RM0481 - Table 108 */
+#define RCC_CR_HSI48RDY             (1 << 13) /*    RM0481 - Table 108 */
+#define RCC_CR_HSI48ON              (1 << 12) /*    RM0481 - Table 108 */
+#define RCC_CR_CSIKERON             (1 << 10) /*    RM0481 - Table 108 */
+#define RCC_CR_CSIRDY               (1 << 9)  /*    RM0481 - Table 108 */
+#define RCC_CR_CSION                (1 << 8)  /*    RM0481 - Table 108 */
+#define RCC_CR_HSIDIVF              (1 << 5)  /*    RM0481 - Table 108 */
+#define RCC_CR_HSIDIV_SHIFT         (3)       /*    RM0481 - Table 108 */
+#define RCC_CR_HSIKERON             (1 << 2)  /*    RM0481 - Table 108 */
+#define RCC_CR_HSIRDY               (1 << 1)  /*    RM0481 - Table 108 */
+#define RCC_CR_HSION                (1 << 0)  /*    RM0481 - Table 108 */
+
+#define RCC_CFGR1                   (*(volatile uint32_t *)(RCC_BASE + 0x1C))  /* RM0481 - 11.8.5 */
+#define RCC_CFGR2                   (*(volatile uint32_t *)(RCC_BASE + 0x20))  /* RM0481 - 11.8.6 */
+
+/* CFGR1 - PLL Source selection */
+#define RCC_CFGR1_SW_SHIFT      (0x0)
+#define RCC_CFGR1_SWS_SHIFT     (0x3)
+#define RCC_CFGR1_SW_HSI        (0x0) /* 00: HSI selected as system clock, default after reset */
+#define RCC_CFGR1_SW_CSI        (0x1)
+#define RCC_CFGR1_SW_HSE        (0x2)
+#define RCC_CFGR1_SW_PLL1       (0x3)
+#define RCC_CFGR1_SW_MASK       (0x3)
+
+/* HPRE - PPRE1 - PPRE2 - PPRE3 */
+#define RCC_CFGR2_HPRE_SHIFT        (0x0)
+#define RCC_CFGR2_PPRE1_SHIFT       (0x4)
+#define RCC_CFGR2_PPRE2_SHIFT       (0x8)
+#define RCC_CFGR2_PPRE3_SHIFT       (0xC)
+
+/* PLL1 Configuration */
+#define RCC_PLL1CFGR               (*(volatile uint32_t *)(RCC_BASE + 0x28))  /* RM0481 - Table 108 */
+#define RCC_PLL1DIVR               (*(volatile uint32_t *)(RCC_BASE + 0x34))  /* RM0481 - Table 108 */
+#define RCC_PLL1FRACR              (*(volatile uint32_t *)(RCC_BASE + 0x38))  /* RM0481 - Table 108 */
+
+#define RCC_PLL1CFGR_PLL1SRC_SHIFT (0x0)
+#define RCC_PLL1CFGR_PLL1SRC_HSE   (0x3)
+#define RCC_PLL1CFGR_PLL1RGE_SHIFT (0x2)
+#define RCC_PLL1CFGR_RGE_1_2       (0x0) /* Default at boot: 1-2 MHz */
+#define RCC_PLL1CFGR_RGE_2_4       (0x1) /* 2-4 MHz */
+#define RCC_PLL1CFGR_RGE_4_8       (0x2) /* 4-8 MHz */
+#define RCC_PLL1CFGR_RGE_8_16      (0x3) /* 8-16 MHz */
+#define RCC_PLL1CFGR_PLL1PEN       (1 << 16)
+#define RCC_PLL1CFGR_PLL1QEN       (1 << 17)
+#define RCC_PLL1CFGR_PLL1REN       (1 << 18)
+
+
+#define RCC_PLL1CFGR_PLL1FRACEN    (1 << 4)
+#define RCC_PLL1CFGR_PLL1VCOSEL    (1 << 5)
+#define RCC_PLL1CFGR_PLL1M_SHIFT   (0x8)
+#define RCC_PLL1CFGR_PLL1PEN       (1 << 16)
+#define RCC_PLL1CFGR_PLL1QEN       (1 << 17)
+#define RCC_PLL1CFGR_PLL1REN       (1 << 18)
+
+#define RCC_PLL1DIVR_DIVN_SHIFT    (0)
+#define RCC_PLL1DIVR_DIVP_SHIFT    (9)
+#define RCC_PLL1DIVR_DIVQ_SHIFT    (16)
+#define RCC_PLL1DIVR_DIVR_SHIFT    (24)
+
+#define RCC_PLL1FRACR_FRACN_SHIFT  (3)
+
+
+#define RCC_APB_PRESCALER_DIV_NONE 0x0  /* 0xx: HCLK not divided */
+#define RCC_APB_PRESCALER_DIV_2 0x4     /* 100: HCLK divided by 2 */
+#define RCC_APB_PRESCALER_DIV_4 0x5     /* 101: HCLK divided by 4 */
+#define RCC_APB_PRESCALER_DIV_8 0x6     /* 110: HCLK divided by 8 */
+#define RCC_APB_PRESCALER_DIV_16 0x7    /* 111: HCLK divided by 16 */
+
+#define RCC_AHB_PRESCALER_DIV_NONE 0x0    /* 0xxx: SYSCLK not divided */
+#define RCC_AHB_PRESCALER_DIV_2    0x8    /* 1000: SYSCLK divided by 2 */
+#define RCC_AHB_PRESCALER_DIV_4    0x9    /* 1001: SYSCLK divided by 4 */
+#define RCC_AHB_PRESCALER_DIV_8   0xA    /* 1010: SYSCLK divided by 8 */
+#define RCC_AHB_PRESCALER_DIV_16  0xB    /* 1011: SYSCLK divided by 16 */
+#define RCC_AHB_PRESCALER_DIV_64  0xC    /* 1100: SYSCLK divided by 64 */
+#define RCC_AHB_PRESCALER_DIV_128 0xD    /* 1101: SYSCLK divided by 128 */
+#define RCC_AHB_PRESCALER_DIV_256 0xE    /* 1110: SYSCLK divided by 256 */
+#define RCC_AHB_PRESCALER_DIV_512 0xF    /* 1111: SYSCLK divided by 512 */
+
+
+#define RCC_CFGR_SW_MSI             0x0
+#define RCC_CFGR_SW_HSI16           0x1
+#define RCC_CFGR_SW_HSE             0x2
+#define RCC_CFGR_SW_PLL             0x3
+
+#define RCC_PLLCFGR         (*(volatile uint32_t *)(RCC_BASE + 0x0C))  //RM0481 - Table 77
+#define RCC_PLLCFGR_PLLP_SHIFT       (27)
+#define RCC_PLLCFGR_PLLR_SHIFT      (25)
+#define RCC_PLLCFGR_PLLREN          (1 << 24)
+
+#define RCC_PLLCFGR_PLLQ_SHIFT       (21)
+#define RCC_PLLCFGR_PLLQEN           (1 << 20)
+
+#define RCC_PLLCFGR_PLLN_SHIFT       (8)
+#define RCC_PLLCFGR_PLLM_SHIFT       (4)
+
+#define RCC_PLLCFGR_QR_DIV_2          0x0
+#define RCC_PLLCFGR_QR_DIV_4          0x1
+#define RCC_PLLCFGR_QR_DIV_6          0x2
+#define RCC_PLLCFGR_QR_DIV_8          0x3
+
+#define RCC_PLLCFGR_P_DIV_7           0x0
+#define RCC_PLLCFGR_P_DIV_17          0x1
+
+#define RCC_PLLCKSELR_PLLSRC_NONE    0x0
+#define RCC_PLLCKSELR_PLLSRC_MSI     0x1
+#define RCC_PLLCKSELR_PLLSRC_HSI16   0x2
+#define RCC_PLLCKSELR_PLLSRC_HSE     0x3
+
+#define RCC_CCIPR1          (*(volatile uint32_t *)(RCC_BASE + 0x88))
+#define RCC_CCIPR1_LPUART1SEL_SHIFT (10)
+#define RCC_CCIPR1_LPUART1SEL_MASK (0x3)
+
+#define RCC_CRRCR         (*(volatile uint32_t *)(RCC_BASE + 0x98))
+#define RCC_CRRCR_HSI48ON      (1 << 0)
+#define RCC_CRRCR_HSI48RDY     (1 << 1)
+
+/*** PWR ***/
+/*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
+#if TZ_SECURE()
+/*Secure */
+#define PWR_BASE            (0x50020800)   //RM0481 - Table 3
+#else
+/*Non-Secure */
+#define PWR_BASE            (0x40020800)   //RM0481 - Table 3
+#endif
+
+#define PWR_VOSCR              (*(volatile uint32_t *)(PWR_BASE + 0x10))
+#define PWR_VOSSR              (*(volatile uint32_t *)(PWR_BASE + 0x14))
+#define PWR_VOS_SCALE_0      (0x3 << 4)   //RM0481 - 10.11.3
+#define PWR_VOS_SCALE_3      (0x0 << 4)   //RM0481 - 10.11.3 - Default on power up
+#define PWR_VOS_MASK         (0x3 << 4)   //RM0481 - 10.11.3
+#define PWR_VOSRDY           (1 << 3)     //RM0481 - 10.11.4 - Voltage scaling ready
+
+#define PWR_CR2              (*(volatile uint32_t *)(PWR_BASE + 0x04))
+#define PWR_CR2_IOSV         (1 << 9)
+#define PWR_CR3              (*(volatile uint32_t *)(PWR_BASE + 0x08))
+#define PWR_CR3_UCPD_DBDIS   (1 << 14)
+#define PWR_CR4              (*(volatile uint32_t *)(PWR_BASE + 0x0C))
+
+#define PWR_SR1              (*(volatile uint32_t *)(PWR_BASE + 0x10))
+#define PWR_SR2              (*(volatile uint32_t *)(PWR_BASE + 0x14))
+#define PWR_SR2_VOSF         (1 << 10)
+
+#if TZ_SECURE()
+/*Secure*/
+#define FLASH_BASE          (0x50022000)   //RM0481 - Table 75
+#define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x08))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
+#define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x24))
+#define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
+
+#define FLASH_SECBB1       ((volatile uint32_t *)(FLASH_BASE + 0x0A0)) /* Array */
+#define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0x1A0)) /* Array */
+#define FLASH_SECBB_NREGS  4    /* Array length for the two above */
+
+#define FLASH_NS_BASE          (0x40022000)   //RM0481 - Table 3
+#define FLASH_NS_KEYR        (*(volatile uint32_t *)(FLASH_NS_BASE + 0x08))
+#define FLASH_NS_OPTKEYR     (*(volatile uint32_t *)(FLASH_NS_BASE + 0x0C))
+#define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
+#define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
+
+#define TZSC_PRIVCFGR2   *((volatile uint32_t *)(0x50036424))
+#define TZSC_PRIVCFG2_LPUARTPRIV (1 << 25) /* LPUART1 */
+
+/* Mapping FLASH_SECCR for bank swapping */
+#define FLASH_CCR            (*(volatile uint32_t *)(FLASH_BASE + 0x34))
+
+#else
+/* Non-Secure only */
+#define FLASH_BASE          (0x40022000)   //RM0481 - Table 3
+#define FLASH_KEYR        (*(volatile uint32_t *)(FLASH_BASE + 0x04))
+#define FLASH_OPTKEYR     (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
+#define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x20))
+#define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x28))
+
+/* Mapping FLASH_NSCCR for bank swapping */
+#define FLASH_CCR            (*(volatile uint32_t *)(FLASH_BASE + 0x30))
+
+#endif
+
+/* Both secure + non secure */
+#define FLASH_OPTCR       (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
+#define FLASH_OPSR        (*(volatile uint32_t *)(FLASH_BASE + 0x18))
+
+#define FLASH_OPSR_DATA_OP          (1 << 21)
+#define FLASH_OPSR_BK_OP            (1 << 22)
+#define FLASH_OPSR_SYSF_OP          (1 << 23)
+#define FLASH_OPSR_OTP_OP           (1 << 24)
+#define FLASH_OPSR_CODE_MASK        (0x7 << 29)
+#define FLASH_OPSR_CODE_WRITE       (0x1 << 29)
+#define FLASH_OPSR_CODE_OBK_ALT_ERASE   (0x2 << 29)
+#define FLASH_OPSR_CODE_SEC_ERASE   (0x3 << 29)
+#define FLASH_OPSR_CODE_BANK_ERASE  (0x4 << 29)
+#define FLASH_OPSR_CODE_MASS_ERASE  (0x5 << 29)
+#define FLASH_OPSR_CODE_OPT_CHANGE  (0x6 << 29)
+#define FLASH_OPSR_CODE_OBK_SWAP    (0x7 << 29)
+
+
+
+
+
+#if defined(DUALBANK_SWAP) && defined (__WOLFBOOT)
+    #define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
+    #define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
+    #define FLASH_OPTSR_SWAP_BANK (1 << 31)
+#endif
+
+/* Register values (for both secure and non secure registers)
+ * RM0481 Table 75 */
+
+#define FLASH_SR_BSY                        (1 << 0)
+#define FLASH_SR_WBNE                       (1 << 1)
+#define FLASH_SR_DBNE                       (1 << 3)
+#define FLASH_SR_EOP                        (1 << 16)
+#define FLASH_SR_WRPE                       (1 << 17)
+#define FLASH_SR_PGSE                       (1 << 18)
+#define FLASH_SR_STRBE                      (1 << 19)
+#define FLASH_SR_INCE                       (1 << 20)
+#define FLASH_SR_OPTE                       (1 << 21)
+#define FLASH_SR_OPTWE                      (1 << 22)
+
+#define FLASH_CCR_CLR_BUSY                  (1 << 0)
+#define FLASH_CCR_CLR_WBNE                  (1 << 1)
+#define FLASH_CCR_CLR_DBNE                  (1 << 3)
+#define FLASH_CCR_CLR_EOP                   (1 << 16)
+#define FLASH_CCR_CLR_WRPE                  (1 << 17)
+#define FLASH_CCR_CLR_PGSE                  (1 << 18)
+#define FLASH_CCR_CLR_STRBE                 (1 << 19)
+#define FLASH_CCR_CLR_INCE                  (1 << 20)
+#define FLASH_CCR_CLR_OPTE                  (1 << 21)
+#define FLASH_CCR_CLR_OPTWE                 (1 << 22)
+
+#define FLASH_CR_LOCK                       (1 << 0)
+#define FLASH_CR_PG                         (1 << 1)
+#define FLASH_CR_SER                        (1 << 2)
+#define FLASH_CR_BER                        (1 << 3)
+#define FLASH_CR_FW                         (1 << 4)
+#define FLASH_CR_STRT                       (1 << 5)
+#define FLASH_CR_PNB_SHIFT                  6
+#define FLASH_CR_PNB_MASK                   0x7F
+#define FLASH_CR_MER                        (1 << 15)
+#define FLASH_CR_EOPIE                      (1 << 16)
+#define FLASH_CR_WRPERRIE                   (1 << 17)
+#define FLASH_CR_PGSERRIE                   (1 << 18)
+#define FLASH_CR_STRBERRIE                  (1 << 19)
+#define FLASH_CR_INCERRIE                   (1 << 20)
+#define FLASH_CR_OBKIE                      (1 << 21)
+#define FLASH_CR_OBKWIE                     (1 << 22)
+#define FLASH_CR_OPTCHANGEERRIE             (1 << 23)
+#define FLASH_CR_BKSEL                      (1 << 31)
+
+
+#define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
+#define FLASH_ACR_LATENCY_MASK              (0x0F)
+#define FLASH_ACR_WRHIGHFREQ_MASK           (0x03)
+#define FLASH_ACR_WRHIGHFREQ_SHIFT          (4)
+
+
+#define FLASH_OPTCR          (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
+#define FLASH_OPTCR_OPTSTRT   (1 << 1)
+#define FLASH_OPTCR_OPTLOCK   (1 << 0)
+#define FLASH_OPTCR_SWAP_BANK (1 << 31)
+
+#define FLASHMEM_ADDRESS_SPACE    (0x08000000)
+#define FLASH_PAGE_SIZE           (0x2000)      /* 8KB */
+#define FLASH_BANK2_BASE          (0x08100000) /*!< Base address of Flash Bank2     */
+#define BOOTLOADER_SIZE           (0x8000)
+#define FLASH_TOP                 (0x081FFFFF) /*!< FLASH end address (sector 127)  */
+
+#define FLASH_KEY1                            (0x45670123U)
+#define FLASH_KEY2                            (0xCDEF89ABU)
+#define FLASH_OPTKEY1                         (0x08192A3BU)
+#define FLASH_OPTKEY2                         (0x4C5D6E7FU)
+
+/* GPIO*/
+#define GPIOA_BASE 0x52020000
+#define GPIOB_BASE 0x52020400
+#define GPIOC_BASE 0x52020800
+#define GPIOD_BASE 0x52020C00
+#define GPIOF_BASE 0x52021400
+#define GPIOG_BASE 0x52021800
+
+/* RCC AHB2 Clock Enable Register */
+#define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
+#define GPIOA_AHB2_CLOCK_ER (1 << 0)
+#define GPIOB_AHB2_CLOCK_ER (1 << 1)
+#define GPIOC_AHB2_CLOCK_ER (1 << 2)
+#define GPIOD_AHB2_CLOCK_ER (1 << 3)
+#define GPIOF_AHB2_CLOCK_ER (1 << 5)
+#define GPIOG_AHB2_CLOCK_ER (1 << 6)
+#define TRNG_AHB2_CLOCK_ER  (1 << 18)
+#define PKA_AHB2_CLOCK_ER   (1 << 19)
+#define SAES_AHB2_CLOCK_ER  (1 << 20)
+#define SRAM2_AHB2_CLOCK_ER  (1 << 30)
+#define SRAM3_AHB2_CLOCK_ER  (1 << 31)
+
+#define RCC_APB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xA4))
+#define UART1_APB2_CLOCK_ER_VAL (1 << 14)
+
+#define UART1_PIN_AF 8
+#define UART1_RX_PIN 8
+#define UART1_TX_PIN 7
+
+#define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30))
+
+
+
+#define LED_AHB2_ENABLE (GPIOG_AHB2_CLOCK_ER | GPIOB_AHB2_CLOCK_ER | \
+        GPIOF_AHB2_CLOCK_ER)
+#define LED_BOOT_PIN (4)  /* PG4 - Nucleo board - Orange Led */
+#define LED_USR_PIN (0)   /* PB0  - Nucleo board  - Green Led */
+#define LED_EXTRA_PIN (4) /* PF4 - Nucleo board - Blue Led */
+
+#endif /* STM32H5_DEF_INCLUDED */

@@ -113,6 +113,7 @@ void hal_prepare_boot(void);
 void hal_tz_claim_nonsecure_area(uint32_t address, int len);
 void hal_tz_release_nonsecure_area(void);
 void hal_tz_sau_init(void);
+void hal_tz_sau_ns_region(void);
 void hal_gtzc_init(void);
 
 /* Needed by TZ to claim/release nonsecure flash areas */

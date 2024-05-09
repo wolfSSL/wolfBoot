@@ -6,7 +6,7 @@
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
-CFLAGS+=-I.
+CFLAGS+=-I. -I..
 CFLAGS+=-I./wcs
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
@@ -56,6 +56,8 @@ ifeq ($(DEBUG_UART),1)
 endif
 
 ifeq ($(TZEN),1)
+    CFLAGS+=-DNONSECURE_APP
+    CFLAGS+=-I./
     APP_OBJS+=../hal/$(TARGET)_ns.o
     ifeq ($(WOLFCRYPT_TZ),1)
         APP_OBJS+=../src/wc_secure_calls.o
@@ -88,7 +90,7 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/wc_encrypt.o
             APP_OBJS+=./wcs/wc_port.o
         endif
-        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=12940
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=12944
     endif
 else
     APP_OBJS+=../hal/$(TARGET).o
@@ -149,6 +151,19 @@ ifeq ($(TARGET),stm32l5)
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..
   APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+endif
+
+ifeq ($(TARGET),stm32h5)
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-stm32h5-ns.ld
+    APP_OBJS+=wcs/wolfcrypt_secure.o
+  else
+    LSCRIPT_TEMPLATE=ARM-stm32h5.ld
+  endif
+  CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
+  LDFLAGS+=-mcpu=cortex-m33
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
 endif
 
 ifeq ($(TARGET),stm32u5)
@@ -369,6 +384,9 @@ delta-extra-data: image.bin
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
+../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
+
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
@@ -398,6 +416,8 @@ $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
 		> $(@)
 	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
+
 
 FORCE:
 

@@ -647,9 +647,6 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
 		./lib/wolfPKCS11/src/internal.o \
 		./lib/wolfPKCS11/src/slot.o \
 		./lib/wolfPKCS11/src/wolfpkcs11.o
-endif
-
-ifeq ($(WOLFCRYPT_TZ),1)
   STACK_USAGE=16688
 endif
 

@@ -80,7 +80,9 @@ CK_FUNCTION_LIST wolfpkcs11nsFunctionList = {
 const char pkcs11_library_name[]="wolfCrypt_secure_mode";
 
 extern unsigned int _start_heap;
+#ifndef NULL
 #define NULL (((void *)0))
+#endif
 
 void * _sbrk(unsigned int incr)
 {

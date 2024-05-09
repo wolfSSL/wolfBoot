@@ -1,7 +1,7 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
-    RAM (rwx) : ORIGIN = 0x20040000, LENGTH = 64K /* Run in lowmem */
+    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
+    RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping TCM only */
 }
 
 SECTIONS
@@ -9,14 +9,10 @@ SECTIONS
     .text :
     {
         _start_text = .;
-        . = ALIGN(8);
         KEEP(*(.isr_vector))
-        . = ALIGN(8);
-        *(.init)
-        *(.fini)
         *(.text*)
         *(.rodata*)
-        . = ALIGN(8);
+        . = ALIGN(4);
         _end_text = .;
     } > FLASH
 
@@ -27,27 +23,28 @@ SECTIONS
     } > FLASH
 
     _stored_data = .;
-
     .data : AT (_stored_data)
     {
         _start_data = .;
         KEEP(*(.data*))
-        . = ALIGN(8);
+        . = ALIGN(4);
         KEEP(*(.ramcode))
-        . = ALIGN(8);
+        . = ALIGN(4);
         _end_data = .;
     } > RAM
 
-    .bss :
+    .bss (NOLOAD) :
     {
         _start_bss = .;
+        __bss_start__ = .;
         *(.bss*)
         *(COMMON)
-        . = ALIGN(8);
+        . = ALIGN(4);
         _end_bss = .;
+        __bss_end__ = .;
         _end = .;
     } > RAM
+    . = ALIGN(4);
 }
 
-PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));
+END_STACK = ORIGIN(RAM) + LENGTH(RAM);

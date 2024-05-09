@@ -326,10 +326,10 @@ void isr_empty(void)
  *  - Call the application entry point
  *
  */
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-#define VTOR (*(volatile uint32_t *)(0xE002ED08)) // SCB_NS -> VTOR
-#else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
+
+#ifdef TZEN
+#include "hal.h"
 #endif
 
 
@@ -353,6 +353,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
     /* Disable interrupts */
     asm volatile("cpsid i");
+
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
