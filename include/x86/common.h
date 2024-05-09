@@ -67,4 +67,5 @@ void cpuid(uint32_t eax_param,
 int cpuid_is_1gb_page_supported();
 void switch_to_long_mode(uint64_t *entry, uint32_t page_table);
 void x86_log_memory_load(uint32_t start, uint32_t end, const char *name);
+void hlt();
 #endif /* COMMON_H */

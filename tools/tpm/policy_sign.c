@@ -205,7 +205,7 @@ static void printHexString(const unsigned char* bin, unsigned long sz,
     printf("\t");
     for (i = 0; i < sz; i++) {
         printf("%02x", bin[i]);
-        if (((i+1) % maxLine) == 0 && i+1 != sz)
+        if (maxLine > 0 && ((i+1) % maxLine) == 0 && i+1 != sz)
             printf("\n\t");
     }
     printf("\n");

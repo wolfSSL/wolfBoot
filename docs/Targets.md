@@ -2198,56 +2198,60 @@ The following variables must be set in your `.config` file when using this featu
 - `WOLFBOOT_LOAD_BASE`: the address where wolfboot will be loaded in RAM after the first initialization phase
 
 While Intel FSP aims to abstract away specific machine details, you still need
-some machine-specific code. In the next section we show how to retrieve the
-target-specific code for qemu. Refer to the Intel Integration Guide of the selected
-silicon for more information.
+some machine-specific code. Current supported targets are QEMU and the TigerLake based Kontron VX3060-S2 board.
+Refer to the Intel Integration Guide of the selected silicon for more information.
 
 Note:
 
 - This feature requires `NASM` to be installed on the machine building wolfBoot.
 
 
-### Running on 64-bit Qemu
+### Running on 64-bit QEMU
 
-An example configuration file is available in `config/examples/x86_fsp_qemu.config`.
+Two example configuration files are available: `config/examples/x86_fsp_qemu.config` and `config/examples/x86_fsp_qemu_seal.config`.
+Both will try to load a 64bit ELF/Multiboot2 payload from the emulated sata drive. 
+The second one is an example of configuration that also do measure boot and seal/unseal secrets using a TPM. 
 
-Assuming that you have compiled a linux kernel that can boot on qemu, you can verify
-and stage it by running the following commands:
+A test ELF/Multiboot2 image is provided as well. To test `config/examples/x86_fsp_qemu.config` use the following steps:
+
 
 ```
 # Copy the example configuration for this target
 cp config/examples/x86_fsp_qemu.config .config
 
 # Create necessary Intel FSP binaries from edk2 repo
-tools/x86_fsp/qemu/qemu_build_fsp.sh
+./tools/scripts/x86_fsp/qemu/qemu_build_fsp.sh
 
 # build wolfboot
 make
 
-# The next script needs to be run from wolboot root folder and assumes your
-# kernel is in th root folder, named bzImage
-# If this is not the case, change the path in the script accordingly
-tools/x86_fsp/qemu/make_hd.sh
+# make test-app
+make test-app/image.elf
 
-# Run wolfBoot + Linux in qemu
-tools/scripts/qemu64/qemu64.sh
+# make_hd.sh sign the image, creates a file-based hard disk image with GPT table and raw partitions and then copies the signed images into the partitions.
+IMAGE=test-app/image.elf tools/scripts/x86_fsp/qemu/make_hd.sh
 
+# run wolfBoot + test-image
+./tools/scripts/x86_fsp/qemu/qemu.sh
 ```
 
-#### Sample boot output
+#### Sample boot output using config/examples/x86_fsp_qemu.config
 ```
 Cache-as-RAM initialized
+FSP-T:0.0.10 build 0
+FSP-M:0.0.10 build 0
+no microcode for QEMU target
 calling FspMemInit...
 
 ============= FSP Spec v2.0 Header Revision v3 ($QEMFSP$ v0.0.10.0) =============
 Fsp BootFirmwareVolumeBase - 0xFFE30000
 Fsp BootFirmwareVolumeSize - 0x22000
 Fsp TemporaryRamBase       - 0x4
-Fsp TemporaryRamSize       - 0x20000
+Fsp TemporaryRamSize       - 0x50000
 Fsp PeiTemporaryRamBase    - 0x4
-Fsp PeiTemporaryRamSize    - 0x14CCC
-Fsp StackBase              - 0x14CD0
-Fsp StackSize              - 0xB334
+Fsp PeiTemporaryRamSize    - 0x34000
+Fsp StackBase              - 0x34004
+Fsp StackSize              - 0x1C000
 Register PPI Notify: DCD0BE23-9586-40F4-B643-06522CED4EDE
 Install PPI: 8C8CE578-8A3D-4F1C-9935-896185C32DD3
 Install PPI: 5473C07A-3DCB-4DCA-BD6F-1E9689E7349A
@@ -2273,15 +2277,15 @@ Install PPI: 7408D748-FC8C-4EE6-9288-C4BEC092A410
 Register PPI Notify: F894643D-C449-42D1-8EA8-85BDD8C65BDE
 PeiInstallPeiMemory MemoryBegin 0x3EF00000, MemoryLength 0x100000
 FspmInitPoint() - End
-Temp Stack : BaseAddress=0x14CD0 Length=0xB334
-Temp Heap  : BaseAddress=0x4 Length=0x14CCC
-Total temporary memory:    131072 bytes.
+Temp Stack : BaseAddress=0x34004 Length=0x1C000
+Temp Heap  : BaseAddress=0x4 Length=0x34000
+Total temporary memory:    327680 bytes.
   temporary memory stack ever used:       3360 bytes.
   temporary memory heap used for HobList: 2104 bytes.
   temporary memory heap occupied by memory pages: 0 bytes.
-Old Stack size 45876, New stack size 131072
+Old Stack size 114688, New stack size 131072
 Stack Hob: BaseAddress=0x3EF00000 Length=0x20000
-Heap Offset = 0x3EF1FFFC Stack Offset = 0x3EEFFFFC
+Heap Offset = 0x3EF1FFFC Stack Offset = 0x3EECFFFC
 Loading PEIM 52C05B14-0B98-496C-BC3B-04B50211D680
 Loading PEIM at 0x0003EFF5150 EntryPoint=0x0003EFFBBC6 PeiCore.efi
 Reinstall PPI: 8C8CE578-8A3D-4F1C-9935-896185C32DD3
@@ -2291,19 +2295,34 @@ Install PPI: F894643D-C449-42D1-8EA8-85BDD8C65BDE
 Notify: PPI Guid: F894643D-C449-42D1-8EA8-85BDD8C65BDE, Peim notify entry point: FFE40AB2
 Memory Discovered Notify invoked ...
 FSP TOLM = 0x3F000000
-Migrate FSP-M UPD from 7F548 to 3EFF4000
+Migrate FSP-M UPD from 7F540 to 3EFF4000
 FspMemoryInitApi() - [Status: 0x00000000] - End
 success
 top reserved 0_3EF00000h
+mem: [ 0x3EEF0000, 0x3EF00000 ] - stack (0x10000)
+mem: [ 0x3EEEFFF4, 0x3EEF0000 ] - stage2 parameter (0xC)
 hoblist@0x3EF20000
+mem: [ 0x3EEE8000, 0x3EEEFFF4 ] - page tables (0x7FF4)
+page table @ 0x3EEE8000 [length: 7000]
+mem: [ 0x3EEE7FF8, 0x3EEE8000 ] - stage2 ptr holder (0x8)
+TOLUM: 0x3EEE7FF8
 TempRamExitApi() - Begin
 Memory Discovered Notify completed ...
 TempRamExitApi() - [Status: 0x00000000] - End
+mem: [ 0x800000, 0x800084 ] - stage1 .data (0x84)
+mem: [ 0x8000A0, 0x801A80 ] - stage1 .bss (0x19E0)
+mem: [ 0xFED5E00, 0xFEEAF00 ] - FSPS (0x15100)
+Authenticating FSP_S at FED5E00...
+Image size 86016
+verify_payload: image open successfully.
+verify_payload: integrity OK. Checking signature.
+FSP_S: verified OK.
+FSP-S:0.0.10 build 0
 call silicon...
 SiliconInitApi() - Begin
 Install PPI: 49EDB1C1-BF21-4761-BB12-EB0031AABB39
 Notify: PPI Guid: 49EDB1C1-BF21-4761-BB12-EB0031AABB39, Peim notify entry point: FFE370A2
-The 1th FV start address is 0x000FFED6000, size is 0x00015000, handle is 0xFFED6000
+The 1th FV start address is 0x0000FED5F00, size is 0x00015000, handle is 0xFED5F00
 DiscoverPeimsAndOrderWithApriori(): Found 0x4 PEI FFS files in the 1th FV
 Loading PEIM 86D70125-BAA3-4296-A62F-602BEBBB9081
 Loading PEIM at 0x0003EFEE150 EntryPoint=0x0003EFF15B9 DxeIpl.efi
@@ -2335,6 +2354,11 @@ FspInitEndOfPeiCallback--
 FSP is waiting for NOTIFY
 FspSiliconInitApi() - [Status: 0x00000000] - End
 success
+pcie retraining failed FFFFFFFF
+cap a 0
+ddt disabled 0
+device enable: 0
+device enable: 128
 NotifyPhaseApi() - Begin  [Phase: 00000020]
 FSP Post PCI Enumeration ...
 Install PPI: 30CFE3E7-3DE1-4586-BE20-DEABA1B3B793
@@ -2357,8 +2381,15 @@ FspEndOfFirmwareCallback++
 FspEndOfFirmwareCallback--
 NotifyPhaseApi() - End  [Status: 0x00000000]
 CPUID(0):D 68747541 444D4163
-loading wolfboot at 2000000...
+mem: [ 0x1FFFF00, 0x200CC70 ] - wolfboot (0xCD70)
+mem: [ 0x200CC70, 0x222FA00 ] - wolfboot .bss (0x222D90)
 load wolfboot end
+Authenticating wolfboot at 2000000...
+Image size 52336
+verify_payload: image open successfully.
+verify_payload: integrity OK. Checking signature.
+wolfBoot: verified OK.
+starting wolfboot 64bit
 AHCI port 0: No disk detected
 AHCI port 1: No disk detected
 AHCI port 2: No disk detected
@@ -2381,46 +2412,95 @@ Total partitions on disk0: 2
 Checking primary OS image in 0,0...
 Checking secondary OS image in 0,1...
 Versions, A:1 B:2
+Load address 0x222FA00
 Attempting boot from partition B
-Image size 11982512
-Firmware Valid
-Booting at 5000100
-linux payload
+mem: [ 0x222FA00, 0x2241DC8 ] - ELF (0x123C8)
+Loading image from disk...done.
+Image size 74696
+Checking image integrity...done.
+Verifying image signature...done.
+Firmware Valid.
+Booting at 222FB00
+mem: [ 0x100, 0x1E0 ] - MPTABLE (0xE0)
+Loading elf at 0x222FB00
+Found valid elf64 (little endian)
+Program Headers 7 (size 56)
+Load 504 bytes (offset 0x0) to 0x400000 (p 0x400000)
+Load 3999 bytes (offset 0x1000) to 0x401000 (p 0x401000)
+Load 1952 bytes (offset 0x2000) to 0x402000 (p 0x402000)
+Load 32 bytes (offset 0x3000) to 0x403000 (p 0x403000)
+Entry point 0x401000
+Elf loaded (ret 0), entry 0x0_401000
+mb2 header found at 2232B00
 booting...
-Linux version 5.17.15 (arch@wb-hg-2) (x86_64-linux-gcc.br_real (Buildroot toolchains.bootlin.com-2021.11-5) 11.2.0, GNU ld (GNU Binutils) 2.37) #24 PREEMPT Wed May 17 13:47:24 UTC 2023
+wolfBoot QEMU x86 FSP test app
 ```
 
-### Running on 64-bit Qemu with swtpm (TPM emulator)
+### Running on QEMU with swtpm (TPM emulator)
 
-The example configuration for this setup can be found in
-`config/examples/x86_fsp_qemu_tpm.config`.
+First step: [clone and install swtpm](https://github.com/stefanberger/swtpm), a
+TPM emulator that can be connected to qemu guest VMs. This TPM emulator will
+create a memory-mapped I/O device.
 
-First step: [clone and install swtpm](https://github.com/stefanberger/swtpm), a TPM emulator that can be connected to qemu
-guest VMs. This TPM emulator will create a memory-mapped I/O device.
+A small note is that `config/examples/x86_fsp_qemu_seal.config` showcases two
+different key ecc size of 384 and 256 of authentication for image verification
+and TPM sealing respectively.
 
-The other steps to follow are:
-
+The correct steps to run the example:
 ```
-# Copy the example configuration for this target
-cp config/examples/x86_fsp_qemu_tpm.config .config
+# copy the example configuration for this target
+cp config/examples/x86_fsp_qemu_seal.config .config
 
-# Create necessary Intel FSP binaries from edk2 repo
-tools/x86_fsp/qemu/qemu_build_fsp.sh
+# create necessary Intel FSP binaries from edk2 repo
+tools/scripts/x86_fsp/qemu/qemu_build_fsp.sh
 
-# Compile wolfBoot and assemble the loader image
-make
+# make keytools and tpmtools
+make keytools
+make tpmtools
 
-# The next script needs to be run from wolboot root folder and assumes your
-# kernel is in wolfBoot's root folder. The file should be named `bzImage`.
-# If this is not the case, change the path in the script accordingly
+# create two keys, one for signing the images (ecc384) and one to seal/unseal secret into the TPM (ecc256)
+./tools/keytools/keygen --force --ecc384 -g wolfboot_signing_private_key.der --ecc256 -g tpm_seal_key.key
 
-tools/x86_fsp/qemu/make_hd.sh
+# build wolfboot, manually add ECC256 for TPM
+make CFLAGS_EXTRA="-DHAVE_ECC256"
 
-# Run wolfBoot + linux in qemu, with swTPM connected to the guest machine.
-# The script will start the TPM emulator before launching the VM.
-tools/scripts/qemu64/qemu64-tpm.sh
+# compute the value of PCR0 to sign with TPM key
+PCR0=$(python ./tools/scripts/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
+
+# sign the policy
+./tools/tpm/policy_sign -ecc256 -key=tpm_seal_key.key  -pcr=0 -pcrdigest=$PCR0
+
+# install the policy
+./tools/scripts/x86_fsp/tpm_install_policy.sh policy.bin.sig
+
+# make test-app
+make test-app/image.elf
+
+# make_hd.sh sign the image, creates a file-based hard disk image with GPT table and raw partitions and then copy the signed images into the partitions.
+IMAGE=test-app/image.elf SIGN=--ecc384 tools/scripts/x86_fsp/qemu/make_hd.sh
+
+# run wolfBoot + test-image, use -t to emulate a TPM (requires swtpm)
+./tools/scripts/x86_fsp/qemu/qemu.sh -t
 ```
 
 For more advanced uses of TPM, please check [TPM.md](TPM.md) to configure wolfBoot
 according to your secure boot strategy.
 
+### Running on Kontron VX3060-S2
+
+A reference configuration and helper scripts are provided to run wolfBoot on
+Kontron VX3060-S2 board.
+A flash dump of the original Flash BIOS is needed.
+To compile a flashable image run the following steps:
+
+```
+cp config/examples/kontron_vx3060_s2.config .config
+./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh
+make tpmtools
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -k 
+make CFLAGS_EXTRA="-DHAVE_ECC256"
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
+```
+
+they produce a file named `final_image.bin` inside the root folder of the
+repository that can be directly flashed into the BIOS flash of the board.

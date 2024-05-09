@@ -1,4 +1,4 @@
-/* gpt.h
+/* exceptions.h
  *
  * Copyright (C) 2023 wolfSSL Inc.
  *
@@ -6,7 +6,7 @@
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
+ * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
  * wolfBoot is distributed in the hope that it will be useful,
@@ -19,10 +19,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef GPT_H
-#define GPT_H
-int disk_open(int drv);
-int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf);
-int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf);
-int disk_find_partion_by_label(int drv, const char *label);
-#endif
+#ifndef EXCEPTIONS_H
+#define EXCEPTIONS_H
+
+#include <stdint.h>
+
+int setup_interrupt_gate(int vnum, uintptr_t handler);
+int setup_interrupts();
+void deinit_interrupts();
+void wfi();
+
+#endif /* EXCEPTIONS_H */

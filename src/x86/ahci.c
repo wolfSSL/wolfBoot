@@ -45,7 +45,7 @@
 #include <tpm.h>
 
 #if defined(WOLFBOOT_FSP)
-#include <stage1.h>
+#include <stage2_params.h>
 #endif
 
 #include <wolfssl/wolfcrypt/coding.h>
@@ -62,6 +62,9 @@
 #if defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) || defined(WOLFBOOT_TPM_SEAL)
 #ifndef ATA_UNLOCK_DISK_KEY_SZ
 #define ATA_UNLOCK_DISK_KEY_SZ 32
+#endif
+#ifndef WOLFBOOT_TPM_SEAL_KEY_ID
+#define WOLFBOOT_TPM_SEAL_KEY_ID (0)
 #endif
 #endif /* defined(WOLFBOOT_ATA_DISK_LOCK_PASSWORD) || defined(WOLFBOOT_TPM_SEAL) */
 
@@ -223,7 +226,10 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 {
     int password_len;
 
-    *secret_size = strlen(WOLFBOOT_ATA_DISK_LOCK_PASSWORD);
+    password_len = strlen(WOLFBOOT_ATA_DISK_LOCK_PASSWORD);
+    if (*secret_size < password_len)
+        return -1;
+    *secret_size = password_len;
     memcpy(secret, (uint8_t*)WOLFBOOT_ATA_DISK_LOCK_PASSWORD, *secret_size);
     return 0;
 }
@@ -236,8 +242,9 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
  *
  * @param key_slot The key slot ID to calculate the hash for.
  * @param hash A pointer to store the resulting SHA256 hash.
+ * @return 0 on success, -1 on failure
  */
-static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
+static int get_key_sha256(uint8_t key_slot, uint8_t *hash)
 {
     int blksz;
     unsigned int i = 0;
@@ -246,7 +253,7 @@ static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
     wc_Sha256 sha256_ctx;
 
     if (!pubkey || (pubkey_sz < 0))
-        return;
+        return -1;
 
     wc_InitSha256(&sha256_ctx);
     while (i < (uint32_t)pubkey_sz) {
@@ -257,25 +264,31 @@ static void get_key_sha256(uint8_t key_slot, uint8_t *hash)
         i += blksz;
     }
     wc_Sha256Final(&sha256_ctx, hash);
+    return 0;
 }
 
 static int sata_get_random_base64(uint8_t *out, int *out_size)
 {
     uint8_t rand[ATA_SECRET_RANDOM_BYTES];
-    word32 _out_size;
+    word32 base_64_len;
     int ret;
 
     ret = wolfBoot_get_random(rand, ATA_SECRET_RANDOM_BYTES);
     if (ret != 0)
         return ret;
-    _out_size = *out_size;
-    ret = Base64_Encode(rand, ATA_SECRET_RANDOM_BYTES, out, &_out_size);
+    base_64_len = *out_size;
+    ret = Base64_Encode_NoNl(rand, ATA_SECRET_RANDOM_BYTES, out, &base_64_len);
     if (ret != 0)
         return ret;
 
     /* double check we have a NULL-terminated string */
-    *out_size = (int)_out_size;
-    out[*out_size] = '\0';
+    if ((int)base_64_len < *out_size) {
+        out[base_64_len] = '\0';
+        base_64_len += 1;
+    } else {
+        out[base_64_len-1] = '\0';
+    }
+    *out_size = (int)base_64_len;
     return 0;
 }
 
@@ -296,12 +309,13 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
     if (ret == 0) {
         wolfBoot_printf("Creating new secret (%d bytes)\r\n", *secret_size);
         wolfBoot_printf("%s\r\n", secret);
-            /* seal new secret */
+
+        /* seal new secret */
         ret = wolfBoot_seal(pubkey_hint, policy, policy_size,
                             ATA_UNLOCK_DISK_KEY_NV_INDEX,
                             secret, *secret_size);
     }
- 
+
     if (ret == 0) {
         /* unseal again to make sure it works */
         memset(secret_check, 0, sizeof(secret_check));
@@ -352,7 +366,11 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
         return -1;
 
     memcpy(policy, pol, policy_size);
-    get_key_sha256(0, pubkey_hint);
+    ret = get_key_sha256(WOLFBOOT_TPM_SEAL_KEY_ID, pubkey_hint);
+    if (ret != 0) {
+        wolfBoot_printf("failed to find key id %d\r\n", WOLFBOOT_TPM_SEAL_KEY_ID);
+        return ret;
+    }
     ret = wolfBoot_unseal(pubkey_hint, policy, policy_size,
                           ATA_UNLOCK_DISK_KEY_NV_INDEX,
                           secret, secret_size);
@@ -361,6 +379,13 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
             ret = sata_create_and_seal_unlock_secret(pubkey_hint, policy, policy_size, secret,
                                                      secret_size);
     }
+#if defined(WOLFBOOT_DEBUG_REMOVE_SEALED_ON_ERROR)
+    if (ret != 0) {
+        wolfBoot_printf("deleting secret and panic!\r\n");
+        wolfBoot_delete_seal(ATA_UNLOCK_DISK_KEY_NV_INDEX);
+        panic();
+    }
+#endif
     if (ret != 0) {
         wolfBoot_printf("get sealed unlock secret failed! %d (%s)\n", ret,
                         wolfTPM2_GetRCString(ret));
@@ -370,52 +395,108 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 
-static int sata_unlock_disk(int drv)
+#ifdef WOLFBOOT_ATA_DISABLE_USER_PASSWORD
+static int sata_disable_password(int drv)
+{
+    enum ata_security_state ata_st;
+    int r;
+    wolfBoot_printf("DISK DISABLE PASSWORD\r\n");
+    ata_st = ata_security_get_state(drv);
+    wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
+    if (ata_st == ATA_SEC4) {
+        r = ata_security_unlock_device(drv, ATA_MASTER_PASSWORD, 1);
+        wolfBoot_printf("ATA device unlock: returned %d\r\n", r);
+        if (r == 0) {
+            r = ata_security_disable_password(drv, ATA_MASTER_PASSWORD, 1);
+            wolfBoot_printf("ATA disable password: returned %d\r\n", r);
+        }
+    }
+    panic();
+    return 0;
+}
+#endif
+
+/**
+ * @brief Unlocks a SATA disk for a given drive.
+ *
+ * This function unlocks a SATA disk identified by the specified drive number.
+ * If the SATA disk has no user password set, this function locks the disk.
+ *
+ * @param drv The drive number of the SATA disk to be unlocked.
+ * @return An integer indicating the success or failure of the unlocking
+ * operation.
+ *         - 0: Success (disk unlocked).
+ *         - -1: Failure (unable to unlock the disk).
+ */
+int sata_unlock_disk(int drv, int freeze)
 {
     int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
     uint8_t secret[ATA_UNLOCK_DISK_KEY_SZ];
     enum ata_security_state ata_st;
     int r;
 
+#ifdef WOLFBOOT_ATA_DISABLE_USER_PASSWORD
+    sata_disable_password(0);
+#endif
     r = sata_get_unlock_secret(secret, &secret_size);
     if (r != 0)
         return r;
 #ifdef TARGET_x86_fsp_qemu
     wolfBoot_printf("DISK LOCK SECRET: %s\r\n", secret);
 #endif
-
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
+#if defined(TARGET_x86_fsp_qemu)
+    if (ata_st == ATA_SEC0)
+        return 0;
+#endif
     if (ata_st == ATA_SEC1) {
-        AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
-        r = ata_security_freeze_lock(drv);
-        AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
+        AHCI_DEBUG_PRINTF("ATA: calling set passphrase\r\n", r);
+        r = ata_security_set_password(drv, 0, (char*)secret);
+        if (r != 0)
+            return -1;
+        AHCI_DEBUG_PRINTF("ATA: calling freeze lock\r\n", r);
+        if (freeze) {
+            r = ata_security_freeze_lock(drv);
+            AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
+            if (r != 0)
+                return -1;
+        }
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         ata_st = ata_security_get_state(drv);
-        wolfBoot_printf("ATA: Security disabled. State SEC%d\r\n", ata_st);
+        wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
     }
     else if (ata_st == ATA_SEC4) {
         AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
-        r = ata_security_unlock_device(drv, (char*)secret);
+        r = ata_security_unlock_device(drv, (char*)secret, 0);
         AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         ata_st = ata_security_get_state(drv);
         if (ata_st == ATA_SEC5) {
-            AHCI_DEBUG_PRINTF("ATA identify: calling device freeze\r\n", r);
-            r = ata_security_freeze_lock(drv);
-            AHCI_DEBUG_PRINTF("ATA device freeze: returned %d\r\n", r);
+            if (freeze) {
+                AHCI_DEBUG_PRINTF("ATA identify: calling freeze lock\r\n", r);
+                r = ata_security_freeze_lock(drv);
+                AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n",
+                                  r);
+                if (r != 0)
+                    return -1;
+            } else {
+                AHCI_DEBUG_PRINTF("ATA security freeze skipped\r\n");
+            }
             r = ata_identify_device(drv);
             AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         }
-        ata_st = ata_security_get_state(drv);
-        if (ata_st != ATA_SEC6) {
-            panic();
-        }
-        ata_st = ata_security_get_state(drv);
-        wolfBoot_printf("ATA: Security enabled. State SEC%d\r\n", ata_st);
     }
+    ata_st = ata_security_get_state(drv);
+    if ((freeze && ata_st != ATA_SEC6) || (!freeze && ata_st != ATA_SEC5)) {
+        AHCI_DEBUG_PRINTF("ATA: Security is not enabled/locked (State SEC%d)\r\n",
+                          ata_st);
+        panic();
+    }
+    AHCI_DEBUG_PRINTF("ATA: Security enabled. State SEC%d\r\n", ata_st);
+
     return 0;
 }
 #endif /* WOLFBOOT_ATA_DISK_LOCK */
@@ -656,10 +737,6 @@ void sata_enable(uint32_t base)
                                 drv, i);
                         r = ata_identify_device(drv);
                         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
-#ifdef WOLFBOOT_ATA_DISK_LOCK
-                        if (r == 0)
-                            r = sata_unlock_disk(drv);
-#endif /* WOLFBOOT_ATA_DISK_LOCK */
                     }
                 } else {
                     AHCI_DEBUG_PRINTF("AHCI port %d: device with signature %08x is not supported\r\n",

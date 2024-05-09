@@ -51,6 +51,11 @@
 #define NULL 0
 #endif
 
+void hlt()
+{
+    __asm__ ("hlt");
+}
+
 /**
  * @brief Memory-mapped write access to a 32-bit register.
  *
@@ -265,9 +270,7 @@ void delay(int msec)
  */
 void panic()
 {
-    while (1) {
-        delay(1);
-    }
+    hlt();
 }
 
 /**

@@ -25,7 +25,7 @@
 
 #define PAGE_TABLE_PAGE_SIZE (0x1000)
 #ifndef PAGE_TABLE_PAGE_NUM
-/* 7 pages are enough to identity map al 4GB */
+/* 7 pages are enough to identity map all 4GB */
 #define PAGE_TABLE_PAGE_NUM 7
 #endif /* PAGE_TABLE_PAGE_NUM */
 
@@ -42,7 +42,7 @@
 #define PAGE_2MB_SHIFT 21
 
 #if !defined(BUILD_LOADER_STAGE1)
-#define WOLFBOOT_PTP_NUM 128
+#define WOLFBOOT_PTP_NUM 512
 static uint8_t page_table_pages[WOLFBOOT_PTP_NUM * PAGE_TABLE_PAGE_SIZE]
 __attribute__((aligned(PAGE_TABLE_PAGE_SIZE)));
 static int page_table_page_used;
@@ -220,12 +220,6 @@ void x86_paging_dump_info()
                     (uint32_t)((uintptr_t)page_table_pages >> 32),
                     (uint32_t)(uintptr_t)page_table_pages);
     wolfBoot_printf("page_table_pages used: %d\r\n", page_table_page_used);
-    wolfBoot_printf("mem start @ %x %xh\r\n",
-                    (uint32_t)((uintptr_t)_mem >> 32),
-                    (uint32_t)(uintptr_t)_mem);
-    wolfBoot_printf("mem curr @ %x %xh\r\n",
-                    (uint32_t)((uintptr_t)mem >> 32),
-                    (uint32_t)(uintptr_t)mem);
 }
 #else
 void x86_paging_dump_info() {}

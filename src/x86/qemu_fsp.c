@@ -25,6 +25,7 @@
 #include <x86/hob.h>
 #include <uart_drv.h>
 #include <x86/ahci.h>
+#include <stage2_params.h>
 
 #define FSPM_UPD_SIGNATURE 0x4D5F4450554D4551 /* 'QEMUPD_M' */
 #define FSPT_UPD_SIGNATURE 0x545F4450554D4551 /* 'QEMUPD_T' */
@@ -115,6 +116,7 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
                                     uint32_t mem_base,
                                     uint32_t mem_size)
 {
+    struct stage2_parameter *params;
     struct fspm_upd *new_udp;
 
     new_udp = (struct fspm_upd*)default_m_params;
@@ -126,5 +128,15 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
     new_udp->FspmArchUpd.StackBase = mem_base;
     new_udp->FspmArchUpd.StackSize = mem_size;
 
+    return 0;
+}
+
+int fsp_pre_mem_init_cb(void)
+{
+    return 0;
+}
+
+int fsp_pre_silicon_init_cb(void)
+{
     return 0;
 }

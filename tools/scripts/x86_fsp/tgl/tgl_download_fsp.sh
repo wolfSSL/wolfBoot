@@ -3,17 +3,22 @@
 WORK_DIR=/tmp/tgl_fsp
 EDK2_COMMIT_ID=df25a5457f04ec465dce97428cfee96f462676e7
 FSP_TOOL_URL=https://github.com/tianocore/edk2/raw/${EDK2_COMMIT_ID}/IntelFsp2Pkg/Tools/SplitFspBin.py
-FSP_COMMIT_ID=6f5ae9679e662353bc5570a1bc89e137e262155f
+FSP_COMMIT_ID=cfdf71ddce304e411e46d88f5ef635c6a515a54d
 FSP_URL=https://github.com/intel/FSP/raw/${FSP_COMMIT_ID}/TigerLakeFspBinPkg/TGL_IOT/Fsp.fd
 FSP_REPO=https://github.com/intel/FSP.git
 UCODE_URL=https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/raw/6f36ebde4519f8a21a047c3433b80a3fb41361e1/intel-ucode/06-8c-01
 SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
-WOLFBOOT_DIR="${SCRIPT_DIR}/../../.."
+WOLFBOOT_DIR="$(pwd)"
 FSP_PREFIX=Fsp
 CONFIG_FILE=${CONFIG_FILE:-"${WOLFBOOT_DIR}/.config"}
 PATCH="${SCRIPT_DIR}/0001-FSP-wolfboot-patch.patch"
 
 set -e
+
+if [ ! -f "${WOLFBOOT_DIR}/arch.mk" ]; then
+    echo "Error: Current directory is not the root directory of the source tree"
+    exit 1
+fi
 
 if [ ! -d "$WORK_DIR" ]; then
   mkdir -p "$WORK_DIR"

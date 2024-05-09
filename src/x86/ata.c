@@ -57,7 +57,13 @@
 
 
 static int ata_drive_count = -1;
+struct ata_async_info{
+    int in_progress;
+    int drv;
+    int slot;
+};
 
+static struct ata_async_info ata_async_info;
 /**
  * @brief This structure holds the necessary information for an ATA drive,
  * including AHCI base address, AHCI port number, and sector cache.
@@ -264,6 +270,92 @@ static int prepare_cmd_h2d_slot(int drv, const uint8_t *buf, int sz, int w)
     return slot;
 }
 
+/**
+ * @brief Check the completion status of an asynchronous ATA command.
+ *
+ * This function checks the completion status of an asynchronous ATA command
+ * that was previously initiated.
+ *
+ * @return
+ *   - 0: Asynchronous ATA command completed successfully.
+ *   - ATA_ERR_OP_NOT_IN_PROGRESS: No asynchronous operation in progress.
+ *   - ATA_ERR_BUSY: The ATA operation is still in progress.
+ *   - -1: ATA Task File error.
+ */
+int ata_cmd_complete_async()
+{
+    struct ata_drive *ata;
+    int slot;
+
+    if (!ata_async_info.in_progress)
+        return ATA_ERR_OP_NOT_IN_PROGRESS;
+    ata = &ATA_Drv[ata_async_info.drv];
+    if (mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port)) & AHCI_PORT_IS_TFES) {
+        ata_async_info.in_progress = 0;
+        return -1;
+    }
+
+    slot = ata_async_info.slot;
+    if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) & (1 << slot)) != 0)
+        return ATA_ERR_BUSY;
+
+    ata_async_info.in_progress = 0;
+    return 0;
+}
+
+/**
+ * @brief This static function executes the command in the specified command
+ * slot for the ATA drive, if async = 0 waits for the command to complete
+ * otherwise it immediately returns ATA_ERR_BUSY. Software must call
+ * `ata_cmd_complete_async()` to check for operation completion.  Only one
+ * operation can run at a time, so this function returns ATA_OP_IN_PROGRESS if
+ * another async operation is already in progress. Software must invoke
+ * ata_cmd_complete_async() until it returns 0 or -1. Please note that the
+ * function is NOT thread safe and is NOT safe if ATA functions are supposed to
+ * interrupt the normal execution flow.
+ *
+ * @param[in] drv The index of the ATA drive in the ATA_Drv array.
+ * @param[in] slot The index of the command slot to execute.
+ * @param[in] async Flag indicating whether the operation should be asynchronous (1) or synchronous (0).
+
+ * @return:
+ *   - -1: if an error occurs during command execution.
+ *   - ATA_ERR_OP_IN_PROGRESS: if async  = 1 and another asynchronous operation is already in progress.
+ *   - ATA_ERR_BUSY: If async = 1. To get cmd status invoke `ata_cmd_complete_async()`.
+ *   - 0: success.
+ */
+static int exec_cmd_slot_ex(int drv, int slot, int async)
+{
+    struct ata_drive *ata = &ATA_Drv[drv];
+    uint32_t reg;
+
+    if (ata_async_info.in_progress)
+        return ATA_ERR_OP_IN_PROGRESS;
+
+    /* Clear IS */
+    reg = mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port));
+    mmio_write32(AHCI_PxIS(ata->ahci_base, ata->ahci_port), reg);
+
+    /* Wait until port not busy */
+    while (mmio_read32(AHCI_PxTFD(ata->ahci_base, ata->ahci_port)) & (ATA_DEV_BUSY | ATA_DEV_DRQ))
+        ;
+
+    mmio_write32((AHCI_PxCI(ata->ahci_base, ata->ahci_port)), 1 << slot);
+    if (async) {
+        ata_async_info.in_progress = 1;
+        ata_async_info.drv = drv;
+        ata_async_info.slot = slot;
+        return ATA_ERR_BUSY;
+    }
+
+    while ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) & (1 << slot)) != 0) {
+        if (mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port)) & AHCI_PORT_IS_TFES) {
+            wolfBoot_printf("ATA: port error\r\n");
+            return -1;
+        }
+    }
+    return 0;
+}
 
 /**
  * @brief This static function executes the command in the specified command
@@ -276,27 +368,8 @@ static int prepare_cmd_h2d_slot(int drv, const uint8_t *buf, int sz, int w)
  */
 static int exec_cmd_slot(int drv, int slot)
 {
-    struct ata_drive *ata = &ATA_Drv[drv];
-    uint32_t reg;
-    /* Clear IS */
-    reg = mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port));
-    mmio_write32(AHCI_PxIS(ata->ahci_base, ata->ahci_port), reg);
-
-    /* Wait until port not busy */
-    while (mmio_read32(AHCI_PxTFD(ata->ahci_base, ata->ahci_port)) & (ATA_DEV_BUSY | ATA_DEV_DRQ))
-        ;
-
-    mmio_write32((AHCI_PxCI(ata->ahci_base, ata->ahci_port)), 1 << slot);
-
-    while ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) & (1 << slot)) != 0) {
-        if (mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port)) & AHCI_PORT_IS_TFES) {
-            wolfBoot_printf("ATA: port error\r\n");
-            return -1;
-        }
-    }
-    return 0;
+    return exec_cmd_slot_ex(drv, slot, 0);
 }
-
 
 static void invert_buf(uint8_t *src, uint8_t *dst, unsigned len)
 {
@@ -375,13 +448,15 @@ static int security_command(int drv, uint8_t ata_cmd)
  * @param[in] ata_cmd The ATA command to execute from the ATA security set.
  * @param[in] passphrase The passphrase to transmit as argument in the buffer
  * entry.
- *
- * @return 0 on success, or -1 if an error occurs while preparing or executing
- * the ATA command.
- *
+ * @param[in] async if the command will be executed in asynchronous mode
+ * @param[in] master if the passphrase should compare with master
+ * @return
+ *   - 0: ATA command completed successfully.
+ *   - ATA_ERR_OP_NOT_IN_PROGRESS: If async = 1 but no asynchronous operation in progress.
+ *   - ATA_ERR_BUSY: If async = 1. To get cmd status invoke `ata_cmd_complete_async()`.
  */
 static int security_command_passphrase(int drv, uint8_t ata_cmd,
-        const char *passphrase)
+                                       const char *passphrase, int async, int master)
 {
     struct hba_cmd_header *cmd;
     struct hba_cmd_table *tbl;
@@ -391,6 +466,8 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     int slot = prepare_cmd_h2d_slot(drv, buffer,
             ATA_SECURITY_COMMAND_LEN, 1);
     memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
+    if (master)
+        buffer[0] = 0x1;
     memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase, strlen(passphrase));
     if (slot < 0) {
         return slot;
@@ -403,7 +480,7 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     cmdfis->c = 1;
     cmdfis->command = ata_cmd;
     cmdfis->count = 1;
-    ret = exec_cmd_slot(drv, slot);
+    ret = exec_cmd_slot_ex(drv, slot, async);
     return ret;
 }
 
@@ -439,13 +516,14 @@ int ata_security_erase_prepare(int drv)
  * command SECURITY UNLOCK, as defined in specs ATA8-ACS Sec. 7.49
  *
  * @param[in] drv The index of the ATA drive in the ATA_Drv array.
- * @param[in] passphrase The USER passphrase of the disk unit.
+ * @param[in] passphrase The passphrase of the disk unit.
+ * @param[in] master if true compare with MASTER otherwise USER
  *
  * @return 0 on success, or -1 if an error occurred.
  */
-int ata_security_unlock_device(int drv, const char *passphrase)
+int ata_security_unlock_device(int drv, const char *passphrase, int master)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_UNLOCK, passphrase);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_UNLOCK, passphrase, 0, master);
 }
 
 /**
@@ -460,7 +538,7 @@ int ata_security_unlock_device(int drv, const char *passphrase)
  */
 int ata_security_set_password(int drv, int master, const char *passphrase)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_SET_PASSWORD, passphrase, 0, master);
 }
 
 /**
@@ -470,12 +548,13 @@ int ata_security_set_password(int drv, int master, const char *passphrase)
  *
  * @param[in] drv The index of the ATA drive in the ATA_Drv array.
  * @param[in] passphrase The old USER passphrase for the disk unit to reset.
+ * @param[in] master if true compare with MASTER otherwise USER
  *
  * @return 0 on success, or -1 if an error occurred.
  */
-int ata_security_disable_password(int drv, const char *passphrase)
+int ata_security_disable_password(int drv, const char *passphrase, int master)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_DISABLE_PASSWORD, passphrase);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_DISABLE_PASSWORD, passphrase, 0, master);
 }
 
 /**
@@ -483,13 +562,16 @@ int ata_security_disable_password(int drv, const char *passphrase)
  * in specs ATA8-ACS Sec. 7.46
  *
  * @param[in] drv The index of the ATA drive in the ATA_Drv array.
- * @param[in] passphrase The USER passphrase for the disk unit to erase.
+ * @param[in] passphrase The USER/MASTER passphrase for the disk unit to erase.
+ * @param[in] master if 1 compare againts the MASTER password instead of USER
+ * password
  *
  * @return 0 on success, or -1 if an error occurred.
  */
-int ata_security_erase_unit(int drv, const char *passphrase)
+int ata_security_erase_unit(int drv, const char *passphrase, int master)
 {
-    return security_command_passphrase(drv, ATA_CMD_SECURITY_ERASE_UNIT, passphrase);
+    return security_command_passphrase(drv, ATA_CMD_SECURITY_ERASE_UNIT,
+                                       passphrase, 1, master);
 }
 
 #endif /* WOLFBOOT_SATA_DISK_LOCK */
@@ -711,6 +793,9 @@ int ata_drive_read(int drv, uint64_t start, uint32_t size, uint8_t *buf)
     uint32_t buffer_off = 0;
     sect_start = start >> ata->sector_size_shift;
     sect_off = start - (sect_start << ata->sector_size_shift);
+
+    if (drv > ata_drive_count)
+        return -1;
 
     if (sect_off > 0) {
         uint32_t len = MAX_SECTOR_SIZE - sect_off;
