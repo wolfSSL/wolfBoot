@@ -92,11 +92,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/memory.c</locationURI>
 		</link>
 		<link>
-			<name>src/wolfboot/rsa.c</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/rsa.c</locationURI>
-		</link>
-		<link>
 			<name>src/wolfboot/spi_flash.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/spi_flash.c</locationURI>
@@ -167,6 +162,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/random.c</locationURI>
 		</link>
 		<link>
+			<name>src/wolfcrypt/rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/rsa.c</locationURI>
+		</link>
+		<link>
 			<name>src/wolfcrypt/sha256.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/sha256.c</locationURI>
@@ -195,6 +195,31 @@
 			<name>src/wolfcrypt/wolfmath.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/wolfmath.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_common.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_fspsm_aes.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_fspsm_aes.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_fspsm_rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_fspsm_rsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_fspsm_sha.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_fspsm_sha.c</locationURI>
+		</link>
+		<link>
+			<name>src/wolfcrypt/port/renesas_fspsm_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_fspsm_util.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

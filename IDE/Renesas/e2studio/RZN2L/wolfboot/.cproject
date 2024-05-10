@@ -25,7 +25,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createlisting.995617288" name="Create extended listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createlisting"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.1016449442" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.showCommand.281623932" name="Echo tool command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.showCommand"/>
-							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel.1456570845" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel.1456570845" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.more" valueType="enumerated"/>
 							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.messagelenght.1382064896" name="Message length (-fmessage-length=0)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.messagelenght" value="true" valueType="boolean"/>
 							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.signedchar.713486244" name="'char' is signed (-fsigned-char)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.signedchar" value="true" valueType="boolean"/>
 							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.functionsection.1610806771" name="Function sections (-ffunction-sections)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.functionsection" value="true" valueType="boolean"/>
@@ -78,6 +78,14 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_gen}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg/bsp}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rsip_common/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/common/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/sb_lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/otp/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/rsip/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/primitive}&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.863054847" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
@@ -108,6 +116,14 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_gen}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg/bsp}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rsip_common/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/common/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/sb_lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/otp/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/rsip/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/primitive}&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.files.171365238" name="Include files (-include)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.files" useByScannerDiscovery="true" valueType="includeFiles">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/target.h}&quot;"/>
@@ -189,6 +205,70 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<folderInfo id="com.renesas.cdt.managedbuild.gcc.rz.configuration.debug.update.932200727./rzn/fsp/src/r_rsip" name="r_rsip" resourcePath="rzn/fsp/src/r_rsip">
+						<toolChain id="com.renesas.cdt.managedbuild.gcc.rz.toolchain.debug.update.1502203345" name="GCC for Renesas RZ" superClass="com.renesas.cdt.managedbuild.gcc.rz.toolchain.debug.update" unusedChildren="">
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.2052307467.1274896665" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.2052307467"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createlisting.995617288.388598813" name="Create extended listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createlisting.995617288"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.1016449442.1474224064" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.1016449442"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.showCommand.281623932.788673508" name="Echo tool command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.showCommand.281623932"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel.1456570845.1146078082" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel.1456570845"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.messagelenght.1382064896.961177739" name="Message length (-fmessage-length=0)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.messagelenght.1382064896"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.signedchar.713486244.1553698260" name="'char' is signed (-fsigned-char)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.signedchar.713486244"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.functionsection.1610806771.1892480630" name="Function sections (-ffunction-sections)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.functionsection.1610806771"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.datasections.1855573803.2139742090" name="Data sections (-fdata-sections)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.datasections.1855573803"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.1782421493.337734415" name="Debug level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.1782421493"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.2067367476.1649511743" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.2067367476"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.unused.1259918952.194366548" name="Warn on various unused elements (-Wunused)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.unused.1259918952"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.uninitialized.897941722.436452062" name="Warn on uninitialized variables (-Wuninitialised)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.uninitialized.897941722"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.allwarn.892504953.1468808842" name="Enable all common warnings (-Wall)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.allwarn.892504953"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.extrawarn.2101427717.1791206320" name="Enable extra warnings (-Wextra)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.extrawarn.2101427717"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.missingdeclaration.95583028.1601297453" name="Warn on undeclared global function (-Wmissing-declaration)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.missingdeclaration.95583028"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.conversion.676034855.1249731288" name="Warn on implicit conversions (-Wconversion)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.conversion.676034855"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.pointerarith.206051802.1964179621" name="Warn if pointer arithmetic (-Wpointer-arith)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.pointerarith.206051802"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.shadow.292738106.1059461916" name="Warn if shadowed variable (-Wshadow)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.shadow.292738106"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.logicalop.430865431.999331551" name="Warn if suspicious logical ops (-Wlogical-op)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.logicalop.430865431"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.agreggatereturn.1066443176.701570590" name="Warn if struct is returned (-Wagreggate-return)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.agreggatereturn.1066443176"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.floatequal.1841918022.1654920501" name="Warn if floats are compared as equal (-Wfloat-equal)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.floatequal.1841918022"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.family.1197695446.1511520995" name="Arm family (-mcpu)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.family.1197695446"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.floatunit.824196843.1523756796" name="FPU Type" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.floatunit.824196843"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.floatabi.277797748.497521864" name="Float ABI" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.floatabi.277797748"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.deviceName.165399804.1776252642" name="Device name" superClass="com.renesas.cdt.managedbuild.gcc.rz.deviceName.165399804"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.583176924.974125966" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.583176924"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.571466460.1933785296" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.571466460"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.instructionset.1607665079.75756703" name="Instruction set" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.instructionset.1607665079"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.56812190.456279899" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.56812190"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1340661511.227163216" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1340661511"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp.1219374547.1030933253" name="C++ compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp.1219374547"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar.563609712.2131951418" name="Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar.563609712"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy.715718418.1796988159" name="Hex/Bin converter" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy.715718418"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump.517146012.323179795" name="Listing generator" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump.517146012"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.size.2116110882.1653444553" name="Size command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size.2116110882"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.make.1151164957.369435185" name="Build command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make.1151164957"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm.1560835889.613160700" name="Remove command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm.1560835889"/>
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.assembler.646652107" name="Cross ARM GNU Assembler" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.assembler.2028425354">
+								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.902283512" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
+							</tool>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerC.1153626070" name="Cross ARM C Compiler" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerC.153554225">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.userDefined.48163052" name="Other compiler flags" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.userDefined" valueType="stringList">
+									<listOptionValue builtIn="false" value="-w"/>
+								</option>
+								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.602340420" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
+							</tool>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerCPP.827625648" name="Cross ARM C++ Compiler" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerCPP.823633299">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.cpp.userDefined.286533291" name="Other compiler flags" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.cpp.userDefined" valueType="stringList">
+									<listOptionValue builtIn="false" value="-w"/>
+								</option>
+							</tool>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.c.49925892" name="Cross ARM C Linker" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.c.1625414931"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.cpp.1146085572" name="Cross ARM C++ Linker" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.cpp.1656123744"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.archiver.56033559" name="Cross ARM GNU Archiver" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.archiver.1146591520"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.flash.1144505605" name="Cross ARM GNU Create Flash Image" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.flash.1308763203"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.listing.1509528326" name="Cross ARM GNU Create Listing" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.listing.148337051"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.size.940750042" name="Cross ARM GNU Print Size" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.size.174907462"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.libgen.1966808998" name="Library Generator" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.libgen.1331162773"/>
+						</toolChain>
+					</folderInfo>
 					<folderInfo id="com.renesas.cdt.managedbuild.gcc.rz.configuration.debug.update.932200727./rzn/arm" name="arm" resourcePath="rzn/arm">
 						<toolChain id="com.renesas.cdt.managedbuild.gcc.rz.toolchain.debug.update.903443456" name="GCC for Renesas RZ" superClass="com.renesas.cdt.managedbuild.gcc.rz.toolchain.debug.update" unusedChildren="">
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.2052307467.1851839827" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.2052307467"/>
@@ -246,7 +326,8 @@
 						<entry excluding="wolfcrypt|wolfboot|hal" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/hal"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfboot"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfcrypt"/>
+						<entry excluding="port" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfcrypt"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfcrypt/port"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -329,6 +410,14 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_gen}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg/bsp}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rsip_common/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/common/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/sb_lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/otp/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/rsip/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/primitive}&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.1319480322" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
@@ -351,6 +440,14 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_gen}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg/bsp}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn_cfg/fsp_cfg}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rsip_common/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/common/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/sb_lib/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/otp/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private/lib/rsip/inc}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/private}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/rzn/fsp/src/r_rsip/rzt2n2/primitive}&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1988230099" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -401,6 +498,70 @@
 								<option id="com.renesas.cdt.managedbuild.gcc.rz.option.libraryType.599089944" name="Library type" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.libraryType" value="com.renesas.cdt.managedbuild.gcc.core.option.librarygenerator.settings.libraryType.preBuilt" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.gcc.rz.option.selectlibrary.1728299391" name="Select Library" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.selectlibrary" value="com.renesas.cdt.managedbuild.gcc.core.option.librarygenerator.settings.selectLibrary.newLib" valueType="enumerated"/>
 							</tool>
+						</toolChain>
+					</folderInfo>
+					<folderInfo id="com.renesas.cdt.managedbuild.gcc.rz.configuration.release.update.1352166227./rzn/fsp/src/r_rsip" name="r_rsip" resourcePath="rzn/fsp/src/r_rsip">
+						<toolChain id="com.renesas.cdt.managedbuild.gcc.rz.toolchain.release.update.1120990530" name="GCC for Renesas RZ" superClass="com.renesas.cdt.managedbuild.gcc.rz.toolchain.release.update" unusedChildren="">
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.2119877339.1502471465" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.2119877339"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createlisting.2145588168.1417268456" name="Create extended listing" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createlisting.2145588168"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.1244176294.617691398" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.1244176294"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.showCommand.227125339.498362096" name="Echo tool command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.showCommand.227125339"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel.426778119.2016941803" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.optimizationLevel.426778119"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.messagelenght.151539748.1030987101" name="Message length (-fmessage-length=0)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.messagelenght.151539748"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.signedchar.234115288.1996185094" name="'char' is signed (-fsigned-char)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.signedchar.234115288"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.functionsection.1286017291.1459052588" name="Function sections (-ffunction-sections)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.functionsection.1286017291"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.datasections.1002905504.1754697649" name="Data sections (-fdata-sections)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.datasections.1002905504"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.1737309620.1323152407" name="Debug level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.1737309620"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1237207993.1090915253" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1237207993"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.unused.419169226.1981834743" name="Warn on various unused elements (-Wunused)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.unused.419169226"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.uninitialized.2043116261.2088680368" name="Warn on uninitialized variables (-Wuninitialised)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.uninitialized.2043116261"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.allwarn.724010099.1110692565" name="Enable all common warnings (-Wall)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.allwarn.724010099"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.extrawarn.750009006.189530842" name="Enable extra warnings (-Wextra)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.extrawarn.750009006"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.missingdeclaration.2113666613.1211292039" name="Warn on undeclared global function (-Wmissing-declaration)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.missingdeclaration.2113666613"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.conversion.1908197559.648021076" name="Warn on implicit conversions (-Wconversion)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.conversion.1908197559"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.pointerarith.2090254709.1483762944" name="Warn if pointer arithmetic (-Wpointer-arith)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.pointerarith.2090254709"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.shadow.949172740.1695962744" name="Warn if shadowed variable (-Wshadow)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.shadow.949172740"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.logicalop.2126486727.999096139" name="Warn if suspicious logical ops (-Wlogical-op)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.logicalop.2126486727"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.agreggatereturn.1528485198.1953909410" name="Warn if struct is returned (-Wagreggate-return)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.agreggatereturn.1528485198"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.floatequal.402612961.690779578" name="Warn if floats are compared as equal (-Wfloat-equal)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.warnings.floatequal.402612961"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.family.1049005922.1492365321" name="Arm family (-mcpu)" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.family.1049005922"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.floatunit.104203506.1952855032" name="FPU Type" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.floatunit.104203506"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.floatabi.801231735.1409264816" name="Float ABI" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.floatabi.801231735"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.deviceName.1450539936.108585767" name="Device name" superClass="com.renesas.cdt.managedbuild.gcc.rz.deviceName.1450539936"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.48620421.955451662" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.48620421"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.95554700.164344376" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.95554700"/>
+							<option id="com.renesas.cdt.managedbuild.gcc.rz.option.instructionset.926272596.537381328" name="Instruction set" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.instructionset.926272596"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.790837860.696757827" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.790837860"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.632238044.602841178" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.632238044"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp.1231658066.850098416" name="C++ compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp.1231658066"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar.693806985.1713066414" name="Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar.693806985"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy.418747455.828197949" name="Hex/Bin converter" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy.418747455"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump.988866939.1333958369" name="Listing generator" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump.988866939"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.size.2142391678.1940332267" name="Size command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size.2142391678"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.make.176054863.1223635749" name="Build command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make.176054863"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm.1473535265.2042971762" name="Remove command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm.1473535265"/>
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.assembler.68427702" name="Cross ARM GNU Assembler" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.assembler.676706800">
+								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.369373365" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
+							</tool>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerC.91249074" name="Cross ARM C Compiler" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerC.1391428788">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.userDefined.68780380" name="Other compiler flags" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.userDefined" valueType="stringList">
+									<listOptionValue builtIn="false" value="-w"/>
+								</option>
+								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.566548313" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
+							</tool>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerCPP.2011830176" name="Cross ARM C++ Compiler" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.compilerCPP.428658025">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.cpp.userDefined.156118752" name="Other compiler flags" superClass="com.renesas.cdt.managedbuild.gcc.rz.option.compiler.cpp.userDefined" valueType="stringList">
+									<listOptionValue builtIn="false" value="-w"/>
+								</option>
+							</tool>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.c.418852925" name="Cross ARM C Linker" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.c.1414530170"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.cpp.784419110" name="Cross ARM C++ Linker" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.linker.cpp.804706146"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.archiver.968359144" name="Cross ARM GNU Archiver" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.archiver.1251823616"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.flash.1653185472" name="Cross ARM GNU Create Flash Image" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.flash.1196160786"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.listing.1297925329" name="Cross ARM GNU Create Listing" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.listing.423973108"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.size.1099305312" name="Cross ARM GNU Print Size" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.size.304215049"/>
+							<tool id="com.renesas.cdt.managedbuild.gcc.rz.tool.libgen.925053596" name="Library Generator" superClass="com.renesas.cdt.managedbuild.gcc.rz.tool.libgen.1615610288"/>
 						</toolChain>
 					</folderInfo>
 					<folderInfo id="com.renesas.cdt.managedbuild.gcc.rz.configuration.release.update.1352166227./rzn/arm" name="arm" resourcePath="rzn/arm">
@@ -460,7 +621,8 @@
 						<entry excluding="wolfcrypt|wolfboot|hal" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/hal"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfboot"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfcrypt"/>
+						<entry excluding="port" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfcrypt"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src/wolfcrypt/port"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

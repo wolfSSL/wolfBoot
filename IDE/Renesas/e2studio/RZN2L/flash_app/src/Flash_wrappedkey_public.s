@@ -1,8 +1,4 @@
-/* Flash_sections.s
- *
- * Custom configuration for wolfCrypt/wolfSSL.
- * Enabled via WOLFSSL_USER_SETTINGS.
- *
+/* Flash_wrappedkey_public.s
  *
  * Copyright (C) 2024 wolfSSL Inc.
  *
@@ -10,7 +6,7 @@
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
+ * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
  * wolfBoot is distributed in the hope that it will be useful,
@@ -25,6 +21,6 @@
 /* This file is used to include the application update image into
 the loader project. */
 
-.section .IMAGE_APP_FLASH_update, "ax", %progbits
-/* To download the app v2, please enable the line below.  */
-/* .incbin "../../app_RZ/Debug/app_RZ_v2.0_signed.bin" */
+.section .WRAPPED_KEY_FLASH_PUB, "ax", %progbits
+/* To download the encrypted rsip key, please enable the line below.  */
+/* .incbin "../rsa_pub2048.bin" */
