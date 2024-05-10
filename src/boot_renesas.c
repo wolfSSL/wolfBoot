@@ -49,14 +49,16 @@ void do_boot(const uint32_t *app_offset)
 {
     void (*app_entry)(void);
     uint32_t app_sp;
+
+#ifdef BOOT_ENTRY_OFFSET
+    /* add byte offset to uint32_t */
+    app_offset += BOOT_ENTRY_OFFSET/sizeof(uint32_t);
+#endif
+
     (void) app_offset;
     (void) app_sp;
     (void) app_entry;
-    #ifndef BOOT_ENTRY_OFFSET
-    #define BOOT_ENTRY_OFFSET 0x00
-    #endif
-    /* add byte offset to uint32_t */
-    app_offset += BOOT_ENTRY_OFFSET/sizeof(uint32_t);
+
 #if defined(__RX__)
     /* Do unconditional jump (r1 = app_offset) */
     #if defined(__CCRX__)
