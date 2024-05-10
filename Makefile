@@ -35,7 +35,11 @@ ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
 else
   PRIVATE_KEY=wolfboot_signing_private_key.der
-  OBJS+=./src/keystore.o
+  ifeq ($(FLASH_OTP_ROT),1)
+        OBJS+=./src/flash_otp_keystore.o
+  else
+        OBJS+=./src/keystore.o
+  endif
 endif
 
 WOLFCRYPT_OBJS:=

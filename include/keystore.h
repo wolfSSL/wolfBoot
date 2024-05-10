@@ -43,6 +43,8 @@ struct keystore_slot {
     uint8_t  pubkey[KEYSTORE_PUBKEY_SIZE];
 };
 
+#define SIZEOF_KEYSTORE_SLOT (32 + KEYSTORE_PUBKEY_SIZE)
+
 /* KeyStore API */
 int keystore_num_pubkeys(void);
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
