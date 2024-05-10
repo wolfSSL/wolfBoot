@@ -28,7 +28,7 @@
 #include "keystore.h"
 #include "hal.h"
 
-#ifdef FLASH_OTP_ROT
+#if defined(FLASH_OTP_ROT) && !defined(WOLFBOOT_NO_SIGN)
 
 #ifdef TARGET_stm32h7
 #include "hal/stm32h7.h"
@@ -125,4 +125,4 @@ uint32_t keystore_get_key_type(int id)
 
 #endif /* Keystore public key size check */
 
-#endif /* FLASH_OTP_ROT */
+#endif /* FLASH_OTP_ROT && !WOLFBOOT_NO_SIGN */
