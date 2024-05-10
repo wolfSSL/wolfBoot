@@ -20,6 +20,8 @@ LD_END_GROUP:=-Wl,--end-group
 V?=0
 DEBUG?=0
 DEBUG_UART?=0
+USE_GCC?=1
+USE_GCC_HEADLESS?=1
 
 ifeq ($(ARCH),PPC)
 OBJS:= \
