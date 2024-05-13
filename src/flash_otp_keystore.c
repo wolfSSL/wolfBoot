@@ -27,38 +27,14 @@
 #include "wolfboot/wolfboot.h"
 #include "keystore.h"
 #include "hal.h"
+#include "otp_keystore.h"
 
 #if defined(FLASH_OTP_ROT) && !defined(WOLFBOOT_NO_SIGN)
-
-#ifdef TARGET_stm32h7
-#include "hal/stm32h7.h"
-#endif
-
-#define OTP_HDR_SIZE 16
-
-struct wolfBoot_otp_hdr_size {
-    char keystore_hdr_magic[8];
-    uint16_t item_count;
-    uint16_t flags;
-    uint32_t version;
-};
-
-static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
-
-#if !defined(KEYSTORE_ANY) && (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_ECC256)
-	#error Key algorithm mismatch. Remove old keys via 'make keysclean'
-#else
-
-#define KEYSTORE_MAX_PUBKEYS ((OTP_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
-
-#if (KEYSTORE_MAX_PUBKEYS < 1)
-    #error "No space for keystore in OTP with current algorithm"
-#endif
 
 int keystore_num_pubkeys(void)
 {
     uint8_t otp_header[OTP_HDR_SIZE];
-    struct wolfBoot_otp_hdr_size *hdr = (struct wolfBoot_otp_hdr_size *)otp_header;
+    struct wolfBoot_otp_hdr *hdr = (struct wolfBoot_otp_hdr *)otp_header;
     if (hal_flash_otp_read(FLASH_OTP_BASE, (void *)otp_header, OTP_HDR_SIZE) != 0)
         return 0;
     if (memcmp(hdr->keystore_hdr_magic, KEYSTORE_HDR_MAGIC, 8) != 0) {
@@ -123,6 +99,5 @@ uint32_t keystore_get_key_type(int id)
     return slot->key_type;
 }
 
-#endif /* Keystore public key size check */
 
 #endif /* FLASH_OTP_ROT && !WOLFBOOT_NO_SIGN */

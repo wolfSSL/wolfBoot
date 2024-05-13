@@ -127,6 +127,10 @@ ifeq ($(TARGET),nxp_t1024)
 	MAIN_TARGET:=factory_wstage1.bin
 endif
 
+ifeq ($(FLASH_OTP_ROT),1)
+	MAIN_TARGET:=include/target.h tools/keytools/otp/otp-keystore-primer factory.bin
+endif
+
 ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
@@ -184,6 +188,7 @@ $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
 	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
+	$(Q)(test $(FLASH_OTP_ROT) = 0) || (make -C tools/keytools/otp) || true
 
 keytools: include/target.h
 	@echo "Building key tools"
@@ -239,7 +244,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
-	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN_ALG) src/keystore.c) || \
+	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_ROT) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
@@ -279,6 +284,8 @@ hex: wolfboot.hex
 
 src/keystore.c: $(PRIVATE_KEY)
 
+flash_keystore: $(PRIVATE_KEY) src/flash_otp_keystore.o
+
 keys: $(PRIVATE_KEY)
 
 clean:
@@ -302,6 +309,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/test-update-server -s clean
 	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
 	$(Q)$(MAKE) -C tools/unit-tests -s clean
+	$(Q)$(MAKE) -C tools/keytools/otp -s clean
 
 keysclean: clean
 	$(Q)rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
@@ -358,6 +366,12 @@ cppcheck:
 		--suppress="ctunullpointer" --suppress="nullPointer" \
 		--suppress="objectIndex" --suppress="comparePointers" \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
+
+otp: tools/keytools/otp/otp-keystore-primer.bin
+
+tools/keytools/otp/otp-keystore-primer.bin: FORCE
+	make -C tools/keytools/otp clean
+	make -C tools/keytools/otp
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
