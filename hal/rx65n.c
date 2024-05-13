@@ -496,16 +496,16 @@ void hal_clk_init(void)
     /* ---- RTC Clock ---- */
     if ((SYS_RSTSR1 & SYS_RSTSR1_CWSF) == 0) { /* cold start */
         /* Stop the RTC sub-clock */
-        RTC_RCR4 = 0;
+        RTC_RCR4 &= ~RTC_RCR4_RCKSEL; /* select sub-clock */
         for (i=0; i<4; i++) {
             reg = RTC_RCR4; /* dummy read (required) */
         }
-        while (RTC_RCR4 != 0) { RX_NOP(); }
+        if ((RTC_RCR4 & RTC_RCR4_RCKSEL) != 0) { RX_NOP(); }
         RTC_RCR3 &= ~RTC_RCR3_RTCEN; /* stop osc */
         for (i=0; i<4; i++) {
             reg = RTC_RCR3; /* dummy read (required) */
         }
-        while ((RTC_RCR3 & RTC_RCR3_RTCEN) != RTC_RCR3_RTCEN) { RX_NOP(); }
+        if ((RTC_RCR3 & RTC_RCR3_RTCEN) != 0) { RX_NOP(); }
     }
 
     /* ---- Sub-Clock OSC ---- */
