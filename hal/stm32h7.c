@@ -547,6 +547,7 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
 {
     volatile uint16_t tmp;
     uint16_t idx = 0;
+    const uint16_t *pdata = (const uint16_t *)data;
     if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
         return -1;
     }
@@ -569,13 +570,11 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
         DSB();
 
         /* Program an OTP word (16 bits) */
-        *(volatile uint16_t*)flashAddress = *(const uint16_t*)data;
+        *(volatile uint16_t*)flashAddress = *pdata;
 
-#if 0
         /* Read it back */
         tmp = *(volatile uint16_t*)flashAddress;
         (void)tmp; /* avoid unused warnings */
-#endif
 
         /* Wait for last operation to be completed */
         flash_otp_wait();
@@ -584,7 +583,7 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
         FLASH_OPTCR &= ~FLASH_OPTCR_PG_OTP;
 
         flashAddress += sizeof(uint16_t);
-        data++;
+        pdata++;
         idx += sizeof(uint16_t);
     }
 
@@ -596,6 +595,7 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
 int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
 {
     uint32_t i;
+    uint16_t *pdata = (uint16_t *)data;
     if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
         return -1;
     }
@@ -603,9 +603,9 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
         (i < length) && (flashAddress <= (FLASH_OTP_END-1));
         i += sizeof(uint16_t))
     {
-        *(uint16_t *)data = *(volatile uint16_t*)flashAddress;
+        *pdata = *(volatile uint16_t*)flashAddress;
         flashAddress += sizeof(uint16_t);
-        data++;
+        pdata++;
     }
     return 0;
 }
