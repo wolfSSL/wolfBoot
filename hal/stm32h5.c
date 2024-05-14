@@ -37,12 +37,23 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
         while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != waitstates);
 }
 
-void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
+static void RAMFUNCTION hal_flash_wait_complete(void)
 {
     while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
 #if (TZ_SECURE())
     while ((FLASH_NS_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
+        ;
+#endif
+
+}
+
+static void RAMFUNCTION hal_flash_wait_buffer_empty(void)
+{
+    while ((FLASH_SR & FLASH_SR_DBNE) == FLASH_SR_DBNE)
+        ;
+#if (TZ_SECURE())
+    while ((FLASH_NS_SR & FLASH_SR_DBNE) == FLASH_SR_DBNE)
         ;
 #endif
 
@@ -85,7 +96,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         dst[i >> 2] = dword[0];
         ISB();
         dst[(i >> 2) + 1] = dword[1];
-        hal_flash_wait_complete(0);
+        hal_flash_wait_complete();
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
@@ -99,7 +110,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    hal_flash_wait_complete(0);
+    hal_flash_wait_complete();
     if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR = FLASH_KEY1;
         DMB();
@@ -112,14 +123,14 @@ void RAMFUNCTION hal_flash_unlock(void)
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    hal_flash_wait_complete(0);
+    hal_flash_wait_complete();
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
 }
 
 void RAMFUNCTION hal_flash_opt_unlock(void)
 {
-    hal_flash_wait_complete(0);
+    hal_flash_wait_complete();
     if ((FLASH_OPTCR & FLASH_OPTCR_OPTLOCK) != 0) {
         FLASH_OPTKEYR = FLASH_OPTKEY1;
         DMB();
@@ -134,7 +145,7 @@ void RAMFUNCTION hal_flash_opt_unlock(void)
 void RAMFUNCTION hal_flash_opt_lock(void)
 {
     FLASH_OPTCR |= FLASH_OPTCR_OPTSTRT;
-    hal_flash_wait_complete(0);
+    hal_flash_wait_complete();
     if ((FLASH_OPTCR & FLASH_OPTCR_OPTLOCK) == 0)
         FLASH_OPTCR |= FLASH_OPTCR_OPTLOCK;
 }
@@ -149,7 +160,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
 
-    if (address < ARCH_FLASH_OFFSET)
+    if (address < 0x08000000)
         return -1;
 
     end_address = address + len - 1;
@@ -176,7 +187,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         FLASH_CR = reg;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
-        hal_flash_wait_complete(0);
+        hal_flash_wait_complete();
     }
     /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_SER ;
@@ -421,3 +432,72 @@ void hal_prepare_boot(void)
 #endif
 }
 
+#ifdef FLASH_OTP_ROT
+
+/* Public API */
+
+int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length)
+{
+    volatile uint16_t tmp;
+    uint16_t *pdata = (uint16_t *)data;
+    uint16_t idx = 0, len_align;
+    uint16_t last_word;
+    if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
+        return -1;
+    }
+
+    hal_flash_wait_complete();
+    hal_flash_wait_buffer_empty();
+    hal_flash_unlock();
+    hal_flash_clear_errors(0);
+
+
+    /* Truncate to 2B alignment */
+    length = (length / 2 * 2);
+
+    while (idx < length && flashAddress <= FLASH_OTP_END-1) {
+        hal_flash_wait_complete();
+        /* Set PG bit */
+        FLASH_CR |= FLASH_CR_PG;
+        /* Program an OTP word (32 bits) */
+        *(volatile uint16_t*)flashAddress = *pdata;
+        ISB();
+        DSB();
+        /* Read it back */
+        tmp = *(volatile uint16_t*)flashAddress;
+        if (tmp != *pdata) {
+            /* Provisioning failed. OTP already programmed? */
+            while(1)
+                ;
+        }
+
+        /* Clear PG bit */
+        FLASH_CR &= ~FLASH_CR_PG;
+        flashAddress += sizeof(uint16_t);
+        pdata++;
+        idx += sizeof(uint16_t);
+    }
+
+    hal_flash_lock();
+    return 0;
+}
+
+int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
+{
+    uint16_t i;
+    uint16_t *pdata = (uint16_t *)data;
+    if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
+        return -1;
+    }
+    for (i = 0;
+        (i < length) && (flashAddress <= (FLASH_OTP_END-1));
+        i += sizeof(uint16_t))
+    {
+        *pdata = *(volatile uint16_t*)flashAddress;
+        flashAddress += sizeof(uint16_t);
+        pdata++;
+    }
+    return 0;
+}
+
+#endif /* FLASH_OTP_ROT */

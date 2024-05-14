@@ -45,7 +45,7 @@ int keystore_num_pubkeys(void)
     return hdr->item_count;
 }
 
-static uint16_t otp_slot_item_cache[SIZEOF_KEYSTORE_SLOT/2];
+static uint8_t otp_slot_item_cache[SIZEOF_KEYSTORE_SLOT];
 
 uint8_t *keystore_get_buffer(int id)
 {

@@ -175,6 +175,10 @@ extern "C" {
     #endif
 #endif
 
+#endif
+
+#if defined __WOLFBOOT || defined __FLASH_OTP_PRIMER
+
  /* Authentication configuration */
  #if defined(WOLFBOOT_NO_SIGN)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_NONE

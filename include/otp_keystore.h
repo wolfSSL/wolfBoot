@@ -32,6 +32,8 @@
  */
 #ifdef TARGET_stm32h7
     #include "hal/stm32h7.h"
+#elif defined TARGET_stm32h5
+    #include "hal/stm32h5.h"
 #else
     #error "Unsupported target for OTP"
 #endif

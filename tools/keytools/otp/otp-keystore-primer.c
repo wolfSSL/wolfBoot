@@ -23,6 +23,7 @@
  */
 #include <stdint.h>
 #include <string.h>
+#include "wolfboot/wolfboot.h"
 #include "hal.h"
 #include "otp_keystore.h"
 
@@ -33,6 +34,9 @@ void main(void)
     int n_keys = keystore_num_pubkeys();
     int i;
     struct wolfBoot_otp_hdr hdr;
+
+    hal_init();
+
     memcpy(hdr.keystore_hdr_magic, KEYSTORE_HDR_MAGIC, 8);
     hdr.item_count = n_keys;
     hdr.flags = 0;

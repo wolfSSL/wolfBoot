@@ -355,18 +355,25 @@
 #define RCC_APB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xA4))
 #define UART1_APB2_CLOCK_ER_VAL (1 << 14)
 
+
+/* OTP FLASH AREA */
+#define FLASH_OTP_BASE 0x08FFF000
+#define FLASH_OTP_END  0x08FFF7FF
+#define OTP_SIZE             2048
+#define OTP_BLOCKS             32
+
+/* UART1 pin configuration */
 #define UART1_PIN_AF 8
 #define UART1_RX_PIN 8
 #define UART1_TX_PIN 7
 
+/* GPIO secure configuration */
 #define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30))
-
-
-
 #define LED_AHB2_ENABLE (GPIOG_AHB2_CLOCK_ER | GPIOB_AHB2_CLOCK_ER | \
         GPIOF_AHB2_CLOCK_ER)
 #define LED_BOOT_PIN (4)  /* PG4 - Nucleo board - Orange Led */
 #define LED_USR_PIN (0)   /* PB0  - Nucleo board  - Green Led */
 #define LED_EXTRA_PIN (4) /* PF4 - Nucleo board - Blue Led */
+
 
 #endif /* STM32H5_DEF_INCLUDED */
