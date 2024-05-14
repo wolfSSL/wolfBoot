@@ -69,6 +69,7 @@ _PowerON_Reset :
 2:
 #endif
 
+#ifdef RX_PSW_USER_MODE
 /* check and skip PSW setup if already in "user mode" */
     mvfc   psw, r1
     btst   #20, r1 /* Processor Mode: 0=Supervisor, 1=User */
@@ -85,6 +86,7 @@ _PowerON_Reset :
     nop
     nop
 skip_psw_setup:
+#endif
 
 /* start user program */
 #ifdef NO_LEADING_UNDERSCORE
