@@ -37,7 +37,7 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
         while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != waitstates);
 }
 
-static void RAMFUNCTION hal_flash_wait_complete(void)
+void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
 {
     while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
@@ -48,7 +48,7 @@ static void RAMFUNCTION hal_flash_wait_complete(void)
 
 }
 
-static void RAMFUNCTION hal_flash_wait_buffer_empty(void)
+static void RAMFUNCTION hal_flash_wait_buffer_empty(uint8_t bank)
 {
     while ((FLASH_SR & FLASH_SR_DBNE) == FLASH_SR_DBNE)
         ;
@@ -96,7 +96,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         dst[i >> 2] = dword[0];
         ISB();
         dst[(i >> 2) + 1] = dword[1];
-        hal_flash_wait_complete();
+        hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
@@ -110,7 +110,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    hal_flash_wait_complete();
+    hal_flash_wait_complete(0);
     if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR = FLASH_KEY1;
         DMB();
@@ -123,14 +123,14 @@ void RAMFUNCTION hal_flash_unlock(void)
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    hal_flash_wait_complete();
+    hal_flash_wait_complete(0);
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
 }
 
 void RAMFUNCTION hal_flash_opt_unlock(void)
 {
-    hal_flash_wait_complete();
+    hal_flash_wait_complete(0);
     if ((FLASH_OPTCR & FLASH_OPTCR_OPTLOCK) != 0) {
         FLASH_OPTKEYR = FLASH_OPTKEY1;
         DMB();
@@ -145,7 +145,7 @@ void RAMFUNCTION hal_flash_opt_unlock(void)
 void RAMFUNCTION hal_flash_opt_lock(void)
 {
     FLASH_OPTCR |= FLASH_OPTCR_OPTSTRT;
-    hal_flash_wait_complete();
+    hal_flash_wait_complete(0);
     if ((FLASH_OPTCR & FLASH_OPTCR_OPTLOCK) == 0)
         FLASH_OPTCR |= FLASH_OPTCR_OPTLOCK;
 }
@@ -187,7 +187,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         FLASH_CR = reg;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
-        hal_flash_wait_complete();
+        hal_flash_wait_complete(0);
     }
     /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_SER ;
@@ -446,8 +446,8 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
         return -1;
     }
 
-    hal_flash_wait_complete();
-    hal_flash_wait_buffer_empty();
+    hal_flash_wait_complete(0);
+    hal_flash_wait_buffer_empty(0);
     hal_flash_unlock();
     hal_flash_clear_errors(0);
 
@@ -456,7 +456,7 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
     length = (length / 2 * 2);
 
     while (idx < length && flashAddress <= FLASH_OTP_END-1) {
-        hal_flash_wait_complete();
+        hal_flash_wait_complete(0);
         /* Set PG bit */
         FLASH_CR |= FLASH_CR_PG;
         /* Program an OTP word (32 bits) */
