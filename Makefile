@@ -35,7 +35,7 @@ ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
 else
   PRIVATE_KEY=wolfboot_signing_private_key.der
-  ifeq ($(FLASH_OTP_ROT),1)
+  ifeq ($(FLASH_OTP_KEYSTORE),1)
         OBJS+=./src/flash_otp_keystore.o
   else
         OBJS+=./src/keystore.o
@@ -127,7 +127,7 @@ ifeq ($(TARGET),nxp_t1024)
 	MAIN_TARGET:=factory_wstage1.bin
 endif
 
-ifeq ($(FLASH_OTP_ROT),1)
+ifeq ($(FLASH_OTP_KEYSTORE),1)
 	MAIN_TARGET:=include/target.h tools/keytools/otp/otp-keystore-primer factory.bin
 endif
 
@@ -188,7 +188,7 @@ $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
 	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
-	$(Q)(test $(FLASH_OTP_ROT) = 0) || (make -C tools/keytools/otp) || true
+	$(Q)(test $(FLASH_OTP_KEYSTORE) = 0) || (make -C tools/keytools/otp) || true
 
 keytools: include/target.h
 	@echo "Building key tools"
@@ -244,7 +244,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
-	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_ROT) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
+	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)

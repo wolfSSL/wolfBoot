@@ -26,7 +26,7 @@
 #ifndef OTP_KEYSTORE_H
 #define OTP_KEYSTORE_H
 
-#if defined(FLASH_OTP_ROT) && !defined(WOLFBOOT_NO_SIGN)
+#if defined(FLASH_OTP_KEYSTORE) && !defined(WOLFBOOT_NO_SIGN)
 /* Specific includes for supported targets
  * (needed for OTP_SIZE)
  */
@@ -67,6 +67,6 @@ static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
 
 #endif /* KEYSTORE_ANY */
 
-#endif /* FLASH_OTP_ROT */ 
+#endif /* FLASH_OTP_KEYSTORE */ 
 
 #endif /* OTP_KEYSTORE_H */

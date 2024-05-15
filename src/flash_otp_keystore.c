@@ -29,7 +29,7 @@
 #include "hal.h"
 #include "otp_keystore.h"
 
-#if defined(FLASH_OTP_ROT) && !defined(WOLFBOOT_NO_SIGN)
+#if defined(FLASH_OTP_KEYSTORE) && !defined(WOLFBOOT_NO_SIGN)
 
 int keystore_num_pubkeys(void)
 {
@@ -100,4 +100,4 @@ uint32_t keystore_get_key_type(int id)
 }
 
 
-#endif /* FLASH_OTP_ROT && !WOLFBOOT_NO_SIGN */
+#endif /* FLASH_OTP_KEYSTORE && !WOLFBOOT_NO_SIGN */

@@ -1,8 +1,8 @@
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
 
 # Support for Built-in ROT into OTP flash memory
-ifeq ($(FLASH_OTP_ROT),1)
-    CFLAGS+=-D"FLASH_OTP_ROT"
+ifeq ($(FLASH_OTP_KEYSTORE),1)
+    CFLAGS+=-D"FLASH_OTP_KEYSTORE"
 endif
 
 # Support for TPM signature verification

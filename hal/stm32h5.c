@@ -432,7 +432,7 @@ void hal_prepare_boot(void)
 #endif
 }
 
-#ifdef FLASH_OTP_ROT
+#ifdef FLASH_OTP_KEYSTORE
 
 /* Public API */
 
@@ -500,4 +500,4 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
     return 0;
 }
 
-#endif /* FLASH_OTP_ROT */
+#endif /* FLASH_OTP_KEYSTORE */

@@ -9,7 +9,7 @@ CROSS_COMPILE?=arm-none-eabi-
 CFLAGS+=-O0 -ggdb
 CFLAGS+=-I. -I../../../ -I../../../include
 CFLAGS+=-I./wcs
-CFLAGS+=-DFLASH_OTP_ROT -D__FLASH_OTP_PRIMER
+CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER
 OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
 LSCRIPT=target.ld
 LDFLAGS+=$(CFLAGS) -T$(LSCRIPT) -lc -Wl,-Map=otp-keystore-primer.map
