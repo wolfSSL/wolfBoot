@@ -850,6 +850,11 @@ arm-none-eabi-gdb
 Like [STM32L5](#stm32l5) and [STM32U5](#stm32u5), STM32H5 support is also demonstrated
 through different scenarios.
 
+Additionally, wolfBoot can be compiled with `FLASH_OTP_KEYSTORE` option, to store
+the public key(s) used for firmware authentication into a dedicated, one-time
+programmable flash area that can be write protected.
+For more information, see [/docs/flash-OTP.md](/docs/flash-OTP.md).
+
 ### Scenario 1: TrustZone enabled, staging non-secure application
 
 #### Example description
