@@ -22,7 +22,7 @@ if [ -f "./tools/keytools/sign" ]; then
     SIGN_TOOL="./tools/keytools/sign"
 fi
 
-$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfBoot_signing_private_key.der 1
+$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 1
 $SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 2
 
 mkdir -p /tmp/efi

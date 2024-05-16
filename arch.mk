@@ -788,6 +788,8 @@ ifeq ($(TARGET),x86_64_efi)
             -fshort-wchar -mno-red-zone -maccumulate-outgoing-args
   CFLAGS += -I/usr/include/efi -I/usr/include/efi/x86_64 \
             -DPLATFORM_X86_64_EFI  -DWOLFBOOT_DUALBOOT
+  # avoid using of fixed LOAD_ADDRESS, uefi target uses dynamic location
+  CFLAGS += -DNO_WOLFBOOT_LOAD_ADDRESS
   LDFLAGS = -shared -Bsymbolic -L/usr/lib -T$(GNU_EFI_LSCRIPT)
   LD_START_GROUP = $(GNU_EFI_CRT0)
   LD_END_GROUP = -lgnuefi -lefi
