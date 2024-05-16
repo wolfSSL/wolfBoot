@@ -138,7 +138,7 @@ test-lib: include/target.h $(OBJS)
 
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY)  -j .text -j .sdata -j .data \
+	$(Q)$(OBJCOPY) -j .rodata -j .text -j .sdata -j .data \
 					-j .dynamic -j .dynsym  -j .rel \
 					-j .rela -j .reloc -j .eh_frame \
 					--target=efi-app-x86_64 --subsystem=10 $^ $@

@@ -92,8 +92,10 @@
 
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
+#if !defined(NO_WOLFBOOT_LOAD_ADDRESS)
 /* Load address in RAM for staged OS (update_ram only) */
 #define WOLFBOOT_LOAD_ADDRESS                 @WOLFBOOT_LOAD_ADDRESS@
+#endif
 #define WOLFBOOT_LOAD_DTS_ADDRESS             @WOLFBOOT_LOAD_DTS_ADDRESS@
 
 
