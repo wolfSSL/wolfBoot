@@ -60,29 +60,67 @@ static void RAMFUNCTION hal_flash_nonsecure_lock(void)
         FLASH_NS_CR |= FLASH_CR_LOCK;
 }
 
+static int is_range_nonsecure(uint32_t address, int len)
+{
+#ifndef DUALBANK_SWAP
+    /* The non secure area begins at the BOOT partition */
+    uint32_t min = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t max = FLASH_TOP + 1;
+    uint32_t end;
+    if (len < 0)
+        return 0;
+    end = (uint32_t)(address + len);
+    if ((address >= min) && (end <= max))
+        return 1;
+    return 0;
+#else
+    /* In this case, the secure area is in the lower side of both banks. */
+    uint32_t boot_offset = WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET;
+    uint32_t min1 = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t max1 = FLASH_BANK2_BASE + 1;
+    uint32_t min2 = WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint32_t max2 = FLASH_TOP + 1;
+    uint32_t end;
+    if (len < 0)
+        return 0;
+    end = (uint32_t)(address + len);
+    if (((address >= min1) && (end <= max1)) ||
+            ((address >= min2) && (end <= max2)) )
+        return 1;
+    return 0;
+#endif
+}
+
+
 void hal_tz_claim_nonsecure_area(uint32_t address, int len)
 {
     int page_n, reg_idx;
     uint32_t reg;
     uint32_t end = address + len;
+    uint32_t bank = 0;
+    int pos;
 
-
-    if (address < FLASH_BANK2_BASE)
+    if (!is_range_nonsecure(address, len))
         return;
-    if (end > (FLASH_TOP + 1))
-        return;
-
-    hal_flash_wait_complete(0);
-    hal_flash_clear_errors(0);
     while (address < end) {
-        page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+        if (address < FLASH_BANK2_BASE) {
+            page_n = (address - ARCH_FLASH_OFFSET) / FLASH_PAGE_SIZE;
+            bank = 1;
+        } else {
+            page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+            bank = 2;
+        }
         reg_idx = page_n / 32;
-        int pos;
         pos = page_n % 32;
+        hal_flash_wait_complete(bank);
+        hal_flash_clear_errors(bank);
         hal_flash_nonsecure_unlock();
-        FLASH_SECBB2[reg_idx] |= ( 1 << pos);
+        if (bank == 1)
+            FLASH_SECBB1[reg_idx] |= ( 1 << pos);
+        else
+            FLASH_SECBB2[reg_idx] |= ( 1 << pos);
         ISB();
-        hal_flash_wait_complete(0);
+        hal_flash_wait_complete(bank);
         hal_flash_nonsecure_lock();
         /* Erase claimed non-secure page, in secure mode */
 #ifndef PLATFORM_stm32h5
@@ -96,7 +134,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         ISB();
-        hal_flash_wait_complete(0);
+        hal_flash_wait_complete(bank);
         address += FLASH_PAGE_SIZE;
     }
 #ifndef PLATFORM_stm32h5
@@ -198,15 +236,15 @@ void hal_gtzc_init(void)
 void hal_tz_sau_init(void)
 {
     uint32_t page_n = 0;
-    /* WIP: SAU is set up before staging */
+    /* SAU is set up before staging. Set up all areas as secure. */
     /* Non-secure callable: NSC functions area */
     sau_init_region(0, 0x0C038000, 0x0C040000, 1);
 
     /* Non-Secure: application flash area (first bank) */
-    sau_init_region(1, 0x08040000, 0x080FFFFF, 0);
+    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, FLASH_BANK2_BASE - 1, 0);
 
     /* Non-Secure: application flash area (second bank) */
-    sau_init_region(2, 0x08140000, 0x081FFFFF, 0);
+    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, FLASH_TOP -1, 0);
 
     /* Secure RAM regions in SRAM1/SRAM2 */
     sau_init_region(3, 0x30000000, 0x3004FFFF, 1);
@@ -216,6 +254,9 @@ void hal_tz_sau_init(void)
 
     /* Non-secure: internal peripherals */
     sau_init_region(5, 0x40000000, 0x4FFFFFFF, 0);
+
+    /* Set as non-secure: OTP + RO area */
+    sau_init_region(6, 0x08FFF000, 0x08FFFFFF, 0);
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;

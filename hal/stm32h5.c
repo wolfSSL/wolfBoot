@@ -385,6 +385,7 @@ static void fork_bootloader(void)
     uint32_t r = 0, w = 0;
     int i;
 
+
 #if TZ_SECURE()
     data = (uint32_t)((data & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
     dst = (uint32_t)((dst & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
