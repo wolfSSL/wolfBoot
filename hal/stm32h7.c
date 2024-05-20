@@ -543,6 +543,12 @@ static void hal_flash_otp_lock(void)
 
 /* Public API */
 
+int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length)
+{
+    /* TODO: set WP on OTP if needed */
+    return 0;
+}
+
 int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length)
 {
     volatile uint16_t tmp;

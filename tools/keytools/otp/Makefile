@@ -10,19 +10,19 @@ CFLAGS+=-O0 -ggdb
 CFLAGS+=-I. -I../../../ -I../../../include
 CFLAGS+=-I./wcs
 CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER
-OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
+PRI_KS_OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
 LSCRIPT=target.ld
 LDFLAGS+=$(CFLAGS) -T$(LSCRIPT) -lc -Wl,-Map=otp-keystore-primer.map
 
 ifeq ($(TARGET),stm32h7)
     CFLAGS+=-DTARGET_stm32h7
     CFLAGS+=-mcpu=cortex-m7 -ffunction-sections -fdata-sections -fno-common -ffreestanding -nostartfiles
-    OBJS+=../../../hal/stm32h7.o
+    PRI_KS_OBJS+=../../../hal/stm32h7.o
 endif
 ifeq ($(TARGET),stm32h5)
     CFLAGS+=-DTARGET_stm32h5
     CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common -ffreestanding -nostartfiles
-    OBJS+=../../../hal/stm32h5.o
+    PRI_KS_OBJS+=../../../hal/stm32h5.o
 endif
 CC=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
@@ -32,10 +32,10 @@ SIZE?=$(CROSS_COMPILE)size
 otp-keystore-primer.bin: otp-keystore-primer.elf
 	@$(OBJCOPY) -O binary $(^) $(@)
 
-otp-keystore-primer.elf: $(OBJS)
-	@$(CC) -o otp-keystore-primer.elf $(LDFLAGS) $(CFLAGS) $(OBJS)
+otp-keystore-primer.elf: $(PRI_KS_OBJS)
+	@$(CC) -o otp-keystore-primer.elf $(LDFLAGS) $(CFLAGS) $(PRI_KS_OBJS)
 	@$(SIZE) $(@)
 	
 
 clean:
-	@rm -rf $(OBJS) *.bin *.elf
+	@rm -rf $(PRI_KS_OBJS) *.bin *.elf

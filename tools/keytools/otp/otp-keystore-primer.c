@@ -34,6 +34,7 @@ void main(void)
     int n_keys = keystore_num_pubkeys();
     int i;
     struct wolfBoot_otp_hdr hdr;
+    uint32_t tot_len;
 
     hal_init();
 
@@ -57,6 +58,11 @@ void main(void)
                 OTP_HDR_SIZE + i * SIZEOF_KEYSTORE_SLOT, (uint16_t *)&PubKeys[i],
                 sizeof(struct keystore_slot));
     }
+
+    /* Protect the OTP area just written */
+    tot_len = OTP_HDR_SIZE + n_keys * SIZEOF_KEYSTORE_SLOT;
+    hal_flash_otp_set_readonly(FLASH_OTP_BASE, tot_len);
+
 
     /* Done! */
     while(1)

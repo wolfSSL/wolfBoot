@@ -207,6 +207,8 @@
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x24))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
 
+
+
 #define FLASH_SECBB1       ((volatile uint32_t *)(FLASH_BASE + 0x0A0)) /* Array */
 #define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0x1A0)) /* Array */
 #define FLASH_SECBB_NREGS  4    /* Array length for the two above */
@@ -239,6 +241,8 @@
 /* Both secure + non secure */
 #define FLASH_OPTCR       (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
 #define FLASH_OPSR        (*(volatile uint32_t *)(FLASH_BASE + 0x18))
+#define FLASH_OTPBLR_CUR  (*(volatile uint32_t *)(FLASH_BASE + 0x90))
+#define FLASH_OTPBLR_PRG  (*(volatile uint32_t *)(FLASH_BASE + 0x94))
 
 #define FLASH_OPSR_DATA_OP          (1 << 21)
 #define FLASH_OPSR_BK_OP            (1 << 22)
