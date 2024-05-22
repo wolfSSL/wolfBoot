@@ -2160,33 +2160,109 @@ c
 
 ## Renesas RX72N
 
-This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
-securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
-They are compiled by e2Studio and running on the target board.
+Tested on the RX72N ENVISION KIT (HMI development kit for IoT systems). This includes an onboard E2 Lite emulator.
 
-In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
-board for the debugger and flash programmer.
+The Renesas RX72N is supported either natively with "make" or through e2Studio. If using e2Studio see [Readme.md](../IDE/Renesas/e2studio/RX72N/Readme.md).
 
-Flash Allocation:
+Default UART Serial on SCI2 at P12-RXD2 P13-TXD2. Use USB on CN8 to attach a Virtual USB COM port. This feaure is enabled with `DEBUG_UART=1`.
+
+Example Boot Output (with DEBUG_UART=1):
 
 ```
-+---------------------------+------------------------+-----+
-| B |H|                     |H|                      |     |
-| o |e|   Primary           |e|   Update             |Swap |
-| o |a|   Partition         |a|   Partition          |Sect |
-| t |d|                     |d|                      |     |
-+---------------------------+------------------------+-----+
-0xffc00000: wolfBoot
-0xffc10000: Primary partition (Header)
-0xffc10100: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 256, e.g. ED25519, EC256, EC384 or EC512 */
-0xffc10200: Primary partition (Application image) /* When it uses IMAGE_HEADER_SIZE 512, e.g. RSA2048, RSA3072 */
-0xffdf0000: Update  partition (Header)
-0xffdf0100: Update  partition (Application image)
-0xfffd0000: Swap sector
+wolfBoot HAL Init
+Boot partition: 0xFFC00000
+Image size 25932
+
+| ------------------------------------------------------------------- |
+| Renesas RX User Application in BOOT partition started by wolfBoot   |
+| ------------------------------------------------------------------- |
+
+wolfBoot HAL Init
+
+=== Boot Partition[ffe00000] ===
+Magic:    WOLF
+Version:  01
+Status:   ff (New)
+Tail Mgc: ˇˇˇˇ
+
+=== Update Partition[ffef0000] ===
+Magic:    ˇˇˇˇ
+Version:  00
+Status:   ff (New)
+Tail Mgc: ˇˇˇˇ
+
+Current Firmware Version: 1
+Hit any key to call wolfBoot_success the firmware.
 ```
 
-Detailed steps can be found at [Readme.md](../IDE/Renesas/e2studio/RX72N/Readme.md).
+Default Onboard Flash Memory Layout (4MB) (64KB sector):
+
+| Description       | Address    | Size                |
+| ----------------- | ---------- | ------------------- |
+| OFSM Option Mem   | 0xFE7F5D00 | 0x00000080 ( 128 B ) |
+| Application       | 0xFFC00000 | 0x001F0000 (1984 KB) |
+| Update            | 0xFFDF0000 | 0x001F0000 (1984 KB) |
+| Swap              | 0xFFFE0000 | 0x00010000 (  64 KB) |
+| wolfBoot          | 0xFFFF0000 | 0x00010000 (  64 KB) |
+
+To switch RX parts to big endian data use:
+
+```sh
+# Big Endian
+rfp-cli -if fine -t e2l -device RX72x -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -write32 0xFE7F5D00 0xFFFFFFF8
+OR
+# Little Endian
+rfp-cli -if fine -t e2l -device RX72x -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -write32 0xFE7F5D00 0xFFFFFFFF
+```
+
+## Building Renesas RX72N
+
+Building RX wolfBoot requires the RX-ELF compiler. Please Download and install the Renesas RX GCC toolchain:
+https://llvm-gcc-renesas.com/rx-download-toolchains/
+
+Default installation path (Linux): `~/toolchains/gcc_8.3.0.202311_rx_elf`
+Default installation path (Windows): `C:\ProgramData\GCC for Renesas RX 8.3.0.202305-GNURX-ELF\rx-elf\rx-elf`
+
+Configuration:
+Use `./config/examples/renesas-rx72n.config` as a starting point by copying it to the wolfBoot root as `.config`.
+
+```sh
+cp ./config/examples/renesas-rx72n.config .config
+make
+```
+
+With RX GCC path or or custom cross compiler directly:
+`make CROSS_COMPILE="~/toolchains/gcc_8.3.0.202311_rx_elf/bin/rx-elf-"`
+OR
+`make RX_GCC_PATH="~/toolchains/gcc_8.3.0.202311_rx_elf"`
+
+
+TSIP: To enable TSIP use `make PKA=1`
+
+## Flashing Renesas RX72N
+
+Download the Renesas Flashing Tool: https://www.renesas.com/us/en/software-tool/renesas-flash-programmer-programming-gui
+Download the Renesas E2 Lite Linux Driver: https://www.renesas.com/us/en/document/swo/e2-emulator-e2-emulator-lite-linux-driver?r=488806
+
+Default Flash ID Code: FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+Flash Using:
+
+```
+rfp-cli -if fine -t e2l -device RX72x -auto -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF \
+    -bin FFFF0000 wolfboot.bin \
+    -bin FFC00000 test-app/image_v1_signed.bin \
+    -run
+```
+
+Note: Endianess: if using big endian add `-endian big`
+
+Note: Linux Install E2 Lite USB Driver:
+
+```sh
+sudo cp 99-renesas-emu.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+```
 
 
 ## Renesas RA6M4

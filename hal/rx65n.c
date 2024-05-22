@@ -32,7 +32,7 @@
 #include "hal.h"
 #include "hal/renesas-rx.h"
 
-#define SYS_CLK (240000000) /* 240MHz */
+#define SYS_CLK (120000000) /* 120MHz */
 #define PCLKA   (120000000) /* 120MHz */
 #define PCLKB   (60000000)  /* 60MHz */
 
@@ -107,19 +107,19 @@
 #define PROTECT_OFF() SYS_PRCR = (SYS_PRCR_PRKEY | SYS_PRCR_PRC0 | SYS_PRCR_PRC1 | SYS_PRCR_PRC3)
 #define PROTECT_ON()  SYS_PRCR = (SYS_PRCR_PRKEY)
 
-#define SYS_MOFCR   (*(volatile uint8_t *)(0x8C293))
+#define SYS_MOFCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0xC293))
 #define SYS_MOFCR_MOFXIN      (1 << 0)  /* OSC Force Oscillation: 0=not controlled, 1=main clock forced */
 #define SYS_MOFCR_MODRV2(n) ((n) << 4)  /* OSC MHz: 0=20.1-24, 1=16.1-20, 2=8.1-16, 3=8 */
 #define SYS_MOFCR_MOSEL       (1 << 6)  /* 0=resonator, 1=external clk in*/
 
-#define SYS_HOCOPCR  (*(volatile uint8_t *)(0x8C294))
+#define SYS_HOCOPCR  (*(volatile uint8_t *)(SYSTEM_BASE + 0xC294))
 #define SYS_HOCOPCR_HOCOPCNT (1 << 0) /* High-Speed On-Chip Oscillator Power Supply Control: 0=On, 1=Off */
 
-#define SYS_RSTSR1  (*(volatile uint8_t *)(0x8C291))
+#define SYS_RSTSR1  (*(volatile uint8_t *)(SYSTEM_BASE + 0xC291))
 #define SYS_RSTSR1_CWSF (1 << 0) /* 0=Cold Start, 1=Warm Start */
 
 /* RTC */
-#define RTC_BASE 0x8C400
+#define RTC_BASE (SYSTEM_BASE + 0xC400)
 #define RTC_RCR3 (*(volatile uint8_t *)(RTC_BASE + 0x26))
 #define RTC_RCR3_RTCEN      (1 << 0) /* Sub Clock Osc: 0=stopped, 1=operating */
 #define RTC_RCR3_RTCDV(n) ((n) << 1)
@@ -132,7 +132,7 @@
 #define FLASH_ROMWT_ROMWT(n) ((n) << 0) /* 0=no wait, 1=one wait cycle, 2=two wait cycles */
 
 /* Serial Communication Interface */
-#define SCI_BASE(n) (0x8A000 + ((n) * 0x20))
+#define SCI_BASE(n) (SYSTEM_BASE + 0xA000 + ((n) * 0x20))
 #define SCI_SMR(n)  (*(volatile uint8_t *)(SCI_BASE(n) + 0x00))
 #define SCI_SMR_CKS(clk) (clk & 0x3) /* 0=PCLK, 1=PCLK/4, 2=PCLK/16, 3=PCLK/64 */
 #define SCI_SMR_STOP  (1 << 3) /* 0=1 stop bit */
@@ -169,14 +169,14 @@
 #define SCI_SPMR_CKPH  (1 << 7) /* Clock Phase: 0=not delayed, 1=delayed */
 
 /* MPC (Multi-Function Pin Controller) */
-#define MPC_PWPR   (*(volatile uint8_t *)(0x8C11F))
+#define MPC_PWPR   (*(volatile uint8_t *)(SYSTEM_BASE + 0xC11F))
 #define MPC_PWPR_B0WI  (1 << 7)
 #define MPC_PWPR_PFSWE (1 << 6)
 
-#define MPC_PFS(n) (*(volatile uint8_t *)(0x8C0E0 + (n)))
+#define MPC_PFS(n) (*(volatile uint8_t *)(SYSTEM_BASE + 0xC0E0 + (n)))
 
 /* Ports */
-#define PORT_BASE    (0x8C000)
+#define PORT_BASE    (SYSTEM_BASE + 0xC000)
 #define PORT_PDR(n)  (*(volatile uint8_t*)(PORT_BASE + 0x00 + (n))) /* Port Direction Register: 0=Input, 1=Output */
 #define PORT_PODR(n) (*(volatile uint8_t*)(PORT_BASE + 0x20 + (n))) /* Port Output Data Register: 0=Low, 1=High */
 #define PORT_PIDR(n) (*(volatile uint8_t*)(PORT_BASE + 0x40 + (n))) /* Port Input Register: 0=Low input, 1=Hight Input */
@@ -186,7 +186,7 @@
 #define PORT_DSCR(n) (*(volatile uint8_t*)(PORT_BASE + 0xE0 + (n))) /* Drive Capacity Control Register: 0=Normal, 1=High-drive output */
 
 /* RSPI */
-#define RSPI_BASE(n)     (0xD0100 + ((n) * 0x40)) /* n=0-2 (RSPI0,RSPI1,RSPI2) */
+#define RSPI_BASE(n)     (SYSTEM_BASE + 0x50100 + ((n) * 0x40)) /* n=0-2 (RSPI0,RSPI1,RSPI2) */
 #define RSPI_SPCR(n)     (*(volatile uint8_t *)(RSPI_BASE(n) + 0x00)) /* Control */
 #define RSPI_SPCR_SPMS      (1 << 0) /* RSPI Mode Select 0=SPI operation (4-wire method) */
 #define RSPI_SPCR_TXMD      (1 << 1)
@@ -529,7 +529,7 @@ void hal_clk_init(void)
     #define PLL_MUL_STC (((uint8_t)((float)CFG_PLL_MUL * 2.0)) - 1)
     reg = (
         SYS_PLLCR_PLIDIV(CFD_PLL_DIV) | /* no div */
-        PLL_SRCSEL |                    /* clock source (0=main, 1=HOCO */
+        PLL_SRCSEL |                    /* clock source (0=main, 1=HOCO) */
         SYS_PLLCR_STC(PLL_MUL_STC)      /* multiplier */
     );
     SYS_PLLCR = reg;

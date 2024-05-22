@@ -1,4 +1,4 @@
-/* spi_drv_rx65n.c
+/* spi_drv_renesas_rx.c
  *
  * Driver for the SPI back-end of the SPI_FLASH module.
  *
@@ -24,7 +24,7 @@
  */
 #include <stdint.h>
 #include "spi_drv.h"
-#include "spi_drv_rx65n.h"
+#include "spi_drv_renesas_rx.h"
 
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 

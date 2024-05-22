@@ -511,7 +511,11 @@ ifeq ($(SPI_FLASH),1)
   EXT_FLASH=1
   CFLAGS+=-D"SPI_FLASH=1"
   OBJS+= src/spi_flash.o
-  WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  ifeq ($(ARCH),RENESAS_RX)
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_renesas_rx.o
+  else
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(OCTOSPI_FLASH),1)
@@ -524,7 +528,11 @@ ifeq ($(QSPI_FLASH),1)
   EXT_FLASH=1
   CFLAGS+=-D"QSPI_FLASH=1"
   OBJS+= src/qspi_flash.o
-  WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  ifeq ($(ARCH),RENESAS_RX)
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_renesas_rx.o
+  else
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(UART_FLASH),1)

@@ -58,8 +58,8 @@
 #include "hal/spi/spi_drv_nxp.h"
 #endif
 
-#if defined(PLATFORM_rx65n)
-#include "hal/spi/spi_drv_rx65n.h"
+#if defined(WOLFBOOT_ARCH_RENESAS_RX)
+#include "hal/spi/spi_drv_renesas_rx.h"
 #endif
 
 void spi_init(int polarity, int phase);

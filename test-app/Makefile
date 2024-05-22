@@ -213,7 +213,12 @@ endif
 
 ifeq ($(SPI_FLASH),1)
   CFLAGS+=-D"SPI_FLASH"
-  APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/spi_flash.o
+  APP_OBJS+=../src/spi_flash.o
+  ifeq ($(ARCH),RENESAS_RX)
+    APP_OBJS+=../hal/spi/spi_drv_renesas_rx.o
+  else
+    APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(OCTOSPI_FLASH),1)
@@ -223,7 +228,12 @@ endif
 
 ifeq ($(QSPI_FLASH),1)
   CFLAGS+=-D"QSPI_FLASH"
-  APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/qspi_flash.o
+  APP_OBJS+=../src/qspi_flash.o
+  ifeq ($(ARCH),RENESAS_RX)
+    APP_OBJS+=../hal/spi/spi_drv_renesas_rx.o
+  else
+    APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(UART_FLASH),1)

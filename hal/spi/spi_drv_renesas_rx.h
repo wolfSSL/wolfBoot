@@ -1,4 +1,4 @@
-/* spi_drv_rx65n.h
+/* spi_drv_renesas_rx.h
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,11 +15,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef SPI_DRV_RX65N_H_INCLUDED
-#define SPI_DRV_RX65N_H_INCLUDED
+#ifndef SPI_DRV_RENESAS_RX_H_INCLUDED
+#define SPI_DRV_RENESAS_RX_H_INCLUDED
 #include <stdint.h>
 
 #define SPI_CS_FLASH    0
 #define SPI_CS_PIO_BASE 0UL
 
-#endif /* !SPI_DRV_RX65N_H_INCLUDED */
+#endif /* !SPI_DRV_RENESAS_RX_H_INCLUDED */
