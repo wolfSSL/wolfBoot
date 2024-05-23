@@ -36,6 +36,7 @@
 #include <target.h>
 #include "hal.h"
 #include "hal/renesas-rx.h"
+#include "spi_drv.h"
 
 #define SYS_CLK (240000000) /* 240MHz */
 #define PCLKA   (120000000) /* 120MHz */
@@ -242,6 +243,64 @@
 #define RSPI_SPDCR2(n)   (*(volatile uint8_t *)(RSPI_BASE(n) + 0x20)) /* Data Control 2 */
 #define RSPI_SPDCR2_BYSW    (1 << 0) /* Byte Swap: 0=Byte swapping of SPDR data disabled, 1=Byte swapping of SPDR data enabled */
 
+/* QSPI */
+#define QSPI_BASE (SYSTEM_BASE + 0x9E00)
+#define QSPI_SPCR           (*(volatile uint8_t *)(QSPI_BASE + 0x00)) /* QSPI Control Register */
+#define QSPI_SPCR_MSTR      (1 << 3) /* 0=Slave, 1=Master */
+#define QSPI_SPCR_SPE       (1 << 6) /* 1=Enable RSPI */
+#define QSPI_SPPCR       (*(volatile uint8_t *)(QSPI_BASE + 0x02)) /* Pin Control */
+#define QSPI_SPPCR_IO2FV    (1 << 1) /* Single-/Dual-SPI Mode QIO2 */
+#define QSPI_SPPCR_IO3FV    (1 << 2) /* Single-/Dual-SPI Mode QIO3 */
+#define QSPI_SPPCR_MOIFV    (1 << 4) /* MOSI Idle Fixed Value */
+#define QSPI_SPPCR_MOIDE    (1 << 5) /* MOSI Idle Value Fixing Enable */
+#define QSPI_SPSR        (*(volatile uint8_t *)(QSPI_BASE + 0x03)) /* Status */
+#define QSPI_SPSR_SPSSLF    (1 << 4) /* QSSL Negation Flag */
+#define QSPI_SPSR_SPTEF     (1 << 5) /* Transmit Buffer Empty Flag */
+#define QSPI_SPSR_TREND     (1 << 6) /* Transmit End Flag */
+#define QSPI_SPSR_SPRFF     (1 << 7) /* Receive Buffer Full Flag */
+#define QSPI_SPDR8       (*(volatile uint8_t  *)(QSPI_BASE + 0x04)) /* Data */
+#define QSPI_SPDR16      (*(volatile uint16_t *)(QSPI_BASE + 0x04)) /* Data */
+#define QSPI_SPDR32      (*(volatile uint32_t *)(QSPI_BASE + 0x04)) /* Data */
+#define QSPI_SPSCR       (*(volatile uint32_t *)(QSPI_BASE + 0x08)) /* Sequence Control */
+#define QSPI_SPSCR_SPSC(s) ((s) & 0x3) /* Number of SPCMDn register to be referenced (n = 0 to 3) */
+#define QSPI_SPSSR       (*(volatile uint8_t *)(QSPI_BASE + 0x09)) /* Sequence Status */
+#define QSPI_SPSSR_SPSS(s) ((s) & 0x3) /* Sequence Status: 0=SPCMD0, 1=SPCMD1, 2=SPCMD2, 3=SPCMD3 */
+#define QSPI_SPBR        (*(volatile uint8_t *)(QSPI_BASE + 0x0A)) /* Bit Rate = f(PCLK) / (2 x m x 2^n): 1=30 Mbps, 2=15Mpbs, 3=10Mbps, 4=7.5Mbps, 5=6Mbps */
+#define QSPI_SPDCR       (*(volatile uint8_t *)(QSPI_BASE + 0x0B)) /* Data Control */
+#define QSPI_SPDCR_TXDMY    (1 << 7) /* Dummy Data Transmission Enable */
+#define QSPI_SPCKD       (*(volatile uint8_t *)(QSPI_BASE + 0x0C)) /* Clock Delay */
+#define QSPI_SPCKD_SCKDL(d) ((d) & 0x7) /* Clock Delay Setting: 0=1.5, 1=2.5, 3=3.5 QSPCLK */
+#define QSPI_SSLND       (*(volatile uint8_t *)(QSPI_BASE + 0x0D)) /* Slave Select Negation Delay */
+#define QSPI_SSLND_SLNDL(d) ((d) & 0x7) /* QSSL Neg Delay Setting: 0=1, 1=2 QSPCLK */
+#define QSPI_SPND        (*(volatile uint8_t *)(QSPI_BASE + 0x0D)) /* Next-Access Delay */
+#define QSPI_SPND_SPNDL(d)  ((d) & 0x7) /*  Next-Access Delay Setting: 0=1, 1=2 QSPCLK */
+#define QSPI_SPCMD(n)    (*(volatile uint16_t *)(QSPI_BASE + 0x10 + (((n) & 0x3) * 2))) /* Command Register */
+#define QSPI_SPCMD_CPHA     (1 << 0) /* Phase: 0=Data sampling on odd edge, data variation on even edge */
+#define QSPI_SPCMD_CPOL     (1 << 1) /* Polarity: 0=QSPCLK is low when idle, 1=High when idle */
+#define QSPI_SPCMD_BRDV_MASK (0x3 << 2)
+#define QSPI_SPCMD_BRDV(d)  (((d) & 0x3) << 2) /* Bit Rate Division : 0=none,1=div2,2=div4,3=div8 */
+#define QSPI_SPCMD_SPRW     (1 << 4) /* SPI Read/Write Access: 0=Write operation (QIO1 and QIO0/QIO3 to QIO0: Output), 1=Read operation (QIO1 and QIO0/QIO3 to QIO0: Input) */
+#define QSPI_SPCMD_SPREAD   QSPI_SPCMD_SPRW
+#define QSPI_SPCMD_SPWRITE  0
+#define QSPI_SPCMD_SPIMOD(n) (((n) & 0x3) << 5) /* SPI Operating Mode: 0=Single SPI, 1=Dual SPI, 2=Quad SPI */
+#define QSPI_SPCMD_SSLKP    (1 << 7) /* Signal Level Keeping: 0=Deassert on transfer complete, 1=Keep asserted */
+#define QSPI_SPCMD_SPB_MASK (0xF << 8)
+#define QSPI_SPCMD_SPB(l)   (((l) & 0xF) << 8) /* Data Length: 0=1 byte, 1=2 bytes, 2=4 bytes */
+#define QSPI_SPCMD_LSBF     (1 << 12) /* LSB First: 0=MSB First, 1=LSB First */
+#define QSPI_SPCMD_SPNDEN   (1 << 13) /* Next-Access Delay Enable */
+#define QSPI_SPCMD_SLNDEN   (1 << 14) /* SSL Negation Delay Setting Enable */
+#define QSPI_SPCMD_SCKDEN   (1 << 15) /* QSPCLK Delay Setting Enable */
+#define QSPI_SPBFCR      (*(volatile uint8_t *)(QSPI_BASE + 0x1E)) /* Buffer Control */
+#define QSPI_SPBFCR_RXTRG(n)  ((n) & 0x7)       /* Receive Buffer Data Trigger Num */
+#define QSPI_SPBFCR_TXTRG(n) (((n) & 0x7) >> 3) /* Transmit Buffer Data Trigger Num */
+#define QSPI_SPBFCR_RXRST    (1 << 6) /* Receive Buffer Data Reset */
+#define QSPI_SPBFCR_TXRST    (1 << 7) /* Transmit Buffer Data Reset */
+#define QSPI_SPBDCR      (*(volatile uint16_t *)(QSPI_BASE + 0x1A)) /* Buffer Data Count Set */
+#define QSPI_SPBDCR_RXBC(n) ((n) & 0x3F)
+#define QSPI_SPBDCR_TXBC(n) (((n) & 0x3F) << 8)
+#define QSPI_SPBMUL(n)   (*(volatile uint32_t *)(QSPI_BASE + 0x1C + (((n) & 0x3) * 4))) /* Transfer Data Length Multiplier Setting */
+
+#define QSPI_FIFO_SIZE 32 /* bytes */
 
 static void hal_delay_us(uint32_t us)
 {
@@ -265,6 +324,7 @@ static void hal_delay_us(uint32_t us)
 #define FLASH_SPI_USE_HW_CS
 void spi_init(int polarity, int phase)
 {
+    uint32_t reg;
 #ifdef SPI_FLASH
     /* Release RSPI1 module stop (clear bit) */
     PROTECT_OFF();
@@ -351,20 +411,46 @@ void spi_init(int polarity, int phase)
     MPC_PWPR &= ~(MPC_PWPR_PFSWE | MPC_PWPR_B0WI);
     MPC_PWPR |=   MPC_PWPR_PFSWE;
 
-    /* TODO: Configure QSPI */
+    /* Configure QSPI */
+    QSPI_SPCR = QSPI_SPCR_MSTR; /* Master mode */
+    QSPI_SPPCR = (QSPI_SPPCR_MOIFV | QSPI_SPPCR_MOIDE); /* enable idle fixing */
+    QSPI_SPBR  = 1; /* 30Mbps */
+    QSPI_SPCKD = QSPI_SPCKD_SCKDL(0); /* 1 clock delay (SSL assert and first clock cycle) */
+    QSPI_SSLND = QSPI_SSLND_SLNDL(0); /* 1 clock delay (last clock cycle and SSL negation) */
+    QSPI_SPND  = QSPI_SPND_SPNDL(0); /* Next-Access Delay: 1RSPCK+2PCLK */
+    QSPI_SPDCR = 0; /* no dummy TX */
 
+    /* Setup default QSPI commands */
+    reg = (
+        QSPI_SPCMD_SPIMOD(0) | /* Single SPI */
+        QSPI_SPCMD_SPB(0) |    /* use byte */
+        QSPI_SPCMD_BRDV(0) |   /* div/1 */
+        QSPI_SPCMD_SSLKP |     /* keep signal level between transfers */
+        QSPI_SPCMD_SPNDEN |    /* enable Next-Access Delay */
+        QSPI_SPCMD_SLNDEN |    /* enable negation Delay */
+        QSPI_SPCMD_SCKDEN      /* enable RSPCK Delay */
+    );
+    if (polarity)
+        reg |= QSPI_SPCMD_CPOL;
+    if (phase)
+        reg |= QSPI_SPCMD_CPHA;
+    QSPI_SPCMD(0) = reg;
+    QSPI_SPCMD(1) = reg;
+    QSPI_SPCMD(2) = reg;
+    QSPI_SPCMD(3) = reg;
 #endif /* QSPI_FLASH */
     (void)polarity;
     (void)phase;
+    (void)reg;
 }
 
 void spi_release(void)
 {
 #ifdef SPI_FLASH
-    /* Disable SPI master */
-    RSPI_SPCR(FLASH_RSPI_PORT) &= ~RSPI_SPCR_SPE;
+    RSPI_SPCR(FLASH_RSPI_PORT) &= ~RSPI_SPCR_SPE; /* Disable SPI master */
 #endif
 #ifdef QSPI_FLASH
+    QSPI_SPCR &= ~QSPI_SPCR_SPE; /* Disable QSPI master */
 #endif
 }
 #endif /* SPI_FLASH || QSPI_FLASH */
@@ -406,18 +492,175 @@ uint8_t spi_read(void)
 }
 #endif /* SPI_FLASH */
 
+
 #ifdef QSPI_FLASH
 
-/* Macronix MX25L3233FM2I-08G: 4MB QSPI Serial Flash */
-/* QSPI: PD2/QIO2-B, PD3/QIO3-B, PD4/QSSL-B, PD5/QSPCLK-B, PD6/QIO0-B, PD7/QIO1-B */
+/* TODO: Handle timeout */
+/* dataSz in bytes */
+static int qspi_data(const uint32_t* txData, uint32_t* rxData, uint32_t dataSz)
+{
+    volatile uint32_t tmp;
+    static uint32_t fifoLvl = 0;
+    uint8_t *pTx, *pRx;
 
+    /* Do full FIFO (32 bytes) TX/RX - word */
+    while (dataSz >= QSPI_FIFO_SIZE/2) {
+        /* Set FIFO Trigger Level: RX Trig=16 bytes, TX Trig=16 bytes */
+        QSPI_SPBFCR = QSPI_SPBFCR_RXTRG(5) | QSPI_SPBFCR_TXTRG(3);
+        tmp = QSPI_SPBFCR; /* Per ref manual: SPBFCR requires dummy read after write */
+
+        /* Transmit Data */
+        for (fifoLvl=0; fifoLvl<QSPI_FIFO_SIZE/2; fifoLvl+=4) {
+            tmp = 0xFFFFFFFF;
+            if (txData) {
+                tmp = *txData++;
+            #ifndef BIG_ENDIAN_ORDER
+                tmp = __builtin_bswap32(tmp);
+            #endif
+            }
+            QSPI_SPDR32 = tmp;
+        }
+        dataSz -= QSPI_FIFO_SIZE/2;
+
+        /* Clear transmit empty flag */
+        QSPI_SPSR |= QSPI_SPSR_SPTEF;
+
+        /* handle RX */
+        if (fifoLvl >= QSPI_FIFO_SIZE) {
+            /* Wait for receive full */
+            while ((QSPI_SPSR & QSPI_SPSR_SPRFF) == 0);
+            /* Recieve bytes */
+            while (fifoLvl-- > 0) {
+                tmp = QSPI_SPDR32;
+                if (rxData) {
+                #ifndef BIG_ENDIAN_ORDER
+                    tmp = __builtin_bswap32(tmp);
+                #endif
+                    *rxData++ = tmp;
+                }
+            }
+            /* Clear receive buffer full flag */
+            QSPI_SPSR |= QSPI_SPSR_SPRFF;
+        }
+        else {
+            /* Wait for transmit complete */
+            while ((QSPI_SPSR & QSPI_SPSR_SPTEF) == 0);
+        }
+    }
+
+    /* Set FIFO Trigger Level: RX Trig=1 bytes, TX Trig=0 bytes */
+    QSPI_SPBFCR = QSPI_SPBFCR_RXTRG(0) | QSPI_SPBFCR_TXTRG(6);
+    tmp = QSPI_SPBFCR; /* Per ref manual: SPBFCR requires dummy read after write */
+
+    /* Remainder FIFO TX/RX - byte */
+    pTx = (uint8_t*)txData;
+    pRx = (uint8_t*)rxData;
+    /* Transmit Data */
+    while (dataSz > 0) {
+        if (pTx)
+            QSPI_SPDR8 = *pTx++;
+        else
+            QSPI_SPDR8 = 0xFF;
+        dataSz--;
+        fifoLvl++;
+    }
+    /* Wait for transmit complete */
+    while ((QSPI_SPSR & QSPI_SPSR_SPTEF) == 0);
+
+    /* Recieve bytes */
+    while (fifoLvl-- > 0) {
+        /* Wait for receive full */
+        while ((QSPI_SPSR & QSPI_SPSR_SPRFF) == 0);
+        if (rxData)
+            *pRx++ = QSPI_SPDR8;
+        else
+            tmp = QSPI_SPDR8;
+    }
+
+    /* Clear flags */
+    QSPI_SPSR |= (QSPI_SPSR_SPTEF | QSPI_SPSR_SPRFF | QSPI_SPSR_SPSSLF);
+
+    return 0;
+}
+
+/* fmode = read (1) / write (0) */
 int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     uint32_t addr, uint32_t addrSz, uint32_t addrMode,
     uint32_t alt, uint32_t altSz, uint32_t altMode,
     uint32_t dummySz,
     uint8_t* data, uint32_t dataSz, uint32_t dataMode)
 {
-    /* TODO: Add QSPI driver */
+    uint8_t seq = 0;
+    uint16_t cmd_def;
+    volatile uint32_t reg;
+
+    /* capture command defaults */
+    cmd_def = QSPI_SPCMD(0) & (
+        QSPI_SPCMD_CPOL | QSPI_SPCMD_CPHA | QSPI_SPCMD_SSLKP |
+        QSPI_SPCMD_SPNDEN | QSPI_SPCMD_SLNDEN | QSPI_SPCMD_SCKDEN |
+        QSPI_SPCMD_BRDV_MASK | QSPI_SPCMD_SPB_MASK
+    );
+
+    /* Clear flags */
+    QSPI_SPSR |= (QSPI_SPSR_SPTEF | QSPI_SPSR_SPRFF | QSPI_SPSR_SPSSLF);
+
+    /* Reset buffers */
+    QSPI_SPBFCR |= (QSPI_SPBFCR_RXRST | QSPI_SPBFCR_TXRST);
+    reg = QSPI_SPBFCR; /* Per ref manual: SPBFCR requires dummy read after write */
+
+    /* Command / Instruction - Write */
+    QSPI_SPBMUL(seq) = 1; /* Set Data length */
+    QSPI_SPCMD(seq) = (cmd_def | QSPI_SPCMD_SPIMOD(0));
+    seq++;
+
+    /* Address Write */
+    if (addrMode != QSPI_DATA_MODE_NONE) {
+        QSPI_SPBMUL(seq) = addrSz;
+        QSPI_SPCMD(seq) = (cmd_def | QSPI_SPCMD_SPIMOD(addrMode-1));
+        seq++;
+    }
+
+    /* Alternate bytes + dummy */
+    if (altMode != QSPI_DATA_MODE_NONE || dummySz > 0) {
+        QSPI_SPBMUL(seq) = altSz + dummySz;
+        QSPI_SPCMD(seq) = (cmd_def | QSPI_SPCMD_SPIMOD(altMode-1));
+        seq++;
+    }
+
+    /* Data */
+    if (dataMode != QSPI_DATA_MODE_NONE) {
+        QSPI_SPBMUL(seq) = dataSz;
+        QSPI_SPCMD(seq) = (cmd_def | QSPI_SPCMD_SPIMOD(dataMode-1));
+        if (fmode == QSPI_MODE_READ)
+            QSPI_SPCMD(seq) |= QSPI_SPCMD_SPREAD;
+        seq++;
+    }
+
+    /* Set number of sequences */
+    QSPI_SPSCR = QSPI_SPSCR_SPSC(seq-1);
+
+    /* Enable the QSPI peripheral */
+    QSPI_SPCR |= QSPI_SPCR_SPE;
+
+    /* Transfer Data for sequences */
+    qspi_data((uint32_t*)&cmd, NULL, 1);
+    if (addrMode != QSPI_DATA_MODE_NONE) {
+        qspi_data(&addr, NULL, addrSz);
+    }
+    if (altMode != QSPI_DATA_MODE_NONE) {
+        qspi_data(&alt, NULL, altSz);
+    }
+    if (dummySz > 0) {
+        qspi_data(NULL, NULL, dummySz);
+    }
+    qspi_data(&alt, NULL, altSz);
+
+    /* Wait for QSSL negation */
+    while ((QSPI_SPSR & QSPI_SPSR_SPSSLF) == 0);
+
+    /* Disable QSPI */
+    QSPI_SPCR &= ~QSPI_SPCR_SPE;
+
     return 0;
 }
 #endif /* QSPI_FLASH */

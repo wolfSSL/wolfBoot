@@ -2197,8 +2197,8 @@ Hit any key to call wolfBoot_success the firmware.
 
 Default Onboard Flash Memory Layout (4MB) (64KB sector):
 
-| Description       | Address    | Size                |
-| ----------------- | ---------- | ------------------- |
+| Description       | Address    | Size                 |
+| ----------------- | ---------- | -------------------- |
 | OFSM Option Mem   | 0xFE7F5D00 | 0x00000080 ( 128 B ) |
 | Application       | 0xFFC00000 | 0x001F0000 (1984 KB) |
 | Update            | 0xFFDF0000 | 0x001F0000 (1984 KB) |
