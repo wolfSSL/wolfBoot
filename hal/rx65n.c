@@ -238,6 +238,10 @@
 #define RSPI_SPDCR2_BYSW    (1 << 0) /* Byte Swap: 0=Byte swapping of SPDR data disabled, 1=Byte swapping of SPDR data enabled */
 
 
+#if defined(EXT_FLASH) && defined(TEST_FLASH)
+static int test_flash(void);
+#endif
+
 static void hal_delay_us(uint32_t us)
 {
     uint32_t delay;
@@ -586,6 +590,11 @@ void hal_init(void)
 #ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot HAL Init\n", 18);
+#endif
+#if defined(EXT_FLASH) && defined(TEST_FLASH)
+    if (test_flash() != 0) {
+        wolfBoot_printf("Flash Test Failed!\n");
+    }
 #endif
     return;
 }

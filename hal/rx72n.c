@@ -20,10 +20,11 @@
  */
 
 /* HAL for Renesas RX72N */
-/* Default configuration:
+/* Tested with:
  *   RX72N Envision Kit (HMI IoT)
  *   R5F572NNHDFB 144-pin LFQFP (PLQP0144KA-B)
  * 4MB Flash, 1MB RAM, 32KB Data Flash, 240MHz, TSIP
+ * QSPI: Macronix MX25L3233FM2I-08G: 4MB QSPI Serial Flash
  */
 
 #include <stdio.h>
@@ -248,6 +249,8 @@
 #define QSPI_SPCR           (*(volatile uint8_t *)(QSPI_BASE + 0x00)) /* QSPI Control Register */
 #define QSPI_SPCR_MSTR      (1 << 3) /* 0=Slave, 1=Master */
 #define QSPI_SPCR_SPE       (1 << 6) /* 1=Enable RSPI */
+#define QSPI_SSLP           (*(volatile uint8_t *)(QSPI_BASE + 0x01)) /* QSPI Slave Select Polarity */
+#define QSPI_SSLP_SSLP      (1 << 0) /* 0=active low (default), 1=active high */
 #define QSPI_SPPCR       (*(volatile uint8_t *)(QSPI_BASE + 0x02)) /* Pin Control */
 #define QSPI_SPPCR_IO2FV    (1 << 1) /* Single-/Dual-SPI Mode QIO2 */
 #define QSPI_SPPCR_IO3FV    (1 << 2) /* Single-/Dual-SPI Mode QIO3 */
@@ -261,7 +264,7 @@
 #define QSPI_SPDR8       (*(volatile uint8_t  *)(QSPI_BASE + 0x04)) /* Data */
 #define QSPI_SPDR16      (*(volatile uint16_t *)(QSPI_BASE + 0x04)) /* Data */
 #define QSPI_SPDR32      (*(volatile uint32_t *)(QSPI_BASE + 0x04)) /* Data */
-#define QSPI_SPSCR       (*(volatile uint32_t *)(QSPI_BASE + 0x08)) /* Sequence Control */
+#define QSPI_SPSCR       (*(volatile uint8_t *)(QSPI_BASE + 0x08)) /* Sequence Control */
 #define QSPI_SPSCR_SPSC(s) ((s) & 0x3) /* Number of SPCMDn register to be referenced (n = 0 to 3) */
 #define QSPI_SPSSR       (*(volatile uint8_t *)(QSPI_BASE + 0x09)) /* Sequence Status */
 #define QSPI_SPSSR_SPSS(s) ((s) & 0x3) /* Sequence Status: 0=SPCMD0, 1=SPCMD1, 2=SPCMD2, 3=SPCMD3 */
@@ -290,9 +293,9 @@
 #define QSPI_SPCMD_SPNDEN   (1 << 13) /* Next-Access Delay Enable */
 #define QSPI_SPCMD_SLNDEN   (1 << 14) /* SSL Negation Delay Setting Enable */
 #define QSPI_SPCMD_SCKDEN   (1 << 15) /* QSPCLK Delay Setting Enable */
-#define QSPI_SPBFCR      (*(volatile uint8_t *)(QSPI_BASE + 0x1E)) /* Buffer Control */
+#define QSPI_SPBFCR      (*(volatile uint8_t *)(QSPI_BASE + 0x18)) /* Buffer Control */
 #define QSPI_SPBFCR_RXTRG(n)  ((n) & 0x7)       /* Receive Buffer Data Trigger Num */
-#define QSPI_SPBFCR_TXTRG(n) (((n) & 0x7) >> 3) /* Transmit Buffer Data Trigger Num */
+#define QSPI_SPBFCR_TXTRG(n) (((n) & 0x7) << 3) /* Transmit Buffer Data Trigger Num */
 #define QSPI_SPBFCR_RXRST    (1 << 6) /* Receive Buffer Data Reset */
 #define QSPI_SPBFCR_TXRST    (1 << 7) /* Transmit Buffer Data Reset */
 #define QSPI_SPBDCR      (*(volatile uint16_t *)(QSPI_BASE + 0x1A)) /* Buffer Data Count Set */
@@ -301,6 +304,11 @@
 #define QSPI_SPBMUL(n)   (*(volatile uint32_t *)(QSPI_BASE + 0x1C + (((n) & 0x3) * 4))) /* Transfer Data Length Multiplier Setting */
 
 #define QSPI_FIFO_SIZE 32 /* bytes */
+
+
+#if defined(EXT_FLASH) && defined(TEST_FLASH)
+static int test_flash(void);
+#endif
 
 static void hal_delay_us(uint32_t us)
 {
@@ -312,14 +320,10 @@ static void hal_delay_us(uint32_t us)
 
 #if defined(SPI_FLASH) || defined(QSPI_FLASH)
 
-/* Macronix MX25L3233FM2I-08G: 4MB QSPI Serial Flash */
 /* RSPI1: P27/RSPCKB-A, P26/MOSIB-A, P30/MISOB-A, P31/SSLB0-A */
 /* QSPI:  PD2/QIO2-B, PD3/QIO3-B, PD4/QSSL-B, PD5/QSPCLK-B, PD6/QIO0-B, PD7/QIO1-B */
 #ifndef FLASH_RSPI_PORT
 #define FLASH_RSPI_PORT 1 /* RSPI1 */
-#endif
-#ifndef FLASH_CLK_HZ
-#define FLASH_CLK_HZ 15000000
 #endif
 #define FLASH_SPI_USE_HW_CS
 void spi_init(int polarity, int phase)
@@ -413,6 +417,7 @@ void spi_init(int polarity, int phase)
 
     /* Configure QSPI */
     QSPI_SPCR = QSPI_SPCR_MSTR; /* Master mode */
+    QSPI_SSLP &= ~QSPI_SSLP_SSLP; /* SS Active low */
     QSPI_SPPCR = (QSPI_SPPCR_MOIFV | QSPI_SPPCR_MOIDE); /* enable idle fixing */
     QSPI_SPBR  = 1; /* 30Mbps */
     QSPI_SPCKD = QSPI_SPCKD_SCKDL(0); /* 1 clock delay (SSL assert and first clock cycle) */
@@ -424,7 +429,7 @@ void spi_init(int polarity, int phase)
     reg = (
         QSPI_SPCMD_SPIMOD(0) | /* Single SPI */
         QSPI_SPCMD_SPB(0) |    /* use byte */
-        QSPI_SPCMD_BRDV(0) |   /* div/1 */
+        QSPI_SPCMD_BRDV(0) |   /* div/1 (no div) */
         QSPI_SPCMD_SSLKP |     /* keep signal level between transfers */
         QSPI_SPCMD_SPNDEN |    /* enable Next-Access Delay */
         QSPI_SPCMD_SLNDEN |    /* enable negation Delay */
@@ -504,13 +509,13 @@ static int qspi_data(const uint32_t* txData, uint32_t* rxData, uint32_t dataSz)
     uint8_t *pTx, *pRx;
 
     /* Do full FIFO (32 bytes) TX/RX - word */
-    while (dataSz >= QSPI_FIFO_SIZE/2) {
+    while (dataSz >= ((QSPI_FIFO_SIZE/2) - fifoLvl)) {
         /* Set FIFO Trigger Level: RX Trig=16 bytes, TX Trig=16 bytes */
         QSPI_SPBFCR = QSPI_SPBFCR_RXTRG(5) | QSPI_SPBFCR_TXTRG(3);
         tmp = QSPI_SPBFCR; /* Per ref manual: SPBFCR requires dummy read after write */
 
         /* Transmit Data */
-        for (fifoLvl=0; fifoLvl<QSPI_FIFO_SIZE/2; fifoLvl+=4) {
+        while (fifoLvl < (QSPI_FIFO_SIZE/2)) {
             tmp = 0xFFFFFFFF;
             if (txData) {
                 tmp = *txData++;
@@ -519,6 +524,7 @@ static int qspi_data(const uint32_t* txData, uint32_t* rxData, uint32_t dataSz)
             #endif
             }
             QSPI_SPDR32 = tmp;
+            fifoLvl += 4;
         }
         dataSz -= QSPI_FIFO_SIZE/2;
 
@@ -530,7 +536,7 @@ static int qspi_data(const uint32_t* txData, uint32_t* rxData, uint32_t dataSz)
             /* Wait for receive full */
             while ((QSPI_SPSR & QSPI_SPSR_SPRFF) == 0);
             /* Recieve bytes */
-            while (fifoLvl-- > 0) {
+            while (fifoLvl > 0) {
                 tmp = QSPI_SPDR32;
                 if (rxData) {
                 #ifndef BIG_ENDIAN_ORDER
@@ -538,6 +544,7 @@ static int qspi_data(const uint32_t* txData, uint32_t* rxData, uint32_t dataSz)
                 #endif
                     *rxData++ = tmp;
                 }
+                fifoLvl -= 4;
             }
             /* Clear receive buffer full flag */
             QSPI_SPSR |= QSPI_SPSR_SPRFF;
@@ -568,17 +575,15 @@ static int qspi_data(const uint32_t* txData, uint32_t* rxData, uint32_t dataSz)
     while ((QSPI_SPSR & QSPI_SPSR_SPTEF) == 0);
 
     /* Recieve bytes */
-    while (fifoLvl-- > 0) {
+    while (fifoLvl > 0) {
         /* Wait for receive full */
         while ((QSPI_SPSR & QSPI_SPSR_SPRFF) == 0);
         if (rxData)
             *pRx++ = QSPI_SPDR8;
         else
             tmp = QSPI_SPDR8;
+        fifoLvl--;
     }
-
-    /* Clear flags */
-    QSPI_SPSR |= (QSPI_SPSR_SPTEF | QSPI_SPSR_SPRFF | QSPI_SPSR_SPSSLF);
 
     return 0;
 }
@@ -636,6 +641,9 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
         seq++;
     }
 
+    /* End CS (set high) on last transaction */
+    QSPI_SPCMD(seq-1) &= ~QSPI_SPCMD_SSLKP;
+
     /* Set number of sequences */
     QSPI_SPSCR = QSPI_SPSCR_SPSC(seq-1);
 
@@ -653,10 +661,16 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     if (dummySz > 0) {
         qspi_data(NULL, NULL, dummySz);
     }
-    qspi_data(&alt, NULL, altSz);
+    if (fmode == QSPI_MODE_READ)
+        qspi_data(NULL, (uint32_t*)data, dataSz);
+    else
+        qspi_data((const uint32_t*)data, NULL, dataSz);
 
     /* Wait for QSSL negation */
     while ((QSPI_SPSR & QSPI_SPSR_SPSSLF) == 0);
+
+    /* Clear flags */
+    QSPI_SPSR |= (QSPI_SPSR_SPTEF | QSPI_SPSR_SPRFF | QSPI_SPSR_SPSSLF);
 
     /* Disable QSPI */
     QSPI_SPCR &= ~QSPI_SPCR_SPE;
@@ -892,6 +906,12 @@ void hal_init(void)
     uart_init();
     uart_write("wolfBoot HAL Init\n", 18);
 #endif
+#if defined(EXT_FLASH) && defined(TEST_FLASH)
+    if (test_flash() != 0) {
+        wolfBoot_printf("Flash Test Failed!\n");
+    }
+#endif
+
     return;
 }
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
