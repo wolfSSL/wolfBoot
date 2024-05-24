@@ -36,9 +36,9 @@ ifeq ($(SIGN),NONE)
 else
   PRIVATE_KEY=wolfboot_signing_private_key.der
   ifeq ($(FLASH_OTP_KEYSTORE),1)
-        OBJS+=./src/flash_otp_keystore.o
+    OBJS+=./src/flash_otp_keystore.o
   else
-        OBJS+=./src/keystore.o
+    OBJS+=./src/keystore.o
   endif
 endif
 
@@ -287,7 +287,11 @@ hex: wolfboot.hex
 
 src/keystore.c: $(PRIVATE_KEY)
 
-flash_keystore: $(PRIVATE_KEY) src/flash_otp_keystore.o
+flash_keystore: src/flash_otp_keystore.o
+
+src/flash_otp_keystore.o: $(PRIVATE_KEY) src/flash_otp_keystore.c
+	$(Q)$(MAKE) src/keystore.c
+	$(Q)$(CC) -c $(CFLAGS) src/flash_otp_keystore.c -o $(@)
 
 keys: $(PRIVATE_KEY)
 
