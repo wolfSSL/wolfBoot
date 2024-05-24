@@ -21,12 +21,12 @@ LDFLAGS+=$(CFLAGS) -T$(LSCRIPT) -lc -Wl,-Map=otp-keystore-primer.map
 ifeq ($(TARGET),stm32h7)
     CFLAGS+=-DTARGET_stm32h7
     CFLAGS+=-mcpu=cortex-m7 -ffunction-sections -fdata-sections -fno-common -ffreestanding -nostartfiles
-    PRI_KS_OBJS+=../../../hal/stm32h7.o
+    PRI_KS_OBJS+=stm32h7.o
 endif
 ifeq ($(TARGET),stm32h5)
     CFLAGS+=-DTARGET_stm32h5
     CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common -ffreestanding -nostartfiles
-    PRI_KS_OBJS+=../../../hal/stm32h5.o
+    PRI_KS_OBJS+=stm32h5.o
 endif
 CC=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
@@ -40,6 +40,13 @@ otp-keystore-primer.elf: $(PRI_KS_OBJS)
 	$(Q)$(SIZE) $(@)
 
 %.o: %.c
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+
+stm32h7.o: ../../../hal/stm32h7.c
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+
+
+stm32h5.o: ../../../hal/stm32h5.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 

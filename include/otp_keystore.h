@@ -42,7 +42,14 @@
 
 #define OTP_HDR_SIZE 16
 
-struct __attribute__((packed)) wolfBoot_otp_hdr {
+#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
+        defined(__GNUC__)
+    #define KEYSTORE_HDR_PACKED __attribute__((packed))
+#else
+    #define KEYSTORE_HDR_PACKED
+#endif
+
+struct KEYSTORE_HDR_PACKED wolfBoot_otp_hdr {
     char keystore_hdr_magic[8];
     uint16_t item_count;
     uint16_t flags;
