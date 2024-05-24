@@ -326,7 +326,7 @@
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
 #define FLASH_PAGE_SIZE           (0x2000)      /* 8KB */
 #define FLASH_BANK2_BASE          (0x08100000) /*!< Base address of Flash Bank2     */
-#define BOOTLOADER_SIZE           (0x8000)
+#define BOOTLOADER_SIZE           (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE)
 #define FLASH_TOP                 (0x081FFFFF) /*!< FLASH end address (sector 127)  */
 
 #define FLASH_KEY1                            (0x45670123U)

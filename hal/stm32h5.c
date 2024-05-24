@@ -376,7 +376,9 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
     stm32h5_reboot();
 }
 
-static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
+
+#define BOOTLOADER_COPY_MEM_SIZE 0x1000
+static uint8_t bootloader_copy_mem[BOOTLOADER_COPY_MEM_SIZE];
 
 static void fork_bootloader(void)
 {
@@ -395,13 +397,17 @@ static void fork_bootloader(void)
     if (memcmp((void *)data, (const char*)dst, BOOTLOADER_SIZE) == 0)
         return;
 
-    /* Read the wolfBoot image in RAM */
-    memcpy(bootloader_copy_mem, (void*)data, BOOTLOADER_SIZE);
-
-    /* Mass-erase */
     hal_flash_unlock();
+    /* Mass-erase second block */
     hal_flash_erase(dst, BOOTLOADER_SIZE);
-    hal_flash_write(dst, bootloader_copy_mem, BOOTLOADER_SIZE);
+    /* Read the wolfBoot image in RAM */
+    for (i = 0; i < BOOTLOADER_SIZE;
+            i += BOOTLOADER_COPY_MEM_SIZE) {
+        memcpy(bootloader_copy_mem, (void*)(data + i),
+                BOOTLOADER_COPY_MEM_SIZE);
+        hal_flash_write(dst + i, bootloader_copy_mem,
+                BOOTLOADER_COPY_MEM_SIZE);
+    }
     hal_flash_lock();
 }
 #endif
