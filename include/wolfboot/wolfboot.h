@@ -177,7 +177,7 @@ extern "C" {
 
 #endif
 
-#if defined __WOLFBOOT || defined __FLASH_OTP_PRIMER
+#if defined(__WOLFBOOT) || defined (__FLASH_OTP_PRIMER)
 
  /* Authentication configuration */
  #if defined(WOLFBOOT_NO_SIGN)

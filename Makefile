@@ -26,10 +26,10 @@ SIGN_ALG=
 OBJCOPY_FLAGS=
 
 OBJS:= \
-	./hal/$(TARGET).o \
 	./src/string.o \
 	./src/image.o \
-	./src/libwolfboot.o
+	./src/libwolfboot.o \
+	./hal/$(TARGET).o
 
 ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
@@ -85,50 +85,50 @@ TARGET_H_TEMPLATE:=include/target.h.in
 ifeq ($(TZEN),1)
 ifeq ($(TARGET),stm32l5)
 	# Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
 ifeq ($(TARGET),stm32u5)
 	# Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
 ifeq ($(TARGET),stm32h5)
 	# Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 endif # TZEN=1
 
 ifeq ($(TARGET),x86_64_efi)
-	MAIN_TARGET:=wolfboot.efi
+    MAIN_TARGET:=wolfboot.efi
 endif
 
 ifeq ($(FSP), 1)
-	MAIN_TARGET:=wolfboot_stage1.bin
+    MAIN_TARGET:=wolfboot_stage1.bin
 endif
 
 ifeq ($(TARGET),library)
-	CFLAGS+=-g
-	MAIN_TARGET:=test-lib
+    CFLAGS+=-g
+    MAIN_TARGET:=test-lib
 endif
 
 ifeq ($(TARGET),raspi3)
-	MAIN_TARGET:=wolfboot.bin
+    MAIN_TARGET:=wolfboot.bin
 endif
 
 ifeq ($(TARGET),sim)
-	MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
+    MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 
 ifeq ($(TARGET),nxp_p1021)
-	MAIN_TARGET:=factory_wstage1.bin
+    MAIN_TARGET:=factory_wstage1.bin
 endif
 ifeq ($(TARGET),nxp_t1024)
-	MAIN_TARGET:=factory_wstage1.bin
+    MAIN_TARGET:=factory_wstage1.bin
 endif
 
 ifeq ($(FLASH_OTP_KEYSTORE),1)
-	MAIN_TARGET:=include/target.h tools/keytools/otp/otp-keystore-primer factory.bin
+    MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
 endif
 
 ASFLAGS:=$(CFLAGS)
@@ -177,10 +177,13 @@ standalone:
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary test-app/image.elf standalone.bin
 	$(Q)$(SIZE) test-app/image.elf
 
+
 include tools/test.mk
 include tools/test-enc.mk
 include tools/test-delta.mk
 include tools/test-renode.mk
+
+hal/$(TARGET).o:
 
 keytools_check: keytools FORCE
 
@@ -367,7 +370,7 @@ cppcheck:
 		--suppress="objectIndex" --suppress="comparePointers" \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
 
-otp: tools/keytools/otp/otp-keystore-primer.bin
+otp: tools/keytools/otp/otp-keystore-primer.bin FORCE
 
 tools/keytools/otp/otp-keystore-primer.bin: FORCE
 	make -C tools/keytools/otp clean

@@ -4,6 +4,7 @@ MEMORY
     RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00020000 /* mapping Low-memory only */
 }
 
+ENTRY(isr_reset);
 SECTIONS
 {
     .text :

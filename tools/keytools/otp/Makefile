@@ -2,6 +2,10 @@
 -include ../../../tools/config.mk
 -include ../../../options.mk
 -include ../../../wcs/pkcs11.mk
+V?=0
+ifeq ($(V),0)
+  Q=@
+endif
 
 TARGET?=none
 ARCH?=ARM
@@ -28,14 +32,18 @@ CC=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
 SIZE?=$(CROSS_COMPILE)size
 
-
 otp-keystore-primer.bin: otp-keystore-primer.elf
-	@$(OBJCOPY) -O binary $(^) $(@)
+	$(Q)$(OBJCOPY) -O binary $(^) $(@)
 
 otp-keystore-primer.elf: $(PRI_KS_OBJS)
-	@$(CC) -o otp-keystore-primer.elf $(LDFLAGS) $(CFLAGS) $(PRI_KS_OBJS)
-	@$(SIZE) $(@)
+	$(Q)$(CC) -o otp-keystore-primer.elf $(LDFLAGS) $(CFLAGS) $(PRI_KS_OBJS)
+	$(Q)$(SIZE) $(@)
+
+%.o: %.c
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+
+
 	
 
 clean:
-	@rm -rf $(PRI_KS_OBJS) *.bin *.elf
+	$(Q)rm -rf $(PRI_KS_OBJS) *.bin *.elf
