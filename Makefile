@@ -26,16 +26,20 @@ SIGN_ALG=
 OBJCOPY_FLAGS=
 
 OBJS:= \
-	./hal/$(TARGET).o \
 	./src/string.o \
 	./src/image.o \
-	./src/libwolfboot.o
+	./src/libwolfboot.o \
+	./hal/$(TARGET).o
 
 ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
 else
   PRIVATE_KEY=wolfboot_signing_private_key.der
-  OBJS+=./src/keystore.o
+  ifeq ($(FLASH_OTP_KEYSTORE),1)
+    OBJS+=./src/flash_otp_keystore.o
+  else
+    OBJS+=./src/keystore.o
+  endif
 endif
 
 WOLFCRYPT_OBJS:=
@@ -81,46 +85,50 @@ TARGET_H_TEMPLATE:=include/target.h.in
 ifeq ($(TZEN),1)
 ifeq ($(TARGET),stm32l5)
 	# Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
 ifeq ($(TARGET),stm32u5)
 	# Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
 ifeq ($(TARGET),stm32h5)
 	# Don't build a contiguous image
-	MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 endif # TZEN=1
 
 ifeq ($(TARGET),x86_64_efi)
-	MAIN_TARGET:=wolfboot.efi
+    MAIN_TARGET:=wolfboot.efi
 endif
 
 ifeq ($(FSP), 1)
-	MAIN_TARGET:=wolfboot_stage1.bin
+    MAIN_TARGET:=wolfboot_stage1.bin
 endif
 
 ifeq ($(TARGET),library)
-	CFLAGS+=-g
-	MAIN_TARGET:=test-lib
+    CFLAGS+=-g
+    MAIN_TARGET:=test-lib
 endif
 
 ifeq ($(TARGET),raspi3)
-	MAIN_TARGET:=wolfboot.bin
+    MAIN_TARGET:=wolfboot.bin
 endif
 
 ifeq ($(TARGET),sim)
-	MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
+    MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 
 ifeq ($(TARGET),nxp_p1021)
-	MAIN_TARGET:=factory_wstage1.bin
+    MAIN_TARGET:=factory_wstage1.bin
 endif
 ifeq ($(TARGET),nxp_t1024)
-	MAIN_TARGET:=factory_wstage1.bin
+    MAIN_TARGET:=factory_wstage1.bin
+endif
+
+ifeq ($(FLASH_OTP_KEYSTORE),1)
+    MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
 endif
 
 ASFLAGS:=$(CFLAGS)
@@ -169,10 +177,13 @@ standalone:
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary test-app/image.elf standalone.bin
 	$(Q)$(SIZE) test-app/image.elf
 
+
 include tools/test.mk
 include tools/test-enc.mk
 include tools/test-delta.mk
 include tools/test-renode.mk
+
+hal/$(TARGET).o:
 
 keytools_check: keytools FORCE
 
@@ -180,6 +191,7 @@ $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
 	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
+	$(Q)(test $(FLASH_OTP_KEYSTORE) = 0) || (make -C tools/keytools/otp) || true
 
 keytools: include/target.h
 	@echo "Building key tools"
@@ -235,7 +247,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
-	$(Q)(test $(SIGN) = NONE) || (grep -q $(SIGN_ALG) src/keystore.c) || \
+	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
@@ -275,6 +287,12 @@ hex: wolfboot.hex
 
 src/keystore.c: $(PRIVATE_KEY)
 
+flash_keystore: src/flash_otp_keystore.o
+
+src/flash_otp_keystore.o: $(PRIVATE_KEY) src/flash_otp_keystore.c
+	$(Q)$(MAKE) src/keystore.c
+	$(Q)$(CC) -c $(CFLAGS) src/flash_otp_keystore.c -o $(@)
+
 keys: $(PRIVATE_KEY)
 
 clean:
@@ -298,6 +316,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/test-update-server -s clean
 	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
 	$(Q)$(MAKE) -C tools/unit-tests -s clean
+	$(Q)$(MAKE) -C tools/keytools/otp -s clean
 
 keysclean: clean
 	$(Q)rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
@@ -354,6 +373,12 @@ cppcheck:
 		--suppress="ctunullpointer" --suppress="nullPointer" \
 		--suppress="objectIndex" --suppress="comparePointers" \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
+
+otp: tools/keytools/otp/otp-keystore-primer.bin FORCE
+
+tools/keytools/otp/otp-keystore-primer.bin: FORCE
+	make -C tools/keytools/otp clean
+	make -C tools/keytools/otp
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"

@@ -130,6 +130,14 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len);
 
 #endif
 
+#ifdef FLASH_OTP_KEYSTORE
+
+int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length);
+int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length);
+int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length);
+
+#endif
+
 #ifdef __cplusplus
 }
 #endif

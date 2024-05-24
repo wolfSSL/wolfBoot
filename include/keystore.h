@@ -35,6 +35,7 @@ extern "C" {
     #define KEYSTORE_PUBKEY_SIZE 576 /* Max is RSA 4096 */
 #endif
 
+
 struct keystore_slot {
     uint32_t slot_id;
     uint32_t key_type;
@@ -42,6 +43,9 @@ struct keystore_slot {
     uint32_t pubkey_size;
     uint8_t  pubkey[KEYSTORE_PUBKEY_SIZE];
 };
+
+#define KEYSTORE_HDR_SIZE 16
+#define SIZEOF_KEYSTORE_SLOT (KEYSTORE_HDR_SIZE + KEYSTORE_PUBKEY_SIZE)
 
 /* KeyStore API */
 int keystore_num_pubkeys(void);

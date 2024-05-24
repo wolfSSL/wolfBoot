@@ -207,6 +207,8 @@
 #define FLASH_SR          (*(volatile uint32_t *)(FLASH_BASE + 0x24))
 #define FLASH_CR          (*(volatile uint32_t *)(FLASH_BASE + 0x2C))
 
+
+
 #define FLASH_SECBB1       ((volatile uint32_t *)(FLASH_BASE + 0x0A0)) /* Array */
 #define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0x1A0)) /* Array */
 #define FLASH_SECBB_NREGS  4    /* Array length for the two above */
@@ -239,6 +241,8 @@
 /* Both secure + non secure */
 #define FLASH_OPTCR       (*(volatile uint32_t *)(FLASH_BASE + 0x1C))
 #define FLASH_OPSR        (*(volatile uint32_t *)(FLASH_BASE + 0x18))
+#define FLASH_OTPBLR_CUR  (*(volatile uint32_t *)(FLASH_BASE + 0x90))
+#define FLASH_OTPBLR_PRG  (*(volatile uint32_t *)(FLASH_BASE + 0x94))
 
 #define FLASH_OPSR_DATA_OP          (1 << 21)
 #define FLASH_OPSR_BK_OP            (1 << 22)
@@ -322,7 +326,7 @@
 #define FLASHMEM_ADDRESS_SPACE    (0x08000000)
 #define FLASH_PAGE_SIZE           (0x2000)      /* 8KB */
 #define FLASH_BANK2_BASE          (0x08100000) /*!< Base address of Flash Bank2     */
-#define BOOTLOADER_SIZE           (0x8000)
+#define BOOTLOADER_SIZE           (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE)
 #define FLASH_TOP                 (0x081FFFFF) /*!< FLASH end address (sector 127)  */
 
 #define FLASH_KEY1                            (0x45670123U)
@@ -355,18 +359,25 @@
 #define RCC_APB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xA4))
 #define UART1_APB2_CLOCK_ER_VAL (1 << 14)
 
+
+/* OTP FLASH AREA */
+#define FLASH_OTP_BASE 0x08FFF000
+#define FLASH_OTP_END  0x08FFF7FF
+#define OTP_SIZE             2048
+#define OTP_BLOCKS             32
+
+/* UART1 pin configuration */
 #define UART1_PIN_AF 8
 #define UART1_RX_PIN 8
 #define UART1_TX_PIN 7
 
+/* GPIO secure configuration */
 #define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30))
-
-
-
 #define LED_AHB2_ENABLE (GPIOG_AHB2_CLOCK_ER | GPIOB_AHB2_CLOCK_ER | \
         GPIOF_AHB2_CLOCK_ER)
 #define LED_BOOT_PIN (4)  /* PG4 - Nucleo board - Orange Led */
 #define LED_USR_PIN (0)   /* PB0  - Nucleo board  - Green Led */
 #define LED_EXTRA_PIN (4) /* PF4 - Nucleo board - Blue Led */
+
 
 #endif /* STM32H5_DEF_INCLUDED */

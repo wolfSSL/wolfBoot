@@ -279,6 +279,10 @@ You can also manually override the fill bytes using `FILL_BYTE=` at build-time. 
 
 Note: if you are using an external FLASH (e.g. SPI) in combination with a flash with inverted logic, ensure that you store all the flags in one partition, by using the `FLAGS_HOME=1` option described above.
 
+### Using One-time programmable (OTP) flash as keystore
+
+By default, keys are directly incorporated in the firmware image. To store the keys in a separate, one-time programmable (OTP) flash memory, use the `FLASH_OTP_KEYSTORE=1` option.
+For more information, see [/docs/OTP-keystore.md](/docs/OTP-keystore.md).
 
 ### Using Mac OS/X
 

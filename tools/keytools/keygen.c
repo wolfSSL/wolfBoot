@@ -235,7 +235,7 @@ const char Keystore_API[] =
                 "uint32_t keystore_get_mask(int id)\n"
                 "{\n"
                 "    if (id >= keystore_num_pubkeys())\n"
-                "        return -1;\n"
+                "        return 0;\n"
                 "    return (int)PubKeys[id].part_id_mask;\n"
                 "}\n\n"
                 "uint32_t keystore_get_key_type(int id)\n"

@@ -69,6 +69,7 @@ tools/keytools/keygen.exe
 tools/keytools/x64
 tools/keytools/Debug
 tools/keytools/Release
+tools/keytools/otp/otp-keystore-primer
 
 # delta binaries
 tools/delta/bmdiff

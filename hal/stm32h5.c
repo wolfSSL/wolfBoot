@@ -48,6 +48,17 @@ void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
 
 }
 
+static void RAMFUNCTION hal_flash_wait_buffer_empty(uint8_t bank)
+{
+    while ((FLASH_SR & FLASH_SR_DBNE) == FLASH_SR_DBNE)
+        ;
+#if (TZ_SECURE())
+    while ((FLASH_NS_SR & FLASH_SR_DBNE) == FLASH_SR_DBNE)
+        ;
+#endif
+
+}
+
 void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 {
     FLASH_CCR |= ( FLASH_CCR_CLR_WBNE | FLASH_CCR_CLR_DBNE | FLASH_CCR_CLR_INCE|
@@ -149,7 +160,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
 
-    if (address < ARCH_FLASH_OFFSET)
+    if (address < 0x08000000)
         return -1;
 
     end_address = address + len - 1;
@@ -365,7 +376,9 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
     stm32h5_reboot();
 }
 
-static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
+
+#define BOOTLOADER_COPY_MEM_SIZE 0x1000
+static uint8_t bootloader_copy_mem[BOOTLOADER_COPY_MEM_SIZE];
 
 static void fork_bootloader(void)
 {
@@ -373,6 +386,7 @@ static void fork_bootloader(void)
     uint32_t dst  = FLASH_BANK2_BASE;
     uint32_t r = 0, w = 0;
     int i;
+
 
 #if TZ_SECURE()
     data = (uint32_t)((data & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
@@ -383,13 +397,17 @@ static void fork_bootloader(void)
     if (memcmp((void *)data, (const char*)dst, BOOTLOADER_SIZE) == 0)
         return;
 
-    /* Read the wolfBoot image in RAM */
-    memcpy(bootloader_copy_mem, (void*)data, BOOTLOADER_SIZE);
-
-    /* Mass-erase */
     hal_flash_unlock();
+    /* Mass-erase second block */
     hal_flash_erase(dst, BOOTLOADER_SIZE);
-    hal_flash_write(dst, bootloader_copy_mem, BOOTLOADER_SIZE);
+    /* Read the wolfBoot image in RAM */
+    for (i = 0; i < BOOTLOADER_SIZE;
+            i += BOOTLOADER_COPY_MEM_SIZE) {
+        memcpy(bootloader_copy_mem, (void*)(data + i),
+                BOOTLOADER_COPY_MEM_SIZE);
+        hal_flash_write(dst + i, bootloader_copy_mem,
+                BOOTLOADER_COPY_MEM_SIZE);
+    }
     hal_flash_lock();
 }
 #endif
@@ -421,3 +439,115 @@ void hal_prepare_boot(void)
 #endif
 }
 
+#ifdef FLASH_OTP_KEYSTORE
+
+#define FLASH_OTP_BLOCK_SIZE (64)
+
+/* Public API */
+
+int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length)
+{
+    uint32_t start_block = (flashAddress - FLASH_OTP_BASE) / FLASH_OTP_BLOCK_SIZE;
+    uint32_t count = length / FLASH_OTP_BLOCK_SIZE;
+    uint32_t bmap = 0;
+    unsigned int i;
+    if (start_block + count > 32)
+        return -1;
+
+    if ((length % FLASH_OTP_BLOCK_SIZE) != 0)
+    {
+        count++;
+    }
+
+    /* Turn on the bits */
+    for (i = start_block; i < (start_block + count); i++) {
+        bmap |= (1 << i);
+    }
+    /* Enable OTP write protection for the selected blocks */
+    while ((bmap & FLASH_OTPBLR_CUR) != bmap) {
+        FLASH_OTPBLR_PRG |= bmap;
+        ISB();
+        DSB();
+    }
+    return 0;
+}
+
+int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length)
+{
+    volatile uint16_t tmp_msw, tmp_lsw;
+    uint16_t *pdata = (uint16_t *)data;
+    uint16_t idx = 0, len_align;
+    uint16_t last_word;
+    uint32_t blr_bitmap = 0;
+    if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
+        return -1;
+    }
+
+    /* Reject misaligned destination address */
+    if ((flashAddress & 0x01) != 0) {
+        return -1;
+    }
+
+    hal_flash_wait_complete(0);
+    hal_flash_wait_buffer_empty(0);
+    hal_flash_unlock();
+    hal_flash_clear_errors(0);
+
+    /* Truncate to 2B alignment */
+    length = (length / 2 * 2);
+
+    while ((idx < length) && (flashAddress <= FLASH_OTP_END-1)) {
+        hal_flash_wait_complete(0);
+        /* Set PG bit */
+        FLASH_CR |= FLASH_CR_PG;
+        /* Program an OTP word (16 bits) */
+        *(volatile uint16_t*)flashAddress = pdata[0];
+        /* Program a second OTP word (16 bits) */
+        *(volatile uint16_t*)(flashAddress + sizeof(uint16_t)) = pdata[1];
+        ISB();
+        DSB();
+
+        /* Wait until not busy */
+        while ((FLASH_SR & FLASH_SR_BSY) != 0)
+            ;
+
+        /* Read it back */
+        tmp_msw = *(volatile uint16_t*)flashAddress;
+        tmp_lsw = *(volatile uint16_t*)(flashAddress + sizeof(uint16_t));
+        if ((tmp_msw != pdata[0]) || (tmp_lsw != pdata[1])) {
+            /* Provisioning failed. OTP already programmed? */
+            while(1)
+                ;
+        }
+
+        /* Clear PG bit */
+        FLASH_CR &= ~FLASH_CR_PG;
+
+        /* Advance to next two words */
+        flashAddress += (2 * sizeof(uint16_t));
+        pdata += 2;
+        idx += (2 * sizeof(uint16_t));
+    }
+    hal_flash_lock();
+    return 0;
+}
+
+int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
+{
+    uint16_t i;
+    uint16_t *pdata = (uint16_t *)data;
+    if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
+        return -1;
+    }
+    for (i = 0;
+        (i < length) && (flashAddress <= (FLASH_OTP_END-1));
+        i += sizeof(uint16_t))
+    {
+        *pdata = *(volatile uint16_t*)flashAddress;
+        flashAddress += sizeof(uint16_t);
+        pdata++;
+    }
+    return 0;
+}
+
+#endif /* FLASH_OTP_KEYSTORE */
