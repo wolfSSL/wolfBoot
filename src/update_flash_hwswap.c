@@ -27,6 +27,9 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
+#ifdef SECURE_PKCS11
+int WP11_Library_Init(void);
+#endif
 
 extern void hal_flash_dualbank_swap(void);
 
@@ -92,6 +95,9 @@ void RAMFUNCTION wolfBoot_start(void)
             hal_flash_lock();
         }
     }
+#ifdef SECURE_PKCS11
+    WP11_Library_Init();
+#endif
     hal_prepare_boot();
     do_boot((void *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE));
 }
