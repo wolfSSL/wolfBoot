@@ -58,10 +58,6 @@ struct KEYSTORE_HDR_PACKED wolfBoot_otp_hdr {
 
 static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
 
-#if !defined(KEYSTORE_ANY) && (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_ECC256)
-	#error Key algorithm mismatch. Remove old keys via 'make keysclean'
-#else
-
 #define KEYSTORE_MAX_PUBKEYS ((OTP_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
 
 #if (OTP_SIZE == 0)
@@ -71,8 +67,6 @@ static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
 #if (KEYSTORE_MAX_PUBKEYS < 1)
     #error "No space for any keystores in OTP with current algorithm"
 #endif
-
-#endif /* KEYSTORE_ANY */
 
 #endif /* FLASH_OTP_KEYSTORE */ 
 
