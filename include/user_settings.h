@@ -130,7 +130,7 @@ extern int tolower(int c);
 
 
 /* Curve */
-#   ifdef WOLFBOOT_SIGN_ECC256
+#   if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFCRYPT_SECURE_MODE)
 #       define HAVE_ECC256
 #   elif defined(WOLFBOOT_SIGN_ECC384)
 #       define HAVE_ECC384

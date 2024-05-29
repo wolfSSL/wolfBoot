@@ -646,8 +646,6 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DWP11_HASH_PIN_COST=3
   OBJS+=src/pkcs11_store.o
   OBJS+=src/pkcs11_callable.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/rsa.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/dh.o
@@ -656,6 +654,20 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
 		./lib/wolfPKCS11/src/slot.o \
 		./lib/wolfPKCS11/src/wolfpkcs11.o
   STACK_USAGE=16688
+  ifneq ($(ENCRYPT),1)
+      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+  endif
+  ifeq ($(findstring RSA,$(SIGN)),)
+      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/rsa.o
+  endif
+  ifeq ($(findstring ECC,$(SIGN)),)
+      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/ecc.o
+  endif
+  ifeq ($(findstring RSA,$(SIGN)),)
+    ifeq ($(findstring ECC,$(SIGN)),)
+      WOLFCRYPT_OBJS+=$(MATH_OBJS) ./lib/wolfssl/wolfcrypt/src/wolfmath.o
+    endif
+  endif
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
