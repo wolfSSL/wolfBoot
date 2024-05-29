@@ -663,7 +663,11 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   ifeq ($(findstring ECC,$(SIGN)),)
       WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/ecc.o
   endif
-  WOLFCRYPT_OBJS+=$(MATH_OBJS) ./lib/wolfssl/wolfcrypt/src/wolfmath.o
+  ifeq ($(findstring RSA,$(SIGN)),)
+    ifeq ($(findstring ECC,$(SIGN)),)
+      WOLFCRYPT_OBJS+=$(MATH_OBJS) ./lib/wolfssl/wolfcrypt/src/wolfmath.o
+    endif
+  endif
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
