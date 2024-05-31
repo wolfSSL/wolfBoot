@@ -27,8 +27,4 @@
 /* use RSPI HW chip select */
 #define FLASH_SPI_USE_HW_CS
 
-/* not used */
-#define SPI_CS_FLASH    0
-#define SPI_CS_PIO_BASE 0UL
-
 #endif /* !SPI_DRV_RENESAS_RX_H_INCLUDED */

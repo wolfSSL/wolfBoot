@@ -72,7 +72,7 @@ void hal_delay_us(uint32_t us);
 #define SYS_PLLCR (*(volatile uint16_t *)(SYSTEM_BASE + 0x28))
 #define SYS_PLLCR_PLIDIV(n) ((n) << 0) /* 0=x1, 1=x1/2, 2=x1/3 */
 #define SYS_PLLCR_PLLSRCSEL   (1 << 4)    /* 0=main, 1=HOCO */
-#define SYS_PLLCR_STC(n)    ((n) << 8) /* Frequency Multiplication Factor */
+#define SYS_PLLCR_STC(n)    (((n) & 0x7F) << 8) /* Frequency Multiplication Factor */
 
 #define SYS_PLLCR2 (*(volatile uint8_t *)(SYSTEM_BASE + 0x2A))
 #define SYS_PLLCR2_PLLEN  (1 << 0) /* PLL Stop Control: 0=PLL operating, 1=PLL stopped */

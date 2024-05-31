@@ -173,7 +173,7 @@ void uart_write(const char* buf, unsigned int sz)
 #define CFG_CKSEL 1 /* 0=LOCO, 1=HOCO, 2=Main, 3=Sub, 4=PLL */
 #define CFG_HCO_FRQ (16000000)
 #define CFD_PLL_DIV (0)
-#define CFG_PLL_MUL (SYS_CLK / CFG_HCO_FRQ)
+#define CFG_PLL_MUL (SYS_CLK / (CFG_HCO_FRQ / 2))
 
 void hal_clk_init(void)
 {
@@ -261,12 +261,14 @@ void hal_clk_init(void)
     #else
         #define PLL_SRCSEL SYS_PLLCR_PLLSRCSEL /* HOCO */
     #endif
-    #define PLL_MUL_STC ((uint8_t)(CFG_PLL_MUL - 1))
+    /* convert multiplier to STC value */
+    #define PLL_MUL_STC ((CFG_PLL_MUL * 2) - 1)
     reg = (
         SYS_PLLCR_PLIDIV(CFD_PLL_DIV) | /* no div */
         PLL_SRCSEL |                    /* clock source (0=main, 1=HOCO) */
         SYS_PLLCR_STC(PLL_MUL_STC)      /* multiplier */
     );
+
     SYS_PLLCR = reg;
     SYS_PLLCR2 = 0; /* enable PLL */
     while ((SYS_OSCOVFSR & SYS_OSCOVFSR_PLOVF) == 0) { RX_NOP(); }
