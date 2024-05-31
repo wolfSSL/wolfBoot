@@ -49,7 +49,7 @@ else
   endif
 
   ifeq ($(ARCH),RENESAS_RX)
-    APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o
+    APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o ../hal/renesas-rx.o
     LDFLAGS+=-ffreestanding -nostartfiles
   else
     APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o

@@ -17,8 +17,17 @@
 
 #ifndef SPI_DRV_RENESAS_RX_H_INCLUDED
 #define SPI_DRV_RENESAS_RX_H_INCLUDED
+
 #include <stdint.h>
 
+#ifndef FLASH_RSPI_PORT
+#define FLASH_RSPI_PORT 1 /* RSPI1 */
+#endif
+
+/* use RSPI HW chip select */
+#define FLASH_SPI_USE_HW_CS
+
+/* not used */
 #define SPI_CS_FLASH    0
 #define SPI_CS_PIO_BASE 0UL
 

@@ -297,7 +297,7 @@ ifeq ($(ARCH),RENESAS_RX)
   endif
 
   # Renesas specific files
-  OBJS+=src/boot_renesas.o src/boot_renesas_start.o
+  OBJS+=src/boot_renesas.o src/boot_renesas_start.o hal/renesas-rx.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
   endif
