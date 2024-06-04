@@ -186,7 +186,7 @@ void hal_delay_us(uint32_t us);
 /* 0=FFFF C000h to FFFF DFFFh are used as the start-up area
  * 1=FFFF E000h to FFFF FFFFh are used as the start-up area
  */
-#define FLASH_FAWMON_BTFLG (1 << 31) /* Start-up Area Select */
+#define FLASH_FAWMON_BTFLG (1UL << 31) /* Start-up Area Select */
 
 #define FLASH_FACI_CMD_AREA (0x007E0000UL)
 #define FLASH_FACI_CMD8  (*(volatile uint8_t  *)FLASH_FACI_CMD_AREA)
