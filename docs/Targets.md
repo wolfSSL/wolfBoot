@@ -2195,7 +2195,7 @@ Current Firmware Version: 1
 Hit any key to call wolfBoot_success the firmware.
 ```
 
-Default Onboard Flash Memory Layout (4MB) (64KB sector):
+Default Onboard Flash Memory Layout (4MB) (32KB sector):
 
 | Description       | Address    | Size                 |
 | ----------------- | ---------- | -------------------- |

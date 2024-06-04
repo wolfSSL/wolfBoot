@@ -41,14 +41,7 @@
 #include "hal.h"
 #include "printf.h"
 #include "renesas-rx.h"
-
-#ifdef USE_RENESAS_BSP
-    #define wolfBoot_printf printf
-    #include "r_flash_rx_if.h"
-    #include "r_flash_rx.h"
-#else
-    #include "printf.h"
-#endif
+#include "printf.h"
 
 #if defined(WOLFBOOT_RENESAS_TSIP)  && \
     !defined(WOLFBOOT_RENESAS_APP)
@@ -61,7 +54,9 @@
     TsipUserCtx pkInfo;
 #endif
 
-#if defined(EXT_FLASH) && defined(TEST_FLASH)
+/* forward declaration */
+int hal_flash_init(void);
+#ifdef TEST_FLASH
 static int test_flash(void);
 #endif
 
@@ -352,15 +347,10 @@ void hal_init(void)
     uart_write("wolfBoot HAL Init\n", 18);
 #endif
 
-#if defined(EXT_FLASH) && defined(TEST_FLASH)
-    if (test_flash() != 0) {
-        wolfBoot_printf("Flash Test Failed!\n");
-    }
-#endif
+    hal_flash_init();
 
-#ifdef USE_RENESAS_BSP
-    if (R_FLASH_Open() != FLASH_SUCCESS)
-        hal_panic();
+#ifdef TEST_FLASH
+    test_flash();
 #endif
 
 #if defined(WOLFBOOT_RENESAS_TSIP) && \
@@ -375,19 +365,19 @@ void hal_init(void)
     encrypted_user_key_data = (struct rsa2048_pub*)keystore_get_buffer(0);
 
     key_type = keystore_get_key_type(0);
-    switch(key_type){
-
+    switch (key_type) {
         case AUTH_KEY_RSA2048:
             tsip_key_type = TSIP_RSA2048;
             break;
         case AUTH_KEY_RSA4096:
             tsip_key_type = TSIP_RSA4096;
             break;
-        case AUTH_KEY_ED448:
+        case AUTH_KEY_ECC256:
         case AUTH_KEY_ECC384:
         case AUTH_KEY_ECC521:
+            /* TODO: ECC */
         case AUTH_KEY_ED25519:
-        case AUTH_KEY_ECC256:
+        case AUTH_KEY_ED448:
         case AUTH_KEY_RSA3072:
         default:
             tsip_key_type = -1;
@@ -399,17 +389,19 @@ void hal_init(void)
         hal_panic();
     }
     /* inform user key */
-    tsip_inform_user_keys_ex((byte*)&encrypted_user_key_data->wufpk,
-                            (byte*)&encrypted_user_key_data->initial_vector,
-                            (byte*)&encrypted_user_key_data->encrypted_user_key,
-                            0/* dummy */);
+    tsip_inform_user_keys_ex(
+        (byte*)&encrypted_user_key_data->wufpk,
+        (byte*)&encrypted_user_key_data->initial_vector,
+        (byte*)&encrypted_user_key_data->encrypted_user_key,
+        0/* dummy */
+    );
     /* TSIP specific RSA public key */
     if (tsip_use_PublicKey_buffer_crypt(&pkInfo,
                 (const char*)&encrypted_user_key_data->encrypted_user_key,
                  RSA2048_PUB_SIZE,
                  tsip_key_type) != 0) {
-            wolfboot_printf("ERROR tsip_use_PublicKey_buffer\n");
-            hal_panic();
+        wolfboot_printf("ERROR tsip_use_PublicKey_buffer\n");
+        hal_panic();
     }
     /* Init Crypt Callback */
     pkInfo.sing_hash_type = sha256_mac;
@@ -419,8 +411,7 @@ void hal_init(void)
         wolfboot_printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
         hal_panic();
     }
-#endif
-
+#endif /* TSIP */
 }
 
 void hal_prepare_boot(void)
@@ -428,141 +419,140 @@ void hal_prepare_boot(void)
 
 }
 
-#define IS_FLASH(addr) (addr) >= FLASH_ADDR ? 1 : 0
-
-#ifdef USE_RENESAS_BSP
-
-#define MIN_PROG (0x8000)
-#define ALIGN_FLASH(a) ((a) / MIN_PROG * MIN_PROG)
-static uint8_t save[MIN_PROG];
-
-int blockWrite(const uint8_t *data, uint32_t addr, int len)
+int hal_flash_init(void)
 {
-    for(; len; len-=MIN_PROG, data+=MIN_PROG, addr+=MIN_PROG) {
-        memcpy(save, data, MIN_PROG); /* for the case "data" ls a flash address */
-        if(R_FLASH_Write((uint32_t)save, addr, MIN_PROG) != FLASH_SUCCESS)
-            return -1;
-    }
+    /* Flash Write Enable */
+    FLASH_FWEPROR = FLASH_FWEPROR_FLWE;
+
+    /* Disable FCU interrupts */
+    FLASH_FAEINT &= ~(
+        FLASH_FAEINT_DFAEIE |
+        FLASH_FAEINT_CMDLKIE |
+        FLASH_FAEINT_CFAEIE);
+
+    /* Set the flash clock speed */
+    FLASH_FPCKAR = (FLASH_FPCKAR_KEY |
+        FLASH_FPCKAR_PCKA(FCLK / 1000000UL));
+
     return 0;
 }
 
+/* write up to 256 bytes at a time */
 int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 {
-    uint32_t save_len = 0;
+    int ret, i;
+    const uint16_t* data16 = (const uint16_t*)data;
 
-    if (addr != ALIGN_FLASH(addr)) {
-        save_len = (addr - ALIGN_FLASH(addr)) < (uint32_t)len ?
-            (addr - ALIGN_FLASH(addr)) : (uint32_t)len;
-        memcpy(save, (const void *)ALIGN_FLASH(addr), MIN_PROG);
-        memcpy(save + (addr - ALIGN_FLASH(addr)), data, save_len);
-        addr   = ALIGN_FLASH(addr);
-        if (R_FLASH_Erase((flash_block_address_t)addr, 1) != FLASH_SUCCESS)
-            return -1;
-        if (R_FLASH_Write((uint32_t)save, addr, MIN_PROG) != FLASH_SUCCESS)
-            return -1;
-        len -= save_len;
-        data += save_len;
-        addr += MIN_PROG;
-    }
+    while (len > 0) {
+        FLASH_FSADDR = addr;
 
-    if (len > 0) {
-        if (blockWrite(data, addr, ALIGN_FLASH(len)) < 0)
-            goto error;
-        addr += ALIGN_FLASH(len);
-        data += ALIGN_FLASH(len);
-        len  -= ALIGN_FLASH(len);
-    }
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM;
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM_CODE_LENGTH;
 
-    if (len > 0) {
-        memcpy(save, (const void *)addr, MIN_PROG);
-        memcpy(save, data, len);
-        if (R_FLASH_Erase((flash_block_address_t)addr, 1) != FLASH_SUCCESS)
-            return -1;
-        if (R_FLASH_Write((uint32_t)save, addr, MIN_PROG) != FLASH_SUCCESS)
-            goto error;
+        /* write 128 * 2 bytes */
+        for (i=0; i < FLASH_FACI_CMD_PROGRAM_CODE_LENGTH; i++) {
+            FLASH_FACI_CMD16 = *data16++;
+        }
+
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_FINAL;
+
+        /* Wait for FCU operation to complete */
+        while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
+
+        len += (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH * 2);
     }
     return 0;
-error:
-    return -1;
 }
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    /* last blocks are 8KB */
-    int block_size = address >= 0xffff0000UL ?
-         FLASH_CF_SMALL_BLOCK_SIZE :  FLASH_CF_MEDIUM_BLOCK_SIZE;
+    int block_size;
 
-    if (len % block_size != 0)
+    /* verify this is a flash address */
+    if (!IS_FLASH_ADDR(address)) {
         return -1;
-    for ( ; len; address+=block_size, len-=block_size) {
-        if (R_FLASH_Erase((flash_block_address_t)address, 1)
-                != FLASH_SUCCESS)
-            return -1;
+    }
+
+    /* make sure len is multiple of block sizze */
+    block_size = FLASH_BLOCK_SIZE(address);
+    if (len % block_size != 0) {
+        return -1;
+    }
+
+    /* erase block(s) */
+    while (len > 0) {
+        FLASH_FSADDR = address;
+
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_BLOCK_ERASE;
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_FINAL;
+
+        /* Wait for FCU operation to complete */
+        while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
+
+        address += block_size;
+        len -= block_size;
     }
     return 0;
 }
 
-void RAMFUNCTION hal_flash_unlock(void)
+static int RAMFUNCTION hal_flash_write_faw(uint32_t faw)
 {
-    flash_access_window_config_t info;
+    volatile uint8_t* cmdArea = (volatile uint8_t*)FLASH_FACI_CMD_AREA;
 
-    info.start_addr = (uint32_t) FLASH_CF_BLOCK_INVALID;
-    info.end_addr   = (uint32_t) FLASH_CF_BLOCK_0;
-    R_BSP_InterruptsDisable();
-    if(R_FLASH_Control(FLASH_CMD_ACCESSWINDOW_SET, (void *)&info)
-        != FLASH_SUCCESS)
-        hal_panic();
-    R_BSP_InterruptsEnable();
-    return;
-}
+#ifndef BIG_ENDIAN_ORDER
+    faw = __builtin_bswap32(faw);
+#endif
 
-void RAMFUNCTION hal_flash_lock(void)
-{
-    flash_access_window_config_t info;
-    info.start_addr = (uint32_t) FLASH_CF_BLOCK_END;
-    info.end_addr   = (uint32_t) FLASH_CF_BLOCK_END;
-    R_BSP_InterruptsDisable();
-    if(R_FLASH_Control(FLASH_CMD_ACCESSWINDOW_SET, (void *)&info)
-        != FLASH_SUCCESS)
-        hal_panic();
-    R_BSP_InterruptsEnable();
-    return;
+    hal_flash_unlock();
+
+    /* Flash Access Window Write */
+    FLASH_FSADDR = 0x00FF5D60; /* FAW Register Start */
+    FLASH_FACI_CMD8  = FLASH_FACI_CMD_CONFIGURATION_SET;
+    FLASH_FACI_CMD8  = FLASH_FACI_CMD_CONFIGURATION_LENGTH; /* len=8 */
+    FLASH_FACI_CMD16 = 0xFFFF;
+    FLASH_FACI_CMD16 = 0xFFFF;
+    FLASH_FACI_CMD16 = (uint16_t)(faw & 0xFFFF);
+    FLASH_FACI_CMD16 = (uint16_t)((faw >> 16) & 0xFFFF);
+    FLASH_FACI_CMD16 = 0xFFFF;
+    FLASH_FACI_CMD16 = 0xFFFF;
+    FLASH_FACI_CMD16 = 0xFFFF;
+    FLASH_FACI_CMD16 = 0xFFFF;
+    FLASH_FACI_CMD8  = FLASH_FACI_CMD_FINAL;
+
+    /* Wait for FCU operation to complete */
+    while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
+
+    hal_flash_lock();
+
+    return 0;
 }
 
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
-    flash_cmd_t cmd = FLASH_CMD_SWAPFLAG_TOGGLE;
-    wolfBoot_printf("FLASH_CMD_SWAPFLAG_TOGGLE=%d\n", FLASH_CMD_SWAPFLAG_TOGGLE);
-    hal_flash_unlock();
-    if(R_FLASH_Control(cmd, NULL) != FLASH_SUCCESS)
-        hal_panic();
-    hal_flash_lock();
+    uint32_t faw = FLASH_FAWMON;
+    faw ^= FLASH_FAWMON_BTFLG; /* flip BTFLG */
+    hal_flash_write_faw(faw);
+}
 
-}
-#else
+void RAMFUNCTION hal_flash_unlock(void)
+{
+    /* Enable code flash entry for program/erase */
+    FLASH_FENTRYR = (FLASH_FENTRYR_KEY |
+        FLASH_FENTRYR_DATA_READ | FLASH_FENTRYR_CODE_PR);
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
-{
-    (void)address;
-    (void)data;
-    (void)len;
-    return 0;
-}
-int hal_flash_erase(uint32_t address, int len)
-{
-    (void)address;
-    (void)len;
-    return 0;
-}
-void hal_flash_unlock(void)
-{
+    /* Make sure any pending FACI commands are cancelled */
+    FLASH_FCMDR = FLASH_FACI_CMD_FORCED_STOP;
+    while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
+
     return;
 }
-void hal_flash_lock(void)
+void RAMFUNCTION hal_flash_lock(void)
 {
+    /* Disable code flash entry */
+    FLASH_FENTRYR = (FLASH_FENTRYR_KEY |
+        FLASH_FENTRYR_CODE_READ | FLASH_FENTRYR_DATA_READ);
     return;
 }
-#endif /* USE_RENESAS_BSP */
 
 void* hal_get_primary_address(void)
 {
@@ -574,48 +564,43 @@ void* hal_get_update_address(void)
     return (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 }
 
+#ifdef TEST_FLASH
 
-
-#if defined(EXT_FLASH) && defined(TEST_FLASH)
 #ifndef TEST_ADDRESS
-#define TEST_ADDRESS 0x200000 /* 2MB */
+#define TEST_ADDRESS (0xFFFC0000) /* 3,840 KB offset in 4MB flash */
 #endif
+
 /* #define TEST_FLASH_READONLY */
+
+static uint32_t pageData[WOLFBOOT_SECTOR_SIZE/sizeof(uint32_t)]; /* force 32-bit alignment */
+
 static int test_flash(void)
 {
     int ret;
     uint32_t i;
-    uint32_t pageData[WOLFBOOT_SECTOR_SIZE/4]; /* force 32-bit alignment */
+    uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
-    ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    ret = hal_flash_erase(TEST_ADDRESS, sizeof(pageData));
     wolfBoot_printf("Erase Sector: Ret %d\n", ret);
 
     /* Write Pages */
     for (i=0; i<sizeof(pageData); i++) {
         ((uint8_t*)pageData)[i] = (i & 0xff);
     }
-    ret = ext_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
+    ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
     wolfBoot_printf("Write Page: Ret %d\n", ret);
 #endif /* !TEST_FLASH_READONLY */
 
-    /* Read page */
-    memset(pageData, 0, sizeof(pageData));
-    ret = ext_flash_read(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Read Page: Ret %d\n", ret);
-
     wolfBoot_printf("Checking...\n");
-    /* Check data */
-    for (i=0; i<sizeof(pageData); i++) {
-        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
-        if (((uint8_t*)pageData)[i] != (i & 0xff)) {
-            wolfBoot_printf("Check Data @ %d failed\n", i);
-            return -i;
-        }
+    ret = memcmp(pageData, pagePtr, sizeof(pageData));
+    if (ret != 0) {
+        wolfBoot_printf("Check Data @ %d failed\n", ret);
+        return -ret;
     }
 
     wolfBoot_printf("Flash Test Passed\n");
     return ret;
 }
-#endif /* EXT_FLASH && TEST_FLASH */
+#endif /* TEST_FLASH */

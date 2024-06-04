@@ -22,20 +22,27 @@
 #include <stdint.h>
 #include "wolfboot/wolfboot.h"
 #include "hal.h"
+#include "image.h"
 
 #ifdef _RENESAS_RZN_
 extern uint32_t IMAGE_APP_RAM_start;
 #endif
-/* This is the main loop for the bootloader.
- *
- * It performs the following actions:
- *  - globally disable interrupts
- *  - update the Interrupt Vector using the address of the app
- *  - Set the initial stack pointer and the offset of the app
- *  - Change the stack pointer
- *  - Call the application entry point
- *
- */
+
+#ifdef __RX__
+#include "hal/renesas-rx.h"
+#endif
+
+void RAMFUNCTION arch_reboot(void)
+{
+#if defined(__RX__)
+    /* Disable protect registers */
+	PROTECT_OFF();
+
+	/* Issue software reset */
+	SYS_SWRR = SYS_SWRR_RESET;
+#endif
+}
+
 
 #if defined(__RX__) && defined(__CCRX__)
 #pragma inline_asm longJump
@@ -45,6 +52,7 @@ static void longJump(const uint32_t *app_offset)
 }
 #endif
 
+/* Calls the application entry point */
 void do_boot(const uint32_t *app_offset)
 {
     void (*app_entry)(void);

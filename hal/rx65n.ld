@@ -32,6 +32,7 @@ SECTIONS
 
     .text :
     {
+        __start_text = .;
         *(.text)
         *(.text.*)
         *(P)
@@ -116,6 +117,8 @@ SECTIONS
     .data : AT(_mdata)
     {
         _data = .;
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
         *(.data)
         *(.data.*)
         *(D)

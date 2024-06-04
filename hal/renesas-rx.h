@@ -42,6 +42,7 @@ void hal_delay_us(uint32_t us);
 #endif
 #define PCLKA   (120000000) /* 120MHz */
 #define PCLKB   (60000000)  /* 60MHz */
+#define FCLK    (60000000)  /* 60MHz */
 
 /* System Registers */
 #define SYSTEM_BASE (0x80000)
@@ -104,6 +105,9 @@ void hal_delay_us(uint32_t us);
 #define SYS_MOSCWTCR (*(volatile uint8_t *)(SYSTEM_BASE + 0xA2))
 #define SYS_MOSCWTCR_MSTS(n) ((n) << 0)
 
+#define SYS_SWRR (*(volatile uint16_t *)(SYSTEM_BASE + 0xC2))
+#define SYS_SWRR_RESET 0xA501
+
 /* Register Write Protection Function */
 #define SYS_PRCR       (*(volatile uint16_t *)(SYSTEM_BASE + 0x3FE))
 #define SYS_PRCR_PRKEY (0xA5 << 8)
@@ -135,19 +139,101 @@ void hal_delay_us(uint32_t us);
 
 /* Flash */
 #define FLASH_BASE  (SYSTEM_BASE + 0x1000)
+
+#define FLASH_FWEPROR (*(volatile uint8_t *)(SYSTEM_BASE + 0xC296)) /* Flash P/E Protect Register */
+#define FLASH_FWEPROR_FLWE 0x1 /* 0x01 = Program, block erase, and blank check are enabled */
+#define FLASH_FWEPROR_FLWD 0x2 /* 0x02 = Program, block erase, and blank check are disabled */
+
+#define FLASH_FCMDR  (*(volatile uint16_t *)(0x007FE0A0)) /* read only copy of two most recent FACI commands */
+
+#define FLASH_FSTATR (*(volatile uint32_t *)(0x007FE080))
+#define FLASH_FSTATR_FLWEERR   (1 << 6)  /* Flash P/E Protect Error Flag: 1=error */
+#define FLASH_FSTATR_PRGSPD    (1 << 8)  /* Program Suspend Status Flag: 1=suspend */
+#define FLASH_FSTATR_ERSSPD    (1 << 9)  /* Erase Suspend Status Flag */
+#define FLASH_FSTATR_DBFULL    (1 << 10) /* Data Buffer Full Flag */
+#define FLASH_FSTATR_SUSRDY    (1 << 11) /* Suspend Ready Flag */
+#define FLASH_FSTATR_PRGERR    (1 << 12) /* Program Error Flag */
+#define FLASH_FSTATR_ERSERR    (1 << 13) /* Erase Error Flag */
+#define FLASH_FSTATR_ILGLERR   (1 << 14) /* Illegal Error Flag */
+#define FLASH_FSTATR_FRDY      (1 << 15) /* Flash Ready Flag */
+#define FLASH_FSTATR_OTERR     (1 << 20) /* Other Error Flag */
+#define FLASH_FSTATR_SECERR    (1 << 21) /* Security Error Flag */
+#define FLASH_FSTATR_FESETERR  (1 << 22) /* FENTRY Setting Error Flag */
+#define FLASH_FSTATR_ILGCOMERR (1 << 23) /* Illegal Command Error Flag */
+
+#define FLASH_FPCKAR (*(volatile uint16_t *)(0x007FE0E4))
+#define FLASH_FPCKAR_KEY       (0x1E00)
+#define FLASH_FPCKAR_PCKA(pck) ((pck) & 0xFF)
+
+#define FLASH_FENTRYR (*(volatile uint16_t *)(0x007FE084))
+#define FLASH_FENTRYR_KEY       (0xAA00)
+#define FLASH_FENTRYR_CODE_READ (0)
+#define FLASH_FENTRYR_CODE_PR   (1 << 0) /* Code Flash Memory P/E Mode Entry */
+#define FLASH_FENTRYR_DATA_READ (0)
+#define FLASH_FENTRYR_DATA_PE   (1 << 7) /* Data Flash Memory P/E Mode Entry */
+
+#define FLASH_FAEINT (*(volatile uint8_t *)(0x007FE014))
+#define FLASH_FAEINT_DFAEIE  (1 << 3)
+#define FLASH_FAEINT_CMDLKIE (1 << 4)
+#define FLASH_FAEINT_CFAEIE  (1 << 7)
+
+#define FLASH_FSADDR (*(volatile uint32_t *)(0x007FE030))
+
+#define FLASH_FAWMON (*(volatile uint32_t *)(0x007FE0DC))
+#define FLASH_FAWMON_FAWS(a)  ((a) & 0xFFF)        /* Flash Access Window Start Address * 2 */
+#define FLASH_FAWMON_FAWE(a) (((a) & 0xFFF) << 16) /* Flash access window end address */
+#define FLASH_FAWMON_FSPR  (1 << 15) /* Access Window Protection: 1=with protection */
+/* 0=FFFF C000h to FFFF DFFFh are used as the start-up area
+ * 1=FFFF E000h to FFFF FFFFh are used as the start-up area
+ */
+#define FLASH_FAWMON_BTFLG (1 << 31) /* Start-up Area Select */
+
+#define FLASH_FACI_CMD_AREA (0x007E0000UL)
+#define FLASH_FACI_CMD8  (*(volatile uint8_t  *)FLASH_FACI_CMD_AREA)
+#define FLASH_FACI_CMD16 (*(volatile uint16_t *)FLASH_FACI_CMD_AREA)
+
+#define FCU_RAM_AREA (0x007F8000)
+#define FCU_RAM_SIZE (4096)
+
+/* Target specific flash settings */
 #ifdef TARGET_rx72n
-#define FLASH_SIZE 0x400000UL /* 4MB */
+    #define FLASH_SIZE 0x400000UL /* 4MB */
 
-#define FLASH_MEMWAIT (*(volatile uint8_t *)(FLASH_BASE + 0x1C))
-#define FLASH_MEMWAIT_MEMWAIT(n) ((n) << 0) /* 0=no wait, 1=one wait cycle (ICLK > 120MHz) */
+    #define FLASH_MEMWAIT (*(volatile uint8_t *)(FLASH_BASE + 0x1C))
+    #define FLASH_MEMWAIT_MEMWAIT(n) ((n) << 0) /* 0=no wait, 1=one wait cycle (ICLK > 120MHz) */
 #else
-#define FLASH_SIZE 0x200000UL /* 2MB */
+    #define FLASH_SIZE 0x200000UL /* 2MB */
 
-#define FLASH_ROMWT (*(volatile uint8_t *)(FLASH_BASE + 0x1C))
-#define FLASH_ROMWT_ROMWT(n) ((n) << 0) /* 0=no wait, 1=one wait cycle, 2=two wait cycles */
+    #define FLASH_ROMWT   (*(volatile uint8_t *)(FLASH_BASE + 0x1C))
+    #define FLASH_ROMWT_ROMWT(n)     ((n) << 0) /* 0=no wait, 1=one wait cycle, 2=two wait cycles */
 #endif
 
+#define FLASH_BOOT_BLOCK_START (0xFFFF0000UL)
+#define FLASH_BLOCK_SIZE_SMALL  (8192)
+#define FLASH_BLOCK_SIZE_MEDIUM (32768)
+
+#define FLASH_BLOCK_SIZE(addr) \
+    (((addr) >= FLASH_BOOT_BLOCK_START) ? \
+         FLASH_BLOCK_SIZE_SMALL : FLASH_BLOCK_SIZE_MEDIUM)
+
 #define FLASH_ADDR (0xFFFFFFFFUL - FLASH_SIZE + 1)
+#define IS_FLASH_ADDR(addr) ((addr) >= FLASH_ADDR ? 1 : 0)
+
+/* FCAI Commands (RX72N RM Table 62.11) */
+#define FLASH_FACI_CMD_PROGRAM                  0xE8
+#define FLASH_FACI_CMD_PROGRAM_CODE_LENGTH      128
+#define FLASH_FACI_CMD_PROGRAM_DATA_LENGTH      2
+#define FLASH_FACI_CMD_BLOCK_ERASE              0x20
+#define FLASH_FACI_CMD_PROGRAM_ERASE_SUSPEND    0xB0
+#define FLASH_FACI_CMD_STATUS_CLEAR             0x50
+#define FLASH_FACI_CMD_FORCED_STOP              0xB3
+#define FLASH_FACI_CMD_BLANK_CHECK              0x71
+#define FLASH_FACI_CMD_CONFIGURATION_SET        0x40
+#define FLASH_FACI_CMD_CONFIGURATION_LENGTH     8
+#define FLASH_FACI_CMD_LOCK_BIT_PROGRAM         0x77
+#define FLASH_FACI_CMD_LOCK_BIT_READ            0x71
+#define FLASH_FACI_CMD_FINAL                    0xD0
+
 
 /* Serial Communication Interface */
 #define SCI_BASE(n) (SYSTEM_BASE + 0xA000 + ((n) * 0x20))
@@ -313,9 +399,9 @@ void hal_delay_us(uint32_t us);
 #define QSPI_SPBFCR_TXTRG(n) (((n) & 0x7) << 3) /* Transmit Buffer Data Trigger Num */
 #define QSPI_SPBFCR_RXRST    (1 << 6) /* Receive Buffer Data Reset */
 #define QSPI_SPBFCR_TXRST    (1 << 7) /* Transmit Buffer Data Reset */
-#define QSPI_SPBDCR      (*(volatile uint16_t *)(QSPI_BASE + 0x1A)) /* Buffer Data Count Set */
-#define QSPI_SPBDCR_RXBC(n) ((n) & 0x3F)
-#define QSPI_SPBDCR_TXBC(n) (((n) & 0x3F) << 8)
+#define QSPI_SPBDCR       (*(volatile uint16_t *)(QSPI_BASE + 0x1A)) /* Buffer Data Count Set */
+#define QSPI_SPBDCR_RXBC  (QSPI_SPBDCR & 0x3F)
+#define QSPI_SPBDCR_TXBC ((QSPI_SPBDCR >> 8) & 0x3F)
 #define QSPI_SPBMUL(n)   (*(volatile uint32_t *)(QSPI_BASE + 0x1C + (((n) & 0x3) * 4))) /* Transfer Data Length Multiplier Setting */
 
 #define QSPI_FIFO_SIZE 32 /* bytes */
