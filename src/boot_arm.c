@@ -326,10 +326,12 @@ void isr_empty(void)
  *  - Call the application entry point
  *
  */
-#define VTOR (*(volatile uint32_t *)(0xE000ED08))
 
 #ifdef TZEN
 #include "hal.h"
+#define VTOR (*(volatile uint32_t *)(0xE002ED08))
+#else
+#define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #endif
 
 
