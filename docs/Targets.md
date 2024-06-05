@@ -1089,7 +1089,7 @@ git clone https://github.com/raspberrypi/linux linux-rpi -b rpi-4.19.y --depth=1
 export wolfboot_dir=`pwd`
 cd linux-rpi
 patch -p1 < $wolfboot_dir/tools/wolfboot-rpi-devicetree.diff
-make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcmrpi3_defconfig
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcm2711_defconfig
 make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 ```
 
@@ -1126,10 +1126,66 @@ dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrun
 
 * Test boot using qemu
 
+Download [root file system image(2020-02-13-raspbian-buster-lite.zip)](https://ftp.jaist.ac.jp/pub/raspberrypi/raspbian_lite/images/raspbian_lite-2020-02-14/2020-02-13-raspbian-buster-lite.zip)
 ```
-qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_raspi.bin -cpu cortex-a53
+qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_raspi.bin -cpu cortex-a53 -drive file=../wolfboot/2020-02-13-raspbian-buster-lite.img,if=sd,format=raw
 ```
 
+### Testing on [Raspberry PI 3 B Plus](https://www.raspberrypi.com/products/raspberry-pi-3-model-b-plus/)
+
+* Copy dtb file for Raspberry PI 3 B Plus to the wolfboot directory
+
+```
+cp /path/to/raspberry-pi-linux/arch/arm64/boot/dts/broadcom/bcm2710-rpi-3-b-plus.dtb $wolfboot_dir
+cd $wolfboot_dir
+```
+
+* Compose the image
+```
+dd if=bcm2710-rpi-3-b-plus.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
+```
+
+* Copy the kernel image to boot partition of boot media. e.g. SD card
+
+Raspberry Pi loads `kernel8.img` when it is in `AArch64` mode. Therefore, the kernel image is copied to boot partition as `kernel8.img` file name.
+```
+cp wolfboot_linux_raspi.bin /media/foo/boot/kernel8.img
+```
+
+* Troubleshooting
+
+o Turn on UART for debugging to know what boot-process is going on. Chaning DEBUG_UART property in .config to 1.
+```
+DEBUG_UART?=1
+```
+UART properties set as 115200 bps, 8bit data transmission, 1 stop bit and no parity.
+
+You would see the following message when wolfboot starts.
+```
+My board version is: 0xA020D3
+Trying partition 0 at 0x140000
+Boot partition: 0x140000 (size 14901760, version 0x1)
+....
+````
+Note: Now, integrity-check takes 2 - 3 minutes to complete before running Linux kernel.
+
+o Kernel panic after wolfboot message
+Mount position of root file system could be wrong. Checking your boot media by `lsblk` command.
+```
+$ lsblk
+NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+mmcblk0 179:0 0 29.7G 0 disk
+├─mmcblk0p1 179:1 0 63M 0 part
+├─mmcblk0p2 179:2 0 1K 0 part
+├─mmcblk0p5 179:5 0 32M 0 part
+├─mmcblk0p6 179:6 0 66M 0 part /boot
+└─mmcblk0p7 179:7 0 29.6G 0 part /
+```
+
+It need to modify dtb file accordingly. Go to /path/to/raspberry-pi-linux/arch/arm/boot/dts/bcm2710-rpi-3-b-plus.dts. Change `root=/dev/mmcblk0p7` of the following line in the file to your root file system device.
+```
+bootargs = "coherent_pool=1M 8250.nr_uarts=1 console=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p7 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait splash plymouth.ignore-serial-consoles";
+```
 
 ### Testing with kernel encryption
 

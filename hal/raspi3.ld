@@ -1,6 +1,6 @@
 MEMORY
 {
-    DDR_MEM(rwx): ORIGIN = 0x00080000, LENGTH = 0x80000000
+    DDR_MEM(rwx): ORIGIN = 0x00080000, LENGTH = 0x3c000000
 }
 ENTRY(_vector_table);
 
