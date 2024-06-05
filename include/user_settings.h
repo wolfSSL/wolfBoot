@@ -40,8 +40,12 @@
 #define SIZEOF_LONG_LONG 8
 
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
+#ifndef toupper
 extern int toupper(int c);
+#endif
+#ifndef tolower
 extern int tolower(int c);
+#endif
 #define XTOUPPER(c)     toupper((c))
 #define XTOLOWER(c)     tolower((c))
 

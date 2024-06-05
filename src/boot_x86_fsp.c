@@ -744,7 +744,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     uint8_t *fsp_m_base, done = 0;
     struct efi_hob *hobList, *it;
     memory_init_cb MemoryInit;
-    uint64_t top_address;
+    uint64_t top_address = MEMORY_4GB;
     uint32_t new_stack;
     uint32_t status;
     uint16_t type;
@@ -836,7 +836,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     hob_dump_memory_map(hobList);
 #endif /* DEBUG */
 
-    if (top_address > MEMORY_4GB) {
+    if (top_address >= MEMORY_4GB) {
         panic();
     }
 

@@ -79,7 +79,7 @@ static struct idt_descriptor idt_descriptor;
                    : ""(X));                                                   \
     }
 
-static void common_exception_handler(uint64_t vector_number)
+__attribute__((used)) static void common_exception_handler(uint64_t vector_number)
 {
     EXCEPTIONS_DEBUG_PRINTF("CPU exception: %d\r\n", (int)vector_number);
 }
@@ -133,7 +133,7 @@ int setup_interrupt_gate(int vnum, uintptr_t handler)
     ig->reserved = 0x0;
 }
 
-static void _timer_handler()
+__attribute__((used)) static void _timer_handler()
 {
     EXCEPTIONS_DEBUG_PRINTF("In the timer handler\r\n");
 }

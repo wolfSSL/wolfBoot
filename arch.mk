@@ -671,7 +671,10 @@ endif
 ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
   FSP=1
   CFLAGS+=-DWOLFBOOT_FSP=1
-  CFLAGS+=-ffunction-sections -fdata-sections
+  CFLAGS+=-ffunction-sections -fdata-sections -ffreestanding -nostdlib -static
+  # some std libc have headers that bring in extra symbols used in
+  # FORTIFY_SOURCE realated checks. Use -U_FORTIFY_SOURCE to avoid that.
+  CFLAGS+=-U_FORTIFY_SOURCE
   ifeq ($(TARGET), kontron_vx3060_s2)
     FSP_TGL=1
     CFLAGS+=-DWOLFBOOT_TGL=1
@@ -840,9 +843,7 @@ CFLAGS+=-DWOLFBOOT_ORIGIN=$(WOLFBOOT_ORIGIN)
 CFLAGS+=-DBOOTLOADER_PARTITION_SIZE=$(BOOTLOADER_PARTITION_SIZE)
 
 ## Debug
-ifeq ($(DEBUG),1)
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/logging.o
-endif
+WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/logging.o
 
 # Debug UART
 ifeq ($(DEBUG_UART),1)
