@@ -43,9 +43,10 @@
 #include "renesas-rx.h"
 #include "printf.h"
 
-#if defined(WOLFBOOT_RENESAS_TSIP)  && \
-    !defined(WOLFBOOT_RENESAS_APP)
+#if defined(WOLFBOOT_RENESAS_TSIP) && \
+   !defined(WOLFBOOT_RENESAS_APP)
     #include "wolfssl/wolfcrypt/settings.h"
+    #include "wolfssl/wolfcrypt/types.h"
     #include "wolfssl/wolfcrypt/wc_port.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas_sync.h"
@@ -332,7 +333,7 @@ void hal_clk_init(void)
 
 void hal_init(void)
 {
-#if defined(WOLFBOOT_RENESAS_TSIP) &&\
+#if defined(WOLFBOOT_RENESAS_TSIP) && \
     !defined(WOLFBOOT_RENESAS_APP)
     int err;
     uint32_t key_type = 0;
@@ -385,7 +386,7 @@ void hal_init(void)
     }
 
     if (tsip_key_type == -1) {
-        wolfboot_printf("key type (%d) not supported\n", key_type);
+        wolfBoot_printf("key type (%d) not supported\n", key_type);
         hal_panic();
     }
     /* inform user key */
@@ -400,7 +401,7 @@ void hal_init(void)
                 (const char*)&encrypted_user_key_data->encrypted_user_key,
                  RSA2048_PUB_SIZE,
                  tsip_key_type) != 0) {
-        wolfboot_printf("ERROR tsip_use_PublicKey_buffer\n");
+        wolfBoot_printf("ERROR tsip_use_PublicKey_buffer\n");
         hal_panic();
     }
     /* Init Crypt Callback */
@@ -408,7 +409,7 @@ void hal_init(void)
     pkInfo.keyflgs_crypt.bits.message_type = 1;
     err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
     if (err < 0) {
-        wolfboot_printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
+        wolfBoot_printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
         hal_panic();
     }
 #endif /* TSIP */

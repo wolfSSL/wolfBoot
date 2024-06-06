@@ -320,7 +320,7 @@ ifeq ($(ARCH),RENESAS_RX)
     endif
   endif
 
-  ifeq ($(TSIP),1)
+  ifeq ($(PKA),1)
     CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
   endif
 endif

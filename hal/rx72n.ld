@@ -31,6 +31,7 @@ SECTIONS
 
     .text :
     {
+        _start_text = .;
         __start_text = .;
         *(.text)
         *(.text.*)
