@@ -27,6 +27,7 @@
 #include <string.h>
 #include "system.h"
 #include "hal.h"
+#include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
 
 #ifdef SECURE_PKCS11
@@ -153,6 +154,14 @@ void main(void)
     
     /* Turn on boot LED */
     boot_led_on();
+    uart_init(115200, 8, 'N', 1);
+    for (i = 0; i < 10000; i++) {
+        uart_tx('T');
+        uart_tx('E');
+        uart_tx('S');
+        uart_tx('T');
+        uart_tx('\r');
+    }
 
 #ifdef SECURE_PKCS11
     wolfCrypt_Init();

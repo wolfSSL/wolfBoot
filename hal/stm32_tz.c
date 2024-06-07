@@ -255,8 +255,11 @@ void hal_tz_sau_init(void)
     /* Non-secure: internal peripherals */
     sau_init_region(5, 0x40000000, 0x4FFFFFFF, 0);
 
+    /* Secure mapped peripherals */
+    sau_init_region(6, 0x50000000, 0x5FFFFFFF, 1);
+
     /* Set as non-secure: OTP + RO area */
-    sau_init_region(6, 0x08FFF000, 0x08FFFFFF, 0);
+    sau_init_region(7, 0x08FFF000, 0x08FFFFFF, 0);
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;

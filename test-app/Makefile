@@ -164,6 +164,7 @@ ifeq ($(TARGET),stm32h5)
   LDFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..
+  APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
 endif
 
 ifeq ($(TARGET),stm32u5)
