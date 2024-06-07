@@ -201,15 +201,25 @@ static void clock_pll_off(void)
     /* Select HSI as SYSCLK source. */
     RCC_CFGR1 &= ~(0x07 << RCC_CFGR1_SW_SHIFT);
     DMB();
+
     /* Turn off PLL1 */
-    RCC_PLL1CFGR &= ~RCC_PLL1CFGR_PLL1PEN;
+    RCC_PLL1CFGR &= ~RCC_PLLCFGR_PLL1PEN;
     DMB();
     RCC_CR &= ~RCC_CR_PLL1ON;
     DMB();
-
     /* Wait until PLL1 is disabled */
     while ((RCC_CR & RCC_CR_PLL1RDY) != 0)
         ;
+
+    /* Turn off PLL2 */
+    RCC_PLL2CFGR &= ~RCC_PLLCFGR_PLLPEN;
+    DMB();
+    RCC_CR &= ~RCC_CR_PLL2ON;
+    DMB();
+    /* Wait until PLL2 is disabled */
+    while ((RCC_CR & RCC_CR_PLL2RDY) != 0)
+        ;
+
 
 }
 
@@ -247,18 +257,18 @@ static void clock_pll_on(void)
 
     /* Configure PLL1 div/mul factors */
     reg32 = RCC_PLL1CFGR;
-    reg32 &= ~((0x3F << RCC_PLL1CFGR_PLL1M_SHIFT) | (0x03));
-    reg32 |= (pllm << RCC_PLL1CFGR_PLL1M_SHIFT) | RCC_PLL1CFGR_PLL1SRC_HSE;
+    reg32 &= ~((0x3F << RCC_PLLCFGR_PLLM_SHIFT) | (0x03));
+    reg32 |= (pllm << RCC_PLLCFGR_PLLM_SHIFT) | RCC_PLLCFGR_PLLSRC_HSE;
     RCC_PLL1CFGR = reg32;
     DMB();
 
-    RCC_PLL1DIVR = ((plln - 1) << RCC_PLL1DIVR_DIVN_SHIFT) | ((pllp - 1) << RCC_PLL1DIVR_DIVP_SHIFT) |
-        ((pllq - 1) << RCC_PLL1DIVR_DIVQ_SHIFT) | ((pllr - 1) << RCC_PLL1DIVR_DIVR_SHIFT);
+    RCC_PLL1DIVR = ((plln - 1) << RCC_PLLDIVR_DIVN_SHIFT) | ((pllp - 1) << RCC_PLLDIVR_DIVP_SHIFT) |
+        ((pllq - 1) << RCC_PLLDIVR_DIVQ_SHIFT) | ((pllr - 1) << RCC_PLLDIVR_DIVR_SHIFT);
     DMB();
 
 
     /* Disable Fractional PLL */
-    RCC_PLL1CFGR &= ~RCC_PLL1CFGR_PLL1FRACEN;
+    RCC_PLL1CFGR &= ~RCC_PLLCFGR_PLLFRACEN;
     DMB();
 
 
@@ -267,18 +277,18 @@ static void clock_pll_on(void)
     DMB();
 
     /* Enable Fractional PLL */
-    RCC_PLL1CFGR |= RCC_PLL1CFGR_PLL1FRACEN;
+    RCC_PLL1CFGR |= RCC_PLLCFGR_PLLFRACEN;
     DMB();
 
     /* Select PLL1 Input frequency range: VCI */
-    RCC_PLL1CFGR |= RCC_PLL1CFGR_RGE_1_2 << RCC_PLL1CFGR_PLL1RGE_SHIFT;
+    RCC_PLL1CFGR |= RCC_PLLCFGR_RGE_1_2 << RCC_PLLCFGR_PLLRGE_SHIFT;
 
     /* Select PLL1 Output frequency range: VCO = 0 */
-    RCC_PLL1CFGR &= ~RCC_PLL1CFGR_PLL1VCOSEL;
+    RCC_PLL1CFGR &= ~RCC_PLLCFGR_PLLVCOSEL;
     DMB();
 
     /* Enable PLL1 system clock out (DIV: P) */
-    RCC_PLL1CFGR |= RCC_PLL1CFGR_PLL1PEN;
+    RCC_PLL1CFGR |= RCC_PLLCFGR_PLL1PEN;
 
     /* Enable PLL1 */
     RCC_CR |= RCC_CR_PLL1ON;
@@ -311,18 +321,64 @@ static void clock_pll_on(void)
     while ((RCC_CFGR1 & (RCC_CFGR1_SW_PLL1 << RCC_CFGR1_SWS_SHIFT)) == 0)
         ;
 
+    /* Configure PLL2 div/mul factors */
+    reg32 = RCC_PLL2CFGR;
+    reg32 &= ~((0x3F << RCC_PLLCFGR_PLLM_SHIFT) | (0x03));
+    reg32 |= (pllm << RCC_PLLCFGR_PLLM_SHIFT) | RCC_PLLCFGR_PLLSRC_HSE;
+    RCC_PLL2CFGR = reg32;
+    DMB();
+
+    RCC_PLL2DIVR = ((plln - 1) << RCC_PLLDIVR_DIVN_SHIFT) | ((pllp - 1) << RCC_PLLDIVR_DIVP_SHIFT) |
+        ((pllq - 1) << RCC_PLLDIVR_DIVQ_SHIFT) | ((pllr - 1) << RCC_PLLDIVR_DIVR_SHIFT);
+    DMB();
+
+
+    /* Disable Fractional PLL */
+    RCC_PLL2CFGR &= ~RCC_PLLCFGR_PLLFRACEN;
+    DMB();
+
+
+    /* Configure Fractional PLL factor */
+    RCC_PLL2FRACR = 0x00000000;
+    DMB();
+
+    /* Enable Fractional PLL */
+    RCC_PLL2CFGR |= RCC_PLLCFGR_PLLFRACEN;
+    DMB();
+
+    /* Select PLL2 Input frequency range: VCI */
+    RCC_PLL2CFGR |= RCC_PLLCFGR_RGE_1_2 << RCC_PLLCFGR_PLLRGE_SHIFT;
+
+    /* Select PLL2 Output frequency range: VCO = 0 */
+    RCC_PLL2CFGR &= ~RCC_PLLCFGR_PLLVCOSEL;
+    DMB();
+
+    /* Enable PLL2 system clock out (DIV: P) */
+    RCC_PLL2CFGR |= RCC_PLLCFGR_PLLPEN;
+
+    /* Enable PLL2 */
+    RCC_CR |= RCC_CR_PLL2ON;
+
+    /* Wait until PLL2 is Ready */
+    while ((RCC_CR & RCC_CR_PLL2RDY) == 0)
+        ;
+
 }
 
 #if (TZ_SECURE())
 static void periph_unsecure(void)
 {
     uint32_t pin;
+    volatile uint32_t reg;
 
     /*Enable clock for User LED GPIOs */
     RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
 
     /* Enable clock for LPUART1 */
     RCC_APB2_CLOCK_ER |= UART1_APB2_CLOCK_ER_VAL;
+
+    /* Enable clock for USART3 */
+    RCC_APB1L_CLOCK_ER |= UART3_APB1L_CLOCK_ER_VAL;
 
 
     PWR_CR2 |= PWR_CR2_IOSV;
@@ -331,12 +387,24 @@ static void periph_unsecure(void)
     GPIO_SECCFGR(GPIOB_BASE) &= ~(1 << 0);
     GPIO_SECCFGR(GPIOF_BASE) &= ~(1 << 4);
 
-#if 0
     /* Unsecure LPUART1 */
-    TZSC_PRIVCFGR2 &= ~(TZSC_PRIVCFG2_LPUARTPRIV);
-    GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_TX_PIN);
-    GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_RX_PIN);
-#endif
+    GPIO_SECCFGR(GPIOB_BASE) &= ~(1<<UART1_TX_PIN);
+    GPIO_SECCFGR(GPIOB_BASE) &= ~(1<<UART1_RX_PIN);
+    reg = TZSC_SECCFGR2;
+    if (reg & TZSC_SECCFGR2_LPUART1SEC) {
+        reg &= (~TZSC_SECCFGR2_LPUART1SEC);
+        DMB();
+        TZSC_SECCFGR2 = reg;
+    }
+    /* Unsecure USART3 */
+    GPIO_SECCFGR(GPIOD_BASE) &= ~(1<<UART3_TX_PIN);
+    GPIO_SECCFGR(GPIOD_BASE) &= ~(1<<UART3_RX_PIN);
+    reg = TZSC_SECCFGR1;
+    if (reg & TZSC_SECCFGR1_USART3SEC) {
+        reg &= (~TZSC_SECCFGR1_USART3SEC);
+        DMB();
+        TZSC_SECCFGR1 = reg;
+    }
 
 }
 #endif
@@ -412,6 +480,7 @@ static void fork_bootloader(void)
 }
 #endif
 
+#include "uart_drv.h"
 void hal_init(void)
 {
 #if TZ_SECURE()
@@ -419,8 +488,6 @@ void hal_init(void)
     hal_gtzc_init();
 #endif
     clock_pll_on();
-
-
 
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
     if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)
