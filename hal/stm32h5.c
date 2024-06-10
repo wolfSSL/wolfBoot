@@ -26,6 +26,8 @@
 #include "hal.h"
 #include "hal/stm32h5.h"
 
+#define PLL_SRC_HSE 1
+
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
@@ -230,13 +232,29 @@ static void clock_pll_on(void)
     uint32_t reg32;
     uint32_t plln, pllm, pllq, pllp, pllr, hpre, apb1pre, apb2pre, apb3pre, flash_waitstates;
 
-    /* Select clock parameters (CPU Speed = 125 MHz) */
+
+#if PLL_SRC_HSE
     pllm = 4;
-    plln = 125; /* TODO: increase to 250 MHz */
+    plln = 250;
     pllp = 2;
     pllq = 2;
     pllr = 2;
+#else
+    pllm = 1;
+    plln = 129;
+    pllp = 2;
+    pllq = 2;
+    pllr = 2;
+#endif
     flash_waitstates = 5;
+
+    /* Set voltage scaler */
+    reg32 = PWR_VOSCR & (~PWR_VOS_MASK);
+    PWR_VOSCR = reg32 | PWR_VOS_SCALE_0;
+
+    /* Wait until scale has changed */
+    while ((PWR_VOSSR & PWR_VOSRDY) == 0)
+        ;
 
     /* Disable PLL1 */
     RCC_CR &= ~RCC_CR_PLL1ON;
@@ -248,8 +266,9 @@ static void clock_pll_on(void)
     /* Set flash wait states */
     flash_set_waitstates(flash_waitstates);
 
+#if PLL_SRC_HSE
     /* PLL Oscillator configuration */
-    RCC_CR |= RCC_CR_HSEON | RCC_CR_HSEBYP | RCC_CR_HSEEXT;
+    RCC_CR |= RCC_CR_HSEON | RCC_CR_HSEBYP;
 
     /* Wait until HSE is Ready */
     while ((RCC_CR & RCC_CR_HSERDY) == 0)
@@ -260,6 +279,26 @@ static void clock_pll_on(void)
     reg32 &= ~((0x3F << RCC_PLLCFGR_PLLM_SHIFT) | (0x03));
     reg32 |= (pllm << RCC_PLLCFGR_PLLM_SHIFT) | RCC_PLLCFGR_PLLSRC_HSE;
     RCC_PLL1CFGR = reg32;
+#else
+    RCC_CR |= RCC_CR_HSION;
+
+    /* Wait until HSI is Ready */
+    while ((RCC_CR & RCC_CR_HSIRDY) == 0)
+          ;
+
+    RCC_CR |= RCC_CR_CSION;
+
+    /* Wait until CSI is Ready */
+    while ((RCC_CR & RCC_CR_HSIRDY) == 0)
+          ;
+
+    /* Configure PLL1 div/mul factors */
+    reg32 = RCC_PLL1CFGR;
+    reg32 &= ~((0x3F << RCC_PLLCFGR_PLLM_SHIFT) | (0x03));
+    reg32 |= (pllm << RCC_PLLCFGR_PLLM_SHIFT) | RCC_PLLCFGR_PLLSRC_CSI;
+    RCC_PLL1CFGR = reg32;
+
+#endif
     DMB();
 
     RCC_PLL1DIVR = ((plln - 1) << RCC_PLLDIVR_DIVN_SHIFT) | ((pllp - 1) << RCC_PLLDIVR_DIVP_SHIFT) |
@@ -281,7 +320,7 @@ static void clock_pll_on(void)
     DMB();
 
     /* Select PLL1 Input frequency range: VCI */
-    RCC_PLL1CFGR |= RCC_PLLCFGR_RGE_1_2 << RCC_PLLCFGR_PLLRGE_SHIFT;
+    RCC_PLL1CFGR |= RCC_PLLCFGR_RGE_2_4 << RCC_PLLCFGR_PLLRGE_SHIFT;
 
     /* Select PLL1 Output frequency range: VCO = 0 */
     RCC_PLL1CFGR &= ~RCC_PLLCFGR_PLLVCOSEL;
@@ -321,47 +360,8 @@ static void clock_pll_on(void)
     while ((RCC_CFGR1 & (RCC_CFGR1_SW_PLL1 << RCC_CFGR1_SWS_SHIFT)) == 0)
         ;
 
-    /* Configure PLL2 div/mul factors */
-    reg32 = RCC_PLL2CFGR;
-    reg32 &= ~((0x3F << RCC_PLLCFGR_PLLM_SHIFT) | (0x03));
-    reg32 |= (pllm << RCC_PLLCFGR_PLLM_SHIFT) | RCC_PLLCFGR_PLLSRC_HSE;
-    RCC_PLL2CFGR = reg32;
-    DMB();
-
-    RCC_PLL2DIVR = ((plln - 1) << RCC_PLLDIVR_DIVN_SHIFT) | ((pllp - 1) << RCC_PLLDIVR_DIVP_SHIFT) |
-        ((pllq - 1) << RCC_PLLDIVR_DIVQ_SHIFT) | ((pllr - 1) << RCC_PLLDIVR_DIVR_SHIFT);
-    DMB();
-
-
-    /* Disable Fractional PLL */
-    RCC_PLL2CFGR &= ~RCC_PLLCFGR_PLLFRACEN;
-    DMB();
-
-
-    /* Configure Fractional PLL factor */
-    RCC_PLL2FRACR = 0x00000000;
-    DMB();
-
-    /* Enable Fractional PLL */
-    RCC_PLL2CFGR |= RCC_PLLCFGR_PLLFRACEN;
-    DMB();
-
-    /* Select PLL2 Input frequency range: VCI */
-    RCC_PLL2CFGR |= RCC_PLLCFGR_RGE_1_2 << RCC_PLLCFGR_PLLRGE_SHIFT;
-
-    /* Select PLL2 Output frequency range: VCO = 0 */
-    RCC_PLL2CFGR &= ~RCC_PLLCFGR_PLLVCOSEL;
-    DMB();
-
-    /* Enable PLL2 system clock out (DIV: P) */
-    RCC_PLL2CFGR |= RCC_PLLCFGR_PLLPEN;
-
-    /* Enable PLL2 */
-    RCC_CR |= RCC_CR_PLL2ON;
-
-    /* Wait until PLL2 is Ready */
-    while ((RCC_CR & RCC_CR_PLL2RDY) == 0)
-        ;
+    /* Set PLL1 as system clock */
+    RCC_PLL1CFGR |= RCC_PLLCFGR_PLL1PEN;
 
 }
 
@@ -373,6 +373,12 @@ static void periph_unsecure(void)
 
     /*Enable clock for User LED GPIOs */
     RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
+
+    /* Enable GPIO clock for accessing SECCFGR registers */
+    RCC_AHB2_CLOCK_ER |= GPIOA_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER |= GPIOB_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER |= GPIOC_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER |= GPIOD_AHB2_CLOCK_ER;
 
     /* Enable clock for LPUART1 */
     RCC_APB2_CLOCK_ER |= UART1_APB2_CLOCK_ER_VAL;
@@ -405,6 +411,15 @@ static void periph_unsecure(void)
         DMB();
         TZSC_SECCFGR1 = reg;
     }
+
+    /* Disable GPIOs clock used previously for accessing SECCFGR registers */
+#if 0
+    RCC_AHB2_CLOCK_ER &= ~GPIOA_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER &= ~GPIOB_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER &= ~GPIOC_AHB2_CLOCK_ER;
+    RCC_AHB2_CLOCK_ER &= ~GPIOD_AHB2_CLOCK_ER;
+#endif
+
 
 }
 #endif
@@ -500,9 +515,12 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    clock_pll_off();
+
+    /* Keep clock settings when staging a NS-application */
 #if (TZ_SECURE())
     periph_unsecure();
+#else
+    clock_pll_off();
 #endif
 }
 

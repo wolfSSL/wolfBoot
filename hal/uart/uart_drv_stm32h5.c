@@ -30,9 +30,13 @@
 
 /* USE_UART1
  * Set to 0 for VCP over USB
- * Set to 1 for Arduino D0, D1 pins on nucleo 
+ * Set to 1 for Arduino D0, D1 pins on nucleo
  * */
 #define USE_UART1 0
+
+#define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
+#define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
+#define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
 
 
 #define GPIOB_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
@@ -53,18 +57,18 @@
 #define GPIOD_AFL   (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
 #define GPIOD_AFH   (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
 
-//#define CLOCK_FREQ (125000000)
 #define CLOCK_FREQ (64000000)
 
 static void uart1_pins_setup(void)
 {
     uint32_t reg;
+    RCC_AHB2ENR1_CLOCK_ER|= GPIOB_AHB2ENR1_CLOCK_ER;
     /* Set mode = AF */
     reg = GPIOB_MODE & ~ (0x03 << (UART1_RX_PIN * 2));
     GPIOB_MODE = reg | (2 << (UART1_RX_PIN * 2));
     reg = GPIOB_MODE & ~ (0x03 << (UART1_TX_PIN * 2));
     GPIOB_MODE = reg | (2 << (UART1_TX_PIN * 2));
-    
+
     /* Alternate function: use low pins (6 and 7) */
     reg = GPIOB_AFL & ~(0xf << (UART1_TX_PIN * 4));
     GPIOB_AFL = reg | (UART1_PIN_AF << (UART1_TX_PIN * 4));
@@ -76,12 +80,13 @@ static void uart1_pins_setup(void)
 static void uart3_pins_setup(void)
 {
     uint32_t reg;
+    RCC_AHB2ENR1_CLOCK_ER|= GPIOD_AHB2ENR1_CLOCK_ER;
     /* Set mode = AF */
     reg = GPIOD_MODE & ~ (0x03 << (UART3_RX_PIN * 2));
     GPIOD_MODE = reg | (2 << (UART3_RX_PIN * 2));
     reg = GPIOD_MODE & ~ (0x03 << (UART3_TX_PIN * 2));
     GPIOD_MODE = reg | (2 << (UART3_TX_PIN * 2));
-    
+
     /* Alternate function: use hi pins (8 and 9) */
     reg = GPIOD_AFH & ~(0xf << ((UART3_TX_PIN - 8) * 4));
     GPIOD_AFH = reg | (UART3_PIN_AF << ((UART3_TX_PIN - 8) * 4));
@@ -97,10 +102,10 @@ static int uart1_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     uart1_pins_setup();
 
     reg = RCC_CCIPR3 & (~ (RCC_CCIPR3_LPUART1SEL_MASK << RCC_CCIPR3_LPUART1SEL_SHIFT));
-    RCC_CCIPR3 = reg | (3 << RCC_CCIPR3_LPUART1SEL_SHIFT); /* PLL2 */
+    RCC_CCIPR3 = reg | (0 << RCC_CCIPR3_LPUART1SEL_SHIFT); /* PLL2 */
 
     /* Configure clock */
-    UART1_BRR |= (uint16_t)(CLOCK_FREQ / bitrate);
+    UART1_BRR |= (uint16_t)(CLOCK_FREQ / bitrate) + 1;
 
     /* Configure data bits */
     if (data == 8)
@@ -126,7 +131,9 @@ static int uart1_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
         UART1_CR2 = reg & (2 << 12);
     else
         UART1_CR2 = reg;
-    
+
+    /* Prescaler to DIV1 */
+    UART1_PRE |= 2;
 
     /* Configure for RX+TX, turn on. */
     UART1_CR1 |= UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE | UART_CR1_UART_ENABLE;
@@ -163,10 +170,10 @@ static int uart3_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     uart3_pins_setup();
 
     reg = RCC_CCIPR1 & (~ (RCC_CCIPR1_USART3SEL_MASK << RCC_CCIPR1_USART3SEL_SHIFT));
-    RCC_CCIPR1 = reg | (3 << RCC_CCIPR1_USART3SEL_SHIFT); /* PLL2 */
+    RCC_CCIPR1 = reg | (0 << RCC_CCIPR1_USART3SEL_SHIFT); /* PLL2 */
 
     /* Configure clock */
-    UART3_BRR |= (uint16_t)(CLOCK_FREQ / bitrate);
+    UART3_BRR = (uint16_t)(CLOCK_FREQ / bitrate) + 1;
 
     /* Configure data bits */
     if (data == 8)
@@ -192,7 +199,9 @@ static int uart3_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
         UART3_CR2 = reg & (2 << 12);
     else
         UART3_CR2 = reg;
-    
+
+    /* Prescaler to DIV1 */
+    UART3_PRE |= 2;
 
     /* Configure for RX+TX, turn on. */
     UART3_CR1 |= UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE | UART_CR1_UART_ENABLE;

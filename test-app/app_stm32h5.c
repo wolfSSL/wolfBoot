@@ -66,6 +66,7 @@ extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 #define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
 #define GPIOF_AHB2ENR1_CLOCK_ER (1 << 5)
 #define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
+#define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
 
 static void boot_led_on(void)
 {
@@ -154,6 +155,7 @@ void main(void)
     
     /* Turn on boot LED */
     boot_led_on();
+
     uart_init(115200, 8, 'N', 1);
     for (i = 0; i < 10000; i++) {
         uart_tx('T');
