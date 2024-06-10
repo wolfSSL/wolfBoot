@@ -97,6 +97,8 @@
 #define RCC_PLL2FRACR              (*(volatile uint32_t *)(RCC_BASE + 0x40))  /* RM0481 - Table 108 */
 
 #define RCC_PLLCFGR_PLLSRC_SHIFT (0x0)
+#define RCC_PLLCFGR_PLLSRC_HSI   (0x1)
+#define RCC_PLLCFGR_PLLSRC_CSI   (0x2)
 #define RCC_PLLCFGR_PLLSRC_HSE   (0x3)
 #define RCC_PLLCFGR_PLLRGE_SHIFT (0x2)
 #define RCC_PLLCFGR_RGE_1_2       (0x0) /* Default at boot: 1-2 MHz */
@@ -153,10 +155,10 @@
 
 #define RCC_CCIPR1          (*(volatile uint32_t *)(RCC_BASE + 0xD8))
 #define RCC_CCIPR3          (*(volatile uint32_t *)(RCC_BASE + 0xE0))
-#define RCC_CCIPR3_LPUART1SEL_SHIFT (24)
-#define RCC_CCIPR3_LPUART1SEL_MASK (0x3)
 #define RCC_CCIPR1_USART3SEL_SHIFT (6)
-#define RCC_CCIPR1_USART3SEL_MASK (0x3)
+#define RCC_CCIPR1_USART3SEL_MASK (0x7)
+#define RCC_CCIPR3_LPUART1SEL_SHIFT (24)
+#define RCC_CCIPR3_LPUART1SEL_MASK (0x7)
 
 
 #define RCC_CRRCR         (*(volatile uint32_t *)(RCC_BASE + 0x98))
@@ -167,10 +169,10 @@
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
 #if TZ_SECURE()
 /*Secure */
-#define PWR_BASE            (0x50020800)   //RM0481 - Table 3
+#define PWR_BASE            (0x54020800)   //RM0481 - Table 3
 #else
 /*Non-Secure */
-#define PWR_BASE            (0x40020800)   //RM0481 - Table 3
+#define PWR_BASE            (0x44020800)   //RM0481 - Table 3
 #endif
 
 #define PWR_VOSCR              (*(volatile uint32_t *)(PWR_BASE + 0x10))
@@ -382,6 +384,7 @@
 #define UART1_ICR      (*(volatile uint32_t *)(UART1 + 0x20))
 #define UART1_RDR      (*(volatile uint32_t *)(UART1 + 0x24))
 #define UART1_TDR      (*(volatile uint32_t *)(UART1 + 0x28))
+#define UART1_PRE      (*(volatile uint32_t *)(UART1 + 0x2C))
 
 #define UART3_CR1      (*(volatile uint32_t *)(UART3 + 0x00))
 #define UART3_CR2      (*(volatile uint32_t *)(UART3 + 0x04))
@@ -391,8 +394,10 @@
 #define UART3_ICR      (*(volatile uint32_t *)(UART3 + 0x20))
 #define UART3_RDR      (*(volatile uint32_t *)(UART3 + 0x24))
 #define UART3_TDR      (*(volatile uint32_t *)(UART3 + 0x28))
+#define UART3_PRE      (*(volatile uint32_t *)(UART3 + 0x2C))
 
 #define UART_CR1_UART_ENABLE    (1 << 0)
+#define UART_CR1_OVER8          (1 << 15)
 #define UART_CR1_SYMBOL_LEN     (1 << 12)
 #define UART_CR1_PARITY_ENABLED (1 << 10)
 #define UART_CR1_PARITY_ODD     (1 << 9)
