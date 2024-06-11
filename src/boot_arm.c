@@ -364,6 +364,8 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     /* Jump to non secure app_entry */
     asm volatile("mov r7, %0" ::"r"(app_entry));
     asm volatile("bic.w   r7, r7, #1");
+    /* Re-enable interrupts to allow non-secure OS handlers */
+    asm volatile("cpsie i");
     asm volatile("blxns   r7" );
 #   else
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
