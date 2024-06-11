@@ -33,6 +33,10 @@ extern unsigned int _start_heap;
 extern void isr_tim2(void);
 #endif
 
+#ifdef APP_HAS_SYSTICK
+extern void isr_systick(void);
+#endif
+
 #ifndef STACK_PAINTING
 #define STACK_PAINTING 0
 #endif
@@ -127,7 +131,11 @@ void (* const IV[])(void) =
 	isr_empty,                   // DebugMonitor
 	0,                           // reserved
 	isr_empty,                   // PendSV
+#ifdef APP_HAS_SYSTICK
+    isr_systick,                 // SysTick
+#else
 	isr_empty,                   // SysTick
+#endif
 
 /* Device specific IRQs for LM3S */
 

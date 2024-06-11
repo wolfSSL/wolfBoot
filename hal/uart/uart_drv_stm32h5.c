@@ -151,7 +151,7 @@ static int uart1_tx(const uint8_t c)
     return 1;
 }
 
-static int uart1_rx(uint8_t *c, int len)
+static int uart1_rx(uint8_t *c)
 {
     volatile uint32_t reg;
     int i = 0;
@@ -219,7 +219,7 @@ static int uart3_tx(const uint8_t c)
     return 1;
 }
 
-static int uart3_rx(uint8_t *c, int len)
+static int uart3_rx(uint8_t *c)
 {
     volatile uint32_t reg;
     int i = 0;
@@ -249,12 +249,12 @@ int uart_tx(const uint8_t c)
 #endif
 }
 
-int uart_rx(uint8_t *c, int len)
+int uart_rx(uint8_t *c)
 {
 #if USE_UART1
-    return uart1_rx(c, len);
+    return uart1_rx(c);
 #else
-    return uart3_rx(c, len);
+    return uart3_rx(c);
 #endif
 }
 
