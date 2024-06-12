@@ -366,10 +366,23 @@ static void clock_pll_on(void)
 }
 
 #if (TZ_SECURE())
+
+#define NVIC_ISER_BASE (0xE000E100)
+#define NVIC_ICER_BASE (0xE000E180)
+#define NVIC_IPRI_BASE (0xE000E400)
+#define NVIC_USART3_IRQ 60
+
+/* Cortex M-33 has an extra register to set up non-secure interrupts */
+#define NVIC_ITNS_BASE (0xE000E380)
+
+
+
 static void periph_unsecure(void)
 {
     uint32_t pin;
     volatile uint32_t reg;
+    volatile uint32_t *nvic_itns;
+    uint32_t nvic_reg_pos, nvic_reg_off;
 
     /*Enable clock for User LED GPIOs */
     RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
@@ -411,6 +424,13 @@ static void periph_unsecure(void)
         DMB();
         TZSC_SECCFGR1 = reg;
     }
+
+    /* Set USART3 interrupt as non-secure */
+    nvic_reg_pos = NVIC_USART3_IRQ / 32;
+    nvic_reg_off = NVIC_USART3_IRQ % 32;
+    nvic_itns = ((volatile uint32_t *)(NVIC_ITNS_BASE + 4 * nvic_reg_pos));
+    *nvic_itns |= (1 << nvic_reg_off);
+
 
     /* Disable GPIOs clock used previously for accessing SECCFGR registers */
 #if 0

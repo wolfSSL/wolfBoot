@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include "system.h"
 #include "hal.h"
+#include "hal/stm32h5.h"
 #include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
 #include "wolfcrypt/benchmark/benchmark.h"
@@ -45,9 +46,18 @@ extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 
 volatile unsigned int jiffies = 0;
 
+/* Usart irq-based read function */
+static uint8_t uart_buf_rx[256];
+static uint32_t uart_rx_bytes = 0;
+static uint32_t uart_processed = 0;
+static int uart_rx_isr(unsigned char *c, int len);
+static int uart_poll(void);
+
 #define LED_BOOT_PIN (4) /* PG4 - Nucleo - Red Led */
 #define LED_USR_PIN  (0) /* PB0 - Nucleo - Green Led */
 #define LED_EXTRA_PIN  (4) /* PF4 - Nucleo - Orange Led */
+
+#define NVIC_USART3_IRQN (60)
 
 /*Non-Secure */
 #define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
@@ -176,6 +186,9 @@ static int cmd_random(const char *args);
 static int cmd_benchmark(const char *args);
 static int cmd_test(const char *args);
 static int cmd_timestamp(const char *args);
+static int cmd_update(const char *args);
+static int cmd_update_xmodem(const char *args);
+static int cmd_reboot(const char *args);
 
 
 
@@ -201,8 +214,164 @@ struct console_command COMMANDS[] =
      { cmd_timestamp, "timestamp", "print the current timestamp"},
      { cmd_benchmark, "benchmark", "run the wolfCrypt benchmark"},
      { cmd_test, "test", "run the wolfCrypt test"},
+     { cmd_update_xmodem, "update", "update the firmware via XMODEM"},
+     { cmd_reboot, "reboot", "reboot the system"},
      { NULL, "", ""}
 };
+
+#define AIRCR *(volatile uint32_t *)(0xE000ED0C)
+#define AIRCR_VKEY (0x05FA << 16)
+#   define AIRCR_SYSRESETREQ (1 << 2)
+
+int cmd_reboot(const char *args)
+{
+    (void)args;
+    AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
+    while(1)
+        asm volatile("wfi");
+    return 0; /* Never happens */
+}
+
+#define XSOH 0x01
+#define XEOT 0x04
+#define XACK 0x06
+#define XNAK 0x15
+#define XCAN 0x18
+
+
+static uint8_t crc8(uint8_t *data, size_t len)
+{
+    uint8_t checksum = 0;
+    for (int i = 0; i < len; i++) {
+        checksum += data[i];
+    }
+    return checksum;
+}
+
+#define XMODEM_PAYLOAD_SIZE 128
+#define XMODEM_PACKET_SIZE (3 + XMODEM_PAYLOAD_SIZE + 1)
+#define XMODEM_TIMEOUT   1000 /* milliseconds */
+
+static void xcancel(void)
+{
+    int i;
+    for (i = 0; i < 10; i++)
+        uart_tx(XCAN);
+}
+
+static uint8_t xpkt_payload[XMODEM_PAYLOAD_SIZE];
+
+static int cmd_update_xmodem(const char *args)
+{
+    int ret = -1;
+    uint8_t xpkt[XMODEM_PACKET_SIZE];
+    uint32_t dst_flash = (uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint8_t pkt_num = 0, pkt_num_expected=0xFF;
+    uint32_t pkt_size = XMODEM_PACKET_SIZE;
+    uint32_t update_ver = 0;
+    uint32_t now = jiffies;
+    uint32_t i = 0;
+    uint8_t pkt_num_inv;
+    uint8_t crc, calc_crc;
+
+
+    printf("Erasing update partition...");
+    fflush(stdout);
+    hal_flash_unlock();
+    //hal_flash_erase(dst_flash, WOLFBOOT_PARTITION_SIZE);
+    printf("Done.\r\n");
+
+    printf("Waiting for XMODEM transfer...\r\n");
+
+    while (1) {
+        now = jiffies;
+        i = 0;
+
+        while(i < XMODEM_PACKET_SIZE) {
+            ret = uart_rx_isr(&xpkt[i], XMODEM_PACKET_SIZE - i);
+            if (ret == 0) {
+                if(jiffies > (now + XMODEM_TIMEOUT)) {
+                    now = jiffies;
+                    if (i == 0)
+                        uart_tx(XNAK);
+                    i = 0;
+                } else {
+                    asm volatile("wfi");
+                }
+            } else {
+                now = jiffies;
+                i += ret;
+            }
+        }
+
+        if (xpkt[0] == XEOT) {
+            ret = 0;
+            uart_tx(XACK);
+            extra_led_on();
+            break;
+        }
+        if (xpkt[0] != XSOH) {
+            continue;
+        }
+        pkt_num = xpkt[1];
+        pkt_num_inv = ~xpkt[2];
+        if (pkt_num == pkt_num_inv) {
+            if (pkt_num_expected == 0xFF) /* re-sync */
+                (pkt_num_expected = pkt_num);
+            else if (pkt_num_expected != pkt_num) {
+                uart_tx(XNAK);
+                continue;
+            }
+            if ((pkt_num / 0x10) & 0x01)
+                extra_led_on();
+            else
+                extra_led_off();
+
+            /* Packet is valid */
+            crc = xpkt[XMODEM_PACKET_SIZE - 1];
+            calc_crc = crc8(xpkt, XMODEM_PACKET_SIZE - 1);
+            if (crc == calc_crc) {
+                uint32_t t_size;
+                /* CRC is valid */
+                memcpy(xpkt_payload, xpkt + 3, XMODEM_PAYLOAD_SIZE);
+                ret = hal_flash_write(dst_flash, xpkt_payload, XMODEM_PAYLOAD_SIZE);
+                if (ret != 0) {
+                    xcancel();
+                    printf("Error writing to flash\r\n");
+                    break;
+                }
+                uart_tx(XACK);
+                pkt_num++;
+                pkt_num_expected++;
+                dst_flash += XMODEM_PAYLOAD_SIZE;
+                t_size = *((uint32_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4));
+                if ((uint32_t)dst_flash >= (WOLFBOOT_PARTITION_UPDATE_ADDRESS + t_size)) {
+                    ret = 0;
+                    extra_led_off();
+                    break;
+                }
+                uart_tx(XACK);
+            } else {
+                uart_tx(XNAK);
+            }
+        } else {
+            uart_tx(XNAK); /* invalid packet number received */
+        }
+    }
+    for (i = 0; i < 10; i++)
+        uart_tx('\r');
+
+    printf("End of transfer. ret: %d\r\n", ret);
+    update_ver = wolfBoot_update_firmware_version();
+    if (update_ver != 0) {
+        printf("New firmware version: 0x%lx\r\n", update_ver);
+    } else {
+        printf("No valid image in update partition\r\n");
+    }
+
+    hal_flash_lock();
+    return ret;
+}
 
 static int cmd_help(const char *args)
 {
@@ -231,6 +400,12 @@ static int cmd_info(const char *args)
     printf("Firmware version : 0x%lx\r\n", wolfBoot_current_firmware_version());
     if (update_fw_version != 0) {
         printf("Candidate firmware version : 0x%lx\r\n", update_fw_version);
+        if (update_fw_version > cur_fw_version) {
+            wolfBoot_update_trigger();
+            printf("'reboot' to initiate update.\r\n");
+        } else {
+            printf("Update image older than current.\r\n");
+        }
     } else {
         printf("No image in update partition.\r\n");
     }
@@ -443,7 +618,7 @@ static void console_loop(void)
         fflush(stdout);
         idx = 0;
         do {
-            ret = uart_rx((uint8_t *)&c);
+            ret = uart_rx_isr((uint8_t *)&c, 1);
             if (ret > 0) {
                 if (c == '\r')
                     break;
@@ -453,20 +628,51 @@ static void console_loop(void)
         if (idx > 0) {
             cmd[idx] = 0;
             if (parse_cmd(cmd) == -2) {
-                printf("Unknown command\r\n");
+                printf("Unknown command: %s\r\n", cmd);
             }
         }
     }
 }
 
+void isr_usart3(void)
+{
+    volatile uint32_t reg;
+    usr_led_on();
+    reg = UART3_ISR;
+    if (reg & UART_ISR_RX_NOTEMPTY) {
+        if (uart_rx_bytes >= 255)
+            reg = UART3_RDR;
+        else
+            uart_buf_rx[uart_rx_bytes++] = (unsigned char)(UART3_RDR & 0xFF);
+    }
+}
+
+static int uart_rx_isr(unsigned char *c, int len)
+{
+    UART3_CR1 &= ~UART_ISR_RX_NOTEMPTY;
+    if (len > (uart_rx_bytes - uart_processed))
+        len = (uart_rx_bytes - uart_processed);
+    if (len > 0) {
+        memcpy(c, uart_buf_rx + uart_processed, len);
+        uart_processed += len;
+        if (uart_processed >= uart_rx_bytes) {
+            uart_processed = 0;
+            uart_rx_bytes = 0;
+            usr_led_off();
+        }
+    }
+    UART3_CR1 |= UART_ISR_RX_NOTEMPTY;
+    return len;
+}
+
+static int uart_poll(void)
+{
+    return (uart_rx_bytes > uart_processed)?1:0;
+}
 
 void main(void)
 {
     int ret;
-    uint32_t rand;
-    uint32_t i;
-    uint32_t klen = 200;
-    int otherkey_slot;
     uint32_t app_version;
 
 
@@ -478,7 +684,15 @@ void main(void)
 
     app_version = wolfBoot_current_firmware_version();
 
+
+    nvic_irq_setprio(NVIC_USART3_IRQN, 0);
+    nvic_irq_enable(NVIC_USART3_IRQN);
+
     uart_init(115200, 8, 'N', 1);
+    UART3_CR1 |= UART_ISR_RX_NOTEMPTY;
+    UART3_CR3 |= UART_CR3_RXFTIE;
+
+
     printf("========================\r\n");
     printf("STM32H5 wolfBoot demo Application\r\n");
     printf("Copyright 2024 wolfSSL Inc\r\n");
@@ -523,18 +737,7 @@ __attribute__((weak)) int _read(int file, char *ptr, int len)
   (void)file;
   int DataIdx;
   int ret;
-
-  for (DataIdx = 0; DataIdx < len; DataIdx++)
-  {
-      do {
-          ret = uart_rx((uint8_t *)ptr);
-          if (ret > 0)
-              ptr++;
-      } while (ret == 0);
-      if (ret == 0)
-          break;
-  }
-  return DataIdx;
+  return -1;
 }
 
 int _write(int file, char *ptr, int len)

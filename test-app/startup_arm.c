@@ -33,6 +33,10 @@ extern unsigned int _start_heap;
 extern void isr_tim2(void);
 #endif
 
+#ifdef PLATFORM_stm32h5
+extern void isr_usart3(void);
+#endif
+
 #ifdef APP_HAS_SYSTICK
 extern void isr_systick(void);
 #endif
@@ -294,6 +298,139 @@ void (* const IV[])(void) =
     isr_empty, //	UCPD1_IRQHandler
     isr_empty, //	ICACHE_IRQHandler
     isr_empty, //	OTFDEC1_IRQHandler
+               //
+#elif defined(PLATFORM_stm32h5)
+    isr_empty, //	WWDG_IRQHandler
+    isr_empty, //	PVD_PVM_IRQHandler
+    isr_empty, //	RTC_IRQHandler
+    isr_empty, //	RTC_S_IRQHandler
+    isr_empty, //	TAMP_IRQHandler
+    isr_empty, //	RAMCFG_IRQHandler
+    isr_empty, //	FLASH_IRQHandler
+    isr_empty, //	FLASH_S_IRQHandler
+    isr_empty, //	GTZC_IRQHandler
+    isr_empty, //	RCC_IRQHandler
+    isr_empty, //	RCC_S_IRQHandler
+    isr_empty, //	EXTI0_IRQHandler
+    isr_empty, //	EXTI1_IRQHandler
+    isr_empty, //	EXTI2_IRQHandler
+    isr_empty, //	EXTI3_IRQHandler
+    isr_empty, //	EXTI4_IRQHandler
+    isr_empty, //	EXTI5_IRQHandler
+    isr_empty, //	EXTI6_IRQHandler
+    isr_empty, //	EXTI7_IRQHandler
+    isr_empty, //	EXTI8_IRQHandler
+    isr_empty, //	EXTI9_IRQHandler
+    isr_empty, //	EXTI10_IRQHandler
+    isr_empty, //	EXTI11_IRQHandler
+    isr_empty, //	EXTI12_IRQHandler
+    isr_empty, //	EXTI13_IRQHandler
+    isr_empty, //	EXTI14_IRQHandler
+    isr_empty, //	EXTI15_IRQHandler
+    isr_empty, //	GPDMA1CH0_IRQHandler
+    isr_empty, //	GPDMA1CH1_IRQHandler
+    isr_empty, //	GPDMA1CH2_IRQHandler
+    isr_empty, //	GPDMA1CH3_IRQHandler
+    isr_empty, //	GPDMA1CH4_IRQHandler
+    isr_empty, //	GPDMA1CH5_IRQHandler
+    isr_empty, //	GPDMA1CH6_IRQHandler
+    isr_empty, //	GPDMA1CH7_IRQHandler
+    isr_empty, //	IWDG_IRQHandler
+    isr_empty, //	SAES_IRQHandler
+    isr_empty, //	ADC1_IRQHandler
+    isr_empty, //	DAC1_IRQHandler
+    isr_empty, //	FDCAN1_IT0_IRQHandler
+    isr_empty, //	FDCAN1_IT1_IRQHandler
+    isr_empty, //	TIM1_BRK_IRQHandler
+    isr_empty, //	TIM1_UP_IRQHandler
+    isr_empty, //	TIM1_TRG_COM_IRQHandler
+    isr_empty, //	TIM1_CC_IRQHandler
+    isr_empty, //	TIM2_IRQHandler
+    isr_empty, //	TIM3_IRQHandler
+    isr_empty, //	TIM4_IRQHandler
+    isr_empty, //	TIM5_IRQHandler
+    isr_empty, //	TIM6_IRQHandler
+    isr_empty, //	TIM7_IRQHandler
+    isr_empty, //	I2C1_EV_IRQHandler
+    isr_empty, //	I2C1_ER_IRQHandler
+    isr_empty, //	I2C2_EV_IRQHandler
+    isr_empty, //	I2C2_ER_IRQHandler
+    isr_empty, //	SPI1_IRQHandler
+    isr_empty, //	SPI2_IRQHandler
+    isr_empty, //	SPI3_IRQHandler
+    isr_empty, //	USART1_IRQHandler
+    isr_empty, //	USART2_IRQHandler
+    isr_usart3, //	USART3_IRQHandler
+    isr_empty, //	UART4_IRQHandler
+    isr_empty, //	UART5_IRQHandler
+    isr_empty, //	LPUART1_IRQHandler
+    isr_empty, //	LPTIM1_IRQHandler
+    isr_empty, //	TIM8_BRK_IRQHandler
+    isr_empty, //	TIM8_UP_IRQHandler
+    isr_empty, //	TIM8_TRG_COM_IRQHandler
+    isr_empty, //	TIM8_CC_IRQHandler
+    isr_empty, //	ADC2_IRQHandler
+    isr_empty, //	LPTIM2_IRQHandler
+    isr_empty, //	TIM15_IRQHandler
+    isr_empty, //	TIM16_IRQHandler
+    isr_empty, //	TIM17_IRQHandler
+    isr_empty, //	USB_FS_IRQHandler
+    isr_empty, //	CRS_IRQHandler
+    isr_empty, //	UCPD1_IRQHandler
+    isr_empty, //	FMC_IRQHandler
+    isr_empty, //	OCTOSPI1_IRQHandler
+    isr_empty, //	SDMMC1_IRQHandler
+    isr_empty, //	I2C3_EV_IRQHandler
+    isr_empty, //	I2C3_ER_IRQHandler
+    isr_empty, //	SPI4_IRQHandler
+    isr_empty, //	SPI5_IRQHandler
+    isr_empty, //	SPI6_IRQHandler
+    isr_empty, //	USART6_IRQHandler
+    isr_empty, //	USART10_IRQHandler
+    isr_empty, //	USART11_IRQHandler
+    isr_empty, //	SAI1_IRQHandler
+    isr_empty, //	SAI2_IRQHandler
+    isr_empty, //   GPDMA2CH0_IRQHandler
+    isr_empty, //   GPDMA2CH1_IRQHandler
+    isr_empty, //   GPDMA2CH2_IRQHandler
+    isr_empty, //   GPDMA2CH3_IRQHandler
+    isr_empty, //   GPDMA2CH4_IRQHandler
+    isr_empty, //   GPDMA2CH5_IRQHandler
+    isr_empty, //   GPDMA2CH6_IRQHandler
+    isr_empty, //   GPDMA2CH7_IRQHandler
+    isr_empty, //	UART7_IRQHandler
+    isr_empty, //	UART8_IRQHandler
+    isr_empty, //	UART9_IRQHandler
+    isr_empty, //	UART12_IRQHandler
+    isr_empty, //	SDMMC2_IRQHandler
+    isr_empty, //   FPU_IRQHandler
+    isr_empty, //   ICACHE_IRQHandler
+    isr_empty, //   DCACHE_IRQHandler
+    isr_empty, //   ETH1_IRQHandler
+    isr_empty, //   DCMI_PSSI_IRQHandler
+    isr_empty, //   FDCAN2_IT0_IRQHandler
+    isr_empty, //   FDCAN2_IT1_IRQHandler
+    isr_empty, //   CORDIC_IRQHandler
+    isr_empty, //   FMAC_IRQHandler
+    isr_empty, //   DTS_IRQHandler
+    isr_empty, //   RNG_IRQHandler
+    isr_empty, //   OTFDEC1_IRQHandler
+    isr_empty, //   AES_IRQHandler
+    isr_empty, //   HASH_IRQHandler
+    isr_empty, //   PKA_IRQHandler
+    isr_empty, //   CEC_IRQHandler
+    isr_empty, //   TIM12_IRQHandler
+    isr_empty, //   TIM13_IRQHandler
+    isr_empty, //   TIM14_IRQHandler
+    isr_empty, //   I3C1_EV_IRQHandler
+    isr_empty, //   I3C1_ER_IRQHandler
+    isr_empty, //   I2C4_EV_IRQHandler
+    isr_empty, //   I2C4_ER_IRQHandler
+    isr_empty, //   LPTIM3_IRQHandler
+    isr_empty, //   LPTIM4_IRQHandler
+    isr_empty, //   LPTIM5_IRQHandler
+    isr_empty, //   LPTIM6_IRQHandler
+
 #elif defined(STM32) /* For STM32 */
     isr_empty,              // NVIC_WWDG_IRQ 0
     isr_empty,              // PVD_IRQ 1

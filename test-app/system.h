@@ -28,12 +28,13 @@
 #define PLL_FULL_MASK (0x7F037FFF)
 
 /* Assembly helpers */
+#ifndef DMB
 #define DMB() asm volatile ("dmb");
+#endif
 #define WFI() asm volatile ("wfi");
 
 /* Master clock setting */
 void clock_config(void);
-void flash_set_waitstates(void);
 
 
 /* NVIC */
