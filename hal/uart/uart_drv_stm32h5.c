@@ -141,11 +141,18 @@ static int uart1_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     return 0;
 }
 
+static void uart1_clear_errors(void)
+{
+    UART1_ICR = UART1_ISR & (UART_ENE | UART_EPE | UART_ORE | UART_EFE);
+}
+
 static int uart1_tx(const uint8_t c)
 {
     volatile uint32_t reg;
     do {
         reg = UART1_ISR;
+        if (reg & (UART_ENE | UART_EPE | UART_ORE | UART_EFE))
+            uart1_clear_errors();
     } while ((reg & UART_ISR_TX_EMPTY) == 0);
     UART1_TDR = c;
     return 1;
@@ -156,6 +163,8 @@ static int uart1_rx(uint8_t *c)
     volatile uint32_t reg;
     int i = 0;
     reg = UART1_ISR;
+    if (reg & (UART_ENE | UART_EPE | UART_ORE | UART_EFE))
+        uart1_clear_errors();
     if (reg & UART_ISR_RX_NOTEMPTY) {
         *c = (uint8_t)UART1_RDR;
         return 1;
@@ -209,11 +218,18 @@ static int uart3_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     return 0;
 }
 
+static void uart3_clear_errors(void)
+{
+    UART3_ICR = UART3_ISR & (UART_ENE | UART_EPE | UART_ORE | UART_EFE);
+}
+
 static int uart3_tx(const uint8_t c)
 {
     volatile uint32_t reg;
     do {
         reg = UART3_ISR;
+        if (reg & (UART_ENE | UART_EPE | UART_ORE | UART_EFE))
+            uart3_clear_errors();
     } while ((reg & UART_ISR_TX_EMPTY) == 0);
     UART3_TDR = c;
     return 1;
@@ -224,6 +240,8 @@ static int uart3_rx(uint8_t *c)
     volatile uint32_t reg;
     int i = 0;
     reg = UART3_ISR;
+    if (reg & (UART_ENE | UART_EPE | UART_ORE | UART_EFE))
+        uart3_clear_errors();
     if (reg & UART_ISR_RX_NOTEMPTY) {
         *c = (uint8_t)UART3_RDR;
         return 1;

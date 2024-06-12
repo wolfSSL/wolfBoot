@@ -23,7 +23,9 @@
 #ifndef STM32H5_DEF_INCLUDED
 #define STM32H5_DEF_INCLUDED
 /* Assembly helpers */
+#ifndef DMB
 #define DMB() __asm__ volatile ("dmb")
+#endif
 #define ISB() __asm__ volatile ("isb")
 #define DSB() __asm__ volatile ("dsb")
 
@@ -409,8 +411,14 @@
 #define UART_CR3_HDSEL          (1 << 3)
 #define UART_CR3_DEM            (1 << 14)
 #define UART_CR3_IREN           (1 << 1)
+#define UART_CR3_RXFTIE         (1 << 28)
 #define UART_ISR_TX_EMPTY       (1 << 7)
 #define UART_ISR_RX_NOTEMPTY    (1 << 5)
+#define UART_EPE                (1 << 0)    /* Parity error */
+#define UART_EFE                (1 << 1)    /* Framing error */
+#define UART_ENE                (1 << 2)    /* Noise error */
+#define UART_ORE                (1 << 3)    /* Overrun error */
+
 
 
 /* OTP FLASH AREA */
