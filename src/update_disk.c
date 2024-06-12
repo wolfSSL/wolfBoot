@@ -79,9 +79,9 @@ extern uint8_t _end_wb[];
  */
 void RAMFUNCTION wolfBoot_start(void)
 {
+    uint8_t p_hdr[IMAGE_HEADER_SIZE] __attribute__((aligned(16)));
     struct stage2_parameter *stage2_params;
     struct wolfBoot_image os_image;
-    uint8_t p_hdr[IMAGE_HEADER_SIZE];
     int pA_ver = 0, pB_ver = 0;
     uint32_t cur_part = 0;
     int ret = -1;
@@ -135,8 +135,8 @@ void RAMFUNCTION wolfBoot_start(void)
         selected = 0;
 
     stage2_params = stage2_get_parameters();
-    /* load the image just after wolfboot */
-    load_address = (uint32_t *)(_end_wb);
+    /* load the image just after wolfboot, 16 bytes aligned */
+    load_address = (uint32_t *)((((uintptr_t)_end_wb) + 0xf) & ~0xf);
     wolfBoot_printf("Load address 0x%x\r\n", load_address);
     do {
         failures++;

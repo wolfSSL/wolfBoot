@@ -88,6 +88,15 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define PCI_DEVICE_CONTROLLER_TO_PEX 0x6
 #define PCIE_TRAINING_TIMEOUT_MS (100)
 
+/* compile time alignment checks */
+#define ALIGN_CHECK(value, alignment) ((value) & ((alignment)-1)) == 0
+#if !ALIGN_CHECK(FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE, 16)
+#error "FSP_S_LOAD_BASE must be aligned on a 16 bytes boundary"
+#endif
+#if !ALIGN_CHECK(WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE, 16)
+#error "WOLFBOOT_LOAD_BASE must be aligned on a 16 bytes boundary"
+#endif
+
 typedef uint32_t (*memory_init_cb)(void *udp, struct efi_hob **HobList);
 typedef uint32_t (*temp_ram_exit_cb)(void *udp);
 typedef uint32_t (*silicon_init_cb)(void *udp);
