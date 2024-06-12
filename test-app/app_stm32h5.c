@@ -47,7 +47,7 @@ extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 volatile unsigned int jiffies = 0;
 
 /* Usart irq-based read function */
-static uint8_t uart_buf_rx[256];
+static uint8_t uart_buf_rx[1024];
 static uint32_t uart_rx_bytes = 0;
 static uint32_t uart_processed = 0;
 static int uart_rx_isr(unsigned char *c, int len);
@@ -273,6 +273,7 @@ static int cmd_update_xmodem(const char *args)
     uint32_t i = 0;
     uint8_t pkt_num_inv;
     uint8_t crc, calc_crc;
+    int transfer_started = 0;
 
 
     printf("Erasing update partition...");
@@ -316,9 +317,10 @@ static int cmd_update_xmodem(const char *args)
         pkt_num = xpkt[1];
         pkt_num_inv = ~xpkt[2];
         if (pkt_num == pkt_num_inv) {
-            if (pkt_num_expected == 0xFF) /* re-sync */
+            if (!transfer_started) /* sync */ {
                 (pkt_num_expected = pkt_num);
-            else if (pkt_num_expected != pkt_num) {
+                transfer_started = 1;
+            } else if (pkt_num_expected != pkt_num) {
                 uart_tx(XNAK);
                 continue;
             }
@@ -345,6 +347,7 @@ static int cmd_update_xmodem(const char *args)
                 pkt_num_expected++;
                 dst_flash += XMODEM_PAYLOAD_SIZE;
                 t_size = *((uint32_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4));
+                t_size += IMAGE_HEADER_SIZE;
                 if ((uint32_t)dst_flash >= (WOLFBOOT_PARTITION_UPDATE_ADDRESS + t_size)) {
                     ret = 0;
                     extra_led_off();
@@ -640,7 +643,7 @@ void isr_usart3(void)
     usr_led_on();
     reg = UART3_ISR;
     if (reg & UART_ISR_RX_NOTEMPTY) {
-        if (uart_rx_bytes >= 255)
+        if (uart_rx_bytes >= 1023)
             reg = UART3_RDR;
         else
             uart_buf_rx[uart_rx_bytes++] = (unsigned char)(UART3_RDR & 0xFF);
