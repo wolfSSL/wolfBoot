@@ -105,17 +105,23 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
     while (address < end) {
         if (address < FLASH_BANK2_BASE) {
             page_n = (address - ARCH_FLASH_OFFSET) / FLASH_PAGE_SIZE;
-            bank = 1;
+            bank = 0;
         } else {
             page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
-            bank = 2;
+            bank = 1;
         }
+
+#ifdef PLATFORM_stm32h5
+        /* Take into account current swap configuration */
+        if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
+            bank = !bank;
+#endif
         reg_idx = page_n / 32;
         pos = page_n % 32;
         hal_flash_wait_complete(bank);
         hal_flash_clear_errors(bank);
         hal_flash_nonsecure_unlock();
-        if (bank == 1)
+        if (bank == 0)
             FLASH_SECBB1[reg_idx] |= ( 1 << pos);
         else
             FLASH_SECBB2[reg_idx] |= ( 1 << pos);
@@ -128,7 +134,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
 #else
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER));
-        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER);
+        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bank << 31));
 #endif
 
         DMB();

@@ -279,7 +279,7 @@ static int cmd_update_xmodem(const char *args)
     printf("Erasing update partition...");
     fflush(stdout);
     hal_flash_unlock();
-    //hal_flash_erase(dst_flash, WOLFBOOT_PARTITION_SIZE);
+    hal_flash_erase(dst_flash, WOLFBOOT_PARTITION_SIZE);
     printf("Done.\r\n");
 
     printf("Waiting for XMODEM transfer...\r\n");
@@ -400,6 +400,7 @@ static int cmd_info(const char *args)
     printf("\r\n");
     printf("System information\r\n");
     printf("====================================\r\n");
+    printf("Flash banks are %sswapped.\r\n", ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)?"not ":"");
     printf("Firmware version : 0x%lx\r\n", wolfBoot_current_firmware_version());
     if (update_fw_version != 0) {
         printf("Candidate firmware version : 0x%lx\r\n", update_fw_version);
