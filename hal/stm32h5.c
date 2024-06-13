@@ -28,6 +28,25 @@
 
 #define PLL_SRC_HSE 1
 
+#if TZ_SECURE()
+static int is_flash_nonsecure(uint32_t address)
+{
+    uint32_t in_bank_offset = address & 0x000FFFFF;
+#ifdef DUALBANK_SWAP
+    if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE))
+        return 1;
+    else
+        return 0;
+#else
+    if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS)
+        return 1;
+    else
+        return 0;
+#endif
+}
+#endif
+
+
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
@@ -84,11 +103,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     dst = (uint32_t *)address;
 
 #if (TZ_SECURE())
-    if ( ((address < FLASH_BANK2_BASE) && (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS)) ||
-        (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS))
+    if (is_flash_nonsecure(address)) {
         hal_tz_claim_nonsecure_area(address, len);
+    }
     /* Convert into secure address space */
-    dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
+    if (((uint32_t)dst & 0x0F000000) == 0x08000000) {
+        dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
+    }
 #endif
 
     while (i < len) {
@@ -153,6 +174,7 @@ void RAMFUNCTION hal_flash_opt_lock(void)
 }
 
 
+
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end_address;
@@ -173,18 +195,25 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         base = FLASHMEM_ADDRESS_SPACE;
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BER));
 
+#if TZ_SECURE()
+        /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
+        if (is_flash_nonsecure(address)) {
+            return 0;
+        }
+#endif
         if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
-#if TZ_SECURE()
-            /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
-            return 0;
-#endif
             base = FLASH_BANK2_BASE;
             bnksel = 1;
         } else {
             FLASH_CR &= ~FLASH_CR_SER ;
             return 0; /* Address out of range */
         }
+
+        /* Check for swapped banks to invert bnksel */
+        if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
+            bnksel = !bnksel;
+
         reg |= ((((p - base)  >> 13) << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bnksel << 31));
         FLASH_CR = reg;
         DMB();

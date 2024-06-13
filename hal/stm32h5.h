@@ -258,7 +258,7 @@
 
 
 
-#if defined(DUALBANK_SWAP) && defined (__WOLFBOOT)
+#if defined(DUALBANK_SWAP)
     #define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
     #define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
     #define FLASH_OPTSR_SWAP_BANK (1 << 31)
