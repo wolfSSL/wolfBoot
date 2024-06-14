@@ -368,6 +368,9 @@ static int cmd_update_xmodem(const char *args)
     update_ver = wolfBoot_update_firmware_version();
     if (update_ver != 0) {
         printf("New firmware version: 0x%lx\r\n", update_ver);
+        printf("Triggering update...\r\n");
+        wolfBoot_update_trigger();
+        printf("Update completed successfully.\r\n");
     } else {
         printf("No valid image in update partition\r\n");
     }
@@ -387,25 +390,60 @@ static int cmd_help(const char *args)
     return 0;
 }
 
+const char part_state_names[6][16] = {
+    "NEW",
+    "UPDATING",
+    "FFLAGS",
+    "TESTING",
+    "CONFIRMED",
+    "[Invalid state]"
+};
+
+static const char *part_state_name(uint8_t state)
+{
+    switch(state) {
+        case IMG_STATE_NEW:
+            return part_state_names[0];
+        case IMG_STATE_UPDATING:
+            return part_state_names[1];
+        case IMG_STATE_FINAL_FLAGS:
+            return part_state_names[2];
+        case IMG_STATE_TESTING:
+            return part_state_names[3];
+        case IMG_STATE_SUCCESS:
+            return part_state_names[4];
+        default:
+            return part_state_names[5];
+    }
+}
+
 static int cmd_info(const char *args)
 {
     int i, j;
     uint32_t cur_fw_version, update_fw_version;
     uint32_t n_keys;
     uint16_t hdrSz;
+    uint8_t boot_part_state = IMG_STATE_NEW, update_part_state = IMG_STATE_NEW;
 
     cur_fw_version = wolfBoot_current_firmware_version();
     update_fw_version = wolfBoot_update_firmware_version();
+
+    wolfBoot_get_partition_state(PART_BOOT, &boot_part_state);
+    wolfBoot_get_partition_state(PART_UPDATE, &update_part_state);
 
     printf("\r\n");
     printf("System information\r\n");
     printf("====================================\r\n");
     printf("Flash banks are %sswapped.\r\n", ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)?"not ":"");
     printf("Firmware version : 0x%lx\r\n", wolfBoot_current_firmware_version());
+    printf("Current firmware state: %s\r\n", part_state_name(boot_part_state));
     if (update_fw_version != 0) {
-        printf("Candidate firmware version : 0x%lx\r\n", update_fw_version);
+        if (update_part_state == IMG_STATE_UPDATING)
+            printf("Candidate firmware version : 0x%lx\r\n", update_fw_version);
+        else
+            printf("Backup firmware version : 0x%lx\r\n", update_fw_version);
+        printf("Update state: %s\r\n", part_state_name(update_part_state));
         if (update_fw_version > cur_fw_version) {
-            wolfBoot_update_trigger();
             printf("'reboot' to initiate update.\r\n");
         } else {
             printf("Update image older than current.\r\n");

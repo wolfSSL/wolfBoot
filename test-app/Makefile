@@ -162,6 +162,7 @@ ifeq ($(TARGET),stm32h5)
     LSCRIPT_TEMPLATE=ARM-stm32h5.ld
   endif
   CFLAGS+=-DAPP_HAS_SYSTICK
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
   CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
   LDFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
