@@ -94,6 +94,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t *src, *dst;
     uint32_t dword[2];
     volatile uint32_t *sr, *cr;
+    uint32_t off = 0;
+    uint32_t una_len = 0;
 
     cr = &FLASH_CR;
     sr = &FLASH_SR;
@@ -105,20 +107,22 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #if (TZ_SECURE())
     if (is_flash_nonsecure(address)) {
         hal_tz_claim_nonsecure_area(address, len);
-    }
-    /* Convert into secure address space */
-    if (((uint32_t)dst & 0x0F000000) == 0x08000000) {
+    } else if (((uint32_t)dst & 0x0F000000) == 0x08000000) {
+        /* Convert into secure address space */
         dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
     }
 #endif
-
     while (i < len) {
         dword[0] = src[i >> 2];
-        dword[1] = src[(i >> 2) + 1];
+        if (len > i + 1)
+            dword[1] = src[(i >> 2) + 1];
+        else
+            dword[1] = 0xFFFFFFFF;
         *cr |= FLASH_CR_PG;
         dst[i >> 2] = dword[0];
         ISB();
         dst[(i >> 2) + 1] = dword[1];
+        ISB();
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
@@ -126,7 +130,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         i+=8;
     }
 #if (TZ_SECURE())
-    hal_tz_release_nonsecure_area();
+    if (is_flash_nonsecure(address)) {
+        hal_tz_release_nonsecure_area();
+    }
 #endif
     return 0;
 }
@@ -194,6 +200,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         uint32_t bnksel = 0;
         base = FLASHMEM_ADDRESS_SPACE;
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BER));
+        if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        {
+            base = FLASH_BANK2_BASE;
+            bnksel = 1;
+        }
 
 #if TZ_SECURE()
         /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
@@ -201,22 +212,17 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             return 0;
         }
 #endif
-        if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
-        {
-            base = FLASH_BANK2_BASE;
-            bnksel = 1;
-        } else {
-            FLASH_CR &= ~FLASH_CR_SER ;
-            return 0; /* Address out of range */
-        }
-
         /* Check for swapped banks to invert bnksel */
         if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
             bnksel = !bnksel;
 
+#if !TZ_SECURE() && !defined(__FLASH_OTP_PRIMER)
+        printf("Erasing bank %d, page %d\r\n", bnksel, (p - base) >> 13);
+#endif
+
         reg |= ((((p - base)  >> 13) << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bnksel << 31));
         FLASH_CR = reg;
-        DMB();
+        ISB();
         FLASH_CR |= FLASH_CR_STRT;
         hal_flash_wait_complete(0);
     }
@@ -547,19 +553,19 @@ static void fork_bootloader(void)
 #include "uart_drv.h"
 void hal_init(void)
 {
-#if TZ_SECURE()
-    hal_tz_sau_init();
-    hal_gtzc_init();
-#endif
     clock_pll_on();
+#if TZ_SECURE()
+    hal_gtzc_init();
+    hal_tz_sau_init();
+#endif
 
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
-    if ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)
-        fork_bootloader();
+    fork_bootloader();
 #endif
 
 
 }
+
 
 
 void hal_prepare_boot(void)
