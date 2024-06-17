@@ -254,15 +254,10 @@
 #define FLASH_OPSR_CODE_OPT_CHANGE  (0x6 << 29)
 #define FLASH_OPSR_CODE_OBK_SWAP    (0x7 << 29)
 
+#define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
+#define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
+#define FLASH_OPTSR_SWAP_BANK (1 << 31)
 
-
-
-
-#if defined(DUALBANK_SWAP)
-    #define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
-    #define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
-    #define FLASH_OPTSR_SWAP_BANK (1 << 31)
-#endif
 
 /* Register values (for both secure and non secure registers)
  * RM0481 Table 75 */
