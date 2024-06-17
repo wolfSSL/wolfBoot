@@ -308,6 +308,7 @@ ifeq ($(ARCH),RENESAS_RX)
     CFLAGS+=-mbig-endian-data
     ifeq ($(USE_GCC),1)
       LDFLAGS+=-Wl,--oformat=elf32-rx-be
+      CFLAGS+=-misa=v2
     else
       LDFLAGS+=--oformat=elf32-rx-be
     endif
@@ -315,6 +316,7 @@ ifeq ($(ARCH),RENESAS_RX)
     CFLAGS+=-mlittle-endian-data
     ifeq ($(USE_GCC),1)
       LDFLAGS+=-Wl,--oformat=elf32-rx-le
+      CFLAGS+=-misa=v2
     else
       LDFLAGS+=--oformat=elf32-rx-le
     endif
@@ -322,6 +324,53 @@ ifeq ($(ARCH),RENESAS_RX)
 
   ifeq ($(PKA),1)
     CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
+    RX_DRIVER_PATH?=./lib
+
+    OBJS+=./lib/wolfssl/wolfcrypt/src/cryptocb.o \
+          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.o \
+          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o
+
+    # RX TSIP uses pre-compiled .a library by default
+    ifeq ($(RX_TSIP_SRC),)
+      ifeq ($(BIG_ENDIAN),1)
+        LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx72m_rx72n_rx66n_big.a
+      else
+        LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx72m_rx72n_rx66n_little.a
+      endif
+    else
+      # Use RX_TSIP_SRC if building TSIP sources directly
+      OBJS+=$(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/r_tsip_rx.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/r_tsip_aes_rx.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/r_tsip_hash_rx.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/r_tsip_ecc_rx.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_p00.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_p01.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_p02.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_p23.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_p26.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_subprc01.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_subprc02.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function050.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function051.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function052.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function053.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function054.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function100.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function101.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function102.o \
+            $(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n/ip/r_tsip_rx_function103.o
+    endif
+
+    OBJS+=$(RX_DRIVER_PATH)/r_bsp/mcu/all/r_bsp_cpu.o \
+          $(RX_DRIVER_PATH)/r_bsp/mcu/all/r_bsp_interrupts.o \
+          $(RX_DRIVER_PATH)/r_bsp/mcu/all/r_rx_intrinsic_functions.o \
+          $(RX_DRIVER_PATH)/r_bsp/mcu/rx72n/mcu_interrupts.o
+
+    CFLAGS+=-Ihal -I./lib/wolfssl \
+            -I$(RX_DRIVER_PATH)/r_bsp \
+            -I$(RX_DRIVER_PATH)/r_config \
+            -I$(RX_DRIVER_PATH)/r_tsip_rx \
+            -I$(RX_DRIVER_PATH)/r_tsip_rx/src
   endif
 endif
 

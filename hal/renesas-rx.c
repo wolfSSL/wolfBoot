@@ -50,9 +50,11 @@
     #include "wolfssl/wolfcrypt/wc_port.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas_sync.h"
-    #include "key_data.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas_tsip_types.h"
-    TsipUserCtx pkInfo;
+    #include "wolfssl/wolfcrypt/port/Renesas/renesas_cmn.h"
+    static TsipUserCtx pkInfo;
+
+    #include "key_data.h"
 #endif
 
 /* forward declaration */
@@ -338,7 +340,7 @@ void hal_init(void)
     int err;
     uint32_t key_type = 0;
     int tsip_key_type = -1;
-    struct rsa2048_pub *encrypted_user_key_data;
+    struct enc_pub_key *encrypted_user_key_data;
 #endif
 
     hal_clk_init();
@@ -363,7 +365,7 @@ void hal_init(void)
     }
 
     /* retrive installed pubkey data from flash */
-    encrypted_user_key_data = (struct rsa2048_pub*)keystore_get_buffer(0);
+    encrypted_user_key_data = (struct enc_pub_key*)keystore_get_buffer(0);
 
     key_type = keystore_get_key_type(0);
     switch (key_type) {
@@ -374,7 +376,11 @@ void hal_init(void)
             tsip_key_type = TSIP_RSA4096;
             break;
         case AUTH_KEY_ECC256:
+            tsip_key_type = TSIP_ECCP256;
+            break;
         case AUTH_KEY_ECC384:
+            //tsip_key_type = TSIP_ECCP384;
+            //break;
         case AUTH_KEY_ECC521:
             /* TODO: ECC */
         case AUTH_KEY_ED25519:
@@ -399,7 +405,7 @@ void hal_init(void)
     /* TSIP specific RSA public key */
     if (tsip_use_PublicKey_buffer_crypt(&pkInfo,
                 (const char*)&encrypted_user_key_data->encrypted_user_key,
-                 RSA2048_PUB_SIZE,
+                sizeof(encrypted_user_key_data->encrypted_user_key),
                  tsip_key_type) != 0) {
         wolfBoot_printf("ERROR tsip_use_PublicKey_buffer\n");
         hal_panic();

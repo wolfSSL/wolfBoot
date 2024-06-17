@@ -190,13 +190,14 @@ To generate a RSA key for sign and verify, you can follow the following commands
 $ export PATH:$PATH:<wolfBoot>/tools/keytools
 $ export PATH:$PATH:<skmt>
 $ cd <wolfBoot>
-$ keygen --rsa2048 -g ./rsa-pri2048.der
-$ openssl rsa -in rsa-pri2048.der -pubout -out rsa-pub2048.pem
+$ keygen --rsa2048 -g ./pri-rsa2048.der
+$ openssl rsa -inform der -in ./pri-rsa2048.der -pubout -out ./pub-rsa2048.pem
 ```
 
 Generate a c header and source file from PEM file :
 ```
-$ skmt.exe /genkey /ufpk file=./sample.key /wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public /output key_data.c /filetype csource /keyname rsa2048_pub
+$ export PATH="$PATH:C:\Renesas\SecurityKeyManagementTool\cli"
+$ skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public -output key_data.c -filetype csource -keyname rsa2048_pub
 ```
 
 The value of option `/keyname` becomes structure name and macro definition defined in key_data.h.  Therefore, please specify `rsa2048_pub` like above unless there is some particular reason.
@@ -205,7 +206,7 @@ Copy a generated c header file, which is `key_data.h` to `<wolfBoot>/include/` f
 
 Generate Motorola hex file to write it to flash memory from PEM file :
 ```
-$ skmt.exe /genkey /ufpk file=./sample.key /wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public /output rsa_pub2048.mot /filetype "mot" /address "FFFF0000"
+$ skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public -output rsa_pub2048.mot -filetype "mot" -address "FFFF0000"
 ```
 The generated `mot` key is written to `0xFFFF0000` address. The flash memory address is set by macro, which is `RENESAS_TSIP_INSTALLEDKEY_ADDR` in `user_settings.h`
 After generating "mot" format key, you can download it to flash data area by using Renesas flash programmer.

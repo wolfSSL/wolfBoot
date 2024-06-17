@@ -426,6 +426,41 @@ extern int tolower(int c);
 #   define WOLFSSL_SMALL_STACK
 #endif
 
+
+/* Renesas */
+#if defined(WOLFBOOT_RENESAS_TSIP) || defined(WOLFBOOT_RENESAS_RSIP) || \
+    defined(WOLFBOOT_RENESAS_SCEPROTECT)
+
+    #define WOLFBOOT_SMALL_STACK
+    #define WOLF_CRYPTO_CB
+
+    #ifdef WOLFBOOT_RENESAS_TSIP
+        #define WOLFSSL_RENESAS_TSIP_VER  117
+        #define WOLFSSL_RENESAS_TSIP_CRYPT
+        #define WOLFSSL_RENESAS_TSIP_CRYPTONLY
+        #define WOLFSSL_NO_SW_MATH
+        #define RENESAS_TSIP_INSTALLEDKEY_ADDR 0xFFFF0000
+        #define ENCRYPTED_KEY_BYTE_SIZE ENC_PUB_KEY_SIZE /* from key_data.h */
+        #define RENESAS_DEVID 7890
+    #endif
+    #ifdef WOLFBOOT_RENESAS_SCEPROTECT
+        #define WOLFSSL_RENESAS_SCEPROTECT_CRYPTONLY
+        #define RENESAS_SCE_INSTALLEDKEY_ADDR 0x08001000U
+        #define SCE_ID 7890
+    #endif
+    #ifdef WOLFBOOT_RENESAS_RSIP
+        #define WOLFSSL_RENESAS_FSPSM
+        #define WOLFSSL_RENESAS_FSPSM_CRYPTONLY
+        #define WOLFSSL_RENESAS_RSIP_CRYPTONLY
+        #undef  WOLFSSL_RENESAS_FSPSM_TLS
+        #define RENESAS_RSIP_INSTALLEDKEY_FLASH_ADDR  0x60200000
+        #define RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR    0x10000100
+        #define RENESAS_DEVID 7890
+    #endif
+#endif
+
+
+
 #endif /* WOLFBOOT_PKCS11_APP */
 
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */

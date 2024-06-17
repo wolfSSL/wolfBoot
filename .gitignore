@@ -60,6 +60,9 @@ src/ecc384_pub_key.c
 src/ecc512_pub_key.c
 src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
+# Renesas key data files
+include/key_data.c
+include/key_data.h
 
 # keygen binaries
 tools/keytools/sign
@@ -209,5 +212,9 @@ IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug
 IDE/Renesas/e2studio/RX72N/app_RenesasRX01/src/smc_gen
 IDE/Renesas/e2studio/RX72N/wolfBoot/HardwareDebug
 IDE/Renesas/e2studio/RX72N/wolfBoot/src/smc_gen
-lib/r_bsp_v7.42
-lib/r_flash_rx_v5.11
+
+# Renesas Libraries
+lib/r_bsp
+lib/r_config
+lib/r_flash_rx
+lib/r_tsip_rx

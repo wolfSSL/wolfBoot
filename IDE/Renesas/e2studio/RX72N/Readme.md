@@ -2,7 +2,8 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+
+This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 

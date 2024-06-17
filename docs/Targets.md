@@ -2094,7 +2094,8 @@ OR
 `make RX_GCC_PATH="~/toolchains/gcc_8.3.0.202311_rx_elf"`
 
 
-TSIP: To enable TSIP use `make PKA=1`
+TSIP: To enable TSIP use `make PKA=1`. See [docs/Renesas.md](docs/Renesas.md) for details.
+
 
 ## Flashing Renesas RX65N
 
@@ -2237,7 +2238,7 @@ OR
 `make RX_GCC_PATH="~/toolchains/gcc_8.3.0.202311_rx_elf"`
 
 
-TSIP: To enable TSIP use `make PKA=1`
+TSIP: To enable TSIP use `make PKA=1`. See [docs/Renesas.md](docs/Renesas.md) for details.
 
 ## Flashing Renesas RX72N
 
