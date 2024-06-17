@@ -93,12 +93,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int i = 0;
     uint32_t *src, *dst;
     uint32_t dword[2];
-    volatile uint32_t *sr, *cr;
     uint32_t off = 0;
     uint32_t una_len = 0;
-
-    cr = &FLASH_CR;
-    sr = &FLASH_SR;
 
     hal_flash_clear_errors(0);
     src = (uint32_t *)data;
@@ -118,15 +114,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             dword[1] = src[(i >> 2) + 1];
         else
             dword[1] = 0xFFFFFFFF;
-        *cr |= FLASH_CR_PG;
+        FLASH_CR |= FLASH_CR_PG;
         dst[i >> 2] = dword[0];
         ISB();
         dst[(i >> 2) + 1] = dword[1];
         ISB();
         hal_flash_wait_complete(0);
-        if ((*sr & FLASH_SR_EOP) != 0)
-            *sr |= FLASH_SR_EOP;
-        *cr &= ~FLASH_CR_PG;
+        if ((FLASH_SR & FLASH_SR_EOP) != 0)
+            FLASH_SR |= FLASH_SR_EOP;
+        FLASH_CR &= ~FLASH_CR_PG;
         i+=8;
     }
 #if (TZ_SECURE())
@@ -215,11 +211,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         /* Check for swapped banks to invert bnksel */
         if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
             bnksel = !bnksel;
-
-#if !TZ_SECURE() && !defined(__FLASH_OTP_PRIMER) && defined(DEBUG)
-        printf("Erasing bank %d, page %d\r\n", bnksel, (p - base) >> 13);
-#endif
-
         reg |= ((((p - base)  >> 13) << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bnksel << 31));
         FLASH_CR = reg;
         ISB();

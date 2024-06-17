@@ -128,7 +128,6 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         address += FLASH_PAGE_SIZE;
         page_n++;
     }
-
     address = start_address;
     while (address < end) {
         /* Erase claimed non-secure page, in secure mode */
@@ -141,10 +140,12 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
 #endif
 
         DMB();
+        ISB();
         FLASH_CR |= FLASH_CR_STRT;
         ISB();
         hal_flash_wait_complete(bank);
         address += FLASH_PAGE_SIZE;
+        page_n++;
     }
 #ifndef PLATFORM_stm32h5
     FLASH_CR &= ~FLASH_CR_PER ;
