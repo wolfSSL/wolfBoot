@@ -653,7 +653,7 @@ static void console_loop(void)
     int ret;
     int idx = 0;
     char cmd[CMD_BUFFER_SIZE];
-    char c;
+    unsigned char c;
     while (1) {
         printf("\r\n");
         printf("cmd> ");
@@ -662,9 +662,23 @@ static void console_loop(void)
         do {
             ret = uart_rx_isr((uint8_t *)&c, 1);
             if (ret > 0) {
-                if (c == '\r')
-                    break;
-                cmd[idx++] = c;
+                if ((c >= 32) && (c < 127)) {
+                    printf("%c", c);
+                    fflush(stdout);
+                    cmd[idx++] = (char)c;
+                } else if (c == '\r') {
+                    printf("\r\n");
+                    fflush(stdout);
+                    break; /* End of command. Parse it. */
+                } else if (c == 0x08) { /* Backspace */
+                    if (idx > 0) {
+                        printf("%c", 0x08);
+                        printf(" ");
+                        printf("%c", 0x08);
+                        fflush(stdout);
+                        idx--;
+                    }
+                }
             }
         } while (idx < (CMD_BUFFER_SIZE - 1));
         if (idx > 0) {
