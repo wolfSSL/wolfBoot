@@ -168,7 +168,11 @@ ifeq ($(TARGET),stm32h5)
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..
   APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
-  APP_OBJS+=../src/flash_otp_keystore.o
+  ifeq ($(FLASH_OTP_KEYSTORE),1)
+    APP_OBJS+=../src/flash_otp_keystore.o
+  else
+    APP_OBJS+=../src/keystore.o
+  endif
   APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
   APP_OBJS+=../lib/wolfssl/wolfcrypt/test/test.o
 endif
