@@ -499,7 +499,10 @@ void mptable_setup(void)
     x86_log_memory_load((uint32_t)MPTABLE_LOAD_BASE,
                         (uint32_t)MPTABLE_LOAD_BASE + sizeof(struct mptable), 
                         "MPTABLE");
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
     memcpy(_mp, (void*)&_mptable, sizeof(struct mptable));
+#pragma GCC diagnostic pop
     apic_id = mmio_read32(LOCAL_APIC_ID);
     apic_ver = mmio_read32(LOCAL_APIC_VER);
 
