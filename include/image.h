@@ -74,7 +74,7 @@ int wolfBot_get_dts_size(void *dts_addr);
 
 
 
-#if defined(WOLFBOOT_ARMORED)
+#if (defined(WOLFBOOT_ARMORED) && defined(__WOLFBOOT))
 
 #if !defined(ARCH_ARM) || !defined(__GNUC__)
 #   error WOLFBOOT_ARMORED only available with arm-gcc compiler
