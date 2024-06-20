@@ -133,7 +133,9 @@ extern int tolower(int c);
 
 #define BENCH_EMBEDDED
 
+#ifdef SECURE_PKCS11
 #define CUSTOM_RAND_GENERATE_BLOCK wcs_get_random
+#endif
 
 /* Disable VLAs */
 #define WOLFSSL_SP_NO_DYN_STACK

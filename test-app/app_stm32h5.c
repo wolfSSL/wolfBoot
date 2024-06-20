@@ -31,15 +31,15 @@
 #include "hal/stm32h5.h"
 #include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
-#include "wolfcrypt/benchmark/benchmark.h"
-#include "wolfcrypt/test/test.h"
 #include "keystore.h"
 
 #ifdef SECURE_PKCS11
 #include "wcs/user_settings.h"
-#include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/wc_pkcs11.h>
-#include <wolfssl/wolfcrypt/random.h>
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/wc_pkcs11.h"
+#include "wolfssl/wolfcrypt/random.h"
+#include "wolfcrypt/benchmark/benchmark.h"
+#include "wolfcrypt/test/test.h"
 extern const char pkcs11_library_name[];
 extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 #endif
@@ -487,6 +487,7 @@ static int cmd_success(const char *args)
 
 static int cmd_random(const char *args)
 {
+#ifdef WOLFCRYPT_SECURE_MODE
     WC_RNG rng;
     int ret;
     uint32_t rand;
@@ -505,6 +506,9 @@ static int cmd_random(const char *args)
     printf("Today's lucky number: 0x%08lX\r\n", rand);
     printf("Brought to you by wolfCrypt's DRBG fed by HW TRNG in Secure world\r\n");
     wc_FreeRng(&rng);
+#else
+    printf("Feature only supported with WOLFCRYPT_TZ=1\n");
+#endif
     return 0;
 }
 
@@ -521,6 +525,7 @@ static int cmd_timestamp(const char *args)
 static int cmd_login_pkcs11(const char *args)
 {
     int ret = -1;
+#ifdef SECURE_PKCS11
     unsigned int devId = 0;
     Pkcs11Token token;
     Pkcs11Dev PKCS11_d;
@@ -535,7 +540,6 @@ static int cmd_login_pkcs11(const char *args)
         return 0;
     }
 
-#ifdef SECURE_PKCS11
     printf("PKCS11 Login\r\n");
 
     printf("Initializing wolfCrypt...");
@@ -608,26 +612,30 @@ static int cmd_login_pkcs11(const char *args)
         }
 #endif
     }
-
-#endif /* SECURE_PKCS11 */
     if (ret == 0) {
         printf("PKCS11 initialization completed successfully.\r\n");
         pkcs11_initialized = 1;
     }
+#else
+    printf("Feature only supported with WOLFCRYPT_TZ=1\n");
+#endif /* SECURE_PKCS11 */
     return ret;
 }
 
 static int cmd_benchmark(const char *args)
 {
-
+#ifdef WOLFCRYPT_SECURE_MODE
     benchmark_test(NULL);
+#endif
     return 0;
 }
 
 /* Test command */
 static int cmd_test(const char *args)
 {
+#ifdef WOLFCRYPT_SECURE_MODE
     wolfcrypt_test(NULL);
+#endif
     return 0;
 }
 
@@ -836,3 +844,27 @@ int _fstat(int file, struct stat *st)
   return 0;
 }
 
+#ifndef WOLFCRYPT_SECURE_MODE
+/* Back-end for malloc, used for token handling */
+extern unsigned int _start_heap; /* From linker script: heap memory */
+extern unsigned int _heap_size;  /* From linker script: heap limit */
+
+void * _sbrk(unsigned int incr)
+{
+    static unsigned char *heap = (unsigned char *)&_start_heap;
+    static uint32_t heapsize = (uint32_t)(&_heap_size);
+    void *old_heap = heap;
+    if (((incr >> 2) << 2) != incr)
+        incr = ((incr >> 2) + 1) << 2;
+
+    if (heap == NULL)
+        heap = (unsigned char *)&_start_heap;
+    else
+        heap += incr;
+    if (((uint32_t)heap - (uint32_t)(&_start_heap)) > heapsize) {
+        heap -= incr;
+        return NULL;
+    }
+    return old_heap;
+}
+#endif
