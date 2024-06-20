@@ -216,7 +216,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
             bnksel = !bnksel;
 
-#if !TZ_SECURE() && !defined(__FLASH_OTP_PRIMER)
+#if !TZ_SECURE() && !defined(__FLASH_OTP_PRIMER) && defined(DEBUG)
         printf("Erasing bank %d, page %d\r\n", bnksel, (p - base) >> 13);
 #endif
 

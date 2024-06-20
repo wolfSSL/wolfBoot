@@ -157,7 +157,11 @@ ifeq ($(TARGET),stm32h5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32h5-ns.ld
     APP_OBJS+=wcs/wolfcrypt_secure.o
-    APP_OBJS+=../lib/wolfssl/wolfcrypt/src/logging.o
+    ifeq ($(WOLFCRYPT_TZ),1)
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/src/logging.o
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/test/test.o
+    endif
   else
     LSCRIPT_TEMPLATE=ARM-stm32h5.ld
   endif
@@ -173,8 +177,6 @@ ifeq ($(TARGET),stm32h5)
   else
     APP_OBJS+=../src/keystore.o
   endif
-  APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
-  APP_OBJS+=../lib/wolfssl/wolfcrypt/test/test.o
 endif
 
 ifeq ($(TARGET),stm32u5)
