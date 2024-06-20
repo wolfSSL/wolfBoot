@@ -234,11 +234,13 @@ int disk_open(int drv)
         uint64_t address = ptable.start_array * SECTOR_SIZE +
             i * ptable.array_sz;
         r = ata_drive_read(drv, address, ptable.array_sz, (void *)&pa);
+        if (r < 0)
+            return -1;
         if (pa.type[0] != 0 || pa.type[1] != 0) {
             uint64_t size;
             uint32_t part_count;
             if (pa.first > pa.last) {
-                wolfBoot_printf("Bad geometry for partition %d\r\n", part_count);
+                wolfBoot_printf("Bad geometry for partition %d\r\n", i);
                 break;
             }
             size = (1 + pa.last - pa.first) * SECTOR_SIZE;

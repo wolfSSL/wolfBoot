@@ -171,7 +171,6 @@ int init_sata_controller(uint32_t bus, uint32_t dev, uint32_t fun)
 uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
 {
     uint16_t reg16;
-    uint32_t iobar;
     uint32_t reg;
     uint32_t bar;
 
@@ -180,8 +179,6 @@ uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
 
     bar = pci_config_read32(bus, dev, fun, AHCI_ABAR_OFFSET);
     AHCI_DEBUG_PRINTF("PCI BAR: %08x\r\n", bar);
-    iobar = pci_config_read32(bus, dev, fun, AHCI_AIDPBA_OFFSET);
-    AHCI_DEBUG_PRINTF("PCI I/O space: %08x\r\n", iobar);
 
     reg |= PCI_COMMAND_BUS_MASTER;
     reg |= PCI_COMMAND_MEM_SPACE;
@@ -195,29 +192,6 @@ uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
     AHCI_DEBUG_PRINTF("Setting interrupt line: 0x0A\r\n");
 
     return bar;
-}
-
-/**
- * @brief Dumps the status of the specified AHCI port.
- *
- * This function dumps the status of the AHCI port with the given index.
- * It prints the status of various port registers for debugging purposes.
- *
- * @param base The AHCI Base Address Register (ABAR) for accessing AHCI registers.
- * @param i The index of the AHCI port to dump status for.
- */
-void ahci_dump_port(uint32_t base, int i)
-{
-    uint32_t cmd, ci, is, tfd, serr, ssst;
-
-    cmd = mmio_read32(AHCI_PxCMD(base, i));
-    ci = mmio_read32(AHCI_PxCI(base, i));
-    is = mmio_read32(AHCI_PxIS(base, i));
-    tfd = mmio_read32(AHCI_PxTFD(base, i));
-    serr = mmio_read32(AHCI_PxSERR(base, i));
-    ssst = mmio_read32(AHCI_PxSSTS(base, i));
-    AHCI_DEBUG_PRINTF("%d: cmd:0x%x ci:0x%x is: 0x%x tfd: 0x%x serr: 0x%x ssst: 0x%x\r\n",
-                    i, cmd, ci, is, tfd, serr, ssst);
 }
 
 #ifdef WOLFBOOT_ATA_DISK_LOCK
@@ -362,7 +336,7 @@ static int sata_get_unlock_secret(uint8_t *secret, int *secret_size)
 #error "implement get_tpm_policy "
 #endif
 
-    if (policy_size > TPM_MAX_POLICY_SIZE)
+    if (policy_size > TPM_MAX_POLICY_SIZE || ret != 0)
         return -1;
 
     memcpy(policy, pol, policy_size);
@@ -464,6 +438,8 @@ int sata_unlock_disk(int drv, int freeze)
         }
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+        if (r != 0)
+            return -1;
         ata_st = ata_security_get_state(drv);
         wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
     }
@@ -471,8 +447,12 @@ int sata_unlock_disk(int drv, int freeze)
         AHCI_DEBUG_PRINTF("ATA identify: calling device unlock\r\n", r);
         r = ata_security_unlock_device(drv, (char*)secret, 0);
         AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
+        if (r != 0)
+            return -1;
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+        if (r != 0)
+            return -1;
         ata_st = ata_security_get_state(drv);
         if (ata_st == ATA_SEC5) {
             if (freeze) {
@@ -487,6 +467,8 @@ int sata_unlock_disk(int drv, int freeze)
             }
             r = ata_identify_device(drv);
             AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
+            if (r != 0)
+                return -1;
         }
     }
     ata_st = ata_security_get_state(drv);
@@ -583,6 +565,7 @@ void sata_enable(uint32_t base)
 
     cap = mmio_read32(AHCI_HBA_CAP(base));
     n_ports = (cap & 0x1F) + 1;
+    (void)n_ports;
     sata_only = (cap & AHCI_CAP_SAM);
     cap_sud = (cap & AHCI_CAP_SSS);
 
@@ -601,8 +584,8 @@ void sata_enable(uint32_t base)
         if ((ports_impl & (1 << i)) != 0) {
             uint32_t reg;
             uint32_t ssts = mmio_read32(AHCI_PxSSTS(base, i));
-            uint8_t ipm = (ssts >> 8) & 0xFF;
             uint8_t det = ssts & 0x0F;
+            uint8_t ipm;
             volatile struct hba_cmd_header *hdr;
 
 
@@ -736,6 +719,7 @@ void sata_enable(uint32_t base)
                         AHCI_DEBUG_PRINTF("ATA%d associated to AHCI port %d\r\n",
                                 drv, i);
                         r = ata_identify_device(drv);
+                        (void)r;
                         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
                     }
                 } else {

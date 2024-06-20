@@ -88,6 +88,15 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define PCI_DEVICE_CONTROLLER_TO_PEX 0x6
 #define PCIE_TRAINING_TIMEOUT_MS (100)
 
+/* compile time alignment checks */
+#define ALIGN_CHECK(value, alignment) ((value) & ((alignment)-1)) == 0
+#if !ALIGN_CHECK(FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE, 16)
+#error "FSP_S_LOAD_BASE must be aligned on a 16 bytes boundary"
+#endif
+#if !ALIGN_CHECK(WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE, 16)
+#error "WOLFBOOT_LOAD_BASE must be aligned on a 16 bytes boundary"
+#endif
+
 typedef uint32_t (*memory_init_cb)(void *udp, struct efi_hob **HobList);
 typedef uint32_t (*temp_ram_exit_cb)(void *udp);
 typedef uint32_t (*silicon_init_cb)(void *udp);
@@ -492,6 +501,8 @@ static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_bas
     memcpy(silicon_init_parameter, fsp_s_base + fsp_info->CfgRegionOffset,
             FSP_S_PARAM_SIZE);
     status = fsp_machine_update_s_parameters(silicon_init_parameter);
+    if (status != 0)
+        panic();
     SiliconInit = (silicon_init_cb)(fsp_s_base + fsp_info->FspSiliconInitEntryOffset);
 
 #if defined(WOLFBOOT_DUMP_FSP_UPD)
@@ -744,7 +755,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     uint8_t *fsp_m_base, done = 0;
     struct efi_hob *hobList, *it;
     memory_init_cb MemoryInit;
-    uint64_t top_address;
+    uint64_t top_address = MEMORY_4GB;
     uint32_t new_stack;
     uint32_t status;
     uint16_t type;
@@ -836,7 +847,7 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     hob_dump_memory_map(hobList);
 #endif /* DEBUG */
 
-    if (top_address > MEMORY_4GB) {
+    if (top_address >= MEMORY_4GB) {
         panic();
     }
 

@@ -142,7 +142,7 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 
     mode = 0;
     mode |= data;
-    mode |= (stop << 2);
+    mode |= (stops << 2);
     mode |= (parity_bits << 3);
     write_reg(X86_UART_LCR, mode);
 

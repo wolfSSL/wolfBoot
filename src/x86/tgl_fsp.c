@@ -990,7 +990,8 @@ static int tgl_setup_lpc_decode(uint32_t address, uint32_t length,
 
     reg = PCI_ESPI_LGIR1 + range * 4;
     /* setup up decoding in eSPI - generic I/O range 0*/
-    pci_config_write32(PCI_ESPI_BUS, PCI_ESPI_DEV, PCI_ESPI_FUN, PCI_ESPI_LGIR1, val);
+    pci_config_write32(PCI_ESPI_BUS, PCI_ESPI_DEV, PCI_ESPI_FUN,
+                       reg, val);
 
     return 0;
 }
@@ -1523,7 +1524,6 @@ static void setup_ece1200()
 
     io_write8(ECE1200_INDEX, 0x55); /* conf mode */
     io_write8(ECE1200_INDEX, 0x36);
-    reg = io_read8(ECE1200_DATA);
 
     io_write8(ECE1200_INDEX, 0x07);
     io_write8(ECE1200_DATA, 0x01);

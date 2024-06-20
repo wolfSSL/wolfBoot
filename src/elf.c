@@ -88,6 +88,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
     /* Load class and endianess */
     is_elf32 = (h32->ident[4] == ELF_CLASS_32);
     is_le = (h32->ident[5] == ELF_ENDIAN_LITTLE);
+    (void)is_le;
 
     /* Verify this is an executable */
     if (GET_H16(type) != ELF_HET_EXEC) {
