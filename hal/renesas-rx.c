@@ -372,6 +372,9 @@ void hal_init(void)
         case AUTH_KEY_RSA2048:
             tsip_key_type = TSIP_RSA2048;
             break;
+        case AUTH_KEY_RSA3072:
+            tsip_key_type = TSIP_RSA3072;
+            break;
         case AUTH_KEY_RSA4096:
             tsip_key_type = TSIP_RSA4096;
             break;
@@ -379,39 +382,39 @@ void hal_init(void)
             tsip_key_type = TSIP_ECCP256;
             break;
         case AUTH_KEY_ECC384:
-            //tsip_key_type = TSIP_ECCP384;
-            //break;
+            tsip_key_type = TSIP_ECCP384;
+            break;
         case AUTH_KEY_ECC521:
-            /* TODO: ECC */
         case AUTH_KEY_ED25519:
         case AUTH_KEY_ED448:
-        case AUTH_KEY_RSA3072:
         default:
             tsip_key_type = -1;
             break;
     }
-
     if (tsip_key_type == -1) {
         wolfBoot_printf("key type (%d) not supported\n", key_type);
         hal_panic();
     }
-    /* inform user key */
+
+    /* Load encrypted UFPK (User Factory Programming Key) */
     tsip_inform_user_keys_ex(
         (byte*)&encrypted_user_key_data->wufpk,
         (byte*)&encrypted_user_key_data->initial_vector,
         (byte*)&encrypted_user_key_data->encrypted_user_key,
         0/* dummy */
     );
-    /* TSIP specific RSA public key */
+
+    /* Load a wrapped public key into TSIP */
     if (tsip_use_PublicKey_buffer_crypt(&pkInfo,
                 (const char*)&encrypted_user_key_data->encrypted_user_key,
                 sizeof(encrypted_user_key_data->encrypted_user_key),
-                 tsip_key_type) != 0) {
+                tsip_key_type) != 0) {
         wolfBoot_printf("ERROR tsip_use_PublicKey_buffer\n");
         hal_panic();
     }
+
     /* Init Crypt Callback */
-    pkInfo.sing_hash_type = sha256_mac;
+    pkInfo.sign_hash_type = sha256_mac; /* TSIP does not support SHA2-384/512 */
     pkInfo.keyflgs_crypt.bits.message_type = 1;
     err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
     if (err < 0) {

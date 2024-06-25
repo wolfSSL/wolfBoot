@@ -178,8 +178,25 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
+    defined(WOLFBOOT_RENESAS_TSIP) || \
+    defined(WOLFBOOT_RENESAS_RSIP)
+    ret = wc_ecc_init_ex(&ecc, NULL, RENESAS_DEVID);
+#else
     ret = wc_ecc_init(&ecc);
+#endif
     if (ret == 0) {
+    #if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
+        defined(WOLFBOOT_RENESAS_TSIP) || \
+        defined(WOLFBOOT_RENESAS_RSIP)
+        /* The public key is wrapped and cannot be imported.
+         * Key must be loaded to TSIP and unwrapped.
+         * Then ECDSA crypto callback will perform verify on TSIP hardware */
+        wc_ecc_set_curve(&ecc, 0, ECC_KEY_TYPE);
+
+        VERIFY_FN(img, &verify_res, wc_ecc_verify_hash, sig, point_sz*2,
+            img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc)
+    #else
         /* Import public key */
         ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
             ECC_KEY_TYPE);
@@ -192,8 +209,9 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
             VERIFY_FN(img, &verify_res, wc_ecc_verify_hash_ex, &r, &s,
                 img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc);
         }
-        wc_ecc_free(&ecc);
+    #endif
     }
+    wc_ecc_free(&ecc);
 }
 
 #endif /* WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC521 */
@@ -274,9 +292,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-    /* wolfCrypt software RSA verify */
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
-    defined(WOLFBOOT_RENESAS_TSIP) ||\
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
+    defined(WOLFBOOT_RENESAS_TSIP) || \
     defined(WOLFBOOT_RENESAS_RSIP)
     ret = wc_InitRsaKey_ex(&rsa, NULL, RENESAS_DEVID);
     if (ret == 0) {
@@ -284,12 +301,13 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         RSA_VERIFY_FN(ret,
             wc_RsaSSL_Verify, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
             output, IMAGE_SIGNATURE_SIZE, &rsa);
-        /* SCE SignatureVerify API has verified */
+        /* The crypto callback success also verifies hash */
         if (ret == 0)
             wolfBoot_image_confirm_signature_ok(img);
     }
     (void)digest_out;
 #else
+    /* wolfCrypt software RSA verify */
     ret = wc_InitRsaKey(&rsa, NULL);
     if (ret == 0) {
         /* Import public key */
@@ -1051,7 +1069,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     defined(WOLFBOOT_RENESAS_RSIP)
         /* SCE wrapped key is installed at
          *    RENESAS_SCE_INSTALLEDKEY_ADDR
-         * TSIP encrypted key is installed ad
+         * TSIP encrypted key is installed at
          *    RENESAS_TSIP_INSTALLEDKEY_ADDR
          */
         key_slot = 0;

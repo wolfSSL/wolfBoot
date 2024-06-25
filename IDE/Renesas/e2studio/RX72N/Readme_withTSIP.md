@@ -197,10 +197,10 @@ $ openssl rsa -inform der -in ./pri-rsa2048.der -pubout -out ./pub-rsa2048.pem
 Generate a c header and source file from PEM file :
 ```
 $ export PATH="$PATH:C:\Renesas\SecurityKeyManagementTool\cli"
-$ skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public -output key_data.c -filetype csource -keyname rsa2048_pub
+$ skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public -output key_data.c -filetype csource -keyname enc_pub_key
 ```
 
-The value of option `/keyname` becomes structure name and macro definition defined in key_data.h.  Therefore, please specify `rsa2048_pub` like above unless there is some particular reason.
+The value of option `-keyname` becomes structure name and macro definition defined in key_data.h. Therefore, please specify `enc_pub_key` like above unless there is some particular reason.
 
 Copy a generated c header file, which is `key_data.h` to `<wolfBoot>/include/` folder
 

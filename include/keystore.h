@@ -49,8 +49,8 @@ struct keystore_slot {
 
 /* KeyStore API */
 int keystore_num_pubkeys(void);
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT) ||\
-    defined(WOLFBOOT_RENESAS_TSIP) ||\
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
+    defined(WOLFBOOT_RENESAS_TSIP) || \
     defined(WOLFBOOT_RENESAS_RSIP)
     uint32_t *keystore_get_buffer(int id);
 #else

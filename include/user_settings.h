@@ -428,17 +428,22 @@ extern int tolower(int c);
 
 
 /* Renesas */
-#if defined(WOLFBOOT_RENESAS_TSIP) || defined(WOLFBOOT_RENESAS_RSIP) || \
+#if defined(WOLFBOOT_RENESAS_TSIP) || \
+    defined(WOLFBOOT_RENESAS_RSIP) || \
     defined(WOLFBOOT_RENESAS_SCEPROTECT)
 
     #define WOLFBOOT_SMALL_STACK
     #define WOLF_CRYPTO_CB
+    #define WOLF_CRYPTO_CB_ONLY_ECC
+    #define WOLF_CRYPTO_CB_ONLY_RSA
+    #define WOLFSSL_NO_SW_MATH
 
     #ifdef WOLFBOOT_RENESAS_TSIP
+        #define WOLFSSL_RENESAS_TSIP
         #define WOLFSSL_RENESAS_TSIP_VER  117
         #define WOLFSSL_RENESAS_TSIP_CRYPT
         #define WOLFSSL_RENESAS_TSIP_CRYPTONLY
-        #define WOLFSSL_NO_SW_MATH
+        #define NO_WOLFSSL_RENESAS_TSIP_CRYPT_HASH
         #define RENESAS_TSIP_INSTALLEDKEY_ADDR 0xFFFF0000
         #define ENCRYPTED_KEY_BYTE_SIZE ENC_PUB_KEY_SIZE /* from key_data.h */
         #define RENESAS_DEVID 7890

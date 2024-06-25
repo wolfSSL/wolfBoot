@@ -15,19 +15,19 @@ Platforms Supported:
   - [IDE/Renesas/e2studio/RX72N/Readme_withTSIP.md](/IDE/Renesas/e2studio/RX72N/Readme_withTSIP.md)
 
 All of the Renesas examples support using e2Studio.
-The Renesas RX parts support using the rx-gcc cross compiler with the default Makefile and example .config files.
+The Renesas RX parts support using wolfBoot Makefile's with the rx-elf-gcc cross-compiler and example .config files.
 
 ### RX TSIP
 
 1) Setup a Renesas KeyWrap account and do the PGP key exchange.
 https://dlm.renesas.com/keywrap
 You will get a public key from Renesas `keywrap-pub.key` that needs imported to PGP/GPG.
-Note: You cannot use RSA 4096-bit key, must be 2048 or 3072.
+Note: You cannot use RSA 4096-bit key, must be RSA-2048 or RSA-3072.
 
 2) Using "Security Key Management Tool" create 32-byte UFPK (User Factory Programming Key). This can be a random 32-byte value.
 Example: Random 32-bytes `B94A2B96 1C755101 74F0C967 ECFC20B3 77C7FB25 6DB627B1 BFFADEE0 5EE98AC4`
 
-3) Sign and Encrypt the 32-byte binary file with PGP the sample.key. Result is `sample.key.gpg`.
+3) Sign and Encrypt the 32-byte binary file with PGP the `sample.key`. Result is `sample.key.gpg`.
 Use GPG4Win and the Sign/Encrypt option. Sign with your own GPG key and encrypt with the Renesas public key.
 
 4) Use https://dlm.renesas.com/keywrap to wrap `sample.key.gpg`.
@@ -72,3 +72,24 @@ Encrypted key: 5DD8D7E59E6AC85AE340BBA60AA8F8BE56C4C1FE02340C49EB8F36DA79B8D6640
 7) Edit .config `PKA?=1`.
 
 8) Rebuild wolfBoot. `make clean && make wolfboot.srec`
+
+9) Sign application
+
+Sign application using the created private key above `pri-ecc384.der`:
+
+```
+./tools/keytools/sign --ecc384 --sha256 test-app/image.bin pri-ecc384.der 1
+wolfBoot KeyTools (Compiled C version)
+wolfBoot version 2010000
+Update type:          Firmware
+Input image:          test-app/image.bin
+Selected cipher:      ECC384
+Selected hash  :      SHA256
+Public key:           pri-ecc384.der
+Output  image:        test-app/image_v1_signed.bin
+Target partition id : 1
+image header size overridden by config value (1024 bytes)
+Calculating SHA256 digest...
+Signing the digest...
+Output image(s) successfully created.
+```
