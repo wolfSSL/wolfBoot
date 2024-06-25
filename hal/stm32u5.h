@@ -263,3 +263,25 @@
 #define AIRCR_VKEY        (0x05FA << 16)
 #define AIRCR_SYSRESETREQ (1 << 2)
 
+/* Cache */
+#if (TZ_SECURE())
+#define ICACHE_BASE          (0x50030400)   /* RM0456 - Table 4 */
+#else
+#define ICACHE_BASE          (0x40030400)   /* RM0456 - Table 4 */
+#endif
+#define ICACHE_CR    *(volatile uint32_t *)(ICACHE_BASE + 0x00)
+#define ICACHE_CR_WAYSEL   (1 << 2)
+#define ICACHE_CR_1WAY     0U               /* 1-way cache (direct mapped cache) */
+#define ICACHE_CR_2WAYS    ICACHE_CR_WAYSEL /* 2-ways set associative cache */
+
+#define ICACHE_CR_CACHEINV (1 << 1)
+#define ICACHE_CR_CEN      (1 << 0)
+
+#define ICACHE_SR    *(volatile uint32_t *)(ICACHE_BASE + 0x04)
+#define ICACHE_SR_BUSYF    (1 << 0) /* busy flag */
+#define ICACHE_SR_BSYENDF  (1 << 1) /* busy end flag */
+#define ICACHE_SR_ERRF     (1 << 2) /* cache error flag */
+
+void hal_cache_invalidate(void);
+void hal_cache_enable(int way);
+void hal_cache_disable(void);
