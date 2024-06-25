@@ -157,13 +157,26 @@ ifeq ($(TARGET),stm32h5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32h5-ns.ld
     APP_OBJS+=wcs/wolfcrypt_secure.o
+    ifeq ($(WOLFCRYPT_TZ),1)
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/src/logging.o
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/test/test.o
+    endif
   else
     LSCRIPT_TEMPLATE=ARM-stm32h5.ld
   endif
+  CFLAGS+=-DAPP_HAS_SYSTICK
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
   CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
   LDFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..
+  APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  ifeq ($(FLASH_OTP_KEYSTORE),1)
+    APP_OBJS+=../src/flash_otp_keystore.o
+  else
+    APP_OBJS+=../src/keystore.o
+  endif
 endif
 
 ifeq ($(TARGET),stm32u5)
