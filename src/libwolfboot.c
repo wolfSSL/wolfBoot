@@ -189,6 +189,11 @@ static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
     #pragma GCC diagnostic pop
 #endif
 
+void WEAKFUNCTION hal_cache_invalidate(void)
+{
+    /* if cache flushing is required implement in hal */
+}
+
 static int RAMFUNCTION nvm_select_fresh_sector(int part)
 {
     int sel;
@@ -197,6 +202,8 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     uint8_t* addrErase;
     uint32_t word_0;
     uint32_t word_1;
+
+    hal_cache_invalidate();
 
     /* if FLAGS_HOME check both boot and update for changes */
 #ifdef FLAGS_HOME

@@ -526,3 +526,29 @@ void hal_prepare_boot(void)
     led_unsecure();
 #endif
 }
+
+void hal_cache_enable(int way)
+{
+    ICACHE_CR |= (way ? ICACHE_CR_2WAYS : ICACHE_CR_1WAY);
+    ICACHE_CR |= ICACHE_CR_CEN;
+}
+
+void hal_cache_disable(void)
+{
+    ICACHE_CR &= ~ICACHE_CR_CEN;
+}
+
+void hal_cache_invalidate(void)
+{
+    /* Check if no ongoing operation */
+    if ((ICACHE_SR & ICACHE_SR_BUSYF) == 0) {
+        /* Launch cache invalidation */
+        ICACHE_CR |= ICACHE_CR_CACHEINV;
+    }
+
+    if (ICACHE_SR & ICACHE_SR_BUSYF) {
+        while ((ICACHE_SR & ICACHE_SR_BSYENDF) == 0);
+    }
+    /* Clear BSYENDF */
+    ICACHE_SR |= ICACHE_SR_BSYENDF;
+}

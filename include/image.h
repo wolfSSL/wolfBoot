@@ -58,6 +58,14 @@ int wolfBot_get_dts_size(void *dts_addr);
 #endif
 #endif
 
+#ifndef WEAKFUNCTION
+#  if defined(__GNUC__) || defined(__CC_ARM)
+#    define WEAKFUNCTION __attribute__((weak))
+#  else
+#    define WEAKFUNCTION
+#  endif
+#endif
+
 
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F
