@@ -540,15 +540,20 @@ void hal_cache_disable(void)
 
 void hal_cache_invalidate(void)
 {
-    /* Check if no ongoing operation */
+    /* only try and invalidate cache if enabled */
+    if ((ICACHE_CR & ICACHE_CR_CEN) == 0)
+        return;
+
+    /* If cache invalidate not in progress, start it */
     if ((ICACHE_SR & ICACHE_SR_BUSYF) == 0) {
-        /* Launch cache invalidation */
+        /* Start invalidate */
         ICACHE_CR |= ICACHE_CR_CACHEINV;
     }
 
+    /* If cache invalidate is active, wait for busy end flag */
     if (ICACHE_SR & ICACHE_SR_BUSYF) {
         while ((ICACHE_SR & ICACHE_SR_BSYENDF) == 0);
     }
-    /* Clear BSYENDF */
+    /* Clear busy end flag */
     ICACHE_SR |= ICACHE_SR_BSYENDF;
 }
