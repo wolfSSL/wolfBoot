@@ -185,8 +185,13 @@ static void stm_pins_release(void)
 static void RAMFUNCTION spi_reset(void)
 {
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
-    AHB3_CLOCK_RST |= RCC_AHB3ENR_QSPIEN;
-    AHB3_CLOCK_RST &= ~RCC_AHB3ENR_QSPIEN;
+    #ifndef TARGET_stm32u5
+        AHB3_CLOCK_RST |= RCC_AHB3ENR_QSPIEN;
+        AHB3_CLOCK_RST &= ~RCC_AHB3ENR_QSPIEN;
+    #else
+        AHB2_CLOCK_RST |= RCC_AHB2ENR_QSPIEN;
+        AHB2_CLOCK_RST &= ~RCC_AHB2ENR_QSPIEN;
+    #endif
 #endif
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
     APB2_CLOCK_RST |= SPI1_APB2_CLOCK_ER_VAL;
@@ -390,13 +395,21 @@ void RAMFUNCTION spi_init(int polarity, int phase)
     if (!initialized) {
         initialized++;
 
-        /* Setup clocks */
+/* Setup clocks */
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
+
+    #ifdef PLATFORM_stm32u5
+        /* Clock configuration for QSPI defaults to SYSCLK
+         * (RM0456 section 11.8.47)
+         */
+    #else
         /* Select QUADSPI clock source */
         RCC_D1CCIPR &= ~RCC_D1CCIPR_QSPISEL_MASK;
         RCC_D1CCIPR |= RCC_D1CCIPR_QSPISEL(QSPI_CLOCK_SEL);
         AHB3_CLOCK_EN |= RCC_AHB3ENR_QSPIEN;
+    #endif
 #endif
+
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         APB2_CLOCK_ER |= SPI1_APB2_CLOCK_ER_VAL;
 #endif
