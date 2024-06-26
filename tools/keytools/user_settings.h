@@ -110,6 +110,10 @@
 #define NO_CRYPT_TEST
 #define NO_CRYPT_BENCHMARK
 
-#define XSNPRINTF /* not used */
+#ifdef DEBUG_WOLFSSL
+    #define XSNPRINTF snprintf
+#else
+    #define XSNPRINTF /* not used */
+#endif
 
 #endif /* !H_USER_SETTINGS_ */

@@ -115,7 +115,7 @@ static inline int fp_truncate(FILE *f, size_t len)
     #endif
 #endif
 
-#if defined(WOLFSSL_HAVE_XMSS)
+#ifdef WOLFSSL_HAVE_XMSS
     #include <wolfssl/wolfcrypt/xmss.h>
     #ifdef HAVE_LIBXMSS
         #include <wolfssl/wolfcrypt/ext_xmss.h>
@@ -292,17 +292,184 @@ static struct cmd_options CMD = {
 
 };
 
+
+static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
+    int header_sz,
+    uint8_t **key_buffer, uint32_t *key_buffer_sz,
+    uint8_t **pubkey, uint32_t *pubkey_sz)
+{
+    int ret = -1;
+    int initRet = -1;
+    uint32_t idx;
+    uint32_t qxSz = curve_sz;
+    uint32_t qySz = curve_sz;
+
+    *pubkey_sz = curve_sz * 2;
+    *pubkey = malloc(*pubkey_sz); /* assume malloc works */
+
+    initRet = ret = wc_ecc_init(&key.ecc);
+
+    if (CMD.manual_sign || CMD.sha_only) {
+        /* raw (public x + public y) */
+        if (*key_buffer_sz == (curve_sz * 2)) {
+            memcpy(*pubkey, *key_buffer, *pubkey_sz);
+            ret = 0;
+        }
+        else {
+            if (ret == 0) {
+                idx = 0;
+                ret = wc_EccPublicKeyDecode(*key_buffer, &idx, &key.ecc,
+                    *key_buffer_sz);
+            }
+
+            /* we could decode another type of key in auto so check */
+            if (ret == 0 && key.ecc.dp->id != curve_id) {
+                ret = -1;
+            }
+            if (ret == 0) {
+                ret = wc_ecc_export_public_raw(&key.ecc,
+                    *pubkey, &qxSz,           /* public x */
+                    *pubkey + curve_sz, &qySz /* public y */
+                );
+            }
+        }
+    }
+    /* raw only (public x + public y + private d)*/
+    else if (*key_buffer_sz == (curve_sz * 3)) {
+        memcpy(*pubkey, *key_buffer, *pubkey_sz);
+
+        if (ret == 0) {
+            ret = wc_ecc_import_unsigned(&key.ecc,
+                *key_buffer,                    /* public x */
+                (*key_buffer) + curve_sz,       /* public y */
+                (*key_buffer) + (curve_sz * 2), /* private d */
+                curve_id
+            );
+            if (ret == 0) {
+                /* don't free the key */
+                initRet = 0;
+            }
+        }
+    }
+    /* try ASN.1/DER decode of private key */
+    else {
+        if (ret == 0) {
+            idx = 0;
+            ret = wc_EccPrivateKeyDecode(*key_buffer, &idx, &key.ecc,
+                *key_buffer_sz);
+        }
+        /* we could decode another type of key in auto so check */
+        if (ret == 0 && key.ecc.dp->id != curve_id) {
+            ret = -1;
+        }
+        if (ret == 0) {
+            ret = wc_ecc_export_public_raw(&key.ecc,
+                *pubkey, &qxSz,           /* public x */
+                *pubkey + curve_sz, &qySz /* public y */
+            );
+        }
+        if (ret == 0) {
+            /* don't free the key */
+            initRet = 0;
+        }
+    }
+
+    if (ret != 0 && initRet == 0) {
+        wc_ecc_free(&key.ecc);
+    }
+    if (ret != 0)
+        free(*pubkey);
+
+    if (ret == 0 || CMD.sign != SIGN_AUTO) {
+        CMD.sign = sign_type;
+        CMD.header_sz = header_sz;
+        CMD.signature_sz = (curve_sz * 2);
+        ret = 0;
+    }
+    return ret;
+}
+
+static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz,
+    int header_sz,
+    uint8_t **key_buffer, uint32_t *key_buffer_sz,
+    uint8_t **pubkey, uint32_t *pubkey_sz)
+{
+    int ret = -1;
+    int initRet = -1;
+    uint32_t idx;
+    uint32_t keySzOut = 0;
+
+    if (CMD.manual_sign || CMD.sha_only) {
+        /* use public key directly */
+        *pubkey = *key_buffer;
+        *pubkey_sz = *key_buffer_sz;
+
+        if (*pubkey_sz <= rsa_pubkeysz) {
+            CMD.sign = sign_type;
+            CMD.header_sz = header_sz;
+            if (CMD.policy_sign) {
+                CMD.header_sz += 512;
+            }
+            else if (sign_type == SIGN_RSA3072 && CMD.hash_algo != HASH_SHA256) {
+                CMD.header_sz += 512;
+            }
+            CMD.signature_sz = rsa_keysz;
+        }
+        ret = 0;
+    }
+    else {
+        initRet = ret = wc_InitRsaKey(&key.rsa, NULL);
+        if (ret == 0) {
+            idx = 0;
+            ret = wc_RsaPrivateKeyDecode(*key_buffer, &idx, &key.rsa,
+                *key_buffer_sz);
+        }
+
+        if (ret == 0) {
+            ret = wc_RsaKeyToPublicDer(&key.rsa, *key_buffer, *key_buffer_sz);
+        }
+
+        if (ret > 0) {
+            *pubkey = *key_buffer;
+            *pubkey_sz = ret;
+            ret = 0;
+        }
+
+        if (ret == 0) {
+            keySzOut = wc_RsaEncryptSize(&key.rsa);
+        }
+
+        if (ret != 0 && initRet == 0) {
+            wc_FreeRsaKey(&key.rsa);
+        }
+
+        if (ret == 0 || CMD.sign != SIGN_AUTO) {
+            CMD.sign = sign_type;
+            CMD.header_sz = header_sz;
+            if (CMD.policy_sign) {
+                CMD.header_sz += 512;
+            }
+            else if (sign_type == SIGN_RSA3072 && CMD.hash_algo != HASH_SHA256) {
+                CMD.header_sz += 512;
+            }
+            CMD.signature_sz = keySzOut;
+            printf("Found RSA%d key\n", keySzOut);
+        }
+    }
+    return ret;
+}
+
 static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
-        uint8_t **pubkey, uint32_t *pubkey_sz)
+    uint8_t **pubkey, uint32_t *pubkey_sz)
 {
     int ret = -1;
     int initRet = -1;
     uint32_t idx = 0;
     int io_sz;
     FILE *f;
-    uint32_t keySzOut = 0;
-    uint32_t qxSz = ECC_MAXSIZE;
-    uint32_t qySz = ECC_MAXSIZE;
+#ifdef WOLFSSL_HAVE_XMSS
+    word32 priv_sz = 0;
+#endif
 
     /* open and load key buffer */
     *key_buffer = NULL;
@@ -337,7 +504,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             initRet = -1;
             *pubkey_sz = ED25519_PUB_KEY_SIZE;
             *pubkey = malloc(*pubkey_sz);
-            keySzOut = 0;
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
@@ -347,9 +513,12 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     ret = 0;
                 }
                 else {
-                    initRet = ret = wc_Ed25519PublicKeyDecode(*key_buffer,
-                        &keySzOut, &key.ed, *key_buffer_sz);
-
+                    initRet = ret = wc_ed25519_init(&key.ed);
+                    if (ret == 0) {
+                        idx = 0;
+                        ret = wc_Ed25519PublicKeyDecode(*key_buffer, &idx,
+                            &key.ed, *key_buffer_sz);
+                    }
                     if (ret == 0) {
                         ret = wc_ed25519_export_public(&key.ed, *pubkey,
                             pubkey_sz);
@@ -366,7 +535,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     KEYSTORE_PUBKEY_SIZE_ED25519);
 
                 initRet = ret = wc_ed25519_init(&key.ed);
-
                 if (ret == 0) {
                     ret = wc_ed25519_import_private_key(*key_buffer,
                             ED25519_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed);
@@ -385,29 +553,30 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 CMD.header_sz = 256;
                 CMD.signature_sz = 64;
                 CMD.sign = SIGN_ED25519;
-                printf("Found ed25519 key\n");
+                printf("Found ED25519 key\n");
                 break;
             }
-            FALL_THROUGH;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
 
         case SIGN_ED448:
             ret = -1;
             initRet = -1;
             *pubkey_sz = ED448_PUB_KEY_SIZE;
             *pubkey = malloc(*pubkey_sz);
-            keySzOut = 0;
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
                 if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_ED448) {
                     memcpy(*pubkey, *key_buffer, KEYSTORE_PUBKEY_SIZE_ED448);
-
                     ret = 0;
                 }
                 else {
-                    initRet = ret = wc_Ed448PublicKeyDecode(*key_buffer,
-                        &keySzOut, &key.ed4, *key_buffer_sz);
-
+                    initRet = ret = wc_ed448_init(&key.ed4);
+                    if (ret == 0) {
+                        idx = 0;
+                        ret = wc_Ed448PublicKeyDecode(*key_buffer, &idx,
+                            &key.ed4, *key_buffer_sz);
+                    }
                     if (ret == 0) {
                         ret = wc_ed448_export_public(&key.ed4, *pubkey,
                             pubkey_sz);
@@ -416,6 +585,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     /* free key no matter what */
                     if (initRet == 0)
                         wc_ed448_free(&key.ed4);
+
                 }
             }
             /* raw only */
@@ -424,7 +594,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     ED448_PUB_KEY_SIZE);
 
                 initRet = ret = wc_ed448_init(&key.ed4);
-
                 if (ret == 0) {
                     ret = wc_ed448_import_private_key(*key_buffer,
                         ED448_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed4);
@@ -443,295 +612,50 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 CMD.header_sz = 512;
                 CMD.signature_sz = 114;
                 CMD.sign = SIGN_ED448;
+                printf("Found ED448 key\n");
                 break;
             }
-            FALL_THROUGH;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
 
         case SIGN_ECC256:
-            ret = -1;
-            initRet = -1;
-            *pubkey_sz = 64;
-            *pubkey = malloc(*pubkey_sz);
-            keySzOut = 0;
-
-            if (CMD.manual_sign || CMD.sha_only) {
-                /* raw */
-                if (*key_buffer_sz == 64) {
-                    memcpy(*pubkey, *key_buffer, 64);
-
-                    ret = 0;
-                }
-                else {
-                    initRet = ret = wc_ecc_init(&key.ecc);
-
-                    if (ret == 0) {
-                        ret = wc_EccPublicKeyDecode(*key_buffer,
-                            &keySzOut, &key.ecc, *key_buffer_sz);
-                    }
-
-                    /* we could decode another type of key in auto so check */
-                    if (ret == 0 && key.ecc.dp->id != ECC_SECP256R1)
-                        ret = -1;
-
-                    if (ret == 0) {
-                        ret = wc_ecc_export_public_raw(&key.ecc, *pubkey, &qxSz,
-                            *pubkey + *pubkey_sz / 2, &qySz);
-                    }
-
-                    /* free key no matter what */
-                    if (initRet == 0)
-                        wc_ecc_free(&key.ecc);
-                }
-            }
-            /* raw only */
-            else if (*key_buffer_sz == 96) {
-                memcpy(*pubkey, *key_buffer, 64);
-
-                initRet = ret = wc_ecc_init(&key.ecc);
-
-                if (ret == 0) {
-                    ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer,
-                        (*key_buffer) + 32, (*key_buffer) + 64,
-                        ECC_SECP256R1);
-                }
-
-                if (ret != 0 && initRet == 0) {
-                    wc_ecc_free(&key.ecc);
-                }
-            }
-
-            if (ret != 0)
-                free(*pubkey);
-
-            /* break if we succeed or are not using auto */
-            if (ret == 0 || CMD.sign != SIGN_AUTO) {
-                CMD.sign = SIGN_ECC256;
-                CMD.header_sz = 256;
-                CMD.signature_sz = 64;
+            ret = load_key_ecc(SIGN_ECC256, 32, ECC_SECP256R1, 256,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+            if (ret == 0)
                 break;
-            }
             FALL_THROUGH;
-
         case SIGN_ECC384:
-            ret = -1;
-            initRet = -1;
-            *pubkey_sz = 96;
-            *pubkey = malloc(*pubkey_sz);
-            keySzOut = 0;
-
-            if (CMD.manual_sign || CMD.sha_only) {
-                /* raw */
-                if (*key_buffer_sz == 96) {
-                    memcpy(*pubkey, *key_buffer, 96);
-
-                    ret = 0;
-                }
-                else {
-                    initRet = ret = wc_EccPublicKeyDecode(*key_buffer,
-                        &keySzOut, &key.ecc, *key_buffer_sz);
-
-                    /* we could decode another type of key in auto so check */
-                    if (ret == 0 && key.ecc.dp->id != ECC_SECP384R1)
-                        ret = -1;
-
-                    if (ret == 0) {
-                        ret = wc_ecc_export_public_raw(&key.ecc, *pubkey, &qxSz,
-                            *pubkey + *pubkey_sz / 2, &qySz);
-                    }
-
-                    /* free key no matter what */
-                    if (initRet == 0)
-                        wc_ecc_free(&key.ecc);
-                }
-            }
-            /* raw only */
-            else if (*key_buffer_sz == 144) {
-                memcpy(*pubkey, *key_buffer, 96);
-
-                initRet = ret = wc_ecc_init(&key.ecc);
-
-                if (ret == 0) {
-                    ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer,
-                        (*key_buffer) + 48, (*key_buffer) + 96,
-                        ECC_SECP384R1);
-                }
-
-                if (ret != 0 && initRet == 0)
-                    wc_ecc_free(&key.ecc);
-            }
-
-            if (ret != 0)
-                free(*pubkey);
-
-            /* break if we succeed or are not using auto */
-            if (ret == 0 || CMD.sign != SIGN_AUTO) {
-                CMD.sign = SIGN_ECC384;
-                CMD.header_sz = 512;
-                CMD.signature_sz = 96;
+            ret = load_key_ecc(SIGN_ECC384, 48, ECC_SECP384R1, 512,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+            if (ret == 0)
                 break;
-            }
             FALL_THROUGH;
-
         case SIGN_ECC521:
-            ret = -1;
-            initRet = -1;
-            *pubkey_sz = 132;
-            *pubkey = malloc(*pubkey_sz);
-            keySzOut = 0;
-
-            if (CMD.manual_sign || CMD.sha_only) {
-                /* raw */
-                if (*key_buffer_sz == 132) {
-                    memcpy(*pubkey, *key_buffer, 132);
-
-                    ret = 0;
-                }
-                else {
-                    initRet = ret = wc_EccPublicKeyDecode(*key_buffer,
-                        &keySzOut, &key.ecc, *key_buffer_sz);
-
-                    /* we could decode another type of key in auto so check */
-                    if (ret == 0 && key.ecc.dp->id != ECC_SECP521R1)
-                        ret = -1;
-
-                    if (ret == 0) {
-                        ret = wc_ecc_export_public_raw(&key.ecc, *pubkey, &qxSz,
-                            *pubkey + *pubkey_sz / 2, &qySz);
-                    }
-
-                    /* free key no matter what */
-                    if (initRet == 0)
-                        wc_ecc_free(&key.ecc);
-                }
-            }
-            /* raw only */
-            else if (*key_buffer_sz == 198) {
-                memcpy(*pubkey, *key_buffer, 132);
-
-                initRet = ret = wc_ecc_init(&key.ecc);
-
-                if (ret == 0) {
-                    ret = wc_ecc_import_unsigned(&key.ecc, *key_buffer,
-                        (*key_buffer) + 66, (*key_buffer) + 132,
-                        ECC_SECP521R1);
-                }
-
-                if (ret != 0 && initRet == 0)
-                    wc_ecc_free(&key.ecc);
-            }
-
-            if (ret != 0)
-                free(*pubkey);
-
-            /* break if we succeed or are not using auto */
-            if (ret == 0 || CMD.sign != SIGN_AUTO) {
-                CMD.sign = SIGN_ECC521;
-                CMD.header_sz = 512;
-                CMD.signature_sz = 132;
+            ret = load_key_ecc(SIGN_ECC521, 66, ECC_SECP521R1, 512,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+            if (ret == 0)
                 break;
-            }
-            FALL_THROUGH;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
 
         case SIGN_RSA2048:
-            FALL_THROUGH;
+            ret = load_key_rsa(SIGN_RSA2048, 256, KEYSTORE_PUBKEY_SIZE_RSA2048, 512,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+            if (ret == 0)
+                break;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_RSA3072:
-            FALL_THROUGH;
+            ret = load_key_rsa(SIGN_RSA3072, 384, KEYSTORE_PUBKEY_SIZE_RSA3072, 512,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+            if (ret == 0)
+                break;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_RSA4096:
-            ret = -1;
-            initRet = -1;
-            keySzOut = 0;
+            ret = load_key_rsa(SIGN_RSA4096, 512, KEYSTORE_PUBKEY_SIZE_RSA4096, 1024,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+            if (ret == 0)
+                break;
 
-            if (CMD.manual_sign || CMD.sha_only) {
-                *pubkey = *key_buffer;
-                *pubkey_sz = *key_buffer_sz;
-
-                if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA2048) {
-                    CMD.sign = SIGN_RSA2048;
-                    if (CMD.policy_sign) {
-                        CMD.header_sz = 1024;
-                    }
-                    else {
-                        CMD.header_sz = 512;
-                    }
-                    CMD.signature_sz = 256;
-                }
-                else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA3072) {
-                    CMD.sign = SIGN_RSA3072;
-                    if (CMD.hash_algo != HASH_SHA256 || CMD.policy_sign) {
-                        CMD.header_sz = 1024;
-                    }
-                    else {
-                        CMD.header_sz = 512;
-                    }
-                    CMD.signature_sz = 384;
-                }
-                else if (*pubkey_sz <= KEYSTORE_PUBKEY_SIZE_RSA4096) {
-                    CMD.sign = SIGN_RSA4096;
-                    CMD.header_sz = 1024;
-                    CMD.signature_sz = 512;
-                }
-
-                ret = 0;
-            }
-            else {
-                idx = 0;
-                initRet = ret = wc_InitRsaKey(&key.rsa, NULL);
-
-                if (ret == 0) {
-                    ret = wc_RsaPrivateKeyDecode(*key_buffer, &idx, &key.rsa,
-                            *key_buffer_sz);
-                }
-
-                if (ret == 0) {
-                    ret = wc_RsaKeyToPublicDer(&key.rsa, *key_buffer,
-                            *key_buffer_sz);
-                }
-
-                if (ret > 0) {
-                    *pubkey = *key_buffer;
-                    *pubkey_sz = ret;
-                    ret = 0;
-                }
-
-                if (ret == 0)
-                    keySzOut = wc_RsaEncryptSize(&key.rsa);
-
-                if (ret != 0 && initRet == 0) {
-                    wc_FreeRsaKey(&key.rsa);
-                }
-
-                /* break if we succeed or are not using auto */
-                if (ret == 0 || CMD.sign != SIGN_AUTO) {
-                    if (keySzOut == 512) {
-                        CMD.sign = SIGN_RSA4096;
-                        CMD.header_sz = 1024;
-                        CMD.signature_sz = 512;
-                    }
-                    else if (keySzOut == 384) {
-                        CMD.sign = SIGN_RSA3072;
-                        if (CMD.hash_algo != HASH_SHA256 || CMD.policy_sign) {
-                            CMD.header_sz = 1024;
-                        }
-                        else {
-                            CMD.header_sz = 512;
-                        }
-                        CMD.signature_sz = 384;
-                    }
-                    else {
-                        CMD.sign = SIGN_RSA2048;
-                        if (CMD.policy_sign) {
-                            CMD.header_sz = 1024;
-                        }
-                        else {
-                            CMD.header_sz = 512;
-                        }
-                        CMD.signature_sz = 256;
-                    }
-                    break;
-                }
-            }
 #ifdef WOLFSSL_HAVE_LMS
-            FALL_THROUGH;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_LMS:
             ret = -1;
 
@@ -739,38 +663,41 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 /* LMS is stateful and requires additional config, and is not
                  * compatible with SIGN_AUTO. */
                 printf("error: SIGN_AUTO with LMS is not supported\n");
+                break;
+            }
+
+            /* The LMS file callbacks will handle writing and reading the
+             * private key. We only need to set the public key here.
+             *
+             * If both priv/pub are present:
+             *  - The first 64 bytes is the private key.
+             *  - The next 60 bytes is the public key. */
+            if (*key_buffer_sz == (HSS_MAX_PRIVATE_KEY_LEN +
+                                    KEYSTORE_PUBKEY_SIZE_LMS)) {
+                /* priv + pub */
+                *pubkey = (*key_buffer) + HSS_MAX_PRIVATE_KEY_LEN;
+                *pubkey_sz = (*key_buffer_sz) - HSS_MAX_PRIVATE_KEY_LEN;
+                ret = 0;
+                printf("Found LMS key\n");
+                break;
+            }
+            else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_LMS) {
+                /* pub only */
+                *pubkey = (*key_buffer);
+                *pubkey_sz = KEYSTORE_PUBKEY_SIZE_LMS;
+                ret = 0;
+                printf("Found LMS public only key\n");
+                break;
             }
             else {
-                /* The LMS file callbacks will handle writing and reading the
-                 * private key. We only need to set the public key here.
-                 *
-                 * If both priv/pub are present:
-                 *  - The first 64 bytes is the private key.
-                 *  - The next 60 bytes is the public key. */
-
-                if (*key_buffer_sz == (HSS_MAX_PRIVATE_KEY_LEN +
-                    KEYSTORE_PUBKEY_SIZE_LMS)) {
-                    /* priv + pub */
-                    *pubkey = (*key_buffer) + HSS_MAX_PRIVATE_KEY_LEN;
-                    *pubkey_sz = (*key_buffer_sz) - HSS_MAX_PRIVATE_KEY_LEN;
-                    ret = 0;
-                }
-                else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_LMS) {
-                    /* pub only. */
-                    *pubkey = (*key_buffer);
-                    *pubkey_sz = KEYSTORE_PUBKEY_SIZE_LMS;
-                    ret = 0;
-                }
-                else {
-                    /* We don't recognize this as an LMS pub or private key. */
-                    printf("error: unrecognized LMS key size: %d\n",
-                           *key_buffer_sz );
-                }
+                /* We don't recognize this as an LMS pub or private key. */
+                printf("error: unrecognized LMS key size: %d\n",
+                        *key_buffer_sz);
             }
 #endif /* WOLFSSL_HAVE_LMS */
 
 #ifdef WOLFSSL_HAVE_XMSS
-            FALL_THROUGH;
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_XMSS:
             ret = -1;
 
@@ -778,44 +705,44 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 /* XMSS is stateful and requires additional config, and is not
                  * compatible with SIGN_AUTO. */
                 printf("error: SIGN_AUTO with XMSS is not supported\n");
+                break;
+            }
+
+            /* The XMSS file callbacks will handle writing and reading the
+                * private key. We only need to set the public key here.
+                *
+                * If both priv/pub are present:
+                *  - The first ?? bytes is the private key.
+                *  - The next 68 bytes is the public key. */
+            ret = wc_XmssKey_GetPrivLen(&key.xmss, &priv_sz);
+            if (ret != 0 || priv_sz <= 0) {
+                printf("error: wc_XmssKey_GetPrivLen returned %d\n", ret);
+                break;
+            }
+
+            printf("info: xmss sk len: %d\n", priv_sz);
+            printf("info: xmss pk len: %d\n", KEYSTORE_PUBKEY_SIZE_XMSS);
+
+            if (*key_buffer_sz == (priv_sz + KEYSTORE_PUBKEY_SIZE_XMSS)) {
+                /* priv + pub */
+                *pubkey = (*key_buffer) + priv_sz;
+                *pubkey_sz = (*key_buffer_sz) - priv_sz;
+                ret = 0;
+                printf("Found XMSS key\n");
+                break;
+            }
+            else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_XMSS) {
+                /* pub only */
+                *pubkey = (*key_buffer);
+                *pubkey_sz = KEYSTORE_PUBKEY_SIZE_XMSS;
+                ret = 0;
+                printf("Found XMSS public only key\n");
+                break;
             }
             else {
-                /* The XMSS file callbacks will handle writing and reading the
-                 * private key. We only need to set the public key here.
-                 *
-                 * If both priv/pub are present:
-                 *  - The first ?? bytes is the private key.
-                 *  - The next 68 bytes is the public key. */
-                word32 priv_sz = 0;
-                int    xmss_ret = 0;
-
-                xmss_ret = wc_XmssKey_GetPrivLen(&key.xmss, &priv_sz);
-                if (xmss_ret != 0 || priv_sz <= 0) {
-                    printf("error: wc_XmssKey_GetPrivLen returned %d\n",
-                            xmss_ret);
-                    break;
-                }
-
-                printf("info: xmss sk len: %d\n", priv_sz);
-                printf("info: xmss pk len: %d\n", KEYSTORE_PUBKEY_SIZE_XMSS);
-
-                if (*key_buffer_sz == (priv_sz + KEYSTORE_PUBKEY_SIZE_XMSS)) {
-                    /* priv + pub */
-                    *pubkey = (*key_buffer) + priv_sz;
-                    *pubkey_sz = (*key_buffer_sz) - priv_sz;
-                    ret = 0;
-                }
-                else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_XMSS) {
-                    /* pub only. */
-                    *pubkey = (*key_buffer);
-                    *pubkey_sz = KEYSTORE_PUBKEY_SIZE_XMSS;
-                    ret = 0;
-                }
-                else {
-                    /* We don't recognize this as an XMSS pub or private key. */
-                    printf("error: unrecognized XMSS key size: %d\n",
-                           *key_buffer_sz );
-                }
+                /* We don't recognize this as an XMSS pub or private key. */
+                printf("error: unrecognized XMSS key size: %d\n",
+                    *key_buffer_sz);
             }
 #endif /* WOLFSSL_HAVE_XMSS */
 
@@ -842,7 +769,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     return *key_buffer;
 
 failure:
-    if (*key_buffer) {
+    if (*key_buffer != NULL) {
         free(*key_buffer);
         *key_buffer = NULL;
     }
@@ -1089,7 +1016,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         uint32_t i;
         for (i = 0; i < CMD.custom_tlvs; i++) {
             /* require 8-byte alignment */
-            /* The offset '4' takes into account 2B Tag + 2B Len, so that the 
+            /* The offset '4' takes into account 2B Tag + 2B Len, so that the
              * Value starts at (addr % 8 == 0) position.
              */
             while ((header_idx % 8) != 4)
@@ -1106,7 +1033,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     }
 
     /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
-    /* The offset '4' takes into account 2B Tag + 2B Len, so that the Value 
+    /* The offset '4' takes into account 2B Tag + 2B Len, so that the Value
      * starts at (addr % 8 == 0) position.
      */
     while ((header_idx % 8) != 4)
@@ -2356,21 +2283,34 @@ int main(int argc, char** argv)
 #ifdef HAVE_ED25519
         wc_ed25519_free(&key.ed);
 #endif
-    } else if (CMD.sign == SIGN_ED448) {
+    }
+    else if (CMD.sign == SIGN_ED448) {
 #ifdef HAVE_ED448
         wc_ed448_free(&key.ed4);
 #endif
-    } else if (CMD.sign == SIGN_ECC256) {
+    }
+    else if (CMD.sign == SIGN_ECC256 ||
+             CMD.sign == SIGN_ECC384 ||
+             CMD.sign == SIGN_ECC521) {
 #ifdef HAVE_ECC
         wc_ecc_free(&key.ecc);
 #endif
-    } else if (CMD.sign == SIGN_RSA4096 || CMD.sign == SIGN_RSA4096) {
+    }
+    else if (CMD.sign == SIGN_RSA2048 ||
+             CMD.sign == SIGN_RSA3072 ||
+             CMD.sign == SIGN_RSA4096) {
 #ifndef NO_RSA
         wc_FreeRsaKey(&key.rsa);
 #endif
-    } else if (CMD.sign == SIGN_LMS) {
+    }
+    else if (CMD.sign == SIGN_LMS) {
 #ifdef WOLFSSL_HAVE_LMS
         wc_LmsKey_Free(&key.lms);
+#endif
+    }
+    else if (CMD.sign == SIGN_XMSS) {
+#ifdef WOLFSSL_HAVE_XMSS
+        wc_XmssKey_Free(&key.xmss);
 #endif
     }
     return ret;

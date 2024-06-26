@@ -49,10 +49,11 @@ Two options are supported:
 
 - `-g privkey.der` to generate a new keypair, add the public key to the keystore and save the private key in a new file `privkey.der`
 - `-i existing.der` to import an existing public key from `existing.der`
+- `--der` save generated private key in DER format.
 
 Arguments are not exclusive, and can be repeated more than once to populate a keystore with multiple keys.
 
-One option must be specified to select the algorithm enabled in the keystore (e.g. `--ed25519` or `--rsa3072`. See the section "Public key signature options" for the sign tool for the available options.
+One option must be specified to select the algorithm enabled in the keystore (e.g. `--ed25519` or `--rsa3072`). See the section "Public key signature options" for the sign tool for the available options.
 
 The files generate by the keygen tool is the following:
 
@@ -174,6 +175,9 @@ is provided:
   * `--delta BASE_SIGNED_IMG.BIN` This option creates a binary diff file between
     `BASE_SIGNED_IMG.BIN` and the new image signed starting from `IMAGE.BIN`. The
 result is stored in a file ending in `_signed_diff.bin`.
+
+The compression scheme used is Bentley–McIlroy.
+
 
 #### Policy signing (for sealing/unsealing with a TPM)
 

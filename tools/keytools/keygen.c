@@ -107,6 +107,13 @@
 /* Globals */
 static FILE *fpub, *fpub_image;
 static int force = 0;
+#if defined(WOLFBOOT_RENESAS_RSIP) || \
+    defined(WOLFBOOT_RENESAS_TSIP) || \
+    defined(WOLFBOOT_RENESAS_SCEPROTECT)
+static int saveAsDer = 1; /* For Renesas PKA default to save as DER/ASN.1 */
+#else
+static int saveAsDer = 0;
+#endif
 static WC_RNG rng;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
@@ -130,11 +137,14 @@ const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generate
              " * used by wolfBoot to verify the updates.\n"
              " */"
              "\n#include <stdint.h>\n#include \"wolfboot/wolfboot.h\"\n#include \"keystore.h\"\n"
+        #if defined(WOLFBOOT_RENESAS_TSIP) || defined(WOLFBOOT_RENESAS_RSIP)
+             "#include \"user_settings.h\"\n"
              #if defined(WOLFBOOT_RENESAS_TSIP)
              "#include \"key_data.h\"\n"
              #elif defined(WOLFBOOT_RENESAS_RSIP)
              "#include \"rsa_pub.h\"\n"
              #endif
+        #endif
              "#ifdef WOLFBOOT_NO_SIGN\n\t#define NUM_PUBKEYS 0\n#else\n\n"
              "#if !defined(KEYSTORE_ANY) && (KEYSTORE_PUBKEY_SIZE != KEYSTORE_PUBKEY_SIZE_%s)\n\t"
              "#error Key algorithm mismatch. Remove old keys via 'make keysclean'\n"
@@ -143,7 +153,7 @@ const char Cfile_Banner[]="/* Keystore file for wolfBoot, automatically generate
 const char Store_hdr[] = "\n"
             "#if defined(__APPLE__) && defined(__MACH__)\n"
             "#define KEYSTORE_SECTION __attribute__((section (\"__KEYSTORE,__keystore\")))\n"
-            "#elif defined(__CCRX__)\n"
+            "#elif defined(__CCRX__) /* Renesas RX */\n"
             "#define KEYSTORE_SECTION\n"
             "#elif defined(TARGET_x86_64_efi)\n"
             "#define KEYSTORE_SECTION\n"
@@ -153,14 +163,6 @@ const char Store_hdr[] = "\n"
             "#define NUM_PUBKEYS %d\n"
             "const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {\n\n";
 const char Slot_hdr[] =
-#if defined(WOLFBOOT_RENESAS_RSIP)
-            "\t#if !defined(WOLFBOOT_RENESAS_RSIP)\n"
-#endif
-            "\t/* Key associated to file '%s' */\n"
-            "\t{\n\t\t.slot_id = %d,\n\t\t.key_type = %s,\n"
-            "\t\t.part_id_mask = 0x%08X,\n\t\t.pubkey_size = %s,\n"
-            "\t\t.pubkey = {\n\t\t\t";
-const char Slot_hdr_int_size[] =
             "\t /* Key associated to file '%s' */\n"
             "\t{\n\t\t.slot_id = %d,\n\t\t.key_type = %s,\n"
             "\t\t.part_id_mask = 0x%08X,\n\t\t.pubkey_size = %u,\n"
@@ -174,8 +176,8 @@ const char Slot_hdr_int_size[] =
 #endif
             "\t\t\t";
 const char Pubkey_footer[] =
-#if defined(WOLFBOOT_RENESAS_RSIP) ||\
-    defined(WOLFBOOT_RENESAS_TSIP) ||\
+#if defined(WOLFBOOT_RENESAS_RSIP) || \
+    defined(WOLFBOOT_RENESAS_TSIP) || \
     defined(WOLFBOOT_RENESAS_SCEPROTECT)
             "\n\t#endif\n"
 #endif
@@ -251,8 +253,9 @@ const char Keystore_API[] =
 static void usage(const char *pname) /* implies exit */
 {
     printf("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 "
-           "| --ecc521 | --rsa2048 | --rsa3072 "
-           "| --rsa4096 ] [-g privkey] [-i pubkey] [-keystoreDir dir] [--id {list}] \n", pname);
+           "| --ecc521 | --rsa2048 | --rsa3072 | --rsa4096 ] "
+           "[-g privkey] [-i pubkey] [-keystoreDir dir] "
+           "[--id {list}] [--der]\n", pname);
     exit(125);
 }
 
@@ -373,10 +376,7 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     struct keystore_slot sl;
     size_t slot_size;
 
-    if (ktype == KEYGEN_RSA2048 || ktype == KEYGEN_RSA3072 || ktype == KEYGEN_RSA4096)
-        fprintf(fpub, Slot_hdr_int_size,  keyfile, id_slot, KType[ktype], id_mask, sz);
-    else
-        fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], id_mask, KSize[ktype]);
+    fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], id_mask, sz);
     fwritekey(key, sz, fpub);
     fprintf(fpub, Pubkey_footer);
     fprintf(fpub, Slot_footer);
@@ -450,11 +450,14 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
 static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         uint32_t id_mask)
 {
+    int ret;
     ecc_key k;
     uint8_t Qx[MAX_ECC_KEY_SIZE], Qy[MAX_ECC_KEY_SIZE], d[MAX_ECC_KEY_SIZE];
     uint32_t qxsize = ecc_key_size,
              qysize = ecc_key_size,
              dsize =  ecc_key_size;
+    uint8_t priv_der[ECC_BUFSIZE];
+    int privlen;
     uint8_t k_buffer[2 * MAX_ECC_KEY_SIZE];
     FILE *fpriv;
 
@@ -465,9 +468,17 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         exit(1);
     }
 
+    ret = wc_EccKeyToDer(&k, priv_der, (word32)sizeof(priv_der));
+    if (ret <= 0) {
+        fprintf(stderr, "Unable to export private key to DER\n");
+        exit(2);
+    }
+    privlen = ret;
+    ret = 0;
+
     if (wc_ecc_export_private_raw(&k, Qx, &qxsize, Qy, &qysize, d, &dsize) != 0)
     {
-        fprintf(stderr, "Unable to export private key to DER\n");
+        fprintf(stderr, "Unable to export private key to raw\n");
         exit(2);
     }
 
@@ -486,12 +497,19 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         exit(3);
     }
 
-
-    fwrite(Qx, qxsize, 1, fpriv);
-    fwrite(Qy, qysize, 1, fpriv);
-    fwrite(d, dsize, 1, fpriv);
+    if (saveAsDer) {
+        /* save file as standard ASN.1 / DER */
+        fwrite(priv_der, privlen, 1, fpriv);
+    }
+    else {
+        /* save file as RAW public X/Y and private K */
+        fwrite(Qx, qxsize, 1, fpriv);
+        fwrite(Qy, qysize, 1, fpriv);
+        fwrite(d, dsize, 1, fpriv);
+    }
     fclose(fpriv);
-    memcpy(k_buffer, Qx, ecc_key_size);
+
+    memcpy(k_buffer,                Qx, ecc_key_size);
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
 
     if (ecc_key_size == 32)
@@ -973,6 +991,9 @@ int main(int argc, char** argv)
 #endif
         else if (strcmp(argv[i], "--force") == 0) {
             force = 1;
+        }
+        else if (strcmp(argv[i], "--der") == 0) {
+            saveAsDer = 1;
         }
         else if (strcmp(argv[i], "-g") == 0) {
             key_gen_check(argv[i + 1]);
