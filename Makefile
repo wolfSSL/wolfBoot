@@ -192,7 +192,7 @@ $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
 	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
-	$(Q)(test $(FLASH_OTP_KEYSTORE) = 0) || (make -C tools/keytools/otp) || true
+	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
 
 keytools: include/target.h
 	@echo "Building key tools"
