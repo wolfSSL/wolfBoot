@@ -330,6 +330,9 @@ ifeq ($(ARCH),RENESAS_RX)
           ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.o \
           ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o
 
+    # Key Data from Security Key Management Tool (SKMT). See docs/Renesas.md
+    OBJS+=./include/key_data.o
+
     # RX TSIP uses pre-compiled .a library by default
     ifeq ($(RX_TSIP_SRC),)
       ifeq ($(BIG_ENDIAN),1)

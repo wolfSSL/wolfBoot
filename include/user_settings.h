@@ -444,8 +444,9 @@ extern int tolower(int c);
         #define WOLFSSL_RENESAS_TSIP_CRYPT
         #define WOLFSSL_RENESAS_TSIP_CRYPTONLY
         #define NO_WOLFSSL_RENESAS_TSIP_CRYPT_HASH
-        #define RENESAS_TSIP_INSTALLEDKEY_ADDR 0xFFFF0000
-        #define ENCRYPTED_KEY_BYTE_SIZE ENC_PUB_KEY_SIZE /* from key_data.h */
+        /* from key_data.h */
+        #define RENESAS_TSIP_INSTALLEDKEY_ADDR (&g_enc_pub_key)
+        #define ENCRYPTED_KEY_BYTE_SIZE ENC_PUB_KEY_SIZE
         #define RENESAS_DEVID 7890
     #endif
     #ifdef WOLFBOOT_RENESAS_SCEPROTECT

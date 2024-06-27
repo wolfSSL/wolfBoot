@@ -168,7 +168,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, verify_res = 0;
-    uint8_t *pubkey = (uint8_t*)keystore_get_buffer(key_slot);
+    uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     int point_sz = pubkey_sz/2;
     ecc_key ecc;
@@ -631,7 +631,7 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
 {
     int blksz;
     unsigned int i = 0;
-    uint8_t *pubkey = (uint8_t*)keystore_get_buffer(key_slot);
+    uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha256 sha256_ctx;
 

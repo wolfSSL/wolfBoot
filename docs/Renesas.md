@@ -54,7 +54,24 @@ Done.
 $ openssl ec -inform der -in ./pri-ecc384.der -pubout -out ./pub-ecc384.pem
 ```
 
+OR Import Public Key
+```
+# Export public portion of key as DER
+$ openssl ec -inform der -in ./pri-ecc384.der -pubout -outform der -out ./pub-ecc384.der
+
+# Import public key and populate src/keystore.c
+$ ./tools/keytools/keygen --ecc384 -i ./pub-ecc384.der
+Keytype: ECC384
+Associated key file:   ./pub-ecc384.der
+Partition ids mask:   ffffffff
+Key type   :           ECC384
+Public key slot:       0
+Done.
+```
+
 6) Create wrapped public key
+
+Use the Security Key Management Tool (SKMT) command line tool (CLI) to create a wrapped public key.
 
 This will use the user encryption key to wrap the public key and output key_data.c / key_data.h files.
 
