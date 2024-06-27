@@ -194,7 +194,11 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
          * Then ECDSA crypto callback will perform verify on TSIP hardware */
         wc_ecc_set_curve(&ecc, 0, ECC_KEY_TYPE);
 
-        VERIFY_FN(img, &verify_res, wc_ecc_verify_hash, sig, point_sz*2,
+        /* The wc_ecc_verify_hash must be used since _ex version does not
+         * trigger crypto callback. Building with NO_ASN allows us to send R+S
+         * directly without ASN.1 encoded DSA header */
+        VERIFY_FN(img, &verify_res, wc_ecc_verify_hash,
+            sig, IMAGE_SIGNATURE_SIZE,
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc)
     #else
         /* Import public key */
