@@ -736,6 +736,8 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
         wolfBoot_printf("Trying emergency update\n");
+        /* clear out the update sector flags */
+        wolfBoot_update_trigger();
         if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
             wolfBoot_printf("Boot failed! No boot option available!\n");
