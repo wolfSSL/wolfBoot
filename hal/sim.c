@@ -106,7 +106,7 @@ void hal_prepare_boot(void)
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    if (forceEmergency == 1 && address < WOLFBOOT_PARTITION_UPDATE_ADDRESS) {
+    if (forceEmergency == 1 && address == WOLFBOOT_PARTITION_BOOT_ADDRESS) {
         /* implicit cast abide compiler warning */
         memset((void*)address, 0, len);
         /* let the rest of the writes work properly for the emergency update */
