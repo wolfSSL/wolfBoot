@@ -45,6 +45,7 @@
 uint8_t *sim_ram_base;
 static uint8_t *flash_base;
 
+int forceEmergency = 0;
 uint32_t erasefail_address = 0xFFFFFFFF;
 
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
@@ -105,8 +106,15 @@ void hal_prepare_boot(void)
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    /* implicit cast abide compiler warning */
-    memcpy((void*)address, data, len);
+    if (forceEmergency == 1 && address < WOLFBOOT_PARTITION_UPDATE_ADDRESS) {
+        /* implicit cast abide compiler warning */
+        memset((void*)address, 0, len);
+        /* let the rest of the writes work properly for the emergency update */
+        forceEmergency = 0;
+    }
+    else
+        /* implicit cast abide compiler warning */
+        memcpy((void*)address, data, len);
     return 0;
 }
 
@@ -150,8 +158,9 @@ void hal_init(void)
             erasefail_address = strtol(main_argv[++i], NULL,  16);
             fprintf(stderr, "Set power fail to erase at address %x\n",
                 erasefail_address);
-            break;
         }
+        else if (strcmp(main_argv[i], "emergency") == 0)
+            forceEmergency = 1;
     }
 }
 
