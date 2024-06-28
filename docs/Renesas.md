@@ -69,7 +69,7 @@ Public key slot:       0
 Done.
 ```
 
-6) Create wrapped public key
+6) Create wrapped public key (code files)
 
 Use the Security Key Management Tool (SKMT) command line tool (CLI) to create a wrapped public key.
 
@@ -86,11 +86,46 @@ IV: 6C296A040EEF5EDD687E8D3D98D146D0
 Encrypted key: 5DD8D7E59E6AC85AE340BBA60AA8F8BE56C4C1FE02340C49EB8F36DA79B8D6640961FE9EAECDD6BADF083C5B6060C1D0309D28EFA25946F431979B9F9D21E77BDC5B1CC7165DE2F4AE51E418746260F518ED0C328BD3020DEC9B774DC00270B0CFBBE3DD738FDF715342CFBF2D461239
 ```
 
-7) Edit .config `PKA?=1`.
+7) Create wrapped public key (flash file)
 
-8) Rebuild wolfBoot. `make clean && make wolfboot.srec`
+Generate Motorola HEX file to write wrapped key to flash.
 
-9) Sign application
+```
+$ C:\Renesas\SecurityKeyManagementTool\cli\skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-ecc384.pem -mcu RX-TSIP -keytype secp384r1-public -output pub-ecc384.srec -filetype "mot" -address FFFF0000
+Output File: Y:\GitHub\wolfboot\pub-ecc384.srec
+UFPK: B94A2B961C75510174F0C967ECFC20B377C7FB256DB627B1BFFADEE05EE98AC4
+W-UFPK: 000000016CCB9A1C8AA58883B1CB02DE6C37DA6054FB94E206EAE7204D9CCF4C6EEB288C
+IV: 9C13402DF1AF631DC2A10C2424182601
+Encrypted key: C4A0B368552EB921A3AF3427FD7403BBE6CB8EE259D6CC0692AA72D46F7343F5FFE7DA97A1C811B21BF392E3834B67C3CE6F84707CCB8923D4FBB8DA003EF23C1CD785B6F58E5DB161F575F78D646434AC2BFAF207F6FFF6363C800CFF7E7BFF4857452A70C496B675D08DD6924CAB5E
+```
+
+The generated file is a Motorola HEX (S-Record) formatted image containing the wrapped public key with instructions to use the `0xFFFF0000` address.
+
+```
+S00E00007075622D65636333737265D5
+S315FFFF000000000000000000006CCB9A1C8AA58883C5
+S315FFFF0010B1CB02DE6C37DA6054FB94E206EAE720E7
+S315FFFF00204D9CCF4C6EEB288C9C13402DF1AF631D7F
+S315FFFF0030C2A10C2424182601C4A0B368552EB921EA
+S315FFFF0040A3AF3427FD7403BBE6CB8EE259D6CC06AE
+S315FFFF005092AA72D46F7343F5FFE7DA97A1C811B27D
+S315FFFF00601BF392E3834B67C3CE6F84707CCB8923ED
+S315FFFF0070D4FBB8DA003EF23C1CD785B6F58E5DB1F0
+S315FFFF008061F575F78D646434AC2BFAF207F6FFF66C
+S315FFFF0090363C800CFF7E7BFF4857452A70C496B6D9
+S311FFFF00A075D08DD6924CAB5ED6FF44C5E3
+S705FFFF0000FC
+```
+
+The default flash memory address is `0xFFFF0000`, but it can be changed. The following two places must be set:
+a) The `user_settings.h` build macro `RENESAS_TSIP_INSTALLEDKEY_ADDR`
+b) The linker script `.rot` section (example `hal/rx72n.ld` or `hal/rx65n.ld`).
+
+8) Edit .config `PKA?=1`.
+
+9) Rebuild wolfBoot. `make clean && make wolfboot.srec`
+
+10) Sign application
 
 Sign application using the created private key above `pri-ecc384.der`:
 
@@ -110,3 +145,7 @@ Calculating SHA256 digest...
 Signing the digest...
 Output image(s) successfully created.
 ```
+
+11) Flash wolfboot.srec, pub-ecc384.srec and signed application binary
+
+Download files to flash using Renesas flash programmer.

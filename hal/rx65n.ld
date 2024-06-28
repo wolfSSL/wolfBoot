@@ -23,6 +23,12 @@ SECTIONS
         KEEP(*(.fvectors))
     } = 0x4
 
+    .rot 0xFFFF0000 :
+    {
+        /* Reserved space for Wrapped Public Key (See docs/Renesas.md) */
+        KEEP(*(.rot))
+    } = 0x2000 /* 8KB (min sector size) */
+
     .rvectors ORIGIN(ROM) :
     {
         _rvectors_start = .;
