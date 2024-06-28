@@ -221,7 +221,7 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-delta-update
+          make clean && make test-sim-internal-flash-with-delta-update
 
       - name: Run update-revert test (DELTA)
         run: |
@@ -229,7 +229,7 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-delta-update
+          make clean && make test-sim-internal-flash-with-delta-update
 
       - name: Run update-revert test with power failures (DELTA)
         run: |
@@ -237,7 +237,7 @@ jobs:
 
       - name: Rebuild wolfboot.elf
         run: |
-          make test-sim-internal-flash-with-delta-update
+          make clean && make test-sim-internal-flash-with-delta-update
 
       - name: Run emergency fallback test
         run: |
