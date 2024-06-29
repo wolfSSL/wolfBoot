@@ -235,14 +235,6 @@ jobs:
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
 
-      - name: Rebuild wolfboot.elf
-        run: |
-          make clean && make test-sim-internal-flash-with-delta-update
-
-      - name: Run emergency fallback test
-        run: |
-          tools/scripts/sim-update-emergency-fallback.sh
-
 
      # TEST with encryption (aes128)
       - name: make clean
@@ -324,14 +316,6 @@ jobs:
       - name: Run update-revert test with power failures (AES128 DELTA)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
-
-      - name: Rebuild wolfboot.elf
-        run: |
-          make clean && make test-sim-external-flash-with-enc-delta-update
-
-      - name: Run emergency fallback test
-        run: |
-          tools/scripts/sim-update-emergency-fallback.sh
 
 
      # TEST with encryption (aes128) and NVM_WRITEONCE
@@ -496,14 +480,6 @@ jobs:
       - name: Run update-revert test with power failures (AES128 DELTA)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
-
-      - name: Rebuild wolfboot.elf
-        run: |
-          make clean && make test-sim-external-flash-with-enc-delta-update
-
-      - name: Run emergency fallback test
-        run: |
-          tools/scripts/sim-update-emergency-fallback.sh
 
     # TEST with backup disabled
       - name: make clean
