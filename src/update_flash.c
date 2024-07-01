@@ -230,7 +230,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
 #endif
         /* check for MAGIC and TRAIL */
 #ifdef EXT_ENCRYPTED
-        if ((uint32_t*)swapBuffer[0] != WOLFBOOT_MAGIC ||
+        if (((uint32_t*)swapBuffer)[0] != WOLFBOOT_MAGIC ||
             *(uint32_t*)(swapBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
             + ENCRYPT_NONCE_SIZE) != WOLFBOOT_MAGIC_TRAIL) {
             return -1;
