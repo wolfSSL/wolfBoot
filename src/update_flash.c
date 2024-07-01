@@ -544,7 +544,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 inverse = 1;
                 resume_inverse = 1;
             }
-            else if (inverse == 1 && fallback_allowed == 0 ||
+            else if ((inverse == 1 && fallback_allowed == 0) ||
                 (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
                 st == IMG_STATE_UPDATING)) {
                 inverse = 0;
