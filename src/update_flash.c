@@ -194,9 +194,9 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     return pos;
 }
 
-static int wolfBoot_swap_and_final_erase(struct wolfBoot_image *boot,
-    int resume)
+static int wolfBoot_swap_and_final_erase(int resume)
 {
+    struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
     int eraseLen = WOLFBOOT_SECTOR_SIZE
@@ -211,6 +211,8 @@ static int wolfBoot_swap_and_final_erase(struct wolfBoot_image *boot,
         + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE
 #endif
     ];
+    /* open boot */
+    wolfBoot_open_image(boot, PART_BOOT);
     /* open update */
     wolfBoot_open_image(update, PART_UPDATE);
     /* open swap */
@@ -419,7 +421,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         sector++;
     }
     /* start re-entrant final erase */
-    wolfBoot_swap_and_final_erase(boot, 0);
+    wolfBoot_swap_and_final_erase(0);
 out:
     wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
 #ifdef EXT_FLASH
@@ -614,7 +616,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         sector++;
     }
     /* start re-entrant final erase */
-    wolfBoot_swap_and_final_erase(&boot, 0);
+    wolfBoot_swap_and_final_erase(0);
     /* encryption key was not erased, will be erased by success */
 #ifdef EXT_FLASH
     ext_flash_lock();
@@ -833,7 +835,7 @@ void RAMFUNCTION wolfBoot_start(void)
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
     /* resume the final erase in case the power failed before it finished */
-    resumedFinalErase = wolfBoot_swap_and_final_erase(&boot, 1);
+    resumedFinalErase = wolfBoot_swap_and_final_erase(1);
 
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
