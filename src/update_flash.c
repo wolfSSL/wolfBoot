@@ -205,6 +205,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
         * 2
 #endif
     ;
+    uint8_t flag;
     /* final swap and erase flag is WOLFBOOT_MAGIC | WOLFBOOT_MAGIC_TRAIL */
     uint8_t swapBuffer[sizeof(WOLFBOOT_MAGIC) + sizeof(WOLFBOOT_MAGIC_TRAIL)
 #ifdef EXT_ENCRYPTED
@@ -259,14 +260,16 @@ static int wolfBoot_swap_and_final_erase(int resume)
 #endif
         wb_flash_write(swap, 0, (void*)swapBuffer, sizeof(swapBuffer));
     }
-    /* erase the last sector(s) of boot and update */
+    /* erase the last sector(s), skip update if delta */
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* set the encryption key */
 #ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(swapBuffer + sizeof(WOLFBOOT_MAGIC), nonce);
+    wolfBoot_set_encrypt_key(swapBuffer + sizeof(WOLFBOOT_MAGIC), swapBuffer +
+        sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE);
 #endif
-    /* mark boot as TESTING */
+    /* mark update to new to reset magic and mark boot as TESTING */
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
     /* erase swap */
     wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
@@ -423,7 +426,6 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     /* start re-entrant final erase */
     wolfBoot_swap_and_final_erase(0);
 out:
-    wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif
@@ -475,7 +477,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
 #ifdef DELTA_UPDATES
     int inverse = 0;
-    int inverse_resume = 0;
+    int resume_inverse = 0;
     uint32_t cur_v;
     uint32_t up_v;
 #endif
@@ -526,25 +528,37 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
         cur_v = wolfBoot_current_firmware_version();
+        /* if the current version is 0, the boot header had a corrupted write
+         * and the diffbase version will have the right version */
+        if (cur_v == 0)
+            cur_v = wolfBoot_get_diffbase_version(PART_UPDATE);
         up_v = wolfBoot_update_firmware_version();
         inverse = cur_v >= up_v;
 
-        /* if the first sector flag is not new but we are updating then */
-        /* we were interrupted */
-        if (flag != SECT_FLAG_NEW &&
-            wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
-            st == IMG_STATE_UPDATING) {
-            if (cur_v == up_v) {
+        /* if we've already written a sector, the version numbers will be
+         * swapped since they're in the header and we need to infer the
+         * direction of the update by version, if we're falling back and if
+         * we're updating or not */
+        if (flag != SECT_FLAG_NEW) {
+            if (cur_v < up_v && fallback_allowed == 1) {
+                inverse = 1;
+                resume_inverse = 1;
+            }
+            else if (inverse == 1 && fallback_allowed == 0 ||
+                (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
+                st == IMG_STATE_UPDATING)) {
                 inverse = 0;
             }
-            else if (cur_v < up_v) {
-                inverse = 1;
-                inverse_resume = 1;
-            }
+        }
+        /* If we're dealing with a "ping-pong" fallback that wasn't interrupted
+         * we need to call update trigger, otherwise there's no way to tell the
+         * original direction of the update once interrupted */
+        else if (cur_v < up_v && fallback_allowed == 1) {
+            wolfBoot_update_trigger();
         }
 
         return wolfBoot_delta_update(&boot, &update, &swap, inverse,
-            inverse_resume);
+            resume_inverse);
     }
 #endif
 
@@ -821,6 +835,7 @@ void RAMFUNCTION wolfBoot_start(void)
     int resumedFinalErase;
     uint8_t bootState;
     uint8_t updateState;
+    uint8_t flag;
     struct wolfBoot_image boot;
 
 #if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
@@ -830,6 +845,8 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef RAM_CODE
     wolfBoot_check_self_update();
 #endif
+
+    wolfBoot_get_update_sector_flag(0, &flag);
 
     bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
