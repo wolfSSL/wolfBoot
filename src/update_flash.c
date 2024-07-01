@@ -194,6 +194,83 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     return pos;
 }
 
+static int wolfBoot_swap_and_final_erase(struct wolfBoot_image *boot,
+    int resume)
+{
+    struct wolfBoot_image update[1];
+    struct wolfBoot_image swap[1];
+    int eraseLen = WOLFBOOT_SECTOR_SIZE
+#ifdef NVM_FLASH_WRITEONCE
+    /* need to erase the redundant sector too */
+        * 2
+#endif
+    ;
+    /* final swap and erase flag is WOLFBOOT_MAGIC | WOLFBOOT_MAGIC_TRAIL */
+    uint8_t swapBuffer[sizeof(WOLFBOOT_MAGIC) + sizeof(WOLFBOOT_MAGIC_TRAIL)
+#ifdef EXT_ENCRYPTED
+        + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE
+#endif
+    ];
+    /* open update */
+    wolfBoot_open_image(update, PART_UPDATE);
+    /* open swap */
+    wolfBoot_open_image(swap, PART_SWAP);
+    /* if resuming, check if final erase is in progress */
+    if (resume == 1) {
+        /* read swap and encryption key and iv if encryption is enabled */
+#ifdef EXT_FLASH
+        ext_flash_read((uintptr_t)(swap->hdr), (void *)swapBuffer,
+            sizeof(swapBuffer));
+#else
+        ((uint32_t*)swapBuffer)[0] = ((uint32_t*)swap->hdr)[0];
+        ((uint32_t*)swapBuffer)[1] = ((uint32_t*)swap->hdr)[1];
+#endif
+        /* check for MAGIC and TRAIL */
+#ifdef EXT_ENCRYPTED
+        if ((uint32_t*)swapBuffer[0] != WOLFBOOT_MAGIC ||
+            *(uint32_t*)(swapBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
+            + ENCRYPT_NONCE_SIZE) != WOLFBOOT_MAGIC_TRAIL) {
+            return -1;
+        }
+#else
+        if (((uint32_t*)swapBuffer)[0] != WOLFBOOT_MAGIC ||
+            ((uint32_t*)swapBuffer)[1] != WOLFBOOT_MAGIC_TRAIL) {
+            return -1;
+        }
+#endif
+    }
+    else {
+        /* erase swap */
+        wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
+#ifdef EXT_ENCRYPTED
+        /* get encryption key and iv if encryption is enabled */
+        wolfBoot_get_encrypt_key(swapBuffer + sizeof(WOLFBOOT_MAGIC), swapBuffer
+            + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE);
+#endif
+        /* write MAGIC, TRAIL and encryption key and iv if enabled */
+        ((uint32_t*)swapBuffer)[0] = WOLFBOOT_MAGIC;
+#ifdef EXT_ENCRYPTED
+        *(uint32_t*)(swapBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
+            + ENCRYPT_NONCE_SIZE) = WOLFBOOT_MAGIC_TRAIL;
+#else
+        ((uint32_t*)swapBuffer)[1] = WOLFBOOT_MAGIC_TRAIL;
+#endif
+        wb_flash_write(swap, 0, (void*)swapBuffer, sizeof(swapBuffer));
+    }
+    /* erase the last sector(s) of boot and update */
+    wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    /* set the encryption key */
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key(swapBuffer + sizeof(WOLFBOOT_MAGIC), nonce);
+#endif
+    /* mark boot as TESTING */
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    /* erase swap */
+    wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
+    return 0;
+}
+
 #ifdef DELTA_UPDATES
 
     #ifndef DELTA_BLOCK_SIZE
@@ -341,12 +418,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
         sector++;
     }
-    /* mark that our sector flags aren't reliable in testing mode */
-    st = IMG_STATE_FINAL_FLAGS;
-    wolfBoot_set_partition_state(PART_UPDATE, st);
-    /* mark boot partition as testing */
-    st = IMG_STATE_TESTING;
-    wolfBoot_set_partition_state(PART_BOOT, st);
+    /* start re-entrant final erase */
+    wolfBoot_swap_and_final_erase(boot, 0);
 out:
     wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
 #ifdef EXT_FLASH
@@ -540,13 +613,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
     }
-    /* mark that our sector flags aren't reliable in testing mode */
-    st = IMG_STATE_FINAL_FLAGS;
-    wolfBoot_set_partition_state(PART_UPDATE, st);
-    /* mark boot partition as testing */
-    st = IMG_STATE_TESTING;
-    wolfBoot_set_partition_state(PART_BOOT, st);
-    wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
+    /* start re-entrant final erase */
+    wolfBoot_swap_and_final_erase(&boot, 0);
     /* encryption key was not erased, will be erased by success */
 #ifdef EXT_FLASH
     ext_flash_lock();
@@ -693,6 +761,7 @@ int wolfBoot_unlock_disk(void)
 }
 #endif
 
+#if 0
 static int RAMFUNCTION wolfBoot_special_update_trigger(int resume)
 {
     struct wolfBoot_image update[1];
@@ -741,11 +810,13 @@ static int RAMFUNCTION wolfBoot_special_update_trigger(int resume)
     wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
     return 0;
 }
+#endif
 
 void RAMFUNCTION wolfBoot_start(void)
 {
     int bootRet;
     int updateRet;
+    int resumedFinalErase;
     uint8_t bootState;
     uint8_t updateState;
     struct wolfBoot_image boot;
@@ -761,25 +832,21 @@ void RAMFUNCTION wolfBoot_start(void)
     bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
-    /* resume the special update trigger in case the power failed right after
-     * erasing the last sector of the update partition */
-    wolfBoot_special_update_trigger(1);
+    /* resume the final erase in case the power failed before it finished */
+    resumedFinalErase = wolfBoot_swap_and_final_erase(&boot, 1);
 
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
-    if (bootRet == 0 && bootState == IMG_STATE_TESTING) {
-        /* wolfBoot_update_trigger now erases all the sector flags, only trigger
-         * if we're not already updating */
-        if (updateRet || updateState != IMG_STATE_UPDATING) {
-            wolfBoot_special_update_trigger(0);
+    if (resumedFinalErase != 0) {
+        if (bootRet == 0 && bootState == IMG_STATE_TESTING) {
+            wolfBoot_update(1);
+        /* Check for new updates in the UPDATE partition or if we were
+         * interrupted during the flags setting */
+        } else if (updateRet == 0 && updateState == IMG_STATE_UPDATING) {
+            /* Check for new updates in the UPDATE partition */
+            wolfBoot_update(0);
         }
-        wolfBoot_update(1);
-    /* Check for new updates in the UPDATE partition or if we were
-     * interrupted during the flags setting */
-    } else if (updateRet == 0 && (updateState == IMG_STATE_UPDATING || updateState == IMG_STATE_FINAL_FLAGS)) {
-        /* Check for new updates in the UPDATE partition */
-        wolfBoot_update(0);
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0)
             || (wolfBoot_verify_integrity(&boot) < 0)
@@ -788,8 +855,6 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
         wolfBoot_printf("Trying emergency update\n");
-        /* clear out the update sector flags */
-        wolfBoot_special_update_trigger(0);
         if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
             wolfBoot_printf("Boot failed! No boot option available!\n");

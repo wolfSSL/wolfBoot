@@ -819,16 +819,10 @@ void RAMFUNCTION wolfBoot_success(void)
     if (FLAGS_BOOT_EXT()) {
         ext_flash_unlock();
         wolfBoot_set_partition_state(PART_BOOT, st);
-        /* set update so IMG_STATE_FINAL_FLAGS isn't triggering pointless calls
-         * to wolfBoot update */
-        wolfBoot_set_partition_state(PART_UPDATE, st);
         ext_flash_lock();
     } else {
         hal_flash_unlock();
         wolfBoot_set_partition_state(PART_BOOT, st);
-        /* set update so IMG_STATE_FINAL_FLAGS isn't triggering pointless calls
-         * to wolfBoot update */
-        wolfBoot_set_partition_state(PART_UPDATE, st);
         hal_flash_lock();
     }
 #ifdef EXT_ENCRYPTED
