@@ -137,14 +137,19 @@ const char Cfile_Banner[]=
     " * This file has been generated and contains the public keys\n"
     " * used by wolfBoot to verify the updates.\n"
     " */"
-    "\n#include <stdint.h>\n#include \"wolfboot/wolfboot.h\"\n#include \"keystore.h\"\n"
-#if defined(WOLFBOOT_RENESAS_TSIP) || defined(WOLFBOOT_RENESAS_RSIP)
-    "#include \"user_settings.h\"\n"
-    #if defined(WOLFBOOT_RENESAS_TSIP)
-    "#include \"key_data.h\"\n"
-    #elif defined(WOLFBOOT_RENESAS_RSIP)
-    "#include \"rsa_pub.h\"\n"
-    #endif
+    "\n"
+    "#include <stdint.h>\n"
+    "#include \"wolfboot/wolfboot.h\"\n"
+    "#include \"keystore.h\"\n"
+#ifdef RENESAS_KEY
+    "#if defined(WOLFBOOT_RENESAS_TSIP) || defined(WOLFBOOT_RENESAS_RSIP)\n"
+    "    #include \"user_settings.h\"\n"
+    "    #if defined(WOLFBOOT_RENESAS_TSIP)\n"
+    "        #include \"key_data.h\"\n"
+    "    #elif defined(WOLFBOOT_RENESAS_RSIP)\n"
+    "        #include \"rsa_pub.h\"\n"
+    "    #endif\n"
+    "#endif\n"
 #endif
     "\n"
     "#ifdef WOLFBOOT_NO_SIGN\n"
@@ -175,22 +180,18 @@ const char Slot_hdr[] =
     "        .part_id_mask = 0x%08X,\n"
     "        .pubkey_size = %u,\n"
     "        .pubkey = {\n"
-#if defined(WOLFBOOT_RENESAS_RSIP)
-    "#if !defined(WOLFBOOT_RENESAS_RSIP)\n"
-#elif defined(WOLFBOOT_RENESAS_TSIP)
-    "#if !defined(WOLFBOOT_RENESAS_TSIP)\n"
-#elif defined(WOLFBOOT_RENESAS_SCEPROTECT)
-    "#if !defined(WOLFBOOT_RENESAS_SCEPROTECT)\n"
+#ifdef RENESAS_KEY
+    "#if !defined(WOLFBOOT_RENESAS_RSIP) && \\\n"
+    "    !defined(WOLFBOOT_RENESAS_TSIP) && \\\n"
+    "    !defined(WOLFBOOT_RENESAS_SCEPROTECT)\n"
 #endif
     "            ";
 const char Pubkey_footer[] =
-#if defined(WOLFBOOT_RENESAS_RSIP) || \
-    defined(WOLFBOOT_RENESAS_TSIP) || \
-    defined(WOLFBOOT_RENESAS_SCEPROTECT)
     "\n"
+#ifdef RENESAS_KEY
     "#endif"
-    "\n"
 #endif
+    "\n"
     "\n"
     "        },";
 const char Slot_footer[] = "\n"
@@ -202,7 +203,7 @@ const char Store_footer[] = "\n"
     "\n";
 
 const char Keystore_API[] =
-    "int keystore_num_pubkeys(void)\n"
+"int keystore_num_pubkeys(void)\n"
     "{\n"
     "    return NUM_PUBKEYS;\n"
     "}\n"
@@ -210,32 +211,40 @@ const char Keystore_API[] =
     "uint8_t *keystore_get_buffer(int id)\n"
     "{\n"
     "    (void)id;\n"
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT)
-    "    return (uint8_t *)RENESAS_SCE_INSTALLEDKEY_ADDR;\n"
-#elif defined(WOLFBOOT_RENESAS_TSIP)
-    "    return (uint8_t *)RENESAS_TSIP_INSTALLEDKEY_ADDR;\n"
-#elif defined(WOLFBOOT_RENESAS_RSIP)
-    "    return (uint8_t *)RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR;\n"
-#else
+#ifdef RENESAS_KEY
+    "#if defined(WOLFBOOT_RENESAS_SCEPROTECT)\n"
+    "    return (uint8_t*)RENESAS_SCE_INSTALLEDKEY_ADDR;\n"
+    "#elif defined(WOLFBOOT_RENESAS_TSIP)\n"
+    "    return (uint8_t*)RENESAS_TSIP_INSTALLEDKEY_ADDR;\n"
+    "#elif defined(WOLFBOOT_RENESAS_RSIP)\n"
+    "    return (uint8_t*)RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR;\n"
+    "#else\n"
+#endif
     "    if (id >= keystore_num_pubkeys())\n"
     "        return (uint8_t *)0;\n"
     "    return (uint8_t *)PubKeys[id].pubkey;\n"
+#ifdef RENESAS_KEY
+    "#endif\n"
 #endif
     "}\n"
     "\n"
     "int keystore_get_size(int id)\n"
     "{\n"
     "    (void)id;\n"
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT)
+#ifdef RENESAS_KEY
+    "#if defined(WOLFBOOT_RENESAS_SCEPROTECT)\n"
     "    return (int)260;\n"
-#elif defined(WOLFBOOT_RENESAS_TSIP)
+    "#elif defined(WOLFBOOT_RENESAS_TSIP)\n"
     "    return (int)ENCRYPTED_KEY_BYTE_SIZE;\n"
-#elif defined(WOLFBOOT_RENESAS_RSIP)
+    "#elif defined(WOLFBOOT_RENESAS_RSIP)\n"
     "    return (int)sizeof(rsa_public_t);\n"
-#else
+    "#else\n"
+#endif
     "    if (id >= keystore_num_pubkeys())\n"
     "        return -1;\n"
     "    return (int)PubKeys[id].pubkey_size;\n"
+#ifdef RENESAS_KEY
+    "#endif\n"
 #endif
     "}\n"
     "\n"
