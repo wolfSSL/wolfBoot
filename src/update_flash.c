@@ -693,6 +693,54 @@ int wolfBoot_unlock_disk(void)
 }
 #endif
 
+static int RAMFUNCTION wolfBoot_special_update_trigger(int resume)
+{
+    struct wolfBoot_image update[1];
+    struct wolfBoot_image swap[1];
+    int updateEraseLen = WOLFBOOT_SECTOR_SIZE
+#ifdef NVM_FLASH_WRITEONCE
+    /* need to erase the redundant sector too */
+        * 2
+#endif
+    ;
+    /* special update trigger flag is WOLFBOOT_MAGIC | WOLFBOOT_MAGIC_TRAIL */
+    uint32_t specialUpdateTrigger[2];
+    /* open swap */
+    wolfBoot_open_image(swap, PART_SWAP);
+    /* open update */
+    wolfBoot_open_image(update, PART_UPDATE);
+    /* if resuming, only proceed if special update trigger is in progress */
+    if (resume) {
+#ifdef EXT_FLASH
+        ext_flash_read((uintptr_t)(swap->hdr), (void *)specialUpdateTrigger,
+            sizeof(specialUpdateTrigger));
+#else
+        specialUpdateTrigger[0] = ((uint32_t*)swap->hdr)[0];
+        specialUpdateTrigger[1] = ((uint32_t*)swap->hdr)[1];
+#endif
+        if (specialUpdateTrigger[0] != WOLFBOOT_MAGIC ||
+            specialUpdateTrigger[1] != WOLFBOOT_MAGIC_TRAIL) {
+            return -1;
+        }
+    }
+    else {
+        /* erase swap */
+        wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
+        /* mark swap as special update trigger in progress */
+        specialUpdateTrigger[0] = WOLFBOOT_MAGIC;
+        specialUpdateTrigger[0] = WOLFBOOT_MAGIC_TRAIL;
+        wb_flash_write(swap, 0, (void*)specialUpdateTrigger,
+            sizeof(specialUpdateTrigger));
+    }
+    /* erase the last sector of update */
+    wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - updateEraseLen,
+        updateEraseLen);
+    /* call update_trigger */
+    wolfBoot_update_trigger();
+    /* erase swap */
+    wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
+    return 0;
+}
 
 void RAMFUNCTION wolfBoot_start(void)
 {
@@ -713,6 +761,10 @@ void RAMFUNCTION wolfBoot_start(void)
     bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
+    /* resume the special update trigger in case the power failed right after
+     * erasing the last sector of the update partition */
+    wolfBoot_special_update_trigger(1);
+
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
@@ -720,7 +772,7 @@ void RAMFUNCTION wolfBoot_start(void)
         /* wolfBoot_update_trigger now erases all the sector flags, only trigger
          * if we're not already updating */
         if (updateRet || updateState != IMG_STATE_UPDATING) {
-            wolfBoot_update_trigger();
+            wolfBoot_special_update_trigger(0);
         }
         wolfBoot_update(1);
     /* Check for new updates in the UPDATE partition or if we were
@@ -737,7 +789,7 @@ void RAMFUNCTION wolfBoot_start(void)
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
         wolfBoot_printf("Trying emergency update\n");
         /* clear out the update sector flags */
-        wolfBoot_update_trigger();
+        wolfBoot_special_update_trigger(0);
         if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
             wolfBoot_printf("Boot failed! No boot option available!\n");
