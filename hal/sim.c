@@ -106,15 +106,29 @@ void hal_prepare_boot(void)
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
+    int i;
     if (forceEmergency == 1 && address == WOLFBOOT_PARTITION_BOOT_ADDRESS) {
         /* implicit cast abide compiler warning */
         memset((void*)address, 0, len);
         /* let the rest of the writes work properly for the emergency update */
         forceEmergency = 0;
     }
-    else
-        /* implicit cast abide compiler warning */
-        memcpy((void*)address, data, len);
+    else {
+        for (i = 0; i < len; i++) {
+#ifdef NVM_FLASH_WRITEONCE
+            if (((uint8_t*)address)[i] != FLASH_BYTE_ERASED) {
+                /* no writing to non-erased page in NVM_FLASH_WRITEONCE */
+                printf("NVM_FLASH_WRITEONCE non-erased write detected!\n");
+                return -1;
+            }
+#endif
+#ifdef WOLFBOOT_FLAGS_INVERT
+            ((uint8_t*)address)[i] |= data[i];
+#else
+            ((uint8_t*)address)[i] &= data[i];
+#endif
+        }
+    }
     return 0;
 }
 
