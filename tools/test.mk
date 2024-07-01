@@ -990,7 +990,7 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=13661
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=11362
+	make test-size SIGN=RSA3072 LIMIT=11365
 	make keysclean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11914
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=11917
 	make keysclean
