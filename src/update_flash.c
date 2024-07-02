@@ -513,6 +513,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             (flag == SECT_FLAG_NEW))
     {
         if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
+            ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH) ||
+            update.fw_size > MAX_UPDATE_SIZE - 1 || !update.hdr_ok ||
+            (wolfBoot_verify_integrity(&update) < 0)
+            || (wolfBoot_verify_authenticity(&update) < 0)) {
+                return -1;
+            }
+#if 0
+        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
                 ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
             return -1;
         if (update.fw_size > MAX_UPDATE_SIZE - 1)
@@ -521,6 +529,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
         }
+#endif
         PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
         if ( ((fallback_allowed==1) &&
@@ -556,9 +565,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             }
         }
         /* If we're dealing with a "ping-pong" fallback that wasn't interrupted
-         * we need to call update trigger, otherwise there's no way to tell the
+         * we need to set to UPDATING, otherwise there's no way to tell the
          * original direction of the update once interrupted */
-        else if (cur_v < up_v && fallback_allowed == 1) {
+        else if (inverse == 0 && fallback_allowed == 1) {
+            //wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
             wolfBoot_update_trigger();
         }
 
