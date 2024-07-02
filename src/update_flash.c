@@ -470,11 +470,16 @@ static inline int wolfBoot_get_total_size(struct wolfBoot_image* boot,
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
+    const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
     uint8_t flag, st;
     struct wolfBoot_image boot, update, swap;
     uint16_t update_type;
     uint32_t fw_size;
+#if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint8_t nonce[ENCRYPT_NONCE_SIZE];
+#endif
 #ifdef DELTA_UPDATES
     int inverse = 0;
     int resume_inverse = 0;
@@ -568,29 +573,29 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * The status is saved in the sector flags of the update partition.
      * If something goes wrong, the operation will be resumed upon reboot.
      */
-    while ((sector * WOLFBOOT_SECTOR_SIZE) < total_size) {
+    while ((sector * sector_size) < total_size) {
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
            wolfBoot_copy_sector(&update, &swap, sector);
-           if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
+           if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                wolfBoot_set_update_sector_flag(sector, flag);
         }
         if (flag == SECT_FLAG_SWAPPING) {
-            uint32_t size = total_size - (sector * WOLFBOOT_SECTOR_SIZE);
-            if (size > WOLFBOOT_SECTOR_SIZE)
-                size = WOLFBOOT_SECTOR_SIZE;
+            uint32_t size = total_size - (sector * sector_size);
+            if (size > sector_size)
+                size = sector_size;
             flag = SECT_FLAG_BACKUP;
             wolfBoot_copy_sector(&boot, &update, sector);
-            if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
+            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                 wolfBoot_set_update_sector_flag(sector, flag);
         }
         if (flag == SECT_FLAG_BACKUP) {
-            uint32_t size = total_size - (sector * WOLFBOOT_SECTOR_SIZE);
-            if (size > WOLFBOOT_SECTOR_SIZE)
-                size = WOLFBOOT_SECTOR_SIZE;
+            uint32_t size = total_size - (sector * sector_size);
+            if (size > sector_size)
+                size = sector_size;
             flag = SECT_FLAG_UPDATED;
             wolfBoot_copy_sector(&swap, &boot, sector);
-            if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
+            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                 wolfBoot_set_update_sector_flag(sector, flag);
         }
         sector++;
@@ -615,16 +620,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
     }
     /* erase to the last sector, writeonce has 2 sectors */
-    while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE -
-        WOLFBOOT_SECTOR_SIZE
+    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
+        sector_size
 #ifdef NVM_FLASH_WRITEONCE
         * 2
 #endif
     ) {
-        wb_flash_erase(&boot, sector * WOLFBOOT_SECTOR_SIZE,
-            WOLFBOOT_SECTOR_SIZE);
-        wb_flash_erase(&update, sector * WOLFBOOT_SECTOR_SIZE,
-            WOLFBOOT_SECTOR_SIZE);
+        wb_flash_erase(&boot, sector * sector_size, sector_size);
+        wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
     }
     /* start re-entrant final erase */
@@ -641,13 +644,12 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     /* Directly copy the content of the UPDATE partition into the BOOT partition.
      */
-    while ((sector * WOLFBOOT_SECTOR_SIZE) < total_size) {
+    while ((sector * sector_size) < total_size) {
         wolfBoot_copy_sector(&update, &boot, sector);
         sector++;
     }
-    while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE) {
-        wb_flash_erase(&boot, sector * WOLFBOOT_SECTOR_SIZE,
-            WOLFBOOT_SECTOR_SIZE);
+    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
+        wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;
     }
     st = IMG_STATE_SUCCESS;
