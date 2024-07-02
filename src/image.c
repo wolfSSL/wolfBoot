@@ -700,8 +700,6 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
  */
 static void key_sha384(uint8_t key_slot, uint8_t *hash)
 {
-    int blksz;
-    unsigned int i = 0;
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha384 sha384_ctx;
@@ -710,13 +708,7 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
         return;
 
     wc_InitSha384(&sha384_ctx);
-    while (i < (uint32_t)(pubkey_sz)) {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if ((i + blksz) > (uint32_t)pubkey_sz)
-            blksz = pubkey_sz - i;
-        wc_Sha384Update(&sha384_ctx, (pubkey + i), blksz);
-        i += blksz;
-    }
+    wc_Sha384Update(&sha384_ctx, pubkey, (word32)pubkey_sz);
     wc_Sha384Final(&sha384_ctx, hash);
 }
 #endif /* WOLFBOOT_NO_SIGN */
