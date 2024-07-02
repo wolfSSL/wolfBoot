@@ -280,8 +280,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* mark update as new to set magic for correct flags read */
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
-    /* erase swap */
-    wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
     return 0;
 }
 
@@ -513,14 +511,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             (flag == SECT_FLAG_NEW))
     {
         if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
-            ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH) ||
-            update.fw_size > MAX_UPDATE_SIZE - 1 || !update.hdr_ok ||
-            (wolfBoot_verify_integrity(&update) < 0)
-            || (wolfBoot_verify_authenticity(&update) < 0)) {
-                return -1;
-            }
-#if 0
-        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
                 ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
             return -1;
         if (update.fw_size > MAX_UPDATE_SIZE - 1)
@@ -529,7 +519,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             return -1;
         }
-#endif
         PART_SANITY_CHECK(&update);
 #ifndef ALLOW_DOWNGRADE
         if ( ((fallback_allowed==1) &&
@@ -569,7 +558,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * original direction of the update once interrupted */
         else if (inverse == 0 && fallback_allowed == 1) {
             wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
-            //wolfBoot_update_trigger();
         }
 
         return wolfBoot_delta_update(&boot, &update, &swap, inverse,
