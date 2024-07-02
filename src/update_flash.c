@@ -223,7 +223,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(swap, PART_SWAP);
     wolfBoot_get_partition_state(PART_UPDATE, &st);
     /* read from tmpBootPos */
-    memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos), sizeof(tmpBuffer));
+    memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos),
+        sizeof(tmpBuffer));
     /* check for TRAIL */
 #ifdef EXT_ENCRYPTED
     if (*(uint32_t*)(tmpBuffer + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) ==
@@ -269,9 +270,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
     /* write the original contents of tmpBootPos back */
     if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE)
         wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
-    else {
+    else
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
-    }
     /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
     /* erase the last sector(s) of update */

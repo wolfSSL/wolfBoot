@@ -746,54 +746,16 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
  * @brief Update trigger function.
  *
  * This function updates the boot partition state to "IMG_STATE_UPDATING".
- * If the FLAGS_HOME macro is defined, it erases the last sector of the boot
- * partition before updating the partition state. It also checks FLAGS_UPDATE_EXT
- * and calls the appropriate flash unlock and lock functions before
- * updating the partition state.
  */
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
-    uintptr_t lastSector = PART_UPDATE_ENDFLAGS -
-        (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE);
-#ifdef NVM_FLASH_WRITEONCE
-    uint8_t selSec = 0;
-#endif
-
-    /* if PART_UPDATE_ENDFLAGS stradles a sector, (all non FLAGS_HOME builds)
-     * align it to the correct sector */
-    if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE == 0)
-        lastSector -= WOLFBOOT_SECTOR_SIZE;
 
     /* erase the sector flags */
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_unlock();
     } else {
         hal_flash_unlock();
-    }
-
-    /* NVM_FLASH_WRITEONCE needs erased flags since it selects the fresh
-     * partition based on how many flags are non-erased
-     * FLAGS_INVERT needs erased flags because the bin-assemble's fill byte may
-     * not match what's in wolfBoot */
-    if (FLAGS_UPDATE_EXT()) {
-        ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
-    } else {
-#ifndef NVM_FLASH_WRITEONCE
-        hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
-#else
-        selSec = nvm_select_fresh_sector(PART_UPDATE);
-        XMEMCPY(NVM_CACHE,
-            (uint8_t*)(lastSector - WOLFBOOT_SECTOR_SIZE * selSec),
-            WOLFBOOT_SECTOR_SIZE);
-        XMEMSET(NVM_CACHE, FLASH_BYTE_ERASED, SECTOR_FLAGS_SIZE);
-        /* write to the non selected sector */
-        hal_flash_write(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec, NVM_CACHE,
-            WOLFBOOT_SECTOR_SIZE);
-        /* erase the previously selected sector */
-        hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
-            WOLFBOOT_SECTOR_SIZE);
-#endif
     }
 
     wolfBoot_set_partition_state(PART_UPDATE, st);
