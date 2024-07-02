@@ -614,9 +614,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
             /* get total size */
             total_size = wolfBoot_get_total_size(&boot, &update);
-
-            if (total_size <= IMAGE_HEADER_SIZE)
-                return -1;
         }
     }
     /* erase to the last sector, writeonce has 2 sectors */
@@ -795,24 +792,25 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
-    /* resume the final erase in case the power failed before it finished */
-    resumedFinalErase = wolfBoot_swap_and_final_erase(1);
-
     bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
+
+    /* resume the final erase in case the power failed before it finished */
+    resumedFinalErase = wolfBoot_swap_and_final_erase(1);
 
     /* Check if the BOOT partition is still in TESTING,
      * to trigger fallback.
      */
-    if (resumedFinalErase != 0 && bootRet == 0 &&
-        bootState == IMG_STATE_TESTING) {
-        wolfBoot_update(1);
-    /* Check for new updates in the UPDATE partition or if we were
-     * interrupted during the flags setting */
-    }
-    else if (updateRet == 0 && updateState == IMG_STATE_UPDATING) {
-        /* Check for new updates in the UPDATE partition */
-        wolfBoot_update(0);
+    if (resumedFinalErase != 0) {
+        if (bootRet == 0 && bootState == IMG_STATE_TESTING) {
+            wolfBoot_update(1);
+        /* Check for new updates in the UPDATE partition or if we were
+         * interrupted during the flags setting */
+        }
+        else if (updateRet == 0 && updateState == IMG_STATE_UPDATING) {
+            /* Check for new updates in the UPDATE partition */
+            wolfBoot_update(0);
+        }
     }
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0)
             || (wolfBoot_verify_integrity(&boot) < 0)
