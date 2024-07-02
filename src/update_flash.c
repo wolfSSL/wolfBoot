@@ -568,8 +568,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * we need to set to UPDATING, otherwise there's no way to tell the
          * original direction of the update once interrupted */
         else if (inverse == 0 && fallback_allowed == 1) {
-            //wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
-            wolfBoot_update_trigger();
+            wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+            //wolfBoot_update_trigger();
         }
 
         return wolfBoot_delta_update(&boot, &update, &swap, inverse,
