@@ -831,6 +831,8 @@ void hal_prepare_boot(void)
 
 #endif /* __WOLFBOOT */
 
+void DCACHE_InvalidateByRange(uint32_t address, uint32_t size_byte);
+
 static int hal_flash_init(void)
 {
 #ifdef USE_GET_CONFIG
@@ -856,6 +858,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     status_t status;
     uint32_t wbuf[CONFIG_FLASH_PAGE_SIZE / sizeof(uint32_t)];
     int i;
+    asm volatile("cpsid i");
     hal_flash_init(); /* make sure g_bootloaderTree is set */
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("flash write: addr 0x%x, len %d\n",
@@ -865,9 +868,14 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
+        DCACHE_InvalidateByRange(address + i, sizeof(wbuf));
         if (status != kStatus_Success)
+        {
+            asm volatile("cpsie i");
             return -1;
+        }
     }
+    asm volatile("cpsie i");
     return 0;
 }
 
@@ -887,8 +895,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     wolfBoot_printf("flash erase: addr 0x%x, len %d\n",
         address - FLASH_BASE, len);
 #endif
+    asm volatile("cpsid i");
     status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
+    DCACHE_InvalidateByRange(address, len);
+    asm volatile("cpsie i");
     if (status != kStatus_Success)
         return -1;
     return 0;
