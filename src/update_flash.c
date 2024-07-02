@@ -475,7 +475,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint8_t flag, st;
     struct wolfBoot_image boot, update, swap;
     uint16_t update_type;
-    uint32_t fw_size;
 #if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
@@ -604,13 +603,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * because the locations are correct but the metadata is now swapped
          * also recalculate total_size since it could be invalid */
         if (sector == 1) {
-            wolfBoot_open_image(&boot, PART_BOOT);
-            wolfBoot_open_image(&update, PART_UPDATE);
-
-            /* swap the fw_size since they're now swapped */
-            fw_size = boot.fw_size;
-            boot.fw_size = update.fw_size;
-            update.fw_size = fw_size;
+            wolfBoot_open_image(&boot, PART_UPDATE);
+            wolfBoot_open_image(&update, PART_BOOT);
 
             /* get total size */
             total_size = wolfBoot_get_total_size(&boot, &update);
