@@ -576,32 +576,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * If something goes wrong, the operation will be resumed upon reboot.
      */
     while ((sector * sector_size) < total_size) {
-#if 0
-        if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
-           flag = SECT_FLAG_SWAPPING;
-           wolfBoot_copy_sector(&update, &swap, sector);
-           if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-               wolfBoot_set_update_sector_flag(sector, flag);
-        }
-        if (flag == SECT_FLAG_SWAPPING) {
-            uint32_t size = total_size - (sector * sector_size);
-            if (size > sector_size)
-                size = sector_size;
-            flag = SECT_FLAG_BACKUP;
-            wolfBoot_copy_sector(&boot, &update, sector);
-            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-                wolfBoot_set_update_sector_flag(sector, flag);
-        }
-        if (flag == SECT_FLAG_BACKUP) {
-            uint32_t size = total_size - (sector * sector_size);
-            if (size > sector_size)
-                size = sector_size;
-            flag = SECT_FLAG_UPDATED;
-            wolfBoot_copy_sector(&swap, &boot, sector);
-            if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
-                wolfBoot_set_update_sector_flag(sector, flag);
-        }
-#endif
         flag = SECT_FLAG_NEW;
         wolfBoot_get_update_sector_flag(sector, &flag);
         switch (flag) {

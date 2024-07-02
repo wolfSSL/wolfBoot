@@ -350,12 +350,8 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
     /* Calculate write address */
     addr_write = addr_align - ((!nvm_cached_sector) * NVM_CACHE_SIZE);
 
-    /* Ensure that the destination was erased, or force erase */
-    if (*((uint32_t *)(addr_write + NVM_CACHE_SIZE - sizeof(uint32_t)))
-            != FLASH_WORD_ERASED)
-    {
-        hal_flash_erase(addr_write, NVM_CACHE_SIZE);
-    }
+    /* Ensure that the destination was erased */
+    hal_flash_erase(addr_write, NVM_CACHE_SIZE);
 #if FLASHBUFFER_SIZE != WOLFBOOT_SECTOR_SIZE
     addr_off = 0;
     while ((addr_off < WOLFBOOT_SECTOR_SIZE) && (ret == 0)) {
@@ -718,17 +714,21 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
     uint32_t address = 0;
     int size = 0;
 
-    if (part == PART_BOOT) {
-        address = (uint32_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        size = WOLFBOOT_PARTITION_SIZE;
-    }
-    if (part == PART_UPDATE) {
-        address = (uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        size = WOLFBOOT_PARTITION_SIZE;
-    }
-    if (part == PART_SWAP) {
-        address = (uint32_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
-        size = WOLFBOOT_SECTOR_SIZE;
+    switch (part) {
+        case PART_BOOT:
+            address = (uint32_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+            size = WOLFBOOT_PARTITION_SIZE;
+            break;
+        case PART_UPDATE:
+            address = (uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+            size = WOLFBOOT_PARTITION_SIZE;
+            break;
+        case PART_SWAP:
+            address = (uint32_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+            size = WOLFBOOT_SECTOR_SIZE;
+            break;
+        default:
+            break;
     }
 
     if (size > 0) {
@@ -860,13 +860,9 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
             unit_dbg("Explicit end of options reached\n");
             break;
         }
-        if (*p == HDR_PADDING) {
-            /* Padding byte (skip one position) */
-            p++;
-            continue;
-        }
         /* Sanity check to prevent dereferencing unaligned half-words */
-        if ((((size_t)p) & 0x01) != 0) {
+        if (*p == HDR_PADDING || (((size_t)p) & 0x01) != 0) {
+            /* Padding byte (skip one position) */
             p++;
             continue;
         }
