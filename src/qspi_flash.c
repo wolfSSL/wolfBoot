@@ -144,8 +144,8 @@
 /* forward declarations */
 static int qspi_wait_ready(void);
 static int qspi_status(uint8_t* status);
-#ifdef TEST_FLASH
-static int test_flash(void);
+#ifdef TEST_EXT_FLASH
+static int test_ext_flash(void);
 #endif
 
 static inline int qspi_command_simple(uint8_t fmode, uint8_t cmd,
@@ -173,8 +173,8 @@ static int qspi_flash_read_id(uint8_t* id, uint32_t idSz)
     ret = qspi_command_simple(QSPI_MODE_READ, READ_ID_CMD, data, 3);
 
 #ifdef DEBUG_QSPI
-    wolfBoot_printf("Flash ID (ret %d): 0x%x\n",
-        ret, *((uint32_t*)data));
+    wolfBoot_printf("Flash ID (ret %d): 0x%02x 0x%02x 0x%02x\n",
+        ret, data[0], data[1], data[2]);
 #endif
 
     /* optionally return id data */
@@ -352,8 +352,8 @@ uint16_t spi_flash_probe(void)
     qspi_enter_4byte_addr();
 #endif
 
-#ifdef TEST_FLASH
-    test_flash();
+#ifdef TEST_EXT_FLASH
+    test_ext_flash();
 #endif
     return 0;
 }
@@ -477,11 +477,14 @@ void spi_flash_release(void)
 #endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
 
-#ifdef TEST_FLASH
-/* Start Address for test - 2MB */
-#define TEST_ADDRESS (2 * 1024 * 1024)
+#ifdef TEST_EXT_FLASH
 
-static int test_flash(void)
+#ifndef TEST_EXT_ADDRESS
+    /* Start Address for test - 2MB */
+    #define TEST_EXT_ADDRESS (2 * 1024 * 1024)
+#endif
+
+static int test_ext_flash(void)
 {
     int ret;
     uint32_t i;
@@ -490,20 +493,20 @@ static int test_flash(void)
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
-    ret = ext_flash_erase(TEST_ADDRESS, FLASH_SECTOR_SIZE);
+    ret = ext_flash_erase(TEST_EXT_ADDRESS, FLASH_SECTOR_SIZE);
     wolfBoot_printf("Sector Erase: Ret %d\n", ret);
 
     /* Write Page */
     for (i=0; i<sizeof(pageData); i++) {
         pageData[i] = (i & 0xff);
     }
-    ret = ext_flash_write(TEST_ADDRESS, pageData, sizeof(pageData));
+    ret = ext_flash_write(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
     wolfBoot_printf("Page Write: Ret %d\n", ret);
 #endif /* !TEST_FLASH_READONLY */
 
     /* Read page */
     memset(pageData, 0, sizeof(pageData));
-    ret = ext_flash_read(TEST_ADDRESS, pageData, sizeof(pageData));
+    ret = ext_flash_read(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
     wolfBoot_printf("Page Read: Ret %d\n", ret);
 
     wolfBoot_printf("Checking...\n");
@@ -521,4 +524,4 @@ static int test_flash(void)
     wolfBoot_printf("Flash Test Passed\n");
     return ret;
 }
-#endif /* TEST_FLASH */
+#endif /* TEST_EXT_FLASH */

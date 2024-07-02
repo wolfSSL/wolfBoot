@@ -2,7 +2,8 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
+
+This example for `Renesas RX72N` demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
 securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
@@ -48,19 +49,21 @@ Flash Allocation:
 0xffdf8100: Update  partition (Application image) /* When it uses IMAGE_HEADER_SIZE 256, e.g. ED25519, EC256, EC384 or EC512 */
 0xffdf8200: Update  partition (Application image) /* When it uses IMAGE_HEADER_SIZE 512, e.g. RSA2048, RSA3072 */
 0xfffe0000: Swap sector
-
 ```
 
 Note : Depending on IMAGE_HEADER_SIZE, it needs to change the address of Power Reset vector by Linker section.
 Application default is set to 0xffc10200. It means that you need to change it when you use 256 IMAGE_HEADER_SIZE.
 
+To resolve the "RPFRAM" section not assigned / overflow follow the RX Family Flash Module guide section 5.3.1.1 or 5.3.12 for adding that section.
+https://www.renesas.com/us/en/document/apn/rx-family-flash-module-using-firmware-integration-technology
+
 
 ## 3. How to build and use
 It has key tools running under the host environment such as Linux, Windows or MacOS.
-For comiling the tools, follow the instruction described in the user manual.
+For compiling the tools, follow the instruction described in the user manual.
 
 It demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
-cerurely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
+securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
@@ -72,14 +75,14 @@ board for the debugger and flash programmer.
 
 ```
 $ cd <wolfBoot>
-$ export PATH:$PATH:<wolfBoot>/tools/keytools
-$ keygen --ecc256 -g ./pri-ecc256.der
+$ make keytools
+$ ./tools/keytools/keygen --ecc256 -g ./pri-ecc256.der
 ```
 
 This generates a pair of private and public keys with -g option. The private key is stored
 in the specified file. The public key is stored in a key store as a C source code
 in "src/keystore.c" soo that it can be compiled and linked with wolfBoot.
-If you have an existing key pair, you can use -i option to import the pablic
+If you have an existing key pair, you can use -i option to import the public
 key to the store.
 
 You can specify various signature algorithms such as
@@ -94,6 +97,8 @@ Open project under IDE/Renesas/e2studio/RX72N/wolfBoot with e2Studio, and build 
 
 Project properties are preset for the demo.
 
+Open the wolfBoot.scfg from e2Studio and allow it to download/install the required FIT modules for the RX72N and `r_flash_rx`.
+
 ```
 Smart Configurator
 Flash Driver: r_flash_rx
@@ -104,17 +109,15 @@ Include Paths
 ../../../../../../lib/wolfssl/ : <wolfBoot>/lib/wolfssl
 
 Pre-Include
-../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settigs.h
+../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settings.h
 ../../include/target.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/target.h
 
 Pre-defined Pre-processor Macro
 __WOLFBOOT
-WOLFBOOT_PARTIION_INFO
 PRINTF_ENABLED
-
 ```
 
-WOLFBOOT_PARTION_INFO, PRINTF_ENABLED are for debug information about partitions.
+`PRINTF_ENABLED` is for debug information about partitions.
 Eliminate them for operational use.
 
 
@@ -135,15 +138,18 @@ Include Paths
 ../../../../../../include : <wolfBoot>/include
 
 Pre-Include
-../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settigs.h
+../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settings.h
 ../../include/target.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/target.h
 
 Code Origin and entry point (PResetPRG) is "0xffc10200" (See Section Viewer of Linker Section).
 ```
 
-app_RenesasRx01.x in ELF is generated under HardwareDebug. You can derive bair binary file
-(app_RenesasRx01.bin) by rx-elf-objcopy.exe command as follows. -R are for eliminate unnecessary
-secrions.
+`app_RenesasRx01.x` in ELF is generated under HardwareDebug (`IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug`).
+
+Build tools are typically located here:
+`C:\ProgramData\GCC for Renesas RX 8.3.0.202305-GNURX-ELF\rx-elf\rx-elf\bin` or `/c/ProgramData/GCC\ for\ Renesas\ RX\ 8.3.0.202305-GNURX-ELF/rx-elf/rx-elf/bin`
+
+You can derive the binary file `app_RenesasRx01.bin` by using `rx-elf-objcopy.exe` as follows:
 
 ```
 $ rx-elf-objcopy.exe -O binary\
@@ -152,15 +158,17 @@ $ rx-elf-objcopy.exe -O binary\
   -R '$ADDR_C_FE7F5D70' -R EXCEPTVECT -R RESETVECT app_RenesasRx01.x app_RenesasRx01.bin
 ```
 
+Note `-R` is for eliminate unnecessary sections.
+
 ### 3-5 Generate Signature for app V1
 
-The `sign` command under tools/keytools generates a signature for the binary with a specified version.
+The sign tool (`tools/keytools/sign`) generates a signature for the binary with a specified version.
 It generates a file containing a partition header and application image. The partition header
 includes the generated signature and other control fields. Output file name is made up from
-the input file name and version like app_RenesasRx01_v1.0_signed.bin.
+the input file name and version like `app_RenesasRx01_v1.0_signed.bin`.
 
 ```
-$ sign --ecc256 app_RenesasRx01.bin ../../../../../pri-ecc256.der 1.0 ecc256.der 1.0
+$ ./tools/keytools/sign --ecc256 IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug/app_RenesasRx01.bin pri-ecc256.der 1.0 ecc256.der 1.0
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 10B0000
 Update type:          Firmware
@@ -177,11 +185,11 @@ Output image(s) successfully created.
 
 ### 3-6 Download the app V1
 
-You can convert the binary file to hex format and download it to the board by Flash Programmer.
+You can convert the binary file to hex format and download it to the board by Renesas Flash Programmer tool. Use E2 emulator lite and FINE interface.
 The partition starts at "0xffc10000".
 
 ```
-$ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc10000 app_RenesasRx01_v1.0_signed.bin app_RenesasRx01_v1.0_signed.hex
+$ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc10000 IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug/app_RenesasRx01_v1.0_signed.bin IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug/app_RenesasRx01_v1.0_signed.hex
 ```
 
 
@@ -236,7 +244,7 @@ You can see the state is Success("00").
 
 ### 3-8 Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0xffdf8000".
+Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0xffdf8000".
 You can download it by the flash programmer.
 
 

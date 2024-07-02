@@ -7,9 +7,8 @@ securely updated to v2. Both versions behave the same except displaying its vers
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer. It is only available RSA with Renesas TSIP now.
-
 
 ## 2. Components and Tools
 
@@ -34,7 +33,7 @@ FIT Module
 |r_tsip_rx|v1.18.J|Library or Source Version. Please contact Renesas to get source code version.|
 
 
-Flash Allocation(TSIP Library version use):
+Flash Allocation (TSIP Library version use):
 ```
 +---------------------------+------------------------+-----+
 | B |H|                     |H|                      |     |
@@ -48,7 +47,6 @@ Flash Allocation(TSIP Library version use):
 0xffe20000: Update  partition (Header)
 0xffe20200: Update  partition (Application image)
 0xfffd0000: Swap sector
-
 ```
 
 Note : Depending on IMAGE_HEADER_SIZE, it needs to change the address of Power Reset vector by Linker section.
@@ -77,14 +75,14 @@ Note : By enabling `WOLFBOOT_RENESAS_TSIP_SRCVERSION`, this example uses the all
 
 ## 3. How to build and use
 It has key tools running under the host environment such as Linux, Windows or MacOS.
-For comiling the tools, follow the instruction described in the user manual.
+For compiling the tools, follow the instruction described in the user manual.
 
 It demonstrates simple secure firmware update by wolfBoot. A sample application v1 is
-cerurely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
+securely updated to v2. Both versions behave the same except displaying its version of v1 or v2.
 They are compiled by e2Studio and running on the target board.
 
 In this demo, you may download two versions of application binary file by Renesas Flash Programmer.
-You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
+You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the
 board for the debugger and flash programmer.
 
 
@@ -93,8 +91,7 @@ board for the debugger and flash programmer.
 ```
 $ cd <wolfBoot>
 $ make keytools RENESAS_KEY=2
-$ export PATH:$PATH:<wolfBoot>/tools/keytools
-$ keygen --rsa2048 -g ./pri-rsa2048.der
+$ ./tools/keytools/keygen --rsa2048 -g ./pri-rsa2048.der
 Keytype: RSA2048
 Gen ./pri-rsa2048.der
 Generating key (type: RSA2048)
@@ -105,10 +102,10 @@ Public key slot:       0
 Done.
 ```
 
-This generates a pair of private and public keys with -g option. The private key is stored 
-in the specified file. The public key is stored in a key store as a C source code 
+This generates a pair of private and public keys with -g option. The private key is stored
+in the specified file. The public key is stored in a key store as a C source code
 in "src/keystore.c" soo that it can be compiled and linked with wolfBoot.
-If you have an existing key pair, you can use -i option to import the pablic
+If you have an existing key pair, you can use -i option to import the public
 key to the store.
 
 ### 3-2 Compile wolfBoot
@@ -127,19 +124,19 @@ Include Paths
 ../../../../../../lib/wolfssl/ : <wolfBoot>/lib/wolfssl
 
 Pre-Include
-../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settigs.h
+../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settings.h
 ../../include/target.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/target.h
 ```
 
 To enable TSIP use, it needs commenting out `WOLFBOOT_RENESAS_TSIP`.
 To enable TSIP Source code version, please comment out `WOLFBOOT_RENESAS_TSIP_SRCVERSION`.
 
-`WOLFBOOT_PARTION_INFO` and `PRINTF_ENABLED` are for debug information about partitions.
+`PRINTF_ENABLED` are for debug information about partitions.
 Eliminate them for operational use.
 
 When you use TSIP source code version, taking the following two steps  optimize TSIP driver size.
 
-* Set unnecessary ciphers to "No using XXXX" by Smart Configuration. Only select 
+* Set unnecessary ciphers to "No using XXXX" by Smart Configuration. Only select
 * Check "Deletes variables/functions that are not referenced)" Liker optimization option, [Project]->[Properties]->[C/C++ Build]->[Settings]->[Linker]->[Optimization]
 
 
@@ -160,7 +157,7 @@ Include Paths
 ../../../../../../include : <wolfBoot>/include
 
 Pre-Include
-../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settigs.h
+../../include/user_settings.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/user_settings.h
 ../../include/target.h : <wolfBoot>/IDE/Renesas/e2studio/RX72N/include/target.h
 
 Code Origin and entry point (PResetPRG) is "0xffc70200" (See Section Viewer of Linker Section).
@@ -168,9 +165,9 @@ Code Origin and entry point (PResetPRG) is "0xffc10200" (TSIP source code versio
 You would need updating section settings depending on either TSIP version use.
 ```
 
-app_RenesasRx01.x in ELF is gnerated under HardwareDebug. You can derive bair binary file 
+app_RenesasRx01.x in ELF is generated under HardwareDebug. You can derive the binary file
 (app_RenesasRx01.bin) by rx-elf-objcopy.exe command as follows. -R are for eliminate unnecessary
-secrions.
+sections.
 
 ```
 $ rx-elf-objcopy.exe -O binary\
@@ -182,7 +179,7 @@ $ rx-elf-objcopy.exe -O binary\
 ### 3-3 Generate Encrypted Key for TSIP
 
 TSIP requires to have a encrypted public key for sign verification to generate its own Renesas TSIP Key.
-This example supports RSA2048. 
+This example supports RSA2048.
 
 You can generate a RSA key pair by wolfBoot "keygen" command along with Renesas Security Key Management Tool "skmt".
 "skmt" command creates the encrypted Renesas key, generating Motorola hex file for writing it to flash memory and also generates a c header and source file for an application program with TSIP.
@@ -193,22 +190,23 @@ To generate a RSA key for sign and verify, you can follow the following commands
 $ export PATH:$PATH:<wolfBoot>/tools/keytools
 $ export PATH:$PATH:<skmt>
 $ cd <wolfBoot>
-$ keygen --rsa2048 -g ./rsa-pri2048.der
-$ openssl rsa -in rsa-pri2048.der -pubout -out rsa-pub2048.pem
+$ keygen --rsa2048 -g ./pri-rsa2048.der
+$ openssl rsa -inform der -in ./pri-rsa2048.der -pubout -out ./pub-rsa2048.pem
 ```
 
 Generate a c header and source file from PEM file :
 ```
-$ skmt.exe /genkey /ufpk file=./sample.key /wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public /output key_data.c /filetype csource /keyname rsa2048_pub
+$ export PATH="$PATH:C:\Renesas\SecurityKeyManagementTool\cli"
+$ skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public -output key_data.c -filetype csource -keyname enc_pub_key
 ```
 
-The value of option `/keyname` becomes structure name and macro definition defined in key_data.h.  Therefore, please specify `rsa2048_pub` like above unless there is some particular reason.
- 
+The value of option `-keyname` becomes structure name and macro definition defined in key_data.h. Therefore, please specify `enc_pub_key` like above unless there is some particular reason.
+
 Copy a generated c header file, which is `key_data.h` to `<wolfBoot>/include/` folder
 
 Generate Motorola hex file to write it to flash memory from PEM file :
 ```
-$ skmt.exe /genkey /ufpk file=./sample.key /wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public /output rsa_pub2048.mot /filetype "mot" /address "FFFF0000"
+$ skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-rsa2048.pem -mcu RX-TSIP -keytype RSA-2048-public -output rsa_pub2048.mot -filetype "mot" -address "FFFF0000"
 ```
 The generated `mot` key is written to `0xFFFF0000` address. The flash memory address is set by macro, which is `RENESAS_TSIP_INSTALLEDKEY_ADDR` in `user_settings.h`
 After generating "mot" format key, you can download it to flash data area by using Renesas flash programmer.
@@ -248,18 +246,18 @@ The partition starts at "0xffc70000"(TSIP library version) or "0xffc10000"(TSIP 
 ```
 For TSIP Library version
 $ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc70000 app_RenesasRx01_v1.0_signed.bin app_RenesasRx01_v1.0_signed.hex
-or 
+or
 For TSIP Source version
 $ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffc10000 app_RenesasRx01_v1.0_signed.bin app_RenesasRx01_v1.0_signed.hex
 ```
 
 
-### 3-7 Execute inital boot
+### 3-7 Execute initial boot
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
 If the boot program succeeds integrity and authenticity check, it initiate the
-application V1. 
+application V1.
 
 
 ```
@@ -285,9 +283,9 @@ Hit any key to call wolfBoot_success the firmware.
 ```
 
 After hitting any key, the application calls wolfBoot_success() to set boot partition
-state and wait for any key again. 
+state and wait for any key again.
 
-If you re-start the boot program at this moment, 
+If you re-start the boot program at this moment,
 after checking the integrity and authenticity, it jumps to the application.
 You can see the state is Success("00").
 
@@ -309,7 +307,7 @@ Hit any key to update the firmware.
 
 ### 3-8 Generate Signed app V2 and download it
 
-Similar to V1, you can signe and generate a binary of V2. The update partition starts at "0xffdf0000".
+Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0xffdf0000".
 You can download it by the flash programmer.
 
 
@@ -327,7 +325,7 @@ $ rx-elf-objcopy.exe -I binary -O srec --change-addresses=0xffdf0000 app_Renesas
 
 Now the image is downloaded but note that the partition status is not changed yet.
 When it is re-boot, it checks integrity and authenticity of V1 and initiate V1 as in
-step 6. 
+step 6.
 
 ```
 | -------------------------------------------------------------------------------- |
@@ -340,7 +338,7 @@ Firmware Update is triggered
 ```
 
 After you see the message, hit any key so that the application calls
-wolfBoot_update_trigger() whcih changes the partition status and triggers
+wolfBoot_update_trigger(), which changes the partition status and triggers
 updating the firmware.
 
 Since this is just a trigger, the application can continue the process.

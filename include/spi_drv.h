@@ -58,6 +58,10 @@
 #include "hal/spi/spi_drv_nxp.h"
 #endif
 
+#if defined(WOLFBOOT_ARCH_RENESAS_RX)
+#include "hal/spi/spi_drv_renesas_rx.h"
+#endif
+
 void spi_init(int polarity, int phase);
 void spi_release(void);
 
@@ -92,6 +96,13 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     uint8_t* data, uint32_t dataSz, uint32_t dataMode
 );
 #endif /* QSPI_FLASH || OCTOSPI_FLASH */
+
+#ifndef SPI_CS_FLASH
+#define SPI_CS_FLASH    0
+#endif
+#ifndef SPI_CS_PIO_BASE
+#define SPI_CS_PIO_BASE 0UL
+#endif
 
 #endif /* SPI_FLASH || WOLFBOOT_TPM || QSPI_FLASH || OCTOSPI_FLASH */
 
