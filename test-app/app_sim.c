@@ -52,6 +52,9 @@ int do_cmd(const char *cmd)
     if (strcmp(cmd, "powerfail") == 0) {
         return 1;
     }
+    if (strcmp(cmd, "emergency") == 0) {
+        return 1;
+    }
     if (strcmp(cmd, "get_version") == 0) {
         printf("%d\n", wolfBoot_current_firmware_version());
         return 0;
