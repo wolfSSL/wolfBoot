@@ -221,9 +221,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(update, PART_UPDATE);
     /* open swap */
     wolfBoot_open_image(swap, PART_SWAP);
-    if (wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) {
-        return -1;
-    }
+    wolfBoot_get_partition_state(PART_UPDATE, &st);
     /* read from tmpBootPos */
     memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos), sizeof(tmpBuffer));
     /* check for TRAIL */
