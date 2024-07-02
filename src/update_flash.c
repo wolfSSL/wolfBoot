@@ -454,7 +454,7 @@ out:
     #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
 
-static inline int wolfBoot_get_total_size(struct wolfBoot_image* boot,
+static int wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
     uint32_t total_size = 0;
