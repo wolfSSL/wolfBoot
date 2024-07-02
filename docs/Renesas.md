@@ -17,7 +17,7 @@ Platforms Supported:
 All of the Renesas examples support using e2Studio.
 The Renesas RX parts support using wolfBoot Makefile's with the rx-elf-gcc cross-compiler and example .config files.
 
-### RX TSIP
+### Security Key Management Tool (SKMT) Key Wrapping
 
 1) Setup a Renesas KeyWrap account and do the PGP key exchange.
 https://dlm.renesas.com/keywrap
@@ -34,12 +34,23 @@ Use GPG4Win and the Sign/Encrypt option. Sign with your own GPG key and encrypt 
 It will use the Hidden Root Key (HRK) that both Renesas and the RX TSIP have pre-provisioned from Renesas Factory.
 Result is `sample.key_enc.key`. Example: `00000001 6CCB9A1C 8AA58883 B1CB02DE 6C37DA60 54FB94E2 06EAE720 4D9CCF4C 6EEB288C`
 
-5) Create wolfBoot signing key
+### RX TSIP
 
-```
+1) Build key tools for Renesas
+
+```sh
 # Build keytools for Renesas RX (TSIP)
 $ make keytools RENESAS_KEY=2
+```
 
+2) wolfBoot public key (create or import existing)
+
+Instructions below for ECDSA P384 (SECP384R1).
+For SECP256R1 replace "ecc384" with "ecc256" and "secp384r1" with "secp256r1".
+
+Create new signing key:
+
+```sh
 # Create new signing key
 $ ./tools/keytools/keygen --ecc384 -g ./pri-ecc384.der
 Keytype: ECC384
@@ -54,8 +65,11 @@ Done.
 $ openssl ec -inform der -in ./pri-ecc384.der -pubout -out ./pub-ecc384.pem
 ```
 
-OR Import Public Key
-```
+OR
+
+Import Public Key:
+
+```sh
 # Export public portion of key as DER
 $ openssl ec -inform der -in ./pri-ecc384.der -pubout -outform der -out ./pub-ecc384.der
 
@@ -69,13 +83,13 @@ Public key slot:       0
 Done.
 ```
 
-6) Create wrapped public key (code files)
+3) Create wrapped public key (code files)
 
 Use the Security Key Management Tool (SKMT) command line tool (CLI) to create a wrapped public key.
 
 This will use the user encryption key to wrap the public key and output key_data.c / key_data.h files.
 
-```
+```sh
 $ C:\Renesas\SecurityKeyManagementTool\cli\skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-ecc384.pem -mcu RX-TSIP -keytype secp384r1-public -output include/key_data.c -filetype csource -keyname enc_pub_key
 RX-TSIP -keytype secp384r1-public -output include/key_data.c -filetype csource -keyname enc_pub_key
 Output File: include\key_data.h
@@ -86,11 +100,11 @@ IV: 6C296A040EEF5EDD687E8D3D98D146D0
 Encrypted key: 5DD8D7E59E6AC85AE340BBA60AA8F8BE56C4C1FE02340C49EB8F36DA79B8D6640961FE9EAECDD6BADF083C5B6060C1D0309D28EFA25946F431979B9F9D21E77BDC5B1CC7165DE2F4AE51E418746260F518ED0C328BD3020DEC9B774DC00270B0CFBBE3DD738FDF715342CFBF2D461239
 ```
 
-7) Create wrapped public key (flash file)
+4) Create wrapped public key (flash file)
 
 Generate Motorola HEX file to write wrapped key to flash.
 
-```
+```sh
 $ C:\Renesas\SecurityKeyManagementTool\cli\skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./pub-ecc384.pem -mcu RX-TSIP -keytype secp384r1-public -output pub-ecc384.srec -filetype "mot" -address FFFF0000
 Output File: Y:\GitHub\wolfboot\pub-ecc384.srec
 UFPK: B94A2B961C75510174F0C967ECFC20B377C7FB256DB627B1BFFADEE05EE98AC4
@@ -121,16 +135,16 @@ The default flash memory address is `0xFFFF0000`, but it can be changed. The fol
 a) The `user_settings.h` build macro `RENESAS_TSIP_INSTALLEDKEY_ADDR`
 b) The linker script `.rot` section (example `hal/rx72n.ld` or `hal/rx65n.ld`).
 
-8) Edit .config `PKA?=1`.
+5) Edit .config `PKA?=1`.
 
-9) Rebuild wolfBoot. `make clean && make wolfboot.srec`
+6) Rebuild wolfBoot. `make clean && make wolfboot.srec`
 
-10) Sign application
+7) Sign application
 
 Sign application using the created private key above `pri-ecc384.der`:
 
-```
-./tools/keytools/sign --ecc384 --sha256 test-app/image.bin pri-ecc384.der 1
+```sh
+$ ./tools/keytools/sign --ecc384 --sha256 test-app/image.bin pri-ecc384.der 1
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 2010000
 Update type:          Firmware
@@ -146,6 +160,14 @@ Signing the digest...
 Output image(s) successfully created.
 ```
 
-11) Flash wolfboot.srec, pub-ecc384.srec and signed application binary
+8) Flash wolfboot.srec, pub-ecc384.srec and signed application binary
 
 Download files to flash using Renesas flash programmer.
+
+
+#### RX TSIP Benchmarks
+
+| Algorithm         | RX TSIP  | Debug    | Release (-Os) | Release (-O2) |
+| ----------------- | -------- | -------- | ------------- | ------------- |
+| ECDSA Verify P384 | 17.26 ms | 1570 ms  | 441 ms        | 313 ms        |
+| ECDSA Verify P256 |  2.73 ms |  469 ms  | 135 ms        | 107 ms        |
