@@ -225,8 +225,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
         return -1;
     }
     /* read from tmpBootPos */
-    memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos),
-        sizeof(tmpBuffer));
+    memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos), sizeof(tmpBuffer));
     /* check for TRAIL */
 #ifdef EXT_ENCRYPTED
     if (*(uint32_t*)(tmpBuffer + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) ==
@@ -258,7 +257,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
         *(uint32_t*)(tmpBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
             + ENCRYPT_NONCE_SIZE) = WOLFBOOT_MAGIC_TRAIL;
 #else
-        ((uint32_t*)tmpBuffer)[1] = WOLFBOOT_MAGIC_TRAIL;
+        ((uint32_t*)tmpBuffer)[0] = WOLFBOOT_MAGIC_TRAIL;
 #endif
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
