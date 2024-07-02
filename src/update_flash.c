@@ -604,8 +604,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * because the locations are correct but the metadata is now swapped
          * also recalculate total_size since it could be invalid */
         if (sector == 1) {
-            wolfBoot_open_image(&boot, PART_UPDATE);
-            wolfBoot_open_image(&update, PART_BOOT);
+            wolfBoot_open_image(&boot, PART_BOOT);
+            wolfBoot_open_image(&update, PART_UPDATE);
 
             /* swap the fw_size since they're now swapped */
             fw_size = boot.fw_size;
