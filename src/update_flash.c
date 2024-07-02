@@ -254,8 +254,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
 #endif
         /* write TRAIL, encryption key and iv if enabled to tmpBootPos*/
 #ifdef EXT_ENCRYPTED
-        *(uint32_t*)(tmpBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
-            + ENCRYPT_NONCE_SIZE) = WOLFBOOT_MAGIC_TRAIL;
+        *(uint32_t*)(tmpBuffer + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)
+            = WOLFBOOT_MAGIC_TRAIL;
 #else
         ((uint32_t*)tmpBuffer)[0] = WOLFBOOT_MAGIC_TRAIL;
 #endif
@@ -537,10 +537,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
         cur_v = wolfBoot_current_firmware_version();
-        /* if the current version is 0, the boot header had a corrupted write
-         * and the diffbase version will have the right version */
-        if (cur_v == 0)
-            cur_v = wolfBoot_get_diffbase_version(PART_UPDATE);
         up_v = wolfBoot_update_firmware_version();
         inverse = cur_v >= up_v;
 
