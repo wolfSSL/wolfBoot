@@ -199,14 +199,18 @@ static int wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
+    uint8_t st;
     int eraseLen = WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE
     /* need to erase the redundant sector too */
         * 2
 #endif
     ;
+    int swapDone = 0;
+    uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
+        WOLFBOOT_SECTOR_SIZE;
     /* final swap and erase flag is WOLFBOOT_MAGIC | WOLFBOOT_MAGIC_TRAIL */
-    uint8_t swapBuffer[sizeof(WOLFBOOT_MAGIC) + sizeof(WOLFBOOT_MAGIC_TRAIL)
+    uint8_t tmpBuffer[sizeof(WOLFBOOT_MAGIC) + sizeof(WOLFBOOT_MAGIC_TRAIL)
 #ifdef EXT_ENCRYPTED
         + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE
 #endif
@@ -217,59 +221,75 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(update, PART_UPDATE);
     /* open swap */
     wolfBoot_open_image(swap, PART_SWAP);
-    /* if resuming, check if final erase is in progress */
-    if (resume == 1) {
-        /* read swap and encryption key and iv if encryption is enabled */
-#ifdef EXT_FLASH
-        ext_flash_read((uintptr_t)(swap->hdr), (void *)swapBuffer,
-            sizeof(swapBuffer));
-#else
-        ((uint32_t*)swapBuffer)[0] = ((uint32_t*)swap->hdr)[0];
-        ((uint32_t*)swapBuffer)[1] = ((uint32_t*)swap->hdr)[1];
-#endif
-        /* check for MAGIC and TRAIL */
-#ifdef EXT_ENCRYPTED
-        if (((uint32_t*)swapBuffer)[0] != WOLFBOOT_MAGIC ||
-            *(uint32_t*)(swapBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
-            + ENCRYPT_NONCE_SIZE) != WOLFBOOT_MAGIC_TRAIL) {
-            return -1;
-        }
-#else
-        if (((uint32_t*)swapBuffer)[0] != WOLFBOOT_MAGIC ||
-            ((uint32_t*)swapBuffer)[1] != WOLFBOOT_MAGIC_TRAIL) {
-            return -1;
-        }
-#endif
+    if (wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) {
+        return -1;
     }
-    else {
-        /* erase swap */
-        wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
+    /* read from tmpBootPos */
+    memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos),
+        sizeof(tmpBuffer));
+    /* check for MAGIC and TRAIL */
+#ifdef EXT_ENCRYPTED
+    if (((uint32_t*)tmpBuffer)[0] == WOLFBOOT_MAGIC &&
+        *(uint32_t*)(tmpBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
+        + ENCRYPT_NONCE_SIZE) == WOLFBOOT_MAGIC_TRAIL) {
+        swapDone = 1;
+    }
+#else
+    if (((uint32_t*)tmpBuffer)[0] == WOLFBOOT_MAGIC ||
+        ((uint32_t*)tmpBuffer)[1] == WOLFBOOT_MAGIC_TRAIL) {
+        swapDone = 1;
+    }
+#endif
+    /* if resuming, quit if swap isn't done */
+    if (resume == 1 && swapDone == 0 && st != IMG_STATE_FINAL_SWAP)
+        return -1;
+    if (swapDone == 0) {
+        /* IMG_STATE_FINAL_SWAP allows re-entry without blowing away swap */
+        if (st != IMG_STATE_FINAL_SWAP) {
+            /* store the sector at tmpBootPos into swap, will encrypt */
+            if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
+                wolfBoot_copy_sector(boot, swap,
+                    tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+            }
+            /* set FINAL_SWAP for re-entry */
+            wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_SWAP);
+        }
 #ifdef EXT_ENCRYPTED
         /* get encryption key and iv if encryption is enabled */
-        wolfBoot_get_encrypt_key(swapBuffer + sizeof(WOLFBOOT_MAGIC), swapBuffer
+        wolfBoot_get_encrypt_key(tmpBuffer + sizeof(WOLFBOOT_MAGIC), tmpBuffer
             + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE);
 #endif
-        /* write MAGIC, TRAIL and encryption key and iv if enabled */
-        ((uint32_t*)swapBuffer)[0] = WOLFBOOT_MAGIC;
+        /* write MAGIC, TRAIL and encryption key and iv if enabled to
+         * tmpBootPos*/
+        ((uint32_t*)tmpBuffer)[0] = WOLFBOOT_MAGIC;
 #ifdef EXT_ENCRYPTED
-        *(uint32_t*)(swapBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
+        *(uint32_t*)(tmpBuffer + sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE
             + ENCRYPT_NONCE_SIZE) = WOLFBOOT_MAGIC_TRAIL;
 #else
-        ((uint32_t*)swapBuffer)[1] = WOLFBOOT_MAGIC_TRAIL;
+        ((uint32_t*)tmpBuffer)[1] = WOLFBOOT_MAGIC_TRAIL;
 #endif
-        wb_flash_write(swap, 0, (void*)swapBuffer, sizeof(swapBuffer));
+        wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
+        wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
-    /* erase the last sector(s), skip update if delta */
-    wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    /* erase the last boot sector(s) */
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* set the encryption key */
 #ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(swapBuffer + sizeof(WOLFBOOT_MAGIC), swapBuffer +
+    wolfBoot_set_encrypt_key(tmpBuffer + sizeof(WOLFBOOT_MAGIC), tmpBuffer +
         sizeof(WOLFBOOT_MAGIC) + ENCRYPT_KEY_SIZE);
 #endif
-    /* mark update to new to reset magic and mark boot as TESTING */
-    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+    /* write the original contents of tmpBootPos back */
+    if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE)
+        wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+    else {
+        wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
+    }
+    /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    /* erase the last sector(s) of update */
+    wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    /* mark update as new to set magic for correct flags read */
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
     /* erase swap */
     wb_flash_erase(swap, 0, WOLFBOOT_SECTOR_SIZE);
     return 0;
