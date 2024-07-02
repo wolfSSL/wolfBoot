@@ -279,20 +279,12 @@
 #define FLASH_OPT_KEY1                      (0x08192A3BU)
 #define FLASH_OPT_KEY2                      (0x4C5D6E7FU)
 
-#ifndef FLASH_OTP_BASE
+/* OTP FLASH AREA */
 #define FLASH_OTP_BASE 0x08FFF000
-#endif
-#ifndef FLASH_OTP_END
 #define FLASH_OTP_END  0x08FFF3FF
-#endif
-#ifndef OTP_SIZE
 #define OTP_SIZE       1024
-#endif
-#ifndef OTP_BLOCKS
 #define OTP_BLOCKS     16
-#endif
 
-#define OTP_BLOCK_SIZE (OTP_SIZE / OTP_BLOCKS) /* 64 bytes */
 
 /* STM32H7: Due to ECC functionality, it is not possible to write partition/sector
  * flags and signature more than once. This flags_cache is used to intercept write operations and

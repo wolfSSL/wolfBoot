@@ -27,7 +27,7 @@ non-secure domain can access wolfCrypt through a standard PKCS11 interface and
 use the crypto library with pre-provisioned keys that are never exposed to the
 non-secure domain.
 
-### Example using STM32-L552
+### Example using STM32L552
 
   - Copy the example configuration for STM32-L5 with support for wolfCrypt in
     TrustZone-M and PKCS11 interface: `cp config/examples/stm32l5-wolfcrypt-tz.config .config`
@@ -117,9 +117,10 @@ STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08040000
 
 ### Example using STM32H563
 
-
-  - Copy the example configuration for STM32-L5 with support for wolfCrypt in
-    TrustZone-M and PKCS11 interface: `cp config/examples/stm32l5-wolfcrypt-tz.config .config`
+  - Copy one of the example configurations for STM32H5 with support for TrustZone and PKCS11 to `.config`:
+      `cp config/examples/stm32h5-tz.config .config`
+      `cp config/examples/stm32h5-tz-dualbank-otp.config .config` (with Dual Bank)
+      `cp config/examples/stm32h5-tz-dualbank-otp-lms.config .config` (with Dual Bank and PQ LMS)
 
   - Run `make`. `wolfboot.elf` and the test applications are built as separate
     objects. The application is signed and stored as `test-app/image_v1_signed.bin`.

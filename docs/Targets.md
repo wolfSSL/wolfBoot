@@ -884,7 +884,7 @@ The example configuration for this scenario is available in [/config/examples/st
 
 For a full list of all the option bytes tested with this configuration, refer to [STM32-TZ.md](/docs/STM32-TZ.md).
 
-### Scenario 2: Trustzone Enabled, wolfCrypt as secure engine for NS applications
+### Scenario 2: TrustZone Enabled, wolfCrypt as secure engine for NS applications
 
 This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
 that can be accessed via PKCS11 interface by non-secure applications.
@@ -893,14 +893,16 @@ This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
 options in your configuration. This enables a PKCS11 accessible from NS domain via
 non-secure callables (NSC).
 
-The example configuration for this scenario is available in [/config/examples/stm32h5-wolfcrypt-tz.config](/config/examples/stm32h5-wolfcrypt-tz.config).
+The example configuration for this scenario is available in [/config/examples/stm32h5-tz.config](/config/examples/stm32h5-tz.config).
 
 For more information, see [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
 
-### Scenario 3: DUALBANK mode (Trustzone disabled)
+### Scenario 3: DUALBANK mode
 
 The STM32H5 can be configured to use hardware-assisted bank swapping to facilitate the update.
 The configuration file to copy into `.config` is `config/examples/stm32h5-dualbank.config`.
+
+For DUALBANK with TrustZone use `stm32h5-tz-dualbank-otp.config`.
 
 DUALBANK configuration (Tested on NUCLEO-STM32H563ZI):
 
