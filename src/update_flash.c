@@ -469,6 +469,7 @@ static int wolfBoot_get_total_size(struct wolfBoot_image* boot,
 
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
+    int flagRet;
     uint32_t total_size = 0;
     const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
@@ -476,6 +477,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     struct wolfBoot_image boot, update, swap;
     uint16_t update_type;
     uint32_t fw_size;
+    uint32_t size;
 #if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
@@ -574,6 +576,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * If something goes wrong, the operation will be resumed upon reboot.
      */
     while ((sector * sector_size) < total_size) {
+#if 0
         if ((wolfBoot_get_update_sector_flag(sector, &flag) != 0) || (flag == SECT_FLAG_NEW)) {
            flag = SECT_FLAG_SWAPPING;
            wolfBoot_copy_sector(&update, &swap, sector);
@@ -597,6 +600,39 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             wolfBoot_copy_sector(&swap, &boot, sector);
             if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                 wolfBoot_set_update_sector_flag(sector, flag);
+        }
+#endif
+        flag = SECT_FLAG_NEW;
+        wolfBoot_get_update_sector_flag(sector, &flag);
+        switch (flag) {
+            case SECT_FLAG_NEW:
+               flag = SECT_FLAG_SWAPPING;
+               wolfBoot_copy_sector(&update, &swap, sector);
+               if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                   wolfBoot_set_update_sector_flag(sector, flag);
+                /* FALL THROUGH */
+            case SECT_FLAG_SWAPPING:
+                size = total_size - (sector * sector_size);
+                if (size > sector_size)
+                    size = sector_size;
+                flag = SECT_FLAG_BACKUP;
+                wolfBoot_copy_sector(&boot, &update, sector);
+                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                    wolfBoot_set_update_sector_flag(sector, flag);
+                /* FALL THROUGH */
+            case SECT_FLAG_BACKUP:
+                size = total_size - (sector * sector_size);
+                if (size > sector_size)
+                    size = sector_size;
+                flag = SECT_FLAG_UPDATED;
+                wolfBoot_copy_sector(&swap, &boot, sector);
+                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                    wolfBoot_set_update_sector_flag(sector, flag);
+                break;
+            case SECT_FLAG_UPDATED:
+                /* FALL THROUGH */
+            default:
+                break;
         }
         sector++;
         /* headers that can be in different positions depending on when the
