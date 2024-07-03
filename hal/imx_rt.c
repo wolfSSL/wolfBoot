@@ -26,6 +26,7 @@
 #include <target.h>
 #include "image.h"
 #include "printf.h"
+#include "fsl_cache.h"
 #include "fsl_common.h"
 #include "fsl_iomuxc.h"
 #include "fsl_nor_flash.h"
@@ -831,8 +832,6 @@ void hal_prepare_boot(void)
 
 #endif /* __WOLFBOOT */
 
-void DCACHE_InvalidateByRange(uint32_t address, uint32_t size_byte);
-
 static int hal_flash_init(void)
 {
 #ifdef USE_GET_CONFIG
@@ -858,16 +857,24 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     status_t status;
     uint32_t wbuf[CONFIG_FLASH_PAGE_SIZE / sizeof(uint32_t)];
     int i;
-    asm volatile("cpsid i");
     hal_flash_init(); /* make sure g_bootloaderTree is set */
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("flash write: addr 0x%x, len %d\n",
         address - FLASH_BASE, len);
 #endif
+    /**
+     * Disable interrupts before accessing flash when using XIP
+     * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
+     */
+    asm volatile("cpsid i");
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
+        /**
+         * Flash is memory mapped, so the address range must be invalidated in data cache
+         * to ensure coherency between flash and cache
+         */
         DCACHE_InvalidateByRange(address + i, sizeof(wbuf));
         if (status != kStatus_Success)
         {
@@ -895,9 +902,17 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     wolfBoot_printf("flash erase: addr 0x%x, len %d\n",
         address - FLASH_BASE, len);
 #endif
+    /**
+     * Disable interrupts before accessing flash when using XIP
+     * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
+     */
     asm volatile("cpsid i");
     status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
+    /**
+     * Flash is memory mapped, so the address range must be invalidated in data cache
+     * to ensure coherency between flash and cache
+     */
     DCACHE_InvalidateByRange(address, len);
     asm volatile("cpsie i");
     if (status != kStatus_Success)

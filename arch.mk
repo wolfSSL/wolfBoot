@@ -382,6 +382,7 @@ ifeq ($(TARGET),imx_rt)
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \
       -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/cache/armv7-m7 \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO)/drivers/flexspi \
       -I$(MCUXPRESSO)/drivers/lpuart \
@@ -405,7 +406,8 @@ ifeq ($(TARGET),imx_rt)
       -I$(MCUXPRESSO)/utilities/debug_console
     OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-      $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o
+      $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o \
+      $(MCUXPRESSO)/drivers/cache/armv7-m7/fsl_cache.o
     ifeq ($(DEBUG_UART),1)
       OBJS+= $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o
     endif
@@ -415,7 +417,8 @@ ifeq ($(TARGET),imx_rt)
       -I$(MCUXPRESSO_DRIVERS)/utilities/debug_console
     OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_cache.o
     ifeq ($(DEBUG_UART),1)
       OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o
     endif
