@@ -280,3 +280,7 @@ openssl pkeyutl -sign -keyform der -inkey my_key.der -in test-app/image_v1_diges
 tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \
                               0xc0000 test-app/image_v1_signed.bin
 ```
+
+### Signing Firmware with Azure Key Vault
+
+See [docs/azure_keyvault.md](/docs/azure_keyvault.md).
