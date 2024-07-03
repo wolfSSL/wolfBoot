@@ -434,6 +434,11 @@ ifeq ($(TARGET),imx_rt)
     CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
   endif
 
+  ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6B)
+    ARCH_FLASH_OFFSET=0x60000000
+    CFLAGS+=-I$(MCUXPRESSO)/boards/evkbmimxrt1060/xip/
+  endif
+
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1061CVJ5B)
     ARCH_FLASH_OFFSET=0x60000000
     CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/

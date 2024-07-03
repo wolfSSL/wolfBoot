@@ -43,6 +43,10 @@
 #include "evkmimxrt1060_flexspi_nor_config.h"
 #define USE_GET_CONFIG
 #endif
+#ifdef CPU_MIMXRT1062DVL6B
+#include "evkbmimxrt1060_flexspi_nor_config.h"
+#define USE_GET_CONFIG
+#endif
 #ifdef CPU_MIMXRT1061CVJ5B
 #include "evkmimxrt1060_flexspi_nor_config.h"
 #endif
@@ -262,7 +266,7 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
 
 
 /** Flash configuration in the .flash_config section of flash **/
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes   */
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
@@ -590,7 +594,10 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
 
 
 #ifndef __FLASH_BASE
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1042XJM5B)
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || \
+    defined(CPU_MIMXRT1061CVJ5B) || \
+    defined(CPU_MIMXRT1052DVJ6B) || \
+    defined(CPU_MIMXRT1042XJM5B)
 #define __FLASH_BASE 0x60000000
 #elif defined(CPU_MIMXRT1064DVL6A)
 #define __FLASH_BASE 0x70000000
@@ -709,7 +716,9 @@ static void clock_init(void)
             CCM_CBCDR_AHB_PODF(2) |
             CCM_CBCDR_IPG_PODF(2);
 
-#if defined(CPU_MIMXRT1064DVL6A) || defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1061CVJ5B)
+#if defined(CPU_MIMXRT1064DVL6A) || \
+    defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || \
+    defined(CPU_MIMXRT1061CVJ5B)
         /* Configure FLEXSPI2 CLOCKS */
         CCM->CBCMR =
             (CCM->CBCMR &
