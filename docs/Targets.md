@@ -1379,14 +1379,18 @@ wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK 
 
 DCP support (hardware acceleration for SHA256 operations) can be enabled by using PKA=1 in the configuration file.
 
-Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
-
-The RT1050 EVKB board comes wired to use the 64MB HyperFlash. If you'd like to use QSPI there is a rework that can be performed (see AN12183). The default onboard QSPI 8MB ISSI IS25WP064A (`CONFIG_FLASH_IS25WP064A`). To use a 64Mbit Winbond W25Q64JV define `CONFIG_FLASH_W25Q64JV` (16Mbit, 32Mbit, 128Mbit, 256Mbit and 512Mbit versions are also available). These options are also available for the RT1042 and RT1061 target.
-
 You can also get the SDK and CMSIS bundles using these repositories:
 * https://github.com/nxp-mcuxpresso/mcux-sdk
 * https://github.com/nxp-mcuxpresso/CMSIS_5
 Use MCUXSDK=1 with this option, since the pack paths are different.
+
+Example:
+```
+MCUXSDK?=1
+MCUXPRESSO?=$(PWD)/../mcux-sdk
+MCUXPRESSO_DRIVERS?=$(MCUXPRESSO)/devices/MIMXRT1062
+MCUXPRESSO_CMSIS?="$(PWD)/../CMSIS_5/CMSIS"
+```
 
 ### Custom Device Configuration Data (DCD)
 
@@ -1401,58 +1405,61 @@ section, e.g.:
 If an external `.dcd_data` section is provided, the option `NXP_CUSTOM_DCD=1` must
 be added to the configuration.
 
+### Flashing
 
-### Testing Update
+Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
 
-First make the update partition, pre-triggered for update
+The RT1050 EVKB board comes wired to use the 64MB HyperFlash. If you'd like to use QSPI there is a rework that can be performed (see AN12183). The default onboard QSPI 8MB ISSI IS25WP064A (`CONFIG_FLASH_IS25WP064A`). To use a 64Mbit Winbond W25Q64JV define `CONFIG_FLASH_W25Q64JV` (16Mbit, 32Mbit, 128Mbit, 256Mbit and 512Mbit versions are also available). These options are also available for the RT1042 and RT1061 target.
 
-```sh
-tools/scripts/prepare_update.sh
-```
-
-Then connect to the board with JLinkExe, for the rt1040 do:
+If you have updated the MCULink to use JLink then you can connect to the board with JLinkExe using one of the following commands:
 
 ```sh
 # HyperFlash
 JLinkExe -if swd -speed 5000 -Device "MIMXRT1042xxxxB"
-# QSPI
-JLinkExe -if swd -speed 5000 -Device "MIMXRT1042xxxxB?BankAddr=0x60000000&Loader=QSPI"
-```
-
-For the rt1050 do:
-
-```sh
-# HyperFlash
 JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A"
-# QSPI
-JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A?BankAddr=0x60000000&Loader=QSPI"
-```
-
-For the rt-1060:
-
-```sh
-# HyperFlash
 JLinkExe -if swd -speed 5000 -Device "MIMXRT1062XXX6B"
 # QSPI
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1042xxxxB?BankAddr=0x60000000&Loader=QSPI"
+JLinkExe -if swd -speed 5000 -Device "MIMXRT1052XXX6A?BankAddr=0x60000000&Loader=QSPI"
 JLinkExe -if swd -speed 5000 -Device "MIMXRT1062XXX6B?BankAddr=0x60000000&Loader=QSPI"
 ```
 
-Now flash the board:
+Flash using:
 
 ```sh
 loadbin factory.bin 0x60000000
+```
+
+### Testing Update
+
+First make the update partition, pre-triggered for update:
+
+```sh
+./tools/scripts/prepare_update.sh
+```
+
+Run the "loadbin" commands to flash the update:
+
+```sh
 loadbin update.bin 0x60030000
+```
+
+Reboot device. Expected output:
+
+```
+wolfBoot Test app, version = 1
+wolfBoot Test app, version = 8
 ```
 
 ### NXP iMX-RT Debugging JTAG / JLINK
 
 ```sh
-# rt-1040
+# Start JLink GDB server for your device
 JLinkGDBServer -Device MIMXRT1042xxxxB -speed 5000 -if swd -port 3333
-# rt-1050
 JLinkGDBServer -Device MIMXRT1052xxx6A -speed 5000 -if swd -port 3333
-# rt-1060
 JLinkGDBServer -Device MIMXRT1062xxx6B -speed 5000 -if swd -port 3333
+
+# From wolfBoot directory
 arm-none-eabi-gdb
 add-symbol-file test-app/image.elf 0x60010100
 mon reset init
@@ -2214,8 +2221,8 @@ Note:
 ### Running on 64-bit QEMU
 
 Two example configuration files are available: `config/examples/x86_fsp_qemu.config` and `config/examples/x86_fsp_qemu_seal.config`.
-Both will try to load a 64bit ELF/Multiboot2 payload from the emulated sata drive. 
-The second one is an example of configuration that also do measure boot and seal/unseal secrets using a TPM. 
+Both will try to load a 64bit ELF/Multiboot2 payload from the emulated sata drive.
+The second one is an example of configuration that also do measure boot and seal/unseal secrets using a TPM.
 
 A test ELF/Multiboot2 image is provided as well. To test `config/examples/x86_fsp_qemu.config` use the following steps:
 
@@ -2502,7 +2509,7 @@ To compile a flashable image run the following steps:
 cp config/examples/kontron_vx3060_s2.config .config
 ./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh
 make tpmtools
-./tools/scripts/x86_fsp/tgl/assemble_image.sh -k 
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -k
 make CFLAGS_EXTRA="-DHAVE_ECC256"
 ./tools/scripts/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
 ```

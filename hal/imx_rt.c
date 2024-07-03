@@ -26,6 +26,7 @@
 #include <target.h>
 #include "image.h"
 #include "printf.h"
+#include "fsl_cache.h"
 #include "fsl_common.h"
 #include "fsl_iomuxc.h"
 #include "fsl_nor_flash.h"
@@ -40,6 +41,10 @@
 #endif
 #ifdef CPU_MIMXRT1062DVL6A
 #include "evkmimxrt1060_flexspi_nor_config.h"
+#define USE_GET_CONFIG
+#endif
+#ifdef CPU_MIMXRT1062DVL6B
+#include "evkbmimxrt1060_flexspi_nor_config.h"
 #define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1061CVJ5B
@@ -261,7 +266,7 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
 
 
 /** Flash configuration in the .flash_config section of flash **/
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes   */
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
@@ -589,7 +594,10 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
 
 
 #ifndef __FLASH_BASE
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1042XJM5B)
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || \
+    defined(CPU_MIMXRT1061CVJ5B) || \
+    defined(CPU_MIMXRT1052DVJ6B) || \
+    defined(CPU_MIMXRT1042XJM5B)
 #define __FLASH_BASE 0x60000000
 #elif defined(CPU_MIMXRT1064DVL6A)
 #define __FLASH_BASE 0x70000000
@@ -708,7 +716,9 @@ static void clock_init(void)
             CCM_CBCDR_AHB_PODF(2) |
             CCM_CBCDR_IPG_PODF(2);
 
-#if defined(CPU_MIMXRT1064DVL6A) || defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1061CVJ5B)
+#if defined(CPU_MIMXRT1064DVL6A) || \
+    defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || \
+    defined(CPU_MIMXRT1061CVJ5B)
         /* Configure FLEXSPI2 CLOCKS */
         CCM->CBCMR =
             (CCM->CBCMR &
@@ -861,13 +871,27 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     wolfBoot_printf("flash write: addr 0x%x, len %d\n",
         address - FLASH_BASE, len);
 #endif
+    /**
+     * Disable interrupts before accessing flash when using XIP
+     * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
+     */
+    asm volatile("cpsid i");
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
+        /**
+         * Flash is memory mapped, so the address range must be invalidated in data cache
+         * to ensure coherency between flash and cache
+         */
+        DCACHE_InvalidateByRange(address + i, sizeof(wbuf));
         if (status != kStatus_Success)
+        {
+            asm volatile("cpsie i");
             return -1;
+        }
     }
+    asm volatile("cpsie i");
     return 0;
 }
 
@@ -887,8 +911,19 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     wolfBoot_printf("flash erase: addr 0x%x, len %d\n",
         address - FLASH_BASE, len);
 #endif
+    /**
+     * Disable interrupts before accessing flash when using XIP
+     * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
+     */
+    asm volatile("cpsid i");
     status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
+    /**
+     * Flash is memory mapped, so the address range must be invalidated in data cache
+     * to ensure coherency between flash and cache
+     */
+    DCACHE_InvalidateByRange(address, len);
+    asm volatile("cpsie i");
     if (status != kStatus_Success)
         return -1;
     return 0;

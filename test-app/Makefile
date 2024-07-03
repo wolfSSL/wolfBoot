@@ -262,6 +262,7 @@ ifeq ($(TARGET),imx_rt)
   ifeq ($(MCUXSDK),1)
     APP_OBJS+=\
       $(MCUXPRESSO)/drivers/igpio/fsl_gpio.o \
+      $(MCUXPRESSO)/drivers/cache/armv7-m7/fsl_cache.o \
       $(MCUXPRESSO)/drivers/common/fsl_common.o \
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o \
@@ -271,6 +272,7 @@ ifeq ($(TARGET),imx_rt)
   else
     APP_OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_cache.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_common_arm.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexspi.o \
@@ -291,6 +293,11 @@ ifeq ($(TARGET),imx_rt)
     ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
       CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
               -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+      APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
+    endif
+    ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6B)
+      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+              -I$(MCUXPRESSO)/boards/evkbmimxrt1060/xip/
       APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
     endif
     ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)

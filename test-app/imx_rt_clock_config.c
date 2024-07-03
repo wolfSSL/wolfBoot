@@ -125,13 +125,13 @@ void imx_rt_init_boot_clock(void)
 #if !(defined(XIP_EXTERNAL_FLASH) && (XIP_EXTERNAL_FLASH == 1))
     /* Disable Flexspi clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi);
-    #ifdef CPU_MIMXRT1062DVL6A
+    #if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
         /* Set FLEXSPI_PODF. */
         CLOCK_SetDiv(kCLOCK_FlexspiDiv, 1);
         /* Set Flexspi clock source. */
         CLOCK_SetMux(kCLOCK_FlexspiMux, 3);
     #endif
-    #ifdef CPU_MIMXRT1062DVL6A
+    #if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
         /* Set FLEXSPI_PODF. */
         CLOCK_SetDiv(kCLOCK_FlexspiDiv, 2);
         /* Set Flexspi clock source. */
@@ -139,7 +139,7 @@ void imx_rt_init_boot_clock(void)
     #endif
 #endif
 
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     /* Disable Flexspi2 clock gate. */
     CLOCK_DisableClock(kCLOCK_FlexSpi2);
     /* Set FLEXSPI2_PODF. */
@@ -214,12 +214,12 @@ void imx_rt_init_boot_clock(void)
     /* Disable CAN clock gate. */
     CLOCK_DisableClock(kCLOCK_Can1);
     CLOCK_DisableClock(kCLOCK_Can2);
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     CLOCK_DisableClock(kCLOCK_Can3);
 #endif
     CLOCK_DisableClock(kCLOCK_Can1S);
     CLOCK_DisableClock(kCLOCK_Can2S);
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     CLOCK_DisableClock(kCLOCK_Can3S);
 #endif
     /* Set CAN_CLK_PODF. */
@@ -346,7 +346,7 @@ void imx_rt_init_boot_clock(void)
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_DIV_SELECT(1);
     /* Enable Enet output. */
     CCM_ANALOG->PLL_ENET |= CCM_ANALOG_PLL_ENET_ENABLE_MASK;
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     /* Set Enet2 output divider. */
     CCM_ANALOG->PLL_ENET = (CCM_ANALOG->PLL_ENET & (~CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT_MASK)) | CCM_ANALOG_PLL_ENET_ENET2_DIV_SELECT(0);
     /* Enable Enet2 output. */
@@ -400,7 +400,7 @@ void imx_rt_init_boot_clock(void)
     IOMUXC_MQSConfig(IOMUXC_GPR,kIOMUXC_MqsPwmOverSampleRate32, 0);
     /* Set ENET1 Tx clock source. */
     IOMUXC_EnableMode(IOMUXC_GPR, kIOMUXC_GPR_ENET1RefClkMode, false);
-#ifdef CPU_MIMXRT1062DVL6A
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
     /* Set ENET2 Tx clock source. */
 #if defined(FSL_IOMUXC_DRIVER_VERSION) && (FSL_IOMUXC_DRIVER_VERSION != (MAKE_VERSION(2, 0, 0)))
     IOMUXC_EnableMode(IOMUXC_GPR, kIOMUXC_GPR_ENET2RefClkMode, false);
