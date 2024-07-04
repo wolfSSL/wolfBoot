@@ -464,10 +464,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         if (flag != SECT_FLAG_NEW &&
             wolfBoot_get_partition_state(PART_UPDATE, &st) == 0 &&
             st == IMG_STATE_UPDATING) {
-            if (cur_v == up_v) {
-                inverse = 0;
-            }
-            else if (cur_v < up_v) {
+            if ((cur_v == 0) || (cur_v == up_v)) {
                 inverse = 1;
                 inverse_resume = 1;
             }
