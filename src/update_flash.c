@@ -249,7 +249,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ret = -1;
         }
     } else {
-        if (cur_v != delta_base_v) {
+        if (!resume_inverse && (cur_v != delta_base_v)) {
             /* Wrong base image, cannot apply delta patch */
             ret = -1;
         } else {
