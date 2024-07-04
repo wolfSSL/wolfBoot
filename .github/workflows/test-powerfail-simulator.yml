@@ -198,7 +198,7 @@ jobs:
       - name: Rebuild wolfboot.elf
         run: |
           make test-sim-internal-flash-with-delta-update
-      
+
       - name: Run update-revert test with power failures (DELTA)
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
