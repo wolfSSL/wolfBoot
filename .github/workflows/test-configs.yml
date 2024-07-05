@@ -175,7 +175,7 @@ jobs:
       config-file: ./config/examples/sim.config
       make-args: SPMATHALL=1 WOLFBOOT_SMALL_STACK=1
 
-  sim_spmathall_bigsack_test:
+  sim_spmathall_bigstack_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: host

@@ -14,15 +14,20 @@ of 256B from the beginning of the flash partition.
 
 ## Firmware image header
 
-Each (signed) firmware image is prepended with a fixed-size **image header**, containing
-useful information about the firmware. The **image header** is padded to fit in 256B, in order
-to guarantee that the entry point of the actual firmware is stored on the flash starting from
-a 256-Bytes aligned address. This ensures that the bootloader can relocate the vector table before
-chain-loading the firmware the interrupt continue to work properly after the boot is complete.
+Each (signed) firmware image is prepended with a fixed-size **image header**, containing useful information about the
+firmware. The exact size of the **image header** depends on the size of the image digest and signature, which depend on
+the algorithms/key sizes used. Larger key sizes will result in a larger image header. The size of the image header is
+determined by the build system and provided to the application code in the `IMAGE_HEADER_SIZE` macro. The size of the generated
+image header is also output by the keytools during the signing operation. The **image header** data is padded out to the next
+multiple of 256B, in order to guarantee that the entry point of the actual firmware is stored on the flash starting from a
+256-Bytes aligned address. This ensures that the bootloader can relocate the vector table before chain-loading the firmware
+so interrupts continue to work properly after the boot is complete. When porting wolfBoot to a platform that doesn't use wolfBoot's
+Makefile-based build system, extra care should be taken to ensure `IMAGE_HEADER_SIZE` is set to a value that matches the output of
+the wolfBoot `sign` key tool.
 
 ![Image header](png/image_header.png)
 
-*The image header is stored at the beginning of the slot and the actual firmware image starts 256 Bytes after it*
+*The image header is stored at the beginning of the slot and the actual firmware image starts `IMAGE_HEADER_SIZE` Bytes after it*
 
 ### Image header: Tags
 

@@ -202,6 +202,7 @@ forced downgrade attacks.
 WolfBoot can be compiled with the makefile option `EXT_FLASH=1`. When the external flash support is
 enabled, update and swap partitions can be associated to an external memory, and will use alternative
 HAL function for read/write/erase access.
+
 To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or
 `PART_SWAP_EXT`, respectively. By default, the makefile assumes that if an external memory is present,
 both `PART_UPDATE_EXT` and `PART_SWAP_EXT` are defined.
@@ -213,6 +214,15 @@ copied in RAM to boot after verification.
 
 When external memory is used, the HAL API must be extended to define methods to access the custom memory.
 Refer to the [HAL](HAL.md) page for the description of the `ext_flash_*` API.
+
+The `EXT_FLASH` option can also be used if the target device requires special handling for flash reads
+(e.g. word size requirements or other restrictions), regardless of whether the flash is internal or external.
+
+Note that the `EXT_FLASH` option is incompatible with the `NVM_FLASH_WRITEONCE` option. Targets that need
+both these options must implement the sector-based read-modify-erase-write sequence at the HAL layer.
+
+For an example of using `EXT_FLASH` to bypass read restrictions, (in this case, the inability to read from
+erased flash due to ECC errors) on a platform with write-once flash, see the [infineon tricore port](../hal/aurix_tc3xx.c).
 
 #### SPI devices
 
@@ -283,6 +293,13 @@ Note: if you are using an external FLASH (e.g. SPI) in combination with a flash 
 
 By default, keys are directly incorporated in the firmware image. To store the keys in a separate, one-time programmable (OTP) flash memory, use the `FLASH_OTP_KEYSTORE=1` option.
 For more information, see [/docs/OTP-keystore.md](/docs/OTP-keystore.md).
+
+### Prefer multi-sector flash erase operations
+
+wolfBoot HAL flash erase function must be able to handle erase lengths larger than `WOLFBOOT_SECTOR_SIZE`, even if the underlying flash controller does not. However, in some cases, wolfBoot defaults to
+iterating over a range of flash sectors and erasing them one at a time. Setting the `FLASH_MULTI_SECTOR_ERASE=1` config option prevents this behavior when possible, configuring wolfBoot to instead prefer a
+single HAL flash erase invocation with a larger erase length versus the iterative approach. On targets where multi-sector erases are more performant, this option can be used to dramatically speed up the
+image swap procedure.
 
 ### Using Mac OS/X
 

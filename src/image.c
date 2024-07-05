@@ -285,7 +285,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 {
     int ret;
     uint8_t output[IMAGE_SIGNATURE_SIZE];
-    int output_sz = (int)sizeof(output);
     uint8_t* digest_out = NULL;
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
