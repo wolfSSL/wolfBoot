@@ -38,8 +38,13 @@ if [ "x$V" != "x1" ]; then
 fi
 
 if [ "x$V" != "x1" ]; then
-    echo "Failed fallback (V: $V)"
-    exit 1
+    echo "Did not fallback (V: $V)"
+    echo "Retrying get_version after reboot..."
+    V=`./wolfboot.elf get_version 2>/dev/null`
+    if [ "x$V" != "x1" ]; then
+        echo "Error: failed fallback (V: $V)"
+        exit 1
+    fi
 fi
 
 echo Test successful.

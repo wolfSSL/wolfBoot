@@ -237,6 +237,15 @@ test-sim-internal-flash-with-delta-update:
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff.bin \
 		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
 
+test-sim-internal-flash-with-wrong-delta-update:
+	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
+	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v2_signed.bin" TEST_UPDATE_VERSION=3
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) test-app/image_v3_signed_diff.bin \
+		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
+
 test-sim-update-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
 	$(Q)(test `./wolfboot.elf success update_trigger get_version` -eq 1)
 	$(Q)(test `./wolfboot.elf success get_version` -eq $(TEST_UPDATE_VERSION))

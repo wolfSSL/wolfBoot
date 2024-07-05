@@ -203,6 +203,13 @@ jobs:
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
 
+      - name: Rebuild with wrong delta base version
+        run: |
+          make clean && make test-sim-internal-flash-with-wrong-delta-update
+
+      - name: Run negative update test with wrong base version (DELTA)
+        run: |
+          tools/scripts/sim-delta-wrongversion-update.sh
 
      # TEST with encryption (aes128)
       - name: make clean
