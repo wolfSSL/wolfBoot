@@ -357,9 +357,7 @@ ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide
 Max OS/X:
 
 ```sh
-sudo ln -s /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_1.6.0.202101291314/tools/bin/native/mac_x64/libSTLinkUSBDriver.dylib /usr/local/lib/libSTLinkUSBDriver.dylib
-
-/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_1.6.0.202101291314/tools/bin/ST-LINK_gdbserver -d -cp ./Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.macos64_1.6.0.202101291314/tools/bin -e -r 1 -p 3333
+/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.stlink-gdb-server.macos64_2.1.300.202403291623/tools/bin/ST-LINK_gdbserver -d -cp /Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.macos64_2.1.201.202404072231/tools/bin -e -r 1 -p 3333
 ```
 
 Win:
@@ -373,6 +371,7 @@ wolfBoot has a .gdbinit to configure
 ```
 add-symbol-file test-app/image.elf
 ```
+
 
 ## STM32L0
 
@@ -2214,8 +2213,8 @@ Note:
 ### Running on 64-bit QEMU
 
 Two example configuration files are available: `config/examples/x86_fsp_qemu.config` and `config/examples/x86_fsp_qemu_seal.config`.
-Both will try to load a 64bit ELF/Multiboot2 payload from the emulated sata drive. 
-The second one is an example of configuration that also do measure boot and seal/unseal secrets using a TPM. 
+Both will try to load a 64bit ELF/Multiboot2 payload from the emulated sata drive.
+The second one is an example of configuration that also do measure boot and seal/unseal secrets using a TPM.
 
 A test ELF/Multiboot2 image is provided as well. To test `config/examples/x86_fsp_qemu.config` use the following steps:
 
@@ -2502,7 +2501,7 @@ To compile a flashable image run the following steps:
 cp config/examples/kontron_vx3060_s2.config .config
 ./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh
 make tpmtools
-./tools/scripts/x86_fsp/tgl/assemble_image.sh -k 
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -k
 make CFLAGS_EXTRA="-DHAVE_ECC256"
 ./tools/scripts/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
 ```
