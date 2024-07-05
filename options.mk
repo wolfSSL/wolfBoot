@@ -819,6 +819,10 @@ ifeq ($(FSP), 1)
     $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))
 endif
 
+ifeq ($(FLASH_MULTI_SECTOR_ERASE),1)
+    CFLAGS+=-DWOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+endif
+
 CFLAGS+=$(CFLAGS_EXTRA)
 OBJS:=$(OBJS_EXTRA) $(OBJS)
 
