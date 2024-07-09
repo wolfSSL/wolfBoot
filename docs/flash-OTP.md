@@ -92,6 +92,7 @@ make keytools
 5) Setup the OTP keystore
 
   Flash the OTP keystore primer:
+  - Run `make otp`
   - Flash `./tools/keytools/otp/otp-keystore-primer.bin` to `0x08000000`
   - Disconnect the tool and hit reset button
   - The primer will run and flash keystore.c to OTP and enable write protection on those blocks
