@@ -776,24 +776,6 @@ static void key_gen_check(const char *kfilename)
             unlink(kfilename);
         }
     }
-#if 0
-    f = fopen(pubkeyfile, "rb");
-    if (!force && (f != NULL)) {
-        char reply[40];
-        int replySz;
-        printf("** Warning: keystore already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
-        fflush(stdout);
-        replySz = scanf("%s", reply);
-        printf("Reply is [%s]\n", reply);
-        fclose(f);
-        if (replySz < 0 || strcmp(reply, "Yes") != 0) {
-            printf("Operation aborted by user.");
-            exit(5);
-        } else {
-            unlink(pubkeyfile);
-        }
-    }
-#endif
 }
 
 static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask)
@@ -1060,6 +1042,23 @@ int main(int argc, char** argv)
     printf("Keytype: %s\n", KName[keytype]);
     if (keytype == 0)
         exit(0);
+    fpub = fopen(pubkeyfile, "rb");
+    if (!force && (fpub != NULL)) {
+        char reply[40];
+        int replySz;
+        printf("** Warning: keystore already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        fflush(stdout);
+        replySz = scanf("%s", reply);
+        printf("Reply is [%s]\n", reply);
+        fclose(fpub);
+        if (replySz < 0 || strcmp(reply, "Yes") != 0) {
+            printf("Operation aborted by user.");
+            exit(5);
+        } else {
+            unlink(pubkeyfile);
+        }
+        fpub = NULL;
+    }
     fpub = fopen(pubkeyfile, "w");
     if (fpub == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkeyfile, strerror(errno));
