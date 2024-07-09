@@ -89,18 +89,23 @@ make keytools
   - Copy one of the generated keys to `wolfboot_signing_private_key.der`
   - `cp 1.key wolfboot_signing_private_key.der`
 
-5) Flash the OTP keystore primer:
+5) Setup the OTP keystore
 
+  Flash the OTP keystore primer:
   - Flash `./tools/keytools/otp/otp-keystore-primer.bin` to `0x08000000`
   - Disconnect the tool and hit reset button
   - The primer will run and flash keystore.c to OTP and enable write protection on those blocks
 
   OR
 
-  - Run `make otpgen` and run `./tools/keytools/otp/otp-keystore-gen` to generate an otp.bin file that can be programmed using STM32CubeProgrammer to `0x08FFF000`.
+  Generate OTP (otp.bin) and flash using external tool
+  - Run `make otpgen`
+  - Run `./tools/keytools/otp/otp-keystore-gen` to generate an otp.bin file
+  - Program otp.bin to `0x08FFF000` using external tool like STM32CubeProgrammer
 
-6) Verify you flashed the keystore in OTP
-  - Read memory from STM32CubeProgrammer at address `0x08FFF000` (should start with ASCII "WOLFBOOT")
+6) Verify OTP keystore
+  - Read memory at address `0x08FFF000` (should start with ASCII "WOLFBOOT")
+  - Typically use STM32CubeProgrammer for this
 
 7) Setup the option bytes
   - User Configuration 2 -> TrustZone Enable (TZEN=0xB4)
