@@ -59,7 +59,8 @@ int main(void)
 
     /* Sanity check to avoid writing an empty keystore */
     if (n_keys < 1) {
-        fprintf(stderr, "Error: too few keys (%d), refusing to create %s\n", n_keys, outfile);
+        fprintf(stderr, "Error: too few keys (%d), refusing to create %s\n",
+            n_keys, outfile);
         exit(1);
     }
 
@@ -67,7 +68,8 @@ int main(void)
     slot_size += KEYSTORE_HDR_SIZE;
     fprintf(stderr, "Slot size: %d\n", slot_size);
     fprintf(stderr, "Number of slots: %d\n", n_keys);
-    fprintf(stderr, "%s size: %d\n", outfile, slot_size * n_keys + sizeof(struct wolfBoot_otp_hdr));
+    fprintf(stderr, "%s size: %d\n", outfile, (slot_size * n_keys) +
+        (int)sizeof(struct wolfBoot_otp_hdr));
 
     ofd = open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0600);
     if (ofd < 0) {
@@ -84,11 +86,13 @@ int main(void)
         /* Write each public key to its slot in OTP */
         if (write(ofd, &PubKeys[i],
                 slot_size) < 0) {
-        fprintf(stderr, "Error adding key %d to %s: %s\n", i, outfile, strerror(errno));
-        exit(3);
+            fprintf(stderr, "Error adding key %d to %s: %s\n", i, outfile,
+                strerror(errno));
+            exit(3);
         }
     }
     fprintf(stderr, "%s successfully created.\nGoodbye.\n", outfile);
     close(ofd);
+
     return 0;
 }

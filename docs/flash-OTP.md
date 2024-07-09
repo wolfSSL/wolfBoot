@@ -89,24 +89,28 @@ make keytools
   - Copy one of the generated keys to `wolfboot_signing_private_key.der`
   - `cp 1.key wolfboot_signing_private_key.der`
 
-5) Setup the option bytes
+5) Flash the OTP keystore primer:
+
+  - Flash `./tools/keytools/otp/otp-keystore-primer.bin` to `0x08000000`
+  - Disconnect the tool and hit reset button
+  - The primer will run and flash keystore.c to OTP and enable write protection on those blocks
+
+  OR
+
+  - Run `make otpgen` and run `./tools/keytools/otp/otp-keystore-gen` to generate an otp.bin file that can be programmed using STM32CubeProgrammer to `0x08FFF000`.
+
+6) Verify you flashed the keystore in OTP
+  - Read memory from STM32CubeProgrammer at address `0x08FFF000` (should start with ASCII "WOLFBOOT")
+
+7) Setup the option bytes
   - User Configuration 2 -> TrustZone Enable (TZEN=0xB4)
   - Bank1 - Flash Watermark area (SECWM1_START=0x00, SECWM1_END=0x1F)
   - Bank2 - Flash Watermark area (SECWM2_START=0x00, SECWM2_END=0x1F)
 
-6) Build wolfBoot and test application using `make`
-
-7) Flash the OTP keystore primer:
-
-  - Flash `./tools/keytools/otp/otp-keystore-primer.bin` to `0x08000000`
-
-8) Disconnect the tool and reboot
-  - The primer will run and flash keystore.c to OTP.
-  - Verify you flashed the keystore in OTP
-  - Read memory from STM32CubeProgrammer at address `0x08FFF000` (should start with ASCII "WOLFBOOT")
-
-9) Mass erase the device
+8) Mass erase the device
   - STM32CubeProgrammer -> Full chip erase
+
+9) Build wolfBoot and test application using `make`
 
 10) Flash wolfBoot and test-app
 
