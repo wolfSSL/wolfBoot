@@ -302,6 +302,7 @@ clean:
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)rm -f $(OBJS)
+	$(Q)rm -f tools/keytools/otp/otp-keystore-gen
 	$(Q)$(MAKE) -C test-app -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
@@ -376,6 +377,9 @@ cppcheck:
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
 
 otp: tools/keytools/otp/otp-keystore-primer.bin FORCE
+
+otpgen:
+	make -C tools/keytools/otp otp-keystore-gen
 
 tools/keytools/otp/otp-keystore-primer.bin: FORCE
 	make -C tools/keytools/otp clean

@@ -764,7 +764,7 @@ static void key_gen_check(const char *kfilename)
     if (!force && (f != NULL)) {
         char reply[40];
         int replySz;
-        printf("** Warning: key file already exist! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        printf("** Warning: key file already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
         fflush(stdout);
         replySz = scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
@@ -884,9 +884,13 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
         else if (ktype == KEYGEN_ED25519) {
             initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
                 ed25519Key, readLen);
+            if (ret < 0)
+                printf("error: wc_Ed25519PublicKeyDecode failed on %s\n", fname);
 
             if (ret == 0)
                 ret = wc_ed25519_export_public(ed25519Key, buf, &qxSz);
+            if (ret < 0)
+                printf("error: wc_ed25519_export_public failed on %s\n", fname);
 
             if (initKey == 0)
                 wc_ed25519_free(ed25519Key);
@@ -1038,6 +1042,23 @@ int main(int argc, char** argv)
     printf("Keytype: %s\n", KName[keytype]);
     if (keytype == 0)
         exit(0);
+    fpub = fopen(pubkeyfile, "rb");
+    if (!force && (fpub != NULL)) {
+        char reply[40];
+        int replySz;
+        printf("** Warning: keystore already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        fflush(stdout);
+        replySz = scanf("%s", reply);
+        printf("Reply is [%s]\n", reply);
+        fclose(fpub);
+        if (replySz < 0 || strcmp(reply, "Yes") != 0) {
+            printf("Operation aborted by user.");
+            exit(5);
+        } else {
+            unlink(pubkeyfile);
+        }
+        fpub = NULL;
+    }
     fpub = fopen(pubkeyfile, "w");
     if (fpub == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkeyfile, strerror(errno));

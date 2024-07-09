@@ -32,6 +32,12 @@ CC=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
 SIZE?=$(CROSS_COMPILE)size
 
+all: otp-keystore-primer.bin otp-keystore-gen
+
+otp-keystore-gen: otp-keystore-gen.c
+	gcc -o $@ otp-keystore-gen.c ../../../src/keystore.c -I. -I../../../ -I../../../include -DFLASH_OTP_KEYSTORE
+
+
 otp-keystore-primer.bin: otp-keystore-primer.elf
 	$(Q)$(OBJCOPY) -O binary $(^) $(@)
 

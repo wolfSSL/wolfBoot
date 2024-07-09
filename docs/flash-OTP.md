@@ -20,9 +20,26 @@ The public keys are stored in the OTP area, after an initial 16-byte header that
 keys stored, the size of each key, and other information.
 
 In order for wolfBoot to start authenticating the firmware images at boot and upon update, the public keys
-must be provisioned to the OTP area in a separate step, as described in the next section.
+must be provisioned to the OTP area in a separate step, as described in the next sections.
 
-### Provisioning the public keys to the OTP area
+Depending on the target device, you can either prepare a binary image of the OTP area content, or use `otp-keystore-primer` firmware to directly provision the keys on the target.
+
+### Creating an image of the OTP area content
+
+It is possible to create a binary image of the content for the OTP area. The resulting file (otp.bin) can be manually provisioned using any external tool that allows writing to the target OTP area.
+
+To compile the otp-keystore-gen tool using the current keystore content:
+
+```
+make otpgen
+```
+
+And then, to create the image file `otp.bin`:
+
+tools/keytools/otp/otp-keystore-gen
+
+
+### Directly provisioning the public keys to the OTP area (primer)
 
 After enabling the `FLASH_OTP_KEYSTORE` option in your `.config` file, when you compile wolfBoot by running "make",
 an additional application called `otp-keystore-primer` is generated under `tools/keytools/otp`. This application is used to

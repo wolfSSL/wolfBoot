@@ -75,6 +75,9 @@ tools/keytools/otp/otp-keystore-primer
 tools/delta/bmdiff
 tools/delta/bmpatch
 
+# otp-keystore-gen binary
+tools/keytools/otp/otp-keystore-gen
+
 # Vim swap files
 .*.swp
 
