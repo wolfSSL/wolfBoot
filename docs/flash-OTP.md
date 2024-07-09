@@ -30,13 +30,16 @@ It is possible to create a binary image of the content for the OTP area. The res
 
 To compile the otp-keystore-gen tool using the current keystore content:
 
-```
+```sh
 make otpgen
 ```
 
 And then, to create the image file `otp.bin`:
 
-tools/keytools/otp/otp-keystore-gen
+
+```sh
+./tools/keytools/otp/otp-keystore-gen
+```
 
 
 ## Directly provisioning the public keys to the OTP area (primer)
@@ -110,9 +113,9 @@ make keytools
  - Flash `wolfboot.bin` at `0x0C000000`
  - Flash `test-app/image_v1_signed.bin` at `0x08040000`
 
-13) Disconnect and reboot, the red LED should turn on.
+11) Disconnect and reboot, the red LED should turn on.
 
-14) Connect to USB UART on NUCLEO board for console
+12) Connect to USB UART on NUCLEO board for console
 
 Explore the command line (run help)
 
@@ -137,7 +140,7 @@ update : update the firmware via XMODEM
 reboot : reboot the system
 ```
 
-15) Test Update
+13) Test Update
 
   - Sign a new version of the firmware: `./tools/keytools/sign --lms test-app/image.bin wolfboot_signing_private_key.der 2`
   - Run "update" command on the shell and wait for xmodem transfer
