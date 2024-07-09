@@ -30,6 +30,11 @@
 #include <unistd.h>
 #include <errno.h>
 
+/* Define a generic max OTP size to appease otp_keystore.h */
+#ifndef OTP_SIZE
+#define OTP_SIZE 4096
+#endif
+
 #include "wolfboot/wolfboot.h"
 #include "keystore.h"
 #include "otp_keystore.h"
