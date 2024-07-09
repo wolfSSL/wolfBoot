@@ -900,9 +900,13 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
         else if (ktype == KEYGEN_ED25519) {
             initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
                 ed25519Key, readLen);
+            if (ret < 0)
+                printf("error: wc_Ed25519PublicKeyDecode failed on %s\n", fname);
 
             if (ret == 0)
                 ret = wc_ed25519_export_public(ed25519Key, buf, &qxSz);
+            if (ret < 0)
+                printf("error: wc_ed25519_export_public failed on %s\n", fname);
 
             if (initKey == 0)
                 wc_ed25519_free(ed25519Key);
