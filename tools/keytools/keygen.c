@@ -776,6 +776,7 @@ static void key_gen_check(const char *kfilename)
             unlink(kfilename);
         }
     }
+#if 0
     f = fopen(pubkeyfile, "rb");
     if (!force && (f != NULL)) {
         char reply[40];
@@ -792,6 +793,7 @@ static void key_gen_check(const char *kfilename)
             unlink(pubkeyfile);
         }
     }
+#endif
 }
 
 static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask)
