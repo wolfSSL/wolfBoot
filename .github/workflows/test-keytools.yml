@@ -33,6 +33,10 @@ jobs:
         run: |
           make SIGN=ECC256 HASH=SHA256
 
+      - name: Remove default keystore
+        run: |
+          rm -f src/keystore.c
+
       - name: Generate external key
         run: |
           openssl ecparam -name prime256v1 -genkey -noout -outform DER -out private-key.der
@@ -75,6 +79,10 @@ jobs:
         run: |
           make SIGN=ED25519 HASH=SHA256
 
+      - name: Remove default keystore
+        run: |
+          rm -f src/keystore.c
+
       - name: Generate external key
         run: |
           openssl genpkey -algorithm ed25519 -out private-key.der -outform DER
@@ -116,6 +124,10 @@ jobs:
       - name: Build wolfboot
         run: |
           make SIGN=RSA2048 HASH=SHA256
+
+      - name: Remove default keystore
+        run: |
+          rm -f src/keystore.c
 
       - name: Generate external key
         run: |
@@ -258,7 +270,7 @@ jobs:
         run: |
           ./tools/keytools/sign --ecc256 --sha256 --custom-tlv 0x45 4 0x6f616943 test-app/image.elf wolfboot_signing_private_key.der 2
           grep "Ciao" test-app/image_v2_signed.bin
-      
+
       - name: Sign app with custom buffer TLV included
         run: |
           ./tools/keytools/sign --ecc256 --sha256 --custom-tlv-buffer 0x46 48656C6C6F20776F726C64 test-app/image.elf wolfboot_signing_private_key.der 3
@@ -268,5 +280,5 @@ jobs:
         run: |
           ./tools/keytools/sign --ecc256 --sha256 --custom-tlv-string 0x46 "Hello world" test-app/image.elf wolfboot_signing_private_key.der 3
           grep "Hello world" test-app/image_v3_signed.bin
-                   
+
 
