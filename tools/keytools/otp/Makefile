@@ -34,8 +34,8 @@ SIZE?=$(CROSS_COMPILE)size
 
 all: otp-keystore-primer.bin otp-keystore-gen
 
-otp-keystore-gen: otp-keystore-gen.c ../../../src/keystore.c
-	gcc -o $@ $^ -I. -I../../../ -I../../../include -DFLASH_OTP_KEYSTORE
+otp-keystore-gen: otp-keystore-gen.c
+	gcc -o $@ otp-keystore-gen.c ../../../src/keystore.c -I. -I../../../ -I../../../include -DFLASH_OTP_KEYSTORE
 
 
 otp-keystore-primer.bin: otp-keystore-primer.elf

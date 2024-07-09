@@ -63,6 +63,8 @@ int main(void)
     slot_size = keystore_get_size(0);
     slot_size += KEYSTORE_HDR_SIZE;
     fprintf(stderr, "Slot size: %d\n", slot_size);
+    fprintf(stderr, "Number of slots: %d\n", n_keys);
+    fprintf(stderr, "%s size: %d\n", outfile, slot_size * n_keys + sizeof(struct wolfBoot_otp_hdr));
 
     ofd = open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0600);
     if (ofd < 0) {

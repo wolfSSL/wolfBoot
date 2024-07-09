@@ -764,7 +764,7 @@ static void key_gen_check(const char *kfilename)
     if (!force && (f != NULL)) {
         char reply[40];
         int replySz;
-        printf("** Warning: key file already exist! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        printf("** Warning: key file already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
         fflush(stdout);
         replySz = scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
@@ -774,6 +774,22 @@ static void key_gen_check(const char *kfilename)
             exit(5);
         } else {
             unlink(kfilename);
+        }
+    }
+    f = fopen(pubkeyfile, "rb");
+    if (!force && (f != NULL)) {
+        char reply[40];
+        int replySz;
+        printf("** Warning: keystore already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        fflush(stdout);
+        replySz = scanf("%s", reply);
+        printf("Reply is [%s]\n", reply);
+        fclose(f);
+        if (replySz < 0 || strcmp(reply, "Yes") != 0) {
+            printf("Operation aborted by user.");
+            exit(5);
+        } else {
+            unlink(pubkeyfile);
         }
     }
 }
