@@ -377,6 +377,9 @@ cppcheck:
 
 otp: tools/keytools/otp/otp-keystore-primer.bin FORCE
 
+otpgen:
+	make -C tools/keytools/otp otp-keystore-gen
+
 tools/keytools/otp/otp-keystore-primer.bin: FORCE
 	make -C tools/keytools/otp clean
 	make -C tools/keytools/otp
