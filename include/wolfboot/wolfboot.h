@@ -257,7 +257,9 @@ extern "C" {
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define IMG_STATE_NEW       0xFF
 #define IMG_STATE_UPDATING  0x70
-#define IMG_STATE_FINAL_FLAGS  0x30
+/* now just an intermediary state, update state will always be either new or
+ * updating before the application boots*/
+#define IMG_STATE_FINAL_FLAGS 0x30
 #define IMG_STATE_TESTING   0x10
 #define IMG_STATE_SUCCESS   0x00
 #define FLASH_BYTE_ERASED   0xFF
@@ -265,8 +267,8 @@ extern "C" {
 #else
 #define IMG_STATE_NEW       0x00
 #define IMG_STATE_UPDATING  0x8F
-#define IMG_STATE_FINAL_FLAGS  0xBF
 #define IMG_STATE_TESTING   0xEF
+#define IMG_STATE_FINAL_FLAGS 0xBF
 #define IMG_STATE_SUCCESS   0xFF
 #define FLASH_BYTE_ERASED   0x00
 #define FLASH_WORD_ERASED   0x00000000UL

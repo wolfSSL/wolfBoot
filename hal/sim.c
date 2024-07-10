@@ -45,6 +45,7 @@
 uint8_t *sim_ram_base;
 static uint8_t *flash_base;
 
+int forceEmergency = 0;
 uint32_t erasefail_address = 0xFFFFFFFF;
 
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
@@ -105,8 +106,29 @@ void hal_prepare_boot(void)
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    /* implicit cast abide compiler warning */
-    memcpy((void*)address, data, len);
+    int i;
+    if (forceEmergency == 1 && address == WOLFBOOT_PARTITION_BOOT_ADDRESS) {
+        /* implicit cast abide compiler warning */
+        memset((void*)address, 0, len);
+        /* let the rest of the writes work properly for the emergency update */
+        forceEmergency = 0;
+    }
+    else {
+        for (i = 0; i < len; i++) {
+#ifdef NVM_FLASH_WRITEONCE
+            if (((uint8_t*)address)[i] != FLASH_BYTE_ERASED) {
+                /* no writing to non-erased page in NVM_FLASH_WRITEONCE */
+                printf("NVM_FLASH_WRITEONCE non-erased write detected!\n");
+                return -1;
+            }
+#endif
+#ifdef WOLFBOOT_FLAGS_INVERT
+            ((uint8_t*)address)[i] |= data[i];
+#else
+            ((uint8_t*)address)[i] &= data[i];
+#endif
+        }
+    }
     return 0;
 }
 
@@ -150,8 +172,11 @@ void hal_init(void)
             erasefail_address = strtol(main_argv[++i], NULL,  16);
             fprintf(stderr, "Set power fail to erase at address %x\n",
                 erasefail_address);
-            break;
         }
+        /* force a bad write of the boot partition to trigger and test the
+         * emergency fallback feature */
+        else if (strcmp(main_argv[i], "emergency") == 0)
+            forceEmergency = 1;
     }
 }
 
