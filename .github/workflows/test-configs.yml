@@ -251,17 +251,23 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32h5-dualbank.config
 
-  stm32h5_wolfcrypt_tz:
+  stm32h5_tz_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
-      config-file: ./config/examples/stm32h5-wolfcrypt-tz.config
+      config-file: ./config/examples/stm32h5-tz.config
 
-  stm32h5_tz_dualbank_otp:
+  stm32h5_tz_dualbank_otp_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
       config-file: ./config/examples/stm32h5-tz-dualbank-otp.config
+
+  stm32h5_tz_dualbank_otp_lms_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32h5-tz-dualbank-otp-lms.config
 
   stm32h7_test:
     uses: ./.github/workflows/test-build.yml

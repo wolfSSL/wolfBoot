@@ -32,6 +32,10 @@ CC=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
 SIZE?=$(CROSS_COMPILE)size
 
+ifeq ($(ENABLE_OTP_WP),1)
+	CFLAGS+=-DENABLE_OTP_WP
+endif
+
 all: otp-keystore-primer.bin otp-keystore-gen
 
 otp-keystore-gen: otp-keystore-gen.c
@@ -56,7 +60,7 @@ stm32h5.o: ../../../hal/stm32h5.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 
-	
+
 
 clean:
 	$(Q)rm -rf $(PRI_KS_OBJS) *.bin *.elf

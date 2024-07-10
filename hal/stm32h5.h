@@ -23,7 +23,9 @@
 #ifndef STM32H5_DEF_INCLUDED
 #define STM32H5_DEF_INCLUDED
 /* Assembly helpers */
+#ifndef DMB
 #define DMB() __asm__ volatile ("dmb")
+#endif
 #define ISB() __asm__ volatile ("isb")
 #define DSB() __asm__ volatile ("dsb")
 
@@ -91,31 +93,38 @@
 #define RCC_PLL1DIVR               (*(volatile uint32_t *)(RCC_BASE + 0x34))  /* RM0481 - Table 108 */
 #define RCC_PLL1FRACR              (*(volatile uint32_t *)(RCC_BASE + 0x38))  /* RM0481 - Table 108 */
 
-#define RCC_PLL1CFGR_PLL1SRC_SHIFT (0x0)
-#define RCC_PLL1CFGR_PLL1SRC_HSE   (0x3)
-#define RCC_PLL1CFGR_PLL1RGE_SHIFT (0x2)
-#define RCC_PLL1CFGR_RGE_1_2       (0x0) /* Default at boot: 1-2 MHz */
-#define RCC_PLL1CFGR_RGE_2_4       (0x1) /* 2-4 MHz */
-#define RCC_PLL1CFGR_RGE_4_8       (0x2) /* 4-8 MHz */
-#define RCC_PLL1CFGR_RGE_8_16      (0x3) /* 8-16 MHz */
-#define RCC_PLL1CFGR_PLL1PEN       (1 << 16)
-#define RCC_PLL1CFGR_PLL1QEN       (1 << 17)
-#define RCC_PLL1CFGR_PLL1REN       (1 << 18)
+/* PLL2 Configuration */
+#define RCC_PLL2CFGR               (*(volatile uint32_t *)(RCC_BASE + 0x2C))  /* RM0481 - Table 108 */
+#define RCC_PLL2DIVR               (*(volatile uint32_t *)(RCC_BASE + 0x3C))  /* RM0481 - Table 108 */
+#define RCC_PLL2FRACR              (*(volatile uint32_t *)(RCC_BASE + 0x40))  /* RM0481 - Table 108 */
+
+#define RCC_PLLCFGR_PLLSRC_SHIFT (0x0)
+#define RCC_PLLCFGR_PLLSRC_HSI   (0x1)
+#define RCC_PLLCFGR_PLLSRC_CSI   (0x2)
+#define RCC_PLLCFGR_PLLSRC_HSE   (0x3)
+#define RCC_PLLCFGR_PLLRGE_SHIFT (0x2)
+#define RCC_PLLCFGR_RGE_1_2       (0x0) /* Default at boot: 1-2 MHz */
+#define RCC_PLLCFGR_RGE_2_4       (0x1) /* 2-4 MHz */
+#define RCC_PLLCFGR_RGE_4_8       (0x2) /* 4-8 MHz */
+#define RCC_PLLCFGR_RGE_8_16      (0x3) /* 8-16 MHz */
+#define RCC_PLLCFGR_PLL1PEN       (1 << 16)
+#define RCC_PLLCFGR_PLL1QEN       (1 << 17)
+#define RCC_PLLCFGR_PLL1REN       (1 << 18)
 
 
-#define RCC_PLL1CFGR_PLL1FRACEN    (1 << 4)
-#define RCC_PLL1CFGR_PLL1VCOSEL    (1 << 5)
-#define RCC_PLL1CFGR_PLL1M_SHIFT   (0x8)
-#define RCC_PLL1CFGR_PLL1PEN       (1 << 16)
-#define RCC_PLL1CFGR_PLL1QEN       (1 << 17)
-#define RCC_PLL1CFGR_PLL1REN       (1 << 18)
+#define RCC_PLLCFGR_PLLFRACEN    (1 << 4)
+#define RCC_PLLCFGR_PLLVCOSEL    (1 << 5)
+#define RCC_PLLCFGR_PLLM_SHIFT   (0x8)
+#define RCC_PLLCFGR_PLLPEN       (1 << 16)
+#define RCC_PLLCFGR_PLLQEN       (1 << 17)
+#define RCC_PLLCFGR_PLLREN       (1 << 18)
 
-#define RCC_PLL1DIVR_DIVN_SHIFT    (0)
-#define RCC_PLL1DIVR_DIVP_SHIFT    (9)
-#define RCC_PLL1DIVR_DIVQ_SHIFT    (16)
-#define RCC_PLL1DIVR_DIVR_SHIFT    (24)
+#define RCC_PLLDIVR_DIVN_SHIFT    (0)
+#define RCC_PLLDIVR_DIVP_SHIFT    (9)
+#define RCC_PLLDIVR_DIVQ_SHIFT    (16)
+#define RCC_PLLDIVR_DIVR_SHIFT    (24)
 
-#define RCC_PLL1FRACR_FRACN_SHIFT  (3)
+#define RCC_PLLFRACR_FRACN_SHIFT  (3)
 
 
 #define RCC_APB_PRESCALER_DIV_NONE 0x0  /* 0xx: HCLK not divided */
@@ -140,33 +149,19 @@
 #define RCC_CFGR_SW_HSE             0x2
 #define RCC_CFGR_SW_PLL             0x3
 
-#define RCC_PLLCFGR         (*(volatile uint32_t *)(RCC_BASE + 0x0C))  //RM0481 - Table 77
-#define RCC_PLLCFGR_PLLP_SHIFT       (27)
-#define RCC_PLLCFGR_PLLR_SHIFT      (25)
-#define RCC_PLLCFGR_PLLREN          (1 << 24)
-
-#define RCC_PLLCFGR_PLLQ_SHIFT       (21)
-#define RCC_PLLCFGR_PLLQEN           (1 << 20)
-
-#define RCC_PLLCFGR_PLLN_SHIFT       (8)
-#define RCC_PLLCFGR_PLLM_SHIFT       (4)
-
-#define RCC_PLLCFGR_QR_DIV_2          0x0
-#define RCC_PLLCFGR_QR_DIV_4          0x1
-#define RCC_PLLCFGR_QR_DIV_6          0x2
-#define RCC_PLLCFGR_QR_DIV_8          0x3
-
-#define RCC_PLLCFGR_P_DIV_7           0x0
-#define RCC_PLLCFGR_P_DIV_17          0x1
 
 #define RCC_PLLCKSELR_PLLSRC_NONE    0x0
 #define RCC_PLLCKSELR_PLLSRC_MSI     0x1
 #define RCC_PLLCKSELR_PLLSRC_HSI16   0x2
 #define RCC_PLLCKSELR_PLLSRC_HSE     0x3
 
-#define RCC_CCIPR1          (*(volatile uint32_t *)(RCC_BASE + 0x88))
-#define RCC_CCIPR1_LPUART1SEL_SHIFT (10)
-#define RCC_CCIPR1_LPUART1SEL_MASK (0x3)
+#define RCC_CCIPR1          (*(volatile uint32_t *)(RCC_BASE + 0xD8))
+#define RCC_CCIPR3          (*(volatile uint32_t *)(RCC_BASE + 0xE0))
+#define RCC_CCIPR1_USART3SEL_SHIFT (6)
+#define RCC_CCIPR1_USART3SEL_MASK (0x7)
+#define RCC_CCIPR3_LPUART1SEL_SHIFT (24)
+#define RCC_CCIPR3_LPUART1SEL_MASK (0x7)
+
 
 #define RCC_CRRCR         (*(volatile uint32_t *)(RCC_BASE + 0x98))
 #define RCC_CRRCR_HSI48ON      (1 << 0)
@@ -176,10 +171,10 @@
 /*!< Memory & Instance aliases and base addresses for Non-Secure/Secure peripherals */
 #if TZ_SECURE()
 /*Secure */
-#define PWR_BASE            (0x50020800)   //RM0481 - Table 3
+#define PWR_BASE            (0x54020800)   //RM0481 - Table 3
 #else
 /*Non-Secure */
-#define PWR_BASE            (0x40020800)   //RM0481 - Table 3
+#define PWR_BASE            (0x44020800)   //RM0481 - Table 3
 #endif
 
 #define PWR_VOSCR              (*(volatile uint32_t *)(PWR_BASE + 0x10))
@@ -219,8 +214,10 @@
 #define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
 #define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
 
-#define TZSC_PRIVCFGR2   *((volatile uint32_t *)(0x50036424))
-#define TZSC_PRIVCFG2_LPUARTPRIV (1 << 25) /* LPUART1 */
+#define TZSC_SECCFGR1   *((volatile uint32_t *)(0x50036410))
+#define TZSC_SECCFGR1_USART3SEC (1 << 14) /* USART3 */
+#define TZSC_SECCFGR2   *((volatile uint32_t *)(0x50036414))
+#define TZSC_SECCFGR2_LPUART1SEC (1 << 25) /* LPUART1 */
 
 /* Mapping FLASH_SECCR for bank swapping */
 #define FLASH_CCR            (*(volatile uint32_t *)(FLASH_BASE + 0x34))
@@ -257,15 +254,10 @@
 #define FLASH_OPSR_CODE_OPT_CHANGE  (0x6 << 29)
 #define FLASH_OPSR_CODE_OBK_SWAP    (0x7 << 29)
 
+#define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
+#define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
+#define FLASH_OPTSR_SWAP_BANK (1 << 31)
 
-
-
-
-#if defined(DUALBANK_SWAP) && defined (__WOLFBOOT)
-    #define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
-    #define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
-    #define FLASH_OPTSR_SWAP_BANK (1 << 31)
-#endif
 
 /* Register values (for both secure and non secure registers)
  * RM0481 Table 75 */
@@ -335,12 +327,21 @@
 #define FLASH_OPTKEY2                         (0x4C5D6E7FU)
 
 /* GPIO*/
+#if (TZ_SECURE())
 #define GPIOA_BASE 0x52020000
 #define GPIOB_BASE 0x52020400
 #define GPIOC_BASE 0x52020800
 #define GPIOD_BASE 0x52020C00
 #define GPIOF_BASE 0x52021400
 #define GPIOG_BASE 0x52021800
+#else
+#define GPIOA_BASE 0x42020000
+#define GPIOB_BASE 0x42020400
+#define GPIOC_BASE 0x42020800
+#define GPIOD_BASE 0x42020C00
+#define GPIOF_BASE 0x42021400
+#define GPIOG_BASE 0x42021800
+#endif
 
 /* RCC AHB2 Clock Enable Register */
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
@@ -356,8 +357,63 @@
 #define SRAM2_AHB2_CLOCK_ER  (1 << 30)
 #define SRAM3_AHB2_CLOCK_ER  (1 << 31)
 
+/* RCC: APB1 and APB2 */
 #define RCC_APB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xA4))
 #define UART1_APB2_CLOCK_ER_VAL (1 << 14)
+
+#define RCC_APB1L_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x9C))
+#define UART3_APB1L_CLOCK_ER_VAL (1 << 18)
+
+/* UART1 */
+#if (TZ_SECURE())
+#define UART1 (0x54002400) /* Using LPUART1 */
+#define UART3 (0x50005800) /* Using USART3 */
+#else
+#define UART1 (0x44002400)
+#define UART3 (0x40004800)
+#endif
+
+#define UART1_CR1      (*(volatile uint32_t *)(UART1 + 0x00))
+#define UART1_CR2      (*(volatile uint32_t *)(UART1 + 0x04))
+#define UART1_CR3      (*(volatile uint32_t *)(UART1 + 0x08))
+#define UART1_BRR      (*(volatile uint32_t *)(UART1 + 0x0c))
+#define UART1_ISR      (*(volatile uint32_t *)(UART1 + 0x1c))
+#define UART1_ICR      (*(volatile uint32_t *)(UART1 + 0x20))
+#define UART1_RDR      (*(volatile uint32_t *)(UART1 + 0x24))
+#define UART1_TDR      (*(volatile uint32_t *)(UART1 + 0x28))
+#define UART1_PRE      (*(volatile uint32_t *)(UART1 + 0x2C))
+
+#define UART3_CR1      (*(volatile uint32_t *)(UART3 + 0x00))
+#define UART3_CR2      (*(volatile uint32_t *)(UART3 + 0x04))
+#define UART3_CR3      (*(volatile uint32_t *)(UART3 + 0x08))
+#define UART3_BRR      (*(volatile uint32_t *)(UART3 + 0x0c))
+#define UART3_ISR      (*(volatile uint32_t *)(UART3 + 0x1c))
+#define UART3_ICR      (*(volatile uint32_t *)(UART3 + 0x20))
+#define UART3_RDR      (*(volatile uint32_t *)(UART3 + 0x24))
+#define UART3_TDR      (*(volatile uint32_t *)(UART3 + 0x28))
+#define UART3_PRE      (*(volatile uint32_t *)(UART3 + 0x2C))
+
+#define UART_CR1_UART_ENABLE    (1 << 0)
+#define UART_CR1_OVER8          (1 << 15)
+#define UART_CR1_SYMBOL_LEN     (1 << 12)
+#define UART_CR1_PARITY_ENABLED (1 << 10)
+#define UART_CR1_PARITY_ODD     (1 << 9)
+#define UART_CR1_TX_ENABLE      (1 << 3)
+#define UART_CR1_RX_ENABLE      (1 << 2)
+#define UART_CR2_STOPBITS       (3 << 12)
+#define UART_CR2_LINEN          (1 << 14)
+#define UART_CR2_CLKEN          (1 << 11)
+#define UART_CR3_HDSEL          (1 << 3)
+#define UART_CR3_DEM            (1 << 14)
+#define UART_CR3_IREN           (1 << 1)
+#define UART_CR3_RXFTIE         (1 << 28)
+#define UART_ISR_TX_EMPTY       (1 << 7)
+#define UART_ISR_RX_NOTEMPTY    (1 << 5)
+#define UART_EPE                (1 << 0)    /* Parity error */
+#define UART_EFE                (1 << 1)    /* Framing error */
+#define UART_ENE                (1 << 2)    /* Noise error */
+#define UART_ORE                (1 << 3)    /* Overrun error */
+
 
 
 /* OTP FLASH AREA */
@@ -367,9 +423,13 @@
 #define OTP_BLOCKS             32
 
 /* UART1 pin configuration */
-#define UART1_PIN_AF 8
-#define UART1_RX_PIN 8
-#define UART1_TX_PIN 7
+#define UART1_PIN_AF 7
+#define UART1_RX_PIN 7
+#define UART1_TX_PIN 6
+
+#define UART3_PIN_AF 7
+#define UART3_RX_PIN 9
+#define UART3_TX_PIN 8
 
 /* GPIO secure configuration */
 #define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30))

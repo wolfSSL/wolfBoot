@@ -114,7 +114,9 @@ extern int tolower(int c);
 #       endif
 #   else
 #       define HAVE_ECC_SIGN
+#ifndef PKCS11_SMALL
 #       define HAVE_ECC_CDH
+#endif
 #       define WOLFSSL_SP
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
@@ -173,7 +175,7 @@ extern int tolower(int c);
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
     defined(WOLFBOOT_SIGN_RSA3072) || \
     defined(WOLFBOOT_SIGN_RSA4096) || \
-    defined(WOLFCRYPT_SECURE_MODE)
+    (defined(WOLFCRYPT_SECURE_MODE) && (!defined(PKCS11_SMALL)))
 
 #   define WC_RSA_BLINDING
 #   define WC_RSA_DIRECT

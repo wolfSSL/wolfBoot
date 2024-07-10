@@ -301,6 +301,8 @@ int wolfBoot_fallback_is_possible(void);
 int wolfBoot_dualboot_candidate(void);
 
 int wolfBoot_dualboot_candidate_addr(void**);
+int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
+
 
 #ifdef EXT_ENCRYPTED
 /* Encryption support */

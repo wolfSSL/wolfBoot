@@ -59,10 +59,13 @@ void main(void)
                 sizeof(struct keystore_slot));
     }
 
-    /* Protect the OTP area just written */
     tot_len = OTP_HDR_SIZE + n_keys * SIZEOF_KEYSTORE_SLOT;
-    hal_flash_otp_set_readonly(FLASH_OTP_BASE, tot_len);
 
+#ifdef ENABLE_OTP_WP
+    /* Protect the OTP area just written */
+    hal_flash_otp_set_readonly(FLASH_OTP_BASE, tot_len);
+#endif
+    (void)tot_len;
 
     /* Done! */
     while(1)

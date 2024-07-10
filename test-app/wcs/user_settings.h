@@ -132,10 +132,10 @@ extern int tolower(int c);
 #define NO_ERROR_STRINGS
 
 #define BENCH_EMBEDDED
-#define NO_CRYPT_TEST
-#define NO_CRYPT_BENCHMARK
 
+#ifdef SECURE_PKCS11
 #define CUSTOM_RAND_GENERATE_BLOCK wcs_get_random
+#endif
 
 /* Disable VLAs */
 #define WOLFSSL_SP_NO_DYN_STACK
