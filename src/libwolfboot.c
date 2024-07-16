@@ -308,8 +308,8 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
                 break;
             }
             /* Examine previous position one byte ahead */
-            byte_0 = get_base_offset(base, (1 - off));
-            byte_1 = get_base_offset(base, (1 - (WOLFBOOT_SECTOR_SIZE + off)));
+            byte_0 = get_base_offset(base, (off - 1));
+            byte_1 = get_base_offset(base, ((WOLFBOOT_SECTOR_SIZE + off) - 1));
 
             sel = FLAG_CMP(byte_0, byte_1);
             break;
