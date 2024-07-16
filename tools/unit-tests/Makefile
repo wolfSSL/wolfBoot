@@ -17,7 +17,7 @@ WOLFCRYPT=../../lib/wolfssl/
 
 
 TESTS:=unit-parser unit-extflash unit-aes128 unit-aes256 unit-chacha20 unit-pci \
-	   unit-mock-state unit-sectorflags unit-image
+	   unit-mock-state unit-sectorflags unit-image unit-nvm
 
 all: $(TESTS)
 
@@ -39,6 +39,7 @@ unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
 unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
 unit-chacha20:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA
 unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
+unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 
 
 WOLFCRYPT_SRC:=$(WOLFCRYPT)/wolfcrypt/src/sha.c \
@@ -85,6 +86,9 @@ unit-sectorflags: ../../include/target.h unit-sectorflags.c
 
 unit-image:  unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 	gcc -o $@ $^ $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-nvm: ../../include/target.h unit-nvm.c
+	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
