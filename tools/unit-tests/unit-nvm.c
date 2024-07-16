@@ -44,6 +44,7 @@ int hal_flash_erase(haladdr_t address, int len)
     } else if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
+        memset(address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -89,10 +90,10 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
     }
     fprintf(stderr, "Open file: %s success.\n", path);
     for (i = 0; i < WOLFBOOT_PARTITION_SIZE; i+=4) {
-        const uint32_t erased_word = 0xFFFFFFFF;
-        write(fd, &erased_word, 4); 
+        const uint32_t erased_word = 0xBADBADBA;
+        write(fd, &erased_word, 4);
     }
-    lseek(fd, SEEK_SET, 0); 
+    lseek(fd, SEEK_SET, 0);
 
     mmaped_addr = mmap(address, WOLFBOOT_PARTITION_SIZE, PROT_READ | PROT_WRITE,
                        MAP_SHARED, fd, 0);
@@ -120,16 +121,23 @@ START_TEST (test_nvm_select_fresh_sector)
 {
     int ret;
     const char BOOT[] = "BOOT";
+    const uint32_t *boot_word = (const uint32_t *)BOOT;
     uint8_t st;
+    uint32_t *magic;
     ret = mmap_file("/tmp/wolfboot-unit-file.bin", MOCK_ADDRESS, NULL);
 
+    erased_update = 0;
+    wolfBoot_erase_partition(PART_UPDATE);
+    fail_if(erased_update != 1);
     /* Erased flag sectors: select '0' by default */
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 0, "Failed to select default fresh sector\n");
 
-    /* Force a good 'magic' at the end of sector 1 */
-    hal_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 
-            (WOLFBOOT_SECTOR_SIZE + 4), BOOT, 4);
+    /* Force a good 'magic' at the end of sector 1 by setting the magic word */
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+    magic = get_partition_magic(PART_UPDATE);
+    fail_if(*magic != *boot_word,
+            "Failed to read back 'BOOT' trailer at the end of the partition");
 
     /* Current selected should now be 1 */
     ret = nvm_select_fresh_sector(PART_UPDATE);
@@ -145,7 +153,7 @@ START_TEST (test_nvm_select_fresh_sector)
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 0, "Failed to select updating fresh sector\n");
     fail_if(erased_nvm_bank1 == 0, "Did not erase the non-selected bank");
-    
+
     erased_nvm_bank1 = 0;
     erased_nvm_bank0 = 0;
 
@@ -160,7 +168,7 @@ START_TEST (test_nvm_select_fresh_sector)
 
     /* Update one sector flag, it should change nvm sector */
     wolfBoot_set_update_sector_flag(0, SECT_FLAG_SWAPPING);
-    
+
     /* Current selected should now be 1 */
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 1, "Failed to select updating fresh sector\n");
@@ -170,16 +178,16 @@ START_TEST (test_nvm_select_fresh_sector)
     ret = wolfBoot_get_update_sector_flag(0, &st);
     fail_if (ret != 0, "Failed to read sector flag state\n");
     fail_if (st != SECT_FLAG_SWAPPING, "Wrong sector flag state\n");
-    
+
     /* Check that reading did not change the current sector (1) */
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 1, "Failed to select right sector after reading sector state\n");
-    
+
     /* Update sector flag, again. it should change nvm sector */
     erased_nvm_bank1 = 0;
     erased_nvm_bank0 = 0;
     wolfBoot_set_update_sector_flag(0, SECT_FLAG_UPDATED);
-    
+
     /* Current selected should now be 0 */
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 0, "Failed to select updating fresh sector\n");
@@ -190,7 +198,9 @@ START_TEST (test_nvm_select_fresh_sector)
     fail_if (ret != 0, "Failed to read sector flag state\n");
     fail_if (st != SECT_FLAG_UPDATED, "Wrong sector flag state\n");
 
-
+    /* Check that reading did not change the current sector (0) */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 0, "Failed to select right sector after reading sector state\n");
 
 }
 END_TEST
