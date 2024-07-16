@@ -176,18 +176,10 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #include <string.h>
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
 static int nvm_cached_sector = 0;
-
-#ifdef __GNUC__
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Warray-bounds"
-#endif
 static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
 {
     return *(base - off); /* ignore array bounds error */
 }
-#ifdef __GNUC__
-    #pragma GCC diagnostic pop
-#endif
 
 void WEAKFUNCTION hal_cache_invalidate(void)
 {
