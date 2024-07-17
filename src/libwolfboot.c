@@ -1381,9 +1381,12 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     if (ret != 0)
         return ret;
 #endif
+
     XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
     XMEMCPY(ENCRYPT_CACHE + addr_off + ENCRYPT_KEY_SIZE, nonce,
         ENCRYPT_NONCE_SIZE);
+    XMEMCPY(ENCRYPT_CACHE + addr_off - 4,
+            &wolfboot_magic_trail, 4);
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
 #ifdef NVM_FLASH_WRITEONCE
     /* now erase the old populated sector */
@@ -1412,7 +1415,6 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     const uint8_t *nonce)
 {
-    set_partition_magic(PART_BOOT);
     hal_set_key(key, nonce);
     return 0;
 }

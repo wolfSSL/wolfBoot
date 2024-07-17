@@ -821,7 +821,7 @@ void RAMFUNCTION wolfBoot_start(void)
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
 
-#if !defined(DISABLE_BACKUP) && !defined(EXT_ENCRYPTED)
+#if !defined(DISABLE_BACKUP)
     /* resume the final erase in case the power failed before it finished */
     resumedFinalErase = wolfBoot_swap_and_final_erase(1);
     if (resumedFinalErase != 0)
