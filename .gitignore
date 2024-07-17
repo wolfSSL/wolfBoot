@@ -60,6 +60,9 @@ src/ecc384_pub_key.c
 src/ecc512_pub_key.c
 src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
+# Renesas key data files
+include/key_data.c
+include/key_data.h
 
 # keygen binaries
 tools/keytools/sign
@@ -149,6 +152,7 @@ debug/lauterbach
 *.gcda
 *.gcno
 coverage.*
+
 IDE/MPLAB/test-app/test-usb-updater.same51.X/dist/
 IDE/MPLAB/test-app/test-usb-updater.same51.X/.generated_files/
 IDE/MPLAB/bootloader/wolfboot-same51.dualbank.X/dist/
@@ -205,3 +209,15 @@ include/x86/fsp/FspmUpd.h
 include/x86/fsp/FspsUpd.h
 include/x86/fsp/FsptUpd.h
 include/x86/fsp/MemInfoHob.h
+
+# IDE Renesas e2Studio generated
+IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug
+IDE/Renesas/e2studio/RX72N/app_RenesasRX01/src/smc_gen
+IDE/Renesas/e2studio/RX72N/wolfBoot/HardwareDebug
+IDE/Renesas/e2studio/RX72N/wolfBoot/src/smc_gen
+
+# Renesas Libraries
+lib/r_bsp
+lib/r_config
+lib/r_flash_rx
+lib/r_tsip_rx

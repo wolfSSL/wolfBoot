@@ -35,6 +35,9 @@
 #endif
 
 #if defined(DEBUG_UART)
+    #if !defined(UART_FLASH) && !defined(WOLFBOOT_FSP)
+        void uart_init(void);
+    #endif
     void uart_write(const char* buf, unsigned int sz);
 
     /* turn on small printf support */

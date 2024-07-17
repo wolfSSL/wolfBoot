@@ -2,10 +2,10 @@
 
 ## Flash memory partitions
 
-To integrate wolfBoot you need to partition the flash into 
+To integrate wolfBoot you need to partition the flash into
 separate areas (partitions), taking into account the geometry of the flash memory.
 
-Images boundaries **must** be aligned to physical sectors, because the 
+Images boundaries **must** be aligned to physical sectors, because the
 bootloader erases all the flash sectors before storing a new firmware image, and
 swaps the content of the two partitions, one sector at a time.
 
@@ -22,7 +22,7 @@ The flash memory of the target is partitioned into the following areas:
   - Secondary slot (UPDATE partition) starting at address `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
     - both partitions share the same size, defined as `WOLFBOOT_PARTITION_SIZE`
   - Swapping space (SWAP partition) starting at address `WOLFBOOT_PARTITION_SWAP_ADDRESS`
-    - the swap space size is defined as `WOLFBOOT_SECTOR_SIZE` and must be as big as the 
+    - the swap space size is defined as `WOLFBOOT_SECTOR_SIZE` and must be as big as the
       largest sector used in either BOOT/UPDATE partitions.
 
 A proper partitioning configuration must be set up for the specific use, by setting
@@ -36,9 +36,9 @@ as part of the firmware image.
 
 ### BOOT partition
 
-This is the only partition from where it is possible to chain-load and execute a 
+This is the only partition from where it is possible to chain-load and execute a
 firmware image. The firmware image must be linked so that its entry-point is at address
-`WOLFBOOT_PARTITION_BOOT_ADDRESS + 256`. 
+`WOLFBOOT_PARTITION_BOOT_ADDRESS + 256`.
 
 ### UPDATE partition
 
@@ -50,16 +50,39 @@ the firmware in the boot partition at the next reboot.
 ## Partition status and sector flags
 
 Partitions are used to store firmware images currently in use (BOOT) or ready to swap in (UPDATE).
-In order to track the status of the firmware in each partition, a 1-Byte state field is stored at the end of 
+In order to track the status of the firmware in each partition, a 1-Byte state field is stored at the end of
 each partition space. This byte is initialized when the partition is erased and accessed for the first time.
 
 Possible states are:
-  - `STATE_NEW` (0xFF): The image was never staged for boot, or triggered for an update. If an image is present, no flags are active.
-  - `STATE_UPDATING` (0x70): Only valid in the UPDATE partition. The image is marked for update and should replace the current image in BOOT.
-  - `STATE_TESTING` (0x10): Only valid in the BOOT partition. The image has been just updated, and never completed its boot. If present after reboot, it means that the updated image failed to boot, despite being correctly verified. This particular situation triggers a rollback.
-  - `STATE_SUCCESS` (0x00): Only valid in the BOOT partition. The image stored in BOOT has been successfully staged at least once, and the update is now complete.
+  - `IMG_STATE_NEW` (0xFF): The image was never staged for boot, or triggered for an update. If an image is present, no flags are active.
+  - `IMG_STATE_UPDATING` (0x70): Only valid in the UPDATE partition. The image is marked for update and should replace the current image in BOOT.
+  - `IMG_STATE_TESTING` (0x10): Only valid in the BOOT partition. The image has been just updated, and never completed its boot. If present after reboot, it means that the updated image failed to boot, despite being correctly verified. This particular situation triggers a rollback.
+  - `IMG_STATE_SUCCESS` (0x00): Only valid in the BOOT partition. The image stored in BOOT has been successfully staged at least once, and the update is now complete.
 
-Starting from the State byte and growing backwards, the bootloader keeps track of the state of each sector, using 4 bits per sector at the end of the UPDATE partition. Whenever an update is initiated, the firmware is transferred from UPDATE to BOOT one sector at a time, and storing a backup of the original firmware from BOOT to UPDATE. Each flash access operation correspond to a different value of the flags for the sector in the sector flags area, so that if the operation is interrupted, it can be resumed upon reboot.
+Starting from the State byte and growing backwards, the bootloader keeps track of the state of each sector, using 4-bits per sector at the end of the UPDATE partition. Whenever an update is initiated, the firmware is transferred from UPDATE to BOOT one sector at a time, and storing a backup of the original firmware from BOOT to UPDATE. Each flash access operation correspond to a different value of the flags for the sector in the sector flags area, so that if the operation is interrupted, it can be resumed upon reboot.
+
+End of flash layout:
+ * 4-bits flag (sector 1)
+ * 4-bits flag (sector 0)
+ * 1-byte partition state
+ * 4-byte trailer "BOOT"
+
+If the `FLAGS_HOME` build option is used then all flags are placed at the end of the boot partition:
+
+ ```
+                         / -12    /-8       /-4     / END
+   |Sn| ... |S2|S1|S0|PU|  MAGIC  |X|X|X|PB| MAGIC |
+    ^--sectors   --^  ^--update           ^---boot partition
+       flags             partition            flag
+                         flag
+```
+
+You can use the `CUSTOM_PARTITION_TRAILER` option to implement your own functions for: `get_trailer_at`, `set_trailer_at` and `set_partition_magic`.
+
+To enable:
+1) Add the `CUSTOM_PARTITION_TRAILER` build option to your `.config`: `CFLAGS_EXTRA+=--DCUSTOM_PARTITION_TRAILER`
+2) Add your own .c file using `OBJS_EXTRA`. For example for your own `src/custom_trailer.c` add this to your `.config`: `OBJS_EXTRA=src/custom_trailer.o`.
+
 
 ## Overview of the content of the FLASH partitions
 

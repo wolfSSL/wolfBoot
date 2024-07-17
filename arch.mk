@@ -269,6 +269,146 @@ ifeq ($(TZEN),1)
   CFLAGS+=-DTZEN
 endif
 
+
+## Renesas RX
+ifeq ($(ARCH),RENESAS_RX)
+  RX_GCC_PATH?=~/toolchains/gcc_8.3.0.202311_rx_elf
+  CROSS_COMPILE?=$(RX_GCC_PATH)/bin/rx-elf-
+
+  ## Toolchain setup
+  ifeq ($(USE_GCC),0)
+    CC=$(CROSS_COMPILE)gcc
+    # Must use LD directly (gcc link calls LD with sysroot and is not supported)
+    LD=$(CROSS_COMPILE)ld
+    AS=$(CROSS_COMPILE)gcc
+    OBJCOPY?=$(CROSS_COMPILE)objcopy
+    SIZE=$(CROSS_COMPILE)size
+
+    # Override flags
+    USE_GCC_HEADLESS=0
+    LD_START_GROUP=--start-group
+    LD_END_GROUP=--end-group
+    CFLAGS+=-Wall -Wextra -ffreestanding -Wno-unused -nostartfiles -fno-common
+    CFLAGS+=-ffunction-sections -fdata-sections
+    CFLAGS+=-B$(dir $(CROSS_COMPILE))
+    LDFLAGS+=-gc-sections -Map=wolfboot.map
+    LDFLAGS+=-T $(LSCRIPT) -L$(dir $(CROSS_COMPILE))../lib
+    LIBS+=-lgcc
+  endif
+
+  # Renesas specific files
+  OBJS+=src/boot_renesas.o src/boot_renesas_start.o hal/renesas-rx.o
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
+
+  # RX parts support big or little endian data depending on MDE register
+  CFLAGS+=-fomit-frame-pointer -nofpu
+  ifeq ($(BIG_ENDIAN),1)
+    CFLAGS+=-mbig-endian-data
+    ifeq ($(USE_GCC),1)
+      LDFLAGS+=-Wl,--oformat=elf32-rx-be
+      CFLAGS+=-misa=v2
+    else
+      LDFLAGS+=--oformat=elf32-rx-be
+    endif
+  else
+    CFLAGS+=-mlittle-endian-data
+    ifeq ($(USE_GCC),1)
+      LDFLAGS+=-Wl,--oformat=elf32-rx-le
+      CFLAGS+=-misa=v2
+    else
+      LDFLAGS+=--oformat=elf32-rx-le
+    endif
+  endif
+
+  ifeq ($(PKA),1)
+    CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
+    RX_DRIVER_PATH?=./lib
+
+    OBJS+=./lib/wolfssl/wolfcrypt/src/cryptocb.o \
+          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.o \
+          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o
+
+    # RX TSIP uses pre-compiled .a library by default
+    ifeq ($(RX_TSIP_SRC),)
+      ifeq ($(TARGET),rx65n)
+        ifeq ($(BIG_ENDIAN),1)
+          LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx65n_big.a
+        else
+          LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx65n_little.a
+        endif
+      endif
+      ifeq ($(TARGET),rx72n)
+        ifeq ($(BIG_ENDIAN),1)
+          LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx72m_rx72n_rx66n_big.a
+        else
+          LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx72m_rx72n_rx66n_little.a
+        endif
+      endif
+    else
+      CFLAGS+=-DRX_TSIP_SRC
+      ifeq ($(TARGET),rx65n)
+        RX_TSIP_SRC_PATH?=$(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx65n
+      endif
+      ifeq ($(TARGET),rx72n)
+        RX_TSIP_SRC_PATH?=$(RX_DRIVER_PATH)/r_tsip_rx/src/targets/rx72m_rx72n_rx66n
+      endif
+      # Use RX_TSIP_SRC if building TSIP sources directly
+      OBJS+=$(RX_TSIP_SRC_PATH)/r_tsip_rx.o \
+            $(RX_TSIP_SRC_PATH)/r_tsip_rx_private.o \
+            $(RX_TSIP_SRC_PATH)/r_tsip_aes_rx.o \
+            $(RX_TSIP_SRC_PATH)/r_tsip_hash_rx.o \
+            $(RX_TSIP_SRC_PATH)/r_tsip_ecc_rx.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pfa.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pfb.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf1.o \
+            $(RX_TSIP_SRC_PATH)/ip/s_flash.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p00.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p01.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p02.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p23.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p26.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p72.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_subprc01.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_subprc02.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function004.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function005.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function006.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function009.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function010.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function011.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function023.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function050.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function051.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function052.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function053.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function054.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function100.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function101.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function102.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function103.o
+    endif
+
+    OBJS+=$(RX_DRIVER_PATH)/r_bsp/mcu/all/r_bsp_cpu.o \
+          $(RX_DRIVER_PATH)/r_bsp/mcu/all/r_bsp_interrupts.o \
+          $(RX_DRIVER_PATH)/r_bsp/mcu/all/r_rx_intrinsic_functions.o
+    ifeq ($(TARGET),rx65n)
+      OBJS+=$(RX_DRIVER_PATH)/r_bsp/mcu/rx65n/mcu_interrupts.o
+    endif
+    ifeq ($(TARGET),rx72n)
+      OBJS+=$(RX_DRIVER_PATH)/r_bsp/mcu/rx72n/mcu_interrupts.o
+    endif
+
+    CFLAGS+=-Ihal -I./lib/wolfssl \
+            -I$(RX_DRIVER_PATH)/r_bsp \
+            -I$(RX_DRIVER_PATH)/r_config \
+            -I$(RX_DRIVER_PATH)/r_tsip_rx \
+            -I$(RX_DRIVER_PATH)/r_tsip_rx/src
+  endif
+endif
+
+
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
@@ -479,7 +619,8 @@ endif
 ifeq ($(TARGET),nxp_t1024)
   # Power PC big endian
   ARCH_FLAGS=-mhard-float -mcpu=e5500
-  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
@@ -503,7 +644,8 @@ endif
 ifeq ($(TARGET),nxp_t2080)
   # Power PC big endian
   ARCH_FLAGS=-mhard-float -mcpu=e6500
-  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
@@ -524,7 +666,8 @@ ifeq ($(TARGET),nxp_p1021)
   # Power PC big endian
   ARCH_FLAGS=-m32 -mhard-float -mcpu=e500mc
   ARCH_FLAGS+=-fno-builtin -ffreestanding -nostartfiles
-  CFLAGS+=$(ARCH_FLAGS) -DBIG_ENDIAN_ORDER
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
   CFLAGS+=-DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   LDFLAGS+=$(ARCH_FLAGS)
@@ -552,7 +695,8 @@ endif
 ifeq ($(TARGET),ti_hercules)
   # HALCoGen Source and Include?
   CORTEX_R5=1
-  CFLAGS+=-D"CORTEX_R5" -D"BIG_ENDIAN_ORDER" -D"NVM_FLASH_WRITEONCE" -D"FLASHBUFFER_SIZE=32"
+  CFLAGS+=-D"CORTEX_R5" -D"NVM_FLASH_WRITEONCE" -D"FLASHBUFFER_SIZE=32"
+  BIG_ENDIAN=1
   STACK_USAGE=0
   USE_GCC=0
   USE_GCC_HEADLESS=0
@@ -660,10 +804,6 @@ ifeq ($(TARGET),psoc6)
     endif
 endif
 
-
-
-USE_GCC?=1
-USE_GCC_HEADLESS?=1
 ifeq ($(USE_GCC),1)
   ## Toolchain setup
   CC=$(CROSS_COMPILE)gcc
@@ -671,8 +811,8 @@ ifeq ($(USE_GCC),1)
   AS=$(CROSS_COMPILE)gcc
   OBJCOPY?=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
-  OUTPUT_FLAG=-o
 endif
+OUTPUT_FLAG?=-o
 
 ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
   FSP=1
@@ -859,6 +999,10 @@ endif
 ifeq ($(NXP_CUSTOM_DCD),1)
   CFLAGS+=-DNXP_CUSTOM_DCD
   OBJS+=$(NXP_CUSTOM_DCD_OBJS)
+endif
+
+ifeq ($(BIG_ENDIAN),1)
+  CFLAGS+=-D"BIG_ENDIAN_ORDER"
 endif
 
 CFLAGS+=-DWOLFBOOT_ARCH_$(ARCH)

@@ -10,6 +10,8 @@ CFLAGS+=-I. -I..
 CFLAGS+=-I./wcs
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
+USE_GCC?=1
+USE_GCC_HEADLESS?=1
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -38,10 +40,22 @@ ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
-  CFLAGS+=-g -ggdb -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
-  APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
-endif
+  CFLAGS+=-Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+  CFLAGS+=-g
+  ifeq ($(USE_GCC),1)
+    CFLAGS+=-ggdb3
+  else
+    CFLAGS+=-gstabs
+  endif
 
+  ifeq ($(ARCH),RENESAS_RX)
+    APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o ../hal/renesas-rx.o
+    LDFLAGS+=-ffreestanding -nostartfiles
+    CFLAGS+=-DWOLFBOOT_RENESAS_APP
+  else
+    APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
+  endif
+endif
 
 include ../arch.mk
 
@@ -213,7 +227,12 @@ endif
 
 ifeq ($(SPI_FLASH),1)
   CFLAGS+=-D"SPI_FLASH"
-  APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/spi_flash.o
+  APP_OBJS+=../src/spi_flash.o
+  ifeq ($(ARCH),RENESAS_RX)
+    APP_OBJS+=../hal/spi/spi_drv_renesas_rx.o
+  else
+    APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(OCTOSPI_FLASH),1)
@@ -223,7 +242,12 @@ endif
 
 ifeq ($(QSPI_FLASH),1)
   CFLAGS+=-D"QSPI_FLASH"
-  APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o ../src/qspi_flash.o
+  APP_OBJS+=../src/qspi_flash.o
+  ifeq ($(ARCH),RENESAS_RX)
+    APP_OBJS+=../hal/spi/spi_drv_renesas_rx.o
+  else
+    APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(UART_FLASH),1)
@@ -396,6 +420,14 @@ delta-extra-data:LDFLAGS=-Wl,-Map=image.map
 image.bin: image.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
+
+image.hex: image.elf
+	@echo "\t[HEX] $@"
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O ihex $^ $@
+
+image.srec: image.elf
+	@echo "\t[SREC] $@"
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O srec $^ $@
 
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"

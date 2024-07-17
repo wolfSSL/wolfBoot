@@ -24,6 +24,10 @@ DEBUG_UART?=0
 LIBS=
 SIGN_ALG=
 OBJCOPY_FLAGS=
+BIG_ENDIAN?=0
+USE_GCC?=1
+USE_GCC_HEADLESS?=1
+FLASH_OTP_KEYSTORE?=0
 
 OBJS:= \
 	./src/string.o \
@@ -247,7 +251,7 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
-wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(LIBS) $(BINASSEMBLE) FORCE
+wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
@@ -281,10 +285,15 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		> $@
 
 hex: wolfboot.hex
+srec: wolfboot.srec
 
 %.hex:%.elf
 	@echo "\t[ELF2HEX] $@"
 	@$(OBJCOPY) -O ihex $^ $@
+
+%.srec:%.elf
+	@echo "\t[ELF2SREC] $@"
+	@$(OBJCOPY) -O srec $^ $@
 
 src/keystore.c: $(PRIVATE_KEY)
 
@@ -299,6 +308,7 @@ keys: $(PRIVATE_KEY)
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o test-app/*.o src/x86/*.o
 	$(Q)rm -f lib/wolfssl/wolfcrypt/src/*.o lib/wolfTPM/src/*.o lib/wolfTPM/hal/*.o
+	$(Q)rm -f lib/wolfssl/wolfcrypt/src/port/Renesas/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)rm -f $(OBJS)

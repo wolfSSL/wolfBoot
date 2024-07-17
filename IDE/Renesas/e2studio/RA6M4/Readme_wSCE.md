@@ -2,10 +2,10 @@
 
 ## 1. Overview
 
-This example demonstrates simple secure firmware update by wolfBoot and uses Renesas SCE. 
+This example demonstrates simple secure firmware update by wolfBoot and uses Renesas SCE.
 A sample application v1 is securely updated to v2. Both versions behave the same except displaying its version of v1 or v2. They are compiled by e2Studio and running on the target board.
 
-In this demo, you may download two versions of the application binary file by Renesas Flash Programmer. You can download and excute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.It is only available RSA with Renesas SCE now.
+In this demo, you may download two versions of the application binary file by Renesas Flash Programmer. You can download and execute wolfBoot by e2Studio debugger. Use a USB connection between PC and the board for the debugger and flash programmer.It is only available RSA with Renesas SCE now.
 
 ## 2. Components and Tools
 
@@ -95,7 +95,7 @@ Enabled `WOLFBOOT_RENESAS_SCEPROTECT` expects to use Renesas SCE.
 + Add `SCE Protected Mode` stack from `New Stack` -> `Security`
 + Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
 
-Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+Modify `g_flash0 Flash(r_flash_hp)` properties as follows:
 |Property|Value|
 |:--|:--|
 |Data Flash Background Operation|Disabled|
@@ -105,7 +105,8 @@ Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
 + Open Smart Configurator by clicking copied configuration.xml
 + Click `Generate Project Content` on Smart Configurator
 + Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
-+ Build `wolfBoot` projet
++ Build `wolfBoot` project
+
 ### 3) Compile the sample application
 
 Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio.
@@ -129,12 +130,12 @@ Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio.
                 0x2000094c       0xa8 ./src/SEGGER_RTT/SEGGER_RTT.o
                 0x2000094c                _SEGGER_RTT
     ````
-    
+
     you can specify "RTT control block" to 0x2000094c by Address
       OR
     you can specify "RTT control block" to 0x20000000 0x1000 by Search Range
-    
- 
+
+
  #### 3-2). Create `dummy_application`
 + Click File->New->`RA C/C++ Project`.
 + Select `EK-RA6M4` from Drop-down list.
@@ -143,7 +144,7 @@ Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio.
 + Check `Bare Metal Minimal`. Click Finish.
 + Go to `BSP` tab and Add `g_flash0 Flash(r_falsh_hp)` stack from  `New Stack` -> `Storage`
 
-Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
+Modify `g_flash0 Flash(r_flash_hp)` properties as follows:
 |Property|Value|
 |:--|:--|
 |Data Flash Background Operation|Disabled|
@@ -154,10 +155,11 @@ Modify `g_flash0 Flash(r_flash_hp)` properites as follows:
 + Click `Generate Project Content` on Smart Configurator
 + Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
 + Linker option update, Click project->`Properties`->`C/C++ Build`->`Settings`->`GNU Arm Cross Linker`->`Miscellaneous`. Modify `--defsym=FLASH_IMAGE_START=0x10200` to `--defsym=FLASH_IMAGE_START=0x10200`
-+ Build `app_RA` projet
++ Build `app_RA` project
 
 
-Code Origin and entry point is "0x00020200". app_RA.elf is gnerated under Debug.
+Code Origin and entry point is "0x00020200". app_RA.elf is generated under Debug.
+
 ### 4) Generate Wrapped Key for SCE
 
 SCE needs to have a wrapped key for sign verification installed in advance.
@@ -182,16 +184,16 @@ Please refer Renesas Manual to generate ufpk.key and upfk.key_enc.key.
 After generating "rfp" format key, you can download it to flash data area by using Renesas flash programmer.
 The default address for "rfp" key is `0x08001000U` which is set at `user_settings.h`.
 
-### 4) Generate Signature for app V1
-You can derive bair binary file (app_RA.bin) by objcopy command as follows.
+### 5) Generate Signature for app V1
+You can derive the binary file (app_RA.bin) by objcopy command as follows.
 
 ```
 $ aarch64-none-elf-objcopy.exe -O binary -j .text -j .data app_RA.elf app_RA.bin
 ```
 
-`sign` command under tools/keytools benerates a signature for the binary with a specified version.
+`sign` command under tools/keytools generates a signature for the binary with a specified version.
 It generates a file contain a partition header and application image.
-The partition header contain generated signature and other control fields. 
+The partition header contain generated signature and other control fields.
 Output file name is made up from the input file name and version like app_RenesasRx01_v1.0_signed.bin.
 It needs to specify `--rsa2048enc` option to sign the image because SCE assumes to have DigestInfo structure before hashed data.
 
@@ -211,18 +213,18 @@ Signing the digest...
 Output image(s) successfully created.
 ```
 
-### 5) Download the app V1
+### 6) Download the app V1
 
 You can convert the binary file to hex format and download it to the board by Flash Programmer. The partition starts at "0x00020000".
 
 ```
 $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00020000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 ```
-### 6) Execute inital boot
+### 7) Execute initial boot
 
 Now, you can download and start wolfBoot program by e2Studio debugger.
 After starting the program, you can see the partition information as follows.
-If the boot program succeeds integlity and authenticity check, it initiate the application V1.
+If the boot program succeeds successfully and authenticity check then start application V1.
 To initially run `wolfBoot` project,
 1.) Right-Click the Project name.
 2.) Select `Debug As` -> `Renesas GDB Hardware Debugging`
@@ -245,13 +247,13 @@ Application Entry Address:         0x00020200
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 
 === Update Partition[00090000] ===
-Magic:    
+Magic:
 Version:  00
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 Current Firmware Version : 1
 
 Calling wolfBoot_success()
@@ -270,7 +272,7 @@ Status:   00
 Tail Mgc: BOOT
 
 === Update Partition[00090000] ===
-Magic:    
+Magic:
 Version:  00
 Status:   FF
 Tail Mgc:
@@ -281,7 +283,7 @@ You can also see flashing each LED light in 1 second. Notable things about V1 ap
 it will also call wolfBoot_update_trigger() so that it tells wolfBoot that new version exists.
 We are going to generate and download V2 application into "Update partition".
 
-### 7) Generate Signed app V2 and download it
+### 8) Generate Signed app V2 and download it
 
 Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0x00090000".
 You can download it by the flash programmer.
@@ -294,9 +296,9 @@ $ sign --rsa2048enc app_RA.bin ../../../../../pri-rsa2048.der 2.0
 $ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00090000 app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
 ```
 
-### 8) Reboot and secure update to V2
+### 9) Reboot and secure update to V2
 
-The boot program checks integlity and authenticity of V2, swap the partition safely and initiates V2.
+The boot program checks integrity and authenticity of V2, swap the partition safely and initiates V2.
 You will see following message after the partition information.
 You can also see flashing each LED light in 5 second.
 
@@ -322,7 +324,7 @@ Tail Mgc: BOOT
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc: 
+Tail Mgc:
 Current Firmware Version : 2
 
 Calling wolfBoot_success()
