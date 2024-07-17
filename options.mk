@@ -511,7 +511,11 @@ ifeq ($(SPI_FLASH),1)
   EXT_FLASH=1
   CFLAGS+=-D"SPI_FLASH=1"
   OBJS+= src/spi_flash.o
-  WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  ifeq ($(ARCH),RENESAS_RX)
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_renesas_rx.o
+  else
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(OCTOSPI_FLASH),1)
@@ -524,7 +528,11 @@ ifeq ($(QSPI_FLASH),1)
   EXT_FLASH=1
   CFLAGS+=-D"QSPI_FLASH=1"
   OBJS+= src/qspi_flash.o
-  WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  ifeq ($(ARCH),RENESAS_RX)
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_renesas_rx.o
+  else
+    WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
+  endif
 endif
 
 ifeq ($(UART_FLASH),1)
@@ -594,7 +602,12 @@ endif
 # allow elf inclusion of debug symbols even with optimizations enabled
 # make DEBUG_SYMBOLS=1
 ifeq ($(DEBUG_SYMBOLS),1)
-  CFLAGS+=-g -ggdb3
+  CFLAGS+=-g
+  ifeq ($(USE_GCC),1)
+    CFLAGS+=-ggdb3
+  else
+    CFLAGS+=-gstabs
+  endif
 endif
 
 
@@ -807,9 +820,12 @@ ifeq ($(FSP), 1)
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
+OBJS:=$(OBJS_EXTRA) $(OBJS)
 
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+  ifneq ($(ARCH),RENESAS_RX)
+    CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+  endif
 endif
 
 ifeq ($(SIGN_ALG),)

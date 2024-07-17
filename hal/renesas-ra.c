@@ -1,6 +1,6 @@
 /* renesas-ra.c
  *
- * Stubs for custom HAL implementation. Defines the 
+ * Stubs for custom HAL implementation. Defines the
  * functions used by wolfboot for a specific target.
  *
  * Copyright (C) 2023 wolfSSL Inc.
@@ -64,12 +64,12 @@ void hal_init(void)
 #endif
     err = R_FLASH_HP_Close(&g_flash0_ctrl);
     err = R_FLASH_HP_Open(&g_flash0_ctrl, &g_flash0_cfg);
-    
+
      if(err != FSP_ERR_ALREADY_OPEN && err != FSP_SUCCESS){
          printf("ERROR: %d\n", err);
         hal_panic();
      }
-    
+
     /* Setup Default  Block 0 as Startup Setup Block */
     err = R_FLASH_HP_StartUpAreaSelect(&g_flash0_ctrl, FLASH_STARTUP_AREA_BLOCK0, true);
     if(err != FSP_SUCCESS){
@@ -120,7 +120,7 @@ static int blockWrite(const uint8_t *data, uint32_t addr, uint32_t len)
     for(; len; len-=MINIMUM_BLOCK, data+=MINIMUM_BLOCK, addr+=MINIMUM_BLOCK) {
         /* for the case "data" ls a flash address */
         memcpy(save, data, MINIMUM_BLOCK);
-        
+
         if(R_FLASH_HP_Write(&g_flash0_ctrl, (uint32_t)save, addr, MINIMUM_BLOCK)
                                              != FSP_SUCCESS)
             return -1;
@@ -128,7 +128,7 @@ static int blockWrite(const uint8_t *data, uint32_t addr, uint32_t len)
     return 0;
 }
 
-#define IS_FLASH(addr) (addr) >= 0xffc00000 ? 1 : 0
+#define IS_FLASH_ADDR(addr) (addr) >= 0xffc00000 ? 1 : 0
 
 int hal_flash_write(uint32_t addr, const uint8_t *data, int int_len)
 {
@@ -138,21 +138,21 @@ int hal_flash_write(uint32_t addr, const uint8_t *data, int int_len)
     uint8_t address_tmp = (uint8_t)(addr - ALIGN_FLASH(addr));
 
     if(addr != ALIGN_FLASH(addr)) {
-        
+
         memset(save, 0, sizeof(save));
-        
-        save_len = (addr - ALIGN_FLASH(addr)) < len ? 
+
+        save_len = (addr - ALIGN_FLASH(addr)) < len ?
                                     (addr - ALIGN_FLASH(addr)) : len;
-        
-        memcpy(save, (const void *)ALIGN_FLASH(addr), 
+
+        memcpy(save, (const void *)ALIGN_FLASH(addr),
                                     MINIMUM_BLOCK * sizeof(uint32_t));
         memcpy(save + (address_tmp), data, save_len);
         addr   = ALIGN_FLASH(addr);
-        
+
         if((err=R_FLASH_HP_Erase(&g_flash0_ctrl, addr, 1)) != FSP_SUCCESS)
             return -1;
-            
-        if((err=R_FLASH_HP_Write(&g_flash0_ctrl, (uint32_t)save, addr, 
+
+        if((err=R_FLASH_HP_Write(&g_flash0_ctrl, (uint32_t)save, addr,
                             MINIMUM_BLOCK * sizeof(uint32_t))) != FSP_SUCCESS)
             return -1;
 
@@ -180,12 +180,12 @@ int hal_flash_write(uint32_t addr, const uint8_t *data, int int_len)
         memcpy(save, data, len);
         if(R_FLASH_HP_Erase(&g_flash0_ctrl, addr, 1) != FSP_SUCCESS)
             return -1;
-        if(R_FLASH_HP_Write(&g_flash0_ctrl, 
+        if(R_FLASH_HP_Write(&g_flash0_ctrl,
                     (uint32_t)save, addr, MINIMUM_BLOCK) != FSP_SUCCESS)
             goto error;
     }
     return 0;
-    
+
 error:
     return -1;
 }
@@ -194,7 +194,7 @@ int hal_flash_erase(uint32_t address, int int_len)
 {
     uint32_t len = (uint32_t)int_len;
     #ifdef WOLFBOOT_DUALBANK
-    uint32_t block_size = (address <= 0x80000 && address >= 0x10000) 
+    uint32_t block_size = (address <= 0x80000 && address >= 0x10000)
                    || address >= 0x210000 ? (32*1024) :  (8*1024);
     #else /* Lenier mode */
     uint32_t block_size = address >= 0x10000 ? (32*1024) :  (8*1024);
@@ -234,9 +234,9 @@ void hal_flash_lock(void)
                                         FLASH_START_ADDR, FLASH_END_ADDR)
             != FSP_SUCCESS)
             hal_panic();
-            
+
    #ifdef WOLFBOOT_DUALBANK
-    if(R_FLASH_HP_AccessWindowSet(&g_flash0_ctrl, 
+    if(R_FLASH_HP_AccessWindowSet(&g_flash0_ctrl,
                                         FLASH1_START_ADDR, FLASH1_END_ADDR)
             != FSP_SUCCESS)
             hal_panic();
@@ -250,10 +250,10 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
      flash_cmd_t cmd = FLASH_CMD_SWAPFLAG_TOGGLE;
 
     hal_flash_unlock();
-    
+
     if(R_FLASH_HP_Control(cmd, NULL) != FSP_SUCCESS)
         hal_panic();
-    
+
     hal_flash_lock();
 
 }

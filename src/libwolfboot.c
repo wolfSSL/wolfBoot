@@ -391,110 +391,18 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
 #   define trailer_write(part,addr, val) hal_flash_write(addr, (void *)&val, 1)
 #   define partition_magic_write(part,addr) hal_flash_write(addr, \
                                 (void*)&wolfboot_magic_trail, sizeof(uint32_t));
-#endif
+#endif /* NVM_FLASH_WRITEONCE */
 
-#ifndef MOCK_PARTITION_TRAILER
-#ifdef EXT_FLASH
+#ifndef MOCK_PARTITION_TRAILER /* used for unit-mock-state.c */
+#ifdef CUSTOM_PARTITION_TRAILER
 
-/**
- * @brief Get the trailer at a specific address in a fixed partition.
- *
- * This function retrieves the trailer at a specific address in a fixed partition.
- *
- * @param[in] part Partition number.
- * @param[in] at Address offset.
- * @return Pointer to the trailer at the specified address.
+/* Custom partition trailer
+ * Function implementation externally defined
  */
-static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
-{
-    uint8_t *ret = NULL;
-    uint32_t sel_sec = 0;
-    if (part == PART_BOOT) {
-        if (FLAGS_BOOT_EXT()){
-            ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
-                (void *)&ext_cache, sizeof(uint32_t));
-            ret = (uint8_t *)&ext_cache;
-        } else {
-            /* only internal flash should be writeonce */
-#ifdef NVM_FLASH_WRITEONCE
-            sel_sec = nvm_select_fresh_sector(part);
-#endif
-            ret = (void *)(PART_BOOT_ENDFLAGS -
-                    (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
-        }
-    }
-    else if (part == PART_UPDATE) {
-        if (FLAGS_UPDATE_EXT()) {
-            ext_flash_check_read(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
-                (void *)&ext_cache, sizeof(uint32_t));
-            ret = (uint8_t *)&ext_cache;
-        } else {
-            /* only internal flash should be writeonce */
-#ifdef NVM_FLASH_WRITEONCE
-            sel_sec = nvm_select_fresh_sector(part);
-#endif
-            ret = (void *)(PART_UPDATE_ENDFLAGS -
-                    (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
-        }
-    }
-    return ret;
-}
+uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at);
+void     RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val);
+void     RAMFUNCTION set_partition_magic(uint8_t part);
 
-/**
- * @brief Set the trailer at a specific address in an external flash.
- *
- * This function sets the trailer at a specific address in an external flash.
- *
- * @param[in] part Partition number.
- * @param[in] at Address offset.
- * @param[in] val New value to set in the trailer.
- */
-static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
-{
-    if (part == PART_BOOT) {
-        if (FLAGS_BOOT_EXT()) {
-            ext_flash_check_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
-                (void *)&val, 1);
-        } else {
-            trailer_write(part, PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
-        }
-    }
-    else if (part == PART_UPDATE) {
-        if (FLAGS_UPDATE_EXT()) {
-            ext_flash_check_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
-                (void *)&val, 1);
-        } else {
-            trailer_write(part, PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
-        }
-    }
-}
-
-/**
- * @brief Set the partition magic trailer in an external flash.
- *
- * This function sets the partition magic trailer in an external flash.
- *
- * @param[in] part Partition number.
- */
-static void RAMFUNCTION set_partition_magic(uint8_t part)
-{
-    if (part == PART_BOOT) {
-        if (FLAGS_BOOT_EXT()) {
-            ext_flash_check_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t),
-                (void *)&wolfboot_magic_trail, sizeof(uint32_t));
-        } else {
-            partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
-        }
-    }
-    else if (part == PART_UPDATE) {
-        if (FLAGS_UPDATE_EXT()) {
-            ext_flash_check_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t),
-                (void *)&wolfboot_magic_trail, sizeof(uint32_t));
-        } else {
-            partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
-        }
-    }
-}
 #elif !defined(WOLFBOOT_FIXED_PARTITIONS)
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
@@ -516,45 +424,135 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 }
 
 #else
+
+/**
+ * @brief Get the trailer at a specific address
+ *
+ * This function retrieves the trailer at a specific address in external or
+ * internal flash
+ *
+ * @param[in] part Partition number.
+ * @param[in] at Address offset.
+ * @return Pointer to the trailer at the specified address.
+ */
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     uint8_t *ret = NULL;
     uint32_t sel_sec = 0;
-#ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(part);
-#endif
+
     if (part == PART_BOOT) {
-        ret = (void *)(PART_BOOT_ENDFLAGS -
-                (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
+    #ifdef EXT_FLASH
+        if (FLAGS_BOOT_EXT()){
+            ext_flash_check_read(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
+                (void *)&ext_cache, sizeof(uint32_t));
+            ret = (uint8_t *)&ext_cache;
+        }
+        else
+    #endif
+        {
+            /* only internal flash should be writeonce */
+        #ifdef NVM_FLASH_WRITEONCE
+            sel_sec = nvm_select_fresh_sector(part);
+        #endif
+            ret = (void *)(PART_BOOT_ENDFLAGS -
+                    (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
+        }
     }
     else if (part == PART_UPDATE) {
-        ret = (void *)(PART_UPDATE_ENDFLAGS -
-                (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
+    #ifdef EXT_FLASH
+        if (FLAGS_UPDATE_EXT()) {
+            ext_flash_check_read(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
+                (void *)&ext_cache, sizeof(uint32_t));
+            ret = (uint8_t *)&ext_cache;
+        }
+        else
+    #endif
+        {
+            /* only internal flash should be writeonce */
+        #ifdef NVM_FLASH_WRITEONCE
+            sel_sec = nvm_select_fresh_sector(part);
+        #endif
+            ret = (void *)(PART_UPDATE_ENDFLAGS -
+                    (WOLFBOOT_SECTOR_SIZE * sel_sec + (sizeof(uint32_t) + at)));
+        }
     }
     return ret;
 }
 
+/**
+ * @brief Set the trailer at a specific address
+ *
+ * This function sets the trailer at a specific address in external or
+ * internal flash.
+ *
+ * @param[in] part Partition number.
+ * @param[in] at Address offset.
+ * @param[in] val New value to set in the trailer.
+ */
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     if (part == PART_BOOT) {
-        trailer_write(part, PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
+    #ifdef EXT_FLASH
+        if (FLAGS_BOOT_EXT()) {
+            ext_flash_check_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
+                (void *)&val, 1);
+        }
+        else
+    #endif
+        {
+            trailer_write(part, PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at), val);
+        }
     }
     else if (part == PART_UPDATE) {
-        trailer_write(part, PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
+    #ifdef EXT_FLASH
+        if (FLAGS_UPDATE_EXT()) {
+            ext_flash_check_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
+                (void *)&val, 1);
+        }
+        else
+    #endif
+        {
+            trailer_write(part, PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at), val);
+        }
     }
 }
 
+/**
+ * @brief Set the partition magic trailer
+ *
+ * This function sets the partition magic trailer in external or internal flash.
+ *
+ * @param[in] part Partition number.
+ */
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
     if (part == PART_BOOT) {
-        partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
+    #ifdef EXT_FLASH
+        if (FLAGS_BOOT_EXT()) {
+            ext_flash_check_write(PART_BOOT_ENDFLAGS - sizeof(uint32_t),
+                (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+        }
+        else
+    #endif
+        {
+            partition_magic_write(part, PART_BOOT_ENDFLAGS - sizeof(uint32_t));
+        }
     }
     else if (part == PART_UPDATE) {
-        partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
+    #ifdef EXT_FLASH
+        if (FLAGS_UPDATE_EXT()) {
+            ext_flash_check_write(PART_UPDATE_ENDFLAGS - sizeof(uint32_t),
+                (void *)&wolfboot_magic_trail, sizeof(uint32_t));
+        }
+        else
+    #endif
+        {
+            partition_magic_write(part, PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
+        }
     }
 }
-#endif /* EXT_FLASH */
-#endif /* MOCK_PARTITION_TRAILER */
+#endif
+#endif /* !MOCK_PARTITION_TRAILER */
 
 
 
@@ -634,7 +632,17 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
-int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag)
+/**
+ * @brief Set the flag for sector
+ *
+ * This function sets the sector flag for update partition.
+ *
+ * @param[in] sector Sector number.
+ * @param[in] newflag Nibble (4-bits) for sector flag
+ * @return 0 on success, -1 on failure.
+ */
+int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector,
+    uint8_t newflag)
 {
     uint32_t *magic;
     uint8_t *flags;
@@ -678,6 +686,18 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     return 0;
 }
 
+/**
+ * @brief Get the flag for sector
+ *
+ * This function retrieves the sector flag for update partition.
+ *
+ * User may override this is function for cases where the update partition
+ * flags are not at the end of partition
+ *
+ * @param[in] sector Sector number.
+ * @param[out] flag Nibble (4-bits) for sector flags
+ * @return 0 on success, -1 on failure.
+ */
 int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag)
 {
     uint32_t *magic;
@@ -752,7 +772,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     uint8_t selSec = 0;
 #endif
 
-    /* if PART_UPDATE_ENDFLAGS stradles a sector, (all non FLAGS_HOME builds)
+    /* if PART_UPDATE_ENDFLAGS straddles a sector, (all non FLAGS_HOME builds)
      * align it to the correct sector */
     if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE == 0)
         lastSector -= WOLFBOOT_SECTOR_SIZE;
@@ -839,7 +859,7 @@ void RAMFUNCTION wolfBoot_success(void)
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
-    uint16_t len;
+    uint16_t len, htype;
     const volatile uint8_t *max_p = (haystack - IMAGE_HEADER_OFFSET) +
                                                     IMAGE_HEADER_SIZE;
     *ptr = NULL;
@@ -848,33 +868,41 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
         return 0;
     }
     while ((p + 4) < max_p) {
-        if ((p[0] == 0) && (p[1] == 0)) {
+        htype = p[0] | (p[1] << 8);
+        if (htype == 0) {
             unit_dbg("Explicit end of options reached\n");
             break;
         }
-        /* Sanity check to prevent dereferencing unaligned half-words and skip
-         * past padding bytes */
-        if ((*p == HDR_PADDING) || ((((size_t)p) & 0x01) != 0)) {
+        /* skip unaligned half-words and padding bytes */
+        if ((p[0] == HDR_PADDING) || ((((size_t)p) & 0x01) != 0)) {
             p++;
             continue;
         }
+
         len = p[2] | (p[3] << 8);
+        /* check len */
         if ((4 + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
             unit_dbg("This field is too large (bigger than the space available "
                      "in the current header)\n");
             unit_dbg("%d %d %d\n", len, IMAGE_HEADER_SIZE, IMAGE_HEADER_OFFSET);
             break;
         }
+        /* check max pointer */
         if (p + 4 + len > max_p) {
             unit_dbg("This field is too large and would overflow the image "
                      "header\n");
             break;
         }
-        if ((p[0] | (p[1] << 8)) == type) {
-            *ptr = (p + 4);
+
+        /* skip header [type|len] */
+        p += 4;
+
+        if (htype == type) {
+            /* found, return pointer to data portion */
+            *ptr = p;
             return len;
         }
-        p += 4 + len;
+        p += len;
     }
     return 0;
 }

@@ -369,7 +369,7 @@ Use `make keysclean` to delete keys and regenerate.
  * Fix RSA keygen tool
  * wolfTPM integration: improvements and bugfixes
  * Fix configuration and documentation for STM32WB
- * Fix alignment of trailers in NVM_WRITEONCE mode
+ * Fix alignment of trailers in NVM_FLASH_WRITEONCE mode
  * Fix uint16_t index overflow on platforms with very small flash pages
  * Fix for building C key tools on windows (Cygwin/MinGW/Visual Studio)
  * Fix in LPC driver: correct page alignment in flash write

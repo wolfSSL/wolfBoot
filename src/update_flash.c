@@ -822,7 +822,6 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifndef DISABLE_BACKUP
     /* resume the final erase in case the power failed before it finished */
     resumedFinalErase = wolfBoot_swap_and_final_erase(1);
-
     if (resumedFinalErase != 0)
 #endif
     {
@@ -831,9 +830,10 @@ void RAMFUNCTION wolfBoot_start(void)
          */
         if ((bootRet == 0) && (bootState == IMG_STATE_TESTING)) {
             wolfBoot_update(1);
+        }
+
         /* Check for new updates in the UPDATE partition or if we were
          * interrupted during the flags setting */
-        }
         else if ((updateRet == 0) && (updateState == IMG_STATE_UPDATING)) {
             /* Check for new updates in the UPDATE partition */
             wolfBoot_update(0);
@@ -842,7 +842,7 @@ void RAMFUNCTION wolfBoot_start(void)
     if ((wolfBoot_open_image(&boot, PART_BOOT) < 0)
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
-            ) {
+    ) {
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
         wolfBoot_printf("Trying emergency update\n");

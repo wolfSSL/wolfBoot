@@ -25,10 +25,12 @@
 
 #include "spi_drv.h"
 #include "spi_flash.h"
+#include "printf.h"
+#include "string.h"
 
 #ifdef SPI_FLASH
 
-#define MDID            0x90
+#define MDID            0x9F
 #define RDSR            0x05
 #define WRSR            0x01
 #   define ST_BUSY (1 << 0)
@@ -49,6 +51,9 @@
 #define EBSY            0x70
 #define DBSY            0x80
 
+#ifdef TEST_EXT_FLASH
+static int test_ext_flash(void);
+#endif
 
 static enum write_mode {
     WB_WRITEPAGE = 0x00,
@@ -170,15 +175,14 @@ static int RAMFUNCTION spi_flash_write_sb(uint32_t address, const void *data, in
 
 uint16_t spi_flash_probe(void)
 {
-    uint8_t manuf, product, b0;
+    uint8_t manuf, product, notused;
+    uint16_t manuf_prod;
     int i;
     spi_init(0,0);
     wait_busy();
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(MDID);
-    b0 = spi_read();
-
-    write_address(0);
+    notused = spi_read();
     spi_write(0xFF);
     manuf = spi_read();
     spi_write(0xFF);
@@ -197,7 +201,15 @@ uint16_t spi_flash_probe(void)
     spi_read();
     spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
 #endif
-    return (uint16_t)(manuf << 8 | product);
+
+    wolfBoot_printf("SPI Probe: Manuf 0x%x, Product 0x%x\n", manuf, product);
+    manuf_prod = (uint16_t)(manuf << 8) | (uint16_t)product;
+
+#ifdef TEST_EXT_FLASH
+    test_ext_flash();
+#endif
+
+    return manuf_prod;
 }
 
 
@@ -247,5 +259,54 @@ void spi_flash_release(void)
 {
     spi_release();
 }
+
+#ifdef TEST_EXT_FLASH
+
+#ifndef TEST_EXT_ADDRESS
+    /* Start Address for test - 2MB */
+    #define TEST_EXT_ADDRESS (2 * 1024 * 1024)
+#endif
+
+static int test_ext_flash(void)
+{
+    int ret;
+    uint32_t i;
+    uint8_t pageData[SPI_FLASH_SECTOR_SIZE];
+    uint32_t wait = 0;
+
+#ifndef READONLY
+    /* Erase sector */
+    ret = ext_flash_erase(TEST_EXT_ADDRESS, SPI_FLASH_SECTOR_SIZE);
+    wolfBoot_printf("Sector Erase: Ret %d\n", ret);
+
+    /* Write Page */
+    for (i=0; i<sizeof(pageData); i++) {
+        pageData[i] = (i & 0xff);
+    }
+    ret = ext_flash_write(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
+    wolfBoot_printf("Page Write: Ret %d\n", ret);
+#endif
+
+    /* Read page */
+    memset(pageData, 0, sizeof(pageData));
+    ret = ext_flash_read(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
+    wolfBoot_printf("Page Read: Ret %d\n", ret);
+
+    wolfBoot_printf("Checking...\n");
+    /* Check data */
+    for (i=0; i<sizeof(pageData); i++) {
+    #if defined(DEBUG_QSPI) && DEBUG_QSPI > 1
+        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
+    #endif
+        if (pageData[i] != (i & 0xff)) {
+            wolfBoot_printf("Check Data @ %d failed\n", i);
+            return -1;
+        }
+    }
+
+    wolfBoot_printf("Flash Test Passed\n");
+    return ret;
+}
+#endif /* TEST_EXT_FLASH */
 
 #endif /* SPI_FLASH */
