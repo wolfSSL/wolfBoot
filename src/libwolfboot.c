@@ -192,17 +192,12 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     uintptr_t off;
     uint8_t *base;
     uint8_t* addrErase;
+    uint32_t magic_off = 0;
     uint32_t word_0;
     uint32_t word_1;
 
     hal_cache_invalidate();
 
-    /* if FLAGS_HOME check both boot and update for changes */
-#ifdef FLAGS_HOME
-    base = (uint8_t *)PART_BOOT_ENDFLAGS;
-    addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
-#else
     if (part == PART_BOOT) {
         base = (uint8_t *)PART_BOOT_ENDFLAGS;
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
@@ -213,7 +208,6 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
             WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
     }
-#endif
 
 #ifdef EXT_ENCRYPTED
 #ifndef FLAGS_HOME
@@ -239,8 +233,9 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
 #endif
 
     /* check magic in case the sector is corrupt */
-    word_0 = *((uint32_t*)((uintptr_t)base - sizeof(uint32_t)));
-    word_1 = *((uint32_t*)((uintptr_t)base - WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)));
+    word_0 = *((uint32_t*)((uintptr_t)base - (magic_off + sizeof(uint32_t))));
+    word_1 = *((uint32_t*)((uintptr_t)base - (WOLFBOOT_SECTOR_SIZE + magic_off +
+                    sizeof(uint32_t))));
 
     if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
         sel = 0;
@@ -255,30 +250,13 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
         goto finish;
     }
 
-/* try the update magic as well */
-#ifdef FLAGS_HOME
-    /* check magic in case the sector is corrupt */
-    word_0 = *((uint32_t*)(PART_UPDATE_ENDFLAGS - sizeof(uint32_t)));
-    word_1 = *((uint32_t*)(PART_UPDATE_ENDFLAGS - WOLFBOOT_SECTOR_SIZE -
-        sizeof(uint32_t)));
-
-    if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
-        sel = 0;
-        goto finish;
-    }
-    else if (word_0 != WOLFBOOT_MAGIC_TRAIL && word_1 == WOLFBOOT_MAGIC_TRAIL) {
-        sel = 1;
-        goto finish;
-    }
-#endif
-
     /* Default to last sector if no match is found */
     sel = 0;
 
     /* Select the sector with more flags set. Partition flag is at offset '4'.
      * Sector flags begin from offset '5'. 
      */
-    for (off = 4; off < WOLFBOOT_SECTOR_SIZE; off++) {
+    for (off = 4 + magic_off; off < WOLFBOOT_SECTOR_SIZE; off++) {
         volatile uint8_t byte_0 = get_base_offset(base, off);
         volatile uint8_t byte_1 = get_base_offset(base, (WOLFBOOT_SECTOR_SIZE + off));
 
@@ -292,14 +270,6 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
         }
         else if ((byte_0 == FLASH_BYTE_ERASED) &&
                 (byte_1 == FLASH_BYTE_ERASED)) {
-#ifdef FLAGS_HOME
-            /* if we're still checking boot flags, check update flags */
-            if (base - off > (uint8_t*)PART_UPDATE_ENDFLAGS) {
-                base = (uint8_t *)PART_UPDATE_ENDFLAGS;
-                off = 0;
-                continue;
-            }
-#endif
             /* Examine previous position one byte ahead */
             byte_0 = get_base_offset(base, (off - 1));
             byte_1 = get_base_offset(base, ((WOLFBOOT_SECTOR_SIZE + off) - 1));

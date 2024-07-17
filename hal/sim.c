@@ -116,9 +116,11 @@ int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
     else {
         for (i = 0; i < len; i++) {
 #ifdef NVM_FLASH_WRITEONCE
-            if (((uint8_t*)address)[i] != FLASH_BYTE_ERASED) {
+            uint8_t *addr = (uint8_t *)address;
+            if (addr[i] != FLASH_BYTE_ERASED) {
                 /* no writing to non-erased page in NVM_FLASH_WRITEONCE */
-                printf("NVM_FLASH_WRITEONCE non-erased write detected!\n");
+                printf("NVM_FLASH_WRITEONCE non-erased write detected at address %p!\n", addr);
+                printf("Address[%d] = %02x\n", i, addr[i]);
                 return -1;
             }
 #endif
