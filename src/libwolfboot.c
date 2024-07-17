@@ -249,6 +249,10 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     else if (word_0 != WOLFBOOT_MAGIC_TRAIL && word_1 == WOLFBOOT_MAGIC_TRAIL) {
         sel = 1;
         goto finish;
+    } else if (word_0 != WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
+        /* none of the partition has a valid trailer, default to '0' */
+        sel = 0;
+        goto finish;
     }
 
 /* try the update magic as well */
@@ -271,10 +275,12 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     /* Default to last sector if no match is found */
     sel = 0;
 
-    /* Select the sector with more flags set */
-    for (off = 1; off < WOLFBOOT_SECTOR_SIZE; off++) {
-        uint8_t byte_0 = get_base_offset(base, off);
-        uint8_t byte_1 = get_base_offset(base, (WOLFBOOT_SECTOR_SIZE + off));
+    /* Select the sector with more flags set. Partition flag is at offset '4'.
+     * Sector flags begin from offset '5'. 
+     */
+    for (off = 4; off < WOLFBOOT_SECTOR_SIZE; off++) {
+        volatile uint8_t byte_0 = get_base_offset(base, off);
+        volatile uint8_t byte_1 = get_base_offset(base, (WOLFBOOT_SECTOR_SIZE + off));
 
         if (byte_0 == FLASH_BYTE_ERASED && byte_1 != FLASH_BYTE_ERASED) {
             sel = 1;
@@ -294,11 +300,6 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
                 continue;
             }
 #endif
-            /* First time boot?  Assume no pending update */
-            if (off == 1) {
-                sel=0;
-                break;
-            }
             /* Examine previous position one byte ahead */
             byte_0 = get_base_offset(base, (off - 1));
             byte_1 = get_base_offset(base, ((WOLFBOOT_SECTOR_SIZE + off) - 1));

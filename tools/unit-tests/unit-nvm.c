@@ -10,14 +10,11 @@
 #include <sys/mman.h>
 #include <check.h>
 
-static int locked = 0;
+static int locked = 1;
 static int erased_boot = 0;
 static int erased_update = 0;
 static int erased_nvm_bank0 = 0;
 static int erased_nvm_bank1 = 0;
-
-
-
 
 
 /* Mocks */
@@ -28,6 +25,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 {
     int i;
     uint8_t *a = (uint8_t *)address;
+    fail_if(locked, "Attempting to write to a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         for (i = 0; i < len; i++) {
@@ -38,6 +36,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 }
 int hal_flash_erase(haladdr_t address, int len)
 {
+    fail_if(locked, "Attempting to erase a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_boot++;
@@ -119,13 +118,18 @@ Suite *wolfboot_suite(void);
 
 START_TEST (test_nvm_select_fresh_sector)
 {
-    int ret;
+    int ret, i;
     const char BOOT[] = "BOOT";
     const uint32_t *boot_word = (const uint32_t *)BOOT;
     uint8_t st;
     uint32_t *magic;
+    uint8_t *dst, *src;
+
     ret = mmap_file("/tmp/wolfboot-unit-file.bin", MOCK_ADDRESS, NULL);
 
+    
+    /* unlock the flash to allow operations */
+    hal_flash_unlock();
     erased_update = 0;
     wolfBoot_erase_partition(PART_UPDATE);
     fail_if(erased_update != 1);
@@ -201,6 +205,122 @@ START_TEST (test_nvm_select_fresh_sector)
     /* Check that reading did not change the current sector (0) */
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 0, "Failed to select right sector after reading sector state\n");
+
+    /* Update sector flag, again. it should change nvm sector */
+    erased_nvm_bank1 = 0;
+    erased_nvm_bank0 = 0;
+    wolfBoot_set_update_sector_flag(1, SECT_FLAG_SWAPPING);
+
+    /* Current selected should now be 1 */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 1, "Failed to select updating fresh sector\n");
+    fail_if(erased_nvm_bank0 == 0, "Did not erase the non-selected bank");
+
+    /* Check sector state is read back correctly */
+    ret = wolfBoot_get_update_sector_flag(1, &st);
+    fail_if (ret != 0, "Failed to read sector flag state\n");
+    fail_if (st != SECT_FLAG_SWAPPING, "Wrong sector flag state\n");
+
+    /* Check that reading did not change the current sector (1) */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 1, "Failed to select right sector after reading sector state\n");
+
+    /* Update sector flag, again. it should change nvm sector */
+    erased_nvm_bank1 = 0;
+    erased_nvm_bank0 = 0;
+    wolfBoot_set_update_sector_flag(1, SECT_FLAG_UPDATED);
+
+    /* Copy flags from 0 to 1 */
+    src = (uint8_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 8);
+    dst = (uint8_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - (8 + WOLFBOOT_SECTOR_SIZE));
+    for (i = 0; i < 8; i++)
+        dst[i] = src[i];
+
+    /* Force-erase 4B of sector flags in 0 */
+    dst = (uint8_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 8);
+    for (i = 0; i < 4; i++)
+        dst[i] = 0xFF;
+
+    /* This should fall back to 1 */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 1, "Failed to select most recent sector after deleting flags\n");
+
+    /* Start over, update some sector flags */
+    wolfBoot_erase_partition(PART_UPDATE);
+    wolfBoot_set_update_sector_flag(0, SECT_FLAG_UPDATED);
+    wolfBoot_set_update_sector_flag(1, SECT_FLAG_UPDATED);
+    wolfBoot_set_update_sector_flag(2, SECT_FLAG_UPDATED);
+    wolfBoot_set_update_sector_flag(3, SECT_FLAG_UPDATED);
+    wolfBoot_set_update_sector_flag(4, SECT_FLAG_SWAPPING);
+    st = IMG_STATE_UPDATING;
+    wolfBoot_set_partition_state(PART_UPDATE, &st);
+
+    /* Current selected should now be 1 */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 1, "Failed to select updating fresh sector\n");
+    fail_if(erased_nvm_bank0 == 0, "Did not erase the non-selected bank");
+
+    /* Check sector state is read back correctly */
+    for (i = 0; i < 4; i++) {
+        ret = wolfBoot_get_update_sector_flag(i, &st);
+        fail_if (ret != 0, "Failed to read sector flag state\n");
+        fail_if (st != SECT_FLAG_UPDATED, "Wrong sector flag state\n");
+
+    }
+    ret = wolfBoot_get_update_sector_flag(4, &st);
+    fail_if (ret != 0, "Failed to read sector flag state\n");
+    fail_if (st != SECT_FLAG_SWAPPING, "Wrong sector flag state\n");
+
+    /* Check that reading did not change the current sector (1) */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 1, "Failed to select right sector after reading sector state\n");
+
+    /* Copy flags from 1 to 0 */
+    src = (uint8_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - (8 + WOLFBOOT_SECTOR_SIZE));
+    dst = (uint8_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 8);
+    for (i = 0; i < 8; i++)
+        dst[i] = src[i];
+
+    /* Force to F0 last sector flag in 0, so that the sector '4' is 'updated' */
+    dst = (uint8_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 8);
+    dst[0] = 0xF0;
+
+    /* Check if still there */
+    ret = wolfBoot_get_update_sector_flag(4, &st);
+    fail_if (ret != 0, "Failed to read sector flag state\n");
+    fail_if (st != SECT_FLAG_UPDATED, "Wrong sector flag state\n");
+
+    /* This should fall back to 0 */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 0, "Failed to select most recent sector after deleting flags\n");
+
+
+    /* Erase partition and start over */
+    erased_update = 0;
+    wolfBoot_erase_partition(PART_UPDATE);
+    fail_if(erased_update != 1);
+
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 0, "Failed to select right sector after reading sector state\n");
+    
+    /* re-lock the flash: update_trigger implies unlocking/locking */
+    hal_flash_lock();
+
+    /* Triggering update to set flags */
+    wolfBoot_update_trigger();
+
+    /* Current selected should now be 0 */
+    ret = nvm_select_fresh_sector(PART_UPDATE);
+    fail_if(ret != 0, "Failed to select updating fresh sector\n");
+    fail_if(erased_nvm_bank1 == 0, "Did not erase the non-selected bank");
+
+    magic = get_partition_magic(PART_UPDATE);
+    fail_if(*magic != *boot_word,
+            "Failed to read back 'BOOT' trailer at the end of the partition");
+
+    /* Sanity check at the end of the operations. */
+    fail_unless(locked, "The FLASH was left unlocked.\n");
+
 
 }
 END_TEST
