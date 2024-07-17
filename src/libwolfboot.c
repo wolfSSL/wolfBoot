@@ -196,6 +196,12 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     uint32_t word_0;
     uint32_t word_1;
 
+#ifdef EXT_FLASH
+    if ((part == PART_UPDATE) && FLAGS_UPDATE_EXT()) {
+        return 0;
+    }
+#endif
+
     hal_cache_invalidate();
 
     if (part == PART_BOOT) {
@@ -218,6 +224,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     word_0 = *((uint32_t*)((uintptr_t)base - (magic_off + sizeof(uint32_t))));
     word_1 = *((uint32_t*)((uintptr_t)base - (WOLFBOOT_SECTOR_SIZE + magic_off +
                     sizeof(uint32_t))));
+
 
     if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
         sel = 0;
@@ -287,6 +294,7 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
     uintptr_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
 
+
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = addr_align - (nvm_cached_sector * NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
@@ -329,6 +337,7 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     uintptr_t base = (uintptr_t)addr - off;
     uintptr_t addr_read, addr_write;
     int ret;
+
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
     addr_write = base - (!nvm_cached_sector * NVM_CACHE_SIZE);
@@ -1403,6 +1412,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     const uint8_t *nonce)
 {
+    set_partition_magic(PART_BOOT);
     hal_set_key(key, nonce);
     return 0;
 }
@@ -1670,10 +1680,6 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     if (sz < ENCRYPT_BLOCK_SIZE) {
         sz = ENCRYPT_BLOCK_SIZE;
     }
-    if (!encrypt_initialized) {
-        if (crypto_init() < 0)
-            return -1;
-    }
     part = part_address(address);
     switch (part) {
         case PART_UPDATE:
@@ -1683,6 +1689,10 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) /
                     ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
+            }
+            if (!encrypt_initialized) {
+                if (crypto_init() < 0)
+                    return -1;
             }
             crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
@@ -1752,10 +1762,6 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     if (row_offset != 0) {
         row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
     }
-    if (!encrypt_initialized) {
-        if (crypto_init() < 0)
-            return -1;
-    }
     part = part_address(row_address);
     switch (part) {
         case PART_UPDATE:
@@ -1765,6 +1771,11 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
             if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) /
                     ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
+            }
+            if (!encrypt_initialized) {
+                if (crypto_init() < 0) {
+                    return -1;
+                }
             }
             crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
@@ -1847,18 +1858,15 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     uint32_t dst_offset = 0, iv_counter = 0;
     uint32_t magic, len;
 
-    wolfBoot_printf("Decrypting %p to %p\n", src, dst);
 
     if (!encrypt_initialized) {
         if (crypto_init() < 0) {
-            wolfBoot_printf("Error initializing crypto!\n");
             return -1;
         }
     }
 
     /* Attempt to decrypt firmware header */
     if (decrypt_header(src) != 0) {
-        wolfBoot_printf("Error decrypting header at %p!\n", src);
         return -1;
     }
     len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));

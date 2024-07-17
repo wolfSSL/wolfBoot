@@ -99,16 +99,46 @@ void hal_prepare_boot(void)
 
 int ext_flash_erase(uintptr_t address, int len)
 {
+    printf("%s", __FUNCTION__);
+    if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
+            (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
+        erased_update++;
+        memset(address, 0xFF, len);
+        if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
+            erased_nvm_bank0++;
+        } else if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
+            erased_nvm_bank1++;
+        }
+    } else if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
+            (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
+        erased_swap++;
+        memset(address, 0xFF, len);
+    } else {
+        fail("Invalid address\n");
+        return -1;
+    }
     return 0;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
+    int i;
+    uint8_t *a = (uint8_t *)address;
+    fail_if(locked, "Attempting to write to a locked FLASH");
+    printf("%s", __FUNCTION__);
+    for (i = 0; i < len; i++) {
+        a[i] = data[i];
+    }
     return 0;
 }
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
+    int i;
+    uint8_t *a = (uint8_t *)address;
+    for (i = 0; i < len; i++) {
+         data[i] = a[i];
+    }
     return 0;
 }
 
