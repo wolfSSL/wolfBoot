@@ -191,7 +191,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     int sel;
     uintptr_t off;
     uint8_t *base;
-    uint8_t* addrErase;
+    uint8_t* addrErase = 0;
     uint32_t magic_off = 0;
     uint32_t word_0;
     uint32_t word_1;
@@ -205,8 +205,13 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     }
     else {
         base = (uint8_t *)PART_UPDATE_ENDFLAGS;
+#ifdef FLAGS_HOME
+        addrErase = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+#else
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
             WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+#endif
     }
 
 #ifdef EXT_ENCRYPTED
