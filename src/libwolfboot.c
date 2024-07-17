@@ -214,29 +214,6 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
 #endif
     }
 
-#ifdef EXT_ENCRYPTED
-#ifndef FLAGS_HOME
-    if (part == PART_BOOT)
-#endif
-    {
-        word_0 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-            WOLFBOOT_PARTITION_BOOT_ADDRESS));
-        word_1 = *((uint32_t *)(ENCRYPT_TMP_SECRET_OFFSET +
-            WOLFBOOT_PARTITION_BOOT_ADDRESS - WOLFBOOT_SECTOR_SIZE));
-
-        if (word_0 == FLASH_WORD_ERASED && word_1 !=
-            FLASH_WORD_ERASED) {
-            sel = 1;
-            goto finish;
-        }
-        else if (word_0 != FLASH_WORD_ERASED && word_1 ==
-            FLASH_WORD_ERASED) {
-            sel = 0;
-            goto finish;
-        }
-    }
-#endif
-
     /* check magic in case the sector is corrupt */
     word_0 = *((uint32_t*)((uintptr_t)base - (magic_off + sizeof(uint32_t))));
     word_1 = *((uint32_t*)((uintptr_t)base - (WOLFBOOT_SECTOR_SIZE + magic_off +
