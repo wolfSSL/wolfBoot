@@ -195,27 +195,30 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 }
 
 #ifndef DISABLE_BACKUP
+
+#ifdef EXT_ENCRYPTED
+#   define TAIL_OFFSET_WORDS \
+        ((ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) / sizeof(uint32_t))
+#else
+#   define TAIL_OFFSET_WORDS 0
+#endif
+
 static int wolfBoot_swap_and_final_erase(int resume)
 {
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
     uint8_t st;
-    int eraseLen = WOLFBOOT_SECTOR_SIZE
-#ifdef NVM_FLASH_WRITEONCE
-        /* need to erase the redundant sector too */
+    int eraseLen = (WOLFBOOT_SECTOR_SIZE
+#ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
 #endif
-    ;
+    );
     int swapDone = 0;
     uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
         WOLFBOOT_SECTOR_SIZE;
-    /* final swap and erase flag is WOLFBOOT_MAGIC_TRAIL */
-    uint8_t tmpBuffer[sizeof(WOLFBOOT_MAGIC_TRAIL)
-#ifdef EXT_ENCRYPTED
-        + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE
-#endif
-    ];
+    uint32_t tmpBuffer[TAIL_OFFSET_WORDS + 1];
+
     /* open boot */
     wolfBoot_open_image(boot, PART_BOOT);
     /* open update */
@@ -223,23 +226,19 @@ static int wolfBoot_swap_and_final_erase(int resume)
     /* open swap */
     wolfBoot_open_image(swap, PART_SWAP);
     wolfBoot_get_partition_state(PART_UPDATE, &st);
-    /* read from tmpBootPos */
-    memcpy((void*)tmpBuffer, (void*)(boot->hdr + tmpBootPos),
-        sizeof(tmpBuffer));
-    /* check for TRAIL */
-#ifdef EXT_ENCRYPTED
-    if (*(uint32_t*)(tmpBuffer + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) ==
-        WOLFBOOT_MAGIC_TRAIL) {
+
+    /* read tail */
+    memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
+
+    /* check for trailing magic (BOOT) */
+    /* final swap and erase flag is WOLFBOOT_MAGIC_TRAIL */
+    if (tmpBuffer[TAIL_OFFSET_WORDS] == WOLFBOOT_MAGIC_TRAIL) {
         swapDone = 1;
     }
-#else
-    if (((uint32_t*)tmpBuffer)[0] == WOLFBOOT_MAGIC_TRAIL) {
-        swapDone = 1;
-    }
-#endif
     /* if resuming, quit if swap isn't done */
-    if ((resume == 1) && (swapDone == 0) && (st != IMG_STATE_FINAL_FLAGS))
+    if ((resume == 1) && (swapDone == 0) && (st != IMG_STATE_FINAL_FLAGS)) {
         return -1;
+    }
     if (swapDone == 0) {
         /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
         if (st != IMG_STATE_FINAL_FLAGS) {
@@ -250,15 +249,12 @@ static int wolfBoot_swap_and_final_erase(int resume)
         }
 #ifdef EXT_ENCRYPTED
         /* get encryption key and iv if encryption is enabled */
-        wolfBoot_get_encrypt_key(tmpBuffer, tmpBuffer + ENCRYPT_KEY_SIZE);
+        wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
+            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
 #endif
         /* write TRAIL, encryption key and iv if enabled to tmpBootPos*/
-#ifdef EXT_ENCRYPTED
-        *(uint32_t*)(tmpBuffer + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)
-            = WOLFBOOT_MAGIC_TRAIL;
-#else
-        ((uint32_t*)tmpBuffer)[0] = WOLFBOOT_MAGIC_TRAIL;
-#endif
+        tmpBuffer[TAIL_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
+
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
@@ -266,13 +262,16 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* set the encryption key */
 #ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(tmpBuffer, tmpBuffer + ENCRYPT_KEY_SIZE);
+    wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
+            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
 #endif
     /* write the original contents of tmpBootPos back */
-    if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE)
+    if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
         wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
-    else
+    }
+    else {
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
+    }
     /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
     /* erase the last sector(s) of update */
