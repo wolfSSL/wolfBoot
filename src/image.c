@@ -861,11 +861,12 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
-    wolfBoot_printf("Image size %d\r\n", (unsigned int)img->fw_size);
+
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Image size %d > max %d\n",
-            (unsigned int)img->fw_size, (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
+            (unsigned int)img->fw_size,
+            (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
         img->fw_size = 0;
         return -1;
     }
@@ -880,6 +881,12 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 #endif
     img->hdr_ok = 1;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
+
+    wolfBoot_printf("%s partition: %p (size %d, version 0x%x)\n",
+        (img->part == PART_BOOT) ? "Boot" : "Update",
+        img->hdr,
+        (unsigned int)img->fw_size,
+        wolfBoot_get_blob_version(img->hdr));
 
     return 0;
 }
@@ -962,11 +969,9 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 #endif
     if (part == PART_BOOT) {
         img->hdr = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        wolfBoot_printf("Boot partition: %p\n", img->hdr);
     }
     else if (part == PART_UPDATE) {
         img->hdr = (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        wolfBoot_printf("Update partition: %p\n", img->hdr);
     }
     else {
         return -1;
