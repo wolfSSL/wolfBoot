@@ -1483,7 +1483,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
+    XMEMSET(ff, FLASH_BYTE_ERASED, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
     if (XMEMCMP(mem, ff, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) != 0)
         hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
 #endif
