@@ -886,7 +886,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
         (img->part == PART_BOOT) ? "Boot" : "Update",
         img->hdr,
         (unsigned int)img->fw_size,
-        wolfBoot_get_blob_version(img->hdr));
+        wolfBoot_get_blob_version(image));
 
     return 0;
 }

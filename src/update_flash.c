@@ -219,6 +219,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
         + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE
 #endif
     ];
+
     /* open partitions (ignore failure) */
     wolfBoot_open_image(boot, PART_BOOT);
     wolfBoot_open_image(update, PART_UPDATE);
