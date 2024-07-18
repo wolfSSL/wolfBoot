@@ -754,6 +754,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         lastSector -= selSec * WOLFBOOT_SECTOR_SIZE;
         XMEMCPY(NVM_CACHE, (uint8_t*)lastSector, WOLFBOOT_SECTOR_SIZE);
         /* write to the non selected sector */
+        hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec, WOLFBOOT_SECTOR_SIZE);
         hal_flash_write(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec, NVM_CACHE,
             WOLFBOOT_SECTOR_SIZE);
         /* erase the previously selected sector */
