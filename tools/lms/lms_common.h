@@ -48,8 +48,7 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
         /* Create the file if it didn't exist. */
         file = fopen(filename, "w+");
         if (!file) {
-            fprintf(stderr, "error: fopen(%s, \"w+\") failed: %d\n", filename,
-                    ferror(file));
+            fprintf(stderr, "error: fopen(%s, \"w+\") failed.\n", filename);
             return WC_LMS_RC_WRITE_FAIL;
         }
     }
@@ -72,8 +71,7 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
      * storage correctly. */
     file = fopen(filename, "r+");
     if (!file) {
-        fprintf(stderr, "error: fopen(%s, \"r+\") failed: %d\n", filename,
-                ferror(file));
+        fprintf(stderr, "error: fopen(%s, \"r+\") failed.\n", filename);
         return WC_LMS_RC_WRITE_FAIL;
     }
 
