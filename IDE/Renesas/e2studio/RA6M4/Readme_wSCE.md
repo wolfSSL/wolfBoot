@@ -247,13 +247,13 @@ Application Entry Address:         0x00020200
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc:
+Trailer Magic:
 
 === Update Partition[00090000] ===
 Magic:
 Version:  00
 Status:   FF
-Tail Mgc:
+Trailer Magic:
 Current Firmware Version : 1
 
 Calling wolfBoot_success()
@@ -269,16 +269,16 @@ Called wolfBoot_success()
 Magic:    WOLF
 Version:  01
 Status:   00
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[00090000] ===
 Magic:
 Version:  00
 Status:   FF
-Tail Mgc:
+Trailer Magic:
 ```
 
-You can see the state is Success("00") and Tail Magic number becomes "BOOT".
+You can see the state is Success("00") and Trailer Magic number becomes "BOOT".
 You can also see flashing each LED light in 1 second. Notable things about V1 application,
 it will also call wolfBoot_update_trigger() so that it tells wolfBoot that new version exists.
 We are going to generate and download V2 application into "Update partition".
@@ -318,13 +318,13 @@ Application Entry Address:         0x00020200
 Magic:    WOLF
 Version:  02
 Status:   10
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[00090000] ===
 Magic:    WOLF
 Version:  01
 Status:   FF
-Tail Mgc:
+Trailer Magic:
 Current Firmware Version : 2
 
 Calling wolfBoot_success()
@@ -333,13 +333,13 @@ Called wolfBoot_success()
 Magic:    WOLF
 Version:  02
 Status:   00
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[00090000] ===
 Magic:    WOLF
 Version:  01
 Status:   70
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 ```
-You can see "Current Firmware Version : 2". The state is Success("00") and Tail Magic number becomes "BOOT".
+You can see "Current Firmware Version : 2". The state is Success("00") and Trailer Magic number becomes "BOOT".
 You can also see flashing each LED light in 5 second at this new version.

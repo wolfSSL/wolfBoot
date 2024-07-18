@@ -197,10 +197,10 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 #ifndef DISABLE_BACKUP
 
 #ifdef EXT_ENCRYPTED
-#   define TAIL_OFFSET_WORDS \
+#   define TRAILER_OFFSET_WORDS \
         ((ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) / sizeof(uint32_t))
 #else
-#   define TAIL_OFFSET_WORDS 0
+#   define TRAILER_OFFSET_WORDS 0
 #endif
 
 static int wolfBoot_swap_and_final_erase(int resume)
@@ -217,7 +217,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
     int swapDone = 0;
     uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
         WOLFBOOT_SECTOR_SIZE;
-    uint32_t tmpBuffer[TAIL_OFFSET_WORDS + 1];
+    uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
 
     /* open boot */
     wolfBoot_open_image(boot, PART_BOOT);
@@ -227,12 +227,12 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(swap, PART_SWAP);
     wolfBoot_get_partition_state(PART_UPDATE, &st);
 
-    /* read tail */
+    /* read trailer */
     memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
 
     /* check for trailing magic (BOOT) */
     /* final swap and erase flag is WOLFBOOT_MAGIC_TRAIL */
-    if (tmpBuffer[TAIL_OFFSET_WORDS] == WOLFBOOT_MAGIC_TRAIL) {
+    if (tmpBuffer[TRAILER_OFFSET_WORDS] == WOLFBOOT_MAGIC_TRAIL) {
         swapDone = 1;
     }
     /* if resuming, quit if swap isn't done */
@@ -253,7 +253,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
             (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
 #endif
         /* write TRAIL, encryption key and iv if enabled to tmpBootPos*/
-        tmpBuffer[TAIL_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
+        tmpBuffer[TRAILER_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
 
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));

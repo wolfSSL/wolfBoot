@@ -211,13 +211,13 @@ application V1.
 Magic:    WOLF
 Version:  01
 Status:   ff (New)
-Tail Mgc: ����
+Trailer Magic: ����
 
 === Update Partition[ffdf8000] ===
 Magic:    ����
 Version:  00
 Status:   ff (New)
-Tail Mgc: ����
+Trailer Magic: ����
 
 Current Firmware Version: 1
 Hit any key to call wolfBoot_success the firmware.
@@ -231,13 +231,13 @@ state and wait for any key again.
 Magic:    WOLF
 Version:  01
 Status:   00 (Success)
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[ffdf8000] ===
 Magic:    ����
 Version:  00
 Status:   00 (Success)
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 ```
 You can see the state is Success("00").
@@ -280,13 +280,13 @@ Firmware Update is triggered
 Magic:    WOLF
 Version:  01
 Status:   00 (Success)
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[ffdf8000] ===
 Magic:    ����
 Version:  00
 Status:   70 (Updating)
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 ```
 
 Since this is just a trigger, the application can continue the process.
@@ -309,13 +309,13 @@ information.
 Magic:    WOLF
 Version:  02
 Status:   10
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[ffdf8000] ===
 Magic:    WOLF
 Version:  01
 Status:   30
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 Current Firmware Version: 2
 ```

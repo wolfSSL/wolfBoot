@@ -2074,13 +2074,13 @@ wolfBoot HAL Init
 Magic:    WOLF
 Version:  01
 Status:   ff (New)
-Tail Mgc: ˇˇˇˇ
+Trailer Magic: ˇˇˇˇ
 
 === Update Partition[ffef0000] ===
 Magic:    ˇˇˇˇ
 Version:  00
 Status:   ff (New)
-Tail Mgc: ˇˇˇˇ
+Trailer Magic: ˇˇˇˇ
 
 Current Firmware Version: 1
 Hit any key to call wolfBoot_success the firmware.
@@ -2189,13 +2189,13 @@ wolfBoot HAL Init
 Magic:    WOLF
 Version:  01
 Status:   ff (New)
-Tail Mgc: ˇˇˇˇ
+Trailer Magic: ˇˇˇˇ
 
 === Update Partition[ffdf0000] ===
 Magic:    ˇˇˇˇ
 Version:  00
 Status:   ff (New)
-Tail Mgc: ˇˇˇˇ
+Trailer Magic: ˇˇˇˇ
 
 Current Firmware Version: 1
 Hit any key to call wolfBoot_success the firmware.

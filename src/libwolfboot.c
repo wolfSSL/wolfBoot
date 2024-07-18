@@ -239,7 +239,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     sel = 0;
 
     /* Select the sector with more flags set. Partition flag is at offset '4'.
-     * Sector flags begin from offset '5'. 
+     * Sector flags begin from offset '5'.
      */
     for (off = 4; off < WOLFBOOT_SECTOR_SIZE; off++) {
         volatile uint8_t byte_0 = get_base_offset(base, off);
@@ -1763,7 +1763,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     int i;
     int flash_read_size;
     int read_remaining = len;
-    int unaligned_head_size, unaligned_tail_size;
+    int unaligned_head_size, unaligned_trailer_size;
     uint8_t part;
     uintptr_t base_address;
 
@@ -1815,8 +1815,8 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
         iv_counter++;
     }
     /* Trim the read size to align with the Encryption Blocks. Read the
-     * remaining unaligned tail bytes after, since the `data` buffer won't have
-     * enough space to handle the extra bytes.
+     * remaining unaligned trailer bytes after, since the `data` buffer won't
+     * have enough space to handle the extra bytes.
      */
     flash_read_size = read_remaining & ~(ENCRYPT_BLOCK_SIZE - 1);
     if (ext_flash_read(address, data, flash_read_size) != flash_read_size)
@@ -1833,17 +1833,17 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     data += flash_read_size;
     read_remaining -= flash_read_size;
 
-    /* Read the unaligned tail bytes. */
-    unaligned_tail_size = read_remaining;
-    if (unaligned_tail_size > 0)
+    /* Read the unaligned trailer bytes. */
+    unaligned_trailer_size = read_remaining;
+    if (unaligned_trailer_size > 0)
     {
         uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE)
             return -1;
         crypto_decrypt(dec_block, block, ENCRYPT_BLOCK_SIZE);
-        XMEMCPY(data, dec_block, unaligned_tail_size);
-        read_remaining -= unaligned_tail_size;
+        XMEMCPY(data, dec_block, unaligned_trailer_size);
+        read_remaining -= unaligned_trailer_size;
     }
     return (len - read_remaining);
 }

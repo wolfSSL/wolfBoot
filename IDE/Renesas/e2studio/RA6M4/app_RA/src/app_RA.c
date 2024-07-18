@@ -40,7 +40,7 @@ static void blink(int interval)
 
     /* LED type structure */
     bsp_leds_t leds = g_bsp_leds;
-    
+
 #if BSP_TZ_SECURE_BUILD
 
     /* Enter non-secure code */
@@ -59,8 +59,8 @@ static void blink(int interval)
     {
         /* Enable access to the PFS registers */
         R_BSP_PinAccessEnable();
-        
-        
+
+
         /* Update each LEDs*/
         for (uint32_t i = 0; i < leds.led_count; i++)
         {
@@ -69,18 +69,18 @@ static void blink(int interval)
 
             /* Write to this pin */
             R_BSP_PinWrite((bsp_io_port_pin_t) pin, pin_level);
-            
+
             /* Delay */
             R_BSP_SoftwareDelay(delay, bsp_delay_units);
         }
-        
+
         /* Protect PFS registers */
         R_BSP_PinAccessDisable();
 
         /* Toggle level for next write */
         if (BSP_IO_LEVEL_LOW == pin_level) {
             pin_level = BSP_IO_LEVEL_HIGH;
-        } 
+        }
         else {
             pin_level = BSP_IO_LEVEL_LOW;
         }
@@ -104,7 +104,7 @@ static void printPart(uint8_t *part)
     state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
     myprintf("Status:   %02x\n", state);
     magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
-    myprintf("Tail Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    myprintf("Trailer Magic: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
 
 #ifdef WOLFBOOT_DEBUG_PARTION
     v = (uint32_t *)part;
