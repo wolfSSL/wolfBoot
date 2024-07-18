@@ -5,7 +5,9 @@
 #define MOCK_ADDRESS 0xCC000000
 #define MOCK_ADDRESS_BOOT 0xCD000000
 #define MOCK_ADDRESS_SWAP 0xCE000000
+const char ENCRYPT_KEY[] = "0123456789abcdef0123456789abcdef0123456789abcdef";
 #include <stdio.h>
+#include "encrypt.h"
 #include "libwolfboot.c"
 #include <fcntl.h>
 #include <unistd.h>
@@ -19,6 +21,7 @@ static int erased_swap = 0;
 static int erased_nvm_bank0 = 0;
 static int erased_nvm_bank1 = 0;
 const char *argv0;
+
 
 
 /* Mocks */
@@ -94,8 +97,53 @@ void hal_prepare_boot(void)
 {
 }
 
+int ext_flash_erase(uintptr_t address, int len)
+{
+    printf("%s", __FUNCTION__);
+    if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
+            (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
+        erased_update++;
+        memset(address, 0xFF, len);
+        if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
+            erased_nvm_bank0++;
+        } else if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
+            erased_nvm_bank1++;
+        }
+    } else if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
+            (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
+        erased_swap++;
+        memset(address, 0xFF, len);
+    } else {
+        fail("Invalid address\n");
+        return -1;
+    }
+    return 0;
+}
+
+int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
+{
+    int i;
+    uint8_t *a = (uint8_t *)address;
+    fail_if(locked, "Attempting to write to a locked FLASH");
+    printf("%s", __FUNCTION__);
+    for (i = 0; i < len; i++) {
+        a[i] = data[i];
+    }
+    return 0;
+}
+
+int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+{
+    int i;
+    uint8_t *a = (uint8_t *)address;
+    for (i = 0; i < len; i++) {
+         data[i] = a[i];
+    }
+    return 0;
+}
+
 /* A simple mock memory */
-static int mmap_file(const char *path, uint8_t *address, uint32_t len, 
+static int mmap_file(const char *path, uint8_t *address, uint32_t len,
         uint8_t** ret_address)
 {
     struct stat st = { 0 };
@@ -141,7 +189,7 @@ static int mmap_file(const char *path, uint8_t *address, uint32_t len,
 Suite *wolfboot_suite(void);
 
 
-START_TEST (test_nvm_select_fresh_sector)
+START_TEST (test_nvm_update_with_encryption)
 {
     int ret, i;
     const char BOOT[] = "BOOT";
@@ -170,7 +218,7 @@ START_TEST (test_nvm_select_fresh_sector)
 
     /* Sanity */
     fail_if(home_off > WOLFBOOT_SECTOR_SIZE);
-    
+
     /* unlock the flash to allow operations */
     hal_flash_unlock();
 
@@ -287,13 +335,14 @@ START_TEST (test_nvm_select_fresh_sector)
     wolfBoot_set_update_sector_flag(1, SECT_FLAG_UPDATED);
 
     /* Copy flags from 0 to 1 */
-    src = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off));
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off + WOLFBOOT_SECTOR_SIZE));
-    for (i = 0; i < 8; i++)
+    src = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE);
+    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE));
+    for (i = 0; i < WOLFBOOT_SECTOR_SIZE; i++)
         dst[i] = src[i];
 
     /* Force-erase 4B of sector flags in 0 */
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off));
+    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off +
+                TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE));
     for (i = 0; i < 4; i++)
         dst[i] = 0xFF;
 
@@ -332,13 +381,14 @@ START_TEST (test_nvm_select_fresh_sector)
     fail_if(ret != 1, "Failed to select right sector after reading sector state\n");
 
     /* Copy flags from 1 to 0 */
-    src = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off + WOLFBOOT_SECTOR_SIZE));
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off));
-    for (i = 0; i < 8; i++)
+    src = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE));
+    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (WOLFBOOT_SECTOR_SIZE));
+    for (i = 0; i < WOLFBOOT_SECTOR_SIZE; i++)
         dst[i] = src[i];
 
     /* Force to F0 last sector flag in 0, so that the sector '4' is 'updated' */
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off));
+    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off +
+                TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE));
     dst[0] = 0xF0;
 
     /* Check if still there */
@@ -363,7 +413,7 @@ START_TEST (test_nvm_select_fresh_sector)
 
     ret = nvm_select_fresh_sector(PART_UPDATE);
     fail_if(ret != 0, "Failed to select right sector after reading sector state\n");
-    
+
     /* re-lock the flash: update_trigger implies unlocking/locking */
     hal_flash_lock();
 
@@ -393,9 +443,9 @@ Suite *wolfboot_suite(void)
     Suite *s = suite_create("wolfboot");
 
     /* Test cases */
-    TCase *nvm_select_fresh_sector = tcase_create("NVM select fresh sector");
-    tcase_add_test(nvm_select_fresh_sector, test_nvm_select_fresh_sector);
-    suite_add_tcase(s, nvm_select_fresh_sector);
+    TCase *nvm_update_with_encryption = tcase_create("NVM update with encryption");
+    tcase_add_test(nvm_update_with_encryption, test_nvm_update_with_encryption);
+    suite_add_tcase(s, nvm_update_with_encryption);
 
     return s;
 }

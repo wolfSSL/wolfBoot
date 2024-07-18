@@ -501,6 +501,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t up_v;
 #endif
 
+
     /* No Safety check on open: we might be in the middle of a broken update */
     wolfBoot_open_image(&update, PART_UPDATE);
     wolfBoot_open_image(&boot, PART_BOOT);
@@ -819,7 +820,8 @@ void RAMFUNCTION wolfBoot_start(void)
     bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
-#ifndef DISABLE_BACKUP
+
+#if !defined(DISABLE_BACKUP)
     /* resume the final erase in case the power failed before it finished */
     resumedFinalErase = wolfBoot_swap_and_final_erase(1);
     if (resumedFinalErase != 0)

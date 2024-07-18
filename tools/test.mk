@@ -69,6 +69,12 @@ ifeq ($(HASH),SHA3)
 	SIGN_ARGS+= --sha3
 endif
 
+ifeq ($(FLAGS_INVERT),1)
+  INVERSION=
+else
+  INVERSION=| tr "\000" "\377"
+endif
+
 $(EXPVER):
 	$(MAKE) -C $(dir $@)
 
@@ -136,7 +142,7 @@ test-spi-off: FORCE
 	@make testbed-on
 
 test-update: test-app/image.bin FORCE
-	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-update.bin
+	@dd if=/dev/zero bs=131067 count=1 2>/dev/null $(INVERSION) > test-update.bin
 	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-update.bin
@@ -155,11 +161,11 @@ test-sim-external-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	# Assembling internal flash image
 	#
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > v1_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null $(INVERSION) > v1_part.dd
 	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
 	$(Q)$(BINASSEMBLE) internal_flash.dd 0 wolfboot.bin \
 		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null $(INVERSION) > erased_sec.dd
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
 
@@ -175,12 +181,12 @@ test-sim-external-flash-with-enc-delta-update-extradata: wolfboot.bin test-app/i
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > v1_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null $(INVERSION) > v1_part.dd
 	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
 		0 wolfboot.bin \
 		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null $(INVERSION) > erased_sec.dd
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff_encrypted.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
 	$(Q)ls -l test-app/*.bin
@@ -199,12 +205,12 @@ test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	# Assembling internal flash image
 	#
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > v1_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null $(INVERSION) > v1_part.dd
 	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
 		0 wolfboot.bin \
 		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null $(INVERSION) > erased_sec.dd
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_and_encrypted.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
 
@@ -220,7 +226,7 @@ test-sim-internal-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.bak.elf test-app/image.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr "\000" "\377" > erased_sec.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null $(INVERSION) > erased_sec.dd
 	$(Q)$(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
@@ -263,7 +269,7 @@ test-self-update: FORCE
 	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000)
-	@dd if=/dev/zero bs=131067 count=1 2>/dev/null | tr "\000" "\377" > test-self-update.bin
+	@dd if=/dev/zero bs=131067 count=1 2>/dev/null $(INVERSION) > test-self-update.bin
 	@$(SIGN_TOOL) $(SIGN_ARGS) --wolfboot-update wolfboot.bin private_key.old $(WOLFBOOT_VERSION)
 	@dd if=wolfboot_v$(WOLFBOOT_VERSION)_signed.bin of=test-self-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-self-update.bin

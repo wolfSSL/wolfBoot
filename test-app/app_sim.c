@@ -61,6 +61,12 @@ int do_cmd(const char *cmd)
         printf("%d\n", wolfBoot_current_firmware_version());
         return 0;
     }
+    if (strcmp(cmd, "get_state") == 0) {
+        uint8_t st = 0;
+        wolfBoot_get_partition_state(PART_UPDATE, &st);
+        printf("%02x\n", st);
+        return 0;
+    }
     if (strcmp(cmd, "success") == 0) {
         wolfBoot_success();
         return 0;

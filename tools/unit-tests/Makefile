@@ -17,7 +17,8 @@ WOLFCRYPT=../../lib/wolfssl/
 
 
 TESTS:=unit-parser unit-extflash unit-aes128 unit-aes256 unit-chacha20 unit-pci \
-	   unit-mock-state unit-sectorflags unit-image unit-nvm
+	   unit-mock-state unit-sectorflags unit-image unit-nvm unit-nvm-flagshome \
+	   unit-enc-nvm unit-enc-nvm-flagshome
 
 all: $(TESTS)
 
@@ -35,13 +36,6 @@ run: $(TESTS)
 	done
 
 
-unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
-unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
-unit-chacha20:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA
-unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
-unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
-
-
 WOLFCRYPT_SRC:=$(WOLFCRYPT)/wolfcrypt/src/sha.c \
                $(WOLFCRYPT)/wolfcrypt/src/sha256.c \
                $(WOLFCRYPT)/wolfcrypt/src/sp_int.c \
@@ -49,7 +43,22 @@ WOLFCRYPT_SRC:=$(WOLFCRYPT)/wolfcrypt/src/sha.c \
                $(WOLFCRYPT)/wolfcrypt/src/random.c \
                $(WOLFCRYPT)/wolfcrypt/src/memory.c
 
-WOLFCRYPT_CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_SIGN_ECC256 -DHAVE_ECC_KEY_IMPORT -DWOLFBOOT_HASH_SHA256 -D__WOLFBOOT
+unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
+unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
+unit-chacha20:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA
+unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
+unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
+unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
+unit-enc-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_CHACHA -DEXT_FLASH -DHAVE_CHACHA
+unit-enc-nvm:WOLFCRYPT_SRC+=$(WOLFCRYPT)/wolfcrypt/src/chacha.c
+unit-enc-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS \
+	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DEXT_FLASH -DHAVE_CHACHA -DFLAGS_HOME
+unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFCRYPT)/wolfcrypt/src/chacha.c
+
+
+
+WOLFCRYPT_CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_SIGN_ECC256 -DHAVE_ECC_KEY_IMPORT  -D__WOLFBOOT
 
 
 
@@ -89,6 +98,15 @@ unit-image:  unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 
 unit-nvm: ../../include/target.h unit-nvm.c
 	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)
+
+unit-nvm-flagshome: ../../include/target.h unit-nvm.c
+	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)
+
+unit-enc-nvm: ../../include/target.h unit-enc-nvm.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-nvm.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-enc-nvm-flagshome: ../../include/target.h unit-enc-nvm.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-nvm.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
