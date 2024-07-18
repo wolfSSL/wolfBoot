@@ -239,7 +239,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     sel = 0;
 
     /* Select the sector with more flags set. Partition flag is at offset '4'.
-     * Sector flags begin from offset '5'. 
+     * Sector flags begin from offset '5'.
      */
     for (off = 4; off < WOLFBOOT_SECTOR_SIZE; off++) {
         volatile uint8_t byte_0 = get_base_offset(base, off);
@@ -1018,6 +1018,8 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     uint32_t *volatile version_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    if (blob == NULL)
+        return 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
     if (!encrypt_initialized)
         if (crypto_init() < 0)
@@ -1870,15 +1872,16 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     uint32_t dst_offset = 0, iv_counter = 0;
     uint32_t magic, len;
 
-
     if (!encrypt_initialized) {
         if (crypto_init() < 0) {
+            wolfBoot_printf("Error initializing crypto!\n");
             return -1;
         }
     }
 
     /* Attempt to decrypt firmware header */
     if (decrypt_header(src) != 0) {
+        wolfBoot_printf("Error decrypting header at %p!\n", src);
         return -1;
     }
     len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
