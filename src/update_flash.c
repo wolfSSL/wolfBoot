@@ -138,6 +138,9 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     if (src == dst)
         return 0;
 
+    wolfBoot_printf("Copy sector %d (part %d->%d)\n",
+        sector, src->part, dst->part);
+
     if (src->part == PART_SWAP)
         src_sector_offset = 0;
     if (dst->part == PART_SWAP)
@@ -216,11 +219,9 @@ static int wolfBoot_swap_and_final_erase(int resume)
         + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE
 #endif
     ];
-    /* open boot */
+    /* open partitions (ignore failure) */
     wolfBoot_open_image(boot, PART_BOOT);
-    /* open update */
     wolfBoot_open_image(update, PART_UPDATE);
-    /* open swap */
     wolfBoot_open_image(swap, PART_SWAP);
     wolfBoot_get_partition_state(PART_UPDATE, &st);
     /* read from tmpBootPos */
@@ -500,6 +501,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t cur_v;
     uint32_t up_v;
 #endif
+    uint32_t cur_ver, upd_ver;
+
+    wolfBoot_printf("Staring Update (fallback allowed %d)\n", fallback_allowed);
 
 
     /* No Safety check on open: we might be in the middle of a broken update */
@@ -509,9 +513,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     /* get total size */
     total_size = wolfBoot_get_total_size(&boot, &update);
-
-    if (total_size <= IMAGE_HEADER_SIZE)
+    if (total_size <= IMAGE_HEADER_SIZE) {
+        wolfBoot_printf("Image total size %u too large!\n", total_size);
         return -1;
+    }
     /* In case this is a new update, do the required
      * checks on the firmware update
      * before starting the swap
@@ -523,26 +528,38 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Check the first sector to detect interrupted update */
     if (flag == SECT_FLAG_NEW) {
         if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
-                ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH))
+            ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH)) {
+            wolfBoot_printf("Invalid update type %d\n", update_type);
             return -1;
-        if (update.fw_size > MAX_UPDATE_SIZE - 1)
+        }
+        if (update.fw_size > MAX_UPDATE_SIZE - 1) {
+            wolfBoot_printf("Invalid update size %u\n", update.fw_size);
             return -1;
+        }
         if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
+            wolfBoot_printf("Update integrity/verification failed!\n");
             return -1;
         }
         PART_SANITY_CHECK(&update);
+
+        cur_ver = wolfBoot_current_firmware_version();
+        upd_ver = wolfBoot_update_firmware_version();
+
+        wolfBoot_printf("Versions: Current 0x%x, Update 0x%x\n",
+            cur_ver, upd_ver);
+
 #ifndef ALLOW_DOWNGRADE
         if ( ((fallback_allowed==1) &&
                     (~(uint32_t)fallback_allowed == 0xFFFFFFFE)) ||
-                (wolfBoot_current_firmware_version() <
-                 wolfBoot_update_firmware_version()) ) {
+                (cur_ver < upd_ver) ) {
             VERIFY_VERSION_ALLOWED(fallback_allowed);
-        } else
+        } else {
+            wolfBoot_printf("Update version not allowed\n");
             return -1;
+        }
 #endif
     }
-
 
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
@@ -577,12 +594,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
 #endif
 
-    hal_flash_unlock();
-#ifdef EXT_FLASH
-    ext_flash_unlock();
-#endif
-
 #ifndef DISABLE_BACKUP
+    /* Interruptible swap */
+
+    hal_flash_unlock();
+    #ifdef EXT_FLASH
+    ext_flash_unlock();
+    #endif
+
     /* Interruptible swap
      * The status is saved in the sector flags of the update partition.
      * If something goes wrong, the operation will be resumed upon reboot.
@@ -621,6 +640,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 break;
         }
         sector++;
+
         /* headers that can be in different positions depending on when the
          * power fails are now in a known state, re-read and swap fw_size
          * because the locations are correct but the metadata is now swapped
@@ -641,9 +661,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* erase to the last sector, writeonce has 2 sectors */
     while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
         sector_size
-#ifdef NVM_FLASH_WRITEONCE
+    #ifdef NVM_FLASH_WRITEONCE
         * 2
-#endif
+    #endif
     ) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
@@ -653,37 +673,45 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * wolfBoot_start*/
     wolfBoot_swap_and_final_erase(0);
     /* encryption key was not erased, will be erased by success */
-#ifdef EXT_FLASH
+    #ifdef EXT_FLASH
     ext_flash_lock();
-#endif
+    #endif
     hal_flash_lock();
-#else /* DISABLE_BACKUP */
-#ifdef EXT_ENCRYPTED
-    wolfBoot_get_encrypt_key(key, nonce);
-#endif
 
-    /* Directly copy the content of the UPDATE partition into the BOOT partition.
-     */
+#else /* DISABLE_BACKUP */
+    /* Direct Swap without power fail saftey */
+
+    hal_flash_unlock();
+    #ifdef EXT_FLASH
+    ext_flash_unlock();
+    #endif
+
+    #ifdef EXT_ENCRYPTED
+    wolfBoot_get_encrypt_key(key, nonce);
+    #endif
+
+    /* Directly copy the content of the UPDATE partition into the BOOT
+     * partition. */
     while ((sector * sector_size) < total_size) {
         wolfBoot_copy_sector(&update, &boot, sector);
         sector++;
     }
-    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
+    while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;
     }
     st = IMG_STATE_SUCCESS;
     wolfBoot_set_partition_state(PART_BOOT, st);
-#ifdef EXT_FLASH
+
+    #ifdef EXT_FLASH
     ext_flash_lock();
-#endif
+    #endif
     hal_flash_lock();
 
-/* Save the encryption key after swapping */
-#ifdef EXT_ENCRYPTED
+    /* Save the encryption key after swapping */
+    #ifdef EXT_ENCRYPTED
     wolfBoot_set_encrypt_key(key, nonce);
-#endif
-
+    #endif
 #endif /* DISABLE_BACKUP */
     return 0;
 }
@@ -841,7 +869,12 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_update(0);
         }
     }
-    if ((wolfBoot_open_image(&boot, PART_BOOT) < 0)
+
+    bootRet = wolfBoot_open_image(&boot, PART_BOOT);
+    wolfBoot_printf("Booting version: 0x%x\n",
+        wolfBoot_get_blob_version(boot.hdr));
+
+    if (bootRet < 0
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
     ) {
