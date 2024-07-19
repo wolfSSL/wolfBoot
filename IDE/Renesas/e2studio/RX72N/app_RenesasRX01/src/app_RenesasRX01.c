@@ -56,7 +56,7 @@ static void printPart(uint8_t *part)
     state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
     printf("Status:   %02x (%s)\n", state,state2str(state));
     magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
-    printf("Tail Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    printf("Trailer Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
 
 #ifdef WOLFBOOT_DEBUG_PARTION
     v = (uint32_t *)part;

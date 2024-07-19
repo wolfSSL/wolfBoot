@@ -270,13 +270,13 @@ application V1.
 Magic:    WOLF
 Version:  01
 Status:   ff
-Tail Mgc: ����
+Trailer Magic: ����
 
 === Update Partition[ffe20000] ===
 Magic:    WOLF
 Version:  02
 Status:   ff
-Tail Mgc: ����
+Trailer Magic: ����
 
 Current Firmware Version: 1
 Hit any key to call wolfBoot_success the firmware.
@@ -294,13 +294,13 @@ You can see the state is Success("00").
 Magic:    WOLF
 Version:  01
 Status:   00
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[ffe20000] ===
 Magic:    WOLF
 Version:  02
 Status:   ff
-Tail Mgc: ����
+Trailer Magic: ����
 
 Hit any key to update the firmware.
 ```
@@ -361,13 +361,13 @@ information.
 Magic:    WOLF
 Version:  02
 Status:   10
-Tail Mgc: BOOT
+Trailer Magic: BOOT
 
 === Update Partition[ffe20000] ===
 Magic:    ����
 Version:  00
 Status:   ff
-Tail Mgc: ����
+Trailer Magic: ����
 
 Current Firmware Version: 2
 ```
