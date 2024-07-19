@@ -40,25 +40,37 @@
 #define SPI_MOSI_PIN  5 /* SPI_MOSI PB5  */
 #endif /* PLATFORM_stm32f4 */
 
-
 #ifdef PLATFORM_stm32u5
+
 #ifdef TZEN
 #define PERIPH_BASE (0x50000000UL)
 #else
 #define PERIPH_BASE (0x40000000UL)
 #endif
 
-#define APB2PERIPH_BASE (PERIPH_BASE + 0x00010000UL)
+#define OCTOSPI1_BASE (PERIPH_BASE + 0x020D1400UL)
+#define OCTOSPI2_BASE (PERIPH_BASE + 0x020D2400UL)
+
+#ifndef OCTOSPI_BASE
+#define OCTOSPI_BASE OCTOSPI2_BASE
+#endif
+
+/* Registers mapping */
+#define APB2PERIPH_BASE (PERIPH_BASE + 0x00012C00UL)
+#define RCC_BASE        (PERIPH_BASE + 0x06020C00UL)
+#define GPIO_BASE       (PERIPH_BASE + 0x02020000UL)
 #define AHB2PERIPH_BASE (PERIPH_BASE + 0x02020000UL)
-
-#define SPI1_BASE (APB2PERIPH_BASE + 0x3000UL)
-
-#define RCC_BASE  (APB2PERIPH_BASE + 0x0C00UL)
+#define SPI1_BASE       (APB2PERIPH_BASE + 0x3000UL)
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(RCC_BASE + 0xA4))
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(RCC_BASE + 0x7C))
+#define AHB2_CLOCK_ER     (*(volatile uint32_t *)(RCC_BASE + 0x90))
+#define AHB2_CLOCK_RST    (*(volatile uint32_t *)(RCC_BASE + 0x68))
+
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C))
 
-#define GPIO_BASE  (APB2PERIPH_BASE + 0x02020000UL)
+
+#define RCC_AHB2ENR_QSPIEN (1 << 8) /* OCTOSPI2 = bit 8, OCTOSPI1 = bit 4 */
+
 #define GPIOA_BASE (GPIO_BASE + 0x00000UL)
 #define GPIOB_BASE (GPIO_BASE + 0x00400UL)
 #define GPIOC_BASE (GPIO_BASE + 0x00800UL)
@@ -68,6 +80,64 @@
 #define GPIOG_BASE (GPIO_BASE + 0x01800UL)
 #define GPIOH_BASE (GPIO_BASE + 0x01C00UL)
 #define GPIOI_BASE (GPIO_BASE + 0x02000UL)
+
+/** QSPI **/
+/* Default Base (H) and AF (alternate function=5) for QSPI */
+#define QSPI_GPIO            GPIOH_BASE
+#define QSPI_PIN_AF          5
+
+#ifndef QSPI_CLOCK_BASE
+#define QSPI_CLOCK_BASE 160000000
+#endif
+
+#ifndef QSPI_CLOCK_MHZ
+#define QSPI_CLOCK_MHZ  10000000
+#endif
+
+/* Default to flash bank 1 */
+#ifndef QSPI_FLASH_BANK
+#define QSPI_FLASH_BANK      1
+#endif
+
+/* Default flash size to 16MB */
+#ifndef QSPI_FLASH_SIZE
+#define QSPI_FLASH_SIZE      23 /* 2^24 = 16 MB */
+#endif
+
+/* QSPI CLK PB2 (alt OCTOSPIM_P1_CLK)*/
+#define QSPI_CLOCK_PIO_BASE  GPIOH_BASE
+#define QSPI_CLOCK_PIN       6
+#define QSPI_CLOCK_PIN_AF    5
+
+/* nQSPI_CS PG6 (alt PB6 -> OCTOSPIM_P1_NCS) */
+#ifndef QSPI_ALT_CONFIGURATION
+#define QSPI_CS_PIO_BASE     GPIOH_BASE
+#define QSPI_CS_FLASH_PIN    5
+#else
+#define QSPI_CS_PIO_BASE     GPIOH_BASE
+#define QSPI_CS_FLASH_PIN    6
+#endif
+
+/* QSPI_IO0 */
+#define QSPI_IO0_PIO_BASE   GPIOH_BASE
+#define QSPI_IO0_PIN        9
+#define QSPI_IO0_PIN_AF     5
+
+/* QSPI_IO1 */
+#define QSPI_IO1_PIO_BASE   GPIOH_BASE
+#define QSPI_IO1_PIN        10
+#define QSPI_IO1_PIN_AF     5
+
+/* QSPI_IO2 */
+#define QSPI_IO2_PIO_BASE   GPIOH_BASE
+#define QSPI_IO2_PIN        11
+#define QSPI_IO2_PIN_AF     5
+
+/* QSPI_IO3 */
+#define QSPI_IO3_PIO_BASE   GPIOH_BASE
+#define QSPI_IO3_PIN        12
+#define QSPI_IO3_PIN_AF     5
+
 
 /* STMOD+ Port */
 #define SPI_GPIO      GPIOE_BASE
