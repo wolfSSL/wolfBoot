@@ -40,13 +40,14 @@
     #endif
     void uart_write(const char* buf, unsigned int sz);
 
-    /* turn on small printf support */
+    /* turn on small printf support in string.c */
     #if !defined(PRINTF_ENABLED) && !defined(NO_PRINTF_UART)
         #define PRINTF_ENABLED
     #endif
 #endif
 
-#ifdef PRINTF_ENABLED
+/* support for wolfBoot_printf logging */
+#if defined(PRINTF_ENABLED) && !defined(WOLFBOOT_NO_PRINTF)
 #   include <stdio.h>
 #   if defined(DEBUG_ZYNQ) && !defined(USE_QNX)
 #       include "xil_printf.h"
@@ -62,8 +63,12 @@
 #       define wolfBoot_printf(_f_, ...) uart_printf(_f_, ##__VA_ARGS__)
 #   elif defined(__CCRX__)
 #       define wolfBoot_printf printf
-#   else
+#   elif defined(WOLFBOOT_LOG_PRINTF)
+        /* allow output to stdout */
 #       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
+#   else
+        /* use stderr by default */
+#       define wolfBoot_printf(_f_, ...) fprintf(stderr, _f_, ##__VA_ARGS__)
 #   endif
 #else
 #   define wolfBoot_printf(_f_, ...) do{}while(0)
