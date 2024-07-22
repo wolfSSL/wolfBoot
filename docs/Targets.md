@@ -1407,6 +1407,10 @@ section, e.g.:
 If an external `.dcd_data` section is provided, the option `NXP_CUSTOM_DCD=1` must
 be added to the configuration.
 
+### Building wolfBoot for HAB (High Assurance Boot)
+
+The `imx_rt` target supports building without a flash configuration, IVT, Boot Data and DCD. This is needed when wanting to use HAB through NXP's *Secure Provisioning Tool* to sign wolfBoot to enable secure boot. To build wolfBoot this way `TARGET_IMX_HAB` needs to be set to 1 in the configuration file (see `config/examples/imx-rt1060 _hab.config` for an example). When built with `TARGET_IMX_HAB=1` wolfBoot must be written to flash using NXP's *Secure Provisioning Tool*.
+
 ### Flashing
 
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
