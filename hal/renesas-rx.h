@@ -407,5 +407,8 @@ void hal_delay_us(uint32_t us);
 
 #define QSPI_FIFO_SIZE 32 /* bytes */
 
+/* Software Configurable Interrupt Request Registers */
+#define ICU_PIBR(x) (*(volatile uint8_t *)(SYSTEM_BASE + 0x7700 + (x)))
+#define ICU_PIAR(x) (*(volatile uint8_t *)(SYSTEM_BASE + 0x7900 + (x)))
 
 #endif /* !_WOLFBOOT_RENESAS_RX_H_ */

@@ -45,6 +45,7 @@ uint16_t spi_flash_probe(void);
 void spi_flash_release(void);
 
 int spi_flash_sector_erase(uint32_t address);
+int spi_flash_chip_erase(void);
 int spi_flash_read(uint32_t address, void *data, int len);
 int spi_flash_write(uint32_t address, const void *data, int len);
 
