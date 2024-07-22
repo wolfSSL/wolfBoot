@@ -44,6 +44,7 @@
 #define WREN            0x06
 #define WRDI            0x04
 #define SECTOR_ERASE    0x20
+#define CHIP_ERASE      0x60
 #define BYTE_READ       0x03
 #define BYTE_WRITE      0x02
 #define AUTOINC         0xAD
@@ -205,6 +206,10 @@ uint16_t spi_flash_probe(void)
     wolfBoot_printf("SPI Probe: Manuf 0x%x, Product 0x%x\n", manuf, product);
     manuf_prod = (uint16_t)(manuf << 8) | (uint16_t)product;
 
+#ifdef SPI_FLASH_CHIP_ERASE
+    spi_flash_chip_erase();
+#endif
+
 #ifdef TEST_EXT_FLASH
     test_ext_flash();
 #endif
@@ -223,6 +228,18 @@ int RAMFUNCTION spi_flash_sector_erase(uint32_t address)
     spi_write(SECTOR_ERASE);
     spi_read();
     write_address(address);
+    spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+    wait_busy();
+    return 0;
+}
+
+int RAMFUNCTION spi_flash_chip_erase(void)
+{
+    wait_busy();
+    flash_write_enable();
+    spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+    spi_write(CHIP_ERASE);
+    spi_read();
     spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     wait_busy();
     return 0;
