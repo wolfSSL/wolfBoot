@@ -17,15 +17,7 @@ LDFLAGS:=
 SECURE_LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
-ifeq ($(TARGET),imx_rt)
-	ifeq ($(TARGET_IMX_HAB),1)
-		LSCRIPT_IN:=hal/$(TARGET)_hab.ld
-	else
-		LSCRIPT_IN:=hal/$(TARGET).ld
-	endif
-else
-	LSCRIPT_IN:=hal/$(TARGET).ld
-endif
+LSCRIPT_IN:=hal/$(TARGET).ld
 V?=0
 DEBUG?=0
 DEBUG_UART?=0
