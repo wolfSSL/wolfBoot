@@ -588,3 +588,37 @@ Use `make keysclean` to delete keys and regenerate.
     * wolfSSL v5.7.0
     * wolfPKCS11 v1.3.0
     * wolfTPM v3.2.0
+
+### V 2.2.0 - (2024-07-22)
+  * New hardware targets
+    * Add STM32H5 port with support for Dual-bank, OTP, TrustZone-M
+    * Add native support for Renesas RX family, using gcc toolchain
+  * Improvements to supported targets
+    * NXP i.MX-RT:
+      * New flash geometry configurations
+      * Support for LPUART4
+      * Add port for RT1061
+      * Disable DCACHE upon flash access
+      * Support for building with HAB
+    * STM32:
+      * Refactoring of TrustZone-M support
+      * OTP driver for STM32H5/H7
+      * Full firmware update demo on STM32H5
+      * Add support for QSPI in STM32U5
+    * Renesas RZ:
+      * Add support for RSIP
+    * x86-64 (FSP):
+      * Improve x86-64 specific code, add features
+      * Clean-up and re-arrange scripts for qemu demo
+  * Post-quantum crypto
+    * LMS and XMSS support now using native wolfCrypt implementation
+  * Tools improvements
+    * Keystore: now supports .der ECC key via `--der`
+    * Add `otp_primer` firmware, to provision keystores in OTP
+    * Add `otp_gen` tool to provide a pre-assembled keystore to flash into OTP
+  * Bug fixes
+    * Fix regression in x86-EFI builds
+    * Fix setting `VTOR_NS` when staging a non-secure app/os from TrustZone
+    * Fix delta updates: patches with invalid base versions were not discarded
+    * Fix potential array bound overflow in `NVM_FLASH_WRITEONCE` mode
+    * Fix dereferencing type-punned pointer in flash update
