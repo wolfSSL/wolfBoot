@@ -166,7 +166,9 @@ Download files to flash using Renesas flash programmer.
 
 #### RX TSIP Benchmarks
 
-| Algorithm         | RX TSIP  | Debug    | Release (-Os) | Release (-O2) |
-| ----------------- | -------- | -------- | ------------- | ------------- |
-| ECDSA Verify P384 | 17.26 ms | 1570 ms  | 441 ms        | 313 ms        |
-| ECDSA Verify P256 |  2.73 ms |  469 ms  | 135 ms        | 107 ms        |
+| Hardware | Clock  | Algorithm         | RX TSIP  | Debug    | Release (-Os) | Release (-O2) |
+| -------- | ------ | ----------------- | -------- | -------- | ------------- | ------------- |
+| RX72N    | 240MHz | ECDSA Verify P384 | 17.26 ms | 1570 ms  |  441 ms       |  313 ms       |
+| RX72N    | 240MHz | ECDSA Verify P256 |  2.73 ms |  469 ms  |  135 ms       |  107 ms       |
+| RX65N    | 120MHz | ECDSA Verify P384 | 18.57 ms | 4213 ms  | 2179 ms       | 1831 ms       |
+| RX65N    | 120MHz | ECDSA Verify P256 |  2.95 ms | 1208 ms  |  602 ms       |  517 ms       |
