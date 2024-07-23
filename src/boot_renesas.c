@@ -58,6 +58,16 @@ void do_boot(const uint32_t *app_offset)
     void (*app_entry)(void);
     uint32_t app_sp;
 
+    /* Make sure interrupts are disabled */
+    /* Application may assume interrupts are disabled */
+#if defined(__CCRX__)
+    clrpsw_i();
+#elif defined(__GNUC__)
+    __builtin_rx_clrpsw('I');
+#elif defined(__ICCRX__)
+    __disable_interrupt();
+#endif
+
 #ifdef BOOT_ENTRY_OFFSET
     /* add byte offset to uint32_t */
     app_offset += BOOT_ENTRY_OFFSET/sizeof(uint32_t);
