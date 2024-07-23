@@ -433,14 +433,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    /* make sure interrupts are disabled */
-#if defined(__CCRX__)
-    clrpsw_i();
-#elif defined(__GNUC__)
-    __builtin_rx_clrpsw('I');
-#elif defined(__ICCRX__)
-    __disable_interrupt();
-#endif
+
 }
 
 int hal_flash_init(void)
