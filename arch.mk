@@ -363,6 +363,8 @@ ifeq ($(ARCH),RENESAS_RX)
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pfa.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pfb.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf1.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf5.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf6.o \
             $(RX_TSIP_SRC_PATH)/ip/s_flash.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p00.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p01.o \
@@ -379,6 +381,8 @@ ifeq ($(ARCH),RENESAS_RX)
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function010.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function011.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function023.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function027.o \
+            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function028.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function050.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function051.o \
             $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function052.o \

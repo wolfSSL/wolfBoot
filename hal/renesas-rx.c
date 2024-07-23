@@ -454,20 +454,25 @@ int hal_flash_init(void)
     return 0;
 }
 
-/* write up to 256 bytes at a time */
+/* write up to 128 bytes at a time */
 int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 {
-    int ret, i;
+    int ret, i, chunk;
     const uint16_t* data16 = (const uint16_t*)data;
 
     while (len > 0) {
+        chunk = len/2;
+        if (chunk > FLASH_FACI_CMD_PROGRAM_CODE_LENGTH) {
+            chunk = FLASH_FACI_CMD_PROGRAM_CODE_LENGTH;
+        }
+
         FLASH_FSADDR = addr;
 
         FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM;
-        FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM_CODE_LENGTH;
+        FLASH_FACI_CMD8 = chunk;
 
         /* write 64 * 2 bytes */
-        for (i=0; i < FLASH_FACI_CMD_PROGRAM_CODE_LENGTH; i++) {
+        for (i=0; i < chunk; i++) {
             FLASH_FACI_CMD16 = *data16++;
 
             /* wait for data buffer not full */
@@ -479,10 +484,8 @@ int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
         /* Wait for FCU operation to complete */
         while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
 
-        len -= (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH *
-                FLASH_FACI_CMD_PROGRAM_DATA_LENGTH);
-        addr += (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH *
-                FLASH_FACI_CMD_PROGRAM_DATA_LENGTH);
+        len -= (chunk * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH);
+        addr += (chunk * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH);
     }
     return 0;
 }
