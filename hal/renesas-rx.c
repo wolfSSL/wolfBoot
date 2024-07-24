@@ -455,37 +455,44 @@ int hal_flash_init(void)
 }
 
 /* write up to 128 bytes at a time */
+#define FLASH_FACI_CODE_BLOCK_SZ \
+    (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH)
 int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 {
     int ret, i, chunk;
-    const uint16_t* data16 = (const uint16_t*)data;
+    uint8_t codeblock[FLASH_FACI_CODE_BLOCK_SZ];
+    uint16_t* data16 = (uint16_t*)data;
 
     while (len > 0) {
-        chunk = len/2;
-        if (chunk > FLASH_FACI_CMD_PROGRAM_CODE_LENGTH) {
-            chunk = FLASH_FACI_CMD_PROGRAM_CODE_LENGTH;
+        /* handle partial remainder */
+        if (len < FLASH_FACI_CODE_BLOCK_SZ) {
+            uint8_t *src = (uint8_t*)addr;
+            int remain = FLASH_FACI_CODE_BLOCK_SZ - len;
+            memcpy(codeblock, data16, len);
+            memcpy(codeblock + len, src + len, remain);
+            data16 = (uint16_t*)codeblock;
         }
 
         FLASH_FSADDR = addr;
-
+        /* flash program command */
         FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM;
-        FLASH_FACI_CMD8 = chunk;
+        /* number of 16-bit blocks: for code blocks is always 0x40 (64) */
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM_CODE_LENGTH;
 
         /* write 64 * 2 bytes */
-        for (i=0; i < chunk; i++) {
+        for (i=0; i < FLASH_FACI_CMD_PROGRAM_CODE_LENGTH; i++) {
             FLASH_FACI_CMD16 = *data16++;
 
             /* wait for data buffer not full */
             while (FLASH_FSTATR & FLASH_FSTATR_DBFULL);
         }
-
         FLASH_FACI_CMD8 = FLASH_FACI_CMD_FINAL;
 
         /* Wait for FCU operation to complete */
         while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
 
-        len -= (chunk * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH);
-        addr += (chunk * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH);
+        len -= FLASH_FACI_CODE_BLOCK_SZ;
+        addr += FLASH_FACI_CODE_BLOCK_SZ;
     }
     return 0;
 }
@@ -593,41 +600,51 @@ void* hal_get_update_address(void)
 #ifdef TEST_FLASH
 
 #ifndef TEST_ADDRESS
-#define TEST_ADDRESS (0xFFFC0000) /* 3,840 KB offset in 4MB flash */
+/* 3,840 KB offset in 4MB flash */
+/* 1,792 KB offset in 2MB flash */
+#define TEST_ADDRESS (0xFFFC0000)
 #endif
 
 /* #define TEST_FLASH_READONLY */
 
-static uint32_t pageData[WOLFBOOT_SECTOR_SIZE/sizeof(uint32_t)]; /* force 32-bit alignment */
+static uint8_t pageData[1024];
 
 static int test_flash(void)
 {
     int ret;
-    uint32_t i;
+    uint32_t i, len;
     uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
 
-#ifndef TEST_FLASH_READONLY
-    /* Erase sector */
-    hal_flash_unlock();
-    ret = hal_flash_erase(TEST_ADDRESS, sizeof(pageData));
-    hal_flash_lock();
-    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
-
-    /* Write Pages */
+    /* Setup test data */
     for (i=0; i<sizeof(pageData); i++) {
         ((uint8_t*)pageData)[i] = (i & 0xff);
     }
-    hal_flash_unlock();
-    ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    hal_flash_lock();
-    wolfBoot_printf("Write Page: Ret %d\n", ret);
-#endif /* !TEST_FLASH_READONLY */
 
-    wolfBoot_printf("Checking...\n");
-    ret = memcmp(pageData, pagePtr, sizeof(pageData));
-    if (ret != 0) {
-        wolfBoot_printf("Check Data @ %d failed\n", ret);
-        return -ret;
+    /* Test writting 1 - 1024 */
+    for (len=1; len<(int)sizeof(pageData); len++) {
+    #ifndef TEST_FLASH_READONLY
+        /* Erase sector */
+        hal_flash_unlock();
+        ret = hal_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+        hal_flash_lock();
+        if (ret != 0) {
+            wolfBoot_printf("Erase Sector failed: Ret %d\n", ret);
+            break;
+        }
+
+        /* Write variable length sector */
+        hal_flash_unlock();
+        ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, len);
+        hal_flash_lock();
+        wolfBoot_printf("Write Page (len %d): Ret %d\n", len, ret);
+    #endif /* !TEST_FLASH_READONLY */
+
+        for (i=0; i<len; i++) {
+            if (pageData[i] != pagePtr[i]) {
+                wolfBoot_printf("Check Data @ %d with len %d failed\n", i, len);
+                return -ret;
+            }
+        }
     }
 
     wolfBoot_printf("Flash Test Passed\n");
