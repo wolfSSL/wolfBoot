@@ -69,6 +69,33 @@ static void hal_panic(void)
         ;
 }
 
+#ifdef ENABLE_LED
+void hal_led_on(void)
+{
+#if defined(TARGET_rx65n)
+    /* RX65N RSK+ LED0 P73 */
+    PORT_PDR(7) |= (1 << 3);   /* output */
+    PORT_PODR(7) &= ~(1 << 3); /* low */
+#elif defined(TARGET_rx72n)
+    /* RX72N Envision USR LED P40 */
+    PORT_PDR(4) |= (1 << 0);   /* output */
+    PORT_PODR(4) &= ~(1 << 0); /* low */
+#endif
+}
+void hal_led_off(void)
+{
+#ifdef TARGET_rx65n
+    /* RX65N RSK+ LED0 P73 */
+    PORT_PDR(7) |= (1 << 3);  /* output */
+    PORT_PODR(7) |= (1 << 3); /* high */
+#else
+    /* RX72N Envision USR LED P40 */
+    PORT_PDR(4) |= (1 << 0);  /* output */
+    PORT_PODR(4) |= (1 << 0); /* high */
+#endif
+}
+#endif
+
 void hal_delay_us(uint32_t us)
 {
     uint32_t delay;
@@ -351,6 +378,10 @@ void hal_init(void)
 #endif
 
     hal_clk_init();
+
+#ifdef ENABLE_LED
+    hal_led_off();
+#endif
 
 #ifdef DEBUG_UART
     uart_init();
