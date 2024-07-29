@@ -566,12 +566,13 @@ ifeq ($(TARGET),imx_rt)
     ifeq ($(DEBUG_UART),1)
       OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_lpuart.o
     endif
-    ifeq ($(TARGET_IMX_HAB),1)
-        LSCRIPT_IN:=hal/$(TARGET)_hab.ld
-    else
-        LSCRIPT_IN:=hal/$(TARGET).ld
-    endif
-endif
+  endif
+
+  ifeq ($(TARGET_IMX_HAB),1)
+      LSCRIPT_IN:=hal/$(TARGET)_hab.ld
+  else
+      LSCRIPT_IN:=hal/$(TARGET).ld
+  endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
     ARCH_FLASH_OFFSET=0x70000000
