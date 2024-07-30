@@ -69,18 +69,18 @@ static uint32_t sectorBuffer[WOLFBOOT_SECTOR_SIZE / sizeof(uint32_t)];
 /* Returns the SDK flash type enum based on the address */
 static IfxFlash_FlashType getFlashTypeFromAddr(uint32_t addr)
 {
-    IfxFlash_FlashType type = 0;
+    IfxFlash_FlashType type;
 
     if (addr >= IFXFLASH_DFLASH_START && addr <= IFXFLASH_DFLASH_END) {
         /* Assuming D0 for simplicity */
         type = IfxFlash_FlashType_D0;
     }
-    else if (addr >= IFXFLASH_PFLASH_P0_START && addr <= IFXFLASH_PFLASH_P0_END)
-    {
+    else if (addr >= IFXFLASH_PFLASH_P0_START
+             && addr <= IFXFLASH_PFLASH_P0_END) {
         type = IfxFlash_FlashType_P0;
     }
-    else if (addr >= IFXFLASH_PFLASH_P1_START && addr <= IFXFLASH_PFLASH_P1_END)
-    {
+    else if (addr >= IFXFLASH_PFLASH_P1_START
+             && addr <= IFXFLASH_PFLASH_P1_END) {
         type = IfxFlash_FlashType_P1;
     }
     else {
@@ -92,24 +92,23 @@ static IfxFlash_FlashType getFlashTypeFromAddr(uint32_t addr)
 }
 
 /* Programs a single page in flash */
-static void RAMFUNCTION programPage(uint32_t address,
-                                    const uint32_t* data,
+static void RAMFUNCTION programPage(uint32_t           address,
+                                    const uint32_t*    data,
                                     IfxFlash_FlashType type)
 {
+    const uint16 endInitSafetyPassword =
+        IfxScuWdt_getSafetyWatchdogPasswordInline();
+    size_t offset;
+
     if (address % IFXFLASH_PFLASH_PAGE_LENGTH != 0) {
         wolfBoot_panic();
     }
 
-    const uint16 endInitSafetyPassword =
-        IfxScuWdt_getSafetyWatchdogPasswordInline();
-
     IfxFlash_enterPageMode(address);
     IfxFlash_waitUnbusy(FLASH_MODULE, type);
 
-    for (size_t offset = 0;
-         offset < IFXFLASH_PFLASH_PAGE_LENGTH / sizeof(uint32_t);
-         offset += 2)
-    {
+    for (offset = 0; offset < IFXFLASH_PFLASH_PAGE_LENGTH / sizeof(uint32_t);
+         offset += 2) {
         IfxFlash_loadPage2X32(address, data[offset], data[offset + 1]);
     }
 
@@ -122,8 +121,8 @@ static void RAMFUNCTION programPage(uint32_t address,
 
 /* Performs a hardware erase verify check on the range specified by address and
  * len. Returns true if the region is erased */
-static int RAMFUNCTION flashIsErased(uint32_t address,
-                                     int len,
+static int RAMFUNCTION flashIsErased(uint32_t           address,
+                                     int                len,
                                      IfxFlash_FlashType type)
 {
     uint32_t base = 0;
@@ -158,16 +157,16 @@ static int RAMFUNCTION flashIsErased(uint32_t address,
 }
 
 /* Returns true if any of the pages spanned by address and len are erased */
-static int RAMFUNCTION containsErasedPage(uint32_t address,
-                                          size_t len,
+static int RAMFUNCTION containsErasedPage(uint32_t           address,
+                                          size_t             len,
                                           IfxFlash_FlashType type)
 {
     const uint32_t startPage = GET_PAGE_ADDR(address);
     const uint32_t endPage   = GET_PAGE_ADDR(address + len - 1);
+    uint32_t       page;
 
-    for (uint32_t page = startPage; page <= endPage;
-         page += IFXFLASH_PFLASH_PAGE_LENGTH)
-    {
+    for (page = startPage; page <= endPage;
+         page += IFXFLASH_PFLASH_PAGE_LENGTH) {
         if (flashIsErased(page, IFXFLASH_PFLASH_PAGE_LENGTH, type)) {
             return 1;
         }
@@ -177,29 +176,33 @@ static int RAMFUNCTION containsErasedPage(uint32_t address,
 }
 
 /* Programs the contents of the cached sector buffer to flash */
-static void RAMFUNCTION programCachedSector(uint32_t sectorAddress,
+static void RAMFUNCTION programCachedSector(uint32_t           sectorAddress,
                                             IfxFlash_FlashType type)
 {
     const uint16 endInitSafetyPassword =
         IfxScuWdt_getSafetyWatchdogPasswordInline();
-    uint32_t pageAddr = sectorAddress;
+    uint32_t pageAddr;
+    size_t   burstIdx;
+    size_t   bufferIdx;
+    size_t   offset;
+
+    pageAddr = sectorAddress;
 
     /* Burst program the whole sector with values from sectorBuffer */
-    for (int i = 0; i < WOLFBOOT_SECTOR_SIZE / IFXFLASH_PFLASH_BURST_LENGTH;
-         i++)
-    {
+    for (burstIdx = 0;
+         burstIdx < WOLFBOOT_SECTOR_SIZE / IFXFLASH_PFLASH_BURST_LENGTH;
+         burstIdx++) {
         IfxFlash_enterPageMode(pageAddr);
 
         /* Wait until page mode is entered */
         IfxFlash_waitUnbusy(FLASH_MODULE, type);
 
         /* Load a burst worth of data into the page */
-        for (size_t offset = 0;
+        for (offset = 0;
              offset < IFXFLASH_PFLASH_BURST_LENGTH / (2 * sizeof(uint32_t));
-             offset++)
-        {
-            size_t bufferIndex =
-                i * (IFXFLASH_PFLASH_BURST_LENGTH / sizeof(uint32_t))
+             offset++) {
+            bufferIndex =
+                burstIdx * (IFXFLASH_PFLASH_BURST_LENGTH / sizeof(uint32_t))
                 + (offset * 2);
 
             IfxFlash_loadPage2X32(UNUSED_PARAMETER,
@@ -221,15 +224,18 @@ static void RAMFUNCTION programCachedSector(uint32_t sectorAddress,
 
 /* Programs unaligned input data to flash, assuming the underlying memory is
  * erased */
-void RAMFUNCTION programBytesToErasedFlash(uint32_t address,
-                                           const uint8_t* data,
-                                           int size,
+void RAMFUNCTION programBytesToErasedFlash(uint32_t           address,
+                                           const uint8_t*     data,
+                                           int                size,
                                            IfxFlash_FlashType type)
 {
     uint32_t pageBuffer[IFXFLASH_PFLASH_PAGE_LENGTH / sizeof(uint32_t)];
-    uint32_t pageAddress = address & ~(IFXFLASH_PFLASH_PAGE_LENGTH - 1);
-    uint32_t offset      = address % IFXFLASH_PFLASH_PAGE_LENGTH;
+    uint32_t pageAddress;
+    uint32_t offset;
     uint32_t toWrite;
+
+    pageAddress = address & ~(IFXFLASH_PFLASH_PAGE_LENGTH - 1);
+    offset      = address % IFXFLASH_PFLASH_PAGE_LENGTH;
 
     while (size > 0) {
         /* Calculate the number of bytes to write in the current page */
@@ -258,9 +264,11 @@ void RAMFUNCTION programBytesToErasedFlash(uint32_t address,
 /* Directly reads a page from PFLASH using word-aligned reads/writes */
 static void readPage32Aligned(uint32_t pageAddr, uint32_t* data)
 {
-    uint32_t* ptr = (uint32_t*)pageAddr;
+    uint32_t* ptr;
+    size_t    i;
+    ptr = (uint32_t*)pageAddr;
 
-    for (int i = 0; i < IFXFLASH_PFLASH_PAGE_LENGTH / sizeof(uint32_t); i++) {
+    for (i = 0; i < IFXFLASH_PFLASH_PAGE_LENGTH / sizeof(uint32_t); i++) {
         *data = *ptr;
         data++;
         ptr++;
@@ -275,12 +283,12 @@ static void cacheSector(uint32_t sectorAddress, IfxFlash_FlashType type)
     const uint32_t endPage =
         GET_PAGE_ADDR(sectorAddress + WOLFBOOT_SECTOR_SIZE - 1);
     uint32_t* pageInSectorBuffer;
+    uint32_t  page;
 
     /* Iterate over every page in the sector, caching its contents if not
      * erased, and caching 0s if erased */
-    for (uint32_t page = startPage; page <= endPage;
-         page += IFXFLASH_PFLASH_PAGE_LENGTH)
-    {
+    for (page = startPage; page <= endPage;
+         page += IFXFLASH_PFLASH_PAGE_LENGTH) {
         pageInSectorBuffer =
             sectorBuffer + ((page - sectorAddress) / sizeof(uint32_t));
 
@@ -336,26 +344,27 @@ void hal_init(void)
  */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
 {
-    LED_ON(LED_PROG);
-
     /* base address of containing sector (TODO what if size spans sectors?)
      */
-    const uint32_t sectorAddress  = GET_SECTOR_ADDR(address);
-    const IfxFlash_FlashType type = getFlashTypeFromAddr(address);
+    const uint32_t           sectorAddress = GET_SECTOR_ADDR(address);
+    const IfxFlash_FlashType type          = getFlashTypeFromAddr(address);
 
     /* Determine the range of pages affected */
     const uint32_t startPage = GET_PAGE_ADDR(address);
     const uint32_t endPage   = GET_PAGE_ADDR(address + size - 1);
+    uint32_t       page;
 
     /* Flag to check if sector read-modify-write is necessary */
-    bool needsSectorRmw = false;
+    int needsSectorRmw;
+
+    LED_ON(LED_PROG);
 
     /* Check if any page within the range is not erased */
-    for (uint32_t page = startPage; page <= endPage;
-         page += IFXFLASH_PFLASH_PAGE_LENGTH)
-    {
+    needsSectorRmw = 0;
+    for (page = startPage; page <= endPage;
+         page += IFXFLASH_PFLASH_PAGE_LENGTH) {
         if (!flashIsErased(page, IFXFLASH_PFLASH_PAGE_LENGTH, type)) {
-            needsSectorRmw = true;
+            needsSectorRmw = 1;
             break;
         }
     }
@@ -363,6 +372,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
     /* If a page within the range is erased, we need to read-modify-write the
      * whole sector */
     if (needsSectorRmw) {
+        size_t offsetInSector;
+
         /* Read entire sector into RAM */
         cacheSector(sectorAddress, type);
 
@@ -370,7 +381,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
         hal_flash_erase(sectorAddress, WOLFBOOT_SECTOR_SIZE);
 
         /* Modify the relevant part of the RAM sector buffer */
-        size_t offsetInSector = address - sectorAddress;
+        offsetInSector = address - sectorAddress;
         memcpy((uint8_t*)sectorBuffer + offsetInSector, data, size);
 
         /* Program the modified sector back into flash */
@@ -397,7 +408,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     LED_ON(LED_ERASE);
 
     const uint32_t sectorAddr = GET_SECTOR_ADDR(address);
-    const size_t numSectors =
+    const size_t   numSectors =
         (len == 0) ? 0 : ((len - 1) / WOLFBOOT_SECTOR_SIZE) + 1;
     const IfxFlash_FlashType type = getFlashTypeFromAddr(address);
 
@@ -452,17 +463,19 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t* data, int len)
  */
 int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
 {
-    int bytesRead = 0;
-
-    LED_ON(LED_READ);
+    int bytesRead;
 
     const IfxFlash_FlashType type = getFlashTypeFromAddr(address);
 
+    bytesRead = 0;
     while (bytesRead < len) {
-        uint32_t pageAddress = GET_PAGE_ADDR(address);
-        uint32_t offset      = address % IFXFLASH_PFLASH_PAGE_LENGTH;
+        uint32_t pageAddress;
+        uint32_t offset;
+        int      isErased;
 
-        int isErased =
+        pageAddress = GET_PAGE_ADDR(address);
+        offset      = address % IFXFLASH_PFLASH_PAGE_LENGTH;
+        isErased =
             flashIsErased(pageAddress, IFXFLASH_PFLASH_PAGE_LENGTH, type);
 
         while (offset < IFXFLASH_PFLASH_PAGE_LENGTH && bytesRead < len) {
