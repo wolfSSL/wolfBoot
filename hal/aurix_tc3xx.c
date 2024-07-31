@@ -201,13 +201,13 @@ static void RAMFUNCTION programCachedSector(uint32_t           sectorAddress,
         for (offset = 0;
              offset < IFXFLASH_PFLASH_BURST_LENGTH / (2 * sizeof(uint32_t));
              offset++) {
-            bufferIndex =
+            bufferIdx =
                 burstIdx * (IFXFLASH_PFLASH_BURST_LENGTH / sizeof(uint32_t))
                 + (offset * 2);
 
             IfxFlash_loadPage2X32(UNUSED_PARAMETER,
-                                  sectorBuffer[bufferIndex],
-                                  sectorBuffer[bufferIndex + 1]);
+                                  sectorBuffer[bufferIdx],
+                                  sectorBuffer[bufferIdx + 1]);
         }
 
         /* Write the page */
