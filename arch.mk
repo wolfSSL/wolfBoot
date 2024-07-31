@@ -69,6 +69,23 @@ ifeq ($(ARCH),AARCH64)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
   endif
+
+  ifeq ($(TARGET),nxp_ls1028a)
+    ARCH_FLAGS=-mcpu=cortex-a72+crypto -mstrict-align -march=armv8-a+crypto -mtune=cortex-a72
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72 -DTARGET_LS1028A -DWOLFSSL_ARMASM -DWC_HASH_DATA_ALIGNMENT=8
+    #LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT"
+    CFLAGS +=-ffunction-sections -fdata-sections
+    LDFLAGS+=-Wl,--gc-sections
+
+    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o
+
+    ifeq ($(DEBUG_UART),0)
+      CFLAGS+=-fno-builtin-printf
+    endif
+
+    SPI_TARGET=nxp
+  endif
 endif
 
 ## ARM Cortex-M

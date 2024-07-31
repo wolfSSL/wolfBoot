@@ -59,7 +59,8 @@
 #include "hal/spi/spi_drv_nrf5340.h"
 #endif
 
-#if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024)
+#if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024) || \
+    defined(TARGET_nxp_ls1028a)
 #include "hal/spi/spi_drv_nxp.h"
 #endif
 

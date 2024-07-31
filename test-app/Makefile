@@ -423,6 +423,10 @@ ifeq ($(TARGET),x86_fsp_qemu)
   LDFLAGS=
 endif
 
+ifeq ($(TARGET),nxp_ls1028a)
+  LSCRIPT_TEMPLATE:=AARCH64-ls1028a.ld
+endif
+
 CFLAGS+=-I../lib/wolfssl
 
 

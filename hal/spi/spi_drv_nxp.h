@@ -29,4 +29,17 @@
     #endif
 #endif
 
+#if defined(TARGET_nxp_ls1028a)
+
+/* LS1028A SPI to the MikroBus uses SPI3 (sel is 2) and CS 0 */
+#ifndef SPI_SEL_TPM
+#define SPI_SEL_TPM 2
+#endif
+
+#ifndef SPI_CS_TPM
+#define SPI_CS_TPM 0
+#endif
+
+#endif
+
 #endif /* !SPI_DRV_NXP_H_INCLUDED */
