@@ -23,10 +23,16 @@
 
 #include <stdint.h>
 #include <string.h>
+
+#include "hal.h"
+
+#ifdef SECURE_PKCS11
+
 #include "wolfpkcs11/pkcs11.h"
 #include "wolfpkcs11/store.h"
-#include "wolfssl/wolfcrypt/types.h"
-#include "hal.h"
+
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/types.h>
 
 extern uint32_t *_flash_keyvault; /* From linker script: origin of vault flash */
 extern uint32_t *_flash_keyvault_size; /* From linker script: size of vault */
@@ -181,7 +187,7 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
         return -1;
     obj->hdr.size += len;
     hal_flash_unlock();
-    if (obj->hdr.off == 0) 
+    if (obj->hdr.off == 0)
         hal_flash_erase((uint32_t)(vault_base + obj->vault_idx * KEYVAULT_OBJ_SIZE),
             KEYVAULT_OBJ_SIZE);
 
@@ -201,3 +207,5 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
     obj->hdr.off += len;
     return len;
 }
+
+#endif /* SECURE_PKCS11 */

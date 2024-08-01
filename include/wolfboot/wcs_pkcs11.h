@@ -1,7 +1,31 @@
-#include "wolfpkcs11/pkcs11.h"
+/* wcs_pkcs11.h
+ *
+ * The wolfBoot library version
+ *
+ * Copyright (C) 2021 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
 
 #ifndef WOLFBOOT_PKCS11_H
 #define WOLFBOOT_PKCS11_H
+
+#ifdef SECURE_PKCS11
+#include "wolfpkcs11/pkcs11.h"
 
 struct C_SetPIN_nsc_args {
     CK_SESSION_HANDLE hSession;
@@ -319,4 +343,5 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_GetFunctionStatus_nsc_call(CK_SESS
 CK_RV __attribute__((cmse_nonsecure_entry)) C_CancelFunction_nsc_call(CK_SESSION_HANDLE hSession);
 CK_RV __attribute__((cmse_nonsecure_entry)) C_WaitForSlotEvent_nsc_call(CK_FLAGS flags, CK_SLOT_ID_PTR pSlot, CK_VOID_PTR pReserved);
 
-#endif
+#endif /* SECURE_PKCS11 */
+#endif /* !WOLFBOOT_PKCS11_H */

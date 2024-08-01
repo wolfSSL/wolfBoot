@@ -23,6 +23,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#if defined(UART_FLASH) && defined(TARGET_lpc)
+
 #include "fsl_common.h"
 #include "fsl_iocon.h"
 #include "fsl_usart.h"
@@ -89,7 +91,7 @@ int uart_tx(const uint8_t c)
 int uart_rx(uint8_t *c)
 {
     if ((USART_GetStatusFlags(USART0) & kUSART_RxFifoNotEmptyFlag) != 0) {
-        *c = USART_ReadByte(USART0); 
+        *c = USART_ReadByte(USART0);
         return 1;
     }
     return 0;
@@ -111,3 +113,4 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     return 0;
 }
 
+#endif /* UART_FLASH && TARGET_lpc */

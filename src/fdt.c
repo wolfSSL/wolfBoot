@@ -669,7 +669,7 @@ int fdt_add_subnode(void* fdt, int parentoff, const char *name)
 int fdt_del_node(void *fdt, int nodeoffset)
 {
     int err;
-    int offset, endoffset;
+    int endoffset;
     int depth = 0;
 
     err = fdt_check_header(fdt);

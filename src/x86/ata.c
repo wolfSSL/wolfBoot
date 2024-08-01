@@ -382,11 +382,6 @@ static void invert_buf(uint8_t *src, uint8_t *dst, unsigned len)
     dst[len - 1]  = 0;
 }
 
-static void noninvert_buf(uint8_t *src, uint8_t *dst, unsigned len)
-{
-    memcpy(dst, src, len);
-}
-
 #ifndef ATA_BUF_SIZE
 #define ATA_BUF_SIZE 8192
 #endif
@@ -696,7 +691,6 @@ static int ata_drive_read_sector(int drv, uint64_t start, uint32_t count,
     struct hba_cmd_header *cmd;
     struct hba_cmd_table *tbl;
     struct fis_reg_h2d *cmdfis;
-    int i;
     int slot = prepare_cmd_h2d_slot(drv, buf, count << ata->sector_size_shift, 0);
     if (slot < 0)
         return -1;
@@ -727,8 +721,6 @@ static int ata_drive_write_sector(int drv, uint64_t start, uint32_t count,
     struct hba_cmd_header *cmd;
     struct hba_cmd_table *tbl;
     struct fis_reg_h2d *cmdfis;
-    uint8_t *buf_ptr;
-    int i;
     int slot = prepare_cmd_h2d_slot(drv, buf, count << ata->sector_size_shift, 1);
     if (slot < 0)
         return -1;

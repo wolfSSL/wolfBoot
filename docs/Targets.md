@@ -1177,8 +1177,9 @@ qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_rasp
 
 Xilinx UltraScale+ ZCU102 (Aarch64)
 
-Build configuration options (`.config`):
+See example .config file at `config/examples/zynqmp.config`.
 
+Example build options (.config):
 ```
 TARGET=zynq
 ARCH=AARCH64
@@ -1186,22 +1187,65 @@ SIGN=RSA4096
 HASH=SHA3
 ```
 
-### QNX
+### Building Zynq with Xilinx tools (Vitis IDE)
+
+See [IDE/XilinxSDK/README.md](/IDE/XilinxSDK/README.md) for using Xilinx IDE
+
+### Building Zynq with gcc-aarch64-linux-gnu
+
+Requires `gcc-aarch64-linux-gnu` package.
+Use `make CROSS_COMPILE=aarch64-linux-gnu-`
+
+### Building Zynq with QNX
 
 ```sh
-cd ~
-source qnx700/qnxsdp-env.sh
-cd wolfBoot
+source ~/qnx700/qnxsdp-env.sh
 cp ./config/examples/zynqmp.config .config
 make clean
 make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 ```
 
-#### Debugging
+#### Testing Zynq with QEMU
 
-`qemu-system-aarch64 -M raspi3 -kernel /path/to/wolfboot/factory.bin -serial stdio -gdb tcp::3333 -S`
+```
+qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display none \
+    -device loader,file=wolfboot.bin,cpu-num=0
 
-#### Signing
+```
+
+### Testing with qemu-system-aarch64
+
+* Build wolfboot using the example configuration (RSA4096, SHA3)
+
+```
+cp config/examples/raspi3.config .config
+make clean
+make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+* Sign Linux kernel image
+```
+make keytools
+./tools/keytools/sign --rsa4096 --sha3 Image wolfboot_signing_private_key.der 1
+```
+
+* Compose the image
+
+```
+tools/bin-assemble/bin-assemble wolfboot_linux_raspi.bin 0x0 wolfboot.bin \
+                              0xc0000 Image_v1_signed.bin
+dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
+```
+
+* Test boot using qemu
+
+```
+qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_raspi.bin -cpu cortex-a53
+```
+
+
+
+#### Signing Zynq
 
 `tools/keytools/sign --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin wolfboot_signing_private_key.der 1`
 

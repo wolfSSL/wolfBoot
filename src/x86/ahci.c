@@ -170,7 +170,6 @@ int init_sata_controller(uint32_t bus, uint32_t dev, uint32_t fun)
  */
 uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
 {
-    uint16_t reg16;
     uint32_t reg;
     uint32_t bar;
 
@@ -188,7 +187,7 @@ uint32_t ahci_enable(uint32_t bus, uint32_t dev, uint32_t fun)
     AHCI_DEBUG_PRINTF("Interrupt pin for AHCI controller: %02x\r\n",
                     (reg >> 8) & 0xFF);
     pci_config_write32(bus, dev, fun, PCI_INTR_OFFSET,
-                       (reg & 0xFFFFFF00 | 0x0a));
+                       ((reg & 0xFFFFFF00) | 0x0a));
     AHCI_DEBUG_PRINTF("Setting interrupt line: 0x0A\r\n");
 
     return bar;
@@ -532,8 +531,7 @@ void sata_enable(uint32_t base)
     uint8_t sata_only;
     uint8_t cap_sud;
     uint32_t n_ports;
-    uint32_t i, j;
-    uint64_t data64;
+    uint32_t i;
     uint32_t data;
     uint32_t reg;
     int drv;
@@ -586,8 +584,6 @@ void sata_enable(uint32_t base)
             uint32_t ssts = mmio_read32(AHCI_PxSSTS(base, i));
             uint8_t det = ssts & 0x0F;
             uint8_t ipm;
-            volatile struct hba_cmd_header *hdr;
-
 
             data = mmio_read32(AHCI_PxCMD(base, i));
             /* Detect POD */
@@ -625,6 +621,8 @@ void sata_enable(uint32_t base)
             } else {
                 wolfBoot_printf("AHCI port %d: Disk detected (det: %02x ipm: %02x)\r\n",
                                 i, det, ipm);
+                (void)ipm;
+                (void)det;
 
                 /* Clear port SERR */
                 reg = mmio_read32(AHCI_PxSERR(base, i));
@@ -743,7 +741,6 @@ void sata_disable(uint32_t base)
 {
     uint32_t ports_impl;
     uint32_t i, reg;
-    volatile uint32_t count;
     int r;
     
     AHCI_DEBUG_PRINTF("SATA: disabling sata controller at 0x%x\r\n", base);

@@ -25,6 +25,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#if defined(UART_FLASH) && defined(TARGET_stm32f4)
+
 #include <stdint.h>
 
 /* Driver hardcoded to work on UART3 (PD8/PD9) */
@@ -146,3 +148,4 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     return 0;
 }
 
+#endif /* UART_FLASH && TARGET_stm32f4 */

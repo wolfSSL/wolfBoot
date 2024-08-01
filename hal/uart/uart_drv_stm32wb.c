@@ -25,6 +25,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#if defined(UART_FLASH) && defined(TARGET_stm32wb)
+
 #include <stdint.h>
 
 /* Driver hardcoded to work on UART1 (PB6/PB7) */
@@ -105,7 +107,7 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     uint32_t reg;
     /* Enable pins and configure for AF7 */
     uart_pins_setup();
-    
+
     /* Turn on the device */
     APB2_CLOCK_ER |= UART1_APB2_CLOCK_ER_VAL;
     UART1_CR1 &= ~(UART_CR1_UART_ENABLE);
@@ -143,3 +145,4 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     return 0;
 }
 
+#endif /* UART_FLASH && TARGET_stm32wb */

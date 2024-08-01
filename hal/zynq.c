@@ -835,7 +835,7 @@ static int qspi_write_disable(QspiDev_t* dev)
 
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = WRITE_DISABLE_CMD;
-    ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0,
+    ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
     wolfBoot_printf("Write Disable: Ret %d\n", ret);
     return ret;
@@ -848,7 +848,7 @@ static int qspi_flash_status(QspiDev_t* dev, uint8_t* status)
 
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = READ_FSR_CMD;
-    ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, 2, 0,
+    ret = qspi_transfer(dev, cmd, 1, NULL, 0, cmd, 2, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
     wolfBoot_printf("Flash Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
     if (ret == GQSPI_CODE_SUCCESS && status) {
@@ -867,7 +867,7 @@ static int qspi_status(QspiDev_t* dev, uint8_t* status)
 
     memset(cmd, 0, sizeof(cmd));
     cmd[0] = READ_SR_CMD;
-    ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, 2, 0,
+    ret = qspi_transfer(dev, cmd, 1, NULL, 0, cmd, 2, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
     wolfBoot_printf("Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
     if (ret == GQSPI_CODE_SUCCESS && status) {
@@ -1282,36 +1282,39 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
 }
 
 /* Issues a sector erase based on flash address */
-/* Assumes len is not > sector size */
 int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
 {
-    int ret;
+    int ret = 0;
     uint8_t cmd[8]; /* size multiple of uint32_t */
     uint32_t idx = 0;
+    uintptr_t qspiaddr;
 
-    if (mDev.stripe) {
+    while (len > 0) {
         /* For dual parallel the address divide by 2 */
-        address /= 2;
-    }
+        qspiaddr = (mDev.stripe) ? address / 2 : address;
 
-    ret = qspi_write_enable(&mDev);
-    if (ret == GQSPI_CODE_SUCCESS) {
-        /* ------ Erase Flash ------ */
-        memset(cmd, 0, sizeof(cmd));
-        cmd[idx++] = SEC_ERASE_CMD;
-    #if GQPI_USE_4BYTE_ADDR == 1
-        cmd[idx++] = ((address >> 24) & 0xFF);
-    #endif
-        cmd[idx++] = ((address >> 16) & 0xFF);
-        cmd[idx++] = ((address >> 8)  & 0xFF);
-        cmd[idx++] = ((address >> 0)  & 0xFF);
-        ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0,
-            GQSPI_GEN_FIFO_MODE_SPI);
-        wolfBoot_printf("Flash Erase: Ret %d\n", ret);
+        ret = qspi_write_enable(&mDev);
         if (ret == GQSPI_CODE_SUCCESS) {
-            ret = qspi_wait_ready(&mDev); /* Wait for not busy */
+            /* ------ Erase Flash ------ */
+            memset(cmd, 0, sizeof(cmd));
+            cmd[idx++] = SEC_ERASE_CMD;
+        #if GQPI_USE_4BYTE_ADDR == 1
+            cmd[idx++] = ((qspiaddr >> 24) & 0xFF);
+        #endif
+            cmd[idx++] = ((qspiaddr >> 16) & 0xFF);
+            cmd[idx++] = ((qspiaddr >> 8)  & 0xFF);
+            cmd[idx++] = ((qspiaddr >> 0)  & 0xFF);
+            ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0,
+                GQSPI_GEN_FIFO_MODE_SPI);
+            wolfBoot_printf("Flash Erase: Ret %d\n", ret);
+            if (ret == GQSPI_CODE_SUCCESS) {
+                ret = qspi_wait_ready(&mDev); /* Wait for not busy */
+            }
+            qspi_write_disable(&mDev);
         }
-        qspi_write_disable(&mDev);
+
+        address += WOLFBOOT_SECTOR_SIZE;
+        len -= WOLFBOOT_SECTOR_SIZE;
     }
 
     return ret;

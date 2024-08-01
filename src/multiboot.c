@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef WOLFBOOT_MULTIBOOT2
+
 #include <stdint.h>
 #include <stdio.h>
 #include <printf.h>
@@ -360,3 +362,5 @@ void mb2_jump(uintptr_t entry, uint32_t mb2_boot_info)
             : "g"(mb2_boot_info), "g"(entry)
             : "eax", "ebx");
 }
+
+#endif /* WOLFBOOT_MULTIBOOT2 */

@@ -292,7 +292,9 @@ static struct xmalloc_slot xmalloc_pool[] = {
 #elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA4096) || \
       defined(WOLFBOOT_SIGN_RSA3072)
 
+#if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
 static uint32_t sha_block[HASH_BLOCK_SIZE];
+#endif
 
 #ifndef _LP64
 #define ASNCHECK_BUF_SIZE (224)

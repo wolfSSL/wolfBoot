@@ -6,14 +6,20 @@ To use this example project:
 
 ## Xilinx SDK BSP
 
-This project uses a BSP named `standalone_bsp_0`, which must be configured to use "hypervisor guest" in the BSP configuration settings. This will enable the EL-1 support required with Bl31 (ARM Trusted Firmware). The BSP generates a include/bspconfig.h, which should have these defines set:
+This project uses a BSP named `standalone_bsp_0`, which must be configured to use "hypervisor guest" in the BSP configuration settings, which is edited by opening the `platform.spr` file under "standalone on psa_cortexa53_0" -> "Board Support Package" -> "Modify BSP Settings".
+
+This will enable the EL-1 support required with Bl31 (ARM Trusted Firmware). The BSP generates a `include/bspconfig.h`, which should have these defines set:
 
 ```
 #define EL1_NONSECURE 1
 #define HYP_GUEST 1
 ```
 
-Note: This is a generated file from the BSP configurator tool, which is edited by opening the `system.mss` file.
+You may need to adjust/add the following project settings under Properties -> C/C++ General:
+
+1) Platform bspInclude path: "Paths and Symbols" -> "Includes" -> "GNU C" -> "Add" -> Workspace Path for platform (example: `/zcu102/export/zcu102/sw/zcu102/standalone_domain/bspinclude/include`).
+
+2) Platform BSP Library path: See "Library Paths" -> "Add" (example: `/zcu102/psu_cortexa53_0/standalone_domain/bsp/psu_cortexa53_0/lib`).ß
 
 ## wolfBoot Configuration
 
