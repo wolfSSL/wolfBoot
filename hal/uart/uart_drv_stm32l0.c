@@ -4,7 +4,7 @@
  *
  * Example implementation for stm32L0, using UART2 (PA2/PA3).
  *
- * Pinout: RX=PA3, TX=PA2 
+ * Pinout: RX=PA3, TX=PA2
  *
  * Copyright (C) 2021 wolfSSL Inc.
  *
@@ -24,6 +24,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
+
+#if defined(UART_FLASH) && defined(TARGET_stm32l0)
 
 #include <stdint.h>
 
@@ -86,7 +88,7 @@ static void uart2_pins_setup(void)
     GPIOA_MODE = reg | (2 << (UART2_RX_PIN * 2));
     reg = GPIOA_MODE & ~ (0x03 << (UART2_TX_PIN * 2));
     GPIOA_MODE = reg | (2 << (UART2_TX_PIN * 2));
-    
+
     /* Alternate function: use low pins (2 and 3) */
     reg = GPIOA_AFL & ~(0xf << (UART2_TX_PIN * 4));
     GPIOA_AFL = reg | (UART2_PIN_AF << (UART2_TX_PIN * 4));
@@ -134,10 +136,10 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
         UART2_CR2 = reg & (2 << 12);
     else
         UART2_CR2 = reg;
-    
+
     /* Clear flags for async mode */
-    UART2_CR2 &= ~(UART_CR2_LINEN | UART_CR2_CLKEN); 
-    UART2_CR3 &= ~(UART_CR3_SCEN | UART_CR3_HDSEL | UART_CR3_IREN); 
+    UART2_CR2 &= ~(UART_CR2_LINEN | UART_CR2_CLKEN);
+    UART2_CR3 &= ~(UART_CR3_SCEN | UART_CR3_HDSEL | UART_CR3_IREN);
 
     /* Configure for RX+TX, turn on. */
     UART2_CR1 |= UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE | UART_CR1_UART_ENABLE;
@@ -167,3 +169,4 @@ int uart_rx(uint8_t *c, int len)
     return 0;
 }
 
+#endif /* UART_FLASH && TARGET_stm32l0 */

@@ -23,7 +23,9 @@
 
 #ifndef ENCRYPT_H_INCLUDED
 #define ENCRYPT_H_INCLUDED
+
 #if defined(__WOLFBOOT) || defined(UNIT_TEST)
+
 #include <stdint.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/sha256.h>

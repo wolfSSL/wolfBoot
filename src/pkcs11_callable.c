@@ -18,12 +18,15 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#include "wolfpkcs11/pkcs11.h"
+
+
 #include "wolfboot/wcs_pkcs11.h"
+
+#ifdef SECURE_PKCS11
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Initialize_nsc_call(CK_VOID_PTR pInitArgs)
 {
-    return C_Initialize(pInitArgs); 
+    return C_Initialize(pInitArgs);
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Finalize_nsc_call(CK_VOID_PTR pReserved)
@@ -78,14 +81,14 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_InitPIN_nsc_call(CK_SESSION_HANDLE
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_SetPIN_nsc_call(struct C_SetPIN_nsc_args *args)
-    
+
 {
     return C_SetPIN(args->hSession, args->pOldPin, args->ulOldLen, args->pNewPin,
             args->ulNewLen);
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_OpenSession_nsc_call(struct C_OpenSession_nsc_args *args) {
-    
+
     return C_OpenSession(args->slotID, args->flags, args->pApplication, args->Notify, args->phSession);
 }
 
@@ -112,7 +115,7 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_GetOperationState_nsc_call(
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_SetOperationState_nsc_call(struct C_SetOperationState_nsc_args *args) {
-    
+
     return C_SetOperationState(args->hSession, args->pOperationState, args->ulOperationStateLen, args->hEncryptionKey, args->hAuthenticationKey);
 }
 
@@ -167,7 +170,7 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_FindObjects_nsc_call(CK_SESSION_HA
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_CopyObject_nsc_call(struct C_CopyObject_nsc_args *args) {
-    
+
     return C_CopyObject(args->hSession, args->hObject, args->pTemplate, args->ulCount, args->phNewObject);
 }
 
@@ -185,14 +188,14 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_EncryptInit_nsc_call(CK_SESSION_HA
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Encrypt_nsc_call(struct C_Encrypt_nsc_args *args) {
-    
+
     return C_Encrypt(args->hSession, args->pData, args->ulDataLen, args->pEncryptedData, args->pulEncryptedDataLen);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_EncryptUpdate_nsc_call(struct C_EncryptUpdate_nsc_args *args) {
-    
+
     return C_EncryptUpdate(args->hSession, args->pPart, args->ulPartLen, args->pEncryptedPart, args->pulEncryptedPartLen);
 }
 
@@ -210,12 +213,12 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_DecryptInit_nsc_call(CK_SESSION_HA
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Decrypt_nsc_call(struct C_Decrypt_nsc_args *args) {
-    
+
     return C_Decrypt(args->hSession, args->pEncryptedData, args->ulEncryptedDataLen, args->pData, args->pulDataLen);
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_DecryptUpdate_nsc_call(struct C_DecryptUpdate_nsc_args *args) {
-    
+
     return C_DecryptUpdate(args->hSession, args->pEncryptedPart, args->ulEncryptedPartLen, args->pPart, args->pulPartLen);
 }
 
@@ -234,7 +237,7 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_DigestInit_nsc_call(CK_SESSION_HAN
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Digest_nsc_call(struct C_Digest_nsc_args *args) {
-    
+
     return C_Digest(args->hSession, args->pData, args->ulDataLen, args->pDigest, args->pulDigestLen);
 }
 
@@ -260,7 +263,7 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_SignInit_nsc_call(CK_SESSION_HANDL
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Sign_nsc_call(struct C_Sign_nsc_args *args) {
-    
+
     return C_Sign(args->hSession, args->pData, args->ulDataLen, args->pSignature, args->pulSignatureLen);
 }
 
@@ -280,7 +283,7 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_SignRecoverInit_nsc_call(CK_SESSIO
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_SignRecover_nsc_call(struct C_SignRecover_nsc_args *args) {
-    
+
     return C_SignRecover(args->hSession, args->pData, args->ulDataLen, args->pSignature, args->pulSignatureLen);
 }
 
@@ -291,7 +294,7 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_VerifyInit_nsc_call(CK_SESSION_HAN
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_Verify_nsc_call(struct C_Verify_nsc_args *args) {
-    
+
     return C_Verify(args->hSession, args->pData, args->ulDataLen, args->pSignature, args->ulSignatureLen);
 }
 
@@ -316,48 +319,48 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_VerifyRecoverInit_nsc_call(CK_SESS
 }
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_VerifyRecover_nsc_call(struct C_VerifyRecover_nsc_args *args) {
-    
+
     return C_VerifyRecover(args->hSession, args->pSignature, args->ulSignatureLen, args->pData, args->pulDataLen);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_DigestEncryptUpdate_nsc_call(struct C_DigestEncryptUpdate_nsc_args *args) {
-    
+
     return C_DigestEncryptUpdate(args->hSession, args->pPart, args->ulPartLen, args->pEncryptedPart, args->pulEncryptedPartLen);
 }
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_DecryptDigestUpdate_nsc_call(struct C_DecryptDigestUpdate_nsc_args *args) {
-    
+
     return C_DecryptDigestUpdate(args->hSession, args->pEncryptedPart, args->ulEncryptedPartLen, args->pPart, args->pulPartLen);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_SignEncryptUpdate_nsc_call(struct C_SignEncryptUpdate_nsc_args *args) {
-    
+
     return C_SignEncryptUpdate(args->hSession, args->pPart, args->ulPartLen, args->pEncryptedPart, args->pulEncryptedPartLen);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_DecryptVerifyUpdate_nsc_call(struct C_DecryptVerifyUpdate_nsc_args *args) {
-    
+
     return C_DecryptVerifyUpdate(args->hSession, args->pEncryptedPart, args->ulEncryptedPartLen, args->pPart, args->pulPartLen);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_GenerateKey_nsc_call(struct C_GenerateKey_nsc_args *args) {
-    
+
     return C_GenerateKey(args->hSession, args->pMechanism, args->pTemplate, args->ulCount, args->phKey);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_GenerateKeyPair_nsc_call(struct C_GenerateKeyPair_nsc_args *args) {
-    
+
     return C_GenerateKeyPair(args->hSession, args->pMechanism, args->pPublicKeyTemplate, args->ulPublicKeyAttributeCount, args->pPrivateKeyTemplate, args->ulPrivateKeyAttributeCount, args->phPublicKey, args->phPrivateKey);
 
 }
@@ -365,21 +368,21 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_GenerateKeyPair_nsc_call(struct C_
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_WrapKey_nsc_call(struct C_WrapKey_nsc_args *args) {
-    
+
     return C_WrapKey(args->hSession, args->pMechanism, args->hWrappingKey, args->hKey, args->pWrappedKey, args->pulWrappedKeyLen);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_UnwrapKey_nsc_call(struct C_UnwrapKey_nsc_args *args) {
-    
+
     return C_UnwrapKey(args->hSession, args->pMechanism, args->hUnwrappingKey, args->pWrappedKey, args->ulWrappedKeyLen, args->pTemplate, args->ulAttributeCount, args->phKey);
 }
 
 
 
 CK_RV __attribute__((cmse_nonsecure_entry)) C_DeriveKey_nsc_call(struct C_DeriveKey_nsc_args *args) {
-    
+
     return C_DeriveKey(args->hSession, args->pMechanism, args->hBaseKey, args->pTemplate, args->ulAttributeCount, args->phKey);
 
 }
@@ -409,5 +412,4 @@ CK_RV __attribute__((cmse_nonsecure_entry)) C_WaitForSlotEvent_nsc_call(CK_FLAGS
     return C_WaitForSlotEvent(flags, pSlot, pReserved);
 }
 
-
- 
+#endif /* SECURE_PKCS11 */

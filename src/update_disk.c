@@ -34,8 +34,8 @@
  * authenticity, and perform the boot process.
  */
 
-#ifndef UPDATE_DISK_H_
-#define UPDATE_DISK_H_
+#ifdef WOLFBOOT_UPDATE_DISK
+
 #include "image.h"
 #include "loader.h"
 #include "hal.h"
@@ -146,7 +146,7 @@ void RAMFUNCTION wolfBoot_start(void)
             cur_part = BOOT_PART_A;
 
         wolfBoot_printf("Attempting boot from partition %c\r\n", 'A' + selected);
-    
+
         /* Fetch header again */
         if (disk_read(BOOT_DISK, cur_part, 0, IMAGE_HEADER_SIZE, p_hdr)
             != IMAGE_HEADER_SIZE) {
@@ -224,4 +224,4 @@ void RAMFUNCTION wolfBoot_start(void)
     hal_prepare_boot();
     do_boot((uint32_t*)os_image.fw_base);
 }
-#endif /* UPDATE_DISK_H_ */
+#endif /* WOLFBOOT_UPDATE_DISK */

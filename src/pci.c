@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef WOLFBOOT_USE_PCI
+
 #include <stdint.h>
 
 #include <pci.h>
@@ -726,10 +728,9 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
 
 uint32_t pci_enum_bus(uint8_t bus, struct pci_enum_info *info)
 {
-    uint16_t vendor_id, device_id, header_type;
-    uint32_t vd_code, reg;
+    uint16_t header_type;
+    uint32_t vd_code;
     uint32_t dev, fun;
-    int ret;
 
     PCI_DEBUG_PRINTF("enumerating bus %d\r\n", bus);
 
@@ -925,3 +926,5 @@ int pci_enum_do(void)
 
     return ret;
 }
+
+#endif /* WOLFBOOT_USE_PCI */

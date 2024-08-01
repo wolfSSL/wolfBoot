@@ -52,7 +52,7 @@ extern int tolower(int c);
 
 #ifdef USE_FAST_MATH
     /* wolfBoot only does public asymmetric operations,
-     * so timing resistenace and hardening is not required */
+     * so timing resistance and hardening is not required */
 #   define WC_NO_HARDEN
 #endif
 
@@ -285,6 +285,8 @@ extern int tolower(int c);
 #   define HAVE_AESGCM
 #   define HAVE_PKCS8
 #endif
+/* PKCS11 for wolfBoot is always static */
+#define HAVE_PKCS11_STATIC
 
 #ifndef HAVE_PWDBASED
 #   define NO_PWDBASED

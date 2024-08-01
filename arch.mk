@@ -640,6 +640,7 @@ ifeq ($(TARGET),nxp_t1024)
   OBJS+=src/boot_ppc_mp.o # support for spin table
   OBJS+=src/fdt.o
   OBJS+=src/pci.o
+  CFLAGS+=-DWOLFBOOT_USE_PCI
   UPDATE_OBJS:=src/update_ram.o
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
@@ -700,6 +701,7 @@ endif
 ifeq ($(TARGET),zynq)
   # Support detection and skip of U-Boot legecy header */
   CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+  CFLAGS+=-DWOLFBOOT_DUALBOOT
 endif
 
 ifeq ($(TARGET),ti_hercules)
@@ -826,7 +828,6 @@ OUTPUT_FLAG?=-o
 
 ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
   FSP=1
-  CFLAGS+=-DWOLFBOOT_FSP=1
   CFLAGS+=-ffunction-sections -fdata-sections -ffreestanding -nostdlib -static
   # some std libc have headers that bring in extra symbols used in
   # FORTIFY_SOURCE realated checks. Use -U_FORTIFY_SOURCE to avoid that.
@@ -845,6 +846,7 @@ endif
 
 # x86-64 FSP targets
 ifeq ("${FSP}", "1")
+  CFLAGS+=-DWOLFBOOT_FSP=1
   USE_GCC_HEADLESS=0
   LD_START_GROUP =
   LD_END_GROUP =
@@ -871,6 +873,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/common.o
     OBJS += src/x86/hob.o
     OBJS += src/pci.o
+    CFLAGS+=-DWOLFBOOT_USE_PCI
     OBJS += hal/x86_uart.o
     OBJS += src/string.o
     OBJS += src/stage2_params.o
@@ -911,6 +914,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/common.o
     OBJS += src/x86/hob.o
     OBJS += src/pci.o
+    CFLAGS+=-DWOLFBOOT_USE_PCI
     OBJS += src/x86/ahci.o
     OBJS += src/x86/ata.o
     OBJS += src/x86/gpt.o
@@ -918,6 +922,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o
     UPDATE_OBJS := src/update_disk.o
+    CFLAGS+=-DWOLFBOOT_UPDATE_DISK
     ifeq ($(64BIT),1)
       LDFLAGS += -m elf_x86_64 --oformat elf64-x86-64
       CFLAGS += -m64

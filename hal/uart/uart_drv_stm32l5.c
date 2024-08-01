@@ -25,6 +25,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#if defined(UART_FLASH) && defined(TARGET_stm32l5)
+
 #include <stdint.h>
 #include "hal/stm32l5.h"
 
@@ -75,7 +77,7 @@ static void uart1_pins_setup(void)
     GPIOG_MODE = reg | (2 << (UART1_RX_PIN * 2));
     reg = GPIOG_MODE & ~ (0x03 << (UART1_TX_PIN * 2));
     GPIOG_MODE = reg | (2 << (UART1_TX_PIN * 2));
-    
+
     /* Alternate function: use low pins (2 and 3) */
     reg = GPIOG_AFL & ~(0xf << (UART1_TX_PIN * 4));
     GPIOG_AFL = reg | (UART1_PIN_AF << (UART1_TX_PIN * 4));
@@ -123,10 +125,10 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
         UART1_CR2 = reg & (2 << 12);
     else
         UART1_CR2 = reg;
-    
+
     /* Clear flags for async mode */
-    UART1_CR2 &= ~(UART_CR2_LINEN | UART_CR2_CLKEN); 
-    UART1_CR3 &= ~(UART_CR3_SCEN | UART_CR3_HDSEL | UART_CR3_IREN); 
+    UART1_CR2 &= ~(UART_CR2_LINEN | UART_CR2_CLKEN);
+    UART1_CR3 &= ~(UART_CR3_SCEN | UART_CR3_HDSEL | UART_CR3_IREN);
 
     /* Configure for RX+TX, turn on. */
     UART1_CR1 |= UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE | UART_CR1_UART_ENABLE;
@@ -156,3 +158,4 @@ int uart_rx(uint8_t *c, int len)
     return 0;
 }
 
+#endif /* UART_FLASH && TARGET_stm32l5 */
