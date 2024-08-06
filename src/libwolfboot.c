@@ -1129,13 +1129,13 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
  */
 static uint8_t* wolfBoot_get_image_from_part(uint8_t part)
 {
-    uint8_t *image = (uint8_t *)0x00000000;
+    uint8_t *image = (uint8_t *)0x00000000; /* default to 0x0 base */
 
-    if (part == PART_UPDATE) {
-        image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-
-    } else if (part == PART_BOOT) {
+    if (part == PART_BOOT) {
         image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    }
+    else if (part == PART_UPDATE) {
+        image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     }
 #ifdef EXT_FLASH
     if (PARTN_IS_EXT(part)) {
