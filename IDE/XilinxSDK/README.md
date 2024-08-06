@@ -19,7 +19,7 @@ You may need to adjust/add the following project settings under Properties -> C/
 
 1) Platform bspInclude path: "Paths and Symbols" -> "Includes" -> "GNU C" -> "Add" -> Workspace Path for platform (example: `/zcu102/export/zcu102/sw/zcu102/standalone_domain/bspinclude/include`).
 
-2) Platform BSP Library path: See "Library Paths" -> "Add" (example: `/zcu102/psu_cortexa53_0/standalone_domain/bsp/psu_cortexa53_0/lib`).ß
+2) Platform BSP Library path: See "Library Paths" -> "Add" (example: `/zcu102/psu_cortexa53_0/standalone_domain/bsp/psu_cortexa53_0/lib`).
 
 ## wolfBoot Configuration
 
@@ -43,8 +43,22 @@ Note: If not using Position Independent Code (PIC) the linker script `ldscript.l
 ## Signing Example
 
 ```sh
-make keytools
-./tools/keytools/sign --rsa4096 --sha3 ../helloworld/Debug/helloworld.elf ./rsa4096.der 1
+$ make keytools
+$ ./tools/keytools/sign --rsa4096 --sha3 ../hello_world/Debug/hello_world.elf ./wolfboot_signing_private_key.der 1
+wolfBoot KeyTools (Compiled C version)
+wolfBoot version 2020000
+Update type:          Firmware
+Input image:          ../hello_world/Debug/hello_world.elf
+Selected cipher:      RSA4096
+Selected hash  :      SHA3
+Public key:           ./wolfboot_signing_private_key.der
+Output  image:        ../hello_world/Debug/hello_world_v1_signed.bin
+Target partition id : 1
+Found RSA512 key
+image header size calculated at runtime (1024 bytes)
+Calculating SHA3 digest...
+Signing the digest...
+Output image(s) successfully created.
 ```
 
 ## Bootgen
@@ -54,6 +68,45 @@ Xilinx uses a `bootgen` tool for generating a boot binary image that has Xilinx 
 * Use "partition_owner=uboot" to prevent a partition from being loaded into RAM.
 * Use "offset=" option to place the application into a specific location in flash.
 * Use "load=" option to have FSBL load into specific location in RAM.
+
+Generating a boot.bin (from boot.bif).
+Run the Xilinx -> Vitis Shell and cd into the workspace root.
+
+Example boot.bif in workspace root:
+
+```
+// Boot BIF example for wolfBoot with signed Hello World
+// Note: "partition_owner=uboot" prevents partition from being loaded to RAM
+the_ROM_image:
+{
+	[bootloader, destination_cpu=a53-0] zcu102\zynqmp_fsbl\fsbl_a53.elf
+	[destination_cpu=a53-0, exception_level=el-1] wolfboot\Debug\wolfboot.elf
+	[destination_cpu=a53-0, partition_owner=uboot, offset=0x800000] hello_world\Debug\hello_world_v1_signed.bin
+}
+```
+
+```sh
+bootgen -image boot.bif -arch zynqmp -o BOOT.bin
+
+****** Xilinx Bootgen v2022.1
+  **** Build date : Apr 18 2022-16:02:32
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+[INFO]   : Bootimage generated successfully
+```
+
+## Running Boot.bin
+
+* QSPI: Flash using Vitis -> Xilinx (menu) -> Program Flash
+* SD: or copy boot.bin to SDCARD
+
+| Boot Mode | MODE Pins 3:0 | Mode SW6[4:1]  |
+| --------- | ------------- | -------------- |
+| JTAG      | 0 0 0 0       | on, on, on, on |
+| QSPI32    | 0 0 1 0       | on, on, off,on |
+| SD        | 1 1 1 0       | off,off,off,on |
+
+
 
 ### Adding RSA Authentication
 

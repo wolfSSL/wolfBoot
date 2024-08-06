@@ -230,3 +230,6 @@ lib/r_bsp
 lib/r_config
 lib/r_flash_rx
 lib/r_tsip_rx
+
+Debug/
+Release/

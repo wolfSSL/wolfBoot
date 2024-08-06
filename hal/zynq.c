@@ -183,7 +183,7 @@
 #define GQSPI_QSPI_MODE        GQSPI_GEN_FIFO_MODE_QSPI
 #endif
 #ifndef GQPI_USE_DUAL_PARALLEL
-#define GQPI_USE_DUAL_PARALLEL 1 /* stripe */
+#define GQPI_USE_DUAL_PARALLEL 0 /* default is single QSPI chip. Use 1=stripe */
 #endif
 #ifndef GQPI_USE_4BYTE_ADDR
 #define GQPI_USE_4BYTE_ADDR    1
@@ -271,8 +271,8 @@ static QspiDev_t mDev;
 static int qspi_wait_ready(QspiDev_t* dev);
 static int qspi_status(QspiDev_t* dev, uint8_t* status);
 static int qspi_wait_we(QspiDev_t* dev);
-#ifdef TEST_FLASH
-static int test_flash(QspiDev_t* dev);
+#ifdef TEST_EXT_FLASH
+static int test_ext_flash(QspiDev_t* dev);
 #endif
 
 /* eFUSE support */
@@ -359,8 +359,13 @@ void uart_write(const char* buf, uint32_t sz)
 {
     uint32_t pos = 0;
     while (sz-- > 0) {
+        char c = buf[pos++];
+        if (c == '\n') { /* handle CRLF */
+            while (ZYNQMP_UART_SR & ZYNQMP_UART_SR_TXFULL);
+            ZYNQMP_UART_SR = '\r';
+        }
         while (ZYNQMP_UART_SR & ZYNQMP_UART_SR_TXFULL);
-        ZYNQMP_UART_SR = (uint32_t)buf[pos++];
+        ZYNQMP_UART_SR = c;
     }
     /* Wait till TX Fifo is empty */
     while (!(ZYNQMP_UART_SR & ZYNQMP_UART_SR_TXEMPTY));
@@ -1109,8 +1114,8 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
         return;
 #endif
 
-#ifdef TEST_FLASH
-    test_flash(&mDev);
+#ifdef TEST_EXT_FLASH
+    test_ext_flash(&mDev);
 #endif
 }
 
@@ -1146,18 +1151,17 @@ void zynq_exit(void)
 void hal_init(void)
 {
     uint32_t cpu_freq = 0;
-
-#ifdef DEBUG_ZYNQ
     const char* bootMsg = "\nwolfBoot Secure Boot\n";
+
 #ifdef DEBUG_UART
     uart_init();
-    uart_write(bootMsg, strlen(bootMsg));
 #endif
     wolfBoot_printf(bootMsg);
-#endif /* DEBUG_ZYNQ */
 
+#ifdef USE_BUILTIN_STARTUP /* Vitis is EL-3 */
     /* This is only allowed for EL-3 */
-    //asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");
+    asm volatile("msr cntfrq_el0, %0" : : "r" (cpu_freq) : "memory");
+#endif
 
     zynq_init(cpu_freq);
 }
@@ -1338,9 +1342,11 @@ void* hal_get_dts_address(void)
 #endif
 
 
-#ifdef TEST_FLASH
-#define TEST_ADDRESS 0x2800000 /* 40MB */
-static int test_flash(QspiDev_t* dev)
+#ifdef TEST_EXT_FLASH
+#ifndef TEST_EXT_ADDRESS
+#define TEST_EXT_ADDRESS 0x2800000 /* 40MB */
+#endif
+static int test_ext_flash(QspiDev_t* dev)
 {
     int ret;
     uint32_t i;
@@ -1348,20 +1354,20 @@ static int test_flash(QspiDev_t* dev)
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
-    ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    ret = ext_flash_erase(TEST_EXT_ADDRESS, WOLFBOOT_SECTOR_SIZE);
     wolfBoot_printf("Erase Sector: Ret %d\n", ret);
 
     /* Write Pages */
     for (i=0; i<sizeof(pageData); i++) {
         pageData[i] = (i & 0xff);
     }
-    ret = ext_flash_write(TEST_ADDRESS, pageData, sizeof(pageData));
+    ret = ext_flash_write(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
     wolfBoot_printf("Write Page: Ret %d\n", ret);
 #endif /* !TEST_FLASH_READONLY */
 
     /* Read page */
     memset(pageData, 0, sizeof(pageData));
-    ret = ext_flash_read(TEST_ADDRESS, pageData, sizeof(pageData));
+    ret = ext_flash_read(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
     wolfBoot_printf("Read Page: Ret %d\n", ret);
 
     wolfBoot_printf("Checking...\n");
@@ -1377,4 +1383,4 @@ static int test_flash(QspiDev_t* dev)
     wolfBoot_printf("Flash Test Passed\n");
     return ret;
 }
-#endif /* TEST_FLASH */
+#endif /* TEST_EXT_FLASH */

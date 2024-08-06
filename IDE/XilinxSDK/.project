@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>efuse_wolfboot</name>
-	<comment>Created by SDK v2018.2. standalone_bsp_0 - psu_cortexa53_0</comment>
+	<name>wolfboot</name>
+	<comment>Created by Vitis v2022.1</comment>
 	<projects>
-		<project>standalone_bsp_0</project>
+		<project>zcu102</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
@@ -19,6 +19,7 @@
 		</buildCommand>
 	</buildSpec>
 	<natures>
+		<nature>com.xilinx.sdx.sdk.core.SdkProjectNature</nature>
 		<nature>org.eclipse.cdt.core.cnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
