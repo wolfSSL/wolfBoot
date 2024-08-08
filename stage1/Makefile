@@ -67,8 +67,7 @@ CFLAGS+= \
   -I".." -I"../include/" -I"../lib/wolfssl" \
   -I"../lib/wolfTPM" \
   -D"WOLFSSL_USER_SETTINGS" \
-  -D"WOLFTPM_USER_SETTINGS" \
-  -D"PLATFORM_$(TARGET)" \
+  -D"WOLFTPM_USER_SETTINGS"
 
 # Do not change platform auth in stage 1
 CFLAGS+=-D"WOLFBOOT_TPM_NO_CHG_PLAT_AUTH"

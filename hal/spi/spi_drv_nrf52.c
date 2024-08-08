@@ -26,8 +26,8 @@
  */
 #include <stdint.h>
 #include "spi_drv.h"
-#include "spi_drv_nrf52.h"
 
+#ifdef TARGET_nrf52
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 
 #define SPI0 (0x40003000)
@@ -142,3 +142,4 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags)
 #endif /* WOLFBOOT_TPM */
 
 #endif /* SPI_FLASH || WOLFBOOT_TPM */
+#endif /* TARGET_ */

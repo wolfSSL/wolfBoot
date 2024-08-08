@@ -27,7 +27,7 @@
 
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_raspi3
+#ifdef TARGET_raspi3
 
 volatile uint32_t time_elapsed = 0;
 void __attribute__((section(".boot"))) main(void) {
@@ -36,4 +36,4 @@ void __attribute__((section(".boot"))) main(void) {
     while(1)
         ;
 }
-#endif /** PLATFORM_raspi3 **/
+#endif /** TARGET_raspi3 **/

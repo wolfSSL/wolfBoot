@@ -20,7 +20,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7)
+#if defined(TARGET_stm32f4) || defined(TARGET_stm32f7)
 #include <stdint.h>
 #include "system.h"
 
@@ -58,17 +58,17 @@
 
 
 /* STM32F4-Discovery, 168 MHz */
-#ifdef PLATFORM_stm32f4
+#ifdef TARGET_stm32f4
 #  define PLLM 8
 #  define PLLN 336
-#  define PLLP 2 
+#  define PLLP 2
 #  define PLLQ 7
 #  define PLLR 0
 #  define TARGET_FLASH_WAITSTATES 5
 #endif
 
 /* STM32F7-Discovery, 216 MHz */
-#ifdef PLATFORM_stm32f7
+#ifdef TARGET_stm32f7
 #  define PLLM 25
 #  define PLLN 432
 #  define PLLP 2
@@ -144,4 +144,4 @@ void clock_config(void)
     RCC_CR &= ~RCC_CR_HSION;
 }
 
-#endif /* PLATFORM_stm32f4 */
+#endif /* TARGET_stm32f4 */

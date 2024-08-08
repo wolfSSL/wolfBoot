@@ -27,7 +27,7 @@
 #endif
 
 #include <stddef.h>
-#ifndef PLATFORM_library
+#ifndef TARGET_library
 #include <string.h>
 #else
 size_t strlen(const char *s); /* forward declaration */
@@ -40,7 +40,7 @@ size_t strlen(const char *s); /* forward declaration */
     #endif
 #endif
 
-#if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 /* for RAMFUNCTION */
 #include "image.h"
 #endif
@@ -77,7 +77,7 @@ int isalpha(int c)
 }
 
 #if !defined(__CCRX__) /* Renesas CCRX */
-#if !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
     unsigned char *d = (unsigned char *)s;
@@ -257,7 +257,7 @@ size_t strlen(const char *s)
 }
 #endif
 
-#if  !defined(__IAR_SYSTEMS_ICC__) && !defined(PLATFORM_X86_64_EFI)
+#if  !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;

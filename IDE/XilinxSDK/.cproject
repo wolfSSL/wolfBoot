@@ -33,7 +33,7 @@
                                     <listOptionValue builtIn="false" value="DEBUG_ZYNQ"/>
                                     <listOptionValue builtIn="false" value="DEBUG=1"/>
                                     <listOptionValue builtIn="false" value="__WOLFBOOT"/>
-                                    <listOptionValue builtIn="false" value="PLATFORM_zynq"/>
+                                    <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
@@ -71,7 +71,7 @@
                                     <listOptionValue builtIn="false" value="DEBUG_ZYNQ"/>
                                     <listOptionValue builtIn="false" value="DEBUG=1"/>
                                     <listOptionValue builtIn="false" value="__WOLFBOOT"/>
-                                    <listOptionValue builtIn="false" value="PLATFORM_zynq"/>
+                                    <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
@@ -163,7 +163,7 @@
                                     <listOptionValue builtIn="false" value="DEBUG_ZYNQ"/>
                                     <listOptionValue builtIn="false" value="DEBUG=1"/>
                                     <listOptionValue builtIn="false" value="__WOLFBOOT"/>
-                                    <listOptionValue builtIn="false" value="PLATFORM_zynq"/>
+                                    <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
@@ -201,7 +201,7 @@
                                     <listOptionValue builtIn="false" value="DEBUG_ZYNQ"/>
                                     <listOptionValue builtIn="false" value="DEBUG=1"/>
                                     <listOptionValue builtIn="false" value="__WOLFBOOT"/>
-                                    <listOptionValue builtIn="false" value="PLATFORM_zynq"/>
+                                    <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>

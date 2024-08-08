@@ -117,7 +117,7 @@ if(BUILD_TEST_APPS)
 
     target_link_libraries(image wolfboot target)
 
-    target_compile_definitions(image PRIVATE PLATFORM_${WOLFBOOT_TARGET}
+    target_compile_definitions(image PRIVATE TARGET_${WOLFBOOT_TARGET}
                                                 ${TEST_APP_COMPILE_DEFINITIONS} ${WOLFBOOT_DEFS})
 
     target_compile_options(image PRIVATE -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused

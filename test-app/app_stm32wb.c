@@ -29,7 +29,7 @@
 #include "wolfboot/wolfboot.h"
 #include "uart_drv.h"
 
-#ifdef PLATFORM_stm32wb
+#ifdef TARGET_stm32wb
 
 /* Matches all keys:
  *    - chacha (32 + 12)

@@ -55,7 +55,7 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 extern void (** const IV_RAM)(void);
 #endif
 
-#ifdef PLATFORM_sim
+#ifdef TARGET_sim
 /**
  * @brief Command line arguments for the test-app in sim mode.
  */
@@ -92,7 +92,7 @@ int main(void)
 #endif
 {
 
-#ifdef PLATFORM_sim
+#ifdef TARGET_sim
     /* to forward arguments to the test-app for testing. See
      * test-app/app_sim.c */
     main_argv = argv;

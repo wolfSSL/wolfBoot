@@ -40,7 +40,8 @@ ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
-  CFLAGS+=-Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -DPLATFORM_$(TARGET) -I../include -nostartfiles
+  CFLAGS+=-Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -nostartfiles
+  CFLAGS+=-DTARGET_$(TARGET) -I../include
   CFLAGS+=-g
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3

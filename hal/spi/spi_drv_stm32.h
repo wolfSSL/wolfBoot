@@ -20,7 +20,7 @@
 
 #include <stdint.h>
 
-#ifdef PLATFORM_stm32f4
+#ifdef TARGET_stm32f4
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x40023844))
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x40023824))
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
@@ -38,9 +38,9 @@
 #define SPI_CLOCK_PIN 3 /* SPI_SCK: PB3  */
 #define SPI_MISO_PIN  4 /* SPI_MISO PB4  */
 #define SPI_MOSI_PIN  5 /* SPI_MOSI PB5  */
-#endif /* PLATFORM_stm32f4 */
+#endif /* TARGET_stm32f4 */
 
-#ifdef PLATFORM_stm32u5
+#ifdef TARGET_stm32u5
 
 #ifdef TZEN
 #define PERIPH_BASE (0x50000000UL)
@@ -149,10 +149,10 @@
 #define SPI_CLOCK_PIN 13 /* SPI_SCK: PE13  */
 #define SPI_MISO_PIN  14 /* SPI_MISO PE14 */
 #define SPI_MOSI_PIN  15 /* SPI_MOSI PE15  */
-#endif /* PLATFORM_stm32u5 */
+#endif /* TARGET_stm32u5 */
 
 
-#ifdef PLATFORM_stm32wb
+#ifdef TARGET_stm32wb
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x58000060))
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x58000040))
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(0x5800004C))
@@ -170,10 +170,10 @@
 #define SPI_CLOCK_PIN 5 /* SPI_SCK: PA5  */
 #define SPI_MISO_PIN  6 /* SPI_MISO PA6  */
 #define SPI_MOSI_PIN  7 /* SPI_MOSI PA7  */
-#endif /* PLATFORM_stm32wb */
+#endif /* TARGET_stm32wb */
 
 
-#ifdef PLATFORM_stm32l0
+#ifdef TARGET_stm32l0
 #define APB2_CLOCK_ER     (*(volatile uint32_t *)(0x40021034))
 #define APB2_CLOCK_RST    (*(volatile uint32_t *)(0x40021024))
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(0x4002102C))
@@ -196,10 +196,10 @@
     #define SPI_MISO_PIN  6 /* SPI_MISO PA6  */
     #define SPI_MOSI_PIN  7 /* SPI_MOSI PA7  */
 #endif /* SPI_ALT_CONFIGURATION */
-#endif /* PLATFORM_stm32l0 */
+#endif /* TARGET_stm32l0 */
 
 
-#ifdef PLATFORM_stm32h7
+#ifdef TARGET_stm32h7
 
 #define RCC_BASE          (0x58024400UL)
 #define RCC_GPIO_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xE0)) /* RM0433 - 8.7.43 (RCC_AHB4ENR) */
@@ -323,7 +323,7 @@
 #define QSPI_IO3_PIN        10
 #endif
 
-#endif /* PLATFORM_stm32h7 */
+#endif /* TARGET_stm32h7 */
 
 
 /* Setup SPI PIO Bases */

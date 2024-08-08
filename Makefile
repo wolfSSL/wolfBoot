@@ -66,8 +66,7 @@ CFLAGS+= \
   -I"." -I"include/" -I"lib/wolfssl" \
   -Wno-array-bounds \
   -D"WOLFSSL_USER_SETTINGS" \
-  -D"WOLFTPM_USER_SETTINGS" \
-  -D"PLATFORM_$(TARGET)"
+  -D"WOLFTPM_USER_SETTINGS"
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)

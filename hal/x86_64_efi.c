@@ -27,7 +27,7 @@
 #include "loader.h"
 #include "printf.h"
 
-#ifdef PLATFORM_X86_64_EFI
+#ifdef TARGET_X86_64_EFI
 
 #include <efi/efi.h>
 #include <efi/efilib.h>
@@ -280,4 +280,4 @@ efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     return EFI_SUCCESS;
 }
 
-#endif /* PLATFORM_X86_64_EFI */
+#endif /* TARGET_X86_64_EFI */

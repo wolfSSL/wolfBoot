@@ -25,7 +25,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#if defined(UART_FLASH) && defined(TARGET_stm32l5)
+#ifdef TARGET_stm32l5
 
 #include <stdint.h>
 #include "hal/stm32l5.h"
@@ -158,4 +158,4 @@ int uart_rx(uint8_t *c, int len)
     return 0;
 }
 
-#endif /* UART_FLASH && TARGET_stm32l5 */
+#endif /* TARGET_stm32l5 */

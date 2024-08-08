@@ -40,21 +40,22 @@
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH) || \
     defined(OCTOSPI_FLASH)
 
-#if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || \
-    defined(PLATFORM_stm32wb) || defined(PLATFORM_stm32l0) || \
-    defined(PLATFORM_stm32u5) || defined(PLATFORM_stm32h7)
+#if defined(TARGET_stm32f4) || defined(TARGET_stm32f7) || \
+    defined(TARGET_stm32wb) || defined(TARGET_stm32l0) || \
+    defined(TARGET_stm32u5) || defined(TARGET_stm32h7)
+    #define WOLFBOOT_STM32_SPIDRV
 #include "hal/spi/spi_drv_stm32.h"
 #endif
 
-#if defined(PLATFORM_zynq)
+#if defined(TARGET_zynq)
 #include "hal/spi/spi_drv_zynq.h"
 #endif
 
-#if defined(PLATFORM_nrf52)
+#if defined(TARGET_nrf52)
 #include "hal/spi/spi_drv_nrf52.h"
 #endif
 
-#if defined(PLATFORM_nxp_p1021) || defined(PLATFORM_nxp_t1024)
+#if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024)
 #include "hal/spi/spi_drv_nxp.h"
 #endif
 

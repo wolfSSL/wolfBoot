@@ -21,15 +21,15 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifdef PLATFORM_stm32l5
+#ifdef TARGET_stm32l5
     #include "hal/stm32l5.h"
 #endif
 
-#ifdef PLATFORM_stm32u5
+#ifdef TARGET_stm32u5
     #include "hal/stm32u5.h"
 #endif
 
-#ifdef PLATFORM_stm32h5
+#ifdef TARGET_stm32h5
     #include "hal/stm32h5.h"
 #endif
 
@@ -109,7 +109,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
         bank = 1;
     }
-#ifdef PLATFORM_stm32h5
+#ifdef TARGET_stm32h5
     /* Take into account current swap configuration */
     if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
         bank = !bank;
@@ -131,7 +131,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
     address = start_address;
     while (address < end) {
         /* Erase claimed non-secure page, in secure mode */
-#ifndef PLATFORM_stm32h5
+#ifndef TARGET_stm32h5
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
 #else
@@ -147,7 +147,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         address += FLASH_PAGE_SIZE;
         page_n++;
     }
-#ifndef PLATFORM_stm32h5
+#ifndef TARGET_stm32h5
     FLASH_CR &= ~FLASH_CR_PER ;
 #else
     FLASH_CR &= ~FLASH_CR_SER ;
@@ -209,7 +209,7 @@ void hal_tz_release_nonsecure_area(void)
 
 
 
-#ifdef PLATFORM_stm32h5
+#ifdef TARGET_stm32h5
 #define GTZC1_BASE             (0x50032400)
 #define GTZC1_TZSC             (*(volatile uint32_t *)(GTZC1_BASE + 0x00))
 #define GTZC1_TZIC             (*(volatile uint32_t *)(GTZC1_BASE + 0x0400))
@@ -280,7 +280,7 @@ void hal_gtzc_init(void)
 }
 #endif
 
-#ifdef PLATFORM_stm32h5
+#ifdef TARGET_stm32h5
 
 void hal_tz_sau_init(void)
 {
@@ -361,7 +361,7 @@ void hal_tz_sau_init(void)
 static void hsi48_on(void)
 {
 
-#ifdef PLATFORM_stm32l5
+#ifdef TARGET_stm32l5
     RCC_CRRCR |= RCC_CRRCR_HSI48ON;
     while ((RCC_CRRCR & RCC_CRRCR_HSI48RDY) == 0)
         ;
@@ -386,7 +386,7 @@ void hal_trng_init(void)
     reg_val |= 0x0F << TRNG_CR_CONFIG1_SHIFT;
     reg_val |= 0x0D << TRNG_CR_CONFIG3_SHIFT;
 
-#ifdef PLATFORM_stm32u5 /* RM0456 40.6.2 */
+#ifdef TARGET_stm32u5 /* RM0456 40.6.2 */
     reg_val |= 0x06 << TRNG_CR_CLKDIV_SHIFT;
 #endif
     TRNG_CR = TRNG_CR_CONDRST | reg_val;
