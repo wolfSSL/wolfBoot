@@ -26,7 +26,7 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_stm32l4
+#ifdef TARGET_stm32l4
 
 void main(void)
 {
@@ -49,4 +49,4 @@ void main(void)
     }
 }
 
-#endif /* PLATFORM_stm32l4 */
+#endif /* TARGET_stm32l4 */

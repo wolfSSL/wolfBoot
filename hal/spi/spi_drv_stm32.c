@@ -27,7 +27,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "spi_drv.h"
-#include "spi_drv_stm32.h"
+
+#ifdef WOLFBOOT_STM32_SPIDRV
 
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM) || defined(QSPI_FLASH) || \
     defined(OCTOSPI_FLASH)
@@ -133,7 +134,7 @@ void RAMFUNCTION spi_cs_on(uint32_t base, int pin)
 static void RAMFUNCTION stm_pins_setup(void)
 {
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
-    #ifdef PLATFORM_stm32l0
+    #ifdef TARGET_stm32l0
     stm_gpio_config(SPI_CLOCK_PIO_BASE, SPI_CLOCK_PIN, GPIO_MODE_AF,
         SPI_CLOCK_PIN_AF, 2, 3);
     stm_gpio_config(SPI_MOSI_PIO_BASE, SPI_MOSI_PIN, GPIO_MODE_AF,
@@ -398,7 +399,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 /* Setup clocks */
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
 
-    #ifdef PLATFORM_stm32u5
+    #ifdef TARGET_stm32u5
         /* Clock configuration for QSPI defaults to SYSCLK
          * (RM0456 section 11.8.47)
          */
@@ -485,7 +486,7 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 #endif
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         /* Configure SPI1 for master mode */
-#   ifdef PLATFORM_stm32l0
+#   ifdef TARGET_stm32l0
         SPI1_CR1 = SPI_CR1_MASTER | (polarity << 1) | (phase << 0);
 #   else
         /* baud rate 5 (hclk/6) */
@@ -529,3 +530,4 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags)
 #endif /* WOLFBOOT_TPM */
 
 #endif /* SPI_FLASH || WOLFBOOT_TPM || QSPI_FLASH || OCTOSPI_FLASH */
+#endif /* WOLFBOOT_STM32_SPIDRV */

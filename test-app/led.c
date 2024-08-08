@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_stm32f4
+#ifdef TARGET_stm32f4
 
 #define AHB1_CLOCK_ER (*(volatile uint32_t *)(0x40023830))
 #define GPIOD_AHB1_CLOCK_ER (1 << 3)
@@ -70,9 +70,9 @@ void boot_led_on(void)
     GPIOD_BSRR |= (1 << pin);
 }
 
-#endif /* PLATFORM_stm32f4 */
+#endif /* TARGET_stm32f4 */
 
-#ifdef PLATFORM_stm32l0
+#ifdef TARGET_stm32l0
 #define LED_BOOT_PIN (5)
 
 #define RCC_IOPENR (*(volatile uint32_t *)(0x4002102C))
@@ -108,9 +108,9 @@ void boot_led_off(void)
     GPIOA_BSRR |= (1 << (pin + 16));
 }
 
-#endif /* PLATFORM_stm32l0 */
+#endif /* TARGET_stm32l0 */
 
-#if defined(PLATFORM_stm32g0) || defined(PLATFORM_stm32c0)
+#if defined(TARGET_stm32g0) || defined(TARGET_stm32c0)
 /* GPIOA5 */
 #define RCC_IOPENR (*(volatile uint32_t *)(0x40021034))
 #define RCC_IOPENR_GPIOAEN (1 << 0)
@@ -140,9 +140,9 @@ void boot_led_on(void)
     GPIOA_BSRR |= (1 << pin); /* set pin */
 }
 
-#endif /* PLATFORM_stm32g0 || PLATFORM_stm32c0 */
+#endif /* TARGET_stm32g0 || TARGET_stm32c0 */
 
-#ifdef PLATFORM_stm32wb
+#ifdef TARGET_stm32wb
 #define LED_BOOT_PIN (0)
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(0x5800004C))
 #define GPIOB_AHB2_CLOCK_ER (1 << 1)
@@ -178,9 +178,9 @@ void boot_led_off(void)
 }
 
 
-#endif /* PLATFORM_stm32wb */
+#endif /* TARGET_stm32wb */
 
-#ifdef PLATFORM_stm32l4
+#ifdef TARGET_stm32l4
 #define AHB2_CLOCK_ER (*(volatile uint32_t *)(0x4002104C)) /* RCC_AHB2ENR */
 #define GPIOB_AHB2_CLOCK_ER (1 << 1)
 
@@ -229,4 +229,4 @@ void boot_led_off(void)
     GPIOB_BSRR |= (1 << (LED_BOOT_PIN + 16));
 }
 
-#endif /* PLATFORM_stm32l4 */
+#endif /* TARGET_stm32l4 */

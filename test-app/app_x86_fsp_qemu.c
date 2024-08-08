@@ -22,7 +22,7 @@
  */
 
 
-#ifdef PLATFORM_x86_fsp_qemu
+#ifdef TARGET_x86_fsp_qemu
 
 #include <printf.h>
 #include <stdint.h>

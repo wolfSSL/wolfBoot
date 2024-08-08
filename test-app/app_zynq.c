@@ -27,7 +27,7 @@
 
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_zynq
+#ifdef TARGET_zynq
 
 volatile uint32_t time_elapsed = 0;
 void main(void) {
@@ -36,4 +36,4 @@ void main(void) {
     while(1)
         ;
 }
-#endif /** PLATFORM_zynq **/
+#endif /** TARGET_zynq **/

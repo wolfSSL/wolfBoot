@@ -27,7 +27,7 @@
 #include "led.h"
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_stm32g0
+#ifdef TARGET_stm32g0
 
 void main(void) {
     boot_led_on();
@@ -35,5 +35,5 @@ void main(void) {
     while(1)
         ;
 }
-#endif /* PLATFORM_stm32g0 */
+#endif /* TARGET_stm32g0 */
 

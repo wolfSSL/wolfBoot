@@ -33,7 +33,7 @@ extern unsigned int _start_heap;
 extern void isr_tim2(void);
 #endif
 
-#ifdef PLATFORM_stm32h5
+#ifdef TARGET_stm32h5
 extern void isr_usart3(void);
 #endif
 
@@ -188,7 +188,7 @@ void (* const IV[])(void) =
     isr_empty,                     // CAN2
     isr_empty,                     // Ethernet
     isr_empty,                     // Hibernate
-#elif (defined(PLATFORM_stm32l5) ||defined(PLATFORM_stm32u5))   /* Fill with extra unused handlers */
+#elif (defined(TARGET_stm32l5) ||defined(TARGET_stm32u5))   /* Fill with extra unused handlers */
     isr_empty, //	WWDG_IRQHandler
     isr_empty, //	PVD_PVM_IRQHandler
     isr_empty, //	RTC_IRQHandler
@@ -299,7 +299,7 @@ void (* const IV[])(void) =
     isr_empty, //	ICACHE_IRQHandler
     isr_empty, //	OTFDEC1_IRQHandler
                //
-#elif defined(PLATFORM_stm32h5)
+#elif defined(TARGET_stm32h5)
     isr_empty, //	WWDG_IRQHandler
     isr_empty, //	PVD_PVM_IRQHandler
     isr_empty, //	RTC_IRQHandler

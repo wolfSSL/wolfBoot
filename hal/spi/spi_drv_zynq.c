@@ -29,6 +29,8 @@
 #include "spi_drv.h"
 #include "spi_drv_zynq.h"
 
+#ifdef TARGET_zynq
+
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 
 void spi_cs_off(uint32_t base, int pin)
@@ -87,3 +89,4 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags)
 #endif /* WOLFBOOT_TPM */
 
 #endif /* SPI_FLASH | WOLFBOOT_TPM */
+#endif /* TARGET_zynq */

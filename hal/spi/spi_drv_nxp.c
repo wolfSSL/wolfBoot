@@ -25,8 +25,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "spi_drv.h"
-#include "spi_drv_nxp.h"
 
+#if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024)
 #ifdef WOLFBOOT_TPM
 
 /* functions from nxp_p1021.c and nxp_t1024.c hal */
@@ -58,3 +58,4 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags)
     return hal_espi_xfer(cs, tx, rx, sz, flags);
 }
 #endif /* WOLFBOOT_TPM */
+#endif /* TARGET_ */

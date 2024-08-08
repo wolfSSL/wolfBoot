@@ -220,7 +220,7 @@
                 <debug>1</debug>
                 <option>
                     <name>CCDefines</name>
-                    <state>PLATFORM_stm32f4</state>
+                    <state>TARGET_stm32f4</state>
                     <state>ARCH_ARM</state>
                     <state>WOLFSSL_USER_SETTINGS</state>
                     <state>DEBUG_CONSOLE_ASSERT_DISABLE=1</state>

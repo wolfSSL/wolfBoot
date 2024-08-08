@@ -23,14 +23,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <stdint.h>
-#include "spi_drv.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include "printf.h"
 
+#include "spi_drv.h"
+
+#ifdef WOLFBOOT_ARCH_RENESAS_RX
+
+#include "printf.h"
 #include "hal/renesas-rx.h"
-#include "spi_drv_renesas_rx.h"
 
 #if defined(SPI_FLASH) || defined(QSPI_FLASH)
 
@@ -444,3 +446,4 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     return ret;
 }
 #endif /* QSPI_FLASH */
+#endif /* WOLFBOOT_ARCH_RENESAS_RX */

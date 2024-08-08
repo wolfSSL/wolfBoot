@@ -126,7 +126,7 @@ _reset:
         li      r1, MSR_DE
         mtmsr   r1
 
-#ifdef PLATFORM_nxp_p1021
+#ifdef TARGET_nxp_p1021
         /* Errata: A-005125 - force the core to process all snoops of IO device
          *                    full cache line writes to DDR differently */
         msync

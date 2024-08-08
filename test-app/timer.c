@@ -21,7 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifdef PLATFORM_stm32f4
+#ifdef TARGET_stm32f4
 #include <stdint.h>
 
 #include "system.h"
@@ -168,4 +168,4 @@ void isr_tim2(void)
 {
 }
 
-#endif /* PLATFORM_stm32f4 */
+#endif /* TARGET_stm32f4 */

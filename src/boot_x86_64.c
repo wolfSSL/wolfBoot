@@ -24,7 +24,7 @@
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_X86_64_EFI
+#ifdef TARGET_X86_64_EFI
 
 #include <efi/efi.h>
 #include <efi/efilib.h>
@@ -45,4 +45,4 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     x86_64_efi_do_boot((uint8_t *)app_offset);
 }
 
-#endif /* PLATFORM_X86_64_EFI */
+#endif /* TARGET_X86_64_EFI */

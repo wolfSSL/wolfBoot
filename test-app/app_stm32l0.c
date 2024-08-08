@@ -30,7 +30,7 @@
 #include "spi_flash.h"
 #endif
 
-#ifdef PLATFORM_stm32l0
+#ifdef TARGET_stm32l0
 
 #define UART2 (0x40004400)
 #define UART2_CR1      (*(volatile uint32_t *)(UART2 + 0x00))

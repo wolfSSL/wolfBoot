@@ -134,7 +134,7 @@ void RAMFUNCTION wolfBoot_start(void)
             active = wolfBoot_dualboot_candidate();
         if (active == PART_BOOT)
             source_address = (uint32_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        else if (active == PART_UPDATE)
+        else
             source_address = (uint32_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     #else
         active = wolfBoot_dualboot_candidate_addr((void**)&source_address);

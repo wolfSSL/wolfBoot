@@ -39,7 +39,7 @@ extern void do_boot(const uint32_t *app_offset);
 extern void arch_reboot(void);
 
 /* Simulator-only calls */
-#ifdef PLATFORM_sim
+#ifdef TARGET_sim
 void hal_set_internal_flash_file(const char* file);
 void hal_set_external_flash_file(const char* file);
 void hal_deinit();

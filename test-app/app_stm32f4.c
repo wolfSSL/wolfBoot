@@ -31,7 +31,7 @@
 #include "wolfboot/wolfboot.h"
 #include "spi_flash.h"
 
-#ifdef PLATFORM_stm32f4
+#ifdef TARGET_stm32f4
 
 #define UART1 (0x40011000)
 
@@ -314,5 +314,5 @@ void main(void) {
     while(1)
         ;
 }
-#endif /** PLATFORM_stm32f4 **/
+#endif /** TARGET_stm32f4 **/
 

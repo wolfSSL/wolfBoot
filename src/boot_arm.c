@@ -188,7 +188,7 @@ asm(
 
 void isr_reset(void) {
     register unsigned int *src, *dst;
-#if defined(PLATFORM_kinetis)
+#if defined(TARGET_kinetis)
     /* Immediately disable Watchdog after boot */
     /*  Write Keys to unlock register */
     *((volatile unsigned short *)0x4005200E) = 0xC520;
@@ -396,7 +396,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 }
 
-#ifdef PLATFORM_psoc6
+#ifdef TARGET_psoc6
 typedef void(*NMIHANDLER)(void);
 #   define isr_NMI (NMIHANDLER)(0x0000000D)
 #else
@@ -439,8 +439,8 @@ void (* const IV[])(void) =
 	isr_empty,                   // SysTick
 
     /* Fill with extra unused handlers */
-#if defined(PLATFORM_stm32l5) || defined(PLATFORM_stm32u5) || \
-    defined(PLATFORM_stm32h7)
+#if defined(TARGET_stm32l5) || defined(TARGET_stm32u5) || \
+    defined(TARGET_stm32h7)
     isr_empty,
     isr_empty,
     isr_empty,

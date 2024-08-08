@@ -22,7 +22,7 @@
 #ifndef _NXP_PPC_H_
 #define _NXP_PPC_H_
 
-#ifdef PLATFORM_nxp_p1021
+#ifdef TARGET_nxp_p1021
     /* NXP P1021 */
     #define CPU_NUMCORES 2
     #define CORE_E500
@@ -62,7 +62,7 @@
         #define ENABLE_INTERRUPTS
     #endif
 
-#elif defined(PLATFORM_nxp_t1024)
+#elif defined(TARGET_nxp_t1024)
     /* NXP T1024 */
     #define CORE_E5500
     #define CPU_NUMCORES 2
@@ -100,7 +100,7 @@
 
     #define USE_LONG_JUMP
 
-#elif defined(PLATFORM_nxp_t2080)
+#elif defined(TARGET_nxp_t2080)
     /* NXP T0280 */
     #define CORE_E6500
     #define CPU_NUMCORES 4

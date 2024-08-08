@@ -22,9 +22,9 @@
 
 /* Chip select for TPM - defaults */
 #ifndef SPI_CS_TPM
-    #if defined(PLATFORM_nxp_p1021)
+    #if defined(TARGET_nxp_p1021)
         #define SPI_CS_TPM 2
-    #elif defined(PLATFORM_nxp_t1024)
+    #elif defined(TARGET_nxp_t1024)
         #define SPI_CS_TPM 1
     #endif
 #endif

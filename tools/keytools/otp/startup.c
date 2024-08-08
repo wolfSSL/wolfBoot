@@ -173,7 +173,7 @@ void (* const IV[])(void) =
     isr_empty,                     // CAN2
     isr_empty,                     // Ethernet
     isr_empty,                     // Hibernate
-#elif (defined(PLATFORM_stm32l5) ||defined(PLATFORM_stm32u5))   /* Fill with extra unused handlers */
+#elif (defined(TARGET_stm32l5) ||defined(TARGET_stm32u5))   /* Fill with extra unused handlers */
     isr_empty, //	WWDG_IRQHandler
     isr_empty, //	PVD_PVM_IRQHandler
     isr_empty, //	RTC_IRQHandler

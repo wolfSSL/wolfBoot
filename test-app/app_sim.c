@@ -29,7 +29,7 @@
 
 #include "wolfboot/wolfboot.h"
 
-#ifdef PLATFORM_sim
+#ifdef TARGET_sim
 
 /* Matches all keys:
  *    - chacha (32 + 12)
@@ -128,4 +128,4 @@ int main(int argc, char *argv[]) {
     return 0;
 
 }
-#endif /** PLATFORM_sim **/
+#endif /** TARGET_sim **/
