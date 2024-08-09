@@ -271,7 +271,7 @@ jobs:
 
       - name: Build wolfboot.elf (RSA4096, FASTMATH)
         run: |
-          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 SPMATH=0
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 SPMATH=0 WOLFBOOT_HUGE_STACK=1
 
       - name: Run sunny day update test
         run: |
@@ -532,7 +532,7 @@ jobs:
 
       - name: Build wolfboot.elf (RSA4096, FASTMATH)
         run: |
-          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 SPMATH=0
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 SPMATH=0 WOLFBOOT_HUGE_STACK=1
 
       - name: Run sunny day update test
         run: |
