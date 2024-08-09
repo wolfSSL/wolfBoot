@@ -215,6 +215,10 @@ ifeq ($(TARGET),sim)
   # LD on MacOS does not support "-Map="
   LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
   LDFLAGS=
+  ifeq ($(FORCE_32BIT),1)
+    LDFLAGS+=-m32
+    CFLAGS+=-m32
+  endif
   ifeq ($(LDMAPSUPPORTED),)
     # Override linker flags
     LDFLAGS+=-Wl,-Map=image.map
