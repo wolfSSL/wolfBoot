@@ -43,3 +43,103 @@ jobs:
         run: |
           tools/scripts/sim-sunnyday-update.sh
 
+      - name: Cleanup to change key type
+        run: |
+          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+
+      - name: Build wolfboot.elf (ECC384)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC384 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (ECC384, WOLFBOOT_SMALL_STACK)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC384 WOLFBOOT_SMALL_STACK=1 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Cleanup to change key type
+        run: |
+          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+
+      - name: Build wolfboot.elf (ECC521)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC521 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (ECC521, WOLFBOOT_SMALL_STACK)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC521 WOLFBOOT_SMALL_STACK=1 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Cleanup to change key type
+        run: |
+          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+
+      - name: Build wolfboot.elf (RSA2048)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA2048 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (RSA2048, WOLFBOOT_SMALL_STACK)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA2048 WOLFBOOT_SMALL_STACK=1 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Cleanup to change key type
+        run: |
+          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+
+      - name: Build wolfboot.elf (RSA3072)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA3072 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (RSA3072, WOLFBOOT_SMALL_STACK)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA3072 WOLFBOOT_SMALL_STACK=1 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Cleanup to change key type
+        run: |
+          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+
+      - name: Build wolfboot.elf (RSA4096)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (RSA4096, WOLFBOOT_SMALL_STACK)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1 SPMATH=1
+
+      - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
