@@ -63,6 +63,7 @@ struct xmalloc_slot {
 #   error "No hash mechanism selected."
 #endif
 
+
 #if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384) || defined(WOLFBOOT_SIGN_ECC521)
 
 #ifndef USE_FAST_MATH
@@ -74,6 +75,12 @@ struct xmalloc_slot {
             #define MP_POINT_SIZE (196)
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 8)
             #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 6)
+        #elif defined (_LP64)
+            #define MP_POINT_SIZE (220)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 9)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 9 + 3))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 6))
+            #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 8)
         #else
             #define MP_POINT_SIZE (220)
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 9)
@@ -95,6 +102,7 @@ struct xmalloc_slot {
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 15)
             #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (4 * 15 + 3))
             #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 15 * 6))
+            #define MP_INT_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2)
             #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 12)
         #endif
     #endif /* WOLFBOOT_SIGN_ECC384 */
