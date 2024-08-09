@@ -15,6 +15,16 @@ jobs:
         with:
           submodules: true
 
+      - name: Workaround for sources.list
+        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+
+      - name: Update repository
+        run: sudo apt-get update
+
+      - name: Install 32-bit libc
+        run: |
+          sudo apt-get install -y libc6-dev-i386
+
       # 32 Bit simulator, SP_MATH
       #
       - name: make clean
