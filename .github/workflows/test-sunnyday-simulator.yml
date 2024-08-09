@@ -29,7 +29,7 @@ jobs:
 
       - name: Build wolfboot.elf (ECC256)
         run: |
-          make clean && make test-sim-internal-flash-with-update SIGN=ECC256
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 SPMATH=1
 
       - name: Run sunny day update test
         run: |
@@ -37,7 +37,7 @@ jobs:
 
       - name: Build wolfboot.elf (ECC256, WOLFBOOT_SMALL_STACK)
         run: |
-          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 WOLFBOOT_SMALL_STACK=1
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 SPMATH=1
 
       - name: Run sunny day update test
         run: |
