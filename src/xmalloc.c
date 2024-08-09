@@ -136,7 +136,12 @@ struct xmalloc_slot {
         #define MP_SCHEME "TFM ECC256"
         #define MP_CURVE_SPECS_SIZE (MP_INT_TYPE_SIZE)
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
-        #define ECC_POINT_SIZE (228)
+        #ifndef _LP64
+            #define ECC_POINT_SIZE (228)
+        #else
+            #define ECC_POINT_SIZE (312)
+            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 5)
+        #endif
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif
@@ -144,7 +149,11 @@ struct xmalloc_slot {
         #define MP_SCHEME "TFM ECC384"
         #define MP_CURVE_SPECS_SIZE (MP_INT_TYPE_SIZE)
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
-        #define ECC_POINT_SIZE (408)
+        #ifndef _LP64
+            #define ECC_POINT_SIZE (408)
+        #else
+            #define ECC_POINT_SIZE (504)
+        #endif
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
@@ -153,7 +162,11 @@ struct xmalloc_slot {
         #define MP_SCHEME "TFM ECC521"
         #define MP_CURVE_SPECS_SIZE (MP_INT_TYPE_SIZE)
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
-        #define ECC_POINT_SIZE (516)
+        #ifndef _LP64
+            #define ECC_POINT_SIZE (516)
+        #else
+            #define ECC_POINT_SIZE (600)
+        #endif
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
@@ -331,7 +344,7 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
     #endif
         { NULL, 0, 0}
     };
-#else
+#else /* FAST MATH */
     #define MP_SCHEME "TFM RSA"
     #define MP_INT_TYPE_SIZE (sizeof(mp_int))
     #define MP_MONT_REDUCE_BUF_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
