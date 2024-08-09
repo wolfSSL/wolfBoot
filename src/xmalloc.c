@@ -281,7 +281,11 @@ static struct xmalloc_slot xmalloc_pool[] = {
 
 static uint32_t sha_block[HASH_BLOCK_SIZE];
 
+#ifndef _LP64
 #define ASNCHECK_BUF_SIZE (224)
+#else
+#define ASNCHECK_BUF_SIZE (320)
+#endif
 static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
 
 #ifndef USE_FAST_MATH
