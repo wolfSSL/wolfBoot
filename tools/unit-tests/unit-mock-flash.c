@@ -24,14 +24,12 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
             a[i] = data[i];
         }
     }
-#ifdef FLAGS_HOME
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
     }
-#endif
 #ifdef MOCK_KEYVAULT
     if ((address >= vault_base) && (address < vault_base + keyvault_size)) {
         for (i = 0; i < len; i++) {
@@ -47,14 +45,12 @@ int hal_flash_erase(haladdr_t address, int len)
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_boot++;
-#ifdef FLAGS_HOME
         memset(address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank1++;
         }
-#endif
     } else if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;

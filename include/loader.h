@@ -88,9 +88,18 @@ void wolfBoot_start(void);
 
 #elif defined(ARCH_SIM)
 #include <stdlib.h>
+#include <stdio.h>
 static inline void wolfBoot_panic(void)
 {
-    exit(1);
+    fprintf(stderr, "wolfBoot: PANIC!\n");
+    exit('P');
+}
+#elif defined UNIT_TEST
+static int wolfBoot_panicked = 0;
+static inline void wolfBoot_panic(void)
+{
+    fprintf(stderr, "wolfBoot: PANIC!\n");
+    wolfBoot_panicked++;
 }
 #else
 static inline void wolfBoot_panic(void)
