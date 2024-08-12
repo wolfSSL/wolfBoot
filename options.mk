@@ -922,3 +922,36 @@ ifneq ($(WOLFBOOT_PART_ID),)
   CFLAGS+=-DHDR_IMG_TYPE_APP=$(WOLFBOOT_PART_ID)
   SIGN_OPTIONS+=--id $(WOLFBOOT_PART_ID)
 endif
+
+# wolfHSM options
+ifeq ($(WOLFHSM_CLIENT),1)
+  LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
+  WOLFCRYPT_OBJS += \
+    $(LIBDIR)/wolfssl/wolfcrypt/src/cryptocb.o \
+    $(LIBDIR)/wolfssl/wolfcrypt/src/coding.o
+
+  WOLFHSM_CLIENT_OBJS += \
+    $(LIBDIR)/wolfHSM/src/wh_client.o \
+    $(LIBDIR)/wolfHSM/src/wh_client_nvm.o \
+    $(LIBDIR)/wolfHSM/src/wh_client_cryptocb.o \
+    $(LIBDIR)/wolfHSM/src/wh_client_crypto.o \
+    $(LIBDIR)/wolfHSM/src/wh_crypto.o \
+    $(LIBDIR)/wolfHSM/src/wh_utils.o \
+    $(LIBDIR)/wolfHSM/src/wh_comm.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_comm.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_nvm.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_customcb.o
+  #includes
+  CFLAGS += -I"$(LIBDIR)/wolfHSM"
+  # defines
+  CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT
+  # Make sure we export generated public keys so they can be used to load into
+  # HSM out-of-band
+  KEYGEN_OPTIONS += --exportpubkey --der
+
+  # Default to using public keys on the HSM
+  ifneq ($(WOLFHSM_CLIENT_LOCAL_KEYS),1)
+    KEYGEN_OPTIONS += --nolocalkeys
+    CFLAGS += -DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID
+  endif
+endif

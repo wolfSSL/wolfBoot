@@ -433,3 +433,9 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/zynqmp.config
       make-args: CROSS_COMPILE=aarch64-linux-gnu-
+
+  sim_wolfhsm_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM.config

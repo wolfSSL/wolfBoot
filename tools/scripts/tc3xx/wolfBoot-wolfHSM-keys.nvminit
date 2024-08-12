@@ -1,0 +1,5 @@
+# NVM config file for wolfHSM whnvmtool to create NVM image based on generated keys
+#
+# Key format is:
+# key <clientId> <keyId> <access> <flags> <label> <file>
+key 0x1 0xFF 0xFF 0x00 "wolfBoot ECC Pubkey" ../../../priv_pub.der

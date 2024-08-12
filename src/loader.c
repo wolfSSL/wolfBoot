@@ -105,6 +105,11 @@ int main(void)
 #ifdef TEST_FLASH
     hal_flash_test();
 #endif
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    if (0 != hal_hsm_init_connect()) {
+        wolfBoot_panic();
+    }
+#endif
     spi_flash_probe();
 #ifdef UART_FLASH
     uart_init(UART_FLASH_BITRATE, 8, 'N', 1);

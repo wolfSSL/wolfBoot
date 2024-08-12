@@ -42,6 +42,12 @@
 #include "target.h"
 #include "printf.h"
 
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+#include "wolfhsm/wh_error.h"
+#include "wolfhsm/wh_client.h"
+#include "port/posix/posix_transport_tcp.h"
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+
 /* Global pointer to the internal and external flash base */
 uint8_t *sim_ram_base;
 static uint8_t *flash_base;
@@ -56,6 +62,42 @@ uint32_t erasefail_address = 0xFFFFFFFF;
  * application */
 char **main_argv;
 int main_argc;
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+
+/* Client configuration/contexts */
+static whTransportClientCb            pttccb[1]      = {PTT_CLIENT_CB};
+static posixTransportTcpClientContext tcc[1]         = {};
+static posixTransportTcpConfig        mytcpconfig[1] = {{
+           .server_ip_string = "127.0.0.1",
+           .server_port      = 23456,
+}};
+
+static whCommClientConfig cc_conf[1] = {{
+    .transport_cb      = pttccb,
+    .transport_context = (void*)tcc,
+    .transport_config  = (void*)mytcpconfig,
+    .client_id         = 12,
+}};
+static whClientConfig     c_conf[1]  = {{
+         .comm = cc_conf,
+}};
+
+/* Globally exported HAL symbols */
+whClientContext hsmClientCtx         = {0};
+const int       hsmClientDevIdHash   = WH_DEV_ID;
+const int       hsmClientDevIdPubKey = WH_DEV_ID;
+const int       hsmClientKeyIdPubKey = 0xFF;
+#ifdef EXT_ENCRYPT
+#error "Simulator does not support firmware encryption with wolfHSM(yet)"
+const int       hsmClientDevIdCrypt = WH_DEV_ID;
+const int       hsmClientKeyIdCrypt = 0xFF;
+#endif
+
+int hal_hsm_init_connect(void);
+int hal_hsm_disconnect(void);
+
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
 static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 {
@@ -314,3 +356,46 @@ int wolfBoot_dualboot_candidate(void)
 {
     return 0;
 }
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+
+
+int hal_hsm_init_connect(void)
+{
+    int rc = 0;
+
+    rc = wh_Client_Init(&hsmClientCtx, c_conf);
+    if (rc != WH_ERROR_OK) {
+        fprintf(stderr, "Failed to initialize HSM client\n");
+        exit(-1);
+    }
+
+    rc = wh_Client_CommInit(&hsmClientCtx, NULL, NULL);
+    if (rc != WH_ERROR_OK) {
+        fprintf(stderr, "Failed to initialize HSM client communication\n");
+        exit(-1);
+    }
+
+    return rc;
+}
+
+
+int hal_hsm_disconnect(void)
+{
+    int rc = 0;
+
+    rc = wh_Client_CommClose(&hsmClientCtx);
+    if (rc != WH_ERROR_OK) {
+        fprintf(stderr, "Failed to close HSM client connection\n");
+        exit(-1);
+    }
+
+    rc = wh_Client_Cleanup(&hsmClientCtx);
+    if (rc != WH_ERROR_OK) {
+        fprintf(stderr, "Failed to cleanup HSM client\n");
+        exit(-1);
+    }
+    return rc;
+}
+
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */

@@ -1,5 +1,8 @@
 ## CPU Architecture selection via $ARCH
 
+# Global reference to lib directory that works with relative paths
+LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
+
 # check for math library
 ifeq ($(SPMATH),1)
   # SP Math
@@ -1038,6 +1041,9 @@ ifeq ($(TARGET),sim)
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
     CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+  endif
+  ifeq ($(WOLFHSM_CLIENT),1)
+	  WOLFHSM_CLIENT_OBJS += $(LIBDIR)/wolfHSM/port/posix/posix_transport_tcp.o
   endif
 endif
 

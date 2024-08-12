@@ -1,12 +1,32 @@
-# Overview
+# WolfBoot on Infineon AURIX TC3xx
 
 This example demonstrates using wolfBoot on the Infineon AURIX TC3xx family of microcontrollers. The example is based on the TC375 Lite-Kit V2, but should be easily adaptable to other TC3xx devices. This README assumes basic familiarity with the TC375 SoC, the AURIX IDE, and Lauterbach Trace32 debugger.
+
+## Overview
+
+- [WolfBoot on Infineon AURIX TC3xx](#wolfboot-on-infineon-aurix-tc3xx)
+  - [Overview](#overview)
+  - [Important notes](#important-notes)
+  - [Flash Partitioning](#flash-partitioning)
+  - [Building and running the wolfBoot demo](#building-and-running-the-wolfboot-demo)
+    - [Prerequisites](#prerequisites)
+    - [Clone wolfBoot](#clone-wolfboot)
+    - [Build wolfBoot keytools and generate keys](#build-wolfboot-keytools-and-generate-keys)
+    - [Install the Infineon TC3xx SDK into the wolfBoot project](#install-the-infineon-tc3xx-sdk-into-the-wolfboot-project)
+    - [Build wolfBoot](#build-wolfboot)
+    - [Connect the Lauterbach to the TC375 Device in TRACE32](#connect-the-lauterbach-to-the-tc375-device-in-trace32)
+    - [Update the start address in UCBs using TRACE32](#update-the-start-address-in-ucbs-using-trace32)
+    - [Load and run the wolfBoot demo in TRACE32](#load-and-run-the-wolfboot-demo-in-trace32)
+  - [wolfHSM Compatibility](#wolfhsm-compatibility)
+    - [Building wolfBoot with wolfHSM](#building-wolfboot-with-wolfhsm)
+  - [Troubleshooting](#troubleshooting)
+    - [WSL "bad interpreter" error](#wsl-bad-interpreter-error)
 
 The example contains two projects: `wolfBoot-tc3xx` and `test-app`. The `wolfBoot-tc3xx` project contains the wolfBoot bootloader, and the `test-app` project contains a simple firmware application that will be loaded and executed by wolfBoot. The `test-app` project is a simple blinky application that blinks LED2 on the TC375 Lite-Kit V2 once per second when running the base image, and rapidly (~3x/sec) when running the update image. The test app determines if it is a base or update image by inspecting the firmware version (obtained through the wolfBoot API). The firmware version is set in the image header by the wolfBoot keytools when signing the test app binaries. The same test app binary is used for both the base and update images, with the only difference being the firmware version set by the keytools.
 
 ## Important notes
 
-- In the TC375 UCBs, BMDHx.STAD must point to the wolfBoot entrypoint `0xA000_0000`. This is the default value of the TC375 and so need not be changed unless it has already been modified or you wish to rearrange the memory map.
+- In the TC375 UCBs, BMDHx.STAD must point to the wolfBoot entrypoint `0xA00A_0000`. You can modify this in the `UCB` section of the TRACE32 IDE as described in the steps later in this document. Please refer to the TRACE32 manual and the TC37xx user manual for more information on the UCBs.
 - Because TC3xx PFLASH ECC prevents reading from erased flash, the `EXT_FLASH` option is used to redirect flash reads to the `ext_flash_read()` HAL API, where the flash pages requested to be read can be blank-checked by hardware before reading.
 - TC3xx PFLASH is write-once (`NVM_FLASH_WRITEONCE`), however wolfBoot `NVM_FLASH_WRITEONCE` does not support `EXT_FLASH`. Therefore the write-once functionality is re-implemented in the `HAL` layer.
 - This demo app is only compatible with the GCC toolchain build configurations shipped with the AURIX IDE. The TASKING compiler build configurations are not yet supported.
@@ -18,20 +38,22 @@ The TC3xx AURIX port of wolfBoot places all images in PFLASH, and uses both PFLA
 ```
 +==========+
 | PFLASH0  |
-+==========+ <-- 0x8000_0000
-| wolfBoot |        128K
-+----------+ <-- 0x8002_0000
-| SWAP     |        16K
-+----------+ <-- 0x8002_4000
-| Unused   |        ~2.86M
++----------+ <-- 0x8000_0000
+| Unused   |        640K
++==========+ <-- 0x800A_0000
+| wolfBoot |        172K
++----------+ <-- 0x8002_B000
+| Unused   |       ~2.8M
 +----------+ <-- 0x8030_0000
 
 +==========+
 | PFLASH1  |
 +==========+ <-- 0x8030_0000
-| BOOT     |        1.5M
-+----------+ <-- 0x8048_0000
-| UPDATE   |        1.5M
+| BOOT     |        1.5M (0x17E000)
++----------+ <-- 0x8047_E000
+| UPDATE   |        1.5M (0x17E000)
++----------+ <-- 0x805F_C000
+| SWAP     |        16K (0x4000)
 +----------+ <-- 0x8060_0000
 ```
 
@@ -54,20 +76,19 @@ Please refer to the [wolfBoot](wolfBoot-tc3xx/Lcf_Gnu_Tricore_Tc.lsl) and [test-
 
 1. Open a WSL2 terminal and navigate to the top level `wolfBoot` directory
 2. Compile the keytools by running `make keytools`
-3. Use the helper script to generate a new signing key pair using RSA 4096
+3. Use the helper script to generate a new signing key pair using ECC 256
     1. Navigate to `wolfBoot/tools/scripts/tc3xx`
     2. Run `./gen-tc3xx-keys.sh`. This generates the signing private key `wolfBoot/priv.der` and adds the public key to the wolfBoot keystore (see [keygen](https://github.com/wolfSSL/wolfBoot/blob/aurix-tc3xx-support/docs/Signing.md) for more information). If you already have generated a key, you will be prompted to overwrite it.
 
 ```
 $ ./gen-tc3xx-keys.sh
 + cd ../../../
-+ ./tools/keytools/keygen -g priv.der --rsa4096
-Keytype: RSA4096
-Generating key (type: RSA4096)
-RSA public key len: 550 bytes
++ tools/keytools/keygen --ecc256 -g priv.der
+Keytype: ECC256
+Generating key (type: ECC256)
 Associated key file:   priv.der
 Partition ids mask:   ffffffff
-Key type   :           RSA4096
+Key type   :           ECC256
 Public key slot:       0
 Done.
 ```
@@ -125,45 +146,62 @@ wolfBoot/IDE/AURIX/Configurations/
 
 ```
 $ ./gen-tc3xx-signed-test-apps-release.sh
-+ ../../keytools/sign --rsa4096 --sha256 '../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin' ../../../priv.der 1
++ ../../keytools/sign --ecc256 --sha256 '../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin' ../../../priv.der 1
 wolfBoot KeyTools (Compiled C version)
-wolfBoot version 2010000
+wolfBoot version 2020000
 Update type:          Firmware
 Input image:          ../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin
-Selected cipher:      RSA4096
+Selected cipher:      ECC256
 Selected hash  :      SHA256
 Public key:           ../../../priv.der
 Output  image:        ../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app_v1_signed.bin
 Target partition id : 1
-Found RSA512 key
-image header size calculated at runtime (1024 bytes)
+image header size calculated at runtime (256 bytes)
 Calculating SHA256 digest...
 Signing the digest...
 Output image(s) successfully created.
-+ ../../keytools/sign --rsa4096 --sha256 '../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin' ../../../priv.der 2
++ ../../keytools/sign --ecc256 --sha256 '../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin' ../../../priv.der 2
 wolfBoot KeyTools (Compiled C version)
-wolfBoot version 2010000
+wolfBoot version 2020000
 Update type:          Firmware
 Input image:          ../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin
-Selected cipher:      RSA4096
+Selected cipher:      ECC256
 Selected hash  :      SHA256
 Public key:           ../../../priv.der
 Output  image:        ../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app_v2_signed.bin
 Target partition id : 1
-Found RSA512 key
-image header size calculated at runtime (1024 bytes)
+image header size calculated at runtime (256 bytes)
 Calculating SHA256 digest...
 Signing the digest...
 Output image(s) successfully created.
 ```
 
-### Load and run the wolfBoot demo
+### Connect the Lauterbach to the TC375 Device in TRACE32
 
-1. Load wolfBoot and the firmware application images to the tc3xx device using Trace32 and a Lauterbach probe
-    1. Ensure the Lauterbach probe is connected to the debug port of the tc375 LiteKit
-    2. Open Trace32 Power View for Tricore
-    3. Open the SYStem menu and click "DETECT" to detect the tc375 device. Click "CONTINUE" in the pop-up window, and then choose "Set TC375xx" when the device is detected
-    4. Click "File" -> "ChangeDir and Run Script" and choose the `wolfBoot/tools/scripts/tc3xx/wolfBoot-loadAll-$BUILD.cmm` script, where $BUILD should be either "debug" or "release" depending on your build type in (4) and (6).
+1. Ensure the Lauterbach probe is connected to the debug port of the tc375 LiteKit
+2. Open Trace32 Power View for Tricore
+3. Open the SYStem menu and click "DETECT" to detect the tc375 device. Click "CONTINUE" in the pop-up window, and then choose "Set TC375xx" when the device is detected
+
+### Update the start address in UCBs using TRACE32
+
+The default Boot Mode Header (BMHD) start address on a new TC375 `0xA0000000` but the wolfBoot application has a start address of `0xA00A0000`. We must therefore update the BMHD UCBs with the correct entry point such that it can boot wolfBoot out of reset.
+
+1. Select the TC37x dropdown menu and click UCBs
+2. Expand `BMHD0_COPY`
+3. Click "Edit"
+4. Set the `STAD` to `0xA00A0000`
+5. Click "Update" to recompute the CRC
+6. Click "Check" to verify the new CRC
+7. Click "Write" to update the UCB in flash
+8. Perform the same operations (2-7) on the `BMHD0_ORIG` UCB
+
+The device is now configured to boot from `0xA00A0000` out of reset.
+
+### Load and run the wolfBoot demo in TRACE32
+
+We can now load wolfBoot and the firmware application images to the tc3xx device using Trace32 and a Lauterbach probe
+
+1. Click "File" -> "ChangeDir and Run Script" and choose the `wolfBoot/tools/scripts/tc3xx/wolfBoot-loadAll-$BUILD.cmm` script, where $BUILD should be either "debug" or "release" depending on your build type in (4) and (6).
 
 wolfBoot and the demo applications are now loaded into flash, and core0 will be halted at the wolfBoot entry point (`core0_main()`).
 
@@ -173,15 +211,45 @@ wolfBoot and the demo applications are now loaded into flash, and core0 will be 
 
 To rerun the demo, simply rerun the loader script in Trace32 and repeat the above steps
 
+## wolfHSM Compatibility
+
+wolfBoot has full support for wolfHSM on the AURIX TC3xx platform. The wolfBoot application functions as the HSM client, and all cryptographic operations required to verify application images are offloaded to the HSM. When used in tandem with wolfHSM, wolfBoot can be configured to use keys stored on the HSM for cryptographic operations, or to store keys in the default keystore and send them on-demand to the HSM for usage. The former option is the default configuration, and is recommended for most use cases, as key material will never leave the secure boundary of the HSM. The latter option is useful for development and testing, before keys have been preloaded onto the HSM.
+
+Note that information regarding the AURIX TC3xx HSM core is restricted by NDA with Infineon. Source code for the wolfHSM TC3xx platform port is therefore not publicly available and cannot be included for distribution in wolfBoot. Instructions to build wolfBoot with wolfHSM compatibility are provided here, but the wolfHSM TC3xx port must be obtained separately from wolfSSL. To obtain the wolfHSM TC3xx port, please contact wolfSSL at [facts@wolfssl.com](mailto:facts@wolfssl.com).
+
+### Building wolfBoot with wolfHSM
+
+Steps to build wolfBoot on TC3xx with wolfHSM are largely similar to the non-HSM case, with a few key differences.
+
+1. Obtain the wolfHSM release for the AURIX TC3xx from wolfSSL
+2. Extract the contents of the `infineon/tc3xx` directory from the wolfHSM TC3xx release you obtained from wolfSSL into the [wolfBoot/IDE/AURIX/wolfHSM-infineon-tc3xx](./wolfHSM-infineon-tc3xx/) directory. The contents of this directory should now be:
+
+```
+IDE/AURIX/wolfHSM-infineon-tc3xx/
+├── README.md
+├── T32
+├── placeholder.txt
+├── port
+├── tchsm-client
+├── tchsm-server
+├── wolfHSM
+└── wolfssl
+```
+
+3. Build the wolfHSM server application and load it onto the HSM core, following the instructions provided in the release you obtained from wolfSSL. You do not need to build or load the demo client application,  as wolfBoot will act as the client.
+4. Follow all of the steps in [Building and Running the wolfBoot Demo](#building-and-running-the-wolfboot-demo) for the non-HSM enabled case, but with the following key differences:
+   1. The [wolfBoot-tc3xx-wolfHSM](./wolfBoot-tc3xx-wolfHSM/) AURIX Studio project should be used instead of `wolfBoot-tc3xx`
+   2. Use the `wolfBoot-wolfHSM-loadAll-XXX.cmm` lauterbach scripts instead of `wolfBoot-loadAll-XXX.cmm` to load the wolfBoot and test-app images in the TRACE32 GUI
+5. If using the default build options in [wolfBoot-tc3xx-wolfHSM](./wolfBoot-tc3xx-wolfHSM/), wolfBoot will expect the public key for image verification to be stored at a specific keyId for the wolfBoot client ID. You can use [whnvmtool](https://github.com/wolfSSL/wolfHSM/tree/main/tools/whnvmtool) to generate a loadable NVM image that contains the required keys. [wolfBoot-wolfHSM-keys.nvminit](../../tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit) provides an example `whnvmtool` config file that will include the generated key in the NVM image, which can then be loaded to the device via a flash programming tool. See the `whnvmtool` documentation and the documentation included in your wolfHSM AURIX release for more details. Note: if you want to use the standard wolfBoot keystore functionality in conjunction with wolfHSM for testing purposes (doesn't require pre-loading keys on the HSM) you can configure wolfBoot to send the keys to the HSM on-the-fly as ephemeral keys. To do this, ensure `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID` is **NOT** defined, and remove the `--nolocalkeys` argument when invoking `keygen` in the `./gen-tc3xx-keys.sh` script.
 
 ## Troubleshooting
 
-### WSL "bad interpreter" error 
+### WSL "bad interpreter" error
 
 When running a shell script in WSL, you may see the following error:
 
 ```
-$ ./gen-tc3xx-target.sh: 
+$ ./gen-tc3xx-target.sh:
 /bin/bash^M: bad interpreter: No such file or directory
 ```
 

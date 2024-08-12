@@ -326,6 +326,11 @@ backup_on_failure:
 #endif /* MMU */
 
     wolfBoot_printf("Booting at %p\n", load_address);
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    (void)hal_hsm_disconnect();
+#endif
+
     hal_prepare_boot();
 
 #ifdef MMU

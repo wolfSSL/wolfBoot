@@ -189,23 +189,30 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, verify_res = 0;
-    uint8_t *pubkey = keystore_get_buffer(key_slot);
-    int pubkey_sz = keystore_get_size(key_slot);
-    int point_sz = pubkey_sz/2;
     ecc_key ecc;
-    mp_int r, s;
+    mp_int  r, s;
+#if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
+    (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
+     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
+    uint8_t* pubkey    = keystore_get_buffer(key_slot);
+    int      pubkey_sz = keystore_get_size(key_slot);
+    int      point_sz  = pubkey_sz / 2;
 
     if (pubkey == NULL || pubkey_sz <= 0) {
         return;
     }
+#endif
 
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
     defined(WOLFBOOT_RENESAS_TSIP) || \
     defined(WOLFBOOT_RENESAS_RSIP)
     ret = wc_ecc_init_ex(&ecc, NULL, RENESAS_DEVID);
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+    ret = wc_ecc_init_ex(&ecc, NULL, hsmClientDevIdPubKey);
 #else
     ret = wc_ecc_init(&ecc);
 #endif
+
     if (ret == 0) {
     #if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
         defined(WOLFBOOT_RENESAS_TSIP) || \
@@ -221,6 +228,49 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         VERIFY_FN(img, &verify_res, wc_ecc_verify_hash,
             sig, ECC_IMAGE_SIGNATURE_SIZE,
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc)
+
+    #elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+
+        uint8_t tmpSigBuf[ECC_MAX_SIG_SIZE] = {0};
+        size_t  tmpSigSz                    = sizeof(tmpSigBuf);
+
+    #if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+        /* hardcoded, since not using keystore */
+        const int point_sz = ECC_IMAGE_SIGNATURE_SIZE / 2;
+
+        /* Use the public key ID to verify the signature */
+        ret = wh_Client_EccSetKeyId(&ecc, hsmClientKeyIdPubKey);
+        if (ret != 0) {
+            return;
+        }
+    #else
+        /* First, import public key from the keystore to the local wolfCrypt
+         * struct, then import into wolfHSM key cache for subsequent
+         * verification */
+        ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
+                                     ECC_KEY_TYPE);
+        if (ret != 0) {
+            return;
+        }
+
+    #endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+        /* wc_ecc_verify_hash_ex() doesn't trigger a crypto callback, so we need
+           to use wc_ecc_verify_hash instead. Unfortunately, that requires
+           converting the signature to intermediate DER format first */
+        mp_init(&r);
+        mp_init(&s);
+        mp_read_unsigned_bin(&r, sig, point_sz);
+        mp_read_unsigned_bin(&s, sig + point_sz, point_sz);
+        uint32_t rSz = mp_unsigned_bin_size(&r);
+        uint32_t sSz = mp_unsigned_bin_size(&s);
+        ret          = wc_ecc_rs_raw_to_sig(sig, rSz, &sig[point_sz], sSz,
+                                            (byte*)&tmpSigBuf, (word32*)&tmpSigSz);
+        /* Verify the (temporary) DER representation of the signature */
+        if (ret == 0) {
+            VERIFY_FN(img, &verify_res, wc_ecc_verify_hash, tmpSigBuf, tmpSigSz,
+                      img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res,
+                      &ecc);
+        }
     #else
         /* Import public key */
         ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
@@ -312,14 +362,19 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
     int ret;
     uint8_t output[RSA_IMAGE_SIGNATURE_SIZE];
     uint8_t* digest_out = NULL;
-    uint8_t *pubkey = keystore_get_buffer(key_slot);
-    int pubkey_sz = keystore_get_size(key_slot);
     word32 inOutIdx = 0;
     struct RsaKey rsa;
+
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) &&  \
+        !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
+    uint8_t *pubkey = keystore_get_buffer(key_slot);
+    int pubkey_sz = keystore_get_size(key_slot);
 
     if (pubkey == NULL || pubkey_sz < 0) {
         return;
     }
+#endif
 
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
     defined(WOLFBOOT_RENESAS_TSIP) || \
@@ -335,6 +390,40 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
             wolfBoot_image_confirm_signature_ok(img);
     }
     (void)digest_out;
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+    ret = wc_InitRsaKey_ex(&rsa, NULL, hsmClientDevIdPubKey);
+    if (ret != 0) {
+        return;
+    }
+#if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+    /* public key is stored on server at hsmClientKeyIdPubKey*/
+    ret = wh_Client_RsaSetKeyId(&rsa, hsmClientKeyIdPubKey);
+    if (ret != 0) {
+        return;
+    }
+#else
+    whKeyId hsmKeyId = WH_KEYID_ERASED;
+    /* Cache the public key on the server */
+    ret = wh_Client_KeyCache(&hsmClientCtx, 0, NULL, 0, pubkey, pubkey_sz,
+                             &hsmKeyId);
+    if (ret != WH_ERROR_OK) {
+        return;
+    }
+    /* Associate this RSA struct with the keyId of the cached key */
+    ret = wh_Client_RsaSetKeyId(&rsa, hsmKeyId);
+    if (ret != WH_ERROR_OK) {
+        return;
+    }
+#endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+    XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
+    RSA_VERIFY_FN(ret, wc_RsaSSL_VerifyInline, output, RSA_IMAGE_SIGNATURE_SIZE,
+                  &digest_out, &rsa);
+#if !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+    /* evict the key after use, since we aren't using the RSA import API */
+    if (WH_ERROR_OK != wh_Client_KeyEvict(&hsmClientCtx, hsmKeyId)) {
+        return;
+    }
+#endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
 #else
     /* wolfCrypt software RSA verify */
     ret = wc_InitRsaKey(&rsa, NULL);
@@ -727,7 +816,11 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    (void)wc_InitSha256_ex(&sha256_ctx, NULL, hsmClientDevIdHash);
+#else
     wc_InitSha256(&sha256_ctx);
+#endif
     end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
     while (p < end_sha) {
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
@@ -1213,6 +1306,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
          * TSIP encrypted key is installed at
          *    RENESAS_TSIP_INSTALLEDKEY_ADDR
          */
+        key_slot = 0;
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+        /* Don't care about the key slot, we are using a fixed wolfHSM keyId */
         key_slot = 0;
 #else
         key_slot = keyslot_id_by_sha(pubkey_hint);

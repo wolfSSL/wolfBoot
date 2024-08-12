@@ -119,7 +119,9 @@ static int saveAsDer = 1; /* For Renesas PKA default to save as DER/ASN.1 */
 #else
 static int saveAsDer = 0;
 #endif
+static int exportPubKey = 0;
 static WC_RNG rng;
+static int noLocalKeys = 0;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
     #if defined(KEYSTORE_PUBKEY_SIZE_ML_DSA)
@@ -279,7 +281,7 @@ static void usage(const char *pname) /* implies exit */
     printf("Usage: %s [--ed25519 | --ed448 | --ecc256 | --ecc384 "
            "| --ecc521 | --rsa2048 | --rsa3072 | --rsa4096 ] "
            "[-g privkey] [-i pubkey] [-keystoreDir dir] "
-           "[--id {list}] [--der]\n", pname);
+           "[--id {list}] [--der] [--exportpubkey] [--nolocalkeys]\n", pname);
     exit(125);
 }
 
@@ -356,6 +358,66 @@ static int generated_keypairs_type[MAX_KEYPAIRS];
 static uint32_t generated_keypairs_id_mask[MAX_KEYPAIRS];
 static int n_generated = 0;
 
+static char *append_pub_to_fname(const char *filename) {
+    const char pubSuffix[] = "_pub";
+    const size_t pubSuffixLength = strlen(pubSuffix);
+
+    const char *dotPosition = strchr(filename, '.');
+
+    size_t prefixLength;
+    if (dotPosition != NULL) {
+        prefixLength = dotPosition - filename;
+    } else {
+        prefixLength = strlen(filename);
+    }
+
+    size_t newFilenameLength = prefixLength + pubSuffixLength + (dotPosition ? strlen(dotPosition) : 0) + 1;
+
+    char *newFilename = (char *)malloc(newFilenameLength);
+    if (newFilename == NULL) {
+        return NULL;
+    }
+
+    /* Copy the prefix (part before the period) */
+    memcpy(newFilename, filename, prefixLength);
+
+    /* Append the suffix */
+    memcpy(newFilename + prefixLength, pubSuffix, pubSuffixLength);
+
+    /* Append the rest of the original filename if a period was found */
+    if (dotPosition != NULL) {
+        strcpy(newFilename + prefixLength + pubSuffixLength, dotPosition);
+    } else {
+        newFilename[prefixLength + pubSuffixLength] = '\0'; /* Null-terminate the string if no period */
+    }
+
+    return newFilename;
+}
+
+static int export_pubkey_file(const char *prvKeyFile, uint8_t *pubDer, size_t pubLen)
+{
+    FILE *fpub;
+    char *fname;
+
+    fname = append_pub_to_fname(prvKeyFile);
+    if (fname == NULL) {
+        return -1;
+    }
+
+    fpub = fopen(fname, "wb");
+    if (fpub == NULL) {
+        fprintf(stderr, "Unable to open file '%s' for writing: %s",
+                fname, strerror(errno));
+        free(fname);
+        return -1;
+    }
+    fwrite(pubDer, pubLen, 1, fpub);
+    fclose(fpub);
+    free(fname);
+
+    return 0;
+}
+
 static uint32_t get_pubkey_size(uint32_t keyType)
 {
     uint32_t size = 0;
@@ -408,13 +470,25 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     size_t slot_size;
 
     fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], id_mask, sz);
-    fwritekey(key, sz, fpub);
+    if (noLocalKeys) {
+        /* If noLocalKeys is set by caller, we should write a zero key to the
+         * keystore array, as the key material should not be local to the device
+         */
+        uint8_t *zero_key = calloc(sz, sizeof(uint8_t));
+        fwritekey(zero_key, sz, fpub);
+        free(zero_key);
+    } else {
+        fwritekey(key, sz, fpub);
+    }
     fprintf(fpub, Pubkey_footer);
     fprintf(fpub, Slot_footer);
     printf("Associated key file:   %s\n", keyfile);
     printf("Partition ids mask:   %08x\n", id_mask);
     printf("Key type   :           %s\n", KName[ktype]);
     printf("Public key slot:       %u\n", id_slot);
+    if (noLocalKeys) {
+        printf("WARNING: --nolocalkeys flag used, keystore.c public key is zeroed\n");
+    }
 
     memset(&sl, 0, sizeof(sl));
     sl.slot_id = id_slot;
@@ -481,6 +555,13 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
     fwrite(priv_der, privlen, 1, fpriv);
     fclose(fpriv);
 
+    if (exportPubKey) {
+        if (export_pubkey_file(keyfile, pub_der, publen) != 0) {
+            fprintf(stderr, "Unable to export public key to file\n");
+            exit(5);
+        }
+    }
+
     if (kbits == 2048)
         keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile, id_mask);
     else if (kbits == 3072)
@@ -534,8 +615,6 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         exit(3);
     }
 
-    wc_ecc_free(&k);
-
     fpriv = fopen(priv_fname, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", priv_fname,
@@ -554,6 +633,37 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         fwrite(d, dsize, 1, fpriv);
     }
     fclose(fpriv);
+
+    if (exportPubKey) {
+        int pubOutLen;
+        /* Reuse priv_der buffer for public key */
+        memset(priv_der, 0, sizeof(priv_der));
+
+        if (saveAsDer) {
+            /* If you want public key also exported as a DER file and not as RAW
+             * point. Note that this is the expected format if loading the public
+             * key into wolfHSM */
+            pubOutLen = ret =
+                wc_EccPublicKeyToDer(&k, priv_der, (word32)sizeof(priv_der), 1);
+        }
+        else {
+            memcpy(priv_der, Qx, qxsize);
+            memcpy(priv_der + qxsize, Qy, qysize);
+            pubOutLen = qxsize + qysize;
+        }
+        if (ret < 0) {
+            fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
+                    ret);
+            exit(4);
+        }
+        if (export_pubkey_file(priv_fname, priv_der, pubOutLen) != 0) {
+            fprintf(stderr, "Unable to export public key to file\n");
+            exit(4);
+        }
+        ret = 0;
+    }
+
+    wc_ecc_free(&k);
 
     memcpy(k_buffer,                Qx, ecc_key_size);
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
@@ -595,6 +705,14 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
+
+    if (exportPubKey) {
+        if (export_pubkey_file(privkey, pub, ED25519_PUB_KEY_SIZE) != 0) {
+            fprintf(stderr, "Unable to export public key to file\n");
+            exit(4);
+        }
+    }
+
     keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
 }
 #endif
@@ -626,6 +744,14 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
     fclose(fpriv);
+
+    if (exportPubKey) {
+        if (export_pubkey_file(privkey, pub, ED448_PUB_KEY_SIZE) != 0) {
+            fprintf(stderr, "Unable to export public key to file\n");
+            exit(4);
+        }
+    }
+
     keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
 }
 #endif
@@ -705,6 +831,13 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     fseek(fpriv, 64, SEEK_SET);
     fwrite(lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, 1, fpriv);
     fclose(fpriv);
+
+    if (exportPubKey) {
+        if (export_pubkey_file(priv_fname, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS) != 0) {
+            fprintf(stderr, "Unable to export public key to file\n");
+            exit(1);
+        }
+    }
 
     keystore_add(KEYGEN_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
@@ -795,6 +928,14 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     fseek(fpriv, priv_sz, SEEK_SET);
     fwrite(xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, 1, fpriv);
     fclose(fpriv);
+
+    if (exportPubKey) {
+        if (export_pubkey_file(priv_fname, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS) != 0) {
+            fprintf(stderr, "Unable to export public key to file\n");
+            exit(1);
+        }
+    }
+
 
     keystore_add(KEYGEN_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
 
@@ -1172,6 +1313,9 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--der") == 0) {
             saveAsDer = 1;
         }
+        else if (strcmp(argv[i], "--nolocalkeys") == 0) {
+            noLocalKeys = 1;
+        }
         else if (strcmp(argv[i], "-g") == 0) {
             key_gen_check(argv[i + 1]);
             i++;
@@ -1180,6 +1324,11 @@ int main(int argc, char** argv)
             generated_keypairs_type[n_generated] = keytype;
             generated_keypairs_id_mask[n_generated] = part_id_mask;
             n_generated++;
+            continue;
+        }
+        else if (strcmp(argv[i], "--exportpubkey") == 0) {
+            key_gen_check(argv[i + 1]);
+            exportPubKey = 1;
             continue;
         }
         else if (strcmp(argv[i], "-i") == 0) {
