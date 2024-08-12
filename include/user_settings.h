@@ -22,7 +22,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-
 #ifndef _WOLFBOOT_USER_SETTINGS_H_
 #define _WOLFBOOT_USER_SETTINGS_H_
 
@@ -118,8 +117,10 @@ extern int tolower(int c);
 #       if !defined(WOLFBOOT_TPM)
 #          define NO_ECC_SIGN
 #          define NO_ECC_DHE
-#          define NO_ECC_EXPORT
-#          define NO_ECC_KEY_EXPORT
+#          if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+#              define NO_ECC_EXPORT
+#              define NO_ECC_KEY_EXPORT
+#          endif
 #       else
 #           define HAVE_ECC_KEY_EXPORT
 #       endif
@@ -334,7 +335,8 @@ extern int tolower(int c);
 #   define NO_PWDBASED
 #endif
 
-#if defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)
+#if (defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)) || \
+    defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
 #   define WOLFSSL_BASE64_ENCODE
 #else
 #   define NO_CODING
@@ -407,9 +409,11 @@ extern int tolower(int c);
 #   define WC_NO_RNG
 #   define WC_NO_HASHDRBG
 #   define NO_DEV_RANDOM
-#   define NO_ECC_KEY_EXPORT
-#   if defined(NO_RSA)
+#   if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+#     define NO_ECC_KEY_EXPORT
+#     if defined(NO_RSA)
 #       define NO_ASN
+#     endif
 #   endif
 #endif
 
@@ -515,5 +519,11 @@ extern int tolower(int c);
 #ifndef XTOLOWER
 #define XTOLOWER(x) (x)
 #endif
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+#define WOLF_CRYPTO_CB
+#define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
+#define WOLFSSL_KEY_GEN
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */
