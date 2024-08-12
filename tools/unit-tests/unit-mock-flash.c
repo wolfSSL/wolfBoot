@@ -97,6 +97,7 @@ int hal_flash_erase(haladdr_t address, int len)
         memset(address, 0xFF, len);
 #ifdef MOCK_KEYVAULT
     } else if ((address >= vault_base) && (address < vault_base + keyvault_size)) {
+        printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
         memset(address, 0xFF, len);
 #endif

@@ -43,6 +43,7 @@
 #else
     #define WOLFBOOT_PARTITION_SIZE              0x8000
 #endif
+    #define WOLFBOOT_KEYVAULT                    0xCF000000
 #else
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS

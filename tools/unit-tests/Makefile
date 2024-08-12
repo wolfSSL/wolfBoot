@@ -13,13 +13,14 @@ CFLAGS+=--coverage
 LDFLAGS+=-fprofile-arcs
 LDFLAGS+=-ftest-coverage
 WOLFCRYPT=../../lib/wolfssl/
+WOLFPKCS11=../../lib/wolfPKCS11/
 
 
 
 TESTS:=unit-parser unit-extflash unit-aes128 unit-aes256 unit-chacha20 unit-pci \
 	   unit-mock-state unit-sectorflags unit-image unit-nvm unit-nvm-flagshome \
 	   unit-enc-nvm unit-enc-nvm-flagshome unit-delta unit-update-flash \
-	   unit-update-ram
+	   unit-update-ram unit-pkcs11_store
 
 all: $(TESTS)
 
@@ -62,6 +63,7 @@ unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH 
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP
+unit-pkcs11_store:CFLAGS+=-I$(WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11
 
 
 
@@ -123,6 +125,9 @@ unit-update-flash: ../../include/target.h unit-update-flash.c
 
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c ../../lib/wolfssl/wolfcrypt/src/sha256.c  $(CFLAGS) $(LDFLAGS)
+
+unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
