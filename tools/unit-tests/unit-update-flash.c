@@ -31,6 +31,8 @@
 #define TEST_SIZE_SMALL 5300
 #define TEST_SIZE_LARGE 9800
 
+#define NO_FORK 0 /* Set to 1 to disable fork mode (e.g. for gdb debugging) */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "wolfboot/wolfboot.h"
@@ -399,7 +401,9 @@ int main(int argc, char *argv[])
     argv0 = strdup(argv[0]);
     Suite *s = wolfboot_suite();
     SRunner *sr = srunner_create(s);
+#if (NO_FORK == 1)
     srunner_set_fork_status(sr, CK_NOFORK);
+#endif
     srunner_run_all(sr, CK_NORMAL);
     fails = srunner_ntests_failed(sr);
     srunner_free(sr);
