@@ -366,7 +366,8 @@ extern int tolower(int c);
 #   define WC_NO_HASHDRBG
 #   define NO_DEV_RANDOM
 #   define NO_ECC_KEY_EXPORT
-#   ifdef NO_RSA
+#   if defined(NO_RSA) && !defined(WOLFSSL_HAVE_XMSS) && \
+       !defined(WOLFSSL_HAVE_LMS)
 #       define NO_ASN
 #   endif
 #endif

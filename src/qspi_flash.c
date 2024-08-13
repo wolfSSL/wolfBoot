@@ -416,7 +416,8 @@ int spi_flash_read(uint32_t address, void *data, int len)
         ret, address, len, FLASH_READ_CMD);
 #endif
 
-    return ret;
+    /* external flash read expects length returned */
+    return (ret == 0) ? len : ret;
 }
 
 int spi_flash_write(uint32_t address, const void *data, int len)

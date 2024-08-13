@@ -351,7 +351,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 {
     int       ret = 0;
     LmsKey    lms;
-    word32    pub_len = 0;
     uint8_t * pubkey = NULL;
 
     wolfBoot_printf("info: LMS wolfBoot_verify_signature\n");
@@ -419,7 +418,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 {
     int       ret = 0;
     XmssKey   xmss;
-    word32    pub_len = 0;
     uint8_t * pubkey = NULL;
 
     wolfBoot_printf("info: XMSS wolfBoot_verify_signature\n");

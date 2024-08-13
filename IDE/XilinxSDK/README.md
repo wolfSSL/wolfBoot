@@ -23,7 +23,14 @@ You may need to adjust/add the following project settings under Properties -> C/
 
 ## wolfBoot Configuration
 
-A build settings template for Zynq UltraScale+ can be found here `./config/examples/zynqmp.config`. This file can be copied to wolfBoot root as `.config` for building from the command line. These template settings are also in this `.cproject` as preprocessor macros. These settings are loaded into the `target.h.in` template by the wolfBoot `make`. If not using the built-in make then the following defines will need to be manually created in `target.h`:
+A build settings template for Zynq UltraScale+ can be found here `./config/examples/zynqmp.config`. This file can be copied to wolfBoot root as `.config` for building from the command line.
+
+```sh
+$ cp ./config/examples/zynqmp.config .config
+$ make keytools
+```
+
+These template settings are also in this `.cproject` as preprocessor macros. These settings are loaded into the `target.h.in` template by the wolfBoot `make`. If not using the built-in make then the following defines will need to be manually created in `target.h`:
 
 ```
 #define WOLFBOOT_SECTOR_SIZE                 0x20000
@@ -40,10 +47,25 @@ A build settings template for Zynq UltraScale+ can be found here `./config/examp
 
 Note: If not using Position Independent Code (PIC) the linker script `ldscript.ld` must have the start address offset to match the `WOLFBOOT_LOAD_ADDRESS`.
 
+## Generate signing key
+
+The keygen tool creates an RSA 4096-bit private key (`wolfboot_signing_private_key.der`) and exports the public key to `src/keystore.c` for wolfBoot to use at compile-time as the default root-of-trust.
+
+```sh
+$ ./tools/keytools/keygen --rsa4096 -g wolfboot_signing_private_key.der
+Keytype: RSA4096
+Generating key (type: RSA4096)
+RSA public key len: 550 bytes
+Associated key file:   wolfboot_signing_private_key.der
+Partition ids mask:   ffffffff
+Key type   :           RSA4096
+Public key slot:       0
+Done.
+```
+
 ## Signing Example
 
 ```sh
-$ make keytools
 $ ./tools/keytools/sign --rsa4096 --sha3 ../hello_world/Debug/hello_world.elf ./wolfboot_signing_private_key.der 1
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 2020000
@@ -115,11 +137,24 @@ Read FlashID Upper: Ret 0, 20 BB 20
 Versions: Boot 1, Update 0
 Trying Boot partition at 800000
 Boot partition: 800000 (size 226024, version 0x1)
+info: LMS wolfBoot_verify_signature
+info: using LMS parameters: L2-H5-W8
+info: wc_LmsKey_Verify returned OK
+Successfully selected image in part: 0
 Firmware Valid
-Loading 226024 bytes to RAM at 10000000
+Loading flash image from 8014A8 to RAM at 10000000 (226024 bytes)
+Loading elf at 10000000
+Found valid elf64 (little endian)
+Program Headers 2 (size 56)
+Load 57536 bytes (offset 10000) to 0 (p 0)
+Clear 20600 bytes at 0 (p 0)
+Entry point 0
 DTB boot partition: 7B0000
 Failed parsing DTB to load
-Booting at 10000000
+Booting at 0
+Hello World
+
+Successfully ran Hello World application
 ```
 
 
@@ -156,11 +191,109 @@ Note: To generate a report of a boot.bin use the `bootgen_utility`:
 
 ## Post Quantum
 
-XMSS
+### PQ XMSS
+
+1) Add these build symbols to the Xilinx project:
+Note: Make sure and remove the existing `WOLFBOOT_SIGN_*`, `WOLFBOOT_HASH_*` and `IMAGE_HEADER_SIZE`
+
+```
+WOLFBOOT_SIGN_XMSS
+WOLFBOOT_HASH_SHA256
+WOLFSSL_HAVE_XMSS
+WOLFSSL_WC_XMSS
+WOLFSSL_WC_XMSS_SMALL
+WOLFBOOT_XMSS_PARAMS="'XMSS-SHA2_10_256'"
+WOLFSSL_XMSS_VERIFY_ONLY
+WOLFSSL_XMSS_MAX_HEIGHT=32
+WOLFBOOT_SHA_BLOCK_SIZE=4096
+IMAGE_SIGNATURE_SIZE=2500
+IMAGE_HEADER_SIZE=4096
+```
+
+2) Create and sign image:
 
 ```sh
-./tools/keytools/keygen --xmss -g wolfboot_signing_private_key.der
-./tools/keytools/sign --xmss test-app/image.bin wolfboot_signing_private_key.der 1
+$ ./tools/keytools/keygen --xmss -g wolfboot_signing_private_key.der
+Keytype: XMSS
+Generating key (type: XMSS)
+info: using XMSS parameters: XMSS-SHA2_10_256
+Associated key file:   wolfboot_signing_private_key.der
+Partition ids mask:   ffffffff
+Key type   :           XMSS
+Public key slot:       0
+Done.
+
+$ ./tools/keytools/sign --xmss ../hello_world/Debug/hello_world.elf wolfboot_signing_private_key.der 1
+wolfBoot KeyTools (Compiled C version)
+wolfBoot version 2020000
+Update type:          Firmware
+Input image:          ../hello_world/Debug/hello_world.elf
+Selected cipher:      XMSS
+Selected hash  :      SHA256
+Public key:           wolfboot_signing_private_key.der
+Output  image:        ../hello_world/Debug/hello_world_v1_signed.bin
+Target partition id : 1
+info: using XMSS parameters: XMSS-SHA2_10_256
+info: XMSS signature size: 2500
+info: xmss sk len: 1343
+info: xmss pk len: 68
+Found XMSS key
+image header size calculated at runtime (5000 bytes)
+Calculating SHA256 digest...
+Signing the digest...
+Output image(s) successfully created.
+```
+
+### PQ LMS
+
+1) Add these build symbols to the Xilinx project:
+Note: Make sure and remove the existing `WOLFBOOT_SIGN_*`, `WOLFBOOT_HASH_*` and `IMAGE_HEADER_SIZE`
+
+```
+WOLFBOOT_SIGN_LMS
+WOLFBOOT_HASH_SHA256
+WOLFSSL_HAVE_LMS
+WOLFSSL_WC_LMS
+WOLFSSL_WC_LMS_SMALL
+WOLFSSL_LMS_VERIFY_ONLY
+WOLFSSL_LMS_MAX_LEVELS=2
+WOLFSSL_LMS_MAX_HEIGHT=5
+LMS_LEVELS=2
+LMS_HEIGHT=5
+LMS_WINTERNITZ=8
+IMAGE_SIGNATURE_SIZE=2644
+IMAGE_HEADER_SIZE=5288
+```
+2) Create and sign image:
+
+```sh
+$ ./tools/keytools/keygen --lms -g wolfboot_signing_private_key.der
+Keytype: LMS
+Generating key (type: LMS)
+info: using LMS parameters: L2-H5-W8
+Associated key file:   wolfboot_signing_private_key.der
+Partition ids mask:   ffffffff
+Key type   :           LMS
+Public key slot:       0
+Done.
+
+$ ./tools/keytools/sign --lms ../hello_world/Debug/hello_world.elf wolfboot_signing_private_key.der 1
+wolfBoot KeyTools (Compiled C version)
+wolfBoot version 2020000
+Update type:          Firmware
+Input image:          ../hello_world/Debug/hello_world.elf
+Selected cipher:      LMS
+Selected hash  :      SHA256
+Public key:           wolfboot_signing_private_key.der
+Output  image:        ../hello_world/Debug/hello_world_v1_signed.bin
+Target partition id : 1
+info: using LMS parameters: L2-H5-W8
+info: LMS signature size: 2644
+Found LMS key
+image header size calculated at runtime (5288 bytes)
+Calculating SHA256 digest...
+Signing the digest...
+Output image(s) successfully created.
 ```
 
 

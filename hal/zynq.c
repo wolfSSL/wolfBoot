@@ -1301,7 +1301,7 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
     wolfBoot_printf("Flash Read: Ret %d\r\n", ret);
 #endif
 
-    return ret;
+    return (ret == 0) ? len : ret;
 }
 
 /* Issues a sector erase based on flash address */

@@ -378,7 +378,7 @@ ifeq ($(SIGN),LMS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with LMS not supported)
   else
-    STACK_USAGE=1024
+    STACK_USAGE=1296
   endif
 endif
 
@@ -447,7 +447,7 @@ ifeq ($(SIGN),XMSS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
   else
-    STACK_USAGE=2688
+    STACK_USAGE=2720
   endif
 endif
 

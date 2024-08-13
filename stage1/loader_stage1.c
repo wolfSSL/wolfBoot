@@ -22,6 +22,8 @@
 
 /* A stage 1 loader to copy wolfBoot from flash to RAM location */
 
+#ifdef BUILD_LOADER_STAGE1
+
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
@@ -40,8 +42,6 @@
 #ifndef WOLFBOOT_STAGE1_SIZE
     #define WOLFBOOT_STAGE1_SIZE (4*1024)
 #endif
-
-#ifdef BUILD_LOADER_STAGE1
 
 #ifdef WOLFBOOT_ARCH_PPC
 #include "hal/nxp_ppc.h"
