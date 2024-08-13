@@ -341,6 +341,78 @@ START_TEST (test_invalid_sha) {
     cleanup_flash();
 }
 
+START_TEST (test_emergency_rollback) {
+    uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
+    /* Set the testing flag in the last five bytes of the BOOT partition */
+    hal_flash_unlock();
+    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
+            testing_flags, 5);
+    hal_flash_lock();
+
+    wolfBoot_start();
+    fail_if(wolfBoot_panicked);
+    fail_unless(wolfBoot_staged_ok);
+    fail_if(wolfBoot_current_firmware_version() != 1);
+    cleanup_flash();
+}
+
+START_TEST (test_emergency_rollback_failure_due_to_bad_update) {
+    uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
+    uint8_t wrong_update_magic[4] = { 'G', 'O', 'L', 'F' };
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
+    /* Set the testing flag in the last five bytes of the BOOT partition */
+    hal_flash_unlock();
+    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
+            testing_flags, 5);
+    hal_flash_lock();
+
+    /* Corrupt the update */
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS, wrong_update_magic, 4);
+    ext_flash_lock();
+
+    wolfBoot_start();
+    fail_if(wolfBoot_panicked);
+    fail_unless(wolfBoot_staged_ok);
+    fail_if(wolfBoot_current_firmware_version() != 2);
+    cleanup_flash();
+}
+
+START_TEST (test_empty_boot_partition_update) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_UPDATE, 5, TEST_SIZE_SMALL);
+    wolfBoot_start();
+    fail_if(wolfBoot_panicked);
+    fail_unless(wolfBoot_staged_ok);
+    fail_if(wolfBoot_current_firmware_version() != 5);
+    cleanup_flash();
+}
+
+START_TEST (test_empty_boot_but_update_sha_corrupted_denied) {
+    uint8_t bad_digest[SHA256_DIGEST_SIZE];
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_UPDATE, 5, TEST_SIZE_SMALL);
+    memset(bad_digest, 0xBA, SHA256_DIGEST_SIZE);
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
+    ext_flash_lock();
+    wolfBoot_start();
+    /* We expect to panic */
+    fail_unless(wolfBoot_panicked);
+    fail_if(wolfBoot_staged_ok);
+    cleanup_flash();
+}
+
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
@@ -363,6 +435,10 @@ Suite *wolfboot_suite(void)
         tcase_create("Invalid update type");
     TCase *update_toolarge = tcase_create("Update too large");
     TCase *invalid_sha = tcase_create("Invalid SHA digest");
+    TCase *emergency_rollback = tcase_create("Emergency rollback");
+    TCase *emergency_rollback_failure_due_to_bad_update = tcase_create("Emergency rollback failure due to bad update");
+    TCase *empty_boot_partition_update = tcase_create("Empty boot partition update");
+    TCase *empty_boot_but_update_sha_corrupted_denied = tcase_create("Empty boot partition but update SHA corrupted");
 
 
 
@@ -376,6 +452,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_update_type, test_invalid_update_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
     tcase_add_test(invalid_sha, test_invalid_sha);
+    tcase_add_test(emergency_rollback, test_emergency_rollback);
+    tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
+    tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
+    tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
 
 
 
@@ -389,6 +469,11 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, invalid_update_type);
     suite_add_tcase(s, update_toolarge);
     suite_add_tcase(s, invalid_sha);
+    suite_add_tcase(s, emergency_rollback);
+    suite_add_tcase(s, emergency_rollback_failure_due_to_bad_update);
+    suite_add_tcase(s, empty_boot_partition_update);
+    suite_add_tcase(s, empty_boot_but_update_sha_corrupted_denied);
+
 
 
     return s;
