@@ -159,8 +159,6 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
     uint8_t *a = (uint8_t *)address;
-    if (ext_locked)
-        abort();
     fail_if(ext_locked, "Attempting to write to a locked FLASH");
     for (i = 0; i < len; i++) {
         a[i] = data[i];
@@ -188,6 +186,7 @@ void ext_flash_lock(void)
     fail_if(ext_locked, "Double ext lock detected\n");
     ext_locked++;
 }
+
 
 /* A simple mock memory */
 static int mmap_file(const char *path, uint8_t *address, uint32_t len,
