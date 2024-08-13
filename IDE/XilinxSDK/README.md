@@ -86,7 +86,7 @@ the_ROM_image:
 ```
 
 ```sh
-bootgen -image boot.bif -arch zynqmp -o BOOT.bin
+bootgen -image boot.bif -arch zynqmp -w -o BOOT.bin
 
 ****** Xilinx Bootgen v2022.1
   **** Build date : Apr 18 2022-16:02:32
@@ -106,6 +106,21 @@ bootgen -image boot.bif -arch zynqmp -o BOOT.bin
 | QSPI32    | 0 0 1 0       | on, on, off,on |
 | SD        | 1 1 1 0       | off,off,off,on |
 
+## Example boot output
+
+```
+wolfBoot Secure Boot
+Read FlashID Lower: Ret 0, 20 BB 20
+Read FlashID Upper: Ret 0, 20 BB 20
+Versions: Boot 1, Update 0
+Trying Boot partition at 800000
+Boot partition: 800000 (size 226024, version 0x1)
+Firmware Valid
+Loading 226024 bytes to RAM at 10000000
+DTB boot partition: 7B0000
+Failed parsing DTB to load
+Booting at 10000000
+```
 
 
 ### Adding RSA Authentication
@@ -138,6 +153,16 @@ bootgen -image boot.bif -arch zynqmp -o BOOT.bin
 
 Note: To generate a report of a boot.bin use the `bootgen_utility`:
 `bootgen_utility -arch zynqmp -bin boot.bin -out boot.bin.txt`
+
+## Post Quantum
+
+XMSS
+
+```sh
+./tools/keytools/keygen --xmss -g wolfboot_signing_private_key.der
+./tools/keytools/sign --xmss test-app/image.bin wolfboot_signing_private_key.der 1
+```
+
 
 ### References:
 * [ZAPP1319](https://www.xilinx.com/support/documentation/application_notes/xapp1319-zynq-usp-prog-nvm.pdf): Programming BBRAM and eFUSEs

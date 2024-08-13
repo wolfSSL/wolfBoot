@@ -43,10 +43,10 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
     filename = context;
 
     /* Open file for read and write. */
-    file = fopen(filename, "r+");
+    file = fopen(filename, "rb+");
     if (!file) {
         /* Create the file if it didn't exist. */
-        file = fopen(filename, "w+");
+        file = fopen(filename, "wb+");
         if (!file) {
             fprintf(stderr, "error: fopen(%s, \"w+\") failed.\n", filename);
             return WC_LMS_RC_WRITE_FAIL;
@@ -69,7 +69,7 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
 
     /* Verify private key data has actually been written to persistent
      * storage correctly. */
-    file = fopen(filename, "r+");
+    file = fopen(filename, "rb+");
     if (!file) {
         fprintf(stderr, "error: fopen(%s, \"r+\") failed.\n", filename);
         return WC_LMS_RC_WRITE_FAIL;
