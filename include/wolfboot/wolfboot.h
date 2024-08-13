@@ -132,7 +132,7 @@ extern "C" {
  #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
  #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
 
-#ifdef __WOLFBOOT
+#if defined(__WOLFBOOT) || defined(UNIT_TEST_AUTH)
 
  /* Hashing configuration */
  #if defined(WOLFBOOT_HASH_SHA256)
@@ -177,7 +177,7 @@ extern "C" {
 
 #endif
 
-#if defined(__WOLFBOOT) || defined (__FLASH_OTP_PRIMER)
+#if defined(__WOLFBOOT) || defined (__FLASH_OTP_PRIMER) || defined (UNIT_TEST_AUTH)
 
  /* Authentication configuration */
  #if defined(WOLFBOOT_NO_SIGN)

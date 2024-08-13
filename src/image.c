@@ -866,7 +866,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
         wolfBoot_printf("Image size %d > max %d\n",
             (unsigned int)img->fw_size,
             (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
-        img->fw_size = 0;
+        img->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
         return -1;
     }
     if (!img->hdr_ok) {

@@ -1,5 +1,30 @@
+/* unit-mock-flash.c
+ *
+ * Mock flash access for unit tests
+ * usage: #include "unit-mock-flash.c"
+ *
+ *
+ * Copyright (C) 2024 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
 
 static int locked = 1;
+static int ext_locked = 1;
 static int erased_boot = 0;
 static int erased_update = 0;
 static int erased_swap = 0;
@@ -18,20 +43,24 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
     int i;
     uint8_t *a = (uint8_t *)address;
     fail_if(locked, "Attempting to write to a locked FLASH");
+    if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
+            (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
+        for (i = 0; i < len; i++) {
+            a[i] = data[i];
+        }
+    }
     if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
     }
-#ifdef FLAGS_HOME
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
     }
-#endif
 #ifdef MOCK_KEYVAULT
     if ((address >= vault_base) && (address < vault_base + keyvault_size)) {
         for (i = 0; i < len; i++) {
@@ -47,14 +76,12 @@ int hal_flash_erase(haladdr_t address, int len)
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_boot++;
-#ifdef FLAGS_HOME
         memset(address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank1++;
         }
-#endif
     } else if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
@@ -96,7 +123,6 @@ void hal_prepare_boot(void)
 
 int ext_flash_erase(uintptr_t address, int len)
 {
-    printf("%s", __FUNCTION__);
     if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
@@ -121,8 +147,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
     uint8_t *a = (uint8_t *)address;
-    fail_if(locked, "Attempting to write to a locked FLASH");
-    printf("%s", __FUNCTION__);
+    fail_if(ext_locked, "Attempting to write to a locked FLASH");
     for (i = 0; i < len; i++) {
         a[i] = data[i];
     }
@@ -137,6 +162,17 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
          data[i] = a[i];
     }
     return 0;
+}
+
+void ext_flash_unlock(void)
+{
+    fail_unless(ext_locked, "Double ext unlock detected\n");
+    ext_locked--;
+}
+void ext_flash_lock(void)
+{
+    fail_if(ext_locked, "Double ext lock detected\n");
+    ext_locked++;
 }
 
 /* A simple mock memory */
