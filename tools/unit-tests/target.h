@@ -36,9 +36,13 @@
 
 #ifdef MOCK_PARTITIONS
     #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0xCD000000
-    #define WOLFBOOT_PARTITION_SIZE              0x8000
     #define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0xCC000000
     #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0xCE000000
+#ifdef NO_XIP
+    #define WOLFBOOT_PARTITION_SIZE              0x7F00
+#else
+    #define WOLFBOOT_PARTITION_SIZE              0x8000
+#endif
 #else
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -70,10 +74,6 @@
 
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
-/* Load address in RAM for staged OS (update_ram only) */
-#define WOLFBOOT_LOAD_ADDRESS                0x200000
-#define WOLFBOOT_LOAD_DTS_ADDRESS            0x400000
 #endif /* MOCK_PARTITIONS */
-
 
 #endif /* !H_TARGETS_TARGET_ */

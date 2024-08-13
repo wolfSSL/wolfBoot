@@ -18,7 +18,8 @@ WOLFCRYPT=../../lib/wolfssl/
 
 TESTS:=unit-parser unit-extflash unit-aes128 unit-aes256 unit-chacha20 unit-pci \
 	   unit-mock-state unit-sectorflags unit-image unit-nvm unit-nvm-flagshome \
-	   unit-enc-nvm unit-enc-nvm-flagshome unit-delta unit-update-flash
+	   unit-enc-nvm unit-enc-nvm-flagshome unit-delta unit-update-flash \
+	   unit-update-ram
 
 all: $(TESTS)
 
@@ -58,6 +59,9 @@ unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFCRYPT)/wolfcrypt/src/chacha.c
 unit-delta:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT
+unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP
 
 
 
@@ -116,6 +120,9 @@ unit-delta: ../../include/target.h unit-delta.c
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c ../../lib/wolfssl/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-ram: ../../include/target.h unit-update-ram.c
+	gcc -o $@ unit-update-ram.c ../../src/image.c ../../lib/wolfssl/wolfcrypt/src/sha256.c  $(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
