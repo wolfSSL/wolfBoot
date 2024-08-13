@@ -71,7 +71,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 #if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src, dst, IMAGE_HEADER_SIZE);
     if (ret != IMAGE_HEADER_SIZE){
-        wolfBoot_printf("Error reading header at %p\n", img);
+        wolfBoot_printf("Error reading header at %p\n", src);
         return -1;
     }
 #else
@@ -111,7 +111,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 
 void RAMFUNCTION wolfBoot_start(void)
 {
-    int active, ret = 0;
+    int active = -1, ret = 0;
     struct wolfBoot_image os_image;
     uint8_t *image_ptr;
     uint32_t *load_address = NULL;
@@ -128,7 +128,8 @@ void RAMFUNCTION wolfBoot_start(void)
 
     for (;;) {
     #ifdef WOLFBOOT_FIXED_PARTITIONS
-        active = wolfBoot_dualboot_candidate();
+        if (active < 0)
+            active = wolfBoot_dualboot_candidate();
         if (active == PART_BOOT)
             source_address = (uint32_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
         else
@@ -139,6 +140,7 @@ void RAMFUNCTION wolfBoot_start(void)
         if (active < 0) { /* panic if no images available */
             wolfBoot_printf("No valid image found!\n");
             wolfBoot_panic();
+            break;
         }
 
     #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -185,6 +187,7 @@ void RAMFUNCTION wolfBoot_start(void)
         #else
             #error missing WOLFBOOT_LOAD_ADDRESS or XIP
         #endif
+            wolfBoot_printf("Successfully selected image in part: %d\n", active);
             break;
         }
 
@@ -192,14 +195,23 @@ backup_on_failure:
         wolfBoot_printf("Failure %d: Part %d, Hdr %d, Hash %d, Sig %d\n", ret,
             active, os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
         /* panic if authentication fails and no backup */
-        if (!wolfBoot_fallback_is_possible())
+        if (!wolfBoot_fallback_is_possible()) {
+            wolfBoot_printf("Impossible recovery with fallback.\n");
             wolfBoot_panic();
-        else {
+            break;
+        } else {
             /* Invalidate failing image and switch to the other partition */
             active ^= 1;
+            wolfBoot_printf("Active is now: %d\n", active);
             continue;
         }
     }
+#ifdef UNIT_TEST
+    if (wolfBoot_panicked != 0) {
+        wolfBoot_printf("panic!\n");
+        return;
+    }
+#endif
 
     wolfBoot_printf("Firmware Valid\n");
 
@@ -210,9 +222,17 @@ backup_on_failure:
     if ((wolfBoot_get_partition_state(active, &p_state) == 0) &&
         (p_state == IMG_STATE_UPDATING))
     {
+        #ifdef EXT_FLASH
+        ext_flash_unlock();
+        #else
         hal_flash_unlock();
+        #endif
         wolfBoot_set_partition_state(active, IMG_STATE_TESTING);
+        #ifdef EXT_FLASH
+        ext_flash_lock();
+        #else
         hal_flash_lock();
+        #endif
     }
 #endif
 
