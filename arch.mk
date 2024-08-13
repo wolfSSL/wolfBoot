@@ -953,7 +953,7 @@ ifeq ($(TARGET),x86_64_efi)
   CFLAGS += -I/usr/include/efi -I/usr/include/efi/x86_64 \
             -DTARGET_X86_64_EFI  -DWOLFBOOT_DUALBOOT
   # avoid using of fixed LOAD_ADDRESS, uefi target uses dynamic location
-  CFLAGS += -DNO_WOLFBOOT_LOAD_ADDRESS
+  CFLAGS += -DWOLFBOOT_NO_LOAD_ADDRESS
   LDFLAGS = -shared -Bsymbolic -L/usr/lib -T$(GNU_EFI_LSCRIPT)
   LD_START_GROUP = $(GNU_EFI_CRT0)
   LD_END_GROUP = -lgnuefi -lefi

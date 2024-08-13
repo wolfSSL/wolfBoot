@@ -37,6 +37,7 @@
                                     <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
+                                    <listOptionValue builtIn="false" value="NO_XIP"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_SWAP_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_BOOT_EXT=1"/>
@@ -51,6 +52,7 @@
                                     <listOptionValue builtIn="false" value="WOLFTPM_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFPKCS11_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFBOOT_DUALBOOT"/>
+                                    <listOptionValue builtIn="false" value="WOLFBOOT_ELF"/>
                                 </option>
                                 <option id="xilinx.gnu.compiler.dircategory.includes.398847842" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" useByScannerDiscovery="false" valueType="includePath">
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}}&quot;"/>
@@ -76,6 +78,7 @@
                                     <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
+                                    <listOptionValue builtIn="false" value="NO_XIP"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_SWAP_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_BOOT_EXT=1"/>
@@ -90,6 +93,7 @@
                                     <listOptionValue builtIn="false" value="WOLFTPM_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFPKCS11_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFBOOT_DUALBOOT"/>
+                                    <listOptionValue builtIn="false" value="WOLFBOOT_ELF"/>
                                 </option>
                                 <option id="xilinx.gnu.compiler.dircategory.includes.1725565215" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}}&quot;"/>
@@ -169,6 +173,7 @@
                                     <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
+                                    <listOptionValue builtIn="false" value="NO_XIP"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_SWAP_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_BOOT_EXT=1"/>
@@ -183,6 +188,7 @@
                                     <listOptionValue builtIn="false" value="WOLFTPM_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFPKCS11_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFBOOT_DUALBOOT"/>
+                                    <listOptionValue builtIn="false" value="WOLFBOOT_ELF"/>
                                 </option>
                                 <option id="xilinx.gnu.compiler.dircategory.includes.1446899274" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}}&quot;"/>
@@ -208,6 +214,7 @@
                                     <listOptionValue builtIn="false" value="TARGET_zynq"/>
                                     <listOptionValue builtIn="false" value="ARCH_AARCH64"/>
                                     <listOptionValue builtIn="false" value="MMU"/>
+                                    <listOptionValue builtIn="false" value="NO_XIP"/>
                                     <listOptionValue builtIn="false" value="PART_UPDATE_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_SWAP_EXT=1"/>
                                     <listOptionValue builtIn="false" value="PART_BOOT_EXT=1"/>
@@ -222,6 +229,7 @@
                                     <listOptionValue builtIn="false" value="WOLFTPM_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFPKCS11_USER_SETTINGS"/>
                                     <listOptionValue builtIn="false" value="WOLFBOOT_DUALBOOT"/>
+                                    <listOptionValue builtIn="false" value="WOLFBOOT_ELF"/>
                                 </option>
                                 <option id="xilinx.gnu.compiler.dircategory.includes.438324592" name="Include Paths" superClass="xilinx.gnu.compiler.dircategory.includes" valueType="includePath">
                                     <listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}}&quot;"/>

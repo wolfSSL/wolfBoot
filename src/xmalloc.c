@@ -371,7 +371,8 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
     };
 #endif
 
-#elif defined WOLFBOOT_NO_SIGN
+#elif defined(WOLFBOOT_NO_SIGN) || defined(WOLFBOOT_SIGN_XMSS) || \
+      defined(WOLFBOOT_SIGN_LMS)
 
 #define MP_SCHEME "NONE"
 static uint32_t sha_block[HASH_BLOCK_SIZE];
@@ -383,7 +384,7 @@ static struct xmalloc_slot xmalloc_pool[] = {
 };
 
 #else
-#   error "No cipher selected."
+#   error "No signing scheme selected."
 #endif
 
 #ifdef WOLFBOOT_DEBUG_MALLOC

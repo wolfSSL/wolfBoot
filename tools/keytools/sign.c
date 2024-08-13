@@ -709,11 +709,11 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             }
 
             /* The XMSS file callbacks will handle writing and reading the
-                * private key. We only need to set the public key here.
-                *
-                * If both priv/pub are present:
-                *  - The first ?? bytes is the private key.
-                *  - The next 68 bytes is the public key. */
+             * private key. We only need to set the public key here.
+             *
+             * If both priv/pub are present:
+             *  - The first ?? bytes is the private key.
+             *  - The next 68 bytes is the public key. */
             ret = wc_XmssKey_GetPrivLen(&key.xmss, &priv_sz);
             if (ret != 0 || priv_sz <= 0) {
                 printf("error: wc_XmssKey_GetPrivLen returned %d\n", ret);

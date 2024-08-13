@@ -662,7 +662,7 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     }
 
     /* Append the public key to the private keyfile. */
-    fpriv = fopen(priv_fname, "r+");
+    fpriv = fopen(priv_fname, "rb+");
     if (!fpriv) {
         fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
                 ret);
@@ -752,7 +752,7 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     }
 
     /* Append the public key to the private keyfile. */
-    fpriv = fopen(priv_fname, "r+");
+    fpriv = fopen(priv_fname, "rb+");
     if (!fpriv) {
         fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
                 ret);
@@ -1072,7 +1072,7 @@ int main(int argc, char** argv)
         }
         fpub = NULL;
     }
-    fpub = fopen(pubkeyfile, "w");
+    fpub = fopen(pubkeyfile, "wb");
     if (fpub == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", pubkeyfile, strerror(errno));
         exit(4);

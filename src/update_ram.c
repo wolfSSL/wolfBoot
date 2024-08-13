@@ -48,6 +48,8 @@ extern uint32_t dts_load_addr;
 #endif
 
 #ifdef WOLFBOOT_USE_RAMBOOT
+
+#if !(defined(EXT_FLASH) && defined(NO_XIP))
 /* requires/assumes inputs and size to be 4-byte aligned */
 static void memcpy32(void *dst, const void *src, size_t n)
 {
@@ -58,6 +60,7 @@ static void memcpy32(void *dst, const void *src, size_t n)
         d[i] = s[i];
     }
 }
+#endif
 
 /* Function to load image from flash to ram */
 int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
@@ -107,7 +110,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 
     return 0; /* success */
 }
-#endif
+#endif /* WOLFBOOT_USE_RAMBOOT */
 
 void RAMFUNCTION wolfBoot_start(void)
 {
@@ -261,11 +264,23 @@ backup_on_failure:
 #endif
 
 #ifndef WOLFBOOT_USE_RAMBOOT
-    /* if needed copy image to RAM */
-    wolfBoot_printf("Loading %d bytes to RAM at %p\n", os_image.fw_size,
-            load_address);
+    /* copy image to RAM */
+    #if defined(EXT_FLASH) && defined(NO_XIP)
+    wolfBoot_printf("Loading flash image from %p to RAM at %p (%d bytes)\n",
+        os_image.fw_base, load_address, os_image.fw_size);
+    ret = ext_flash_read((uintptr_t)os_image.fw_base, (uint8_t*)load_address,
+        os_image.fw_size);
+    if (ret < 0){
+        wolfBoot_printf("Error loading image at %p (ret %d)\n",
+            os_image.fw_base, ret);
+        return;
+    }
+    #else
+    wolfBoot_printf("Copying image from %p to RAM at %p (%d bytes)\n",
+        os_image.fw_base, load_address, os_image.fw_size);
     memcpy((void*)load_address, os_image.fw_base, os_image.fw_size);
-#endif
+    #endif
+#endif /* !WOLFBOOT_USE_RAMBOOT */
 
 #ifdef WOLFBOOT_ELF
     /* Load elf */
