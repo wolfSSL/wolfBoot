@@ -43,10 +43,10 @@ static enum wc_XmssRc xmss_write_key(const byte * priv, word32 privSz, void * co
     filename = context;
 
     /* Open file for read and write. */
-    file = fopen(filename, "r+");
+    file = fopen(filename, "rb+");
     if (!file) {
         /* Create the file if it didn't exist. */
-        file = fopen(filename, "w+");
+        file = fopen(filename, "wb+");
         if (!file) {
             fprintf(stderr, "error: fopen(%s, \"w+\") failed.\n", filename);
             return WC_XMSS_RC_WRITE_FAIL;
@@ -69,7 +69,7 @@ static enum wc_XmssRc xmss_write_key(const byte * priv, word32 privSz, void * co
 
     /* Verify private key data has actually been written to persistent
      * storage correctly. */
-    file = fopen(filename, "r+");
+    file = fopen(filename, "rb+");
     if (!file) {
         fprintf(stderr, "error: fopen(%s, \"r+\") failed.\n", filename);
         return WC_XMSS_RC_WRITE_FAIL;

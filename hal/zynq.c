@@ -25,10 +25,7 @@
 #if defined(__QNXNTO__) && !defined(NO_QNX)
     #define USE_QNX
 #elif defined(USE_BUILTIN_STARTUP)
-    /* we are using Xilinx SDK to build, so use Xilinx QSPI driver */
-    #ifndef USE_XQSPIPSU
-    #define USE_XQSPIPSU
-    #endif
+    /* to use the Xilinx QSPI driver define USE_XQSPIPSU */
 #endif
 
 #include <target.h>
@@ -183,7 +180,7 @@
 #define GQSPI_QSPI_MODE        GQSPI_GEN_FIFO_MODE_QSPI
 #endif
 #ifndef GQPI_USE_DUAL_PARALLEL
-#define GQPI_USE_DUAL_PARALLEL 0 /* default is single QSPI chip. Use 1=stripe */
+#define GQPI_USE_DUAL_PARALLEL 1 /* 0=no stripe, 1=stripe */
 #endif
 #ifndef GQPI_USE_4BYTE_ADDR
 #define GQPI_USE_4BYTE_ADDR    1
@@ -195,18 +192,25 @@
 
 
 /* Flash Parameters:
- * Micron Serial NOR Flash Memory 64KB Sector Erase MT25QU01GBBB
- * Stacked device (two 512Mb die)
+ * Micron Serial NOR Flash Memory 64KB Sector Erase MT25QU512ABB
+ * Stacked device (two 512Mb (64MB))
  * Dual Parallel so total addressable size is double
  */
 #ifndef FLASH_DEVICE_SIZE
-#define FLASH_DEVICE_SIZE      0x10000000
+    #ifdef ZCU102
+        /* 64*2 (dual parallel) = 128MB */
+        #define FLASH_DEVICE_SIZE (2 *  64 * 1024 * 1024) /* MT25QU512ABB */
+    #else
+        /* 128*2 (dual parallel) = 256MB */
+        #define FLASH_DEVICE_SIZE (2 * 128 * 1024 * 1024) /* MT25QU01GBBB */
+    #endif
 #endif
 #ifndef FLASH_PAGE_SIZE
-#define FLASH_PAGE_SIZE        512
-#endif
-#ifndef FLASH_NUM_PAGES
-#define FLASH_NUM_PAGES        0x80000
+    #ifdef ZCU102
+        #define FLASH_PAGE_SIZE 256 /* MT25QU512ABB */
+    #else
+        #define FLASH_PAGE_SIZE 512 /* MT25QU01GBBB */
+    #endif
 #endif
 #define FLASH_NUM_SECTORS      (FLASH_DEVICE_SIZE/WOLFBOOT_SECTOR_SIZE)
 
@@ -817,17 +821,22 @@ static int qspi_write_enable(QspiDev_t* dev)
     cmd[0] = WRITE_ENABLE_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, NULL, 0, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
     wolfBoot_printf("Write Enable: Ret %d\n", ret);
-
+#endif
     ret = qspi_wait_ready(dev);
-    wolfBoot_printf("wait ready: Ret %d\n", ret);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+    wolfBoot_printf("Wait ready: Ret %d\n", ret);
+#endif
 
     ret = qspi_wait_we(dev);
-    wolfBoot_printf("wait we: Ret %d\n", ret);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+    wolfBoot_printf("Wait we: Ret %d\n", ret);
+#endif
 
     qspi_status(dev, &status);
     if ((status & WRITE_EN_MASK) == 0) {
-        wolfBoot_printf("status %02x\n", status);
+        wolfBoot_printf("Write enable failed: status %02x\n", status);
         ret = -1;
     }
 
@@ -842,7 +851,9 @@ static int qspi_write_disable(QspiDev_t* dev)
     cmd[0] = WRITE_DISABLE_CMD;
     ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
     wolfBoot_printf("Write Disable: Ret %d\n", ret);
+#endif
     return ret;
 }
 
@@ -855,7 +866,9 @@ static int qspi_flash_status(QspiDev_t* dev, uint8_t* status)
     cmd[0] = READ_FSR_CMD;
     ret = qspi_transfer(dev, cmd, 1, NULL, 0, cmd, 2, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
     wolfBoot_printf("Flash Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
+#endif
     if (ret == GQSPI_CODE_SUCCESS && status) {
         if (dev->stripe) {
             cmd[0] &= cmd[1];
@@ -874,7 +887,9 @@ static int qspi_status(QspiDev_t* dev, uint8_t* status)
     cmd[0] = READ_SR_CMD;
     ret = qspi_transfer(dev, cmd, 1, NULL, 0, cmd, 2, 0,
         GQSPI_GEN_FIFO_MODE_SPI);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
     wolfBoot_printf("Status: Ret %d Cmd %02x %02x\n", ret, cmd[0], cmd[1]);
+#endif
     if (ret == GQSPI_CODE_SUCCESS && status) {
         if (dev->stripe) {
             cmd[0] &= cmd[1];
@@ -938,7 +953,9 @@ static int qspi_enter_4byte_addr(QspiDev_t* dev)
     if (ret == GQSPI_CODE_SUCCESS) {
         ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
             GQSPI_GEN_FIFO_MODE_SPI);
+    #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
         wolfBoot_printf("Enter 4-byte address mode: Ret %d\n", ret);
+    #endif
         if (ret == GQSPI_CODE_SUCCESS) {
             ret = qspi_wait_ready(&mDev); /* Wait for not busy */
         }
@@ -957,7 +974,9 @@ static int qspi_exit_4byte_addr(QspiDev_t* dev)
     if (ret == GQSPI_CODE_SUCCESS) {
         ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
             GQSPI_GEN_FIFO_MODE_SPI);
+    #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
         wolfBoot_printf("Exit 4-byte address mode: Ret %d\n", ret);
+    #endif
         if (ret == GQSPI_CODE_SUCCESS) {
             ret = qspi_wait_ready(&mDev); /* Wait for not busy */
         }
