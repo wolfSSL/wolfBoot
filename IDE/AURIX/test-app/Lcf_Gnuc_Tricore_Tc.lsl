@@ -1017,22 +1017,24 @@ REGION_ALIAS( default_rom , pfls1)
         .inttab_tc2_0FE (__INTTAB_CPU2 + 0x1FC0) : { . = ALIGN(8) ;  KEEP (*(.intvec_tc2_254)); }
         .inttab_tc2_0FF (__INTTAB_CPU2 + 0x1FE0) : { . = ALIGN(8) ;  KEEP (*(.intvec_tc2_255)); }
     }
-    
-    /*Fixed memory Allocations for BMHD*/
+
+    /* Explicitly reject all BMHD entries from iLLD SDK - these should be set out-of-band by user */
     CORE_ID = GLOBAL;
     SECTIONS
     {
-        .bmhd_0_org (0xaf400000) : FLAGS(arl) { KEEP (*(.bmhd_0_orig)); } > ucb
-        .bmhd_1_org (0xaf400200) : FLAGS(arl) { KEEP (*(.bmhd_1_orig)); } > ucb
-        .bmhd_2_org (0xaf400400) : FLAGS(arl) { KEEP (*(.bmhd_2_orig)); } > ucb
-        .bmhd_3_org (0xaf400600) : FLAGS(arl) { KEEP (*(.bmhd_3_orig)); } > ucb
-        .ucb_reserved (0xaf400800) : FLAGS(arl) { } > ucb
-        .bmhd_0_copy (0xaf401000) : FLAGS(arl) { KEEP (*(.bmhd_0_copy)); } > ucb
-        .bmhd_1_copy (0xaf401200) : FLAGS(arl) { KEEP (*(.bmhd_1_copy)); } > ucb
-        .bmhd_2_copy (0xaf401400) : FLAGS(arl) { KEEP (*(.bmhd_2_copy)); } > ucb
-        .bmhd_3_copy (0xaf401600) : FLAGS(arl) { KEEP (*(.bmhd_3_copy)); } > ucb
+        /DISCARD/ :
+        {
+            *(.bmhd_0_orig)
+            *(.bmhd_1_orig)
+            *(.bmhd_2_orig)
+            *(.bmhd_3_orig)
+            *(.bmhd_0_copy)
+            *(.bmhd_1_copy)
+            *(.bmhd_2_copy)
+            *(.bmhd_3_copy)
+        }
     }
-    
+
     /*Near Abbsolute Addressable Data Sections*/
     /*Near Absolute Data, selectable with patterns and user defined sections*/
     CORE_ID = CPU2;
