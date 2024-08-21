@@ -61,6 +61,11 @@ ifneq (,$(filter $(SIGN), ext_LMS ext_XMSS))
   CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
 endif
 
+# When WOLFBOOT_UNIVERSAL_KEYSTORE is defined, pad store_sizes in keystore.der
+ifeq ($(WOLFBOOT_UNIVERSAL_KEYSTORE),1)
+  CFLAGS+=-DWOLFBOOT_UNIVERSAL_KEYSTORE
+endif
+
 # option variables
 DEBUG_FLAGS     = -g -DDEBUG -DDEBUG_SIGNTOOL -DDEBUG_WOLFSSL -DDEBUG_WOLFSSL_VERBOSE
 SANITIZE_FLAGS  = -fsanitize=address

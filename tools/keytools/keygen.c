@@ -405,8 +405,12 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
 
     sl.pubkey_size = get_pubkey_size(ktype);
     memcpy(sl.pubkey, key, sl.pubkey_size);
-    slot_size = sizeof(struct keystore_slot) + sl.pubkey_size -
+#ifdef WOLFBOOT_UNIVERSAL_KEYSTORE
+    slot_size = sizeof(struct keystore_slot);
+#else
+    slot_size = sizeof(struct keystore_slot) +  sl.pubkey_size - 
         KEYSLOT_MAX_PUBKEY_SIZE;
+#endif
     fwrite(&sl, slot_size, 1, fpub_image);
     id_slot++;
 }
