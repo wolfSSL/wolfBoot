@@ -264,15 +264,6 @@ void* hal_get_dts_update_address(void)
   return NULL; /* Not yet supported */
 }
 
-/* QSPI functions */
-void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
-{
-}
-
-void zynq_init(uint32_t cpu_clock)
-{
-}
-
 #if defined(DISPLAY_CLOCKS)
 static uint32_t getclocks(uint8_t cid)
 {
