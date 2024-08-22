@@ -65,29 +65,32 @@ endif
 ## ARM Cortex-A
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
-  CFLAGS+=-DARCH_AARCH64 -march=armv8-a
-  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
-  CFLAGS+=-DNO_QNX
-  ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
-  endif
+  CFLAGS+=-DARCH_AARCH64
+  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o src/boot_aarch64_vectors.o src/boot_aarch64_translation.o
 
   ifeq ($(TARGET),nxp_ls1028a)
-    ARCH_FLAGS=-mcpu=cortex-a72+crypto -mstrict-align -march=armv8-a+crypto -mtune=cortex-a72
-    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72 -DTARGET_LS1028A -DWOLFSSL_ARMASM -DWC_HASH_DATA_ALIGNMENT=8
-    #LDFLAGS+=-Wl,--as-needed -D"__WOLFBOOT"
+    ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
+
     CFLAGS +=-ffunction-sections -fdata-sections
     LDFLAGS+=-Wl,--gc-sections
-
-    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o
 
     ifeq ($(DEBUG_UART),0)
       CFLAGS+=-fno-builtin-printf
     endif
 
     SPI_TARGET=nxp
+  endif
+
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
+  endif
+  ifeq ($(NO_ASM),0)
+    ARCH_FLAGS=-mstrict-align
+    CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWC_HASH_DATA_ALIGNMENT=8
+    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o
   endif
 endif
 
