@@ -49,12 +49,18 @@
 #endif
 #ifdef CPU_MIMXRT1061CVJ5B
 #include "evkmimxrt1060_flexspi_nor_config.h"
+#define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1052DVJ6B
 #include "evkbimxrt1050_flexspi_nor_config.h"
+/**
+ * Does not support getting the config through the FlexSPI ROM API
+ * (see ch. 9.13.1 in rev.5 of the reference manual)
+ */
 #endif
 #ifdef CPU_MIMXRT1042XJM5B
 #include "evkmimxrt1040_flexspi_nor_config.h"
+#define USE_GET_CONFIG
 #endif
 
 #include "xip/fsl_flexspi_nor_boot.h"
@@ -235,7 +241,32 @@ bootloader_api_entry_t *g_bootloaderTree;
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1064DVL6A
-    #define CONFIG_FLASH_SIZE              (4 * 1024 * 1024) /* 4MBytes   */
+    #if defined(CONFIG_FLASH_W25Q16JV)
+        /* Winbond W25Q16JV */
+        #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q32JV)
+        /* Winbond W25Q32JV */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q64JV)
+        /* Winbond W25Q64JV */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q128JV)
+        /* Winbond W25Q128JV */
+        #define CONFIG_FLASH_SIZE (16 * 1024 * 1024) /* 16MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q256JV)
+        /* Winbond W25Q256JV */
+        #define CONFIG_FLASH_SIZE (32 * 1024 * 1024) /* 32MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q512JV)
+        /* Winbond W25Q512JV */
+        #define CONFIG_FLASH_SIZE (64 * 1024 * 1024) /* 64MBytes  */
+    #elif defined(CONFIG_FLASH_IS25WP064A)
+        /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #else
+        /* Default to 4MBytes */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
+    #endif
+
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
@@ -266,8 +297,33 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
 
 
 /** Flash configuration in the .flash_config section of flash **/
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
-    #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes   */
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1042XJM5B)
+    #if defined(CONFIG_FLASH_W25Q16JV)
+        /* Winbond W25Q16JV */
+        #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q32JV)
+        /* Winbond W25Q32JV */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q64JV)
+        /* Winbond W25Q64JV */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q128JV)
+        /* Winbond W25Q128JV */
+        #define CONFIG_FLASH_SIZE (16 * 1024 * 1024) /* 16MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q256JV)
+        /* Winbond W25Q256JV */
+        #define CONFIG_FLASH_SIZE (32 * 1024 * 1024) /* 32MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q512JV)
+        /* Winbond W25Q512JV */
+        #define CONFIG_FLASH_SIZE (64 * 1024 * 1024) /* 64MBytes  */
+    #elif defined(CONFIG_FLASH_IS25WP064A)
+        /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #else
+        /* Default to 8MBytes */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes   */
+    #endif
+
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
@@ -294,12 +350,10 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
     .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
     .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
 };
-#endif
-
+#endif /* CPU_MIMXRT1062DVL6A || CPU_MIMXRT1062DVL6B || CPU_MIMXRT1061CVJ5B || CPU_MIMXRT1042XJM5B */
 
 /** Flash configuration in the .flash_config section of flash **/
-#if defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1042XJM5B)
-
+#if defined(CPU_MIMXRT1052DVJ6B)
     #if defined(CONFIG_FLASH_W25Q16JV)
         /* Winbond W25Q16JV */
         #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
@@ -590,11 +644,11 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         .ipcmdSerialClkFreq = 0,
     };
     #endif
-#endif /* CPU_MIMXRT1042XJM5B || CPU_MIMXRT1052DVJ6B */
-
+#endif /* CPU_MIMXRT1052DVJ6B */
 
 #ifndef __FLASH_BASE
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || \
+#if defined(CPU_MIMXRT1062DVL6A) || \
+    defined(CPU_MIMXRT1062DVL6B) || \
     defined(CPU_MIMXRT1061CVJ5B) || \
     defined(CPU_MIMXRT1052DVJ6B) || \
     defined(CPU_MIMXRT1042XJM5B)
