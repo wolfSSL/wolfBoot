@@ -880,17 +880,23 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
-        /**
-         * Flash is memory mapped, so the address range must be invalidated in data cache
-         * to ensure coherency between flash and cache
-         */
-        DCACHE_InvalidateByRange(address + i, sizeof(wbuf));
         if (status != kStatus_Success)
         {
             asm volatile("cpsie i");
             return -1;
         }
     }
+    /**
+     * Flash is memory mapped, so the address range must be invalidated in data cache
+     * to ensure coherency between flash and cache.
+     * 
+     * Also, both the address and size must be 32-byte aligned as cache-lines are 32 bytes
+     * (see definition of DCACHE_InvalidateByRange).
+     * To ensure all data is included we align the address downwards, and the length upwards.
+     */
+    uint32_t aligned_address = address - (address % 32);
+    uint32_t aligned_len = len + (32 - (len % 32));
+    DCACHE_InvalidateByRange(aligned_address, aligned_len);
     asm volatile("cpsie i");
     return 0;
 }
@@ -920,9 +926,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         address - FLASH_BASE, len);
     /**
      * Flash is memory mapped, so the address range must be invalidated in data cache
-     * to ensure coherency between flash and cache
+     * to ensure coherency between flash and cache.
+     * 
+     * Also, both the address and size must be 32-byte aligned as cache-lines are 32 bytes
+     * (see definition of DCACHE_InvalidateByRange).
+     * To ensure all data is included we align the address downwards, and the length upwards.
      */
-    DCACHE_InvalidateByRange(address, len);
+    uint32_t aligned_address = address - (address % 32);
+    uint32_t aligned_len = len + (32 - (len % 32));
+    DCACHE_InvalidateByRange(aligned_address, aligned_len);
     asm volatile("cpsie i");
     if (status != kStatus_Success)
         return -1;
