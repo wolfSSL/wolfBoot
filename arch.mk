@@ -70,7 +70,6 @@ ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
   CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
   LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
-  OBJS+=src/boot_arm.o
 
   ## Target specific configuration
   ifeq ($(TARGET),samr21)
@@ -176,87 +175,101 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
-  ## Cortex-M CPU
-ifeq ($(CORTEX_M33),1)
-  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
-  LDFLAGS+=-mcpu=cortex-m33
-  ifeq ($(TZEN),1)
-    OBJS+=hal/stm32_tz.o
-    CFLAGS+=-mcmse
-    ifeq ($(WOLFCRYPT_TZ),1)
-      SECURE_OBJS+=./src/wc_callable.o
-      SECURE_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
-      CFLAGS+=-DWOLFCRYPT_SECURE_MODE
-      SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
-    endif
-  endif # TZEN=1
-  ifeq ($(NO_ASM),1)
-    ifeq ($(SPMATH),1)
-      ifeq ($(NO_ASM),1)
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-      else
-        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
-      endif
-    endif
-  else
-    ifeq ($(SPMATH),1)
-      CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
-    endif
+  ifeq ($(TARGET),sama5d3)
+     CORTEX_A5=1
   endif
+
+## Cortex CPU
+
+ifeq ($(CORTEX_A5),1)
+  CFLAGS+=-mcpu=cortex-a5  -mtune=cortex-a5 -mfpu=vfpv4-d16 -static -z noexecstack
+  LDLAGS+=-mcpu=cortex-a5 -mtune=cortex-a5  -mtune=cortex-a5 -mfpu=vfpv4-d16 -static -z noexecstack  -Ttext 0x300000
+  # Cortex-A uses boot_arm32.o
+  OBJS+=src/boot_arm32.o src/boot_arm32_start.o
+  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
 else
-  ifeq ($(CORTEX_M7),1)
-    CFLAGS+=-mcpu=cortex-m7
-    LDFLAGS+=-mcpu=cortex-m7
-    ifeq ($(SPMATH),1)
-      ifeq ($(NO_ASM),1)
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-      else
-        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+  # All others use boot_arm.o
+  OBJS+=src/boot_arm.o
+  ifeq ($(CORTEX_M33),1)
+    CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
+    LDFLAGS+=-mcpu=cortex-m33
+    ifeq ($(TZEN),1)
+      OBJS+=hal/stm32_tz.o
+      CFLAGS+=-mcmse
+      ifeq ($(WOLFCRYPT_TZ),1)
+        SECURE_OBJS+=./src/wc_callable.o
+        SECURE_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+        CFLAGS+=-DWOLFCRYPT_SECURE_MODE
+        SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
       endif
-    endif
-  else
-    ifeq ($(CORTEX_M0),1)
-      CFLAGS+=-mcpu=cortex-m0
-      LDFLAGS+=-mcpu=cortex-m0
+    endif # TZEN=1
+    ifeq ($(NO_ASM),1)
       ifeq ($(SPMATH),1)
         ifeq ($(NO_ASM),1)
           MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
         else
-          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
+          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
         endif
       endif
     else
-      ifeq ($(CORTEX_M3),1)
-
-        CFLAGS+=-mcpu=cortex-m3
-        LDFLAGS+=-mcpu=cortex-m3
+      ifeq ($(SPMATH),1)
+        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+      endif
+    endif
+  else
+    ifeq ($(CORTEX_M7),1)
+      CFLAGS+=-mcpu=cortex-m7
+      LDFLAGS+=-mcpu=cortex-m7
+      ifeq ($(SPMATH),1)
+        ifeq ($(NO_ASM),1)
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        else
+          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
+          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+        endif
+      endif
+    else
+      ifeq ($(CORTEX_M0),1)
+        CFLAGS+=-mcpu=cortex-m0
+        LDFLAGS+=-mcpu=cortex-m0
+        ifeq ($(SPMATH),1)
+          ifeq ($(NO_ASM),1)
+            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+          else
+            CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
+            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
+          endif
+        endif
+      else
+        ifeq ($(CORTEX_M3),1)
+          CFLAGS+=-mcpu=cortex-m3
+          LDFLAGS+=-mcpu=cortex-m3
+          ifeq ($(NO_ASM),1)
+            ifeq ($(SPMATH),1)
+              MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+            endif
+          else
+            ifeq ($(SPMATH),1)
+              CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
+              MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+            endif
+          endif
+      else
+        # default Cortex M4
+        CFLAGS+=-mcpu=cortex-m4
+        LDFLAGS+=-mcpu=cortex-m4
         ifeq ($(NO_ASM),1)
           ifeq ($(SPMATH),1)
             MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
           endif
         else
+          CFLAGS+=-fomit-frame-pointer # required with debug builds only
           ifeq ($(SPMATH),1)
-            CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
+            CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
             MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
           endif
-        endif
-    else
-      # default Cortex M4
-      CFLAGS+=-mcpu=cortex-m4
-      LDFLAGS+=-mcpu=cortex-m4
-      ifeq ($(NO_ASM),1)
-        ifeq ($(SPMATH),1)
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-        endif
-      else
-        CFLAGS+=-fomit-frame-pointer # required with debug builds only
-        ifeq ($(SPMATH),1)
-          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
         endif
       endif
     endif
