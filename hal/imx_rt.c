@@ -895,7 +895,7 @@ void hal_prepare_boot(void)
 
 #endif /* __WOLFBOOT */
 
-static int hal_flash_init(void)
+static int RAMFUNCTION hal_flash_init(void)
 {
 #ifdef USE_GET_CONFIG
     serial_nor_config_option_t flexspi_cfg_option;
