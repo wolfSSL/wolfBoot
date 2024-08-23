@@ -905,11 +905,20 @@ static int RAMFUNCTION hal_flash_init(void)
     #ifdef USE_GET_CONFIG
         memset(&flexspi_cfg_option, 0, sizeof(flexspi_cfg_option));
         flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
+        /**
+         * Disable interrupts before accessing flash when using XIP
+         * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
+         */
+        asm volatile("cpsid i");
         g_bootloaderTree->flexSpiNorDriver->get_config(0,
             &flexspi_config,
             &flexspi_cfg_option);
         g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
         g_bootloaderTree->flexSpiNorDriver->clear_cache(0);
+        /* Ensure no speculative prefetching happens before flash access is finished */
+        asm volatile("dsb");
+        /* Re-enable interrupts */
+        asm volatile("cpsie i");
     #endif
     }
     return 0;
@@ -930,16 +939,19 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
      * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
      */
     asm volatile("cpsid i");
+    bool program_success = true;
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
         if (status != kStatus_Success)
         {
-            asm volatile("cpsie i");
-            return -1;
+            program_success = false;
+            break;
         }
     }
+    /* Ensure no speculative prefetching happens before flash program is finished */
+    asm volatile("dsb");
     /**
      * Flash is memory mapped, so the address range must be invalidated in data cache
      * to ensure coherency between flash and cache.
@@ -951,8 +963,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t aligned_address = address - (address % 32);
     uint32_t aligned_len = len + (32 - (len % 32));
     DCACHE_InvalidateByRange(aligned_address, aligned_len);
+    /* Re-enable interrupts */
     asm volatile("cpsie i");
-    return 0;
+    return program_success;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -978,6 +991,8 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     asm volatile("cpsid i");
     status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
+    /* Ensure no speculative prefetching happens before flash erase is finished */
+    asm volatile("dsb");
     /**
      * Flash is memory mapped, so the address range must be invalidated in data cache
      * to ensure coherency between flash and cache.
@@ -989,6 +1004,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t aligned_address = address - (address % 32);
     uint32_t aligned_len = len + (32 - (len % 32));
     DCACHE_InvalidateByRange(aligned_address, aligned_len);
+    /* Re-enable interrupts */
     asm volatile("cpsie i");
     if (status != kStatus_Success)
         return -1;
