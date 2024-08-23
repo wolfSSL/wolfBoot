@@ -195,9 +195,11 @@
 #endif
 #ifndef FLASH_PAGE_SIZE
     #ifdef ZCU102
-        #define FLASH_PAGE_SIZE 256 /* MT25QU512ABB */
+        /* MT25QU512ABB */
+        #define FLASH_PAGE_SIZE 256
     #else
-        #define FLASH_PAGE_SIZE 512 /* MT25QU01GBBB */
+        /* MT25QU01GBBB */
+        #define FLASH_PAGE_SIZE 512
     #endif
 #endif
 #define FLASH_NUM_SECTORS      (FLASH_DEVICE_SIZE/WOLFBOOT_SECTOR_SIZE)

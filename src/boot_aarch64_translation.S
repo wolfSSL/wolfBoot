@@ -118,7 +118,6 @@ MMUTableL1:
 .endif
 #else
 .set DDR_1_REG, 0
-#warning "There's no DDR_1 in the HW design. MMU translation table marks 32 GB DDR address space as undefined"
 #endif
 
 .set UNDEF_1_REG, 0x20 - DDR_1_REG
@@ -169,7 +168,6 @@ MMUTableL2:
 .endif
 #else
 .set DDR_0_REG, 0
-#warning "There's no DDR_0 in the HW design. MMU translation table marks 2 GB DDR address space as undefined"
 #endif
 
 .set UNDEF_0_REG, 0x400 - DDR_0_REG

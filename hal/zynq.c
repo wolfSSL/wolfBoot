@@ -737,7 +737,7 @@ static int qspi_exit_4byte_addr(QspiDev_t* dev)
 void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
 {
     int ret;
-    uint32_t reg_cfg;
+    uint32_t reg_cfg, reg_isr;
     uint8_t id_low[4];
 #if GQPI_USE_DUAL_PARALLEL == 1
     uint8_t id_hi[4];
@@ -784,9 +784,10 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     GQSPI_SEL = 1;
 
     /* Clear and disable interrupts */
-    reg_cfg = GQSPI_ISR;
+    reg_isr = GQSPI_ISR;
     GQSPI_ISR |= GQSPI_ISR_WR_TO_CLR_MASK; /* Clear poll timeout counter interrupt */
-    QSPIDMA_DST_I_STS = QSPIDMA_DST_I_STS; /* clear all active interrupts */
+    reg_cfg = QSPIDMA_DST_I_STS;
+    QSPIDMA_DST_I_STS = reg_cfg; /* clear all active interrupts */
     QSPIDMA_DST_STS |= QSPIDMA_DST_STS_WTC; /* mark outstanding DMA's done */
     GQSPI_IDR = GQSPI_IXR_ALL_MASK; /* disable interrupts */
     QSPIDMA_DST_I_STS = QSPIDMA_DST_I_STS_ALL_MASK; /* disable interrupts */
@@ -794,7 +795,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     if (GQSPI_ISR & GQSPI_IXR_RX_FIFO_EMPTY) {
         GQSPI_FIFO_CTRL |= (GQSPI_FIFO_CTRL_RST_TX_FIFO | GQSPI_FIFO_CTRL_RST_RX_FIFO);
     }
-    if (reg_cfg & GQSPI_IXR_RX_FIFO_EMPTY) {
+    if (reg_isr & GQSPI_IXR_RX_FIFO_EMPTY) {
         GQSPI_FIFO_CTRL |= GQSPI_FIFO_CTRL_RST_RX_FIFO;
     }
 
@@ -829,6 +830,7 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     GQSPI_EN = 1; /* Enable Device */
 #endif /* USE_QNX */
     (void)reg_cfg;
+    (void)reg_isr;
 
     /* ------ Flash Read ID (retry) ------ */
     timeout = 0;
@@ -948,46 +950,54 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int ret = 0;
     uint8_t cmd[8]; /* size multiple of uint32_t */
-    uint32_t xferSz, page, pages, idx = 0;
+    uint32_t xferSz, page, pages, idx;
     uintptr_t addr;
+
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+    wolfBoot_printf("Flash Write: Addr 0x%x, Ptr %p, Len %d\n",
+        address, data, len);
+#endif
 
     /* write by page */
     pages = ((len + (FLASH_PAGE_SIZE-1)) / FLASH_PAGE_SIZE);
     for (page = 0; page < pages; page++) {
         ret = qspi_write_enable(&mDev);
-        if (ret == GQSPI_CODE_SUCCESS) {
-            xferSz = len;
-            if (xferSz > FLASH_PAGE_SIZE)
-                xferSz = FLASH_PAGE_SIZE;
-
-            addr = address + (page * FLASH_PAGE_SIZE);
-            if (mDev.stripe) {
-                /* For dual parallel the address divide by 2 */
-                addr /= 2;
-            }
-
-            /* ------ Write Flash (page at a time) ------ */
-            memset(cmd, 0, sizeof(cmd));
-            cmd[idx++] = PAGE_PROG_CMD;
-        #if GQPI_USE_4BYTE_ADDR == 1
-            cmd[idx++] = ((addr >> 24) & 0xFF);
-        #endif
-            cmd[idx++] = ((addr >> 16) & 0xFF);
-            cmd[idx++] = ((addr >> 8)  & 0xFF);
-            cmd[idx++] = ((addr >> 0)  & 0xFF);
-            ret = qspi_transfer(&mDev, cmd, idx,
-                (const uint8_t*)(data + (page * FLASH_PAGE_SIZE)),
-                xferSz, NULL, 0, 0, GQSPI_GEN_FIFO_MODE_SPI);
-            wolfBoot_printf("Flash Page %d Write: Ret %d\n", page, ret);
-            if (ret != GQSPI_CODE_SUCCESS)
-                break;
-
-            ret = qspi_wait_ready(&mDev); /* Wait for not busy */
-            if (ret != GQSPI_CODE_SUCCESS) {
-                break;
-            }
-            qspi_write_disable(&mDev);
+        if (ret != GQSPI_CODE_SUCCESS) {
+            break;
         }
+        xferSz = len;
+        if (xferSz > FLASH_PAGE_SIZE)
+            xferSz = FLASH_PAGE_SIZE;
+
+        addr = address + (page * FLASH_PAGE_SIZE);
+        if (mDev.stripe) {
+            /* For dual parallel the address divide by 2 */
+            addr /= 2;
+        }
+
+        /* ------ Write Flash (page at a time) ------ */
+        memset(cmd, 0, sizeof(cmd));
+        idx = 0;
+        cmd[idx++] = PAGE_PROG_CMD;
+    #if GQPI_USE_4BYTE_ADDR == 1
+        cmd[idx++] = ((addr >> 24) & 0xFF);
+    #endif
+        cmd[idx++] = ((addr >> 16) & 0xFF);
+        cmd[idx++] = ((addr >> 8)  & 0xFF);
+        cmd[idx++] = ((addr >> 0)  & 0xFF);
+        ret = qspi_transfer(&mDev, cmd, idx,
+            (const uint8_t*)(data + (page * FLASH_PAGE_SIZE)),
+            xferSz, NULL, 0, 0, GQSPI_GEN_FIFO_MODE_SPI);
+        wolfBoot_printf("Flash Page %d Write: Ret %d\n", page, ret);
+        if (ret != GQSPI_CODE_SUCCESS)
+            break;
+
+        ret = qspi_wait_ready(&mDev); /* Wait for not busy */
+        if (ret != GQSPI_CODE_SUCCESS) {
+            break;
+        }
+        qspi_write_disable(&mDev);
+        len -= xferSz;
     }
 
     return ret;
@@ -1012,6 +1022,11 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
     int ret;
     uint8_t cmd[8]; /* size multiple of uint32_t */
     uint32_t idx = 0;
+
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+    wolfBoot_printf("Flash Read: Addr 0x%x, Ptr %p, Len %d\n",
+        address, data, len);
+#endif
 
     if (mDev.stripe) {
         /* For dual parallel the address divide by 2 */
@@ -1043,6 +1058,10 @@ int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
     uint8_t cmd[8]; /* size multiple of uint32_t */
     uint32_t idx = 0;
     uintptr_t qspiaddr;
+
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+    wolfBoot_printf("Flash Erase: Addr 0x%x, Len %d\n",  address, len);
+#endif
 
     while (len > 0) {
         /* For dual parallel the address divide by 2 */
@@ -1101,7 +1120,7 @@ static int test_ext_flash(QspiDev_t* dev)
 {
     int ret;
     uint32_t i;
-    uint8_t pageData[FLASH_PAGE_SIZE];
+    uint8_t pageData[FLASH_PAGE_SIZE*4];
 
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
