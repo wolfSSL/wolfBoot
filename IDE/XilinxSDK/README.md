@@ -111,6 +111,8 @@ the_ROM_image:
 }
 ```
 
+Note: If using the wolfboot.elf compiled from our makefile use "exception_level=el-3".
+
 From the workspace root:
 
 ```sh

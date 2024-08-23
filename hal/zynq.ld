@@ -11,7 +11,8 @@ _EL2_STACK_SIZE = DEFINED(_EL2_STACK_SIZE) ? _EL2_STACK_SIZE : 1024;
 /* Define Memories in the system */
 MEMORY
 {
-   psu_ddr_0_MEM_0 : ORIGIN = 0x0, LENGTH = 0x7FF00000
+   psu_ddr_0_MEM_0 : ORIGIN = 0x40000000, LENGTH = 0x100000
+   /* psu_ddr_0_MEM_0 : ORIGIN = 0x0, LENGTH = 0x7FF00000 */
    psu_ddr_1_MEM_0 : ORIGIN = 0x800000000, LENGTH = 0x80000000
    psu_ocm_ram_0_MEM_0 : ORIGIN = 0xFFFC0000, LENGTH = 0x40000
    psu_qspi_linear_0_MEM_0 : ORIGIN = 0xC0000000, LENGTH = 0x20000000
