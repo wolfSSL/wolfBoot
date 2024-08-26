@@ -49,12 +49,18 @@
 #endif
 #ifdef CPU_MIMXRT1061CVJ5B
 #include "evkmimxrt1060_flexspi_nor_config.h"
+#define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1052DVJ6B
 #include "evkbimxrt1050_flexspi_nor_config.h"
+/**
+ * Does not support getting the config through the FlexSPI ROM API
+ * (see ch. 9.13.1 in rev.5 of the reference manual)
+ */
 #endif
 #ifdef CPU_MIMXRT1042XJM5B
 #include "evkmimxrt1040_flexspi_nor_config.h"
+#define USE_GET_CONFIG
 #endif
 
 #include "xip/fsl_flexspi_nor_boot.h"
@@ -235,7 +241,32 @@ bootloader_api_entry_t *g_bootloaderTree;
 
 /** Flash configuration in the .flash_config section of flash **/
 #ifdef CPU_MIMXRT1064DVL6A
-    #define CONFIG_FLASH_SIZE              (4 * 1024 * 1024) /* 4MBytes   */
+    #if defined(CONFIG_FLASH_W25Q16JV)
+        /* Winbond W25Q16JV */
+        #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q32JV)
+        /* Winbond W25Q32JV */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q64JV)
+        /* Winbond W25Q64JV */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q128JV)
+        /* Winbond W25Q128JV */
+        #define CONFIG_FLASH_SIZE (16 * 1024 * 1024) /* 16MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q256JV)
+        /* Winbond W25Q256JV */
+        #define CONFIG_FLASH_SIZE (32 * 1024 * 1024) /* 32MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q512JV)
+        /* Winbond W25Q512JV */
+        #define CONFIG_FLASH_SIZE (64 * 1024 * 1024) /* 64MBytes  */
+    #elif defined(CONFIG_FLASH_IS25WP064A)
+        /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #else
+        /* Default to 4MBytes */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
+    #endif
+
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
@@ -266,8 +297,33 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
 
 
 /** Flash configuration in the .flash_config section of flash **/
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B)
-    #define CONFIG_FLASH_SIZE              (8 * 1024 * 1024) /* 8MBytes   */
+#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1042XJM5B)
+    #if defined(CONFIG_FLASH_W25Q16JV)
+        /* Winbond W25Q16JV */
+        #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q32JV)
+        /* Winbond W25Q32JV */
+        #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q64JV)
+        /* Winbond W25Q64JV */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q128JV)
+        /* Winbond W25Q128JV */
+        #define CONFIG_FLASH_SIZE (16 * 1024 * 1024) /* 16MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q256JV)
+        /* Winbond W25Q256JV */
+        #define CONFIG_FLASH_SIZE (32 * 1024 * 1024) /* 32MBytes  */
+    #elif defined(CONFIG_FLASH_W25Q512JV)
+        /* Winbond W25Q512JV */
+        #define CONFIG_FLASH_SIZE (64 * 1024 * 1024) /* 64MBytes  */
+    #elif defined(CONFIG_FLASH_IS25WP064A)
+        /* ISSI IS25WP064A (on EVKB with rework see AN12183) */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes  */
+    #else
+        /* Default to 8MBytes */
+        #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes   */
+    #endif
+
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
@@ -294,12 +350,10 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
     .blockSize          = CONFIG_FLASH_BLOCK_SIZE,
     .isUniformBlockSize = CONFIG_FLASH_UNIFORM_BLOCKSIZE,
 };
-#endif
-
+#endif /* CPU_MIMXRT1062DVL6A || CPU_MIMXRT1062DVL6B || CPU_MIMXRT1061CVJ5B || CPU_MIMXRT1042XJM5B */
 
 /** Flash configuration in the .flash_config section of flash **/
-#if defined(CPU_MIMXRT1061CVJ5B) || defined(CPU_MIMXRT1052DVJ6B) || defined(CPU_MIMXRT1042XJM5B)
-
+#if defined(CPU_MIMXRT1052DVJ6B)
     #if defined(CONFIG_FLASH_W25Q16JV)
         /* Winbond W25Q16JV */
         #define CONFIG_FLASH_SIZE (2 * 1024 * 1024) /* 2MBytes  */
@@ -590,11 +644,11 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         .ipcmdSerialClkFreq = 0,
     };
     #endif
-#endif /* CPU_MIMXRT1042XJM5B || CPU_MIMXRT1052DVJ6B */
-
+#endif /* CPU_MIMXRT1052DVJ6B */
 
 #ifndef __FLASH_BASE
-#if defined(CPU_MIMXRT1062DVL6A) || defined(CPU_MIMXRT1062DVL6B) || \
+#if defined(CPU_MIMXRT1062DVL6A) || \
+    defined(CPU_MIMXRT1062DVL6B) || \
     defined(CPU_MIMXRT1061CVJ5B) || \
     defined(CPU_MIMXRT1052DVJ6B) || \
     defined(CPU_MIMXRT1042XJM5B)
@@ -841,7 +895,7 @@ void hal_prepare_boot(void)
 
 #endif /* __WOLFBOOT */
 
-static int hal_flash_init(void)
+static int RAMFUNCTION hal_flash_init(void)
 {
 #ifdef USE_GET_CONFIG
     serial_nor_config_option_t flexspi_cfg_option;
@@ -851,11 +905,20 @@ static int hal_flash_init(void)
     #ifdef USE_GET_CONFIG
         memset(&flexspi_cfg_option, 0, sizeof(flexspi_cfg_option));
         flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
+        /**
+         * Disable interrupts before accessing flash when using XIP
+         * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
+         */
+        asm volatile("cpsid i");
         g_bootloaderTree->flexSpiNorDriver->get_config(0,
             &flexspi_config,
             &flexspi_cfg_option);
         g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
         g_bootloaderTree->flexSpiNorDriver->clear_cache(0);
+        /* Ensure no speculative prefetching happens before flash access is finished */
+        asm volatile("dsb");
+        /* Re-enable interrupts */
+        asm volatile("cpsie i");
     #endif
     }
     return 0;
@@ -876,23 +939,33 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
      * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
      */
     asm volatile("cpsid i");
+    int write_success = 0;
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
-        /**
-         * Flash is memory mapped, so the address range must be invalidated in data cache
-         * to ensure coherency between flash and cache
-         */
-        DCACHE_InvalidateByRange(address + i, sizeof(wbuf));
         if (status != kStatus_Success)
         {
-            asm volatile("cpsie i");
-            return -1;
+            write_success = -1;
+            break;
         }
     }
+    /* Ensure no speculative prefetching happens before flash program is finished */
+    asm volatile("dsb");
+    /**
+     * Flash is memory mapped, so the address range must be invalidated in data cache
+     * to ensure coherency between flash and cache.
+     * 
+     * Also, both the address and size must be 32-byte aligned as cache-lines are 32 bytes
+     * (see definition of DCACHE_InvalidateByRange).
+     * To ensure all data is included we align the address downwards, and the length upwards.
+     */
+    uint32_t aligned_address = address - (address % 32);
+    uint32_t aligned_len = len + (32 - (len % 32));
+    DCACHE_InvalidateByRange(aligned_address, aligned_len);
+    /* Re-enable interrupts */
     asm volatile("cpsie i");
-    return 0;
+    return write_success;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -918,11 +991,20 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     asm volatile("cpsid i");
     status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
         address - FLASH_BASE, len);
+    /* Ensure no speculative prefetching happens before flash erase is finished */
+    asm volatile("dsb");
     /**
      * Flash is memory mapped, so the address range must be invalidated in data cache
-     * to ensure coherency between flash and cache
+     * to ensure coherency between flash and cache.
+     * 
+     * Also, both the address and size must be 32-byte aligned as cache-lines are 32 bytes
+     * (see definition of DCACHE_InvalidateByRange).
+     * To ensure all data is included we align the address downwards, and the length upwards.
      */
-    DCACHE_InvalidateByRange(address, len);
+    uint32_t aligned_address = address - (address % 32);
+    uint32_t aligned_len = len + (32 - (len % 32));
+    DCACHE_InvalidateByRange(aligned_address, aligned_len);
+    /* Re-enable interrupts */
     asm volatile("cpsie i");
     if (status != kStatus_Success)
         return -1;

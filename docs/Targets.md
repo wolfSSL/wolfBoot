@@ -1455,6 +1455,30 @@ be added to the configuration.
 
 The `imx_rt` target supports building without a flash configuration, IVT, Boot Data and DCD. This is needed when wanting to use HAB through NXP's *Secure Provisioning Tool* to sign wolfBoot to enable secure boot. To build wolfBoot this way `TARGET_IMX_HAB` needs to be set to 1 in the configuration file (see `config/examples/imx-rt1060 _hab.config` for an example). When built with `TARGET_IMX_HAB=1` wolfBoot must be written to flash using NXP's *Secure Provisioning Tool*.
 
+### Building libwolfBoot
+
+To enable interactions with wolfBoot, your application needs to include `libwolfBoot`. When compiling this a few things are important to note:
+* When using XIP, functions that have the `RAMFUNCTION` signature need to be located in RAM and not flash. To do this the `.ramcode` section needs to be placed in RAM. Note that defining `WOLFBOOT_USE_STDLIBC` will not use wolfBoot's implementation of `memcpy`, and thus breaks this requirement.
+* When using XIP, the `DCACHE_InvalidateByRange` function from NXP's SDK needs to be placed in RAM. To do this exclude the file it's located in from being put into flash
+```
+.text :
+{
+    ...
+    *(EXCLUDE_FILE(
+        */fsl_cache.c.obj
+        ) .text*) /* .text* sections (code) */
+    *(EXCLUDE_FILE(
+        */fsl_cache.c.obj
+        ) .rodata*) /* .rodata* sections (constants, strings, etc.) */
+    ...
+} > FLASH
+```
+and instead include it in your RAM section
+.ram :
+{
+    */fsl_cache.c.obj(.text* .rodata*)
+} > RAM
+
 ### Flashing
 
 Firmware can be directly uploaded to the target by copying `factory.bin` to the virtual USB drive associated to the device, or by loading the image directly into flash using a JTAG/SWD debugger.
