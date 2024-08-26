@@ -267,6 +267,9 @@ bootloader_api_entry_t *g_bootloaderTree;
         #define CONFIG_FLASH_SIZE (4 * 1024 * 1024) /* 4MBytes   */
     #endif
 
+    /* "Instance" number of the FLEXSPI peripheral, passed to ROM API */
+    #define CONFIG_FLASH_FLEXSPI_INSTANCE (1)
+
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
     #define CONFIG_FLASH_BLOCK_SIZE        (64 * 1024)       /* 64KBytes  */
@@ -323,6 +326,9 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         /* Default to 8MBytes */
         #define CONFIG_FLASH_SIZE (8 * 1024 * 1024) /* 8MBytes   */
     #endif
+
+    /* "Instance" number of the FLEXSPI peripheral, passed to ROM API */
+    #define CONFIG_FLASH_FLEXSPI_INSTANCE (0)
 
     #define CONFIG_FLASH_PAGE_SIZE         256UL             /* 256Bytes  */
     #define CONFIG_FLASH_SECTOR_SIZE       (4 * 1024)        /* 4KBytes   */
@@ -393,6 +399,9 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         /* Hyperflash - Default on RT1050-EVKB */
         #define CONFIG_HYPERFLASH
     #endif
+
+    /* "Instance" number of the FLEXSPI peripheral, passed to ROM API */
+    #define CONFIG_FLASH_FLEXSPI_INSTANCE (0)
 
     #ifdef CONFIG_HYPERFLASH
     #define CONFIG_FLASH_SIZE        (64 * 1024 * 1024) /* 64MBytes  */
@@ -897,6 +906,7 @@ void hal_prepare_boot(void)
 
 static int RAMFUNCTION hal_flash_init(void)
 {
+    status_t ret = 0;
 #ifdef USE_GET_CONFIG
     serial_nor_config_option_t flexspi_cfg_option;
 #endif
@@ -910,18 +920,27 @@ static int RAMFUNCTION hal_flash_init(void)
          * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
          */
         asm volatile("cpsid i");
-        g_bootloaderTree->flexSpiNorDriver->get_config(0,
+        ret = g_bootloaderTree->flexSpiNorDriver->get_config(
+            CONFIG_FLASH_FLEXSPI_INSTANCE,
             &flexspi_config,
             &flexspi_cfg_option);
-        g_bootloaderTree->flexSpiNorDriver->init(0, &flexspi_config);
-        g_bootloaderTree->flexSpiNorDriver->clear_cache(0);
-        /* Ensure no speculative prefetching happens before flash access is finished */
+        if (ret == kStatus_Success) {
+            ret = g_bootloaderTree->flexSpiNorDriver->init(
+                CONFIG_FLASH_FLEXSPI_INSTANCE,
+                &flexspi_config);
+        }
+        if (ret == kStatus_Success) {
+            g_bootloaderTree->flexSpiNorDriver->clear_cache(
+                CONFIG_FLASH_FLEXSPI_INSTANCE);
+        }
+        /* Ensure no speculative prefetching happens before flash access is
+         * finished */
         asm volatile("dsb");
         /* Re-enable interrupts */
         asm volatile("cpsie i");
-    #endif
+#endif
     }
-    return 0;
+    return (ret == kStatus_Success) ? 0 : -1;
 }
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
@@ -942,7 +961,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int write_success = 0;
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
-        status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
+        status = g_bootloaderTree->flexSpiNorDriver->program(
+            CONFIG_FLASH_FLEXSPI_INSTANCE,
+            FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
         if (status != kStatus_Success)
         {
@@ -989,8 +1010,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
      * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
      */
     asm volatile("cpsid i");
-    status = g_bootloaderTree->flexSpiNorDriver->erase(0, FLEXSPI_CONFIG,
-        address - FLASH_BASE, len);
+    status = g_bootloaderTree->flexSpiNorDriver->erase(
+        CONFIG_FLASH_FLEXSPI_INSTANCE,
+        FLEXSPI_CONFIG,
+        address - FLASH_BASE,
+        len);
     /* Ensure no speculative prefetching happens before flash erase is finished */
     asm volatile("dsb");
     /**
