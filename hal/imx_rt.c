@@ -939,14 +939,14 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
      * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
      */
     asm volatile("cpsid i");
-    bool program_success = true;
+    int write_success = 0;
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
         memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
         status = g_bootloaderTree->flexSpiNorDriver->program(0, FLEXSPI_CONFIG,
             (address + i) - FLASH_BASE, wbuf);
         if (status != kStatus_Success)
         {
-            program_success = false;
+            write_success = -1;
             break;
         }
     }
@@ -965,7 +965,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     DCACHE_InvalidateByRange(aligned_address, aligned_len);
     /* Re-enable interrupts */
     asm volatile("cpsie i");
-    return program_success;
+    return write_success;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
