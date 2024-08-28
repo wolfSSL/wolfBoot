@@ -152,10 +152,6 @@ char uart_read(void)
     } while(*UART0_FR & 0x10);
     /* read it and return */
     c = (char)(*UART0_DR);
-    /* convert carrige return to newline */
-    if (c == '\r')
-        c = '\n';
-
     return c;
 }
 
@@ -166,10 +162,6 @@ void uart_write(const char* buf, uint32_t sz) {
     uint32_t len = sz;
 
     while (len > 0 && *buf) {
-        /* convert newline to carrige return + newline */
-        if (*buf == '\n')
-            uart_tx('\r');
-
         uart_tx(*buf++);
         len--;
     }
@@ -216,7 +208,7 @@ void uart_init()
     *UART0_IBRD = 2;
     /* Fractional part register = (.17013 * 64) + 0.5 = 11.38 = ~11 */
     *UART0_FBRD = 0xB;
-    /* Enable fifo, 8bit data transmission ( 1stop bit, no parity) */
+    /* Enable fifo, 8bit data transmission (1 stop bit, no parity) */
     *UART0_LCRH = (1 << 4) | (1 << 5) | (1 << 6);
     /* enable UART0 transfer & receive*/
     *UART0_CR = (1 << 0) | (1 << 8) | (1 << 9);
