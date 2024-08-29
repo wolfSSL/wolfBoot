@@ -36,6 +36,7 @@ ifeq ($(HASH),SHA3_384)
 endif
 
 
+
 ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
@@ -142,6 +143,11 @@ endif
 
 ifeq ($(TARGET),stm32c0)
   LSCRIPT_TEMPLATE=ARM-stm32c0.ld
+endif
+
+ifeq ($(TARGET),sama5d3)
+  APP_OBJS+=../src/boot_arm32_start.o
+  LSCRIPT_TEMPLATE:=$(ARCH)-$(TARGET).ld
 endif
 
 ifeq ($(TARGET),stm32l4)

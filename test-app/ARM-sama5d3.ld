@@ -45,14 +45,9 @@ SECTIONS
 		_end_bss = .;
 	}
 }
-
-kernel_addr = 0x040000;
-update_addr = 0x080000;
-
 _romsize = _end_data - _start_text;
 _sramsize = _end_bss - _start_text;
 END_STACK = _start_text;
 _stack_top = ORIGIN(DDR_MEM) + LENGTH(DDR_MEM);
 end = .;  /* define a global symbol marking the end of application */
-
 
