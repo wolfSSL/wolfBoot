@@ -49,6 +49,9 @@
     /* #define WOLFBOOT_SIGN_ECC256  */
     /* #define WOLFBOOT_SIGN_ECC384  */
     /* #define WOLFBOOT_SIGN_ECC521  */
+    #if !defined(min)
+    	#define min(data1, data2)    _builtin_min(data1, data2)
+	#endif
 #endif
 
 #define WOLFBOOT_FIXED_PARTITIONS
@@ -59,8 +62,6 @@
 #endif
 
 #define WOLFBOOT_HASH_SHA256
-
-#include "rx72n/r_flash_rx72n.h"
 
 #define FLASHBUFFER_SIZE WOLFBOOT_SECTOR_SIZE
 #define WOLFSSL_HAVE_MIN

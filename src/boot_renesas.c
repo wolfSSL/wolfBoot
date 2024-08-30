@@ -32,6 +32,10 @@ extern uint32_t IMAGE_APP_RAM_start;
 #include "hal/renesas-rx.h"
 #endif
 
+#if defined(__CCRX__)
+#include "r_smc_entry.h"
+#endif
+
 void RAMFUNCTION arch_reboot(void)
 {
 #if defined(__RX__)
@@ -110,7 +114,7 @@ void do_boot(const uint32_t *app_offset)
 
 
 /* Interrupt Handling and Linker Sections for RX */
-#if defined(__RX__)
+#if defined(__RX__) && defined(__GNUC__)
 typedef void (*fp) (void); /* generic interrupt function pointer typedef */
 #ifdef NO_LEADING_UNDERSCORE
 extern void _PowerON_Reset(void);

@@ -42,7 +42,9 @@
 #include "printf.h"
 #include "renesas-rx.h"
 #include "printf.h"
-
+#if defined(__CCRX__)
+#include "r_smc_entry.h"
+#endif
 #if defined(WOLFBOOT_RENESAS_TSIP) && \
    !defined(WOLFBOOT_RENESAS_APP)
     #include "wolfssl/wolfcrypt/settings.h"
@@ -232,7 +234,7 @@ void hal_clk_init(void)
         SYS_HOCOCR &= ~SYS_HOCOCR_HCSTP;
         reg = SYS_HOCOCR; /* dummy ready (required) */
     }
-    /* Wait for HOCO oscisllator stabilization */
+    /* Wait for HOCO oscillator stabilization */
     while ((SYS_OSCOVFSR & SYS_OSCOVFSR_HCOVF) == 0) { RX_NOP(); }
 #else
 	if (SYS_HOCOCR & SYS_HOCOCR_HCSTP) {
@@ -377,7 +379,10 @@ void hal_init(void)
     struct enc_pub_key *encrypted_user_key_data;
 #endif
 
+/* For CCRX, mcu_clock_setup() in resetprg.c will set up clocks. */
+#if defined(_GNUC_)
     hal_clk_init();
+#endif
 
 #ifdef ENABLE_LED
     hal_led_off();
@@ -564,7 +569,11 @@ static int RAMFUNCTION hal_flash_write_faw(uint32_t faw)
     volatile uint8_t* cmdArea = (volatile uint8_t*)FLASH_FACI_CMD_AREA;
 
 #ifndef BIG_ENDIAN_ORDER
+  #if defined(__CCRX__)
+    faw = _builtin_revl(faw);
+  #elif defined(__GNUC__)
     faw = __builtin_bswap32(faw);
+  #endif
 #endif
 
     hal_flash_unlock();
