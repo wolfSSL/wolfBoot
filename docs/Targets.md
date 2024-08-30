@@ -6,35 +6,36 @@ This README describes configuration of supported targets.
 
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cypress PSoC-6](#cypress-psoc-6)
+* [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
+* [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
 * [Microchip SAME51](#microchip-same51)
-* [Nordic nRF52840](#nordic-nrf52840)
-* [NXP LPC54xxx](#nxp-lpc54xxx)
-* [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
+* [NXP LPC54xxx](#nxp-lpc54xxx)
+* [NXP MCXA153](#nxp-mcxa153)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
-* [NXP MCXA153](#nxp-mcxa153)
-* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
+* [NXP iMX-RT](#nxp-imx-rt)
+* [Nordic nRF52840](#nordic-nrf52840)
+* [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [Renesas RA6M4](#renesas-ra6m4)
+* [Renesas RX65N](#renesas-rx65n)
+* [Renesas RX72N](#renesas-rx72n)
+* [Renesas RZN2L](#renesas-rzn2l)
+* [STM32C0](#stm32c0)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
+* [STM32G0](#stm32g0)
+* [STM32H5](#stm32h5)
+* [STM32H7](#stm32h7)
 * [STM32L0](#stm32l0)
 * [STM32L4](#stm32l4)
 * [STM32L5](#stm32l5)
-* [STM32G0](#stm32g0)
-* [STM32C0](#stm32c0)
-* [STM32H5](#stm32h5)
-* [STM32H7](#stm32h7)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
+* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
-* [Renesas RX65N](#renesas-rx65n)
-* [Renesas RX72N](#renesas-rx72n)
-* [Renesas RA6M4](#renesas-ra6m4)
-* [Renesas RZN2L](#renesas-rzn2l)
-* [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
-* [Intel x86-64 Intel FSP](#Intel-x86_64-with-Intel-FSP-support)
 
 
 ## STM32F4
@@ -2804,3 +2805,11 @@ make CFLAGS_EXTRA="-DHAVE_ECC256"
 
 they produce a file named `final_image.bin` inside the root folder of the
 repository that can be directly flashed into the BIOS flash of the board.
+
+## Infineon AURIX TC3xx
+
+wolfBoot supports the AURIX TC3xx family of devices, and provides a demo application targeting the TC375 AURIX LiteKit-V2. 
+
+For detailed instructions on using wolfBoot with the AURIX TC3xx, please refer to [IDE/AURIX/README.md](../IDE/AURIX/README.md)  
+
+wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) on AURIX TC3xx devices, offloading cryptographic operations and key storage to the AURIX HSM core. For more information on using wolfBoot with wolfHSM on AURIX devices, please contact us at facts@wolfssl.com. 
