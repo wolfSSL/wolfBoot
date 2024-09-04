@@ -178,7 +178,8 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),sama5d3)
      CORTEX_A5=1
      UPDATE_OBJS:=src/update_ram.o
-     CFLAGS+=-DWOLFBOOT_DUALBOOT
+     CFLAGS+=-DWOLFBOOT_DUALBOOT -DEXT_FLASH -DNAND_FLASH
+     #CFLAGS+=-DWOLFBOOT_USE_STDLIBC
   endif
 
 ## Cortex CPU

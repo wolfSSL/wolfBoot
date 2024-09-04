@@ -196,7 +196,7 @@ ifeq ($(SIGN),ED448)
     ifeq ($(WOLFBOOT_SMALL_STACK),1)
       STACK_USAGE?=1024
     else
-      STACK_USAGE?=4376
+      STACK_USAGE?=4578
     endif
   endif
 
