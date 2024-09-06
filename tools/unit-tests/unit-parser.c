@@ -26,8 +26,8 @@
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
 #define WOLFBOOT_HASH_SHA256
 #define IMAGE_HEADER_SIZE 256
-#define UNIT_TEST
-#define WC_NO_HARDEN
+#define WC_RSA_BLINDING
+#define ECC_TIMING_RESISTANT
 #include <stdio.h>
 #include "libwolfboot.c"
 #include <check.h>

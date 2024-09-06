@@ -20,14 +20,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#define WOLFBOOT_HASH_SHA256
+#ifndef WOLFBOOT_HASH_SHA256
+    #define WOLFBOOT_HASH_SHA256
+#endif
 #define IMAGE_HEADER_SIZE 256
-#define UNIT_TEST
-#define WC_NO_HARDEN
 #define MOCK_ADDRESS_UPDATE 0xCC000000
 #define MOCK_ADDRESS_BOOT 0xCD000000
 #define MOCK_ADDRESS_SWAP 0xCE000000
-
 #define TEST_SIZE_SMALL 5300
 #define TEST_SIZE_LARGE 9800
 
@@ -35,6 +34,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "user_settings.h"
 #include "wolfboot/wolfboot.h"
 #include "libwolfboot.c"
 #include "update_flash.c"
@@ -51,7 +51,7 @@ const char *argv0;
 Suite *wolfboot_suite(void);
 
 int wolfBoot_staged_ok = 0;
-uint32_t *wolfBoot_stage_address = (uint32_t *) 0xFFFFFFFF;
+const uint32_t *wolfBoot_stage_address = (uint32_t *) 0xFFFFFFFF;
 
 void do_boot(const uint32_t *address)
 {
@@ -73,13 +73,13 @@ static void reset_mock_stats(void)
 static void prepare_flash(void)
 {
     int ret;
-    ret = mmap_file("/tmp/wolfboot-unit-ext-file.bin", MOCK_ADDRESS_UPDATE,
+    ret = mmap_file("/tmp/wolfboot-unit-ext-file.bin", (void *)MOCK_ADDRESS_UPDATE,
             WOLFBOOT_PARTITION_SIZE, NULL);
     fail_if(ret < 0);
-    ret = mmap_file("/tmp/wolfboot-unit-int-file.bin", MOCK_ADDRESS_BOOT,
+    ret = mmap_file("/tmp/wolfboot-unit-int-file.bin", (void *)MOCK_ADDRESS_BOOT,
             WOLFBOOT_PARTITION_SIZE, NULL);
     fail_if(ret < 0);
-    ret = mmap_file("/tmp/wolfboot-unit-swap.bin", MOCK_ADDRESS_SWAP,
+    ret = mmap_file("/tmp/wolfboot-unit-swap.bin", (void *)MOCK_ADDRESS_SWAP,
             WOLFBOOT_SECTOR_SIZE, NULL);
     fail_if(ret < 0);
     hal_flash_unlock();
@@ -90,9 +90,9 @@ static void prepare_flash(void)
 
 static void cleanup_flash(void)
 {
-    munmap(MOCK_ADDRESS_UPDATE, WOLFBOOT_PARTITION_SIZE);
-    munmap(MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE);
-    munmap(MOCK_ADDRESS_SWAP, WOLFBOOT_SECTOR_SIZE);
+    munmap((void *)MOCK_ADDRESS_UPDATE, WOLFBOOT_PARTITION_SIZE);
+    munmap((void *)MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE);
+    munmap((void *)MOCK_ADDRESS_SWAP, WOLFBOOT_SECTOR_SIZE);
 }
 
 
@@ -102,7 +102,7 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
     uint32_t word;
     uint16_t word16;
     int i;
-    uint8_t *base = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint8_t *base = (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     int ret;
     wc_Sha256 sha;
     uint8_t digest[SHA256_DIGEST_SIZE];
@@ -113,27 +113,27 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
 
 
     if (part == PART_UPDATE)
-        base = WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+        base = (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     srandom(part); /* Ensure reproducible "random" image */
 
 
     hal_flash_unlock();
-    hal_flash_write(base, "WOLF", 4);
+    hal_flash_write((uintptr_t)base, "WOLF", 4);
     printf("Written magic: \"WOLF\"\n");
 
-    hal_flash_write(base + 4, &size, 4);
+    hal_flash_write((uintptr_t)base + 4, (void *)&size, 4);
     printf("Written size: %u\n", size);
 
     /* Headers */
     word = 4 << 16 | HDR_VERSION;
-    hal_flash_write(base + 8, &word, 4);
-    hal_flash_write(base + 12, &version, 4);
+    hal_flash_write((uintptr_t)base + 8, (void *)&word, 4);
+    hal_flash_write((uintptr_t)base + 12, (void *)&version, 4);
     printf("Written version: %u\n", version);
 
     word = 2 << 16 | HDR_IMG_TYPE;
-    hal_flash_write(base + 16, &word, 4);
+    hal_flash_write((uintptr_t)base + 16, (void *)&word, 4);
     word16 = HDR_IMG_TYPE_AUTH_NONE | HDR_IMG_TYPE_APP;
-    hal_flash_write(base + 20, &word16, 2);
+    hal_flash_write((uintptr_t)base + 20, (void *)&word16, 2);
     printf("Written img_type: %04X\n", word16);
 
     /* Add 28B header to sha calculation */
@@ -145,7 +145,7 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
     size += IMAGE_HEADER_SIZE;
     for (i = IMAGE_HEADER_SIZE; i < size; i+=4) {
         uint32_t word = (random() << 16) | random();
-        hal_flash_write(base + i, &word, 4);
+        hal_flash_write((uintptr_t)base + i, (void *)&word, 4);
     }
     for (i = IMAGE_HEADER_SIZE; i < size; i+= WOLFBOOT_SHA_BLOCK_SIZE) {
         int len = WOLFBOOT_SHA_BLOCK_SIZE;
@@ -163,8 +163,8 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
     wc_Sha256Free(&sha);
 
     word = SHA256_DIGEST_SIZE << 16 | HDR_SHA256;
-    hal_flash_write(base + DIGEST_TLV_OFF_IN_HDR, &word, 4);
-    hal_flash_write(base + DIGEST_TLV_OFF_IN_HDR + 4, digest,
+    hal_flash_write((uintptr_t)base + DIGEST_TLV_OFF_IN_HDR, (void *)&word, 4);
+    hal_flash_write((uintptr_t)base + DIGEST_TLV_OFF_IN_HDR + 4, digest,
             SHA256_DIGEST_SIZE);
     printf("SHA digest written\n");
     for (i = 0; i < 32; i++) {
@@ -293,7 +293,7 @@ START_TEST (test_invalid_update_type) {
     add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, &word16, 2);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, (void *)&word16, 2);
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
@@ -311,7 +311,7 @@ START_TEST (test_update_toolarge) {
     add_payload(PART_UPDATE, 2, TEST_SIZE_LARGE);
     /* Change the size in the header to be larger than the actual size */
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4, &very_large, 4);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4, (void *)&very_large, 4);
     ext_flash_lock();
 
     wolfBoot_update_trigger();

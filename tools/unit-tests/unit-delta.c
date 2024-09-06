@@ -26,12 +26,15 @@
 #include <stdio.h>
 
 #include "delta.h"
+#define WC_RSA_BLINDING
 #include "delta.c"
 
 #define SRC_SIZE 4096
 #define PATCH_SIZE 8192
 #define DST_SIZE 4096
 #define DIFF_SIZE 8192
+
+
 
 START_TEST(test_wb_patch_init_invalid)
 {

@@ -41,12 +41,8 @@
 #endif
 #define ECC_TIMING_RESISTANT
 
-#define WOLFSSL_USER_SETTINGS
-#define UNIT_TEST
-#define WOLFBOOT_SIGN_ECC256
 #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC256
 
-#define __WOLFBOOT
 
 #include <stdio.h>
 #include <check.h>
@@ -75,16 +71,16 @@ const uint32_t keyvault_size = KEYVAULT_OBJ_SIZE * KEYVAULT_MAX_ITEMS + 2 * WOLF
 
 #include "txt_filler.h"
 
-const char dante_filler[KEYVAULT_OBJ_SIZE] = DANTE_FILLER;
+char dante_filler[KEYVAULT_OBJ_SIZE] = DANTE_FILLER;
 
 START_TEST (test_store_and_load_objs) {
     CK_ULONG id_tok, id_obj;
     int type;
     int ret, readonly;
     void *store = NULL;
-    const char secret1[] = "Everyone gets Friday off.";
-    const char secret2[] = "This is just a test string.";
-    const char short_string[] = "Short string";
+    char secret1[] = "Everyone gets Friday off.";
+    char secret2[] = "This is just a test string.";
+    char short_string[] = "Short string";
     char secret_rd[KEYVAULT_OBJ_SIZE];
 
     type = DYNAMIC_TYPE_ECC;

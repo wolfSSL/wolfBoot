@@ -22,8 +22,6 @@
  */
 #define WOLFBOOT_HASH_SHA256
 #define IMAGE_HEADER_SIZE 256
-#define UNIT_TEST
-#define WC_NO_HARDEN
 #define MOCK_ADDRESS 0xCC000000
 #define MOCK_ADDRESS_BOOT 0xCD000000
 #define MOCK_ADDRESS_SWAP 0xCE000000
@@ -57,18 +55,18 @@ START_TEST (test_nvm_update_with_encryption)
     uint32_t base_addr = WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     uint32_t home_off = 0;
 
-    ret = mmap_file("/tmp/wolfboot-unit-file.bin", MOCK_ADDRESS,
+    ret = mmap_file("/tmp/wolfboot-unit-file.bin", (void *)MOCK_ADDRESS,
             WOLFBOOT_PARTITION_SIZE, NULL);
     fail_if(ret < 0);
 #ifdef FLAGS_HOME
-    ret = mmap_file("/tmp/wolfboot-unit-int-file.bin", MOCK_ADDRESS_BOOT,
+    ret = mmap_file("/tmp/wolfboot-unit-int-file.bin", (void *)MOCK_ADDRESS_BOOT,
             WOLFBOOT_PARTITION_SIZE, NULL);
     fail_if(ret < 0);
     part = PART_BOOT;
     base_addr = WOLFBOOT_PARTITION_BOOT_ADDRESS;
     home_off = PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS;
 #endif
-    ret = mmap_file("/tmp/wolfboot-unit-swap.bin", MOCK_ADDRESS_SWAP,
+    ret = mmap_file("/tmp/wolfboot-unit-swap.bin", (void *)MOCK_ADDRESS_SWAP,
             WOLFBOOT_SECTOR_SIZE, NULL);
     fail_if(ret < 0);
 
@@ -82,7 +80,7 @@ START_TEST (test_nvm_update_with_encryption)
     wolfBoot_erase_partition(PART_SWAP);
     fail_if(erased_swap != 1);
     for (i = 0; i < WOLFBOOT_SECTOR_SIZE; i+=4) {
-        uint32_t *word = ((uint32_t *)(WOLFBOOT_PARTITION_SWAP_ADDRESS + i));
+        uint32_t *word = ((uint32_t *)((uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS + i));
         fail_if(*word != 0xFFFFFFFF);
     }
 
@@ -191,13 +189,13 @@ START_TEST (test_nvm_update_with_encryption)
     wolfBoot_set_update_sector_flag(1, SECT_FLAG_UPDATED);
 
     /* Copy flags from 0 to 1 */
-    src = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE);
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE));
+    src = (uint8_t *)((uintptr_t)base_addr + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE);
+    dst = (uint8_t *)((uintptr_t)base_addr + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE));
     for (i = 0; i < WOLFBOOT_SECTOR_SIZE; i++)
         dst[i] = src[i];
 
     /* Force-erase 4B of sector flags in 0 */
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off +
+    dst = (uint8_t *)((uintptr_t)base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off +
                 TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE));
     for (i = 0; i < 4; i++)
         dst[i] = 0xFF;
@@ -214,7 +212,7 @@ START_TEST (test_nvm_update_with_encryption)
     wolfBoot_set_update_sector_flag(3, SECT_FLAG_UPDATED);
     wolfBoot_set_update_sector_flag(4, SECT_FLAG_SWAPPING);
     st = IMG_STATE_UPDATING;
-    wolfBoot_set_partition_state(PART_UPDATE, &st);
+    wolfBoot_set_partition_state(PART_UPDATE, (uintptr_t)&st);
 
     /* Current selected should now be 1 */
     ret = nvm_select_fresh_sector(PART_UPDATE);
@@ -237,13 +235,13 @@ START_TEST (test_nvm_update_with_encryption)
     fail_if(ret != 1, "Failed to select right sector after reading sector state\n");
 
     /* Copy flags from 1 to 0 */
-    src = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE));
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (WOLFBOOT_SECTOR_SIZE));
+    src = (uint8_t *)((uintptr_t)base_addr + WOLFBOOT_PARTITION_SIZE - (2 * WOLFBOOT_SECTOR_SIZE));
+    dst = (uint8_t *)((uintptr_t)base_addr + WOLFBOOT_PARTITION_SIZE - (WOLFBOOT_SECTOR_SIZE));
     for (i = 0; i < WOLFBOOT_SECTOR_SIZE; i++)
         dst[i] = src[i];
 
     /* Force to F0 last sector flag in 0, so that the sector '4' is 'updated' */
-    dst = (uint8_t *)(base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off +
+    dst = (uint8_t *)((uintptr_t)base_addr + WOLFBOOT_PARTITION_SIZE - (8 + home_off +
                 TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE));
     dst[0] = 0xF0;
 

@@ -39,11 +39,8 @@
 #if defined(ENCRYPT_WITH_CHACHA)
     #define HAVE_CHACHA
 #endif
-#define WC_NO_HARDEN
 
-#define WOLFSSL_USER_SETTINGS
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
-#define UNIT_TEST
 #include <stdio.h>
 #include <check.h>
 #include <stdint.h>

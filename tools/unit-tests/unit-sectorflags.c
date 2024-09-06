@@ -30,13 +30,7 @@
 #define EXT_FLASH 1
 #define PART_UPDATE_EXT 1
 #define PART_SWAP_EXT 1
-
-
-#define WC_NO_HARDEN
-
-#define WOLFSSL_USER_SETTINGS
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
-#define UNIT_TEST
 #include <stdio.h>
 #include <check.h>
 #include <stdint.h>

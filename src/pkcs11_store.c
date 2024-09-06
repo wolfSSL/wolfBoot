@@ -180,12 +180,12 @@ static void cache_commit(uint32_t offset)
 
 
     /* Write backup sector first */
-    hal_flash_erase((uint32_t)BACKUP_SECTOR_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    hal_flash_write((uint32_t)BACKUP_SECTOR_ADDRESS, cached_sector, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_erase((uintptr_t)BACKUP_SECTOR_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_write((uintptr_t)BACKUP_SECTOR_ADDRESS, cached_sector, WOLFBOOT_SECTOR_SIZE);
 
     /* Erase + write actual destination sector */
-    hal_flash_erase((uint32_t)vault_base + offset, WOLFBOOT_SECTOR_SIZE);
-    hal_flash_write((uint32_t)vault_base + offset, cached_sector, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_erase((uintptr_t)vault_base + offset, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_write((uintptr_t)vault_base + offset, cached_sector, WOLFBOOT_SECTOR_SIZE);
 
     hal_flash_lock();
 }
@@ -194,8 +194,8 @@ static void restore_backup(uint32_t offset)
 {
     hal_flash_unlock();
     /* Erase + copy from backup */
-    hal_flash_erase((uint32_t)vault_base + offset, WOLFBOOT_SECTOR_SIZE);
-    hal_flash_write((uint32_t)vault_base + offset, BACKUP_SECTOR_ADDRESS,
+    hal_flash_erase((uintptr_t)vault_base + offset, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_write((uintptr_t)vault_base + offset, BACKUP_SECTOR_ADDRESS,
             WOLFBOOT_SECTOR_SIZE);
     hal_flash_lock();
 }
@@ -220,7 +220,7 @@ static void check_vault(void)
         memset(cached_sector + sizeof(uint32_t), 0x00, BITMAP_SIZE);
         cache_commit(0);
         hal_flash_unlock();
-        hal_flash_erase((uint32_t)vault_base + WOLFBOOT_SECTOR_SIZE * 2, total_vault_size);
+        hal_flash_erase((uintptr_t)vault_base + WOLFBOOT_SECTOR_SIZE * 2, total_vault_size);
         hal_flash_lock();
     }
 }
@@ -253,7 +253,7 @@ static uint8_t *find_object_buffer(int32_t type, uint32_t tok_id, uint32_t obj_i
 {
     struct obj_hdr *hdr = NODES_TABLE;
     uint32_t *tok_obj_stored = NULL;
-    while ((uint32_t)hdr < ((uint32_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
+    while ((uintptr_t)hdr < ((uintptr_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
         if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id)
                 && (hdr->type == type)) {
             tok_obj_stored = (uint32_t *) (vault_base + (2 * WOLFBOOT_SECTOR_SIZE) + (hdr->pos * KEYVAULT_OBJ_SIZE));
@@ -285,7 +285,7 @@ static struct obj_hdr *find_object_header(int32_t type, uint32_t tok_id,
 {
     struct obj_hdr *hdr = NODES_TABLE;
     uint32_t *tok_obj_stored = NULL;
-    while ((uint32_t)hdr < ((uint32_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
+    while ((uintptr_t)hdr < ((uintptr_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
         if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id)
                 && (hdr->type == type)) {
             return hdr;
@@ -307,7 +307,7 @@ static struct obj_hdr *create_object(int32_t type, uint32_t tok_id, uint32_t obj
     /* Caching sector 0 */
     memcpy(cached_sector, vault_base , WOLFBOOT_SECTOR_SIZE);
     hdr = (struct obj_hdr *)(cached_sector + STORE_PRIV_HDR_OFFSET);
-    while ((uint32_t)hdr < ((uint32_t)cached_sector + WOLFBOOT_SECTOR_SIZE)) {
+    while ((uintptr_t)hdr < ((uintptr_t)cached_sector + WOLFBOOT_SECTOR_SIZE)) {
         if (hdr->token_id == PKCS11_INVALID_ID) {
             uint32_t sector_base, in_sector_off;
             int pos = bitmap_find_free_pos();
@@ -337,7 +337,7 @@ static struct obj_hdr *create_object(int32_t type, uint32_t tok_id, uint32_t obj
              */
             memcpy(cached_sector, vault_base + sector_base,
                     WOLFBOOT_SECTOR_SIZE);
-            tok_obj_id = (uint32_t *)(cached_sector + in_sector_off);
+            tok_obj_id = (void*)(cached_sector + in_sector_off);
             tok_obj_id[0] = tok_id;
             tok_obj_id[1] = obj_id;
             cache_commit(sector_base);
@@ -357,7 +357,7 @@ static void update_store_size(struct obj_hdr *hdr, uint32_t size)
         ((uint8_t *)hdr > vault_base + WOLFBOOT_SECTOR_SIZE))
         return;
     check_vault();
-    off = (uint32_t)hdr - (uint32_t)vault_base;
+    off = (uintptr_t)hdr - (uintptr_t)vault_base;
     memcpy(cached_sector, vault_base, WOLFBOOT_SECTOR_SIZE);
     hdr_mem = (struct obj_hdr *)(cached_sector + off);
     hdr_mem->size = size;
@@ -426,7 +426,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 
     /* Set the position of the buffer in the handle */
     handle->buffer = buf;
-    handle->pos = (((uint32_t)buf) - (uint32_t)vault_base) / KEYVAULT_OBJ_SIZE;
+    handle->pos = (((uintptr_t)buf) - (uintptr_t)vault_base) / KEYVAULT_OBJ_SIZE;
     /* Set the 'open' flag */
     handle->flags |= STORE_FLAGS_OPEN;
 
@@ -508,22 +508,22 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
 
 
     while (written < len) {
-        in_sector_offset = ((uint32_t)(handle->buffer) + handle->in_buffer_offset)
+        in_sector_offset = ((uintptr_t)(handle->buffer) + handle->in_buffer_offset)
            % WOLFBOOT_SECTOR_SIZE;
-        sector_base = (uint32_t)handle->buffer + handle->in_buffer_offset - in_sector_offset;
+        sector_base = (uintptr_t)handle->buffer + handle->in_buffer_offset - in_sector_offset;
         in_sector_len = WOLFBOOT_SECTOR_SIZE - in_sector_offset;
         if (in_sector_len > (uint32_t)len)
             in_sector_len = len;
 
         /* Cache the corresponding sector */
-        memcpy(cached_sector, (void *)sector_base, WOLFBOOT_SECTOR_SIZE);
+        memcpy(cached_sector, (void *)(uintptr_t)sector_base, WOLFBOOT_SECTOR_SIZE);
         /* Write content into cache */
         memcpy(cached_sector + in_sector_offset, buffer + written, in_sector_len);
         /* Adjust in_buffer position for the handle accordingly */
         handle->in_buffer_offset += in_sector_len;
         written += in_sector_len;
         /* Write sector to flash */
-        cache_commit((uint32_t)sector_base - (uint32_t)vault_base);
+        cache_commit((uintptr_t)sector_base - (uintptr_t)vault_base);
     }
     obj_size += written;
     update_store_size(handle->hdr, obj_size);

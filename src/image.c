@@ -26,6 +26,9 @@
 #ifndef IMAGE_H_
 #define IMAGE_H_
 
+#ifdef UNIT_TEST
+#include <stdio.h>
+#endif
 #include <wolfssl/wolfcrypt/settings.h> /* for wolfCrypt hash/sign routines */
 
 #include <stddef.h>
