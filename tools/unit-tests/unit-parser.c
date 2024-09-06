@@ -236,8 +236,8 @@ START_TEST (test_parser_borders)
     ck_assert_msg(wolfBoot_find_header(bad_buff + 8, HDR_TIMESTAMP, &p) == 0, "Parser error: accessing version field out of bounds");
 
     /* High memory access */
-    ck_assert(!wolfBoot_find_header(((void *)(0 - 0xF8)), HDR_VERSION, &p) != 0);
-    ck_assert(!wolfBoot_find_header(((void *)(0 - 0x10)), HDR_VERSION, &p) != 0);
+    ck_assert(wolfBoot_find_header(((void *)(0 - 0xF8)), HDR_VERSION, &p) == 0);
+    ck_assert(wolfBoot_find_header(((void *)(0 - 0x10)), HDR_VERSION, &p) == 0);
 
 }
 END_TEST

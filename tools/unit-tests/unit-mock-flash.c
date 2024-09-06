@@ -33,6 +33,8 @@ static int erased_nvm_bank1 = 0;
 static int erased_vault = 0;
 const char *argv0;
 
+#include <sys/stat.h>
+
 
 /* Mocks */
 void hal_init(void)
