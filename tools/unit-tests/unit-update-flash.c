@@ -75,13 +75,13 @@ static void prepare_flash(void)
     int ret;
     ret = mmap_file("/tmp/wolfboot-unit-ext-file.bin", (void *)MOCK_ADDRESS_UPDATE,
             WOLFBOOT_PARTITION_SIZE, NULL);
-    fail_if(ret < 0);
+    ck_assert(ret >= 0);
     ret = mmap_file("/tmp/wolfboot-unit-int-file.bin", (void *)MOCK_ADDRESS_BOOT,
             WOLFBOOT_PARTITION_SIZE, NULL);
-    fail_if(ret < 0);
+    ck_assert(ret >= 0);
     ret = mmap_file("/tmp/wolfboot-unit-swap.bin", (void *)MOCK_ADDRESS_SWAP,
             WOLFBOOT_SECTOR_SIZE, NULL);
-    fail_if(ret < 0);
+    ck_assert(ret >= 0);
     hal_flash_unlock();
     hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_SIZE);
     hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
@@ -180,8 +180,8 @@ START_TEST (test_empty_panic)
     reset_mock_stats();
     prepare_flash();
     wolfBoot_start();
-    fail_if(wolfBoot_staged_ok);
-    fail_unless(wolfBoot_panicked);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert(wolfBoot_panicked);
     cleanup_flash();
 
 }
@@ -194,9 +194,9 @@ START_TEST (test_sunnyday_noupdate)
     prepare_flash();
     add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
     cleanup_flash();
 
 }
@@ -208,9 +208,9 @@ START_TEST (test_forward_update_samesize_notrigger) {
     add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
     cleanup_flash();
 }
 END_TEST
@@ -222,9 +222,9 @@ START_TEST (test_forward_update_samesize) {
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 2);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
     cleanup_flash();
 }
 END_TEST
@@ -236,9 +236,9 @@ START_TEST (test_forward_update_tolarger) {
     add_payload(PART_UPDATE, 2, TEST_SIZE_LARGE);
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 2);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
     cleanup_flash();
 }
 END_TEST
@@ -250,9 +250,9 @@ START_TEST (test_forward_update_tosmaller) {
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 2);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
     cleanup_flash();
 }
 END_TEST
@@ -264,10 +264,10 @@ START_TEST (test_forward_update_sameversion_denied) {
     add_payload(PART_UPDATE, 1, TEST_SIZE_LARGE);
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
-    fail_if(*(uint32_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4) != TEST_SIZE_SMALL);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
+    ck_assert(*(uint32_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4) == TEST_SIZE_SMALL);
     cleanup_flash();
 }
 END_TEST
@@ -279,10 +279,10 @@ START_TEST (test_update_oldversion_denied) {
     add_payload(PART_UPDATE, 1, TEST_SIZE_LARGE);
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 2);
-    fail_if(*(uint32_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4) != TEST_SIZE_SMALL);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
+    ck_assert(*(uint32_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4) == TEST_SIZE_SMALL);
     cleanup_flash();
 }
 
@@ -297,9 +297,9 @@ START_TEST (test_invalid_update_type) {
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
     cleanup_flash();
 }
 
@@ -316,9 +316,9 @@ START_TEST (test_update_toolarge) {
 
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
     cleanup_flash();
 }
 
@@ -335,9 +335,9 @@ START_TEST (test_invalid_sha) {
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
     cleanup_flash();
 }
 
@@ -354,9 +354,9 @@ START_TEST (test_emergency_rollback) {
     hal_flash_lock();
 
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 1);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
     cleanup_flash();
 }
 
@@ -379,9 +379,9 @@ START_TEST (test_emergency_rollback_failure_due_to_bad_update) {
     ext_flash_lock();
 
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 2);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
     cleanup_flash();
 }
 
@@ -390,9 +390,9 @@ START_TEST (test_empty_boot_partition_update) {
     prepare_flash();
     add_payload(PART_UPDATE, 5, TEST_SIZE_SMALL);
     wolfBoot_start();
-    fail_if(wolfBoot_panicked);
-    fail_unless(wolfBoot_staged_ok);
-    fail_if(wolfBoot_current_firmware_version() != 5);
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 5);
     cleanup_flash();
 }
 
@@ -407,8 +407,8 @@ START_TEST (test_empty_boot_but_update_sha_corrupted_denied) {
     ext_flash_lock();
     wolfBoot_start();
     /* We expect to panic */
-    fail_unless(wolfBoot_panicked);
-    fail_if(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_panicked);
+    ck_assert(!wolfBoot_staged_ok);
     cleanup_flash();
 }
 

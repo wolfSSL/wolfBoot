@@ -59,23 +59,23 @@ int hal_flash_erase(uint32_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    fail_unless(locked, "Double unlock detected\n");
+    ck_assert_msg(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    fail_if(locked, "Double lock detected\n");
+    ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
 
 void ext_flash_unlock(void)
 {
-    //fail_unless(ext_locked, "Double unlock detected\n");
+    //ck_assert_msg(ext_locked, "Double unlock detected\n");
     ext_locked--;
 }
 void ext_flash_lock(void)
 {
-    //fail_if(ext_locked, "Double lock detected\n");
+    //ck_assert_msg(!ext_locked, "Double lock detected\n");
     ext_locked++;
 }
 

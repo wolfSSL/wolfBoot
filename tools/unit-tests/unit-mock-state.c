@@ -47,6 +47,7 @@
 #include <string.h>
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
+
 static uint8_t* get_trailer_at(uint8_t part, uint32_t at);
 static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val);
 static void set_partition_magic(uint8_t part);
@@ -185,12 +186,12 @@ int ext_flash_erase(uintptr_t address, int len)
 }
 void ext_flash_unlock(void)
 {
-    fail_unless(ext_locked, "Double unlock detected (ext)\n");
+    ck_assert_msg(ext_locked, "Double unlock detected (ext)\n");
     ext_locked--;
 }
 void ext_flash_lock(void)
 {
-    fail_if(ext_locked, "Double lock detected(ext)\n");
+    ck_assert_msg(!ext_locked, "Double lock detected(ext)\n");
     ext_locked++;
 }
 

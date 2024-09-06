@@ -89,14 +89,14 @@ START_TEST (test_store_and_load_objs) {
     readonly = 0;
     ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
             keyvault_size, NULL);
-    fail_if(ret != 0);
+    ck_assert(ret == 0);
     memset(vault_base, 0xEE, keyvault_size);
     /* Open the vault, create the object */
     fprintf(stderr, "Opening the vault\n");
     printf("Flash Keyvault: %p\n", vault_base);
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_unless(ret == 0, "Failed to open the vault: %d", ret);
-    fail_if(store == NULL, "Did not receive a store address");
+    ck_assert_msg(ret == 0, "Failed to open the vault: %d", ret);
+    ck_assert_msg(store != NULL, "Did not receive a store address");
     fprintf(stderr, "open successful\n");
 
     /* Test two subsequent writes */
@@ -110,13 +110,13 @@ START_TEST (test_store_and_load_objs) {
     /* Reopen for reading */
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault in read-only mode: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault in read-only mode: %d", ret);
 
     /* Read out the content */
     ret = wolfPKCS11_Store_Read(store, secret_rd, 128);
-    fail_if(ret != strlen(secret1) + strlen(secret2) + 2);
-    fail_if(strcmp(secret1, secret_rd) != 0);
-    fail_if(strcmp(secret2, secret_rd + 1 + strlen(secret1)) != 0);
+    ck_assert(ret == strlen(secret1) + strlen(secret2) + 2);
+    ck_assert(strcmp(secret1, secret_rd) == 0);
+    ck_assert(strcmp(secret2, secret_rd + 1 + strlen(secret1)) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Create a second object with same Ids, different type*/
@@ -125,8 +125,8 @@ START_TEST (test_store_and_load_objs) {
     fprintf(stderr, "Opening the second vault\n");
     printf("Flash Keyvault: %p\n", vault_base);
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_unless(ret == 0, "Failed to open the 2nd vault: %d", ret);
-    fail_if(store == NULL, "Did not receive a store address for 2nd vault");
+    ck_assert_msg(ret == 0, "Failed to open the 2nd vault: %d", ret);
+    ck_assert_msg(store != NULL, "Did not receive a store address for 2nd vault");
     fprintf(stderr, "open 2 successful\n");
     ret = wolfPKCS11_Store_Write(store, secret2, strlen(secret2) + 1);
     wolfPKCS11_Store_Close(store);
@@ -134,11 +134,11 @@ START_TEST (test_store_and_load_objs) {
     /* Reopen for reading */
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault in read-only mode: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault in read-only mode: %d", ret);
     /* Read out the content */
     ret = wolfPKCS11_Store_Read(store, secret_rd, 128);
-    fail_if(ret != strlen(secret2) + 1);
-    fail_if(strcmp(secret2, secret_rd) != 0);
+    ck_assert(ret == strlen(secret2) + 1);
+    ck_assert(strcmp(secret2, secret_rd) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Create more similar objects, different secret */
@@ -148,8 +148,8 @@ START_TEST (test_store_and_load_objs) {
     readonly = 0;
     fprintf(stderr, "Creating one more vault\n");
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_unless(ret == 0, "Failed to create vault: %d", ret);
-    fail_if(store == NULL, "Did not receive a store address for vault");
+    ck_assert_msg(ret == 0, "Failed to create vault: %d", ret);
+    ck_assert_msg(store != NULL, "Did not receive a store address for vault");
     fprintf(stderr, "open 2 successful\n");
     ret = wolfPKCS11_Store_Write(store, secret1, strlen(secret1) + 1);
 
@@ -158,8 +158,8 @@ START_TEST (test_store_and_load_objs) {
     readonly = 0;
     fprintf(stderr, "Creating one more vault\n");
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_unless(ret == 0, "Failed to create vault: %d", ret);
-    fail_if(store == NULL, "Did not receive a store address for vault");
+    ck_assert_msg(ret == 0, "Failed to create vault: %d", ret);
+    ck_assert_msg(store != NULL, "Did not receive a store address for vault");
     fprintf(stderr, "open 2 successful\n");
     ret = wolfPKCS11_Store_Write(store, secret1, strlen(secret1) + 1);
     wolfPKCS11_Store_Close(store);
@@ -169,27 +169,27 @@ START_TEST (test_store_and_load_objs) {
     id_obj = 12;
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault in read-only mode: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault in read-only mode: %d", ret);
     /* Read out the content */
     ret = wolfPKCS11_Store_Read(store, secret_rd, 128);
-    fail_if(ret != strlen(secret2) + 1);
-    fail_if(strcmp(secret2, secret_rd) != 0);
+    ck_assert(ret == strlen(secret2) + 1);
+    ck_assert(strcmp(secret2, secret_rd) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Open non-existing vaults */
     id_tok = 5;
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret == 0, "Returned with success with invalid id_tok %d", id_tok);
+    ck_assert_msg(ret != 0, "Returned with success with invalid id_tok %d", id_tok);
     id_tok = 2;
     id_obj = 0;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret == 0, "Returned with success with invalid id_obj %d", id_obj);
+    ck_assert_msg(ret != 0, "Returned with success with invalid id_obj %d", id_obj);
     type = 0xFF;
     id_tok = 2;
     id_obj = 23;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret == 0, "Returned with success with invalid type %d", type);
+    ck_assert_msg(ret != 0, "Returned with success with invalid type %d", type);
 
     /* Test backup recovery for allocation table */
     memset(vault_base, 0xEE, WOLFBOOT_SECTOR_SIZE);
@@ -198,11 +198,11 @@ START_TEST (test_store_and_load_objs) {
     id_obj = 12;
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault recovering from alloc table backup: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault recovering from alloc table backup: %d", ret);
     /* Read out the content */
     ret = wolfPKCS11_Store_Read(store, secret_rd, 128);
-    fail_if(ret != strlen(secret2) + 1);
-    fail_if(strcmp(secret2, secret_rd) != 0);
+    ck_assert(ret == strlen(secret2) + 1);
+    ck_assert(strcmp(secret2, secret_rd) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Test backup recovery for object sector */
@@ -214,11 +214,11 @@ START_TEST (test_store_and_load_objs) {
     id_obj = 12;
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault recovering from object sector backup: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault recovering from object sector backup: %d", ret);
     /* Read out the content */
     ret = wolfPKCS11_Store_Read(store, secret_rd, 128);
-    fail_if(ret != strlen(secret2) + 1);
-    fail_if(strcmp(secret2, secret_rd) != 0);
+    ck_assert(ret == strlen(secret2) + 1);
+    ck_assert(strcmp(secret2, secret_rd) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Test with very large payload */
@@ -228,8 +228,8 @@ START_TEST (test_store_and_load_objs) {
     readonly = 0;
     fprintf(stderr, "Creating one BIG vault\n");
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_unless(ret == 0, "Failed to create vault: %d", ret);
-    fail_if(store == NULL, "Did not receive a store address for vault");
+    ck_assert_msg(ret == 0, "Failed to create vault: %d", ret);
+    ck_assert_msg(store != NULL, "Did not receive a store address for vault");
     fprintf(stderr, "open 3.33 successful\n");
     ret = wolfPKCS11_Store_Write(store, dante_filler, strlen(dante_filler) + 1);
     wolfPKCS11_Store_Close(store);
@@ -237,19 +237,19 @@ START_TEST (test_store_and_load_objs) {
     /* Reopen for reading */
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault in read-only mode: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault in read-only mode: %d", ret);
     /* Read out the content */
     memset(secret_rd, 0, KEYVAULT_OBJ_SIZE);
     ret = wolfPKCS11_Store_Read(store, secret_rd, KEYVAULT_OBJ_SIZE);
-    fail_if(ret != KEYVAULT_OBJ_SIZE - 8);
-    fail_if(strncmp(dante_filler, secret_rd, KEYVAULT_OBJ_SIZE - 8) != 0);
+    ck_assert(ret == KEYVAULT_OBJ_SIZE - 8);
+    ck_assert(strncmp(dante_filler, secret_rd, KEYVAULT_OBJ_SIZE - 8) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Reopen for writing, test truncate */
     readonly = 0;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_unless(ret == 0, "Failed to create vault: %d", ret);
-    fail_if(store == NULL, "Did not receive a store address for vault");
+    ck_assert_msg(ret == 0, "Failed to create vault: %d", ret);
+    ck_assert_msg(store != NULL, "Did not receive a store address for vault");
     fprintf(stderr, "open 3.33 successful\n");
     ret = wolfPKCS11_Store_Write(store, short_string, strlen(short_string) + 1);
     wolfPKCS11_Store_Close(store);
@@ -257,12 +257,12 @@ START_TEST (test_store_and_load_objs) {
     /* Reopen for reading */
     readonly = 1;
     ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
-    fail_if(ret != 0, "Failed to reopen the vault in read-only mode: %d", ret);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault in read-only mode: %d", ret);
     /* Read out the content */
     memset(secret_rd, 0, KEYVAULT_OBJ_SIZE);
     ret = wolfPKCS11_Store_Read(store, secret_rd, KEYVAULT_OBJ_SIZE);
-    fail_if(ret != strlen(short_string) + 1);
-    fail_if(strcmp(short_string, secret_rd) != 0);
+    ck_assert(ret == strlen(short_string) + 1);
+    ck_assert(strcmp(short_string, secret_rd) == 0);
     wolfPKCS11_Store_Close(store);
 }
 END_TEST

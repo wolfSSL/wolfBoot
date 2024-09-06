@@ -42,7 +42,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 {
     int i;
     uint8_t *a = (uint8_t *)(uintptr_t)address;
-    fail_if(locked, "Attempting to write to a locked FLASH");
+    ck_assert_msg(!locked, "Attempting to write to a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         for (i = 0; i < len; i++) {
@@ -72,7 +72,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 }
 int hal_flash_erase(haladdr_t address, int len)
 {
-    fail_if(locked, "Attempting to erase a locked FLASH");
+    ck_assert_msg(!locked, "Attempting to erase a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_boot++;
@@ -109,12 +109,12 @@ int hal_flash_erase(haladdr_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    fail_unless(locked, "Double unlock detected\n");
+    ck_assert_msg(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    fail_if(locked, "Double lock detected\n");
+    ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
 
@@ -160,7 +160,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
     uint8_t *a = (uint8_t *)address;
-    fail_if(ext_locked, "Attempting to write to a locked FLASH");
+    ck_assert_msg(!ext_locked, "Attempting to write to a locked FLASH");
     for (i = 0; i < len; i++) {
         a[i] = data[i];
     }
@@ -179,12 +179,12 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 void ext_flash_unlock(void)
 {
-    fail_unless(ext_locked, "Double ext unlock detected\n");
+    ck_assert_msg(ext_locked, "Double ext unlock detected\n");
     ext_locked--;
 }
 void ext_flash_lock(void)
 {
-    fail_if(ext_locked, "Double ext lock detected\n");
+    ck_assert_msg(!ext_locked, "Double ext lock detected\n");
     ext_locked++;
 }
 
