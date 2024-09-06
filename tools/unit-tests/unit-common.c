@@ -94,12 +94,12 @@ int ext_flash_erase(uintptr_t address, int len) {
 
 void ext_flash_unlock(void)
 {
-    fail_unless(elocked, "Double ext unlock detected\n");
+    ck_assert_msg(elocked, "Double ext unlock detected\n");
     elocked--;
 }
 void ext_flash_lock(void)
 {
-    fail_if(elocked, "Double ext lock detected\n");
+    ck_assert_msg(!elocked, "Double ext lock detected\n");
     elocked++;
 }
 

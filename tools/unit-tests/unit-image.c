@@ -39,15 +39,10 @@
 #if defined(ENCRYPT_WITH_CHACHA)
     #define HAVE_CHACHA
 #endif
-//#define WC_NO_HARDEN
 #define ECC_TIMING_RESISTANT
 
-#define WOLFSSL_USER_SETTINGS
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
-#define UNIT_TEST
-#define WOLFBOOT_SIGN_ECC256
 #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC256
-#define __WOLFBOOT
 
 #include <stdio.h>
 #include <check.h>
@@ -80,7 +75,7 @@ static const unsigned char pubkey_digest[SHA256_DIGEST_SIZE] = {
 };
 
 
-static const unsigned char test_img_v200000000_signed_bin[] = {
+static unsigned char test_img_v200000000_signed_bin[] = {
       0x57, 0x4f, 0x4c, 0x46, 0x13, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x00,
   0x00, 0xc2, 0xeb, 0x0b, 0xff, 0xff, 0xff, 0xff, 0x02, 0x00, 0x08, 0x00,
   0x77, 0x33, 0x29, 0x65, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x02, 0x00,
@@ -407,28 +402,28 @@ START_TEST(test_headers)
     img.part = PART_BOOT;
     find_header_fail = 1;
     find_header_called = 0;
-    ret = get_header(&img, type, &ptr);
+    ret = get_header(&img, type, (void *)&ptr);
     ck_assert_uint_eq(ret, 0xFFFF);
     ck_assert_int_eq(find_header_called, 1);
 
     img.part = PART_BOOT;
     find_header_fail = 0;
     find_header_called = 0;
-    ret = get_header(&img, type, &ptr);
+    ret = get_header(&img, type, (void *)&ptr);
     ck_assert_uint_ne(ret, 0xFFFF);
     ck_assert_int_eq(find_header_called, 1);
 
     img.part = PART_UPDATE;
     find_header_fail = 1;
     find_header_called = 0;
-    ret = get_header(&img, type, &ptr);
+    ret = get_header(&img, type, (void *)&ptr);
     ck_assert_uint_eq(ret, 0xFFFF);
     ck_assert_int_eq(find_header_called, 1);
 
     img.part = PART_UPDATE;
     find_header_fail = 0;
     find_header_called = 0;
-    ret = get_header(&img, type, &ptr);
+    ret = get_header(&img, type, (void *)&ptr);
     ck_assert_uint_ne(ret, 0xFFFF);
     ck_assert_int_eq(find_header_called, 1);
 
@@ -444,7 +439,7 @@ START_TEST(test_headers)
     ck_assert_ptr_eq(ptr, hdr_cpy);
 
     /* Test image_size */
-    sz = wolfBoot_image_size(test_img_v200000000_signed_bin);
+    sz = wolfBoot_image_size((void *)(uintptr_t)test_img_v200000000_signed_bin);
     ck_assert_uint_eq(sz, test_img_len - 256);
 }
 
@@ -514,7 +509,7 @@ START_TEST(test_verify_integrity)
             test_img_v123_signed_bin_len);
     ret = wolfBoot_open_image(&test_img, PART_UPDATE);
     ck_assert_int_eq(ret, 0);
-    ck_assert_uint_eq(test_img.hdr, WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    ck_assert_ptr_eq(test_img.hdr, (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
     ret = wolfBoot_verify_integrity(&test_img);
     ck_assert_int_eq(ret, 0);
 }
@@ -540,7 +535,7 @@ START_TEST(test_open_image)
     /* Swap partition */
     ret = wolfBoot_open_image(&img, PART_SWAP);
     ck_assert_uint_eq(img.hdr_ok, 1);
-    ck_assert_ptr_eq(img.hdr, WOLFBOOT_PARTITION_SWAP_ADDRESS);
+    ck_assert_ptr_eq(img.hdr, (void *)WOLFBOOT_PARTITION_SWAP_ADDRESS);
     ck_assert_ptr_eq(img.hdr, img.fw_base);
     ck_assert_uint_eq(img.fw_size, WOLFBOOT_SECTOR_SIZE);
     
@@ -552,7 +547,8 @@ START_TEST(test_open_image)
     ck_assert_int_eq(ret, 0);
     ck_assert_uint_eq(img.hdr_ok, 1);
     ck_assert_ptr_eq(img.hdr, WOLFBOOT_PARTITION_UPDATE_ADDRESS);
-    ck_assert_ptr_eq(img.fw_base, WOLFBOOT_PARTITION_UPDATE_ADDRESS + 256);
+    ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
+            + 256);
 
 }
 END_TEST

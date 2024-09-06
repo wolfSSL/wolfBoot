@@ -30,13 +30,7 @@
 #define EXT_FLASH 1
 #define PART_UPDATE_EXT 1
 #define PART_SWAP_EXT 1
-
-
-#define WC_NO_HARDEN
-
-#define WOLFSSL_USER_SETTINGS
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
-#define UNIT_TEST
 #include <stdio.h>
 #include <check.h>
 #include <stdint.h>
@@ -65,23 +59,23 @@ int hal_flash_erase(uint32_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    fail_unless(locked, "Double unlock detected\n");
+    ck_assert_msg(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    fail_if(locked, "Double lock detected\n");
+    ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
 
 void ext_flash_unlock(void)
 {
-    //fail_unless(ext_locked, "Double unlock detected\n");
+    //ck_assert_msg(ext_locked, "Double unlock detected\n");
     ext_locked--;
 }
 void ext_flash_lock(void)
 {
-    //fail_if(ext_locked, "Double lock detected\n");
+    //ck_assert_msg(!ext_locked, "Double lock detected\n");
     ext_locked++;
 }
 

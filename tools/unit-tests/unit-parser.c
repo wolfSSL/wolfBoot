@@ -26,8 +26,8 @@
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
 #define WOLFBOOT_HASH_SHA256
 #define IMAGE_HEADER_SIZE 256
-#define UNIT_TEST
-#define WC_NO_HARDEN
+#define WC_RSA_BLINDING
+#define ECC_TIMING_RESISTANT
 #include <stdio.h>
 #include "libwolfboot.c"
 #include <check.h>
@@ -47,12 +47,12 @@ int hal_flash_erase(haladdr_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    fail_unless(locked, "Double unlock detected\n");
+    ck_assert_msg(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    fail_if(locked, "Double lock detected\n");
+    ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
 
@@ -181,21 +181,21 @@ START_TEST (test_parser_sunny)
     int i;
 
     /* Check version */
-    fail_if(wolfBoot_find_header(test_buffer + 8, HDR_VERSION, &p) != 4, "Parser error: cannot locate version");
-    fail_if((p[0] != 0x0d) || (p[1] != 0x0c) || (p[2] != 0x0b) || (p[3] != 0x0a), "Parser error: version doesn't match");
+    ck_assert_msg(wolfBoot_find_header(test_buffer + 8, HDR_VERSION, &p) == 4, "Parser error: cannot locate version");
+    ck_assert_msg((p[0] == 0x0d) && (p[1] == 0x0c) && (p[2] == 0x0b) && (p[3] == 0x0a), "Parser error: version doesn't match");
 
     /* Check timestamp */
-    fail_if(wolfBoot_find_header(test_buffer + 8, HDR_TIMESTAMP, &p) != 8, "Parser error: cannot locate timestamp");
-    fail_if((p[0] != 0x07) || (p[1] != 0x06) || (p[2] != 0x05) || (p[3] != 0x04), "Parser error: timestamp doesn't match");
-    fail_if((p[4] != 0x03) || (p[5] != 0x02) || (p[6] != 0x01) || (p[7] != 0x00), "Parser error: timestamp doesn't match");
+    ck_assert_msg(wolfBoot_find_header(test_buffer + 8, HDR_TIMESTAMP, &p) == 8, "Parser error: cannot locate timestamp");
+    ck_assert_msg((p[0] == 0x07) && (p[1] == 0x06) && (p[2] == 0x05) && (p[3] == 0x04), "Parser error: timestamp doesn't match");
+    ck_assert_msg((p[4] == 0x03) && (p[5] == 0x02) && (p[6] == 0x01) && (p[7] == 0x00), "Parser error: timestamp doesn't match");
 
     /* Check sha256 field */
-    fail_if(wolfBoot_find_header(test_buffer + 8, HDR_SHA256, &p) != 32, "Parser error: cannot locate hash");
+    ck_assert_msg(wolfBoot_find_header(test_buffer + 8, HDR_SHA256, &p) == 32, "Parser error: cannot locate hash");
     for (i = 0; i < 32; i++)
-        fail_unless(p[i] == i, "Parser error: hash does not match");
+        ck_assert_msg(p[i] == i, "Parser error: hash does not match");
 
     /* Check non-existing field */
-    fail_if(wolfBoot_find_header(test_buffer + 8, HDR_SHA3_384, &p) != 0, "Parser error: found a non-existing field");
+    ck_assert_msg(wolfBoot_find_header(test_buffer + 8, HDR_SHA3_384, &p) == 0, "Parser error: found a non-existing field");
 }
 END_TEST
 
@@ -211,14 +211,14 @@ START_TEST (test_parser_borders)
     bad_buff[257] = 0x00;
     bad_buff[258] = 0x04;
     bad_buff[259] = 0x00;
-    fail_if(wolfBoot_find_header(bad_buff + 8, HDR_VERSION, &p) != 0, "Parser error: accessing version field out of bounds");
+    ck_assert_msg(wolfBoot_find_header(bad_buff + 8, HDR_VERSION, &p) == 0, "Parser error: accessing version field out of bounds");
 
     /* Single field too large */
     bad_buff[8]  = 0x02;
     bad_buff[9]  = 0x00;
     bad_buff[10]  = 0xF8;
     bad_buff[11]  = 0x00;
-    fail_if(wolfBoot_find_header(bad_buff + 8, HDR_VERSION, &p) != 0, "Parser error: accessing version field out of bounds");
+    ck_assert_msg(wolfBoot_find_header(bad_buff + 8, HDR_VERSION, &p) == 0, "Parser error: accessing version field out of bounds");
 
     /* Second field too large */
     bad_buff[8]  = 0x01;
@@ -233,11 +233,11 @@ START_TEST (test_parser_borders)
     bad_buff[17]  = 0x00;
     bad_buff[18]  = 0xf0; /** Timestamp field too large **/
     bad_buff[19]  = 0x00;
-    fail_if(wolfBoot_find_header(bad_buff + 8, HDR_TIMESTAMP, &p) != 0, "Parser error: accessing version field out of bounds");
+    ck_assert_msg(wolfBoot_find_header(bad_buff + 8, HDR_TIMESTAMP, &p) == 0, "Parser error: accessing version field out of bounds");
 
     /* High memory access */
-    fail_if(wolfBoot_find_header(((void *)(0 - 0xF8)), HDR_VERSION, &p) != 0);
-    fail_if(wolfBoot_find_header(((void *)(0 - 0x10)), HDR_VERSION, &p) != 0);
+    ck_assert(wolfBoot_find_header(((void *)(0 - 0xF8)), HDR_VERSION, &p) == 0);
+    ck_assert(wolfBoot_find_header(((void *)(0 - 0x10)), HDR_VERSION, &p) == 0);
 
 }
 END_TEST
@@ -247,15 +247,15 @@ START_TEST (test_parser_blobs)
     uint32_t ver;
     uint16_t type;
     ver = wolfBoot_get_blob_version(test_buffer);
-    fail_unless(ver == 0x0a0b0c0d, "Parser error: version does not match");
+    ck_assert_msg(ver == 0x0a0b0c0d, "Parser error: version does not match");
 
     type = wolfBoot_get_blob_type(test_buffer_with_type);
-    fail_unless(type == 0xDDEE, "Wrong image type");
+    ck_assert_msg(type == 0xDDEE, "Wrong image type");
 
     type = wolfBoot_get_blob_type(test_buffer);
-    fail_unless(type == 0, "Reading non-existing version: failed to report error");
+    ck_assert_msg(type == 0, "Reading non-existing version: failed to report error");
     ver = wolfBoot_get_blob_diffbase_version(test_buffer_with_diffbase);
-    fail_unless(ver == 0x01020304, "Wrong delta base version parsed");
+    ck_assert_msg(ver == 0x01020304, "Wrong delta base version parsed");
 
 }
 END_TEST

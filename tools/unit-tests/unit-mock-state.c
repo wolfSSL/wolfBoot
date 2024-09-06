@@ -36,11 +36,8 @@
 #if defined(ENCRYPT_WITH_CHACHA)
     #define HAVE_CHACHA
 #endif
-#define WC_NO_HARDEN
 #define NVM_FLASH_WRITEONCE
 
-#define WOLFSSL_USER_SETTINGS
-#define UNIT_TEST
 #define MOCK_PARTITION_TRAILER
 #define MOCK_BLOB_TYPE
 #include <stdio.h>
@@ -50,6 +47,7 @@
 #include <string.h>
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
+
 static uint8_t* get_trailer_at(uint8_t part, uint32_t at);
 static void set_trailer_at(uint8_t part, uint32_t at, uint8_t val);
 static void set_partition_magic(uint8_t part);
@@ -72,7 +70,7 @@ uint8_t image_backup(uint8_t part_id)
 static int locked = 0;
 static int hal_flash_write_mock_called = 0;
 static uintptr_t hal_flash_write_mock_address = 0U;
-static uint8_t *hal_flash_write_mock_data = NULL;
+static const uint8_t *hal_flash_write_mock_data = NULL;
 static int hal_flash_write_mock_len = 0;
 
 static uintptr_t hal_flash_erase_mock_address = 0;
@@ -129,7 +127,7 @@ void hal_prepare_boot(void)
 static int ext_locked = 1;
 static int ext_flash_write_mock_called = 0;
 static uintptr_t ext_flash_write_mock_address = 0U;
-static uint8_t *ext_flash_write_mock_data = NULL;
+static const uint8_t *ext_flash_write_mock_data = NULL;
 static int ext_flash_write_mock_len = 0;
 
 static int ext_flash_read_mock_called = 0;
@@ -188,12 +186,12 @@ int ext_flash_erase(uintptr_t address, int len)
 }
 void ext_flash_unlock(void)
 {
-    fail_unless(ext_locked, "Double unlock detected (ext)\n");
+    ck_assert_msg(ext_locked, "Double unlock detected (ext)\n");
     ext_locked--;
 }
 void ext_flash_lock(void)
 {
-    fail_if(ext_locked, "Double lock detected(ext)\n");
+    ck_assert_msg(!ext_locked, "Double lock detected(ext)\n");
     ext_locked++;
 }
 

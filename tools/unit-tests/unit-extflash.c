@@ -39,11 +39,8 @@
 #if defined(ENCRYPT_WITH_CHACHA)
     #define HAVE_CHACHA
 #endif
-#define WC_NO_HARDEN
 
-#define WOLFSSL_USER_SETTINGS
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
-#define UNIT_TEST
 #include <stdio.h>
 #include <check.h>
 #include <stdint.h>
@@ -78,12 +75,12 @@ int hal_flash_erase(haladdr_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    fail_unless(locked, "Double unlock detected\n");
+    ck_assert_msg(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    fail_if(locked, "Double lock detected\n");
+    ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
 

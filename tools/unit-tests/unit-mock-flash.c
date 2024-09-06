@@ -33,6 +33,8 @@ static int erased_nvm_bank1 = 0;
 static int erased_vault = 0;
 const char *argv0;
 
+#include <sys/stat.h>
+
 
 /* Mocks */
 void hal_init(void)
@@ -41,8 +43,8 @@ void hal_init(void)
 int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 {
     int i;
-    uint8_t *a = (uint8_t *)address;
-    fail_if(locked, "Attempting to write to a locked FLASH");
+    uint8_t *a = (uint8_t *)(uintptr_t)address;
+    ck_assert_msg(!locked, "Attempting to write to a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         for (i = 0; i < len; i++) {
@@ -62,7 +64,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
         }
     }
 #ifdef MOCK_KEYVAULT
-    if ((address >= vault_base) && (address < vault_base + keyvault_size)) {
+    if ((address >= (const uintptr_t)vault_base) && (address < (const uintptr_t)vault_base + keyvault_size)) {
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
@@ -72,11 +74,11 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 }
 int hal_flash_erase(haladdr_t address, int len)
 {
-    fail_if(locked, "Attempting to erase a locked FLASH");
+    ck_assert_msg(!locked, "Attempting to erase a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_boot++;
-        memset(address, 0xFF, len);
+        memset((void*)(uintptr_t)address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -85,7 +87,7 @@ int hal_flash_erase(haladdr_t address, int len)
     } else if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
-        memset(address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -94,11 +96,12 @@ int hal_flash_erase(haladdr_t address, int len)
     } else if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         erased_swap++;
-        memset(address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, len);
 #ifdef MOCK_KEYVAULT
-    } else if ((address >= vault_base) && (address < vault_base + keyvault_size)) {
+    } else if ((address >= (uintptr_t)vault_base) && (address < (uintptr_t)vault_base + keyvault_size)) {
+        printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
-        memset(address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, len);
 #endif
     } else {
         fail("Invalid address\n");
@@ -108,12 +111,12 @@ int hal_flash_erase(haladdr_t address, int len)
 }
 void hal_flash_unlock(void)
 {
-    fail_unless(locked, "Double unlock detected\n");
+    ck_assert_msg(locked, "Double unlock detected\n");
     locked--;
 }
 void hal_flash_lock(void)
 {
-    fail_if(locked, "Double lock detected\n");
+    ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
 
@@ -127,7 +130,7 @@ int ext_flash_erase(uintptr_t address, int len)
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
-        memset(address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -138,7 +141,7 @@ int ext_flash_erase(uintptr_t address, int len)
     if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
-        memset(address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -147,7 +150,7 @@ int ext_flash_erase(uintptr_t address, int len)
     } else if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         erased_swap++;
-        memset(address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, len);
     } else {
         fail("Invalid address: %p\n", address);
         return -1;
@@ -159,7 +162,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
     uint8_t *a = (uint8_t *)address;
-    fail_if(ext_locked, "Attempting to write to a locked FLASH");
+    ck_assert_msg(!ext_locked, "Attempting to write to a locked FLASH");
     for (i = 0; i < len; i++) {
         a[i] = data[i];
     }
@@ -178,12 +181,12 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 void ext_flash_unlock(void)
 {
-    fail_unless(ext_locked, "Double ext unlock detected\n");
+    ck_assert_msg(ext_locked, "Double ext unlock detected\n");
     ext_locked--;
 }
 void ext_flash_lock(void)
 {
-    fail_if(ext_locked, "Double ext lock detected\n");
+    ck_assert_msg(!ext_locked, "Double ext lock detected\n");
     ext_locked++;
 }
 
