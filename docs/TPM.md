@@ -59,49 +59,54 @@ NOTE: The TPM's RSA verify requires ASN.1 encoding, so use SIGN=RSA2048ENC
 % make keytools
 % make tpmtools
 % echo aaa > aaa.bin
+% echo bbb > bbb.bin
 % ./tools/tpm/pcr_extend 0 aaa.bin
-% ./tools/tpm/policy_create -pcr=0
+% ./tools/tpm/pcr_extend 1 bbb.bin
+# hash for policy PCR is done 1 then 0
+% ./tools/tpm/policy_create -pcr=1 -pcr=0 -out=policy.bin
 # if ROT enabled
 % ./tools/tpm/rot -write [-auth=TestAuth]
 % make clean
 $ make POLICY_FILE=policy.bin [WOLFBOOT_TPM_KEYSTORE_AUTH=TestAuth] [WOLFBOOT_TPM_SEAL_AUTH=SealAuth]
 
 % ./wolfboot.elf get_version
-Simulator assigned ./internal_flash.dd to base 0x103378000
-Mfg IBM  (0), Vendor SW   TPM, Fw 8217.4131 (0x163636), FIPS 140-2 1, CC-EAL4 0
+Simulator assigned ./internal_flash.dd to base 0x107175000
+Mfg IBM  (0), Vendor SW   TPM, Fw 8228.293 (0x120000), FIPS 140-2 1, CC-EAL4 0
 Unlocking disk...
-Boot partition: 0x1033f8000
-Image size 54400
+Boot partition: 0x1071f5000 (size 21288, version 0x1)
 Error 395 reading blob from NV index 1400300 (error TPM_RC_HANDLE)
 Error 395 unsealing secret! (TPM_RC_HANDLE)
 Sealed secret does not exist!
 Creating new secret (32 bytes)
-430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
-Wrote 210 bytes to NV index 0x1400300
-Read 210 bytes from NV index 0x1400300
+7801a7fb716371c975a9a1bca6159a223bc7dba6adb2acf82781421062e498a5
+Error 395 deleting blob from NV index 1400300 (error TPM_RC_HANDLE)
+Wrote 242 bytes to NV index 0x1400300
+Read 242 bytes from NV index 0x1400300
 Secret Check 32 bytes
-430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
+7801a7fb716371c975a9a1bca6159a223bc7dba6adb2acf82781421062e498a5
 Secret 32 bytes
-430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
-Boot partition: 0x1033f8000
-Image size 54400
+7801a7fb716371c975a9a1bca6159a223bc7dba6adb2acf82781421062e498a5
+Boot partition: 0x1071f5000 (size 21288, version 0x1)
+Boot header magic 0x00000000 invalid at 0x107275000
+Boot partition: 0x1071f5000 (size 21288, version 0x1)
+Booting version: 0x1
 TPM Root of Trust valid (id 0)
-Simulator assigned ./internal_flash.dd to base 0x103543000
+Simulator assigned ./internal_flash.dd to base 0x1073cc000
 1
-
 % ./wolfboot.elf get_version
-Simulator assigned ./internal_flash.dd to base 0x10c01c000
-Mfg IBM  (0), Vendor SW   TPM, Fw 8217.4131 (0x163636), FIPS 140-2 1, CC-EAL4 0
+Simulator assigned ./internal_flash.dd to base 0x102f38000
+Mfg IBM  (0), Vendor SW   TPM, Fw 8228.293 (0x120000), FIPS 140-2 1, CC-EAL4 0
 Unlocking disk...
-Boot partition: 0x10c09c000
-Image size 54400
-Read 210 bytes from NV index 0x1400300
+Boot partition: 0x102fb8000 (size 21288, version 0x1)
+Read 242 bytes from NV index 0x1400300
 Secret 32 bytes
-430dee45553c4a8b75fbc6bcd0890765c48cab760b24b1aa6b633dc0538e0159
-Boot partition: 0x10c09c000
-Image size 54400
+7801a7fb716371c975a9a1bca6159a223bc7dba6adb2acf82781421062e498a5
+Boot partition: 0x102fb8000 (size 21288, version 0x1)
+Boot header magic 0x00000000 invalid at 0x103038000
+Boot partition: 0x102fb8000 (size 21288, version 0x1)
+Booting version: 0x1
 TPM Root of Trust valid (id 0)
-Simulator assigned ./internal_flash.dd to base 0x10c1e7000
+Simulator assigned ./internal_flash.dd to base 0x10318f000
 1
 ```
 

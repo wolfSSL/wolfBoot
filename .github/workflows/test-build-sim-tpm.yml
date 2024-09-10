@@ -67,8 +67,10 @@ jobs:
       - name: Create a PCR Policy
         run: |
           echo aaa > aaa.bin
+          echo bbb > bbb.bin
           ./tools/tpm/pcr_extend 0 aaa.bin
-          ./tools/tpm/policy_create -pcr=0 -out=policy.bin
+          ./tools/tpm/pcr_extend 1 bbb.bin
+          ./tools/tpm/policy_create -pcr=1 -pcr=0 -out=policy.bin
 
       - name: Build wolfboot
         run: |
