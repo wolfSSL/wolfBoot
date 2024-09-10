@@ -477,7 +477,7 @@ uint32_t wolfBoot_tpm_pcrmask_sel(uint32_t pcrMask, uint8_t* pcrArray,
     for (i=0; i<IMPLEMENTATION_PCR; i++) {
         if (pcrMask & (1 << i)) {
             pcrArray[pcrArraySzAct++] = i;
-            if (pcrArraySzAct < pcrArraySz) { /* make sure we have room */
+            if (pcrArraySzAct > pcrArraySz) { /* make sure we have room */
                 break;
             }
         }
