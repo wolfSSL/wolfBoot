@@ -35,6 +35,7 @@
 #include <stdint.h>
 
 #include <x86/common.h>
+#include <x86/gdt.h>
 
 #define barrier()   __asm__ __volatile__ ("":::"memory");
 
@@ -371,4 +372,89 @@ void x86_log_memory_load(uint32_t start, uint32_t end, const char *name)
 {
     wolfBoot_printf("mem: [ 0x%x, 0x%x ] - %s (0x%x) \n\r", start, end, name, end - start);
 }
+
+#if !defined(BUILD_LOADER_STAGE1)
+int x86_run_fsp_32bit(void* api, void* arg)
+{
+    uint32_t status;
+    __asm__ volatile (
+        /* arg on the stack, will be used as arg */
+        "mov %[arg], %%rax\n"
+        "shl $32, %%rax\n"
+        "or %[api], %%rax\n"
+        "push %%rax\n"
+        "push %[SEG_COMP]\n"
+        "lea (1f), %%rax\n"
+        "push %%rax\n"
+        "retfq\n"
+        "1:\n"
+        /* we are now in compatibility mode */
+        ".code32\n"
+        /* disable paging */
+        "mov %%cr0, %%eax\n"
+        "mov %[PG], %%edx\n"
+        "not %%edx\n"
+        "and %%edx, %%eax\n"
+        "mov %%eax, %%cr0\n"
+        /* disable EFER.LME */
+        "mov $0xc0000080, %%ecx\n"
+        "rdmsr\n"
+        "mov %[LME], %%ecx\n"
+        "not %%ecx\n"
+        "and %%ecx, %%eax\n"
+        "mov $0xc0000080, %%ecx\n"
+        "wrmsr\n"
+        /* disable PAE */
+        "mov %%cr4, %%eax\n"
+        "mov %[PAE], %%edx\n"
+        "not %%edx\n"
+        "and %%edx, %%eax\n"
+        "mov %%eax, %%cr4\n"
+        /* get api from stack */
+        "pop %%eax\n"
+        "call *%%eax\n"
+        /* remove parameter from the stack */
+        "add $4, %%esp\n"
+        /* save status to ebx */
+        "mov %%eax, %%ebx\n"
+        /* enable PAE */
+        "mov %%cr4, %%eax\n"
+        "or %[PAE], %%eax\n"
+        "mov %%eax, %%cr4\n"
+        /* enable EFER_LME */
+        "mov $0xc0000080, %%ecx\n"
+        "rdmsr\n"
+        "or %[LME], %%eax\n"
+        "mov $0xc0000080, %%ecx\n"
+        "wrmsr\n"
+        /* setup far pointer on the stack */
+        "push %[SEG_LONG]\n"
+        "push $2f\n"
+        /* enable paging */
+        "mov %%cr0, %%eax\n"
+        "or %[PG], %%eax\n"
+        "mov %%eax, %%cr0\n"
+        "retf\n"
+        "2:\n"
+        /* back in long mode */
+        ".code64\n"
+        /* save status */
+        "mov %%ebx, %[status]\n"
+       :[status]"=m"(status)
+       :[SEG_COMP]"i"(GDT_CS_32BIT_COMPAT), 
+        [SEG_LONG]"i"(GDT_CS_64BIT),
+        [PG]"i"(CR0_PG_BIT), 
+        [LME]"i"(IA32_EFER_LME),
+        [PAE]"i"(CR4_PAE_BIT),
+        [api]"r"(api),
+        [arg]"r"(arg)
+       : "rax",  "rbx", "rcx", "rdx");
+    return status;
+}
+#else
+int x86_run_fsp_32bit(void* api, void* arg)
+{
+   return 0;
+}
+#endif /* !STAGE1 */
 #endif /* COMMON_H_ */
