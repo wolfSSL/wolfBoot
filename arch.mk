@@ -1012,6 +1012,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/mptable.o
     OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o
+    OBJS += src/x86/gdt.o
     UPDATE_OBJS := src/update_disk.o
     CFLAGS+=-DWOLFBOOT_UPDATE_DISK
     ifeq ($(64BIT),1)
