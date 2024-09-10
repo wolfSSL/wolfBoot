@@ -26,14 +26,15 @@
 
 #ifdef __WOLFBOOT
 #include <printf.h>
-#include <x86/common.h>
-#include <x86/ahci.h>
 #include <x86/ata.h>
-#include <x86/gpt.h>
+#include <x86/gdt.h>
+#include <x86/common.h>
 #include <pci.h>
 
 void hal_init(void)
 {
+    gdt_setup_table();
+    gdt_update_segments();
 }
 
 void hal_prepare_boot(void)
