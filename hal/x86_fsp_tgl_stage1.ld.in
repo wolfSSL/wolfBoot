@@ -2,7 +2,6 @@ FLASH_SIZE = @BOOTLOADER_PARTITION_SIZE@;
 FLASH_START = 0x100000000 - @BOOTLOADER_PARTITION_SIZE@;
 UCODE0_BASE = @UCODE0_BASE@;
 FIT_TABLE = 0xffe00000;
-FSP_S_ORIGIN = @FSP_S_BASE@;
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
 FSP_T_ORIGIN = @FSP_T_BASE@;
 FSP_M_ORIGIN = @FSP_M_BASE@;
@@ -51,15 +50,6 @@ SECTIONS
         KEEP(*(.fit));
         . = ALIGN(256*1024);
     }
-
-    .fsp_s FSP_S_ORIGIN :
-    {
-       _fsp_s_hdr = .;
-       KEEP(*(.sig_fsp_s*))
-       _start_fsp_s = .;
-       KEEP(*(.fsp_s))
-       _end_fsp_s = .;
-    } > FLASH
 
     .bootloader WOLFBOOT_ORIGIN :
     {

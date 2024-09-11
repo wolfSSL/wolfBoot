@@ -315,7 +315,8 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_STAGE1_BASE_ADDR@/$(WOLFBOOT_STAGE1_BASE_ADDR)/g" | \
 		sed -e "s/@WOLFBOOT_LOAD_BASE@/$(WOLFBOOT_LOAD_BASE)/g" | \
 		sed -e "s/@BOOTLOADER_START@/$(BOOTLOADER_START)/g" | \
-		sed -e "s/@IMAGE_HEADER_SIZE@/$(IMAGE_HEADER_SIZE)/g" \
+		sed -e "s/@IMAGE_HEADER_SIZE@/$(IMAGE_HEADER_SIZE)/g" | \
+		sed -e "s/@FSP_S_LOAD_BASE@/$(FSP_S_LOAD_BASE)/g" \
 		> $@
 
 hex: wolfboot.hex
@@ -447,6 +448,9 @@ secondary: $(SECONDARY_PRIVATE_KEY)
 	@echo "\t[AS-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
+src/x86/fsp_s.o: $(FSP_S_BIN)
+	$(OBJCOPY) -I binary -O elf64-x86-64 -B i386 --rename-section .data=.fsp_s $^ $@
+	
 FORCE:
 
 .PHONY: FORCE clean keytool_check

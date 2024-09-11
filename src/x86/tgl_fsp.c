@@ -158,6 +158,7 @@ SI_PCH_DEVICE_INTERRUPT_CONFIG mPchHDevIntConfig[] = {
     {30, 0, SiPchIntA, 16},
 };
 
+#if defined(BUILD_LOADER_STAGE1)
 #define FIT_NUM_ENTRIES 2
 __attribute__((__section__(".boot"))) const struct fit_table_entry fit_table[FIT_NUM_ENTRIES] =
 {
@@ -462,6 +463,7 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->PcieRefPllSsc = 0;
     return 0;
 }
+#endif /* BUILD_LOADER_STAGE1 */
 
 static int disable_watchdog_tco()
 {
@@ -935,7 +937,8 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
 
     upd->MicrocodeRegionBase = 0x0;
     upd->MicrocodeRegionSize = 0x0;
-    upd->DevIntConfigPtr = (uint32_t)mPchHDevIntConfig;
+    /* we can assume that is under 4gb */
+    upd->DevIntConfigPtr = (uint32_t)(uintptr_t)mPchHDevIntConfig;
     upd->NumOfDevIntConfig = sizeof(mPchHDevIntConfig)/sizeof(mPchHDevIntConfig[0]);
     upd->SataEnable = 1;
     upd->SataMode = 0;
@@ -1641,6 +1644,7 @@ int post_temp_ram_init_cb(void)
     return 0;
 }
 
+#if defined(BUILD_LOADER_STAGE1)
 /**
  * @brief Update M parameters in FSPM_UPD structure.
  *
@@ -1683,6 +1687,7 @@ int fsp_pre_mem_init_cb(void)
 
     return 0;
 }
+#endif /* BUILD_LOADER_STAGE1 */
 
 int fsp_pre_silicon_init_cb(void)
 {

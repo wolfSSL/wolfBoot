@@ -29,12 +29,14 @@
 #include <x86/ata.h>
 #include <x86/gdt.h>
 #include <x86/common.h>
+#include <x86/fsp.h>
 #include <pci.h>
 
 void hal_init(void)
 {
     gdt_setup_table();
     gdt_update_segments();
+    fsp_init_silicon();
 }
 
 void hal_prepare_boot(void)

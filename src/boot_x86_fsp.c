@@ -68,9 +68,6 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define FSP_M_UDP_MAX_SIZE 0x978
 #endif
 
-#ifndef FSP_S_PARAM_SIZE
-#define FSP_S_PARAM_SIZE 0xee0
-#endif
 
 /* Amount of car memory to provide to FSP-M, machine dependent, find the value
  * in the integration guide */
@@ -86,22 +83,14 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define MEMORY_4GB (4ULL * 1024 * 1024 * 1024)
 #define ENDLINE "\r\n"
 
-#define PCI_DEVICE_CONTROLLER_TO_PEX 0x6
-#define PCIE_TRAINING_TIMEOUT_MS (100)
 
 /* compile time alignment checks */
 #define ALIGN_CHECK(value, alignment) ((value) & ((alignment)-1)) == 0
-#if !ALIGN_CHECK(FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE, 16)
-#error "FSP_S_LOAD_BASE must be aligned on a 16 bytes boundary"
-#endif
 #if !ALIGN_CHECK(WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE, 16)
 #error "WOLFBOOT_LOAD_BASE must be aligned on a 16 bytes boundary"
 #endif
 
 typedef uint32_t (*memory_init_cb)(void *udp, struct efi_hob **HobList);
-typedef uint32_t (*temp_ram_exit_cb)(void *udp);
-typedef uint32_t (*silicon_init_cb)(void *udp);
-typedef uint32_t (*notify_phase_cb)(NOTIFY_PHASE_PARAMS *p);
 
 /* need to be implemented by machine dependent code */
 int fsp_machine_update_m_parameters(uint8_t *default_m_params,
@@ -114,9 +103,7 @@ int fsp_pre_silicon_init_cb(void);
 /* from the linker */
 extern uint8_t _start_fsp_t[];
 extern uint8_t _start_fsp_m[];
-extern uint8_t _fsp_s_hdr[];
 extern uint8_t _end_fsp_m[];
-extern uint8_t _end_fsp_s[];
 extern uint8_t _wolfboot_flash_start[];
 extern uint8_t _wolfboot_flash_end[];
 extern uint8_t wb_end_bss[], wb_start_bss[];
@@ -230,16 +217,6 @@ static void load_wolfboot(void)
                         "wolfboot .bss");
     memset(wb_start_bss, 0, bss_size);
     wolfBoot_printf("load wolfboot end" ENDLINE);
-}
-
-static void load_fsp_s_to_ram(void)
-{
-    size_t fsp_s_size;
-    uint32_t fsp_start;
-    fsp_start = FSP_S_LOAD_BASE - IMAGE_HEADER_SIZE;
-    fsp_s_size = _end_fsp_s - _fsp_s_hdr;
-    x86_log_memory_load(fsp_start, fsp_start + fsp_s_size, "FSPS");
-    memcpy((uint8_t*)fsp_start, _fsp_s_hdr, fsp_s_size);
 }
 
 #ifdef WOLFBOOT_64BIT
@@ -372,124 +349,6 @@ static int pci_get_capability(uint8_t bus, uint8_t dev, uint8_t fun,
     return -1;
 }
 
-int pcie_retraining_link(uint8_t bus, uint8_t dev, uint8_t fun)
-{
-    uint16_t link_status, link_control, vid;
-    uint8_t pcie_cap_off;
-    int ret, tries;
-
-    vid = pci_config_read16(bus, dev, 0, PCI_VENDOR_ID_OFFSET);
-    if (vid == 0xffff) {
-        return -1;
-    }
-    
-    ret = pci_get_capability(bus, dev, fun, PCI_PCIE_CAP_ID, &pcie_cap_off);
-    if (ret != 0) {
-        return -1;
-    }
-
-    link_status = pci_config_read16(bus, dev, fun,
-                                    pcie_cap_off + PCIE_LINK_STATUS_OFF);
-    if (link_status & PCIE_LINK_STATUS_TRAINING) {
-        delay(PCIE_TRAINING_TIMEOUT_MS);
-        link_status = pci_config_read16(bus, dev, fun,
-                                        pcie_cap_off + PCIE_LINK_STATUS_OFF);
-        if (link_status & PCIE_LINK_STATUS_TRAINING) {
-            return -1;
-        }
-    }
-
-    link_control = pci_config_read16(bus, dev, fun,
-                                         pcie_cap_off + PCIE_LINK_CONTROL_OFF);
-    link_control |= PCIE_LINK_CONTROL_RETRAINING;
-    pci_config_write16(bus, dev, fun, pcie_cap_off + PCIE_LINK_CONTROL_OFF,
-                       link_control);
-    tries = PCIE_TRAINING_TIMEOUT_MS / 10;
-    do {
-        link_status = pci_config_read16(bus, dev, fun,
-                                        pcie_cap_off + PCIE_LINK_STATUS_OFF);
-        if (!(link_status & PCIE_LINK_STATUS_TRAINING))
-            break;
-        delay(10);
-    } while(tries--);
-
-    if ((link_status & PCIE_LINK_STATUS_TRAINING)) {
-        return -1;
-    }
-
-    return 0;
-}
-
-/*!
- * \brief Staging of FSP_S after verification
- *
- * Setpu the parameters and call FSP Silicon Initialization.
- *
- * \param fsp_info FSP information header
- * \param fsp_s_base the area in RAM where FSP_S has been loaded and verified
- * \return EFI_SUCCESS in case of success, -1 otherwise
- */
-static int fsp_silicon_init(struct fsp_info_header *fsp_info, uint8_t *fsp_s_base)
-{
-    uint8_t silicon_init_parameter[FSP_S_PARAM_SIZE];
-    silicon_init_cb SiliconInit;
-    notify_phase_cb notifyPhase;
-    NOTIFY_PHASE_PARAMS param;
-    uint32_t status;
-    unsigned int i;
-    int ret;
-
-    memcpy(silicon_init_parameter, fsp_s_base + fsp_info->CfgRegionOffset,
-            FSP_S_PARAM_SIZE);
-    status = fsp_machine_update_s_parameters(silicon_init_parameter);
-    if (status != 0)
-        panic();
-    SiliconInit = (silicon_init_cb)(fsp_s_base + fsp_info->FspSiliconInitEntryOffset);
-
-#if defined(WOLFBOOT_DUMP_FSP_UPD)
-    wolfBoot_printf("Dumping fsps upd (%d bytes)" ENDLINE, (int)fsp_info->CfgRegionSize);
-    wolfBoot_print_hexstr(silicon_init_parameter, fsp_info->CfgRegionSize, 16);
-#endif
-    status = fsp_pre_silicon_init_cb();
-    if (status != 0) {
-        wolfBoot_printf("pre silicon init cb returns %d", status);
-        panic();
-    }
-    wolfBoot_printf("call silicon..." ENDLINE);
-    status = SiliconInit(silicon_init_parameter);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %x\n", status);
-        return -1;
-    }
-    wolfBoot_printf("success" ENDLINE);
-    status = pcie_retraining_link(0, PCI_DEVICE_CONTROLLER_TO_PEX, 0);
-    if (status != 0)
-        wolfBoot_printf("pcie retraining failed %x\n", status);
-
-    pci_enum_do();
-    pci_dump_config_space();
-    notifyPhase = (notify_phase_cb)(fsp_s_base +
-                                        fsp_info->NotifyPhaseEntryOffset);
-    param.Phase = EnumInitPhaseAfterPciEnumeration;
-    status = notifyPhase(&param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
-        return -1;
-    }
-    param.Phase = EnumInitPhaseReadyToBoot;
-    status = notifyPhase(&param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
-        return -1;
-    }
-    param.Phase = EnumInitPhaseEndOfFirmware;
-    status = notifyPhase(&param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("failed %d: %x\n", __LINE__, status);
-        return -1;
-    }
-    return EFI_SUCCESS;
-}
 
 #if defined(TARGET_x86_fsp_qemu) && defined(WOLFBOOT_MEASURED_BOOT)
 /*!
@@ -536,31 +395,16 @@ static int self_extend_pcr(void)
  * memory initialization is completed and the stack has been remapped.
  *
  */
-static void memory_ready_entry(void)
+static void memory_ready_entry(uint32_t new_stack)
 {
     struct fsp_info_header *fsp_info;
-    temp_ram_exit_cb TempRamExit;
     uint8_t *fsp_s_base;
     uint8_t *fsp_m_base;
     uint32_t cpu_info[4];
     uint32_t status;
     int ret;
 
-    /* FSP_M is located in flash */
-    fsp_m_base = _start_fsp_m;
-    /* fsp_s is loaded to RAM for validation */
-    fsp_s_base = (uint8_t *)(FSP_S_LOAD_BASE);
-    fsp_info =
-        (struct fsp_info_header *)(fsp_m_base + FSP_INFO_HEADER_OFFSET);
-    TempRamExit = (temp_ram_exit_cb)(fsp_m_base +
-            fsp_info->TempRamExitEntryOffset);
-    status = TempRamExit(NULL);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("temp ram exit failed" ENDLINE);
-        panic();
-    }
     /* Confirmed memory initialization complete.
-     * TempRamExit was successful.
      *
      * Copy .data section to RAM and initialize .bss
      */
@@ -588,35 +432,6 @@ static void memory_ready_entry(void)
         wolfBoot_printf("fail to extend PCR" ENDLINE);
 #endif
 
-    /* Load FSP_S to RAM */
-    load_fsp_s_to_ram();
-#ifdef STAGE1_AUTH
-    /* Verify FSP_S */
-    wolfBoot_printf("Authenticating FSP_S at %x..." ENDLINE,
-            fsp_s_base - IMAGE_HEADER_SIZE);
-
-    if (verify_payload(fsp_s_base - IMAGE_HEADER_SIZE) == 0)
-        wolfBoot_printf("FSP_S: verified OK." ENDLINE);
-    else {
-        panic();
-    }
-#endif
-
-#if defined(WOLFBOOT_MEASURED_BOOT)
-    ret = wolfBoot_image_measure((uint8_t*)fsp_s_base - IMAGE_HEADER_SIZE);
-    if (ret != 0) {
-        wolfBoot_printf("Fail to measure FSP_S image\r\n");
-        panic();
-    }
-#endif /* WOLFBOOT_MEASURED_BOOT */
-
-    /* Call FSP_S initialization */
-    fsp_info =
-        (struct fsp_info_header *)(fsp_s_base + FSP_INFO_HEADER_OFFSET);
-    wolfBoot_printf("FSP-S:");
-    print_fsp_image_revision((struct fsp_info_header *)fsp_info);
-    if (fsp_silicon_init(fsp_info, fsp_s_base) != EFI_SUCCESS)
-        panic();
     /* Get CPUID */
     cpuid(0, &cpu_info[0], &cpu_info[1], &cpu_info[2], NULL);
     wolfBoot_printf("CPUID(0):%x %x %x\r\n", cpu_info[0], cpu_info[1], cpu_info[2]);
@@ -646,8 +461,12 @@ static void memory_ready_entry(void)
     (defined(STAGE1_AUTH) && defined (WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY))
     wolfBoot_tpm2_deinit();
 #endif
-    /* Finalize staging to stage2 */
-    jump_into_wolfboot();
+    /* change_stack_and_invoke() never returns.
+     *
+     * Execution here is eventually transferred to jump_into_wolfboot, that
+     * will transfer the execution to stage2 after the stack has been remapped.
+     */
+    change_stack_and_invoke(new_stack, jump_into_wolfboot);
 }
 
 static void print_ucode_revision(void)
@@ -831,15 +650,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
 
     stage2_set_parameters(stage2_params, mem_stage2_holder);
     wolfBoot_printf("TOLUM: 0x%x\r\n", stage2_params->tolum);
-    /* change_stack_and_invoke() never returns.
-     *
-     * Execution here is eventually transferred to memory_ready_entry
-     * after the stack has been remapped.
-     */
-    change_stack_and_invoke(new_stack, memory_ready_entry);
+    memory_ready_entry(new_stack);
 
     /* Returning from change_stack_and_invoke() implies a fatal error
-     * while attempting to remap the stack.
      */
     wolfBoot_printf("FAIL" ENDLINE);
     panic();

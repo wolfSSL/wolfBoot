@@ -109,10 +109,6 @@ if __name__ == '__main__':
     print(f"stage1  auth is {'enabled' if is_stage1_auth_enabled else 'disabled'}")
 
     if is_stage1_auth_enabled:
-        fsp_s_hash = get_sha256_hash_of_wolfboot_image("src/x86/fsp_s_v1_signed.bin")
-        pcr0 = pcr_extend(pcr0, fsp_s_hash)
-        print(f"PCR0 after FSP_S: {pcr0.hex()}")
-
         wb_hash = get_sha256_hash_of_wolfboot_image('stage1/wolfboot_raw_v1_signed.bin')
         pcr0 = pcr_extend(pcr0, wb_hash)
         print(f"PCR0 after wolfboot: {pcr0.hex()}")
