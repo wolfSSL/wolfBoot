@@ -930,9 +930,7 @@ ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
 endif
 
 ifeq ($(TARGET),x86_fsp_qemu)
-  ifeq ($(filter-out $(STAGE1),1),)
     OBJS+=src/x86/qemu_fsp.o
-  endif
 endif
 
 # x86-64 FSP targets
@@ -958,7 +956,6 @@ ifeq ("${FSP}", "1")
     OBJS += src/boot_x86_fsp.o
     OBJS += src/boot_x86_fsp_start.o
     OBJS += src/fsp_m.o
-    OBJS += src/fsp_s.o
     OBJS += src/fsp_t.o
     OBJS += src/wolfboot_raw.o
     OBJS += src/x86/common.o
@@ -974,7 +971,6 @@ ifeq ("${FSP}", "1")
       OBJS += src/image.o
       OBJS += src/keystore.o
       OBJS += src/sig_wolfboot_raw.o
-      OBJS += src/sig_fsp_s.o
       ifeq ($(TARGET), kontron_vx3060_s2)
         OBJS += hal/kontron_vx3060_s2_loader.o
       endif
@@ -983,6 +979,7 @@ ifeq ("${FSP}", "1")
     endif
 
     CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART
+    CFLAGS += -DFSP_M_BASE=$(FSP_M_BASE)
     ifeq ($(FSP_TGL), 1)
       OBJS+=src/x86/tgl_fsp.o
       OBJS+=src/ucode0.o
@@ -1000,6 +997,7 @@ ifeq ("${FSP}", "1")
     endif
     LDFLAGS = --gc-sections --entry=main  -T $(LSCRIPT) -Map=wolfboot.map
     CFLAGS += -fno-stack-protector -fno-PIC -fno-pie -mno-mmx -mno-sse -Os -DDEBUG_UART
+    CFLAGS += -DFSP_M_BASE=$(FSP_M_BASE)
     OBJS += hal/x86_fsp_tgl.o
     OBJS += hal/x86_uart.o
     OBJS += src/boot_x86_fsp_payload.o
@@ -1015,6 +1013,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/exceptions.o
     OBJS += src/x86/gdt.o
     OBJS += src/x86/fsp.o
+    OBJS += src/x86/fsp_s.o
     UPDATE_OBJS := src/update_disk.o
     CFLAGS+=-DWOLFBOOT_UPDATE_DISK
     ifeq ($(64BIT),1)
@@ -1023,7 +1022,10 @@ ifeq ("${FSP}", "1")
     else
       CFLAGS += -m32
       LDFLAGS += -m elf_i386 --oformat elf32-i386
-     endif
+    endif
+    ifeq ($(FSP_TGL), 1)
+      OBJS+=src/x86/tgl_fsp.o
+    endif
   endif
   ifeq ($(64BIT),1)
     OBJS += src/x86/paging.o

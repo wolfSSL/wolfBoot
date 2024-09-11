@@ -5,7 +5,6 @@ RESETVECTOR_START = 0xffffffec;
 KEYSTORE_START = 0xffffe000;
 FSP_T_ORIGIN = @FSP_T_BASE@; /* default base:size 0xFFFFF000:0x3000 [0xfffff000:0x100002000] */
 FSP_M_ORIGIN = @FSP_M_BASE@; /* default base:size 0xfffdd000:0x22000 [0xfffdd000:0xfffff000] */
-FSP_S_ORIGIN = @FSP_S_BASE@; /* default base:size 0xfffc8000:0x15000 [0xfffdd000:0xfffdd000] */
 WOLFBOOT_ORIGIN = @WOLFBOOT_ORIGIN@;
 DATA_MEM_START = 0x800000; /* 8 MB */
 MAX_POLICY_SIZE = 512;
@@ -90,15 +89,6 @@ SECTIONS
     {
        _start_fsp_t = .;
        KEEP(*(.fsp_t))
-    }
-
-    .fsp_s FSP_S_ORIGIN :
-    {
-       _fsp_s_hdr = .;
-       KEEP(*(.sig_fsp_s*))
-       _start_fsp_s = .;
-       KEEP(*(.fsp_s))
-       _end_fsp_s = .;
     }
 
     .fsp_m FSP_M_ORIGIN :

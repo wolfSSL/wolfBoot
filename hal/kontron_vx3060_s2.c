@@ -25,6 +25,7 @@
 #include <printf.h>
 #include <pci.h>
 #include <x86/gdt.h>
+#include <x86/fsp.h>
 #include <x86/common.h>
 
 #ifdef __WOLFBOOT
@@ -88,6 +89,7 @@ void hal_init(void)
 {
     gdt_setup_table();
     gdt_update_segments();
+    fsp_init_silicon();
 }
 
 void hal_prepare_boot(void)

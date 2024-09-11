@@ -24,20 +24,12 @@ fsp_t.o: ../$(FSP_T_BIN)
 fsp_m.o: ../$(FSP_M_BIN)
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsp_m $^ $@
 
-fsp_s.o: ../$(FSP_S_BIN)
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.fsp_s $^ $@
 
 wolfboot_raw.bin: ../wolfboot.elf
 	$(Q)$(OBJCOPY) -j .text -O binary $^ $@
 
 wolfboot_raw.o: wolfboot_raw.bin
 	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.wolfboot $^ $@
-
-sig_fsp_s.o: fsp_s.o $(SIGN_KEY) ../$(FSP_S_BIN)
-	$(SIGN_TOOL) $(SIGN_OPTIONS) ../$(FSP_S_BIN) $(SIGN_KEY) 1
-	@dd if=$(X86FSP_PATH)/fsp_s_v1_signed.bin of=$(X86FSP_PATH)/fsp_s_signature.bin bs=$(IMAGE_HEADER_SIZE) count=1
-	$(OBJCOPY) -I binary -O elf32-i386 -B i386 --rename-section .data=.sig_fsp_s $(X86FSP_PATH)/fsp_s_signature.bin sig_fsp_s.o
-	@rm -f $(X86FSP_PATH)/fsp_s_signature.bin
 
 sig_wolfboot_raw.o: wolfboot_raw.bin $(SIGN_KEY)
 	$(SIGN_TOOL) $(SIGN_OPTIONS) wolfboot_raw.bin $(SIGN_KEY) 1
