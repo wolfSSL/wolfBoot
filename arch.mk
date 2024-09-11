@@ -968,6 +968,7 @@ ifeq ("${FSP}", "1")
     OBJS += hal/x86_uart.o
     OBJS += src/string.o
     OBJS += src/stage2_params.o
+    OBJS += src/x86/fsp.o
     ifeq ($(filter-out $(STAGE1_AUTH),1),)
       OBJS += src/libwolfboot.o
       OBJS += src/image.o
@@ -1013,6 +1014,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o
     OBJS += src/x86/gdt.o
+    OBJS += src/x86/fsp.o
     UPDATE_OBJS := src/update_disk.o
     CFLAGS+=-DWOLFBOOT_UPDATE_DISK
     ifeq ($(64BIT),1)
