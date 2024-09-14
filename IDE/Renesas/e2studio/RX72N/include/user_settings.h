@@ -50,8 +50,8 @@
     /* #define WOLFBOOT_SIGN_ECC384  */
     /* #define WOLFBOOT_SIGN_ECC521  */
     #if !defined(min)
-    	#define min(data1, data2)    _builtin_min(data1, data2)
-	#endif
+        #define min(data1, data2)    _builtin_min(data1, data2)
+    #endif
 #endif
 
 #define WOLFBOOT_FIXED_PARTITIONS
