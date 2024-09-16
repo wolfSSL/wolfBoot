@@ -146,7 +146,7 @@ ifeq ($(TARGET),stm32c0)
 endif
 
 ifeq ($(TARGET),sama5d3)
-  APP_OBJS+=../src/boot_arm32_start.o
+  APP_OBJS+=./boot_arm32_start.o
   LSCRIPT_TEMPLATE:=$(ARCH)-$(TARGET).ld
 endif
 

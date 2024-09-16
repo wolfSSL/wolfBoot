@@ -178,18 +178,24 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),sama5d3)
      CORTEX_A5=1
      UPDATE_OBJS:=src/update_ram.o
-     CFLAGS+=-DWOLFBOOT_DUALBOOT -DEXT_FLASH -DNAND_FLASH
+     CFLAGS+=-DWOLFBOOT_DUALBOOT -DEXT_FLASH -DNAND_FLASH -fno-builtin -ffreestanding
      #CFLAGS+=-DWOLFBOOT_USE_STDLIBC
   endif
 
 ## Cortex CPU
 
 ifeq ($(CORTEX_A5),1)
-  CFLAGS+=-mcpu=cortex-a5  -mtune=cortex-a5 -mfpu=vfpv4-d16 -static -z noexecstack
-  LDLAGS+=-mcpu=cortex-a5 -mtune=cortex-a5  -mtune=cortex-a5 -mfpu=vfpv4-d16 -static -z noexecstack  -Ttext 0x300000
+  FPU=-mfpu=vfp4-d16
+  CFLAGS+=-mcpu=cortex-a5  -mtune=cortex-a5 -static -z noexecstack
+  LDLAGS+=-mcpu=cortex-a5 -mtune=cortex-a5  -mtune=cortex-a5 -static -z noexecstack  -Ttext 0x300000
   # Cortex-A uses boot_arm32.o
   OBJS+=src/boot_arm32.o src/boot_arm32_start.o
-  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  ifeq ($(NO_ASM),1)
+    MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  else
+    MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_arm32.o
+    CFLAGS+=-DWOLFSSL_SP_ARM32_ASM
+  endif
 else
   # All others use boot_arm.o
   OBJS+=src/boot_arm.o

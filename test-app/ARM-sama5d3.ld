@@ -3,7 +3,7 @@ OUTPUT_ARCH(arm)
 
 MEMORY
 {
-    DDR_MEM(rwx): ORIGIN = 0x00340000, LENGTH = 0x000100000
+    DDR_MEM(rwx): ORIGIN = 0x00311000, LENGTH = 0x000080000
 }
 
 ENTRY(reset_vector_entry)
@@ -11,6 +11,7 @@ SECTIONS
 {
     .text : { 
         _start_text = .;
+        *(.iv)
         *(.text)
             *(.rodata)
             *(.rodata*)

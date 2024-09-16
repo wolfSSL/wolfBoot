@@ -3,7 +3,7 @@ OUTPUT_ARCH(arm)
 
 MEMORY
 {
-    DDR_MEM(rwx): ORIGIN = 0x00300000, LENGTH = 0x0007F000
+    DDR_MEM(rwx): ORIGIN = 0x00000000, LENGTH = 0x0000F000
 }
 
 ENTRY(reset_vector_entry)
@@ -12,9 +12,9 @@ SECTIONS
     .text : { 
         _start_text = .;
         *(.text)
-            *(.rodata)
-            *(.rodata*)
-            . = ALIGN(4);
+        *(.rodata)
+        *(.rodata*)
+        . = ALIGN(4);
         *(.glue_7)
         . = ALIGN(4);		
         *(.eh_frame)
@@ -46,8 +46,8 @@ SECTIONS
 	}
 }
 
-kernel_addr = 0x040000;
-update_addr = 0x080000;
+kernel_addr = 0x0400000;
+update_addr = 0x0800000;
 
 _romsize = _end_data - _start_text;
 _sramsize = _end_bss - _start_text;

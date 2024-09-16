@@ -48,10 +48,9 @@ extern void *kernel_addr, *update_addr, *dts_addr;
 
 #define NAND_MASK_ALE        (1 << 21)
 #define NAND_MASK_CLE        (1 << 22)
-#define NAND_CMD (*((volatile uint8_t *)(NAND_BASE | NAND_MASK_CLE)))
+#define NAND_CMD  (*((volatile uint8_t *)(NAND_BASE | NAND_MASK_CLE)))
 #define NAND_ADDR (*((volatile uint8_t *)(NAND_BASE | NAND_MASK_ALE)))
 #define NAND_DATA (*((volatile uint8_t *)(NAND_BASE)))
-#define NAND_DATAW (*((volatile uint32_t *)(NAND_BASE)))
 
 /* Command set */
 #define NAND_CMD_STATUS       0x70
@@ -140,6 +139,80 @@ extern void *kernel_addr, *update_addr, *dts_addr;
 
 #define MAX_ECC_BYTES 8
 
+
+/* Manual division operation */
+int division(uint32_t dividend,
+		uint32_t divisor,
+		uint32_t *quotient,
+		uint32_t *remainder)
+{
+	uint32_t shift;
+	uint32_t divisor_shift;
+	uint32_t factor = 0;
+	unsigned char end_flag = 0;
+
+	if (!divisor)
+		return 0xffffffff;
+
+	if (dividend < divisor) {
+		*quotient = 0;
+		*remainder = dividend;
+		return 0;
+	}
+
+	while (dividend >= divisor) {
+		for (shift = 0, divisor_shift = divisor;
+			dividend >= divisor_shift;
+			divisor_shift <<= 1, shift++) {
+			if (dividend - divisor_shift < divisor_shift) {
+				factor += 1 << shift;
+				dividend -= divisor_shift;
+				end_flag = 1;
+				break;
+			}
+		}
+
+		if (end_flag)
+			continue;
+
+		factor += 1 << (shift - 1);
+		dividend -= divisor_shift >> 1;
+	}
+
+	if (quotient)
+		*quotient = factor;
+
+	if (remainder)
+		*remainder = dividend;
+
+	return 0;
+}
+
+uint32_t div(uint32_t dividend, uint32_t divisor)
+{
+	uint32_t quotient = 0;
+	uint32_t remainder = 0;
+	int ret;
+
+	ret = division(dividend, divisor, &quotient, &remainder);
+	if (ret)
+		return 0xffffffff;
+
+	return quotient;
+}
+
+uint32_t mod(uint32_t dividend, uint32_t divisor)
+{
+	uint32_t quotient = 0;
+	uint32_t remainder = 0;
+	int ret;
+
+	ret = division(dividend, divisor, &quotient, &remainder);
+	if (ret)
+		return 0xffffffff;
+
+	return remainder;
+}
 
 /* Static variables to hold nand info */
 static uint8_t nand_manif_id;
@@ -245,7 +318,7 @@ static void nand_read_info(void)
     nand_flash.bad_block_pos = (*(uint16_t *)(onfi_data + PARAMS_POS_FEATURES)) & 1;
     nand_flash.ext_page_len = *(uint16_t *)(onfi_data + PARAMS_POS_EXT_PARAM_PAGE_LEN);
     nand_flash.parameter_page = *(uint16_t *)(onfi_data + PARAMS_POS_PARAMETER_PAGE);
-    nand_flash.pages_per_block = nand_flash.block_size / nand_flash.page_size;
+    nand_flash.pages_per_block = div(nand_flash.block_size, nand_flash.page_size);
     nand_flash.pages_per_device = nand_flash.pages_per_block * nand_flash.block_count;
     nand_flash.oob_size = *(uint16_t *)(onfi_data + PARAMS_POS_OOBSIZE);
     nand_flash.revision = *(uint16_t *)(onfi_data + PARAMS_POS_REVISION);
@@ -342,14 +415,14 @@ static int nand_check_bad_block(uint32_t block)
 }
 
 
-static uint8_t buffer_page[NAND_FLASH_PAGE_SIZE];
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
-    uint32_t block = address / nand_flash.block_size; /* The block where the address falls in */
-    uint32_t page = address / nand_flash.page_size; /* The page where the address falls in */
-    uint32_t start_page_in_block = page % nand_flash.pages_per_block; /* The start page within this block */
-    uint32_t in_block_offset = address % nand_flash.block_size; /* The offset of the address within the block */
+    uint8_t buffer_page[NAND_FLASH_PAGE_SIZE];
+    uint32_t block = div(address, nand_flash.block_size); /* The block where the address falls in */
+    uint32_t page = div(address, nand_flash.page_size); /* The page where the address falls in */
+    uint32_t start_page_in_block = mod(page, nand_flash.pages_per_block); /* The start page within this block */
+    uint32_t in_block_offset = mod(address, nand_flash.block_size); /* The offset of the address within the block */
     uint32_t remaining = nand_flash.block_size - in_block_offset; /* How many bytes remaining to read in the first block */
     uint32_t len_to_read = len;
     uint8_t *buffer = data;
@@ -378,7 +451,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         } while (ret < 0);
 
         /* Amount of pages to be read from this block */
-        pages_to_read = (sz + nand_flash.page_size - 1) / nand_flash.page_size;
+        pages_to_read = div((sz + nand_flash.page_size - 1), nand_flash.page_size);
 
         if (pages_to_read * nand_flash.page_size > remaining)
             pages_to_read--;
@@ -397,7 +470,8 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     if (copy) {
         uint32_t *dst = (uint32_t *)data;
         uint32_t *src = (uint32_t *)buffer_page;
-        for (i = 0; i < (len / sizeof(uint32_t)); i++) {
+        uint32_t tot_len = (uint32_t)len;
+        for (i = 0; i < (tot_len >> 2); i++) {
             dst[i] = src[i];
         }
     }
