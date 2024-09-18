@@ -19,129 +19,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdint.h>
 #include <string.h>
 #include <target.h>
 #include "image.h"
+#include "sama5d3.h"
+
 #ifndef ARCH_ARM
 #   error "wolfBoot atsama5d3 HAL: wrong architecture selected. Please compile with ARCH=ARM."
 #endif
 
-/* Fixed addresses */
-extern void *kernel_addr, *update_addr, *dts_addr;
-
-#if defined(EXT_FLASH) && defined(NAND_FLASH)
-
-/* Constant for local buffers */
-#define NAND_FLASH_PAGE_SIZE 0x800 /* 2KB */
-#define NAND_FLASH_OOB_SIZE 0x40   /* 64B */
-
-/* Address space mapping for atsama5d3 */
-#define AT91C_BASE_DDRCS        0x20000000
-#define AT91C_BASE_CS1          0x40000000
-#define AT91C_BASE_CS2          0x50000000
-#define AT91C_BASE_CS3          0x60000000
-#define AT91C_BASE_NFC_CMD      0x70000000
-
-/* NAND flash is mapped to CS3 */
-#define NAND_BASE            AT91C_BASE_CS3
-
-#define NAND_MASK_ALE        (1 << 21)
-#define NAND_MASK_CLE        (1 << 22)
-#define NAND_CMD  (*((volatile uint8_t *)(NAND_BASE | NAND_MASK_CLE)))
-#define NAND_ADDR (*((volatile uint8_t *)(NAND_BASE | NAND_MASK_ALE)))
-#define NAND_DATA (*((volatile uint8_t *)(NAND_BASE)))
-
-/* Command set */
-#define NAND_CMD_STATUS       0x70
-#define NAND_CMD_READ1        0x00
-#define NAND_CMD_READ2        0x30
-#define NAND_CMD_READID       0x90
-#define NAND_CMD_RESET        0xFF
-#define NAND_CMD_ERASE1       0x60
-#define NAND_CMD_ERASE2       0xD0
-#define NAND_CMD_WRITE1       0x80
-#define NAND_CMD_WRITE2       0x10
-
-/* Small block */
-#define NAND_CMD_READ_A0      0x00
-#define NAND_CMD_READ_A1      0x01
-#define NAND_CMD_READ_C       0x50
-#define NAND_CMD_WRITE_A      0x00
-#define NAND_CMD_WRITE_C      0x50
-
-
-/* ONFI */
-#define NAND_CMD_READ_ONFI  0xEC
-
-/* Features set/get */
-#define NAND_CMD_GET_FEATURES 0xEE
-#define NAND_CMD_SET_FEATURES 0xEF
-
-/* ONFI parameters and definitions */
-#define ONFI_PARAMS_SIZE		256
-
-#define PARAMS_POS_REVISION		4
-#define		PARAMS_REVISION_1_0	(0x1 << 1)
-#define		PARAMS_REVISION_2_0	(0x1 << 2)
-#define		PARAMS_REVISION_2_1	(0x1 << 3)
-
-#define PARAMS_POS_FEATURES		6
-#define		PARAMS_FEATURE_BUSWIDTH		(0x1 << 0)
-#define		PARAMS_FEATURE_EXTENDED_PARAM	(0x1 << 7)
-
-#define PARAMS_POS_OPT_CMD		8
-#define		PARAMS_OPT_CMD_SET_GET_FEATURES	(0x1 << 2)
-
-#define PARAMS_POS_EXT_PARAM_PAGE_LEN	12
-#define PARAMS_POS_PARAMETER_PAGE		14
-#define PARAMS_POS_PAGESIZE		        80
-#define PARAMS_POS_OOBSIZE		        84
-#define PARAMS_POS_BLOCKSIZE		    92
-#define PARAMS_POS_NBBLOCKS		        96
-#define PARAMS_POS_ECC_BITS		        112
-
-#define PARAMS_POS_TIMING_MODE	        129
-#define		PARAMS_TIMING_MODE_0	    (1 << 0)
-#define		PARAMS_TIMING_MODE_1	    (1 << 1)
-#define		PARAMS_TIMING_MODE_2	    (1 << 2)
-#define		PARAMS_TIMING_MODE_3	    (1 << 3)
-#define		PARAMS_TIMING_MODE_4	    (1 << 4)
-#define		PARAMS_TIMING_MODE_5	    (1 << 5)
-
-#define PARAMS_POS_CRC		254
-
-#define ONFI_CRC_BASE			0x4F4E
-
-#define ONFI_MAX_SECTIONS		8
-
-#define ONFI_SECTION_TYPE_0		0
-#define ONFI_SECTION_TYPE_1		1
-#define ONFI_SECTION_TYPE_2		2
-
-/* Read access modes */
-#define NAND_MODE_DATAPAGE      1
-#define NAND_MODE_INFO          2
-#define NAND_MODE_DATABLOCK    3
-
-/*
-#define LOOKUP_TABLE_ALPHA_OFFSET        0x14000
-#define LOOKUP_TABLE_INDEX_OFFSET        0x10000
-#define LOOKUP_TABLE_ALPHA_OFFSET_1024   0x20000
-#define LOOKUP_TABLE_INDEX_OFFSET_1024   0x18000
-*/
-
-#define nand_flash_read ext_flash_read
-#define nand_flash_write ext_flash_write
-#define nand_flash_erase ext_flash_erase
-#define nand_flash_unlock ext_flash_unlock
-#define nand_flash_lock ext_flash_lock
-
-#define MAX_ECC_BYTES 8
-
+void sleep_us(uint32_t usec);
 
 /* Manual division operation */
-int division(uint32_t dividend,
+static int division(uint32_t dividend,
 		uint32_t divisor,
 		uint32_t *quotient,
 		uint32_t *remainder)
@@ -188,7 +78,7 @@ int division(uint32_t dividend,
 	return 0;
 }
 
-uint32_t div(uint32_t dividend, uint32_t divisor)
+static uint32_t div(uint32_t dividend, uint32_t divisor)
 {
 	uint32_t quotient = 0;
 	uint32_t remainder = 0;
@@ -201,7 +91,7 @@ uint32_t div(uint32_t dividend, uint32_t divisor)
 	return quotient;
 }
 
-uint32_t mod(uint32_t dividend, uint32_t divisor)
+static uint32_t mod(uint32_t dividend, uint32_t divisor)
 {
 	uint32_t quotient = 0;
 	uint32_t remainder = 0;
@@ -214,12 +104,287 @@ uint32_t mod(uint32_t dividend, uint32_t divisor)
 	return remainder;
 }
 
+/* RAM configuration: 2 x MT47H64M16 on SAMA5D3-Xplained
+ * 8 Mwords x 8 Banks x 16 bits x 2, total 2 Gbit
+ */
+static struct dram ddram ={
+    .timing = { /* Hardcoded for MT47H64M16, */
+        .tras = 6,
+        .trcd = 2,
+        .twr = 2,
+        .trc = 8,
+        .trp = 2,
+        .trrd = 2,
+        .twtr = 2,
+        .tmrd = 2,
+        .trfc = 17,
+        .txsnr = 19,
+        .txsrd = 200,
+        .txp = 2,
+        .txard = 8,
+        .txards = 8,
+        .trpa = 2,
+        .trtp = 2,
+        .tfaw = 6,
+    }
+};
+
+
+void master_clock_set(uint32_t prescaler)
+{
+	uint32_t mck = PMC_MCKR & (PMC_MDIV_MASK | PMC_CSS_MASK);
+    uint32_t diff = mck ^ prescaler;
+
+    if (diff & PMC_ALTPRES_MASK) {
+        /* Clear ALT_PRES field and extra PRES bit */
+        mck &= ~((1 << 13 | PMC_ALTPRES_MASK));
+        mck |= (prescaler & (PMC_ALTPRES_MASK));
+        PMC_MCKR = mck;
+        while ((PMC_SR & PMC_SR_MCKRDY) == 0)
+            ;
+
+    }
+    if (diff & PMC_MDIV_MASK) {
+        mck &= ~PMC_MDIV_MASK;
+        mck |= (prescaler & PMC_MDIV_MASK);
+        PMC_MCKR = mck;
+        while ((PMC_SR & PMC_SR_MCKRDY) == 0)
+            ;
+    }
+    if (diff & PMC_PLLADIV_MASK) {
+        mck &= ~PMC_PLLADIV_MASK;
+        mck |= (prescaler & PMC_PLLADIV_MASK);
+        PMC_MCKR = mck;
+        while ((PMC_SR & PMC_SR_MCKRDY) == 0)
+            ;
+    }
+    if (diff & PMC_H32MXDIV_MASK) {
+        mck &= ~PMC_H32MXDIV_MASK;
+        mck |= (prescaler & PMC_H32MXDIV_MASK);
+        PMC_MCKR = mck;
+        while ((PMC_SR & PMC_SR_MCKRDY) == 0)
+            ;
+    }
+    if (diff & PMC_CSS_MASK) {
+        mck &= ~PMC_CSS_MASK;
+        mck |= (prescaler & PMC_CSS_MASK);
+        PMC_MCKR = mck;
+        while ((PMC_SR & PMC_SR_MCKRDY) == 0)
+            ;
+    }
+}
+
+static void pll_init(void)
+{
+    /* Disable PLLA */
+    PMC_PLLA &= PLLA_CKGR_SRCA;
+    asm volatile("dmb");
+    /* Configure PLLA */
+    PMC_PLLA = PLLA_CONFIG;
+    /* Wait for the PLLA to lock */
+
+    while (!(PMC_SR & PMC_SR_LOCKA))
+        ;
+    /* Set the current charge pump */
+    PMC_PLLICPR = PLLICPR_CONFIG;
+
+    /* Set main clock */
+    master_clock_set(PRESCALER_MAIN_CLOCK);
+
+    /* Set PLLA clock */
+    master_clock_set(PRESCALER_PLLA_CLOCK);
+}
+
+
+static void ddr_init(void)
+{
+    uint32_t val;
+    uint32_t rtr, md, cr, tpr0, tpr1, tpr2;
+    uint32_t col, row, cas, bank;
+    uint32_t cal;
+    uint32_t ba_offset = 0;
+    uint32_t pmc_pcr;
+    volatile uint32_t *dram_base = (volatile uint32_t *)DRAM_BASE;
+
+    /* Step 1: Calculate register values
+     *
+     */
+    md = MPDDRC_MD_DDR2_SDRAM | MPDDRC_MD_DBW_32BIT;
+    col = MPDDRC_NC_10;  /* 10/9 column address */
+    row = MPDDRC_NR_13;  /* 13-bit row address */
+    cas = 3 << MPDDRC_CAS_SHIFT; /* CAS latency 3 */
+    bank = 1 << MPDDRC_NB_SHIFT; /* NB_BANKS = 8 */
+    cr = col | row | bank | cas | MPDDRC_CR_DECOD_INTERLEAVED | MPDDRC_UNAL
+        | MPDDRC_NDQS_DISABLED;
+    ba_offset = 12; /* Based on col = MPDDRC_NC_10, DBW 32 bit, interleaved */
+
+    /* Set timing parameters using hardcoded values */
+    rtr = 0x40F;
+    tpr0 = (ddram.timing.tras << MPDDRC_TRAS_SHIFT) |
+        (ddram.timing.trcd << MPDDRC_TRCD_SHIFT) |
+        (ddram.timing.twr << MPDDRC_TWR_SHIFT) |
+        (ddram.timing.trc << MPDDRC_TRC_SHIFT) |
+        (ddram.timing.trp << MPDDRC_TRP_SHIFT) |
+        (ddram.timing.trrd << MPDDRC_TRRD_SHIFT) |
+        (ddram.timing.twtr << MPDDRC_TWTR_SHIFT) |
+        (ddram.timing.tmrd << MPDDRC_TMRD_SHIFT);
+
+
+    tpr1 = (ddram.timing.trfc << MPDDRC_TRFC_SHIFT) |
+        (ddram.timing.txsnr << MPDDRC_TXSNR_SHIFT) |
+        (ddram.timing.txsrd << MPDDRC_TXSRD_SHIFT) |
+        (ddram.timing.txp << MPDDRC_TXP_SHIFT);
+
+    tpr2 = (ddram.timing.txard << MPDDRC_TXARD_SHIFT) |
+        (ddram.timing.txards << MPDDRC_TXARDS_SHIFT) |
+        (ddram.timing.trpa << MPDDRC_TRPA_SHIFT) |
+        (ddram.timing.trtp << MPDDRC_TRTP_SHIFT) |
+        (ddram.timing.tfaw << MPDDRC_TFAW_SHIFT);
+
+    /* Step 2: Enable the DDR2 SDRAM controller
+     *
+     */
+    /* Turn on the DDRAM controller peripheral clock */
+    PMC_PCR = MPDDRC_PMCID;
+    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK);
+    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN;
+    PMC_PCR = pmc_pcr;
+
+    /* Enable DDR in system clock */
+    PMC_SCER = MPDDRC_SCERID;
+
+    sleep_us(10); /* 10 us */
+
+    /* Step 3: Calibration
+     *
+     */
+    cal = MPDDRC_IO_CALIBR;
+    cal &= ~(MPDDRC_IOCALIBR_RDIV_MASK);
+    cal |= MPDDRC_IOCALIBR_RDIV_DDR2_RZQ_50; /* 50 ohm */
+    cal &= ~(MPDDRC_IOCALIBR_TZQIO_MASK);
+    //cal |= (80 << MPDDRC_IOCALIBR_TZQIO_SHIFT); /* 100 cycles at 133MHz is 0.75 us, 100 cycles at 166MHz is 0.6 us */
+    cal |= (100 << MPDDRC_IOCALIBR_TZQIO_SHIFT); /* 100 cycles at 133MHz is 0.75 us, 100 cycles at 166MHz is 0.6 us */
+
+    MPDDRC_IO_CALIBR = cal;
+
+    /* Data path configuration */
+    MPDDRC_RD_DATA_PATH = 0x01; /* One cycle read delay */
+
+    /* Write calibration again */
+    MPDDRC_IO_CALIBR = cal;
+
+    /* Step 4: Program the DDR2 SDRAM controller
+     *
+     */
+
+    /* Program the memory device type */
+    MPDDRC_MD = md;
+
+    /* Program the features into configuration registers */
+    MPDDRC_CR = cr;
+    MPDDRC_TPR0 = tpr0;
+    MPDDRC_TPR1 = tpr1;
+    MPDDRC_TPR2 = tpr2;
+
+    /* Send a NOP command via mode register */
+    MPDDRC_MR = MPDDRC_MR_MODE_NOP;
+    *dram_base = 0;
+
+    sleep_us(200); /* 200 us */
+
+    /* Send a second NOP command to set CKE high */
+    MPDDRC_MR = MPDDRC_MR_MODE_NOP;
+    *dram_base = 0;
+    sleep_us(1); /* min 200 ns */
+
+    /* Issue precharge all command */
+    MPDDRC_MR = MPDDRC_MR_MODE_PRECHARGE;
+    *dram_base = 0;
+    sleep_us(1); /* min 15 ns */
+
+    /* Issue external load command to set temperature mode (EMR2) */
+    MPDDRC_MR = MPDDRC_MR_MODE_EXT_LOAD;
+    *(volatile uint32_t *)(DRAM_BASE + (0x2 << ba_offset)) = 0x00000000;
+    sleep_us(1); /* min 15 ns */
+
+    /* Issue external load command to set DLL to 0 (EMR3)*/
+    MPDDRC_MR = MPDDRC_MR_MODE_EXT_LOAD;
+    *(volatile uint32_t *)(DRAM_BASE + (0x3 << ba_offset)) = 0x00000000;
+    sleep_us(1); /* min 200 cycles */
+
+    /* Issue external load command to program D.I.C. (EMR1) */
+    MPDDRC_MR = MPDDRC_MR_MODE_EXT_LOAD;
+    *(volatile uint32_t *)(DRAM_BASE + (0x1 << ba_offset)) = 0x00000000;
+    sleep_us(1); /* min 200 cycles */
+
+    /* Reset DLL via Configuration Register */
+    MPDDRC_CR |= MPDDRC_CR_ENABLE_DLL_RESET;
+
+    /* Issue load command to set DLL to 1 */
+    MPDDRC_MR = MPDDRC_MR_MODE_LOAD;
+    *dram_base = 0;
+    sleep_us(1); /* min 15 ns */
+
+    /* Issue a precharge command */
+    MPDDRC_MR = MPDDRC_MR_MODE_PRECHARGE;
+    *dram_base = 0;
+    sleep_us(1); /* min 400 ns */
+
+    /* Issue two auto-refresh cycles */
+    MPDDRC_MR = MPDDRC_MR_MODE_AUTO_REFRESH;
+    *dram_base = 0;
+    sleep_us(1); /* min 400 ns */
+
+    MPDDRC_MR = MPDDRC_MR_MODE_AUTO_REFRESH;
+    *dram_base = 0;
+    sleep_us(1); /* min 400 ns */
+
+    /* Disable DLL reset */
+    MPDDRC_CR &= ~MPDDRC_CR_ENABLE_DLL_RESET;
+
+    /* Issue a mode register LOAD command */
+    MPDDRC_MR = MPDDRC_MR_MODE_LOAD;
+    *dram_base = 0;
+    sleep_us(1); /* min 15 ns */
+
+
+    /* Trigger OCD default calibration  */
+    MPDDRC_CR |= MPDDRC_CR_OCD_DEFAULT;
+    sleep_us(1); /* min 15 ns */
+
+    /* Issue a mode register LOAD command (EMR1) */
+    MPDDRC_MR = MPDDRC_MR_MODE_EXT_LOAD;
+    *(volatile uint32_t *)(DRAM_BASE + (0x1 << ba_offset)) = 0x00000000;
+    sleep_us(1); /* min 15 ns */
+
+    /* Exit OCD default calibration */
+    MPDDRC_CR &= ~MPDDRC_CR_OCD_DEFAULT;
+    sleep_us(1); /* min 15 ns */
+
+    /* Issue a mode register LOAD command (EMR1) */
+    MPDDRC_MR = MPDDRC_MR_MODE_EXT_LOAD;
+    *(volatile uint32_t *)(DRAM_BASE + (0x1 << ba_offset)) = 0x00000000;
+    sleep_us(1); /* min 15 ns */
+
+    /* Switch mode to NORMAL */
+    MPDDRC_MR = MPDDRC_MR_MODE_NORMAL;
+    *dram_base = 0;
+    sleep_us(1); /* min 15 ns */
+
+    /* Perform a write access to the DDR2-SDRAM */
+    *(dram_base) = 0xA5A5A5D1;
+
+    /* finally, set the refresh rate */
+    MPDDRC_RTR = rtr;
+
+    /* DDR is now ready to use. Wait for the end of calibration */
+    sleep_us(10);
+}
+
 /* Static variables to hold nand info */
 static uint8_t nand_manif_id;
 static uint8_t nand_dev_id;
 static char nand_onfi_id[4];
-
-
 
 struct nand_flash {
     uint16_t revision;
@@ -478,6 +643,44 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     return len;
 }
 
+void pit_init(void)
+{
+    uint32_t pmc_pcr;
+
+    /* Turn on clock for PIT */
+    PMC_PCR = PIT_PMCID;
+    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK);
+    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN;
+    PMC_PCR = pmc_pcr;
+
+    /* Set clock source to MCK/2 */
+    PIT_MR = MAX_PIV | PIT_MR_EN;
+}
+
+void sleep_us(uint32_t usec)
+{
+	uint32_t base = PIT_PIIR;
+	uint32_t delay;
+	uint32_t current;
+
+	/* Since our division function which costs much run time
+	 * causes the delay time error.
+	 * So here using shifting to implement the division.
+	 * to change "1000" to "1024", this cause some inaccuacy,
+	 * but it is acceptable.
+	 * ((MASTER_CLOCK / 1024) * usec) / (16 * 1024)
+	 */
+    delay = ((MASTER_FREQ >> 10) * usec) >> 14;
+	do {
+		current = PIT_PIIR;
+		current -= base;
+	} while (current < delay);
+}
+
+
+
+
+
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     return 0;
@@ -496,7 +699,6 @@ void ext_flash_unlock(void)
 void ext_flash_lock(void)
 {
 }
-#endif
 
 void* hal_get_dts_address(void)
 {
@@ -522,6 +724,10 @@ void zynq_init(uint32_t cpu_clock)
 /* public HAL functions */
 void hal_init(void)
 {
+    pll_init();
+    pit_init();
+    watchdog_disable();
+    ddr_init();
     nand_read_info();
 }
 

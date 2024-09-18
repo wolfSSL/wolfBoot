@@ -3,13 +3,14 @@ OUTPUT_ARCH(arm)
 
 MEMORY
 {
-    DDR_MEM(rwx): ORIGIN = 0x00311000, LENGTH = 0x000080000
+    DDR_MEM(rwx): ORIGIN = 0x20100800, LENGTH = 0x100000
+    STACK_MEM(rw): ORIGIN = 0x20000000, LENGTH = 0x00100000
 }
 
 ENTRY(reset_vector_entry)
 SECTIONS
 {
-    .text : { 
+    .text : AT (ORIGIN(DDR_MEM)) {
         _start_text = .;
         *(.iv)
         *(.text)
@@ -39,7 +40,7 @@ SECTIONS
 	}
 
 	/* collect all uninitialized .bss sections */
-	.bss (NOLOAD) : { 
+	.bss (NOLOAD) : {
 		. = ALIGN(4);
 		_start_bss = .;
 		*(.bss)
@@ -49,6 +50,6 @@ SECTIONS
 _romsize = _end_data - _start_text;
 _sramsize = _end_bss - _start_text;
 END_STACK = _start_text;
-_stack_top = ORIGIN(DDR_MEM) + LENGTH(DDR_MEM);
+_stack_top = ORIGIN(STACK_MEM) + LENGTH(STACK_MEM);
 end = .;  /* define a global symbol marking the end of application */
 

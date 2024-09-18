@@ -1,4 +1,5 @@
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
+USE_GCC?=1
 
 # Support for Built-in ROT into OTP flash memory
 ifeq ($(FLASH_OTP_KEYSTORE),1)
