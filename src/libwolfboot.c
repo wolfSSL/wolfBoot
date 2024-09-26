@@ -1204,11 +1204,9 @@ uint32_t wolfBoot_get_diffbase_version(uint8_t part)
 uint16_t wolfBoot_get_image_type(uint8_t part)
 {
     uint8_t *image = wolfBoot_get_image_from_part(part);
-
     if (image) {
-      return wolfBoot_get_blob_type(image);
+        return wolfBoot_get_blob_type(image);
     }
-
     return 0;
 }
 #endif /* WOLFBOOT_FIXED_PARTITIONS */

@@ -294,22 +294,33 @@ void *memmove(void *dst, const void *src, size_t n)
 #endif /* WOLFBOOT_USE_STDLIBC */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
-void uart_writenum(int num, int base)
+void uart_writenum(int num, int base, int zeropad, int maxdigits)
 {
     int i = 0;
     char buf[sizeof(int)*2+1];
     const char* kDigitLut = "0123456789ABCDEF";
     unsigned int val = (unsigned int)num;
     int sz = 0;
+    if (maxdigits == 0)
+        maxdigits = 8;
+    if (maxdigits > (int)sizeof(buf))
+        maxdigits = (int)sizeof(buf);
+    memset(buf, 0, sizeof(buf));
     if (base == 10 && num < 0) { /* handle negative */
         buf[i++] = '-';
         val = -num;
+    }
+    if (zeropad) {
+        memset(&buf[i], '0', maxdigits);
     }
     do {
         buf[sizeof(buf)-sz-1] = kDigitLut[(val % base)];
         sz++;
         val /= base;
     } while (val > 0U);
+    if (zeropad && sz < maxdigits) {
+        i += maxdigits-sz;
+    }
     memmove(&buf[i], &buf[sizeof(buf)-sz], sz);
     i+=sz;
     uart_write(buf, i);
@@ -318,6 +329,7 @@ void uart_writenum(int num, int base)
 void uart_vprintf(const char* fmt, va_list argp)
 {
     char* fmtp = (char*)fmt;
+    int zeropad, maxdigits;
     while (fmtp != NULL && *fmtp != '\0') {
         /* print non formatting characters */
         if (*fmtp != '%') {
@@ -327,9 +339,15 @@ void uart_vprintf(const char* fmt, va_list argp)
         fmtp++; /* skip % */
 
         /* find formatters */
+        zeropad = maxdigits = 0;
         while (*fmtp != '\0') {
             if (*fmtp >= '0' && *fmtp <= '9') {
-                /* length formatter - skip */
+                /* length formatter */
+                if (*fmtp == '0') {
+                    zeropad = 1;
+                }
+                maxdigits <<= 8;
+                maxdigits += (*fmtp - '0');
                 fmtp++;
             }
             else if (*fmtp == 'l') {
@@ -354,7 +372,7 @@ void uart_vprintf(const char* fmt, va_list argp)
             case 'd':
             {
                 int n = (int)va_arg(argp, int);
-                uart_writenum(n, 10);
+                uart_writenum(n, 10, zeropad, maxdigits);
                 break;
             }
             case 'p':
@@ -363,7 +381,7 @@ void uart_vprintf(const char* fmt, va_list argp)
             case 'x':
             {
                 int n = (int)va_arg(argp, int);
-                uart_writenum(n, 16);
+                uart_writenum(n, 16, zeropad, maxdigits);
                 break;
             }
             case 's':

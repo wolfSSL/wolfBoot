@@ -55,6 +55,10 @@
 #include "hal/spi/spi_drv_nrf52.h"
 #endif
 
+#if defined(TARGET_nrf5340)
+#include "hal/spi/spi_drv_nrf5340.h"
+#endif
+
 #if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024)
 #include "hal/spi/spi_drv_nxp.h"
 #endif
@@ -90,12 +94,27 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags);
 #define QSPI_DATA_MODE_DSPI 2
 #define QSPI_DATA_MODE_QSPI 3
 
+/* QSPI Configuration */
+#ifndef QSPI_ADDR_MODE /* address uses single SPI mode */
+    #define QSPI_ADDR_MODE  QSPI_DATA_MODE_SPI
+#endif
+#ifndef QSPI_ADDR_SZ /* default to 24-bit address */
+    #define QSPI_ADDR_SZ           3
+#endif
+#ifndef QSPI_DATA_MODE /* data defaults to Quad mode */
+    #define QSPI_DATA_MODE  QSPI_DATA_MODE_QSPI
+#endif
+
 int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     uint32_t addr, uint32_t addrSz, uint32_t addrMode,
     uint32_t alt, uint32_t altSz, uint32_t altMode,
     uint32_t dummySz,
     uint8_t* data, uint32_t dataSz, uint32_t dataMode
 );
+
+#if !defined(DEBUG_QSPI) && defined(DEBUG_UART)
+    #define DEBUG_QSPI 1
+#endif
 #endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
 #ifndef SPI_CS_FLASH

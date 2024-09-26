@@ -28,6 +28,7 @@
 #ifndef SPI_FLASH_DRI_H
 #define SPI_FLASH_DRI_H
 
+/* SPI Configuration */
 #ifndef SPI_FLASH_SECTOR_SIZE
 #define SPI_FLASH_SECTOR_SIZE (4096)
 #endif

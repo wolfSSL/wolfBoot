@@ -4,25 +4,28 @@ This README describes configuration of supported targets.
 
 ## Supported Targets
 
+* [Simulated](#simulated)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
 * [Microchip SAMA5D3](#microchip-sama5d3)
 * [Microchip SAME51](#microchip-same51)
+* [Nordic nRF52840](#nordic-nrf52840)
+* [Nordic nRF5340](#nordic-nrf5340)
+* [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
-* [NXP iMX-RT](#nxp-imx-rt)
-* [Nordic nRF52840](#nordic-nrf52840)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [Renesas RA6M4](#renesas-ra6m4)
 * [Renesas RX65N](#renesas-rx65n)
 * [Renesas RX72N](#renesas-rx72n)
 * [Renesas RZN2L](#renesas-rzn2l)
+* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32C0](#stm32c0)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -34,7 +37,6 @@ This README describes configuration of supported targets.
 * [STM32L5](#stm32l5)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
-* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 
@@ -2177,6 +2179,135 @@ Example of flash memory layout and configuration on the nRF52:
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x58000
 ```
 
+
+## Nordic nRF5340
+
+Tested with the Nordic nRF5340-DK. This device has two cores:
+1) Application core: Cortex-M33 at 128MHz, w/TrustZone, 1MB flash, 512KB RAM
+2) Network core: Cortex-M33 at 64MHz, 256KB Flash and 64KB RAM
+
+The cores communicate using the IPC peripheral.
+
+The network core can access application core resources (flash, RAM, and peripherals) when granted permission through the application's DCNF and SPU settings. A small portion of the application core RAM is dedicated to the exchange of messages between the application and network cores.
+
+The DK board has two virtual COM ports. Application core and Network core will each output to different VCOM ports.
+
+Example Boot Output:
+
+Application Core:
+
+```
+wolfBoot HAL Init (app core)
+QSPI Freq=24MHz (Div Clk=3/Sck=1), Addr=24-bits, PageSz=256
+QSPI Activate
+QSPI Flash ID (ret 0): 0xC2 0x28 0x17
+Status Reg: Ret 0, 0x40 (Quad Enabled: Yes)
+QSPI Flash Read: Ret 0, Cmd 0xEB, Len 4 , 0xEDFFC -> 0x2000022C
+QSPI Flash Read: Ret 0, Cmd 0xEB, Len 4 , 0xEDFFC -> 0x2000022C
+Boot partition: 0xC000 (size 7428, version 0x1)
+QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x0 -> 0x20000128
+Update partition: 0x0 (size 7428, version 0x2)
+QSPI Flash Read: Ret 0, Cmd 0xEB, Len 4 , 0xEDFFC -> 0x2000022C
+Boot partition: 0xC000 (size 7428, version 0x1)
+Booting version: 0x1
+QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x100000 -> 0x20000128
+Update partition: 0x100000 (size 5492, version 0x2)
+QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x0 -> 0x20000230
+Network version: 0x2
+========================
+nRF5340 wolfBoot (app core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x1
+========================
+Internal Flash Write: addr 0xF9FFC, len 4
+Internal Flash Write: addr 0xF9FFB, len 1
+```
+
+Network Core:
+
+```
+wolfBoot HAL Init (net core)
+Boot partition: 0x100C000 (size 5492, version 0x1)
+Update partition: 0x100C000 (size 5492, version 0x1)
+Boot partition: 0x100C000 (size 5492, version 0x1)
+Booting version: 0x1
+========================
+nRF5340 wolfBoot (net core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x1
+========================
+Internal Flash Write: addr 0x1039FFC, len 4
+Internal Flash Write: addr 0x1039FFB, len 1
+```
+
+### Building / Flashing Nordic nRF5340
+
+You may optionally use `./tools/scripts/nrf5340/build_flash.sh` for building and flashing both cores.
+
+The `nrfjprog` can be used to program external QSPI flash for testing. Example: `nrfjprog --program <qspi_content.hex> --verify -f nrf53`
+
+#### Application Core
+
+Flash base: 0x00000000, SRAM base: 0x20000000
+
+Building Application core:
+
+```sh
+cp config/examples/nrf5340.config .config
+make clean
+make
+```
+
+Flashing Application core with JLink:
+
+```
+JLinkExe -device nRF5340_xxAA_APP -if SWD -speed 4000 -jtagconf -1,-1 -autoconnect 1
+loadbin factory.bin 0x0
+rnh
+```
+
+#### Network Core
+
+Flash base: 0x01000000, SRAM base: 0x21000000
+
+Building Network core:
+
+```sh
+cp config/examples/nrf5340_net.config .config
+make clean
+make
+```
+
+Flashing Network core with JLink:
+
+```
+JLinkExe -device nRF5340_xxAA_NET -if SWD -speed 4000 -jtagconf -1,-1 -autoconnect 1
+loadbin factory.bin 0x01000000
+rnh
+```
+
+### Debugging Nordic nRF5340
+
+Debugging with JLink:
+
+1) Start GDB Server:
+```
+JLinkGDBServer -device nRF5340_xxAA_APP -if SWD -port 3333
+```
+
+2) Start GDB
+This will use .gdbinit, but can supply `wolfboot.elf -ex "target remote localhost:3333"` if permissions not allowing.
+
+```
+arm-none-eabi-gdb
+b main
+mon reset
+c
+```
+
+
 ## Simulated
 
 You can create a simulated target that uses files to mimic an internal and
@@ -2919,8 +3050,8 @@ repository that can be directly flashed into the BIOS flash of the board.
 
 ## Infineon AURIX TC3xx
 
-wolfBoot supports the AURIX TC3xx family of devices, and provides a demo application targeting the TC375 AURIX LiteKit-V2. 
+wolfBoot supports the AURIX TC3xx family of devices, and provides a demo application targeting the TC375 AURIX LiteKit-V2.
 
-For detailed instructions on using wolfBoot with the AURIX TC3xx, please refer to [IDE/AURIX/README.md](../IDE/AURIX/README.md)  
+For detailed instructions on using wolfBoot with the AURIX TC3xx, please refer to [IDE/AURIX/README.md](../IDE/AURIX/README.md)
 
-wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) on AURIX TC3xx devices, offloading cryptographic operations and key storage to the AURIX HSM core. For more information on using wolfBoot with wolfHSM on AURIX devices, please contact us at facts@wolfssl.com. 
+wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) on AURIX TC3xx devices, offloading cryptographic operations and key storage to the AURIX HSM core. For more information on using wolfBoot with wolfHSM on AURIX devices, please contact us at facts@wolfssl.com.
