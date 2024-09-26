@@ -97,6 +97,8 @@ struct wolfBoot_image {
     uint8_t *sha_hash;
     uint8_t *fw_base;
     uint32_t fw_size;
+    uint32_t fw_ver;
+    uint32_t type;
     uint32_t part;
     uint32_t hdr_ok;
     uint32_t canary_FEED4567;
@@ -514,6 +516,8 @@ struct wolfBoot_image {
     uint8_t *sha_hash;
     uint8_t *fw_base;
     uint32_t fw_size;
+    uint32_t fw_ver;
+    uint16_t type;
     uint8_t part;
     uint8_t hdr_ok : 1;
     uint8_t signature_ok : 1;
@@ -562,6 +566,9 @@ static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
 
 /* Defined in image.c */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
+#ifdef EXT_FLASH
+int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint32_t addr);
+#endif
 int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);

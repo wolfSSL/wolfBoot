@@ -118,7 +118,6 @@ endif
 
 ifeq ($(ARCH),ARM)
   APP_OBJS+=startup_arm.o
-  CFLAGS+=-DSTM32
 endif
 ifeq ($(ARCH),ARM_BE)
   APP_OBJS+=startup_arm.o
@@ -132,6 +131,7 @@ endif
 ENTRY_POINT=`cat .entry-point-address`
 LSCRIPT:=../config/target-app.ld
 LSCRIPT_TEMPLATE:=$(ARCH).ld
+
 ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
   CFLAGS+=-DDUALBANK_SWAP
@@ -208,6 +208,10 @@ ifeq ($(TARGET),stm32u5)
   endif
   CFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-mcpu=cortex-m33
+endif
+
+ifeq ($(TARGET),nrf5340_net)
+  LSCRIPT_TEMPLATE=ARM-nrf5340_net.ld
 endif
 
 ifeq ($(TARGET),ti_hercules)

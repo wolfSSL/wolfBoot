@@ -123,6 +123,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf52840.config
 
+  nrf5340_app_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340.config
+
+  nrf5340_net_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340_net.config
+
   nxp_p1021_test:
     uses: ./.github/workflows/test-build.yml
     with:

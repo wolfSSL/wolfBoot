@@ -29,7 +29,7 @@ extern unsigned int _end_bss;
 extern unsigned int _end_stack;
 extern unsigned int _start_heap;
 
-#ifdef STM32
+#ifdef TARGET_stm32f4
 extern void isr_tim2(void);
 #endif
 

@@ -28,37 +28,10 @@
 #include "spi_drv.h"
 
 #ifdef TARGET_nrf52
+
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 
-#define SPI0 (0x40003000)
-#define SPI1 (0x40004000)
-#define SPI2 (0x40023000)
-
-#define SPI SPI0
-#define SPI_TASKS_START   *((volatile uint32_t *)(SPI + 0x10))
-#define SPI_TASKS_STOP    *((volatile uint32_t *)(SPI + 0x14))
-#define SPI_EVENTS_ENDRX  *((volatile uint32_t *)(SPI + 0x110))
-#define SPI_EVENTS_END    *((volatile uint32_t *)(SPI + 0x118))
-#define SPI_EVENTS_ENDTX  *((volatile uint32_t *)(SPI + 0x120))
-#define SPI_EV_RDY        *((volatile uint32_t *)(SPI + 0x108))
-#define SPI_INTENSET      *((volatile uint32_t *)(SPI + 0x304))
-#define SPI_INTENCLR      *((volatile uint32_t *)(SPI + 0x308))
-#define SPI_ENABLE        *((volatile uint32_t *)(SPI + 0x500))
-#define SPI_PSEL_SCK      *((volatile uint32_t *)(SPI + 0x508))
-#define SPI_PSEL_MOSI     *((volatile uint32_t *)(SPI + 0x50C))
-#define SPI_PSEL_MISO     *((volatile uint32_t *)(SPI + 0x510))
-#define SPI_RXDATA        *((volatile uint32_t *)(SPI + 0x518))
-#define SPI_TXDATA        *((volatile uint32_t *)(SPI + 0x51C))
-#define SPI_FREQUENCY     *((volatile uint32_t *)(SPI + 0x524))
-#define SPI_CONFIG        *((volatile uint32_t *)(SPI + 0x554))
-
-#define K125 0x02000000
-#define K250 0x04000000
-#define K500 0x08000000
-#define M1   0x10000000
-#define M2   0x20000000
-#define M4   0x40000000
-#define M8   0x80000000
+#include "hal/nrf52.h"
 
 void RAMFUNCTION spi_cs_off(uint32_t base, int pin)
 {

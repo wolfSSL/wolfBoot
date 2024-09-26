@@ -881,12 +881,12 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 #endif
     img->hdr_ok = 1;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
+    img->fw_ver = wolfBoot_get_blob_version(image);
+    img->type = wolfBoot_get_blob_type(image);
 
-    wolfBoot_printf("%s partition: %p (size %d, version 0x%x)\n",
+    wolfBoot_printf("%s partition: %p (sz %d, ver 0x%x, type 0x%d)\n",
         (img->part == PART_BOOT) ? "Boot" : "Update",
-        img->hdr,
-        (unsigned int)img->fw_size,
-        wolfBoot_get_blob_version(image));
+        img->hdr, (unsigned int)img->fw_size, img->fw_ver, img->type);
 
     return 0;
 }
@@ -988,6 +988,27 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 
     return wolfBoot_open_image_address(img, image);
 }
+
+
+#ifdef EXT_FLASH
+int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
+    uint32_t addr)
+{
+    uint8_t *image;
+
+    if (img == NULL)
+        return -1;
+
+    memset(img, 0, sizeof(struct wolfBoot_image));
+    img->part = part;
+    img->hdr = (void*)addr;
+    img->hdr_ok = 1;
+    hdr_cpy_done = 0; /* reset hdr "open" flag */
+    image = fetch_hdr_cpy(img);
+    return wolfBoot_open_image_address(img, image);
+}
+#endif /* EXT_FLASH */
+
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /**
@@ -1078,7 +1099,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     if (image_type_size != sizeof(uint16_t))
         return -1;
     image_type = (uint16_t)(image_type_buf[0] + (image_type_buf[1] << 8));
-    if ((image_type & 0xFF00) != HDR_IMG_TYPE_AUTH)
+    if ((image_type & HDR_IMG_TYPE_AUTH_MASK) != HDR_IMG_TYPE_AUTH)
         return -1;
     if (img->sha_hash == NULL) {
         if (image_hash(img, digest) != 0)
