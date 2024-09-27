@@ -881,12 +881,15 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 #endif
     img->hdr_ok = 1;
     img->fw_base = img->hdr + IMAGE_HEADER_SIZE;
-    img->fw_ver = wolfBoot_get_blob_version(image);
-    img->type = wolfBoot_get_blob_type(image);
+#ifdef EXT_FLASH
+    img->hdr_cache = image;
+#endif
 
     wolfBoot_printf("%s partition: %p (sz %d, ver 0x%x, type 0x%d)\n",
         (img->part == PART_BOOT) ? "Boot" : "Update",
-        img->hdr, (unsigned int)img->fw_size, img->fw_ver, img->type);
+        img->hdr, (unsigned int)img->fw_size,
+        wolfBoot_get_blob_version(image),
+        wolfBoot_get_blob_type(image));
 
     return 0;
 }
@@ -992,16 +995,15 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 
 #ifdef EXT_FLASH
 int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
-    uint32_t addr)
+    uint8_t* addr)
 {
-    uint8_t *image;
-
+    uint8_t* image;
     if (img == NULL)
         return -1;
 
     memset(img, 0, sizeof(struct wolfBoot_image));
     img->part = part;
-    img->hdr = (void*)addr;
+    img->hdr = addr;
     img->hdr_ok = 1;
     hdr_cpy_done = 0; /* reset hdr "open" flag */
     image = fetch_hdr_cpy(img);
