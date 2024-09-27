@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# nRF5340 dual core: Creates internal and external flash images for testing
+
 # run from wolfBoot root
 # ./tools/scripts/nrf5340/build_flash.sh
 
@@ -33,14 +35,19 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x01000000 tools/scri
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10000000 tools/scripts/nrf5340/image_v2_signed_app.bin tools/scripts/nrf5340/image_v2_signed_app.hex
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10100000 tools/scripts/nrf5340/image_v2_signed_net.bin tools/scripts/nrf5340/image_v2_signed_net.hex
 
+
+if [ "$1" == "erase" ]; then
+    nrfjprog -f nrf53 --recover
+    nrfjprog -f nrf53 --qspieraseall
+fi
+
+# Program external flash
+nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_app.hex --verify
+nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_net.hex --verify
+
+
 # Program Internal Flash
-#nrfjprog -f nrf53 --recover
 #nrfjprog -f nrf53 --program tools/scripts/nrf5340/factory_app.hex --verify
 #nrfjprog -f nrf53 --program tools/scripts/nrf5340/factory_net.hex --verify --coprocessor CP_NETWORK
 JLinkExe -CommandFile tools/scripts/nrf5340/flash_net.jlink
 JLinkExe -CommandFile tools/scripts/nrf5340/flash_app.jlink
-
-# Program external flash
-nrfjprog -f nrf53 --qspieraseall
-nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_app.hex --verify
-nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_net.hex --verify
