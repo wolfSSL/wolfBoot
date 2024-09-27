@@ -43,7 +43,6 @@
     /* Tests */
     #if 0
         #define TEST_DDR
-        #define TEST_FLASH
         #define TEST_TPM
     #endif
 
@@ -71,9 +70,6 @@
 /* Foward declarations */
 #if defined(ENABLE_DDR) && defined(TEST_DDR)
 static int test_ddr(void);
-#endif
-#if defined(ENABLE_IFC) && defined(TEST_FLASH)
-static int test_flash(void);
 #endif
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
 static int test_tpm(void);
@@ -3013,12 +3009,6 @@ void hal_init(void)
     }
 #endif
 
-#if defined(ENABLE_IFC) && defined(TEST_FLASH)
-    if (test_flash() != 0) {
-        wolfBoot_printf("Flash Test Failed!\n");
-    }
-#endif
-
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
     if (test_tpm() != 0) {
         wolfBoot_printf("TPM Test Failed!\n");
@@ -3448,51 +3438,6 @@ static int test_ddr(void)
     return ret;
 }
 #endif /* ENABLE_DDR && TEST_DDR */
-
-#if defined(ENABLE_IFC) && defined(TEST_FLASH)
-
-#ifndef TEST_ADDRESS
-    /* 0xEC100000 (1MB offset) */
-    #define TEST_ADDRESS (FLASH_BASE_ADDR + (1 * 0x100000))
-#endif
-
-/* #define TEST_FLASH_READONLY */
-
-static uint32_t pageData[FLASH_PAGE_SIZE/sizeof(uint32_t)]; /* force 32-bit alignment */
-
-static int test_flash(void)
-{
-    int ret;
-    uint32_t i;
-    uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
-
-#ifndef TEST_FLASH_READONLY
-    /* Erase sector */
-    ret = hal_flash_erase(TEST_ADDRESS, sizeof(pageData));
-    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
-
-    /* Write Pages */
-    for (i=0; i<sizeof(pageData); i++) {
-        ((uint8_t*)pageData)[i] = (i & 0xff);
-    }
-    ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Write Page: Ret %d\n", ret);
-#endif /* !TEST_FLASH_READONLY */
-
-    /* invalidate cache */
-    flush_cache((uint32_t)pagePtr, sizeof(pageData));
-
-    wolfBoot_printf("Checking...\n");
-    ret = memcmp(pageData, pagePtr, sizeof(pageData));
-    if (ret != 0) {
-        wolfBoot_printf("Check Data @ %d failed\n", ret);
-        return -ret;
-    }
-
-    wolfBoot_printf("Flash Test Passed\n");
-    return ret;
-}
-#endif /* ENABLE_IFC && TEST_FLASH */
 
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
 int test_tpm(void)

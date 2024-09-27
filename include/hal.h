@@ -138,6 +138,10 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length);
 
 #endif
 
+#ifdef TEST_FLASH
+int hal_flash_test(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

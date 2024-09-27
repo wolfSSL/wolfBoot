@@ -37,7 +37,6 @@
     /* Tests */
     #if 0
         #define TEST_DDR
-        #define TEST_FLASH
         #define TEST_TPM
     #endif
     #define ENABLE_PCIE
@@ -55,9 +54,6 @@
 /* Foward declarations */
 #if defined(ENABLE_DDR) && defined(TEST_DDR)
 static int test_ddr(void);
-#endif
-#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
-static int test_flash(void);
 #endif
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
 static int test_tpm(void);
@@ -1569,12 +1565,6 @@ void hal_init(void)
     }
 #endif
 
-#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
-    if (test_flash() != 0) {
-        wolfBoot_printf("Flash Test Failed!\n");
-    }
-#endif
-
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
     if (test_tpm() != 0) {
         wolfBoot_printf("TPM Test Failed!\n");
@@ -1894,52 +1884,6 @@ static int test_ddr(void)
     return ret;
 }
 #endif /* ENABLE_DDR && TEST_DDR */
-
-#if defined(ENABLE_ELBC) && defined(TEST_FLASH)
-
-#ifndef TEST_ADDRESS
-#define TEST_ADDRESS 0x2800000 /* 40MB */
-#endif
-/* #define TEST_FLASH_READONLY */
-
-static int test_flash(void)
-{
-    int ret;
-    uint32_t i;
-    uint32_t pageData[WOLFBOOT_SECTOR_SIZE/4]; /* force 32-bit alignment */
-
-#ifndef TEST_FLASH_READONLY
-    /* Erase sector */
-    ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
-
-    /* Write Pages */
-    for (i=0; i<sizeof(pageData); i++) {
-        ((uint8_t*)pageData)[i] = (i & 0xff);
-    }
-    ret = ext_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Write Page: Ret %d\n", ret);
-#endif /* !TEST_FLASH_READONLY */
-
-    /* Read page */
-    memset(pageData, 0, sizeof(pageData));
-    ret = ext_flash_read(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Read Page: Ret %d\n", ret);
-
-    wolfBoot_printf("Checking...\n");
-    /* Check data */
-    for (i=0; i<sizeof(pageData); i++) {
-        wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
-        if (((uint8_t*)pageData)[i] != (i & 0xff)) {
-            wolfBoot_printf("Check Data @ %d failed\n", i);
-            return -i;
-        }
-    }
-
-    wolfBoot_printf("Flash Test Passed\n");
-    return ret;
-}
-#endif /* ENABLE_ELBC && TEST_FLASH */
 
 #if defined(ENABLE_ESPI) && defined(TEST_TPM)
 int test_tpm(void)
