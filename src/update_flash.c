@@ -526,22 +526,22 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * checks on the firmware update
      * before starting the swap
      */
-
     update_type = wolfBoot_get_image_type(PART_UPDATE);
 
     wolfBoot_get_update_sector_flag(0, &flag);
     /* Check the first sector to detect interrupted update */
     if (flag == SECT_FLAG_NEW) {
-        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
-            ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH)) {
-            wolfBoot_printf("Invalid update type %d\n", update_type);
+        if (((update_type & HDR_IMG_TYPE_PART_MASK) != HDR_IMG_TYPE_APP) ||
+            ((update_type & HDR_IMG_TYPE_AUTH_MASK) != HDR_IMG_TYPE_AUTH)) {
+            wolfBoot_printf("Invalid update type 0x%x\n", update_type);
             return -1;
         }
         if (update.fw_size > MAX_UPDATE_SIZE - 1) {
             wolfBoot_printf("Invalid update size %u\n", update.fw_size);
             return -1;
         }
-        if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
+        if (!update.hdr_ok
+                || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
             wolfBoot_printf("Update integrity/verification failed!\n");
             return -1;
@@ -872,9 +872,8 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
-    bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
+    bootRet =   wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
-
 
 #if !defined(DISABLE_BACKUP)
     /* resume the final erase in case the power failed before it finished */
