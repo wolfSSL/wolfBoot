@@ -209,19 +209,21 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end = address + len - 1;
     uint32_t p;
-    uint32_t page_sz = (address < FLASH_BASE_NET) ?
-        FLASH_PAGESZ_APP :
-        FLASH_PAGESZ_NET;
 #ifdef DEBUG_FLASH
     wolfBoot_printf("Internal Flash Erase: addr 0x%x, len %d\n", address, len);
 #endif
-    for (p = address; p <= end; p += page_sz) {
+    /* mask to page start address */
+    address &= ~(FLASH_PAGE_SIZE-1);
+    for (p = address; p <= end; p += FLASH_PAGE_SIZE) {
         /* set both secure and non-secure registers */
         NVMC_CONFIG = NVMC_CONFIG_EEN;
         NVMC_CONFIGNS = NVMC_CONFIG_EEN;
         while (NVMC_READY == 0);
         *(volatile uint32_t *)p = 0xFFFFFFFF;
         while (NVMC_READY == 0);
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Internal Flash Erase: page 0x%x\n", p);
+    #endif
     }
     return 0;
 }
@@ -319,10 +321,13 @@ static int hal_net_get_image(struct wolfBoot_image* img, ShmInfo_t* info)
     ret = wolfBoot_open_image(img, PART_BOOT);
 #endif /* TARGET_nrf5340_* */
     if (ret == 0) {
-        info->version = wolfBoot_get_blob_version(get_image_hdr(img));
-        info->size = img->fw_size;
+        uint32_t ver = wolfBoot_get_blob_version(get_image_hdr(img));
+        /* Note: network core fault writing to shared memory means application
+         *       core did not enable access at run-time yet */
+        info->version = ver;
+        info->size = IMAGE_HEADER_SIZE + img->fw_size;
         wolfBoot_printf("Network Image: Ver 0x%x, Size %d\n",
-            info->version, info->size);
+            ver, img->fw_size);
     }
     else {
         info->version = 0; /* not known */
@@ -390,18 +395,17 @@ static void hal_net_check_version(void)
         wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
             shm->net.version, shm->app.version, shm->net.size, shm->net.size);
         /* Erase network core boot flash */
-        wb_flash_erase(&img, 0, WOLFBOOT_PARTITION_SIZE);
+        hal_flash_erase((uintptr_t)img.hdr, shm->app.size);
         /* Write new firmware to internal flash */
-        wb_flash_write(&img, 0, shm->data, shm->app.size);
+        hal_flash_write((uintptr_t)img.hdr, shm->data, shm->app.size);
 
         /* Reopen image and refresh information */
-        wolfBoot_open_image(&img, PART_BOOT);
+        hal_net_get_image(&img, &shm->net);
         wolfBoot_printf("Network version (after update): 0x%x\n",
             shm->net.version);
-        hal_net_get_image(&img, &shm->net);
         hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
 
-        /* continue booting */
+        /* continue booting - boot process will validate image hash/signature */
     }
 #endif /* TARGET_nrf5340_* */
 exit:
@@ -420,19 +424,18 @@ void hal_net_check_update(void)
     ret = hal_net_get_image(&img, &shm->app);
     if (ret == 0 && shm->app.version > shm->net.version) {
         wolfBoot_printf("Found Network Core update: Ver %d->%d, Size %d->%d\n",
-            shm->net.version, shm->app.version, shm->net.size, shm->net.size);
+            shm->net.version, shm->app.version, shm->net.size, shm->app.size);
 
         /* validate the update is valid */
         if (wolfBoot_verify_integrity(&img) == 0 &&
             wolfBoot_verify_authenticity(&img) == 0)
         {
-            uint32_t fw_size = IMAGE_HEADER_SIZE + img.fw_size;
             wolfBoot_printf("Network image valid, loading into shared mem\n");
             /* relocate image to shared ram */
         #ifdef EXT_FLASH
-            ret = ext_flash_read(PART_NET_ADDR, shm->data, fw_size);
+            ret = ext_flash_read(PART_NET_ADDR, shm->data, shm->app.size);
         #else
-            memcpy(shm->data, img.hdr, fw_size);
+            memcpy(shm->data, img.hdr, shm->app.size);
         #endif
             if (ret >= 0) {
                 /* signal network core to do update */
@@ -441,8 +444,9 @@ void hal_net_check_update(void)
                 /* wait for update_done */
                 ret = hal_shm_status_wait(&shm->net,
                     SHARED_STATUS_UPDATE_DONE, 1000000);
-                if (ret == 0)
-                    wolfBoot_printf("Network core firmware update sent\n");
+                if (ret == 0) {
+                    wolfBoot_printf("Network core firmware update done\n");
+                }
             }
         }
         else {
@@ -474,15 +478,15 @@ void hal_init(void)
         (SPU_EXTDOMAIN_PERM_SECATTR_SECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
 #endif
 
-    spi_flash_probe();
-
-    hal_net_check_version();
-
 #ifdef TEST_FLASH
     if (test_flash() != 0) {
         wolfBoot_printf("Internal flash Test Failed!\n");
     }
 #endif
+
+    spi_flash_probe();
+
+    hal_net_check_version();
 }
 
 
@@ -506,7 +510,8 @@ void hal_prepare_boot(void)
 #ifdef TEST_FLASH
 
 #ifndef TEST_ADDRESS
-    #define TEST_ADDRESS (FLASH_BASE_ADDR + (FLASH_SIZE - WOLFBOOT_SECTOR_SIZE))
+    #define TEST_SZ      (WOLFBOOT_SECTOR_SIZE * 2)
+    #define TEST_ADDRESS (FLASH_BASE_ADDR + (FLASH_SIZE - TEST_SZ))
 #endif
 
 /* #define TEST_FLASH_READONLY */
@@ -516,7 +521,7 @@ static int test_flash(void)
     int ret = 0;
     uint32_t i, len;
     uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
-    static uint8_t pageData[WOLFBOOT_SECTOR_SIZE];
+    static uint8_t pageData[TEST_SZ];
 
     wolfBoot_printf("Internal flash test at 0x%x\n", TEST_ADDRESS);
 
@@ -528,7 +533,7 @@ static int test_flash(void)
 #ifndef TEST_FLASH_READONLY
     /* Erase sector */
     hal_flash_unlock();
-    ret = hal_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    ret = hal_flash_erase(TEST_ADDRESS, sizeof(pageData));
     hal_flash_lock();
     if (ret != 0) {
         wolfBoot_printf("Erase Sector failed: Ret %d\n", ret);

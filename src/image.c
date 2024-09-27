@@ -885,7 +885,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     img->hdr_cache = image;
 #endif
 
-    wolfBoot_printf("%s partition: %p (sz %d, ver 0x%x, type 0x%d)\n",
+    wolfBoot_printf("%s partition: %p (sz %d, ver 0x%x, type 0x%x)\n",
         (img->part == PART_BOOT) ? "Boot" : "Update",
         img->hdr, (unsigned int)img->fw_size,
         wolfBoot_get_blob_version(image),

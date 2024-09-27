@@ -99,7 +99,7 @@ int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags);
     #define QSPI_ADDR_MODE  QSPI_DATA_MODE_SPI
 #endif
 #ifndef QSPI_ADDR_SZ /* default to 24-bit address */
-    #define QSPI_ADDR_SZ           3
+    #define QSPI_ADDR_SZ    3
 #endif
 #ifndef QSPI_DATA_MODE /* data defaults to Quad mode */
     #define QSPI_DATA_MODE  QSPI_DATA_MODE_QSPI
