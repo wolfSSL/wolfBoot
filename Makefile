@@ -33,6 +33,7 @@ OBJS:= \
 	./src/string.o \
 	./src/image.o \
 	./src/libwolfboot.o \
+	./hal/hal.o \
 	./hal/$(TARGET).o
 
 ifeq ($(SIGN),NONE)

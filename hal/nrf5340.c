@@ -38,10 +38,6 @@
  * Any key size greater than 128 bits must be divided and distributed over multiple key slot instances.
  */
 
-#ifdef TEST_FLASH
-static int test_flash(void);
-#endif
-
 /* Network updates can be signed with "--id 2" and placed into the normal update partition,
  * or they can be placed into the external flash at offset 0x100000 */
 #ifndef PART_NET_ID
@@ -478,12 +474,7 @@ void hal_init(void)
         (SPU_EXTDOMAIN_PERM_SECATTR_SECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
 #endif
 
-#ifdef TEST_FLASH
-    if (test_flash() != 0) {
-        wolfBoot_printf("Internal flash Test Failed!\n");
-    }
-#endif
-
+    /* need early init of external flash to support checking network core */
     spi_flash_probe();
 
     hal_net_check_version();
@@ -504,57 +495,5 @@ void hal_prepare_boot(void)
         (SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
 #endif
 }
-
-/* Test for internal flash erase/write */
-/* Use TEST_EXT_FLASH to test external QSPI flash (see qspi_flash.c) */
-#ifdef TEST_FLASH
-
-#ifndef TEST_ADDRESS
-    #define TEST_SZ      (WOLFBOOT_SECTOR_SIZE * 2)
-    #define TEST_ADDRESS (FLASH_BASE_ADDR + (FLASH_SIZE - TEST_SZ))
-#endif
-
-/* #define TEST_FLASH_READONLY */
-
-static int test_flash(void)
-{
-    int ret = 0;
-    uint32_t i, len;
-    uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
-    static uint8_t pageData[TEST_SZ];
-
-    wolfBoot_printf("Internal flash test at 0x%x\n", TEST_ADDRESS);
-
-    /* Setup test data */
-    for (i=0; i<sizeof(pageData); i++) {
-        ((uint8_t*)pageData)[i] = (i & 0xff);
-    }
-
-#ifndef TEST_FLASH_READONLY
-    /* Erase sector */
-    hal_flash_unlock();
-    ret = hal_flash_erase(TEST_ADDRESS, sizeof(pageData));
-    hal_flash_lock();
-    if (ret != 0) {
-        wolfBoot_printf("Erase Sector failed: Ret %d\n", ret);
-        return ret;
-    }
-
-    /* Write Page */
-    ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Write Page: Ret %d\n", ret);
-#endif /* !TEST_FLASH_READONLY */
-
-    /* Compare Page */
-    ret = memcmp((void*)TEST_ADDRESS, pageData, sizeof(pageData));
-    if (ret != 0) {
-        wolfBoot_printf("Check Data @ %d failed\n", ret);
-        return ret;
-    }
-
-    wolfBoot_printf("Internal Flash Test Passed\n");
-    return ret;
-}
-#endif /* TEST_FLASH */
 
 #endif /* TARGET_* */
