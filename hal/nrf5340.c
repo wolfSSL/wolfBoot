@@ -53,11 +53,11 @@
     #define SHARED_MEM_ADDR (0x20000000UL + (64 * 1024))
 #endif
 /* Shared memory states (mask, easier to check) */
-#define SHARED_STATUS_UNKNOWN      0
-#define SHARED_STATUS_READY        1
-#define SHARED_STATUS_UPDATE_START 2
-#define SHARED_STATUS_UPDATE_DONE  4
-#define SHARED_STATUS_DO_BOOT      8
+#define SHARED_STATUS_UNKNOWN      0x00
+#define SHARED_STATUS_READY        0x01
+#define SHARED_STATUS_UPDATE_START 0x02
+#define SHARED_STATUS_UPDATE_DONE  0x04
+#define SHARED_STATUS_DO_BOOT      0x08
 
 #define SHAREM_MEM_MAGIC 0x5753484D /* WSHM */
 
@@ -205,7 +205,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end = address + len - 1;
     uint32_t p;
-#ifdef DEBUG_FLASH
+#if defined(DEBUG_FLASH) && DEBUG_FLASH > 1
     wolfBoot_printf("Internal Flash Erase: addr 0x%x, len %d\n", address, len);
 #endif
     /* mask to page start address */
@@ -354,6 +354,7 @@ static int hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
     return ret;
 }
 
+/* Handles network core updates */
 static void hal_net_check_version(void)
 {
     int ret;
@@ -374,51 +375,8 @@ static void hal_net_check_version(void)
     /* check if network core can continue booting or needs to wait for update */
     if (ret != 0 || shm->app.version <= shm->net.version) {
         wolfBoot_printf("Network Core: Releasing for boot\n");
-        hal_shm_status_set(&shm->app, SHARED_STATUS_DO_BOOT);
     }
     else {
-        wolfBoot_printf("Network Core: Holding for update\n");
-    }
-#else /* TARGET_nrf5340_net */
-    hal_net_get_image(&img, &shm->net);
-    hal_shm_status_set(&shm->net, SHARED_STATUS_READY);
-
-    /* wait for do_boot or update from app core */
-    ret = hal_shm_status_wait(&shm->app,
-        (SHARED_STATUS_UPDATE_START | SHARED_STATUS_DO_BOOT), 1000000);
-    /* are we updating? */
-    if (ret == 0 && shm->app.status == SHARED_STATUS_UPDATE_START) {
-        wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
-            shm->net.version, shm->app.version, shm->net.size, shm->net.size);
-        /* Erase network core boot flash */
-        hal_flash_erase((uintptr_t)img.hdr, shm->app.size);
-        /* Write new firmware to internal flash */
-        hal_flash_write((uintptr_t)img.hdr, shm->data, shm->app.size);
-
-        /* Reopen image and refresh information */
-        hal_net_get_image(&img, &shm->net);
-        wolfBoot_printf("Network version (after update): 0x%x\n",
-            shm->net.version);
-        hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
-
-        /* continue booting - boot process will validate image hash/signature */
-    }
-#endif /* TARGET_nrf5340_* */
-exit:
-    wolfBoot_printf("Status: App %d (ver %d), Net %d (ver %d)\n",
-        shm->app.status, shm->app.version, shm->net.status, shm->net.version);
-}
-
-#ifdef TARGET_nrf5340_app
-void hal_net_check_update(void)
-{
-    int ret;
-    uint32_t timeout;
-    struct wolfBoot_image img;
-
-    /* handle update for network core */
-    ret = hal_net_get_image(&img, &shm->app);
-    if (ret == 0 && shm->app.version > shm->net.version) {
         wolfBoot_printf("Found Network Core update: Ver %d->%d, Size %d->%d\n",
             shm->net.version, shm->app.version, shm->net.size, shm->app.size);
 
@@ -452,8 +410,37 @@ void hal_net_check_update(void)
     }
     /* inform network core to boot */
     hal_shm_status_set(&shm->app, SHARED_STATUS_DO_BOOT);
+#else /* TARGET_nrf5340_net */
+    hal_net_get_image(&img, &shm->net);
+    hal_shm_status_set(&shm->net, SHARED_STATUS_READY);
+
+    /* wait for do_boot or update from app core */
+    wolfBoot_printf("Waiting for status from app core...\n");
+    ret = hal_shm_status_wait(&shm->app,
+        (SHARED_STATUS_UPDATE_START | SHARED_STATUS_DO_BOOT), 1000000);
+
+    /* are we updating? */
+    if (ret == 0 && shm->app.status == SHARED_STATUS_UPDATE_START) {
+        wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
+            shm->net.version, shm->app.version, shm->net.size, shm->net.size);
+        /* Erase network core boot flash */
+        hal_flash_erase((uintptr_t)img.hdr, shm->app.size);
+        /* Write new firmware to internal flash */
+        hal_flash_write((uintptr_t)img.hdr, shm->data, shm->app.size);
+
+        /* Reopen image and refresh information */
+        hal_net_get_image(&img, &shm->net);
+        wolfBoot_printf("Network version (after update): 0x%x\n",
+            shm->net.version);
+        hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
+
+        /* continue booting - boot process will validate image hash/signature */
+    }
+#endif /* TARGET_nrf5340_* */
+exit:
+    wolfBoot_printf("Status: App %d (ver %d), Net %d (ver %d)\n",
+        shm->app.status, shm->app.version, shm->net.status, shm->net.version);
 }
-#endif
 
 void hal_init(void)
 {
@@ -488,8 +475,6 @@ void hal_prepare_boot(void)
     //BOOTLOADER_PARTITION_SIZE
 
 #ifdef TARGET_nrf5340_app
-    hal_net_check_update();
-
     /* Restore defaults preventing network core from accessing shared SDRAM */
     SPU_EXTDOMAIN_PERM(0) =
         (SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE | SPU_EXTDOMAIN_PERM_UNLOCK);

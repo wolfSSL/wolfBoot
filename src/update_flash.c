@@ -438,9 +438,11 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
         sector++;
     }
+#ifndef DISABLE_BACKUP
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start*/
     wolfBoot_swap_and_final_erase(0);
+#endif
 out:
 #ifdef EXT_FLASH
     ext_flash_lock();

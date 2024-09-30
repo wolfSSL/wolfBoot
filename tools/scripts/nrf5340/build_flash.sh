@@ -28,11 +28,19 @@ cp factory.bin tools/scripts/nrf5340/factory_app.bin
 tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
 cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_app.bin
 
+# Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
+echo -n "pBOOT" > tools/scripts/nrf5340/trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  tools/scripts/nrf5340/update_app_v2.bin \
+    0x0     tools/scripts/nrf5340/image_v2_signed_app.bin \
+    0xEDFFB tools/scripts/nrf5340/trigger_magic.bin
+
+
 # Convert to HEX format for programmer tool
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x00000000 tools/scripts/nrf5340/factory_app.bin tools/scripts/nrf5340/factory_app.hex
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x01000000 tools/scripts/nrf5340/factory_net.bin tools/scripts/nrf5340/factory_net.hex
 
-arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10000000 tools/scripts/nrf5340/image_v2_signed_app.bin tools/scripts/nrf5340/image_v2_signed_app.hex
+arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10000000 tools/scripts/nrf5340/update_app_v2.bin tools/scripts/nrf5340/update_app_v2.hex
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10100000 tools/scripts/nrf5340/image_v2_signed_net.bin tools/scripts/nrf5340/image_v2_signed_net.hex
 
 
@@ -42,7 +50,7 @@ if [ "$1" == "erase" ]; then
 fi
 
 # Program external flash
-nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_app.hex --verify
+nrfjprog -f nrf53 --program tools/scripts/nrf5340/update_app_v2.hex --verify
 nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_net.hex --verify
 
 

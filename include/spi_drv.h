@@ -112,9 +112,6 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
     uint8_t* data, uint32_t dataSz, uint32_t dataMode
 );
 
-#if !defined(DEBUG_QSPI) && defined(DEBUG_UART)
-    #define DEBUG_QSPI 1
-#endif
 #endif /* QSPI_FLASH || OCTOSPI_FLASH */
 
 #ifndef SPI_CS_FLASH
