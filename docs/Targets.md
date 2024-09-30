@@ -1447,8 +1447,17 @@ Step 3: program `wolfboot.bin` to the beginning of the flash:
 
 ### Programming the test application into NAND flash
 
-(TODO)
+The application can be written to a second partition in nand,
+e.g. at address "0x40000"
 
+`sam-ba -p j-link -b sama5d3-xplained -t 5 -a nandflash -c write:test-app/image_v1_signed.bin:0x400000`
+
+With the example configuration, wolfBoot will evaluate two alternative images
+at addresses 0x400000 and 0x800000, authenticate, load to DRAM and stage from
+`LOAD_ADDRESS`.
+
+Ensure that the application is compiled to run from `LOAD_ADDRESS`.
+Check `test-app/ARM-sama5d3.ld` for details.
 
 
 ## Microchip SAME51
