@@ -589,7 +589,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     uint32_t start_page_in_block = mod(page, nand_flash.pages_per_block); /* The start page within this block */
     uint32_t in_block_offset = mod(address, nand_flash.block_size); /* The offset of the address within the block */
     uint32_t remaining = nand_flash.block_size - in_block_offset; /* How many bytes remaining to read in the first block */
-    uint32_t len_to_read = len;
+    int len_to_read = len;
     uint8_t *buffer = data;
     uint32_t i;
     int copy = 0;
@@ -624,6 +624,8 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         /* Read (remaining) pages off a block */
         for (i = 0; i < pages_to_read; i++) {
             nand_read_page(block, start_page_in_block + i, buffer);
+            if (sz > nand_flash.page_size)
+                sz = nand_flash.page_size;
             len_to_read -= sz;
             buffer += sz;
         }
