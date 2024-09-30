@@ -79,8 +79,8 @@
     #define QSPI_IO3_PIN    16
 #endif
 
-#ifndef QSPI_CLOCK_MHZ /* default 24MHz (up to 96MHz) */
-    #define QSPI_CLOCK_MHZ  24000000UL
+#ifndef QSPI_CLOCK_MHZ /* default 48MHz (up to 96MHz) */
+    #define QSPI_CLOCK_MHZ  48000000UL
 #endif
 
 /* MX25R6435F */
