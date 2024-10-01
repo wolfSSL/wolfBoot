@@ -265,7 +265,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
     /* erase the last boot sector(s) */
-    wolfBoot_printf("Erasing unused boot sectors...\n");
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* set the encryption key */
 #ifdef EXT_ENCRYPTED
@@ -282,7 +281,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
     /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
     /* erase the last sector(s) of update */
-    wolfBoot_printf("Erasing unused update sectors...\n");
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     return 0;
 }
@@ -509,9 +507,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t up_v;
 #endif
     uint32_t cur_ver, upd_ver;
-#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-    size_t remainderBytes;
-#endif
 
     wolfBoot_printf("Staring Update (fallback allowed %d)\n", fallback_allowed);
 
@@ -668,37 +663,30 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
     }
 
-#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-/* Performant option: Erase remainder of flash sectors in one HAL command */
-
 #ifdef NVM_FLASH_WRITEONCE
-   /* erase up until the start of the second-to-last sector for writeonce */
-    remainderBytes =
-        WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
+    /* erase up until the start of the second-to-last sector for writeonce */
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
 #else
-   /* erase up until the start of the last sector */
-    remainderBytes =
-        WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
+    /* erase up until the start of the last sector */
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
 #endif
-    wb_flash_erase(&boot, sector * sector_size, remainderBytes);
-    wb_flash_erase(&update, sector * sector_size, remainderBytes);
 
-#else /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
-/* Smaller code size option: Iterate over every remaining sector and erase it
- * individually. Required on some targets (stm32f4) to pass code size check */
+    wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
+        size/sector_size);
 
-    /* erase to the last sector, writeonce has 2 sectors */
-    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
-        sector_size
-    #ifdef NVM_FLASH_WRITEONCE
-        * 2
-    #endif
-    ) {
+#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+    /* Performant option: Erase remainder of flash sectors in one HAL command */
+    wb_flash_erase(&boot, sector * sector_size, size);
+    wb_flash_erase(&update, sector * sector_size, size);
+#else
+    /* Smaller code size option: Iterate over every remaining sector and erase
+     * individually. Required on some targets (like stm32f4) due to code size */
+    while (size >= sector_size) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
+        size -= sector_size;
     }
-
 #endif /* !WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
 
     /* start re-entrant final erase, return code is only for resumption in
@@ -728,9 +716,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wolfBoot_copy_sector(&update, &boot, sector);
         sector++;
     }
-    while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
+    /* erase remainder of partition */
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size);
+    wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
+        size/sector_size);
+    while (size >= sector_size) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;
+        size -= sector_size;
     }
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
 
