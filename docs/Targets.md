@@ -2186,11 +2186,8 @@ Tested with the Nordic nRF5340-DK. This device has two cores:
 1) Application core: Cortex-M33 at 128MHz, w/TrustZone, 1MB flash, 512KB RAM
 2) Network core: Cortex-M33 at 64MHz, 256KB Flash and 64KB RAM
 
-The cores communicate using the IPC peripheral.
-
-The network core can access application core resources (flash, RAM, and peripherals) when granted permission through the application's DCNF and SPU settings. A small portion of the application core RAM is dedicated to the exchange of messages between the application and network cores.
-
 The DK board has two virtual COM ports. Application core and Network core will each output to different VCOM ports.
+The cores communicate firmware updates using shared memory hosted on application core.
 
 Example Boot Output:
 

@@ -265,6 +265,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
     /* erase the last boot sector(s) */
+    wolfBoot_printf("Erasing unused boot sectors...\n");
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* set the encryption key */
 #ifdef EXT_ENCRYPTED
@@ -281,6 +282,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
     /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
     /* erase the last sector(s) of update */
+    wolfBoot_printf("Erasing unused update sectors...\n");
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     return 0;
 }
@@ -440,7 +442,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     }
 #ifndef DISABLE_BACKUP
     /* start re-entrant final erase, return code is only for resumption in
-     * wolfBoot_start*/
+     * wolfBoot_start */
     wolfBoot_swap_and_final_erase(0);
 #endif
 out:
