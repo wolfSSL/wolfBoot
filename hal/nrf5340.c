@@ -468,7 +468,7 @@ static void hal_net_check_version(void)
 
                 wolfBoot_printf("Waiting for net core update to finish...\n");
 
-                /* wait for update_done */
+                /* wait for update_done - note longer wait */
                 ret = hal_shm_status_wait(&shm->net,
                     SHARED_STATUS_UPDATE_DONE, 5000000);
                 if (ret == 0) {
@@ -543,17 +543,27 @@ void hal_prepare_boot(void)
 
 #ifdef TARGET_nrf5340_net
     if (do_update) {
-        /* signal application core of update */
-        /* Reopen image and refresh information */
+        /* signal application core update done */
         struct wolfBoot_image img;
+        /* Reopen image and refresh information */
         hal_net_get_image(&img, &shm->net);
         wolfBoot_printf("Network version (after update): 0x%x\n",
             shm->net.version);
         hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
     }
+    else {
+        hal_shm_status_set(&shm->net, SHARED_STATUS_DO_BOOT);
+    }
 #endif
 
 #ifdef TARGET_nrf5340_app
+#ifdef NRF_SYNC_CORES
+    /* if core synchronization enabled, then wait for update_done or do_boot */
+    wolfBoot_printf("Waiting for network core...\n");
+    (void)hal_shm_status_wait(&shm->net,
+        (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT), 1000000);
+#endif
+
     /* Restore defaults preventing network core from accessing shared SDRAM */
     SPU_EXTDOMAIN_PERM(0) =
         (SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE | SPU_EXTDOMAIN_PERM_UNLOCK);

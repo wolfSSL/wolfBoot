@@ -208,6 +208,14 @@ jobs:
       config-file: ./config/examples/sim.config
       make-args: SPMATH=1 WOLFBOOT_SMALL_STACK=0 WOLFBOOT_HUGE_STACK=1
 
+  sim_multi_sector_erase:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: CFLAGS_EXTRA=-DWOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+
+
   # TODO: SP math with small stack has issues
 
   stm32c0:
