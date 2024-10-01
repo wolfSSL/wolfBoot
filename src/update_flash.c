@@ -486,7 +486,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
     /* we need to pre-set flag to SECT_FLAG_NEW in case magic hasn't been set
-     * on the update partion as part of the delta update direction check. if
+     * on the update partition as part of the delta update direction check. if
      * magic has not been set flag will have an un-determined value when we go
      * to check it */
     uint8_t flag = SECT_FLAG_NEW;
@@ -663,9 +663,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
     }
 
+    /* Erase remainder of partitions */
+#if defined(WOLFBOOT_FLASH_MULTI_SECTOR_ERASE) || defined(PRINTF_ENABLED)
     /* calculate number of remaining bytes */
     /* reserve 1 sector for status (2 sectors for NV write once) */
-#if defined(WOLFBOOT_FLASH_MULTI_SECTOR_ERASE) || defined(PRINTF_ENABLED)
 #ifdef NVM_FLASH_WRITEONCE
     size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
 #else
@@ -677,8 +678,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
 
 #ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-    /* Performant option: Erase remainder of flash sectors in one HAL command */
-    /* If the HAL supports erase of multiple sectors this could improve performance */
+    /* Erase remainder of flash sectors in one HAL command. */
+    /* This can improve performance if the HAL supports erase of
+     * multiple sectors */
     wb_flash_erase(&boot, sector * sector_size, size);
     wb_flash_erase(&update, sector * sector_size, size);
 #else

@@ -40,9 +40,17 @@
 
 /* Network updates can be signed with "--id 2" and placed into the normal update partition,
  * or they can be placed into the external flash at offset 0x100000 */
+/* Partition ID should be set HDR_IMG_TYPE_APP=2 */
 #ifndef PART_NET_ID
-#define PART_NET_ID 2
+#ifdef HDR_IMG_TYPE_APP
+    #define PART_NET_ID HDR_IMG_TYPE_APP
+#else
+    #define PART_NET_ID 2 /* default */
 #endif
+#endif
+
+/* Offset in external QSPI flash for network update
+ * Comes from nrf5340_net.config WOLFBOOT_PARTITION_UPDATE_ADDRESS) */
 #ifndef PART_NET_ADDR
 #define PART_NET_ADDR 0x100000UL
 #endif
@@ -244,14 +252,8 @@ void RAMFUNCTION hal_flash_lock(void)
 /* calculates location in shared memory */
 static uintptr_t ext_flash_addr_calc(uintptr_t address)
 {
-    if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) {
-        if (address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) {
-            address -= WOLFBOOT_PARTITION_SWAP_ADDRESS;
-        }
-        else { /* update */
-            address -= WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        }
-    }
+    /* offset external flash addresses by the update partition address */
+    address -= WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     /* check address */
     if (address >= (FLASH_SIZE_NET + FLASH_PAGESZ_NET)) {
         address = 0;
@@ -456,6 +458,9 @@ static void hal_net_check_version(void)
             wolfBoot_verify_authenticity(&img) == 0)
         {
             wolfBoot_printf("Network image valid, loading into shared mem\n");
+            /* initialize remainder of shared memory with 0xFF (erased) */
+            memset(shm->data + shm->app.size, FLASH_BYTE_ERASED,
+                sizeof(shm->data) - shm->app.size);
             /* relocate image to shared ram */
         #ifdef EXT_FLASH
             ret = ext_flash_read(PART_NET_ADDR, shm->data, shm->app.size);
