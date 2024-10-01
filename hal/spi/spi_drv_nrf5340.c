@@ -195,6 +195,10 @@ void spi_init(int polarity, int phase)
     GPIO_PIN_CNF(QSPI_IO1_PORT, QSPI_IO1_PIN) = (GPIO_CNF_IN_DIS | GPIO_CNF_HIGH_DRIVE);
     GPIO_PIN_CNF(QSPI_IO2_PORT, QSPI_IO2_PIN) = (GPIO_CNF_IN_DIS | GPIO_CNF_HIGH_DRIVE);
     GPIO_PIN_CNF(QSPI_IO3_PORT, QSPI_IO3_PIN) = (GPIO_CNF_IN_DIS | GPIO_CNF_HIGH_DRIVE);
+#if defined(QSPI_PWR_CTRL_PORT) && defined(QSPI_PWR_CTRL_PIN)
+    GPIO_PIN_CNF(QSPI_PWR_CTRL_PORT, QSPI_PWR_CTRL_PIN) = (GPIO_CNF_IN_DIS | GPIO_CNF_HIGH_DRIVE);
+    GPIO_OUTCLR(QSPI_PWR_CTRL_PORT) = (1 << QSPI_PWR_CTRL_PIN); /* active low */
+#endif
 
     reg = QSPI_IFCONFIG0;
     reg &= ~(QSPI_IFCONFIG0_READOC_MASK | QSPI_IFCONFIG0_WRITEOC_MASK);
@@ -278,6 +282,9 @@ void spi_release(void)
         /* Disable QSPI Clock to save power */
         QSPI_ENABLE = 0;
         CLOCK_HFCLK192MSTOP = 1;
+    #if defined(QSPI_PWR_CTRL_PORT) && defined(QSPI_PWR_CTRL_PIN)
+        GPIO_OUTSET(QSPI_PWR_CTRL_PORT) = (1 << QSPI_PWR_CTRL_PIN);
+    #endif
     }
 }
 

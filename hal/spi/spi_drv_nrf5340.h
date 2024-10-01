@@ -83,6 +83,10 @@
     #define QSPI_CLOCK_MHZ  48000000UL
 #endif
 
+/* Optional power pin for QSPI enable */
+//#define QSPI_PWR_CTRL_PORT 1
+//#define QSPI_PWR_CTRL_PIN  0
+
 /* MX25R6435F */
 #define QSPI_NO_SR2
 
