@@ -466,9 +466,11 @@ static void hal_net_check_version(void)
                 /* signal network core to do update */
                 hal_shm_status_set(&shm->app, SHARED_STATUS_UPDATE_START);
 
+                wolfBoot_printf("Waiting for net core update to finish...\n");
+
                 /* wait for update_done */
                 ret = hal_shm_status_wait(&shm->net,
-                    SHARED_STATUS_UPDATE_DONE, 1000000);
+                    SHARED_STATUS_UPDATE_DONE, 5000000);
                 if (ret == 0) {
                     wolfBoot_printf("Network core firmware update done\n");
                 }
