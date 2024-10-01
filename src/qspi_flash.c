@@ -408,7 +408,7 @@ int spi_flash_read(uint32_t address, void *data, int len)
     );
 
 #ifdef DEBUG_QSPI
-    wolfBoot_printf("QSPI Flash Read: Ret %d, Cmd 0x%x, Len %d , 0x%x -> %p\n",
+    wolfBoot_printf("QSPI Flash Read: Ret %d, Cmd 0x%x, Len %d, 0x%x -> %p\n",
         ret, FLASH_READ_CMD, len, address, data);
 #endif
 

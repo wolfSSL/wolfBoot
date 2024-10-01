@@ -74,8 +74,14 @@ typedef struct {
 
     /* application places firmware here */
     uint8_t  data[FLASH_SIZE_NET];
+    /* used as "swap" */
+    uint8_t  swap[FLASH_PAGESZ_NET];
 } SharedMem_t;
 static SharedMem_t* shm = (SharedMem_t*)SHARED_MEM_ADDR;
+
+#ifdef TARGET_nrf5340_net
+static int do_update = 0;
+#endif
 
 
 /* UART */
@@ -231,6 +237,71 @@ void RAMFUNCTION hal_flash_unlock(void)
 void RAMFUNCTION hal_flash_lock(void)
 {
 }
+
+#ifdef TARGET_nrf5340_net
+/* external flash is access application core shared memory directly */
+
+/* calculates location in shared memory */
+static uintptr_t ext_flash_addr_calc(uintptr_t address)
+{
+    if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) {
+        if (address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) {
+            address -= WOLFBOOT_PARTITION_SWAP_ADDRESS;
+        }
+        else { /* update */
+            address -= WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+        }
+    }
+    /* check address */
+    if (address >= (FLASH_SIZE_NET + FLASH_PAGESZ_NET)) {
+        address = 0;
+    }
+    return address;
+}
+
+int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
+{
+    uintptr_t addr = ext_flash_addr_calc(address);
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Ext Write: Len %d, Addr 0x%x (off 0x%x) -> 0x%x\n",
+        len, address, addr, data);
+#endif
+    memcpy(shm->data + addr, data, len);
+    return 0;
+}
+
+int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+{
+    uintptr_t addr = ext_flash_addr_calc(address);
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Ext Read: Len %d, Addr 0x%x (off 0x%x) -> %p\n",
+        len, address, addr, data);
+#endif
+
+    memcpy(data, shm->data + addr, len);
+    return len;
+}
+
+int ext_flash_erase(uintptr_t address, int len)
+{
+    uintptr_t addr = ext_flash_addr_calc(address);
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Ext Erase: Len %d, Addr 0x%x (off 0x%x)\n",
+        len, address, addr);
+#endif
+    memset(shm->data + addr, FLASH_BYTE_ERASED, len);
+    return 0;
+}
+
+void ext_flash_lock(void)
+{
+    /* no op */
+}
+void ext_flash_unlock(void)
+{
+    /* no op */
+}
+#endif /* TARGET_nrf5340_net */
 
 static void clock_init(void)
 {
@@ -423,18 +494,12 @@ static void hal_net_check_version(void)
     if (ret == 0 && shm->app.status == SHARED_STATUS_UPDATE_START) {
         wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
             shm->net.version, shm->app.version, shm->net.size, shm->net.size);
-        /* Erase network core boot flash */
-        hal_flash_erase((uintptr_t)img.hdr, shm->app.size);
-        /* Write new firmware to internal flash */
-        hal_flash_write((uintptr_t)img.hdr, shm->data, shm->app.size);
+        do_update = 1;
 
-        /* Reopen image and refresh information */
-        hal_net_get_image(&img, &shm->net);
-        wolfBoot_printf("Network version (after update): 0x%x\n",
-            shm->net.version);
-        hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
+        /* trigger update */
+        wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
 
-        /* continue booting - boot process will validate image hash/signature */
+        /* proceed to update_flash routines */
     }
 #endif /* TARGET_nrf5340_* */
 exit:
@@ -473,6 +538,18 @@ void hal_prepare_boot(void)
     /* TODO: Protect bootloader region of flash using SPU_FLASHREGION_PERM */
     //WOLFBOOT_ORIGIN
     //BOOTLOADER_PARTITION_SIZE
+
+#ifdef TARGET_nrf5340_net
+    if (do_update) {
+        /* signal application core of update */
+        /* Reopen image and refresh information */
+        struct wolfBoot_image img;
+        hal_net_get_image(&img, &shm->net);
+        wolfBoot_printf("Network version (after update): 0x%x\n",
+            shm->net.version);
+        hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
+    }
+#endif
 
 #ifdef TARGET_nrf5340_app
     /* Restore defaults preventing network core from accessing shared SDRAM */
