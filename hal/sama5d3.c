@@ -32,82 +32,82 @@ void sleep_us(uint32_t usec);
 
 /* Manual division operation */
 static int division(uint32_t dividend,
-		uint32_t divisor,
-		uint32_t *quotient,
-		uint32_t *remainder)
+        uint32_t divisor,
+        uint32_t *quotient,
+        uint32_t *remainder)
 {
-	uint32_t shift;
-	uint32_t divisor_shift;
-	uint32_t factor = 0;
-	unsigned char end_flag = 0;
+    uint32_t shift;
+    uint32_t divisor_shift;
+    uint32_t factor = 0;
+    unsigned char end_flag = 0;
 
-	if (!divisor)
-		return 0xffffffff;
+    if (!divisor)
+        return 0xffffffff;
 
-	if (dividend < divisor) {
-		*quotient = 0;
-		*remainder = dividend;
-		return 0;
-	}
+    if (dividend < divisor) {
+        *quotient = 0;
+        *remainder = dividend;
+        return 0;
+    }
 
-	while (dividend >= divisor) {
-		for (shift = 0, divisor_shift = divisor;
-			dividend >= divisor_shift;
-			divisor_shift <<= 1, shift++) {
-			if (dividend - divisor_shift < divisor_shift) {
-				factor += 1 << shift;
-				dividend -= divisor_shift;
-				end_flag = 1;
-				break;
-			}
-		}
+    while (dividend >= divisor) {
+        for (shift = 0, divisor_shift = divisor;
+                dividend >= divisor_shift;
+                divisor_shift <<= 1, shift++) {
+            if (dividend - divisor_shift < divisor_shift) {
+                factor += 1 << shift;
+                dividend -= divisor_shift;
+                end_flag = 1;
+                break;
+            }
+        }
 
-		if (end_flag)
-			continue;
+        if (end_flag)
+            continue;
 
-		factor += 1 << (shift - 1);
-		dividend -= divisor_shift >> 1;
-	}
+        factor += 1 << (shift - 1);
+        dividend -= divisor_shift >> 1;
+    }
 
-	if (quotient)
-		*quotient = factor;
+    if (quotient)
+        *quotient = factor;
 
-	if (remainder)
-		*remainder = dividend;
+    if (remainder)
+        *remainder = dividend;
 
-	return 0;
+    return 0;
 }
 
 static uint32_t div(uint32_t dividend, uint32_t divisor)
 {
-	uint32_t quotient = 0;
-	uint32_t remainder = 0;
-	int ret;
+    uint32_t quotient = 0;
+    uint32_t remainder = 0;
+    int ret;
 
-	ret = division(dividend, divisor, &quotient, &remainder);
-	if (ret)
-		return 0xffffffff;
+    ret = division(dividend, divisor, &quotient, &remainder);
+    if (ret)
+        return 0xffffffff;
 
-	return quotient;
+    return quotient;
 }
 
 static uint32_t mod(uint32_t dividend, uint32_t divisor)
 {
-	uint32_t quotient = 0;
-	uint32_t remainder = 0;
-	int ret;
+    uint32_t quotient = 0;
+    uint32_t remainder = 0;
+    int ret;
 
-	ret = division(dividend, divisor, &quotient, &remainder);
-	if (ret)
-		return 0xffffffff;
+    ret = division(dividend, divisor, &quotient, &remainder);
+    if (ret)
+        return 0xffffffff;
 
-	return remainder;
+    return remainder;
 }
 
 /* RAM configuration: 2 x MT47H64M16 on SAMA5D3-Xplained
  * 8 Mwords x 8 Banks x 16 bits x 2, total 2 Gbit
  */
-static struct dram ddram ={
+static const struct dram ddram ={
     .timing = { /* Hardcoded for MT47H64M16, */
         .tras = 6,
         .trcd = 2,
@@ -132,7 +132,7 @@ static struct dram ddram ={
 
 void master_clock_set(uint32_t prescaler)
 {
-	uint32_t mck = PMC_MCKR & (PMC_MDIV_MASK | PMC_CSS_MASK);
+    uint32_t mck = PMC_MCKR & (PMC_MDIV_MASK | PMC_CSS_MASK);
     uint32_t diff = mck ^ prescaler;
 
     if (diff & PMC_ALTPRES_MASK) {
@@ -262,7 +262,6 @@ static void ddr_init(void)
     cal &= ~(MPDDRC_IOCALIBR_RDIV_MASK);
     cal |= MPDDRC_IOCALIBR_RDIV_DDR2_RZQ_50; /* 50 ohm */
     cal &= ~(MPDDRC_IOCALIBR_TZQIO_MASK);
-    //cal |= (80 << MPDDRC_IOCALIBR_TZQIO_SHIFT); /* 100 cycles at 133MHz is 0.75 us, 100 cycles at 166MHz is 0.6 us */
     cal |= (100 << MPDDRC_IOCALIBR_TZQIO_SHIFT); /* 100 cycles at 133MHz is 0.75 us, 100 cycles at 166MHz is 0.6 us */
 
     MPDDRC_IO_CALIBR = cal;
@@ -608,7 +607,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             sz = remaining;
 
         do {
-             ret = nand_check_bad_block(block);
+            ret = nand_check_bad_block(block);
             if (ret < 0) {
                 /* Block is bad, skip it */
                 block++;
@@ -661,35 +660,39 @@ void pit_init(void)
 
 void sleep_us(uint32_t usec)
 {
-	uint32_t base = PIT_PIIR;
-	uint32_t delay;
-	uint32_t current;
+    uint32_t base = PIT_PIIR;
+    uint32_t delay;
+    uint32_t current;
 
-	/* Since our division function which costs much run time
-	 * causes the delay time error.
-	 * So here using shifting to implement the division.
-	 * to change "1000" to "1024", this cause some inaccuacy,
-	 * but it is acceptable.
-	 * ((MASTER_CLOCK / 1024) * usec) / (16 * 1024)
-	 */
+    /* Since our division function which costs much run time
+     * causes the delay time error.
+     * So here using shifting to implement the division.
+     * to change "1000" to "1024", this cause some inaccuacy,
+     * but it is acceptable.
+     * ((MASTER_CLOCK / 1024) * usec) / (16 * 1024)
+     */
     delay = ((MASTER_FREQ >> 10) * usec) >> 14;
-	do {
-		current = PIT_PIIR;
-		current -= base;
-	} while (current < delay);
+    do {
+        current = PIT_PIIR;
+        current -= base;
+    } while (current < delay);
 }
-
-
-
-
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
+    /* TODO */
+    (void)address;
+    (void)data;
+    (void)len;
+
     return 0;
 }
 
 int ext_flash_erase(uintptr_t address, int len)
 {
+    /* TODO */
+    (void)address;
+    (void)len;
     return 0;
 }
 
@@ -704,22 +707,12 @@ void ext_flash_lock(void)
 
 void* hal_get_dts_address(void)
 {
-  return (void*)&dts_addr;
+    return (void*)&dts_addr;
 }
 
 void* hal_get_dts_update_address(void)
 {
-  return NULL; /* Not yet supported */
-}
-
-/* QSPI functions */
-void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
-{
-}
-
-
-void zynq_init(uint32_t cpu_clock)
-{
+    return NULL; /* Not yet supported */
 }
 
 
@@ -740,6 +733,9 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
+    (void)address;
+    (void)data;
+    (void)len;
     return 0;
 }
 
@@ -754,6 +750,8 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+    (void)address;
+    (void)len;
     return 0;
 }
 

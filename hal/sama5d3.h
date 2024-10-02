@@ -1,3 +1,25 @@
+/* sama5d3.h
+ *
+ * Header file for SAMA5D3 HAL
+ *
+ * Copyright (C) 2024 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
 
 #ifndef SAMA5D3_HAL_H
 #define SAMA5D3_HAL_H
@@ -5,9 +27,9 @@
 #include <stdint.h>
 
 /* CPU/Board clock settings */
-#define CPU_FREQ 264000000
-#define MASTER_FREQ 132000000
-#define CRYSTAL_FREQ 12000000
+#define CPU_FREQ 264000000UL
+#define MASTER_FREQ 132000000UL
+#define CRYSTAL_FREQ 12000000UL
 #define MULA		 43
 
 /* PLLA register
@@ -309,11 +331,11 @@ extern void *kernel_addr, *update_addr, *dts_addr;
 #define NAND_FLASH_OOB_SIZE 0x40   /* 64B */
 
 /* Address space mapping for atsama5d3 */
-#define DRAM_BASE              0x20000000
-#define CS1_BASE          0x40000000
-#define CS2_BASE          0x50000000
-#define CS3_BASE          0x60000000
-#define NFC_CMD_BASE      0x70000000
+#define DRAM_BASE         0x20000000UL
+#define CS1_BASE          0x40000000UL
+#define CS2_BASE          0x50000000UL
+#define CS3_BASE          0x60000000UL
+#define NFC_CMD_BASE      0x70000000UL
 
 /* NAND flash is mapped to CS3 */
 #define NAND_BASE            CS3_BASE
@@ -404,5 +426,23 @@ extern void *kernel_addr, *update_addr, *dts_addr;
 
 #define MAX_ECC_BYTES 8
 #endif
+
+#define GPIOE_BASE     0xFFFFFA00
+
+#define GPIOE_PER      *(volatile uint32_t *)(GPIOE_BASE + 0x00)
+#define GPIOE_PDR      *(volatile uint32_t *)(GPIOE_BASE + 0x04)
+#define GPIOE_PSR      *(volatile uint32_t *)(GPIOE_BASE + 0x08)
+#define GPIOE_OER      *(volatile uint32_t *)(GPIOE_BASE + 0x10)
+#define GPIOE_ODR      *(volatile uint32_t *)(GPIOE_BASE + 0x14)
+#define GPIOE_OSR      *(volatile uint32_t *)(GPIOE_BASE + 0x18)
+#define GPIOE_SODR     *(volatile uint32_t *)(GPIOE_BASE + 0x30)
+#define GPIOE_CODR     *(volatile uint32_t *)(GPIOE_BASE + 0x34)
+#define GPIOE_IER      *(volatile uint32_t *)(GPIOE_BASE + 0x40)
+#define GPIOE_IDR      *(volatile uint32_t *)(GPIOE_BASE + 0x44)
+#define GPIOE_MDER     *(volatile uint32_t *)(GPIOE_BASE + 0x50)
+#define GPIOE_MDDR     *(volatile uint32_t *)(GPIOE_BASE + 0x54)
+#define GPIOE_PPUDR    *(volatile uint32_t *)(GPIOE_BASE + 0x60)
+#define GPIOE_PPUER    *(volatile uint32_t *)(GPIOE_BASE + 0x64)
+
 
 #endif

@@ -2,7 +2,7 @@
  *
  * Test bare-metal boot application
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2024 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -24,28 +24,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <hal/sama5d3.h>
 
 #include "wolfboot/wolfboot.h"
 
 #ifdef TARGET_sama5d3
 /* Blue LED is PE23, Red LED is PE24 */
-
-#define GPIOE_BASE     0xFFFFFA00
-
-#define GPIOE_PER      *(volatile uint32_t *)(GPIOE_BASE + 0x00)
-#define GPIOE_PDR      *(volatile uint32_t *)(GPIOE_BASE + 0x04)
-#define GPIOE_PSR      *(volatile uint32_t *)(GPIOE_BASE + 0x08)
-#define GPIOE_OER      *(volatile uint32_t *)(GPIOE_BASE + 0x10)
-#define GPIOE_ODR      *(volatile uint32_t *)(GPIOE_BASE + 0x14)
-#define GPIOE_OSR      *(volatile uint32_t *)(GPIOE_BASE + 0x18)
-#define GPIOE_SODR     *(volatile uint32_t *)(GPIOE_BASE + 0x30)
-#define GPIOE_CODR     *(volatile uint32_t *)(GPIOE_BASE + 0x34)
-#define GPIOE_IER      *(volatile uint32_t *)(GPIOE_BASE + 0x40)
-#define GPIOE_IDR      *(volatile uint32_t *)(GPIOE_BASE + 0x44)
-#define GPIOE_MDER     *(volatile uint32_t *)(GPIOE_BASE + 0x50)
-#define GPIOE_MDDR     *(volatile uint32_t *)(GPIOE_BASE + 0x54)
-#define GPIOE_PPUDR    *(volatile uint32_t *)(GPIOE_BASE + 0x60)
-#define GPIOE_PPUER    *(volatile uint32_t *)(GPIOE_BASE + 0x64)
 
 #define BLUE_LED_PIN 23
 #define RED_LED_PIN 24
