@@ -236,6 +236,7 @@ void sleep_us(unsigned int us);
 #endif
 #define UART_TASK_STARTTX(n) *((volatile uint32_t *)(UART_BASE(n) + 0x008))
 #define UART_TASK_STOPTX(n)  *((volatile uint32_t *)(UART_BASE(n) + 0x00C))
+#define UART_EVENT_TXDRDY(n) *((volatile uint32_t *)(UART_BASE(n) + 0x11C))
 #define UART_EVENT_ENDTX(n)  *((volatile uint32_t *)(UART_BASE(n) + 0x120))
 #define UART_ENABLE(n)       *((volatile uint32_t *)(UART_BASE(n) + 0x500))
 #define UART_PSEL_TXD(n)     *((volatile uint32_t *)(UART_BASE(n) + 0x50C))

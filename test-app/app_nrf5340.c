@@ -45,7 +45,9 @@ void main(void)
     uint32_t pin = 28;
     uint32_t app_version;
 
-    GPIO_PIN_CNF(port, pin) = 1; /* Output */
+    GPIO_PIN_CNF(port, pin) = GPIO_CNF_OUT;
+    /* Allow network core access to P0.29 GPIO */
+    GPIO_PIN_CNF(0, 29) = (GPIO_CNF_OUT | GPIO_CNF_MCUSEL(1));
 
     app_version = wolfBoot_current_firmware_version();
 
@@ -55,7 +57,7 @@ void main(void)
     wolfBoot_printf("nRF5340 wolfBoot (app core)\n");
     wolfBoot_printf("Copyright 2024 wolfSSL Inc\n");
     wolfBoot_printf("GPL v3\n");
-    wolfBoot_printf("Version : 0x%lx\r\n", app_version);
+    wolfBoot_printf("Version : 0x%lx\n", app_version);
     wolfBoot_printf("========================\n");
 
     /* mark boot successful */

@@ -2195,73 +2195,129 @@ Application Core:
 
 ```
 wolfBoot HAL Init (app core)
-QSPI Freq=24MHz (Div Clk=3/Sck=1), Addr=24-bits, PageSz=256
-QSPI Activate
-QSPI Flash ID (ret 0): 0xC2 0x28 0x17
-Status Reg: Ret 0, 0x40 (Quad Enabled: Yes)
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x0 -> 0x2000012C
-Update partition: 0x0 (sz 7864, ver 0x2, type 0x201)
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x100000 -> 0x2000012C
-Update partition: 0x100000 (sz 5780, ver 0x2, type 0x202)
-Network Image: Ver 0x2, Size 5780
-Network Core: Holding for update
-Status: App 1 (ver 2), Net 1 (ver 1)
-QSPI Flash ID (ret 0): 0xC2 0x28 0x17
-Status Reg: Ret 0, 0x40 (Quad Enabled: Yes)
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 4 , 0xEDFFC -> 0x20000230
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 4 , 0xEDFFC -> 0x20000230
-Boot partition: 0xC000 (sz 7864, ver 0x1, type 0x201)
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x0 -> 0x2000012C
-Update partition: 0x0 (sz 7864, ver 0x2, type 0x201)
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 4 , 0xEDFFC -> 0x20000230
-Boot partition: 0xC000 (sz 7864, ver 0x1, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Update partition: 0x100000 (sz 4120, ver 0x1, type 0x202)
+Network Image: Update not found
+Network Core: Releasing for boot
+Status: App 8 (ver 0), Net 1 (ver 1)
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
 Booting version: 0x1
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x0 -> 0x2000012C
-Update partition: 0x0 (sz 7864, ver 0x2, type 0x201)
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x100000 -> 0x2000012C
-Update partition: 0x100000 (sz 5780, ver 0x2, type 0x202)
-Network Image: Ver 0x2, Size 5780
-Found Network Core update: Ver 1->2, Size 6036->6036
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 256 , 0x101700 -> 0x2000002C
-Network image valid, loading into shared mem
-QSPI Flash Read: Ret 0, Cmd 0xEB, Len 6036 , 0x100000 -> 0x20010020
-Network core firmware update done
+Waiting for network core...
 ========================
 nRF5340 wolfBoot (app core)
 Copyright 2024 wolfSSL Inc
 GPL v3
 Version : 0x1
 ========================
-Internal Flash Write: addr 0xF9FFC, len 4
-Internal Flash Write: addr 0xF9FFB, len 1
 ```
 
 Network Core:
 
 ```
 wolfBoot HAL Init (net core)
-Boot partition: 0x100C000 (sz 5780, ver 0x1, type 0x201)
-Network Image: Ver 0x1, Size 5780
-Starting update: Ver 1->2, Size 6036->6036
-Internal Flash Erase: addr 0x100C000, len 6036
-Internal Flash Erase: page 0x100C000
-Internal Flash Erase: page 0x100C800
-Internal Flash Erase: page 0x100D000
-Internal Flash Write: addr 0x100C000, len 6036
-Boot partition: 0x100C000 (sz 5780, ver 0x2, type 0x202)
-Network Image: Ver 0x2, Size 5780
-Network version (after update): 0x2
-Status: App 2 (ver 2), Net 4 (ver 2)
-Boot partition: 0x100C000 (sz 5780, ver 0x2, type 0x202)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x202)
+Network Image: Ver 0x1, Size 4120
+Waiting for status from app core...
+Status: App 8 (ver 0), Net 1 (ver 2)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x202)
+Boot header magic 0xF7E99810 invalid at 0x21000128
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x202)
+Booting version: 0x1
+========================
+nRF5340 wolfBoot (net core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x1
+========================
+```
+
+Example output when doing an update:
+
+Application Core:
+
+```
+wolfBoot HAL Init (app core)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Network Image: Ver 0x2, Size 4832
+Found Network Core update: Ver 1->2, Size 4376->5088
+Network image valid, loading into shared mem
+Waiting for net core update to finish...
+Network core firmware update done
+Status: App 8 (ver 2), Net 4 (ver 2)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Staring Update (fallback allowed 0)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Versions: Current 0x1, Update 0x2
+Copy sector 0 (part 1->2)
+Copy sector 0 (part 0->1)
+Copy sector 0 (part 2->0)
+Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Copy sector 1 (part 1->2)
+Copy sector 1 (part 0->1)
+Copy sector 1 (part 2->0)
+Erasing remainder of partitions (235 sectors)...
+Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Copy sector 236 (part 0->2)
+Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
 Booting version: 0x2
+Waiting for network core...
+========================
+nRF5340 wolfBoot (app core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x2
+========================
+```
+
+Network Core:
+
+```
+wolfBoot HAL Init (net core)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x201)
+Network Image: Ver 0x1, Size 4120
+Waiting for status from app core...
+Starting update: Ver 1->2, Size 4376->4376
+Status: App 2 (ver 2), Net 1 (ver 1)
+Update partition: 0x100000 (sz 4120, ver 0x2, type 0x202)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x201)
+Update partition: 0x100000 (sz 4120, ver 0x2, type 0x202)
+Staring Update (fallback allowed 0)
+Update partition: 0x100000 (sz 4120, ver 0x2, type 0x202)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x201)
+Versions: Current 0x1, Update 0x2
+Copy sector 0 (part 1->2)
+Copy sector 0 (part 0->1)
+Copy sector 0 (part 2->0)
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Update partition: 0x100000 (sz 4120, ver 0x1, type 0x201)
+Copy sector 1 (part 1->2)
+Copy sector 1 (part 0->1)
+Copy sector 1 (part 2->0)
+Copy sector 2 (part 1->2)
+Copy sector 2 (part 0->1)
+Copy sector 2 (part 2->0)
+Erasing remainder of partitions (88 sectors)...
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Update partition: 0x100000 (sz 4120, ver 0x1, type 0x201)
+Copy sector 90 (part 0->2)
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Booting version: 0x2
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Network Image: Ver 0x2, Size 4120
+Network version (after update): 0x2
 ========================
 nRF5340 wolfBoot (net core)
 Copyright 2024 wolfSSL Inc
 GPL v3
 Version : 0x2
 ========================
-Internal Flash Write: addr 0x1039FFC, len 4
-Internal Flash Write: addr 0x1039FFB, len 1
 ```
 
 ### Building / Flashing Nordic nRF5340

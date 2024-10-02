@@ -42,10 +42,10 @@ void main(void)
      *  LED3 P0.30
      *  LED4 P0.31 */
     uint32_t port = 0;
-    uint32_t pin = 28;
+    uint32_t pin = 29;
     uint32_t app_version;
 
-    GPIO_PIN_CNF(port, pin) = 1; /* Output */
+    GPIO_PIN_CNF(port, pin) = GPIO_CNF_OUT;
 
     app_version = wolfBoot_current_firmware_version();
 
@@ -55,7 +55,7 @@ void main(void)
     wolfBoot_printf("nRF5340 wolfBoot (net core)\n");
     wolfBoot_printf("Copyright 2024 wolfSSL Inc\n");
     wolfBoot_printf("GPL v3\n");
-    wolfBoot_printf("Version : 0x%lx\r\n", app_version);
+    wolfBoot_printf("Version : 0x%lx\n", app_version);
     wolfBoot_printf("========================\n");
 
     /* mark boot successful */

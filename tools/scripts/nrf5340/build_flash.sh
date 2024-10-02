@@ -4,6 +4,17 @@
 
 # run from wolfBoot root
 # ./tools/scripts/nrf5340/build_flash.sh
+# optionally run with "erase" argument to rease both internal and external flash
+# or provide make arguments "DEBUG=1"
+
+
+if [ "$1" == "erase" ]; then
+  DO_ERASE=1
+  MAKE_ARGS="$2"
+else
+  DO_ERASE=0
+  MAKE_ARGS="$1"
+fi
 
 rm -f ./tools/scripts/nrf5340/*.bin
 rm -f ./tools/scripts/nrf5340/*.hex
@@ -13,7 +24,7 @@ rm -f ./tools/scripts/nrf5340/*.hex
 # Build net
 cp config/examples/nrf5340_net.config .config
 make clean
-make DEBUG=1
+make $MAKE_ARGS
 cp factory.bin tools/scripts/nrf5340/factory_net.bin
 # Sign flash update for testing (use partition type 2 for network update)
 tools/keytools/sign --ecc256 --id 2 test-app/image.bin wolfboot_signing_private_key.der 2
@@ -22,7 +33,8 @@ cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_net.bin
 # Build app
 cp config/examples/nrf5340.config .config
 make clean
-make DEBUG=1
+make $MAKE_ARGS
+
 cp factory.bin tools/scripts/nrf5340/factory_app.bin
 # Sign flash update for testing
 tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
@@ -44,7 +56,7 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10000000 tools/scri
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10100000 tools/scripts/nrf5340/image_v2_signed_net.bin tools/scripts/nrf5340/image_v2_signed_net.hex
 
 
-if [ "$1" == "erase" ]; then
+if [ "$DO_ERASE" == "1" ]; then
     nrfjprog -f nrf53 --recover
     nrfjprog -f nrf53 --qspieraseall
 fi
