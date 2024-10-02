@@ -8,6 +8,7 @@ This README describes configuration of supported targets.
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
+* [Microchip SAMA5D3](#microchip-sama5d3)
 * [Microchip SAME51](#microchip-same51)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
@@ -1404,6 +1405,60 @@ the monitor command sequence below:
 (gdb) mon reset init
 (gdb) mon psoc6 reset_halt
 ```
+
+
+## Microchip SAMA5D3
+
+SAMA5D3 is a Cortex-A5 Microprocessor. The ATSAMA5D3-XPLAINED is the evaluation
+board used for wolfBoot port, which also equips a 2MB NAND flash. WolfBoot
+replaces the default first stage bootloader (at91bootstrap).
+
+### Building wolfBoot
+
+An example configuration file is provided.
+
+`cp config/examples/sama5d3.config .config`
+
+Run make to build wolfBoot.bin and the test application
+
+`make`
+
+### Programming wolfboot.bin into NAND flash
+
+To flash any firmware image into the device NVMs, you need the tool `sam-ba`,
+distributed by Microchip.
+
+This procedure has been tested using sam-ba v.3.8 using ATSAMA5D3-XPLAINED board,
+with JP6 (aka the `SPI_CS` jumper) removed, so the system boots from NAND by
+default.
+
+Step 1: install the tool, connect a J-Link device to the J24 JTAG connector then run the
+following command to activate "lowlevel" mode:
+
+`sam-ba -p j-link -b sama5d3-xplained -t 5 -a lowlevel`
+
+Step 2: erase the entire NAND flash:
+
+`sam-ba -p j-link -b sama5d3-xplained -t 5 -a nandflash -c erase`
+
+Step 3: program `wolfboot.bin` to the beginning of the flash:
+
+`sam-ba -p j-link -b sama5d3-xplained -t 5 -a nandflash -c writeboot:wolfboot.bin`
+
+### Programming the test application into NAND flash
+
+The application can be written to a second partition in nand,
+e.g. at address "0x40000"
+
+`sam-ba -p j-link -b sama5d3-xplained -t 5 -a nandflash -c write:test-app/image_v1_signed.bin:0x400000`
+
+With the example configuration, wolfBoot will evaluate two alternative images
+at addresses 0x400000 and 0x800000, authenticate, load to DRAM and stage from
+`LOAD_ADDRESS`.
+
+Ensure that the application is compiled to run from `LOAD_ADDRESS`.
+Check `test-app/ARM-sama5d3.ld` for details.
+
 
 ## Microchip SAME51
 

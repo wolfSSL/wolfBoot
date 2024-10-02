@@ -130,6 +130,11 @@ ifeq ($(TARGET),nxp_t1024)
     MAIN_TARGET:=factory_wstage1.bin
 endif
 
+ifeq ($(TARGET),sama5d3)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
+
 ifeq ($(FLASH_OTP_KEYSTORE),1)
     MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
 endif
