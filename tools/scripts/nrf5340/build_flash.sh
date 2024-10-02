@@ -4,70 +4,128 @@
 
 # run from wolfBoot root
 # ./tools/scripts/nrf5340/build_flash.sh
-# optionally run with "erase" argument to rease both internal and external flash
-# or provide make arguments "DEBUG=1"
 
+# optionally run with "--erase" argument to rease both internal and external flash
 
-if [ "$1" == "erase" ]; then
+# Defaults
+MAKE_ARGS=
+DO_BUILD=0
+DO_BUILD_DEBUG=0
+DO_ERASE=0
+DO_PROGRAM=0
+if [[ $# -eq 0 ]] ; then
+  DO_BUILD=1
+  DO_BUILD_DEBUG=0
   DO_ERASE=1
-  MAKE_ARGS="$2"
-else
-  DO_ERASE=0
-  MAKE_ARGS="$1"
+  DO_PROGRAM=1
+  echo "Build release with symbols, erase and program"
 fi
 
-rm -f ./tools/scripts/nrf5340/*.bin
-rm -f ./tools/scripts/nrf5340/*.hex
+while test $# -gt 0; do
+  case "$1" in
+    -h|--help|-?)
+      echo "nRF5340 build / flash script"
+      echo " "
+      echo "default: build, erase and program"
+      echo " "
+      echo "options:"
+      echo "-h, --help      show brief help"
+      echo "-b, --build     build release with symbols"
+      echo "-d, --debug     build debug"
+      echo "-v, --verbose   build verbose"
+      echo "-e, --erase     do erase of internal/external flash"
+      echo "-p, --program   program images built"
+      exit 0
+      ;;
+    -b|--build)
+      DO_BUILD=1
+      MAKE_ARGS+=" DEBUG_SYMBOLS=1"
+      echo "Build release with symbols"
+      shift
+      ;;
+    -d|--debug)
+      DO_BUILD=1
+      MAKE_ARGS+=" DEBUG=1"
+      echo "Build with debug"
+      shift
+      ;;
+    -v|--verbose)
+      DO_BUILD=1
+      MAKE_ARGS+=" V=1"
+      echo "Build with verbose output"
+      shift
+      ;;
+    -e|--erase)
+      DO_ERASE=1
+      echo "Do erase"
+      shift
+      ;;
+    -p|--program)
+      DO_PROGRAM=1
+      echo "Do program"
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
-# Build internal flash images for both cores
+if [[ $DO_BUILD == 1 ]]; then
+  rm -f ./tools/scripts/nrf5340/*.bin
+  rm -f ./tools/scripts/nrf5340/*.hex
 
-# Build net
-cp config/examples/nrf5340_net.config .config
-make clean
-make $MAKE_ARGS
-cp factory.bin tools/scripts/nrf5340/factory_net.bin
-# Sign flash update for testing (use partition type 2 for network update)
-tools/keytools/sign --ecc256 --id 2 test-app/image.bin wolfboot_signing_private_key.der 2
-cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_net.bin
+  # Build internal flash images for both cores
 
-# Build app
-cp config/examples/nrf5340.config .config
-make clean
-make $MAKE_ARGS
+  # Build net
+  cp config/examples/nrf5340_net.config .config
+  make clean
+  make $MAKE_ARGS
+  cp factory.bin tools/scripts/nrf5340/factory_net.bin
+  # Sign flash update for testing (use partition type 2 for network update)
+  tools/keytools/sign --ecc256 --id 2 test-app/image.bin wolfboot_signing_private_key.der 2
+  cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_net.bin
 
-cp factory.bin tools/scripts/nrf5340/factory_app.bin
-# Sign flash update for testing
-tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
-cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_app.bin
+  # Build app
+  cp config/examples/nrf5340.config .config
+  make clean
+  make $MAKE_ARGS
 
-# Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
-echo -n "pBOOT" > tools/scripts/nrf5340/trigger_magic.bin
-./tools/bin-assemble/bin-assemble \
-  tools/scripts/nrf5340/update_app_v2.bin \
-    0x0     tools/scripts/nrf5340/image_v2_signed_app.bin \
-    0xEDFFB tools/scripts/nrf5340/trigger_magic.bin
+  cp factory.bin tools/scripts/nrf5340/factory_app.bin
+  # Sign flash update for testing
+  tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+  cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_app.bin
 
-
-# Convert to HEX format for programmer tool
-arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x00000000 tools/scripts/nrf5340/factory_app.bin tools/scripts/nrf5340/factory_app.hex
-arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x01000000 tools/scripts/nrf5340/factory_net.bin tools/scripts/nrf5340/factory_net.hex
-
-arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10000000 tools/scripts/nrf5340/update_app_v2.bin tools/scripts/nrf5340/update_app_v2.hex
-arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10100000 tools/scripts/nrf5340/image_v2_signed_net.bin tools/scripts/nrf5340/image_v2_signed_net.hex
+  # Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
+  echo -n "pBOOT" > tools/scripts/nrf5340/trigger_magic.bin
+  ./tools/bin-assemble/bin-assemble \
+    tools/scripts/nrf5340/update_app_v2.bin \
+      0x0     tools/scripts/nrf5340/image_v2_signed_app.bin \
+      0xEDFFB tools/scripts/nrf5340/trigger_magic.bin
 
 
-if [ "$DO_ERASE" == "1" ]; then
+  # Convert to HEX format for programmer tool
+  arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x00000000 tools/scripts/nrf5340/factory_app.bin tools/scripts/nrf5340/factory_app.hex
+  arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x01000000 tools/scripts/nrf5340/factory_net.bin tools/scripts/nrf5340/factory_net.hex
+
+  arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10000000 tools/scripts/nrf5340/update_app_v2.bin tools/scripts/nrf5340/update_app_v2.hex
+  arm-none-eabi-objcopy -I binary -O ihex --change-addresses 0x10100000 tools/scripts/nrf5340/image_v2_signed_net.bin tools/scripts/nrf5340/image_v2_signed_net.hex
+fi
+
+if [[ $DO_ERASE == 1 ]]; then
     nrfjprog -f nrf53 --recover
     nrfjprog -f nrf53 --qspieraseall
 fi
 
-# Program external flash
-nrfjprog -f nrf53 --program tools/scripts/nrf5340/update_app_v2.hex --verify
-nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_net.hex --verify
+if [[ $DO_PROGRAM == 1 ]]; then
+  # Program external flash
+  nrfjprog -f nrf53 --program tools/scripts/nrf5340/update_app_v2.hex --verify
+  nrfjprog -f nrf53 --program tools/scripts/nrf5340/image_v2_signed_net.hex --verify
 
 
-# Program Internal Flash
-#nrfjprog -f nrf53 --program tools/scripts/nrf5340/factory_app.hex --verify
-#nrfjprog -f nrf53 --program tools/scripts/nrf5340/factory_net.hex --verify --coprocessor CP_NETWORK
-JLinkExe -CommandFile tools/scripts/nrf5340/flash_net.jlink
-JLinkExe -CommandFile tools/scripts/nrf5340/flash_app.jlink
+  # Program Internal Flash
+  #nrfjprog -f nrf53 --program tools/scripts/nrf5340/factory_app.hex --verify
+  #nrfjprog -f nrf53 --program tools/scripts/nrf5340/factory_net.hex --verify --coprocessor CP_NETWORK
+  JLinkExe -CommandFile tools/scripts/nrf5340/flash_net.jlink
+  JLinkExe -CommandFile tools/scripts/nrf5340/flash_app.jlink
+fi
