@@ -98,9 +98,11 @@ static int do_update = 0;
     #define UART_SEL 0 /* select UART 0 or 1 */
 #endif
 #if !defined(UART_PORT) && !defined(UART_PIN)
-    #if UART_SEL == 0 && !defined(TARGET_nrf5340_net)
+    #if defined(TARGET_nrf5340_app)
         #define UART_PORT 0
         #define UART_PIN  20
+        #define UART_NET_PORT 1
+        #define UART_NET_PIN  1
     #else
         #define UART_PORT 1
         #define UART_PIN  1
@@ -109,8 +111,9 @@ static int do_update = 0;
 
 void uart_init(void)
 {
-    /* nRF5340-DK:
-     * App: UART0=P1.01, UART1=P0.20 */
+    /* nRF5340-DK: (P0.20 or P1.01)
+     * App: UART0=P0.20
+     * Net: UART0=P1.01 */
     UART_ENABLE(UART_SEL) = 0;
     GPIO_PIN_CNF(UART_PORT, UART_PIN) = (GPIO_CNF_OUT
     #ifdef TARGET_nrf5340_net
@@ -122,9 +125,11 @@ void uart_init(void)
     UART_CONFIG(UART_SEL) = 0; /* Flow=Diabled, Stop=1-bit, Parity exclude */
     UART_ENABLE(UART_SEL) = 8;
 
-    /* allow network core access to P1.01 - must be set from application core */
-#ifdef TARGET_nrf5340_app
-    GPIO_PIN_CNF(1, 1) = (GPIO_CNF_OUT | GPIO_CNF_MCUSEL(1));
+    /* allow network core access to UART pin - must be set from app core */
+#if defined(TARGET_nrf5340_app) && \
+    defined(UART_NET_PORT) && defined(UART_NET_PIN)
+    GPIO_PIN_CNF(UART_NET_PORT, UART_NET_PIN) =
+        (GPIO_CNF_OUT | GPIO_CNF_MCUSEL(1));
 #endif
 }
 
@@ -160,18 +165,20 @@ void uart_write(const char* buf, unsigned int sz)
     unsigned int lineSz;
     do {
         /* find `\n` */
-        line = memchr(buf, sz, '\n');
+        line = memchr(buf, '\n', sz);
         if (line == NULL) {
             uart_write_sz(buf, sz);
             break;
         }
         lineSz = line - buf;
+        if (lineSz > sz-1)
+            lineSz = sz-1;
 
-        uart_write_sz(line, lineSz);
-        uart_write_sz("\r", 1); /* handle CRLF */
+        uart_write_sz(buf, lineSz);
+        uart_write_sz("\r\n", 2); /* handle CRLF */
 
         buf = line;
-        sz -= lineSz;
+        sz -= lineSz + 1; /* skip \n, already sent */
     } while ((int)sz > 0);
 }
 #endif /* DEBUG_UART */
@@ -427,6 +434,23 @@ static int hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
     return ret;
 }
 
+static const char* hal_shm_status_string(uint32_t status)
+{
+    switch (status) {
+        case SHARED_STATUS_READY:
+            return "Ready";
+        case SHARED_STATUS_UPDATE_START:
+            return "Update Start";
+        case SHARED_STATUS_UPDATE_DONE:
+            return "Update Done";
+        case SHARED_STATUS_DO_BOOT:
+            return "Do boot";
+        default:
+            break;
+    }
+    return "Unknown";
+}
+
 /* Handles network core updates */
 static void hal_net_check_version(void)
 {
@@ -510,8 +534,9 @@ static void hal_net_check_version(void)
     }
 #endif /* TARGET_nrf5340_* */
 exit:
-    wolfBoot_printf("Status: App %d (ver %d), Net %d (ver %d)\n",
-        shm->app.status, shm->app.version, shm->net.status, shm->net.version);
+    wolfBoot_printf("Status: App %s (ver %d), Net %s (ver %d)\n",
+        hal_shm_status_string(shm->app.status), shm->app.version,
+        hal_shm_status_string(shm->net.status), shm->net.version);
 }
 
 void hal_init(void)
