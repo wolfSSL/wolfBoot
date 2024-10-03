@@ -33,7 +33,9 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_flash.h"
+#ifdef UART_FLASH
 #include "uart_flash.h"
+#endif
 #include "wolfboot/wolfboot.h"
 
 #ifdef WOLFBOOT_TPM

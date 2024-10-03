@@ -11,6 +11,7 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
+        *(.boot*)
         *(.text*)
         *(.rodata*)
         *(.init*)

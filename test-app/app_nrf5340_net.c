@@ -65,6 +65,6 @@ void main(void)
     while (1) {
         gpiotoggle(port, pin);
 
-        sleep_us(100 * 1000);
+        sleep_us(500 * 1000);
     }
 }
