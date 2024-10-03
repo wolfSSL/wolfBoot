@@ -85,7 +85,9 @@ typedef struct {
     /* used as "swap" */
     uint8_t  swap[FLASH_PAGESZ_NET];
 } SharedMem_t;
+#ifndef DISABLE_SHARED_MEM
 static SharedMem_t* shm = (SharedMem_t*)SHARED_MEM_ADDR;
+#endif /* !DISABLE_SHARED_MEM */
 
 #ifdef TARGET_nrf5340_net
 static int do_update = 0;
@@ -275,7 +277,9 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     wolfBoot_printf("Ext Write: Len %d, Addr 0x%x (off 0x%x) -> 0x%x\n",
         len, address, addr, data);
 #endif
+#ifndef DISABLE_SHARED_MEM
     memcpy(shm->data + addr, data, len);
+#endif
     return 0;
 }
 
@@ -286,8 +290,9 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     wolfBoot_printf("Ext Read: Len %d, Addr 0x%x (off 0x%x) -> %p\n",
         len, address, addr, data);
 #endif
-
+#ifndef DISABLE_SHARED_MEM
     memcpy(data, shm->data + addr, len);
+#endif
     return len;
 }
 
@@ -298,7 +303,9 @@ int ext_flash_erase(uintptr_t address, int len)
     wolfBoot_printf("Ext Erase: Len %d, Addr 0x%x (off 0x%x)\n",
         len, address, addr);
 #endif
+#ifndef DISABLE_SHARED_MEM
     memset(shm->data + addr, FLASH_BYTE_ERASED, len);
+#endif
     return 0;
 }
 
@@ -325,13 +332,13 @@ static void clock_init(void)
 void sleep_us(unsigned int us)
 {
     /* Calculate ops per us (128MHz=128 instructions per 1us */
-    unsigned long nop_us = (CPU_CLOCK / 10000000);
+    unsigned long nop_us = (CPU_CLOCK / 1000000);
     nop_us *= us;
     /* instruction for each iteration */
 #ifdef DEBUG
-    nop_us /= 5;
+    nop_us /= 30;
 #else
-    nop_us /= 2;
+    nop_us /= 5;
 #endif
     while (nop_us-- > 0) {
         NOP();
@@ -358,6 +365,7 @@ void hal_net_core(int hold) /* 1=hold, 0=release */
 }
 #endif
 
+#ifndef DISABLE_SHARED_MEM
 static uint8_t* get_image_hdr(struct wolfBoot_image* img)
 {
 #ifdef EXT_FLASH
@@ -538,6 +546,8 @@ exit:
         hal_shm_status_string(shm->app.status), shm->app.version,
         hal_shm_status_string(shm->net.status), shm->net.version);
 }
+#endif /* !DISABLE_SHARED_MEM */
+
 
 void hal_init(void)
 {
@@ -561,7 +571,9 @@ void hal_init(void)
     /* need early init of external flash to support checking network core */
     spi_flash_probe();
 
+#ifndef DISABLE_SHARED_MEM
     hal_net_check_version();
+#endif
 }
 
 
@@ -571,6 +583,7 @@ void hal_prepare_boot(void)
     //WOLFBOOT_ORIGIN
     //BOOTLOADER_PARTITION_SIZE
 
+#ifndef DISABLE_SHARED_MEM
 #ifdef TARGET_nrf5340_net
     if (do_update) {
         /* signal application core update done */
@@ -591,9 +604,12 @@ void hal_prepare_boot(void)
     /* if core synchronization enabled, then wait for update_done or do_boot */
     wolfBoot_printf("Waiting for network core...\n");
     (void)hal_shm_status_wait(&shm->net,
-        (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT), 1000000);
-#endif
+        (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT), 2000000);
+#endif /* NRF_SYNC_CORES */
+#endif /* TARGET_nrf5340_app */
+#endif /* !DISABLE_SHARED_MEM */
 
+#ifdef TARGET_nrf5340_app
     /* Restore defaults preventing network core from accessing shared SDRAM */
     SPU_EXTDOMAIN_PERM(0) =
         (SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE | SPU_EXTDOMAIN_PERM_UNLOCK);

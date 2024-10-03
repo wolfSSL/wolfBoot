@@ -1,11 +1,14 @@
 #!/bin/bash
 
 # nRF5340 dual core: Creates internal and external flash images for testing
+# Signs each with a new version 2 and places into external flash,
+# with flag to trigger update (like calling wolfBoot_update_trigger)
 
 # run from wolfBoot root
 # ./tools/scripts/nrf5340/build_flash.sh
 
 # optionally run with "--erase" argument to rease both internal and external flash
+# example: ./tools/scripts/nrf5340/build_flash.sh --debug --erase --program
 
 # Defaults
 MAKE_ARGS=
@@ -83,7 +86,7 @@ if [[ $DO_BUILD == 1 ]]; then
   make $MAKE_ARGS
   cp factory.bin tools/scripts/nrf5340/factory_net.bin
   # Sign flash update for testing (use partition type 2 for network update)
-  tools/keytools/sign --ecc256 --id 2 test-app/image.bin wolfboot_signing_private_key.der 2
+  tools/keytools/sign --ecc384 --sha384 --id 2 test-app/image.bin wolfboot_signing_private_key.der 2
   cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_net.bin
 
   # Build app
@@ -93,7 +96,7 @@ if [[ $DO_BUILD == 1 ]]; then
 
   cp factory.bin tools/scripts/nrf5340/factory_app.bin
   # Sign flash update for testing
-  tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+  tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
   cp test-app/image_v2_signed.bin tools/scripts/nrf5340/image_v2_signed_app.bin
 
   # Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
