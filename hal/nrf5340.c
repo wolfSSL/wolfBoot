@@ -516,9 +516,9 @@ static void hal_net_check_version(void)
 
                 wolfBoot_printf("Waiting for net core update to finish...\n");
 
-                /* wait for update_done - note longer wait - 10 seconds */
+                /* wait for update_done - 30 seconds */
                 ret = hal_shm_status_wait(&shm->net,
-                    SHARED_STATUS_UPDATE_DONE, 10*1000);
+                    SHARED_STATUS_UPDATE_DONE, 30*1000);
                 if (ret == 0) {
                     wolfBoot_printf("Network core firmware update done\n");
                 }
@@ -543,7 +543,7 @@ static void hal_net_check_version(void)
     /* are we updating? */
     if (ret == 0 && shm->app.status == SHARED_STATUS_UPDATE_START) {
         wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
-            shm->net.version, shm->app.version, shm->net.size, shm->net.size);
+            shm->net.version, shm->app.version, shm->net.size, shm->app.size);
         do_update = 1;
 
         /* trigger update */
