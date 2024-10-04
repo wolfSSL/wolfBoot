@@ -38,6 +38,8 @@
  * Any key size greater than 128 bits must be divided and distributed over multiple key slot instances.
  */
 
+#define USE_RTC 0 /* Use RTC0 for sleep */
+
 /* Network updates can be signed with "--id 2" and placed into the normal update partition,
  * or they can be placed into the external flash at offset 0x100000 */
 /* Partition ID should be set HDR_IMG_TYPE_APP=2 */
@@ -321,28 +323,38 @@ void ext_flash_unlock(void)
 
 static void clock_init(void)
 {
-#ifndef TARGET_nrf5340_net
+#ifdef TARGET_nrf5340_app
     CLOCK_HFCLKSRC = 1; /* use external high frequency clock */
     CLOCK_HFCLKSTART = 1;
     /* wait for high frequency clock startup */
     while (CLOCK_HFCLKSTARTED == 0);
 #endif
+    /* Start low frequency clock - used by RTC */
+    CLOCK_LFCLKSRC = 0; /* internal low power */
+    CLOCK_LFCLKSTART = 1;
+    /* wait for high frequency clock startup */
+    while (CLOCK_LFCLKSTARTED == 0);
+
+    RTC_PRESCALER(USE_RTC) = 0; /* 32768 per second */
 }
 
-void sleep_us(unsigned int us)
+void sleep_us(uint32_t usec)
 {
-    /* Calculate ops per us (128MHz=128 instructions per 1us */
-    unsigned long nop_us = (CPU_CLOCK / 1000000);
-    nop_us *= us;
-    /* instruction for each iteration */
-#ifdef DEBUG
-    nop_us /= 30;
-#else
-    nop_us /= 5;
-#endif
-    while (nop_us-- > 0) {
-        NOP();
-    }
+    /* Calculate number ticks to wait */
+    uint32_t comp = ((usec * 32768UL) / 1000000);
+    if (comp == 0)
+        comp = 1; /* wait at least 1 tick */
+    if (comp > RTC_OVERFLOW)
+        comp = RTC_OVERFLOW; /* max wait (512 seconds with prescaler=0) */
+
+    RTC_CLEAR(USE_RTC) = 1;
+    RTC_EVTENSET(USE_RTC) = RTC_EVTENSET_CC0;
+    RTC_EVENT_CC(USE_RTC, 0) = 0; /* clear compare event */
+    RTC_CC(USE_RTC, 0) = comp;
+    RTC_START(USE_RTC) = 1;
+    /* wait for compare event */
+    while (RTC_EVENT_CC(USE_RTC, 0) == 0);
+    RTC_STOP(USE_RTC) = 1;
 }
 
 #ifdef TARGET_nrf5340_app
@@ -427,15 +439,14 @@ static void hal_shm_status_set(ShmInfo_t* info, uint32_t status)
 }
 
 static int hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
-    uint32_t timeout_us)
+    uint32_t timeout_ms)
 {
     int ret = 0;
-    uint32_t timeout = timeout_us;
     while ((info->magic != SHAREM_MEM_MAGIC || (info->status & status) == 0)
-            && --timeout > 0) {
-        sleep_us(1);
+            && --timeout_ms > 0) {
+        sleep_us(1000);
     };
-    if (timeout == 0) {
+    if (timeout_ms == 0) {
         wolfBoot_printf("Timeout: status 0x%x\n", status);
         ret = -1; /* timeout */
     }
@@ -474,8 +485,8 @@ static void hal_net_check_version(void)
     /* release network core - issue boot command */
     hal_net_core(0);
 
-    /* wait for ready status from network core */
-    ret = hal_shm_status_wait(&shm->net, SHARED_STATUS_READY, 1000000);
+    /* wait for ready status from network core - 2 seconds */
+    ret = hal_shm_status_wait(&shm->net, SHARED_STATUS_READY, 2*1000);
 
     /* check if network core can continue booting or needs to wait for update */
     if (ret != 0 || shm->app.version <= shm->net.version) {
@@ -505,9 +516,9 @@ static void hal_net_check_version(void)
 
                 wolfBoot_printf("Waiting for net core update to finish...\n");
 
-                /* wait for update_done - note longer wait */
+                /* wait for update_done - note longer wait - 10 seconds */
                 ret = hal_shm_status_wait(&shm->net,
-                    SHARED_STATUS_UPDATE_DONE, 5000000);
+                    SHARED_STATUS_UPDATE_DONE, 10*1000);
                 if (ret == 0) {
                     wolfBoot_printf("Network core firmware update done\n");
                 }
@@ -524,10 +535,10 @@ static void hal_net_check_version(void)
     hal_net_get_image(&img, &shm->net);
     hal_shm_status_set(&shm->net, SHARED_STATUS_READY);
 
-    /* wait for do_boot or update from app core */
+    /* wait for do_boot or update from app core - 2 seconds */
     wolfBoot_printf("Waiting for status from app core...\n");
     ret = hal_shm_status_wait(&shm->app,
-        (SHARED_STATUS_UPDATE_START | SHARED_STATUS_DO_BOOT), 1000000);
+        (SHARED_STATUS_UPDATE_START | SHARED_STATUS_DO_BOOT), 2*1000);
 
     /* are we updating? */
     if (ret == 0 && shm->app.status == SHARED_STATUS_UPDATE_START) {
@@ -601,10 +612,11 @@ void hal_prepare_boot(void)
 
 #ifdef TARGET_nrf5340_app
 #ifdef NRF_SYNC_CORES
-    /* if core synchronization enabled, then wait for update_done or do_boot */
+    /* if core synchronization enabled,
+     * then wait for update_done or do_boot (5 seconds) */
     wolfBoot_printf("Waiting for network core...\n");
     (void)hal_shm_status_wait(&shm->net,
-        (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT), 2000000);
+        (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT), 5*1000);
 #endif /* NRF_SYNC_CORES */
 #endif /* TARGET_nrf5340_app */
 #endif /* !DISABLE_SHARED_MEM */

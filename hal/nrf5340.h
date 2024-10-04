@@ -70,7 +70,7 @@
 #define ISB() __asm__ volatile ("isb")
 #define NOP() __asm__ volatile ("nop")
 
-void sleep_us(unsigned int us);
+void sleep_us(uint32_t usec);
 
 /* PSEL Port (bit 5) - Used for various PSEL (UART,SPI,QSPI,I2C,NFC) */
 #define PSEL_PORT(n)         (((n) & 0x1) << 5)
@@ -193,6 +193,16 @@ void sleep_us(unsigned int us);
 #define CLOCK_HFCLK192MCTRL_DIV1 0
 #define CLOCK_HFCLK192MCTRL_DIV2 1
 #define CLOCK_HFCLK192MCTRL_DIV4 2
+
+/* Low frequency: 32.768 kHz */
+#define CLOCK_LFCLKSTART      *((volatile uint32_t *)(CLOCK_BASE + 0x008))
+#define CLOCK_LFCLKSTOP       *((volatile uint32_t *)(CLOCK_BASE + 0x00C))
+#define CLOCK_LFCLKSTARTED    *((volatile uint32_t *)(CLOCK_BASE + 0x104))
+#define CLOCK_LFCLKSRC        *((volatile uint32_t *)(CLOCK_BASE + 0x518))
+#define CLOCK_LFCLKSRC_LFULP  0 /* ultra-low power RC oscillator */
+#define CLOCK_LFCLKSRC_LFRC   1 /* RC oscillator */
+#define CLOCK_LFCLKSRC_LFXO   2 /* crystal oscillator */
+#define CLOCK_LFCLKSRC_LFSYNT 3 /* synthesized from HFCLK */
 
 
 /* GPIO Port (0-1) */
@@ -386,5 +396,34 @@ void uart_write_sz(const char* c, unsigned int sz);
 #define IPC_SEND_CNF(n)        *((volatile uint32_t *)(IPC_BASE + 0x510 + (((n) & 0xF) * 0x4)))
 #define IPC_RECEIVE_CNF(n)     *((volatile uint32_t *)(IPC_BASE + 0x590 + (((n) & 0xF) * 0x4)))
 #define IPC_GPMEM(n)           *((volatile uint32_t *)(IPC_BASE + 0x610 + (((n) & 0x1) * 0x4)))
+
+/* RTC - uses LFCLK - 24-bit counter/compare */
+#ifdef TARGET_nrf5340_app
+    #ifdef TZEN
+    #define RTC_BASE(n)     ((0x50014000) + (((n) & 0x1) * 0x1000))
+    #else
+    #define RTC_BASE(n)     ((0x40014000) + (((n) & 0x1) * 0x1000))
+    #endif
+#else
+    #define RTC_BASE(n)     (0x41011000) /* network core */
+#endif
+#define RTC_START(n)        *((volatile uint32_t *)(RTC_BASE(n) + 0x000))
+#define RTC_STOP(n)         *((volatile uint32_t *)(RTC_BASE(n) + 0x004))
+#define RTC_CLEAR(n)        *((volatile uint32_t *)(RTC_BASE(n) + 0x008))
+#define RTC_EVENT_TICK(n)   *((volatile uint32_t *)(RTC_BASE(n) + 0x100))
+#define RTC_EVENT_OVRFLW(n) *((volatile uint32_t *)(RTC_BASE(n) + 0x104))
+#define RTC_EVENT_CC(n,i)   *((volatile uint32_t *)(RTC_BASE(n) + 0x140 + ((i) & 0x3) * 0x4))
+#define RTC_EVTENSET(n)     *((volatile uint32_t *)(RTC_BASE(n) + 0x344))
+#define RTC_EVTENSET_TICK   (1 << 0)
+#define RTC_EVTENSET_OVRFLW (1 << 1)
+#define RTC_EVTENSET_CC0    (1 << 16)
+#define RTC_EVTENSET_CC1    (1 << 17)
+#define RTC_EVTENSET_CC2    (1 << 18)
+#define RTC_EVTENSET_CC3    (1 << 19)
+#define RTC_COUNTER(n)      *((volatile uint32_t *)(RTC_BASE(n) + 0x504))
+#define RTC_PRESCALER(n)    *((volatile uint32_t *)(RTC_BASE(n) + 0x508)) /* default=0 or 32768 per second (12-bit) up to 0xFFF */
+#define RTC_CC(n,i)         *((volatile uint32_t *)(RTC_BASE(n) + 0x540 + ((i) & 0x3) * 0x4))
+#define RTC_OVERFLOW        0xFFFFFFUL
+
 
 #endif /* !_HAL_NRF5340_H_ */
