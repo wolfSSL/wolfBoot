@@ -338,11 +338,16 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
                     IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
         } else {
+            wolfBoot_printf("Delta version check failed! "
+                "Cur 0x%x, Upd 0x%x, Delta 0x%x\n",
+                cur_v, upd_v, delta_base_v);
             ret = -1;
         }
     } else {
         if (!resume && (cur_v != delta_base_v)) {
             /* Wrong base image, cannot apply delta patch */
+            wolfBoot_printf("Delta Base 0x%x != Cur 0x%x\n",
+                cur_v, delta_base_v);
             ret = -1;
         } else {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
