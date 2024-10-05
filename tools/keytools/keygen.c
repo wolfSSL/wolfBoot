@@ -79,6 +79,10 @@
     #endif
 #endif
 
+#ifdef WOLFSSL_WC_DILITHIUM
+    #include <wolfssl/wolfcrypt/dilithium.h>
+#endif
+
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #ifdef DEBUG_SIGNTOOL
@@ -103,6 +107,7 @@
 #define KEYGEN_RSA3072 8
 #define KEYGEN_LMS     9
 #define KEYGEN_XMSS    10
+#define KEYGEN_ML_DSA  11
 
 /* Globals */
 static FILE *fpub, *fpub_image;
@@ -117,7 +122,12 @@ static int saveAsDer = 0;
 static WC_RNG rng;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
-    #define KEYSLOT_MAX_PUBKEY_SIZE 576
+    #if defined(WOLFSSL_WC_DILITHIUM)
+        /* ML-DSA pub keys are big. */
+        #define KEYSLOT_MAX_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
+    #else
+        #define KEYSLOT_MAX_PUBKEY_SIZE 576
+    #endif
 #endif
 
 struct keystore_slot {
@@ -300,7 +310,8 @@ const char KType[][17] = {
     "AUTH_KEY_ECC521",
     "AUTH_KEY_RSA3072",
     "AUTH_KEY_LMS",
-    "AUTH_KEY_XMSS"
+    "AUTH_KEY_XMSS",
+    "AUTH_KEY_ML_DSA"
 };
 
 const char KSize[][29] = {
@@ -314,7 +325,8 @@ const char KSize[][29] = {
     "KEYSTORE_PUBKEY_SIZE_ECC521",
     "KEYSTORE_PUBKEY_SIZE_RSA3072",
     "KEYSTORE_PUBKEY_SIZE_LMS",
-    "KEYSTORE_PUBKEY_SIZE_XMSS"
+    "KEYSTORE_PUBKEY_SIZE_XMSS",
+    "KEYSTORE_PUBKEY_SIZE_ML_DSA"
 };
 
 const char KName[][8] = {
@@ -328,7 +340,8 @@ const char KName[][8] = {
     "ECC521",
     "RSA3072",
     "LMS",
-    "XMSS"
+    "XMSS",
+    "ML_DSA"
 };
 
 #define MAX_PUBKEYS 64
@@ -375,6 +388,9 @@ static uint32_t get_pubkey_size(uint32_t keyType)
         case KEYGEN_XMSS:
             size = KEYSTORE_PUBKEY_SIZE_XMSS;
             break;
+        case KEYGEN_ML_DSA:
+            size = KEYSTORE_PUBKEY_SIZE_ML_DSA;
+            break;
         default:
             size = 0;
     }
@@ -404,6 +420,13 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     sl.part_id_mask = id_mask;
 
     sl.pubkey_size = get_pubkey_size(ktype);
+
+    if (sl.pubkey_size > sizeof(sl.pubkey)){
+        printf("error: %s pubkey larger than keystore: %d > %zu\n",
+               KName[ktype], sl.pubkey_size, sizeof(sl.pubkey));
+        exit(1);
+    }
+
     memcpy(sl.pubkey, key, sl.pubkey_size);
 #ifdef WOLFBOOT_UNIVERSAL_KEYSTORE
     slot_size = sizeof(struct keystore_slot);
@@ -773,6 +796,120 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
 }
 #endif /* if defined(WOLFSSL_HAVE_XMSS) */
 
+#if defined(WOLFSSL_WC_DILITHIUM)
+
+static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
+{
+    FILE *   fpriv = NULL;
+    MlDsaKey key;
+    int      ret;
+    byte *   priv = NULL;
+    byte     pub[KEYSTORE_PUBKEY_SIZE_ML_DSA];
+    word32   priv_len = 0;
+    word32   pub_len = 0;
+    int      ml_dsa_priv_len = 0;
+    int      ml_dsa_pub_len = 0;
+
+    ret = wc_MlDsaKey_Init(&key, NULL, INVALID_DEVID);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_MlDsaKey_SetParams(&key, ML_DSA_LEVEL);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_MlDsaKey_SetParams(%d) returned %d\n",
+                ML_DSA_LEVEL, ret);
+        exit(1);
+    }
+
+    /* Make the key pair. */
+    ret = wc_MlDsaKey_MakeKey(&key, &rng);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_MlDsaKey_MakeKey returned %d\n", ret);
+        exit(1);
+    }
+
+    /* Get the ML-DSA public key length. */
+    ret = wc_MlDsaKey_GetPubLen(&key, &ml_dsa_pub_len);
+    if (ret != 0 || ml_dsa_pub_len <= 0) {
+        printf("error: wc_MlDsaKey_GetPrivLen returned %d\n",
+                ret);
+        exit(1);
+    }
+
+    /* Get the ML-DSA private key length. This API returns
+     * the public + private length. */
+    ret = wc_MlDsaKey_GetPrivLen(&key, &ml_dsa_priv_len);
+    if (ret != 0 || ml_dsa_priv_len <= 0) {
+        printf("error: wc_MlDsaKey_GetPrivLen returned %d\n",
+                ret);
+        exit(1);
+    }
+
+    if (ml_dsa_priv_len <= ml_dsa_pub_len) {
+        printf("error: ml-dsa: unexpected key lengths: %d, %d",
+               ml_dsa_priv_len, ml_dsa_pub_len);
+        exit(1);
+    }
+    else {
+        ml_dsa_priv_len -= ml_dsa_pub_len;
+    }
+
+    priv = malloc(ml_dsa_priv_len);
+    if (priv == NULL) {
+        fprintf(stderr, "error: malloc(%d) failed\n", ml_dsa_priv_len);
+        exit(1);
+    }
+
+    /* Set the expected key lengths. */
+    pub_len = (word32) ml_dsa_pub_len;
+    priv_len = (word32) ml_dsa_priv_len;
+
+    ret = wc_MlDsaKey_ExportPubRaw(&key, pub, &pub_len);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_MlDsaKey_ExportPubRaw returned %d\n", ret);
+        exit(1);
+    }
+
+    ret = wc_MlDsaKey_ExportPrivRaw(&key, priv, &priv_len);
+    if (ret != 0) {
+        fprintf(stderr, "error: wc_MlDsaKey_ExportPrivRaw returned %d\n", ret);
+        exit(1);
+    }
+
+    if (pub_len != sizeof(pub)) {
+        fprintf(stderr, "error: wc_MlDsaKey_ExportPubRaw returned pub_len=%d, " \
+                        "expected %zu\n", pub_len, sizeof(pub));
+        exit(1);
+    }
+
+    if ((int) priv_len != ml_dsa_priv_len) {
+        fprintf(stderr, "error: ml_dsa priv key mismatch: got %d " \
+                        "bytes, expected %d\n", priv_len, ml_dsa_priv_len);
+        exit(1);
+    }
+
+    fpriv = fopen(priv_fname, "wb");
+
+    if (fpriv == NULL) {
+        fprintf(stderr, "error: fopen(%s) failed: %s",
+                priv_fname, strerror(errno));
+        exit(1);
+    }
+
+    fwrite(priv, priv_len, 1, fpriv);
+    fwrite(pub, pub_len, 1, fpriv);
+    fclose(fpriv);
+
+    keystore_add(KEYGEN_ML_DSA, pub, KEYSTORE_PUBKEY_SIZE_ML_DSA,
+                 priv_fname, id_mask);
+
+    wc_MlDsaKey_Free(&key);
+    free(priv);
+    priv = NULL;
+}
+#endif /* if defined(WOLFSSL_WC_DILITHIUM) */
 
 static void key_gen_check(const char *kfilename)
 {
@@ -848,6 +985,13 @@ static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask
             keygen_xmss(kfilename, id_mask);
             break;
 #endif
+
+#ifdef WOLFSSL_WC_DILITHIUM
+        case KEYGEN_ML_DSA:
+            keygen_ml_dsa(kfilename, id_mask);
+            break;
+#endif
+
     } /* end switch */
 }
 
@@ -1008,6 +1152,11 @@ int main(int argc, char** argv)
 #if defined(WOLFSSL_HAVE_XMSS)
         else if (strcmp(argv[i], "--xmss") == 0) {
             keytype = KEYGEN_XMSS;
+        }
+#endif
+#if defined(WOLFSSL_WC_DILITHIUM)
+        else if (strcmp(argv[i], "--ml_dsa") == 0) {
+            keytype = KEYGEN_ML_DSA;
         }
 #endif
         else if (strcmp(argv[i], "--force") == 0) {
