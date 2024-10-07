@@ -68,7 +68,8 @@ endif
 
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
-  CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
+  CFLAGS+=-DARCH_ARM
+  CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
   LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
 
   ## Target specific configuration
@@ -194,7 +195,10 @@ ifeq ($(CORTEX_A5),1)
     MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_c32.o
   else
     MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_arm32.o
-    CFLAGS+=-DWOLFSSL_SP_ARM32_ASM
+    OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o
+    OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
+    OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
+    CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO -DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
   endif
 else
   # All others use boot_arm.o

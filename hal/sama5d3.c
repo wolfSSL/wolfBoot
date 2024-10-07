@@ -195,6 +195,31 @@ static void pll_init(void)
     master_clock_set(PRESCALER_PLLA_CLOCK);
 }
 
+/* GMAC PINS: PB8, PB11, PB16, PB18 */
+/* EMAC PINS: PC7, PC8 */
+#define GMAC_PINS ( (1 << 8) | (1 << 11) | (1 << 16) | (1 << 18) )
+#define EMAC_PINS ( (1 << 7) | (1 << 8) )
+#define GPIO_GMAC GPIOB
+#define GPIO_EMAC GPIOC
+
+static void mac_init(void)
+{
+    PMC_CLOCK_EN(GPIOB_PMCID);
+    PMC_CLOCK_EN(GPIOC_PMCID);
+
+    GPIO_PPUDR(GPIO_GMAC) = GMAC_PINS;
+    GPIO_PPDDR(GPIO_GMAC) = GMAC_PINS;
+    GPIO_PER(GPIO_GMAC) = GMAC_PINS;
+    GPIO_OER(GPIO_GMAC) = GMAC_PINS;
+    GPIO_CODR(GPIO_GMAC) = GMAC_PINS;
+
+    GPIO_PPUDR(GPIO_EMAC) = EMAC_PINS;
+    GPIO_PPDDR(GPIO_EMAC) = EMAC_PINS;
+    GPIO_PER(GPIO_EMAC) = EMAC_PINS;
+    GPIO_OER(GPIO_EMAC) = EMAC_PINS;
+    GPIO_CODR(GPIO_EMAC) = EMAC_PINS;
+}
+
 
 static void ddr_init(void)
 {
@@ -245,10 +270,7 @@ static void ddr_init(void)
      *
      */
     /* Turn on the DDRAM controller peripheral clock */
-    PMC_PCR = MPDDRC_PMCID;
-    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK);
-    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN;
-    PMC_PCR = pmc_pcr;
+    PMC_CLOCK_EN(MPDDRC_PMCID);
 
     /* Enable DDR in system clock */
     PMC_SCER = MPDDRC_SCERID;
@@ -649,10 +671,7 @@ void pit_init(void)
     uint32_t pmc_pcr;
 
     /* Turn on clock for PIT */
-    PMC_PCR = PIT_PMCID;
-    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK);
-    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN;
-    PMC_PCR = pmc_pcr;
+    PMC_CLOCK_EN(PIT_PMCID);
 
     /* Set clock source to MCK/2 */
     PIT_MR = MAX_PIV | PIT_MR_EN;
