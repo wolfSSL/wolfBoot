@@ -91,9 +91,13 @@ Xilinx uses a `bootgen` tool for generating a boot binary image that has Xilinx 
 * Use "offset=" option to place the application into a specific location in flash.
 * Use "load=" option to have FSBL load into specific location in RAM.
 
-Generating a boot.bin (from boot.bif).
-Run the Xilinx -> Vitis Shell and cd into the workspace root.
+Default install locations for bootgen tools:
+* Linux: `/tools/Xilinx/Vitis/2022.1/bin`
+* Windows: `C:\Xilinx\Vitis\2022.1\bin`
 
+Open the Vitis Shell from the IDE by using file menu "Xilinx" -> "Vitis Shell".
+
+Generating a boot.bin (from boot.bif).
 Example boot.bif in workspace root:
 
 ```
@@ -106,6 +110,10 @@ the_ROM_image:
 	[destination_cpu=a53-0, partition_owner=uboot, offset=0x800000] hello_world\Debug\hello_world_v1_signed.bin
 }
 ```
+
+Note: If using the wolfboot.elf compiled from our makefile use "exception_level=el-3".
+
+From the workspace root:
 
 ```sh
 bootgen -image boot.bif -arch zynqmp -w -o BOOT.bin
@@ -207,7 +215,7 @@ WOLFSSL_XMSS_VERIFY_ONLY
 WOLFSSL_XMSS_MAX_HEIGHT=32
 WOLFBOOT_SHA_BLOCK_SIZE=4096
 IMAGE_SIGNATURE_SIZE=2500
-IMAGE_HEADER_SIZE=4096
+IMAGE_HEADER_SIZE=5000
 ```
 
 2) Create and sign image:
