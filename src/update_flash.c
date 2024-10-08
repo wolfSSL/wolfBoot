@@ -537,7 +537,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     if (flag == SECT_FLAG_NEW) {
         if (((update_type & HDR_IMG_TYPE_PART_MASK) != HDR_IMG_TYPE_APP) ||
             ((update_type & HDR_IMG_TYPE_AUTH_MASK) != HDR_IMG_TYPE_AUTH)) {
-            wolfBoot_printf("Invalid update type 0x%x\n", update_type);
+            wolfBoot_printf("Update type invalid 0x%x!=0x%x\n",
+                update_type, HDR_IMG_TYPE_AUTH);
             return -1;
         }
         if (update.fw_size > MAX_UPDATE_SIZE - 1) {
@@ -547,7 +548,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         if (!update.hdr_ok
                 || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
-            wolfBoot_printf("Update integrity/verification failed!\n");
+            wolfBoot_printf("Update verify failed: Hdr %d, Hash %d, Sig %d\n",
+                update.hdr_ok, update.sha_ok, update.signature_ok);
             return -1;
         }
         PART_SANITY_CHECK(&update);
