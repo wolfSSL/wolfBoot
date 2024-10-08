@@ -38,17 +38,15 @@
  * Any key size greater than 128 bits must be divided and distributed over multiple key slot instances.
  */
 
-#define USE_RTC 0 /* Use RTC0 for sleep */
+#ifndef USE_RTC
+    #define USE_RTC 0 /* Use RTC0 for sleep */
+#endif
 
 /* Network updates can be signed with "--id 2" and placed into the normal update partition,
  * or they can be placed into the external flash at offset 0x100000 */
-/* Partition ID should be set HDR_IMG_TYPE_APP=2 */
+/* Set Partition ID in .config using WOLFBOOT_PART_ID=2 */
 #ifndef PART_NET_ID
-#ifdef HDR_IMG_TYPE_APP
-    #define PART_NET_ID HDR_IMG_TYPE_APP
-#else
-    #define PART_NET_ID 2 /* default */
-#endif
+#define PART_NET_ID 2 /* default */
 #endif
 
 /* Offset in external QSPI flash for network update
@@ -57,17 +55,31 @@
 #define PART_NET_ADDR 0x100000UL
 #endif
 
+/* IPC Channels 0/1 */
+/* Channel 0: APP Send -> NET Recv
+ * Channel 1: NET Send -> APP Recv */
+#ifdef TARGET_nrf5340_app
+    #define USE_IPC_SEND  0
+    #define USE_IPC_RECV  1
+#else
+    #define USE_IPC_SEND  1
+    #define USE_IPC_RECV  0
+#endif
+
 /* SHM: Shared Memory between network and application cores */
 /* first 64KB (0x10000) is used by wolfBoot and limited in nrf5340.ld */
 #ifndef SHARED_MEM_ADDR
     #define SHARED_MEM_ADDR (0x20000000UL + (64 * 1024))
 #endif
+
 /* Shared memory states (mask, easier to check) */
 #define SHARED_STATUS_UNKNOWN      0x00
 #define SHARED_STATUS_READY        0x01
-#define SHARED_STATUS_UPDATE_START 0x02
-#define SHARED_STATUS_UPDATE_DONE  0x04
-#define SHARED_STATUS_DO_BOOT      0x08
+#define SHARED_STATUS_VERSION      0x02
+#define SHARED_STATUS_UPDATE_START 0x04
+#define SHARED_STATUS_UPDATE_DONE  0x08
+#define SHARED_STATUS_DO_BOOT      0x10
+#define SHARED_STATUS_TIMEOUT      0x80
 
 #define SHAREM_MEM_MAGIC 0x5753484D /* WSHM */
 
@@ -81,18 +93,26 @@ typedef struct {
 typedef struct {
     ShmInfo_t net; /* network core write location */
     ShmInfo_t app; /* application core write location */
+} SharedCores_t;
 
+typedef struct {
+    SharedCores_t core;
+
+    /* Note: If enableShm=0 do not access below */
     /* application places firmware here */
     uint8_t  data[FLASH_SIZE_NET];
     /* used as "swap" */
     uint8_t  swap[FLASH_PAGESZ_NET];
 } SharedMem_t;
-#ifndef DISABLE_SHARED_MEM
-static SharedMem_t* shm = (SharedMem_t*)SHARED_MEM_ADDR;
-#endif /* !DISABLE_SHARED_MEM */
 
-#ifdef TARGET_nrf5340_net
-static int do_update = 0;
+static int enableShm = 0;
+static int doUpdateNet = 0;
+
+#ifdef TARGET_nrf5340_app
+static SharedMem_t* shm = (SharedMem_t*)SHARED_MEM_ADDR;
+#else
+static SharedCores_t shm_shadow;
+static SharedMem_t*  shm = (SharedMem_t*)&shm_shadow;
 #endif
 
 
@@ -279,9 +299,8 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     wolfBoot_printf("Ext Write: Len %d, Addr 0x%x (off 0x%x) -> 0x%x\n",
         len, address, addr, data);
 #endif
-#ifndef DISABLE_SHARED_MEM
-    memcpy(shm->data + addr, data, len);
-#endif
+    if (enableShm)
+        memcpy(shm->data + addr, data, len);
     return 0;
 }
 
@@ -292,9 +311,10 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     wolfBoot_printf("Ext Read: Len %d, Addr 0x%x (off 0x%x) -> %p\n",
         len, address, addr, data);
 #endif
-#ifndef DISABLE_SHARED_MEM
-    memcpy(data, shm->data + addr, len);
-#endif
+    if (enableShm)
+        memcpy(data, shm->data + addr, len);
+    else
+        memset(data, FLASH_BYTE_ERASED, len);
     return len;
 }
 
@@ -305,9 +325,8 @@ int ext_flash_erase(uintptr_t address, int len)
     wolfBoot_printf("Ext Erase: Len %d, Addr 0x%x (off 0x%x)\n",
         len, address, addr);
 #endif
-#ifndef DISABLE_SHARED_MEM
-    memset(shm->data + addr, FLASH_BYTE_ERASED, len);
-#endif
+    if (enableShm)
+        memset(shm->data + addr, FLASH_BYTE_ERASED, len);
     return 0;
 }
 
@@ -377,7 +396,6 @@ void hal_net_core(int hold) /* 1=hold, 0=release */
 }
 #endif
 
-#ifndef DISABLE_SHARED_MEM
 static uint8_t* get_image_hdr(struct wolfBoot_image* img)
 {
 #ifdef EXT_FLASH
@@ -432,25 +450,69 @@ static int hal_net_get_image(struct wolfBoot_image* img, ShmInfo_t* info)
     return ret;
 }
 
-static void hal_shm_status_set(ShmInfo_t* info, uint32_t status)
+static void hal_shm_init(void)
 {
-    info->magic = SHAREM_MEM_MAGIC;
-    info->status = status;
+    IPC_SEND_CNF(USE_IPC_SEND)    = (1 << USE_IPC_SEND);
+    IPC_RECEIVE_CNF(USE_IPC_RECV) = (1 << USE_IPC_RECV);
+    IPC_EVENTS_RECEIVE(USE_IPC_SEND) = 0;
+    IPC_EVENTS_RECEIVE(USE_IPC_RECV) = 0;
+
+#ifdef TARGET_nrf5340_app
+    /* Allow the network core to access shared SDRAM at 0x2000_0000 */
+    SPU_EXTDOMAIN_PERM(0) =
+        (SPU_EXTDOMAIN_PERM_SECATTR_SECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
+#endif
 }
 
-static int hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
+static void hal_shm_status_set(ShmInfo_t* info, uint32_t status)
+{
+    IPC_TASKS_SEND(USE_IPC_SEND) = 1;
+    if (info != NULL) {
+        info->magic = SHAREM_MEM_MAGIC;
+        info->status = status;
+    }
+}
+
+static uint32_t hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
     uint32_t timeout_ms)
 {
+    uint32_t status_ret = SHARED_STATUS_UNKNOWN;
     int ret = 0;
-    while ((info->magic != SHAREM_MEM_MAGIC || (info->status & status) == 0)
-            && --timeout_ms > 0) {
-        sleep_us(1000);
-    };
-    if (timeout_ms == 0) {
-        wolfBoot_printf("Timeout: status 0x%x\n", status);
-        ret = -1; /* timeout */
-    }
-    return ret;
+
+    do {
+        /* see if status shared already */
+        if (info != NULL && (info->magic == SHAREM_MEM_MAGIC &&
+                (info->status & status) != 0)) {
+            status_ret = info->status;
+            break;
+        }
+        /* Wait for event */
+        while (IPC_EVENTS_RECEIVE(USE_IPC_RECV) == 0 && --timeout_ms > 0) {
+            sleep_us(1000);
+        }
+        if (timeout_ms == 0) {
+            status_ret = SHARED_STATUS_TIMEOUT;
+            break;
+        }
+        /* clear event */
+        IPC_EVENTS_RECEIVE(USE_IPC_RECV) = 0;
+        /* if we got an event and "info" not provided, just return status to
+         * signal event occurred */
+        if (info == NULL) {
+            status_ret = status;
+            break;
+        }
+    } while (1);
+    return status_ret;
+}
+
+static void hal_shm_cleanup(void)
+{
+#ifdef TARGET_nrf5340_app
+    /* Restore defaults preventing network core from accessing shared SDRAM */
+    SPU_EXTDOMAIN_PERM(0) =
+        (SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
+#endif
 }
 
 static const char* hal_shm_status_string(uint32_t status)
@@ -458,43 +520,75 @@ static const char* hal_shm_status_string(uint32_t status)
     switch (status) {
         case SHARED_STATUS_READY:
             return "Ready";
+        case SHARED_STATUS_VERSION:
+            return "Version";
         case SHARED_STATUS_UPDATE_START:
             return "Update Start";
         case SHARED_STATUS_UPDATE_DONE:
             return "Update Done";
         case SHARED_STATUS_DO_BOOT:
             return "Do boot";
+        case SHARED_STATUS_TIMEOUT:
+            return "Timeout";
         default:
             break;
     }
     return "Unknown";
 }
 
+static int hal_net_signal_wait_ready(uint32_t timeout_ms)
+{
+    int ret = 0;
+    uint32_t status;
+
+    /* wait for network core ready */
+    do {
+        hal_shm_status_set(NULL, SHARED_STATUS_READY);
+        status = hal_shm_status_wait(NULL, SHARED_STATUS_READY, 1);
+    } while (status == SHARED_STATUS_TIMEOUT && --timeout_ms > 0);
+    if (timeout_ms == 0 && status == SHARED_STATUS_TIMEOUT) {
+        ret = -1;
+    }
+    return ret;
+}
 /* Handles network core updates */
 static void hal_net_check_version(void)
 {
     int ret;
     struct wolfBoot_image img;
-    uint32_t timeout;
+    uint32_t timeout, status = 0;
 
 #ifdef TARGET_nrf5340_app
     /* check the network core version */
-    hal_net_get_image(&img, &shm->app);
-    hal_shm_status_set(&shm->app, SHARED_STATUS_READY);
+    hal_net_get_image(&img, &shm->core.app);
 
     /* release network core - issue boot command */
     hal_net_core(0);
 
-    /* wait for ready status from network core - 2 seconds */
-    ret = hal_shm_status_wait(&shm->net, SHARED_STATUS_READY, 2*1000);
+    wolfBoot_printf("Waiting for ready from net core...\n");
+
+    /* wait for ready status from network core */
+    ret = hal_net_signal_wait_ready(500);
+    if (ret == 0) {
+        enableShm = 1;
+        wolfBoot_printf("Net core ready\n");
+
+        /* wait for version */
+        status = hal_shm_status_wait(&shm->core.net,
+            SHARED_STATUS_VERSION, 2*1000);
+    }
+    else {
+        wolfBoot_printf("Net core timeout, disable shared mem\n");
+    }
 
     /* check if network core can continue booting or needs to wait for update */
-    if (ret != 0 || shm->app.version <= shm->net.version) {
+    if (ret != 0 || shm->core.app.version <= shm->core.net.version) {
         wolfBoot_printf("Network Core: Releasing for boot\n");
     }
     else {
         wolfBoot_printf("Found Network Core update: Ver %d->%d, Size %d->%d\n",
-            shm->net.version, shm->app.version, shm->net.size, shm->app.size);
+            shm->core.net.version, shm->core.app.version,
+            shm->core.net.size, shm->core.app.size);
 
         /* validate the update is valid */
         if (wolfBoot_verify_integrity(&img) == 0 &&
@@ -502,26 +596,32 @@ static void hal_net_check_version(void)
         {
             wolfBoot_printf("Network image valid, loading into shared mem\n");
             /* initialize remainder of shared memory with 0xFF (erased) */
-            memset(shm->data + shm->app.size, FLASH_BYTE_ERASED,
-                sizeof(shm->data) - shm->app.size);
+            memset(shm->data + shm->core.app.size, FLASH_BYTE_ERASED,
+                sizeof(shm->data) - shm->core.app.size);
             /* relocate image to shared ram */
         #ifdef EXT_FLASH
-            ret = ext_flash_read(PART_NET_ADDR, shm->data, shm->app.size);
+            ret = ext_flash_read(PART_NET_ADDR, shm->data, shm->core.app.size);
         #else
-            memcpy(shm->data, img.hdr, shm->app.size);
+            memcpy(shm->data, img.hdr, shm->core.app.size);
         #endif
             if (ret >= 0) {
-                /* signal network core to do update */
-                hal_shm_status_set(&shm->app, SHARED_STATUS_UPDATE_START);
+                doUpdateNet = 1;
 
+                /* signal network core to do update */
+                hal_shm_status_set(&shm->core.app, SHARED_STATUS_UPDATE_START);
+
+            #ifndef NRF_SYNC_CORES
                 wolfBoot_printf("Waiting for net core update to finish...\n");
 
                 /* wait for update_done - 30 seconds */
-                ret = hal_shm_status_wait(&shm->net,
+                status = hal_shm_status_wait(&shm->core.net,
                     SHARED_STATUS_UPDATE_DONE, 30*1000);
-                if (ret == 0) {
+                if (status == SHARED_STATUS_UPDATE_DONE) {
                     wolfBoot_printf("Network core firmware update done\n");
                 }
+            #else
+                wolfBoot_printf("Continuing boot while network core updates\n");
+            #endif
             }
         }
         else {
@@ -530,34 +630,51 @@ static void hal_net_check_version(void)
         }
     }
     /* inform network core to boot */
-    hal_shm_status_set(&shm->app, SHARED_STATUS_DO_BOOT);
+    hal_shm_status_set(&shm->core.app, SHARED_STATUS_DO_BOOT);
 #else /* TARGET_nrf5340_net */
-    hal_net_get_image(&img, &shm->net);
-    hal_shm_status_set(&shm->net, SHARED_STATUS_READY);
-
-    /* wait for do_boot or update from app core - 2 seconds */
-    wolfBoot_printf("Waiting for status from app core...\n");
-    ret = hal_shm_status_wait(&shm->app,
-        (SHARED_STATUS_UPDATE_START | SHARED_STATUS_DO_BOOT), 2*1000);
-
-    /* are we updating? */
-    if (ret == 0 && shm->app.status == SHARED_STATUS_UPDATE_START) {
-        wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
-            shm->net.version, shm->app.version, shm->net.size, shm->app.size);
-        do_update = 1;
-
-        /* trigger update */
-        wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
-
-        /* proceed to update_flash routines */
+    /* wait for IPC event indicating application core exists */
+    ret = hal_net_signal_wait_ready(500);
+    if (ret == 0) {
+        /* enable use of shared memory */
+        shm = (SharedMem_t*)SHARED_MEM_ADDR;
+        enableShm = 1;
     }
+    else {
+        wolfBoot_printf("App core timeout, disable shared mem\n");
+    }
+
+    /* inform application core we are ready */
+    hal_shm_status_set(&shm->core.net, SHARED_STATUS_READY);
+
+    if (enableShm) {
+        wolfBoot_printf("App core ready\n");
+
+        hal_net_get_image(&img, &shm->core.net);
+        hal_shm_status_set(&shm->core.net, SHARED_STATUS_VERSION);
+
+        /* wait for do_boot or update from app core - 2 seconds */
+        wolfBoot_printf("Waiting for update or boot from app core...\n");
+        status = hal_shm_status_wait(&shm->core.app,
+            (SHARED_STATUS_UPDATE_START | SHARED_STATUS_DO_BOOT), 2*1000);
+
+        /* are we updating? */
+        if (status == SHARED_STATUS_UPDATE_START) {
+            wolfBoot_printf("Starting update: Ver %d->%d, Size %d->%d\n",
+                shm->core.net.version, shm->core.app.version,
+                shm->core.net.size, shm->core.app.size);
+            doUpdateNet = 1;
+
+            /* trigger update */
+            wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+        }
+    }
+    /* proceed to update_flash routines */
 #endif /* TARGET_nrf5340_* */
 exit:
     wolfBoot_printf("Status: App %s (ver %d), Net %s (ver %d)\n",
-        hal_shm_status_string(shm->app.status), shm->app.version,
-        hal_shm_status_string(shm->net.status), shm->net.version);
+        hal_shm_status_string(shm->core.app.status), shm->core.app.version,
+        hal_shm_status_string(shm->core.net.status), shm->core.net.version);
 }
-#endif /* !DISABLE_SHARED_MEM */
 
 
 void hal_init(void)
@@ -573,18 +690,12 @@ void hal_init(void)
     uart_write(bootStr, strlen(bootStr));
 #endif
 
-#ifdef TARGET_nrf5340_app
-    /* Allow the network core to access shared SDRAM at 0x2000_0000 */
-    SPU_EXTDOMAIN_PERM(0) =
-        (SPU_EXTDOMAIN_PERM_SECATTR_SECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
-#endif
+    hal_shm_init();
 
     /* need early init of external flash to support checking network core */
     spi_flash_probe();
 
-#ifndef DISABLE_SHARED_MEM
     hal_net_check_version();
-#endif
 }
 
 
@@ -593,39 +704,35 @@ void hal_prepare_boot(void)
     /* TODO: Protect bootloader region of flash using SPU_FLASHREGION_PERM */
     //WOLFBOOT_ORIGIN
     //BOOTLOADER_PARTITION_SIZE
+    //FLASHREGION[n].PERM
 
-#ifndef DISABLE_SHARED_MEM
-#ifdef TARGET_nrf5340_net
-    if (do_update) {
-        /* signal application core update done */
-        struct wolfBoot_image img;
-        /* Reopen image and refresh information */
-        hal_net_get_image(&img, &shm->net);
-        wolfBoot_printf("Network version (after update): 0x%x\n",
-            shm->net.version);
-        hal_shm_status_set(&shm->net, SHARED_STATUS_UPDATE_DONE);
+    if (enableShm) {
+    #ifdef TARGET_nrf5340_net
+        if (doUpdateNet) {
+            /* signal application core update done */
+            struct wolfBoot_image img;
+            /* Reopen image and refresh information */
+            hal_net_get_image(&img, &shm->core.net);
+            wolfBoot_printf("Network version (after update): 0x%x\n",
+                shm->core.net.version);
+            hal_shm_status_set(&shm->core.net, SHARED_STATUS_UPDATE_DONE);
+        }
+        else {
+            hal_shm_status_set(&shm->core.net, SHARED_STATUS_DO_BOOT);
+        }
+    #endif
+
+    #if defined(TARGET_nrf5340_app) && defined(NRF_SYNC_CORES)
+        /* if core synchronization enabled,
+         * then wait for update_done or do_boot (5 seconds, 30 for update) */
+        wolfBoot_printf("Waiting for network core...\n");
+        (void)hal_shm_status_wait(&shm->core.net,
+            (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT),
+            doUpdateNet ? 30*1000 : 5*1000);
+    #endif
     }
-    else {
-        hal_shm_status_set(&shm->net, SHARED_STATUS_DO_BOOT);
-    }
-#endif
 
-#ifdef TARGET_nrf5340_app
-#ifdef NRF_SYNC_CORES
-    /* if core synchronization enabled,
-     * then wait for update_done or do_boot (5 seconds) */
-    wolfBoot_printf("Waiting for network core...\n");
-    (void)hal_shm_status_wait(&shm->net,
-        (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT), 5*1000);
-#endif /* NRF_SYNC_CORES */
-#endif /* TARGET_nrf5340_app */
-#endif /* !DISABLE_SHARED_MEM */
-
-#ifdef TARGET_nrf5340_app
-    /* Restore defaults preventing network core from accessing shared SDRAM */
-    SPU_EXTDOMAIN_PERM(0) =
-        (SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE | SPU_EXTDOMAIN_PERM_UNLOCK);
-#endif
+    hal_shm_cleanup();
 }
 
 #endif /* TARGET_* */

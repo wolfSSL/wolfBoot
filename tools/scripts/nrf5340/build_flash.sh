@@ -153,7 +153,6 @@ if [[ $DO_BUILD == 1 ]]; then
   make clean
   make $MAKE_ARGS
   cp test-app/image.bin tools/scripts/nrf5340/image_app.bin
-  cp test-app/image.bin tools/scripts/nrf5340/image_app_v${UPDATE_VERSION}.bin
   if [ ! -f tools/scripts/nrf5340/factory_app.bin ]; then
     cp test-app/image_v1_signed.bin tools/scripts/nrf5340/image_app_v1_signed.bin
     cp factory.bin tools/scripts/nrf5340/factory_app.bin

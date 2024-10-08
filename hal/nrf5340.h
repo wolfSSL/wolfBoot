@@ -387,7 +387,7 @@ void uart_write_sz(const char* c, unsigned int sz);
     #define IPC_BASE      (0x4002A000)
     #endif
 #else
-    #define IPC_BASE      (0x4002A000) /* network core */
+    #define IPC_BASE      (0x41012000) /* network core */
 #endif
 #define IPC_TASKS_SEND(n)      *((volatile uint32_t *)(IPC_BASE + 0x000 + (((n) & 0xF) * 0x4)))
 #define IPC_SUBSCRIBE_SEND(n)  *((volatile uint32_t *)(IPC_BASE + 0x080 + (((n) & 0xF) * 0x4)))
