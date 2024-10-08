@@ -595,15 +595,17 @@ static void hal_net_check_version(void)
             wolfBoot_verify_authenticity(&img) == 0)
         {
             wolfBoot_printf("Network image valid, loading into shared mem\n");
-            /* initialize remainder of shared memory with 0xFF (erased) */
-            memset(shm->data + shm->core.app.size, FLASH_BYTE_ERASED,
-                sizeof(shm->data) - shm->core.app.size);
             /* relocate image to shared ram */
         #ifdef EXT_FLASH
-            ret = ext_flash_read(PART_NET_ADDR, shm->data, shm->core.app.size);
+            /* must be multiple of 4 (READ.CNT length must be multiple of 4) */
+            ret = ext_flash_read(PART_NET_ADDR, shm->data,
+                (shm->core.app.size + 3) & ~3);
         #else
             memcpy(shm->data, img.hdr, shm->core.app.size);
         #endif
+            /* initialize remainder of shared memory with 0xFF (erased) */
+            memset(shm->data + shm->core.app.size, FLASH_BYTE_ERASED,
+                sizeof(shm->data) - shm->core.app.size);
             if (ret >= 0) {
                 doUpdateNet = 1;
 
