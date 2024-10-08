@@ -106,11 +106,11 @@ void sleep_us(uint32_t usec);
 
     #define SPU_BLOCK_SIZE (16 * 1024)
     #define SPU_FLASHREGION_PERM(n) *((volatile uint32_t *)(SPU_BASE + 0x600 + (((n) & 0x3F) * 0x4)))
-    #define SPU_FLASHREGION_PERM_EXEC    (1 << 0)
-    #define SPU_FLASHREGION_PERM_WRITE   (1 << 1)
-    #define SPU_FLASHREGION_PERM_READ    (1 << 2)
-    #define SPU_FLASHREGION_PERM_SECATTR (1 << 4)
-    #define SPU_FLASHREGION_PERM_LOCK    (1 << 8)
+    #define SPU_FLASHREGION_PERM_EXEC    (1 << 0) /* Allow instruction fetches from flash region */
+    #define SPU_FLASHREGION_PERM_WRITE   (1 << 1) /* Allow write operation to region */
+    #define SPU_FLASHREGION_PERM_READ    (1 << 2) /* Allow read operation from flash region */
+    #define SPU_FLASHREGION_PERM_SECATTR (1 << 4) /* Flash region n security attribute is secure */
+    #define SPU_FLASHREGION_PERM_LOCK    (1 << 8) /* The content of this register can't be changed until the next reset */
 #endif
 
 /* OTP */

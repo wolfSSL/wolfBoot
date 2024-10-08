@@ -700,13 +700,40 @@ void hal_init(void)
     hal_net_check_version();
 }
 
+/* enable write protection for the region of flash specified */
+int hal_flash_protect(uint32_t start, uint32_t len)
+{
+    /* only application core supports SPU */
+#ifdef TARGET_nrf5340_app
+    uint32_t region, n, i;
+
+    /* limit check */
+    if (start > FLASH_SIZE)
+        return -1;
+    /* truncate if exceeds flash size */
+    if (start + len > FLASH_SIZE)
+        len = FLASH_SIZE - start;
+
+    region = (start / SPU_BLOCK_SIZE);
+    n = (len / SPU_BLOCK_SIZE);
+
+    for (i = 0; i < n; i++) {
+        /* do not allow write to this region and lock till next reset */
+        SPU_FLASHREGION_PERM(region+i) = (
+            SPU_FLASHREGION_PERM_EXEC |
+            SPU_FLASHREGION_PERM_READ |
+            SPU_FLASHREGION_PERM_SECATTR |
+            SPU_FLASHREGION_PERM_LOCK
+        );
+    }
+#endif
+    return 0;
+}
 
 void hal_prepare_boot(void)
 {
-    /* TODO: Protect bootloader region of flash using SPU_FLASHREGION_PERM */
-    //WOLFBOOT_ORIGIN
-    //BOOTLOADER_PARTITION_SIZE
-    //FLASHREGION[n].PERM
+    /* Write protect bootloader region of flash */
+    hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
 
     if (enableShm) {
     #ifdef TARGET_nrf5340_net
