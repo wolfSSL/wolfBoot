@@ -2435,5 +2435,10 @@ int main(int argc, char** argv)
         wc_XmssKey_Free(&key.xmss);
 #endif
     }
+    else if (CMD.sign == SIGN_ML_DSA) {
+#ifdef WOLFSSL_WC_DILITHIUM
+        wc_MlDsaKey_Free(&key.ml_dsa);
+#endif
+    }
     return ret;
 }
