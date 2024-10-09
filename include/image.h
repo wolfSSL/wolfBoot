@@ -93,6 +93,9 @@ int wolfBot_get_dts_size(void *dts_addr);
 
 struct wolfBoot_image {
     uint8_t *hdr;
+#ifdef EXT_FLASH
+    uint8_t *hdr_cache;
+#endif
     uint8_t *trailer;
     uint8_t *sha_hash;
     uint8_t *fw_base;
@@ -510,6 +513,9 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
 
 struct wolfBoot_image {
     uint8_t *hdr;
+#ifdef EXT_FLASH
+    uint8_t *hdr_cache;
+#endif
     uint8_t *trailer;
     uint8_t *sha_hash;
     uint8_t *fw_base;
@@ -562,6 +568,9 @@ static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
 
 /* Defined in image.c */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
+#ifdef EXT_FLASH
+int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8_t* addr);
+#endif
 int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);

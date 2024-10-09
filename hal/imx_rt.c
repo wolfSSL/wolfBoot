@@ -66,12 +66,6 @@
 #include "xip/fsl_flexspi_nor_boot.h"
 
 /* #define DEBUG_EXT_FLASH */
-/* #define TEST_FLASH */
-
-#ifdef TEST_FLASH
-static int test_flash(void);
-#endif
-
 
 #ifdef __WOLFBOOT
 
@@ -891,11 +885,6 @@ void hal_init(void)
     uart_write("wolfBoot HAL Init\n", 18);
 #endif
     hal_flash_init();
-#ifdef TEST_FLASH
-    if (test_flash() != 0) {
-        wolfBoot_printf("Flash Test Failed!\n");
-    }
-#endif
 }
 
 void hal_prepare_boot(void)
@@ -976,7 +965,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     /**
      * Flash is memory mapped, so the address range must be invalidated in data cache
      * to ensure coherency between flash and cache.
-     * 
+     *
      * Also, both the address and size must be 32-byte aligned as cache-lines are 32 bytes
      * (see definition of DCACHE_InvalidateByRange).
      * To ensure all data is included we align the address downwards, and the length upwards.
@@ -1020,7 +1009,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     /**
      * Flash is memory mapped, so the address range must be invalidated in data cache
      * to ensure coherency between flash and cache.
-     * 
+     *
      * Also, both the address and size must be 32-byte aligned as cache-lines are 32 bytes
      * (see definition of DCACHE_InvalidateByRange).
      * To ensure all data is included we align the address downwards, and the length upwards.
@@ -1034,43 +1023,3 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         return -1;
     return 0;
 }
-
-#ifdef TEST_FLASH
-
-#ifndef TEST_ADDRESS
-#define TEST_ADDRESS (FLASH_BASE + 0x700000) /* 7MB */
-#endif
-/* #define TEST_FLASH_READONLY */
-
-static uint32_t pageData[WOLFBOOT_SECTOR_SIZE/4]; /* force 32-bit alignment */
-
-static int test_flash(void)
-{
-    int ret;
-    uint32_t i;
-
-#ifndef TEST_FLASH_READONLY
-    /* Erase sector */
-    ret = hal_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
-
-    /* Fill data into the page_buffer */
-    for (i=0; i<sizeof(pageData)/sizeof(pageData[0]); i++) {
-        pageData[i] = (i << 24) | (i << 16) | (i << 8) | i;
-    }
-    /* Write Page */
-    ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, sizeof(pageData));
-    wolfBoot_printf("Write Page: Ret %d\n", ret);
-#endif /* !TEST_FLASH_READONLY */
-
-    /* Compare Page */
-    ret = memcmp((void*)TEST_ADDRESS, pageData, sizeof(pageData));
-    if (ret != 0) {
-        wolfBoot_printf("Check Data @ %d failed\n", ret);
-        return ret;
-    }
-
-    wolfBoot_printf("Flash Test Passed\n");
-    return ret;
-}
-#endif /* TEST_FLASH */

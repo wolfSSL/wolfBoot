@@ -1,4 +1,8 @@
-/* spi_drv_nrf52.h
+/* nrf5340_net.c
+ *
+ * Copyright (C) 2024 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,29 +19,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef SPI_DRV_NRF52_H_INCLUDED
-#define SPI_DRV_NRF52_H_INCLUDED
+#ifdef TARGET_nrf5340_net
 
-#include <stdint.h>
+/* use code from nrf5340.c */
+#define TARGET_nrf5340
+#include "nrf5340.c"
 
-#include "hal/nrf52.h"
-
-/* SPI Pin Configuration (P0.x) */
-#if 1
-#define SPI_CS_PIN 13
-#define SPI_MOSI_PIN 4
-#define SPI_MISO_PIN 5
-#define SPI_SCLK_PIN 30
-#endif
-#if 0
-#define SPI_SCLK_PIN 5
-#define SPI_MISO_PIN 6
-#define SPI_MOSI_PIN 7
-#define SPI_CS_PIN 8
-#endif
-
-
-#define SPI_CS_FLASH    SPI_CS_PIN
-#define SPI_CS_PIO_BASE GPIO_BASE
-
-#endif
+#endif /* TARGET_* */

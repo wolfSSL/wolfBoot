@@ -853,3 +853,8 @@ ifneq ($(KEYVAULT_MAX_ITEMS),)
   CFLAGS+=-DKEYVAULT_MAX_ITEMS=$(KEYVAULT_MAX_ITEMS)
 endif
 
+# Support for using a custom partition ID
+ifneq ($(WOLFBOOT_PART_ID),)
+  CFLAGS+=-DHDR_IMG_TYPE_APP=$(WOLFBOOT_PART_ID)
+  SIGN_OPTIONS+=--id $(WOLFBOOT_PART_ID)
+endif

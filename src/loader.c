@@ -33,7 +33,9 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_flash.h"
+#ifdef UART_FLASH
 #include "uart_flash.h"
+#endif
 #include "wolfboot/wolfboot.h"
 
 #ifdef WOLFBOOT_TPM
@@ -100,6 +102,9 @@ int main(void)
 #endif
 
     hal_init();
+#ifdef TEST_FLASH
+    hal_flash_test();
+#endif
     spi_flash_probe();
 #ifdef UART_FLASH
     uart_init(UART_FLASH_BITRATE, 8, 'N', 1);

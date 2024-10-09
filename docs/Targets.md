@@ -4,25 +4,28 @@ This README describes configuration of supported targets.
 
 ## Supported Targets
 
+* [Simulated](#simulated)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
 * [Microchip SAMA5D3](#microchip-sama5d3)
 * [Microchip SAME51](#microchip-same51)
+* [Nordic nRF52840](#nordic-nrf52840)
+* [Nordic nRF5340](#nordic-nrf5340)
+* [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
-* [NXP iMX-RT](#nxp-imx-rt)
-* [Nordic nRF52840](#nordic-nrf52840)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [Renesas RA6M4](#renesas-ra6m4)
 * [Renesas RX65N](#renesas-rx65n)
 * [Renesas RX72N](#renesas-rx72n)
 * [Renesas RZN2L](#renesas-rzn2l)
+* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32C0](#stm32c0)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -34,7 +37,6 @@ This README describes configuration of supported targets.
 * [STM32L5](#stm32l5)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
-* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 
@@ -2176,6 +2178,213 @@ Example of flash memory layout and configuration on the nRF52:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS   0x57000
 #define WOLFBOOT_PARTITION_UPDATE_ADDRESS 0x58000
 ```
+
+
+## Nordic nRF5340
+
+Tested with the Nordic nRF5340-DK. This device has two cores:
+1) Application core: Cortex-M33 at 128MHz, w/TrustZone, 1MB flash, 512KB RAM
+2) Network core: Cortex-M33 at 64MHz, 256KB Flash and 64KB RAM
+
+The DK board has two virtual COM ports. Application core and Network core will each output to different VCOM ports.
+The cores communicate firmware updates using shared memory hosted on application core.
+
+Example Boot Output:
+
+Application Core:
+
+```
+wolfBoot HAL Init (app core)
+Boot header magic 0x00000000 invalid at 0x20000128
+Update partition: 0x100000 (sz 4120, ver 0x1, type 0x202)
+Network Image: Update not found
+Network Core: Releasing for boot
+Status: App 8 (ver 0), Net 1 (ver 1)
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Booting version: 0x1
+Waiting for network core...
+========================
+nRF5340 wolfBoot (app core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x1
+========================
+```
+
+Network Core:
+
+```
+wolfBoot HAL Init (net core)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x202)
+Network Image: Ver 0x1, Size 4120
+Waiting for status from app core...
+Status: App 8 (ver 0), Net 1 (ver 2)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x202)
+Boot header magic 0xF7E99810 invalid at 0x21000128
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x202)
+Booting version: 0x1
+========================
+nRF5340 wolfBoot (net core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x1
+========================
+```
+
+Example output when doing an update:
+
+Application Core:
+
+```
+wolfBoot HAL Init (app core)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Network Image: Ver 0x2, Size 4832
+Found Network Core update: Ver 1->2, Size 4376->5088
+Network image valid, loading into shared mem
+Waiting for net core update to finish...
+Network core firmware update done
+Status: App 8 (ver 2), Net 4 (ver 2)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Staring Update (fallback allowed 0)
+Update partition: 0x0 (sz 4832, ver 0x2, type 0x201)
+Boot partition: 0xC000 (sz 4832, ver 0x1, type 0x201)
+Versions: Current 0x1, Update 0x2
+Copy sector 0 (part 1->2)
+Copy sector 0 (part 0->1)
+Copy sector 0 (part 2->0)
+Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Copy sector 1 (part 1->2)
+Copy sector 1 (part 0->1)
+Copy sector 1 (part 2->0)
+Erasing remainder of partitions (235 sectors)...
+Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
+Boot header magic 0x00000000 invalid at 0x20000128
+Copy sector 236 (part 0->2)
+Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
+Booting version: 0x2
+Waiting for network core...
+========================
+nRF5340 wolfBoot (app core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x2
+========================
+```
+
+Network Core:
+
+```
+wolfBoot HAL Init (net core)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x201)
+Network Image: Ver 0x1, Size 4120
+Waiting for status from app core...
+Starting update: Ver 1->2, Size 4376->4376
+Status: App 2 (ver 2), Net 1 (ver 1)
+Update partition: 0x100000 (sz 4120, ver 0x2, type 0x202)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x201)
+Update partition: 0x100000 (sz 4120, ver 0x2, type 0x202)
+Staring Update (fallback allowed 0)
+Update partition: 0x100000 (sz 4120, ver 0x2, type 0x202)
+Boot partition: 0x100C000 (sz 4120, ver 0x1, type 0x201)
+Versions: Current 0x1, Update 0x2
+Copy sector 0 (part 1->2)
+Copy sector 0 (part 0->1)
+Copy sector 0 (part 2->0)
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Update partition: 0x100000 (sz 4120, ver 0x1, type 0x201)
+Copy sector 1 (part 1->2)
+Copy sector 1 (part 0->1)
+Copy sector 1 (part 2->0)
+Copy sector 2 (part 1->2)
+Copy sector 2 (part 0->1)
+Copy sector 2 (part 2->0)
+Erasing remainder of partitions (88 sectors)...
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Update partition: 0x100000 (sz 4120, ver 0x1, type 0x201)
+Copy sector 90 (part 0->2)
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Booting version: 0x2
+Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
+Network Image: Ver 0x2, Size 4120
+Network version (after update): 0x2
+========================
+nRF5340 wolfBoot (net core)
+Copyright 2024 wolfSSL Inc
+GPL v3
+Version : 0x2
+========================
+```
+
+### Building / Flashing Nordic nRF5340
+
+You may optionally use `./tools/scripts/nrf5340/build_flash.sh` for building and flashing both cores.
+
+The `nrfjprog` can be used to program external QSPI flash for testing. Example: `nrfjprog --program <qspi_content.hex> --verify -f nrf53`
+
+#### Application Core
+
+Flash base: 0x00000000, SRAM base: 0x20000000
+
+Building Application core:
+
+```sh
+cp config/examples/nrf5340.config .config
+make clean
+make
+```
+
+Flashing Application core with JLink:
+
+```
+JLinkExe -device nRF5340_xxAA_APP -if SWD -speed 4000 -jtagconf -1,-1 -autoconnect 1
+loadbin factory.bin 0x0
+rnh
+```
+
+#### Network Core
+
+Flash base: 0x01000000, SRAM base: 0x21000000
+
+Building Network core:
+
+```sh
+cp config/examples/nrf5340_net.config .config
+make clean
+make
+```
+
+Flashing Network core with JLink:
+
+```
+JLinkExe -device nRF5340_xxAA_NET -if SWD -speed 4000 -jtagconf -1,-1 -autoconnect 1
+loadbin factory.bin 0x01000000
+rnh
+```
+
+### Debugging Nordic nRF5340
+
+Debugging with JLink:
+
+1) Start GDB Server:
+```
+JLinkGDBServer -device nRF5340_xxAA_APP -if SWD -port 3333
+```
+
+2) Start GDB
+This will use .gdbinit, but can supply `wolfboot.elf -ex "target remote localhost:3333"` if permissions not allowing.
+
+```
+arm-none-eabi-gdb
+b main
+mon reset
+c
+```
+
 
 ## Simulated
 

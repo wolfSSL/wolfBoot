@@ -453,8 +453,12 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
     if (part == PART_BOOT) {
     #ifdef EXT_FLASH
         if (FLAGS_BOOT_EXT()) {
+            /* use ext_cache and 32-bit writes to avoid any underlying hardware
+             * issues with 1-byte write */
+            ext_cache &= ~0xFF;
+            ext_cache |= val;
             ext_flash_check_write(PART_BOOT_ENDFLAGS - (sizeof(uint32_t) + at),
-                (void *)&val, 1);
+                (void *)&ext_cache, sizeof(uint32_t));
         }
         else
     #endif
@@ -465,8 +469,12 @@ static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
     else if (part == PART_UPDATE) {
     #ifdef EXT_FLASH
         if (FLAGS_UPDATE_EXT()) {
+            /* use ext_cache and 32-bit writes to avoid any underlying hardware
+             * issues with 1-byte write */
+            ext_cache &= ~0xFF;
+            ext_cache |= val;
             ext_flash_check_write(PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + at),
-                (void *)&val, 1);
+                (void *)&ext_cache, sizeof(uint32_t));
         }
         else
     #endif
@@ -1204,11 +1212,9 @@ uint32_t wolfBoot_get_diffbase_version(uint8_t part)
 uint16_t wolfBoot_get_image_type(uint8_t part)
 {
     uint8_t *image = wolfBoot_get_image_from_part(part);
-
     if (image) {
-      return wolfBoot_get_blob_type(image);
+        return wolfBoot_get_blob_type(image);
     }
-
     return 0;
 }
 #endif /* WOLFBOOT_FIXED_PARTITIONS */

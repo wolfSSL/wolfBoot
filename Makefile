@@ -28,11 +28,13 @@ BIG_ENDIAN?=0
 USE_GCC?=1
 USE_GCC_HEADLESS?=1
 FLASH_OTP_KEYSTORE?=0
+BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 OBJS:= \
 	./src/string.o \
 	./src/image.o \
 	./src/libwolfboot.o \
+	./hal/hal.o \
 	./hal/$(TARGET).o
 
 ifeq ($(SIGN),NONE)
@@ -140,7 +142,6 @@ ifeq ($(FLASH_OTP_KEYSTORE),1)
 endif
 
 ASFLAGS:=$(CFLAGS)
-BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 all: $(MAIN_TARGET)
 

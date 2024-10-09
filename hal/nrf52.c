@@ -19,32 +19,42 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifdef TARGET_nrf52
+
 #include <stdint.h>
 #include "image.h"
+#include "nrf52.h"
 
-/* Assembly helpers */
-#define DMB() __asm__ volatile ("dmb")
+#ifdef DEBUG_UART
+void uart_init(void)
+{
+    UART0_BAUDRATE = BAUD_115200;
+    UART0_ENABLE = 1;
+}
 
+static void uart_write_char(char c)
+{
+    UART0_EVENT_ENDTX = 0;
 
-/* Instantiation */
-#define CLOCK_CONTROL_BASE (0x40000000)
-#define NVMC_BASE (0x4001E000)
+    UART0_TXD_PTR = (uint32_t)(&c);
+    UART0_TXD_MAXCOUNT = 1;
+    UART0_TASK_STARTTX = 1;
+    while(UART0_EVENT_ENDTX == 0)
+        ;
+}
 
-
-/* Flash write/erase control */
-#define NVMC_CONFIG *((volatile uint32_t *)(NVMC_BASE + 0x504))
-#define NVMC_ERASEPAGE *((volatile uint32_t *)(NVMC_BASE + 0x508))
-#define NVMC_READY *((volatile uint32_t *)(NVMC_BASE + 0x400))
-#define NVMC_CONFIG_REN 0
-#define NVMC_CONFIG_WEN 1
-#define NVMC_CONFIG_EEN 2
-
-#define FLASH_PAGE_SIZE (4096)
-
-/* Clock control */
-#define TASKS_HFCLKSTART   *((volatile uint32_t *)(CLOCK_CONTROL_BASE + 0x000))
-#define TASKS_HFCLKSTOP    *((volatile uint32_t *)(CLOCK_CONTROL_BASE + 0x004))
-#define TASKS_HFCLKSTARTED *((volatile uint32_t *)(CLOCK_CONTROL_BASE + 0x100))
+void uart_write(const char* buf, unsigned int sz)
+{
+    uint32_t pos = 0;
+    while (sz-- > 0) {
+        char c = buf[pos++];
+        if (c == '\n') { /* handle CRLF */
+            uart_write_char('\r');
+        }
+        uart_write_char(c);
+    }
+}
+#endif /* DEBUG_UART */
 
 static void RAMFUNCTION flash_wait_complete(void)
 {
@@ -117,3 +127,4 @@ void hal_prepare_boot(void)
     TASKS_HFCLKSTOP = 1;
 }
 
+#endif /* TARGET_nrf52 */

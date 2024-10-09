@@ -123,6 +123,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf52840.config
 
+  nrf5340_app_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340.config
+
+  nrf5340_net_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340_net.config
+
   nxp_p1021_test:
     uses: ./.github/workflows/test-build.yml
     with:
@@ -195,6 +207,14 @@ jobs:
       arch: host
       config-file: ./config/examples/sim.config
       make-args: SPMATH=1 WOLFBOOT_SMALL_STACK=0 WOLFBOOT_HUGE_STACK=1
+
+  sim_multi_sector_erase:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: CFLAGS_EXTRA=-DWOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+
 
   # TODO: SP math with small stack has issues
 

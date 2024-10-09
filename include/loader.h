@@ -102,8 +102,10 @@ static inline void wolfBoot_panic(void)
     wolfBoot_panicked++;
 }
 #else
+#include "printf.h"
 static inline void wolfBoot_panic(void)
 {
+    wolfBoot_printf("wolfBoot: PANIC!\n");
     while(1)
         ;
 }

@@ -23,6 +23,7 @@
 
 #include "image.h"
 #include "loader.h"
+#include "printf.h"
 #include "wolfboot/wolfboot.h"
 
 extern unsigned int _start_text;
@@ -296,11 +297,97 @@ asm(
 
 #endif /* CORTEX_R5 */
 
+#ifdef DEBUG_HARDFAULT
+__attribute__((section(".boot"))) __attribute__((used))
+void HardFault_HandlerC( uint32_t *hardfault_args )
+{
+    /* Using volatile to prevent the compiler/linker optimizing them out */
+    volatile uint32_t stacked_r0;
+    volatile uint32_t stacked_r1;
+    volatile uint32_t stacked_r2;
+    volatile uint32_t stacked_r3;
+    volatile uint32_t stacked_r12;
+    volatile uint32_t stacked_lr;
+    volatile uint32_t stacked_pc;
+    volatile uint32_t stacked_psr;
+    volatile uint32_t _CFSR;
+    volatile uint32_t _HFSR;
+    volatile uint32_t _DFSR;
+    volatile uint32_t _AFSR;
+    volatile uint32_t _BFAR;
+    volatile uint32_t _MMAR;
+
+    stacked_r0 =  ((uint32_t)hardfault_args[0]);
+    stacked_r1 =  ((uint32_t)hardfault_args[1]);
+    stacked_r2 =  ((uint32_t)hardfault_args[2]);
+    stacked_r3 =  ((uint32_t)hardfault_args[3]);
+    stacked_r12 = ((uint32_t)hardfault_args[4]);
+    stacked_lr =  ((uint32_t)hardfault_args[5]);
+    stacked_pc =  ((uint32_t)hardfault_args[6]);
+    stacked_psr = ((uint32_t)hardfault_args[7]);
+
+    /* Configurable Fault Status Register */
+    /* Consists of MMSR, BFSR and UFSR */
+    _CFSR = (*((volatile uint32_t *)(0xE000ED28)));
+    /* Hard Fault Status Register */
+    _HFSR = (*((volatile uint32_t *)(0xE000ED2C)));
+    /* Debug Fault Status Register */
+    _DFSR = (*((volatile uint32_t *)(0xE000ED30)));
+    /* Auxiliary Fault Status Register */
+    _AFSR = (*((volatile uint32_t *)(0xE000ED3C)));
+    /* MemManage Fault Address Register */
+    _MMAR = (*((volatile uint32_t *)(0xE000ED34)));
+    /* Bus Fault Address Register */
+    _BFAR = (*((volatile uint32_t *)(0xE000ED38)));
+
+    wolfBoot_printf("\n\nHard fault handler (all numbers in hex):\n");
+    wolfBoot_printf("R0 = %lx\n", stacked_r0);
+    wolfBoot_printf("R1 = %lx\n", stacked_r1);
+    wolfBoot_printf("R2 = %lx\n", stacked_r2);
+    wolfBoot_printf("R3 = %lx\n", stacked_r3);
+    wolfBoot_printf("R12 = %lx\n", stacked_r12);
+    wolfBoot_printf("LR [R14] = %lx  subroutine call return address\n",
+        stacked_lr);
+    wolfBoot_printf("PC [R15] = %lx  program counter\n", stacked_pc);
+    wolfBoot_printf("PSR = %lx\n", stacked_psr);
+    wolfBoot_printf("CFSR = %lx\n", _CFSR);
+    wolfBoot_printf("HFSR = %lx\n", _HFSR);
+    wolfBoot_printf("DFSR = %lx\n", _DFSR);
+    wolfBoot_printf("AFSR = %lx\n", _AFSR);
+    wolfBoot_printf("MMAR = %lx\n", _MMAR);
+    wolfBoot_printf("BFAR = %lx\n", _BFAR);
+
+    /* Break into the debugger */
+    __asm("BKPT #0\n");
+}
+
+__attribute__((section(".boot")))  __attribute__((naked))
+void isr_fault(void)
+{
+    __asm volatile
+    (
+        " movs r0,#4      \n"  /* load bit mask into R0 */
+        " mov  r1, lr     \n"  /* load link register into R1 */
+        " tst r0, r1      \n"  /* compare with bitmask */
+        " beq _MSP        \n"  /* if bitmask is set: stack pointer is in PSP. Otherwise in MSP */
+        " mrs r0, psp     \n"  /* otherwise: stack pointer is in PSP */
+        " b _GetPC        \n"  /* go to part which loads the PC */
+        "_MSP:            \n"  /* stack pointer is in MSP register */
+        " mrs r0, msp     \n"  /* load stack pointer into R0 */
+        "_GetPC:          \n"  /* find out where the hard fault happened */
+        " ldr r1,[r0,#20] \n"  /* load program counter into R1. R1 contains address of the next instruction where the hard fault happened */
+        " ldr r2, =HardFault_HandlerC \n"
+        " bx r2           \n"
+        " bx lr           \n"  /* decode more information. R0 contains pointer to stack frame */
+    );
+}
+#else
 void isr_fault(void)
 {
     /* Panic. */
     wolfBoot_panic();
 }
+#endif /* DEBUG_HARDFAULT */
 
 void isr_empty(void)
 {

@@ -61,9 +61,6 @@
 
 /* forward declaration */
 int hal_flash_init(void);
-#ifdef TEST_FLASH
-static int test_flash(void);
-#endif
 
 static void hal_panic(void)
 {
@@ -395,10 +392,6 @@ void hal_init(void)
 
     hal_flash_init();
 
-#ifdef TEST_FLASH
-    test_flash();
-#endif
-
 #if defined(WOLFBOOT_RENESAS_TSIP) && \
     !defined(WOLFBOOT_RENESAS_APP)
     err = wolfCrypt_Init();
@@ -636,58 +629,3 @@ void* hal_get_update_address(void)
 {
     return (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 }
-
-#ifdef TEST_FLASH
-
-#ifndef TEST_ADDRESS
-/* 3,840 KB offset in 4MB flash */
-/* 1,792 KB offset in 2MB flash */
-#define TEST_ADDRESS (0xFFFC0000)
-#endif
-
-/* #define TEST_FLASH_READONLY */
-
-static uint8_t pageData[1024];
-
-static int test_flash(void)
-{
-    int ret;
-    uint32_t i, len;
-    uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
-
-    /* Setup test data */
-    for (i=0; i<sizeof(pageData); i++) {
-        ((uint8_t*)pageData)[i] = (i & 0xff);
-    }
-
-    /* Test writting 1 - 1024 */
-    for (len=1; len<(int)sizeof(pageData); len++) {
-    #ifndef TEST_FLASH_READONLY
-        /* Erase sector */
-        hal_flash_unlock();
-        ret = hal_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-        hal_flash_lock();
-        if (ret != 0) {
-            wolfBoot_printf("Erase Sector failed: Ret %d\n", ret);
-            break;
-        }
-
-        /* Write variable length sector */
-        hal_flash_unlock();
-        ret = hal_flash_write(TEST_ADDRESS, (uint8_t*)pageData, len);
-        hal_flash_lock();
-        wolfBoot_printf("Write Page (len %d): Ret %d\n", len, ret);
-    #endif /* !TEST_FLASH_READONLY */
-
-        for (i=0; i<len; i++) {
-            if (pageData[i] != pagePtr[i]) {
-                wolfBoot_printf("Check Data @ %d with len %d failed\n", i, len);
-                return -ret;
-            }
-        }
-    }
-
-    wolfBoot_printf("Flash Test Passed\n");
-    return ret;
-}
-#endif /* TEST_FLASH */

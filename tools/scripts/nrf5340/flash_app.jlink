@@ -1,0 +1,7 @@
+device nRF5340_xxAA_APP
+si SWD
+speed 4000
+jtagconf -1,-1
+connect
+loadbin tools/scripts/nrf5340/factory_app.bin 0x0
+quit

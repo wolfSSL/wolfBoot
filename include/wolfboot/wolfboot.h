@@ -112,7 +112,9 @@ extern "C" {
 
 #define HDR_IMG_TYPE_PART_MASK    0x000F
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
+#ifndef HDR_IMG_TYPE_APP
 #define HDR_IMG_TYPE_APP          0x0001
+#endif
 
  #define KEYSTORE_PUBKEY_SIZE_NONE    0
  #define KEYSTORE_PUBKEY_SIZE_ED25519 32

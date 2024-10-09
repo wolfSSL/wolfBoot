@@ -338,11 +338,16 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
                     IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
         } else {
+            wolfBoot_printf("Delta version check failed! "
+                "Cur 0x%x, Upd 0x%x, Delta 0x%x\n",
+                cur_v, upd_v, delta_base_v);
             ret = -1;
         }
     } else {
         if (!resume && (cur_v != delta_base_v)) {
             /* Wrong base image, cannot apply delta patch */
+            wolfBoot_printf("Delta Base 0x%x != Cur 0x%x\n",
+                cur_v, delta_base_v);
             ret = -1;
         } else {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
@@ -438,9 +443,11 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
         sector++;
     }
+#ifndef DISABLE_BACKUP
     /* start re-entrant final erase, return code is only for resumption in
-     * wolfBoot_start*/
+     * wolfBoot_start */
     wolfBoot_swap_and_final_erase(0);
+#endif
 out:
 #ifdef EXT_FLASH
     ext_flash_lock();
@@ -484,7 +491,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
     /* we need to pre-set flag to SECT_FLAG_NEW in case magic hasn't been set
-     * on the update partion as part of the delta update direction check. if
+     * on the update partition as part of the delta update direction check. if
      * magic has not been set flag will have an un-determined value when we go
      * to check it */
     uint8_t flag = SECT_FLAG_NEW;
@@ -505,9 +512,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t up_v;
 #endif
     uint32_t cur_ver, upd_ver;
-#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-    size_t remainderBytes;
-#endif
 
     wolfBoot_printf("Staring Update (fallback allowed %d)\n", fallback_allowed);
 
@@ -526,24 +530,26 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * checks on the firmware update
      * before starting the swap
      */
-
     update_type = wolfBoot_get_image_type(PART_UPDATE);
 
     wolfBoot_get_update_sector_flag(0, &flag);
     /* Check the first sector to detect interrupted update */
     if (flag == SECT_FLAG_NEW) {
-        if (((update_type & 0x000F) != HDR_IMG_TYPE_APP) ||
-            ((update_type & 0xFF00) != HDR_IMG_TYPE_AUTH)) {
-            wolfBoot_printf("Invalid update type %d\n", update_type);
+        if (((update_type & HDR_IMG_TYPE_PART_MASK) != HDR_IMG_TYPE_APP) ||
+            ((update_type & HDR_IMG_TYPE_AUTH_MASK) != HDR_IMG_TYPE_AUTH)) {
+            wolfBoot_printf("Update type invalid 0x%x!=0x%x\n",
+                update_type, HDR_IMG_TYPE_AUTH);
             return -1;
         }
         if (update.fw_size > MAX_UPDATE_SIZE - 1) {
             wolfBoot_printf("Invalid update size %u\n", update.fw_size);
             return -1;
         }
-        if (!update.hdr_ok || (wolfBoot_verify_integrity(&update) < 0)
+        if (!update.hdr_ok
+                || (wolfBoot_verify_integrity(&update) < 0)
                 || (wolfBoot_verify_authenticity(&update) < 0)) {
-            wolfBoot_printf("Update integrity/verification failed!\n");
+            wolfBoot_printf("Update verify failed: Hdr %d, Hash %d, Sig %d\n",
+                update.hdr_ok, update.sha_ok, update.signature_ok);
             return -1;
         }
         PART_SANITY_CHECK(&update);
@@ -664,27 +670,30 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
     }
 
-#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-/* Performant option: Erase remainder of flash sectors in one HAL command */
-
+    /* Erase remainder of partitions */
+#if defined(WOLFBOOT_FLASH_MULTI_SECTOR_ERASE) || defined(PRINTF_ENABLED)
+    /* calculate number of remaining bytes */
+    /* reserve 1 sector for status (2 sectors for NV write once) */
 #ifdef NVM_FLASH_WRITEONCE
-   /* erase up until the start of the second-to-last sector for writeonce */
-    remainderBytes =
-        WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
 #else
-   /* erase up until the start of the last sector */
-    remainderBytes =
-        WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
 #endif
-    wb_flash_erase(&boot, sector * sector_size, remainderBytes);
-    wb_flash_erase(&update, sector * sector_size, remainderBytes);
 
-#else /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
-/* Smaller code size option: Iterate over every remaining sector and erase it
- * individually. Required on some targets (stm32f4) to pass code size check */
+    wolfBoot_printf("Erasing remainder of partitions (%d sectors)...\n",
+        size/sector_size);
+#endif
 
-    /* erase to the last sector, writeonce has 2 sectors */
-    while((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
+#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+    /* Erase remainder of flash sectors in one HAL command. */
+    /* This can improve performance if the HAL supports erase of
+     * multiple sectors */
+    wb_flash_erase(&boot, sector * sector_size, size);
+    wb_flash_erase(&update, sector * sector_size, size);
+#else
+    /* Iterate over every remaining sector and erase individually. */
+    /* This loop is smallest code size */
+    while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
         sector_size
     #ifdef NVM_FLASH_WRITEONCE
         * 2
@@ -694,8 +703,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wb_flash_erase(&update, sector * sector_size, sector_size);
         sector++;
     }
-
-#endif /* !WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
+#endif /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
 
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start*/
@@ -707,7 +715,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     hal_flash_lock();
 
 #else /* DISABLE_BACKUP */
-    /* Direct Swap without power fail saftey */
+    /* Direct Swap without power fail safety */
 
     hal_flash_unlock();
     #ifdef EXT_FLASH
@@ -724,6 +732,12 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wolfBoot_copy_sector(&update, &boot, sector);
         sector++;
     }
+    /* erase remainder of partition */
+#ifdef PRINTF_ENABLED
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size);
+    wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
+        size/sector_size);
+#endif
     while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;
@@ -872,9 +886,8 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
-    bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
+    bootRet =   wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
-
 
 #if !defined(DISABLE_BACKUP)
     /* resume the final erase in case the power failed before it finished */
