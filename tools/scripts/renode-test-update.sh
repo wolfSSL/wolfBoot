@@ -48,6 +48,17 @@ if (echo $TEST_OPTIONS | grep "ext_XMSS" &>/dev/null); then
         cd ../../ || exit 2
 fi
 
+# ML-DSA test
+if (echo $TEST_OPTIONS | grep "ML_DSA" &>/dev/null); then
+    # Need git.
+    apt install -y git
+
+    # wolfSSL needs to be on latest master for ML-DSA support. Also, we need to
+    # add the wolfssl module as a safe directory so docker can use it.
+    git config --global --add safe.directory /workspace/lib/wolfssl || exit 2
+    cd lib/wolfssl && git checkout master && git pull && cd ../.. || exit 2
+fi
+
 make distclean
 make -C tools/keytools
 make -C tools/test-expect-version

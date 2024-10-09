@@ -1,8 +1,90 @@
 # Post-Quantum Signatures
 
-wolfBoot is adding support for post-quantum signatures. At present, support
-for LMS/HSS (https://www.rfc-editor.org/rfc/rfc8554.html), and XMSS/XMSS^MT
-(https://www.rfc-editor.org/rfc/rfc8391.html) has been added.
+wolfBoot is continuously adding support for post-quantum (PQ) signature
+algorithms as they mature. At present, support has been added for three NIST
+approved PQ signature algorithms:
+
+- ML-DSA: https://csrc.nist.gov/pubs/fips/204/final
+- LMS/HSS: https://csrc.nist.gov/projects/stateful-hash-based-signatures
+- XMSS/XMSS^MT: https://csrc.nist.gov/projects/stateful-hash-based-signatures
+
+ML-DSA is a PQ lattice-based algorithm, derived from
+CRYSTALS-DILITHIUM (a round three NIST finalist).
+
+LMS/HSS and XMSS/XMSS^MT are both PQ stateful hash-based signature (HBS)
+schemes, recommended in NIST SP 800-208.
+
+In terms of relative tradeoffs:
+- All three methods have fast verifying operations.
+- All three methods have variable length signature sizes.
+- ML-DSA key generation is much faster than LMS/HSS and XMSS/XMSS^MT.
+- ML-DSA public keys are larger than LMS/HSS and XMSS/XMSS^MT, and
+  variable sized.
+- LMS/HSS and XMSS/XMSS^MT have stateful private keys, which requires
+  more care with key generation and signing operations.
+
+See these config files for simulated target examples:
+
+- `config/examples/sim-ml-dsa.config`
+- `config/examples/sim-lms.config`
+- `config/examples/sim-xmss.config`
+
+## Lattice Based Signature Methods
+
+### ML-DSA
+
+ML-DSA (Module-Lattice Digital Signature Algorithm) was standardized in
+FIPS 204 (https://csrc.nist.gov/pubs/fips/204/final), based on its
+round 3 predecessor CRYSTALS-DILITHIUM.
+
+ML-DSA has three standardized parameter sets:
+
+- `ML-DSA-44`
+- `ML-DSA-65`
+- `ML-DSA-87`
+
+The numerical suffix (44, 65, 87) denotes the dimension of the matrix used
+in the underlying lattice construction.
+
+The private key, public key, signature size, and overall security strength
+all depend on the parameter set:
+
+```
+#
+#               Private Key   Public Key   Signature Size   Security Strength
+#   ML-DSA-44      2560          1312         2420            Category 2
+#   ML-DSA-65      4032          1952         3309            Category 3
+#   ML-DSA-87      4896          2592         4627            Category 5
+#
+```
+
+### ML-DSA Config
+
+A new ML-DSA sim example has been added here:
+
+```
+config/examples/sim-ml-dsa.config
+```
+
+The security category level is configured with `ML_DSA_LEVEL=<num>`, where
+num = 2, 3, 5. Here is an example from the `sim-ml-dsa.config` for category
+2:
+
+```
+# ML-DSA config examples:
+#
+# Category 2:
+ML_DSA_LEVEL=2
+IMAGE_SIGNATURE_SIZE=2420
+IMAGE_HEADER_SIZE?=4840
+```
+
+Note: The wolfcrypt implementation of ML-DSA (dilithium) builds to the
+FIPS 204 final standard by default. If you wish to conform to the older
+FIPS 204 draft standard, then build with `WOLFSSL_DILITHIUM_FIPS204_DRAFT`
+instead.
+
+## Stateful Hash-Based Signature Methods
 
 LMS/HSS and XMSS/XMSS^MT are both post-quantum stateful hash-based signature
 (HBS) schemes. They are known for having small public keys, relatively fast
@@ -19,7 +101,7 @@ See these links for more info on stateful HBS support and wolfSSL/wolfCrypt:
 - https://www.wolfssl.com/documentation/manuals/wolfssl/appendix07.html#post-quantum-stateful-hash-based-signatures
 - https://github.com/wolfSSL/wolfssl-examples/tree/master/pq/stateful_hash_sig
 
-## Supported PQ Signature Methods
+### Supported PQ HBS Options
 
 These four PQ signature options are supported:
 - LMS: uses wolfcrypt implementation from `wc_lms.c`, and `wc_lms_impl.c`.

@@ -472,6 +472,106 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 }
 #endif /* WOLFBOOT_SIGN_XMSS */
 
+#ifdef WOLFBOOT_SIGN_ML_DSA
+#include <wolfssl/wolfcrypt/dilithium.h>
+static void wolfBoot_verify_signature(uint8_t key_slot,
+        struct wolfBoot_image *img, uint8_t *sig)
+{
+    int       ret = 0;
+    MlDsaKey  ml_dsa;
+    uint8_t * pubkey = NULL;
+    int       pub_len = 0;
+    int       sig_len = 0;
+    int       verify_res = 0;
+
+    wolfBoot_printf("info: ML-DSA wolfBoot_verify_signature\n");
+
+    pubkey = keystore_get_buffer(key_slot);
+
+    if (pubkey == NULL) {
+        wolfBoot_printf("error: ML-DSA pubkey not found\n");
+        return;
+    }
+
+    ret = wc_MlDsaKey_Init(&ml_dsa, NULL, INVALID_DEVID);
+
+    if (ret != 0) {
+        wolfBoot_printf("error: wc_MlDsaKey_Init returned %d\n", ret);
+    }
+
+    if (ret == 0) {
+        /* Set the ML-DSA security level. */
+        ret = wc_MlDsaKey_SetParams(&ml_dsa, ML_DSA_LEVEL);
+
+        if (ret != 0) {
+            wolfBoot_printf("error: wc_MlDsaKey_SetParams(%d)" \
+                            " returned %d\n", ML_DSA_LEVEL, ret);
+        }
+    }
+
+    /* Make sure pub key matches parameters. */
+    if (ret == 0) {
+        ret = wc_MlDsaKey_GetPubLen(&ml_dsa, &pub_len);
+
+        if (ret != 0 || pub_len <= 0) {
+            wolfBoot_printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
+            ret = -1;
+        }
+        else if (pub_len != KEYSTORE_PUBKEY_SIZE_ML_DSA) {
+            wolfBoot_printf("error: ML-DSA pub key mismatch: got %d bytes " \
+                   "expected %d\n", pub_len, KEYSTORE_PUBKEY_SIZE_ML_DSA);
+            ret = -1;
+        }
+    }
+
+    /* Make sure sig len matches parameters. */
+    if (ret == 0) {
+        ret = wc_MlDsaKey_GetSigLen(&ml_dsa, &sig_len);
+
+        if (ret != 0 || sig_len <= 0) {
+            wolfBoot_printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
+            ret = -1;
+        }
+        else if (sig_len != IMAGE_SIGNATURE_SIZE) {
+            wolfBoot_printf("error: ML-DSA sig len mismatch: got %d bytes " \
+                   "expected %d\n", sig_len, IMAGE_SIGNATURE_SIZE);
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        /* Now import pub key. */
+        ret = wc_MlDsaKey_ImportPubRaw(&ml_dsa, pubkey, pub_len);
+
+        if (ret != 0) {
+            wolfBoot_printf("error: wc_MlDsaKey_ImportPubRaw returned: %d\n",
+                            ret);
+        }
+    }
+
+    if (ret == 0) {
+        wolfBoot_printf("info: using ML-DSA security level: %d\n",
+                        ML_DSA_LEVEL);
+
+        /* Finally verify signagure. */
+        ret = wc_MlDsaKey_Verify(&ml_dsa, sig, IMAGE_SIGNATURE_SIZE,
+                                 img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
+                                 &verify_res);
+
+        if (ret == 0 && verify_res == 1) {
+            wolfBoot_printf("info: wc_MlDsaKey_Verify returned OK\n");
+            wolfBoot_image_confirm_signature_ok(img);
+        }
+        else {
+            wolfBoot_printf("error: wc_MlDsaKey_Verify returned: ret=%d, "
+                            "res=%d\n", ret, verify_res);
+        }
+    }
+
+    wc_MlDsaKey_Free(&ml_dsa);
+}
+#endif /* WOLFBOOT_SIGN_ML_DSA */
+
 #endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY */
 
 

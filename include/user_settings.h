@@ -227,6 +227,29 @@ extern int tolower(int c);
 #   define NO_RSA
 #endif /* RSA */
 
+/* ML-DSA (dilithium) */
+#if defined(WOLFBOOT_SIGN_ML_DSA)
+#   define HAVE_DILITHIUM
+#   define WOLFSSL_WC_DILITHIUM
+#   define WOLFSSL_EXPERIMENTAL_SETTINGS
+    /* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
+     * standard by default. Uncomment this if you want the draft
+     * version instead. */
+    #if 0
+    #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+    #endif
+#   define WOLFSSL_DILITHIUM_VERIFY_ONLY
+#   define WOLFSSL_DILITHIUM_NO_LARGE_CODE
+#   define WOLFSSL_DILITHIUM_SMALL
+#   define WOLFSSL_DILITHIUM_VERIFY_SMALL_MEM
+#   define WOLFSSL_DILITHIUM_VERIFY_NO_MALLOC
+#   define WOLFSSL_DILITHIUM_NO_ASN1
+    /* dilithium needs these sha functions. */
+#   define WOLFSSL_SHA3
+#   define WOLFSSL_SHAKE256
+#   define WOLFSSL_SHAKE128
+#endif /* WOLFBOOT_SIGN_ML_DSA */
+
 #ifdef WOLFBOOT_HASH_SHA3_384
 #   define WOLFSSL_SHA3
 #   if defined(NO_RSA) && !defined(WOLFBOOT_TPM) && \

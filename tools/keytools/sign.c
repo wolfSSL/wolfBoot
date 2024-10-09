@@ -124,6 +124,10 @@ static inline int fp_truncate(FILE *f, size_t len)
     #endif
 #endif
 
+#ifdef WOLFSSL_WC_DILITHIUM
+    #include <wolfssl/wolfcrypt/dilithium.h>
+#endif
+
 #ifdef DEBUG_SIGNTOOL
     #include <wolfssl/wolfcrypt/logging.h>
 #endif
@@ -186,6 +190,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define SIGN_ECC521    HDR_IMG_TYPE_AUTH_ECC521
 #define SIGN_LMS       HDR_IMG_TYPE_AUTH_LMS
 #define SIGN_XMSS      HDR_IMG_TYPE_AUTH_XMSS
+#define SIGN_ML_DSA    HDR_IMG_TYPE_AUTH_ML_DSA
 
 
 #define ENC_OFF 0
@@ -245,6 +250,9 @@ static union {
 #endif
 #ifdef WOLFSSL_HAVE_XMSS
     XmssKey xmss;
+#endif
+#ifdef WOLFSSL_WC_DILITHIUM
+    MlDsaKey  ml_dsa;
 #endif
 } key;
 
@@ -467,8 +475,12 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     uint32_t idx = 0;
     int io_sz;
     FILE *f;
-#ifdef WOLFSSL_HAVE_XMSS
+#if defined(WOLFSSL_HAVE_XMSS)
     word32 priv_sz = 0;
+#endif
+#if defined(WOLFSSL_WC_DILITHIUM)
+    int    priv_sz = 0;
+    int    pub_sz = 0;
 #endif
 
     /* open and load key buffer */
@@ -746,6 +758,63 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             }
 #endif /* WOLFSSL_HAVE_XMSS */
 
+#ifdef WOLFSSL_WC_DILITHIUM
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
+        case SIGN_ML_DSA:
+            ret = wc_MlDsaKey_GetPubLen(&key.ml_dsa, &pub_sz);
+
+            if (ret != 0 || pub_sz <= 0) {
+                printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
+                break;
+            }
+
+            /* Get the ML-DSA private key length. This API returns
+             * the public + private length. */
+            ret = wc_MlDsaKey_GetPrivLen(&key.ml_dsa, &priv_sz);
+
+            if (ret != 0 || priv_sz <= 0) {
+                printf("error: wc_MlDsaKey_GetPrivLen returned %d\n", ret);
+                break;
+            }
+
+            if (priv_sz <= pub_sz) {
+                printf("error: ml-dsa: unexpected key lengths: %d, %d",
+                       priv_sz, pub_sz);
+                break;
+            }
+            else {
+                priv_sz -= pub_sz;
+            }
+
+            printf("info: ml-dsa priv len: %d\n", priv_sz);
+            printf("info: ml-dsa pub len: %d\n", pub_sz);
+
+            if ((int)*key_buffer_sz == (priv_sz + pub_sz)) {
+                /* priv + pub */
+                ret = wc_MlDsaKey_ImportPrivRaw(&key.ml_dsa, *key_buffer,
+                                                priv_sz);
+                *pubkey = (*key_buffer) + priv_sz;
+                *pubkey_sz = (*key_buffer_sz) - priv_sz;
+                ret = 0;
+                printf("Found ml-dsa key\n");
+                break;
+            }
+            else if ((int)*key_buffer_sz == pub_sz) {
+                /* pub only */
+                *pubkey = (*key_buffer);
+                *pubkey_sz = pub_sz;
+                ret = 0;
+                printf("Found ml-dsa public only key\n");
+                break;
+            }
+            else {
+                /* We don't recognize this as an ML-DSA pub or private key. */
+                printf("error: unrecognized ml-dsa key size: %d\n",
+                    *key_buffer_sz);
+                ret = -1;
+            }
+#endif /* WOLFSSL_WC_DILITHIUM */
+
             break;
     } /* end switch (CMD.sign) */
 
@@ -915,6 +984,19 @@ static int sign_digest(int sign, int hash_algo,
     }
     else
 #endif /* WOLFSSL_HAVE_XMSS */
+#ifdef WOLFSSL_WC_DILITHIUM
+    if (sign == SIGN_ML_DSA) {
+        /* Nothing else to do, ready to sign. */
+        if (ret == 0) {
+            ret = wc_MlDsaKey_Sign(&key.ml_dsa, signature, signature_sz,
+                                   digest, digest_sz, &rng);
+        }
+        if (ret != 0) {
+            fprintf(stderr, "error signing with XMSS: %d\n", ret);
+        }
+    }
+    else
+#endif /* WOLFSSL_WC_DILITHIUM */
     {
         ret = NOT_COMPILED_IN;
     }
@@ -1872,6 +1954,12 @@ int main(int argc, char** argv)
             sign_str = "XMSS";
         }
 #endif
+#ifdef HAVE_DILITHIUM
+        else if (strcmp(argv[i], "--ml_dsa") == 0) {
+            CMD.sign = SIGN_ML_DSA;
+            sign_str = "ML-DSA";
+        }
+#endif
         else if (strcmp(argv[i], "--sha256") == 0) {
             CMD.hash_algo = HASH_SHA256;
             hash_str = "SHA256";
@@ -2250,10 +2338,44 @@ int main(int argc, char** argv)
         CMD.signature_sz = sig_sz;
     }
 #endif /* WOLFSSL_HAVE_XMSS */
+#ifdef WOLFSSL_WC_DILITHIUM
+    else if (CMD.sign == SIGN_ML_DSA) {
+        int ml_dsa_ret = 0;
+        int sig_sz = 0;
+
+        ml_dsa_ret = wc_MlDsaKey_Init(&key.ml_dsa, NULL, INVALID_DEVID);
+        if (ml_dsa_ret != 0) {
+            fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ml_dsa_ret);
+            exit(1);
+        }
+
+        ml_dsa_ret = wc_MlDsaKey_SetParams(&key.ml_dsa, ML_DSA_LEVEL);
+        if (ml_dsa_ret != 0) {
+            fprintf(stderr, "error: wc_MlDsaKey_SetParamStr(%d)" \
+                    " returned %d\n", ML_DSA_LEVEL, ret);
+            exit(1);
+        }
+
+        printf("info: using ML-DSA parameters: %d\n", ML_DSA_LEVEL);
+
+        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, &sig_sz);
+        if (ml_dsa_ret != 0) {
+            fprintf(stderr, "error: wc_MlDsaKey_GetSigLen returned %d\n",
+                    ml_dsa_ret);
+            exit(1);
+        }
+
+        printf("info: ML-DSA signature size: %d\n", sig_sz);
+
+        CMD.header_sz = 2 * sig_sz;
+        CMD.signature_sz = sig_sz;
+    }
+#endif /* WOLFSSL_WC_DILITHIUM */
 
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
             CMD.header_sz == 0) {
-        printf("Invalid hash or signature type! %d\n", CMD.sign);
+        printf("Invalid hash or signature type! %d, %d, %d\n", CMD.sign,
+               CMD.signature_sz, CMD.header_sz);
         exit(2);
     }
 
@@ -2311,6 +2433,11 @@ int main(int argc, char** argv)
     else if (CMD.sign == SIGN_XMSS) {
 #ifdef WOLFSSL_HAVE_XMSS
         wc_XmssKey_Free(&key.xmss);
+#endif
+    }
+    else if (CMD.sign == SIGN_ML_DSA) {
+#ifdef WOLFSSL_WC_DILITHIUM
+        wc_MlDsaKey_Free(&key.ml_dsa);
 #endif
     }
     return ret;

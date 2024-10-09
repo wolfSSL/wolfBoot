@@ -61,15 +61,18 @@ extern "C" {
     extern const unsigned char rsa4096_pub_key[];
     extern unsigned int rsa4096_pub_key_len;
 #   define IMAGE_SIGNATURE_SIZE (512)
+/* In PQC methods the signature size is a function of
+ * the parameters. Therefore IMAGE_SIGNATURE_SIZE is
+ * set in options.mk from the .config file. */
 #elif defined(WOLFBOOT_SIGN_LMS)
-    /* Because signature size in LMS is function of
-     * LMS variables, IMAGE_SIGNATURE_SIZE is set in
-     * options.mk from the .config file. */
     extern const unsigned char lms_pub_key[];
     extern unsigned int lms_pub_key_len;
 #elif defined(WOLFBOOT_SIGN_XMSS)
     extern const unsigned char xmss_pub_key[];
     extern unsigned int xmss_pub_key_len;
+#elif defined(WOLFBOOT_SIGN_ML_DSA)
+    extern const unsigned char ml_dsa_pub_key[];
+    extern unsigned int ml_dsa_pub_key_len;
 #elif !defined(WOLFBOOT_NO_SIGN)
 #   error "No public key available for given signing algorithm."
 #endif /* Algorithm selection */
