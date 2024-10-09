@@ -666,7 +666,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     return len;
 }
 
-void pit_init(void)
+static void pit_init(void)
 {
     uint32_t pmc_pcr;
 
@@ -696,6 +696,29 @@ void sleep_us(uint32_t usec)
         current -= base;
     } while (current < delay);
 }
+
+/* Set up DBGU.
+ * Assume baud rate is correcly set by RomBoot
+ */
+static void dbgu_init(void) {
+    /* Set up pins */
+    PMC_CLOCK_EN(GPIOB_PMCID);
+
+    /* Disable Pull */
+    GPIO_PPUDR(DBGU_GPIO) = (1 << DBGU_PIN_TX) | (1 << DBGU_PIN_RX);
+    GPIO_PPDDR(DBGU_GPIO) = (1 << DBGU_PIN_TX) | (1 << DBGU_PIN_RX);
+
+    /* Set "Peripheral A" */
+    GPIO_ASR(DBGU_GPIO) = (1 << DBGU_PIN_TX) | (1 << DBGU_PIN_RX);
+
+    /* Enable the peripheral clock for the DBGU */
+    PMC_CLOCK_EN(DBGU_PMCID);
+
+    /* Enable the transmitter and receiver */
+    DBGU_CR = DBGU_CR_TXEN | DBGU_CR_RXEN;
+}
+
+
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
@@ -742,6 +765,7 @@ void hal_init(void)
     pit_init();
     watchdog_disable();
     ddr_init();
+    dbgu_init();
     nand_read_info();
 }
 
