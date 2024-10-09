@@ -93,8 +93,6 @@
 #define PMC_PCR_DIV_SHIFT     13
 #define PMC_PCR_DIV_MASK      (0x3 << PMC_PCR_DIV_SHIFT)
 
-
-
 /* Specific configuration for 264/132/12 MHz */
 
 #define PLL_PCK		         (((CRYSTAL_FREQ * (PLLA_MULA + 1)) / 2))
@@ -110,23 +108,33 @@
 
 #define PLLICPR_CONFIG      (0x0 << PMC_PLLICPR_ICPPLLA_SHIFT | 0x3 << PMC_PLLICPR_IPLLA_SHIFT)
 
+/* DBGU
+ *
+ */
+#define DBGU_BASE 0xFFFFEE00
+#define DBGU_CR   *(volatile uint32_t *)(DBGU_BASE + 0x00)
+#define DBGU_BRGR *(volatile uint32_t *)(DBGU_BASE + 0x20)
+#define DBGU_CR_RXEN (1 << 4)
+#define DBGU_CR_TXEN (1 << 6)
+#define DBGU_PMCID 0x02 /* dec: 2 for SAMA5D3 */
+
+/* Associated pins : GPIOB 30 - 31*/
+#define DBGU_PIN_RX 30
+#define DBGU_PIN_TX 31
+#define DBGU_GPIO   GPIOB
 
 /* PIT
  *
  */
-
 #define PIT_BASE 0xFFFFFE30
 #define PIT_MR   *(volatile uint32_t *)(PIT_BASE + 0x00)
 #define PIT_SR   *(volatile uint32_t *)(PIT_BASE + 0x04)
 #define PIT_PIVR *(volatile uint32_t *)(PIT_BASE + 0x08)
 #define PIT_PIIR *(volatile uint32_t *)(PIT_BASE + 0x0C)
 
-
-
-
 /* DRAM setup
+ *
  */
-
 #define MPDDRC_BASE 0xFFFFEA00
 #define MPDDRC_MR *(volatile uint32_t *)(MPDDRC_BASE + 0x00) /* Mode Register */
 #define MPDDRC_RTR *(volatile uint32_t *)(MPDDRC_BASE + 0x04) /* Refresh Timer Register */
@@ -158,7 +166,6 @@
 /* Reserved 0x90 to 0xE0 */
 #define MPDDRC_WPMR *(volatile uint32_t *)(MPDDRC_BASE + 0xE4) /* Write Protection Mode Register */
 #define MPDDRC_WPSR *(volatile uint32_t *)(MPDDRC_BASE + 0xE8) /* Write Protection Status Register */
-
 
 /* MPDDRC_CR: shift, mask, values */
 #define MPDDRC_NC_SHIFT 0  /* Number of Column Bits */
@@ -278,6 +285,12 @@
 #define MAX_PIV		0xfffff
 #define PIT_MR_EN (1 << 24)
 
+/* GPIO PMC IDs */
+#define GPIOA_PMCID 0x06
+#define GPIOB_PMCID 0x07
+#define GPIOC_PMCID 0x08
+#define GPIOD_PMCID 0x09
+#define GPIOE_PMCID 0x0A
 
 struct dram {
     struct dram_timing {
@@ -302,6 +315,7 @@ struct dram {
 };
 
 /* Watchdog
+ *
  */
 #define WDT_BASE 0xFFFFFD40
 #define WDT_CR   *(volatile uint32_t *)(WDT_BASE + 0x00)
@@ -427,22 +441,36 @@ extern void *kernel_addr, *update_addr, *dts_addr;
 #define MAX_ECC_BYTES 8
 #endif
 
-#define GPIOE_BASE     0xFFFFFA00
+#define GPIOB   0xFFFFF400
+#define GPIOC   0xFFFFF600
+#define GPIOE   0xFFFFFA00
 
-#define GPIOE_PER      *(volatile uint32_t *)(GPIOE_BASE + 0x00)
-#define GPIOE_PDR      *(volatile uint32_t *)(GPIOE_BASE + 0x04)
-#define GPIOE_PSR      *(volatile uint32_t *)(GPIOE_BASE + 0x08)
-#define GPIOE_OER      *(volatile uint32_t *)(GPIOE_BASE + 0x10)
-#define GPIOE_ODR      *(volatile uint32_t *)(GPIOE_BASE + 0x14)
-#define GPIOE_OSR      *(volatile uint32_t *)(GPIOE_BASE + 0x18)
-#define GPIOE_SODR     *(volatile uint32_t *)(GPIOE_BASE + 0x30)
-#define GPIOE_CODR     *(volatile uint32_t *)(GPIOE_BASE + 0x34)
-#define GPIOE_IER      *(volatile uint32_t *)(GPIOE_BASE + 0x40)
-#define GPIOE_IDR      *(volatile uint32_t *)(GPIOE_BASE + 0x44)
-#define GPIOE_MDER     *(volatile uint32_t *)(GPIOE_BASE + 0x50)
-#define GPIOE_MDDR     *(volatile uint32_t *)(GPIOE_BASE + 0x54)
-#define GPIOE_PPUDR    *(volatile uint32_t *)(GPIOE_BASE + 0x60)
-#define GPIOE_PPUER    *(volatile uint32_t *)(GPIOE_BASE + 0x64)
+#define GPIO_PER(base)     *(volatile uint32_t *)(base + 0x00)
+#define GPIO_PDR(base)     *(volatile uint32_t *)(base + 0x04)
+#define GPIO_PSR(base)     *(volatile uint32_t *)(base + 0x08)
+#define GPIO_OER(base)     *(volatile uint32_t *)(base + 0x10)
+#define GPIO_ODR(base)     *(volatile uint32_t *)(base + 0x14)
+#define GPIO_OSR(base)     *(volatile uint32_t *)(base + 0x18)
+#define GPIO_SODR(base)     *(volatile uint32_t *)(base + 0x30)
+#define GPIO_CODR(base)     *(volatile uint32_t *)(base + 0x34)
+#define GPIO_IER(base)     *(volatile uint32_t *)(base + 0x40)
+#define GPIO_IDR(base)     *(volatile uint32_t *)(base + 0x44)
+#define GPIO_MDER(base)     *(volatile uint32_t *)(base + 0x50)
+#define GPIO_MDDR(base)     *(volatile uint32_t *)(base + 0x54)
+#define GPIO_PPUDR(base)    *(volatile uint32_t *)(base + 0x60)
+#define GPIO_PPUER(base)    *(volatile uint32_t *)(base + 0x64)
+#define GPIO_ASR(base)      *(volatile uint32_t *)(base + 0x70)
+#define GPIO_PPDDR(base)    *(volatile uint32_t *)(base + 0x90)
+
+
+/* PMC Macro to enable clock */
+#define PMC_CLOCK_EN(id) { \
+    register uint32_t pmc_pcr; \
+    PMC_PCR = id; \
+    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK); \
+    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN; \
+    PMC_PCR = pmc_pcr; \
+}
 
 
 #endif

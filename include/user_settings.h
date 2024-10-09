@@ -41,6 +41,8 @@
 
 /* Stdlib Types */
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
+
+#ifndef WOLFSSL_ARMASM
 #ifndef toupper
 extern int toupper(int c);
 #endif
@@ -49,6 +51,7 @@ extern int tolower(int c);
 #endif
 #define XTOUPPER(c)     toupper((c))
 #define XTOLOWER(c)     tolower((c))
+#endif
 
 #ifdef USE_FAST_MATH
     /* wolfBoot only does public asymmetric operations,
