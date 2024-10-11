@@ -162,6 +162,15 @@ OBJS_REAL+=\
 	$(XMSSDIR)/utils.o
 endif
 
+# Add wolfcrypt ML-DSA (dilithium) implementation.
+ifeq ($(SIGN),ML_DSA)
+  OBJS_REAL+=$(WOLFDIR)/wolfcrypt/src/dilithium.o
+
+  CFLAGS += -D"WOLFBOOT_SIGN_ML_DSA" \
+            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+            -D"ML_DSA_LEVEL"=$(ML_DSA_LEVEL)
+endif
+
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 vpath %.c $(WOLFDIR)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/

@@ -546,3 +546,15 @@ jobs:
         run: |
           tools/scripts/sim-sunnyday-update.sh
 
+      - name: Run sunny day LMS update test
+        run: |
+          tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-lms.config
+
+      - name: Run sunny day XMSS update test
+        run: |
+          tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-xmss.config
+
+      - name: Run sunny day ML-DSA update test
+        run: |
+          tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-ml-dsa.config
+

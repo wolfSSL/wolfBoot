@@ -487,6 +487,26 @@ ifneq (,$(filter $(SIGN), ext_LMS ext_XMSS))
   CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
 endif
 
+ifeq ($(SIGN),ML_DSA)
+  # Use wolfcrypt ML-DSA dilithium implementation.
+  KEYGEN_OPTIONS+=--ml_dsa
+  SIGN_OPTIONS+=--ml_dsa
+  WOLFCRYPT_OBJS+= \
+    ./lib/wolfssl/wolfcrypt/src/dilithium.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o \
+    ./lib/wolfssl/wolfcrypt/src/sha3.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+    ./lib/wolfssl/wolfcrypt/src/hash.o
+  CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" \
+          -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+          -D"ML_DSA_LEVEL"=$(ML_DSA_LEVEL)
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    $(error WOLFBOOT_SMALL_STACK with ML-DSA not supported yet)
+  else
+    STACK_USAGE=19544
+  endif
+endif
+
 ifeq ($(RAM_CODE),1)
   CFLAGS+= -D"RAM_CODE"
 endif
