@@ -102,6 +102,10 @@ ifeq ($(SIGN),XMSS)
   SIGN_ARGS+= --xmss
 endif
 
+ifeq ($(SIGN),ML_DSA)
+  SIGN_ARGS+= --ml_dsa
+endif
+
 ifeq ($(HASH),SHA256)
   SIGN_ARGS+= --sha256
 endif

@@ -57,6 +57,9 @@ endif
 ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
 	SIGN_ARGS+= --xmss
 endif
+ifeq ($(SIGN),ML_DSA)
+	SIGN_ARGS+= --ml_dsa
+endif
 
 # Make sign hash argument
 ifeq ($(HASH),SHA256)
