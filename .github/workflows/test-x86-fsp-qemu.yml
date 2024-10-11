@@ -13,7 +13,7 @@ jobs:
       - name: install req
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y -q nasm gcc-multilib qemu-system-x86 swtpm
+          sudo apt-get install --no-install-recommends -y -q nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
       - name: setup git
         run: |
           git config --global user.email "you@example.com"

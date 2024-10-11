@@ -421,6 +421,7 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
 #   if !defined(SECURE_PKCS11)
+#       define NO_WOLFSSL_MEMORY
 #       define WOLFSSL_NO_MALLOC
 #   endif
 #else
