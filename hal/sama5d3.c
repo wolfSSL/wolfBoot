@@ -705,11 +705,11 @@ static void dbgu_init(void) {
     PMC_CLOCK_EN(GPIOB_PMCID);
 
     /* Disable Pull */
-    GPIO_PPUDR(DBGU_GPIO) = (1 << DBGU_PIN_TX) | (1 << DBGU_PIN_RX);
-    GPIO_PPDDR(DBGU_GPIO) = (1 << DBGU_PIN_TX) | (1 << DBGU_PIN_RX);
+    GPIO_PPUDR(DBGU_GPIO) = (1U << DBGU_PIN_TX) | (1U << DBGU_PIN_RX);
+    GPIO_PPDDR(DBGU_GPIO) = (1U << DBGU_PIN_TX) | (1U << DBGU_PIN_RX);
 
     /* Set "Peripheral A" */
-    GPIO_ASR(DBGU_GPIO) = (1 << DBGU_PIN_TX) | (1 << DBGU_PIN_RX);
+    GPIO_ASR(DBGU_GPIO) = (1U << DBGU_PIN_TX) | (1U << DBGU_PIN_RX);
 
     /* Enable the peripheral clock for the DBGU */
     PMC_CLOCK_EN(DBGU_PMCID);
