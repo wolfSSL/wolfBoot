@@ -1,6 +1,6 @@
 /* boot_aarch64.c
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2024 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -25,23 +25,43 @@
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
 
+/* Linker exported variables */
 extern unsigned int __bss_start__;
 extern unsigned int __bss_end__;
-static volatile unsigned int cpu_id;
-extern unsigned int *END_STACK;
+#ifndef NO_XIP
+extern unsigned int _stored_data;
+extern unsigned int _start_data;
+extern unsigned int _end_data;
+#endif
 
 extern void main(void);
 extern void gicv2_init_secure(void);
 
-void boot_entry_C(void) 
+void boot_entry_C(void)
 {
-    register unsigned int *dst;
+    register unsigned int *dst, *src;
+
     /* Initialize the BSS section to 0 */
     dst = &__bss_start__;
     while (dst < (unsigned int *)&__bss_end__) {
         *dst = 0U;
         dst++;
     }
+
+#ifndef NO_XIP
+    /* Copy data section from flash to RAM if necessary */
+    src = (unsigned int*)&_stored_data;
+    dst = (unsigned int*)&_start_data;
+    if(src!=dst) {
+        while (dst < (unsigned int *)&_end_data) {
+            *dst = *src;
+            dst++;
+            src++;
+        }
+    }
+#else
+    (void)src;
+#endif
 
     /* Run wolfboot! */
     main();
@@ -102,3 +122,20 @@ void RAMFUNCTION arch_reboot(void)
 
 }
 #endif
+
+void SynchronousInterrupt(void)
+{
+
+}
+void IRQInterrupt(void)
+{
+
+}
+void FIQInterrupt(void)
+{
+
+}
+void SErrorInterrupt(void)
+{
+
+}

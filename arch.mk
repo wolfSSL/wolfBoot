@@ -54,18 +54,34 @@ ifeq ($(ARCH),x86_64)
   endif
 endif
 
-## ARM
+## ARM Cortex-A
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
-  CFLAGS+=-DARCH_AARCH64 -march=armv8-a
-  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
-  CFLAGS+=-DNO_QNX
+  CFLAGS+=-DARCH_AARCH64
+  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o src/boot_aarch64_vectors.o src/boot_aarch64_translation.o
+
+  ifeq ($(TARGET),zynq)
+    CFLAGS+=-march=armv8-a+crypto -DCORTEX_A53
+    CFLAGS+=-DNO_QNX
+
+    # Support detection and skip of U-Boot legecy header */
+    CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+    CFLAGS+=-DWOLFBOOT_DUALBOOT
+  endif
+
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
   endif
+  ifeq ($(NO_ASM),0)
+    ARCH_FLAGS=-mstrict-align
+    CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWC_HASH_DATA_ALIGNMENT=8
+    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o
+  endif
 endif
 
+## ARM Cortex-M
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
   CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
@@ -720,12 +736,6 @@ ifeq ($(TARGET),nxp_p1021)
     CFLAGS+=-DWOLFSSL_SP_PPC
   endif
   SPI_TARGET=nxp
-endif
-
-ifeq ($(TARGET),zynq)
-  # Support detection and skip of U-Boot legecy header */
-  CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
-  CFLAGS+=-DWOLFBOOT_DUALBOOT
 endif
 
 ifeq ($(TARGET),ti_hercules)
