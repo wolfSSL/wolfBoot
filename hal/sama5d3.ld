@@ -3,7 +3,7 @@ OUTPUT_ARCH(arm)
 
 MEMORY
 {
-    DDR_MEM(rwx): ORIGIN = 0x00000000, LENGTH = 0x0000F000
+    DDR_MEM(rwx): ORIGIN = 0x00000000, LENGTH = 0x000100000
 }
 
 ENTRY(reset_vector_entry)

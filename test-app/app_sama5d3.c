@@ -37,20 +37,20 @@
 void led_init(uint32_t pin)
 {
     uint32_t mask = 1U << pin;
-    GPIOE_MDDR |= mask;
-    GPIOE_PER |= mask;
-    GPIOE_IDR |= mask;
-    GPIOE_PPUDR |= mask;
-    GPIOE_CODR |= mask;
+    GPIO_MDDR(GPIOE) |= mask;
+    GPIO_PER(GPIOE) |= mask;
+    GPIO_IDR(GPIOE) |= mask;
+    GPIO_PPUDR(GPIOE) |= mask;
+    GPIO_CODR(GPIOE) |= mask;
 }
 
 void led_put(uint32_t pin, int val)
 {
     uint32_t mask = 1U << pin;
     if (val)
-        GPIOE_SODR |= mask;
+        GPIO_SODR(GPIOE) |= mask;
     else
-        GPIOE_CODR |= mask;
+        GPIO_CODR(GPIOE) |= mask;
 }
 
 volatile uint32_t time_elapsed = 0;

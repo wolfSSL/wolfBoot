@@ -195,6 +195,31 @@ static void pll_init(void)
     master_clock_set(PRESCALER_PLLA_CLOCK);
 }
 
+/* GMAC PINS: PB8, PB11, PB16, PB18 */
+/* EMAC PINS: PC7, PC8 */
+#define GMAC_PINS ( (1 << 8) | (1 << 11) | (1 << 16) | (1 << 18) )
+#define EMAC_PINS ( (1 << 7) | (1 << 8) )
+#define GPIO_GMAC GPIOB
+#define GPIO_EMAC GPIOC
+
+static void mac_init(void)
+{
+    PMC_CLOCK_EN(GPIOB_PMCID);
+    PMC_CLOCK_EN(GPIOC_PMCID);
+
+    GPIO_PPUDR(GPIO_GMAC) = GMAC_PINS;
+    GPIO_PPDDR(GPIO_GMAC) = GMAC_PINS;
+    GPIO_PER(GPIO_GMAC) = GMAC_PINS;
+    GPIO_OER(GPIO_GMAC) = GMAC_PINS;
+    GPIO_CODR(GPIO_GMAC) = GMAC_PINS;
+
+    GPIO_PPUDR(GPIO_EMAC) = EMAC_PINS;
+    GPIO_PPDDR(GPIO_EMAC) = EMAC_PINS;
+    GPIO_PER(GPIO_EMAC) = EMAC_PINS;
+    GPIO_OER(GPIO_EMAC) = EMAC_PINS;
+    GPIO_CODR(GPIO_EMAC) = EMAC_PINS;
+}
+
 
 static void ddr_init(void)
 {
@@ -245,10 +270,7 @@ static void ddr_init(void)
      *
      */
     /* Turn on the DDRAM controller peripheral clock */
-    PMC_PCR = MPDDRC_PMCID;
-    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK);
-    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN;
-    PMC_PCR = pmc_pcr;
+    PMC_CLOCK_EN(MPDDRC_PMCID);
 
     /* Enable DDR in system clock */
     PMC_SCER = MPDDRC_SCERID;
@@ -644,15 +666,12 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     return len;
 }
 
-void pit_init(void)
+static void pit_init(void)
 {
     uint32_t pmc_pcr;
 
     /* Turn on clock for PIT */
-    PMC_PCR = PIT_PMCID;
-    pmc_pcr = PMC_PCR & (~PMC_PCR_DIV_MASK);
-    pmc_pcr |= PMC_PCR_CMD | PMC_PCR_EN;
-    PMC_PCR = pmc_pcr;
+    PMC_CLOCK_EN(PIT_PMCID);
 
     /* Set clock source to MCK/2 */
     PIT_MR = MAX_PIV | PIT_MR_EN;
@@ -677,6 +696,29 @@ void sleep_us(uint32_t usec)
         current -= base;
     } while (current < delay);
 }
+
+/* Set up DBGU.
+ * Assume baud rate is correcly set by RomBoot
+ */
+static void dbgu_init(void) {
+    /* Set up pins */
+    PMC_CLOCK_EN(GPIOB_PMCID);
+
+    /* Disable Pull */
+    GPIO_PPUDR(DBGU_GPIO) = (1U << DBGU_PIN_TX) | (1U << DBGU_PIN_RX);
+    GPIO_PPDDR(DBGU_GPIO) = (1U << DBGU_PIN_TX) | (1U << DBGU_PIN_RX);
+
+    /* Set "Peripheral A" */
+    GPIO_ASR(DBGU_GPIO) = (1U << DBGU_PIN_TX) | (1U << DBGU_PIN_RX);
+
+    /* Enable the peripheral clock for the DBGU */
+    PMC_CLOCK_EN(DBGU_PMCID);
+
+    /* Enable the transmitter and receiver */
+    DBGU_CR = DBGU_CR_TXEN | DBGU_CR_RXEN;
+}
+
+
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
@@ -723,6 +765,7 @@ void hal_init(void)
     pit_init();
     watchdog_disable();
     ddr_init();
+    dbgu_init();
     nand_read_info();
 }
 
