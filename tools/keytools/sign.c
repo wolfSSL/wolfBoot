@@ -144,16 +144,18 @@ static inline int fp_truncate(FILE *f, size_t len)
 
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 
-#define HDR_VERSION           0x01
-#define HDR_TIMESTAMP         0x02
-#define HDR_PUBKEY            0x10
-#define HDR_SIGNATURE         0x20
-#define HDR_POLICY_SIGNATURE  0x21
-#define HDR_IMG_TYPE          0x04
+#define HDR_VERSION             0x01
+#define HDR_TIMESTAMP           0x02
+#define HDR_SHA256              0x03
+#define HDR_IMG_TYPE            0x04
+#define HDR_PUBKEY              0x10
+#define HDR_SECONDARY_PUBKEY    0x12
+#define HDR_SHA3_384            0x13
+#define HDR_SHA384              0x14
+#define HDR_SIGNATURE           0x20
+#define HDR_POLICY_SIGNATURE    0x21
+#define HDR_SECONDARY_SIGNATURE 0x22
 
-#define HDR_SHA256      0x03
-#define HDR_SHA3_384    0x13
-#define HDR_SHA384      0x14
 
 #define HDR_SHA256_LEN    32
 #define HDR_SHA384_LEN    48
@@ -173,6 +175,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define HDR_IMG_TYPE_WOLFBOOT     0x0000
 #define HDR_IMG_TYPE_APP          0x0001
 #define HDR_IMG_TYPE_DIFF         0x00D0
+#define HDR_IMG_TYPE_HYBRID       0x0080
 
 #define HASH_SHA256    HDR_SHA256
 #define HASH_SHA384    HDR_SHA384
@@ -232,7 +235,7 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
 /* Globals */
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
 
-static union {
+static struct {
 #ifdef HAVE_ED25519
     ed25519_key ed;
 #endif
@@ -264,11 +267,14 @@ struct cmd_options {
     int encrypt;
     int hash_algo;
     int sign;
+    int hybrid;
+    int secondary_sign;
     int delta;
     int no_ts;
     int sign_wenc;
     const char *image_file;
     const char *key_file;
+    const char *secondary_key_file;
     const char *fw_version;
     const char *signature_file;
     const char *policy_file;
@@ -280,6 +286,7 @@ struct cmd_options {
     uint32_t pubkey_sz;
     uint32_t header_sz;
     uint32_t signature_sz;
+    uint32_t secondary_signature_sz;
     uint32_t policy_sz;
     uint8_t partition_id;
     uint32_t custom_tlvs;
@@ -296,7 +303,9 @@ static struct cmd_options CMD = {
     .encrypt  = ENC_OFF,
     .hash_algo = HASH_SHA256,
     .header_sz = IMAGE_HEADER_SIZE,
-    .partition_id = HDR_IMG_TYPE_APP
+    .partition_id = HDR_IMG_TYPE_APP,
+    .hybrid = 0
+        
 
 };
 
@@ -304,7 +313,7 @@ static struct cmd_options CMD = {
 static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     int header_sz,
     uint8_t **key_buffer, uint32_t *key_buffer_sz,
-    uint8_t **pubkey, uint32_t *pubkey_sz)
+    uint8_t **pubkey, uint32_t *pubkey_sz, int secondary)
 {
     int ret = -1;
     int initRet = -1;
@@ -315,6 +324,8 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     *pubkey_sz = curve_sz * 2;
     *pubkey = malloc(*pubkey_sz); /* assume malloc works */
 
+    printf("Load key: %s", secondary?"secondary":"primary");
+    printf(" Size: %d\n", *pubkey_sz);
     initRet = ret = wc_ecc_init(&key.ecc);
 
     if (CMD.manual_sign || CMD.sha_only) {
@@ -389,9 +400,14 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
         free(*pubkey);
 
     if (ret == 0 || CMD.sign != SIGN_AUTO) {
-        CMD.sign = sign_type;
         CMD.header_sz = header_sz;
-        CMD.signature_sz = (curve_sz * 2);
+        if (secondary) {
+            CMD.secondary_sign = sign_type;
+            CMD.secondary_signature_sz = (curve_sz * 2);
+        } else {
+            CMD.sign = sign_type;
+            CMD.signature_sz = (curve_sz * 2);
+        }
         ret = 0;
     }
     return ret;
@@ -400,7 +416,7 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
 static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz,
     int header_sz,
     uint8_t **key_buffer, uint32_t *key_buffer_sz,
-    uint8_t **pubkey, uint32_t *pubkey_sz)
+    uint8_t **pubkey, uint32_t *pubkey_sz, int secondary)
 {
     int ret = -1;
     int initRet = -1;
@@ -413,7 +429,6 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         *pubkey_sz = *key_buffer_sz;
 
         if (*pubkey_sz <= rsa_pubkeysz) {
-            CMD.sign = sign_type;
             CMD.header_sz = header_sz;
             if (CMD.policy_sign) {
                 CMD.header_sz += 512;
@@ -421,7 +436,13 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
             else if (sign_type == SIGN_RSA3072 && CMD.hash_algo != HASH_SHA256) {
                 CMD.header_sz += 512;
             }
-            CMD.signature_sz = rsa_keysz;
+            if (secondary) {
+                CMD.secondary_signature_sz = rsa_keysz;
+                CMD.secondary_sign = sign_type;
+            } else {
+                CMD.sign = sign_type;
+                CMD.signature_sz = rsa_keysz;
+            }
         }
         ret = 0;
     }
@@ -452,7 +473,6 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         }
 
         if (ret == 0 || CMD.sign != SIGN_AUTO) {
-            CMD.sign = sign_type;
             CMD.header_sz = header_sz;
             if (CMD.policy_sign) {
                 CMD.header_sz += 512;
@@ -460,7 +480,13 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
             else if (sign_type == SIGN_RSA3072 && CMD.hash_algo != HASH_SHA256) {
                 CMD.header_sz += 512;
             }
-            CMD.signature_sz = keySzOut;
+            if (secondary) {
+                CMD.secondary_sign = sign_type;
+                CMD.secondary_signature_sz = keySzOut;
+            } else {
+                CMD.sign = sign_type;
+                CMD.signature_sz = keySzOut;
+            }
             printf("Found RSA%d key\n", keySzOut);
         }
     }
@@ -468,7 +494,7 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
 }
 
 static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
-    uint8_t **pubkey, uint32_t *pubkey_sz)
+    uint8_t **pubkey, uint32_t *pubkey_sz, int secondary)
 {
     int ret = -1;
     int initRet = -1;
@@ -482,10 +508,17 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     int    priv_sz = 0;
     int    pub_sz = 0;
 #endif
+    int sign = CMD.sign;
+    const char *key_file = CMD.key_file;
 
     /* open and load key buffer */
     *key_buffer = NULL;
-    f = fopen(CMD.key_file, "rb");
+    if (secondary) {
+        key_file = CMD.secondary_key_file;
+        sign = CMD.secondary_sign;
+    }
+
+    f = fopen(key_file, "rb");
     if (f == NULL) {
         printf("Open key file %s failed\n", CMD.key_file);
         goto failure;
@@ -507,7 +540,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         goto failure;
     }
 
-    switch (CMD.sign) {
+    switch (sign) {
         /* auto, just try them all, no harm no foul */
         default:
             FALL_THROUGH;
@@ -561,10 +594,14 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 free(*pubkey);
 
             /* break if we succeed or are not using auto */
-            if (ret == 0 || CMD.sign != SIGN_AUTO) {
-                CMD.header_sz = 256;
-                CMD.signature_sz = 64;
-                CMD.sign = SIGN_ED25519;
+            if (ret == 0 || sign != SIGN_AUTO) {
+                if (CMD.header_sz < 256)
+                    CMD.header_sz = 256;
+                if (secondary)
+                    CMD.secondary_signature_sz = 64;
+                else
+                    CMD.signature_sz = 64;
+                sign = SIGN_ED25519;
                 printf("Found ED25519 key\n");
                 break;
             }
@@ -620,10 +657,14 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 free(*pubkey);
 
             /* break if we succeed or are not using auto */
-            if (ret == 0 || CMD.sign != SIGN_AUTO) {
-                CMD.header_sz = 512;
-                CMD.signature_sz = 114;
-                CMD.sign = SIGN_ED448;
+            if (ret == 0 || sign != SIGN_AUTO) {
+                if (CMD.header_sz < 512)
+                    CMD.header_sz = 512;
+                if (secondary)
+                    CMD.secondary_signature_sz = 114;
+                else
+                    CMD.signature_sz = 114;
+                sign = SIGN_ED448;
                 printf("Found ED448 key\n");
                 break;
             }
@@ -631,38 +672,38 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
         case SIGN_ECC256:
             ret = load_key_ecc(SIGN_ECC256, 32, ECC_SECP256R1, 256,
-                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
             if (ret == 0)
                 break;
             FALL_THROUGH;
         case SIGN_ECC384:
             ret = load_key_ecc(SIGN_ECC384, 48, ECC_SECP384R1, 512,
-                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
             if (ret == 0)
                 break;
             FALL_THROUGH;
         case SIGN_ECC521:
             ret = load_key_ecc(SIGN_ECC521, 66, ECC_SECP521R1, 512,
-                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
             if (ret == 0)
                 break;
             FALL_THROUGH; /* we didn't solve the key, keep trying */
 
         case SIGN_RSA2048:
             ret = load_key_rsa(SIGN_RSA2048, 256, KEYSTORE_PUBKEY_SIZE_RSA2048, 512,
-                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
             if (ret == 0)
                 break;
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_RSA3072:
             ret = load_key_rsa(SIGN_RSA3072, 384, KEYSTORE_PUBKEY_SIZE_RSA3072, 512,
-                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
             if (ret == 0)
                 break;
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_RSA4096:
             ret = load_key_rsa(SIGN_RSA4096, 512, KEYSTORE_PUBKEY_SIZE_RSA4096, 1024,
-                key_buffer, key_buffer_sz, pubkey, pubkey_sz);
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
             if (ret == 0)
                 break;
 
@@ -671,7 +712,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         case SIGN_LMS:
             ret = -1;
 
-            if (CMD.sign == SIGN_AUTO) {
+            if (sign == SIGN_AUTO) {
                 /* LMS is stateful and requires additional config, and is not
                  * compatible with SIGN_AUTO. */
                 printf("error: SIGN_AUTO with LMS is not supported\n");
@@ -713,7 +754,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         case SIGN_XMSS:
             ret = -1;
 
-            if (CMD.sign == SIGN_AUTO) {
+            if (sign == SIGN_AUTO) {
                 /* XMSS is stateful and requires additional config, and is not
                  * compatible with SIGN_AUTO. */
                 printf("error: SIGN_AUTO with XMSS is not supported\n");
@@ -816,7 +857,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 #endif /* WOLFSSL_WC_DILITHIUM */
 
             break;
-    } /* end switch (CMD.sign) */
+    } /* end switch (sign) */
 
     if (ret != 0) {
         printf("Key decode error %d\n", ret);
@@ -852,6 +893,7 @@ static int sign_digest(int sign, int hash_algo,
 {
     int ret;
     WC_RNG rng;
+    printf("Sign: %02x\n", sign >> 8);
 
     if ((ret = wc_InitRng(&rng)) != 0) {
         return ret;
@@ -940,7 +982,7 @@ static int sign_digest(int sign, int hash_algo,
             ret = wc_LmsKey_SetReadCb(&key.lms, lms_read_key);
         }
         if (ret == 0) {
-            ret = wc_LmsKey_SetContext(&key.lms, (void*)CMD.key_file);
+            ret = wc_LmsKey_SetContext(&key.lms, (void*)key_file);
         }
         if (ret == 0) {
             ret = wc_LmsKey_Reload(&key.lms);
@@ -966,7 +1008,7 @@ static int sign_digest(int sign, int hash_algo,
             ret = wc_XmssKey_SetReadCb(&key.xmss, xmss_read_key);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_SetContext(&key.xmss, (void*)CMD.key_file);
+            ret = wc_XmssKey_SetContext(&key.xmss, (void*)key_file);
         }
         if (ret == 0) {
             ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
@@ -992,7 +1034,7 @@ static int sign_digest(int sign, int hash_algo,
                                    digest, digest_sz, &rng);
         }
         if (ret != 0) {
-            fprintf(stderr, "error signing with XMSS: %d\n", ret);
+            fprintf(stderr, "error signing with ML-DSA: %d\n", ret);
         }
     }
     else
@@ -1007,7 +1049,7 @@ static int sign_digest(int sign, int hash_algo,
 static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint32_t patch_len, uint32_t patch_inv_off,
-        uint32_t patch_inv_len)
+        uint32_t patch_inv_len, const uint8_t *secondary_key, uint32_t secondary_key_sz)
 {
     uint32_t header_idx;
     uint8_t *header;
@@ -1016,9 +1058,11 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     struct stat attrib;
     uint16_t image_type;
     uint8_t* signature = NULL;
+    uint8_t* secondary_signature = NULL;
     uint8_t* policy = NULL;
     int ret = -1;
-    uint8_t  buf[1024];
+    uint8_t  buf[4096];
+    uint8_t  second_buf[4096];
     uint32_t read_sz, pos;
     uint8_t  digest[48]; /* max digest */
     uint32_t digest_sz = 0;
@@ -1162,6 +1206,16 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 wc_Sha256Free(&sha);
             }
         }
+        /* secondary public key in hybrid mode */
+        if (ret == 0 && secondary_key_sz > 0) {
+            ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
+            if (ret == 0) {
+                ret = wc_Sha256Update(&sha, secondary_key, secondary_key_sz);
+                if (ret == 0)
+                    wc_Sha256Final(&sha, second_buf);
+                wc_Sha256Free(&sha);
+            }
+        } 
         if (ret == 0)
             digest_sz = HDR_SHA256_LEN;
     #endif
@@ -1203,6 +1257,15 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 ret = wc_Sha384Update(&sha, pubkey, pubkey_sz);
                 if (ret == 0)
                     wc_Sha384Final(&sha, buf);
+                wc_Sha384Free(&sha);
+            }
+        }
+        if (ret == 0 && secondary_key_sz > 0) {
+            ret = wc_InitSha384_ex(&sha, NULL, INVALID_DEVID);
+            if (ret == 0) {
+                ret = wc_Sha384Update(&sha, secondary_key, secondary_key_sz);
+                if (ret == 0)
+                    wc_Sha384Final(&sha, second_buf);
                 wc_Sha384Free(&sha);
             }
         }
@@ -1253,6 +1316,15 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 wc_Sha3_384_Free(&sha);
             }
         }
+        if (ret == 0 && secondary_key_sz > 0) {
+            ret = wc_InitSha3_384(&sha, NULL, INVALID_DEVID);
+            if (ret == 0) {
+                ret = wc_Sha3_384_Update(&sha, secondary_key, secondary_key_sz);
+                if (ret == 0)
+                    ret = wc_Sha3_384_Final(&sha, second_buf);
+                wc_Sha3_384_Free(&sha);
+            }
+        }
         if (ret == 0)
             digest_sz = HDR_SHA3_384_LEN;
     #endif
@@ -1273,6 +1345,14 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     if (CMD.sign != NO_SIGN) {
         /* Add Pubkey Hash to header */
         header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
+
+        if (CMD.hybrid) {
+            /* Append pad bytes, so field value is 8-byte aligned */
+            while ((header_idx % 8) != 4)
+                header_idx++;
+            /* Add secondary pubkey hash to header */
+            header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
+        }
 
         /* If hash only, then save digest and exit */
         if (CMD.sha_only) {
@@ -1295,16 +1375,17 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             printf("Signature malloc error!\n");
             goto failure;
         }
-        memset(signature, 0, CMD.signature_sz);
 
+        memset(signature, 0, CMD.signature_sz);
+        printf("Signature sz (malloc): %d\n", CMD.signature_sz);
         if (!CMD.manual_sign) {
             printf("Signing the digest...\n");
 #ifdef DEBUG_SIGNTOOL
             printf("Digest %d\n", digest_sz);
             WOLFSSL_BUFFER(digest, digest_sz);
 #endif
-
             /* Sign the digest */
+            printf("CMD.sign == %02x\n", CMD.sign);
             ret = sign_digest(CMD.sign, CMD.hash_algo,
                 signature, &CMD.signature_sz, digest, digest_sz);
             if (ret != 0) {
@@ -1327,6 +1408,22 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 goto failure;
             }
             CMD.signature_sz = io_sz;
+        }
+
+        if (CMD.hybrid) {
+            /* Sign the digest again with the secondary key */
+            secondary_signature = malloc(CMD.secondary_signature_sz);
+            if (secondary_signature == NULL) {
+                printf("Secondary Signature malloc error!\n");
+                goto failure;
+            }
+            memset(secondary_signature, 0, CMD.secondary_signature_sz);
+            ret = sign_digest(CMD.secondary_sign, CMD.hash_algo,
+                secondary_signature, &CMD.secondary_signature_sz, digest, digest_sz);
+            if (ret != 0) {
+                printf("Secondary Signing error %d\n", ret);
+                goto failure;
+            }
         }
 
         /* Signing Policy */
@@ -1415,6 +1512,15 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz,
                 signature);
 
+        if (CMD.hybrid) {
+            /* Append pad bytes, so field value is 8-byte aligned */
+            while ((header_idx % 8) != 4)
+                header_idx++;
+            /* Add secondary signature to header */
+            header_append_tag(header, &header_idx, HDR_SECONDARY_SIGNATURE,
+                    CMD.secondary_signature_sz, secondary_signature);
+            free(secondary_signature);
+        }
         if (CMD.policy_sign) {
             /* Add policy signature to header */
             header_append_tag(header, &header_idx, HDR_POLICY_SIGNATURE,
@@ -1550,7 +1656,8 @@ failure:
 static int make_header(uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile)
 {
-    return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0);
+    return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0,
+            NULL, 0);
 }
 
 static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
@@ -1560,7 +1667,16 @@ static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
 {
     return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile,
             delta_base_version, patch_len,
-            patch_inv_off, patch_inv_len);
+            patch_inv_off, patch_inv_len,
+            NULL, 0);
+}
+
+static int make_hybrid_header(uint8_t *pubkey, uint32_t pubkey_sz,
+        const char *image_file, const char *outfile,
+        const uint8_t *secondary_key, uint32_t secondary_key_sz)
+{
+    return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0,
+            secondary_key, secondary_key_sz);
 }
 
 static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, int padding)
@@ -1864,6 +1980,161 @@ uint64_t arg2num(const char *arg, size_t len)
     return ret;
 }
 
+static void set_signature_sizes(int secondary)
+{
+    uint32_t *sz = &CMD.signature_sz;
+    int *sign = &CMD.sign;
+    if (secondary) {
+        sz = &CMD.secondary_signature_sz;
+        sign = &CMD.secondary_sign;
+    }
+    /* get header and signature sizes */
+    if (*sign == SIGN_ED25519) {
+        if (CMD.header_sz < 256)
+            CMD.header_sz = 256;
+        *sz = 64;
+    }
+    else if (*sign == SIGN_ED448) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 114;
+    }
+    else if (*sign == SIGN_ECC256) {
+        if (CMD.header_sz < 256)
+            CMD.header_sz = 256;
+        *sz = 64;
+    }
+    else if (*sign == SIGN_ECC384) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 96;
+    }
+    else if (*sign == SIGN_ECC521) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 132;
+    }
+    else if (*sign == SIGN_RSA2048) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 256;
+    }
+    else if (*sign == SIGN_RSA3072) {
+        if ((CMD.header_sz < 1024) && (CMD.hash_algo != HASH_SHA256))
+            CMD.header_sz = 1024;
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 384;
+    }
+    else if (*sign == SIGN_RSA4096) {
+        if (CMD.header_sz < 1024)
+            CMD.header_sz = 1024;
+        *sz = 512;
+    }
+#ifdef WOLFSSL_HAVE_LMS
+    else if (*sign == SIGN_LMS) {
+        int    lms_ret = 0;
+        word32 sig_sz = 0;
+
+        lms_ret = wc_LmsKey_Init(&key.lms, NULL, INVALID_DEVID);
+        if (lms_ret != 0) {
+            fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", lms_ret);
+            exit(1);
+        }
+
+        lms_ret = wc_LmsKey_SetParameters(&key.lms, LMS_LEVELS,
+                                          LMS_HEIGHT, LMS_WINTERNITZ);
+        if (lms_ret != 0) {
+            fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
+                    " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
+                    LMS_WINTERNITZ, ret);
+            exit(1);
+        }
+
+        printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
+               LMS_HEIGHT, LMS_WINTERNITZ);
+
+        lms_ret = wc_LmsKey_GetSigLen(&key.lms, &sig_sz);
+        if (lms_ret != 0) {
+            fprintf(stderr, "error: wc_LmsKey_GetSigLen returned %d\n",
+                    lms_ret);
+            exit(1);
+        }
+
+        printf("info: LMS signature size: %d\n", sig_sz);
+
+        CMD.header_sz = 2 * sig_sz;
+        *sz = sig_sz;
+    }
+#endif /* WOLFSSL_HAVE_LMS */
+#ifdef WOLFSSL_HAVE_XMSS
+    else if (*sign == SIGN_XMSS) {
+        int    xmss_ret = 0;
+        word32 sig_sz = 0;
+
+        xmss_ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
+        if (xmss_ret != 0) {
+            fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", xmss_ret);
+            exit(1);
+        }
+
+        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
+        if (xmss_ret != 0) {
+            fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
+                    " returned %d\n", WOLFBOOT_XMSS_PARAMS, ret);
+            exit(1);
+        }
+
+        printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
+
+        xmss_ret = wc_XmssKey_GetSigLen(&key.xmss, &sig_sz);
+        if (xmss_ret != 0) {
+            fprintf(stderr, "error: wc_XmssKey_GetSigLen returned %d\n",
+                    xmss_ret);
+            exit(1);
+        }
+
+        printf("info: XMSS signature size: %d\n", sig_sz);
+
+        CMD.header_sz = 2 * sig_sz;
+        *sz = sig_sz;
+    }
+#endif /* WOLFSSL_HAVE_XMSS */
+#ifdef WOLFSSL_WC_DILITHIUM
+    else if (*sign == SIGN_ML_DSA) {
+        int ml_dsa_ret = 0;
+        int sig_sz = 0;
+
+        ml_dsa_ret = wc_MlDsaKey_Init(&key.ml_dsa, NULL, INVALID_DEVID);
+        if (ml_dsa_ret != 0) {
+            fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ml_dsa_ret);
+            exit(1);
+        }
+
+        ml_dsa_ret = wc_MlDsaKey_SetParams(&key.ml_dsa, ML_DSA_LEVEL);
+        if (ml_dsa_ret != 0) {
+            fprintf(stderr, "error: wc_MlDsaKey_SetParamStr(%d)" \
+                    " returned %d\n", ML_DSA_LEVEL, ml_dsa_ret);
+            exit(1);
+        }
+
+        printf("info: using ML-DSA parameters: %d\n", ML_DSA_LEVEL);
+
+        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, &sig_sz);
+        if (ml_dsa_ret != 0) {
+            fprintf(stderr, "error: wc_MlDsaKey_GetSigLen returned %d\n",
+                    ml_dsa_ret);
+            exit(1);
+        }
+
+        printf("info: ML-DSA signature size: %d\n", sig_sz);
+
+        CMD.header_sz = 2 * sig_sz;
+        *sz = sig_sz;
+    }
+#endif /* WOLFSSL_WC_DILITHIUM */
+}
+
 int main(int argc, char** argv)
 {
     int ret = 0;
@@ -1871,6 +2142,7 @@ int main(int argc, char** argv)
     char* tmpstr;
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
+    const char* secondary_sign_str = "NONE";
     uint8_t  buf[PATH_MAX-32]; /* leave room to avoid "directive output may be truncated" */
     uint8_t *pubkey = NULL;
     uint32_t pubkey_sz = 0;
@@ -1897,67 +2169,151 @@ int main(int argc, char** argv)
             CMD.sign = NO_SIGN;
             sign_str = "NONE";
         } else if (strcmp(argv[i], "--ed25519") == 0) {
-            CMD.sign = SIGN_ED25519;
-            sign_str = "ED25519";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_ED25519;
+                secondary_sign_str = "ED25519";
+            } else {
+                CMD.sign = SIGN_ED25519;
+                sign_str = "ED25519";
+            }
         } else if (strcmp(argv[i], "--ed448") == 0) {
-            CMD.sign = SIGN_ED448;
-            sign_str = "ED448";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_ED448;
+                secondary_sign_str = "ED448";
+            } else {
+                CMD.sign = SIGN_ED448;
+                sign_str = "ED448";
+            }
         }
         else if (strcmp(argv[i], "--ecc256") == 0) {
-            CMD.sign = SIGN_ECC256;
-            sign_str = "ECC256";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_ECC256;
+                secondary_sign_str = "ECC256";
+            } else {
+                CMD.sign = SIGN_ECC256;
+                sign_str = "ECC256";
+            }
         }
         else if (strcmp(argv[i], "--ecc384") == 0) {
-            CMD.sign = SIGN_ECC384;
-            sign_str = "ECC384";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_ECC384;
+                secondary_sign_str = "ECC384";
+            } else {
+                CMD.sign = SIGN_ECC384;
+                sign_str = "ECC384";
+            }
         }
         else if (strcmp(argv[i], "--ecc521") == 0) {
-            CMD.sign = SIGN_ECC521;
-            sign_str = "ECC521";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_ECC521;
+                secondary_sign_str = "ECC521";
+            } else {
+                CMD.sign = SIGN_ECC521;
+                sign_str = "ECC521";
+            }
         }
         else if (strcmp(argv[i], "--rsa2048enc") == 0) {
-            CMD.sign = SIGN_RSA2048;
-            sign_str = "RSA2048ENC";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSA2048;
+                secondary_sign_str = "RSA2048ENC";
+            } else {
+                CMD.sign = SIGN_RSA2048;
+                sign_str = "RSA2048ENC";
+            }
             CMD.sign_wenc = 1;
         }
         else if (strcmp(argv[i], "--rsa2048") == 0) {
-            CMD.sign = SIGN_RSA2048;
-            sign_str = "RSA2048";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSA2048;
+                secondary_sign_str = "RSA2048";
+            } else {
+                CMD.sign = SIGN_RSA2048;
+                sign_str = "RSA2048";
+            }
         }
         else if (strcmp(argv[i], "--rsa3072enc") == 0) {
-            CMD.sign = SIGN_RSA3072;
-            sign_str = "RSA3072ENC";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSA3072;
+                secondary_sign_str = "RSA3072ENC";
+            } else {
+                CMD.sign = SIGN_RSA3072;
+                sign_str = "RSA3072ENC";
+            }
             CMD.sign_wenc = 1;
         }
         else if (strcmp(argv[i], "--rsa3072") == 0) {
-            CMD.sign = SIGN_RSA3072;
-            sign_str = "RSA3072";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSA3072;
+                secondary_sign_str = "RSA3072";
+            } else {
+                CMD.sign = SIGN_RSA3072;
+                sign_str = "RSA3072";
+            }
         }
         else if (strcmp(argv[i], "--rsa4096enc") == 0) {
-            CMD.sign = SIGN_RSA4096;
-            sign_str = "RSA4096ENC";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSA4096;
+                secondary_sign_str = "RSA4096ENC";
+            } else {
+                CMD.sign = SIGN_RSA4096;
+                sign_str = "RSA4096ENC";
+            }
             CMD.sign_wenc = 1;
         }
         else if (strcmp(argv[i], "--rsa4096") == 0) {
-            CMD.sign = SIGN_RSA4096;
-            sign_str = "RSA4096";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSA4096;
+                secondary_sign_str = "RSA4096";
+            } else {
+                CMD.sign = SIGN_RSA4096;
+                sign_str = "RSA4096";
+            }
         }
 #ifdef WOLFSSL_HAVE_LMS
         else if (strcmp(argv[i], "--lms") == 0) {
-            CMD.sign = SIGN_LMS;
-            sign_str = "LMS";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_LMS;
+                secondary_sign_str = "LMS";
+            } else {
+                CMD.sign = SIGN_LMS;
+                sign_str = "LMS";
+            }
         }
 #endif
 #ifdef WOLFSSL_HAVE_XMSS
         else if (strcmp(argv[i], "--xmss") == 0) {
-            CMD.sign = SIGN_XMSS;
-            sign_str = "XMSS";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_XMSS;
+                secondary_sign_str = "XMSS";
+            } else {
+                CMD.sign = SIGN_XMSS;
+                sign_str = "XMSS";
+            }
         }
 #endif
 #ifdef HAVE_DILITHIUM
         else if (strcmp(argv[i], "--ml_dsa") == 0) {
-            CMD.sign = SIGN_ML_DSA;
-            sign_str = "ML-DSA";
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_ML_DSA;
+                secondary_sign_str = "ML-DSA";
+            } else {
+                CMD.sign = SIGN_ML_DSA;
+                sign_str = "ML-DSA";
+            }
         }
 #endif
         else if (strcmp(argv[i], "--sha256") == 0) {
@@ -2137,11 +2493,25 @@ int main(int argc, char** argv)
     }
 
     if (CMD.sign != NO_SIGN) {
-        CMD.image_file = argv[i+1];
-        CMD.key_file = argv[i+2];
-        CMD.fw_version = argv[i+3];
-        if (CMD.manual_sign) {
-            CMD.signature_file = argv[i+4];
+        if (CMD.hybrid) {
+            printf("Parsing arguments in hybrid mode\n");
+            CMD.image_file = argv[i+1];
+            CMD.key_file = argv[i+2];
+            CMD.secondary_key_file = argv[i+3];
+            CMD.fw_version = argv[i+4];
+            if (CMD.manual_sign) {
+                CMD.signature_file = argv[i+5];
+            }
+            printf("Secondary private key: %s\n", CMD.secondary_key_file);
+            printf("Secondary cipher: %s\n", secondary_sign_str);
+            printf("Version: %s\n", CMD.fw_version);
+        } else {
+            CMD.image_file = argv[i+1];
+            CMD.key_file = argv[i+2];
+            CMD.fw_version = argv[i+3];
+            if (CMD.manual_sign) {
+                CMD.signature_file = argv[i+4];
+            }
         }
     } else {
         CMD.image_file = argv[i+1];
@@ -2154,7 +2524,7 @@ int main(int argc, char** argv)
     if (tmpstr) {
         *tmpstr = '\0'; /* null terminate at last "." */
     }
-    snprintf(CMD.output_image_file, sizeof(CMD.output_image_file),
+    snprintf(CMD.output_image_file, sizeof(CMD.output_image_file) - 1,
             "%s_v%s_%s.bin", (char*)buf, CMD.fw_version,
             CMD.sha_only ? "digest" : "signed");
 
@@ -2182,7 +2552,11 @@ int main(int argc, char** argv)
     printf("Selected cipher:      %s\n", sign_str);
     printf("Selected hash  :      %s\n", hash_str);
     if (CMD.sign != NO_SIGN) {
-        printf("Public key:           %s\n", CMD.key_file);
+        printf("Private key:           %s\n", CMD.key_file);
+    }
+    if (CMD.hybrid) {
+        printf("Secondary cipher:     %s\n", secondary_sign_str);
+        printf("Secondary private key: %s\n", CMD.secondary_key_file);
     }
     if (CMD.delta) {
         printf("Delta Base file:      %s\n", CMD.delta_base_file);
@@ -2226,151 +2600,10 @@ int main(int argc, char** argv)
         }
     }
 
-    /* get header and signature sizes */
-    if (CMD.sign == SIGN_ED25519) {
-        if (CMD.header_sz < 256)
-            CMD.header_sz = 256;
-        CMD.signature_sz = 64;
+    set_signature_sizes(0);
+    if (CMD.hybrid) {
+        set_signature_sizes(1);
     }
-    else if (CMD.sign == SIGN_ED448) {
-        if (CMD.header_sz < 512)
-            CMD.header_sz = 512;
-        CMD.signature_sz = 114;
-    }
-    else if (CMD.sign == SIGN_ECC256) {
-        if (CMD.header_sz < 256)
-            CMD.header_sz = 256;
-        CMD.signature_sz = 64;
-    }
-    else if (CMD.sign == SIGN_ECC384) {
-        if (CMD.header_sz < 512)
-            CMD.header_sz = 512;
-        CMD.signature_sz = 96;
-    }
-    else if (CMD.sign == SIGN_ECC521) {
-        if (CMD.header_sz < 512)
-            CMD.header_sz = 512;
-        CMD.signature_sz = 132;
-    }
-    else if (CMD.sign == SIGN_RSA2048) {
-        if (CMD.header_sz < 512)
-            CMD.header_sz = 512;
-        CMD.signature_sz = 256;
-    }
-    else if (CMD.sign == SIGN_RSA3072) {
-        if ((CMD.header_sz < 1024) && (CMD.hash_algo != HASH_SHA256))
-            CMD.header_sz = 1024;
-        if (CMD.header_sz < 512)
-            CMD.header_sz = 512;
-        CMD.signature_sz = 384;
-    }
-    else if (CMD.sign == SIGN_RSA4096) {
-        if (CMD.header_sz < 1024)
-            CMD.header_sz = 1024;
-        CMD.signature_sz = 512;
-    }
-#ifdef WOLFSSL_HAVE_LMS
-    else if (CMD.sign == SIGN_LMS) {
-        int    lms_ret = 0;
-        word32 sig_sz = 0;
-
-        lms_ret = wc_LmsKey_Init(&key.lms, NULL, INVALID_DEVID);
-        if (lms_ret != 0) {
-            fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", lms_ret);
-            exit(1);
-        }
-
-        lms_ret = wc_LmsKey_SetParameters(&key.lms, LMS_LEVELS,
-                                          LMS_HEIGHT, LMS_WINTERNITZ);
-        if (lms_ret != 0) {
-            fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
-                    " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
-                    LMS_WINTERNITZ, ret);
-            exit(1);
-        }
-
-        printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
-               LMS_HEIGHT, LMS_WINTERNITZ);
-
-        lms_ret = wc_LmsKey_GetSigLen(&key.lms, &sig_sz);
-        if (lms_ret != 0) {
-            fprintf(stderr, "error: wc_LmsKey_GetSigLen returned %d\n",
-                    lms_ret);
-            exit(1);
-        }
-
-        printf("info: LMS signature size: %d\n", sig_sz);
-
-        CMD.header_sz = 2 * sig_sz;
-        CMD.signature_sz = sig_sz;
-    }
-#endif /* WOLFSSL_HAVE_LMS */
-#ifdef WOLFSSL_HAVE_XMSS
-    else if (CMD.sign == SIGN_XMSS) {
-        int    xmss_ret = 0;
-        word32 sig_sz = 0;
-
-        xmss_ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
-        if (xmss_ret != 0) {
-            fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", xmss_ret);
-            exit(1);
-        }
-
-        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
-        if (xmss_ret != 0) {
-            fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
-                    " returned %d\n", WOLFBOOT_XMSS_PARAMS, ret);
-            exit(1);
-        }
-
-        printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
-
-        xmss_ret = wc_XmssKey_GetSigLen(&key.xmss, &sig_sz);
-        if (xmss_ret != 0) {
-            fprintf(stderr, "error: wc_XmssKey_GetSigLen returned %d\n",
-                    xmss_ret);
-            exit(1);
-        }
-
-        printf("info: XMSS signature size: %d\n", sig_sz);
-
-        CMD.header_sz = 2 * sig_sz;
-        CMD.signature_sz = sig_sz;
-    }
-#endif /* WOLFSSL_HAVE_XMSS */
-#ifdef WOLFSSL_WC_DILITHIUM
-    else if (CMD.sign == SIGN_ML_DSA) {
-        int ml_dsa_ret = 0;
-        int sig_sz = 0;
-
-        ml_dsa_ret = wc_MlDsaKey_Init(&key.ml_dsa, NULL, INVALID_DEVID);
-        if (ml_dsa_ret != 0) {
-            fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ml_dsa_ret);
-            exit(1);
-        }
-
-        ml_dsa_ret = wc_MlDsaKey_SetParams(&key.ml_dsa, ML_DSA_LEVEL);
-        if (ml_dsa_ret != 0) {
-            fprintf(stderr, "error: wc_MlDsaKey_SetParamStr(%d)" \
-                    " returned %d\n", ML_DSA_LEVEL, ret);
-            exit(1);
-        }
-
-        printf("info: using ML-DSA parameters: %d\n", ML_DSA_LEVEL);
-
-        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, &sig_sz);
-        if (ml_dsa_ret != 0) {
-            fprintf(stderr, "error: wc_MlDsaKey_GetSigLen returned %d\n",
-                    ml_dsa_ret);
-            exit(1);
-        }
-
-        printf("info: ML-DSA signature size: %d\n", sig_sz);
-
-        CMD.header_sz = 2 * sig_sz;
-        CMD.signature_sz = sig_sz;
-    }
-#endif /* WOLFSSL_WC_DILITHIUM */
 
     if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
             CMD.header_sz == 0) {
@@ -2384,12 +2617,30 @@ int main(int argc, char** argv)
                 "*** Image will not be authenticated!\n"
                 "*** SECURE BOOT DISABLED.\n");
     } else {
-        kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkey_sz);
+        kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkey_sz, 0);
         if (!kbuf) {
             exit(1);
         }
     } /* CMD.sign != NO_SIGN */
-    make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
+
+    if (CMD.hybrid) {
+        uint8_t *kbuf2 = NULL;
+        uint32_t key_buffer_sz2;
+        uint8_t *pubkey2 = NULL;
+        uint32_t pubkey_sz2;
+        kbuf2 = load_key(&key_buffer, &key_buffer_sz2, &pubkey2, &pubkey_sz2, 1);
+        printf("Creating hybrid signature\n");
+        make_hybrid_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file,
+                pubkey2, pubkey_sz2);
+        if (kbuf2)
+            free(kbuf2);
+        printf("Signature size: %u\n", CMD.signature_sz);
+        printf("Secondary signature size: %u\n", CMD.secondary_signature_sz);
+        printf("Header size: %u\n", CMD.header_sz);
+    } else {
+        make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
+    }
+
 
     if (CMD.delta) {
         if (CMD.encrypt)

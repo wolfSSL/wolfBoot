@@ -32,7 +32,11 @@ extern "C" {
 #ifndef KEYSTORE_PUBKEY_SIZE
     /* allow building version for external API use */
     #define KEYSTORE_ANY
-    #define KEYSTORE_PUBKEY_SIZE 576 /* Max is RSA 4096 */
+#ifdef ML_DSA_LEVEL
+    #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
+#else
+    #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
+#endif
 #endif
 
 

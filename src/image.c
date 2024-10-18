@@ -97,7 +97,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 /* wolfCrypt software verify */
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ed25519(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, res;
@@ -121,7 +121,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
 #ifdef WOLFBOOT_SIGN_ED448
 #include <wolfssl/wolfcrypt/ed448.h>
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ed448(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, res;
@@ -140,7 +140,6 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     VERIFY_FN(img, &res, wc_ed448_verify_msg, sig, IMAGE_SIGNATURE_SIZE,
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed, NULL, 0);
 }
-
 
 #endif
 
@@ -167,7 +166,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
  * @param img The image to verify.
  * @param sig The signature to use for verification.
  */
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, verify_res = 0;
@@ -283,7 +282,7 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 }
 #endif /* !NO_RSA_SIG_ENCODING */
 
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret;
@@ -338,6 +337,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         RSA_VERIFY_HASH(img, digest_out);
     }
 }
+
 #endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_3072 || \
         * WOLFBOOT_SIGN_RSA4096 */
 
@@ -349,7 +349,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     #include <wolfssl/wolfcrypt/wc_lms.h>
 #endif
 
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_lms(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int       ret = 0;
@@ -406,6 +406,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     wc_LmsKey_Free(&lms);
 }
+
 #endif /* WOLFBOOT_SIGN_LMS */
 
 #ifdef WOLFBOOT_SIGN_XMSS
@@ -416,7 +417,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     #include <wolfssl/wolfcrypt/wc_xmss.h>
 #endif
 
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int       ret = 0;
@@ -470,11 +471,12 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     wc_XmssKey_Free(&xmss);
 }
+
 #endif /* WOLFBOOT_SIGN_XMSS */
 
 #ifdef WOLFBOOT_SIGN_ML_DSA
 #include <wolfssl/wolfcrypt/dilithium.h>
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int       ret = 0;
@@ -570,6 +572,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     wc_MlDsaKey_Free(&ml_dsa);
 }
+
 #endif /* WOLFBOOT_SIGN_ML_DSA */
 
 #endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY */
@@ -1228,6 +1231,27 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      */
     wolfBoot_verify_signature(key_slot, img, stored_signature);
     if (img->signature_ok == 1)
+#ifdef SIGN_HYBRID
+    {
+        /* Invalidate the signature_ok flag */
+        wolfBoot_image_clear_signature_ok(img);
+        /* Load the pubkey hint for the secondary key */
+        pubkey_hint_size = get_header(img, HDR_SECONDARY_PUBKEY, &pubkey_hint);
+        if (pubkey_hint_size == WOLFBOOT_SHA_DIGEST_SIZE) {
+            key_slot = keyslot_id_by_sha(pubkey_hint);
+            if (key_slot < 0) {
+                return -1; /* Key was not found */
+            }
+            key_mask = keystore_get_mask(key_slot);
+            if (((1U << image_part) & key_mask) != (1U << image_part)) {
+                return -1; /* Key not allowed to verify this partition id */
+            }
+            CONFIRM_MASK_VALID(image_part, key_mask);
+            wolfBoot_verify_signature(key_slot, img, stored_signature);
+        }
+    }
+    if (img->signature_ok == 1)
+#endif
         return 0;
     return -2;
 }

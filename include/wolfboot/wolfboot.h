@@ -67,12 +67,14 @@ extern "C" {
 #define HDR_IMG_DELTA_BASE          0x05
 #define HDR_IMG_DELTA_SIZE          0x06
 #define HDR_PUBKEY                  0x10
+#define HDR_SECONDARY_PUBKEY        0x12
 #define HDR_SHA3_384                0x13
 #define HDR_SHA384                  0x14
 #define HDR_IMG_DELTA_INVERSE       0x15
 #define HDR_IMG_DELTA_INVERSE_SIZE  0x16
 #define HDR_SIGNATURE               0x20
 #define HDR_POLICY_SIGNATURE        0x21
+#define HDR_SECONDARY_SIGNATURE     0x22
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */
@@ -118,72 +120,71 @@ extern "C" {
 #define HDR_IMG_TYPE_APP          0x0001
 #endif
 
- #define KEYSTORE_PUBKEY_SIZE_NONE    0
- #define KEYSTORE_PUBKEY_SIZE_ED25519 32
- #define KEYSTORE_PUBKEY_SIZE_ED448   57
- #define KEYSTORE_PUBKEY_SIZE_ECC256  64
- #define KEYSTORE_PUBKEY_SIZE_ECC384  96
- #define KEYSTORE_PUBKEY_SIZE_ECC521  132
- #define KEYSTORE_PUBKEY_SIZE_RSA2048 320
- #define KEYSTORE_PUBKEY_SIZE_RSA3072 448
- #define KEYSTORE_PUBKEY_SIZE_RSA4096 576
- #define KEYSTORE_PUBKEY_SIZE_LMS     60
- #define KEYSTORE_PUBKEY_SIZE_XMSS    68
- /* ML-DSA pub key size is a function of parameters.
-  * This needs to be configurable. Default to security
-  * category 2. */
- #ifdef ML_DSA_LEVEL
-     #if ML_DSA_LEVEL == 2
-         #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1312
-     #elif ML_DSA_LEVEL == 3
-         #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1952
-     #elif ML_DSA_LEVEL == 5
-         #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
-     #else
-         #error "Invalid ML_DSA_LEVEL!"
-     #endif
- #else
-     #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1312
- #endif /* ML_DSA_LEVEL */
+#define KEYSTORE_PUBKEY_SIZE_NONE    0
+#define KEYSTORE_PUBKEY_SIZE_ED25519 32
+#define KEYSTORE_PUBKEY_SIZE_ED448   57
+#define KEYSTORE_PUBKEY_SIZE_ECC256  64
+#define KEYSTORE_PUBKEY_SIZE_ECC384  96
+#define KEYSTORE_PUBKEY_SIZE_ECC521  132
+#define KEYSTORE_PUBKEY_SIZE_RSA2048 320
+#define KEYSTORE_PUBKEY_SIZE_RSA3072 448
+#define KEYSTORE_PUBKEY_SIZE_RSA4096 576
+#define KEYSTORE_PUBKEY_SIZE_LMS     60
+#define KEYSTORE_PUBKEY_SIZE_XMSS    68
+
+/* ML-DSA pub key size is a function of parameters.
+ * This needs to be configurable. Default to security
+ * category 2. */
+#ifdef ML_DSA_LEVEL
+    #if ML_DSA_LEVEL == 2
+        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1312
+    #elif ML_DSA_LEVEL == 3
+        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1952
+    #elif ML_DSA_LEVEL == 5
+        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
+    #else
+        #error "Invalid ML_DSA_LEVEL!"
+    #endif
+#endif /* ML_DSA_LEVEL */
 
 /* Mask for key permissions */
- #define KEY_VERIFY_ALL         (0xFFFFFFFFU)
- #define KEY_VERIFY_ONLY_ID(X)  (1U << X)
- #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
- #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
+#define KEY_VERIFY_ALL         (0xFFFFFFFFU)
+#define KEY_VERIFY_ONLY_ID(X)  (1U << X)
+#define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
+#define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
 
 #if defined(__WOLFBOOT) || defined(UNIT_TEST_AUTH)
 
- /* Hashing configuration */
- #if defined(WOLFBOOT_HASH_SHA256)
- #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
- #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
- #   endif
- #   define WOLFBOOT_SHA_HDR HDR_SHA256
- #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
- #   define image_hash image_sha256
- #   define key_hash key_sha256
- #   define self_hash self_sha256
- #elif defined(WOLFBOOT_HASH_SHA384)
- #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
- #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
- #   endif
- #   define WOLFBOOT_SHA_HDR HDR_SHA384
- #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
- #   define image_hash image_sha384
- #   define key_hash key_sha384
- #   define self_hash self_sha384
- #elif defined(WOLFBOOT_HASH_SHA3_384)
- #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
- #     define WOLFBOOT_SHA_BLOCK_SIZE (128)
- #   endif
- #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
- #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
- #   define image_hash image_sha3_384
- #   define key_hash key_sha3_384
- #else
- #   error "No valid hash algorithm defined!"
- #endif
+/* Hashing configuration */
+#if defined(WOLFBOOT_HASH_SHA256)
+#   ifndef WOLFBOOT_SHA_BLOCK_SIZE
+#     define WOLFBOOT_SHA_BLOCK_SIZE (256)
+#   endif
+#   define WOLFBOOT_SHA_HDR HDR_SHA256
+#   define WOLFBOOT_SHA_DIGEST_SIZE (32)
+#   define image_hash image_sha256
+#   define key_hash key_sha256
+#   define self_hash self_sha256
+#elif defined(WOLFBOOT_HASH_SHA384)
+#   ifndef WOLFBOOT_SHA_BLOCK_SIZE
+#     define WOLFBOOT_SHA_BLOCK_SIZE (256)
+#   endif
+#   define WOLFBOOT_SHA_HDR HDR_SHA384
+#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+#   define image_hash image_sha384
+#   define key_hash key_sha384
+#   define self_hash self_sha384
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+#   ifndef WOLFBOOT_SHA_BLOCK_SIZE
+#     define WOLFBOOT_SHA_BLOCK_SIZE (128)
+#   endif
+#   define WOLFBOOT_SHA_HDR HDR_SHA3_384
+#   define WOLFBOOT_SHA_DIGEST_SIZE (48)
+#   define image_hash image_sha3_384
+#   define key_hash key_sha3_384
+#else
+#   error "No valid hash algorithm defined!"
+#endif
 
 #ifdef WOLFBOOT_TPM
     #if defined(WOLFBOOT_HASH_SHA256)

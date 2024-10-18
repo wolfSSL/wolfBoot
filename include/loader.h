@@ -77,6 +77,28 @@ extern "C" {
 #   error "No public key available for given signing algorithm."
 #endif /* Algorithm selection */
 
+#ifdef WOLFBOOT_SIGN_PRIMARY_ED25519
+#define wolfBoot_verify_signature wolfBoot_verify_signature_ed25519
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_ED448
+#define wolfBoot_verify_signature wolfBoot_verify_signature_ed448
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_RSA
+#define wolfBoot_verify_signature wolfBoot_verify_signature_rsa
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_ECC
+#define wolfBoot_verify_signature wolfBoot_verify_signature_ecc
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_LMS
+#define wolfBoot_verify_signature wolfBoot_verify_signature_lms
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_XMSS
+#define wolfBoot_verify_signature wolfBoot_verify_signature_xmss
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_ML_DSA
+#define wolfBoot_verify_signature wolfBoot_verify_signature_ml_dsa
+#endif
+
 void wolfBoot_start(void);
 
 #if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
