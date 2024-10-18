@@ -25,8 +25,13 @@ SPI_TARGET=$(TARGET)
 # Default UART driver name
 UART_TARGET=$(TARGET)
 
-# Include SHA256 module because it's implicitly needed by RSA
-WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
+# Include some modules by default
+WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o \
+                ./lib/wolfssl/wolfcrypt/src/hash.o \
+                ./lib/wolfssl/wolfcrypt/src/memory.o \
+                ./lib/wolfssl/wolfcrypt/src/wc_port.o \
+                ./lib/wolfssl/wolfcrypt/src/wolfmath.o
+
 
 ifeq ($(ARCH),x86_64)
   CFLAGS+=-DARCH_x86_64
@@ -239,7 +244,6 @@ else
         CORTEXM_ARM_EXTRA_OBJS=
         CORTEXM_ARM_EXTRA_CFLAGS=
         SECURE_OBJS+=./src/wc_callable.o
-        SECURE_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
         CFLAGS+=-DWOLFCRYPT_SECURE_MODE
         SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
       endif
@@ -1025,9 +1029,12 @@ ifeq ($(TARGET),sim)
   LD_END_GROUP=
   BOOT_IMG=test-app/image.elf
   CFLAGS+=-DARCH_SIM
+  CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+  LDFLAGS +=-Wl,-gc-sections -Wl,-Map=wolfboot.map
   ifeq ($(FORCE_32BIT),1)
     CFLAGS+=-m32
     LDFLAGS+=-m32
+
   endif
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o

@@ -58,6 +58,7 @@ int do_cmd(const char *cmd)
         return 1;
     }
     if (strcmp(cmd, "get_version") == 0) {
+        sleep(.5);
         printf("%d\n", wolfBoot_current_firmware_version());
         return 0;
     }

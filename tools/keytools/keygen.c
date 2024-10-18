@@ -122,7 +122,7 @@ static int saveAsDer = 0;
 static WC_RNG rng;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
-    #if defined(WOLFSSL_WC_DILITHIUM)
+    #if defined(KEYSTORE_PUBKEY_SIZE_ML_DSA)
         /* ML-DSA pub keys are big. */
         #define KEYSLOT_MAX_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
     #else
@@ -388,9 +388,11 @@ static uint32_t get_pubkey_size(uint32_t keyType)
         case KEYGEN_XMSS:
             size = KEYSTORE_PUBKEY_SIZE_XMSS;
             break;
+#ifdef KEYSTORE_PUBKEY_SIZE_ML_DSA
         case KEYGEN_ML_DSA:
             size = KEYSTORE_PUBKEY_SIZE_ML_DSA;
             break;
+#endif
         default:
             size = 0;
     }
@@ -431,10 +433,14 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
 #ifdef WOLFBOOT_UNIVERSAL_KEYSTORE
     slot_size = sizeof(struct keystore_slot);
 #else
-    slot_size = sizeof(struct keystore_slot) +  sl.pubkey_size - 
+    slot_size = sizeof(struct keystore_slot) +  sl.pubkey_size -
         KEYSLOT_MAX_PUBKEY_SIZE;
 #endif
     fwrite(&sl, slot_size, 1, fpub_image);
+#ifdef DEBUG_SIGNTOOL
+    printf("Added key to keystore: %s\n", keyfile);
+    WOLFSSL_BUFFER(key, sz);
+#endif
     id_slot++;
 }
 
@@ -1113,6 +1119,7 @@ int main(int argc, char** argv)
 #ifdef DEBUG_SIGNTOOL
     wolfSSL_Debugging_ON();
 #endif
+    printf("Keystore size: %lu\n", (unsigned long)sizeof(struct keystore_slot));
 
     /* Check arguments and print usage */
     if (argc < 2)
