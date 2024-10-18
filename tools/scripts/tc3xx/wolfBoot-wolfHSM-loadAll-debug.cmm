@@ -3,15 +3,18 @@ system.up
 
 
 LOCAL &wolfBoot &testApp &updateApp
-&wolfBoot="..\..\..\IDE\AURIX\wolfBoot-tc3xx\TriCore Debug (GCC)\wolfBoot-tc3xx.elf"
+&wolfBoot="..\..\..\IDE\AURIX\wolfBoot-tc3xx-wolfHSM\TriCore Debug (GCC)\wolfBoot-tc3xx-wolfHSM.elf"
 &testApp="..\..\..\IDE\AURIX\test-app\TriCore Debug (GCC)\test-app_v1_signed.bin"
 &updateApp="..\..\..\IDE\AURIX\test-app\TriCore Debug (GCC)\test-app_v2_signed.bin"
 
 DO  ~~/demo/tricore/flash/tc37x.cmm PREPAREONLY
 
-flash.erase all
+flash.CHANGEtype 0xA0000000--0xA009FFFF NOP
+flash.CHANGEtype 0xAFC00000--0xAFC10000 NOP
 
+FLASH.Erase 0xA00A0000--0xA05FFFFF
 flash.reprogram all /erase
+
 data.load.binary "&testApp" 0xA0300000
 data.load.binary "&updateApp" 0xA047E000
 data.load.elf "&wolfBoot"
@@ -21,7 +24,7 @@ break.set core0_main
 
 system.down
 system.up
-go
+;go
 
 ; Bring up the important views
 SYStem

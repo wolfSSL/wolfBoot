@@ -209,6 +209,8 @@ IDE/AURIX/SDK/*
 !IDE/AURIX/SDK/placeholder.txt
 IDE/AURIX/Configurations/*
 !IDE/AURIX/Configurations/placeholder.txt
+IDE/AURIX/wolfHSM-infineon-tc3xx/*
+!IDE/AURIX/wolfHSM-infineon-tc3xx/placeholder.txt
 
 tpm_seal_key.key
 

@@ -51,6 +51,7 @@ endif
 WOLFCRYPT_OBJS:=
 SECURE_OBJS:=
 PUBLIC_KEY_OBJS:=
+WOLFHSM_CLIENT_OBJS:=
 ifneq ("$(NO_LOADER)","1")
   OBJS+=./src/loader.o
 endif
@@ -63,6 +64,7 @@ include options.mk
 
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
+OBJS+=$(WOLFHSM_CLIENT_OBJS)
 
 CFLAGS+= \
   -I"." -I"include/" -I"lib/wolfssl" \
@@ -144,6 +146,7 @@ endif
 ASFLAGS:=$(CFLAGS)
 
 all: $(MAIN_TARGET)
+	@echo "HSM OBJS = $(WOLFHSM_CLIENT_OBJS)"
 
 stage1: stage1/loader_stage1.bin
 stage1/loader_stage1.bin: wolfboot.elf

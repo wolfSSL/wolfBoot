@@ -98,6 +98,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef SECURE_PKCS11
     WP11_Library_Init();
 #endif
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    (void)hal_hsm_disconnect();
+#endif
     hal_prepare_boot();
     do_boot((void *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE));
 }

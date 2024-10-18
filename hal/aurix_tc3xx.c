@@ -23,6 +23,7 @@
 #include <string.h>
 
 /* wolfBoot headers */
+#include "hal.h"
 #include "image.h"  /* for RAMFUNCTION */
 #include "loader.h" /* for wolfBoot_panic */
 
@@ -32,6 +33,20 @@
 #include "IfxPort.h"       /* for IfxPort_*  */
 #include "IfxScuRcu.h"     /* for IfxScuRcu_performReset */
 #include "Ifx_Ssw_Infra.h" /* for Ifx_Ssw_jumpToFunction */
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+/* wolfHSM headers */
+#include "wolfhsm/wh_error.h"
+#include "wolfhsm/wh_client.h"
+#include "wolfhsm/wh_transport_mem.h"
+
+/* wolfHSM AURIX port headers */
+#include "tchsm_hh_host.h"
+#include "tchsm_hsmhost.h"
+#include "tchsm_config.h"
+#include "tchsm_common.h"
+#include "hsm_ipc.h"
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
 #define FLASH_MODULE                (0)
 #define UNUSED_PARAMETER            (0)
@@ -65,6 +80,11 @@ static uint32_t sectorBuffer[WOLFBOOT_SECTOR_SIZE / sizeof(uint32_t)];
 #define LED_ON(led)
 #define LED_OFF(led)
 #endif /* WOLFBOOT_AURIX_GPIO_TIMING */
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+int hal_hsm_init_connect(void);
+int hal_hsm_disconnect(void);
+#endif
 
 /* Returns the SDK flash type enum based on the address */
 static IfxFlash_FlashType getFlashTypeFromAddr(uint32_t addr)
@@ -522,3 +542,122 @@ void arch_reboot(void)
     IfxScuRcu_performReset(IfxScuRcu_ResetType_system,
                            WOLFBOOT_AURIX_RESET_REASON);
 }
+
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+static int _cancelCb(uint16_t cancelSeq);
+static int _connectCb(void* context, whCommConnected connect);
+
+ /* Client configuration/contexts */
+static whTransportMemClientContext tmcCtx[1]  = {0};
+static whTransportClientCb         tmcCb[1]   = {WH_TRANSPORT_MEM_CLIENT_CB};
+
+/* Globally exported HAL symbols */
+whClientContext hsmClientCtx         = {0};
+const int       hsmClientDevIdHash   = WH_DEV_ID_DMA;
+const int       hsmClientDevIdPubKey = WH_DEV_ID;
+const int       hsmClientKeyIdPubKey = 0xFF;
+#ifdef EXT_ENCRYPT
+#error "AURIX TC3xx does not support firmware encryption with wolfHSM (yet)"
+const int       hsmClientDevIdCrypt = WH_DEV_ID;
+const int       hsmClientKeyIdCrypt = 0xFF;
+#endif
+
+
+static int _cancelCb(uint16_t cancelSeq)
+{
+    HSM_SHM_CORE0_CANCEL_SEQ = cancelSeq;
+    (void)tchsmHhHost2Hsm_Notify(TCHSM_HOST2HSM_NOTIFY_CANCEL);
+    return 0;
+}
+
+static int _connectCb(void* context, whCommConnected connect)
+{
+    int ret;
+
+    switch (connect) {
+        case WH_COMM_CONNECTED:
+            ret = tchsmHhHost2Hsm_Notify(TCHSM_HOST2HSM_NOTIFY_CONNECT);
+            break;
+        case WH_COMM_DISCONNECTED:
+            ret = tchsmHhHost2Hsm_Notify(TCHSM_HOST2HSM_NOTIFY_DISCONNECT);
+            break;
+        default:
+            ret = WH_ERROR_BADARGS;
+            break;
+    }
+
+    return ret;
+}
+
+int hal_hsm_init_connect(void)
+{
+    int rc = 0;
+
+    /* init shared memory buffers */
+    uint32_t* req  = (uint32_t*)hsmShmCore0CommBuf;
+    uint32_t* resp = (uint32_t*)hsmShmCore0CommBuf + HSM_SHM_CORE0_COMM_BUF_WORDS / 2;
+    whTransportMemConfig tmcCfg[1] = {{
+        .req       = req,
+        .req_size  = HSM_SHM_CORE0_COMM_BUF_SIZE / 2,
+        .resp      = resp,
+        .resp_size = HSM_SHM_CORE0_COMM_BUF_SIZE / 2,
+    }};
+
+
+     /* Client configuration/contexts */
+    whCommClientConfig          cc_conf[1] = {{
+                  .transport_cb      = tmcCb,
+                  .transport_context = (void*)tmcCtx,
+                  .transport_config  = (void*)tmcCfg,
+                  .client_id         = 1,
+                  .connect_cb        = _connectCb,
+     }};
+
+     whClientConfig c_conf[1] = {{
+         .comm = cc_conf,
+         .cancelCb = _cancelCb,
+     }};
+
+    rc = hsm_ipc_init();
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    /* init shared memory buffers */
+    for (size_t i=0; i<HSM_SHM_CORE0_COMM_BUF_WORDS; i++) {
+        hsmShmCore0CommBuf[i] = 0;
+    }
+
+    rc = wh_Client_Init(&hsmClientCtx, c_conf);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    rc = wh_Client_CommInit(&hsmClientCtx, NULL, NULL);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
+
+    return rc;
+}
+
+int hal_hsm_disconnect(void)
+{
+    int rc;
+
+    rc = wh_Client_CommClose(&hsmClientCtx);
+    if (rc != 0) {
+        wolfBoot_panic();
+    }
+
+    rc = wh_Client_Cleanup(&hsmClientCtx);
+    if (rc != 0) {
+        wolfBoot_panic();
+    }
+
+    return 0;
+}
+
+
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
