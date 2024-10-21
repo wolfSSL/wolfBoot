@@ -17,38 +17,16 @@
  * You should have received a copy of the GNU General Public License
  * along with wolfBoot.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "Bsp.h"
 #include "IfxCpu.h"
-#include "IfxPort.h"
 #include "IfxScuWdt.h"
 #include "Ifx_Types.h"
-#include "wolfboot/wolfboot.h"
 
 IFX_ALIGN(4) IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
-
-#define LED               &MODULE_P00, 5 /* LED: Port, Pin definition  */
-#define BLINK_TIME_BASE   500 /* Wait time constant in milliseconds   */
-#define BLINK_TIME_UPDATE 100 /* Wait time constant in milliseconds   */
-
-#define BASE_FW_VERSION 1
-
-/* This function initializes the port pin which drives the LED */
-static void initLED(void)
-{
-    /* Initialization of the LED used in this example */
-    IfxPort_setPinModeOutput(LED,
-                             IfxPort_OutputMode_pushPull,
-                             IfxPort_OutputIdx_general);
-
-    /* Switch OFF the LED (low-level active) */
-    IfxPort_setPinLow(LED);
-}
+extern void loader_main(void);
 
 void core0_main(void)
 {
-    size_t blinkTime;
-
     IfxCpu_enableInterrupts();
 
     /* !!WATCHDOG0 AND SAFETY WATCHDOG ARE DISABLED HERE!!
@@ -61,23 +39,9 @@ void core0_main(void)
     IfxCpu_emitEvent(&g_cpuSyncEvent);
     IfxCpu_waitEvent(&g_cpuSyncEvent, 1);
 
-    initLED();
-
-    if (wolfBoot_current_firmware_version() <= BASE_FW_VERSION) {
-        /* We are booting into the base firmware, so stage the update and set
-         * the LED to blink slow */
-        wolfBoot_update_trigger();
-        blinkTime = BLINK_TIME_BASE;
-    }
-    else {
-        /* we are booting into the updated firmware so acknowledge the update
-         * (to prevent rollback) and set the LED to blink fast */
-        wolfBoot_success();
-        blinkTime = BLINK_TIME_UPDATE;
-    }
+    /* invoke wolfBoot */
+    loader_main();
 
     while (1) {
-        IfxPort_togglePin(LED);
-        waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, blinkTime));
     }
 }

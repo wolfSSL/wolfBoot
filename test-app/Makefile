@@ -7,7 +7,11 @@ TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 CFLAGS+=-I. -I..
-CFLAGS+=-I./wcs
+ifeq ($(TZEN),1)
+  # wcs directory contains a user_settings.h, which will conflict with
+  # the one in the include directory if the test app needs it (e.g. wolfHSM)
+  CFLAGS+=-I./wcs
+endif
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
 USE_GCC?=1
@@ -424,6 +428,12 @@ ifeq ($(TARGET),x86_fsp_qemu)
 endif
 
 CFLAGS+=-I../lib/wolfssl
+
+ifeq ($(WOLFHSM_CLIENT),1)
+  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I../lib/wolfssl
+  APP_OBJS += $(WOLFHSM_CLIENT_OBJS)
+  APP_OBJS += $(sort $(patsubst ./lib/wolfssl/%, ../lib/wolfssl/%, $(WOLFCRYPT_OBJS)))
+endif
 
 
 standalone:CFLAGS+=-D"TEST_APP_STANDALONE"

@@ -221,6 +221,9 @@ void RAMFUNCTION wolfBoot_start(void)
     sata_disable(sata_bar);
     wolfBoot_printf("Firmware Valid.\r\n");
     wolfBoot_printf("Booting at %08lx\r\n", os_image.fw_base);
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    (void)hal_hsm_disconnect();
+#endif
     hal_prepare_boot();
     do_boot((uint32_t*)os_image.fw_base);
 }

@@ -952,6 +952,9 @@ void RAMFUNCTION wolfBoot_start(void)
     WP11_Library_Init();
 #endif
 
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    (void)hal_hsm_disconnect();
+#endif
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }

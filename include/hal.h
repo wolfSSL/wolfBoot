@@ -142,6 +142,31 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length);
 int hal_flash_test(void);
 #endif
 
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+/* TODO: most of this should be moved to its own HSM shim header */
+#include "wolfhsm/wh_error.h"  /* wolfHSM error codes */
+#include "wolfhsm/wh_client.h" /* For client API access */
+#include "wolfhsm/wh_client_crypto.h" /* For client crypto helper API */
+
+extern whClientContext hsmClientCtx; /* global wolfHSM client context */
+
+extern const int hsmClientDevIdHash;   /* devId for image digest */
+extern const int hsmClientDevIdPubKey; /* devId for signature verification */
+#ifdef EXT_ENCRYPTED
+extern const int hsmClientDevIdCrypt; /* devId for image (enc)decryption */
+#endif
+
+extern const int hsmClientKeyIdPubKey; /* KeyId for public key operations */
+#ifdef EXT_ENCRYPTED
+extern const int hsmClientKeyIdCrypt; /* KeyId for image (enc/dec)ryption */
+#endif
+
+/* Implementation of functions provided by HAL */
+int hal_hsm_init_connect(void);
+int hal_hsm_disconnect(void);
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+
 #ifdef __cplusplus
 }
 #endif

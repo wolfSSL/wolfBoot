@@ -63,28 +63,36 @@ LCF_HEAP1_OFFSET =   (LCF_USTACK1_OFFSET - LCF_HEAP_SIZE);
 LCF_HEAP2_OFFSET =   (LCF_USTACK2_OFFSET - LCF_HEAP_SIZE);
 
 
-LCF_STARTPTR_CPU0 = 0x80300400;
-LCF_STARTPTR_CPU1 = 0x80300420;
-LCF_STARTPTR_CPU2 = 0x80300440;
+LCF_WOLFBOOT_BOOT_PART_BASEADDR = 0xA0300000;
+LCF_WOLFBOOT_HEADER_OFFSET = 0x100;
 
-LCF_STARTPTR_NC_CPU0 = 0xA0300400;
-LCF_STARTPTR_NC_CPU1 = 0xA0300420;
-LCF_STARTPTR_NC_CPU2 = 0xA0300440;
+LCF_CODE_BASE_ADDR = LCF_WOLFBOOT_BOOT_PART_BASEADDR + LCF_WOLFBOOT_HEADER_OFFSET;
 
-/* TODO LCF_TRAPVEC_SIZE */
-LCF_TRAPVEC0_START = 0x80300500;
-LCF_TRAPVEC1_START = 0x80300600;
-LCF_TRAPVEC2_START = 0x80300700;
+LCF_START_CODE_SIZE = 0x20; /* space reserved for .start sections (per-cpu) */
+LCF_TRAPVEC_OFFSET = 0x100; /* size/alignment of trap table (also offset from base to first trap table) */
 
-LCF_INTVEC0_START = 0x80300800;
-LCF_INTVEC1_START = 0x80302800;
-LCF_INTVEC2_START = 0x80304800;
+LCF_STARTPTR_NC_CPU0 = LCF_CODE_BASE_ADDR;
+LCF_STARTPTR_NC_CPU1 = LCF_STARTPTR_NC_CPU0 + LCF_START_CODE_SIZE;
+LCF_STARTPTR_NC_CPU2 = LCF_STARTPTR_NC_CPU1 + LCF_START_CODE_SIZE;
+
+/* Offset of the trap table from start address (accounts for size of .start section) */
+LCF_TRAPVEC0_START = (LCF_STARTPTR_NC_CPU0 + LCF_TRAPVEC_OFFSET); /* 0x80000100 */
+LCF_TRAPVEC1_START = (LCF_TRAPVEC0_START + LCF_TRAPVEC_OFFSET);   /* 0x80000200 */
+LCF_TRAPVEC2_START = (LCF_TRAPVEC1_START + LCF_TRAPVEC_OFFSET);   /* 0x80000300 */
+
+LCF_INTVEC_SIZE   = 0x2000; /* 8k */
+LCF_INTVEC0_START = (LCF_TRAPVEC2_START + LCF_TRAPVEC_OFFSET); /* 0x80000400; */
+LCF_INTVEC1_START = (LCF_INTVEC0_START + LCF_INTVEC_SIZE);     /* 0x80002400; */
+LCF_INTVEC2_START = (LCF_INTVEC1_START + LCF_INTVEC_SIZE);     /* 0x80004400; */
 
 __INTTAB_CPU0 = LCF_INTVEC0_START;
 __INTTAB_CPU1 = LCF_INTVEC1_START;
 __INTTAB_CPU2 = LCF_INTVEC2_START;
 
-
+/* Alias non-cached to cached sections for now */
+LCF_STARTPTR_CPU0 = LCF_STARTPTR_NC_CPU0;
+LCF_STARTPTR_CPU1 = LCF_STARTPTR_NC_CPU1;
+LCF_STARTPTR_CPU2 = LCF_STARTPTR_NC_CPU2;
 
 RESET = LCF_STARTPTR_NC_CPU0;
 
@@ -93,37 +101,40 @@ MEMORY
     dsram2_local (w!xp): org = 0xd0000000, len = 96K
     dsram2 (w!xp): org = 0x50000000, len = 96K
     psram2 (w!xp): org = 0x50100000, len = 64K
-    
+
     dsram1_local (w!xp): org = 0xd0000000, len = 240K
     dsram1 (w!xp): org = 0x60000000, len = 240K
     psram1 (w!xp): org = 0x60100000, len = 64K
-    
+
     dsram0_local (w!xp): org = 0xd0000000, len = 240K
     dsram0 (w!xp): org = 0x70000000, len = 240K
     psram0 (w!xp): org = 0x70100000, len = 64K
-    
+
     psram_local (w!xp): org = 0xc0000000, len = 64K
-    
+
     /* Majority of pfls0 is reserved for wolfBoot, swap and HSM */
-    pfls0 (rx!p):    org = 0x80000000, len = 3M
-    
+    pfls0 (rx!p):    org = 0xA0000000, len = 3M
+
     /* placeholder for wolfBoot image header */
-    pfls1_hdr (rx!p):    org = 0x80300000, len = 1024 
-    
+    pfls1_hdr (rx!p):    org = 0xA0300000, len = 256
+
     /* pfls1 is the remainder of the wolfBoot BOOT partition. Everything goes here */
-    pfls1 (rx!p):    org = 0x80300400, len = 0x17FC00 /* 1.5MiB - 1024B*/ 
-    
+    pfls1 (rx!p):    org = 0xA0300100, len = 0x17DF00 /* 0x17E000 - 256B */
+
     /* reserved for wolfBoot UPDATE partition */
-    pfls1_update (rx!p):    org = 0x80480000, len = 0x180000 /* 1.5MiB */
-    
+    pfls1_update (rwx!p):    org = 0xA047E000, len = 0x17E000  /* ~1.5MiB */
+
+    /* SWAP sector for wolfBoot image update */
+    pfls1_swap (rwx!p): org = 0xA05FC000, len = 16K /* last sector of PFLASH1 */
+
     dfls0 (rx!p): org = 0xaf000000, len = 256K
-    
+
     ucb (rx!p): org = 0xaf400000, len = 24K
-    
+
     cpu0_dlmu (w!xp): org = 0x90000000, len = 64K
-    
+
     cpu1_dlmu (w!xp): org = 0x90010000, len = 64K
-    
+
     cpu2_dlmu (w!xp): org = 0x90020000, len = 64K
 }
 
@@ -134,7 +145,7 @@ REGION_MAP( CPU2 , ORIGIN(dsram2_local), LENGTH(dsram2_local), ORIGIN(dsram2))
 
 
 /*Un comment one of the below statement groups to enable CpuX DMI RAM to hold global variables*/
-/* 
+/*
 REGION_ALIAS( default_ram , dsram0)
 REGION_ALIAS( default_rom , pfls1)
 */
@@ -157,40 +168,40 @@ REGION_ALIAS( default_rom , pfls1)
     {
         CORE_SEC(.ustack) (LCF_DSPR2_START + LCF_USTACK2_OFFSET):
         { PROVIDE(__USTACK2_END = .);    . = . + LCF_USTACK2_SIZE;    PROVIDE(__USTACK2 = .); }
-        
+
         CORE_SEC(.istack) (LCF_DSPR2_START + LCF_ISTACK2_OFFSET):
         { PROVIDE(__ISTACK2_END = .);    . = . + LCF_ISTACK2_SIZE;    PROVIDE(__ISTACK2 = .); }
-        
+
         CORE_SEC(.csa) (LCF_DSPR2_START + LCF_CSA2_OFFSET):
         { PROVIDE(__CSA2 = .);    . = . + LCF_CSA2_SIZE;    PROVIDE(__CSA2_END = .); }
     }
-    
+
     CORE_ID = CPU1;
     SECTIONS
     {
         CORE_SEC(.ustack) (LCF_DSPR1_START + LCF_USTACK1_OFFSET):
         { PROVIDE(__USTACK1_END = .);    . = . + LCF_USTACK1_SIZE;    PROVIDE(__USTACK1 = .); }
-        
+
         CORE_SEC(.istack) (LCF_DSPR1_START + LCF_ISTACK1_OFFSET):
         { PROVIDE(__ISTACK1_END = .);    . = . + LCF_ISTACK1_SIZE;    PROVIDE(__ISTACK1 = .); }
-        
+
         CORE_SEC(.csa) (LCF_DSPR1_START + LCF_CSA1_OFFSET):
         { PROVIDE(__CSA1 = .);    . = . + LCF_CSA1_SIZE;    PROVIDE(__CSA1_END = .); }
     }
-    
+
     CORE_ID = CPU0;
     SECTIONS
     {
         CORE_SEC(.ustack) (LCF_DSPR0_START + LCF_USTACK0_OFFSET):
         { PROVIDE(__USTACK0_END = .);    . = . + LCF_USTACK0_SIZE;    PROVIDE(__USTACK0 = .); }
-        
+
         CORE_SEC(.istack) (LCF_DSPR0_START + LCF_ISTACK0_OFFSET):
         { PROVIDE(__ISTACK0_END = .);    . = . + LCF_ISTACK0_SIZE;    PROVIDE(__ISTACK0 = .); }
-        
+
         CORE_SEC(.csa) (LCF_DSPR0_START + LCF_CSA0_OFFSET):
         { PROVIDE(__CSA0 = .);    . = . + LCF_CSA0_SIZE;    PROVIDE(__CSA0_END = .); }
     }
-    
+
     /*Fixed memory Allocations for _START*/
     CORE_ID = GLOBAL ;
     SECTIONS
@@ -201,12 +212,12 @@ REGION_ALIAS( default_rom , pfls1)
         PROVIDE(__START1 = LCF_STARTPTR_NC_CPU1);
         .start_tc2 (LCF_STARTPTR_CPU2) : FLAGS(rxl) { KEEP (*(.start_cpu2)); } > pfls1
         PROVIDE(__START2 = LCF_STARTPTR_NC_CPU2);
-        
+
         PROVIDE(__ENABLE_INDIVIDUAL_C_INIT_CPU0 = 0); /* Not used */
         PROVIDE(__ENABLE_INDIVIDUAL_C_INIT_CPU1 = 0);
         PROVIDE(__ENABLE_INDIVIDUAL_C_INIT_CPU2 = 0);
     }
-    
+
     /*Fixed memory Allocations for Trap Vector Table*/
     CORE_ID = GLOBAL;
     SECTIONS
@@ -214,28 +225,28 @@ REGION_ALIAS( default_rom , pfls1)
         .traptab_tc0 (LCF_TRAPVEC0_START) :
         {
             . = ALIGN(8);
-            PROVIDE(__TRAPTAB_CPU0 = .); 
+            PROVIDE(__TRAPTAB_CPU0 = .);
             KEEP (*(.traptab_cpu0));
             PROVIDE(__TRAPTAB_CPU0_END = .);
         } > pfls1
 
-        .traptab_tc1 (__TRAPTAB_CPU0_END) : 
+        .traptab_tc1 (__TRAPTAB_CPU0_END) :
         {
             . = ALIGN(8);
-            PROVIDE(__TRAPTAB_CPU1 = .); 
-            KEEP (*(.traptab_cpu1)); 
-            PROVIDE(__TRAPTAB_CPU1_END = .); 
+            PROVIDE(__TRAPTAB_CPU1 = .);
+            KEEP (*(.traptab_cpu1));
+            PROVIDE(__TRAPTAB_CPU1_END = .);
         } > pfls1
 
-        .traptab_tc2 (__TRAPTAB_CPU1_END) : 
+        .traptab_tc2 (__TRAPTAB_CPU1_END) :
         {
             . = ALIGN(8);
-            PROVIDE(__TRAPTAB_CPU2 = .); 
-            KEEP (*(.traptab_cpu2)); 
-            PROVIDE(__TRAPTAB_CPU2_END = .); 
+            PROVIDE(__TRAPTAB_CPU2 = .);
+            KEEP (*(.traptab_cpu2));
+            PROVIDE(__TRAPTAB_CPU2_END = .);
         } > pfls1
-    }    
-    
+    }
+
     /*Fixed memory Allocations for Interrupt Vector Table*/
     SECTIONS
     {
@@ -1048,7 +1059,7 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zdata_cpu2.*)
             . = ALIGN(2);
         } > dsram2 AT> pfls1
-        
+
         CORE_SEC(.zbss) (NOLOAD): FLAGS(awz)
         {
             *Ifx_Ssw_Tc2.* (.zbss)
@@ -1068,7 +1079,7 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zdata_cpu1.*)
             . = ALIGN(2);
         } > dsram1 AT> pfls1
-        
+
         CORE_SEC(.zbss) (NOLOAD): FLAGS(awz)
         {
             *Ifx_Ssw_Tc1.* (.zbss)
@@ -1088,7 +1099,7 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zdata_cpu0.*)
             . = ALIGN(2);
         } > dsram0 AT> pfls1
-        
+
         CORE_SEC(.zbss) (NOLOAD): FLAGS(awz)
         {
             *Ifx_Ssw_Tc0.* (.zbss)
@@ -1097,11 +1108,11 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zbss_cpu0.*)
         } > dsram0
     }
-    
+
     /*Near Absolute Data, selectable by toolchain*/
     CORE_ID = GLOBAL;
     SECTIONS
-    {    
+    {
         CORE_SEC(.zdata_powerOn) : FLAGS(awzl)
         {
             *(.zdata.dsprPowerOnInit.cpu0.32bit)
@@ -1109,7 +1120,7 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zdata.dsprPowerOnInit.cpu0.8bit)
             . = ALIGN(2);
         } > default_ram AT> pfls1
-        
+
         CORE_SEC(.zdata) : FLAGS(awzl)
         {
             *(.zdata.dsprInit.cpu0.32bit)
@@ -1120,21 +1131,21 @@ REGION_ALIAS( default_rom , pfls1)
             *(.gnu.linkonce.z.*)
             . = ALIGN(2);
         } > default_ram AT> pfls1
-        
+
         CORE_SEC(.zbss_powerOn) (NOLOAD) : FLAGS(awz)
         {
             *(.zbss.dsprPowerOnClear.cpu0.32bit)
             *(.zbss.dsprPowerOnClear.cpu0.16bit)
             *(.zbss.dsprPowerOnClear.cpu0.8bit)
         } > default_ram
-        
+
         CORE_SEC(.zbss_noClear) (NOLOAD) : FLAGS(awz)
         {
             *(.zbss.dsprNoInit.cpu0.32bit)
             *(.zbss.dsprNoInit.cpu0.16bit)
             *(.zbss.dsprNoInit.cpu0.8bit)
         } > default_ram
-        
+
         CORE_SEC(.zbss) (NOLOAD) : FLAGS(awz)
         {
             *(.zbss.dsprClearOnInit.cpu0.32bit)
@@ -1158,14 +1169,14 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zlmudata.*)
             . = ALIGN(2);
         } > cpu0_dlmu AT> pfls1
-        
+
         CORE_SEC(.zbss) (NOLOAD) : FLAGS(awz)
         {
             *(.zlmubss)
             *(.zlmubss.*)
         } > cpu0_dlmu
     }
-    
+
     /*Near Absolute Const, selectable with patterns and user defined sections*/
     CORE_ID = GLOBAL;
     SECTIONS
@@ -1177,7 +1188,7 @@ REGION_ALIAS( default_rom , pfls1)
             *(.zrodata_cpu?)
         } > pfls1
     }
-    
+
     /*Near Absolute Const, selectable by toolchain*/
     CORE_ID = GLOBAL;
     SECTIONS
@@ -1241,7 +1252,7 @@ SECTIONS
         *(.rodata_a8)
         *(.rodata_a8.*)
     } > default_rom
-    
+
     _SMALL_DATA3_ = SIZEOF(CORE_SEC(.sdata3)) ? ADDR(CORE_SEC(.sdata3)) : (ADDR(CORE_SEC(.sdata3)) & 0xF0000000) + 32k ;
     __A8_MEM = _SMALL_DATA3_;
 }
@@ -1260,7 +1271,7 @@ SECTIONS
         *(.data_cpu2.*)
         . = ALIGN(2);
     } > dsram2 AT> pfls1
-    
+
     CORE_SEC(.bss) (NOLOAD): FLAGS(aw)
     {
         *Ifx_Ssw_Tc2.* (.bss)
@@ -1268,7 +1279,7 @@ SECTIONS
         *(.bss_cpu2)
         *(.bss_cpu2.*)
     } > dsram2
-    
+
     /*DLMU2 Sections*/
     CORE_SEC(.lmudata) : FLAGS(awl)
     {
@@ -1276,7 +1287,7 @@ SECTIONS
         *(.lmudata_cpu2.*)
         . = ALIGN(2);
     } > cpu2_dlmu AT> pfls1
-    
+
     CORE_SEC(.lmubss) : FLAGS(aw)
     {
         *(.lmubss_cpu2)
@@ -1295,7 +1306,7 @@ SECTIONS
         *(.data_cpu1.*)
         . = ALIGN(2);
     } > dsram1 AT> pfls1
-    
+
     CORE_SEC(.bss) (NOLOAD): FLAGS(aw)
     {
         *Ifx_Ssw_Tc1.* (.bss)
@@ -1303,7 +1314,7 @@ SECTIONS
         *(.bss_cpu1)
         *(.bss_cpu1.*)
     } > dsram1
-    
+
     /*DLMU1 Sections*/
     CORE_SEC(.lmudata) : FLAGS(awl)
     {
@@ -1311,7 +1322,7 @@ SECTIONS
         *(.lmudata_cpu1.*)
         . = ALIGN(2);
     } > cpu1_dlmu AT> pfls1
-    
+
     CORE_SEC(.lmubss) : FLAGS(aw)
     {
         *(.lmubss_cpu1)
@@ -1330,7 +1341,7 @@ SECTIONS
         *(.data_cpu0.*)
         . = ALIGN(2);
     } > dsram0 AT> pfls1
-    
+
     CORE_SEC(.bss) (NOLOAD): FLAGS(aw)
     {
         *Ifx_Ssw_Tc0.* (.bss)
@@ -1338,7 +1349,7 @@ SECTIONS
         *(.bss_cpu0)
         *(.bss_cpu0.*)
     } > dsram0
-    
+
     /*DLMU0 Sections*/
     CORE_SEC(.lmudata) : FLAGS(awl)
     {
@@ -1346,7 +1357,7 @@ SECTIONS
         *(.lmudata_cpu0.*)
         . = ALIGN(2);
     } > cpu0_dlmu AT> pfls1
-    
+
     CORE_SEC(.lmubss) : FLAGS(aw)
     {
         *(.lmubss_cpu0)
@@ -1364,13 +1375,13 @@ SECTIONS
         *(.a9sdata.*)
         . = ALIGN(2);
     } > cpu0_dlmu AT> pfls1
-    
+
     CORE_SEC(.sbss4) :
     {
         *(.a9sbss)
-        *(.a9sbss.*)    
+        *(.a9sbss.*)
     } > cpu0_dlmu
-    
+
     _SMALL_DATA4_ = SIZEOF(CORE_SEC(.sdata4)) ? ADDR(CORE_SEC(.sdata4)) : (ADDR(CORE_SEC(.sdata4)) & 0xF0000000) + 32k ;
     __A9_MEM = _SMALL_DATA4_;
 }
@@ -1385,7 +1396,7 @@ SECTIONS
         *(.bss.farDsprNoInit.cpu0.16bit)
         *(.bss.farDsprNoInit.cpu0.8bit)
     } > default_ram
-    
+
     CORE_SEC(.data) : FLAGS(awl)
     {
         *(.data.farDsprInit.cpu0.32bit)
@@ -1396,7 +1407,7 @@ SECTIONS
         *(.gnu.linkonce.d.*)
         . = ALIGN(2);
     } > default_ram AT> pfls1
-    
+
     CORE_SEC(.bss) (NOLOAD) : FLAGS(aw)
     {
         *(.bss.farDsprClearOnInit.cpu0.32bit)
@@ -1406,7 +1417,7 @@ SECTIONS
         *(.bss.*)
         *(.gnu.linkonce.b.*)
     } > default_ram
-    
+
     .heap  : FLAGS(aw)
     {
     . = ALIGN(4);
@@ -1414,14 +1425,14 @@ SECTIONS
     . += LCF_HEAP_SIZE;
     __HEAP_END = .;
     } > default_ram
-    
+
     CORE_SEC(.lmudata) : FLAGS(awl)
     {
         *(.lmudata)
         *(.lmudata.*)
         . = ALIGN(2);
     } > cpu0_dlmu AT> pfls1
-    
+
     CORE_SEC(.lmubss) : FLAGS(aw)
     {
         *(.lmubss)
@@ -1542,7 +1553,7 @@ SECTIONS
         *(.text_cpu0)
         *(.text_cpu0.*)
     } > pfls1
-    
+
     /*
      * Code executed before calling main extra section for C++ constructor init
      *  -------------------------Start-----------------------------------------
@@ -1554,9 +1565,9 @@ SECTIONS
         KEEP(*(.init*))
         PROVIDE(__init_end = .);
         . = ALIGN(8);
-    
+
     } > pfls1
-    
+
     .fini :
     {
         PROVIDE(__fini_start = .);
@@ -1565,7 +1576,7 @@ SECTIONS
         PROVIDE(__fini_end = .);
         . = ALIGN(8);
     } > pfls1
-    
+
     /*
      * Code executed before calling main extra section for C++ constructor init
      *  -------------------------End-----------------------------------------
@@ -1660,10 +1671,10 @@ SECTIONS
      * the .eh_frame section from the executable.
      */
     .eh_frame_hdr :
-    { 
+    {
         *(.eh_frame_hdr)
     } > default_rom
-	
+
     .eh_frame  :
     {
         __EH_FRAME_BEGIN__ = . ;
@@ -1671,14 +1682,14 @@ SECTIONS
         __EH_FRAME_END__ = . ;
         . = ALIGN(8);
     } > default_rom
-    
-    .gcc_except_table  : 
-    { 
-        __GCC_EXCEPT_TABLE_BEGIN__ = . ; 
-        KEEP (*(.gcc_except_table)) 
-        __GCC_EXCEPT_TABLE_END__ = . ; 
-        . = ALIGN(8); 
-    } > default_rom 
+
+    .gcc_except_table  :
+    {
+        __GCC_EXCEPT_TABLE_BEGIN__ = . ;
+        KEEP (*(.gcc_except_table))
+        __GCC_EXCEPT_TABLE_END__ = . ;
+        . = ALIGN(8);
+    } > default_rom
 
     /*
      * Constructors and destructors.
