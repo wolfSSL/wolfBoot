@@ -122,7 +122,7 @@ static int saveAsDer = 0;
 static WC_RNG rng;
 
 #ifndef KEYSLOT_MAX_PUBKEY_SIZE
-    #if defined(WOLFSSL_WC_DILITHIUM)
+    #if defined(KEYSTORE_PUBKEY_SIZE_ML_DSA)
         /* ML-DSA pub keys are big. */
         #define KEYSLOT_MAX_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
     #else
@@ -388,9 +388,11 @@ static uint32_t get_pubkey_size(uint32_t keyType)
         case KEYGEN_XMSS:
             size = KEYSTORE_PUBKEY_SIZE_XMSS;
             break;
+#ifdef KEYSTORE_PUBKEY_SIZE_ML_DSA
         case KEYGEN_ML_DSA:
             size = KEYSTORE_PUBKEY_SIZE_ML_DSA;
             break;
+#endif
         default:
             size = 0;
     }
@@ -1113,6 +1115,7 @@ int main(int argc, char** argv)
 #ifdef DEBUG_SIGNTOOL
     wolfSSL_Debugging_ON();
 #endif
+    printf("Keystore size: %lu\n", sizeof(struct keystore_slot));
 
     /* Check arguments and print usage */
     if (argc < 2)
