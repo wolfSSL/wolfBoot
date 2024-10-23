@@ -75,8 +75,8 @@ extern int tolower(int c);
 #   define ED25519_SMALL
 #   define NO_ED25519_SIGN
 #   define NO_ED25519_EXPORT
-#   define WOLFSSL_SHA512
 #   define USE_SLOW_SHA512
+#   define WOLFSSL_SHA512
 #endif
 
 /* ED448 and SHA3/SHAKE256 */
@@ -267,6 +267,9 @@ extern int tolower(int c);
     !defined(WOLFCRYPT_SECURE_MODE)
 #       define NO_SHA256
 #   endif
+#ifndef WOLFSSL_SHA512
+#define WOLFSSL_SHA512
+#endif
 #endif
 
 /* If SP math is enabled determine word size */
@@ -498,5 +501,9 @@ extern int tolower(int c);
 
 
 #endif /* WOLFBOOT_PKCS11_APP */
+
+#ifndef XTOLOWER
+#define XTOLOWER(x) (x)
+#endif
 
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */
