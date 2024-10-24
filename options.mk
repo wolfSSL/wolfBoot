@@ -448,7 +448,7 @@ ifeq ($(SIGN),XMSS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
   else
-    STACK_USAGE=2720
+    STACK_USAGE=9352
   endif
 endif
 
