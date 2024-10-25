@@ -189,7 +189,7 @@ ifeq ($(CORTEX_A5),1)
   FPU=-mfpu=vfp4-d16
   CFLAGS+=-mcpu=cortex-a5  -mtune=cortex-a5 -static -z noexecstack
   LDLAGS+=-mcpu=cortex-a5 -mtune=cortex-a5  -mtune=cortex-a5 -static \
-		  -z noexecstack  -Ttext 0x300000
+          -z noexecstack  -Ttext 0x300000
   # Cortex-A uses boot_arm32.o
   OBJS+=src/boot_arm32.o src/boot_arm32_start.o
   ifeq ($(NO_ASM),1)
@@ -200,7 +200,7 @@ ifeq ($(CORTEX_A5),1)
     OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
     OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
     CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
-			-DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
+            -DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
   endif
 else
   # All others use boot_arm.o
@@ -208,7 +208,7 @@ else
   ifneq ($(NO_ARM_ASM),1)
     CORTEXM_ARM_EXTRA_OBJS= \
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o \
-		  ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-chacha.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-chacha.o \
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512.o \
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-aes-asm.o \
@@ -228,7 +228,7 @@ else
           ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o
 
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
-							-DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
+                            -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
   endif
   ifeq ($(CORTEX_M33),1)
     CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
@@ -281,7 +281,7 @@ else
           else
             CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
             MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
-			# TODO: integrate thumb2-asm
+            # TODO: integrate thumb2-asm
             #CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=6
             #OBJS+=$(CORTEXM_ARM_THUMB_EXTRA_OBJS)
           endif
