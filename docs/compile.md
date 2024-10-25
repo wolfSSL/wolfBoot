@@ -44,8 +44,8 @@ By default, wolfBoot is compiled for ARM Cortex-M3/4/7. To compile for Cortex-M0
 
 ### Speed vs. size
 
-On a number of targets, algorithm may be optimized automatically to use assembly
-optimizations. To disable assembly optimizations, use `NO_ASM=1`. This option will
+Some targets support assembly optimizations by default.
+To disable assembly optimizations, use `NO_ASM=1`. This option will
 produce smaller code, but will also impact on the boot time.
 
 ARM-specific ARM optimizations affecting hash and symmetric key ciphers can be
