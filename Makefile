@@ -318,6 +318,7 @@ clean:
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)rm -f $(OBJS)
 	$(Q)rm -f tools/keytools/otp/otp-keystore-gen
+	$(Q)rm -f .stack_usage
 	$(Q)$(MAKE) -C test-app -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
@@ -384,6 +385,13 @@ line-count-nrf52:
 
 line-count-x86:
 	cloc --force-lang-def cloc_lang_def.txt src/boot_x86_fsp.c src/boot_x86_fsp_payload.c src/boot_x86_fsp_start.S src/image.c src/keystore.c src/libwolfboot.c src/loader.c src/string.c src/update_disk.c src/x86/ahci.c src/x86/ata.c src/x86/common.c src/x86/gpt.c src/x86/hob.c src/pci.c src/x86/tgl_fsp.c hal/x86_fsp_tgl.c hal/x86_uart.c
+
+stack-usage: wolfboot.bin
+	$(Q)echo $(STACK_USAGE) > .stack_usage
+
+image-header-size: wolfboot.bin
+	$(Q)echo $(IMAGE_HEADER_SIZE) > .image_header_size
+
 
 cppcheck:
 	cppcheck -f --enable=warning --enable=portability \

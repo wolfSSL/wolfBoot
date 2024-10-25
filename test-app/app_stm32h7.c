@@ -362,6 +362,9 @@ void uart_print(const char *s)
     }
 }
 
+#define FILLER_SIZE (100 * 1024)
+static volatile uint8_t filler_data[FILLER_SIZE] = { 0x01, 0x02, 0x03 };
+
 void main(void)
 {
     uint8_t firmware_version = 0;
@@ -373,6 +376,7 @@ void main(void)
     if (FIRMWARE_A)
         ld3_write(LED_INIT);
 
+    filler_data[FILLER_SIZE - 1] = 0xAA;
     /* LED Indicator of successful UART initialization. SUCCESS = ON, FAIL = OFF */
     if (uart_setup(115200) < 0)
         ld2_write(LED_OFF);

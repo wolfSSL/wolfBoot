@@ -448,7 +448,7 @@ ifeq ($(SIGN),XMSS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
   else
-    STACK_USAGE=2720
+    STACK_USAGE=9352
   endif
 endif
 
@@ -684,9 +684,9 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/dh.o
   WOLFCRYPT_OBJS+=./lib/wolfPKCS11/src/crypto.o \
-		./lib/wolfPKCS11/src/internal.o \
-		./lib/wolfPKCS11/src/slot.o \
-		./lib/wolfPKCS11/src/wolfpkcs11.o
+        ./lib/wolfPKCS11/src/internal.o \
+        ./lib/wolfPKCS11/src/slot.o \
+        ./lib/wolfPKCS11/src/wolfpkcs11.o
   STACK_USAGE=16688
   ifneq ($(ENCRYPT),1)
       WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o

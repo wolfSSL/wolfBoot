@@ -42,6 +42,28 @@ By default, wolfBoot is compiled for ARM Cortex-M3/4/7. To compile for Cortex-M0
 
 `CORTEX_M0=1`
 
+### Speed vs. size
+
+Some targets support assembly optimizations by default.
+To disable assembly optimizations, use `NO_ASM=1`. This option will
+produce smaller code, but will also impact on the boot time.
+
+ARM-specific ARM optimizations affecting hash and symmetric key ciphers can be
+disabled with the option `NO_ARM_ASM=1`. This is useful for example when you want
+to use SP math optimizations for key verification, but exclude SHA2/AES optimizations
+to save some space.
+
+#### Example: ECC256 + SHA256 on STM32H7
+
+Benchmark footprint vs. boot time SHA of 100KB image + signature verification
+
+| Description | Selected options | wolfBoot size (B) | Boot time (s) |
+|-------------|------------------|-------------------|---------------|
+| Full ECC256 assembly optimizations. Fastest. | `SIGN=ECC256` | 21836 | .583 |
+| Optimize ECC only (SP math assembly only)  | `SIGN=ECC256 NO_ARM_ASM=1` | 18624 | .760 |
+| No assembly optimizations (smallest) | `SIGN=ECC256 NO_ASM=1` | 14416 | 3.356 |
+
+
 ### Flash partitions
 
 The file [include/target.h](../include/target.h) is generated according to the configured flash geometry,
