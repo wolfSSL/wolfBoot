@@ -49,6 +49,14 @@
 
 #include "wolfboot/version.h"
 
+#ifdef DEBUG_SIGNTOOL
+#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_BUFFER(buf,sz) WOLFSSL_BUFFER(buf,sz)
+#else
+#define DEBUG_PRINT(...) do{}while(0)
+#define DEBUG_BUFFER(buf,sz) do{}while(0)
+#endif
+
 #ifdef _WIN32
 #include <io.h>
 #define HAVE_MMAP 0
@@ -534,7 +542,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         printf("Key buffer malloc error!\n");
         goto failure;
     }
-    printf("Key buffer size: %d\n", *key_buffer_sz);
+    DEBUG_PRINT("Key buffer size: %d\n", *key_buffer_sz);
 
     switch (sign) {
         /* auto, just try them all, no harm no foul */
@@ -769,8 +777,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 break;
             }
 
-            printf("info: xmss sk len: %d\n", priv_sz);
-            printf("info: xmss pk len: %d\n", KEYSTORE_PUBKEY_SIZE_XMSS);
+            DEBUG_PRINT("info: xmss sk len: %d\n", priv_sz);
+            DEBUG_PRINT("info: xmss pk len: %d\n", KEYSTORE_PUBKEY_SIZE_XMSS);
 
             if (*key_buffer_sz == (priv_sz + KEYSTORE_PUBKEY_SIZE_XMSS)) {
                 /* priv + pub */
@@ -823,8 +831,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 priv_sz -= pub_sz;
             }
 
-            printf("info: ml-dsa priv len: %d\n", priv_sz);
-            printf("info: ml-dsa pub len: %d\n", pub_sz);
+            DEBUG_PRINT("info: ml-dsa priv len: %d\n", priv_sz);
+            DEBUG_PRINT("info: ml-dsa pub len: %d\n", pub_sz);
 
             if ((int)*key_buffer_sz == (priv_sz + pub_sz)) {
                 /* priv + pub */
@@ -868,10 +876,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         printf("image header size calculated at runtime (%u bytes)\n", CMD.header_sz);
     }
 
-#ifdef DEBUG_SIGNTOOL
-    printf("Pubkey %d\n", *pubkey_sz);
-    WOLFSSL_BUFFER(*pubkey, *pubkey_sz);
-#endif
+    DEBUG_PRINT("Pubkey %d\n", *pubkey_sz);
+    DEBUG_BUFFER(*pubkey, *pubkey_sz);
     return *key_buffer;
 
 failure:
@@ -1185,16 +1191,14 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             wc_Sha256Free(&sha);
             /* Add Pubkey Hash to header */
             header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
-    #ifdef DEBUG_SIGNTOOL
-            printf("Pubkey hash %d\n", digest_sz);
-            WOLFSSL_BUFFER(buf, digest_sz);
-    #endif
+            DEBUG_PRINT("Pubkey hash %d\n", digest_sz);
+            DEBUG_BUFFER(buf, digest_sz);
             ALIGN_8(header_idx);
         }
         /* secondary public key in hybrid mode */
         if (ret == 0 && CMD.hybrid && secondary_key_sz > 0) {
             ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
-            printf("Hashing secondary pubkey, size: %d\n", secondary_key_sz);
+            DEBUG_PRINT("Hashing secondary pubkey, size: %d\n", secondary_key_sz);
             if (ret == 0) {
                 ret = wc_Sha256Update(&sha, secondary_key, secondary_key_sz);
                 if (ret == 0)
@@ -1205,10 +1209,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 ALIGN_8(header_idx);
                 /* Add Secondary Pubkey Hash to header */
                 header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
-    #ifdef DEBUG_SIGNTOOL
-                printf("Secondary pubkey hash %d\n", digest_sz);
-                WOLFSSL_BUFFER(second_buf, digest_sz);
-    #endif
+                DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
+                DEBUG_BUFFER(second_buf, digest_sz);
             }
         }
         if (ret == 0) {
@@ -1261,10 +1263,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 /* Add Pubkey Hash to header */
                 ALIGN_8(header_idx);
                 header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
-    #ifdef DEBUG_SIGNTOOL
-                printf("Pubkey hash %d\n", digest_sz);
-                WOLFSSL_BUFFER(buf, digest_sz);
-    #endif
+                DEBUG_PRINT("Pubkey hash %d\n", digest_sz);
+                DEBUG_BUFFER(buf, digest_sz);
                 ALIGN_8(header_idx);
             }
             wc_Sha384Free(&sha);
@@ -1279,10 +1279,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
                     /* Add Secondary Pubkey Hash to header */
                     header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
-    #ifdef DEBUG_SIGNTOOL
-                    printf("Secondary pubkey hash %d\n", digest_sz);
-                    WOLFSSL_BUFFER(second_buf, digest_sz);
-    #endif
+                    DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
+                    DEBUG_BUFFER(second_buf, digest_sz);
                     ALIGN_8(header_idx);
                 }
                 wc_Sha384Free(&sha);
@@ -1329,10 +1327,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             if (ret == 0) {
                 ret = wc_Sha3_384_Final(&sha, buf);
                 header_append_tag(header, &header_idx, HDR_PUBKEY, digest_sz, buf);
-    #ifdef DEBUG_SIGNTOOL
-                printf("Pubkey hash %d\n", digest_sz);
-                WOLFSSL_BUFFER(buf, digest_sz);
-    #endif
+                DEBUG_PRINT("Pubkey hash %d\n", digest_sz);
+                DEBUG_BUFFER(buf, digest_sz);
             ALIGN_8(header_idx);
             }
             wc_Sha3_384_Free(&sha);
@@ -1347,10 +1343,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     /* Add Secondary cipher to header */
                     header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
                     header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
-#ifdef DEBUG_SIGNTOOL
-                    printf("Secondary pubkey hash %d\n", digest_sz);
-                    WOLFSSL_BUFFER(second_buf, digest_sz);
-#endif
+                    DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
+                    DEBUG_BUFFER(second_buf, digest_sz);
                     ALIGN_8(header_idx);
                 }
                 wc_Sha3_384_Free(&sha);
@@ -1394,10 +1388,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         printf("Hash algorithm error %d\n", ret);
         goto failure;
     }
-#ifdef DEBUG_SIGNTOOL
-    printf("Image hash %d\n", digest_sz);
-    WOLFSSL_BUFFER(digest, digest_sz);
-#endif
+    DEBUG_PRINT("Image hash %d\n", digest_sz);
+    DEBUG_BUFFER(digest, digest_sz);
 
     /* Add image hash to header */
     header_append_tag(header, &header_idx, CMD.hash_algo, digest_sz, digest);
@@ -1425,15 +1417,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         }
 
         memset(signature, 0, CMD.signature_sz);
-        printf("Signature sz (malloc): %d\n", CMD.signature_sz);
+        DEBUG_PRINT("Signature sz (malloc): %d\n", CMD.signature_sz);
         if (!CMD.manual_sign) {
             printf("Signing the digest...\n");
-#ifdef DEBUG_SIGNTOOL
-            printf("Digest %d\n", digest_sz);
-            WOLFSSL_BUFFER(digest, digest_sz);
-#endif
+            DEBUG_PRINT("Digest %d\n", digest_sz);
+            DEBUG_BUFFER(digest, digest_sz);
             /* Sign the digest */
-            printf("CMD.sign == %02x\n", CMD.sign);
             ret = sign_digest(CMD.sign, CMD.hash_algo,
                 signature, &CMD.signature_sz, digest, digest_sz, 0);
             if (ret != 0) {
@@ -1442,7 +1431,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
         }
         else {
-            printf("Opening signature file %s\n", CMD.signature_file);
+            DEBUG_PRINT("Opening signature file %s\n", CMD.signature_file);
 
             f = fopen(CMD.signature_file, "rb");
             if (f == NULL) {
@@ -1511,10 +1500,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 }
 
                 printf("Signing the policy digest...\n");
-#ifdef DEBUG_SIGNTOOL
-                printf("Policy Digest %d\n", digest_sz);
-                WOLFSSL_BUFFER(digest, digest_sz);
-#endif
+                DEBUG_PRINT("Policy Digest %d\n", digest_sz);
+                DEBUG_BUFFER(digest, digest_sz);
 
                 /* Policy is always SHA2-256 */
                 ret = sign_digest(CMD.sign, HASH_SHA256,
@@ -1546,15 +1533,13 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
         }
 
-#ifdef DEBUG_SIGNTOOL
-        printf("Signature %d\n", CMD.signature_sz);
-        WOLFSSL_BUFFER(signature, CMD.signature_sz);
+        DEBUG_PRINT("Signature %d\n", CMD.signature_sz);
+        DEBUG_BUFFER(signature, CMD.signature_sz);
         if (CMD.policy_sign) {
-            printf("PCR Mask 0x%08x\n", *((uint32_t*)policy));
-            printf("Policy Signature %d\n", CMD.policy_sz);
-            WOLFSSL_BUFFER(policy + sizeof(uint32_t), CMD.policy_sz);
+            DEBUG_PRINT("PCR Mask 0x%08x\n", *((uint32_t*)policy));
+            DEBUG_PRINT("Policy Signature %d\n", CMD.policy_sz);
+            DEBUG_BUFFER(policy + sizeof(uint32_t), CMD.policy_sz);
         }
-#endif
 
         /* Add signature to header */
         ALIGN_8(header_idx);
@@ -2109,7 +2094,7 @@ static void set_signature_sizes(int secondary)
             exit(1);
         }
 
-        printf("info: LMS signature size: %d\n", sig_sz);
+        DEBUG_PRINT("info: LMS signature size: %d\n", sig_sz);
 
         CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
@@ -2142,7 +2127,7 @@ static void set_signature_sizes(int secondary)
             exit(1);
         }
 
-        printf("info: XMSS signature size: %d\n", sig_sz);
+        DEBUG_PRINT("info: XMSS signature size: %d\n", sig_sz);
 
         CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
@@ -2175,7 +2160,7 @@ static void set_signature_sizes(int secondary)
             exit(1);
         }
 
-        printf("info: ML-DSA signature size: %d\n", sig_sz);
+        DEBUG_PRINT("info: ML-DSA signature size: %d\n", sig_sz);
 
         CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
@@ -2540,7 +2525,7 @@ int main(int argc, char** argv)
         }
     }
     if ((CMD.sign == CMD.secondary_sign) && (CMD.hybrid)) {
-        printf("Waring: Duplicate signature algorithm detected. Fix your command line!\n");
+        printf("Warning: Duplicate signature algorithm detected. Fix your command line!\n");
         CMD.hybrid = 0;
         CMD.secondary_key_file = NULL;
         CMD.secondary_signature_sz = 0;
@@ -2682,14 +2667,14 @@ int main(int argc, char** argv)
         uint8_t *kbuf2 = NULL;
         uint8_t *pubkey2 = NULL;
         uint32_t pubkey_sz2;
-        printf("Loading secondary key\n");
+        DEBUG_PRINT("Loading secondary key\n");
         kbuf2 = load_key(&key_buffer2, &key_buffer_sz2, &pubkey2, &pubkey_sz2, 1);
         printf("Creating hybrid signature\n");
         make_hybrid_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file,
                 pubkey2, pubkey_sz2);
-        printf("Signature size: %u\n", CMD.signature_sz);
-        printf("Secondary signature size: %u\n", CMD.secondary_signature_sz);
-        printf("Header size: %u\n", CMD.header_sz);
+        DEBUG_PRINT("Signature size: %u\n", CMD.signature_sz);
+        DEBUG_PRINT("Secondary signature size: %u\n", CMD.secondary_signature_sz);
+        DEBUG_PRINT("Header size: %u\n", CMD.header_sz);
         if (kbuf2)
             free(kbuf2);
     } else {
