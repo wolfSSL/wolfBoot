@@ -88,10 +88,9 @@ extern "C" {
 #define AUTH_KEY_ECC521  0x07
 #define AUTH_KEY_RSA3072 0x08
 #define AUTH_KEY_LMS     0x09
+                        /* 0x0A...0x0F reserved */
 #define AUTH_KEY_XMSS    0x10
 #define AUTH_KEY_ML_DSA  0x11
-
-
 
 /*
  * 8 bits: auth type
@@ -270,7 +269,6 @@ extern "C" {
  #include "keystore.h"
 
 #endif /* defined WOLFBOOT */
-
 
 #define PART_BOOT   0
 #define PART_UPDATE 1
