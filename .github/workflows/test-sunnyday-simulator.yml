@@ -558,3 +558,20 @@ jobs:
         run: |
           tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-ml-dsa.config
 
+      # 64 Bit simulator, Hybrid auth ML_DSA + ECDSA
+      #
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config (64 bit simulator) Hybrid ML_DSA + ECC
+        run: |
+          cp config/examples/sim-ml-dsa-ecc-hybrid.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make
+
+      - name: Run sunny day hybrid boot test
+        run: |
+          ./wolfboot.elf get_version
