@@ -5,6 +5,7 @@ RENODE_UART?=$(TMP)/wolfboot.uart
 RENODE_LOG?=$(TMP)/wolfboot.log
 RENODE_PIDFILE?=$(TMP)/renode.pid
 RENODE_UPDATE_FILE=$(TMP)/renode-test-update.bin
+SIGN_ARGS=
 
 
 RENODE_PORT=55155
