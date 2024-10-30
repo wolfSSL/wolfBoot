@@ -43,6 +43,7 @@
 
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
 #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC256
+#define WOLFBOOT_SIGN_PRIMARY_ECC256
 
 #include <stdio.h>
 #include <check.h>
@@ -289,17 +290,17 @@ START_TEST(test_verify_signature)
     test_img.fw_size = test_img_len;
     test_img.fw_base = 0;
 
-    wolfBoot_verify_signature(0, NULL, NULL);
+    wolfBoot_verify_signature_ecc(0, NULL, NULL);
     ck_assert_int_eq(verify_called, 0);
 
     ecc_init_fail = 1;
-    wolfBoot_verify_signature(0, NULL, pubkey);
+    wolfBoot_verify_signature_ecc(0, NULL, pubkey);
     ck_assert_int_eq(verify_called, 0);
 
     ecc_init_fail = 0;
     verify_called = 0;
     ecc_import_fail = 1;
-    wolfBoot_verify_signature(0, NULL, pubkey);
+    wolfBoot_verify_signature_ecc(0, NULL, pubkey);
     ck_assert_int_eq(verify_called, 0);
 
     ecc_init_fail = 0;
@@ -309,7 +310,7 @@ START_TEST(test_verify_signature)
     ext_flash_erase(0, 2 * WOLFBOOT_SECTOR_SIZE);
     ext_flash_write(0, test_img_v200000000_signed_bin,
             test_img_len);
-    wolfBoot_verify_signature(0, &test_img, pubkey);
+    wolfBoot_verify_signature_ecc(0, &test_img, pubkey);
     ck_assert_int_eq(verify_called, 1);
 }
 END_TEST

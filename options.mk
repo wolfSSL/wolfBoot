@@ -71,16 +71,63 @@ ifeq ($(WOLFBOOT_SMALL_STACK),1)
   OBJS+=./src/xmalloc.o
 endif
 
+
+ECC_OBJS= \
+    ./lib/wolfssl/wolfcrypt/src/ecc.o
+
+ED25519_OBJS=./lib/wolfssl/wolfcrypt/src/sha512.o \
+    ./lib/wolfssl/wolfcrypt/src/ed25519.o \
+    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
+    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+
+ED448_OBJS=./lib/wolfssl/wolfcrypt/src/ed448.o \
+    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
+    ./lib/wolfssl/wolfcrypt/src/ge_448.o \
+    ./lib/wolfssl/wolfcrypt/src/fe_448.o \
+    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+
+RSA_OBJS=\
+    $(RSA_EXTRA_OBJS) \
+    ./lib/wolfssl/wolfcrypt/src/rsa.o
+
+LMS_OBJS=\
+    ./lib/wolfssl/wolfcrypt/src/wc_lms.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_lms_impl.o
+
+LMS_EXTRA=\
+    -D"WOLFSSL_HAVE_LMS" \
+    -D"WOLFSSL_WC_LMS" -D"WOLFSSL_WC_LMS_SMALL" \
+    -D"WOLFSSL_LMS_MAX_LEVELS=$(LMS_LEVELS)" \
+    -D"WOLFSSL_LMS_MAX_HEIGHT=$(LMS_HEIGHT)" \
+    -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
+    -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" \
+    -D"LMS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+    -D"WOLFSSL_LMS_VERIFY_ONLY"
+
+XMSS_OBJS=\
+    ./lib/wolfssl/wolfcrypt/src/wc_xmss.o \
+    ./lib/wolfssl/wolfcrypt/src/wc_xmss_impl.o
+
+XMSS_EXTRA=\
+    -D"WOLFSSL_HAVE_XMSS" \
+    -D"WOLFSSL_WC_XMSS" -D"WOLFSSL_WC_XMSS_SMALL" \
+    -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"  \
+    -D"XMSS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+    -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
+
+ML_DSA_OBJS=\
+    ./lib/wolfssl/wolfcrypt/src/dilithium.o \
+    ./lib/wolfssl/wolfcrypt/src/memory.o
+
+ML_DSA_EXTRA=\
+    -D"ML_DSA_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+    -D"ML_DSA_LEVEL"=$(ML_DSA_LEVEL)
+
 ifeq ($(SIGN),ECC256)
   KEYGEN_OPTIONS+=--ecc256
   SIGN_OPTIONS+=--ecc256
-  WOLFCRYPT_OBJS+= \
-    $(MATH_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/ecc.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
+  WOLFCRYPT_OBJS+=$(ECC_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC256"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
        STACK_USAGE=4096
@@ -103,13 +150,8 @@ endif
 ifeq ($(SIGN),ECC384)
   KEYGEN_OPTIONS+=--ecc384
   SIGN_OPTIONS+=--ecc384
-  WOLFCRYPT_OBJS+= \
-    $(MATH_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/ecc.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
+  WOLFCRYPT_OBJS+=$(ECC_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC384"
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
        STACK_USAGE=5880
@@ -132,14 +174,9 @@ endif
 ifeq ($(SIGN),ECC521)
   KEYGEN_OPTIONS+=--ecc521
   SIGN_OPTIONS+=--ecc521
-  WOLFCRYPT_OBJS+= \
-    $(MATH_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/ecc.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
   CFLAGS+=-D"WOLFBOOT_SIGN_ECC521"
+  WOLFCRYPT_OBJS+=$(ECC_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
        STACK_USAGE=4096
   else
@@ -162,13 +199,7 @@ endif
 ifeq ($(SIGN),ED25519)
   KEYGEN_OPTIONS+=--ed25519
   SIGN_OPTIONS+=--ed25519
-  WOLFCRYPT_OBJS+= ./lib/wolfssl/wolfcrypt/src/sha512.o \
-    ./lib/wolfssl/wolfcrypt/src/ed25519.o \
-    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+  WOLFCRYPT_OBJS+=$(ED25519_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
   ifeq ($(WOLFTPM),1)
     STACK_USAGE=6680
@@ -183,14 +214,7 @@ endif
 ifeq ($(SIGN),ED448)
   KEYGEN_OPTIONS+=--ed448
   SIGN_OPTIONS+=--ed448
-  WOLFCRYPT_OBJS+= ./lib/wolfssl/wolfcrypt/src/ed448.o \
-    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
-    ./lib/wolfssl/wolfcrypt/src/ge_448.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_448.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+  WOLFCRYPT_OBJS+= $(ED448_OBJS)
   ifeq ($(WOLFTPM),1)
     STACK_USAGE=6680
   else
@@ -219,14 +243,8 @@ ifneq ($(findstring RSA2048,$(SIGN)),)
     SIGN_OPTIONS+=--rsa2048
   endif
   SIGN_ALG=RSA2048 # helps keystore.c check
-  WOLFCRYPT_OBJS+= \
-    $(RSA_EXTRA_OBJS) \
-    $(MATH_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o
+  WOLFCRYPT_OBJS+= $(RSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
@@ -258,14 +276,8 @@ ifneq ($(findstring RSA3072,$(SIGN)),)
     SIGN_OPTIONS+=--rsa3072
   endif
   SIGN_ALG=RSA3072 # helps keystore.c check
-  WOLFCRYPT_OBJS+= \
-    $(RSA_EXTRA_OBJS) \
-    $(MATH_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o
+  WOLFCRYPT_OBJS+= $(RSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_RSA3072" $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
@@ -301,14 +313,8 @@ ifneq ($(findstring RSA4096,$(SIGN)),)
     SIGN_OPTIONS+=--rsa4096
   endif
   SIGN_ALG=RSA4096 # helps keystore.c check
-  WOLFCRYPT_OBJS+= \
-    $(RSA_EXTRA_OBJS) \
-    $(MATH_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/rsa.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wolfmath.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o
+  WOLFCRYPT_OBJS+= $(RSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
@@ -362,20 +368,8 @@ endif
 ifeq ($(SIGN),LMS)
   KEYGEN_OPTIONS+=--lms
   SIGN_OPTIONS+=--lms
-  WOLFCRYPT_OBJS+= \
-    ./lib/wolfssl/wolfcrypt/src/wc_lms.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_lms_impl.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_LMS" -D"WOLFSSL_HAVE_LMS" \
-    -D"WOLFSSL_WC_LMS" -D"WOLFSSL_WC_LMS_SMALL" \
-    -D"WOLFSSL_LMS_MAX_LEVELS=$(LMS_LEVELS)" \
-    -D"WOLFSSL_LMS_MAX_HEIGHT=$(LMS_HEIGHT)" \
-    -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
-    -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" \
-    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-    -D"WOLFSSL_LMS_VERIFY_ONLY"
+  WOLFCRYPT_OBJS+= $(LMS_OBJS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_LMS" $(LMS_EXTRA)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with LMS not supported)
   else
@@ -387,6 +381,7 @@ ifeq ($(SIGN),ext_LMS)
   LMSDIR = lib/hash-sigs
   KEYGEN_OPTIONS+=--lms
   SIGN_OPTIONS+=--lms
+  CFLAGS+=-D"LMS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE)
   WOLFCRYPT_OBJS+= \
     ./$(LMSDIR)/src/hss_verify.o \
     ./$(LMSDIR)/src/hss_verify_inc.o \
@@ -400,10 +395,7 @@ ifeq ($(SIGN),ext_LMS)
     ./$(LMSDIR)/src/endian.o \
     ./$(LMSDIR)/src/hash.o \
     ./$(LMSDIR)/src/sha256.o \
-    ./lib/wolfssl/wolfcrypt/src/ext_lms.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
+    ./lib/wolfssl/wolfcrypt/src/ext_lms.o
   CFLAGS+=-D"WOLFBOOT_SIGN_LMS" -D"WOLFSSL_HAVE_LMS" -D"HAVE_LIBLMS" \
     -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
     -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" -I$(LMSDIR)/src \
@@ -434,17 +426,9 @@ ifeq ($(SIGN),XMSS)
   # Use wc_xmss implementation.
   KEYGEN_OPTIONS+=--xmss
   SIGN_OPTIONS+=--xmss
-  WOLFCRYPT_OBJS+= \
-    ./lib/wolfssl/wolfcrypt/src/wc_xmss.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_xmss_impl.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" -D"WOLFSSL_HAVE_XMSS" \
-    -D"WOLFSSL_WC_XMSS" -D"WOLFSSL_WC_XMSS_SMALL" \
-    -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"  \
-    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-    -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
+  WOLFCRYPT_OBJS+=$(XMSS_OBJS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_XMSS"
+  CFLAGS+=$(XMSS_EXTRA)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
   else
@@ -457,6 +441,7 @@ ifeq ($(SIGN),ext_XMSS)
   XMSSDIR = lib/xmss
   KEYGEN_OPTIONS+=--xmss
   SIGN_OPTIONS+=--xmss
+  CFLAGS+=-D"XMSS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE)
   WOLFCRYPT_OBJS+= \
     ./$(XMSSDIR)/params.o \
     ./$(XMSSDIR)/thash.o \
@@ -466,10 +451,7 @@ ifeq ($(SIGN),ext_XMSS)
     ./$(XMSSDIR)/xmss_core_fast.o \
     ./$(XMSSDIR)/xmss_commons.o \
     ./$(XMSSDIR)/utils.o \
-    ./lib/wolfssl/wolfcrypt/src/ext_xmss.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
+    ./lib/wolfssl/wolfcrypt/src/ext_xmss.o
   CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" -D"WOLFSSL_HAVE_XMSS" -D"HAVE_LIBXMSS" \
     -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\" -I$(XMSSDIR) \
     -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
@@ -491,21 +473,74 @@ ifeq ($(SIGN),ML_DSA)
   # Use wolfcrypt ML-DSA dilithium implementation.
   KEYGEN_OPTIONS+=--ml_dsa
   SIGN_OPTIONS+=--ml_dsa
-  WOLFCRYPT_OBJS+= \
-    ./lib/wolfssl/wolfcrypt/src/dilithium.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o \
-    ./lib/wolfssl/wolfcrypt/src/sha3.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-    ./lib/wolfssl/wolfcrypt/src/hash.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" \
-          -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-          -D"ML_DSA_LEVEL"=$(ML_DSA_LEVEL)
+  WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" $(ML_DSA_EXTRA)
+  ifneq ($(HASH),SHA3)
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  endif
+  
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with ML-DSA not supported yet)
   else
     STACK_USAGE=19544
   endif
 endif
+
+ifneq ($(SIGN_SECONDARY),)
+  LOWERCASE_SECONDARY=$(shell echo $(SIGN_SECONDARY) | tr '[:upper:]' '[:lower:]')
+  SECONDARY_KEYGEN_OPTIONS=--$(LOWERCASE_SECONDARY)
+  SECONDARY_SIGN_OPTIONS=--$(LOWERCASE_SECONDARY)
+  CFLAGS+=-DSIGN_HYBRID
+  CFLAGS+=-DWOLFBOOT_SIGN_SECONDARY_$(SIGN_SECONDARY)
+  ifeq ($(SIGN_SECONDARY),RSA2048)
+    WOLFCRYPT_OBJS+=$(RSA_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),RSA3072)
+    WOLFCRYPT_OBJS+=$(RSA_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),RSA4096)
+    WOLFCRYPT_OBJS+=$(RSA_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),ECC256)
+    WOLFCRYPT_OBJS+=$(ECC_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),ECC384)
+    WOLFCRYPT_OBJS+=$(ECC_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),ECC521)
+    WOLFCRYPT_OBJS+=$(ECC_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),ED25519)
+    WOLFCRYPT_OBJS+=$(ED25519_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),ED448)
+    WOLFCRYPT_OBJS+=$(ED448_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),LMS)
+    WOLFCRYPT_OBJS+=$(LMS_OBJS)
+    CFLAGS+=-D"WOLFBOOT_SIGN_LMS" $(LMS_EXTRA)
+  endif
+  ifeq ($(SIGN_SECONDARY),XMSS)
+    WOLFCRYPT_OBJS+= $(XMSS_OBJS)
+    CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" $(XMSS_EXTRA)
+  endif
+  ifeq ($(SIGN_SECONDARY),ML_DSA)
+    WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
+    ifneq ($(HASH),SHA3)
+      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+    endif
+    CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" $(ML_DSA_EXTRA)
+  endif
+endif
+
+
+CFLAGS+=-DWOLFBOOT_SIGN_PRIMARY_$(SIGN)
 
 ifeq ($(RAM_CODE),1)
   CFLAGS+= -D"RAM_CODE"
@@ -678,11 +713,14 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-Ilib/wolfPKCS11
   CFLAGS+=-DWP11_HASH_PIN_COST=3
-  OBJS+=src/pkcs11_store.o
-  OBJS+=src/pkcs11_callable.o
+  WOLFCRYPT_OBJS+=src/pkcs11_store.o
+  WOLFCRYPT_OBJS+=src/pkcs11_callable.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/dh.o
+  ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
+    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+  endif
   WOLFCRYPT_OBJS+=./lib/wolfPKCS11/src/crypto.o \
         ./lib/wolfPKCS11/src/internal.o \
         ./lib/wolfPKCS11/src/slot.o \
@@ -692,15 +730,23 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
       WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
   endif
   ifeq ($(findstring RSA,$(SIGN)),)
-      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/rsa.o
+  ifeq ($(findstring RSA,$(SIGN_SECONDARY)),)
+      WOLFCRYPT_OBJS+=$(RSA_OBJS)
+  endif
   endif
   ifeq ($(findstring ECC,$(SIGN)),)
-      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/ecc.o
+  ifeq ($(findstring ECC,$(SIGN_SECONDARY)),)
+      WOLFCRYPT_OBJS+=$(ECC_OBJS)
   endif
+  endif
+  ifeq ($(findstring ECC,$(SIGN)),)
+  ifeq ($(findstring ECC,$(SIGN_SECONDARY)),)
   ifeq ($(findstring RSA,$(SIGN)),)
-    ifeq ($(findstring ECC,$(SIGN)),)
-      WOLFCRYPT_OBJS+=$(MATH_OBJS) ./lib/wolfssl/wolfcrypt/src/wolfmath.o
-    endif
+  ifeq ($(findstring RSA,$(SIGN_SECONDARY)),)
+	  WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  endif
+  endif
   endif
 endif
 
@@ -845,7 +891,7 @@ ifeq ($(FLASH_MULTI_SECTOR_ERASE),1)
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
-OBJS:=$(OBJS_EXTRA) $(OBJS)
+OBJS+=$(OBJS_EXTRA)
 
 ifeq ($(USE_GCC_HEADLESS),1)
   ifneq ($(ARCH),RENESAS_RX)

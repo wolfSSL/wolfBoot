@@ -79,7 +79,68 @@ int wolfBot_get_dts_size(void *dts_addr);
 #define SECT_FLAG_UPDATED   0x0f
 #endif
 
+#ifdef WOLFBOOT_SIGN_PRIMARY_ED25519
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ed25519
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_ED448
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ed448
+#endif
+#if defined (WOLFBOOT_SIGN_PRIMARY_RSA2048) || \
+    defined (WOLFBOOT_SIGN_PRIMARY_RSA3072) || \
+    defined (WOLFBOOT_SIGN_PRIMARY_RSA4096) || \
+    defined (WOLFBOOT_SIGN_PRIMARY_RSA2048ENC) || \
+    defined (WOLFBOOT_SIGN_PRIMARY_RSA3072ENC) || \
+    defined (WOLFBOOT_SIGN_PRIMARY_RSA4096ENC)
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_rsa
+#endif
+#if defined (WOLFBOOT_SIGN_PRIMARY_ECC256) || \
+        defined (WOLFBOOT_SIGN_PRIMARY_ECC384) || \
+        defined (WOLFBOOT_SIGN_PRIMARY_ECC521)
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ecc
+#endif
+#if defined(WOLFBOOT_SIGN_PRIMARY_LMS) || defined(WOLFBOOT_SIGN_PRIMARY_ext_LMS)
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_lms
+#endif
+#if defined(WOLFBOOT_SIGN_PRIMARY_XMSS ) || defined(WOLFBOOT_SIGN_PRIMARY_ext_XMSS)
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_xmss
+#endif
+#ifdef WOLFBOOT_SIGN_PRIMARY_ML_DSA
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ml_dsa
+#endif
 
+#ifdef WOLFBOOT_SIGN_SECONDARY_ED25519
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_ed25519
+#endif
+#ifdef WOLFBOOT_SIGN_SECONDARY_ED448
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_ed448
+#endif
+#if defined (WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSA2048ENC) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSA3072ENC) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSA4096ENC)
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_rsa
+#endif
+#if defined (WOLFBOOT_SIGN_SECONDARY_ECC256) || \
+        defined (WOLFBOOT_SIGN_SECONDARY_ECC384) || \
+        defined (WOLFBOOT_SIGN_SECONDARY_ECC521)
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_ecc
+#endif
+#ifdef WOLFBOOT_SIGN_SECONDARY_LMS
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_lms
+#endif
+#ifdef WOLFBOOT_SIGN_SECONDARY_XMSS
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_xmss
+#endif
+#ifdef WOLFBOOT_SIGN_SECONDARY_ML_DSA
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_ml_dsa
+#endif
+
+#if defined(WOLFBOOT_TPM) && defined (WOLFBOOT_TPM_VERIFY)
+#undef wolfBoot_verify_signature_primary
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_tpm
+#endif
 
 
 #if (defined(WOLFBOOT_ARMORED) && defined(__WOLFBOOT))
@@ -126,6 +187,16 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     img->canary_FEED6789 = 0xFEED6789UL;
     img->not_signature_ok = ~(1UL);
     img->canary_FEED89AB = 0xFEED89ABUL;
+}
+
+static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
+	struct wolfBoot_image *img)
+{
+	img->canary_FEED4567 = 0xFEED4567UL;
+	img->signature_ok = 0UL;
+	img->canary_FEED6789 = 0xFEED6789UL;
+	img->not_signature_ok = 1UL;
+	img->canary_FEED89AB = 0xFEED89ABUL;
 }
 
 /**
@@ -330,8 +401,8 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     }
 
 /**
- * ECC / Ed signature verification.
- * ECC and Ed verify functions set an additional value 'p_res'
+ * ECC / Ed / PQ signature verification.
+ * Those verify functions set an additional value 'p_res'
  * which is passed as a pointer.
  *
  * Ensure that the verification function has been called, and then
@@ -528,14 +599,13 @@ struct wolfBoot_image {
 };
 
 /* do not warn if this is not used */
-#if !defined(__CCRX__)
-static void __attribute__ ((unused)) wolfBoot_image_confirm_signature_ok(
-    struct wolfBoot_image *img)
-#else
 static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
-#endif
 {
     img->signature_ok = 1;
+}
+static void wolfBoot_image_clear_signature_ok(struct wolfBoot_image *img)
+{
+	img->signature_ok = 0;
 }
 
 #define likely(x) (x)

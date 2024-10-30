@@ -42,13 +42,28 @@
 #ifdef WOLFBOOT_TPM
 #include "tpm.h"
 #endif
+#ifdef WOLFBOOT_HASH_SHA256
+#include <wolfssl/wolfcrypt/sha256.h>
+#endif
+#ifdef WOLFBOOT_HASH_SHA384
+#include <wolfssl/wolfcrypt/sha512.h>
+#endif
+#ifdef WOLFBOOT_HASH_SHA3_384
+#include <wolfssl/wolfcrypt/sha3.h>
+#endif
 
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
 /* TPM based verify */
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
-static void wolfBoot_verify_signature(uint8_t key_slot,
+#ifdef ECC_IMAGE_SIGNATURE_SIZE
+#define IMAGE_SIGNATURE_SIZE ECC_IMAGE_SIGNATURE_SIZE
+#else
+#define IMAGE_SIGNATURE_SIZE RSA_IMAGE_SIGNATURE_SIZE
+#endif
+
+static void wolfBoot_verify_signature_tpm(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret = 0, verify_res = 0;
@@ -71,7 +86,8 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     if (ret == 0) {
         sigAlg = (alg == TPM_ALG_RSA) ? TPM_ALG_RSASSA : TPM_ALG_ECDSA;
         ret = wolfTPM2_VerifyHashScheme(&wolftpm_dev, &tpmKey,
-            sig, IMAGE_SIGNATURE_SIZE,               /* Signature */
+            sig, /* Signature */
+            IMAGE_SIGNATURE_SIZE, /* Signature size */
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, /* Hash */
             sigAlg, WOLFBOOT_TPM_HASH_ALG);
     }
@@ -97,7 +113,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 /* wolfCrypt software verify */
 #ifdef WOLFBOOT_SIGN_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ed25519(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, res;
@@ -113,7 +129,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         /* Failed to import ed25519 key */
         return;
     }
-    VERIFY_FN(img, &res, wc_ed25519_verify_msg, sig, IMAGE_SIGNATURE_SIZE,
+    VERIFY_FN(img, &res, wc_ed25519_verify_msg, sig, ED25519_IMAGE_SIGNATURE_SIZE,
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed);
 }
 
@@ -121,7 +137,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
 #ifdef WOLFBOOT_SIGN_ED448
 #include <wolfssl/wolfcrypt/ed448.h>
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ed448(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, res;
@@ -137,25 +153,27 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         /* Failed to import ed448 key */
         return;
     }
-    VERIFY_FN(img, &res, wc_ed448_verify_msg, sig, IMAGE_SIGNATURE_SIZE,
+    VERIFY_FN(img, &res, wc_ed448_verify_msg, sig, ED448_IMAGE_SIGNATURE_SIZE,
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &res, &ed, NULL, 0);
 }
-
 
 #endif
 
 
 #if defined(WOLFBOOT_SIGN_ECC256) || \
     defined(WOLFBOOT_SIGN_ECC384) || \
-    defined(WOLFBOOT_SIGN_ECC521)
+    defined(WOLFBOOT_SIGN_ECC521) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC256) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC384) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC521)
 
 #include <wolfssl/wolfcrypt/ecc.h>
 
-#if defined(WOLFBOOT_SIGN_ECC256)
+#if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_SECONDARY_ECC256)
     #define ECC_KEY_TYPE ECC_SECP256R1
-#elif defined(WOLFBOOT_SIGN_ECC384)
+#elif defined(WOLFBOOT_SIGN_ECC384) || defined(WOLFBOOT_SIGN_SECONDARY_ECC384)
     #define ECC_KEY_TYPE ECC_SECP384R1
-#elif defined(WOLFBOOT_SIGN_ECC521)
+#elif defined(WOLFBOOT_SIGN_ECC521) || defined(WOLFBOOT_SIGN_SECONDARY_ECC521)
     #define ECC_KEY_TYPE ECC_SECP521R1
 #endif
 
@@ -167,7 +185,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
  * @param img The image to verify.
  * @param sig The signature to use for verification.
  */
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, verify_res = 0;
@@ -201,7 +219,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
          * trigger crypto callback. Building with NO_ASN allows us to send R+S
          * directly without ASN.1 encoded DSA header */
         VERIFY_FN(img, &verify_res, wc_ecc_verify_hash,
-            sig, IMAGE_SIGNATURE_SIZE,
+            sig, ECC_IMAGE_SIGNATURE_SIZE,
             img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc)
     #else
         /* Import public key */
@@ -221,12 +239,17 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     wc_ecc_free(&ecc);
 }
 
-#endif /* WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC521 */
+#endif /* WOLFBOOT_SIGN_ECC256 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC521 ||
+        * WOLFBOOT_SIGN_SECONDARY_ECC256 || WOLFBOOT_SIGN_SECONDARY_ECC384 ||
+        * WOLFBOOT_SIGN_SECONDARY_ECC521 */
 
 
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
     defined(WOLFBOOT_SIGN_RSA3072) || \
-    defined(WOLFBOOT_SIGN_RSA4096)
+    defined(WOLFBOOT_SIGN_RSA4096) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
 
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/rsa.h>
@@ -283,11 +306,11 @@ static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 }
 #endif /* !NO_RSA_SIG_ENCODING */
 
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret;
-    uint8_t output[IMAGE_SIGNATURE_SIZE];
+    uint8_t output[RSA_IMAGE_SIGNATURE_SIZE];
     uint8_t* digest_out = NULL;
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
@@ -303,10 +326,10 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     defined(WOLFBOOT_RENESAS_RSIP)
     ret = wc_InitRsaKey_ex(&rsa, NULL, RENESAS_DEVID);
     if (ret == 0) {
-        XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
+        XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
         RSA_VERIFY_FN(ret,
             wc_RsaSSL_Verify, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
-            output, IMAGE_SIGNATURE_SIZE, &rsa);
+            output, RSA_IMAGE_SIGNATURE_SIZE, &rsa);
         /* The crypto callback success also verifies hash */
         if (ret == 0)
             wolfBoot_image_confirm_signature_ok(img);
@@ -319,9 +342,9 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         /* Import public key */
         ret = wc_RsaPublicKeyDecode((byte*)pubkey, &inOutIdx, &rsa, pubkey_sz);
         if (ret >= 0) {
-            XMEMCPY(output, sig, IMAGE_SIGNATURE_SIZE);
+            XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
             RSA_VERIFY_FN(ret,
-                wc_RsaSSL_VerifyInline, output, IMAGE_SIGNATURE_SIZE,
+                wc_RsaSSL_VerifyInline, output, RSA_IMAGE_SIGNATURE_SIZE,
                     &digest_out, &rsa);
         }
     }
@@ -338,8 +361,10 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         RSA_VERIFY_HASH(img, digest_out);
     }
 }
-#endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_3072 || \
-        * WOLFBOOT_SIGN_RSA4096 */
+
+#endif /* WOLFBOOT_SIGN_RSA2048 || WOLFBOOT_SIGN_RSA3072 || \
+        * WOLFBOOT_SIGN_RSA4096 || WOLFBOOT_SIGN_SECONDARY_RSA2048 ||
+        * WOLFBOOT_SIGN_SECONDARY_RSA3072 || WOLFBOOT_SIGN_SECONDARY_RSA4096 */
 
 #ifdef WOLFBOOT_SIGN_LMS
 #include <wolfssl/wolfcrypt/lms.h>
@@ -349,7 +374,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     #include <wolfssl/wolfcrypt/wc_lms.h>
 #endif
 
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_lms(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int       ret = 0;
@@ -393,7 +418,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-    ret = wc_LmsKey_Verify(&lms, sig, IMAGE_SIGNATURE_SIZE, img->sha_hash,
+    ret = wc_LmsKey_Verify(&lms, sig, LMS_IMAGE_SIGNATURE_SIZE, img->sha_hash,
                            WOLFBOOT_SHA_DIGEST_SIZE);
 
     if (ret == 0) {
@@ -406,6 +431,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     wc_LmsKey_Free(&lms);
 }
+
 #endif /* WOLFBOOT_SIGN_LMS */
 
 #ifdef WOLFBOOT_SIGN_XMSS
@@ -416,7 +442,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
     #include <wolfssl/wolfcrypt/wc_xmss.h>
 #endif
 
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int       ret = 0;
@@ -457,7 +483,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
         return;
     }
 
-    ret = wc_XmssKey_Verify(&xmss, sig, IMAGE_SIGNATURE_SIZE, img->sha_hash,
+    ret = wc_XmssKey_Verify(&xmss, sig, XMSS_IMAGE_SIGNATURE_SIZE, img->sha_hash,
                            WOLFBOOT_SHA_DIGEST_SIZE);
 
     if (ret == 0) {
@@ -470,11 +496,12 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     wc_XmssKey_Free(&xmss);
 }
+
 #endif /* WOLFBOOT_SIGN_XMSS */
 
 #ifdef WOLFBOOT_SIGN_ML_DSA
 #include <wolfssl/wolfcrypt/dilithium.h>
-static void wolfBoot_verify_signature(uint8_t key_slot,
+static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int       ret = 0;
@@ -532,9 +559,9 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
             wolfBoot_printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
             ret = -1;
         }
-        else if (sig_len != IMAGE_SIGNATURE_SIZE) {
+        else if (sig_len != ML_DSA_IMAGE_SIGNATURE_SIZE) {
             wolfBoot_printf("error: ML-DSA sig len mismatch: got %d bytes " \
-                   "expected %d\n", sig_len, IMAGE_SIGNATURE_SIZE);
+                   "expected %d\n", sig_len, ML_DSA_IMAGE_SIGNATURE_SIZE);
             ret = -1;
         }
     }
@@ -554,7 +581,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
                         ML_DSA_LEVEL);
 
         /* Finally verify signagure. */
-        ret = wc_MlDsaKey_Verify(&ml_dsa, sig, IMAGE_SIGNATURE_SIZE,
+        ret = wc_MlDsaKey_Verify(&ml_dsa, sig, ML_DSA_IMAGE_SIGNATURE_SIZE,
                                  img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
                                  &verify_res);
 
@@ -570,6 +597,7 @@ static void wolfBoot_verify_signature(uint8_t key_slot,
 
     wc_MlDsaKey_Free(&ml_dsa);
 }
+
 #endif /* WOLFBOOT_SIGN_ML_DSA */
 
 #endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY */
@@ -720,6 +748,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
     } while(position < img->fw_size);
 
     wc_Sha256Final(&sha256_ctx, hash);
+    wc_Sha256Free(&sha256_ctx);
     return 0;
 }
 
@@ -737,12 +766,14 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha256 sha256_ctx;
 
+    memset(hash, 0, SHA256_DIGEST_SIZE);
     if (!pubkey || (pubkey_sz < 0))
         return;
 
     wc_InitSha256(&sha256_ctx);
     wc_Sha256Update(&sha256_ctx, pubkey, (word32)pubkey_sz);
     wc_Sha256Final(&sha256_ctx, hash);
+    wc_Sha256Free(&sha256_ctx);
 }
 #endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA2-256 */
@@ -796,6 +827,7 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
     } while(position < img->fw_size);
 
     wc_Sha384Final(&sha384_ctx, hash);
+    wc_Sha384Free(&sha384_ctx);
     return 0;
 }
 
@@ -824,6 +856,7 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
     wc_InitSha384(&sha384_ctx);
     wc_Sha384Update(&sha384_ctx, pubkey, (word32)pubkey_sz);
     wc_Sha384Final(&sha384_ctx, hash);
+    wc_Sha384Free(&sha384_ctx);
 }
 #endif /* WOLFBOOT_NO_SIGN */
 #endif /* WOLFBOOT_HASH_SHA384 */
@@ -878,6 +911,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     } while(position < img->fw_size);
 
     wc_Sha3_384_Final(&sha3_ctx, hash);
+    wc_Sha3_384_Free(&sha3_ctx);
     return 0;
 }
 #ifndef WOLFBOOT_NO_SIGN
@@ -904,6 +938,7 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
     wc_InitSha3_384(&sha3_ctx, NULL, INVALID_DEVID);
     wc_Sha3_384_Update(&sha3_ctx, pubkey, (word32)pubkey_sz);
     wc_Sha3_384_Final(&sha3_ctx, hash);
+    wc_Sha3_384_Free(&sha3_ctx);
 }
 #endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA3-384 */
@@ -1168,8 +1203,6 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     int key_slot;
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);
-    if (stored_signature_size != IMAGE_SIGNATURE_SIZE)
-       return -1;
     pubkey_hint_size = get_header(img, HDR_PUBKEY, &pubkey_hint);
     if (pubkey_hint_size == WOLFBOOT_SHA_DIGEST_SIZE) {
 #if defined(WOLFBOOT_RENESAS_SCEPROTECT) || \
@@ -1218,7 +1251,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 
     CONFIRM_MASK_VALID(image_part, key_mask);
 
-    /* wolfBoot_verify_signature() does not return the result directly.
+    /* wolfBoot_verify_signature_ecc() does not return the result directly.
      * A call to wolfBoot_image_confirm_signature_ok() is required in order to
      * confirm that the signature verification is OK.
      *
@@ -1226,8 +1259,36 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      * img->signature_ok to 1.
      *
      */
-    wolfBoot_verify_signature(key_slot, img, stored_signature);
+    wolfBoot_verify_signature_primary(key_slot, img, stored_signature);
     if (img->signature_ok == 1)
+#ifdef SIGN_HYBRID
+    {
+        uint8_t *stored_secondary_signature;
+        uint16_t stored_secondary_signature_size;
+        /* Invalidate the signature_ok flag */
+        wolfBoot_image_clear_signature_ok(img);
+        /* Load the pubkey hint for the secondary key */
+        pubkey_hint_size = get_header(img, HDR_SECONDARY_PUBKEY, &pubkey_hint);
+        if (pubkey_hint_size == WOLFBOOT_SHA_DIGEST_SIZE) {
+            key_slot = keyslot_id_by_sha(pubkey_hint);
+            if (key_slot < 0) {
+                return -1; /* Key was not found */
+            }
+            key_mask = keystore_get_mask(key_slot);
+            if (((1U << image_part) & key_mask) != (1U << image_part)) {
+                return -1; /* Key not allowed to verify this partition id */
+            }
+            CONFIRM_MASK_VALID(image_part, key_mask);
+            stored_secondary_signature_size = get_header(img,
+                    HDR_SECONDARY_SIGNATURE, &stored_secondary_signature);
+            wolfBoot_printf("Verification of hybrid signature\n");
+            wolfBoot_verify_signature_secondary(key_slot, img,
+                    stored_secondary_signature);
+            wolfBoot_printf("Done.\n");
+        }
+    }
+    if (img->signature_ok == 1)
+#endif
         return 0;
     return -2;
 }

@@ -70,7 +70,7 @@ extern int tolower(int c);
 #endif
 
 /* ED25519 and SHA512 */
-#ifdef WOLFBOOT_SIGN_ED25519
+#if defined(WOLFBOOT_SIGN_ED25519) || defined(WOLFBOOT_SIGN_SECONDARY_ED25519)
 #   define HAVE_ED25519
 #   define ED25519_SMALL
 #   define NO_ED25519_SIGN
@@ -80,7 +80,7 @@ extern int tolower(int c);
 #endif
 
 /* ED448 and SHA3/SHAKE256 */
-#ifdef WOLFBOOT_SIGN_ED448
+#if defined(WOLFBOOT_SIGN_ED448) || defined(WOLFBOOT_SIGN_SECONDARY_ED448)
 #   define HAVE_ED448
 #   define HAVE_ED448_VERIFY
 #   define ED448_SMALL
@@ -94,7 +94,11 @@ extern int tolower(int c);
 #if defined(WOLFBOOT_SIGN_ECC256) || \
     defined(WOLFBOOT_SIGN_ECC384) || \
     defined(WOLFBOOT_SIGN_ECC521) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC256) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC384) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC521) || \
     defined(WOLFCRYPT_SECURE_MODE)
+
 
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
@@ -141,12 +145,15 @@ extern int tolower(int c);
 
 
     /* Curve */
-#   if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFCRYPT_SECURE_MODE)
+#   if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFCRYPT_SECURE_MODE) || \
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC256)
 #       define HAVE_ECC256
-#   elif defined(WOLFBOOT_SIGN_ECC384)
+#   elif defined(WOLFBOOT_SIGN_ECC384) || \
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC384)
 #       define HAVE_ECC384
 #       define WOLFSSL_SP_384
-#   elif defined(WOLFBOOT_SIGN_ECC521)
+#   elif defined(WOLFBOOT_SIGN_ECC521) || \
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC521)
 #       define HAVE_ECC521
 #       define WOLFSSL_SP_521
 #   endif
@@ -175,13 +182,18 @@ extern int tolower(int c);
 #      define WOLFSSL_SP_NO_256
 #      endif
 #   endif
-#endif /* WOLFBOOT_SIGN_ECC521 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC256 */
+#endif /* WOLFBOOT_SIGN_ECC521 || WOLFBOOT_SIGN_ECC384 || WOLFBOOT_SIGN_ECC256 ||
+        * WOLFBOOT_SIGN_SECONDARY_ECC521 || WOLFBOOT_SIGN_SECONDARY_ECC384 ||
+        * WOLFBOOT_SIGN_SECONDARY_ECC256 || WOLFCRYPT_SECURE_MODE */
 
 
 /* RSA */
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
     defined(WOLFBOOT_SIGN_RSA3072) || \
     defined(WOLFBOOT_SIGN_RSA4096) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
     (defined(WOLFCRYPT_SECURE_MODE) && (!defined(PKCS11_SMALL)))
 
 #   define WC_RSA_BLINDING
@@ -200,20 +212,20 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
 #   endif
-#   ifdef WOLFBOOT_SIGN_RSA2048
+#   if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048)
 #       define FP_MAX_BITS (2048 * 2)
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_NO_4096
 #       define WOLFSSL_SP_2048
 #   endif
-#   ifdef WOLFBOOT_SIGN_RSA3072
+#   if defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072)
 #       define FP_MAX_BITS (3072 * 2)
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_4096
 #       define WOLFSSL_SP_3072
 #   endif
 
-#   ifdef WOLFBOOT_SIGN_RSA4096
+#   if defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
 #       define FP_MAX_BITS (4096 * 2)
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_3072
@@ -231,7 +243,7 @@ extern int tolower(int c);
 #endif /* RSA */
 
 /* ML-DSA (dilithium) */
-#if defined(WOLFBOOT_SIGN_ML_DSA)
+#if defined(WOLFBOOT_SIGN_ML_DSA) || defined(WOLFBOOT_SIGN_SECONDARY_ML_DSA)
 #   define HAVE_DILITHIUM
 #   define WOLFSSL_WC_DILITHIUM
 #   define WOLFSSL_EXPERIMENTAL_SETTINGS
@@ -251,7 +263,7 @@ extern int tolower(int c);
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
 #   define WOLFSSL_SHAKE128
-#endif /* WOLFBOOT_SIGN_ML_DSA */
+#endif /* WOLFBOOT_SIGN_ML_DSA || WOLFBOOT_SIGN_SECONDARY_ML_DSA */
 
 #ifdef WOLFBOOT_HASH_SHA3_384
 #   define WOLFSSL_SHA3
@@ -308,6 +320,7 @@ extern int tolower(int c);
 #   define WOLFSSL_AES_COUNTER
 #   define WOLFSSL_AES_DIRECT
 #   define WOLFSSL_AES_GCM
+#   define GCM_TABLE_4BIT
 #   define ENCRYPT_WITH_AES128
 #   define WOLFSSL_AES_128
 #   define HAVE_SCRYPT
@@ -497,9 +510,6 @@ extern int tolower(int c);
         #define RENESAS_DEVID 7890
     #endif
 #endif
-
-
-
 #endif /* WOLFBOOT_PKCS11_APP */
 
 #ifndef XTOLOWER

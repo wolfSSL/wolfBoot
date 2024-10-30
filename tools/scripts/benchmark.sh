@@ -44,7 +44,7 @@ function set_benchmark {
     echo -n " | "
     make clean &>/dev/null
     make keysclean &>/dev/null
-    make $@ factory.bin &>/dev/null || make $@ factory.bin
+    make $@ &>/dev/null || make $@ factory.bin
     make $@ stack-usage &>/dev/null
     make $@ image-header-size &>/dev/null
     # Bootloader size
@@ -95,4 +95,6 @@ set_benchmark "ML_DSA-65" SIGN=ML_DSA ML_DSA_LEVEL=3 IMAGE_SIGNATURE_SIZE=3309 I
 set_benchmark "ML_DSA-87" SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288
 set_benchmark "LMS 1-10-8" SIGN=LMS LMS_LEVELS=1 LMS_HEIGHT=10 LMS_WINTERNITZ=8 IMAGE_HEADER_SIZE=4096 IMAGE_SIGNATURE_SIZE=1456
 set_benchmark "XMSS-SHA2_10_256'" XMSS_PARAMS='XMSS-SHA2_10_256' SIGN=XMSS IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=8192
+set_benchmark "ML_DSA-65 hybrid with ECDSA384" SIGN=ML_DSA ML_DSA_LEVEL=3 IMAGE_SIGNATURE_SIZE=3309 IMAGE_HEADER_SIZE=8192 SIGN_SECONDARY=ECC384 WOLFBOOT_UNIVERSAL_KEYSTORE=1
+set_benchmark "ML_DSA-87 hybrid with ECDSA521" SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 SIGN_SECONDARY=ECC521 WOLFBOOT_UNIVERSAL_KEYSTORE=1
 

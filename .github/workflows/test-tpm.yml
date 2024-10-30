@@ -113,7 +113,7 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim-tpm-seal.config
-      make-args: SIGN=ECC256 HASH=SHA256 POLICY_FILE=policy.bin
+      make-args: SIGN=ECC256 HASH=SHA256 POLICY_FILE=policy.bin IMAGE_HEADER_SIZE=512
       keyauthstr: TestAuth
       sealauthstr: SealAuth
 
@@ -143,7 +143,7 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim-tpm-seal.config
-      make-args: SIGN=ECC256 HASH=SHA256 POLICY_FILE=policy.bin
+      make-args: SIGN=ECC256 HASH=SHA256 POLICY_FILE=policy.bin IMAGE_HEADER_SIZE=512
       keyauthstr: TestAuth
 
   sim_tpm_seal_noauth_ecc384:

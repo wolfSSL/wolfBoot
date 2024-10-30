@@ -29,53 +29,29 @@
 extern "C" {
 #endif
 
-#if defined(WOLFBOOT_SIGN_ED25519)
-    extern const unsigned char ed25519_pub_key[];
-    extern unsigned int ed25519_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (64)
-#elif defined(WOLFBOOT_SIGN_ED448)
-    extern const unsigned char ed448_pub_key[];
-    extern unsigned int ed448_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (114)
-#elif defined(WOLFBOOT_SIGN_ECC256)
-    extern const unsigned char ecc256_pub_key[];
-    extern unsigned int ecc256_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (64)
-#elif defined(WOLFBOOT_SIGN_ECC384)
-    extern const unsigned char ecc384_pub_key[];
-    extern unsigned int ecc384_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (96)
-#elif defined(WOLFBOOT_SIGN_ECC521)
-    extern const unsigned char ecc521_pub_key[];
-    extern unsigned int ecc521_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (132)
-#elif defined(WOLFBOOT_SIGN_RSA2048)
-    extern const unsigned char rsa2048_pub_key[];
-    extern unsigned int rsa2048_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (256)
-#elif defined(WOLFBOOT_SIGN_RSA3072)
-    extern const unsigned char rsa3072_pub_key[];
-    extern unsigned int rsa3072_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (384)
-#elif defined(WOLFBOOT_SIGN_RSA4096)
-    extern const unsigned char rsa4096_pub_key[];
-    extern unsigned int rsa4096_pub_key_len;
-#   define IMAGE_SIGNATURE_SIZE (512)
-/* In PQC methods the signature size is a function of
- * the parameters. Therefore IMAGE_SIGNATURE_SIZE is
- * set in options.mk from the .config file. */
-#elif defined(WOLFBOOT_SIGN_LMS)
-    extern const unsigned char lms_pub_key[];
-    extern unsigned int lms_pub_key_len;
-#elif defined(WOLFBOOT_SIGN_XMSS)
-    extern const unsigned char xmss_pub_key[];
-    extern unsigned int xmss_pub_key_len;
-#elif defined(WOLFBOOT_SIGN_ML_DSA)
-    extern const unsigned char ml_dsa_pub_key[];
-    extern unsigned int ml_dsa_pub_key_len;
-#elif !defined(WOLFBOOT_NO_SIGN)
-#   error "No public key available for given signing algorithm."
-#endif /* Algorithm selection */
+#define ED25519_IMAGE_SIGNATURE_SIZE (64)
+#define ED448_IMAGE_SIGNATURE_SIZE (114)
+
+#if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SECONDARY_SIGN_ECC256)
+#define ECC_IMAGE_SIGNATURE_SIZE (64)
+#elif defined(WOLFBOOT_SIGN_ECC384) || defined(WOLFBOOT_SECONDARY_SIGN_ECC384)
+#define ECC_IMAGE_SIGNATURE_SIZE (96)
+#elif defined(WOLFBOOT_SIGN_ECC521) || defined(WOLFBOOT_SECONDARY_SIGN_ECC521)
+#define ECC_IMAGE_SIGNATURE_SIZE (132)
+#endif
+
+#if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SECONDARY_SIGN_RSA2048)
+#define RSA_IMAGE_SIGNATURE_SIZE (256)
+#elif defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SECONDARY_SIGN_RSA3072)
+#define RSA_IMAGE_SIGNATURE_SIZE (384)
+#elif defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SECONDARY_SIGN_RSA4096)
+#define RSA_IMAGE_SIGNATURE_SIZE (512)
+#endif
+
+#ifndef ML_DSA_IMAGE_SIGNATURE_SIZE
+#define ML_DSA_IMAGE_SIGNATURE_SIZE (3309)
+#endif
+
 
 void wolfBoot_start(void);
 

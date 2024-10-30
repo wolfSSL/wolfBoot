@@ -24,7 +24,7 @@
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolftpm/tpm2_wrap.h>
 #include <hal/tpm_io.h>
-#include "keystore.h"
+#include "wolfboot/wolfboot.h"
 #include "tpm.h"
 
 #include <stdio.h>

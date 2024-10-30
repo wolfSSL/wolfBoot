@@ -178,6 +178,109 @@ parameter set:    XMSSMT-SHA2_20/2_256
 signature length: 4963
 ```
 
+## Hybrid mode (classic + PQ)
+
+wolfBoot supports a hybrid mode where both classic and PQ signatures are verified,
+sequentially. This allows for a gradual transition from classic to PQ signatures,
+and protects the secure boot mechanism from potential vulnerabilities in either of
+the two ciphers in use.
+
+The hybrid mode is enabled by setting a `SECONDARY_SIGN` option in the config file,
+which specifies the secondary signature algorithm to be used. The secondary signature
+option requires the option `WOLFBOOT_UNIVERSAL_KEYSTORE=1`, to ensure that the
+keystore can handle both classic and PQ keys.
+
+The secondary signature option can be set to any of the supported PQ signature options.
+
+The example configuration provided in `config/examples/sim-ml-dsa-ecc-hybrid.config`
+demonstrates the use of hybrid mode with both ML-DSA-65 and ECC-384.
+
+### Hybrid signature
+
+The `sign` tool supports hybrid signatures. It is sufficient to specify two
+ciphers argument from command line. When you do that, the tool expects two private
+key files path passed as arguments, instead of one.
+
+The two public keys must be added to the same keystore. For this reason, the two
+keypairs must be generated either at the same time, or in two subsequent steps.
+
+### Generating keypairs for hybrid signatures
+
+#### Generate both keys at the same time:
+
+```
+./tools/keytools/keygen --ml_dsa -g wolfboot_signing_private_key.der --ecc384 -g wolfboot_signing_second_private_key.der
+```
+
+both keys are automatically added to the same keystore.
+
+
+#### Generate the two keys in separate steps
+
+If you want to generate the keys in two steps, you will have to import the first
+key in the new keystore. The first public key is stored in `keystore.der` during
+the keypair generation:
+```
+./tools/keytools/keygen --ml_dsa -g wolfboot_signing_private_key.der
+```
+
+The first 16 bytes contain the keystore header, and must be skipped:
+
+```
+dd if=keystore.der of=ml_dsa-pubkey.der bs=1 skip=16
+```
+
+The new keypair can be generated (`-g`) while importing (`-i`)the old public key:
+
+```
+./tools/keytools/keygen --ml_dsa -i ml_dsa-pubkey.der -g --ecc384 wolfboot_signing_second_private_key.der
+```
+
+The keystore generated is now ready to be used by wolfBoot for hybrid signature verification.
+
+### Hybrid signature of the firmware
+
+In both examples above, the two private keys are now available in separate .der files.
+The `sign` tool can now be used to sign the firmware with both keys:
+
+```
+./tools/sign/sign --ml_dsa --ecc384 --sha256 test-app/image.elf wolfboot_signing_private_key.der wolfboot_signing_second_private_key.der 1
+```
+
+The command should confirm that both keys are loaded, and that the image is signed and includes the hybrid signature:
+```
+wolfBoot KeyTools (Compiled C version)
+wolfBoot version 2020000
+Parsing arguments in hybrid mode
+Secondary private key: wolfboot_signing_second_private_key.der
+Secondary cipher: ECC384
+Version: 1
+Update type:          Firmware
+Input image:          test-app/image.elf
+Selected cipher:      ML-DSA
+Selected hash  :      SHA256
+Private key:           wolfboot_signing_private_key.der
+Secondary cipher:     ECC384
+Secondary private key: wolfboot_signing_second_private_key.der
+Output  image:        test-app/image_v1_signed.bin
+Target partition id : 1
+info: using ML-DSA parameters: 3
+info: ML-DSA signature size: 3309
+Key buffer size: 5984
+info: ml-dsa priv len: 4032
+info: ml-dsa pub len: 1952
+Found ml-dsa key
+image header size overridden by config value (8192 bytes)
+Loading secondary key
+Key buffer size: 144
+Secondary ECC key, size: 96
+image header size overridden by config value (8192 bytes)
+Creating hybrid signature
+[...]
+```
+
+The resulting image `image_v1_signed.bin` contains both signatures, and can be verified using a wolfBoot with hybrid signature support.
+
 ## Building the external PQ Integrations
 
 ### ext_LMS Support

@@ -141,9 +141,13 @@ ifeq ($(FLASH_OTP_KEYSTORE),1)
     MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
 endif
 
+ifneq ($(SIGN_SECONDARY),)
+  SECONDARY_PRIVATE_KEY=wolfboot_signing_second_private_key.der
+endif
+
 ASFLAGS:=$(CFLAGS)
 
-all: $(MAIN_TARGET)
+all: $(SECONDARY_PRIVATE_KEY) $(MAIN_TARGET)
 
 stage1: stage1/loader_stage1.bin
 stage1/loader_stage1.bin: wolfboot.elf
@@ -203,6 +207,15 @@ $(PRIVATE_KEY):
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
 
+$(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
+	$(Q)$(MAKE) keytools_check
+	$(Q)rm -f src/keystore.c
+	$(Q)dd if=keystore.der of=pubkey_1.der bs=1 skip=16
+	$(Q)(test $(SIGN_SECONDARY) = NONE) || ("$(KEYGEN_TOOL)" \
+		$(KEYGEN_OPTIONS) -i pubkey_1.der $(SECONDARY_KEYGEN_OPTIONS) \
+		-g $(SECONDARY_PRIVATE_KEY)) || true
+	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
+
 keytools: include/target.h
 	@echo "Building key tools"
 	@$(MAKE) -C tools/keytools -s clean
@@ -220,7 +233,12 @@ swtpmtools:
 
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
-	$(Q)(test $(SIGN) = NONE) || "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) 1
+	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
+	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"
+
+	$(Q)(test $(SIGN) = NONE) || "$(SIGN_TOOL)" $(SIGN_OPTIONS) \
+		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) \
+		$(SECONDARY_PRIVATE_KEY) 1 || true
 	$(Q)(test $(SIGN) = NONE) && "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
@@ -312,7 +330,7 @@ keys: $(PRIVATE_KEY)
 
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o test-app/*.o src/x86/*.o
-	$(Q)rm -f lib/wolfssl/wolfcrypt/src/*.o lib/wolfTPM/src/*.o lib/wolfTPM/hal/*.o
+	$(Q)rm -f lib/wolfssl/wolfcrypt/src/*.o lib/wolfTPM/src/*.o lib/wolfTPM/hal/*.o lib/wolfTPM/examples/pcr/*.o
 	$(Q)rm -f lib/wolfssl/wolfcrypt/src/port/Renesas/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
@@ -407,6 +425,8 @@ otpgen:
 tools/keytools/otp/otp-keystore-primer.bin: FORCE
 	make -C tools/keytools/otp clean
 	make -C tools/keytools/otp
+
+secondary: $(SECONDARY_PRIVATE_KEY)
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"

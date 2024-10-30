@@ -40,6 +40,7 @@
 
 #include "wolfboot/wolfboot.h"
 #include "target.h"
+#include "printf.h"
 
 /* Global pointer to the internal and external flash base */
 uint8_t *sim_ram_base;
@@ -72,7 +73,7 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 
     fd = open(path, O_RDWR);
     if (fd == -1) {
-        fprintf(stderr, "can't open %s\n", path);
+        wolfBoot_printf( "can't open %s\n", path);
         return -1;
     }
 
@@ -81,7 +82,7 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
     if (mmaped_addr == MAP_FAILED)
         return -1;
 
-    fprintf(stderr, "Simulator assigned %s to base %p\n", path, mmaped_addr);
+    wolfBoot_printf( "Simulator assigned %s to base %p\n", path, mmaped_addr);
 
     *ret_address = mmaped_addr;
 
@@ -119,8 +120,8 @@ int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
             uint8_t *addr = (uint8_t *)address;
             if (addr[i] != FLASH_BYTE_ERASED) {
                 /* no writing to non-erased page in NVM_FLASH_WRITEONCE */
-                printf("NVM_FLASH_WRITEONCE non-erased write detected at address %p!\n", addr);
-                printf("Address[%d] = %02x\n", i, addr[i]);
+                wolfBoot_printf("NVM_FLASH_WRITEONCE non-erased write detected at address %p!\n", addr);
+                wolfBoot_printf("Address[%d] = %02x\n", i, addr[i]);
                 return -1;
             }
 #endif
@@ -137,9 +138,9 @@ int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 int hal_flash_erase(uintptr_t address, int len)
 {
     /* implicit cast abide compiler warning */
-    fprintf(stderr, "hal_flash_erase addr %p len %d\n", (void*)address, len);
+    wolfBoot_printf( "hal_flash_erase addr %p len %d\n", (void*)address, len);
     if (address == erasefail_address + WOLFBOOT_PARTITION_BOOT_ADDRESS) {
-        fprintf(stderr, "POWER FAILURE\n");
+        wolfBoot_printf( "POWER FAILURE\n");
         /* Corrupt page */
         memset((void*)address, 0xEE, len);
         exit(0);
@@ -156,7 +157,7 @@ void hal_init(void)
     ret = mmap_file(INTERNAL_FLASH_FILE,
         (uint8_t*)ARCH_FLASH_OFFSET, &sim_ram_base);
     if (ret != 0) {
-        fprintf(stderr, "failed to load internal flash file\n");
+        wolfBoot_printf( "failed to load internal flash file\n");
         exit(-1);
     }
 
@@ -164,7 +165,7 @@ void hal_init(void)
     ret = mmap_file(EXTERNAL_FLASH_FILE,
         (uint8_t*)ARCH_FLASH_OFFSET + 0x10000000, &flash_base);
     if (ret != 0) {
-        fprintf(stderr, "failed to load external flash file\n");
+        wolfBoot_printf( "failed to load external flash file\n");
         exit(-1);
     }
 #endif /* EXT_FLASH */
@@ -172,7 +173,7 @@ void hal_init(void)
     for (i = 1; i < main_argc; i++) {
         if (strcmp(main_argv[i], "powerfail") == 0) {
             erasefail_address = strtol(main_argv[++i], NULL,  16);
-            fprintf(stderr, "Set power fail to erase at address %x\n",
+            wolfBoot_printf( "Set power fail to erase at address %x\n",
                 erasefail_address);
         }
         /* force a bad write of the boot partition to trigger and test the
@@ -262,7 +263,7 @@ void do_boot(const uint32_t *app_offset)
 
     ret = NSCreateObjectFileImageFromMemory(app_buf, app_size, &fileImage);
     if (ret != 1 || fileImage == NULL) {
-        fprintf(stderr, "Error loading object memory!\n");
+        wolfBoot_printf( "Error loading object memory!\n");
         exit(-1);
     }
     module = NSLinkModule(fileImage, "module",
@@ -270,7 +271,7 @@ void do_boot(const uint32_t *app_offset)
     symbol = NSLookupSymbolInModule(module, "__mh_execute_header");
     pSymbolAddress = NSAddressOfSymbol(symbol);
     if (!find_epc(pSymbolAddress, &epc)) {
-        fprintf(stderr, "Error finding entry point!\n");
+        wolfBoot_printf( "Error finding entry point!\n");
         exit(-1);
     }
 
@@ -283,17 +284,17 @@ void do_boot(const uint32_t *app_offset)
     char *envp[1] = {NULL};
     int fd = memfd_create("test_app", 0);
     if (fd == -1) {
-        fprintf(stderr, "memfd error\n");
+        wolfBoot_printf( "memfd error\n");
         exit(-1);
     }
 
     if ((size_t)write(fd, app_offset, app_size) != app_size) {
-        fprintf(stderr, "can't write test-app to memfd\n");
+        wolfBoot_printf( "can't write test-app to memfd\n");
         exit(-1);
     }
 
     ret = fexecve(fd, main_argv, envp);
-    fprintf(stderr, "fexecve error\n");
+    wolfBoot_printf( "fexecve error\n");
 #endif
     exit(1);
 }
