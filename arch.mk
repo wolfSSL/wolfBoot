@@ -1029,12 +1029,13 @@ ifeq ($(TARGET),sim)
   LD_END_GROUP=
   BOOT_IMG=test-app/image.elf
   CFLAGS+=-DARCH_SIM
-  CFLAGS+=-DWOLFBOOT_USE_STDLIBC
-  LDFLAGS +=-Wl,-gc-sections -Wl,-Map=wolfboot.map
+  ifeq ($(USE_GCC),1)
+     CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+  endif
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=wolfboot.map
   ifeq ($(FORCE_32BIT),1)
     CFLAGS+=-m32
     LDFLAGS+=-m32
-
   endif
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
