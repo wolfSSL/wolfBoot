@@ -235,6 +235,8 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         size_t  tmpSigSz                    = sizeof(tmpSigBuf);
 
     #if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+        (void)key_slot;
+
         /* hardcoded, since not using keystore */
         const int point_sz = ECC_IMAGE_SIGNATURE_SIZE / 2;
 
@@ -396,6 +398,7 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
         return;
     }
 #if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+    (void)key_slot;
     /* public key is stored on server at hsmClientKeyIdPubKey*/
     ret = wh_Client_RsaSetKeyId(&rsa, hsmClientKeyIdPubKey);
     if (ret != 0) {

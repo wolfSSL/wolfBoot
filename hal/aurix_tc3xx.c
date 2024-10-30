@@ -592,7 +592,8 @@ static int _connectCb(void* context, whCommConnected connect)
 
 int hal_hsm_init_connect(void)
 {
-    int rc = 0;
+    int    rc = 0;
+    size_t i;
 
     /* init shared memory buffers */
     uint32_t* req  = (uint32_t*)hsmShmCore0CommBuf;
@@ -625,7 +626,7 @@ int hal_hsm_init_connect(void)
     }
 
     /* init shared memory buffers */
-    for (size_t i=0; i<HSM_SHM_CORE0_COMM_BUF_WORDS; i++) {
+    for (i = 0; i < HSM_SHM_CORE0_COMM_BUF_WORDS; i++) {
         hsmShmCore0CommBuf[i] = 0;
     }
 
