@@ -39,8 +39,8 @@ extern int wolfBoot_get_dts_size(void *dts_addr);
 extern uint32_t kernel_load_addr;
 extern uint32_t dts_load_addr;
 
-#if (defined(EXT_FLASH) && defined(NO_XIP)) || \
-    (defined(EXT_ENCRYPTED) && defined(MMU)) && \
+#if ((defined(EXT_FLASH) && defined(NO_XIP)) || \
+    (defined(EXT_ENCRYPTED) && defined(MMU))) && \
     !defined(WOLFBOOT_NO_RAMBOOT)
     /* Load firmware to RAM on boot (single flash read) */
     #undef  WOLFBOOT_USE_RAMBOOT

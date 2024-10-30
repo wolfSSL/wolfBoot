@@ -490,7 +490,7 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
                 CMD.sign = sign_type;
                 CMD.signature_sz = keySzOut;
             }
-            printf("Found RSA%d key\n", keySzOut);
+            printf("Found RSA%d key\n", keySzOut*8);
         }
     }
     return ret;

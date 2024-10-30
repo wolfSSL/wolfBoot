@@ -478,7 +478,7 @@ ifeq ($(SIGN),ML_DSA)
   ifneq ($(HASH),SHA3)
     WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
   endif
-  
+
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with ML-DSA not supported yet)
   else
@@ -539,8 +539,6 @@ ifneq ($(SIGN_SECONDARY),)
   endif
 endif
 
-
-CFLAGS+=-DWOLFBOOT_SIGN_PRIMARY_$(SIGN)
 
 ifeq ($(RAM_CODE),1)
   CFLAGS+= -D"RAM_CODE"
