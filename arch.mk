@@ -211,24 +211,21 @@ else
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-chacha.o \
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
           ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-aes-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-aes-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha512-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha512-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha3-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha3-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-chacha-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-chacha-asm_c.o
-
-
-    CORTEXM_ARM_THUMB_EXTRA_OBJS= \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
           ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm.o \
+          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+
 
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
-                            -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
+                            -DWOLFSSL_ARMASM_NO_NEON
+    CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM_THUMB2
   endif
   ifeq ($(CORTEX_M33),1)
     CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
@@ -281,9 +278,7 @@ else
           else
             CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
             MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
-            # TODO: integrate thumb2-asm
-            #CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=6
-            #OBJS+=$(CORTEXM_ARM_THUMB_EXTRA_OBJS)
+            # No ARMASM support available for ARMv6-M.
           endif
         endif
       else
