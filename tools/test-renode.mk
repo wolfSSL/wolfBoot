@@ -95,12 +95,11 @@ ifeq ($(SIGN),RSA4096)
   SIGN_ARGS+= --rsa4096
 endif
 
-ifeq ($(SIGN),LMS)
-  SIGN_ARGS+= --lms
+ifneq (,$(filter $(SIGN), LMS ext_LMS))
+	SIGN_ARGS+= --lms
 endif
-
-ifeq ($(SIGN),XMSS)
-  SIGN_ARGS+= --xmss
+ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
+	SIGN_ARGS+= --xmss
 endif
 
 ifeq ($(SIGN),ML_DSA)
