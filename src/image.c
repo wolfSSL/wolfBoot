@@ -1260,6 +1260,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      *
      */
     wolfBoot_verify_signature_primary(key_slot, img, stored_signature);
+    (void)stored_signature_size;
     if (img->signature_ok == 1)
 #ifdef SIGN_HYBRID
     {

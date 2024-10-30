@@ -66,6 +66,14 @@ int wolfBot_get_dts_size(void *dts_addr);
 #  endif
 #endif
 
+#ifndef UNUSEDFUNCTION
+#  if defined(__GNUC__) || defined(__CC_ARM)
+#    define UNUSEDFUNCTION __attribute__((unused))
+#  else
+#    define UNUSEDFUNCTION
+#  endif
+#endif
+
 
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F
@@ -79,32 +87,32 @@ int wolfBot_get_dts_size(void *dts_addr);
 #define SECT_FLAG_UPDATED   0x0f
 #endif
 
-#ifdef WOLFBOOT_SIGN_PRIMARY_ED25519
+#ifdef WOLFBOOT_SIGN_ED25519
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ed25519
 #endif
-#ifdef WOLFBOOT_SIGN_PRIMARY_ED448
+#ifdef WOLFBOOT_SIGN_ED448
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ed448
 #endif
-#if defined (WOLFBOOT_SIGN_PRIMARY_RSA2048) || \
-    defined (WOLFBOOT_SIGN_PRIMARY_RSA3072) || \
-    defined (WOLFBOOT_SIGN_PRIMARY_RSA4096) || \
-    defined (WOLFBOOT_SIGN_PRIMARY_RSA2048ENC) || \
-    defined (WOLFBOOT_SIGN_PRIMARY_RSA3072ENC) || \
-    defined (WOLFBOOT_SIGN_PRIMARY_RSA4096ENC)
+#if defined (WOLFBOOT_SIGN_RSA2048) || \
+    defined (WOLFBOOT_SIGN_RSA3072) || \
+    defined (WOLFBOOT_SIGN_RSA4096) || \
+    defined (WOLFBOOT_SIGN_RSA2048ENC) || \
+    defined (WOLFBOOT_SIGN_RSA3072ENC) || \
+    defined (WOLFBOOT_SIGN_RSA4096ENC)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_rsa
 #endif
-#if defined (WOLFBOOT_SIGN_PRIMARY_ECC256) || \
-        defined (WOLFBOOT_SIGN_PRIMARY_ECC384) || \
-        defined (WOLFBOOT_SIGN_PRIMARY_ECC521)
+#if defined (WOLFBOOT_SIGN_ECC256) || \
+        defined (WOLFBOOT_SIGN_ECC384) || \
+        defined (WOLFBOOT_SIGN_ECC521)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ecc
 #endif
-#if defined(WOLFBOOT_SIGN_PRIMARY_LMS) || defined(WOLFBOOT_SIGN_PRIMARY_ext_LMS)
+#if defined(WOLFBOOT_SIGN_LMS) || defined(WOLFBOOT_SIGN_ext_LMS)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_lms
 #endif
-#if defined(WOLFBOOT_SIGN_PRIMARY_XMSS ) || defined(WOLFBOOT_SIGN_PRIMARY_ext_XMSS)
+#if defined(WOLFBOOT_SIGN_XMSS ) || defined(WOLFBOOT_SIGN_ext_XMSS)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_xmss
 #endif
-#ifdef WOLFBOOT_SIGN_PRIMARY_ML_DSA
+#ifdef WOLFBOOT_SIGN_ML_DSA
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ml_dsa
 #endif
 
@@ -598,12 +606,15 @@ struct wolfBoot_image {
     uint8_t not_ext : 1; /* image is no longer external */
 };
 
+
 /* do not warn if this is not used */
-static void wolfBoot_image_confirm_signature_ok(struct wolfBoot_image *img)
+static void UNUSEDFUNCTION wolfBoot_image_confirm_signature_ok(
+    struct wolfBoot_image *img)
 {
     img->signature_ok = 1;
 }
-static void wolfBoot_image_clear_signature_ok(struct wolfBoot_image *img)
+static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
+    struct wolfBoot_image *img)
 {
 	img->signature_ok = 0;
 }

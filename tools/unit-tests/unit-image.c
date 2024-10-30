@@ -43,7 +43,7 @@
 
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
 #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC256
-#define WOLFBOOT_SIGN_PRIMARY_ECC256
+#define WOLFBOOT_SIGN_ECC256
 
 #include <stdio.h>
 #include <check.h>
@@ -267,7 +267,7 @@ int wc_ecc_import_unsigned(ecc_key* key, const byte* qx, const byte* qy,
 {
     if (ecc_import_fail)
         return -1;
-    
+
     key->type = ECC_PUBLICKEY;
     return 0;
 }
@@ -285,7 +285,7 @@ START_TEST(test_verify_signature)
 {
     uint8_t pubkey[32];
     struct wolfBoot_image test_img;
-    
+
     test_img.part = PART_UPDATE;
     test_img.fw_size = test_img_len;
     test_img.fw_base = 0;
@@ -455,7 +455,7 @@ START_TEST(test_verify_authenticity)
     find_header_mocked = 1;
     ret = wolfBoot_verify_authenticity(&test_img);
     ck_assert_int_eq(ret, -1);
-    
+
     /* Wrong pubkey  */
     find_header_mocked = 0;
     hdr_cpy_done = 0;
@@ -463,7 +463,7 @@ START_TEST(test_verify_authenticity)
             test_img_len);
     ret = wolfBoot_verify_authenticity(&test_img);
     ck_assert_int_lt(ret, 0);
-    
+
     /* Wrong signature  */
     find_header_mocked = 0;
     find_header_fail = 0;
@@ -539,7 +539,7 @@ START_TEST(test_open_image)
     ck_assert_ptr_eq(img.hdr, (void *)WOLFBOOT_PARTITION_SWAP_ADDRESS);
     ck_assert_ptr_eq(img.hdr, img.fw_base);
     ck_assert_uint_eq(img.fw_size, WOLFBOOT_SECTOR_SIZE);
-    
+
     /* Valid image */
     hdr_cpy_done = 0;
     ext_flash_write(0, test_img_v200000000_signed_bin,
@@ -574,17 +574,17 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(tcase_headers, 20);
     tcase_add_test(tcase_headers, test_headers);
     suite_add_tcase(s, tcase_headers);
-    
+
     TCase* tcase_verify_authenticity = tcase_create("verify_authenticity");
     tcase_set_timeout(tcase_verify_authenticity, 20);
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
     suite_add_tcase(s, tcase_verify_authenticity);
-    
+
     TCase* tcase_verify_integrity = tcase_create("verify_integrity");
     tcase_set_timeout(tcase_verify_integrity, 20);
     tcase_add_test(tcase_verify_integrity, test_verify_integrity);
     suite_add_tcase(s, tcase_verify_integrity);
-    
+
     TCase* tcase_open_image = tcase_create("open_image");
     tcase_set_timeout(tcase_open_image, 20);
     tcase_add_test(tcase_open_image, test_open_image);

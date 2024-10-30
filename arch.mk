@@ -59,7 +59,7 @@ ifeq ($(ARCH),x86_64)
   endif
 endif
 
-## ARM
+## ARM Cortex-A
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
   CFLAGS+=-DARCH_AARCH64 -march=armv8-a
@@ -71,6 +71,7 @@ ifeq ($(ARCH),AARCH64)
   endif
 endif
 
+## ARM Cortex-M
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
   CFLAGS+=-DARCH_ARM
