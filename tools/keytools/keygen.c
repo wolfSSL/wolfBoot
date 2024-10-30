@@ -358,22 +358,27 @@ static int generated_keypairs_type[MAX_KEYPAIRS];
 static uint32_t generated_keypairs_id_mask[MAX_KEYPAIRS];
 static int n_generated = 0;
 
-static char *append_pub_to_fname(const char *filename) {
-    const char pubSuffix[] = "_pub";
+static char* append_pub_to_fname(const char* filename)
+{
+    const char   pubSuffix[]     = "_pub";
     const size_t pubSuffixLength = strlen(pubSuffix);
+    const char*  dotPosition;
+    size_t       prefixLength;
+    char*        newFilename;
+    size_t       newFilenameLength;
 
-    const char *dotPosition = strchr(filename, '.');
-
-    size_t prefixLength;
+    dotPosition = strchr(filename, '.');
     if (dotPosition != NULL) {
         prefixLength = dotPosition - filename;
-    } else {
+    }
+    else {
         prefixLength = strlen(filename);
     }
 
-    size_t newFilenameLength = prefixLength + pubSuffixLength + (dotPosition ? strlen(dotPosition) : 0) + 1;
+    newFilenameLength = prefixLength + pubSuffixLength +
+                        (dotPosition ? strlen(dotPosition) : 0) + 1;
 
-    char *newFilename = (char *)malloc(newFilenameLength);
+    newFilename = (char*)malloc(newFilenameLength);
     if (newFilename == NULL) {
         return NULL;
     }
@@ -387,8 +392,10 @@ static char *append_pub_to_fname(const char *filename) {
     /* Append the rest of the original filename if a period was found */
     if (dotPosition != NULL) {
         strcpy(newFilename + prefixLength + pubSuffixLength, dotPosition);
-    } else {
-        newFilename[prefixLength + pubSuffixLength] = '\0'; /* Null-terminate the string if no period */
+    }
+    else {
+        /* Null-terminate the string if no period */
+        newFilename[prefixLength + pubSuffixLength] = '\0';
     }
 
     return newFilename;
