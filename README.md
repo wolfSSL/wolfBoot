@@ -622,3 +622,33 @@ Use `make keysclean` to delete keys and regenerate.
     * Fix delta updates: patches with invalid base versions were not discarded
     * Fix potential array bound overflow in `NVM_FLASH_WRITEONCE` mode
     * Fix dereferencing type-punned pointer in flash update
+
+### V 2.3.0 - (2024-10-31)
+  * New hardware targets
+    * New architecture: ARM Cortex-A 32 bit
+    * Add support for Microchip ATSAMA5D3
+    * Add support for Nordic nRF5340
+    * Add support for Infineon AURIX TriCore TCxxx
+    * Add support for 32-bit simulator target
+  * Improvements to supported targets
+    * Support for building HAB for i.MX-RT targets, fixed flash interaction, dcache invalidation
+    * Fixes for Renesas RX: full flash erase, IRQ on boot, flash write
+    * Raspberry Pi: add UART support
+    * STM32: refactoring of the PKCS11 storage driver
+    * Fixes for Xilinx Zynq+ build options
+  * New features
+    * Support for multiple key types in the same keystore
+    * New algorithm: ML-DSA
+    * Hybrid authentication (using one PQC in combination with ECC/RSA)
+    * Full assembly optimizations for ARM targets, including SHA, AES, Chacha (ARMASM)
+    * Benchmark scripts for performance testing
+    * Unit test coverage drastically increased
+  * Bug fixes
+    * Fix multiple type-punned pointer dereferences
+    * Fix for TPM to properly support more than one PCR
+    * Fixed order of digests in the header: public key digest is now signed
+  * Updated modules
+    * wolfSSL v5.7.4
+    * wolfTPM latest
+    * wolfPKCS11 latest
+
