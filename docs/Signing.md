@@ -45,11 +45,13 @@ to ensure that the dependencies are met.
 Usage: `keygen [OPTIONS] [-g new-keypair.der] [-i existing-pubkey.der] [...]`
 
 `keygen` is used to populate a keystore with existing and new public keys.
-Two options are supported:
+The following options are supported:
 
 - `-g privkey.der` to generate a new keypair, add the public key to the keystore and save the private key in a new file `privkey.der`
 - `-i existing.der` to import an existing public key from `existing.der`
 - `--der` save generated private key in DER format.
+- `--exportpubkey` to export the public key (corresponding to the private key generated with `-g`) to a DER file. This option only has an effect if used in conjunction with the `-g` option.
+- `--nolocalkeys` to generate a keystore entry with zeroized key material. This option is only useful on platforms that support using an external key by reference, such as wolfHSM. Only has an effect if used in conjunction with the `-g` option.
 
 Arguments are not exclusive, and can be repeated more than once to populate a keystore with multiple keys.
 
