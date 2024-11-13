@@ -21,7 +21,7 @@
 
 
 /* Include target-specific defines here to override any AA64 defaults */
-#if defined(TARGET_LS1028A)
+#ifdef TARGET_nxp_ls1028a
 #include "../hal/nxp_ls1028a.h"
 #endif
 
@@ -280,6 +280,7 @@ init_stack:
     bl invalidate_ivac
     b boot_entry_C
 
+#ifdef TARGET_nxp_ls1028a
 .global mmu_enable
 mmu_enable:
     tlbi alle3                    /* Invalidate table entries */
@@ -317,6 +318,7 @@ mmu_enable:
     dsb sy
     isb
     ret
+#endif
 
 /* Exception Vector Table EL3 */
 .balign 0x800
@@ -388,6 +390,7 @@ PUT_64BIT_WORD \attr_hi, ((\PA) & 0xc0000000) | \attr_lo | 0x1
 PUT_64BIT_WORD \attr_hi, ((\PA) & 0xffe00000) | \attr_lo | 0x1
 .endm
 
+#ifdef TARGET_nxp_ls1028a
 /* Note: In EL3/2 has direct physical to virutal mapping */
 .align 12
 .global ttb0_base
@@ -404,3 +407,4 @@ level1_pagetable:
 BLOCK_2MB (ADDR << 20), 0, 0x74c
 .set ADDR, ADDR + 2
 .endr
+#endif
