@@ -6,7 +6,7 @@ MEMORY
 {
     /*The flash address range on LS1028A RDB is 0x20000000 - 0x23FFFFFF.*/
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    
+
     /* DDR4 - 2GB */
     DRAM (rwx) : ORIGIN = 0x80001000 , LENGTH = 0xBFFFFFFF
 
@@ -22,7 +22,7 @@ SECTIONS
     PROVIDE (_CORE_NUMBER = 0);
     PROVIDE (_MEMORY_SIZE = LENGTH(OCRAM));
     PROVIDE (_FLASH_SIZE = LENGTH(FLASH));
-    PROVIDE (STACK_SIZE = 20K);
+    PROVIDE (_STACK_SIZE = 20K);
 
     .boot :
     {
@@ -74,7 +74,7 @@ SECTIONS
         _rodata_end = .;
     } > OCRAM
 
-    PROVIDE(_stored_data = .); 
+    PROVIDE(_stored_data = .);
 
     .data :
     {
@@ -84,7 +84,7 @@ SECTIONS
         KEEP(*(.ramcode))
         . = ALIGN(8);
         _end_data = .;
-    } > OCRAM 
+    } > OCRAM
 
     .bss :
     {
@@ -100,10 +100,10 @@ SECTIONS
     } > OCRAM
 
     . = ALIGN(16);
-    .stack : 
+    .stack :
     {
         _start_stack = .;
-        . = . + STACK_SIZE;
+        . = . + _STACK_SIZE;
         _end_stack = .;
     } > OCRAM
 

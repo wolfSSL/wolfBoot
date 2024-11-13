@@ -80,13 +80,16 @@ ifeq ($(ARCH),AARCH64)
     endif
 
     SPI_TARGET=nxp
+  else
+    # By default disable ARM ASM for other targets
+    NO_ARM_ASM=1
   endif
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
     MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
   endif
-  ifeq ($(NO_ASM),0)
+  ifeq ($(NO_ARM_ASM),0)
     ARCH_FLAGS=-mstrict-align
     CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8
     WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
@@ -228,11 +231,13 @@ ifeq ($(CORTEX_A5),1)
     MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_c32.o
   else
     MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_arm32.o
-    OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o
-    OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
-    OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
-    CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
-            -DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
+    ifneq ($(NO_ARM_ASM),1)
+      OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o
+      OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
+      OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
+      CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
+              -DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
+    endif
   endif
 else
   # All others use boot_arm.o
@@ -256,8 +261,7 @@ else
 
 
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
-                            -DWOLFSSL_ARMASM_NO_NEON
-    CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM_THUMB2
+                              -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
   endif
   ifeq ($(CORTEX_M33),1)
     CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33

@@ -1,6 +1,6 @@
 /**
  * Aarch64 bootup
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2024 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -269,7 +269,7 @@ init_stack:
     sub x0, x0, #16
     and x0, x0, #-16
     mov sp, x0
-    ldr x1, =STACK_SIZE
+    ldr x1, =_STACK_SIZE
     msr sp_el2, x0
     msr sp_el1, x0
     msr sp_el0, x0
