@@ -28,14 +28,16 @@
 /* Linker exported variables */
 extern unsigned int __bss_start__;
 extern unsigned int __bss_end__;
+#ifndef NO_XIP
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
+#endif
 
 extern void main(void);
 extern void gicv2_init_secure(void);
 
-void boot_entry_C(void) 
+void boot_entry_C(void)
 {
     register unsigned int *dst, *src;
 
@@ -46,6 +48,7 @@ void boot_entry_C(void)
         dst++;
     }
 
+#ifndef NO_XIP
     /* Copy data section from flash to RAM if necessary */
     src = (unsigned int*)&_stored_data;
     dst = (unsigned int*)&_start_data;
@@ -56,6 +59,9 @@ void boot_entry_C(void)
             src++;
         }
     }
+#else
+    (void)src;
+#endif
 
     /* Run wolfboot! */
     main();
