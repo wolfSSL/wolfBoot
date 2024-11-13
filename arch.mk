@@ -63,7 +63,7 @@ endif
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
   CFLAGS+=-DARCH_AARCH64
-  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o src/boot_aarch64_vectors.o src/boot_aarch64_translation.o
+  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
 
   ifeq ($(TARGET),nxp_ls1028a)
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
@@ -85,9 +85,12 @@ ifeq ($(ARCH),AARCH64)
   endif
   ifeq ($(NO_ASM),0)
     ARCH_FLAGS=-mstrict-align
-    CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWC_HASH_DATA_ALIGNMENT=8
+    CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8
     WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
   endif
 endif
 
