@@ -65,185 +65,73 @@
 
 
 /* GICv2 Register Offsets */
+#define GICD_BASE       0xF9010000
 #define GICD_CTLR       0x0000
 #define GICD_TYPER      0x0004
 #define GICD_SGIR       0x0F00
 #define GICD_IGROUPRn   0x0080
+
+#define GICC_BASE       0xF9020000
 #define GICC_PMR        0x0004
 
-#ifndef USE_BUILTIN_STARTUP
-/* This is the entry function.  If this is the start of a cold boot, the CPU
- * will be at the highest exception level (EL) and the CPU must be configured
- * for each of the levels down to the target EL: either EL2 for a hypervisor
- * or EL1 for a standard OS.
- *
- * Configuration only enables secure EL3 and forces all lower levels NS.
- *
- * AA64_TARGET_EL: 1 or 2
- * AA64_GICVERSION: 0- no external GIC, 2: GICv2, 3: GICv3
- * AA64_ENABLE_EL3_SMC: Enable SMC call handling in EL3
- * AA64_ENABLE_EL3_PM: Enable handling of power management (TWE, TWI)
- */
+.equ TZPCDECPROT0_SET_BASE, 0x02200804
+.equ TZPCDECPROT1_SET_BASE, 0x02200810
+.equ OCRAM_TZPC_ADDR      , 0x02200000
 
+#ifndef USE_BUILTIN_STARTUP
 .section ".boot", "ax"
 .global _vector_table
 _vector_table:
-    /* If we are booted as a Linux direct boot, then X0 will have FDT */
-    mov     x21, x0             /* save ATAG/FDT address */
+   mov x21, x0        // read ATAG/FDT address
 
+4: ldr x1, =_vector_table // get start of .text in x1
+    // Read current EL
+    mrs     x0, CurrentEL
+    and     x0, x0, #0x0C
 
-
-    /* Get highest EL implemented in this CPU */
-    bl      aa64_get_highest_el
-    mov     x19, x0             /* save highest EL in x19 */
-
-    /* Get current EL */
-    bl      aa64_get_current_el
-    mov     x20, x0             /* save current EL in x20 */
-
-    cmp     x19, x20            /* EL is at highest? */
-    bne     3f
-    bl      aa64_setup_el_highest
-
-3:  cmp     x20, #0x3           /* at EL3? */
+    // EL == 3?
+    cmp     x0, #12
     bne     2f
-    bl      aa64_setup_el3
+3:  mrs     x2, scr_el3
+    orr     x2, x2, 0x0F    // scr_el3 |= NS|IRQ|FIQ|EA
+    msr     scr_el3, x2
 
-2:  cmp     x20, #0x1           /* EL == 1? */
+    msr cptr_el3, xzr       // enable FP/SIMD
+
+    // EL == 1?
+2:  cmp     x0, #4
     beq     1f
 
-    /* EL2 Setup */
-    mov     x2, #3 << 20
-    msr     cptr_el2, x2        /* Disable FP/SIMD traps for EL2 */
+    // EL == 2?
+    mov x2, #3 << 20
+    msr cptr_el2, x2           /* Enable FP/SIMD */
     b 0f
 
-    /* EL1 Setup */
-1:  mov     x0, #3 << 20
-    msr     cpacr_el1, x0       /* Disable FP/SIMD traps for EL1 */
+1:  mov x0, #3 << 20
+    msr cpacr_el1, x0           // Enable FP/SIMD for EL1
     msr     sp_el1, x1
 
-    /* Suspend slave CPUs */
-0:  mrs     x3, mpidr_el1       /* read MPIDR_EL1 */
-    and     x3, x3, #3          /* CPUID = MPIDR_EL1 & 0x03 */
-    cbz     x3, 8f              /* if 0, branch forward */
-7:  wfi                         /* infinite sleep */
-    b       7b
+   /* Suspend slave CPUs */
+0: mrs x3, mpidr_el1  // read MPIDR_EL1
+   and x3, x3, #3     // CPUID = MPIDR_EL1 & 0x03
+   cbz x3, 8f         // if 0, branch forward
+7: wfi                // infinite sleep
+   b    7b
 
-8:  ldr     x1, =_vector_table  /* ??? get start of .text in x1 */
-    mov     sp, x1              /* XXX set stack pointer */
+8:  mov sp, x1         // set stack pointer
 
-#ifdef CORTEX_A72
-    bl      init_A72
+#ifdef CPU_A72
+    bl  init_A72
 #endif
-    bl      boot_entry_C       /* boot_entry_C never returns */
-    b       7b                 /* go to sleep anyhow in case. */
+    bl boot_entry_C   // boot_entry_C never returns
+    b   7b            // go to sleep anyhow in case.
 #endif /* USE_BUILTIN_STARTUP */
-
-/* Return the highest EL implemented on this CPU in x0
- * No stack usage. No clobbers. */
-.global aa64_get_highest_el
-.type aa64_get_highest_el, @function
-aa64_get_highest_el:
-    mrs     x0, ID_AA64PFR0_EL1
-    tst     x0, ID_AA64PFR0_EL3_MASK
-    cbz     2f                  /* Highest is not EL3? */
-    mov     x0, #0x3
-    ret
-2:  tst     x0, ID_AA64PFR0_EL2_MASK
-    cbz     1f                  /* Highest is not EL2? */
-    mov     x0, #0x2
-    ret
-1:  mov     x0, #0x1            /* Highest is EL1  */
-    ret
-
-/* Return the current EL on this CPU in x0
- * No stack usage. No clobbers. */
-.global aa64_get_current_el
-.type aa64_get_current_el, @function
-aa64_get_current_el:
-    mrs     x0, CURRENT_EL
-    tst     x0, CURRENT_EL3_MASK
-    cbz     2f                  /* Current is not EL3? */
-    mov     x0, #0x3
-    ret
-2:  tst     x0, CURRENT_EL2_MASK
-    cbz     1f                  /* Current is not EL2? */
-    mov     x0, #0x2
-    ret
-1:  tst     x0, CURRENT_EL1_MASK
-    cbz     0f                  /* Current is not EL1? */
-    mov     x0, #0x1
-    ret
-0:  mov     x0, #0x0            /* Current is EL0  */
-    ret
-
-/* Perform chip setup when at the highest EL
- * No stack. Clobbers: x0 */
-.global aa64_setup_el_highest
-.type aa64_setup_el_highest, @function
-aa64_setup_el_highest
-#if defined(AA64_CNTFRQ)
-    /* Set the counter-timer frequency to AA64_CNTFRQ*/
-    mov     x0, AA64_CNTFRQ
-    msr     cntfrq_el0, x0
-#endif
-    ret
-
-/* Perform chip setup when at the EL3
- * No stack. Clobbers: x0 */
-.global aa64_setup_el3
-.type aa64_setup_el3, @function
-aa64_setup_el3
-    mrs     x0, scr_el3         /* Get Secure Config Reg scr_el3 */
-    bic     x0, x0, #(1 << 18)  /* EEL2 Disable Secure EL2 */
-#if !defined (AA64_ENABLE_EL3_PM)
-    bic     x0, x0, #(1 << 13)  /* TWE Disable trap WFE to EL3 */
-    bic     x0, x0, #(1 << 12)  /* TWI Disable trap WFI to EL3 */
-#else
-    orr     x0, x0, #(1 << 13)  /* TWE Enable trap WFE to EL3 */
-    orr     x0, x0, #(1 << 12)  /* TWI Enable trap WFI to EL3 */
-#endif
-    orr     x0, x0, #(1 << 11)  /* ST Disable trap SEL1 acc CNTPS to EL3 */
-    orr     x0, x0, #(1 << 10)  /* RW Next lower level is AArch64 */
-    orr     x0, x0, #(1 << 9)   /* SIF Disable Sec Ins Fetch from NS mem */
-#if defined(AA64_TARGET_EL) && (AA64_TARGET_EL==2)
-    orr     x0, x0, #(1 << 8)   /* HCE Enable Hypervisor Call HVC */
-#else
-    bic     x0, x0, #(1 << 8)   /* HCE Disable Hypervisor Call HVC */
-#endif
-#if !defined(AA64_ENABLE_EL3_SMC)
-    orr     x0, x0, #(1 << 7)   /* SMD Disable Secure Monitor Call SMC */
-#else
-    bic     x0, x0, #(1 << 7)   /* SMD Enable Secure Monitor Call SMC */
-#endif
-    bic     x0, x0, #(1 << 3)   /* EA Disable EA and SError to EL3 */
-    bic     x0, x0, #(1 << 2)   /* FIQ Disable FIQ to EL3 */
-    bic     x0, x0, #(1 << 1)   /* IRQ Disable IRQ to EL3 */
-    orr     x0, x0, #(1 << 0)   /* NS EL0, EL1, and EL2 are NS */
-    msr     scr_el3, x0         /* Set scr_el3 */
-
-    mrs     x0, cptr_el3        /* Get EL3 Feature Trap Reg CPTR_EL3 */
-    bic     x0, x0, #(1 << 31)  /* TCPAC Disable config traps to EL3 */
-    bic     x0, x0, #(1 << 30)  /* TAM Disable AM traps to EL3 */
-    bic     x0, x0, #(1 << 20)  /* TTA Disable trace traps to EL3 */
-    bic     x0, x0, #(1 << 12)  /* ESM Disable SVCR traps to EL3 */
-    bic     x0, x0, #(1 << 10)  /* TFP Disable FP/SIMD traps to EL3 */
-    bic     x0, x0, #(1 << 20)  /* EZ Disable ZCR traps to EL3 */
-    msr     cptr_el3, x0        /* Set cptr_el3 */
-
-#if defined(AA64_TARGET_EL) && (AA64_TARGET_EL==2)
-    orr     x0, x0, #(1 << 8)   /* HCE Enable Hypervisor Call HVC */
-#else
-    bic     x0, x0, #(1 << 8)   /* HCE Disable Hypervisor Call HVC */
-#endif
-
-    ret
 
 
 /* Initialize GIC 400 (GICv2) */
 .global gicv2_init_secure
 gicv2_init_secure:
-    ldr  x0, =AA64_GICD_BASE
+    ldr  x0, =GICD_BASE
     mov  w9, #0x3            /* EnableGrp0 | EnableGrp1 */
     str  w9, [x0, GICD_CTLR] /* Secure GICD_CTLR */
     ldr  w9, [x0, GICD_TYPER]
@@ -256,7 +144,7 @@ gicv2_init_secure:
     sub	 w10, w10, #0x1
     cbnz w10, 0b
 
-    ldr  x1, =AA64_GICC_BASE      /* GICC_CTLR */
+    ldr  x1, =GICC_BASE      /* GICC_CTLR */
     mov	 w0, #3              /* EnableGrp0 | EnableGrp1 */
     str	 w0, [x1]
 
@@ -328,33 +216,16 @@ init_A72:
     msr vbar_el3, x1
 
 el3_state:
-    mrs x0, scr_el3             /* Get scr_el3 */
-    bic x0, x0, #(1 << 18)      /* EEL2 Disable Secure EL2 */
-#if !defined (AA64_ENABLE_EL3_PM)
-    bic x0, x0, #(1 << 13)      /* TWE Disable trap WFE to EL3 */
-    bic x0, x0, #(1 << 12)      /* TWI Disable trap WFI to EL3 */
-#else
-    orr x0, x0, #(1 << 13)      /* TWE Enable trap WFE to EL3 */
-    orr x0, x0, #(1 << 12)      /* TWI Enable trap WFI to EL3 */
-#endif
-    orr x0, x0, #(1 << 11)      /* ST Disable trap SEL1 access CNTPS to EL3 */
-    orr x0, x0, #(1 << 10)      /* RW Next lower level is AArch64 */
-    orr x0, x0, #(1 << 9)       /* SIF Disable secure ins. fetches from NS */
-#if defined(AA64_TARGET_EL) && (AA64_TARGET_EL==2)
-    orr x0, x0, #(1 << 8)       /* HCE Enable Hypervisor Call HVC */
-#else
-    bic x0, x0, #(1 << 8)       /* HCE Disable Hypervisor Call HVC */
-#endif
-#if !defined(AA64_ENABLE_EL3_SMC)
-    orr x0, x0, #(1 << 7)       /* SMD Disable Secure Monitor Call SMC */
-#else
-    bic x0, x0, #(1 << 7)       /* SMD Enable Secure Monitor Call SMC */
-#endif
-    orr x0, x0, #(1 << 3)       /* EA Enable EA and SError to EL3 for now */
-    orr x0, x0, #(1 << 2)       /* FIQ Enable FIQ to EL3 for now */
-    orr x0, x0, #(1 << 1)       /* IRQ Enable IRQ to EL3 for now */
-    orr x0, x0, #(1 << 0)       /* NS EL0, EL1, and EL2 are NS */
-    msr scr_el3, x0             /* Set scr_el3 */
+    mrs x0, scr_el3             /* scr_el3 config */
+    bic x0, x0, #(1 << 13)      /* Trap WFE instruciton to EL3 off */
+    bic x0, x0, #(1 << 12)      /* Traps TWI ins to EL3 off */
+    bic x0, x0, #(1 << 11)      /* Traps EL1 access to physical secure timer to EL3 on */
+    orr x0, x0, #(1 << 10)      /* Next lower level is AArch64 */
+    bic x0, x0, #(1 << 9)       /* Secure state instuction fetches from non-secure memory are permitted */
+    bic x0, x0, #(1 << 8)       /* Hypervisor Call instruction disabled */
+    bic x0, x0, #(1 << 7)       /* Secure Monitor Call enabled */
+    orr x0, x0, #0xf            /* IRQ|FIQ|EA to EL3 */
+    msr scr_el3, x0
 
     mrs x0, sctlr_el3           /* sctlr_el3 config */
     bic x0, x0, #(1 << 19)      /* Disable EL3 translation XN */
