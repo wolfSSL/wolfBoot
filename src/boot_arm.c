@@ -527,7 +527,7 @@ void (* const IV[])(void) =
 
     /* Fill with extra unused handlers */
 #if defined(TARGET_stm32l5) || defined(TARGET_stm32u5) || \
-    defined(TARGET_stm32h7)
+    defined(TARGET_stm32h7) || defined(TARGET_rp2350)
     isr_empty,
     isr_empty,
     isr_empty,
