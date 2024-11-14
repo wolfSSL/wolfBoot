@@ -158,6 +158,8 @@
 #define MMUTCB_COUNT    (64)
 #define MMUTCB_BASE(_n) (MMUTCB0_BASE + ((_n) % MMUTCB_COUNT) * MMUTCB_STRIDE)
 #define GICD_BASE       (0x06000000ul)     /* GIC-500 GICD */
+#define GICR_BASE       (0x06100000ul)
+#define GICC_BASE       (0x01402000ul)
 #define GITS_BASE       (0x06020000ul)     /* GIC-500 GITS Control */
 #define GITST_BASE      (0x06030000ul)     /* GIC-500 GITS Translation */
 #define CPU0RD_BASE     (0x06040000ul)     /* CPU0 control, Locality Perif Int*/

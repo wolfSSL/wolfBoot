@@ -1,4 +1,4 @@
-/* ls1028a.c
+/* nxp_ls1028a.c
  *
  * Copyright (C) 2024 wolfSSL Inc.
  *
@@ -24,6 +24,8 @@
 #include <target.h>
 #include "image.h"
 #include "printf.h"
+
+#ifdef TARGET_nxp_ls1028a
 
 #ifndef ARCH_AARCH64
 #   error "wolfBoot ls1028a HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
@@ -877,3 +879,5 @@ void hal_init(void)
     wolfBoot_printf("MMU init done\n");
 #endif
 }
+
+#endif /* TARGET_nxp_ls1028a */

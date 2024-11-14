@@ -65,13 +65,17 @@
 
 
 /* GICv2 Register Offsets */
+#ifndef GICD_BASE
 #define GICD_BASE       0xF9010000
+#endif
 #define GICD_CTLR       0x0000
 #define GICD_TYPER      0x0004
 #define GICD_SGIR       0x0F00
 #define GICD_IGROUPRn   0x0080
 
+#ifndef GICC_BASE
 #define GICC_BASE       0xF9020000
+#endif
 #define GICC_PMR        0x0004
 
 .equ TZPCDECPROT0_SET_BASE, 0x02200804
@@ -120,7 +124,7 @@ _vector_table:
 
 8:  mov sp, x1         // set stack pointer
 
-#ifdef CPU_A72
+#ifdef CORTEX_A72
     bl  init_A72
 #endif
     bl boot_entry_C   // boot_entry_C never returns
@@ -154,6 +158,7 @@ gicv2_init_secure:
 	ret
 
 
+#ifdef CORTEX_A72
 .global invalidate_ivac
 invalidate_ivac:
     ldr x0, =_OCRAM_ADDRESS
@@ -207,7 +212,6 @@ switch_el3_to_el2:
 
 .global cortex_a72_erratta
 cortex_a72_erratta:
-
 
 /* Initalization code for NXP LS1028a (A72) */
 .global init_A72
@@ -280,7 +284,6 @@ init_stack:
     bl invalidate_ivac
     b boot_entry_C
 
-#ifdef TARGET_nxp_ls1028a
 .global mmu_enable
 mmu_enable:
     tlbi alle3                    /* Invalidate table entries */
@@ -318,7 +321,6 @@ mmu_enable:
     dsb sy
     isb
     ret
-#endif
 
 /* Exception Vector Table EL3 */
 .balign 0x800
@@ -390,7 +392,6 @@ PUT_64BIT_WORD \attr_hi, ((\PA) & 0xc0000000) | \attr_lo | 0x1
 PUT_64BIT_WORD \attr_hi, ((\PA) & 0xffe00000) | \attr_lo | 0x1
 .endm
 
-#ifdef TARGET_nxp_ls1028a
 /* Note: In EL3/2 has direct physical to virutal mapping */
 .align 12
 .global ttb0_base
@@ -407,4 +408,5 @@ level1_pagetable:
 BLOCK_2MB (ADDR << 20), 0, 0x74c
 .set ADDR, ADDR + 2
 .endr
-#endif
+
+#endif /* CORTEX_A72 */
