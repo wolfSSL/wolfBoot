@@ -52,7 +52,7 @@ void boot_entry_C(void)
     /* Copy data section from flash to RAM if necessary */
     src = (unsigned int*)&_stored_data;
     dst = (unsigned int*)&_start_data;
-    if(src!=dst) {
+    if (src != dst) {
         while (dst < (unsigned int *)&_end_data) {
             *dst = *src;
             dst++;
