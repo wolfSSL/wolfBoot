@@ -183,15 +183,15 @@ static void spi_transaction(unsigned int sel, unsigned int pcs,
 
 /*#define TPM_TEST*/
 #ifdef TPM_TEST
-void read_tpm_id()
+void read_tpm_id(void)
 {
-    /*Read 4 bytes from offset D40F00.  Assumes 0 wait state on TPM*/
+    /* Read 4 bytes from offset D40F00.  Assumes 0 wait state on TPM */
     unsigned char out[8] = { 0x83, 0xD4, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00 };
     unsigned char in[8] = { 0 };
     unsigned char in2[8] = { 0 };
     unsigned int counter;
 
-    /*LS1028A SPI to the MikroBus uses SPI3 (sel is 2) and CS 0*/
+    /* LS1028A SPI to the MikroBus uses SPI3 (sel is 2) and CS 0 */
     #ifndef SPI_SEL_TPM
     #define SPI_SEL_TPM 2
     #endif
@@ -219,16 +219,9 @@ void read_tpm_id()
 }
 #endif
 
-/* Exposed functions */
-extern void nxp_ls1028a_spi_init(unsigned int sel);
-extern int nxp_ls1028a_spi_xfer(unsigned int sel, unsigned int cs,
-        const unsigned char *out, unsigned char *in,
-        unsigned int size, int cont);
-extern void nxp_ls1028a_spi_deinit(unsigned int sel);
-
 void nxp_ls1028a_spi_init(unsigned int sel)
 {
-    /* TODO Expose more configuration options */
+    /* TODO: Expose more configuration options */
     spi_open(sel);
 }
 
@@ -236,7 +229,7 @@ int nxp_ls1028a_spi_xfer(unsigned int sel, unsigned int cs,
         const unsigned char *out, unsigned char *in,
         unsigned int size, int cont)
 {
-    /*TODO Make spi_transaction actually return errors */
+    /* TODO Make spi_transaction actually return errors */
     spi_transaction(sel, cs, out, in, size, cont);
     return 0;
 }
@@ -489,12 +482,6 @@ void hal_ddr_init(void)
 #endif
 }
 
-void hal_flash_unlock(void) {}
-void hal_flash_lock(void) {}
-void ext_flash_lock(void) {}
-void ext_flash_unlock(void) {}
-
-
 void xspi_writereg(uint32_t* addr, uint32_t val)
 {
     *(volatile uint32_t *)(addr) = val;
@@ -619,6 +606,14 @@ void xspi_flash_sec_erase(uintptr_t address)
     XSPI_INTR &= ~XSPI_IPCMDDONE;
 }
 
+
+void hal_flash_unlock(void)
+{
+}
+void hal_flash_lock(void)
+{
+}
+
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     xspi_write_en(address);
@@ -650,6 +645,14 @@ int hal_flash_erase(uintptr_t address, int len)
     return len;
 }
 
+#ifdef EXT_FLASH
+void ext_flash_lock(void)
+{
+}
+
+void ext_flash_unlock(void)
+{
+}
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     xspi_write_en(address);
@@ -660,7 +663,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
-    address = address & MASK_32BIT;
+    address = (address & MASK_32BIT);
     memcpy(data, (void*)address, len);
     return len;
 }
@@ -687,6 +690,8 @@ int ext_flash_erase(uintptr_t address, int len)
 
     return len;
 }
+#endif /* EXT_FLASH */
+
 
 void hal_prepare_boot(void)
 {

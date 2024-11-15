@@ -26,7 +26,8 @@
 #include <stddef.h>
 #include "spi_drv.h"
 
-#if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024)
+#if defined(TARGET_nxp_p1021) || defined(TARGET_nxp_t1024) || \
+    defined(TARGET_nxp_ls1028a)
 #ifdef WOLFBOOT_TPM
 
 /* functions from nxp_p1021.c and nxp_t1024.c hal */
