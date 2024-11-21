@@ -48,6 +48,7 @@
 #include <delta.h>
 
 #include "wolfboot/version.h"
+#include "wolfboot/wolfboot.h"
 
 #ifdef DEBUG_SIGNTOOL
 #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
@@ -176,6 +177,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 
 #define HDR_IMG_DELTA_BASE 0x05
 #define HDR_IMG_DELTA_SIZE 0x06
+#define HDR_IMG_DELTA_BASE_HASH 0x07
 #define HDR_IMG_DELTA_INVERSE 0x15
 #define HDR_IMG_DELTA_INVERSE_SIZE 0x16
 
@@ -315,6 +317,57 @@ static struct cmd_options CMD = {
     .partition_id = HDR_IMG_TYPE_APP,
     .hybrid = 0
 };
+
+static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
+{
+    uint8_t *p = haystack;
+    uint16_t len, htype;
+    const volatile uint8_t *max_p = (haystack - IMAGE_HEADER_OFFSET) +
+                                                    IMAGE_HEADER_SIZE;
+    *ptr = NULL;
+    if (p > max_p) {
+        fprintf(stderr, "Illegal address (too high)\n");
+        return 0;
+    }
+    while ((p + 4) < max_p) {
+        htype = p[0] | (p[1] << 8);
+        if (htype == 0) {
+            fprintf(stderr, "Explicit end of options reached\n");
+            break;
+        }
+        /* skip unaligned half-words and padding bytes */
+        if ((p[0] == HDR_PADDING) || ((((size_t)p) & 0x01) != 0)) {
+            p++;
+            continue;
+        }
+
+        len = p[2] | (p[3] << 8);
+        /* check len */
+        if ((4 + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
+            fprintf(stderr, "This field is too large (bigger than the space available "
+                     "in the current header)\n");
+            //fprintf(stderr, "%d %d %d\n", len, IMAGE_HEADER_SIZE, IMAGE_HEADER_OFFSET);
+            break;
+        }
+        /* check max pointer */
+        if (p + 4 + len > max_p) {
+            fprintf(stderr, "This field is too large and would overflow the image "
+                     "header\n");
+            break;
+        }
+
+        /* skip header [type|len] */
+        p += 4;
+
+        if (htype == type) {
+            /* found, return pointer to data portion */
+            *ptr = p;
+            return len;
+        }
+        p += len;
+    }
+    return 0;
+}
 
 static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     int header_sz,
@@ -1063,7 +1116,8 @@ static int sign_digest(int sign, int hash_algo,
 static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint32_t patch_len, uint32_t patch_inv_off,
-        uint32_t patch_inv_len, const uint8_t *secondary_key, uint32_t secondary_key_sz)
+        uint32_t patch_inv_len, const uint8_t *secondary_key, uint32_t secondary_key_sz,
+        uint8_t *base_hash, uint32_t base_hash_sz)
 {
     uint32_t header_idx;
     uint8_t *header;
@@ -1141,12 +1195,40 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 &patch_len);
 
         /* Append pad bytes, so fields are 4-byte aligned */
-        while ((header_idx % 4) != 0)
-            header_idx++;
+        ALIGN_4(header_idx);
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
                 &patch_inv_off);
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 4,
                 &patch_inv_len);
+
+        /* Append pad bytes, so base hash is 8-byte aligned */
+        ALIGN_8(header_idx);
+        if (!base_hash) {
+            fprintf(stderr, "Base hash for delta image not found.\n");
+            exit(1);
+        }
+        if (CMD.hash_algo == HASH_SHA256) {
+            if (base_hash_sz != HDR_SHA256_LEN) {
+                fprintf(stderr, "Invalid base hash size for SHA256.\n");
+                exit(1);
+            }
+            header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
+                    HDR_SHA256_LEN, base_hash);
+        } else if (CMD.hash_algo == HASH_SHA384) {
+            if  (base_hash_sz != HDR_SHA384_LEN) {
+                fprintf(stderr, "Invalid base hash size for SHA384.\n");
+                exit(1);
+            }
+            header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
+                    HDR_SHA384_LEN, base_hash);
+        } else if (CMD.hash_algo == HASH_SHA3) {
+            if (base_hash_sz != HDR_SHA3_384_LEN) {
+                fprintf(stderr, "Invalid base hash size for SHA3-384.\n");
+                exit(1);
+            }
+            header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
+                    HDR_SHA3_384_LEN, base_hash);
+        }
     }
 
     /* Add custom TLVs */
@@ -1690,18 +1772,19 @@ static int make_header(uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile)
 {
     return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0,
-            NULL, 0);
+            NULL, 0, NULL, 0);
 }
 
 static int make_header_delta(uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint32_t patch_len,
-        uint32_t patch_inv_off, uint32_t patch_inv_len)
+        uint32_t patch_inv_off, uint32_t patch_inv_len,
+        uint8_t *base_hash, uint32_t base_hash_sz)
 {
     return make_header_ex(1, pubkey, pubkey_sz, image_file, outfile,
             delta_base_version, patch_len,
             patch_inv_off, patch_inv_len,
-            NULL, 0);
+            NULL, 0, base_hash, base_hash_sz);
 }
 
 static int make_hybrid_header(uint8_t *pubkey, uint32_t pubkey_sz,
@@ -1709,7 +1792,7 @@ static int make_hybrid_header(uint8_t *pubkey, uint32_t pubkey_sz,
         const uint8_t *secondary_key, uint32_t secondary_key_sz)
 {
     return make_header_ex(0, pubkey, pubkey_sz, image_file, outfile, 0, 0, 0, 0,
-            secondary_key, secondary_key_sz);
+            secondary_key, secondary_key_sz, NULL, 0);
 }
 
 static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, int padding)
@@ -1734,6 +1817,8 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     WB_DIFF_CTX diff_ctx;
     int ret = -1;
     int io_sz;
+    uint8_t *base_hash = NULL;
+    uint32_t base_hash_sz = 0;
 
     /* Get source file size */
     if (stat(f_base, &st) < 0) {
@@ -1790,13 +1875,20 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
                 delta_base_version = (uint32_t)(retval&0xFFFFFFFF);
         }
     }
-
     if (delta_base_version == 0) {
         printf("Could not read firmware version from base file %s\n", f_base);
         goto cleanup;
     } else {
         printf("Delta base version: %u\n", delta_base_version);
     }
+
+    /* Retrieve the hash digest of the base image */
+    if (CMD.hash_algo == HASH_SHA256)
+        base_hash_sz = sign_tool_find_header(base + 8, HDR_SHA256, &base_hash);
+    else if (CMD.hash_algo == HASH_SHA384)
+        base_hash_sz = sign_tool_find_header(base + 8, HDR_SHA384, &base_hash);
+    else if (CMD.hash_algo == HASH_SHA3)
+        base_hash_sz = sign_tool_find_header(base + 8, HDR_SHA3_384, &base_hash);
 
 #if HAVE_MMAP
     /* Open second image file */
@@ -1952,7 +2044,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     /* Create delta file, with header, from the resulting patch */
 
     ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
-            delta_base_version, patch_sz, patch_inv_off, patch_inv_sz);
+            delta_base_version, patch_sz, patch_inv_off, patch_inv_sz, base_hash, base_hash_sz);
 
 cleanup:
     /* Unlink output file */

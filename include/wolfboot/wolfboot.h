@@ -66,6 +66,7 @@ extern "C" {
 #define HDR_IMG_TYPE                0x04
 #define HDR_IMG_DELTA_BASE          0x05
 #define HDR_IMG_DELTA_SIZE          0x06
+#define HDR_IMG_DELTA_BASE_HASH     0x07
 #define HDR_PUBKEY                  0x10
 #define HDR_SECONDARY_CIPHER        0x11
 #define HDR_SECONDARY_PUBKEY        0x12
