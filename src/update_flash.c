@@ -313,6 +313,10 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
     uint8_t enc_blk[DELTA_BLOCK_SIZE];
 #endif
+    uint16_t delta_base_hash_sz;
+    uint8_t *delta_base_hash;
+    uint16_t base_hash_sz;
+    uint8_t *base_hash;
 
     /* Use biggest size for the swap */
     total_size = boot->fw_size + IMAGE_HEADER_SIZE;
@@ -327,12 +331,39 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
-    if (wolfBoot_get_delta_info(PART_UPDATE, inverse, &img_offset, &img_size) < 0) {
+    if (wolfBoot_get_delta_info(PART_UPDATE, inverse, &img_offset, &img_size,
+                &delta_base_hash, &delta_base_hash_sz) < 0) {
         return -1;
     }
     cur_v = wolfBoot_current_firmware_version();
     upd_v = wolfBoot_update_firmware_version();
     delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
+
+    if (delta_base_hash_sz != WOLFBOOT_SHA_DIGEST_SIZE) {
+        if (delta_base_hash_sz == 0) {
+            wolfBoot_printf("Warning: delta update: Base hash not found in image\n");
+            delta_base_hash = NULL;
+        } else {
+            wolfBoot_printf("Error: delta update: Base hash size mismatch"
+                    " (size: %x expected %x)\n", delta_base_hash_sz,
+                    WOLFBOOT_SHA_DIGEST_SIZE);
+            return -1;
+        }
+    }
+
+#if defined(WOLFBOOT_HASH_SHA256)
+    base_hash_sz = wolfBoot_find_header(boot->hdr + IMAGE_HEADER_OFFSET,
+            HDR_SHA256, &base_hash);
+#elif defined(WOLFBOOT_HASH_SHA384)
+    base_hash_sz = wolfBoot_find_header(boot->hdr + IMAGE_HEADER_OFFSET,
+            HDR_SHA384, &base_hash);
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    base_hash_sz = wolfBoot_find_header(boot->hdr + IMAGE_HEADER_OFFSET,
+            HDR_SHA3_384, &base_hash);
+#else
+    #error "Delta update: Fatal error, no hash algorithm defined!"
+#endif
+
     if (inverse) {
         if (((cur_v == upd_v) && (delta_base_v < cur_v)) || resume) {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
@@ -345,9 +376,14 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         }
     } else {
         if (!resume && (cur_v != delta_base_v)) {
-            /* Wrong base image, cannot apply delta patch */
+            /* Wrong base image version, cannot apply delta patch */
             wolfBoot_printf("Delta Base 0x%x != Cur 0x%x\n",
                 cur_v, delta_base_v);
+            ret = -1;
+        } else if (!resume && delta_base_hash &&
+                memcmp(base_hash, delta_base_hash, base_hash_sz) != 0) {
+            /* Wrong base image digest, cannot apply delta patch */
+            wolfBoot_printf("Delta Base hash mismatch\n");
             ret = -1;
         } else {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,

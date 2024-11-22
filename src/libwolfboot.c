@@ -935,9 +935,8 @@ static inline uint16_t im2ns(uint16_t val)
  *
  */
 int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
-    uint16_t **img_size)
+    uint32_t **img_size, uint8_t **base_hash, uint16_t *base_hash_size)
 {
-    uint32_t *version_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *image = (uint8_t *)0x00000000;
     if (part == PART_UPDATE) {
@@ -986,6 +985,8 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
             return -1;
         }
     }
+    *base_hash_size = wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
+            HDR_IMG_DELTA_BASE_HASH, base_hash);
     return 0;
 }
 #endif

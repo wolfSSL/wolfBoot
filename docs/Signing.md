@@ -180,6 +180,15 @@ result is stored in a file ending in `_signed_diff.bin`.
 
 The compression scheme used is Bentley–McIlroy.
 
+Options:
+  * `--no-base-sha` : Avoid adding the sha of the base image to the manifest header.
+    By default, the sign tool appends the sha of the base image to the manifest header,
+    so wolfBoot will refuse to start a delta update if the sha does not match the
+    one of the existing image. However, this takes up 32 to 48 bytes extra in the
+    manifest header, so this option is available to provide compatibility on 
+    existing installations without this feature, where the header size does not
+    allow to accommodate the field
+
 
 #### Policy signing (for sealing/unsealing with a TPM)
 
