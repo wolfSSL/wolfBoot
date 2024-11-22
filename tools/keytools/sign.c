@@ -291,6 +291,7 @@ struct cmd_options {
     const char *policy_file;
     const char *encrypt_key_file;
     const char *delta_base_file;
+    int no_base_sha;
     char output_image_file[PATH_MAX];
     char output_diff_file[PATH_MAX];
     char output_encrypted_image_file[PATH_MAX];
@@ -1201,33 +1202,35 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 4,
                 &patch_inv_len);
 
-        /* Append pad bytes, so base hash is 8-byte aligned */
-        ALIGN_8(header_idx);
-        if (!base_hash) {
-            fprintf(stderr, "Base hash for delta image not found.\n");
-            exit(1);
-        }
-        if (CMD.hash_algo == HASH_SHA256) {
-            if (base_hash_sz != HDR_SHA256_LEN) {
-                fprintf(stderr, "Invalid base hash size for SHA256.\n");
+        if (!CMD.no_base_sha) {
+            /* Append pad bytes, so base hash is 8-byte aligned */
+            ALIGN_8(header_idx);
+            if (!base_hash) {
+                fprintf(stderr, "Base hash for delta image not found.\n");
                 exit(1);
             }
-            header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
-                    HDR_SHA256_LEN, base_hash);
-        } else if (CMD.hash_algo == HASH_SHA384) {
-            if  (base_hash_sz != HDR_SHA384_LEN) {
-                fprintf(stderr, "Invalid base hash size for SHA384.\n");
-                exit(1);
+            if (CMD.hash_algo == HASH_SHA256) {
+                if (base_hash_sz != HDR_SHA256_LEN) {
+                    fprintf(stderr, "Invalid base hash size for SHA256.\n");
+                    exit(1);
+                }
+                header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
+                        HDR_SHA256_LEN, base_hash);
+            } else if (CMD.hash_algo == HASH_SHA384) {
+                if  (base_hash_sz != HDR_SHA384_LEN) {
+                    fprintf(stderr, "Invalid base hash size for SHA384.\n");
+                    exit(1);
+                }
+                header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
+                        HDR_SHA384_LEN, base_hash);
+            } else if (CMD.hash_algo == HASH_SHA3) {
+                if (base_hash_sz != HDR_SHA3_384_LEN) {
+                    fprintf(stderr, "Invalid base hash size for SHA3-384.\n");
+                    exit(1);
+                }
+                header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
+                        HDR_SHA3_384_LEN, base_hash);
             }
-            header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
-                    HDR_SHA384_LEN, base_hash);
-        } else if (CMD.hash_algo == HASH_SHA3) {
-            if (base_hash_sz != HDR_SHA3_384_LEN) {
-                fprintf(stderr, "Invalid base hash size for SHA3-384.\n");
-                exit(1);
-            }
-            header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
-                    HDR_SHA3_384_LEN, base_hash);
         }
     }
 
@@ -2490,6 +2493,8 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--delta") == 0) {
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
+        } else if (strcmp(argv[i], "--no-base-sha") == 0) {
+            CMD.no_base_sha = 1;
         }
         else if (strcmp(argv[i], "--no-ts") == 0) {
             CMD.no_ts = 1;

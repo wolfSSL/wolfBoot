@@ -235,6 +235,14 @@ jobs:
         run: |
           tools/scripts/sim-update-powerfail-resume.sh
 
+      - name: Rebuild without SHA of base image to test compatibility
+        run: |
+          make clean && make test-sim-internal-flash-with-delta-update-no-base-sha
+
+      - name: Run sunny day update test (DELTA with no-base-sha)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
       - name: Rebuild with wrong delta base version
         run: |
           make clean && make test-sim-internal-flash-with-wrong-delta-update

@@ -340,10 +340,15 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
 
     if (delta_base_hash_sz != WOLFBOOT_SHA_DIGEST_SIZE) {
-        wolfBoot_printf("Delta update: Base hash size mismatch"
-                " (size: %x expected %x)\n", delta_base_hash_sz,
-                WOLFBOOT_SHA_DIGEST_SIZE);
-        return -1;
+        if (delta_base_hash_sz == 0) {
+            wolfBoot_printf("Warning: delta update: Base hash not found in image\n");
+            delta_base_hash = NULL;
+        } else {
+            wolfBoot_printf("Error: delta update: Base hash size mismatch"
+                    " (size: %x expected %x)\n", delta_base_hash_sz,
+                    WOLFBOOT_SHA_DIGEST_SIZE);
+            return -1;
+        }
     }
 
 #if defined(WOLFBOOT_HASH_SHA256)
@@ -375,8 +380,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             wolfBoot_printf("Delta Base 0x%x != Cur 0x%x\n",
                 cur_v, delta_base_v);
             ret = -1;
-
-        } else if (!resume && memcmp(base_hash, delta_base_hash, base_hash_sz) != 0) {
+        } else if (!resume && delta_base_hash &&
+                memcmp(base_hash, delta_base_hash, base_hash_sz) != 0) {
             /* Wrong base image digest, cannot apply delta patch */
             wolfBoot_printf("Delta Base hash mismatch\n");
             ret = -1;
