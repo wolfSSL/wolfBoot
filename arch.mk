@@ -82,7 +82,7 @@ ifeq ($(ARCH),AARCH64)
     SPI_TARGET=nxp
   else
     # By default disable ARM ASM for other targets
-    NO_ARM_ASM=1
+    NO_ARM_ASM?=1
   endif
 
   ifeq ($(SPMATH),1)
