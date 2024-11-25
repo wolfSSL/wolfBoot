@@ -1809,7 +1809,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     struct stat st;
     void *base = NULL;
     void *buffer = NULL;
-    uint8_t dest[WOLFBOOT_SECTOR_SIZE];
+    static uint8_t dest[WOLFBOOT_SECTOR_SIZE];
     uint8_t ff = 0xff;
     int r;
     uint32_t blksz = WOLFBOOT_SECTOR_SIZE;
@@ -1887,11 +1887,11 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
 
     /* Retrieve the hash digest of the base image */
     if (CMD.hash_algo == HASH_SHA256)
-        base_hash_sz = sign_tool_find_header(base + 8, HDR_SHA256, &base_hash);
+        base_hash_sz = sign_tool_find_header((uint8_t*)base + 8, HDR_SHA256, &base_hash);
     else if (CMD.hash_algo == HASH_SHA384)
-        base_hash_sz = sign_tool_find_header(base + 8, HDR_SHA384, &base_hash);
+        base_hash_sz = sign_tool_find_header((uint8_t*)base + 8, HDR_SHA384, &base_hash);
     else if (CMD.hash_algo == HASH_SHA3)
-        base_hash_sz = sign_tool_find_header(base + 8, HDR_SHA3_384, &base_hash);
+        base_hash_sz = sign_tool_find_header((uint8_t*)base + 8, HDR_SHA3_384, &base_hash);
 
 #if HAVE_MMAP
     /* Open second image file */
@@ -2656,6 +2656,7 @@ int main(int argc, char** argv)
         CMD.fw_version = argv[i+2];
     }
 
+    memset(buf, 0, sizeof(buf));
     strncpy((char*)buf, CMD.image_file, sizeof(buf)-1);
     tmpstr = strrchr((char*)buf, '.');
     if (tmpstr) {

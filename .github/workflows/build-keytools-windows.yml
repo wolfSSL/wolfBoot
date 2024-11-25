@@ -1,0 +1,38 @@
+name: Build Windows Keytools executables
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    # Step 1: Checkout the repository
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    # Step 2: Setup MSBuild
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1
+
+    # Step 3: Build the solution
+    - name: Build Solution
+      shell: cmd
+      run: |
+        echo #define WOLFBOOT_SECTOR_SIZE 1024 > include\target.h
+        MSBuild.exe tools\keytools\wolfBootKeyTools.sln /m /p:Configuration=Release /p:Platform="x64"
+
+    # Step 4: Upload executables as artifacts
+    - name: Upload EXE Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-keytools
+        path: |
+          tools\keytools\*.exe

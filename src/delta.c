@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <delta.h>
+#include <target.h> /* WOLFBOOT_SECTOR_SIZE */
 
 
 #define ESC 0x7f
