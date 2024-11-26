@@ -9,24 +9,16 @@ SIGN_ARGS=
 SIGN_ENC_ARGS=
 DELTA_DATA_SIZE?=2000
 
-# python version only supported using
-# KEYGEN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py"
-ifeq ("$(KEYGEN_TOOL)","")
-	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
-		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
-	else
-		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
-	endif
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
+	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
+else
+	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
 endif
 
-# python version only supported using
-# SIGN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py"
-ifeq ("$(SIGN_TOOL)","")
-	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
-		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
-	else
-		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
-	endif
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
+	SIGN_TOOL=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) $(WOLFBOOT_ROOT)/tools/keytools/sign.exe
+else
+	SIGN_TOOL=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) $(WOLFBOOT_ROOT)/tools/keytools/sign
 endif
 
 # Make sign algorithm argument
