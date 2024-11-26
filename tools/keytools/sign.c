@@ -2263,6 +2263,10 @@ static void set_signature_sizes(int secondary)
         else
             printf("Environment variable IMAGE_HEADER_SIZE=%u overridden.\n", suggested_sz);
     }
+    if ((CMD.header_sz == 256) && (CMD.delta)) {
+        printf("Adjusting header size to fit base image of delta update \n");
+        CMD.header_sz <<= 1;
+    }
     printf("Manifest header size: %u\n", CMD.header_sz);
 }
 
