@@ -42,13 +42,10 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <inttypes.h>
-/* target.h is a generated file based on .config (see target.h.in)
- * Provides: WOLFBOOT_SECTOR_SIZE */
-#include <target.h>
 #include <delta.h>
 
 #include "wolfboot/version.h"
-#include "wolfboot/wolfboot.h"
+//#include "wolfboot/wolfboot.h"
 
 #ifdef DEBUG_SIGNTOOL
 #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
@@ -1798,10 +1795,9 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     struct stat st;
     void *base = NULL;
     void *buffer = NULL;
-    static uint8_t dest[WOLFBOOT_SECTOR_SIZE];
+    uint8_t *dest = NULL;
     uint8_t ff = 0xff;
     int r;
-    uint32_t blksz = WOLFBOOT_SECTOR_SIZE;
     uint32_t patch_sz, patch_inv_sz;
     uint32_t patch_inv_off;
     uint32_t delta_base_version = 0;
@@ -1811,6 +1807,17 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     int io_sz;
     uint8_t *base_hash = NULL;
     uint32_t base_hash_sz = 0;
+    uint32_t wolfboot_sector_size = 0;
+    uint32_t blksz;
+
+    wolfboot_sector_size = wb_diff_get_sector_size();
+    printf("delta update: WOLFBOOT_SECTOR_SIZE: %u\n", wolfboot_sector_size);
+    blksz = wolfboot_sector_size;
+    dest = malloc(wolfboot_sector_size);
+    if (!dest) {
+        printf("Error allocating memory to prepare patch sectors\n");
+        goto cleanup;
+    }
 
     /* Get source file size */
     if (stat(f_base, &st) < 0) {
@@ -2039,6 +2046,10 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
             delta_base_version, patch_sz, patch_inv_off, patch_inv_sz, base_hash, base_hash_sz);
 
 cleanup:
+    if (dest) {
+        free(dest);
+        dest = NULL;
+    }
     /* Unlink output file */
     unlink(wolfboot_delta_file);
 #if HAVE_MMAP

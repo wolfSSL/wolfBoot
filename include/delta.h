@@ -72,6 +72,7 @@ int wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz, uint8_t *patch, 
 int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len);
 int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
     uint32_t **img_size, uint8_t **base_hash, uint16_t *base_hash_size);
+int wb_diff_get_sector_size(void);
 
 #endif
 

@@ -27,6 +27,7 @@
 #include "system.h"
 #include "wolfboot/wolfboot.h"
 #include "hal.h"
+#include "target.h"
 
 
 /* UART module */

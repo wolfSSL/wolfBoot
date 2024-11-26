@@ -30,7 +30,9 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#ifdef __WOLFBOOT
 #include "target.h"
+#endif
 #include "wolfboot/version.h"
 
 #ifdef WOLFCRYPT_SECURE_MODE

@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include "target.h"
 
 #include "wolfboot/wolfboot.h"
 

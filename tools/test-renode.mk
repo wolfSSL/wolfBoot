@@ -24,26 +24,19 @@ LMS_OPTS=LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 WOLFBOOT_SMALL_STACK=0 \
 XMSS_OPTS=WOLFBOOT_XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 \
          IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000
 
-# python version only supported using
-# KEYGEN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/keygen.py"
-ifeq ("$(KEYGEN_TOOL)","")
-	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
-		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
-	else
-		KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
-	endif
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
+	KEYGEN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
+else
+	KEYGEN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/keygen
 endif
 
-# python version only supported using
-# SIGN_TOOL="python3 $(WOLFBOOT_ROOT)/tools/keytools/sign.py"
-ifeq ("$(SIGN_TOOL)","")
-	ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
-		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
-	else
-		SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
-	endif
+ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
+	SIGN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
+else
+	SIGN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/sign
 endif
 
+SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) WOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE)
 
 ifeq ($(TARGET),stm32f7)
   RENODE_CONFIG=tools/renode/stm32f746_wolfboot.resc
@@ -140,7 +133,7 @@ renode-off: FORCE
 
 
 $(RENODE_UPDATE_FILE): test-app/image.bin FORCE
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
 	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
 		> $@
@@ -150,7 +143,7 @@ $(RENODE_UPDATE_FILE): test-app/image.bin FORCE
 
 renode-factory: factory.bin test-app/image.bin $(RENODE_UPDATE_FILE) $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UART)
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
 	${Q}cp test-app/image_v1_signed.bin $(TMP)/renode-test-v1.bin
 	${Q}cp wolfboot.elf $(TMP)/renode-wolfboot.elf
 	${Q}make renode-on
@@ -175,8 +168,8 @@ renode-update: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UART)
 	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
 		> $(RENODE_UPDATE_FILE)
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
 	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		of=$(RENODE_UPDATE_FILE) bs=1 conv=notrunc
@@ -201,8 +194,8 @@ renode-no-downgrade: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UART)
 	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
 		> $(RENODE_UPDATE_FILE)
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 7
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 5
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 7
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 5
 	${Q}dd if=test-app/image_v5_signed.bin \
 		of=$(RENODE_UPDATE_FILE) bs=1 conv=notrunc
 	${Q}printf "pBOOT" >> $(RENODE_UPDATE_FILE)
@@ -225,8 +218,8 @@ renode-corrupted: factory.bin test-app/image.bin $(EXPVER) FORCE
 	${Q}rm -f $(RENODE_UART)
 	${Q}dd if=/dev/zero bs=$(POFF) count=1 2>/dev/null | tr "\000" "\377" \
 		> $(RENODE_UPDATE_FILE)
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
-	${Q}$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) 1
+	${Q}$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) \
 		$(TEST_UPDATE_VERSION)
 	${Q}dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		of=$(RENODE_UPDATE_FILE) bs=1 conv=notrunc

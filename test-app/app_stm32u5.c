@@ -28,6 +28,7 @@
 #include "system.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 #define LED_BOOT_PIN (7) /* PH7 - Discovery - Green Led */
 #define LED_USR_PIN  (6) /* PH6 - Discovery - Red Led */

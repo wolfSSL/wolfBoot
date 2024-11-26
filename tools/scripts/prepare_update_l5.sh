@@ -1,9 +1,7 @@
 #!/bin/bash
 
-SIGN_TOOL="python3 ./tools/keytools/sign.py"
-if [ -f "./tools/keytools/sign" ]; then
-    SIGN_TOOL="./tools/keytools/sign"
-fi
+. ./.config
+SIGN_TOOL="./tools/keytools/sign"
 
 # SIZE is WOLFBOOT_PARTITION_SIZE - 5
 SIZE=129019

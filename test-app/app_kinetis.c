@@ -27,6 +27,7 @@
 #include "fsl_gpio.h"
 #include "fsl_clock.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 /* FRDM-K64 board */
 #if defined(CPU_MK64FN1M0VLL12)

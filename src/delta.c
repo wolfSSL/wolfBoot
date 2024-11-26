@@ -22,10 +22,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <delta.h>
-#include <target.h> /* WOLFBOOT_SECTOR_SIZE */
 
 
 #define ESC 0x7f
+
 
 #if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
     defined(__GNUC__)
@@ -46,7 +46,7 @@ struct BLOCK_HDR_PACKED block_hdr {
 #include "encrypt.h"
 #define ext_flash_check_write ext_flash_encrypt_write
 #define ext_flash_check_read ext_flash_decrypt_read
-#else
+#elif defined(__WOLFBOOT)
 #include "hal.h"
 #define ext_flash_check_write ext_flash_write
 #define ext_flash_check_read ext_flash_read
@@ -169,6 +169,36 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
     return dst_off;
 }
 
+#ifndef __WOLFBOOT
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+
+static uint32_t wolfboot_sector_size = 0;
+
+int wb_diff_get_sector_size(void)
+{
+    uint32_t sec_sz = 0;
+    char *env_sector_size = NULL;
+    env_sector_size = getenv("WOLFBOOT_SECTOR_SIZE");
+    if (!env_sector_size) {
+       fprintf(stderr, "Please set the WOLFBOOT_SECTOR_SIZE environment variable in\n"
+               "order to sign a delta update.\n");
+       exit(6);
+    } else {
+        sec_sz = atoi(env_sector_size);
+        if (sec_sz == 0) {
+            errno = 0;
+            sec_sz = strtol(env_sector_size, NULL, 16);
+            if (errno != 0) {
+                fprintf(stderr, "Invalid WOLFBOOT_SECTOR_SIZE value\n");
+                exit(6);
+            }
+        }
+    }
+    return sec_sz;
+}
 
 int wb_diff_init(WB_DIFF_CTX *ctx, uint8_t *src_a, uint32_t len_a, uint8_t *src_b, uint32_t len_b)
 {
@@ -179,6 +209,8 @@ int wb_diff_init(WB_DIFF_CTX *ctx, uint8_t *src_a, uint32_t len_a, uint8_t *src_
     ctx->src_b = src_b;
     ctx->size_a = len_a;
     ctx->size_b = len_b;
+    wolfboot_sector_size = wb_diff_get_sector_size();
+    printf("WOLFBOOT_SECTOR_SIZE: %u\n", wolfboot_sector_size);
     return 0;
 }
 
@@ -196,7 +228,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         return -1;
 
     while ((ctx->off_b + BLOCK_HDR_SIZE < ctx->size_b) && (len > p_off + BLOCK_HDR_SIZE)) {
-        uintptr_t page_start = ctx->off_b / WOLFBOOT_SECTOR_SIZE;
+        uintptr_t page_start = ctx->off_b / wolfboot_sector_size;
         uintptr_t pa_start;
         found = 0;
         if (p_off + BLOCK_HDR_SIZE >  len)
@@ -210,14 +242,14 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
          * base for the sectors that have already been updated.
          */
 
-        pa_start = WOLFBOOT_SECTOR_SIZE  * page_start;
+        pa_start = wolfboot_sector_size  * page_start;
         pa = ctx->src_a + pa_start;
         while (((uintptr_t)(pa - ctx->src_a) < (uintptr_t)ctx->size_a) && (p_off < len)) {
             if ((uintptr_t)(ctx->size_a - (pa - ctx->src_a)) < BLOCK_HDR_SIZE)
                 break;
             if ((ctx->size_b - ctx->off_b) < BLOCK_HDR_SIZE)
                 break;
-            if ((WOLFBOOT_SECTOR_SIZE - (ctx->off_b % WOLFBOOT_SECTOR_SIZE)) < BLOCK_HDR_SIZE)
+            if ((wolfboot_sector_size - (ctx->off_b % wolfboot_sector_size)) < BLOCK_HDR_SIZE)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
                 uintptr_t b_start;
@@ -238,7 +270,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                         /* Stop matching if the source image size limit is hit. */
                         break;
                     }
-                    if ((b_start / WOLFBOOT_SECTOR_SIZE) < ((ctx->off_b + 1) / WOLFBOOT_SECTOR_SIZE)) {
+                    if ((b_start / wolfboot_sector_size) < ((ctx->off_b + 1) / wolfboot_sector_size)) {
                         /* Stop matching when the sector bound is hit. */
                         break;
                     }
@@ -262,7 +294,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         }
         if (!found) {
             /* Try matching an earlier section in the resulting image */
-            uintptr_t pb_end = page_start * WOLFBOOT_SECTOR_SIZE;
+            uintptr_t pb_end = page_start * wolfboot_sector_size;
             pb = ctx->src_b;
             while (((uintptr_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
                 /* Check image boundary */
@@ -274,7 +306,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 /* Don't try matching backwards if the distance between the two
                  * blocks is smaller than one sector.
                  */
-                if (WOLFBOOT_SECTOR_SIZE > (page_start * WOLFBOOT_SECTOR_SIZE)
+                if (wolfboot_sector_size > (page_start * wolfboot_sector_size)
                         - (pb - ctx->src_b))
                     break;
 
@@ -338,5 +370,6 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     }
     return (int)p_off;
 }
+#endif /* __WOLFBOOT */
 
 #endif /* DELTA_UPDATES */

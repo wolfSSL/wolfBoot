@@ -26,9 +26,9 @@ test-delta-update: distclean factory.bin test-app/image.bin tools/uart-flash-ser
 	@st-flash erase || st-flash erase
 	@rm -f zero.bin
 	@diff .config config/examples/stm32wb-delta.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta.config to .config to run this test\n\n" && exit 1)
-	$(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin test-app/image.bin \
+	$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin test-app/image.bin \
 		$(PRIVATE_KEY) 7
-	$(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin test-app/image.bin \
+	$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin test-app/image.bin \
 		$(PRIVATE_KEY) 2
 	@st-flash write factory.bin 0x08000000
 	@echo Expecting version '1'
@@ -79,7 +79,7 @@ test-delta-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash
 	@st-flash erase || st-flash erase
 	@rm -f zero.bin
 	@diff .config config/examples/stm32wb-delta-ext.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta-ext.config to .config to run this test\n\n" && exit 1)
-	$(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin test-app/image.bin \
+	$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin test-app/image.bin \
 		$(PRIVATE_KEY) 7
 	@(tools/uart-flash-server/ufserver test-app/image_v7_signed_diff.bin $(USBTTY))&
 	@st-flash reset
@@ -121,7 +121,7 @@ test-delta-enc-update-ext: distclean factory.bin test-app/image.bin tools/uart-f
 	   @st-flash erase || st-flash erase
 	   @rm -f zero.bin
 	   @diff .config config/examples/stm32wb-delta-enc-ext.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-delta-enc-ext.config to .config to run this test\n\n" && exit 1)
-	   $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin \
+	   $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) --delta test-app/image_v1_signed.bin \
 	           $(ENCRYPT_STRING) --encrypt /tmp/enc_key.der \
 	           test-app/image.bin \
 	           $(PRIVATE_KEY) 7

@@ -25,6 +25,7 @@
 #include "wolfboot/wolfboot.h"
 #include "hal/nrf52.h"
 #include "printf.h"
+#include "target.h"
 
 static const char extradata[1024 * 16] = "hi!";
 

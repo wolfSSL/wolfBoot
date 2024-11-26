@@ -25,6 +25,7 @@
 #include "wolfboot/wolfboot.h"
 #include "hal/nrf5340.h"
 #include "printf.h"
+#include "target.h"
 
 void gpiotoggle(uint32_t port, uint32_t pin)
 {

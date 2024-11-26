@@ -24,6 +24,7 @@
 #include <string.h>
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 /* Change to '1' to enable uart update */
 #define UART_UPDATE 0

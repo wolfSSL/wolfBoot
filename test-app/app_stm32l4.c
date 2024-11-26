@@ -25,6 +25,7 @@
 #include "led.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 #ifdef TARGET_stm32l4
 

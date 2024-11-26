@@ -24,6 +24,7 @@
 #include "fsl_debug_console.h"
 #include "fsl_gpio.h"
 #include "fsl_iomuxc.h"
+#include "target.h"
 
 static int g_pinSet = false;
 extern void imx_rt_init_boot_clock(void);

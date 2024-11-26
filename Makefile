@@ -85,6 +85,9 @@ ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
 endif
 
+# Environment variables for sign tool
+SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) WOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE)
+
 
 MAIN_TARGET=factory.bin
 TARGET_H_TEMPLATE:=include/target.h.in
@@ -218,7 +221,7 @@ $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
 		-g $(SECONDARY_PRIVATE_KEY)) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
 
-keytools: include/target.h
+keytools:
 	@echo "Building key tools"
 	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j
@@ -238,10 +241,10 @@ test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
 	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"
 
-	$(Q)(test $(SIGN) = NONE) || IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) "$(SIGN_TOOL)" $(SIGN_OPTIONS) \
+	$(Q)(test $(SIGN) = NONE) || $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) \
 		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) \
 		$(SECONDARY_PRIVATE_KEY) 1 || true
-	$(Q)(test $(SIGN) = NONE) && IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
+	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf

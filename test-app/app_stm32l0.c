@@ -29,6 +29,7 @@
 #ifdef SPI_FLASH
 #include "spi_flash.h"
 #endif
+#include "target.h"
 
 #ifdef TARGET_stm32l0
 

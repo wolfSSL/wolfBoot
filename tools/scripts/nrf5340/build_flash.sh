@@ -15,6 +15,9 @@
 # Build dela update version 3 and flash to external (also reprograms internal flash)
 # ./tools/scripts/nrf5340/build_flash.sh --delta
 
+#import config for IMAGE_HEADER_SIZE and WOLFBOOT_SECTOR_SIZE
+. config/examples/nrf5340.config
+
 # Defaults
 MAKE_ARGS=" DEBUG_SYMBOLS=1"
 DO_CLEAN=0
@@ -28,6 +31,8 @@ DO_PROGRAM_EXT=0
 DO_DELTA=0
 UPDATE_VERSION=1
 
+SIGN_ENV=IMAGE_HEADER_SIZE=$IMAGE_HEADER_SIZE WOLFBOOT_SECTOR_SIZE=$WOLFBOOT_SECTOR_SIZE
+SIGN_TOOL=tools/keytools/sign
 SIGN_ARGS="--ecc384 --sha384"
 #SIGN_ARGS="--ecc256 --sha256"
 
@@ -161,8 +166,8 @@ fi
 
 if [[ $DO_UPDATE == 1 ]]; then
   # Sign flash update for testing (for network partition using --id 2)
-  tools/keytools/sign $SIGN_ARGS --id 2 tools/scripts/nrf5340/image_net.bin wolfboot_signing_private_key.der $UPDATE_VERSION
-  tools/keytools/sign $SIGN_ARGS        tools/scripts/nrf5340/image_app.bin wolfboot_signing_private_key.der $UPDATE_VERSION
+  $SIGN_ENV $SIGN_TOOL $SIGN_ARGS --id 2 tools/scripts/nrf5340/image_net.bin wolfboot_signing_private_key.der $UPDATE_VERSION
+  $SIGN_ENV $SIGN_TOOL $SIGN_ARGS        tools/scripts/nrf5340/image_app.bin wolfboot_signing_private_key.der $UPDATE_VERSION
 
   # Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
   echo -n "pBOOT" > tools/scripts/nrf5340/trigger_magic.bin
@@ -177,8 +182,8 @@ fi
 
 if [[ $DO_DELTA == 1 ]]; then
   # Sign flash update for testing (for network partition using --id 2) delta between v1 and v3
-  tools/keytools/sign $SIGN_ARGS --id 2 --delta tools/scripts/nrf5340/image_net_v1_signed.bin tools/scripts/nrf5340/image_net.bin wolfboot_signing_private_key.der $UPDATE_VERSION
-  tools/keytools/sign $SIGN_ARGS        --delta tools/scripts/nrf5340/image_app_v1_signed.bin tools/scripts/nrf5340/image_app.bin wolfboot_signing_private_key.der $UPDATE_VERSION
+  $SIGN_ENV $SIGN_TOOL $SIGN_ARGS --id 2 --delta tools/scripts/nrf5340/image_net_v1_signed.bin tools/scripts/nrf5340/image_net.bin wolfboot_signing_private_key.der $UPDATE_VERSION
+  $SIGN_ENV $SIGN_TOOL $SIGN_ARGS        --delta tools/scripts/nrf5340/image_app_v1_signed.bin tools/scripts/nrf5340/image_app.bin wolfboot_signing_private_key.der $UPDATE_VERSION
 
   # Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
   echo -n "pBOOT" > tools/scripts/nrf5340/trigger_magic.bin

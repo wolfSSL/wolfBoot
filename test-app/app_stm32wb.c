@@ -28,6 +28,7 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "uart_drv.h"
+#include "target.h"
 
 #ifdef TARGET_stm32wb
 
