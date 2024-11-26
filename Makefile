@@ -238,10 +238,10 @@ test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
 	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"
 
-	$(Q)(test $(SIGN) = NONE) || "$(SIGN_TOOL)" $(SIGN_OPTIONS) \
+	$(Q)(test $(SIGN) = NONE) || IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) "$(SIGN_TOOL)" $(SIGN_OPTIONS) \
 		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) \
 		$(SECONDARY_PRIVATE_KEY) 1 || true
-	$(Q)(test $(SIGN) = NONE) && "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
+	$(Q)(test $(SIGN) = NONE) && IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
