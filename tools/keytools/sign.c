@@ -147,9 +147,6 @@ static inline int fp_truncate(FILE *f, size_t len)
     #define PATH_MAX 256
 #endif
 
-#ifndef IMAGE_HEADER_SIZE
-    #define IMAGE_HEADER_SIZE 256
-#endif
 
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 
@@ -314,7 +311,6 @@ static struct cmd_options CMD = {
     .sign = SIGN_AUTO,
     .encrypt  = ENC_OFF,
     .hash_algo = HASH_SHA256,
-    .header_sz = IMAGE_HEADER_SIZE,
     .partition_id = HDR_IMG_TYPE_APP,
     .hybrid = 0
 };
@@ -324,7 +320,7 @@ static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t 
     uint8_t *p = haystack;
     uint16_t len, htype;
     const volatile uint8_t *max_p = (haystack - IMAGE_HEADER_OFFSET) +
-                                                    IMAGE_HEADER_SIZE;
+                                                    CMD.header_sz;
     *ptr = NULL;
     if (p > max_p) {
         fprintf(stderr, "Illegal address (too high)\n");
@@ -344,10 +340,10 @@ static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t 
 
         len = p[2] | (p[3] << 8);
         /* check len */
-        if ((4 + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
+        if ((4 + len) > (uint16_t)(CMD.header_sz - IMAGE_HEADER_OFFSET)) {
             fprintf(stderr, "This field is too large (bigger than the space available "
                      "in the current header)\n");
-            //fprintf(stderr, "%d %d %d\n", len, IMAGE_HEADER_SIZE, IMAGE_HEADER_OFFSET);
+            //fprintf(stderr, "%d %d %d\n", len, CMD.header_sz, IMAGE_HEADER_OFFSET);
             break;
         }
         /* check max pointer */
@@ -921,13 +917,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         printf("Key decode error %d\n", ret);
 
         goto failure;
-    }
-
-    if (CMD.header_sz < IMAGE_HEADER_SIZE) {
-        printf("image header size overridden by config value (%u bytes)\n", IMAGE_HEADER_SIZE);
-        CMD.header_sz = IMAGE_HEADER_SIZE;
-    } else {
-        printf("image header size calculated at runtime (%u bytes)\n", CMD.header_sz);
     }
 
     DEBUG_PRINT("Pubkey %d\n", *pubkey_sz);
@@ -2112,6 +2101,8 @@ static void set_signature_sizes(int secondary)
 {
     uint32_t *sz = &CMD.signature_sz;
     int *sign = &CMD.sign;
+    uint32_t suggested_sz = 0;
+    char *env_image_header_size;
     if (secondary) {
         sz = &CMD.secondary_signature_sz;
         sign = &CMD.secondary_sign;
@@ -2261,6 +2252,18 @@ static void set_signature_sizes(int secondary)
         *sz = sig_sz;
     }
 #endif /* WOLFSSL_WC_DILITHIUM */
+
+    env_image_header_size = getenv("IMAGE_HEADER_SIZE");
+    if (env_image_header_size) {
+        suggested_sz = atoi(env_image_header_size);
+    }
+    if (suggested_sz != 0) {
+        if (CMD.header_sz <= suggested_sz)
+            CMD.header_sz = suggested_sz;
+        else
+            printf("Environment variable IMAGE_HEADER_SIZE=%u overridden.\n", suggested_sz);
+    }
+    printf("Manifest header size: %u\n", CMD.header_sz);
 }
 
 int main(int argc, char** argv)
@@ -2290,6 +2293,9 @@ int main(int argc, char** argv)
         printf("For full usage manual, see 'docs/Signing.md'\n");
         exit(1);
     }
+
+    /* Set initial manifest header size to a minimum default value */
+    CMD.header_sz = 256;
 
     /* Parse Arguments */
     for (i=1; i<argc; i++) {
