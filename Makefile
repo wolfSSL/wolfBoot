@@ -226,12 +226,12 @@ keytools:
 	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j
 
-tpmtools: keys
+tpmtools: include/target.h keys
 	@echo "Building TPM tools"
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j
 
-swtpmtools:
+swtpmtools: include/target.h
 	@echo "Building TPM tools"
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j swtpm
