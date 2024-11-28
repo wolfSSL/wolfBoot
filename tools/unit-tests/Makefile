@@ -35,7 +35,7 @@ cov:
 
 run: $(TESTS)
 	for unit in $(TESTS); do \
-		./$$unit || exit 1; \
+		WOLFBOOT_SECTOR_SIZE=0x400 ./$$unit || exit 1; \
 	done
 
 
