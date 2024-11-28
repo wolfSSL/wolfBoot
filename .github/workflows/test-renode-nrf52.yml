@@ -23,12 +23,12 @@ jobs:
 # SIGN=NONE TEST
 
       - name: Renode Tests SIGN=NONE
-        run: ./tools/renode/docker-test.sh "SIGN=NONE"
+        run: ./tools/renode/docker-test.sh "SIGN=NONE V=1"
 
 
 # ECC256 TEST
       - name: Renode Tests ECC256
-        run: ./tools/renode/docker-test.sh "SIGN=ECC256"
+        run: ./tools/renode/docker-test.sh "SIGN=ECC256 V=1"
 
 # ECC384 TEST
       - name: Renode Tests ECC384
