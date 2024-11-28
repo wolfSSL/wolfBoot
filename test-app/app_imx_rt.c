@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#include "target.h"
 #include "wolfboot/wolfboot.h"
 #include <stdint.h>
 #include "fsl_common.h"
@@ -24,7 +25,6 @@
 #include "fsl_debug_console.h"
 #include "fsl_gpio.h"
 #include "fsl_iomuxc.h"
-#include "target.h"
 
 static int g_pinSet = false;
 extern void imx_rt_init_boot_clock(void);
