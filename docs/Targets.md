@@ -334,15 +334,15 @@ The flash memory is segmented into two different banks:
 
 Bank 0 contains the bootloader at address 0x08000000, and the application at address 0x08100000.
 When a valid image is available at the same offset in Bank 1, a candidate is selected for booting between the two valid images.
-A firmware update can be uploaded at address 0x08108000.
+A firmware update can be uploaded at address 0x08110000.
 
 The example configuration is available in [/config/examples/stm32u5-nonsecure-dualbank.config](/config/examples/stm32u5-nonsecure-dualbank.config).
 
 Program each partition using:
 1. flash `wolfboot.bin` to 0x08000000:
     - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x08000000`
-2. flash `image_v1_signed.bin` to 0x08008000
-    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08008000`
+2. flash `image_v1_signed.bin` to 0x08010000
+    - `STM32_Programmer_CLI -c port=swd -d ./test-app/image_v1_signed.bin 0x08010000`
 
 RED LD9 will be on indicating successful boot ()
 
@@ -355,8 +355,8 @@ Use `make DEBUG=1` and reload firmware.
 
 Linux:
 
-```
-ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333`
+```sh
+ST-LINK_gdbserver -d -cp /opt/st/stm32cubeide_1.3.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_1.3.0.202002181050/tools/bin -e -r 1 -p 3333
 ```
 
 Max OS/X:
@@ -368,7 +368,7 @@ Max OS/X:
 Win:
 
 ```
-ST-LINK_gdbserver -d -cp C:\ST\STM32CubeIDE_1.7.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.0.0.202105311346\tools\bin -e -r 1 -p 3333`
+ST-LINK_gdbserver -d -cp C:\ST\STM32CubeIDE_1.7.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.0.0.202105311346\tools\bin -e -r 1 -p 3333
 ```
 - Connect with arm-none-eabi-gdb or gdb-multiarch
 
