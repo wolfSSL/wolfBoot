@@ -481,12 +481,6 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
 
         if (*pubkey_sz <= rsa_pubkeysz) {
             CMD.header_sz = header_sz;
-            if (CMD.policy_sign) {
-                CMD.header_sz += 512;
-            }
-            else if (sign_type == SIGN_RSA3072 && CMD.hash_algo != HASH_SHA256) {
-                CMD.header_sz += 512;
-            }
             if (secondary) {
                 CMD.secondary_signature_sz = rsa_keysz;
                 CMD.secondary_sign = sign_type;
@@ -526,12 +520,6 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         if (ret == 0 || CMD.sign != SIGN_AUTO) {
             if (CMD.header_sz < header_sz)
                 CMD.header_sz = header_sz;
-            if (CMD.policy_sign) {
-                CMD.header_sz += 512;
-            }
-            else if (sign_type == SIGN_RSA3072 && CMD.hash_algo != HASH_SHA256) {
-                CMD.header_sz += 512;
-            }
             if (secondary) {
                 CMD.secondary_sign = sign_type;
                 CMD.secondary_signature_sz = keySzOut;
