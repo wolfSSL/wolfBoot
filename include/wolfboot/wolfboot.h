@@ -145,10 +145,14 @@ extern "C" {
         #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1952
     #elif ML_DSA_LEVEL == 5
         #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
-    #else
-        #error "Invalid ML_DSA_LEVEL!"
     #endif
-#endif /* ML_DSA_LEVEL */
+#else
+    #ifdef SIGN_ML_DSA
+        #error "ML_DSA_LEVEL not defined"
+    #endif
+    /* Default to max size for keystore */
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
+#endif /* defined ML_DSA_LEVEL */
 
 /* Mask for key permissions */
 #define KEY_VERIFY_ALL         (0xFFFFFFFFU)

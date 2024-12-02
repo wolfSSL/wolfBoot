@@ -123,14 +123,8 @@ static int exportPubKey = 0;
 static WC_RNG rng;
 static int noLocalKeys = 0;
 
-#ifndef KEYSLOT_MAX_PUBKEY_SIZE
-    #if defined(KEYSTORE_PUBKEY_SIZE_ML_DSA)
-        /* ML-DSA pub keys are big. */
-        #define KEYSLOT_MAX_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
-    #else
-        #define KEYSLOT_MAX_PUBKEY_SIZE 576
-    #endif
-#endif
+/* ML-DSA pub keys are big. */
+#define KEYSLOT_MAX_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
 
 struct keystore_slot {
      uint32_t slot_id;

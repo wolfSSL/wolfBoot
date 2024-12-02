@@ -14,7 +14,7 @@ test-delta-enc-update-ext:EXPVER=tools/test-expect-version/test-expect-version /
 test-delta-enc-update-ext:PART_SIZE=131023
 test-delta-enc-update-ext:APP=test-app/image_v7_signed_diff_encrypted.bin
 
-test-delta-update: distclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
+test-delta-update: keysclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	@killall ufserver || true
 	@st-flash reset
 	@sleep 2
@@ -68,7 +68,7 @@ test-delta-update: distclean factory.bin test-app/image.bin tools/uart-flash-ser
 	@(test `$(EXPVER)` -eq 2)
 	@echo "TEST SUCCESSFUL"
 
-test-delta-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
+test-delta-update-ext: keysclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	@killall ufserver || true
 	@st-flash reset
 	@dd if=/dev/zero of=zero.bin bs=4096 count=1
@@ -110,7 +110,7 @@ test-delta-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash
 	@rm boot.bin boot_full.bin
 	@echo "TEST SUCCESSFUL"
 
-test-delta-enc-update-ext: distclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
+test-delta-enc-update-ext: keysclean factory.bin test-app/image.bin tools/uart-flash-server/ufserver tools/delta/bmdiff tools/test-expect-version/test-expect-version
 	   @killall ufserver || true
 	   @st-flash reset
 	   @dd if=/dev/zero of=zero.bin bs=4096 count=1

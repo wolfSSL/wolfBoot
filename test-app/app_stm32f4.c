@@ -78,6 +78,8 @@ static const char UPDATE='U';
 static const char ACK='#';
 static uint8_t msg[MSGSIZE];
 
+extern void flash_set_waitstates(void);
+
 
 #ifdef WOLFBOOT_NO_SIGN
 

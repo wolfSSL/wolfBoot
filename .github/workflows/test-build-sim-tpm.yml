@@ -44,9 +44,9 @@ jobs:
         with:
           submodules: true
 
-      - name: make distclean
+      - name: make keysclean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config
         run: |

@@ -204,7 +204,7 @@ include tools/test-renode.mk
 
 hal/$(TARGET).o:
 
-keytools_check: keytools FORCE
+keytools_check: keytools
 
 $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
@@ -223,7 +223,6 @@ $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
 
 keytools:
 	@echo "Building key tools"
-	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j
 
 tpmtools: include/target.h keys
@@ -281,7 +280,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
-		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
+		(echo "Key mismatch: please run 'make keysclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(SECURE_LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LIBS) $(LD_END_GROUP) -o $@

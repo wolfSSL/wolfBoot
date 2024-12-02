@@ -541,13 +541,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     uint32_t idx = 0;
     int io_sz;
     FILE *f;
-#if defined(WOLFSSL_HAVE_XMSS)
     word32 priv_sz = 0;
-#endif
-#if defined(WOLFSSL_WC_DILITHIUM)
-    int    priv_sz = 0;
-    int    pub_sz = 0;
-#endif
+    word32 pub_sz = 0;
     int sign = CMD.sign;
     const char *key_file = CMD.key_file;
 
@@ -843,7 +838,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 #ifdef WOLFSSL_WC_DILITHIUM
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_ML_DSA:
-            ret = wc_MlDsaKey_GetPubLen(&key.ml_dsa, &pub_sz);
+            ret = wc_MlDsaKey_GetPubLen(&key.ml_dsa, (int *)&pub_sz);
 
             if (ret != 0 || pub_sz <= 0) {
                 printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
@@ -852,7 +847,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             /* Get the ML-DSA private key length. This API returns
              * the public + private length. */
-            ret = wc_MlDsaKey_GetPrivLen(&key.ml_dsa, &priv_sz);
+            ret = wc_MlDsaKey_GetPrivLen(&key.ml_dsa, (int*)&priv_sz);
 
             if (ret != 0 || priv_sz <= 0) {
                 printf("error: wc_MlDsaKey_GetPrivLen returned %d\n", ret);
@@ -871,7 +866,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             DEBUG_PRINT("info: ml-dsa priv len: %d\n", priv_sz);
             DEBUG_PRINT("info: ml-dsa pub len: %d\n", pub_sz);
 
-            if ((int)*key_buffer_sz == (priv_sz + pub_sz)) {
+            if (*key_buffer_sz == (priv_sz + pub_sz)) {
                 /* priv + pub */
                 ret = wc_MlDsaKey_ImportPrivRaw(&key.ml_dsa, *key_buffer,
                                                 priv_sz);
@@ -881,7 +876,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 printf("Found ml-dsa key\n");
                 break;
             }
-            else if ((int)*key_buffer_sz == pub_sz) {
+            else if (*key_buffer_sz == pub_sz) {
                 /* pub only */
                 *pubkey = (*key_buffer);
                 *pubkey_sz = pub_sz;
