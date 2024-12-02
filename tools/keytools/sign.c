@@ -364,7 +364,7 @@ static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t 
 }
 
 static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
-    int header_sz,
+    uint32_t header_sz,
     uint8_t **key_buffer, uint32_t *key_buffer_sz,
     uint8_t **pubkey, uint32_t *pubkey_sz, int secondary)
 {
@@ -449,7 +449,8 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
         free(*pubkey);
 
     if (ret == 0 || CMD.sign != SIGN_AUTO) {
-        CMD.header_sz = header_sz;
+        if (CMD.header_sz < header_sz)
+            CMD.header_sz = header_sz;
         if (secondary) {
             CMD.secondary_sign = sign_type;
             CMD.secondary_signature_sz = (curve_sz * 2);
@@ -464,7 +465,7 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
 }
 
 static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz,
-    int header_sz,
+    uint32_t header_sz,
     uint8_t **key_buffer, uint32_t *key_buffer_sz,
     uint8_t **pubkey, uint32_t *pubkey_sz, int secondary)
 {
@@ -523,7 +524,8 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         }
 
         if (ret == 0 || CMD.sign != SIGN_AUTO) {
-            CMD.header_sz = header_sz;
+            if (CMD.header_sz < header_sz)
+                CMD.header_sz = header_sz;
             if (CMD.policy_sign) {
                 CMD.header_sz += 512;
             }
@@ -2193,7 +2195,8 @@ static void set_signature_sizes(int secondary)
 
         DEBUG_PRINT("info: LMS signature size: %d\n", sig_sz);
 
-        CMD.header_sz = 2 * sig_sz;
+        if (CMD.header_sz < 2 * sig_sz)
+            CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
     }
 #endif /* WOLFSSL_HAVE_LMS */
@@ -2226,14 +2229,15 @@ static void set_signature_sizes(int secondary)
 
         DEBUG_PRINT("info: XMSS signature size: %d\n", sig_sz);
 
-        CMD.header_sz = 2 * sig_sz;
+        if (CMD.header_sz < 2 * sig_sz)
+            CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
     }
 #endif /* WOLFSSL_HAVE_XMSS */
 #ifdef WOLFSSL_WC_DILITHIUM
     else if (*sign == SIGN_ML_DSA) {
         int ml_dsa_ret = 0;
-        int sig_sz = 0;
+        uint32_t sig_sz = 0;
 
         ml_dsa_ret = wc_MlDsaKey_Init(&key.ml_dsa, NULL, INVALID_DEVID);
         if (ml_dsa_ret != 0) {
@@ -2250,7 +2254,7 @@ static void set_signature_sizes(int secondary)
 
         printf("info: using ML-DSA parameters: %d\n", ML_DSA_LEVEL);
 
-        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, &sig_sz);
+        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, (int *)&sig_sz);
         if (ml_dsa_ret != 0) {
             fprintf(stderr, "error: wc_MlDsaKey_GetSigLen returned %d\n",
                     ml_dsa_ret);
@@ -2259,7 +2263,8 @@ static void set_signature_sizes(int secondary)
 
         DEBUG_PRINT("info: ML-DSA signature size: %d\n", sig_sz);
 
-        CMD.header_sz = 2 * sig_sz;
+        if (CMD.header_sz < 2 * sig_sz)
+            CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
     }
 #endif /* WOLFSSL_WC_DILITHIUM */
