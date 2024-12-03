@@ -86,7 +86,7 @@ ifeq ($(TARGET),ti_hercules)
 endif
 
 # Environment variables for sign tool
-SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) WOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE)
+SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) WOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE) ML_DSA_LEVEL=$(ML_DSA_LEVEL) IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE)
 
 
 MAIN_TARGET=factory.bin
@@ -208,7 +208,7 @@ keytools_check: keytools
 
 $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
-	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
+	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
 
@@ -216,7 +216,7 @@ $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
 	$(Q)$(MAKE) keytools_check
 	$(Q)rm -f src/keystore.c
 	$(Q)dd if=keystore.der of=pubkey_1.der bs=1 skip=16
-	$(Q)(test $(SIGN_SECONDARY) = NONE) || ("$(KEYGEN_TOOL)" \
+	$(Q)(test $(SIGN_SECONDARY) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" \
 		$(KEYGEN_OPTIONS) -i pubkey_1.der $(SECONDARY_KEYGEN_OPTIONS) \
 		-g $(SECONDARY_PRIVATE_KEY)) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true

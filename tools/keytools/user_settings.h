@@ -74,19 +74,17 @@
 #undef  NO_SHA256
 
 /* ML-DSA (dilithium) */
-#if defined(WOLFBOOT_SIGN_ML_DSA)
-#   define HAVE_DILITHIUM
-#   define WOLFSSL_WC_DILITHIUM
-#   define WOLFSSL_EXPERIMENTAL_SETTINGS
-    /* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
-     * standard by default. Uncomment this if you want the draft
-     * version instead. */
-    #if 0
-    #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
-    #endif
-    /* dilithium needs these sha functions. */
-#   define WOLFSSL_SHAKE128
-#endif /* WOLFBOOT_SIGN_ML_DSA */
+#define HAVE_DILITHIUM
+#define WOLFSSL_WC_DILITHIUM
+#define WOLFSSL_EXPERIMENTAL_SETTINGS
+/* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
+* standard by default. Uncomment this if you want the draft
+* version instead. */
+#if 0
+  #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+#endif
+/* dilithium needs these sha functions. */
+#define WOLFSSL_SHAKE128
 
 /* ASN */
 #define WOLFSSL_ASN_TEMPLATE

@@ -36,8 +36,6 @@ else
 	SIGN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/sign
 endif
 
-SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) WOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE)
-
 ifeq ($(TARGET),stm32f7)
   RENODE_CONFIG=tools/renode/stm32f746_wolfboot.resc
   POFF=393211

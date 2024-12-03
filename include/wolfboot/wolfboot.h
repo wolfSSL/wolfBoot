@@ -138,21 +138,17 @@ extern "C" {
 /* ML-DSA pub key size is a function of parameters.
  * This needs to be configurable. Default to security
  * category 2. */
-#ifdef ML_DSA_LEVEL
-    #if ML_DSA_LEVEL == 2
-        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1312
-    #elif ML_DSA_LEVEL == 3
-        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1952
-    #elif ML_DSA_LEVEL == 5
-        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
-    #endif
-#else
-    #ifdef SIGN_ML_DSA
-        #error "ML_DSA_LEVEL not defined"
-    #endif
-    /* Default to max size for keystore */
-    #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
-#endif /* defined ML_DSA_LEVEL */
+
+#define ML_DSA_L2_PUBKEY_SIZE   1312
+#define ML_DSA_L3_PUBKEY_SIZE   1952
+#define ML_DSA_L5_PUBKEY_SIZE   2592
+
+
+#if defined(SIGN_ML_DSA) && !defined(ML_DSA_LEVEL)
+    #define ML_DSA_LEVEL 5
+#endif
+/* Default to max size for keystore */
+#define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
 
 /* Mask for key permissions */
 #define KEY_VERIFY_ALL         (0xFFFFFFFFU)

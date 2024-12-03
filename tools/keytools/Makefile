@@ -17,7 +17,8 @@ LDFLAGS =
 OBJDIR = ./
 LIBS =
 
-ML_DSA_LEVEL?=2
+ML_DSA_LEVEL?=5
+CFLAGS+=-DML_DSA_LEVEL=$(ML_DSA_LEVEL)
 
 LMS_LEVELS?=1
 LMS_HEIGHT?=10
@@ -32,6 +33,9 @@ CFLAGS +=-DWOLFBOOT_SIGN_LMS -DWOLFSSL_HAVE_LMS \
 
 # LMS flags
 CFLAGS +=-DWOLFSSL_WC_LMS
+
+# ML_DSA flags
+CFLAGS +=-DWOLFSSL_HAVE_DILITHIUM
 
 # XMSS flags
 CFLAGS +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS \
@@ -110,10 +114,6 @@ OBJS_REAL+=\
 	$(WOLFDIR)/wolfcrypt/src/wc_xmss.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_xmss_impl.o
 OBJS_REAL+=$(WOLFDIR)/wolfcrypt/src/dilithium.o
-
-CFLAGS += -D"WOLFBOOT_SIGN_ML_DSA" \
-            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-            -D"ML_DSA_LEVEL"=$(ML_DSA_LEVEL)
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 vpath %.c $(WOLFDIR)/wolfcrypt/src/
