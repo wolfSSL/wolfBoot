@@ -229,39 +229,20 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
     *idx += len;
 }
 
-#ifdef WOLFSSL_HAVE_LMS
 #include "../lms/lms_common.h"
-#endif
-
-#ifdef WOLFSSL_HAVE_XMSS
 #include "../xmss/xmss_common.h"
-#endif
 
 /* Globals */
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
 
 static struct {
-#ifdef HAVE_ED25519
     ed25519_key ed;
-#endif
-#ifdef HAVE_ED448
     ed448_key ed4;
-#endif
-#ifdef HAVE_ECC
     ecc_key ecc;
-#endif
-#ifndef NO_RSA
     RsaKey rsa;
-#endif
-#ifdef WOLFSSL_HAVE_LMS
     LmsKey lms;
-#endif
-#ifdef WOLFSSL_HAVE_XMSS
     XmssKey xmss;
-#endif
-#ifdef WOLFSSL_WC_DILITHIUM
     MlDsaKey  ml_dsa;
-#endif
 } key;
 
 struct cmd_options {
@@ -743,7 +724,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             if (ret == 0)
                 break;
 
-#ifdef WOLFSSL_HAVE_LMS
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_LMS:
             ret = -1;
@@ -783,9 +763,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 printf("error: unrecognized LMS key size: %d\n",
                         *key_buffer_sz);
             }
-#endif /* WOLFSSL_HAVE_LMS */
 
-#ifdef WOLFSSL_HAVE_XMSS
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_XMSS:
             ret = -1;
@@ -833,9 +811,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 printf("error: unrecognized XMSS key size: %d\n",
                     *key_buffer_sz);
             }
-#endif /* WOLFSSL_HAVE_XMSS */
-
-#ifdef WOLFSSL_WC_DILITHIUM
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_ML_DSA:
             ret = wc_MlDsaKey_GetPubLen(&key.ml_dsa, (int *)&pub_sz);
@@ -890,8 +865,6 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     *key_buffer_sz);
                 ret = -1;
             }
-#endif /* WOLFSSL_WC_DILITHIUM */
-
             break;
     } /* end switch (sign) */
 
@@ -927,21 +900,16 @@ static int sign_digest(int sign, int hash_algo,
         return ret;
     }
 
-#ifdef HAVE_ED25519
     if (sign == SIGN_ED25519) {
         ret = wc_ed25519_sign_msg(digest, digest_sz, signature,
                 signature_sz, &key.ed);
     }
     else
-#endif
-#ifdef HAVE_ED448
     if (sign == SIGN_ED448) {
         ret = wc_ed448_sign_msg(digest, digest_sz, signature,
                 signature_sz, &key.ed4, NULL, 0);
     }
     else
-#endif
-#ifdef HAVE_ECC
     if (sign == SIGN_ECC256 ||
         sign == SIGN_ECC384 ||
         sign == SIGN_ECC521)
@@ -969,8 +937,6 @@ static int sign_digest(int sign, int hash_algo,
         mp_clear(&r); mp_clear(&s);
     }
     else
-#endif
-#ifndef NO_RSA
     if (sign == SIGN_RSA2048 ||
         sign == SIGN_RSA3072 ||
         sign == SIGN_RSA4096)
@@ -1001,8 +967,6 @@ static int sign_digest(int sign, int hash_algo,
         }
     }
     else
-#endif
-#ifdef WOLFSSL_HAVE_LMS
     if (sign == SIGN_LMS) {
         const char *key_file = CMD.key_file;
         if (secondary) {
@@ -1028,8 +992,6 @@ static int sign_digest(int sign, int hash_algo,
         }
     }
     else
-#endif /* WOLFSSL_HAVE_LMS */
-#ifdef WOLFSSL_HAVE_XMSS
     if (sign == SIGN_XMSS) {
         const char *key_file = CMD.key_file;
         if (secondary) {
@@ -1061,8 +1023,6 @@ static int sign_digest(int sign, int hash_algo,
         }
     }
     else
-#endif /* WOLFSSL_HAVE_XMSS */
-#ifdef WOLFSSL_WC_DILITHIUM
     if (sign == SIGN_ML_DSA) {
         /* Nothing else to do, ready to sign. */
         if (ret == 0) {
@@ -1074,7 +1034,6 @@ static int sign_digest(int sign, int hash_algo,
         }
     }
     else
-#endif /* WOLFSSL_WC_DILITHIUM */
     {
         ret = NOT_COMPILED_IN;
     }
@@ -2146,28 +2105,44 @@ static void set_signature_sizes(int secondary)
             CMD.header_sz = 1024;
         *sz = 512;
     }
-#ifdef WOLFSSL_HAVE_LMS
     else if (*sign == SIGN_LMS) {
         int    lms_ret = 0;
         word32 sig_sz = 0;
+        char *lms_levels_str, *lms_height_str, *lms_winternitz_str;
+        int lms_levels, lms_height, lms_winternitz;
+        lms_levels_str = getenv("LMS_LEVELS");
+        lms_height_str = getenv("LMS_HEIGHT");
+        lms_winternitz_str = getenv("LMS_WINTERNITZ");
+
+        if (!lms_levels_str)
+            lms_levels = LMS_LEVELS;
+        else 
+            lms_levels = atoi(lms_levels_str);
+        if (!lms_height_str)
+            lms_height = LMS_HEIGHT;
+        else
+            lms_height = atoi(lms_height_str);
+        if (!lms_winternitz_str)
+            lms_winternitz = LMS_WINTERNITZ;
+        else
+            lms_winternitz = atoi(lms_winternitz_str);
 
         lms_ret = wc_LmsKey_Init(&key.lms, NULL, INVALID_DEVID);
         if (lms_ret != 0) {
             fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", lms_ret);
             exit(1);
         }
-
-        lms_ret = wc_LmsKey_SetParameters(&key.lms, LMS_LEVELS,
-                                          LMS_HEIGHT, LMS_WINTERNITZ);
+        lms_ret = wc_LmsKey_SetParameters(&key.lms, lms_levels, lms_height,
+                                          lms_winternitz);
         if (lms_ret != 0) {
             fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
-                    " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
-                    LMS_WINTERNITZ, lms_ret);
+                    " returned %d\n", lms_levels, lms_height,
+                    lms_winternitz, lms_ret);
             exit(1);
         }
 
-        printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
-               LMS_HEIGHT, LMS_WINTERNITZ);
+        printf("info: using LMS parameters: L%d-H%d-W%d\n", lms_levels,
+               lms_height, lms_winternitz);
 
         lms_ret = wc_LmsKey_GetSigLen(&key.lms, &sig_sz);
         if (lms_ret != 0) {
@@ -2182,11 +2157,16 @@ static void set_signature_sizes(int secondary)
             CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
     }
-#endif /* WOLFSSL_HAVE_LMS */
-#ifdef WOLFSSL_HAVE_XMSS
     else if (*sign == SIGN_XMSS) {
         int    xmss_ret = 0;
         word32 sig_sz = 0;
+        char *xmss_params = NULL;
+
+        xmss_params = getenv("XMSS_PARAMS");
+        if (!xmss_params)
+            xmss_params = WOLFBOOT_XMSS_PARAMS;
+
+        printf("info: using XMSS parameters: %s\n", xmss_params);
 
         xmss_ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
         if (xmss_ret != 0) {
@@ -2194,14 +2174,13 @@ static void set_signature_sizes(int secondary)
             exit(1);
         }
 
-        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
+        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, xmss_params);
         if (xmss_ret != 0) {
             fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
-                    " returned %d\n", WOLFBOOT_XMSS_PARAMS, xmss_ret);
+                    " returned %d\n", xmss_params, xmss_ret);
             exit(1);
         }
 
-        printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
 
         xmss_ret = wc_XmssKey_GetSigLen(&key.xmss, &sig_sz);
         if (xmss_ret != 0) {
@@ -2216,11 +2195,14 @@ static void set_signature_sizes(int secondary)
             CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
     }
-#endif /* WOLFSSL_HAVE_XMSS */
-#ifdef WOLFSSL_WC_DILITHIUM
     else if (*sign == SIGN_ML_DSA) {
         int ml_dsa_ret = 0;
         uint32_t sig_sz = 0;
+        char *env_ml_dsa_level = NULL;
+        int ml_dsa_level = ML_DSA_LEVEL;
+        env_ml_dsa_level = getenv("ML_DSA_LEVEL");
+        if (env_ml_dsa_level)
+            ml_dsa_level = atoi(env_ml_dsa_level);
 
         ml_dsa_ret = wc_MlDsaKey_Init(&key.ml_dsa, NULL, INVALID_DEVID);
         if (ml_dsa_ret != 0) {
@@ -2228,14 +2210,14 @@ static void set_signature_sizes(int secondary)
             exit(1);
         }
 
-        ml_dsa_ret = wc_MlDsaKey_SetParams(&key.ml_dsa, ML_DSA_LEVEL);
+        ml_dsa_ret = wc_MlDsaKey_SetParams(&key.ml_dsa, ml_dsa_level);
         if (ml_dsa_ret != 0) {
             fprintf(stderr, "error: wc_MlDsaKey_SetParamStr(%d)" \
-                    " returned %d\n", ML_DSA_LEVEL, ml_dsa_ret);
+                    " returned %d\n", ml_dsa_level, ml_dsa_ret);
             exit(1);
         }
 
-        printf("info: using ML-DSA parameters: %d\n", ML_DSA_LEVEL);
+        printf("info: using ML-DSA parameters: %d\n", ml_dsa_level);
 
         ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, (int *)&sig_sz);
         if (ml_dsa_ret != 0) {
@@ -2250,7 +2232,6 @@ static void set_signature_sizes(int secondary)
             CMD.header_sz = 2 * sig_sz;
         *sz = sig_sz;
     }
-#endif /* WOLFSSL_WC_DILITHIUM */
 
     env_image_header_size = getenv("IMAGE_HEADER_SIZE");
     if (env_image_header_size) {
@@ -2417,7 +2398,6 @@ int main(int argc, char** argv)
                 sign_str = "RSA4096";
             }
         }
-#ifdef WOLFSSL_HAVE_LMS
         else if (strcmp(argv[i], "--lms") == 0) {
             if (CMD.sign != SIGN_AUTO) {
                 CMD.hybrid = 1;
@@ -2428,8 +2408,6 @@ int main(int argc, char** argv)
                 sign_str = "LMS";
             }
         }
-#endif
-#ifdef WOLFSSL_HAVE_XMSS
         else if (strcmp(argv[i], "--xmss") == 0) {
             if (CMD.sign != SIGN_AUTO) {
                 CMD.hybrid = 1;
@@ -2440,8 +2418,6 @@ int main(int argc, char** argv)
                 sign_str = "XMSS";
             }
         }
-#endif
-#ifdef HAVE_DILITHIUM
         else if (strcmp(argv[i], "--ml_dsa") == 0) {
             if (CMD.sign != SIGN_AUTO) {
                 CMD.hybrid = 1;
@@ -2452,7 +2428,6 @@ int main(int argc, char** argv)
                 sign_str = "ML-DSA";
             }
         }
-#endif
         else if (strcmp(argv[i], "--sha256") == 0) {
             CMD.hash_algo = HASH_SHA256;
             hash_str = "SHA256";
@@ -2800,43 +2775,29 @@ int main(int argc, char** argv)
     if (kbuf)
         free(kbuf);
     if (CMD.sign == SIGN_ED25519) {
-#ifdef HAVE_ED25519
         wc_ed25519_free(&key.ed);
-#endif
     }
     else if (CMD.sign == SIGN_ED448) {
-#ifdef HAVE_ED448
         wc_ed448_free(&key.ed4);
-#endif
     }
     else if (CMD.sign == SIGN_ECC256 ||
              CMD.sign == SIGN_ECC384 ||
              CMD.sign == SIGN_ECC521) {
-#ifdef HAVE_ECC
         wc_ecc_free(&key.ecc);
-#endif
     }
     else if (CMD.sign == SIGN_RSA2048 ||
              CMD.sign == SIGN_RSA3072 ||
              CMD.sign == SIGN_RSA4096) {
-#ifndef NO_RSA
         wc_FreeRsaKey(&key.rsa);
-#endif
     }
     else if (CMD.sign == SIGN_LMS) {
-#ifdef WOLFSSL_HAVE_LMS
         wc_LmsKey_Free(&key.lms);
-#endif
     }
     else if (CMD.sign == SIGN_XMSS) {
-#ifdef WOLFSSL_HAVE_XMSS
         wc_XmssKey_Free(&key.xmss);
-#endif
     }
     else if (CMD.sign == SIGN_ML_DSA) {
-#ifdef WOLFSSL_WC_DILITHIUM
         wc_MlDsaKey_Free(&key.ml_dsa);
-#endif
     }
     return ret;
 }
