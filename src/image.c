@@ -599,21 +599,33 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
 {
     int       ret = 0;
     MlDsaKey  ml_dsa;
+#if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
+    (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
+     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
     uint8_t * pubkey = NULL;
     int       pub_len = 0;
+#endif
     int       sig_len = 0;
     int       verify_res = 0;
 
     wolfBoot_printf("info: ML-DSA wolfBoot_verify_signature\n");
 
+#if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
+    (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
+     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
     pubkey = keystore_get_buffer(key_slot);
 
     if (pubkey == NULL) {
         wolfBoot_printf("error: ML-DSA pubkey not found\n");
         return;
     }
+#endif
 
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    ret = wc_MlDsaKey_Init(&ml_dsa, NULL, hsmClientDevIdPubKey);
+#else
     ret = wc_MlDsaKey_Init(&ml_dsa, NULL, INVALID_DEVID);
+#endif
 
     if (ret != 0) {
         wolfBoot_printf("error: wc_MlDsaKey_Init returned %d\n", ret);
@@ -629,7 +641,15 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         }
     }
 
-    /* Make sure pub key matches parameters. */
+#if defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
+    defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+    /* Use key slot ID directly with wolfHSM */
+    ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmClientKeyIdPubKey);
+    if (ret != 0) {
+        wolfBoot_printf("error: wh_Client_MlDsaSetKeyId returned %d\n", ret);
+    }
+#else
+    /* Make sure pub key matches parameters and import it */
     if (ret == 0) {
         ret = wc_MlDsaKey_GetPubLen(&ml_dsa, &pub_len);
 
@@ -644,6 +664,17 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         }
     }
 
+    if (ret == 0) {
+        ret = wc_MlDsaKey_ImportPubRaw(&ml_dsa, pubkey, pub_len);
+        if (ret != 0) {
+            wolfBoot_printf("error: wc_MlDsaKey_ImportPubRaw returned: %d\n",
+                            ret);
+        }
+    }
+#endif /* !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT &&
+          !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID) */
+
+
     /* Make sure sig len matches parameters. */
     if (ret == 0) {
         ret = wc_MlDsaKey_GetSigLen(&ml_dsa, &sig_len);
@@ -656,16 +687,6 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
             wolfBoot_printf("error: ML-DSA sig len mismatch: got %d bytes " \
                    "expected %d\n", sig_len, ML_DSA_IMAGE_SIGNATURE_SIZE);
             ret = -1;
-        }
-    }
-
-    if (ret == 0) {
-        /* Now import pub key. */
-        ret = wc_MlDsaKey_ImportPubRaw(&ml_dsa, pubkey, pub_len);
-
-        if (ret != 0) {
-            wolfBoot_printf("error: wc_MlDsaKey_ImportPubRaw returned: %d\n",
-                            ret);
         }
     }
 
@@ -1311,7 +1332,8 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
          *    RENESAS_TSIP_INSTALLEDKEY_ADDR
          */
         key_slot = 0;
-#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+      defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
         /* Don't care about the key slot, we are using a fixed wolfHSM keyId */
         key_slot = 0;
 #else

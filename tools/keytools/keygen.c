@@ -1086,8 +1086,45 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     fwrite(pub, pub_len, 1, fpriv);
     fclose(fpriv);
 
-    keystore_add(KEYGEN_ML_DSA, pub, pub_len,
-                 priv_fname, id_mask);
+    if (exportPubKey) {
+        if (saveAsDer) {
+            /* Export public key in DER format */
+            uint8_t pubDer[
+            #if ML_DSA_LEVEL == 2
+                ML_DSA_LEVEL2_PUB_KEY_DER_SIZE
+            #elif ML_DSA_LEVEL == 3
+                ML_DSA_LEVEL3_PUB_KEY_DER_SIZE
+            #elif ML_DSA_LEVEL == 5
+                ML_DSA_LEVEL5_PUB_KEY_DER_SIZE
+            #endif
+            ];
+            int     pubOutLen;
+
+            const int WITH_ALG_SPKI = 1;
+            pubOutLen = wc_Dilithium_PublicKeyToDer(
+                &key, pubDer, sizeof(pubDer), WITH_ALG_SPKI);
+            if (pubOutLen < 0) {
+                fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
+                        pubOutLen);
+                exit(1);
+            }
+
+            if (export_pubkey_file(priv_fname, pubDer, pubOutLen) != 0) {
+                fprintf(stderr, "Unable to export public key to file\n");
+                exit(1);
+            }
+        }
+        else {
+            /* Export public key in raw format */
+            if (export_pubkey_file(priv_fname, pub,
+                                   KEYSTORE_PUBKEY_SIZE_ML_DSA) != 0) {
+                fprintf(stderr, "Unable to export public key to file\n");
+                exit(1);
+            }
+        }
+    }
+
+    keystore_add(KEYGEN_ML_DSA, pub, pub_len, priv_fname, id_mask);
 
     wc_MlDsaKey_Free(&key);
     free(priv);

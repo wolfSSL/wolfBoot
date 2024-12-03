@@ -8,6 +8,7 @@ This example demonstrates using wolfBoot on the Infineon AURIX TC3xx family of m
   - [Overview](#overview)
   - [Important notes](#important-notes)
   - [Flash Partitioning](#flash-partitioning)
+  - [Configuration and the wolfBoot AURIX tool (wbaurixtool.sh)](#configuration-and-the-wolfboot-aurix-tool-wbaurixtoolsh)
   - [Building and running the wolfBoot demo](#building-and-running-the-wolfboot-demo)
     - [Prerequisites](#prerequisites)
     - [Clone wolfBoot](#clone-wolfboot)
@@ -19,8 +20,11 @@ This example demonstrates using wolfBoot on the Infineon AURIX TC3xx family of m
     - [Load and run the wolfBoot demo in TRACE32](#load-and-run-the-wolfboot-demo-in-trace32)
   - [wolfHSM Compatibility](#wolfhsm-compatibility)
     - [Building wolfBoot with wolfHSM](#building-wolfboot-with-wolfhsm)
+  - [Building: Command Sequence](#building-command-sequence)
   - [Troubleshooting](#troubleshooting)
     - [WSL "bad interpreter" error](#wsl-bad-interpreter-error)
+    - [Post Quantum: ML-DSA](#post-quantum-ml-dsa)
+      - [ML-DSA Keytools](#ml-dsa-keytools)
 
 The example contains two projects: `wolfBoot-tc3xx` and `test-app`. The `wolfBoot-tc3xx` project contains the wolfBoot bootloader, and the `test-app` project contains a simple firmware application that will be loaded and executed by wolfBoot. The `test-app` project is a simple blinky application that blinks LED2 on the TC375 Lite-Kit V2 once per second when running the base image, and rapidly (~3x/sec) when running the update image. The test app determines if it is a base or update image by inspecting the firmware version (obtained through the wolfBoot API). The firmware version is set in the image header by the wolfBoot keytools when signing the test app binaries. The same test app binary is used for both the base and update images, with the only difference being the firmware version set by the keytools.
 
@@ -57,8 +61,35 @@ The TC3xx AURIX port of wolfBoot places all images in PFLASH, and uses both PFLA
 +----------+ <-- 0x8060_0000
 ```
 
-Please refer to the [wolfBoot](wolfBoot-tc3xx/Lcf_Gnu_Tricore_Tc.lsl) and [test-app](test-app/Lcf_Gnu_Tricore_Tc.lsl) linker scripts for the exact memory configuration.
+Please refer to the [wolfBoot](wolfBoot-tc3xx/Lcf_Gnu_Tricore_Tc.lsl.in) and [test-app](test-app/Lcf_Gnu_Tricore_Tc.lsl.in) linker script templates for the exact memory configuration.
 
+## Configuration and the wolfBoot AURIX tool (wbaurixtool.sh)
+
+wolfBoot relies extensively on its build system in order to properly set configuration macros, linker addresses, and other target-specific items. Because wolfBoot on AURIX uses the AURIX studio IDE to build, changing things like the signature algorithm would require manually editing IDE settings, linker scripts, etc. which is error prone and tedious. The `wbaurixtool.sh` script provides a single tool that automates the generation of all configurable items required for building wolfBoot and the test application on aurix given the chosen signature and hashing algorithms, including managing all configuration macros, linker scripts, as well as handling the actual key generation and image signing process. `wbaurixtool.sh` can also generate wolfHSM NVM images containing the generated image signing key when used in conjunction with wolfHSM.
+
+The general usage of `wbaurixtool.sh` is as follows:
+
+```
+$ ./wbaurixtool.sh [global options] <subcommand> [subcommand options]
+```
+
+where `<subcommand>` is one of the following:
+
+- `keygen`: Generate a new signing key pair
+- `sign`: Sign a firmware image
+- `target`: Generate the `target.h` header file for the tc375 flash configuration
+- `macros`: Generate the `wolfBoot_macros.txt` file from the `wolfBoot_macros.in` template in the `wolfBoot-tc3xx` directory
+- `nvm`: Generate a wolfHSM NVM image containing the signing key, based on the nvm configuration file `tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit`
+- `lcf`: Generate the `Lcf_Gnu_Tricore_Tc.lsl` file from the `Lcf_Gnu_Tricore_Tc.lcf.in` template in the `test-app` directory
+- `clean`: Remove all generated keys and images
+
+The `keygen`, `sign`, `macros` and `lcf` commands will use `ecc256` as the default signature algorithm, and `sha256` as the default hashing algorithm. Each subcommand can take the `--sign-algo` and `--hash-algo` options to specify different algorithms.
+
+Subcommands can be chained together, and can inherit options from previous commands. For example, `./wbaurixtool.sh keygen --sign-algo ecc256 macros lcf` will generate a new signing key pair using ECC 256, generate the `wolfBoot_macros.txt` file from the `wolfBoot_macros.in` template in the `wolfBoot-tc3xx` directory, and generate the `Lcf_Gnu_Tricore_Tc.lsl` file from the `Lcf_Gnu_Tricore_Tc.lcf.in` template in the `test-app` directory. If the global option `--hsm` is specified, then the subsequent subcommands will apply to the wolfHSM AURIX projects instead of the standard projects (e.g. `wolfBoot-tc3xx-wolfHSM` and `test-app-wolfHSM`).
+
+`wbaurixtool.sh` can also be used to generate wolfHSM NVM images containing the generated image signing key via the `nvm` subcommand when used in conjunction with wolfHSM. See the [wolfHSM Compatibility](#wolfhsm-compatibility) section for more information.
+
+For more information on the `wbaurixtool.sh` script, run `./wbaurixtool.sh --help` for a full list of options and subcommands.
 
 ## Building and running the wolfBoot demo
 
@@ -78,12 +109,15 @@ Please refer to the [wolfBoot](wolfBoot-tc3xx/Lcf_Gnu_Tricore_Tc.lsl) and [test-
 2. Compile the keytools by running `make keytools`
 3. Use the helper script to generate a new signing key pair using ECC 256
     1. Navigate to `wolfBoot/tools/scripts/tc3xx`
-    2. Run `./gen-tc3xx-keys.sh`. This generates the signing private key `wolfBoot/priv.der` and adds the public key to the wolfBoot keystore (see [keygen](https://github.com/wolfSSL/wolfBoot/blob/aurix-tc3xx-support/docs/Signing.md) for more information). If you already have generated a key, you will be prompted to overwrite it.
+    2. Run `./wbaurixtool.sh keygen --sign-algo ecc256 macros lcf`. This:
+        - Generates the signing private key `wolfBoot/priv.der` and adds the public key to the wolfBoot keystore (see [keygen](https://github.com/wolfSSL/wolfBoot/blob/aurix-tc3xx-support/docs/Signing.md) for more information)
+        - Generates the `wolfBoot_macros.txt` file from the `wolfBoot_macros.in` template in the `wolfBoot-tc3xx` directory, which sets the appropriate wolfBoot preprocessor macros based on the hash and signature algorithms. The `wolfBoot_macros.txt` file is then passed to the compiler in the AURIX project
+        - Generates the `Lcf_Gnu_Tricore_Tc.lsl` file from the `Lcf_Gnu_Tricore_Tc.lcf.in` template in the `test-app` directory, which sets appropriate values for Linker addresses (e.g. wolfBoot header size)based on the selected signature algorithm. The `Lcf_Gnu_Tricore_Tc.lsl` file is then passed to the linker in the AURIX project
+        - Note that if you already have generated keys, you can use `./wbaurixtool.sh clean` to remove them first
 
 ```
-$ ./gen-tc3xx-keys.sh
-+ cd ../../../
-+ tools/keytools/keygen --ecc256 -g priv.der
+$ ./wbaurixtool.sh keygen --sign-algo ecc256 macros
+Generating keys with algorithm: ecc256
 Keytype: ECC256
 Generating key (type: ECC256)
 Associated key file:   priv.der
@@ -91,13 +125,14 @@ Partition ids mask:   ffffffff
 Key type   :           ECC256
 Public key slot:       0
 Done.
+Generating macros file with sign_algo=ecc256, hash_algo=sha256
 ```
 
 ### Install the Infineon TC3xx SDK into the wolfBoot project
 
 Because of repository size constraints and differing licenses, the required Infineon low level drivers ("iLLD") and auto-generated SDK configuration code that are usually included in AURIX projects are not included in this demo app. It is therefore required to locate them in your AURIX install and extract them to the location that the wolfBoot AURIX projects expect them to be at. The remainder of these instructions will use variables to reference the following three paths:
 
-- `$AURIX_INSTALL`: The AURIX IDE installation location. This is usually `C:\Infineon\AURIX-Studio-<version>`.
+- `$AURIX_INSTALL`: The AURIX IDE installation location. This is usually `C:\Infineon\AURIX-Studio-<version>`
 - `$SDK_ARCHIVE`: The zip archive of the iLLD SDK. This is usually at `$AURIX_INSTALL\build_system\bundled-artefacts-repo\project-initializer\tricore-tc3xx\<version>\iLLDs\Full_Set\iLLD_<version>__TC37A.zip`
 - `$SDK_CONFIG`: The directory containing the iLLD SDK configuration for the specific chip. This is usually at `$AURIX_INSTALL\build_system\bundled-artefacts-repo\project-initializer\tricore-tc3xx\<version>\ProjectTemplates\TC37A\TriCore\Configurations`
 
@@ -128,7 +163,7 @@ wolfBoot/IDE/AURIX/Configurations/
 ### Build wolfBoot
 1. Generate the 'target.h` header file for the tc375 flash configuration
     1. Open a WSL terminal and navigate to `wolfBoot/tools/scripts/tc3xx`
-    2. Run `./gen-tc3xx-target.sh`
+    2. Run `./wbaurixtool.sh target`
 2. Open the AURIX IDE and create a new workspace directory, if you do not already have a workspace you wish to use
 3. Import the wolfBoot project
     1. Click "File" -> Open Projects From File System"
@@ -142,11 +177,11 @@ wolfBoot/IDE/AURIX/Configurations/
 6. Build the test-app project using the same procedure as in step (4), except choosing the `test-app` eclipse project. Note that the build process contains a custom post-build step that converts the application `elf` file into a `.bin` file using `tricore-elf-objcopy`, which can then be signed by the wolfBoot key tools in the following step
 7. Sign the generated test-app binary using the wolfBoot keytools
     1. Open a WSL terminal and navigate to `wolfBoot/tools/scripts/tc3xx`
-    2. Run `./gen-tc3xx-signed-test-apps-debug.sh` or `gen-tc3xx-signed-test-apps-release.sh` to sign either the debug or release build, respectively. This creates the signed image files `test-app_v1_signed.bin` and `test-app_v2_signed.bin` in the test-app output build directory. The v1 image is the initial image that will be loaded to the `BOOT` partition, and the v2 image is the update image that will be loaded to the `UPDATE` partition.
+    2. Run `./wbaurixtool.sh sign --debug` or `./wbaurixtool.sh sign` to sign either the debug or release build, respectively. This creates the signed image files `test-app_v1_signed.bin` and `test-app_v2_signed.bin` in the test-app output build directory. The v1 image is the initial image that will be loaded to the `BOOT` partition, and the v2 image is the update image that will be loaded to the `UPDATE` partition.
 
 ```
-$ ./gen-tc3xx-signed-test-apps-release.sh
-+ ../../keytools/sign --ecc256 --sha256 '../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin' ../../../priv.der 1
+$ ./wbaurixtool.sh sign
+Signing binaries with ecc256 and sha256
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 2020000
 Update type:          Firmware
@@ -160,7 +195,6 @@ image header size calculated at runtime (256 bytes)
 Calculating SHA256 digest...
 Signing the digest...
 Output image(s) successfully created.
-+ ../../keytools/sign --ecc256 --sha256 '../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app.bin' ../../../priv.der 2
 wolfBoot KeyTools (Compiled C version)
 wolfBoot version 2020000
 Update type:          Firmware
@@ -169,7 +203,7 @@ Selected cipher:      ECC256
 Selected hash  :      SHA256
 Public key:           ../../../priv.der
 Output  image:        ../../../IDE/AURIX/test-app/TriCore Release (GCC)/test-app_v2_signed.bin
-Target partition id : 1
+Target partition id : 2
 image header size calculated at runtime (256 bytes)
 Calculating SHA256 digest...
 Signing the digest...
@@ -240,7 +274,57 @@ IDE/AURIX/wolfHSM-infineon-tc3xx/
 4. Follow all of the steps in [Building and Running the wolfBoot Demo](#building-and-running-the-wolfboot-demo) for the non-HSM enabled case, but with the following key differences:
    1. The [wolfBoot-tc3xx-wolfHSM](./wolfBoot-tc3xx-wolfHSM/) AURIX Studio project should be used instead of `wolfBoot-tc3xx`
    2. Use the `wolfBoot-wolfHSM-loadAll-XXX.cmm` lauterbach scripts instead of `wolfBoot-loadAll-XXX.cmm` to load the wolfBoot and test-app images in the TRACE32 GUI
-5. If using the default build options in [wolfBoot-tc3xx-wolfHSM](./wolfBoot-tc3xx-wolfHSM/), wolfBoot will expect the public key for image verification to be stored at a specific keyId for the wolfBoot client ID. You can use [whnvmtool](https://github.com/wolfSSL/wolfHSM/tree/main/tools/whnvmtool) to generate a loadable NVM image that contains the required keys. [wolfBoot-wolfHSM-keys.nvminit](../../tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit) provides an example `whnvmtool` config file that will include the generated key in the NVM image, which can then be loaded to the device via a flash programming tool. See the `whnvmtool` documentation and the documentation included in your wolfHSM AURIX release for more details. Note: if you want to use the standard wolfBoot keystore functionality in conjunction with wolfHSM for testing purposes (doesn't require pre-loading keys on the HSM) you can configure wolfBoot to send the keys to the HSM on-the-fly as ephemeral keys. To do this, ensure `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID` is **NOT** defined, and remove the `--nolocalkeys` argument when invoking `keygen` in the `./gen-tc3xx-keys.sh` script.
+   3. Provide the `--hsm` global option to the `wbaurixtool.sh` script when invoking it, so the wolfHSM projects are used instead of the standard wolfBoot projects
+   4. If using the default build options in [wolfBoot-tc3xx-wolfHSM](./wolfBoot-tc3xx-wolfHSM/), wolfBoot will expect the public key for image verification to be stored at a specific keyId for the wolfBoot client ID. You can use [whnvmtool](https://github.com/wolfSSL/wolfHSM/tree/main/tools/whnvmtool) to generate a loadable NVM image that contains the required keys automatically via `wbaurixtool.sh` through the `nvm` subcommand. This generates an NVM image containing the generated image signing key based on the [wolfBoot-wolfHSM-keys.nvminit](../../tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit) configuration file, which can then be loaded to the device via a flash programming tool. See the `whnvmtool` documentation and the documentation included in your wolfHSM AURIX release for more details. Note: if you want to use the standard wolfBoot keystore functionality in conjunction with wolfHSM for testing purposes (doesn't require pre-loading keys on the HSM) you can configure wolfBoot to send the keys to the HSM on-the-fly as ephemeral keys. To do this, ensure `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID` is **NOT** defined, and add the `--localkeys` argument to then `./wbaurixtool.sh keygen` command, which invokes the `keygen` tool without the default `--nolocalkeys` option.
+
+## Building: Command Sequence
+
+The following pseudo command sequence shows a brief overview of the commands needed to build wolfBoot on AURIX (optionally with wolfHSM). The signature and hashing algorithms used in the example are ECC 256 and SHA 256 and specified explicitly for clarity. Note that these algorithms are the default, so do not need to be explicitly specified. Optional arguments are shown in square brackets (e.g. if targeting wolfHSM, the `--hsm` option must be provided as a global option to `wbaurixtool.sh`).
+
+```sh
+# Navigate to wolfBoot directory
+WOLFBOOT_DIR=/path/to/wolfBoot
+SCRIPTS_DIR=$WOLFBOOT_DIR/tools/scripts/tc3xx
+cd $WOLFBOOT_DIR
+
+# Copy source files to appropriate location as listed in the steps above
+# ...
+
+# Start with a clean build
+make clean && make keysclean && cd $WOLFBOOT_DIR/tools/keytools && make clean
+cd $SCRIPTS_DIR && ./aurixtool.sh clean
+# Delete any build artifacts in wolfBoot-tc3xx (or wolfBoot-tc3xx-wolfHSM) and test-app (or test-app-wolfHSM) AURIX Studio projects
+# ...
+
+# Make keytools (NOTE: THIS OVERRIDES TARGET.H WITH SIM VALUES)
+cd $WOLFBOOT_DIR
+make keytools
+
+
+# Generate target.h
+cd $SCRIPTS_DIR
+./aurixtool.sh target
+
+# Generate keys, as well as configuration macros and linker script based on the selected signature algorithm
+./aurixtool.sh [--hsm] keygen --sign-algo ecc256 --hash-algo sha256 macros lcf
+
+# If using wolfHSM, generate key NVM image
+./aurixtool.sh nvm
+# Load NVM image hexfile to the device
+# ...
+
+# Build wolfHSM AURIX Studio project
+# ....
+
+# Build test-app AURIX Studio project
+# ....
+
+# Sign test app
+./aurixtool.sh [--hsm] sign --sign-algo ecc256 --hash-algo sha256 [--debug]
+
+# Load wolfBoot + app in Lauterbach using tools/scripts/tc3xx/wolfBoot-loadAll-XXX.cmm
+# ...
+```
 
 ## Troubleshooting
 
@@ -249,8 +333,14 @@ IDE/AURIX/wolfHSM-infineon-tc3xx/
 When running a shell script in WSL, you may see the following error:
 
 ```
-$ ./gen-tc3xx-target.sh:
+$ ./wbaurixtool.sh:
 /bin/bash^M: bad interpreter: No such file or directory
 ```
 
 This occurs because your local git repository is configured with the default `core.autocrlf true` configuration, meaning that git is checking out files with Windows-style CRLF line endings which the bash interpreter cannot handle. To fix this, you need to either configure git to not checkout windows line endings for shell scripts ([GitHub docs](https://docs.github.com/en/get-started/getting-started-with-git/configuring-git-to-handle-line-endings#about-line-endings)), or you can run the `dos2unix` (`sudo apt install dos2unix`) utility on the script before running it.
+
+### Post Quantum: ML-DSA
+
+#### ML-DSA Keytools
+
+When compiling wolfBoot to use wolfHSM with ML-DSA for verification, you must ensure to compile the keytools with a .config file specifying the ML-DSA parameters. Otherwise, the image header size will be incorrect, and attempts to boot the application will fail in unpredictable ways. Before compiling the keytools in the steps above, copy [config/examples/sim-wolfHSM-mldsa.config] to `.config`. You can now run `make keytools` and the keytools will be able to handle ML-DSA keys.

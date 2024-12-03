@@ -211,6 +211,10 @@ IDE/AURIX/Configurations/*
 !IDE/AURIX/Configurations/placeholder.txt
 IDE/AURIX/wolfHSM-infineon-tc3xx/*
 !IDE/AURIX/wolfHSM-infineon-tc3xx/placeholder.txt
+IDE/AURIX/wolfBoot-tc3xx/wolfBoot_macros.txt
+IDE/AURIX/wolfBoot-tc3xx-wolfHSM/wolfBoot_macros.txt
+IDE/AURIX/test-app/Lcf_Gnuc_Tricore_Tc.lsl
+IDE/AURIX/test-app-wolfHSM/Lcf_Gnuc_Tricore_Tc.lsl
 
 tpm_seal_key.key
 

@@ -930,6 +930,16 @@ ifeq ($(WOLFHSM_CLIENT),1)
     $(LIBDIR)/wolfssl/wolfcrypt/src/cryptocb.o \
     $(LIBDIR)/wolfssl/wolfcrypt/src/coding.o
 
+  ifeq ($(SIGN),ML_DSA)
+    # Dilithium asn.c decode/encode requires mp_xxx functions
+    WOLFCRYPT_OBJS += \
+        $(LIBDIR)/wolfssl/wolfcrypt/src/tfm.o \
+        $(LIBDIR)/wolfssl/wolfcrypt/src/random.o
+
+    # Large enough to handle the largest Dilithium key/signature
+    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
+  endif
+
   WOLFHSM_CLIENT_OBJS += \
     $(LIBDIR)/wolfHSM/src/wh_client.o \
     $(LIBDIR)/wolfHSM/src/wh_client_nvm.o \
