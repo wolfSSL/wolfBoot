@@ -778,6 +778,22 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     int     ret;
     byte    lms_pub[HSS_MAX_PUBLIC_KEY_LEN];
     word32  pub_len = sizeof(lms_pub);
+    int     lms_levels, lms_height, lms_winternitz;
+    char    *env_lms_levels, *env_lms_height, *env_lms_winternitz;
+
+    lms_levels = LMS_LEVELS;
+    lms_height = LMS_HEIGHT;
+    lms_winternitz = LMS_WINTERNITZ;
+
+    env_lms_levels = getenv("LMS_LEVELS");
+    env_lms_height = getenv("LMS_HEIGHT");
+    env_lms_winternitz = getenv("LMS_WINTERNITZ");
+    if (env_lms_levels != NULL)
+        lms_levels = atoi(env_lms_levels);
+    if (env_lms_height != NULL)
+        lms_height = atoi(env_lms_height);
+    if (env_lms_winternitz != NULL)
+        lms_winternitz = atoi(env_lms_winternitz);
 
     ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
@@ -785,16 +801,16 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
         exit(1);
     }
 
-    ret = wc_LmsKey_SetParameters(&key, LMS_LEVELS, LMS_HEIGHT, LMS_WINTERNITZ);
+    ret = wc_LmsKey_SetParameters(&key, lms_levels, lms_height, lms_winternitz);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
-                " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
-                LMS_WINTERNITZ, ret);
+                " returned %d\n", lms_levels, lms_height,
+                lms_winternitz, ret);
         exit(1);
     }
 
-    printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
-           LMS_HEIGHT, LMS_WINTERNITZ);
+    printf("info: using LMS parameters: L%d-H%d-W%d\n", lms_levels,
+           lms_height, lms_winternitz);
 
     ret = wc_LmsKey_SetWriteCb(&key, lms_write_key);
     if (ret != 0) {
@@ -865,6 +881,7 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     int     ret;
     word32  priv_sz = 0;
     byte    xmss_pub[XMSS_SHA256_PUBLEN];
+    char    *xmss_params = getenv("XMSS_PARAMS");
     word32  pub_len = sizeof(xmss_pub);
 
     ret = wc_XmssKey_Init(&key, NULL, INVALID_DEVID);
@@ -873,14 +890,17 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
         exit(1);
     }
 
-    ret = wc_XmssKey_SetParamStr(&key, WOLFBOOT_XMSS_PARAMS);
+    if (xmss_params != NULL)
+        xmss_params = WOLFBOOT_XMSS_PARAMS;
+
+    ret = wc_XmssKey_SetParamStr(&key, xmss_params);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
-                " returned %d\n", WOLFBOOT_XMSS_PARAMS, ret);
+                " returned %d\n", xmss_params, ret);
         exit(1);
     }
 
-    printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
+    printf("info: using XMSS parameters: %s\n", xmss_params);
 
     ret = wc_XmssKey_SetWriteCb(&key, xmss_write_key);
     if (ret != 0) {
