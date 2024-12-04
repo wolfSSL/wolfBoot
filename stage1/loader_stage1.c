@@ -55,17 +55,6 @@
 #endif
 #endif
 
-/* requires/assumes inputs and size to be 4-byte aligned */
-static void memcpy32(void *dst, const void *src, size_t n)
-{
-    size_t i;
-    const uint32_t *s = (const uint32_t*)src;
-    uint32_t *d = (uint32_t*)dst;
-    for (i = 0; i < n/4; i++) {
-        d[i] = s[i];
-    }
-}
-
 int main(void)
 {
     int ret = -1;

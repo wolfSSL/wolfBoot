@@ -257,6 +257,19 @@ size_t strlen(const char *s)
 }
 #endif
 
+#if defined(MMU) || (defined(EXT_FLASH) && defined(NO_XIP))
+/* requires/assumes inputs and size to be 4-byte aligned */
+void memcpy32(void *dst, const void *src, size_t n)
+{
+    size_t i;
+    const uint32_t *s = (const uint32_t*)src;
+    uint32_t *d = (uint32_t*)dst;
+    for (i = 0; i < n/4; i++) {
+        d[i] = s[i];
+    }
+}
+#endif
+
 #if  !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
