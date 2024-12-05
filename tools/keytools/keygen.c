@@ -979,7 +979,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     MlDsaKey key;
     int      ret;
     byte *   priv = NULL;
-    byte     pub[KEYSTORE_PUBKEY_SIZE_ML_DSA];
+    byte     pub[ML_DSA_L5_PUBKEY_SIZE]; /* max size */
     word32   priv_len = 0;
     word32   pub_len = 0;
     int      ml_dsa_priv_len = 0;
