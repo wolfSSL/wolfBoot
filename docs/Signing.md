@@ -4,21 +4,11 @@
 server) environment to manage wolfBoot private keys and sign the initial
 firmware and all the updates for the target.
 
-## C or Python
-
-The tools are distributed in two versions, using the same command line syntax,
-for portability reasons.
-
-By default, C keytools are compiled. The makefiles and scripts in this
-repository will use the C tools.
-
-### C Key Tools
+## C Key Tools
 
 A standalone C version of the key tools is available in: `./tools/keytools`.
 
 These can be built in `tools/keytools` using `make` or from the wolfBoot root using `make keytools`.
-
-If the C version of the key tools exists they will be used by wolfBoot's makefile and scripts.
 
 #### Windows Visual Studio
 
@@ -26,17 +16,6 @@ Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe`
 
 If you see any error about missing `target.h` this is a generated file based on your .config using the make process. It is needed for `WOLFBOOT_SECTOR_SIZE` used in delta updates.
 
-### Python key tools
-
-**Please note that the Python tools are deprecated and will be removed in future versions.**
-
-In order to use the python key tools, ensure that the `wolfcrypt` package is
-installed in your python environment. In most systems it's sufficient to run a
-command similar to:
-
-`pip install wolfcrypt`
-
-to ensure that the dependencies are met.
 
 ## Command Line Usage
 
@@ -77,6 +56,19 @@ Usage: `sign [OPTIONS] IMAGE.BIN KEY.DER VERSION`
 `KEY.DER`:    Private key file, in DER format, to sign the binary image
 `VERSION`:    The version associated with this signed software
 `OPTIONS`:    Zero or more options, described below
+
+#### Image header size
+
+By default, the manifest header size used by SIGN tool depends on the ideal
+value for the configuration chosen. In some cases however, it is necessary to use
+a different value than the default. To override the `IMAGE_HEADER_SIZE` value,
+set an environment variable with the same name and the desired value, via `setenv`,
+`export`, or simply inlining it with the sign command:
+
+```
+IMAGE_HEADER_SIZE=2048 sign [OPTIONS] IMAGE.BIN KEY.DER VERSION
+```
+
 
 #### Public key signature options
 

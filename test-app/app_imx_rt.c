@@ -17,6 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#include "target.h"
 #include "wolfboot/wolfboot.h"
 #include <stdint.h>
 #include "fsl_common.h"

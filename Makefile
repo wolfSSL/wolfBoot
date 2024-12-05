@@ -85,6 +85,16 @@ ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
 endif
 
+# Environment variables for sign tool
+SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) \
+		 WOLFBOOT_SECTOR_SIZE=$(WOLFBOOT_SECTOR_SIZE) \
+		 ML_DSA_LEVEL=$(ML_DSA_LEVEL) \
+		 IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE) \
+		 LMS_LEVELS=$(LMS_LEVELS) \
+		 LMS_HEIGHT=$(LMS_HEIGHT) \
+		 LMS_WINTERNITZ=$(LMS_WINTERNITZ) \
+		 XMSS_PARAMS=$(XMSS_PARAMS)
+
 
 MAIN_TARGET=factory.bin
 TARGET_H_TEMPLATE:=include/target.h.in
@@ -201,11 +211,11 @@ include tools/test-renode.mk
 
 hal/$(TARGET).o:
 
-keytools_check: keytools FORCE
+keytools_check: keytools
 
 $(PRIVATE_KEY):
 	$(Q)$(MAKE) keytools_check
-	$(Q)(test $(SIGN) = NONE) || ("$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
+	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
 
@@ -213,22 +223,21 @@ $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
 	$(Q)$(MAKE) keytools_check
 	$(Q)rm -f src/keystore.c
 	$(Q)dd if=keystore.der of=pubkey_1.der bs=1 skip=16
-	$(Q)(test $(SIGN_SECONDARY) = NONE) || ("$(KEYGEN_TOOL)" \
+	$(Q)(test $(SIGN_SECONDARY) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" \
 		$(KEYGEN_OPTIONS) -i pubkey_1.der $(SECONDARY_KEYGEN_OPTIONS) \
 		-g $(SECONDARY_PRIVATE_KEY)) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
 
-keytools: include/target.h
+keytools:
 	@echo "Building key tools"
-	@$(MAKE) -C tools/keytools -s clean
 	@$(MAKE) -C tools/keytools -j
 
-tpmtools: keys
+tpmtools: include/target.h keys
 	@echo "Building TPM tools"
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j
 
-swtpmtools:
+swtpmtools: include/target.h
 	@echo "Building TPM tools"
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j swtpm
@@ -238,10 +247,10 @@ test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
 	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"
 
-	$(Q)(test $(SIGN) = NONE) || "$(SIGN_TOOL)" $(SIGN_OPTIONS) \
+	$(Q)(test $(SIGN) = NONE) || $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) \
 		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) \
 		$(SECONDARY_PRIVATE_KEY) 1 || true
-	$(Q)(test $(SIGN) = NONE) && "$(SIGN_TOOL)" $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
+	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
@@ -278,7 +287,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
-		(echo "Key mismatch: please run 'make distclean' to remove all keys if you want to change algorithm" && false)
+		(echo "Key mismatch: please run 'make keysclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
 	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(SECURE_LDFLAGS) $(LD_START_GROUP) $(OBJS) $(LIBS) $(LD_END_GROUP) -o $@

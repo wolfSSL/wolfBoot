@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "led.h"
+#include "target.h"
 #include "wolfboot/wolfboot.h"
 #ifdef SPI_FLASH
 #include "spi_flash.h"

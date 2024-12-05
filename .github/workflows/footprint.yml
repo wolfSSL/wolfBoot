@@ -22,7 +22,7 @@ jobs:
 
       - name: make clean
         run: |
-          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+          make keysclean && rm -f include/target.h
 
       - name: Install wolfSSL
         run: |
@@ -34,7 +34,7 @@ jobs:
 
       - name: Build key tools
         run: |
-          make -C tools/keytools
+          make keytools
 
       - name: Build wolfboot and test footprint
         run: |

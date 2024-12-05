@@ -48,8 +48,8 @@ if (echo $TEST_OPTIONS | grep "ext_XMSS" &>/dev/null); then
         cd ../../ || exit 2
 fi
 
-make distclean
-make -C tools/keytools
+make keysclean
+make keytools
 make -C tools/test-expect-version
 make clean && make $TEST_OPTIONS || exit 2
 make /tmp/renode-test-update.bin $TEST_OPTIONS || exit 2

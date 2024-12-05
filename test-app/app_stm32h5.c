@@ -32,6 +32,7 @@
 #include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
 #include "keystore.h"
+#include "target.h"
 
 #ifdef SECURE_PKCS11
 #include "wcs/user_settings.h"

@@ -31,6 +31,7 @@
 #include "fsl_clock.h"
 
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 extern void hal_init(void);
 

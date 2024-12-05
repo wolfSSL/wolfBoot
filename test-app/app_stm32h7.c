@@ -38,6 +38,7 @@
 #include "system.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 #define SET_BIT(REG, BIT)   ((REG) |= (BIT))
 #define CLEAR_BIT(REG, BIT) ((REG) &= ~(BIT))

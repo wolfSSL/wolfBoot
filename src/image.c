@@ -593,6 +593,7 @@ static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
 
 #ifdef WOLFBOOT_SIGN_ML_DSA
 #include <wolfssl/wolfcrypt/dilithium.h>
+
 static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
@@ -636,9 +637,9 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
             wolfBoot_printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
             ret = -1;
         }
-        else if (pub_len != KEYSTORE_PUBKEY_SIZE_ML_DSA) {
+        else if (pub_len > KEYSTORE_PUBKEY_SIZE) {
             wolfBoot_printf("error: ML-DSA pub key mismatch: got %d bytes " \
-                   "expected %d\n", pub_len, KEYSTORE_PUBKEY_SIZE_ML_DSA);
+                   "max %d\n", pub_len, KEYSTORE_PUBKEY_SIZE);
             ret = -1;
         }
     }

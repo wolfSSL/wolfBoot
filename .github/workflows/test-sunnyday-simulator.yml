@@ -29,7 +29,7 @@ jobs:
       #
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config (32 bit simulator)
         run: |
@@ -57,7 +57,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC384)
         run: |
@@ -77,7 +77,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC521)
         run: |
@@ -97,7 +97,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA2048)
         run: |
@@ -117,7 +117,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA3072)
         run: |
@@ -137,7 +137,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA4096)
         run: |
@@ -159,7 +159,7 @@ jobs:
       #
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config (32 bit simulator)
         run: |
@@ -187,7 +187,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC384, FASTMATH)
         run: |
@@ -207,7 +207,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC521, FASTMATH)
         run: |
@@ -227,7 +227,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA2048, FASTMATH)
         run: |
@@ -247,7 +247,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA3072, FASTMATH)
         run: |
@@ -267,7 +267,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA4096, FASTMATH)
         run: |
@@ -290,7 +290,7 @@ jobs:
       #
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config (64 bit simulator)
         run: |
@@ -318,7 +318,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC384)
         run: |
@@ -338,7 +338,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC521)
         run: |
@@ -358,7 +358,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA2048)
         run: |
@@ -378,7 +378,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA3072)
         run: |
@@ -398,7 +398,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA4096)
         run: |
@@ -420,7 +420,7 @@ jobs:
       #
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config (64 bit simulator)
         run: |
@@ -448,7 +448,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC384, FASTMATH)
         run: |
@@ -468,7 +468,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (ECC521, FASTMATH)
         run: |
@@ -488,7 +488,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA2048, FASTMATH)
         run: |
@@ -508,7 +508,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA3072, FASTMATH)
         run: |
@@ -528,7 +528,7 @@ jobs:
 
       - name: Cleanup to change key type
         run: |
-          make -C tools/keytools clean && make keysclean && make -C tools/keytools
+          make keysclean
 
       - name: Build wolfboot.elf (RSA4096, FASTMATH)
         run: |
@@ -562,7 +562,7 @@ jobs:
       #
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config (64 bit simulator) Hybrid ML_DSA + ECC
         run: |

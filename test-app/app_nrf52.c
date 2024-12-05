@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include "target.h"
 #include "wolfboot/wolfboot.h"
 #include "hal/nrf52.h"
 #include "printf.h"

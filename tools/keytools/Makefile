@@ -12,54 +12,27 @@ LD      = gcc
 WOLFBOOTDIR = ../..
 WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl
 CFLAGS  = -Wall -Wextra -Werror
-CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include -DWOLFBOOT_KEYTOOLS
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include
 LDFLAGS =
 OBJDIR = ./
 LIBS =
 
+ML_DSA_LEVEL?=2
+CFLAGS+=-DML_DSA_LEVEL=$(ML_DSA_LEVEL)
+
+LMS_LEVELS?=1
+LMS_HEIGHT?=10
+LMS_WINTERNITZ?=8
+
 # Common to wc_lms and ext_lms.
-ifneq (,$(filter $(SIGN), LMS ext_LMS))
-  CFLAGS +=-DWOLFBOOT_SIGN_LMS -DWOLFSSL_HAVE_LMS \
-           -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
-           -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
-endif
+CFLAGS +=-D"LMS_LEVELS=$(LMS_LEVELS)" \
+		 -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
+		 -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)"
 
-# Specific to ext_lms.
-ifeq ($(SIGN),ext_LMS)
-  LMSDIR = $(WOLFBOOTDIR)/lib/hash-sigs
-  LIBS += $(LMSDIR)/lib/hss_lib.a
-  CFLAGS +=-DHAVE_LIBLMS -I$(LMSDIR)/src
-endif
-
-# Specific to wc_lms.
-ifeq ($(SIGN),LMS)
-  CFLAGS +=-DWOLFSSL_WC_LMS
-endif
-
-# Common to wc_xmss and ext_xmss.
-ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
-  $(info xmss params: $(XMSS_PARAMS))
-  CFLAGS +=-DWOLFBOOT_SIGN_XMSS -DWOLFSSL_HAVE_XMSS \
-           -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-           -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
-endif
-
-# Specific to ext_xmss.
-ifeq ($(SIGN),ext_XMSS)
-  XMSSDIR = $(WOLFBOOTDIR)/lib/xmss
-  CFLAGS +=-DHAVE_LIBXMSS -I$(XMSSDIR)
-endif
-
-# Specific to wc_xmss.
-ifeq ($(SIGN),XMSS)
-  CFLAGS +=-D"WOLFSSL_WC_XMSS" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
-endif
-
-# Only needed if using 3rd party integration. This can be
-# removed if ext_lms and ext_xmss are deprecated.
-ifneq (,$(filter $(SIGN), ext_LMS ext_XMSS))
-  CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
-endif
+# XMSS flags
+XMSS_PARAMS?='XMSS-SHA2_10_256'
+CFLAGS +=-D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
+		 -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"
 
 # When WOLFBOOT_UNIVERSAL_KEYSTORE is defined, pad store_sizes in keystore.der
 ifeq ($(WOLFBOOT_UNIVERSAL_KEYSTORE),1)
@@ -79,11 +52,6 @@ else
   CFLAGS+=$(OPTIMIZE)
 endif
 
-ifeq ($(IMAGE_HEADER_SIZE),)
-  IMAGE_HEADER_SIZE=256
-endif
-
-CFLAGS+=-DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 CFLAGS+=-DDELTA_UPDATES
 
 ifneq ($(RENESAS_KEY),)
@@ -129,77 +97,26 @@ OBJS_REAL=\
 OBJS_REAL+=\
 	$(WOLFBOOTDIR)/src/delta.o
 
-# Add wolfcrypt lms implementation.
-ifeq ($(SIGN),LMS)
 OBJS_REAL+=\
 	$(WOLFDIR)/wolfcrypt/src/wc_lms.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_lms_impl.o
-endif
 
-# Add external lms integration.
-ifeq ($(SIGN),ext_LMS)
-OBJS_REAL+= $(WOLFDIR)/wolfcrypt/src/ext_lms.o
-endif
-
-# Add wolfcrypt xmss implementation.
-ifeq ($(SIGN),XMSS)
 OBJS_REAL+=\
 	$(WOLFDIR)/wolfcrypt/src/wc_xmss.o \
 	$(WOLFDIR)/wolfcrypt/src/wc_xmss_impl.o
-endif
-
-# Add external xmss integration.
-ifeq ($(SIGN),ext_XMSS)
-OBJS_REAL+=\
-	$(WOLFDIR)/wolfcrypt/src/ext_xmss.o \
-	$(XMSSDIR)/params.o \
-	$(XMSSDIR)/thash.o \
-	$(XMSSDIR)/hash_address.o \
-	$(XMSSDIR)/wots.o \
-	$(XMSSDIR)/xmss.o \
-	$(XMSSDIR)/xmss_core_fast.o \
-	$(XMSSDIR)/xmss_commons.o \
-	$(XMSSDIR)/utils.o
-endif
-
-# Add wolfcrypt ML-DSA (dilithium) implementation.
-ifeq ($(SIGN),ML_DSA)
-  OBJS_REAL+=$(WOLFDIR)/wolfcrypt/src/dilithium.o
-
-  CFLAGS += -D"WOLFBOOT_SIGN_ML_DSA" \
-            -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-            -D"ML_DSA_LEVEL"=$(ML_DSA_LEVEL)
-endif
+OBJS_REAL+=$(WOLFDIR)/wolfcrypt/src/dilithium.o
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 vpath %.c $(WOLFDIR)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c ./
 
-ifeq ($(SIGN),ext_XMSS)
-    vpath %.c $(XMSSDIR)/
-endif
-
 .PHONY: clean all
 
-all: $(WOLFBOOTDIR)/include/target.h sign keygen
+all: sign keygen
 
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
-
-# Target.h is required for key tools
-$(WOLFBOOTDIR)/include/target.h: $(WOLFBOOTDIR)/include/target.h.in
-	@cat $(WOLFBOOTDIR)/include/target.h.in | \
-	sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
-	sed -e "s/@WOLFBOOT_SECTOR_SIZE@/$(WOLFBOOT_SECTOR_SIZE)/g" | \
-	sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
-	sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
-	sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
-	sed -e "s/@WOLFBOOT_DTS_BOOT_ADDRESS@/$(WOLFBOOT_DTS_BOOT_ADDRESS)/g" | \
-	sed -e "s/@WOLFBOOT_DTS_UPDATE_ADDRESS@/$(WOLFBOOT_DTS_UPDATE_ADDRESS)/g" | \
-	sed -e "s/@WOLFBOOT_LOAD_ADDRESS@/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
-	sed -e "s/@WOLFBOOT_LOAD_DTS_ADDRESS@/$(WOLFBOOT_LOAD_DTS_ADDRESS)/g" \
-		> $@
 
 # build objects
 $(OBJDIR)/%.o: %.c
@@ -207,9 +124,6 @@ $(OBJDIR)/%.o: %.c
 $(OBJDIR)/%.o: $(WOLFBOOTDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFDIR)/wolfcrypt/src/%.c
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
-
-$(XMSSDIR)/src/%.o: $(XMSSDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 # build templates
@@ -224,11 +138,3 @@ keygen: $(OBJS_VIRT) $(LIBS) keygen.o
 clean:
 	rm -f sign keygen *.o
 
-# The final make clean is to ensure a subsequent LMS wolfboot
-# hash-sigs build is separate from keytools.
-$(LMSDIR)/lib/hss_lib.a:
-	@echo "Building hss_lib.a"
-	$(Q)@$(MAKE) -C $(LMSDIR)/src/ -s clean
-	$(Q)@$(MAKE) -C $(LMSDIR)/src/ hss_lib.a
-	$(Q)cp $(LMSDIR)/src/hss_lib.a $(LMSDIR)/lib/
-	$(Q)@$(MAKE) -C $(LMSDIR)/src/ -s clean

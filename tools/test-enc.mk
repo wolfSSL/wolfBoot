@@ -24,8 +24,8 @@ tools/uart-flash-server/ufserver: FORCE
 test-enc-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
 	@diff .config config/examples/stm32wb-uart-flash-encryption.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-uart-flash-encryption.config to .config to run this test\n\n" && exit 1)
 	@printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
-	@$(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@(tools/uart-flash-server/ufserver test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed_and_encrypted.bin $(USBTTY))&
 	@st-flash erase
 	@st-flash write factory.bin 0x08000000
@@ -47,8 +47,8 @@ test-enc-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
 test-enc-aes128-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
 	@diff .config config/examples/stm32wb-uart-flash-encryption-aes128.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-uart-flash-encryption-aes128.config to .config to run this test\n\n" && exit 1)
 	@printf "0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
-	@$(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@(tools/uart-flash-server/ufserver test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed_and_encrypted.bin $(USBTTY))&
 	@st-flash erase
 	@st-flash write factory.bin 0x08000000
@@ -70,8 +70,8 @@ test-enc-aes128-update: factory.bin test-app/image.bin tools/uart-flash-server/u
 test-enc-aes256-update: factory.bin test-app/image.bin tools/uart-flash-server/ufserver
 	@diff .config config/examples/stm32wb-uart-flash-encryption-aes256.config || (echo "\n\n*** Error: please copy config/examples/stm32wb-uart-flash-encryption-aes256.config to .config to run this test\n\n" && exit 1)
 	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
-	@$(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
-	@$(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ENC_ARGS) test-app/image.bin $(PRIVATE_KEY) $(ENC_TEST_UPDATE_VERSION)
 	@(tools/uart-flash-server/ufserver test-app/image_v$(ENC_TEST_UPDATE_VERSION)_signed_and_encrypted.bin $(USBTTY))&
 	@st-flash erase
 	@st-flash write factory.bin 0x08000000

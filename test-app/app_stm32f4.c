@@ -30,6 +30,7 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "spi_flash.h"
+#include "target.h"
 
 #ifdef TARGET_stm32f4
 
@@ -76,6 +77,8 @@ static const char START='*';
 static const char UPDATE='U';
 static const char ACK='#';
 static uint8_t msg[MSGSIZE];
+
+extern void flash_set_waitstates(void);
 
 
 #ifdef WOLFBOOT_NO_SIGN

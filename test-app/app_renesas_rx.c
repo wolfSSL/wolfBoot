@@ -28,6 +28,7 @@
 #include "hal.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 /* route stdout to UART */
 int write(int fileno, char *buf, int count)

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-SIGN_TOOL="python3 ./tools/keytools/sign.py"
-if [ -f "./tools/keytools/sign" ]; then
-    SIGN_TOOL="./tools/keytools/sign"
-fi
+. .config
+echo IMAGE_HEADER_SIZE= $IMAGE_HEADER_SIZE
+echo WOLFBOOT_SECTOR_SIZE= $WOLFBOOT_SECTOR_SIZE
+SIGN_TOOL="./tools/keytools/sign"
 
 # SIZE is WOLFBOOT_PARTITION_SIZE - 5
 SIZE=229371

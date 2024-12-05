@@ -30,7 +30,9 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#ifdef __WOLFBOOT
 #include "target.h"
+#endif
 #include "wolfboot/version.h"
 
 #ifdef WOLFCRYPT_SECURE_MODE
@@ -133,20 +135,23 @@ extern "C" {
 #define KEYSTORE_PUBKEY_SIZE_LMS     60
 #define KEYSTORE_PUBKEY_SIZE_XMSS    68
 
-/* ML-DSA pub key size is a function of parameters.
- * This needs to be configurable. Default to security
- * category 2. */
-#ifdef ML_DSA_LEVEL
-    #if ML_DSA_LEVEL == 2
-        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1312
-    #elif ML_DSA_LEVEL == 3
-        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  1952
-    #elif ML_DSA_LEVEL == 5
-        #define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
-    #else
-        #error "Invalid ML_DSA_LEVEL!"
-    #endif
-#endif /* ML_DSA_LEVEL */
+/* ML-DSA pub key size is a function of parameters. */
+#define ML_DSA_L2_PUBKEY_SIZE   1312
+#define ML_DSA_L3_PUBKEY_SIZE   1952
+#define ML_DSA_L5_PUBKEY_SIZE   2592
+
+/* Configure using ML_DSA_LEVEL: Default is security category 2. */
+#ifndef ML_DSA_LEVEL
+#define ML_DSA_LEVEL 2
+#endif
+
+#if ML_DSA_LEVEL == 2
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA ML_DSA_L2_PUBKEY_SIZE
+#elif ML_DSA_LEVEL == 3
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA ML_DSA_L3_PUBKEY_SIZE
+#elif ML_DSA_LEVEL == 5
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA ML_DSA_L5_PUBKEY_SIZE
+#endif
 
 /* Mask for key permissions */
 #define KEY_VERIFY_ALL         (0xFFFFFFFFU)

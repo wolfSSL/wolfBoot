@@ -29,7 +29,7 @@ fi
 
 cp $sim_pq .config || err_and_die "cp $sim_pq"
 
-make distclean; make clean;
+make keysclean; make clean;
 
 make keytools || err_and_die "keytools build failed"
 

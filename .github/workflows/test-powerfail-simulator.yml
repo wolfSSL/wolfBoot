@@ -17,7 +17,7 @@ jobs:
 
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config
         run: |
@@ -63,15 +63,11 @@ jobs:
       # TEST with NVM_FLASH_WRITEONCE enabled
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config with NVM_FLASH_WRITEONCE
         run: |
           cp config/examples/sim-nvm-writeonce.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -109,15 +105,11 @@ jobs:
       # TEST with NVM_FLASH_WRITEONCE AND FLAGS_HOME enabled
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config with NVM_FLASH_WRITEONCE and FLAGS_HOME
         run: |
           cp config/examples/sim-nvm-writeonce-flags-home.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -155,15 +147,11 @@ jobs:
       # TEST with NVM_FLASH_WRITEONCE AND FLAGS_HOME AND FLAGS_INVERT enabled
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config with NVM_FLASH_WRITEONCE and FLAGS_HOME and FLAGS_INVERT
         run: |
           cp config/examples/sim-nvm-writeonce-flags-home-invert.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -201,15 +189,11 @@ jobs:
       # TEST with DELTA updates
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config with DELTA updates
         run: |
           cp config/examples/sim-delta-update.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -254,15 +238,11 @@ jobs:
      # TEST with encryption (aes128)
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config with encrypted updates
         run: |
           cp config/examples/sim-encrypt-update.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -299,14 +279,10 @@ jobs:
      # TEST with encryption (aes128) and delta updates
       - name: make clean
         run: |
-          make distclean
+          make keysclean
       - name: Select config with encrypted updates
         run: |
           cp config/examples/sim-encrypt-delta-update.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -336,15 +312,11 @@ jobs:
      # TEST with encryption (aes128) and NVM_FLASH_WRITEONCE
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config with encrypted updates
         run: |
           cp config/examples/sim-encrypt-nvm-writeonce-update.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -463,14 +435,10 @@ jobs:
      # TEST with encryption (aes128) and NVM_FLASH_WRITEONCE and DELTA updates
       - name: make clean
         run: |
-          make distclean
+          make keysclean
       - name: Select config with encrypted updates
         run: |
           cp config/examples/sim-encrypt-delta-nvm-writeonce-update.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -499,14 +467,10 @@ jobs:
     # TEST with backup disabled
       - name: make clean
         run: |
-          make distclean
+          make keysclean
       - name: Select config with backup disabled
         run: |
           cp config/examples/sim-nobackup.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -527,14 +491,10 @@ jobs:
     # TEST with backup disabled + NVM_FLASH_WRITEONCE
       - name: make clean
         run: |
-          make distclean
+          make keysclean
       - name: Select config with backup disabled + NVM WRITEONCE
         run: |
           cp config/examples/sim-nobackup-nvm-writeonce.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -555,14 +515,10 @@ jobs:
     # TEST with backup disabled + FLAGS_HOME
       - name: make clean
         run: |
-          make distclean
+          make keysclean
       - name: Select config with backup disabled + FLAGS_HOME
         run: |
           cp config/examples/sim-nobackup-flags-home.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf
         run: |
@@ -584,15 +540,11 @@ jobs:
     # TEST with FLASH_MULTI_SECTOR_ERASE
       - name: make clean
         run: |
-          make distclean
+          make keysclean
 
       - name: Select config
         run: |
           cp config/examples/sim.config .config
-
-      - name: Build tools
-        run: |
-          make -C tools/keytools && make -C tools/bin-assemble
 
       - name: Build wolfboot.elf (FLASH_MULTI_SECTOR_ERASE=1)
         run: |
