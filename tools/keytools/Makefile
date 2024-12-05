@@ -110,7 +110,6 @@ OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 vpath %.c $(WOLFDIR)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c ./
-vpath %.c $(XMSSDIR)/
 
 .PHONY: clean all
 
@@ -125,9 +124,6 @@ $(OBJDIR)/%.o: %.c
 $(OBJDIR)/%.o: $(WOLFBOOTDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFDIR)/wolfcrypt/src/%.c
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
-
-$(XMSSDIR)/src/%.o: $(XMSSDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 # build templates
