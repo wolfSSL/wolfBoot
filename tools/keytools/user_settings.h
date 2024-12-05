@@ -86,10 +86,13 @@
 #if 0
     #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
 #endif
+
+/* Default the keygen/sign tool to use ML-DSA level 2 */
 #ifndef ML_DSA_LEVEL
-    #define ML_DSA_LEVEL 5
+    #define ML_DSA_LEVEL 2
 #endif
-/* dilithium needs these sha functions. */
+
+/* Dilithium needs SHAKE128 */
 #define WOLFSSL_SHAKE128
 
 /* LMS */
