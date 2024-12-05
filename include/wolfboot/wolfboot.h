@@ -135,16 +135,13 @@ extern "C" {
 #define KEYSTORE_PUBKEY_SIZE_LMS     60
 #define KEYSTORE_PUBKEY_SIZE_XMSS    68
 
-/* ML-DSA pub key size is a function of parameters.
- * This needs to be configurable. Default to security
- * category 5. */
-
+/* ML-DSA pub key size is a function of parameters. */
 #define ML_DSA_L2_PUBKEY_SIZE   1312
 #define ML_DSA_L3_PUBKEY_SIZE   1952
 #define ML_DSA_L5_PUBKEY_SIZE   2592
 
-
-#if defined(SIGN_ML_DSA) && !defined(ML_DSA_LEVEL)
+/* Configure using ML_DSA_LEVEL: Default is security category 5. */
+#if defined(WOLFBOOT_SIGN_ML_DSA) && !defined(ML_DSA_LEVEL)
     #define ML_DSA_LEVEL 5
 #endif
 /* Default to max size for keystore */

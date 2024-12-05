@@ -35,4 +35,4 @@ jobs:
       with:
         name: windows-keytools
         path: |
-          tools\keytools\*.exe
+          tools\keytools\x64\Release\*.exe
