@@ -4,7 +4,7 @@ set(CMAKE_CXX_COMPILER arm-none-eabi-gcc)
 
 include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
 
-set(PICOTOOL_FETCH_FROM_GIT_PATH 1)
+set(PICOTOOL_FETCH_FROM_GIT_PATH build/picotool)
 
 project(wolfboot)
 
