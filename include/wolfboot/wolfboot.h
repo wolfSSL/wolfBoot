@@ -140,12 +140,18 @@ extern "C" {
 #define ML_DSA_L3_PUBKEY_SIZE   1952
 #define ML_DSA_L5_PUBKEY_SIZE   2592
 
-/* Configure using ML_DSA_LEVEL: Default is security category 5. */
-#if defined(WOLFBOOT_SIGN_ML_DSA) && !defined(ML_DSA_LEVEL)
-    #define ML_DSA_LEVEL 5
+/* Configure using ML_DSA_LEVEL: Default is security category 2. */
+#ifndef ML_DSA_LEVEL
+#define ML_DSA_LEVEL 2
 #endif
-/* Default to max size for keystore */
-#define KEYSTORE_PUBKEY_SIZE_ML_DSA  2592
+
+#if ML_DSA_LEVEL == 2
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA ML_DSA_L2_PUBKEY_SIZE
+#elif ML_DSA_LEVEL == 3
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA ML_DSA_L3_PUBKEY_SIZE
+#elif ML_DSA_LEVEL == 5
+    #define KEYSTORE_PUBKEY_SIZE_ML_DSA ML_DSA_L5_PUBKEY_SIZE
+#endif
 
 /* Mask for key permissions */
 #define KEY_VERIFY_ALL         (0xFFFFFFFFU)

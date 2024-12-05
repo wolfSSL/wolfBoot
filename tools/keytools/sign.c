@@ -45,7 +45,6 @@
 #include <delta.h>
 
 #include "wolfboot/version.h"
-//#include "wolfboot/wolfboot.h"
 
 #ifdef DEBUG_SIGNTOOL
 #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
@@ -319,15 +318,15 @@ static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t 
         len = p[2] | (p[3] << 8);
         /* check len */
         if ((4 + len) > (uint16_t)(CMD.header_sz - IMAGE_HEADER_OFFSET)) {
-            fprintf(stderr, "This field is too large (bigger than the space available "
-                     "in the current header)\n");
-            //fprintf(stderr, "%d %d %d\n", len, CMD.header_sz, IMAGE_HEADER_OFFSET);
+            fprintf(stderr, "This field too large to fit into header "
+                "(%d > %d)\n",
+                (int)(4 + len), (int)(CMD.header_sz - IMAGE_HEADER_OFFSET));
             break;
         }
         /* check max pointer */
         if (p + 4 + len > max_p) {
-            fprintf(stderr, "This field is too large and would overflow the image "
-                     "header\n");
+            fprintf(stderr, "This field is too large and would overflow the "
+                "image header pointer\n");
             break;
         }
 
@@ -2116,7 +2115,7 @@ static void set_signature_sizes(int secondary)
 
         if (!lms_levels_str)
             lms_levels = LMS_LEVELS;
-        else 
+        else
             lms_levels = atoi(lms_levels_str);
         if (!lms_height_str)
             lms_height = LMS_HEIGHT;

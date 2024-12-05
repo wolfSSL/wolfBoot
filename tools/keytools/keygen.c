@@ -124,7 +124,7 @@ static WC_RNG rng;
 static int noLocalKeys = 0;
 
 /* ML-DSA pub keys are big. */
-#define KEYSLOT_MAX_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
+#define KEYSLOT_MAX_PUBKEY_SIZE ML_DSA_L5_PUBKEY_SIZE
 
 struct keystore_slot {
      uint32_t slot_id;
