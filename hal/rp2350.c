@@ -25,33 +25,14 @@
 #include <stdint.h>
 #include <target.h>
 #include "image.h"
-
-
-#define SIO_BASE (0xD0000000U)
-#define SIO_CPUID (*(volatile uint32_t *)(SIO_BASE + 0x00))
-
-const uint32_t VTOR_ADDR = 0xE000ED08;
-const uint32_t BOOTROM_VTABLE_OFFSET = 0x00000000;
-
-void __attribute__((naked)) jmp_to_rom_vector(void)
-{
-    __asm volatile(
-        "ldr r0, =BOOTROM_VTABLE_OFFSET\n"
-        "ldr r1, =VTOR_ADDR\n"
-        "str r0, [r1]\n"
-        "ldmia r0!, {r1, r2}\n"
-        "msr msp, r1\n"
-        "bx r2\n"
-    );
-}
+#include "printf.h"
 
 #ifdef __WOLFBOOT
 void hal_init(void)
 {
-    /* Keep CPU1 in ROM */
-    if (SIO_CPUID != 0) {
-        jmp_to_rom_vector();
-    }
+#ifdef PRINTF_ENABLED
+    stdio_init_all();
+#endif
 }
 
 void hal_prepare_boot(void)

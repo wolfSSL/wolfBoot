@@ -233,6 +233,7 @@ ifeq ($(ARCH),ARM)
     endif
     SPI_TARGET=raspberrypi_pico
     CFLAGS+=-DPICO_SDK_PATH=$(PICO_SDK_PATH)
+    CFLAGS+=-I$(PICO_SDK_PATH)/src/common/pico_stdlib_headers/include
   endif
 
   ifeq ($(TARGET),sama5d3)
