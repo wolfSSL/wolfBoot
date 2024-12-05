@@ -137,7 +137,7 @@ extern "C" {
 
 /* ML-DSA pub key size is a function of parameters.
  * This needs to be configurable. Default to security
- * category 2. */
+ * category 5. */
 
 #define ML_DSA_L2_PUBKEY_SIZE   1312
 #define ML_DSA_L3_PUBKEY_SIZE   1952
