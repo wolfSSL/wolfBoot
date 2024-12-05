@@ -29,6 +29,7 @@
 #include <stdint.h>
 
 /* System */
+#define WOLFBOOT_KEYTOOLS
 #define SINGLE_THREADED
 #define WOLFCRYPT_ONLY
 
@@ -73,18 +74,48 @@
 #define WOLFSSL_SHA3
 #undef  NO_SHA256
 
+/* Enable experimental PQ algos */
+#define WOLFSSL_EXPERIMENTAL_SETTINGS
+
 /* ML-DSA (dilithium) */
 #define HAVE_DILITHIUM
 #define WOLFSSL_WC_DILITHIUM
-#define WOLFSSL_EXPERIMENTAL_SETTINGS
 /* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
 * standard by default. Uncomment this if you want the draft
 * version instead. */
 #if 0
-  #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+    #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+#endif
+#ifndef ML_DSA_LEVEL
+    #define ML_DSA_LEVEL 5
 #endif
 /* dilithium needs these sha functions. */
 #define WOLFSSL_SHAKE128
+
+/* LMS */
+#define WOLFBOOT_SIGN_LMS
+#define WOLFSSL_HAVE_LMS
+#define WOLFSSL_WC_LMS
+#ifndef LMS_LEVELS
+    #define LMS_LEVELS 1
+#endif
+#ifndef LMS_HEIGHT
+    #define LMS_HEIGHT 10
+#endif
+#ifndef LMS_WINTERNITZ
+    #define LMS_WINTERNITZ 8
+#endif
+
+/* XMSS */
+#define WOLFBOOT_SIGN_XMSS
+#define WOLFSSL_HAVE_XMSS
+#define WOLFSSL_WC_XMSS
+#ifndef WOLFBOOT_XMSS_PARAMS
+    #define WOLFBOOT_XMSS_PARAMS "XMSS-SHA2_10_256"
+#endif
+#ifndef WOLFSSL_XMSS_MAX_HEIGHT
+    #define WOLFSSL_XMSS_MAX_HEIGHT 32
+#endif
 
 /* ASN */
 #define WOLFSSL_ASN_TEMPLATE

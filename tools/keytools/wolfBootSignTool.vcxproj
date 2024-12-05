@@ -158,6 +158,7 @@
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\asn.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\chacha.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\coding.c" />
+    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\dilithium.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\ecc.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\ed25519.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\ed448.c" />
@@ -178,6 +179,10 @@
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\sp_int.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\tfm.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_port.c" />
+    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_lms.c" />
+    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_lms_impl.c" />
+    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_xmss.c" />
+    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_xmss_impl.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wolfmath.c" />
     <ClCompile Include="..\..\src\delta.c" />
     <ClCompile Include="sign.c">
