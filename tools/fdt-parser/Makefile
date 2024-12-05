@@ -12,7 +12,7 @@ LIBS=
 all: $(EXE)
 
 $(EXE):
-	$(CC) -o $@ $(CFLAGS) $(LIBS) fdt-parser.c ../../src/fdt.c
+	$(CC) -o $@ $(CFLAGS) $(LIBS) fdt-parser.c ../../src/fdt.c ../../src/string.c
 
 clean:
 	rm -f *.o $(EXE)
