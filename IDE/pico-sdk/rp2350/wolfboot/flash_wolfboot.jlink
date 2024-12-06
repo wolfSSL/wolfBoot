@@ -1,0 +1,6 @@
+connect
+r
+loadfile build/wolfboot.bin 0x10000000
+r
+g
+exit

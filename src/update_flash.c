@@ -39,7 +39,12 @@ int WP11_Library_Init(void);
 #endif
 
 #ifdef RAM_CODE
+#ifndef TARGET_rp2350
 extern unsigned int _start_text;
+#else
+extern unsigned int __logical_binary_start;
+unsigned int _start_text = (unsigned int)&__logical_binary_start;
+#endif
 static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
 
 #ifdef EXT_FLASH
