@@ -9,6 +9,17 @@ on:
 
 jobs:
   wolfhsm_simulator_test:
+    # Matrix strategy runs all steps below for each config specified.
+    # This allows testing multiple configurations without duplicating the workflow.
+    strategy:
+      matrix:
+        config:
+          - name: "Standard wolfHSM"
+            file: "config/examples/sim-wolfHSM.config"
+          - name: "wolfHSM ML-DSA"
+            file: "config/examples/sim-wolfHSM-mldsa.config"
+      fail-fast: false
+    
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -25,9 +36,9 @@ jobs:
         run: |
           make distclean
 
-      - name: Select config (wolfHSM simulator)
+      - name: Select config (${{ matrix.config.name }})
         run: |
-          cp config/examples/sim-wolfHSM.config .config
+          cp ${{ matrix.config.file }} .config
 
       - name: Build tools
         run: |
@@ -62,5 +73,6 @@ jobs:
 
       # Kill the server if it is still running
       - name: Kill POSIX TCP server
+        if: always()
         run: |
-          kill $TCP_SERVER_PID
+          kill $TCP_SERVER_PID || true
