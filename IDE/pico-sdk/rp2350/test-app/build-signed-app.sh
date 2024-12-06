@@ -10,7 +10,8 @@ cp pico_flash_region_wolfboot.ld pico_flash_region.ld
 curl -o blink.c https://raw.githubusercontent.com/raspberrypi/pico-examples/refs/tags/sdk-2.1.0/blink/blink.c
 
 make clean && make
-../../../../../tools/keytools/sign --sha256 --ecc256 blink.bin \
+
+IMAGE_HEADER_SIZE=1024 ../../../../../tools/keytools/sign --sha256 --ecc256 blink.bin \
     ../../../../../wolfboot_signing_private_key.der 1
 
 cd ..
