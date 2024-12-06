@@ -218,8 +218,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
 #endif
     );
     int swapDone = 0;
-    uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
-        WOLFBOOT_SECTOR_SIZE;
+    uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen;
     uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
 
     /* open partitions (ignore failure) */
