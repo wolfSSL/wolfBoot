@@ -100,7 +100,7 @@ get_header_size() {
         "rsa4096") echo "1024" ;;
         "ed25519") echo "256" ;;
         "ed448") echo "512" ;;
-        "lms"|"xmss") echo "0" ;;
+        "lms"|"xmss") echo "0" ;; # currently not supported
         "none") echo "256" ;;
         *) echo "256" ;;  # Default
     esac
@@ -164,10 +164,22 @@ usage() {
 
 # Function to generate keys
 do_keygen() {
-    local base_dir="../../../"
+    local sign_algo="${KEYGEN_OPTS[sign_algo]:-$DEFAULT_SIGN_ALGO}"
+    local pq_params="${COMMON_OPTS[sign_pq_params]}"
+    local header_size
 
-    echo "Generating keys with algorithm: ${KEYGEN_OPTS[sign_algo]}"
-    (cd $base_dir && tools/keytools/keygen --"${KEYGEN_OPTS[sign_algo]}" -g $(basename $PRVKEY_DER) --exportpubkey \
+    # Get header size for current algorithm
+    header_size=$(get_header_size "$sign_algo" "$pq_params")
+
+    echo "Generating keys with algorithm: $sign_algo"
+
+    # Set environment variables for keygen tool
+    export IMAGE_HEADER_SIZE="$header_size"
+    if [ "$sign_algo" = "ml_dsa" ]; then
+        export ML_DSA_LEVEL="${pq_params:-2}"  # Default to level 2 if not specified
+    fi
+
+    (cd $WOLFBOOT_DIR && tools/keytools/keygen --"$sign_algo" -g $(basename $PRVKEY_DER) --exportpubkey \
         ${KEYGEN_OPTS[nolocalkeys]:+--nolocalkeys} --der)
 }
 
@@ -176,9 +188,18 @@ do_sign() {
     local base_path="../../../IDE/AURIX"
     local app_name="test-app${HSM:+-wolfHSM}"
     local sign_algo="${SIGN_OPTS[sign_algo]:-${KEYGEN_OPTS[sign_algo]}}"
+    local pq_params="${COMMON_OPTS[sign_pq_params]}"
+    local header_size
+    local bin_path="$base_path/$app_name/TriCore ${SIGN_OPTS[build_type]} (GCC)/$app_name.bin"
+
+    # Get header size for current algorithm
+    header_size=$(get_header_size "$sign_algo" "$pq_params")
+
+    # Set IMAGE_HEADER_SIZE environment variable for sign tool
+    export IMAGE_HEADER_SIZE="$header_size"
 
     echo "Signing binaries with $sign_algo and ${SIGN_OPTS[hash_algo]}"
-    local bin_path="$base_path/$app_name/TriCore ${SIGN_OPTS[build_type]} (GCC)/$app_name.bin"
+    echo "Using header size: $header_size"
 
     # Sign for both partition 1 and 2
     ../../keytools/sign --"$sign_algo" --"${SIGN_OPTS[hash_algo]}" "$bin_path" "$PRVKEY_DER" 1
@@ -264,11 +285,24 @@ do_gen_macros() {
         use_wolfhsm_pubkey_id="-DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID"
     fi
 
-    # Set image signature size and ML-DSA level only for ML-DSA
+    # Quirk: set additional (redundant) macros for ML DSA based on pq_params
     if [[ "${sign_algo,,}" == ml_dsa* ]]; then
-        image_signature_size="-DIMAGE_SIGNATURE_SIZE=2420"
-        ml_dsa_image_signature_size="-DML_DSA_IMAGE_SIGNATURE_SIZE=2420"
-        ml_dsa_level="-DML_DSA_LEVEL=2"
+        local level="${pq_params:-2}" # Default to level 2 if not specified
+        case "$level" in
+            2)
+                image_signature_size="-DIMAGE_SIGNATURE_SIZE=2420"
+                ml_dsa_image_signature_size="-DML_DSA_IMAGE_SIGNATURE_SIZE=2420"
+                ;;
+            3)
+                image_signature_size="-DIMAGE_SIGNATURE_SIZE=3300"
+                ml_dsa_image_signature_size="-DML_DSA_IMAGE_SIGNATURE_SIZE=3300"
+                ;;
+            5)
+                image_signature_size="-DIMAGE_SIGNATURE_SIZE=5200"
+                ml_dsa_image_signature_size="-DML_DSA_IMAGE_SIGNATURE_SIZE=5200"
+                ;;
+        esac
+        ml_dsa_level="-DML_DSA_LEVEL=$level"
     fi
 
     echo "Generating macros file with sign_algo=$sign_algo, hash_algo=$hash_algo"

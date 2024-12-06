@@ -292,7 +292,7 @@ cd $WOLFBOOT_DIR
 
 # Start with a clean build
 make clean && make keysclean && cd $WOLFBOOT_DIR/tools/keytools && make clean
-cd $SCRIPTS_DIR && ./aurixtool.sh clean
+cd $SCRIPTS_DIR && ./wbaurixtool.sh clean
 # Delete any build artifacts in wolfBoot-tc3xx (or wolfBoot-tc3xx-wolfHSM) and test-app (or test-app-wolfHSM) AURIX Studio projects
 # ...
 
@@ -303,13 +303,13 @@ make keytools
 
 # Generate target.h
 cd $SCRIPTS_DIR
-./aurixtool.sh target
+./wbaurixtool.sh target
 
 # Generate keys, as well as configuration macros and linker script based on the selected signature algorithm
-./aurixtool.sh [--hsm] keygen --sign-algo ecc256 --hash-algo sha256 macros lcf
+./wbaurixtool.sh [--hsm] keygen --sign-algo ecc256 --hash-algo sha256 macros lcf
 
 # If using wolfHSM, generate key NVM image
-./aurixtool.sh nvm
+./wbaurixtool.sh nvm
 # Load NVM image hexfile to the device
 # ...
 
@@ -320,7 +320,7 @@ cd $SCRIPTS_DIR
 # ....
 
 # Sign test app
-./aurixtool.sh [--hsm] sign --sign-algo ecc256 --hash-algo sha256 [--debug]
+./wbaurixtool.sh [--hsm] sign --sign-algo ecc256 --hash-algo sha256 [--debug]
 
 # Load wolfBoot + app in Lauterbach using tools/scripts/tc3xx/wolfBoot-loadAll-XXX.cmm
 # ...
