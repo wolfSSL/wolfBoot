@@ -22,6 +22,8 @@
 #include "IfxPort.h"
 #include "IfxScuWdt.h"
 #include "Ifx_Types.h"
+
+#include "target.h"
 #include "wolfboot/wolfboot.h"
 
 IFX_ALIGN(4) IfxCpu_syncEvent g_cpuSyncEvent = 0;
