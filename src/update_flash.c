@@ -245,6 +245,11 @@ static int wolfBoot_swap_and_final_erase(int resume)
     if ((resume == 1) && (swapDone == 0) && (st != IMG_STATE_FINAL_FLAGS)) {
         return -1;
     }
+    hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
+
     if (swapDone == 0) {
         /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
         if (st != IMG_STATE_FINAL_FLAGS) {
@@ -282,6 +287,12 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
     /* erase the last sector(s) of update */
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
+    hal_flash_lock();
+
     return 0;
 }
 #endif
@@ -480,15 +491,17 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         sector++;
     }
 #ifndef DISABLE_BACKUP
-    /* start re-entrant final erase, return code is only for resumption in
-     * wolfBoot_start */
-    wolfBoot_swap_and_final_erase(0);
 #endif
 out:
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif
     hal_flash_lock();
+    /* start re-entrant final erase, return code is only for resumption in
+     * wolfBoot_start */
+    if (ret == 0) {
+        wolfBoot_swap_and_final_erase(0);
+    }
     /* encryption key was not erased, will be erased by success */
     return ret;
 }
@@ -741,14 +754,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
 #endif /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
 
-    /* start re-entrant final erase, return code is only for resumption in
-     * wolfBoot_start*/
-    wolfBoot_swap_and_final_erase(0);
     /* encryption key was not erased, will be erased by success */
     #ifdef EXT_FLASH
     ext_flash_lock();
     #endif
     hal_flash_lock();
+    /* start re-entrant final erase, return code is only for resumption in
+     * wolfBoot_start*/
+    wolfBoot_swap_and_final_erase(0);
 
 #else /* DISABLE_BACKUP */
     /* Direct Swap without power fail safety */
