@@ -245,36 +245,38 @@ static int wolfBoot_swap_and_final_erase(int resume)
     if ((resume == 1) && (swapDone == 0) && (st != IMG_STATE_FINAL_FLAGS)) {
         return -1;
     }
+
     hal_flash_unlock();
-#ifdef EXT_FLASH
+
+    /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
+    if (st != IMG_STATE_FINAL_FLAGS) {
+        /* store the sector at tmpBootPos into swap */
+        wolfBoot_copy_sector(boot, swap, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        /* set FINAL_SWAP for re-entry */
+        wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    }
+#ifdef EXT_ENCRYPTED
     ext_flash_unlock();
-#endif
 
     if (swapDone == 0) {
-        /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
-        if (st != IMG_STATE_FINAL_FLAGS) {
-            /* store the sector at tmpBootPos into swap */
-            wolfBoot_copy_sector(boot, swap, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
-            /* set FINAL_SWAP for re-entry */
-            wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
-        }
-#ifdef EXT_ENCRYPTED
         /* get encryption key and iv if encryption is enabled */
         wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
             (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
-#endif
         /* write TRAIL, encryption key and iv if enabled to tmpBootPos*/
         tmpBuffer[TRAILER_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
 
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
+#endif
     /* erase the last boot sector(s) */
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
     /* set the encryption key */
 #ifdef EXT_ENCRYPTED
     wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
             (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
+    /* wolfBoot_set_encrypt_key calls hal_flash_unlock, need to unlock again */
+    hal_flash_unlock();
 #endif
     /* write the original contents of tmpBootPos back */
     if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
