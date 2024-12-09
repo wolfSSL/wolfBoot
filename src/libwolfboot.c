@@ -268,7 +268,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
         }
     }
 finish:
-    /* Erase the non-selected partition */
+    /* Erase the non-selected partition, requires unlocked flash */
     addrErase -= WOLFBOOT_SECTOR_SIZE * (!sel);
     if (*((uint32_t*)(addrErase + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
             != FLASH_WORD_ERASED) {
