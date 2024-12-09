@@ -247,6 +247,9 @@ static int wolfBoot_swap_and_final_erase(int resume)
     }
 
     hal_flash_unlock();
+#ifdef EXT_ENCRYPTED
+    ext_flash_unlock();
+#endif
 
     /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
     if (st != IMG_STATE_FINAL_FLAGS) {
@@ -256,8 +259,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
         wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
     }
 #ifdef EXT_ENCRYPTED
-    ext_flash_unlock();
-
     if (swapDone == 0) {
         /* get encryption key and iv if encryption is enabled */
         wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
@@ -937,8 +938,24 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
+#ifdef NVM_FLASH_WRITEONCE 
+    /* nvm_select_fresh_sector needs unlocked flash in cases where  */
+    hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
+#endif
+
     bootRet =   wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
+
+#ifdef NVM_FLASH_WRITEONCE 
+    /* nvm_select_fresh_sector needs unlocked flash in cases where  */
+    hal_flash_lock();
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
+#endif
 
 #if !defined(DISABLE_BACKUP)
     /* resume the final erase in case the power failed before it finished */
