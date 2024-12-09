@@ -54,6 +54,8 @@ static uint8_t *flash_base;
 
 int forceEmergency = 0;
 uint32_t erasefail_address = 0xFFFFFFFF;
+int flashLocked = 1;
+int extFlashLocked = 1;
 
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
 #define EXTERNAL_FLASH_FILE "./external_flash.dd"
@@ -134,12 +136,12 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 
 void hal_flash_unlock(void)
 {
-    /* no op */
+    flashLocked = 0;
 }
 
 void hal_flash_lock(void)
 {
-    /* no op */
+    flashLocked = 1;
 }
 
 void hal_prepare_boot(void)
@@ -150,6 +152,10 @@ void hal_prepare_boot(void)
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
+    if (flashLocked == 1) {
+        wolfBoot_printf("FLASH IS BEING WRITTEN TO WHILE LOCKED\n");
+        return -1;
+    }
     if (forceEmergency == 1 && address == WOLFBOOT_PARTITION_BOOT_ADDRESS) {
         /* implicit cast abide compiler warning */
         memset((void*)address, 0, len);
@@ -179,6 +185,10 @@ int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 
 int hal_flash_erase(uintptr_t address, int len)
 {
+    if (flashLocked == 1) {
+        wolfBoot_printf("FLASH IS BEING ERASED WHILE LOCKED\n");
+        return -1;
+    }
     /* implicit cast abide compiler warning */
     wolfBoot_printf( "hal_flash_erase addr %p len %d\n", (void*)address, len);
     if (address == erasefail_address + WOLFBOOT_PARTITION_BOOT_ADDRESS) {
@@ -227,16 +237,20 @@ void hal_init(void)
 
 void ext_flash_lock(void)
 {
-    /* no op */
+    extFlashLocked = 1;
 }
 
 void ext_flash_unlock(void)
 {
-    /* no op */
+    extFlashLocked = 0;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
+    if (extFlashLocked == 1) {
+        wolfBoot_printf("EXT FLASH IS BEING WRITTEN TO WHILE LOCKED\n");
+        return -1;
+    }
     memcpy(flash_base + address, data, len);
     return 0;
 }
@@ -249,6 +263,10 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 int ext_flash_erase(uintptr_t address, int len)
 {
+    if (extFlashLocked == 1) {
+        wolfBoot_printf("EXT FLASH IS BEING ERASED WHILE LOCKED\n");
+        return -1;
+    }
     memset(flash_base + address, FLASH_BYTE_ERASED, len);
     return 0;
 }
@@ -286,6 +304,14 @@ void do_boot(const uint32_t *app_offset)
 {
     int ret;
     size_t app_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+
+    if (flashLocked == 0) {
+        wolfBoot_printf("WARNING FLASH IS UNLOCKED AT BOOT");
+    }
+
+    if (extFlashLocked == 0) {
+        wolfBoot_printf("WARNING EXT FLASH IS UNLOCKED AT BOOT");
+    }
 
 #ifdef __APPLE__
     typedef int (*main_entry)(int, char**, char**, char**);
