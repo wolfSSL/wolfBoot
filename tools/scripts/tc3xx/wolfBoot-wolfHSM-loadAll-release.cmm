@@ -4,8 +4,8 @@ system.up
 
 LOCAL &wolfBoot &testApp &updateApp
 &wolfBoot="..\..\..\IDE\AURIX\wolfBoot-tc3xx-wolfHSM\TriCore Release (GCC)\wolfBoot-tc3xx-wolfHSM.elf"
-&testApp="..\..\..\IDE\AURIX\test-app\TriCore Release (GCC)\test-app_v1_signed.bin"
-&updateApp="..\..\..\IDE\AURIX\test-app\TriCore Release (GCC)\test-app_v2_signed.bin"
+&testApp="..\..\..\IDE\AURIX\test-app-wolfHSM\TriCore Release (GCC)\test-app-wolfHSM_v1_signed.bin"
+&updateApp="..\..\..\IDE\AURIX\test-app-wolfHSM\TriCore Release (GCC)\test-app-wolfHSM_v2_signed.bin"
 
 DO  ~~/demo/tricore/flash/tc37x.cmm PREPAREONLY
 

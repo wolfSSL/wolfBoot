@@ -64,7 +64,9 @@ LCF_HEAP2_OFFSET =   (LCF_USTACK2_OFFSET - LCF_HEAP_SIZE);
 
 
 LCF_WOLFBOOT_BOOT_PART_BASEADDR = 0xA0300000;
-LCF_WOLFBOOT_HEADER_OFFSET = 0x100;
+
+/* size of wolfBoot header, configured by aurixtool.sh based on --sign-algo */
+LCF_WOLFBOOT_HEADER_OFFSET = @LCF_WOLFBOOT_HEADER_OFFSET@;
 
 LCF_CODE_BASE_ADDR = LCF_WOLFBOOT_BOOT_PART_BASEADDR + LCF_WOLFBOOT_HEADER_OFFSET;
 
@@ -116,10 +118,10 @@ MEMORY
     pfls0 (rx!p):    org = 0xA0000000, len = 3M
 
     /* placeholder for wolfBoot image header */
-    pfls1_hdr (rx!p):    org = 0xA0300000, len = 256
+    pfls1_hdr (rx!p):    org = LCF_WOLFBOOT_BOOT_PART_BASEADDR, len = LCF_WOLFBOOT_HEADER_OFFSET
 
     /* pfls1 is the remainder of the wolfBoot BOOT partition. Everything goes here */
-    pfls1 (rx!p):    org = 0xA0300100, len = 0x17DF00 /* 0x17E000 - 256B */
+    pfls1 (rx!p):    org = LCF_CODE_BASE_ADDR, len = (0x17E000 - LCF_WOLFBOOT_HEADER_OFFSET)
 
     /* reserved for wolfBoot UPDATE partition */
     pfls1_update (rwx!p):    org = 0xA047E000, len = 0x17E000  /* ~1.5MiB */

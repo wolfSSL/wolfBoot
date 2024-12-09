@@ -1086,8 +1086,64 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     fwrite(pub, pub_len, 1, fpriv);
     fclose(fpriv);
 
-    keystore_add(KEYGEN_ML_DSA, pub, pub_len,
-                 priv_fname, id_mask);
+    if (exportPubKey) {
+        if (saveAsDer) {
+            uint8_t*  pubDer;
+            size_t    pubDerSz;
+            int       pubOutLen;
+            const int WITH_ALG_SPKI = 1;
+
+            /* Size the buffer based on the ML DSA level */
+            switch (ml_dsa_level) {
+                case WC_ML_DSA_44:
+                    pubDerSz = ML_DSA_LEVEL2_PUB_KEY_DER_SIZE;
+                    break;
+                case WC_ML_DSA_65:
+                    pubDerSz = ML_DSA_LEVEL3_PUB_KEY_DER_SIZE;
+                    break;
+                case WC_ML_DSA_87:
+                    pubDerSz = ML_DSA_LEVEL5_PUB_KEY_DER_SIZE;
+                    break;
+                default:
+                    fprintf(stderr, "Error: Unsupported ML DSA level\n");
+                    exit(1);
+                    break;
+            }
+            pubDer = (uint8_t*)malloc(pubDerSz);
+            if (pubDer == NULL) {
+                fprintf(stderr,
+                        "Error: Failed to allocate memory for DER export\n");
+                exit(1);
+            }
+
+            /* Export public key in DER format */
+
+            pubOutLen = wc_Dilithium_PublicKeyToDer(&key, pubDer, pubDerSz,
+                                                    WITH_ALG_SPKI);
+            if (pubOutLen < 0) {
+                fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
+                        pubOutLen);
+                exit(1);
+            }
+
+            if (export_pubkey_file(priv_fname, pubDer, pubOutLen) != 0) {
+                fprintf(stderr, "Unable to export public key to file\n");
+                exit(1);
+            }
+
+            free(pubDer);
+        }
+        else {
+            /* Export public key in raw format */
+            if (export_pubkey_file(priv_fname, pub,
+                                   KEYSTORE_PUBKEY_SIZE_ML_DSA) != 0) {
+                fprintf(stderr, "Unable to export public key to file\n");
+                exit(1);
+            }
+        }
+    }
+
+    keystore_add(KEYGEN_ML_DSA, pub, pub_len, priv_fname, id_mask);
 
     wc_MlDsaKey_Free(&key);
     free(priv);

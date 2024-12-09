@@ -251,15 +251,17 @@ extern int tolower(int c);
     /* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
      * standard by default. Uncomment this if you want the draft
      * version instead. */
-    #if 0
-    #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
-    #endif
+#   if 0
+#      define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+#   endif
 #   define WOLFSSL_DILITHIUM_VERIFY_ONLY
 #   define WOLFSSL_DILITHIUM_NO_LARGE_CODE
 #   define WOLFSSL_DILITHIUM_SMALL
 #   define WOLFSSL_DILITHIUM_VERIFY_SMALL_MEM
 #   define WOLFSSL_DILITHIUM_VERIFY_NO_MALLOC
-#   define WOLFSSL_DILITHIUM_NO_ASN1
+#   ifndef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+#      define WOLFSSL_DILITHIUM_NO_ASN1
+#   endif
     /* dilithium needs these sha functions. */
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
@@ -390,7 +392,9 @@ extern int tolower(int c);
 #endif
 
 #if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC)
+#if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && defined(WOLFBOOT_SIGN_ML_DSA))
     #define WC_NO_RNG
+#endif
     #define WC_NO_HASHDRBG
     #define NO_AES_CBC
 #else
@@ -406,7 +410,9 @@ extern int tolower(int c);
 
 #if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
 #   define NO_HMAC
-#   define WC_NO_RNG
+#if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && defined(WOLFBOOT_SIGN_ML_DSA))
+    #define WC_NO_RNG
+#endif
 #   define WC_NO_HASHDRBG
 #   define NO_DEV_RANDOM
 #   if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
@@ -521,9 +527,9 @@ extern int tolower(int c);
 #endif
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
-#define WOLF_CRYPTO_CB
-#define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
-#define WOLFSSL_KEY_GEN
+#   define WOLF_CRYPTO_CB
+#   define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
+#   define WOLFSSL_KEY_GEN
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */
