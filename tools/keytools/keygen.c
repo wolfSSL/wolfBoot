@@ -1109,7 +1109,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
                     exit(1);
                     break;
             }
-            pubDer = malloc(pubDerSz);
+            pubDer = (uint8_t*)malloc(pubDerSz);
             if (pubDer == NULL) {
                 fprintf(stderr,
                         "Error: Failed to allocate memory for DER export\n");
