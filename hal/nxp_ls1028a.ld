@@ -23,6 +23,9 @@ SECTIONS
     PROVIDE (_MEMORY_SIZE = LENGTH(OCRAM));
     PROVIDE (_FLASH_SIZE = LENGTH(FLASH));
     PROVIDE (_STACK_SIZE = 64K);
+    PROVIDE (_EL0_STACK_SIZE = DEFINED(_EL0_STACK_SIZE) ? _EL0_STACK_SIZE : 1024);
+    PROVIDE (_EL1_STACK_SIZE = DEFINED(_EL1_STACK_SIZE) ? _EL1_STACK_SIZE : 2048);
+    PROVIDE (_EL2_STACK_SIZE = DEFINED(_EL2_STACK_SIZE) ? _EL2_STACK_SIZE : 1024);
 
     .boot :
     {
@@ -100,10 +103,26 @@ SECTIONS
     } > OCRAM
 
     . = ALIGN(16);
-    .stack :
-    {
+
+    .stack (NOLOAD) : {
+        . = ALIGN(64);
         _start_stack = .;
-        . = . + _STACK_SIZE;
+        _el3_stack_end = .;
+        . += _STACK_SIZE;
+        __el3_stack = .;
+        _el2_stack_end = .;
+        . += _EL2_STACK_SIZE;
+        . = ALIGN(64);
+        __el2_stack = .;
+        _el1_stack_end = .;
+        . += _EL1_STACK_SIZE;
+        . = ALIGN(64);
+        __el1_stack = .;
+        _el0_stack_end = .;
+        . += _EL0_STACK_SIZE;
+        . = ALIGN(64);
+        __el0_stack = .;
+
         _end_stack = .;
     } > OCRAM
 

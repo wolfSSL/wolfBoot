@@ -139,6 +139,11 @@ const char* fdt_get_string(const void *fdt, int stroffset, int *lenp);
 const void *fdt_getprop(const void *fdt, int nodeoffset, const char *name, int *lenp);
 int fdt_setprop(void *fdt, int nodeoffset, const char *name, const void *val, int len);
 
+void* fdt_getprop_address(const void *fdt, int nodeoffset, const char *name);
+
+int fdt_find_node_offset(void* fdt, int startoff, const char* nodename);
+int fdt_find_prop_offset(void* fdt, int startoff, const char* propname, const char* propval);
+
 int fdt_find_devtype(void* fdt, int startoff, const char* node);
 int fdt_node_check_compatible(const void *fdt, int nodeoffset, const char *compatible);
 int fdt_node_offset_by_compatible(const void *fdt, int startoffset, const char *compatible);
@@ -151,6 +156,10 @@ int fdt_fixup_val(void* fdt, int off, const char* node, const char* name, uint32
 int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name, uint64_t val);
 
 int fdt_shrink(void* fdt);
+
+/* FIT */
+const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt);
+void* fit_load_image(void* fdt, const char* image, int* lenp);
 
 #ifdef __cplusplus
 }

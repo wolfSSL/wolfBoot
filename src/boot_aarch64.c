@@ -1,6 +1,6 @@
 /* boot_aarch64.c
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2024 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -67,6 +67,16 @@ void boot_entry_C(void)
     main();
 }
 
+
+#ifdef MMU
+int __attribute((weak)) hal_dts_fixup(void* dts_addr)
+{
+    (void)dts_addr;
+    return 0;
+}
+#endif
+
+
 /* This is the main loop for the bootloader.
  *
  * It performs the following actions:
@@ -80,14 +90,18 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 {
-	/* Set application address via x4 */
-	asm volatile("mov x4, %0" : : "r"(app_offset));
+#ifdef MMU
+    hal_dts_fixup((uint32_t*)dts_offset);
+#endif
+
+    /* Set application address via x4 */
+    asm volatile("mov x4, %0" : : "r"(app_offset));
 
 #ifdef MMU
-	/* Move the dts pointer to x5 (as first argument) */
-	asm volatile("mov x5, %0" : : "r"(dts_offset));
+    /* Move the dts pointer to x5 (as first argument) */
+    asm volatile("mov x5, %0" : : "r"(dts_offset));
 #else
-	asm volatile("mov x5, xzr");
+    asm volatile("mov x5, xzr");
 #endif
 
 #ifndef NO_QNX
@@ -122,3 +136,20 @@ void RAMFUNCTION arch_reboot(void)
 
 }
 #endif
+
+void SynchronousInterrupt(void)
+{
+
+}
+void IRQInterrupt(void)
+{
+
+}
+void FIQInterrupt(void)
+{
+
+}
+void SErrorInterrupt(void)
+{
+
+}
