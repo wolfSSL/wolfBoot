@@ -49,19 +49,6 @@ extern uint32_t dts_load_addr;
 
 #ifdef WOLFBOOT_USE_RAMBOOT
 
-#if !(defined(EXT_FLASH) && defined(NO_XIP))
-/* requires/assumes inputs and size to be 4-byte aligned */
-static void memcpy32(void *dst, const void *src, size_t n)
-{
-    size_t i;
-    const uint32_t *s = (const uint32_t*)src;
-    uint32_t *d = (uint32_t*)dst;
-    for (i = 0; i < n/4; i++) {
-        d[i] = s[i];
-    }
-}
-#endif
-
 /* Function to load image from flash to ram */
 int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
@@ -78,7 +65,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
         return -1;
     }
 #else
-    memcpy32(dst, src, IMAGE_HEADER_SIZE);
+    memcpy(dst, src, IMAGE_HEADER_SIZE);
 #endif
 
     /* check for valid header and version */
@@ -102,7 +89,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
         return -1;
     }
 #else
-    memcpy32(dst + IMAGE_HEADER_SIZE, src + IMAGE_HEADER_SIZE, img_size);
+    memcpy(dst + IMAGE_HEADER_SIZE, src + IMAGE_HEADER_SIZE, img_size);
 #endif
 
     /* mark image as no longer external */
@@ -290,36 +277,61 @@ backup_on_failure:
 #endif
 
 #ifdef MMU
+    /* Is this a Flattened uImage Tree (FIT) image (FDT format) */
+    if (wolfBoot_get_dts_size(load_address) > 0) {
+        void* fit = (void*)load_address;
+        const char *kernel = NULL, *flat_dt = NULL;
+
+        wolfBoot_printf("Flattened uImage Tree: Version %d, Size %d\n",
+            fdt_version(fit), fdt_totalsize(fit));
+
+        (void)fit_find_images(fit, &kernel, &flat_dt);
+        if (kernel != NULL) {
+            load_address = fit_load_image(fit, kernel, NULL);
+        }
+        if (flat_dt != NULL) {
+            uint8_t *dts_ptr = fit_load_image(fit, flat_dt, (int*)&dts_size);
+            if (dts_ptr != NULL && wolfBoot_get_dts_size(dts_ptr) >= 0) {
+                /* relocate to load DTS address */
+                dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+                wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
+                    dts_ptr, dts_addr, dts_size);
+                memcpy(dts_addr, dts_ptr, dts_size);
+            }
+        }
+    }
+    else {
     /* Load DTS to RAM */
     #ifdef EXT_FLASH
-    if (PART_IS_EXT(&os_image) &&
-        wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
-        dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
-        dts_size = (uint32_t)os_image.fw_size;
+        if (PART_IS_EXT(&os_image) &&
+            wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
+            dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+            dts_size = (uint32_t)os_image.fw_size;
 
-        wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
-                dts_size, dts_addr);
-        ext_flash_check_read((uintptr_t)os_image.fw_base,
-                (uint8_t*)dts_addr, dts_size);
-    }
-    else
+            wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
+                    dts_size, dts_addr);
+            ext_flash_check_read((uintptr_t)os_image.fw_base,
+                    (uint8_t*)dts_addr, dts_size);
+        }
+        else
     #endif /* EXT_FLASH */
-    {
-        dts_addr = hal_get_dts_address();
-        if (dts_addr) {
-            ret = wolfBoot_get_dts_size(dts_addr);
-            if (ret < 0) {
-                wolfBoot_printf("Failed parsing DTB to load\n");
-                /* Allow failure, continue booting */
-            }
-            else {
-                /* relocate DTS to RAM */
-                uint8_t* dts_dst = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
-                dts_size = (uint32_t)ret;
-                wolfBoot_printf("Loading DTB (size %d) from %p to RAM at %p\n",
+        {
+            dts_addr = hal_get_dts_address();
+            if (dts_addr) {
+                ret = wolfBoot_get_dts_size(dts_addr);
+                if (ret < 0) {
+                    wolfBoot_printf("Failed parsing DTB to load\n");
+                    /* Allow failure, continue booting */
+                }
+                else {
+                    /* relocate DTS to RAM */
+                    uint8_t* dts_dst = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+                    dts_size = (uint32_t)ret;
+                    wolfBoot_printf("Loading DTB (size %d) from %p to RAM at %p\n",
                         dts_size, dts_addr, WOLFBOOT_LOAD_DTS_ADDRESS);
-                memcpy(dts_dst, dts_addr, dts_size);
-                dts_addr = dts_dst;
+                    memcpy(dts_dst, dts_addr, dts_size);
+                    dts_addr = dts_dst;
+                }
             }
         }
     }

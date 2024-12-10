@@ -264,6 +264,19 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
     const char *s = (const char *)src;
     char *d = (char *)dst;
 
+#ifdef FAST_MEMCPY
+    /* is 32-bit aligned pointer */
+    if (((size_t)dst & (sizeof(unsigned long)-1)) == 0 &&
+        ((size_t)src & (sizeof(unsigned long)-1)) == 0)
+    {
+        while (n >= sizeof(unsigned long)) {
+            *(unsigned long*)d = *(unsigned long*)s;
+            d += sizeof(unsigned long);
+            s += sizeof(unsigned long);
+            n -= sizeof(unsigned long);
+        }
+    }
+#endif
     for (i = 0; i < n; i++) {
         d[i] = s[i];
     }
@@ -297,7 +310,7 @@ void *memmove(void *dst, const void *src, size_t n)
 void uart_writenum(int num, int base, int zeropad, int maxdigits)
 {
     int i = 0;
-    char buf[sizeof(int)*2+1];
+    char buf[sizeof(unsigned long)*2+1];
     const char* kDigitLut = "0123456789ABCDEF";
     unsigned int val = (unsigned int)num;
     int sz = 0;
