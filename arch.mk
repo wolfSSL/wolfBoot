@@ -37,7 +37,7 @@ WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o \
 
 
 ifeq ($(ARCH),x86_64)
-  CFLAGS+=-DARCH_x86_64
+  CFLAGS+=-DARCH_x86_64 -DFAST_MEMCPY
   ifeq ($(FORCE_32BIT),1)
     NO_ASM=1
     CFLAGS+=-DFORCE_32BIT
@@ -65,24 +65,33 @@ endif
 ## ARM Cortex-A
 ifeq ($(ARCH),AARCH64)
   CROSS_COMPILE?=aarch64-none-elf-
-  CFLAGS+=-DARCH_AARCH64
+  CFLAGS+=-DARCH_AARCH64 -DFAST_MEMCPY
   OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
 
-  ifeq ($(TARGET),nxp_ls1028a)
-    ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
-    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
-
-    CFLAGS +=-ffunction-sections -fdata-sections
-    LDFLAGS+=-Wl,--gc-sections
-
-    ifeq ($(DEBUG_UART),0)
-      CFLAGS+=-fno-builtin-printf
-    endif
-
-    SPI_TARGET=nxp
+  ifeq ($(TARGET),zynq)
+    ARCH_FLAGS=-march=armv8-a+crypto
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A53
+    CFLAGS+=-DNO_QNX
+    # Support detection and skip of U-Boot legacy header */
+    CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+    CFLAGS+=-DWOLFBOOT_DUALBOOT
   else
-    # By default disable ARM ASM for other targets
-    NO_ARM_ASM?=1
+    ifeq ($(TARGET),nxp_ls1028a)
+      ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
+      CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
+
+      CFLAGS +=-ffunction-sections -fdata-sections
+      LDFLAGS+=-Wl,--gc-sections
+
+      ifeq ($(DEBUG_UART),0)
+        CFLAGS+=-fno-builtin-printf
+      endif
+
+      SPI_TARGET=nxp
+    else
+      # By default disable ARM ASM for other targets
+      NO_ARM_ASM?=1
+    endif
   endif
 
   ifeq ($(SPMATH),1)
@@ -523,7 +532,7 @@ endif
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
   LDFLAGS+=-Wl,--build-id=none
-  CFLAGS+=-DARCH_PPC
+  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf
@@ -787,12 +796,6 @@ ifeq ($(TARGET),nxp_p1021)
     CFLAGS+=-DWOLFSSL_SP_PPC
   endif
   SPI_TARGET=nxp
-endif
-
-ifeq ($(TARGET),zynq)
-  # Support detection and skip of U-Boot legecy header */
-  CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
-  CFLAGS+=-DWOLFBOOT_DUALBOOT
 endif
 
 ifeq ($(TARGET),ti_hercules)
@@ -1087,12 +1090,12 @@ ifeq ($(ARCH),AARCH64)
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   OBJS+=src/fdt.o
   UPDATE_OBJS:=src/update_ram.o
+else
+  ifeq ($(DUALBANK_SWAP),1)
+    CFLAGS+=-DWOLFBOOT_DUALBOOT
+    UPDATE_OBJS:=src/update_flash_hwswap.o
+  endif
 endif
-ifeq ($(DUALBANK_SWAP),1)
-  CFLAGS+=-DWOLFBOOT_DUALBOOT
-  UPDATE_OBJS:=src/update_flash_hwswap.o
-endif
-
 # Set default update object (if not library)
 ifneq ($(TARGET),library)
 ifeq ($(UPDATE_OBJS),)

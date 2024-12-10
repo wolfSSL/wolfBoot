@@ -45,7 +45,50 @@ These template settings are also in this `.cproject` as preprocessor macros. The
 #define WOLFBOOT_LOAD_DTS_ADDRESS            0x11800000
 ```
 
+The default .cproject build symbols are:
+
+```
+ARCH_AARCH64
+ARCH_FLASH_OFFSET=0x0
+CORTEX_A53
+DEBUG_ZYNQ=1
+EXT_FLASH=1
+FILL_BYTE=0xFF
+IMAGE_HEADER_SIZE=1024
+MMU
+NO_QNX
+NO_XIP
+PART_BOOT_EXT=1
+PART_SWAP_EXT=1
+PART_UPDATE_EXT=1
+TARGET_zynq
+WC_HASH_DATA_ALIGNMENT=8
+WOLFBOOT_ARCH_AARCH64
+WOLFBOOT_DUALBOOT
+WOLFBOOT_ELF
+WOLFBOOT_HASH_SHA3_384
+WOLFBOOT_ORIGIN=0x0
+WOLFBOOT_SHA_BLOCK_SIZE=4096
+WOLFBOOT_SIGN_RSA4096
+WOLFBOOT_UBOOT_LEGACY
+```
+
 Note: If not using Position Independent Code (PIC) the linker script `ldscript.ld` must have the start address offset to match the `WOLFBOOT_LOAD_ADDRESS`.
+
+
+## Zynq UltraScale+ ARMv8 Crypto Extensions
+
+To enable ARM assembly speedups for SHA:
+
+1) Add these build symbols:
+
+```
+WOLFSSL_ARMASM
+WOLFSSL_ARMASM_INLINE
+```
+
+2) Add these compiler misc flags: `-mcpu=generic+crypto -mstrict-align -DWOLFSSL_AARCH64_NO_SQRMLSH`
+
 
 ## Generate signing key
 
@@ -91,9 +134,13 @@ Xilinx uses a `bootgen` tool for generating a boot binary image that has Xilinx 
 * Use "offset=" option to place the application into a specific location in flash.
 * Use "load=" option to have FSBL load into specific location in RAM.
 
-Generating a boot.bin (from boot.bif).
-Run the Xilinx -> Vitis Shell and cd into the workspace root.
+Default install locations for bootgen tools:
+* Linux: `/tools/Xilinx/Vitis/2022.1/bin`
+* Windows: `C:\Xilinx\Vitis\2022.1\bin`
 
+Open the Vitis Shell from the IDE by using file menu "Xilinx" -> "Vitis Shell".
+
+Generating a boot.bin (from boot.bif).
 Example boot.bif in workspace root:
 
 ```
@@ -102,10 +149,14 @@ Example boot.bif in workspace root:
 the_ROM_image:
 {
 	[bootloader, destination_cpu=a53-0] zcu102\zynqmp_fsbl\fsbl_a53.elf
-	[destination_cpu=a53-0, exception_level=el-1] wolfboot\Debug\wolfboot.elf
+	[destination_cpu=a53-0, exception_level=el-2] wolfboot\Debug\wolfboot.elf
 	[destination_cpu=a53-0, partition_owner=uboot, offset=0x800000] hello_world\Debug\hello_world_v1_signed.bin
 }
 ```
+
+You can also use exception level 3 or 1 depending on your needs.
+
+From the workspace root:
 
 ```sh
 bootgen -image boot.bif -arch zynqmp -w -o BOOT.bin
@@ -184,10 +235,10 @@ Successfully ran Hello World application
     ```
 
 6. Build “boot.bin” image:
-    * `bootgen.exe -image boot.bif -arch zynqmp -o i BOOT.BIN -w`
+    * `bootgen -image boot.bif -arch zynqmp -o i BOOT.BIN -w`
 
-Note: To generate a report of a boot.bin use the `bootgen_utility`:
-`bootgen_utility -arch zynqmp -bin boot.bin -out boot.bin.txt`
+Note: To generate a report of a boot.bin use the `bootgen_utility` or after 2022.1 use `bootgen -read`:
+`bootgen -arch zynqmp -read BOOT.BIN`
 
 ## Post Quantum
 
@@ -207,7 +258,8 @@ WOLFSSL_XMSS_VERIFY_ONLY
 WOLFSSL_XMSS_MAX_HEIGHT=32
 WOLFBOOT_SHA_BLOCK_SIZE=4096
 IMAGE_SIGNATURE_SIZE=2500
-IMAGE_HEADER_SIZE=4096
+XMSS_IMAGE_SIGNATURE_SIZE=2500
+IMAGE_HEADER_SIZE=5000
 ```
 
 2) Create and sign image:
@@ -300,3 +352,4 @@ Output image(s) successfully created.
 ### References:
 * [ZAPP1319](https://www.xilinx.com/support/documentation/application_notes/xapp1319-zynq-usp-prog-nvm.pdf): Programming BBRAM and eFUSEs
 * [UG1283](https://www.xilinx.com/support/documentation/sw_manuals/xilinx2018_2/ug1283-bootgen-user-guide.pdf): Bootgen User Guide
+* [Using Cryptography in Zynq UltraScale MPSoC](https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842541/Using+Cryptography+in+Zynq+UltraScale+MPSoC)

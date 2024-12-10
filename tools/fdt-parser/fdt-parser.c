@@ -31,6 +31,7 @@
 #include <limits.h>
 
 static int gEnableUnitTest = 0;
+static int gParseFit = 0;
 #define UNIT_TEST_GROW_SIZE 1024
 
 /* Test case for "nxp_t1024.dtb" */
@@ -113,7 +114,7 @@ static int fdt_test(void* fdt)
         p += sizeof(uint64_t);
         ret = fdt_setprop(fdt, off, "reg", ranges, (int)(p - ranges));
         if (ret != 0) goto exit;
-        wolfBoot_printf("FDT: Set memory, start=0x%x, size=0x%x\n",
+        printf("FDT: Set memory, start=0x%x, size=0x%x\n",
             DDR_ADDRESS, (uint32_t)DDR_SIZE);
     }
 
@@ -198,7 +199,7 @@ static int fdt_test(void* fdt)
 
         liodns[0] = qp_info[i].dliodn;
         liodns[1] = qp_info[i].fliodn;
-        wolfBoot_printf("FDT: Set %s@%d (%d), %s=%d,%d\n",
+        printf("FDT: Set %s@%d (%d), %s=%d,%d\n",
             "qman-portal", i, off, "fsl,liodn", liodns[0], liodns[1]);
         ret = fdt_setprop(fdt, off, "fsl,liodn", liodns, sizeof(liodns));
         if (ret != 0) goto exit;
@@ -319,10 +320,70 @@ static int load_file(const char* filename, uint8_t** buf, size_t* bufLen)
     return ret;
 }
 
-int dts_parse(void* dts_addr)
+static void* dts_fit_image_addr(void* fit, uint32_t off, const char* prop)
+{
+    void* val = fdt_getprop_address(fit, off, prop);
+    printf("\t%s: %p\n", prop, val);
+    return val;
+}
+
+static const void* dts_fit_image_item(void* fit, uint32_t off, const char* prop)
+{
+    int len = 0;
+    const void* val = fdt_getprop(fit, off, prop, &len);
+    if (val != NULL && len > 0) {
+        if (len < 256)
+            printf("\t%s (len %d): %s\n", prop, len, (const char*)val);
+        else
+            printf("\t%s (len %d): not rendering\n", prop, len);
+    }
+    return val;
+}
+
+void dts_parse_fit_image(void* fit, const char* image, const char* desc)
+{
+    int off;
+
+    if (fit != NULL) {
+        printf("%s Image: %s\n", desc, image);
+    }
+
+    off = fdt_find_node_offset(fit, -1, image);
+    if (off > 0) {
+        dts_fit_image_item(fit, off, "description");
+        dts_fit_image_item(fit, off, "type");
+        dts_fit_image_item(fit, off, "os");
+        dts_fit_image_item(fit, off, "arch");
+        dts_fit_image_item(fit, off, "compression");
+        dts_fit_image_addr(fit, off, "load");
+        dts_fit_image_addr(fit, off, "entry");
+        dts_fit_image_item(fit, off, "padding");
+        dts_fit_image_item(fit, off, "data");
+    }
+}
+
+int dts_parse_fit(void* image)
+{
+    const char *conf = NULL, *kernel = NULL, *flat_dt = NULL;
+
+    conf = fit_find_images(image, &kernel, &flat_dt);
+    if (conf != NULL) {
+        printf("FIT: Found '%s' configuration\n", conf);
+        dts_fit_image_item(image, fdt_find_node_offset(image, -1, conf),
+            "description");
+    }
+
+    /* dump image information */
+    dts_parse_fit_image(image, kernel, "Kernel");
+    dts_parse_fit_image(image, flat_dt, "FDT");
+
+    return 0;
+}
+
+int dts_parse(void* image)
 {
     int ret = 0;
-    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    struct fdt_header *fdt = (struct fdt_header *)image;
     const struct fdt_property* prop;
     int nlen, plen, slen;
     int noff, poff, soff;
@@ -330,17 +391,6 @@ int dts_parse(void* dts_addr)
     int depth = 0;
     #define MAX_DEPTH 24
     char tabs[MAX_DEPTH+1] = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
-
-    /* check header */
-    ret = fdt_check_header(fdt);
-    if (ret != 0) {
-        printf("FDT check failed %d!\n", ret);
-        return ret;
-    }
-
-    /* display information */
-    printf("FDT Version %d, Size %d\n",
-        fdt_version(fdt), fdt_totalsize(fdt));
 
     /* walk tree */
     for (noff = fdt_next_node(fdt, -1, &depth);
@@ -369,13 +419,29 @@ int dts_parse(void* dts_addr)
                     &tabs[MAX_DEPTH-depth], pstr, poff, plen);
                 if (plen > 32)
                     printf("\n%s", &tabs[MAX_DEPTH-depth-1]);
-                print_bin((const uint8_t*)prop->data, plen);
-                printf("\n");
+                if (plen > 256) {
+                    char file[260+1];
+                    snprintf(file, sizeof(file), "%s.%s.bin", nstr, pstr);
+                    printf("Saving to file %s\n", file);
+                    write_bin(file, (const uint8_t*)prop->data, plen);
+                }
+                else {
+                    print_bin((const uint8_t*)prop->data, plen);
+                    printf("\n");
+                }
             }
         }
     }
 
     return ret;
+}
+
+static void Usage(void)
+{
+    printf("Expected usage:\n");
+    printf("./tools/fdt-parser/fdt-parser [-t] [-i] filename\n");
+    printf("\t* -i: Parse Flattened uImage Tree (FIT) image\n");
+    printf("\t* -t: Test several updates (used with nxp_t1024.dtb)\n");
 }
 
 int main(int argc, char *argv[])
@@ -385,12 +451,25 @@ int main(int argc, char *argv[])
     size_t imageSz = 0;
     const char* filename = NULL;
 
-    if (argc >= 2) {
-        filename = argv[1];
+    if (argc == 1 || (argc >= 2 &&
+            (strcmp(argv[1], "-?") == 0 ||
+             strcmp(argv[1], "-h") == 0 ||
+             strcmp(argv[1], "--help") == 0))) {
+        Usage();
+        return 0;
     }
-    while (argc > 2) {
+    while (argc > 1) {
         if (strcmp(argv[argc-1], "-t") == 0) {
             gEnableUnitTest = 1;
+        }
+        else if (strcmp(argv[argc-1], "-i") == 0) {
+            gParseFit = 1;
+        }
+        else if (*argv[argc-1] != '-') {
+            filename = argv[argc-1];
+        }
+        else {
+            printf("Warning: Unrecognized option: %s\n", argv[argc-1]);
         }
         argc--;
     }
@@ -402,6 +481,18 @@ int main(int argc, char *argv[])
     }
 
     ret = load_file(filename, &image, &imageSz);
+    if (ret == 0) {
+        /* check header */
+        ret = fdt_check_header(image);
+        if (ret != 0) {
+            printf("FDT check failed %d!\n", ret);
+            return ret;
+        }
+
+        /* display information */
+        printf("FDT Version %d, Size %d\n",
+            fdt_version(image), fdt_totalsize(image));
+    }
     if (ret == 0 && gEnableUnitTest) {
         ret = fdt_test(image);
         if (ret == 0) {
@@ -414,7 +505,12 @@ int main(int argc, char *argv[])
         }
     }
     if (ret == 0) {
-        ret = dts_parse(image);
+        if (gParseFit) {
+            ret = dts_parse_fit(image);
+        }
+        else {
+            ret = dts_parse(image);
+        }
     }
     free(image);
 

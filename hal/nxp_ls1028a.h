@@ -22,6 +22,27 @@
 #ifndef NXP_LS1028A_H
 #define NXP_LS1028A_H
 
+/* By default expect EL3 at startup */
+#ifndef EL3_SECURE
+#define EL3_SECURE     1
+#endif
+#ifndef EL2_HYPERVISOR
+#define EL2_HYPERVISOR 0
+#endif
+#ifndef EL1_NONSECURE
+#define EL1_NONSECURE  0
+#endif
+
+#ifndef HYP_GUEST
+/* ZEN Hypervisor guest format support */
+#define HYP_GUEST      0
+#endif
+
+/* Floating Point Trap Enable */
+#ifndef FPU_TRAP
+#define FPU_TRAP       0
+#endif
+
 /* Expose AA64 defines */
 #define AA64_TARGET_EL 2                /* Boot to EL2 hypervisor */
 
@@ -32,7 +53,20 @@
 #define AA64GICV3_GITS_BASE  GITS_BASE
 #define AA64GICV3_GITST_BASE GITST_BASE
 
-
+/* ID_AA64PFR0_EL1 ARMv8 Processor Feature Register 0*/
+#define ID_AA64PFRO_EL3_MASK (0xF<<12)     /* EL3 is implemented: 0x0000 no */
+                                           /* 0x1000 AA64, 0x2000 AA64+AA32 */
+#define ID_AA64PFRO_EL2_MASK (0xF<<8)      /* EL2 is implemented: 0x000 no */
+                                           /* 0x100 AA64, 0x200 AA64+AA32 */
+#define ID_AA64PFRO_EL1_MASK (0xF<<4)      /* EL1 is implemented: */
+                                           /* 0x10 AA64, 0x20 AA64+AA32 */
+#define ID_AA64PFRO_EL0_MASK (0xF<<0)      /* EL0 is implemented: */
+                                           /* 0x1 AA64, 0x2 AA64+AA32 */
+#define ID_AA64PFRO_FGT_MASK (0xFull<<56)  /* Fine Grained Traps: */
+                                           /* 0x0 no, !0x0: yes */
+#define TZPCDECPROT0_SET_BASE 0x02200804
+#define TZPCDECPROT1_SET_BASE 0x02200810
+#define OCRAM_TZPC_ADDR       0x02200000
 
 
 /* LS1028A Reference Manual Rev 0 12/2019 */
