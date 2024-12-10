@@ -510,7 +510,7 @@ const char* fdt_get_name(const void *fdt, int nodeoffset, int *len)
         err = fdt_check_node_offset_(fdt, nodeoffset);
         if (err >= 0) {
             name = nh->name;
-            namelen = strlen(nh->name);
+            namelen = (int)strlen(nh->name);
         }
     }
     if (err < 0)
@@ -524,7 +524,7 @@ const char* fdt_get_string(const void *fdt, int stroffset, int *lenp)
 {
     const char *s = (const char*)fdt + fdt_off_dt_strings(fdt) + stroffset;
     if (lenp) {
-        *lenp = strlen(s);
+        *lenp = (int)strlen(s);
     }
     return s;
 }
@@ -554,13 +554,13 @@ int fdt_setprop(void *fdt, int nodeoffset, const char *name, const void *val,
         }
     }
     if (err != 0) {
-        wolfBoot_printf("FDT: Set prop failed! %d (name %d, off %d)\n",
+        wolfBoot_printf("FDT: Set prop failed! %d (name %s, off %d)\n",
             err, name, nodeoffset);
     }
     return err;
 }
 
-const void *fdt_getprop(const void *fdt, int nodeoffset, const char *name,
+const void* fdt_getprop(const void *fdt, int nodeoffset, const char *name,
     int *lenp)
 {
     int poffset;
@@ -577,23 +577,70 @@ const void *fdt_getprop(const void *fdt, int nodeoffset, const char *name,
     return NULL;
 }
 
-int fdt_find_devtype(void* fdt, int startoff, const char* node)
+void* fdt_getprop_address(const void *fdt, int nodeoffset, const char *name)
 {
-    int len, off;
-    const void* val;
-    const char* propname = "device_type";
-    int nodelen = strlen(node)+1;
+    void* ret = NULL;
+    int len = 0;
+    void* val = (void*)fdt_getprop(fdt, nodeoffset, name, &len);
+    if (val != NULL && len > 0) {
+        if (len == 8) {
+            uint64_t* val64 = (uint64_t*)val;
+            ret = (void*)((uintptr_t)fdt64_to_cpu(*val64));
+        }
+        else if (len == 4) {
+            uint32_t* val32 = (uint32_t*)val;
+            ret = (void*)((uintptr_t)fdt32_to_cpu(*val32));
+        }
+    }
+    return ret;
+}
 
+int fdt_find_node_offset(void* fdt, int startoff, const char* nodename)
+{
+    int off, nlen, fnlen;
+    const char* nstr = NULL;
+
+    if (nodename == NULL)
+        return -1;
+
+    fnlen = (int)strlen(nodename);
+    for (off = fdt_next_node(fdt, startoff, NULL);
+         off >= 0;
+         off = fdt_next_node(fdt, off, NULL))
+    {
+        nstr = fdt_get_name(fdt, off, &nlen);
+        if ((nlen == fnlen) && (memcmp(nstr, nodename, fnlen) == 0)) {
+            break;
+        }
+    }
+    return off;
+}
+
+int fdt_find_prop_offset(void* fdt, int startoff, const char* propname,
+    const char* propval)
+{
+    int len, off, pvallen;
+    const void* val;
+
+    if (propname == NULL || propval == NULL)
+        return -1;
+
+    pvallen = (int)strlen(propval)+1;
     for (off = fdt_next_node(fdt, startoff, NULL);
          off >= 0;
          off = fdt_next_node(fdt, off, NULL))
     {
         val = fdt_getprop(fdt, off, propname, &len);
-        if (val && (len == nodelen) && (memcmp(val, node, len) == 0)) {
-            return off;
+        if (val && (len == pvallen) && (memcmp(val, propval, len) == 0)) {
+            break;
         }
     }
-    return off; /* return error from fdt_next_node() */
+    return off;
+}
+
+int fdt_find_devtype(void* fdt, int startoff, const char* node)
+{
+    return fdt_find_prop_offset(fdt, startoff, "device_type", node);
 }
 
 int fdt_node_offset_by_compatible(const void *fdt, int startoffset,
@@ -719,6 +766,89 @@ int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name,
         node, off, name, (unsigned long long)val);
     val = cpu_to_fdt64(val);
     return fdt_setprop(fdt, off, name, &val, sizeof(val));
+}
+
+
+/* FIT Specific */
+const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt)
+{
+    const void* val;
+    const char *conf = NULL, *kernel = NULL, *flat_dt = NULL;
+    int off, len = 0;
+
+    /* Find the default configuration (optional) */
+    off = fdt_find_node_offset(fdt, -1, "configurations");
+    if (off > 0) {
+        val = fdt_getprop(fdt, off, "default", &len);
+        if (val != NULL && len > 0) {
+            conf = (const char*)val;
+        }
+    }
+    if (conf != NULL) {
+        off = fdt_find_node_offset(fdt, -1, conf);
+        if (off > 0) {
+            kernel = fdt_getprop(fdt, off, "kernel", &len);
+            flat_dt = fdt_getprop(fdt, off, "fdt", &len);
+        }
+    }
+    if (kernel == NULL) {
+        /* find node with "type" == kernel */
+        off = fdt_find_prop_offset(fdt, -1, "type", "kernel");
+        if (off > 0) {
+            val = fdt_get_name(fdt, off, &len);
+            if (val != NULL && len > 0) {
+                kernel = (const char*)val;
+            }
+        }
+    }
+    if (flat_dt == NULL) {
+        /* find node with "type" == flat_dt */
+        off = fdt_find_prop_offset(fdt, -1, "type", "flat_dt");
+        if (off > 0) {
+            val = fdt_get_name(fdt, off, &len);
+            if (val != NULL && len > 0) {
+                flat_dt = (const char*)val;
+            }
+        }
+    }
+
+    if (pkernel)
+        *pkernel = kernel;
+    if (pflat_dt)
+        *pflat_dt = flat_dt;
+
+    return conf;
+}
+
+void* fit_load_image(void* fdt, const char* image, int* lenp)
+{
+    void *load, *entry, *data = NULL;
+    int off, len = 0;
+
+    off = fdt_find_node_offset(fdt, -1, image);
+    if (off > 0) {
+        /* get load and entry */
+        data = (void*)fdt_getprop(fdt, off, "data", &len);
+        load = fdt_getprop_address(fdt, off, "load");
+        entry = fdt_getprop_address(fdt, off, "entry");
+        if (data != NULL && load != NULL && data != load) {
+            wolfBoot_printf("Loading Image %s: %p -> %p (%d bytes)\n",
+                image, data, load, len);
+            memcpy(load, data, len);
+
+            /* load should always have entry, but if not use load adress */
+            data = (entry != NULL) ? entry : load;
+        }
+        wolfBoot_printf("Image %s: %p (%d bytes)\n", image, data, len);
+    }
+    else {
+        wolfBoot_printf("Image %s: Not found!\n", image);
+    }
+    if (lenp != NULL) {
+        *lenp = len;
+    }
+    return data;
+
 }
 
 #endif /* MMU && !BUILD_LOADER_STAGE1 */
