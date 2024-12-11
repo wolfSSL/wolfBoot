@@ -74,6 +74,22 @@ int wolfBot_get_dts_size(void *dts_addr);
 #  endif
 #endif
 
+/* Helpers for memory alignment */
+#ifndef XALIGNED
+    #if defined(__GNUC__) || defined(__llvm__) || \
+            defined(__IAR_SYSTEMS_ICC__)
+        #define XALIGNED(x) __attribute__ ( (aligned (x)))
+    #elif defined(__KEIL__)
+        #define XALIGNED(x) __align(x)
+    #elif defined(_MSC_VER)
+        /* disable align warning, we want alignment ! */
+        #pragma warning(disable: 4324)
+        #define XALIGNED(x) __declspec (align (x))
+    #else
+        #define XALIGNED(x) /* null expansion */
+    #endif
+#endif
+
 
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F

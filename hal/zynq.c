@@ -80,6 +80,9 @@ static int qspi_wait_we(QspiDev_t* dev);
 static int test_ext_flash(QspiDev_t* dev);
 #endif
 
+/* asm function */
+extern void flush_dcache_range(unsigned long start, unsigned long stop);
+
 #ifdef DEBUG_UART
 void uart_init(void)
 {
@@ -293,9 +296,23 @@ static inline int qspi_isr_wait(uint32_t wait_mask, uint32_t wait_val)
     }
     return 0;
 }
+#ifdef GQSPI_DMA
+static inline int qspi_dmaisr_wait(uint32_t wait_mask, uint32_t wait_val)
+{
+    uint32_t timeout = 0;
+    while ((GQSPIDMA_ISR & wait_mask) == wait_val &&
+           ++timeout < GQSPI_TIMEOUT_TRIES);
+    if (timeout == GQSPI_TIMEOUT_TRIES) {
+        return -1;
+    }
+    return 0;
+}
+#endif
 
 static int qspi_gen_fifo_write(uint32_t reg_genfifo)
 {
+    uint32_t reg_cfg;
+
     /* wait until the gen FIFO is not full to write */
     if (qspi_isr_wait(GQSPI_IXR_GEN_FIFO_NOT_FULL, 0)) {
         return GQSPI_CODE_TIMEOUT;
@@ -317,6 +334,17 @@ static int gspi_fifo_tx(const uint8_t* data, uint32_t sz)
             return GQSPI_CODE_TIMEOUT;
         }
 
+    #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
+        uint32_t txSz = sz;
+        if (txSz > GQSPI_FIFO_WORD_SZ)
+            txSz = GQSPI_FIFO_WORD_SZ;
+        memcpy(&tmp32, data, txSz);
+        GQSPI_TXD = tmp32;
+        wolfBoot_printf("TXD=%08x\n", tmp32);
+
+        sz -= txSz;
+        data += txSz;
+    #else
         /* Write data */
         if (sz >= 4) {
             GQSPI_TXD = *(uint32_t*)data;
@@ -329,23 +357,32 @@ static int gspi_fifo_tx(const uint8_t* data, uint32_t sz)
             GQSPI_TXD = tmp32;
             sz = 0;
         }
+    #endif
     }
     return GQSPI_CODE_SUCCESS;
 }
 
-static int gspi_fifo_rx(uint8_t* data, uint32_t sz, uint32_t discardSz)
+#ifndef GQSPI_DMA
+static int gspi_fifo_rx(uint8_t* data, uint32_t sz)
 {
     uint32_t tmp32;
+
     while (sz > 0) {
         /* Wait for RX FIFO not empty */
         if (qspi_isr_wait(GQSPI_IXR_RX_FIFO_NOT_EMPTY, 0)) {
             return GQSPI_CODE_TIMEOUT;
         }
-        if (discardSz >= GQSPI_FIFO_WORD_SZ) {
-            tmp32 = GQSPI_RXD; /* discard */
-            discardSz -= GQSPI_FIFO_WORD_SZ;
-            continue;
-        }
+
+    #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
+        uint32_t rxSz = sz;
+        if (rxSz > GQSPI_FIFO_WORD_SZ)
+            rxSz = GQSPI_FIFO_WORD_SZ;
+        tmp32 = GQSPI_RXD;
+        memcpy(data, &tmp32, rxSz);
+        wolfBoot_printf("RXD=%08x\n", tmp32);
+        sz -= rxSz;
+        data += rxSz;
+    #else
         if (sz >= 4) {
             *(uint32_t*)data = GQSPI_RXD;
             data += 4;
@@ -356,9 +393,11 @@ static int gspi_fifo_rx(uint8_t* data, uint32_t sz, uint32_t discardSz)
             memcpy(data, &tmp32, sz);
             sz = 0;
         }
+    #endif
     }
     return GQSPI_CODE_SUCCESS;
 }
+#endif
 
 static int qspi_cs(QspiDev_t* pDev, int csAssert)
 {
@@ -374,6 +413,33 @@ static int qspi_cs(QspiDev_t* pDev, int csAssert)
     return qspi_gen_fifo_write(reg_genfifo);
 }
 
+static uint32_t qspi_calc_exp(uint32_t xferSz, uint32_t* reg_genfifo)
+{
+    uint32_t expval = 8;
+    *reg_genfifo &= ~(GQSPI_GEN_FIFO_IMM_MASK | GQSPI_GEN_FIFO_EXP_MASK);
+    if (xferSz > GQSPI_GEN_FIFO_IMM_MASK) {
+        /* Use exponent mode */
+        while (1) {
+            if (xferSz & (1 << expval)) {
+                *reg_genfifo |= GQSPI_GEN_FIFO_EXP_MASK;
+                *reg_genfifo |= GQSPI_GEN_FIFO_IMM(expval); /* IMM is exponent */
+                xferSz = (1 << expval);
+                break;
+            }
+            expval++;
+        }
+    }
+    else {
+        /* Use length mode */
+        *reg_genfifo |= GQSPI_GEN_FIFO_IMM(xferSz); /* IMM is length */
+    }
+    return xferSz;
+}
+
+#ifdef GQSPI_DMA
+static uint8_t XALIGNED(QQSPI_DMA_ALIGN) dmatmp[GQSPI_DMA_TMPSZ];
+#endif
+
 static int qspi_transfer(QspiDev_t* pDev,
     const uint8_t* cmdData, uint32_t cmdSz,
     const uint8_t* txData, uint32_t txSz,
@@ -382,7 +448,9 @@ static int qspi_transfer(QspiDev_t* pDev,
 {
     int ret = GQSPI_CODE_SUCCESS;
     uint32_t reg_genfifo, xferSz;
-
+#ifdef GQSPI_DMA
+    uint8_t* dmarxptr = NULL;
+#endif
     GQSPI_EN = 1; /* Enable device */
     qspi_cs(pDev, 1); /* Select slave */
 
@@ -395,14 +463,14 @@ static int qspi_transfer(QspiDev_t* pDev,
     xferSz = cmdSz;
     while (ret == GQSPI_CODE_SUCCESS && cmdData && xferSz > 0) {
        /* Enable TX and send command inline */
-       reg_genfifo |= GQSPI_GEN_FIFO_TX;
        reg_genfifo &= ~(GQSPI_GEN_FIFO_RX | GQSPI_GEN_FIFO_IMM_MASK);
+       reg_genfifo |= GQSPI_GEN_FIFO_TX;
        reg_genfifo |= GQSPI_GEN_FIFO_IMM(*cmdData); /* IMM is data */
 
        /* Submit general FIFO operation */
        ret = qspi_gen_fifo_write(reg_genfifo);
        if (ret != GQSPI_CODE_SUCCESS) {
-           wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+           wolfBoot_printf("zynq.c:%d (error %d)\n", __LINE__, ret);
            break;
        }
 
@@ -411,39 +479,28 @@ static int qspi_transfer(QspiDev_t* pDev,
        cmdData++;
     }
 
-    /* Set desired data mode and stripe */
+    /* Set desired data mode */
     reg_genfifo |= (mode & GQSPI_GEN_FIFO_MODE_MASK);
-    reg_genfifo |= (pDev->stripe & GQSPI_GEN_FIFO_STRIPE);
 
     /* TX Data */
     while (ret == GQSPI_CODE_SUCCESS && txData && txSz > 0) {
-        xferSz = txSz;
-
         /* Enable TX */
         reg_genfifo &= ~(GQSPI_GEN_FIFO_RX | GQSPI_GEN_FIFO_IMM_MASK |
                          GQSPI_GEN_FIFO_EXP_MASK);
         reg_genfifo |= (GQSPI_GEN_FIFO_TX | GQSPI_GEN_FIFO_DATA_XFER);
-
-        if (xferSz > GQSPI_GEN_FIFO_IMM_MASK) {
-            /* Use exponent mode */
-            xferSz = 256; /* 2 ^ 8 = 256 */
-            reg_genfifo |= GQSPI_GEN_FIFO_EXP_MASK;
-            reg_genfifo |= GQSPI_GEN_FIFO_IMM(8); /* IMM is exponent */
-        }
-        else {
-            reg_genfifo |= GQSPI_GEN_FIFO_IMM(xferSz); /* IMM is length */
-        }
+        reg_genfifo |= (pDev->stripe & GQSPI_GEN_FIFO_STRIPE);
+        xferSz = qspi_calc_exp(txSz, &reg_genfifo);
 
         /* Submit general FIFO operation */
         ret = qspi_gen_fifo_write(reg_genfifo);
         if (ret != GQSPI_CODE_SUCCESS) {
-            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+            wolfBoot_printf("zynq.c:%d (error %d)\n", __LINE__, ret);
         }
 
         /* Fill FIFO */
         ret = gspi_fifo_tx(txData, xferSz);
         if (ret != GQSPI_CODE_SUCCESS) {
-            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+            wolfBoot_printf("zynq.c:%d (error %d)\n", __LINE__, ret);
             break;
         }
 
@@ -454,60 +511,77 @@ static int qspi_transfer(QspiDev_t* pDev,
 
     /* Dummy operations */
     if (ret == GQSPI_CODE_SUCCESS && dummySz) {
-        /* Send dummy clocks (Disable TX & RX) */
+        /* Send dummy clocks (Disable TX & RX), do not set stripe */
         reg_genfifo &= ~(GQSPI_GEN_FIFO_TX | GQSPI_GEN_FIFO_RX |
-                         GQSPI_GEN_FIFO_IMM_MASK | GQSPI_GEN_FIFO_EXP_MASK);
+                         GQSPI_GEN_FIFO_IMM_MASK | GQSPI_GEN_FIFO_EXP_MASK |
+                         GQSPI_GEN_FIFO_STRIPE);
+        reg_genfifo |= GQSPI_GEN_FIFO_DATA_XFER;
         /* IMM is number of dummy clock cycles */
         reg_genfifo |= GQSPI_GEN_FIFO_IMM(dummySz);
         ret = qspi_gen_fifo_write(reg_genfifo); /* Submit FIFO Dummy Op */
-
-        if (rxSz > 0) {
-            /* Convert dummy bits to bytes */
-            dummySz = (dummySz + 7) / 8;
-            /* Adjust rxSz for dummy bytes */
-            rxSz += dummySz;
-            /* round up by FIFO Word Size */
-            rxSz = (((rxSz + GQSPI_FIFO_WORD_SZ - 1) / GQSPI_FIFO_WORD_SZ) *
-                    GQSPI_FIFO_WORD_SZ);
-        }
     }
 
     /* RX Data */
     while (ret == GQSPI_CODE_SUCCESS && rxData && rxSz > 0) {
-        xferSz = rxSz;
-
         /* Enable RX */
         reg_genfifo &= ~(GQSPI_GEN_FIFO_TX | GQSPI_GEN_FIFO_IMM_MASK |
                          GQSPI_GEN_FIFO_EXP_MASK);
         reg_genfifo |= (GQSPI_GEN_FIFO_RX | GQSPI_GEN_FIFO_DATA_XFER);
+        reg_genfifo |= (pDev->stripe & GQSPI_GEN_FIFO_STRIPE);
 
-        if (xferSz > GQSPI_GEN_FIFO_IMM_MASK) {
-            /* Use exponent mode */
-            xferSz = 256; /* 2 ^ 8 = 256 */
-            reg_genfifo |= GQSPI_GEN_FIFO_EXP_MASK;
-            reg_genfifo |= GQSPI_GEN_FIFO_IMM(8); /* IMM is exponent */
+        xferSz = rxSz;
+    #ifdef GQSPI_DMA
+        /* if xferSz or rxData is not QQSPI_DMA_ALIGN aligned use tmp  */
+        dmarxptr = rxData;
+        if ((rxSz & (QQSPI_DMA_ALIGN-1)) ||
+            (((size_t)rxData) & (QQSPI_DMA_ALIGN-1))) {
+            dmarxptr = (uint8_t*)dmatmp;
+            /* round up */
+            xferSz = ((xferSz + (QQSPI_DMA_ALIGN-1)) & ~(QQSPI_DMA_ALIGN-1));
+            if (xferSz > (uint32_t)sizeof(dmatmp)) {
+                xferSz = (uint32_t)sizeof(dmatmp);
+            }
         }
-        else {
-            reg_genfifo |= GQSPI_GEN_FIFO_IMM(xferSz); /* IMM is length */
-        }
+
+        GQSPIDMA_DST = (unsigned long)dmarxptr;
+        GQSPIDMA_SIZE = xferSz;
+        GQSPIDMA_IER = GQSPIDMA_ISR_ALL_MASK;
+        flush_dcache_range((unsigned long)dmarxptr,
+            (unsigned long)dmarxptr + xferSz);
+    #endif
+        xferSz = qspi_calc_exp(xferSz, &reg_genfifo);
 
         /* Submit general FIFO operation */
         ret = qspi_gen_fifo_write(reg_genfifo);
         if (ret != GQSPI_CODE_SUCCESS) {
-            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+            wolfBoot_printf("zynq.c:%d (error %d)\n", __LINE__, ret);
             break;
         }
 
+    #ifndef GQSPI_DMA
         /* Read FIFO */
-        ret = gspi_fifo_rx(rxData, xferSz-dummySz, dummySz);
+        ret = gspi_fifo_rx(rxData, xferSz);
         if (ret != GQSPI_CODE_SUCCESS) {
-            wolfBoot_printf("on line %d: error %d\n", __LINE__, ret);
+            wolfBoot_printf("zynq.c:%d (error %d)\n", __LINE__, ret);
         }
+    #else
+        /* Wait for DMA done */
+        if (qspi_dmaisr_wait(GQSPIDMA_ISR_DONE, 0)) {
+            return GQSPI_CODE_TIMEOUT;
+        }
+        GQSPIDMA_ISR = GQSPIDMA_ISR_DONE;
+        /* adjust xfer sz */
+        if (xferSz > rxSz)
+            xferSz = rxSz;
+        /* copy result if not aligned */
+        if (dmarxptr != rxData) {
+            memcpy(rxData, dmarxptr, xferSz);
+        }
+    #endif
 
         /* offset size and buffer */
         rxSz -= xferSz;
-        rxData += (xferSz - dummySz);
-        dummySz = 0; /* only first RX */
+        rxData += xferSz;
     }
 
     qspi_cs(pDev, 0); /* Deselect Slave */
@@ -524,7 +598,7 @@ static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
     uint8_t status = 0;
 
     memset(cmd, 0, sizeof(cmd));
-    cmd[0] = MULTI_IO_READ_ID_CMD;
+    cmd[0] = READ_ID_CMD;
     ret = qspi_transfer(&mDev, cmd, 1, NULL, 0, cmd, sizeof(cmd), 0,
         GQSPI_GEN_FIFO_MODE_SPI);
 
@@ -775,11 +849,11 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     /* Clear and disable interrupts */
     reg_isr = GQSPI_ISR;
     GQSPI_ISR |= GQSPI_ISR_WR_TO_CLR_MASK; /* Clear poll timeout counter interrupt */
-    reg_cfg = QSPIDMA_DST_I_STS;
-    QSPIDMA_DST_I_STS = reg_cfg; /* clear all active interrupts */
-    QSPIDMA_DST_STS |= QSPIDMA_DST_STS_WTC; /* mark outstanding DMA's done */
+    reg_cfg = GQSPIDMA_ISR;
+    GQSPIDMA_ISR = reg_cfg; /* clear all active interrupts */
+    GQSPIDMA_STS |= GQSPIDMA_STS_WTC; /* mark outstanding DMA's done */
     GQSPI_IDR = GQSPI_IXR_ALL_MASK; /* disable interrupts */
-    QSPIDMA_DST_I_STS = QSPIDMA_DST_I_STS_ALL_MASK; /* disable interrupts */
+    GQSPIDMA_ISR = GQSPIDMA_ISR_ALL_MASK; /* disable interrupts */
     /* Reset FIFOs */
     if (GQSPI_ISR & GQSPI_IXR_RX_FIFO_EMPTY) {
         GQSPI_FIFO_CTRL |= (GQSPI_FIFO_CTRL_RST_TX_FIFO | GQSPI_FIFO_CTRL_RST_RX_FIFO);
@@ -791,10 +865,14 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     GQSPI_EN = 0; /* Disable device */
 
     /* Initialize clock divisor, write protect hold and start mode */
+#ifdef GQSPI_DMA
+    reg_cfg  = GQSPI_CFG_MODE_EN_DMA; /* Use DMA Transfer Mode */
+#else
     reg_cfg  = GQSPI_CFG_MODE_EN_IO; /* Use I/O Transfer Mode */
+    reg_cfg |= GQSPI_CFG_START_GEN_FIFO; /* Auto start GFIFO cmd execution */
+#endif
     reg_cfg |= GQSPI_CFG_BAUD_RATE_DIV(GQSPI_CLK_DIV); /* Clock Divider */
     reg_cfg |= GQSPI_CFG_WP_HOLD; /* Use WP Hold */
-    reg_cfg |= GQSPI_CFG_START_GEN_FIFO; /* Start GFIFO command execution */
     reg_cfg &= ~(GQSPI_CFG_CLK_POL | GQSPI_CFG_CLK_PH); /* Use POL=0,PH=0 */
     GQSPI_CFG = reg_cfg;
 
@@ -803,30 +881,31 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
      * the clock and data tap delays bypassed. */
     IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = 0;
-    QSPI_DATA_DLY_ADJ = 0;
+    GQSPI_DATA_DLY_ADJ = 0;
 #elif GQSPI_CLK_DIV >= 1 /* 300/4=75MHz */
     /* At 100 MHz, the Quad-SPI controller should be in clock loopback mode
      * with the clock tap delay bypassed, but the data tap delay enabled. */
     IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = GQSPI_LPBK_DLY_ADJ_USE_LPBK;
-    QSPI_DATA_DLY_ADJ = QSPI_DATA_DLY_ADJ_USE_DATA_DLY | QSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(2);
+    GQSPI_DATA_DLY_ADJ = (GQSPI_DATA_DLY_ADJ_USE_DATA_DLY |
+                          GQSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(2));
 #else
     /* At 150 MHz, only the generic controller can be used.
      * The generic controller should be in clock loopback mode and the clock
      * tap delay enabled, but the data tap delay disabled. */
     IOU_TAPDLY_BYPASS = 0;
     GQSPI_LPBK_DLY_ADJ = GQSPI_LPBK_DLY_ADJ_USE_LPBK;
-    QSPI_DATA_DLY_ADJ = 0;
+    GQSPI_DATA_DLY_ADJ = 0;
 #endif
 
     /* Initialize hardware parameters for Threshold and Interrupts */
     GQSPI_TX_THRESH = 1;
     GQSPI_RX_THRESH = 1;
-    GQSPI_GF_THRESH = 16;
+    GQSPI_GF_THRESH = 31;
 
     /* Reset DMA */
-    QSPIDMA_DST_CTRL = QSPIDMA_DST_CTRL_DEF;
-    QSPIDMA_DST_CTRL2 = QSPIDMA_DST_CTRL2_DEF;
+    GQSPIDMA_CTRL = GQSPIDMA_CTRL_DEF;
+    GQSPIDMA_CTRL2 = GQSPIDMA_CTRL2_DEF;
 
     /* Interrupts unmask and enable */
     GQSPI_IMR = GQSPI_IXR_ALL_MASK;
