@@ -33,6 +33,7 @@
 #include "wolfboot/wolfboot.h"
 #include "keystore.h"
 #include "target.h"
+#include "image.h"
 
 #ifdef SECURE_PKCS11
 #include "wcs/user_settings.h"
@@ -797,7 +798,7 @@ void _exit (int status)
   while (1) {}    /* Make sure we hang here */
 }
 
-__attribute__((weak)) int _read(int file, char *ptr, int len)
+int WEAKFUNCTION _read(int file, char *ptr, int len)
 {
   (void)file;
   int DataIdx;

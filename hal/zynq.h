@@ -85,18 +85,25 @@
 #define GQSPI_POLL_CFG     (*((volatile uint32_t*)(QSPI_BASE + 0x154))) /* poll configuration register */
 #define GQSPI_P_TIMEOUT    (*((volatile uint32_t*)(QSPI_BASE + 0x158))) /* poll timeout register. */
 #define GQSPI_XFER_STS     (*((volatile uint32_t*)(QSPI_BASE + 0x15C))) /* transfer status register. */
-#define QSPI_DATA_DLY_ADJ  (*((volatile uint32_t*)(QSPI_BASE + 0x1F8))) /* adjusting the internal receive data delay for read data capturing */
+#define GQSPI_DATA_DLY_ADJ (*((volatile uint32_t*)(QSPI_BASE + 0x1F8))) /* adjusting the internal receive data delay for read data capturing */
 #define GQSPI_MOD_ID       (*((volatile uint32_t*)(QSPI_BASE + 0x1FC)))
-#define QSPIDMA_DST_STS    (*((volatile uint32_t*)(QSPI_BASE + 0x808)))
-#define QSPIDMA_DST_CTRL   (*((volatile uint32_t*)(QSPI_BASE + 0x80C)))
-#define QSPIDMA_DST_I_STS  (*((volatile uint32_t*)(QSPI_BASE + 0x814)))
-#define QSPIDMA_DST_CTRL2  (*((volatile uint32_t*)(QSPI_BASE + 0x824)))
+/* DMA Registers */
+#define GQSPIDMA_DST       (*((volatile uint32_t*)(QSPI_BASE + 0x800))) /* Destination memory address for DMA stream -> memory data transfer */
+#define GQSPIDMA_DST_MSB   (*((volatile uint32_t*)(QSPI_BASE + 0x828))) /* Destination memory address (MSBs) for DMA stream -> memory data transfer */
+#define GQSPIDMA_SIZE      (*((volatile uint32_t*)(QSPI_BASE + 0x804))) /* DMA transfer payload for DMA stream -> memory data transfer */
+#define GQSPIDMA_STS       (*((volatile uint32_t*)(QSPI_BASE + 0x808))) /* General DST DMA status */
+#define GQSPIDMA_CTRL      (*((volatile uint32_t*)(QSPI_BASE + 0x80C))) /* General DST DMA control */
+#define GQSPIDMA_ISR       (*((volatile uint32_t*)(QSPI_BASE + 0x814))) /* DST DMA interrupt status register */
+#define GQSPIDMA_IER       (*((volatile uint32_t*)(QSPI_BASE + 0x818))) /* DST DMA interrupt enable */
+#define GQSPIDMA_IDR       (*((volatile uint32_t*)(QSPI_BASE + 0x81C))) /* DST DMA interrupt disable */
+#define GQSPIDMA_IMR       (*((volatile uint32_t*)(QSPI_BASE + 0x820))) /* DST DMA interrupt mask */
+#define GQSPIDMA_CTRL2     (*((volatile uint32_t*)(QSPI_BASE + 0x824))) /* General DST DMA control register 2 */
 
 #define GQSPI_LPBK_DLY_ADJ_USE_LPBK       (1UL << 5)
 #define GQSPI_LPBK_DLY_ADJ_DIV0(x)        (((x) & 0x7) << 0)
 #define GQSPI_LPBK_DLY_ADJ_DLY1(x)        (((x) & 0x3) << 3)
-#define QSPI_DATA_DLY_ADJ_USE_DATA_DLY    (1UL << 31)
-#define QSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(x) (((x) & 0x7) << 28)
+#define GQSPI_DATA_DLY_ADJ_USE_DATA_DLY    (1UL << 31)
+#define GQSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(x) (((x) & 0x7) << 28)
 
 /* GQSPI Registers */
 /* GQSPI_CFG: Configuration registers */
@@ -166,15 +173,16 @@
 #define GQSPI_FIFO_CTRL_RST_TX_FIFO  (1UL << 1)
 #define GQSPI_FIFO_CTRL_RST_RX_FIFO  (1UL << 2)
 
-/* QSPIDMA_DST_CTRL */
-#define QSPIDMA_DST_CTRL_DEF  0x403FFA00UL
-#define QSPIDMA_DST_CTRL2_DEF 0x081BFFF8UL
+/* GQSPIDMA_CTRL */
+#define GQSPIDMA_CTRL_DEF  0x403FFA00UL
+#define GQSPIDMA_CTRL2_DEF 0x081BFFF8UL
 
-/* QSPIDMA_DST_STS */
-#define QSPIDMA_DST_STS_WTC   0xE000U
+/* GQSPIDMA_STS */
+#define GQSPIDMA_STS_WTC   0xE000U
 
-/* QSPIDMA_DST_I_STS */
-#define QSPIDMA_DST_I_STS_ALL_MASK 0xFEU
+/* GQSPIDMA_ISR */
+#define GQSPIDMA_ISR_DONE      0x02
+#define GQSPIDMA_ISR_ALL_MASK  0xFEU
 
 /* QSPI Configuration (bare-metal only) */
 #ifndef GQSPI_CLK_DIV
@@ -182,6 +190,16 @@
 #endif
 #define GQSPI_CS_ASSERT_CLOCKS 5 /* CS Setup Time (tCSS) - num of clock cycles foes in IMM */
 #define GQSPI_FIFO_WORD_SZ     4
+#define QQSPI_DMA_ALIGN        64 /* L1 cache size */
+#ifndef GQSPI_DMA_TMPSZ
+    /* Use larger of WOLFBOOT_SHA_BLOCK_SIZE or IMAGE_HEADER_SIZE */
+    #if defined(WOLFBOOT_SHA_BLOCK_SIZE) && \
+            WOLFBOOT_SHA_BLOCK_SIZE > IMAGE_HEADER_SIZE
+        #define GQSPI_DMA_TMPSZ WOLFBOOT_SHA_BLOCK_SIZE
+    #else
+        #define GQSPI_DMA_TMPSZ IMAGE_HEADER_SIZE
+    #endif
+#endif
 #define GQSPI_TIMEOUT_TRIES    100000
 #define QSPI_FLASH_READY_TRIES 1000
 
@@ -196,7 +214,7 @@
 #define GQPI_USE_4BYTE_ADDR    1
 #endif
 #ifndef GQSPI_DUMMY_READ
-#define GQSPI_DUMMY_READ       (8*8) /* Number of dummy clock cycles for reads */
+#define GQSPI_DUMMY_READ       (8) /* Number of dummy clock cycles for reads */
 #endif
 
 

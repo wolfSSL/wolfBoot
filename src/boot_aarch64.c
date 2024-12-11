@@ -69,7 +69,7 @@ void boot_entry_C(void)
 
 
 #ifdef MMU
-int __attribute((weak)) hal_dts_fixup(void* dts_addr)
+int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 {
     (void)dts_addr;
     return 0;
