@@ -26,6 +26,7 @@ wolfBoot supports using wolfHSM for the following algorithms:
 
 - RSA with 2048, 3072, and 4096-bit keys for image signature verification
 - ECDSA P-256, P-384, and P-521 for image signature verification
+- ML-DSA level 2, 3, and 5 (depending on platform) for image signature verification
 - SHA256 for image integrity verification
 
 Encrypted images with wolfHSM is not yet supported in wolfBoot. Note that every HAL target may not support all of these algorithms. Consult the platform-specific wolfBoot documentation for details.
