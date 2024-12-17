@@ -252,7 +252,6 @@ static void load_fsp_s_to_ram(void)
 static void jump_into_wolfboot(void)
 {
     struct stage2_parameter *params;
-    uint32_t cr3;
     int ret;
 
     params = stage2_get_parameters();
