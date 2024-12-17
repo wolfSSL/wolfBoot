@@ -1,0 +1,6 @@
+connect
+r
+loadfile build/blink_v1_signed.bin 0x10040000
+r
+g
+exit
