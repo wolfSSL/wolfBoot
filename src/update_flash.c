@@ -247,7 +247,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
     }
 
     hal_flash_unlock();
-#ifdef EXT_ENCRYPTED
+#ifdef EXT_FLASH
     ext_flash_unlock();
 #endif
 
