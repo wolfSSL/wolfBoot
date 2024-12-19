@@ -1,0 +1,25 @@
+name: kontron_vx3060_s2 build test
+
+on:
+  pull_request:
+    branches: [ '*' ]
+jobs:
+  fsp_qemu_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: install req
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y -q nasm gcc-multilib
+      - name: setup git
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+      - name: run test
+        run: |
+          cp config/examples/kontron_vx3060_s2.config .config
+          ./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh
+          make
