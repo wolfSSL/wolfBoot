@@ -296,13 +296,13 @@ static inline int qspi_isr_wait(uint32_t wait_mask, uint32_t wait_val)
     }
     return 0;
 }
-#ifdef GQSPI_DMA
+#ifndef GQSPI_MODE_IO
 static inline int qspi_dmaisr_wait(uint32_t wait_mask, uint32_t wait_val)
 {
     uint32_t timeout = 0;
     while ((GQSPIDMA_ISR & wait_mask) == wait_val &&
-           ++timeout < GQSPI_TIMEOUT_TRIES);
-    if (timeout == GQSPI_TIMEOUT_TRIES) {
+           ++timeout < GQSPIDMA_TIMEOUT_TRIES);
+    if (timeout == GQSPIDMA_TIMEOUT_TRIES) {
         return -1;
     }
     return 0;
@@ -362,7 +362,7 @@ static int gspi_fifo_tx(const uint8_t* data, uint32_t sz)
     return GQSPI_CODE_SUCCESS;
 }
 
-#ifndef GQSPI_DMA
+#ifdef GQSPI_MODE_IO
 static int gspi_fifo_rx(uint8_t* data, uint32_t sz)
 {
     uint32_t tmp32;
@@ -415,28 +415,28 @@ static int qspi_cs(QspiDev_t* pDev, int csAssert)
 
 static uint32_t qspi_calc_exp(uint32_t xferSz, uint32_t* reg_genfifo)
 {
-    uint32_t expval = 8;
+    uint32_t expval;
     *reg_genfifo &= ~(GQSPI_GEN_FIFO_IMM_MASK | GQSPI_GEN_FIFO_EXP_MASK);
     if (xferSz > GQSPI_GEN_FIFO_IMM_MASK) {
-        /* Use exponent mode */
-        while (1) {
+        /* Use exponent mode (DMA max is 2^28) */
+        for (expval=28; expval>=8; expval--) {
+            /* find highest bit set */
             if (xferSz & (1 << expval)) {
                 *reg_genfifo |= GQSPI_GEN_FIFO_EXP_MASK;
-                *reg_genfifo |= GQSPI_GEN_FIFO_IMM(expval); /* IMM is exponent */
+                *reg_genfifo |= GQSPI_GEN_FIFO_IMM(expval); /* IMM=exponent */
                 xferSz = (1 << expval);
                 break;
             }
-            expval++;
         }
     }
     else {
         /* Use length mode */
-        *reg_genfifo |= GQSPI_GEN_FIFO_IMM(xferSz); /* IMM is length */
+        *reg_genfifo |= GQSPI_GEN_FIFO_IMM(xferSz); /* IMM=actual length */
     }
     return xferSz;
 }
 
-#ifdef GQSPI_DMA
+#ifndef GQSPI_MODE_IO
 static uint8_t XALIGNED(QQSPI_DMA_ALIGN) dmatmp[GQSPI_DMA_TMPSZ];
 #endif
 
@@ -448,7 +448,7 @@ static int qspi_transfer(QspiDev_t* pDev,
 {
     int ret = GQSPI_CODE_SUCCESS;
     uint32_t reg_genfifo, xferSz;
-#ifdef GQSPI_DMA
+#ifndef GQSPI_MODE_IO
     uint8_t* dmarxptr = NULL;
 #endif
     GQSPI_EN = 1; /* Enable device */
@@ -529,27 +529,26 @@ static int qspi_transfer(QspiDev_t* pDev,
         reg_genfifo |= (GQSPI_GEN_FIFO_RX | GQSPI_GEN_FIFO_DATA_XFER);
         reg_genfifo |= (pDev->stripe & GQSPI_GEN_FIFO_STRIPE);
 
-        xferSz = rxSz;
-    #ifdef GQSPI_DMA
-        /* if xferSz or rxData is not QQSPI_DMA_ALIGN aligned use tmp  */
+        xferSz = qspi_calc_exp(rxSz, &reg_genfifo);
+    #ifndef GQSPI_MODE_IO
+        /* check if pointer is aligned or odd remainder */
         dmarxptr = rxData;
-        if ((rxSz & (QQSPI_DMA_ALIGN-1)) ||
-            (((size_t)rxData) & (QQSPI_DMA_ALIGN-1))) {
+        if (((size_t)rxData & (QQSPI_DMA_ALIGN-1)) || (xferSz & 3)) {
             dmarxptr = (uint8_t*)dmatmp;
-            /* round up */
             xferSz = ((xferSz + (QQSPI_DMA_ALIGN-1)) & ~(QQSPI_DMA_ALIGN-1));
             if (xferSz > (uint32_t)sizeof(dmatmp)) {
                 xferSz = (uint32_t)sizeof(dmatmp);
             }
+            /* re-adjust transfer */
+            xferSz = qspi_calc_exp(xferSz, &reg_genfifo);
         }
 
         GQSPIDMA_DST = (unsigned long)dmarxptr;
         GQSPIDMA_SIZE = xferSz;
-        GQSPIDMA_IER = GQSPIDMA_ISR_ALL_MASK;
+        GQSPIDMA_IER = GQSPIDMA_ISR_DONE; /* enable DMA done interrupt */
         flush_dcache_range((unsigned long)dmarxptr,
             (unsigned long)dmarxptr + xferSz);
     #endif
-        xferSz = qspi_calc_exp(xferSz, &reg_genfifo);
 
         /* Submit general FIFO operation */
         ret = qspi_gen_fifo_write(reg_genfifo);
@@ -558,7 +557,7 @@ static int qspi_transfer(QspiDev_t* pDev,
             break;
         }
 
-    #ifndef GQSPI_DMA
+    #ifdef GQSPI_MODE_IO
         /* Read FIFO */
         ret = gspi_fifo_rx(rxData, xferSz);
         if (ret != GQSPI_CODE_SUCCESS) {
@@ -569,7 +568,7 @@ static int qspi_transfer(QspiDev_t* pDev,
         if (qspi_dmaisr_wait(GQSPIDMA_ISR_DONE, 0)) {
             return GQSPI_CODE_TIMEOUT;
         }
-        GQSPIDMA_ISR = GQSPIDMA_ISR_DONE;
+        GQSPIDMA_ISR = GQSPIDMA_ISR_DONE; /* clear DMA interrupt */
         /* adjust xfer sz */
         if (xferSz > rxSz)
             xferSz = rxSz;
@@ -577,6 +576,13 @@ static int qspi_transfer(QspiDev_t* pDev,
         if (dmarxptr != rxData) {
             memcpy(rxData, dmarxptr, xferSz);
         }
+        #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 3
+        if (xferSz <= 1024) {
+            for (uint32_t i=0; i<xferSz; i+=4) {
+                wolfBoot_printf("RXD=%08x\n", *((uint32_t*)&rxData[i]));
+            }
+        }
+        #endif
     #endif
 
         /* offset size and buffer */
@@ -594,7 +600,7 @@ static int qspi_transfer(QspiDev_t* pDev,
 static int qspi_flash_read_id(QspiDev_t* dev, uint8_t* id, uint32_t idSz)
 {
     int ret;
-    uint8_t cmd[20]; /* size multiple of uint32_t */
+    uint8_t cmd[4]; /* size multiple of uint32_t */
     uint8_t status = 0;
 
     memset(cmd, 0, sizeof(cmd));
@@ -846,53 +852,47 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     /* Select Generic Quad-SPI */
     GQSPI_SEL = 1;
 
-    /* Clear and disable interrupts */
+    /* Clear and disable all interrupts */
     reg_isr = GQSPI_ISR;
-    GQSPI_ISR |= GQSPI_ISR_WR_TO_CLR_MASK; /* Clear poll timeout counter interrupt */
+    GQSPI_ISR = (reg_isr | GQSPI_ISR_WR_TO_CLR_MASK); /* Clear poll timeout counter interrupt */
     reg_cfg = GQSPIDMA_ISR;
     GQSPIDMA_ISR = reg_cfg; /* clear all active interrupts */
-    GQSPIDMA_STS |= GQSPIDMA_STS_WTC; /* mark outstanding DMA's done */
     GQSPI_IDR = GQSPI_IXR_ALL_MASK; /* disable interrupts */
-    GQSPIDMA_ISR = GQSPIDMA_ISR_ALL_MASK; /* disable interrupts */
-    /* Reset FIFOs */
-    if (GQSPI_ISR & GQSPI_IXR_RX_FIFO_EMPTY) {
-        GQSPI_FIFO_CTRL |= (GQSPI_FIFO_CTRL_RST_TX_FIFO | GQSPI_FIFO_CTRL_RST_RX_FIFO);
-    }
-    if (reg_isr & GQSPI_IXR_RX_FIFO_EMPTY) {
-        GQSPI_FIFO_CTRL |= GQSPI_FIFO_CTRL_RST_RX_FIFO;
-    }
+    GQSPIDMA_IDR = GQSPIDMA_ISR_ALL_MASK;
 
     GQSPI_EN = 0; /* Disable device */
 
     /* Initialize clock divisor, write protect hold and start mode */
-#ifdef GQSPI_DMA
-    reg_cfg  = GQSPI_CFG_MODE_EN_DMA; /* Use DMA Transfer Mode */
-#else
+#ifdef GQSPI_MODE_IO
     reg_cfg  = GQSPI_CFG_MODE_EN_IO; /* Use I/O Transfer Mode */
     reg_cfg |= GQSPI_CFG_START_GEN_FIFO; /* Auto start GFIFO cmd execution */
+#else
+    reg_cfg  = GQSPI_CFG_MODE_EN_DMA; /* Use DMA Transfer Mode */
 #endif
     reg_cfg |= GQSPI_CFG_BAUD_RATE_DIV(GQSPI_CLK_DIV); /* Clock Divider */
     reg_cfg |= GQSPI_CFG_WP_HOLD; /* Use WP Hold */
     reg_cfg &= ~(GQSPI_CFG_CLK_POL | GQSPI_CFG_CLK_PH); /* Use POL=0,PH=0 */
     GQSPI_CFG = reg_cfg;
 
-#if GQSPI_CLK_DIV >= 2 /* 300/8=37.5MHz */
-    /* At 40 MHz, the Quad-SPI controller should be in non-loopback mode with
+#if GQSPI_CLK_DIV >= 1 /* 125/4=31.25MHz */
+    /* At <40 MHz, the Quad-SPI controller should be in non-loopback mode with
      * the clock and data tap delays bypassed. */
     IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = 0;
     GQSPI_DATA_DLY_ADJ = 0;
-#elif GQSPI_CLK_DIV >= 1 /* 300/4=75MHz */
-    /* At 100 MHz, the Quad-SPI controller should be in clock loopback mode
+#elif GQSPI_CLK_DIV >= 0 /* 125/2 = 62.5MHz */
+    /* At <100 MHz, the Quad-SPI controller should be in clock loopback mode
      * with the clock tap delay bypassed, but the data tap delay enabled. */
     IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = GQSPI_LPBK_DLY_ADJ_USE_LPBK;
     GQSPI_DATA_DLY_ADJ = (GQSPI_DATA_DLY_ADJ_USE_DATA_DLY |
                           GQSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(2));
-#else
-    /* At 150 MHz, only the generic controller can be used.
+#endif
+#if 0
+    /* At <150 MHz, only the generic controller can be used.
      * The generic controller should be in clock loopback mode and the clock
      * tap delay enabled, but the data tap delay disabled. */
+    /* For EL2 or lower must use IOCTL_SET_TAPDELAY_BYPASS ARG1=2, ARG2=0 */
     IOU_TAPDLY_BYPASS = 0;
     GQSPI_LPBK_DLY_ADJ = GQSPI_LPBK_DLY_ADJ_USE_LPBK;
     GQSPI_DATA_DLY_ADJ = 0;
@@ -906,10 +906,6 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     /* Reset DMA */
     GQSPIDMA_CTRL = GQSPIDMA_CTRL_DEF;
     GQSPIDMA_CTRL2 = GQSPIDMA_CTRL2_DEF;
-
-    /* Interrupts unmask and enable */
-    GQSPI_IMR = GQSPI_IXR_ALL_MASK;
-    GQSPI_IER = GQSPI_IXR_ALL_MASK;
 
     GQSPI_EN = 1; /* Enable Device */
 #endif /* USE_QNX */
