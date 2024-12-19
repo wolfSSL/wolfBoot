@@ -9,6 +9,7 @@ This README describes configuration of supported targets.
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
+* [Kontron VX3060-S2](#kontron-vx3060-s2)
 * [Microchip SAMA5D3](#microchip-sama5d3)
 * [Microchip SAME51](#microchip-same51)
 * [Nordic nRF52840](#nordic-nrf52840)
@@ -3199,24 +3200,97 @@ IMAGE=test-app/image.elf SIGN=--ecc384 tools/scripts/x86_fsp/qemu/make_hd.sh
 For more advanced uses of TPM, please check [TPM.md](TPM.md) to configure wolfBoot
 according to your secure boot strategy.
 
-### Running on Kontron VX3060-S2
+## Kontron VX3060-S2
 
-A reference configuration and helper scripts are provided to run wolfBoot on
-Kontron VX3060-S2 board.
-A flash dump of the original Flash BIOS is needed.
-To compile a flashable image run the following steps:
+wolfBoot supports Kontron VX3060-S2 board using Intel Firmware Support Package
+(FSP). You can find more details about the wolfBoot support with Intel FSP in
+the above [section](#intel-x86_64-with-intel-fsp-support). A minimal
+configuration example is provided in
+[config/examples/kontron_vx3060_s2.config](config/examples/kontron_vx3060_s2.config).
+In order to produce a flashable flash image, a dump of the original flash is
+required. To build wolfBoot, follow the following steps:
 
 ```
 cp config/examples/kontron_vx3060_s2.config .config
 ./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh
-make tpmtools
-./tools/scripts/x86_fsp/tgl/assemble_image.sh -k
-make CFLAGS_EXTRA="-DHAVE_ECC256"
+make
 ./tools/scripts/x86_fsp/tgl/assemble_image.sh -n /path/to/original/flash/dump
 ```
 
-they produce a file named `final_image.bin` inside the root folder of the
-repository that can be directly flashed into the BIOS flash of the board.
+After running the above commands, you should find a file named `final_image.bin` in the root folder of the repository. The image can be flashed directly into the board.
+By default wolfBoot tries to read a wolfBoot image from the SATA drive.
+The drive should be partitioned with a GPT table, wolfBoot tries to load an image saved in the 5th or the 6th partition. 
+You can find more details in `src/update_disk.c`. wolfBoot doesn't try to read from a filesystem and the images need to be written directly into the partition.
+This is an example boot log:
+```
+Press any key within 2 seconds to toogle BIOS flash chip
+Cache-as-RAM initialized
+FSP-T:A.0.7E build 70
+FSP-M:A.0.7E build 70
+microcode revision: AA, date: 12-28-2022
+machine_update_m_params
+calling FspMemInit...
+warm reset required
+Press any key within 2 seconds to toogle BIOS flash chip
+Cache-as-RAM initialized
+FSP-T:A.0.7E build 70
+FSP-M:A.0.7E build 70
+microcode revision: AA, date: 12-28-2022
+machine_update_m_params
+calling FspMemInit...
+success
+top reserved 0_78C50000h
+mem: [ 0x78C40000, 0x78C50000 ] - stack (0x10000)
+mem: [ 0x78C3FFF4, 0x78C40000 ] - stage2 parameter (0xC)
+hoblist@0x78C90000
+mem: [ 0x78C38000, 0x78C3FFF4 ] - page tables (0x7FF4)
+page table @ 0x78C38000 [length: 7000]
+mem: [ 0x78C37FF8, 0x78C38000 ] - stage2 ptr holder (0x8)
+TOLUM: 0x78C37FF8
+mem: [ 0x100000, 0x100014 ] - stage1 .data (0x14)
+mem: [ 0x100020, 0x100040 ] - stage1 .bss (0x20)
+CPUID(0):1B 756E6547 6C65746E
+mem: [ 0x58000100, 0x5806196C ] - wolfboot (0x6186C)
+mem: [ 0x5806196C, 0x58282000 ] - wolfboot .bss (0x220694)
+load wolfboot end
+Authenticating wolfboot at 58000200...
+Boot partition: 0x58000100 (sz 399212, ver 0x1, type 0x201)
+verify_payload: image open successfully.
+verify_payload: integrity OK. Checking signature.
+wolfBoot: verified OK.
+starting wolfboot 64bit
+call temp ram exit...successA.0.7E build 70
+call silicon...successcap a 2268409840
+ddt disabled 0
+device enable: 172049
+device enable: 172049
+AHCI port 0: Disk detected (det: 04 ipm: 00)
+AHCI port 1: Disk detected (det: 03 ipm: 01)
+SATA disk drive detected on AHCI port 1
+Reading MBR...
+Found GPT PTE at sector 1
+Found valid boot signature in MBR
+Valid GPT partition table
+Current LBA: 0x1
+Backup LBA: 0x6FCCF2F
+Max number of partitions: 128
+Software limited: only allowing up to 16 partitions per disk.
+Disk size: 1107095552
+disk0.p0 (0_8000000h@ 0_100000)
+disk0.p1 (0_20000000h@ 0_8100000)
+disk0.p2 (4_0h@ 0_28100000)
+disk0.p3 (4_0h@ 4_28100000)
+disk0.p4 (1_0h@ 8_28100000)
+disk0.p5 (0_80000000h@ 9_28100000)
+disk0.p6 (0_80000000h@ 9_A8100000)
+Total partitions on disk0: 7
+Checking primary OS image in 0,5...
+Checking secondary OS image in 0,6...
+Versions, A:1 B:1
+Load address 0x58282000
+Attempting boot from partition A
+```
+At this point, the kernel image in partition "A" is verified and staged and you should be seeing the log messages of your OS booting.
 
 ## Infineon AURIX TC3xx
 
