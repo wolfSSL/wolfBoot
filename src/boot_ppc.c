@@ -101,12 +101,12 @@ void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l, uint32_t trgt_id,
     (void)get32(LAWAR(idx));
 }
 
-void __attribute((weak)) hal_early_init(void)
+void WEAKFUNCTION hal_early_init(void)
 {
 
 }
 #ifdef MMU
-int __attribute((weak))  hal_dts_fixup(void* dts_addr)
+int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 {
     (void)dts_addr;
     return 0;
