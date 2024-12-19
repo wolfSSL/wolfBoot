@@ -358,7 +358,7 @@ int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
     return ret;
 }
 
-int disk_find_partion_by_label(int drv, const char *label)
+int disk_find_partition_by_label(int drv, const char *label)
 {
     struct disk_partition *p;
     int i;
