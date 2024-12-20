@@ -311,8 +311,6 @@ static inline int qspi_dmaisr_wait(uint32_t wait_mask, uint32_t wait_val)
 
 static int qspi_gen_fifo_write(uint32_t reg_genfifo)
 {
-    uint32_t reg_cfg;
-
     /* wait until the gen FIFO is not full to write */
     if (qspi_isr_wait(GQSPI_IXR_GEN_FIFO_NOT_FULL, 0)) {
         return GQSPI_CODE_TIMEOUT;

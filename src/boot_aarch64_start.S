@@ -462,32 +462,6 @@ invalidatecaches_end:
     ret
 
 
-/*
- * void flush_dcache_range(start, end)
- *
- * clean & invalidate data cache in the range
- *
- * x0: start address
- * x1: end address
- */
-.global flush_dcache_range
-flush_dcache_range:
-    mrs    x3, ctr_el0
-    lsr    x3, x3, #16
-    and    x3, x3, #0xf
-    mov    x2, #4
-    lsl    x2, x2, x3  /* cache line size */
-
-    /* x2 <- minimal cache line size in cache system */
-    sub    x3, x2, #1
-    bic    x0, x0, x3
-1:  dc     civac, x0 /* clean & invalidate data or unified cache */
-    add    x0, x0, x2
-    cmp    x0, x1
-    b.lo   1b
-    dsb    sy
-    ret
-
 
 /*
 * Below is the static translation page table required by MMU for Cortex-A53.
@@ -1056,6 +1030,33 @@ FPUStatus:
 .align 8
 
 #endif /* !USE_BUILTIN_STARTUP */
+
+
+/*
+ * void flush_dcache_range(start, end)
+ *
+ * clean & invalidate data cache in the range
+ *
+ * x0: start address
+ * x1: end address
+ */
+.global flush_dcache_range
+flush_dcache_range:
+    mrs    x3, ctr_el0
+    lsr    x3, x3, #16
+    and    x3, x3, #0xf
+    mov    x2, #4
+    lsl    x2, x2, x3  /* cache line size */
+
+    /* x2 <- minimal cache line size in cache system */
+    sub    x3, x2, #1
+    bic    x0, x0, x3
+1:  dc     civac, x0 /* clean & invalidate data or unified cache */
+    add    x0, x0, x2
+    cmp    x0, x1
+    b.lo   1b
+    dsb    sy
+    ret
 
 
 /* Initialize GIC 400 (GICv2) */
