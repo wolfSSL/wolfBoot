@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-set(WOLFBOOT_PATH ../../../../)
+set(WOLFBOOT_PATH ../../../..)
 set(CMAKE_CXX_COMPILER arm-none-eabi-gcc)
 
 include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
@@ -64,6 +64,7 @@ target_include_directories(wolfboot PRIVATE
 )
 
 target_link_libraries(wolfboot pico_stdlib hardware_flash)
+pico_set_linker_script(wolfboot ../../../../../hal/rp2350.ld)
 
 pico_enable_stdio_usb(wolfboot 1)
 pico_enable_stdio_uart(wolfboot 0)

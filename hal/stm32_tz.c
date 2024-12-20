@@ -33,7 +33,7 @@
     #include "hal/stm32h5.h"
 #endif
 
-#include "hal/stm32_tz.h"
+#include "hal/armv8m_tz.h"
 
 #include "image.h"
 #include "hal.h"

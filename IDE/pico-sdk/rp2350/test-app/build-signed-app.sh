@@ -3,8 +3,6 @@
 mkdir -p build
 cd build
 cmake .. -DPICO_SDK_PATH=$PICO_SDK_PATH -DPICO_PLATFORM=rp2350
-cat pico_flash_region.ld | sed -e "s/0x10000000/0x10040400/g" >pico_flash_region_wolfboot.ld
-cp pico_flash_region_wolfboot.ld pico_flash_region.ld
 
 # Get off-tree source file from raspberry pico-examples
 curl -o blink.c https://raw.githubusercontent.com/raspberrypi/pico-examples/refs/tags/sdk-2.1.0/blink/blink.c

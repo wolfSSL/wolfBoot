@@ -1,4 +1,4 @@
-/* stm32_tz.h
+/* armv8m_tz.h
  *
  * Copyright (C) 2024 wolfSSL Inc.
  *
@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef STM32_TZ_INCLUDED
-#define STM32_TZ_INCLUDED
+#ifndef TZ_INCLUDED
+#define TZ_INCLUDED
 #include <stdint.h>
 
 /* SAU registers, used to define memory mapped regions */
