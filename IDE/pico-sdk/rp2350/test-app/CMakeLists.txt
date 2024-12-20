@@ -17,6 +17,7 @@ add_executable(blink
     blink.c
 )
 
+pico_set_linker_script(blink ../../../../../hal/rp2350-app.ld)
 target_link_libraries(blink pico_stdlib)
 
 # create map/bin/hex/uf2 file etc.
