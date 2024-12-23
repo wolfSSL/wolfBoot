@@ -742,7 +742,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
 
     /* if PART_UPDATE_ENDFLAGS straddles a sector, (all non FLAGS_HOME builds)
      * align it to the correct sector */
-    if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE == 0)
+    if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE != 0)
         lastSector -= WOLFBOOT_SECTOR_SIZE;
 
     /* erase the sector flags */
