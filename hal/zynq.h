@@ -51,15 +51,10 @@
 #define XPAR_PSU_DDR_1_S_AXI_BASEADDR 0x800000000
 #define XPAR_PSU_DDR_1_S_AXI_HIGHADDR 0x87FFFFFFF
 
-/* Clocking */
-#define CORTEXA53_0_CPU_CLK_FREQ_HZ    1199880127
-#define CORTEXA53_0_TIMESTAMP_CLK_FREQ 99990005
-#define UART_MASTER_CLOCK              99990005
-#define GQSPI_CLK_FREQ_HZ              124987511
-
 /* IOP System-level Control */
 #define IOU_SLCR_BASSE             0xFF180000
-#define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)(IOU_SLCR_BASSE + 0x390)))
+#define IOU_TAPDLY_BYPASS_ADDR     (IOU_SLCR_BASSE + 0x390)
+#define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)IOU_TAPDLY_BYPASS_ADDR))
 #define IOU_TAPDLY_BYPASS_LQSPI_RX (1UL << 2) /* LQSPI Tap Delay Enable on Rx Clock signal. 0: enable. 1: disable (bypass tap delay). */
 
 /* QSPI bare-metal driver */
@@ -186,8 +181,12 @@
 #define GQSPIDMA_ISR_ALL_MASK  0xFEU
 
 /* QSPI Configuration (bare-metal only) */
+
+#ifndef GQSPI_CLK_REF
+#define GQSPI_CLK_REF          125000000 /* QSPI Reference Clock */
+#endif
 #ifndef GQSPI_CLK_DIV
-#define GQSPI_CLK_DIV          2 /* (CLK (300MHz) / (2 << DIV) = BUS): 0=DIV2, 1=DIV4, 2=DIV8 */
+#define GQSPI_CLK_DIV          2 /* (QSPI_REF_CLK (125MHZ) / (2 << DIV) = BUS): 0=DIV2, 1=DIV4, 2=DIV8 */
 #endif
 #define GQSPI_CS_ASSERT_CLOCKS 5 /* CS Setup Time (tCSS) - num of clock cycles foes in IMM */
 #define GQSPI_FIFO_WORD_SZ     4
@@ -221,29 +220,20 @@
 
 
 /* Flash Parameters:
- * Micron Serial NOR Flash Memory 64KB Sector Erase MT25QU512ABB
- * Stacked device (two 512Mb (64MB))
- * Dual Parallel so total addressable size is double
+ * Micron Serial NOR Flash Memory 4K Sector Erase MT25QU512ABB
+ * ZCU102 uses dual Parallel (stacked device 2*64MB)
+ * MT25QU512 - Read FlashID: 20 BB 20 (64MB)
+ * MT25QU01G - Read FlashID: 20 BB 21 (128MB)
+ * MT25QU02G - Read FlashID: 20 BB 22 (256MB)
  */
-#ifndef FLASH_DEVICE_SIZE
-    #ifdef ZCU102
-        /* 64*2 (dual parallel) = 128MB */
-        #define FLASH_DEVICE_SIZE (2 *  64 * 1024 * 1024) /* MT25QU512ABB */
-    #else
-        /* 128*2 (dual parallel) = 256MB */
-        #define FLASH_DEVICE_SIZE (2 * 128 * 1024 * 1024) /* MT25QU01GBBB */
-    #endif
-#endif
 #ifndef FLASH_PAGE_SIZE
-    #ifdef ZCU102
-        /* MT25QU512ABB - Read FlashID: 20 BB 20 */
-        #define FLASH_PAGE_SIZE 256
-    #else
-        /* MT25QU01GBBB - Read FlashID: 20 BB 21 */
+    #if defined(GQPI_USE_DUAL_PARALLEL) && GQPI_USE_DUAL_PARALLEL == 1
+        /* each flash page size is 256 bytes, for dual parallel double it */
         #define FLASH_PAGE_SIZE 512
+    #else
+        #define FLASH_PAGE_SIZE 256
     #endif
 #endif
-#define FLASH_NUM_SECTORS      (FLASH_DEVICE_SIZE/WOLFBOOT_SECTOR_SIZE)
 
 
 /* Flash Commands */
@@ -368,6 +358,10 @@
 #ifndef DEBUG_UART_BASE
     /* default to UART0 */
     #define DEBUG_UART_BASE     ZYNQMP_UART0_BASE
+#endif
+
+#ifndef UART_CLK_REF
+    #define UART_CLK_REF        100000000
 #endif
 
 #ifndef DEBUG_UART_BAUD
