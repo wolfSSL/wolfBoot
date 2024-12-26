@@ -44,7 +44,7 @@
     /* Xilinx BSP Driver */
     #include "xqspipsu.h"
     #ifndef QSPI_DEVICE_ID
-    #define QSPI_DEVICE_ID		XPAR_XQSPIPSU_0_DEVICE_ID
+    #define QSPI_DEVICE_ID      XPAR_XQSPIPSU_0_DEVICE_ID
     #endif
     #ifndef QSPI_CLK_PRESACALE
     #define QSPI_CLK_PRESACALE  XQSPIPSU_CLK_PRESCALE_8
@@ -104,7 +104,7 @@ void uart_init(void)
     ZYNQMP_UART_RXTOUT = 0;
 
     /* baud (115200) = master clk / (BR_GEN * (BR_DIV + 1)) */
-    ZYNQMP_UART_BR_GEN = UART_MASTER_CLOCK / (DEBUG_UART_BAUD * (DEBUG_UART_DIV+1));
+    ZYNQMP_UART_BR_GEN = UART_CLK_REF / (DEBUG_UART_BAUD * (DEBUG_UART_DIV+1));
     ZYNQMP_UART_BR_DIV = DEBUG_UART_DIV;
 
     /* Reset TX/RX */
@@ -843,6 +843,16 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     }
 #else
     /* QSPI bare-metal driver */
+    wolfBoot_printf("QSPI Init: Ref=%dMHz, Div=%d, Bus=%d, IO=%s\n",
+        GQSPI_CLK_REF/1000000,
+        (2 << GQSPI_CLK_DIV),
+        (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)),
+    #ifdef GQSPI_MODE_IO
+        "Poll"
+    #else
+        "DMA"
+    #endif
+    );
 
     /* Disable Linear Mode in case FSBL enabled it */
     LQSPI_EN = 0;
@@ -872,21 +882,20 @@ void qspi_init(uint32_t cpu_clock, uint32_t flash_freq)
     reg_cfg &= ~(GQSPI_CFG_CLK_POL | GQSPI_CFG_CLK_PH); /* Use POL=0,PH=0 */
     GQSPI_CFG = reg_cfg;
 
-#if GQSPI_CLK_DIV >= 1 /* 125/4=31.25MHz */
+#if (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) <= 40000000 /* 40MHz */
     /* At <40 MHz, the Quad-SPI controller should be in non-loopback mode with
      * the clock and data tap delays bypassed. */
     IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = 0;
     GQSPI_DATA_DLY_ADJ = 0;
-#elif GQSPI_CLK_DIV >= 0 /* 125/2 = 62.5MHz */
+#elif (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) <= 100000000 /* 100MHz */
     /* At <100 MHz, the Quad-SPI controller should be in clock loopback mode
      * with the clock tap delay bypassed, but the data tap delay enabled. */
     IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
     GQSPI_LPBK_DLY_ADJ = GQSPI_LPBK_DLY_ADJ_USE_LPBK;
     GQSPI_DATA_DLY_ADJ = (GQSPI_DATA_DLY_ADJ_USE_DATA_DLY |
                           GQSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(2));
-#endif
-#if 0
+#elif (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) <= 150000000 /* 150MHz */
     /* At <150 MHz, only the generic controller can be used.
      * The generic controller should be in clock loopback mode and the clock
      * tap delay enabled, but the data tap delay disabled. */
