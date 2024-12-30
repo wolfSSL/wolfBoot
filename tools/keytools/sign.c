@@ -1743,13 +1743,13 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     int r;
     uint32_t patch_sz, patch_inv_sz;
     uint32_t patch_inv_off;
-    uint32_t delta_base_version = 0;
-    char *base_ver_p, *base_ver_e;
+    uint32_t *delta_base_version = NULL;
+    uint16_t delta_base_version_sz = 0;
     WB_DIFF_CTX diff_ctx;
     int ret = -1;
     int io_sz;
     uint8_t *base_hash = NULL;
-    uint32_t base_hash_sz = 0;
+    uint16_t base_hash_sz = 0;
     uint32_t wolfboot_sector_size = 0;
     uint32_t blksz;
 
@@ -1804,24 +1804,12 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
 #endif
 
     /* Check base image version */
-    base_ver_p = strstr(f_base, "_v");
-    if (base_ver_p) {
-        base_ver_p += 2;
-        base_ver_e = strchr(base_ver_p, '_');
-        if (base_ver_e) {
-            long long retval;
-            retval = strtoll(base_ver_p, NULL, 10);
-            if (retval < 0)
-                delta_base_version = 0;
-            else
-                delta_base_version = (uint32_t)(retval&0xFFFFFFFF);
-        }
-    }
-    if (delta_base_version == 0) {
+    delta_base_version_sz = sign_tool_find_header((uint8_t *)base + 8, HDR_VERSION, (void *)&delta_base_version);
+    if ((delta_base_version_sz != sizeof(uint32_t)) || (*delta_base_version == 0)) {
         printf("Could not read firmware version from base file %s\n", f_base);
         goto cleanup;
     } else {
-        printf("Delta base version: %u\n", delta_base_version);
+        printf("Delta base version: %u\n", *delta_base_version);
     }
 
     /* Retrieve the hash digest of the base image */
@@ -1986,7 +1974,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     /* Create delta file, with header, from the resulting patch */
 
     ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
-            delta_base_version, patch_sz, patch_inv_off, patch_inv_sz, base_hash, base_hash_sz);
+            *delta_base_version, patch_sz, patch_inv_off, patch_inv_sz, base_hash, base_hash_sz);
 
 cleanup:
     if (dest) {
