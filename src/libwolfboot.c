@@ -740,11 +740,6 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     uint8_t selSec = 0;
 #endif
 
-    /* if PART_UPDATE_ENDFLAGS straddles a sector, (all non FLAGS_HOME builds)
-     * align it to the correct sector */
-    if (PART_UPDATE_ENDFLAGS % WOLFBOOT_SECTOR_SIZE == 0)
-        lastSector -= WOLFBOOT_SECTOR_SIZE;
-
     /* erase the sector flags */
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_unlock();
