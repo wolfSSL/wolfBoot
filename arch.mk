@@ -100,8 +100,9 @@ ifeq ($(ARCH),AARCH64)
   endif
   ifeq ($(NO_ARM_ASM),0)
     ARCH_FLAGS=-mstrict-align
-    CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8
-    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
+    CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8 -DWOLFSSL_AARCH64_PRIVILEGE_MODE
+    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/cpuid.o \
+                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
                       lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512.o \
                       lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o \
                       lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
