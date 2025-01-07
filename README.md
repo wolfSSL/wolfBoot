@@ -658,6 +658,10 @@ Use `make keysclean` to delete keys and regenerate.
   * Improvements to supported targets
     * ARMv7-M, ARMv8-M: Using Thumb2 version of ARMASM
     * x86-FSP: improvements to stage1 code, added support for GDT tables
+    * Xilinx UltraScale+
+      * Support running from all Execution levels
+      * Added QSPI DMA support and improved clock configuration
+      * Added FIT image support
   * New features and improvements
     * Added integration with wolfHSM
     * Improve delta update detection of base image via SHA
