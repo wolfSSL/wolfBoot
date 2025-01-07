@@ -652,3 +652,22 @@ Use `make keysclean` to delete keys and regenerate.
     * wolfTPM latest
     * wolfPKCS11 latest
 
+### V 2.4.0 - (2025-01-07)
+  * New hardware targets
+    * Add support for NXP Layerscape LS1028A
+  * Improvements to supported targets
+    * ARMv7-M, ARMv8-M: Using Thumb2 version of ARMASM
+    * x86-FSP: improvements to stage1 code, added support for GDT tables
+  * New features and improvements
+    * Added integration with wolfHSM
+    * Improve delta update detection of base image via SHA
+    * Remove compile-time dependencies for key tools
+    * Key tools: improve detection of delta base image version
+  * Bug fixes
+    * Fix potential failure in `NVM_FLASH_WRITEONCE` mode
+  * Updated modules
+    * wolfSSL v5.7.6
+    * wolfTPM 3.8.0
+    * wolfPKCS11 latest
+    * wolfHSM latest
+
