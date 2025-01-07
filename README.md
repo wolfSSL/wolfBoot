@@ -659,7 +659,7 @@ Use `make keysclean` to delete keys and regenerate.
     * ARMv7-M, ARMv8-M: Using Thumb2 version of ARMASM
     * x86-FSP: improvements to stage1 code, added support for GDT tables
     * Xilinx UltraScale+
-      * Support running from all Execution levels
+      * Support running from all Exception Levels
       * Added QSPI DMA support and improved clock configuration
       * Added FIT image support
   * New features and improvements
