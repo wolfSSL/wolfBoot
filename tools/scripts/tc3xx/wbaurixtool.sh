@@ -26,8 +26,6 @@ WOLFBOOT_DIR="../../../"
 PRVKEY_DER="$WOLFBOOT_DIR/priv.der"
 PUBKEY_DER="$WOLFBOOT_DIR/priv_pub.der"
 TARGET_H="$WOLFBOOT_DIR/include/target.h"
-MACROS_IN="$WOLFBOOT_DIR/IDE/AURIX/wolfBoot-tc3xx-wolfHSM/wolfBoot_macros.in"
-MACROS_OUT="$WOLFBOOT_DIR/IDE/AURIX/wolfBoot-tc3xx-wolfHSM/wolfBoot_macros.txt"
 NVM_CONFIG="$WOLFBOOT_DIR/tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit"
 NVM_BIN="whNvmImage.bin"
 NVM_HEX="whNvmImage.hex"
@@ -238,16 +236,22 @@ do_gen_target() {
 # Function to clean generated files
 do_clean() {
     echo "Cleaning generated files"
+    local macros_out="$WOLFBOOT_DIR/IDE/AURIX/wolfBoot-tc3xx${HSM:+-wolfHSM}/wolfBoot_macros.txt"
+    
     rm -f "$PRVKEY_DER"
     rm -f "$PUBKEY_DER"
     rm -f "$TARGET_H"
-    rm -f "$MACROS_OUT"
+    rm -f "$macros_out"
     rm -f "$NVM_BIN"
     rm -f "$NVM_HEX"
 }
 
 # Function to generate macros
 do_gen_macros() {
+    # Set the macros paths dynamically based on HSM flag
+    local macros_in="$WOLFBOOT_DIR/IDE/AURIX/wolfBoot-tc3xx${HSM:+-wolfHSM}/wolfBoot_macros.in"
+    local macros_out="$WOLFBOOT_DIR/IDE/AURIX/wolfBoot-tc3xx${HSM:+-wolfHSM}/wolfBoot_macros.txt"
+
     # Use macros options first, then fall back to sign/keygen options
     local sign_algo="${MACROS_OPTS[sign_algo]:-${SIGN_OPTS[sign_algo]:-${KEYGEN_OPTS[sign_algo]:-$DEFAULT_SIGN_ALGO}}}"
     local hash_algo="${MACROS_OPTS[hash_algo]:-${SIGN_OPTS[hash_algo]}}"
@@ -314,10 +318,10 @@ do_gen_macros() {
         -e "s/@ML_DSA_IMAGE_SIGNATURE_SIZE@/$ml_dsa_image_signature_size/g" \
         -e "s/@WOLFBOOT_HUGE_STACK@/$use_huge_stack/g" \
         -e "s/@WOLFBOOT_USE_WOLFHSM_PUBKEY_ID@/$use_wolfhsm_pubkey_id/g" \
-        "$MACROS_IN" > "$MACROS_OUT"
+        "$macros_in" > "$macros_out"
 
     # Remove empty lines from the output file, as they cause compiler errors
-    sed -i '/^$/d' "$MACROS_OUT"
+    sed -i '/^$/d' "$macros_out"
 }
 
 # Function to generate a wolfHSM NVM image

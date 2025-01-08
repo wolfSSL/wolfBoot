@@ -316,10 +316,11 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="com.infineon.aurix.buildsystem.managed.buildArtefactType.elf" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=com.infineon.aurix.buildsystem.managed.buildArtefactType.elf,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" description="" id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug.401330509" name="TriCore Debug (GCC)" parent="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug" postannouncebuildStep="Generating binary from elf" postbuildStep="tricore-elf-objcopy.exe -O binary &quot;${BuildArtifactFileName}&quot; &quot;${BuildArtifactFileBaseName}.bin&quot;">
+				<configuration artifactName="${ProjName}" buildArtefactType="com.infineon.aurix.buildsystem.managed.buildArtefactType.elf" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=com.infineon.aurix.buildsystem.managed.buildArtefactType.elf,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" description="" errorParsers="org.eclipse.cdt.core.GASErrorParser;org.eclipse.cdt.core.GmakeErrorParser;org.eclipse.cdt.core.GLDErrorParser;org.eclipse.cdt.core.CWDLocator;org.eclipse.cdt.core.GCCErrorParser" id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug.401330509" name="TriCore Debug (GCC)" parent="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug" postannouncebuildStep="Generating binary from elf" postbuildStep="tricore-elf-objcopy.exe -O binary &quot;${BuildArtifactFileName}&quot; &quot;${BuildArtifactFileBaseName}.bin&quot;">
 					<folderInfo id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug.401330509." name="/" resourcePath="">
 						<toolChain id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug.1484118021" name="GCC" superClass="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.debug">
 							<option id="com.infineon.aurix.buildsystem.managed.gcc.c.option.mtc.570305100" name="Instruction set" superClass="com.infineon.aurix.buildsystem.managed.gcc.c.option.mtc"/>
+							<option id="com.infineon.aurix.buildsystem.managed.gcc.c.option.mcpu.48200493" name="CPU Derivative" superClass="com.infineon.aurix.buildsystem.managed.gcc.c.option.mcpu"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="com.infineon.aurix.buildsystem.managed.gcc.targetPlatform.151573044" isAbstract="false" osList="all" superClass="com.infineon.aurix.buildsystem.managed.gcc.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/wolfBoot-tc3xx}/TriCore Debug (GCC)" id="com.infineon.aurix.buildsystem.managed.gcc.builtin.builder.1718901406" keepEnvironmentInBuildfile="false" name="Gnu Make Builder" superClass="com.infineon.aurix.buildsystem.managed.gcc.builtin.builder"/>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.24121577" name="AURIX GCC Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler">
@@ -490,6 +491,7 @@
 									<listOptionValue builtIn="false" value="PART_BOOT_EXT"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_FLASH_MULTI_SECTOR_ERASE"/>
 								</option>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.1524582129" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-mtc162 -c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.1768062788" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.937301277" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
@@ -500,7 +502,7 @@
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType.678458224" name="Assembler Input" superClass="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.c.linker.1470542959" name="AURIX GCC Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.c.linker">
-								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.341171241" name="Linker flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" useByScannerDiscovery="false" value="-Wl,--gc-sections -Wl,-Map,wolfBoot-tc3xx.map" valueType="string"/>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.341171241" name="Linker flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" useByScannerDiscovery="false" value="-mtc162 -Wl,--gc-sections -Wl,-Map,wolfBoot-tc3xx.map" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.c.linker.inputType.1357120707" superClass="com.infineon.aurix.buildsystem.managed.c.linker.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.linker.500011979" name="AURIX G++ Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.linker"/>
@@ -515,6 +517,7 @@
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+			<storageModule moduleId="com.infineon.aurix.buildsystem.build.autodiscovery.settings"/>
 		</cconfiguration>
 		<cconfiguration id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.release.1853938077">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.release.1853938077" moduleId="org.eclipse.cdt.core.settings" name="TriCore Release (GCC)">
@@ -702,6 +705,7 @@
 									<listOptionValue builtIn="false" value="PART_SWAP_EXT"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_FLASH_MULTI_SECTOR_ERASE"/>
 								</option>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.1290904533" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-mtc162 -c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.526570406" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.1059779057" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
@@ -712,6 +716,7 @@
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType.172140853" name="Assembler Input" superClass="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.c.linker.2051405852" name="AURIX GCC Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.c.linker">
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.1085040707" name="Linker flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" value="-mtc162 -Wl,--gc-sections" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.c.linker.inputType.1267861903" superClass="com.infineon.aurix.buildsystem.managed.c.linker.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.linker.1218688897" name="AURIX G++ Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.linker"/>

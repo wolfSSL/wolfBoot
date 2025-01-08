@@ -494,7 +494,7 @@
 									<listOptionValue builtIn="false" value="WOLFBOOT_ENABLE_WOLFHSM_CLIENT"/>
 									<listOptionValue builtIn="false" value="WOLFHSM_CFG"/>
 								</option>
-								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.498353619" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.498353619" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-mtc162 -c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.1768062788" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.937301277" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
@@ -505,7 +505,7 @@
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType.678458224" name="Assembler Input" superClass="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.c.linker.1470542959" name="AURIX GCC Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.c.linker">
-								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.341171241" name="Linker flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" useByScannerDiscovery="false" value="-Wl,--gc-sections -Wl,-Map,wolfBoot-tc3xx-wolfHSM.map" valueType="string"/>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.341171241" name="Linker flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" useByScannerDiscovery="false" value="-mtc162 -Wl,--gc-sections -Wl,-Map,wolfBoot-tc3xx-wolfHSM.map" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.c.linker.inputType.1357120707" superClass="com.infineon.aurix.buildsystem.managed.c.linker.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.linker.500011979" name="AURIX G++ Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.linker"/>
@@ -711,7 +711,7 @@
 									<listOptionValue builtIn="false" value="WOLFBOOT_ENABLE_WOLFHSM_CLIENT"/>
 									<listOptionValue builtIn="false" value="WOLFHSM_CFG"/>
 								</option>
-								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.306665650" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.306665650" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-mtc162 -c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.526570406" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.1059779057" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
@@ -722,6 +722,7 @@
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType.172140853" name="Assembler Input" superClass="com.infineon.aurix.buildsystem.managed.tool.assembler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.c.linker.2051405852" name="AURIX GCC Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.c.linker">
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.2143232281" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" value="-mtc162 -Wl,--gc-sections" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.c.linker.inputType.1267861903" superClass="com.infineon.aurix.buildsystem.managed.c.linker.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.linker.1218688897" name="AURIX G++ Linker" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.linker"/>
