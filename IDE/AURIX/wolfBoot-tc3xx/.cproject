@@ -491,7 +491,7 @@
 									<listOptionValue builtIn="false" value="PART_BOOT_EXT"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_FLASH_MULTI_SECTOR_ERASE"/>
 								</option>
-								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.1524582129" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0 -mtc162" valueType="string"/>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.1524582129" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-mtc162 -c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.1768062788" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.937301277" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
@@ -705,7 +705,7 @@
 									<listOptionValue builtIn="false" value="PART_SWAP_EXT"/>
 									<listOptionValue builtIn="false" value="WOLFBOOT_FLASH_MULTI_SECTOR_ERASE"/>
 								</option>
-								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.1290904533" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0 -mtc162" valueType="string"/>
+								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.1290904533" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-mtc162 -c -fmessage-length=0 &quot;@${workspace_loc:/${ProjName}/wolfBoot_macros.txt}&quot;" valueType="string"/>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.526570406" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.1059779057" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
