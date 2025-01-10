@@ -22,6 +22,9 @@
 #ifndef _ZYNQMP_H_
 #define _ZYNQMP_H_
 
+#ifndef USE_BUILTIN_STARTUP
+/* Macros needs for boot_aarch64_startup.S */
+
 /* By default expect EL2 at startup */
 #ifndef EL3_SECURE
 #define EL3_SECURE     0
@@ -50,6 +53,9 @@
 #define XPAR_PSU_DDR_0_S_AXI_HIGHADDR 0x7FFFFFFF
 #define XPAR_PSU_DDR_1_S_AXI_BASEADDR 0x800000000
 #define XPAR_PSU_DDR_1_S_AXI_HIGHADDR 0x87FFFFFFF
+
+#endif /* USE_BUILTIN_STARTUP */
+
 
 /* IOP System-level Control */
 #define IOU_SLCR_BASSE             0xFF180000
