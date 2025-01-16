@@ -20,34 +20,6 @@ quit_renode() {
 
 rm -f $RENODE_UART
 
-# external LMS test
-if (echo $TEST_OPTIONS | grep "ext_LMS" &>/dev/null); then
-    # Need git.
-    apt install -y git
-
-    # Extra steps needed for external LMS support.
-    # Need to clone the hash-sigs repo, and patch it for wolfBoot build.
-    mkdir -p lib/hash-sigs/lib || exit 2
-    git clone https://github.com/cisco/hash-sigs.git lib/hash-sigs/src || exit 2
-    cd lib/hash-sigs/src && git checkout b0631b8891295bf2929e68761205337b7c031726 && \
-        git apply ../../../tools/lms/0001-Patch-to-support-wolfBoot-LMS-build.patch &&\
-        cd ../../.. || exit 2
-fi
-
-# external XMSS test
-if (echo $TEST_OPTIONS | grep "ext_XMSS" &>/dev/null); then
-    # Need git.
-    apt install -y git
-
-    # Extra steps needed for external XMSS support.
-    # Need to clone the xmss-reference repo, and patch it for wolfBoot build.
-    cd lib || exit 2
-    git clone https://github.com/XMSS/xmss-reference.git xmss || exit 2
-    cd xmss && git checkout 171ccbd26f098542a67eb5d2b128281c80bd71a6 && \
-        git apply ../../tools/xmss/0001-Patch-to-support-wolfSSL-xmss-reference-integration.patch &&\
-        cd ../../ || exit 2
-fi
-
 make keysclean
 make keytools
 make -C tools/test-expect-version

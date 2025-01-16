@@ -43,10 +43,10 @@ endif
 ifeq ($(SIGN),RSA4096)
 	SIGN_ARGS+= --rsa4096
 endif
-ifneq (,$(filter $(SIGN), LMS ext_LMS))
+ifeq ($(SIGN),LMS)
 	SIGN_ARGS+= --lms
 endif
-ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
+ifeq ($(SIGN),XMSS)
 	SIGN_ARGS+= --xmss
 endif
 ifeq ($(SIGN),ML_DSA)

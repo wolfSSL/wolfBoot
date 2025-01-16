@@ -122,10 +122,10 @@ int wolfBot_get_dts_size(void *dts_addr);
         defined (WOLFBOOT_SIGN_ECC521)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ecc
 #endif
-#if defined(WOLFBOOT_SIGN_LMS) || defined(WOLFBOOT_SIGN_ext_LMS)
+#if defined(WOLFBOOT_SIGN_LMS)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_lms
 #endif
-#if defined(WOLFBOOT_SIGN_XMSS ) || defined(WOLFBOOT_SIGN_ext_XMSS)
+#if defined(WOLFBOOT_SIGN_XMSS )
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_xmss
 #endif
 #ifdef WOLFBOOT_SIGN_ML_DSA

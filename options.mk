@@ -338,7 +338,7 @@ ifneq ($(findstring RSA4096,$(SIGN)),)
   endif
 endif
 
-ifneq (,$(filter $(SIGN), LMS ext_LMS))
+ifeq ($(SIGN),LMS)
   # For LMS the signature size is a function of the LMS parameters.
   # All five of these parms must be set in the LMS .config file:
   #   LMS_LEVELS, LMS_HEIGHT, LMS_WINTERNITZ, IMAGE_SIGNATURE_SIZE,
@@ -377,38 +377,7 @@ ifeq ($(SIGN),LMS)
   endif
 endif
 
-ifeq ($(SIGN),ext_LMS)
-  LMSDIR = lib/hash-sigs
-  KEYGEN_OPTIONS+=--lms
-  SIGN_OPTIONS+=--lms
-  CFLAGS+=-D"LMS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE)
-  WOLFCRYPT_OBJS+= \
-    ./$(LMSDIR)/src/hss_verify.o \
-    ./$(LMSDIR)/src/hss_verify_inc.o \
-    ./$(LMSDIR)/src/hss_common.o \
-    ./$(LMSDIR)/src/hss_thread_single.o \
-    ./$(LMSDIR)/src/hss_zeroize.o \
-    ./$(LMSDIR)/src/lm_common.o \
-    ./$(LMSDIR)/src/lm_ots_common.o \
-    ./$(LMSDIR)/src/lm_ots_verify.o \
-    ./$(LMSDIR)/src/lm_verify.o \
-    ./$(LMSDIR)/src/endian.o \
-    ./$(LMSDIR)/src/hash.o \
-    ./$(LMSDIR)/src/sha256.o \
-    ./lib/wolfssl/wolfcrypt/src/ext_lms.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_LMS" -D"WOLFSSL_HAVE_LMS" -D"HAVE_LIBLMS" \
-    -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
-    -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" -I$(LMSDIR)/src \
-    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-    -D"WOLFSSL_LMS_VERIFY_ONLY"
-  ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    $(error WOLFBOOT_SMALL_STACK with LMS not supported)
-  else
-    STACK_USAGE=1024
-  endif
-endif
-
-ifneq (,$(filter $(SIGN), XMSS ext_XMSS))
+ifeq ($(SIGN),XMSS)
   ifndef XMSS_PARAMS
     $(error XMSS_PARAMS not set)
   endif
@@ -434,39 +403,6 @@ ifeq ($(SIGN),XMSS)
   else
     STACK_USAGE=9352
   endif
-endif
-
-ifeq ($(SIGN),ext_XMSS)
-  # Use ext_xmss implementation.
-  XMSSDIR = lib/xmss
-  KEYGEN_OPTIONS+=--xmss
-  SIGN_OPTIONS+=--xmss
-  CFLAGS+=-D"XMSS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE)
-  WOLFCRYPT_OBJS+= \
-    ./$(XMSSDIR)/params.o \
-    ./$(XMSSDIR)/thash.o \
-    ./$(XMSSDIR)/hash_address.o \
-    ./$(XMSSDIR)/wots.o \
-    ./$(XMSSDIR)/xmss.o \
-    ./$(XMSSDIR)/xmss_core_fast.o \
-    ./$(XMSSDIR)/xmss_commons.o \
-    ./$(XMSSDIR)/utils.o \
-    ./lib/wolfssl/wolfcrypt/src/ext_xmss.o
-  CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" -D"WOLFSSL_HAVE_XMSS" -D"HAVE_LIBXMSS" \
-    -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\" -I$(XMSSDIR) \
-    -D"IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-    -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"XMSS_VERIFY_ONLY"
-  ifeq ($(WOLFBOOT_SMALL_STACK),1)
-    $(error WOLFBOOT_SMALL_STACK with XMSS not supported)
-  else
-    STACK_USAGE=2712
-  endif
-endif
-
-# Only needed if using 3rd party integration. This can be
-# removed if ext_lms and ext_xmss are deprecated.
-ifneq (,$(filter $(SIGN), ext_LMS ext_XMSS))
-  CFLAGS  +=-DWOLFSSL_EXPERIMENTAL_SETTINGS
 endif
 
 ifeq ($(SIGN),ML_DSA)
@@ -899,14 +835,6 @@ endif
 
 ifeq ($(SIGN_ALG),)
   SIGN_ALG=$(SIGN)
-endif
-
-ifeq ($(SIGN_ALG),ext_XMSS)
-  SIGN_ALG=XMSS
-endif
-
-ifeq ($(SIGN_ALG),ext_LMS)
-  SIGN_ALG=LMS
 endif
 
 ifneq ($(KEYVAULT_OBJ_SIZE),)
