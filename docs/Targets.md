@@ -1106,13 +1106,13 @@ This should output 3 binary files, `wolfboot.bin`, `image_v1_signed.bin` and `fa
 
 ### Hardware Setup LS1028ARDB
 
-DIP Switch Configuraiton for XSPI_NOR_BOOT:
+DIP Switch Configuration for XSPI_NOR_BOOT:
 ```
 SW2 : 0xF8 = 11111000  SW3 : 0x70 = 01110000  SW5 : 0x20 = 00100000
 Where '1' = UP/ON
 ```
 
-UART Configuraiton:
+UART Configuration:
 ```
 Baud Rate: 115200
 Data Bits: 8
@@ -1155,15 +1155,15 @@ the RCW is `0x0` and the address offset for wolboot is `0x1000`.
 
 #### Other Tools
 
-1. Make sure the memory addresses are alinged with the `.config` file.
-2. Note the important NOR flash addresses in the defualt config are as follows.
+1. Make sure the memory addresses are aligned with the `.config` file.
+2. Note the important NOR flash addresses in the default config are as follows.
 3. RCW location is offset `0x0` or `0x20000000` memory mapped.
 4. Wolfboot location is offset `0x1000` or `0x20001000` where wolfboot starts.
 5. Application location is offset `0x20000` or `0x20020000` where application code goes.
 6. Update location is offset `0x40000` or `0x20040000` where the new or updated applciaiton goes.
 7. Load Location is `0x18020100` which is OCRAM or where the applciaiton code is loaded if using RAM loading from
 8. DTS Location is
-9. Update memory locations as neeeded.
+9. Update memory locations as needed.
 
 
 ## Cortex-A53 / Raspberry PI 3 (experimental)
@@ -1251,7 +1251,7 @@ cp wolfboot_linux_raspi.bin /media/foo/boot/kernel8.img
 
 * Troubleshooting
 
-o Turn on UART for debugging to know what boot-process is going on. Chaning DEBUG_UART property in .config to 1.
+o Turn on UART for debugging to know what boot-process is going on. Changing DEBUG_UART property in .config to 1.
 ```
 DEBUG_UART?=1
 ```
