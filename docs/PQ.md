@@ -107,9 +107,6 @@ These two hash-based PQ signature options are supported:
 - LMS: uses wolfcrypt implementation from `wc_lms.c`, and `wc_lms_impl.c`.
 - XMSS: uses wolfcrypt implementation from `wc_xmss.c`, and `wc_xmss_impl.c`.
 
-The wolfcrypt implementations are more performant and are recommended.
-The external integrations are experimental and for testing interoperability.
-
 ### LMS/HSS Config
 
 A new LMS sim example has been added here:
