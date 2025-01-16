@@ -698,31 +698,6 @@ const ivt __attribute__((section(".image_vt"))) image_vector_table = {
     IVT_RSVD                            /* Reserved = 0 */
 };
 
-/*******************************************************************************
- * Variables for BOARD_BootClockRUN configuration
- ******************************************************************************/
-const clock_arm_pll_config_t armPllConfig_BOARD_BootClockRUN = {
-    .loopDivider = 100,                 /* PLL loop divider, Fout = Fin * 50 */
-    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-};
-const clock_sys_pll_config_t sysPllConfig_BOARD_BootClockRUN = {
-    .loopDivider = 1,                   /* PLL loop divider, Fout = Fin * ( 20 + loopDivider*2 + numerator / denominator ) */
-    .numerator = 0,                     /* 30 bit numerator of fractional loop divider */
-    .denominator = 1,                   /* 30 bit denominator of fractional loop divider */
-    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-};
-const clock_usb_pll_config_t usb1PllConfig_BOARD_BootClockRUN = {
-    .loopDivider = 0,                   /* PLL loop divider, Fout = Fin * 20 */
-    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-};
-const clock_video_pll_config_t videoPllConfig_BOARD_BootClockRUN = {
-    .loopDivider = 31,                  /* PLL loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
-    .postDivider = 8,                   /* Divider after PLL */
-    .numerator = 0,                     /* 30 bit numerator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
-    .denominator = 1,                   /* 30 bit denominator of fractional loop divider, Fout = Fin * ( loopDivider + numerator / denominator ) */
-    .src = 0,                           /* Bypass clock source, 0 - OSC 24M, 1 - CLK1_P and CLK1_N */
-};
-
 static void clock_init(void)
 {
     if (CCM_ANALOG->PLL_ARM & CCM_ANALOG_PLL_ARM_BYPASS_MASK) {
