@@ -33,11 +33,10 @@ ST-Link utilities (e.g. [STSW-LINK004](https://www.st.com/en/development-tools/s
 
 This step is required to compile the bootloader.
 
-Open a command line terminal in the [IAR](./) directory. Execute the following script:
+Open a command line terminal in the [IDE/IAR](./) directory. Execute the following script:
 
 ```
 generate_key.bat
-
 ```
 
 The script will generate a keypair. The file `wolfboot_signing_private_key.der` in the root of the repository contains the private key that will be used
