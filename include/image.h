@@ -168,13 +168,18 @@ int wolfBot_get_dts_size(void *dts_addr);
 
 
 #if (defined(WOLFBOOT_ARMORED) && defined(__WOLFBOOT))
-
-#if !defined(ARCH_ARM) || !defined(__GNUC__)
-#   error WOLFBOOT_ARMORED only available with arm-gcc compiler
+#if !defined(ARCH_ARM) || (!defined(__GNUC__) && \
+    !(defined(__ICCARM__) && defined(__IAR_SYSTEMS_ICC__)))
+#   error WOLFBOOT_ARMORED only available for ARM with IAR or gcc compilers
 #endif
 
+#if defined(__GNUC__)
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
+#else
+#define likely(x)      (x)
+#define unlikely(x)    (x)
+#endif
 
 struct wolfBoot_image {
     uint8_t *hdr;
@@ -434,6 +439,8 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
  *
  * Double check by reading the value in p_res from memory a few times.
  */
+#if defined(__GNUC__)
+
 #define VERIFY_FN(img,p_res,fn,...) \
     /* Redundant set of r0=50*/ \
     asm volatile("mov r0, #50":::"r0"); \
@@ -468,6 +475,59 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
     asm volatile("nope:"); \
     asm volatile("nop")
 
+#elif defined(__ICCARM__) && defined(__IAR_SYSTEMS_ICC__)
+
+#define VERIFY_FN(img, p_res, fn, ...) \
+    do { \
+        __asm volatile( \
+            "mov r0, #50\n" \
+            "mov r0, #50\n" \
+            "mov r0, #50\n" \
+            : /* No output operands */ \
+            : /* No input operands */ \
+            : "r0" /* Clobbered registers */ \
+        ); \
+        void (*confirm_func)(struct wolfBoot_image *) = \
+            wolfBoot_image_confirm_signature_ok; \
+        fn(__VA_ARGS__); \
+        __asm volatile( \
+            "cmp r0, #0\n" \
+            "bne 1f\n" \
+            "cmp r0, #0\n" \
+            "bne 1f\n" \
+            "cmp r0, #0\n" \
+            "bne 1f\n" \
+            "cmp r0, #0\n" \
+            "bne 1f\n" \
+            "ldr r2, [%0]\n" \
+            "cmp r2, #1\n" \
+            "bne 1f\n" \
+            "ldr r2, [%0]\n" \
+            "cmp r2, #1\n" \
+            "bne 1f\n" \
+            "ldr r2, [%0]\n" \
+            "cmp r2, #1\n" \
+            "bne 1f\n" \
+            "ldr r2, [%0]\n" \
+            "cmp r2, #1\n" \
+            "bne 1f\n" \
+            /* Load 'img' into r0 (first argument to the function) */ \
+            "mov r0, %1\n" \
+            /* Load the function pointer into r3 */ \
+            "mov r3, %2\n" \
+            "blx r3\n"\
+            "b 2f\n" \
+            "1:\n" \
+            "nop\n" \
+            "2:\n" \
+            : /* No output operands */ \
+            : "r"(p_res), "r"(img), "r"(confirm_func) /* Input operands */ \
+            : "r0", "r2", "lr" /* Clobbered registers */ \
+        ); \
+    } while (0)
+#endif
+
+
 /**
  * This macro is only invoked after a successful update version check, prior to
  * initiating the update installation.
@@ -486,6 +546,8 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
  * version is not strictly greater than the current one.
  *
  */
+#if defined(__GNUC__)
+
 #define VERIFY_VERSION_ALLOWED(fb_ok) \
     /* Stash the registry values */ \
     asm volatile("push {r4, r5, r6, r7}"); \
@@ -574,6 +636,96 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
     asm volatile("end_check:"); \
     /* Restore previously saved registry values */ \
     asm volatile("pop {r4, r5, r6, r7}":::"r4", "r5", "r6", "r7")
+
+#elif defined(__ICCARM__) && defined(__IAR_SYSTEMS_ICC__)
+
+#define VERIFY_VERSION_ALLOWED(fb_ok) \
+    do { \
+        __asm volatile( \
+            "push {r4, r5, r6, r7}\n" \
+            "mov r0, #0\n" \
+            "mov r4, #1\n" \
+            "mov r5, #0\n" \
+            "mov r6, #2\n" \
+            "mov r7, #0\n" \
+            "mov r0, #0\n" \
+            "mov r4, #1\n" \
+            "mov r5, #0\n" \
+            "mov r6, #2\n" \
+            "mov r7, #0\n" \
+            "mov r0, %0\n" \
+            "cmp r0, #1\n" \
+            "bne 1f\n" \
+            "cmp r0, #1\n" \
+            "bne 1f\n" \
+            "cmp r0, #1\n" \
+            "bne 1f\n" \
+            "b 2f\n" \
+            "1:\n" \
+            "mov r0, #1\n" \
+            "mov r0, #1\n" \
+            "mov r0, #1\n" \
+            "bl wolfBoot_get_image_version\n" \
+            "mov r5, r0\n" \
+            "mov r5, r0\n" \
+            "mov r5, r0\n" \
+            "mov r0, #1\n" \
+            "mov r0, #1\n" \
+            "mov r0, #1\n" \
+            "bl wolfBoot_get_image_version\n" \
+            "mov r7, r0\n" \
+            "mov r7, r0\n" \
+            "mov r7, r0\n" \
+            "cmp r5, r7\n" \
+            "bne .\n" \
+            "cmp r5, r7\n" \
+            "bne .-4\n" \
+            "cmp r5, r7\n" \
+            "bne .-8\n" \
+            "cmp r5, r7\n" \
+            "bne .-12\n" \
+            "mov r0, #0\n" \
+            "mov r0, #0\n" \
+            "mov r0, #0\n" \
+            "bl wolfBoot_get_image_version\n" \
+            "mov r4, r0\n" \
+            "mov r4, r0\n" \
+            "mov r4, r0\n" \
+            "mov r0, #0\n" \
+            "mov r0, #0\n" \
+            "mov r0, #0\n" \
+            "bl wolfBoot_get_image_version\n" \
+            "mov r6, r0\n" \
+            "mov r6, r0\n" \
+            "mov r6, r0\n" \
+            "cmp r4, r6\n" \
+            "bne .\n" \
+            "cmp r4, r6\n" \
+            "bne .-4\n" \
+            "cmp r4, r6\n" \
+            "bne .-8\n" \
+            "cmp r4, r6\n" \
+            "bne .-12\n" \
+            "mov r0, #0\n" \
+            "mov r0, #0\n" \
+            "mov r0, #0\n" \
+            "cmp r4, r5\n" \
+            "bge .\n" \
+            "cmp r6, r7\n" \
+            "bge .-4\n" \
+            "cmp r4, r5\n" \
+            "bge .-8\n" \
+            "cmp r6, r7\n" \
+            "bge .-12\n" \
+            "2:\n" \
+            "pop {r4, r5, r6, r7}\n" \
+            : /* No output operands */ \
+            : "r"(fb_ok) /* Input operands */ \
+            : "r0", "r4", "r5", "r6", "r7" /* Clobbered registers */ \
+        ); \
+    } while (0)
+#endif
+
 
 #define CONFIRM_MASK_VALID(id, mask) \
     asm volatile("mov r1, %0" :: "r"(id):"r1");  \
