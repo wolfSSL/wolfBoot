@@ -518,8 +518,12 @@ out:
 
 
 #ifdef WOLFBOOT_ARMORED
-#    pragma GCC push_options
-#    pragma GCC optimize("O0")
+#    ifdef __GNUC__
+#        pragma GCC push_options
+#        pragma GCC optimize("O0")
+#    elif defined(__IAR_SYSTEMS_ICC__)
+#        pragma optimize=none
+#    endif
 #endif
 
 /* Reserve space for two sectors in case of NVM_FLASH_WRITEONCE, for redundancy */
@@ -951,7 +955,7 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_check_self_update();
 #endif
 
-#ifdef NVM_FLASH_WRITEONCE 
+#ifdef NVM_FLASH_WRITEONCE
     /* nvm_select_fresh_sector needs unlocked flash in cases where the unused
      * sector needs to be erased */
     hal_flash_unlock();
@@ -963,7 +967,7 @@ void RAMFUNCTION wolfBoot_start(void)
     bootRet =   wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
-#ifdef NVM_FLASH_WRITEONCE 
+#ifdef NVM_FLASH_WRITEONCE
     hal_flash_lock();
 #ifdef EXT_FLASH
     ext_flash_lock();
@@ -1039,6 +1043,11 @@ void RAMFUNCTION wolfBoot_start(void)
     hal_prepare_boot();
     do_boot((void *)boot.fw_base);
 }
+
 #ifdef WOLFBOOT_ARMORED
-#    pragma GCC pop_options
+#    ifdef __GNUC__
+#        pragma GCC pop_options
+#    elif defined(__IAR_SYSTEMS_ICC__)
+#        pragma optimize=default
+#    endif
 #endif

@@ -10,15 +10,15 @@ SIGN_ENC_ARGS=
 DELTA_DATA_SIZE?=2000
 
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
-	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
+	KEYGEN_TOOL="$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe"
 else
-	KEYGEN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/keygen
+	KEYGEN_TOOL="$(WOLFBOOT_ROOT)/tools/keytools/keygen"
 endif
 
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
-	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
+	SIGN_TOOL="$(WOLFBOOT_ROOT)/tools/keytools/sign.exe"
 else
-	SIGN_TOOL=$(WOLFBOOT_ROOT)/tools/keytools/sign
+	SIGN_TOOL="$(WOLFBOOT_ROOT)/tools/keytools/sign"
 endif
 
 # Make sign algorithm argument
