@@ -90,5 +90,6 @@ Using the ST-LINK Utility, perform the following steps:
 
 If you are using a STM32F407-discovery board, a red LED will turn on upon application boot.
 
+##  Armored Mode (Glitch Resistance)
 
-
+If you would like to enable the "Armored" mode (glitch resistance) in IAR you can set the compiler pre-processor macro `WOLFBOOT_ARMORED`. Note: This has only been tested with ECDSA on Cortex-M.

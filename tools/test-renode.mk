@@ -25,15 +25,15 @@ XMSS_OPTS=WOLFBOOT_XMSS_PARAMS='XMSS-SHA2_10_256' WOLFBOOT_SMALL_STACK=0 \
          IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=5000
 
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/keygen.exe)","")
-	KEYGEN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe
+	KEYGEN_TOOL?="$(WOLFBOOT_ROOT)/tools/keytools/keygen.exe"
 else
-	KEYGEN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/keygen
+	KEYGEN_TOOL?="$(WOLFBOOT_ROOT)/tools/keytools/keygen"
 endif
 
 ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
-	SIGN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/sign.exe
+	SIGN_TOOL?="$(WOLFBOOT_ROOT)/tools/keytools/sign.exe"
 else
-	SIGN_TOOL?=$(WOLFBOOT_ROOT)/tools/keytools/sign
+	SIGN_TOOL?="$(WOLFBOOT_ROOT)/tools/keytools/sign"
 endif
 
 ifeq ($(TARGET),stm32f7)
