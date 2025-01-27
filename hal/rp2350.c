@@ -1,9 +1,9 @@
 /* rp2350.c
  *
- * Stubs for custom HAL implementation. Defines the 
- * functions used by wolfboot for a specific target.
+ * Custom HAL implementation. Defines the
+ * functions used by wolfboot for raspberry-pi pico2 (rp2350)
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -110,9 +110,6 @@
 
 #endif
 
-
-
-
 #ifdef __WOLFBOOT
 void hal_init(void)
 {
@@ -120,7 +117,6 @@ void hal_init(void)
     stdio_init_all();
 #endif
 }
-
 
 #ifdef TZEN
 static void rp2350_configure_sau(void)
@@ -130,8 +126,8 @@ static void rp2350_configure_sau(void)
     sau_init_region(0, 0x10000000, 0x1002FFFF, 1); /* Secure flash */
     sau_init_region(1, 0x10030000, 0x1003FFFF, 1); /* Non-secure-callable flash */
     sau_init_region(2, 0x10040000, 0x101FFFFF, 0); /* Non-secure flash */
-    sau_init_region(3, 0x20000000, 0x20007FFF, 1); /* Secure RAM */
-    sau_init_region(4, 0x20008000, 0x20081FFF, 0); /* Non-secure RAM */
+    sau_init_region(3, 0x20000000, 0x2003FFFF, 1); /* Secure RAM (Low 256K) */
+    sau_init_region(4, 0x20040000, 0x20081FFF, 0); /* Non-secure RAM (High 256 + 8K) */
     sau_init_region(6, 0x40000000, 0x5FFFFFFF, 0); /* Non-secure peripherals */
     sau_init_region(7, 0xD0000000, 0xDFFFFFFF, 0); /* Non-secure SIO region */
 
@@ -159,37 +155,32 @@ static void rp2350_configure_nvic(void)
 static void rp2350_configure_access_control(void)
 {
     int i;
-    /* Reset ACCESSCTRL */
-    const uint32_t secure_fl = (ACCESS_BITS_SU | ACCESS_BITS_SP | ACCESS_BITS_DMA | ACCESS_BITS_DBG | ACCESS_BITS_CORE0 | ACCESS_BITS_CORE1) | ACCESS_MAGIC;
+    const uint32_t secure_fl = (ACCESS_BITS_SU | ACCESS_BITS_SP | ACCESS_BITS_DMA | ACCESS_BITS_DBG | ACCESS_BITS_CORE0) | ACCESS_MAGIC;
     const uint32_t non_secure_fl = (ACCESS_BITS_NSU | ACCESS_BITS_NSP | ACCESS_BITS_DMA | ACCESS_BITS_DBG | ACCESS_BITS_CORE0 | ACCESS_BITS_CORE1) | ACCESS_MAGIC;
 
-    //ACCESS_CONTROL_CFGRESET = 1;
-    /* Corresponding regions for the secure flash and RAM */
-    /*
-    for(i = 0; i < 2; i++) {
+    /* Set access control to Secure for lower RAM (0x20000000 - 0x2003FFFF) */
+    for (i = 0; i < 4; i ++)
         ACCESS_CONTROL_SRAM(i) = secure_fl;
-    }
-    */
-    for (i = 0; i < 10; i++) {
+
+    /* Set access control to Non-secure for upper RAM (0x20040000 - 0x20081FFF) */
+    for (i = 4; i < 10; i++)
         ACCESS_CONTROL_SRAM(i) = non_secure_fl | secure_fl;
-    }
+
+    /* Set access control for peripherals */
     ACCESS_CONTROL_ROM = secure_fl | non_secure_fl;
     ACCESS_CONTROL_XIP_MAIN = non_secure_fl | secure_fl;
     ACCESS_CONTROL_DMA = non_secure_fl;
     ACCESS_CONTROL_TRNG = secure_fl;
-    ACCESS_CONTROL_SYSCFG = secure_fl | non_secure_fl;
+    ACCESS_CONTROL_SYSCFG = secure_fl;
     ACCESS_CONTROL_SHA256 = secure_fl;
-    ACCESS_CONTROL_GPIOMASK0 = 0xFFFFFFFF;
-    ACCESS_CONTROL_GPIOMASK1 = 0xFFFFFFFF;
     ACCESS_CONTROL_IO_BANK0 = non_secure_fl | secure_fl;
     ACCESS_CONTROL_IO_BANK1 = non_secure_fl | secure_fl;
     ACCESS_CONTROL_PADS_BANK0 = non_secure_fl | secure_fl;
-//    ACCESS_CONTROL_FORCE_CORE_NS = (1 << 1); /* Force core 1 to non-secure */
     ACCESS_CONTROL_PIO0 = non_secure_fl | secure_fl;
     ACCESS_CONTROL_PIO1 = non_secure_fl | secure_fl;
     ACCESS_CONTROL_PIO2 = non_secure_fl | secure_fl;
 
-    ACCESS_CONTROL_I2C0   = non_secure_fl|secure_fl;
+    ACCESS_CONTROL_I2C0   = non_secure_fl |secure_fl;
     ACCESS_CONTROL_I2C1   = non_secure_fl | secure_fl;
     ACCESS_CONTROL_PWM    = non_secure_fl | secure_fl;
     ACCESS_CONTROL_SPI0   = non_secure_fl | secure_fl;
@@ -201,10 +192,18 @@ static void rp2350_configure_access_control(void)
     ACCESS_CONTROL_ADC    = non_secure_fl | secure_fl;
     ACCESS_CONTROL_RESETS = non_secure_fl | secure_fl;
 
+    /* Force core 1 to non-secure */
+    ACCESS_CONTROL_FORCE_CORE_NS = (1 << 1) | ACCESS_MAGIC;
+
+    /* GPIO masks: Each bit represents "NS allowed" for a GPIO pin */
+    ACCESS_CONTROL_GPIOMASK0 = 0xFFFFFFFF;
+    ACCESS_CONTROL_GPIOMASK1 = 0xFFFFFFFF;
+
     CPACR |= 0x000000FF; /* Enable access to coprocessors CP0-CP7 */
     NSACR |= 0x000000FF; /* Enable non-secure access to coprocessors CP0-CP7 */
 
-//    ACCESS_CONTROL_LOCK = (1 << 0) | (1 << 1) | (1 << 3);
+    /* Lock access control */
+    ACCESS_CONTROL_LOCK = non_secure_fl | secure_fl;
 }
 #endif
 

@@ -23,10 +23,12 @@
 
 MEMORY
 {
-    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = 256k
-    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 24k
-    SCRATCH_X(rwx) : ORIGIN = 0x20006000, LENGTH = 4k 
-    SCRATCH_Y(rwx) : ORIGIN = 0x20007000, LENGTH = 4k
+    FLASH(rx)      : ORIGIN = 0x10000000, LENGTH = 0x38000
+    FLASH_NSC(rx)  : ORIGIN = 0x10038000, LENGTH = 0x8000
+
+    RAM(rwx)       : ORIGIN = 0x20000000, LENGTH = 0x3E000
+    SCRATCH_X(rwx) : ORIGIN = 0x2003E000, LENGTH = 4k
+    SCRATCH_Y(rwx) : ORIGIN = 0x2003F000, LENGTH = 4k
 }
 
 ENTRY(_entry_point)
@@ -99,6 +101,12 @@ SECTIONS
         *(.eh_frame*)
         . = ALIGN(4);
     } > FLASH
+
+    .gnu.sgstubs :
+    {
+        *(.gnu.sgstubs*)   /* Secure Gateway stubs */
+        . = ALIGN(4);
+    } >FLASH_NSC
 
     /* Note the boot2 section is optional, and should be discarded if there is
        no reference to it *inside* the binary, as it is not called by the

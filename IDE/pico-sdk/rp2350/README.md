@@ -1,5 +1,27 @@
 ## wolfBoot port for rp2350 (Raspberry pi pico 2)
 
+### Support for TrustZone
+
+By default, TZEN=1 is enabled in the provided configuration. wolfBoot will run
+from the Secure domain, and will stage the application in the Non-Secure domain.
+
+The flash memory is divided as follows:
+
+- wolfBoot partition (0x10000000 - 0x1003FFFF), 224 KB
+- Non-secure callable partition (for secure gateway) (0x10038000 - 0x1003FFFF), 32 KB
+- Boot partition (0x10040000 - 0x1007FFFF), 768 KB
+- Update partition (0x10100000 - 0x1013FFFF), 768 KB
+- Unused flash space (0x101C1000 - 0x101FFFFF), 252 KB
+- Swap space (0x101C0000 - 0x101C0FFF), 4 KB
+
+The SRAM bank0 is assigned to the Secure domain, and enforced using both SAU and `ACCESS_CONTROL` registers.
+
+- Secure SRAM0-3: 0x20000000 - 0x2003FFFF, 256 KB
+- Non-secure SRAM4-7: 0x20040000 - 0x2007FFFF, 256 KB
+- Non-secure stack for application SRAM8-9: 0x20080000 - 0x20081FFF, 8 KB
+
+```
+
 ### Requirements 
 
 #### External debugger
@@ -31,18 +53,10 @@ From wolfBoot root directory, copy the example configuration:
 cp config/examples/rp2350.config .config
 ```
 
-By default, the config file indicates the following partition layout:
-
-```
-wolfBoot partition: 256 KB, at address 0x10000000 to 0x1003FFFF
-Boot partition:     768 KB, at address 0x10040000 to 0x1007FFFF
-Update partition:   768 KB, at address 0x10100000 to 0x1013FFFF
-Swap space:           4 KB, at address 0x101C0000 to 0x101C0FFF
-Unused flash space: 252 KB, at address 0x101C1000 to 0x101FFFFF
-```
-
 You can now edit the .config file to change partition sizes/offsets, algorithms,
-add/remove features, etc.
+disable trustzone, add/remove features, etc.
+
+When TZEN=0, the application will run in the Secure domain.
 
 When the configuration is complete, run `make`. This will:
 
@@ -61,6 +75,7 @@ return to this directory and run:
 
 ```
 cd wolfboot
+export PICO_SDK_PATH=...
 ./build-wolfboot.sh
 ```
 
@@ -69,7 +84,8 @@ This version of wolfboot incorporates the `.boot2` sequence needed to enable
 the QSPI device, provided by the pico-sdk and always embedded in all
 applications.
 
-wolfboot.bin contains the bootloader, configured as follows:
+wolfboot.bin contains the bootloader, and can be loaded into the RP2350, starting at address 0x10000000.
+The script will automatically upload the binary if a JLink debugger is connected.
 
 ### Building and uploading the application
 
@@ -85,6 +101,13 @@ The linker script included is modified to change the application entry point
 from 0x10000000 to 0x10040400, which is the start of the application code,
 taking into account the wolfBoot header size.
 
+The application is signed with the wolfBoot private key, and the signature is
+stored in the manifest header of the application binary.
+
+The output file `build/blink_v1_signed.bin` is automatically uploaded to the RP2350 if a JLink debugger is connected.
+The application image is stored in the boot partition, starting at address 0x10040000.
+The entry point of the application (0x10040400), set in the linker script `hal/rp2350-app.ld`, is the start of the application code, taking into account the wolfBoot header size.
+
 
 ### Testing the application
 
@@ -92,4 +115,6 @@ The application is a simple blinky example, which toggles the LED on the board
 every 500ms.
 
 If the above steps are successful, the LED on the board should start blinking.
+
+The code has been tested on a Seeed studio XIAO RP2350 board.
 

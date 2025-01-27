@@ -1,13 +1,4 @@
 #include <stdint.h>
-void runtime_init_bootrom_reset(void)
-{
-}
-
-void runtime_init_clocks(void)
-{
-}
-
-
 typedef void (*preinit_fn_t)(void);
 
 void runtime_init_cpasr(void)
