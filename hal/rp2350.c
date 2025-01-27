@@ -26,6 +26,9 @@
 #include <target.h>
 #include "image.h"
 #include "printf.h"
+
+#include "hardware/flash.h"
+
 #ifdef TZEN
 #include "armv8m_tz.h"
 #include "pico/bootrom.h"
@@ -221,7 +224,8 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    return 0; /* on success. */
+    flash_range_program(address - XIP_BASE, data, len);
+    return 0;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -234,6 +238,7 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    return 0; /* on success. */
+    flash_range_erase(address - XIP_BASE, len);
+    return 0;
 }
 
