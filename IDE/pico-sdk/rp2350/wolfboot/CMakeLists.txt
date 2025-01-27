@@ -35,10 +35,11 @@ add_executable(wolfboot
 # Add cflags
 target_compile_options(wolfboot PRIVATE
     -D__WOLFBOOT
-    -D__ARM_ARCH_6M__
     -DWOLFSSL_USER_SETTINGS
     -mcpu=cortex-m33
     -DCORTEX_M33
+    -DTZEN
+    -mcmse
     -DWOLFSSL_SP_ASM
     -DWOLFSSL_SP_ARM_CORTEX_M_ASM
     -DWOLFSSL_ARM_ARCH=8

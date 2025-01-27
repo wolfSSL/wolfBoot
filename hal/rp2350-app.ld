@@ -23,8 +23,9 @@
 
 MEMORY
 {
+    BOOT(rx) : ORIGIN = 0x10000000, LENGTH = 0x40400
     FLASH(rx) : ORIGIN = 0x10040400, LENGTH = 0x1D0000
-    RAM(rwx) : ORIGIN =  0x20008000, LENGTH = 472k
+    RAM(rwx) : ORIGIN =  0x20010000, LENGTH = 0x6E000
     SCRATCH_X(rwx) : ORIGIN = 0x2007E000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x2007F000, LENGTH = 4k
 }
@@ -78,15 +79,16 @@ SECTIONS
         . = ALIGN(4);
         /* preinit data */
         PROVIDE_HIDDEN (__preinit_array_start = .);
-        KEEP(*(SORT(.preinit_array.*)))
-        KEEP(*(.preinit_array))
+        /* KEEP(*(SORT(.preinit_array.*))) */
+        /* KEEP(*(.preinit_array)) */
+        KEEP(*(.nonsecure_preinit_array))
         PROVIDE_HIDDEN (__preinit_array_end = .);
 
         . = ALIGN(4);
         /* init data */
         PROVIDE_HIDDEN (__init_array_start = .);
-        KEEP(*(SORT(.init_array.*)))
-        KEEP(*(.init_array))
+        /* KEEP(*(SORT(.init_array.*))) */
+        /* KEEP(*(.init_array)) */
         PROVIDE_HIDDEN (__init_array_end = .);
 
         . = ALIGN(4);
@@ -100,30 +102,8 @@ SECTIONS
         . = ALIGN(4);
     } > FLASH
 
-    /* Note the boot2 section is optional, and should be discarded if there is
-       no reference to it *inside* the binary, as it is not called by the
-       bootrom. (The bootrom performs a simple best-effort XIP setup and
-       leaves it to the binary to do anything more sophisticated.) However
-       there is still a size limit of 256 bytes, to ensure the boot2 can be
-       stored in boot RAM.
-
-       Really this is a "XIP setup function" -- the name boot2 is historic and
-       refers to its dual-purpose on RP2040, where it also handled vectoring
-       from the bootrom into the user image.
-    */
-
-    .boot2 : {
-        __boot2_start__ = .;
-        *(.boot2)
-        __boot2_end__ = .;
-    } > FLASH
-
-    ASSERT(__boot2_end__ - __boot2_start__ <= 256,
-        "ERROR: Pico second stage bootloader must be no more than 256 bytes in size")
-
     .rodata : {
         *(EXCLUDE_FILE(*libgcc.a: *libc.a:*lib_a-mem*.o *libm.a:) .rodata*)
-        *(.srodata*)
         . = ALIGN(4);
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.flashdata*)))
         . = ALIGN(4);
@@ -174,7 +154,6 @@ SECTIONS
         . = ALIGN(4);
 
         *(.data*)
-        *(.sdata*)
 
         . = ALIGN(4);
         *(.after_data.*)
@@ -185,6 +164,7 @@ SECTIONS
         KEEP(*(.mutex_array))
         PROVIDE_HIDDEN (__mutex_array_end = .);
 
+        . = ALIGN(4);
         *(.jcr)
         . = ALIGN(4);
     } > RAM AT> FLASH
@@ -270,7 +250,8 @@ SECTIONS
     .flash_end : {
         KEEP(*(.embedded_end_block*))
         PROVIDE(__flash_binary_end = .);
-    } > FLASH =0xaa
+    } > FLASH
+
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
