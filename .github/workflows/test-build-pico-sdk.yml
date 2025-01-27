@@ -13,6 +13,9 @@ on:
       make-args:
         required: false
         type: string
+      target:
+        required: true
+        type: string
 
 jobs:
 
