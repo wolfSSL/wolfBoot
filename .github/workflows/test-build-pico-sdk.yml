@@ -62,5 +62,5 @@ jobs:
           cd IDE/pico-sdk/${{inputs.target}}/wolfboot
           mkdir build
           cd build
-          cmake ../ -DPICO_SDK_PATH="$GITHUB_WORKSPACE/pico-sdk"
+          cmake ../ -DPICO_SDK_PATH="$GITHUB_WORKSPACE/pico-sdk" -DPICO_PLATFORM=${{inputs.target}}
           make
