@@ -7,5 +7,5 @@ void runtime_init_cpasr(void)
     *cpasr_ns |= 0xFF;
 }
 
-preinit_fn_t __attribute__((section(".nonsecure_preinit_array"))) *((*nonsecure_preinit)(void)) =
+preinit_fn_t __attribute__((section(".nonsecure_preinit_array"))) nonsecure_preinit[] = 
              { &runtime_init_cpasr };

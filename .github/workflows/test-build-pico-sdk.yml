@@ -1,0 +1,63 @@
+name: Wolfboot Reusable Build Workflow for Raspberry Pi Pico2 (rp2350)
+
+on:
+
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      config-file:
+        required: true
+        type: string
+      make-args:
+        required: false
+        type: string
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - uses: actions/checkout@main
+        with:
+          repository: raspberrypi/pico-sdk
+          path: pico-sdk
+
+      - name: Workaround for sources.list
+        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+
+      - name: Update repository
+        run: sudo apt-get update
+
+      - name: Install cross compilers
+        run: |
+          sudo apt-get install -y gcc-arm-none-eabi
+
+      - name: make distclean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp ${{inputs.config-file}} .config && make include/target.h
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: pre-build wolfboot
+        run: |
+          make
+      - name: build wolfboot with pico-sdk
+        run: |
+          cd IDE/pico-sdk/${{inputs.target}}/wolfboot
+          mkdir build
+          cd build
+          cmake ../ -DPICO_SDK_PATH="$GITHUB_WORKSPACE/pico-sdk"
+          make

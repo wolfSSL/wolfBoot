@@ -439,3 +439,10 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/sim-wolfHSM.config
+
+  rp2350_test:
+    uses: ./.github/workflows/test-build-pico-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rp2350.config
+      target: rp2350
