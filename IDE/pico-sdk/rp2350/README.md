@@ -20,16 +20,22 @@ The SRAM bank0 is assigned to the Secure domain, and enforced using both SAU and
 - Non-secure SRAM4-7: 0x20040000 - 0x2007FFFF, 256 KB
 - Non-secure stack for application SRAM8-9: 0x20080000 - 0x20081FFF, 8 KB
 
-```
 
-### Requirements 
+### Requirements
 
 #### External debugger
 
 As the two images (bootloader + application) are stored in different areas in
-the flash memory, a SWD connector is required to upload the binary images into
-the flash, as opposed to the default bootloader, allowing to upload non-signed
-applications into a storage device
+the flash memory, a SWD connector is recommended to upload the binary images
+into the flash, as opposed to the default bootloader, allowing to upload
+non-signed applications into a storage device.
+
+The scripts used in this example expect a JLink to be connected to the SWD port
+as documented [here](https://kb.segger.com/Raspberry_Pi_Pico).
+
+There is documentation below on how to do this with `picotool` instead, the
+scripts to error that it cannot file the JLink if you wish to use `picotool`
+instead, but this can be ignored.
 
 #### PicoSDK
 
@@ -71,7 +77,7 @@ The environment has now been prepared to build and flash the two images
 ### Building and uploading wolfBoot.bin
 
 After preparing the configuration and creating the keypair,
-return to this directory and run:
+return to the `IDE/pico-sdk/rp2350/` directory and run:
 
 ```
 cd wolfboot
@@ -84,13 +90,20 @@ This version of wolfboot incorporates the `.boot2` sequence needed to enable
 the QSPI device, provided by the pico-sdk and always embedded in all
 applications.
 
-wolfboot.bin contains the bootloader, and can be loaded into the RP2350, starting at address 0x10000000.
-The script will automatically upload the binary if a JLink debugger is connected.
+wolfboot.bin contains the bootloader, and can be loaded into the RP2350,
+starting at address 0x10000000. The script will automatically upload the binary
+if a JLink debugger is connected.
+
+If you do not have a JLink you can install the binary using:
+
+```
+picotool load build/wolfboot.uf2
+```
 
 ### Building and uploading the application
 
 ```
-cd test-app
+cd ../test-app
 ./build-signed-app.sh
 ```
 The script above will compile the test application and sign it with the
@@ -104,10 +117,19 @@ taking into account the wolfBoot header size.
 The application is signed with the wolfBoot private key, and the signature is
 stored in the manifest header of the application binary.
 
-The output file `build/blink_v1_signed.bin` is automatically uploaded to the RP2350 if a JLink debugger is connected.
-The application image is stored in the boot partition, starting at address 0x10040000.
-The entry point of the application (0x10040400), set in the linker script `hal/rp2350-app.ld`, is the start of the application code, taking into account the wolfBoot header size.
+The output file `build/blink_v1_signed.bin` is automatically uploaded to the
+RP2350 if a JLink debugger is connected.
+The application image is stored in the boot partition, starting at address
+0x10040000.
+The entry point of the application (0x10040400), set in the linker script
+`hal/rp2350-app.ld`, is the start of the application code, taking into account
+the wolfBoot header size.
 
+To use `picotool` instead run:
+
+```
+picotool load build/blink_v1_signed.bin -o 0x10040000
+```
 
 ### Testing the application
 
@@ -116,5 +138,6 @@ every 500ms.
 
 If the above steps are successful, the LED on the board should start blinking.
 
-The code has been tested on a Seeed studio XIAO RP2350 board.
+The code has been tested on a Seeed studio XIAO RP2350 board and a Raspberry Pi
+Pico 2 (non-WiFi version).
 
