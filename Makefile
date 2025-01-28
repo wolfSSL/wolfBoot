@@ -148,6 +148,10 @@ ifeq ($(TARGET),sama5d3)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),rp2350)
+    MAIN_TARGET:=include/target.h keytools wolfboot_signing_private_key.der pico-sdk-info
+endif
+
 
 ifeq ($(FLASH_OTP_KEYSTORE),1)
     MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
@@ -451,6 +455,9 @@ secondary: $(SECONDARY_PRIVATE_KEY)
 src/x86/fsp_s.o: $(FSP_S_BIN)
 	$(OBJCOPY) -I binary -O elf64-x86-64 -B i386 --rename-section .data=.fsp_s $^ $@
 	
+pico-sdk-info: FORCE
+	@echo "To complete the build, check IDE/pico-sdk/rp2350"
+
 FORCE:
 
 .PHONY: FORCE clean keytool_check

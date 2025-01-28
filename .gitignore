@@ -231,6 +231,13 @@ IDE/Renesas/e2studio/RX72N/app_RenesasRX01/src/smc_gen
 IDE/Renesas/e2studio/RX72N/wolfBoot/HardwareDebug
 IDE/Renesas/e2studio/RX72N/wolfBoot/src/smc_gen
 
+# IDE pico-sdk build directories
+IDE/pico-sdk/rp2350/wolfboot/build
+IDE/pico-sdk/rp2350/test-app/build
+
+# Third party test application distributed off-tree
+IDE/pico-sdk/rp2350/test-app/blink.c
+
 # Renesas Libraries
 lib/r_bsp
 lib/r_config

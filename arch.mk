@@ -221,6 +221,22 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),rp2350)
+    CORTEX_M33=1
+    CFLAGS+=-Ihal
+    ARCH_FLASH_OFFSET=0x10000000
+    WOLFBOOT_ORIGIN=0x10000000
+    ifeq ($(TZEN),1)
+      LSCRIPT_IN=hal/$(TARGET).ld
+      CFLAGS+=-DTZEN
+    else
+      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    endif
+    SPI_TARGET=raspberrypi_pico
+    CFLAGS+=-DPICO_SDK_PATH=$(PICO_SDK_PATH)
+    CFLAGS+=-I$(PICO_SDK_PATH)/src/common/pico_stdlib_headers/include
+  endif
+
   ifeq ($(TARGET),sama5d3)
      CORTEX_A5=1
      UPDATE_OBJS:=src/update_ram.o
@@ -1079,7 +1095,7 @@ ifeq ($(TARGET),sim)
     CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
   endif
   ifeq ($(WOLFHSM_CLIENT),1)
-	  WOLFHSM_CLIENT_OBJS += $(LIBDIR)/wolfHSM/port/posix/posix_transport_tcp.o
+    WOLFHSM_CLIENT_OBJS += $(LIBDIR)/wolfHSM/port/posix/posix_transport_tcp.o
   endif
 endif
 

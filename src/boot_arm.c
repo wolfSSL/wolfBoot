@@ -397,7 +397,7 @@ void isr_empty(void)
 
 
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
 #   define isr_securefault isr_fault
 #else
 #   define isr_securefault 0
@@ -416,7 +416,8 @@ void isr_empty(void)
 
 #ifdef TZEN
 #include "hal.h"
-#define VTOR (*(volatile uint32_t *)(0xE002ED08))
+//#define VTOR (*(volatile uint32_t *)(0xE002ED08))
+#define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #endif
@@ -446,7 +447,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
-#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
     /* Jump to non secure app_entry */
     asm volatile("mov r7, %0" ::"r"(app_entry));
@@ -527,7 +528,7 @@ void (* const IV[])(void) =
 
     /* Fill with extra unused handlers */
 #if defined(TARGET_stm32l5) || defined(TARGET_stm32u5) || \
-    defined(TARGET_stm32h7)
+    defined(TARGET_stm32h7) || defined(TARGET_rp2350)
     isr_empty,
     isr_empty,
     isr_empty,

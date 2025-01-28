@@ -23,6 +23,7 @@ This README describes configuration of supported targets.
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
 * [Renesas RA6M4](#renesas-ra6m4)
 * [Renesas RX65N](#renesas-rx65n)
 * [Renesas RX72N](#renesas-rx72n)
@@ -2510,6 +2511,10 @@ make test-sim-internal-flash-with-update
 
 Note: This also works on Mac OS, but `objcopy` does not exist. Install with `brew install binutils` and make using `OBJCOPY=/usr/local/Cellar//binutils/2.41/bin/objcopy make`.
 
+
+## Raspberry Pi Pico rp2350
+
+See instructions in [IDE/pico-sdk/rp2350/README.md](/IDE/pico-sdk/rp2350/README.md)
 
 ## Renesas RX65N
 
