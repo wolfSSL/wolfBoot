@@ -75,6 +75,12 @@ ifeq ($(ARCH),AARCH64)
     # Support detection and skip of U-Boot legacy header */
     CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
     CFLAGS+=-DWOLFBOOT_DUALBOOT
+
+    ifeq ($(PKA),1)
+      # Use HAL for hash (see zynqmp.c)
+      PKA_HASH_HAL=1
+      CFLAGS+=-DWOLFBOOT_ZYNQMP_CSU
+    endif
   else
     ifeq ($(TARGET),nxp_ls1028a)
       ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
