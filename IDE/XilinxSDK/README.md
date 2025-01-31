@@ -78,16 +78,7 @@ Note: If not using Position Independent Code (PIC) the linker script `ldscript.l
 
 ## Zynq UltraScale+ ARMv8 Crypto Extensions
 
-To enable ARM assembly speedups for SHA:
-
-1) Add these build symbols:
-
-```
-WOLFSSL_ARMASM
-WOLFSSL_ARMASM_INLINE
-```
-
-2) Add these compiler misc flags: `-mcpu=generic+crypto -mstrict-align -DWOLFSSL_AARCH64_NO_SQRMLSH`
+By default the ARM assembly speedups for SHA will be enabled. This uses inline assembly in wolfcrypt/src/port/arm/ and the armb8 crypto extensions. To disable set `NO_ARM_ASM=1`.
 
 
 ## Generate signing key
@@ -154,7 +145,7 @@ the_ROM_image:
 }
 ```
 
-You can also use exception level 3 or 1 depending on your needs.
+You can use exception level 3, 2 or 1 depending on your needs. See hal/zynq.h options EL3_SECURE, EL2_HYPERVISOR and EL1_NONSECURE for enabled/disabling entry support for each. Default is support for EL2.
 
 From the workspace root:
 
@@ -208,13 +199,12 @@ Hello World
 Successfully ran Hello World application
 ```
 
-
 ### Adding RSA Authentication
 
 1. Generate keys:
-    * `bootgen.exe -generate_keys auth pem -arch zynqmp -image boot.bif`
+    * `bootgen.exe -generate_keys auth pem -arch zynqmp -image boot_auth.bif`
 2. Create hash for primary key:
-    * `bootgen.exe -image boot.bif -arch zynqmp -w -o i BOOT.BIN -efuseppkbits ppkf_hash.txt`
+    * `bootgen.exe -image boot_auth.bif -arch zynqmp -w -o i BOOT.BIN -efuseppkbits ppkf_hash.txt`
 3. Import example project for programming eFuses:
     * New BSP project (program efuses , ZCU102_hw_platform, standalone, CPU: PSU_cortexa53_0)
     * Goto Xilinx Board Support Packet Settings.
@@ -235,10 +225,22 @@ Successfully ran Hello World application
     ```
 
 6. Build “boot.bin” image:
-    * `bootgen -image boot.bif -arch zynqmp -o i BOOT.BIN -w`
+    * `bootgen -image boot_auth.bif -arch zynqmp -o i BOOT.BIN -w`
+
+Note: During testing add `[fsbl_config] bh_auth_enable` to allow skipping of the eFuse check of the PPK hash. In production the RSA_EN eFuses must be blown to force checking of the PPK hash.
 
 Note: To generate a report of a boot.bin use the `bootgen_utility` or after 2022.1 use `bootgen -read`:
 `bootgen -arch zynqmp -read BOOT.BIN`
+
+
+# CSU Support
+
+Enabling PMU firmware support for access to the CSU.
+In PetaLinux menuconfig under PMU Configuration add compiler flag `-DSECURE_ACCESS_VAL=1`.
+```sh
+petalinux-build -c pmufw
+petalinux-build
+```
 
 ## Post Quantum
 

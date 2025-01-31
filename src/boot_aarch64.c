@@ -37,6 +37,13 @@ extern unsigned int _end_data;
 extern void main(void);
 extern void gicv2_init_secure(void);
 
+unsigned int current_el(void)
+{
+    unsigned long el;
+    asm volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
+    return (unsigned int)((el >> 2) & 0x3U);
+}
+
 void boot_entry_C(void)
 {
     register unsigned int *dst, *src;
