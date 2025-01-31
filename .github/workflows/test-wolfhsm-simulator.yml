@@ -19,10 +19,10 @@ jobs:
           - name: "wolfHSM ML-DSA"
             file: "config/examples/sim-wolfHSM-mldsa.config"
       fail-fast: false
-    
+
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -50,7 +50,7 @@ jobs:
 
       # checkout and build wolfHSM examples repo
       - name: Checkout wolfHSM-examples
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: wolfssl/wolfHSM-examples
           path: wolfHSM-examples

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -34,7 +34,7 @@ jobs:
       - name: Sign the image with a custom TLV
         run: |
           tools/keytools/sign --ed25519 --custom-tlv-buffer 0x0034 AABBCCDDEEFF0011223344 test-app/image.elf wolfboot_signing_private_key.der 1
-      
+
       - name: Re-assemble the internal_flash.dd image file
         run: |
           make assemble_internal_flash.dd
