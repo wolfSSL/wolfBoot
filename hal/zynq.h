@@ -477,6 +477,7 @@
 #define CSU_PUF_CFG1    (CSU_BASE + 0x4008U)
 #define CSU_PUF_SHUTTER (CSU_BASE + 0x400CU)
 #define CSU_PUF_STATUS  (CSU_BASE + 0x4010U)
+#define CSU_PUF_DBG     (CSU_BASE + 0x4014U)
 #define CSU_PUF_WORD    (CSU_BASE + 0x4018U)
 
 #define CSU_PUF_CMD_CLEAR        0x6 /* Clear PUF status */
@@ -485,14 +486,14 @@
 #define CSU_PUF_CMD_REGISTRATION 0x1 /* Key registration */
 
 #define CSU_PUF_CFG0_INIT        0x2
-#define CSU_PUF_CFG1_INIT        0x0C230090 /* 0x00080080 */
-#define CSU_PUF_SHUTTER_INIT     0x0100005E /* 0x01000100 */
+#define CSU_PUF_CFG1_INIT        0x0C230090U /* 4K */
+#define CSU_PUF_SHUTTER_INIT     0x00100005E
 
-#define CSU_PUF_STATUS_OVERFLOW_MASK    0x30000000 /* Overflow, if bits are not 0. Reduce SHUT[SOPEN] value. */
-#define CSU_PUF_STATUS_AUX_MASK         0x0FFFFFF0 /* During provisioning, auxiliary sundrome bits are stored here and must be written to the eFuse or boot image. */
-#define CSU_PUF_STATUS_KEY_RDY_MASK     0x00000008
-#define CSU_PUF_STATUS_KEY_ZERO_MASK    0x00000002 /* Indicates that the PUF key has been zeroized */
-#define CSU_PUF_STATUS_SYN_WRD_RDY_MASK 0x00000001 /* Indicates a syndrome word is ready in the PUF_WORD register. */
+#define CSU_PUF_STATUS_OVERFLOW_MASK    (0x3U << 28)     /* Overflow, if bits are not 0. Reduce SHUT[SOPEN] value. */
+#define CSU_PUF_STATUS_AUX_MASK         (0xFFFFFFU << 4) /* During provisioning, auxiliary sundrome bits are stored here and must be written to the eFuse or boot image. */
+#define CSU_PUF_STATUS_KEY_RDY_MASK     (0x1U << 3)      /* Indicates that the key is ready */
+#define CSU_PUF_STATUS_KEY_ZERO_MASK    (0x1U << 1)      /* Indicates that the PUF key has been zeroized */
+#define CSU_PUF_STATUS_SYN_WRD_RDY_MASK (0x1U << 0)      /* Indicates a syndrome word is ready in the PUF_WORD register */
 
 /* SHA3 */
 #define CSU_SHA_START  (CSU_BASE + 0x2000U)

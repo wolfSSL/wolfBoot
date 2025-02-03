@@ -233,14 +233,146 @@ Note: To generate a report of a boot.bin use the `bootgen_utility` or after 2022
 `bootgen -arch zynqmp -read BOOT.BIN`
 
 
-# CSU Support
+## CSU Support
 
-Enabling PMU firmware support for access to the CSU.
+The Configuration Security Unit (CSU) is a dedicate core that contains security functions like PUF, SHA3, RSA, Tamper Protection. These registers can only be accessed through the PMU, which is a separate dedicated core. If operating from LE2 or lower the calls must be done through the BL31 (TF-A) SIP service to elevate privledges.
+
+Access to most CSU registers can be done by setting the `-DSECURE_ACCESS_VAL=1` build option.
+
 In PetaLinux menuconfig under PMU Configuration add compiler flag `-DSECURE_ACCESS_VAL=1`.
+
 ```sh
 petalinux-build -c pmufw
-petalinux-build
 ```
+
+### CSU PUF
+
+The PUF (Physically Unclonable Function) provides a way to generate a unique key for encryption specific to the device. It is useful for wrapping other keys to pair/bind them and allows external storage of the encrypted key.
+
+This feature is enabled with `CFLAGS_EXTRA+=-DCSU_PUF_ROT`.
+
+For PUF functionality a patch must be applied to the PMUFW to enable access to the PUF registers. See `pm_mmio_access.c` patch below:
+
+```
++	/* CSU PUF Registers */
++	{
++		.startAddr = ( ( CSU_BASEADDR ) + 0X00004000 ),
++		.endAddr = ( ( CSU_BASEADDR ) + 0X00004018 ),
++		.access = MMIO_ACCESS_RW(IPI_PMU_0_IER_APU_MASK |
++					 IPI_PMU_0_IER_RPU_0_MASK |
++					 IPI_PMU_0_IER_RPU_1_MASK),
++	},
+```
+
+Example PUF Generation Output:
+
+```
+wolfBoot Secure Boot
+Current EL: 2
+QSPI Init: Ref=300MHz, Div=8, Bus=37500000, IO=DMA
+Read FlashID Lower: Ret 0, 20 BB 22
+Read FlashID Upper: Ret 0, 20 BB 22
+PMUFW Ver: 1.1
+CSU ID 0x24738093, Ver 0x00000003
+Enabling JTAG
+JTAG Attached: status 0x3
+CSU Puf Register
+Ret 0, SyndromeSz 560, CHASH 0xA014DD88, AUX 0x00408A64
+462273FBECB98600E3D099415B30F1AF3DD6B29369102847EC61B708AB37AF2A6999596BC9071F84773142631BA2C1109C14FACC156B7343FB8436CE06292DB95B4C1941E6DC8F982404462DEFB91792076EC428D1C0C8A10F271E3B67F652F562885384B97717B0AA3B8B24CC0AD54D1641860355C343D0FE38E1F6D6F4289C38AEC5EFD1046C736423EF881DE0A04F64165B9D275E5050D91F3EBD9241FE67D55BEA336E46B174112F86361FB2AA78197C6BF5812533E4EC1E88BC7125366C5E8BE8B70483FE5FC144B9F608D72964690D6DE0E8E8B65C23D2B9ED8262DF77AC4E2EE67ABF18DC2EC452B0731B0E229CAD555BC61CF0FE26066F1E54C33C7DC7C86DC56BFFF391689F937CD3C565D4B28D68C74793562B4938D6FE5667644F247CEFCCC926A57B54048A4986E8AC9F1B7D673CC14C2CC5DDD4A548986BF925B938FF92D6F7D3A2CD1ACD3943C6A35CF9CFFD8A786682032D3826CFDBAD38FDCBFD2B3480A933CAAEB391685E58A0BBDECDF9B69A5D685AE0D93BAC6B55E9D447565FBFF68E35F12B779EBC5918E0A5CD3CE00C7B5AF833A33CACD0F871A2FB89218BC2F1F02F0B68CB65F9B122D5B5D72116F1F6ED111B87DEB7E1BC4873E5889C2C6915CD362B75DA211264CF66F093C368F37EC54721AAFA6313C5892514011CE9BFDD72C51FDEA7320377692A1AF8FD0D563A66E465AA9AD51BF91B2A5CE6178E517032D3786B1F714681339C2286BBE5E71B7334F923FABBFBEC382E2EF6880471BB13956
+```
+
+### CSU JTAG Enable
+
+When RSA authentication is enabled the JTAG feature is disabled in the PMU. To re-enable it (assuming eFuse allows it) build with `CFLAGS_EXTRA+=-DDEBUG_CSU=2` and apply the PMUFW patches below.
+
+To patch the PMUFW from PetaLinux use the following steps (for 2022.1 or later):
+
+Based on instructions from: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/2587197506/Zynq+UltraScale+MPSoC+JTAG+Enable+in+U-Boot
+
+`pim/project-spec/meta-user/recipes-bsp/embeddedsw/pmu-firmware_%.bbappend`:
+
+```
+# Patch for PMUFW
+
+SRC_URI_append = " file://0001-csu-regs.patch"
+FILESEXTRAPATHS_prepend := "${THISDIR}/files:"
+```
+
+`pim/project-spec/meta-user/recipes-bsp/embeddedsw/files/0001-csu-regs.patch`:
+```
+diff --git a/lib/sw_apps/zynqmp_pmufw/src/pm_mmio_access.c b/lib/sw_apps/zynqmp_pmufw/src/pm_mmio_access.c
+index 73066576a5..ce9490916d 100644
+--- a/lib/sw_apps/zynqmp_pmufw/src/pm_mmio_access.c
++++ b/lib/sw_apps/zynqmp_pmufw/src/pm_mmio_access.c
+@@ -99,6 +99,22 @@ static const PmAccessRegion pmAccessTable[] = {
+ 					 IPI_PMU_0_IER_RPU_1_MASK),
+ 	},
+
++	/* WOLF: Adding DBG_LPD_CTRL and RST_LPD_DBG to support JTAG Enable in u-boot */
++	{
++		.startAddr = CRL_APB_DBG_LPD_CTRL,
++		.endAddr = CRL_APB_DBG_LPD_CTRL,
++		.access = MMIO_ACCESS_RW(IPI_PMU_0_IER_APU_MASK |
++					 IPI_PMU_0_IER_RPU_0_MASK |
++					 IPI_PMU_0_IER_RPU_1_MASK),
++	},
++	{
++		.startAddr = CRL_APB_RST_LPD_DBG,
++		.endAddr = CRL_APB_RST_LPD_DBG,
++		.access = MMIO_ACCESS_RW(IPI_PMU_0_IER_APU_MASK |
++					 IPI_PMU_0_IER_RPU_0_MASK |
++					 IPI_PMU_0_IER_RPU_1_MASK),
++	},
++
+ 	/* PMU's global Power Status register*/
+ 	{
+ 		.startAddr = PMU_GLOBAL_PWR_STATE,
+@@ -415,15 +431,24 @@ static const PmAccessRegion pmAccessTable[] = {
+ 					 IPI_PMU_0_IER_RPU_1_MASK),
+ 	},
+
++	/* WOLF: separate CSU_JTAG_CHAIN_CFG so it can be made RW */
+ 	/* CSU ier register*/
+ 	{
+ 		.startAddr = CSU_IER,
+-		.endAddr = CSU_JTAG_CHAIN_CFG,
++		.endAddr = CSU_IDR,
+ 		.access = MMIO_ACCESS_WO(IPI_PMU_0_IER_APU_MASK |
+ 					 IPI_PMU_0_IER_RPU_0_MASK |
+ 					 IPI_PMU_0_IER_RPU_1_MASK),
+ 	},
+
++	{
++		.startAddr = CSU_JTAG_CHAIN_CFG,
++		.endAddr = CSU_JTAG_CHAIN_CFG,
++		.access = MMIO_ACCESS_RW(IPI_PMU_0_IER_APU_MASK |
++					 IPI_PMU_0_IER_RPU_0_MASK |
++					 IPI_PMU_0_IER_RPU_1_MASK),
++	},
++
+ 	/* CSU idr register*/
+ 	{
+ 		.startAddr = CSU_IDR,
+@@ -504,6 +529,15 @@ static const PmAccessRegion pmAccessTable[] = {
+ 					 IPI_PMU_0_IER_RPU_1_MASK),
+ 	},
+
++	/* CSU PUF Registers */
++	{
++		.startAddr = ( ( CSU_BASEADDR ) + 0X00004000 ),
++		.endAddr = ( ( CSU_BASEADDR ) + 0X00004018 ),
++		.access = MMIO_ACCESS_RW(IPI_PMU_0_IER_APU_MASK |
++					 IPI_PMU_0_IER_RPU_0_MASK |
++					 IPI_PMU_0_IER_RPU_1_MASK),
++	},
++
+ 	/*CSU tamper-status register */
+ 	{
+ 		.startAddr = CSU_TAMPER_STATUS,
+```
+
+Then rebuild PMUFW: `petalinux-build -c pmufw`
+
 
 ## Post Quantum
 

@@ -288,30 +288,59 @@ void wc_Sha3_384_Free(wc_Sha3* sha)
 #endif
 
 /* CSU PUF */
-#define PUF_REG_TIMEOUT 500000
+#ifdef CSU_PUF_ROT
+#define CSU_PUF_SYNDROME_WORDS 386
+#ifndef CSU_PUF_REG_TIMEOUT
+#define CSU_PUF_REG_TIMEOUT    500000
+#endif
+
+static int csu_puf_wait_word(uint32_t* puf_status)
+{
+    int ret = -1; /* timeout */
+    uint32_t timeout = 0;
+
+    while (++timeout < CSU_PUF_REG_TIMEOUT) {
+        *puf_status = pmu_mmio_read(CSU_PUF_STATUS);
+        if ((*puf_status & CSU_PUF_STATUS_SYN_WRD_RDY_MASK) != 0) {
+            ret = 0;
+            break;
+        }
+    }
+    return ret;
+}
+
 int csu_puf_register(uint32_t* syndrome, uint32_t* syndromeSz, uint32_t* chash,
     uint32_t* aux)
 {
     int ret;
-    uint32_t puf_status, timeout = 0, idx = 0;
+    uint32_t reg32, puf_status = 0, idx = 0;
 
 #if defined(DEBUG_CSU) && DEBUG_CSU >= 1
     wolfBoot_printf("CSU Puf Register\n");
 #endif
 
-    pmu_mmio_write(CSU_PUF_CFG0, CSU_PUF_CFG0_INIT);
-    pmu_mmio_write(CSU_PUF_CFG1, CSU_PUF_CFG1_INIT);
-    pmu_mmio_write(CSU_PUF_SHUTTER, CSU_PUF_SHUTTER_INIT);
-    pmu_mmio_write(CSU_PUF_CMD, CSU_PUF_CMD_REGISTRATION);
-    while (1) {
-        /* Wait for PUF status done */
-        while (((puf_status = pmu_mmio_read(CSU_PUF_STATUS))
-                & CSU_PUF_STATUS_SYN_WRD_RDY_MASK) == 0
-            && ++timeout < PUF_REG_TIMEOUT);
-        if (timeout == PUF_REG_TIMEOUT) {
-            ret = -1; /* timeout */
+    /* try a read from register to make sure PMU has permission */
+    reg32 = pmu_mmio_read(CSU_PUF_SHUTTER);
+    if (reg32 == 0) {
+        wolfBoot_printf("PMUFW PUF Register access not enabled in "
+                        "pm_mmio_access pmAccessTable!\n");
+        return -1;
+    }
+
+    ret = pmu_mmio_write(CSU_PUF_CFG0, CSU_PUF_CFG0_INIT);
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_PUF_CFG1, CSU_PUF_CFG1_INIT);
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_PUF_SHUTTER, CSU_PUF_SHUTTER_INIT);
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_PUF_CMD, CSU_PUF_CMD_REGISTRATION);
+    while (ret == 0) {
+        /* wait for PUF word ready */
+        puf_status = 0;
+        ret = csu_puf_wait_word(&puf_status);
+        if (ret != 0)
             break;
-        }
+
         if ((idx * 4) > *syndromeSz) {
             ret = -2; /* overrun */
             break;
@@ -341,14 +370,16 @@ int csu_puf_register(uint32_t* syndrome, uint32_t* syndromeSz, uint32_t* chash,
 
     return ret;
 }
+#endif /* CSU_PUF_ROT */
 
-#define CSU_PUF_SYNDROME_WORDS 386
 int csu_init(void)
 {
-    int ret;
+    int ret = 0;
+#ifdef CSU_PUF_ROT
     uint32_t syndrome[CSU_PUF_SYNDROME_WORDS];
     uint32_t syndromeSz = (uint32_t)sizeof(syndrome);
     uint32_t chash=0, aux=0;
+#endif
     uint32_t reg1  = pmu_mmio_read(CSU_IDCODE);
     uint32_t reg2 = pmu_mmio_read(CSU_VERSION);
 
@@ -371,7 +402,9 @@ int csu_init(void)
     hal_delay_ms(500); /* give time for debugger to break */
 #endif
 
+#ifdef CSU_PUF_ROT
     ret = csu_puf_register(syndrome, &syndromeSz, &chash, &aux);
+#endif
 
     return ret;
 }
