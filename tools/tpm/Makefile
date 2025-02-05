@@ -9,6 +9,7 @@ endif
 
 CC = gcc
 LD = gcc
+USE_GCC = 1
 WOLFBOOTDIR = ../..
 WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl/
 WOLFTPMDIR = $(WOLFBOOTDIR)/lib/wolfTPM/
