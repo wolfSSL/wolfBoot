@@ -563,7 +563,9 @@ endif
 ifeq ($(NO_XIP),1)
   CFLAGS+=-D"NO_XIP"
 endif
-
+ifeq ($(NO_QNX),1)
+  CFLAGS+=-D"NO_QNX"
+endif
 
 ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+= -D"ALLOW_DOWNGRADE"

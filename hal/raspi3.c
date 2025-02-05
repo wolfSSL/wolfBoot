@@ -102,6 +102,7 @@ static inline void delay(int32_t count)
         asm volatile("nop");
     }
 }
+#if defined(DEBUG_UART)
 /**
  * write message to mailbox
  */
@@ -213,7 +214,7 @@ void uart_init()
     /* enable UART0 transfer & receive*/
     *UART0_CR = (1 << 0) | (1 << 8) | (1 << 9);
 }
-
+#endif
 void* hal_get_primary_address(void)
 {
     return (void*)&kernel_addr;
@@ -300,7 +301,7 @@ void hal_init(void)
         "0123456789abcdef";
     wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
     #endif
-
+#if defined(DEBUG_UART)
     uart_init();
 
     /* length of the message */
@@ -341,7 +342,7 @@ void hal_init(void)
     wolfBoot_printf("\n M2MC clock : %d Hz", getclocks(13));
     wolfBoot_printf("\n PIXEL_BVB clock : %d Hz\n", getclocks(14));
 #endif
-
+#endif
 }
 
 void hal_prepare_boot(void)
