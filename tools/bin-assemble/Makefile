@@ -3,6 +3,7 @@
 -include ../../options.mk
 
 CC=gcc
+USE_GCC=1
 CFLAGS+=-Wall -g -ggdb
 EXE=bin-assemble
 
