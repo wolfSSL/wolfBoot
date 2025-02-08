@@ -288,20 +288,22 @@
 
 /* eFUSE support */
 #define ZYNQMP_EFUSE_BASE       0xFFCC0000
-#define ZYNQMP_EFUSE_STATUS     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x0008)))
-#define ZYNQMP_EFUSE_SEC_CTRL   (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x1058)))
-#define ZYNQMP_EFUSE_PPK0_0     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10A0)))
-#define ZYNQMP_EFUSE_PPK0_1     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10A4)))
-#define ZYNQMP_EFUSE_PPK0_2     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10A8)))
-#define ZYNQMP_EFUSE_PPK0_3     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10AC)))
-#define ZYNQMP_EFUSE_PPK0_4     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10B0)))
-#define ZYNQMP_EFUSE_PPK0_5     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10B4)))
-#define ZYNQMP_EFUSE_PPK0_6     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10B8)))
-#define ZYNQMP_EFUSE_PPK0_7     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10BC)))
-#define ZYNQMP_EFUSE_PPK0_8     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10C0)))
-#define ZYNQMP_EFUSE_PPK0_9     (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10C4)))
-#define ZYNQMP_EFUSE_PPK0_10    (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10C8)))
-#define ZYNQMP_EFUSE_PPK0_11    (*((volatile uint32_t*)(ZYNQMP_EFUSE_BASE + 0x10CC)))
+#define ZYNQMP_EFUSE_STATUS     (ZYNQMP_EFUSE_BASE + 0x0008)
+#define ZYNQMP_EFUSE_PUF_CHASH  (ZYNQMP_EFUSE_BASE + 0x1050)
+#define ZYNQMP_EFUSE_PUF_AUX    (ZYNQMP_EFUSE_BASE + 0x1054)
+#define ZYNQMP_EFUSE_SEC_CTRL   (ZYNQMP_EFUSE_BASE + 0x1058)
+#define ZYNQMP_EFUSE_PPK0_0     (ZYNQMP_EFUSE_BASE + 0x10A0)
+#define ZYNQMP_EFUSE_PPK0_1     (ZYNQMP_EFUSE_BASE + 0x10A4)
+#define ZYNQMP_EFUSE_PPK0_2     (ZYNQMP_EFUSE_BASE + 0x10A8)
+#define ZYNQMP_EFUSE_PPK0_3     (ZYNQMP_EFUSE_BASE + 0x10AC)
+#define ZYNQMP_EFUSE_PPK0_4     (ZYNQMP_EFUSE_BASE + 0x10B0)
+#define ZYNQMP_EFUSE_PPK0_5     (ZYNQMP_EFUSE_BASE + 0x10B4)
+#define ZYNQMP_EFUSE_PPK0_6     (ZYNQMP_EFUSE_BASE + 0x10B8)
+#define ZYNQMP_EFUSE_PPK0_7     (ZYNQMP_EFUSE_BASE + 0x10BC)
+#define ZYNQMP_EFUSE_PPK0_8     (ZYNQMP_EFUSE_BASE + 0x10C0)
+#define ZYNQMP_EFUSE_PPK0_9     (ZYNQMP_EFUSE_BASE + 0x10C4)
+#define ZYNQMP_EFUSE_PPK0_10    (ZYNQMP_EFUSE_BASE + 0x10C8)
+#define ZYNQMP_EFUSE_PPK0_11    (ZYNQMP_EFUSE_BASE + 0x10CC)
 
 /* eFUSE STATUS Registers */
 #define ZYNQMP_EFUSE_STATUS_CACHE_DONE    (1UL << 5)
@@ -430,13 +432,13 @@
 /* SSS - Secure Stream Switch */
 #define CSU_SSS_CFG           (CSU_BASE + 0x0008U)
 #define CSU_SSS_CFG_PCAP_MASK 0x0000000FU
-#define CSU_SSS_CFG_PCAP(n)   (((n) << 0) & CSU_SSS_CFG_PCAP_SSS_MASK)
+#define CSU_SSS_CFG_PCAP(n)   (((n) << 0) & CSU_SSS_CFG_PCAP_MASK)
 #define CSU_SSS_CFG_DMA_MASK  0x000000F0U
-#define CSU_SSS_CFG_DMA(n)    (((n) << 4) & CSU_SSS_CFG_DMA_SSS_MASK)
+#define CSU_SSS_CFG_DMA(n)    (((n) << 4) & CSU_SSS_CFG_DMA_MASK)
 #define CSU_SSS_CFG_AES_MASK  0x00000F00U
-#define CSU_SSS_CFG_AES(n)    (((n) << 8) & CSU_SSS_CFG_AES_SSS_MASK)
+#define CSU_SSS_CFG_AES(n)    (((n) << 8) & CSU_SSS_CFG_AES_MASK)
 #define CSU_SSS_CFG_SHA_MASK  0x0000F000U
-#define CSU_SSS_CFG_SHA(n)    (((n) << 12) & CSU_SSS_CFG_SHA_SSS_MASK)
+#define CSU_SSS_CFG_SHA(n)    (((n) << 12) & CSU_SSS_CFG_SHA_MASK)
 /* Data Sources */
 #define CSU_SSS_CFG_SRC_NONE  0x0
 #define CSU_SSS_CFG_SRC_PCAP  0x3 /* Processor Configuration Access Port */
@@ -470,6 +472,10 @@
 
 #define CSU_AES_KEY_CLEAR_KUP         (1 << 1) /* Zeroize KUP key */
 #define CSU_AES_KEY_CLEAR_EXP         (1 << 0) /* Zeroize expanded key */
+
+#define CSU_AES_CFG_DEC 0
+#define CSU_AES_CFG_ENC 1
+
 
 /* PUF */
 #define CSU_PUF_CMD     (CSU_BASE + 0x4000U)
@@ -506,7 +512,7 @@
 /* CSU DMA */
 /* Addresses and sizes must be word aligned last two bits = 0 */
 /* 128 x 32-bit data FIFO for each channel (two channels) */
-#define CSUDMA_BASE(ch)     (0xFFC80000UL * (((ch) & 0x1) * 0x800))
+#define CSUDMA_BASE(ch)     (0xFFC80000UL + (((ch) & 0x1) * 0x800))
 #define CSUDMA_ADDR(ch)     (CSUDMA_BASE(ch) + 0x0000U) /* Mem address (lower 32-bits) */
 #define CSUDMA_ADDR_MSB(ch) (CSUDMA_BASE(ch) + 0x0028U) /*             (upper 17 bits) */
 #define CSUDMA_SIZE(ch)     (CSUDMA_BASE(ch) + 0x0004U) /* DMA transfer payload size */
@@ -518,6 +524,8 @@
 #define CSUDMA_IEN(ch)      (CSUDMA_BASE(ch) + 0x0018U)
 #define CSUDMA_IDIS(ch)     (CSUDMA_BASE(ch) + 0x001CU)
 #define CSUDMA_IMASK(ch)    (CSUDMA_BASE(ch) + 0x0020U)
+
+#define CSUDMA_SIZE_LAST_WORD     (1 << 0)
 
 #define CSUDMA_STS_DONE_CNT       (0x07 << 13)
 #define CSUDMA_STS_SRC_FIFO_LEVEL (0xFF << 5)
