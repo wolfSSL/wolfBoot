@@ -183,6 +183,30 @@ static void smc_call(struct pt_regs *args)
 #define PM_MMIO_WRITE      0x13
 #define PM_MMIO_READ       0x14
 
+/* AES */
+/* requires PMU built with -DENABLE_SECURE_VAL=1 */
+#define PM_SECURE_AES      0x2F
+typedef struct pmu_aes {
+    uint64_t src;    /* source address */
+    uint64_t iv;     /* initialization vector address */
+    uint64_t key;    /* key address */
+    uint64_t dst;    /* destination address */
+    uint64_t size;   /* size */
+    uint64_t op;     /* operation: 0=Decrypt, 1=Encrypt */
+    uint64_t keySrc; /* key source 0=KUP, 1=Device Key, 2=Use PUF (do regen) */
+} pmu_aes;
+
+/* EFUSE */
+/* requires PMU built with -DENABLE_EFUSE_ACCESS=1 */
+#define PM_EFUSE_ACCESS    0x35
+typedef struct pmu_efuse {
+    uint64_t src;        /* adress of data buffer */
+    uint32_t size;       /* size in words */
+    uint32_t offset;     /* offset */
+    uint32_t flag;       /* 0: to read efuse, 1: to write efuse */
+    uint32_t pufUserFuse;/* 0: PUF HD, 1: eFuses for User Data */
+} pmu_efuse;
+
 /* Secure Monitor Call (SMC) to BL31 Silicon Provider (SIP) service,
  * which is the PMU Firmware */
 static int pmu_request(uint32_t api_id,
@@ -219,6 +243,27 @@ uint32_t pmu_get_version(void)
     return ret_payload[1];
 }
 
+/* Aligned data buffer for DMA */
+#define EFUSE_MAX_BUFSZ (sizeof(pmu_efuse) + 48 /* SHA3-384 Digest */)
+static uint8_t XALIGNED(32) efuseBuf[EFUSE_MAX_BUFSZ];
+
+uint32_t pmu_efuse_read(uint32_t offset, uint32_t* data, uint32_t size)
+{
+    pmu_efuse* efuseCmd = (pmu_efuse*)efuseBuf;
+    uint8_t* efuseData = (efuseBuf + sizeof(pmu_efuse));
+    uint64_t efuseCmdPtr = (uint64_t)efuseCmd;
+    uint32_t ret_payload[PM_ARGS_CNT];
+    memset(ret_payload, 0, sizeof(ret_payload));
+    memset(efuseBuf, 0, sizeof(efuseBuf));
+    efuseCmd->src = (uint64_t)efuseData;
+    efuseCmd->offset = (offset & 0xFF); /* offset is only the last 0xFF bits */
+    efuseCmd->size = (size/sizeof(uint32_t)); /* number of 32-bit words */
+    pmu_request(PM_EFUSE_ACCESS, (efuseCmdPtr >> 32), (efuseCmdPtr & 0xFFFFFFFF),
+        0, 0, ret_payload);
+    memcpy(data, efuseData, size);
+    return ret_payload[0]; /* 0=Success, 30=No Access */
+}
+
 uint32_t pmu_mmio_read(uint32_t addr)
 {
     uint32_t ret_payload[PM_ARGS_CNT];
@@ -240,6 +285,15 @@ uint32_t pmu_mmio_write(uint32_t addr, uint32_t val)
     return pmu_mmio_writemask(addr, 0xFFFFFFFF, val);
 }
 
+int pmu_mmio_wait(uint32_t addr, uint32_t wait_mask, uint32_t wait_val,
+    uint32_t tries)
+{
+    uint32_t regval, timeout = 0;
+    while ((((regval = pmu_mmio_read(addr)) & wait_mask) != wait_val)
+        && ++timeout < tries);
+    return (timeout < tries) ? 0 : -1;
+}
+
 #ifdef WOLFBOOT_ZYNQMP_CSU
 
 #ifdef WOLFBOOT_HASH_SHA3_384
@@ -247,7 +301,7 @@ uint32_t pmu_mmio_write(uint32_t addr, uint32_t val)
 #define XSECURE_SHA3_INIT   1U
 #define XSECURE_SHA3_UPDATE 2U
 #define XSECURE_SHA3_FINAL  4U
-static uint32_t secure_sha3(uint64_t addr, uint32_t sz, uint32_t flags)
+static uint32_t csu_sha3(uint64_t addr, uint32_t sz, uint32_t flags)
 {
     uint32_t ret_payload[PM_ARGS_CNT];
     memset(ret_payload, 0, sizeof(ret_payload));
@@ -261,7 +315,7 @@ int wc_InitSha3_384(wc_Sha3* sha, void* heap, int devId)
     (void)sha;
     (void)heap;
     (void)devId;
-    return secure_sha3(0, 0, XSECURE_SHA3_INIT);
+    return csu_sha3(0, 0, XSECURE_SHA3_INIT);
 }
 int wc_Sha3_384_Update(wc_Sha3* sha, const byte* data, word32 len)
 {
@@ -269,7 +323,7 @@ int wc_Sha3_384_Update(wc_Sha3* sha, const byte* data, word32 len)
     flush_dcache_range(
         (unsigned long)data,
         (unsigned long)data + len);
-    return secure_sha3((uint64_t)data, len, XSECURE_SHA3_UPDATE);
+    return csu_sha3((uint64_t)data, len, XSECURE_SHA3_UPDATE);
 }
 int wc_Sha3_384_Final(wc_Sha3* sha, byte* out)
 {
@@ -277,7 +331,7 @@ int wc_Sha3_384_Final(wc_Sha3* sha, byte* out)
     flush_dcache_range(
         (unsigned long)out,
         (unsigned long)out + WC_SHA3_384_DIGEST_SIZE);
-    return secure_sha3((uint64_t)out, 0, XSECURE_SHA3_FINAL);
+    return csu_sha3((uint64_t)out, 0, XSECURE_SHA3_FINAL);
 }
 void wc_Sha3_384_Free(wc_Sha3* sha)
 {
@@ -289,28 +343,13 @@ void wc_Sha3_384_Free(wc_Sha3* sha)
 
 /* CSU PUF */
 #ifdef CSU_PUF_ROT
+/* 1544 bytes is fixed size for boot header used by CSU ROM */
 #define CSU_PUF_SYNDROME_WORDS 386
-#ifndef CSU_PUF_REG_TIMEOUT
-#define CSU_PUF_REG_TIMEOUT    500000
+#ifndef CSU_PUF_REG_TRIES
+#define CSU_PUF_REG_TRIES    500000
 #endif
 
-static int csu_puf_wait_word(uint32_t* puf_status)
-{
-    int ret = -1; /* timeout */
-    uint32_t timeout = 0;
-
-    while (++timeout < CSU_PUF_REG_TIMEOUT) {
-        *puf_status = pmu_mmio_read(CSU_PUF_STATUS);
-        if ((*puf_status & CSU_PUF_STATUS_SYN_WRD_RDY_MASK) != 0) {
-            ret = 0;
-            break;
-        }
-    }
-    return ret;
-}
-
-int csu_puf_register(uint32_t* syndrome, uint32_t* syndromeSz, uint32_t* chash,
-    uint32_t* aux)
+int csu_puf_register(uint32_t* syndrome, uint32_t* chash, uint32_t* aux)
 {
     int ret;
     uint32_t reg32, puf_status = 0, idx = 0;
@@ -336,52 +375,235 @@ int csu_puf_register(uint32_t* syndrome, uint32_t* syndromeSz, uint32_t* chash,
         ret = pmu_mmio_write(CSU_PUF_CMD, CSU_PUF_CMD_REGISTRATION);
     while (ret == 0) {
         /* wait for PUF word ready */
-        puf_status = 0;
-        ret = csu_puf_wait_word(&puf_status);
+        ret = pmu_mmio_wait(CSU_PUF_STATUS,
+            CSU_PUF_STATUS_SYN_WRD_RDY_MASK,
+            CSU_PUF_STATUS_SYN_WRD_RDY_MASK,
+            CSU_PUF_REG_TRIES);
         if (ret != 0)
             break;
 
-        if ((idx * 4) > *syndromeSz) {
+        if ((idx > CSU_PUF_SYNDROME_WORDS-2) /* room for chash and aux */) {
             ret = -2; /* overrun */
             break;
         }
+
+        puf_status = pmu_mmio_read(CSU_PUF_STATUS);
+        /* Read in the syndrome */
+        syndrome[idx++] = pmu_mmio_read(CSU_PUF_WORD);
         if (puf_status & CSU_PUF_STATUS_KEY_RDY_MASK) {
             *chash = pmu_mmio_read(CSU_PUF_WORD);
+            syndrome[CSU_PUF_SYNDROME_WORDS-2] = *chash;
             *aux = (puf_status & CSU_PUF_STATUS_AUX_MASK) >> 4;
+            syndrome[CSU_PUF_SYNDROME_WORDS-1] = *aux;
             ret = 0;
             break;
         }
-        else {
-            /* Read in the syndrome */
-            syndrome[idx++] = pmu_mmio_read(CSU_PUF_WORD);
-        }
     }
-    *syndromeSz = idx * 4;
 
 #if defined(DEBUG_CSU) && DEBUG_CSU >= 1
-    wolfBoot_printf("Ret %d, SyndromeSz %d, CHASH 0x%08x, AUX 0x%08x\n",
-        ret, *syndromeSz, *chash, *aux);
-    #if DEBUG_CSU >= 2
-    for (idx=0; idx<*syndromeSz/4; idx++) {
-        wolfBoot_printf("%02x", syndrome[idx]);
+    wolfBoot_printf("Ret %d, Syndrome %d, CHASH 0x%08x, AUX 0x%08x\n",
+        ret, (CSU_PUF_SYNDROME_WORDS*4), *chash, *aux);
+    for (idx=0; idx<CSU_PUF_SYNDROME_WORDS; idx++) {
+        wolfBoot_printf("%08x", syndrome[idx]);
     }
-    #endif
+    wolfBoot_printf("\n");
 #endif
 
     return ret;
 }
+
+int csu_puf_regeneration(uint32_t* syndrome, uint32_t chash, uint32_t aux)
+{
+    int ret;
+    uint32_t puf_status = 0;
+
+    (void)syndrome;
+    (void)chash;
+    (void)aux;
+
+    ret = pmu_mmio_write(CSU_PUF_CFG0, CSU_PUF_CFG0_INIT);
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_PUF_SHUTTER, CSU_PUF_SHUTTER_INIT);
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_PUF_CMD, CSU_PUF_CMD_REGENERATION);
+
+    /* wait 6ms */
+    hal_delay_ms(6);
+
+    /* read the puf_status */
+    puf_status = pmu_mmio_read(CSU_PUF_STATUS);
+    wolfBoot_printf("Regen: PUF Status 0x%08x\n", puf_status);
+
+    return ret;
+}
 #endif /* CSU_PUF_ROT */
+
+#define CSU_AES_TIMEOUT 150000
+#define CSU_DMA_TIMEOUT 300000000U
+
+static int csu_dma_wait_done(int ch)
+{
+    /* wait for DMA channel done */
+    int ret = pmu_mmio_wait(CSUDMA_ISTS(ch), CSUDMA_ISR_DONE, CSUDMA_ISR_DONE,
+        CSU_DMA_TIMEOUT);
+    /* clear status interrupt */
+    if (ret == 0)
+        ret = pmu_mmio_write(CSUDMA_ISTS(ch), pmu_mmio_read(CSUDMA_ISTS(ch)));
+    return ret;
+}
+static int csu_dma_transfer(int ch, uintptr_t addr, uint32_t sz, uint32_t flags)
+{
+    int ret = pmu_mmio_write(CSUDMA_ADDR(ch), (addr & 0xFFFFFFFF));
+    if (ret == 0)
+        ret = pmu_mmio_write(CSUDMA_ADDR_MSB(ch), (addr >> 32));
+    if (ret == 0)
+        ret = pmu_mmio_write(CSUDMA_SIZE(ch), (sz | flags));
+    return ret;
+}
+
+static int csu_aes_reset(void)
+{
+    /* Reset AES (set and clear) */
+    int ret = pmu_mmio_write(CSU_AES_RESET, 1);
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_AES_RESET, 0);
+    return ret;
+}
+
+static int csu_dma_config(int ch, int doSwap)
+{
+    int ret = 0;
+    uint32_t regs, reg;
+    regs = reg = pmu_mmio_read(CSUDMA_CTRL(ch));
+    if (doSwap)
+        reg |= CSUDMA_CTRL_ENDIANNESS;
+    else
+        reg &= ~CSUDMA_CTRL_ENDIANNESS;
+    if (regs != reg)
+        ret = pmu_mmio_write(CSUDMA_CTRL(ch), reg);
+    return ret;
+}
+
+/* AES GCM Encrypt or Decrypt with Device Key setup by CSU ROM */
+/* Output must also have room for updated IV at end */
+#define AES_GCM_TAG_SZ 12
+int csu_aes(int enc, const uint8_t* iv, const uint8_t* in, uint8_t* out, uint32_t sz)
+{
+    int ret;
+    uint32_t reg;
+
+    /* Flush data cache for variables used */
+    flush_dcache_range((unsigned long)iv,  (unsigned long)iv + AES_GCM_TAG_SZ);
+    flush_dcache_range((unsigned long)in,  (unsigned long)in);
+    flush_dcache_range((unsigned long)out, (unsigned long)out + AES_GCM_TAG_SZ);
+
+    /* Configure SSS for DMA <-> AES */
+    ret = pmu_mmio_write(CSU_SSS_CFG,
+        (CSU_SSS_CFG_AES(CSU_SSS_CFG_SRC_DMA) |
+         CSU_SSS_CFG_DMA(CSU_SSS_CFG_SRC_AES)));
+    /* Reset AES (set and clear) */
+    if (ret == 0)
+        ret = csu_aes_reset();
+    /* Setup AES GCM Key (use device key) */
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_AES_KEY_SRC, CSU_AES_KEY_SRC_DEVICE_KEY);
+    /* Trigger key load */
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_AES_KEY_LOAD, 1);
+    /* Wait till key init done */
+    if (ret == 0)
+        ret = pmu_mmio_wait(CSU_AES_STATUS, CSU_AES_STATUS_KEY_INIT_DONE,
+            CSU_AES_STATUS_KEY_INIT_DONE, CSU_AES_TIMEOUT);
+    /* Enable DMA byte swapping */
+    if (ret == 0)
+        ret = csu_dma_config(CSUDMA_CH_SRC, 1);
+    if (ret == 0)
+        ret = csu_dma_config(CSUDMA_CH_DST, 1);
+    /* Set encrypt or decrypt */
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_AES_CFG, enc);
+    /* Issue start and wait for DMA IV and data */
+    if (ret == 0)
+        ret = pmu_mmio_write(CSU_AES_START_MSG, 1);
+    /* Send IV with byte swap (not last) */
+    if (ret == 0)
+        ret = csu_dma_transfer(CSUDMA_CH_SRC,
+            (uintptr_t)iv, AES_GCM_TAG_SZ, 0);
+    /* wait for IV to send and cear interrupt */
+    if (ret == 0)
+        ret = csu_dma_wait_done(CSUDMA_CH_SRC);
+    /* Setup data to recieve */
+    if (ret == 0)
+        ret = csu_dma_transfer(CSUDMA_CH_DST,
+            (uintptr_t)out, sz + AES_GCM_TAG_SZ, 0);
+    /* Send data */
+    if (ret == 0)
+        ret = csu_dma_transfer(CSUDMA_CH_SRC,
+            (uintptr_t)in, sz, CSUDMA_SIZE_LAST_WORD);
+    /* Wait for DMA to complete and clear */
+    if (ret == 0)
+        ret = csu_dma_wait_done(CSUDMA_CH_SRC);
+    if (ret == 0)
+        ret = csu_dma_wait_done(CSUDMA_CH_DST);
+    /* Disable DMA byte swapping */
+    if (ret == 0)
+        ret = csu_dma_config(CSUDMA_CH_SRC, 0);
+    if (ret == 0)
+        ret = csu_dma_config(CSUDMA_CH_DST, 0);
+    /* Wait for AES done */
+    if (ret == 0)
+        ret = pmu_mmio_wait(CSU_AES_STATUS, CSU_AES_STATUS_BUSY,
+            0, CSU_AES_TIMEOUT);
+    return ret;
+}
+
+/* zero the kup and expanded key */
+int csu_aes_key_zero(void)
+{
+    int ret;
+    uint32_t reg = pmu_mmio_read(CSU_AES_KEY_CLEAR);
+    ret = pmu_mmio_write(CSU_AES_KEY_CLEAR,
+        (reg | CSU_AES_KEY_CLEAR_KUP | CSU_AES_KEY_CLEAR_EXP));
+    if (ret == 0) {
+        ret = pmu_mmio_wait(CSU_AES_STATUS,
+            (CSU_AES_STATUS_AES_KEY_ZEROED | CSU_AES_STATUS_KUP_ZEROED),
+            (CSU_AES_STATUS_AES_KEY_ZEROED | CSU_AES_STATUS_KUP_ZEROED),
+            CSU_AES_TIMEOUT);
+    }
+    return ret;
+}
+
+#ifdef CSU_PUF_ROT
+#define KEY_WRAP_SZ 32
+/* Red (sensitive key), Black (protected key), Grey (unknown) */
+/* Example key to encrypt */
+static const uint8_t XALIGNED(32) redKey[KEY_WRAP_SZ] = {
+    0x64, 0xF0, 0x3A, 0xFD, 0x7D, 0x0C, 0x70, 0xD2,
+    0x59, 0x1C, 0xDF, 0x34, 0x30, 0x5F, 0x7B, 0x8A,
+    0x5B, 0xA4, 0x59, 0x3C, 0x0A, 0x0E, 0x1B, 0x8C,
+    0x5E, 0xCD, 0xFF, 0x9F, 0x59, 0x00, 0x19, 0x2C
+};
+/* Example IV to use for wrapping */
+static const uint8_t XALIGNED(32) blackIv[AES_GCM_TAG_SZ] = {
+    0xD1, 0x42, 0xAC, 0x7C, 0x56, 0x0F, 0x15, 0x8B,
+    0xA9, 0x5A, 0x21, 0x31
+};
+static uint8_t XALIGNED(32) blackKey[KEY_WRAP_SZ+AES_GCM_TAG_SZ];
+#endif
 
 int csu_init(void)
 {
     int ret = 0;
 #ifdef CSU_PUF_ROT
     uint32_t syndrome[CSU_PUF_SYNDROME_WORDS];
-    uint32_t syndromeSz = (uint32_t)sizeof(syndrome);
     uint32_t chash=0, aux=0;
+    #if defined(DEBUG_CSU) && DEBUG_CSU >= 1
+    uint32_t idx;
+    #endif
 #endif
-    uint32_t reg1  = pmu_mmio_read(CSU_IDCODE);
+    uint32_t reg1 = pmu_mmio_read(CSU_IDCODE);
     uint32_t reg2 = pmu_mmio_read(CSU_VERSION);
+    uint64_t ms;
 
     wolfBoot_printf("CSU ID 0x%08x, Ver 0x%08x\n",
         reg1, reg2 & CSU_VERSION_MASK);
@@ -403,7 +625,58 @@ int csu_init(void)
 #endif
 
 #ifdef CSU_PUF_ROT
-    ret = csu_puf_register(syndrome, &syndromeSz, &chash, &aux);
+    reg1 = pmu_mmio_read(CSU_PUF_STATUS);
+    wolfBoot_printf("PUF Status 0x%08x\n", reg1);
+
+    /* Read eFuse SEC ctrl bits */
+    pmu_efuse_read(ZYNQMP_EFUSE_SEC_CTRL, &reg1, sizeof(reg1));
+    wolfBoot_printf("eFuse SEC_CTRL 0x%08x\n", reg1);
+
+    /* Read eFUSE helper data */
+    pmu_efuse_read(ZYNQMP_EFUSE_PUF_CHASH, &reg1, sizeof(reg1));
+    pmu_efuse_read(ZYNQMP_EFUSE_PUF_AUX, &reg2, sizeof(reg2));
+    wolfBoot_printf("eFuse PUF CHASH 0x%08x, AUX 0x%08x\n", reg1, reg2);
+
+    memset(syndrome, 0, sizeof(syndrome));
+    ms = hal_timer_ms();
+    ret = csu_puf_register(syndrome, &chash, &aux);
+    wolfBoot_printf("CSU Register PUF %d: %dms\n", ret, hal_timer_ms() - ms);
+
+    if (ret == 0) {
+        ms = hal_timer_ms();
+        /* regenerate - load kek */
+        ret = csu_puf_regeneration(syndrome, chash, aux);
+        wolfBoot_printf("CSU Regen PUF %d: %dms\n", ret, hal_timer_ms() - ms);
+    }
+    if (ret == 0) {
+        /* Use CSU ROM device key and IV to encrypt the red key */
+        /* Possible PUF syndrome location 0xFFC30000 */
+    #if defined(DEBUG_CSU) && DEBUG_CSU >= 1
+        wolfBoot_printf("Red Key %d\n", sizeof(redKey));
+        for (idx=0; idx<sizeof(redKey); idx++) {
+            wolfBoot_printf("%02x", redKey[idx]);
+        }
+        wolfBoot_printf("\nBlack IV %d\n", sizeof(blackIv));
+        for (idx=0; idx<sizeof(blackIv); idx++) {
+            wolfBoot_printf("%02x", blackIv[idx]);
+        }
+        wolfBoot_printf("\n");
+    #endif
+
+        ret = csu_aes(CSU_AES_CFG_ENC, blackIv, redKey, blackKey, KEY_WRAP_SZ);
+
+    #if defined(DEBUG_CSU) && DEBUG_CSU >= 1
+        wolfBoot_printf("Black Key %d\n", KEY_WRAP_SZ);
+        for (idx=0; idx<KEY_WRAP_SZ; idx++) {
+            wolfBoot_printf("%02x", blackKey[idx]);
+        }
+        wolfBoot_printf("\nNew IV %d\n", AES_GCM_TAG_SZ);
+        for (idx=0; idx<AES_GCM_TAG_SZ; idx++) {
+            wolfBoot_printf("%02x", blackKey[KEY_WRAP_SZ+idx]);
+        }
+        wolfBoot_printf("\n");
+    #endif
+    }
 #endif
 
     return ret;
@@ -415,13 +688,7 @@ int csu_init(void)
 /* Xilinx BSP Driver */
 
 /* Aligned page data buffer for DMA */
-#ifdef __ICCARM__
-#pragma data_alignment = 32
-static uint8_t pageData[FLASH_PAGE_SIZE];
-#pragma data_alignment = 4
-#else
-static uint8_t pageData[FLASH_PAGE_SIZE] __attribute__ ((aligned(32)));;
-#endif
+static uint8_t XALIGNED(32) pageData[FLASH_PAGE_SIZE];
 static int qspi_transfer(QspiDev_t* pDev,
     const uint8_t* cmdData, uint32_t cmdSz,
     const uint8_t* txData, uint32_t txSz,
@@ -823,7 +1090,8 @@ static int qspi_transfer(QspiDev_t* pDev,
             xferSz = qspi_calc_exp(xferSz, &reg_genfifo);
         }
 
-        GQSPIDMA_DST = (unsigned long)dmarxptr;
+        GQSPIDMA_DST = ((uintptr_t)dmarxptr & 0xFFFFFFFF);
+        GQSPIDMA_DST_MSB = ((uintptr_t)dmarxptr >> 32);
         GQSPIDMA_SIZE = xferSz;
         GQSPIDMA_IER = GQSPIDMA_ISR_DONE; /* enable DMA done interrupt */
         flush_dcache_range((unsigned long)dmarxptr,
