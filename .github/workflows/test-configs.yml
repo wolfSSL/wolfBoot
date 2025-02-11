@@ -236,6 +236,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32c0-lms-8-10-1.config
 
+  stm32f1_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32f1.config
+
   stm32f4_small_blocks_uart_update_test:
     uses: ./.github/workflows/test-build.yml
     with:
