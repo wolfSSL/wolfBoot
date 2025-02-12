@@ -1334,17 +1334,21 @@ int wolfBoot_fallback_is_possible(void)
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
+
 #if !defined(EXT_FLASH) && !defined(MMU)
-#error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
+    #error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
 #endif
 
-
-#ifdef NVM_FLASH_WRITEONCE
-#define ENCRYPT_CACHE NVM_CACHE
+#ifndef WOLFBOOT_ENCRYPT_CACHE
+    #ifdef NVM_FLASH_WRITEONCE
+        #define ENCRYPT_CACHE NVM_CACHE
+    #else
+        #ifdef WOLFBOOT_SMALL_STACK
+        static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
+        #endif
+    #endif
 #else
-#ifdef WOLFBOOT_SMALL_STACK
-static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
-#endif
+    #define ENCRYPT_CACHE (WOLFBOOT_ENCRYPT_CACHE)
 #endif
 
 #if defined(EXT_ENCRYPTED) && defined(MMU)
@@ -1358,7 +1362,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     int sel_sec = 0;
     uint32_t trailer_relative_off = 4;
 
-#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE)
+#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && !defined(WOLFBOOT_ENCRYPT_CACHE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
 #endif
 
