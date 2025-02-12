@@ -179,6 +179,13 @@ as template. The file `hal/stm32l0_chacha_ram.ld` contains the changes described
 all the needed symbols in RAM.
 
 
+### Using a custom buffer as encrypt/decrypt cache
+
+By default, encryption support requires a buffer of the same size as the external flash page size to be allocated in RAM.
+You can provide a custom pre-allocated buffer by passing its address via the option `ENCRYPT_CACHE`, e.g.:
+
+`ENCRYPT_CACHE=0x20010000`
+
 ### API usage in the application
 
 When transferring the image, the application can still use the libwolfboot API functions to store the encrypted firmware. When called from the application,
