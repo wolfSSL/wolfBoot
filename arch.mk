@@ -638,6 +638,40 @@ ifeq ($(TARGET),mcxa)
   endif
 endif
 
+ifeq ($(TARGET),mcxw)
+  CORTEX_M33=1
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+	  -I$(MCUXPRESSO_DRIVERS)/periph2 \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  CFLAGS+=-DWOLFSSL_SP_NO_UMAAL
+  CFLAGS+=-Wno-old-style-declaration
+  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33 -U__ARM_FEATURE_DSP
+  LDFLAGS+=-mcpu=cortex-m33
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o \
+	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ccm32k.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+
+  ifeq ($(MCUXSDK),1)
+    CFLAGS+=\
+      -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/sysmpu \
+      -I$(MCUXPRESSO)/drivers/ltc \
+      -I$(MCUXPRESSO)/drivers/port \
+      -I$(MCUXPRESSO)/drivers/gpio
+
+  else
+  endif
+endif
+
 ifeq ($(TARGET),imx_rt)
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
