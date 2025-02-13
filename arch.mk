@@ -656,6 +656,9 @@ ifeq ($(TARGET),mcxw)
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o \
+	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ccm32k.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
 
   ifeq ($(MCUXSDK),1)
     CFLAGS+=\
