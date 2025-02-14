@@ -302,6 +302,16 @@ ifeq ($(TARGET),mcxa)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o
 endif
 
+ifeq ($(TARGET),mcxw)
+    LSCRIPT_TEMPLATE=ARM-mcxw.ld
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_ccm32k.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+endif
+
 ifeq ($(TARGET),imx_rt)
   LDFLAGS+=\
     -mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections \
