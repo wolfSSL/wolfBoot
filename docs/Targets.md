@@ -1,47 +1,44 @@
-# Targets
+# Target Configuration Guide
 
-This README describes configuration of supported targets.
+This guide provides configuration and setup instructions for all supported targets in wolfBoot.
 
-## Supported Targets
+## Quick Reference
 
-* [Simulated](#simulated)
-* [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
-* [Cypress PSoC-6](#cypress-psoc-6)
-* [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
-* [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
-* [Kontron VX3060-S2](#kontron-vx3060-s2)
-* [Microchip SAMA5D3](#microchip-sama5d3)
-* [Microchip SAME51](#microchip-same51)
-* [Nordic nRF52840](#nordic-nrf52840)
-* [Nordic nRF5340](#nordic-nrf5340)
-* [NXP iMX-RT](#nxp-imx-rt)
-* [NXP Kinetis](#nxp-kinetis)
-* [NXP LPC54xxx](#nxp-lpc54xxx)
-* [NXP LS1028A](#nxp-ls1028a)
-* [NXP MCXA153](#nxp-mcxa153)
-* [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
-* [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
-* [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
-* [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
-* [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
-* [Renesas RA6M4](#renesas-ra6m4)
-* [Renesas RX65N](#renesas-rx65n)
-* [Renesas RX72N](#renesas-rx72n)
-* [Renesas RZN2L](#renesas-rzn2l)
-* [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
-* [STM32C0](#stm32c0)
-* [STM32F4](#stm32f4)
-* [STM32F7](#stm32f7)
-* [STM32G0](#stm32g0)
-* [STM32H5](#stm32h5)
-* [STM32H7](#stm32h7)
-* [STM32L0](#stm32l0)
-* [STM32L4](#stm32l4)
-* [STM32L5](#stm32l5)
-* [STM32U5](#stm32u5)
-* [STM32WB55](#stm32wb55)
-* [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
-* [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+### Target Categories
+
+#### ARM-based MCUs
+- STM32 Family (F4, F7, G0, H5, H7, L0, L4, L5, U5, WB55, C0)
+- NXP Family (iMX-RT, Kinetis, LPC54xxx, MCXA153)
+- Nordic Family (nRF52840, nRF5340)
+- Renesas Family (RA6M4, RX65N, RX72N, RZN2L)
+- Other ARM (Cypress PSoC-6, Microchip SAME51)
+
+#### RISC-V
+- SiFive HiFive1
+
+#### PowerPC
+- NXP QorIQ (P1021, T1024, T2080)
+
+#### x86-64
+- Intel FSP Support
+- QEMU x86-64 UEFI
+- Kontron VX3060-S2
+
+#### Development/Testing
+- Simulated Target
+- QEMU Support
+
+## Target Index
+
+| Target | Architecture | Key Features | Documentation Link |
+|--------|--------------|--------------|-------------------|
+| STM32F4 | ARM Cortex-M4 | Dual Bank Flash, TrustZone | [Details](#stm32f4) |
+| STM32H5 | ARM Cortex-M33 | TrustZone, OTP Support | [Details](#stm32h5) |
+| nRF5340 | ARM Cortex-M33 | Dual Core, TrustZone | [Details](#nordic-nrf5340) |
+| RX65N | Renesas RX | TSIP Support | [Details](#renesas-rx65n) |
+| x86_64 FSP | x86-64 | Intel FSP Support | [Details](#intel-x86_64-with-intel-fsp-support) |
+
+[Full list of supported targets below]
 
 
 ## STM32F4
@@ -2886,32 +2883,39 @@ You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
 
 
 
-## Intel x86_64 with Intel FSP support
+## Intel x86_64 with Intel FSP Support
 
-This setup is more complex than the UEFI approach described earlier, but allows
-for complete control of the machine since the very first stage after poweron.
+### Overview
+This configuration enables wolfBoot to function as a secure system BIOS replacement by integrating with Intel's Firmware Support Package (FSP). This provides lower-level hardware control compared to the UEFI approach.
 
-In other words, wolfBoot can run as a secure replacement of the system BIOS, thanks to the
-integration with the Intel Firmware Support Package (FSP). FSP provides services
-for target-specific initial configuration (memory and silicon initialization,
-power management, etc.). These services are designed to be accessed and invoked
-by the bootloader.
+### Key Features
+- Complete system control from power-on
+- Hardware initialization via FSP
+- Memory and silicon configuration
+- Power management integration
+- Secure boot chain from reset
 
-If wolfBoot is compiled with FSP support, it invokes the necessary machine-dependent
-binary code, which that can be obtained from the chip manufacturer.
+### FSP Integration
+wolfBoot interfaces with Intel FSP to handle platform-specific initialization:
+- Memory configuration
+- Silicon initialization
+- Power management
+- Hardware abstraction
 
-The following variables must be set in your `.config` file when using this feature:
+### Configuration Requirements
 
+Required `.config` variables:
 
-- `ARCH` = `x86_64`
-- `TARGET` = A useful name for the target you want to support. You can refer to
-  x86_fsp_qemu or kontron_vx3060_s2 for reference
-- `FSP_T_BASE`: the base address where the FSP-T binary blob will be loaded.
-- `FSP_M_BASE`: the base address where the FSP-M binary blob will be loaded.
-- `FSP_S_BASE`: the base address where the FSP-S binary blob will be loaded.
-- `FSP_T_BIN`: path to the FSP-T binary blob
-- `FSP_M_BIN`: path to the FSP-M binary blob
-- `FSP_S_BIN`: path to the FSP-S binary blob
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `ARCH` | Architecture setting | `x86_64` |
+| `TARGET` | Target platform name | `x86_fsp_qemu` |
+| `FSP_T_BASE` | FSP-T load address | Platform specific |
+| `FSP_M_BASE` | FSP-M load address | Platform specific |
+| `FSP_S_BASE` | FSP-S load address | Platform specific |
+| `FSP_T_BIN` | Path to FSP-T binary | `/path/to/fspt.bin` |
+| `FSP_M_BIN` | Path to FSP-M binary | `/path/to/fspm.bin` |
+| `FSP_S_BIN` | Path to FSP-S binary | `/path/to/fsps.bin` |
 - `WOLFBOOT_ORIGIN`: the start address of wolfBoot inside the flash (flash is mapped so that it ends at the 4GB boundary)
 - `BOOTLOADER_PARTITION_SIZE`: the size of the partition that stores wolfBoot in the flash
 - `WOLFBOOT_LOAD_BASE`: the address where wolfboot will be loaded in RAM after the first initialization phase

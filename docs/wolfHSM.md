@@ -1,147 +1,249 @@
 
-# wolfHSM Client Integration with wolfBoot
+# wolfHSM Integration Guide
 
-wolfBoot provides tight integration with wolfHSM when used on a select group of supported platforms. When used in this mode, wolfBoot acts as a wolfHSM client, with all cryptographic operations and key storage offloaded to the wolfHSM server as remote procedure calls (RPCs).
+## Overview
+wolfBoot provides secure cryptographic offloading through wolfHSM integration, enabling hardware-backed security features through Remote Procedure Calls (RPCs).
 
-For an introduction to wolfHSM, please refer to the [wolfHSM Manual](https://wolfSSL.com/https://www.wolfssl.com/documentation/manuals/wolfhsm/) and [wolfHSM GitHub Repository](https://github.com/wolfssl/wolfHSM.git).
+### Architecture
+```
++-------------+     +------------+     +-----------+
+|  wolfBoot   | --> |  wolfHSM   | --> |  Hardware |
+|  (Client)   |     |  (Server)  |     |   HSM     |
++-------------+     +------------+     +-----------+
+      ↓                   ↓                 ↓
+    Requests         Operations         Secure Keys
+```
 
-## Key Features
+### Key Features
+| Feature | Description |
+|---------|-------------|
+| Key Storage | Secure HSM-backed storage |
+| Crypto Ops | Remote operation execution |
+| Key Rotation | Runtime key management |
+| Isolation | Hardware security boundary |
 
-1. Secure key storage: Keys used for authentication and encryption are stored securely on the wolfHSM server
-2. Remote cryptographic operations: All cryptographic operations are performed on the wolfHSM server
-3. Flexible key management: Keys can be updated or rotated on the wolfHSM server without requiring an update to wolfBoot
+## Platform Support
 
-## Supported Platforms
+### Supported Targets
+| Platform | Transport | Status |
+|----------|-----------|---------|
+| Simulator | POSIX TCP | ✓ Full |
+| AURIX TC3xx | Shared Memory | ✓ Full |
 
-wolfBoot supports using wolfHSM on the following platforms:
+### Documentation
+- [wolfHSM Manual](https://wolfSSL.com/https://www.wolfssl.com/documentation/manuals/wolfhsm/)
+- [GitHub Repository](https://github.com/wolfssl/wolfHSM.git)
+- Platform-specific guides in respective docs
 
-- wolfBoot simulator (using wolfHSM POSIX TCP transport)
-- AURIX TC3xx (shared memory transport)
+## Cryptographic Support
 
-Details on configuring wolfBoot to use wolfHSM on each of these platforms can be found in the wolfBoot (and wolfHSM) documentation specific to that target, with the exception of the simulator, which is documented here. The remainder of this document focuses on the generic wolfHSM-related configuration options.
+### Supported Algorithms
 
-## Algorithm Support
+#### Signature Verification
+| Algorithm | Key Sizes | Notes |
+|-----------|-----------|-------|
+| RSA | 2048/3072/4096 | Image signatures |
+| ECDSA | P-256/384/521 | Image signatures |
+| ML-DSA | Level 2/3/5 | Platform dependent |
+| SHA256 | N/A | Image integrity |
 
-wolfBoot supports using wolfHSM for the following algorithms:
+**Note**: Encrypted image support pending
 
-- RSA with 2048, 3072, and 4096-bit keys for image signature verification
-- ECDSA P-256, P-384, and P-521 for image signature verification
-- ML-DSA security levels 2, 3, and 5 (depending on platform) for image signature verification
-- SHA256 for image integrity verification
+### Configuration
 
-Encrypted images with wolfHSM is not yet supported in wolfBoot. Note that every HAL target may not support all of these algorithms. Consult the platform-specific wolfBoot documentation for details.
+#### Basic Setup
+```make
+# Enable HSM client
+WOLFBOOT_ENABLE_WOLFHSM_CLIENT=1
 
-## Configuration Options
+# Use HSM key storage
+WOLFBOOT_USE_WOLFHSM_PUBKEY_ID=1
+```
 
-This section describes the configuration options available for wolfHSM client integration. Note that these options should be configured automatically by the build system for each supported platform when wolfHSM support is enabled. Consult the platform-specific documentation for details on enabling wolfHSM support.
+#### Key Management Modes
 
-### `WOLFBOOT_ENABLE_WOLFHSM_CLIENT`
+1. **HSM-Stored Keys** (Recommended)
+```bash
+# Generate keys without local storage
+keygen --nolocalkeys ...
 
-This option enables wolfHSM client support in wolfBoot. Without defining this option, support for wolfHSM is not compiled in and the remainder of the options have no effect.
+# Configuration
+WOLFBOOT_USE_WOLFHSM_PUBKEY_ID=1
+```
 
-### `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID`
+2. **Local Keys** (Debug/Testing)
+```bash
+# Generate standard keys
+keygen ...
 
-This option enables use of the reserved wolfHSM public key ID for firmware authentication, and is typically the desired behavior for using wolfHSM. When this option is defined, wolfBoot will use the reserved wolfHSM keyId defined by the HAL (`hsmClientKeyIdPubKey`). This option is meant to be used in conjunction with the `--nolocalkeys` keygen option, as the key material in the keystore will not be used.
+# Configuration
+# WOLFBOOT_USE_WOLFHSM_PUBKEY_ID not set
+```
 
-If this option is not defined, cryptographic operations are still performed on the wolfHSM server, but wolfBoot assumes the key material is present in the keystore and NOT stored on the HSM. This means that wolfBoot will first load keys from the keystore, send the key material to the wolfHSM server at the time of use (cached as ephemeral keys), and finally evict the key from the HSM after usage. This behavior is typically only useful for debugging or testing scenarios, where the keys may not be pre-loaded onto the HSM. The keystore for use in this mode should not be generated with the `--nolocalkeys` option.
+#### Operation Flow
+```
+HSM-Stored Keys:
+wolfBoot → HSM KeyId → Direct Operations
 
-## HAL Implementations
+Local Keys:
+wolfBoot → Local Key → HSM Cache → Operations → Evict
+```
 
-In addition to the standard wolfBoot HAL functions, wolfHSM-enabled platforms must also implement or instantiate the following wolfHSM-specific items in the platform HAL:
+## HAL Integration
 
-### HAL Global Variables
+### Required Components
 
-- `hsmClientCtx`: A global context for the wolfHSM client. This is initialized by the HAL and passed to wolfBoot, but should not be modified by wolfBoot.
-- `hsmClientDevIdHash`: The HSM device ID for hash operations. This is used to identify the HSM device to wolfBoot.
-- `hsmClientDevIdPubKey`: The HSM device ID for public key operations. This is used to identify the HSM device to wolfBoot.
-- `hsmClientKeyIdPubKey`: The HSM key ID for public key operations. This is used to identify the key to use for public key operations.
+#### Global Variables
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `hsmClientCtx` | Context | Client state |
+| `hsmClientDevIdHash` | ID | Hash operations |
+| `hsmClientDevIdPubKey` | ID | Public key ops |
+| `hsmClientKeyIdPubKey` | ID | Key selection |
 
-### HAL Functions
+#### Function Interface
+```c
+/* Initialize HSM connection */
+int hal_hsm_init_connect(void);
 
-- `hal_hsm_init_connect()`: Initializes the connection to the wolfHSM server. This is called by wolfBoot during initialization. This should initialize the HSM client context (`hsmClientCtx`) with a valid configuration and initialize the wolfHSM client API.
-- `hal_hsm_disconnect()`: Disconnects from the wolfHSM server. This is called by wolfBoot during shutdown. This should clean up the HSM client context (`hsmClientCtx`) and invoke the wolfHSM client API's cleanup function, freeing any additional allocated resources.
+/* Cleanup HSM connection */
+void hal_hsm_disconnect(void);
+```
 
-## wolfBoot Simulator and wolfHSM
+### Implementation Flow
+```
+Initialization:
++----------------+     +------------------+
+| Boot Sequence  | --> | hal_hsm_init    |
++----------------+     +------------------+
+                              ↓
+                      +------------------+
+                      | Context Setup    |
+                      +------------------+
+                              ↓
+                      +------------------+
+                      | API Init         |
+                      +------------------+
 
-The wolfBoot simulator supports wolfHSM with the POSIX TCP transport. It expects to communicate with the [wolfHSM example POSIX TCP server](https://github.com/wolfSSL/wolfHSM-examples/tree/main/posix/tcp/wh_server_tcp) at `127.0.0.1:1234`. See the [wolfHSM-examples README](https://github.com/wolfSSL/wolfHSM-examples/blob/main/README.md) for more information on the example POSIX TCP server.
+Shutdown:
++----------------+     +------------------+
+| System Cleanup | --> | hal_hsm_disc    |
++----------------+     +------------------+
+                              ↓
+                      +------------------+
+                      | Context Cleanup  |
+                      +------------------+
+                              ↓
+                      +------------------+
+                      | Resource Free    |
+                      +------------------+
+```
 
-### Building the simulator with wolfHSM support
+## Simulator Integration
 
-The wolfBoot simulator supports using wolfHSM with all algorithms mentioned in [Algorithm Support](#algorithm-support). To build the simulator configured to use wolfHSM,, ensure you build with the `WOLFHSM_CLIENT=1` makefile option. This will automatically define `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID`, and requires the public key corresponding to the private key that signed the image to be pre-loaded into the HSM at the keyId specified by `hsmClientKeyIdPubKey` in the simulator HAL (see the next section for details on loading keys into the HSM example server).
+### Overview
+The wolfBoot simulator provides a complete wolfHSM testing environment using POSIX TCP transport.
 
-```sh
-# Grab the HSM simulator configuration
+### Network Configuration
+```
++----------------+     +----------------+
+| wolfBoot Sim   | <-> | wolfHSM Server |
+| 127.0.0.1     |     | :1234         |
++----------------+     +----------------+
+```
+
+### Build Instructions
+
+#### 1. Configuration
+```bash
+# Setup simulator config
 cp config/examples/sim-wolfHSM.config .config
 
-# Build wolfBoot with the simulator HAL configured to use wolfHSM, automatically generating keys
-make
+# Enable HSM client
+make WOLFHSM_CLIENT=1
+```
 
-# Build and sign the test applications used in the simulated update
+#### 2. Test Application
+```bash
+# Build and sign test apps
 make test-sim-internal-flash-with-update
 
-# The generated wolfBoot public key can be found at `wolfboot_signing_private_key_pub.der`, and
-# should be loaded into the HSM at the keyId specified by `hsmClientKeyIdPubKey` as described
-# in the next section
+# Key location:
+# wolfboot_signing_private_key_pub.der
 ```
 
-### Running the simulator against a wolfHSM server
+#### Key Features
+| Feature | Description |
+|---------|-------------|
+| Transport | POSIX TCP |
+| Algorithms | Full support |
+| Key Storage | HSM-backed |
+| Testing | Automated |
 
-First, build the wolfHSM POSIX TCP server, following the instructions in the [wolfHSM-examples README](https://github.com/wolfSSL/wolfHSM-examples/blob/main/README.md). 
+## Testing Guide
 
-Next, in a new terminal window, run the wolfHSM POSIX TCP server, loading the public key generated by the wolfBoot build process (`wolfboot_signing_private_key_pub.der`)
+### Server Setup
 
-```sh
-# Build the example server
+#### 1. Build Server
+```bash
+# Get wolfHSM examples
 cd wolfHSM-examples/posix/tcp/wh_server_tcp
+
+# Build server
 make WOLFHSM_DIR=/path/to/wolfHSM/install
-
-# Run the server, loading the wolfBoot public key and using keyId 0xFF (or modify keyId to match value of `hsmClientKeyIdPubKey` in `hal/sim.c`)
-./Build/wh_server_tcp.elf --key /path/to/wolfboot_signing_private_key_pub.der --id 0xFF
-
-# The server will now be waiting for connections
 ```
 
-Run the wolfBoot simulator against the server with the appropriate arguments to report the firmware version and stage an update
+#### 2. Start Server
+```bash
+# Run with wolfBoot key
+./Build/wh_server_tcp.elf \
+    --key wolfboot_signing_private_key_pub.der \
+    --id 0xFF  # Match hsmClientKeyIdPubKey
+```
 
-```sh
-# in the wolfBoot terminal window
+### Testing Process
+
+#### 1. Stage Update
+```bash
+# Trigger update
 ./wolfboot.elf update_trigger get_version
 
-# The following output should indicate that the update was staged successfully
-Simulator assigned ./internal_flash.dd to base 0x7f7fcbd80000
-Boot partition: 0x7f7fcbe00000 (size 745400, version 0x1)
-Update partition: 0x7f7fcbf00000 (size 745400, version 0x2)
-Boot partition: 0x7f7fcbe00000 (size 745400, version 0x1)
-Booting version: 0x1
-Simulator assigned ./internal_flash.dd to base 0x7f6665679000
-hal_flash_erase addr 0x7f66658f7000 len 4091
-1
+# Expected Output:
+# Boot partition: v1
+# Update partition: v2
+# Status: Update staged
 ```
 
-Restart the wolfHSM server with the same arguments, then rerun the wolfBoot simulator to boot the new firmware and verify the update.
+#### 2. Verify Update
+```bash
+# Restart server first
+./Build/wh_server_tcp.elf \
+    --key wolfboot_signing_private_key_pub.der \
+    --id 0xFF
 
-```sh
-# In the wolfHSM server terminal window
-./Build/wh_server_tcp.elf --key /path/to/wolfboot_signing_private_key_pub.der --id 0xFF
-
-# In the wolfBoot terminal window, run the following to update the image and confirm the update
+# Complete update
 ./wolfboot.elf success get_version
 
-# The output should ultimately print the following, indicating the update was successful
-
-#... lots of output ...
-#
-Boot partition: 0x7f3a2f96b000 (size 745400, version 0x2)
-Update partition: 0x7f3a2fa6b000 (size 745400, version 0x1)
-Copy sector 254 (part 0->2)
-hal_flash_erase addr 0x7f3a2fb6b000 len 4096
-hal_flash_erase addr 0x7f3a2fa69000 len 4096
-hal_flash_erase addr 0x7f3a2fa6a000 len 4096
-hal_flash_erase addr 0x7f3a2fa69000 len 4096
-hal_flash_erase addr 0x7f3a2fb6a000 len 4096
-Boot partition: 0x7f3a2f96b000 (size 745400, version 0x2)
-Booting version: 0x2
-Simulator assigned ./internal_flash.dd to base 0x7fe902d2e000
-2
+# Verification Points
+- Boot partition: v2
+- Update success
+- Version increment
 ```
+
+### Update Flow
+```
+Initial State:
+Boot(v1) | Update(v2)
+
+After Stage:
+Boot(v1) | Update(v2*)
+
+After Success:
+Boot(v2) | Update(v1)
+```
+
+## Related Documentation
+- [wolfHSM Examples](https://github.com/wolfSSL/wolfHSM-examples)
+- [Firmware Updates](firmware_update.md)
+- [Key Management](keystore.md)
 

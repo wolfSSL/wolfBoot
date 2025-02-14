@@ -1,50 +1,96 @@
-## Remote External flash memory support via UART
+# Remote Flash Support via UART
 
-wolfBoot can emulate external partitions using UART communication with a neighbor system. This feature
-is particularly useful in those asynchronous multi-process architectures, where updates can be stored
-with the assistance of an external processing unit.
+## Overview
+wolfBoot supports external partition emulation through UART communication, enabling:
+- Remote flash storage
+- Asynchronous updates
+- Multi-processor architectures
+- External update staging
 
-### Bootloader setup
+## Configuration
 
-The option to activate this feature is `UART_FLASH=1`. This configuration option depends on the
-external flash API, which means that the option `EXT_FLASH=1` is also mandatory to compile the bootloader.
-
-The HAL of the target system must be expanded to include a simple UART driver, that will be used by the
-bootloader to access the content of the remote flash using one of the UART controllers on board.
-
-Example UART drivers for a few of the supported platforms can be found in the [hal/uart](hal/uart) directory.
-
-The API exposed by the UART HAL extension for the supported targets is composed by the following functions:
-
-```
-int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
-int uart_tx(const uint8_t c);
-int uart_rx(uint8_t *c);
+### Build Options
+```make
+# Required settings
+UART_FLASH=1   # Enable UART flash
+EXT_FLASH=1    # Enable external flash API
 ```
 
-Consider implementing these three functions based on the provided examples if you want to use external flash memory
-support on your platform, if not officially supported yet.
+### UART Driver Integration
+
+#### Required HAL Functions
+```c
+/* Initialize UART with specified parameters */
+int uart_init(
+    uint32_t bitrate,  // Communication speed
+    uint8_t data,      // Data bits
+    char parity,       // Parity mode
+    uint8_t stop       // Stop bits
+);
+
+/* Transmit single byte */
+int uart_tx(
+    const uint8_t c    // Byte to send
+);
+
+/* Receive single byte */
+int uart_rx(
+    uint8_t *c        // Buffer for received byte
+);
+```
+
+#### Implementation Notes
+- Example drivers: [hal/uart](hal/uart)
+- Platform-specific adaptations needed
+- Simple interface design
+- Minimal dependencies
 
 
-### Host side: UART flash server
+## Host Implementation
 
-On the remote system hosting the external partition image for the target, a simple protocol can be implemented
-on top of UART messages to serve flash-access specific calls.
+### UART Flash Server
+```
+Host System                      Target System
++----------------+   UART    +----------------+
+| Flash Server   | <------> | wolfBoot       |
+| - File storage |          | - Remote flash |
+| - RPC handler  |          | - Update mgmt  |
++----------------+          +----------------+
+```
 
-An example uart-flash-server daemon, designed to run on a GNU/Linux host and emulate the external partition with
-a local file on the filesystem, is available in [tools/uart-flash-server](tools/uart-flash-server).
+#### Components
+- Location: [tools/uart-flash-server](tools/uart-flash-server)
+- Platform: GNU/Linux host
+- Storage: Local file system
+- Protocol: Custom UART messages
 
+### Update Mechanism
 
-### External flash update mechanism
+#### Operation Model
+| Operation | Implementation |
+|-----------|---------------|
+| Read | UART RPC → Host read |
+| Write | UART RPC → Host write |
+| Update | Standard wolfBoot flow |
+| Rollback | Remote partition backup |
 
-wolfBoot treats external UPDATE and SWAP partitions in the same way as when they are mapped on a local SPI flash.
-Read and write operations are simply translated into remote procedure calls via UART, that can be interpreted by
-the remote application and provide read and write access to actual storage elements which would only be accessible
-by the host.
+#### Key Features
+- Transparent operation
+- Standard update flow
+- Remote storage support
+- Automatic backup
+- Rollback capability
 
-This means that after a successful update, a copy of the previous firmware will be stored in the remote partition to
-provide exactly the same update mechanism that is available in all the other use cases. The only difference consist
-in the way of accessing the physical storage area, but all the mechanisms at a higher level stay the same.
+#### Architecture Benefits
+- Consistent API
+- Flexible storage
+- Reliable updates
+- Host accessibility
+
+## Related Documentation
+- [Firmware Updates](firmware_update.md)
+- [External Flash](flash_partitions.md)
+- [HAL Integration](HAL.md)
 
 
 

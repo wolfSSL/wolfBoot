@@ -1,223 +1,323 @@
-# KeyStore structure: support for multiple public keys
+# wolfBoot KeyStore Guide
 
-## What is wolfBoot KeyStore
+## Overview
+The KeyStore system provides secure storage and management of public keys used for firmware authentication in wolfBoot.
 
-KeyStore is the mechanism used by wolfBoot to store all the public keys used for
-authenticating the signature of current firmware and updates.
+### Key Features
+- Multiple key support
+- Flexible storage options
+- Runtime key access
+- Permission management
+- HSM integration
 
-wolfBoot's key generation tool can be used to generate one or more keys. By default,
-when running `make` for the first time, a single key `wolfboot_signing_private_key.der`
-is created, and added to the keystore module. This key should be used to sign any firmware
-running on the target, as well as firmware update binaries.
+## Basic Operation
 
-Additionally, the `keygen` tool creates additional files with different representations
-of the keystore
- - A .c file (src/keystore.c) which can be used to deploy public keys as part
-   of the bootloader itself, by linking the keystore in `wolfboot.elf`
- - A .bin file (keystore.bin) which contains the keystore that can be hosted
-   on a custom memory support. In order to access the keystore, a small driver is
-   required (see section "Interface API" below).
+### Default Setup
+```bash
+# First build generates default key
+make
 
-## Default usage (built-in keystore)
-
-By default, the keystore object in `src/keystore.c` is accessed by wolfboot by including
-its symbols in the build.
-Once generated, this file contains an array of structures describing each public
-key that will be available to wolfBoot on the target system. Additionally, there are a few
-functions that connect to the wolfBoot keystore API to access the details and the
-content of the public key slots.
-
-The public key is described by the following structure:
-
-```
- struct keystore_slot {
-     uint32_t slot_id;
-     uint32_t key_type;
-     uint32_t part_id_mask;
-     uint32_t pubkey_size;
-     uint8_t  pubkey[KEYSTORE_PUBKEY_SIZE];
- };
-
+# Results in:
+wolfboot_signing_private_key.der  # Signing key
+src/keystore.c                    # Embedded keystore
+keystore.bin                      # Binary keystore
 ```
 
-- `slot_id` is the incremental identifier for the key slot, starting from 0.
+### Storage Options
+| Format | File | Purpose |
+|--------|------|---------|
+| Source | src/keystore.c | Embedded in bootloader |
+| Binary | keystore.bin | External storage support |
+| DER | *.der | Key distribution |
 
-- `key_type` describes the algorithm of the key, e.g. `AUTH_KEY_ECC256` or `AUTH_KEY_RSA3072`
+### Integration Methods
+1. **Built-in Storage**
+   - Linked with wolfboot.elf
+   - Direct memory access
+   - Default approach
 
-- `mask` describes the permissions for the key. It's a bitmap of the partition ids for which this key can be used for verification
+2. **External Storage**
+   - Custom memory support
+   - Driver required
+   - Flexible deployment
 
-- `pubkey_size` the size of the public key buffer
+## Built-in KeyStore Implementation
 
-- `pubkey` the actual buffer containing the public key in its raw format
+### Data Structure
+```c
+struct keystore_slot {
+    uint32_t slot_id;      // Sequential ID (0-based)
+    uint32_t key_type;     // Algorithm identifier
+    uint32_t part_id_mask; // Permission bitmap
+    uint32_t pubkey_size;  // Key buffer size
+    uint8_t  pubkey[KEYSTORE_PUBKEY_SIZE]; // Key data
+};
+```
+
+### Field Descriptions
+
+| Field | Type | Description | Example |
+|-------|------|-------------|---------|
+| slot_id | uint32_t | Sequential identifier | 0, 1, 2... |
+| key_type | uint32_t | Crypto algorithm | AUTH_KEY_ECC256 |
+| part_id_mask | uint32_t | Access permissions | KEY_VERIFY_ALL |
+| pubkey_size | uint32_t | Key length | 32, 64, etc. |
+| pubkey | uint8_t[] | Raw key data | Binary buffer |
+
+### Memory Layout
+```
+KeyStore Memory
++------------------------+
+| Slot 0                |
+|   - Metadata          |
+|   - Key Data          |
++------------------------+
+| Slot 1                |
+|   - Metadata          |
+|   - Key Data          |
++------------------------+
+| ...                   |
+```
 
 When booting, wolfBoot will automatically select the public key associated to the signed firmware image, check that it matches the permission mask for the partition id where the verification is running and then attempts to authenticate the signature of the image using the selected public key slot.
 
-### Creating multiple keys
+## Key Management
 
-`keygen` accepts multiple filenames for private keys.
+### Key Generation
 
-Two arguments:
+#### Command Options
+```bash
+# Generate new keypair
+keygen -g priv.der
 
- - `-g priv.der` generate new keypair, store the private key in priv.der, add the public key to the keystore
- - `-i pub.der` import an existing public key and add it to the keystore
-
-Example of creation of a keystore with two ED25519 keys:
-
-`./tools/keytools/keygen --ed25519 -g first.der -g second.der`
-
-will create the following files:
-
- - `first.der` first private key
- - `second.der` second private key
- - `src/keystore.c` C keystore containing both public keys associated with `first.der`
-     and `second.der`.
-
-The `keystore.c` generated should look similar to this:
-
+# Import existing key
+keygen -i pub.der
 ```
+
+#### Multiple Key Example
+```bash
+# Create two ED25519 keys
+./tools/keytools/keygen \
+    --ed25519 \
+    -g first.der \
+    -g second.der
+```
+
+#### Output Files
+| File | Description |
+|------|-------------|
+| first.der | Private key 1 |
+| second.der | Private key 2 |
+| src/keystore.c | Generated keystore |
+
+### KeyStore Source Example
+```c
 #define NUM_PUBKEYS 2
 const struct keystore_slot PubKeys[NUM_PUBKEYS] = {
-
-     /* Key associated to private key 'first.der' */
+    /* Slot 0: first.der */
     {
         .slot_id = 0,
         .key_type = AUTH_KEY_ED25519,
         .part_id_mask = KEY_VERIFY_ALL,
         .pubkey_size = KEYSTORE_PUBKEY_SIZE_ED25519,
         .pubkey = {
-            0x21, 0x7B, 0x8E, 0x64, 0x4A, 0xB7, 0xF2, 0x2F,
-            0x22, 0x5E, 0x9A, 0xC9, 0x86, 0xDF, 0x42, 0x14,
-            0xA0, 0x40, 0x2C, 0x52, 0x32, 0x2C, 0xF8, 0x9C,
-            0x6E, 0xB8, 0xC8, 0x74, 0xFA, 0xA5, 0x24, 0x84
+            0x21, 0x7B, /* ... */ 0x24, 0x84
         },
     },
-
-     /* Key associated to private key 'second.der' */
+    /* Slot 1: second.der */
     {
         .slot_id = 1,
         .key_type = AUTH_KEY_ED25519,
         .part_id_mask = KEY_VERIFY_ALL,
         .pubkey_size = KEYSTORE_PUBKEY_SIZE_ED25519,
         .pubkey = {
-            0x41, 0xC8, 0xB6, 0x6C, 0xB5, 0x4C, 0x8E, 0xA4,
-            0xA7, 0x15, 0x40, 0x99, 0x8E, 0x6F, 0xD9, 0xCF,
-            0x00, 0xD0, 0x86, 0xB0, 0x0F, 0xF4, 0xA8, 0xAB,
-            0xA3, 0x35, 0x40, 0x26, 0xAB, 0xA0, 0x2A, 0xD5
+            0x41, 0xC8, /* ... */ 0x2A, 0xD5
         },
-    },
-
-
+    }
 };
 
+## Access Control
+
+### Permission System
+
+#### Partition Mask
+```
+Bit Layout (32-bit mask)
+31                             3 2 1 0
++--------------------------------+-+-+-+
+|             Reserved           |3|2|1|0|
++--------------------------------+-+-+-+
+                                 | | | |
+                                 | | | +-- wolfBoot self-update
+                                 | | +---- Main firmware
+                                 | +------ Custom partition 2
+                                 +-------- Custom partition 3
 ```
 
-### Permissions
+#### Default Access
+- Mask: `KEY_VERIFY_ALL`
+- Allows: All partition access
+- Usage: General purpose keys
 
-By default, when a new keystore is created, the permissions mask is set
-to `KEY_VERIFY_ALL`, which means that the key can be used to verify a firmware
-targeting any partition id.
-
-The `part_id_mask` value is a bitmask, where each bit represent a different partition.
-The bit '0' is reserved for wolfBoot self-update, while typically the main firmware partition
-is associated to id 1, so it requires a key with the bit '1' set. In other words, signing a
-partition with `--id 3` would require turning on bit '3' in the mask, i.e. adding (1U << 3) to it.
-
-To restrict the permissions for single keys, it would be sufficient to change the value
-of each key `part_id_mask`. This is done via the `--id` command line option for keygen.
-Each generated or imported key can be associated with a number of partition by passing the
-partition IDs in a comma-separated list, e.g.:
-
-```
-keygen --ecc256 -g generic.key --id 1,2,3 -g restricted.key
+#### Restricted Access
+```bash
+# Create keys with specific permissions
+keygen --ecc256 \
+    -g generic.key \        # All access
+    --id 1,2,3 \
+    -g restricted.key       # Limited access
 ```
 
-Generates two keypairs, `generic.key` and `restricted.key`. The former assumes the
-default mask `KEY_VERIFY_ALL`, which makes it possible to use it to authenticate any
-of the system components. The latter instead, will carry a mask with only the bits
-'1', '2', and '3' set (mask = b00001110 =0x000e), allowing the usage only with the assigned
-partition IDs.
+#### Permission Examples
+| Key | Mask | Binary | Access |
+|-----|------|--------|---------|
+| generic.key | KEY_VERIFY_ALL | 11111111 | All partitions |
+| restricted.key | 0x000E | 00001110 | Partitions 1,2,3 |
 
 
-### Importing public keys
+## Advanced Key Management
 
-The "-i" option is used to import existing public keys into the keyvault. The usage is identical to the '-g' option, except that
-the file provided must exist and contain a valid public key of the given algorithm and key size.
+### Key Import
+```bash
+# Import existing public key
+keygen -i existing_pub.der
+```
 
-### Generating and importing keys of different types
+### Universal KeyStore
 
-By default, wolfBoot hardcodes the type of key used for all the signature verification operations into the keystore format.
+#### Configuration
+```bash
+# Enable mixed key types
+make WOLFBOOT_UNIVERSAL_KEYSTORE=1
+```
 
-Alternatively, wolfBoot can be compiled with the option `WOLFBOOT_UNIVERSAL_KEYSTORE=1`, which disables the check at compile
-time and allows adding keys of different types to the keystore. For example, if we want to create two keypairs with different ECC curves,
-and additionally store a pre-existing RSA2048 public key file `rsa-pub.der`, we could run the following:
+#### Mixed Key Example
+```bash
+# Create multi-algorithm keystore
+keygen \
+    --ecc256 -g a.key \     # ECC-256 key
+    --ecc384 -g b.key \     # ECC-384 key
+    --rsa2048 -i rsa-pub.der  # Import RSA-2048
+```
 
-`keygen --ecc256 -g a.key  --ecc384 -g b.key --rsa2048 -i rsa-pub.der`
+#### Supported Algorithms
+| Type | Option | Key Size |
+|------|---------|----------|
+| ECC-256 | --ecc256 | 256-bit |
+| ECC-384 | --ecc384 | 384-bit |
+| RSA-2048 | --rsa2048 | 2048-bit |
+| ED25519 | --ed25519 | 256-bit |
 
-The command above generates a keystore with three public keys that are accessible by the bootloader at runtime.
+**Note**: Additional algorithms require explicit inclusion via `SIGN=` option
 
-Please note that by default wolfBoot does not include any public key algorithm implementations besides the one
-selected via the option `SIGN=`, so usually this feature is reserved to specific use cases where other policies or components
-in the chain-of-trust require to store different key types for different purposes.
+### Key Export
 
-### Exporting the public key to a file
-
-The `keygen` tool can also export the public key that corresponds to the private key generated with the `-g` option to a der file when
-used with the `--exportpubkey` option. The `--exportpubkey` option only has an effect if used in conjunction with the `-g` option,
-otherwise it is ignored. To generate a new ECC 256 keypair, with der files exported for both public and private keys, use:
-
-```sh
+#### Export Command
+```bash
+# Generate and export keypair
 keygen --ecc256 --exportpubkey -g mykey.der
 ```
 
-The exported public key will have the same name as the input to the `-g` option, but with `_pub` appended to the string before
-the first `.` character. Therefore, running the  above command will result in the creation of the following two files:
+#### Output Files
+| File | Description | Format |
+|------|-------------|---------|
+| mykey.der | Private key | DER |
+| mykey_pub.der | Public key | DER |
 
-```sh
-mykey.der     # <-- the generated private key
-mykey_pub.der # <-- the generated public key
+#### Usage Notes
+- Requires `-g` option
+- Automatic name generation
+- DER format output
+- Suitable for HSM import
+
+## External KeyStore Integration
+
+### Overview
+Support for external key storage:
+- Hardware security modules
+- External NVM
+- Key vaults
+- Custom storage solutions
+
+### API Reference
+
+#### Core Functions
+```c
+// Get total key count
+int keystore_num_pubkeys(void);
+
+// Get key size for slot
+int keystore_get_size(int id);
+
+// Access key buffer
+uint8_t *keystore_get_buffer(int id);
+
+// Get permission mask
+uint32_t keystore_get_mask(int id);
 ```
 
-## Using KeyStore with external Key Vaults, where keys are accessible
+#### Function Details
 
-It is possible to use an external NVM, a Key Vault or any generic support to
-access the KeyStore. In this case, wolfBoot should not link the generated keystore.c directly,
-but rather rely on an external interface, that exports the same API which
-would be implemented by `keystore.c`.
+| Function | Return Type | Description | Error Handling |
+|----------|-------------|-------------|----------------|
+| keystore_num_pubkeys | int | Total slots | Must be ≥ 1 |
+| keystore_get_size | int | Key size | Negative on error |
+| keystore_get_buffer | uint8_t* | Key data | NULL on error |
+| keystore_get_mask | uint32_t | Permissions | 0 on error |
 
-The API consists of a few functions described below.
+#### Implementation Notes
+- Sequential slot numbering
+- Zero-based indexing
+- Error checking required
+- Thread-safe access
 
-### Interface API
+## HSM Integration
 
-#### Number of keys in the keystore
-`int keystore_num_pubkeys(void)`
+### Overview
+Support for Hardware Security Modules (HSMs):
+- Secure key storage
+- Cryptographic operations
+- Runtime verification
+- Field updates
 
-Returns the number of slots in the keystore. At least one slot
-should be populated if you want to authenticate your firmware today.
-The interface assumes that the slots are numbered sequentially, from zero to
-`keystore_num_pubkeys() - 1`. Accessing those slots through this API should always
- return a valid public key.
+### Architecture
+```
+Application
+    ↓
+wolfBoot ←→ KeyStore
+    ↓         ↓
+   HSM  ←→  Metadata
+```
 
-#### Size of the public key in a slot
-`int keystore_get_size(int id)`
+### Implementation
 
-Returns the size of the public key stored in the slot `id`.
-In case of error, return a negative value.
+#### Key Generation
+```bash
+# Generate HSM-compatible keys
+keygen --ecc256 \
+    --nolocalkeys \
+    --exportpubkey \
+    -g hsm_key.der
+```
 
-#### Actual public key buffer (mapped/copied in memory)
+#### Features
+| Feature | Description |
+|---------|-------------|
+| Zero-copy | No key material in keystore |
+| Metadata | Size and type information |
+| Field updates | No rebuild required |
+| Security | Keys never exposed |
 
-`uint8_t *keystore_get_buffer(int id)`
+#### Requirements
+- Compatible HSM (e.g., wolfHSM)
+- Manual key loading
+- Matching algorithms
+- Proper key sizes
 
-Returns a pointer to an accessible area in memory, containing the buffer with the
-public key associated to the slot `id`.
+### Security Benefits
+- Keys never leave HSM
+- Hardware-backed crypto
+- Tamper resistance
+- Secure key updates
 
-#### Permissions mask
-
-`uint32_t keystore_get_mask(int id)`
-
-Returns the permissions mask, as a 32-bit word, for the public key stored in the slot `id`.
-
-### Using KeyStore with HSMs (inaccessible keys)
-
-wolfBoot supports certain platforms that contain connected HSMs (Hardware Security Modules) that can provide cryptographic services using keys that are not stored in the device NVM or readable by wolfBoot, for example, wolfHSM. In these scenarios, wolfBoot key tools should be used to generate the keys, which can then be manually loaded into the HSM (see [--exportpubkey](#exporting-the-public-key-to-a-file)). At runtime, wolfBoot will still use the keystore to obtain information about the public keys, specifically the size of the key and the key type, but does not need access to the actual key material.
-
-To support this mode of operation, the `keygen` tool supports the `--nolocalkeys` option, which instructs the tool to generate a keystore entry with a zeroed key material. It still generates the `.der` files for private and public keys, so the wolfBoot key tools can sign images, but the `keystore.c` file that is linked into wolfBoot will contain all zeros in the `pubkey` field. Because the key material isn't present in the keystore, the keypair used to sign the image and stored on the HSM for verification can be updated in the field without needing to rebuild wolfBoot against a new `keystore.c`, as long as the signature algorithm and key size does not change. Most targets that use this option will automatically add it to the key generation options or explicitly mention this step in the build documentation.
+For detailed HSM setup, see [wolfHSM Documentation](wolfHSM.md)

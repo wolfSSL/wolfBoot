@@ -1,68 +1,105 @@
-# Application interface for interactions with the bootloader
+# Application Interface for wolfBoot
 
-wolfBoot offers a small interface to interact with the images stored in the partition,
-explicitly initiate an update and confirm the success of a previously scheduled update.
+wolfBoot provides an API through libwolfboot that allows applications to:
+- Query firmware versions in both BOOT and UPDATE partitions
+- Initiate firmware updates
+- Confirm successful firmware boots
+- Access partition states
 
-## Compiling and linking with libwolfboot
+## Compiling and Linking with libwolfboot
 
-An application that requires interactions with wolfBoot must include the header file:
+Applications using wolfBoot functionality must:
 
-`#include <wolfboot/wolfboot.h>`
+1. Include the wolfBoot header:
+   ```c
+   #include <wolfboot/wolfboot.h>`
+   ```
 
-This exports the API function declarations, and the predefined values for the flags
-and tags stored together with the firmware images in the two partitions.
+2. Link against libwolfboot library
 
-For more information about flash partitions, flags and states see [Flash partitions](flash_partitions.md).
+The header provides:
+- API function declarations
+- Predefined partition flag values
+- Image tag definitions
+- Partition state constants
 
-## API
+For details about flash partitions, flags and states see [Flash partitions](flash_partitions.md).
 
-libwolfboot provides low-level access interface to flash partition states. The state
-of each partition can be retrieved and altered by the application.
+## Core API Functions
 
-Basic interaction from the application is provided via the following high-level function calls:
+libwolfboot provides both high-level and low-level interfaces to manage firmware updates:
 
-`uint32_t wolfBoot_get_image_version(uint8_t part)`
+### High-Level Functions
 
-`void wolfBoot_update_trigger(void)`
+```c
+uint32_t wolfBoot_get_image_version(uint8_t part)
+void wolfBoot_update_trigger(void)
+void wolfBoot_success(void)
+```
 
-`void wolfBoot_success(void)`
+### Version Management Functions
 
-### Firmware version
+#### Get Image Version
+```c
+uint32_t wolfBoot_get_image_version(uint8_t part)
+```
+Retrieves the version number of the firmware in the specified partition.
 
-Current (boot) firmware and update firmware versions can be retrieved from the application using:
+Parameters:
+- `part`: Partition ID (PART_BOOT or PART_UPDATE)
 
-`uint32_t wolfBoot_get_image_version(uint8_t part)`
+Returns:
+- Version number of the firmware in the specified partition
+- 0 if no valid firmware exists in the partition
 
-Or via the shortcut macros:
+#### Convenience Macros
+```c
+wolfBoot_current_firmware_version()  // Get version of firmware in BOOT partition
+wolfBoot_update_firmware_version()   // Get version of firmware in UPDATE partition
+```
 
-`wolfBoot_current_firmware_version()`
+### Update Management Functions
 
-and
+#### Trigger Update
+```c
+void wolfBoot_update_trigger(void)
+```
+Initiates the firmware update process for the next boot.
 
-`wolfBoot_update_firmware_version()`
+Operation:
+1. Sets UPDATE partition state to `STATE_UPDATING`
+2. On next boot, wolfBoot will:
+   - Verify the update image signature
+   - Swap BOOT and UPDATE partition contents using SWAP space
+   - Set new firmware state to `STATE_TESTING`
+   - Boot into new firmware
 
-### Trigger an update
+Note: The update image must be stored in the UPDATE partition before calling this function.
 
-  - `wolfBoot_update_trigger()` is used to trigger an update upon the next reboot, and it is normally used by
-an update application that has retrieved a new version of the running firmware, and has
-stored it in the UPDATE partition on the flash. This function will set the state of the UPDATE partition 
-to `STATE_UPDATING`, instructing the bootloader to perform the update upon the next execution (after reboot).
+### Boot Confirmation Functions
 
-wolfBoot update process swaps the contents of the UPDATE and the BOOT partitions, using a temporary
-single-block SWAP space.
+#### Confirm Successful Boot
+```c
+void wolfBoot_success(void)
+```
+Confirms successful boot of the current firmware.
 
-### Confirm current image
+Operation:
+1. Marks current firmware in BOOT partition as `STATE_SUCCESS`
+2. Prevents automatic rollback on next boot
 
-- `wolfBoot_success()` indicates a successful boot of a new firmware. This can be called by the application
-at any time, but it will only be effective to mark the current firmware (in the BOOT partition) with the state
-`STATE_SUCCESS`, indicating that no roll-back is required. An application should typically call `wolfBoot_success()`
-only after verifying that the basic system features are up and running, including the possibility to retrieve
-a new firmware for the next upgrade.
+Important:
+- Should be called only after verifying critical system functionality
+- Recommended to verify:
+  - Core system features work correctly
+  - Update capability is functional
+  - Any required peripherals are accessible
 
-If after an upgrade and reboot wolfBoot detects that the active firmware is still in `STATE_TESTING` state, it means that
-a successful boot has not been confirmed for the application, and will attempt to revert the update by swapping 
-the two images again.
+Rollback Behavior:
+- If firmware remains in `STATE_TESTING` state after reboot
+- wolfBoot will automatically rollback to previous version
+- Accomplished by re-swapping BOOT and UPDATE partitions
 
-For more information about the update process, see [Firmware Update](firmware_update.md)
-
-For the image format, see [Firmware Image](firmware_image.md)
+Related Documentation:
+- [Firmware Update Process](firmware_update.md)
+- [Firmware Image Format](firmware_image.md)

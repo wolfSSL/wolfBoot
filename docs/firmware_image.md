@@ -1,115 +1,218 @@
-# Firmware image
+# Firmware Image Format
 
-## Firmware entry point
+## Overview
+This document describes the wolfBoot firmware image format, including:
+- Image header structure
+- Entry point requirements
+- Partition management
+- Signing and verification
 
-WolfBoot can only chain-load and execute firmware images from a specific entry point in memory,
-which must be specified as the origin of the FLASH memory in the linker script of the embedded
-application. This corresponds to the first partition in the flash memory.
+## Memory Layout
 
-Multiple firmware images can be created this way, and stored in two different partitions. The bootloader
-will take care of moving the selected firmware to the first (BOOT) partition before chain-loading the image.
+### Entry Point Requirements
+- Fixed memory location required
+- Specified in linker script
+- Must match FLASH origin
+- Located in first partition
 
-Due to the presence of an image header, the entry point of the application has a fixed additional offset
-of 256B from the beginning of the flash partition.
+### Partition Structure
+```
+Flash Memory
++------------------------+ <- Partition Start
+|    Image Header       | 256B aligned
++------------------------+ <- Entry Point
+|    Firmware Image     |
+|                      |
++------------------------+
+```
 
-## Firmware image header
+### Key Characteristics
+- 256B header offset
+- Multiple partition support
+- Automatic image relocation
+- Chain-load execution model
 
-Each (signed) firmware image is prepended with a fixed-size **image header**, containing useful information about the
-firmware. The exact size of the **image header** depends on the size of the image digest and signature, which depend on
-the algorithms/key sizes used. Larger key sizes will result in a larger image header. The size of the image header is
-determined by the build system and provided to the application code in the `IMAGE_HEADER_SIZE` macro. The size of the generated
-image header is also output by the keytools during the signing operation. The **image header** data is padded out to the next
-multiple of 256B, in order to guarantee that the entry point of the actual firmware is stored on the flash starting from a
-256-Bytes aligned address. This ensures that the bootloader can relocate the vector table before chain-loading the firmware
-so interrupts continue to work properly after the boot is complete. When porting wolfBoot to a platform that doesn't use wolfBoot's
-Makefile-based build system, extra care should be taken to ensure `IMAGE_HEADER_SIZE` is set to a value that matches the output of
-the wolfBoot `sign` key tool.
+## Image Header
 
-![Image header](png/image_header.png)
+### Structure Overview
+The image header contains metadata and security information for the firmware:
 
-*The image header is stored at the beginning of the slot and the actual firmware image starts `IMAGE_HEADER_SIZE` Bytes after it*
+```
++------------------------+ <- Header Start
+|     Magic Number      | 4 bytes
+|     Image Size        | 4 bytes
+|     Tags Section      | Variable size
+|     Padding           | To 256B alignment
++------------------------+ <- IMAGE_HEADER_SIZE
+|     Firmware Start    |
+```
 
-### Image header: Tags
+### Header Characteristics
+- Variable total size based on:
+  - Digest algorithm
+  - Signature size
+  - Key length
+- 256-byte alignment enforced
+- Size defined by `IMAGE_HEADER_SIZE`
+- Supports vector table relocation
 
-The **image header** is prepended with a single 4-byte magic number, followed by a 4-byte field indicating the
-firmware image size (excluding the header). All numbers in the header are stored in Little-endian format.
+### Implementation Notes
+- Size determined at build time
+- Reported by signing tools
+- Critical for interrupt handling
+- Must match across toolchain
 
-The two fixed fields are followed by one or more tags. Each TAG is structured as follows:
+**Important**: When porting to custom build systems, ensure `IMAGE_HEADER_SIZE` matches the `sign` tool output.
 
-  - 2 bytes indicating the **Type**
-  - 2 bytes indicating the **size** of the tag, excluding the type and size bytes
-  - ***N*** bytes of tag content
+### Tag System
 
-With the following exception:
-  - A '0xFF' in the Type field indicate a simple padding byte. The 'padding' byte has no **size** field, and the next byte should be processed as **Type** again.
+#### Base Format
+All values stored in little-endian format.
 
-Each **Type** has a different meaning, and integrate information about the firmware. The following Tags are mandatory for validating the firmware image:
+##### Fixed Fields
+| Field | Size | Description |
+|-------|------|-------------|
+| Magic Number | 4 bytes | Header identifier |
+| Image Size | 4 bytes | Firmware size (excluding header) |
 
-  - A 'version' Tag (type: 0x0001, size: 4 Bytes) indicating the version number for the firmware stored in the image
-  - A 'timestamp' Tag (type: 0x0002, size 8 Bytes) indicating the timestamp in unix seconds for the creation of the firmware
-  - A 'sha digest' Tag (type: 0x0003, size: digest size (32 Bytes for SHA256)) used for integrity check of the firmware
-  - A 'firmware signature' Tag (type: 0x0020, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
-  - A 'firmware type' Tag (type: 0x0030, size: 2 Bytes) used to identify the type of firmware, and the authentication mechanism in use.
+##### Tag Structure
+```c
+struct tag {
+    uint16_t type;    // Tag identifier
+    uint16_t size;    // Content size
+    uint8_t  data[];  // Variable length content
+};
+```
 
-A 'public key hint digest' tag is transmitted in the header (type: 0x10, size:32 Bytes). This tag contains the SHA digest of the public key used
-by the signing tool. The bootloader may use this field to locate the correct public key in case of multiple keys available.
+#### Mandatory Tags
+
+| Type | Name | Size | Description |
+|------|------|------|-------------|
+| 0x0001 | Version | 4B | Firmware version number |
+| 0x0002 | Timestamp | 8B | Creation time (Unix seconds) |
+| 0x0003 | SHA Digest | 32B* | Integrity check (SHA256) |
+| 0x0020 | Signature | 64B | Firmware authentication |
+| 0x0030 | Type | 2B | Firmware type & auth method |
+| 0x0010 | Key Hint | 32B | Public key SHA digest |
+
+\* Size varies with hash algorithm
+
+#### Special Cases
+- Type field = 0xFF: Padding byte
+  - No size field
+  - Next byte is new Type
+  - Used for alignment
+
+#### Key Management
+- Key hint enables multi-key support
+- Bootloader uses hint for key selection
+- Required for signature verification
 
 wolfBoot will, in all cases, refuse to boot an image that cannot be verified and authenticated using the built-in digital signature authentication mechanism.
 
-### Adding custom fields to the manifest header
+## Custom Fields Support
 
-It is possible to add custom fields to the manifest header, by using the `--custom-tlv` option in the signing tool.
+### Overview
+wolfBoot supports extending the manifest header with custom fields:
+- Secured by signature verification
+- Flexible field types
+- Runtime accessible
+- Little-endian format
 
-In order for the fields to be secured (checked by wolfBoot for integrity and authenticity),
-their value is placed in the manifest header before the signature is calculated. The signing tool takes care of the alignment and padding of the fields.
+### Adding Custom Fields
 
-The custom fields are identified by a 16-bit tag, and their size is indicated by a 16-bit length field. The tag and length fields are stored in little-endian format.
-
-At runtime, the values stored in the manifest header can be accessed using the `wolfBoot_find_header` function.
-
-The syntax for `--custom-tlv` option is also documented in [docs/Signing.md](/docs/Signing.md#adding-custom-fields-to-the-manifest-header).
-
-### Image header: Example
-
-This example adds a custom field when the signing tool is used to sign the firmware image:
-
+#### Command Line Usage
 ```bash
-./tools/keytools/sign --ed25519 --custom-tlv 0x34 4 0xAABBCCDD test-app/image.bin wolfboot_signing_private_key.der 4
+# Add custom TLV field
+./tools/keytools/sign \
+    --ed25519 \
+    --custom-tlv 0x34 4 0xAABBCCDD \
+    test-app/image.bin \
+    wolfboot_signing_private_key.der \
+    4
 ```
 
-The output image `test-app/image_v4_signed.bin` will contain the custom field with tag `0x34` with length `4` and value `0xAABBCCDD`.
-
-From the bootloader code, we can then retrieve the value of the custom field using the `wolfBoot_find_header` function:
-
+#### Field Structure
 ```c
+struct custom_field {
+    uint16_t tag;     // Custom identifier
+    uint16_t length;  // Field size
+    uint8_t  value[]; // Field content
+};
+```
+
+### Runtime Access
+
+#### API Usage
+```c
+// Access custom field
 uint32_t value;
 uint8_t* ptr = NULL;
 uint16_t tlv = 0x34;
-uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_OFFSET;
+uint8_t* imageHdr = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS + 
+                    IMAGE_HEADER_OFFSET;
+
+// Find and read field
 uint16_t size = wolfBoot_find_header(imageHdr, tlv, &ptr);
 if (size > 0 && ptr != NULL) {
-  /* Found field and ptr points to value 0xAABBCCDD */
-  memcpy(&value, ptr, size);
-  printf("TLV 0x%x=0x%x\n", tlv, value);
+    // Field found - read value
+    memcpy(&value, ptr, size);
+    printf("TLV 0x%x=0x%x\n", tlv, value);
 }
 else {
-    /* Error: the field is not found */
+    // Field not found
+    handle_error();
 }
 ```
 
-### Image signing tool
+#### Security Notes
+- Fields included in signature
+- Protected against tampering
+- Alignment handled automatically
 
-The image signing tool generates the header with all the required Tags for the compiled image, and add them to the output file that can be then
-stored on the primary slot on the device, or transmitted later to the device through a secure channel to initiate an update.
+For detailed syntax, see [Signing Documentation](Signing.md#adding-custom-fields-to-the-manifest-header)
 
-### Storing firmware image
+## Image Management
 
-Firmware images are stored with their full header at the beginning of any of the partitions on the system.
-wolfBoot can only boot images from the BOOT partition, while keeping a second firmware image in the UPDATE partition.
+### Signing Process
 
-In order to boot a different image, wolfBoot will have to swap the content of the two images.
+#### Tool Overview
+The signing tool provides:
+- Automatic header generation
+- Required tag creation
+- Signature calculation
+- Output file creation
 
-For more information on how firmware images are stored and managed within the two partitions, see [Flash partitions](flash_partitions.md)
+#### Usage Flow
+1. Compile firmware
+2. Generate header
+3. Sign image
+4. Store or transmit
+
+### Storage Management
+
+#### Partition Layout
+```
+Flash Memory
++------------------------+
+|    BOOT Partition     |
+| [Header + Firmware A] |
++------------------------+
+|   UPDATE Partition    |
+| [Header + Firmware B] |
++------------------------+
+```
+
+#### Key Points
+- Headers required in all partitions
+- Boot only from BOOT partition
+- Swap mechanism for updates
+- Secure update process
+
+For detailed partition information, see:
+- [Flash Partitions](flash_partitions.md)
+- [Firmware Updates](firmware_update.md)
+- [Security Features](Signing.md)
 
 
 

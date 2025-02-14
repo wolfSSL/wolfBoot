@@ -1,109 +1,123 @@
-## Signing firmware using Microsoft Azure Key Vault
+# Azure Key Vault Integration for Firmware Signing
 
-Microsoft offers secure key management and provisioning tools, using keys stored
-in HSMs. This mechanisms helps to centralize key management for several purposes,
-including the support for signing payloads using the managed keys, which can be
-used in combination with wolfBoot for provisioning public keys in a fleet of
-devices.
+## Overview
+wolfBoot integrates with Microsoft Azure Key Vault to provide secure firmware signing using Hardware Security Modules (HSMs). This integration enables:
+- Centralized key management
+- Secure key storage in HSMs
+- Fleet-wide public key provisioning
+- Automated firmware signing workflow
+
+## Key Features
+- Azure Key Vault integration
+- HSM-backed key storage
+- Support for ECC256 signatures
+- ASN.1 DER format compatibility
+- REST API-based signing process
 
 
-### Preparing the keystore
+## Setup and Configuration
 
-wolfBoot can import public keys in the keystore using the `keygen` command line
-tool provided. `keygen` supports both raw ECC keys and ASN.1 format (.der).
+### Keystore Preparation
 
-Azure allows to download the public keys in ASN.1 format to provision the device.
-To retrieve each public key to use for firmware authentication in wolfBoot, use:
-
-```sh
-az keyvault key download --vault-name <vault-name> -n test-signing-key-1 -e DER -f public-key-1.der
+#### 1. Download Public Keys
+Retrieve public keys from Azure Key Vault in ASN.1 DER format:
+```bash
+az keyvault key download \
+    --vault-name <vault-name> \
+    -n test-signing-key-1 \
+    -e DER \
+    -f public-key-1.der
 ```
 
-A keystore can now be created importing the public keys and with `keygen`'s `-i`
-(import) option. The option may be repeated multiple times to add more keys to
-the keystore.
+#### 2. Import Keys to wolfBoot
+Create a keystore using wolfBoot's `keygen` tool:
+```bash
+# Import single key
+./tools/keytools/keygen --ecc256 -i public-key-1.der
 
-```sh
-./tools/keytools/keygen --ecc256 -i public-key-1.der [-i public-key-2.der ...]
+# Import multiple keys
+./tools/keytools/keygen --ecc256 \
+    -i public-key-1.der \
+    -i public-key-2.der \
+    -i public-key-3.der
 ```
 
-### Signing the firmware image for wolfBoot
+**Note**: `keygen` supports both raw ECC keys and ASN.1 DER format
 
-The signing operation using any external HSM is performed through three-steps,
-as described in the relevant section in [Signing.md](signing.md).
-In this section we describe the procedure to sign the firmware image using Azure key vault.
+## Firmware Signing Process
 
+The signing process with Azure Key Vault follows a three-step procedure as outlined in [Signing.md](signing.md). Below is the detailed workflow for Azure Key Vault integration.
 
-#### Obtaining the SHA256 digest
+### Step 1: Generate Image Digest
 
-Step 1 consists in calling the `./sign` tool with the extra `--sha-only` argument,
-to generate the digest to sign. The public key associated to the selected signing
-key in the vault needs to be provided:
-
-```sh
-./tools/keytools/sign --ecc256 --sha-only --sha256 test-app/image.bin public-key-1.der 1
+1. Create SHA256 digest using wolfBoot tools:
+```bash
+./tools/keytools/sign \
+    --ecc256 \
+    --sha-only \
+    --sha256 \
+    test-app/image.bin \
+    public-key-1.der \
+    1
 ```
 
-To fit in a https REST request, the digest obtained must be encoded using base64:
-
-```sh
+2. Encode digest for HTTP transport:
+```bash
 DIGEST=$(cat test-app/image_v1_digest.bin | base64url_encode)
 ```
 
-The variable `DIGEST` now contains a printable encoding of the key, which can be
-attached to the request.
+### Step 2: Sign with Azure Key Vault
 
-#### HTTPS request for signing the digest with the Key Vault
-
-
-To prepare the request, first get an access token from the vault and store it in a variable:
-
-```sh
-ACCESS_TOKEN=$(az account get-access-token --resource "https://vault.azure.net" --query "accessToken" -o tsv)
+1. Obtain Azure access token:
+```bash
+ACCESS_TOKEN=$(az account get-access-token \
+    --resource "https://vault.azure.net" \
+    --query "accessToken" \
+    -o tsv)
 ```
 
-Use the URL associated to the selected key vault:
-
-```sh
+2. Configure Key Vault endpoint:
+```bash
 KEY_IDENTIFIER="https://<vault-name>.vault.azure.net/keys/test-signing-key"
 ```
 
-Perform the request using cURL, and store the result in a variable:
-
-```sh
+3. Request signature via REST API:
+```bash
 SIGNING_RESULT=$(curl -X POST \
     -s "${KEY_IDENTIFIER}/sign?api-version=7.4" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Content-Type:application/json" \
     -H "Accept:application/json" \
     -d "{\"alg\":\"ES256\",\"value\":\"${DIGEST}\"}")
-echo $SIGNING_RESULT
 ```
 
-The field `.value` in the result contains the (base64 encoded) signature.
-To extract the signature from the response, you can use a JSON parser:
-
-```sh
+4. Extract and decode signature:
+```bash
+# Extract base64 signature
 SIGNATURE=$(jq -jn "$SIGNING_RESULT|.value")
+
+# Decode to binary
+echo $SIGNATURE | base64url_decode > test-app/image_v1_digest.sig
 ```
 
-The signature can now be decoded from base64 into a binary, so the
-`sign` tool can incorporate the signature into the manifest header.
+### Step 3: Create Signed Firmware
 
-```sh
-echo $SIGNATURE| base64url_decode > test-app/image_v1_digest.sig
+Generate final signed firmware image:
+```bash
+./tools/keytools/sign \
+    --ecc256 \
+    --sha256 \
+    --manual-sign \
+    test-app/image.bin \
+    test-signin-key_pub.der \
+    1 \
+    test-app/image_v1_digest.sig
 ```
 
-#### Final step: create the signed firmware image
+The output file `image_v1_signed.bin` contains the firmware image with embedded signature, ready for deployment to wolfBoot-enabled devices.
 
-The 'third step' in the HSM three-steps procedure requires the `--manual-sign` option and the
-signature obtained through the Azure REST API.
-
-
-```
-./tools/keytools/sign --ecc256 --sha256 --manual-sign test-app/image.bin test-signin-key_pub.der 1 test-app/image_v1_digest.sig
-```
-
-The resulting binary file `image_v1_signed.bin` will now contain a signed firmware
-image that can be authenticated and staged by wolfBoot.
+## Related Documentation
+- [Signing Process Details](signing.md)
+- [Firmware Image Format](firmware_image.md)
+- [Key Management](keystore.md)
 

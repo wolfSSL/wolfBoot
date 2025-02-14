@@ -1,125 +1,168 @@
-# Build wolfBoot as Library
+# wolfBoot Library Integration Guide
 
-Instead of building as standalone repository, wolfBoot can be built as
-a secure-boot library and integrated in third party bootloaders, custom
-staging solutions etc.
+## Overview
+wolfBoot can be integrated as a secure-boot library into:
+- Third-party bootloaders
+- Custom staging solutions
+- Existing boot chains
+- Verification modules
 
+## Core API
 
-## Library API
+### Image Verification Interface
 
-The wolfBoot secure-boot image verification has a very simple interface.
-The core object describing the image is a `struct wolfBoot_image`, which
-is initialized when `wolfBoot_open_image_address()` is called. The signature is:
-
-
-`int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)`
-
-
-where `img` is a pointer to a local (uninitialized) structure of type `wolfBoot_image`, and
-`image` is a pointer to where the signed image is mapped in memory, starting from the beginning
-of the manifest header.
-
-
-On success, zero is returned. If the image does not contain a valid 'magic number' at the beginning
-of the manifest, or if the size of the image is bigger than `WOLFBOOT_PARTITION_SIZE`, -1 is returned. 
-
-
-If the `open_image_address` operation is successful, two other functions can be invoked:
-
-
-- `int wolfBoot_verify_integrity(struct wolfBoot_image *img)`
-
-
-This function verifies the integrity of the image, by calculating the SHA hash of the image content,
-and comparing it with the digest stored in the manifest header. `img` is a pointer to
-an object of type `wolfBoot_image`, previously initialized by `wolfBoot_open_image_address`.
-
-
-0 is returned if the image integrity could be successfully verified, -1 otherwise.
-
-
-
-- `int wolfBoot_verify_authenticity(struct wolfBoot_image *img)`
-
-
-This function verifies that the image content has been signed by a trusted
-counterpart (i.e. that could be verified using one of the public keys available).
-
-
-`0` is returned in case of successful authentication,  `-1` if anything went wrong during the operation,
-and `-2` if the signature could be found, but was not possible to authenticate against its public key.
-
-## Library mode: example application
-
-An example application is provided in `hal/library.c`.
-
-The application `test-lib` opens a file from a path passed as argument
-from the command line, and verifies that the file contains a valid, signed
-image that can be verified for integrity and authenticity using wolfBoot in library
-mode.
-
-## Configuring and compiling the test-lib application
-
-Step 1: use the provided configuration to compile wolfBoot in library mode:
-
+#### Key Components
+```c
+struct wolfBoot_image {
+    // Image metadata and state
+    // See wolfboot/include/image.h
+};
 ```
+
+#### Opening Images
+```c
+int wolfBoot_open_image_address(
+    struct wolfBoot_image* img,  // Uninitialized image struct
+    uint8_t* image              // Pointer to manifest header
+);
+```
+
+#### Return Values
+| Value | Description |
+|-------|-------------|
+| 0 | Success |
+| -1 | Invalid magic number or size |
+
+#### Size Constraints
+- Maximum size: `WOLFBOOT_PARTITION_SIZE`
+- Includes manifest header
+- Enforced at runtime
+
+
+### Verification Functions
+
+#### 1. Integrity Check
+```c
+int wolfBoot_verify_integrity(
+    struct wolfBoot_image *img  // Initialized image struct
+);
+```
+
+**Operation**:
+- Calculates SHA hash
+- Compares with manifest
+- Verifies image content
+
+**Returns**:
+| Value | Meaning |
+|-------|---------|
+| 0 | Integrity verified |
+| -1 | Verification failed |
+
+#### 2. Authenticity Verification
+```c
+int wolfBoot_verify_authenticity(
+    struct wolfBoot_image *img  // Initialized image struct
+);
+```
+
+**Operation**:
+- Verifies signature
+- Checks against public keys
+- Validates trust chain
+
+**Returns**:
+| Value | Meaning |
+|-------|---------|
+| 0 | Authentication successful |
+| -1 | Operation error |
+| -2 | Invalid signature |
+
+## Example Implementation
+
+### Test Application
+Location: `hal/library.c`
+
+#### Features
+- Command-line interface
+- File-based verification
+- Integrity checking
+- Signature validation
+
+### Build Instructions
+
+#### 1. Configuration Setup
+```bash
+# Copy library configuration
 cp config/examples/library.config .config
 ```
 
-Step 2: create a file `target.h` that only contains the following lines:
-
-```
-cat > include/target.h << EOF
+#### 2. Target Configuration
+Create `include/target.h`:
+```c
 #ifndef H_TARGETS_TARGET_
 #define H_TARGETS_TARGET_
 
+/* Disable partition support */
 #define WOLFBOOT_NO_PARTITIONS
 
-#define WOLFBOOT_SECTOR_SIZE                 0x20000
-#define WOLFBOOT_PARTITION_SIZE              0x20000
+/* Configure memory layout */
+#define WOLFBOOT_SECTOR_SIZE     0x20000
+#define WOLFBOOT_PARTITION_SIZE  0x20000
 
 #endif /* !H_TARGETS_TARGET_ */
-
-EOF
 ```
 
-Change `WOLFBOOT_PARTITION_SIZE` accordingly. `wolfBoot_open_image_address()` will discard images larger than
-`WOLFBOOT_PARTITION_SIZE` - `IMAGE_HEADER_SIZE`.
+**Important**: Adjust `WOLFBOOT_PARTITION_SIZE` based on your requirements:
+- Maximum image size = `PARTITION_SIZE - HEADER_SIZE`
+- Oversized images rejected automatically
 
 
-Step 3: compile keytools and create keys.
+### Testing Process
 
-```
+#### 1. Key Generation
+```bash
+# Build key tools
 make keytools
-./tools/keytools/keygen --ed25519 -g wolfboot_signing_private_key.der
+
+# Generate ED25519 keypair
+./tools/keytools/keygen \
+    --ed25519 \
+    -g wolfboot_signing_private_key.der
 ```
 
-
-Step 4: Create an empty file and sign it using the private key.
-
-```
+#### 2. Image Signing
+```bash
+# Create test image
 touch empty
-./tools/keytools/sign --ed25519 --sha256 empty wolfboot_signing_private_key.der 1
+
+# Sign image
+./tools/keytools/sign \
+    --ed25519 \
+    --sha256 \
+    empty \
+    wolfboot_signing_private_key.der \
+    1
 ```
 
-
-Step 5: compile the test-lib application, linked with wolfBoot in library mode, and the
-public key from the keypair created at step 4.
-
-```
+#### 3. Build Test Application
+```bash
+# Compile with library support
 make test-lib
 ```
 
-Step 6: run the application with the signed image
-
-```
+#### 4. Verification Test
+```bash
+# Run verification
 ./test-lib empty_v1_signed.bin
+
+# Expected output:
+# Firmware Valid
+# booting 0x5609e3526590(actually exiting)
 ```
 
-If everything went right, the output should be similar to:
-
-```
-Firmware Valid
-booting 0x5609e3526590(actually exiting)
-```
+## Related Documentation
+- [Firmware Format](firmware_image.md)
+- [Signing Process](Signing.md)
+- [API Reference](API.md)
 
