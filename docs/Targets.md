@@ -30,6 +30,7 @@ This README describes configuration of supported targets.
 * [Renesas RZN2L](#renesas-rzn2l)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32C0](#stm32c0)
+* [STM32F1](#stm32f1)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
 * [STM32G0](#stm32g0)
@@ -103,6 +104,36 @@ b main
 c
 ```
 
+## STM32F1
+
+Similar layout as the STM32F4, but for a much smaller 64KB flash.
+
+WolfBoot occupy 12KB, followed by 2x25 KB firmware partitions, and a 2KB swap:
+
+```
+WOLFBOOT_PARTITION_BOOT_ADDRESS?=0x08003000
+WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x08009400
+WOLFBOOT_PARTITION_SWAP_ADDRESS?=0x0800F800
+```
+
+This is with the sample config in [config/examples/stm32f1.config](config/examples/stm32f1.config).
+
+Note that with this partition layout, WolfBoot cannot be compiled with debug support.
+
+The test application for STM32F1 is designed so that if it boots a version 1 software, it will trigger an update
+If the running software version is 2, all is good.
+In both cases, PC13 is cleared (lights up the green LED on a Blue Pill board).
+
+### STM32F1 Programming
+
+All STM32F1 devices come with a builtin bootloader that can be used to program the device.
+It allows firmware upload on USART0 (pin A9 and A10 on the Blue Pill) using a usb-serial converter.
+The bootloader is entered by pulling the BOOT0 pin high.
+Once the builtin bootloader is active, the STM32F1 can be programmed with `stm32flash`:
+
+```
+stm32flash -w factory.bin -b 115200 -g 0 /dev/ttyUSB0
+```
 
 ## STM32L4
 Example 1MB partitioning on STM32L4
