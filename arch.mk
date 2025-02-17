@@ -629,6 +629,7 @@ ifeq ($(TARGET),mcxa)
   ifeq ($(MCUXSDK),1)
     CFLAGS+=\
       -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/mcx_spc \
       -I$(MCUXPRESSO)/drivers/sysmpu \
       -I$(MCUXPRESSO)/drivers/ltc \
       -I$(MCUXPRESSO)/drivers/port \
@@ -663,6 +664,7 @@ ifeq ($(TARGET),mcxw)
   ifeq ($(MCUXSDK),1)
     CFLAGS+=\
       -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/mcx_spc \
       -I$(MCUXPRESSO)/drivers/sysmpu \
       -I$(MCUXPRESSO)/drivers/ltc \
       -I$(MCUXPRESSO)/drivers/port \
