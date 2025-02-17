@@ -32,7 +32,7 @@ jobs:
       - name: Initialize MCUXpresso SDK
         run: |
           west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests
-          west update
+          west update --narrow -o=--depth=1 devices/MCX
 
       - name: Workaround for sources.list
         run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
