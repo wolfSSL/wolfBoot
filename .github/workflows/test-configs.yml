@@ -159,12 +159,17 @@ jobs:
       arch: ppc
       config-file: ./config/examples/nxp-t2080.config
 
-#  MCXA test disabled until MCXA is available in mcux
-#  nxp_mcxa_test:
-#    uses: ./.github/workflows/test-build-mcux-sdk.yml
-#    with:
-#      arch: arm
-#      config-file: ./config/examples/mcxa.config
+  nxp_mcxa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxa.config
+
+  nxp_mcxw_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw.config
 
   raspi3_test:
     uses: ./.github/workflows/test-build.yml

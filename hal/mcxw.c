@@ -30,12 +30,15 @@
 
 /* Clock + RAM voltage settings */
 #include "fsl_clock.h"
-#include "fsl_spc.h"
+//#include "fsl_spc.h"
 
 /* Flash driver */
 #include "fsl_device_registers.h"
 #include "fsl_lpspi_flash.h"
-#include "fsl_k4_flash.h"
+#include "fsl_flash_api.h"
+#include "fsl_ccm32k.h"
+
+#define FLASH FMU0
 
 /*!< Core clock frequency: 48000000Hz */
 #define BOARD_BOOTCLOCKRUN_CORE_CLOCK              48000000U
@@ -87,24 +90,24 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int ret;
     int w = 0;
-    const uint8_t empty_qword[16] = {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+    const uint32_t empty_qword[4] = {
+        0xFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
 
     while (len > 0) {
-        if ((len < 16) || address & 0x0F) {
-            uint8_t aligned_qword[16];
+        if ((len < 16) || (address & 0x0F)) {
+            uint32_t aligned_qword[4];
             uint32_t address_align = address - (address & 0x0F);
             uint32_t start_off = address - address_align;
             int i;
 
             memcpy(aligned_qword, (void*)address_align, 16);
             for (i = start_off; ((i < 16) && (i < len + (int)start_off)); i++) {
-                aligned_qword[i] = data[w++];
+                ((uint8_t *)aligned_qword)[i] = data[w++];
             }
             if (memcmp(aligned_qword, empty_qword, 16) != 0) {
-                ret = FLASH_Program(&pflash, FLASH, address_align, aligned_qword, 16);
+                ret = FLASH_Program(&pflash, FLASH, address_align, aligned_qword,
+                        16);
                 if (ret != kStatus_Success)
                     return -1;
             }
@@ -113,7 +116,17 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         }
         else {
             uint32_t len_align = len - (len & 0x0F);
-            ret = FLASH_Program(&pflash, FLASH, address, (uint8_t*)data + w, len_align);
+            if (((uint32_t)data + w) & 0x0F) {
+                uint32_t __attribute__((aligned(16))) aligned_data[4];
+                memcpy(aligned_data, (void*)((uint32_t)data + w), len_align);
+                ret = FLASH_Program(&pflash, FLASH, address, (uint32_t*)data + w,
+                        len_align);
+            }
+            else
+            {
+                ret = FLASH_Program(&pflash, FLASH, address, (uint32_t*)data + w,
+                        len_align);
+            }
             if (ret != kStatus_Success)
                 return -1;
             len -= len_align;

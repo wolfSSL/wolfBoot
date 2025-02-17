@@ -613,6 +613,7 @@ ifeq ($(TARGET),mcxa)
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO_DRIVERS)/drivers/common \
       -I$(MCUXPRESSO)/drivers \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO_CMSIS)/Include \
@@ -624,18 +625,16 @@ ifeq ($(TARGET),mcxa)
   LDFLAGS+=-mcpu=cortex-m33
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o
+      $(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o \
+	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
 
-  ifeq ($(MCUXSDK),1)
     CFLAGS+=\
       -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/mcx_spc \
       -I$(MCUXPRESSO)/drivers/sysmpu \
       -I$(MCUXPRESSO)/drivers/ltc \
       -I$(MCUXPRESSO)/drivers/port \
       -I$(MCUXPRESSO)/drivers/gpio
-
-  else
-  endif
 endif
 
 ifeq ($(TARGET),mcxw)
@@ -645,6 +644,8 @@ ifeq ($(TARGET),mcxw)
       -I$(MCUXPRESSO_DRIVERS)/drivers \
 	  -I$(MCUXPRESSO_DRIVERS)/periph2 \
       -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/flash_k4 \
+      -I$(MCUXPRESSO)/drivers/ccm32k \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO_CMSIS)/Include \
       -I$(MCUXPRESSO_CMSIS)/Core/Include
@@ -655,21 +656,19 @@ ifeq ($(TARGET),mcxw)
   LDFLAGS+=-mcpu=cortex-m33
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o \
+      $(MCUXPRESSO)/drivers/spc/fsl_spc.o \
 	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_ccm32k.o \
+      $(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
 
-  ifeq ($(MCUXSDK),1)
     CFLAGS+=\
       -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/spc \
       -I$(MCUXPRESSO)/drivers/sysmpu \
       -I$(MCUXPRESSO)/drivers/ltc \
       -I$(MCUXPRESSO)/drivers/port \
       -I$(MCUXPRESSO)/drivers/gpio
 
-  else
-  endif
 endif
 
 ifeq ($(TARGET),imx_rt)
