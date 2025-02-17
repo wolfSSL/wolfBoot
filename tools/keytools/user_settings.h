@@ -29,7 +29,10 @@
 #include <stdint.h>
 
 /* System */
+#ifndef WOLFBOOT_KEYTOOLS
 #define WOLFBOOT_KEYTOOLS
+#endif
+
 #define SINGLE_THREADED
 #define WOLFCRYPT_ONLY
 
