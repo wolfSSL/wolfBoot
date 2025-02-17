@@ -298,15 +298,15 @@ ifeq ($(TARGET),mcxa)
     LSCRIPT_TEMPLATE=ARM-mcxa.ld
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o
+    APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
+    APP_OBJS+=$(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o
 endif
 
 ifeq ($(TARGET),mcxw)
     LSCRIPT_TEMPLATE=ARM-mcxw.ld
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_spc.o
+    APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
+    APP_OBJS+=$(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_ccm32k.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
