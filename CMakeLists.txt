@@ -721,6 +721,7 @@ if(NOT PYTHON_KEYTOOLS)
         lib/wolfssl/wolfcrypt/src/ecc.c
         lib/wolfssl/wolfcrypt/src/coding.c
         lib/wolfssl/wolfcrypt/src/chacha.c
+        lib/wolfssl/wolfcrypt/src/dilithium.c
         lib/wolfssl/wolfcrypt/src/ed25519.c
         lib/wolfssl/wolfcrypt/src/ed448.c
         lib/wolfssl/wolfcrypt/src/fe_operations.c
@@ -739,7 +740,11 @@ if(NOT PYTHON_KEYTOOLS)
         lib/wolfssl/wolfcrypt/src/sha256.c
         lib/wolfssl/wolfcrypt/src/sha512.c
         lib/wolfssl/wolfcrypt/src/tfm.c
+        lib/wolfssl/wolfcrypt/src/wc_lms.c
+        lib/wolfssl/wolfcrypt/src/wc_lms_impl.c
         lib/wolfssl/wolfcrypt/src/wc_port.c
+        lib/wolfssl/wolfcrypt/src/wc_xmss.c
+        lib/wolfssl/wolfcrypt/src/wc_xmss_impl.c
         lib/wolfssl/wolfcrypt/src/wolfmath.c)
 
     list(
