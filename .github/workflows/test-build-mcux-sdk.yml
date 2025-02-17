@@ -24,15 +24,15 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/checkout@main
-        with:
-          repository: nxp-mcuxpresso/mcux-sdk
-          path: mcux-sdk
+      - name: Install west
+        run: |
+          python3 -m pip install --user west
+          echo "${HOME}/.local/bin" >> $GITHUB_PATH
 
-      - uses: actions/checkout@main
-        with:
-          repository: nxp-mcuxpresso/CMSIS_5
-          path: CMSIS_5
+      - name: Initialize MCUXpresso SDK
+        run: |
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests
+          west update
 
       - name: Workaround for sources.list
         run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
@@ -58,4 +58,4 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcux-sdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS" ${{inputs.make-args}} V=1
+          make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcuxsdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/mcuxsdk/core/CMSIS" ${{inputs.make-args}} V=1
