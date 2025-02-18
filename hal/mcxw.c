@@ -75,9 +75,6 @@ void hal_init(void)
     /* Clock setting  */
     BOARD_BootClockRUN();
 #endif
-
-    /* Flash driver init */
-    flash_config_t pflash;
     /* Clear the FLASH configuration structure */
     memset(&pflash, 0, sizeof(pflash));
     /* FLASH driver init */

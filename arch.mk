@@ -617,7 +617,13 @@ ifeq ($(TARGET),mcxa)
       -I$(MCUXPRESSO)/drivers \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO_CMSIS)/Include \
-      -I$(MCUXPRESSO_CMSIS)/Core/Include
+      -I$(MCUXPRESSO_CMSIS)/Core/Include \
+      -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/mcx_spc \
+      -I$(MCUXPRESSO)/drivers/sysmpu \
+      -I$(MCUXPRESSO)/drivers/ltc \
+      -I$(MCUXPRESSO)/drivers/port \
+      -I$(MCUXPRESSO)/drivers/gpio
   CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   CFLAGS+=-DWOLFSSL_SP_NO_UMAAL
   CFLAGS+=-Wno-old-style-declaration
@@ -627,14 +633,6 @@ ifeq ($(TARGET),mcxa)
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o \
 	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
-
-    CFLAGS+=\
-      -I$(MCUXPRESSO)/drivers/flash \
-      -I$(MCUXPRESSO)/drivers/mcx_spc \
-      -I$(MCUXPRESSO)/drivers/sysmpu \
-      -I$(MCUXPRESSO)/drivers/ltc \
-      -I$(MCUXPRESSO)/drivers/port \
-      -I$(MCUXPRESSO)/drivers/gpio
 endif
 
 ifeq ($(TARGET),mcxw)
@@ -648,7 +646,13 @@ ifeq ($(TARGET),mcxw)
       -I$(MCUXPRESSO)/drivers/ccm32k \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO_CMSIS)/Include \
-      -I$(MCUXPRESSO_CMSIS)/Core/Include
+      -I$(MCUXPRESSO_CMSIS)/Core/Include \
+      -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/spc \
+      -I$(MCUXPRESSO)/drivers/sysmpu \
+      -I$(MCUXPRESSO)/drivers/ltc \
+      -I$(MCUXPRESSO)/drivers/port \
+      -I$(MCUXPRESSO)/drivers/gpio
   CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   CFLAGS+=-DWOLFSSL_SP_NO_UMAAL
   CFLAGS+=-Wno-old-style-declaration
@@ -660,15 +664,6 @@ ifeq ($(TARGET),mcxw)
 	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o \
       $(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
-
-    CFLAGS+=\
-      -I$(MCUXPRESSO)/drivers/flash \
-      -I$(MCUXPRESSO)/drivers/spc \
-      -I$(MCUXPRESSO)/drivers/sysmpu \
-      -I$(MCUXPRESSO)/drivers/ltc \
-      -I$(MCUXPRESSO)/drivers/port \
-      -I$(MCUXPRESSO)/drivers/gpio
-
 endif
 
 ifeq ($(TARGET),imx_rt)
