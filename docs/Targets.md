@@ -19,6 +19,7 @@ This README describes configuration of supported targets.
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
+* [NXP MCXW716C](#nxp-mcxw716c)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -2181,7 +2182,15 @@ make
 
 ### MCX A: Loading the firmware
 
-The NXP Freedom MCX A board debugger comes loaded with MCU Link, but it can be updated to JLink. See https://docs.nxp.com/bundle/UM12012/page/topics/Updating_MCU_Link_firmware.html
+The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink.
+- Download and install the tool to update MCU Link to support jlink:
+[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+
+- put the rom bootloader in 'dfu' mode by adding a jumper JP8 (ISP_EN)
+
+- run `scripts/program_JLINK` to update the onboard debugger
+
+- when the update is complete, remove the jumper in JP8
 
 Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXA153`
 
@@ -2232,6 +2241,96 @@ Debugging with JLink:
 Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
 
 In one terminal: `JLinkGDBServer -if swd -Device MCXA153 -port 3333`
+
+In another terminal use `gdb`:
+
+```
+b main
+mon reset
+c
+```
+
+## NXP MCXW716
+
+NXP MCXW716 is a Cortex-M33 microcontroller running at 96MHz.
+The support has been tested using FRDM-MCXW716 with the onboard MCU-Link configured in JLink mode.
+
+This requires the MCXW SDK from the NXP MCUXpresso SDK Builder. We tested using [mcux-sdk](https://github.com/nxp-mcuxpresso/mcux-sdk) and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5)`
+placed under "../NXP". Adjust the MCUXPRESSO and MCUXPRESSO_CMSIS variables in your .config file according to your paths.
+
+### MCX W: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cp config/examples/mcxw.config .config`
+make
+```
+
+### MCX W: Loading the firmware
+
+The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink.
+- Download and install the tool to update MCU Link to support jlink:
+[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+
+- put the rom bootloader in 'dfu' mode by adding a jumper in JP5 (ISP_EN)
+
+- run `scripts/program_JLINK` to update the onboard debugger
+
+- when the update is complete, remove the jumper in JP5
+
+Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXW716`
+
+At the Jlink prompt, type:
+
+```
+loadbin factory.bin 0
+Downloading file [factory.bin]...
+J-Link: Flash download: Bank 0 @ 0x00000000: Skipped. Contents already match
+O.K.
+```
+
+Reset or power cycle board.
+
+The blue led (PA20) will show to indicate version 1 of the firmware has been staged.
+
+
+### MCX W: Testing firmware update
+
+1) Sign the test-app with version 2:
+
+```sh
+./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+2) Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
+
+```sh
+echo -n "pBOOT" > trigger_magic.bin
+```
+
+3) Assembly new factory update.bin:
+
+```sh
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0    test-app/image_v2_signed.bin \
+    0xAFFB trigger_magic.bin
+```
+
+4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`).
+
+Once wolfBoot has performed validation of the partition and staged a firmware with version > 1, the D15 Green LED on PA19 will show.
+
+Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trigger_magic.bin at `0x9FFB`.
+
+### MCX W: Debugging
+
+Debugging with JLink:
+
+Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
+
+In one terminal: `JLinkGDBServer -if swd -Device MCXW716 -port 3333`
 
 In another terminal use `gdb`:
 
@@ -3224,7 +3323,7 @@ make
 
 After running the above commands, you should find a file named `final_image.bin` in the root folder of the repository. The image can be flashed directly into the board.
 By default wolfBoot tries to read a wolfBoot image from the SATA drive.
-The drive should be partitioned with a GPT table, wolfBoot tries to load an image saved in the 5th or the 6th partition. 
+The drive should be partitioned with a GPT table, wolfBoot tries to load an image saved in the 5th or the 6th partition.
 You can find more details in `src/update_disk.c`. wolfBoot doesn't try to read from a filesystem and the images need to be written directly into the partition.
 This is an example boot log:
 ```
