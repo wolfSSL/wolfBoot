@@ -2182,7 +2182,15 @@ make
 
 ### MCX A: Loading the firmware
 
-The NXP Freedom MCX A board debugger comes loaded with MCU Link, but it can be updated to JLink. See https://docs.nxp.com/bundle/UM12012/page/topics/Updating_MCU_Link_firmware.html
+The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink. 
+- Download and install the tool to update MCU Link to support jlink:
+[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+
+- put the rom bootloader in 'dfu' mode by adding a jumper JP8 (ISP_EN)
+
+- run `scripts/program_JLINK` to update the onboard debugger
+
+- when the update is complete, remove the jumper in JP8
 
 Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXA153`
 
@@ -2261,7 +2269,15 @@ make
 
 ### MCX W: Loading the firmware
 
-The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink. See https://docs.nxp.com/bundle/UM12012/page/topics/Updating_MCU_Link_firmware.html
+The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink. 
+- Download and install the tool to update MCU Link to support jlink:
+[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+
+- put the rom bootloader in 'dfu' mode by adding a jumper in JP5 (ISP_EN)
+
+- run `scripts/program_JLINK` to update the onboard debugger
+
+- when the update is complete, remove the jumper in JP5
 
 Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXW716`
 
