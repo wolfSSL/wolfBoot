@@ -30,7 +30,6 @@
 
 /* Clock + RAM voltage settings */
 #include "fsl_clock.h"
-//#include "fsl_spc.h"
 
 /* Flash driver */
 #include "fsl_device_registers.h"
@@ -87,24 +86,25 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int ret;
     int w = 0;
+    const uint32_t flash_word_size = 16;
     const uint32_t empty_qword[4] = {
         0xFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
 
     while (len > 0) {
-        if ((len < 16) || (address & 0x0F)) {
+        if ((len < (int)flash_word_size) || (address & (flash_word_size - 1))) {
             uint32_t aligned_qword[4];
-            uint32_t address_align = address - (address & 0x0F);
+            uint32_t address_align = address - (address & (flash_word_size - 1));
             uint32_t start_off = address - address_align;
-            int i;
+            uint32_t i;
 
-            memcpy(aligned_qword, (void*)address_align, 16);
-            for (i = start_off; ((i < 16) && (i < len + (int)start_off)); i++) {
+            memcpy(aligned_qword, (void*)address_align, flash_word_size);
+            for (i = start_off; ((i < flash_word_size) && (i < len + start_off)); i++) {
                 ((uint8_t *)aligned_qword)[i] = data[w++];
             }
-            if (memcmp(aligned_qword, empty_qword, 16) != 0) {
+            if (memcmp(aligned_qword, empty_qword, flash_word_size) != 0) {
                 ret = FLASH_Program(&pflash, FLASH, address_align, aligned_qword,
-                        16);
+                        flash_word_size);
                 if (ret != kStatus_Success)
                     return -1;
             }
