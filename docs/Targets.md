@@ -2182,7 +2182,7 @@ make
 
 ### MCX A: Loading the firmware
 
-The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink. 
+The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink.
 - Download and install the tool to update MCU Link to support jlink:
 [@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
 
@@ -2255,7 +2255,7 @@ c
 NXP MCXW716 is a Cortex-M33 microcontroller running at 96MHz.
 The support has been tested using FRDM-MCXW716 with the onboard MCU-Link configured in JLink mode.
 
-This requires the MCXW SDK from the NXP MCUXpresso SDK Builder. We tested using [mcux-sdk](https://github.com/nxp-mcuxpresso/mcux-sdk) and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5)` 
+This requires the MCXW SDK from the NXP MCUXpresso SDK Builder. We tested using [mcux-sdk](https://github.com/nxp-mcuxpresso/mcux-sdk) and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5)`
 placed under "../NXP". Adjust the MCUXPRESSO and MCUXPRESSO_CMSIS variables in your .config file according to your paths.
 
 ### MCX W: Configuring and compiling
@@ -2269,7 +2269,7 @@ make
 
 ### MCX W: Loading the firmware
 
-The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink. 
+The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink.
 - Download and install the tool to update MCU Link to support jlink:
 [@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
 
@@ -2292,7 +2292,8 @@ O.K.
 
 Reset or power cycle board.
 
-Once wolfBoot has performed validation of the partition and booted the D15 Green LED on P3_13 will illuminate.
+The blue led (PA20) will show to indicate version 1 of the firmware has been staged.
+
 
 ### MCX W: Testing firmware update
 
@@ -2317,7 +2318,9 @@ echo -n "pBOOT" > trigger_magic.bin
     0xAFFB trigger_magic.bin
 ```
 
-4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`). The D15 RGB LED Blue P3_0 will show if version is > 1.
+4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`).
+
+Once wolfBoot has performed validation of the partition and staged a firmware with version > 1, the D15 Green LED on PA19 will show.
 
 Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trigger_magic.bin at `0x9FFB`.
 
@@ -3320,7 +3323,7 @@ make
 
 After running the above commands, you should find a file named `final_image.bin` in the root folder of the repository. The image can be flashed directly into the board.
 By default wolfBoot tries to read a wolfBoot image from the SATA drive.
-The drive should be partitioned with a GPT table, wolfBoot tries to load an image saved in the 5th or the 6th partition. 
+The drive should be partitioned with a GPT table, wolfBoot tries to load an image saved in the 5th or the 6th partition.
 You can find more details in `src/update_disk.c`. wolfBoot doesn't try to read from a filesystem and the images need to be written directly into the partition.
 This is an example boot log:
 ```
