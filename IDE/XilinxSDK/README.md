@@ -214,7 +214,7 @@ Successfully ran Hello World application
 4. Edit `xilskey_efuseps_zynqmp_input.h`
     * 433 `#define XSK_EFUSEPS_WRITE_PPK0_HASH  TRUE`
     * 453 `#define XSK_EFUSEPS_PPK0_IS_SHA3     TRUE`
-    * 454 `#define XSK_EFUSEPS_PPK0_HASH "0000000000000000000000000000000000000000000000000000000000000000" /* from ppkf_hash.txt */``
+    * 454 `#define XSK_EFUSEPS_PPK0_HASH "0000000000000000000000000000000000000000000000000000000000000000" /* from ppkf_hash.txt */`
 5. Update boot.bif (see boot_auth.bif)
 
     ```
@@ -297,7 +297,7 @@ Example .bif that includes the PUF helper data and black key/iv. This enables th
 the_ROM_image:
 {
 	// Boot Header Authentication Enable
-	[fsbl_config] a53_x64, bh_auth_enable, puf4kmode, shutter=0x0100005E, pufhd_bh, auth_only
+	[fsbl_config] a53_x64, bh_auth_enable, puf4kmode, shutter=0x0100005E, pufhd_bh
 	[keysrc_encryption] bh_blk_key
 	[puf_file] helperdata.txt
 	[bh_key_iv] black_iv.txt
@@ -310,7 +310,7 @@ the_ROM_image:
 	[pskfile] pskf.pem
 	[sskfile] sskf.pem
 
-	[bootloader, authentication=rsa, destination_cpu=a53-0] zynqmp_fsbl.elf
+	[bootloader, authentication=rsa, encryption=aes, destination_cpu=a53-0] zynqmp_fsbl.elf
 	[destination_cpu=pmu, authentication=rsa] pmufw.elf
 	[destination_device=pl, authentication=rsa] system.bit
 	[destination_cpu=a53-0, authentication=rsa, exception_level=el-3, trustzone] bl31.elf
@@ -319,6 +319,11 @@ the_ROM_image:
 	[destination_cpu=a53-0, partition_owner=uboot, offset=0x800000] hello_world_v1_signed.bin
 }
 ```
+
+Generated BOOT.BIN using: `bootgen -image bootgen.bif -arch zynqmp -o BOOT.BIN -w -p xzcu9eg`
+
+This will create an encryption key file `zynqmp_fsbl.nky`.
+
 
 ### CSU JTAG Enable
 
