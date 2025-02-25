@@ -94,6 +94,16 @@ For more detailed information about firmware update implementation, see [Firmwar
 
 ## Building
 
+### Git Submodules (GitHub clone only)
+
+If you cloned wolfBoot from GitHub (rather than using a release package), you'll need to initialize and update the git submodules first:
+
+```
+git submodule update --init
+```
+
+This step is required to pull in the necessary dependencies before building.
+
 ### Makefile
 
 To build using the Makefile, create a `.config` file with your build specifications in the wolfBoot root directory. You can find a
