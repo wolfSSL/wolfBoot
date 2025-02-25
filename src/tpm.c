@@ -1245,8 +1245,8 @@ void wolfBoot_tpm2_deinit(void)
              TPMA_SESSION_continueSession));
     if (rc == 0) {
         /* Change platform auth to random value, to prevent application
-            * from being able to use platform hierarchy. This is defined in
-            * section 10 of the TCG PC Client Platform specification. */
+         * from being able to use platform hierarchy. This is defined in
+         * section 10 of the TCG PC Client Platform specification. */
         rc = wolfTPM2_ChangePlatformAuth(&wolftpm_dev, &wolftpm_session);
     }
     if (rc != 0) {
