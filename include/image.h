@@ -74,6 +74,7 @@ int wolfBot_get_dts_size(void *dts_addr);
 #  endif
 #endif
 
+
 /* Helpers for memory alignment */
 #ifndef XALIGNED
     #if defined(__GNUC__) || defined(__llvm__) || \
@@ -87,6 +88,13 @@ int wolfBot_get_dts_size(void *dts_addr);
         #define XALIGNED(x) __declspec (align (x))
     #else
         #define XALIGNED(x) /* null expansion */
+    #endif
+
+    /* Don't enforce stack alignment on IAR */
+    #if defined (__IAR_SYSTEMS_ICC__)
+        #define XALIGNED_STACK(x)
+    #else
+        #define XALIGNED_STACK(x) XALIGNED(x)
     #endif
 #endif
 
