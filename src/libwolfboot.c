@@ -177,7 +177,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 
 #include <stddef.h>
 #include <string.h>
-static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16)
+static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
 static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
 {
