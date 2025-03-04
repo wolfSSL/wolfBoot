@@ -766,6 +766,14 @@ ifeq ($(RAM_CODE),1)
   endif
 endif
 
+# Support external encryption cache
+#
+ifeq ($(ENCRYPT),1)
+  ifeq ($(ENCRYPT_CACHE),1)
+	CFLAGS+=-D"WOLFBOOT_ENCRYPT_CACHE=$(ENCRYPT_CACHE)"
+  endif
+endif
+
 # support for elf32 or elf64 loader
 ifeq ($(ELF),1)
   CFLAGS+=-DWOLFBOOT_ELF
