@@ -89,7 +89,9 @@ int wolfBot_get_dts_size(void *dts_addr);
     #else
         #define XALIGNED(x) /* null expansion */
     #endif
+#endif
 
+#ifndef XALIGNED_STACK
     /* Don't enforce stack alignment on IAR */
     #if defined (__IAR_SYSTEMS_ICC__)
         #define XALIGNED_STACK(x)
