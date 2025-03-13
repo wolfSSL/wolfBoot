@@ -116,7 +116,7 @@ For more information on the `wbaurixtool.sh` script, run `./wbaurixtool.sh --hel
         - Note that if you already have generated keys, you can use `./wbaurixtool.sh clean` to remove them first
 
 ```
-$ ./wbaurixtool.sh keygen --sign-algo ecc256 macros
+$ ./wbaurixtool.sh keygen --sign-algo ecc256 macros lcf
 Generating keys with algorithm: ecc256
 Keytype: ECC256
 Generating key (type: ECC256)
@@ -126,6 +126,7 @@ Key type   :           ECC256
 Public key slot:       0
 Done.
 Generating macros file with sign_algo=ecc256, hash_algo=sha256
+Generating LCF file with header_size=256
 ```
 
 ### Install the Infineon TC3xx SDK into the wolfBoot project
