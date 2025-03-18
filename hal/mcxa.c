@@ -32,6 +32,14 @@
 /* Flash driver */
 #include "fsl_romapi.h"
 
+#include "hal/armv8m_tz.h"
+
+#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && !defined(NONSECURE_APP))
+#   define TZ_SECURE() (1)
+#else
+#   define TZ_SECURE() (0)
+#endif
+
 /*!< Core clock frequency: 96000000Hz */
 #define BOARD_BOOTCLOCKFRO96M_CORE_CLOCK 96000000UL
 
@@ -61,8 +69,32 @@ void hal_init(void)
     FLASH_Init(&pflash);
 }
 
+#ifdef TZEN
+static void mcxa_configure_sau(void)
+{
+    /* Disable SAU */
+    SAU_CTRL = 0;
+    
+    /* Configure SAU regions - adjust addresses based on MCXA memory map */
+    sau_init_region(0, 0x00000000, 0x0003FFFF, 1); /* Secure flash */
+    sau_init_region(1, 0x00040000, 0x0007FFFF, 0); /* Non-secure flash */
+    sau_init_region(2, 0x20000000, 0x2001FFFF, 1); /* Secure RAM */
+    sau_init_region(3, 0x20020000, 0x2003FFFF, 0); /* Non-secure RAM */
+    sau_init_region(4, 0x40000000, 0x5FFFFFFF, 0); /* Non-secure peripherals */
+    
+    /* Enable SAU */
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+    
+    /* Enable securefault handler */
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+}
+#endif
+
 void hal_prepare_boot(void)
 {
+#ifdef TZEN
+    mcxa_configure_sau();
+#endif
 }
 
 #endif /* __WOLFBOOT */
@@ -75,6 +107,10 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
     };
+
+#if TZ_SECURE()
+    /* Add TrustZone-specific handling if needed */
+#endif
 
     while (len > 0) {
         if ((len < 16) || address & 0x0F) {
@@ -118,6 +154,10 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+#if TZ_SECURE()
+    /* Add TrustZone-specific handling if needed */
+#endif
+
     while ((address % 4) != 0)
         address --;
     if (FLASH_EraseSector(&pflash, address, len, kFLASH_ApiEraseKey) != kStatus_Success)

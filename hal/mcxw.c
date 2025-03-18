@@ -37,6 +37,14 @@
 #include "fsl_flash_api.h"
 #include "fsl_ccm32k.h"
 
+#include "hal/armv8m_tz.h"
+
+#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && !defined(NONSECURE_APP))
+#   define TZ_SECURE() (1)
+#else
+#   define TZ_SECURE() (0)
+#endif
+
 #define FLASH FMU0
 
 /*!< Core clock frequency: 48000000Hz */
@@ -61,9 +69,32 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
 }
 
 
+#ifdef TZEN
+static void mcxw_configure_sau(void)
+{
+    /* Disable SAU */
+    SAU_CTRL = 0;
+    
+    /* Configure SAU regions - adjust addresses based on MCXW memory map */
+    sau_init_region(0, 0x00000000, 0x0003FFFF, 1); /* Secure flash */
+    sau_init_region(1, 0x00040000, 0x0007FFFF, 0); /* Non-secure flash */
+    sau_init_region(2, 0x20000000, 0x2001FFFF, 1); /* Secure RAM */
+    sau_init_region(3, 0x20020000, 0x2003FFFF, 0); /* Non-secure RAM */
+    sau_init_region(4, 0x40000000, 0x5FFFFFFF, 0); /* Non-secure peripherals */
+    
+    /* Enable SAU */
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+    
+    /* Enable securefault handler */
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+}
+#endif
+
 void hal_prepare_boot(void)
 {
-
+#ifdef TZEN
+    mcxw_configure_sau();
+#endif
 }
 
 #endif
@@ -90,6 +121,10 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     const uint32_t empty_qword[4] = {
         0xFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
+
+#if TZ_SECURE()
+    /* Add TrustZone-specific handling if needed */
+#endif
 
     while (len > 0) {
         if ((len < (int)flash_word_size) || (address & (flash_word_size - 1))) {
@@ -144,6 +179,11 @@ void RAMFUNCTION hal_flash_lock(void)
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     status_t result;
+    
+#if TZ_SECURE()
+    /* Add TrustZone-specific handling if needed */
+#endif
+
     if (address % pflash_sector_size)
         address -= address % pflash_sector_size;
     while (len > 0) {
