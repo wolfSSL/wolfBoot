@@ -58,7 +58,7 @@ int WP11_Library_Init(void);
  * executed in place (XIP) from flash. The implementation uses standard wolfBoot
  * signature verification plus an additional scattered hash verification:
  *
- * 1. Standard wolfBoot Signature: Used to verify the authenticity and integrity 
+ * 1. Standard wolfBoot Signature: Used to verify the authenticity and integrity
  *    of the entire ELF image as stored in the partition
  *    - Leverages existing wolfBoot signature verification mechanism
  *    - Verifies the entire image during update and at boot time
@@ -81,9 +81,9 @@ int WP11_Library_Init(void);
  *    boot partition is restarted
  * 7. If verification succeeds, set boot partition to IMG_STATE_TESTING, extract entry point from
  *    ELF header and boot
- * 8. If verification fails, the boot partition is rolled back to the previous state (update) 
+ * 8. If verification fails, the boot partition is rolled back to the previous state (update)
  *    and the update process is restarted
- * 
+ *
  * Boot Process:
  * 1. Standard wolfBoot verification of the boot image signature
  * 2. Additionally verify the scattered hash by hashing PT_LOAD
@@ -103,17 +103,18 @@ int WP11_Library_Init(void);
  * @param img Pointer to the wolfBoot image
  * @return 0 on success, negative value on error
  */
-static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
+static int wolfBoot_elf_load_segments(struct wolfBoot_image* img)
 {
     elf32_header* h32 = (elf32_header*)(img->fw_base);
     elf64_header* h64 = (elf64_header*)(img->fw_base);
-    uint16_t entry_count, entry_size;
-    uint8_t *entry_off;
-    int is_elf32, is_le, i;
-    int ret = 0;
+    uint16_t      entry_count, entry_size;
+    uint8_t*      entry_off;
+    int           is_elf32, is_le, i;
+    int           ret = 0;
 
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Loading ELF segments to XIP flash from %p\r\n", (void*)(img->fw_base));
+    wolfBoot_printf("Loading ELF segments to XIP flash from %p\r\n",
+                    (void*)(img->fw_base));
 #endif
 
     /* Verify ELF header */
@@ -123,7 +124,7 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
 
     /* Load class and endianess */
     is_elf32 = (h32->ident[4] == ELF_CLASS_32);
-    is_le = (h32->ident[5] == ELF_ENDIAN_LITTLE);
+    is_le    = (h32->ident[5] == ELF_ENDIAN_LITTLE);
     (void)is_le;
 
     /* Verify this is an executable */
@@ -133,29 +134,34 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
 
 #ifdef DEBUG_ELF
     wolfBoot_printf("Found valid elf%d (%s endian) for XIP loading\r\n",
-        is_elf32 ? 32 : 64, is_le ? "little" : "big");
+                    is_elf32 ? 32 : 64, is_le ? "little" : "big");
 #endif
 
     /* programs */
-    entry_off = (uint8_t*)(img->fw_base) + 
-        (is_elf32 ? GET32(h32->ph_offset) : GET32(h64->ph_offset));
-    entry_size = (is_elf32 ? GET16(h32->ph_entry_size) : GET16(h64->ph_entry_size));
-    entry_count = (is_elf32 ? GET16(h32->ph_entry_count) : GET16(h64->ph_entry_count));
+    entry_off = (uint8_t*)(img->fw_base) +
+                (is_elf32 ? GET32(h32->ph_offset) : GET32(h64->ph_offset));
+    entry_size =
+        (is_elf32 ? GET16(h32->ph_entry_size) : GET16(h64->ph_entry_size));
+    entry_count =
+        (is_elf32 ? GET16(h32->ph_entry_count) : GET16(h64->ph_entry_count));
 
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Program Headers %d (size %d)\r\n", entry_count, entry_size);
+    wolfBoot_printf("Program Headers %d (size %d)\r\n", entry_count,
+                    entry_size);
 #endif
 
     for (i = 0; i < entry_count; i++) {
-        uint8_t *ptr = ((uint8_t*)entry_off) + (i * entry_size);
+        uint8_t*              ptr = ((uint8_t*)entry_off) + (i * entry_size);
         elf32_program_header* e32 = (elf32_program_header*)ptr;
         elf64_program_header* e64 = (elf64_program_header*)ptr;
-        uint32_t type = (is_elf32 ? GET32(e32->type) : GET32(e64->type));
+        uint32_t  type  = (is_elf32 ? GET32(e32->type) : GET32(e64->type));
         uintptr_t paddr = (is_elf32 ? GET32(e32->paddr) : GET64(e64->paddr));
         uintptr_t vaddr = (is_elf32 ? GET32(e32->vaddr) : GET64(e64->vaddr));
-        uintptr_t mem_size = (is_elf32 ? GET32(e32->mem_size) : GET64(e64->mem_size));
+        uintptr_t mem_size =
+            (is_elf32 ? GET32(e32->mem_size) : GET64(e64->mem_size));
         uintptr_t offset = (is_elf32 ? GET32(e32->offset) : GET64(e64->offset));
-        uintptr_t file_size = (is_elf32 ? GET32(e32->file_size) : GET64(e64->file_size));
+        uintptr_t file_size =
+            (is_elf32 ? GET32(e32->file_size) : GET64(e64->file_size));
 
         if (type != ELF_PT_LOAD || mem_size == 0) {
             continue;
@@ -163,14 +169,14 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
 
 #ifdef DEBUG_ELF
         if (file_size > 0) {
-            wolfBoot_printf(
-                "Load %u bytes (offset %p) to %p (p %p)\r\n",
-                (uint32_t)mem_size, (void*)offset, (void*)vaddr, (void*)paddr);
+            wolfBoot_printf("Load %u bytes (offset %p) to %p (p %p)\r\n",
+                            (uint32_t)mem_size, (void*)offset, (void*)vaddr,
+                            (void*)paddr);
         }
         if (mem_size > file_size) {
-            wolfBoot_printf(
-                "Clear %u bytes at %p (p %p)\r\n",
-                (uint32_t)(mem_size - file_size), (void*)vaddr, (void*)paddr);
+            wolfBoot_printf("Clear %u bytes at %p (p %p)\r\n",
+                            (uint32_t)(mem_size - file_size), (void*)vaddr,
+                            (void*)paddr);
         }
 #endif
 
@@ -182,22 +188,26 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
             ext_flash_unlock();
 #endif
             /* Erase the target flash area before writing */
-            if (paddr >= WOLFBOOT_PARTITION_BOOT_ADDRESS && 
-                paddr + mem_size <= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) {
+            if (paddr >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
+                paddr + mem_size <=
+                    WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) {
                 /* Target is in internal flash */
                 hal_flash_erase(paddr, mem_size);
                 /* Copy the segment data to flash */
-                if (hal_flash_write(paddr, (void*)(img->fw_base + offset), file_size) < 0) {
+                if (hal_flash_write(paddr, (void*)(img->fw_base + offset),
+                                    file_size) < 0) {
                     ret = -3;
                 }
             }
 #ifdef EXT_FLASH
-            else if (paddr >= WOLFBOOT_PARTITION_UPDATE_ADDRESS && 
-                     paddr + mem_size <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) {
+            else if (paddr >= WOLFBOOT_PARTITION_UPDATE_ADDRESS &&
+                     paddr + mem_size <= WOLFBOOT_PARTITION_UPDATE_ADDRESS +
+                                             WOLFBOOT_PARTITION_SIZE) {
                 /* Target is in external flash */
                 ext_flash_erase(paddr, mem_size);
                 /* Copy the segment data to external flash */
-                if (ext_flash_write(paddr, (void*)(img->fw_base + offset), file_size) < 0) {
+                if (ext_flash_write(paddr, (void*)(img->fw_base + offset),
+                                    file_size) < 0) {
                     ret = -3;
                 }
             }
@@ -209,26 +219,30 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
 
             /* If mem_size > file_size, we need to zero out the rest */
             if (mem_size > file_size && ret == 0) {
-                uint8_t zero_buf[64];
+                uint8_t  zero_buf[64];
                 uint32_t to_clear = mem_size - file_size;
                 uint32_t chunk, pos = 0;
-                
+
                 /* Initialize zero buffer */
                 memset(zero_buf, 0, sizeof(zero_buf));
-                
+
                 /* Zero out remainder in chunks */
                 while (to_clear > 0) {
-                    chunk = (to_clear > sizeof(zero_buf)) ? sizeof(zero_buf) : to_clear;
-                    if (paddr >= WOLFBOOT_PARTITION_BOOT_ADDRESS && 
-                        paddr + mem_size <= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) {
-                        if (hal_flash_write(paddr + file_size + pos, zero_buf, chunk) < 0) {
+                    chunk = (to_clear > sizeof(zero_buf)) ? sizeof(zero_buf)
+                                                          : to_clear;
+                    if (paddr >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
+                        paddr + mem_size <= WOLFBOOT_PARTITION_BOOT_ADDRESS +
+                                                WOLFBOOT_PARTITION_SIZE) {
+                        if (hal_flash_write(paddr + file_size + pos, zero_buf,
+                                            chunk) < 0) {
                             ret = -5;
                             break;
                         }
                     }
 #ifdef EXT_FLASH
                     else {
-                        if (ext_flash_write(paddr + file_size + pos, zero_buf, chunk) < 0) {
+                        if (ext_flash_write(paddr + file_size + pos, zero_buf,
+                                            chunk) < 0) {
                             ret = -5;
                             break;
                         }
@@ -244,7 +258,7 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
             ext_flash_lock();
 #endif
             hal_flash_lock();
-            
+
             if (ret != 0) {
                 return ret;
             }
@@ -259,19 +273,22 @@ static int wolfBoot_elf_load_segments(struct wolfBoot_image *img)
 }
 
 /**
- * @brief Compute the scattered hash by hashing PT_LOAD segments at their XIP addresses
+ * @brief Compute the scattered hash by hashing PT_LOAD segments at their XIP
+ * addresses
  *
  * @param img Pointer to the wolfBoot image
- * @param hash Buffer to store the computed hash (must be at least SHA256_DIGEST_SIZE bytes)
+ * @param hash Buffer to store the computed hash (must be at least
+ * SHA256_DIGEST_SIZE bytes)
  * @return 0 on success, negative value on error
  */
-static int wolfBoot_compute_scattered_hash(struct wolfBoot_image *img, uint8_t *hash)
+static int wolfBoot_compute_scattered_hash(struct wolfBoot_image* img,
+                                           uint8_t*               hash)
 {
     elf32_header* h32 = (elf32_header*)(img->fw_base);
     elf64_header* h64 = (elf64_header*)(img->fw_base);
-    uint16_t entry_count, entry_size;
-    uint8_t *entry_off;
-    int is_elf32, is_le, i;
+    uint16_t      entry_count, entry_size;
+    uint8_t*      entry_off;
+    int           is_elf32, is_le, i;
 #if defined(WOLFBOOT_HASH_SHA256)
     wc_Sha256 sha256_ctx;
 #elif defined(WOLFBOOT_HASH_SHA384)
@@ -287,7 +304,7 @@ static int wolfBoot_compute_scattered_hash(struct wolfBoot_image *img, uint8_t *
 
     /* Load class and endianess */
     is_elf32 = (h32->ident[4] == ELF_CLASS_32);
-    is_le = (h32->ident[5] == ELF_ENDIAN_LITTLE);
+    is_le    = (h32->ident[5] == ELF_ENDIAN_LITTLE);
     (void)is_le;
 
     /* Initialize hash context */
@@ -300,60 +317,67 @@ static int wolfBoot_compute_scattered_hash(struct wolfBoot_image *img, uint8_t *
 #endif
 
     /* Get program headers */
-    entry_off = (uint8_t*)(img->fw_base) + 
-        (is_elf32 ? GET32(h32->ph_offset) : GET32(h64->ph_offset));
-    entry_size = (is_elf32 ? GET16(h32->ph_entry_size) : GET16(h64->ph_entry_size));
-    entry_count = (is_elf32 ? GET16(h32->ph_entry_count) : GET16(h64->ph_entry_count));
+    entry_off = (uint8_t*)(img->fw_base) +
+                (is_elf32 ? GET32(h32->ph_offset) : GET32(h64->ph_offset));
+    entry_size =
+        (is_elf32 ? GET16(h32->ph_entry_size) : GET16(h64->ph_entry_size));
+    entry_count =
+        (is_elf32 ? GET16(h32->ph_entry_count) : GET16(h64->ph_entry_count));
 
     /* Sort loadable segments by physical address */
     /* Simple bubble sort - ELF files typically have few program headers */
     typedef struct {
-        uint32_t type;
+        uint32_t  type;
         uintptr_t paddr;
         uintptr_t file_size;
     } segment_info;
-    
-    segment_info segments[32]; /* Assuming max 32 segments, increase if needed */
+
+    segment_info
+        segments[32]; /* Assuming max 32 segments, increase if needed */
     int num_loadable = 0;
-    
+
     /* Collect loadable segments */
     for (i = 0; i < entry_count && num_loadable < 32; i++) {
-        uint8_t *ptr = ((uint8_t*)entry_off) + (i * entry_size);
+        uint8_t*              ptr = ((uint8_t*)entry_off) + (i * entry_size);
         elf32_program_header* e32 = (elf32_program_header*)ptr;
         elf64_program_header* e64 = (elf64_program_header*)ptr;
-        uint32_t type = (is_elf32 ? GET32(e32->type) : GET32(e64->type));
+        uint32_t  type  = (is_elf32 ? GET32(e32->type) : GET32(e64->type));
         uintptr_t paddr = (is_elf32 ? GET32(e32->paddr) : GET64(e64->paddr));
-        uintptr_t file_size = (is_elf32 ? GET32(e32->file_size) : GET64(e64->file_size));
-        
+        uintptr_t file_size =
+            (is_elf32 ? GET32(e32->file_size) : GET64(e64->file_size));
+
         if (type == ELF_PT_LOAD && file_size > 0) {
-            segments[num_loadable].type = type;
-            segments[num_loadable].paddr = paddr;
+            segments[num_loadable].type      = type;
+            segments[num_loadable].paddr     = paddr;
             segments[num_loadable].file_size = file_size;
             num_loadable++;
         }
     }
-    
+
     /* Sort segments by physical address (ascending) */
     for (i = 0; i < num_loadable - 1; i++) {
         int j;
         for (j = 0; j < num_loadable - i - 1; j++) {
             if (segments[j].paddr > segments[j + 1].paddr) {
                 segment_info temp = segments[j];
-                segments[j] = segments[j + 1];
-                segments[j + 1] = temp;
+                segments[j]       = segments[j + 1];
+                segments[j + 1]   = temp;
             }
         }
     }
-    
+
     /* Hash segments in order of physical address */
     for (i = 0; i < num_loadable; i++) {
         /* Hash the segment data from physical address */
 #if defined(WOLFBOOT_HASH_SHA256)
-        wc_Sha256Update(&sha256_ctx, (uint8_t*)segments[i].paddr, segments[i].file_size);
+        wc_Sha256Update(&sha256_ctx, (uint8_t*)segments[i].paddr,
+                        segments[i].file_size);
 #elif defined(WOLFBOOT_HASH_SHA384)
-        wc_Sha384Update(&sha384_ctx, (uint8_t*)segments[i].paddr, segments[i].file_size);
+        wc_Sha384Update(&sha384_ctx, (uint8_t*)segments[i].paddr,
+                        segments[i].file_size);
 #elif defined(WOLFBOOT_HASH_SHA3_384)
-        wc_Sha3_384_Update(&sha3_384_ctx, (uint8_t*)segments[i].paddr, segments[i].file_size);
+        wc_Sha3_384_Update(&sha3_384_ctx, (uint8_t*)segments[i].paddr,
+                           segments[i].file_size);
 #endif
     }
 
@@ -370,16 +394,17 @@ static int wolfBoot_compute_scattered_hash(struct wolfBoot_image *img, uint8_t *
 }
 
 /**
- * @brief Verify that the scattered hash matches the one stored in the image header
+ * @brief Verify that the scattered hash matches the one stored in the image
+ * header
  *
  * @param img Pointer to the wolfBoot image
  * @return 0 on success, negative value on error
  */
-static int wolfBoot_verify_scattered_hash(struct wolfBoot_image *img)
+static int wolfBoot_verify_scattered_hash(struct wolfBoot_image* img)
 {
-    int ret;
-    uint8_t computed_hash[SHA256_DIGEST_SIZE];
-    uint8_t *stored_hash;
+    int      ret;
+    uint8_t  computed_hash[SHA256_DIGEST_SIZE];
+    uint8_t* stored_hash;
     uint16_t stored_hash_len;
 
     /* Compute scattered hash */
@@ -389,7 +414,8 @@ static int wolfBoot_verify_scattered_hash(struct wolfBoot_image *img)
     }
 
     /* Get stored scattered hash from header */
-    stored_hash_len = wolfBoot_get_header(img, HDR_SCATTERED_HASH, &stored_hash);
+    stored_hash_len =
+        wolfBoot_get_header(img, HDR_SCATTERED_HASH, &stored_hash);
     if (stored_hash_len != SHA256_DIGEST_SIZE) {
         return -1; /* Scattered hash not found or invalid size */
     }
@@ -408,10 +434,10 @@ static int wolfBoot_verify_scattered_hash(struct wolfBoot_image *img)
  * @param img Pointer to the wolfBoot image
  * @return 1 if ELF, 0 if not
  */
-static int is_elf_image(struct wolfBoot_image *img)
+static int is_elf_image(struct wolfBoot_image* img)
 {
     elf32_header* h32 = (elf32_header*)(img->fw_base);
-    
+
     if (memcmp(h32->ident, ELF_IDENT_STR, 4) == 0) {
         return 1;
     }
@@ -420,7 +446,7 @@ static int is_elf_image(struct wolfBoot_image *img)
 
 
 /* Scatter loads an ELF image from boot partition if it is an ELF image */
-static void check_and_load_boot_elf(struct wolfBoot_image *boot)
+static void check_and_load_boot_elf(struct wolfBoot_image* boot)
 {
     /* Check if this is an ELF image */
     if (is_elf_image(&boot)) {
@@ -666,8 +692,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
 
 #ifdef WOLFBOOT_ELF
     if ((resume == 1) && (is_elf_image(boot))) {
-        /* If we're resuming and already in ELF loading state, we can skip
-         * directly to ELF loading since the swap was already completed */
+        /* If we're resuming an interrupted elf load, we can skip the image swap
+         * since we know it was already completed */
         if (bootState == IMG_STATE_ELF_LOADING) {
             hal_flash_unlock();
 #ifdef EXT_FLASH
@@ -714,9 +740,9 @@ static int wolfBoot_swap_and_final_erase(int resume)
     }
     /* if resuming, quit if swap isn't done */
     if ((resume == 1) && (swapDone == 0) &&
-        (updateState != IMG_STATE_FINAL_FLAGS) &&
+        (updateState != IMG_STATE_FINAL_FLAGS)
 #ifdef WOLFBOOT_ELF
-        (bootState != IMG_STATE_ELF_LOADING)
+        && (bootState != IMG_STATE_ELF_LOADING)
 #endif
     ) {
         return -1;
