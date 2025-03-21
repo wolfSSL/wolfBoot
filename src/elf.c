@@ -42,28 +42,6 @@
 #endif
 #endif
 
-/* support byte swapping if testing/reading an elf with different endianess */
-#if defined(ELF_PARSER) || defined(ELF_ENDIAN_SUPPORT)
-  #ifdef BIG_ENDIAN_ORDER
-    #define GET16(x) (( is_le) ? __builtin_bswap16(x) : (x))
-    #define GET32(x) (( is_le) ? __builtin_bswap32(x) : (x))
-    #define GET64(x) (( is_le) ? __builtin_bswap64(x) : (x))
-  #else
-    #define GET16(x) ((!is_le) ? __builtin_bswap16(x) : (x))
-    #define GET32(x) ((!is_le) ? __builtin_bswap32(x) : (x))
-    #define GET64(x) ((!is_le) ? __builtin_bswap64(x) : (x))
-  #endif
-#else
-    #define GET16(x) (x)
-    #define GET32(x) (x)
-    #define GET64(x) (x)
-#endif
-
-#define GET_H64(name) (is_elf32 ? GET32(h32->name) : GET64(h64->name))
-#define GET_H32(name) (is_elf32 ? GET32(h32->name) : GET32(h64->name))
-#define GET_H16(name) (is_elf32 ? GET16(h32->name) : GET16(h64->name))
-#define GET_E64(name) (is_elf32 ? GET32(e32->name) : GET64(e64->name))
-#define GET_E32(name) (is_elf32 ? GET32(e32->name) : GET32(e64->name))
 
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
