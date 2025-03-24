@@ -76,9 +76,9 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
     CFLAGS+=-DWOLFBOOT_DUALBOOT
 
-    ifeq ($(PKA),1)
+    ifeq ($(HW_SHA3),1)
       # Use HAL for hash (see zynqmp.c)
-      PKA_HASH_HAL=1
+      HASH_HAL=1
       CFLAGS+=-DWOLFBOOT_ZYNQMP_CSU
     endif
   else

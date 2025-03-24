@@ -338,7 +338,7 @@ void wc_Sha3_384_Free(wc_Sha3* sha)
     (void)sha;
 }
 #else
-#   error PKA=1 only supported with HASH=SHA3
+#   error HW_SHA3=1 only supported with HASH=SHA3
 #endif
 
 /* CSU PUF */
@@ -573,32 +573,16 @@ int csu_aes_key_zero(void)
     return ret;
 }
 
-#ifdef CSU_PUF_ROT
-#define KEY_WRAP_SZ 32
-/* Red (sensitive key), Black (protected key), Grey (unknown) */
-/* Example key to encrypt */
-static const uint8_t XALIGNED(32) redKey[KEY_WRAP_SZ] = {
-    0x64, 0xF0, 0x3A, 0xFD, 0x7D, 0x0C, 0x70, 0xD2,
-    0x59, 0x1C, 0xDF, 0x34, 0x30, 0x5F, 0x7B, 0x8A,
-    0x5B, 0xA4, 0x59, 0x3C, 0x0A, 0x0E, 0x1B, 0x8C,
-    0x5E, 0xCD, 0xFF, 0x9F, 0x59, 0x00, 0x19, 0x2C
-};
-/* Example IV to use for wrapping */
-static const uint8_t XALIGNED(32) blackIv[AES_GCM_TAG_SZ] = {
-    0xD1, 0x42, 0xAC, 0x7C, 0x56, 0x0F, 0x15, 0x8B,
-    0xA9, 0x5A, 0x21, 0x31
-};
-static uint8_t XALIGNED(32) blackKey[KEY_WRAP_SZ+AES_GCM_TAG_SZ];
-#endif
-
 int csu_init(void)
 {
     int ret = 0;
 #ifdef CSU_PUF_ROT
+    #if 0
     uint32_t syndrome[CSU_PUF_SYNDROME_WORDS];
     uint32_t chash=0, aux=0;
     #if defined(DEBUG_CSU) && DEBUG_CSU >= 1
     uint32_t idx;
+    #endif
     #endif
 #endif
     uint32_t reg1 = pmu_mmio_read(CSU_IDCODE);
@@ -637,6 +621,10 @@ int csu_init(void)
     pmu_efuse_read(ZYNQMP_EFUSE_PUF_AUX, &reg2, sizeof(reg2));
     wolfBoot_printf("eFuse PUF CHASH 0x%08x, AUX 0x%08x\n", reg1, reg2);
 
+    /* CSU PUF only supported with eFuses */
+    /* Keeping code for reference in future generations like Versal */
+    /* Red (sensitive key), Black (protected key), Grey (unknown) */
+    #if 0
     memset(syndrome, 0, sizeof(syndrome));
     ms = hal_timer_ms();
     ret = csu_puf_register(syndrome, &chash, &aux);
@@ -675,6 +663,7 @@ int csu_init(void)
             wolfBoot_printf("%02x", blackKey[KEY_WRAP_SZ+idx]);
         }
         wolfBoot_printf("\n");
+    #endif
     #endif
     }
 #endif

@@ -19,7 +19,7 @@ This README describes configuration of supported targets.
 * [NXP LPC54xxx](#nxp-lpc54xxx)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
-* [NXP MCXW716C](#nxp-mcxw716c)
+* [NXP MCXW716](#nxp-mcxw716)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -1296,7 +1296,7 @@ My board version is: 0xA020D3
 Trying partition 0 at 0x140000
 Boot partition: 0x140000 (size 14901760, version 0x1)
 ....
-````
+```
 Note: Now, integrity-check takes 2 - 3 minutes to complete before running Linux kernel.
 
 o Kernel panic after wolfboot message
@@ -1398,38 +1398,6 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
     -device loader,file=wolfboot.bin,cpu-num=0
 
 ```
-
-### Testing with qemu-system-aarch64
-
-* Build wolfboot using the example configuration (RSA4096, SHA3)
-
-```
-cp config/examples/raspi3.config .config
-make clean
-make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
-```
-
-* Sign Linux kernel image
-```
-make keytools
-./tools/keytools/sign --rsa4096 --sha3 Image wolfboot_signing_private_key.der 1
-```
-
-* Compose the image
-
-```
-tools/bin-assemble/bin-assemble wolfboot_linux_raspi.bin 0x0 wolfboot.bin \
-                              0xc0000 Image_v1_signed.bin
-dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
-```
-
-* Test boot using qemu
-
-```
-qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_raspi.bin -cpu cortex-a53
-```
-
-
 
 #### Signing Zynq
 
