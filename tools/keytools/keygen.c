@@ -519,8 +519,8 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     sl.pubkey_size = get_pubkey_size(ktype);
 
     if (sl.pubkey_size > sizeof(sl.pubkey)){
-        printf("error: %s pubkey larger than keystore: %d > %zu\n",
-               KName[ktype], sl.pubkey_size, sizeof(sl.pubkey));
+        printf("error: %s pubkey larger than keystore: %d > %d\n",
+               KName[ktype], sl.pubkey_size, (int)sizeof(sl.pubkey));
         exit(1);
     }
 
@@ -844,7 +844,7 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
 
     if (pub_len != sizeof(lms_pub)) {
         fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned pub_len=%d\n" \
-                        ", expected %zu\n", pub_len, sizeof(lms_pub));
+                        ", expected %d\n", pub_len, (int)sizeof(lms_pub));
         exit(1);
     }
 
@@ -943,7 +943,7 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
 
     if (pub_len != sizeof(xmss_pub)) {
         fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned pub_len=%d\n" \
-                        ", expected %zu\n", pub_len, sizeof(xmss_pub));
+                        ", expected %d\n", pub_len, (int)sizeof(xmss_pub));
         exit(1);
     }
 

@@ -377,7 +377,7 @@ void hal_init(void)
 #endif
 
 /* For CCRX, mcu_clock_setup() in resetprg.c will set up clocks. */
-#if defined(_GNUC_)
+#if defined(__GNUC__)
     hal_clk_init();
 #endif
 
