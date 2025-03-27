@@ -5,10 +5,12 @@ on:
 jobs:
   setup:
     runs-on: ubuntu-latest
-    outputs:
-      mirror_cmd: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
     steps:
-      - run: echo "Setting up common environment variables"
+      - name: Setup mirror and install dependencies
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu cmake
 
   cmake_stm32u5_test:
     needs: setup
@@ -17,12 +19,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu cmake
 
       - name: Run CMake - STM32U5
         run: |
@@ -39,12 +35,6 @@ jobs:
         with:
           submodules: true
 
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi cmake
-
       - name: Run CMake - STM32F4
         run: |
           rm -rf ./build
@@ -59,12 +49,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi cmake
 
       - name: Run CMake - STM32F7
         run: |
@@ -81,12 +65,6 @@ jobs:
         with:
           submodules: true
 
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y cmake
-
       - name: Run CMake - Simulator
         run: |
           rm -rf ./build
@@ -101,12 +79,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi cmake
 
       - name: Run CMake - STM32H5 with TrustZone
         run: |
@@ -123,12 +95,6 @@ jobs:
         with:
           submodules: true
 
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi cmake
-
       - name: Run CMake - NRF52
         run: |
           rm -rf ./build
@@ -143,12 +109,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi cmake
 
       - name: Checkout MCUXpresso SDK
         uses: actions/checkout@main
@@ -170,12 +130,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Install requirements
-        run: |
-          ${{ needs.setup.outputs.mirror_cmd }}
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi cmake
 
       - name: Checkout MCUXpresso SDK
         uses: actions/checkout@main
