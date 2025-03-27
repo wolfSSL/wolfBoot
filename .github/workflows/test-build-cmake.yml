@@ -1,21 +1,16 @@
-name: Wolfboot CMake Build Workflow
-
+name: Wolfboot CMake Build
 on:
-  push:
-    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
     branches: [ '*' ]
-
 jobs:
-  build-cmake:
+  cmake_automated_test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Install cross compilers
+      - name: Install requirements
         run: |
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
           sudo apt-get update
@@ -24,7 +19,6 @@ jobs:
       - name: Run CMake
         run: |
           rm -rf ./build
-          cmake -B build -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08100000 -DWOLFBOOT_SECTOR_SIZE=0x2000 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x817F000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81FE000 -DNO_MPU=yes
-
-     - name: Build wolfBoot
+          cmake -B build -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08100000 -DWOLFBOOT_SECTOR_SIZE=0x2000 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x817F000-DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81FE000 -DNO_MPU=yes
+      - name: Build wolfBoot
         run: make -C build
