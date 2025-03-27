@@ -56,7 +56,7 @@ if(NOT DEFINED WOLFBOOT_SECTOR_SIZE)
 endif()
 
 if(NOT DEFINED ARM_TARGETS)
-    list(APPEND ARM_TARGETS stm32h7 stm32l0 stm32f4 stm32u5)
+    list(APPEND ARM_TARGETS cypsoc6 imx kinetis lpc54606j512 mcxa mcxw nrf52 nrf52840 nrf5340 nrf5340_net rp2350 sama5d3 same51 stm32c0 stm32f1 stm32f4 stm32f7 stm32g0 stm32h5 stm32h7 stm32l0 stm32l5 stm32u5 stm32wb ti zynqmp)
     set(ARM_TARGETS
         "${ARM_TARGETS}"
         CACHE INTERNAL "")
