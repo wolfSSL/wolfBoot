@@ -177,7 +177,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 
 #include <stddef.h>
 #include <string.h>
-static uint8_t NVM_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(16)));
+static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
 static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
 {
@@ -1334,16 +1334,21 @@ int wolfBoot_fallback_is_possible(void)
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
+
 #if !defined(EXT_FLASH) && !defined(MMU)
-#error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
+    #error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
 #endif
 
-
-
-#ifdef NVM_FLASH_WRITEONCE
-#define ENCRYPT_CACHE NVM_CACHE
+#ifndef WOLFBOOT_ENCRYPT_CACHE
+    #ifdef NVM_FLASH_WRITEONCE
+        #define ENCRYPT_CACHE NVM_CACHE
+    #else
+        #ifdef WOLFBOOT_SMALL_STACK
+        static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED(32);
+        #endif
+    #endif
 #else
-static uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] __attribute__((aligned(32)));
+    #define ENCRYPT_CACHE (WOLFBOOT_ENCRYPT_CACHE)
 #endif
 
 #if defined(EXT_ENCRYPTED) && defined(MMU)
@@ -1356,6 +1361,11 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     int ret = 0;
     int sel_sec = 0;
     uint32_t trailer_relative_off = 4;
+
+#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && !defined(WOLFBOOT_ENCRYPT_CACHE)
+    uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
+#endif
+
 #ifdef MMU
     XMEMCPY(ENCRYPT_KEY, k, ENCRYPT_KEY_SIZE);
     XMEMCPY(ENCRYPT_KEY + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
@@ -1692,6 +1702,9 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     int sz = len, i, step;
     uint8_t part;
     uint32_t iv_counter = 0;
+#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE)
+    uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
+#endif
 
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {

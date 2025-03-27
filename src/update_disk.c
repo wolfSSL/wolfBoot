@@ -79,7 +79,7 @@ extern uint8_t _end_wb[];
  */
 void RAMFUNCTION wolfBoot_start(void)
 {
-    uint8_t p_hdr[IMAGE_HEADER_SIZE] __attribute__((aligned(16)));
+    uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
     struct stage2_parameter *stage2_params;
     struct wolfBoot_image os_image;
     int pA_ver = 0, pB_ver = 0;
