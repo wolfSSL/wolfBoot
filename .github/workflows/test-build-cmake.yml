@@ -3,7 +3,15 @@ on:
   pull_request:
     branches: [ '*' ]
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      mirror_cmd: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+    steps:
+      - run: echo "Setting up common environment variables"
+
   cmake_stm32u5_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,7 +20,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu cmake
 
@@ -24,6 +32,7 @@ jobs:
         run: make -C build
 
   cmake_stm32f4_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +41,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi cmake
 
@@ -44,6 +53,7 @@ jobs:
         run: make -C build
 
   cmake_stm32f7_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +62,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi cmake
 
@@ -64,6 +74,7 @@ jobs:
         run: make -C build
 
   cmake_simulator_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +83,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y cmake
 
@@ -84,6 +95,7 @@ jobs:
         run: make -C build
 
   cmake_stm32h5_tz_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +104,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi cmake
 
@@ -104,6 +116,7 @@ jobs:
         run: make -C build
 
   cmake_nrf52_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +125,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi cmake
 
@@ -124,6 +137,7 @@ jobs:
         run: make -C build
 
   cmake_mcxa_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,7 +146,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi cmake
 
@@ -150,6 +164,7 @@ jobs:
         run: make -C build
 
   cmake_imx_rt1060_test:
+    needs: setup
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,7 +173,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          ${{ needs.setup.outputs.mirror_cmd }}
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi cmake
 
