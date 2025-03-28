@@ -118,7 +118,7 @@ add_option("OCTOSPI_FLASH" "Use external OCTOSPI flash drivers (default: disable
 add_option("SPMATH" "Use SP Math (default: disabled)" "no" "yes;no")
 add_option("SPMATHALL" "Use SP Math All (sp_int.c) (default: disabled)" "no" "yes;no")
 add_option("WOLFBOOT_TARGET" "Target platform to build for (default: stm32h7)" "stm32h7"
-           "stm32f4;stm32h7;stm32l0;stm32u5;x86_64_efi;sim")
+    "${ARM_TARGETS};x86_64_efi;sim")
 add_option("UART_FLASH" "Use external UART flash drivers (default: disabled)" "no" "yes;no")
 add_option(
     "WOLFBOOT_SMALL_STACK"
