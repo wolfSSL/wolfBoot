@@ -1,0 +1,52 @@
+name: Wolfboot CMake Build
+on:
+  pull_request:
+    branches: [ '*' ]
+jobs:
+  cmake_automated_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install requirements
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu cmake
+
+      - name: Run CMake build for STM32U5
+        run: |
+          rm -rf ./build
+          cmake -B build -DWOLFBOOT_TARGET=stm32u5 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08100000 -DWOLFBOOT_SECTOR_SIZE=0x2000 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x817F000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81FE000 -DNO_MPU=yes
+      - name: Build wolfBoot
+        run: make -C build
+
+      - name: Run CMake build for STM32H7
+        run: |
+          rm -rf ./build
+          cmake -B build -DWOLFBOOT_TARGET=stm32h7 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000
+      - name: Build wolfBoot
+        run: make -C build
+
+      - name: Run CMake build for STM32F4
+        run: |
+          rm -rf ./build
+          cmake -B build -DWOLFBOOT_TARGET=stm32f4 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08020000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08040000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x08060000
+      - name: Build wolfBoot
+        run: make -C build
+
+      - name: Run CMake build for STM32L0
+        run: |
+          rm -rf ./build
+          cmake -B build -DWOLFBOOT_TARGET=stm32l0 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8000 -DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_PARTITION_SIZE=0x10000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x18000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x28000 -DNVM_FLASH_WRITEONCE=yes
+      - name: Build wolfBoot
+        run: make -C build
+
+      - name: Run Cmake build for Nordic nrf52
+        run: |
+          rm -rf ./build
+          cmake -B build -DWOLFBOOT_TARGET=nrf52 -DWOLFBOOT_PARTITION_SIZE=0x8000 -DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x27000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x2F000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x37000
+      - name: Build wolfBoot
+        run: make -C build
