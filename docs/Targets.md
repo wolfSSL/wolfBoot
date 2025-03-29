@@ -2614,24 +2614,22 @@ Note: This also works on Mac OS, but `objcopy` does not exist. Install with `bre
 
 See instructions in [IDE/pico-sdk/rp2350/README.md](/IDE/pico-sdk/rp2350/README.md)
 
+
 ## Renesas RX65N
 
 Tested on the:
-* RX65N-2MB-Starter-Kit-Plus
+* RX65N-2MB-Starter-Kit-Plus (RSK+)
 * RX65N Target Board (RTK5RX65N0C00000BR) (includes onboard E2 Lite emulator)
-
-Both include an E2 Lite Emulator.
 
 ### Renesas Console
 
 Console output is supported with `DEBUG_UART=1`.
 
-RSK+:
+* RSK+:
 This board includes a USB to Serial port that uses SCI8 and PJ1/PJ2.
 This is the wolfBoot HAL default for RX65N.
 
-RX65N target board:
-
+* RX65N target board:
 Can route UART Serial output to PC3 via PMOD1-IO0 at Pin 9.
 This requires an external TTL UART to USB adapter.
 You will need to set `CFLAGS_EXTRA+="-DDEBUG_UART_SCI=3"` in .config.
@@ -2689,7 +2687,12 @@ Default Onboard Flash Memory Layout (2MB) (32KB sector):
 
 ### Renesas Data Endianess
 
-To switch RX parts to big endian data use:
+To switch RX parts to big endian data use the Renesas Flashing Tool:
+
+Download the Renesas Flashing Tool: https://www.renesas.com/us/en/software-tool/renesas-flash-programmer-programming-gui
+Download the Renesas E2 Lite Linux Driver: https://www.renesas.com/us/en/document/swo/e2-emulator-e2-emulator-lite-linux-driver?r=488806
+
+Default location on Windows: `C:\Program Files (x86)\Renesas Electronics\Programming Tools\Renesas Flash Programmer V3.14`.
 
 ```sh
 # Big Endian
@@ -2723,9 +2726,6 @@ OR
 TSIP: To enable TSIP use `make PKA=1`. See [docs/Renesas.md](docs/Renesas.md) for details.
 
 ### Flashing Renesas RX65N
-
-Download the Renesas Flashing Tool: https://www.renesas.com/us/en/software-tool/renesas-flash-programmer-programming-gui
-Download the Renesas E2 Lite Linux Driver: https://www.renesas.com/us/en/document/swo/e2-emulator-e2-emulator-lite-linux-driver?r=488806
 
 Default Flash ID Code: FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
