@@ -27,6 +27,7 @@
 #include "printf.h"
 #include "string.h"
 #include "elf.h"
+#include "hal.h"
 
 #ifdef ARCH_PPC
 #include "hal/nxp_ppc.h"
@@ -43,6 +44,7 @@
 #endif
 
 
+#ifdef MMU
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */
@@ -143,11 +145,262 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 
     return 0;
 }
+#endif /* MMU */
 
-int elf_load_image(uint8_t *image, uintptr_t *entry)
+#if 0
+/**
+ * @brief Compute the scattered hash by hashing PT_LOAD segments at their XIP
+ * addresses. Note: This function assumes that the destination addresses for elf
+ * loading have the same access patterns as the memory represented by img.
+ * (e.g. if BOOT partition is external, then reads/writes to the load address
+ * will use ext_flash_read/ext_flash_write.
+ *
+ * @param img Pointer to the wolfBoot image
+ * @param hash Buffer to store the computed hash (must be at least
+ * WOLFBOOT_SHA_DIGEST_SIZE bytes)
+ * @return 0 on success, negative value on error
+ */
+static int wolfBoot_compute_scattered_hash(struct wolfBoot_image *img, uint8_t *hash)
 {
+    uint8_t elf_header_buf[sizeof(elf64_header)];
+    uint8_t program_header_buf[sizeof(elf64_program_header)];
+    elf32_header* h32;
+    elf64_header* h64;
+    uint16_t entry_count, entry_size;
+    uint32_t ph_offset;
+    int is_elf32, is_le, i;
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_Sha256 sha256_ctx;
+#elif defined(WOLFBOOT_HASH_SHA384)
+    wc_Sha384 sha384_ctx;
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_Sha3 sha3_384_ctx;
+#endif
 
+#ifdef EXT_FLASH
+    if (PART_IS_EXT(img)) {
+        /* Read ELF header from external flash */
+        ext_flash_check_read((uintptr_t)(img->fw_base), elf_header_buf, sizeof(elf64_header));
+    } else
+#endif
+    {
+        memcpy(elf_header_buf, (void*)(img->fw_base), sizeof(elf64_header));
+    }
+
+    h32 = (elf32_header*)elf_header_buf;
+    h64 = (elf64_header*)elf_header_buf;
+
+    /* Verify ELF header */
+    if (memcmp(h32->ident, ELF_IDENT_STR, 4) != 0) {
+        return -1; /* not valid header identifier */
+    }
+
+    /* Load class and endianess */
+    is_elf32 = (h32->ident[4] == ELF_CLASS_32);
+    is_le = (h32->ident[5] == ELF_ENDIAN_LITTLE);
+    (void)is_le;
+
+    /* Initialize hash context */
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_InitSha256(&sha256_ctx);
+#elif defined(WOLFBOOT_HASH_SHA384)
+    wc_InitSha384(&sha384_ctx);
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_Sha3_384_Init(&sha3_384_ctx, NULL, INVALID_DEVID);
+#endif
+
+    /* Get program headers info */
+    ph_offset = is_elf32 ? GET32(h32->ph_offset) : GET32(h64->ph_offset);
+    entry_size = is_elf32 ? GET16(h32->ph_entry_size) : GET16(h64->ph_entry_size);
+    entry_count = is_elf32 ? GET16(h32->ph_entry_count) : GET16(h64->ph_entry_count);
+
+    /* Hash each loadable segment directly from its physical address */
+    for (i = 0; i < entry_count; i++) {
+        elf32_program_header* phdr32;
+        elf64_program_header* phdr64;
+        uint32_t type;
+        uintptr_t paddr;
+        uintptr_t file_size;
+
+        /* Read program header into buffer */
+#ifdef EXT_FLASH
+        if (PART_IS_EXT(img)) {
+            ext_flash_check_read((uintptr_t)(img->fw_base) + ph_offset + (i * entry_size),
+                program_header_buf, entry_size);
+        } else
+#endif
+        {
+            memcpy(program_header_buf,
+                   (uint8_t*)(img->fw_base) + ph_offset + (i * entry_size),
+                   entry_size);
+        }
+
+
+        phdr32 = (elf32_program_header*)program_header_buf;
+        phdr64 = (elf64_program_header*)program_header_buf;
+        type = (is_elf32 ? GET32(phdr32->type) : GET32(phdr64->type));
+        paddr = (is_elf32 ? GET32(phdr32->paddr) : GET64(phdr64->paddr));
+        file_size = (is_elf32 ? GET32(phdr32->file_size) : GET64(phdr64->file_size));
+
+        /* Only hash PT_LOAD segments with non-zero size */
+        if (type == ELF_PT_LOAD && file_size > 0) {
+#ifdef DEBUG_ELF
+            wolfBoot_printf("Hashing segment at %p (%d bytes)\r\n", (void*)paddr, (uint32_t)file_size);
+#endif
+            /* Hash the segment data from physical address in blocks */
+            uint32_t pos = 0;
+            while (pos < file_size) {
+                uint8_t *block;
+                uint32_t blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+
+                if (pos + blksz > file_size) {
+                    blksz = file_size - pos;
+                }
+
+                block = get_sha_block_ptr(img, (const uint8_t *)(paddr + pos));
+                if (block == NULL) {
+                    return -1;
+                }
+
+#if defined(WOLFBOOT_HASH_SHA256)
+                wc_Sha256Update(&sha256_ctx, block, blksz);
+#elif defined(WOLFBOOT_HASH_SHA384)
+                wc_Sha384Update(&sha384_ctx, block, blksz);
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+                wc_Sha3_384_Update(&sha3_384_ctx, block, blksz);
+#endif
+                pos += blksz;
+            }
+        }
+    }
+
+    /* Finalize hash */
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_Sha256Final(&sha256_ctx, hash);
+#elif defined(WOLFBOOT_HASH_SHA384)
+    wc_Sha384Final(&sha384_ctx, hash);
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_Sha3_384_Final(&sha3_384_ctx, hash);
+#endif
+
+    return 0;
+}
+#endif
+
+int elf_store_image_scattered(const unsigned char *image, unsigned long *entry_out, int ext_flash) {
+    const unsigned char *ident;
+    int is_elf32;
+    unsigned short entry_count;
+    unsigned short entry_size;
+    unsigned long entry_off;
+    int i;
+
+    ident = image;
+
+
+    /* Verify ELF header */
+    if (memcmp(ident, ELF_IDENT_STR, 4) != 0) {
+        return -1; /* not valid header identifier */
+    }
+
+    is_elf32 = (ident[ELF_CLASS_OFF] == ELF_CLASS_32);
+
+    if (is_elf32) {
+        const elf32_header *eh;
+        const elf32_program_header *ph;
+
+        eh = (const elf32_header *)image;
+        entry_count = eh->ph_entry_count;
+        entry_size = eh->ph_entry_size;
+        entry_off = eh->ph_offset;
+        *entry_out = (unsigned long)eh->entry;
+
+        ph = (const elf32_program_header *)(image + entry_off);
+        for (i = 0; i < entry_count; ++i) {
+            unsigned long paddr;
+            unsigned long filesz;
+            unsigned long offset;
+
+            if (ph[i].type != ELF_PT_LOAD)
+                continue;
+
+            paddr = (unsigned long)ph[i].paddr;
+            offset = (unsigned long)ph[i].offset;
+            filesz = (unsigned long)ph[i].file_size;
+#if 0
+#ifdef EXT_FLASH
+            if (ext_flash) {
+                ext_flash_unlock();
+                ext_flash_erase(paddr, filesz);
+                ext_flash_write(paddr, image + offset, filesz);
+                ext_flash_lock();
+            }
+            else
+#endif
+            {
+                hal_flash_unlock();
+                hal_flash_erase(paddr, filesz);
+                hal_flash_write(paddr, image + offset, filesz);
+                hal_flash_lock();
+            }
+#endif
+        }
+    } else if (ident[ELF_CLASS_OFF] == ELF_CLASS_64) {
+        const elf64_header *eh;
+        const elf64_program_header *ph;
+
+        eh = (const elf64_header *)image;
+        entry_count = eh->ph_entry_count;
+        entry_size = eh->ph_entry_size;
+        entry_off = eh->ph_offset;
+        *entry_out = (unsigned long)eh->entry;
+
+        ph = (const elf64_program_header *)(image + entry_off);
+        for (i = 0; i < entry_count; ++i) {
+            unsigned long paddr;
+            unsigned long filesz;
+            unsigned long offset;
+
+            if (ph[i].type != ELF_PT_LOAD)
+                continue;
+
+            paddr = (unsigned long)ph[i].paddr;
+            offset = (unsigned long)ph[i].offset;
+            filesz = (unsigned long)ph[i].file_size;
+#if 0
+#ifdef EXT_FLASH
+            if (ext_flash) {
+                ext_flash_unlock();
+                ext_flash_erase(paddr, filesz);
+                ext_flash_write(paddr, image + offset, filesz);
+                ext_flash_lock();
+            }
+            else
+#endif
+            {
+                hal_flash_unlock();
+                hal_flash_erase(paddr, filesz);
+                hal_flash_write(paddr, image + offset, filesz);
+                hal_flash_lock();
+            }
+#endif
+        }
+    } else {
+        /* Invalid elf header. */
+        return -1;
+    }
+
+    return 0;
+}
+
+
+int elf_load_image(uint8_t *image, uintptr_t *entry, int ext_flash)
+{
+#ifdef MMU
     return elf_load_image_mmu(image, entry, NULL);
+#else
+    return elf_store_image_scattered(image, entry, ext_flash);
+#endif
 }
 
 #endif /* WOLFBOOT_ELF */

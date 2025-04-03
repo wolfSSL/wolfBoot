@@ -38,350 +38,6 @@
 int WP11_Library_Init(void);
 #endif
 
-#ifdef WOLFBOOT_ELF
-#include "elf.h"
-#ifdef WOLFBOOT_HASH_SHA256
-#include "wolfssl/wolfcrypt/sha256.h"
-#endif
-#ifdef WOLFBOOT_HASH_SHA384
-#include "wolfssl/wolfcrypt/sha384.h"
-#endif
-#ifdef WOLFBOOT_HASH_SHA3_384
-#include "wolfssl/wolfcrypt/sha3_384.h"
-#endif
-#endif /* WOLFBOOT_ELF */
-
-#ifdef WOLFBOOT_ELF
-/**
- * --------------------------------------------------------------------------------
- * ELF XIP Update Scheme Overview
- * --------------------------------------------------------------------------------
- * This module implements a secure update mechanism for ELF files that can be
- * executed in place (XIP) from flash. The implementation uses standard wolfBoot
- * signature verification plus an additional scattered hash verification:
- *
- * 1. Standard wolfBoot Signature: Used to verify the authenticity and integrity
- *    of the entire ELF image as stored in the partition
- *    - Leverages existing wolfBoot signature verification mechanism
- *    - Verifies the entire image during update and at boot time
- *
- * 2. Scattered Hash: A hash of all PT_LOAD segments in their XIP memory locations
- *    - Computed by hashing loadable segments in ascending physical address order
- *    - Stored in a custom TLV in the wolfBoot image header, which is covered by
- *      the image signature, thus guaranteeing its authenticity
- *    - Verifies that segments loaded to their XIP addresses match the original
- *      contents of the ELF file
- *
- * Update Process:
- * 1. Standard wolfBoot verification of the stored elf file in the update partition
- * 2. Perform the standard three-way interruptible partition swap (update -> boot)
- * 3. Set boot partition state to IMG_STATE_ELF_LOADING
- * 4. Parse ELF headers from the boot partition and load each PT_LOAD segment to its XIP address
- * 5. Compute scattered hash of loaded segments and verify against the authenticated
- *    scattered hash TLV from the image header
- * 6. If process is interrupted during scatter loading/verification, the scatter load from the
- *    boot partition is restarted
- * 7. If verification succeeds, set boot partition to IMG_STATE_TESTING, extract entry point from
- *    ELF header and boot
- * 8. If verification fails, the boot partition is rolled back to the previous state (update)
- *    and the update process is restarted
- *
- * Boot Process:
- * 1. Standard wolfBoot verification of the boot image signature
- * 2. Additionally verify the scattered hash by hashing PT_LOAD
- *    segments in their XIP locations and comparing with the authenticated hash
- *    from the image header
- * 3. If verification succeeds, extract entry point from ELF header and boot
- * 4. If verification fails, the boot partition is rolled back to the previous state (update)
- *    and the new boot partition is scatter loaded and verified
- *
- * The update process is failsafe and interruptible. If power is lost during
- * ELF loading, the system can resume from where it left off (or close to it) on next boot.
- */
-
-/**
- * @brief Load ELF segments to their runtime memory addresses in flash
- *
- * @param img Pointer to the wolfBoot image
- * @return 0 on success, negative value on error
- */
-static int wolfBoot_elf_load_segments(struct wolfBoot_image* img)
-{
-    uint8_t elf_header_buf[sizeof(elf64_header)];
-    uint8_t program_header_buf[sizeof(elf64_program_header)];
-    elf32_header* h32;
-    elf64_header* h64;
-    uint16_t entry_count, entry_size;
-    uint32_t ph_offset;
-    int is_elf32, is_le, i;
-    int ret = 0;
-
-#ifdef DEBUG_ELF
-    wolfBoot_printf("Loading ELF segments to XIP flash from %p\r\n",
-                    (void*)(img->fw_base));
-#endif
-
-#ifdef EXT_FLASH
-    if (PART_IS_EXT(img)) {
-        /* Read ELF header from external flash */
-        ext_flash_check_read((uintptr_t)(img->fw_base), elf_header_buf, sizeof(elf64_header));
-    } else {
-        memcpy(elf_header_buf, (void*)(img->fw_base), sizeof(elf64_header));
-    }
-#else
-    memcpy(elf_header_buf, (void*)(img->fw_base), sizeof(elf64_header));
-#endif
-
-    h32 = (elf32_header*)elf_header_buf;
-    h64 = (elf64_header*)elf_header_buf;
-
-    /* Verify ELF header */
-    if (memcmp(h32->ident, ELF_IDENT_STR, 4) != 0) {
-        return -1; /* not valid header identifier */
-    }
-
-    /* Load class and endianess */
-    is_elf32 = (h32->ident[4] == ELF_CLASS_32);
-    is_le = (h32->ident[5] == ELF_ENDIAN_LITTLE);
-    (void)is_le;
-
-    /* Verify this is an executable */
-    if ((is_elf32 ? GET16(h32->type) : GET16(h64->type)) != ELF_HET_EXEC) {
-        return -2; /* not executable */
-    }
-
-#ifdef DEBUG_ELF
-    wolfBoot_printf("Found valid elf%d (%s endian) for XIP loading\r\n",
-                    is_elf32 ? 32 : 64, is_le ? "little" : "big");
-#endif
-
-    /* Get program headers info */
-    ph_offset = is_elf32 ? GET32(h32->ph_offset) : GET32(h64->ph_offset);
-    entry_size = is_elf32 ? GET16(h32->ph_entry_size) : GET16(h64->ph_entry_size);
-    entry_count = is_elf32 ? GET16(h32->ph_entry_count) : GET16(h64->ph_entry_count);
-
-#ifdef DEBUG_ELF
-    wolfBoot_printf("Program Headers %d (size %d)\r\n", entry_count,
-                    entry_size);
-#endif
-
-    /* We need to unlock flash before writing */
-    hal_flash_unlock();
-#ifdef EXT_FLASH
-    ext_flash_unlock();
-#endif
-
-    for (i = 0; i < entry_count; i++) {
-        uint32_t type;
-        uintptr_t paddr, vaddr, mem_size, offset, file_size;
-        
-        /* Read program header */
-#ifdef EXT_FLASH
-        if (PART_IS_EXT(img)) {
-            ext_flash_check_read((uintptr_t)(img->fw_base + ph_offset + (i * entry_size)), 
-                                program_header_buf, entry_size);
-        } else
-#endif
-        {
-            memcpy(program_header_buf, (void*)(img->fw_base + ph_offset + (i * entry_size)), entry_size);
-        }
-
-        if (is_elf32) {
-            elf32_program_header* e32 = (elf32_program_header*)program_header_buf;
-            type = GET32(e32->type);
-            paddr = GET32(e32->paddr);
-            vaddr = GET32(e32->vaddr);
-            mem_size = GET32(e32->mem_size);
-            offset = GET32(e32->offset);
-            file_size = GET32(e32->file_size);
-        } else {
-            elf64_program_header* e64 = (elf64_program_header*)program_header_buf;
-            type = GET32(e64->type);
-            paddr = GET64(e64->paddr);
-            vaddr = GET64(e64->vaddr);
-            mem_size = GET64(e64->mem_size);
-            offset = GET64(e64->offset);
-            file_size = GET64(e64->file_size);
-        }
-
-        if (type != ELF_PT_LOAD || mem_size == 0) {
-            continue;
-        }
-
-#ifdef DEBUG_ELF
-        if (file_size > 0) {
-            wolfBoot_printf("Load %u bytes (offset %p) to %p (p %p)\r\n",
-                            (uint32_t)mem_size, (void*)offset, (void*)vaddr,
-                            (void*)paddr);
-        }
-        if (mem_size > file_size) {
-            wolfBoot_printf("Clear %u bytes at %p (p %p)\r\n",
-                            (uint32_t)(mem_size - file_size), (void*)vaddr,
-                            (void*)paddr);
-        }
-#endif
-
-        /* Use physical address for XIP */
-        if (file_size > 0) {
-            uint8_t buffer[WOLFBOOT_SECTOR_SIZE];
-            uint32_t pos = 0;
-            uint32_t chunk_size;
-            
-            /* Erase the target flash area before writing */
-            /* TODO: THis could erase data outside the region we want to program
-             * - AURIX HAL handles read/modify/erase/write but not sure all HALs
-             * do...need to do this manually here and do erases before writes */
-            /* wb_flash_erase(img, paddr, mem_size); */
-            
-            /* Copy the segment data to flash in chunks */
-            while (pos < file_size) {
-                chunk_size = (file_size - pos > sizeof(buffer)) ? 
-                             sizeof(buffer) : (file_size - pos);
-                
-#ifdef EXT_FLASH
-                if (PART_IS_EXT(img)) {
-                    ext_flash_check_read((uintptr_t)(img->fw_base + offset + pos), 
-                                        buffer, chunk_size);
-                } else
-#endif
-                {
-                    memcpy(buffer, (void*)(img->fw_base + offset + pos), chunk_size);
-                }
-                
-                if (wb_flash_write(img, paddr + pos, buffer, chunk_size) < 0) {
-                    ret = -3;
-                    break;
-                }
-                
-                pos += chunk_size;
-            }
-            
-            /* If mem_size > file_size, we need to zero out the rest */
-            if (mem_size > file_size && ret == 0) {
-                uint8_t zero_buf[64];
-                uint32_t to_clear = mem_size - file_size;
-                uint32_t chunk, zero_pos = 0;
-
-                /* Initialize zero buffer */
-                memset(zero_buf, 0, sizeof(zero_buf));
-
-                /* Zero out remainder in chunks */
-                while (to_clear > 0) {
-                    chunk = (to_clear > sizeof(zero_buf)) ? sizeof(zero_buf) : to_clear;
-                    
-                    if (wb_flash_write(img, paddr + file_size + zero_pos, zero_buf, chunk) < 0) {
-                        ret = -5;
-                        break;
-                    }
-                    
-                    zero_pos += chunk;
-                    to_clear -= chunk;
-                }
-            }
-
-            if (ret != 0) {
-                break;
-            }
-        }
-
-#ifdef ARCH_PPC
-        flush_cache(paddr, mem_size);
-#endif
-    }
-
-    /* Lock flash after writing */
-#ifdef EXT_FLASH
-    ext_flash_lock();
-#endif
-    hal_flash_lock();
-
-    return ret;
-}
-
-/**
- * @brief Verify that the scattered hash matches the one stored in the image
- * header
- *
- * @param img Pointer to the wolfBoot image
- * @return 0 on success, negative value on error
- */
-static int wolfBoot_verify_scattered_hash(struct wolfBoot_image* img)
-{
-    int      ret;
-    uint8_t  computed_hash[WOLFBOOT_SHA_DIGEST_SIZE];
-    uint8_t* stored_hash;
-    uint16_t stored_hash_len;
-
-    /* Compute scattered hash */
-    ret = wolfBoot_compute_scattered_hash(img, computed_hash);
-    if (ret != 0) {
-        return ret;
-    }
-
-    /* Get stored scattered hash from header */
-    stored_hash_len =
-        wolfBoot_get_header(img, HDR_ELF_SCATTERED_HASH, &stored_hash);
-    if (stored_hash_len != WOLFBOOT_SHA_DIGEST_SIZE) {
-        return -1; /* Scattered hash not found or invalid size */
-    }
-
-    /* Compare hashes */
-    if (memcmp(computed_hash, stored_hash, WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
-        return -2; /* Hash mismatch */
-    }
-
-    return 0; /* Success */
-}
-
-/**
- * @brief Check if an image is an ELF file
- *
- * @param img Pointer to the wolfBoot image
- * @return 1 if ELF, 0 if not
- */
-static int is_elf_image(struct wolfBoot_image* img)
-{
-    elf32_header h32;
-    
-#ifdef EXT_FLASH
-    if (PART_IS_EXT(img)) {
-        /* Read ELF header from external flash */
-        ext_flash_check_read((uintptr_t)(img->fw_base), (uint8_t*)&h32, sizeof(elf32_header));
-    } else {
-        memcpy(&h32, (void*)(img->fw_base), sizeof(elf32_header));
-    }
-#else
-    memcpy(&h32, (void*)(img->fw_base), sizeof(elf32_header));
-#endif
-
-    if (memcmp(h32.ident, ELF_IDENT_STR, 4) == 0) {
-        return 1;
-    }
-    return 0;
-}
-
-
-/* Scatter loads an ELF image from boot partition if it is an ELF image */
-static void check_and_load_boot_elf(struct wolfBoot_image* boot)
-{
-    /* Check if this is an ELF image */
-    if (is_elf_image(&boot)) {
-        /* Set state to ELF_LOADING before starting scatter load */
-        wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_ELF_LOADING);
-
-        /* Load ELF segments to their XIP addresses */
-        if (wolfBoot_elf_load_segments(&boot) != 0) {
-            wolfBoot_printf("Failed to load ELF segments\n");
-            wolfBoot_panic();
-        }
-
-        /* If we get here, ELF loading and verification succeeded */
-        wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
-    }
-}
-
-#endif /* WOLFBOOT_ELF */
-
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -583,9 +239,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
     uint8_t updateState;
-#ifdef WOLFBOOT_ELF
-    uint8_t bootState;
-#endif
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
@@ -601,45 +254,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(update, PART_UPDATE);
     wolfBoot_open_image(swap, PART_SWAP);
     wolfBoot_get_partition_state(PART_UPDATE, &updateState);
-#ifdef WOLFBOOT_ELF
-    wolfBoot_get_partition_state(PART_BOOT, &bootState);
-#endif
-
-
-#ifdef WOLFBOOT_ELF
-    if ((resume == 1) && (is_elf_image(boot))) {
-        /* If we're resuming an interrupted elf load, we can skip the image swap
-         * since we know it was already completed */
-        if (bootState == IMG_STATE_ELF_LOADING) {
-            hal_flash_unlock();
-#ifdef EXT_FLASH
-            ext_flash_unlock();
-#endif
-
-            /* Load ELF segments to their XIP addresses */
-            if (wolfBoot_elf_load_segments(&boot) != 0) {
-                wolfBoot_printf("Failed to load ELF segments\n");
-                wolfBoot_panic();
-            }
-
-            wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
-
-            /* Only after successful ELF loading, erase update partition state
-             */
-            if (updateState == IMG_STATE_FINAL_FLAGS) {
-                wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen,
-                               eraseLen);
-            }
-
-#ifdef EXT_FLASH
-            ext_flash_lock();
-#endif
-            hal_flash_lock();
-            return 0;
-        }
-    }
-#endif
-
 
     /* read trailer */
 #if defined(EXT_FLASH) && PARTN_IS_EXT(PART_BOOT)
@@ -657,9 +271,6 @@ static int wolfBoot_swap_and_final_erase(int resume)
     /* if resuming, quit if swap isn't done */
     if ((resume == 1) && (swapDone == 0) &&
         (updateState != IMG_STATE_FINAL_FLAGS)
-#ifdef WOLFBOOT_ELF
-        && (bootState != IMG_STATE_ELF_LOADING)
-#endif
     ) {
         return -1;
     }
@@ -705,15 +316,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
     }
 
-#ifdef WOLFBOOT_ELF
-    /* load elf file from boot partition if applicable. This sets the boot
-     * partition state to loading during the load and then to testing on success
-     */
-    check_and_load_boot_elf(boot);
-#else
     /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
-#endif
     /* erase the last sector(s) of update. This resets the update partition state
      * to IMG_STATE_NEW */
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
@@ -1238,9 +842,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         sector++;
     }
 
-#ifdef WOLFBOOT_ELF
-    check_and_load_boot_elf(&boot);
-#endif
 
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
 
@@ -1433,9 +1034,6 @@ void RAMFUNCTION wolfBoot_start(void)
     if (bootRet < 0
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
-#ifdef WOLFBOOT_ELF
-            || (is_elf_image(&boot) && wolfBoot_verify_scattered_elf(&boot) < 0)
-#endif
     ) {
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
@@ -1452,9 +1050,6 @@ void RAMFUNCTION wolfBoot_start(void)
             if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
                     (wolfBoot_verify_authenticity(&boot) < 0)
-#ifdef WOLFBOOT_ELF
-                    || (is_elf_image(&boot) && wolfBoot_verify_scattered_elf(&boot) < 0)
-#endif
                     ))) {
                 wolfBoot_printf("Boot (try 2) failed: Hdr %d, Hash %d, Sig %d\n",
                     boot.hdr_ok, boot.sha_ok, boot.signature_ok);

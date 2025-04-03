@@ -32,6 +32,7 @@ extern "C" {
 #define ELF_IDENT_STR     "\x7F""ELF"
 
 /* header ident[4] */
+#define ELF_CLASS_OFF     (4)
 #define ELF_CLASS_32      (1)
 #define ELF_CLASS_64      (2)
 
@@ -161,7 +162,8 @@ typedef struct elf64_program_header {
 
 typedef int (*elf_mmu_map_cb)(uint64_t, uint64_t, uint32_t);
 int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb);
-int elf_load_image(uint8_t *image, uintptr_t *entry);
+int elf_load_image(uint8_t *image, uintptr_t *entry, int is_ext);
+int elf_store_image_scattered(const unsigned char *image, unsigned long *entry_out, int ext_flash);
 
 
 #ifdef __cplusplus

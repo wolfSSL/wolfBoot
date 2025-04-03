@@ -42,6 +42,10 @@
 #include "target.h"
 #include "printf.h"
 
+#ifdef ELF_SCATTERED
+#include "elf.h"
+#endif
+
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_client.h"
@@ -348,6 +352,19 @@ void do_boot(const uint32_t *app_offset)
 
     main = (main_entry)((uint8_t*)pSymbolAddress + epc->entryoff);
     main(main_argc, main_argv, NULL, NULL);
+#elif defined ELF_SCATTERED
+    unsigned long *entry_point = (unsigned long *)sim_ram_base;
+    typedef int (*main_entry)(int, char**);
+    main_entry main;
+
+    wolfBoot_printf("Loading ELF image with scattered segments...\n");
+    ret = elf_store_image_scattered((void*)app_offset, entry_point, 0);
+    if (ret != 0) {
+        wolfBoot_printf( "Error loading ELF image!\n");
+        exit(-1);
+    }
+    main = (main_entry)(entry_point);
+    main(main_argc, main_argv);
 #else
     char *envp[1] = {NULL};
     int fd = memfd_create("test_app", 0);
