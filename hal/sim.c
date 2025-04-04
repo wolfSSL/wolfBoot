@@ -353,16 +353,11 @@ void do_boot(const uint32_t *app_offset)
     main = (main_entry)((uint8_t*)pSymbolAddress + epc->entryoff);
     main(main_argc, main_argv, NULL, NULL);
 #elif defined ELF_SCATTERED
-    unsigned long *entry_point = (unsigned long *)sim_ram_base;
+    uint8_t *entry_point = (sim_ram_base + 0x100000);
+    printf("entry point: %p\n", entry_point);
+    printf("app offset: %p\n", app_offset);
     typedef int (*main_entry)(int, char**);
     main_entry main;
-
-    wolfBoot_printf("Loading ELF image with scattered segments...\n");
-    ret = elf_store_image_scattered((void*)app_offset, entry_point, 0);
-    if (ret != 0) {
-        wolfBoot_printf( "Error loading ELF image!\n");
-        exit(-1);
-    }
     main = (main_entry)(entry_point);
     main(main_argc, main_argv);
 #else

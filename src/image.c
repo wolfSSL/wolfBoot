@@ -818,22 +818,13 @@ static uint8_t *get_img_hdr(struct wolfBoot_image *img)
 #if defined(WOLFBOOT_HASH_SHA256)
 #include <wolfssl/wolfcrypt/sha256.h>
 
-/**
- * @brief Calculate the SHA256 hash of the image.
- *
- * @param img The image to calculate the hash for.
- * @param hash A pointer to store the resulting SHA256 hash.
- * @return 0 on success, -1 on failure.
- */
-static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
+/* Initialize and hash the header part */
+static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
 {
     uint8_t *stored_sha, *end_sha;
     uint16_t stored_sha_len;
     uint8_t *p;
     int blksz;
-    uint32_t position = 0;
-    wc_Sha256 sha256_ctx;
-
     if (!img)
         return -1;
 
@@ -844,16 +835,35 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)wc_InitSha256_ex(&sha256_ctx, NULL, hsmClientDevIdHash);
 #else
-    wc_InitSha256(&sha256_ctx);
+    wc_InitSha256(sha256_ctx);
 #endif
     end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
     while (p < end_sha) {
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (end_sha - p < blksz)
             blksz = end_sha - p;
-        wc_Sha256Update(&sha256_ctx, p, blksz);
+        wc_Sha256Update(sha256_ctx, p, blksz);
         p += blksz;
     }
+    return 0;
+}
+
+/**
+ * @brief Calculate the SHA256 hash of the image.
+ *
+ * @param img The image to calculate the hash for.
+ * @param hash A pointer to store the resulting SHA256 hash.
+ * @return 0 on success, -1 on failure.
+ */
+static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
+{
+    uint32_t position = 0;
+    uint8_t *p;
+    int blksz;
+    wc_Sha256 sha256_ctx;
+
+    if (header_sha256(&sha256_ctx, img) != 0)
+        return -1;
     do {
         p = get_sha_block(img, position);
         if (p == NULL)
@@ -899,6 +909,37 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
 #if defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
 
+/* Initialize and hash the header part */
+static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
+{
+    uint16_t stored_sha_len;
+    uint8_t *stored_sha, *end_sha;
+    uint8_t *p;
+    int blksz;
+    if (!img)
+        return -1;
+
+    p = get_img_hdr(img);
+    stored_sha_len = get_header(img, HDR_SHA384, &stored_sha);
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+        return -1;
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    (void)wc_InitSha384_ex(&sha384_ctx, NULL, hsmClientDevIdHash);
+#else
+    wc_InitSha384(sha384_ctx);
+#endif
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    while (p < end_sha) {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (end_sha - p < blksz)
+            blksz = end_sha - p;
+        wc_Sha384Update(sha384_ctx, p, blksz);
+        p += blksz;
+    }
+    return 0;
+}
+
+
 /**
  * @brief Calculate SHA-384 hash of the image.
  *
@@ -910,29 +951,13 @@ static void key_sha256(uint8_t key_slot, uint8_t *hash)
  */
 static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
-    uint8_t *stored_sha, *end_sha;
-    uint16_t stored_sha_len;
+    uint32_t position = 0;
     uint8_t *p;
     int blksz;
-    uint32_t position = 0;
     wc_Sha384 sha384_ctx;
 
-    if (!img)
+    if (header_sha384(&sha384_ctx, img) != 0)
         return -1;
-
-    p = get_img_hdr(img);
-    stored_sha_len = get_header(img, HDR_SHA384, &stored_sha);
-    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
-        return -1;
-    wc_InitSha384(&sha384_ctx);
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
-    while (p < end_sha) {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (end_sha - p < blksz)
-            blksz = end_sha - p;
-        wc_Sha384Update(&sha384_ctx, p, blksz);
-        p += blksz;
-    }
     do {
         p = get_sha_block(img, position);
         if (p == NULL)
@@ -983,6 +1008,33 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
 
 #include <wolfssl/wolfcrypt/sha3.h>
 
+/* Initialize and hash the header part */
+static int header_sha3_384(wc_Sha3 *sha3_ctx, struct wolfBoot_image *img)
+{
+    uint16_t stored_sha_len;
+    uint8_t *stored_sha, *end_sha;
+    uint8_t *p;
+    int blksz;
+
+    if (!img)
+        return -1;
+
+    p = get_img_hdr(img);
+    stored_sha_len = get_header(img, HDR_SHA3_384, &stored_sha);
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+        return -1;
+    wc_InitSha3_384(sha3_ctx, NULL, INVALID_DEVID);
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    while (p < end_sha) {
+        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (end_sha - p < blksz)
+            blksz = end_sha - p;
+        wc_Sha3_384_Update(sha3_ctx, p, blksz);
+        p += blksz;
+    }
+    return 0;
+}
+
 /**
  * @brief Calculate SHA3-384 hash of the image.
  *
@@ -994,29 +1046,13 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
  */
 static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
 {
-    uint8_t *stored_sha, *end_sha;
-    uint16_t stored_sha_len;
     uint8_t *p;
     int blksz;
     uint32_t position = 0;
     wc_Sha3 sha3_ctx;
 
-    if (!img)
+    if (header_sha3_384(&sha3_ctx, img) != 0)
         return -1;
-
-    p = get_img_hdr(img);
-    stored_sha_len = get_header(img, HDR_SHA3_384, &stored_sha);
-    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
-        return -1;
-    wc_InitSha3_384(&sha3_ctx, NULL, INVALID_DEVID);
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
-    while (p < end_sha) {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (end_sha - p < blksz)
-            blksz = end_sha - p;
-        wc_Sha3_384_Update(&sha3_ctx, p, blksz);
-        p += blksz;
-    }
     do {
         p = get_sha_block(img, position);
         if (p == NULL)
@@ -1290,6 +1326,267 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     img->sha_hash = stored_sha;
     return 0;
 }
+
+#ifdef ELF_SCATTERED
+#include "elf.h"
+
+#define PADDING_BLOCK_SIZE 64
+
+int elf_check_image_scattered(uint8_t part)
+{
+    /* Open the partition containing the image */
+    struct wolfBoot_image boot;
+    uint8_t *elf_h, *p;
+    int elf_hdr_sz = 0;
+    int len;
+    int is_elf32;
+    unsigned short entry_count;
+    unsigned short entry_size;
+    unsigned long entry_off;
+    long final_offset = -1;
+    uint8_t calc_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t *exp_digest;
+    int stored_sha_len;
+    int i;
+    uint8_t padding_block[PADDING_BLOCK_SIZE];
+    
+    wolfBoot_hash_t ctx;
+    if (wolfBoot_open_image(&boot, part) < 0)
+        return -1;
+    p = get_img_hdr(&boot);
+
+    /* Initialize hash, feed the manifest header to it */
+    if (header_hash(&ctx, &boot) < 0)
+        return -1;
+
+    stored_sha_len = get_header(&boot, HDR_HASH, &exp_digest);
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+        return -1;
+
+    /* Get the elf header size */
+    elf_h = p + IMAGE_HEADER_SIZE;
+
+    if (elf_open(elf_h, &is_elf32) < 0)
+        return -1;
+
+    elf_hdr_sz = elf_hdr_size(elf_h);
+    wolfBoot_printf("Elf header size: %d\n", elf_hdr_sz);
+
+    memset(padding_block, 0, PADDING_BLOCK_SIZE);
+
+    /* Feed the elf header to the hash function */
+    len = elf_hdr_sz;
+    p = elf_h;
+    while (len > 0) {
+        if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
+            update_hash(&ctx, p, WOLFBOOT_SHA_BLOCK_SIZE);
+            len -= WOLFBOOT_SHA_BLOCK_SIZE;
+        } else {
+            update_hash(&ctx, p, len);
+            break;
+        }
+        p += WOLFBOOT_SHA_BLOCK_SIZE;
+    }
+    wolfBoot_printf("Hashed ELF header.\n");
+
+
+
+    /* Feed the program headers to the hash function */
+    if (is_elf32) {
+        elf32_header *eh = (elf32_header *)elf_h;
+        elf32_program_header *ph;
+        entry_count = eh->ph_entry_count;
+        entry_size = eh->ph_entry_size;
+        entry_off = eh->ph_offset;
+
+        /* Add padding until the first program header into hash function */
+        len = entry_off - elf_hdr_sz;
+        wolfBoot_printf("Adding %d bytes padding\n", len);
+        while (len > 0) {
+            if (len > PADDING_BLOCK_SIZE) {
+                update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
+                len -= PADDING_BLOCK_SIZE;
+            } else {
+                update_hash(&ctx, padding_block, len);
+                break;
+            }
+        }
+
+        ph = (elf32_program_header *)(elf_h + entry_off);
+        for (i = 0; i < entry_count; ++i) {
+            unsigned long paddr;
+            unsigned long filesz;
+            unsigned long offset;
+            paddr = (unsigned long)ph[i].paddr;
+            offset = (unsigned long)ph[i].offset;
+            filesz = (unsigned long)ph[i].file_size;
+
+            /* Feed any non-loaded parts to the hash function */
+            if (ph[i].type != ELF_PT_LOAD) {
+                len = filesz;
+                while (len > 0) {
+                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
+                        update_hash(&ctx, elf_h + offset, WOLFBOOT_SHA_BLOCK_SIZE);
+                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
+                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                    } else {
+                        update_hash(&ctx, elf_h + offset, len);
+                        break;
+                    }
+                }
+            } else {
+                /* Feed the loaded parts to the hash function */
+                len = filesz;
+                while (len > 0) {
+                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
+                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                                WOLFBOOT_SHA_BLOCK_SIZE);
+                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
+                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                    } else {
+                        update_hash(&ctx, (void *)(paddr +  ARCH_FLASH_OFFSET),
+                               len);
+                        break;
+                    }
+                }
+            }
+            /* Add padding until next program header, if any. */
+            if ((i < entry_count - 1) && (ph[i+1].offset > offset)) {
+                unsigned long padding = ph[i+1].offset - (offset + filesz);
+                wolfBoot_printf("Adding padding: %lu\n", padding);
+                while (padding > 0) {
+                    if (padding > PADDING_BLOCK_SIZE) {
+                        update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
+                        padding -= PADDING_BLOCK_SIZE;
+                    } else {
+                        update_hash(&ctx, padding_block, padding);
+                        break;
+                    }
+                }
+            } else {
+                final_offset = offset + filesz;
+            }
+        }
+    }else { /* 64-bit ELF */
+        elf64_header *eh = (elf64_header *)elf_h;
+        elf64_program_header *ph;
+        entry_count = eh->ph_entry_count;
+        entry_size = eh->ph_entry_size;
+        entry_off = eh->ph_offset;
+
+        wolfBoot_printf("EH entry offset: %d\n", entry_off);
+        ph = (elf64_program_header *)(elf_h + entry_off);
+        /* Add padding until the first program header into hash function */
+        len = ph[0].offset - elf_hdr_sz;
+        wolfBoot_printf("Adding %d bytes padding\n", len);
+        while (len > 0) {
+            if (len > PADDING_BLOCK_SIZE) {
+                update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
+                len -= PADDING_BLOCK_SIZE;
+            } else {
+                update_hash(&ctx, padding_block, len);
+                break;
+            }
+        }
+        for (i = 0; i < entry_count; i++) {
+            unsigned long paddr;
+            unsigned long filesz;
+            unsigned long offset;
+            paddr = (unsigned long)ph[i].paddr;
+            offset = (unsigned long)ph[i].offset;
+            filesz = (unsigned long)ph[i].file_size;
+            wolfBoot_printf("Paddr: 0x%lx offset: %lu, size: %lu\n", paddr,
+                            offset, filesz);
+
+            /* Feed any non-loaded parts to the hash function */
+            if (ph[i].type != ELF_PT_LOAD) {
+                len = filesz;
+                //wolfBoot_printf("Feeding ghost segment, len %d\n", len);
+                continue;
+                while (len > 0) {
+                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
+                        update_hash(&ctx, elf_h + offset, WOLFBOOT_SHA_BLOCK_SIZE);
+                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
+                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                    } else {
+                        update_hash(&ctx, elf_h + offset, len);
+                        break;
+                    }
+                }
+            } else {
+                /* Feed the loaded parts to the hash function */
+                len = filesz;
+                wolfBoot_printf("Feeding stored segment, len %d\n", len);
+                while (len > 0) {
+                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
+                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                                WOLFBOOT_SHA_BLOCK_SIZE);
+                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
+                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                    } else {
+                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                                len);
+                        break;
+                    }
+                }
+            }
+            /* Add padding until next program header, if any. */
+            if ((i < entry_count - 1) && (ph[i+1].offset > offset)) {
+                unsigned long padding = ph[i+1].offset - (offset + filesz);
+                wolfBoot_printf("Adding padding: %lu\n", padding);
+                while (padding > 0) {
+                    if (padding > PADDING_BLOCK_SIZE) {
+                        update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
+                        padding -= PADDING_BLOCK_SIZE;
+                    } else {
+                        update_hash(&ctx, padding_block, padding);
+                        break;
+                    }
+                }
+            } else {
+                final_offset = offset + filesz;
+            }
+        }
+    }
+    if (final_offset < 0)
+        return -1;
+    if (final_offset + IMAGE_HEADER_SIZE > boot.fw_size)
+        return -1;
+
+    len = boot.fw_size - final_offset;
+    p = boot.hdr + IMAGE_HEADER_SIZE + final_offset;
+    p = get_img_hdr(&boot) + IMAGE_HEADER_SIZE + final_offset;
+
+    wolfBoot_printf("Appending %d bytes of data from image, from position %lu...(0x%p)\n", len, IMAGE_HEADER_SIZE + final_offset, p);
+
+    while (len > 0) {
+        if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
+            update_hash(&ctx, p, WOLFBOOT_SHA_BLOCK_SIZE);
+            len -= WOLFBOOT_SHA_BLOCK_SIZE;
+            p += WOLFBOOT_SHA_BLOCK_SIZE;
+        } else {
+            update_hash(&ctx, p, len);
+            break;
+        }
+    }
+
+    /* Finalize SHA calculation */
+    final_hash(&ctx, calc_digest);
+    if (memcmp(calc_digest, exp_digest, WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
+        wolfBoot_printf("SHA failed for scattered ELF!\n");
+        wolfBoot_printf("Expected   %02x%02x%02x%02x%02x%02x%02x%02x\n",
+                exp_digest[0], exp_digest[1], exp_digest[2], exp_digest[3],
+                exp_digest[4], exp_digest[5], exp_digest[6], exp_digest[7]);
+        wolfBoot_printf("Calculated %02x%02x%02x%02x%02x%02x%02x%02x\n",
+                calc_digest[0], calc_digest[1], calc_digest[2], calc_digest[3],
+                calc_digest[4], calc_digest[5], calc_digest[6], calc_digest[7]);
+        return -2;
+    }
+    wolfBoot_printf("Scattered ELF verified.\n");
+    return 0;
+}
+
+#endif
 
 #ifdef WOLFBOOT_NO_SIGN
 /**

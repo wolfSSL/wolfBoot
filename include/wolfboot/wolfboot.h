@@ -164,31 +164,49 @@ extern "C" {
 
 /* Hashing configuration */
 #if defined(WOLFBOOT_HASH_SHA256)
+#   include "wolfssl/wolfcrypt/sha256.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA256
 #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
 #   define image_hash image_sha256
+#   define header_hash header_sha256
+#   define update_hash wc_Sha256Update
 #   define key_hash key_sha256
 #   define self_hash self_sha256
+#   define final_hash wc_Sha256Final
+    typedef wc_Sha256 wolfBoot_hash_t;
+#   define HDR_HASH HDR_SHA256
 #elif defined(WOLFBOOT_HASH_SHA384)
+#   include "wolfssl/wolfcrypt/sha512.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
 #   define image_hash image_sha384
+#   define header_hash header_sha384
+#   define update_hash wc_Sha384Update
 #   define key_hash key_sha384
 #   define self_hash self_sha384
+#   define final_hash wc_Sha384Final
+    typedef wc_Sha384 wolfBoot_hash_t;
+#   define HDR_HASH HDR_SHA384
 #elif defined(WOLFBOOT_HASH_SHA3_384)
+#   include "wolfssl/wolfcrypt/sha3.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (128)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
 #   define image_hash image_sha3_384
+#   define header_hash header_sha3_384
+#   define update_hash wc_Sha3Update
+#   define final_hash wc_Sha3Final
 #   define key_hash key_sha3_384
+    typedef wc_sha3_384 wolfBoot_hash_t;
+#   define HDR_HASH HDR_SHA3_384
 #else
 #   error "No valid hash algorithm defined!"
 #endif

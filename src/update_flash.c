@@ -38,6 +38,11 @@
 int WP11_Library_Init(void);
 #endif
 
+/* Support for ELF scatter/gather format */
+#ifdef ELF_SCATTERED
+#include "elf.h"
+#endif
+
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -1062,6 +1067,24 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
     PART_SANITY_CHECK(&boot);
+
+#ifdef ELF_SCATTERED
+    uintptr_t entry;
+    void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    wolfBoot_printf("ELF Scattered image digest check\n");
+    if (elf_check_image_scattered(PART_BOOT) <0) {
+        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
+        elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
+        if (elf_check_image_scattered(PART_BOOT) < 0) {
+            wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
+            wolfBoot_panic();
+        }
+    }
+    wolfBoot_printf("Scattered image correctly verified. Setting entry point to %p\n", entry);
+    boot.fw_base = (void *)entry;
+#endif
+
+
 #ifdef WOLFBOOT_TPM
     wolfBoot_tpm2_deinit();
 #endif

@@ -227,7 +227,6 @@ ifeq ($(TARGET),ti_hercules)
 endif
 
 ifeq ($(TARGET),sim)
-  APP_OBJS+=../test-app/libwolfboot.o ../hal/$(TARGET).o
   # LD on MacOS does not support "-Map="
   LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
   LDFLAGS=
@@ -241,11 +240,12 @@ ifeq ($(TARGET),sim)
   endif
   ifeq ($(ELF_SCATTERED),1)
     LSCRIPT_TEMPLATE=sim_scattered.ld
-    APP_OBJS=app_sim_scattered.o ../src/elf.o ../src/string.o
+    APP_OBJS=app_sim_scattered.o ../src/string.o
     CFLAGS+=-D"ELF_SCATTERED=1" -nostartfiles -ffreestanding -static -nostdlib
     LDFLAGS+=-ffreestanding -nostartfiles -static -T$(LSCRIPT) -nostdlib
   else
     APP_OBJS=app_sim.o
+    APP_OBJS+=../test-app/libwolfboot.o ../hal/$(TARGET).o
   endif
 endif
 
