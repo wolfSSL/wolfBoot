@@ -169,7 +169,7 @@ typedef int (*elf_mmu_map_cb)(uint64_t, uint64_t, uint32_t);
 int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb);
 int elf_load_image(uint8_t *image, uintptr_t *entry, int is_ext);
 int elf_store_image_scattered(const unsigned char *image, unsigned long *entry_out, int ext_flash);
-int elf_check_image_scattered(uint8_t part);
+int elf_check_image_scattered(uint8_t part, unsigned long *entry_out);
 int elf_hdr_size(const unsigned char *ehdr);
 int elf_open(const unsigned char *ehdr, int *is_elf32);
 

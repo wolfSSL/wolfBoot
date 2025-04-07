@@ -212,10 +212,10 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
 
             if (ph[i].type != ELF_PT_LOAD)
                 continue;
-
             paddr = (unsigned long)ph[i].paddr;
             offset = (unsigned long)ph[i].offset;
             filesz = (unsigned long)ph[i].file_size;
+            printf("Writing section at address %lx offset %lx\n", paddr, offset);
 #ifdef EXT_FLASH
             if (ext_flash) {
                 ext_flash_unlock();
@@ -227,12 +227,12 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
 #endif
             {
                 hal_flash_unlock();
-                hal_flash_erase(paddr, filesz);
-                hal_flash_write(paddr, image + offset, filesz);
+                hal_flash_erase(paddr + ARCH_FLASH_OFFSET, filesz);
+                hal_flash_write(paddr + ARCH_FLASH_OFFSET, image + offset, filesz);
                 hal_flash_lock();
             }
         }
-    } else { /* 64 bit ELF */
+    } else { /* 32 bit ELF */
         const elf64_header *eh;
         const elf64_program_header *ph;
         wolfBoot_printf("ELF image is 64 bit\n");
@@ -281,7 +281,7 @@ int elf_load_image(uint8_t *image, uintptr_t *entry, int ext_flash)
 #ifdef MMU
     return elf_load_image_mmu(image, entry, NULL);
 #else
-    return elf_store_image_scattered(image, entry, ext_flash);
+    return elf_store_image_scattered(image, (unsigned long *)entry, ext_flash);
 #endif
 }
 

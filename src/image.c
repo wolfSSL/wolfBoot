@@ -1332,7 +1332,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 
 #define PADDING_BLOCK_SIZE 64
 
-int elf_check_image_scattered(uint8_t part)
+int elf_check_image_scattered(uint8_t part, unsigned long *entry_out)
 {
     /* Open the partition containing the image */
     struct wolfBoot_image boot;
@@ -1349,6 +1349,8 @@ int elf_check_image_scattered(uint8_t part)
     int stored_sha_len;
     int i;
     uint8_t padding_block[PADDING_BLOCK_SIZE];
+    int entry_out_set = 0;
+
     
     wolfBoot_hash_t ctx;
     if (wolfBoot_open_image(&boot, part) < 0)
@@ -1389,8 +1391,6 @@ int elf_check_image_scattered(uint8_t part)
     }
     wolfBoot_printf("Hashed ELF header.\n");
 
-
-
     /* Feed the program headers to the hash function */
     if (is_elf32) {
         elf32_header *eh = (elf32_header *)elf_h;
@@ -1398,9 +1398,15 @@ int elf_check_image_scattered(uint8_t part)
         entry_count = eh->ph_entry_count;
         entry_size = eh->ph_entry_size;
         entry_off = eh->ph_offset;
+        if (!entry_out_set) {
+            *entry_out = eh->entry;
+            entry_out_set = 1;
+        }
 
+        wolfBoot_printf("EH entry offset: %d\n", entry_off);
+        ph = (elf32_program_header *)(elf_h + entry_off);
         /* Add padding until the first program header into hash function */
-        len = entry_off - elf_hdr_sz;
+        len = ph[0].offset - elf_hdr_sz;
         wolfBoot_printf("Adding %d bytes padding\n", len);
         while (len > 0) {
             if (len > PADDING_BLOCK_SIZE) {
@@ -1411,24 +1417,26 @@ int elf_check_image_scattered(uint8_t part)
                 break;
             }
         }
-
-        ph = (elf32_program_header *)(elf_h + entry_off);
-        for (i = 0; i < entry_count; ++i) {
+        for (i = 0; i < entry_count; i++) {
             unsigned long paddr;
             unsigned long filesz;
             unsigned long offset;
             paddr = (unsigned long)ph[i].paddr;
             offset = (unsigned long)ph[i].offset;
             filesz = (unsigned long)ph[i].file_size;
+            wolfBoot_printf("Paddr: 0x%lx offset: %lu, size: %lu\n", paddr,
+                            offset, filesz);
 
             /* Feed any non-loaded parts to the hash function */
             if (ph[i].type != ELF_PT_LOAD) {
                 len = filesz;
+                //wolfBoot_printf("Feeding ghost segment, len %d\n", len);
+                continue;
                 while (len > 0) {
                     if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
                         update_hash(&ctx, elf_h + offset, WOLFBOOT_SHA_BLOCK_SIZE);
                         len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
                     } else {
                         update_hash(&ctx, elf_h + offset, len);
                         break;
@@ -1437,23 +1445,24 @@ int elf_check_image_scattered(uint8_t part)
             } else {
                 /* Feed the loaded parts to the hash function */
                 len = filesz;
+                wolfBoot_printf("Feeding stored segment, len %d\n", len);
                 while (len > 0) {
                     if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
                         update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
                                 WOLFBOOT_SHA_BLOCK_SIZE);
                         len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
                     } else {
-                        update_hash(&ctx, (void *)(paddr +  ARCH_FLASH_OFFSET),
-                               len);
+                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                                len);
                         break;
                     }
                 }
             }
             /* Add padding until next program header, if any. */
-            if ((i < entry_count - 1) && (ph[i+1].offset > offset)) {
+            if ((i < entry_count - 1) && (ph[i+1].offset > (offset + filesz))) {
                 unsigned long padding = ph[i+1].offset - (offset + filesz);
-                wolfBoot_printf("Adding padding: %lu\n", padding);
+                wolfBoot_printf("Adding padding: %lu (from %p to %p)\n", padding, offset + filesz, ph[i+1].offset);
                 while (padding > 0) {
                     if (padding > PADDING_BLOCK_SIZE) {
                         update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
@@ -1467,12 +1476,16 @@ int elf_check_image_scattered(uint8_t part)
                 final_offset = offset + filesz;
             }
         }
-    }else { /* 64-bit ELF */
+    } else { /* 64-bit ELF */
         elf64_header *eh = (elf64_header *)elf_h;
         elf64_program_header *ph;
         entry_count = eh->ph_entry_count;
         entry_size = eh->ph_entry_size;
         entry_off = eh->ph_offset;
+        if (!entry_out_set) {
+            *entry_out = eh->entry;
+            entry_out_set = 1;
+        }
 
         wolfBoot_printf("EH entry offset: %d\n", entry_off);
         ph = (elf64_program_header *)(elf_h + entry_off);
@@ -1507,7 +1520,7 @@ int elf_check_image_scattered(uint8_t part)
                     if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
                         update_hash(&ctx, elf_h + offset, WOLFBOOT_SHA_BLOCK_SIZE);
                         len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
                     } else {
                         update_hash(&ctx, elf_h + offset, len);
                         break;
@@ -1522,7 +1535,7 @@ int elf_check_image_scattered(uint8_t part)
                         update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
                                 WOLFBOOT_SHA_BLOCK_SIZE);
                         len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        offset += WOLFBOOT_SHA_BLOCK_SIZE;
+                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
                     } else {
                         update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
                                 len);
@@ -1531,7 +1544,7 @@ int elf_check_image_scattered(uint8_t part)
                 }
             }
             /* Add padding until next program header, if any. */
-            if ((i < entry_count - 1) && (ph[i+1].offset > offset)) {
+            if ((i < entry_count - 1) && (ph[i+1].offset > (offset + filesz))) {
                 unsigned long padding = ph[i+1].offset - (offset + filesz);
                 wolfBoot_printf("Adding padding: %lu\n", padding);
                 while (padding > 0) {
@@ -1550,7 +1563,7 @@ int elf_check_image_scattered(uint8_t part)
     }
     if (final_offset < 0)
         return -1;
-    if (final_offset + IMAGE_HEADER_SIZE > boot.fw_size)
+    if (final_offset + IMAGE_HEADER_SIZE > (long)boot.fw_size)
         return -1;
 
     len = boot.fw_size - final_offset;

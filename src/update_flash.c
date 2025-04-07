@@ -1069,13 +1069,13 @@ void RAMFUNCTION wolfBoot_start(void)
     PART_SANITY_CHECK(&boot);
 
 #ifdef ELF_SCATTERED
-    uintptr_t entry;
+    unsigned long entry;
     void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     wolfBoot_printf("ELF Scattered image digest check\n");
-    if (elf_check_image_scattered(PART_BOOT) <0) {
+    if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
         wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
         elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
-        if (elf_check_image_scattered(PART_BOOT) < 0) {
+        if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
             wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
             wolfBoot_panic();
         }
