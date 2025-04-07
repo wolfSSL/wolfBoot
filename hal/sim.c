@@ -378,7 +378,7 @@ void do_boot(const uint32_t *app_offset)
 
     wret = write(fd, app_offset, app_size);
     if (wret != app_size) {
-        wolfBoot_printf( "can't write test-app to memfd, address %p: fd %d rval %d errno %d\n", app_offset, fd, wret, errno);
+        wolfBoot_printf( "can't write test-app to memfd, address %p\n", app_offset);
         exit(-1);
     }
     wolfBoot_printf("Stored test-app to memfd, address %p (%zu bytes)\n", app_offset, wret);

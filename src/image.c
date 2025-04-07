@@ -833,7 +833,7 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
-    (void)wc_InitSha256_ex(&sha256_ctx, NULL, hsmClientDevIdHash);
+    (void)wc_InitSha256_ex(sha256_ctx, NULL, hsmClientDevIdHash);
 #else
     wc_InitSha256(sha256_ctx);
 #endif
@@ -924,7 +924,7 @@ static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
-    (void)wc_InitSha384_ex(&sha384_ctx, NULL, hsmClientDevIdHash);
+    (void)wc_InitSha384_ex(sha384_ctx, NULL, hsmClientDevIdHash);
 #else
     wc_InitSha384(sha384_ctx);
 #endif

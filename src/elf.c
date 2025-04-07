@@ -48,7 +48,7 @@
 #endif
 
 
-#ifdef MMU
+#if defined(MMU) || defined (WOLFBOOT_FSP) || defined (ARCH_PPC)
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */
@@ -181,7 +181,7 @@ int elf_hdr_size(const unsigned char *ehdr)
     }
     return sz;
 }
-
+#if !defined(MMU) && !defined(WOLFBOOT_FSP) && !defined(ARCH_PPC)
 int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out, int ext_flash) {
     const unsigned char *image;
     int is_elf32;
@@ -274,6 +274,7 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
     }
     return 0;
 }
+#endif
 
 
 int elf_load_image(uint8_t *image, uintptr_t *entry, int ext_flash)

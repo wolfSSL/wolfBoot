@@ -78,7 +78,7 @@ static int division(uint32_t dividend,
     return 0;
 }
 
-static uint32_t div(uint32_t dividend, uint32_t divisor)
+static uint32_t div_u(uint32_t dividend, uint32_t divisor)
 {
     uint32_t quotient = 0;
     uint32_t remainder = 0;
@@ -504,7 +504,7 @@ static void nand_read_info(void)
     nand_flash.bad_block_pos = (*(uint16_t *)(onfi_data + PARAMS_POS_FEATURES)) & 1;
     nand_flash.ext_page_len = *(uint16_t *)(onfi_data + PARAMS_POS_EXT_PARAM_PAGE_LEN);
     nand_flash.parameter_page = *(uint16_t *)(onfi_data + PARAMS_POS_PARAMETER_PAGE);
-    nand_flash.pages_per_block = div(nand_flash.block_size, nand_flash.page_size);
+    nand_flash.pages_per_block = div_u(nand_flash.block_size, nand_flash.page_size);
     nand_flash.pages_per_device = nand_flash.pages_per_block * nand_flash.block_count;
     nand_flash.oob_size = *(uint16_t *)(onfi_data + PARAMS_POS_OOBSIZE);
     nand_flash.revision = *(uint16_t *)(onfi_data + PARAMS_POS_REVISION);
@@ -605,8 +605,8 @@ static int nand_check_bad_block(uint32_t block)
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     uint8_t buffer_page[NAND_FLASH_PAGE_SIZE];
-    uint32_t block = div(address, nand_flash.block_size); /* The block where the address falls in */
-    uint32_t page = div(address, nand_flash.page_size); /* The page where the address falls in */
+    uint32_t block = div_u(address, nand_flash.block_size); /* The block where the address falls in */
+    uint32_t page = div_u(address, nand_flash.page_size); /* The page where the address falls in */
     uint32_t start_page_in_block = mod(page, nand_flash.pages_per_block); /* The start page within this block */
     uint32_t in_block_offset = mod(address, nand_flash.block_size); /* The offset of the address within the block */
     uint32_t remaining = nand_flash.block_size - in_block_offset; /* How many bytes remaining to read in the first block */
@@ -637,7 +637,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         } while (ret < 0);
 
         /* Amount of pages to be read from this block */
-        pages_to_read = div((sz + nand_flash.page_size - 1), nand_flash.page_size);
+        pages_to_read = div_u((sz + nand_flash.page_size - 1), nand_flash.page_size);
 
         if (pages_to_read * nand_flash.page_size > remaining)
             pages_to_read--;

@@ -271,7 +271,7 @@ backup_on_failure:
 
 #ifdef WOLFBOOT_ELF
     /* Load elf */
-    if (elf_load_image((uint8_t*)load_address, (uintptr_t*)&load_address) != 0){
+    if (elf_load_image_mmu((uint8_t*)load_address, (uintptr_t*)&load_address, NULL) != 0){
         wolfBoot_printf("Invalid elf, falling back to raw binary\n");
     }
 #endif

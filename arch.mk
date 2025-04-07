@@ -253,7 +253,7 @@ ifeq ($(ARCH),ARM)
      CORTEX_A5=1
      UPDATE_OBJS:=src/update_ram.o
      CFLAGS+=-DWOLFBOOT_DUALBOOT -DEXT_FLASH -DNAND_FLASH -fno-builtin -ffreestanding
-     #CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+     CFLAGS+=-DWOLFBOOT_USE_STDLIBC
   endif
 
 ## Cortex CPU

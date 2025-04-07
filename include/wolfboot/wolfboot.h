@@ -205,7 +205,7 @@ extern "C" {
 #   define update_hash wc_Sha3Update
 #   define final_hash wc_Sha3Final
 #   define key_hash key_sha3_384
-    typedef wc_sha3_384 wolfBoot_hash_t;
+    typedef wc_Sha3 wolfBoot_hash_t;
 #   define HDR_HASH HDR_SHA3_384
 #else
 #   error "No valid hash algorithm defined!"
