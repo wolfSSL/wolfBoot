@@ -814,11 +814,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * wolfBoot_start*/
     wolfBoot_swap_and_final_erase(0);
 
-#else /* DISABLE_BACKUP */        /* Compute and verify scattered hash */
-        if (wolfBoot_verify_scattered_hash(&boot) != 0) {
-            wolfBoot_printf("Scattered hash verification failed\n");
-            return -1;
-        }
+#else /* DISABLE_BACKUP */
+    #ifdef ELF_SCATTERED
+    /* Compute and verify scattered hash */
+    if (wolfBoot_verify_scattered_hash(&boot) != 0) {
+        wolfBoot_printf("Scattered hash verification failed\n");
+        return -1;
+    }
+    #endif
     /* Direct Swap without power fail safety */
 
     hal_flash_unlock();
