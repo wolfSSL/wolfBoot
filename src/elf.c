@@ -232,7 +232,7 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
                 hal_flash_lock();
             }
         }
-    } else { /* 32 bit ELF */
+    } else { /* 64 bit ELF */
         const elf64_header *eh;
         const elf64_program_header *ph;
         wolfBoot_printf("ELF image is 64 bit\n");
