@@ -110,6 +110,13 @@ jobs:
     with:
       arch: host
       config-file: ./config/examples/library.config
+      make-args: test-lib
+
+  libwolfboot_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/library.config
 
   lpc54606j512_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml

@@ -410,6 +410,7 @@ ifeq ($(ARCH),RENESAS_RX)
     # Must use LD directly (gcc link calls LD with sysroot and is not supported)
     LD=$(CROSS_COMPILE)ld
     AS=$(CROSS_COMPILE)gcc
+    AR=$(CROSS_COMPILE)ar
     OBJCOPY?=$(CROSS_COMPILE)objcopy
     SIZE=$(CROSS_COMPILE)size
 
@@ -872,6 +873,7 @@ ifeq ($(TARGET),ti_hercules)
   CC=$(CROSS_COMPILE)armcl
   LD=$(CROSS_COMPILE)armcl
   AS=$(CROSS_COMPILE)armasm
+  AR=$(CROSS_COMPILE)armcl -ar
   OBJCOPY=$(CROSS_COMPILE)armobjcopy
   SIZE=$(CROSS_COMPILE)armsize
   OUTPUT_FLAG=--output_file
@@ -972,6 +974,7 @@ ifeq ($(USE_GCC),1)
   CC=$(CROSS_COMPILE)gcc
   LD=$(CROSS_COMPILE)gcc
   AS=$(CROSS_COMPILE)gcc
+  AR=$(CROSS_COMPILE)ar
   OBJCOPY?=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
 endif
