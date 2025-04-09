@@ -126,7 +126,7 @@ endif
 
 ifeq ($(TARGET),library)
     CFLAGS+=-g
-    MAIN_TARGET:=test-lib
+    MAIN_TARGET:=libwolfboot.a
 endif
 
 ifeq ($(TARGET),raspi3)
@@ -174,6 +174,9 @@ stage1/loader_stage1.bin: FORCE
 test-lib: include/target.h $(OBJS)
 	$(Q)$(CC) $(CFLAGS) -o $@ $(OBJS)
 
+libwolfboot.a: $(OBJS)
+	$(Q)$(AR) rcs $@ $(OBJS)
+
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -j .rodata -j .text -j .sdata -j .data \
@@ -192,7 +195,6 @@ wolfboot.bin: wolfboot.elf
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
 	@echo
-
 
 test-app/image.bin: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)"
@@ -454,7 +456,7 @@ secondary: $(SECONDARY_PRIVATE_KEY)
 
 src/x86/fsp_s.o: $(FSP_S_BIN)
 	$(OBJCOPY) -I binary -O elf64-x86-64 -B i386 --rename-section .data=.fsp_s $^ $@
-	
+
 pico-sdk-info: FORCE
 	@echo "To complete the build, check IDE/pico-sdk/rp2350"
 

@@ -1,0 +1,38 @@
+name: wolfBoot as Library test
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  test-lib:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: make clean
+        run: |
+          make keysclean && make -C tools/keytools clean && rm -f include/target.h
+
+      - name: Build test-lib
+        run: |
+          cp config/examples/library.config .config
+          make keytools
+          ./tools/keytools/keygen --ed25519 -g wolfboot_signing_private_key.der
+          echo "Test" > test.bin
+          ./tools/keytools/sign --ed25519 --sha256 test.bin wolfboot_signing_private_key.der 1
+          make test-lib
+
+      - name: Run test-lib
+        run: |
+          ./test-lib test_v1_signed.bin 2>&1 | grep "Firmware Valid"
+
+      - name: Run test-lib (expect failure)
+        run: |
+          echo "A" >> test_v1_signed.bin
+          ./test-lib test_v1_signed.bin 2>&1 | grep "Failure"

@@ -81,13 +81,14 @@ void hal_led_on(void)
     PORT_PODR(4) &= ~(1 << 0); /* low */
 #endif
 }
+
 void hal_led_off(void)
 {
-#ifdef TARGET_rx65n
+#if defined(TARGET_rx65n)
     /* RX65N RSK+ LED0 P73 */
     PORT_PDR(7) |= (1 << 3);  /* output */
     PORT_PODR(7) |= (1 << 3); /* high */
-#else
+#elif defined(TARGET_rx72n)
     /* RX72N Envision USR LED P40 */
     PORT_PDR(4) |= (1 << 0);  /* output */
     PORT_PODR(4) |= (1 << 0); /* high */
@@ -620,6 +621,7 @@ void RAMFUNCTION hal_flash_lock(void)
     return;
 }
 
+#ifndef TARGET_library
 void* hal_get_primary_address(void)
 {
     return (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -629,3 +631,4 @@ void* hal_get_update_address(void)
 {
     return (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 }
+#endif
