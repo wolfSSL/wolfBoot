@@ -34,5 +34,6 @@ jobs:
 
       - name: Run test-lib (expect failure)
         run: |
+          truncate -s -1 test_v1_signed.bin
           echo "A" >> test_v1_signed.bin
           ./test-lib test_v1_signed.bin 2>&1 | grep "Failure"
