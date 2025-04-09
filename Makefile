@@ -34,8 +34,11 @@ OBJS:= \
 	./src/string.o \
 	./src/image.o \
 	./src/libwolfboot.o \
-	./hal/hal.o \
-	./hal/$(TARGET).o
+	./hal/hal.o
+
+ifneq ($(TARGET),library)
+	OBJS+=./hal/$(TARGET).o
+endif
 
 ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
@@ -171,11 +174,13 @@ stage1/loader_stage1.bin: FORCE
 	@echo "\t[BIN] $@"
 	$(Q)$(MAKE) -C $(dir $@) $(notdir $@)
 
-test-lib: include/target.h $(OBJS)
-	$(Q)$(CC) $(CFLAGS) -o $@ $(OBJS)
-
-libwolfboot.a: $(OBJS)
+libwolfboot.a: include/target.h $(OBJS)
+	@echo "\t[LIB] $@"
 	$(Q)$(AR) rcs $@ $(OBJS)
+
+test-lib: libwolfboot.a hal/library.o
+	@echo "\t[BIN] $@"
+	$(Q)$(CC) $(CFLAGS) -o $@ hal/library.o libwolfboot.a
 
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
@@ -379,7 +384,7 @@ distclean: clean keysclean utilsclean
 	$(Q)rm -f *.bin *.elf
 
 include/target.h: $(TARGET_H_TEMPLATE) FORCE
-	@cat $(TARGET_H_TEMPLATE) | \
+	$(Q)cat $(TARGET_H_TEMPLATE) | \
 	sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
 	sed -e "s/@WOLFBOOT_SECTOR_SIZE@/$(WOLFBOOT_SECTOR_SIZE)/g" | \
 	sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
@@ -447,11 +452,11 @@ tools/keytools/otp/otp-keystore-primer.bin: FORCE
 secondary: $(SECONDARY_PRIVATE_KEY)
 
 %.o:%.c
-	@echo "\t[CC-$(ARCH)] $@"
+	@echo "\t[CC $(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 %.o:%.S
-	@echo "\t[AS-$(ARCH)] $@"
+	@echo "\t[AS $(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
 src/x86/fsp_s.o: $(FSP_S_BIN)
