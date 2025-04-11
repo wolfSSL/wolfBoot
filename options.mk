@@ -787,7 +787,7 @@ ifeq ($(ELF),1)
     CFLAGS+=-DDEBUG_ELF=$(DEBUG_ELF)
   endif
   ifeq ($(ELF_SCATTERED),1)
-    CFLAGS+=-D"ELF_SCATTERED=1"
+    CFLAGS+=-D"WOLFBOOT_ELF_SCATTERED=1"
   endif
 
 endif

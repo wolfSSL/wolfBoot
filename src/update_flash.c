@@ -39,7 +39,7 @@ int WP11_Library_Init(void);
 #endif
 
 /* Support for ELF scatter/gather format */
-#ifdef ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_SCATTERED
 #include "elf.h"
 #endif
 
@@ -815,13 +815,21 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_swap_and_final_erase(0);
 
 #else /* DISABLE_BACKUP */
-    #ifdef ELF_SCATTERED
-    /* Compute and verify scattered hash */
-    if (wolfBoot_verify_scattered_hash(&boot) != 0) {
-        wolfBoot_printf("Scattered hash verification failed\n");
-        return -1;
+#ifdef WOLFBOOT_ELF_SCATTERED
+    unsigned long entry;
+    void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    wolfBoot_printf("ELF Scattered image digest check\n");
+    if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
+        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
+        elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
+        if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
+            wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
+            wolfBoot_panic();
+        }
     }
-    #endif
+    wolfBoot_printf("Scattered image correctly verified. Setting entry point to %p\n", entry);
+    boot.fw_base = (void *)entry;
+#endif
     /* Direct Swap without power fail safety */
 
     hal_flash_unlock();
@@ -1071,7 +1079,7 @@ void RAMFUNCTION wolfBoot_start(void)
     }
     PART_SANITY_CHECK(&boot);
 
-#ifdef ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_SCATTERED
     unsigned long entry;
     void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     wolfBoot_printf("ELF Scattered image digest check\n");

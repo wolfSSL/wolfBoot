@@ -241,7 +241,7 @@ ifeq ($(TARGET),sim)
   ifeq ($(ELF_SCATTERED),1)
     LSCRIPT_TEMPLATE=sim_scattered.ld
     APP_OBJS=app_sim_scattered.o ../src/string.o
-    CFLAGS+=-D"ELF_SCATTERED=1" -nostartfiles -ffreestanding -static -nostdlib
+    CFLAGS+=-D"WOLFBOOT_ELF_SCATTERED=1" -nostartfiles -ffreestanding -static -nostdlib
     LDFLAGS+=-ffreestanding -nostartfiles -static -T$(LSCRIPT) -nostdlib
   else
     APP_OBJS=app_sim.o

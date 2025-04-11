@@ -1327,10 +1327,16 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     return 0;
 }
 
-#ifdef ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_SCATTERED
 #include "elf.h"
 
 #define PADDING_BLOCK_SIZE 64
+
+#ifdef ARCH_SIM
+#define BASE_OFF ARCH_FLASH_OFFSET
+#else
+#define BASE_OFF 0
+#endif
 
 int elf_check_image_scattered(uint8_t part, unsigned long *entry_out)
 {
@@ -1448,12 +1454,12 @@ int elf_check_image_scattered(uint8_t part, unsigned long *entry_out)
                 wolfBoot_printf("Feeding stored segment, len %d\n", len);
                 while (len > 0) {
                     if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
                                 WOLFBOOT_SHA_BLOCK_SIZE);
                         len -= WOLFBOOT_SHA_BLOCK_SIZE;
                         paddr += WOLFBOOT_SHA_BLOCK_SIZE;
                     } else {
-                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
                                 len);
                         break;
                     }
@@ -1532,12 +1538,12 @@ int elf_check_image_scattered(uint8_t part, unsigned long *entry_out)
                 wolfBoot_printf("Feeding stored segment, len %d\n", len);
                 while (len > 0) {
                     if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
                                 WOLFBOOT_SHA_BLOCK_SIZE);
                         len -= WOLFBOOT_SHA_BLOCK_SIZE;
                         paddr += WOLFBOOT_SHA_BLOCK_SIZE;
                     } else {
-                        update_hash(&ctx, (void *)(paddr + ARCH_FLASH_OFFSET),
+                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
                                 len);
                         break;
                     }
@@ -1598,6 +1604,7 @@ int elf_check_image_scattered(uint8_t part, unsigned long *entry_out)
     wolfBoot_printf("Scattered ELF verified.\n");
     return 0;
 }
+#undef BASE_OFF
 
 #endif
 

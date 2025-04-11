@@ -33,7 +33,7 @@
 #include "hal/nxp_ppc.h"
 #endif
 
-#ifdef ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_SCATTERED
 #include "image.h"
 #endif
 
@@ -181,7 +181,14 @@ int elf_hdr_size(const unsigned char *ehdr)
     }
     return sz;
 }
-#if !defined(MMU) && !defined(WOLFBOOT_FSP) && !defined(ARCH_PPC)
+#if !defined(MMU) && !defined(WOLFBOOT_FSP) && !defined(ARCH_PPC) && defined (WOLFBOOT_ELF_SCATTERED)
+
+#ifdef ARCH_SIM
+#   define BASE_OFF ARCH_FLASH_OFFSET
+#else
+#   define BASE_OFF 0
+#endif
+
 int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out, int ext_flash) {
     const unsigned char *image;
     int is_elf32;
@@ -219,16 +226,16 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
 #ifdef EXT_FLASH
             if (ext_flash) {
                 ext_flash_unlock();
-                ext_flash_erase(paddr + ARCH_FLASH_OFFSET, filesz);
-                ext_flash_write(paddr + ARCH_FLASH_OFFSET, image + offset, filesz);
+                ext_flash_erase(paddr + BASE_OFF, filesz);
+                ext_flash_write(paddr + BASE_OFF, image + offset, filesz);
                 ext_flash_lock();
             }
             else
 #endif
             {
                 hal_flash_unlock();
-                hal_flash_erase(paddr + ARCH_FLASH_OFFSET, filesz);
-                hal_flash_write(paddr + ARCH_FLASH_OFFSET, image + offset, filesz);
+                hal_flash_erase(paddr + BASE_OFF, filesz);
+                hal_flash_write(paddr + BASE_OFF, image + offset, filesz);
                 hal_flash_lock();
             }
         }
@@ -258,16 +265,16 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
 #ifdef EXT_FLASH
             if (ext_flash) {
                 ext_flash_unlock();
-                ext_flash_erase(paddr + ARCH_FLASH_OFFSET, filesz);
-                ext_flash_write(paddr + ARCH_FLASH_OFFSET, image + offset, filesz);
+                ext_flash_erase(paddr + BASE_OFF, filesz);
+                ext_flash_write(paddr + BASE_OFF, image + offset, filesz);
                 ext_flash_lock();
             }
             else
 #endif
             {
                 hal_flash_unlock();
-                hal_flash_erase(paddr + ARCH_FLASH_OFFSET, filesz);
-                hal_flash_write(paddr + ARCH_FLASH_OFFSET, image + offset, filesz);
+                hal_flash_erase(paddr + BASE_OFF, filesz);
+                hal_flash_write(paddr + BASE_OFF, image + offset, filesz);
                 hal_flash_lock();
             }
         }
