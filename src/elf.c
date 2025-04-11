@@ -149,7 +149,7 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 
     return 0;
 }
-#endif /* MMU */
+#endif /* MMU || WOLFBOOT_FSP || ARCH_PPC */
 
 int elf_open(const unsigned char *ehdr, int *is_elf32)
 {
@@ -281,7 +281,7 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
     }
     return 0;
 }
-#endif
+#endif /* !defined(MMU) && !defined(WOLFBOOT_FSP) && !defined(ARCH_PPC) && defined (WOLFBOOT_ELF_SCATTERED) */
 
 
 int elf_load_image(uint8_t *image, uintptr_t *entry, int ext_flash)

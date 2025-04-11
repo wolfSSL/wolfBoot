@@ -312,7 +312,6 @@ extern "C" {
 #define IMG_STATE_FINAL_FLAGS 0x30
 /* ELF loading state - only valid on boot partition so doesn't conflict with
  * IMAGE_STATE_UPDATING */
-#define IMG_STATE_ELF_LOADING 0x70
 #define IMG_STATE_TESTING   0x10
 #define IMG_STATE_SUCCESS   0x00
 #define FLASH_BYTE_ERASED   0xFF
@@ -322,7 +321,6 @@ extern "C" {
 #define IMG_STATE_UPDATING  0x8F
 #define IMG_STATE_TESTING   0xEF
 #define IMG_STATE_FINAL_FLAGS 0xBF
-#define IMG_STATE_ELF_LOADING 0x70
 #define IMG_STATE_SUCCESS   0xFF
 #define FLASH_BYTE_ERASED   0x00
 #define FLASH_WORD_ERASED   0x00000000UL
