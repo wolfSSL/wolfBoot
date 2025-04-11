@@ -238,10 +238,10 @@ ifeq ($(TARGET),sim)
     # Override linker flags
     LDFLAGS+=-Wl,-Map=image.map
   endif
-  ifeq ($(ELF_SCATTERED),1)
+  ifeq ($(ELF_FLASH_SCATTER),1)
     LSCRIPT_TEMPLATE=sim_scattered.ld
     APP_OBJS=app_sim_scattered.o ../src/string.o
-    CFLAGS+=-D"WOLFBOOT_ELF_SCATTERED=1" -nostartfiles -ffreestanding -static -nostdlib
+    CFLAGS+=-D"WOLFBOOT_ELF_FLASH_SCATTER=1" -nostartfiles -ffreestanding -static -nostdlib
     LDFLAGS+=-ffreestanding -nostartfiles -static -T$(LSCRIPT) -nostdlib
   else
     APP_OBJS=app_sim.o
@@ -478,10 +478,22 @@ image.srec: image.elf
 	@echo "\t[SREC] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O srec $^ $@
 
-image.elf: $(APP_OBJS) $(LSCRIPT)
+ifeq ($(ELF_FLASH_SCATTER),1)
+# When ELF_FLASH_SCATTER=1, preprocess the ELF file with the squashelf tool
+SQUASHELF_TOOL = ../tools/squashelf/squashelf
+image-orig.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
 
+image.elf: image-orig.elf
+	@echo "\t[SQUASHELF] $@"
+	$(Q)$(SQUASHELF_TOOL) -v --nosht $< $@
+else
+# Default behavior when ELF_FLASH_SCATTER is not set
+image.elf: $(APP_OBJS) $(LSCRIPT)
+	@echo "\t[LD] $@"
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
+endif
 
 standalone: image.bin
 

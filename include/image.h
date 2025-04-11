@@ -838,6 +838,13 @@ int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
 int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
 int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
 
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER
+/* Support for ELF scatter/gather format */
+int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out,
+                                  int ext_flash);
+int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out);
+#endif
+
 uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
         uint32_t* sz);
 
