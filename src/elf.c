@@ -222,7 +222,7 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
             paddr = (unsigned long)ph[i].paddr;
             offset = (unsigned long)ph[i].offset;
             filesz = (unsigned long)ph[i].file_size;
-            printf("Writing section at address %lx offset %lx\n", paddr, offset);
+            wolfBoot_printf("Writing section at address %lx offset %lx\n", paddr, offset);
 #ifdef EXT_FLASH
             if (ext_flash) {
                 ext_flash_unlock();
@@ -261,7 +261,7 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
             paddr = (unsigned long)ph[i].paddr;
             offset = (unsigned long)ph[i].offset;
             filesz = (unsigned long)ph[i].file_size;
-            printf("Writing section at address %lx offset %lx\n", paddr, offset);
+            wolfBoot_printf("Writing section at address %lx offset %lx\n", paddr, offset);
 #ifdef EXT_FLASH
             if (ext_flash) {
                 ext_flash_unlock();

@@ -220,6 +220,24 @@ jobs:
       config-file: ./config/examples/sim.config
       make-args: CFLAGS_EXTRA=-DWOLFBOOT_FLASH_MULTI_SECTOR_ERASE
 
+  sim_elf_scattered:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-elf-scattered.config
+
+  sim_elf_scattered_nobackup:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-elf-scattered.config
+      make-args: DISABLE_BACKUP=1
+
+  sim32_elf_scattered:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim32-elf-scattered.config
 
   # TODO: SP math with small stack has issues
 
