@@ -79,6 +79,7 @@ extern "C" {
 #define HDR_SIGNATURE               0x20
 #define HDR_POLICY_SIGNATURE        0x21
 #define HDR_SECONDARY_SIGNATURE     0x22
+#define HDR_ELF_SCATTERED_HASH      0x23
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */
@@ -163,31 +164,49 @@ extern "C" {
 
 /* Hashing configuration */
 #if defined(WOLFBOOT_HASH_SHA256)
+#   include "wolfssl/wolfcrypt/sha256.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA256
 #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
 #   define image_hash image_sha256
+#   define header_hash header_sha256
+#   define update_hash wc_Sha256Update
 #   define key_hash key_sha256
 #   define self_hash self_sha256
+#   define final_hash wc_Sha256Final
+    typedef wc_Sha256 wolfBoot_hash_t;
+#   define HDR_HASH HDR_SHA256
 #elif defined(WOLFBOOT_HASH_SHA384)
+#   include "wolfssl/wolfcrypt/sha512.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
 #   define image_hash image_sha384
+#   define header_hash header_sha384
+#   define update_hash wc_Sha384Update
 #   define key_hash key_sha384
 #   define self_hash self_sha384
+#   define final_hash wc_Sha384Final
+    typedef wc_Sha384 wolfBoot_hash_t;
+#   define HDR_HASH HDR_SHA384
 #elif defined(WOLFBOOT_HASH_SHA3_384)
+#   include "wolfssl/wolfcrypt/sha3.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (128)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
 #   define image_hash image_sha3_384
+#   define header_hash header_sha3_384
+#   define update_hash wc_Sha3Update
+#   define final_hash wc_Sha3Final
 #   define key_hash key_sha3_384
+    typedef wc_Sha3 wolfBoot_hash_t;
+#   define HDR_HASH HDR_SHA3_384
 #else
 #   error "No valid hash algorithm defined!"
 #endif
@@ -291,6 +310,8 @@ extern "C" {
 /* now just an intermediary state, update state will always be either new or
  * updating before the application boots*/
 #define IMG_STATE_FINAL_FLAGS 0x30
+/* ELF loading state - only valid on boot partition so doesn't conflict with
+ * IMAGE_STATE_UPDATING */
 #define IMG_STATE_TESTING   0x10
 #define IMG_STATE_SUCCESS   0x00
 #define FLASH_BYTE_ERASED   0xFF

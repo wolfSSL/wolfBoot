@@ -27,9 +27,14 @@
 #include "printf.h"
 #include "string.h"
 #include "elf.h"
+#include "hal.h"
 
 #ifdef ARCH_PPC
 #include "hal/nxp_ppc.h"
+#endif
+
+#ifdef WOLFBOOT_ELF_SCATTERED
+#include "image.h"
 #endif
 
 /* support for elf parsing debug printf */
@@ -42,29 +47,8 @@
 #endif
 #endif
 
-/* support byte swapping if testing/reading an elf with different endianess */
-#if defined(ELF_PARSER) || defined(ELF_ENDIAN_SUPPORT)
-  #ifdef BIG_ENDIAN_ORDER
-    #define GET16(x) (( is_le) ? __builtin_bswap16(x) : (x))
-    #define GET32(x) (( is_le) ? __builtin_bswap32(x) : (x))
-    #define GET64(x) (( is_le) ? __builtin_bswap64(x) : (x))
-  #else
-    #define GET16(x) ((!is_le) ? __builtin_bswap16(x) : (x))
-    #define GET32(x) ((!is_le) ? __builtin_bswap32(x) : (x))
-    #define GET64(x) ((!is_le) ? __builtin_bswap64(x) : (x))
-  #endif
-#else
-    #define GET16(x) (x)
-    #define GET32(x) (x)
-    #define GET64(x) (x)
-#endif
 
-#define GET_H64(name) (is_elf32 ? GET32(h32->name) : GET64(h64->name))
-#define GET_H32(name) (is_elf32 ? GET32(h32->name) : GET32(h64->name))
-#define GET_H16(name) (is_elf32 ? GET16(h32->name) : GET16(h64->name))
-#define GET_E64(name) (is_elf32 ? GET32(e32->name) : GET64(e64->name))
-#define GET_E32(name) (is_elf32 ? GET32(e32->name) : GET32(e64->name))
-
+#if defined(MMU) || defined (WOLFBOOT_FSP) || defined (ARCH_PPC)
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */
@@ -165,11 +149,145 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 
     return 0;
 }
+#endif /* MMU || WOLFBOOT_FSP || ARCH_PPC */
 
-int elf_load_image(uint8_t *image, uintptr_t *entry)
+int elf_open(const unsigned char *ehdr, int *is_elf32)
 {
+    const unsigned char *ident = ehdr;
+    /* Verify ELF header */
+    if (memcmp(ident, ELF_IDENT_STR, 4) != 0) {
+        return -1; /* not valid header identifier */
+    }
+    wolfBoot_printf("ELF image found\n");
+    *is_elf32 = !!(ident[ELF_CLASS_OFF] == ELF_CLASS_32);
+    return 0;
 
+}
+
+int elf_hdr_size(const unsigned char *ehdr)
+{
+    int sz = 0;
+    int is_elf32;
+    if (elf_open(ehdr, &is_elf32) != 0)
+        return -1;
+    if (is_elf32) {
+        const elf32_header *elf32_hdr = (const elf32_header *)ehdr;
+        sz = sizeof(elf32_header);
+        sz += elf32_hdr->ph_entry_count * sizeof(elf32_program_header);
+    } else {
+        const elf64_header *elf64_hdr = (const elf64_header *)ehdr;
+        sz = sizeof(elf64_header);
+        sz += elf64_hdr->ph_entry_count * sizeof(elf64_program_header);
+    }
+    return sz;
+}
+#if !defined(MMU) && !defined(WOLFBOOT_FSP) && !defined(ARCH_PPC) && defined (WOLFBOOT_ELF_SCATTERED)
+
+#ifdef ARCH_SIM
+#   define BASE_OFF ARCH_FLASH_OFFSET
+#else
+#   define BASE_OFF 0
+#endif
+
+int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out, int ext_flash) {
+    const unsigned char *image;
+    int is_elf32;
+    unsigned short entry_count;
+    unsigned long entry_off;
+    int i;
+    image = hdr + IMAGE_HEADER_SIZE;
+    if (elf_open(image, &is_elf32) != 0) {
+        return -1;
+    }
+    if (is_elf32) {
+        const elf32_header *eh;
+        const elf32_program_header *ph;
+        wolfBoot_printf("ELF image is 32 bit\n");
+
+        eh = (const elf32_header *)image;
+        entry_count = eh->ph_entry_count;
+        entry_off = eh->ph_offset;
+        *entry_out = (unsigned long)eh->entry;
+
+        ph = (const elf32_program_header *)(image + entry_off);
+        for (i = 0; i < entry_count; ++i) {
+            unsigned long paddr;
+            unsigned long filesz;
+            unsigned long offset;
+
+            if (ph[i].type != ELF_PT_LOAD)
+                continue;
+            paddr = (unsigned long)ph[i].paddr;
+            offset = (unsigned long)ph[i].offset;
+            filesz = (unsigned long)ph[i].file_size;
+            wolfBoot_printf("Writing section at address %lx offset %lx\n", paddr, offset);
+#ifdef EXT_FLASH
+            if (ext_flash) {
+                ext_flash_unlock();
+                ext_flash_erase(paddr + BASE_OFF, filesz);
+                ext_flash_write(paddr + BASE_OFF, image + offset, filesz);
+                ext_flash_lock();
+            }
+            else
+#endif
+            {
+                hal_flash_unlock();
+                hal_flash_erase(paddr + BASE_OFF, filesz);
+                hal_flash_write(paddr + BASE_OFF, image + offset, filesz);
+                hal_flash_lock();
+            }
+        }
+    } else { /* 64 bit ELF */
+        const elf64_header *eh;
+        const elf64_program_header *ph;
+        wolfBoot_printf("ELF image is 64 bit\n");
+
+        eh = (const elf64_header *)image;
+        entry_count = eh->ph_entry_count;
+        entry_off = eh->ph_offset;
+        *entry_out = (unsigned long)eh->entry;
+
+        ph = (const elf64_program_header *)(image + entry_off);
+        for (i = 0; i < entry_count; ++i) {
+            unsigned long paddr;
+            unsigned long filesz;
+            unsigned long offset;
+
+            if (ph[i].type != ELF_PT_LOAD)
+                continue;
+            paddr = (unsigned long)ph[i].paddr;
+            offset = (unsigned long)ph[i].offset;
+            filesz = (unsigned long)ph[i].file_size;
+            wolfBoot_printf("Writing section at address %lx offset %lx\n", paddr, offset);
+#ifdef EXT_FLASH
+            if (ext_flash) {
+                ext_flash_unlock();
+                ext_flash_erase(paddr + BASE_OFF, filesz);
+                ext_flash_write(paddr + BASE_OFF, image + offset, filesz);
+                ext_flash_lock();
+            }
+            else
+#endif
+            {
+                hal_flash_unlock();
+                hal_flash_erase(paddr + BASE_OFF, filesz);
+                hal_flash_write(paddr + BASE_OFF, image + offset, filesz);
+                hal_flash_lock();
+            }
+        }
+    }
+    return 0;
+}
+#endif /* !defined(MMU) && !defined(WOLFBOOT_FSP) && !defined(ARCH_PPC) && defined (WOLFBOOT_ELF_SCATTERED) */
+
+
+int elf_load_image(uint8_t *image, uintptr_t *entry, int ext_flash)
+{
+#ifdef MMU
     return elf_load_image_mmu(image, entry, NULL);
+#else
+    return elf_store_image_scattered(image, (unsigned long *)entry, ext_flash);
+#endif
 }
 
 #endif /* WOLFBOOT_ELF */

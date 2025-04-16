@@ -32,6 +32,7 @@ extern "C" {
 #define ELF_IDENT_STR     "\x7F""ELF"
 
 /* header ident[4] */
+#define ELF_CLASS_OFF     (4)
 #define ELF_CLASS_32      (1)
 #define ELF_CLASS_64      (2)
 
@@ -111,6 +112,11 @@ typedef struct elf64_header {
     uint16_t sh_str_index;
 } elf64_header;
 
+union elf_header {
+    elf32_header *h32;
+    elf64_header *h64;
+};
+
 typedef struct elf64_section_header {
     uint32_t name;
     uint32_t type;
@@ -136,9 +142,36 @@ typedef struct elf64_program_header {
 } elf64_program_header;
 
 
+/* support byte swapping if testing/reading an elf with different endianess */
+#if defined(ELF_PARSER) || defined(ELF_ENDIAN_SUPPORT)
+  #ifdef BIG_ENDIAN_ORDER
+    #define GET16(x) (( is_le) ? __builtin_bswap16(x) : (x))
+    #define GET32(x) (( is_le) ? __builtin_bswap32(x) : (x))
+    #define GET64(x) (( is_le) ? __builtin_bswap64(x) : (x))
+  #else
+    #define GET16(x) ((!is_le) ? __builtin_bswap16(x) : (x))
+    #define GET32(x) ((!is_le) ? __builtin_bswap32(x) : (x))
+    #define GET64(x) ((!is_le) ? __builtin_bswap64(x) : (x))
+  #endif
+#else
+    #define GET16(x) (x)
+    #define GET32(x) (x)
+    #define GET64(x) (x)
+#endif
+
+#define GET_H64(name) (is_elf32 ? GET32(h32->name) : GET64(h64->name))
+#define GET_H32(name) (is_elf32 ? GET32(h32->name) : GET32(h64->name))
+#define GET_H16(name) (is_elf32 ? GET16(h32->name) : GET16(h64->name))
+#define GET_E64(name) (is_elf32 ? GET32(e32->name) : GET64(e64->name))
+#define GET_E32(name) (is_elf32 ? GET32(e32->name) : GET32(e64->name))
+
 typedef int (*elf_mmu_map_cb)(uint64_t, uint64_t, uint32_t);
 int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb);
-int elf_load_image(uint8_t *image, uintptr_t *entry);
+int elf_load_image(uint8_t *image, uintptr_t *entry, int is_ext);
+int elf_store_image_scattered(const unsigned char *image, unsigned long *entry_out, int ext_flash);
+int elf_check_image_scattered(uint8_t part, unsigned long *entry_out);
+int elf_hdr_size(const unsigned char *ehdr);
+int elf_open(const unsigned char *ehdr, int *is_elf32);
 
 
 #ifdef __cplusplus

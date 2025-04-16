@@ -45,6 +45,9 @@ project(wolfBoot)
 include(cmake/utils.cmake)
 include(cmake/functions.cmake)
 
+include_directories(include)
+include_directories(lib/wolfssl)
+
 if(NOT DEFINED WOLFBOOT_TARGET)
     message(FATAL_ERROR "WOLFBOOT_TARGET must be defined")
 else()
@@ -620,6 +623,8 @@ if(NOT SPMATH AND NOT SPMATHALL)
     list(APPEND USER_SETTINGS USE_FAST_MATH)
 endif()
 
+list(APPEND WOLFBOOT_DEFS WOLFSSL_USER_SETTINGS)
+
 add_library(user_settings INTERFACE)
 target_compile_definitions(user_settings INTERFACE ${USER_SETTINGS} ${SIGN_OPTIONS})
 
@@ -699,7 +704,7 @@ configure_file(include/target.h.in ${CMAKE_CURRENT_BINARY_DIR}/target.h @ONLY)
 
 add_library(target INTERFACE)
 target_compile_definitions(target INTERFACE ${WOLFBOOT_DEFS})
-target_include_directories(target BEFORE INTERFACE ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(target BEFORE INTERFACE ${CMAKE_CURRENT_BINARY_DIR} lib/wolfssl)
 
 set(KEYSTORE ${CMAKE_CURRENT_BINARY_DIR}/keystore.c)
 

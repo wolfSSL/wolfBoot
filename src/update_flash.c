@@ -38,6 +38,11 @@
 int WP11_Library_Init(void);
 #endif
 
+/* Support for ELF scatter/gather format */
+#ifdef WOLFBOOT_ELF_SCATTERED
+#include "elf.h"
+#endif
+
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -211,12 +216,34 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 #   define TRAILER_OFFSET_WORDS 0
 #endif
 
+/**
+ * @brief Performs the final swap and erase operations during a secure update,
+ * ensuring that if power is lost during the update, the process can be resumed
+ * on next boot.
+ *
+ * This function handles the final phase of the three-way swap update process.
+ * It ensures that the update is atomic and power-fail safe by:
+ * 1. Saving the last sector of the boot partition to the swap area
+ * 2. Setting a magic trailer value to mark the swap as in progress
+ * 3. Erasing the last sector(s) of the boot partition
+ * 4. Restoring the saved sector from swap back to boot
+ * 5. Setting the boot partition state to TESTING
+ * 6. Erasing the last sector(s) of the update partition
+ *
+ * The function can be called in two modes:
+ * - Normal mode (resume=0): Initiates the swap and erase process
+ * - Resume mode (resume=1): Checks if a swap was interrupted and completes it
+ *
+ * @param resume If 1, checks for interrupted swap and resumes it; if 0, starts
+ * new swap
+ * @return 0 on success, negative value if no swap needed or on error
+ */
 static int wolfBoot_swap_and_final_erase(int resume)
 {
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
-    uint8_t st;
+    uint8_t updateState;
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
@@ -231,7 +258,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(boot, PART_BOOT);
     wolfBoot_open_image(update, PART_UPDATE);
     wolfBoot_open_image(swap, PART_SWAP);
-    wolfBoot_get_partition_state(PART_UPDATE, &st);
+    wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
     /* read trailer */
 #if defined(EXT_FLASH) && PARTN_IS_EXT(PART_BOOT)
@@ -247,7 +274,9 @@ static int wolfBoot_swap_and_final_erase(int resume)
         swapDone = 1;
     }
     /* if resuming, quit if swap isn't done */
-    if ((resume == 1) && (swapDone == 0) && (st != IMG_STATE_FINAL_FLAGS)) {
+    if ((resume == 1) && (swapDone == 0) &&
+        (updateState != IMG_STATE_FINAL_FLAGS)
+    ) {
         return -1;
     }
 
@@ -257,7 +286,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
 #endif
 
     /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
-    if (st != IMG_STATE_FINAL_FLAGS) {
+    if (updateState != IMG_STATE_FINAL_FLAGS) {
         /* store the sector at tmpBootPos into swap */
         wolfBoot_copy_sector(boot, swap, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
         /* set FINAL_SWAP for re-entry */
@@ -291,9 +320,11 @@ static int wolfBoot_swap_and_final_erase(int resume)
     else {
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
     }
+
     /* mark boot as TESTING */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
-    /* erase the last sector(s) of update */
+    /* erase the last sector(s) of update. This resets the update partition state
+     * to IMG_STATE_NEW */
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
 
 #ifdef EXT_FLASH
@@ -784,6 +815,21 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_swap_and_final_erase(0);
 
 #else /* DISABLE_BACKUP */
+#ifdef WOLFBOOT_ELF_SCATTERED
+    unsigned long entry;
+    void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    wolfBoot_printf("ELF Scattered image digest check\n");
+    if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
+        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
+        elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
+        if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
+            wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
+            wolfBoot_panic();
+        }
+    }
+    wolfBoot_printf("Scattered image correctly verified. Setting entry point to %lx\n", entry);
+    boot.fw_base = (void *)entry;
+#endif
     /* Direct Swap without power fail safety */
 
     hal_flash_unlock();
@@ -811,6 +857,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;
     }
+
+
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
 
     #ifdef EXT_FLASH
@@ -1017,7 +1065,8 @@ void RAMFUNCTION wolfBoot_start(void)
             /* Emergency update successful, try to re-open boot image */
             if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
-                    (wolfBoot_verify_authenticity(&boot) < 0)))) {
+                    (wolfBoot_verify_authenticity(&boot) < 0)
+                    ))) {
                 wolfBoot_printf("Boot (try 2) failed: Hdr %d, Hash %d, Sig %d\n",
                     boot.hdr_ok, boot.sha_ok, boot.signature_ok);
                 /* panic: something went wrong after the emergency update */
@@ -1029,6 +1078,24 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
     PART_SANITY_CHECK(&boot);
+
+#ifdef WOLFBOOT_ELF_SCATTERED
+    unsigned long entry;
+    void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    wolfBoot_printf("ELF Scattered image digest check\n");
+    if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
+        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
+        elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
+        if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
+            wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
+            wolfBoot_panic();
+        }
+    }
+    wolfBoot_printf("Scattered image correctly verified. Setting entry point to %lx\n", entry);
+    boot.fw_base = (void *)entry;
+#endif
+
+
 #ifdef WOLFBOOT_TPM
     wolfBoot_tpm2_deinit();
 #endif

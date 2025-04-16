@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 
 #ifdef __APPLE__
 #include <mach-o/loader.h>
@@ -41,6 +42,10 @@
 #include "wolfboot/wolfboot.h"
 #include "target.h"
 #include "printf.h"
+
+#ifdef WOLFBOOT_ELF_SCATTERED
+#include "elf.h"
+#endif
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 #include "wolfhsm/wh_error.h"
@@ -304,6 +309,7 @@ void do_boot(const uint32_t *app_offset)
 {
     int ret;
     size_t app_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+    wolfBoot_printf("Simulator do_boot app_offset = %p\n", app_offset);
 
     if (flashLocked == 0) {
         wolfBoot_printf("WARNING FLASH IS UNLOCKED AT BOOT");
@@ -348,18 +354,34 @@ void do_boot(const uint32_t *app_offset)
 
     main = (main_entry)((uint8_t*)pSymbolAddress + epc->entryoff);
     main(main_argc, main_argv, NULL, NULL);
+
+#elif defined (WOLFBOOT_ELF_SCATTERED)
+    uint8_t *entry_point = (sim_ram_base + (unsigned long)app_offset);
+    printf("entry point: %p\n", entry_point);
+    printf("app offset: %p\n", app_offset);
+    typedef int (*main_entry)(int, char**);
+    main_entry main;
+    main = (main_entry)(entry_point);
+
+    /* TODO: call main ! */
+    /* main(main_argc, main_argv); */
+    wolfBoot_printf("Simulator for ELF_SCATTERED image not implemented yet. Exiting...\n");
+    exit(0);
 #else
     char *envp[1] = {NULL};
     int fd = memfd_create("test_app", 0);
+    size_t wret;
     if (fd == -1) {
         wolfBoot_printf( "memfd error\n");
         exit(-1);
     }
 
-    if ((size_t)write(fd, app_offset, app_size) != app_size) {
-        wolfBoot_printf( "can't write test-app to memfd\n");
+    wret = write(fd, app_offset, app_size);
+    if (wret != app_size) {
+        wolfBoot_printf( "can't write test-app to memfd, address %p\n", app_offset);
         exit(-1);
     }
+    wolfBoot_printf("Stored test-app to memfd, address %p (%zu bytes)\n", app_offset, wret);
 
     ret = fexecve(fd, main_argv, envp);
     wolfBoot_printf( "fexecve error\n");

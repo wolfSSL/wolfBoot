@@ -253,7 +253,7 @@ ifeq ($(ARCH),ARM)
      CORTEX_A5=1
      UPDATE_OBJS:=src/update_ram.o
      CFLAGS+=-DWOLFBOOT_DUALBOOT -DEXT_FLASH -DNAND_FLASH -fno-builtin -ffreestanding
-     #CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+     CFLAGS+=-DWOLFBOOT_USE_STDLIBC
   endif
 
 ## Cortex CPU
@@ -1125,7 +1125,9 @@ ifeq ($(TARGET),sim)
   LD_END_GROUP=
   BOOT_IMG=test-app/image.elf
   CFLAGS+=-DARCH_SIM
-  CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+  ifneq ($(ELF_SCATTERED),1)
+    CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+  endif
   ifeq ($(FORCE_32BIT),1)
     CFLAGS+=-m32
     LDFLAGS+=-m32
