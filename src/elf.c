@@ -193,7 +193,6 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
     const unsigned char *image;
     int is_elf32;
     unsigned short entry_count;
-    unsigned short entry_size;
     unsigned long entry_off;
     int i;
     image = hdr + IMAGE_HEADER_SIZE;
@@ -207,7 +206,6 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
 
         eh = (const elf32_header *)image;
         entry_count = eh->ph_entry_count;
-        entry_size = eh->ph_entry_size;
         entry_off = eh->ph_offset;
         *entry_out = (unsigned long)eh->entry;
 
@@ -246,7 +244,6 @@ int elf_store_image_scattered(const unsigned char *hdr, unsigned long *entry_out
 
         eh = (const elf64_header *)image;
         entry_count = eh->ph_entry_count;
-        entry_size = eh->ph_entry_size;
         entry_off = eh->ph_offset;
         *entry_out = (unsigned long)eh->entry;
 
