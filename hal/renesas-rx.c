@@ -621,7 +621,7 @@ void RAMFUNCTION hal_flash_lock(void)
     return;
 }
 
-#ifndef TARGET_library
+#if !defined(WOLFBOOT_NO_PARTITIONS) && !defined(TARGET_library)
 void* hal_get_primary_address(void)
 {
     return (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;

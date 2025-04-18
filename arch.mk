@@ -1158,11 +1158,18 @@ else
     UPDATE_OBJS:=src/update_flash_hwswap.o
   endif
 endif
-# Set default update object (if not library)
-ifneq ($(TARGET),library)
-ifeq ($(UPDATE_OBJS),)
-  UPDATE_OBJS:=./src/update_flash.o
+
+## For library target disable partitions
+ifeq ($(TARGET),library)
+  WOLFBOOT_NO_PARTITIONS=1
+  NO_LOADER=1
 endif
+
+## Set default update object
+ifneq ($(WOLFBOOT_NO_PARTITIONS),1)
+  ifeq ($(UPDATE_OBJS),)
+    UPDATE_OBJS:=./src/update_flash.o
+  endif
 endif
 
 ## wolfBoot origin
