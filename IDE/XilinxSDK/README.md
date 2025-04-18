@@ -28,6 +28,7 @@ A build settings template for Zynq UltraScale+ can be found here `./config/examp
 ```sh
 $ cp ./config/examples/zynqmp.config .config
 $ make keytools
+$ make wolfboot.elf
 ```
 
 These template settings are also in this `.cproject` as preprocessor macros. These settings are loaded into the `target.h.in` template by the wolfBoot `make`. If not using the built-in make then the following defines will need to be manually created in `target.h`:
@@ -201,33 +202,34 @@ Successfully ran Hello World application
 
 ### Adding RSA Authentication
 
-1. Generate keys:
+1. Update boot.bif (see boot_auth.bif)
+
+    ```
+[auth_params] ppk_select=0; spk_id=0x00000000
+[pskfile] pskf.pem
+[sskfile] sskf.pem
+authentication=rsa
+    ```
+
+2. Generate keys:
     * `bootgen.exe -generate_keys auth pem -arch zynqmp -image boot_auth.bif`
-2. Create hash for primary key:
+3. Create hash for primary key:
     * `bootgen.exe -image boot_auth.bif -arch zynqmp -w -o i BOOT.BIN -efuseppkbits ppkf_hash.txt`
-3. Import example project for programming eFuses:
+4. Import example project for programming eFuses:
     * New BSP project (program efuses , ZCU102_hw_platform, standalone, CPU: PSU_cortexa53_0)
     * Goto Xilinx Board Support Packet Settings.
     * Scroll down to Supported Libraries and Check the xiskey library
     * In the system.mss pane, scroll down to Libraries and click Import Examples.
     * Check the xilskey_esfuseps_zynqmp_example
-4. Edit `xilskey_efuseps_zynqmp_input.h`
+5. Edit `xilskey_efuseps_zynqmp_input.h`
     * 433 `#define XSK_EFUSEPS_WRITE_PPK0_HASH  TRUE`
     * 453 `#define XSK_EFUSEPS_PPK0_IS_SHA3     TRUE`
     * 454 `#define XSK_EFUSEPS_PPK0_HASH "0000000000000000000000000000000000000000000000000000000000000000" /* from ppkf_hash.txt */`
-5. Update boot.bif (see boot_auth.bif)
-
-    ```
-    [auth_params] ppk_select=0; spk_id=0x00000000
-    [pskfile] pskf.pem
-    [sskfile] sskf.pem
-    authentication=rsa
-    ```
 
 6. Build “boot.bin” image:
     * `bootgen -image boot_auth.bif -arch zynqmp -o i BOOT.BIN -w`
 
-Note: During testing add `[fsbl_config] bh_auth_enable` to allow skipping of the eFuse check of the PPK hash. In production the RSA_EN eFuses must be blown to force checking of the PPK hash.
+Note: During testing add `[fsbl_config] bh_auth_enable` to allow skipping of the eFuse check of the PPK hash. In production the `RSA_EN` eFuses must be blown to force checking of the PPK hash.
 
 Note: To generate a report of a boot.bin use the `bootgen_utility` or after 2022.1 use `bootgen -read`:
 `bootgen -arch zynqmp -read BOOT.BIN`

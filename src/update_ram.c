@@ -29,6 +29,9 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
+#ifdef WOLFBOOT_TPM
+#include "tpm.h"
+#endif
 #ifdef WOLFBOOT_ELF
 #include "elf.h"
 #endif

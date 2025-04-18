@@ -461,7 +461,7 @@ ifeq ($(ARCH),RENESAS_RX)
           ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o
 
     # RX TSIP uses pre-compiled .a library by default
-    ifeq ($(RX_TSIP_SRC),)
+    ifneq ($(RX_TSIP_SRC),1)
       ifeq ($(TARGET),rx65n)
         ifeq ($(BIG_ENDIAN),1)
           LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx65n_big.a
