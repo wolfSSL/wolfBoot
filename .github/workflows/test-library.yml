@@ -30,10 +30,13 @@ jobs:
 
       - name: Run test-lib
         run: |
+          ./test-lib test_v1_signed.bin
           ./test-lib test_v1_signed.bin 2>&1 | grep "Firmware Valid"
 
       - name: Run test-lib (expect failure)
         run: |
+          # Corrupt signed binary
           truncate -s -1 test_v1_signed.bin
           echo "A" >> test_v1_signed.bin
+          ./test-lib test_v1_signed.bin
           ./test-lib test_v1_signed.bin 2>&1 | grep "Failure"
