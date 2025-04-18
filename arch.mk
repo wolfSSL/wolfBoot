@@ -410,6 +410,7 @@ ifeq ($(ARCH),RENESAS_RX)
     # Must use LD directly (gcc link calls LD with sysroot and is not supported)
     LD=$(CROSS_COMPILE)ld
     AS=$(CROSS_COMPILE)gcc
+    AR=$(CROSS_COMPILE)ar
     OBJCOPY?=$(CROSS_COMPILE)objcopy
     SIZE=$(CROSS_COMPILE)size
 
@@ -460,7 +461,7 @@ ifeq ($(ARCH),RENESAS_RX)
           ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o
 
     # RX TSIP uses pre-compiled .a library by default
-    ifeq ($(RX_TSIP_SRC),)
+    ifneq ($(RX_TSIP_SRC),1)
       ifeq ($(TARGET),rx65n)
         ifeq ($(BIG_ENDIAN),1)
           LIBS+=$(RX_DRIVER_PATH)/r_tsip_rx/lib/gcc/libr_tsip_rx65n_big.a
@@ -872,6 +873,7 @@ ifeq ($(TARGET),ti_hercules)
   CC=$(CROSS_COMPILE)armcl
   LD=$(CROSS_COMPILE)armcl
   AS=$(CROSS_COMPILE)armasm
+  AR=$(CROSS_COMPILE)armcl -ar
   OBJCOPY=$(CROSS_COMPILE)armobjcopy
   SIZE=$(CROSS_COMPILE)armsize
   OUTPUT_FLAG=--output_file
@@ -972,6 +974,7 @@ ifeq ($(USE_GCC),1)
   CC=$(CROSS_COMPILE)gcc
   LD=$(CROSS_COMPILE)gcc
   AS=$(CROSS_COMPILE)gcc
+  AR=$(CROSS_COMPILE)ar
   OBJCOPY?=$(CROSS_COMPILE)objcopy
   SIZE=$(CROSS_COMPILE)size
 endif
@@ -1155,11 +1158,18 @@ else
     UPDATE_OBJS:=src/update_flash_hwswap.o
   endif
 endif
-# Set default update object (if not library)
-ifneq ($(TARGET),library)
-ifeq ($(UPDATE_OBJS),)
-  UPDATE_OBJS:=./src/update_flash.o
+
+## For library target disable partitions
+ifeq ($(TARGET),library)
+  WOLFBOOT_NO_PARTITIONS=1
+  NO_LOADER=1
 endif
+
+## Set default update object
+ifneq ($(WOLFBOOT_NO_PARTITIONS),1)
+  ifeq ($(UPDATE_OBJS),)
+    UPDATE_OBJS:=./src/update_flash.o
+  endif
 endif
 
 ## wolfBoot origin

@@ -64,7 +64,7 @@ static inline int fp_truncate(FILE *f, size_t len)
     if (f == NULL)
         return -1;
     fd = _fileno(f);
-    return _chsize_s(fd, len);
+    return _chsize(fd, len);
 }
 #else
 #define HAVE_MMAP 1

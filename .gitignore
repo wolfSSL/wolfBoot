@@ -116,8 +116,9 @@ tools/tpm/pcr_extend
 tools/tpm/policy_create
 tools/tpm/policy_sign
 config/*.ld
+test-lib
 
-# Generated confiuguration file
+# Generated configuration file
 .config
 .vs
 *.filters
@@ -144,7 +145,7 @@ hal/x86_fsp_qemu_stage1.ld
 
 debug/lauterbach
 
-#cland cache
+#clangd cache
 .cache/*
 
 #gcov files

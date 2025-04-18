@@ -56,8 +56,8 @@ static enum wc_XmssRc xmss_write_key(const byte * priv, word32 privSz, void * co
     n_write = fwrite(priv, 1, privSz, file);
 
     if (n_write != privSz) {
-        fprintf(stderr, "error: wrote %zu, expected %d: %d\n", n_write, privSz,
-                ferror(file));
+        fprintf(stderr, "error: wrote %d, expected %d: %d\n",
+            (int)n_write, privSz, ferror(file));
         return WC_XMSS_RC_WRITE_FAIL;
     }
 
@@ -86,8 +86,8 @@ static enum wc_XmssRc xmss_write_key(const byte * priv, word32 privSz, void * co
     n_read = fread(buff, 1, n_write, file);
 
     if (n_read != n_write) {
-        fprintf(stderr, "error: read %zu, expected %zu: %d\n", n_read, n_write,
-                ferror(file));
+        fprintf(stderr, "error: read %d, expected %d: %d\n",
+            (int)n_read, (int)n_write, ferror(file));
         free(buff);
         return WC_XMSS_RC_WRITE_FAIL;
     }
@@ -132,8 +132,8 @@ static enum wc_XmssRc xmss_read_key(byte * priv, word32 privSz, void * context)
     n_read = fread(priv, 1, privSz, file);
 
     if (n_read != privSz) {
-        fprintf(stderr, "error: read %zu, expected %d: %d\n", n_read, privSz,
-                ferror(file));
+        fprintf(stderr, "error: read %d, expected %d: %d\n",
+            (int)n_read, privSz, ferror(file));
         return WC_XMSS_RC_READ_FAIL;
     }
 
