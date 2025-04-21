@@ -490,38 +490,13 @@ ifeq ($(ARCH),RENESAS_RX)
             $(RX_TSIP_SRC_PATH)/r_tsip_aes_rx.o \
             $(RX_TSIP_SRC_PATH)/r_tsip_hash_rx.o \
             $(RX_TSIP_SRC_PATH)/r_tsip_ecc_rx.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pfa.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pfb.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf1.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf5.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_pf6.o \
             $(RX_TSIP_SRC_PATH)/ip/s_flash.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p00.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p01.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p02.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p23.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p26.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p72.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_subprc01.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_subprc02.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function004.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function005.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function006.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function009.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function010.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function011.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function023.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function027.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function028.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function050.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function051.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function052.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function053.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function054.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function100.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function101.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function102.o \
-            $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function103.o
+            $(patsubst %.c,%.o,$(wildcard $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_p*.c)) \
+            $(patsubst %.c,%.o,$(wildcard $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_subprc*.c)) \
+            $(patsubst %.c,%.o,$(wildcard $(RX_TSIP_SRC_PATH)/ip/r_tsip_rx_function*.c))
+
+      # Ignore sign compare warnings in TSIP RX driver
+      CFLAGS+=-Wno-error=sign-compare
     endif
 
     OBJS+=$(RX_DRIVER_PATH)/r_bsp/mcu/all/r_bsp_cpu.o \
