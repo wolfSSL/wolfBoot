@@ -10,6 +10,40 @@ jobs:
   test-lib:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        math: [SPMATH=1, SPMATHALL=1, FASTMATH=1]
+        include:
+          - name: ED25519-SHA256
+            keygen: --ed25519
+            sign: --ed25519 --sha256
+            config: SIGN=ED25519 HASH=SHA256
+          - name: ECC256-SHA256
+            keygen: --ecc256
+            sign: --ecc256 --sha256
+            config: SIGN=ECC256 HASH=SHA256
+          - name: ECC384-SHA384
+            keygen: --ecc384
+            sign: --ecc384 --sha384
+            config: SIGN=ECC384 HASH=SHA384
+          - name: ECC521-SHA512
+            keygen: --ecc521
+            sign: --ecc521 --sha3
+            config: SIGN=ECC521 HASH=SHA3
+          - name: RSA2048-SHA256
+            keygen: --rsa2048
+            sign: --rsa2048 --sha256
+            config: SIGN=RSA2048 HASH=SHA256
+          - name: RSA3072-SHA384
+            keygen: --rsa3072
+            sign: --rsa3072 --sha384
+            config: SIGN=RSA3072 HASH=SHA384
+          - name: RSA4096-SHA512
+            keygen: --rsa4096
+            sign: --rsa4096 --sha3
+            config: SIGN=RSA4096 HASH=SHA3
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,10 +57,10 @@ jobs:
         run: |
           cp config/examples/library.config .config
           make keytools
-          ./tools/keytools/keygen --ed25519 -g wolfboot_signing_private_key.der
+          ./tools/keytools/keygen ${{ matrix.keygen }} -g wolfboot_signing_private_key.der
           echo "Test" > test.bin
-          ./tools/keytools/sign --ed25519 --sha256 test.bin wolfboot_signing_private_key.der 1
-          make test-lib
+          ./tools/keytools/sign ${{ matrix.sign }} test.bin wolfboot_signing_private_key.der 1
+          make test-lib ${{ matrix.math }} ${{ matrix.config }}
 
       - name: Run test-lib
         run: |
