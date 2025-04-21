@@ -43,7 +43,7 @@ jobs:
           - name: RSA4096-SHA512
             keygen: --rsa4096
             sign: --rsa4096 --sha3
-            config: SIGN=RSA4096 HASH=SHA3
+            config: SIGN=RSA4096 HASH=SHA3 WOLFBOOT_HUGE_STACK=1
 
     steps:
       - uses: actions/checkout@v4

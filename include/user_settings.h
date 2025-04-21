@@ -215,12 +215,14 @@ extern int tolower(int c);
 #   endif
 #   if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048)
 #       define FP_MAX_BITS (2048 * 2)
+#       define SP_INT_BITS 2048
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_NO_4096
 #       define WOLFSSL_SP_2048
 #   endif
 #   if defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072)
 #       define FP_MAX_BITS (3072 * 2)
+#       define SP_INT_BITS 3072
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_4096
 #       define WOLFSSL_SP_3072
@@ -228,6 +230,7 @@ extern int tolower(int c);
 
 #   if defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
 #       define FP_MAX_BITS (4096 * 2)
+#       define SP_INT_BITS 4096
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_4096
@@ -235,6 +238,7 @@ extern int tolower(int c);
 #   ifdef WOLFCRYPT_SECURE_MODE
 #       undef FP_MAX_BITS
 #       define FP_MAX_BITS (4096 * 2)
+#       define SP_INT_BITS 4096
 #       define WOLFSSL_SP_2048
 #       define WOLFSSL_SP_3072
 #       define WOLFSSL_SP_4096
