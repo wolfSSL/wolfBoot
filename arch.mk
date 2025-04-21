@@ -1095,10 +1095,12 @@ ifeq ($(TARGET),x86_64_efi)
   UPDATE_OBJS:=src/update_ram.o
 endif
 
-ifeq ($(TARGET),sim)
+ifeq ($(ARCH),sim)
   USE_GCC_HEADLESS=0
   LD = gcc
-  UPDATE_OBJS:=src/update_flash.o
+  ifneq ($(TARGET),library)
+    UPDATE_OBJS:=src/update_flash.o
+  endif
   LD_START_GROUP=
   LD_END_GROUP=
   BOOT_IMG=test-app/image.elf
