@@ -14,6 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         math: [SPMATH=1, SPMATHALL=1, FASTMATH=1]
+        smallstack: [WOLFBOOT_SMALL_STACK=0, WOLFBOOT_SMALL_STACK=1]
         include:
           - name: ED25519-SHA256
             keygen: --ed25519
@@ -60,7 +61,7 @@ jobs:
           ./tools/keytools/keygen ${{ matrix.keygen }} -g wolfboot_signing_private_key.der
           echo "Test" > test.bin
           ./tools/keytools/sign ${{ matrix.sign }} test.bin wolfboot_signing_private_key.der 1
-          make test-lib ${{ matrix.math }} ${{ matrix.config }}
+          make test-lib ${{ matrix.math }} ${{ matrix.config }} ${{ matrix.smallstack }}
 
       - name: Run test-lib
         run: |
