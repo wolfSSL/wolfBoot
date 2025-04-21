@@ -41,6 +41,11 @@
 #include "image.h"
 #include "printf.h"
 
+/* force off NO_FILESYSTEM coming from include/user_settings.h */
+#ifdef PRINTF_ENABLED
+    #undef NO_FILESYSTEM
+#endif
+
 /* HAL Stubs */
 void hal_init(void)
 {
@@ -152,8 +157,12 @@ int main(int argc, const char* argv[])
     gImage = (uintptr_t)test_img;
 #else
     if (argc > 1) {
-        size_t sz = 0;
+        size_t sz = 0, bread;
         FILE* img = fopen(argv[1], "rb");
+        if (img == NULL) {
+            wolfBoot_printf("failed to open %s!\n", argv[1]);
+            return -3;
+        }
         fseek(img, 0, SEEK_END);
         sz = ftell(img);
         fseek(img, 0, SEEK_SET);
@@ -164,7 +173,7 @@ int main(int argc, const char* argv[])
             ret = -1;
         }
 
-        size_t bread = fread((void*)gImage, 1, sz, img);
+        bread = fread((void*)gImage, 1, sz, img);
         if (bread != sz) {
             ret = -2;
             wolfBoot_printf("read %zu of %zu bytes from %s\n", bread, sz, argv[1]);
@@ -172,14 +181,16 @@ int main(int argc, const char* argv[])
         fclose(img);
     } else {
         wolfBoot_printf("usage: %s image_file.bin\n", argv[0]);
-        return 255;
+        ret = 255;
     }
 #endif
-
-    ret = wolfBoot_start();
+    if (ret == 0) {
+        ret = wolfBoot_start();
+    }
 
 #ifndef NO_FILESYSTEM
-    free((void*)gImage);
+    if ((void*)gImage != NULL)
+        free((void*)gImage);
 #endif
     return ret;
 }
