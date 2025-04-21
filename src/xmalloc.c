@@ -1,4 +1,3 @@
-
 /* xmalloc.c
  *
  * Fixed-pool implementation of malloc/free for wolfBoot
@@ -35,12 +34,11 @@
 #endif
 #include "target.h"
 
+#ifdef WOLFBOOT_SMALL_STACK
 
 #ifdef WOLFBOOT_DEBUG_MALLOC
 #include <stdio.h>
 #endif
-
-
 
 struct xmalloc_slot {
     uint8_t *addr;
@@ -322,8 +320,6 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
             #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (106 * 4 + 3))
             static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
         #endif
-
-
     #else
         #define MP_SCHEME "SP RSA4096"
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
@@ -346,7 +342,7 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
     #endif
         { NULL, 0, 0}
     };
-#else /* FAST MATH */
+#else /* Old tom's Fast math (tfm.c) */
     #define MP_SCHEME "TFM RSA"
     #define MP_INT_TYPE_SIZE (sizeof(mp_int))
     #define MP_MONT_REDUCE_BUF_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
@@ -409,6 +405,7 @@ void* XMALLOC(size_t n, void* heap, int type)
     static int detect_init = 0;
     if (detect_init++ == 0) {
         printf("MP_SCHEME %s\n", MP_SCHEME);
+        printf("MP_DIGIT %d\n", (int)MP_DIGIT_SIZE);
         dump_pool();
     }
     printf("MALLOC: Type %d, Size %zd", type, n);
@@ -450,3 +447,5 @@ void XFREE(void *ptr, void *heap, int type)
     (void)heap;
     (void)type;
 }
+
+#endif /* WOLFBOOT_SMALL_STACK */
