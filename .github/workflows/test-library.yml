@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         math: [SPMATH=1, SPMATHALL=1, FASTMATH=1]
-        smallstack: [WOLFBOOT_SMALL_STACK=0, WOLFBOOT_SMALL_STACK=1]
+        smallstack: [WOLFBOOT_SMALL_STACK=0 WOLFBOOT_HUGE_STACK=1, WOLFBOOT_SMALL_STACK=1]
         include:
           - name: ED25519-SHA256
             keygen: --ed25519
@@ -43,7 +43,7 @@ jobs:
           - name: RSA4096-SHA512
             keygen: --rsa4096
             sign: --rsa4096 --sha3
-            config: SIGN=RSA4096 HASH=SHA3 WOLFBOOT_HUGE_STACK=1
+            config: SIGN=RSA4096 HASH=SHA3
 
     steps:
       - uses: actions/checkout@v4
