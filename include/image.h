@@ -940,8 +940,9 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 #define UBOOT_IMG_HDR_SZ    64
 
 /* --- Flattened Device Tree Blob */
+#ifdef MMU
 #include "fdt.h"
-
+#endif
 
 #ifndef EXT_ENCRYPTED
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - \
