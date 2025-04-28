@@ -53,6 +53,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wolfssl/wolfHSM-examples
+          # Make sure to update this when the wolfHSM submodule is updated!
+          ref: wolfHSM-v1.1.0
           path: wolfHSM-examples
 
       - name: Build example POSIX TCP server
