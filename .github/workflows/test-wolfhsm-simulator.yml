@@ -54,7 +54,8 @@ jobs:
         with:
           repository: wolfssl/wolfHSM-examples
           # Make sure to update this when the wolfHSM submodule is updated!
-          ref: wolfHSM-v1.1.0
+          #ref: wolfHSM-v1.1.0
+          ref: 3e03bd4d4a8439ed4a8a9577823c89e4c37eb9be
           path: wolfHSM-examples
 
       - name: Build example POSIX TCP server
