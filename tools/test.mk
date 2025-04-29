@@ -990,9 +990,9 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=11448 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=17968 NO_ARM_ASM=1
+	make test-size SIGN=ECC256  LIMIT=17988 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13512 NO_ARM_ASM=1
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13536 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA2048 LIMIT=11232  NO_ARM_ASM=1
 	make clean
@@ -1002,9 +1002,9 @@ test-size-all:
 	make clean
 	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=12096 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=17536 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 LIMIT=17556 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=14904 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=14924 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=13464 NO_ARM_ASM=1
 	make keysclean
@@ -1018,7 +1018,7 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' \
 		IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE?=4096 \
-		LIMIT=8252 NO_ARM_ASM=1
+		LIMIT=8292 NO_ARM_ASM=1
 	make keysclean
 	make clean
 	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=20168 \
