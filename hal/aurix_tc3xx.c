@@ -364,52 +364,66 @@ void hal_init(void)
  */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
 {
-    /* base address of containing sector (TODO what if size spans sectors?)
-     */
-    const uint32_t           sectorAddress = GET_SECTOR_ADDR(address);
-    const IfxFlash_FlashType type          = getFlashTypeFromAddr(address);
-
-    /* Determine the range of pages affected */
-    const uint32_t startPage = GET_PAGE_ADDR(address);
-    const uint32_t endPage   = GET_PAGE_ADDR(address + size - 1);
-    uint32_t       page;
-
-    /* Flag to check if sector read-modify-write is necessary */
-    int needsSectorRmw;
+    const IfxFlash_FlashType type              = getFlashTypeFromAddr(address);
+    uint32_t                 currentAddress    = address;
+    int                      remainingSize     = size;
+    int                      bytesWrittenTotal = 0;
 
     LED_ON(LED_PROG);
 
-    /* Check if any page within the range is not erased */
-    needsSectorRmw = 0;
-    for (page = startPage; page <= endPage;
-         page += IFXFLASH_PFLASH_PAGE_LENGTH) {
-        if (!flashIsErased(page, IFXFLASH_PFLASH_PAGE_LENGTH, type)) {
-            needsSectorRmw = 1;
-            break;
+    /* Process the data sector by sector */
+    while (remainingSize > 0) {
+        uint32_t currentSectorAddress = GET_SECTOR_ADDR(currentAddress);
+        uint32_t offsetInSector       = currentAddress - currentSectorAddress;
+        uint32_t bytesInThisSector    = WOLFBOOT_SECTOR_SIZE - offsetInSector;
+
+        /* Adjust bytes to write if this would overflow the current sector */
+        if (bytesInThisSector > remainingSize) {
+            bytesInThisSector = remainingSize;
         }
-    }
 
-    /* If a page within the range is erased, we need to read-modify-write the
-     * whole sector */
-    if (needsSectorRmw) {
-        size_t offsetInSector;
+        /* Determine the range of pages affected in this sector */
+        const uint32_t startPage = GET_PAGE_ADDR(currentAddress);
+        const uint32_t endPage =
+            GET_PAGE_ADDR(currentAddress + bytesInThisSector - 1);
+        uint32_t page;
+        int      needsSectorRmw = 0;
 
-        /* Read entire sector into RAM */
-        cacheSector(sectorAddress, type);
+        /* Check if any page within the range is not erased */
+        for (page = startPage; page <= endPage;
+             page += IFXFLASH_PFLASH_PAGE_LENGTH) {
+            if (!flashIsErased(page, IFXFLASH_PFLASH_PAGE_LENGTH, type)) {
+                needsSectorRmw = 1;
+                break;
+            }
+        }
 
-        /* Erase the entire sector */
-        hal_flash_erase(sectorAddress, WOLFBOOT_SECTOR_SIZE);
+        /* If a page within the range is not erased, we need to
+         * read-modify-write the sector */
+        if (needsSectorRmw) {
+            /* Read entire sector into RAM */
+            cacheSector(currentSectorAddress, type);
 
-        /* Modify the relevant part of the RAM sector buffer */
-        offsetInSector = address - sectorAddress;
-        memcpy((uint8_t*)sectorBuffer + offsetInSector, data, size);
+            /* Erase the entire sector */
+            hal_flash_erase(currentSectorAddress, WOLFBOOT_SECTOR_SIZE);
 
-        /* Program the modified sector back into flash */
-        programCachedSector(sectorAddress, type);
-    }
-    else {
-        /* All affected pages are erased, program the data directly */
-        programBytesToErasedFlash(address, data, size, type);
+            /* Modify the relevant part of the RAM sector buffer */
+            memcpy((uint8_t*)sectorBuffer + offsetInSector,
+                   data + bytesWrittenTotal, bytesInThisSector);
+
+            /* Program the modified sector back into flash */
+            programCachedSector(currentSectorAddress, type);
+        }
+        else {
+            /* All affected pages are erased, program the data directly */
+            programBytesToErasedFlash(currentAddress, data + bytesWrittenTotal,
+                                      bytesInThisSector, type);
+        }
+
+        /* Update pointers and counters */
+        bytesWrittenTotal += bytesInThisSector;
+        currentAddress += bytesInThisSector;
+        remainingSize -= bytesInThisSector;
     }
 
     LED_OFF(LED_PROG);
