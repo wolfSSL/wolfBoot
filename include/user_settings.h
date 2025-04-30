@@ -144,6 +144,7 @@ extern int tolower(int c);
 #       define WOLFSSL_HAVE_SP_ECC
 #   endif
 
+#define WOLFSSL_PUBLIC_MP
 
     /* Curve */
 #   if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFCRYPT_SECURE_MODE) || \
