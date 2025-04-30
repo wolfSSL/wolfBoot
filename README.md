@@ -685,3 +685,35 @@ Use `make keysclean` to delete keys and regenerate.
     * wolfPKCS11 latest
     * wolfHSM latest
 
+### V 2.5.0 - (2025-05-05)
+  * New hardware targets
+    * RP2350 (Raspberry Pi Pico 2, ARM Cortex-M33 with TrustZone)
+    * NXP MCXA153
+    * NXP MCXW716
+    * STM32F1 series (STM32F103 “Blue Pill” board)
+  * Improvements to supported targets
+    * Xilinx UltraScale+ (ZynqMP)
+        * Added hardware-accelerated SHA3 hashing via the CSU engine
+        * Added support for enabling JTAG at runtime when `CSU_DEBUG` is set
+        * Introduced support for the device’s PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
+    * Renesas RX
+        * Added option for TSIP hardware crypto engine
+    * Infineon TriCore (AURIX TC3xx)
+        * Updated IDE project files for ARM Developer Studio 1.10.6, fixing build issues and ensuring support for latest toolchain
+        * Fix to support write operations spanning over multiple sectors
+  * New features and improvements
+    * Added support for non-contiguous elf sections, scattered elf firmware loading and verification.
+    * PQC: Simplified LMS/XMSS integration, deprecated support for third-party libraries
+    * Support to build wolfBoot as a static library (`libwolfboot.a`) for easier integration and testing of the bootloader logic in custom workflows
+    * Extended support for ARMORED glitch mitigations to the IAR toolchain
+    * CMake build refactoring, extended support to more targets
+    * Various documentation and configuration improvements
+  * Bug fixes
+    * Fix alignment enforcement on IAR compiler
+    * Fix build error on Windows in key generation tool (`_chsize_s` declaration issue in `sign.c`)
+  * Updated modules
+    * wolfSSL v5.8.0
+    * wolfTPM v3.9.0
+    * wolfPKCS11 latest
+    * wolfHSM latest
+
