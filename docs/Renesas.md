@@ -17,7 +17,7 @@ Platforms Supported:
 All of the Renesas examples support using e2Studio.
 The Renesas RX parts support using wolfBoot Makefile's with the rx-elf-gcc cross-compiler and example .config files.
 
-### Security Key Management Tool (SKMT) Key Wrapping
+## Security Key Management Tool (SKMT) Key Wrapping
 
 1) Setup a Renesas KeyWrap account and do the PGP key exchange.
 https://dlm.renesas.com/keywrap
@@ -34,7 +34,7 @@ Use GPG4Win and the Sign/Encrypt option. Sign with your own GPG key and encrypt 
 It will use the Hidden Root Key (HRK) that both Renesas and the RX TSIP have pre-provisioned from Renesas Factory.
 Result is `sample.key_enc.key`. Example: `00000001 6CCB9A1C 8AA58883 B1CB02DE 6C37DA60 54FB94E2 06EAE720 4D9CCF4C 6EEB288C`
 
-### RX TSIP
+## RX TSIP
 
 1) Build key tools for Renesas
 
@@ -164,7 +164,7 @@ Output image(s) successfully created.
 Download files to flash using Renesas flash programmer.
 
 
-#### RX TSIP Benchmarks
+### RX TSIP Benchmarks
 
 | Hardware | Clock  | Algorithm         | RX TSIP  | Debug    | Release (-Os) | Release (-O2) |
 | -------- | ------ | ----------------- | -------- | -------- | ------------- | ------------- |
@@ -172,3 +172,16 @@ Download files to flash using Renesas flash programmer.
 | RX72N    | 240MHz | ECDSA Verify P256 |  2.73 ms |  469 ms  |  135 ms       |  107 ms       |
 | RX65N    | 120MHz | ECDSA Verify P384 | 18.57 ms | 4213 ms  | 2179 ms       | 1831 ms       |
 | RX65N    | 120MHz | ECDSA Verify P256 |  2.95 ms | 1208 ms  |  602 ms       |  517 ms       |
+
+
+## RX Production Protection (recommendations)
+
+1) Lockdown external serial programmer `SPCC.SPE = 0`
+2) Flash Access Window Setting Register (FAW)
+  * BTFLG: Start-up Area Select FAW.BTFLG (1=FFFF E000h to FFFF FFFFh, 0=FFFF C000h to FFFF DFFFh)
+  * FSPR - FAW.FSPR Access Window Protection (0=protections enabled) Once changed to 0 cannot be reset.
+3) ROM Code Protection Register `ROMCODE.CODE[31:0]`
+  * 0000 0000h: ROM code protection enabled (ROM code protection 1)
+  * 0000 0001h: ROM code protection enabled (ROM code protection 2)
+  * Other than above: ROM code protection disabled
+4) Options Trusted Memory (TM) Enable `TMEF.TMEF[2:0] = b000` - prevents reading of blocks 8 and 9 (see 59.17 Trusted Memory) - Location for keys or code that should not be read

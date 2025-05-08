@@ -43,7 +43,7 @@ struct BLOCK_HDR_PACKED block_hdr {
 #define BLOCK_HDR_SIZE (sizeof (struct block_hdr))
 
 #if defined(EXT_ENCRYPTED) && defined(__WOLFBOOT)
-#include "encrypt.h"
+#include "image.h"
 #define ext_flash_check_write ext_flash_encrypt_write
 #define ext_flash_check_read ext_flash_decrypt_read
 #elif defined(__WOLFBOOT)
