@@ -37,6 +37,8 @@
 #define WOLFSSL_USER_MUTEX /* avoid wc_port.c wc_InitAndAllocMutex */
 #define WOLFCRYPT_ONLY
 #define SIZEOF_LONG_LONG 8
+#define HAVE_EMPTY_AGGREGATES 0
+#define HAVE_ANONYMOUS_INLINE_AGGREGATES 0
 
 /* Stdlib Types */
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
@@ -533,6 +535,7 @@ extern int tolower(int c);
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 #   define WOLF_CRYPTO_CB
+#   undef  HAVE_ANONYMOUS_INLINE_AGGREGATES
 #   define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
 #   define WOLFSSL_KEY_GEN
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
