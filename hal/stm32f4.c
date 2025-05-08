@@ -261,11 +261,11 @@ static void clock_pll_on(int powersave)
     APB1_CLOCK_ER |= PWR_APB1_CLOCK_ER_VAL;
 
     /* Select clock parameters (CPU Speed = 168MHz) */
-    cpu_freq = 168000000; (void)cpu_freq; /* not used */
-    pllm = 8;
-    plln = 336;
-    pllp = 2;
-    pllq = 7;
+    cpu_freq = CLOCK_SPEED; (void)cpu_freq; /* not used */
+    pllm = STM32_PLLM;
+    plln = STM32_PLLN;
+    pllp = STM32_PLLP;
+    pllq = STM32_PLLQ;
     pllr = 0; (void)pllr; /* not used */
     hpre = RCC_PRESCALER_DIV_NONE;
     ppre1 = RCC_PRESCALER_DIV_4;
