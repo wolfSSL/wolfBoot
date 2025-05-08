@@ -948,3 +948,31 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
 endif
+
+# Clock Speed (Hz)
+ifneq ($(CLOCK_SPEED),)
+	CFLAGS += -DCLOCK_SPEED=$(CLOCK_SPEED)
+endif
+
+# STM32F4 clock options
+ifneq ($(STM32_PLLM),)
+	CFLAGS += -DSTM32_PLLM=$(STM32_PLLM)
+endif
+ifneq ($(STM32_PLLN),)
+	CFLAGS += -DSTM32_PLLN=$(STM32_PLLN)
+endif
+ifneq ($(STM32_PLLP),)
+	CFLAGS += -DSTM32_PLLP=$(STM32_PLLP)
+endif
+ifneq ($(STM32_PLLQ),)
+	CFLAGS += -DSTM32_PLLQ=$(STM32_PLLQ)
+endif
+
+# STM32 UART options
+ifeq ($(USE_UART1),1)
+	CFLAGS += -DUSE_UART1=1
+endif
+
+ifeq ($(USE_UART3),1)
+	CFLAGS += -DUSE_UART3=1
+endif
