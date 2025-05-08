@@ -43,7 +43,7 @@
 #include "target.h"
 #include "printf.h"
 
-#ifdef WOLFBOOT_ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER
 #include "elf.h"
 #endif
 
@@ -355,7 +355,7 @@ void do_boot(const uint32_t *app_offset)
     main = (main_entry)((uint8_t*)pSymbolAddress + epc->entryoff);
     main(main_argc, main_argv, NULL, NULL);
 
-#elif defined (WOLFBOOT_ELF_SCATTERED)
+#elif defined (WOLFBOOT_ELF_FLASH_SCATTER)
     uint8_t *entry_point = (sim_ram_base + (unsigned long)app_offset);
     printf("entry point: %p\n", entry_point);
     printf("app offset: %p\n", app_offset);
@@ -365,7 +365,7 @@ void do_boot(const uint32_t *app_offset)
 
     /* TODO: call main ! */
     /* main(main_argc, main_argv); */
-    wolfBoot_printf("Simulator for ELF_SCATTERED image not implemented yet. Exiting...\n");
+    wolfBoot_printf("Simulator for ELF_FLASH_SCATTER image not implemented yet. Exiting...\n");
     exit(0);
 #else
     char *envp[1] = {NULL};

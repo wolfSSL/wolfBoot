@@ -477,6 +477,8 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/wolfBoot/include/wolfboot}&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.preprocessor.def.symbols.2021414389" name="Defined symbols (-D)" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="PRINTF_ENABLED"/>
+									<listOptionValue builtIn="false" value="DEBUG_UART"/>
 									<listOptionValue builtIn="false" value="__WOLFBOOT"/>
 									<listOptionValue builtIn="false" value="IFX_USE_SW_MANAGED_INT"/>
 									<listOptionValue builtIn="false" value="GNU"/>

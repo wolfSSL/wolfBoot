@@ -30,12 +30,17 @@ NVM_CONFIG="$WOLFBOOT_DIR/tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit"
 NVM_BIN="whNvmImage.bin"
 NVM_HEX="whNvmImage.hex"
 
+# Tool paths (relative to project root)
+SQUASHELF="$WOLFBOOT_DIR/tools/squashelf/squashelf"
+WHNVMTOOL="$WOLFBOOT_DIR/lib/wolfHSM/tools/whnvmtool/whnvmtool"
+
 # Default algorithm configuration
 DEFAULT_SIGN_ALGO="ecc256"
 DEFAULT_HASH_ALGO="sha256"
 
 # Default values
 HSM=""
+ELF=""
 OPERATIONS=()
 
 # Structure to hold command options
@@ -47,10 +52,12 @@ declare -A SIGN_OPTS=(
     [sign_algo]="$DEFAULT_SIGN_ALGO"
     [hash_algo]="$DEFAULT_HASH_ALGO"
     [build_type]="Release"
+    [file_ext]=".bin"
 )
 declare -A MACROS_OPTS=(
     [sign_algo]=""
     [hash_algo]=""
+    [use_elf_format]=""
 )
 CURRENT_OPTS=""
 
@@ -112,6 +119,12 @@ declare -A COMMON_OPTS=(
 # Add LCF_OPTS to command options structure
 declare -A LCF_OPTS=(
     [sign_algo]="$DEFAULT_SIGN_ALGO"
+    [use_elf_format]=""
+)
+
+# Add TARGET_OPTS to command options structure
+declare -A TARGET_OPTS=(
+    [use_elf_format]=""
 )
 
 # Helper function to display usage
@@ -120,6 +133,7 @@ usage() {
     echo ""
     echo "Global Options:"
     echo "  --hsm                   Use wolfHSM version"
+    echo "  --elf                   Use ELF format for firmware images (affects target, macros, lcf, and sign commands)"
     echo ""
     echo "Commands and their options:"
     echo "  keygen"
@@ -152,7 +166,7 @@ usage() {
     echo "  $0 sign --hash-algo sha256 --debug"
     echo "  $0 keygen --sign-algo ecc256 sign --hash-algo sha256"
     echo "  $0 --hsm keygen --sign-algo ecc256 --localkeys sign --debug"
-    echo "  $0 target"
+    echo "  $0 --elf target macros lcf sign"
     echo "  $0 clean"
     echo "  $0 macros"
     echo "  $0 nvm"
@@ -188,7 +202,17 @@ do_sign() {
     local sign_algo="${SIGN_OPTS[sign_algo]:-${KEYGEN_OPTS[sign_algo]}}"
     local pq_params="${COMMON_OPTS[sign_pq_params]}"
     local header_size
-    local bin_path="$base_path/$app_name/TriCore ${SIGN_OPTS[build_type]} (GCC)/$app_name.bin"
+    local bin_path="$base_path/$app_name/TriCore ${SIGN_OPTS[build_type]} (GCC)/$app_name${SIGN_OPTS[file_ext]}"
+
+    # If signing an elf file, first preprocess it with squashelf
+    if [[ "${SIGN_OPTS[file_ext]}" == ".elf" ]]; then
+        local temp_file="${bin_path}.squashed"
+        echo "Preprocessing ELF file with $SQUASHELF"
+        "$SQUASHELF" -v --nosht -r 0xA0300000-0xA0500000 "$bin_path" "$temp_file"
+        echo "Replacing original ELF with squashed version"
+        cp "$temp_file" "$bin_path"
+        rm "$temp_file"
+    fi
 
     # Get header size for current algorithm
     header_size=$(get_header_size "$sign_algo" "$pq_params")
@@ -209,10 +233,24 @@ do_gen_target() {
     local target_h_template="${TARGET_H}.in"
 
     local wolfboot_sector_size=0x4000
-    local wolfboot_partition_size=0x17E000
-    local wolfboot_partition_boot_address=0xA0300000
-    local wolfboot_partition_update_address=0xA047E000
-    local wolfboot_partition_swap_address=0xA05FC000
+
+    # Select partition values based on whether --elf option was specified
+    local wolfboot_partition_size
+    local wolfboot_partition_boot_address
+    local wolfboot_partition_update_address
+    local wolfboot_partition_swap_address
+
+    if [[ -n "${TARGET_OPTS[use_elf_format]}" ]]; then
+        wolfboot_partition_size=0xC0000
+        wolfboot_partition_boot_address=0xA047C000
+        wolfboot_partition_update_address=0xA053C000
+        wolfboot_partition_swap_address=0xA05FC000
+    else
+        wolfboot_partition_size=0x17C000
+        wolfboot_partition_boot_address=0xA0300000
+        wolfboot_partition_update_address=0xA047C000
+        wolfboot_partition_swap_address=0xA05FC000
+    fi
 
     local wolfboot_dts_boot_address=""
     local wolfboot_dts_update_address=""
@@ -237,7 +275,7 @@ do_gen_target() {
 do_clean() {
     echo "Cleaning generated files"
     local macros_out="$WOLFBOOT_DIR/IDE/AURIX/wolfBoot-tc3xx${HSM:+-wolfHSM}/wolfBoot_macros.txt"
-    
+
     rm -f "$PRVKEY_DER"
     rm -f "$PUBKEY_DER"
     rm -f "$TARGET_H"
@@ -265,6 +303,8 @@ do_gen_macros() {
     local image_signature_size=""
     local ml_dsa_image_signature_size=""
     local ml_dsa_level=""
+    local use_wolfboot_elf=""
+    local use_wolfboot_elf_flash_scattered=""
 
     # Map algorithms to their macro names
     local sign_macro="${SIGN_ALGO_MAP[${sign_algo,,}]:-}"
@@ -287,6 +327,12 @@ do_gen_macros() {
     # Set HSM pubkey ID if using HSM without local keys
     if [[ -n "$HSM" && -n "${KEYGEN_OPTS[nolocalkeys]}" ]]; then
         use_wolfhsm_pubkey_id="-DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID"
+    fi
+
+    # Set ELF format macros if --elf option was specified
+    if [[ -n "${MACROS_OPTS[use_elf_format]}" ]]; then
+        use_wolfboot_elf="-DWOLFBOOT_ELF"
+        use_wolfboot_elf_flash_scattered="-DWOLFBOOT_ELF_FLASH_SCATTER"
     fi
 
     # Quirk: set additional (redundant) macros for ML DSA based on pq_params
@@ -318,6 +364,8 @@ do_gen_macros() {
         -e "s/@ML_DSA_IMAGE_SIGNATURE_SIZE@/$ml_dsa_image_signature_size/g" \
         -e "s/@WOLFBOOT_HUGE_STACK@/$use_huge_stack/g" \
         -e "s/@WOLFBOOT_USE_WOLFHSM_PUBKEY_ID@/$use_wolfhsm_pubkey_id/g" \
+        -e "s/@WOLFBOOT_ELF@/$use_wolfboot_elf/g" \
+        -e "s/@WOLFBOOT_ELF_FLASH_SCATTER@/$use_wolfboot_elf_flash_scattered/g" \
         "$macros_in" > "$macros_out"
 
     # Remove empty lines from the output file, as they cause compiler errors
@@ -327,8 +375,8 @@ do_gen_macros() {
 # Function to generate a wolfHSM NVM image
 do_gen_nvm() {
     echo "Generating HSM NVM image"
-    echo "Running: whnvmtool --image=$NVM_BIN --size=0x10000 --invert-erased-byte $NVM_CONFIG"
-    whnvmtool --image="$NVM_BIN" --size=0x10000 --invert-erased-byte "$NVM_CONFIG"
+    echo "Running: $WHNVMTOOL --image=$NVM_BIN --size=0x10000 --invert-erased-byte $NVM_CONFIG"
+    "$WHNVMTOOL" --image="$NVM_BIN" --size=0x10000 --invert-erased-byte "$NVM_CONFIG"
 
     echo "Converting to Intel HEX format"
     echo "Running: objcopy -I binary -O ihex --change-address 0xAFC00000 $NVM_BIN $NVM_HEX"
@@ -345,7 +393,16 @@ do_gen_lcf() {
     # Determine target directory based on HSM flag
     local base_dir="$WOLFBOOT_DIR/IDE/AURIX"
     local app_dir="test-app${HSM:+-wolfHSM}"
-    local lcf_template="$base_dir/$app_dir/Lcf_Gnuc_Tricore_Tc.lsl.in"
+
+    # Select template file based on whether --elf option was specified
+    local template_name
+    if [[ -n "${LCF_OPTS[use_elf_format]}" ]]; then
+        template_name="Lcf_Gnuc_Tricore_elf.lsl.in"
+    else
+        template_name="Lcf_Gnuc_Tricore_Tc.lsl.in"
+    fi
+
+    local lcf_template="$base_dir/$app_dir/$template_name"
     local lcf_output="$base_dir/$app_dir/Lcf_Gnuc_Tricore_Tc.lsl"
 
     header_size=$(get_header_size "$sign_algo" "$pq_params")
@@ -361,6 +418,15 @@ while [[ $# -gt 0 ]]; do
         --hsm)
             HSM="1"
             KEYGEN_OPTS[nolocalkeys]="1"
+            shift
+            ;;
+        --elf)
+            ELF="1"
+            # Set ELF mode for relevant command options
+            SIGN_OPTS[file_ext]=".elf"
+            LCF_OPTS[use_elf_format]="1"
+            TARGET_OPTS[use_elf_format]="1"
+            MACROS_OPTS[use_elf_format]="1"
             shift
             ;;
         keygen|sign|target|clean|macros|nvm|lcf)
@@ -391,7 +457,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         target)
             OPERATIONS+=("target")
-            CURRENT_OPTS=""
+            CURRENT_OPTS="TARGET_OPTS"
             shift
             ;;
         clean)

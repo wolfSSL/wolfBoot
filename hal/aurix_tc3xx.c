@@ -33,6 +33,11 @@
 #include "IfxPort.h"       /* for IfxPort_*  */
 #include "IfxScuRcu.h"     /* for IfxScuRcu_performReset */
 #include "Ifx_Ssw_Infra.h" /* for Ifx_Ssw_jumpToFunction */
+#if defined(DEBUG_UART)
+#include "IfxAsclin_Asc.h"
+#include "Cpu/Irq/IfxCpu_Irq.h"
+#include "IfxCpu.h"
+#endif /* DEBUG_UART */
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 /* wolfHSM headers */
@@ -80,6 +85,15 @@ static uint32_t sectorBuffer[WOLFBOOT_SECTOR_SIZE / sizeof(uint32_t)];
 #define LED_ON(led)
 #define LED_OFF(led)
 #endif /* WOLFBOOT_AURIX_GPIO_TIMING */
+
+#if defined(DEBUG_UART)
+#define UART_PIN_RX IfxAsclin0_RXA_P14_1_IN /* RX pin of the board */
+#define UART_PIN_TX IfxAsclin0_TX_P14_0_OUT /* TX pin of the board */
+#define UART_BAUDRATE 115200
+static Ifx_ASCLIN* g_asclinRegs = &MODULE_ASCLIN0;
+static int         uartInit(void);
+static int         uartTx(const uint8_t c);
+#endif /* DEBUG_UART */
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 int hal_hsm_init_connect(void);
@@ -353,6 +367,10 @@ void hal_init(void)
     LED_OFF(LED_PROG);
     LED_OFF(LED_ERASE);
     LED_OFF(LED_READ);
+
+#if defined(DEBUG_UART)
+    uartInit();
+#endif
 }
 
 /*
@@ -441,25 +459,91 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     LED_ON(LED_ERASE);
 
-    const uint32_t sectorAddr = GET_SECTOR_ADDR(address);
-    const size_t   numSectors =
-        (len == 0) ? 0 : ((len - 1) / WOLFBOOT_SECTOR_SIZE) + 1;
-    const IfxFlash_FlashType type = getFlashTypeFromAddr(address);
+    /* Handle zero length case */
+    if (len <= 0) {
+        LED_OFF(LED_ERASE);
+        return 0;
+    }
 
-    /* Disable ENDINIT protection */
-    const uint16 endInitSafetyPassword =
+    const uint32_t           startSectorAddr = GET_SECTOR_ADDR(address);
+    const uint32_t           endAddress      = address + len - 1;
+    const uint32_t           endSectorAddr   = GET_SECTOR_ADDR(endAddress);
+    const IfxFlash_FlashType type            = getFlashTypeFromAddr(address);
+    const uint16             endInitSafetyPassword =
         IfxScuWdt_getSafetyWatchdogPasswordInline();
-    IfxScuWdt_clearSafetyEndinitInline(endInitSafetyPassword);
+    uint32_t currentSectorAddr;
 
-    IfxFlash_eraseMultipleSectors(sectorAddr, numSectors);
+    /* If address and len are both sector-aligned, perform simple bulk erase */
+    if ((address == startSectorAddr) &&
+        (endAddress == endSectorAddr + WOLFBOOT_SECTOR_SIZE - 1)) {
+        const size_t numSectors =
+            (endSectorAddr - startSectorAddr) / WOLFBOOT_SECTOR_SIZE + 1;
 
-    /* Reenable ENDINIT protection */
-    IfxScuWdt_setSafetyEndinitInline(endInitSafetyPassword);
+        /* Disable ENDINIT protection */
+        IfxScuWdt_clearSafetyEndinitInline(endInitSafetyPassword);
 
-    IfxFlash_waitUnbusy(FLASH_MODULE, type);
+        IfxFlash_eraseMultipleSectors(startSectorAddr, numSectors);
+
+        /* Reenable ENDINIT protection */
+        IfxScuWdt_setSafetyEndinitInline(endInitSafetyPassword);
+
+        IfxFlash_waitUnbusy(FLASH_MODULE, type);
+    }
+    /* For non-sector aligned erases, handle each sector carefully */
+    else {
+        /* Process each affected sector */
+        for (currentSectorAddr = startSectorAddr;
+             currentSectorAddr <= endSectorAddr;
+             currentSectorAddr += WOLFBOOT_SECTOR_SIZE) {
+
+            /* Check if this is a partial sector erase */
+            const int isFirstSector = (currentSectorAddr == startSectorAddr);
+            const int isLastSector  = (currentSectorAddr == endSectorAddr);
+            const int isPartialStart =
+                isFirstSector && (address > startSectorAddr);
+            const int isPartialEnd =
+                isLastSector &&
+                (endAddress < (endSectorAddr + WOLFBOOT_SECTOR_SIZE - 1));
+
+            /* For partial sectors, need to read-modify-write */
+            if (isPartialStart || isPartialEnd) {
+                /* Read the sector into the sector buffer */
+                cacheSector(currentSectorAddr, type);
+
+                /* Calculate which bytes within the sector to erase */
+                uint32_t eraseStartOffset =
+                    isPartialStart ? (address - currentSectorAddr) : 0;
+
+                uint32_t eraseEndOffset = isPartialEnd
+                                              ? (endAddress - currentSectorAddr)
+                                              : (WOLFBOOT_SECTOR_SIZE - 1);
+
+                uint32_t eraseLen = eraseEndOffset - eraseStartOffset + 1;
+
+                /* Fill the section to be erased with the erased byte value */
+                memset((uint8_t*)sectorBuffer + eraseStartOffset,
+                       FLASH_BYTE_ERASED, eraseLen);
+
+                /* Erase the sector */
+                IfxScuWdt_clearSafetyEndinitInline(endInitSafetyPassword);
+                IfxFlash_eraseSector(currentSectorAddr);
+                IfxScuWdt_setSafetyEndinitInline(endInitSafetyPassword);
+                IfxFlash_waitUnbusy(FLASH_MODULE, type);
+
+                /* Program the modified buffer back */
+                programCachedSector(currentSectorAddr, type);
+            }
+            /* For full sector erase, just erase directly */
+            else {
+                IfxScuWdt_clearSafetyEndinitInline(endInitSafetyPassword);
+                IfxFlash_eraseSector(currentSectorAddr);
+                IfxScuWdt_setSafetyEndinitInline(endInitSafetyPassword);
+                IfxFlash_waitUnbusy(FLASH_MODULE, type);
+            }
+        }
+    }
 
     LED_OFF(LED_ERASE);
-
     return 0;
 }
 
@@ -681,3 +765,118 @@ int hal_hsm_disconnect(void)
 
 
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+
+#if defined(DEBUG_UART)
+
+static int uartInit(void)
+{
+    /* Define local pin structures for init function */
+    IfxAsclin_Rx_In  uartRxPin = UART_PIN_RX;
+    IfxAsclin_Tx_Out uartTxPin = UART_PIN_TX;
+
+    IfxAsclin_enableModule(g_asclinRegs);
+    IfxAsclin_setClockSource(g_asclinRegs, IfxAsclin_ClockSource_noClock);
+
+    IfxAsclin_initRxPin(&uartRxPin, IfxPort_InputMode_pullUp,
+                        IfxPort_PadDriver_cmosAutomotiveSpeed1);
+    IfxAsclin_initTxPin(&uartTxPin, IfxPort_OutputMode_pushPull,
+                        IfxPort_PadDriver_cmosAutomotiveSpeed1);
+    IfxAsclin_setFrameMode(g_asclinRegs, IfxAsclin_FrameMode_initialise);
+
+    /* Configure baudrate - must temporarily enable clocks */
+    IfxAsclin_setClockSource(g_asclinRegs, IfxAsclin_ClockSource_ascFastClock);
+    IfxAsclin_setPrescaler(g_asclinRegs, 1);
+    if (IfxAsclin_setBitTiming(
+            g_asclinRegs, (float32)UART_BAUDRATE,
+            IfxAsclin_OversamplingFactor_16,
+            IfxAsclin_SamplePointPosition_9,           /* Sample point 9 */
+            IfxAsclin_SamplesPerBit_three) == FALSE) { /* Three samples */
+        IfxAsclin_disableModule(g_asclinRegs);
+        return -1;
+    }
+    IfxAsclin_setClockSource(g_asclinRegs, IfxAsclin_ClockSource_noClock);
+
+    IfxAsclin_setDataLength(g_asclinRegs, IfxAsclin_DataLength_8);
+    IfxAsclin_enableParity(g_asclinRegs, FALSE);
+    IfxAsclin_setStopBit(g_asclinRegs, IfxAsclin_StopBit_1);
+    IfxAsclin_setIdleDelay(g_asclinRegs, IfxAsclin_IdleDelay_0);
+
+    IfxAsclin_enableLoopBackMode(g_asclinRegs, FALSE);
+    IfxAsclin_setShiftDirection(g_asclinRegs,
+                                IfxAsclin_ShiftDirection_lsbFirst);
+
+    IfxAsclin_setRxFifoOutletWidth(g_asclinRegs, IfxAsclin_RxFifoOutletWidth_1);
+    IfxAsclin_setRxFifoInterruptLevel(g_asclinRegs,
+                                      IfxAsclin_RxFifoInterruptLevel_1);
+    IfxAsclin_setRxFifoInterruptMode(g_asclinRegs,
+                                     IfxAsclin_FifoInterruptMode_combined);
+    IfxAsclin_setTxFifoInletWidth(g_asclinRegs, IfxAsclin_TxFifoInletWidth_1);
+    IfxAsclin_setTxFifoInterruptLevel(g_asclinRegs,
+                                      IfxAsclin_TxFifoInterruptLevel_15);
+    IfxAsclin_setTxFifoInterruptMode(g_asclinRegs,
+                                     IfxAsclin_FifoInterruptMode_combined);
+
+    IfxAsclin_setFrameMode(g_asclinRegs, IfxAsclin_FrameMode_asc);
+
+    IfxAsclin_setClockSource(g_asclinRegs, IfxAsclin_ClockSource_ascFastClock);
+
+    IfxAsclin_disableAllFlags(g_asclinRegs);
+    IfxAsclin_clearAllFlags(g_asclinRegs);
+
+    IfxAsclin_enableRxFifoInlet(g_asclinRegs, TRUE);
+    IfxAsclin_enableTxFifoOutlet(g_asclinRegs, TRUE);
+
+    IfxAsclin_flushRxFifo(g_asclinRegs);
+    IfxAsclin_flushTxFifo(g_asclinRegs);
+
+    return 0; /* Success */
+}
+
+static int uartTx(const uint8_t c)
+{
+    /* Write the data value to the ASCLIN peripheral's transmit FIFO. */
+    /* Note: IfxAsclin_write8 takes a pointer */
+    uint8 data_to_send = c;
+    IfxAsclin_write8(g_asclinRegs, &data_to_send, 1);
+
+    /* Wait (poll) for the transmit FIFO to be empty */
+    /* TODO: Consider adding a timeout mechanism here if necessary */
+    while (IfxAsclin_getTxFifoFillLevel(g_asclinRegs) != 0) {
+        /* Busy wait */
+    }
+
+    return 0; /* Success */
+}
+
+void uart_write(const char* buf, unsigned int sz)
+{
+    static char       rambuf[512];
+    const static char lf = '\r';
+    unsigned int      i;
+
+    if (sz > sizeof(rambuf)) {
+        sz = sizeof(rambuf);
+    }
+    memcpy(rambuf, buf, sz);
+    buf = rambuf;
+
+    for (i = 0; i < sz; i++) {
+        /* If newline character is detected, send carriage return first */
+        if (buf[i] == '\n') {
+            /* Send carriage return before newline */
+            if (uartTx(lf) != 0) {
+                /* Handle error if needed */
+                break;
+            }
+        }
+
+        /* Call uart_tx for each byte, which now polls until TX FIFO is empty */
+        if (uartTx((uint8_t)buf[i]) != 0) {
+            /* Handle error if needed */
+            break;
+        }
+    }
+    /* No final wait needed here, as uart_tx waits after each byte */
+}
+
+#endif /* DEBUG_UART */

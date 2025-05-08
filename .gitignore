@@ -118,7 +118,13 @@ tools/tpm/policy_sign
 config/*.ld
 test-lib
 
-# Generated configuration file
+# Elf preprocessing tools
+tools/squashelf/**
+!tools/squashelf/squashelf.c
+!tools/squashelf/Makefile
+!tools/squashelf/README.md
+
+# Generated configuration files
 .config
 .vs
 *.filters
@@ -247,3 +253,4 @@ lib/r_tsip_rx
 
 Debug/
 Release/
+language.settings.xml

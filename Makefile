@@ -243,6 +243,12 @@ keytools:
 	@echo "Building key tools"
 	@$(MAKE) -C tools/keytools -j
 
+squashelf:
+	@echo "Building squashelf tool"
+	@$(MAKE) -C tools/squashelf -j
+
+squashelf_check: squashelf
+
 tpmtools: include/target.h keys
 	@echo "Building TPM tools"
 	@$(MAKE) -C tools/tpm -s clean
@@ -266,6 +272,10 @@ test-app/image_v1_signed.bin: $(BOOT_IMG)
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
 	$(Q)$(SIZE) test-app/image.elf
+
+ifeq ($(ELF_FLASH_SCATTER),1)
+test-app/image.elf: squashelf
+endif
 
 assemble_internal_flash.dd: FORCE
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
@@ -376,6 +386,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
 	$(Q)$(MAKE) -C tools/unit-tests -s clean
 	$(Q)$(MAKE) -C tools/keytools/otp -s clean
+	$(Q)$(MAKE) -C tools/squashelf -s clean
 
 keysclean: clean
 	$(Q)rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
@@ -467,4 +478,4 @@ pico-sdk-info: FORCE
 
 FORCE:
 
-.PHONY: FORCE clean keytool_check
+.PHONY: FORCE clean keytool_check squashelf_check

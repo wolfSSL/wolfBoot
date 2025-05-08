@@ -123,18 +123,11 @@ MEMORY
     /* wolfBoot program code - all of this project's executable code goes here */
     pfls0_nc (rx!p): org      = 0xA00A8000, len = 0x23000  /* 140K total (incl 32K for startup) */
 
-    /* reserved for wolfBoot BOOT partition */
-    pfls1_boot (rwx!p):    org = 0x80300000, len = 0x17E000   /* ~1.5MiB */
-    pfls1_boot_nc (rwx!p): org = 0xA0300000, len = 0x17E000   /* ~1.5MiB */
+    /* reserved for BOOT, UPDATE, and SWAP partitions */
+    pfls1(rwx!p):    org = 0x80300000, len = 0x300000 /* 3MiB */
+    pfls1_nc(rwx!p): org = 0xA0300000, len = 0x300000 /* 3MiB */
 
-    /* reserved for wolfBoot UPDATE partition */
-    pfls1_update (rwx!p):    org = 0x8047E000, len = 0x17E000  /* ~1.5MiB */
-    pfls1_update_nc (rwx!p): org = 0xA047E000, len = 0x17E000  /* ~1.5MiB */
-
-    /* SWAP sector for wolfBoot image update */
-    pfls1_swap (rwx!p): org = 0x805FC000, len = 16K /* last sector of PFLASH1 */
-
-    dfls0 (rx!p): org = 0xaf000000, len = 256K
+    fls0 (rx!p): org = 0xaf000000, len = 256K
 
     ucb (rx!p): org = 0xaf400000, len = 24K
 

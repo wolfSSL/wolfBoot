@@ -12,8 +12,8 @@ DO  ~~/demo/tricore/flash/tc37x.cmm PREPAREONLY
 flash.erase all
 
 flash.reprogram all /erase
-data.load.binary "&testApp" 0xA0300000
-data.load.binary "&updateApp" 0xA047C000
+data.load.binary "&testApp" 0xA047C000
+data.load.binary "&updateApp" 0xA053C000
 data.load.elf "&wolfBoot"
 flash.reprogram off
 

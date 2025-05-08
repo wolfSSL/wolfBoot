@@ -440,6 +440,9 @@
 									<listOptionValue builtIn="false" value="PART_SWAP_EXT"/>
 								</option>
 								<option id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other.739113076" name="Other flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.misc.other" useByScannerDiscovery="false" value="-c -fmessage-length=0 -mtc162" valueType="string"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.include.files.884786319" name="Include files (-include)" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.option.include.files" useByScannerDiscovery="false" valueType="includeFiles">
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/wolfBoot-tc3xx/wolfBoot/include/image.h}&quot;"/>
+								</option>
 								<inputType id="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType.1480422611" superClass="com.infineon.aurix.buildsystem.managed.tool.c.compiler.inputType"/>
 							</tool>
 							<tool id="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler.366043271" name="AURIX G++ Compiler" superClass="com.infineon.aurix.buildsystem.managed.tool.cpp.compiler">
@@ -453,6 +456,9 @@
 								<option id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags.708051953" name="Linker flags" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.ldflags" useByScannerDiscovery="false" value="-mtc162 -Wl,--gc-sections -Wl,-Map,output.map" valueType="string"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.infineon.aurix.buildsystem.managed.tool.c.link.option.userobjs.1601921229" name="Other objects" superClass="com.infineon.aurix.buildsystem.managed.tool.c.link.option.userobjs" useByScannerDiscovery="false" valueType="userObjs">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/wolfBoot-tc3xx/TriCore Debug (GCC)/wolfBoot/hal/aurix_tc3xx.o}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/wolfBoot-tc3xx/TriCore Debug (GCC)/Libraries/iLLD/TC37A/Tricore/Asclin/Std/IfxAsclin.o}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/wolfBoot-tc3xx/TriCore Debug (GCC)/Libraries/iLLD/TC37A/Tricore/Asclin/Asc/IfxAsclin_Asc.o}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/wolfBoot-tc3xx/TriCore Debug (GCC)/wolfBoot/src/string.o}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/wolfBoot-tc3xx/TriCore Debug (GCC)/wolfBoot/src/libwolfboot.o}&quot;"/>
 								</option>
 								<inputType id="com.infineon.aurix.buildsystem.managed.c.linker.inputType.1147881076" superClass="com.infineon.aurix.buildsystem.managed.c.linker.inputType"/>
@@ -469,6 +475,7 @@
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+			<storageModule moduleId="com.infineon.aurix.buildsystem.build.autodiscovery.settings"/>
 		</cconfiguration>
 		<cconfiguration id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.release.856945873">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="com.infineon.aurix.buildsystem.managed.external.gcc.builtin.configuration.release.856945873" moduleId="org.eclipse.cdt.core.settings" name="TriCore Release (GCC)">

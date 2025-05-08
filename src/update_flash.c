@@ -38,11 +38,6 @@
 int WP11_Library_Init(void);
 #endif
 
-/* Support for ELF scatter/gather format */
-#ifdef WOLFBOOT_ELF_SCATTERED
-#include "elf.h"
-#endif
-
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -223,12 +218,16 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
  *
  * This function handles the final phase of the three-way swap update process.
  * It ensures that the update is atomic and power-fail safe by:
- * 1. Saving the last sector of the boot partition to the swap area
+ * 1. Saving the sector at tmpBootPos (staging sector) to the swap area
  * 2. Setting a magic trailer value to mark the swap as in progress
- * 3. Erasing the last sector(s) of the boot partition
- * 4. Restoring the saved sector from swap back to boot
+ * 3. Erasing the last sector(s) of the boot partition (where partition state is stored)
+ * 4. Restoring the saved staging sector from swap back to boot
  * 5. Setting the boot partition state to TESTING
  * 6. Erasing the last sector(s) of the update partition
+ *
+ * The staging sector (tmpBootPos) is positioned right before the final sectors
+ * that will be erased. This sector is preserved and used to store a magic trailer
+ * that indicates a swap operation is in progress.
  *
  * The function can be called in two modes:
  * - Normal mode (resume=0): Initiates the swap and erase process
@@ -250,6 +249,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
 #endif
     );
     int swapDone = 0;
+    /* Calculate position of staging sector - just before the final sectors
+     * that store partition state */
     uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
         WOLFBOOT_SECTOR_SIZE;
     uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
@@ -260,7 +261,8 @@ static int wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(swap, PART_SWAP);
     wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
-    /* read trailer */
+    /* Read the trailer from the staging sector to check if we're resuming an
+     * interrupted operation */
 #if defined(EXT_FLASH) && PARTN_IS_EXT(PART_BOOT)
     ext_flash_read((uintptr_t)(boot->hdr + tmpBootPos), (void*)tmpBuffer,
         sizeof(tmpBuffer));
@@ -268,12 +270,13 @@ static int wolfBoot_swap_and_final_erase(int resume)
     memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
 #endif
 
-    /* check for trailing magic (BOOT) */
+    /* Check if the magic trailer exists - indicates an interrupted swap
+     * operation */
     /* final swap and erase flag is WOLFBOOT_MAGIC_TRAIL */
     if (tmpBuffer[TRAILER_OFFSET_WORDS] == WOLFBOOT_MAGIC_TRAIL) {
         swapDone = 1;
     }
-    /* if resuming, quit if swap isn't done */
+    /* If we're in resume mode but no swap was in progress, return */
     if ((resume == 1) && (swapDone == 0) &&
         (updateState != IMG_STATE_FINAL_FLAGS)
     ) {
@@ -285,35 +288,38 @@ static int wolfBoot_swap_and_final_erase(int resume)
     ext_flash_unlock();
 #endif
 
+    /* If update state isn't set to FINAL_FLAGS, this is the first run of the function */
     /* IMG_STATE_FINAL_FLAGS allows re-entry without blowing away swap */
     if (updateState != IMG_STATE_FINAL_FLAGS) {
-        /* store the sector at tmpBootPos into swap */
+        /* First, backup the staging sector (sector at tmpBootPos) into swap partition */
+        /* This sector will be modified with the magic trailer, so we need to preserve it */
         wolfBoot_copy_sector(boot, swap, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
-        /* set FINAL_SWAP for re-entry */
+        /* Mark update as being in final swap phase to allow resumption if power fails */
         wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
     }
 #ifdef EXT_ENCRYPTED
     if (swapDone == 0) {
-        /* get encryption key and iv if encryption is enabled */
+        /* For encrypted images: Get the encryption key and IV */
         wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
             (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
-        /* write TRAIL, encryption key and iv if enabled to tmpBootPos*/
+        /* Set the magic trailer in the buffer and write it to the staging sector */
         tmpBuffer[TRAILER_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
 
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
 #endif
-    /* erase the last boot sector(s) */
+    /* Erase the last sector(s) of boot partition (where partition state is stored) */
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
-    /* set the encryption key */
+
 #ifdef EXT_ENCRYPTED
+    /* Initialize encryption with the saved key */
     wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
             (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
     /* wolfBoot_set_encrypt_key calls hal_flash_unlock, need to unlock again */
     hal_flash_unlock();
 #endif
-    /* write the original contents of tmpBootPos back */
+    /* Restore the original contents of the staging sector (with the magic trailer if encrypted) */
     if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
         wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
     }
@@ -321,10 +327,11 @@ static int wolfBoot_swap_and_final_erase(int resume)
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
     }
 
-    /* mark boot as TESTING */
+    /* Mark boot partition as TESTING - this tells bootloader to fallback if update fails */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
-    /* erase the last sector(s) of update. This resets the update partition state
-     * to IMG_STATE_NEW */
+
+    /* Erase the last sector(s) of update partition */
+    /* This resets the update partition state to IMG_STATE_NEW */
     wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
 
 #ifdef EXT_FLASH
@@ -815,31 +822,35 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_swap_and_final_erase(0);
 
 #else /* DISABLE_BACKUP */
-#ifdef WOLFBOOT_ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER
     unsigned long entry;
-    void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    void*         base = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     wolfBoot_printf("ELF Scattered image digest check\n");
-    if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
-        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
-        elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
-        if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
-            wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
+    if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
+        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring "
+                        "scattered image...\n");
+        wolfBoot_load_flash_image_elf(PART_BOOT, &entry, PART_IS_EXT(boot));
+        if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
+            wolfBoot_printf(
+                "Fatal: Could not verify digest after scattering. Panic().\n");
             wolfBoot_panic();
         }
     }
-    wolfBoot_printf("Scattered image correctly verified. Setting entry point to %lx\n", entry);
-    boot.fw_base = (void *)entry;
+    wolfBoot_printf(
+        "Scattered image correctly verified. Setting entry point to %lx\n",
+        entry);
+    boot.fw_base = (void*)entry;
 #endif
     /* Direct Swap without power fail safety */
 
     hal_flash_unlock();
-    #ifdef EXT_FLASH
+#ifdef EXT_FLASH
     ext_flash_unlock();
-    #endif
+#endif
 
-    #ifdef EXT_ENCRYPTED
+#ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
-    #endif
+#endif
 
     /* Directly copy the content of the UPDATE partition into the BOOT
      * partition. */
@@ -1079,20 +1090,28 @@ void RAMFUNCTION wolfBoot_start(void)
     }
     PART_SANITY_CHECK(&boot);
 
-#ifdef WOLFBOOT_ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER
     unsigned long entry;
-    void *base = (void *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     wolfBoot_printf("ELF Scattered image digest check\n");
-    if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
-        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring scattered image...\n");
-        elf_store_image_scattered(base, &entry, PART_IS_EXT(boot));
-        if (elf_check_image_scattered(PART_BOOT, &entry) < 0) {
-            wolfBoot_printf("Fatal: Could not verify digest after scattering. Panic().\n");
+    if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
+        wolfBoot_printf("ELF Scattered image digest check: failed. Restoring "
+                        "scattered image...\n");
+        if (wolfBoot_load_flash_image_elf(PART_BOOT, &entry,
+                                          PART_IS_EXT(&boot)) < 0) {
+            wolfBoot_printf(
+                "ELF: [BOOT] ERROR: could not store scattered image\n");
+            wolfBoot_panic();
+        }
+        if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
+            wolfBoot_printf(
+                "Fatal: Could not verify digest after scattering. Panic().\n");
             wolfBoot_panic();
         }
     }
-    wolfBoot_printf("Scattered image correctly verified. Setting entry point to %lx\n", entry);
-    boot.fw_base = (void *)entry;
+    wolfBoot_printf(
+        "Scattered image correctly verified. Setting entry point to %lx\n",
+        entry);
+    boot.fw_base = (void*)entry;
 #endif
 
 
