@@ -81,8 +81,8 @@
 #define UART2_RX_PIN 2
 #define UART2_TX_PIN 3
 
-#ifndef CPU_FREQ
-#define CPU_FREQ (24000000)
+#ifndef CLOCK_SPEED
+#define CLOCK_SPEED (24000000)
 #endif
 
 static void uart2_pins_setup(void)
@@ -117,7 +117,7 @@ int uart_setup(uint32_t bitrate)
     UART2_CR1 &= (~UART_CR1_OVER8);
 
     /* Configure clock */
-    UART2_BRR |= (uint16_t)(CPU_FREQ / bitrate);
+    UART2_BRR |= (uint16_t)(CLOCK_SPEED / bitrate);
 
     /* Configure data bits to 8 */
     UART2_CR1 &= ~UART_CR1_SYMBOL_LEN;
