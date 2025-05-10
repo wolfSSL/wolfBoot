@@ -203,7 +203,7 @@ static int check_scatter_format(const unsigned char* ehdr, int is_elf32)
 
 /* Returns the combined size of the elf header and program header table. This
  * assumes the program header table immediately follows the elf header. */
-int elf_hdr_pht_combined_size(const unsigned char* ehdr)
+int64_t elf_hdr_pht_combined_size(const unsigned char* ehdr)
 {
     int sz = 0;
     int is_elf32;

@@ -107,20 +107,8 @@ static int parseRange(const char* rangeStr, AddressRange* range)
     char* minStr = copyStr;
     char* maxStr = dashPos + 1;
 
-    /* Check for hex or decimal format and convert */
-    if (strncmp(minStr, "0x", 2) == 0 || strncmp(minStr, "0X", 2) == 0) {
-        range->min = strtoull(minStr, NULL, 16);
-    }
-    else {
-        range->min = strtoull(minStr, NULL, 10);
-    }
-
-    if (strncmp(maxStr, "0x", 2) == 0 || strncmp(maxStr, "0X", 2) == 0) {
-        range->max = strtoull(maxStr, NULL, 16);
-    }
-    else {
-        range->max = strtoull(maxStr, NULL, 10);
-    }
+    range->min = strtoull(minStr, NULL, 0);
+    range->max = strtoull(maxStr, NULL, 0);
 
     free(copyStr);
 

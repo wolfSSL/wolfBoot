@@ -60,10 +60,3 @@ squashelf [options] <input.elf> <output.elf>
     ```bash
     squashelf --help
     ```
-
-## Dependencies
-
-`squashelf` depends on `libelf`. You can typically install the development package for `libelf` using your system's package manager.
-
-*   **Debian/Ubuntu:** `sudo apt-get install libelf-dev`
-

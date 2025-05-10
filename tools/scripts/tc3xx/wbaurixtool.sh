@@ -43,6 +43,9 @@ HSM=""
 ELF=""
 OPERATIONS=()
 
+# Important Constants
+PFLASH1_RANGE="0xA0300000-0xA0500000"
+
 # Structure to hold command options
 declare -A KEYGEN_OPTS=(
     [sign_algo]="$DEFAULT_SIGN_ALGO"
@@ -208,7 +211,7 @@ do_sign() {
     if [[ "${SIGN_OPTS[file_ext]}" == ".elf" ]]; then
         local temp_file="${bin_path}.squashed"
         echo "Preprocessing ELF file with $SQUASHELF"
-        "$SQUASHELF" -v --nosht -r 0xA0300000-0xA0500000 "$bin_path" "$temp_file"
+        "$SQUASHELF" -v --nosht -r "$PFLASH1_RANGE" "$bin_path" "$temp_file"
         echo "Replacing original ELF with squashed version"
         cp "$temp_file" "$bin_path"
         rm "$temp_file"
@@ -241,11 +244,15 @@ do_gen_target() {
     local wolfboot_partition_swap_address
 
     if [[ -n "${TARGET_OPTS[use_elf_format]}" ]]; then
+        # These addresses and values must match those defined in the test-app
+        # linker file
         wolfboot_partition_size=0xC0000
         wolfboot_partition_boot_address=0xA047C000
         wolfboot_partition_update_address=0xA053C000
         wolfboot_partition_swap_address=0xA05FC000
     else
+        # These addresses and values must match those defined in the test-app
+        # linker file
         wolfboot_partition_size=0x17C000
         wolfboot_partition_boot_address=0xA0300000
         wolfboot_partition_update_address=0xA047C000

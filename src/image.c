@@ -1631,7 +1631,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
                         eh->entry, (unsigned long)entry_off, entry_count);
     }
 
-    elf_hdr_sz = elf_hdr_pht_combined_size(elf_h);
+    elf_hdr_sz = (size_t)elf_hdr_pht_combined_size(elf_h);
     wolfBoot_printf("ELF: [CHECK] Header size: %zu bytes\n", elf_hdr_sz);
 
     /* Hash the elf header and program header in the image, assuming the PHT
