@@ -907,5 +907,43 @@ ifeq ($(WOLFHSM_CLIENT),1)
   ifneq ($(WOLFHSM_CLIENT_LOCAL_KEYS),1)
     KEYGEN_OPTIONS += --nolocalkeys
     CFLAGS += -DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID
+	# big enough for cert chain
+    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
+
+  # Ensure wolfHSM is configured to use certificate manager if we are
+  # doing cert chain verification
+  ifneq ($(CERT_CHAIN_VERIFY),)
+    WOLFHSM_CLIENT_OBJS += \
+      $(LIBDIR)/wolfHSM/src/wh_client_cert.o \
+      $(LIBDIR)/wolfHSM/src/wh_message_cert.o
+    CFLAGS += -DWOLFHSM_CFG_CERTIFICATE_MANAGER
+  endif
+endif
+
+# Cert chain verification options
+ifneq ($(CERT_CHAIN_VERIFY),)
+  CFLAGS += -DWOLFBOOT_CERT_CHAIN_VERIFY
+  # export the private key in DER format so it can be used with certificates
+  KEYGEN_OPTIONS += --der
+  ifneq ($(CERT_CHAIN_GEN),)
+    # Use dummy cert chain file if not provided (needs to be generated when keys are generated)
+    CERT_CHAIN_FILE = test-dummy-ca/raw_chain.der
+
+    # Set appropriate cert gen options based on sigalg
+    ifeq ($(SIGN),ECC256)
+      CERT_CHAIN_GEN_ALGO+=ecc256
+    endif
+    ifeq ($(SIGN),RSA2048)
+      CERT_CHAIN_GEN_ALGO+=rsa2048
+    endif
+    ifeq ($(SIGN),RSA4096)
+      CERT_CHAIN_GEN_ALGO+=rsa4096
+    endif
+  else
+    ifeq ($(CERT_CHAIN_FILE),)
+      $(error CERT_CHAIN_FILE must be specified when CERT_CHAIN_VERIFY is enabled and not using CERT_CHAIN_GEN)
+    endif
+  endif
+  SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
 endif

@@ -161,6 +161,10 @@ extern const int hsmClientKeyIdPubKey; /* KeyId for public key operations */
 #ifdef EXT_ENCRYPTED
 extern const int hsmClientKeyIdCrypt; /* KeyId for image (enc/dec)ryption */
 #endif
+#ifdef WOLFBOOT_CERT_CHAIN_VERIFY
+/* NvmId for trusted root CA certificate */
+extern const whNvmId hsmClientNvmIdCertRootCA;
+#endif
 
 /* Implementation of functions provided by HAL */
 int hal_hsm_init_connect(void);

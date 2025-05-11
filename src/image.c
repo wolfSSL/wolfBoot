@@ -55,6 +55,12 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
+    defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+static whKeyId g_certLeafKeyId  = WH_KEYID_ERASED;
+static int     g_leafKeyIdValid = 0;
+#endif
+
 /* TPM based verify */
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
 #ifdef ECC_IMAGE_SIGNATURE_SIZE
@@ -241,7 +247,23 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         const int point_sz = ECC_IMAGE_SIGNATURE_SIZE / 2;
 
         /* Use the public key ID to verify the signature */
+    #if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+        /* If using certificate chain verification and we have a verified leaf
+         * key ID */
+        if (g_leafKeyIdValid) {
+            /* Use the leaf key ID from certificate verification */
+            ret = wh_Client_EccSetKeyId(&ecc, g_certLeafKeyId);
+            wolfBoot_printf(
+                "Using leaf cert public key (ID: %08x) for ECC verification\n",
+                (unsigned int)g_certLeafKeyId);
+        }
+        else {
+            /* Default behavior: use the pre-configured public key ID */
+            ret = wh_Client_EccSetKeyId(&ecc, hsmClientKeyIdPubKey);
+        }
+    #else
         ret = wh_Client_EccSetKeyId(&ecc, hsmClientKeyIdPubKey);
+    #endif
         if (ret != 0) {
             return;
         }
@@ -273,6 +295,12 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
                       img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res,
                       &ecc);
         }
+    #if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+        if (g_leafKeyIdValid) {
+            (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
+            g_leafKeyIdValid = 0;
+        }
+    #endif
     #else
         /* Import public key */
         ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
@@ -400,7 +428,23 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
 #if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
     (void)key_slot;
     /* public key is stored on server at hsmClientKeyIdPubKey*/
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+    /* If using certificate chain verification and we have a verified leaf key
+     * ID */
+    if (g_leafKeyIdValid) {
+        /* Use the leaf key ID from certificate verification */
+        ret = wh_Client_RsaSetKeyId(&rsa, g_certLeafKeyId);
+        wolfBoot_printf(
+            "Using leaf cert public key (ID: %08x) for RSA verification\n",
+            (unsigned int)g_certLeafKeyId);
+    }
+    else {
+        /* Default behavior: use the pre-configured public key ID */
+        ret = wh_Client_RsaSetKeyId(&rsa, hsmClientKeyIdPubKey);
+    }
+#else
     ret = wh_Client_RsaSetKeyId(&rsa, hsmClientKeyIdPubKey);
+#endif
     if (ret != 0) {
         return;
     }
@@ -425,6 +469,11 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
     /* evict the key after use, since we aren't using the RSA import API */
     if (WH_ERROR_OK != wh_Client_KeyEvict(&hsmClientCtx, hsmKeyId)) {
         return;
+    }
+#elif defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+    if (g_leafKeyIdValid) {
+        (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
+        g_leafKeyIdValid = 0;
     }
 #endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
 #else
@@ -644,7 +693,23 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
 #if defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
     defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
     /* Use key slot ID directly with wolfHSM */
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+    /* If using certificate chain verification and we have a verified leaf key
+     * ID */
+    if (g_leafKeyIdValid) {
+        /* Use the leaf key ID from certificate verification */
+        ret = wh_Client_MlDsaSetKeyId(&ml_dsa, g_certLeafKeyId);
+        wolfBoot_printf(
+            "Using leaf cert public key (ID: %08x) for ML-DSA verification\n",
+            (unsigned int)g_certLeafKeyId);
+    }
+    else {
+        /* Default behavior: use the pre-configured public key ID */
+        ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmClientKeyIdPubKey);
+    }
+#else
     ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmClientKeyIdPubKey);
+#endif
     if (ret != 0) {
         wolfBoot_printf("error: wh_Client_MlDsaSetKeyId returned %d\n", ret);
     }
@@ -1901,6 +1966,16 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     uint32_t key_mask = 0U;
     uint32_t image_part = 1U;
     int key_slot;
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
+    defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+    uint8_t* cert_chain;
+    uint16_t cert_chain_size;
+    int32_t  cert_verify_result;
+    int hsm_ret;
+
+    /* Reset certificate chain usage for this verification */
+    g_leafKeyIdValid = 0;
+#endif
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);
     pubkey_hint_size = get_header(img, HDR_PUBKEY, &pubkey_hint);
@@ -1954,6 +2029,37 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     }
 
     CONFIRM_MASK_VALID(image_part, key_mask);
+
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
+    defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+    /* Check for certificate chain in the image header */
+    cert_chain_size = get_header(img, HDR_CERT_CHAIN, &cert_chain);
+    if (cert_chain_size > 0) {
+        wolfBoot_printf("Found certificate chain (%d bytes)\n",
+                        cert_chain_size);
+
+        /* Verify certificate chain using wolfHSM's verification API */
+        hsm_ret = wh_Client_CertVerifyAndCacheLeafPubKey(
+            &hsmClientCtx, cert_chain, cert_chain_size,
+            hsmClientNvmIdCertRootCA, &g_certLeafKeyId, &cert_verify_result);
+
+        /* Error or verification failure results in standard auth check failure
+         * path */
+        if (hsm_ret != 0 || cert_verify_result != 0) {
+            wolfBoot_printf("Certificate chain verification failed: "
+                            "hsm_ret=%d, verify_result=%d\n",
+                            hsm_ret, cert_verify_result);
+            return -1;
+        }
+
+        wolfBoot_printf("Certificate chain verified, using leaf key ID: %08x\n",
+                        (unsigned int)g_certLeafKeyId);
+
+        /* Set flag to use the leaf certificate's public key for signature
+         * verification later */
+        g_leafKeyIdValid = 1;
+    }
+#endif
 
     /* wolfBoot_verify_signature_ecc() does not return the result directly.
      * A call to wolfBoot_image_confirm_signature_ok() is required in order to

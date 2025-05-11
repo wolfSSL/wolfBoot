@@ -119,6 +119,14 @@ If none of the following is used, '--sha256' is assumed by default.
 
   * `--sha3` Use sha3-384 for digest calculation on binary images and public keys.
 
+#### Certificate Chain Options
+
+wolfBoot also supports verifying firmware images using certificate chains instead of raw public keys. In this mode of operation, a certificate chain is included in the image manifest header, and the image is signed with the private key corresponding to the leaf certificate identity (signer cert). On boot, wolfBoot verifies the trust of the certificate chain (and therefore the signer cert) against a trusted root CA stored in the wolfHSM server, and if the chain is trusted, verifies the authenticity of the firmware image using the public key from the image signer certificate.
+
+To generate an image for use with this mode, pass the `--cert-chain CERT_CHAIN.der` option to the sign tool, where `CERT_CHAIN.der` is a der encoded certificate chain containing one or more certificates in SSL order (leaf/signer cert last). Note that the sign tool still expects a signing private key to be provided as described above, and assumes that the public key of the signer cert in the chain corresponds to the signing private key.
+
+Certificate chain verification of images is currently limited to use in conjuction with wolfHSM. See [wolfHSM.md](wolfHSM.md) for more details.
+
 #### Target partition id (Multiple partition images, "self-update" feature)
 
 If none of the following is used, "--id=1" is assumed by default. On systems
@@ -257,7 +265,7 @@ For a real-life example, see the section below.
 ./tools/keytools/sign --rsa2048 --sha256 test-app/image.bin wolfboot_signing_private_key.der 1
 ```
 
-Note: The last argument is the “version” number.
+Note: The last argument is the "version" number.
 
 ### Signing Firmware with External Private Key (HSM)
 

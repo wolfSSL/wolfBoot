@@ -229,6 +229,7 @@ $(PRIVATE_KEY):
 	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
+	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(CERT_CHAIN_GEN)" = "") || (tools/scripts/sim-gen-dummy-chain.sh --algo $(CERT_CHAIN_GEN_ALGO) --leaf $(PRIVATE_KEY))
 
 $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
 	$(Q)$(MAKE) keytools_check
@@ -390,6 +391,7 @@ utilsclean: clean
 
 keysclean: clean
 	$(Q)rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
+	$(Q)(test "$(CERT_CHAIN_GEN)" = "") || rm -rf test-dummy-ca || true
 
 distclean: clean keysclean utilsclean
 	$(Q)rm -f *.bin *.elf

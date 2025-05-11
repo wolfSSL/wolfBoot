@@ -5,7 +5,6 @@ EXPVER_CMD=$(EXPVER) /dev/ttyAMA0
 BINASSEMBLE=tools/bin-assemble/bin-assemble
 SPI_CHIP=SST25VF080B
 SPI_OPTIONS=SPI_FLASH=1 WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x00000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x80000
-SIGN_ARGS=
 SIGN_ENC_ARGS=
 DELTA_DATA_SIZE?=2000
 
@@ -19,49 +18,6 @@ ifneq ("$(wildcard $(WOLFBOOT_ROOT)/tools/keytools/sign.exe)","")
 	SIGN_TOOL="$(WOLFBOOT_ROOT)/tools/keytools/sign.exe"
 else
 	SIGN_TOOL="$(WOLFBOOT_ROOT)/tools/keytools/sign"
-endif
-
-# Make sign algorithm argument
-ifeq ($(SIGN),NONE)
-	SIGN_ARGS+=--no-sign
-endif
-ifeq ($(SIGN),ED25519)
-	SIGN_ARGS+= --ed25519
-endif
-ifeq ($(SIGN),ED448)
-	SIGN_ARGS+= --ed448
-endif
-ifeq ($(SIGN),ECC256)
-	SIGN_ARGS+= --ecc256
-endif
-ifeq ($(SIGN),RSA2048)
-	SIGN_ARGS+= --rsa2048
-endif
-ifeq ($(SIGN),RSA3072)
-	SIGN_ARGS+= --rsa3072
-endif
-ifeq ($(SIGN),RSA4096)
-	SIGN_ARGS+= --rsa4096
-endif
-ifeq ($(SIGN),LMS)
-	SIGN_ARGS+= --lms
-endif
-ifeq ($(SIGN),XMSS)
-	SIGN_ARGS+= --xmss
-endif
-ifeq ($(SIGN),ML_DSA)
-	SIGN_ARGS+= --ml_dsa
-endif
-
-# Make sign hash argument
-ifeq ($(HASH),SHA256)
-	SIGN_ARGS+= --sha256
-endif
-ifeq ($(HASH),SHA384)
-	SIGN_ARGS+= --sha384
-endif
-ifeq ($(HASH),SHA3)
-	SIGN_ARGS+= --sha3
 endif
 
 ifeq ($(FLAGS_INVERT),1)
@@ -138,7 +94,7 @@ test-spi-off: FORCE
 
 test-update: test-app/image.bin FORCE
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null $(INVERSION) > test-update.bin
-	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-update.bin
 	@make test-reset
@@ -174,7 +130,7 @@ test-sim-external-flash-with-enc-delta-update-extradata: wolfboot.bin test-app/i
 	$(Q)make -C test-app delta-extra-data DELTA_DATA_SIZE=$(DELTA_DATA_SIZE)
 	$(Q)cp test-app/image_v1_signed.bak test-app/image_v1_signed.bin
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null $(INVERSION) > v1_part.dd
 	$(Q)dd if=test-app/image_v1_signed.bin bs=256 of=v1_part.dd conv=notrunc
@@ -192,11 +148,16 @@ test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.elf test-app/image.bak.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
+	# First sign command: Create version 1 of the encrypted application (base image)
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) 1
 	$(Q)cp test-app/image.bak.elf test-app/image.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
+	# Second sign command: Create a full encrypted update (version 2 by default)
+	# This produces image_v2_signed_and_encrypted.bin which is needed for the first flash assembly step
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(SIGN_ENC_ARGS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
-	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
+	# Third sign command: Create update with delta option (if specified), producing image_v2_signed_diff_encrypted.bin
+	# This file is used by the test-sim-external-flash-with-enc-delta-update target
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(DELTA_UPDATE_OPTIONS) $(SIGN_ENC_ARGS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	# Assembling internal flash image
 	#
@@ -210,6 +171,9 @@ test-sim-external-flash-with-enc-update: wolfboot.bin test-app/image.elf FORCE
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
 
 test-sim-external-flash-with-enc-delta-update:
+	# This target first calls test-sim-external-flash-with-enc-update to generate both
+	# image_v2_signed_and_encrypted.bin (full update) and image_v2_signed_diff_encrypted.bin (delta update)
+	# Then it rebuilds the external flash image using the delta update version
 	make test-sim-external-flash-with-enc-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
 	$(Q)$(BINASSEMBLE) external_flash.dd 0 test-app/image_v$(TEST_UPDATE_VERSION)_signed_diff_encrypted.bin \
 		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
@@ -217,12 +181,17 @@ test-sim-external-flash-with-enc-delta-update:
 test-sim-internal-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 	$(Q)cp test-app/image.elf test-app/image.bak.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
+	# Create version 1 of the application (base image)
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) 1
 	$(Q)cp test-app/image.bak.elf test-app/image.elf
 	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null $(INVERSION) > erased_sec.dd
-	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) $(DELTA_UPDATE_OPTIONS) \
+	# Sign the update image (version 2 by default)
+	# This command handles both standard and delta update modes based on DELTA_UPDATE_OPTIONS
+	# empty DELTA_UPDATE_OPTIONS (Without --delta): Produces image_v2_signed.bin
+	# DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin": Produces image_v2_signed_diff.bin
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(DELTA_UPDATE_OPTIONS) \
 		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
 		0 wolfboot.bin \
@@ -231,6 +200,9 @@ test-sim-internal-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
 
 test-sim-internal-flash-with-delta-update:
+	# This target calls test-sim-internal-flash-with-update with the delta option
+	# The delta option causes the sign tool to produce image_v2_signed_diff.bin instead of image_v2_signed.bin
+	# Then it rebuilds the internal flash image using the delta update version
 	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
 		0 wolfboot.bin \
@@ -247,6 +219,9 @@ test-sim-internal-flash-with-delta-update-no-base-sha:
 		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
 
 test-sim-internal-flash-with-wrong-delta-update:
+	# This target tests the bootloader's ability to reject delta updates with wrong base hashes
+	# First it creates a delta update based on v1, then creates a different delta update based on v2
+	# The final image contains v1 as the base image but a delta update that expects v2 as its base
 	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v1_signed.bin"
 	make test-sim-internal-flash-with-update DELTA_UPDATE_OPTIONS="--delta test-app/image_v2_signed.bin" TEST_UPDATE_VERSION=3
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
@@ -268,12 +243,12 @@ test-sim-rollback-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
 test-self-update: FORCE
 	@mv $(PRIVATE_KEY) private_key.old
 	@make clean factory.bin RAM_CODE=1 WOLFBOOT_VERSION=1 SIGN=$(SIGN)
-	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@st-flash --reset write test-app/image_v2_signed.bin 0x08020000 || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000) || \
 		(make test-reset && sleep 1 && st-flash --reset write test-app/image_v2_signed.bin 0x08020000)
 	@dd if=/dev/zero bs=131067 count=1 2>/dev/null $(INVERSION) > test-self-update.bin
-	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) --wolfboot-update wolfboot.bin private_key.old $(WOLFBOOT_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update wolfboot.bin private_key.old $(WOLFBOOT_VERSION)
 	@dd if=wolfboot_v$(WOLFBOOT_VERSION)_signed.bin of=test-self-update.bin bs=1 conv=notrunc
 	@printf "pBOOT" >> test-self-update.bin
 	@st-flash --reset write test-self-update.bin 0x08040000 || \
@@ -281,7 +256,7 @@ test-self-update: FORCE
 		(make test-reset && sleep 1 && st-flash --reset write test-self-update.bin 0x08040000)
 
 test-update-ext: test-app/image.bin FORCE
-	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_ARGS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	@$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.bin $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
 	@(dd if=/dev/zero bs=1M count=1 | tr '\000' '\377' > test-update.rom)
 	@dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin of=test-update.rom bs=1 count=524283 conv=notrunc
 	@printf "pBOOT" | dd of=test-update.rom obs=1 seek=524283 count=5 conv=notrunc

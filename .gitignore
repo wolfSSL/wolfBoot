@@ -99,6 +99,7 @@ include/target.h
 .wolfboot-partition-size
 .bootloader-partition-size
 MPLabX/wolfBoot-SAME51.X/.generated_files/
+test-dummy-ca/**
 
 # Test tools
 tools/check_config/check_config

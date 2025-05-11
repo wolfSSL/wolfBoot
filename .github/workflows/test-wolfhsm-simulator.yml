@@ -18,6 +18,8 @@ jobs:
             file: "config/examples/sim-wolfHSM.config"
           - name: "wolfHSM ML-DSA"
             file: "config/examples/sim-wolfHSM-mldsa.config"
+          - name: "wolfHSM cert chain verify"
+            file: "config/examples/sim-wolfHSM-certchain.config"
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -54,8 +56,7 @@ jobs:
         with:
           repository: wolfssl/wolfHSM-examples
           # Make sure to update this when the wolfHSM submodule is updated!
-          #ref: wolfHSM-v1.1.0
-          ref: 3e03bd4d4a8439ed4a8a9577823c89e4c37eb9be
+          ref: wolfHSM-examples-v1.2.0
           path: wolfHSM-examples
 
       - name: Build example POSIX TCP server
@@ -65,7 +66,13 @@ jobs:
       - name: Run POSIX TCP server
         run: |
           cd wolfHSM-examples/posix/tcp/wh_server_tcp
-          ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../wolfboot_signing_private_key_pub.der  &
+          if [ "${{ matrix.config.name }}" = "wolfHSM cert chain verify" ]; then
+            tmpfile=$(mktemp)
+            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            ./Build/wh_server_tcp.elf --nvminit $tmpfile &
+          else
+            ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../wolfboot_signing_private_key_pub.der --cert ../../../../wolfboot_signing_cert_chain.der &
+          fi
           TCP_SERVER_PID=$!
           echo "TCP_SERVER_PID=$TCP_SERVER_PID" >> $GITHUB_ENV
 
