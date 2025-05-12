@@ -121,10 +121,10 @@ MEMORY
     pfls1_hdr (rx!p):    org = LCF_WOLFBOOT_BOOT_PART_BASEADDR, len = LCF_WOLFBOOT_HEADER_OFFSET
 
     /* pfls1 is the remainder of the wolfBoot BOOT partition. Everything goes here */
-    pfls1 (rx!p):    org = LCF_CODE_BASE_ADDR, len = (0x17E000 - LCF_WOLFBOOT_HEADER_OFFSET)
+    pfls1 (rx!p):    org = LCF_CODE_BASE_ADDR, len = (0x17C000 - LCF_WOLFBOOT_HEADER_OFFSET)
 
     /* reserved for wolfBoot UPDATE partition */
-    pfls1_update (rwx!p):    org = 0xA047E000, len = 0x17E000  /* ~1.5MiB */
+    pfls1_update (rwx!p):    org = 0xA047C000, len = 0x17C000  /* ~1.5MiB */
 
     /* SWAP sector for wolfBoot image update */
     pfls1_swap (rwx!p): org = 0xA05FC000, len = 16K /* last sector of PFLASH1 */

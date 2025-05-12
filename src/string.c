@@ -392,6 +392,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                 uart_write("0x", 2);
                 /* fall through */
             case 'x':
+            case 'X':
             {
                 int n = (int)va_arg(argp, int);
                 uart_writenum(n, 16, zeropad, maxdigits);

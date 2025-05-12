@@ -1327,10 +1327,8 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
     return 0;
 }
 
-#ifdef WOLFBOOT_ELF_SCATTERED
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER
 #include "elf.h"
-
-#define PADDING_BLOCK_SIZE 64
 
 #ifdef ARCH_SIM
 #define BASE_OFF ARCH_FLASH_OFFSET
@@ -1338,272 +1336,539 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 #define BASE_OFF 0
 #endif
 
-int elf_check_image_scattered(uint8_t part, unsigned long *entry_out)
+/* Maximum size of ELF header for any architecture */
+typedef union {
+    elf32_header elf32;
+    elf64_header elf64;
+} elfHeaderMaxBuf;
+
+/*
+ * Copies an arbitrary amount of data between two flash memory locations
+ * (internal or external) using an intermediate RAM buffer.
+ */
+static int copy_flash_buffered(uintptr_t src_addr, uintptr_t dst_addr,
+                               size_t total_size, int is_src_ext,
+                               int is_dst_ext)
+{
+    size_t  bytes_copied = 0;
+
+#ifndef BUFFER_DECLARED
+#define BUFFER_DECLARED
+    static uint8_t buffer[FLASHBUFFER_SIZE];
+#endif
+
+#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+/* Mass erase destination flash in one go before writing */
+#ifdef EXT_FLASH
+    if (is_dst_ext) {
+        ext_flash_unlock();
+        ext_flash_erase(dst_addr, total_size);
+        ext_flash_lock();
+    }
+    else
+#endif
+    {
+        hal_flash_unlock();
+        hal_flash_erase(dst_addr, total_size);
+        hal_flash_lock();
+    }
+#endif /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
+
+    /* Loop until all requested bytes are copied */
+    while (bytes_copied < total_size) {
+        /* Determine the size of the next chunk to copy */
+        size_t remaining_bytes = total_size - bytes_copied;
+        size_t chunk_size      = (remaining_bytes > FLASHBUFFER_SIZE)
+                                     ? FLASHBUFFER_SIZE
+                                     : remaining_bytes;
+
+        /* Read a chunk from the source flash into the RAM buffer */
+#ifdef EXT_FLASH
+        if (is_src_ext) {
+            ext_flash_unlock();
+            ext_flash_read(src_addr + bytes_copied, buffer, chunk_size);
+            ext_flash_lock();
+        }
+        else
+#endif
+        {
+            memcpy(buffer, (const void*)(src_addr + bytes_copied), chunk_size);
+        }
+
+        /* Write the chunk from the RAM buffer to the destination flash */
+#ifdef EXT_FLASH
+        if (is_dst_ext) {
+            ext_flash_unlock();
+#ifndef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+            ext_flash_erase(dst_addr + bytes_copied, chunk_size);
+#endif
+            ext_flash_write(dst_addr + bytes_copied, buffer, chunk_size);
+            ext_flash_lock();
+        }
+        else
+#endif
+        {
+            hal_flash_unlock();
+#ifndef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
+            hal_flash_erase(dst_addr + bytes_copied, chunk_size);
+#endif
+            hal_flash_write(dst_addr + bytes_copied, buffer, chunk_size);
+            hal_flash_lock();
+        }
+
+        /* Update the count of bytes successfully copied */
+        bytes_copied += chunk_size;
+    }
+
+    /* All bytes copied successfully */
+    return 0;
+}
+
+/*
+ * Reads data from a given wolfBoot partition's firmware image, properly
+ * handling internal/external flash.
+ */
+static int read_flash_fwimage(struct wolfBoot_image* img, uint32_t offset,
+                              void* buffer, uint32_t size)
+{
+    if (img == NULL || buffer == NULL) {
+        return -1;
+    }
+    /* Prevent reading past the end of the image */
+    if ((uint64_t)offset + size > img->fw_size) {
+        wolfBoot_printf(
+            "ERROR: read_flash_fwimage attempt to read past fw_size! "
+            "Offset %lu, Size %u, TotalSize %lu\n",
+            (unsigned long)offset, size, (unsigned long)img->fw_size);
+        return -1;
+    }
+
+#ifdef EXT_FLASH
+    if (PART_IS_EXT(img)) {
+        if (ext_flash_check_read((uintptr_t)img->fw_base + offset, buffer,
+                                 size) != 0) {
+            wolfBoot_printf(
+                "ERROR: ext_flash_check_read failed at offset %lu, size %u\n",
+                (unsigned long)offset, size);
+            return -1;
+        }
+    }
+    else
+#endif
+    {
+        /* Internal flash: Direct memory access */
+        memcpy(buffer, (uint8_t*)img->fw_base + offset, size);
+    }
+    return 0;
+}
+
+/*
+ * Reads data from a raw flash address (no offset) into a RAM buffer,
+ * properly handling internal/external flash.
+ */
+static int read_flash_addr(void* src, void* buffer, uint32_t size, int src_ext)
+{
+    if (src == NULL || buffer == NULL) {
+        return -1;
+    }
+
+#ifdef EXT_FLASH
+    if (src_ext) {
+        if (ext_flash_check_read((uintptr_t)src, buffer, size) != 0) {
+            wolfBoot_printf(
+                "ERROR: ext_flash_check_read failed at address %p, size %u\n",
+                src, size);
+            return -1;
+        }
+    }
+    else
+#endif
+    {
+        /* Internal flash: Direct memory access */
+        memcpy(buffer, src, size);
+    }
+    return 0;
+}
+
+/*
+ * Hashes a chunk of the firmware image one SHA block at a time, properly
+ * handling internal/external flash
+ */
+static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
+                                   struct wolfBoot_image* img, uint32_t offset,
+                                   uint32_t size)
+{
+    uint32_t current_offset = offset;
+    uint32_t remaining_size = size;
+    uint8_t  read_buf[WOLFBOOT_SHA_BLOCK_SIZE]; /* Use local buffer */
+
+    while (remaining_size > 0) {
+        uint32_t read_size = (remaining_size > WOLFBOOT_SHA_BLOCK_SIZE)
+                                 ? WOLFBOOT_SHA_BLOCK_SIZE
+                                 : remaining_size;
+
+        if (read_flash_fwimage(img, current_offset, read_buf, read_size) != 0) {
+            wolfBoot_printf("ERROR: Failed to read image data for hashing. "
+                            "Offset: %lu, Size: %u\n",
+                            (unsigned long)current_offset, read_size);
+            return -1;
+        }
+
+        update_hash(ctx, read_buf, read_size);
+
+        remaining_size -= read_size;
+        current_offset += read_size;
+    }
+    return 0;
+}
+
+/*
+ * Hashes a chunk of flash memory at a given absolute address, reading one
+ * SHA block at a time, properly handling internal/external flash
+ */
+static int update_hash_flash_addr(wolfBoot_hash_t* ctx, uintptr_t addr,
+                                  uint32_t size, int src_ext)
+{
+    uint8_t   buffer[WOLFBOOT_SHA_BLOCK_SIZE];
+    uint32_t  remaining_size = size;
+    uintptr_t current_addr   = addr;
+
+    while (remaining_size > 0) {
+        uint32_t read_size = (remaining_size > WOLFBOOT_SHA_BLOCK_SIZE)
+                                 ? WOLFBOOT_SHA_BLOCK_SIZE
+                                 : remaining_size;
+
+        if (read_flash_addr((void*)current_addr, buffer, read_size, src_ext) !=
+            0) {
+            wolfBoot_printf(
+                "ERROR: Failed to read data from address %p, size %u\n",
+                (void*)current_addr, read_size);
+            return -1;
+        }
+
+        update_hash(ctx, buffer, read_size);
+
+        remaining_size -= read_size;
+        current_addr += read_size;
+    }
+
+    return 0;
+}
+
+int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 {
     /* Open the partition containing the image */
+    int                   is_elf32;
     struct wolfBoot_image boot;
-    uint8_t *elf_h, *p;
-    int elf_hdr_sz = 0;
-    int len;
-    int is_elf32;
-    unsigned short entry_count;
-    unsigned short entry_size;
-    unsigned long entry_off;
-    long final_offset = -1;
-    uint8_t calc_digest[WOLFBOOT_SHA_DIGEST_SIZE];
-    uint8_t *exp_digest;
-    int stored_sha_len;
-    int i;
-    uint8_t padding_block[PADDING_BLOCK_SIZE];
-    int entry_out_set = 0;
+    uint8_t *             elf_h;
+    size_t                elf_hdr_sz = 0;
+    uint32_t              len;
+    uint16_t              entry_count       = 0;
+    size_t                entry_off         = 0;
+    size_t                ph_size           = 0;
+    size_t                current_ph_offset = 0;
+    int64_t               final_offset      = -1;
+    uint8_t               calc_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t*              exp_digest;
+    int32_t               stored_sha_len;
+    int                   i;
+    int32_t               entry_out_set = 0;
+    uint8_t               elfHdrBuf[sizeof(elfHeaderMaxBuf)];
+    uint8_t ph_buf[sizeof(elf64_program_header)]; /* Buffer for current PH */
+    uint8_t ph_next_buf[sizeof(elf64_program_header)]; /* Buffer for next PH */
 
-    
+
     wolfBoot_hash_t ctx;
-    if (wolfBoot_open_image(&boot, part) < 0)
+    if (wolfBoot_open_image(&boot, part) < 0) {
         return -1;
-    p = get_img_hdr(&boot);
+    }
 
     /* Initialize hash, feed the manifest header to it */
-    if (header_hash(&ctx, &boot) < 0)
+    if (header_hash(&ctx, &boot) < 0) {
         return -1;
+    }
 
     stored_sha_len = get_header(&boot, HDR_HASH, &exp_digest);
-    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE) {
         return -1;
-
-    /* Get the elf header size */
-    elf_h = p + IMAGE_HEADER_SIZE;
-
-    if (elf_open(elf_h, &is_elf32) < 0)
-        return -1;
-
-    elf_hdr_sz = elf_hdr_size(elf_h);
-    wolfBoot_printf("Elf header size: %d\n", elf_hdr_sz);
-
-    memset(padding_block, 0, PADDING_BLOCK_SIZE);
-
-    /* Feed the elf header to the hash function */
-    len = elf_hdr_sz;
-    p = elf_h;
-    while (len > 0) {
-        if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-            update_hash(&ctx, p, WOLFBOOT_SHA_BLOCK_SIZE);
-            len -= WOLFBOOT_SHA_BLOCK_SIZE;
-        } else {
-            update_hash(&ctx, p, len);
-            break;
-        }
-        p += WOLFBOOT_SHA_BLOCK_SIZE;
     }
-    wolfBoot_printf("Hashed ELF header.\n");
 
-    /* Feed the program headers to the hash function */
+    /* Get the elf header from the image into a local buffer. We may overread
+     * the buffer depending on architecture */
+    memset(elfHdrBuf, 0, sizeof(elfHdrBuf));
+    read_flash_fwimage(&boot, 0, elfHdrBuf, sizeof(elfHeaderMaxBuf));
+    elf_h = elfHdrBuf;
+
+    if (elf_open(elf_h, &is_elf32) < 0) {
+        return -1;
+    }
+
+    /* Set up common variables based on ELF type */
     if (is_elf32) {
-        elf32_header *eh = (elf32_header *)elf_h;
-        elf32_program_header *ph;
-        entry_count = eh->ph_entry_count;
-        entry_size = eh->ph_entry_size;
-        entry_off = eh->ph_offset;
+        elf32_header* eh = (elf32_header*)elf_h;
+        entry_count      = eh->ph_entry_count;
+        entry_off        = eh->ph_offset;
+        ph_size          = sizeof(elf32_program_header);
         if (!entry_out_set) {
-            *entry_out = eh->entry;
+            *entry_out    = eh->entry;
             entry_out_set = 1;
         }
-
-        wolfBoot_printf("EH entry offset: %d\n", (int)entry_off);
-        ph = (elf32_program_header *)(elf_h + entry_off);
-        /* Add padding until the first program header into hash function */
-        len = ph[0].offset - elf_hdr_sz;
-        wolfBoot_printf("Adding %d bytes padding\n", (int)len);
-        while (len > 0) {
-            if (len > PADDING_BLOCK_SIZE) {
-                update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
-                len -= PADDING_BLOCK_SIZE;
-            } else {
-                update_hash(&ctx, padding_block, len);
-                break;
-            }
-        }
-        for (i = 0; i < entry_count; i++) {
-            unsigned long paddr;
-            unsigned long filesz;
-            unsigned long offset;
-            paddr = (unsigned long)ph[i].paddr;
-            offset = (unsigned long)ph[i].offset;
-            filesz = (unsigned long)ph[i].file_size;
-            wolfBoot_printf("Paddr: 0x%lx offset: %lu, size: %lu\n", paddr,
-                            offset, filesz);
-
-            /* Feed any non-loaded parts to the hash function */
-            if (ph[i].type != ELF_PT_LOAD) {
-                len = filesz;
-                //wolfBoot_printf("Feeding ghost segment, len %d\n", len);
-                continue;
-                while (len > 0) {
-                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-                        update_hash(&ctx, elf_h + offset, WOLFBOOT_SHA_BLOCK_SIZE);
-                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
-                    } else {
-                        update_hash(&ctx, elf_h + offset, len);
-                        break;
-                    }
-                }
-            } else {
-                /* Feed the loaded parts to the hash function */
-                len = filesz;
-                wolfBoot_printf("Feeding stored segment, len %d\n", len);
-                while (len > 0) {
-                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
-                                WOLFBOOT_SHA_BLOCK_SIZE);
-                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
-                    } else {
-                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
-                                len);
-                        break;
-                    }
-                }
-            }
-            /* Add padding until next program header, if any. */
-            if ((i < entry_count - 1) && (ph[i+1].offset > (offset + filesz))) {
-                unsigned long padding = ph[i+1].offset - (offset + filesz);
-                wolfBoot_printf("Adding padding: %lu (from %lx to %lx)\n", padding, (unsigned long)offset + filesz, (unsigned long)ph[i+1].offset);
-                while (padding > 0) {
-                    if (padding > PADDING_BLOCK_SIZE) {
-                        update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
-                        padding -= PADDING_BLOCK_SIZE;
-                    } else {
-                        update_hash(&ctx, padding_block, padding);
-                        break;
-                    }
-                }
-            } else {
-                final_offset = offset + filesz;
-            }
-        }
-    } else { /* 64-bit ELF */
-        elf64_header *eh = (elf64_header *)elf_h;
-        elf64_program_header *ph;
-        entry_count = eh->ph_entry_count;
-        entry_size = eh->ph_entry_size;
-        entry_off = eh->ph_offset;
+        wolfBoot_printf("ELF: [CHECK] 32-bit, entry=0x%08X, "
+                        "ph_offset=0x%lX, ph_count=%u\n",
+                        eh->entry, (unsigned long)entry_off, entry_count);
+    }
+    else { /* 64-bit ELF */
+        elf64_header* eh = (elf64_header*)elf_h;
+        entry_count      = eh->ph_entry_count;
+        entry_off        = eh->ph_offset;
+        ph_size          = sizeof(elf64_program_header);
         if (!entry_out_set) {
-            *entry_out = eh->entry;
+            *entry_out    = eh->entry;
             entry_out_set = 1;
         }
+        wolfBoot_printf("ELF: [CHECK] 64-bit, entry=0x%08lx, "
+                        "ph_offset=0x%08lx, ph_count=%d\n",
+                        eh->entry, (unsigned long)entry_off, entry_count);
+    }
 
-        wolfBoot_printf("EH entry offset: %d\n", (int)entry_off);
-        ph = (elf64_program_header *)(elf_h + entry_off);
-        /* Add padding until the first program header into hash function */
-        len = ph[0].offset - elf_hdr_sz;
-        wolfBoot_printf("Adding %d bytes padding\n", len);
-        while (len > 0) {
-            if (len > PADDING_BLOCK_SIZE) {
-                update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
-                len -= PADDING_BLOCK_SIZE;
-            } else {
-                update_hash(&ctx, padding_block, len);
-                break;
-            }
+    elf_hdr_sz = (size_t)elf_hdr_pht_combined_size(elf_h);
+    wolfBoot_printf("ELF: [CHECK] Header size: %zu bytes\n", elf_hdr_sz);
+
+    /* Hash the elf header and program header in the image, assuming the PHT
+     * immediately follows the ELF header */
+    update_hash_flash_fwimg(&ctx, &boot, 0, elf_hdr_sz);
+
+    current_ph_offset = entry_off;
+
+    /* Calculate padding between ELF+PHT header and first segment */
+    if (entry_count > 0) {
+        uint64_t first_offset;
+        read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size);
+        if (is_elf32) {
+            first_offset = ((elf32_program_header*)ph_buf)->offset;
         }
-        for (i = 0; i < entry_count; i++) {
-            unsigned long paddr;
-            unsigned long filesz;
-            unsigned long offset;
-            paddr = (unsigned long)ph[i].paddr;
-            offset = (unsigned long)ph[i].offset;
-            filesz = (unsigned long)ph[i].file_size;
-            wolfBoot_printf("Paddr: 0x%lx offset: %lu, size: %lu\n", paddr,
-                            offset, filesz);
+        else {
+            first_offset = ((elf64_program_header*)ph_buf)->offset;
+        }
 
-            /* Feed any non-loaded parts to the hash function */
-            if (ph[i].type != ELF_PT_LOAD) {
-                len = filesz;
-                //wolfBoot_printf("Feeding ghost segment, len %d\n", len);
-                continue;
-                while (len > 0) {
-                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-                        update_hash(&ctx, elf_h + offset, WOLFBOOT_SHA_BLOCK_SIZE);
-                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
-                    } else {
-                        update_hash(&ctx, elf_h + offset, len);
-                        break;
-                    }
-                }
-            } else {
-                /* Feed the loaded parts to the hash function */
-                len = filesz;
-                wolfBoot_printf("Feeding stored segment, len %d\n", len);
-                while (len > 0) {
-                    if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
-                                WOLFBOOT_SHA_BLOCK_SIZE);
-                        len -= WOLFBOOT_SHA_BLOCK_SIZE;
-                        paddr += WOLFBOOT_SHA_BLOCK_SIZE;
-                    } else {
-                        update_hash(&ctx, (void *)(paddr + BASE_OFF),
-                                len);
-                        break;
-                    }
-                }
-            }
-            /* Add padding until next program header, if any. */
-            if ((i < entry_count - 1) && (ph[i+1].offset > (offset + filesz))) {
-                unsigned long padding = ph[i+1].offset - (offset + filesz);
-                wolfBoot_printf("Adding padding: %lu\n", padding);
-                while (padding > 0) {
-                    if (padding > PADDING_BLOCK_SIZE) {
-                        update_hash(&ctx, padding_block, PADDING_BLOCK_SIZE);
-                        padding -= PADDING_BLOCK_SIZE;
-                    } else {
-                        update_hash(&ctx, padding_block, padding);
-                        break;
-                    }
-                }
-            } else {
-                final_offset = offset + filesz;
-            }
+        if (first_offset > elf_hdr_sz) {
+            len = first_offset - elf_hdr_sz;
+            wolfBoot_printf(
+                "ELF: [CHECK] Adding %d bytes padding before first segment\n",
+                (int32_t)len);
+            update_hash_flash_fwimg(&ctx, &boot, elf_hdr_sz, len); /* Hash actual file content */
         }
     }
-    if (final_offset < 0)
-        return -1;
-    if (final_offset + IMAGE_HEADER_SIZE > (long)boot.fw_size)
-        return -1;
 
+    /* Walk the program header table and hash each loadable segment. */
+    for (i = 0; i < entry_count; i++) {
+        uint64_t paddr;
+        uint64_t filesz;
+        uint64_t offset;
+        uint32_t type;
+        uint64_t next_offset = 0; /* Initialize */
+
+        /* read the current program header into a local buffer */
+        read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size);
+
+        /* Extract common fields based on ELF type */
+        if (is_elf32) {
+            elf32_program_header* ph = (elf32_program_header*)ph_buf;
+            paddr                    = ph->paddr;
+            offset                   = ph->offset;
+            filesz                   = ph->file_size;
+            type                     = ph->type;
+        }
+        else { /* 64-bit */
+            elf64_program_header* ph = (elf64_program_header*)ph_buf;
+            paddr                    = ph->paddr;
+            offset                   = ph->offset;
+            filesz                   = ph->file_size;
+            type                     = ph->type;
+        }
+
+        /* Handle loadable segments */
+        if (type == ELF_PT_LOAD) {
+            uintptr_t load_addr = (uintptr_t)(paddr + BASE_OFF);
+            /* Feed the loadable parts to the hash function */
+            wolfBoot_printf("ELF: [CHECK] Hashing loadable segment: "
+                            "paddr = 0x%08lx, loadaddr = 0x%08lx, "
+                            "offset = 0x%08lx, size = %lu\n",
+                            (unsigned long)paddr, (unsigned long)load_addr,
+                            (unsigned long)offset, (unsigned long)filesz);
+            update_hash_flash_addr(&ctx, load_addr, (uint32_t)filesz,
+                                   PART_IS_EXT(&boot));
+        }
+        else {
+            wolfBoot_printf("ELF: [CHECK] ERROR: non-loadable segment\n");
+            return -1;
+        }
+
+        /* Add padding until next program header, if any. */
+        if (i < entry_count - 1) {
+            read_flash_fwimage(&boot, current_ph_offset + ph_size, ph_next_buf,
+                               ph_size);
+            if (is_elf32) {
+                next_offset = ((elf32_program_header*)ph_next_buf)->offset;
+            }
+            else {
+                next_offset = ((elf64_program_header*)ph_next_buf)->offset;
+            }
+
+            if (next_offset > (offset + filesz)) {
+                uint32_t padding = next_offset - (offset + filesz);
+                wolfBoot_printf("ELF: [CHECK] Adding padding: %u bytes (from "
+                                "0x%08lx to 0x%08lx)\n",
+                                padding, (unsigned long)(offset + filesz),
+                                (unsigned long)next_offset);
+                update_hash_flash_fwimg(&ctx, &boot, offset + filesz, padding); /* Hash actual file content */
+            }
+        }
+
+        final_offset =
+            offset + filesz; /* Track end offset of last processed segment */
+        current_ph_offset += ph_size;
+    } /* End of program header loop */
+
+    if (final_offset < 0 && entry_count > 0) {
+        /* Should have processed at least one segment if entry_count > 0 */
+        wolfBoot_printf("ELF: [CHECK] Error determining final offset\n");
+        return -1;
+    }
+    else if (final_offset < 0 && entry_count == 0) {
+        /* No program headers, hash only ELF header + PHT */
+        final_offset = elf_hdr_sz;
+    }
+
+    /* Check if final offset is valid */
+    if (final_offset > (int64_t)boot.fw_size) {
+        wolfBoot_printf("ELF: [CHECK] Final offset (%d) exceeds image size (%d)\n",
+                        (int32_t)final_offset, (int32_t)boot.fw_size);
+        return -1;
+    }
+
+    /* Hash any trailing data after the last segment/header */
     len = boot.fw_size - final_offset;
-    p = boot.hdr + IMAGE_HEADER_SIZE + final_offset;
-    p = get_img_hdr(&boot) + IMAGE_HEADER_SIZE + final_offset;
-
-    wolfBoot_printf("Appending %d bytes of data from image, from position %lu...(0x%p)\n", len, IMAGE_HEADER_SIZE + final_offset, p);
-
-    while (len > 0) {
-        if (len > WOLFBOOT_SHA_BLOCK_SIZE) {
-            update_hash(&ctx, p, WOLFBOOT_SHA_BLOCK_SIZE);
-            len -= WOLFBOOT_SHA_BLOCK_SIZE;
-            p += WOLFBOOT_SHA_BLOCK_SIZE;
-        } else {
-            update_hash(&ctx, p, len);
-            break;
-        }
+    if (len > 0) {
+        wolfBoot_printf("ELF: [CHECK] Hashing %u bytes of trailing data from "
+                        "offset 0x%llX\n",
+                        len, (unsigned long long)final_offset);
+        update_hash_flash_fwimg(&ctx, &boot, final_offset, len);
     }
+
 
     /* Finalize SHA calculation */
     final_hash(&ctx, calc_digest);
     if (memcmp(calc_digest, exp_digest, WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
-        wolfBoot_printf("SHA failed for scattered ELF!\n");
-        wolfBoot_printf("Expected   %02x%02x%02x%02x%02x%02x%02x%02x\n",
-                exp_digest[0], exp_digest[1], exp_digest[2], exp_digest[3],
-                exp_digest[4], exp_digest[5], exp_digest[6], exp_digest[7]);
-        wolfBoot_printf("Calculated %02x%02x%02x%02x%02x%02x%02x%02x\n",
-                calc_digest[0], calc_digest[1], calc_digest[2], calc_digest[3],
-                calc_digest[4], calc_digest[5], calc_digest[6], calc_digest[7]);
+        wolfBoot_printf("ELF: [CHECK] SHA verification FAILED\n");
+        wolfBoot_printf(
+            "ELF: [CHECK] Expected   %02x%02x%02x%02x%02x%02x%02x%02x\n",
+            exp_digest[0], exp_digest[1], exp_digest[2], exp_digest[3],
+            exp_digest[4], exp_digest[5], exp_digest[6], exp_digest[7]);
+        wolfBoot_printf(
+            "ELF: [CHECK] Calculated %02x%02x%02x%02x%02x%02x%02x%02x\n",
+            calc_digest[0], calc_digest[1], calc_digest[2], calc_digest[3],
+            calc_digest[4], calc_digest[5], calc_digest[6], calc_digest[7]);
         return -2;
     }
-    wolfBoot_printf("Scattered ELF verified.\n");
+    wolfBoot_printf("ELF: [CHECK] Verification successful\n");
     return 0;
 }
+
+int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_flash)
+{
+    const unsigned char*  image;
+    int                   is_elf32;
+    uint16_t              entry_count;
+    size_t                entry_off;
+    size_t                ph_size;
+    int                   i;
+    const void*           eh;
+    struct wolfBoot_image boot;
+    uint8_t               elfHdrBuf[sizeof(elfHeaderMaxBuf)];
+
+    if (wolfBoot_open_image(&boot, part) < 0) {
+        return -1;
+    }
+    image = boot.fw_base;
+
+    /* Get the elf header from the image into a local buffer. We may overread
+     * the buffer depending on architecture */
+    memset(elfHdrBuf, 0, sizeof(elfHdrBuf));
+    read_flash_fwimage(&boot, 0, elfHdrBuf, sizeof(elfHeaderMaxBuf));
+    if (elf_open(elfHdrBuf, &is_elf32) != 0) {
+        return -1;
+    }
+
+    /* Set up header pointers based on ELF type */
+    if (is_elf32) {
+        eh          = (const elf32_header*)elfHdrBuf;
+        entry_count = ((const elf32_header*)eh)->ph_entry_count;
+        entry_off   = ((const elf32_header*)eh)->ph_offset;
+        *entry_out  = (unsigned long)((const elf32_header*)eh)->entry;
+
+        wolfBoot_printf("ELF: [STORE] 32-bit, entry=0x%08lx, "
+                        "ph_offset=0x%08lx, ph_count=%d\n",
+                        (unsigned long)((const elf32_header*)eh)->entry,
+                        (unsigned long)entry_off, entry_count);
+    }
+    else {
+        eh          = (const elf64_header*)elfHdrBuf;
+        entry_count = ((const elf64_header*)eh)->ph_entry_count;
+        entry_off   = ((const elf64_header*)eh)->ph_offset;
+        *entry_out  = (unsigned long)((const elf64_header*)eh)->entry;
+
+        wolfBoot_printf("ELF: [STORE] 64-bit, entry=0x%08lx, "
+                        "ph_offset=0x%08lx, ph_count=%d\n",
+                        (unsigned long)((const elf64_header*)eh)->entry,
+                        (unsigned long)entry_off, entry_count);
+    }
+
+    /* Walk the program header table and store each loadable segment */
+    for (i = 0; i < entry_count; ++i) {
+        unsigned long paddr, filesz, offset;
+        int           is_loadable;
+        uintptr_t     load_addr;
+
+        /* Read the current program header into a local buffer */
+        if (is_elf32) {
+            elf32_program_header p32;
+            read_flash_fwimage(&boot, entry_off, &p32, sizeof(p32));
+            is_loadable = (p32.type == ELF_PT_LOAD);
+            paddr       = (unsigned long)p32.paddr;
+            offset      = (unsigned long)p32.offset;
+            filesz      = (unsigned long)p32.file_size;
+            ph_size     = sizeof(p32);
+        }
+        else {
+            elf64_program_header p64;
+            read_flash_fwimage(&boot, entry_off, &p64, sizeof(p64));
+            is_loadable = (p64.type == ELF_PT_LOAD);
+            paddr       = (unsigned long)p64.paddr;
+            offset      = (unsigned long)p64.offset;
+            filesz      = (unsigned long)p64.file_size;
+            ph_size     = sizeof(p64);
+        }
+        /* Skip non-loadable segments */
+        if (!is_loadable) {
+            wolfBoot_printf("ELF: [STORE] ERROR: non-loadable segment\n");
+            return -1;
+        }
+
+        load_addr = (uintptr_t)(paddr + BASE_OFF);
+        wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
+                        "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
+                        load_addr, offset, filesz);
+        copy_flash_buffered((uintptr_t)(image + offset), load_addr, filesz,
+                            ext_flash, ext_flash);
+
+        entry_off += ph_size;
+    }
+
+    wolfBoot_printf("ELF: [STORE] Image loading complete\n");
+    return 0;
+}
+
 #undef BASE_OFF
 
 #endif

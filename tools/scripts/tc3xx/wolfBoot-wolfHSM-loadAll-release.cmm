@@ -16,7 +16,7 @@ FLASH.Erase 0xA00A0000--0xA05FFFFF
 flash.reprogram all /erase
 
 data.load.binary "&testApp" 0xA0300000
-data.load.binary "&updateApp" 0xA047E000
+data.load.binary "&updateApp" 0xA047C000
 data.load.elf "&wolfBoot"
 flash.reprogram off
 
