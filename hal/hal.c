@@ -40,7 +40,7 @@
 int hal_flash_test(void)
 {
     int ret = 0;
-    uint32_t i, len;
+    uint32_t i;
     uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
     static uint8_t pageData[TEST_SZ];
 
@@ -110,7 +110,7 @@ int hal_flash_test_write_once(void)
         hal_flash_lock();
 
         if (ret != 0) {
-            wolfBoot_printf("Write failed at byte %d, bit %d: Ret %d\n", i, b, ret);
+            wolfBoot_printf("Write failed at bit %d: Ret %d\n", b, ret);
             return -1;
         }
 
@@ -185,7 +185,7 @@ int hal_flash_test_align(void)
 int hal_flash_test_dualbank(void)
 {
     int ret = 0;
-    uint32_t i, len;
+    uint32_t i;
     uint8_t cur_fill = 0xb0;
     uint8_t new_fill = 0xf0;
     uint8_t fill;
