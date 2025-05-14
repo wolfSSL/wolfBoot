@@ -27,4 +27,4 @@
 #define GCLK_BASE (0x44010000U)
 #define MCLK_BASE (0x44012000U)
 
-#endif /* PIC32CZ_REGISTERS_H */
+#endif /* PIC32CK_REGISTERS_H */

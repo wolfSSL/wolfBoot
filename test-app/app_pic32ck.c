@@ -1,4 +1,4 @@
-/* app_pic32cz.c
+/* app_pic32ck.c
  *
  * Test bare-metal boot-led-on application
  *
