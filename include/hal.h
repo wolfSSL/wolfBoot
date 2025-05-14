@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 #include "target.h"
+#include <stdint.h>
 
 /* Architecture specific calls */
 #ifdef MMU
