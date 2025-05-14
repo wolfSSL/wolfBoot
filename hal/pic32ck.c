@@ -52,7 +52,7 @@ void hal_flash_dualbank_swap(void)
 void hal_init(void)
 {
 #if defined(TEST_CLOCK)
-    /* toogle led at 1hz for 10sec */
+    /* toggle led at 1hz for 10sec */
     pic32_clock_test(48000000U);
 #endif
     pic32_clock_fracdiv0_set(0, 0);
@@ -63,7 +63,7 @@ void hal_init(void)
     while (1) {}
 #endif
 #if defined(TEST_CLOCK)
-    /* toogle led at 1hz */
+    /* toggle led at 1hz */
     pic32_clock_test(120000000U);
     pic32_clock_reset();
     pic32_clock_test(48000000U);

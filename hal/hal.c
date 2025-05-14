@@ -189,8 +189,6 @@ int hal_flash_test_dualbank(void)
     uint8_t cur_fill = 0xb0;
     uint8_t new_fill = 0xf0;
     uint8_t fill;
-    uint32_t bankA = TEST_ADDRESS_BANKA;
-    uint32_t bankB = TEST_ADDRESS_BANKB;
     uint32_t pagePtr;
 
     wolfBoot_printf("swap flash test at 0x%x\n", TEST_ADDRESS);
@@ -219,21 +217,21 @@ int hal_flash_test_dualbank(void)
     }
 
     if (*((uint8_t*)(TEST_ADDRESS_BANKA)) != cur_fill) {
-        wolfBoot_printf("Bank A data mismatch: %x != %x\n", bankA[0], cur_fill);
+        wolfBoot_printf("Bank A data mismatch: %x != %x\n", *((uint8_t*)TEST_ADDRESS_BANKA), cur_fill);
         return -1;
     }
     if (*((uint8_t*)(TEST_ADDRESS_BANKB)) != new_fill) {
-        wolfBoot_printf("Bank B data mismatch: %x != %x\n", bankB[0], new_fill);
+        wolfBoot_printf("Bank B data mismatch: %x != %x\n", *((uint8_t*)TEST_ADDRESS_BANKB), new_fill);
         return -1;
     }
     hal_flash_dualbank_swap();
 
     if (*((uint8_t*)(TEST_ADDRESS_BANKA)) != new_fill) {
-        wolfBoot_printf("Bank A data mismatch after swap: %x != %x\n", bankA[0], new_fill);
+        wolfBoot_printf("Bank A data mismatch after swap: %x != %x\n", *((uint8_t*)TEST_ADDRESS_BANKA), new_fill);
         return -1;
     }
     if (*((uint8_t*)(TEST_ADDRESS_BANKB)) != cur_fill) {
-        wolfBoot_printf("Bank B data mismatch after swap: %x != %x\n", bankB[0], cur_fill);
+        wolfBoot_printf("Bank B data mismatch after swap: %x != %x\n", *((uint8_t*)TEST_ADDRESS_BANKB), cur_fill);
         return -1;
     }
 
