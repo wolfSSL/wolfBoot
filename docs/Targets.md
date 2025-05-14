@@ -44,7 +44,8 @@ This README describes configuration of supported targets.
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
-
+* [Microchip PIC32CZ](#microchip-pic32cz)
+* [Microchip PIC32CK](#microchip-pic32ck)
 
 ## STM32F4
 
@@ -3402,3 +3403,145 @@ wolfBoot supports the AURIX TC3xx family of devices, and provides a demo applica
 For detailed instructions on using wolfBoot with the AURIX TC3xx, please refer to [IDE/AURIX/README.md](../IDE/AURIX/README.md).
 
 wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) on AURIX TC3xx devices, offloading cryptographic operations and key storage to the AURIX HSM core. For more information on using wolfBoot with wolfHSM on AURIX devices, please contact us at facts@wolfssl.com.
+
+## Microchip PIC32CZ
+
+The PIC32CZ is a high-performance 32-bit microcontroller family from Microchip featuring an ARM Cortex-M7 core. wolfBoot has been tested on the PIC32CZCA91 Curiosity board, which has GPIO pins PB21 and PB22 connected to LED0 and LED1, respectively, for status indication.
+
+### Configuration
+
+The PIC32CZ supports a dual-bank update mechanism that can be activated using the `DUALBANK_SWAP=1` option in the configuration file. When activated, the boot partition must be configured to reside in the lower Program Flash Memory (PFM) area, while the update partition should be in the upper PFM area. An example configuration for the PIC32CZ with 4MB RAM is provided in `config/examples/pic32cz.config`.
+
+### Building
+
+To build wolfBoot for the PIC32CZ:
+
+1. Configure the build using the example configuration file:
+
+   ```sh
+   cp config/examples/pic32cz.config .config
+   make clean
+   make
+   ```
+
+2. Sign the application:
+
+   ```sh
+   ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 1
+   ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 2
+   ```
+
+### Programming and Testing
+
+To program the flash chip using the JLink tool:
+
+Identify the correct JLink device for your PIC32CZ board. In the examples the model is PIC32CZ4010CA90.
+
+1. Run the following command:
+
+   ```sh
+   JLinkExe -device PIC32CZ4010CA90 -if SWD -speed 4000 -autoconnect 1
+   ```
+
+2. At the JLink prompt, use the following commands:
+
+   ```
+   halt
+   reset
+   erase
+   loadfile wolfboot.bin 0x08000000
+   loadfile test-app/image_v1_signed.bin 0x0c000000
+   loadfile test-app/image_v2_signed.bin 0x0c200000
+   reset
+   q
+   ```
+
+### Programming with MPlab IPE
+
+In order to program using the MPlab IPE, you need to create the hex files for wolfBoot, and the signed application images:
+
+```bash
+arm-none-eabi-objcopy -O ihex wolfboot.elf wolfboot.hex
+arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C000000 test-app/image_v1_signed.bin image_v1_signed.hex
+arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C200000 test-app/image_v2_signed.bin image_v2_signed.hex
+```
+
+Then enable advanced setting in the MPLAB IPE Gui, and enable the "Allow Import Multiple Hex file" option in the Production view.
+After that load the hex files into the MPLAB IPE Gui (File -> Import -> Multiple hex) and program the device.
+
+### Behavior During Testing
+
+The test behavior depends on whether the `DUALBANK_SWAP` feature is enabled:
+
+- **If `DUALBANK_SWAP=1`:** The higher version of the application will be automatically selected, and LED1 will turn on.
+- **If `DUALBANK_SWAP=0`:** The application version 1 will boot first. The application will trigger the update and light LED0. On the next reset, wolfBoot will update the application, boot application version 2, and turn on LED1.
+
+## Microchip PIC32CK
+
+The PIC32CK is a high-performance 32-bit microcontroller family from Microchip featuring an ARM Cortex-M33 core. wolfBoot has been tested on the PIC32CKSG Curiosity board, which has GPIO pins PD20 and PB25 connected to LED0 and LED1, respectively, for status indication.
+
+### Configuration
+
+The PIC32CK SG family models support TrustZone. The flash and memory areas marked as secure or non secure depend on configuration settings. If setting `TZEN=0`, wolfBoot ignores TrustZone configuration, with the net effect to stage the application in the secure domain. In this case the flash area used to store BOOT and UPDATE partition should be marked as secure. The config file provided in `config/examples/pic32ck.config` sets `TZEN=0` and uses flash partition addresses that are marked as secure under default settings.
+The PIC32CK supports a dual-bank update mechanism but, based on configuration settings, the swap may cause an area marked as secure to be mapped in non-secure flash space. For this reason `DUALBANK_SWAP` feature should be only used after precise configuration.
+
+### Building
+
+To build wolfBoot for the PIC32CK:
+
+1. Configure the build using the example configuration file:
+
+   ```sh
+   cp config/examples/pic32ck.config .config
+   make clean
+   make
+   ```
+
+2. Sign the application:
+
+   ```sh
+   ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 1
+   ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 2
+   ```
+
+### Programming and Testing
+
+To program the flash chip using the JLink tool:
+
+Identify the correct JLink device for your PIC32CK. In the examples the model is PIC32CK2051SG.
+
+1. Run the following command:
+
+   ```sh
+   JLinkExe -device PIC32CK2051SG -if SWD -speed 4000 -autoconnect 1
+   ```
+
+2. At the JLink prompt, use the following commands:
+
+   ```
+   halt
+   reset
+   erase
+   loadfile wolfboot.bin 0x08000000
+   loadfile test-app/image_v1_signed.bin 0x0c000000
+   loadfile test-app/image_v2_signed.bin 0x0c07f000
+   reset
+   q
+   ```
+
+### Programming with MPlab IPE
+
+In order to program using the MPlab IPE, you need to create the hex files for wolfBoot, and the signed application images:
+
+```bash
+arm-none-eabi-objcopy -O ihex wolfboot.elf wolfboot.hex
+arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C000000 test-app/image_v1_signed.bin image_v1_signed.hex
+arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C07F000 test-app/image_v2_signed.bin image_v2_signed.hex
+```
+
+Then enable advanced setting in the MPLAB IPE Gui, and enable the "Allow Import Multiple Hex file" option in the Production view.
+After that load the hex files into the MPLAB IPE Gui (File -> Import -> Multiple hex) and program the device.
+
+### Behavior During Testing
+
+- The application version 1 will boot first. The application will trigger the update and light LED0. On the next reset, wolfBoot will update the application, boot application version 2, and turn on LED1.
