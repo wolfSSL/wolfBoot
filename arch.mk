@@ -156,6 +156,18 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),pic32cz)
+    ARCH_FLASH_OFFSET=0x08000000
+    CORTEX_M7=1
+    OBJS+=hal/pic32c.o
+  endif
+
+  ifeq ($(TARGET),pic32ck)
+    ARCH_FLASH_OFFSET=0x08000000
+    CORTEX_M33=1
+    OBJS+=hal/pic32c.o
+  endif
+
   ifeq ($(TARGET),stm32l4)
     SPI_TARGET=stm32
     ARCH_FLASH_OFFSET=0x08000000
