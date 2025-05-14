@@ -772,7 +772,7 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 }
 
 #ifdef EXT_FLASH
-static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
+static uint8_t XALIGNED(4) hdr_cpy[IMAGE_HEADER_SIZE];
 static int hdr_cpy_done = 0;
 
 /**
