@@ -451,6 +451,14 @@ ifeq ($(TARGET),nxp_ls1028a)
   LSCRIPT_TEMPLATE:=AARCH64-ls1028a.ld
 endif
 
+ifeq ($(TARGET),pic32ck)
+  APP_OBJS+=../hal/pic32c.o
+endif
+
+ifeq ($(TARGET), pic32cz)
+  APP_OBJS+=../hal/pic32c.o
+endif
+
 CFLAGS+=-I../lib/wolfssl
 
 ifeq ($(WOLFHSM_CLIENT),1)
