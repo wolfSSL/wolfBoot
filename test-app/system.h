@@ -23,8 +23,6 @@
 #ifndef SYSTEM_H_INCLUDED
 #define SYSTEM_H_INCLUDED
 
-/* System specific: PLL with 8 MHz external oscillator, CPU at 168MHz */
-#define CPU_FREQ (168000000)
 #define PLL_FULL_MASK (0x7F037FFF)
 
 /* Assembly helpers */
