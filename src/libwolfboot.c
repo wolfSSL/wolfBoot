@@ -760,6 +760,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         wolfBoot_set_partition_state(PART_UPDATE, st);
 #else
         uint32_t magic_trail = WOLFBOOT_MAGIC_TRAIL;
+        uint32_t offset;
         selSec = nvm_select_fresh_sector(PART_UPDATE);
         XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
             WOLFBOOT_SECTOR_SIZE);
@@ -767,10 +768,16 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         /* Set the IMG_STATE_UPDATING flag and
          * the trailer magic in cache before committing to flash
          */
-        NVM_CACHE[WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + 1)] =
-            IMG_STATE_UPDATING;
-        XMEMCPY(NVM_CACHE + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t),
-                &magic_trail, sizeof(uint32_t));
+        offset = WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + 1);
+#ifdef FLAGS_HOME
+        /* If flags are stored in BOOT partition, take into account the offset
+         * of the flags used for the update partition too, to avoid erasing the
+         * sector.
+         */
+        offset -= (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
+#endif
+        NVM_CACHE[offset] = st;
+        XMEMCPY(NVM_CACHE + offset + 1, &magic_trail, sizeof(uint32_t));
 
         /* write to the non selected sector */
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec,
