@@ -248,8 +248,8 @@ int pic32_flash_write(uint32_t address, const uint8_t *data, int len)
         if (!pic32_addr_is_dqword_aligned(address) || len < FCW_WRITE_SIZE) {
             _addr = pic32_addr_dqword_align(address);
             /* Setup an aligned buffer with the following rules:
-             * - For bytes outside the writing range: 0xFF (no change)
-             * - For bytes inside the writing range: data | !current_data
+             * - For addresses outside the writing range: 0xFF (no change)
+             * - For addresses inside the writing range: data | !current_data
              *
              * This approach ensures we only flip bits from 1 to 0 when writing
              * without an erase operation. When the address is aligned and length
