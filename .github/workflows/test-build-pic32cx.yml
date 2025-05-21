@@ -1,0 +1,21 @@
+name: Test PIC32CZ and PIC32CK Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-pic32cz:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: ARM
+      config-file: config/examples/pic32cz.config
+      make-args: "TARGET=pic32cz"
+  build-pic32ck:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: ARM
+      config-file: config/examples/pic32ck.config
+      make-args: "TARGET=pic32ck"
