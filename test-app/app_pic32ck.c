@@ -46,16 +46,19 @@
 #define PORTD_OUTCLR (*(volatile uint32_t *)(PORTD_BASE + 0x14))
 #define PORTD_OUTCLR_OUT(X) (1 << (X))
 
+#define LED0_PIN (20)
+#define LED1_PIN (25)
+
 static void led0_on(void)
 {
-    PORTD_DIRSET = PORTD_DIRSET_OUT(20);
-    PORTD_OUTCLR = PORTD_OUTCLR_OUT(20);
+    PORTD_DIRSET = PORTD_DIRSET_OUT(LED0_PIN);
+    PORTD_OUTCLR = PORTD_OUTCLR_OUT(LED0_PIN);
 }
 
 static void led1_on(void)
 {
-    PORTB_DIRSET = PORTB_DIRSET_OUT(25);
-    PORTB_OUTCLR = PORTB_OUTCLR_OUT(25);
+    PORTB_DIRSET = PORTB_DIRSET_OUT(LED1_PIN);
+    PORTB_OUTCLR = PORTB_OUTCLR_OUT(LED1_PIN);
 }
 
 void main(void)
