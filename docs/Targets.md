@@ -1620,7 +1620,7 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C07F000 test-app/i
 ```
 
 then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
-Once enabled the option, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
+Once the option is enabled, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
 
 ### Behavior During Testing
 
@@ -1688,7 +1688,7 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C200000 test-app/i
 ```
 
 then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
-Once enabled the option, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
+Once the option is enabled, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
 
 ### Behavior During Testing
 
