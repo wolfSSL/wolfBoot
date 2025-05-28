@@ -125,7 +125,7 @@ wolfBoot also supports verifying firmware images using certificate chains instea
 
 To generate an image for use with this mode, pass the `--cert-chain CERT_CHAIN.der` option to the sign tool, where `CERT_CHAIN.der` is a der encoded certificate chain containing one or more certificates in SSL order (leaf/signer cert last). Note that the sign tool still expects a signing private key to be provided as described above, and assumes that the public key of the signer cert in the chain corresponds to the signing private key.
 
-Certificate chain verification of images is currently limited to use in conjuction with wolfHSM. See [wolfHSM.md](wolfHSM.md) for more details.
+Certificate chain verification of images is currently limited to use in conjunction with wolfHSM. See [wolfHSM.md](wolfHSM.md) for more details.
 
 #### Target partition id (Multiple partition images, "self-update" feature)
 
