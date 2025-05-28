@@ -1137,8 +1137,6 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
         /* Get the file size */
         if (stat(CMD.cert_chain_file, &file_stat) == 0) {
-            cert_chain_sz = file_stat.st_size;
-
             /* 2 bytes for tag + 2 bytes for length field */
             const uint32_t tag_len_size = 4;
             /* Maximum alignment padding that might be needed */
@@ -1146,7 +1144,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             /* Required space = tag(2) + length(2) + data + potential alignment
              * * padding */
             const uint32_t required_space =
-                tag_len_size + cert_chain_sz + max_alignment;
+                tag_len_size + file_stat.st_size + max_alignment;
 
             /* If the current header size is too small, increase it */
             if (CMD.header_sz < required_space) {
