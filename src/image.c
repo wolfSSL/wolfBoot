@@ -2038,10 +2038,20 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         wolfBoot_printf("Found certificate chain (%d bytes)\n",
                         cert_chain_size);
 
-        /* Verify certificate chain using wolfHSM's verification API */
+        /* Verify certificate chain using wolfHSM's verification API. Use DMA if
+         * available in the wolfHSM configuration */
+#if defined(WOLFHSM_CFG_DMA)
+        wolfBoot_printf(
+            "verifying cert chain and caching leaf pubkey (using DMA)\n");
+        hsm_ret = wh_Client_CertVerifyDmaAndCacheLeafPubKey(
+            &hsmClientCtx, cert_chain, cert_chain_size,
+            hsmClientNvmIdCertRootCA, &g_certLeafKeyId, &cert_verify_result);
+#else
+        wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
         hsm_ret = wh_Client_CertVerifyAndCacheLeafPubKey(
             &hsmClientCtx, cert_chain, cert_chain_size,
             hsmClientNvmIdCertRootCA, &g_certLeafKeyId, &cert_verify_result);
+#endif
 
         /* Error or verification failure results in standard auth check failure
          * path */

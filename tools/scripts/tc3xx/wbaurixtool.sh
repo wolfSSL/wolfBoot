@@ -27,8 +27,10 @@ PRVKEY_DER="$WOLFBOOT_DIR/priv.der"
 PUBKEY_DER="$WOLFBOOT_DIR/priv_pub.der"
 TARGET_H="$WOLFBOOT_DIR/include/target.h"
 NVM_CONFIG="$WOLFBOOT_DIR/tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit"
+NVM_CONFIG_DUMMY_CERTCHAIN="$WOLFBOOT_DIR/tools/scripts/tc3xx/wolfBoot-wolfHSM-dummy-certchain.nvminit"
 NVM_BIN="whNvmImage.bin"
 NVM_HEX="whNvmImage.hex"
+DUMMY_CERT_CHAIN="$WOLFBOOT_DIR/test-dummy-ca/raw-chain.der"
 
 # Tool paths (relative to project root)
 SQUASHELF="$WOLFBOOT_DIR/tools/squashelf/squashelf"
@@ -93,30 +95,11 @@ declare -A ML_DSA_HEADER_SIZES=(
     [5]=12288
 )
 
-# Get the header size based on the selected public key algorithm
-get_header_size() {
-    local algo="$1"
-    local pq_params="$2"
-
-    case "$algo" in
-        "ml_dsa")
-            # Default to level 2 for ML-DSA if no params specified
-            echo "${ML_DSA_HEADER_SIZES[${pq_params:-2}]}"
-            ;;
-        "ecc256") echo "256" ;;
-        "ecc384"|"ecc521"|"rsa2048"|"rsa3072") echo "512" ;;
-        "rsa4096") echo "1024" ;;
-        "ed25519") echo "256" ;;
-        "ed448") echo "512" ;;
-        "lms"|"xmss") echo "0" ;; # currently not supported
-        "none") echo "256" ;;
-        *) echo "256" ;;  # Default
-    esac
-}
-
 # Add to command options structure
 declare -A COMMON_OPTS=(
     [sign_pq_params]=""
+    [certchain_file]=""
+    [dummy_certchain]=""
 )
 
 # Add LCF_OPTS to command options structure
@@ -130,6 +113,80 @@ declare -A TARGET_OPTS=(
     [use_elf_format]=""
 )
 
+# Add NVM_OPTS to command options structure
+declare -A NVM_OPTS=(
+    [dummy_certchain]=""
+)
+
+# Get the effective certificate chain file path
+get_effective_certchain_file() {
+    if [[ -n "${COMMON_OPTS[dummy_certchain]}" ]]; then
+        echo "$DUMMY_CERT_CHAIN"
+    elif [[ -n "${COMMON_OPTS[certchain_file]}" ]]; then
+        echo "${COMMON_OPTS[certchain_file]}"
+    else
+        echo ""
+    fi
+}
+
+# Get the header size based on the selected public key algorithm
+get_header_size() {
+    local algo="$1"
+    local pq_params="$2"
+    local certchain_file="$3"
+
+    # Get base header size for the algorithm
+    local base_size
+    case "$algo" in
+        "ml_dsa")
+            # Default to level 2 for ML-DSA if no params specified
+            base_size="${ML_DSA_HEADER_SIZES[${pq_params:-2}]}"
+            ;;
+        "ecc256") base_size="256" ;;
+        "ecc384"|"ecc521"|"rsa2048"|"rsa3072") base_size="512" ;;
+        "rsa4096") base_size="1024" ;;
+        "ed25519") base_size="256" ;;
+        "ed448") base_size="512" ;;
+        "lms"|"xmss") base_size="0" ;; # currently not supported
+        "none") base_size="256" ;;
+        *) base_size="256" ;;  # Default
+    esac
+
+    # If no certificate chain, return base size
+    if [[ -z "$certchain_file" ]]; then
+        echo "$base_size"
+        return
+    fi
+
+    # Check if certificate chain file exists and get its size
+    if [[ ! -f "$certchain_file" ]]; then
+        echo "Error: Certificate chain file not found: $certchain_file" >&2
+        echo "$base_size"
+        return
+    fi
+
+    local cert_size
+    cert_size=$(stat -c%s "$certchain_file" 2>/dev/null || stat -f%z "$certchain_file" 2>/dev/null)
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Cannot get certificate chain file size: $certchain_file" >&2
+        echo "$base_size"
+        return
+    fi
+
+    # Calculate total required space
+    # cert_size + 4 bytes (TLV header) + 8 bytes (max alignment padding)
+    local cert_overhead=$((cert_size + 12))
+    local total_required=$((base_size + cert_overhead))
+
+    # Round up to next power of 2 (matching C code behavior)
+    local final_size=$base_size
+    while [[ $final_size -lt $total_required ]]; do
+        final_size=$((final_size * 2))
+    done
+
+    echo "$final_size"
+}
+
 # Helper function to display usage
 usage() {
     echo "Usage: $0 [global-options] COMMAND [command-options] [COMMAND [command-options]]"
@@ -142,11 +199,14 @@ usage() {
     echo "  keygen"
     echo "    --sign-algo ALGO      Signing algorithm (default: ecc256)"
     echo "    --localkeys           Use local keys (only valid with --hsm)"
+    echo "    --dummy-certchain     Generate dummy certificate chain after key generation"
     echo ""
     echo "  sign"
     echo "    --sign-algo ALGO      Signing algorithm (inherits from keygen if not specified)"
     echo "    --hash-algo ALGO      Hash algorithm (default: sha256)"
     echo "    --debug               Use debug build (default: release)"
+    echo "    --certchain FILE      Certificate chain file to include in header"
+    echo "    --dummy-certchain     Use dummy certificate chain in header"
     echo ""
     echo "  target"
     echo "    No additional options"
@@ -157,12 +217,16 @@ usage() {
     echo "  macros"
     echo "    --sign-algo ALGO      Signing algorithm (inherits from keygen/sign if not specified)"
     echo "    --hash-algo ALGO      Hash algorithm (inherits from sign if not specified)"
+    echo "    --certchain FILE      Certificate chain file to include in header"
+    echo "    --dummy-certchain     Use dummy certificate chain in header"
     echo ""
     echo "  nvm"
-    echo "    No additional options"
+    echo "    --dummy-certchain     Use dummy certificate chain configuration"
     echo ""
     echo "  lcf"
     echo "    --sign-algo ALGO      Signing algorithm (inherits from keygen/sign if not specified)"
+    echo "    --certchain FILE      Certificate chain file to include in header"
+    echo "    --dummy-certchain     Use dummy certificate chain in header"
     echo ""
     echo "Examples:"
     echo "  $0 keygen --sign-algo ecc256"
@@ -174,28 +238,29 @@ usage() {
     echo "  $0 macros"
     echo "  $0 nvm"
     echo "  $0 lcf"
+    echo "  $0 sign --certchain /path/to/cert_chain.pem"
+    echo "  $0 macros --certchain /path/to/cert_chain.pem lcf --certchain /path/to/cert_chain.pem"
+    echo "  $0 keygen --sign-algo ecc256 --dummy-certchain"
+    echo "  $0 sign --dummy-certchain"
+    echo "  $0 keygen --sign-algo ecc256 --dummy-certchain sign --dummy-certchain"
+    echo "  $0 nvm --dummy-certchain"
     exit 1
 }
 
 # Function to generate keys
 do_keygen() {
     local sign_algo="${KEYGEN_OPTS[sign_algo]:-$DEFAULT_SIGN_ALGO}"
-    local pq_params="${COMMON_OPTS[sign_pq_params]}"
-    local header_size
-
-    # Get header size for current algorithm
-    header_size=$(get_header_size "$sign_algo" "$pq_params")
 
     echo "Generating keys with algorithm: $sign_algo"
 
-    # Set environment variables for keygen tool
-    export IMAGE_HEADER_SIZE="$header_size"
-    if [ "$sign_algo" = "ml_dsa" ]; then
-        export ML_DSA_LEVEL="${pq_params:-2}"  # Default to level 2 if not specified
-    fi
-
     (cd $WOLFBOOT_DIR && tools/keytools/keygen --"$sign_algo" -g $(basename $PRVKEY_DER) --exportpubkey \
         ${KEYGEN_OPTS[nolocalkeys]:+--nolocalkeys} --der)
+
+    # Generate dummy certificate chain if requested
+    if [[ -n "${COMMON_OPTS[dummy_certchain]}" ]]; then
+        echo "Generating dummy certificate chain with algorithm: $sign_algo"
+        (cd $WOLFBOOT_DIR && tools/scripts/sim-gen-dummy-chain.sh --algo "$sign_algo" --leaf priv.der)
+    fi
 }
 
 # Function to sign binaries
@@ -218,7 +283,7 @@ do_sign() {
     fi
 
     # Get header size for current algorithm
-    header_size=$(get_header_size "$sign_algo" "$pq_params")
+    header_size=$(get_header_size "$sign_algo" "$pq_params" "$(get_effective_certchain_file)")
 
     # Set IMAGE_HEADER_SIZE environment variable for sign tool
     export IMAGE_HEADER_SIZE="$header_size"
@@ -226,9 +291,17 @@ do_sign() {
     echo "Signing binaries with $sign_algo and ${SIGN_OPTS[hash_algo]}"
     echo "Using header size: $header_size"
 
+    # Build cert-chain argument if specified
+    local cert_chain_arg=""
+    if [[ -n "${COMMON_OPTS[certchain_file]}" ]]; then
+        cert_chain_arg="--cert-chain ${COMMON_OPTS[certchain_file]}"
+    elif [[ -n "${COMMON_OPTS[dummy_certchain]}" ]]; then
+        cert_chain_arg="--cert-chain $DUMMY_CERT_CHAIN"
+    fi
+
     # Sign for both partition 1 and 2
-    ../../keytools/sign --"$sign_algo" --"${SIGN_OPTS[hash_algo]}" "$bin_path" "$PRVKEY_DER" 1
-    ../../keytools/sign --"$sign_algo" --"${SIGN_OPTS[hash_algo]}" "$bin_path" "$PRVKEY_DER" 2
+    ../../keytools/sign --"$sign_algo" --"${SIGN_OPTS[hash_algo]}" $cert_chain_arg "$bin_path" "$PRVKEY_DER" 1
+    ../../keytools/sign --"$sign_algo" --"${SIGN_OPTS[hash_algo]}" $cert_chain_arg "$bin_path" "$PRVKEY_DER" 2
 }
 
 # Function to generate target header
@@ -303,7 +376,8 @@ do_gen_macros() {
     local pq_params="${COMMON_OPTS[sign_pq_params]}"
 
     # Get header size using the new function
-    local image_header_size=$(get_header_size "$sign_algo" "$pq_params")
+    local image_header_size=$(get_header_size "$sign_algo" "$pq_params" "$(get_effective_certchain_file)")
+    echo "generating macros with header size = $image_header_size"
 
     local use_huge_stack=""
     local use_wolfhsm_pubkey_id=""
@@ -312,6 +386,7 @@ do_gen_macros() {
     local ml_dsa_level=""
     local use_wolfboot_elf=""
     local use_wolfboot_elf_flash_scattered=""
+    local use_wolfboot_cert_chain_verify=""
 
     # Map algorithms to their macro names
     local sign_macro="${SIGN_ALGO_MAP[${sign_algo,,}]:-}"
@@ -324,6 +399,13 @@ do_gen_macros() {
     if [[ -z "$hash_macro" ]]; then
         echo "Error: Invalid or missing hash algorithm"
         exit 1
+    fi
+
+    # Validate certificate chain usage
+    if [[ -n "${COMMON_OPTS[certchain_file]}" ]]; then
+        use_wolfboot_cert_chain_verify="-DWOLFBOOT_CERT_CHAIN_VERIFY"
+    elif [[ -n "${COMMON_OPTS[dummy_certchain]}" ]]; then
+        use_wolfboot_cert_chain_verify="-DWOLFBOOT_CERT_CHAIN_VERIFY"
     fi
 
     # Set huge stack for RSA4096
@@ -373,6 +455,7 @@ do_gen_macros() {
         -e "s/@WOLFBOOT_USE_WOLFHSM_PUBKEY_ID@/$use_wolfhsm_pubkey_id/g" \
         -e "s/@WOLFBOOT_ELF@/$use_wolfboot_elf/g" \
         -e "s/@WOLFBOOT_ELF_FLASH_SCATTER@/$use_wolfboot_elf_flash_scattered/g" \
+        -e "s/@WOLFBOOT_CERT_CHAIN_VERIFY@/$use_wolfboot_cert_chain_verify/g" \
         "$macros_in" > "$macros_out"
 
     # Remove empty lines from the output file, as they cause compiler errors
@@ -381,9 +464,16 @@ do_gen_macros() {
 
 # Function to generate a wolfHSM NVM image
 do_gen_nvm() {
+    local nvm_config_file="$NVM_CONFIG"
+
+    # Use dummy cert chain config if specified
+    if [[ -n "${COMMON_OPTS[dummy_certchain]}" ]]; then
+        nvm_config_file="$NVM_CONFIG_DUMMY_CERTCHAIN"
+    fi
+
     echo "Generating HSM NVM image"
-    echo "Running: $WHNVMTOOL --image=$NVM_BIN --size=0x10000 --invert-erased-byte $NVM_CONFIG"
-    "$WHNVMTOOL" --image="$NVM_BIN" --size=0x10000 --invert-erased-byte "$NVM_CONFIG"
+    echo "Running: $WHNVMTOOL --image=$NVM_BIN --size=0x10000 --invert-erased-byte $nvm_config_file"
+    "$WHNVMTOOL" --image="$NVM_BIN" --size=0x10000 --invert-erased-byte "$nvm_config_file"
 
     echo "Converting to Intel HEX format"
     echo "Running: objcopy -I binary -O ihex --change-address 0xAFC00000 $NVM_BIN $NVM_HEX"
@@ -412,7 +502,7 @@ do_gen_lcf() {
     local lcf_template="$base_dir/$app_dir/$template_name"
     local lcf_output="$base_dir/$app_dir/Lcf_Gnuc_Tricore_Tc.lsl"
 
-    header_size=$(get_header_size "$sign_algo" "$pq_params")
+    header_size=$(get_header_size "$sign_algo" "$pq_params" "$(get_effective_certchain_file)")
 
     echo "Generating LCF file with header_size=$header_size"
     sed -e "s/@LCF_WOLFBOOT_HEADER_OFFSET@/$header_size/g" \
@@ -479,7 +569,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         nvm)
             OPERATIONS+=("nvm")
-            CURRENT_OPTS=""
+            CURRENT_OPTS="NVM_OPTS"
             shift
             ;;
         lcf)
@@ -546,6 +636,26 @@ while [[ $# -gt 0 ]]; do
             COMMON_OPTS[sign_pq_params]="$2"
             shift 2
             ;;
+        --certchain)
+            if [[ -z "$CURRENT_OPTS" ]]; then
+                echo "Error: --certchain must follow a command"
+                exit 1
+            fi
+            if [[ -z "$HSM" ]]; then
+                echo "Error: --certchain can only be used with --hsm global option"
+                exit 1
+            fi
+            COMMON_OPTS[certchain_file]="$2"
+            shift 2
+            ;;
+        --dummy-certchain)
+            if [[ -z "$CURRENT_OPTS" ]]; then
+                echo "Error: --dummy-certchain must follow a command"
+                exit 1
+            fi
+            COMMON_OPTS[dummy_certchain]="1"
+            shift
+            ;;
         *)
             echo "Unknown option for ${CURRENT_OPTS:-global options}: $1"
             usage
@@ -557,6 +667,12 @@ done
 if [ ${#OPERATIONS[@]} -eq 0 ]; then
     echo "Error: Must specify at least one command (keygen, sign, or target)"
     usage
+fi
+
+# Validate that --certchain and --dummy-certchain are not both specified
+if [[ -n "${COMMON_OPTS[certchain_file]}" && -n "${COMMON_OPTS[dummy_certchain]}" ]]; then
+    echo "Error: Cannot specify both --certchain and --dummy-certchain"
+    exit 1
 fi
 
 # Execute requested operations in order

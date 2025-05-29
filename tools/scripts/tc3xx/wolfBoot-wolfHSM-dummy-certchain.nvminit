@@ -1,0 +1,2 @@
+# NVM config file for wolfHSM whnvmtool to create NVM image based on generated keys
+obj 1 0xFFFF 0x0000 "cert CA" ../../../test-dummy-ca/root-cert.der

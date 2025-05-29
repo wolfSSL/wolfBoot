@@ -26,5 +26,6 @@
 #define WOLFHSM_CFG_H_
 
 #define WOLFHSM_CFG_DMA
+#define WOLFHSM_CFG_CERTIFICATE_MANAGER
 
 #endif /* WOLFHSM_CFG_H_ */

@@ -928,7 +928,7 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   KEYGEN_OPTIONS += --der
   ifneq ($(CERT_CHAIN_GEN),)
     # Use dummy cert chain file if not provided (needs to be generated when keys are generated)
-    CERT_CHAIN_FILE = test-dummy-ca/raw_chain.der
+    CERT_CHAIN_FILE = test-dummy-ca/raw-chain.der
 
     # Set appropriate cert gen options based on sigalg
     ifeq ($(SIGN),ECC256)

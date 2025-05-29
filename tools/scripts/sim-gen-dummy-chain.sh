@@ -176,7 +176,7 @@ echo "Extracting public key from leaf certificate..."
 extract_public_key "${OUTPUT_DIR}/temp/leaf.crt.pem" "${OUTPUT_DIR}/temp/leaf_pubkey.pem" "${OUTPUT_DIR}/leaf-pubkey.der"
 
 # Create raw DER format certificate chain
-cat ${OUTPUT_DIR}/intermediate-cert.der ${OUTPUT_DIR}/leaf-cert.der > ${OUTPUT_DIR}/raw_chain.der
+cat ${OUTPUT_DIR}/intermediate-cert.der ${OUTPUT_DIR}/leaf-cert.der > ${OUTPUT_DIR}/raw-chain.der
 
 ##################################
 # GENERATE C ARRAYS FOR EMBEDDING
@@ -223,7 +223,7 @@ echo "/* Certificates */" >> "${HEADER_FILE}"
 append_cert_array "${OUTPUT_DIR}/root-cert.der" "ROOT_CERT" "Root CA Certificate (DER format)"
 append_cert_array "${OUTPUT_DIR}/intermediate-cert.der" "INTERMEDIATE_CERT" "Intermediate CA Certificate (DER format)"
 append_cert_array "${OUTPUT_DIR}/leaf-cert.der" "LEAF_CERT" "Leaf/Server Certificate (DER format)"
-append_cert_array "${OUTPUT_DIR}/raw_chain.der" "RAW_CERT_CHAIN" "Raw Certificate Chain (Intermediate+Leaf) (DER format)"
+append_cert_array "${OUTPUT_DIR}/raw-chain.der" "RAW_CERT_CHAIN" "Raw Certificate Chain (Intermediate+Leaf) (DER format)"
 # Add leaf certificate public key
 append_cert_array "${OUTPUT_DIR}/leaf-pubkey.der" "LEAF_PUBKEY" "Leaf Certificate Public Key (DER format)"
 
@@ -257,7 +257,7 @@ echo "  Intermediate certificate:   ${OUTPUT_DIR}/intermediate-cert.der"
 echo "  Intermediate key:           ${OUTPUT_DIR}/intermediate-prvkey.der"
 echo "  Leaf certificate:           ${OUTPUT_DIR}/leaf-cert.der"
 echo "  Leaf key:                   ${OUTPUT_DIR}/leaf-prvkey.der"
-echo "  Raw chain:                  ${OUTPUT_DIR}/raw_chain.der"
+echo "  Raw chain:                  ${OUTPUT_DIR}/raw-chain.der"
 echo "  Leaf public key:            ${OUTPUT_DIR}/leaf-pubkey.der"
 echo ""
 echo "C Header file:"
