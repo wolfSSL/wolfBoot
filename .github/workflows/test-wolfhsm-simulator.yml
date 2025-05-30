@@ -71,7 +71,7 @@ jobs:
             echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../test-dummy-ca/root-cert.der" >> $tmpfile
             ./Build/wh_server_tcp.elf --nvminit $tmpfile &
           else
-            ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../wolfboot_signing_private_key_pub.der --cert ../../../../wolfboot_signing_cert_chain.der &
+            ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../wolfboot_signing_private_key_pub.der &
           fi
           TCP_SERVER_PID=$!
           echo "TCP_SERVER_PID=$TCP_SERVER_PID" >> $GITHUB_ENV
