@@ -31,6 +31,34 @@ wolfBoot supports using wolfHSM for the following algorithms:
 
 Encrypted images with wolfHSM is not yet supported in wolfBoot. Note that every HAL target may not support all of these algorithms. Consult the platform-specific wolfBoot documentation for details.
 
+## Additional Features
+
+wolfBoot with wolfHSM also supports the following features:
+
+### Certificate Verification
+
+wolfBoot with wolfHSM supports certificate chain verification for firmware images. In this mode, instead of using raw public keys for signature verification, wolfBoot verifies firmware images using wolfHSM with a public key embedded in a certificate chain that is included in the image manifest header.
+
+The certificate verification process with wolfHSM works as follows:
+
+1. A root CA is created serving as the root of trust for the entire PKI system
+2. A signing keypair and corresponding identity certificate is created for signing firmware images
+3. The firmware image is signed with the signing private key
+4. A certificate chain is created consisting of the signing identity certificate and an optional number of intermediate certificates, where trust is chained back to the root CA.
+5. During the signing process, the image is signed with the signer private key and the certificate chain is embedded in the firmware image header.
+6. During boot, wolfBoot extracts the certificate chain from the firmware header
+7. wolfBoot uses the wolfHSM server to verify the certificate chain against a pre-provisioned root CA certificate stored on the HSM and caches the public key of the leaf certificate if the chain verifies as trusted
+8. If the chain is trusted, wolfBoot uses the cached public key from the leaf certificate to verify the firmware signature on the wolfHSM server
+
+To use certificate verification with wolfHSM:
+
+1. Enable `WOLFBOOT_CERT_CHAIN_VERIFY` in your wolfBoot configuration
+2. Ensure the wolfHSM server is configured with certificate manager support (`WOLFHSM_CFG_CERTIFICATE_MANAGER`)
+3. Pre-provision the root CA certificate on the wolfHSM server at the NVM ID specified by the HAL `hsmClientNvmIdCertRootCA`
+4. Sign firmware images with the `--cert-chain` option, providing a DER-encoded certificate chain
+
+To build the simulator using wolfHSM for certificate verification, use [config/examples/sim-wolfHSM-certchain.config](config/examples/sim-wolfHSM-certchain.config).
+
 ## Configuration Options
 
 This section describes the configuration options available for wolfHSM client integration. Note that these options should be configured automatically by the build system for each supported platform when wolfHSM support is enabled. Consult the platform-specific documentation for details on enabling wolfHSM support.

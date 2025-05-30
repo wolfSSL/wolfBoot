@@ -100,6 +100,9 @@ const int       hsmClientKeyIdPubKey = 0xFF;
 const int       hsmClientDevIdCrypt = WH_DEV_ID;
 const int       hsmClientKeyIdCrypt = 0xFF;
 #endif
+#ifdef WOLFBOOT_CERT_CHAIN_VERIFY
+const whNvmId hsmClientNvmIdCertRootCA = 1;
+#endif
 
 int hal_hsm_init_connect(void);
 int hal_hsm_disconnect(void);

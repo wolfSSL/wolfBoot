@@ -79,6 +79,7 @@ extern "C" {
 #define HDR_SIGNATURE               0x20
 #define HDR_POLICY_SIGNATURE        0x21
 #define HDR_SECONDARY_SIGNATURE     0x22
+#define HDR_CERT_CHAIN              0x23
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */
