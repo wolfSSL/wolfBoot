@@ -501,6 +501,7 @@ extern int tolower(int c);
     #define WOLF_CRYPTO_CB_ONLY_ECC
     #define WOLF_CRYPTO_CB_ONLY_RSA
     #define WOLFSSL_NO_SW_MATH
+    #define MAX_CRYPTO_DEVID_CALLBACKS 2
 
     #ifdef WOLFBOOT_RENESAS_TSIP
         #define WOLFSSL_RENESAS_TSIP

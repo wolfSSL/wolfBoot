@@ -54,29 +54,19 @@ static inline void hal_panic(void)
 extern flash_ctrl_t g_flash0_ctrl;
 extern flash_cfg_t g_flash0_cfg;
 
-void hal_init(void)
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
+static int sipInitDone = 0;
+int hal_renesas_init(void)
 {
     fsp_err_t err;
+    uint32_t *pubkey;
 
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
+    if (sipInitDone)
+        return 0;
+
     /* retrieve installed pubkey from flash */
-    uint32_t *pubkey = keystore_get_buffer(0);
-#endif
-    err = R_FLASH_HP_Close(&g_flash0_ctrl);
-    err = R_FLASH_HP_Open(&g_flash0_ctrl, &g_flash0_cfg);
+    pubkey = keystore_get_buffer(0);
 
-     if(err != FSP_ERR_ALREADY_OPEN && err != FSP_SUCCESS){
-         printf("ERROR: %d\n", err);
-        hal_panic();
-     }
-
-    /* Setup Default  Block 0 as Startup Setup Block */
-    err = R_FLASH_HP_StartUpAreaSelect(&g_flash0_ctrl, FLASH_STARTUP_AREA_BLOCK0, true);
-    if(err != FSP_SUCCESS){
-        printf("ERROR: %d\n", err);
-        hal_panic();
-    }
-#if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
     err = wolfCrypt_Init();
     if (err != 0) {
           printf("ERROR: wolfCrypt_Init %d\n", err);
@@ -93,12 +83,39 @@ void hal_init(void)
     pkInfo.keyflgs_crypt.bits.rsapub2048_installedkey_set = 1;
     pkInfo.keyflgs_crypt.bits.message_type = 1;
     err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
-
     if (err < 0) {
          printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
-         hal_panic();
+         return err;
     }
+    sipInitDone = 1;
+    return 0;
+}
+#endif
 
+void hal_init(void)
+{
+    fsp_err_t err;
+
+    err = R_FLASH_HP_Close(&g_flash0_ctrl);
+    err = R_FLASH_HP_Open(&g_flash0_ctrl, &g_flash0_cfg);
+
+     if (err != FSP_ERR_ALREADY_OPEN && err != FSP_SUCCESS){
+        wolfBoot_printf("ERROR: %d\n", err);
+        hal_panic();
+     }
+
+    /* Setup Default  Block 0 as Startup Setup Block */
+    err = R_FLASH_HP_StartUpAreaSelect(&g_flash0_ctrl, FLASH_STARTUP_AREA_BLOCK0, true);
+    if (err != FSP_SUCCESS){
+        wolfBoot_printf("ERROR: %d\n", err);
+        hal_panic();
+    }
+#if defined(WOLFBOOT_RENESAS_SCEPROTECT) && !defined(WOLFBOOT_RENESAS_APP)
+    err = hal_renesas_init();
+    if (err != 0) {
+        wolfBoot_printf("ERROR: hal_renesas_init %d\n", err);
+        hal_panic();
+    }
 #endif
 }
 
