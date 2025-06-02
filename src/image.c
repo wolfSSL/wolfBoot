@@ -53,7 +53,7 @@
 #endif
 
 /* Globals */
-static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
+static uint8_t XALIGNED(4) digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
 /* TPM based verify */
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
@@ -748,7 +748,7 @@ uint16_t wolfBoot_get_header(struct wolfBoot_image *img, uint16_t type,
 }
 
 #ifdef EXT_FLASH
-static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
+static uint8_t XALIGNED(4) ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
 #endif
 /**
  * @brief Get a block of data to be hashed.
@@ -1500,7 +1500,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 {
     uint32_t current_offset = offset;
     uint32_t remaining_size = size;
-    uint8_t  read_buf[WOLFBOOT_SHA_BLOCK_SIZE]; /* Use local buffer */
+    uint8_t XALIGNED(4) read_buf[WOLFBOOT_SHA_BLOCK_SIZE]; /* Use local buffer */
 
     while (remaining_size > 0) {
         uint32_t read_size = (remaining_size > WOLFBOOT_SHA_BLOCK_SIZE)
@@ -1529,7 +1529,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 static int update_hash_flash_addr(wolfBoot_hash_t* ctx, uintptr_t addr,
                                   uint32_t size, int src_ext)
 {
-    uint8_t   buffer[WOLFBOOT_SHA_BLOCK_SIZE];
+    uint8_t XALIGNED(4) buffer[WOLFBOOT_SHA_BLOCK_SIZE];
     uint32_t  remaining_size = size;
     uintptr_t current_addr   = addr;
 
@@ -1568,7 +1568,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     size_t                ph_size           = 0;
     size_t                current_ph_offset = 0;
     int64_t               final_offset      = -1;
-    uint8_t               calc_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t XALIGNED(4)   calc_digest[WOLFBOOT_SHA_DIGEST_SIZE];
     uint8_t*              exp_digest;
     int32_t               stored_sha_len;
     int                   i;
@@ -1913,7 +1913,14 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
          * TSIP encrypted key is installed at
          *    RENESAS_TSIP_INSTALLEDKEY_ADDR
          */
+        extern int hal_renesas_init(void);
+        int rc = hal_renesas_init();
+        if (rc != 0) {
+            wolfBoot_printf("hal_renesas_init failed! %d\n", rc);
+            return rc;
+        }
         key_slot = 0;
+
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
       defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
         /* Don't care about the key slot, we are using a fixed wolfHSM keyId */

@@ -207,7 +207,7 @@ extern "C" {
     #include "wolfssl/wolfcrypt/types.h"
     #include "wolfssl/wolfcrypt/sha3.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
-#     define WOLFBOOT_SHA_BLOCK_SIZE (128)
+#     define WOLFBOOT_SHA_BLOCK_SIZE (256)
 #   endif
 #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
