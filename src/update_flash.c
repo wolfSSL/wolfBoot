@@ -777,7 +777,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
     }
 
-    /* Erase remainder of partitions */
+    /* Erase remainder of partition */
 #if defined(WOLFBOOT_FLASH_MULTI_SECTOR_ERASE) || defined(PRINTF_ENABLED)
     /* calculate number of remaining bytes */
     /* reserve 1 sector for status (2 sectors for NV write once) */
@@ -787,7 +787,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
 #endif
 
-    wolfBoot_printf("Erasing remainder of partitions (%d sectors)...\n",
+    wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
         size/sector_size);
 #endif
 
