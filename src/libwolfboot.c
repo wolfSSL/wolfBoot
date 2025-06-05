@@ -752,7 +752,10 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
      * FLAGS_INVERT needs erased flags because the bin-assemble's fill byte may
      * not match what's in wolfBoot */
     if (FLAGS_UPDATE_EXT()) {
+#ifndef NVM_FLASH_WRITEONCE
         ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        wolfBoot_set_partition_state(PART_UPDATE, st);
+#endif
     } else {
 #ifndef NVM_FLASH_WRITEONCE
         hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
