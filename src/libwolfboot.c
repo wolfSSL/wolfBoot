@@ -753,7 +753,6 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
      * not match what's in wolfBoot */
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
-        wolfBoot_set_partition_state(PART_UPDATE, st);
     } else {
 #ifndef NVM_FLASH_WRITEONCE
         hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
