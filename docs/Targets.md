@@ -1609,7 +1609,7 @@ Identify the correct JLink device for your PIC32CK. In the examples the model is
    q
    ```
 
-3. Disconnect USB debugger and power cycle board. LED0 will illuminate (indicating version 1). Hit reset button and LED1 will illumate (indicating version 2).
+3. Disconnect USB debugger and power cycle board. LED0 will turn on indicating version 1. Then press the reset button and LED1 will turn on indicating version 2.
 
 ### Programming with MPlab IPE
 
@@ -1621,7 +1621,7 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C000000 test-app/i
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C07F000 test-app/image_v2_signed.bin image_v2_signed.hex
 ```
 
-Then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
+then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
 Once the option is enabled, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
 
 ### Behavior During Testing
@@ -1681,7 +1681,7 @@ Identify the correct JLink device for your PIC32CZ board. In the examples the mo
    q
    ```
 
-3. Disconnect USB debugger and power cycle board. LED0 will illuminate (indicating version 1). Hit reset button and LED1 will illumate (indicating version 2).
+3. Disconnect USB debugger and power cycle board. LED0 will turn on indicating version 1. Then press the reset button and LED1 will turn on indicating version 2.
 
 ### Programming with MPLAB IPE
 
@@ -1693,7 +1693,7 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C000000 test-app/i
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C200000 test-app/image_v2_signed.bin image_v2_signed.hex
 ```
 
-Then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
+then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
 Once the option is enabled, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
 
 ### Behavior During Testing
