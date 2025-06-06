@@ -1609,6 +1609,8 @@ Identify the correct JLink device for your PIC32CK. In the examples the model is
    q
    ```
 
+3. Disconnect USB debugger and power cycle board. LED0 will illuminate (indicating version 1). Hit reset button and LED1 will illumate (indicating version 2).
+
 ### Programming with MPlab IPE
 
 In order to program using the MPlab IPE, you need to create the hex files for wolfBoot, and the signed application images:
@@ -1619,12 +1621,14 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C000000 test-app/i
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C07F000 test-app/image_v2_signed.bin image_v2_signed.hex
 ```
 
-then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
+Then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
 Once the option is enabled, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
 
 ### Behavior During Testing
 
 - The application version 1 will boot first. The application will trigger the update and light LED0. On the next reset, wolfBoot will update the application, boot application version 2, and turn on LED1.
+
+
 ## Microchip PIC32CZ
 
 The PIC32CZ is a high-performance 32-bit microcontroller family from Microchip featuring an ARM Cortex-M7 core. wolfBoot has been tested on the PIC32CZCA91 Curiosity board, which has GPIO pins PB21 and PB22 connected to LED0 and LED1, respectively, for status indication.
@@ -1677,6 +1681,8 @@ Identify the correct JLink device for your PIC32CZ board. In the examples the mo
    q
    ```
 
+3. Disconnect USB debugger and power cycle board. LED0 will illuminate (indicating version 1). Hit reset button and LED1 will illumate (indicating version 2).
+
 ### Programming with MPLAB IPE
 
 In order to program using the MPLAB IPE, you need to create the hex files for wolfBoot, and the signed application images:
@@ -1687,7 +1693,7 @@ arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C000000 test-app/i
 arm-none-eabi-objcopy -I binary -O ihex --change-addresses=0x0C200000 test-app/image_v2_signed.bin image_v2_signed.hex
 ```
 
-then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
+Then enable advanced setting in the MPLAB IPE GUI, and enable the "Allow Import Multiple Hex file" option in the Production view.
 Once the option is enabled, load the hex files into the MPLAB IPE GUI (File -> Import -> Multiple hex) and program the device.
 
 ### Behavior During Testing

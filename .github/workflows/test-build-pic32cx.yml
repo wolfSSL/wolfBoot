@@ -2,9 +2,9 @@ name: Test PIC32CZ and PIC32CK Build
 
 on:
   push:
-    branches: [main]
+    branches: [ 'master', 'main', 'release/**' ]
   pull_request:
-    branches: [main]
+    branches: [ '*' ]
 
 jobs:
   build-pic32cz:
