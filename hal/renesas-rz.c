@@ -34,7 +34,7 @@
     #include "wolfssl/wolfcrypt/wc_port.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas-fspsm-crypt.h"
     #include "wolfssl/wolfcrypt/port/Renesas/renesas-fspsm-types.h"
-    
+
     FSPSM_ST pkInfo;
     uint8_t  wrapped_public_key[RSIP_BYTE_SIZE_WRAPPED_KEY_VALUE_RSA_2048_PUBLIC];
     rsip_wrapped_key_t *p_wrapped_public_key = (rsip_wrapped_key_t *) wrapped_public_key;
@@ -125,20 +125,22 @@ void ext_flash_unlock(void)
 
 #endif
 
-void hal_init(void)
-{
-    
 #if defined(WOLFBOOT_RENESAS_RSIP) && !defined(WOLFBOOT_RENESAS_APP)
-
+static int sipInitDone = 0;
+int hal_renesas_init(void)
+{
     fsp_err_t err;
     int ret;
     rsa_public_t rsip_pub_key;
     const size_t key_size = sizeof(rsip_pub_key);
 
-    err = wolfCrypt_Init();
-    if (err != 0) {
-        printf("ERROR: wolfCrypt_Init %d\n", err);
-        hal_panic();
+    if (sipInitDone)
+        reutrn 0;
+
+    ret = wolfCrypt_Init();
+    if (ret != 0) {
+        wolfBoot_printf("ERROR: wolfCrypt_Init %d\n", ret);
+        return ret;
     }
 
     /* copy the key from ext flash to RAM */
@@ -146,8 +148,8 @@ void hal_init(void)
             (uint8_t*)RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR, key_size);
     if (ret != key_size){
         wolfBoot_printf("Error reading public key at %lx\n",
-        RENESAS_RSIP_INSTALLEDKEY_FLASH_ADDR);
-         hal_panic();
+            RENESAS_RSIP_INSTALLEDKEY_FLASH_ADDR);
+        return -1;
     }
     /* import enrypted key */
     XMEMCPY(&rsip_pub_key, (const void*)RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR, key_size);
@@ -166,12 +168,23 @@ void hal_init(void)
     pkInfo.keyflgs_crypt.bits.message_type = 1;
     pkInfo.hash_type = RSIP_HASH_TYPE_SHA256;
     err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
-
     if (err < 0) {
         wolfBoot_printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
+        return err;
+    }
+    sipInitDone = 1;
+    return 0;
+}
+#endif
+
+void hal_init(void)
+{
+#if defined(WOLFBOOT_RENESAS_RSIP) && !defined(WOLFBOOT_RENESAS_APP)
+    int err = hal_renesas_init();
+    if (err != 0) {
+        printf("ERROR: hal_renesas_init %d\n", err);
         hal_panic();
     }
-
 #endif
 }
 

@@ -367,14 +367,90 @@ void hal_clk_init(void)
     PROTECT_ON(); /* write protect on */
 }
 
-void hal_init(void)
+#if defined(WOLFBOOT_RENESAS_TSIP) && !defined(WOLFBOOT_RENESAS_APP)
+static int sipInitDone = 0;
+int hal_renesas_init(void)
 {
-#if defined(WOLFBOOT_RENESAS_TSIP) && \
-    !defined(WOLFBOOT_RENESAS_APP)
     int err;
     uint32_t key_type = 0;
     int tsip_key_type = -1;
     struct enc_pub_key *encrypted_user_key_data;
+
+    if (sipInitDone)
+        return 0;
+
+    err = wolfCrypt_Init();
+    if (err != 0) {
+        return err;
+    }
+
+    /* retrive installed pubkey data from flash */
+    encrypted_user_key_data = (struct enc_pub_key*)keystore_get_buffer(0);
+
+    key_type = keystore_get_key_type(0);
+    switch (key_type) {
+        case AUTH_KEY_RSA2048:
+            tsip_key_type = TSIP_KEY_TYPE_RSA2048;
+            break;
+        case AUTH_KEY_RSA3072:
+            tsip_key_type = TSIP_KEY_TYPE_RSA3072;
+            break;
+        case AUTH_KEY_RSA4096:
+            tsip_key_type = TSIP_KEY_TYPE_RSA4096;
+            break;
+        case AUTH_KEY_ECC256:
+            tsip_key_type = TSIP_KEY_TYPE_ECDSAP256;
+            break;
+        case AUTH_KEY_ECC384:
+            tsip_key_type = TSIP_KEY_TYPE_ECDSAP384;
+            break;
+        case AUTH_KEY_ECC521:
+        case AUTH_KEY_ED25519:
+        case AUTH_KEY_ED448:
+        default:
+            tsip_key_type = -1;
+            break;
+    }
+    if (tsip_key_type == -1) {
+        wolfBoot_printf("key type (%d) not supported\n", key_type);
+        return -1;
+    }
+
+    /* Load encrypted UFPK (User Factory Programming Key) */
+    tsip_inform_user_keys_ex(
+        (byte*)&encrypted_user_key_data->wufpk,
+        (byte*)&encrypted_user_key_data->initial_vector,
+        (byte*)&encrypted_user_key_data->encrypted_user_key,
+        0/* dummy */
+    );
+
+    /* Load a wrapped public key into TSIP */
+    if (tsip_use_PublicKey_buffer_crypt(&pkInfo,
+                (const char*)&encrypted_user_key_data->encrypted_user_key,
+                sizeof(encrypted_user_key_data->encrypted_user_key),
+                tsip_key_type) != 0) {
+        wolfBoot_printf("ERROR tsip_use_PublicKey_buffer\n");
+        return -1;
+    }
+
+    /* Init Crypt Callback */
+    pkInfo.sign_hash_type = sha256_mac; /* TSIP does not support SHA2-384/512 */
+    pkInfo.keyflgs_crypt.bits.message_type = 1;
+    err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
+    if (err < 0) {
+        wolfBoot_printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
+        return -1;
+    }
+    sipInitDone = 1;
+    return 0;
+}
+#endif /* TSIP */
+
+
+void hal_init(void)
+{
+#if defined(WOLFBOOT_RENESAS_TSIP) && !defined(WOLFBOOT_RENESAS_APP)
+    int err;
 #endif
 
 /* For CCRX, mcu_clock_setup() in resetprg.c will set up clocks. */
@@ -393,72 +469,13 @@ void hal_init(void)
 
     hal_flash_init();
 
-#if defined(WOLFBOOT_RENESAS_TSIP) && \
-    !defined(WOLFBOOT_RENESAS_APP)
-    err = wolfCrypt_Init();
+#if defined(WOLFBOOT_RENESAS_TSIP) && !defined(WOLFBOOT_RENESAS_APP)
+    err = hal_renesas_init();
     if (err != 0) {
-       wolfBoot_printf("ERROR: wolfCrypt_Init %d\n", err);
-       hal_panic();
-    }
-
-    /* retrive installed pubkey data from flash */
-    encrypted_user_key_data = (struct enc_pub_key*)keystore_get_buffer(0);
-
-    key_type = keystore_get_key_type(0);
-    switch (key_type) {
-        case AUTH_KEY_RSA2048:
-            tsip_key_type = TSIP_RSA2048;
-            break;
-        case AUTH_KEY_RSA3072:
-            tsip_key_type = TSIP_RSA3072;
-            break;
-        case AUTH_KEY_RSA4096:
-            tsip_key_type = TSIP_RSA4096;
-            break;
-        case AUTH_KEY_ECC256:
-            tsip_key_type = TSIP_ECCP256;
-            break;
-        case AUTH_KEY_ECC384:
-            tsip_key_type = TSIP_ECCP384;
-            break;
-        case AUTH_KEY_ECC521:
-        case AUTH_KEY_ED25519:
-        case AUTH_KEY_ED448:
-        default:
-            tsip_key_type = -1;
-            break;
-    }
-    if (tsip_key_type == -1) {
-        wolfBoot_printf("key type (%d) not supported\n", key_type);
+        wolfBoot_printf("ERROR: hal_renesas_init %d\n", err);
         hal_panic();
     }
-
-    /* Load encrypted UFPK (User Factory Programming Key) */
-    tsip_inform_user_keys_ex(
-        (byte*)&encrypted_user_key_data->wufpk,
-        (byte*)&encrypted_user_key_data->initial_vector,
-        (byte*)&encrypted_user_key_data->encrypted_user_key,
-        0/* dummy */
-    );
-
-    /* Load a wrapped public key into TSIP */
-    if (tsip_use_PublicKey_buffer_crypt(&pkInfo,
-                (const char*)&encrypted_user_key_data->encrypted_user_key,
-                sizeof(encrypted_user_key_data->encrypted_user_key),
-                tsip_key_type) != 0) {
-        wolfBoot_printf("ERROR tsip_use_PublicKey_buffer\n");
-        hal_panic();
-    }
-
-    /* Init Crypt Callback */
-    pkInfo.sign_hash_type = sha256_mac; /* TSIP does not support SHA2-384/512 */
-    pkInfo.keyflgs_crypt.bits.message_type = 1;
-    err = wc_CryptoCb_CryptInitRenesasCmn(NULL, &pkInfo);
-    if (err < 0) {
-        wolfBoot_printf("ERROR: wc_CryptoCb_CryptInitRenesasCmn %d\n", err);
-        hal_panic();
-    }
-#endif /* TSIP */
+#endif
 }
 
 void hal_prepare_boot(void)

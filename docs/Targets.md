@@ -2453,7 +2453,7 @@ Boot header magic 0x00000000 invalid at 0x20000128
 Copy sector 1 (part 1->2)
 Copy sector 1 (part 0->1)
 Copy sector 1 (part 2->0)
-Erasing remainder of partitions (235 sectors)...
+Erasing remainder of partition (235 sectors)...
 Boot partition: 0xC000 (sz 4832, ver 0x2, type 0x201)
 Boot header magic 0x00000000 invalid at 0x20000128
 Copy sector 236 (part 0->2)
@@ -2495,7 +2495,7 @@ Copy sector 1 (part 2->0)
 Copy sector 2 (part 1->2)
 Copy sector 2 (part 0->1)
 Copy sector 2 (part 2->0)
-Erasing remainder of partitions (88 sectors)...
+Erasing remainder of partition (88 sectors)...
 Boot partition: 0x100C000 (sz 4120, ver 0x2, type 0x202)
 Update partition: 0x100000 (sz 4120, ver 0x1, type 0x201)
 Copy sector 90 (part 0->2)

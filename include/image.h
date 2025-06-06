@@ -833,7 +833,6 @@ int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8
 int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image);
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
-int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
 int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
 int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
