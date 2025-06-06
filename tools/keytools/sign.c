@@ -158,6 +158,7 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define HDR_SIGNATURE           0x20
 #define HDR_POLICY_SIGNATURE    0x21
 #define HDR_SECONDARY_SIGNATURE 0x22
+#define HDR_CERT_CHAIN          0x23
 
 
 #define HDR_SHA256_LEN    32
@@ -265,6 +266,7 @@ struct cmd_options {
     const char *policy_file;
     const char *encrypt_key_file;
     const char *delta_base_file;
+    const char *cert_chain_file;
     int no_base_sha;
     char output_image_file[PATH_MAX];
     char output_diff_file[PATH_MAX];
@@ -356,6 +358,10 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
 
     *pubkey_sz = curve_sz * 2;
     *pubkey = malloc(*pubkey_sz); /* assume malloc works */
+    if (*pubkey == NULL) {
+        printf("Pubkey malloc error!\n");
+        return -1;
+    }
     initRet = ret = wc_ecc_init(&key.ecc);
     if (CMD.manual_sign || CMD.sha_only) {
         /* raw (public x + public y) */
@@ -425,8 +431,10 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     if (ret != 0 && initRet == 0) {
         wc_ecc_free(&key.ecc);
     }
-    if (ret != 0)
+    if (ret != 0) {
         free(*pubkey);
+        *pubkey = NULL;
+    }
 
     if (ret == 0 || CMD.sign != SIGN_AUTO) {
         if (CMD.header_sz < header_sz)
@@ -455,9 +463,14 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
     uint32_t keySzOut = 0;
 
     if (CMD.manual_sign || CMD.sha_only) {
-        /* use public key directly */
-        *pubkey = *key_buffer;
+        /* Allocate and copy pubkey instead of using key_buffer directly */
         *pubkey_sz = *key_buffer_sz;
+        *pubkey = malloc(*pubkey_sz);
+        if (*pubkey == NULL) {
+            printf("Pubkey malloc error!\n");
+            return -1;
+        }
+        memcpy(*pubkey, *key_buffer, *pubkey_sz);
 
         if (*pubkey_sz <= rsa_pubkeysz) {
             CMD.header_sz = header_sz;
@@ -484,8 +497,18 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         }
 
         if (ret > 0) {
-            *pubkey = *key_buffer;
+            /* Allocate and copy pubkey instead of using key_buffer directly */
             *pubkey_sz = ret;
+            *pubkey = malloc(*pubkey_sz);
+            if (*pubkey == NULL) {
+                printf("Pubkey malloc error!\n");
+                ret = -1;
+                if (initRet == 0) {
+                    wc_FreeRsaKey(&key.rsa);
+                }
+                return -1;
+            }
+            memcpy(*pubkey, *key_buffer, *pubkey_sz);
             ret = 0;
         }
 
@@ -565,6 +588,10 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             initRet = -1;
             *pubkey_sz = ED25519_PUB_KEY_SIZE;
             *pubkey = malloc(*pubkey_sz);
+            if (*pubkey == NULL) {
+                printf("Pubkey malloc error!\n");
+                goto failure;
+            }
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
@@ -628,6 +655,10 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             initRet = -1;
             *pubkey_sz = ED448_PUB_KEY_SIZE;
             *pubkey = malloc(*pubkey_sz);
+            if (*pubkey == NULL) {
+                printf("Pubkey malloc error!\n");
+                goto failure;
+            }
 
             if (CMD.manual_sign || CMD.sha_only) {
                 /* raw */
@@ -743,16 +774,26 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             if (*key_buffer_sz == (HSS_MAX_PRIVATE_KEY_LEN +
                                     KEYSTORE_PUBKEY_SIZE_LMS)) {
                 /* priv + pub */
-                *pubkey = (*key_buffer) + HSS_MAX_PRIVATE_KEY_LEN;
-                *pubkey_sz = (*key_buffer_sz) - HSS_MAX_PRIVATE_KEY_LEN;
+                *pubkey_sz = KEYSTORE_PUBKEY_SIZE_LMS;
+                *pubkey = malloc(*pubkey_sz);
+                if (*pubkey == NULL) {
+                    printf("Pubkey malloc error!\n");
+                    goto failure;
+                }
+                memcpy(*pubkey, (*key_buffer) + HSS_MAX_PRIVATE_KEY_LEN, *pubkey_sz);
                 ret = 0;
                 printf("Found LMS key\n");
                 break;
             }
             else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_LMS) {
                 /* pub only */
-                *pubkey = (*key_buffer);
                 *pubkey_sz = KEYSTORE_PUBKEY_SIZE_LMS;
+                *pubkey = malloc(*pubkey_sz);
+                if (*pubkey == NULL) {
+                    printf("Pubkey malloc error!\n");
+                    goto failure;
+                }
+                memcpy(*pubkey, *key_buffer, *pubkey_sz);
                 ret = 0;
                 printf("Found LMS public only key\n");
                 break;
@@ -791,16 +832,26 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (*key_buffer_sz == (priv_sz + KEYSTORE_PUBKEY_SIZE_XMSS)) {
                 /* priv + pub */
-                *pubkey = (*key_buffer) + priv_sz;
-                *pubkey_sz = (*key_buffer_sz) - priv_sz;
+                *pubkey_sz = KEYSTORE_PUBKEY_SIZE_XMSS;
+                *pubkey = malloc(*pubkey_sz);
+                if (*pubkey == NULL) {
+                    printf("Pubkey malloc error!\n");
+                    goto failure;
+                }
+                memcpy(*pubkey, (*key_buffer) + priv_sz, *pubkey_sz);
                 ret = 0;
                 printf("Found XMSS key\n");
                 break;
             }
             else if (*key_buffer_sz == KEYSTORE_PUBKEY_SIZE_XMSS) {
                 /* pub only */
-                *pubkey = (*key_buffer);
                 *pubkey_sz = KEYSTORE_PUBKEY_SIZE_XMSS;
+                *pubkey = malloc(*pubkey_sz);
+                if (*pubkey == NULL) {
+                    printf("Pubkey malloc error!\n");
+                    goto failure;
+                }
+                memcpy(*pubkey, *key_buffer, *pubkey_sz);
                 ret = 0;
                 printf("Found XMSS public only key\n");
                 break;
@@ -844,16 +895,26 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 /* priv + pub */
                 ret = wc_MlDsaKey_ImportPrivRaw(&key.ml_dsa, *key_buffer,
                                                 priv_sz);
-                *pubkey = (*key_buffer) + priv_sz;
-                *pubkey_sz = (*key_buffer_sz) - priv_sz;
+                *pubkey_sz = pub_sz;
+                *pubkey = malloc(*pubkey_sz);
+                if (*pubkey == NULL) {
+                    printf("Pubkey malloc error!\n");
+                    goto failure;
+                }
+                memcpy(*pubkey, (*key_buffer) + priv_sz, *pubkey_sz);
                 ret = 0;
                 printf("Found ml-dsa key\n");
                 break;
             }
             else if (*key_buffer_sz == pub_sz) {
                 /* pub only */
-                *pubkey = (*key_buffer);
                 *pubkey_sz = pub_sz;
+                *pubkey = malloc(*pubkey_sz);
+                if (*pubkey == NULL) {
+                    printf("Pubkey malloc error!\n");
+                    goto failure;
+                }
+                memcpy(*pubkey, *key_buffer, *pubkey_sz);
                 ret = 0;
                 printf("Found ml-dsa public only key\n");
                 break;
@@ -1066,6 +1127,45 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     uint32_t digest_sz = 0;
     uint32_t image_sz = 0;
     int io_sz;
+    uint8_t*    cert_chain    = NULL;
+    uint32_t    cert_chain_sz = 0;
+
+    /* Check certificate chain file size before allocating header, and adjust
+     * header size if needed */
+    if (CMD.cert_chain_file != NULL) {
+        struct stat file_stat;
+
+        /* Get the file size */
+        if (stat(CMD.cert_chain_file, &file_stat) == 0) {
+            /* 2 bytes for tag + 2 bytes for length field */
+            const uint32_t tag_len_size = 4;
+            /* Maximum alignment padding that might be needed */
+            const uint32_t max_alignment = 8;
+            /* Required space = tag(2) + length(2) + data + potential alignment
+             * * padding */
+            const uint32_t required_space =
+                tag_len_size + file_stat.st_size + max_alignment;
+
+            /* If the current header size is too small, increase it */
+            if (CMD.header_sz < required_space) {
+                /* Round up to nearest power of 2 that can hold the chain */
+                const uint32_t min_header_size = 256;
+                uint32_t       new_size        = min_header_size;
+                while (new_size < required_space) {
+                    new_size *= 2;
+                }
+
+                printf("Increasing header size from %u to %u bytes to fit "
+                       "certificate chain\n",
+                       CMD.header_sz, new_size);
+                CMD.header_sz = new_size;
+            }
+        }
+        else {
+            printf("Warning: Could not stat certificate chain file %s: %s\n",
+                   CMD.cert_chain_file, strerror(errno));
+        }
+    }
 
     header_idx = 0;
     header = malloc(CMD.header_sz);
@@ -1181,6 +1281,64 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     CMD.custom_tlv[i].len, CMD.custom_tlv[i].buffer);
             }
         }
+    }
+
+    /* Read certificate chain if provided */
+    if (CMD.cert_chain_file != NULL) {
+        const size_t cert_chain_tlv_hdr_sz = 4;
+        struct stat  file_stat;
+        f = fopen(CMD.cert_chain_file, "rb");
+        if (f == NULL) {
+            printf("Open certificate chain file %s failed: %s\n",
+                   CMD.cert_chain_file, strerror(errno));
+            goto failure;
+        }
+
+        /* Get the file size */
+        if (stat(CMD.cert_chain_file, &file_stat) != 0) {
+            printf("Could not get certificate chain file size: %s\n",
+                   strerror(errno));
+            fclose(f);
+            goto failure;
+        }
+
+        cert_chain_sz = file_stat.st_size;
+
+        /* Verify that the chain will fit in our header */
+        if (header_idx + cert_chain_tlv_hdr_sz + cert_chain_sz >
+            CMD.header_sz) {
+            printf("Error: Certificate chain too large for header (%u bytes "
+                   "needed, %u available)\n",
+                   (unsigned int)(header_idx + cert_chain_tlv_hdr_sz +
+                                  cert_chain_sz),
+                   CMD.header_sz);
+            fclose(f);
+            goto failure;
+        }
+
+        cert_chain = malloc(cert_chain_sz);
+        if (cert_chain == NULL) {
+            printf("Certificate chain buffer malloc error!\n");
+            fclose(f);
+            goto failure;
+        }
+
+        /* Read the entire file into the buffer */
+        io_sz = (int)fread(cert_chain, 1, cert_chain_sz, f);
+        fclose(f);
+
+        if (io_sz != (int)cert_chain_sz) {
+            printf("Error reading certificate chain file: %s\n",
+                   strerror(errno));
+            goto failure;
+        }
+
+        /* Append the certificate chain TLV - require 8-byte alignment */
+        ALIGN_8(header_idx);
+        header_append_tag(header, &header_idx, HDR_CERT_CHAIN, cert_chain_sz,
+                          cert_chain);
+
+        printf("Added certificate chain (%d bytes)\n", cert_chain_sz);
     }
 
     /* Add padding bytes. Sha-3 val field requires 8-byte alignment */
@@ -1693,10 +1851,16 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     fclose(f2);
     fclose(f);
 failure:
+    if (cert_chain)
+        free(cert_chain);
     if (policy)
         free(policy);
     if (header)
         free(header);
+    if (signature)
+        free(signature);
+    if (secondary_signature)
+        free(secondary_signature);
     return ret;
 }
 
@@ -2587,6 +2751,13 @@ int main(int argc, char** argv)
             CMD.custom_tlvs++;
             i += 2;
         }
+        else if (strcmp(argv[i], "--cert-chain") == 0) {
+            if (argc <= (i + 1)) {
+                fprintf(stderr, "Missing certificate chain file argument\n");
+                exit(16);
+            }
+            CMD.cert_chain_file = argv[++i];
+        }
         else {
             i--;
             break;
@@ -2746,6 +2917,8 @@ int main(int argc, char** argv)
         DEBUG_PRINT("Header size: %u\n", CMD.header_sz);
         if (kbuf2)
             free(kbuf2);
+        if (pubkey2)
+            free(pubkey2);
     } else {
         make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
     }
@@ -2758,6 +2931,9 @@ int main(int argc, char** argv)
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 16);
     }
 
+    /* Add pubkey cleanup */
+    if (pubkey)
+        free(pubkey);
 
     if (kbuf)
         free(kbuf);
