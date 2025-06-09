@@ -502,6 +502,7 @@ extern int tolower(int c);
     #define WOLF_CRYPTO_CB_ONLY_RSA
     #define WOLFSSL_NO_SW_MATH
     #define MAX_CRYPTO_DEVID_CALLBACKS 2
+    #define WOLFSSL_AES_SMALL_TABLES
 
     #ifdef WOLFBOOT_RENESAS_TSIP
         #define WOLFSSL_RENESAS_TSIP
@@ -510,6 +511,10 @@ extern int tolower(int c);
         #define WOLFSSL_RENESAS_TSIP_CRYPTONLY
         #define NO_WOLFSSL_RENESAS_TSIP_CRYPT_HASH
         #define RENESAS_TSIP_INSTALLEDKEY_ADDR 0xFFFF0000
+        #ifndef RENESAS_TSIP_INSTALLEDENCKEY_ADDR
+            #define RENESAS_TSIP_INSTALLEDENCKEY_ADDR \
+                (RENESAS_TSIP_INSTALLEDKEY_ADDR + 0x100)
+        #endif
         #define ENCRYPTED_KEY_BYTE_SIZE ENC_PUB_KEY_SIZE
         #define RENESAS_DEVID 7890
     #endif

@@ -38,6 +38,9 @@
 #else
 #include <wolfssl/wolfcrypt/aes.h>
 #endif
+#ifdef WOLF_CRYPTO_CB
+#include <wolfssl/wolfcrypt/cryptocb.h>
+#endif
 
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
