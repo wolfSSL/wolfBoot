@@ -1553,6 +1553,7 @@ int RAMFUNCTION chacha_init(void)
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
 
 Aes aes_dec, aes_enc;
+
 /**
  * @brief Initialize AES encryption.
  *
@@ -1564,6 +1565,46 @@ Aes aes_dec, aes_enc;
  */
 int aes_init(void)
 {
+#if defined(WOLFBOOT_RENESAS_TSIP)
+    /* This structure is generated using Renesas Security Key Management Tool
+     * See docs/Renesas.md */
+    #include "enckey_data.h"
+    int ret;
+    int devId = RENESAS_DEVID + 1;
+    wrap_enc_key_t* enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
+
+    XMEMSET(&aes_enc, 0, sizeof(aes_enc));
+    XMEMSET(&aes_dec, 0, sizeof(aes_dec));
+    wc_AesInit(&aes_enc, NULL, devId);
+    wc_AesInit(&aes_dec, NULL, devId);
+
+    /* Unwrap key and get key index */
+#if ENCRYPT_KEY_SIZE == 32
+    ret = R_TSIP_GenerateAes256KeyIndex(enc_key->wufpk, enc_key->initial_vector,
+        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
+#else
+    ret = R_TSIP_GenerateAes128KeyIndex(enc_key->wufpk, enc_key->initial_vector,
+        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
+#endif
+    if (ret == TSIP_SUCCESS) {
+        /* copy to decryption key */
+        XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
+
+        /* register AES crypto callback */
+        extern int wc_tsip_AesCipher(int devIdArg, struct wc_CryptoInfo* info, void* ctx);
+        wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
+
+        encrypt_initialized = 1;
+
+        /* AES_ENCRYPTION is used for both directions in CTR */
+        /* unwrapped key never leaves TSIP and is referenced by tsip_keyIdx */
+        wc_AesSetKeyDirect(&aes_enc, enc_key->encrypted_user_key,
+            ENCRYPT_KEY_SIZE, enc_key->initial_vector, AES_ENCRYPTION);
+        wc_AesSetKeyDirect(&aes_dec, enc_key->encrypted_user_key,
+            ENCRYPT_KEY_SIZE, enc_key->initial_vector, AES_ENCRYPTION);
+    }
+#else
+
 #if defined(MMU) || defined(UNIT_TEST)
     uint8_t *key = ENCRYPT_KEY;
 #else
@@ -1582,8 +1623,8 @@ int aes_init(void)
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));
-    wc_AesInit(&aes_enc, NULL, 0);
-    wc_AesInit(&aes_dec, NULL, 0);
+    wc_AesInit(&aes_enc, NULL, INVALID_DEVID);
+    wc_AesInit(&aes_dec, NULL, INVALID_DEVID);
 
     /* Check against 'all 0xff' or 'all zero' cases */
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
@@ -1599,6 +1640,7 @@ int aes_init(void)
     wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
     wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
     encrypt_initialized = 1;
+#endif
     return 0;
 }
 

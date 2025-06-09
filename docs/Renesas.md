@@ -40,6 +40,7 @@ Result is `sample.key_enc.key`. Example: `00000001 6CCB9A1C 8AA58883 B1CB02DE 6C
 
 ```sh
 # Build keytools for Renesas RX (TSIP)
+# Use RENESAS_KEY=2 for TSIP
 $ make keytools RENESAS_KEY=2
 ```
 
@@ -163,6 +164,34 @@ Output image(s) successfully created.
 
 Download files to flash using Renesas flash programmer.
 
+## RX TSIP AES Encryption (optional)
+
+Create a wrapped AES key for encrypting/decrypting the update
+
+Example key: `fwenc.key`: e07227e477450b1ca266078e217a3c89cbae827a7bb117ff851bc25300163575
+Note: `.config` must include `ENCRYPT=1` and `ENCRYPT_WITH_AES256=1`
+
+```sh
+$ C:\Renesas\SecurityKeyManagementTool\cli\skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./fwenc.key -mcu RX-TSIP -keytype AES-256 -output include/enckey_data.c -filetype csource -keyname wrap_enc_key -iv A8B14B0F5F09D73F31D4777FC0103FB4
+Output File: C:\CPG_Controls\wolfboot\include\enckey_data.h
+Output File: C:\CPG_Controls\wolfboot\include\enckey_data.c
+UFPK: B94A2B961C75510174F0C967ECFC20B377C7FB256DB627B1BFFADEE05EE98AC4
+W-UFPK: 000000016CCB9A1C8AA58883B1CB02DE6C37DA6054FB94E206EAE7204D9CCF4C6EEB288C
+IV: A8B14B0F5F09D73F31D4777FC0103FB4
+Encrypted key: 3C39BE75E9CA5CB9D2D0BBDE111CABC894A2B13F857399B05E7B140518F35D05CD97D8DF20817CEEBA2F207CC90BAF2C
+
+$ C:\Renesas\SecurityKeyManagementTool\cli\skmt.exe -genkey -ufpk file=./sample.key -wufpk file=./sample.key_enc.key -key file=./fwenc.key -mcu RX-TSIP -keytype AES-256 -output fwenc.srec -filetype "mot" -address FFFF0100 -iv A8B14B0F5F09D73F31D4777FC0103FB4
+Output File: C:\CPG_Controls\wolfboot\fwenc.srec
+UFPK: B94A2B961C75510174F0C967ECFC20B377C7FB256DB627B1BFFADEE05EE98AC4
+W-UFPK: 000000016CCB9A1C8AA58883B1CB02DE6C37DA6054FB94E206EAE7204D9CCF4C6EEB288C
+IV: A8B14B0F5F09D73F31D4777FC0103FB4
+Encrypted key: 3C39BE75E9CA5CB9D2D0BBDE111CABC894A2B13F857399B05E7B140518F35D05CD97D8DF20817CEEBA2F207CC90BAF2C
+```
+
+The offset for the wrapped AES key is determined by `RENESAS_TSIP_INSTALLEDENCKEY_ADDR` and defaults to `RENESAS_TSIP_INSTALLEDKEY_ADDR` + 0x100
+
+The key needed for the firmware signing tool is the 32 byte AES Key + 16 byte IV.
+`echo "e07227e477450b1ca266078e217a3c89cbae827a7bb117ff851bc25300163575A8B14B0F5F09D73F31D4777FC0103FB4" | xxd -r -p - > fwkey.bin`
 
 ### RX TSIP Benchmarks
 

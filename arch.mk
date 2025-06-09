@@ -470,7 +470,8 @@ ifeq ($(ARCH),RENESAS_RX)
 
     OBJS+=./lib/wolfssl/wolfcrypt/src/cryptocb.o \
           ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.o \
-          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o
+          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o \
+          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_aes.o
 
     # RX TSIP uses pre-compiled .a library by default
     ifneq ($(RX_TSIP_SRC),1)

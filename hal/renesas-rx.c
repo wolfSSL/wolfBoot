@@ -374,6 +374,8 @@ int hal_renesas_init(void)
     int err;
     uint32_t key_type = 0;
     int tsip_key_type = -1;
+    /* This structure is generated using Renesas Security Key Management Tool
+     * See docs/Renesas.md */
     struct enc_pub_key *encrypted_user_key_data;
 
     if (sipInitDone)

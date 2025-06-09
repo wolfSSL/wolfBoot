@@ -61,8 +61,8 @@ src/ecc512_pub_key.c
 src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
 # Renesas key data files
-include/key_data.c
-include/key_data.h
+include/key_data.*
+include/enckey_data.*
 
 # keygen binaries
 tools/keytools/sign
