@@ -1554,6 +1554,12 @@ int RAMFUNCTION chacha_init(void)
 
 Aes aes_dec, aes_enc;
 
+#if defined(WOLFBOOT_RENESAS_TSIP)
+    /* Provides wrap_enc_key_t structure generated using
+     * Renesas Security Key Management Tool. See docs/Renesas.md */
+    #include "enckey_data.h"
+#endif
+
 /**
  * @brief Initialize AES encryption.
  *
@@ -1566,9 +1572,6 @@ Aes aes_dec, aes_enc;
 int aes_init(void)
 {
 #if defined(WOLFBOOT_RENESAS_TSIP)
-    /* This structure is generated using Renesas Security Key Management Tool
-     * See docs/Renesas.md */
-    #include "enckey_data.h"
     int ret;
     int devId = RENESAS_DEVID + 1;
     wrap_enc_key_t* enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
@@ -1591,7 +1594,6 @@ int aes_init(void)
         XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
 
         /* register AES crypto callback */
-        extern int wc_tsip_AesCipher(int devIdArg, struct wc_CryptoInfo* info, void* ctx);
         wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
 
         encrypt_initialized = 1;

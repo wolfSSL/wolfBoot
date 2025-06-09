@@ -41,6 +41,9 @@
 #ifdef WOLF_CRYPTO_CB
 #include <wolfssl/wolfcrypt/cryptocb.h>
 #endif
+#ifdef WOLFSSL_RENESAS_TSIP
+#include <wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h>
+#endif
 
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
