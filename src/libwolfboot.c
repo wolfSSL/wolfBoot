@@ -768,12 +768,18 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         /* Set the IMG_STATE_UPDATING flag and
          * the trailer magic in cache before committing to flash
          */
+#ifndef FLAGS_HOME
         offset = WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + 1);
-#ifdef FLAGS_HOME
+#else
         /* If flags are stored in BOOT partition, take into account the offset
          * of the flags used for the update partition too, to avoid erasing the
          * sector.
          */
+    #ifdef EXT_ENCRYPTED
+        offset = WOLFBOOT_SECTOR_SIZE - TRAILER_OVERHEAD;
+    #else
+        offset = WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + 1);
+    #endif
         offset -= (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
 #endif
         NVM_CACHE[offset] = st;
