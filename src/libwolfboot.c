@@ -753,13 +753,38 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
      * not match what's in wolfBoot */
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        wolfBoot_set_partition_state(PART_UPDATE, st);
     } else {
 #ifndef NVM_FLASH_WRITEONCE
         hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        wolfBoot_set_partition_state(PART_UPDATE, st);
 #else
+        uint32_t magic_trail = WOLFBOOT_MAGIC_TRAIL;
+        uint32_t offset;
         selSec = nvm_select_fresh_sector(PART_UPDATE);
         XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
             WOLFBOOT_SECTOR_SIZE);
+
+        /* Set the IMG_STATE_UPDATING flag and
+         * the trailer magic in cache before committing to flash
+         */
+#ifndef FLAGS_HOME
+        offset = WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + 1);
+#else
+        /* If flags are stored in BOOT partition, take into account the offset
+         * of the flags used for the update partition too, to avoid erasing the
+         * sector.
+         */
+    #ifdef EXT_ENCRYPTED
+        offset = WOLFBOOT_SECTOR_SIZE - TRAILER_OVERHEAD;
+    #else
+        offset = WOLFBOOT_SECTOR_SIZE - (sizeof(uint32_t) + 1);
+    #endif
+        offset -= (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
+#endif
+        NVM_CACHE[offset] = st;
+        XMEMCPY(NVM_CACHE + offset + 1, &magic_trail, sizeof(uint32_t));
+
         /* write to the non selected sector */
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec,
             WOLFBOOT_SECTOR_SIZE);
@@ -770,8 +795,6 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
             WOLFBOOT_SECTOR_SIZE);
 #endif
     }
-
-    wolfBoot_set_partition_state(PART_UPDATE, st);
 
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_lock();
