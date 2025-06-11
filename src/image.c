@@ -53,7 +53,7 @@
 #endif
 
 /* Globals */
-static uint8_t XALIGNED(4) digest[WOLFBOOT_SHA_DIGEST_SIZE];
+static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 
 /* TPM based verify */
 #if defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_VERIFY)
@@ -748,7 +748,7 @@ uint16_t wolfBoot_get_header(struct wolfBoot_image *img, uint16_t type,
 }
 
 #ifdef EXT_FLASH
-static uint8_t XALIGNED(4) ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE];
+static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4);
 #endif
 /**
  * @brief Get a block of data to be hashed.
@@ -772,7 +772,7 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 }
 
 #ifdef EXT_FLASH
-static uint8_t XALIGNED(4) hdr_cpy[IMAGE_HEADER_SIZE];
+static uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
 static int hdr_cpy_done = 0;
 
 /**
@@ -1500,7 +1500,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 {
     uint32_t current_offset = offset;
     uint32_t remaining_size = size;
-    uint8_t XALIGNED(4) read_buf[WOLFBOOT_SHA_BLOCK_SIZE]; /* Use local buffer */
+    uint8_t read_buf[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4); /* Use local buffer*/
 
     while (remaining_size > 0) {
         uint32_t read_size = (remaining_size > WOLFBOOT_SHA_BLOCK_SIZE)
@@ -1529,7 +1529,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 static int update_hash_flash_addr(wolfBoot_hash_t* ctx, uintptr_t addr,
                                   uint32_t size, int src_ext)
 {
-    uint8_t XALIGNED(4) buffer[WOLFBOOT_SHA_BLOCK_SIZE];
+    uint8_t   buffer[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4);
     uint32_t  remaining_size = size;
     uintptr_t current_addr   = addr;
 
@@ -1568,7 +1568,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     size_t                ph_size           = 0;
     size_t                current_ph_offset = 0;
     int64_t               final_offset      = -1;
-    uint8_t XALIGNED(4)   calc_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t               calc_digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
     uint8_t*              exp_digest;
     int32_t               stored_sha_len;
     int                   i;

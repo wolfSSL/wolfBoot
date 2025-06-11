@@ -64,7 +64,7 @@
 
 #if defined(EXT_ENCRYPTED)
 static int encrypt_initialized = 0;
-static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
+static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
     #elif !defined(XMEMSET)
@@ -1598,14 +1598,15 @@ int aes_init(void)
         /* register AES crypto callback */
         wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
 
-        encrypt_initialized = 1;
-
         /* AES_ENCRYPTION is used for both directions in CTR */
         /* unwrapped key never leaves TSIP and is referenced by tsip_keyIdx */
         wc_AesSetKeyDirect(&aes_enc, enc_key->encrypted_user_key,
             ENCRYPT_KEY_SIZE, enc_key->initial_vector, AES_ENCRYPTION);
         wc_AesSetKeyDirect(&aes_dec, enc_key->encrypted_user_key,
             ENCRYPT_KEY_SIZE, enc_key->initial_vector, AES_ENCRYPTION);
+
+        XMEMCPY(encrypt_iv_nonce, enc_key->initial_vector, ENCRYPT_NONCE_SIZE);
+        encrypt_initialized = 1;
     }
 #else
 
@@ -1825,8 +1826,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
  */
 int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
-    uint8_t block[ENCRYPT_BLOCK_SIZE];
-    uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+    uint8_t  block[ENCRYPT_BLOCK_SIZE] XALIGNED(4);
+    uint8_t  dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED(4);
     uint32_t row_address = address, row_offset, iv_counter = 0;
     int i;
     int flash_read_size;
