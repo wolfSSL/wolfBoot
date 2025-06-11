@@ -162,12 +162,22 @@ extern "C" {
 
 #if defined(__WOLFBOOT) || defined(UNIT_TEST_AUTH)
 
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/visibility.h"
+#include "wolfssl/wolfcrypt/wc_port.h"
+#include "wolfssl/wolfcrypt/types.h"
+
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* Include these before any algorithm headers */
+    #include "mcu/all/r_bsp_common.h"
+    #include "r_bsp_config.h"
+    #include "r_tsip_rx_if.h"
+    #include "wolfssl/wolfcrypt/port/Renesas/renesas_tsip_types.h"
+#endif
+
+
 /* Hashing configuration */
 #if defined(WOLFBOOT_HASH_SHA256)
-    #include "wolfssl/wolfcrypt/settings.h"
-    #include "wolfssl/wolfcrypt/visibility.h"
-    #include "wolfssl/wolfcrypt/wc_port.h"
-    #include "wolfssl/wolfcrypt/types.h"
     #include "wolfssl/wolfcrypt/sha256.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
@@ -183,10 +193,6 @@ extern "C" {
     typedef wc_Sha256 wolfBoot_hash_t;
 #   define HDR_HASH HDR_SHA256
 #elif defined(WOLFBOOT_HASH_SHA384)
-    #include "wolfssl/wolfcrypt/settings.h"
-    #include "wolfssl/wolfcrypt/visibility.h"
-    #include "wolfssl/wolfcrypt/wc_port.h"
-    #include "wolfssl/wolfcrypt/types.h"
     #include "wolfssl/wolfcrypt/sha512.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
@@ -202,10 +208,6 @@ extern "C" {
     typedef wc_Sha384 wolfBoot_hash_t;
 #   define HDR_HASH HDR_SHA384
 #elif defined(WOLFBOOT_HASH_SHA3_384)
-    #include "wolfssl/wolfcrypt/settings.h"
-    #include "wolfssl/wolfcrypt/visibility.h"
-    #include "wolfssl/wolfcrypt/wc_port.h"
-    #include "wolfssl/wolfcrypt/types.h"
     #include "wolfssl/wolfcrypt/sha3.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
@@ -235,7 +237,8 @@ extern "C" {
 
 #endif
 
-#if defined(__WOLFBOOT) || defined (__FLASH_OTP_PRIMER) || defined (UNIT_TEST_AUTH) || defined(WOLFBOOT_TPM)
+#if defined(__WOLFBOOT) || defined (__FLASH_OTP_PRIMER) || \
+    defined (UNIT_TEST_AUTH) || defined(WOLFBOOT_TPM)
 
  /* Authentication configuration */
  #if defined(WOLFBOOT_NO_SIGN)

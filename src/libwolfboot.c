@@ -1555,6 +1555,8 @@ int RAMFUNCTION chacha_init(void)
 Aes aes_dec, aes_enc;
 
 #if defined(WOLFBOOT_RENESAS_TSIP)
+    #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
+
     /* Provides wrap_enc_key_t structure generated using
      * Renesas Security Key Management Tool. See docs/Renesas.md */
     #include "enckey_data.h"
