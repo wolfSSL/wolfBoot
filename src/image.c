@@ -1511,7 +1511,7 @@ static int read_flash_fwimage(struct wolfBoot_image* img, uint32_t offset,
 #ifdef EXT_FLASH
     if (PART_IS_EXT(img)) {
         if (ext_flash_check_read((uintptr_t)img->fw_base + offset, buffer,
-                                 size) != 0) {
+                                 size) < 0) {
             wolfBoot_printf(
                 "ERROR: ext_flash_check_read failed at offset %lu, size %u\n",
                 (unsigned long)offset, size);
@@ -1539,7 +1539,7 @@ static int read_flash_addr(void* src, void* buffer, uint32_t size, int src_ext)
 
 #ifdef EXT_FLASH
     if (src_ext) {
-        if (ext_flash_check_read((uintptr_t)src, buffer, size) != 0) {
+        if (ext_flash_check_read((uintptr_t)src, buffer, size) < 0) {
             wolfBoot_printf(
                 "ERROR: ext_flash_check_read failed at address %p, size %u\n",
                 src, size);
