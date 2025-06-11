@@ -113,12 +113,12 @@ extern int tolower(int c);
 #      define FREESCALE_LTC_TFM
 #   endif
 
-
     /* Some ECC options are disabled to reduce size */
 #   if !defined(WOLFCRYPT_SECURE_MODE)
 #       if !defined(WOLFBOOT_TPM)
 #          define NO_ECC_SIGN
 #          define NO_ECC_DHE
+#          define WOLFSSL_NO_CT_OPS /* don't use constant time ops in misc.c */
 #          if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
 #              define NO_ECC_EXPORT
 #              define NO_ECC_KEY_EXPORT
@@ -502,6 +502,7 @@ extern int tolower(int c);
     #define WOLF_CRYPTO_CB_ONLY_RSA
     #define WOLFSSL_NO_SW_MATH
     #define MAX_CRYPTO_DEVID_CALLBACKS 2
+    #define WC_NO_DEFAULT_DEVID
     #define WOLFSSL_AES_SMALL_TABLES
 
     #ifdef WOLFBOOT_RENESAS_TSIP

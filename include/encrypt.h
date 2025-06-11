@@ -27,25 +27,19 @@
 #if defined(__WOLFBOOT) || defined(UNIT_TEST)
 
 #include <stdint.h>
-#include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/sha256.h>
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/sha256.h"
 
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
 #ifdef ENCRYPT_WITH_CHACHA
-#include <wolfssl/wolfcrypt/chacha.h>
+    #include "wolfssl/wolfcrypt/chacha.h"
 #else
-#include <wolfssl/wolfcrypt/aes.h>
-#endif
-#ifdef WOLF_CRYPTO_CB
-#include <wolfssl/wolfcrypt/cryptocb.h>
-#endif
-#ifdef WOLFSSL_RENESAS_TSIP
-#include <wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h>
+    #include "wolfssl/wolfcrypt/aes.h"
 #endif
 
-#include <wolfssl/wolfcrypt/pwdbased.h>
+#include "wolfssl/wolfcrypt/pwdbased.h"
 
 #ifdef ENCRYPT_WITH_CHACHA
 
