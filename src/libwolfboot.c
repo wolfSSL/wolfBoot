@@ -1592,6 +1592,8 @@ int aes_init(void)
         enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
 #endif
     if (ret == TSIP_SUCCESS) {
+        aes_enc.ctx.keySize = ENCRYPT_KEY_SIZE;
+
         /* copy to decryption key */
         XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
 
