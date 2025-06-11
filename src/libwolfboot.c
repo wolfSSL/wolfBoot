@@ -1600,13 +1600,14 @@ int aes_init(void)
         /* register AES crypto callback */
         wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
 
-        /* AES_ENCRYPTION is used for both directions in CTR */
-        /* unwrapped key never leaves TSIP and is referenced by tsip_keyIdx */
+        /* AES_ENCRYPTION is used for both directions in CTR
+         * IV is set later with "wc_AesSetIV" */
         wc_AesSetKeyDirect(&aes_enc, enc_key->encrypted_user_key,
-            ENCRYPT_KEY_SIZE, enc_key->initial_vector, AES_ENCRYPTION);
+            ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
         wc_AesSetKeyDirect(&aes_dec, enc_key->encrypted_user_key,
-            ENCRYPT_KEY_SIZE, enc_key->initial_vector, AES_ENCRYPTION);
+            ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
 
+        /* set IV nonce use in aes_set_iv */
         XMEMCPY(encrypt_iv_nonce, enc_key->initial_vector, ENCRYPT_NONCE_SIZE);
         encrypt_initialized = 1;
     }
@@ -1619,7 +1620,6 @@ int aes_init(void)
         ENCRYPT_TMP_SECRET_OFFSET);
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
-    uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
     uint8_t* stored_nonce;
 
 #ifdef NVM_FLASH_WRITEONCE
@@ -1641,11 +1641,13 @@ int aes_init(void)
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
         return -1;
 
+    /* AES_ENCRYPTION is used for both directions in CTR
+     * IV is set later with "wc_AesSetIV" */
+    wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
+    wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
+
+    /* set IV nonce use in aes_set_iv */
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
-    XMEMCPY(iv_buf, stored_nonce, ENCRYPT_NONCE_SIZE);
-    /* AES_ENCRYPTION is used for both directions in CTR */
-    wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
-    wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
     encrypt_initialized = 1;
 #endif
     return 0;
@@ -1655,10 +1657,10 @@ int aes_init(void)
  * @brief Set the AES initialization vector (IV) for CTR mode.
  *
  * This function sets the AES initialization vector (IV) for the Counter (CTR)
- * mode encryption. It takes a 12-byte nonce and a 32-bit IV counter value to
+ * mode encryption. It takes a 16-byte nonce and a 32-bit IV counter value to
  * construct the 16-byte IV used for encryption.
  *
- * @param nonce Pointer to the 12-byte nonce (IV) buffer.
+ * @param nonce Pointer to the 16-byte nonce (IV) buffer.
  * @param iv_ctr The IV counter value.
  *
  */
@@ -1751,7 +1753,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     int sz = len, i, step;
     uint8_t part;
     uint32_t iv_counter = 0;
-#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE)
+#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && \
+    !defined(NVM_FLASH_WRITEONCE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
 #endif
 
@@ -1863,9 +1866,8 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
             crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
-            {
-                break;
-            }
+            break;
+
         default:
             return -1;
     }
@@ -1908,7 +1910,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     unaligned_trailer_size = read_remaining;
     if (unaligned_trailer_size > 0)
     {
-        uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+        uint8_t dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED(4);
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE)
             return -1;
