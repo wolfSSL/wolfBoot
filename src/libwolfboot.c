@@ -1573,68 +1573,37 @@ Aes aes_dec, aes_enc;
  */
 int aes_init(void)
 {
-#if defined(WOLFBOOT_RENESAS_TSIP)
-    int ret;
-    int devId = RENESAS_DEVID + 1;
-    wrap_enc_key_t* enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
+    int devId;
+    uint8_t *stored_nonce;
+    uint8_t *key;
+    uint8_t ff[ENCRYPT_KEY_SIZE];
 
-    /* required to properly setup the crypto callback defaults */
-    wolfCrypt_Init(); /* has logic to support being called multiple times */
+#ifdef WOLFBOOT_RENESAS_TSIP
+    int ret;
+    wrap_enc_key_t* enc_key;
+    devId = RENESAS_DEVID + 1;
+    enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
+    key = enc_key->encrypted_user_key;
+    stored_nonce = enc_key->initial_vector;
+    wolfCrypt_Init(); /* required to setup the crypto callback defaults */
+#else
+    devId = INVALID_DEVID;
+#if defined(MMU) || defined(UNIT_TEST)
+    key = ENCRYPT_KEY;
+#else
+    key = (uint8_t*)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+        ENCRYPT_TMP_SECRET_OFFSET);
+#endif
+#ifdef NVM_FLASH_WRITEONCE
+    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+#endif
+    stored_nonce = key + ENCRYPT_KEY_SIZE;
+#endif
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));
     wc_AesInit(&aes_enc, NULL, devId);
     wc_AesInit(&aes_dec, NULL, devId);
-
-    /* Unwrap key and get key index */
-#if ENCRYPT_KEY_SIZE == 32
-    ret = R_TSIP_GenerateAes256KeyIndex(enc_key->wufpk, enc_key->initial_vector,
-        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
-#else
-    ret = R_TSIP_GenerateAes128KeyIndex(enc_key->wufpk, enc_key->initial_vector,
-        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
-#endif
-    if (ret == TSIP_SUCCESS) {
-        aes_enc.ctx.keySize = ENCRYPT_KEY_SIZE;
-
-        /* copy to decryption key */
-        XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
-
-        /* register AES crypto callback */
-        wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
-
-        /* AES_ENCRYPTION is used for both directions in CTR
-         * IV is set later with "wc_AesSetIV" */
-        wc_AesSetKeyDirect(&aes_enc, enc_key->encrypted_user_key,
-            ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
-        wc_AesSetKeyDirect(&aes_dec, enc_key->encrypted_user_key,
-            ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
-
-        /* set IV nonce use in aes_set_iv */
-        XMEMCPY(encrypt_iv_nonce, enc_key->initial_vector, ENCRYPT_NONCE_SIZE);
-        encrypt_initialized = 1;
-    }
-#else
-
-#if defined(MMU) || defined(UNIT_TEST)
-    uint8_t *key = ENCRYPT_KEY;
-#else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
-#endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-    uint8_t* stored_nonce;
-
-#ifdef NVM_FLASH_WRITEONCE
-    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
-#endif
-
-    stored_nonce = key + ENCRYPT_KEY_SIZE;
-
-    XMEMSET(&aes_enc, 0, sizeof(aes_enc));
-    XMEMSET(&aes_dec, 0, sizeof(aes_dec));
-    wc_AesInit(&aes_enc, NULL, INVALID_DEVID);
-    wc_AesInit(&aes_dec, NULL, INVALID_DEVID);
 
     /* Check against 'all 0xff' or 'all zero' cases */
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
@@ -1644,15 +1613,37 @@ int aes_init(void)
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
         return -1;
 
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* Unwrap key and get key index */
+#if ENCRYPT_KEY_SIZE == 32
+    ret = R_TSIP_GenerateAes256KeyIndex(enc_key->wufpk, enc_key->initial_vector,
+        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
+#else
+    ret = R_TSIP_GenerateAes128KeyIndex(enc_key->wufpk, enc_key->initial_vector,
+        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
+#endif
+    if (ret != TSIP_SUCCESS) {
+        return -1;
+    }
+    /* set encryption key size */
+    aes_enc.ctx.keySize = ENCRYPT_KEY_SIZE;
+
+    /* copy TSIP ctx to decryption key */
+    XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
+
+    /* register AES crypto callback */
+    wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
+#endif /* WOLFBOOT_RENESAS_TSIP */
+
     /* AES_ENCRYPTION is used for both directions in CTR
      * IV is set later with "wc_AesSetIV" */
     wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
     wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
 
-    /* set IV nonce use in aes_set_iv */
+    /* Set global IV nonce used in aes_set_iv */
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
     encrypt_initialized = 1;
-#endif
+
     return 0;
 }
 
