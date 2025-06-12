@@ -1578,6 +1578,9 @@ int aes_init(void)
     int devId = RENESAS_DEVID + 1;
     wrap_enc_key_t* enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
 
+    /* required to properly setup the crypto callback defaults */
+    wolfCrypt_Init(); /* has logic to support being called multiple times */
+
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));
     wc_AesInit(&aes_enc, NULL, devId);
