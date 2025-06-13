@@ -1335,6 +1335,14 @@ int wolfBoot_fallback_is_possible(void)
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
 
+#if defined(WOLFBOOT_RENESAS_TSIP)
+    #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
+
+    /* Provides wrap_enc_key_t structure generated using
+     * Renesas Security Key Management Tool. See docs/Renesas.md */
+    #include "enckey_data.h"
+#endif
+
 #if !defined(EXT_FLASH) && !defined(MMU)
     #error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
 #endif
@@ -1357,20 +1365,25 @@ static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
 
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
-    uintptr_t addr, addr_align, addr_off;
-    int ret = 0;
-    int sel_sec = 0;
-    uint32_t trailer_relative_off = 4;
-
-#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && !defined(WOLFBOOT_ENCRYPT_CACHE)
-    uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
-#endif
-
-#ifdef MMU
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* must be flashed to RENESAS_TSIP_INSTALLEDENCKEY_ADDR */
+    (void)k;
+    (void)nonce;
+    return 0;
+#elif defined(MMU)
     XMEMCPY(ENCRYPT_KEY, k, ENCRYPT_KEY_SIZE);
     XMEMCPY(ENCRYPT_KEY + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
     return 0;
 #else
+    uintptr_t addr, addr_align, addr_off;
+    int ret = 0;
+    int sel_sec = 0;
+    uint32_t trailer_relative_off = 4;
+#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
+    !defined(WOLFBOOT_ENCRYPT_CACHE)
+    uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
+#endif
+
     addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
     addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
@@ -1463,7 +1476,11 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
  */
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
-#if defined(MMU)
+#ifdef WOLFBOOT_RENESAS_TSIP
+    wrap_enc_key_t* enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
+    XMEMCPY(k, enc_key->encrypted_user_key, ENCRYPT_KEY_SIZE);
+    XMEMCPY(nonce, enc_key->initial_vector, ENCRYPT_NONCE_SIZE);
+#elif defined(MMU)
     XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #else
@@ -1491,7 +1508,9 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
  */
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
-#if defined(MMU)
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* nothing to erase */
+#elif defined(MMU)
     ForceZero(ENCRYPT_KEY, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
 #else
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
@@ -1554,14 +1573,6 @@ int RAMFUNCTION chacha_init(void)
 
 Aes aes_dec, aes_enc;
 
-#if defined(WOLFBOOT_RENESAS_TSIP)
-    #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
-
-    /* Provides wrap_enc_key_t structure generated using
-     * Renesas Security Key Management Tool. See docs/Renesas.md */
-    #include "enckey_data.h"
-#endif
-
 /**
  * @brief Initialize AES encryption.
  *
@@ -1586,7 +1597,7 @@ int aes_init(void)
     key = enc_key->encrypted_user_key;
     stored_nonce = enc_key->initial_vector;
     wolfCrypt_Init(); /* required to setup the crypto callback defaults */
-#else
+#else  /* non TSIP */
     devId = INVALID_DEVID;
 #if defined(MMU) || defined(UNIT_TEST)
     key = ENCRYPT_KEY;
@@ -1598,7 +1609,7 @@ int aes_init(void)
     key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
 #endif
     stored_nonce = key + ENCRYPT_KEY_SIZE;
-#endif
+#endif /* WOLFBOOT_RENESAS_TSIP */
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));
