@@ -1500,7 +1500,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 {
     uint32_t current_offset = offset;
     uint32_t remaining_size = size;
-    uint8_t read_buf[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4); /* Use local buffer*/
+    uint8_t read_buf[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED_STACK(4); /* Use local buffer */
 
     while (remaining_size > 0) {
         uint32_t read_size = (remaining_size > WOLFBOOT_SHA_BLOCK_SIZE)
@@ -1529,7 +1529,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 static int update_hash_flash_addr(wolfBoot_hash_t* ctx, uintptr_t addr,
                                   uint32_t size, int src_ext)
 {
-    uint8_t   buffer[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4);
+    uint8_t   buffer[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED_STACK(4);
     uint32_t  remaining_size = size;
     uintptr_t current_addr   = addr;
 
@@ -1568,7 +1568,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     size_t                ph_size           = 0;
     size_t                current_ph_offset = 0;
     int64_t               final_offset      = -1;
-    uint8_t               calc_digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
+    uint8_t               calc_digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED_STACK(4);
     uint8_t*              exp_digest;
     int32_t               stored_sha_len;
     int                   i;

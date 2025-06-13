@@ -1836,8 +1836,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
  */
 int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
-    uint8_t  block[ENCRYPT_BLOCK_SIZE] XALIGNED(4);
-    uint8_t  dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED(4);
+    uint8_t  block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
+    uint8_t  dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
     uint32_t row_address = address, row_offset, iv_counter = 0;
     int i;
     int flash_read_size;
@@ -1915,7 +1915,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     unaligned_trailer_size = read_remaining;
     if (unaligned_trailer_size > 0)
     {
-        uint8_t dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED(4);
+        uint8_t dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE)
             return -1;

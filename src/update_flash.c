@@ -153,7 +153,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 
 #ifdef EXT_ENCRYPTED
     wolfBoot_get_encrypt_key(key, nonce);
-    if(src->part == PART_SWAP)
+    if (src->part == PART_SWAP)
         iv_counter = dst_sector_offset;
     else
         iv_counter = src_sector_offset;
@@ -172,8 +172,8 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
           if (src_sector_offset + pos <
               (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
-              /* bypass decryption, copy encrypted data into swap */
-              if (dst->part == PART_SWAP) {
+              /* bypass decryption, copy encrypted data into swap (and its external) */
+              if (dst->part == PART_SWAP && SWAP_EXT) {
                   ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos,
                                  (void *)buffer, FLASHBUFFER_SIZE);
               } else {
