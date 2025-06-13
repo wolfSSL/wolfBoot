@@ -118,7 +118,11 @@ extern int tolower(int c);
 #       if !defined(WOLFBOOT_TPM)
 #          define NO_ECC_SIGN
 #          define NO_ECC_DHE
-#          define WOLFSSL_NO_CT_OPS /* don't use constant time ops in misc.c */
+           /* For Renesas RX do not enable the misc.c constant time code
+            * due to issue with 64-bit types */
+#          if defined(__RX__)
+#              define WOLFSSL_NO_CT_OPS /* don't use constant time ops in misc.c */
+#          endif
 #          if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
 #              define NO_ECC_EXPORT
 #              define NO_ECC_KEY_EXPORT
