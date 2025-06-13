@@ -64,7 +64,7 @@
 
 #if defined(EXT_ENCRYPTED)
 static int encrypt_initialized = 0;
-static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE];
+static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
     #elif !defined(XMEMSET)
@@ -1335,6 +1335,14 @@ int wolfBoot_fallback_is_possible(void)
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
 
+#if defined(WOLFBOOT_RENESAS_TSIP)
+    #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
+
+    /* Provides wrap_enc_key_t structure generated using
+     * Renesas Security Key Management Tool. See docs/Renesas.md */
+    #include "enckey_data.h"
+#endif
+
 #if !defined(EXT_FLASH) && !defined(MMU)
     #error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
 #endif
@@ -1357,20 +1365,25 @@ static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
 
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
-    uintptr_t addr, addr_align, addr_off;
-    int ret = 0;
-    int sel_sec = 0;
-    uint32_t trailer_relative_off = 4;
-
-#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && !defined(WOLFBOOT_ENCRYPT_CACHE)
-    uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
-#endif
-
-#ifdef MMU
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* must be flashed to RENESAS_TSIP_INSTALLEDENCKEY_ADDR */
+    (void)k;
+    (void)nonce;
+    return 0;
+#elif defined(MMU)
     XMEMCPY(ENCRYPT_KEY, k, ENCRYPT_KEY_SIZE);
     XMEMCPY(ENCRYPT_KEY + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
     return 0;
 #else
+    uintptr_t addr, addr_align, addr_off;
+    int ret = 0;
+    int sel_sec = 0;
+    uint32_t trailer_relative_off = 4;
+#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
+    !defined(WOLFBOOT_ENCRYPT_CACHE)
+    uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
+#endif
+
     addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
     addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
     addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
@@ -1463,7 +1476,11 @@ int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
  */
 int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
-#if defined(MMU)
+#ifdef WOLFBOOT_RENESAS_TSIP
+    wrap_enc_key_t* enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
+    XMEMCPY(k, enc_key->encrypted_user_key, ENCRYPT_KEY_SIZE);
+    XMEMCPY(nonce, enc_key->initial_vector, ENCRYPT_NONCE_SIZE);
+#elif defined(MMU)
     XMEMCPY(k, ENCRYPT_KEY, ENCRYPT_KEY_SIZE);
     XMEMCPY(nonce, ENCRYPT_KEY + ENCRYPT_KEY_SIZE, ENCRYPT_NONCE_SIZE);
 #else
@@ -1491,7 +1508,9 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
  */
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 {
-#if defined(MMU)
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* nothing to erase */
+#elif defined(MMU)
     ForceZero(ENCRYPT_KEY, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
 #else
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
@@ -1553,6 +1572,7 @@ int RAMFUNCTION chacha_init(void)
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
 
 Aes aes_dec, aes_enc;
+
 /**
  * @brief Initialize AES encryption.
  *
@@ -1564,26 +1584,37 @@ Aes aes_dec, aes_enc;
  */
 int aes_init(void)
 {
+    int devId;
+    uint8_t *stored_nonce;
+    uint8_t *key;
+    uint8_t ff[ENCRYPT_KEY_SIZE];
+
+#ifdef WOLFBOOT_RENESAS_TSIP
+    int ret;
+    wrap_enc_key_t* enc_key;
+    devId = RENESAS_DEVID + 1;
+    enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
+    key = enc_key->encrypted_user_key;
+    stored_nonce = enc_key->initial_vector;
+    wolfCrypt_Init(); /* required to setup the crypto callback defaults */
+#else  /* non TSIP */
+    devId = INVALID_DEVID;
 #if defined(MMU) || defined(UNIT_TEST)
-    uint8_t *key = ENCRYPT_KEY;
+    key = ENCRYPT_KEY;
 #else
-    uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+    key = (uint8_t*)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
         ENCRYPT_TMP_SECRET_OFFSET);
 #endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-    uint8_t iv_buf[ENCRYPT_NONCE_SIZE];
-    uint8_t* stored_nonce;
-
 #ifdef NVM_FLASH_WRITEONCE
     key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
 #endif
-
     stored_nonce = key + ENCRYPT_KEY_SIZE;
+#endif /* WOLFBOOT_RENESAS_TSIP */
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));
-    wc_AesInit(&aes_enc, NULL, 0);
-    wc_AesInit(&aes_dec, NULL, 0);
+    wc_AesInit(&aes_enc, NULL, devId);
+    wc_AesInit(&aes_dec, NULL, devId);
 
     /* Check against 'all 0xff' or 'all zero' cases */
     XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
@@ -1593,12 +1624,37 @@ int aes_init(void)
     if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
         return -1;
 
+#ifdef WOLFBOOT_RENESAS_TSIP
+    /* Unwrap key and get key index */
+#if ENCRYPT_KEY_SIZE == 32
+    ret = R_TSIP_GenerateAes256KeyIndex(enc_key->wufpk, enc_key->initial_vector,
+        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
+#else
+    ret = R_TSIP_GenerateAes128KeyIndex(enc_key->wufpk, enc_key->initial_vector,
+        enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
+#endif
+    if (ret != TSIP_SUCCESS) {
+        return -1;
+    }
+    /* set encryption key size */
+    aes_enc.ctx.keySize = ENCRYPT_KEY_SIZE;
+
+    /* copy TSIP ctx to decryption key */
+    XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
+
+    /* register AES crypto callback */
+    wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
+#endif /* WOLFBOOT_RENESAS_TSIP */
+
+    /* AES_ENCRYPTION is used for both directions in CTR
+     * IV is set later with "wc_AesSetIV" */
+    wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
+    wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, NULL, AES_ENCRYPTION);
+
+    /* Set global IV nonce used in aes_set_iv */
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
-    XMEMCPY(iv_buf, stored_nonce, ENCRYPT_NONCE_SIZE);
-    /* AES_ENCRYPTION is used for both directions in CTR */
-    wc_AesSetKeyDirect(&aes_enc, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
-    wc_AesSetKeyDirect(&aes_dec, key, ENCRYPT_KEY_SIZE, iv_buf, AES_ENCRYPTION);
     encrypt_initialized = 1;
+
     return 0;
 }
 
@@ -1606,10 +1662,10 @@ int aes_init(void)
  * @brief Set the AES initialization vector (IV) for CTR mode.
  *
  * This function sets the AES initialization vector (IV) for the Counter (CTR)
- * mode encryption. It takes a 12-byte nonce and a 32-bit IV counter value to
+ * mode encryption. It takes a 16-byte nonce and a 32-bit IV counter value to
  * construct the 16-byte IV used for encryption.
  *
- * @param nonce Pointer to the 12-byte nonce (IV) buffer.
+ * @param nonce Pointer to the 16-byte nonce (IV) buffer.
  * @param iv_ctr The IV counter value.
  *
  */
@@ -1702,7 +1758,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     int sz = len, i, step;
     uint8_t part;
     uint32_t iv_counter = 0;
-#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE)
+#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && \
+    !defined(NVM_FLASH_WRITEONCE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
 #endif
 
@@ -1779,8 +1836,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
  */
 int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len)
 {
-    uint8_t block[ENCRYPT_BLOCK_SIZE];
-    uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+    uint8_t  block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
+    uint8_t  dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
     uint32_t row_address = address, row_offset, iv_counter = 0;
     int i;
     int flash_read_size;
@@ -1814,9 +1871,8 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
             crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
-            {
-                break;
-            }
+            break;
+
         default:
             return -1;
     }
@@ -1859,7 +1915,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     unaligned_trailer_size = read_remaining;
     if (unaligned_trailer_size > 0)
     {
-        uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+        uint8_t dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE)
             return -1;

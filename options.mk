@@ -549,7 +549,10 @@ ifeq ($(ENCRYPT),1)
 endif
 
 ifeq ($(EXT_FLASH),1)
-  CFLAGS+= -D"EXT_FLASH=1" -D"PART_UPDATE_EXT=1" -D"PART_SWAP_EXT=1"
+  CFLAGS+= -D"EXT_FLASH=1" -D"PART_UPDATE_EXT=1"
+  ifeq ($(NO_SWAP_EXT),)
+    CFLAGS+= -D"PART_SWAP_EXT=1"
+  endif
   ifeq ($(NO_XIP),1)
     CFLAGS+=-D"PART_BOOT_EXT=1"
   endif
@@ -762,9 +765,7 @@ OBJS+=$(SECURE_OBJS)
 #
 ifeq ($(RAM_CODE),1)
   ifeq ($(ENCRYPT),1)
-    ifneq ($(ENCRYPT_WITH_CHACHA),1)
-       LSCRIPT_IN=NONE
-    else
+    ifeq ($(ENCRYPT_WITH_CHACHA),1)
        LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
     endif
   endif

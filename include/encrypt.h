@@ -27,19 +27,19 @@
 #if defined(__WOLFBOOT) || defined(UNIT_TEST)
 
 #include <stdint.h>
-#include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/sha256.h>
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/sha256.h"
 
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
 #ifdef ENCRYPT_WITH_CHACHA
-#include <wolfssl/wolfcrypt/chacha.h>
+    #include "wolfssl/wolfcrypt/chacha.h"
 #else
-#include <wolfssl/wolfcrypt/aes.h>
+    #include "wolfssl/wolfcrypt/aes.h"
 #endif
 
-#include <wolfssl/wolfcrypt/pwdbased.h>
+#include "wolfssl/wolfcrypt/pwdbased.h"
 
 #ifdef ENCRYPT_WITH_CHACHA
 
@@ -65,7 +65,7 @@ int aes_init(void);
 void aes_set_iv(uint8_t *nonce, uint32_t address);
 #endif /* ENCRYPT_WITH_CHACHA */
 
-/* Internal read/write functions (not exported in the libwolfboot API) */
+/* external flash encryption read/write functions */
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
 
