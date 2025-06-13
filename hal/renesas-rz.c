@@ -135,7 +135,7 @@ int hal_renesas_init(void)
     const size_t key_size = sizeof(rsip_pub_key);
 
     if (sipInitDone)
-        reutrn 0;
+        return 0;
 
     ret = wolfCrypt_Init();
     if (ret != 0) {

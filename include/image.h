@@ -931,6 +931,9 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 
 #else
 
+# define SWAP_EXT (0)
+# define BOOT_EXT (0)
+# define UPDATE_EXT (0)
 # define PART_IS_EXT(x) (0)
 # define PARTN_IS_EXT(x) (0)
 # define wb_flash_erase(im, of, siz) \
