@@ -765,9 +765,7 @@ OBJS+=$(SECURE_OBJS)
 #
 ifeq ($(RAM_CODE),1)
   ifeq ($(ENCRYPT),1)
-    ifneq ($(ENCRYPT_WITH_CHACHA),1)
-       LSCRIPT_IN=NONE
-    else
+    ifeq ($(ENCRYPT_WITH_CHACHA),1)
        LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
     endif
   endif
