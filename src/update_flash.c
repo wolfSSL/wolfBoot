@@ -50,7 +50,7 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 #ifdef EXT_FLASH
 #  ifndef BUFFER_DECLARED
 #  define BUFFER_DECLARED
-static uint8_t buffer[FLASHBUFFER_SIZE];
+static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #  endif
 #endif
 
@@ -166,13 +166,13 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     if (PART_IS_EXT(src)) {
 #ifndef BUFFER_DECLARED
 #define BUFFER_DECLARED
-        static uint8_t buffer[FLASHBUFFER_SIZE];
+        static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED_STACK(4);
 #endif
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
           if (src_sector_offset + pos <
               (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
-              /* bypass decryption, copy encrypted data into swap (and its external) */
+              /* bypass decryption, copy encrypted data into swap if its external */
               if (dst->part == PART_SWAP && SWAP_EXT) {
                   ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos,
                                  (void *)buffer, FLASHBUFFER_SIZE);
@@ -202,7 +202,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     return pos;
 }
 
-#ifndef DISABLE_BACKUP
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
 
 #ifdef EXT_ENCRYPTED
 #   define TRAILER_OFFSET_WORDS \
@@ -214,7 +214,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 /**
  * @brief Performs the final swap and erase operations during a secure update,
  * ensuring that if power is lost during the update, the process can be resumed
- * on next boot.
+ * on next boot. Not supported with CUSTOM_PARTITION_TRAILER
  *
  * This function handles the final phase of the three-way swap update process.
  * It ensures that the update is atomic and power-fail safe by:
@@ -341,7 +341,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
 
     return 0;
 }
-#endif
+#endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER */
 
 #ifdef DELTA_UPDATES
 
@@ -541,9 +541,10 @@ out:
     ext_flash_lock();
 #endif
     hal_flash_lock();
+
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start */
-#ifndef DISABLE_BACKUP
     if (ret == 0) {
         wolfBoot_swap_and_final_erase(0);
     }
@@ -817,9 +818,15 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     ext_flash_lock();
     #endif
     hal_flash_lock();
+
+#if !defined(CUSTOM_PARTITION_TRAILER)
     /* start re-entrant final erase, return code is only for resumption in
-     * wolfBoot_start*/
+     * wolfBoot_start */
     wolfBoot_swap_and_final_erase(0);
+#else
+    /* Mark boot partition as TESTING - this tells bootloader to fallback if update fails */
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+#endif
 
 #else /* DISABLE_BACKUP */
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
@@ -1033,7 +1040,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 #endif
 
-#if !defined(DISABLE_BACKUP)
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     /* resume the final erase in case the power failed before it finished */
     resumedFinalErase = wolfBoot_swap_and_final_erase(1);
     if (resumedFinalErase != 0)
