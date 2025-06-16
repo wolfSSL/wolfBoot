@@ -1354,7 +1354,7 @@ static int copy_flash_buffered(uintptr_t src_addr, uintptr_t dst_addr,
 
 #ifndef BUFFER_DECLARED
 #define BUFFER_DECLARED
-    static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED_STACK(4);
+    static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #endif
 
 #ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE

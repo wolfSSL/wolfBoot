@@ -166,7 +166,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     if (PART_IS_EXT(src)) {
 #ifndef BUFFER_DECLARED
 #define BUFFER_DECLARED
-        static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED_STACK(4);
+        static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #endif
         wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
