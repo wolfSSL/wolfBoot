@@ -178,7 +178,46 @@ int hal_flash_test_align(void)
     wolfBoot_printf("Unaligned write test passed\n");
     return 0;
 }
-#endif
+
+int hal_flash_test_unaligned_src(void)
+{
+    uint32_t src[9];
+    unsigned int i;
+    uint8_t *ptr;
+    int ret;
+
+    /* force unaligned pointer */
+    ptr = (uint8_t*)(uintptr_t)src;
+    ptr++;
+
+    for (i = 0; i < sizeof(src); i++) {
+        ptr[i] = i & 0xff;
+    }
+
+    hal_flash_unlock();
+    ret = hal_flash_erase(TEST_ADDRESS, TEST_SZ);
+    hal_flash_lock();
+    if (ret != 0) {
+        wolfBoot_printf("Erase Sector failed: Ret %d\n", ret);
+        return -1;
+    }
+
+    hal_flash_unlock();
+    ret = hal_flash_write(TEST_ADDRESS, ptr, sizeof(src) - 1);
+    hal_flash_lock();
+    if (ret != 0) {
+        wolfBoot_printf("writing for unaligned source failed: Ret %d\n", ret);
+        return -1;
+    }
+    if (memcmp(ptr, (uint8_t*)TEST_ADDRESS, sizeof(src) - 1) != 0) {
+        wolfBoot_printf("unaligned source verification failed\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+#endif /* TEST_FLASH_READONLY */
 
 /* This test can be run only if swapping the flash do not reboot the board */
 #if defined(DUALBANK_SWAP) && !defined(TEST_FLASH_READONLY)
