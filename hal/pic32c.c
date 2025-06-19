@@ -76,6 +76,7 @@
 #define FCW_MUTEX_LOCK_MASK 0x1
 
 #define FCW_WRITE_SIZE (4 * 8)
+#define FCW_WRITE_WORD_SIZE (8)
 static uint32_t pic32_last_err = 0;
 
 #define OSCCTRL_STATUS (*(volatile uint32_t *)(OSCCTRL_BASE + 0x10U))
@@ -170,16 +171,15 @@ static void pic32_fcw_wait_complete(void)
     while (FCW_STATUS & FCW_BUSY_MASK) {}
 }
 
-static int pic32_write_dqword_aligned(uint32_t addr, const uint8_t *data)
+static int pic32_write_dqword_aligned(uint32_t addr, const uint32_t *data)
 {
-    uint32_t i;
-    uint32_t *_data = (uint32_t *)data;
     uint32_t err;
+    uint32_t i;
 
     pic32_fcw_wait_complete();
     FCW_ADDR = addr;
     for (i = 0; i < 8; i++) {
-        FCW_DATA[i] = _data[i];
+        FCW_DATA[i] = data[i];
     }
     FCW_KEY = FCW_UNLOCK_WRKEY;
     pic32_fcw_start_op(FCW_OP_QUAD_DOUBLE_WORD_WRITE);
@@ -199,14 +199,6 @@ static int pic32_addr_is_dqword_aligned(uint32_t addr)
 static uint32_t pic32_addr_dqword_align(uint32_t addr)
 {
     return (addr & ~0x1F);
-}
-
-static void pic32_copy_dqword(uint8_t *dst, uint32_t addr)
-{
-    int i;
-    for (i = 0; i < FCW_WRITE_SIZE; i++) {
-        dst[i] = *(volatile uint8_t *)(addr + i);
-    }
 }
 
 static int pic32_fcw_erase_sector(uint32_t addr)
@@ -239,7 +231,8 @@ static uint8_t pic32_mask_zeros(uint8_t programmed, uint8_t to_program)
 
 int pic32_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    uint8_t buff[FCW_WRITE_SIZE], curr[FCW_WRITE_SIZE];
+    uint32_t buff[FCW_WRITE_WORD_SIZE], curr[FCW_WRITE_WORD_SIZE];
+    uint8_t  *p_buff, *p_curr;
     uint32_t _addr;
     uint8_t i;
     int ret;
@@ -256,11 +249,13 @@ int pic32_flash_write(uint32_t address, const uint8_t *data, int len)
              * is at least WOLFBOOT_SECTOR_SIZE, an erase was already performed,
              * so we can write data directly.
              */
-            pic32_copy_dqword(curr, _addr);
-            memset(buff, 0xff, FCW_WRITE_SIZE);
+            memcpy(curr, (uint8_t*)(uintptr_t)_addr, sizeof(curr));
+            memset(buff, 0xff, sizeof(buff));
             i = address - _addr;
+            p_curr = (uint8_t*)curr;
+            p_buff = (uint8_t*)buff;
             for (; i < FCW_WRITE_SIZE && len > 0; i++, len--) {
-                buff[i] = pic32_mask_zeros(curr[i], *data);
+                p_buff[i] = pic32_mask_zeros(p_curr[i], *data);
                 data++;
                 address++;
             }
@@ -269,7 +264,15 @@ int pic32_flash_write(uint32_t address, const uint8_t *data, int len)
                 return ret;
             continue;
         }
-        ret = pic32_write_dqword_aligned(address, data);
+
+        /* move data in aligned buffer */
+        if (!pic32_addr_is_dqword_aligned((uint32_t)(uintptr_t)data)) {
+            memcpy(buff, data, sizeof(buff));
+            ret = pic32_write_dqword_aligned(address, buff);
+        } else {
+            ret = pic32_write_dqword_aligned(address, (uint32_t*)data);
+        }
+
         if (ret != 0)
             return ret;
         address += FCW_WRITE_SIZE;
@@ -406,6 +409,7 @@ int hal_flash_test_align(void);
 int hal_flash_test_write_once(void);
 int hal_flash_test(void);
 int hal_flash_test_dualbank(void);
+int hal_flash_test_unaligned_src(void);
 void pic32_flash_test(void)
 {
     int ret;
@@ -417,6 +421,12 @@ void pic32_flash_test(void)
     if (ret != 0)
         wolfBoot_panic();
     ret = hal_flash_test_write_once();
+    if (ret != 0)
+        wolfBoot_panic();
+    /* enable unaligned access fault for testing */
+    ret = *(volatile uint32_t*)0xE000ED14;
+    *(volatile uint32_t*)0xE000ED14 = ret | 8;
+    ret = hal_flash_test_unaligned_src();
     if (ret != 0)
         wolfBoot_panic();
 #ifdef DUALBANK_SWAP
