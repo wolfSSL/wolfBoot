@@ -186,7 +186,11 @@ static int pic32_write_dqword_aligned(uint32_t addr, const uint32_t *data)
     pic32_fcw_wait_complete();
     err = pic32_get_errs();
     pic32_last_err = err;
-    err &= ~FCW_INTFLAG_DONE_BIT;
+    if (!(err & FCW_INTFLAG_DONE_BIT)) {
+        err = -1;
+    } else {
+        err &= ~FCW_INTFLAG_DONE_BIT;
+    }
     pic32_clear_errs();
     return err;
 }
@@ -210,9 +214,13 @@ static int pic32_fcw_erase_sector(uint32_t addr)
     pic32_fcw_start_op(FCW_OP_ERASE_SECTOR);
     pic32_fcw_wait_complete();
     err = pic32_get_errs();
-    pic32_clear_errs();
     pic32_last_err = err;
-    err &= ~FCW_INTFLAG_DONE_BIT;
+    if (!(err & FCW_INTFLAG_DONE_BIT)) {
+        err = -1;
+    } else {
+        err &= ~FCW_INTFLAG_DONE_BIT;
+    }
+    pic32_clear_errs();
     return err;
 }
 
