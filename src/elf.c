@@ -54,7 +54,7 @@ static int check_scatter_format(const unsigned char* ehdr, int is_elf32);
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */
-int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
+int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
 {
     elf32_header* h32 = (elf32_header*)image;
     elf64_header* h64 = (elf64_header*)image;
@@ -85,6 +85,9 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
     wolfBoot_printf("Found valid elf%d (%s endian)\r\n",
         is_elf32 ? 32 : 64, is_le ? "little" : "big");
 #endif
+
+    /* set entry point */
+    *pentry = GET_H64(entry);
 
     /* programs */
     entry_off = image + GET_H32(ph_offset);
@@ -144,9 +147,8 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *entry, elf_mmu_map_cb mmu_cb)
 #endif
     }
 
-    *entry = GET_H64(entry);
 #ifdef DEBUG_ELF
-    wolfBoot_printf("Entry point %p\r\n", (void*)*entry);
+    wolfBoot_printf("Entry point %p\r\n", (void*)*pentry);
 #endif
 
     return 0;

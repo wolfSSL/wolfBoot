@@ -498,6 +498,7 @@
 /* Hardware Implementation-Dependent Registers */
 #define SPRN_HID0   0x3F0
 #define HID0_TBEN   (1 << 14) /* Time base enable */
+#define HID0_TBCLK  (1 << 13) /* select clock: 0=every 8 ccb clocks, 1=rising edge of RTC */
 #define HID0_ENMAS7 (1 << 7)  /* Enable hot-wire update of MAS7 register */
 #define HID0_EMCP   (1 << 31) /* Enable machine check pin */
 

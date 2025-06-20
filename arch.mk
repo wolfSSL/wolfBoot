@@ -561,6 +561,19 @@ ifeq ($(ARCH),PPC)
   LDFLAGS+=-Wl,--gc-sections
 
   OBJS+=src/boot_ppc_start.o src/boot_ppc.o
+
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  endif
+
+  ifneq ($(NO_ASM),1)
+    # Use the SHA256 and SP math all assembly accelerations
+    CFLAGS+=-DWOLFSSL_SP_PPC
+    CFLAGS+=-DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE
+    #CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
+    #CFLAGS+=-DUSE_SLOW_SHA256
+    OBJS+=./lib/wolfssl/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+  endif
 endif
 
 ifeq ($(TARGET),kinetis)
@@ -788,12 +801,7 @@ ifeq ($(TARGET),nxp_t1024)
   OBJS+=src/pci.o
   CFLAGS+=-DWOLFBOOT_USE_PCI
   UPDATE_OBJS:=src/update_ram.o
-  ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-  else
-    # Use the SP math all assembly accelerations
-    CFLAGS+=-DWOLFSSL_SP_PPC
-  endif
+
   SPI_TARGET=nxp
   OPTIMIZATION_LEVEL=0 # using default -Os causes issues with alignment
 endif
@@ -811,12 +819,6 @@ ifeq ($(TARGET),nxp_t2080)
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
   UPDATE_OBJS:=src/update_ram.o
   OBJS+=src/fdt.o
-  ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-  else
-    # Use the SP math all assembly accelerations
-    CFLAGS+=-DWOLFSSL_SP_PPC
-  endif
 endif
 
 ifeq ($(TARGET),nxp_p1021)
@@ -835,12 +837,6 @@ ifeq ($(TARGET),nxp_p1021)
   # Use PPC stdlib for memcpy, etc.
   #CFLAGS+=-DWOLFBOOT_USE_STDLIBC
 
-  ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-  else
-    # Use the SP math all assembly accelerations
-    CFLAGS+=-DWOLFSSL_SP_PPC
-  endif
   SPI_TARGET=nxp
 endif
 
