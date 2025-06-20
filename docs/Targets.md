@@ -1990,12 +1990,15 @@ make DEBUG=1 wolfboot.bin
 # OR
 make wolfboot.bin
 
-# Sign application
+# Build test app
+make test-app/image.bin
+
+# Sign the ELF32 application
 # 1=version (can be any 32-bit value)
-./tools/keytools/sign \
+IMAGE_HEADER_SIZE=512 ./tools/keytools/sign \
     --ecc384 \
     --sha384 \
-    test-app/image.bin \
+    test-app/image.elf \
     wolfboot_signing_private_key.der \
     1
 
@@ -2003,7 +2006,7 @@ make wolfboot.bin
   factory.bin \
     0x0        hal/nxp_p1021_stage1.bin \
     0x8000     wolfboot.bin \
-    0x200000   test-app/image.bin \
+    0x200000   test-app/image_v1_signed.bin \
     0x01F00000 fsl_qe_ucode_1021_10_A.bin
 ```
 

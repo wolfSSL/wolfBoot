@@ -514,6 +514,48 @@ static void udelay(uint32_t delay_us)
     wait_ticks(delay_us * DELAY_US);
 }
 
+#if 0 /* useful timer code */
+
+uint64_t hal_timer_ms(void)
+{
+    uint64_t val;
+    /* time base is updated every 8 CCB clocks */
+    uint64_t cntfrq = hal_get_bus_clk() / 8;
+    uint64_t cntpct = get_ticks();
+    val = (cntpct * 1000ULL) / cntfrq;
+    return val;
+}
+
+/* example usage */
+//uint64_t start = hal_get_tick_count();
+// do some work
+//wolfBoot_printf("done (%lu ms)\n", (uint32_t)hal_elapsed_time_ms(start));
+
+/* Calculate elapsed time in milliseconds, handling timer overflow properly */
+uint64_t hal_elapsed_time_ms(uint64_t start_ticks)
+{
+    uint64_t current_ticks, elapsed_ticks;
+    uint64_t cntfrq = hal_get_bus_clk() / 8;
+
+    current_ticks = get_ticks();
+
+    /* Handle timer overflow using unsigned arithmetic
+     * This works correctly even if the timer has rolled over,
+     * as long as the elapsed time is less than the full timer range
+     */
+    elapsed_ticks = current_ticks - start_ticks;
+
+    /* Convert elapsed ticks to milliseconds */
+    return (elapsed_ticks * 1000ULL) / cntfrq;
+}
+
+/* Get current tick count for use with hal_elapsed_time_ms() */
+uint64_t hal_get_tick_count(void)
+{
+    return get_ticks();
+}
+#endif
+
 /* ---- eSPI Driver ---- */
 #ifdef ENABLE_ESPI
 void hal_espi_init(uint32_t cs, uint32_t clock_hz, uint32_t mode)
