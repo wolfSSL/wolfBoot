@@ -70,7 +70,8 @@
 #define GPIO_CLOCK_ER_VAL (1 << 1)
 #define GPIOB_BASE 0x40020400
 #define GPIO_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
-#define GPIO_AF    (*(volatile uint32_t *)(GPIOB_BASE + 0x20))
+#define GPIO_AFL    (*(volatile uint32_t *)(GPIOB_BASE + 0x20))
+#define GPIO_AFH    (*(volatile uint32_t *)(GPIOB_BASE + 0x24))
 #endif
 
 /* UART3 Config */
@@ -92,7 +93,8 @@
 #define GPIO_CLOCK_ER_VAL (1 << 3)
 #define GPIOD_BASE 0x40020c00
 #define GPIO_MODE  (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
-#define GPIO_AF    (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
+#define GPIO_AFL   (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
+#define GPIO_AFH   (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
 #endif
 
 
@@ -106,10 +108,29 @@ static void uart_pins_setup(void)
     reg = GPIO_MODE & ~ (0x03 << (UART_TX_PIN * 2));
     GPIO_MODE = reg | (2 << (UART_TX_PIN * 2));
 
-    reg = GPIO_AF & ~(0xf << (UART_TX_PIN * 4));
-    GPIO_AF = reg | (UART_PIN_AF << (UART_TX_PIN * 4));
-    reg = GPIO_AF & ~(0xf << (UART_RX_PIN * 4));
-    GPIO_AF = reg | (UART_PIN_AF << (UART_RX_PIN * 4));
+    /* The alternate function register is split across two 32bit
+     * registers (AFL, AFH). AFL covers pins 0 through 7, and 
+     * AFH covers pins 8 through 15. The code below determines 
+     * which register to use at compile time based on the chosen
+     * pin number
+    */
+
+#if UART_TX_PIN > 7
+    reg = GPIO_AFH & ~(0xf << ((UART_TX_PIN - 8) * 4));
+    GPIO_AFH = reg | (UART_PIN_AF << ((UART_TX_PIN - 8) * 4));
+#else
+    reg = GPIO_AFL & ~(0xf << (UART_TX_PIN * 4));
+    GPIO_AFL = reg | (UART_PIN_AF << (UART_TX_PIN * 4));
+#endif
+
+#if UART_RX_PIN > 7
+    reg = GPIO_AFH & ~(0xf << ((UART_RX_PIN - 8) * 4));
+    GPIO_AFH = reg | (UART_PIN_AF << ((UART_RX_PIN - 8) * 4));
+#else
+    reg = GPIO_AFL & ~(0xf << (UART_RX_PIN * 4));
+    GPIO_AFL = reg | (UART_PIN_AF << (UART_RX_PIN * 4));
+#endif
+
 }
 
 int uart_tx(const uint8_t c)
