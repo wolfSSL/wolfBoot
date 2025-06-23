@@ -54,7 +54,7 @@ endif
 WOLFCRYPT_OBJS:=
 SECURE_OBJS:=
 PUBLIC_KEY_OBJS:=
-WOLFHSM_CLIENT_OBJS:=
+WOLFHSM_OBJS:=
 ifneq ("$(NO_LOADER)","1")
   OBJS+=./src/loader.o
 endif
@@ -67,7 +67,7 @@ include options.mk
 
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
-OBJS+=$(WOLFHSM_CLIENT_OBJS)
+OBJS+=$(WOLFHSM_OBJS)
 
 CFLAGS+= \
   -I"." -I"include/" -I"lib/wolfssl" \

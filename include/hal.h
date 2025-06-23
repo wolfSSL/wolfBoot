@@ -170,6 +170,32 @@ extern const whNvmId hsmClientNvmIdCertRootCA;
 /* Implementation of functions provided by HAL */
 int hal_hsm_init_connect(void);
 int hal_hsm_disconnect(void);
+
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+
+#include "wolfhsm/wh_error.h"
+#include "wolfhsm/wh_server.h"
+#include "wolfhsm/wh_server_crypto.h"
+#include "wolfhsm/wh_server_keystore.h"
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+#include "wolfhsm/wh_server_cert.h"
+#endif
+
+extern whServerContext hsmServerCtx; /* global wolfHSM server context */
+
+extern const int hsmServerDevIdHash;   /* devId for image digest */
+extern const int hsmServerDevIdPubKey; /* devId for signature verification */
+#ifdef EXT_ENCRYPTED
+extern const int hsmServerDevIdCrypt; /* devId for image (enc)decryption */
+#endif
+#ifdef WOLFBOOT_CERT_CHAIN_VERIFY
+/* NvmId for trusted root CA certificate */
+extern const whNvmId hsmServerNvmIdCertRootCA;
+#endif
+
+int hal_hsm_server_init(void);
+int hal_hsm_server_cleanup(void);
+
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
 #ifdef __cplusplus

@@ -1125,7 +1125,7 @@ ifeq ($(ARCH),sim)
     CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
   endif
   ifeq ($(WOLFHSM_CLIENT),1)
-    WOLFHSM_CLIENT_OBJS += $(LIBDIR)/wolfHSM/port/posix/posix_transport_tcp.o
+    WOLFHSM_OBJS += $(LIBDIR)/wolfHSM/port/posix/posix_transport_tcp.o
   endif
 endif
 

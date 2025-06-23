@@ -51,7 +51,15 @@
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_client.h"
 #include "port/posix/posix_transport_tcp.h"
-#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) /*WOLFBOOT_ENABLE_WOLFHSM_CLIENT*/
+#include "wolfhsm/wh_error.h"
+#include "wolfhsm/wh_server.h"
+#include "wolfhsm/wh_server_keystore.h"
+#include "wolfhsm/wh_nvm.h"
+#include "wolfhsm/wh_nvm_flash.h"
+#include "wolfhsm/wh_transport_mem.h"
+#include "port/posix/posix_flash_file.h"
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER */
 
 /* Global pointer to the internal and external flash base */
 uint8_t *sim_ram_base;
@@ -107,7 +115,76 @@ const whNvmId hsmClientNvmIdCertRootCA = 1;
 int hal_hsm_init_connect(void);
 int hal_hsm_disconnect(void);
 
-#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) /*WOLFBOOT_ENABLE_WOLFHSM_CLIENT*/
+
+/* HAL Flash state and configuration */
+const whFlashCb       fcb[1]     = {POSIX_FLASH_FILE_CB};
+posixFlashFileContext fc[1]      = {0};
+posixFlashFileConfig  fc_conf[1] = {{
+     .filename       = "wolfBoot_wolfHSM_NVM.bin",
+     .partition_size = 16384,
+     .erased_byte    = (uint8_t)0,
+}};
+/* NVM Configuration using PosixSim HAL Flash */
+whNvmFlashConfig  nf_conf[1] = {{
+     .cb      = fcb,
+     .context = fc,
+     .config  = fc_conf,
+}};
+whNvmFlashContext nfc[1]     = {0};
+whNvmCb           nfcb[1]    = {WH_NVM_FLASH_CB};
+
+whNvmConfig  n_conf[1] = {{
+     .cb      = nfcb,
+     .context = nfc,
+     .config  = nf_conf,
+}};
+whNvmContext nvm[1]    = {{0}};
+
+static uint8_t req[]  = {0};
+static uint8_t resp[] = {0};
+
+whTransportMemConfig tmcf[1] = {{
+   .req       = (whTransportMemCsr*)req,
+   .req_size  = sizeof(req),
+   .resp      = (whTransportMemCsr*)resp,
+   .resp_size = sizeof(resp),
+}};
+whTransportServerCb         tscb[1]    = {WH_TRANSPORT_MEM_SERVER_CB};
+whTransportMemServerContext tmsc[1]    = {0};
+/* Dummy comm server config */
+whCommServerConfig          cs_conf[1] = {{
+             .transport_cb      = tscb,
+             .transport_context = &tmsc,
+             .transport_config  = &tmcf,
+             .server_id         = 0,
+}};
+
+/* Crypto context */
+whServerCryptoContext crypto[1] = {{
+    .devId = INVALID_DEVID,
+}};
+
+#if defined(WOLFHSM_CFG_SHE_EXTENSION)
+whServerSheContext    she[1]    = {{0}};
+#endif
+
+whServerConfig s_conf[1] = {{
+    .comm_config = cs_conf,
+    .nvm         = nvm,
+    .crypto      = crypto,
+}};
+
+whServerContext hsmServerCtx = {0};
+
+const int hsmServerDevIdHash       = INVALID_DEVID;
+const int hsmServerDevIdPubKey     = INVALID_DEVID;
+const whNvmId   hsmServerNvmIdCertRootCA = 1;
+
+int hal_hsm_server_init(void);
+int hal_hsm_server_cleanup(void);
+
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER*/
 
 static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 {
@@ -410,7 +487,6 @@ int wolfBoot_dualboot_candidate(void)
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 
-
 int hal_hsm_init_connect(void)
 {
     int rc = 0;
@@ -449,4 +525,57 @@ int hal_hsm_disconnect(void)
     return rc;
 }
 
-#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) /*WOLFBOOT_ENABLE_WOLFHSM_CLIENT*/
+
+int hal_hsm_server_init(void)
+{
+    int rc = 0;
+
+    rc = wh_Nvm_Init(nvm, n_conf);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to initialize NVM: %d\n", rc);
+        exit(-1);
+    }
+
+    wolfCrypt_Init();
+
+    rc = wc_InitRng_ex(crypto->rng, NULL, INVALID_DEVID);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to initialize RNG: %d\n", rc);
+        exit(-1);
+    }
+
+    rc = wh_Server_Init(&hsmServerCtx, s_conf);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to initialize HSM server: %d\n", rc);
+        exit(-1);
+    }
+
+    return rc;
+}
+
+int hal_hsm_server_cleanup(void)
+{
+    int rc = 0;
+
+    rc = wh_Server_Cleanup(&hsmServerCtx);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to cleanup HSM server: %d\n", rc);
+        exit(-1);
+    }
+
+    rc = wc_FreeRng(crypto->rng);
+    if (rc != 0) {
+        fprintf(stderr, "Failed to cleanup RNG: %d\n", rc);
+        exit(-1);
+    }
+
+    rc = wolfCrypt_Cleanup();
+    if (rc != 0) {
+        fprintf(stderr, "Failed to cleanup wolfCrypt: %d\n", rc);
+        exit(-1);
+    }
+
+    return rc;
+}
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER */

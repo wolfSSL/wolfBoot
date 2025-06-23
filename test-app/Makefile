@@ -463,7 +463,13 @@ CFLAGS+=-I../lib/wolfssl
 
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I../lib/wolfssl
-  APP_OBJS += $(WOLFHSM_CLIENT_OBJS)
+  APP_OBJS += $(WOLFHSM_OBJS)
+  APP_OBJS += $(sort $(patsubst ./lib/wolfssl/%, ../lib/wolfssl/%, $(WOLFCRYPT_OBJS)))
+endif
+
+ifeq ($(WOLFHSM_SERVER),1)
+  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I../lib/wolfssl
+  APP_OBJS += $(WOLFHSM_OBJS)
   APP_OBJS += $(sort $(patsubst ./lib/wolfssl/%, ../lib/wolfssl/%, $(WOLFCRYPT_OBJS)))
 endif
 
