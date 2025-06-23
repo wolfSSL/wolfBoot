@@ -571,8 +571,7 @@ ifeq ($(ARCH),PPC)
     CFLAGS+=-DWOLFSSL_SP_PPC
     CFLAGS+=-DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE
     #CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
-    #CFLAGS+=-DUSE_SLOW_SHA256
-    OBJS+=./lib/wolfssl/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+    MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
   endif
 endif
 
