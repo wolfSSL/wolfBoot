@@ -15,11 +15,14 @@ jobs:
       matrix:
         config:
           - name: "Standard wolfHSM"
-            file: "config/examples/sim-wolfHSM.config"
+            file: "config/examples/sim-wolfHSM-client.config"
           - name: "wolfHSM ML-DSA"
-            file: "config/examples/sim-wolfHSM-mldsa.config"
+            file: "config/examples/sim-wolfHSM-client-mldsa.config"
           - name: "wolfHSM cert chain verify"
-            file: "config/examples/sim-wolfHSM-certchain.config"
+            file: "config/examples/sim-wolfHSM-client-certchain.config"
+          - name: "wolfHSM server cert chain verify"
+            file: "config/examples/sim-wolfHSM-server-certchain.config"
+
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -50,31 +53,34 @@ jobs:
         run: |
           make clean && make test-sim-internal-flash-with-update
 
-      # checkout and build wolfHSM examples repo
-      - name: Checkout wolfHSM-examples
-        uses: actions/checkout@v4
-        with:
-          repository: wolfssl/wolfHSM-examples
-          # Make sure to update this when the wolfHSM submodule is updated!
-          ref: wolfHSM-examples-v1.2.0
-          path: wolfHSM-examples
-
       - name: Build example POSIX TCP server
-        run: cd wolfHSM-examples/posix/tcp/wh_server_tcp && make WOLFSSL_DIR=../../../../lib/wolfssl WOLFHSM_DIR=../../../../lib/wolfHSM
+        if: matrix.config.name != 'wolfHSM server cert chain verify'
+        run: cd lib/wolfHSM/examples/posix/tcp/wh_server_tcp && make WOLFSSL_DIR=../../../../../wolfssl
 
       # Start the server in the background
       - name: Run POSIX TCP server
+        if: matrix.config.name != 'wolfHSM server cert chain verify'
         run: |
-          cd wolfHSM-examples/posix/tcp/wh_server_tcp
+          cd lib/wolfHSM/examples/posix/tcp/wh_server_tcp
           if [ "${{ matrix.config.name }}" = "wolfHSM cert chain verify" ]; then
             tmpfile=$(mktemp)
-            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
             ./Build/wh_server_tcp.elf --nvminit $tmpfile &
           else
-            ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../wolfboot_signing_private_key_pub.der &
+            ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../../../wolfboot_signing_private_key_pub.der &
           fi
           TCP_SERVER_PID=$!
           echo "TCP_SERVER_PID=$TCP_SERVER_PID" >> $GITHUB_ENV
+
+      # For testing the wolfHSM server cert chain verify feature, we need to create an NVM image containing our root CA that
+      # the internal wolfHSM server can load.
+      - name: Create NVM image for wolfHSM server cert chain verify
+        if: matrix.config.name == 'wolfHSM server cert chain verify'
+        run: |
+          make -C lib/wolfHSM/tools/whnvmtool
+          tmpfile=$(mktemp)
+          echo "obj 1 0xFFFF 0x0000 \"cert CA\" test-dummy-ca/root-cert.der" >> $tmpfile
+          ./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size=16348 --invert-erased-byte $tmpfile
 
       # Run the sunny day update test against the server
       - name: Run sunny day update test
@@ -83,6 +89,6 @@ jobs:
 
       # Kill the server if it is still running
       - name: Kill POSIX TCP server
-        if: always()
+        if: always() && matrix.config.name != 'wolfHSM server cert chain verify'
         run: |
           kill $TCP_SERVER_PID || true

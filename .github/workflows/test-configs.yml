@@ -468,7 +468,7 @@ jobs:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: host
-      config-file: ./config/examples/sim-wolfHSM.config
+      config-file: ./config/examples/sim-wolfHSM-client.config
 
   rp2350_test:
     uses: ./.github/workflows/test-build-pico-sdk.yml

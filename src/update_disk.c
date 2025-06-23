@@ -223,6 +223,8 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_printf("Booting at %08lx\r\n", os_image.fw_base);
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)hal_hsm_disconnect();
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+    (void)hal_hsm_server_cleanup();
 #endif
     hal_prepare_boot();
     do_boot((uint32_t*)os_image.fw_base);

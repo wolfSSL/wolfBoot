@@ -109,6 +109,10 @@ int main(void)
     if (0 != hal_hsm_init_connect()) {
         wolfBoot_panic();
     }
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+    if (0 != hal_hsm_server_init()) {
+        wolfBoot_panic();
+    }
 #endif
     spi_flash_probe();
 #ifdef UART_FLASH

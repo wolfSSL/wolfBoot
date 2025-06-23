@@ -868,7 +868,7 @@ ifneq ($(WOLFBOOT_PART_ID),)
   SIGN_OPTIONS+=--id $(WOLFBOOT_PART_ID)
 endif
 
-# wolfHSM options
+# wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
   WOLFCRYPT_OBJS += \
@@ -876,16 +876,16 @@ ifeq ($(WOLFHSM_CLIENT),1)
     $(LIBDIR)/wolfssl/wolfcrypt/src/coding.o
 
   ifeq ($(SIGN),ML_DSA)
+    WOLFCRYPT_OBJS += $(MATH_OBJS)
     # Dilithium asn.c decode/encode requires mp_xxx functions
     WOLFCRYPT_OBJS += \
-        $(LIBDIR)/wolfssl/wolfcrypt/src/tfm.o \
         $(LIBDIR)/wolfssl/wolfcrypt/src/random.o
 
     # Large enough to handle the largest Dilithium key/signature
     CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 
-  WOLFHSM_CLIENT_OBJS += \
+  WOLFHSM_OBJS += \
     $(LIBDIR)/wolfHSM/src/wh_client.o \
     $(LIBDIR)/wolfHSM/src/wh_client_nvm.o \
     $(LIBDIR)/wolfHSM/src/wh_client_cryptocb.o \
@@ -899,7 +899,7 @@ ifeq ($(WOLFHSM_CLIENT),1)
   #includes
   CFLAGS += -I"$(LIBDIR)/wolfHSM"
   # defines
-  CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT
+  CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT -DWOLFHSM_CFG_ENABLE_CLIENT
   # Make sure we export generated public keys so they can be used to load into
   # HSM out-of-band
   KEYGEN_OPTIONS += --exportpubkey --der
@@ -915,9 +915,66 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # Ensure wolfHSM is configured to use certificate manager if we are
   # doing cert chain verification
   ifneq ($(CERT_CHAIN_VERIFY),)
-    WOLFHSM_CLIENT_OBJS += \
+    WOLFHSM_OBJS += \
       $(LIBDIR)/wolfHSM/src/wh_client_cert.o \
       $(LIBDIR)/wolfHSM/src/wh_message_cert.o
+    CFLAGS += -DWOLFHSM_CFG_CERTIFICATE_MANAGER
+  endif
+endif
+
+# wolfHSM server options
+ifeq ($(WOLFHSM_SERVER),1)
+  LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
+  WOLFCRYPT_OBJS += \
+    $(LIBDIR)/wolfssl/wolfcrypt/src/cryptocb.o \
+    $(LIBDIR)/wolfssl/wolfcrypt/src/coding.o \
+    $(LIBDIR)/wolfssl/wolfcrypt/src/random.o
+
+  ifeq ($(SIGN),ML_DSA)
+    WOLFCRYPT_OBJS += $(MATH_OBJS)
+    # Large enough to handle the largest Dilithium key/signature
+    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
+  endif
+
+  WOLFHSM_OBJS += \
+    $(LIBDIR)/wolfHSM/src/wh_utils.o \
+    $(LIBDIR)/wolfHSM/src/wh_comm.o \
+    $(LIBDIR)/wolfHSM/src/wh_nvm.o \
+    $(LIBDIR)/wolfHSM/src/wh_nvm_flash.o \
+    $(LIBDIR)/wolfHSM/src/wh_flash_unit.o \
+    $(LIBDIR)/wolfHSM/src/wh_crypto.o \
+    $(LIBDIR)/wolfHSM/src/wh_server.o \
+    $(LIBDIR)/wolfHSM/src/wh_server_nvm.o \
+    $(LIBDIR)/wolfHSM/src/wh_server_crypto.o \
+    $(LIBDIR)/wolfHSM/src/wh_server_counter.o \
+    $(LIBDIR)/wolfHSM/src/wh_server_keystore.o \
+    $(LIBDIR)/wolfHSM/src/wh_server_customcb.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_customcb.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_keystore.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_crypto.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_counter.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_nvm.o \
+    $(LIBDIR)/wolfHSM/src/wh_message_comm.o \
+    $(LIBDIR)/wolfHSM/src/wh_transport_mem.o \
+    $(LIBDIR)/wolfHSM/port/posix/posix_flash_file.o
+
+  #includes
+  CFLAGS += -I"$(LIBDIR)/wolfHSM"
+  # defines'
+  CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_SERVER -DWOLFHSM_CFG_ENABLE_SERVER
+
+  # Ensure wolfHSM is configured to use certificate manager if we are
+  # doing cert chain verification
+  ifneq ($(CERT_CHAIN_VERIFY),)
+    CFLAGS += -I"$(LIBDIR)/wolfssl"
+    WOLFCRYPT_OBJS += \
+      $(LIBDIR)/wolfssl/src/internal.o \
+      $(LIBDIR)/wolfssl/src/ssl.o \
+      $(LIBDIR)/wolfssl/src/ssl_certman.o
+
+    WOLFHSM_OBJS += \
+      $(LIBDIR)/wolfHSM/src/wh_message_cert.o \
+      $(LIBDIR)/wolfHSM/src/wh_server_cert.o
     CFLAGS += -DWOLFHSM_CFG_CERTIFICATE_MANAGER
   endif
 endif
