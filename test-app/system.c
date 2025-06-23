@@ -57,12 +57,20 @@
 #define RCC_PRESCALER_DIV_4    9
 
 
-/* STM32F4-Discovery, 168 MHz */
+/* STM32F4 */
 #ifdef TARGET_stm32f4
-#  define PLLM 8
-#  define PLLN 336
-#  define PLLP 2
-#  define PLLQ 7
+#  if defined(STM32_PLLM) && defined(STM32_PLLN) && \
+    defined(STM32_PLLP) && defined(STM32_PLLQ)
+#    define PLLM STM32_PLLM
+#    define PLLN STM32_PLLN
+#    define PLLP STM32_PLLP
+#    define PLLQ STM32_PLLQ
+#  else
+#    define PLLM 8
+#    define PLLN 336
+#    define PLLP 2
+#    define PLLQ 7
+#  endif
 #  define PLLR 0
 #  define TARGET_FLASH_WAITSTATES 5
 #endif

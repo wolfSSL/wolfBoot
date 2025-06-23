@@ -238,6 +238,29 @@ if(ARCH STREQUAL "ARM")
     if(${WOLFBOOT_TARGET} STREQUAL "stm32f4")
         set(ARCH_FLASH_OFFSET 0x08000000)
         set(WOLFBOOT_ORIGIN ${ARCH_FLASH_OFFSET})
+
+        if(NOT DEFINED CLOCK_SPEED)
+            message(FATAL_ERROR "CLOCK_SPEED must be defined")
+        endif()
+        if(NOT DEFINED STM32_PLLM)
+            message(FATAL_ERROR "STM32_PLLM must be defined")
+        endif()
+        if(NOT DEFINED STM32_PLLN)
+            message(FATAL_ERROR "STM32_PLLN must be defined")
+        endif()
+        if(NOT DEFINED STM32_PLLP)
+            message(FATAL_ERROR "STM32_PLLP must be defined")
+        endif()
+        if(NOT DEFINED STM32_PLLQ)
+            message(FATAL_ERROR "STM32_PLLQ must be defined")
+        endif()
+        add_compile_definitions(
+            CLOCK_SPEED=${CLOCK_SPEED}
+            STM32_PLLM=${STM32_PLLM}
+            STM32_PLLN=${STM32_PLLN}
+            STM32_PLLP=${STM32_PLLP}
+            STM32_PLLQ=${STM32_PLLQ}
+        )
     endif()
 
     if(${WOLFBOOT_TARGET} STREQUAL "stm32u5")

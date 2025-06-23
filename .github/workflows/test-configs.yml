@@ -272,11 +272,17 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32f4-small-blocks-uart-update.config
 
-  stm32f4_test:
+  stm32f407_discovery_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
-      config-file: ./config/examples/stm32f4.config
+      config-file: ./config/examples/stm32f407-discovery.config
+
+  stm32f411_blackpill_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32f411-blackpill.config
 
   stm32f7_dualbank_test:
     uses: ./.github/workflows/test-build.yml

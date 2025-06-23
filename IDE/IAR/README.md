@@ -12,7 +12,7 @@ application image starts at address 0x08020000.
 
 ```
 $template=Get-Content -path ..\..\include\target.h.in;
-Get-Content -path ..\..\config\examples\stm32f4.config | ForEach-Object {$v=$_.Split('?='); $a=$v[0]; $b=$v[2]; $template=($template -replace "##$a##",$b) };
+Get-Content -path ..\..\config\examples\stm32f407-discovery.config | ForEach-Object {$v=$_.Split('?='); $a=$v[0]; $b=$v[2]; $template=($template -replace "##$a##",$b) };
 $template=($template -replace "##.*##","");
 Set-Content -path target.h $template
 ```

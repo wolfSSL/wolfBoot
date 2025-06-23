@@ -30,7 +30,7 @@ jobs:
 
       - name: Select config
         run: |
-          cp config/examples/stm32f4.config .config && make include/target.h
+          cp config/examples/stm32f407-discovery.config .config && make include/target.h
 
       - name: Build key tools
         run: |
