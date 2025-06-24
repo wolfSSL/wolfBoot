@@ -136,15 +136,25 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
             }
         }
 
-        memcpy((void*)(uintptr_t)vaddr, image + offset, file_size);
-        if (mem_size > file_size) {
-            memset((void*)(uintptr_t)(vaddr + file_size), 0,
-                   mem_size - file_size);
+        /* confirm the entry won't clobber any of the headers */
+        if ((uint8_t*)vaddr + file_size < image ||
+            (uint8_t*)vaddr > (entry_off + entry_count * entry_size))
+        {
+            memcpy((void*)vaddr, image + offset, file_size);
+            if (mem_size > file_size) {
+                memset((void*)(uintptr_t)(vaddr + file_size), 0,
+                    mem_size - file_size);
+            }
+        #ifdef ARCH_PPC
+            flush_cache(paddr, mem_size);
+        #endif
         }
-    #ifdef ARCH_PPC
-        flush_cache(paddr, mem_size);
+    #ifdef DEBUG_ELF
+        else {
+            wolfBoot_printf("Section would collide with headers! Skipping\n");
+        }
     #endif
-#endif
+#endif /* !ELF_PARSER */
     }
 
 #ifdef DEBUG_ELF
