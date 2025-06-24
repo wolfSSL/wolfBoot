@@ -145,3 +145,6 @@ implementation in new ports must return immediately without performing any actio
 if the content of the bootloader partition in the two banks already match.
 
 
+### wolfHSM HAL extensions
+
+Refer to [wolfHSM.md](wolfHSM.md) for the wolfHSM-specific HAL functions and an overview of wolfHSM compatibility.

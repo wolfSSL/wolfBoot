@@ -652,21 +652,21 @@ static whTransportClientCb         tmcCb[1]   = {WH_TRANSPORT_MEM_CLIENT_CB};
 
 /* Globally exported HAL symbols */
 whClientContext hsmClientCtx         = {0};
-const int       hsmClientDevIdHash   = WH_DEV_ID_DMA;
+const int       hsmDevIdHash         = WH_DEV_ID_DMA;
 #ifdef WOLFBOOT_SIGN_ML_DSA
 /* Use DMA for massive ML DSA keys/signatures, too big for shm transport */
-const int       hsmClientDevIdPubKey = WH_DEV_ID_DMA;
+const int hsmDevIdPubKey = WH_DEV_ID_DMA;
 #else
-const int       hsmClientDevIdPubKey = WH_DEV_ID;
+const int hsmDevIdPubKey = WH_DEV_ID;
 #endif
-const int       hsmClientKeyIdPubKey = 0xFF;
+const int hsmKeyIdPubKey = 0xFF;
 #ifdef EXT_ENCRYPT
 #error "AURIX TC3xx does not support firmware encryption with wolfHSM (yet)"
-const int       hsmClientDevIdCrypt = WH_DEV_ID;
-const int       hsmClientKeyIdCrypt = 0xFF;
+const int hsmDevIdCrypt = WH_DEV_ID;
+const int hsmKeyIdCrypt = 0xFF;
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-const whNvmId hsmClientNvmIdCertRootCA = 1;
+const whNvmId hsmNvmIdCertRootCA = 1;
 #endif
 
 
