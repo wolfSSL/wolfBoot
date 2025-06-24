@@ -144,34 +144,18 @@ int hal_flash_test(void);
 #endif
 
 
-#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
-/* TODO: most of this should be moved to its own HSM shim header */
-#include "wolfhsm/wh_error.h"  /* wolfHSM error codes */
-#include "wolfhsm/wh_client.h" /* For client API access */
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+
+#include "wolfhsm/wh_error.h"         /* wolfHSM error codes */
+#include "wolfhsm/wh_client.h"        /* For client API access */
 #include "wolfhsm/wh_client_crypto.h" /* For client crypto helper API */
 
 extern whClientContext hsmClientCtx; /* global wolfHSM client context */
 
-extern const int hsmClientDevIdHash;   /* devId for image digest */
-extern const int hsmClientDevIdPubKey; /* devId for signature verification */
-#ifdef EXT_ENCRYPTED
-extern const int hsmClientDevIdCrypt; /* devId for image (enc)decryption */
-#endif
-
-extern const int hsmClientKeyIdPubKey; /* KeyId for public key operations */
-#ifdef EXT_ENCRYPTED
-extern const int hsmClientKeyIdCrypt; /* KeyId for image (enc/dec)ryption */
-#endif
-#ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-/* NvmId for trusted root CA certificate */
-extern const whNvmId hsmClientNvmIdCertRootCA;
-#endif
-
-/* Implementation of functions provided by HAL */
 int hal_hsm_init_connect(void);
 int hal_hsm_disconnect(void);
 
-#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) /*WOLFBOOT_ENABLE_WOLFHSM_CLIENT*/
 
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_server.h"
@@ -183,20 +167,30 @@ int hal_hsm_disconnect(void);
 
 extern whServerContext hsmServerCtx; /* global wolfHSM server context */
 
-extern const int hsmServerDevIdHash;   /* devId for image digest */
-extern const int hsmServerDevIdPubKey; /* devId for signature verification */
-#ifdef EXT_ENCRYPTED
-extern const int hsmServerDevIdCrypt; /* devId for image (enc)decryption */
-#endif
-#ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-/* NvmId for trusted root CA certificate */
-extern const whNvmId hsmServerNvmIdCertRootCA;
-#endif
-
 int hal_hsm_server_init(void);
 int hal_hsm_server_cleanup(void);
 
-#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER */
+
+
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+
+/* devId and KeyIds for wolfHSM operations */
+
+extern const int hsmDevIdHash;   /* devId for image digest */
+extern const int hsmDevIdPubKey; /* devId for signature verification */
+extern const int hsmKeyIdPubKey; /* KeyId for public key operations */
+#ifdef EXT_ENCRYPTED
+extern const int hsmDevIdCrypt; /* devId for image (enc)decryption */
+extern const int hsmKeyIdCrypt; /* KeyId for image (enc/dec)ryption */
+#endif
+#ifdef WOLFBOOT_CERT_CHAIN_VERIFY
+/* NvmId for trusted root CA certificate */
+extern const whNvmId hsmNvmIdCertRootCA;
+#endif
+
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || WOLFBOOT_ENABLE_WOLFHSM_SERVER */
 
 #ifdef __cplusplus
 }

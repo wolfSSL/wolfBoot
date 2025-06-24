@@ -99,17 +99,17 @@ static whClientConfig     c_conf[1]  = {{
 }};
 
 /* Globally exported HAL symbols */
-whClientContext hsmClientCtx         = {0};
-const int       hsmClientDevIdHash   = WH_DEV_ID;
-const int       hsmClientDevIdPubKey = WH_DEV_ID;
-const int       hsmClientKeyIdPubKey = 0xFF;
+whClientContext hsmClientCtx   = {0};
+const int       hsmDevIdHash   = WH_DEV_ID;
+const int       hsmDevIdPubKey = WH_DEV_ID;
+const int       hsmKeyIdPubKey = 0xFF;
 #ifdef EXT_ENCRYPT
 #error "Simulator does not support firmware encryption with wolfHSM(yet)"
-const int       hsmClientDevIdCrypt = WH_DEV_ID;
-const int       hsmClientKeyIdCrypt = 0xFF;
+const int hsmDevIdCrypt = WH_DEV_ID;
+const int hsmKeyIdCrypt = 0xFF;
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-const whNvmId hsmClientNvmIdCertRootCA = 1;
+const whNvmId hsmNvmIdCertRootCA = 1;
 #endif
 
 int hal_hsm_init_connect(void);
@@ -144,20 +144,20 @@ whNvmContext nvm[1]    = {{0}};
 static uint8_t req[]  = {0};
 static uint8_t resp[] = {0};
 
-whTransportMemConfig tmcf[1] = {{
-   .req       = (whTransportMemCsr*)req,
-   .req_size  = sizeof(req),
-   .resp      = (whTransportMemCsr*)resp,
-   .resp_size = sizeof(resp),
+whTransportMemConfig        tmcf[1] = {{
+           .req       = (whTransportMemCsr*)req,
+           .req_size  = sizeof(req),
+           .resp      = (whTransportMemCsr*)resp,
+           .resp_size = sizeof(resp),
 }};
-whTransportServerCb         tscb[1]    = {WH_TRANSPORT_MEM_SERVER_CB};
-whTransportMemServerContext tmsc[1]    = {0};
+whTransportServerCb         tscb[1] = {WH_TRANSPORT_MEM_SERVER_CB};
+whTransportMemServerContext tmsc[1] = {0};
 /* Dummy comm server config */
-whCommServerConfig          cs_conf[1] = {{
-             .transport_cb      = tscb,
-             .transport_context = &tmsc,
-             .transport_config  = &tmcf,
-             .server_id         = 0,
+whCommServerConfig cs_conf[1] = {{
+    .transport_cb      = tscb,
+    .transport_context = &tmsc,
+    .transport_config  = &tmcf,
+    .server_id         = 0,
 }};
 
 /* Crypto context */
@@ -177,9 +177,14 @@ whServerConfig s_conf[1] = {{
 
 whServerContext hsmServerCtx = {0};
 
-const int hsmServerDevIdHash       = INVALID_DEVID;
-const int hsmServerDevIdPubKey     = INVALID_DEVID;
-const whNvmId   hsmServerNvmIdCertRootCA = 1;
+const int     hsmDevIdHash       = INVALID_DEVID;
+const int     hsmDevIdPubKey     = INVALID_DEVID;
+const whNvmId hsmNvmIdCertRootCA = 1;
+#ifdef EXT_ENCRYPT
+#error "Simulator does not support firmware encryption with wolfHSM(yet)"
+const int     hsmDevIdCrypt      = WH_DEV_ID;
+const int     hsmKeyIdCrypt      = 0xFF;
+#endif
 
 int hal_hsm_server_init(void);
 int hal_hsm_server_cleanup(void);
