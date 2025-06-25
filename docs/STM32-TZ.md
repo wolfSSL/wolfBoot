@@ -182,8 +182,8 @@ OPTION BYTES BANK: 4
 
    Bank2 - Flash watermark area definition:
 
-     SECWM2_STRT  : 0x7F  (0x81FE000)
-     SECWM2_END   : 0x0  (0x8100000)
+     SECWM2_STRT  : 0x0  (0x08100000)
+     SECWM2_END   : 0x1F  (0x0813e000)
 
    Write sector group protection 2:
 
