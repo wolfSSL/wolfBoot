@@ -752,14 +752,18 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
      * FLAGS_INVERT needs erased flags because the bin-assemble's fill byte may
      * not match what's in wolfBoot */
     if (FLAGS_UPDATE_EXT()) {
-        ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        ext_flash_erase(lastSector, WOLFBOOT_SECTOR_SIZE);
         wolfBoot_set_partition_state(PART_UPDATE, st);
     } else {
 #ifndef NVM_FLASH_WRITEONCE
-        hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        hal_flash_erase(lastSector, WOLFBOOT_SECTOR_SIZE);
         wolfBoot_set_partition_state(PART_UPDATE, st);
 #else
         uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
+        uint32_t offset = SECTOR_FLAGS_SIZE;
+#ifdef FLAGS_HOME
+        offset -= (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
+#endif
         selSec = nvm_select_fresh_sector(PART_UPDATE);
         XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
             WOLFBOOT_SECTOR_SIZE);
@@ -767,8 +771,8 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec,
             WOLFBOOT_SECTOR_SIZE);
 
-        NVM_CACHE[SECTOR_FLAGS_SIZE] = IMG_STATE_UPDATING;
-        memcpy(NVM_CACHE + SECTOR_FLAGS_SIZE + 1, &magic, sizeof(uint32_t));
+        NVM_CACHE[offset] = IMG_STATE_UPDATING;
+        memcpy(NVM_CACHE + offset + 1, &magic, sizeof(uint32_t));
         hal_flash_write(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec, NVM_CACHE,
             WOLFBOOT_SECTOR_SIZE);
         /* erase the previously selected sector */
