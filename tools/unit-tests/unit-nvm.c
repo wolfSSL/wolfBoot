@@ -269,10 +269,10 @@ START_TEST (test_nvm_select_fresh_sector)
     /* Triggering update to set flags */
     wolfBoot_update_trigger();
 
-    /* Current selected should now be 0 */
+    /* Current selected should now be 1 */
     ret = nvm_select_fresh_sector(PART_UPDATE);
-    ck_assert_msg(ret == 0, "Failed to select updating fresh sector\n");
-    ck_assert_msg(erased_nvm_bank1 > 0, "Did not erase the non-selected bank");
+    ck_assert_msg(ret == 1, "Failed to select updating fresh sector\n");
+    ck_assert_msg(erased_nvm_bank0 > 0, "Did not erase the non-selected bank");
 
     magic = get_partition_magic(PART_UPDATE);
     ck_assert_msg(*magic == *boot_word,
