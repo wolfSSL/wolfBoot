@@ -753,16 +753,22 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
      * not match what's in wolfBoot */
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        wolfBoot_set_partition_state(PART_UPDATE, st);
     } else {
 #ifndef NVM_FLASH_WRITEONCE
         hal_flash_erase(lastSector, SECTOR_FLAGS_SIZE);
+        wolfBoot_set_partition_state(PART_UPDATE, st);
 #else
+        uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
         selSec = nvm_select_fresh_sector(PART_UPDATE);
         XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
             WOLFBOOT_SECTOR_SIZE);
         /* write to the non selected sector */
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec,
             WOLFBOOT_SECTOR_SIZE);
+
+        NVM_CACHE[SECTOR_FLAGS_SIZE] = IMG_STATE_UPDATING;
+        memcpy(NVM_CACHE + SECTOR_FLAGS_SIZE + 1, &magic, sizeof(uint32_t));
         hal_flash_write(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec, NVM_CACHE,
             WOLFBOOT_SECTOR_SIZE);
         /* erase the previously selected sector */
@@ -771,7 +777,6 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
 #endif
     }
 
-    wolfBoot_set_partition_state(PART_UPDATE, st);
 
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_lock();
