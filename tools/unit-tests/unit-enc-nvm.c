@@ -27,6 +27,7 @@
 #define MOCK_ADDRESS_SWAP 0xCE000000
 const char ENCRYPT_KEY[] = "0123456789abcdef0123456789abcdef0123456789abcdef";
 #include <stdio.h>
+#include "image.h"
 #include "encrypt.h"
 #include "libwolfboot.c"
 #include <fcntl.h>
@@ -274,10 +275,10 @@ START_TEST (test_nvm_update_with_encryption)
     /* Triggering update to set flags */
     wolfBoot_update_trigger();
 
-    /* Current selected should now be 0 */
+    /* Current selected should now be 1 */
     ret = nvm_select_fresh_sector(PART_UPDATE);
-    ck_assert_msg(ret == 0, "Failed to select updating fresh sector\n");
-    ck_assert_msg(erased_nvm_bank1 != 0, "Did not erase the non-selected bank");
+    ck_assert_msg(ret == 1, "Failed to select updating fresh sector\n");
+    ck_assert_msg(erased_nvm_bank0 != 0, "Did not erase the non-selected bank");
 
     magic = get_partition_magic(PART_UPDATE);
     ck_assert_msg(*magic == *boot_word,
