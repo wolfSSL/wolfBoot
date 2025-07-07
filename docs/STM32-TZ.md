@@ -48,6 +48,13 @@ bytes (256×4). As a result, in this case `IMAGE_HEADER_SIZE` must be set to
 This detail is already taken care of in the configuration files provided in
 `config/examples`.
 
+In addition to this, when using the signing tool standalone the appropriate
+image header size must be supplied as an environment variable. For example:
+
+```
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --sha256 --ecc256 myapp.bin wolfboot_signing_private_key.der 1
+```
+
 ### Example using STM32L552
 
   - Copy the example configuration for STM32-L5 with support for wolfCrypt in
