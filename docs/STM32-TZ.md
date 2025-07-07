@@ -27,6 +27,27 @@ non-secure domain can access wolfCrypt through a standard PKCS11 interface and
 use the crypto library with pre-provisioned keys that are never exposed to the
 non-secure domain.
 
+### Image header size
+
+The `IMAGE_HEADER_SIZE` option has to be carefully tuned to accommodate for the
+interrupt vector table alignment requirements. According to the [ARM Cortex-M33
+documentation](https://developer.arm.com/documentation/100235/0004/the-cortex-m33-processor/exception-model/vector-table):
+
+> The silicon vendor must configure the required alignment of the vector
+> tables, which depends on the number of interrupts implemented. The minimum
+> alignment is 32 words, enough for up to 16 interrupts. For more interrupts,
+> adjust the alignment by rounding up to the next power of two. For example, if
+> you require 21 interrupts, the alignment must be on a 64-word boundary
+> because the required table size is 37 words, and the next power of two is 64.
+
+For example, all the STM32H5 series boards have at least 146 interrupt
+channels; since the next power of two is 256, they require an alignment of 1024
+bytes (256×4). As a result, in this case `IMAGE_HEADER_SIZE` must be set to
+`1024` or a multiple of it.
+
+This detail is already taken care of in the configuration files provided in
+`config/examples`.
+
 ### Example using STM32L552
 
   - Copy the example configuration for STM32-L5 with support for wolfCrypt in
