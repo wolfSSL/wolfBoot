@@ -1129,6 +1129,180 @@ ifeq ($(ARCH),sim)
   ifeq ($(WOLFHSM_CLIENT),1)
     WOLFHSM_OBJS += $(WOLFBOOT_LIB_WOLFHSM)/port/posix/posix_transport_tcp.o
   endif
+  ifeq ($(WOLFHSM_SERVER),1)
+    WOLFHSM_OBJS += $(WOLFBOOT_LIB_WOLFHSM)/port/posix/posix_flash_file.o \
+                    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+
+  endif
+endif
+
+# Infineon AURIX Tricore
+ifeq ($(ARCH), AURIX_TC3)
+  # TC3xx specific
+  ifeq ($(TARGET), aurix_tc3xx)
+    USE_GCC?=1
+    ARCH_FLASH_OFFSET=0x00000000
+
+    # No asm for you!
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+
+    CFLAGS += -I$(TC3_DIR) -Ihal
+
+    CFLAGS += -Werror
+    CFLAGS += -Wall -Wdiv-by-zero -Warray-bounds -Wformat -Wformat-security \
+              -Wignored-qualifiers -Wno-implicit-function-declaration \
+              -Wno-type-limits -Wno-unused-variable -Wno-unused-parameter \
+              -Wno-missing-braces -fno-common -pipe \
+              -ffunction-sections -fdata-sections -fmessage-length=0 \
+              -std=gnu99 -DPART_BOOT_EXT -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+              -DHAVE_TC3XX -DWOLFBOOT_LOADER_MAIN
+
+
+    # Makefile shennanigans for "if (WOLFHSM_CLIENT==1 || WOLFHSM_SERVER==1)"
+    ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
+      # Common wolfHSM port files
+      CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port -DWOLFHSM_CFG_DMA
+      OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_common.o \
+	          $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_hsmhost.o
+      # General wolfHSM files
+      OBJS += $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+
+      # NVM image generation variables
+      WH_NVM_BIN ?= whNvmImage.bin
+      WH_NVM_HEX ?= whNvmImage.hex
+      WH_NVM_PART_SIZE ?= 0x8000
+	  # Default to base of HSM DFLASH1
+      WH_NVM_BASE_ADDRESS ?= 0xAFC00000
+
+      # Select config file based on certificate chain verification
+      ifneq ($(CERT_CHAIN_VERIFY),)
+        NVM_CONFIG = tools/scripts/tc3xx/wolfBoot-wolfHSM-dummy-certchain.nvminit
+      else
+        NVM_CONFIG = tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit
+      endif
+    endif
+
+    # Set BOOT_IMG to the ELF file instead of default bin when ELF_FLASH_SCATTER is enabled
+    ifeq ($(ELF_FLASH_SCATTER),1)
+      BOOT_IMG=test-app/image.elf
+    endif
+
+    ifeq ($(AURIX_TC3_HSM),1)
+      # HSM compiler flags, build options, source code, etc
+      ifeq ($(USE_GCC),1)
+        # Just arm-none-eabi-gcc for now
+        CROSS_COMPILE?=arm-none-eabi-
+      else
+      endif
+
+      # Compiler flags
+      CFLAGS += -march=armv7-m -mcpu=cortex-m3 -mthumb -mlittle-endian \
+                -fno-builtin -DWOLFBOOT_AURIX_TC3XX_HSM
+
+      LDFLAGS += -march=armv7-m -mcpu=cortex-m3 -mthumb -mlittle-endian -g \
+                --specs=nano.specs -Wl,--gc-sections -static -Wl,--cref -Wl,-n \
+                -ffunction-sections -fdata-sections \
+                -nostartfiles \
+                -Wl,-Map="wolfboot.map" \
+                -Wl,-L$(TC3_DIR)/tc3
+
+      LSCRIPT_IN=hal/$(TARGET)_hsm.ld
+
+	  # wolfHSM port server-specific files
+      ifeq ($(WOLFHSM_SERVER),1)
+        USE_GCC_HEADLESS=0
+
+        CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/tchsm-server/cfg \
+				  -I$(WOLFHSM_INFINEON_TC3XX)/port/server
+
+        OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o \
+				$(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
+				$(WOLFHSM_INFINEON_TC3XX)/port/server/sysmem.o \
+				$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hh_hsm.o \
+				$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o
+
+				# SW only for now, as we dont have the right protection macros
+				#$(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
+				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
+				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
+				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
+				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
+				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
+      endif
+
+      # HSM BSP specific object files
+      OBJS += $(TC3_DIR)/src/tc3_clock.o \
+              $(TC3_DIR)/src/tc3_flash.o \
+              $(TC3_DIR)/src/tc3_gpio.o \
+              $(TC3_DIR)/src/tc3_uart.o \
+              $(TC3_DIR)/src/tc3.o \
+              $(TC3_DIR)/src/tc3arm.o \
+              $(TC3_DIR)/src/tc3arm_crt.o \
+              $(TC3_DIR)/../tc3arm_bootloader/tc3arm_bootloader.o
+
+    else
+      # Tricore compiler settings
+      ifeq ($(USE_GCC),1)
+        HT_ROOT?=/opt/hightec/gnutri_v4.9.4.1-11fcedf-lin64
+        CROSS_COMPILE?=$(HT_ROOT)/bin/tricore-
+      else
+        HT_ROOT?=~/HighTec/toolchains/tricore/v9.1.2
+        CROSS_COMPILE?=$(HT_ROOT)/bin
+        CC=$(CROSS_COMPILE)/clang
+        LD=$(CROSS_COMPILE)/clang
+        AS=$(CROSS_COMPILE)/clang
+        AR=$(CROSS_COMPILE)/llvm-ar
+        OBJCOPY=tricore-objcopy
+        SIZE=$(CROSS_COMPILE)/llvm-size
+      endif
+
+      # Arch settings for tricore
+      ifeq ($(USE_GCC),1)
+        CFLAGS+= -fshort-double -mtc162 -fstrict-volatile-bitfields -fno-builtin \
+                 -fno-strict-aliasing
+      else
+        CFLAGS+= --target=tricore -march=tc162
+      endif
+
+      DEBUG_AFLAGS= -Wa,--gdwarf-2
+
+      # Linker flags
+      ifeq ($(USE_GCC),1)
+        LDFLAGS+= -fshort-double -mtc162 -nostartfiles -Wl,--extmap="a"
+      else
+        LDFLAGS+= --target=tricore -march=tc162 -Wl,--entry=tc3tc_start
+      endif
+
+      LDFLAGS+= -Wl,--gc-sections -Wl,--cref -Wl,-n \
+                -ffunction-sections -fdata-sections \
+                -Wl,-Map="wolfboot.map" \
+                -Wl,-L$(TC3_DIR)/tc3
+
+      # Tricore BSP layer (replace with only tricore specific stuff)
+      OBJS += $(TC3_DIR)/src/tc3_clock.o \
+              $(TC3_DIR)/src/tc3_flash.o \
+              $(TC3_DIR)/src/tc3_gpio.o \
+              $(TC3_DIR)/src/tc3_uart.o \
+              $(TC3_DIR)/src/tc3.o \
+              $(TC3_DIR)/src/tc3tc_isr.o \
+              $(TC3_DIR)/src/tc3tc_traps.o \
+              $(TC3_DIR)/src/tc3tc.o \
+              $(TC3_DIR)/src/tc3tc_crt.o \
+              $(TC3_DIR)/../tc3tc_bootloader/tc3tc_bootloader.o
+
+      ifeq ($(WOLFHSM_CLIENT),1)
+        CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port/client
+		# All source files in port/client but listed as *.o files
+        OBJS += $(patsubst %.c,%.o,$(wildcard $(WOLFHSM_INFINEON_TC3XX)/port/client/*.c))
+      endif
+
+    endif # !AURIX_TC3_HSM
+  endif
+
+  # TC4xx specific
+  ifeq ($(TARGET), aurix_tc4xx)
+    # Coming soon ;-)
+  endif
 endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)

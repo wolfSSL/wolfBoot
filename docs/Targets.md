@@ -3548,8 +3548,11 @@ At this point, the kernel image in partition "A" is verified and staged and you 
 
 ## Infineon AURIX TC3xx
 
-wolfBoot supports the AURIX TC3xx family of devices, and provides a demo application targeting the TC375 AURIX LiteKit-V2.
+wolfBoot supports the Infineon AURIX TC3xx family and includes a demo application for the TC375 AURIX LiteKit-V2. It can be configured to run on either the TriCore application cores or the HSM core.
 
-For detailed instructions on using wolfBoot with the AURIX TC3xx, please refer to [IDE/AURIX/README.md](../IDE/AURIX/README.md).
+On AURIX TC3xx devices, wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) to offload cryptographic operations and key management to the HSM core.
 
-wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) on AURIX TC3xx devices, offloading cryptographic operations and key storage to the AURIX HSM core. For more information on using wolfBoot with wolfHSM on AURIX devices, please contact us at facts@wolfssl.com.
+Currently, wolfBoot for TC3xx is distributed as part of the wolfHSM TC3xx platform release bundle, not as a standalone package. This bundle is under NDA and is not publicly available.
+
+For access to the TC3xx platform release or for more information on using wolfBoot and wolfHSM on AURIX devices, contact [facts@wolfssl.com](mailto:facts@wolfssl.com).
+

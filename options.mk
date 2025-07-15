@@ -600,7 +600,7 @@ ifeq ($(DEBUG_SYMBOLS),1)
   CFLAGS+=-g
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
-  else
+  else ifneq ($(ARCH),AURIX_TC3)
     CFLAGS+=-gstabs
   endif
 endif
@@ -849,7 +849,9 @@ OBJS+=$(OBJS_EXTRA)
 
 ifeq ($(USE_GCC_HEADLESS),1)
   ifneq ($(ARCH),RENESAS_RX)
-    CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+    ifneq ($(ARCH),AURIX_TC3)
+      CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+    endif
   endif
 endif
 
@@ -955,9 +957,7 @@ ifeq ($(WOLFHSM_SERVER),1)
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_crypto.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_counter.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/port/posix/posix_flash_file.o
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o
 
   #includes
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"

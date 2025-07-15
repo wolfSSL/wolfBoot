@@ -55,19 +55,19 @@ jobs:
 
       - name: Build example POSIX TCP server
         if: matrix.config.name != 'wolfHSM server cert chain verify'
-        run: cd lib/wolfHSM/examples/posix/tcp/wh_server_tcp && make WOLFSSL_DIR=../../../../../wolfssl
+        run: cd lib/wolfHSM/examples/posix/wh_posix_server && make WOLFSSL_DIR=../../../../wolfssl
 
       # Start the server in the background
       - name: Run POSIX TCP server
         if: matrix.config.name != 'wolfHSM server cert chain verify'
         run: |
-          cd lib/wolfHSM/examples/posix/tcp/wh_server_tcp
+          cd lib/wolfHSM/examples/posix/wh_posix_server
           if [ "${{ matrix.config.name }}" = "wolfHSM cert chain verify" ]; then
             tmpfile=$(mktemp)
-            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
-            ./Build/wh_server_tcp.elf --nvminit $tmpfile &
+            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            ./Build/wh_posix_server.elf --type tcp --nvminit $tmpfile &
           else
-            ./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../../../wolfboot_signing_private_key_pub.der &
+            ./Build/wh_posix_server.elf --type tcp --client 12 --id 255 --key ../../../../../wolfboot_signing_private_key_pub.der &
           fi
           TCP_SERVER_PID=$!
           echo "TCP_SERVER_PID=$TCP_SERVER_PID" >> $GITHUB_ENV
