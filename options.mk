@@ -769,6 +769,9 @@ ifeq ($(RAM_CODE),1)
        LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
     endif
   endif
+  ifeq ($(ARCH),ARM)
+    CFLAGS+=-mlong-calls
+  endif
 endif
 
 # Support external encryption cache

@@ -184,15 +184,16 @@ ifeq ($(TARGET),stm32h5)
     APP_OBJS+=wcs/wolfcrypt_secure.o
     ifeq ($(WOLFCRYPT_TZ),1)
       APP_OBJS+=../lib/wolfssl/wolfcrypt/src/logging.o
-      APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
       APP_OBJS+=../lib/wolfssl/wolfcrypt/test/test.o
+      APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
     endif
   else
     LSCRIPT_TEMPLATE=ARM-stm32h5.ld
   endif
   CFLAGS+=-DAPP_HAS_SYSTICK
-  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode"),long_call))'
   CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
+  CFLAGS+=-mlong-calls
   LDFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..

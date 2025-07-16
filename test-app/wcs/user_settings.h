@@ -143,5 +143,7 @@ extern int tolower(int c);
 #define WOLFSSL_SP_NO_DYN_STACK
 
 
+struct timespec;
+int clock_gettime (unsigned long clock_id, struct timespec *tp);
 
 #endif /* !H_USER_SETTINGS_ */

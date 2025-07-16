@@ -1,10 +1,10 @@
 MEMORY
 {
-    FLASH (rx) :    ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@ - 0x20000
-    RAM (rwx) :     ORIGIN = 0x30000000, LENGTH = 0x30000
+    FLASH (rx) :    ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@ - 0x1C000
+    RAM (rwx) :     ORIGIN = 0x30000000, LENGTH = 0x20000
     RAM_KV (rw):    ORIGIN = 0x30020000, LENGTH = 0x10000
     RAM_HEAP (rw):  ORIGIN = 0x30030000, LENGTH = 0x10000 /* 64KB Heap for wolfcrypt/PKCS11 */
-    FLASH_KEYVAULT(rw): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x20000, LENGTH = 0x18000
+    FLASH_KEYVAULT(rw): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x24000, LENGTH = 0x14000
     FLASH_NSC(rx): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x38000, LENGTH = 0x8000
 }
 
@@ -14,8 +14,8 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
-        *(.text*)
-        *(.rodata*)
+       *(.text*)
+       *(.rodata*)
         . = ALIGN(8);
         _end_text = .;
     } > FLASH
