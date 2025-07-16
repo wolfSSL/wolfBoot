@@ -294,7 +294,7 @@ void hal_tz_sau_init(void)
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, FLASH_BANK2_BASE - 1, 0);
 
     /* Secure: application flash area (second bank) */
-    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, FLASH_TOP -1, 0);
+    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, FLASH_TOP, 0);
 
     /* Secure RAM regions in SRAM1/SRAM2 */
     sau_init_region(3, 0x30000000, 0x3004FFFF, 1);

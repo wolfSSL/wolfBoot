@@ -102,7 +102,7 @@ lock_and_reset:
     arch_reboot();
 }
 
-void wolfBoot_check_self_update(void)
+void RAMFUNCTION wolfBoot_check_self_update(void)
 {
     uint8_t st;
     struct wolfBoot_image update;
@@ -237,7 +237,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
  * new swap
  * @return 0 on success, negative value if no swap needed or on error
  */
-static int wolfBoot_swap_and_final_erase(int resume)
+static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 {
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
@@ -349,7 +349,7 @@ static int wolfBoot_swap_and_final_erase(int resume)
     #   define DELTA_BLOCK_SIZE 1024
     #endif
 
-static int wolfBoot_delta_update(struct wolfBoot_image *boot,
+static int RAMFUNCITON wolfBoot_delta_update(struct wolfBoot_image *boot,
     struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse,
     int resume)
 {
@@ -572,7 +572,7 @@ out:
     #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
 
-static int wolfBoot_get_total_size(struct wolfBoot_image* boot,
+static int RAMFUNCTION wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
     uint32_t total_size = 0;
