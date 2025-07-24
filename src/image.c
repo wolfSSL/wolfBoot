@@ -1204,7 +1204,7 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
  * @param val The 32-bit integer value in little-endian byte order.
  * @return The 32-bit integer value in native byte order.
  */
-static inline uint32_t im2n(uint32_t val)
+static inline uint32_t RAMFUNCTION im2n(uint32_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
     val = (((val & 0x000000FF) << 24) |
@@ -1223,7 +1223,7 @@ static inline uint32_t im2n(uint32_t val)
  * @param image The pointer to the image header.
  * @return The size of the image in bytes.
  */
-uint32_t wolfBoot_image_size(uint8_t *image)
+uint32_t RAMFUNCTION wolfBoot_image_size(uint8_t *image)
 {
     uint32_t *size = (uint32_t *)(image + sizeof (uint32_t));
     return im2n(*size);
@@ -1239,7 +1239,7 @@ uint32_t wolfBoot_image_size(uint8_t *image)
  * @param image The pointer to the image address.
  * @return 0 on success, -1 on error.
  */
-int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
+int RAMFUNCTION wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC) {
@@ -1315,7 +1315,7 @@ int wolfBoot_get_dts_size(void *dts_addr)
  * @param part The partition ID (PART_BOOT, PART_UPDATE, PART_SWAP, etc.).
  * @return 0 on success, -1 on error.
  */
-int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
+int RAMFUNCTION wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
 #ifdef MMU
     int ret;

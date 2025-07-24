@@ -78,7 +78,7 @@ int isalpha(int c)
 
 #if !defined(__CCRX__) /* Renesas CCRX */
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
-void *memset(void *s, int c, size_t n)
+void RAMFUNCTION *memset(void *s, int c, size_t n)
 {
     unsigned char *d = (unsigned char *)s;
 

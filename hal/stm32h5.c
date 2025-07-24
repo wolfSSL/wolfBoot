@@ -25,24 +25,23 @@
 
 #include "hal.h"
 #include "hal/stm32h5.h"
+#include "hal/armv8m_tz.h"
 
 #define PLL_SRC_HSE 1
 
 #if TZ_SECURE()
+
+/* This function assumes that the boot and the update
+ * partitions are at the same address in the two banks,
+ * regardless wheather DUALBANK_SWAP is active or not.
+ */
 static int is_flash_nonsecure(uint32_t address)
 {
     uint32_t in_bank_offset = address & 0x000FFFFF;
-#ifdef DUALBANK_SWAP
     if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE))
         return 1;
     else
         return 0;
-#else
-    if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS)
-        return 1;
-    else
-        return 0;
-#endif
 }
 #endif
 
@@ -101,11 +100,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     dst = (uint32_t *)address;
 
 #if (TZ_SECURE())
+    dst = (uint32_t *)(address | FLASH_SECURE_MMAP_BASE);
     if (is_flash_nonsecure(address)) {
         hal_tz_claim_nonsecure_area(address, len);
-    } else if (((uint32_t)dst & 0x0F000000) == 0x08000000) {
-        /* Convert into secure address space */
-        dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
     }
 #endif
     while (i < len) {
@@ -124,6 +121,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             FLASH_SR |= FLASH_SR_EOP;
         FLASH_CR &= ~FLASH_CR_PG;
         i+=8;
+        DSB();
     }
 #if (TZ_SECURE())
     if (is_flash_nonsecure(address)) {
@@ -201,7 +199,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             base = FLASH_BANK2_BASE;
             bnksel = 1;
         }
-
 #if TZ_SECURE()
         /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
         if (is_flash_nonsecure(address)) {
