@@ -26,6 +26,8 @@
 #define H_USER_SETTINGS_
 
 #include <target.h>
+#include <time.h>
+int clock_gettime (clockid_t clock_id, struct timespec *tp);
 #include "wolfboot/wc_secure.h"
 
 #define WOLFCRYPT_ONLY
