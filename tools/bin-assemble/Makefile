@@ -3,7 +3,7 @@
 -include ../../options.mk
 
 CC=gcc
-CFLAGS+=-Wall -g -ggdb
+CFLAGS=-Wall -g -ggdb
 EXE=bin-assemble
 
 LIBS=
