@@ -1,0 +1,57 @@
+name: Wolfboot Build workflow for AARCH64
+
+on:
+
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      config-file:
+        required: true
+        type: string
+      make-args:
+        required: false
+        type: string
+
+jobs:
+
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Workaround for sources.list
+        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+
+      - name: Update repository
+        run: sudo apt-get update
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y build-essential curl
+
+      - name: Install cross compiler
+        run: |
+          curl -O https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/14.3.rel1/binrel/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz
+          tar xf arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf.tar.xz -C /opt/
+          echo "/opt/arm-gnu-toolchain-14.3.rel1-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp ${{inputs.config-file}} .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot
+        run: |
+          make ${{inputs.make-args}}
