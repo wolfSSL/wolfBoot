@@ -32,6 +32,11 @@ jobs:
           repository: raspberrypi/pico-sdk
           path: pico-sdk
 
+      - name: pico-sdk submodules initialization
+        run: |
+          cd pico-sdk
+          git submodule update --init --recursive
+
       - name: Workaround for sources.list
         run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
 
