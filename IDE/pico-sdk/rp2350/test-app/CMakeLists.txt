@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
-set(WOLFBOOT_PATH ../../../../)
+set(WOLFBOOT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
+get_filename_component(WOLFBOOT_PATH "${WOLFBOOT_PATH}" ABSOLUTE)
 set(CMAKE_CXX_COMPILER arm-none-eabi-gcc)
 set(LIB_PICO_RUNTIME_INIT=0)
 
@@ -27,7 +28,7 @@ target_compile_options(blink PRIVATE
 )
 target_compile_definitions(blink PRIVATE PICO_NO_RUNTIME=1)
 
-pico_set_linker_script(blink ../../../../../hal/rp2350-app.ld)
+pico_set_linker_script(blink ${WOLFBOOT_PATH}/hal/rp2350-app.ld)
 target_link_libraries(blink pico_stdlib)
 
 # create map/bin/hex/uf2 file etc.
