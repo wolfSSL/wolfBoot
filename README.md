@@ -717,3 +717,24 @@ Use `make keysclean` to delete keys and regenerate.
     * wolfPKCS11 latest
     * wolfHSM latest
 
+### V 2.6.0 - (2025-08-01)
+  * New hardware targets: PIC32CX and PIC32CZ
+  * New features:
+    * Added support for external flash in ELF scattering mode
+    * Added support for certificate chain verification (ECC/RSA) with wolfHSM client
+    * Added support for x509 auth with wolfHSM in server mode
+    * Added support for encrypted updates on Renesas RX (also via TSIP)
+    * Added support for assembly optimizations for PowerPC 32bit (SHA, AES)
+    * STM32F4: new clock configuration to support all models, added support for STM32F411 
+  * Bugfixes:
+    * Fixed unaligned access in Cortex-A5
+    * Fixed compile flags to properly run code from RAM on ARM
+    * Use the correct `VTOR_NS` register when staging a non-secure image with TrustZone-M
+    * Removed double-write-after-erase in `wolfBoot_update_trigger`
+    * Multiple fixes for STM32H5 running in TrustZone mode
+  * Updated modules
+    * wolfSSL v5.8.2+ (a06268f70)
+    * wolfTPM v3.9.1+ (6cfe800)
+    * wolfPKCS11: latest (ddeb887)
+    * wolfHSM: latest (e0b2019)
+
