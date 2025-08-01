@@ -102,7 +102,7 @@ lock_and_reset:
     arch_reboot();
 }
 
-void wolfBoot_check_self_update(void)
+void RAMFUNCTION wolfBoot_check_self_update(void)
 {
     uint8_t st;
     struct wolfBoot_image update;
@@ -237,7 +237,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
  * new swap
  * @return 0 on success, negative value if no swap needed or on error
  */
-static int wolfBoot_swap_and_final_erase(int resume)
+static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 {
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];

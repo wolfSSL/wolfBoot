@@ -243,6 +243,10 @@ ifeq ($(ARCH),ARM)
       LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
     SPI_TARGET=stm32
+    ifneq ($(DEBUG),0)
+        CFLAGS+=-DPKCS11_SMALL
+    endif
+
   endif
 
   ifeq ($(TARGET),rp2350)
