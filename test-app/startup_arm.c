@@ -31,6 +31,8 @@ extern unsigned int _start_heap;
 
 #ifdef TARGET_stm32f4
 extern void isr_tim2(void);
+#else
+#define isr_tim2 isr_empty
 #endif
 
 #ifdef TARGET_stm32h5
