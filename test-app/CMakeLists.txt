@@ -126,7 +126,7 @@ if(BUILD_TEST_APPS)
     if(WOLFBOOT_TARGET STREQUAL "sim")
         target_link_options(image PRIVATE -Wl,-gc-sections -Wl,-Map=image.map)
     else()
-        target_link_options(image PRIVATE -T${APP_LSCRIPT} -Wl,-gc-sections -Wl,-Map=image.map)
+        target_link_options(image PRIVATE -T${APP_LSCRIPT} -Wl,-gc-sections -Wl,-Map=image.map -ffreestanding -nostartfiles)
     endif()
 
     if(WOLFBOOT_TARGET IN_LIST ARM_TARGETS)
