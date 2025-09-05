@@ -2005,7 +2005,7 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
         return -1;
     if (address + len > WOLFBOOT_PARTITION_SIZE)
         return -1;
-    hal_flash_erase(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, len);
+    return hal_flash_erase(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, len);
 
 }
 
@@ -2016,7 +2016,7 @@ int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len
         return -1;
     if (address + len > WOLFBOOT_PARTITION_SIZE)
         return -1;
-    hal_flash_write(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len);
+    return hal_flash_write(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len);
 }
 
 #endif
