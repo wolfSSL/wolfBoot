@@ -411,22 +411,26 @@ int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
 
-#ifndef __WOLFBOOT
+#if !defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
 
 /* Applications can access update success/trigger and flash erase/write
  * via non-secure callable, to facilitate updates
  */
 
 /* Call wolfBoot_success from non-secure application */
+
+__attribute__((cmse_nonsecure_entry))
 void wolfBoot_nsc_success(void);
 
 /* Call wolfBoot_update_trigger from non-secure application */
+__attribute__((cmse_nonsecure_entry))
 void wolfBoot_nsc_update_trigger(void);
 
 /* Erase one or more sectors in the update partition.
  * - address: offset within the update partition ('0' corresponds to PARTITION_UPDATE_ADDRESS)
  * - len: size, in bytes
  */
+__attribute__((cmse_nonsecure_entry))
 int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len);
 
 /* Write the content of buffer `buf` and size `len` to the update partition,
@@ -434,8 +438,10 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len);
  * - address: offset within the update partition ('0' corresponds to PARTITION_UPDATE_ADDRESS)
  * - len: size, in bytes
  */
+__attribute__((cmse_nonsecure_entry))
 int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len);
-#endif /* !__WOLFBOOT */
+
+#endif /* !__WOLFBOOT && WOLFCRYPT_SECURE_MODE */
 
 
 #ifdef __cplusplus

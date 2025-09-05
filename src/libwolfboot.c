@@ -1985,7 +1985,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif /* MMU */
 #endif /* EXT_ENCRYPTED */
 
-#if defined(WOLFCRYPT_SECURE_MODE)
+#if defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
 __attribute__((cmse_nonsecure_entry))
 void wolfBoot_nsc_success(void)
 {
