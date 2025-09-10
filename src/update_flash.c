@@ -227,7 +227,8 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
         sector, src->part, dst->part);
 
     wolfBoot_get_encrypt_key(key, nonce);
-    wolfBoot_printf("In function wolfBoot_backup_last_boot_sector (sector # %lu)\n", sector);
+    wolfBoot_printf("In function wolfBoot_backup_last_boot_sector (sector # %u)\n",
+            sector);
 
     iv_counter = src_sector_offset;
     iv_counter /= ENCRYPT_BLOCK_SIZE;
@@ -240,7 +241,8 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
     if (PART_IS_EXT(dst)) {
         uint32_t sz = 0;
         uint32_t step = 0;
-        uint8_t *orig = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS) + src_sector_offset; 
+        uint8_t *orig = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS) +
+            src_sector_offset;
         while (pos < WOLFBOOT_SECTOR_SIZE) {
             uint32_t len = ENCRYPT_BLOCK_SIZE;
             XMEMCPY(block, orig + pos, ENCRYPT_BLOCK_SIZE);

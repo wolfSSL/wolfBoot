@@ -75,7 +75,7 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
         #define XMEMCMP memcmp
     #endif
 
-#ifdef __WOLFBOOT
+#if defined (__WOLFBOOT) || defined (UNIT_TEST)
 int wolfBoot_initialize_encryption(void)
 {
     if (!encrypt_initialized) {
