@@ -239,8 +239,6 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
     /* Erase swap space */
     wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
     if (PART_IS_EXT(dst)) {
-        uint32_t sz = 0;
-        uint32_t step = 0;
         uint8_t *orig = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS) +
             src_sector_offset;
         while (pos < WOLFBOOT_SECTOR_SIZE) {
@@ -248,7 +246,6 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
             XMEMCPY(block, orig + pos, ENCRYPT_BLOCK_SIZE);
             crypto_encrypt(encrypted_block, block, ENCRYPT_BLOCK_SIZE);
             wb_flash_write(dst, dst_sector_offset + pos, encrypted_block, ENCRYPT_BLOCK_SIZE);
-            step++;
             pos += ENCRYPT_BLOCK_SIZE;
         }
         return 0;
