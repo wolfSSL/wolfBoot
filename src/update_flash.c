@@ -242,7 +242,6 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
         uint8_t *orig = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS) +
             src_sector_offset;
         while (pos < WOLFBOOT_SECTOR_SIZE) {
-            uint32_t len = ENCRYPT_BLOCK_SIZE;
             XMEMCPY(block, orig + pos, ENCRYPT_BLOCK_SIZE);
             crypto_encrypt(encrypted_block, block, ENCRYPT_BLOCK_SIZE);
             wb_flash_write(dst, dst_sector_offset + pos, encrypted_block, ENCRYPT_BLOCK_SIZE);
