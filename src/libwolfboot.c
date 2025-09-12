@@ -64,6 +64,7 @@
 
 #if defined(EXT_ENCRYPTED)
 static int encrypt_initialized = 0;
+
 static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
     #if defined(__WOLFBOOT)
         #include "encrypt.h"
@@ -73,7 +74,25 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
         #define XMEMCPY memcpy
         #define XMEMCMP memcmp
     #endif
+
+#if defined (__WOLFBOOT) || defined (UNIT_TEST)
+int wolfBoot_initialize_encryption(void)
+{
+    if (!encrypt_initialized) {
+        if (crypto_init() != 0) {
+            return -1;
+        }
+        encrypt_initialized = 1;
+    }
+    return 0;
+}
 #endif
+
+#else
+    #define wolfBoot_initialize_encryption() (0)
+#endif /* EXT_ENCRYPTED */
+
+
 
 #if defined(EXT_FLASH) && defined(EXT_ENCRYPTED)
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - \
@@ -1039,9 +1058,8 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     if (blob == NULL)
         return 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
-    if (!encrypt_initialized)
-        if (crypto_init() < 0)
-            return 0;
+    if (wolfBoot_initialize_encryption() < 0)
+        return 0;
     decrypt_header(blob);
     img_bin = dec_hdr;
 #endif
@@ -1073,9 +1091,8 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
-    if (!encrypt_initialized)
-        if (crypto_init() < 0)
-            return 0;
+    if (wolfBoot_initialize_encryption() < 0)
+        return 0;
     decrypt_header(blob);
     img_bin = dec_hdr;
 #endif
@@ -1111,9 +1128,8 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
-    if (!encrypt_initialized)
-        if (crypto_init() < 0)
-            return 0;
+    if (wolfBoot_initialize_encryption() < 0)
+        return 0;
     decrypt_header(blob);
     img_bin = dec_hdr;
 #endif
@@ -1790,10 +1806,9 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
                     ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
             }
-            if (!encrypt_initialized) {
-                if (crypto_init() < 0)
-                    return -1;
-            }
+            if (wolfBoot_initialize_encryption() < 0)
+                return -1;
+
             crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:

@@ -28,6 +28,7 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
+#include "target.h"
 
 #include "delta.h"
 #include "printf.h"
@@ -152,7 +153,11 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         dst_sector_offset = 0;
 
 #ifdef EXT_ENCRYPTED
+    if (wolfBoot_initialize_encryption() < 0) {
+        return -1;
+    }
     wolfBoot_get_encrypt_key(key, nonce);
+
     if (src->part == PART_SWAP)
         iv_counter = dst_sector_offset;
     else
@@ -201,6 +206,54 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     }
     return pos;
 }
+
+#ifdef EXT_ENCRYPTED
+static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
+{
+    uint32_t pos = 0;
+    uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
+    uint32_t dst_sector_offset = 0;
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint8_t nonce[ENCRYPT_NONCE_SIZE];
+    uint32_t iv_counter;
+    uint8_t block[ENCRYPT_BLOCK_SIZE], encrypted_block[ENCRYPT_BLOCK_SIZE];
+    struct wolfBoot_image src[1], dst[1];
+
+    wolfBoot_open_image(src, PART_BOOT);
+    wolfBoot_open_image(dst, PART_SWAP);
+
+
+    wolfBoot_printf("Copy sector %d (part %d->%d)\n",
+        sector, src->part, dst->part);
+
+    wolfBoot_get_encrypt_key(key, nonce);
+    wolfBoot_printf("In function wolfBoot_backup_last_boot_sector (sector # %u)\n",
+            sector);
+
+    iv_counter = src_sector_offset;
+    iv_counter /= ENCRYPT_BLOCK_SIZE;
+    if (wolfBoot_initialize_encryption() < 0)
+        return -1;
+    crypto_set_iv(nonce, iv_counter);
+
+    /* Erase swap space */
+    wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
+    if (PART_IS_EXT(dst)) {
+        uint8_t *orig = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS) +
+            src_sector_offset;
+        while (pos < WOLFBOOT_SECTOR_SIZE) {
+            XMEMCPY(block, orig + pos, ENCRYPT_BLOCK_SIZE);
+            crypto_encrypt(encrypted_block, block, ENCRYPT_BLOCK_SIZE);
+            wb_flash_write(dst, dst_sector_offset + pos, encrypted_block, ENCRYPT_BLOCK_SIZE);
+            pos += ENCRYPT_BLOCK_SIZE;
+        }
+        return 0;
+    } else
+        return wolfBoot_copy_sector(src, dst, sector);
+}
+#else
+#define wolfBoot_backup_last_boot_sector(sec) wolfBoot_copy_sector(boot, swap, sec)
+#endif
 
 #if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
 
@@ -293,11 +346,13 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     if (updateState != IMG_STATE_FINAL_FLAGS) {
         /* First, backup the staging sector (sector at tmpBootPos) into swap partition */
         /* This sector will be modified with the magic trailer, so we need to preserve it */
-        wolfBoot_copy_sector(boot, swap, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        wolfBoot_backup_last_boot_sector(tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        wolfBoot_printf("Copied boot sector to swap\n");
         /* Mark update as being in final swap phase to allow resumption if power fails */
         wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
     }
 #ifdef EXT_ENCRYPTED
+    wolfBoot_printf("In function wolfBoot_final_swap: swapDone = %d\n", swapDone);
     if (swapDone == 0) {
         /* For encrypted images: Get the encryption key and IV */
         wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
@@ -321,6 +376,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 #endif
     /* Restore the original contents of the staging sector (with the magic trailer if encrypted) */
     if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
+        wolfBoot_printf("Restoring last boot sector from swap\n");
         wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
     }
     else {
@@ -461,6 +517,10 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #ifdef EXT_ENCRYPTED
                     uint32_t iv_counter = sector * WOLFBOOT_SECTOR_SIZE + len;
                     int wr_ret;
+                    if (wolfBoot_initialize_encryption() < 0) {
+                        ret = -1;
+                        goto out;
+                    }
                     iv_counter /= ENCRYPT_BLOCK_SIZE;
                     /* Encrypt + send */
                     crypto_set_iv(nonce, iv_counter);
