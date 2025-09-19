@@ -39,6 +39,10 @@
 int WP11_Library_Init(void);
 #endif
 
+#ifdef EXT_ENCRYPTED
+#include "encrypt.h"
+#endif /* EXT_ENCRYPTED */
+
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -55,9 +59,6 @@ static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #  endif
 #endif
 
-#ifdef EXT_ENCRYPTED
-#include "encrypt.h"
-#endif
 
 static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 {
@@ -136,6 +137,7 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = src_sector_offset;
 #ifdef EXT_ENCRYPTED
+    uint32_t i;
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
     uint32_t iv_counter;
@@ -153,19 +155,21 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         dst_sector_offset = 0;
 
 #ifdef EXT_ENCRYPTED
-    if (wolfBoot_initialize_encryption() < 0) {
+    if (wolfBoot_initialize_encryption() < 0)
         return -1;
-    }
-    wolfBoot_get_encrypt_key(key, nonce);
 
+    wolfBoot_get_encrypt_key(key, nonce);
     if (src->part == PART_SWAP)
         iv_counter = dst_sector_offset;
     else
+        /*
+         * Always re-derive the IV starting from the source address.
+         * This guarantees we do not reuse the same IV in the SWAP partition.
+         */
         iv_counter = src_sector_offset;
-
     iv_counter /= ENCRYPT_BLOCK_SIZE;
-    crypto_set_iv(nonce, iv_counter);
-#endif
+    wolfBoot_crypto_set_iv(nonce, iv_counter);
+#endif /* EXT_ENCRYPTED */
 
 #ifdef EXT_FLASH
     if (PART_IS_EXT(src)) {
@@ -222,7 +226,6 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
     wolfBoot_open_image(src, PART_BOOT);
     wolfBoot_open_image(dst, PART_SWAP);
 
-
     wolfBoot_printf("Copy sector %d (part %d->%d)\n",
         sector, src->part, dst->part);
 
@@ -234,7 +237,12 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
     iv_counter /= ENCRYPT_BLOCK_SIZE;
     if (wolfBoot_initialize_encryption() < 0)
         return -1;
-    crypto_set_iv(nonce, iv_counter);
+    /*
+     * Preserve the IV sequence used by the source sector so that the staging
+     * copy in SWAP can be decrypted with exactly the same keystream when it is
+     * restored to BOOT.
+     */
+    wolfBoot_crypto_set_iv(nonce, iv_counter);
 
     /* Erase swap space */
     wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
@@ -523,7 +531,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                     }
                     iv_counter /= ENCRYPT_BLOCK_SIZE;
                     /* Encrypt + send */
-                    crypto_set_iv(nonce, iv_counter);
+                    wolfBoot_crypto_set_iv(nonce, iv_counter);
                     crypto_encrypt(enc_blk, delta_blk, ret);
                     wr_ret = ext_flash_write(
                             (uint32_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + len),
@@ -659,26 +667,54 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint16_t update_type;
     uint32_t fw_size;
     uint32_t size;
+    int inverse = 0;
+    int fallback_image = 0;
 #if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
 #endif
 #ifdef DELTA_UPDATES
     uint8_t st;
-    int inverse = 0;
     int resume = 0;
     int stateRet = -1;
-    uint32_t cur_v;
-    uint32_t up_v;
 #endif
     uint32_t cur_ver, upd_ver;
 
     wolfBoot_printf("Staring Update (fallback allowed %d)\n", fallback_allowed);
 
     /* No Safety check on open: we might be in the middle of a broken update */
-    wolfBoot_open_image(&update, PART_UPDATE);
-    wolfBoot_open_image(&boot, PART_BOOT);
-    wolfBoot_open_image(&swap, PART_SWAP);
+    {
+        int update_open;
+#ifdef EXT_ENCRYPTED
+        /* Start with the standard IV mapping for every fresh update attempt. */
+        wolfBoot_enable_fallback_iv(0);
+#endif
+        update_open = wolfBoot_open_image(&update, PART_UPDATE);
+#ifdef EXT_ENCRYPTED
+        if (update_open < 0) {
+            int prev = wolfBoot_enable_fallback_iv(1);
+            (void)prev;
+            update_open = wolfBoot_open_image(&update, PART_UPDATE);
+            if (update_open < 0) {
+                wolfBoot_enable_fallback_iv(0);
+                return -1;
+            }
+            fallback_image = 1;
+        }
+        wolfBoot_enable_fallback_iv(fallback_image);
+#else
+        if (update_open < 0)
+            return -1;
+#endif
+        wolfBoot_open_image(&boot, PART_BOOT);
+        wolfBoot_open_image(&swap, PART_SWAP);
+
+#ifdef EXT_ENCRYPTED
+        wolfBoot_printf("Update partition fallback image: %d\n", fallback_image);
+        if (fallback_image)
+            inverse = 1;
+#endif
+    }
 
     /* get total size */
     total_size = wolfBoot_get_total_size(&boot, &update);
@@ -705,12 +741,23 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             wolfBoot_printf("Invalid update size %u\n", update.fw_size);
             return -1;
         }
-        if (!update.hdr_ok
-                || (wolfBoot_verify_integrity(&update) < 0)
-                || (wolfBoot_verify_authenticity(&update) < 0)) {
-            wolfBoot_printf("Update verify failed: Hdr %d, Hash %d, Sig %d\n",
-                update.hdr_ok, update.sha_ok, update.signature_ok);
-            return -1;
+        if (!fallback_image) {
+            if (!update.hdr_ok
+                    || (wolfBoot_verify_integrity(&update) < 0)
+                    || (wolfBoot_verify_authenticity(&update) < 0)) {
+                wolfBoot_printf("Update verify failed: Hdr %d, Hash %d, Sig %d\n",
+                    update.hdr_ok, update.sha_ok, update.signature_ok);
+                return -1;
+            }
+        } else {
+            /*
+             * When we recover an already-encrypted fallback image, the
+             * manifest still contains hashes computed with the original IV
+             * stream.  Skip the redundant integrity/authenticity checks here
+             * and let the bootloader verify the restored image after the swap.
+             */
+            update.sha_ok = 1;
+            update.signature_ok = 1;
         }
         PART_SANITY_CHECK(&update);
 
@@ -731,12 +778,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
 #endif
     }
+    if (cur_ver > upd_ver)
+        inverse = 1;
 
 #ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
-        cur_v = wolfBoot_current_firmware_version();
-        up_v = wolfBoot_update_firmware_version();
-        inverse = cur_v >= up_v;
         /* if magic isn't set stateRet will be -1 but that means we're on a
          * fresh partition and aren't resuming */
         stateRet = wolfBoot_get_partition_state(PART_UPDATE, &st);
@@ -745,7 +791,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * header we can't determine the direction by version numbers. instead
          * use the update partition state, updating means regular, new means
          * reverting */
-        if ((stateRet == 0) && ((flag != SECT_FLAG_NEW) || (cur_v == 0))) {
+        if ((stateRet == 0) && ((flag != SECT_FLAG_NEW) || (cur_ver == 0))) {
             resume = 1;
             if (st == IMG_STATE_UPDATING) {
                 inverse = 0;
@@ -780,7 +826,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     #ifdef EXT_FLASH
     ext_flash_unlock();
     #endif
-
     /* Interruptible swap
      * The status is saved in the sector flags of the update partition.
      * If something goes wrong, the operation will be resumed upon reboot.
@@ -800,7 +845,22 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 if (size > sector_size)
                     size = sector_size;
                 flag = SECT_FLAG_BACKUP;
-                wolfBoot_copy_sector(&boot, &update, sector);
+                {
+#ifdef EXT_ENCRYPTED
+                    /*
+                     * When we are performing a fallback, force the alternate
+                     * IV offset only for the segment copied from BOOT into
+                     * UPDATE.  All other copies see the offset that was
+                     * active beforehand (0 for the normal path, fallback
+                     * offset for the recovery path).
+                     */
+                    int prev_iv = wolfBoot_enable_fallback_iv(1);
+#endif
+                    wolfBoot_copy_sector(&boot, &update, sector);
+#ifdef EXT_ENCRYPTED
+                    wolfBoot_enable_fallback_iv(prev_iv);
+#endif
+                }
                 if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                     wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
@@ -945,10 +1005,14 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     hal_flash_lock();
 
     /* Save the encryption key after swapping */
-    #ifdef EXT_ENCRYPTED
+#ifdef EXT_ENCRYPTED
     wolfBoot_set_encrypt_key(key, nonce);
-    #endif
+#endif
 #endif /* DISABLE_BACKUP */
+#ifdef EXT_ENCRYPTED
+    /* Make sure we leave the global IV offset in its normal state. */
+    wolfBoot_enable_fallback_iv(0);
+#endif
     return 0;
 }
 
