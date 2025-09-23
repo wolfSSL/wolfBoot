@@ -100,8 +100,8 @@ This function provides an indirect read of the external memory, using the
 driver's specific interface. `address` is the offset from the beginning of the
 addressable space in the device, `data` is a pointer where payload is stored upon a successful
 call, and `len` is the maximum size allowed for the payload. This function must be able to handle
-reads of any size and alignment. `ext_flash_read` should return 0 upon success, or a negative value
-in case of failure.
+reads of any size and alignment. `ext_flash_read` should return the number of bytes read
+on success, or a negative value in case of failure.
 
 `int  ext_flash_erase(uintptr_t address, int len)`
 
