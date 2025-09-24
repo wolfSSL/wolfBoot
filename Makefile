@@ -59,6 +59,26 @@ ifneq ("$(NO_LOADER)","1")
   OBJS+=./src/loader.o
 endif
 
+## Library Path Configuration
+# Default paths for wolf* submodules - can be overridden with absolute or relative paths
+# Convert all paths to absolute paths for consistent handling across sub-makefiles
+WOLFBOOT_LIB_WOLFSSL?=lib/wolfssl
+WOLFBOOT_LIB_WOLFTPM?=lib/wolfTPM
+WOLFBOOT_LIB_WOLFPKCS11?=lib/wolfPKCS11
+WOLFBOOT_LIB_WOLFHSM?=lib/wolfHSM
+
+# Convert to absolute paths using abspath function
+WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
+WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
+WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
+WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
+
+# Export variables so they are available to sub-makefiles
+export WOLFBOOT_LIB_WOLFSSL
+export WOLFBOOT_LIB_WOLFTPM
+export WOLFBOOT_LIB_WOLFPKCS11
+export WOLFBOOT_LIB_WOLFHSM
+
 ## Architecture/CPU configuration
 include arch.mk
 
@@ -70,7 +90,7 @@ OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(WOLFHSM_OBJS)
 
 CFLAGS+= \
-  -I"." -I"include/" -I"lib/wolfssl" \
+  -I"." -I"include/" -I"$(WOLFBOOT_LIB_WOLFSSL)" \
   -Wno-array-bounds \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS"
@@ -364,8 +384,8 @@ keys: $(PRIVATE_KEY)
 
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o test-app/*.o src/x86/*.o
-	$(Q)rm -f lib/wolfssl/wolfcrypt/src/*.o lib/wolfTPM/src/*.o lib/wolfTPM/hal/*.o lib/wolfTPM/examples/pcr/*.o
-	$(Q)rm -f lib/wolfssl/wolfcrypt/src/port/Renesas/*.o
+	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
+	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)rm -f $(OBJS)

@@ -64,8 +64,8 @@ ifeq ($(WOLFTPM),1)
 endif
 
 CFLAGS+= \
-  -I".." -I"../include/" -I"../lib/wolfssl" \
-  -I"../lib/wolfTPM" \
+  -I".." -I"../include/" -I"$(WOLFBOOT_LIB_WOLFSSL)" \
+  -I"$(WOLFBOOT_LIB_WOLFTPM)" \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS"
 
@@ -113,7 +113,7 @@ BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
 vpath %.c ../src
 vpath %.c ../hal
-vpath %.c ../lib/wolfssl/wolfcrypt/src ../lib/wolfTPM/src
+vpath %.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src $(WOLFBOOT_LIB_WOLFTPM)/src
 vpath %.c ../src/x86
 vpath %.S ../src
 
@@ -190,7 +190,7 @@ $(BUILD_DIR)/%.o: ../src/%.c
 $(BUILD_DIR)/%.o: ../hal/%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
-$(BUILD_DIR)/%.o: ../lib/wolfssl/wolfcrypt/src/%.c
+$(BUILD_DIR)/%.o: $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 

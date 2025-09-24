@@ -5,7 +5,15 @@ ifneq ($(UNAME_S),Darwin)
 	LDFLAGS+=-lrt -lsubunit
 endif
 
-CFLAGS=-I. -I../../src -I../../include -I../../lib/wolfssl
+# Default library paths (can be overridden)
+WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
+WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
+
+# Convert to absolute paths for standalone usage
+WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
+WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
+
+CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
 CFLAGS+=-fprofile-arcs
 CFLAGS+=-ftest-coverage
@@ -13,8 +21,7 @@ CFLAGS+=--coverage
 CFLAGS+=-DUNIT_TEST -DWOLFSSL_USER_SETTINGS
 LDFLAGS+=-fprofile-arcs
 LDFLAGS+=-ftest-coverage
-WOLFCRYPT=../../lib/wolfssl/
-WOLFPKCS11=../../lib/wolfPKCS11/
+
 
 
 
@@ -39,12 +46,12 @@ run: $(TESTS)
 	done
 
 
-WOLFCRYPT_SRC:=$(WOLFCRYPT)/wolfcrypt/src/sha.c \
-               $(WOLFCRYPT)/wolfcrypt/src/sha256.c \
-               $(WOLFCRYPT)/wolfcrypt/src/sp_int.c \
-               $(WOLFCRYPT)/wolfcrypt/src/sp_c64.c \
-               $(WOLFCRYPT)/wolfcrypt/src/random.c \
-               $(WOLFCRYPT)/wolfcrypt/src/memory.c
+WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.c \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.c \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.c \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
 
 unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
 unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
@@ -54,12 +61,12 @@ unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
 unit-enc-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DEXT_ENCRYPTED \
 	-DENCRYPT_WITH_CHACHA -DEXT_FLASH -DHAVE_CHACHA
-unit-enc-nvm:WOLFCRYPT_SRC+=$(WOLFCRYPT)/wolfcrypt/src/chacha.c
+unit-enc-nvm:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-enc-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS \
 	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DEXT_FLASH -DHAVE_CHACHA -DFLAGS_HOME
-unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFCRYPT)/wolfcrypt/src/chacha.c
+unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-delta:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512
-unit-pkcs11_store:CFLAGS+=-I$(WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11
+unit-pkcs11_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -121,10 +128,10 @@ unit-delta: ../../include/target.h unit-delta.c
 	gcc -o $@ unit-delta.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
-	gcc -o $@ unit-update-flash.c ../../src/image.c ../../lib/wolfssl/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-ram: ../../include/target.h unit-update-ram.c
-	gcc -o $@ unit-update-ram.c ../../src/image.c ../../lib/wolfssl/wolfcrypt/src/sha256.c  $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
