@@ -1,0 +1,89 @@
+name: Test External Library Paths
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+
+jobs:
+  test_external_libs:
+    runs-on: ubuntu-latest
+
+    # Matrix to test multiple configurations
+    strategy:
+      matrix:
+        test-config:
+          - name: "External wolfSSL"
+            config: "config/examples/sim.config"
+
+          - name: "External wolfTPM"
+            config: "config/examples/sim-tpm.config"
+            build-tpm-tools: true
+
+          - name: "external wolfHSM"
+            config: "config/examples/sim-wolfHSM-client.config"
+
+          - name: "Unit tests"
+            config: ""
+            is-unit-test: true
+
+      fail-fast: false
+
+    steps:
+      # Checkout wolfBoot with submodules
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # Move libraries outside the wolfBoot tree
+      - name: Relocate libraries to external path
+        run: |
+          echo "=== Moving libraries outside wolfBoot tree ==="
+          mv lib ../external-libs
+          ls -la ../external-libs/
+          echo "Libraries moved to ../external-libs"
+
+      # Select configuration (skip for unit tests)
+      - name: Select config
+        if: matrix.test-config.config != ''
+        run: |
+          cp ${{ matrix.test-config.config }} .config
+          echo "=== Selected config: ${{ matrix.test-config.name }} ==="
+
+      # Build TPM tools if needed
+      - name: Build TPM tools with external paths
+        if: matrix.test-config.build-tpm-tools == true
+        run: |
+          echo "=== Building TPM tools with external paths ==="
+          make tpmtools \
+            WOLFBOOT_LIB_WOLFSSL=$(realpath ../external-libs/wolfssl) \
+            WOLFBOOT_LIB_WOLFTPM=$(realpath ../external-libs/wolfTPM)
+
+      # Build main target (skip for unit tests)
+      - name: Build wolfBoot with external library paths
+        if: matrix.test-config.is-unit-test != true
+        run: |
+          echo "=== Building wolfBoot with external paths ==="
+          make clean
+          make \
+            WOLFBOOT_LIB_WOLFSSL="$(realpath ../external-libs/wolfssl)" \
+            WOLFBOOT_LIB_WOLFTPM="$(realpath ../external-libs/wolfTPM)" \
+            WOLFBOOT_LIB_WOLFPKCS11="$(realpath ../external-libs/wolfPKCS11)" \
+            WOLFBOOT_LIB_WOLFHSM="$(realpath ../external-libs/wolfHSM)"
+
+      # If building unit tests, install libcheck
+      - name: install libcheck
+        if: matrix.test-config.is-unit-test == true
+        run: sudo apt-get install --no-install-recommends -y -q check
+
+
+      # Build unit tests with external paths
+      - name: Build unit tests with external library paths
+        if: matrix.test-config.is-unit-test == true
+        run: |
+          echo "=== Building unit tests with external paths ==="
+          make -C tools/unit-tests \
+            WOLFBOOT_LIB_WOLFSSL="$(realpath ../external-libs/wolfssl)" \
+            WOLFBOOT_LIB_WOLFPKCS11="$(realpath ../external-libs/wolfPKCS11)"

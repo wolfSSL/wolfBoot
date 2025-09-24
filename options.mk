@@ -1,4 +1,4 @@
-WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/asn.o
+WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
 USE_GCC?=1
 
 # Support for Built-in ROT into OTP flash memory
@@ -73,26 +73,26 @@ endif
 
 
 ECC_OBJS= \
-    ./lib/wolfssl/wolfcrypt/src/ecc.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o
 
-ED25519_OBJS=./lib/wolfssl/wolfcrypt/src/sha512.o \
-    ./lib/wolfssl/wolfcrypt/src/ed25519.o \
-    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+ED25519_OBJS=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed25519.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_low_mem.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_low_mem.o
 
-ED448_OBJS=./lib/wolfssl/wolfcrypt/src/ed448.o \
-    ./lib/wolfssl/wolfcrypt/src/ge_low_mem.o \
-    ./lib/wolfssl/wolfcrypt/src/ge_448.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_448.o \
-    ./lib/wolfssl/wolfcrypt/src/fe_low_mem.o
+ED448_OBJS=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed448.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_low_mem.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_448.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_448.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_low_mem.o
 
 RSA_OBJS=\
     $(RSA_EXTRA_OBJS) \
-    ./lib/wolfssl/wolfcrypt/src/rsa.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.o
 
 LMS_OBJS=\
-    ./lib/wolfssl/wolfcrypt/src/wc_lms.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_lms_impl.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms_impl.o
 
 LMS_EXTRA=\
     -D"WOLFSSL_HAVE_LMS" \
@@ -105,8 +105,8 @@ LMS_EXTRA=\
     -D"WOLFSSL_LMS_VERIFY_ONLY"
 
 XMSS_OBJS=\
-    ./lib/wolfssl/wolfcrypt/src/wc_xmss.o \
-    ./lib/wolfssl/wolfcrypt/src/wc_xmss_impl.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.o
 
 XMSS_EXTRA=\
     -D"WOLFSSL_HAVE_XMSS" \
@@ -116,8 +116,8 @@ XMSS_EXTRA=\
     -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
 
 ML_DSA_OBJS=\
-    ./lib/wolfssl/wolfcrypt/src/dilithium.o \
-    ./lib/wolfssl/wolfcrypt/src/memory.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o
 
 ML_DSA_EXTRA=\
     -D"ML_DSA_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
@@ -227,7 +227,7 @@ ifeq ($(SIGN),ED448)
 
 
   ifneq ($(HASH),SHA3)
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   endif
   CFLAGS+=-D"WOLFBOOT_SIGN_ED448"
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
@@ -412,7 +412,7 @@ ifeq ($(SIGN),ML_DSA)
   WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" $(ML_DSA_EXTRA)
   ifneq ($(HASH),SHA3)
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   endif
 
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
@@ -469,7 +469,7 @@ ifneq ($(SIGN_SECONDARY),)
   ifeq ($(SIGN_SECONDARY),ML_DSA)
     WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
     ifneq ($(HASH),SHA3)
-      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
     endif
     CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" $(ML_DSA_EXTRA)
   endif
@@ -534,15 +534,15 @@ ifeq ($(ENCRYPT),1)
   ifeq ($(ENCRYPT_WITH_AES128),1)
     CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT
     CFLAGS+=-DENCRYPT_WITH_AES128 -DWOLFSSL_AES_128
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
   else
     ifeq ($(ENCRYPT_WITH_AES256),1)
       CFLAGS+=-DWOLFSSL_AES_COUNTER -DWOLFSSL_AES_DIRECT
       CFLAGS+=-DENCRYPT_WITH_AES256 -DWOLFSSL_AES_256
-      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
     else
       ENCRYPT_WITH_CHACHA=1
-      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/chacha.o
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.o
       CFLAGS+=-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA
     endif
   endif
@@ -650,23 +650,23 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DSECURE_PKCS11
   CFLAGS+=-DWOLFSSL_PKCS11_RW_TOKENS
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
-  CFLAGS+=-Ilib/wolfPKCS11
+  CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11)
   CFLAGS+=-DWP11_HASH_PIN_COST=3
   WOLFCRYPT_OBJS+=src/pkcs11_store.o
   WOLFCRYPT_OBJS+=src/pkcs11_callable.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/pwdbased.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/dh.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o
   ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   endif
-  WOLFCRYPT_OBJS+=./lib/wolfPKCS11/src/crypto.o \
-        ./lib/wolfPKCS11/src/internal.o \
-        ./lib/wolfPKCS11/src/slot.o \
-        ./lib/wolfPKCS11/src/wolfpkcs11.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFPKCS11)/src/crypto.o \
+        $(WOLFBOOT_LIB_WOLFPKCS11)/src/internal.o \
+        $(WOLFBOOT_LIB_WOLFPKCS11)/src/slot.o \
+        $(WOLFBOOT_LIB_WOLFPKCS11)/src/wolfpkcs11.o
   STACK_USAGE=16688
   ifneq ($(ENCRYPT),1)
-      WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
   endif
   ifeq ($(findstring RSA,$(SIGN)),)
   ifeq ($(findstring RSA,$(SIGN_SECONDARY)),)
@@ -697,12 +697,12 @@ endif
 ifeq ($(WOLFTPM),1)
   OBJS+=\
     ./src/tpm.o \
-    lib/wolfTPM/src/tpm2.o \
-    lib/wolfTPM/src/tpm2_packet.o \
-    lib/wolfTPM/src/tpm2_tis.o \
-    lib/wolfTPM/src/tpm2_wrap.o \
-    lib/wolfTPM/src/tpm2_param_enc.o
-  CFLAGS+=-Ilib/wolfTPM
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2.o \
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_packet.o \
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_tis.o \
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_wrap.o \
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_param_enc.o
+  CFLAGS+=-I$(WOLFBOOT_LIB_WOLFTPM)
   CFLAGS+=-D"WOLFBOOT_TPM"
   CFLAGS+=-D"WOLFTPM_SMALL_STACK"
   CFLAGS+=-D"WOLFTPM_AUTODETECT"
@@ -713,21 +713,21 @@ ifeq ($(WOLFTPM),1)
     endif
     ifeq ($(SIM_TPM),1)
       CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0 -DHAVE_NETDB_H -DHAVE_UNISTD_H
-      OBJS+=./lib/wolfTPM/src/tpm2_swtpm.o
+      OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_swtpm.o
     else
       # Use memory-mapped WOLFTPM on x86-64
        ifeq ($(ARCH),x86_64)
           CFLAGS+=-DWOLFTPM_MMIO -DWOLFTPM_EXAMPLE_HAL -DWOLFTPM_INCLUDE_IO_FILE
-          OBJS+=./lib/wolfTPM/hal/tpm_io_mmio.o
+          OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/hal/tpm_io_mmio.o
         # By default, on other architectures, provide SPI driver
         else
           WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
         endif
     endif
   endif
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/aes.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/hmac.o
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/random.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   ifeq ($(DEBUG),1)
     CFLAGS+=-DWOLFBOOT_DEBUG_TPM=1
   endif
@@ -742,7 +742,7 @@ ifeq ($(HASH),SHA384)
   CFLAGS+=-D"WOLFBOOT_HASH_SHA384"
   SIGN_OPTIONS+=--sha384
   ifneq ($(SIGN),ED25519)
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha512.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
   endif
 endif
 
@@ -752,7 +752,7 @@ endif
 
 ifeq ($(HASH),SHA3)
   ifeq ($(HASH_HAL),)
-    WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   endif
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
   SIGN_OPTIONS+=--sha3
@@ -821,7 +821,7 @@ ifeq ($(DISK_LOCK),1)
   ifneq ($(DISK_LOCK_PASSWORD),)
     CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK_PASSWORD=\"$(DISK_LOCK_PASSWORD)\"
   endif
-  OBJS+=./lib/wolfssl/wolfcrypt/src/coding.o
+  OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
 endif
 
 ifeq ($(FSP), 1)
@@ -873,34 +873,33 @@ endif
 
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
-  LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
   WOLFCRYPT_OBJS += \
-    $(LIBDIR)/wolfssl/wolfcrypt/src/cryptocb.o \
-    $(LIBDIR)/wolfssl/wolfcrypt/src/coding.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
 
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
     # Dilithium asn.c decode/encode requires mp_xxx functions
     WOLFCRYPT_OBJS += \
-        $(LIBDIR)/wolfssl/wolfcrypt/src/random.o
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
 
     # Large enough to handle the largest Dilithium key/signature
     CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 
   WOLFHSM_OBJS += \
-    $(LIBDIR)/wolfHSM/src/wh_client.o \
-    $(LIBDIR)/wolfHSM/src/wh_client_nvm.o \
-    $(LIBDIR)/wolfHSM/src/wh_client_cryptocb.o \
-    $(LIBDIR)/wolfHSM/src/wh_client_crypto.o \
-    $(LIBDIR)/wolfHSM/src/wh_crypto.o \
-    $(LIBDIR)/wolfHSM/src/wh_utils.o \
-    $(LIBDIR)/wolfHSM/src/wh_comm.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_comm.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_nvm.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_customcb.o
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_nvm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_cryptocb.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o
   #includes
-  CFLAGS += -I"$(LIBDIR)/wolfHSM"
+  CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
   # defines
   CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT -DWOLFHSM_CFG_ENABLE_CLIENT
   # Make sure we export generated public keys so they can be used to load into
@@ -919,19 +918,18 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # doing cert chain verification
   ifneq ($(CERT_CHAIN_VERIFY),)
     WOLFHSM_OBJS += \
-      $(LIBDIR)/wolfHSM/src/wh_client_cert.o \
-      $(LIBDIR)/wolfHSM/src/wh_message_cert.o
+      $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_cert.o \
+      $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_cert.o
     CFLAGS += -DWOLFHSM_CFG_CERTIFICATE_MANAGER
   endif
 endif
 
 # wolfHSM server options
 ifeq ($(WOLFHSM_SERVER),1)
-  LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
   WOLFCRYPT_OBJS += \
-    $(LIBDIR)/wolfssl/wolfcrypt/src/cryptocb.o \
-    $(LIBDIR)/wolfssl/wolfcrypt/src/coding.o \
-    $(LIBDIR)/wolfssl/wolfcrypt/src/random.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
 
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
@@ -940,44 +938,44 @@ ifeq ($(WOLFHSM_SERVER),1)
   endif
 
   WOLFHSM_OBJS += \
-    $(LIBDIR)/wolfHSM/src/wh_utils.o \
-    $(LIBDIR)/wolfHSM/src/wh_comm.o \
-    $(LIBDIR)/wolfHSM/src/wh_nvm.o \
-    $(LIBDIR)/wolfHSM/src/wh_nvm_flash.o \
-    $(LIBDIR)/wolfHSM/src/wh_flash_unit.o \
-    $(LIBDIR)/wolfHSM/src/wh_crypto.o \
-    $(LIBDIR)/wolfHSM/src/wh_server.o \
-    $(LIBDIR)/wolfHSM/src/wh_server_nvm.o \
-    $(LIBDIR)/wolfHSM/src/wh_server_crypto.o \
-    $(LIBDIR)/wolfHSM/src/wh_server_counter.o \
-    $(LIBDIR)/wolfHSM/src/wh_server_keystore.o \
-    $(LIBDIR)/wolfHSM/src/wh_server_customcb.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_customcb.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_keystore.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_crypto.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_counter.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_nvm.o \
-    $(LIBDIR)/wolfHSM/src/wh_message_comm.o \
-    $(LIBDIR)/wolfHSM/src/wh_transport_mem.o \
-    $(LIBDIR)/wolfHSM/port/posix/posix_flash_file.o
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm_flash.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_unit.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_nvm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_counter.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_keystore.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_customcb.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_keystore.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_counter.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/port/posix/posix_flash_file.o
 
   #includes
-  CFLAGS += -I"$(LIBDIR)/wolfHSM"
+  CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
   # defines'
   CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_SERVER -DWOLFHSM_CFG_ENABLE_SERVER
 
   # Ensure wolfHSM is configured to use certificate manager if we are
   # doing cert chain verification
   ifneq ($(CERT_CHAIN_VERIFY),)
-    CFLAGS += -I"$(LIBDIR)/wolfssl"
+    CFLAGS += -I"$(WOLFBOOT_LIB_WOLFSSL)"
     WOLFCRYPT_OBJS += \
-      $(LIBDIR)/wolfssl/src/internal.o \
-      $(LIBDIR)/wolfssl/src/ssl.o \
-      $(LIBDIR)/wolfssl/src/ssl_certman.o
+      $(WOLFBOOT_LIB_WOLFSSL)/src/internal.o \
+      $(WOLFBOOT_LIB_WOLFSSL)/src/ssl.o \
+      $(WOLFBOOT_LIB_WOLFSSL)/src/ssl_certman.o
 
     WOLFHSM_OBJS += \
-      $(LIBDIR)/wolfHSM/src/wh_message_cert.o \
-      $(LIBDIR)/wolfHSM/src/wh_server_cert.o
+      $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_cert.o \
+      $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_cert.o
     CFLAGS += -DWOLFHSM_CFG_CERTIFICATE_MANAGER
   endif
 endif

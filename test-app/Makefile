@@ -25,7 +25,7 @@ ifeq ($(SIGN),RSA4096)
   IMAGE_HEADER_SIZE:=1024
 endif
 ifeq ($(HASH),SHA256)
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o
   CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
 endif
 
@@ -35,7 +35,7 @@ endif
 
 
 ifeq ($(HASH),SHA3_384)
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
 endif
 
@@ -83,7 +83,7 @@ ifeq ($(TZEN),1)
         APP_OBJS+=../src/wc_secure_calls.o
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
             CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
-            CFLAGS+=-I../lib/wolfPKCS11
+            CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFPKCS11)"
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
             APP_OBJS+=./wcs/pkcs11_stub.o
             APP_OBJS+=./wcs/ecc.o
@@ -183,9 +183,9 @@ ifeq ($(TARGET),stm32h5)
     LSCRIPT_TEMPLATE=ARM-stm32h5-ns.ld
     APP_OBJS+=wcs/wolfcrypt_secure.o
     ifeq ($(WOLFCRYPT_TZ),1)
-      APP_OBJS+=../lib/wolfssl/wolfcrypt/src/logging.o
-      APP_OBJS+=../lib/wolfssl/wolfcrypt/test/test.o
-      APP_OBJS+=../lib/wolfssl/wolfcrypt/benchmark/benchmark.o
+      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.o
+      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/test/test.o
+      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/benchmark/benchmark.o
     endif
   else
     LSCRIPT_TEMPLATE=ARM-stm32h5.ld
@@ -460,18 +460,18 @@ ifeq ($(TARGET), pic32cz)
   APP_OBJS+=../hal/pic32c.o
 endif
 
-CFLAGS+=-I../lib/wolfssl
+CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
 
 ifeq ($(WOLFHSM_CLIENT),1)
-  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I../lib/wolfssl
+  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
-  APP_OBJS += $(sort $(patsubst ./lib/wolfssl/%, ../lib/wolfssl/%, $(WOLFCRYPT_OBJS)))
+  APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
 
 ifeq ($(WOLFHSM_SERVER),1)
-  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I../lib/wolfssl
+  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
-  APP_OBJS += $(sort $(patsubst ./lib/wolfssl/%, ../lib/wolfssl/%, $(WOLFCRYPT_OBJS)))
+  APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
 
 

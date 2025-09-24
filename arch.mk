@@ -1,21 +1,18 @@
 ## CPU Architecture selection via $ARCH
 
-# Global reference to lib directory that works with relative paths
-LIBDIR := $(dir $(lastword $(MAKEFILE_LIST)))lib
-
 # check for math library
 ifeq ($(SPMATH),1)
   # SP Math
-  MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
+  MATH_OBJS:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o
 else
   ifeq ($(SPMATHALL),1)
     # SP Math all
     CFLAGS+=-DWOLFSSL_SP_MATH_ALL
-    MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
+    MATH_OBJS:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o
   else
     # Fastmath
     CFLAGS+=-DUSE_FAST_MATH
-    MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/integer.o ./lib/wolfssl/wolfcrypt/src/tfm.o
+    MATH_OBJS:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/integer.o $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/tfm.o
   endif
 endif
 
@@ -29,11 +26,11 @@ SPI_TARGET=$(TARGET)
 UART_TARGET=$(TARGET)
 
 # Include some modules by default
-WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o \
-                ./lib/wolfssl/wolfcrypt/src/hash.o \
-                ./lib/wolfssl/wolfcrypt/src/memory.o \
-                ./lib/wolfssl/wolfcrypt/src/wc_port.o \
-                ./lib/wolfssl/wolfcrypt/src/wolfmath.o
+WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o \
+                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.o \
+                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o \
+                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.o \
+                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.o
 
 
 ifeq ($(ARCH),x86_64)
@@ -45,13 +42,13 @@ ifeq ($(ARCH),x86_64)
   ifeq ($(SPMATH),1)
     ifeq ($(NO_ASM),1)
       ifeq ($(FORCE_32BIT),1)
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+        MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
         CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
       else
-        MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c64.o
+        MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o
       endif
     else
-      MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_x86_64.o
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_x86_64.o
     endif
   endif
   ifeq ($(TARGET),x86_64_efi)
@@ -101,18 +98,18 @@ ifeq ($(ARCH),AARCH64)
   endif
 
   ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_arm64.o
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm64.o
   endif
   ifeq ($(NO_ARM_ASM),0)
     ARCH_FLAGS=-mstrict-align
     CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8 -DWOLFSSL_AARCH64_PRIVILEGE_MODE
-    WOLFCRYPT_OBJS += lib/wolfssl/wolfcrypt/src/cpuid.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
-                      lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
+    WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
   endif
 endif
 
@@ -196,7 +193,7 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
     ifneq ($(PKA),0)
-      PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  ./lib/wolfssl/wolfcrypt/src/port/st/stm32.o
+      PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/st/stm32.o
       PKA_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
           -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
           -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
@@ -283,13 +280,13 @@ ifeq ($(CORTEX_A5),1)
   # Cortex-A uses boot_arm32.o
   OBJS+=src/boot_arm32.o src/boot_arm32_start.o
   ifeq ($(NO_ASM),1)
-    MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
   else
-    MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/sp_arm32.o
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm32.o
     ifneq ($(NO_ARM_ASM),1)
-      OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o
-      OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
-      OBJS+=./lib/wolfssl/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
+      OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256.o
+      OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
+      OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
       CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
               -DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
     endif
@@ -299,20 +296,20 @@ else
   OBJS+=src/boot_arm.o
   ifneq ($(NO_ARM_ASM),1)
     CORTEXM_ARM_EXTRA_OBJS= \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-aes.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-chacha.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha256.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/armv8-sha512.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm.o \
-          ./lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-chacha.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha256-asm.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha512-asm.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
 
 
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
@@ -336,10 +333,10 @@ else
     endif # TZEN=1
       ifeq ($(SPMATH),1)
         ifeq ($(NO_ASM),1)
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+          MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
         else
           CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+          MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
           CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=8
           OBJS+=$(CORTEXM_ARM_EXTRA_OBJS)
         endif
@@ -350,10 +347,10 @@ else
       LDFLAGS+=-mcpu=cortex-m7
       ifeq ($(SPMATH),1)
         ifeq ($(NO_ASM),1)
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+          MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
         else
           CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-          MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+          MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
           CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=7
           OBJS+=$(CORTEXM_ARM_EXTRA_OBJS)
         endif
@@ -364,10 +361,10 @@ else
         LDFLAGS+=-mcpu=cortex-m0
         ifeq ($(SPMATH),1)
           ifeq ($(NO_ASM),1)
-            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+            MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
           else
             CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
-            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_armthumb.o
+            MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_armthumb.o
             # No ARMASM support available for ARMv6-M.
           endif
         endif
@@ -377,12 +374,12 @@ else
           LDFLAGS+=-mcpu=cortex-m3
           ifeq ($(NO_ASM),1)
             ifeq ($(SPMATH),1)
-              MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+              MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
             endif
           else
             ifeq ($(SPMATH),1)
               CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
-              MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+              MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
               CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=7
               OBJS+=$(CORTEXM_ARM_EXTRA_OBJS)
             endif
@@ -393,13 +390,13 @@ else
         LDFLAGS+=-mcpu=cortex-m4
         ifeq ($(NO_ASM),1)
           ifeq ($(SPMATH),1)
-            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+            MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
           endif
         else
           CFLAGS+=-fomit-frame-pointer # required with debug builds only
           ifeq ($(SPMATH),1)
             CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM
-            MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+            MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
             CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=7
             OBJS+=$(CORTEXM_ARM_EXTRA_OBJS)
           endif
@@ -446,7 +443,7 @@ ifeq ($(ARCH),RENESAS_RX)
   # Renesas specific files
   OBJS+=src/boot_renesas.o src/boot_renesas_start.o hal/renesas-rx.o
   ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
   endif
 
   # RX parts support big or little endian data depending on MDE register
@@ -473,10 +470,10 @@ ifeq ($(ARCH),RENESAS_RX)
     CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
     RX_DRIVER_PATH?=./lib
 
-    OBJS+=./lib/wolfssl/wolfcrypt/src/cryptocb.o \
-          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_common.o \
-          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_util.o \
-          ./lib/wolfssl/wolfcrypt/src/port/Renesas/renesas_tsip_aes.o
+    OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/renesas_common.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/renesas_tsip_util.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/renesas_tsip_aes.o
 
     # RX TSIP uses pre-compiled .a library by default
     ifneq ($(RX_TSIP_SRC),1)
@@ -527,7 +524,7 @@ ifeq ($(ARCH),RENESAS_RX)
       OBJS+=$(RX_DRIVER_PATH)/r_bsp/mcu/rx72n/mcu_interrupts.o
     endif
 
-    CFLAGS+=-Ihal -I./lib/wolfssl \
+    CFLAGS+=-Ihal -I$(WOLFBOOT_LIB_WOLFSSL) \
             -I$(RX_DRIVER_PATH)/r_bsp \
             -I$(RX_DRIVER_PATH)/r_config \
             -I$(RX_DRIVER_PATH)/r_tsip_rx \
@@ -541,7 +538,7 @@ ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
   LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
-  MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+  MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
@@ -568,7 +565,7 @@ ifeq ($(ARCH),PPC)
   OBJS+=src/boot_ppc_start.o src/boot_ppc.o
 
   ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
   endif
 
   ifneq ($(NO_ASM),1)
@@ -576,7 +573,7 @@ ifeq ($(ARCH),PPC)
     CFLAGS+=-DWOLFSSL_SP_PPC
     CFLAGS+=-DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE
     #CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
-    MATH_OBJS+=./lib/wolfssl/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
   endif
 endif
 
@@ -616,7 +613,7 @@ ifeq ($(TARGET),kinetis)
   ifeq ($(MCUXPRESSO_CPU),MK82FN256VLL15)
     ifeq ($(PKA),1)
       PKA_EXTRA_CFLAGS+=-DFREESCALE_USE_LTC
-      PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/ksdk_port.o
+      PKA_EXTRA_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/ksdk_port.o
       ifeq ($(MCUXSDK),1)
         PKA_EXTRA_OBJS+=$(MCUXPRESSO)/drivers/ltc/fsl_ltc.o
       else
@@ -773,7 +770,7 @@ ifeq ($(TARGET),imx_rt)
     else
       PKA_EXTRA_OBJS+= $(MCUXPRESSO_DRIVERS)/drivers/fsl_dcp.o
     endif
-    PKA_EXTRA_OBJS+=./lib/wolfssl/wolfcrypt/src/port/nxp/dcp_port.o
+    PKA_EXTRA_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/dcp_port.o
     PKA_EXTRA_CFLAGS+=\
         -DWOLFSSL_IMXRT_DCP \
         -I$(MCUXPRESSO)/drivers/cache/armv7-m7 \
@@ -785,7 +782,7 @@ endif
 ifeq ($(ARCH),ARM_BE)
   OBJS+=src/boot_arm.o
   ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
   endif
 endif
 
@@ -928,7 +925,7 @@ ifeq ($(TARGET),psoc6)
         $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
         $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
     PSOC6_CRYPTO_OBJS=\
-        ./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/cypress/psoc6_crypto.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
@@ -1126,11 +1123,11 @@ ifeq ($(ARCH),sim)
     LDFLAGS+=-m32
   endif
   ifeq ($(SPMATH),1)
-    MATH_OBJS += ./lib/wolfssl/wolfcrypt/src/sp_c32.o
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
     CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
   endif
   ifeq ($(WOLFHSM_CLIENT),1)
-    WOLFHSM_OBJS += $(LIBDIR)/wolfHSM/port/posix/posix_transport_tcp.o
+    WOLFHSM_OBJS += $(WOLFBOOT_LIB_WOLFHSM)/port/posix/posix_transport_tcp.o
   endif
 endif
 
@@ -1170,7 +1167,7 @@ CFLAGS+=-DWOLFBOOT_ORIGIN=$(WOLFBOOT_ORIGIN)
 CFLAGS+=-DBOOTLOADER_PARTITION_SIZE=$(BOOTLOADER_PARTITION_SIZE)
 
 ## Debug
-WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/logging.o
+WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.o
 
 # Debug UART
 ifeq ($(DEBUG_UART),1)

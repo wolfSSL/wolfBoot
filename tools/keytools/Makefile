@@ -7,12 +7,17 @@ ifeq ($(V),0)
   Q=@
 endif
 
+# Default library paths (can be overridden)
+WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
+
+# Convert to absolute paths for standalone usage
+WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
+
 CC      = gcc
 LD      = gcc
 WOLFBOOTDIR = ../..
-WOLFDIR = $(WOLFBOOTDIR)/lib/wolfssl
 CFLAGS  = -Wall -Wextra -Werror
-CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFDIR) -I$(WOLFBOOTDIR)/include
+CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFBOOT_LIB_WOLFSSL) -I$(WOLFBOOTDIR)/include
 LDFLAGS =
 OBJDIR = ./
 LIBS =
@@ -68,46 +73,46 @@ endif
 
 # Sources
 OBJS_REAL=\
-	$(WOLFDIR)/wolfcrypt/src/asn.o \
-	$(WOLFDIR)/wolfcrypt/src/aes.o \
-	$(WOLFDIR)/wolfcrypt/src/ecc.o \
-	$(WOLFDIR)/wolfcrypt/src/coding.o \
-	$(WOLFDIR)/wolfcrypt/src/chacha.o \
-	$(WOLFDIR)/wolfcrypt/src/ed25519.o \
-	$(WOLFDIR)/wolfcrypt/src/ed448.o \
-	$(WOLFDIR)/wolfcrypt/src/fe_operations.o \
-	$(WOLFDIR)/wolfcrypt/src/ge_operations.o \
-	$(WOLFDIR)/wolfcrypt/src/fe_448.o \
-	$(WOLFDIR)/wolfcrypt/src/ge_448.o \
-	$(WOLFDIR)/wolfcrypt/src/hash.o \
-	$(WOLFDIR)/wolfcrypt/src/logging.o \
-	$(WOLFDIR)/wolfcrypt/src/memory.o \
-	$(WOLFDIR)/wolfcrypt/src/random.o \
-	$(WOLFDIR)/wolfcrypt/src/rsa.o \
-	$(WOLFDIR)/wolfcrypt/src/sp_int.o \
-	$(WOLFDIR)/wolfcrypt/src/sp_c32.o \
-	$(WOLFDIR)/wolfcrypt/src/sp_c64.o \
-	$(WOLFDIR)/wolfcrypt/src/sha3.o \
-	$(WOLFDIR)/wolfcrypt/src/sha256.o \
-	$(WOLFDIR)/wolfcrypt/src/sha512.o \
-	$(WOLFDIR)/wolfcrypt/src/tfm.o \
-	$(WOLFDIR)/wolfcrypt/src/wc_port.o \
-	$(WOLFDIR)/wolfcrypt/src/wolfmath.o
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed25519.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed448.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_operations.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_operations.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_448.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_448.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/tfm.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.o
 
 OBJS_REAL+=\
 	$(WOLFBOOTDIR)/src/delta.o
 
 OBJS_REAL+=\
-	$(WOLFDIR)/wolfcrypt/src/wc_lms.o \
-	$(WOLFDIR)/wolfcrypt/src/wc_lms_impl.o
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms_impl.o
 
 OBJS_REAL+=\
-	$(WOLFDIR)/wolfcrypt/src/wc_xmss.o \
-	$(WOLFDIR)/wolfcrypt/src/wc_xmss_impl.o
-OBJS_REAL+=$(WOLFDIR)/wolfcrypt/src/dilithium.o
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.o \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.o
+OBJS_REAL+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
-vpath %.c $(WOLFDIR)/wolfcrypt/src/
+vpath %.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c ./
 
@@ -123,7 +128,7 @@ $(OBJDIR)/%.o: %.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFBOOTDIR)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
-$(OBJDIR)/%.o: $(WOLFDIR)/wolfcrypt/src/%.c
+$(OBJDIR)/%.o: $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 # build templates
