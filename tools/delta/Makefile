@@ -1,8 +1,16 @@
+# Default library paths (can be overridden)
+# NOTE: This makefile expects to only be called from the top level
+#  wolfBoot directory, so use default relative path from there
+WOLFBOOT_LIB_WOLFSSL?=./lib/wolfssl
+
+# Convert to absolute paths for standalone usage
+WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
+
 all: bmdiff bmpatch
 CFLAGS+=-Wall -Werror -Wextra -DDELTA_UPDATES
 
 ifeq ($(HASH),SHA3)
-  WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha3.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
   SIGN_OPTIONS+=--sha3
 else
