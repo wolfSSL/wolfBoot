@@ -347,8 +347,6 @@ Then run the normal `make` steps.
 
 wolfBoot includes its internal dependencies (all official wolfSSL projects) as git submodules under `lib/`, ensuring known-compatible versions. You may override these paths with `WOLFBOOT_LIB_XXX` environment variables to point to local copies of the libraries.
 
-This mechanism exists mainly for internal use and is NOT RECOMMENDED, as mismatched versions can cause build failures or subtle bugs.
-
 Note that all paths MUST be supplied to the Makefiles as absolute paths.
 
 Available overrides:
