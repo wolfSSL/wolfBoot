@@ -55,6 +55,7 @@
 
 #include "user_settings.h"
 #include "wolfssl/wolfcrypt/sha.h"
+#include "wolfssl/wolfcrypt/error-crypt.h"
 #include "wolfboot/wolfboot.h"
 #include "wolfpkcs11/pkcs11.h"
 #include "hal.h"
@@ -264,6 +265,18 @@ START_TEST (test_store_and_load_objs) {
     ck_assert(ret == strlen(short_string) + 1);
     ck_assert(strcmp(short_string, secret_rd) == 0);
     wolfPKCS11_Store_Close(store);
+
+    /* Remove the object and confirm it is no longer addressable */
+    ret = wolfPKCS11_Store_Remove(type, id_tok, id_obj);
+    ck_assert_msg(ret == 0, "Failed to delete vault: %d", ret);
+
+    readonly = 1;
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, readonly, &store);
+    ck_assert_int_eq(ret, NOT_AVAILABLE_E);
+
+    /* Second removal attempt should report the object is already gone */
+    ret = wolfPKCS11_Store_Remove(type, id_tok, id_obj);
+    ck_assert_int_eq(ret, NOT_AVAILABLE_E);
 }
 END_TEST
 

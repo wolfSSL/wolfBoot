@@ -530,4 +530,17 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
     return len;
 }
 
+int wolfPKCS11_Store_Remove(int type, CK_ULONG id1, CK_ULONG id2)
+{
+    uint8_t* buf;
+
+    check_vault();
+    buf = find_object_buffer((int32_t)type, (uint32_t)id1, (uint32_t)id2);
+    if (buf == NULL)
+        return NOT_AVAILABLE_E;
+
+    delete_object((int32_t)type, (uint32_t)id1, (uint32_t)id2);
+    return 0;
+}
+
 #endif /* SECURE_PKCS11 */
