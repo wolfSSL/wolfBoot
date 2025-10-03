@@ -224,7 +224,21 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    flash_range_program(address - XIP_BASE, data, len);
+    uint8_t cache[WOLFBOOT_SECTOR_SIZE];
+    uint32_t written = 0;
+    uint32_t sz;
+    if (((uintptr_t)data & 0x20000000UL) == 0) {
+        /* Not in RAM: copy to cache before writing */
+        while (written < len) {
+            sz = WOLFBOOT_SECTOR_SIZE;
+            if (sz > (len - written))
+                sz = len - written;
+            memcpy(cache, data + written, sz);
+            flash_range_program(address - XIP_BASE + written, cache, sz);
+            written += sz;
+        }
+    } else
+        flash_range_program(address - XIP_BASE, data, len);
     return 0;
 }
 
