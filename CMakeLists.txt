@@ -52,8 +52,13 @@ include_directories(lib/wolfssl)
 # Where should configuration values come from?
 #   dot     : parse .config via load_dot_config()
 #   preset  : use cacheVariables from CMakePresets.json
-set(WOLFBOOT_CONFIG_MODE "dot" CACHE STRING "Config source: dot or preset")
-set_property(CACHE WOLFBOOT_CONFIG_MODE PROPERTY STRINGS dot preset)
+if( EXISTS "./.config")
+    message(STATUS "Found a .config file, will parse")
+    set(WOLFBOOT_CONFIG_MODE "dot" CACHE STRING "Config source: dot or preset")
+    set_property(CACHE WOLFBOOT_CONFIG_MODE PROPERTY STRINGS dot preset)
+else()
+    message(STATUS "No .config file found.")
+endif()
 
 if(WOLFBOOT_CONFIG_MODE STREQUAL "dot")
     message(STATUS "Config mode: dot (.config cache)")
@@ -65,7 +70,7 @@ elseif(WOLFBOOT_CONFIG_MODE STREQUAL "preset")
   message(STATUS "Config mode: preset (using cacheVariables; skipping .config)")
 
 else()
-  message(FATAL_ERROR "Invalid WOLFBOOT_CONFIG_MODE='${WOLFBOOT_CONFIG_MODE}'. Use 'dot' or 'preset'.")
+  message(STATUS "Not using .config nor CMakePresets.json for WOLFBOOT_CONFIG_MODE.")
 endif()
 
 
