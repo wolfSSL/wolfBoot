@@ -51,7 +51,7 @@ else
   endif
 endif
 
-WOLFCRYPT_OBJS?=
+WOLFCRYPT_OBJS:=
 SECURE_OBJS:=
 PUBLIC_KEY_OBJS:=
 WOLFHSM_OBJS:=
@@ -135,10 +135,10 @@ ifeq ($(VISUALGDB),1)
   $(CMSIS_LOCAL_OBJ_DIR)/%.o: $(VISUALGDB_CMSIS_SRC)/%.c
 	@mkdir -p $(CMSIS_LOCAL_OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+else
+  OBJS+=$(WOLFCRYPT_OBJS)
 endif
 # ============================================================================
-
--include .config
 
 $(info WOLFCRYPT_OBJS=$(WOLFCRYPT_OBJS))
 $(info MATH_OBJS=$(MATH_OBJS))

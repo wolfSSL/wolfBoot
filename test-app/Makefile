@@ -201,7 +201,7 @@ ifeq ($(TARGET),sama5d3)
   LSCRIPT_TEMPLATE:=$(ARCH)-$(TARGET).ld
 endif
 
-ifeq ($(TARGET),stm32l4_disabled)
+ifeq ($(TARGET),stm32l4)
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
   CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
