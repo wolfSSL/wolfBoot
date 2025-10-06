@@ -42,11 +42,37 @@ endif()
 
 project(wolfBoot)
 
+include(cmake/load_dot_config.cmake)
 include(cmake/utils.cmake)
 include(cmake/functions.cmake)
 
 include_directories(include)
 include_directories(lib/wolfssl)
+
+# Where should configuration values come from?
+#   dot     : parse .config via load_dot_config()
+#   preset  : use cacheVariables from CMakePresets.json
+set(WOLFBOOT_CONFIG_MODE "dot" CACHE STRING "Config source: dot or preset")
+set_property(CACHE WOLFBOOT_CONFIG_MODE PROPERTY STRINGS dot preset)
+
+if(WOLFBOOT_CONFIG_MODE STREQUAL "dot")
+    message(STATUS "Config mode: dot (.config cache)")
+    include(cmake/load_dot_config.cmake)
+    message(STATUS "Loading config from: ${CMAKE_SOURCE_DIR}")
+    load_dot_config("${CMAKE_SOURCE_DIR}/.config")
+
+elseif(WOLFBOOT_CONFIG_MODE STREQUAL "preset")
+  message(STATUS "Config mode: preset (using cacheVariables; skipping .config)")
+
+else()
+  message(FATAL_ERROR "Invalid WOLFBOOT_CONFIG_MODE='${WOLFBOOT_CONFIG_MODE}'. Use 'dot' or 'preset'.")
+endif()
+
+
+if ("${WOLFBOOT_TARGET}" STREQUAL "")
+    message(STATUS "Setting WOLFBOOT_TARGET from TARGET=${TARGET}")
+    set(WOLFBOOT_TARGET "${TARGET}")
+endif()
 
 if(NOT DEFINED WOLFBOOT_TARGET)
     message(FATAL_ERROR "WOLFBOOT_TARGET must be defined")
@@ -59,7 +85,7 @@ if(NOT DEFINED WOLFBOOT_SECTOR_SIZE)
 endif()
 
 if(NOT DEFINED ARM_TARGETS)
-    list(APPEND ARM_TARGETS cypsoc6 imx kinetis lpc54606j512 mcxa mcxw nrf52 nrf52840 nrf5340 nrf5340_net rp2350 sama5d3 same51 stm32c0 stm32f1 stm32f4 stm32f7 stm32g0 stm32h5 stm32h7 stm32l0 stm32l5 stm32u5 stm32wb ti zynqmp)
+    list(APPEND ARM_TARGETS cypsoc6 imx kinetis lpc54606j512 mcxa mcxw nrf52 nrf52840 nrf5340 nrf5340_net rp2350 sama5d3 same51 stm32c0 stm32f1 stm32f4 stm32f7 stm32g0 stm32h5 stm32h7 stm32l0 stm32l4 stm32l5 stm32u5 stm32wb ti zynqmp)
     set(ARM_TARGETS
         "${ARM_TARGETS}"
         CACHE INTERNAL "")
@@ -654,7 +680,45 @@ target_compile_definitions(user_settings INTERFACE ${USER_SETTINGS} ${SIGN_OPTIO
 add_library(wolfboothal)
 target_sources(wolfboothal PRIVATE include/hal.h hal/${WOLFBOOT_TARGET}.c ${WOLFBOOT_FLASH_SOURCES}
                                    ${PARTITION_SOURCE})
-target_link_libraries(wolfboothal target user_settings)
+
+
+# --- HAL for STM32L4 (only the pieces we need) ---
+if(WOLFBOOT_TARGET STREQUAL "stm32l4")
+    set(HAL_BASE "/mnt/c/Users/gojimmypi/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx")
+    set(HAL_DRV  "${HAL_BASE}/STM32L4xx_HAL_Driver")
+    set(HAL_CMSIS_DEV "${HAL_BASE}/CMSIS_HAL/Device/ST/STM32L4xx/Include")
+    set(HAL_CMSIS_CORE "${HAL_BASE}/CMSIS_HAL/Include")
+    set(HAL_TEMPLATE_INC "${HAL_BASE}/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc")
+
+    add_library(stm32l4_hal STATIC
+        ${HAL_DRV}/Src/stm32l4xx_hal.c
+        ${HAL_DRV}/Src/stm32l4xx_hal_flash.c
+        ${HAL_DRV}/Src/stm32l4xx_hal_flash_ex.c
+        # add more modules later if you get missing symbols, e.g. RCC/GPIO/etc:
+        # ${HAL_DRV}/Src/stm32l4xx_hal_rcc.c
+        # ${HAL_DRV}/Src/stm32l4xx_hal_gpio.c
+    )
+
+    target_include_directories(stm32l4_hal PUBLIC
+        ${HAL_DRV}/Inc
+        ${HAL_CMSIS_DEV}
+        ${HAL_CMSIS_CORE}
+        ${HAL_TEMPLATE_INC}
+    )
+
+    target_compile_definitions(stm32l4_hal PUBLIC
+        USE_HAL_DRIVER
+        STM32L475xx
+        # If your stm32l4xx_hal_conf.h doesn’t enable FLASH, you can force it:
+        # HAL_FLASH_MODULE_ENABLED
+    )
+
+    # Link HAL into the HAL wrapper lib so the final image pulls symbols from a single archive
+    target_link_libraries(wolfboothal PUBLIC target user_settings stm32l4_hal)
+else()
+    target_link_libraries(wolfboothal target user_settings)
+endif()
+
 target_compile_definitions(wolfboothal PRIVATE ${WOLFBOOT_DEFS})
 target_include_directories(wolfboothal PRIVATE ${WOLFBOOT_ROOT} include)
 target_compile_options(wolfboothal PRIVATE ${WOLFBOOT_COMPILE_OPTIONS} ${EXTRA_COMPILE_OPTIONS})

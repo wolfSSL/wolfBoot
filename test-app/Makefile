@@ -116,6 +116,53 @@ else
     APP_OBJS+=../hal/$(TARGET).o
 endif
 
+# ==== VisualGDB remap for STM32L4 (opt-in) ===================================
+# Requires VISUALGDB=1 and VISUALGDB_BASE in ../.config
+ifeq ($(VISUALGDB),1)
+  # VisualGDB pack source locations
+  VISUALGDB_HAL_SRC    ?= $(VISUALGDB_BASE)/STM32L4xx_HAL_Driver/Src
+  VISUALGDB_CMSIS_SRC  ?= $(VISUALGDB_BASE)/CMSIS_HAL/Device/ST/STM32L4xx/Source/Templates
+
+  # Local object output dirs (kept inside this repo)
+  HAL_LOCAL_OBJ_DIR    ?= build/vis_hal
+  CMSIS_LOCAL_OBJ_DIR  ?= build/vis_cmsis
+
+  # Include dirs + MCU macro fix (use L475 without editing pack files)
+  CFLAGS += \
+    -I$(VISUALGDB_BASE)/STM32L4xx_HAL_Driver/Inc \
+    -I$(VISUALGDB_BASE)/STM32L4xx_HAL_Driver/Inc/Legacy \
+    -I$(VISUALGDB_BASE)/CMSIS_HAL/Core/Include \
+    -I$(VISUALGDB_BASE)/CMSIS_HAL/Device/ST/STM32L4xx/Include \
+    -USTM32L4A6xx -DSTM32L475xx -DUSE_HAL_DRIVER
+
+  # For stm32l4, ensure we build the needed HAL Flash objs locally
+  ifeq ($(TARGET),stm32l4)
+    # If anything in APP_OBJS still references STM32Cube objects, rewrite them:
+    override APP_OBJS := $(patsubst $(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/%.o,\
+                                   $(HAL_LOCAL_OBJ_DIR)/%.o,$(APP_OBJS))
+
+    # Make sure these two are present (the test-app needs them):
+    APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
+    APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
+
+    APP_OBJS += \
+      $(HAL_LOCAL_OBJ_DIR)/stm32l4xx_hal_flash.o \
+      $(HAL_LOCAL_OBJ_DIR)/stm32l4xx_hal_flash_ex.o
+  endif
+
+  # Pattern rules to compile VisualGDB pack sources into our local obj dirs
+  $(HAL_LOCAL_OBJ_DIR)/%.o: $(VISUALGDB_HAL_SRC)/%.c
+	@mkdir -p $(HAL_LOCAL_OBJ_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+  $(CMSIS_LOCAL_OBJ_DIR)/%.o: $(VISUALGDB_CMSIS_SRC)/%.c
+	@mkdir -p $(CMSIS_LOCAL_OBJ_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+endif
+# =============================================================================
+
+
+
 ifeq ($(ARCH),RISCV)
   APP_OBJS+=startup_riscv.o vector_riscv.o
 endif
@@ -154,7 +201,7 @@ ifeq ($(TARGET),sama5d3)
   LSCRIPT_TEMPLATE:=$(ARCH)-$(TARGET).ld
 endif
 
-ifeq ($(TARGET),stm32l4)
+ifeq ($(TARGET),stm32l4_disabled)
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
   CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
