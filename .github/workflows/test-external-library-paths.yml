@@ -10,6 +10,7 @@ on:
 jobs:
   test_external_libs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     # Matrix to test multiple configurations
     strategy:
