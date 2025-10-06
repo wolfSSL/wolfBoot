@@ -652,6 +652,7 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11)
   CFLAGS+=-DWP11_HASH_PIN_COST=3
+  LDFLAGS+=--specs=nano.specs
   WOLFCRYPT_OBJS+=src/pkcs11_store.o
   WOLFCRYPT_OBJS+=src/pkcs11_callable.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o

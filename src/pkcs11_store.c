@@ -66,19 +66,16 @@ extern unsigned int _heap_size;  /* From linker script: heap limit */
 void * _sbrk(unsigned int incr)
 {
     static unsigned char *heap = (unsigned char *)&_start_heap;
-    static uint32_t heapsize = (uint32_t)(&_heap_size);
+    static uint32_t heapsize = (uintptr_t)&_heap_size;
     void *old_heap = heap;
     if (((incr >> 2) << 2) != incr)
         incr = ((incr >> 2) + 1) << 2;
 
-    if (heap == NULL)
+    if (heap == NULL) {
         heap = (unsigned char *)&_start_heap;
-    else
+        old_heap = heap;
+    } else
         heap += incr;
-    if (((uint32_t)heap - (uint32_t)(&_start_heap)) > heapsize) {
-        heap -= incr;
-        return NULL;
-    }
     return old_heap;
 }
 #endif
