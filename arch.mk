@@ -1172,6 +1172,11 @@ WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.o
 # Debug UART
 ifeq ($(DEBUG_UART),1)
   CFLAGS+=-DDEBUG_UART
+
+  # If this target has a UART driver, add it to the OBJS
+  ifneq (,$(wildcard hal/uart/uart_drv_$(TARGET).c))
+    OBJS+=hal/uart/uart_drv_$(TARGET).o
+  endif
 endif
 
 ifeq ($(NXP_CUSTOM_DCD),1)

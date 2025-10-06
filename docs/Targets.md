@@ -885,6 +885,7 @@ arm-none-eabi-gdb
 (gdb) target remote:3333
 ```
 
+
 ## STM32H5
 
 Like [STM32L5](#stm32l5) and [STM32U5](#stm32u5), STM32H5 support is also demonstrated
@@ -902,8 +903,8 @@ For more information, see [/docs/flash-OTP.md](/docs/flash-OTP.md).
 The implementation shows how to switch from secure application to non-secure application,
 thanks to the system isolation performed, which splits the internal Flash and internal
 SRAM memories into two parts:
- - the first 256KB are used by wolfboot running in secure mode and the secure application
- - the remaining available space is used for non-secure application and update partition
+ - the first 384KB are used by wolfboot running in secure mode and the secure application
+ - the remaining available space (640KB) is used for non-secure application and update partition
 
 The example configuration for this scenario is available in [/config/examples/stm32h5.config](/config/examples/stm32h5.config).
 
@@ -913,14 +914,14 @@ The example configuration for this scenario is available in [/config/examples/st
 
 `STM32_Programmer_CLI -c port=swd -ob TZEN=0xB4`
 
-- set the option bytes to enable flash secure protection of first 256KB:
-`STM32_Programmer_CLI -c port=swd -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x1F SECWM2_PSTRT=0x1F SECWM2_PEND=0x0`
+- set the option bytes to enable flash secure protection of first 384KB:
+`STM32_Programmer_CLI -c port=swd -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x2F SECWM2_PEND=0x0 SECWM2_PSTRT=0x2F`
 
 - flash the wolfboot image to the secure partition:
 `STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000`
 
 - flash the application image to the non-secure partition:
-`STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08040000`
+`STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08060000`
 
 For a full list of all the option bytes tested with this configuration, refer to [STM32-TZ.md](/docs/STM32-TZ.md).
 
@@ -946,35 +947,26 @@ For DUALBANK with TrustZone use `stm32h5-tz-dualbank-otp.config`.
 
 DUALBANK configuration (Tested on NUCLEO-STM32H563ZI):
 
+```
 BANK A: 0x08000000 to 0x080FFFFFF (1MB)
 BANK B: 0x08100000 to 0x081FFFFFF (1MB)
+```
 
 First of all, ensure that the `SWAP_BANK` option byte is off when running wolfBoot
 for the first time:
-
-```
-STM32_Programmer_CLI -c port=swd -ob SWAP_BANK=0
-```
+`STM32_Programmer_CLI -c port=swd -ob SWAP_BANK=0`
 
 It is a good idea to start with an empty flash, by erasing all sectors via:
+`STM32_Programmer_CLI -c port=swd -e 0 255`
 
-```
-STM32_Programmer_CLI -c port=swd -e 0 255
-```
 Compile wolfBoot with `make`. The file `factory.bin` contains both wolfboot and the
 version 1 of the application, and can be uploaded to the board at the beginning
 of the first bank using `STM32_Programmer_CLI` tool:
-
-```
-STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
-```
+`STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000`
 
 Optionally, you can upload another copy of wolfboot.bin to the beginning of the second bank.
-Wolfboot should take care of copying itself to the second bank upon first boot if you don't.:
-
-```
-STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x08100000
-```
+Wolfboot should take care of copying itself to the second bank upon first boot if you don't:
+`STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x08100000`
 
 After uploading the images, reboot your board. The green LED should indicate that v1 of the
 test application is running.
@@ -982,13 +974,26 @@ test application is running.
 To initiate an update, sign a new version of the app and upload the v3 to the update partition
 on the second bank:
 
-```
+```sh
 tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 3
-STM32_Programmer_CLI -c port=swd -d test-app/image_v3_signed.bin 0x08110000
+STM32_Programmer_CLI -c port=swd -d test-app/image_v3_signed.bin 0x08160000
 ```
 
 Reboot the board to initiate an update via DUALBANK hw-assisted swap.
 Any version except the first one will also turn on the orange LED.
+
+### STM32H5 Debugging
+
+OpenOCD: `openocd -s /usr/local/share/openocd/scripts -f board/st_nucleo_h5.cfg`
+
+```sh
+arm-none-eabi-gdb
+source .gdbinit
+add-symbol-file test-app/image.elf 0x08060000
+mon reset init
+b main
+c
+```
 
 
 ## STM32H7

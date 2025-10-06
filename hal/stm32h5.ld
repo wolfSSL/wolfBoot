@@ -4,8 +4,8 @@ MEMORY
     RAM (rwx) :     ORIGIN = 0x30000000, LENGTH = 0x20000
     RAM_KV (rw):    ORIGIN = 0x30020000, LENGTH = 0x10000
     RAM_HEAP (rw):  ORIGIN = 0x30030000, LENGTH = 0x10000 /* 64KB Heap for wolfcrypt/PKCS11 */
-    FLASH_KEYVAULT(rw): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x24000, LENGTH = 0x14000
-    FLASH_NSC(rx): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x38000, LENGTH = 0x8000
+    FLASH_KEYVAULT(rw): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x44000, LENGTH = 0x18000
+    FLASH_NSC(rx): ORIGIN = @WOLFBOOT_ORIGIN@ + 0x5C000, LENGTH = 0x8000
 }
 
 SECTIONS
@@ -28,8 +28,7 @@ SECTIONS
 
     .gnu.sgstubs :
     {
-        . += 0x400;
-        . = ALIGN(4);
+        . = ALIGN(32);
         *(.gnu.sgstubs*)   /* Secure Gateway stubs */
         . = ALIGN(4);
     } >FLASH_NSC

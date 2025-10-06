@@ -213,31 +213,34 @@ void hal_tz_release_nonsecure_area(void)
 #define GTZC1_BASE             (0x50032400)
 #define GTZC1_TZSC             (*(volatile uint32_t *)(GTZC1_BASE + 0x00))
 #define GTZC1_TZIC             (*(volatile uint32_t *)(GTZC1_BASE + 0x0400))
-#define GTZC1_MPCBB1_S         ((volatile uint32_t *)(GTZC1_BASE + 0x0800 + 0x100))
-#define GTZC1_MPCBB2_S         ((volatile uint32_t *)(GTZC1_BASE + 0x0C00 + 0x100))
-#define GTZC1_MPCBB3_S         ((volatile uint32_t *)(GTZC1_BASE + 0x1000 + 0x100))
+#define GTZC1_MPCBB1_SECCFGR   ((volatile uint32_t *)(GTZC1_BASE + 0x0800 + 0x100))
+#define GTZC1_MPCBB2_SECCFGR   ((volatile uint32_t *)(GTZC1_BASE + 0x0C00 + 0x100))
+#define GTZC1_MPCBB3_SECCFGR   ((volatile uint32_t *)(GTZC1_BASE + 0x1000 + 0x100))
 
-#define SET_GTZC1_MPCBBx_S_VCTR(bank,n,val) \
-    (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_S) + n ))= val
+#define SET_GTZC1_MPCBBx_SECCFGR_VCTR(bank,n,val) \
+    (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_SECCFGR) + n )) = val
 
 void hal_gtzc_init(void)
 {
     int i;
-    /* One bit in the bitmask: 512B */
+    /* One bit in the bitmask: 512B
+     * 1: Secure access only to block
+     * 0: Non-secure access only to block
+     */
 
     /* Configure SRAM1 as secure (Low 256 KB) */
     for (i = 0; i < 16; i++) {
-        SET_GTZC1_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(1, i, 0xFFFFFFFF);
     }
 
     /* Configure SRAM2 as secure (64 KB) */
     for (i = 0; i < 4; i++) {
-        SET_GTZC1_MPCBBx_S_VCTR(2, i, 0xFFFFFFFF);
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0xFFFFFFFF);
     }
 
     /* Configure SRAM3 as non-secure (320 KB) */
     for (i = 0; i < 20; i++) {
-        SET_GTZC1_MPCBBx_S_VCTR(3, i, 0x0);
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0x0);
     }
 }
 

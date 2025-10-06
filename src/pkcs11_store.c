@@ -38,7 +38,7 @@
 #endif
 
 #ifndef KEYVAULT_MAX_ITEMS
-    #define KEYVAULT_MAX_ITEMS 0x17 /* Total memory: 0x18000, 22 items + 2 sector overhead */
+    #define KEYVAULT_MAX_ITEMS 20 /* Total memory: 0x16000 (20 items) + 2 sector overhead = 0x18000 */
 #endif
 
 /* Internal errors from wolfPKCS11 */
@@ -55,24 +55,28 @@
 
 
 #ifndef UNIT_TEST
-extern uint32_t *_flash_keyvault; /* From linker script: origin of vault flash */
-static uint8_t *vault_base = (uint8_t *)&_flash_keyvault;
+
+/* From linker script: origin and size of vault flash */
+extern uint32_t _flash_keyvault;
+extern uint32_t _flash_keyvault_size;
+
+static uint8_t *vault_base = (uint8_t*)&_flash_keyvault;
+static uint32_t vault_size = (uint32_t)&_flash_keyvault_size;
 
 /* Back-end for malloc, used by wolfPKCS11 */
-
 extern unsigned int _start_heap; /* From linker script: heap memory */
 extern unsigned int _heap_size;  /* From linker script: heap limit */
 
 void * _sbrk(unsigned int incr)
 {
-    static unsigned char *heap = (unsigned char *)&_start_heap;
-    static uint32_t heapsize = (uintptr_t)&_heap_size;
+    static uint8_t *heap = NULL;
+    static uint32_t heapsize = (uint32_t)&_heap_size;
     void *old_heap = heap;
     if (((incr >> 2) << 2) != incr)
         incr = ((incr >> 2) + 1) << 2;
 
     if (heap == NULL) {
-        heap = (unsigned char *)&_start_heap;
+        heap = (uint8_t*)&_start_heap;
         old_heap = heap;
     } else
         heap += incr;
@@ -175,7 +179,6 @@ static void cache_commit(uint32_t offset)
 {
     hal_flash_unlock();
 
-
     /* Write backup sector first */
     hal_flash_erase((uintptr_t)BACKUP_SECTOR_ADDRESS, WOLFBOOT_SECTOR_SIZE);
     hal_flash_write((uintptr_t)BACKUP_SECTOR_ADDRESS, cached_sector, WOLFBOOT_SECTOR_SIZE);
@@ -229,7 +232,7 @@ static void delete_object(int32_t type, uint32_t tok_id, uint32_t obj_id)
     memcpy(cached_sector, vault_base, WOLFBOOT_SECTOR_SIZE);
 
     while ((uintptr_t)hdr < ((uintptr_t)cached_sector + WOLFBOOT_SECTOR_SIZE)) {
-        if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id) && 
+        if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id) &&
                 (hdr->type == type)) {
             hdr->token_id = PKCS11_INVALID_ID;
             hdr->object_id = PKCS11_INVALID_ID;

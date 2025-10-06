@@ -27,21 +27,23 @@
 #include "hal/stm32h5.h"
 #include "hal/armv8m_tz.h"
 
+#include "uart_drv.h"
+
 #define PLL_SRC_HSE 1
 
 #if TZ_SECURE()
 
 /* This function assumes that the boot and the update
  * partitions are at the same address in the two banks,
- * regardless wheather DUALBANK_SWAP is active or not.
+ * regardless if DUALBANK_SWAP is active or not.
  */
 static int is_flash_nonsecure(uint32_t address)
 {
-    uint32_t in_bank_offset = address & 0x000FFFFF;
-    if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE))
+    uint32_t in_bank_offset = (address & 0x000FFFFF);
+    if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE)) {
         return 1;
-    else
-        return 0;
+    }
+    return 0;
 }
 #endif
 
@@ -49,12 +51,22 @@ static int is_flash_nonsecure(uint32_t address)
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
-    if ((reg & FLASH_ACR_LATENCY_MASK) < waitstates)
-        do {
-            FLASH_ACR =  (reg & ~(FLASH_ACR_LATENCY_MASK | (FLASH_ACR_WRHIGHFREQ_MASK << FLASH_ACR_WRHIGHFREQ_SHIFT))) |
-                         waitstates | (0x02 << FLASH_ACR_WRHIGHFREQ_SHIFT) ;
+    uint32_t wrhighfreq = 1; /* default flash signal delay */
+
+    if ((reg & FLASH_ACR_LATENCY_MASK) < waitstates) {
+        /* clear wrhighfreq and latency */
+        reg &= ~(FLASH_ACR_LATENCY_MASK |
+                (FLASH_ACR_WRHIGHFREQ_MASK << FLASH_ACR_WRHIGHFREQ_SHIFT));
+        if (waitstates > 3) { /* wait states 4 and 5 require = 2 */
+            wrhighfreq = 2;
         }
-        while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != waitstates);
+        reg |= (waitstates | (wrhighfreq << FLASH_ACR_WRHIGHFREQ_SHIFT));
+        FLASH_ACR = reg;
+        ISB();
+        DMB();
+        /* wait for the register to be updated */
+        while (FLASH_ACR != reg);
+    }
 }
 
 void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
@@ -538,10 +550,15 @@ static void fork_bootloader(void)
 }
 #endif
 
-#include "uart_drv.h"
 void hal_init(void)
 {
     clock_pll_on();
+
+#ifdef DEBUG_UART
+    uart_init(115200, 8, 'N', 1);
+    uart_write("wolfBoot Init\n", 14);
+#endif
+
 #if TZ_SECURE()
     hal_gtzc_init();
     hal_tz_sau_init();
