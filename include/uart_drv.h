@@ -29,4 +29,8 @@ int uart_tx(const uint8_t c);
 int uart_rx(uint8_t *c);
 int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
 
+#ifdef DEBUG_UART
+void uart_write(const char *buf, unsigned int len);
+#endif
+
 #endif /* H_HAL_UART_ */

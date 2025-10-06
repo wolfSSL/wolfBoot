@@ -113,4 +113,14 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     return 0;
 }
 
+#ifdef DEBUG_UART
+void uart_write(const char *buf, unsigned int len)
+{
+    while (len--) {
+        uart_tx(*buf);
+        buf++;
+    }
+}
+#endif
+
 #endif /* UART_FLASH && TARGET_lpc */
