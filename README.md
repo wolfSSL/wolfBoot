@@ -39,6 +39,53 @@ The bootloader consists of the following components:
    - The core bootloader
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
 
+## Requirements
+
+### Linux
+
+Ensure the proper toolchain is installed. The default [Makefile](./Makefile) needs at least the `gcc-arm-none-eabi`.
+
+```bash
+sudo apt update
+sudo apt install -y build-essential gcc-arm-none-eabi binutils-arm-none-eabi
+# optional (often handy): gdb-multiarch or gdb-arm-none-eabi
+arm-none-eabi-gcc --version   # should print the version
+```
+
+The device manufacturer toolchain _also_ needs to be installed. For example without the [STM32CubeIDE Software](https://www.st.com/en/development-tools/stm32cubeide.html),
+errors like this will otherwise be encountered:
+
+```
+        [CC ARM] hal/stm32l4.o
+hal/stm32l4.c:24:10: fatal error: stm32l4xx_hal.h: No such file or directory
+   24 | #include "stm32l4xx_hal.h"
+      |          ^~~~~~~~~~~~~~~~~
+```
+
+## Quick Start
+
+```bash
+git clone https://github.com/gojimmypi/wolfBoot.git
+cd wolfBoot
+git submodule update --init
+
+## Use make
+# edit your .config or copy from config/examples
+make
+
+## OR ##
+
+# use cmake via wolfbuild.sh script:
+
+./wolfbuild.sh --CLEAN
+./wolfbuild.sh --CLEAN  stm32h7
+./wolfbuild.sh --target stm32h7
+```
+
+### VS Code
+
+
+
 ## Integrating wolfBoot in an existing project
 
 ### Required steps
@@ -241,12 +288,12 @@ options to configuring wolfBoot, add `-LAH` to your cmake command, along with th
 $ cmake -DWOLFBOOT_TARGET=stm32h7 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000 -LAH ..
 ```
 
-##### stm32f4
+#### stm32f4
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32f4 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08020000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08040000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x08060000 ..
 ```
 
-##### stm32u5
+#### stm32u5
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08100000 -DWOLFBOOT_SECTOR_SIZE=0x2000 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x817F000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81FE000 -DNO_MPU=yes ..
 ```
@@ -690,12 +737,12 @@ Use `make keysclean` to delete keys and regenerate.
     * RP2350 (Raspberry Pi Pico 2, ARM Cortex-M33 with TrustZone)
     * NXP MCXA153
     * NXP MCXW716
-    * STM32F1 series (STM32F103 “Blue Pill” board)
+    * STM32F1 series (STM32F103 "Blue Pill" board)
   * Improvements to supported targets
     * Xilinx UltraScale+ (ZynqMP)
         * Added hardware-accelerated SHA3 hashing via the CSU engine
         * Added support for enabling JTAG at runtime when `CSU_DEBUG` is set
-        * Introduced support for the device’s PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
+        * Introduced support for the device's PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
     * Renesas RX
         * Added option for TSIP hardware crypto engine
     * Infineon TriCore (AURIX TC3xx)
@@ -725,7 +772,7 @@ Use `make keysclean` to delete keys and regenerate.
     * Added support for x509 auth with wolfHSM in server mode
     * Added support for encrypted updates on Renesas RX (also via TSIP)
     * Added support for assembly optimizations for PowerPC 32bit (SHA, AES)
-    * STM32F4: new clock configuration to support all models, added support for STM32F411 
+    * STM32F4: new clock configuration to support all models, added support for STM32F411
   * Bugfixes:
     * Fixed unaligned access in Cortex-A5
     * Fixed compile flags to properly run code from RAM on ARM

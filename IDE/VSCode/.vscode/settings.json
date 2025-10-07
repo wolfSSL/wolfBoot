@@ -1,0 +1,10 @@
+{
+  "cmake.useCMakePresets": "always",
+  "cmake.buildDirectory": "${workspaceFolder}/build-${buildPresetName}",
+  "cmake.configureOnOpen": true,
+  "cmake.generator": "Ninja",
+  "cmake.loggingLevel": "info",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "files.encoding": "utf8",
+  "files.eol": "\n"
+}

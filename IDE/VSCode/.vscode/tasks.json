@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: Configure (linux-stm32l4)",
+      "command": "cmake",
+      "args": [ "--preset", "linux-stm32l4" ],
+      "options": { "cwd": "${workspaceFolder:wolfBoot}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: Build (linux-stm32l4)",
+      "command": "cmake",
+      "args": [ "--build", "--preset", "linux-stm32l4" ],
+      "options": { "cwd": "${workspaceFolder:wolfBoot}" },
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "OpenOCD: Flash wolfBoot (linux-stm32l4)",
+      "type": "shell",
+      "command": "openocd",
+      "args": [
+        "-f",
+        "interface/stlink-dap.cfg",
+        "-f",
+        "target/stm32l4x.cfg",
+        "-c",
+        "program ${workspaceFolder:wolfBoot}/build-linux-stm32l4/wolfboot.elf verify reset exit"
+      ],
+      "options": { "cwd": "${workspaceFolder:wolfBoot}" },
+      "problemMatcher": []
+    }
+  ]
+}

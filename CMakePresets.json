@@ -1,0 +1,132 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build-${presetName}"
+    },
+    {
+      "name": "windows-stm32h7",
+      "displayName": "Windows ARM (STM32H7)",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "WOLFBOOT_TARGET": "stm32h7",
+        "BUILD_TEST_APPS": "yes"
+      }
+    },
+    {
+      "name": "vs-debug-trace",
+      "displayName": "VS Debug Trace (STM32H7)",
+      "inherits": [
+        "linux-stm32h7"
+      ],
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_VERBOSE_MAKEFILE": "ON",
+        "CMAKE_FIND_DEBUG_MODE": "ON"
+      }
+    },
+    {
+      "name": "linux-stm32h7",
+      "inherits": [ "base" ],
+      "displayName": "Linux/WSL ARM (stm32h7)",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "ARCH": "ARM",
+        "WOLFBOOT_TARGET": "stm32h7",
+        "SIGN": "ECC256",
+        "HASH": "SHA256",
+        "DEBUG": "OFF",
+        "DEBUG_UART": "OFF",
+        "VTOR": "ON",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "QSPI_FLASH": "OFF",
+        "OCTOSPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "OFF",
+        "WOLFBOOT_VERSION": "ON",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "WOLFBOOT_PARTITION_SIZE": "0xD0000",
+        "WOLFBOOT_SECTOR_SIZE": "0x20000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x8020000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x80F0000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x81C0000",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    },
+    {
+      "name": "linux-stm32l4",
+      "inherits": [ "base" ],
+      "displayName": "Linux/WSL ARM (stm32l4)",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "VISUALGDB": "ON",
+        "VISUALGDB_BASE": "/mnt/c/Users/$env{USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx",
+        "CMAKE_C_STANDARD_INCLUDE_DIRECTORIES": "/mnt/c/Users/$env{USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc",
+        "WOLFBOOT_TARGET": "stm32l4",
+        "STM32L4_PART": "STM32L475xx",
+        "BOARD": "B-L475E-IOT01A",
+        "ARCH": "ARM",
+        "SIGN": "ECC256",
+        "HASH": "SHA256",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "OFF",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "IMAGE_HEADER_SIZE": "256",
+        "WOLFBOOT_SECTOR_SIZE": "0x1000",
+        "WOLFBOOT_PARTITION_SIZE": "0x7A000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x0800A000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08084000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x080FE000",
+        "WOLFTPM": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-stm32h7",
+      "configurePreset": "windows-stm32h7",
+      "jobs": 0
+    },
+    {
+      "name": "vs-debug-trace",
+      "configurePreset": "vs-debug-trace",
+      "jobs": 0
+    },
+    {
+      "name": "linux-stm32h7",
+      "configurePreset": "linux-stm32h7",
+      "jobs": 0
+    },
+    {
+      "name": "linux-stm32l4",
+      "configurePreset": "linux-stm32l4",
+      "jobs": 0
+    }
+  ]
+}
