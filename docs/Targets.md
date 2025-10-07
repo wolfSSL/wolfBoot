@@ -914,8 +914,8 @@ The example configuration for this scenario is available in [/config/examples/st
 
 `STM32_Programmer_CLI -c port=swd -ob TZEN=0xB4`
 
-- set the option bytes to enable flash secure protection of first 384KB:
-`STM32_Programmer_CLI -c port=swd -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x2F SECWM2_PEND=0x0 SECWM2_PSTRT=0x2F`
+- set the option bytes to enable flash secure protection of first 384KB and remainder as non-secure:
+`STM32_Programmer_CLI -c port=swd -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x2F SECWM2_PSTRT=0x2F SECWM2_PEND=0x0`
 
 - flash the wolfboot image to the secure partition:
 `STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000`
@@ -983,6 +983,7 @@ Reboot the board to initiate an update via DUALBANK hw-assisted swap.
 Any version except the first one will also turn on the orange LED.
 
 ### STM32H5 Debugging
+
 
 OpenOCD: `openocd -s /usr/local/share/openocd/scripts -f board/st_nucleo_h5.cfg`
 
