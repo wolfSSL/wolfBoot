@@ -18,6 +18,7 @@ jobs:
 
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +30,7 @@ jobs:
 
       - name: Update repository
         run: sudo apt-get update
-      
+
       - name: Install dependencies
         run: |
           sudo apt-get install -y build-essential curl
