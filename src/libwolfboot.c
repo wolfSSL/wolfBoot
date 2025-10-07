@@ -200,7 +200,7 @@ static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
 static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
 {
-    return *(base - off); /* ignore array bounds error */
+    return *(uint8_t*)((uintptr_t)base - off); /* ignore array bounds error */
 }
 
 void WEAKFUNCTION hal_cache_invalidate(void)
