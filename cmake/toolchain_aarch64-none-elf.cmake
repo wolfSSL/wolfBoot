@@ -35,10 +35,10 @@ set(MARCH_FLAGS "-march=armv8-a")
 set(TOOLCHAIN aarch64-none-elf)
 set(CMAKE_CXX_STANDARD 20)
 
-execute_process(
-    COMMAND which ${TOOLCHAIN}-gcc
-    OUTPUT_VARIABLE TOOLCHAIN_GCC_PATH
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+find_program(TOOLCHAIN_GCC_PATH
+  NAMES ${TOOLCHAIN}-gcc
+  HINTS $ENV{PATH}
+)
 
 # get toolchain version. CMAKE_C_COMPILER_VERSION cannot be used here since its not defined until
 # `project()` is run in the top-level cmake. The toolchain has to be setup before the `project` call
