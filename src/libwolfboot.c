@@ -1999,3 +1999,40 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 }
 #endif /* MMU */
 #endif /* EXT_ENCRYPTED */
+
+#if defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
+__attribute__((cmse_nonsecure_entry))
+void wolfBoot_nsc_success(void)
+{
+    wolfBoot_success();
+}
+
+__attribute__((cmse_nonsecure_entry))
+void wolfBoot_nsc_update_trigger(void)
+{
+    wolfBoot_update_trigger();
+}
+
+__attribute__((cmse_nonsecure_entry))
+int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
+{
+    if (address > WOLFBOOT_PARTITION_SIZE)
+        return -1;
+    if (address + len > WOLFBOOT_PARTITION_SIZE)
+        return -1;
+    return hal_flash_erase(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, len);
+
+}
+
+__attribute__((cmse_nonsecure_entry))
+int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len)
+{
+    if (address > WOLFBOOT_PARTITION_SIZE)
+        return -1;
+    if (address + len > WOLFBOOT_PARTITION_SIZE)
+        return -1;
+    return hal_flash_write(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len);
+}
+
+#endif
+
