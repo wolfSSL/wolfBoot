@@ -255,3 +255,15 @@ lib/r_tsip_rx
 Debug/
 Release/
 language.settings.xml
+
+# Backup files
+*.bak
+
+# Any Visual Studio / VisualGDB
+/**/.vs
+/**/.visualgdb/*
+
+# Any build directories
+/**/build
+/**/build-**
+
