@@ -36,7 +36,11 @@ jobs:
           path: CMSIS_5
 
       - name: Workaround for sources.list
-        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
+        run: |
+            # workaround disabled, splitting the load between azure and arizona.edu to avoid timeouts
+
+            # See reference code in test-build.yml for various sources that may be updated. Enable as needed here.
+            echo "Workaround for sources.list disabled for this workflow"
 
       - name: Update repository
         run: sudo apt-get update
