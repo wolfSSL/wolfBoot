@@ -45,12 +45,16 @@ ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
-  CFLAGS+=-Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -nostartfiles
+  CFLAGS+=-Wall -ffreestanding -Wno-unused
+  # Stack usage computation not supported on TriCore
+  ifneq ($(ARCH),AURIX_TC3)
+    CFLAGS+=-Wstack-usage=1024 -nostartfiles
+  endif
   CFLAGS+=-DTARGET_$(TARGET) -I../include
   CFLAGS+=-g
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
-  else
+  else ifneq ($(ARCH),AURIX_TC3)
     CFLAGS+=-gstabs
   endif
 
@@ -462,6 +466,35 @@ endif
 
 CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
 
+ifeq ($(TARGET),aurix_tc3xx)
+  # Add BSP objects (same as in arch.mk for wolfBoot)
+  APP_OBJS += $(TC3_DIR)/src/tc3_clock.o \
+              $(TC3_DIR)/src/tc3_flash.o \
+              $(TC3_DIR)/src/tc3_gpio.o \
+              $(TC3_DIR)/src/tc3_uart.o \
+              $(TC3_DIR)/src/tc3.o
+
+  ifeq ($(AURIX_TC3_HSM),1)
+    APP_OBJS += $(TC3_DIR)/src/tc3arm_crt.o \
+                $(TC3_DIR)/src/tc3arm.o
+	# Use TC3 Arm app linker script
+    LSCRIPT_TEMPLATE = tc3arm_app.ld
+  else
+    APP_OBJS += $(TC3_DIR)/src/tc3tc_isr.o \
+                $(TC3_DIR)/src/tc3tc_traps.o \
+                $(TC3_DIR)/src/tc3tc.o \
+                $(TC3_DIR)/src/tc3tc_crt.o
+	# Use TC3 app linker script
+    LSCRIPT_TEMPLATE = tc3tc_app.ld
+  endif
+
+
+  ifeq ($(WOLFHSM_SERVER),1)
+    APP_OBJS += $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+    APP_OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o
+  endif
+endif
+
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
@@ -536,10 +569,23 @@ $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_SIZE) > .partition-size
 	$(Q)printf "%d" $(IMAGE_HEADER_SIZE) > .header-size
+ifeq ($(ELF_FLASH_SCATTER),1)
+# Optionally set the base address for the test-app linker MEMORY{} region if the
+# HAL allows for it to be specified in the config via WOLFBOOT_ELF_EXEC_ADDRESS
+ifdef WOLFBOOT_ELF_EXEC_ADDRESS
+	# For ELF scatter mode, use execution space address directly (with no header offset)
+	$(Q)printf "%d" $(WOLFBOOT_ELF_EXEC_ADDRESS) > .entry-point
+	$(Q)printf "0x%X" `cat .entry-point` > .entry-point
+	$(Q)printf "%d" $(WOLFBOOT_ELF_EXEC_SIZE) > .app-size
+	$(Q)printf "0x%X" `cat .app-size` > .app-size
+endif
+else
+	# Standard mode: boot partition address + header offset
 	$(Q)expr `cat .wolfboot-offset` + `cat .header-size` > .entry-point
 	$(Q)printf "0x%X" `cat .entry-point` > .entry-point
 	$(Q)expr `cat .partition-size` - `cat .header-size` > .app-size
 	$(Q)printf "0x%X" `cat .app-size` > .app-size
+endif
 	$(Q)cat $(LSCRIPT_TEMPLATE) | \
 		sed -e "s/@WOLFBOOT_TEST_APP_SIZE@/`cat .app-size`/g" | \
 		sed -e "s/@WOLFBOOT_TEST_APP_ADDRESS@/`cat .entry-point`/g" | \

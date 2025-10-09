@@ -43,7 +43,14 @@ endif
 ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
 else
-  PRIVATE_KEY=wolfboot_signing_private_key.der
+  # Key selection logic:
+  # - Without CERT_CHAIN_GEN: Single key (wolfboot_signing_private_key.der) signs everything
+  # - With CERT_CHAIN_GEN: Generate cert chain, use leaf key (test-dummy-ca/leaf-prvkey.der) for signing
+  ifneq ($(CERT_CHAIN_GEN),)
+    PRIVATE_KEY=test-dummy-ca/leaf-prvkey.der
+  else
+    PRIVATE_KEY=wolfboot_signing_private_key.der
+  endif
   ifeq ($(FLASH_OTP_KEYSTORE),1)
     OBJS+=./src/flash_otp_keystore.o
   else
@@ -106,6 +113,11 @@ ifeq ($(USE_GCC_HEADLESS),1)
 endif
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
+endif
+ifeq ($(ARCH),AURIX_TC3)
+  ifneq ($(USE_GCC_HEADLESS),1)
+    LSCRIPT_FLAGS+=-T $(LSCRIPT)
+  endif
 endif
 
 # Environment variables for sign tool
@@ -222,7 +234,7 @@ wolfboot.bin: wolfboot.elf
 	@echo
 
 test-app/image.bin: wolfboot.elf
-	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)"
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)"
 	$(Q)$(SIZE) test-app/image.elf
 
 standalone:
@@ -244,12 +256,21 @@ hal/$(TARGET).o:
 
 keytools_check: keytools
 
-$(PRIVATE_KEY):
+# Generate the initial signing key
+# - Always creates wolfboot_signing_private_key.der
+# - If CERT_CHAIN_GEN is set, also generates cert chain with leaf key
+wolfboot_signing_private_key.der:
 	$(Q)$(MAKE) keytools_check
-	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g $(PRIVATE_KEY)) || true
+	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g wolfboot_signing_private_key.der) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
-	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(CERT_CHAIN_GEN)" = "") || (tools/scripts/sim-gen-dummy-chain.sh --algo $(CERT_CHAIN_GEN_ALGO) --leaf $(PRIVATE_KEY))
+	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(CERT_CHAIN_GEN)" = "") || (tools/scripts/sim-gen-dummy-chain.sh --algo $(CERT_CHAIN_GEN_ALGO) --leaf wolfboot_signing_private_key.der)
+
+# CERT_CHAIN_GEN only: Ensure leaf key exists after cert chain generation
+ifneq ($(CERT_CHAIN_GEN),)
+$(PRIVATE_KEY): wolfboot_signing_private_key.der
+	@test -f $(PRIVATE_KEY) || (echo "Error: $(PRIVATE_KEY) not found" && exit 1)
+endif
 
 $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
 	$(Q)$(MAKE) keytools_check
@@ -280,6 +301,26 @@ swtpmtools: include/target.h
 	@$(MAKE) -C tools/tpm -s clean
 	@$(MAKE) -C tools/tpm -j swtpm
 
+# Generate NVM image if either WOLFHSM_CLIENT or WOLFHSM_SERVER
+ifeq ($(WOLFHSM_CLIENT),1)
+    _DO_WH_NVMTOOL:=1
+endif
+ifeq ($(WOLFHSM_SERVER),1)
+    _DO_WH_NVMTOOL:=1
+endif
+ifeq ($(_DO_WH_NVMTOOL),1)
+whnvmtool:
+	@echo "Building wolfHSM NVM tool"
+	@$(MAKE) -C $(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool
+
+nvm-image: $(PRIVATE_KEY) whnvmtool
+	@echo "Generating wolfHSM NVM image"
+	$(Q)$(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool/whnvmtool --image=$(WH_NVM_BIN) --size=$(WH_NVM_PART_SIZE) --invert-erased-byte $(NVM_CONFIG)
+	@echo "Converting NVM image to Intel HEX format"
+	$(Q)$(OBJCOPY) -I binary -O ihex --change-address $(WH_NVM_BASE_ADDRESS) $(WH_NVM_BIN) $(WH_NVM_HEX)
+	@echo "NVM images generated: $(WH_NVM_BIN) and $(WH_NVM_HEX)"
+endif
+
 test-app/image_v1_signed.bin: $(BOOT_IMG)
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
@@ -291,7 +332,7 @@ test-app/image_v1_signed.bin: $(BOOT_IMG)
 	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
 
 test-app/image.elf: wolfboot.elf
-	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" image.elf
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" image.elf
 	$(Q)$(SIZE) test-app/image.elf
 
 ifeq ($(ELF_FLASH_SCATTER),1)
@@ -310,7 +351,13 @@ internal_flash.dd: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-a
 	$(Q)dd if=/dev/zero bs=1 count=$$(($(WOLFBOOT_SECTOR_SIZE))) > /tmp/swap
 	make assemble_internal_flash.dd
 
+ifeq ($(WOLFHSM_CLIENT),1)
+factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin nvm-image
+else ifeq ($(WOLFHSM_SERVER),1)
+factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin nvm-image
+else
 factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
+endif
 	@echo "\t[MERGE] $@"
 	$(Q)$(BINASSEMBLE) $@ \
 		$(WOLFBOOT_ORIGIN) wolfboot.bin \
@@ -391,6 +438,7 @@ clean:
 	$(Q)rm -f $(OBJS)
 	$(Q)rm -f tools/keytools/otp/otp-keystore-gen
 	$(Q)rm -f .stack_usage
+	$(Q)rm -f $(WH_NVM_BIN) $(WH_NVM_HEX)
 	$(Q)$(MAKE) -C test-app -s clean
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
@@ -406,6 +454,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/test-update-server -s clean
 	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
 	$(Q)$(MAKE) -C tools/unit-tests -s clean
+	$(Q)if [ "$(WOLFHSM_CLIENT)" = "1" ]; then $(MAKE) -C lib/wolfHSM/tools/whnvmtool -s clean; fi
 	$(Q)$(MAKE) -C tools/keytools/otp -s clean
 	$(Q)$(MAKE) -C tools/squashelf -s clean
 
