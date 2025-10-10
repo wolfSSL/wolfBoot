@@ -6,12 +6,12 @@
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
-CFLAGS+=-I. -I..
 ifeq ($(TZEN),1)
   # wcs directory contains a user_settings.h, which will conflict with
   # the one in the include directory if the test app needs it (e.g. wolfHSM)
   CFLAGS+=-I./wcs
 endif
+CFLAGS+=-I. -I..
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
 USE_GCC?=1

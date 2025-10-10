@@ -60,8 +60,9 @@
 extern uint32_t _flash_keyvault;
 extern uint32_t _flash_keyvault_size;
 
-static uint8_t *vault_base = (uint8_t*)&_flash_keyvault;
-static uint32_t vault_size = (uint32_t)&_flash_keyvault_size;
+#define vault_base ((uint8_t*)&_flash_keyvault)
+#define vault_size ((uint32_t)&_flash_keyvault_size)
+
 
 /* Back-end for malloc, used by wolfPKCS11 */
 extern unsigned int _start_heap; /* From linker script: heap memory */

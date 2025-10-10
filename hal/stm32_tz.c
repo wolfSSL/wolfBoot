@@ -291,7 +291,7 @@ void hal_tz_sau_init(void)
     /* SAU is set up before staging. Set up all areas as secure. */
 
     /* Non-secure callable: NSC functions area */
-    sau_init_region(0, 0x0C038000, 0x0C040000, 1);
+    sau_init_region(0, 0x0C040000, 0x0C05FFFF, 1);
 
     /* Secure: application flash area (first bank) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, FLASH_BANK2_BASE - 1, 0);
