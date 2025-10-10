@@ -136,6 +136,7 @@ int hal_hsm_server_cleanup(void);
 /* Force longcall on printf functions (called from panic) */
 void uart_printf(const char* fmt, ...) TC3_LONGCALL;
 void uart_vprintf(const char* fmt, va_list argp) TC3_LONGCALL;
+void wolfBoot_panic(void) TC3_LONGCALL;
 #endif
 
 /* RAM buffer to hold the contents of an entire flash sector*/
@@ -300,14 +301,12 @@ void hal_init(void)
 
 #ifdef DEBUG_UART
     uart_init();
-
 #ifndef WOLFBOOT_AURIX_TC3XX_HSM
-    char hello_string[] = "Hello from TC3xx wolfBoot on Tricore\n";
+    wolfBoot_printf("Hello from TC3xx wolfBoot on Tricore\n");
 #else
-    char hello_string[] = "Hello from TC3xx wolfBoot on HSM\n";
+    wolfBoot_printf("Hello from TC3xx wolfBoot on HSM\n");
 #endif
-    uart_write(hello_string, sizeof(hello_string) - 1);
-#endif
+#endif /* DEBUG_UART */
 }
 
 /* This function is called by the bootloader at a very late stage, before
@@ -322,6 +321,10 @@ void hal_prepare_boot(void)
 #endif /* WOLFBOOT_AURIX_GPIO_TIMING */
 
 #ifdef DEBUG_UART
+    /* One final printf so we can block on transmit completion. Prevents reset
+     * before last byte is transmitted */
+    wolfBoot_printf("hal_prepare_boot\n");
+    tc3_uart_BlockOnTC(board_uart);
     tc3_uart_Cleanup(board_uart);
 #endif
 
