@@ -158,4 +158,14 @@ int uart_rx(uint8_t *c, int len)
     return 0;
 }
 
+#ifdef DEBUG_UART
+void uart_write(const char *buf, unsigned int len)
+{
+    while (len--) {
+        uart_tx(*buf);
+        buf++;
+    }
+}
+#endif
+
 #endif /* TARGET_stm32l5 */

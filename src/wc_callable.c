@@ -29,20 +29,18 @@
 #include "hal.h"
 #include <stdint.h>
 
+static WC_RNG wcs_rng;
+
 int __attribute__((cmse_nonsecure_entry))
 wcs_get_random(uint8_t *rand, uint32_t size)
 {
-    int ret;
-    WC_RNG wcs_rng;
-    wc_InitRng(&wcs_rng);
-    ret = wc_RNG_GenerateBlock(&wcs_rng, rand, size);
-    wc_FreeRng(&wcs_rng);
-    return ret;
+    return wc_RNG_GenerateBlock(&wcs_rng, rand, size);
 }
 
 void wcs_Init(void)
 {
     hal_trng_init();
+    wc_InitRng(&wcs_rng);
 }
 
 #endif

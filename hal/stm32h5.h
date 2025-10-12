@@ -22,6 +22,9 @@
 
 #ifndef STM32H5_DEF_INCLUDED
 #define STM32H5_DEF_INCLUDED
+
+#define PERIPH_CLOCK_FREQ (64000000)
+
 /* Assembly helpers */
 #ifndef DMB
 #define DMB() __asm__ volatile ("dmb")
@@ -343,6 +346,25 @@
 #define GPIOG_BASE 0x42021800
 #endif
 
+#define GPIOB_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
+#define GPIOB_OTYPE (*(volatile uint32_t *)(GPIOB_BASE + 0x04))
+#define GPIOB_OSPD  (*(volatile uint32_t *)(GPIOB_BASE + 0x08))
+#define GPIOB_PUPD  (*(volatile uint32_t *)(GPIOB_BASE + 0x0c))
+#define GPIOB_ODR   (*(volatile uint32_t *)(GPIOB_BASE + 0x14))
+#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
+#define GPIOB_AFL   (*(volatile uint32_t *)(GPIOB_BASE + 0x20))
+#define GPIOB_AFH   (*(volatile uint32_t *)(GPIOB_BASE + 0x24))
+
+#define GPIOD_MODE  (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
+#define GPIOD_OTYPE (*(volatile uint32_t *)(GPIOD_BASE + 0x04))
+#define GPIOD_OSPD  (*(volatile uint32_t *)(GPIOD_BASE + 0x08))
+#define GPIOD_PUPD  (*(volatile uint32_t *)(GPIOD_BASE + 0x0c))
+#define GPIOD_ODR   (*(volatile uint32_t *)(GPIOD_BASE + 0x14))
+#define GPIOD_BSRR  (*(volatile uint32_t *)(GPIOD_BASE + 0x18))
+#define GPIOD_AFL   (*(volatile uint32_t *)(GPIOD_BASE + 0x20))
+#define GPIOD_AFH   (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
+
+
 /* RCC AHB2 Clock Enable Register */
 #define RCC_AHB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
 #define GPIOA_AHB2_CLOCK_ER (1 << 0)
@@ -364,7 +386,13 @@
 #define RCC_APB1L_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x9C))
 #define UART3_APB1L_CLOCK_ER_VAL (1 << 18)
 
-/* UART1 */
+#define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
+
+#define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
+#define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
+
+
+/* UART */
 #if (TZ_SECURE())
 #define UART1 (0x54002400) /* Using LPUART1 */
 #define UART3 (0x50005800) /* Using USART3 */
@@ -373,25 +401,25 @@
 #define UART3 (0x40004800)
 #endif
 
-#define UART1_CR1      (*(volatile uint32_t *)(UART1 + 0x00))
-#define UART1_CR2      (*(volatile uint32_t *)(UART1 + 0x04))
-#define UART1_CR3      (*(volatile uint32_t *)(UART1 + 0x08))
-#define UART1_BRR      (*(volatile uint32_t *)(UART1 + 0x0c))
-#define UART1_ISR      (*(volatile uint32_t *)(UART1 + 0x1c))
-#define UART1_ICR      (*(volatile uint32_t *)(UART1 + 0x20))
-#define UART1_RDR      (*(volatile uint32_t *)(UART1 + 0x24))
-#define UART1_TDR      (*(volatile uint32_t *)(UART1 + 0x28))
-#define UART1_PRE      (*(volatile uint32_t *)(UART1 + 0x2C))
+/* USE_UART1
+ * Set to 0 for VCP over USB
+ * Set to 1 for Arduino D0, D1 pins on nucleo
+ */
+#if defined(USE_UART1) && USE_UART1 == 1
+#define USE_UART UART1
+#else
+#define USE_UART UART3
+#endif
 
-#define UART3_CR1      (*(volatile uint32_t *)(UART3 + 0x00))
-#define UART3_CR2      (*(volatile uint32_t *)(UART3 + 0x04))
-#define UART3_CR3      (*(volatile uint32_t *)(UART3 + 0x08))
-#define UART3_BRR      (*(volatile uint32_t *)(UART3 + 0x0c))
-#define UART3_ISR      (*(volatile uint32_t *)(UART3 + 0x1c))
-#define UART3_ICR      (*(volatile uint32_t *)(UART3 + 0x20))
-#define UART3_RDR      (*(volatile uint32_t *)(UART3 + 0x24))
-#define UART3_TDR      (*(volatile uint32_t *)(UART3 + 0x28))
-#define UART3_PRE      (*(volatile uint32_t *)(UART3 + 0x2C))
+#define UART_CR1(base) (*(volatile uint32_t *)((base) + 0x00))
+#define UART_CR2(base) (*(volatile uint32_t *)((base) + 0x04))
+#define UART_CR3(base) (*(volatile uint32_t *)((base) + 0x08))
+#define UART_BRR(base) (*(volatile uint32_t *)((base) + 0x0c))
+#define UART_ISR(base) (*(volatile uint32_t *)((base) + 0x1c))
+#define UART_ICR(base) (*(volatile uint32_t *)((base) + 0x20))
+#define UART_RDR(base) (*(volatile uint32_t *)((base) + 0x24))
+#define UART_TDR(base) (*(volatile uint32_t *)((base) + 0x28))
+#define UART_PRE(base) (*(volatile uint32_t *)((base) + 0x2C))
 
 #define UART_CR1_UART_ENABLE    (1 << 0)
 #define UART_CR1_OVER8          (1 << 15)
@@ -413,7 +441,6 @@
 #define UART_EFE                (1 << 1)    /* Framing error */
 #define UART_ENE                (1 << 2)    /* Noise error */
 #define UART_ORE                (1 << 3)    /* Overrun error */
-
 
 
 /* OTP FLASH AREA */

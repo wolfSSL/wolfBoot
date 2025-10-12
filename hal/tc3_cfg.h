@@ -1,6 +1,6 @@
-/* Cpu2_Main.c
+/* tc3_cfg.h
  *
- * Copyright (C) 2014-2024 wolfSSL Inc.
+ * Copyright (C) 2014-2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -17,26 +17,17 @@
  * You should have received a copy of the GNU General Public License
  * along with wolfBoot.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "Ifx_Types.h"
-#include "IfxCpu.h"
-#include "IfxScuWdt.h"
+#ifndef TC3_CFG_H
+#define TC3_CFG_H
 
-extern IfxCpu_syncEvent g_cpuSyncEvent;
+#if defined(WOLFBOOT_AURIX_TC3XX_HSM)
+#define TC3_CFG_HAVE_ARM
+#else
+#define TC3_CFG_HAVE_TRICORE
+#endif
 
-void core2_main(void)
-{
-    IfxCpu_enableInterrupts();
+#define TC3_CFG_HAVE_BOARD
+#define TC3_BOARD_TC375LITEKIT 1
+#define TC3_CFG_HAVE_WOLFBOOT
 
-    /* !!WATCHDOG2 IS DISABLED HERE!!
-     * Enable the watchdog and service it periodically if it is required
-     */
-    IfxScuWdt_disableCpuWatchdog(IfxScuWdt_getCpuWatchdogPassword());
-
-    /* Wait for CPU sync event */
-    IfxCpu_emitEvent(&g_cpuSyncEvent);
-    IfxCpu_waitEvent(&g_cpuSyncEvent, 1);
-
-    while(1)
-    {
-    }
-}
+#endif /* TC3_CFG_H */

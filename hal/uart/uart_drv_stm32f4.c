@@ -109,8 +109,8 @@ static void uart_pins_setup(void)
     GPIO_MODE = reg | (2 << (UART_TX_PIN * 2));
 
     /* The alternate function register is split across two 32bit
-     * registers (AFL, AFH). AFL covers pins 0 through 7, and 
-     * AFH covers pins 8 through 15. The code below determines 
+     * registers (AFL, AFH). AFL covers pins 0 through 7, and
+     * AFH covers pins 8 through 15. The code below determines
      * which register to use at compile time based on the chosen
      * pin number
     */
@@ -198,5 +198,15 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     UART_CR1 |= UART_CR1_UART_ENABLE;
     return 0;
 }
+
+#ifdef DEBUG_UART
+void uart_write(const char *buf, unsigned int len)
+{
+    while (len--) {
+        uart_tx(*buf);
+        buf++;
+    }
+}
+#endif
 
 #endif /* TARGET_stm32f4 */

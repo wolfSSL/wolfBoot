@@ -704,18 +704,18 @@ void isr_usart3(void)
 {
     volatile uint32_t reg;
     usr_led_on();
-    reg = UART3_ISR;
+    reg = UART_ISR(UART3);
     if (reg & UART_ISR_RX_NOTEMPTY) {
         if (uart_rx_bytes >= 1023)
-            reg = UART3_RDR;
+            reg = UART_RDR(UART3);
         else
-            uart_buf_rx[uart_rx_bytes++] = (unsigned char)(UART3_RDR & 0xFF);
+            uart_buf_rx[uart_rx_bytes++] = (unsigned char)(UART_RDR(UART3) & 0xFF);
     }
 }
 
 static int uart_rx_isr(unsigned char *c, int len)
 {
-    UART3_CR1 &= ~UART_ISR_RX_NOTEMPTY;
+    UART_CR1(UART3) &= ~UART_ISR_RX_NOTEMPTY;
     if (len > (uart_rx_bytes - uart_processed))
         len = (uart_rx_bytes - uart_processed);
     if (len > 0) {
@@ -727,7 +727,7 @@ static int uart_rx_isr(unsigned char *c, int len)
             usr_led_off();
         }
     }
-    UART3_CR1 |= UART_ISR_RX_NOTEMPTY;
+    UART_CR1(UART3) |= UART_ISR_RX_NOTEMPTY;
     return len;
 }
 
@@ -750,14 +750,12 @@ void main(void)
 
     app_version = wolfBoot_current_firmware_version();
 
-
     nvic_irq_setprio(NVIC_USART3_IRQN, 0);
     nvic_irq_enable(NVIC_USART3_IRQN);
 
     uart_init(115200, 8, 'N', 1);
-    UART3_CR1 |= UART_ISR_RX_NOTEMPTY;
-    UART3_CR3 |= UART_CR3_RXFTIE;
-
+    UART_CR1(UART3) |= UART_ISR_RX_NOTEMPTY;
+    UART_CR3(UART3) |= UART_CR3_RXFTIE;
 
     printf("========================\r\n");
     printf("STM32H5 wolfBoot demo Application\r\n");
@@ -767,7 +765,6 @@ void main(void)
     printf("========================\r\n");
 
     console_loop();
-
 
     while(1)
         ;

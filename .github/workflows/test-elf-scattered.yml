@@ -9,6 +9,7 @@ on:
 jobs:
   elf_scattered_test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4

@@ -155,7 +155,7 @@ reboot : reboot the system
   - Sign a new version of the firmware: `./tools/keytools/sign --lms test-app/image.bin wolfboot_signing_private_key.der 2`
   - Run "update" command on the shell and wait for xmodem transfer
   - Use serial terminal that supports xmodem like "minicom" or "CoolTerm".
-    * Run `minicom` on `/dev/ttyACM0` and start file transfer using "CTRL+A; S"
+    * Run `minicom` on `/dev/ttyACM0` and start file transfer using "CTRL+A; S" -> `minicom -D /dev/ttyACM0 -b 115200`
     * Select xmodem then navigate to the new signed firmware file `test-app/image_v2_signed.bin`
   - During the transfer, the yellow LED will flash.
   - The green LED is dim because it's sync with the UART RX

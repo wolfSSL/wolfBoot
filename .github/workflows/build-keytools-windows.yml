@@ -10,6 +10,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 15
 
     steps:
     # Step 1: Checkout the repository

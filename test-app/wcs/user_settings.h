@@ -136,7 +136,13 @@ extern int tolower(int c);
 #define BENCH_EMBEDDED
 
 #ifdef SECURE_PKCS11
-#define CUSTOM_RAND_GENERATE_BLOCK wcs_get_random
+
+static inline int wcs_cmse_get_random(unsigned char* output, int sz)
+{
+    return wcs_get_random(output, sz);
+}
+
+#define CUSTOM_RAND_GENERATE_BLOCK wcs_cmse_get_random
 #endif
 
 /* Disable VLAs */
