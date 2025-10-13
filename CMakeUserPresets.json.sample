@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "my-arm-bin",
+      "inherits": "windows-stm32l4",
+      "cacheVariables": {
+        "ARM_GCC_BIN": "C:/Tools/arm-none-eabi-14.2/bin"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "my-arm-bin",
+      "configurePreset": "my-arm-bin"
+    }
+  ]
+}

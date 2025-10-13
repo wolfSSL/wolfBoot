@@ -1,4 +1,4 @@
-# toolchain_arm-none-eabi.cmake
+# wolfboot/cmake/toolchain_arm-none-eabi.cmake
 #
 # Copyright (C) 2022 wolfSSL Inc.
 #
@@ -21,9 +21,16 @@
 
 set(CMAKE_SYSTEM_NAME Generic)
 
+# Keep try-compile from attempting to run target binaries
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES ARM_GCC_BIN WOLFBOOT_TARGET)
+
 # There needs to be a default platform or the `project()` command will fail.
 if(NOT DEFINED WOLFBOOT_TARGET)
-    set(WOLFBOOT_TARGET "stm32h7")
+    message(STATUS "Select a target, e.g. 'cmake --preset linux-stm32l4'")
+    message(FATAL_ERROR "WOLFBOOT_TARGET not set")
+    # set(WOLFBOOT_TARGET "stm32h7")
 endif()
 
 # Cortex-M CPU
@@ -36,37 +43,86 @@ elseif(WOLFBOOT_TARGET STREQUAL "stm32u5")
 elseif(WOLFBOOT_TARGET STREQUAL "stm32h7")
     set(CMAKE_SYSTEM_PROCESSOR cortex-m7)
     set(MCPU_FLAGS "-mcpu=cortex-m7 -mthumb -mlittle-endian -mthumb-interwork")
+elseif(WOLFBOOT_TARGET STREQUAL "stm32l4")
+    set(CMAKE_SYSTEM_PROCESSOR cortex-m4)
+    # L4 has FPU (single-precision). Let the toolchain pick the right libs.
+    set(MCPU_FLAGS "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
 else()
     set(CMAKE_SYSTEM_PROCESSOR cortex-m3)
     set(MCPU_FLAGS "-mcpu=cortex-m3 -mthumb -mlittle-endian -mthumb-interwork ")
 endif()
 
-# -----------------------------------------------------------------------------
-# Set toolchain paths
-# -----------------------------------------------------------------------------
-set(TOOLCHAIN arm-none-eabi)
-set(CMAKE_CXX_STANDARD 20)
+# ----- Select compilers (works on WSL/Linux and Windows) -----
+# Optional: allow an explicit bin dir
+set(ARM_GCC_BIN "" CACHE PATH "Path to Arm GNU Toolchai       'bin' directory")
 
+if(WIN32)
+    if(ARM_GCC_BIN)
+        file(TO_CMAKE_PATH "${ARM_GCC_BIN}" _BIN)
+        set(CMAKE_C_COMPILER   "${_BIN}/arm-none-eabi-gcc.exe"   CACHE FILEPATH "" FORCE)
+        set(CMAKE_CXX_COMPILER "${_BIN}/arm-none-eabi-g++.exe"   CACHE FILEPATH "" FORCE)
+        set(CMAKE_ASM_COMPILER "${_BIN}/arm-none-eabi-gcc.exe"   CACHE FILEPATH "" FORCE)
+    else()
+        # Try PATH
+        find_program(CMAKE_C_COMPILER   NAMES arm-none-eabi-gcc.exe)
+        find_program(CMAKE_CXX_COMPILER NAMES arm-none-eabi-g++.exe)
+        set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "" FORCE)
+    endif()
+else()
+    if(ARM_GCC_BIN)
+        file(TO_CMAKE_PATH "${ARM_GCC_BIN}" _BIN)
+        set(CMAKE_C_COMPILER   "${_BIN}/arm-none-eabi-gcc" CACHE FILEPATH "" FORCE)
+        set(CMAKE_CXX_COMPILER "${_BIN}/arm-none-eabi-g++" CACHE FILEPATH "" FORCE)
+        set(CMAKE_ASM_COMPILER "${_BIN}/arm-none-eabi-gcc" CACHE FILEPATH "" FORCE)
+    else()
+        find_program(CMAKE_C_COMPILER   NAMES arm-none-eabi-gcc)
+        find_program(CMAKE_CXX_COMPILER NAMES arm-none-eabi-g++)
+        set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "" FORCE)
+    endif()
+endif()
+
+# Use the compiler's own include dir (Homebrew GCC may have no sysroot)
 execute_process(
-    COMMAND which ${TOOLCHAIN}-gcc
-    OUTPUT_VARIABLE TOOLCHAIN_GCC_PATH
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    COMMAND ${CMAKE_C_COMPILER} -print-file-name=include
+    OUTPUT_VARIABLE GCC_INCLUDE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(GCC_INCLUDE_DIR AND EXISTS "${GCC_INCLUDE_DIR}")
+    include_directories(SYSTEM "${GCC_INCLUDE_DIR}")
+endif()
 
 # get toolchain version. CMAKE_C_COMPILER_VERSION cannot be used here since its not defined until
 # `project()` is run in the top-level cmake. The toolchain has to be setup before the `project` call
 execute_process(
-    COMMAND ${TOOLCHAIN}-gcc -dumpversion
-    OUTPUT_VARIABLE TOOLCHAIN_GCC_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    COMMAND ${CMAKE_C_COMPILER} -print-sysroot
+    OUTPUT_VARIABLE GCC_SYSROOT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(GCC_SYSROOT)
+    set(CMAKE_SYSROOT "${GCC_SYSROOT}")
+endif()
 
-get_filename_component(TOOLCHAIN_BIN_DIR ${TOOLCHAIN_GCC_PATH} DIRECTORY)
-get_filename_component(TOOLCHAIN_ROOT_DIR "${TOOLCHAIN_BIN_DIR}/../" DIRECTORY ABSOLUTE)
-set(CMAKE_SYSROOT ${TOOLCHAIN_ROOT_DIR}/${TOOLCHAIN})
 
+# Some sanity checks on compiler and target OS
+if(NOT CMAKE_C_COMPILER OR NOT CMAKE_CXX_COMPILER)
+    if("${TARGET_OS}" STREQUAL "")
+        message(STATUS "Warning: cmake presets should define TARGET_OS = [WINDOWS | LINUX]")
+    endif()
+    if(WIN32)
+        if("${TARGET_OS}" STREQUAL "LINUX")
+            message(FATAL_ERROR "Linux presets are not supported in Windows. Choose a different preset.")
+        endif()
+    else()
+        if("${TARGET_OS}" STREQUAL "Windows")
+            message(FATAL_ERROR "Windows presets are only supported on Windows. Choose a different preset.")
+        endif()
+    endif()
+    message(FATAL_ERROR "arm-none-eabi toolchain not found. Set ARM_GCC_BIN or add to PATH.")
+endif()
 
-# -----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 # Set compiler/linker flags
-#-----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 set(OBJECT_GEN_FLAGS
     "${MCPU_FLAGS} -Wall -Wextra -Wno-main -ffreestanding -Wno-unused -ffunction-sections -fdata-sections"
 )
@@ -76,19 +132,27 @@ set(CMAKE_C_FLAGS   "${OBJECT_GEN_FLAGS}" CACHE INTERNAL "C Compiler options")
 set(CMAKE_ASM_FLAGS "${OBJECT_GEN_FLAGS}" CACHE INTERNAL "ASM Compiler options")
 set(CMAKE_EXE_LINKER_FLAGS "${MCPU_FLAGS} ${LD_FLAGS} -Wl,--gc-sections --specs=nano.specs --specs=nosys.specs" CACHE INTERNAL "Linker options")
 
-#---------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 # Set compilers and toolchain utilities
-#---------------------------------------------------------------------------------------
-set(CMAKE_C_COMPILER    ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-gcc       CACHE INTERNAL "C Compiler")
-set(CMAKE_CXX_COMPILER  ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-g++       CACHE INTERNAL "C++ Compiler")
-set(CMAKE_ASM_COMPILER  ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-gcc       CACHE INTERNAL "ASM Compiler")
-set(TOOLCHAIN_LD        ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-ld        CACHE INTERNAL "Toolchain linker")
-set(TOOLCHAIN_AR        ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-gcc-ar    CACHE INTERNAL "Toolchain archive tool")
-set(TOOLCHAIN_OBJCOPY   ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-objcopy   CACHE INTERNAL "Toolchain objcopy tool")
-set(TOOLCHAIN_OBJDUMP   ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-objdump   CACHE INTERNAL "Toolchain objdump tool")
-set(TOOLCHAIN_SIZE      ${TOOLCHAIN_BIN_DIR}/${TOOLCHAIN}-size      CACHE INTERNAL "Toolchain object size tool")
+#---------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
+# Derive toolchain helper paths from the chosen compiler
+#---------------------------------------------------------------------------------------------
+get_filename_component(_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+if(WIN32)
+    set(_EXE ".exe")
+else()
+    set(_EXE "")
+endif()
 
-set(CMAKE_FIND_ROOT_PATH ${TOOLCHAIN_PREFIX}/${${TOOLCHAIN}} ${CMAKE_PREFIX_PATH})
+
+set(TOOLCHAIN_AR      "${_BIN_DIR}/arm-none-eabi-ar${_EXE}"      CACHE INTERNAL "")
+set(TOOLCHAIN_OBJCOPY "${_BIN_DIR}/arm-none-eabi-objcopy${_EXE}" CACHE INTERNAL "")
+set(TOOLCHAIN_OBJDUMP "${_BIN_DIR}/arm-none-eabi-objdump${_EXE}" CACHE INTERNAL "")
+set(TOOLCHAIN_SIZE    "${_BIN_DIR}/arm-none-eabi-size${_EXE}"    CACHE INTERNAL "")
+
+
+# set(CMAKE_FIND_ROOT_PATH ${TOOLCHAIN_PREFIX}/${${TOOLCHAIN}} ${CMAKE_PREFIX_PATH})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
@@ -98,7 +162,7 @@ message(STATUS "Cross-compiling using GNU arm-none-eabi toolchain")
 
 # Options for DEBUG build
 # -Og   Enables optimizations that do not interfere with debugging.
-# -g    Produce debugging information in the operating system’s native format.
+# -g    Produce debugging information in the operating system's native format.
 set(CMAKE_C_FLAGS_DEBUG         "-Og -g"    CACHE INTERNAL "C Compiler options for debug build type")
 set(CMAKE_CXX_FLAGS_DEBUG       "-Og -g"    CACHE INTERNAL "C++ Compiler options for debug build type")
 set(CMAKE_ASM_FLAGS_DEBUG       "-g"        CACHE INTERNAL "ASM Compiler options for debug build type")

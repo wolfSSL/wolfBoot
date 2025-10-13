@@ -1,0 +1,77 @@
+name: WolfBoot CMake Build (macOS)
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  macos-cmake:
+    name: Build on macOS (CMake + Ninja)
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"    # avoid updating taps during install
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_CURL_RETRIES: "6"      # ask curl inside brew to retry
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Cache Homebrew bottles # downloads (so retries don’t redownload)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /Users/runner/Library/Caches/Homebrew
+          key: homebrew-${{ runner.os }}-mac14-cmake-gcc-newlib
+          restore-keys: |
+            homebrew-${{ runner.os }}-
+
+      - name: Install toolchain and build tools
+        run: |
+          # Install with step throttle to hopefully avoid stuck jobs
+
+          set -euxo pipefail
+
+          throttle_delay=5
+          brew update
+
+          sleep "$throttle_delay"
+          brew install --force-bottle cmake
+
+          sleep "$throttle_delay"
+          brew install --force-bottle ninja
+
+          sleep "$throttle_delay"
+          brew install --force-bottle arm-none-eabi-gcc
+
+      - name: Probe GCC sysroot (headers check)
+        run: |
+          set -euxo pipefail
+          SYSROOT="$(arm-none-eabi-gcc -print-sysroot)"
+          echo "GCC sysroot: $SYSROOT"
+          test -f "$SYSROOT/include/stdlib.h" || { echo "Missing stdlib.h in $SYSROOT/include"; exit 1; }
+          test -f "$SYSROOT/include/string.h" || { echo "Missing string.h in $SYSROOT/include"; exit 1; }
+
+      - name: Configure (STM32L4)
+        run: |
+          echo "Disabled, missing params"
+          # rm -rf build
+          # cmake -B build -G Ninja         \
+          #   -DWOLFBOOT_CONFIG_MODE=preset \
+          #   -DWOLFBOOT_TARGET=stm32l4     \
+          #   -DBUILD_TEST_APPS=ON          \
+          #   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain_arm-none-eabi.cmake
+
+      - name: Presets
+        run: |
+          rm -rf ./build-mac-stm32l4
+
+          cmake --preset mac-stm32l4
+          cmake --build --preset mac-stm32l4

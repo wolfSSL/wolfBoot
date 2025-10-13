@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "STM32L4 - OpenOCD",
+      "type": "cortex-debug",
+      "request": "launch",
+       "servertype": "openocd",
+      "cwd": "${workspaceFolder:wolfBoot}",
+      "executable": "${workspaceFolder:wolfBoot}/build-linux-stm32l4/wolfboot.elf",
+      "device": "STM32L475VG",
+      "configFiles": [
+        "interface/stlink-dap.cfg",
+        "target/stm32l4x.cfg"
+      ],
+      "runToMain": true,
+      "svdFile": "${workspaceFolder:wolfBoot}/hal/stm32l4/STM32L4x.svd",
+    }
+  ]
+}

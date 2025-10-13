@@ -1,5 +1,10 @@
 {
   "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -7,14 +12,56 @@
       "binaryDir": "${sourceDir}/build-${presetName}"
     },
     {
+      "name": "_template-os-target",
+      "displayName": "_sample - target - template",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-windows-stm32l4",
+      "environment": {
+        "PATH": "$penv{LOCALAPPDATA}/Microsoft/WinGet/Links;C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "ENV_REMINDER": "use env for cache, penv elsewhere",
+        "TARGET_OS": "WINDOWS",
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "VISUALGDB": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "WOLFBOOT_TARGET": "stm32l4"
+      }
+    },
+    {
       "name": "windows-stm32h7",
       "displayName": "Windows ARM (STM32H7)",
       "generator": "Ninja",
       "cacheVariables": {
+        "TARGET_OS": "WINDOWS",
         "WOLFBOOT_CONFIG_MODE": "preset",
         "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
         "WOLFBOOT_TARGET": "stm32h7",
-        "BUILD_TEST_APPS": "yes"
+        "BUILD_TEST_APPS": "yes",
+        "ARCH": "ARM",
+        "SIGN": "ECC256",
+        "HASH": "SHA256",
+        "DEBUG": "OFF",
+        "DEBUG_UART": "OFF",
+        "VTOR": "ON",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "QSPI_FLASH": "OFF",
+        "OCTOSPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "OFF",
+        "WOLFBOOT_VERSION": "ON",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "WOLFBOOT_PARTITION_SIZE": "0xD0000",
+        "WOLFBOOT_SECTOR_SIZE": "0x20000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x8020000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x80F0000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x81C0000"
       }
     },
     {
@@ -37,6 +84,7 @@
       "displayName": "Linux/WSL ARM (stm32h7)",
       "generator": "Ninja",
       "cacheVariables": {
+        "TARGET_OS": "LINUX",
         "WOLFBOOT_CONFIG_MODE": "preset",
         "ARCH": "ARM",
         "WOLFBOOT_TARGET": "stm32h7",
@@ -72,10 +120,11 @@
       "displayName": "Linux/WSL ARM (stm32l4)",
       "generator": "Ninja",
       "cacheVariables": {
+        "TARGET_OS": "LINUX",
         "WOLFBOOT_CONFIG_MODE": "preset",
         "VISUALGDB": "ON",
-        "VISUALGDB_BASE": "/mnt/c/Users/$env{USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx",
-        "CMAKE_C_STANDARD_INCLUDE_DIRECTORIES": "/mnt/c/Users/$env{USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc",
+        "VISUALGDB_BASE": "/mnt/c/Users/$penv{USERNAME}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx",
+        "CMAKE_C_STANDARD_INCLUDE_DIRECTORIES": "/mnt/c/Users/$penv{USERNAME}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc",
         "WOLFBOOT_TARGET": "stm32l4",
         "STM32L4_PART": "STM32L475xx",
         "BOARD": "B-L475E-IOT01A",
@@ -105,28 +154,182 @@
         "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
         "BUILD_TEST_APPS": "ON"
       }
+    },
+    {
+      "name": "mac-stm32l4",
+      "displayName": "macOS ARM (STM32L4)",
+      "inherits": [ "base" ],
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-mac-stm32l4",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "WOLFBOOT_TARGET": "stm32l4",
+        "STM32L4_PART": "STM32L475xx",
+        "BOARD": "B-L475E-IOT01A",
+        "ARCH": "ARM",
+        "SIGN": "ECC256",
+        "HASH": "SHA256",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "OFF",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "IMAGE_HEADER_SIZE": "256",
+        "WOLFBOOT_SECTOR_SIZE": "0x1000",
+        "WOLFBOOT_PARTITION_SIZE": "0x7A000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x0800A000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08084000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x080FE000",
+        "WOLFTPM": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    },
+    {
+      "name": "stm32l4",
+      "displayName": "macOS ARM (STM32L4)",
+      "inherits": [ "base" ],
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-stm32l4",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "WOLFBOOT_TARGET": "stm32l4",
+        "STM32L4_PART": "STM32L475xx",
+        "BOARD": "B-L475E-IOT01A",
+        "ARCH": "ARM",
+        "SIGN": "ECC256",
+        "HASH": "SHA256",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "OFF",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "IMAGE_HEADER_SIZE": "256",
+        "WOLFBOOT_SECTOR_SIZE": "0x1000",
+        "WOLFBOOT_PARTITION_SIZE": "0x7A000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x0800A000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08084000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x080FE000",
+        "WOLFTPM": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    },
+    {
+      "name": "windows-stm32l4",
+      "inherits": [ "base" ],
+      "displayName": "Windows - STM32L4 - Ninja",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-windows-stm32l4",
+      "environment": {
+        "WindowsSdkDir": "C:/Program Files (x86)/Windows Kits/10",
+        "WindowsSdkVer": "10.0.26100.0",
+        "VCToolsInstallDir_DISABLED": "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207",
+        "INCLUDE_DISABLED": "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/include;C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/ucrt;C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/um;C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/shared;$penv{INCLUDE}",
+        "LIB_DISABLED": "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/lib/x64;C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/ucrt/x64;C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64;$penv{LIB}",
+        "PATH": "$penv{LOCALAPPDATA}/Microsoft/WinGet/Links;C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "TARGET_OS": "WINDOWS",
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "VISUALGDB": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "CMAKE_C_STANDARD_INCLUDE_DIRECTORIES": "c:/Users/$penv{USERNAME}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc",
+        "WOLFBOOT_TARGET": "stm32l4",
+        "STM32L4_PART": "STM32L475xx",
+        "BOARD": "B-L475E-IOT01A",
+        "ARCH": "ARM",
+        "SIGN": "ECC256",
+        "HASH": "SHA256",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "OFF",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "IMAGE_HEADER_SIZE": "256",
+        "WOLFBOOT_SECTOR_SIZE": "0x1000",
+        "WOLFBOOT_PARTITION_SIZE": "0x7A000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x0800A000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08084000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x080FE000",
+        "WOLFTPM": "OFF",
+        "BUILD_TEST_APPS": "ON"
+      }
     }
   ],
   "buildPresets": [
     {
-      "name": "windows-stm32h7",
-      "configurePreset": "windows-stm32h7",
-      "jobs": 0
-    },
-    {
       "name": "vs-debug-trace",
       "configurePreset": "vs-debug-trace",
-      "jobs": 0
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
     },
     {
       "name": "linux-stm32h7",
       "configurePreset": "linux-stm32h7",
-      "jobs": 0
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
     },
     {
       "name": "linux-stm32l4",
       "configurePreset": "linux-stm32l4",
-      "jobs": 0
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
+    },
+    {
+      "name": "windows-stm32h7",
+      "configurePreset": "windows-stm32h7",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
+    },
+    {
+      "name": "windows-stm32l4",
+      "configurePreset": "windows-stm32l4",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
+    },
+    {
+      "name": "mac-stm32l4",
+      "configurePreset": "mac-stm32l4",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
+    },
+    {
+      "name": "stm32l4",
+      "configurePreset": "stm32l4",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [ "all" ]
     }
   ]
 }

@@ -58,7 +58,7 @@ else
   endif
 endif
 
-WOLFCRYPT_OBJS:=
+WOLFCRYPT_OBJS?=
 SECURE_OBJS:=
 PUBLIC_KEY_OBJS:=
 WOLFHSM_OBJS:=
@@ -146,6 +146,8 @@ else
   OBJS+=$(WOLFCRYPT_OBJS)
 endif
 # ============================================================================
+
+-include .config
 
 $(info WOLFCRYPT_OBJS=$(WOLFCRYPT_OBJS))
 $(info MATH_OBJS=$(MATH_OBJS))
