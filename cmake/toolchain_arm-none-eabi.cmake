@@ -34,6 +34,7 @@ if(NOT DEFINED WOLFBOOT_TARGET)
 endif()
 
 # Cortex-M CPU
+# TODO move to presets
 if(WOLFBOOT_TARGET STREQUAL "stm32l0")
     set(CMAKE_SYSTEM_PROCESSOR cortex-m0)
     set(MCPU_FLAGS "-mcpu=cortex-m0 -mthumb -mlittle-endian -mthumb-interwork ")
@@ -56,7 +57,7 @@ endif()
 # Optional: allow an explicit bin dir
 set(ARM_GCC_BIN "" CACHE PATH "Path to Arm GNU Toolchai       'bin' directory")
 
-if(WIN32)
+if(CMAKE_HOST_WIN32)
     if(ARM_GCC_BIN)
         file(TO_CMAKE_PATH "${ARM_GCC_BIN}" _BIN)
         set(CMAKE_C_COMPILER   "${_BIN}/arm-none-eabi-gcc.exe"   CACHE FILEPATH "" FORCE)
@@ -64,8 +65,21 @@ if(WIN32)
         set(CMAKE_ASM_COMPILER "${_BIN}/arm-none-eabi-gcc.exe"   CACHE FILEPATH "" FORCE)
     else()
         # Try PATH
-        find_program(CMAKE_C_COMPILER   NAMES arm-none-eabi-gcc.exe)
-        find_program(CMAKE_CXX_COMPILER NAMES arm-none-eabi-g++.exe)
+        find_program(CMAKE_C_COMPILER   NAMES arm-none-eabi-gcc.exe
+                     HINTS
+                           "C:/Program Files/Ninja"
+                           "C:/SysGCC/arm-eabi/bin"
+                           "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
+                           "C:/ST/STM32CubeIDE_1.14.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.11.3.rel1.win32_1.1.100.202309141235/tools/bin"
+                    )
+        find_program(CMAKE_CXX_COMPILER NAMES arm-none-eabi-g++.exe
+                     HINTS
+                           "C:/Program Files/Ninja"
+                           "C:/SysGCC/arm-eabi/bin"
+                           "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin"
+                           "C:/ST/STM32CubeIDE_1.14.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.11.3.rel1.win32_1.1.100.202309141235/tools/bin"
+                    )
+
         set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "" FORCE)
     endif()
 else()
@@ -75,6 +89,7 @@ else()
         set(CMAKE_CXX_COMPILER "${_BIN}/arm-none-eabi-g++" CACHE FILEPATH "" FORCE)
         set(CMAKE_ASM_COMPILER "${_BIN}/arm-none-eabi-gcc" CACHE FILEPATH "" FORCE)
     else()
+        # Assume Mac / Linux is in path. No hints.
         find_program(CMAKE_C_COMPILER   NAMES arm-none-eabi-gcc)
         find_program(CMAKE_CXX_COMPILER NAMES arm-none-eabi-g++)
         set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "" FORCE)
@@ -104,11 +119,12 @@ endif()
 
 
 # Some sanity checks on compiler and target OS
+# TODO remove OS specific presets
 if(NOT CMAKE_C_COMPILER OR NOT CMAKE_CXX_COMPILER)
     if("${TARGET_OS}" STREQUAL "")
         message(STATUS "Warning: cmake presets should define TARGET_OS = [WINDOWS | LINUX]")
     endif()
-    if(WIN32)
+    if(CMAKE_HOST_WIN32)
         if("${TARGET_OS}" STREQUAL "LINUX")
             message(FATAL_ERROR "Linux presets are not supported in Windows. Choose a different preset.")
         endif()
@@ -139,7 +155,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${MCPU_FLAGS} ${LD_FLAGS} -Wl,--gc-sections --specs=
 # Derive toolchain helper paths from the chosen compiler
 #---------------------------------------------------------------------------------------------
 get_filename_component(_BIN_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
-if(WIN32)
+if(CMAKE_HOST_WIN32)
     set(_EXE ".exe")
 else()
     set(_EXE "")

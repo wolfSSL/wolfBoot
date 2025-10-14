@@ -62,3 +62,19 @@ function(print_env VAR)
         message(STATUS "${VAR} = (not set)")
     endif()
 endfunction()
+
+# Sets <var_name> to <value_expr>.
+# If <value_expr> points to an existing directory, prints a STATUS message.
+function(set_and_echo_dir var_name value_expr)
+    set(_val "${value_expr}")
+    # Export to caller's scope
+    set(${var_name} "${_val}" PARENT_SCOPE)
+
+    if(IS_DIRECTORY "${_val}")
+        message(STATUS "set ${var_name}; Found directory: ${_val}")
+    else()
+        message(STATUS "set ${var_name}; Directory not found: ${_val}")
+    endif()
+endfunction()
+
+set(functions_cmake_loaded true)

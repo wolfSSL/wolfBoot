@@ -195,7 +195,7 @@
     },
     {
       "name": "stm32l4",
-      "displayName": "macOS ARM (STM32L4)",
+      "displayName": "STM32L4",
       "inherits": [ "base" ],
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-stm32l4",

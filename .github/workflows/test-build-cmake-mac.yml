@@ -23,7 +23,7 @@ jobs:
         with:
           submodules: true
 
-      - name: Cache Homebrew bottles # downloads (so retries don’t redownload)
+      - name: Cache Homebrew bottles # downloads (so retries don't redownload)
         uses: actions/cache@v4
         with:
           path: |
@@ -48,16 +48,30 @@ jobs:
           sleep "$throttle_delay"
           brew install --force-bottle ninja
 
+          # Use cask to include headers such as <stdlib.h>
           sleep "$throttle_delay"
-          brew install --force-bottle arm-none-eabi-gcc
+          brew install --cask gcc-arm-embedded
 
-      - name: Probe GCC sysroot (headers check)
+      - name: Probe ARM GCC (paths + smoke build)
         run: |
           set -euxo pipefail
-          SYSROOT="$(arm-none-eabi-gcc -print-sysroot)"
-          echo "GCC sysroot: $SYSROOT"
-          test -f "$SYSROOT/include/stdlib.h" || { echo "Missing stdlib.h in $SYSROOT/include"; exit 1; }
-          test -f "$SYSROOT/include/string.h" || { echo "Missing string.h in $SYSROOT/include"; exit 1; }
+
+          which arm-none-eabi-gcc
+          arm-none-eabi-gcc --version
+
+          echo "=== GCC search dirs ==="
+          arm-none-eabi-gcc -print-search-dirs
+
+          echo "=== GCC verbose include paths (preprocess only) ==="
+          # This prints the built-in include search order; harmless with empty stdin.
+          arm-none-eabi-gcc -x c -E -v - < /dev/null || true
+
+          echo "=== Compile a freestanding object (no stdlib headers needed) ==="
+          cat > hello.c <<'EOF'
+          int main(void) { return 0; }
+          EOF
+          arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -ffreestanding -nostdlib -c hello.c -o hello.o
+          ls -l hello.o
 
       - name: Configure (STM32L4)
         run: |
@@ -71,7 +85,7 @@ jobs:
 
       - name: Presets
         run: |
-          rm -rf ./build-mac-stm32l4
+          rm -rf ./build-stm32l4
 
-          cmake --preset mac-stm32l4
-          cmake --build --preset mac-stm32l4
+          cmake --preset stm32l4
+          cmake --build --preset stm32l4

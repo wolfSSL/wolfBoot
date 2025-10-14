@@ -32,6 +32,7 @@
 cmake_minimum_required(VERSION 3.16)
 include(cmake/config_defaults.cmake)
 
+
 # ------------------------------------------------------------------------------
 # Initial environment checks
 # ------------------------------------------------------------------------------
@@ -44,6 +45,7 @@ if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
      You must delete them, or cmake will refuse to work.")
 endif()
 
+# This must appear before project(wolfBoot)
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     if(DEFINED WOLFBOOT_TARGET AND
             NOT WOLFBOOT_TARGET STREQUAL "x86_64_efi" AND
@@ -54,12 +56,25 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     endif()
 endif()
 
+
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 project(wolfBoot)
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 include(cmake/functions.cmake)
+
+# include(cmake/cube_ide_config.cmake)
+
+# Some OS-specific checks and configs
+if(CMAKE_HOST_WIN32)
+    include(cmake/vs2022_config.cmake)
+endif()
+
+if(WOLFBOOT_TARGET STREQUAL "stm32l4" AND NOT FOUND_STM32L4_LIB)
+    include(cmake/stm32_hal_download.cmake)
+endif()
+
 
 # set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES "" CACHE STRING "" FORCE)
 
@@ -900,6 +915,7 @@ target_sources(wolfboothal PRIVATE include/hal.h hal/${WOLFBOOT_TARGET}.c ${WOLF
 
 
 # --- HAL for STM32L4 (only the pieces we need) ---
+# TODO move this to preset and/or cmake dir
 if(WOLFBOOT_TARGET STREQUAL "stm32l4")
     if(CMAKE_HOST_WIN32 AND IS_DIRECTORY "${LIB_STM32L4_WINDOWS}" )
         message(STATUS "Win32 Path found: ${LIB_STM32L4_WINDOWS}")
@@ -907,17 +923,29 @@ if(WOLFBOOT_TARGET STREQUAL "stm32l4")
     elseif(IS_DIRECTORY "${LIB_STM32L4_WSL}")
         message(STATUS "WSL Path found: ${LIB_STM32L4_WSL}")
         set(HAL_BASE "${LIB_STM32L4_WSL}")
-    else()
-        message(STATUS "STM32L4 Path not found")
-        set(HAL_BASE "")
     endif()
 
-    if(true)
-
-        set(HAL_DRV  "${HAL_BASE}/STM32L4xx_HAL_Driver")
-        set(HAL_CMSIS_DEV "${HAL_BASE}/CMSIS_HAL/Device/ST/STM32L4xx/Include")
-        set(HAL_CMSIS_CORE "${HAL_BASE}/CMSIS_HAL/Include")
-        set(HAL_TEMPLATE_INC "${HAL_BASE}/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc")
+    # HAL_BASE "C:/Users/${CURRENT_USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx"
+    #
+#1> [CMake] -- Found directory: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/Drivers/STM32L4xx_HAL_Driver (set HAL_DRV)
+#1> [CMake] -- Directory not found: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/CMSIS_HAL/Device/ST/STM32L4xx/Include (set HAL_CMSIS_DEV)
+#1> [CMake] -- Directory not found: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/CMSIS_HAL/Include (set HAL_CMSIS_CORE)
+#1> [CMake] -- Found directory: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/Projects/B-L475E-IOT01A/Templates/Inc (set HAL_TEMPLATE_INC)
+#1> [CMake] -- HAL_DRV=C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/Drivers/STM32L4xx_HAL_Driver
+    if(NOT HAL_BASE STREQUAL "")
+        if(false)
+            # VisualGDB
+            set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
+            set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/CMSIS_HAL/Device/ST/STM32L4xx/Include")
+            set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/CMSIS_HAL/Include")
+            set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc")
+        else()
+            # CubeIDE
+            # set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
+            # set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/Drivers/CMSIS/Device/ST/STM32L4xx/Include")
+            # set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/Drivers/CMSIS/Include")
+            # set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/Projects/B-L475E-IOT01A/Templates/Inc")
+        endif()
     endif()
 
     message(STATUS "HAL_DRV=${HAL_DRV}")
