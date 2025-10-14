@@ -1109,7 +1109,12 @@ ifeq ($(ARCH),sim)
   USE_GCC_HEADLESS=0
   LD = gcc
   ifneq ($(TARGET),library)
+  ifneq ($(TARGET),library_fs)
     UPDATE_OBJS:=src/update_flash.o
+  endif
+  endif
+  ifeq ($(TARGET),library_fs)
+    UPDATE_OBJS += hal/filesystem.o
   endif
   LD_START_GROUP=
   LD_END_GROUP=
@@ -1325,6 +1330,14 @@ ifeq ($(TARGET),library)
   WOLFBOOT_NO_PARTITIONS=1
   NO_LOADER=1
 endif
+
+ifeq ($(TARGET),library_fs)
+  EXT_FLASH=1
+  # Force all partitions to be marked as external
+  NO_XIP=1
+  NO_SWAP_EXT=
+endif
+
 
 ## Set default update object
 ifneq ($(WOLFBOOT_NO_PARTITIONS),1)
