@@ -214,6 +214,10 @@ test-lib: libwolfboot.a hal/library.o
 	@echo "\t[BIN] $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ hal/library.o libwolfboot.a
 
+lib-fs: libwolfboot.a hal/library.o
+	@echo "\t[BIN] $@"
+	$(Q)$(CC) $(CFLAGS) -o hal/library.o libwolfboot.a
+
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) -j .rodata -j .text -j .sdata -j .data \

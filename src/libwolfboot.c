@@ -408,7 +408,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
     return;
 }
 
-#else
+#elif !defined(WOLFBOOT_PARTITION_FILENAME)
 
 /**
  * @brief Get the trailer at a specific address
@@ -548,8 +548,114 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 #endif /* !MOCK_PARTITION_TRAILER */
 
 
+#ifdef WOLFBOOT_PARTITION_FILENAME
 
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifndef WOLFBOOT_FIXED_PARTITIONS
+#error Using WOLFBOOT_PARTITION_FILENAME requires WOLFBOOT_FIXED_PARTITIONS
+#endif
+
+static void set_partition_state_fs(uint8_t st, uint8_t part)
+{
+    const char* fileName = WOLFBOOT_PARTITION_FILENAME;
+    XFILE partFile = XBADFILE;
+    union {
+        uint32_t num;
+        byte buf[sizeof(uint32_t)];
+    } magic;
+    long offset;
+
+    if (part == PART_BOOT)
+        offset = PART_BOOT_ENDFLAGS;
+    else if (part == PART_UPDATE)
+        offset = PART_UPDATE_ENDFLAGS;
+    else
+        return;
+
+    partFile = XFOPEN(fileName, "r+b");
+    if (partFile == XBADFILE)
+        goto cleanup;
+
+    if (XFSEEK(partFile, offset - sizeof(uint32_t), XSEEK_SET) != 0)
+        goto cleanup;
+
+    if (XFREAD(magic.buf, 1, sizeof(magic.buf), partFile) != sizeof(magic.buf))
+        goto cleanup;
+
+    if (magic.num != WOLFBOOT_MAGIC_TRAIL) {
+        magic.num = WOLFBOOT_MAGIC_TRAIL;
+        if (XFSEEK(partFile, offset - sizeof(uint32_t), XSEEK_SET) != 0)
+            goto cleanup;
+        if (XFWRITE(magic.buf, 1, sizeof(magic.buf), partFile) !=
+                sizeof(magic.buf))
+            goto cleanup;
+    }
+
+    if (XFSEEK(partFile, offset - sizeof(uint32_t) - 1, XSEEK_SET) != 0)
+        goto cleanup;
+
+    if (XFWRITE(&st, 1, sizeof(st), partFile) != sizeof(st))
+        goto cleanup;
+
+cleanup:
+    if (partFile != XBADFILE)
+        XFCLOSE(partFile);
+}
+
+void RAMFUNCTION wolfBoot_update_trigger(void)
+{
+    set_partition_state_fs(IMG_STATE_UPDATING, PART_UPDATE);
+}
+
+void RAMFUNCTION wolfBoot_success(void)
+{
+    set_partition_state_fs(IMG_STATE_SUCCESS, PART_BOOT);
+}
+
+int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
+{
+    const char* fileName = WOLFBOOT_PARTITION_FILENAME;
+    XFILE partFile = XBADFILE;
+    union {
+        uint32_t num;
+        byte buf[sizeof(uint32_t)];
+    } magic;
+    long offset;
+    int ret = -1;
+
+    if (part == PART_BOOT)
+        offset = PART_BOOT_ENDFLAGS;
+    else if (part == PART_UPDATE)
+        offset = PART_UPDATE_ENDFLAGS;
+    else
+        return -1;
+
+    partFile = XFOPEN(fileName, "rb");
+    if (partFile == XBADFILE)
+        goto cleanup;
+
+    if (XFSEEK(partFile, offset - sizeof(uint32_t), XSEEK_SET) != 0)
+        goto cleanup;
+
+    if (XFREAD(magic.buf, 1, sizeof(magic.buf), partFile) != sizeof(magic.buf))
+        goto cleanup;
+
+    if (magic.num != WOLFBOOT_MAGIC_TRAIL)
+        goto cleanup;
+
+    if (XFSEEK(partFile, offset - sizeof(uint32_t) - 1, XSEEK_SET) != 0)
+        goto cleanup;
+
+    if (XFREAD(st, 1, sizeof(*st), partFile) != sizeof(*st))
+        goto cleanup;
+
+    ret = 0;
+cleanup:
+    if (partFile != XBADFILE)
+        XFCLOSE(partFile);
+    return ret;
+}
+
+#elif defined(WOLFBOOT_FIXED_PARTITIONS) /* WOLFBOOT_PARTITION_FILENAME */
 /**
  * @brief Get the magic trailer of a partition.
  *
