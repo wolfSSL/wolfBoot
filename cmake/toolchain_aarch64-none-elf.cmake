@@ -1,6 +1,6 @@
 # toolchain_aarch64-none-elf.cmake
 #
-# Copyright (C) 2022 wolfSSL Inc.
+# Copyright (C) 2025 wolfSSL Inc.
 #
 # This file is part of wolfBoot.
 #

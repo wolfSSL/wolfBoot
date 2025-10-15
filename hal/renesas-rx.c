@@ -3,7 +3,7 @@
  * Stubs for custom HAL implementation. Defines the
  * functions used by wolfBoot for a specific target.
  *
- * Copyright (C) 2022 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

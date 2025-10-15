@@ -3,7 +3,7 @@
  * Configuration for wolfBoot TPM tools.
  * Enabled via WOLFSSL_USER_SETTINGS.
  *
- * Copyright (C) 2023 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

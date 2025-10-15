@@ -2,7 +2,7 @@
  *
  * Bring up, vectors and do_boot for 32bit Cortex-A microprocessors.
  *
- * Copyright (C) 2024 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
