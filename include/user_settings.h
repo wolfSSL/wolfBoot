@@ -474,6 +474,7 @@ extern int tolower(int c);
 #define NO_PKCS12
 #define NO_PKCS8
 #define NO_CHECK_PRIVATE_KEY
+#define NO_KDF
 
 #define BENCH_EMBEDDED
 #define NO_CRYPT_TEST

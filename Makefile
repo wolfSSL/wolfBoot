@@ -440,7 +440,7 @@ clean:
 	$(Q)rm -f tools/keytools/otp/otp-keystore-gen
 	$(Q)rm -f .stack_usage
 	$(Q)rm -f $(WH_NVM_BIN) $(WH_NVM_HEX)
-	$(Q)$(MAKE) -C test-app -s clean
+	$(Q)$(MAKE) -C test-app clean V=$(V)
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
 

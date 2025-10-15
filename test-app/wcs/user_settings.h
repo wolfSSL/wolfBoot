@@ -132,6 +132,7 @@ extern int tolower(int c);
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
+#define NO_KDF
 
 #define BENCH_EMBEDDED
 
