@@ -161,7 +161,11 @@ endif
 
 ifeq ($(TARGET),library)
     CFLAGS+=-g
-    MAIN_TARGET:=libwolfboot.a
+    MAIN_TARGET:=test-lib
+endif
+
+ifeq ($(TARGET),library_fs)
+    MAIN_TARGET:=lib-fs
 endif
 
 ifeq ($(TARGET),raspi3)
@@ -214,9 +218,9 @@ test-lib: libwolfboot.a hal/library.o
 	@echo "\t[BIN] $@"
 	$(Q)$(CC) $(CFLAGS) -o $@ hal/library.o libwolfboot.a
 
-lib-fs: libwolfboot.a hal/library.o
+lib-fs: libwolfboot.a hal/library_fs.o
 	@echo "\t[BIN] $@"
-	$(Q)$(CC) $(CFLAGS) -o hal/library.o libwolfboot.a
+	$(Q)$(CC) $(CFLAGS) -o $@ hal/library_fs.o libwolfboot.a
 
 wolfboot.efi: wolfboot.elf
 	@echo "\t[BIN] $@"
@@ -444,6 +448,8 @@ clean:
 	$(Q)rm -f tools/keytools/otp/otp-keystore-gen
 	$(Q)rm -f .stack_usage
 	$(Q)rm -f $(WH_NVM_BIN) $(WH_NVM_HEX)
+	$(Q)rm -f test-lib
+	$(Q)rm -f lib-fs
 	$(Q)$(MAKE) -C test-app clean V=$(V)
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean
