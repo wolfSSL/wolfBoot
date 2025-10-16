@@ -18,6 +18,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED TOOLCHAIN_ARM_NONE_EABI_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
 
 set(CMAKE_SYSTEM_NAME Generic)
 
@@ -28,7 +37,7 @@ set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES ARM_GCC_BIN WOLFBOOT_TARGET)
 
 # There needs to be a default platform or the `project()` command will fail.
 if(NOT DEFINED WOLFBOOT_TARGET)
-    message(STATUS "Select a target, e.g. 'cmake --preset linux-stm32l4'")
+    message(STATUS "Select a target, e.g. 'cmake --preset stm32l4'")
     message(FATAL_ERROR "WOLFBOOT_TARGET not set")
     # set(WOLFBOOT_TARGET "stm32h7")
 endif()
@@ -204,3 +213,5 @@ set(CMAKE_C_FLAGS_MINSIZEREL   "-Os -DNDEBUG -flto -Wl,-flto"     CACHE INTERNAL
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -DNDEBUG -flto -Wl,-flto"     CACHE INTERNAL "C++ Compiler options for minimum size release build type")
 set(CMAKE_ASM_FLAGS_MINSIZEREL ""        CACHE INTERNAL "ASM Compiler options for minimum size release build type")
 set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "-flto -Wl,-flto" CACHE INTERNAL "Linker options for minimum size release build type")
+
+set(TOOLCHAIN_ARM_NONE_EABI_CMAKE_INCLUDED true)

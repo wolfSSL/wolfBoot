@@ -7,7 +7,7 @@
       "request": "launch",
        "servertype": "openocd",
       "cwd": "${workspaceFolder:wolfBoot}",
-      "executable": "${workspaceFolder:wolfBoot}/build-linux-stm32l4/wolfboot.elf",
+      "executable": "${workspaceFolder:wolfBoot}/build-stm32l4/wolfboot.elf",
       "device": "STM32L475VG",
       "configFiles": [
         "interface/stlink-dap.cfg",

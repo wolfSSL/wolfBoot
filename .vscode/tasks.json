@@ -2,22 +2,22 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "CMake: Configure (linux-stm32l4)",
+      "label": "CMake: Configure (stm32l4)",
       "command": "cmake",
-      "args": [ "--preset", "linux-stm32l4" ],
+      "args": [ "--preset", "stm32l4" ],
       "options": { "cwd": "${workspaceFolder:wolfBoot}" },
       "problemMatcher": []
     },
     {
-      "label": "CMake: Build (linux-stm32l4)",
+      "label": "CMake: Build (stm32l4)",
       "command": "cmake",
-      "args": [ "--build", "--preset", "linux-stm32l4" ],
+      "args": [ "--build", "--preset", "stm32l4" ],
       "options": { "cwd": "${workspaceFolder:wolfBoot}" },
       "group": "build",
       "problemMatcher": "$gcc"
     },
     {
-      "label": "OpenOCD: Flash wolfBoot (linux-stm32l4)",
+      "label": "OpenOCD: Flash wolfBoot (stm32l4)",
       "type": "shell",
       "command": "openocd",
       "args": [
@@ -26,7 +26,7 @@
         "-f",
         "target/stm32l4x.cfg",
         "-c",
-        "program ${workspaceFolder:wolfBoot}/build-linux-stm32l4/wolfboot.elf verify reset exit"
+        "program ${workspaceFolder:wolfBoot}/build-stm32l4/wolfboot.elf verify reset exit"
       ],
       "options": { "cwd": "${workspaceFolder:wolfBoot}" },
       "problemMatcher": []

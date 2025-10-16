@@ -32,10 +32,9 @@
 cmake_minimum_required(VERSION 3.16)
 include(cmake/config_defaults.cmake)
 
-
-# ------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 # Initial environment checks
-# ------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
     message(
         FATAL_ERROR
@@ -57,28 +56,55 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 
-# ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 project(wolfBoot)
-# ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 include(cmake/functions.cmake)
+include(cmake/utils.cmake)
 
-# include(cmake/cube_ide_config.cmake)
+# Windows users may prefer VisualGDB
+if(DETECT_VISUALGDB)
+    message(STATUS "VisualGDB detection active: cmake/visualgdb_config.cmake")
+    include(cmake/visualgdb_config.cmake)
+endif()
 
 # Some OS-specific checks and configs
-if(CMAKE_HOST_WIN32)
+if(CMAKE_HOST_WIN32 AND DETECT_VS2022 AND NOT FOUND_HAL_BASE)
+    message(STATUS "Visual Studio 2022 detection active: make/vs2022_config.cmakee")
     include(cmake/vs2022_config.cmake)
 endif()
 
-if(WOLFBOOT_TARGET STREQUAL "stm32l4" AND NOT FOUND_STM32L4_LIB)
-    include(cmake/stm32_hal_download.cmake)
+# If not VisualGDB, perhaps ST CubeIDE?
+if(DETECT_CUBEIDE AND NOT FOUND_HAL_BASE)
+    include(cmake/cube_ide_config.cmake)
 endif()
 
+# If still not found, download:
+if(NOT FOUND_HAL_BASE AND ENABLE_HAL_DOWNLOAD)
+    if(WOLFBOOT_TARGET MATCHES "^stm32")
+        include(cmake/stm32_hal_download.cmake)
+    else()
+        message(STATUS "WARNING: HAL not found and download not available for ${WOLFBOOT_TARGET}")
+    endif()
+endif()
 
-# set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES "" CACHE STRING "" FORCE)
+if(USE_DOT_CONFIG)
+    message(STATUS "USE_DOT_CONFIG is enabled")
+    include(cmake/load_dot_config.cmake)
+else()
+    message(STATUS "No .config files will be read; USE_DOT_CONFIG is disabled")
+endif()
 
-# ---- Host compiler (for native tools only) -----------------------------------
+# Edit to stop CMake from appending any "standard" C include paths that it thinks your toolchain/platform needs
+# Brute force, not recommended, ymmv.
+if(false)
+    set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES "" CACHE STRING "" FORCE)
+endif()
+
+#------------------- Host compiler (for native tools only) -----------------------------------
+#---------------------------------------------------------------------------------------------
 # Build-time tools (bin-assemble/sign/keygen) must compile for the HOST.
 if (CMAKE_HOST_WIN32)
     # Prefer gcc/clang on Windows so POSIX-y headers (unistd.h) are available.
@@ -135,9 +161,9 @@ endif()
 message(STATUS "Host CC: ${HOST_CC}")
 message(STATUS "Host compiler treated as MSVC: ${HOST_IS_MSVC}")
 
-# ------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 # Common includes/defines for host tools
-# ------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 set(HOST_INCLUDES
     ${HOST_I}${CMAKE_SOURCE_DIR}/tools/keytools
     ${HOST_I}${CMAKE_SOURCE_DIR}/lib/wolfssl
@@ -194,13 +220,10 @@ if(CMAKE_HOST_WIN32 AND HOST_IS_MSVC)
   list(INSERT HOST_INCLUDES 0 ${HOST_I}$<SHELL_PATH:${HOST_SHIM_DIR}>)
 endif() # Windows Host Shim
 
-
-include(cmake/load_dot_config.cmake)
-include(cmake/utils.cmake)
-
 include_directories(include)
 include_directories(lib/wolfssl)
 
+# TODO
 if(false) # my Windows
 
     # Cross toolchain basics
@@ -418,9 +441,10 @@ if(0)
 
     add_custom_target(binAssemble DEPENDS "${BINASSEMBLE}")
 
-    # -----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------
     # Toolchain Specifications
-    # -----------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------
+
 
     if(ARCH STREQUAL "ARM")
         include(cmake/toolchain_arm-none-eabi.cmake)
@@ -826,9 +850,9 @@ list(APPEND WOLFBOOT_SOURCES ${UPDATE_SOURCES})
 
 list(TRANSFORM WOLFBOOT_SOURCES PREPEND ${WOLFBOOT_ROOT}/)
 
-# -----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 # Hash settings
-# -----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 if(HASH STREQUAL "SHA256")
     list(APPEND WOLFBOOT_DEFS WOLFBOOT_HASH_SHA256)
     message(STATUS "Using SHA256 hash")
@@ -844,9 +868,9 @@ if(HASH STREQUAL "SHA3")
     list(APPEND KEYTOOL_OPTIONS --sha3)
 endif()
 
-# -----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 # wolfboot HAL
-# -----------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
 
 # Default SPI driver name
 set(SPI_TARGET ${WOLFBOOT_TARGET})
@@ -914,40 +938,11 @@ target_sources(wolfboothal PRIVATE include/hal.h hal/${WOLFBOOT_TARGET}.c ${WOLF
                                    ${PARTITION_SOURCE})
 
 
+#---------------------------------------------------------------------------------------------
 # --- HAL for STM32L4 (only the pieces we need) ---
+#---------------------------------------------------------------------------------------------
 # TODO move this to preset and/or cmake dir
 if(WOLFBOOT_TARGET STREQUAL "stm32l4")
-    if(CMAKE_HOST_WIN32 AND IS_DIRECTORY "${LIB_STM32L4_WINDOWS}" )
-        message(STATUS "Win32 Path found: ${LIB_STM32L4_WINDOWS}")
-        set(HAL_BASE "${LIB_STM32L4_WINDOWS}")
-    elseif(IS_DIRECTORY "${LIB_STM32L4_WSL}")
-        message(STATUS "WSL Path found: ${LIB_STM32L4_WSL}")
-        set(HAL_BASE "${LIB_STM32L4_WSL}")
-    endif()
-
-    # HAL_BASE "C:/Users/${CURRENT_USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx"
-    #
-#1> [CMake] -- Found directory: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/Drivers/STM32L4xx_HAL_Driver (set HAL_DRV)
-#1> [CMake] -- Directory not found: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/CMSIS_HAL/Device/ST/STM32L4xx/Include (set HAL_CMSIS_DEV)
-#1> [CMake] -- Directory not found: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/CMSIS_HAL/Include (set HAL_CMSIS_CORE)
-#1> [CMake] -- Found directory: C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/Projects/B-L475E-IOT01A/Templates/Inc (set HAL_TEMPLATE_INC)
-#1> [CMake] -- HAL_DRV=C:/Users/gojimmypi/STM32Cube/Repository/STM32Cube_FW_L4_V1.18.0/Drivers/STM32L4xx_HAL_Driver
-    if(NOT HAL_BASE STREQUAL "")
-        if(false)
-            # VisualGDB
-            set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
-            set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/CMSIS_HAL/Device/ST/STM32L4xx/Include")
-            set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/CMSIS_HAL/Include")
-            set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/VendorSamples/L4/Projects/B-L475E-IOT01A/Templates/Inc")
-        else()
-            # CubeIDE
-            # set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
-            # set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/Drivers/CMSIS/Device/ST/STM32L4xx/Include")
-            # set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/Drivers/CMSIS/Include")
-            # set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/Projects/B-L475E-IOT01A/Templates/Inc")
-        endif()
-    endif()
-
     message(STATUS "HAL_DRV=${HAL_DRV}")
     add_library(stm32l4_hal STATIC
         ${HAL_DRV}/Src/stm32l4xx_hal.c

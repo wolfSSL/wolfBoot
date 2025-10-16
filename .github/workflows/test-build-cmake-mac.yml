@@ -12,6 +12,11 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 20
 
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [stm32l4, stm32h7, stm32c0, stm32g0]
+
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"    # avoid updating taps during install
       HOMEBREW_NO_ANALYTICS: "1"
@@ -83,9 +88,9 @@ jobs:
           #   -DBUILD_TEST_APPS=ON          \
           #   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain_arm-none-eabi.cmake
 
-      - name: Presets
+      - name: Cmake Configure & Build Preset (${{ matrix.target }})
         run: |
-          rm -rf ./build-stm32l4
+          rm -rf ./build-${{ matrix.target }}
 
-          cmake --preset stm32l4
-          cmake --build --preset stm32l4
+          cmake --preset ${{ matrix.target }}
+          cmake --build --preset ${{ matrix.target }}

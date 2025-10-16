@@ -1,36 +1,38 @@
-# wolfBoot
+﻿# wolfBoot
 
-CMake Dev Status:
+Some interim notes on progress in various environments:
+
+## CMake Dev Status:
 
 |Status | Environment               | Test With
 |-------| ------------------------- | --------
 |  ✅   | VS 2022                   | Right-Click on [CMakeLists.txt](./CMakeLists.txt), Build
-|  ✅   | WSL                       | [./my_test.sh](./my_test.sh)
-|  ⚠️   | Mac                       | [test-build-cmake-mac.yml](./github/workflows/test-build-cmake-mac.yml)
+|  ✅   | WSL                       | [./tools/scripts/cmake_test.sh](./tools/scripts/cmake_test.sh)
+|  ✅   | Mac                       | [test-build-cmake-mac.yml](./github/workflows/test-build-cmake-mac.yml)
 |  ✅   | VS Code, Dev Prompt       | Click "build" on bottom toolbar ribbon
-|  ✅   | DOS Prompt, Dev Prompt    | [my_test.bat](./my_test.bat)
-|  ✅   | PowerShell, Dev Prompt    | [.\my_test.bat](./my_test.bat)
-|  ❌   | DOS Prompt, direct launch | [my_test.bat](./my_test.bat)
-|  ❌   | PowerShell, direct launch | [my_test.bat](./my_test.bat)
-|  ❌   | VS Code, direct launch    | Click "build"
+|  ✅   | DOS Prompt, Dev Prompt    | [.\tools\scripts\cmake_dev_prompt_test.bat](./tools/scripts/cmake_dev_prompt_test.bat)
+|  ✅   | PowerShell, Dev Prompt    | [.\tools\scripts\cmake_dev_prompt_test.bat](./tools/scripts/cmake_dev_prompt_test.bat)
+|  ✅   | DOS Prompt, direct launch | [.\tools\scripts\cmake_test.bat](./tools/scripts/cmake_test.bat) (needs toolchain path)
+|  ✅   | PowerShell, direct launch | [.\tools\scripts\cmake_test.bat](./tools/scripts/cmake_test.bat) (needs toolchain path)
+|  ✅   | VS Code, direct launch    | Click "build"
 
-Make Dev Status:
+## Make Dev Status:
 
 |Status | Environment               | Test With
 |-------| ------------------------- | --------
 |   ?   | VS 2022                   | N/A (?)
-|  ✅  | WSL                       | `./wolfbuild.sh --target stm32l4`
+|  ✅   | WSL                       | `./tools/scripts/wolfboot_build.sh --target stm32l4`
 |  ⚠️   | Mac                       | [test-build-cmake-mac.yml](./github/workflows/test-build-cmake-mac.yml)
 |   ?   | VS Code, Dev Prompt       | N/A (?)
-|  ❌    | DOS Prompt, Dev Prompt    |
+|  ❌   | DOS Prompt, Dev Prompt    |
 |  ❌   | PowerShell, Dev Prompt    |
 |  ❌   | DOS Prompt, direct launch |
-|  ❌    | PowerShell, direct launch |
-|   ?    | VS Code, direct launch    | N/A (?)
+|  ❌   | PowerShell, direct launch |
+|   ?   | VS Code, direct launch    | N/A (?)
 
 ---
 
-wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/))
+wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/), [Manual](https://www.wolfssl.com/documentation/manuals/wolfboot/), [wolfBoot-examples](https://github.com/wolfSSL/wolfBoot-examples))
 
 wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers,
 relying on wolfCrypt for firmware authentication, providing firmware update mechanisms.
@@ -73,127 +75,7 @@ The bootloader consists of the following components:
 
 ### Linux
 
-Ensure the proper toolchain is installed. The default [Makefile](./Makefile) needs at least the `gcc-arm-none-eabi`.
-
-```bash
-sudo apt update
-sudo apt install -y build-essential gcc-arm-none-eabi binutils-arm-none-eabi
-# optional (often handy): gdb-multiarch or gdb-arm-none-eabi
-arm-none-eabi-gcc --version   # should print the version
-```
-
-The device manufacturer toolchain _also_ needs to be installed. For example without the [STM32CubeIDE Software](https://www.st.com/en/development-tools/stm32cubeide.html),
-errors like this will otherwise be encountered:
-
-```
-        [CC ARM] hal/stm32l4.o
-hal/stm32l4.c:24:10: fatal error: stm32l4xx_hal.h: No such file or directory
-   24 | #include "stm32l4xx_hal.h"
-      |          ^~~~~~~~~~~~~~~~~
-```
-
-## Quick Start
-
-```bash
-git clone https://github.com/gojimmypi/wolfBoot.git
-cd wolfBoot
-git submodule update --init
-
-## Use make
-# edit your .config or copy from config/examples
-make
-
-## OR ##
-
-# use cmake via wolfbuild.sh script:
-
-./wolfbuild.sh --CLEAN
-./wolfbuild.sh --CLEAN  stm32h7
-./wolfbuild.sh --target stm32h7
-```
-
-### VS Code
-
-Windows users may need one of these:
-
-- [Visual Studio 2022](https://visualstudio.microsoft.com/)
-- [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/). See `C:\Program Files(x86)\Windows kits`.
-
-#### Launch Stand-alone VS Code
-
-The MSVC kit may be needed if VS 2022 is not installed.
-
-Select `View` - `Command Palette`, search for CMake: Select a Compiler
-
-See also: CMake: Delete Cache and Reconfigure
-
-
-#### Launch VS Code from VS 2022 Command prompt.
-
-Delete any existing `build` or `build-[os]-[target]` directories as needed.
-
-Open a VS 2022 Developer command prompt.
-
-From the command prompt, open the `wolfBoot.code-workspace` VS Code workspace:
-
-```dos
-cd c:\workspace\wolfboot-%USERNAME%
-code ./IDE/VSCode/wolfBoot.code-workspace
-```
-
-### Visual Studio IDE
-
-For the `Select Startup Item`, leave at default. Do not select `image`, wolfboot_name[], etc.
-
-Right click on `CMakeLists.txt` and select `Delete Cache and Reconfigure`.
-
-Right click on `CMakeLists.txt` and select `Build`.
-
-### Visual Studio Command Prompt
-
-Select `View` - `Terminal` from the menu bar.
-
-* Configure: `cmake --preset <preset name>`
-* Build: `cmake --build --preset <preset name>`
-
-```bash
-# delete build directory
-rmdir /s /q build-windows-stm32l4
-
-# configure
-cmake --preset windows-stm32l4
-
-# build
-cmake --build --preset windows-stm32l4
-```
-
-If there are no devices listed in the `Manage Configurations` drop-down, ensure the `CMakePresets.json` is valid.
-A single json syntax error will spoil the entire project.
-
-## Your own toolchain
-
-Create a `CMakeUserPresets.json` (ignored by git, rename `CMakeUserPresets.json.sample` ):
-
-```json
-{
-  "version": 3,
-  "configurePresets": [
-    {
-      "name": "my-arm-bin",
-      "inherits": "windows-stm32l4",
-      "cacheVariables": {
-        "ARM_GCC_BIN": "C:/Tools/arm-none-eabi-14.2/bin"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "my-arm-bin",
-      "configurePreset": "my-arm-bin"
-    }
-  ]
-}
-```
+Ensure the proper toolchain is installed. See the [docs](./docs/README.md) for platform-specific details.
 
 ## Integrating wolfBoot in an existing project
 
@@ -276,7 +158,57 @@ make keytools
 make
 ```
 
-### CMake
+### CMake - Presets
+
+This section explains how to build wolfBoot using CMake Presets.
+Presets let you keep repeatable build settings in a single JSON file ([CMakePresets.json](./CMakePresets.json)) so
+you can configure and build with short, memorable commands like:
+
+```
+cmake --list-presets
+cmake --preset stm32l4
+cmake --build --preset stm32l4
+```
+
+See the `WOLFBOOT_ROOT`/[config_defaults.cmake](./config_defaults.cmake) file.
+
+#### Convert existing `.config` to CMake Presets
+
+The [tools/scripts/config2presets.py](./tools/scripts/config2presets.py) script cam
+convert existing [config/examples](./config/examples) to CMake presets.
+
+For example:
+
+```python
+python3 ./tools/scripts/config2presets.py ./config/examples/stm32h7.config
+```
+
+#### Tips & Gotchas
+
+Out-of-source enforced: wolfBoot’s CMakeLists.txt blocks in-source builds;
+presets default to `build-${presetName}` anyway.
+
+Toolchain auto-select: If `WOLFBOOT_TARGET` is not x86_64_efi or sim,
+CMAKE_TOOLCHAIN_FILE defaults to `cmake/toolchain_arm-none-eabi.cmake`.
+
+Windows host tools: When HOST_CC is `cl.exe`, CMakeLists.txt creates a
+lightweight `unistd.h` shim and adjusts flags—no manual changes needed.
+
+`$penv` vs `$env`: Use `$penv{VAR}` in environment to append to the existing
+process environment (keeps your PATH). `$env{VAR}` replaces it.
+
+Visual Studio / VS Code: Both detect presets automatically;
+select the preset from the status bar or CMake menu, then build.
+
+`--fresh`: Re-configure from scratch without deleting the build directory.
+
+For further details, see the [cmake/README](./cmake/README.md)
+
+### CMake - Read .config file
+
+See [cmake/README](./cmake/README.md#build-with-cmake-using-config-files).
+
+### CMake - Command-line Settings
 
 To build using CMake, create a `build` directory and run `cmake` with the target platform as well as values for the partition
 size and address variables. To build the test-apps, run with `-DBUILD_TEST_APPS=yes`. To use the wolfCrypt-py keytools, run
@@ -410,84 +342,6 @@ $ cmake -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOO
 ##### stm32l0
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32l0 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8000 -DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_PARTITION_SIZE=0x10000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x18000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x28000 -DNVM_FLASH_WRITEONCE=yes ..
-```
-
-## CMake Logic Flow
-
-
-```mermaid
-flowchart TD
-  %% wolfBoot CMake Build Logic Flow (GitHub-safe)
-
-  %% === Local Dev ===
-  A1["Start in VS 2022 / VS Code"] --> A2["Select CMake preset: windows-stm32l4 or linux-stm32l4"]
-  A2 --> A3{"Target preset?"}
-  A3 --> A4["Ensure toolchains on PATH: ARM_GCC_BIN, Ninja"]
-  A4 --> A5["Run: cmake --preset &lt;name&gt;"]
-  A5 --> A6["Optional: cmake --build --preset &lt;name&gt;"]
-
-  %% === Configure ===
-  A5 --> C1["Load CMakePresets.json"]
-  C1 --> C2["Resolve env vars: PATH, ARM_GCC_BIN, VISUALGDB"]
-  C2 --> C3["Apply cache vars: WOLFBOOT_TARGET, BOARD, addresses"]
-  C3 --> C4["Load toolchain file: toolchain_arm-none-eabi.cmake"]
-  C4 --> C5["Generate build system: Ninja"]
-
-  %% === Preset-specific branches ===
-  C5 --> B0(("Begin preset specifics"))
-  subgraph PS["Preset specifics"]
-    direction TB
-
-    %% Windows column
-    subgraph BWIN["Windows: windows-stm32l4"]
-      direction TB
-      BW1["Generator: Ninja (VS 2022 or standalone)"]
-      BW2["Quote paths with spaces (e.g., Program Files)"]
-      BW3["Set ARM_GCC_BIN to Windows install path"]
-      BW4["Use VisualGDB include/BSP paths"]
-      BW5["Artifacts: .bin, .hex; optional .dfu"]
-      BW6["Flash: ST-Link CLI or STM32CubeProgrammer"]
-      BW1 --> BW2 --> BW3 --> BW4 --> BW5 --> BW6
-    end
-
-    %% Linux column
-    subgraph BLNX["Linux: linux-stm32l4"]
-      direction TB
-      BL1["Generator: Ninja (system package)"]
-      BL2["ARM_GCC_BIN in /opt or /usr/bin"]
-      BL3["dfu-util or stlink from package manager"]
-      BL4["CI-friendly paths: avoid spaces"]
-      BL5["Artifacts: .bin, .hex, .dfu"]
-      BL6["Flash: st-flash or dfu-util"]
-      BL1 --> BL2 --> BL3 --> BL4 --> BL5 --> BL6
-    end
-  end
-
-  B0 --> BW1
-  B0 --> BL1
-  BW6 --> BZ(("Merge"))
-  BL6 --> BZ
-
-  %% === Build, Sign, Package ===
-  BZ --> D1["Build host tools: sign, keytools"]
-  D1 --> D2["Compile wolfBoot core and HAL"]
-  D2 --> D3["Link bootloader and test apps"]
-  D3 --> D4["Create image header"]
-  D4 --> D5["Sign firmware image: ECC256, SHA256"]
-  D5 --> D6["Package artifacts: bin, hex, dfu"]
-
-  %% === Deploy & CI ===
-  D6 --> E1["Option A: Flash to device (stlink, dfu-util)"]
-  E1 --> E2["Run smoke tests and UART debug"]
-  E2 --> E3["Option B: Upload artifacts in GitHub Actions"]
-  E3 --> E4["CI: set up toolchains and CMake on runners"]
-  E4 --> E5["CI: matrix build per target preset"]
-  E5 --> E6["CI: archive results and report status"]
-
-  %% === Errors (dotted refs) ===
-  A5 -.-> X1["Preset not found or Ninja missing"]
-  C2 -.-> X2["Toolchain not found: fix ARM_GCC_BIN/PATH, verify VisualGDB"]
-  C3 -.-> X3["Address/partition mismatch: verify BOARD, flash offsets, IMAGE_HEADER_SIZE"]
 ```
 
 ## Troubleshooting
@@ -930,7 +784,7 @@ sp_c32.c : fatal error C1083: Cannot open compiler generated file: '... sp_c32.o
     * RP2350 (Raspberry Pi Pico 2, ARM Cortex-M33 with TrustZone)
     * NXP MCXA153
     * NXP MCXW716
-    * STM32F1 series (STM32F103 "Blue Pill"board)
+    * STM32F1 series (STM32F103 "Blue Pill"ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âboard)
   * Improvements to supported targets
     * Xilinx UltraScale+ (ZynqMP)
         * Added hardware-accelerated SHA3 hashing via the CSU engine

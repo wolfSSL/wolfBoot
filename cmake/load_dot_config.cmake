@@ -1,4 +1,6 @@
-# Copyright (C) 2022 wolfSSL Inc.
+# wolfboot/cmake/load_dot_config.cmake
+#
+# Copyright (C) 2025 wolfSSL Inc.
 #
 # This file is part of wolfBoot.
 #
@@ -21,6 +23,16 @@
 #   load_dot_config("${CMAKE_SOURCE_DIR}/.config")                 # set normal CMake vars
 #   # or cache them so GUIs (e.g. Visual Studio) can see/edit them:
 #   load_dot_config("${CMAKE_SOURCE_DIR}/.config" CACHE_VARS)
+
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake, and anything else that wants to detect is loaded
+    if(DEFINED LOAD_DOT_CONFIG_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
 
 function(load_dot_config CONFIG_PATH)
     set(_USE_CACHE OFF)
@@ -136,3 +148,5 @@ function(load_dot_config CONFIG_PATH)
     endforeach()
     message(STATUS "-- Done processing ${CONFIG_PATH}")
 endfunction()
+
+set(LOAD_DOT_CONFIG_CMAKE_INCLUDED TRUE)

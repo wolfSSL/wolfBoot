@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [ "*" ]
 
+permissions:
+  contents: read
+
 jobs:
   windows-cmake:
-    name: Build on Windows (CMake + Ninja)
+    name: Build on Windows
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -18,12 +21,15 @@ jobs:
         target:
           - stm32l4
           - stm32h7
+          - stm32g0
         include:
           # Optional per-target cache variables you might want to pass later.
           # Keep empty for now to avoid guessing addresses.
           - target: stm32l4
             extra_cache: ""
           - target: stm32h7
+            extra_cache: ""
+          - target: stm32g0
             extra_cache: ""
 
     steps:
@@ -32,17 +38,29 @@ jobs:
         with:
           submodules: true
 
+      # Lock down network/runner
+      # See https://github.com/step-security/harden-runner/releases
+      - uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            developer.arm.com,
+            armkeil.blob.core.windows.net,
+            github.com, objects.githubusercontent.com, api.github.com
+
       # ARM GCC toolchain (adds the bin dir to PATH)
       - name: Set up ARM none-eabi GCC 14.x
         uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
-          version: "14.2.Rel1" # <-- use 'release', not 'version'
+          release: "14.2.Rel1" # <-- use 'release', not 'version'
           path-env-var: ARM_NONE_EABI_GCC_PATH
 
       # CMake + Ninja are preinstalled on windows-latest, but verify & print versions
       - name: Tool versions
         shell: bash
         run: |
+          # Show some key toolchain versions
+
           echo "Compiler versions:"
           arm-none-eabi-gcc --version
           echo
@@ -55,45 +73,27 @@ jobs:
           echo "MSVC (via vswhere):"
           cmd.exe /c "\"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe\" -latest -products * -requires Microsoft.Component.MSBuild -property installationVersion"
 
-      - name: Build via cmd inline
-        shell: cmd
+      - name: List Presets
+        shell: bash
         run: |
-          if exist build-windows-stm32l4 rmdir /s /q build-windows-stm32l4
-          cmake --preset windows-stm32l4
-          cmake --build --preset windows-stm32l4 --parallel %NUMBER_OF_PROCESSORS%
+          # Check available presets in CMakePresets.json
 
-      - name: Build via batch (cmd)
-        shell: cmd
-        run: |
-          :: # Call my_test.bat
+          cmake -S . -B build-list --list-presets=configure
 
-          call my_test.bat
-
-      - name: Configure (CMake + Ninja)
+      - name: Configure Preset "${{ matrix.target }}"
         shell: bash
         run: |
           # cmake runs in git bash
 
-          BUILD_DIR="build-${{ matrix.target }}"
-          cmake -S . -B "$BUILD_DIR" -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain_arm-none-eabi.cmake \
-            -DWOLFBOOT_CONFIG_MODE=preset                              \
-            -DWOLFBOOT_TARGET=${{ matrix.target }}                     \
-            -DBUILD_TEST_APPS=ON                                       \
-            -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000                \
-            -DWOLFBOOT_SECTOR_SIZE=0x20000                             \
-            -DWOLFBOOT_PARTITION_SIZE=0xD0000                          \
-            -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000              \
-            -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000                \
-            ${{ matrix.extra_cache }}
-          echo "Configured: $BUILD_DIR"
+          cmake --preset "${{ matrix.target }}"
+          echo "Configured: ${{ matrix.target }}"
 
-      - name: Build
+      - name: Build "${{ matrix.target }}"
         shell: bash
         run: |
           # cmake runs in git bash
           BUILD_DIR="build-${{ matrix.target }}"
-          cmake --build "$BUILD_DIR" --parallel
+          cmake --build "build-${{ matrix.target }}" --parallel
 
       # Optional: show interesting artifacts
       - name: List build outputs

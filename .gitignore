@@ -144,6 +144,9 @@ IDE/IAR/Release
 build/
 CMakeFiles/
 CMakeCache.txt
+# User specific presets should never be included.
+# See docs: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
+/**/CMakeUserPresets.json
 
 # Stage 1
 stage1/loader_stage1.ld
@@ -267,3 +270,13 @@ language.settings.xml
 /**/build
 /**/build-**
 
+/IDE/VisualGDB
+/commit_squash.sh
+/evars.txt
+/evars_non_dev.txt
+/gpg_refresh.sh
+/IDE/VisualStudio/EmbeddedProject1
+/IDE/VisualStudio/wolfboot
+/.gitignore.wip
+/run.log
+/stm32.mak

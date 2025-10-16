@@ -1,6 +1,6 @@
 # wolfboot/cmake/config_defaults.cmake
 #
-# Copyright (C) 2022 wolfSSL Inc.
+# Copyright (C) 2025 wolfSSL Inc.
 #
 # This file is part of wolfBoot.
 #
@@ -21,7 +21,31 @@
 
 # This is NOT a place for device-specific project settings. For that, see CMakePresets.json
 
-set(FOUND_STM32L4_LIB false)
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED CONFIG_DEFAULTS_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
+
+
+
+# Environments are detected in this order:
+set(DETECT_VISUALGDB true)
+set(DETECT_CUBEIDE true)
+set(DETECT_VS2022 true)
+
+# Enable HAL download only implemented for TMS devices at this time.
+# See [WOLFBOOT_ROOT]/cmake/stm32_hal_download.cmake
+# and [WOLFBOOT_ROOT]/cmake/downloads/stm32_hal_download.cmake
+set(ENABLE_HAL_DOWNLOAD true)
+set(FOUND_HAL_BASE false)
+
+# optionally use .config files; See CMakePresets.json instead
+set(USE_DOT_CONFIG false)
 
 include(cmake/current_user.cmake)
 
@@ -33,27 +57,6 @@ message(STATUS "Current user detected: ${CURRENT_USER}")
 # Want to specify your specific STCubeIDE? Uncomment and set it here:
 #   set(STM32CUBEIDE_DIR "/your/path")
 
-if(false)
-    # TODO need to be more generic, in presets?
-    if(IS_DIRECTORY  "C:/Users/${CURRENT_USER}/AppData/Local/VisualGDB")
-        set(LIB_STM32L4_WINDOWS "C:/Users/${CURRENT_USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx")
-    endif()
-
-    if(IS_DIRECTORY  "/mnt/c/Users/${CURRENT_USER}/AppData/Local/VisualGDB")
-        set(LIB_STM32L4_WSL "/mnt/c/Users/${CURRENT_USER}/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32L4xxxx")
-    endif()
-
-    if(IS_DIRECTORY "${LIB_STM32L4_WINDOWS}")
-        set(FOUND_STM32L4_LIB true)
-        message(STATUS "LIB_STM32L4_WINDOWS found: ${LIB_STM32L4_WINDOWS}")
-    endif()
-
-    if(IS_DIRECTORY "${LIB_STM32L4_WSL}")
-        set(FOUND_STM32L4_LIB true)
-        message(STATUS "LIB_STM32L4_WSL found: ${LIB_STM32L4_WSL}")
-    endif()
-endif()
-
 # set(ARM_GCC_BIN "")
 
 
@@ -61,3 +64,5 @@ message(STATUS "config.defaults:")
 message(STATUS "-- HAL_DRV:       ${HAL_DRV}")
 message(STATUS "-- HAL_CMSIS_DEV: ${HAL_CMSIS_DEV}")
 message(STATUS "-- HAL_CMSIS_CORE:${HAL_CMSIS_CORE}")
+
+set(CONFIG_DEFAULTS_CMAKE_INCLUDED TRUE)

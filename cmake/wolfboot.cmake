@@ -18,6 +18,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED WOLFBOOT_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
+
 include(${CMAKE_CURRENT_LIST_DIR}/utils.cmake)
 
 set(VERSION ${WOLFBOOT_VERSION})
@@ -119,3 +129,5 @@ function(gen_wolfboot_factory_image PLATFORM_NAME TARGET)
 
     multiconfigfileinstall(${BOOTLOADER_OUTPUTS} bin)
 endfunction()
+
+set(WOLFBOOT_CMAKE_INCLUDED true)

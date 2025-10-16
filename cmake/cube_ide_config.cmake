@@ -1,6 +1,6 @@
 # wolfboot/cmake/cube_ide_config.cmake
 #
-# Copyright (C) 2022 wolfSSL Inc.
+# Copyright (C) 2025 wolfSSL Inc.
 #
 # This file is part of wolfBoot.
 #
@@ -27,7 +27,19 @@
 #   find_package(STM32CubeIDE REQUIRED)
 #   message(STATUS "STM32CubeIDE: ${STM32CUBEIDE_EXECUTABLE} (root: ${STM32CUBEIDE_ROOT}, ver: ${STM32CUBEIDE_VERSION})")
 
-include_guard(GLOBAL)
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED CUBE_IDE_CONFIG_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
+
+# Exclude entire file unless DETECT_CUBEIDE is set to true
+if(DETECT_CUBEIDE)
+
 message(STATUS "Begin cube_ide_config.cmake")
 unset(STM32CUBEIDE_ROOT       CACHE)
 unset(STM32CUBEIDE_FOUND      CACHE)
@@ -385,11 +397,20 @@ if(STM32CUBE_L4_VERSION)
     set(HAL_BASE "${STM32CUBE_L4_ROOT}")
     if(IS_DIRECTORY "${HAL_BASE}")
         message(STATUS "Found HAL_BASE=${HAL_BASE}")
-        set(FOUND_STM32L4_LIB true)
+        set(FOUND_HAL_BASE true)
+            # CubeIDE
+            set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
+            set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/Drivers/CMSIS/Device/ST/STM32L4xx/Include")
+            set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/Drivers/CMSIS/Include")
+            set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/Projects/B-L475E-IOT01A/Templates/Inc")
     else()
         message(STATUS "Not found expected HAL_BASE=${HAL_BASE}")
     endif()
 endif()
 
 mark_as_advanced(STM32CUBEIDE_EXECUTABLE STM32CUBEIDE_ROOT STM32CUBEIDE_VERSION)
+
+set(CUBE_IDE_CONFIG_CMAKE_INCLUDED TRUE)
 message(STATUS "End cube_ide_config.cmake")
+
+endif() # DETECT_CUBEIDE

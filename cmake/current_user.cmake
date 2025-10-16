@@ -1,6 +1,6 @@
-# wolfboot/cmake/current_user.cmake 
+# wolfboot/cmake/current_user.cmake
 #
-# Copyright (C) 2022 wolfSSL Inc.
+# Copyright (C) 2025 wolfSSL Inc.
 #
 # This file is part of wolfBoot.
 #
@@ -24,6 +24,16 @@
 # Example usage
 #   get_current_user(CURRENT_USER)
 #   message(STATUS "Current user detected: ${CURRENT_USER}")
+
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake, and anything else that wants to detect is loaded
+    if(DEFINED CURRENT_USER_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
 
 function(get_current_user OUT_VAR)
   set(_user "")
@@ -92,3 +102,5 @@ function(get_current_user OUT_VAR)
 
   set(${OUT_VAR} "${_user}" PARENT_SCOPE)
 endfunction()
+
+set(CURRENT_USER_CMAKE_INCLUDED true)
