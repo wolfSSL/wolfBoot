@@ -161,11 +161,11 @@ endif
 
 ifeq ($(TARGET),library)
     CFLAGS+=-g
-    MAIN_TARGET:=test-lib
+    MAIN_TARGET:=libwolfboot.a
 endif
 
 ifeq ($(TARGET),library_fs)
-    MAIN_TARGET:=lib-fs
+    MAIN_TARGET:=libwolfboot.a
 endif
 
 ifeq ($(TARGET),raspi3)
