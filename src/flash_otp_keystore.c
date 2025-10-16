@@ -3,7 +3,7 @@
  * Implementation for Flash based OTP keystore used as trust anchor
  *
  *
- * Copyright (C) 2024 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

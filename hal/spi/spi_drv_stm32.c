@@ -6,7 +6,7 @@
  *
  * Pinout: see spi_drv_stm32.h
  *
- * Copyright (C) 2022 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

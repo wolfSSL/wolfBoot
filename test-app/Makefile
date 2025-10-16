@@ -114,7 +114,8 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/wc_encrypt.o
             APP_OBJS+=./wcs/wc_port.o
         endif
-        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=12944
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
+        LDFLAGS+=--specs=nosys.specs -u _printf_float
     endif
 else
     APP_OBJS+=../hal/$(TARGET).o

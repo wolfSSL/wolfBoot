@@ -2,7 +2,7 @@
  *
  * unit tests for encrypted updates with nvm_flash_writeonce fix
  *
- * Copyright (C) 2024 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

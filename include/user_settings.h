@@ -4,7 +4,7 @@
  * Enabled via WOLFSSL_USER_SETTINGS.
  *
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -232,6 +232,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_NO_4096
 #       define WOLFSSL_SP_2048
+#       define RSA_MIN_SIZE 2048
+#       define RSA_MAX_SIZE 2048
 #   endif
 #   if defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072)
 #       define FP_MAX_BITS (3072 * 2)
@@ -239,6 +241,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_4096
 #       define WOLFSSL_SP_3072
+#       define RSA_MIN_SIZE 3072
+#       define RSA_MAX_SIZE 3072
 #   endif
 
 #   if defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
@@ -247,6 +251,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_2048
 #       define WOLFSSL_SP_NO_3072
 #       define WOLFSSL_SP_4096
+#       define RSA_MIN_SIZE 4096
+#       define RSA_MAX_SIZE 4096
 #   endif
 #   ifdef WOLFCRYPT_SECURE_MODE
 #       undef FP_MAX_BITS
@@ -255,6 +261,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_2048
 #       define WOLFSSL_SP_3072
 #       define WOLFSSL_SP_4096
+#       define RSA_MIN_SIZE 2048
+#       define RSA_MAX_SIZE 4096
 #   endif
 #else
 #   define NO_RSA
@@ -474,6 +482,7 @@ extern int tolower(int c);
 #define NO_PKCS12
 #define NO_PKCS8
 #define NO_CHECK_PRIVATE_KEY
+#define NO_KDF
 
 #define BENCH_EMBEDDED
 #define NO_CRYPT_TEST

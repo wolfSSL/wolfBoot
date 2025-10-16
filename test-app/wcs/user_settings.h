@@ -3,7 +3,7 @@
  * Custom configuration for wolfCrypt/wolfSSL (PKCS11 client example)
  *
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -132,6 +132,7 @@ extern int tolower(int c);
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
+#define NO_KDF
 
 #define BENCH_EMBEDDED
 
