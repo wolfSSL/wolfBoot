@@ -2,7 +2,7 @@
  *
  * Header file for SAMA5D3 HAL
  *
- * Copyright (C) 2024 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

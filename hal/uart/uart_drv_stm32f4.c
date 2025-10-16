@@ -6,7 +6,7 @@
  *
  * Pinout: RX=PD9, TX=PD8
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

@@ -6,7 +6,7 @@
  *
  * Pinout: RX=PB7, TX=PB6 (VCOM port UART1 -> STLINK USB)
  *
- * Copyright (C) 2021 wolfSSL Inc.
+ * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
