@@ -814,6 +814,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             ext_flash_lock();
 #endif
             hal_flash_lock();
+            inverse = 1;
         }
 
         return wolfBoot_delta_update(&boot, &update, &swap, inverse, resume);
