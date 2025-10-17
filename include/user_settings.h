@@ -472,7 +472,9 @@ extern int tolower(int c);
 #define NO_HC128
 #define NO_DES3
 #define NO_WRITEV
+#ifndef WOLFBOOT_PARTITION_FILENAME
 #define NO_FILESYSTEM
+#endif
 #define NO_MAIN_DRIVER
 #define NO_OLD_RNGNAME
 #define NO_WOLFSSL_DIR
