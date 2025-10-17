@@ -45,7 +45,7 @@ cmake, ninja-build, gcc-arm-none-eabi, openocd
 
 #### Windows path:
 
-Windows path: CMake, Ninja, Arm GNU Toolchain, OpenOCD (or STâ€™s OpenOCD)
+Windows path: CMake, Ninja, Arm GNU Toolchain, OpenOCD (or ST's OpenOCD)
 
 Install via PowerShell (will need to restart VSCode):
 
