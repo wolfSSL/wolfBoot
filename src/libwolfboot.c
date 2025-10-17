@@ -1354,7 +1354,7 @@ uint16_t wolfBoot_get_image_type(uint8_t part)
 }
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
-#if defined(WOLFBOOT_DUALBOOT)
+#if defined(WOLFBOOT_DUALBOOT) && !defined(WOLFBOOT_PARTITION_FILENAME)
 
 #if defined(WOLFBOOT_FIXED_PARTITIONS)
 /**
