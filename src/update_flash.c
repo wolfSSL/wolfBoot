@@ -486,7 +486,9 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #endif
 
     if (inverse) {
-        if (((cur_v == upd_v) && (delta_base_v < cur_v)) || resume) {
+        if (resume ||
+            ((cur_v == upd_v) && (delta_base_v <= cur_v)) ||
+            ((cur_v == delta_base_v) && (upd_v >= cur_v))) {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
                     IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
         } else {
@@ -792,19 +794,22 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * header we can't determine the direction by version numbers. instead
          * use the update partition state, updating means regular, new means
          * reverting */
-        if ((stateRet == 0) && ((flag != SECT_FLAG_NEW) || (cur_ver == 0))) {
+        if ((flag != SECT_FLAG_NEW) || (cur_ver == 0)) {
             resume = 1;
-            if (st == IMG_STATE_UPDATING) {
-                inverse = 0;
-            }
-            else {
-                inverse = 1;
+            if (stateRet == 0) {
+                if (st == IMG_STATE_UPDATING) {
+                    inverse = 0;
+                }
+                else {
+                    inverse = 1;
+                }
             }
         }
         /* If we're dealing with a "ping-pong" fallback that wasn't interrupted
          * we need to set to UPDATING, otherwise there's no way to tell the
          * original direction of the update once interrupted */
-        else if ((inverse == 0) && (fallback_allowed == 1)) {
+        else if ((inverse == 0) && (fallback_allowed == 1) &&
+                 (cur_ver >= upd_ver)) {
             hal_flash_unlock();
 #ifdef EXT_FLASH
             ext_flash_unlock();
