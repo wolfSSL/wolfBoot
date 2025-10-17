@@ -728,6 +728,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      */
     update_type = wolfBoot_get_image_type(PART_UPDATE);
 
+    cur_ver = wolfBoot_current_firmware_version();
+    upd_ver = wolfBoot_update_firmware_version();
+
     wolfBoot_get_update_sector_flag(0, &flag);
     /* Check the first sector to detect interrupted update */
     if (flag == SECT_FLAG_NEW) {
@@ -761,8 +764,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         PART_SANITY_CHECK(&update);
 
-        cur_ver = wolfBoot_current_firmware_version();
-        upd_ver = wolfBoot_update_firmware_version();
 
         wolfBoot_printf("Versions: Current 0x%x, Update 0x%x\n",
             cur_ver, upd_ver);
