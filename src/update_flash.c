@@ -486,6 +486,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #endif
 
     if (inverse) {
+        /* Fallback path: accept the delta when resuming or when the base image
+         * matches the recorded diff origin. */
         if (resume ||
             ((cur_v == upd_v) && (delta_base_v <= cur_v)) ||
             ((cur_v == delta_base_v) && (upd_v >= cur_v))) {
@@ -794,9 +796,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
          * header we can't determine the direction by version numbers. instead
          * use the update partition state, updating means regular, new means
          * reverting */
+        /* Any touched sector (or lack of recorded version) means we are
+         * recovering from an interrupted delta application. */
         if ((flag != SECT_FLAG_NEW) || (cur_ver == 0)) {
             resume = 1;
             if (stateRet == 0) {
+                /* Partition trailer tells us whether we were mid-upgrade
+                 * (UPDATING) or reverting an older image. */
                 if (st == IMG_STATE_UPDATING) {
                     inverse = 0;
                 }
