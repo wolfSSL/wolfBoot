@@ -805,9 +805,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                  * (UPDATING) or reverting an older image. */
                 if (st == IMG_STATE_UPDATING) {
                     inverse = 0;
-                }
-                else {
-                    inverse = 1;
+                } else {
+                    if (cur_ver < upd_ver)
+                        inverse = 1;
+                    else
+                        inverse = 0;
                 }
             }
         }
@@ -820,7 +822,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef EXT_FLASH
             ext_flash_unlock();
 #endif
-            wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+            wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
 #ifdef EXT_FLASH
             ext_flash_lock();
 #endif
