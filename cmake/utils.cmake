@@ -18,6 +18,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED UTILS_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
+
 # --------------------------------------------------------------------------------------------------
 # Utility for properly installing a file output regardless of if the current configuration is multi
 # config or not
@@ -72,3 +83,5 @@ macro(gen_bin_target_outputs TARGET)
     # Add top level target for all MCU standard outputs
     add_custom_target(${FILENAME}_outputs ALL DEPENDS ${TARGET_OUTPUTS})
 endmacro()
+
+set(UTILS_CMAKE_INCLUDED true)

@@ -1,4 +1,4 @@
-# CMakeLists.txt
+# wolfboot test-app/CMakeLists.txt
 #
 # Copyright (C) 2025 wolfSSL Inc.
 #

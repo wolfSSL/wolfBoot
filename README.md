@@ -1,6 +1,38 @@
-# wolfBoot
+﻿# wolfBoot
 
-wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/))
+Some interim notes on progress in various environments:
+
+## CMake Dev Status:
+
+|Status | Environment               | Test With
+|-------| ------------------------- | --------
+|  ✅   | VS 2022                   | Right-Click on [CMakeLists.txt](./CMakeLists.txt), Build
+|  ✅   | WSL                       | [./tools/scripts/cmake_test.sh](./tools/scripts/cmake_test.sh)
+|  ✅   | Mac                       | [test-build-cmake-mac.yml](./github/workflows/test-build-cmake-mac.yml)
+|  ✅   | VS Code, Dev Prompt       | Click "build" on bottom toolbar ribbon
+|  ✅   | DOS Prompt, Dev Prompt    | [.\tools\scripts\cmake_dev_prompt_test.bat](./tools/scripts/cmake_dev_prompt_test.bat)
+|  ✅   | PowerShell, Dev Prompt    | [.\tools\scripts\cmake_dev_prompt_test.bat](./tools/scripts/cmake_dev_prompt_test.bat)
+|  ✅   | DOS Prompt, direct launch | [.\tools\scripts\cmake_test.bat](./tools/scripts/cmake_test.bat) (needs toolchain path)
+|  ✅   | PowerShell, direct launch | [.\tools\scripts\cmake_test.bat](./tools/scripts/cmake_test.bat) (needs toolchain path)
+|  ✅   | VS Code, direct launch    | Click "build"
+
+## Make Dev Status:
+
+|Status | Environment               | Test With
+|-------| ------------------------- | --------
+|   ?   | VS 2022                   | N/A (?)
+|  ✅   | WSL                       | `./tools/scripts/wolfboot_build.sh --target stm32l4`
+|  ⚠️   | Mac                       | [test-build-cmake-mac.yml](./github/workflows/test-build-cmake-mac.yml)
+|   ?   | VS Code, Dev Prompt       | N/A (?)
+|  ❌   | DOS Prompt, Dev Prompt    |
+|  ❌   | PowerShell, Dev Prompt    |
+|  ❌   | DOS Prompt, direct launch |
+|  ❌   | PowerShell, direct launch |
+|   ?   | VS Code, direct launch    | N/A (?)
+
+---
+
+wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/), [Manual](https://www.wolfssl.com/documentation/manuals/wolfboot/), [wolfBoot-examples](https://github.com/wolfSSL/wolfBoot-examples))
 
 wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers,
 relying on wolfCrypt for firmware authentication, providing firmware update mechanisms.
@@ -38,6 +70,12 @@ The bootloader consists of the following components:
    - A minimalist Hardware Abstraction Layer, with an implementation provided for the supported target, which is in charge for IAP flash access and clock setting on the specific MCU
    - The core bootloader
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
+
+## Requirements
+
+### Linux
+
+Ensure the proper toolchain is installed. See the [docs](./docs/README.md) for platform-specific details.
 
 ## Integrating wolfBoot in an existing project
 
@@ -120,7 +158,57 @@ make keytools
 make
 ```
 
-### CMake
+### CMake - Presets
+
+This section explains how to build wolfBoot using CMake Presets.
+Presets let you keep repeatable build settings in a single JSON file ([CMakePresets.json](./CMakePresets.json)) so
+you can configure and build with short, memorable commands like:
+
+```
+cmake --list-presets
+cmake --preset stm32l4
+cmake --build --preset stm32l4
+```
+
+See the `WOLFBOOT_ROOT`/[config_defaults.cmake](./config_defaults.cmake) file.
+
+#### Convert existing `.config` to CMake Presets
+
+The [tools/scripts/config2presets.py](./tools/scripts/config2presets.py) script cam
+convert existing [config/examples](./config/examples) to CMake presets.
+
+For example:
+
+```python
+python3 ./tools/scripts/config2presets.py ./config/examples/stm32h7.config
+```
+
+#### Tips & Gotchas
+
+Out-of-source enforced: wolfBoot’s CMakeLists.txt blocks in-source builds;
+presets default to `build-${presetName}` anyway.
+
+Toolchain auto-select: If `WOLFBOOT_TARGET` is not x86_64_efi or sim,
+CMAKE_TOOLCHAIN_FILE defaults to `cmake/toolchain_arm-none-eabi.cmake`.
+
+Windows host tools: When HOST_CC is `cl.exe`, CMakeLists.txt creates a
+lightweight `unistd.h` shim and adjusts flags—no manual changes needed.
+
+`$penv` vs `$env`: Use `$penv{VAR}` in environment to append to the existing
+process environment (keeps your PATH). `$env{VAR}` replaces it.
+
+Visual Studio / VS Code: Both detect presets automatically;
+select the preset from the status bar or CMake menu, then build.
+
+`--fresh`: Re-configure from scratch without deleting the build directory.
+
+For further details, see the [cmake/README](./cmake/README.md)
+
+### CMake - Read .config file
+
+See [cmake/README](./cmake/README.md#build-with-cmake-using-config-files).
+
+### CMake - Command-line Settings
 
 To build using CMake, create a `build` directory and run `cmake` with the target platform as well as values for the partition
 size and address variables. To build the test-apps, run with `-DBUILD_TEST_APPS=yes`. To use the wolfCrypt-py keytools, run
@@ -241,12 +329,12 @@ options to configuring wolfBoot, add `-LAH` to your cmake command, along with th
 $ cmake -DWOLFBOOT_TARGET=stm32h7 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000 -LAH ..
 ```
 
-##### stm32f4
+#### stm32f4
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32f4 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08020000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08040000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x08060000 ..
 ```
 
-##### stm32u5
+#### stm32u5
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08100000 -DWOLFBOOT_SECTOR_SIZE=0x2000 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x817F000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81FE000 -DNO_MPU=yes ..
 ```
@@ -255,7 +343,6 @@ $ cmake -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOO
 ```
 $ cmake -DWOLFBOOT_TARGET=stm32l0 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8000 -DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_PARTITION_SIZE=0x10000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x18000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x28000 -DNVM_FLASH_WRITEONCE=yes ..
 ```
-
 
 ## Troubleshooting
 
@@ -295,6 +382,13 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
 
 The error `Key algorithm mismatch. Remove old keys via 'make keysclean'` indicates the current `.config` `SIGN` algorithm does not match what is in the generated `src/keystore.c` file.
 Use `make keysclean` to delete keys and regenerate.
+
+
+3.  Cannot open compiler generated file ... Permission denied
+
+```text
+sp_c32.c : fatal error C1083: Cannot open compiler generated file: '... sp_c32.obj': Permission denied
+```
 
 
 ## Release Notes
@@ -690,12 +784,12 @@ Use `make keysclean` to delete keys and regenerate.
     * RP2350 (Raspberry Pi Pico 2, ARM Cortex-M33 with TrustZone)
     * NXP MCXA153
     * NXP MCXW716
-    * STM32F1 series (STM32F103 “Blue Pill” board)
+    * STM32F1 series (STM32F103 "Blue Pill" board)
   * Improvements to supported targets
     * Xilinx UltraScale+ (ZynqMP)
         * Added hardware-accelerated SHA3 hashing via the CSU engine
         * Added support for enabling JTAG at runtime when `CSU_DEBUG` is set
-        * Introduced support for the device’s PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
+        * Introduced support for the device's PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
     * Renesas RX
         * Added option for TSIP hardware crypto engine
     * Infineon TriCore (AURIX TC3xx)
@@ -725,7 +819,7 @@ Use `make keysclean` to delete keys and regenerate.
     * Added support for x509 auth with wolfHSM in server mode
     * Added support for encrypted updates on Renesas RX (also via TSIP)
     * Added support for assembly optimizations for PowerPC 32bit (SHA, AES)
-    * STM32F4: new clock configuration to support all models, added support for STM32F411 
+    * STM32F4: new clock configuration to support all models, added support for STM32F411
   * Bugfixes:
     * Fixed unaligned access in Cortex-A5
     * Fixed compile flags to properly run code from RAM on ARM
