@@ -62,18 +62,23 @@
 
 #include <stddef.h> /* for size_t */
 
-#if defined(EXT_ENCRYPTED)
+#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
+#include "encrypt.h"
 static int encrypt_initialized = 0;
 
 static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
-    #if defined(__WOLFBOOT)
-        #include "encrypt.h"
-    #elif !defined(XMEMSET)
+static uint32_t encrypt_iv_offset = 0;
+
+#define FALLBACK_IV_OFFSET 0x00100000U
+    #if !defined(XMEMSET)
         #include <string.h>
         #define XMEMSET memset
         #define XMEMCPY memcpy
         #define XMEMCMP memcmp
     #endif
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+extern void aes_set_iv(uint8_t *nonce, uint32_t address);
+#endif
 
 #if defined (__WOLFBOOT) || defined (UNIT_TEST)
 int wolfBoot_initialize_encryption(void)
@@ -1027,7 +1032,7 @@ static int decrypt_header(uint8_t *src)
     uint32_t magic;
     uint32_t len;
     for (i = 0; i < IMAGE_HEADER_SIZE; i+=ENCRYPT_BLOCK_SIZE) {
-        crypto_set_iv(encrypt_iv_nonce, i / ENCRYPT_BLOCK_SIZE);
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, i / ENCRYPT_BLOCK_SIZE);
         crypto_decrypt(dec_hdr + i, src + i, ENCRYPT_BLOCK_SIZE);
     }
     magic = *((uint32_t*)(dec_hdr));
@@ -1359,6 +1364,7 @@ int wolfBoot_fallback_is_possible(void)
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
+#include "string.h"
 
 #if defined(WOLFBOOT_RENESAS_TSIP)
     #include "wolfssl/wolfcrypt/port/Renesas/renesas-tsip-crypt.h"
@@ -1387,6 +1393,39 @@ int wolfBoot_fallback_is_possible(void)
 #if defined(EXT_ENCRYPTED) && defined(MMU)
 static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
 #endif
+
+#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
+int RAMFUNCTION wolfBoot_enable_fallback_iv(int enable)
+{
+    int prev = 0;
+    if (encrypt_iv_offset != 0)
+        prev = 1;
+
+    if (enable)
+        encrypt_iv_offset = FALLBACK_IV_OFFSET;
+    else
+        encrypt_iv_offset = 0;
+
+    return prev;
+}
+
+void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counter)
+{
+#if defined(ENCRYPT_WITH_CHACHA)
+    crypto_set_iv((uint8_t *)nonce, iv_counter + encrypt_iv_offset);
+#elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    uint8_t local_nonce[ENCRYPT_NONCE_SIZE];
+    XMEMCPY(local_nonce, nonce, ENCRYPT_NONCE_SIZE);
+    crypto_set_iv(local_nonce, iv_counter + encrypt_iv_offset);
+#else
+    (void)nonce;
+    (void)iv_counter;
+#endif
+
+    /* Fallback IV offset is single-use; clear it once applied. */
+    encrypt_iv_offset = 0;
+}
+#endif /* EXT_ENCRYPTED && (__WOLFBOOT || UNIT_TEST) */
 
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
@@ -1808,8 +1847,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             }
             if (wolfBoot_initialize_encryption() < 0)
                 return -1;
-
-            crypto_set_iv(encrypt_iv_nonce, iv_counter);
+            wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
             /* data is coming from update and is already encrypted */
@@ -1892,7 +1930,7 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
                     return -1;
                 }
             }
-            crypto_set_iv(encrypt_iv_nonce, iv_counter);
+            wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
             break;
@@ -1988,7 +2026,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 
     /* decrypt content */
     while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
-        crypto_set_iv(encrypt_iv_nonce, iv_counter);
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_decrypt(dec_block, row_address, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(dst + dst_offset, dec_block, ENCRYPT_BLOCK_SIZE);
         row_address += ENCRYPT_BLOCK_SIZE;
@@ -2035,4 +2073,3 @@ int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len
 }
 
 #endif
-

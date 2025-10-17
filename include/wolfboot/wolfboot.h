@@ -381,6 +381,7 @@ int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 
 #ifdef EXT_ENCRYPTED
 /* Encryption support */
+
 #if defined(ENCRYPT_WITH_CHACHA)
     #define ENCRYPT_BLOCK_SIZE 64
     #define ENCRYPT_KEY_SIZE   32 /* Chacha20 - 256bit */
