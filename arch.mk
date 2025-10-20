@@ -1212,8 +1212,8 @@ ifeq ($(ARCH), AURIX_TC3)
       ifeq ($(WOLFHSM_SERVER),1)
         USE_GCC_HEADLESS=0
 
-        CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/tchsm-server/cfg \
-				  -I$(WOLFHSM_INFINEON_TC3XX)/port/server
+        CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port/server \
+				  -I$(WOLFHSM_INFINEON_TC3XX)/port/server/config
 
         OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o \
 				$(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
