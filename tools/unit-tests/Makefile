@@ -26,9 +26,9 @@ LDFLAGS+=-ftest-coverage
 
 
 TESTS:=unit-parser unit-extflash unit-aes128 unit-aes256 unit-chacha20 unit-pci \
-	   unit-mock-state unit-sectorflags unit-image unit-nvm unit-nvm-flagshome \
-	   unit-enc-nvm unit-enc-nvm-flagshome unit-delta unit-update-flash \
-	   unit-update-ram unit-pkcs11_store
+       unit-mock-state unit-sectorflags unit-image unit-nvm unit-nvm-flagshome \
+       unit-enc-nvm unit-enc-nvm-flagshome unit-delta unit-update-flash \
+       unit-update-ram unit-pkcs11_store
 
 all: $(TESTS)
 

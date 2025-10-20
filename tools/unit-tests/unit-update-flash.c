@@ -48,6 +48,29 @@
 
 const char *argv0;
 
+static void reset_mock_stats(void);
+static void prepare_flash(void);
+static void cleanup_flash(void);
+
+START_TEST (test_boot_success_sets_state)
+{
+    uint8_t state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    hal_flash_lock();
+
+    wolfBoot_success();
+
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &state), 0);
+    ck_assert_uint_eq(state, IMG_STATE_SUCCESS);
+
+    cleanup_flash();
+}
+END_TEST
+
 Suite *wolfboot_suite(void);
 
 int wolfBoot_staged_ok = 0;
@@ -412,6 +435,62 @@ START_TEST (test_empty_boot_but_update_sha_corrupted_denied) {
     cleanup_flash();
 }
 
+START_TEST (test_swap_resume_noop)
+{
+    reset_mock_stats();
+    prepare_flash();
+    ext_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+    ext_flash_lock();
+    ck_assert_int_eq(wolfBoot_swap_and_final_erase(1), -1);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_diffbase_version_reads)
+{
+    uint32_t word;
+    uint32_t version = 0x01020304;
+    uint32_t delta_base = 0x33445566;
+    uint16_t img_type = HDR_IMG_TYPE_AUTH | HDR_IMG_TYPE_APP;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+            (const uint8_t *)"WOLF", 4);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4,
+            (const uint8_t *)&version, sizeof(version));
+
+    word = (4u << 16) | HDR_VERSION;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 8,
+            (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 12,
+            (const uint8_t *)&version, sizeof(version));
+
+    word = (2u << 16) | HDR_IMG_TYPE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 16,
+            (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20,
+            (const uint8_t *)&img_type, sizeof(img_type));
+
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 24,
+            (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 28,
+            (const uint8_t *)&delta_base, sizeof(delta_base));
+    ext_flash_lock();
+
+    ck_assert_uint_eq(wolfBoot_get_diffbase_version(PART_UPDATE), delta_base);
+    ck_assert_uint_eq(wolfBoot_get_diffbase_version(PART_BOOT), 0);
+    ck_assert_uint_eq(wolfBoot_get_image_version(PART_UPDATE), version);
+    ck_assert_uint_eq(wolfBoot_get_image_type(PART_UPDATE), img_type);
+
+    cleanup_flash();
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -439,6 +518,9 @@ Suite *wolfboot_suite(void)
     TCase *emergency_rollback_failure_due_to_bad_update = tcase_create("Emergency rollback failure due to bad update");
     TCase *empty_boot_partition_update = tcase_create("Empty boot partition update");
     TCase *empty_boot_but_update_sha_corrupted_denied = tcase_create("Empty boot partition but update SHA corrupted");
+    TCase *swap_resume = tcase_create("Swap resume noop");
+    TCase *diffbase_version = tcase_create("Diffbase version lookup");
+    TCase *boot_success = tcase_create("Boot success state");
 
 
 
@@ -456,6 +538,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
+    tcase_add_test(swap_resume, test_swap_resume_noop);
+    tcase_add_test(diffbase_version, test_diffbase_version_reads);
+    tcase_add_test(boot_success, test_boot_success_sets_state);
 
 
 
@@ -473,6 +558,9 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, emergency_rollback_failure_due_to_bad_update);
     suite_add_tcase(s, empty_boot_partition_update);
     suite_add_tcase(s, empty_boot_but_update_sha_corrupted_denied);
+    suite_add_tcase(s, swap_resume);
+    suite_add_tcase(s, diffbase_version);
+    suite_add_tcase(s, boot_success);
 
 
 

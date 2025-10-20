@@ -69,5 +69,10 @@ void aes_set_iv(uint8_t *nonce, uint32_t address);
 int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
 int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
 
+#ifdef EXT_ENCRYPTED
+int wolfBoot_enable_fallback_iv(int enable);
+void wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counter);
+#endif
+
 #endif /* __WOLFBOOT || UNIT_TEST */
 #endif /* ENCRYPT_H_INCLUDED */

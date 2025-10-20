@@ -551,6 +551,20 @@ START_TEST(test_open_image)
     ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
             + 256);
 
+    /* External helper should accept the same mapped header pointer */
+    ret = wolfBoot_open_image_external(NULL, PART_UPDATE,
+            (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    ck_assert_int_eq(ret, -1);
+
+    memset(&img, 0, sizeof(img));
+    hdr_cpy_done = 0;
+    ret = wolfBoot_open_image_external(&img, PART_UPDATE,
+            (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(img.hdr_ok, 1);
+    ck_assert_ptr_eq(img.hdr, (void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
+            + 256);
 }
 END_TEST
 
