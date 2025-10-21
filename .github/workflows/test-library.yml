@@ -19,7 +19,7 @@ jobs:
     concurrency:
       # Avoid duplicate runs on the same ref
       group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
 
     strategy:
       fail-fast: false
