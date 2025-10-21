@@ -1212,8 +1212,7 @@ ifeq ($(ARCH), AURIX_TC3)
       ifeq ($(WOLFHSM_SERVER),1)
         USE_GCC_HEADLESS=0
 
-        CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/tchsm-server/cfg \
-				  -I$(WOLFHSM_INFINEON_TC3XX)/port/server
+        CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port/server
 
         OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o \
 				$(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
@@ -1292,8 +1291,9 @@ ifeq ($(ARCH), AURIX_TC3)
 
       ifeq ($(WOLFHSM_CLIENT),1)
         CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port/client
-		# All source files in port/client but listed as *.o files
-        OBJS += $(patsubst %.c,%.o,$(wildcard $(WOLFHSM_INFINEON_TC3XX)/port/client/*.c))
+        OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/client/hsm_ipc.o \
+                $(WOLFHSM_INFINEON_TC3XX)/port/client/io.o \
+                $(WOLFHSM_INFINEON_TC3XX)/port/client/tchsm_hh_host.o
       endif
 
     endif # !AURIX_TC3_HSM
