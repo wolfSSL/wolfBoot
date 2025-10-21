@@ -21,16 +21,16 @@ set(USE_DOT_CONFIG false)
 
 ## cmake directory overview
 
-- [../CMakeLists.txt](../CMakeLists.txt) - Top-level CMake entry that configures the wolfBoot build.
+- [`WOLFBOOT_ROOT`/CMakeLists.txt](../CMakeLists.txt) - Top-level CMake entry that configures the wolfBoot build.
 Used to initialize the project, include cmake/wolfboot.cmake, set options, and define targets.
 This file is where `project()` is declared and where toolchain logic or preset imports begin.
 
-- [../CMakePresets.json](../CMakePresets.json) - OS-agnostic CMake preset definitions.
+- [`WOLFBOOT_ROOT`/CMakePresets.json](../CMakePresets.json) - OS-agnostic CMake preset definitions.
 Used by `cmake --preset {name}` and `cmake --build --preset {name}` to apply consistent settings.
 Centralizes toolchain paths, target names, build directories, and key cache variables such as:
 `{ "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake", "WOLFBOOT_TARGET": "stm32l4" }`.
 
-- [../CMakeSettings.json](../CMakeSettings.json) - Visual Studio integration file.
+- [`WOLFBOOT_ROOT`/CMakeSettings.json](../CMakeSettings.json) - Visual Studio integration file.
 Maps Visual Studio configurations (Debug, Release) to existing CMake presets.
 Controls IntelliSense, environment variables, and the preset shown in the VS CMake toolbar.
 
@@ -66,11 +66,12 @@ Controls IntelliSense, environment variables, and the preset shown in the VS CMa
 
 - [downloads/stm32l4.cmake](./downloads/stm32l4.cmake) - STM32L4 fetch script for HAL and CMSIS.
 
+- [`WOLFBOOT_ROOT`/.vs/VSWorkspaceSettings.json](../.vs/VSWorkspaceSettings.json) - Exclusion directories: Visual Studio tries to be "helpful" and open a solution file. This is undesired when opening a directory as a CMake project.
 ---
 
 ### Build with cmake using `.config` files
 
-Presets are preferred, see below.
+Presets are preferred instead of `.config`, see below.
 
 To use `.config` files instead of presets,
 
@@ -146,6 +147,43 @@ cmake --build --preset stm32l4
 
 cmake --preset stm32h7
 cmake --build --preset stm32h7
+```
+
+### CMake User Presets.
+
+See the [CMakeUserPresets.json.sample(./CMakeUserPresets.json.sample).
+Copy the file to `WOLFBOOT_ROOT` and remove the`.sample` suffix: `CMakeUserPresets.json`.
+
+It is critically important that none the names of a user preset do not conflict with regular presets.
+
+For instance, the sample extends and overrides some of the `stm32l4` settings,
+using LLVM clang on Windows, and prefixes ALL the names with `my-`:
+
+```json
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "my-stm32l4",
+      "displayName": "my STM32L4",
+      "inherits": [
+        "stm32l4"
+      ],
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-my-stm32l4",
+      "cacheVariables": {
+        "ARM_GCC_BIN": "C:/SysGCC/arm-eabi/bin",
+        "HOST_CC": "C:/Program Files/LLVM/bin/clang.exe"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "my-stm32l4",
+      "configurePreset": "my-stm32l4"
+    }
+  ]
+}
 ```
 
 

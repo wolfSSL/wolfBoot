@@ -1,12 +1,11 @@
 {
   "configurations": [
     {
-      "name": "x64-Debug",
+      "name": "No-CMake",
+      "description": "Default",
       "generator": "Ninja",
-      "configurationType": "Debug",
-      "inheritEnvironments": [ "msvc_x64_x64" ],
-      "buildRoot": "${projectDir}\\out\\build\\${name}",
-      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "buildRoot": "${projectDir}\\build-${name}",
+      "installRoot": "${projectDir}\\install-${name}",
       "cmakeCommandArgs": "",
       "buildCommandArgs": "",
       "ctestCommandArgs": ""
