@@ -33,6 +33,11 @@ jobs:
         asym: [ed25519, ecc256, ecc384, ecc521, rsa2048, rsa3072, rsa4096, ed448]
         hash: [sha256, sha384, sha3]
 
+        # See https://github.com/wolfSSL/wolfBoot/issues/614 regarding exclusions:
+        exclude:
+          - math: "SPMATH=1 WOLFBOOT_SMALL_STACK=1"
+          - math: "SPMATHALL=1 WOLFBOOT_SMALL_STACK=1"
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,13 +75,18 @@ jobs:
 
           # First attempt
           if build_once >build.out 2>build.err; then
-            echo "Success on first attempt"
+            echo "Success on first attempt, WOLFBOOT_HUGE_STACK not applied."
             exit 0
           fi
 
           # If it failed due to the TFM huge stack guard, retry with the flag
-          if grep -q 'If this is OK, please compile with WOLFBOOT_HUGE_STACK=1' build.err; then
-            echo "Retrying with WOLFBOOT_HUGE_STACK=1 due to TFM stack requirement"
+          if grep -Fq 'If this is OK, please compile with WOLFBOOT_HUGE_STACK=1' build.err; then
+            echo "Retrying with WOLFBOOT_HUGE_STACK=1 due to stack requirement error."
+
+            # Always print the entire message
+            grep -Fn 'If this is OK, please compile with WOLFBOOT_HUGE_STACK=1' build.err || true
+
+            # Try again with huge stack allowed
             build_once WOLFBOOT_HUGE_STACK=1
           else
             echo "Build failed for another reason:"
