@@ -23,7 +23,6 @@
 #include <string.h>
 #include <delta.h>
 
-
 #define ESC 0x7f
 
 
@@ -174,6 +173,8 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <limits.h>     /* INT_MAX */
+#include <inttypes.h>   /* PRIu32  */
 
 static uint32_t wolfboot_sector_size = 0;
 
@@ -181,10 +182,21 @@ int wb_diff_get_sector_size(void)
 {
     uint32_t sec_sz = 0;
     char *env_sector_size = NULL;
+#if defined(_MSC_VER)  /* MSVC only, not _WIN32 that includes MSYS2/MinGW */
+    char* dup = NULL;
+    size_t len = 0;
+    if ((_dupenv_s(&dup, &len, "WOLFBOOT_SECTOR_SIZE") == 0) && dup) {
+        env_sector_size = dup;
+    }
+#else
     env_sector_size = getenv("WOLFBOOT_SECTOR_SIZE");
+#endif
     if (!env_sector_size) {
        fprintf(stderr, "Please set the WOLFBOOT_SECTOR_SIZE environment variable in\n"
                "order to sign a delta update.\n");
+#if defined(_MSC_VER)
+       free(dup);
+#endif
        exit(6);
     } else {
         sec_sz = atoi(env_sector_size);
@@ -193,11 +205,28 @@ int wb_diff_get_sector_size(void)
             sec_sz = strtol(env_sector_size, NULL, 16);
             if (errno != 0) {
                 fprintf(stderr, "Invalid WOLFBOOT_SECTOR_SIZE value\n");
+#if defined(_MSC_VER)
+                free(dup);
+#endif
                 exit(6);
             }
         }
     }
-    return sec_sz;
+
+#if defined(_MSC_VER)
+    free(dup);
+#endif
+
+    if (sec_sz == 0) {
+        fprintf(stderr, "WOLFBOOT_SECTOR_SIZE cannot be 0\n");
+        exit(6);
+    }
+    if (sec_sz > (uint32_t)INT_MAX) {
+        fprintf(stderr, "WOLFBOOT_SECTOR_SIZE (%" PRIu32 ") exceeds INT_MAX (%d)\n",
+            sec_sz, INT_MAX);
+        exit(6);
+    }
+    return (int)sec_sz;
 }
 
 int wb_diff_init(WB_DIFF_CTX *ctx, uint8_t *src_a, uint32_t len_a, uint8_t *src_b, uint32_t len_b)
