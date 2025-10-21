@@ -8,20 +8,36 @@ on:
 
 jobs:
   test-lib:
+    # If jobs cancel, consider pinning to ubuntu-24.04
+    # The ubuntu-latest alias can point to different images during migrations (and sometimes be extra busy),
+    # while ubuntu-24.04 always targets the 24.04 poo
     runs-on: ubuntu-latest
+
+    # The timeout is run time after a runner starts, not time in queue
     timeout-minutes: 15
+
+    concurrency:
+      # Avoid duplicate runs on the same ref
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
 
     strategy:
       fail-fast: false
+
+      # Limit concurrent jobs for scheduling problem on GitHub's hosted runner pool.
+      max-parallel: 12
+
       matrix:
-        math: [SPMATH=1 WOLFBOOT_SMALL_STACK=0,
-               SPMATH=1 WOLFBOOT_SMALL_STACK=1,
-               SPMATHALL=1 WOLFBOOT_SMALL_STACK=0,
-               SPMATHALL=1 WOLFBOOT_SMALL_STACK=1,
-               SPMATH=0 SPMATHALL=0 WOLFBOOT_SMALL_STACK=0,
-               SPMATH=0 SPMATHALL=0 WOLFBOOT_SMALL_STACK=1]
+        math:
+          - "SPMATH=1 WOLFBOOT_SMALL_STACK=0"
+          - "SPMATH=1 WOLFBOOT_SMALL_STACK=1"
+          - "SPMATHALL=1 WOLFBOOT_SMALL_STACK=0"
+          - "SPMATHALL=1 WOLFBOOT_SMALL_STACK=1"
+          - "SPMATH=0 SPMATHALL=0 WOLFBOOT_SMALL_STACK=0"
+          - "SPMATH=0 SPMATHALL=0 WOLFBOOT_SMALL_STACK=1"
         asym: [ed25519, ecc256, ecc384, ecc521, rsa2048, rsa3072, rsa4096, ed448]
         hash: [sha256, sha384, sha3]
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,14 +51,15 @@ jobs:
         env:
           ASYM: ${{ matrix.asym }}
           HASH: ${{ matrix.hash }}
+          MATH: ${{ matrix.math }}
         run: |
           cp config/examples/library.config .config
           make keytools
-          ./tools/keytools/keygen --${{ matrix.asym }} -g wolfboot_signing_private_key.der
+          ./tools/keytools/keygen --${ASYM} -g wolfboot_signing_private_key.der
           echo "Test" > test.bin
-          ./tools/keytools/sign --${{ matrix.asym }} --${{ matrix.hash }} test.bin wolfboot_signing_private_key.der 1
+          ./tools/keytools/sign --${ASYM} --${HASH} test.bin wolfboot_signing_private_key.der 1
           # Convert asym and hash to upper case
-          make test-lib SIGN=${ASYM^^} HASH=${HASH^^}
+          make test-lib SIGN=${ASYM^^} HASH=${HASH^^} ${MATH}
 
       - name: Run test-lib
         run: |
