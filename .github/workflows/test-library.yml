@@ -16,11 +16,6 @@ jobs:
     # The timeout is run time after a runner starts, not time in queue
     timeout-minutes: 15
 
-    concurrency:
-      # Avoid duplicate runs on the same ref
-      group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
-      cancel-in-progress: false
-
     strategy:
       fail-fast: false
 
