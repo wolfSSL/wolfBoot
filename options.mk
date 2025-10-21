@@ -895,7 +895,9 @@ ifeq ($(WOLFHSM_CLIENT),1)
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_nvm.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_cryptocb.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_dma.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_dma.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \

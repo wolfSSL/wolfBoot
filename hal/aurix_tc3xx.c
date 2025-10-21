@@ -89,7 +89,6 @@
 /* wolfHSM client context and configuration */
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
 
-static int _cancelCb(uint16_t cancelSeq);
 static int _connectCb(void* context, whCommConnected connect);
 
 /* Client configuration/contexts */
@@ -702,13 +701,6 @@ void ext_flash_unlock(void)
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 
-static int _cancelCb(uint16_t cancelSeq)
-{
-    HSM_SHM_CORE0_CANCEL_SEQ = cancelSeq;
-    (void)tchsmHhHost2Hsm_Notify(TCHSM_HOST2HSM_NOTIFY_CANCEL);
-    return 0;
-}
-
 static int _connectCb(void* context, whCommConnected connect)
 {
     int ret;
@@ -756,7 +748,6 @@ int hal_hsm_init_connect(void)
 
     whClientConfig c_conf[1] = {{
         .comm     = cc_conf,
-        .cancelCb = _cancelCb,
     }};
 
     rc = hsm_ipc_init();

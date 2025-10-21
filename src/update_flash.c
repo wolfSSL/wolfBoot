@@ -671,7 +671,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint16_t update_type;
     uint32_t fw_size;
     uint32_t size;
+#if defined(DELTA_UPDATES)
     int inverse = 0;
+#endif
     int fallback_image = 0;
 #if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
     uint8_t key[ENCRYPT_KEY_SIZE];
@@ -713,7 +715,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         wolfBoot_open_image(&boot, PART_BOOT);
         wolfBoot_open_image(&swap, PART_SWAP);
 
-#ifdef EXT_ENCRYPTED
+#if defined(EXT_ENCRYPTED) && defined(DELTA_UPDATES)
         wolfBoot_printf("Update partition fallback image: %d\n", fallback_image);
         if (fallback_image)
             inverse = 1;
@@ -783,10 +785,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
 #endif
     }
+
+#ifdef DELTA_UPDATES
     if (cur_ver > upd_ver)
         inverse = 1;
 
-#ifdef DELTA_UPDATES
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
         /* if magic isn't set stateRet will be -1 but that means we're on a
          * fresh partition and aren't resuming */
