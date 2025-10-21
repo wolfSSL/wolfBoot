@@ -144,6 +144,9 @@ IDE/IAR/Release
 build/
 CMakeFiles/
 CMakeCache.txt
+# User specific presets should never be included.
+# See docs: https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
+/**/CMakeUserPresets.json
 
 # Stage 1
 stage1/loader_stage1.ld
@@ -262,6 +265,11 @@ language.settings.xml
 # Any Visual Studio / VisualGDB
 /**/.vs
 /**/.visualgdb/*
+
+# Defaults are set in files otherwise excluded:
+!/.vs/README.md
+!/.vs/VSWorkspaceState.json
+!/.vs/VSWorkspaceSettings.json
 
 # Any build directories
 /**/build
