@@ -10,7 +10,7 @@ jobs:
   test-lib:
     # If jobs cancel, consider pinning to ubuntu-24.04
     # The ubuntu-latest alias can point to different images during migrations (and sometimes be extra busy),
-    # while ubuntu-24.04 always targets the 24.04 poo
+    # while ubuntu-24.04 always targets the 24.04 pool
     runs-on: ubuntu-latest
 
     # The timeout is run time after a runner starts, not time in queue
@@ -44,17 +44,45 @@ jobs:
 
       - name: Build test-lib
         env:
+          shell: bash
           ASYM: ${{ matrix.asym }}
           HASH: ${{ matrix.hash }}
           MATH: ${{ matrix.math }}
         run: |
+          # Sample build
+          build_once() {
+              # Convert asym and hash to upper case, optionally add additional param
+              make -j test-lib SIGN=${ASYM^^} HASH=${HASH^^} ${MATH} "$@"
+          }
+
+          set -euo pipefail
+
+          # Get the reference config
           cp config/examples/library.config .config
+
+          # Keytools
           make keytools
           ./tools/keytools/keygen --${ASYM} -g wolfboot_signing_private_key.der
+
+          # Sign
           echo "Test" > test.bin
           ./tools/keytools/sign --${ASYM} --${HASH} test.bin wolfboot_signing_private_key.der 1
-          # Convert asym and hash to upper case
-          make test-lib SIGN=${ASYM^^} HASH=${HASH^^} ${MATH}
+
+          # First attempt
+          if build_once >build.out 2>build.err; then
+            echo "Success on first attempt"
+            exit 0
+          fi
+
+          # If it failed due to the TFM huge stack guard, retry with the flag
+          if grep -q 'TFM will allocate 70\+ KB in the stack' build.err; then
+            echo "Retrying with WOLFBOOT_HUGE_STACK=1 due to TFM stack requirement"
+            build_once WOLFBOOT_HUGE_STACK=1
+          else
+            echo "Build failed for another reason:"
+            cat build.err
+            exit 1
+          fi
 
       - name: Run test-lib
         run: |
