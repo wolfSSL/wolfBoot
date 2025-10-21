@@ -75,7 +75,7 @@ jobs:
           fi
 
           # If it failed due to the TFM huge stack guard, retry with the flag
-          if grep -q 'TFM will allocate 70\+ KB in the stack' build.err; then
+          if grep -q 'If this is OK, please compile with WOLFBOOT_HUGE_STACK=1' build.err; then
             echo "Retrying with WOLFBOOT_HUGE_STACK=1 due to TFM stack requirement"
             build_once WOLFBOOT_HUGE_STACK=1
           else
