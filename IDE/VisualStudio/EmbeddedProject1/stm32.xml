@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<EmbeddedProfile xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ToolchainID>com.visualgdb.arm-eabi</ToolchainID>
+  <ToolchainVersion>
+    <GCC>10.3.1</GCC>
+    <GDB>10.2.90</GDB>
+    <Revision>1</Revision>
+  </ToolchainVersion>
+  <BspID>com.sysprogs.arm.stm32</BspID>
+  <BspVersion>2025.06</BspVersion>
+  <McuID>STM32L475VG</McuID>
+  <MCUDefinitionFile>STM32L4xxxx/DeviceDefinitions/stm32l475xx.xml</MCUDefinitionFile>
+  <MCUProperties>
+    <Entries />
+  </MCUProperties>
+  <BSPSourceFolderName>Device-specific files</BSPSourceFolderName>
+  <MCUMakFile>stm32.mak</MCUMakFile>
+  <ReferencedFrameworks />
+  <FrameworkProperties>
+    <Entries />
+  </FrameworkProperties>
+  <TestFrameworkProperties>
+    <Entries />
+  </TestFrameworkProperties>
+</EmbeddedProfile>

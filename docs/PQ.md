@@ -1,4 +1,4 @@
-# Post-Quantum Signatures
+﻿# Post-Quantum Signatures
 
 wolfBoot is continuously adding support for post-quantum (PQ) signature
 algorithms as they mature. At present, support has been added for three NIST
@@ -95,7 +95,7 @@ tradeoff.
 Stateful HBS schemes are based on the security of their underlying hash
 functions and Merkle trees, which are not expected to be broken by the advent
 of cryptographically relevant quantum computers. For this reason they have
-been recommended by both NIST SP 800-208, and the NSA’s CNSA 2.0 suite.
+been recommended by both NIST SP 800-208, and the NSA's CNSA 2.0 suite.
 
 See these links for more info on stateful HBS support and wolfSSL/wolfCrypt:
 - https://www.wolfssl.com/documentation/manuals/wolfssl/appendix07.html#post-quantum-stateful-hash-based-signatures

@@ -2830,9 +2830,9 @@ int main(int argc, char** argv)
     }
     printf("Input image:          %s\n", CMD.image_file);
     printf("Selected cipher:      %s\n", sign_str);
-    printf("Selected hash  :      %s\n", hash_str);
+    printf("Selected hash:        %s\n", hash_str);
     if (CMD.sign != NO_SIGN) {
-        printf("Private key:           %s\n", CMD.key_file);
+        printf("Private key:          %s\n", CMD.key_file);
     }
     if (CMD.hybrid) {
         printf("Secondary cipher:     %s\n", secondary_sign_str);
@@ -2853,7 +2853,7 @@ int main(int argc, char** argv)
     if (CMD.encrypt) {
         printf("Encrypted output:     %s\n", CMD.output_encrypted_image_file);
     }
-    printf("Target partition id : %hu ", CMD.partition_id);
+    printf("Target partition id:  %hu ", CMD.partition_id);
     if (CMD.partition_id == HDR_IMG_TYPE_WOLFBOOT)
         printf("(bootloader)");
     printf("\n");
