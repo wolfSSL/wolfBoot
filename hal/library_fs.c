@@ -60,14 +60,14 @@ static int cmd_get_state(uint8_t part)
 {
     uint8_t state;
     int ret;
-    
+
     ret = wolfBoot_get_partition_state(part, &state);
     if (ret != 0) {
         wolfBoot_printf("Error: Failed to get state for %s partition (error: %d)\n",
                partition_name(part), ret);
         return -1;
     }
-    
+
     wolfBoot_printf("%s partition state: %s (0x%02X)\n",
            partition_name(part), state_name(state), state);
     return 0;
@@ -77,15 +77,15 @@ static int cmd_get_state(uint8_t part)
 static int cmd_get_all_states(void)
 {
     int ret = 0;
-    
+
     wolfBoot_printf("=== Partition States ===\n");
-    
+
     if (cmd_get_state(PART_BOOT) != 0)
         ret = -1;
-    
+
     if (cmd_get_state(PART_UPDATE) != 0)
         ret = -1;
-    
+
     return ret;
 }
 
@@ -164,15 +164,21 @@ static int cmd_verify(uint8_t part)
 int main(int argc, const char* argv[])
 {
     int ret = 0;
-    
+    const char* prog_name = "lib-fs";
+    const char* command;
+
+    if (argc >= 1) {
+        prog_name = argv[0];
+    }
+
     /* Check for argument count */
     if (argc != 2) {
-        print_usage(argv[0]);
+        print_usage(prog_name);
         return 1;
     }
-    
-    const char* command = argv[1];
-    
+
+    command = argv[1];
+
     /* Process commands */
     if (strcmp(command, "status") == 0) {
         ret = cmd_get_all_states();
@@ -195,7 +201,7 @@ int main(int argc, const char* argv[])
     else if (strcmp(command, "verify-update") == 0) {
         ret = cmd_verify(PART_UPDATE);
     }
-    else if (strcmp(command, "help") == 0 || strcmp(command, "--help") == 0 || 
+    else if (strcmp(command, "help") == 0 || strcmp(command, "--help") == 0 ||
              strcmp(command, "-h") == 0) {
         print_usage(argv[0]);
         ret = 0;
@@ -205,6 +211,6 @@ int main(int argc, const char* argv[])
         print_usage(argv[0]);
         ret = 1;
     }
-    
+
     return ret;
 }

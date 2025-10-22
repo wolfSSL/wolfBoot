@@ -312,7 +312,7 @@ backup_on_failure:
             dts_size = (uint32_t)os_image.fw_size;
 
             wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
-                    dts_size, dts_addr);
+                (long unsigned int)dts_size, (long unsigned int)dts_addr);
             ext_flash_check_read((uintptr_t)os_image.fw_base,
                     (uint8_t*)dts_addr, dts_size);
         }
@@ -331,7 +331,7 @@ backup_on_failure:
                     uint8_t* dts_dst = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
                     dts_size = (uint32_t)ret;
                     wolfBoot_printf("Loading DTB (size %d) from %p to RAM at %p\n",
-                        dts_size, dts_addr, WOLFBOOT_LOAD_DTS_ADDRESS);
+                        dts_size, dts_addr, (void*)WOLFBOOT_LOAD_DTS_ADDRESS);
                     memcpy(dts_dst, dts_addr, dts_size);
                     dts_addr = dts_dst;
                 }
