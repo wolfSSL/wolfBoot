@@ -105,9 +105,6 @@ ifeq ($(ARCH),AARCH64)
     ARCH_FLAGS=-mstrict-align
     CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8 -DWOLFSSL_AARCH64_PRIVILEGE_MODE
     WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
-                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256.o \
-                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512.o \
-                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes.o \
                       $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
                       $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
   endif
@@ -284,7 +281,6 @@ ifeq ($(CORTEX_A5),1)
   else
     MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm32.o
     ifneq ($(NO_ARM_ASM),1)
-      OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256.o
       OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
       OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
       CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
@@ -296,10 +292,6 @@ else
   OBJS+=src/boot_arm.o
   ifneq ($(NO_ARM_ASM),1)
     CORTEXM_ARM_EXTRA_OBJS= \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-chacha.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha256-asm.o \
