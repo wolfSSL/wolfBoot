@@ -62,7 +62,12 @@ void hal_prepare_boot(void)
 {
     return;
 }
+
+#ifdef MMU
+void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
+#else
 void do_boot(const uint32_t *app_offset)
+#endif
 {
     (void)app_offset;
 }
