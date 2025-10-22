@@ -116,8 +116,7 @@ XMSS_EXTRA=\
     -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
 
 ML_DSA_OBJS=\
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o
 
 ML_DSA_EXTRA=\
     -D"ML_DSA_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
