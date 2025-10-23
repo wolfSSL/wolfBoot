@@ -138,7 +138,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
 #else
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | (1 << 31)));
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_BKSEL));
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bank << 31));
 #endif
 
@@ -165,6 +165,7 @@ void hal_tz_release_nonsecure_area(void)
 {
 #ifndef DUALBANK_SWAP
     int i;
+    /* Set all banks as non-secure */
     for (i = 0; i < FLASH_SECBB_NREGS; i++) {
         FLASH_SECBB1[i] = 0;
         FLASH_SECBB2[i] = 0;
