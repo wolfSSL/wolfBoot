@@ -33,17 +33,20 @@
 
 #if TZ_SECURE()
 
-/* This function assumes that the boot and the update
- * partitions are at the same address in the two banks,
- * regardless if DUALBANK_SWAP is active or not.
- */
 static int is_flash_nonsecure(uint32_t address)
 {
+#ifndef DUALBANK_SWAP
+    if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) {
+        return 1;
+    }
+    return 0;
+#else
     uint32_t in_bank_offset = (address & 0x000FFFFF);
     if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE)) {
         return 1;
     }
     return 0;
+#endif
 }
 #endif
 
