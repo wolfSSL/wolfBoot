@@ -1,0 +1,46 @@
+name: Test Filesystem
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build-lib-fs-example:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Set simulation config and build signed boot partition
+        run: |
+          cp config/examples/sim.config .config
+          make clean
+          make
+
+      - name: Check for internal_flash.dd
+        run: |
+          if [ ! -f internal_flash.dd ]; then
+            echo "Error: internal_flash.dd not found. Build may have failed."
+            exit 1
+          fi
+
+      - name: Switch to library_fs config
+        run: cp config/examples/library_fs.config .config
+
+      - name: Clean and build lib-fs
+        run: |
+          make clean
+          make lib-fs
+
+      - name: Mark BOOT partition as SUCCESS
+        run: ./lib-fs success
+
+      - name: Verify BOOT partition integrity and authenticity
+        run: ./lib-fs verify-boot
