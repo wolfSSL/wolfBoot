@@ -192,6 +192,7 @@ void RAMFUNCTION hal_flash_opt_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+    uint32_t start_address;
     uint32_t end_address;
     uint32_t p;
 
@@ -202,8 +203,17 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (address < 0x08000000)
         return -1;
 
-    end_address = address + len - 1;
-    for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
+#if TZ_SECURE()
+    start_address = address | FLASH_SECURE_MMAP_BASE;
+    if (is_flash_nonsecure(address)) {
+        hal_tz_claim_nonsecure_area(address, len);
+    }
+#else
+    start_address = address;
+#endif
+
+    end_address = start_address + len - 1;
+    for (p = start_address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
         uint32_t base;
         uint32_t bnksel = 0;
@@ -214,12 +224,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             base = FLASH_BANK2_BASE;
             bnksel = 1;
         }
-#if TZ_SECURE()
-        /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
-        if (is_flash_nonsecure(address)) {
-            return 0;
-        }
-#endif
         /* Check for swapped banks to invert bnksel */
         if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
             bnksel = !bnksel;
@@ -231,6 +235,12 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     }
     /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_SER ;
+
+#if TZ_SECURE()
+    if (is_flash_nonsecure(address)) {
+        hal_tz_release_nonsecure_area();
+    }
+#endif
     return 0;
 }
 
