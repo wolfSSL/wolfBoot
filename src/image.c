@@ -882,8 +882,10 @@ static int hdr_cpy_done = 0;
 static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
 {
     if (!hdr_cpy_done) {
-        ext_flash_check_read((uintptr_t)img->hdr, hdr_cpy, IMAGE_HEADER_SIZE);
-        hdr_cpy_done = 1;
+        memset(hdr_cpy, 0, sizeof(hdr_cpy));
+        if (ext_flash_check_read((uintptr_t)img->hdr, hdr_cpy,
+                IMAGE_HEADER_SIZE) == IMAGE_HEADER_SIZE)
+            hdr_cpy_done = 1;
     }
     return hdr_cpy;
 }

@@ -142,7 +142,8 @@ int wolfBoot_start(void)
  exit:
     if (ret < 0) {
         wolfBoot_printf("Failure %d: Hdr %d, Hash %d, Sig %d\n", ret,
-                        os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
+                        (int)os_image.hdr_ok, (int)os_image.sha_ok,
+                        (int)os_image.signature_ok);
     }
 
     return 0;

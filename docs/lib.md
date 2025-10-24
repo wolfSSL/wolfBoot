@@ -21,7 +21,7 @@ of the manifest header.
 
 
 On success, zero is returned. If the image does not contain a valid 'magic number' at the beginning
-of the manifest, or if the size of the image is bigger than `WOLFBOOT_PARTITION_SIZE`, -1 is returned. 
+of the manifest, or if the size of the image is bigger than `WOLFBOOT_PARTITION_SIZE`, -1 is returned.
 
 
 If the `open_image_address` operation is successful, two other functions can be invoked:
@@ -123,3 +123,98 @@ Firmware Valid
 booting 0x5609e3526590(actually exiting)
 ```
 
+## Library mode: Partition Manager CLI Example
+
+An example application using filesystem access is provided in `hal/library_fs.c`.
+
+The CLI application `lib-fs` allow querying partition states, triggering updates, and marking the boot partition as successful.
+
+### Building the lib-fs example
+
+To generate and verify a signed boot partition using simulation and library_fs targets, follow these steps.
+You can run these steps using the provided script at `tools/scripts/build_lib_fs_example.sh`:
+
+```
+./tools/scripts/build_lib_fs_example.sh
+```
+
+Alternatively, you can perform the steps manually as described below:
+
+Step 1: Copy the configuration for simulation and build the signed boot partition:
+```
+cp config/examples/sim.config .config
+make
+```
+This will generate a file with a signed boot partition named `internal_flash.dd`.
+
+Step 2: Change the target back to `library_fs`:
+```
+cp config/examples/library_fs.config .config
+```
+
+Step 3: Ensure that the partition layout in `sim.config` matches the layout in `library_fs.config`.
+
+Step 4: Clean previous build artifacts and build the CLI application:
+```
+make clean
+make lib-fs
+```
+This will produce the `lib-fs` executable.
+
+Step 5: Mark the BOOT partition as successfully loaded:
+```
+./lib-fs success
+```
+
+Step 6: Verify the integrity and authenticity of the BOOT partition:
+```
+./lib-fs verify-boot
+```
+
+### Using the Partition Manager CLI
+
+The example configuration points the binary to access `/dev/mtd0` for partition data. You can simulate this file path with `modprobe mtdram total_size=16384 erase_size=128`. You may need to adjust the file permissions to allow read/write access.
+
+Run the application with one of the supported commands:
+
+```
+./lib-fs <command>
+```
+
+Available commands:
+
+- `status`         : Show state of all partitions
+- `get-boot`       : Get BOOT partition state
+- `get-update`     : Get UPDATE partition state
+- `update-trigger` : Trigger an update (sets UPDATE partition to UPDATING)
+- `success`        : Mark BOOT partition as SUCCESS
+- `verify-boot`    : Verify integrity and authenticity of BOOT partition
+- `verify-update`  : Verify integrity and authenticity of UPDATE partition
+- `help`           : Show usage information
+
+#### Example usage
+
+Show all partition states:
+```
+./lib-fs status
+```
+
+Trigger an update:
+```
+./lib-fs update-trigger
+```
+
+Mark the boot partition as successful:
+```
+./lib-fs success
+```
+
+Verify BOOT partition:
+```
+./lib-fs verify-boot
+```
+
+Verify UPDATE partition:
+```
+./lib-fs verify-update
+```

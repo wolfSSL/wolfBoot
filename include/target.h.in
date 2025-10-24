@@ -36,7 +36,7 @@
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 
-#ifdef ARCH_SIM
+#if defined(ARCH_SIM) && !defined(WOLFBOOT_PARTITION_FILENAME)
     #include <stdint.h>
     /* use runtime ram base for simulator */
     extern uint8_t *sim_ram_base;

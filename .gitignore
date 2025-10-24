@@ -118,6 +118,7 @@ tools/tpm/policy_create
 tools/tpm/policy_sign
 config/*.ld
 test-lib
+lib-fs
 
 # Elf preprocessing tools
 tools/squashelf/**
@@ -275,3 +276,7 @@ language.settings.xml
 /**/build
 /**/build-**
 
+# Eclipse
+.cproject
+.project
+.settings/
