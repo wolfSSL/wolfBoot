@@ -175,10 +175,10 @@ The example configuration for this scenario is available in [/config/examples/st
 - User Option Bytes requirement (with STM32CubeProgrammer tool - see below for instructions)
 
 ```
-TZEN = 1                            System with TrustZone-M enabled
-DBANK = 1                           Dual bank mode
-SECWM1_PSTRT=0x0  SECWM1_PEND=0x7F  All 128 pages of internal Flash Bank1 set as secure
-SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secure, hence Bank2 non-secure
+TZEN = 1                          System with TrustZone-M enabled
+DBANK = 1                         Dual bank mode
+SECWM1_STRT=0x0  SECWM1_END=0x7F  All 128 pages of internal Flash Bank1 set as secure
+SECWM2_STRT=0x1  SECWM2_END=0x0   No page of internal Flash Bank2 set as secure, hence Bank2 non-secure
 ```
 
 - NOTE: STM32CubeProgrammer V2.3.0 is required  (v2.4.0 has a known bug for STM32L5)
@@ -189,7 +189,7 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 2. `make`
 3. Prepare board with option bytes configuration reported above
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
-    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_STRT=0x0 SECWM1_END=0x7F SECWM2_STRT=0x1 SECWM2_END=0x0`
 4. flash wolfBoot.bin to 0x0c00 0000
     - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
 5. flash .\test-app\image_v1_signed.bin to 0x0804 0000
@@ -316,10 +316,10 @@ SRAM memories into two parts:
 - User Option Bytes requirement (with STM32CubeProgrammer tool - see below for instructions)
 
 ```
-TZEN = 1                            System with TrustZone-M enabled
-DBANK = 1                           Dual bank mode
-SECWM1_PSTRT=0x0  SECWM1_PEND=0x7F  All 128 pages of internal Flash Bank1 set as secure
-SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secure, hence Bank2 non-secure
+TZEN = 1                          System with TrustZone-M enabled
+DBANK = 1                         Dual bank mode
+SECWM1_STRT=0x0  SECWM1_END=0x7F  All 128 pages of internal Flash Bank1 set as secure
+SECWM2_STRT=0x1  SECWM2_END=0x0   No page of internal Flash Bank2 set as secure, hence Bank2 non-secure
 ```
 
 - NOTE: STM32CubeProgrammer V2.8.0 or newer is required
@@ -330,7 +330,7 @@ SECWM2_PSTRT=0x1  SECWM2_PEND=0x0   No page of internal Flash Bank2 set as secur
 2. `make TZEN=1`
 3. Prepare board with option bytes configuration reported above
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
-    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x1 SECWM2_PEND=0x0`
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_STRT=0x0 SECWM1_END=0x7F SECWM2_STRT=0x1 SECWM2_END=0x0`
 4. flash wolfBoot.bin to 0x0c000000
     - `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
 5. flash .\test-app\image_v1_signed.bin to 0x08010000
@@ -915,7 +915,7 @@ The example configuration for this scenario is available in [/config/examples/st
 `STM32_Programmer_CLI -c port=swd -ob TZEN=0xB4`
 
 - set the option bytes to enable flash secure protection of first 384KB and remainder as non-secure:
-`STM32_Programmer_CLI -c port=swd -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x2F SECWM2_PSTRT=0x2F SECWM2_PEND=0x0`
+`STM32_Programmer_CLI -c port=swd -ob SECWM1_STRT=0x0 SECWM1_END=0x2F SECWM2_STRT=0x2F SECWM2_END=0x0`
 
 - flash the wolfboot image to the secure partition:
 `STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000`
@@ -924,6 +924,19 @@ The example configuration for this scenario is available in [/config/examples/st
 `STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08060000`
 
 For a full list of all the option bytes tested with this configuration, refer to [STM32-TZ.md](/docs/STM32-TZ.md).
+
+You can use the "update" command and XMODEM to send a newly signed update (see docs/flash-OTP.md) or use the steps below using the STM32_Programmer:
+
+```sh
+IMAGE_HEADER_SIZE=1024 tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0     test-app/image_v2_signed.bin \
+    0x9FFFB trigger_magic.bin
+STM32_Programmer_CLI -c port=swd -d update.bin 0x08100000
+```
+
 
 ### Scenario 2: TrustZone Enabled, wolfCrypt as secure engine for NS applications
 
