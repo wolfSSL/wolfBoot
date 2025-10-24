@@ -975,7 +975,7 @@ To initiate an update, sign a new version of the app and upload the v3 to the up
 on the second bank:
 
 ```sh
-tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 3
+IMAGE_HEADER_SIZE=1024 tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 3
 STM32_Programmer_CLI -c port=swd -d test-app/image_v3_signed.bin 0x08160000
 ```
 
