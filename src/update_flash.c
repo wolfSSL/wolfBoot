@@ -686,7 +686,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
     uint32_t cur_ver, upd_ver;
 
-    wolfBoot_printf("Staring Update (fallback allowed %d)\n", fallback_allowed);
+    wolfBoot_printf("Starting Update (fallback allowed %d)\n",
+        fallback_allowed);
 
     /* No Safety check on open: we might be in the middle of a broken update */
     {
