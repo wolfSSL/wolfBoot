@@ -32,21 +32,14 @@
 #define PLL_SRC_HSE 1
 
 #if TZ_SECURE()
-
 static int is_flash_nonsecure(uint32_t address)
 {
-#ifndef DUALBANK_SWAP
-    if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) {
+    if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
+            address < WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE) {
         return 1;
     }
     return 0;
-#else
-    uint32_t in_bank_offset = (address & 0x000FFFFF);
-    if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE)) {
-        return 1;
-    }
-    return 0;
-#endif
 }
 #endif
 
@@ -204,9 +197,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         return -1;
 
 #if TZ_SECURE()
-    start_address = address | FLASH_SECURE_MMAP_BASE;
-    if (is_flash_nonsecure(address)) {
-        hal_tz_claim_nonsecure_area(address, len);
+    if (address & FLASH_SECURE_MMAP_BIT) {
+        /* Get address in non-secure address space */
+        start_address = address & ~FLASH_SECURE_MMAP_BIT;
+    }
+    else {
+        if (is_flash_nonsecure(address)) {
+            hal_tz_claim_nonsecure_area(address, len);
+        }
+        start_address = address;
     }
 #else
     start_address = address;
@@ -218,8 +217,8 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         uint32_t base;
         uint32_t bnksel = 0;
         base = FLASHMEM_ADDRESS_SPACE;
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BER));
-        if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_BKSEL));
+        if (p >= FLASH_BANK2_BASE && p <= FLASH_TOP)
         {
             base = FLASH_BANK2_BASE;
             bnksel = 1;
@@ -231,13 +230,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         FLASH_CR = reg;
         ISB();
         FLASH_CR |= FLASH_CR_STRT;
-        hal_flash_wait_complete(0);
+        hal_flash_wait_complete(bnksel);
     }
     /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_SER ;
 
 #if TZ_SECURE()
-    if (is_flash_nonsecure(address)) {
+    if (!(address & FLASH_SECURE_MMAP_BIT) && is_flash_nonsecure(address)) {
         hal_tz_release_nonsecure_area();
     }
 #endif
