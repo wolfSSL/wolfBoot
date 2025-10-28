@@ -282,7 +282,12 @@ static int cmd_update_xmodem(const char *args)
 
     printf("Erasing update partition...");
     fflush(stdout);
+#ifdef WOLFCRYPT_SECURE_MODE
     wolfBoot_nsc_erase_update(dst_offset, WOLFBOOT_PARTITION_SIZE);
+#else
+    hal_flash_unlock();
+    hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS + dst_offset, WOLFBOOT_PARTITION_SIZE);
+#endif
     printf("Done.\r\n");
 
     printf("Waiting for XMODEM transfer...\r\n");
@@ -346,7 +351,11 @@ static int cmd_update_xmodem(const char *args)
             if (crc == calc_crc) {
                 /* CRC is valid */
                 memcpy(xpkt_payload, xpkt + 3, XMODEM_PAYLOAD_SIZE);
+#ifdef WOLFCRYPT_SECURE_MODE
                 ret = wolfBoot_nsc_write_update(dst_offset, xpkt_payload, XMODEM_PAYLOAD_SIZE);
+#else
+                ret = hal_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + dst_offset, xpkt_payload, XMODEM_PAYLOAD_SIZE);
+#endif
                 if (ret != 0) {
                     xcancel();
                     printf("Error writing to flash\r\n");
@@ -381,16 +390,28 @@ static int cmd_update_xmodem(const char *args)
     }
     else {
         printf("Transfer succeeded\r\n");
+#ifdef WOLFCRYPT_SECURE_MODE
         update_ver = wolfBoot_nsc_update_firmware_version();
+#else
+        update_ver = wolfBoot_update_firmware_version();
+#endif
         if (update_ver != 0) {
             printf("New firmware version: 0x%lx\r\n", update_ver);
             printf("Triggering update...\r\n");
+#ifdef WOLFCRYPT_SECURE_MODE
             wolfBoot_nsc_update_trigger();
+#else
+            wolfBoot_update_trigger();
+#endif
             printf("Update written successfully. Reboot to apply.\r\n");
         } else {
             printf("No valid image in update partition\r\n");
         }
     }
+
+#ifndef WOLFCRYPT_SECURE_MODE
+    hal_flash_lock();
+#endif
 
     return ret;
 }
@@ -441,11 +462,19 @@ static int cmd_info(const char *args)
     uint16_t hdrSz;
     uint8_t boot_part_state = IMG_STATE_NEW, update_part_state = IMG_STATE_NEW;
 
+#ifdef WOLFCRYPT_SECURE_MODE
     cur_fw_version = wolfBoot_nsc_current_firmware_version();
     update_fw_version = wolfBoot_nsc_update_firmware_version();
 
     wolfBoot_nsc_get_partition_state(PART_BOOT, &boot_part_state);
     wolfBoot_nsc_get_partition_state(PART_UPDATE, &update_part_state);
+#else
+    cur_fw_version = wolfBoot_current_firmware_version();
+    update_fw_version = wolfBoot_update_firmware_version();
+
+    wolfBoot_get_partition_state(PART_BOOT, &boot_part_state);
+    wolfBoot_get_partition_state(PART_UPDATE, &update_part_state);
+#endif
 
     printf("\r\n");
     printf("System information\r\n");
@@ -496,7 +525,11 @@ static int cmd_info(const char *args)
 
 static int cmd_success(const char *args)
 {
+#ifdef WOLFCRYPT_SECURE_MODE
     wolfBoot_nsc_success();
+#else
+    wolfBoot_success();
+#endif
     printf("update success confirmed.\r\n");
     return 0;
 }
@@ -761,7 +794,11 @@ void main(void)
     /* Enable SysTick */
     systick_enable();
 
+#ifdef WOLFCRYPT_SECURE_MODE
     app_version = wolfBoot_nsc_current_firmware_version();
+#else
+    app_version = wolfBoot_current_firmware_version();
+#endif
 
     nvic_irq_setprio(NVIC_USART3_IRQN, 0);
     nvic_irq_enable(NVIC_USART3_IRQN);
