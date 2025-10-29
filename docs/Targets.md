@@ -915,7 +915,7 @@ The example configuration for this scenario is available in [/config/examples/st
 `STM32_Programmer_CLI -c port=swd -ob TZEN=0xB4`
 
 - set the option bytes to enable flash secure protection of first 384KB and remainder as non-secure:
-`STM32_Programmer_CLI -c port=swd -ob SECWM1_STRT=0x0 SECWM1_END=0x2F SECWM2_STRT=0x2F SECWM2_END=0x0`
+`STM32_Programmer_CLI -c port=swd -ob SECWM1_STRT=0x0 SECWM1_END=0x2F SECWM2_STRT=0x0 SECWM2_END=0x7F`
 
 - flash the wolfboot image to the secure partition:
 `STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000`
@@ -934,7 +934,7 @@ echo -n "pBOOT" > trigger_magic.bin
   update.bin \
     0x0     test-app/image_v2_signed.bin \
     0x9FFFB trigger_magic.bin
-STM32_Programmer_CLI -c port=swd -d update.bin 0x08100000
+STM32_Programmer_CLI -c port=swd -d update.bin 0x0C100000
 ```
 
 

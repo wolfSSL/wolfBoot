@@ -55,6 +55,12 @@ image header size must be supplied as an environment variable. For example:
 IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --sha256 --ecc256 myapp.bin wolfboot_signing_private_key.der 1
 ```
 
+### NSC API
+
+wolfBoot provides a few Non-Secure Callable functions to allow a non-secure
+application to perform certain operations that must be run from the secure
+domain. For more information, see [API](docs/API.md#nsc-api).
+
 ### Example using STM32L552
 
   - Copy the example configuration for STM32-L5 with support for wolfCrypt in
@@ -210,8 +216,8 @@ OPTION BYTES BANK: 4
 
    Bank2 - Flash watermark area definition:
 
-     SECWM2_STRT  : 0x2F  (0x0815e000)
-     SECWM2_END   : 0x0  (0x08100000)
+     SECWM2_STRT  : 0x0  (0x08100000)
+     SECWM2_END   : 0x7F  (0x081fe0000)
 
    Write sector group protection 2:
 
