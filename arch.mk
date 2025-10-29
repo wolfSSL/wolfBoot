@@ -1336,6 +1336,9 @@ ifeq ($(TARGET),library_fs)
   # Force all partitions to be marked as external
   NO_XIP=1
   NO_SWAP_EXT=
+  NO_LOADER=1
+  USE_GCC_HEADLESS=0
+  CFLAGS+=-DWOLFBOOT_USE_STDLIBC
 endif
 
 

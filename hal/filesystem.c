@@ -98,12 +98,20 @@ static int setup_file(byte read_only)
                 fp = XBADFILE;
             }
         }
+        else {
+            wolfBoot_printf("Failed to open file %s\n",
+                WOLFBOOT_PARTITION_FILENAME);
+        }
     }
     return fp != XBADFILE ? 0 : -1;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext_flash_write: addr %p data %p len %d\n",
+        (void*)address, data, len);
+#endif
     if (setup_file(0) != 0)
         return -1;
     if (address + len > (uintptr_t)fp_size)
@@ -119,19 +127,32 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext_flash_read: addr %p data %p len %d\n",
+        (void*)address, data, len);
+#endif
     if (setup_file(1) != 0)
         return -1;
     if (XFSEEK(fp, address, XSEEK_SET) < 0)
         return -1;
     return (int)XFREAD(data, 1, len, fp);
 }
+
 int ext_flash_erase(uintptr_t address, int len)
 {
-    byte zeros[256];
-    XMEMSET(zeros, 0, sizeof(zeros));
-    for (; len > 0; len -= sizeof(zeros), address += sizeof(zeros)) {
-        if (ext_flash_write(address, zeros, (int)MIN((int)sizeof(zeros), len)) != 0)
+    byte erase_data[256];
+#ifdef DEBUG_EXT_FLASH
+    wolfBoot_printf("ext_flash_erase: addr %p len %d\n",
+        (void*)address, len);
+#endif
+    XMEMSET(erase_data, 0xFF, sizeof(erase_data));
+    while (len > 0) {
+        int erase_len = (int)MIN((int)sizeof(erase_data), len);
+        if (ext_flash_write(address, erase_data, erase_len) != 0) {
             return -1;
+        }
+        len -= erase_len;
+        address += erase_len;
     }
     return 0;
 }
