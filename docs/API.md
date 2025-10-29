@@ -66,3 +66,35 @@ the two images again.
 For more information about the update process, see [Firmware Update](firmware_update.md)
 
 For the image format, see [Firmware Image](firmware_image.md)
+
+## NSC API
+
+If you're running wolfBoot on an ARM TrustZone-enabled device (see for example
+[STM32-TZ](STM32-TZ.md)) you may wish to run your application in non-secure
+mode, while keeping the UPDATE and SWAP partitions in the secure domain. In
+order to accomplish this, any operation by the application that requires access
+to those partitions needs to be performed via wolfBoot code running in the
+secure domain. For this purpose, wolfBoot provides Non-Secure Callable (NSC)
+APIs that allow code running in the non-secure domain to call into the secure
+domain managed by wolfBoot.
+
+These APIs are listed below.
+
+- `void wolfBoot_nsc_success(void)`: wrapper for `wolfBoot_success()`
+- `void wolfBoot_nsc_update_trigger(void)`: wrapper for
+  `wolfBoot_update_trigger()`
+- `uint32_t wolfBoot_nsc_get_image_version(uint8_t part)`: wrapper for
+  `wolfBoot_get_image_version()`
+- `uint32_t wolfBoot_nsc_current_firmware_version(void)`: wrapper for
+  `wolfBoot_current_firmware_version()`
+- `uint32_t wolfBoot_nsc_update_firmware_version(void)`: wrapper for
+  `wolfBoot_update_firmware_version()`
+- `int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st)`: wrapper
+  for `wolfBoot_get_partition_state()`
+- `int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)`: allows the
+  application to erase the update partition in secure mode. The `address`
+  parameter is an offset from the beginning of the partition.
+- `int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t
+  len)`: allows the application to write to the update partition in secure
+  mode. The `address` parameter is an offset from the beginning of the
+  partition.

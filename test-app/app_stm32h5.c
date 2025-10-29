@@ -267,21 +267,27 @@ static int cmd_update_xmodem(const char *args)
 {
     int ret = -1;
     uint8_t xpkt[XMODEM_PACKET_SIZE];
-    uint32_t dst_flash = (uint32_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint32_t dst_offset = 0;
     uint8_t pkt_num = 0, pkt_num_expected=0xFF;
     uint32_t pkt_size = XMODEM_PACKET_SIZE;
+    uint32_t t_size = 0;
     uint32_t update_ver = 0;
     uint32_t now = jiffies;
     uint32_t i = 0;
     uint8_t pkt_num_inv;
     uint8_t crc, calc_crc;
     int transfer_started = 0;
+    int eot_expected = 0;
 
 
     printf("Erasing update partition...");
     fflush(stdout);
+#ifdef WOLFCRYPT_SECURE_MODE
+    wolfBoot_nsc_erase_update(dst_offset, WOLFBOOT_PARTITION_SIZE);
+#else
     hal_flash_unlock();
-    hal_flash_erase(dst_flash, WOLFBOOT_PARTITION_SIZE);
+    hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS + dst_offset, WOLFBOOT_PARTITION_SIZE);
+#endif
     printf("Done.\r\n");
 
     printf("Waiting for XMODEM transfer...\r\n");
@@ -303,6 +309,8 @@ static int cmd_update_xmodem(const char *args)
                 }
             } else {
                 now = jiffies;
+                if (i == 0 && xpkt[0] == XEOT)
+                    break;
                 i += ret;
             }
         }
@@ -313,6 +321,12 @@ static int cmd_update_xmodem(const char *args)
             extra_led_on();
             break;
         }
+        else if (eot_expected) {
+            ret = 1;
+            uart_tx(XNAK);
+            break;
+        }
+
         if (xpkt[0] != XSOH) {
             continue;
         }
@@ -335,10 +349,13 @@ static int cmd_update_xmodem(const char *args)
             crc = xpkt[XMODEM_PACKET_SIZE - 1];
             calc_crc = crc8(xpkt, XMODEM_PACKET_SIZE - 1);
             if (crc == calc_crc) {
-                uint32_t t_size;
                 /* CRC is valid */
                 memcpy(xpkt_payload, xpkt + 3, XMODEM_PAYLOAD_SIZE);
-                ret = hal_flash_write(dst_flash, xpkt_payload, XMODEM_PAYLOAD_SIZE);
+#ifdef WOLFCRYPT_SECURE_MODE
+                ret = wolfBoot_nsc_write_update(dst_offset, xpkt_payload, XMODEM_PAYLOAD_SIZE);
+#else
+                ret = hal_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + dst_offset, xpkt_payload, XMODEM_PAYLOAD_SIZE);
+#endif
                 if (ret != 0) {
                     xcancel();
                     printf("Error writing to flash\r\n");
@@ -347,15 +364,16 @@ static int cmd_update_xmodem(const char *args)
                 uart_tx(XACK);
                 pkt_num++;
                 pkt_num_expected++;
-                dst_flash += XMODEM_PAYLOAD_SIZE;
-                t_size = *((uint32_t *)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4));
-                t_size += IMAGE_HEADER_SIZE;
-                if ((uint32_t)dst_flash >= (WOLFBOOT_PARTITION_UPDATE_ADDRESS + t_size)) {
-                    ret = 0;
-                    extra_led_off();
-                    break;
+                dst_offset += XMODEM_PAYLOAD_SIZE;
+                if (t_size == 0) {
+                    /* At first packet, save expected partition size */
+                    t_size = *(uint32_t *)(xpkt_payload + 4);
+                    t_size += IMAGE_HEADER_SIZE;
                 }
-                uart_tx(XACK);
+                if (dst_offset >= t_size) {
+                    eot_expected = 1;
+                }
+                /*uart_tx(XACK);*/
             } else {
                 uart_tx(XNAK);
             }
@@ -367,17 +385,34 @@ static int cmd_update_xmodem(const char *args)
         uart_tx('\r');
 
     printf("End of transfer. ret: %d\r\n", ret);
-    update_ver = wolfBoot_update_firmware_version();
-    if (update_ver != 0) {
-        printf("New firmware version: 0x%lx\r\n", update_ver);
-        printf("Triggering update...\r\n");
-        wolfBoot_update_trigger();
-        printf("Update completed successfully.\r\n");
-    } else {
-        printf("No valid image in update partition\r\n");
+    if (ret != 0) {
+        printf("Transfer failed\r\n");
+    }
+    else {
+        printf("Transfer succeeded\r\n");
+#ifdef WOLFCRYPT_SECURE_MODE
+        update_ver = wolfBoot_nsc_update_firmware_version();
+#else
+        update_ver = wolfBoot_update_firmware_version();
+#endif
+        if (update_ver != 0) {
+            printf("New firmware version: 0x%lx\r\n", update_ver);
+            printf("Triggering update...\r\n");
+#ifdef WOLFCRYPT_SECURE_MODE
+            wolfBoot_nsc_update_trigger();
+#else
+            wolfBoot_update_trigger();
+#endif
+            printf("Update written successfully. Reboot to apply.\r\n");
+        } else {
+            printf("No valid image in update partition\r\n");
+        }
     }
 
+#ifndef WOLFCRYPT_SECURE_MODE
     hal_flash_lock();
+#endif
+
     return ret;
 }
 
@@ -427,17 +462,25 @@ static int cmd_info(const char *args)
     uint16_t hdrSz;
     uint8_t boot_part_state = IMG_STATE_NEW, update_part_state = IMG_STATE_NEW;
 
+#ifdef WOLFCRYPT_SECURE_MODE
+    cur_fw_version = wolfBoot_nsc_current_firmware_version();
+    update_fw_version = wolfBoot_nsc_update_firmware_version();
+
+    wolfBoot_nsc_get_partition_state(PART_BOOT, &boot_part_state);
+    wolfBoot_nsc_get_partition_state(PART_UPDATE, &update_part_state);
+#else
     cur_fw_version = wolfBoot_current_firmware_version();
     update_fw_version = wolfBoot_update_firmware_version();
 
     wolfBoot_get_partition_state(PART_BOOT, &boot_part_state);
     wolfBoot_get_partition_state(PART_UPDATE, &update_part_state);
+#endif
 
     printf("\r\n");
     printf("System information\r\n");
     printf("====================================\r\n");
     printf("Flash banks are %sswapped.\r\n", ((FLASH_OPTSR_CUR & (FLASH_OPTSR_SWAP_BANK)) == 0)?"not ":"");
-    printf("Firmware version : 0x%lx\r\n", wolfBoot_current_firmware_version());
+    printf("Firmware version : 0x%lx\r\n", cur_fw_version);
     printf("Current firmware state: %s\r\n", part_state_name(boot_part_state));
     if (update_fw_version != 0) {
         if (update_part_state == IMG_STATE_UPDATING)
@@ -482,7 +525,11 @@ static int cmd_info(const char *args)
 
 static int cmd_success(const char *args)
 {
+#ifdef WOLFCRYPT_SECURE_MODE
+    wolfBoot_nsc_success();
+#else
     wolfBoot_success();
+#endif
     printf("update success confirmed.\r\n");
     return 0;
 }
@@ -741,14 +788,17 @@ void main(void)
     int ret;
     uint32_t app_version;
 
-
     /* Turn on boot LED */
     boot_led_on();
 
     /* Enable SysTick */
     systick_enable();
 
+#ifdef WOLFCRYPT_SECURE_MODE
+    app_version = wolfBoot_nsc_current_firmware_version();
+#else
     app_version = wolfBoot_current_firmware_version();
+#endif
 
     nvic_irq_setprio(NVIC_USART3_IRQN, 0);
     nvic_irq_enable(NVIC_USART3_IRQN);

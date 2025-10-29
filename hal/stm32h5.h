@@ -49,6 +49,7 @@
 #endif
 
 #define FLASH_SECURE_MMAP_BASE (0x0C000000)
+#define FLASH_SECURE_MMAP_BIT  (0x04000000)
 
 #define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0481 - Table 108 */
 #define RCC_CR_PLL3RDY               (1 << 29) /*    RM0481 - Table 108 */

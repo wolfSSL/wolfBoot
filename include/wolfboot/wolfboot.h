@@ -420,13 +420,22 @@ int wolfBoot_erase_encrypt_key(void);
  */
 
 /* Call wolfBoot_success from non-secure application */
-
 __attribute__((cmse_nonsecure_entry))
 void wolfBoot_nsc_success(void);
 
 /* Call wolfBoot_update_trigger from non-secure application */
 __attribute__((cmse_nonsecure_entry))
 void wolfBoot_nsc_update_trigger(void);
+
+/* Call wolfBoot_get_image_version from non-secure application */
+__attribute__((cmse_nonsecure_entry))
+uint32_t wolfBoot_nsc_get_image_version(uint8_t part);
+#define wolfBoot_nsc_current_firmware_version() wolfBoot_nsc_get_image_version(PART_BOOT)
+#define wolfBoot_nsc_update_firmware_version() wolfBoot_nsc_get_image_version(PART_UPDATE)
+
+/* Call wolfBoot_get_partition_state from non-secure application */
+__attribute__((cmse_nonsecure_entry))
+int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st);
 
 /* Erase one or more sectors in the update partition.
  * - address: offset within the update partition ('0' corresponds to PARTITION_UPDATE_ADDRESS)

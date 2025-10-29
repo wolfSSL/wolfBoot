@@ -32,15 +32,11 @@
 #define PLL_SRC_HSE 1
 
 #if TZ_SECURE()
-
-/* This function assumes that the boot and the update
- * partitions are at the same address in the two banks,
- * regardless if DUALBANK_SWAP is active or not.
- */
 static int is_flash_nonsecure(uint32_t address)
 {
-    uint32_t in_bank_offset = (address & 0x000FFFFF);
-    if (in_bank_offset >= (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE)) {
+    if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
+            address < WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            WOLFBOOT_PARTITION_SIZE) {
         return 1;
     }
     return 0;
@@ -189,6 +185,7 @@ void RAMFUNCTION hal_flash_opt_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+    uint32_t start_address;
     uint32_t end_address;
     uint32_t p;
 
@@ -199,24 +196,33 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (address < 0x08000000)
         return -1;
 
-    end_address = address + len - 1;
-    for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
+#if TZ_SECURE()
+    if (address & FLASH_SECURE_MMAP_BIT) {
+        /* Get address in non-secure address space */
+        start_address = address & ~FLASH_SECURE_MMAP_BIT;
+    }
+    else {
+        if (is_flash_nonsecure(address)) {
+            hal_tz_claim_nonsecure_area(address, len);
+        }
+        start_address = address;
+    }
+#else
+    start_address = address;
+#endif
+
+    end_address = start_address + len - 1;
+    for (p = start_address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
         uint32_t base;
         uint32_t bnksel = 0;
         base = FLASHMEM_ADDRESS_SPACE;
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_BER));
-        if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_BKSEL));
+        if (p >= FLASH_BANK2_BASE && p <= FLASH_TOP)
         {
             base = FLASH_BANK2_BASE;
             bnksel = 1;
         }
-#if TZ_SECURE()
-        /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
-        if (is_flash_nonsecure(address)) {
-            return 0;
-        }
-#endif
         /* Check for swapped banks to invert bnksel */
         if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
             bnksel = !bnksel;
@@ -224,10 +230,16 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         FLASH_CR = reg;
         ISB();
         FLASH_CR |= FLASH_CR_STRT;
-        hal_flash_wait_complete(0);
+        hal_flash_wait_complete(bnksel);
     }
     /* If the erase operation is completed, disable the associated bits */
     FLASH_CR &= ~FLASH_CR_SER ;
+
+#if TZ_SECURE()
+    if (!(address & FLASH_SECURE_MMAP_BIT) && is_flash_nonsecure(address)) {
+        hal_tz_release_nonsecure_area();
+    }
+#endif
     return 0;
 }
 
