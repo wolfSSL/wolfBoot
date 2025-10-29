@@ -59,7 +59,7 @@ IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --sha256 --ecc256 myapp.bin wolfboo
 
 wolfBoot provides a few Non-Secure Callable functions to allow a non-secure
 application to perform certain operations that must be run from the secure
-domain. For more information, see [API](docs/API.md#nsc-api).
+domain. For more information, see [API](API.md#nsc-api).
 
 ### Example using STM32L552
 
