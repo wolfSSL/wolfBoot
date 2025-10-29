@@ -27,6 +27,7 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 
+
 /* Helper function to convert partition ID to string */
 static const char* partition_name(uint8_t part)
 {
@@ -41,13 +42,17 @@ static const char* partition_name(uint8_t part)
 }
 
 /* Helper function to convert state value to string */
-static const char* state_name(uint8_t state)
+static const char* partition_state_name(uint8_t state)
 {
     switch (state) {
         case IMG_STATE_NEW:
             return "NEW";
         case IMG_STATE_UPDATING:
             return "UPDATING";
+        case IMG_STATE_FINAL_FLAGS:
+            return "FFLAGS";
+        case IMG_STATE_TESTING:
+            return "TESTING";
         case IMG_STATE_SUCCESS:
             return "SUCCESS";
         default:
@@ -55,38 +60,77 @@ static const char* state_name(uint8_t state)
     }
 }
 
-/* Print partition state */
-static int cmd_get_state(uint8_t part)
-{
-    uint8_t state;
-    int ret;
-
-    ret = wolfBoot_get_partition_state(part, &state);
-    if (ret != 0) {
-        wolfBoot_printf("Error: Failed to get state for %s partition (error: %d)\n",
-               partition_name(part), ret);
-        return -1;
-    }
-
-    wolfBoot_printf("%s partition state: %s (0x%02X)\n",
-           partition_name(part), state_name(state), state);
-    return 0;
-}
-
 /* Print all partition states */
 static int cmd_get_all_states(void)
 {
-    int ret = 0;
+    uint32_t cur_fw_version, update_fw_version;
+    uint16_t hdrSz;
+    uint8_t boot_part_state = IMG_STATE_NEW, update_part_state = IMG_STATE_NEW;
 
-    wolfBoot_printf("=== Partition States ===\n");
+    cur_fw_version = wolfBoot_current_firmware_version();
+    update_fw_version = wolfBoot_update_firmware_version();
 
-    if (cmd_get_state(PART_BOOT) != 0)
-        ret = -1;
+    wolfBoot_get_partition_state(PART_BOOT, &boot_part_state);
+    wolfBoot_get_partition_state(PART_UPDATE, &update_part_state);
 
-    if (cmd_get_state(PART_UPDATE) != 0)
-        ret = -1;
+    wolfBoot_printf("\n");
+    wolfBoot_printf("System information\n");
+    wolfBoot_printf("====================================\n");
+    wolfBoot_printf("Firmware version : 0x%lx\n",
+        (unsigned long)wolfBoot_current_firmware_version());
+    wolfBoot_printf("Current firmware state: %s\n",
+        partition_state_name(boot_part_state));
+    if (update_fw_version != 0) {
+        if (update_part_state == IMG_STATE_UPDATING) {
+            wolfBoot_printf("Candidate firmware version : 0x%lx\n",
+                (unsigned long)update_fw_version);
+        } else {
+            wolfBoot_printf("Backup firmware version : 0x%lx\n",
+                (unsigned long)update_fw_version);
+        }
+        wolfBoot_printf("Update state: %s\n",
+            partition_state_name(update_part_state));
+        if (update_fw_version > cur_fw_version) {
+            wolfBoot_printf("'reboot' to initiate update.\n");
+        } else {
+            wolfBoot_printf("Update image older than current.\n");
+        }
+    } else {
+        wolfBoot_printf("No image in update partition.\n");
+    }
 
-    return ret;
+    return 0;
+}
+
+static int cmd_get_keystore(void)
+{
+    int i, j;
+    uint32_t n_keys;
+
+    wolfBoot_printf("\n");
+    wolfBoot_printf("Bootloader keystore information\n");
+    wolfBoot_printf("====================================\n");
+    n_keys = keystore_num_pubkeys();
+    wolfBoot_printf("Number of public keys: %lu\n", (unsigned long)n_keys);
+    for (i = 0; i < (int)n_keys; i++) {
+        uint32_t size = keystore_get_size(i);
+        uint32_t type = keystore_get_key_type(i);
+        uint32_t mask = keystore_get_mask(i);
+        uint8_t *keybuf = keystore_get_buffer(i);
+
+        wolfBoot_printf("\n");
+        wolfBoot_printf("  Public Key #%d: size %lu, type %lx, mask %08lx\n", i,
+                (unsigned long)size, (unsigned long)type, (unsigned long)mask);
+        wolfBoot_printf("  ====================================\n  ");
+        for (j = 0; j < (int)size; j++) {
+            wolfBoot_printf("%02X ", keybuf[j]);
+            if (j % 16 == 15) {
+                wolfBoot_printf("\n  ");
+            }
+        }
+        wolfBoot_printf("\n");
+    }
+    return 0;
 }
 
 /* Trigger an update */
@@ -114,8 +158,7 @@ static void print_usage(const char* prog_name)
     wolfBoot_printf("\nUsage: %s <command> [options]\n\n", prog_name);
     wolfBoot_printf("Commands:\n");
     wolfBoot_printf("  status              - Show state of all partitions\n");
-    wolfBoot_printf("  get-boot            - Get BOOT partition state\n");
-    wolfBoot_printf("  get-update          - Get UPDATE partition state\n");
+    wolfBoot_printf("  keystore            - Show keystore information\n");
     wolfBoot_printf("  update-trigger      - Trigger an update (sets UPDATE partition to UPDATING)\n");
     wolfBoot_printf("  success             - Mark BOOT partition as SUCCESS\n");
     wolfBoot_printf("  verify-boot         - Verify integrity and authenticity of BOOT partition\n");
@@ -140,24 +183,27 @@ static int cmd_verify(uint8_t part)
 
     ret = wolfBoot_open_image(&img, part);
     if (ret < 0) {
-        wolfBoot_printf("Error: Failed to open image header for %s partition (error: %d)\n",
+        wolfBoot_printf("Failed to open image header for %s partition (error: %d)\n",
                         partition_name(part), ret);
         return -1;
     }
 
     ret = wolfBoot_verify_integrity(&img);
     if (ret < 0) {
-        wolfBoot_printf("Integrity check failed for %s partition\n", partition_name(part));
+        wolfBoot_printf("Integrity check failed for %s partition\n",
+            partition_name(part));
         return -1;
     }
 
     ret = wolfBoot_verify_authenticity(&img);
     if (ret < 0) {
-        wolfBoot_printf("Authenticity check failed for %s partition\n", partition_name(part));
+        wolfBoot_printf("Authenticity check failed for %s partition\n",
+            partition_name(part));
         return -1;
     }
 
-    wolfBoot_printf("%s partition: Integrity and authenticity verified.\n", partition_name(part));
+    wolfBoot_printf("%s partition: Integrity and authenticity verified.\n",
+        partition_name(part));
     return ret;
 }
 
@@ -183,11 +229,8 @@ int main(int argc, const char* argv[])
     if (strcmp(command, "status") == 0) {
         ret = cmd_get_all_states();
     }
-    else if (strcmp(command, "get-boot") == 0) {
-        ret = cmd_get_state(PART_BOOT);
-    }
-    else if (strcmp(command, "get-update") == 0) {
-        ret = cmd_get_state(PART_UPDATE);
+    else if (strcmp(command, "keystore") == 0) {
+        ret = cmd_get_keystore();
     }
     else if (strcmp(command, "update-trigger") == 0) {
         ret = cmd_update_trigger();
