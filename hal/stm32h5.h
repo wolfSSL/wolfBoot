@@ -217,8 +217,8 @@
 #define FLASH_SECWM2R_CUR  (*(volatile uint32_t *)(FLASH_BASE + 0x1E0))
 #define FLASH_SECWM2R_PRG  (*(volatile uint32_t *)(FLASH_BASE + 0x1E4))
 
-#define FLASH_SECWM_START_SHIFT 0
-#define FLASH_SECWM_END_SHIFT   16
+#define FLASH_SECWM_STRT_SHIFT 0
+#define FLASH_SECWM_END_SHIFT  16
 
 #define FLASH_NS_BASE          (0x40022000)   //RM0481 - Table 3
 #define FLASH_NS_KEYR        (*(volatile uint32_t *)(FLASH_NS_BASE + 0x08))
