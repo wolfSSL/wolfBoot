@@ -373,7 +373,6 @@ static int cmd_update_xmodem(const char *args)
                 if (dst_offset >= t_size) {
                     eot_expected = 1;
                 }
-                /*uart_tx(XACK);*/
             } else {
                 uart_tx(XNAK);
             }
