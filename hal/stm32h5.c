@@ -510,14 +510,30 @@ static void RAMFUNCTION stm32h5_reboot(void)
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
     uint32_t cur_opts;
+#ifdef WOLFCRYPT_SECURE_MODE
+    uint8_t wolfboot_final_sector =
+        (WOLFBOOT_PARTITION_BOOT_ADDRESS - FLASHMEM_ADDRESS_SPACE) / WOLFBOOT_SECTOR_SIZE - 1;
+    uint8_t partition_final_sector =
+        wolfboot_final_sector + (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE);
+#endif
     cur_opts = (FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31;
     hal_flash_clear_errors(0);
     hal_flash_unlock();
     hal_flash_opt_unlock();
-    if (cur_opts)
+    if (cur_opts) {
         FLASH_OPTSR_PRG &= ~(FLASH_OPTSR_SWAP_BANK);
-    else
+#ifdef WOLFCRYPT_SECURE_MODE
+        FLASH_SECWM1R_PRG = wolfboot_final_sector << FLASH_SECWM_END_SHIFT;
+        FLASH_SECWM2R_PRG = partition_final_sector << FLASH_SECWM_END_SHIFT;
+#endif
+    }
+    else {
         FLASH_OPTSR_PRG |= FLASH_OPTSR_SWAP_BANK;
+#ifdef WOLFCRYPT_SECURE_MODE
+        FLASH_SECWM1R_PRG = partition_final_sector << FLASH_SECWM_END_SHIFT;
+        FLASH_SECWM2R_PRG = wolfboot_final_sector << FLASH_SECWM_END_SHIFT;
+#endif
+    }
 
     FLASH_OPTCR |= FLASH_OPTCR_OPTSTRT;
     DMB();
