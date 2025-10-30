@@ -60,6 +60,12 @@ src/ecc384_pub_key.c
 src/ecc512_pub_key.c
 src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
+
+# Any other generated keystore files
+/**/keystore.c
+/**/wolfboot_signing_private_key.der
+/**/keystore.der
+
 # Renesas key data files
 include/key_data.*
 include/enckey_data.*
