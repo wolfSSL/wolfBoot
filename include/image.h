@@ -822,7 +822,7 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
     if ((mask & (1UL << id)) != (1UL << id)) \
         wolfBoot_panic()
 
-#define VERIFY_VERSION_ALLOWED(fb_ok) wolfBoot_panic()
+#define VERIFY_VERSION_ALLOWED(fb_ok) do{} while(0) /* okay */
 
 #endif
 
