@@ -1264,7 +1264,8 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
+    /* leave TPM2 available to be called from non-secure callable */
     wolfBoot_tpm2_deinit();
 #endif
 

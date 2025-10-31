@@ -86,7 +86,8 @@ ifeq ($(TZEN),1)
     ifeq ($(WOLFCRYPT_TZ),1)
         APP_OBJS+=../src/wc_secure_calls.o
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
-            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
+            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
+            CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
             CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFPKCS11)"
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
             APP_OBJS+=./wcs/pkcs11_stub.o

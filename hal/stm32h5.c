@@ -279,7 +279,6 @@ static void clock_pll_on(void)
     uint32_t reg32;
     uint32_t plln, pllm, pllq, pllp, pllr, hpre, apb1pre, apb2pre, apb3pre, flash_waitstates;
 
-
 #if PLL_SRC_HSE
     pllm = 4;
     plln = 250;
@@ -348,15 +347,15 @@ static void clock_pll_on(void)
 #endif
     DMB();
 
-    RCC_PLL1DIVR = ((plln - 1) << RCC_PLLDIVR_DIVN_SHIFT) | ((pllp - 1) << RCC_PLLDIVR_DIVP_SHIFT) |
-        ((pllq - 1) << RCC_PLLDIVR_DIVQ_SHIFT) | ((pllr - 1) << RCC_PLLDIVR_DIVR_SHIFT);
+    RCC_PLL1DIVR = ((plln - 1) << RCC_PLLDIVR_DIVN_SHIFT) |
+                   ((pllp - 1) << RCC_PLLDIVR_DIVP_SHIFT) |
+                   ((pllq - 1) << RCC_PLLDIVR_DIVQ_SHIFT) |
+                   ((pllr - 1) << RCC_PLLDIVR_DIVR_SHIFT);
     DMB();
-
 
     /* Disable Fractional PLL */
     RCC_PLL1CFGR &= ~RCC_PLLCFGR_PLLFRACEN;
     DMB();
-
 
     /* Configure Fractional PLL factor */
     RCC_PLL1FRACR = 0x00000000;
@@ -373,8 +372,8 @@ static void clock_pll_on(void)
     RCC_PLL1CFGR &= ~RCC_PLLCFGR_PLLVCOSEL;
     DMB();
 
-    /* Enable PLL1 system clock out (DIV: P) */
-    RCC_PLL1CFGR |= RCC_PLLCFGR_PLL1PEN;
+    /* Enable PLL1 system clock out (DIV: P and Q) */
+    RCC_PLL1CFGR |= RCC_PLLCFGR_PLL1PEN | RCC_PLLCFGR_PLL1QEN;
 
     /* Enable PLL1 */
     RCC_CR |= RCC_CR_PLL1ON;
@@ -386,11 +385,13 @@ static void clock_pll_on(void)
     apb3pre = RCC_APB_PRESCALER_DIV_NONE;
     reg32 = RCC_CFGR2;
     reg32 &= ~( (0x0F << RCC_CFGR2_HPRE_SHIFT) |
-            (0x07 << RCC_CFGR2_PPRE1_SHIFT) |
-            (0x07 << RCC_CFGR2_PPRE2_SHIFT) |
-            (0x07 << RCC_CFGR2_PPRE3_SHIFT));
-    reg32 |= ((hpre) << RCC_CFGR2_HPRE_SHIFT) | ((apb1pre) << RCC_CFGR2_PPRE1_SHIFT) |
-        ((apb2pre) << RCC_CFGR2_PPRE2_SHIFT) | ((apb3pre) << RCC_CFGR2_PPRE3_SHIFT);
+                (0x07 << RCC_CFGR2_PPRE1_SHIFT) |
+                (0x07 << RCC_CFGR2_PPRE2_SHIFT) |
+                (0x07 << RCC_CFGR2_PPRE3_SHIFT));
+    reg32 |= (   (hpre) << RCC_CFGR2_HPRE_SHIFT) |
+             ((apb1pre) << RCC_CFGR2_PPRE1_SHIFT) |
+             ((apb2pre) << RCC_CFGR2_PPRE2_SHIFT) |
+             ((apb3pre) << RCC_CFGR2_PPRE3_SHIFT);
     RCC_CFGR2 = reg32;
     DMB();
 
@@ -595,8 +596,6 @@ void hal_init(void)
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
     fork_bootloader();
 #endif
-
-
 }
 
 

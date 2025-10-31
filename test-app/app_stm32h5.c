@@ -35,6 +35,10 @@
 #include "target.h"
 #include "image.h"
 
+#ifdef WOLFBOOT_TPM
+#include "tpm.h"
+#endif
+
 #ifdef SECURE_PKCS11
 #include "wcs/user_settings.h"
 #include "wolfssl/wolfcrypt/settings.h"
@@ -55,44 +59,16 @@ static uint32_t uart_processed = 0;
 static int uart_rx_isr(unsigned char *c, int len);
 static int uart_poll(void);
 
-#define LED_BOOT_PIN (4) /* PG4 - Nucleo - Red Led */
-#define LED_USR_PIN  (0) /* PB0 - Nucleo - Green Led */
-#define LED_EXTRA_PIN  (4) /* PF4 - Nucleo - Orange Led */
+#define LED_BOOT_PIN  (4) /* PG4 - Nucleo - Red Led */
+#define LED_USR_PIN   (0) /* PB0 - Nucleo - Green Led */
+#define LED_EXTRA_PIN (4) /* PF4 - Nucleo - Orange Led */
 
 #define NVIC_USART3_IRQN (60)
 
-/*Non-Secure */
-#define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
-#define GPIOG_BASE 0x42021800
-#define GPIOB_BASE 0x42020400
-#define GPIOF_BASE 0x42021400
-
-#define GPIOG_MODER (*(volatile uint32_t *)(GPIOG_BASE + 0x00))
-#define GPIOG_PUPDR (*(volatile uint32_t *)(GPIOG_BASE + 0x0C))
-#define GPIOG_BSRR  (*(volatile uint32_t *)(GPIOG_BASE + 0x18))
-
-#define GPIOB_MODER (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
-#define GPIOB_PUPDR (*(volatile uint32_t *)(GPIOB_BASE + 0x0C))
-#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
-
-#define GPIOF_MODER (*(volatile uint32_t *)(GPIOF_BASE + 0x00))
-#define GPIOF_PUPDR (*(volatile uint32_t *)(GPIOF_BASE + 0x0C))
-#define GPIOF_BSRR  (*(volatile uint32_t *)(GPIOF_BASE + 0x18))
-
-#define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
-#define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
-#define GPIOF_AHB2ENR1_CLOCK_ER (1 << 5)
-#define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
-#define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
 
 /* SysTick */
 static uint32_t cpu_freq = 250000000;
 
-#define SYSTICK_BASE (0xE000E010)
-#define SYSTICK_CSR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x00))
-#define SYSTICK_RVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x04))
-#define SYSTICK_CVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x08))
-#define SYSTICK_CALIB   (*(volatile uint32_t *)(SYSTICK_BASE + 0x0C))
 
 int clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
@@ -119,9 +95,9 @@ static void boot_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_BOOT_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOG_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER |= GPIOG_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
-    reg = RCC_AHB2ENR1_CLOCK_ER;
+    reg = RCC_AHB2ENR_CLOCK_ER;
 
     reg = GPIOG_MODER & ~(0x03 << (pin * 2));
     GPIOG_MODER = reg | (1 << (pin * 2));
@@ -139,9 +115,9 @@ void usr_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_USR_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOB_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER |= GPIOB_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
-    reg = RCC_AHB2ENR1_CLOCK_ER;
+    reg = RCC_AHB2ENR_CLOCK_ER;
 
     reg = GPIOB_MODER & ~(0x03 << (pin * 2));
     GPIOB_MODER = reg | (1 << (pin * 2));
@@ -159,9 +135,9 @@ void extra_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_EXTRA_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOF_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER|= GPIOF_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
-    reg = RCC_AHB2ENR1_CLOCK_ER;
+    reg = RCC_AHB2ENR_CLOCK_ER;
 
     reg = GPIOF_MODER & ~(0x03 << (pin * 2));
     GPIOF_MODER = reg | (1 << (pin * 2));
@@ -191,7 +167,9 @@ static int cmd_timestamp(const char *args);
 static int cmd_update(const char *args);
 static int cmd_update_xmodem(const char *args);
 static int cmd_reboot(const char *args);
-
+#ifdef WOLFBOOT_TPM
+static int cmd_tpm_info(const char *args);
+#endif
 
 
 #define CMD_BUFFER_SIZE 256
@@ -208,17 +186,20 @@ struct console_command {
 
 struct console_command COMMANDS[] =
 {
-     { cmd_help, "help", "shows this help message"},
-     { cmd_info, "info", "display information about the system and partitions"},
-     { cmd_success, "success", "confirm a successful update"},
-     { cmd_login_pkcs11, "pkcs11", "enable and test crypto calls with PKCS11 in secure mode" },
-     { cmd_random, "random", "generate a random number"},
-     { cmd_timestamp, "timestamp", "print the current timestamp"},
-     { cmd_benchmark, "benchmark", "run the wolfCrypt benchmark"},
-     { cmd_test, "test", "run the wolfCrypt test"},
-     { cmd_update_xmodem, "update", "update the firmware via XMODEM"},
-     { cmd_reboot, "reboot", "reboot the system"},
-     { NULL, "", ""}
+    {cmd_help, "help", "shows this help message"},
+    {cmd_info, "info", "display information about the system and partitions"},
+    {cmd_success, "success", "confirm a successful update"},
+    {cmd_login_pkcs11, "pkcs11", "enable and test crypto calls with PKCS11 in secure mode" },
+    {cmd_random, "random", "generate a random number"},
+    {cmd_timestamp, "timestamp", "print the current timestamp"},
+    {cmd_benchmark, "benchmark", "run the wolfCrypt benchmark"},
+    {cmd_test, "test", "run the wolfCrypt test"},
+    {cmd_update_xmodem, "update", "update the firmware via XMODEM"},
+    {cmd_reboot, "reboot", "reboot the system"},
+#ifdef WOLFBOOT_TPM
+    {cmd_tpm_info, "tpm", "get TPM capabilities"},
+#endif
+    {NULL, "", ""}
 };
 
 #define AIRCR *(volatile uint32_t *)(0xE000ED0C)
@@ -686,6 +667,80 @@ static int cmd_test(const char *args)
 #endif
     return 0;
 }
+
+#ifdef WOLFBOOT_TPM
+#include <wolftpm/tpm2.h>
+#include <wolftpm/tpm2_wrap.h>
+
+static int TPM2_PCRs_Print(void)
+{
+    int rc;
+    int pcrCount, pcrIndex;
+    GetCapability_In  capIn;
+    GetCapability_Out capOut;
+    TPML_PCR_SELECTION* pcrSel;
+
+    /* List available PCR's */
+    XMEMSET(&capIn, 0, sizeof(capIn));
+    capIn.capability = TPM_CAP_PCRS;
+    capIn.property = 0;
+    capIn.propertyCount = 1;
+    rc = wolfBoot_tpm2_get_capability(&capIn, &capOut);
+    if (rc == TPM_RC_SUCCESS) {
+        pcrSel = &capOut.capabilityData.data.assignedPCR;
+        printf("Assigned PCR's:\n");
+        for (pcrCount=0; pcrCount < (int)pcrSel->count; pcrCount++) {
+            printf("\t%s: ", wolfBoot_tpm2_get_alg_name(pcrSel->pcrSelections[pcrCount].hash));
+            for (pcrIndex=0;
+                pcrIndex<pcrSel->pcrSelections[pcrCount].sizeofSelect*8;
+                pcrIndex++) {
+                if ((pcrSel->pcrSelections[pcrCount].pcrSelect[pcrIndex/8] &
+                        ((1 << (pcrIndex % 8)))) != 0) {
+                    printf(" %d", pcrIndex);
+                }
+            }
+            printf("\n");
+        }
+    }
+    return rc;
+}
+
+static int cmd_tpm_info(const char *args)
+{
+    int rc;
+    WOLFTPM2_CAPS caps;
+    TPML_HANDLE handles;
+
+    printf("Get TPM 2.0 module information\n");
+
+    rc = wolfBoot_tpm2_caps(&caps);
+    if (rc == 0) {
+        printf("Mfg %s (%d), Vendor %s, Fw %u.%u (0x%x), "
+            "FIPS 140-2 %d, CC-EAL4 %d\n",
+            caps.mfgStr, caps.mfg, caps.vendorStr, caps.fwVerMajor,
+            caps.fwVerMinor, caps.fwVerVendor, caps.fips140_2, caps.cc_eal4);
+    }
+
+    /* List the active persistent handles */
+    rc = wolfBoot_tpm2_get_handles(PERSISTENT_FIRST, &handles);
+    if (rc >= 0) {
+        int i;
+        printf("Found %d persistent handles\n", rc);
+        for (i=0; i<(int)handles.count; i++) {
+            printf("\tHandle 0x%x\n", (unsigned int)handles.handle[i]);
+        }
+    }
+
+    /* Print the available PCR's */
+    rc = TPM2_PCRs_Print();
+    if (rc != 0) {
+        printf("TPM error 0x%x: %s\n", rc, wolfBoot_tpm2_get_rc_string(rc));
+    }
+
+    return rc;
+}
+#endif
+
 
 static int parse_cmd(const char *cmd)
 {

@@ -40,6 +40,28 @@
 #define SPI_MOSI_PIN  5 /* SPI_MOSI PB5  */
 #endif /* TARGET_stm32f4 */
 
+
+#ifdef TARGET_stm32h5
+#include "hal/stm32h5.h"
+
+#define RCC_GPIO_CLOCK_ER  RCC_AHB2ENR_CLOCK_ER
+#define APB2_CLOCK_RST     RCC_APB2_CLOCK_RSTR
+#define APB2_CLOCK_ER      RCC_APB2_CLOCK_ER
+
+/* Nucleo STM32H573ZI SPI_A Port (SPI1) */
+#define SPI_CLOCK_PIO_BASE  GPIOA_BASE
+#define SPI_MISO_PIO_BASE   GPIOG_BASE
+#define SPI_MOSI_PIO_BASE   GPIOB_BASE
+#define SPI_CS_TPM_PIO_BASE GPIOD_BASE
+
+#define SPI_PIN_AF    5 /* Alternate function for SPI pins */
+#define SPI_CLOCK_PIN 5 /* SPI_SCK: PA5  */
+#define SPI_MISO_PIN  9 /* SPI_MISO PG9  */
+#define SPI_MOSI_PIN  5 /* SPI_MOSI PB5  */
+#define SPI_CS_TPM    14 /* TPM   CS connected to PD14 */
+#endif /* TARGET_stm32h5 */
+
+
 #ifdef TARGET_stm32u5
 
 #ifdef TZEN
@@ -405,15 +427,53 @@
 
 #define SPI1_APB2_CLOCK_ER_VAL     (1 << 12)
 
+#if defined(TARGET_stm32h5)
+/* newer SPI/I2S peripheral */
+#define SPI1_CR1      (*(volatile uint32_t *)(SPI1_BASE))
+#define SPI1_CR2      (*(volatile uint32_t *)(SPI1_BASE + 0x04))
+#define SPI1_CFG1     (*(volatile uint32_t *)(SPI1_BASE + 0x08))
+#define SPI1_CFG2     (*(volatile uint32_t *)(SPI1_BASE + 0x0C))
+#define SPI1_SR       (*(volatile uint32_t *)(SPI1_BASE + 0x14))
+#define SPI1_TXDR     (*(volatile uint8_t *)(SPI1_BASE + 0x20))
+#define SPI1_RXDR     (*(volatile uint8_t *)(SPI1_BASE + 0x30))
+
+#define SPI_CR1_SPI_EN              (1 << 6)
+#define SPI_CR1_CSTART              (1 << 9) /* Continous start */
+#define SPI_CFG1_DSIZE_MASK         (0x1F)
+#define SPI_CFG1_DSIZE_SHIFT        (0)
+
+#define SPI_CFG1_FTHLV_MASK         (0x1F)
+#define SPI_CFG1_FTHLV_SHIFT        (5)
+
+#define SPI_CFG1_BAUDRATE_MASK      (0x07)
+#define SPI_CFG1_BAUDRATE_SHIFT     (28)
+
+#define SPI_CRF2_MASTER             (1 << 22)
+#define SPI_CFG2_LSBFIRST           (1 << 23)
+#define SPI_CFG2_CLOCK_PHASE_SHIFT  (24)
+#define SPI_CFG2_CLOCK_POL_SHIFT    (25)
+#define SPI_CFG2_SSM                (1 << 26)
+#define SPI_CFG2_SSOE               (1 << 29)
+#define SPI_CFG2_HW_CRC_EN          (1 << 29)
+#define SPI_CFG2_COMM_MASK          (0x3) /* 0=full duplex, 1=simplex tx, 2=simplex rx, 3=half duplex */
+#define SPI_CFG2_COMM_SHIFT         (17)
+
+#define SPI_SR_RX_NOTEMPTY          (1 << 0)
+#define SPI_SR_TX_EMPTY             (1 << 1)
+
+#else
+
+/* older SPI peripheral */
 #define SPI1_CR1      (*(volatile uint32_t *)(SPI1_BASE))
 #define SPI1_CR2      (*(volatile uint32_t *)(SPI1_BASE + 0x04))
 #define SPI1_SR       (*(volatile uint32_t *)(SPI1_BASE + 0x08))
-#define SPI1_DR       (*(volatile uint32_t *)(SPI1_BASE + 0x0c))
+#define SPI1_DR       (*(volatile uint8_t *)(SPI1_BASE + 0x0c))
 
-#define SPI_CR1_CLOCK_PHASE         (1 << 0)
-#define SPI_CR1_CLOCK_POLARITY      (1 << 1)
+#define SPI_CR1_CLOCK_PHASE_SHIFT   (0)
+#define SPI_CR1_CLOCK_POL_SHIFT     (1)
 #define SPI_CR1_MASTER              (1 << 2)
-#define SPI_CR1_BAUDRATE            (0x07 << 3)
+#define SPI_CR1_BAUDRATE_MASK       (0x07)
+#define SPI_CR1_BAUDRATE_SHIFT      (3)
 #define SPI_CR1_SPI_EN              (1 << 6)
 #define SPI_CR1_LSBFIRST            (1 << 7)
 #define SPI_CR1_SSI                 (1 << 8)
@@ -428,6 +488,7 @@
 #define SPI_SR_TX_EMPTY             (1 << 1)
 #define SPI_SR_BUSY                 (1 << 7)
 
+#endif
 
 /* GPIO */
 #define GPIO_MODE(base)    (*(volatile uint32_t *)(base + 0x00)) /* GPIOx_MODER */
