@@ -2774,7 +2774,8 @@ static int process_args(int argc, char** argv) {
 #ifdef DEBUG_SIGNTOOL
             printf("    (#%d is not a setting, abort processing of remaining %d args as settings)\n", i, argc - i);
 #endif
-            if (i == (argc - 3)) {
+            if ((i == (argc - 3)) || (i == (argc - 4)))
+            {
                 /* Looks like we have good parameters */
 #ifdef DEBUG_SIGNTOOL
                 printf("Detected positional arguments.\n");
@@ -2782,11 +2783,12 @@ static int process_args(int argc, char** argv) {
                 printf("  Image:   %s\n", argv[i + 0]);
                 printf("  Key:     %s\n", argv[i + 1]);
                 printf("  Version: %s\n", argv[i + 2]);
+                printf("  Output:  %s\n", argv[i + 3]);
 #endif
             }
             else {
-                printf("Error: expected exactly 3 positional arguments after options, got %d.\n", argc);
-                printf("Usage: %s [OPTIONS] IMAGE.BIN KEY.DER VERSION\n", argv[0]);
+                printf("Error: expected exactly 3 or 4 positional arguments after options, got %d.\n", argc - i);
+                printf("Usage: %s [OPTIONS] IMAGE.BIN KEY.DER VERSION [output]\n", argv[0]);
 
                 exit(1);
             }
