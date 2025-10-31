@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-
+#include "wolfboot/wc_secure.h"
 #include "wolfboot/wcs_pkcs11.h"
 
 #ifdef SECURE_PKCS11
