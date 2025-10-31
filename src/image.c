@@ -30,6 +30,11 @@
 #include <stdio.h>
 #endif
 #include <wolfssl/wolfcrypt/settings.h> /* for wolfCrypt hash/sign routines */
+#ifdef WOLFBOOT_KEYTOOLS
+    /* this code needs to use the Use ./include/user_settings.h, not keytools */
+    #error "The wrong user_settings.h has been included."
+#endif
+
 
 #include <stddef.h>
 #include <string.h>
