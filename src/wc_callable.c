@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #ifdef WOLFCRYPT_SECURE_MODE
+
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/ssl.h"
 #include "wolfssl/wolfcrypt/ecc.h"
@@ -31,8 +32,7 @@
 
 static WC_RNG wcs_rng;
 
-int __attribute__((cmse_nonsecure_entry))
-wcs_get_random(uint8_t *rand, uint32_t size)
+int CSME_NSE_API wcs_get_random(uint8_t *rand, uint32_t size)
 {
     return wc_RNG_GenerateBlock(&wcs_rng, rand, size);
 }
@@ -43,4 +43,4 @@ void wcs_Init(void)
     wc_InitRng(&wcs_rng);
 }
 
-#endif
+#endif /* WOLFCRYPT_SECURE_MODE */

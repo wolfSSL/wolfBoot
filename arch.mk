@@ -250,7 +250,6 @@ ifeq ($(ARCH),ARM)
     WOLFBOOT_ORIGIN=0x10000000
     ifeq ($(TZEN),1)
       LSCRIPT_IN=hal/$(TARGET).ld
-      CFLAGS+=-DTZEN
     else
       LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
@@ -398,10 +397,6 @@ else
   endif
 endif
 endif
-endif
-
-ifeq ($(TZEN),1)
-  CFLAGS+=-DTZEN
 endif
 
 

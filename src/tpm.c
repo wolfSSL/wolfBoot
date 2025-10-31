@@ -1133,6 +1133,70 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
 }
 #endif
 
+
+/* API's that are callable from non-secure code */
+int CSME_NSE_API wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps)
+{
+    memset(caps, 0, sizeof(*caps));
+    return wolfTPM2_GetCapabilities(&wolftpm_dev, caps);
+}
+
+int CSME_NSE_API wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles)
+{
+    memset(handles, 0, sizeof(*handles));
+    return wolfTPM2_GetHandles(handle, handles);
+}
+
+const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
+    char* name, int name_sz)
+{
+    const char* s_name;
+    if (name == NULL || name_sz <= 0) {
+        return NULL;
+    }
+    s_name = TPM2_GetAlgName(alg);
+    if (s_name != NULL && name != NULL && name_sz > 0) {
+        strncpy(name, s_name, name_sz - 1);
+        name[name_sz - 1] = '\0';
+    }
+    else {
+        strcpy(name, "Unknown");
+    }
+    return (const char*)name;
+}
+
+const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc, char* error, int error_sz)
+{
+    const char* s_error;
+    if (error == NULL || error_sz <= 0) {
+        return NULL;
+    }
+    s_error = TPM2_GetRCString(rc);
+    if (s_error != NULL && error != NULL && error_sz > 0) {
+        strncpy(error, s_error, error_sz - 1);
+        error[error_sz - 1] = '\0';
+    }
+    else {
+        strcpy(error, "Unknown");
+    }
+    return (const char*)error;
+}
+
+TPM_RC CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out)
+{
+    return TPM2_GetCapability(in, out);
+}
+
+int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* digestSz)
+{
+    return wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
+        digest, digestSz);
+}
+
+
+
+
+
 /**
  * @brief Initialize the TPM2 device and retrieve its capabilities.
  *
