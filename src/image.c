@@ -941,7 +941,7 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
     while (p < end_sha) {
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (end_sha - p < blksz)
-            blksz = end_sha - p;
+            blksz = (int)(end_sha - p);
         wc_Sha256Update(sha256_ctx, p, blksz);
         p += blksz;
     }
@@ -988,20 +988,32 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
  * @param key_slot The key slot ID to calculate the hash for.
  * @param hash A pointer to store the resulting SHA256 hash.
  */
-static void key_sha256(uint8_t key_slot, uint8_t *hash)
+static int key_sha256(uint8_t key_slot, uint8_t *hash)
 {
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha256 sha256_ctx;
+    int ret = 0;
+
+    if (!pubkey || (pubkey_sz < 0)) {
+        return -1;
+    }
+#ifndef WOLFBOOT_KEYHASH_HAS_RESULT
+    wolfBoot_printf("This hash result must define WOLFBOOT_KEYHASH_HAS_RESULT");
+    return -1;
+#endif
 
     memset(hash, 0, SHA256_DIGEST_SIZE);
-    if (!pubkey || (pubkey_sz < 0))
-        return;
 
-    wc_InitSha256(&sha256_ctx);
-    wc_Sha256Update(&sha256_ctx, pubkey, (word32)pubkey_sz);
-    wc_Sha256Final(&sha256_ctx, hash);
+    ret = wc_InitSha256(&sha256_ctx);
+    if (ret == 0) {
+        ret = wc_Sha256Update(&sha256_ctx, pubkey, (word32)pubkey_sz);
+    }
+    if (ret == 0) {
+        ret = wc_Sha256Final(&sha256_ctx, hash);
+    }
     wc_Sha256Free(&sha256_ctx);
+    return ret;
 }
 #endif /* WOLFBOOT_NO_SIGN */
 #endif /* SHA2-256 */
@@ -2192,6 +2204,17 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 
 #if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT)
 
+/* Normalize the call so we always get an int status: 0 == OK, <0 == error */
+static inline int key_hash_ok(int id, uint8_t* digest)
+{
+#ifdef WOLFBOOT_KEYHASH_HAS_RET
+    return key_hash(id, digest);
+#else
+    key_hash(id, digest);
+    return 0;
+#endif
+}
+
 /**
  * @brief Get the key slot ID by SHA hash.
  *
@@ -2200,18 +2223,37 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
  *
  * @param hint The SHA hash of the public key to search for.
  * @return The key slot ID if found, -1 if the key was not found.
+ *         Other negative values if the key_hash function failed.
  */
+
 int keyslot_id_by_sha(const uint8_t *hint)
 {
     int id;
+    int ret = -1;
+    int ct = 0;
+    if (hint == NULL) {
+        return -1;
+    }
+    if (WOLFBOOT_SHA_DIGEST_SIZE <= 0) {
+        return -1;
+    }
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
-        key_hash(id, digest);
-        if (memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
+        ct++;
+        ret = key_hash_ok(id, digest);
+        if ((ret == 0) && memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
+            wolfBoot_printf("Found matching digest in slot %d\n", id);
             return id;
         }
     }
-    return -1;
+
+    if (ret == 0) {
+        /* Calls to key_hash were successful, but we did not find one. Fail: */
+        wolfBoot_printf("No matching key hash found. Looked at %d slot(s)", ct);
+        ret = -1;
+    }
+    /* Reminder: zero based slot array. */
+    return ret;
 }
 #endif /* !WOLFBOOT_NO_SIGN && !WOLFBOOT_RENESAS_SCEPROTECT */
 

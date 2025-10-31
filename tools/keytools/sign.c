@@ -58,7 +58,7 @@
 #include <io.h>
 #define HAVE_MMAP 0
 #define ftruncate(fd, len) _chsize(fd, len)
-static inline int fp_truncate(FILE *f, size_t len)
+static inline int fp_truncate(FILE *f, long len)
 {
     int fd;
     if (f == NULL)
@@ -953,7 +953,7 @@ static int sign_digest(int sign, int hash_algo,
 {
     int ret;
     WC_RNG rng;
-    printf("Sign: %02x\n", sign >> 8);
+    printf("Sign: 0x%02x\n", (unsigned)sign >> 8);
     (void)secondary;
 
     if ((ret = wc_InitRng(&rng)) != 0) {
@@ -2401,57 +2401,54 @@ static void set_signature_sizes(int secondary)
     printf("Manifest header size: %u\n", CMD.header_sz);
 }
 
-int main(int argc, char** argv)
-{
+static int process_args(int argc, char** argv) {
     int ret = 0;
     int i;
     char* tmpstr;
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
     const char* secondary_sign_str = "NONE";
-    uint8_t  buf[PATH_MAX-32]; /* leave room to avoid "directive output may be truncated" */
-    uint8_t *pubkey = NULL;
-    uint32_t pubkey_sz = 0;
-    uint8_t *kbuf=NULL, *key_buffer, *key_buffer2;
-    uint32_t key_buffer_sz, key_buffer_sz2;
+    uint8_t  buf[PATH_MAX - 32]; /* leave room to avoid "directive output may be truncated" */
 
-#ifdef DEBUG_SIGNTOOL
-    wolfSSL_Debugging_ON();
-#endif
-
-    printf("wolfBoot KeyTools (Compiled C version)\n");
-    printf("wolfBoot version %X\n", WOLFBOOT_VERSION);
-
-    /* Check arguments and print usage */
+    /* Usage requires at least 4 params:
+     *    sign [OPTIONS]  IMAGE.BIN  KEY.DER  VERSION */
     if (argc < 4 || argc > 14) {
         printf("Usage: %s [options] image key version\n", argv[0]);
         printf("For full usage manual, see 'docs/Signing.md'\n");
         exit(1);
     }
 
-    /* Set initial manifest header size to a minimum default value */
-    CMD.header_sz = 256;
-
     /* Parse Arguments */
-    for (i=1; i<argc; i++) {
+#ifdef DEBUG_SIGNTOOL
+    printf("  Debug Sign Tool Enabled:\n");
+    printf("  Looking at %d args\n", argc);
+#endif
+    for (i = 1; i < argc; i++) {
+#ifdef DEBUG_SIGNTOOL
+        printf("  Looking at arg #%d: %s\n", i, argv[i]);
+#endif
         if (strcmp(argv[i], "--no-sign") == 0) {
             CMD.sign = NO_SIGN;
             sign_str = "NONE";
-        } else if (strcmp(argv[i], "--ed25519") == 0) {
-            if (CMD.sign != SIGN_AUTO)  {
+        }
+        else if (strcmp(argv[i], "--ed25519") == 0) {
+            if (CMD.sign != SIGN_AUTO) {
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_ED25519;
                 secondary_sign_str = "ED25519";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_ED25519;
                 sign_str = "ED25519";
             }
-        } else if (strcmp(argv[i], "--ed448") == 0) {
+        }
+        else if (strcmp(argv[i], "--ed448") == 0) {
             if (CMD.sign != SIGN_AUTO) {
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_ED448;
                 secondary_sign_str = "ED448";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_ED448;
                 sign_str = "ED448";
             }
@@ -2461,7 +2458,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_ECC256;
                 secondary_sign_str = "ECC256";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_ECC256;
                 sign_str = "ECC256";
             }
@@ -2471,7 +2469,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_ECC384;
                 secondary_sign_str = "ECC384";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_ECC384;
                 sign_str = "ECC384";
             }
@@ -2481,7 +2480,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_ECC521;
                 secondary_sign_str = "ECC521";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_ECC521;
                 sign_str = "ECC521";
             }
@@ -2491,7 +2491,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_RSA2048;
                 secondary_sign_str = "RSA2048ENC";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_RSA2048;
                 sign_str = "RSA2048ENC";
             }
@@ -2502,7 +2503,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_RSA2048;
                 secondary_sign_str = "RSA2048";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_RSA2048;
                 sign_str = "RSA2048";
             }
@@ -2512,7 +2514,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_RSA3072;
                 secondary_sign_str = "RSA3072ENC";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_RSA3072;
                 sign_str = "RSA3072ENC";
             }
@@ -2523,7 +2526,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_RSA3072;
                 secondary_sign_str = "RSA3072";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_RSA3072;
                 sign_str = "RSA3072";
             }
@@ -2533,7 +2537,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_RSA4096;
                 secondary_sign_str = "RSA4096ENC";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_RSA4096;
                 sign_str = "RSA4096ENC";
             }
@@ -2544,7 +2549,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_RSA4096;
                 secondary_sign_str = "RSA4096";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_RSA4096;
                 sign_str = "RSA4096";
             }
@@ -2554,7 +2560,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_LMS;
                 secondary_sign_str = "LMS";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_LMS;
                 sign_str = "LMS";
             }
@@ -2564,7 +2571,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_XMSS;
                 secondary_sign_str = "XMSS";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_XMSS;
                 sign_str = "XMSS";
             }
@@ -2574,7 +2582,8 @@ int main(int argc, char** argv)
                 CMD.hybrid = 1;
                 CMD.secondary_sign = SIGN_ML_DSA;
                 secondary_sign_str = "ML-DSA";
-            } else {
+            }
+            else {
                 CMD.sign = SIGN_ML_DSA;
                 sign_str = "ML-DSA";
             }
@@ -2628,7 +2637,8 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--delta") == 0) {
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
-        } else if (strcmp(argv[i], "--no-base-sha") == 0) {
+        }
+        else if (strcmp(argv[i], "--no-base-sha") == 0) {
             CMD.no_base_sha = 1;
         }
         else if (strcmp(argv[i], "--no-ts") == 0) {
@@ -2656,7 +2666,7 @@ int main(int argc, char** argv)
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
             }
-            if ( ((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF) ) {
+            if (((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF)) {
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
             }
@@ -2669,11 +2679,12 @@ int main(int argc, char** argv)
 
             CMD.custom_tlv[p].tag = tag;
             CMD.custom_tlv[p].len = len;
-            CMD.custom_tlv[p].val = arg2num(argv[i+3], len);
+            CMD.custom_tlv[p].val = arg2num(argv[i + 3], len);
             CMD.custom_tlv[p].buffer = NULL;
             CMD.custom_tlvs++;
             i += 3;
-        } else if (strcmp(argv[i], "--custom-tlv-buffer") == 0) {
+        }
+        else if (strcmp(argv[i], "--custom-tlv-buffer") == 0) {
             int p = CMD.custom_tlvs;
             uint16_t tag, len;
             uint32_t j;
@@ -2691,7 +2702,7 @@ int main(int argc, char** argv)
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
             }
-            if ( ((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF) ) {
+            if (((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF)) {
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
             }
@@ -2707,12 +2718,13 @@ int main(int argc, char** argv)
                 exit(16);
             }
             for (j = 0; j < len; j++) {
-                char c[3] = {argv[i + 2][j * 2], argv[i + 2][j * 2 + 1], 0};
+                char c[3] = { argv[i + 2][j * 2], argv[i + 2][j * 2 + 1], 0 };
                 CMD.custom_tlv[p].buffer[j] = (uint8_t)strtol(c, NULL, 16);
             }
             CMD.custom_tlvs++;
             i += 2;
-        } else if (strcmp(argv[i], "--custom-tlv-string") == 0) {
+        }
+        else if (strcmp(argv[i], "--custom-tlv-string") == 0) {
             int p = CMD.custom_tlvs;
             uint16_t tag, len;
             uint32_t j;
@@ -2730,7 +2742,7 @@ int main(int argc, char** argv)
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
             }
-            if ( ((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF) ) {
+            if (((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF)) {
                 fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
                 exit(16);
             }
@@ -2746,7 +2758,7 @@ int main(int argc, char** argv)
                 exit(16);
             }
             for (j = 0; j < len; j++) {
-                CMD.custom_tlv[p].buffer[j] = (uint8_t)argv[i+2][j];
+                CMD.custom_tlv[p].buffer[j] = (uint8_t)argv[i + 2][j];
             }
             CMD.custom_tlvs++;
             i += 2;
@@ -2759,6 +2771,25 @@ int main(int argc, char** argv)
             CMD.cert_chain_file = argv[++i];
         }
         else {
+#ifdef DEBUG_SIGNTOOL
+            printf("    (#%d is not a setting, abort processing of remaining %d args as settings)\n", i, argc - i);
+#endif
+            if (i == (argc - 3)) {
+                /* Looks like we have good parameters */
+#ifdef DEBUG_SIGNTOOL
+                printf("Detected positional arguments.\n");
+                printf("Using:\n");
+                printf("  Image:   %s\n", argv[i + 0]);
+                printf("  Key:     %s\n", argv[i + 1]);
+                printf("  Version: %s\n", argv[i + 2]);
+#endif
+            }
+            else {
+                printf("Error: expected exactly 3 positional arguments after options, got %d.\n", argc);
+                printf("Usage: %s [OPTIONS] IMAGE.BIN KEY.DER VERSION\n", argv[0]);
+
+                exit(1);
+            }
             i--;
             break;
         }
@@ -2774,39 +2805,41 @@ int main(int argc, char** argv)
     if (CMD.sign != NO_SIGN) {
         if (CMD.hybrid) {
             printf("Parsing arguments in hybrid mode\n");
-            CMD.image_file = argv[i+1];
-            CMD.key_file = argv[i+2];
-            CMD.secondary_key_file = argv[i+3];
-            CMD.fw_version = argv[i+4];
+            CMD.image_file = argv[i + 1];
+            CMD.key_file = argv[i + 2];
+            CMD.secondary_key_file = argv[i + 3];
+            CMD.fw_version = argv[i + 4];
             if (CMD.manual_sign) {
-                CMD.signature_file = argv[i+5];
+                CMD.signature_file = argv[i + 5];
             }
             printf("Secondary private key: %s\n", CMD.secondary_key_file);
             printf("Secondary cipher: %s\n", secondary_sign_str);
             printf("Version: %s\n", CMD.fw_version);
-        } else {
-            CMD.image_file = argv[i+1];
-            CMD.key_file = argv[i+2];
-            CMD.fw_version = argv[i+3];
+        }
+        else {
+            CMD.image_file = argv[i + 1];
+            CMD.key_file = argv[i + 2];
+            CMD.fw_version = argv[i + 3];
             if (CMD.manual_sign) {
-                CMD.signature_file = argv[i+4];
+                CMD.signature_file = argv[i + 4];
             }
         }
-    } else {
-        CMD.image_file = argv[i+1];
+    }
+    else {
+        CMD.image_file = argv[i + 1];
         CMD.key_file = NULL;
-        CMD.fw_version = argv[i+2];
+        CMD.fw_version = argv[i + 2];
     }
 
     memset(buf, 0, sizeof(buf));
-    strncpy((char*)buf, CMD.image_file, sizeof(buf)-1);
+    strncpy((char*)buf, CMD.image_file, sizeof(buf) - 1);
     tmpstr = strrchr((char*)buf, '.');
     if (tmpstr) {
         *tmpstr = '\0'; /* null terminate at last "." */
     }
     snprintf(CMD.output_image_file, sizeof(CMD.output_image_file) - 1,
-            "%s_v%s_%s.bin", (char*)buf, CMD.fw_version,
-            CMD.sha_only ? "digest" : "signed");
+        "%s_v%s_%s.bin", (char*)buf, CMD.fw_version,
+        CMD.sha_only ? "digest" : "signed");
 
     snprintf(CMD.output_encrypted_image_file,
             sizeof(CMD.output_encrypted_image_file),
@@ -2830,9 +2863,9 @@ int main(int argc, char** argv)
     }
     printf("Input image:          %s\n", CMD.image_file);
     printf("Selected cipher:      %s\n", sign_str);
-    printf("Selected hash  :      %s\n", hash_str);
+    printf("Selected hash:        %s\n", hash_str);
     if (CMD.sign != NO_SIGN) {
-        printf("Private key:           %s\n", CMD.key_file);
+        printf("Private key:          %s\n", CMD.key_file);
     }
     if (CMD.hybrid) {
         printf("Secondary cipher:     %s\n", secondary_sign_str);
@@ -2853,7 +2886,7 @@ int main(int argc, char** argv)
     if (CMD.encrypt) {
         printf("Encrypted output:     %s\n", CMD.output_encrypted_image_file);
     }
-    printf("Target partition id : %hu ", CMD.partition_id);
+    printf("Target partition id:  %hu ", CMD.partition_id);
     if (CMD.partition_id == HDR_IMG_TYPE_WOLFBOOT)
         printf("(bootloader)");
     printf("\n");
@@ -2885,11 +2918,65 @@ int main(int argc, char** argv)
         set_signature_sizes(1);
     }
 
-    if (((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) ||
-            CMD.header_sz == 0) {
+    if (CMD.header_sz == 0) {
+        printf("Header size cannot be zero");
+        ret = 2;
+    }
+#ifdef DEBUG_SIGNTOOL
+    else {
+        printf("Command header size:  %d\n", CMD.header_sz);
+    }
+#endif
+
+    if (CMD.sign == HDR_IMG_TYPE_AUTH_NONE) {
+        printf("Warning: image signing auth set to NONE");
+    }
+
+    if (CMD.sign == NO_SIGN) {
+        printf("Warning: not signing");
+    }
+
+    if ((CMD.sign != NO_SIGN) && (CMD.signature_sz == 0)) {
+        printf("ERROR: When signing (CMD.sign = %d), signature size cannot be zero.\n", CMD.sign);
+        ret = 2;
+    }
+#ifdef DEBUG_SIGNTOOL
+    else {
+        printf("Signature size: %d\n", CMD.signature_sz);
+    }
+#endif
+
+    if (ret != 0) {
         printf("Invalid hash or signature type! %d, %d, %d\n", CMD.sign,
-               CMD.signature_sz, CMD.header_sz);
-        exit(2);
+            CMD.signature_sz, CMD.header_sz);
+        exit(ret);
+    }
+
+    return ret;
+}
+
+int main(int argc, char** argv)
+{
+    int ret = 0;
+    uint8_t *pubkey = NULL;
+    uint32_t pubkey_sz = 0;
+    uint8_t *kbuf=NULL, *key_buffer, *key_buffer2;
+    uint32_t key_buffer_sz, key_buffer_sz2;
+
+    /* Set initial manifest header size to a minimum default value */
+    CMD.header_sz = 256;
+
+#ifdef DEBUG_SIGNTOOL
+    wolfSSL_Debugging_ON();
+#endif
+
+    printf("wolfBoot KeyTools (Compiled C version)\n");
+    printf("wolfBoot version %X\n", WOLFBOOT_VERSION);
+
+    /* Check arguments and print usage */
+    ret = process_args(argc, argv);
+    if (ret != 0) {
+        exit(ret);
     }
 
     if (CMD.sign == NO_SIGN) {
@@ -2899,6 +2986,7 @@ int main(int argc, char** argv)
     } else {
         kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkey_sz, 0);
         if (!kbuf) {
+            printf("Failed to load key");
             exit(1);
         }
     } /* CMD.sign != NO_SIGN */
@@ -2915,28 +3003,39 @@ int main(int argc, char** argv)
         DEBUG_PRINT("Signature size: %u\n", CMD.signature_sz);
         DEBUG_PRINT("Secondary signature size: %u\n", CMD.secondary_signature_sz);
         DEBUG_PRINT("Header size: %u\n", CMD.header_sz);
-        if (kbuf2)
+        if (kbuf2) {
             free(kbuf2);
-        if (pubkey2)
+        }
+        if (pubkey2) {
             free(pubkey2);
-    } else {
+        }
+    }
+    else {
         make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
     }
 
 
     if (CMD.delta) {
-        if (CMD.encrypt)
+        if (CMD.encrypt) {
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 64);
-        else
+        }
+        else {
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 16);
+        }
+
+        if (ret != 0) {
+            printf("Warning: base_diff returned %d\n", ret);
+        }
     }
 
     /* Add pubkey cleanup */
-    if (pubkey)
+    if (pubkey) {
         free(pubkey);
-
-    if (kbuf)
+    }
+    if (kbuf) {
         free(kbuf);
+    }
+
     if (CMD.sign == SIGN_ED25519) {
         wc_ed25519_free(&key.ed);
     }
