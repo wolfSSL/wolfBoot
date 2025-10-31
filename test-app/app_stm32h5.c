@@ -677,7 +677,7 @@ static int TPM2_PCRs_Print(void)
     GetCapability_In  capIn;
     GetCapability_Out capOut;
     TPML_PCR_SELECTION* pcrSel;
-    char buffer[24];
+    char algName[24];
 
     /* List available PCR's */
     XMEMSET(&capIn, 0, sizeof(capIn));
@@ -691,7 +691,7 @@ static int TPM2_PCRs_Print(void)
         for (pcrCount=0; pcrCount < (int)pcrSel->count; pcrCount++) {
 
             printf("\t%s: ", wolfBoot_tpm2_get_alg_name(
-                pcrSel->pcrSelections[pcrCount].hash, buffer, sizeof(buffer)));
+                pcrSel->pcrSelections[pcrCount].hash, algName, sizeof(algName)));
             for (pcrIndex=0;
                 pcrIndex<pcrSel->pcrSelections[pcrCount].sizeofSelect*8;
                 pcrIndex++) {
@@ -711,7 +711,10 @@ static int cmd_tpm_info(const char *args)
     int rc;
     WOLFTPM2_CAPS caps;
     TPML_HANDLE handles;
-    char error[100];
+#ifdef WOLFBOOT_MEASURED_PCR_A
+    byte hashBuf[TPM_MAX_DIGEST_SIZE];
+    int hashSz;
+#endif
 
     printf("Get TPM 2.0 module information\r\n");
 
@@ -731,11 +734,36 @@ static int cmd_tpm_info(const char *args)
         for (i=0; i<(int)handles.count; i++) {
             printf("\tHandle 0x%x\r\n", (unsigned int)handles.handle[i]);
         }
+        rc = 0;
     }
 
     /* Print the available PCR's */
-    rc = TPM2_PCRs_Print();
+    if (rc == 0) {
+        rc = TPM2_PCRs_Print();
+    }
+
+#ifdef WOLFBOOT_MEASURED_PCR_A
+    /* Read measured boot PCR */
+    if (rc == 0) {
+        char algName[24];
+        printf("Measured boot: PCR %s %d\r\n",
+            wolfBoot_tpm2_get_alg_name(WOLFBOOT_TPM_PCR_ALG, algName, sizeof(algName)),
+            WOLFBOOT_MEASURED_PCR_A);
+        hashSz = 0;
+        rc = wolfBoot_tpm2_read_pcr(WOLFBOOT_MEASURED_PCR_A, hashBuf, &hashSz);
+        if (rc == 0) {
+            int i;
+            printf("PCR (%d bytes): ", hashSz);
+            for (i = 0; i < hashSz; i++) {
+                printf("%02x", hashBuf[i]);
+            }
+            printf("\r\n");
+        }
+    }
+#endif
+
     if (rc != 0) {
+        char error[100];
         printf("TPM error 0x%x: %s\r\n",
             rc, wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
     }

@@ -62,6 +62,7 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
 const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc,
     char* error, int error_sz);
 TPM_RC CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out);
+int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* digestSz);
 
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
 int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,

@@ -1187,6 +1187,14 @@ TPM_RC CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapabi
     return TPM2_GetCapability(in, out);
 }
 
+int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* digestSz)
+{
+    return wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
+        digest, digestSz);
+}
+
+
+
 
 
 /**
