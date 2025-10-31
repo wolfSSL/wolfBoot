@@ -266,6 +266,26 @@ ifeq ($(ARCH),ARM)
      CFLAGS+=-DWOLFBOOT_USE_STDLIBC
   endif
 
+  ifeq ($(TARGET),va416x0)
+    CFLAGS+=-I$(WOLFBOOT_ROOT)/include/vorago/ \
+            -I$(VORAGO_SDK_DIR)/common/drivers/hdr/ \
+            -I$(VORAGO_SDK_DIR)/common/mcu/hdr/ \
+            -I$(VORAGO_SDK_DIR)/common/utils/hdr/
+    SDK_OBJS=$(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_spi.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_clkgen.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_ioconfig.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_irqrouter.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_uart.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_timer.o \
+             $(VORAGO_SDK_DIR)/common/mcu/src/system_va416xx.o
+    ifeq ($(USE_HAL_SPI_FRAM),1)
+      SDK_OBJS+=$(VORAGO_SDK_DIR)/common/utils/src/spi_fram.o
+      CFLAGS+=-DUSE_HAL_SPI_FRAM
+    endif
+    OBJS+=$(SDK_OBJS)
+  endif
+
 ## Cortex CPU
 
 ifeq ($(CORTEX_A5),1)

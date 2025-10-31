@@ -45,6 +45,7 @@ This README describes configuration of supported targets.
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
+* [Vorago VA416x0](#vorago-va416x0)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
 
 ## STM32F4
@@ -3575,3 +3576,286 @@ Currently, wolfBoot for TC3xx is distributed as part of the wolfHSM TC3xx platfo
 
 For access to the TC3xx platform release or for more information on using wolfBoot and wolfHSM on AURIX devices, contact [facts@wolfssl.com](mailto:facts@wolfssl.com).
 
+
+## Vorago VA416x0
+
+Tested on VA41620 and VA41630 MCU's.
+
+MCU: Cortex-M4 with Triple-Mode Redundancy (TMR) RAD hardening at up to 100MHz.
+FLASH: The VA41630 has 256KB of internal SPI FRAM (for the VA41620 its external). FRAM is Infineon FM25V20A.
+SRAM: 64KB on-chip SRAM and 256KB on-chip program memory
+
+Boot ROM loads at 20MHz from SPI bus to internal data SRAM
+
+### Building Vorago VA416x0
+
+All build settings come from .config file. For this platform use `TARGET=va416x0`.
+See example configuration at `config/examples/vorago_va416x0.config`.
+
+```sh
+cp config/examples/vorago_va416x0.config .config
+make VORAGO_SDK_DIR=$PWD../VA416xx_SDK/
+        [CC ARM] src/string.o
+        [CC ARM] src/image.o
+        [CC ARM] src/libwolfboot.o
+        [CC ARM] hal/hal.o
+        [CC ARM] hal/va416x0.o
+        [CC ARM] src/keystore.o
+        [CC ARM] src/loader.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_spi.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_clkgen.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_ioconfig.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_irqrouter.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_uart.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_timer.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/mcu/src/system_va416xx.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/utils/src/spi_fram.o
+        [CC ARM] src/boot_arm.o
+        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o
+        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o
+        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o
+        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o
+        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+        [CC ARM] src/update_flash.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sha256.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/hash.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/memory.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/wc_port.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/wolfmath.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/logging.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/asn.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/ecc.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sp_int.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sha512.o
+        [LD] wolfboot.elf
+        [BIN] wolfboot.bin
+        [SIZE]
+   text    data     bss     dec     hex filename
+  33900       4   26976   60880    edd0 wolfboot.elf
+```
+
+### Flashing Vorago VA416x0
+
+Flash using Segger JLink: `JLinkExe -CommanderScript tools/scripts/flash_va416xx.jlink`
+
+Example JLink flash script `tools/scripts/flash_va416xx.jlink`:
+
+```
+device VA416XX
+si 1
+speed 2000
+r
+h
+write4 0x40010010 0x1
+loadbin factory.bin 0x0
+write4 0x40010010 0x0
+loadfile ../VA416xx_SDK/loader.elf
+exit
+```
+
+The `loader.elf` programs the external SPI FRAM with the IRAM image. It is created with `make loader` from the SDK.
+
+Example boot ouput on UART 0 (MCU TX):
+
+```
+wolfBoot HAL Init
+Boot partition: 0xFC00 (sz 5144, ver 0x1, type 0x601)
+Partition 1 header magic 0x00000000 invalid at 0x27C00
+Boot partition: 0xFC00 (sz 5144, ver 0x1, type 0x601)
+Booting version: 0x1
+========================
+VA416x0 wolfBoot demo Application
+Copyright 2025 wolfSSL Inc
+GPL v3
+Version : 0x1
+========================
+
+System information
+====================================
+Firmware version : 0x1
+Current firmware state: NEW
+No image in update partition.
+
+Bootloader OTP keystore information
+====================================
+Number of public keys: 1
+
+  Public Key #0: size 96, type 6, mask FFFFFFFF
+  ====================================
+  08 A3 83 69 90 76 12 24 4E 86 17 0B 44 63 FF E7
+  4C 81 AD DD 15 8A 08 B7 EC 1C D2 F3 13 51 97 E1
+  C0 5A 7E BF D2 95 7D EC 49 FC EF 26 90 AD CC 9D
+  AD 4C 31 3A ED 18 6E 17 57 97 7F F5 3A 79 AA 6B
+  8A 0B 16 90 C5 6C 2A CF BE EE 59 99 B2 C7 B6 44
+  BA 3E 1A C3 92 48 1B 5C D2 AF B4 0A 83 2F 74 37
+```
+
+### Debugging Vorago VA416x0
+
+Start the GDB server: `JLinkGDBServer -device VA416XX -if SWD -speed 2000 -port 3333`
+
+Run: `arm-none-eabi-gdb`. This will source the `.gdbinit` to load symbols for `wolfboot.elf` and `test-app/image.elf`. It will also attempt to connect to the GDB server on default port 3333.
+
+### Testing updates on VA416x0
+
+Note: This test was run with DEBUG=1 and DEBUG_UART=1 to generate logging on the UART.
+
+See `tools/scripts/vorago/build_test_update.sh`:
+
+```sh
+# Sign a new test app with version 2
+IMAGE_HEADER_SIZE=512 ./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+
+# Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING)
+echo -n "pBOOT" > trigger_magic.bin
+
+# Assembly new factory update.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0     wolfboot.bin \
+    0xFC00  test-app/image_v1_signed.bin \
+    0x27C00 test-app/image_v2_signed.bin \
+    0x3FBFB trigger_magic.bin
+
+# Use JLink to load
+device VA416XX
+si 1
+speed 2000
+r
+h
+write4 0x40010010 0x1
+loadbin update.bin 0x0
+write4 0x40010010 0x0
+loadfile ../VA416xx_SDK/loader.elf
+exit
+```
+
+Example update output:
+
+```
+wolfBoot HAL Init
+Boot partition: 0xFC00 (sz 8976, ver 0x1, type 0x601)
+Update partition: 0x27C00 (sz 8976, ver 0x2, type 0x601)
+Starting Update (fallback allowed 0)
+Update partition: 0x27C00 (sz 8976, ver 0x2, type 0x601)
+Boot partition: 0xFC00 (sz 8976, ver 0x1, type 0x601)
+verify integrity: img 0x1FFFE844, part 1
+verify authenticity: img 0x1FFFE844, part 1
+Versions: Current 0x1, Update 0x2
+Copy sector 0 (part 1->2)
+Copy sector 0 (part 0->1)
+Copy sector 0 (part 2->0)
+Boot partition: 0xFC00 (sz 8976, ver 0x2, type 0x601)
+Update partition: 0x27C00 (sz 8976, ver 0x1, type 0x601)
+Copy sector 1 (part 1->2)
+Copy sector 1 (part 0->1)
+Copy sector 1 (part 2->0)
+Copy sector 2 (part 1->2)
+Copy sector 2 (part 0->1)
+Copy sector 2 (part 2->0)
+Copy sector 3 (part 1->2)
+Copy sector 3 (part 0->1)
+Copy sector 3 (part 2->0)
+Copy sector 4 (part 1->2)
+Copy sector 4 (part 0->1)
+Copy sector 4 (part 2->0)
+Copy sector 5 (part 1->2)
+Copy sector 5 (part 0->1)
+Copy sector 5 (part 2->0)
+Copy sector 6 (part 1->2)
+Copy sector 6 (part 0->1)
+Copy sector 6 (part 2->0)
+Copy sector 7 (part 1->2)
+Copy sector 7 (part 0->1)
+Copy sector 7 (part 2->0)
+Copy sector 8 (part 1->2)
+Copy sector 8 (part 0->1)
+Copy sector 8 (part 2->0)
+Copy sector 9 (part 1->2)
+Copy sector 9 (part 0->1)
+Copy sector 9 (part 2->0)
+Erasing remainder of partition (85 sectors)...
+Boot partition: 0xFC00 (sz 8976, ver 0x2, type 0x601)
+Update partition: 0x27C00 (sz 8976, ver 0x1, type 0x601)
+Copy sector 94 (part 0->2)
+Copied boot sector to swap
+Boot partition: 0xFC00 (sz 8976, ver 0x2, type 0x601)
+Booting version: 0x1
+verify integrity: img 0x1FFFE904, part 0
+verify authenticity: img 0x1FFFE904, part 0
+========================
+VA416x0 wolfBoot demo Application
+Copyright 2025 wolfSSL Inc
+GPL v3
+Version : 0x2
+========================
+
+System information
+====================================
+Firmware version : 0x2
+Current firmware state: TESTING
+Backup firmware version : 0x1
+Update state: NEW
+Update image older than current.
+
+Bootloader OTP keystore information
+====================================
+Number of public keys: 1
+
+  Public Key #0: size 96, type 6, mask FFFFFFFF
+  ====================================
+  08 A3 83 69 90 76 12 24 4E 86 17 0B 44 63 FF E7
+  4C 81 AD DD 15 8A 08 B7 EC 1C D2 F3 13 51 97 E1
+  C0 5A 7E BF D2 95 7D EC 49 FC EF 26 90 AD CC 9D
+  AD 4C 31 3A ED 18 6E 17 57 97 7F F5 3A 79 AA 6B
+  8A 0B 16 90 C5 6C 2A CF BE EE 59 99 B2 C7 B6 44
+  BA 3E 1A C3 92 48 1B 5C D2 AF B4 0A 83 2F 74 37
+
+Booting new firmware, marking successful boot
+```
+
+Boot logs after hard reset:
+
+```
+wolfBoot HAL Init
+Boot partition: 0xFC00 (sz 8976, ver 0x2, type 0x601)
+Update partition: 0x27C00 (sz 8976, ver 0x1, type 0x601)
+Boot partition: 0xFC00 (sz 8976, ver 0x2, type 0x601)
+Booting version: 0x2
+verify integrity: img 0x1FFFE904, part 0
+verify authenticity: img 0x1FFFE904, part 0
+========================
+VA416x0 wolfBoot demo Application
+Copyright 2025 wolfSSL Inc
+GPL v3
+Version : 0x2
+========================
+
+System information
+====================================
+Firmware version : 0x2
+Current firmware state: CONFIRMED
+Backup firmware version : 0x1
+Update state: NEW
+Update image older than current.
+
+Bootloader OTP keystore information
+====================================
+Number of public keys: 1
+
+  Public Key #0: size 96, type 6, mask FFFFFFFF
+  ====================================
+  08 A3 83 69 90 76 12 24 4E 86 17 0B 44 63 FF E7
+  4C 81 AD DD 15 8A 08 B7 EC 1C D2 F3 13 51 97 E1
+  C0 5A 7E BF D2 95 7D EC 49 FC EF 26 90 AD CC 9D
+  AD 4C 31 3A ED 18 6E 17 57 97 7F F5 3A 79 AA 6B
+  8A 0B 16 90 C5 6C 2A CF BE EE 59 99 B2 C7 B6 44
+  BA 3E 1A C3 92 48 1B 5C D2 AF B4 0A 83 2F 74 37
+```

@@ -208,6 +208,7 @@ struct wolfBoot_image {
     uint32_t not_signature_ok;
     uint32_t canary_FEED89AB;
     uint32_t sha_ok;
+    uint32_t not_ext; /* image is no longer external */
 };
 
 
@@ -821,7 +822,7 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
     if ((mask & (1UL << id)) != (1UL << id)) \
         wolfBoot_panic()
 
-#define VERIFY_VERSION_ALLOWED(fb_ok) do{} while(0)
+#define VERIFY_VERSION_ALLOWED(fb_ok) do{} while(0) /* okay */
 
 #endif
 

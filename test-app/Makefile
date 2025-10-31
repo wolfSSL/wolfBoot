@@ -232,6 +232,12 @@ ifeq ($(TARGET),ti_hercules)
   OBJCOPY_FLAGS=
 endif
 
+ifeq ($(TARGET),va416x0)
+  APP_OBJS+=$(SDK_OBJS)
+  LSCRIPT_TEMPLATE=ARM-va416x0.ld
+  APP_OBJS+=../src/keystore.o
+endif
+
 ifeq ($(TARGET),sim)
   # LD on MacOS does not support "-Map="
   LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
@@ -552,6 +558,9 @@ delta-extra-data: image.bin
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
+../hal/$(TARGET).o: ../hal/$(TARGET).c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c
+
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
 
@@ -597,6 +606,7 @@ endif
 		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
 		> $(@)
 	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
 
 
 

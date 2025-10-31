@@ -1,0 +1,11 @@
+device VA416XX
+si 1
+speed 2000
+r
+h
+write4 0x40010010 0x1
+exec SetCompareMode = 0
+loadbin factory.bin 0x0
+write4 0x40010010 0x0
+loadfile ../VA416xx_SDK/loader.elf
+exit
