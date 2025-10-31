@@ -677,6 +677,7 @@ static int TPM2_PCRs_Print(void)
     GetCapability_In  capIn;
     GetCapability_Out capOut;
     TPML_PCR_SELECTION* pcrSel;
+    char buffer[24];
 
     /* List available PCR's */
     XMEMSET(&capIn, 0, sizeof(capIn));
@@ -686,9 +687,11 @@ static int TPM2_PCRs_Print(void)
     rc = wolfBoot_tpm2_get_capability(&capIn, &capOut);
     if (rc == TPM_RC_SUCCESS) {
         pcrSel = &capOut.capabilityData.data.assignedPCR;
-        printf("Assigned PCR's:\n");
+        printf("Assigned PCR's:\r\n");
         for (pcrCount=0; pcrCount < (int)pcrSel->count; pcrCount++) {
-            printf("\t%s: ", wolfBoot_tpm2_get_alg_name(pcrSel->pcrSelections[pcrCount].hash));
+
+            printf("\t%s: ", wolfBoot_tpm2_get_alg_name(
+                pcrSel->pcrSelections[pcrCount].hash, buffer, sizeof(buffer)));
             for (pcrIndex=0;
                 pcrIndex<pcrSel->pcrSelections[pcrCount].sizeofSelect*8;
                 pcrIndex++) {
@@ -697,7 +700,7 @@ static int TPM2_PCRs_Print(void)
                     printf(" %d", pcrIndex);
                 }
             }
-            printf("\n");
+            printf("\r\n");
         }
     }
     return rc;
@@ -708,13 +711,14 @@ static int cmd_tpm_info(const char *args)
     int rc;
     WOLFTPM2_CAPS caps;
     TPML_HANDLE handles;
+    char error[100];
 
-    printf("Get TPM 2.0 module information\n");
+    printf("Get TPM 2.0 module information\r\n");
 
     rc = wolfBoot_tpm2_caps(&caps);
     if (rc == 0) {
         printf("Mfg %s (%d), Vendor %s, Fw %u.%u (0x%x), "
-            "FIPS 140-2 %d, CC-EAL4 %d\n",
+            "FIPS 140-2 %d, CC-EAL4 %d\r\n",
             caps.mfgStr, caps.mfg, caps.vendorStr, caps.fwVerMajor,
             caps.fwVerMinor, caps.fwVerVendor, caps.fips140_2, caps.cc_eal4);
     }
@@ -723,16 +727,17 @@ static int cmd_tpm_info(const char *args)
     rc = wolfBoot_tpm2_get_handles(PERSISTENT_FIRST, &handles);
     if (rc >= 0) {
         int i;
-        printf("Found %d persistent handles\n", rc);
+        printf("Found %d persistent handles\r\n", rc);
         for (i=0; i<(int)handles.count; i++) {
-            printf("\tHandle 0x%x\n", (unsigned int)handles.handle[i]);
+            printf("\tHandle 0x%x\r\n", (unsigned int)handles.handle[i]);
         }
     }
 
     /* Print the available PCR's */
     rc = TPM2_PCRs_Print();
     if (rc != 0) {
-        printf("TPM error 0x%x: %s\n", rc, wolfBoot_tpm2_get_rc_string(rc));
+        printf("TPM error 0x%x: %s\r\n",
+            rc, wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
     }
 
     return rc;

@@ -36,6 +36,7 @@
 
 #include "loader.h"
 #include "image.h"
+#include "wolfboot/wolfboot.h"
 #include "hal.h"
 #include "spi_drv.h"
 #include "printf.h"

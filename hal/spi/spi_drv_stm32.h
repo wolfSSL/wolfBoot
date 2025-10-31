@@ -433,12 +433,14 @@
 #define SPI1_CFG1     (*(volatile uint32_t *)(SPI1_BASE + 0x08))
 #define SPI1_CFG2     (*(volatile uint32_t *)(SPI1_BASE + 0x0C))
 #define SPI1_SR       (*(volatile uint32_t *)(SPI1_BASE + 0x14))
+#define SPI1_IFCR     (*(volatile uint32_t *)(SPI1_BASE + 0x18))
 #define SPI1_TXDR     (*(volatile uint8_t *)(SPI1_BASE + 0x20))
 #define SPI1_RXDR     (*(volatile uint8_t *)(SPI1_BASE + 0x30))
 
 #define SPI_CR1_SPI_EN              (1 << 0)
-#define SPI_CR1_CSTART              (1 << 9) /* Continous start */
-
+#define SPI_CR1_MASRX               (1 << 8)  /* master automatic suspension in Receive mode */
+#define SPI_CR1_CSTART              (1 << 9)  /* Continous start */
+#define SPI_CR1_SSI                 (1 << 12) /* Internal slave select signal input level */
 #define SPI_CFG1_DSIZE_MASK         (0x1F)
 #define SPI_CFG1_DSIZE_SHIFT        (0)
 #define SPI_CFG1_FTHLV_MASK         (0x1F)
@@ -448,18 +450,28 @@
 #define SPI_CFG1_BAUDRATE_MASK      (0x07)
 #define SPI_CFG1_BAUDRATE_SHIFT     (28)
 
-#define SPI_CRF2_MASTER             (1 << 22)
+#define SPI_CFG2_MASTER             (1 << 22)
 #define SPI_CFG2_LSBFIRST           (1 << 23)
 #define SPI_CFG2_CLOCK_PHASE_SHIFT  (24)
 #define SPI_CFG2_CLOCK_POL_SHIFT    (25)
 #define SPI_CFG2_SSM                (1 << 26)
 #define SPI_CFG2_SSOE               (1 << 29)
-#define SPI_CFG2_HW_CRC_EN          (1 << 29)
-#define SPI_CFG2_COMM_MASK          (0x3) /* 0=full duplex, 1=simplex tx, 2=simplex rx, 3=half duplex */
+#define SPI_CFG2_SSOM               (1 << 30)
+#define SPI_CFG2_AFCNTR             (1 << 31) /* alternate function GPIOs control */
+#define SPI_CFG2_COMM_MASK          (0x3)     /* 0=full duplex, 1=simplex tx, 2=simplex rx, 3=half duplex */
 #define SPI_CFG2_COMM_SHIFT         (17)
 
-#define SPI_SR_RX_NOTEMPTY          (1UL << 0)
-#define SPI_SR_TX_EMPTY             (1UL << 1)
+#define SPI_IFCR_SUSPC              (1 << 11)
+#define SPI_IFCR_MODFC              (1 << 9)
+#define SPI_IFCR_TIFREC             (1 << 8)
+#define SPI_IFCR_CRCEC              (1 << 7)
+#define SPI_IFCR_OVRC               (1 << 6)
+#define SPI_IFCR_UDRC               (1 << 5)
+#define SPI_IFCR_TXTFC              (1 << 4)
+#define SPI_IFCR_EOTC               (1 << 3)
+
+#define SPI_SR_RX_NOTEMPTY          (1 << 0)
+#define SPI_SR_TX_EMPTY             (1 << 1)
 
 #else
 

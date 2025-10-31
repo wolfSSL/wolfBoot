@@ -134,8 +134,6 @@ void extra_led_off(void)
     GPIOB_BSRR |= (1 << (LED_EXTRA_PIN + 16));
 }
 
-static char CaBuf[2048];
-static uint8_t my_pubkey[200];
 
 extern int ecdsa_sign_verify(int devId);
 

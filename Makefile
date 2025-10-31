@@ -531,6 +531,8 @@ cppcheck:
 	cppcheck -f --enable=warning --enable=portability \
 		--suppress="ctunullpointer" --suppress="nullPointer" \
 		--suppress="objectIndex" --suppress="comparePointers" \
+		--suppress="subtractPointers" --suppress="intToPointerCast" \
+		--check-level=exhaustive \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
 
 otp: tools/keytools/otp/otp-keystore-primer.bin FORCE

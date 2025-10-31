@@ -57,8 +57,10 @@ int wolfBoot_tpm2_clear(void);
 /* API's that are callable from non-secure code */
 int CSME_NSE_API wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps);
 int CSME_NSE_API wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles);
-const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg);
-const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc);
+const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
+    char* name, int name_sz);
+const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc,
+    char* error, int error_sz);
 TPM_RC CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out);
 
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)

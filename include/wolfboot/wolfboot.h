@@ -38,14 +38,14 @@ extern "C" {
 
 
 #ifndef RAMFUNCTION
-#if defined(__WOLFBOOT) && defined(RAM_CODE)
-#  if defined(ARCH_ARM)
-#    define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#  if defined(__WOLFBOOT) && defined(RAM_CODE)
+#    if defined(ARCH_ARM)
+#      define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#    else
+#      define RAMFUNCTION __attribute__((used,section(".ramcode")))
+#    endif
 #  else
-#    define RAMFUNCTION __attribute__((used,section(".ramcode")))
-#  endif
-#else
-# define RAMFUNCTION
+#   define RAMFUNCTION
 #endif
 #endif
 
@@ -84,7 +84,7 @@ extern "C" {
 
 #ifndef XALIGNED_STACK
     /* Don't enforce stack alignment on IAR */
-    #if defined (__IAR_SYSTEMS_ICC__)
+    #if defined(__IAR_SYSTEMS_ICC__)
         #define XALIGNED_STACK(x)
     #else
         #define XALIGNED_STACK(x) XALIGNED(x)

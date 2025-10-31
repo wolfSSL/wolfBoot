@@ -27,7 +27,6 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_flash.h"
-#include "wolfboot/wolfboot.h"
 #include "target.h"
 
 #include "delta.h"

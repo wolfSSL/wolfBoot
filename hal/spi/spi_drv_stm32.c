@@ -116,7 +116,7 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
     GPIO_OSPD(base) |= (speed << (pin * 2));
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
-
+    /* TODO: Consider setting GPIO_SECCFGR(base) */
 #endif
 }
 
@@ -375,7 +375,7 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 uint8_t RAMFUNCTION spi_read(void)
 {
-    while ((SPI1_SR & SPI_SR_RX_NOTEMPTY) == 0);
+    while (!(SPI1_SR & SPI_SR_RX_NOTEMPTY));
 #ifdef SPI1_RXDR
     return SPI1_RXDR;
 #else
@@ -385,12 +385,12 @@ uint8_t RAMFUNCTION spi_read(void)
 
 void RAMFUNCTION spi_write(const char byte)
 {
-    int i;
-    while ((SPI1_SR & SPI_SR_TX_EMPTY) == 0);
+    while (!(SPI1_SR & SPI_SR_TX_EMPTY));
+
 #ifdef SPI1_TXDR
-    SPI1_TXDR = byte;
+    SPI1_TXDR = (uint8_t)byte;
 #else
-    SPI1_DR = byte;
+    SPI1_DR = (uint8_t)byte;
 #endif
 }
 #endif /* SPI_FLASH || WOLFBOOT_TPM */
@@ -496,6 +496,10 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         /* Configure SPI1 for master mode */
         SPI1_CR1 &= ~SPI_CR1_SPI_EN;
     #if defined(TARGET_stm32h5)
+        /* Clear any faults in the status register */
+        SPI1_IFCR = (SPI_IFCR_SUSPC | SPI_IFCR_MODFC | SPI_IFCR_TIFREC |
+                     SPI_IFCR_OVRC | SPI_IFCR_UDRC);
+
         /* baud rate 2 (hclk/8), data size (8-bits), CRC Size (8-bits),
          * FIFO threshold level (1-data) */
         SPI1_CFG1 = (
@@ -503,10 +507,9 @@ void RAMFUNCTION spi_init(int polarity, int phase)
             ((7 & SPI_CFG1_CRCSIZE_MASK) << SPI_CFG1_CRCSIZE_SHIFT) |
             ((0 & SPI_CFG1_FTHLV_MASK) << SPI_CFG1_FTHLV_SHIFT) |
             ((7 & SPI_CFG1_DSIZE_MASK) << SPI_CFG1_DSIZE_SHIFT));
-        SPI1_CFG2 = SPI_CRF2_MASTER | SPI_CFG2_SSOE |
+        SPI1_CFG2 = SPI_CFG2_MASTER | SPI_CFG2_SSOE |
             (polarity << SPI_CFG2_CLOCK_POL_SHIFT) |
             (phase << SPI_CFG2_CLOCK_PHASE_SHIFT);
-        SPI1_CR1 |= SPI_CR1_CSTART; /* use continuous start mode */
     #else
         #ifndef TARGET_stm32l0 /* use existing/default baud for L0 */
         /* Baud rate 5 (hclk/6), data size 8 bits */
@@ -520,6 +523,10 @@ void RAMFUNCTION spi_init(int polarity, int phase)
     #endif
 
         SPI1_CR1 |= SPI_CR1_SPI_EN; /* Enable SPI */
+
+    #ifdef SPI_CR1_CSTART
+        SPI1_CR1 |= SPI_CR1_CSTART; /* use continuous start mode */
+    #endif
 #endif /* SPI_FLASH || WOLFBOOOT_TPM */
     }
 }
