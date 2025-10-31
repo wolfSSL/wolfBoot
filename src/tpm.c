@@ -1135,29 +1135,29 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
 
 
 /* API's that are callable from non-secure code */
-int __attribute__((cmse_nonsecure_entry)) wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps)
+int CSME_NSE_API wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps)
 {
     memset(&caps, 0, sizeof(caps));
     return wolfTPM2_GetCapabilities(&wolftpm_dev, caps);
 }
 
-int __attribute__((cmse_nonsecure_entry)) wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles)
+int CSME_NSE_API wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles)
 {
     memset(&handles, 0, sizeof(handles));
     return wolfTPM2_GetHandles(handle, handles);
 }
 
-const char* __attribute__((cmse_nonsecure_entry)) wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg)
+const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg)
 {
     return TPM2_GetAlgName(alg);
 }
 
-const char* __attribute__((cmse_nonsecure_entry)) wolfBoot_tpm2_get_rc_string(int rc)
+const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc)
 {
     return TPM2_GetRCString(rc);
 }
 
-TPM_RC __attribute__((cmse_nonsecure_entry)) wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out)
+TPM_RC CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out)
 {
     return TPM2_GetCapability(in, out);
 }
