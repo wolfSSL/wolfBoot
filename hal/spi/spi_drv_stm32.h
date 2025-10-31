@@ -29,7 +29,6 @@
 #define GPIOC_BASE (0x40020800)
 #define GPIOD_BASE (0x40020C00)
 #define GPIOE_BASE (0x40021000)
-#define GPIO_BASE GPIOA_BASE
 #define SPI_GPIO      GPIOB_BASE
 #define SPI_CS_GPIO   GPIOE_BASE
 #define SPI_CS_FLASH  1 /* Flash CS connected to GPIOE1 */
@@ -44,9 +43,9 @@
 #ifdef TARGET_stm32h5
 #include "hal/stm32h5.h"
 
-#define RCC_GPIO_CLOCK_ER  RCC_AHB2ENR_CLOCK_ER
 #define APB2_CLOCK_RST     RCC_APB2_CLOCK_RSTR
 #define APB2_CLOCK_ER      RCC_APB2_CLOCK_ER
+#define RCC_GPIO_CLOCK_ER  RCC_AHB2ENR_CLOCK_ER
 
 /* Nucleo STM32H573ZI SPI_A Port (SPI1) */
 #define SPI_CLOCK_PIO_BASE  GPIOA_BASE
@@ -437,14 +436,15 @@
 #define SPI1_TXDR     (*(volatile uint8_t *)(SPI1_BASE + 0x20))
 #define SPI1_RXDR     (*(volatile uint8_t *)(SPI1_BASE + 0x30))
 
-#define SPI_CR1_SPI_EN              (1 << 6)
+#define SPI_CR1_SPI_EN              (1 << 0)
 #define SPI_CR1_CSTART              (1 << 9) /* Continous start */
+
 #define SPI_CFG1_DSIZE_MASK         (0x1F)
 #define SPI_CFG1_DSIZE_SHIFT        (0)
-
 #define SPI_CFG1_FTHLV_MASK         (0x1F)
 #define SPI_CFG1_FTHLV_SHIFT        (5)
-
+#define SPI_CFG1_CRCSIZE_MASK       (0x1F)
+#define SPI_CFG1_CRCSIZE_SHIFT      (16)
 #define SPI_CFG1_BAUDRATE_MASK      (0x07)
 #define SPI_CFG1_BAUDRATE_SHIFT     (28)
 
@@ -458,8 +458,8 @@
 #define SPI_CFG2_COMM_MASK          (0x3) /* 0=full duplex, 1=simplex tx, 2=simplex rx, 3=half duplex */
 #define SPI_CFG2_COMM_SHIFT         (17)
 
-#define SPI_SR_RX_NOTEMPTY          (1 << 0)
-#define SPI_SR_TX_EMPTY             (1 << 1)
+#define SPI_SR_RX_NOTEMPTY          (1UL << 0)
+#define SPI_SR_TX_EMPTY             (1UL << 1)
 
 #else
 
@@ -499,6 +499,9 @@
 #define GPIO_BSRR(base)    (*(volatile uint32_t *)(base + 0x18)) /* GPIOx_BSRR */
 #define GPIO_AFL(base)     (*(volatile uint32_t *)(base + 0x20)) /* GPIOx_AFRL */
 #define GPIO_AFH(base)     (*(volatile uint32_t *)(base + 0x24)) /* GPIOx_AFRH */
+#ifndef GPIO_SECCFGR
+#define GPIO_SECCFGR(base) (*(volatile uint32_t *)(base + 0x30)) /* GPIOx_SECCFGR */
+#endif
 
 #define GPIO_MODE_INPUT  (0)
 #define GPIO_MODE_OUTPUT (1)

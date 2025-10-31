@@ -83,6 +83,8 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
 
     /* Enable GPIO clock */
     RCC_GPIO_CLOCK_ER |= (1 << base_num);
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_GPIO_CLOCK_ER;
 
     /* Set Mode and Alternate Function */
     reg = GPIO_MODE(base) & ~(0x03UL << (pin * 2));
@@ -112,6 +114,10 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
     /* configure output speed 0=low, 1=med, 2=high, 3=very high */
     reg = GPIO_OSPD(base) & ~(0x03UL << (pin * 2));
     GPIO_OSPD(base) |= (speed << (pin * 2));
+
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+
+#endif
 }
 
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
@@ -373,7 +379,7 @@ uint8_t RAMFUNCTION spi_read(void)
 #ifdef SPI1_RXDR
     return SPI1_RXDR;
 #else
-    return SPI1_DR
+    return SPI1_DR;
 #endif
 }
 
@@ -490,10 +496,12 @@ void RAMFUNCTION spi_init(int polarity, int phase)
         /* Configure SPI1 for master mode */
         SPI1_CR1 &= ~SPI_CR1_SPI_EN;
     #if defined(TARGET_stm32h5)
-        /* baud rate 2 (hclk/8), data size 8 bits, FIFO threshold level (8-data) */
+        /* baud rate 2 (hclk/8), data size (8-bits), CRC Size (8-bits),
+         * FIFO threshold level (1-data) */
         SPI1_CFG1 = (
-            ((7 & SPI_CFG1_FTHLV_MASK) << SPI_CFG1_FTHLV_SHIFT) |
             ((2 & SPI_CFG1_BAUDRATE_MASK) << SPI_CFG1_BAUDRATE_SHIFT) |
+            ((7 & SPI_CFG1_CRCSIZE_MASK) << SPI_CFG1_CRCSIZE_SHIFT) |
+            ((0 & SPI_CFG1_FTHLV_MASK) << SPI_CFG1_FTHLV_SHIFT) |
             ((7 & SPI_CFG1_DSIZE_MASK) << SPI_CFG1_DSIZE_SHIFT));
         SPI1_CFG2 = SPI_CRF2_MASTER | SPI_CFG2_SSOE |
             (polarity << SPI_CFG2_CLOCK_POL_SHIFT) |

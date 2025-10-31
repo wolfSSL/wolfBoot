@@ -272,7 +272,8 @@ static void clock_pll_off(void)
 
 }
 
-/*This implementation will setup MSI 48 MHz as PLL Source Mux, PLLCLK as System Clock Source*/
+/* If PLL_SRC_HSE is set then HSE (8MHz) is used otherwise HSI 64 MHz is used
+ * and system clock is 250MHz */
 
 static void clock_pll_on(void)
 {
@@ -280,16 +281,16 @@ static void clock_pll_on(void)
     uint32_t plln, pllm, pllq, pllp, pllr, hpre, apb1pre, apb2pre, apb3pre, flash_waitstates;
 
 #if PLL_SRC_HSE
-    pllm = 4;
-    plln = 250;
-    pllp = 2;
-    pllq = 2;
+    pllm = 1;
+    plln = 62;
+    pllp = 2; /* 250Mhz */
+    pllq = 5; /* 100Mhz */
     pllr = 2;
 #else
-    pllm = 1;
-    plln = 129;
+    pllm = 4;
+    plln = 31;
     pllp = 2;
-    pllq = 2;
+    pllq = 5;
     pllr = 2;
 #endif
     flash_waitstates = 5;
@@ -432,8 +433,8 @@ static void periph_unsecure(void)
     volatile uint32_t *nvic_itns;
     uint32_t nvic_reg_pos, nvic_reg_off;
 
-    /*Enable clock for User LED GPIOs */
-    RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
+    /* Enable clock for User LED GPIOs */
+    RCC_AHB2_CLOCK_ER |= LED_AHB2_ENABLE;
 
     /* Enable GPIO clock for accessing SECCFGR registers */
     RCC_AHB2_CLOCK_ER |= GPIOA_AHB2_CLOCK_ER;
@@ -449,10 +450,10 @@ static void periph_unsecure(void)
 
 
     PWR_CR2 |= PWR_CR2_IOSV;
-    /*Un-secure User LED GPIO pins */
-    GPIO_SECCFGR(GPIOG_BASE) &= ~(1 << 4);
-    GPIO_SECCFGR(GPIOB_BASE) &= ~(1 << 0);
-    GPIO_SECCFGR(GPIOF_BASE) &= ~(1 << 4);
+    /* Un-secure User LED GPIO pins */
+    GPIO_SECCFGR(GPIOG_BASE) &= ~(1 << LED_BOOT_PIN);  /* PG4 - Nucleo board - Orange Led */
+    GPIO_SECCFGR(GPIOB_BASE) &= ~(1 << LED_USR_PIN);   /* PB0 - Nucleo board - Green Led */
+    GPIO_SECCFGR(GPIOF_BASE) &= ~(1 << LED_EXTRA_PIN); /* PF4 - Nucleo board - Blue Led */
 
     /* Unsecure LPUART1 */
     GPIO_SECCFGR(GPIOB_BASE) &= ~(1<<UART1_TX_PIN);
@@ -478,17 +479,6 @@ static void periph_unsecure(void)
     nvic_reg_off = NVIC_USART3_IRQ % 32;
     nvic_itns = ((volatile uint32_t *)(NVIC_ITNS_BASE + 4 * nvic_reg_pos));
     *nvic_itns |= (1 << nvic_reg_off);
-
-
-    /* Disable GPIOs clock used previously for accessing SECCFGR registers */
-#if 0
-    RCC_AHB2_CLOCK_ER &= ~GPIOA_AHB2_CLOCK_ER;
-    RCC_AHB2_CLOCK_ER &= ~GPIOB_AHB2_CLOCK_ER;
-    RCC_AHB2_CLOCK_ER &= ~GPIOC_AHB2_CLOCK_ER;
-    RCC_AHB2_CLOCK_ER &= ~GPIOD_AHB2_CLOCK_ER;
-#endif
-
-
 }
 #endif
 

@@ -150,9 +150,6 @@ void extra_led_off(void)
     GPIOF_BSRR |= (1 << (LED_EXTRA_PIN + 16));
 }
 
-static char CaBuf[2048];
-static uint8_t my_pubkey[200];
-
 extern int ecdsa_sign_verify(int devId);
 
 /* Command line commands */
@@ -545,9 +542,10 @@ static int cmd_timestamp(const char *args)
 {
     struct timespec tp = {};
     clock_gettime(0, &tp);
-    printf("Current timestamp: %llu.%03lu\r\n", tp.tv_sec, tp.tv_nsec/1000000);
+    printf("Current timestamp: %lu.%03lu\r\n",
+        (long unsigned int)tp.tv_sec, tp.tv_nsec/1000000);
     printf("Current systick: %u\r\n", jiffies);
-    printf("VTOR: %08lx\r\n", (*(volatile uint32_t *)(0xE000ED08)));
+    printf("VTOR: 0x%08lx\r\n", (*(volatile uint32_t *)(0xE000ED08)));
     return 0;
 }
 
