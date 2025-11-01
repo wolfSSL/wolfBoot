@@ -122,8 +122,6 @@ static int RAMFUNCTION spi_flash_write_page(uint32_t address, const void *data, 
     while (len > 0) {
         wait_busy();
         flash_write_enable();
-        wait_busy();
-
         spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
         spi_write(BYTE_WRITE);
         spi_read();
@@ -159,15 +157,23 @@ static int RAMFUNCTION spi_flash_write_sb(uint32_t address, const void *data, in
         spi_read();
         spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
         wait_busy();
+
         spi_flash_read(address, &verify, 1);
-        if ((verify & ~(buf[j])) == 0) {
-            if (verify != buf[j])
-                return -1;
+        /* Check if the read value matches the written value */
+        if (verify == buf[j]) {
             j++;
             len--;
             address++;
         }
-        wait_busy();
+        else {
+            /* Verification failed, return error */
+            wolfBoot_printf(
+                "SPI SB write verification failed at addr 0x%x. Wrote 0x%x, Read 0x%x\n",
+                address,
+                buf[j],
+                verify);
+            return -1;
+        }
     }
     return 0;
 }
@@ -195,12 +201,16 @@ uint16_t spi_flash_probe(void)
         chip_write_mode = WB_WRITEPAGE;
 
 #ifndef READONLY
+    wait_busy();
+    flash_write_enable()
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(WRSR);
     spi_read();
     spi_write(0x00);
     spi_read();
     spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+    wait_busy();
+    flash_write_disable();
 #endif
 
     wolfBoot_printf("SPI Probe: Manuf 0x%x, Product 0x%x\n", manuf, product);
@@ -224,6 +234,7 @@ int RAMFUNCTION spi_flash_sector_erase(uint32_t address)
 
     wait_busy();
     flash_write_enable();
+    wait_busy();
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(SECTOR_ERASE);
     spi_read();
@@ -237,6 +248,7 @@ int RAMFUNCTION spi_flash_chip_erase(void)
 {
     wait_busy();
     flash_write_enable();
+    wait_busy();
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(CHIP_ERASE);
     spi_read();
