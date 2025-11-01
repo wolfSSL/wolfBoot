@@ -178,6 +178,7 @@ extern "C" {
 
 /* Hashing configuration */
 #if defined(WOLFBOOT_HASH_SHA256)
+    #define WOLFBOOT_KEYHASH_HAS_RESULT
     #include "wolfssl/wolfcrypt/sha256.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
