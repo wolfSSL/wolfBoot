@@ -2409,7 +2409,9 @@ static int process_args(int argc, char** argv) {
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
     const char* secondary_sign_str = "NONE";
+#ifdef DEBUG_SIGNTOOL
     int param_ct = 0; /* params are all non-setting values (image name, key, version, output) */
+#endif
     int ret = 0;
     int i;
 
