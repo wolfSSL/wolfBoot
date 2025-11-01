@@ -2402,18 +2402,21 @@ static void set_signature_sizes(int secondary)
 }
 
 static int process_args(int argc, char** argv) {
-    int ret = 0;
-    int i;
+    uint8_t  buf[PATH_MAX - 32]; /* leave room to avoid "directive output may be truncated" */
+    static const int REQUIRED_PARAM_CT = 2; /* image name, key name */
+    static const int OPTIONAL_PARAM_CT = 2; /* version = 1, output = "[image name]_v1_signed.bin" */
     char* tmpstr;
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
     const char* secondary_sign_str = "NONE";
-    uint8_t  buf[PATH_MAX - 32]; /* leave room to avoid "directive output may be truncated" */
+    int param_ct = 0; /* params are all non-setting values (image name, key, version, output) */
+    int ret = 0;
+    int i;
 
-    /* Usage requires at least 4 params:
-     *    sign [OPTIONS]  IMAGE.BIN  KEY.DER  VERSION */
-    if (argc < 4 || argc > 14) {
-        printf("Usage: %s [options] image key version\n", argv[0]);
+    /* Usage requires at least 2 params:
+     *    sign [OPTIONS]  IMAGE.BIN  KEY.DER */
+    if (argc < 3 || argc > 14) {
+        printf("Usage: %s [options] image key [version] [output name]\n", argv[0]);
         printf("For full usage manual, see 'docs/Signing.md'\n");
         exit(1);
     }
@@ -2421,7 +2424,7 @@ static int process_args(int argc, char** argv) {
     /* Parse Arguments */
 #ifdef DEBUG_SIGNTOOL
     printf("  Debug Sign Tool Enabled:\n");
-    printf("  Looking at %d args\n", argc);
+    printf("  Looking at %d args\n", argc - 1); /* arg[0] is the exe name */
 #endif
     for (i = 1; i < argc; i++) {
 #ifdef DEBUG_SIGNTOOL
@@ -2772,23 +2775,40 @@ static int process_args(int argc, char** argv) {
         }
         else {
 #ifdef DEBUG_SIGNTOOL
-            printf("    (#%d is not a setting, abort processing of remaining %d args as settings)\n", i, argc - i);
+            printf("    (#%d is not a setting, stop processing of remaining %d args as settings)\n", i, argc - i);
 #endif
-            if ((i == (argc - 3)) || (i == (argc - 4)))
+            if ((i >= (argc - (REQUIRED_PARAM_CT + OPTIONAL_PARAM_CT))) && (i <= (argc - REQUIRED_PARAM_CT)))
             {
                 /* Looks like we have good parameters */
 #ifdef DEBUG_SIGNTOOL
-                printf("Detected positional arguments.\n");
-                printf("Using:\n");
-                printf("  Image:   %s\n", argv[i + 0]);
-                printf("  Key:     %s\n", argv[i + 1]);
-                printf("  Version: %s\n", argv[i + 2]);
-                printf("  Output:  %s\n", argv[i + 3]);
+                if (param_ct == 0) {
+                    param_ct = argc - i;
+                    printf("Detected %d positional arguments.\n", param_ct);
+                    printf("Using:\n");
+                }
+                else {
+                    if ((i == argc - param_ct)) {
+                        /* param #1 is essential */
+                        printf("  Image:   %s\n", argv[i + 0]);
+                    }
+                    if ((i == argc - param_ct + 1)) {
+                        /* param #2 is essential */
+                        printf("  Key:     %s\n", argv[i + 1]);
+                    }
+                    if ((i == argc - param_ct + 2)) {
+                        /* param #3 is optional, version number */
+                        printf("  Version: %s\n", argv[i + 2]);
+                    }
+                    if ((i == argc - param_ct + 3)) {
+                        /* param #4 is optional, output name*/
+                        printf("  Output:  %s\n", argv[i + 3]);
+                    }
+                }
 #endif
             }
             else {
-                printf("Error: expected exactly 3 or 4 positional arguments after options, got %d.\n", argc - i);
-                printf("Usage: %s [OPTIONS] IMAGE.BIN KEY.DER VERSION [output]\n", argv[0]);
+                printf("Error: expected exactly 2, 3 or 4 positional arguments after options, got %d.\n", argc - i);
+                printf("Usage: %s [OPTIONS] IMAGE.BIN KEY.DER [VERSION] [output]\n", argv[0]);
 
                 exit(1);
             }
