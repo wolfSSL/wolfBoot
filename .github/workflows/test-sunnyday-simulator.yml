@@ -90,6 +90,20 @@ jobs:
         run: |
           tools/scripts/sim-sunnyday-update.sh
 
+      - name: Cleanup before dualbank simulator test
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (dualbank simulator)
+        run: |
+          make clean
+          cp config/examples/sim-dualbank.config .config
+          make test-sim-internal-flash-with-update
+
+      - name: Run dualbank swap simulation
+        run: |
+          tools/scripts/sim-dualbank-swap-update.sh
+
       - name: Build wolfboot.elf (ECC256, WOLFBOOT_SMALL_STACK)
         run: |
           make clean && make test-sim-internal-flash-with-update SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 SPMATH=1
