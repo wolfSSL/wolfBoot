@@ -73,6 +73,8 @@
 #define FLASH_PAGE_SIZE     (0x800) /* 2KB */
 
 /* Register values */
+#define FLASH_SR_CFGBSY                       (1 << 18) /* RM0444 - 3.7.4 - FLASH_SR */
+#define FLASH_SR_BSY2                         (1 << 17) /* RM0444 - 3.7.4 - FLASH_SR */
 #define FLASH_SR_BSY1                         (1 << 16) /* RM0444 - 3.7.4 - FLASH_SR */
 #define FLASH_SR_SIZERR                       (1 << 6)  /* RM0444 - 3.7.4 - FLASH_SR */
 #define FLASH_SR_PGAERR                       (1 << 5)  /* RM0444 - 3.7.4 - FLASH_SR */
@@ -89,6 +91,13 @@
 
 #define FLASH_CR_PNB_SHIFT                     3        /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 9:3 */
 #define FLASH_CR_PNB_MASK                      0x7f     /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 9:3 - 7 bits */
+
+#define FLASH_CR_BKER                         (1 << 13)
+#define FLASH_CR_BKER_BITMASK                 0x2000
+#define BANK_SIZE                             (0x40000)
+
+#define FLASH_CR_PNB_SHIFT                     3        /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 9:3 */
+#define FLASH_CR_PNB_MASK                      0x7f     /* RM0444 - 3.7.5 - FLASH_CR  - PNB bits 9:3 - 7 bits */
 
 #define FLASH_SECR_SEC_SIZE_POS               (0U)
 #define FLASH_SECR_SEC_SIZE_MASK              (0xFF)
@@ -128,7 +137,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         if ((len - i > 3) && ((((address + i) & 0x07) == 0) &&
                 ((((uint32_t)data) + i) & 0x07) == 0)) {
             src = (uint32_t *)data;
-            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
+            dst = (uint32_t *)address;
             flash_wait_complete();
             dst[i >> 2] = src[i >> 2];
             dst[(i >> 2) + 1] = src[(i >> 2) + 1];
@@ -183,10 +192,19 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t p;
     if (len == 0)
         return -1;
+    address -= FLASHMEM_ADDRESS_SPACE;
     end_address = address + len - 1;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
+        while (FLASH_SR & (FLASH_SR_BSY1 | FLASH_SR_BSY2));
+        flash_clear_errors();
+        while (FLASH_SR & FLASH_SR_CFGBSY);
+        uint32_t page_number = (p >> 11) & FLASH_CR_PNB_MASK;
         uint32_t reg = FLASH_CR & (~(FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT));
-        FLASH_CR = reg | ((p >> 11) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
+        reg &= ~(FLASH_CR_BKER_BITMASK);
+        if (p >= BANK_SIZE) {
+            reg |= FLASH_CR_BKER;
+        }
+        FLASH_CR = reg | (page_number << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete();
