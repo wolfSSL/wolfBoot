@@ -293,6 +293,10 @@
 #define FLASH_CR_BER                        (1 << 3)
 #define FLASH_CR_FW                         (1 << 4)
 #define FLASH_CR_STRT                       (1 << 5)
+/* Page number selection:
+ * Up to  31 pages: H523/33xx
+ * Up to 127 pages: All others
+ */
 #define FLASH_CR_PNB_SHIFT                  6
 #define FLASH_CR_PNB_MASK                   0x7F
 #define FLASH_CR_MER                        (1 << 15)
