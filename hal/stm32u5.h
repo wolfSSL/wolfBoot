@@ -209,8 +209,13 @@
 #define FLASH_CR_PG                         (1 << 0)
 #define FLASH_CR_PER                        (1 << 1)
 #define FLASH_CR_MER1                       (1 << 2)
+/* Page number selection:
+ * Up to  31 pages: U535/U545
+ * Up to 127 pages: U575/U585
+ * Up to 255 pages: U59x/5Ax/5Fx/5Gx
+ */
 #define FLASH_CR_PNB_SHIFT                  3
-#define FLASH_CR_PNB_MASK                   0x7F
+#define FLASH_CR_PNB_MASK                   0xFF /* support up to 255 pages */
 #define FLASH_CR_BKER                       (1 << 11)
 #define FLASH_CR_MER2                       (1 << 15)
 #define FLASH_CR_STRT                       (1 << 16)

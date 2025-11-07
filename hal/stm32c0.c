@@ -95,8 +95,8 @@
 #define FLASH_CR_PG                           (1 << 0)  /* RM0490 - 3.7.5 - FLASH_CR */
 #define FLASH_CR_SEC_PROT                     (1 << 28) /* RM0490 - 3.7.5 - FLASH_CR */
 
-#define FLASH_CR_PNB_SHIFT                     3        /* RM0490 - 3.7.5 - FLASH_CR - PNB bits 8:3 */
-#define FLASH_CR_PNB_MASK                      0x3f     /* RM0490 - 3.7.5 - FLASH_CR  - PNB bits 8:3 - 6 bits */
+#define FLASH_CR_PNB_SHIFT                     3        /* RM0490 - 4.7.5 - FLASH_CR - PNB bits 9:3 */
+#define FLASH_CR_PNB_MASK                      0x7f     /* RM0490 - 4.7.5 - FLASH_CR - PNB bits 9:3 - 7 bits */
 
 #define FLASH_SECR_SEC_SIZE_POS               (0U)
 #define FLASH_SECR_SEC_SIZE_MASK              (0xFF)
