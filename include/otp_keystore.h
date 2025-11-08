@@ -30,10 +30,14 @@
 /* Specific includes for supported targets
  * (needed for OTP_SIZE)
  */
-#ifdef TARGET_stm32h7
+#if defined(TARGET_stm32h7)
     #include "hal/stm32h7.h"
-#elif defined TARGET_stm32h5
+#elif defined(TARGET_stm32h5)
     #include "hal/stm32h5.h"
+#elif defined(TARGET_sim)
+    #include "hal_host_sim_stub.h"
+#else
+    #error "Define a target"
 #endif
 
 #include "keystore.h"
@@ -47,6 +51,25 @@
     #define KEYSTORE_HDR_PACKED
 #endif
 
+#if !defined(OTP_SIZE) || (OTP_SIZE <= 0)
+    /* See TARGET_[device] */
+    #error "WRONG OTP SIZE"
+#endif
+
+#ifndef SIZEOF_KEYSTORE_SLOT
+    #error "SIZEOF_KEYSTORE_SLOT must be defined"
+#endif
+
+#if (OTP_HDR_SIZE >= OTP_SIZE)
+    #error "Bad OTP_HDR_SIZE or OTP_SIZE"
+#endif
+
+#define KEYSTORE_MAX_PUBKEYS ((OTP_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
+
+#if (KEYSTORE_MAX_PUBKEYS < 1)
+    #error "No space for any keystores in OTP with current algorithm"
+#endif
+
 struct KEYSTORE_HDR_PACKED wolfBoot_otp_hdr {
     char keystore_hdr_magic[8];
     uint16_t item_count;
@@ -54,18 +77,9 @@ struct KEYSTORE_HDR_PACKED wolfBoot_otp_hdr {
     uint32_t version;
 };
 
-static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
+/* KEYSTORE_HDR_MAGIC = "WOLFBOOT" exactly 8 bytes, no nul terminator */
+static const char KEYSTORE_HDR_MAGIC[8] = { 'W','O','L','F','B','O','O','T' };
 
-#define KEYSTORE_MAX_PUBKEYS ((OTP_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
-
-#if (OTP_SIZE == 0)
-#error WRONG OTP SIZE
-#endif
-
-#if (KEYSTORE_MAX_PUBKEYS < 1)
-    #error "No space for any keystores in OTP with current algorithm"
-#endif
-
-#endif /* FLASH_OTP_KEYSTORE */ 
+#endif /* FLASH_OTP_KEYSTORE */
 
 #endif /* OTP_KEYSTORE_H */
