@@ -27,6 +27,26 @@
 #include "hal.h"
 #include "otp_keystore.h"
 
+#ifdef NO_FLASH_OTP_KEYSTORE_TARGET
+    /* See otp_keystore.h */
+    #ifndef _MSC_VER
+        #warning "No device target defined and no TARGET_sim"
+    #else
+        #pragma message("Warning: No device target defined and no TARGET_sim")
+    #endif
+#endif
+
+#ifdef TARGET_sim
+    #include <stdio.h>
+    #define SIM_PRINTF(...)         \
+       do {                         \
+           printf(__VA_ARGS__);     \
+           fflush(stdout);          \
+       } while (0)
+    #else
+    #define SIM_PRINTF(...) do {} while (0)
+#endif
+
 extern struct keystore_slot PubKeys[];
 
 void main(void)
@@ -37,6 +57,8 @@ void main(void)
     uint32_t tot_len;
 
     hal_init();
+    SIM_PRINTF("[primer] hal_init() done\n");
+    SIM_PRINTF("[primer] detected %d public key(s)\n", n_keys);
 
     memcpy(hdr.keystore_hdr_magic, KEYSTORE_HDR_MAGIC, 8);
     hdr.item_count = n_keys;
@@ -45,13 +67,20 @@ void main(void)
 
     /* Sanity check to avoid writing an empty keystore */
     if (n_keys < 1) {
+#ifdef TARGET_sim
+        SIM_PRINTF("Error: too few keys (%d), refusing to write\n", n_keys);
+        exit(1);
+#else
         while(1)
             ;
+        /* no exit */
+#endif
     }
 
     /* Write the header to the beginning of the OTP memory */
     hal_flash_otp_write(FLASH_OTP_BASE, (uint16_t *)&hdr, sizeof(hdr));
-
+    SIM_PRINTF("[primer] wrote OTP header at 0x%08lX (size %lu)\n",
+                (unsigned long)FLASH_OTP_BASE, (unsigned long)sizeof(hdr));
     for (i = 0; i < n_keys; i++) {
         /* Write each public key to its slot in OTP */
         hal_flash_otp_write(FLASH_OTP_BASE +
@@ -67,8 +96,13 @@ void main(void)
 #endif
     (void)tot_len;
 
+#ifdef TARGET_sim
+    SIM_PRINTF("Done!\n");
+    exit(0);
+#else
     /* Done! */
     while(1)
         ;
-
+    /* no exit */
+#endif
 }

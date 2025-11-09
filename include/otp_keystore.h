@@ -30,6 +30,7 @@
 /* Specific includes for supported targets
  * (needed for OTP_SIZE)
  */
+#undef NO_FLASH_OTP_KEYSTORE_TARGET
 #if defined(TARGET_stm32h7)
     #include "hal/stm32h7.h"
 #elif defined(TARGET_stm32h5)
@@ -37,7 +38,7 @@
 #elif defined(TARGET_sim)
     #include "hal_host_sim_stub.h"
 #else
-    #error "Define a target"
+    #define NO_FLASH_OTP_KEYSTORE_TARGET
 #endif
 
 #include "keystore.h"

@@ -1,4 +1,4 @@
-/* hal_host_sim_stub.f
+/* hal_host_sim_stub.c
  *
  * Helper for storing/retrieving Trust Anchor to/from OTP flash
  *
