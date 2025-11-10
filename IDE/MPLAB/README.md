@@ -1,6 +1,6 @@
 # wolfBoot demo application for MPLABx IDE
 
-Instruction to compile and test under Windows or Linux OS.
+Instructions to compile and test under Windows or Linux OS.
 
 
 ## Target platform
@@ -81,7 +81,7 @@ you plan to modify the geometry of your partitions in FLASH.
 
 The FLASH memory configuration for this demo is located in include/MPLAB/target.h.
 
-The file can be changed manually to set a new partitions geometry, or a new target.h 
+The file can be changed manually to set a new partitions geometry, or a new target.h
 could be created in the include/ directory by running `make`, which will be based
 on the chosen configuration via the `.config` file. If a custom `target.h` is created
 by `make`, the demo version in `include/MPLAB` can be removed.

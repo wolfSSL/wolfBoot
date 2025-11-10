@@ -60,6 +60,12 @@ src/ecc384_pub_key.c
 src/ecc512_pub_key.c
 src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
+
+# Any other generated keystore files
+/**/keystore.c
+/**/wolfboot_signing_private_key.der
+/**/keystore.der
+
 # Renesas key data files
 include/key_data.*
 include/enckey_data.*
@@ -118,6 +124,7 @@ tools/tpm/policy_create
 tools/tpm/policy_sign
 config/*.ld
 test-lib
+lib-fs
 
 # Elf preprocessing tools
 tools/squashelf/**
@@ -266,17 +273,16 @@ language.settings.xml
 /**/.vs
 /**/.visualgdb/*
 
+# Defaults are set in files otherwise excluded:
+!/.vs/README.md
+!/.vs/VSWorkspaceState.json
+!/.vs/VSWorkspaceSettings.json
+
 # Any build directories
 /**/build
 /**/build-**
 
-/IDE/VisualGDB
-/commit_squash.sh
-/evars.txt
-/evars_non_dev.txt
-/gpg_refresh.sh
-/IDE/VisualStudio/EmbeddedProject1
-/IDE/VisualStudio/wolfboot
-/.gitignore.wip
-/run.log
-/stm32.mak
+# Eclipse
+.cproject
+.project
+.settings/

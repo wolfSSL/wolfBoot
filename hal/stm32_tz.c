@@ -96,6 +96,7 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
     uint32_t reg;
     uint32_t end = address + len;
     uint32_t start_address = address;
+    uint32_t start_page_n;
     uint32_t bank = 0;
     int pos;
 
@@ -103,12 +104,13 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         return;
 
     if (address < FLASH_BANK2_BASE) {
-        page_n = (address - ARCH_FLASH_OFFSET) / FLASH_PAGE_SIZE;
+        start_page_n = (address - ARCH_FLASH_OFFSET) / FLASH_PAGE_SIZE;
         bank = 0;
     } else {
-        page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
+        start_page_n = (address - FLASH_BANK2_BASE) / FLASH_PAGE_SIZE;
         bank = 1;
     }
+    page_n = start_page_n;
 #ifdef TARGET_stm32h5
     /* Take into account current swap configuration */
     if ((FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) >> 31)
@@ -129,13 +131,14 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         page_n++;
     }
     address = start_address;
+    page_n = start_page_n;
     while (address < end) {
         /* Erase claimed non-secure page, in secure mode */
 #ifndef TARGET_stm32h5
         reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
 #else
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER));
+        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_BKSEL));
         FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bank << 31));
 #endif
 
@@ -162,8 +165,11 @@ void hal_tz_release_nonsecure_area(void)
 {
 #ifndef DUALBANK_SWAP
     int i;
-    for (i = 0; i < FLASH_SECBB_NREGS; i++)
+    /* Set all banks as non-secure */
+    for (i = 0; i < FLASH_SECBB_NREGS; i++) {
+        FLASH_SECBB1[i] = 0;
         FLASH_SECBB2[i] = 0;
+    }
 #else
     uint32_t addr;
     int bank_swp = 0;

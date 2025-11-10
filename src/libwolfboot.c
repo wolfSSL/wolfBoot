@@ -2052,24 +2052,47 @@ void wolfBoot_nsc_update_trigger(void)
 }
 
 __attribute__((cmse_nonsecure_entry))
+uint32_t wolfBoot_nsc_get_image_version(uint8_t part)
+{
+    return wolfBoot_get_image_version(part);
+}
+
+__attribute__((cmse_nonsecure_entry))
+int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st)
+{
+    return wolfBoot_get_partition_state(part, st);
+}
+
+__attribute__((cmse_nonsecure_entry))
 int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
 {
+    int ret;
+
     if (address > WOLFBOOT_PARTITION_SIZE)
         return -1;
     if (address + len > WOLFBOOT_PARTITION_SIZE)
         return -1;
-    return hal_flash_erase(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, len);
 
+    hal_flash_unlock();
+    ret = hal_flash_erase(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, len);
+    hal_flash_lock();
+    return ret;
 }
 
 __attribute__((cmse_nonsecure_entry))
 int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len)
 {
+    int ret;
+
     if (address > WOLFBOOT_PARTITION_SIZE)
         return -1;
     if (address + len > WOLFBOOT_PARTITION_SIZE)
         return -1;
-    return hal_flash_write(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len);
+    
+    hal_flash_unlock();
+    ret = hal_flash_write(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len);
+    hal_flash_lock();
+    return ret;
 }
 
 #endif

@@ -49,6 +49,7 @@
 #endif
 
 #define FLASH_SECURE_MMAP_BASE (0x0C000000)
+#define FLASH_SECURE_MMAP_BIT  (0x04000000)
 
 #define RCC_CR              (*(volatile uint32_t *)(RCC_BASE + 0x00))  /* RM0481 - Table 108 */
 #define RCC_CR_PLL3RDY               (1 << 29) /*    RM0481 - Table 108 */
@@ -210,6 +211,14 @@
 #define FLASH_SECBB1       ((volatile uint32_t *)(FLASH_BASE + 0x0A0)) /* Array */
 #define FLASH_SECBB2       ((volatile uint32_t *)(FLASH_BASE + 0x1A0)) /* Array */
 #define FLASH_SECBB_NREGS  4    /* Array length for the two above */
+
+#define FLASH_SECWM1R_CUR  (*(volatile uint32_t *)(FLASH_BASE + 0x0E0))
+#define FLASH_SECWM1R_PRG  (*(volatile uint32_t *)(FLASH_BASE + 0x0E4))
+#define FLASH_SECWM2R_CUR  (*(volatile uint32_t *)(FLASH_BASE + 0x1E0))
+#define FLASH_SECWM2R_PRG  (*(volatile uint32_t *)(FLASH_BASE + 0x1E4))
+
+#define FLASH_SECWM_STRT_SHIFT 0
+#define FLASH_SECWM_END_SHIFT  16
 
 #define FLASH_NS_BASE          (0x40022000)   //RM0481 - Table 3
 #define FLASH_NS_KEYR        (*(volatile uint32_t *)(FLASH_NS_BASE + 0x08))

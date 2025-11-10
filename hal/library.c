@@ -46,6 +46,12 @@
     #undef NO_FILESYSTEM
 #endif
 
+#ifdef WOLFBOOT_KEYTOOLS
+    /* this code needs to use the Use ./include/user_settings.h file */
+    #error "The wrong user_settings.h has been included."
+#endif
+
+
 /* HAL Stubs */
 void hal_init(void)
 {
@@ -142,7 +148,8 @@ int wolfBoot_start(void)
  exit:
     if (ret < 0) {
         wolfBoot_printf("Failure %d: Hdr %d, Hash %d, Sig %d\n", ret,
-                        os_image.hdr_ok, os_image.sha_ok, os_image.signature_ok);
+                        (int)os_image.hdr_ok, (int)os_image.sha_ok,
+                        (int)os_image.signature_ok);
     }
 
     return 0;

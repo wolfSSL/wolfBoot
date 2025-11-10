@@ -72,8 +72,25 @@ int binentry_address_compare(const void* a, const void* b)
     }
 }
 
+#ifdef _WIN32
+/*  'strerror' has been explicitly marked deprecated */
+static const char* win_strerror(int err, char* buf, size_t bufsz) {
+    if (strerror_s(buf, bufsz, err) != 0) {
+        buf[0] = '\0';
+    }
+    return buf;
+}
+#endif
+
 int main(int argc, const char* argv[]) {
+#ifdef _WIN32
+    char errbuf[128] = { 0 };
+    errno_t fe;
+#endif
     const char* outname = NULL;
+    FILE* fo = NULL;
+    FILE* fi = NULL;
+
     size_t i = 0;
     size_t num_entries = 0;
     binentry_t* entries = NULL;
@@ -98,20 +115,25 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    for (i=0; i<num_entries; i++) {
+    for (i = 0; i < num_entries; i++) {
         char* endptr = NULL;
         struct stat st;
 
-        entries[i].address = strtol(argv[2*i + 2], &endptr, 0);
+        entries[i].address = strtol(argv[2 * i + 2], &endptr, 0);
         if (*endptr) {
             fprintf(stderr,
-                    "Remaining characters in address field %s\n", endptr);
+                "Remaining characters in address field %s\n", endptr);
         }
-        entries[i].fname = argv[2*i + 3];
+        entries[i].fname = argv[2 * i + 3];
 
         if (stat(entries[i].fname, &st)) {
+#ifdef _WIN32
+            fprintf(stderr, "unable to stat %s: %s\n",
+                entries[i].fname, win_strerror(errno, errbuf, sizeof errbuf));
+#else
             fprintf(stderr, "unable to stat %s: %s\n", entries[i].fname,
-                    strerror(errno));
+                strerror(errno));
+#endif
             return EXIT_FAILURE;
         }
 
@@ -119,22 +141,22 @@ int main(int argc, const char* argv[]) {
 
 #if VERBOSE
         printf("%s %zu %zu\n",
-               entries[i].fname,
-               entries[i].address,
-               entries[i].nbytes);
+            entries[i].fname,
+            entries[i].address,
+            entries[i].nbytes);
 #endif
     }
 
     qsort(entries, num_entries, sizeof(binentry_t), binentry_address_compare);
 
     // check for overlap
-    for (i=1; i<num_entries; i++) {
-        size_t endaddr = entries[i-1].address + entries[i-1].nbytes;
+    for (i = 1; i < num_entries; i++) {
+        size_t endaddr = entries[i - 1].address + entries[i - 1].nbytes;
         if (endaddr > entries[i].address) {
             fprintf(stderr,
-              "overlap with %s(end address 0x%zx) and %s (start address 0x%zx \n",
-                    entries[i-1].fname, endaddr,
-                    entries[i].fname, entries[i].address);
+                "overlap with %s(end address 0x%zx) and %s (start address 0x%zx \n",
+                entries[i - 1].fname, endaddr,
+                entries[i].fname, entries[i].address);
             err = 1;
         }
         if (err) {
@@ -144,23 +166,39 @@ int main(int argc, const char* argv[]) {
     }
 
     // TODO: consider handling stdout "-"
-
-    FILE* fo = fopen(outname, "wb");
-    if (fo == NULL) {
+#ifdef _WIN32
+    fe = fopen_s(&fo, outname, "wb");
+    if (fo == NULL || fe != 0) {
         fprintf(stderr, "opening %s failed %s\n",
-                outname, strerror(errno));
+            outname, win_strerror((int)fe, errbuf, sizeof errbuf));
         return EXIT_FAILURE;
     }
+#else
+    fo = fopen(outname, "wb");
+    if (fo == NULL) {
+        fprintf(stderr, "opening %s failed %s\n", outname, strerror(errno));
+        return EXIT_FAILURE;
+    }
+#endif
 
     cur_add = entries[0].address;
     for (i=0; i<num_entries; i++) {
         size_t fillSz = entries[i].address - cur_add;
-        FILE* fi = fopen(entries[i].fname, "rb");
-        if (fi == NULL){
+#ifdef _WIN32
+        fe = fopen_s(&fi, entries[i].fname, "rb");
+        if (fi == NULL || fe != 0) {
             fprintf(stderr, "opening %s failed %s\n",
-                    entries[i].fname, strerror(errno));
+                entries[i].fname, win_strerror((int)fe, errbuf, sizeof errbuf));
             return EXIT_FAILURE;
         }
+#else
+        fi = fopen(entries[i].fname, "rb");
+        if (fi == NULL) {
+            fprintf(stderr, "opening %s failed %s\n",
+                entries[i].fname, strerror(errno));
+            return EXIT_FAILURE;
+        }
+#endif
 
         if (fillSz > 0 && fillSz < INT_MAX) {
             /* fill until address - blocks then bytes */
@@ -194,7 +232,7 @@ int main(int argc, const char* argv[]) {
             cur_add += nw;
             if (nr != nw) {
                 fprintf(stderr,
-                  "Failed to wrote %zu bytes of the %zu bytes read from %s\n",
+                  "Failed to write %zu bytes of the %zu bytes read from %s\n",
                         nw, nr, entries[i].fname);
                 return EXIT_FAILURE;
             }
@@ -209,10 +247,9 @@ int main(int argc, const char* argv[]) {
             if (ferror(fo)) {
                 fprintf(stderr,
                         "error writing to %s\n",
-                        entries[i].fname);
+                        outname);
                 return EXIT_FAILURE;
             }
-
         }
 
         fprintf(stderr, "\tAdded %12zu bytes at 0x%08zx from %s\n",

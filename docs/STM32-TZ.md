@@ -55,6 +55,12 @@ image header size must be supplied as an environment variable. For example:
 IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --sha256 --ecc256 myapp.bin wolfboot_signing_private_key.der 1
 ```
 
+### NSC API
+
+wolfBoot provides a few Non-Secure Callable functions to allow a non-secure
+application to perform certain operations that must be run from the secure
+domain. For more information, see [API](API.md#nsc-api).
+
 ### Example using STM32L552
 
   - Copy the example configuration for STM32-L5 with support for wolfCrypt in
@@ -192,7 +198,7 @@ OPTION BYTES BANK: 2
 
    Boot Configuration:
 
-     NSBOOTADD    : 0x80400  (0x8040000)
+     NSBOOTADD    : 0x80600  (0x8060000)
      NSBOOT_LOCK  : 0xC3 (The SWAP_BANK and NSBOOTADD can still be modified following their individual rules.)
      SECBOOT_LOCK : 0xC3 (The BOOT_UBE, SWAP_BANK and SECBOOTADD can still be modified following their individual rules.)
      SECBOOTADD   : 0xC0000  (0xC000000)
@@ -201,7 +207,7 @@ OPTION BYTES BANK: 3
    Bank1 - Flash watermark area definition:
 
      SECWM1_STRT  : 0x0  (0x8000000)
-     SECWM1_END   : 0x1F  (0x803E000)
+     SECWM1_END   : 0x2F  (0x805e000)
 
    Write sector group protection 1:
 
@@ -211,7 +217,7 @@ OPTION BYTES BANK: 4
    Bank2 - Flash watermark area definition:
 
      SECWM2_STRT  : 0x0  (0x08100000)
-     SECWM2_END   : 0x1F  (0x0813e000)
+     SECWM2_END   : 0x7F  (0x081fe0000)
 
    Write sector group protection 2:
 
@@ -251,7 +257,7 @@ OPTION BYTES BANK: 9
 
 ```
 STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000
-STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08040000
+STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08060000
 ```
 
   - After rebooting, the LED on the board should turn on sequentially:

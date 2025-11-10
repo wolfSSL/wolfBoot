@@ -30,6 +30,11 @@
 #include <stdio.h>
 #endif
 #include <wolfssl/wolfcrypt/settings.h> /* for wolfCrypt hash/sign routines */
+#ifdef WOLFBOOT_KEYTOOLS
+    /* this code needs to use the Use ./include/user_settings.h, not keytools */
+    #error "The wrong user_settings.h has been included."
+#endif
+
 
 #include <stddef.h>
 #include <string.h>
@@ -882,8 +887,10 @@ static int hdr_cpy_done = 0;
 static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
 {
     if (!hdr_cpy_done) {
-        ext_flash_check_read((uintptr_t)img->hdr, hdr_cpy, IMAGE_HEADER_SIZE);
-        hdr_cpy_done = 1;
+        memset(hdr_cpy, 0, sizeof(hdr_cpy));
+        if (ext_flash_check_read((uintptr_t)img->hdr, hdr_cpy,
+                IMAGE_HEADER_SIZE) == IMAGE_HEADER_SIZE)
+            hdr_cpy_done = 1;
     }
     return hdr_cpy;
 }
