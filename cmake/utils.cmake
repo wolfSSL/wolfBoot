@@ -67,17 +67,26 @@ macro(gen_bin_target_outputs TARGET)
 
     # Create bin from elf target
     add_custom_command(
-        OUTPUT ${FILENAME}.bin
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.bin"
+        COMMAND "${TOOLCHAIN_OBJCOPY}"
+                -O binary "$<TARGET_FILE:${TARGET}>"
+                "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.bin"
         DEPENDS ${TARGET}
-        COMMAND ${TOOLCHAIN_OBJCOPY} -O binary $<TARGET_FILE:${TARGET}>
-                $<TARGET_FILE:${TARGET}>.bin)
+        VERBATIM
+    )
     list(APPEND TARGET_OUTPUTS ${FILENAME}.bin)
 
     # Print size of bin target
     add_custom_command(
-        OUTPUT ${FILENAME}.size
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.size"
         DEPENDS ${TARGET}
-        COMMAND ${TOOLCHAIN_SIZE} $<TARGET_FILE:${TARGET}> | tee $<TARGET_FILE:${TARGET}>.size)
+        COMMAND "${CMAKE_COMMAND}"
+                -DTOOLCHAIN_SIZE=${TOOLCHAIN_SIZE}
+                -DINPUT=$<TARGET_FILE:${TARGET}>
+                -DOUT=${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.size
+                -P "${SIZE_SCRIPT}"
+        VERBATIM
+    )
     list(APPEND TARGET_OUTPUTS ${FILENAME}.size)
 
     # Add top level target for all MCU standard outputs

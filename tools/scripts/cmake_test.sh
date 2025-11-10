@@ -19,7 +19,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../" && pwd)"
 # Normalize to physical paths (no symlinks, no trailing slashes)
 # SCRIPT_DIR_P="$(cd -- "$SCRIPT_DIR" && pwd -P)"
 REPO_ROOT_P="$(cd -- "$REPO_ROOT" && pwd -P)"
-CALLER_CWD_P="$(pwd -P)"   # where the user ran the script from
+CALLER_CWD_P="$(pwd -P)"   # <â€” where the user ran the script from
 
 # Print only if caller's cwd is neither REPO_ROOT nor REPO_ROOT/scripts
 case "$CALLER_CWD_P" in

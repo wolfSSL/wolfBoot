@@ -1,5 +1,11 @@
 ﻿# wolfBoot Cmake
 
+Review the [Keystore Docs](../docs/keystore.md) and [Signing Docs](../docs/Signing.md)
+regarding backup and storage of the generated `src/keystore.c` file. This file
+is excluded from source in `.gitignore`).
+
+**Save to a safe place outside of the wolfBoot tree.**
+
 See the local [config_defaults.cmake](./config_defaults.cmake) file. Of particular interest
 are some environment configuration settings:
 
@@ -19,7 +25,7 @@ set(FOUND_HAL_BASE false)
 set(USE_DOT_CONFIG false)
 ```
 
-## cmake directory overview
+## cmake Directory Overview
 
 - [`WOLFBOOT_ROOT`/CMakeLists.txt](../CMakeLists.txt) - Top-level CMake entry that configures the wolfBoot build.
 Used to initialize the project, include cmake/wolfboot.cmake, set options, and define targets.
@@ -34,7 +40,7 @@ Centralizes toolchain paths, target names, build directories, and key cache vari
 Maps Visual Studio configurations (Debug, Release) to existing CMake presets.
 Controls IntelliSense, environment variables, and the preset shown in the VS CMake toolbar.
 
-- [CMakeUserPresets.json.sample](./CMakeUserPresets.json.sample) - Example local overrides for user-specific paths and options. Copy to `CMakeUserPresets.json` in the `WOLFBOOT_ROOT` directory and customize. Not committed. Copy to `WOLFBOOT_ROOT` and remove the `.sample` suffix.
+- [preset-examples/CMakeUserPresets.json.sample](./preset-examples/CMakeUserPresets.json.sample) - Example local overrides for user-specific paths and options. Copy to `CMakeUserPresets.json` in the `WOLFBOOT_ROOT` directory and customize. Not committed. Copy to `WOLFBOOT_ROOT` and remove the `.sample` suffix.
 
 - [config_defaults.cmake](./config_defaults.cmake) - Default cache values and feature toggles used when presets or .config do not provide them.
 
@@ -151,7 +157,7 @@ cmake --build --preset stm32h7
 
 ### CMake User Presets.
 
-See the [CMakeUserPresets.json.sample(./CMakeUserPresets.json.sample).
+See the [preset-examples/CMakeUserPresets.json.sample(./preset-examples/CMakeUserPresets.json.sample).
 Copy the file to `WOLFBOOT_ROOT` and remove the`.sample` suffix: `CMakeUserPresets.json`.
 
 It is critically important that none the names of a user preset do not conflict with regular presets.
@@ -207,12 +213,19 @@ checked in. For example, if a project is using Git, `CMakePresets.json` may be t
 
 ## Troubleshooting
 
-The wrong toolchain is being used, or a target was not specified
+The wrong toolchain is being used, or a target was not specified:
 
 ```
 Error: no such instruction: `isb'
 ```
 
+### Other log files
+
+Windows users may find cmake log files in this directory helpful:
+
+```
+C:\Users\%USERNAME%\AppData\Local\CMakeTools
+```
 
 ## CMake Logic Flow
 

@@ -19,7 +19,7 @@ for %%I in ("%~dp0") do set "SCRIPT_DIR=%%~fI"
 rem === Repo root is parent of /tools/scripts ===
 for %%I in ("%SCRIPT_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
-rem === Callerâ€™s current directory ===
+rem === Caller's current directory ===
 for %%I in ("%CD%") do set "CALLER_CWD=%%~fI"
 
 rem === (Optional) Normalize to physical paths via PowerShell to resolve junctions/symlinks ===

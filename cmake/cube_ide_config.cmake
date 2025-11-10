@@ -37,6 +37,12 @@ else()
     include_guard(GLOBAL)
 endif()
 
+if(DEFINED FUNCTIONS_CMAKE_INCLUDED)
+    message(STATUS "Found required functions.cmake")
+else()
+    message(FATL_ERROR "Missing required functions.cmake")
+endif()
+
 # Exclude entire file unless DETECT_CUBEIDE is set to true
 if(DETECT_CUBEIDE)
 
@@ -389,23 +395,37 @@ endif()
 # C:\Users\${CURRENT_USER}\STM32Cube\Repository\STM32Cube_FW_L4_V1.18.0\Drivers\STM32L4xx_HAL_Driver
 # C:/Users/${CURRENT_USER}/STM32Cube/Repository/STM32Cube_FW_L4_V1.14.1/Drivers/
 
-find_newest_stm32cube_fw_l4(STM32CUBE_L4_ROOT STM32CUBE_L4_VERSION)
-set(STM32_HAL_DIR "${STM32CUBE_L4_ROOT}/Drivers/STM32L4xx_HAL_Driver")
-set(CMSIS_DIR     "${STM32CUBE_L4_ROOT}/Drivers/CMSIS")
+message(STATUS "CubeIDE Config WOLFBOOT_TARGET=${WOLFBOOT_TARGET}")
+string(TOLOWER "${WOLFBOOT_TARGET}" _wb_target_lc)
+string(FIND "${_wb_target_lc}" "stm32l4" _pos)
+message(STATUS "Checking if the HAL and CMSIS libraries needed")
+if(_pos EQUAL 0)
+    # Only do this for the L4!
+    find_newest_stm32cube_fw_l4(STM32CUBE_L4_ROOT STM32CUBE_L4_VERSION)
+    set(STM32_HAL_DIR "${STM32CUBE_L4_ROOT}/Drivers/STM32L4xx_HAL_Driver")
+    set(CMSIS_DIR     "${STM32CUBE_L4_ROOT}/Drivers/CMSIS")
 
-if(STM32CUBE_L4_VERSION)
-    set(HAL_BASE "${STM32CUBE_L4_ROOT}")
-    if(IS_DIRECTORY "${HAL_BASE}")
-        message(STATUS "Found HAL_BASE=${HAL_BASE}")
-        set(FOUND_HAL_BASE true)
-            # CubeIDE
-            set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
-            set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/Drivers/CMSIS/Device/ST/STM32L4xx/Include")
-            set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/Drivers/CMSIS/Include")
-            set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/Projects/B-L475E-IOT01A/Templates/Inc")
-    else()
-        message(STATUS "Not found expected HAL_BASE=${HAL_BASE}")
+    if(STM32CUBE_L4_VERSION)
+        set(HAL_BASE "${STM32CUBE_L4_ROOT}")
+        if(IS_DIRECTORY "${HAL_BASE}")
+            message(STATUS "Found HAL_BASE=${HAL_BASE}")
+            set(FOUND_HAL_BASE true)
+                # CubeIDE
+                set_and_echo_dir(HAL_DRV          "${HAL_BASE}/Drivers/STM32L4xx_HAL_Driver")
+                set_and_echo_dir(HAL_CMSIS_DEV    "${HAL_BASE}/Drivers/CMSIS/Device/ST/STM32L4xx/Include")
+                set_and_echo_dir(HAL_CMSIS_CORE   "${HAL_BASE}/Drivers/CMSIS/Include")
+                set_and_echo_dir(HAL_TEMPLATE_INC "${HAL_BASE}/Projects/B-L475E-IOT01A/Templates/Inc")
+        else()
+            message(STATUS "Not found expected HAL_BASE=${HAL_BASE}")
+        endif()
     endif()
+else()
+    message(STATUS "WOLFBOOT_TARGET=${WOLFBOOT_TARGET}, not loading HAL and CMSIS libraries.")
+endif() # #STM32L4 detection
+
+string(FIND "${_wb_target_lc}" "stm32g0" _pos)
+if(_pos EQUAL 0)
+
 endif()
 
 mark_as_advanced(STM32CUBEIDE_EXECUTABLE STM32CUBEIDE_ROOT STM32CUBEIDE_VERSION)

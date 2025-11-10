@@ -239,6 +239,7 @@ if [ $# -gt 0 ]; then
         exit "$status"
     fi
 
+    # TODO Move flash operation to cmake
     if [ "$THIS_OPERATION" = "--flash" ]; then
         echo "Flash Target=$TARGET"
         CLI="$(find_stm32_tool STM32_Programmer_CLI)" || { echo "CLI not found"; exit 1; }
@@ -249,6 +250,9 @@ if [ $# -gt 0 ]; then
             echo "STM32_Programmer_CLI.exe not found, exiting"
             exit 2
         fi
+
+        # TODO Alternative preset inherited configs may write to build directories other than build-$TARGET.
+        # Currently works only with base_build_presetName preset path
 
         WOLFBOOT_BIN="build-$TARGET/test-app/wolfboot_$TARGET.bin"
         echo Checking "WOLFBOOT_BIN=$WOLFBOOT_BIN"

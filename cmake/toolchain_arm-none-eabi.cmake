@@ -67,6 +67,7 @@ endif()
 set(ARM_GCC_BIN "" CACHE PATH "Path to Arm GNU Toolchai       'bin' directory")
 
 if(CMAKE_HOST_WIN32)
+    message(STATUS "toolchain_arm-none-eabi.cmake is CMAKE_HOST_WIN32 mode")
     if(ARM_GCC_BIN)
         file(TO_CMAKE_PATH "${ARM_GCC_BIN}" _BIN)
         set(CMAKE_C_COMPILER   "${_BIN}/arm-none-eabi-gcc.exe"   CACHE FILEPATH "" FORCE)
@@ -92,6 +93,7 @@ if(CMAKE_HOST_WIN32)
         set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "" FORCE)
     endif()
 else()
+    message(STATUS "toolchain_arm-none-eabi.cmake checking for arm compiler")
     if(ARM_GCC_BIN)
         file(TO_CMAKE_PATH "${ARM_GCC_BIN}" _BIN)
         set(CMAKE_C_COMPILER   "${_BIN}/arm-none-eabi-gcc" CACHE FILEPATH "" FORCE)
@@ -104,6 +106,7 @@ else()
         set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}" CACHE FILEPATH "" FORCE)
     endif()
 endif()
+message(STATUS "Found CMAKE_C_COMPILER=${CMAKE_C_COMPILER}")
 
 # Use the compiler's own include dir (Homebrew GCC may have no sysroot)
 execute_process(
@@ -213,5 +216,27 @@ set(CMAKE_C_FLAGS_MINSIZEREL   "-Os -DNDEBUG -flto -Wl,-flto"     CACHE INTERNAL
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -DNDEBUG -flto -Wl,-flto"     CACHE INTERNAL "C++ Compiler options for minimum size release build type")
 set(CMAKE_ASM_FLAGS_MINSIZEREL ""        CACHE INTERNAL "ASM Compiler options for minimum size release build type")
 set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "-flto -Wl,-flto" CACHE INTERNAL "Linker options for minimum size release build type")
+
+
+# Locate the GNU Arm bin dir from the compiler path
+get_filename_component(_gcc_dir "${CMAKE_C_COMPILER}" DIRECTORY)
+
+# Prefer the tool right next to the compiler
+find_program(CMAKE_SIZE
+    NAMES arm-none-eabi-size
+    HINTS "${_gcc_dir}"
+    NO_DEFAULT_PATH
+)
+# Fallback: PATH search
+if(NOT CMAKE_SIZE)
+    find_program(CMAKE_SIZE NAMES arm-none-eabi-size)
+endif()
+
+# Make it visible to all dirs and saved in CMakeCache.txt
+if(CMAKE_SIZE)
+    set(CMAKE_SIZE "${CMAKE_SIZE}" CACHE FILEPATH "Path to arm-none-eabi-size")
+else()
+    message(STATUS "CMAKE_SIZE arm-none-eabi-size not found; add your ARM GCC bin dir to PATH or fix the toolchain hints.")
+endif()
 
 set(TOOLCHAIN_ARM_NONE_EABI_CMAKE_INCLUDED true)

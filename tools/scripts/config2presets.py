@@ -138,7 +138,7 @@ def main():
     script_path = Path(__file__).resolve()
     script_dir = script_path.parent.resolve()
 
-    # repo root is parent of tools/scripts - go up two levels
+    # repo root is parent of tools/scripts Ã¢â€ â€™ go up two levels
     repo_root = (script_dir / ".." / "..").resolve()
 
     caller_cwd = Path.cwd().resolve()
@@ -193,6 +193,7 @@ def main():
     cfg_preset = OrderedDict([
         ("name", preset_name),
         ("displayName", display_name),
+        ("inherits", "base"),
         ("generator", args.generator),
         ("binaryDir", binary_dir),
         ("cacheVariables", cache),

@@ -99,7 +99,7 @@ A single json syntax error will spoil the entire project.
 
 ## Your own toolchain
 
-Create a `CMakeUserPresets.json` (ignored by git, see and rename `cmake/CMakeUserPresets.json.sample` ):
+Create a `CMakeUserPresets.json` (ignored by git, see and rename `cmake/preset-examples/CMakeUserPresets.json.sample` ):
 
 ```json
 {

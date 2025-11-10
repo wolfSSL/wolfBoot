@@ -60,8 +60,47 @@ KEYWORD="Config mode: dot"
 echo "Saving output to $LOG_FILE"
 
 echo "Fetch stm32h7 example .config"
+
+SRC="./config/examples/stm32h7.config"
+DST="./.config"
+
+# Exit if the .config file already exists (perhaps it is valid? we will delete our copy when done here)
+if [ -e "$DST" ]; then
+    echo "ERROR: .config already exists! We need to copy a new test file. Delete or save existing file." >&2
+    exit 1
+fi
+
+echo "Source config file: $SRC"
+echo "Destination file:   $DST"
+
+# Ensure source exists
+if [ ! -f "$SRC" ]; then
+    echo "ERROR: Source not found: $SRC" >&2
+    exit 1
+fi
+
+echo "copy $SRC $DST"
+cp -p "$SRC" "$DST" || { echo "ERROR: Copy failed." >&2; exit 1; }
+
+# Verify destination exists and is non-empty
+if [ ! -s "$DST" ]; then
+    echo "ERROR: Destination missing after copy or file is empty: $DST" >&2
+    exit 1
+fi
+
+# Optional: verify content matches exactly
+if ! cmp -s "$SRC" "$DST"; then
+    echo "ERROR: Destination content does not match source." >&2
+    exit 1
+fi
+
+echo "OK: $DST created and verified."
+
 cp   ./config/examples/stm32h7.config ./.config
 ls   .config
+
+echo ""
+echo "This .config contents:"
 cat  .config
 echo ""
 
@@ -80,4 +119,7 @@ else
 fi
 
 # Sample build
-cmake --build build-stm32h7 -j
+cmake --build build-stm32h7 -j10
+
+rm .config
+
