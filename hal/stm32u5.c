@@ -471,14 +471,22 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
 
 static void led_unsecure()
 {
-    uint32_t pin;
-
+#ifdef STM32_DISCOVERY
     /* Enable clock for User LED GPIOs */
     RCC_AHB2ENR1_CLOCK_ER|= GPIOH_AHB2ENR1_CLOCK_ER;
 
     /* Un-secure User LED GPIO pins */
-    GPIOH_SECCFGR&=~(1<<LED_USR_PIN);
-    GPIOH_SECCFGR&=~(1<<LED_BOOT_PIN);
+    GPIOH_SECCFGR &= ~(1 << LED_USR_PIN);
+    GPIOH_SECCFGR &= ~(1 << LED_BOOT_PIN);
+#else
+    /* Enable clock for User LED GPIOs */
+    RCC_AHB2ENR1_CLOCK_ER |= GPIOC_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR1_CLOCK_ER |= GPIOG_AHB2ENR1_CLOCK_ER;
+
+    /* Un-secure User LED GPIO pins */
+    GPIOG_SECCFGR &= ~(1 << LED_USR_PIN);
+    GPIOC_SECCFGR &= ~(1 << LED_BOOT_PIN);
+#endif
 }
 
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
