@@ -248,14 +248,25 @@
 #define FLASH_OPTKEY2                         (0x4C5D6E7FU)
 
 /* GPIO*/
+#define GPIOC_BASE 0x52020800
+#define GPIOG_BASE 0x52021800
 #define GPIOH_BASE 0x52021C00
 
+#define GPIOC_SECCFGR (*(volatile uint32_t *)(GPIOC_BASE + 0x30))
+#define GPIOG_SECCFGR (*(volatile uint32_t *)(GPIOG_BASE + 0x30))
 #define GPIOH_SECCFGR (*(volatile uint32_t *)(GPIOH_BASE + 0x30))
 
+#ifdef STM32_DISCOVERY
 #define LED_BOOT_PIN (7) /* PH7 - Discovery - Green Led */
 #define LED_USR_PIN (6)  /* PH6 - Discovery  - Red Led */
+#else
+#define LED_BOOT_PIN (7) /* PC7 - Nucleo-U575ZI-Q - Green Led */
+#define LED_USR_PIN (2)  /* PG2 - Nucleo-U575ZI-Q - Red Led */
+#endif
 
 #define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
+#define GPIOC_AHB2ENR1_CLOCK_ER (1 << 2)
+#define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
 #define GPIOH_AHB2ENR1_CLOCK_ER (1 << 7)
 #define TRNG_AHB2_CLOCK_ER      (1 << 18)
 

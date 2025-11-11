@@ -37,6 +37,7 @@
 
 #include "image.h"
 #include "hal.h"
+#include "target.h"
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && (!defined(FLAGS_HOME) || !defined(DISABLE_BACKUP))
 
 
@@ -297,7 +298,8 @@ void hal_tz_sau_init(void)
     /* SAU is set up before staging. Set up all areas as secure. */
 
     /* Non-secure callable: NSC functions area */
-    sau_init_region(0, 0x0C040000, 0x0C05FFFF, 1);
+    sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
+            WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
     /* Secure: application flash area (first bank) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, FLASH_BANK2_BASE - 1, 0);
@@ -331,10 +333,11 @@ void hal_tz_sau_init(void)
 void hal_tz_sau_init(void)
 {
     /* Non-secure callable: NSC functions area */
-    sau_init_region(0, 0x0C038000, 0x0C040000, 1);
+    sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
+            WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
     /* Non-secure: application flash area */
-    sau_init_region(1, 0x08040000, 0x0807FFFF, 0);
+    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_BOOT_ADDRESS + 2 * WOLFBOOT_PARTITION_SIZE - 1, 0);
 
     /* Non-secure RAM region in SRAM1/SRAM2 */
     sau_init_region(2, 0x20020000, 0x2003FFFF, 0);
