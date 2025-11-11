@@ -998,10 +998,6 @@ static int key_sha256(uint8_t key_slot, uint8_t *hash)
     if (!pubkey || (pubkey_sz < 0)) {
         return -1;
     }
-#ifndef WOLFBOOT_KEYHASH_HAS_RESULT
-    wolfBoot_printf("This hash result must define WOLFBOOT_KEYHASH_HAS_RESULT");
-    return -1;
-#endif
 
     memset(hash, 0, SHA256_DIGEST_SIZE);
 
