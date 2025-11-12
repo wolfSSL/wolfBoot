@@ -31,8 +31,9 @@
 #endif
 #include <wolfssl/wolfcrypt/settings.h> /* for wolfCrypt hash/sign routines */
 #ifdef WOLFBOOT_KEYTOOLS
-    /* this code needs to use the Use ./include/user_settings.h, not keytools */
-    #error "The wrong user_settings.h has been included."
+    /* this code needs to use the local tools/keytools/user_settings.h
+     *                    not [WOLFBOOT_ROOT]/include/user_settings.h  */
+#   error "The wrong user_settings.h has been included."
 #endif
 
 

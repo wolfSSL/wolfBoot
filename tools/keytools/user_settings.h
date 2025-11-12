@@ -23,8 +23,31 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef H_USER_SETTINGS_
-#define H_USER_SETTINGS_
+#ifndef WOLFBOOT_KEYTOOLS_USER_SETTINGS_H
+#define WOLFBOOT_KEYTOOLS_USER_SETTINGS_H
+
+/* This is the keytools user settings.
+ *
+ * See also settings in [WOLFBOOT_ROOT]/include/user_settings.h
+ *
+ * When in question, define DEBUG_SIGNTOOL and optionally WOLFBOOT_SHOW_INCLUDE
+ */
+
+ /* During development in new environment, ensure the expected user settings is used: */
+#ifdef WOLFBOOT_SHOW_INCLUDE
+    #ifdef __GNUC__  /* GCC compiler */
+        #pragma message "============= keytools/user_settings.h"
+    #elif defined(_MSC_VER) /* Microsoft Visual C++ compiler */
+        #pragma message("============= keytools/user_settings.h")
+    #else
+        #warning "============= keytools/user_settings"
+    #endif
+#endif /* optional user settings check */
+
+/* Some debug options. See docs. */
+/* #define DEBUG_SIGNTOOL */
+/* #define WOLFBOOT_HASH_SHA256 */
+/* #define WOLFBOOT_SIGN_ECC256 */
 
 #include <stdint.h>
 
