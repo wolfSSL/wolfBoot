@@ -66,6 +66,9 @@
 #   elif defined(WOLFBOOT_LOG_PRINTF)
         /* allow output to stdout */
 #       define wolfBoot_printf(_f_, ...) printf(_f_, ##__VA_ARGS__)
+#   elif defined(_MSC_VER)
+#       include <stdio.h>
+#       define wolfBoot_printf(...) do { fprintf(stderr, __VA_ARGS__); } while (0)
 #   else
         /* use stderr by default */
 #       define wolfBoot_printf(_f_, ...) fprintf(stderr, _f_, ##__VA_ARGS__)
