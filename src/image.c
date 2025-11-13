@@ -2219,7 +2219,7 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 int keyslot_id_by_sha(const uint8_t *hint)
 {
     int id;
-    int ret = -1;
+    int ret = 0; /* TODO default to failure until proven otherwise */
     int ct = 0;
     if (hint == NULL) {
         return -1;
