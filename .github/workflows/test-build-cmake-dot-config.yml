@@ -99,4 +99,4 @@ jobs:
             fi
 
             # Sample build
-            cmake --build build-stm32h7 -j
+            cmake --build build-stm32h7 --parallel 8

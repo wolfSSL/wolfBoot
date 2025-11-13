@@ -1413,7 +1413,7 @@ if(NOT SIGN STREQUAL "NONE")
     add_custom_command(
         OUTPUT ${KEYSTORE} ${WOLFBOOT_SIGNING_PRIVATE_KEY}
         COMMAND "${KEYGEN_TOOL}" ${KEYTOOL_OPTIONS}
-                # --no-overwrite # not yet, see https://github.com/wolfSSL/wolfBoot/pull/636
+                --no-overwrite
                 -g ${WOLFBOOT_SIGNING_PRIVATE_KEY}
                 -keystoreDir ${CMAKE_CURRENT_BINARY_DIR}
         DEPENDS ${KEYGEN_TOOL}

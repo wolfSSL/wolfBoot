@@ -1,0 +1,109 @@
+name: wolfBoot VSCode
+
+on:
+  push:
+    # TODO: branches: [ 'master', 'main', 'release/**' ]
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+    inputs:
+      workspace_path:
+        description: "Path to the .code-workspace file"
+        required: true
+        default: "IDE/VSCode/wolfBoot.code-workspace"
+      cmake_list_presets:
+        description: "Also run 'cmake --list-presets'"
+        required: true
+        default: "true"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Provide fallbacks when not workflow_dispatch
+    env:
+      WORKSPACE_PATH: ${{ github.event_name == 'workflow_dispatch' && inputs.workspace_path || 'IDE/VSCode/wolfBoot.code-workspace' }}
+      CMAKE_LIST: ${{ github.event_name == 'workflow_dispatch' && inputs.cmake_list_presets || 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python and CMake deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip ninja-build
+          cmake --version
+          ninja --version
+
+      - name: Validate workspace JSONC and folder paths
+        shell: python3 {0}
+        env:
+          WORKSPACE_PATH: ${{ env.WORKSPACE_PATH }}
+        run: |
+          import os, sys, re, json, pathlib
+          print("pwd:", pathlib.Path(".").resolve())
+          ws_rel = os.environ.get("WORKSPACE_PATH", "").strip()
+          print("WORKSPACE_PATH:", ws_rel or "<EMPTY>")
+
+          if not ws_rel:
+              print("WORKSPACE_PATH input is required", file=sys.stderr)
+              sys.exit(2)
+
+          ws = pathlib.Path(ws_rel)
+          if not ws.exists():
+              print(f"Workspace file not found: {ws}", file=sys.stderr)
+              sys.exit(3)
+
+          txt = ws.read_text(encoding="utf-8", errors="replace")
+          # strip /* */ and // comments (JSONC -> JSON)
+          txt = re.sub(r"/\*.*?\*/", "", txt, flags=re.S)
+          txt = re.sub(r"//.*", "", txt)
+          try:
+              data = json.loads(txt)
+          except Exception:
+              print("Failed to parse workspace as JSON after removing comments.", file=sys.stderr)
+              raise
+
+          folders = data.get("folders", [])
+          if not isinstance(folders, list) or not folders:
+              print("No 'folders' defined in workspace.", file=sys.stderr)
+              sys.exit(4)
+
+          ws_dir = ws.parent.resolve()
+          errors = 0
+          for idx, item in enumerate(folders):
+              if not isinstance(item, dict):
+                  print(f"folders[{idx}] is not an object", file=sys.stderr)
+                  errors += 1
+                  continue
+              path = item.get("path"); uri = item.get("uri")
+              if path is None and uri is None:
+                  print(f"folders[{idx}] missing 'path' or 'uri'", file=sys.stderr)
+                  errors += 1
+                  continue
+              if path is not None:
+                  if not isinstance(path, str):
+                      print(f"folders[{idx}].path is not a string", file=sys.stderr)
+                      errors += 1
+                  else:
+                      resolved = (ws_dir / path).resolve()
+                      print(f"[ok] folders[{idx}] path='{path}' -> '{resolved}'")
+                      if not resolved.exists():
+                          print(f"[warn] resolved path does not exist on runner: {resolved}", file=sys.stderr)
+              if uri is not None:
+                  print(f"[info] folders[{idx}] uses 'uri': {uri}")
+
+          if errors:
+              sys.exit(5)
+
+          settings = data.get("settings", {})
+          if settings and not isinstance(settings, dict):
+              print("settings is not an object", file=sys.stderr)
+              sys.exit(6)
+
+          print("Workspace JSONC and folder paths look sane.")
+
+      - name: List CMake presets (optional)
+        if: ${{ env.CMAKE_LIST == 'true' }}
+        run: |
+          cmake --list-presets || true

@@ -68,7 +68,6 @@ else()
         set(USE_64BIT_LIBS   true)
     endif()
 
-    set(USE_64BIT_LIBS true)
     # Enable HAL download only implemented for STM devices at this time.
     # See [WOLFBOOT_ROOT]/cmake/stm32_hal_download.cmake
     # and [WOLFBOOT_ROOT]/cmake/downloads/stm32_hal_download.cmake
@@ -351,12 +350,12 @@ if (CMAKE_HOST_WIN32)
                     ${_VC_HINTS}
 
                     # Visual Studio 2022 (all editions)
-                    "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/bin/Hostx64/x64"
-                    "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/bin/Hostx64/x64"
-                    "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/bin/Hostx64/x64"
-                    "C:/Program Files (x86)/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/bin/Hostx64/x64"
-                    "C:/Program Files (x86)/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/bin/Hostx64/x64"
-                    "C:/Program Files (x86)/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/bin/Hostx64/x64"
+                    "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/bin/Hostx64/x86"
+                    "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/bin/Hostx64/x86"
+                    "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/bin/Hostx64/x86"
+                    "C:/Program Files (x86)/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/bin/Hostx64/x86"
+                    "C:/Program Files (x86)/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/bin/Hostx64/x86"
+                    "C:/Program Files (x86)/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/bin/Hostx64/x86"
         )
     endif()
 

@@ -33,7 +33,7 @@ set(USE_DOT_CONFIG false)
 
 ### VS Code extensions
 
-- CMake Tools (ms-vscode.cmake-tools)
+- [CMake Tools (ms-vscode.cmake-tools)](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 - C/C++ (ms-vscode.cpptools)
 - Cortex-Debug (marus25.cortex-debug)
 
@@ -45,7 +45,7 @@ cmake, ninja-build, gcc-arm-none-eabi, openocd
 
 #### Windows path:
 
-Windows path: CMake, Ninja, Arm GNU Toolchain, OpenOCD (or ST's OpenOCD)
+Windows path: CMake, Ninja, Arm GNU Toolchain, OpenOCD (or STâ€™s OpenOCD)
 
 Install via PowerShell (will need to restart VSCode):
 
