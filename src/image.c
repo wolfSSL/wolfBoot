@@ -2227,6 +2227,8 @@ int keyslot_id_by_sha(const uint8_t *hint)
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
         ct++;
+
+        /* TODO: return values for key_hash */
         key_hash(id, digest);
         if ((ret == 0) && memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
             wolfBoot_printf("Found matching digest in slot %d\n", id);
