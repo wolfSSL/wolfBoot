@@ -34,6 +34,10 @@
 
 #if defined(__APPLE__) && defined(__MACH__)
 #define KEYSTORE_SECTION __attribute__((section ("__KEYSTORE,__keystore")))
+#elif defined(_MSC_VER)
+/* Create a RW data section named .keystore */
+#pragma section(".keystore", read, write)
+#define KEYSTORE_SECTION __declspec(allocate(".keystore"))
 #else
 #define KEYSTORE_SECTION __attribute__((section (".keystore")))
 #endif
@@ -48,7 +52,7 @@ const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {
 		.part_id_mask = 0xFFFFFFFF,
 		.pubkey_size = KEYSTORE_PUBKEY_SIZE_ECC256,
 		.pubkey = {
-			
+
 			0xc5, 0x7d, 0xbf, 0xfb, 0x23, 0x79, 0xba, 0xb6,
 			0x31, 0x8f, 0x7b, 0x8d, 0xfe, 0xc9, 0x5d, 0x46,
 			0xf5, 0x95, 0xb4, 0xa8, 0xbd, 0x45, 0xb7, 0x46,
