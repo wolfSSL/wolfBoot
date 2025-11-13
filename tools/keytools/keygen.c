@@ -112,6 +112,7 @@
 /* Globals */
 static FILE *fpub, *fpub_image;
 static int force = 0;
+static int no_overwrite = 0; /* when set, avoids prompt if !force and files exist */
 #if defined(WOLFBOOT_RENESAS_RSIP) || \
     defined(WOLFBOOT_RENESAS_TSIP) || \
     defined(WOLFBOOT_RENESAS_SCEPROTECT)
@@ -1155,18 +1156,24 @@ static void key_gen_check(const char *kfilename)
     FILE *f;
     f = fopen(kfilename, "rb");
     if (!force && (f != NULL)) {
-        char reply[40];
-        int replySz;
-        printf("** Warning: key file already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
-        fflush(stdout);
-        replySz = scanf("%s", reply);
-        printf("Reply is [%s]\n", reply);
-        fclose(f);
-        if (replySz < 0 || strcmp(reply, "Yes") != 0) {
-            printf("Operation aborted by user.");
-            exit(5);
-        } else {
-            unlink(kfilename);
+        if (no_overwrite) {
+            printf("** Warning: key file already exists and will not be overwritten!");
+        }
+        else {
+            char reply[40];
+            int replySz;
+            printf("** Warning: key file already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+            fflush(stdout);
+            replySz = scanf("%s", reply);
+            printf("Reply is [%s]\n", reply);
+            fclose(f);
+            if (replySz < 0 || strcmp(reply, "Yes") != 0) {
+                printf("Operation aborted by user.");
+                exit(5);
+            }
+            else {
+                unlink(kfilename);
+            }
         }
     }
 }
@@ -1402,6 +1409,9 @@ int main(int argc, char** argv)
         else if (strcmp(argv[i], "--force") == 0) {
             force = 1;
         }
+        else if (strcmp(argv[i], "--no-overwrite") == 0) {
+            no_overwrite = 1;
+        }
         else if (strcmp(argv[i], "--der") == 0) {
             saveAsDer = 1;
         }
@@ -1436,6 +1446,7 @@ int main(int argc, char** argv)
             i++;
             sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c");
             sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der");
+            printf("keystore file: %s\n", pubkeyfile);
             i++;
             continue;
         }
@@ -1458,15 +1469,20 @@ int main(int argc, char** argv)
         exit(0);
     fpub = fopen(pubkeyfile, "rb");
     if (!force && (fpub != NULL)) {
+        if (no_overwrite) {
+            printf("** Not overwriting existing keystore file: %s\n", pubkeyfile);
+            exit(0);
+        }
         char reply[40];
         int replySz;
-        printf("** Warning: keystore already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        printf("** Warning: keystore file already exists! %s\n", pubkeyfile);
+        printf("Are you sure you want to generate a new key and overwrite the existing key ? [Type 'Yes'] : ");
         fflush(stdout);
         replySz = scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
         fclose(fpub);
         if (replySz < 0 || strcmp(reply, "Yes") != 0) {
-            printf("Operation aborted by user.");
+            printf("Operation aborted by user.\n");
             exit(5);
         } else {
             unlink(pubkeyfile);
