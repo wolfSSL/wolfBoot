@@ -73,6 +73,15 @@ int extFlashLocked = 1;
 #define INTERNAL_FLASH_FILE "./internal_flash.dd"
 #define EXTERNAL_FLASH_FILE "./external_flash.dd"
 
+#ifdef DUALBANK_SWAP
+#define SIM_REGISTER_FILE "./sim_registers.dd"
+#define SIM_FLASH_OPTR_SWAP_BANK (1U << 20)
+static uint32_t sim_flash_optr;
+static void sim_dualbank_register_load(void);
+static void sim_dualbank_register_store(void);
+uint32_t hal_sim_get_dualbank_state(void);
+#endif
+
 /* global used to store command line arguments to forward to the test
  * application */
 char **main_argv;
@@ -224,6 +233,57 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
     return 0;
 }
 
+#ifdef DUALBANK_SWAP
+static void sim_dualbank_register_store(void)
+{
+    int fd = open(SIM_REGISTER_FILE, O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+        wolfBoot_printf("Failed to open %s: %s\n", SIM_REGISTER_FILE, strerror(errno));
+        return;
+    }
+
+    if (pwrite(fd, &sim_flash_optr, sizeof(sim_flash_optr), 0) !=
+            (ssize_t)sizeof(sim_flash_optr)) {
+        wolfBoot_printf("Failed to store dualbank swap state: %s\n",
+            strerror(errno));
+    }
+
+    close(fd);
+}
+
+static void sim_dualbank_register_load(void)
+{
+    int fd = open(SIM_REGISTER_FILE, O_RDWR | O_CREAT, 0644);
+    uint32_t value = 0;
+    int rd;
+    if (fd == -1) {
+        wolfBoot_printf("Failed to open %s: %s\n", SIM_REGISTER_FILE,
+            strerror(errno));
+        exit(-1);
+    }
+
+    rd = pread(fd, &value, sizeof(value), 0);
+
+    if (rd == (int)sizeof(value)) {
+        sim_flash_optr = value;
+    } else {
+        sim_flash_optr = 0;
+        if (pwrite(fd, &sim_flash_optr, sizeof(sim_flash_optr), 0) !=
+                sizeof(sim_flash_optr)) {
+            wolfBoot_printf("Failed to initialize dualbank swap state: %s\n",
+                strerror(errno));
+        }
+    }
+
+    close(fd);
+}
+
+uint32_t hal_sim_get_dualbank_state(void)
+{
+    return (sim_flash_optr & SIM_FLASH_OPTR_SWAP_BANK) ? 1U : 0U;
+}
+#endif
+
 void hal_flash_unlock(void)
 {
     flashLocked = 0;
@@ -233,6 +293,46 @@ void hal_flash_lock(void)
 {
     flashLocked = 1;
 }
+
+#ifdef DUALBANK_SWAP
+void hal_flash_dualbank_swap(void)
+{
+    uint8_t *boot = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint8_t *update = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint8_t *buffer;
+    int was_locked = flashLocked;
+
+    buffer = (uint8_t *)malloc(WOLFBOOT_PARTITION_SIZE);
+    if (buffer == NULL) {
+        wolfBoot_printf("Simulator dualbank swap failed: out of memory\n");
+        exit(-1);
+    }
+
+    if (was_locked)
+        hal_flash_unlock();
+
+    memcpy(buffer, boot, WOLFBOOT_PARTITION_SIZE);
+    memcpy(boot, update, WOLFBOOT_PARTITION_SIZE);
+    memcpy(update, buffer, WOLFBOOT_PARTITION_SIZE);
+
+    if (msync(boot, WOLFBOOT_PARTITION_SIZE, MS_SYNC) != 0) {
+        wolfBoot_printf("msync boot partition failed: %s\n", strerror(errno));
+    }
+    if (msync(update, WOLFBOOT_PARTITION_SIZE, MS_SYNC) != 0) {
+        wolfBoot_printf("msync update partition failed: %s\n", strerror(errno));
+    }
+
+    free(buffer);
+
+    sim_flash_optr ^= SIM_FLASH_OPTR_SWAP_BANK;
+    sim_dualbank_register_store();
+    wolfBoot_printf("Simulator dualbank swap complete, register=%u\n",
+        hal_sim_get_dualbank_state());
+
+    if (was_locked)
+        hal_flash_lock();
+}
+#endif
 
 void hal_prepare_boot(void)
 {
@@ -311,6 +411,10 @@ void hal_init(void)
         exit(-1);
     }
 #endif /* EXT_FLASH */
+
+#ifdef DUALBANK_SWAP
+    sim_dualbank_register_load();
+#endif
 
     for (i = 1; i < main_argc; i++) {
         if (strcmp(main_argv[i], "powerfail") == 0) {
@@ -480,6 +584,7 @@ void do_boot(const uint32_t *app_offset)
 #endif
 #endif
 
+#if !defined(WOLFBOOT_DUALBOOT)
 int wolfBoot_fallback_is_possible(void)
 {
     return 0;
@@ -489,6 +594,7 @@ int wolfBoot_dualboot_candidate(void)
 {
     return 0;
 }
+#endif
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 

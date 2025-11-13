@@ -31,6 +31,7 @@ The following options are supported:
 - `--der` save generated private key in DER format.
 - `--exportpubkey` to export the public key (corresponding to the private key generated with `-g`) to a DER file. This option only has an effect if used in conjunction with the `-g` option.
 - `--nolocalkeys` to generate a keystore entry with zeroized key material. This option is only useful on platforms that support using an external key by reference, such as wolfHSM. Only has an effect if used in conjunction with the `-g` option.
+- `--no-overwrite` to avoid prompt warning that keyfiles files already exist. This option ensures existing files are not overwritten.
 
 Arguments are not exclusive, and can be repeated more than once to populate a keystore with multiple keys.
 
@@ -185,7 +186,7 @@ Options:
     By default, the sign tool appends the sha of the base image to the manifest header,
     so wolfBoot will refuse to start a delta update if the sha does not match the
     one of the existing image. However, this takes up 32 to 48 bytes extra in the
-    manifest header, so this option is available to provide compatibility on 
+    manifest header, so this option is available to provide compatibility on
     existing installations without this feature, where the header size does not
     allow to accommodate the field
 

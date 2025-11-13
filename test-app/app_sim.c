@@ -30,6 +30,10 @@
 
 #include "wolfboot/wolfboot.h"
 
+#ifdef DUALBANK_SWAP
+uint32_t hal_sim_get_dualbank_state(void);
+#endif
+
 #ifdef TARGET_sim
 
 /* Matches all keys:
@@ -72,6 +76,12 @@ int do_cmd(const char *cmd)
         wolfBoot_success();
         return 0;
     }
+#ifdef DUALBANK_SWAP
+    if (strcmp(cmd, "get_swap_state") == 0) {
+        printf("%u\n", hal_sim_get_dualbank_state());
+        return 0;
+    }
+#endif
     if (strcmp(cmd, "update_trigger") == 0) {
 #if EXT_ENCRYPTED
         wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));

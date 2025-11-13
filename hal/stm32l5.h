@@ -203,7 +203,7 @@
 #define FLASH_CR_PER                        (1 << 1)
 #define FLASH_CR_MER1                       (1 << 2)
 #define FLASH_CR_PNB_SHIFT                  3
-#define FLASH_CR_PNB_MASK                   0x7F
+#define FLASH_CR_PNB_MASK                   0x7F /* up to 127 pages */
 #define FLASH_CR_BKER                       (1 << 11)
 #define FLASH_CR_MER2                       (1 << 15)
 #define FLASH_CR_STRT                       (1 << 16)
