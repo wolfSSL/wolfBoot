@@ -503,10 +503,10 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     }
     fprintf(fpub, Pubkey_footer);
     fprintf(fpub, Slot_footer);
-    printf("Associated key file:   %s\n", keyfile);
+    printf("Associated key file:  %s\n", keyfile);
     printf("Partition ids mask:   %08x\n", id_mask);
-    printf("Key type   :           %s\n", KName[ktype]);
-    printf("Public key slot:       %u\n", id_slot);
+    printf("Key type:             %s\n", KName[ktype]);
+    printf("Public key slot:      %u\n", id_slot);
     if (noLocalKeys) {
         printf("WARNING: --nolocalkeys flag used, keystore.c public key is zeroed\n");
     }
@@ -1089,7 +1089,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (exportPubKey) {
         if (saveAsDer) {
             uint8_t*  pubDer;
-            size_t    pubDerSz;
+            word32    pubDerSz;
             int       pubOutLen;
             const int WITH_ALG_SPKI = 1;
 
@@ -1349,10 +1349,11 @@ int main(int argc, char** argv)
     uint32_t n_pubkeys = 0;
     uint32_t part_id_mask = 0xFFFFFFFF; /* Default: key verify all */
 
+    printf("wolfBoot KeyGen\n");
 #ifdef DEBUG_SIGNTOOL
     wolfSSL_Debugging_ON();
 #endif
-    printf("Keystore size: %lu\n", (unsigned long)sizeof(struct keystore_slot));
+    printf("Keystore size:        %lu\n", (unsigned long)sizeof(struct keystore_slot));
 
     /* Check arguments and print usage */
     if (argc < 2)
@@ -1436,6 +1437,7 @@ int main(int argc, char** argv)
             i++;
             sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c");
             sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der");
+            printf("Saving keystore file: %s\n", pubkeyfile);
             i++;
             continue;
         }
@@ -1453,20 +1455,23 @@ int main(int argc, char** argv)
             usage(argv[0]);
         }
     }
-    printf("Keytype: %s\n", KName[keytype]);
-    if (keytype == 0)
+    printf("Selected Keytype:     %s\n", KName[keytype]);
+    if (keytype == 0) {
+        fprintf(stderr, "No keytype, exiting...");
         exit(0);
+    }
     fpub = fopen(pubkeyfile, "rb");
     if (!force && (fpub != NULL)) {
         char reply[40];
         int replySz;
-        printf("** Warning: keystore already exists! Are you sure you want to generate a new key and overwrite the existing key? [Type 'Yes']: ");
+        printf("** Warning: keystore file already exists! %s\n", pubkeyfile);
+        printf("Are you sure you want to generate a new key and overwrite the existing key ? [Type 'Yes'] : ");
         fflush(stdout);
         replySz = scanf("%s", reply);
         printf("Reply is [%s]\n", reply);
         fclose(fpub);
         if (replySz < 0 || strcmp(reply, "Yes") != 0) {
-            printf("Operation aborted by user.");
+            printf("Operation aborted by user.\n");
             exit(5);
         } else {
             unlink(pubkeyfile);
