@@ -101,7 +101,7 @@ ifeq ($(ARCH),AARCH64)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm64.o
   endif
-  ifeq ($(NO_ARM_ASM),0)
+  ifneq ($(NO_ARM_ASM),1)
     ARCH_FLAGS=-mstrict-align
     CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8 -DWOLFSSL_AARCH64_PRIVILEGE_MODE
     WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
@@ -250,7 +250,6 @@ ifeq ($(ARCH),ARM)
     WOLFBOOT_ORIGIN=0x10000000
     ifeq ($(TZEN),1)
       LSCRIPT_IN=hal/$(TARGET).ld
-      CFLAGS+=-DTZEN
     else
       LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
@@ -322,7 +321,6 @@ else
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
-
 
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
                               -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
@@ -418,10 +416,6 @@ else
   endif
 endif
 endif
-endif
-
-ifeq ($(TZEN),1)
-  CFLAGS+=-DTZEN
 endif
 
 

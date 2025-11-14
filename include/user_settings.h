@@ -410,6 +410,7 @@ extern int tolower(int c);
     #ifndef XTPM_WAIT
         #define XTPM_WAIT() /* no delay */
     #endif
+    #define HASH_COUNT 3 /* enable more PCR hash types */
 
     /* TPM remap printf */
     #if defined(DEBUG_WOLFTPM) && !defined(ARCH_SIM)

@@ -90,6 +90,7 @@ ifeq ($(TZEN),1)
     ifeq ($(WOLFCRYPT_TZ),1)
         APP_OBJS+=../src/wc_secure_calls.o
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
+            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
             CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
             CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFPKCS11)"
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
@@ -117,6 +118,15 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/coding.o
             APP_OBJS+=./wcs/wc_encrypt.o
             APP_OBJS+=./wcs/wc_port.o
+
+            ifeq ($(SPMATH),1)
+              CFLAGS+=-DWOLFSSL_HAVE_SP_RSA -DWOLFSSL_HAVE_SP_ECC
+              ifneq ($(NO_ASM),1)
+                CFLAGS+=-fomit-frame-pointer # required with debug builds only
+                CFLAGS+=-DWOLFSSL_SP_ARM_CORTEX_M_ASM
+                APP_OBJS+=./wcs/sp_cortexm.o
+              endif
+            endif
         endif
         CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
         LDFLAGS+=--specs=nosys.specs -u _printf_float
