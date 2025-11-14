@@ -85,7 +85,7 @@ int hal_flash_test(void)
 int hal_flash_test_write_once(void)
 {
     uint8_t test_byte, expected_byte;
-    unsigned int i, b;
+    unsigned int b;
     int ret = 0;
 
     /* Erase the test sector */
@@ -116,7 +116,7 @@ int hal_flash_test_write_once(void)
 
         /* Verify the write by direct comparison */
         if (memcmp((void*)TEST_ADDRESS, &expected_byte, sizeof(expected_byte)) != 0) {
-            wolfBoot_printf("Verification failed at byte %d, bit %d\n", i, b);
+            wolfBoot_printf("Verification failed at byte %d\n", b);
             return -1;
         }
     }
@@ -217,7 +217,7 @@ int hal_flash_test_unaligned_src(void)
     return 0;
 }
 
-#endif /* TEST_FLASH_READONLY */
+#endif /* !TEST_FLASH_READONLY */
 
 /* This test can be run only if swapping the flash do not reboot the board */
 #if defined(DUALBANK_SWAP) && !defined(TEST_FLASH_READONLY)

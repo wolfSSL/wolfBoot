@@ -26,6 +26,8 @@ In terms of relative tradeoffs:
 See these config files for simulated target examples:
 
 - `config/examples/sim-ml-dsa.config`
+- `config/examples/sim-ml-dsa3.config`
+- `config/examples/sim-ml-dsa5.config`
 - `config/examples/sim-lms.config`
 - `config/examples/sim-xmss.config`
 
@@ -60,15 +62,16 @@ all depend on the parameter set:
 
 ### ML-DSA Config
 
-A new ML-DSA sim example has been added here:
+See ML-DSA sim examples here:
 
 ```
 config/examples/sim-ml-dsa.config
+config/examples/sim-ml-dsa3.config
+config/examples/sim-ml-dsa5.config
 ```
 
 The security category level is configured with `ML_DSA_LEVEL=<num>`, where
-num = 2, 3, 5. Here is an example from the `sim-ml-dsa.config` for category
-2:
+num = 2, 3, 5. Here is an example for level 2:
 
 ```
 # ML-DSA config examples:
