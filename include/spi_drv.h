@@ -42,7 +42,8 @@
 
 #if defined(TARGET_stm32f4) || defined(TARGET_stm32f7) || \
     defined(TARGET_stm32wb) || defined(TARGET_stm32l0) || \
-    defined(TARGET_stm32u5) || defined(TARGET_stm32h7)
+    defined(TARGET_stm32u5) || defined(TARGET_stm32h7) || \
+    defined(TARGET_stm32h5)
     #define WOLFBOOT_STM32_SPIDRV
 #include "hal/spi/spi_drv_stm32.h"
 #endif

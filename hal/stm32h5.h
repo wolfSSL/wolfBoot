@@ -39,14 +39,22 @@
 #endif
 
 /* STM32 H5 register configuration */
-/*** RCC ***/
+
 #if TZ_SECURE()
-/*Secure */
-#define RCC_BASE            (0x54020c00)   /* RM0481 - Table 3 */
+#define PERIPH_BASE (0x50000000UL)
 #else
-/*Non-Secure */
-#define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
+#define PERIPH_BASE (0x40000000UL)
 #endif
+
+#define APB2PERIPH_BASE (PERIPH_BASE + 0x00010000UL)
+#define AHB1PERIPH_BASE (PERIPH_BASE + 0x00020000UL)
+#define AHB2PERIPH_BASE (PERIPH_BASE + 0x02020000UL)
+#define APB3PERIPH_BASE (PERIPH_BASE + 0x04000000UL)
+#define AHB3PERIPH_BASE (PERIPH_BASE + 0x04020000UL)
+#define AHB4PERIPH_BASE (PERIPH_BASE + 0x06000000UL)
+
+/*** RCC ***/
+#define RCC_BASE            (AHB3PERIPH_BASE + 0x0C00UL)   /* RM0481 - Table 3 */
 
 #define FLASH_SECURE_MMAP_BASE (0x0C000000)
 #define FLASH_SECURE_MMAP_BIT  (0x04000000)
@@ -91,6 +99,7 @@
 #define RCC_CFGR2_PPRE1_SHIFT       (0x4)
 #define RCC_CFGR2_PPRE2_SHIFT       (0x8)
 #define RCC_CFGR2_PPRE3_SHIFT       (0xC)
+#define RCC_CFGR2_APB2_SHIFT        (1 << 21)
 
 /* PLL1 Configuration */
 #define RCC_PLL1CFGR               (*(volatile uint32_t *)(RCC_BASE + 0x28))  /* RM0481 - Table 108 */
@@ -161,6 +170,8 @@
 
 #define RCC_CCIPR1          (*(volatile uint32_t *)(RCC_BASE + 0xD8))
 #define RCC_CCIPR3          (*(volatile uint32_t *)(RCC_BASE + 0xE0))
+#define RCC_CCIPR3_SPI1SEL_SHIFT (0)
+#define RCC_CCIPR3_SPI1SEL_MASK (0x7)
 #define RCC_CCIPR1_USART3SEL_SHIFT (6)
 #define RCC_CCIPR1_USART3SEL_MASK (0x7)
 #define RCC_CCIPR3_LPUART1SEL_SHIFT (24)
@@ -343,21 +354,16 @@
 #define FLASH_OPTKEY2                         (0x4C5D6E7FU)
 
 /* GPIO*/
-#if (TZ_SECURE())
-#define GPIOA_BASE 0x52020000
-#define GPIOB_BASE 0x52020400
-#define GPIOC_BASE 0x52020800
-#define GPIOD_BASE 0x52020C00
-#define GPIOF_BASE 0x52021400
-#define GPIOG_BASE 0x52021800
-#else
-#define GPIOA_BASE 0x42020000
-#define GPIOB_BASE 0x42020400
-#define GPIOC_BASE 0x42020800
-#define GPIOD_BASE 0x42020C00
-#define GPIOF_BASE 0x42021400
-#define GPIOG_BASE 0x42021800
-#endif
+#define GPIO_BASE  (AHB2PERIPH_BASE)
+#define GPIOA_BASE (GPIO_BASE + 0x0000)
+#define GPIOB_BASE (GPIO_BASE + 0x0400)
+#define GPIOC_BASE (GPIO_BASE + 0x0800)
+#define GPIOD_BASE (GPIO_BASE + 0x0C00)
+#define GPIOE_BASE (GPIO_BASE + 0x1000)
+#define GPIOF_BASE (GPIO_BASE + 0x1400)
+#define GPIOG_BASE (GPIO_BASE + 0x1800)
+#define GPIOH_BASE (GPIO_BASE + 0x1C00)
+#define GPIOI_BASE (GPIO_BASE + 0x2000)
 
 #define GPIOB_MODE  (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
 #define GPIOB_OTYPE (*(volatile uint32_t *)(GPIOB_BASE + 0x04))
@@ -393,16 +399,42 @@
 #define SRAM3_AHB2_CLOCK_ER  (1 << 31)
 
 /* RCC: APB1 and APB2 */
-#define RCC_APB2_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0xA4))
+#define RCC_APB2_CLOCK_ER   (*(volatile uint32_t *)(RCC_BASE + 0xA4))
+#define RCC_APB2_CLOCK_RSTR (*(volatile uint32_t *)(RCC_BASE + 0x7C))
 #define UART1_APB2_CLOCK_ER_VAL (1 << 14)
 
 #define RCC_APB1L_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x9C))
 #define UART3_APB1L_CLOCK_ER_VAL (1 << 18)
 
-#define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
+#define RCC_AHB2ENR_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C))
 
+#define GPIOA_AHB2ENR1_CLOCK_ER (1 << 0)
 #define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
+#define GPIOC_AHB2ENR1_CLOCK_ER (1 << 2)
 #define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
+#define GPIOE_AHB2ENR1_CLOCK_ER (1 << 4)
+#define GPIOF_AHB2ENR1_CLOCK_ER (1 << 5)
+#define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
+#define GPIOH_AHB2ENR1_CLOCK_ER (1 << 7)
+#define GPIOI_AHB2ENR1_CLOCK_ER (1 << 8)
+
+
+#define GPIOG_MODER (*(volatile uint32_t *)(GPIOG_BASE + 0x00))
+#define GPIOG_PUPDR (*(volatile uint32_t *)(GPIOG_BASE + 0x0C))
+#define GPIOG_BSRR  (*(volatile uint32_t *)(GPIOG_BASE + 0x18))
+
+#define GPIOB_MODER (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
+#define GPIOB_PUPDR (*(volatile uint32_t *)(GPIOB_BASE + 0x0C))
+#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
+
+#define GPIOF_MODER (*(volatile uint32_t *)(GPIOF_BASE + 0x00))
+#define GPIOF_PUPDR (*(volatile uint32_t *)(GPIOF_BASE + 0x0C))
+#define GPIOF_BSRR  (*(volatile uint32_t *)(GPIOF_BASE + 0x18))
+
+
+
+/* SPI */
+#define SPI1_BASE       (APB2PERIPH_BASE + 0x3000UL)
 
 
 /* UART */
@@ -478,6 +510,14 @@
 #define LED_BOOT_PIN (4)  /* PG4 - Nucleo board - Orange Led */
 #define LED_USR_PIN (0)   /* PB0  - Nucleo board  - Green Led */
 #define LED_EXTRA_PIN (4) /* PF4 - Nucleo board - Blue Led */
+
+
+/* SysTick */
+#define SYSTICK_BASE    (0xE000E010)
+#define SYSTICK_CSR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x00))
+#define SYSTICK_RVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x04))
+#define SYSTICK_CVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x08))
+#define SYSTICK_CALIB   (*(volatile uint32_t *)(SYSTICK_BASE + 0x0C))
 
 
 #endif /* STM32H5_DEF_INCLUDED */

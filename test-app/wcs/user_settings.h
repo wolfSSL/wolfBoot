@@ -54,15 +54,17 @@ extern int tolower(int c);
 
 
 /* ECC */
+#define ECC_USER_CURVES
 #define HAVE_ECC
-#define HAVE_ECC256
+#undef  NO_ECC256
 #define HAVE_ECC384
-
+#ifdef WOLFSSL_HAVE_SP_ECC
+  #define WOLFSSL_SP_384
+#endif
 
 #ifndef NO_RSA
   /* RSA */
   #define HAVE_RSA
-  #define WOLFSSL_KEY_GEN
   #define RSA_LOW_MEM
   #define WOLFSSL_RSA_VERIFY_INLINE
   #define WC_ASN_HASH_SHA256
@@ -102,6 +104,9 @@ extern int tolower(int c);
 #define WOLFSSL_AES_DIRECT
 #endif
 
+#define HAVE_AESGCM
+#define GCM_TABLE_4BIT
+
 /* Hardening */
 #define TFM_TIMING_RESISTANT
 #define ECC_TIMING_RESISTANT
@@ -134,6 +139,7 @@ extern int tolower(int c);
 #define NO_ERROR_STRINGS
 #define NO_KDF
 
+#define WC_TEST_NO_CRYPTOCB_SW_TEST
 #define BENCH_EMBEDDED
 
 #ifdef SECURE_PKCS11

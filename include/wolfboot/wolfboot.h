@@ -34,9 +34,61 @@ extern "C" {
 #include "target.h"
 #endif
 #include "wolfboot/version.h"
-
-#ifdef WOLFCRYPT_SECURE_MODE
 #include "wolfboot/wc_secure.h"
+
+
+#ifndef RAMFUNCTION
+#  if defined(__WOLFBOOT) && defined(RAM_CODE)
+#    if defined(ARCH_ARM)
+#      define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#    else
+#      define RAMFUNCTION __attribute__((used,section(".ramcode")))
+#    endif
+#  else
+#   define RAMFUNCTION
+#endif
+#endif
+
+#ifndef WEAKFUNCTION
+#  if defined(__GNUC__) || defined(__CC_ARM)
+#    define WEAKFUNCTION __attribute__((weak))
+#  else
+#    define WEAKFUNCTION
+#  endif
+#endif
+
+#ifndef UNUSEDFUNCTION
+#  if defined(__GNUC__) || defined(__CC_ARM)
+#    define UNUSEDFUNCTION __attribute__((unused))
+#  else
+#    define UNUSEDFUNCTION
+#  endif
+#endif
+
+
+/* Helpers for memory alignment */
+#ifndef XALIGNED
+    #if defined(__GNUC__) || defined(__llvm__) || \
+            defined(__IAR_SYSTEMS_ICC__)
+        #define XALIGNED(x) __attribute__ ( (aligned (x)))
+    #elif defined(__KEIL__)
+        #define XALIGNED(x) __align(x)
+    #elif defined(_MSC_VER)
+        /* disable align warning, we want alignment ! */
+        #pragma warning(disable: 4324)
+        #define XALIGNED(x) __declspec (align (x))
+    #else
+        #define XALIGNED(x) /* null expansion */
+    #endif
+#endif
+
+#ifndef XALIGNED_STACK
+    /* Don't enforce stack alignment on IAR */
+    #if defined(__IAR_SYSTEMS_ICC__)
+        #define XALIGNED_STACK(x)
+    #else
+        #define XALIGNED_STACK(x) XALIGNED(x)
+    #endif
 #endif
 
 
@@ -420,28 +472,28 @@ int wolfBoot_erase_encrypt_key(void);
  */
 
 /* Call wolfBoot_success from non-secure application */
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 void wolfBoot_nsc_success(void);
 
 /* Call wolfBoot_update_trigger from non-secure application */
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 void wolfBoot_nsc_update_trigger(void);
 
 /* Call wolfBoot_get_image_version from non-secure application */
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 uint32_t wolfBoot_nsc_get_image_version(uint8_t part);
 #define wolfBoot_nsc_current_firmware_version() wolfBoot_nsc_get_image_version(PART_BOOT)
 #define wolfBoot_nsc_update_firmware_version() wolfBoot_nsc_get_image_version(PART_UPDATE)
 
 /* Call wolfBoot_get_partition_state from non-secure application */
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st);
 
 /* Erase one or more sectors in the update partition.
  * - address: offset within the update partition ('0' corresponds to PARTITION_UPDATE_ADDRESS)
  * - len: size, in bytes
  */
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len);
 
 /* Write the content of buffer `buf` and size `len` to the update partition,
@@ -449,7 +501,7 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len);
  * - address: offset within the update partition ('0' corresponds to PARTITION_UPDATE_ADDRESS)
  * - len: size, in bytes
  */
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len);
 
 #endif /* !__WOLFBOOT && WOLFCRYPT_SECURE_MODE */

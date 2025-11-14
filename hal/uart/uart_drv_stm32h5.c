@@ -34,7 +34,7 @@
 static void uart_pins_setup(void)
 {
     uint32_t reg;
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOB_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER |= GPIOB_AHB2ENR1_CLOCK_ER;
     /* Set mode = AF */
     reg = GPIOB_MODE & ~ (0x03 << (UART1_RX_PIN * 2));
     GPIOB_MODE = reg | (2 << (UART1_RX_PIN * 2));
@@ -52,7 +52,7 @@ static void uart_pins_setup(void)
 static void uart_pins_setup(void)
 {
     uint32_t reg;
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOD_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER |= GPIOD_AHB2ENR1_CLOCK_ER;
     /* Set mode = AF */
     reg = GPIOD_MODE & ~ (0x03 << (UART3_RX_PIN * 2));
     GPIOD_MODE = reg | (2 << (UART3_RX_PIN * 2));
