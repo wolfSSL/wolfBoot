@@ -1250,8 +1250,8 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC) {
-        wolfBoot_printf("Boot header magic 0x%08x invalid at %p\n",
-            (unsigned int)*magic, image);
+        wolfBoot_printf("Partition %d header magic 0x%08x invalid at %p\n",
+            img->part, (unsigned int)*magic, img->hdr);
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
@@ -2141,9 +2141,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      */
     wolfBoot_verify_signature_primary(key_slot, img, stored_signature);
     (void)stored_signature_size;
-    if (img->signature_ok == 1)
+
 #ifdef SIGN_HYBRID
-    {
+    if (img->signature_ok == 1) {
         uint8_t *stored_secondary_signature;
         uint16_t stored_secondary_signature_size;
         /* Invalidate the signature_ok flag */
@@ -2168,9 +2168,10 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             wolfBoot_printf("Done.\n");
         }
     }
-    if (img->signature_ok == 1)
 #endif
+    if (img->signature_ok == 1) {
         return 0;
+    }
     return -2;
 }
 #endif
