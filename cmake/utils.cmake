@@ -18,6 +18,17 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED UTILS_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
+
 # --------------------------------------------------------------------------------------------------
 # Utility for properly installing a file output regardless of if the current configuration is multi
 # config or not
@@ -56,19 +67,30 @@ macro(gen_bin_target_outputs TARGET)
 
     # Create bin from elf target
     add_custom_command(
-        OUTPUT ${FILENAME}.bin
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.bin"
+        COMMAND "${TOOLCHAIN_OBJCOPY}"
+                -O binary "$<TARGET_FILE:${TARGET}>"
+                "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.bin"
         DEPENDS ${TARGET}
-        COMMAND ${TOOLCHAIN_OBJCOPY} -O binary $<TARGET_FILE:${TARGET}>
-                $<TARGET_FILE:${TARGET}>.bin)
+        VERBATIM
+    )
     list(APPEND TARGET_OUTPUTS ${FILENAME}.bin)
 
     # Print size of bin target
     add_custom_command(
-        OUTPUT ${FILENAME}.size
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.size"
         DEPENDS ${TARGET}
-        COMMAND ${TOOLCHAIN_SIZE} $<TARGET_FILE:${TARGET}> | tee $<TARGET_FILE:${TARGET}>.size)
+        COMMAND "${CMAKE_COMMAND}"
+                -DTOOLCHAIN_SIZE=${TOOLCHAIN_SIZE}
+                -DINPUT=$<TARGET_FILE:${TARGET}>
+                -DOUT=${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}.size
+                -P "${SIZE_SCRIPT}"
+        VERBATIM
+    )
     list(APPEND TARGET_OUTPUTS ${FILENAME}.size)
 
     # Add top level target for all MCU standard outputs
     add_custom_target(${FILENAME}_outputs ALL DEPENDS ${TARGET_OUTPUTS})
 endmacro()
+
+set(UTILS_CMAKE_INCLUDED true)

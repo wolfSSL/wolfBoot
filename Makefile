@@ -58,7 +58,7 @@ else
   endif
 endif
 
-WOLFCRYPT_OBJS:=
+WOLFCRYPT_OBJS?=
 SECURE_OBJS:=
 PUBLIC_KEY_OBJS:=
 WOLFHSM_OBJS:=
@@ -92,7 +92,26 @@ include arch.mk
 # Parse config options
 include options.mk
 
-OBJS+=$(WOLFCRYPT_OBJS)
+
+# ==== VisualGDB remap (opt-in) ==============================================
+# Only active if VISUALGDB=1 is set (e.g., in .config or on the CLI).
+ifeq ($(VISUALGDB),1)
+-include tools/visualgdb.mk
+else
+  OBJS+=$(WOLFCRYPT_OBJS)
+endif
+# ============================================================================
+
+-include .config
+
+$(info WOLFCRYPT_OBJS=$(WOLFCRYPT_OBJS))
+$(info MATH_OBJS=$(MATH_OBJS))
+
+
+$(info SIGN=$(SIGN))
+$(info WOLFCRYPT_OBJS=$(WOLFCRYPT_OBJS))
+
+
 OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(WOLFHSM_OBJS)
 
@@ -101,6 +120,8 @@ CFLAGS+= \
   -Wno-array-bounds \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS"
+
+CFLAGS += $(EXTRA_CFLAGS)
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
@@ -134,6 +155,7 @@ SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) \
 MAIN_TARGET=factory.bin
 TARGET_H_TEMPLATE:=include/target.h.in
 
+# TZEN only for TrustZone-capable parts (L5/U5/H5)
 ifeq ($(TZEN),1)
 ifeq ($(TARGET),stm32l5)
 	# Don't build a contiguous image
@@ -381,6 +403,10 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 # stage1 linker script embed wolfboot.bin inside stage1/loader_stage1.bin
 wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
+
+lib/wolfssl/wolfcrypt/src/%.o: lib/wolfssl/wolfcrypt/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (grep -q $(SIGN_ALG) src/keystore.c) || \
