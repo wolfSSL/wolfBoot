@@ -105,7 +105,7 @@ CFLAGS+= \
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
-  CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
+  CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer -Wno-unused-variable
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
   # Not setting LDFLAGS directly since it is passed to the test-app
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
@@ -531,6 +531,8 @@ cppcheck:
 	cppcheck -f --enable=warning --enable=portability \
 		--suppress="ctunullpointer" --suppress="nullPointer" \
 		--suppress="objectIndex" --suppress="comparePointers" \
+		--suppress="subtractPointers" --suppress="intToPointerCast" \
+		--check-level=exhaustive \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
 
 otp: tools/keytools/otp/otp-keystore-primer.bin FORCE

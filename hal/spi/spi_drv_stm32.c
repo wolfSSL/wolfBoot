@@ -83,6 +83,8 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
 
     /* Enable GPIO clock */
     RCC_GPIO_CLOCK_ER |= (1 << base_num);
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_GPIO_CLOCK_ER;
 
     /* Set Mode and Alternate Function */
     reg = GPIO_MODE(base) & ~(0x03UL << (pin * 2));
@@ -112,6 +114,10 @@ void RAMFUNCTION stm_gpio_config(uint32_t base, uint32_t pin, uint32_t mode,
     /* configure output speed 0=low, 1=med, 2=high, 3=very high */
     reg = GPIO_OSPD(base) & ~(0x03UL << (pin * 2));
     GPIO_OSPD(base) |= (speed << (pin * 2));
+
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+    /* TODO: Consider setting GPIO_SECCFGR(base) */
+#endif
 }
 
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
@@ -369,24 +375,14 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 uint8_t RAMFUNCTION spi_read(void)
 {
-    volatile uint32_t reg;
-    do {
-        reg = SPI1_SR;
-    } while(!(reg & SPI_SR_RX_NOTEMPTY));
-    return (uint8_t)SPI1_DR;
+    while (!(SPI1_SR & SPI_SR_RX_NOTEMPTY));
+    return SPI1_RXDR;
 }
 
 void RAMFUNCTION spi_write(const char byte)
 {
-    int i;
-    volatile uint32_t reg;
-    do {
-        reg = SPI1_SR;
-    } while ((reg & SPI_SR_TX_EMPTY) == 0);
-    SPI1_DR = byte;
-    do {
-        reg = SPI1_SR;
-    } while ((reg & SPI_SR_TX_EMPTY) == 0);
+    while (!(SPI1_SR & SPI_SR_TX_EMPTY));
+    SPI1_TXDR = (uint8_t)byte;
 }
 #endif /* SPI_FLASH || WOLFBOOT_TPM */
 
@@ -398,7 +394,6 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 
 /* Setup clocks */
 #if defined(QSPI_FLASH) || defined(OCTOSPI_FLASH)
-
     #ifdef TARGET_stm32u5
         /* Clock configuration for QSPI defaults to SYSCLK
          * (RM0456 section 11.8.47)
@@ -413,6 +408,10 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         APB2_CLOCK_ER |= SPI1_APB2_CLOCK_ER_VAL;
+        #ifdef TARGET_stm32h5
+        RCC_CCIPR3 &= ~ (RCC_CCIPR3_SPI1SEL_MASK << RCC_CCIPR3_SPI1SEL_SHIFT);
+        RCC_CCIPR3 |= (0 << RCC_CCIPR3_SPI1SEL_SHIFT); /* PLL1_Q */
+        #endif
 #endif
 
         /* reset peripheral before setting up GPIO pins */
@@ -486,14 +485,39 @@ void RAMFUNCTION spi_init(int polarity, int phase)
 #endif
 #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
         /* Configure SPI1 for master mode */
-#   ifdef TARGET_stm32l0
-        SPI1_CR1 = SPI_CR1_MASTER | (polarity << 1) | (phase << 0);
-#   else
-        /* baud rate 5 (hclk/6) */
-        SPI1_CR1 = SPI_CR1_MASTER | (5 << 3) | (polarity << 1) | (phase << 0);
-#   endif
+        SPI1_CR1 &= ~SPI_CR1_SPI_EN;
+    #if defined(TARGET_stm32h5)
+        /* Clear any faults in the status register */
+        SPI1_IFCR = (SPI_IFCR_SUSPC | SPI_IFCR_MODFC | SPI_IFCR_TIFREC |
+                     SPI_IFCR_OVRC | SPI_IFCR_UDRC);
+
+        /* baud rate 2 (hclk/8), data size (8-bits), CRC Size (8-bits),
+         * FIFO threshold level (1-data) */
+        SPI1_CFG1 = (
+            ((2 & SPI_CFG1_BAUDRATE_MASK) << SPI_CFG1_BAUDRATE_SHIFT) |
+            ((7 & SPI_CFG1_CRCSIZE_MASK) << SPI_CFG1_CRCSIZE_SHIFT) |
+            ((0 & SPI_CFG1_FTHLV_MASK) << SPI_CFG1_FTHLV_SHIFT) |
+            ((7 & SPI_CFG1_DSIZE_MASK) << SPI_CFG1_DSIZE_SHIFT));
+        SPI1_CFG2 = SPI_CFG2_MASTER | SPI_CFG2_SSOE |
+            (polarity << SPI_CFG2_CLOCK_POL_SHIFT) |
+            (phase << SPI_CFG2_CLOCK_PHASE_SHIFT);
+    #else
+        #ifndef TARGET_stm32l0 /* use existing/default baud for L0 */
+        /* Baud rate 5 (hclk/6), data size 8 bits */
+        SPI1_CR1 |= ((5 & SPI_CR1_BAUDRATE_MASK) << SPI_CR1_BAUDRATE_SHIFT);
+        #endif
+        SPI1_CR1 &= ~((1 << SPI_CR1_CLOCK_POL_SHIFT) | (1 << SPI_CR1_CLOCK_PHASE_SHIFT));
+        SPI1_CR1 |= SPI_CR1_MASTER |
+            (polarity << SPI_CR1_CLOCK_POL_SHIFT) |
+            (phase << SPI_CR1_CLOCK_PHASE_SHIFT);
         SPI1_CR2 |= SPI_CR2_SSOE;
-        SPI1_CR1 |= SPI_CR1_SPI_EN;
+    #endif
+
+        SPI1_CR1 |= SPI_CR1_SPI_EN; /* Enable SPI */
+
+    #ifdef SPI_CR1_CSTART
+        SPI1_CR1 |= SPI_CR1_CSTART; /* use continuous start mode */
+    #endif
 #endif /* SPI_FLASH || WOLFBOOOT_TPM */
     }
 }
@@ -505,8 +529,12 @@ void RAMFUNCTION spi_release(void)
     }
     if (initialized == 0) {
         spi_reset();
-    #if defined (SPI_FLASH) || defined(WOLFBOOT_TPM)
+    #if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
+        #if defined(TARGET_stm32h5)
+        SPI1_CFG2 &= ~SPI_CFG2_SSOE;
+        #else
         SPI1_CR2 &= ~SPI_CR2_SSOE;
+        #endif
         SPI1_CR1 = 0;
     #endif
         stm_pins_release();
