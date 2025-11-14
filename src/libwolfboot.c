@@ -2021,31 +2021,31 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif /* EXT_ENCRYPTED */
 
 #if defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 void wolfBoot_nsc_success(void)
 {
     wolfBoot_success();
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 void wolfBoot_nsc_update_trigger(void)
 {
     wolfBoot_update_trigger();
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 uint32_t wolfBoot_nsc_get_image_version(uint8_t part)
 {
     return wolfBoot_get_image_version(part);
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st)
 {
     return wolfBoot_get_partition_state(part, st);
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
 {
     int ret;
@@ -2061,7 +2061,7 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
     return ret;
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len)
 {
     int ret;

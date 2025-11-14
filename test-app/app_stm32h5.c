@@ -35,6 +35,10 @@
 #include "target.h"
 #include "image.h"
 
+#ifdef WOLFBOOT_TPM
+#include "tpm.h"
+#endif
+
 #ifdef SECURE_PKCS11
 #include "wcs/user_settings.h"
 #include "wolfssl/wolfcrypt/settings.h"
@@ -55,44 +59,16 @@ static uint32_t uart_processed = 0;
 static int uart_rx_isr(unsigned char *c, int len);
 static int uart_poll(void);
 
-#define LED_BOOT_PIN (4) /* PG4 - Nucleo - Red Led */
-#define LED_USR_PIN  (0) /* PB0 - Nucleo - Green Led */
-#define LED_EXTRA_PIN  (4) /* PF4 - Nucleo - Orange Led */
+#define LED_BOOT_PIN  (4) /* PG4 - Nucleo - Red Led */
+#define LED_USR_PIN   (0) /* PB0 - Nucleo - Green Led */
+#define LED_EXTRA_PIN (4) /* PF4 - Nucleo - Orange Led */
 
 #define NVIC_USART3_IRQN (60)
 
-/*Non-Secure */
-#define RCC_BASE            (0x44020C00)   /* RM0481 - Table 3 */
-#define GPIOG_BASE 0x42021800
-#define GPIOB_BASE 0x42020400
-#define GPIOF_BASE 0x42021400
-
-#define GPIOG_MODER (*(volatile uint32_t *)(GPIOG_BASE + 0x00))
-#define GPIOG_PUPDR (*(volatile uint32_t *)(GPIOG_BASE + 0x0C))
-#define GPIOG_BSRR  (*(volatile uint32_t *)(GPIOG_BASE + 0x18))
-
-#define GPIOB_MODER (*(volatile uint32_t *)(GPIOB_BASE + 0x00))
-#define GPIOB_PUPDR (*(volatile uint32_t *)(GPIOB_BASE + 0x0C))
-#define GPIOB_BSRR  (*(volatile uint32_t *)(GPIOB_BASE + 0x18))
-
-#define GPIOF_MODER (*(volatile uint32_t *)(GPIOF_BASE + 0x00))
-#define GPIOF_PUPDR (*(volatile uint32_t *)(GPIOF_BASE + 0x0C))
-#define GPIOF_BSRR  (*(volatile uint32_t *)(GPIOF_BASE + 0x18))
-
-#define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
-#define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
-#define GPIOF_AHB2ENR1_CLOCK_ER (1 << 5)
-#define GPIOB_AHB2ENR1_CLOCK_ER (1 << 1)
-#define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
 
 /* SysTick */
 static uint32_t cpu_freq = 250000000;
 
-#define SYSTICK_BASE (0xE000E010)
-#define SYSTICK_CSR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x00))
-#define SYSTICK_RVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x04))
-#define SYSTICK_CVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x08))
-#define SYSTICK_CALIB   (*(volatile uint32_t *)(SYSTICK_BASE + 0x0C))
 
 int clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
@@ -119,9 +95,9 @@ static void boot_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_BOOT_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOG_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER |= GPIOG_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
-    reg = RCC_AHB2ENR1_CLOCK_ER;
+    reg = RCC_AHB2ENR_CLOCK_ER;
 
     reg = GPIOG_MODER & ~(0x03 << (pin * 2));
     GPIOG_MODER = reg | (1 << (pin * 2));
@@ -139,9 +115,9 @@ void usr_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_USR_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOB_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER |= GPIOB_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
-    reg = RCC_AHB2ENR1_CLOCK_ER;
+    reg = RCC_AHB2ENR_CLOCK_ER;
 
     reg = GPIOB_MODER & ~(0x03 << (pin * 2));
     GPIOB_MODER = reg | (1 << (pin * 2));
@@ -159,9 +135,9 @@ void extra_led_on(void)
     uint32_t reg;
     uint32_t pin = LED_EXTRA_PIN;
 
-    RCC_AHB2ENR1_CLOCK_ER|= GPIOF_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR_CLOCK_ER|= GPIOF_AHB2ENR1_CLOCK_ER;
     /* Delay after an RCC peripheral clock enabling */
-    reg = RCC_AHB2ENR1_CLOCK_ER;
+    reg = RCC_AHB2ENR_CLOCK_ER;
 
     reg = GPIOF_MODER & ~(0x03 << (pin * 2));
     GPIOF_MODER = reg | (1 << (pin * 2));
@@ -173,9 +149,6 @@ void extra_led_off(void)
 {
     GPIOF_BSRR |= (1 << (LED_EXTRA_PIN + 16));
 }
-
-static char CaBuf[2048];
-static uint8_t my_pubkey[200];
 
 extern int ecdsa_sign_verify(int devId);
 
@@ -191,7 +164,15 @@ static int cmd_timestamp(const char *args);
 static int cmd_update(const char *args);
 static int cmd_update_xmodem(const char *args);
 static int cmd_reboot(const char *args);
-
+#ifdef WOLFBOOT_TPM
+static int cmd_tpm_info(const char *args);
+#ifdef WOLFTPM_MFG_IDENTITY
+static int cmd_tpm_idevid(const char *args);
+static int cmd_tpm_iak(const char *args);
+static int cmd_tpm_signed_timestamp(const char *args);
+static int cmd_tpm_quote(const char *args);
+#endif
+#endif
 
 
 #define CMD_BUFFER_SIZE 256
@@ -208,17 +189,26 @@ struct console_command {
 
 struct console_command COMMANDS[] =
 {
-     { cmd_help, "help", "shows this help message"},
-     { cmd_info, "info", "display information about the system and partitions"},
-     { cmd_success, "success", "confirm a successful update"},
-     { cmd_login_pkcs11, "pkcs11", "enable and test crypto calls with PKCS11 in secure mode" },
-     { cmd_random, "random", "generate a random number"},
-     { cmd_timestamp, "timestamp", "print the current timestamp"},
-     { cmd_benchmark, "benchmark", "run the wolfCrypt benchmark"},
-     { cmd_test, "test", "run the wolfCrypt test"},
-     { cmd_update_xmodem, "update", "update the firmware via XMODEM"},
-     { cmd_reboot, "reboot", "reboot the system"},
-     { NULL, "", ""}
+    {cmd_help, "help", "shows this help message"},
+    {cmd_info, "info", "display information about the system and partitions"},
+    {cmd_success, "success", "confirm a successful update"},
+    {cmd_login_pkcs11, "pkcs11", "enable and test crypto calls with PKCS11 in secure mode" },
+    {cmd_random, "random", "generate a random number"},
+    {cmd_timestamp, "timestamp", "print the current systick/timestamp"},
+    {cmd_benchmark, "benchmark", "run the wolfCrypt benchmark"},
+    {cmd_test, "test", "run the wolfCrypt test"},
+    {cmd_update_xmodem, "update", "update the firmware via XMODEM"},
+    {cmd_reboot, "reboot", "reboot the system"},
+#ifdef WOLFBOOT_TPM
+    {cmd_tpm_info, "tpm", "get TPM capabilities"},
+#ifdef WOLFTPM_MFG_IDENTITY
+    {cmd_tpm_idevid, "idevid", "show Initial Device Identification (IDevID) certificate"},
+    {cmd_tpm_iak, "iak", "show Initial Attestation Identification (IAK) certificate"},
+    {cmd_tpm_signed_timestamp, "signed_time", "TPM IAK signed timestamp attestation report"},
+    {cmd_tpm_quote, "quote", "TPM IAK signed PCR(s) attestation report"},
+#endif
+#endif
+    {NULL, "", ""}
 };
 
 #define AIRCR *(volatile uint32_t *)(0xE000ED0C)
@@ -453,9 +443,47 @@ static const char *part_state_name(uint8_t state)
     }
 }
 
+#define LINE_LEN 16
+void print_hex(const uint8_t* buffer, uint32_t length, int dumpChars)
+{
+    uint32_t i, sz;
+
+    if (!buffer) {
+        printf("\tNULL\n");
+        return;
+    }
+
+    while (length > 0) {
+        sz = length;
+        if (sz > LINE_LEN)
+            sz = LINE_LEN;
+
+        printf("\t");
+        for (i = 0; i < LINE_LEN; i++) {
+            if (i < length)
+                printf("%02x ", buffer[i]);
+            else
+                printf("   ");
+        }
+        if (dumpChars) {
+            printf("| ");
+            for (i = 0; i < sz; i++) {
+                if (buffer[i] > 31 && buffer[i] < 127)
+                    printf("%c", buffer[i]);
+                else
+                    printf(".");
+            }
+        }
+        printf("\r\n");
+
+        buffer += sz;
+        length -= sz;
+    }
+}
+
 static int cmd_info(const char *args)
 {
-    int i, j;
+    int i;
     uint32_t cur_fw_version, update_fw_version;
     uint32_t n_keys;
     uint16_t hdrSz;
@@ -511,13 +539,7 @@ static int cmd_info(const char *args)
         printf("  Public Key #%d: size %lu, type %lx, mask %08lx\r\n", i,
                 size, type, mask);
         printf("  ====================================\r\n  ");
-        for (j = 0; j < size; j++) {
-            printf("%02X ", keybuf[j]);
-            if (j % 16 == 15) {
-                printf("\r\n  ");
-            }
-        }
-        printf("\r\n");
+        print_hex(keybuf, size, 0);
     }
     return 0;
 }
@@ -564,9 +586,10 @@ static int cmd_timestamp(const char *args)
 {
     struct timespec tp = {};
     clock_gettime(0, &tp);
-    printf("Current timestamp: %llu.%03lu\r\n", tp.tv_sec, tp.tv_nsec/1000000);
+    printf("Current timestamp: %lu.%03lu\r\n",
+        (long unsigned int)tp.tv_sec, tp.tv_nsec/1000000);
     printf("Current systick: %u\r\n", jiffies);
-    printf("VTOR: %08lx\r\n", (*(volatile uint32_t *)(0xE000ED08)));
+    printf("VTOR: 0x%08lx\r\n", (*(volatile uint32_t *)(0xE000ED08)));
     return 0;
 }
 
@@ -686,6 +709,276 @@ static int cmd_test(const char *args)
 #endif
     return 0;
 }
+
+#ifdef WOLFBOOT_TPM
+#include <wolftpm/tpm2.h>
+#include <wolftpm/tpm2_wrap.h>
+
+static int TPM2_PCRs_Print(void)
+{
+    int rc;
+    int pcrCount, pcrIndex;
+    GetCapability_In  capIn;
+    GetCapability_Out capOut;
+    TPML_PCR_SELECTION* pcrSel;
+    char algName[24];
+
+    /* List available PCR's */
+    XMEMSET(&capIn, 0, sizeof(capIn));
+    capIn.capability = TPM_CAP_PCRS;
+    capIn.property = 0;
+    capIn.propertyCount = 1;
+    rc = wolfBoot_tpm2_get_capability(&capIn, &capOut);
+    if (rc == TPM_RC_SUCCESS) {
+        pcrSel = &capOut.capabilityData.data.assignedPCR;
+        printf("Assigned PCR's:\r\n");
+        for (pcrCount=0; pcrCount < (int)pcrSel->count; pcrCount++) {
+
+            printf("\t%s: ", wolfBoot_tpm2_get_alg_name(
+                pcrSel->pcrSelections[pcrCount].hash, algName, sizeof(algName)));
+            for (pcrIndex=0;
+                pcrIndex<pcrSel->pcrSelections[pcrCount].sizeofSelect*8;
+                pcrIndex++) {
+                if ((pcrSel->pcrSelections[pcrCount].pcrSelect[pcrIndex/8] &
+                        ((1 << (pcrIndex % 8)))) != 0) {
+                    printf(" %d", pcrIndex);
+                }
+            }
+            printf("\r\n");
+        }
+    }
+    return rc;
+}
+
+static int cmd_tpm_info(const char *args)
+{
+    int rc;
+    WOLFTPM2_CAPS caps;
+    TPML_HANDLE handles;
+#ifdef WOLFBOOT_MEASURED_PCR_A
+    byte hashBuf[TPM_MAX_DIGEST_SIZE];
+    int hashSz;
+#endif
+
+    printf("Get TPM 2.0 module information\r\n");
+
+    rc = wolfBoot_tpm2_caps(&caps);
+    if (rc == 0) {
+        printf("Mfg %s (%d), Vendor %s, Fw %u.%u (0x%x), "
+            "FIPS 140-2 %d, CC-EAL4 %d\r\n",
+            caps.mfgStr, caps.mfg, caps.vendorStr, caps.fwVerMajor,
+            caps.fwVerMinor, caps.fwVerVendor, caps.fips140_2, caps.cc_eal4);
+    }
+
+    /* List the active persistent handles */
+    rc = wolfBoot_tpm2_get_handles(PERSISTENT_FIRST, &handles);
+    if (rc >= 0) {
+        int i;
+        printf("Found %d persistent handles\r\n", rc);
+        for (i=0; i<(int)handles.count; i++) {
+            printf("\tHandle 0x%x\r\n", (unsigned int)handles.handle[i]);
+        }
+        rc = 0;
+    }
+
+    /* Print the available PCR's */
+    if (rc == 0) {
+        rc = TPM2_PCRs_Print();
+    }
+
+#ifdef WOLFBOOT_MEASURED_PCR_A
+    /* Read measured boot PCR */
+    if (rc == 0) {
+        char algName[24];
+        printf("Measured boot: PCR %d - %s\r\n", WOLFBOOT_MEASURED_PCR_A,
+            wolfBoot_tpm2_get_alg_name(WOLFBOOT_TPM_PCR_ALG, algName, sizeof(algName)));
+        hashSz = 0;
+        rc = wolfBoot_tpm2_read_pcr(WOLFBOOT_MEASURED_PCR_A, hashBuf, &hashSz);
+        if (rc == 0) {
+            int i;
+            printf("PCR (%d bytes): ", hashSz);
+            for (i = 0; i < hashSz; i++) {
+                printf("%02x", hashBuf[i]);
+            }
+            printf("\r\n");
+        }
+    }
+#endif
+
+    if (rc != 0) {
+        char error[100];
+        printf("TPM error 0x%x: %s\r\n",
+            rc, wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
+    }
+
+    return rc;
+}
+
+#ifdef WOLFTPM_MFG_IDENTITY
+
+/* Forward declarations */
+static void print_signature(const TPMT_SIGNATURE* sig);
+
+static int cmd_tpm_idevid(const char *args)
+{
+    int rc;
+    uint8_t cert[1024];
+    uint32_t certSz = (uint32_t)sizeof(cert);
+    uint32_t handle = TPM2_IDEVID_CERT_HANDLE;
+
+    rc = wolfBoot_tpm2_read_cert(handle, cert, &certSz);
+    if (rc == 0) {
+        printf("IDevID Handle 0x%x\r\n", (unsigned int)handle);
+        print_hex(cert, certSz, 1);
+    }
+    else {
+        char error[100];
+        printf("TPM error 0x%x: %s\r\n",
+            rc, wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
+    }
+    return rc;
+}
+
+static int cmd_tpm_iak(const char *args)
+{
+    int rc;
+    uint8_t cert[1024];
+    uint32_t certSz = (uint32_t)sizeof(cert);
+    uint32_t handle = TPM2_IAK_CERT_HANDLE;
+
+    rc = wolfBoot_tpm2_read_cert(handle, cert, &certSz);
+    if (rc == 0) {
+        printf("IAK Handle 0x%x\r\n", (unsigned int)handle);
+        print_hex(cert, certSz, 1);
+    }
+    else {
+        char error[100];
+        printf("TPM error 0x%x: %s\r\n",
+            rc, wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
+    }
+    return rc;
+}
+
+static int cmd_tpm_signed_timestamp(const char *args)
+{
+    int rc;
+    WOLFTPM2_KEY aik;
+    GetTime_Out getTime;
+    TPMS_ATTEST timeAttest;
+
+    rc = wolfBoot_tpm2_get_aik(&aik, NULL, 0);
+    if (rc == 0) {
+        rc = wolfBoot_tpm2_get_timestamp(&aik, &getTime);
+    }
+    if (rc == 0) {
+        rc = wolfBoot_tpm2_parse_attest(&getTime.timeInfo, &timeAttest);
+    }
+    if (rc == 0) {
+        if (timeAttest.magic != TPM_GENERATED_VALUE) {
+            printf("\tError, attested data not generated by the TPM = 0x%X\n",
+                (unsigned int)timeAttest.magic);
+        }
+
+        printf("TPM with signature attests (type 0x%x):\n", timeAttest.type);
+        /* time value in milliseconds that advances while the TPM is powered */
+        printf("\tTPM uptime since last power-up (in ms): %lu\n",
+            (unsigned long)timeAttest.attested.time.time.time);
+        /* time value in milliseconds that advances while the TPM is powered */
+        printf("\tTPM clock, total time the TPM has been on (in ms): %lu\n",
+            (unsigned long)timeAttest.attested.time.time.clockInfo.clock);
+        /* number of occurrences of TPM Reset since the last TPM2_Clear() */
+        printf("\tReset Count: %u\n",
+            (unsigned int)timeAttest.attested.time.time.clockInfo.resetCount);
+        /* number of times that TPM2_Shutdown() or _TPM_Hash_Start have occurred since the last TPM Reset or TPM2_Clear(). */
+        printf("\tRestart Count: %u\n",
+            (unsigned int)timeAttest.attested.time.time.clockInfo.restartCount);
+        /* This parameter is set to YES when the value reported in Clock is guaranteed to be unique for the current Owner */
+        printf("\tClock Safe: %u\n",
+            timeAttest.attested.time.time.clockInfo.safe);
+        /* a TPM vendor-specific value indicating the version number of the firmware */
+        printf("\tFirmware Version (vendor specific): 0x%lX\n",
+            (unsigned long)timeAttest.attested.time.firmwareVersion);
+
+        print_signature(&getTime.signature);
+    }
+
+    if (rc != 0) {
+        char error[100];
+        printf("TPM get timestamp error 0x%x: %s\r\n",
+            rc, wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
+    }
+
+    return rc;
+}
+
+static void print_signature(const TPMT_SIGNATURE* sig)
+{
+    char algName[24];
+    printf("\tTPM generated %s signature:\n",
+        wolfBoot_tpm2_get_alg_name(sig->sigAlg, algName, sizeof(algName)));
+    printf("\tHash algorithm: %s\n",
+        wolfBoot_tpm2_get_alg_name(sig->signature.any.hashAlg, algName, sizeof(algName)));
+    switch (sig->sigAlg) {
+        case TPM_ALG_ECDSA:
+        case TPM_ALG_ECDAA:
+            printf("\tR size: %d\n", sig->signature.ecdsa.signatureR.size);
+            print_hex(sig->signature.ecdsa.signatureR.buffer, sig->signature.ecdsa.signatureR.size, 0);
+            printf("\tS size: %d\n", sig->signature.ecdsa.signatureS.size);
+            print_hex(sig->signature.ecdsa.signatureS.buffer, sig->signature.ecdsa.signatureS.size, 0);
+            break;
+        case TPM_ALG_RSASSA:
+        case TPM_ALG_RSAPSS:
+            printf("\tSignature size: %d\n", sig->signature.rsassa.sig.size);
+            print_hex(sig->signature.rsassa.sig.buffer, sig->signature.rsassa.sig.size, 0);
+            break;
+    };
+}
+
+static int cmd_tpm_quote(const char *args)
+{
+    int rc;
+    WOLFTPM2_KEY aik;
+    Quote_Out quoteResult;
+    TPMS_ATTEST quoteAttest;
+    uint8_t  pcrArray[1];
+    uint32_t pcrArraySz = 0;
+
+#ifdef WOLFBOOT_MEASURED_PCR_A
+    pcrArray[0] = WOLFBOOT_MEASURED_PCR_A;
+    pcrArraySz++;
+#else
+    pcrArray[0] = 16; /* test PCR */
+    pcrArraySz++;
+#endif
+
+    rc = wolfBoot_tpm2_get_aik(&aik, NULL, 0);
+    if (rc == 0) {
+        rc = wolfBoot_tpm2_quote(&aik, pcrArray, pcrArraySz, &quoteResult);
+    }
+    if (rc == 0) {
+        rc = wolfBoot_tpm2_parse_attest(&quoteResult.quoted, &quoteAttest);
+    }
+    if (rc == 0) {
+        printf("TPM with signature attests (type 0x%x):\n", quoteAttest.type);
+        printf("\tTPM signed %lu PCRs\n",
+            (unsigned long)quoteAttest.attested.quote.pcrSelect.count);
+
+        printf("\tPCR digest:\n");
+        print_hex(quoteAttest.attested.quote.pcrDigest.buffer,
+                  quoteAttest.attested.quote.pcrDigest.size, 0);
+
+        print_signature(&quoteResult.signature);
+    }
+    else {
+        char error[100];
+        printf("TPM quote error 0x%x: %s\r\n", rc,
+            wolfBoot_tpm2_get_rc_string(rc, error, sizeof(error)));
+    }
+    return rc;
+}
+#endif /* WOLFTPM_MFG_IDENTITY */
+#endif /* WOLFBOOT_TPM */
+
 
 static int parse_cmd(const char *cmd)
 {
@@ -812,6 +1105,11 @@ void main(void)
     printf("GPL v3\r\n");
     printf("Version : 0x%lx\r\n", app_version);
     printf("========================\r\n");
+
+    cmd_info(NULL);
+#ifdef WOLFBOOT_TPM
+    cmd_tpm_info(NULL);
+#endif
 
     console_loop();
 

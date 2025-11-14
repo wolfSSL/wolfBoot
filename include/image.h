@@ -42,65 +42,6 @@ extern "C" {
 #include "encrypt.h"
 #endif
 
-
-int wolfBot_get_dts_size(void *dts_addr);
-
-
-#ifndef RAMFUNCTION
-#if defined(__WOLFBOOT) && defined(RAM_CODE)
-#  if defined(ARCH_ARM)
-#    define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
-#  else
-#    define RAMFUNCTION __attribute__((used,section(".ramcode")))
-#  endif
-#else
-# define RAMFUNCTION
-#endif
-#endif
-
-#ifndef WEAKFUNCTION
-#  if defined(__GNUC__) || defined(__CC_ARM)
-#    define WEAKFUNCTION __attribute__((weak))
-#  else
-#    define WEAKFUNCTION
-#  endif
-#endif
-
-#ifndef UNUSEDFUNCTION
-#  if defined(__GNUC__) || defined(__CC_ARM)
-#    define UNUSEDFUNCTION __attribute__((unused))
-#  else
-#    define UNUSEDFUNCTION
-#  endif
-#endif
-
-
-/* Helpers for memory alignment */
-#ifndef XALIGNED
-    #if defined(__GNUC__) || defined(__llvm__) || \
-            defined(__IAR_SYSTEMS_ICC__)
-        #define XALIGNED(x) __attribute__ ( (aligned (x)))
-    #elif defined(__KEIL__)
-        #define XALIGNED(x) __align(x)
-    #elif defined(_MSC_VER)
-        /* disable align warning, we want alignment ! */
-        #pragma warning(disable: 4324)
-        #define XALIGNED(x) __declspec (align (x))
-    #else
-        #define XALIGNED(x) /* null expansion */
-    #endif
-#endif
-
-#ifndef XALIGNED_STACK
-    /* Don't enforce stack alignment on IAR */
-    #if defined (__IAR_SYSTEMS_ICC__)
-        #define XALIGNED_STACK(x)
-    #else
-        #define XALIGNED_STACK(x) XALIGNED(x)
-    #endif
-#endif
-
-
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F
 #define SECT_FLAG_SWAPPING 0x07

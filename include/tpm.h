@@ -48,7 +48,27 @@ extern WOLFTPM2_KEY     wolftpm_srk;
 
 #define WOLFBOOT_MAX_SEAL_SZ              MAX_SYM_DATA
 
+/* API's that are callable from non-secure code */
+int CSME_NSE_API wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps);
+int CSME_NSE_API wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles);
+const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
+    char* name, int name_sz);
+const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc,
+    char* error, int error_sz);
+int CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out);
+int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* digestSz);
+int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_t* certSz);
 
+#ifdef WOLFTPM_MFG_IDENTITY
+int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
+    uint8_t* masterPassword, uint16_t masterPasswordSz);
+int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* getTime);
+int CSME_NSE_API wolfBoot_tpm2_quote(WOLFTPM2_KEY* aik,
+    byte* pcrArray, word32 pcrArraySz, Quote_Out* quoteResult);
+int CSME_NSE_API wolfBoot_tpm2_parse_attest(const TPM2B_ATTEST* in, TPMS_ATTEST* out);
+#endif
+
+/* Internal wolfBoot TPM API's */
 int  wolfBoot_tpm2_init(void);
 void wolfBoot_tpm2_deinit(void);
 

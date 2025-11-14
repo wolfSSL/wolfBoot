@@ -1133,6 +1133,175 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
 }
 #endif
 
+
+/* API's that are callable from non-secure code */
+int CSME_NSE_API wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps)
+{
+    memset(caps, 0, sizeof(*caps));
+    return wolfTPM2_GetCapabilities(&wolftpm_dev, caps);
+}
+
+int CSME_NSE_API wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles)
+{
+    memset(handles, 0, sizeof(*handles));
+    return wolfTPM2_GetHandles(handle, handles);
+}
+
+const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
+    char* name, int name_sz)
+{
+    const char* s_name;
+    if (name == NULL || name_sz <= 0) {
+        return NULL;
+    }
+    s_name = TPM2_GetAlgName(alg);
+    if (s_name != NULL && name != NULL && name_sz > 0) {
+        strncpy(name, s_name, name_sz - 1);
+        name[name_sz - 1] = '\0';
+    }
+    else {
+        strcpy(name, "Unknown");
+    }
+    return (const char*)name;
+}
+
+const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc, char* error, int error_sz)
+{
+    const char* s_error;
+    if (error == NULL || error_sz <= 0) {
+        return NULL;
+    }
+    s_error = TPM2_GetRCString(rc);
+    if (s_error != NULL && error != NULL && error_sz > 0) {
+        strncpy(error, s_error, error_sz - 1);
+        error[error_sz - 1] = '\0';
+    }
+    else {
+        strcpy(error, "Unknown");
+    }
+    return (const char*)error;
+}
+
+int CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out)
+{
+    return (int)TPM2_GetCapability(in, out);
+}
+
+int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* digestSz)
+{
+    return wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
+        digest, digestSz);
+}
+
+int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_t* certSz)
+{
+    wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
+    return wolfTPM2_NVReadCert(&wolftpm_dev, handle, cert, certSz);
+}
+
+#ifdef WOLFTPM_MFG_IDENTITY
+int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
+    uint8_t* masterPassword, uint16_t masterPasswordSz)
+{
+    int rc;
+    if (aik == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* Load existing AIK and set auth */
+    rc = wolfTPM2_ReadPublicKey(&wolftpm_dev, aik, TPM2_IAK_KEY_HANDLE);
+    if (rc == 0) {
+        /* Custom should supply their own custom master password used during
+         * device provisioning. If using a sample TPM supply NULL to use the
+         * default password. */
+        rc = wolfTPM2_SetIdentityAuth(&wolftpm_dev, &aik->handle,
+            masterPassword, masterPasswordSz);
+    }
+    return rc;
+}
+
+int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* getTime)
+{
+    int rc;
+    WOLFTPM2_HANDLE eh_handle;
+    /* sample master password for EH */
+    uint8_t Master_EH_AuthValue[] = {
+        0xDE, 0xEF, 0x8C, 0xDF, 0x1B, 0x77, 0xBD, 0x00,
+        0x30, 0x58, 0x5E, 0x47, 0xB8, 0x21, 0x46, 0x0B
+    };
+
+    if (aik == NULL || getTime == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    memset(getTime, 0, sizeof(*getTime));
+    memset(&eh_handle, 0, sizeof(eh_handle));
+
+    eh_handle.hndl = TPM_RH_ENDORSEMENT;
+
+    /* Calculate EH auth value */
+    rc = wolfTPM2_SetIdentityAuth(&wolftpm_dev, &eh_handle,
+        Master_EH_AuthValue, (uint16_t)sizeof(Master_EH_AuthValue));
+    if (rc == 0) {
+        /* Set EH auth */
+        wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &eh_handle);
+
+        /* set auth for using the AIK */
+        wolfTPM2_SetAuthHandle(&wolftpm_dev, 1, &aik->handle);
+    }
+    if (rc == 0) {
+        rc = wolfTPM2_GetTime(aik, getTime);
+    }
+
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
+
+    return rc;
+}
+
+int CSME_NSE_API wolfBoot_tpm2_parse_attest(const TPM2B_ATTEST* in, TPMS_ATTEST* out)
+{
+    return TPM2_ParseAttest(in, out);
+}
+
+int CSME_NSE_API wolfBoot_tpm2_quote(WOLFTPM2_KEY* aik,
+    byte* pcrArray, word32 pcrArraySz, Quote_Out* quoteResult)
+{
+    int rc;
+    Quote_In quoteAsk;
+    TPMT_ASYM_SCHEME* scheme;
+
+    if (aik == NULL || pcrArray == NULL || pcrArraySz == 0 ||
+        quoteResult == NULL) {
+        return BAD_FUNC_ARG;
+    }
+
+    /* set auth for using the AIK */
+    wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &aik->handle);
+
+    /* Prepare Quote request */
+    XMEMSET(&quoteAsk, 0, sizeof(quoteAsk));
+    XMEMSET(quoteResult, 0, sizeof(*quoteResult));
+
+    scheme = &aik->pub.publicArea.parameters.asymDetail.scheme;
+    quoteAsk.signHandle = aik->handle.hndl;
+    quoteAsk.inScheme.scheme = scheme->scheme;
+    quoteAsk.inScheme.details.any.hashAlg = scheme->details.anySig.hashAlg;
+    quoteAsk.qualifyingData.size = 0; /* optional */
+    /* Choose PCR(s) for signing */
+    TPM2_SetupPCRSelArray(&quoteAsk.PCRselect, scheme->details.anySig.hashAlg,
+        pcrArray, pcrArraySz);
+
+    /* Get AIK signed attestation of PCR(s) */
+    rc = TPM2_Quote(&quoteAsk, quoteResult);
+
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
+
+    return rc;
+}
+#endif /* WOLFTPM_MFG_IDENTITY */
+
+
 /**
  * @brief Initialize the TPM2 device and retrieve its capabilities.
  *
