@@ -134,7 +134,6 @@ tools/squashelf/**
 
 # Generated configuration files
 .config
-.vs
 *.filters
 *.user
 
@@ -270,13 +269,17 @@ language.settings.xml
 *.bak
 
 # Any Visual Studio / VisualGDB
-/**/.vs
-/**/.visualgdb/*
+/**/.vs/**
+/**/.visualgdb/**
+
+# --- Whitelist specific files in the *root* .vs folder ---
+# Allow Git to descend into the root .vs directory
+!/.vs/
 
 # Defaults are set in files otherwise excluded:
-!/.vs/README.md
-!/.vs/VSWorkspaceState.json
-!/.vs/VSWorkspaceSettings.json
+!**/.vs/README.md
+!**/.vs/VSWorkspaceSettings.json
+
 
 # Any build directories
 /**/build

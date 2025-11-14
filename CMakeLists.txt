@@ -84,6 +84,13 @@ endif()
 project(wolfBoot)
 #---------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------
+
+# Simulator target is POSIX-only (uses sys/mman.h, etc.)
+if(MSVC AND (DEFINED WOLFBOOT_TARGET) AND (WOLFBOOT_TARGET STREQUAL "sim"))
+    message(FATAL_ERROR "TARGET_sim is POSIX-only. Use a device preset (e.g. stm32h7) or build the sim on Linux/WSL/MinGW.")
+endif()
+
+
 include(cmake/functions.cmake)
 include(cmake/utils.cmake)
 

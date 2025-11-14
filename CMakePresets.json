@@ -6,7 +6,29 @@
     "patch": 0
   },
   "configurePresets": [
-    {
+      {
+        "name": "sim",
+        "displayName": "~No config selected",
+        "generator": "Ninja",
+        "cacheVariables": {
+          "SIGN": "ED25519",
+          "HASH": "SHA256",
+          "WOLFBOOT_TARGET": "sim",
+          "WOLFBOOT_SECTOR_SIZE": "256",
+          "WOLFBOOT_CONFIG_MODE": "preset",
+          "WOLFBOOT_HAS_BASE_PRESET": true,
+          "ARCH": "HOST",
+          "SPMATH": "ON",
+          "DISABLE_BACKUP": "OFF",
+          "NVM_FLASH_WRITEONCE": "ON",
+          "BUILD_TEST_APPS": "ON",
+          "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x08003000",
+          "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08009400",
+          "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x0800F800",
+          "WOLFBOOT_PARTITION_SIZE": "0x6400"
+        }
+      },
+      {
       "name": "sign_hash_config",
       "cacheVariables": {
         "SIGN": "ED25519",
@@ -254,6 +276,15 @@
       }
   ],
   "buildPresets": [
+    {
+      "name": "~No config (wolfBoot sim)",
+      "configurePreset": "sim",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
     {
       "name": "vs-debug-trace",
       "configurePreset": "vs-debug-trace",
