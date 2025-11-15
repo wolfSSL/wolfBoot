@@ -104,12 +104,12 @@ jobs:
       - name: Run dualbank swap simulation
         run: |
           tools/scripts/sim-dualbank-swap-update.sh
-      
+
       - name: Cleanup before WOLFBOOT_SMALL_STACK test
         run: |
           make keysclean
           mv .config.orig .config
-      
+
       - name: Build wolfboot.elf (ECC256, WOLFBOOT_SMALL_STACK)
         run: |
           make clean && make test-sim-internal-flash-with-update SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 SPMATH=1
@@ -617,9 +617,17 @@ jobs:
         run: |
           tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-xmss.config
 
-      - name: Run sunny day ML-DSA update test
+      - name: Run sunny day ML-DSA level 2 update test
         run: |
           tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-ml-dsa.config
+
+      - name: Run sunny day ML-DSA level 3 update test
+        run: |
+          tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-ml-dsa3.config
+
+      - name: Run sunny day ML-DSA level 5 update test
+        run: |
+          tools/scripts/sim-pq-sunnyday-update.sh config/examples/sim-ml-dsa5.config
 
       # 64 Bit simulator, Hybrid auth ML_DSA + ECDSA
       #

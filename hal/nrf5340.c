@@ -376,6 +376,8 @@ void sleep_us(uint32_t usec)
     RTC_STOP(USE_RTC) = 1;
 }
 
+#ifdef __WOLFBOOT
+
 #ifdef TARGET_nrf5340_app
 void hal_net_core(int hold) /* 1=hold, 0=release */
 {
@@ -678,28 +680,36 @@ exit:
         hal_shm_status_string(shm->core.net.status), shm->core.net.version);
 }
 
+#endif /* __WOLFBOOT */
 
 void hal_init(void)
 {
+#ifdef __WOLFBOOT
 #ifdef DEBUG_UART
     const char* bootStr = "wolfBoot HAL Init (" CORE_STR " core)\n";
+#endif
 #endif
 
     clock_init();
 
 #ifdef DEBUG_UART
     uart_init();
+    #ifdef __WOLFBOOT
     uart_write(bootStr, strlen(bootStr));
+    #endif
 #endif
 
+#ifdef __WOLFBOOT
     hal_shm_init();
 
     /* need early init of external flash to support checking network core */
     spi_flash_probe();
 
     hal_net_check_version();
+#endif
 }
 
+#ifdef __WOLFBOOT
 /* enable write protection for the region of flash specified */
 int hal_flash_protect(uint32_t start, uint32_t len)
 {
@@ -763,5 +773,6 @@ void hal_prepare_boot(void)
 
     hal_shm_cleanup();
 }
+#endif /* __WOLFBOOT */
 
 #endif /* TARGET_* */

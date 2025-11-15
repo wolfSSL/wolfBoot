@@ -463,6 +463,13 @@ jobs:
 
   # TODO: ti-tms570lc435.config requires CCS_ROOT
 
+  # Cannot run on CI without the SDK (see VORAGO_SDK_DIR)
+  # vorago_va416x0_test:
+  #   uses: ./.github/workflows/test-build.yml
+  #   with:
+  #     arch: arm
+  #     config-file: ./config/examples/vorago_va416x0.config
+
   x86_64_efi_test:
     uses: ./.github/workflows/test-build.yml
     with:

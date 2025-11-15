@@ -67,7 +67,6 @@
 
 /* #define DEBUG_EXT_FLASH */
 
-#ifdef __WOLFBOOT
 
 /** Built-in ROM API for bootloaders **/
 
@@ -850,7 +849,7 @@ static int hal_flash_init(void);
 
 void hal_init(void)
 {
-#ifdef WOLFSSL_IMXRT_DCP
+#if defined(__WOLFBOOT) && defined(WOLFSSL_IMXRT_DCP)
     wc_dcp_init();
 #endif
     ARM_MPU_Disable();
@@ -865,8 +864,6 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 }
-
-#endif /* __WOLFBOOT */
 
 static int RAMFUNCTION hal_flash_init(void)
 {

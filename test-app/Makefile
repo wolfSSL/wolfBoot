@@ -16,6 +16,10 @@ DEBUG?=1
 DELTA_DATA_SIZE?=2000
 USE_GCC?=1
 USE_GCC_HEADLESS?=1
+BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
+
+# For test-applications we should only use user_settings.h
+CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -86,7 +90,7 @@ ifeq ($(TZEN),1)
     ifeq ($(WOLFCRYPT_TZ),1)
         APP_OBJS+=../src/wc_secure_calls.o
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
-            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
+            CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
             CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFPKCS11)"
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
             APP_OBJS+=./wcs/pkcs11_stub.o
@@ -232,6 +236,12 @@ ifeq ($(TARGET),ti_hercules)
   OBJCOPY_FLAGS=
 endif
 
+ifeq ($(TARGET),va416x0)
+  APP_OBJS+=$(SDK_OBJS)
+  LSCRIPT_TEMPLATE=ARM-va416x0.ld
+  APP_OBJS+=../src/keystore.o
+endif
+
 ifeq ($(TARGET),sim)
   # LD on MacOS does not support "-Map="
   LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
@@ -315,6 +325,7 @@ ifeq ($(TARGET),mcxa)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o
+    LDFLAGS+=--specs=nosys.specs
 endif
 
 ifeq ($(TARGET),mcxw)
@@ -325,6 +336,7 @@ ifeq ($(TARGET),mcxw)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+    LDFLAGS+=--specs=nosys.specs
 endif
 
 ifeq ($(TARGET),imx_rt)
@@ -497,13 +509,13 @@ ifeq ($(TARGET),aurix_tc3xx)
 endif
 
 ifeq ($(WOLFHSM_CLIENT),1)
-  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
+  CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
   APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
 
 ifeq ($(WOLFHSM_SERVER),1)
-  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
+  CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
   APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
@@ -552,6 +564,9 @@ delta-extra-data: image.bin
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
+../hal/$(TARGET).o: ../hal/$(TARGET).c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c
+
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
 
@@ -597,6 +612,7 @@ endif
 		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
 		> $(@)
 	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
 
 
 
