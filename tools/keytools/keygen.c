@@ -24,12 +24,8 @@
 
 /* Option to enable sign tool debugging */
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
-//#define DEBUG_SIGNTOOL
+/* #define DEBUG_SIGNTOOL */
 
-#ifdef _WIN32
-#define _CRT_SECURE_NO_WARNINGS
-#define _CRT_NONSTDC_NO_DEPRECATE /* unlink */
-#endif
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -40,18 +36,38 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
-#ifndef _WIN32
-    #include <unistd.h>
+#ifdef _WIN32
+#   define _CRT_SECURE_NO_WARNINGS
+#   define _CRT_NONSTDC_NO_DEPRECATE /* unlink */
+#else
+#   include <unistd.h>
 #endif
 
+/* wolfSSL */
+/* Always include wolfcrypt/settings.h before any other wolfSSL file.    */
+/* Reminder: settings.h pulls in user_settings.h; don't include it here. */
 #include <wolfssl/wolfcrypt/settings.h>
+
+/* During development in new environment, ensure the expected user settings is used: */
+#ifdef DEBUG_SIGNTOOL
+#ifdef WOLFBOOT_USER_SETTINGS_H
+#   error "Keygen encountered unexpected user settings from [WOLFBOOT_ROOT]/include/user_settings.h"
+#endif
+#ifdef __WOLFBOOT
+    /* wolfBoot otherwise uses a user_se*/
+#error "Keygen unexpectedly encountered __WOLFBOOT. Check your config"
+#endif
+#ifndef WOLFBOOT_KEYTOOLS_USER_SETTINGS_H
+#   error "Keygen expects settings from [WOLFBOOT_ROOT]/tools/keygen/user_settings.h"
+#endif
+#endif /* DEBUG_SIGNTOOL optional user settings check */
+
 #ifndef NO_RSA
 #include <wolfssl/wolfcrypt/rsa.h>
 #endif
 #ifdef HAVE_ECC
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/asn.h>
-
 #endif
 #ifdef HAVE_ED25519
 #include <wolfssl/wolfcrypt/ed25519.h>
@@ -62,7 +78,7 @@
 #endif
 
 #if defined(WOLFSSL_HAVE_LMS)
-    #include <wolfssl/wolfcrypt/lms.h>
+#include <wolfssl/wolfcrypt/lms.h>
     #ifdef HAVE_LIBLMS
         #include <wolfssl/wolfcrypt/ext_lms.h>
     #else

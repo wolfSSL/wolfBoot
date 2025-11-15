@@ -22,13 +22,50 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
-#ifndef _WOLFBOOT_USER_SETTINGS_H_
-#define _WOLFBOOT_USER_SETTINGS_H_
+#ifndef WOLFBOOT_USER_SETTINGS_H
+#define WOLFBOOT_USER_SETTINGS_H
+
+/* This is the wolfBoot embedded target user settings.
+ *
+ * See also settings in [WOLFBOOT_ROOT]/tools/keytools
+ *
+ * When in question, define DEBUG_SIGNTOOL and optionally WOLFBOOT_SHOW_INCLUDE
+ */
+
+ /* During development in new environment, ensure the expected user settings is used: */
+#ifdef WOLFBOOT_SHOW_INCLUDE
+#   ifdef __GNUC__  /* GCC compiler */
+#      pragma message "===============include/user_settings.h"
+#   elif defined(_MSC_VER) /* Microsoft Visual C++ compiler */
+#      pragma message("===============include/user_settings.h")
+#   else
+#      warning "===============include/user_settings.h"
+#   endif
+#endif /* WOLFBOOT_SHOW_INCLUDE user_settings message */
+
+#if defined(_MSC_VER)
+    /* MSVC and clang-cl both define _MSC_VER */
+#   ifndef WOLFSSL_HAVE_MIN
+#      define WOLFSSL_HAVE_MIN
+#   endif
+#   ifndef WOLFSSL_HAVE_MAX
+#      define WOLFSSL_HAVE_MAX
+#   endif
+
+    /* Really keep Windows headers from redefining min/max */
+#   ifndef NOMINMAX
+#      define NOMINMAX 1
+#   endif
+#endif
 
 #ifdef WOLFBOOT_PKCS11_APP
 # include "test-app/wcs/user_settings.h"
 #else
 
+/* The target.h is a device-specific, typically a generated file.
+ * CMake configures from `include/target.h.in` into ${CMAKE_CURRENT_BINARY_DIR}
+ *
+ * See also the sample in [WOLFBOOT_ROOT]/tools/unit-tests/target.h */
 #include <target.h>
 
 /* System */
@@ -330,7 +367,9 @@ extern int tolower(int c);
 
     /* SP Math needs to understand long long */
 #   ifndef ULLONG_MAX
-#       define ULLONG_MAX 18446744073709551615ULL
+#       ifndef _MSC_VER
+#           define ULLONG_MAX 18446744073709551615ULL
+#       endif
 #   endif
 #endif
 
@@ -586,4 +625,4 @@ extern int tolower(int c);
 #   define WOLFSSL_PEM_TO_DER
 #endif
 
-#endif /* !_WOLFBOOT_USER_SETTINGS_H_ */
+#endif /* !WOLFBOOT_USER_SETTINGS_H */

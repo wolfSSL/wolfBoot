@@ -36,6 +36,26 @@
 #endif
 
 #include "wolfboot/wolfboot.h"
+
+/* During development in new environment, ensure the expected user settings is used: */
+#ifdef DEBUG_SIGNTOOL
+#ifdef __WOLFBOOT
+#   ifndef WOLFBOOT_USER_SETTINGS_H
+#      error "otp-keystore-gen encountered unexpected user settings, expected [WOLFBOOT_ROOT]/include/user_settings.h"
+#   endif
+#   ifdef WOLFBOOT_KEYTOOLS_USER_SETTINGS_H
+#      error "Detected keytools user settings, expected [WOLFBOOT_ROOT]/include/user_settings.hh"
+#   endif
+#else
+#   ifdef WOLFBOOT_KEYTOOLS_USER_SETTINGS_H
+#      error "Detected keytools user settings, otp-keystore-gen does not expect any user_settings.h"
+#   endif
+#   ifdef WOLFBOOT_USER_SETTINGS_H
+#      error "Detected wolfboot user settings, otp-keystore-gen does not expect any user_settings.h"
+#   endif
+#endif
+#endif /* optional user settings check */
+
 #include "keystore.h"
 #include "otp_keystore.h"
 

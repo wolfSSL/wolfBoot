@@ -133,9 +133,11 @@ int wolfBot_get_dts_size(void *dts_addr);
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_ecc
 #endif
 #if defined(WOLFBOOT_SIGN_LMS)
+#undef  wolfBoot_verify_signature_primary
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_lms
 #endif
 #if defined(WOLFBOOT_SIGN_XMSS )
+#undef  wolfBoot_verify_signature_primary
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_xmss
 #endif
 #ifdef WOLFBOOT_SIGN_ML_DSA
@@ -362,6 +364,12 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
     asm volatile("bne .-8"); \
     asm volatile("cmp r2, r0":::"cc"); \
     asm volatile("bne .-12")
+
+/* Some SHA checks */
+#if !defined(WOLFBOOT_SHA_DIGEST_SIZE) || (WOLFBOOT_SHA_DIGEST_SIZE <= 0)
+#   error "WOLFBOOT_SHA_DIGEST_SIZE must be defined"
+#endif
+
 
 /**
  * First part of RSA verification. Ensure that the function is called by
