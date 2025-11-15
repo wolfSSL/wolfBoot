@@ -904,8 +904,8 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 }
 
 #ifdef EXT_FLASH
-static uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
-static uint32_t hdr_cpy_done = 0;
+uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
+uint32_t hdr_cpy_done = 0;
 #endif
 
 /**
@@ -949,6 +949,10 @@ static inline uint16_t im2ns(uint16_t val)
 }
 
 #ifdef DELTA_UPDATES
+
+/* forward declaration */
+static uint8_t* wolfBoot_get_image_from_part(uint8_t part);
+
 /**
  * @brief Get delta update information.
  *

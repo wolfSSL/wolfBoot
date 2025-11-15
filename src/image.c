@@ -875,8 +875,14 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 }
 
 #ifdef EXT_FLASH
+#ifdef UNIT_TEST
 static uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
 static int hdr_cpy_done = 0;
+#else
+/* use from libwolfboot.c */
+extern uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
+extern int hdr_cpy_done;
+#endif
 
 /**
  * @brief Get a copy of the image header.

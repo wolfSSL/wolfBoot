@@ -3654,6 +3654,19 @@ make VORAGO_SDK_DIR=$PWD../VA416xx_SDK/
   34636       4   26976   61616    f0b0 wolfboot.elf
 ```
 
+Example of wolfBoot binary sizes based on algorithms:
+
+| Authentication | Hash | wolfBoot Size |
+|----------------|------|---------------|
+| ECC256 | SHA256 | 25,836 |
+| ECC384 | SHA384 | 34,652 |
+| ECC521 | SHA384 | 38,608 |
+| ED25519 | SHA256 | 31,448 |
+| RSA2048 | SHA256 | 19,148 |
+| RSA3072 | SHA384 | 28,828 |
+| RSA4096 | SHA3-384 | 19,216 |
+| ML-DSA 87 | SHA256 | 25,168 |
+
 ### Flashing Vorago VA416x0
 
 Flash using Segger JLink: `JLinkExe -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink`
