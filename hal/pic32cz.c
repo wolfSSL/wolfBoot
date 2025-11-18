@@ -104,5 +104,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     pic32_clock_reset();
+#endif
 }

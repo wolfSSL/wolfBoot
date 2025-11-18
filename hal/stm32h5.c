@@ -608,7 +608,9 @@ void hal_prepare_boot(void)
 #if (TZ_SECURE())
     periph_unsecure();
 #else
+    #ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
+    #endif
 #endif
 }
 

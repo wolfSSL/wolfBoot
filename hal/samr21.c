@@ -144,6 +144,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     /* Reset NVM wait states */
     APBBMASK_REG |= APBBMASK_NVM_EN;
     NVMCTRLB_REG &= ~((WAITSTATES & 0x0f) << 1);
@@ -152,6 +153,7 @@ void hal_prepare_boot(void)
     /* Reset clock controller */
     GCLK_CTRL = GCLK_CTRL_RESET;
     GCLK_WAITBUSY();
+#endif
 }
 
 

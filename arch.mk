@@ -267,7 +267,7 @@ ifeq ($(ARCH),ARM)
   endif
 
   ifeq ($(TARGET),va416x0)
-    CFLAGS+=-I$(WOLFBOOT_ROOT)/include/vorago/ \
+    CFLAGS+=-I$(WOLFBOOT_ROOT)/hal/vorago/ \
             -I$(VORAGO_SDK_DIR)/common/drivers/hdr/ \
             -I$(VORAGO_SDK_DIR)/common/mcu/hdr/ \
             -I$(VORAGO_SDK_DIR)/common/utils/hdr/
