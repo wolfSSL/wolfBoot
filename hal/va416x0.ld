@@ -1,4 +1,4 @@
-_Min_Heap_Size  = 0x00000200; /* required amount of heap  */
+# no heap
 _Min_Stack_Size = 0x00006000; /* required amount of stack */
 
 /* Memory areas */
@@ -140,14 +140,12 @@ SECTIONS
     *(dma_blk)
   } >RAM1
 
-  /* User_heap_stack section, used to check that there is enough RAM left */
-  ._user_heap_stack :
+  /* User_stack section, used to check that there is enough RAM left */
+  ._user_stack :
   {
     . = ALIGN(8);
     PROVIDE ( end = . );
     PROVIDE ( _end = . );
-    PROVIDE ( _start_heap = . );
-    . = . + _Min_Heap_Size;
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
     PROVIDE ( END_STACK = . );

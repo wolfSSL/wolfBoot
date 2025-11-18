@@ -423,8 +423,9 @@ void RAMFUNCTION hal_prepare_boot(void)
 #ifdef SPI_FLASH
     spi_flash_release();
 #endif
-
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
+#endif
 }
 
 void RAMFUNCTION hal_erase_bank2(void)

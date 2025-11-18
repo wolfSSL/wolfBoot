@@ -409,7 +409,9 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
+    #endif
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
     periph_unsecure();
 #endif

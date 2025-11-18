@@ -69,7 +69,8 @@ the geometry of the flash sectors, and erase all the sectors in between.
 
 This function is called by the bootloader at a very late stage, before chain-loading the firmware
 in the next stage. This can be used to revert all the changes made to the clock settings, to ensure
-that the state of the microcontroller is restored to its original settings.
+that the state of the microcontroller is restored to its original settings. By default most targets will restore the
+clock settings. Use the `WOLFBOOT_RESTORE_CLOCK=0` option to disable clock restoration.
 
 ### Optional support for external flash memory
 

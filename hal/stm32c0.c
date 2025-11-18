@@ -301,7 +301,9 @@ void RAMFUNCTION hal_prepare_boot(void)
 #ifdef SPI_FLASH
     spi_flash_release();
 #endif
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
+#endif
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT
     do_secure_boot();
 #endif

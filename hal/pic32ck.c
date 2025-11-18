@@ -73,7 +73,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-#ifndef TZEN
+#if !defined(TZEN) && defined(WOLFBOOT_RESTORE_CLOCK)
     pic32_clock_reset();
 #endif
 }
