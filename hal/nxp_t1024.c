@@ -1538,7 +1538,6 @@ uint32_t io_read32(uint16_t port)
 static int hal_pcie_init(void)
 {
     int ret;
-    int bus, i;
     int law_idx = 8;
     int tlb_idx = 14; /* next available TLB (after DDR) */
     struct pci_enum_info enum_info;
@@ -1862,8 +1861,10 @@ struct qe_firmware {
 /* Checks for valid QE firmware */
 static int qe_check_firmware(const struct qe_firmware *firmware, const char* t)
 {
-    unsigned int i, j;
+    unsigned int i;
+#ifdef ENABLE_QE_CRC32
     uint32_t crc;
+#endif
     size_t calc_size = sizeof(struct qe_firmware);
     size_t length;
     const struct qe_header *hdr;
@@ -2172,7 +2173,6 @@ static int fman_upload_firmware(const struct qe_firmware *firmware)
     /* Loop through each microcode. */
     for (i = 0; i < firmware->count; i++) {
         const struct qe_microcode *ucode = &firmware->microcode[i];
-        uint32_t trapCount = 0;
 
         /* Upload a microcode if it's present */
         if (ucode->code_offset) {
@@ -2868,7 +2868,7 @@ extern uint32_t _bootpg_addr;
 /* Startup additional cores with spin table and synchronize the timebase */
 static void hal_mp_up(uint32_t bootpg)
 {
-    uint32_t all_cores, active_cores, whoami, bpcr;
+    uint32_t all_cores, active_cores, whoami;
     int timeout = 50, i;
 
     whoami = get32(PIC_WHOAMI); /* Get current running core number */

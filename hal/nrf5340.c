@@ -487,7 +487,6 @@ static uint32_t hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
     uint32_t timeout_ms)
 {
     uint32_t status_ret = SHARED_STATUS_UNKNOWN;
-    int ret = 0;
 
     do {
         /* see if status shared already */
@@ -566,7 +565,7 @@ static void hal_net_check_version(void)
 {
     int ret;
     struct wolfBoot_image img;
-    uint32_t timeout, status = 0;
+    uint32_t status = 0;
 
 #ifdef TARGET_nrf5340_app
     /* check the network core version */
@@ -682,7 +681,7 @@ static void hal_net_check_version(void)
     }
     /* proceed to update_flash routines */
 #endif /* TARGET_nrf5340_* */
-exit:
+    (void)status;
     wolfBoot_printf("Status: App %s (ver %d), Net %s (ver %d)\n",
         hal_shm_status_string(shm->core.app.status), shm->core.app.version,
         hal_shm_status_string(shm->core.net.status), shm->core.net.version);

@@ -80,6 +80,7 @@ static int is_range_nonsecure(uint32_t address, int len)
     uint32_t min2 = WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     uint32_t max2 = FLASH_TOP + 1;
     uint32_t end;
+    (void)boot_offset; /* calculated for reference, but not used */
     if (len < 0)
         return 0;
     end = (uint32_t)(address + len);
@@ -294,7 +295,6 @@ void hal_gtzc_init(void)
 
 void hal_tz_sau_init(void)
 {
-    uint32_t page_n = 0;
     /* SAU is set up before staging. Set up all areas as secure. */
 
     /* Non-secure callable: NSC functions area */

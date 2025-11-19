@@ -73,6 +73,7 @@ void * _sbrk(unsigned int incr)
     static uint8_t *heap = NULL;
     static uint32_t heapsize = (uint32_t)&_heap_size;
     void *old_heap = heap;
+    (void)heapsize;
     if (((incr >> 2) << 2) != incr)
         incr = ((incr >> 2) + 1) << 2;
 
@@ -84,8 +85,6 @@ void * _sbrk(unsigned int incr)
     return old_heap;
 }
 #endif
-
-static int vault_idx = -1;
 
 struct obj_hdr
 {
@@ -154,7 +153,7 @@ static int bitmap_get(uint32_t pos)
 
 static int bitmap_find_free_pos(void)
 {
-    int i, j;
+    int i;
     for (i = 0; i < KEYVAULT_MAX_ITEMS; i++) {
         if (bitmap_get(i) == 0)
             return i;
@@ -285,7 +284,6 @@ static struct obj_hdr *find_object_header(int32_t type, uint32_t tok_id,
         uint32_t obj_id)
 {
     struct obj_hdr *hdr = NODES_TABLE;
-    uint32_t *tok_obj_stored = NULL;
     while ((uintptr_t)hdr < ((uintptr_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
         if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id)
                 && (hdr->type == type)) {
@@ -384,11 +382,8 @@ static struct store_handle *find_free_handle(void)
 int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     void** store)
 {
-    unsigned int i;
     struct store_handle *handle;
     uint8_t *buf;
-    struct obj_hdr *hdr = NULL;
-
 
     /* Check if there is one handle available to open the slot */
     handle = find_free_handle();
@@ -458,12 +453,10 @@ void wolfPKCS11_Store_Close(void* store)
 int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
 {
     struct store_handle *handle = store;
-    uint32_t *tok_obj_id;
     uint32_t obj_size = 0;
     if ((handle == NULL) || (handle->hdr == NULL) || (handle->buffer == NULL))
        return -1;
 
-    tok_obj_id = (uint32_t *)handle->buffer;
     obj_size = handle->hdr->size;
     if (obj_size > KEYVAULT_OBJ_SIZE)
         return -1;

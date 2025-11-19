@@ -1164,10 +1164,7 @@ static void config_io_pin(uint8_t port, uint8_t pin, int dir, int open_drain,
 
 static void read_io_pin(uint8_t port, uint8_t pin, int *data)
 {
-    uint32_t pin_1bit_mask, tmp_val;
-
-    /* Calculate pin location for 1bit mask */
-    pin_1bit_mask = (uint32_t)(1 << (NUM_OF_PINS - (pin + 1)));
+    uint32_t tmp_val;
 
     /* Read the data */
     tmp_val = get32(GUTS_CPDAT(port));
@@ -1299,7 +1296,9 @@ static void qe_upload_microcode(const struct qe_firmware *firmware,
 static int qe_upload_firmware(const struct qe_firmware *firmware)
 {
     unsigned int i, j;
+#ifdef ENABLE_QE_CRC32
     uint32_t crc;
+#endif
     size_t calc_size = sizeof(struct qe_firmware);
     size_t length;
     const struct qe_header *hdr;
@@ -1567,6 +1566,7 @@ static void hal_irq_init(void)
 
     set32(PIC_GCR, PIC_GCR_M); /* eanble mixed-mode */
     reg = get32(PIC_GCR); /* read back */
+    (void)reg;
 }
 #endif
 
@@ -1685,6 +1685,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
                     ELBC_FIR_OP(4, ELBC_FIR_OP_WB) |
                     ELBC_FIR_OP(5, ELBC_FIR_OP_CW1));
 #endif
+    (void)block_size; /* not used - shown for reference */
 
     /* page write loop */
     while (pos < len) {
@@ -1717,6 +1718,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         wolfBoot_printf("write page %d, col %d, status %x\n",
             page, col, status);
 #endif
+        (void)status;
         address += page_size - col;
         pos += page_size - col;
         data += page_size - col;
@@ -1857,6 +1859,7 @@ int ext_flash_erase(uintptr_t address, int len)
 #ifdef DEBUG_EXT_FLASH
         wolfBoot_printf("erase page %d, status %x\n", page, status);
 #endif
+        (void)status;
         len -= block_size;
     }
 

@@ -491,7 +491,7 @@ static void hal_cpld_init(void)
 
 void hal_init(void)
 {
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) && defined(ENABLE_CPLD)
     uint32_t fw;
 #endif
 

@@ -223,12 +223,10 @@ static void mac_init(void)
 
 static void ddr_init(void)
 {
-    uint32_t val;
     uint32_t rtr, md, cr, tpr0, tpr1, tpr2;
     uint32_t col, row, cas, bank;
     uint32_t cal;
     uint32_t ba_offset = 0;
-    uint32_t pmc_pcr;
     volatile uint32_t *dram_base = (volatile uint32_t *)DRAM_BASE;
 
     /* Step 1: Calculate register values
@@ -551,8 +549,6 @@ static int nand_device_read(uint32_t row_address, uint8_t *data, int mode)
 {
     uint32_t col_address = 0x00;
     uint32_t tot_len = 0;
-    uint32_t page_size = nand_flash.page_size;
-    uint32_t pages_per_device = nand_flash.pages_per_device;
     uint32_t i;
 
     if (mode == NAND_MODE_DATAPAGE) {
@@ -668,8 +664,6 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 static void pit_init(void)
 {
-    uint32_t pmc_pcr;
-
     /* Turn on clock for PIT */
     PMC_CLOCK_EN(PIT_PMCID);
 

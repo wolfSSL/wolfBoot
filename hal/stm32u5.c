@@ -495,8 +495,6 @@ static void RAMFUNCTION fork_bootloader(void)
 {
     uint8_t *data = (uint8_t *) FLASHMEM_ADDRESS_SPACE;
     uint32_t dst  = FLASH_BANK2_BASE;
-    uint32_t r = 0, w = 0;
-    int i;
 
     /* Return if content already matches */
     if (memcmp(data, (void *)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)

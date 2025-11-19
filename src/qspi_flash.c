@@ -148,7 +148,6 @@ static int qspi_flash_read_id(uint8_t* id, uint32_t idSz)
 {
     int ret;
     uint8_t data[4]; /* size multiple of uint32_t */
-    uint32_t status = 0;
 
     memset(data, 0, sizeof(data));
     ret = qspi_command_simple(QSPI_MODE_READ, READ_ID_CMD, data, 3);
@@ -356,7 +355,6 @@ uint16_t spi_flash_probe(void)
 int spi_flash_sector_erase(uint32_t address)
 {
     int ret;
-    uint32_t idx = 0;
 
     ret = qspi_write_enable();
     if (ret == 0) {
@@ -419,7 +417,7 @@ int spi_flash_read(uint32_t address, void *data, int len)
 int spi_flash_write(uint32_t address, const void *data, int len)
 {
     int ret = 0;
-    uint32_t xferSz, page, pages, idx = 0;
+    uint32_t xferSz, page, pages;
     uintptr_t addr;
 
 #ifdef DEBUG_QSPI
