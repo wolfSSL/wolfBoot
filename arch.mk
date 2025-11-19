@@ -687,6 +687,12 @@ ifeq ($(TARGET),mcxw)
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
 endif
 
+ifeq ($(TARGET),nrf5340_net)
+  # Net core doesn't support DSP and FP
+  CFLAGS+=-mcpu=cortex-m33+nodsp+nofp
+  LDFLAGS+=-mcpu=cortex-m33+nodsp+nofp
+endif
+
 ifeq ($(TARGET),imx_rt)
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
