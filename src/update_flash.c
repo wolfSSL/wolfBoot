@@ -27,7 +27,6 @@
 #include "image.h"
 #include "hal.h"
 #include "spi_flash.h"
-#include "wolfboot/wolfboot.h"
 #include "target.h"
 
 #include "delta.h"
@@ -686,7 +685,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
     uint32_t cur_ver, upd_ver;
 
-    wolfBoot_printf("Staring Update (fallback allowed %d)\n", fallback_allowed);
+    wolfBoot_printf("Starting Update (fallback allowed %d)\n",
+        fallback_allowed);
 
     /* No Safety check on open: we might be in the middle of a broken update */
     {
@@ -1264,7 +1264,8 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
+    /* leave TPM2 available to be called from non-secure callable */
     wolfBoot_tpm2_deinit();
 #endif
 

@@ -101,7 +101,7 @@ ifeq ($(ARCH),AARCH64)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm64.o
   endif
-  ifeq ($(NO_ARM_ASM),0)
+  ifneq ($(NO_ARM_ASM),1)
     ARCH_FLAGS=-mstrict-align
     CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8 -DWOLFSSL_AARCH64_PRIVILEGE_MODE
     WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
@@ -250,7 +250,6 @@ ifeq ($(ARCH),ARM)
     WOLFBOOT_ORIGIN=0x10000000
     ifeq ($(TZEN),1)
       LSCRIPT_IN=hal/$(TARGET).ld
-      CFLAGS+=-DTZEN
     else
       LSCRIPT_IN=hal/$(TARGET)-ns.ld
     endif
@@ -264,6 +263,26 @@ ifeq ($(ARCH),ARM)
      UPDATE_OBJS:=src/update_ram.o
      CFLAGS+=-DWOLFBOOT_DUALBOOT -DEXT_FLASH -DNAND_FLASH -fno-builtin -ffreestanding
      CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+  endif
+
+  ifeq ($(TARGET),va416x0)
+    CFLAGS+=-I$(WOLFBOOT_ROOT)/hal/vorago/ \
+            -I$(VORAGO_SDK_DIR)/common/drivers/hdr/ \
+            -I$(VORAGO_SDK_DIR)/common/mcu/hdr/ \
+            -I$(VORAGO_SDK_DIR)/common/utils/hdr/
+    SDK_OBJS=$(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_spi.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_clkgen.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_ioconfig.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_irqrouter.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_uart.o \
+             $(VORAGO_SDK_DIR)/common/drivers/src/va416xx_hal_timer.o \
+             $(VORAGO_SDK_DIR)/common/mcu/src/system_va416xx.o
+    ifeq ($(USE_HAL_SPI_FRAM),1)
+      SDK_OBJS+=$(VORAGO_SDK_DIR)/common/utils/src/spi_fram.o
+      CFLAGS+=-DUSE_HAL_SPI_FRAM
+    endif
+    OBJS+=$(SDK_OBJS)
   endif
 
 ## Cortex CPU
@@ -302,7 +321,6 @@ else
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm.o \
           $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
-
 
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
                               -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
@@ -398,10 +416,6 @@ else
   endif
 endif
 endif
-endif
-
-ifeq ($(TZEN),1)
-  CFLAGS+=-DTZEN
 endif
 
 

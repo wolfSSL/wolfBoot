@@ -262,8 +262,10 @@ void hal_prepare_boot(void)
     spi_flash_release();
 #endif
     hal_flash_lock();
+#ifdef WOLFBOOT_RESTORE_CLOCK
     if ((FLASH_PECR & FLASH_PECR_PELOCK) == 0)
         FLASH_PECR |= FLASH_PECR_PELOCK;
     clock_pll_off();
+#endif
 }
 

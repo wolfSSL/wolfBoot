@@ -46,6 +46,12 @@
     #undef NO_FILESYSTEM
 #endif
 
+#ifdef WOLFBOOT_KEYTOOLS
+    /* this code needs to use the Use ./include/user_settings.h file */
+    #error "The wrong user_settings.h has been included."
+#endif
+
+
 /* HAL Stubs */
 void hal_init(void)
 {

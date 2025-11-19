@@ -317,6 +317,7 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
 
 void RAMFUNCTION hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     /* Reset clock controller */
     GCLK_CTRLA |= CTRLA_SWRST;
 
@@ -332,6 +333,7 @@ void RAMFUNCTION hal_prepare_boot(void)
 
     /* Clear PLL options */
     OSCCTRL_DPLL0CTRLB = 0;
+#endif
 }
 
 #endif /* __WOLFBOOT */

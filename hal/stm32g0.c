@@ -89,8 +89,8 @@
 #define FLASH_CR_PG                           (1 << 0)  /* RM0444 - 3.7.5 - FLASH_CR */
 #define FLASH_CR_SEC_PROT                     (1 << 28) /* RM0444 - 3.7.5 - FLASH_CR */
 
-#define FLASH_CR_PNB_SHIFT                     3        /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 8:3 */
-#define FLASH_CR_PNB_MASK                      0x3f     /* RM0444 - 3.7.5 - FLASH_CR  - PNB bits 8:3 - 6 bits */
+#define FLASH_CR_PNB_SHIFT                     3        /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 9:3 */
+#define FLASH_CR_PNB_MASK                      0x7f     /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 9:3 - 7 bits */
 
 #define FLASH_CR_BKER                         (1 << 13)
 #define FLASH_CR_BKER_BITMASK                 0x2000
@@ -351,7 +351,9 @@ void RAMFUNCTION hal_prepare_boot(void)
 #ifdef SPI_FLASH
     spi_flash_release();
 #endif
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
+#endif
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT
     do_secure_boot();
 #endif

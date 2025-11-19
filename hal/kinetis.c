@@ -28,7 +28,8 @@
 #include "fsl_sysmpu.h"
 
 #if defined(CPU_MK82FN256VLL15) && defined(FREESCALE_USE_LTC)
-#include <wolfssl/wolfcrypt/port/nxp/ksdk_port.h>
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/port/nxp/ksdk_port.h"
 #endif
 
 static flash_config_t pflash;

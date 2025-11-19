@@ -725,9 +725,13 @@ ifeq ($(WOLFTPM),1)
         endif
     endif
   endif
-  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
-  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
-  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+  ifneq ($(WOLFCRYPT_TZ_PKCS11),1)
+    ifneq ($(ENCRYPT),1)
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+    endif
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+  endif
   ifeq ($(DEBUG),1)
     CFLAGS+=-DWOLFBOOT_DEBUG_TPM=1
   endif
@@ -1039,4 +1043,13 @@ endif
 
 ifneq ($(WOLFBOOT_PARTITION_FILENAME),)
 	CFLAGS += -DWOLFBOOT_PARTITION_FILENAME=$(WOLFBOOT_PARTITION_FILENAME)
+endif
+
+# Clock Restore Option (default on)
+ifneq ($(WOLFBOOT_RESTORE_CLOCK),0)
+	CFLAGS += -DWOLFBOOT_RESTORE_CLOCK
+endif
+
+ifeq ($(TZEN),1)
+  CFLAGS+=-DTZEN
 endif

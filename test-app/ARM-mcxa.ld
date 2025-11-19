@@ -54,4 +54,5 @@ _wolfboot_partition_update_address = @WOLFBOOT_PARTITION_UPDATE_ADDRESS@;
 _wolfboot_partition_swap_address = @WOLFBOOT_PARTITION_SWAP_ADDRESS@;
 
 PROVIDE(_start_heap = _end);
+PROVIDE(end = _end);
 PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));
