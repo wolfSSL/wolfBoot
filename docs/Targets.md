@@ -2735,14 +2735,22 @@ Debugging with JLink:
 
 1) Start GDB Server:
 ```
+# To debug the app core:
 JLinkGDBServer -device nRF5340_xxAA_APP -if SWD -port 3333
+# To debug the net core:
+JLinkGDBServer -device nRF5340_xxAA_NET -if SWD -port 3334
 ```
 
 2) Start GDB
-This will use .gdbinit, but can supply `wolfboot.elf -ex "target remote localhost:3333"` if permissions not allowing.
 
 ```
-arm-none-eabi-gdb
+cd tools/scripts/nrf5340
+
+# To debug the app core:
+arm-none-eabi-gdb -x app.gdbinit
+# To debug the net core:
+arm-none-eabi-gdb -x net.gdbinit
+
 b main
 mon reset
 c

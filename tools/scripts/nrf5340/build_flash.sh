@@ -15,8 +15,9 @@
 # Build dela update version 3 and flash to external (also reprograms internal flash)
 # ./tools/scripts/nrf5340/build_flash.sh --delta
 
-#import config for IMAGE_HEADER_SIZE and WOLFBOOT_SECTOR_SIZE
-. config/examples/nrf5340.config
+#import IMAGE_HEADER_SIZE and WOLFBOOT_SECTOR_SIZE
+IMAGE_HEADER_SIZE="$(awk -F '?=|:=|=' '$1 == "IMAGE_HEADER_SIZE" { print $2 }' config/examples/nrf5340.config)"
+WOLFBOOT_SECTOR_SIZE="$(awk -F '?=|:=|=' '$1 == "WOLFBOOT_SECTOR_SIZE" { print $2 }' config/examples/nrf5340.config)"
 
 # Defaults
 MAKE_ARGS=" DEBUG_SYMBOLS=1"
@@ -47,22 +48,26 @@ fi
 
 while test $# -gt 0; do
   case "$1" in
-    -h|--help|-?)
+    -h|--help|-\?)
       echo "nRF5340 build / flash script"
       echo " "
       echo "default: build, erase and program"
       echo " "
       echo "options:"
-      echo "-h, --help      show brief help"
-      echo "-c, --clean     cleanup build artifacts"
-      echo "-b, --build     build release with symbols"
-      echo "-d, --debug     build debug"
-      echo "-v, --verbose   build verbose"
-      echo "--version       use custom version"
-      echo "-e, --erase     do erase of internal/external flash"
-      echo "-p, --program   program images built"
-      echo "-u, --update    build update, sign and program external flash"
-      echo "-t, --delta     build update, sign delta and program external flash"
+      echo "-h, --help           show brief help"
+      echo "-c, --clean          cleanup build artifacts"
+      echo "-b, --build          build release with symbols"
+      echo "-d, --debug          build debug"
+      echo "-v, --verbose        build verbose"
+      echo "--version            use custom version"
+      echo "-e, --erase          do erase of internal/external flash"
+      echo "-ei, --erase-int     do erase of internal flash"
+      echo "-ee, --erase-ext     do erase of external flash"
+      echo "-p, --program        program images built"
+      echo "-pi, --program-int   program internal image (boot)"
+      echo "-pe, --program-ext   program external image (update)"
+      echo "-u, --update         build update, sign and program external flash"
+      echo "-t, --delta          build update, sign delta and program external flash"
       exit 0
       ;;
     -c|--clean)
@@ -93,10 +98,30 @@ while test $# -gt 0; do
       echo "Do erase"
       shift
       ;;
+    -ei|--erase-int)
+      DO_ERASE_INT=1
+      echo "Do erase internal"
+      shift
+      ;;
+    -ee|--erase-ext)
+      DO_ERASE_EXT=1
+      echo "Do erase external"
+      shift
+      ;;
     -p|--program)
       DO_PROGRAM_INT=1
       DO_PROGRAM_EXT=1
       echo "Do program"
+      shift
+      ;;
+    -pi|--program-int)
+      DO_PROGRAM_INT=1
+      echo "Do program internal"
+      shift
+      ;;
+    -pe|--program-ext)
+      DO_PROGRAM_EXT=1
+      echo "Do program external"
       shift
       ;;
     --version)
@@ -148,6 +173,8 @@ if [[ $DO_BUILD == 1 ]]; then
   make clean
   make $MAKE_ARGS
   cp test-app/image.bin tools/scripts/nrf5340/image_net.bin
+  cp wolfboot.elf tools/scripts/nrf5340/wolfboot_net.elf
+  cp test-app/image.elf tools/scripts/nrf5340/image_net.elf
   if [ ! -f tools/scripts/nrf5340/factory_net.bin ]; then
     cp test-app/image_v1_signed.bin tools/scripts/nrf5340/image_net_v1_signed.bin
     cp factory.bin tools/scripts/nrf5340/factory_net.bin
@@ -158,6 +185,8 @@ if [[ $DO_BUILD == 1 ]]; then
   make clean
   make $MAKE_ARGS
   cp test-app/image.bin tools/scripts/nrf5340/image_app.bin
+  cp wolfboot.elf tools/scripts/nrf5340/wolfboot_app.elf
+  cp test-app/image.elf tools/scripts/nrf5340/image_app.elf
   if [ ! -f tools/scripts/nrf5340/factory_app.bin ]; then
     cp test-app/image_v1_signed.bin tools/scripts/nrf5340/image_app_v1_signed.bin
     cp factory.bin tools/scripts/nrf5340/factory_app.bin

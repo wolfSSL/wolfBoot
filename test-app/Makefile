@@ -235,7 +235,8 @@ ifeq ($(TARGET),stm32u5)
 endif
 
 ifeq ($(TARGET),nrf5340_net)
-  APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
+  CFLAGS+=-mcpu=cortex-m33+nodsp+nofp
+  LDFLAGS+=-mcpu=cortex-m33+nodsp+nofp
   LSCRIPT_TEMPLATE=ARM-nrf5340_net.ld
 endif
 

@@ -113,10 +113,27 @@ void sleep_us(uint32_t usec);
     #define SPU_FLASHREGION_PERM_LOCK    (1 << 8) /* The content of this register can't be changed until the next reset */
 #endif
 
-/* OTP */
-#define UICR_BASE (0x00FF8000UL)
+/* UICR */
+#ifdef TARGET_nrf5340_app
+    #define UICR_BASE (0x00FF8000UL)
+#else
+    #define UICR_BASE (0x01FF8000UL)
+#endif
 #define UICR_USER (UICR_BASE)
-#define UICR_OTP  (UICR_BASE + 0x100)
+#define UICR_APPROTECT       (*(volatile uint32_t *)(UICR_BASE + 0x000))
+#define UICR_SECUREAPPROTECT (*(volatile uint32_t *)(UICR_BASE + 0x01C))
+#define UICR_OTP             (UICR_BASE + 0x100)
+
+/* CTRLAP */
+#ifdef TARGET_nrf5340_app
+    #define CTRLAP_BASE (0x50006000)
+#else
+    #define CTRLAP_BASE (0x41006000)
+#endif
+#define CTRLAP_APPROTECT_LOCK          (*(volatile uint32_t *)(CTRLAP_BASE 0x540))
+#define CTRLAP_APPROTECT_DISABLE       (*(volatile uint32_t *)(CTRLAP_BASE 0x544))
+#define CTRLAP_SECUREAPPROTECT_LOCK    (*(volatile uint32_t *)(CTRLAP_BASE 0x548))
+#define CTRLAP_SECUREAPPROTECT_DISABLE (*(volatile uint32_t *)(CTRLAP_BASE 0x54C))
 
 /* Reset */
 #ifdef TARGET_nrf5340_app

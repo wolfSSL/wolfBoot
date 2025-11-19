@@ -340,6 +340,14 @@ void ext_flash_unlock(void)
 }
 #endif /* TARGET_nrf5340_net */
 
+static void hal_handle_approtect(void) {
+#ifdef DEBUG_SYMBOLS
+    /* Needed to allow debugger access */
+    CTRLAP_APPROTECT_DISABLE = 0x50FA50FA;
+    CTRLAP_SECUREAPPROTECT_DISABLE = 0x50FA50FA;
+#endif
+}
+
 static void clock_init(void)
 {
 #ifdef TARGET_nrf5340_app
@@ -691,6 +699,8 @@ void hal_init(void)
 #endif
 
     clock_init();
+
+    hal_handle_approtect();
 
 #ifdef DEBUG_UART
     uart_init();
