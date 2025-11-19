@@ -28,6 +28,7 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "target.h"
+#include "wolfboot/wolfboot.h"
 
 #include "delta.h"
 #include "printf.h"
@@ -75,6 +76,73 @@ static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 
 #include <string.h>
 
+#ifdef WOLFBOOT_SELF_HEADER
+static void RAMFUNCTION wolfBoot_update_self_header(struct wolfBoot_image* src)
+{
+    uint32_t  offset = 0;
+    uint8_t   buffer[FLASHBUFFER_SIZE];
+    int       dst_ext = 0;
+    uintptr_t dst_int_addr;
+    uintptr_t dst_ext_addr = WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS;
+    dst_int_addr           = WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS;
+
+    /* Determine destination flash type */
+#if defined(EXT_FLASH) && defined(WOLFBOOT_SELF_HEADER_EXT)
+    dst_ext = 1;
+#endif
+
+#ifdef EXT_FLASH
+    /* Erase the self-header sector - sets all bytes to 0xFF */
+    if (dst_ext) {
+        ext_flash_unlock();
+        ext_flash_erase(dst_ext_addr, WOLFBOOT_SELF_HEADER_SIZE);
+    }
+    else
+#endif
+    {
+        hal_flash_erase(dst_int_addr, WOLFBOOT_SELF_HEADER_SIZE);
+    }
+
+    /* Write only the actual header data (IMAGE_HEADER_SIZE bytes).
+     * Any reserved space beyond IMAGE_HEADER_SIZE remains 0xFF from erase. */
+    while (offset < IMAGE_HEADER_SIZE) {
+        uint32_t chunk = IMAGE_HEADER_SIZE - offset;
+        if (chunk > FLASHBUFFER_SIZE) {
+            chunk = FLASHBUFFER_SIZE;
+        }
+
+#ifdef EXT_FLASH
+        if (PART_IS_EXT(src)) {
+            ext_flash_check_read((uintptr_t)(src->hdr) + offset, (void*)buffer,
+                                 chunk);
+        }
+        else
+#endif
+        {
+            memcpy(buffer, (uint8_t*)(src->hdr + offset), chunk);
+        }
+
+#ifdef EXT_FLASH
+        if (dst_ext) {
+            ext_flash_write(dst_ext_addr + offset, buffer, chunk);
+        }
+        else
+#endif
+        {
+            hal_flash_write(dst_int_addr + offset, buffer, chunk);
+        }
+
+        offset += chunk;
+    }
+
+#ifdef EXT_FLASH
+    if (dst_ext) {
+        ext_flash_lock();
+    }
+#endif
+}
+#endif
+
 static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
 {
     uintptr_t pos = 0;
@@ -109,6 +177,11 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
             pos += FLASHBUFFER_SIZE;
         }
     }
+
+#ifdef WOLFBOOT_SELF_HEADER
+    wolfBoot_update_self_header(src);
+#endif
+
     hal_flash_lock();
     arch_reboot();
 }

@@ -1255,6 +1255,11 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8_t* addr);
 #endif
 int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image);
+#ifdef WOLFBOOT_SELF_HEADER
+int wolfBoot_open_self(struct wolfBoot_image *img);
+int wolfBoot_open_self_address(struct wolfBoot_image *img, uint8_t *hdr,
+    uint8_t *image);
+#endif
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
 int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
@@ -1293,10 +1298,16 @@ int keyslot_id_by_sha(const uint8_t *hint);
 # else
 #  define SWAP_EXT 0
 # endif
+# if defined(WOLFBOOT_SELF_HEADER_EXT)
+#  define SELF_HEADER_EXT 1
+# else
+#  define SELF_HEADER_EXT 0
+# endif
 # define PARTN_IS_EXT(pn) \
     ((pn == PART_BOOT || pn == PART_DTS_BOOT) ? BOOT_EXT: \
         ((pn == PART_UPDATE || pn == PART_DTS_UPDATE) ? UPDATE_EXT : \
-            ((pn == PART_SWAP) ? SWAP_EXT : 0)))
+            ((pn == PART_SWAP) ? SWAP_EXT : \
+                 ((pn == PART_SELF) ? SELF_HEADER_EXT : 0))))
 # define PART_IS_EXT(x) (!(x)->not_ext) && PARTN_IS_EXT(((x)->part))
 
 

@@ -74,6 +74,21 @@ ifeq ($(WOLFBOOT_TPM_SEAL),1)
   endif
 endif
 
+## Persist wolfBoot self header at fixed address
+## Invariants and defaults are enforced in wolfboot.h
+ifeq ($(WOLFBOOT_SELF_HEADER),1)
+  CFLAGS+=-DWOLFBOOT_SELF_HEADER
+  ifeq ($(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS),)
+    $(error WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS must be set when WOLFBOOT_SELF_HEADER=1)
+  endif
+  ifneq ($(WOLFBOOT_SELF_HEADER_SIZE),)
+    CFLAGS+=-D"WOLFBOOT_SELF_HEADER_SIZE=$(WOLFBOOT_SELF_HEADER_SIZE)"
+  endif
+  ifeq ($(SELF_HEADER_EXT),1)
+    CFLAGS+=-DWOLFBOOT_SELF_HEADER_EXT
+  endif
+endif
+
 ## DSA Settings
 ifeq ($(SIGN),NONE)
   SIGN_OPTIONS+=--no-sign

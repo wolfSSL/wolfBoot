@@ -360,6 +360,20 @@ ifeq ($(TARGET),sim)
   endif
 endif
 
+# Self-header verification requires image.c (for verify_integrity/verify_authenticity)
+# and keystore (for public key lookup), plus wolfcrypt for crypto operations
+ifeq ($(WOLFBOOT_SELF_HEADER),1)
+  CFLAGS+=-D"WOLFBOOT_SELF_HEADER"
+  CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
+  # Test app needs addtional image, keystore, and crypto objects to do verification
+  APP_OBJS+=../src/image.o ../src/keystore.o
+  # Only add wolfcrypt objs if WOLFHSM blocks won't provide them
+  ifeq ($(WOLFHSM_CLIENT)$(WOLFHSM_SERVER),)
+    # remove duplicates for certain object files
+    APP_OBJS+=$(sort $(WOLFCRYPT_OBJS))
+  endif
+endif
+
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-D"EXT_FLASH=1" -D"PART_UPDATE_EXT=1"
   ifeq ($(NO_XIP),1)

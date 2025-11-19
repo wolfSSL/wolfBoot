@@ -24,6 +24,8 @@ The flash memory of the target is partitioned into the following areas:
   - Swapping space (SWAP partition) starting at address `WOLFBOOT_PARTITION_SWAP_ADDRESS`
     - the swap space size is defined as `WOLFBOOT_SECTOR_SIZE` and must be as big as the
       largest sector used in either BOOT/UPDATE partitions.
+  - (Optional) Self-header partition starting at address `WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS`,
+    used when `WOLFBOOT_SELF_HEADER=1` is enabled. See [Self-header partition](#self-header-partition) below.
 
 A proper partitioning configuration must be set up for the specific use, by setting
 the values for offsets and sizes in [include/target.h](../include/target.h).
@@ -33,6 +35,48 @@ the values for offsets and sizes in [include/target.h](../include/target.h).
 This partition is usually very small, and only contains the bootloader code and data.
 Public keys pre-authorized during factory image creations are automatically stored
 as part of the firmware image.
+
+### Self-header partition
+
+When `WOLFBOOT_SELF_HEADER=1` is enabled, an additional flash region is
+reserved for the bootloader's own signed manifest header. This allows
+external components (e.g. wolfHSM server, a secure co-processor, etc.) to read
+and cryptographically verify the bootloader.
+
+Configuration:
+
+- `WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS` — the flash address for the
+  header. **Must be aligned to `WOLFBOOT_SECTOR_SIZE`.**
+- `WOLFBOOT_SELF_HEADER_SIZE` — (optional) the erase span at the header
+  address. Defaults to `IMAGE_HEADER_SIZE` and must be at least
+  `IMAGE_HEADER_SIZE`.
+- `SELF_HEADER_EXT=1` — store the self-header in external flash instead
+  of internal flash. Requires `EXT_FLASH=1`.
+
+The self-header partition sits alongside the other partitions in the
+flash map:
+
+```
+  ┌─────────────────────┐
+  │  wolfBoot           │
+  ├─────────────────────┤  BOOT_ADDRESS
+  │  BOOT partition     │
+  ├─────────────────────┤  UPDATE_ADDRESS
+  │  UPDATE partition   │
+  ├─────────────────────┤  SWAP_ADDRESS
+  │  SWAP partition     │
+  ├─────────────────────┤  SELF_HEADER_ADDRESS
+  │  Self-header        │
+  └─────────────────────┘
+```
+
+The actual placement is flexible — the self-header can be located
+anywhere in the flash map as long as it does not overlap with any other
+partition and is sector-aligned.
+
+For full details on the self-header feature — including the update flow,
+runtime verification API, and factory programming — see
+[firmware_update.md](firmware_update.md#self-header-persisting-the-bootloader-manifest).
 
 ### BOOT partition
 

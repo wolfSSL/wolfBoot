@@ -81,6 +81,125 @@ rebooting.
 wolfBoot can be used to deploy new bootloader versions as well as
 update keys.
 
+#### Self-header: persisting the bootloader manifest
+
+In a typical wolfBoot deployment the bootloader verifies the application
+firmware, but no entity verifies the bootloader itself. When an external
+component — such as a [wolfHSM](wolfHSM.md) server, or another
+secure co-processor — needs to measure and authenticate the running
+bootloader, it must be able to read the bootloader's signed manifest
+header independently. The **self-header** feature makes this possible by
+persisting a copy of the bootloader's manifest header at a dedicated,
+fixed flash address after every self-update.
+
+This completes the chain of trust:
+
+```
+External verifier  --verifies-->  wolfBoot  -->verifies-->  Application
+  (wolfHSM/TPM)                 (self-header)              (BOOT partition)
+```
+
+##### Configuration options
+
+| Build option | Required | Description |
+|---|---|---|
+| `WOLFBOOT_SELF_HEADER=1` | Yes | Enable the self-header feature |
+| `WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS=<addr>` | Yes | Flash address where the header is stored. **Must be sector-aligned.** |
+| `WOLFBOOT_SELF_HEADER_SIZE=<size>` | No | Erase span at the header address. Defaults to `IMAGE_HEADER_SIZE`. Must be ≥ `IMAGE_HEADER_SIZE`. |
+| `SELF_HEADER_EXT=1` | No | Store the header in external flash. Requires `EXT_FLASH=1`. |
+
+##### Flash layout
+
+The self-header occupies its own region in the flash map, separate from
+the bootloader binary and the firmware partitions:
+
+```
+  Internal flash (example)
+  ┌─────────────────────┐  0x00000
+  │  wolfBoot           │
+  │  (bootloader)       │
+  ├─────────────────────┤  WOLFBOOT_PARTITION_BOOT_ADDRESS
+  │  BOOT partition     │
+  ├─────────────────────┤  WOLFBOOT_PARTITION_UPDATE_ADDRESS
+  │  UPDATE partition   │
+  ├─────────────────────┤  WOLFBOOT_PARTITION_SWAP_ADDRESS
+  │  SWAP partition     │
+  ├─────────────────────┤  WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS
+  │  Self-header        │  (IMAGE_HEADER_SIZE or WOLFBOOT_SELF_HEADER_SIZE)
+  └─────────────────────┘
+```
+
+When `SELF_HEADER_EXT=1` is set the self-header is stored in external
+flash instead. See [Flash partitions](flash_partitions.md) for more
+detail on the overall partition layout.
+
+##### Update flow
+
+During a self-update with `WOLFBOOT_SELF_HEADER` enabled, the following
+steps occur:
+
+1. A new signed bootloader image (created with `--wolfboot-update`) is
+   placed in the UPDATE partition.
+2. The application triggers the update (e.g. `wolfBoot_update_trigger()`).
+3. On reboot, wolfBoot validates the new bootloader image — verifying both
+   integrity and signature.
+4. The new bootloader binary is copied to flash, overwriting the old one in-place.
+5. **After** the firmware copy completes, the manifest header is written
+   to `WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS`.
+6. The system reboots into the new bootloader.
+
+##### Runtime verification API
+
+Applications and external verifiers can use the following functions
+(declared in `include/image.h` and `include/wolfboot/wolfboot.h`) when linking
+against wolfBoot as a library to read and verify the persisted self-header:
+
+- **`wolfBoot_get_self_header()`** — returns a pointer to the persisted
+  header bytes, or `NULL` if the header is missing or invalid.
+- **`wolfBoot_get_self_version()`** — returns the version number stored
+  in the persisted header, or `0` if the header is invalid.
+- **`wolfBoot_open_self(struct wolfBoot_image *img)`** — opens the
+  self-header and populates `img` so that the standard verification
+  functions can be used on it. Returns `0` on success.
+- **`wolfBoot_open_self_address(struct wolfBoot_image *img, uint8_t *hdr, uint8_t *image)`**
+  — like `wolfBoot_open_self()` but accepts explicit header and firmware
+  base addresses. Useful for opening any self-header and image combination.
+
+After opening the image with `wolfBoot_open_self()`, the caller can
+verify the bootloader using the standard verification functions:
+
+```c
+struct wolfBoot_image img;
+if (wolfBoot_open_self(&img) == 0) {
+    wolfBoot_verify_integrity(&img);
+    wolfBoot_verify_authenticity(&img);
+}
+```
+
+**NOTE: An application verifying its own integrity and authenticity almost never provides meaningful security.**
+
+The self-header feature exists to support verification of an *untrusted* wolfBoot image by an external entity that has its own independent root of trust, before execution is transferred to wolfBoot.
+This is intended for platforms where the silicon does not support ROM-based verification of a first-stage bootloader.
+
+A common use case is in automotive multicore systems used with wolfHSM, where an HSM core boots first and is responsible for authenticating and releasing the remaining cores in the system.
+
+##### Factory programming
+
+At manufacturing time the self-header must be programmed alongside the
+bootloader binary. Use `--header-only` with the sign tool to generate a
+standalone header binary:
+
+```
+tools/keytools/sign --wolfboot-update --header-only wolfboot.bin key.der 1
+```
+
+This produces a `wolfboot_v1_header.bin` containing only the manifest
+header. Program it at `WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS` and the
+regular signed image at the bootloader origin.
+
+See [Signing.md](Signing.md#header-only-output-wolfboot-self-header) for
+more detail on the `--header-only` sign tool option.
+
 ### Incremental updates (aka: 'delta' updates)
 
 wolfBoot supports incremental updates, based on a specific older version. The sign tool

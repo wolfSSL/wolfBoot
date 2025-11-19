@@ -1174,6 +1174,45 @@ static uint8_t* wolfBoot_get_image_from_part(uint8_t part)
     return image;
 }
 
+#ifdef WOLFBOOT_SELF_HEADER
+uint8_t* wolfBoot_get_self_header(void)
+{
+#if defined(EXT_FLASH) && defined(WOLFBOOT_SELF_HEADER_EXT)
+    static uint8_t hdr_buf[IMAGE_HEADER_SIZE];
+    uint32_t       magic;
+
+    ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS, hdr_buf,
+                   IMAGE_HEADER_SIZE);
+    magic = *((uint32_t*)hdr_buf);
+    if (magic != WOLFBOOT_MAGIC) {
+        return NULL;
+    }
+
+    return hdr_buf;
+#else
+    uint8_t* hdr   = (uint8_t*)WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS;
+    uint32_t magic = *((uint32_t*)hdr);
+
+    if (magic != WOLFBOOT_MAGIC) {
+        return NULL;
+    }
+
+    return hdr;
+#endif
+}
+
+uint32_t wolfBoot_get_self_version(void)
+{
+    uint8_t* hdr = wolfBoot_get_self_header();
+    if (hdr == NULL) {
+        return 0;
+    }
+
+    return wolfBoot_get_blob_version(hdr);
+}
+
+#endif
+
 /**
  * @brief Get image version for a partition.
  *

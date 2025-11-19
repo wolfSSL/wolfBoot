@@ -152,6 +152,27 @@ extern "C" {
 #    endif
 #endif
 
+#ifdef WOLFBOOT_SELF_HEADER
+#ifndef WOLFBOOT_SELF_HEADER_SIZE
+#define WOLFBOOT_SELF_HEADER_SIZE IMAGE_HEADER_SIZE
+#endif
+#if (WOLFBOOT_SELF_HEADER_SIZE < IMAGE_HEADER_SIZE)
+#error "WOLFBOOT_SELF_HEADER_SIZE must be at least IMAGE_HEADER_SIZE"
+#endif
+#ifdef __WOLFBOOT
+#if !defined(WOLFBOOT_PART_USE_ARCH_OFFSET)
+#if (WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS % WOLFBOOT_SECTOR_SIZE)
+#error "WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS must be sector aligned"
+#endif
+#endif
+#endif
+#ifdef WOLFBOOT_SELF_HEADER_EXT
+#ifndef EXT_FLASH
+#error "WOLFBOOT_SELF_HEADER_EXT requires EXT_FLASH"
+#endif
+#endif
+#endif /* WOLFBOOT_SELF_HEADER */
+
 #ifdef BIG_ENDIAN_ORDER
 #    define WOLFBOOT_MAGIC          0x574F4C46 /* WOLF */
 #    define WOLFBOOT_MAGIC_TRAIL    0x424F4F54 /* BOOT */
@@ -433,6 +454,7 @@ extern "C" {
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
+#define PART_SELF   3
 #define PART_NONE   0xFF
 
 #define PART_DTS (0x10)
@@ -473,6 +495,10 @@ uint32_t wolfBoot_image_size(uint8_t *image);
 uint32_t wolfBoot_get_blob_version(uint8_t *blob);
 uint16_t wolfBoot_get_blob_type(uint8_t *blob);
 uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob);
+#ifdef WOLFBOOT_SELF_HEADER
+uint8_t* wolfBoot_get_self_header(void);
+uint32_t wolfBoot_get_self_version(void);
+#endif
 
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 

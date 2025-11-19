@@ -1436,6 +1436,67 @@ int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
 
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
+#ifdef WOLFBOOT_SELF_HEADER
+/**
+ * @brief Open wolfBoot's own image for verification.
+ *
+ * This function initializes a wolfBoot_image structure to represent wolfBoot
+ * itself, using the persisted self-header and the bootloader's flash location.
+ * The resulting image can be passed to wolfBoot_verify_integrity() and
+ * wolfBoot_verify_authenticity() to verify the bootloader.
+ *
+ * @param img Pointer to a wolfBoot_image structure to be initialized.
+ *
+ * @return 0 on success, -1 on failure (NULL pointer or invalid self-header).
+ */
+int wolfBoot_open_self(struct wolfBoot_image* img)
+{
+    uint8_t* hdr;
+    int      ret;
+
+    if (img == NULL) {
+        return -1;
+    }
+
+    hdr = wolfBoot_get_self_header();
+    if (hdr == NULL) {
+        return -1;
+    }
+
+    ret = wolfBoot_open_self_address(img, hdr, (uint8_t*)ARCH_FLASH_OFFSET);
+    if (ret == 0) {
+        /* PART_SELF may be marked external for header storage, but wolfBoot
+         * firmware bytes are always in internal flash at ARCH_FLASH_OFFSET. */
+        img->not_ext = 1;
+    }
+    return ret;
+}
+
+/*
+ * Directly accesses flash, suitable for non-internal-wolfBoot usage
+ */
+int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
+                               uint8_t* image)
+{
+    uint32_t magic;
+
+    XMEMSET(img, 0, sizeof(struct wolfBoot_image));
+
+    magic = *((uint32_t*)hdr);
+    if (magic != WOLFBOOT_MAGIC) {
+        return -1;
+    }
+
+    img->hdr     = hdr;
+    img->fw_size = wolfBoot_image_size(hdr);
+    img->fw_base = image;
+    img->part    = PART_SELF;
+    img->hdr_ok  = 1;
+
+    return 0;
+}
+#endif
+
 /**
  * @brief Verify the integrity of the image using the stored SHA hash.
  *
