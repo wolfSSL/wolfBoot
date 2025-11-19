@@ -1,4 +1,4 @@
-# wolfBoot Key Tools
+﻿# wolfBoot Key Tools
 
 `keygen` and `sign` are two command line tools to be used on a PC (or automated
 server) environment to manage wolfBoot private keys and sign the initial

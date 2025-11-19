@@ -1,0 +1,96 @@
+name: WolfBoot CMake Build (macOS)
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  macos-cmake:
+    name: Build on macOS (CMake + Ninja)
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [stm32l4, stm32h7, stm32c0, stm32g0]
+
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"    # avoid updating taps during install
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_CURL_RETRIES: "6"      # ask curl inside brew to retry
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Cache Homebrew bottles # downloads (so retries don't redownload)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /Users/runner/Library/Caches/Homebrew
+          key: homebrew-${{ runner.os }}-mac14-cmake-gcc-newlib
+          restore-keys: |
+            homebrew-${{ runner.os }}-
+
+      - name: Install toolchain and build tools
+        run: |
+          # Install with step throttle to hopefully avoid stuck jobs
+
+          set -euxo pipefail
+
+          throttle_delay=5
+          brew update
+
+          sleep "$throttle_delay"
+          brew install --force-bottle cmake
+
+          sleep "$throttle_delay"
+          brew install --force-bottle ninja
+
+          # Use cask to include headers such as <stdlib.h>
+          sleep "$throttle_delay"
+          brew install --cask gcc-arm-embedded
+
+      - name: Probe ARM GCC (paths + smoke build)
+        run: |
+          set -euxo pipefail
+
+          which arm-none-eabi-gcc
+          arm-none-eabi-gcc --version
+
+          echo "=== GCC search dirs ==="
+          arm-none-eabi-gcc -print-search-dirs
+
+          echo "=== GCC verbose include paths (preprocess only) ==="
+          # This prints the built-in include search order; harmless with empty stdin.
+          arm-none-eabi-gcc -x c -E -v - < /dev/null || true
+
+          echo "=== Compile a freestanding object (no stdlib headers needed) ==="
+          cat > hello.c <<'EOF'
+          int main(void) { return 0; }
+          EOF
+          arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -ffreestanding -nostdlib -c hello.c -o hello.o
+          ls -l hello.o
+
+      - name: Configure (STM32L4)
+        run: |
+          echo "Disabled, missing params"
+          # rm -rf build
+          # cmake -B build -G Ninja         \
+          #   -DWOLFBOOT_CONFIG_MODE=preset \
+          #   -DWOLFBOOT_TARGET=stm32l4     \
+          #   -DBUILD_TEST_APPS=ON          \
+          #   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain_arm-none-eabi.cmake
+
+      - name: Cmake Configure & Build Preset (${{ matrix.target }})
+        run: |
+          rm -rf ./build-${{ matrix.target }}
+
+          cmake --preset ${{ matrix.target }}
+          cmake --build --preset ${{ matrix.target }}

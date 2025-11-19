@@ -66,6 +66,10 @@ src/rsa4096_pub_key.c
 /**/wolfboot_signing_private_key.der
 /**/keystore.der
 
+# Converted from generated files
+/**/keystore_spki.der
+/**/keystore_spki.pem
+
 # Renesas key data files
 include/key_data.*
 include/enckey_data.*
@@ -134,7 +138,6 @@ tools/squashelf/**
 
 # Generated configuration files
 .config
-.vs
 *.filters
 *.user
 
@@ -270,17 +273,25 @@ language.settings.xml
 *.bak
 
 # Any Visual Studio / VisualGDB
-/**/.vs
-/**/.visualgdb/*
+/**/.vs/**
+/**/.visualgdb/**
+
+# --- Whitelist specific files in the *root* .vs folder ---
+# Allow Git to descend into the root .vs directory
+!/.vs/
 
 # Defaults are set in files otherwise excluded:
-!/.vs/README.md
-!/.vs/VSWorkspaceState.json
-!/.vs/VSWorkspaceSettings.json
+!**/.vs/README.md
+!**/.vs/VSWorkspaceSettings.json
+
 
 # Any build directories
 /**/build
 /**/build-**
+
+# User config
+# See cmake/config_defaults_user.cmake.sample
+/**/cmake/config_defaults_user.cmake
 
 # Eclipse
 .cproject

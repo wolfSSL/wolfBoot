@@ -1,0 +1,24 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "my-stm32l4",
+      "displayName": "my STM32L4",
+      "inherits": [
+        "stm32l4"
+      ],
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-my-stm32l4",
+      "cacheVariables": {
+        "ARM_GCC_BIN": "C:/SysGCC/arm-eabi/bin",
+        "HOST_CC": "C:/Program Files/LLVM/bin/clang.exe"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "my-stm32l4",
+      "configurePreset": "my-stm32l4"
+    }
+  ]
+}

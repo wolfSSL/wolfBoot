@@ -1,0 +1,346 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "sign_hash_config",
+      "displayName": "Common Sign and Hash command-line params",
+      "hidden": true,
+      "cacheVariables": {
+        "SIGN": "ED25519",
+        "HASH": "SHA256"
+      }
+    },
+    {
+      "name": "sim",
+      "displayName": "~No config selected",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-sim",
+      "cacheVariables": {
+        "SIGN": "ED25519",
+        "HASH": "SHA256",
+        "WOLFBOOT_TARGET": "sim",
+        "WOLFBOOT_SECTOR_SIZE": "256",
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "WOLFBOOT_HAS_BASE_PRESET": true,
+        "ARCH": "HOST",
+        "SPMATH": "ON",
+        "DISABLE_BACKUP": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "BUILD_TEST_APPS": "ON",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x08003000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08009400",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x0800F800",
+        "WOLFBOOT_PARTITION_SIZE": "0x6400"
+      }
+    },
+    {
+      "name": "base_build",
+      "description": "Basic build directory",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "base_build_presetName",
+      "description": "Device specific build directory",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build-${presetName}"
+    },
+    {
+      "name": "base_build_env_presetName",
+      "description": "Device and environment specific build directory",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build-$env{TERM_PROGRAM}$env{VSCMD_VER}$env{WSL_DISTRO_NAME}-${presetName}"
+    },
+    {
+      "name": "base",
+      "description": "Edit the build directory inherits setting for all presets.",
+      "hidden": true,
+      "inherits": "base_build_presetName",
+      "cacheVariables": {
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "WOLFBOOT_HAS_BASE_PRESET": true
+      }
+    },
+    {
+      "name": "stm32",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "ST_CMSIS_CORE_TAG": "5.9.0"
+      }
+    },
+    {
+      "name": "_template-target",
+      "displayName": "_sample - target - template",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-template",
+      "environment": {
+        "PATH": "$penv{LOCALAPPDATA}/Microsoft/WinGet/Links;C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "ENV_REMINDER": "use env for cache, penv elsewhere",
+        "WOLFBOOT_CONFIG_MODE": "preset",
+        "VISUALGDB": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "WOLFBOOT_TARGET": "stm32l4"
+      }
+    },
+    {
+      "name": "vs-debug-trace",
+      "displayName": "VS Debug Trace (STM32H7)",
+      "inherits": [
+        "base",
+        "stm32h7"
+      ],
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_VERBOSE_MAKEFILE": "ON",
+        "CMAKE_FIND_DEBUG_MODE": "ON"
+      }
+    },
+    {
+      "name": "stm32c0",
+      "displayName": "STM32C0",
+      "inherits": [
+        "base",
+        "sign_hash_config",
+        "stm32"
+      ],
+      "cacheVariables": {
+        "WOLFBOOT_TARGET": "stm32c0",
+        "ST_HAL_TAG": "v1.4.0",
+        "ST_CMSIS_TAG": "v1.3.0",
+        "ARCH": "ARM",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "ON",
+        "NO_ASM": "OFF",
+        "NO_MPU": "ON",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "DUALBANK_SWAP": "OFF",
+        "RAM_CODE": "OFF",
+        "WOLFBOOT_PARTITION_SIZE": "0x2000",
+        "WOLFBOOT_SECTOR_SIZE": "0x800",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x08002800",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08005000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x08007800",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    },
+    {
+      "name": "stm32f1",
+      "displayName": "stm32f1",
+      "inherits": [
+        "base",
+        "stm32"
+      ],
+      "cacheVariables": {
+        "WOLFBOOT_TARGET": "stm32f1",
+        "ARCH": "ARM",
+        "VTOR": "OFF",
+        "SPMATH": "ON",
+        "DISABLE_BACKUP": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x08003000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08009400",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x0800F800",
+        "WOLFBOOT_PARTITION_SIZE": "0x6400",
+        "WOLFBOOT_SECTOR_SIZE": "0x400",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    },
+    {
+      "name": "stm32g0",
+      "displayName": "stm32g0",
+      "inherits": [
+        "base",
+        "sign_hash_config",
+        "stm32"
+      ],
+      "cacheVariables": {
+        "WOLFBOOT_TARGET": "stm32g0",
+        "ARCH": "ARM",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "ON",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "ON",
+        "DUALBANK_SWAP": "OFF",
+        "WOLFBOOT_PARTITION_SIZE": "0xB000",
+        "WOLFBOOT_SECTOR_SIZE": "0x800",
+        "ARCH_FLASH_OFFSET": "0x08000000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x08008000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08013000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x0801E000",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    },
+    {
+      "name": "stm32h7",
+      "displayName": "STM32H7",
+      "inherits": [
+        "base",
+        "sign_hash_config",
+        "stm32"
+      ],
+      "generator": "Ninja",
+      "cacheVariables": {
+        "ST_HAL_TAG": "v1.10.6",
+        "ST_CMSIS_TAG": "v1.7.4",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "WOLFBOOT_TARGET": "stm32h7",
+        "BUILD_TEST_APPS": "yes",
+        "ARCH": "ARM",
+        "DEBUG": "OFF",
+        "DEBUG_UART": "OFF",
+        "VTOR": "ON",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "QSPI_FLASH": "OFF",
+        "OCTOSPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "OFF",
+        "WOLFBOOT_VERSION": "ON",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "WOLFBOOT_PARTITION_SIZE": "0xD0000",
+        "WOLFBOOT_SECTOR_SIZE": "0x20000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x8020000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x80F0000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x81C0000"
+      }
+    },
+    {
+      "name": "stm32l4",
+      "displayName": "STM32L4",
+      "inherits": [
+        "base",
+        "sign_hash_config",
+        "stm32"
+      ],
+      "environment": {
+        "VSCMD_DEBUG": "3"
+      },
+      "cacheVariables": {
+        "WOLFBOOT_TARGET": "stm32l4",
+        "WOLFBOOT_DOWNLOADS_CMAKE": "${sourceDir}/cmake/downloads/stm32l4.cmake",
+        "STM32L4_PART": "STM32L475xx",
+        "BOARD": "B-L475E-IOT01A",
+        "ARCH": "ARM",
+        "DEBUG": "OFF",
+        "VTOR": "ON",
+        "CORTEX_M0": "OFF",
+        "NO_ASM": "OFF",
+        "EXT_FLASH": "OFF",
+        "SPI_FLASH": "OFF",
+        "ALLOW_DOWNGRADE": "OFF",
+        "NVM_FLASH_WRITEONCE": "ON",
+        "WOLFBOOT_VERSION": "OFF",
+        "V": "OFF",
+        "SPMATH": "ON",
+        "RAM_CODE": "OFF",
+        "DUALBANK_SWAP": "OFF",
+        "IMAGE_HEADER_SIZE": "256",
+        "WOLFBOOT_SECTOR_SIZE": "0x1000",
+        "WOLFBOOT_PARTITION_SIZE": "0x7A000",
+        "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x0800A000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08084000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x080FE000",
+        "WOLFTPM": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "cmake/toolchain_arm-none-eabi.cmake",
+        "BUILD_TEST_APPS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "~No config (wolfBoot sim)",
+      "configurePreset": "sim",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
+    {
+      "name": "stm32c0",
+      "configurePreset": "stm32c0",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
+    {
+      "name": "stm32f1",
+      "configurePreset": "stm32f1",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
+    {
+      "name": "stm32g0",
+      "configurePreset": "stm32g0",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
+    {
+      "name": "stm32h7",
+      "configurePreset": "stm32h7",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
+    {
+      "name": "stm32l4",
+      "configurePreset": "stm32l4",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    },
+    {
+      "name": "vs-debug-trace",
+      "configurePreset": "vs-debug-trace",
+      "jobs": 4,
+      "verbose": true,
+      "targets": [
+        "all"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+name: wolfboot CMake Script
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+jobs:
+  wolfboot_build_script_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Workaround for sources.list
+        run: |
+            # Replace sources
+
+            set -euxo pipefail
+
+            # Peek (what repos are active now)
+            apt-cache policy
+            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
+
+            # Enable nullglob so *.list/*.sources that don't exist don't break sed
+            shopt -s nullglob
+
+            echo "Replace sources.list (legacy)"
+            sudo sed -i \
+              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+              /etc/apt/sources.list || true
+
+            echo "Replace sources.list.d/*.list (legacy)"
+            for f in /etc/apt/sources.list.d/*.list; do
+              sudo sed -i \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                "$f"
+            done
+
+            echo "Replace sources.list.d/*.sources (deb822)"
+            for f in /etc/apt/sources.list.d/*.sources; do
+              sudo sed -i \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                -e "s|https\?://azure\.archive\.ubuntu\.com|http://mirror.arizona.edu|g" \
+                "$f"
+            done
+
+            echo "Fix /etc/apt/apt-mirrors.txt (used by URIs: mirror+file:...)"
+            if grep -qE '^[[:space:]]*https?://azure\.archive\.ubuntu\.com/ubuntu/?' /etc/apt/apt-mirrors.txt; then
+              # Replace azure with our mirror (idempotent)
+              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
+            fi
+
+            # Peek (verify changes)
+            grep -RIn "azure.archive.ubuntu.com" /etc/apt || true
+            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
+            echo "--- apt-mirrors.txt ---"
+            cat /etc/apt/apt-mirrors.txt || true
+
+
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu cmake
+
+      - name: Run wolfboot_build script
+        run: |
+          rm -rf ./build
+          chmod +x ./tools/scripts/wolfboot_cmake_full_build.sh
+
+          ./tools/scripts/wolfboot_cmake_full_build.sh --CLEAN  "stm32l4"
+          ./tools/scripts/wolfboot_cmake_full_build.sh --target "stm32l4"
+
+          ./tools/scripts/wolfboot_cmake_full_build.sh --CLEAN  "stm32g0"
+          ./tools/scripts/wolfboot_cmake_full_build.sh --target "stm32g0"

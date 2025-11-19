@@ -1,0 +1,128 @@
+name: WolfBoot CMake Build (Windows)
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-cmake:
+    name: Build on Windows
+    runs-on: windows-latest
+        # Reminder default is PowerShell runner, not DOS, unless otherwise specified.
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - stm32l4
+          - stm32h7
+          - stm32g0
+        include:
+          # Optional per-target cache variables you might want to pass later.
+          # Keep empty for now to avoid guessing addresses.
+          - target: stm32l4
+            extra_cache: ""
+          - target: stm32h7
+            extra_cache: ""
+          - target: stm32g0
+            extra_cache: ""
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # Lock down network/runner
+      # See https://github.com/step-security/harden-runner/releases
+      # Currently only supported on Ubuntu
+
+      # ARM GCC toolchain (adds the bin dir to PATH)
+      - name: Set up ARM none-eabi GCC 14.x
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: "14.2.Rel1" # <-- use 'release', not 'version'
+          path-env-var: ARM_NONE_EABI_GCC_PATH
+
+      # CMake + Ninja are preinstalled on windows-latest, but verify & print versions
+      - name: Tool versions
+        shell: cmd
+        run: |
+          :: Show some key toolchain versions
+
+          echo "Compiler versions:"
+          arm-none-eabi-gcc --version
+          echo ""
+          echo "CMake:"
+          cmake --version
+          echo
+          echo "Ninja:"
+          ninja --version
+          echo
+          ::echo "MSVC (via vswhere):"
+          ::"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationVersion
+          echo
+          echo "VS2022 Properties"
+          "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products *
+          echo
+
+      - name: List all environment variables
+        run: |
+          # Show environment settings
+
+          echo "All environment settings"
+          # set
+          # Get-ChildItem Env: | Sort-Object Name
+          $env:path -split ";"
+
+          # Get-ChildItem -Path 'C:\' -Filter stdint.h -Recurse -ErrorAction SilentlyContinue
+
+
+      - name: List Presets
+        shell: cmd
+        run: |
+          # Check available presets in CMakePresets.json
+
+          cmake -S . -B build-list --list-presets=configure
+
+      - name: Configure Preset "${{ matrix.target }}"
+        shell: cmd
+        run: |
+          # cmake runs in git bash
+
+          cmake --preset "${{ matrix.target }}"
+          echo "Configured: ${{ matrix.target }}"
+
+      - name: Build "${{ matrix.target }}"
+        shell: cmd
+        run: |
+          # cmake runs in git bash
+          # BUILD_DIR="build-${{ matrix.target }}"
+          cmake --build "build-${{ matrix.target }}" --parallel
+
+      # Optional: show interesting artifacts
+      - name: List build outputs
+        if: always()
+        shell: bash
+        run: |
+          BUILD_DIR="build-${{ matrix.target }}"
+          echo "=== Artifacts in $BUILD_DIR ==="
+          find "$BUILD_DIR" -maxdepth 3 -type f \( -name "*.elf" -o -name "*.bin" -o -name "*.hex" -o -name "bin-assemble" -o -name "keystore" \) -print || true
+
+      # Upload binaries if present (non-fatal if none)
+      - name: Upload firmware/artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfboot-${{ matrix.target }}
+          path: |
+            build-${{ matrix.target }}/**/*.elf
+            build-${{ matrix.target }}/**/*.bin
+            build-${{ matrix.target }}/**/*.hex
+          if-no-files-found: warn
