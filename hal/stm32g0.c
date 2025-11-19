@@ -96,9 +96,6 @@
 #define FLASH_CR_BKER_BITMASK                 0x2000
 #define BANK_SIZE                             (0x40000)
 
-#define FLASH_CR_PNB_SHIFT                     3        /* RM0444 - 3.7.5 - FLASH_CR - PNB bits 9:3 */
-#define FLASH_CR_PNB_MASK                      0x7f     /* RM0444 - 3.7.5 - FLASH_CR  - PNB bits 9:3 - 7 bits */
-
 #define FLASH_SECR_SEC_SIZE_POS               (0U)
 #define FLASH_SECR_SEC_SIZE_MASK              (0xFF)
 
