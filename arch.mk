@@ -106,7 +106,9 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS+=$(ARCH_FLAGS) -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_INLINE -DWC_HASH_DATA_ALIGNMENT=8 -DWOLFSSL_AARCH64_PRIVILEGE_MODE
     WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
                       $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
-                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes-asm_c.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256-asm_c.o
   endif
 endif
 
@@ -190,13 +192,14 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
     ifneq ($(PKA),0)
-      PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/st/stm32.o
-      PKA_EXTRA_CFLAGS+=-DWOLFSSL_STM32_PKA -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
-          -Isrc -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
-          -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc/ \
-          -I$(STM32CUBE)/Drivers/CMSIS/Include \
-          -Ihal \
-          -DSTM32WB55xx
+      PKA_EXTRA_OBJS+= $(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_pka.o $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/st/stm32.o
+      PKA_EXTRA_CFLAGS+=-DWOLFSSL_STM32WB -DWOLFSSL_STM32_PKA -DWOLFSSL_STM32_CUBEMX -DNO_STM32_HASH -DSTM32WB55xx
+      PKA_EXTRA_CFLAGS+=-Isrc -Ihal \
+          -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
+          -I$(STM32CUBE)/Drivers/BSP/P-NUCLEO-WB55.Nucleo/ \
+          -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32WBxx/Include \
+          -I$(STM32CUBE)/Drivers/STM32WBxx_HAL_Driver/Inc \
+          -I$(STM32CUBE)/Drivers/CMSIS/Include
     endif
   endif
 
@@ -1180,7 +1183,7 @@ ifeq ($(ARCH), AURIX_TC3)
       # Common wolfHSM port files
       CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port -DWOLFHSM_CFG_DMA
       OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_common.o \
-	          $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_hsmhost.o
+              $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_hsmhost.o
       # General wolfHSM files
       OBJS += $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
 
@@ -1188,7 +1191,7 @@ ifeq ($(ARCH), AURIX_TC3)
       WH_NVM_BIN ?= whNvmImage.bin
       WH_NVM_HEX ?= whNvmImage.hex
       WH_NVM_PART_SIZE ?= 0x8000
-	  # Default to base of HSM DFLASH1
+      # Default to base of HSM DFLASH1
       WH_NVM_BASE_ADDRESS ?= 0xAFC00000
 
       # Select config file based on certificate chain verification
@@ -1225,25 +1228,25 @@ ifeq ($(ARCH), AURIX_TC3)
 
       LSCRIPT_IN=hal/$(TARGET)_hsm.ld
 
-	  # wolfHSM port server-specific files
+      # wolfHSM port server-specific files
       ifeq ($(WOLFHSM_SERVER),1)
         USE_GCC_HEADLESS=0
 
         CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port/server
 
         OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o \
-				$(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
-				$(WOLFHSM_INFINEON_TC3XX)/port/server/sysmem.o \
-				$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hh_hsm.o \
-				$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/sysmem.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hh_hsm.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o
 
-				# SW only for now, as we dont have the right protection macros
-				#$(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
-				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
-				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
-				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
-				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
-				#$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
+        # SW only for now, as we dont have the right protection macros
+        #$(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
+        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
+        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
+        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
+        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
+        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
       endif
 
       # HSM BSP specific object files

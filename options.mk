@@ -132,7 +132,7 @@ ifeq ($(SIGN),ECC256)
        STACK_USAGE=4096
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=6680
+      STACK_USAGE=7616
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=5264

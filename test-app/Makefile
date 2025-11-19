@@ -176,7 +176,7 @@ endif
 ifeq ($(TARGET),stm32l4)
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
-  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -I../src -I../hal \
     -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
     -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
     -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \

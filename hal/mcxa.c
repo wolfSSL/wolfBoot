@@ -36,7 +36,6 @@
 #define BOARD_BOOTCLOCKFRO96M_CORE_CLOCK 96000000UL
 
 static flash_config_t pflash;
-static int flash_init = 0;
 
 uint32_t SystemCoreClock;
 

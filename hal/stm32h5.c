@@ -100,8 +100,6 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int i = 0;
     uint32_t *src, *dst;
     uint32_t dword[2];
-    uint32_t off = 0;
-    uint32_t una_len = 0;
 
     hal_flash_clear_errors(0);
     src = (uint32_t *)data;
@@ -245,8 +243,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
 static void clock_pll_off(void)
 {
-    uint32_t reg32;
-
     /* Select HSI as SYSCLK source. */
     RCC_CFGR1 &= ~(0x07 << RCC_CFGR1_SW_SHIFT);
     DMB();
@@ -428,7 +424,6 @@ static void clock_pll_on(void)
 
 static void periph_unsecure(void)
 {
-    uint32_t pin;
     volatile uint32_t reg;
     volatile uint32_t *nvic_itns;
     uint32_t nvic_reg_pos, nvic_reg_off;
@@ -480,7 +475,7 @@ static void periph_unsecure(void)
     nvic_itns = ((volatile uint32_t *)(NVIC_ITNS_BASE + 4 * nvic_reg_pos));
     *nvic_itns |= (1 << nvic_reg_off);
 }
-#endif
+#endif /* TZ_SECURE() */
 
 
 #define AIRCR *(volatile uint32_t *)(0xE000ED0C)
@@ -541,7 +536,6 @@ static void fork_bootloader(void)
 {
     uint32_t data = (uint32_t) FLASHMEM_ADDRESS_SPACE;
     uint32_t dst  = FLASH_BANK2_BASE;
-    uint32_t r = 0, w = 0;
     int i;
 
 
@@ -640,9 +634,7 @@ int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length
 {
     volatile uint16_t tmp_msw, tmp_lsw;
     uint16_t *pdata = (uint16_t *)data;
-    uint16_t idx = 0, len_align;
-    uint16_t last_word;
-    uint32_t blr_bitmap = 0;
+    uint16_t idx = 0;
     if (!(flashAddress >= FLASH_OTP_BASE && flashAddress <= FLASH_OTP_END)) {
         return -1;
     }

@@ -29,10 +29,6 @@
 /*** RCC ***/
 #define RCC_PRESCALER_DIV_NONE 0
 
-static uint32_t Address = 0, PAGEError = 0;
-static FLASH_EraseInitTypeDef EraseInitStruct;
-
-
 static uint32_t RAMFUNCTION GetPage(uint32_t Addr)
 {
     uint32_t page = 0;
@@ -84,6 +80,7 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
 {
+    FLASH_EraseInitTypeDef EraseInitStruct;
     uint32_t FirstPage = 0, LastPage = 0, NbOfPages = 0, BankNumber = 0;
     uint32_t PAGEError = 0;
     int ret;
@@ -104,9 +101,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address,int len)
     EraseInitStruct.Page        = FirstPage;
     EraseInitStruct.NbPages     = NbOfPages;
     ret = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
-
     if (ret != HAL_OK)
         return -1;
+    (void)PAGEError; /* not used */
     return 0;
 }
 
@@ -289,9 +286,7 @@ void hal_prepare_boot(void)
  * It is defined here only to avoid a compiler error
  * for a missing symbol in hal_flash_driver.
  */
-#ifdef __WOLFBOOT
 uint32_t HAL_GetTick(void)
 {
     return 0;
 }
-#endif

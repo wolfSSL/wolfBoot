@@ -587,4 +587,8 @@ extern int tolower(int c);
 #   define WOLFSSL_PEM_TO_DER
 #endif
 
+#ifdef WOLFSSL_STM32_PKA
+#define HAVE_UINTPTR_T /* make sure stdint.h is included */
+#endif
+
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */

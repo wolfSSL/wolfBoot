@@ -42,7 +42,9 @@ extern void SysTick_Handler(void);
 
 #ifndef WOLFBOOT_NO_MPU
 
+#ifndef MPU_BASE
 #define MPU_BASE (0xE000ED90)
+#endif
 #define MPU_TYPE            *((volatile uint32_t *)(MPU_BASE + 0x00))
 #define MPU_CTRL            *((volatile uint32_t *)(MPU_BASE + 0x04))
 #define MPU_RNR             *((volatile uint32_t *)(MPU_BASE + 0x08))

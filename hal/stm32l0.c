@@ -155,7 +155,6 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    int start = -1, end = -1;
     uint32_t end_address;
     uint32_t p;
     if (len == 0)
@@ -249,6 +248,9 @@ static void clock_pll_on(int powersave)
     /* Wait for PLL clock to be selected. */
     while (((RCC_CFGR >> 2) & 0x03) != RCC_CFGR_SW_PLL)
         ;
+
+    (void)hsi_freq; /* not used */
+    (void)cpu_freq; /* not used */
 }
 
 void hal_init(void)

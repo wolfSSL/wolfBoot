@@ -144,7 +144,7 @@ make test-sim-internal-flash-with-update
 
 #### wolfHSM Server Mode Build
 
-To build the simulator configured to use embedded wolfHSM server mode, use the `WOLFHSM_SERVER=1` makefile option. In this mode, wolfBoot includes the complete wolfHSM server and no external HSM server is required. Currently the wolfHSM server only supporst the certificate chain verification mode of authentication.
+To build the simulator configured to use embedded wolfHSM server mode, use the `WOLFHSM_SERVER=1` makefile option. In this mode, wolfBoot includes the complete wolfHSM server and no external HSM server is required. Currently the wolfHSM server only supports the certificate chain verification mode of authentication.
 
 ```sh
 # Grab the HSM server simulator configuration (with certificate chain verification)
@@ -228,7 +228,7 @@ When using wolfHSM server mode, no external server is required. wolfBoot include
 # Create a simulated NVM image for the POSIX flash file simulator containing the dummy root CA for cert chain verification.
 # You must build whnvmtool first if you haven't already, and ensure the file name matches the simulated NVM image file
 # name in hal/sim.c
-./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size 16348 --invert-erased-byte tools/scripts/wolfBoot-wolfHSM-sim-dummy-certchain.nvminit 
+./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size 16348 --invert-erased-byte tools/scripts/wolfBoot-wolfHSM-sim-dummy-certchain.nvminit
 
 # Run the wolfBoot simulator with embedded wolfHSM server to stage an update
 ./wolfboot.elf update_trigger get_version

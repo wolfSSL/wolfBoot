@@ -136,7 +136,6 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = src_sector_offset;
 #ifdef EXT_ENCRYPTED
-    uint32_t i;
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
     uint32_t iv_counter;
@@ -418,11 +417,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 {
     int sector = 0;
     int ret;
-    uint8_t flag, st;
-    int hdr_size;
+    uint8_t flag;
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
-    uint32_t offset = 0;
-    uint16_t ptr_len;
     uint32_t *img_offset;
     uint32_t *img_size;
     uint32_t total_size;

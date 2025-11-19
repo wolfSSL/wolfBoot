@@ -245,7 +245,6 @@ static void RAMFUNCTION clear_errors(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i;
-    uint32_t val;
     flash_wait_complete();
     clear_errors();
     /* Set 8-bit write */
@@ -348,6 +347,7 @@ static void clock_pll_on(int powersave)
     ppre2 = RCC_PRESCALER_DIV_2;
     flash_waitstates = 7;
     cpu_freq = 216000000;
+    (void)cpu_freq; /* not used */
 
     flash_set_waitstates(flash_waitstates);
 
@@ -457,17 +457,17 @@ static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
 
 void RAMFUNCTION fork_bootloader(void)
 {
-    uint8_t *data = (uint8_t *) WOLFBOOT_ORIG_BOOTLOADER;
-    uint32_t dst  = WOLFBOOT_COPY_BOOTLOADER;
-    uint32_t r = 0, w = 0;
     int i;
 
     /* Return if content already matches */
-    if (memcmp(data, (void *)WOLFBOOT_COPY_BOOTLOADER, BOOTLOADER_SIZE) == 0)
+    if (memcmp((void*)WOLFBOOT_ORIG_BOOTLOADER, (void*)WOLFBOOT_COPY_BOOTLOADER,
+            BOOTLOADER_SIZE) == 0) {
         return;
+    }
 
     /* Read the wolfBoot image in RAM */
-    memcpy(bootloader_copy_mem, data, BOOTLOADER_SIZE);
+    memcpy(bootloader_copy_mem, (void*)WOLFBOOT_ORIG_BOOTLOADER,
+        BOOTLOADER_SIZE);
 
     /* Disable ART pre-fetcher */
     FLASH_ACR &= ~(FLASH_ACR_PRFEN | FLASH_ACR_ARTEN);

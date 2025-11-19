@@ -104,8 +104,12 @@ CFLAGS+= \
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -nostartfiles
   CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
+  # Allow unused parameters and functions
+  CFLAGS+=-Wno-unused-parameter -Wno-unused-function
+  # Error on unused variables
+  CFLAGS+=-Wunused-variable
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
   # Not setting LDFLAGS directly since it is passed to the test-app
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
@@ -469,7 +473,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/test-update-server -s clean
 	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
 	$(Q)$(MAKE) -C tools/unit-tests -s clean
-	$(Q)if [ "$(WOLFHSM_CLIENT)" = "1" ]; then $(MAKE) -C lib/wolfHSM/tools/whnvmtool -s clean; fi
+	$(Q)if [ "$(WOLFHSM_CLIENT)" = "1" ]; then $(MAKE) -C $(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool -s clean; fi
 	$(Q)$(MAKE) -C tools/keytools/otp -s clean
 	$(Q)$(MAKE) -C tools/squashelf -s clean
 

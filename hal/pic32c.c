@@ -376,8 +376,6 @@ void pic32_clock_pll0_init(int refdiv, int fbdiv, int bw, int postdiv)
 
 void pic32_clock_gclk_gen0(int mclk_div1, int cpudiv)
 {
-    uint32_t reg;
-
     /* setup clock division before changing the generator */
     if (mclk_div1 != 1)
         MCLK_DIV1 = mclk_div1;

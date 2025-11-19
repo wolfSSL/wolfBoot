@@ -90,8 +90,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t *src, *dst;
     uint8_t bank=0;
     uint8_t *vbytes = (uint8_t *)(stm32h7_cache);
-    int off = (address + i) - (((address + i) >> 5) << 5);
-    uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
+    int off;
+    uint32_t base_addr;
 
     if ((address & FLASH_BANK2_BASE_REL) != 0) {
         bank = 1;
@@ -114,8 +114,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             i+=32;
         }
         else {
-            int off = (address + i) - (((address + i) >> 5) << 5);
-            uint32_t base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
+            off = (address + i) - (((address + i) >> 5) << 5);
+            base_addr = (address + i) & (~0x1F); /* aligned to 256 bit */
             dst = (uint32_t *)(base_addr);
             for (ii = 0; ii < 8; ii++) {
                 stm32h7_cache[ii] = dst[ii];
@@ -359,7 +359,7 @@ static void clock_pll_off(void)
 static void clock_pll_on(int powersave)
 {
     uint32_t reg32;
-    uint32_t cpu_freq, plln, pllm, pllq, pllp, pllr, hpre, d1cpre, d1ppre;
+    uint32_t plln, pllm, pllq, pllp, pllr, hpre, d1cpre, d1ppre;
     uint32_t d2ppre1, d2ppre2, d3ppre, flash_waitstates;
 
     PWR_CR3 |= PWR_CR3_LDOEN;

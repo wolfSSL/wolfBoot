@@ -280,7 +280,6 @@ hal_status_t FRAM_Read(uint8_t spiBank, uint32_t addr, uint8_t *buf,
 hal_status_t FRAM_Erase(uint8_t spiBank, uint32_t addr, uint32_t len)
 {
     hal_status_t status;
-    uint8_t spiData[4];
     uint8_t data[32];
 
 #ifdef DEBUG_EXT_FLASH

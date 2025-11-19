@@ -26,7 +26,6 @@
 #include "fsl_flashiap.h"
 #include "fsl_power.h"
 
-static int flash_init = 0;
 uint32_t SystemCoreClock;
 
 #ifdef NVM_FLASH_WRITEONCE

@@ -21,6 +21,11 @@
 
 #include <stdint.h>
 #include "image.h"
+
+#ifndef __WOLFBOOT
+#undef WOLFSSL_STM32_PKA
+#endif
+
 #ifdef WOLFSSL_STM32_PKA
 #include "stm32wbxx_hal.h"
 PKA_HandleTypeDef hpka = { };
@@ -49,7 +54,7 @@ PKA_HandleTypeDef hpka = { };
 #define RCC_CR_MSIRANGE_SHIFT        4
 #define RCC_CR_MSIRANGE_6            (0x06 << 4)
 #define RCC_CR_MSIRANGE_Msk          (0x0F << 4)
-#endif /* !WOLFSSL_STM32_PKA */
+#endif
 
 #define RCC_CFGR_SW_MSI               0x0
 #define RCC_CFGR_SW_PLL               0x3
@@ -250,7 +255,7 @@ static void clock_pll_off(void)
 static void clock_pll_on(void)
 {
     uint32_t reg32;
-    uint32_t cpu_freq, pllm, plln, pllp,pllq, pllr;
+    uint32_t cpu_freq;
     uint32_t hpre, ppre1, ppre2;
     uint32_t flash_waitstates;
 
@@ -258,6 +263,7 @@ static void clock_pll_on(void)
     cpu_freq = 64000000;
     flash_waitstates = 4;
     flash_set_waitstates(flash_waitstates);
+    (void)cpu_freq; /* not used */
 
     /* Configure + enable internal high-speed oscillator. */
     RCC_CR = (RCC_CR & (~RCC_CR_MSIRANGE_Msk)) | RCC_CR_MSIRANGE_6;
@@ -313,7 +319,7 @@ static void clock_pll_on(void)
 void hal_init(void)
 {
     clock_pll_on();
-#ifdef WOLFSSL_STM32_PKA
+#if defined(__WOLFBOOT) && defined(WOLFSSL_STM32_PKA)
     __HAL_RCC_PKA_CLK_ENABLE();
     hpka.Instance = PKA;
     HAL_PKA_Init(&hpka);

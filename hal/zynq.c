@@ -1555,7 +1555,6 @@ uint64_t hal_timer_ms(void)
 /* public HAL functions */
 void hal_init(void)
 {
-    uint32_t reg;
     const char* bootMsg = "\nwolfBoot Secure Boot\n";
 
 #ifdef DEBUG_UART
