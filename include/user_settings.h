@@ -410,6 +410,7 @@ extern int tolower(int c);
     #ifndef XTPM_WAIT
         #define XTPM_WAIT() /* no delay */
     #endif
+    #define HASH_COUNT 3 /* enable more PCR hash types */
 
     /* TPM remap printf */
     #if defined(DEBUG_WOLFTPM) && !defined(ARCH_SIM)
@@ -584,6 +585,10 @@ extern int tolower(int c);
 #   define WOLFSSL_USER_IO
 #   define WOLFSSL_SP_MUL_D
 #   define WOLFSSL_PEM_TO_DER
+#endif
+
+#ifdef WOLFSSL_STM32_PKA
+#define HAVE_UINTPTR_T /* make sure stdint.h is included */
 #endif
 
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */

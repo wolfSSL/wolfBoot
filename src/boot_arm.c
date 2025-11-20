@@ -36,10 +36,15 @@ extern unsigned int _end_bss;
 extern uint32_t *END_STACK;
 
 extern void main(void);
+#ifdef TARGET_va416x0
+extern void SysTick_Handler(void);
+#endif
 
 #ifndef WOLFBOOT_NO_MPU
 
+#ifndef MPU_BASE
 #define MPU_BASE (0xE000ED90)
+#endif
 #define MPU_TYPE            *((volatile uint32_t *)(MPU_BASE + 0x00))
 #define MPU_CTRL            *((volatile uint32_t *)(MPU_BASE + 0x04))
 #define MPU_RNR             *((volatile uint32_t *)(MPU_BASE + 0x08))
@@ -508,22 +513,27 @@ asm volatile (
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
-	(void (*)(void))(&END_STACK),
-	isr_reset,                   // Reset
-	isr_NMI,                     // NMI
-	isr_fault,                   // HardFault
-	isr_fault,                   // MemFault
-	isr_fault,                   // BusFault
-	isr_fault,                   // UsageFault
-	isr_securefault,             // SecureFault on M23/33, reserved otherwise (0)
+    (void (*)(void))(&END_STACK),
+    isr_reset,                   // Reset
+    isr_NMI,                     // NMI
+    isr_fault,                   // HardFault
+    isr_fault,                   // MemFault
+    isr_fault,                   // BusFault
+    isr_fault,                   // UsageFault
+    isr_securefault,             // SecureFault on M23/33, reserved otherwise (0)
     0,                           // reserved
     0,                           // reserved
     0,                           // reserved
-	isr_empty,                   // SVC
-	isr_empty,                   // DebugMonitor
-	0,                           // reserved
-	isr_empty,                   // PendSV
-	isr_empty,                   // SysTick
+    isr_empty,                   // SVC
+    isr_empty,                   // DebugMonitor
+    0,                           // reserved
+    isr_empty,                   // PendSV
+
+#ifdef TARGET_va416x0
+    SysTick_Handler,             // SysTick
+#else
+    isr_empty,                   // SysTick
+#endif
 
     /* Fill with extra unused handlers */
 #if defined(TARGET_stm32l5) || defined(TARGET_stm32u5) || \

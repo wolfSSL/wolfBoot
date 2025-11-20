@@ -16,6 +16,10 @@ DEBUG?=1
 DELTA_DATA_SIZE?=2000
 USE_GCC?=1
 USE_GCC_HEADLESS?=1
+BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
+
+# For test-applications we should only use user_settings.h
+CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
 
 ifeq ($(SIGN),RSA2048)
   IMAGE_HEADER_SIZE:=512
@@ -86,7 +90,8 @@ ifeq ($(TZEN),1)
     ifeq ($(WOLFCRYPT_TZ),1)
         APP_OBJS+=../src/wc_secure_calls.o
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
-            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
+            CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
+            CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
             CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFPKCS11)"
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
             APP_OBJS+=./wcs/pkcs11_stub.o
@@ -113,6 +118,15 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/coding.o
             APP_OBJS+=./wcs/wc_encrypt.o
             APP_OBJS+=./wcs/wc_port.o
+
+            ifeq ($(SPMATH),1)
+              CFLAGS+=-DWOLFSSL_HAVE_SP_RSA -DWOLFSSL_HAVE_SP_ECC
+              ifneq ($(NO_ASM),1)
+                CFLAGS+=-fomit-frame-pointer # required with debug builds only
+                CFLAGS+=-DWOLFSSL_SP_ARM_CORTEX_M_ASM
+                APP_OBJS+=./wcs/sp_cortexm.o
+              endif
+            endif
         endif
         CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
         LDFLAGS+=--specs=nosys.specs -u _printf_float
@@ -162,7 +176,7 @@ endif
 ifeq ($(TARGET),stm32l4)
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash.o
   APP_OBJS+=$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_flash_ex.o
-  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -Isrc -Ihal \
+  CFLAGS+=-DSTM32L4A6xx -DUSE_HAL_DRIVER -I../src -I../hal \
     -I$(STM32CUBE)/Drivers/STM32L4xx_HAL_Driver/Inc/ \
     -I$(STM32CUBE)/Drivers/BSP/STM32L4xx_Nucleo_144/ \
     -I$(STM32CUBE)/Drivers/CMSIS/Device/ST/STM32L4xx/Include/ \
@@ -221,7 +235,8 @@ ifeq ($(TARGET),stm32u5)
 endif
 
 ifeq ($(TARGET),nrf5340_net)
-  APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
+  CFLAGS+=-mcpu=cortex-m33+nodsp+nofp
+  LDFLAGS+=-mcpu=cortex-m33+nodsp+nofp
   LSCRIPT_TEMPLATE=ARM-nrf5340_net.ld
 endif
 
@@ -230,6 +245,12 @@ ifeq ($(TARGET),ti_hercules)
   # Override linker flags
   LDFLAGS=--run_linker $(LSCRIPT) --map_file=image.map
   OBJCOPY_FLAGS=
+endif
+
+ifeq ($(TARGET),va416x0)
+  APP_OBJS+=$(SDK_OBJS)
+  LSCRIPT_TEMPLATE=ARM-va416x0.ld
+  APP_OBJS+=../src/keystore.o
 endif
 
 ifeq ($(TARGET),sim)
@@ -315,6 +336,7 @@ ifeq ($(TARGET),mcxa)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o
+    LDFLAGS+=--specs=nosys.specs
 endif
 
 ifeq ($(TARGET),mcxw)
@@ -325,6 +347,7 @@ ifeq ($(TARGET),mcxw)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+    LDFLAGS+=--specs=nosys.specs
 endif
 
 ifeq ($(TARGET),imx_rt)
@@ -497,13 +520,13 @@ ifeq ($(TARGET),aurix_tc3xx)
 endif
 
 ifeq ($(WOLFHSM_CLIENT),1)
-  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
+  CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
   APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
 
 ifeq ($(WOLFHSM_SERVER),1)
-  CFLAGS += -DWOLFSSL_USER_SETTINGS -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
+  CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
   APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
@@ -552,6 +575,9 @@ delta-extra-data: image.bin
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ ../src/libwolfboot.c
 
+../hal/$(TARGET).o: ../hal/$(TARGET).c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c
+
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
 
@@ -597,6 +623,7 @@ endif
 		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
 		> $(@)
 	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
+
 
 
 

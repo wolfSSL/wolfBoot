@@ -42,65 +42,6 @@ extern "C" {
 #include "encrypt.h"
 #endif
 
-
-int wolfBot_get_dts_size(void *dts_addr);
-
-
-#ifndef RAMFUNCTION
-#if defined(__WOLFBOOT) && defined(RAM_CODE)
-#  if defined(ARCH_ARM)
-#    define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
-#  else
-#    define RAMFUNCTION __attribute__((used,section(".ramcode")))
-#  endif
-#else
-# define RAMFUNCTION
-#endif
-#endif
-
-#ifndef WEAKFUNCTION
-#  if defined(__GNUC__) || defined(__CC_ARM)
-#    define WEAKFUNCTION __attribute__((weak))
-#  else
-#    define WEAKFUNCTION
-#  endif
-#endif
-
-#ifndef UNUSEDFUNCTION
-#  if defined(__GNUC__) || defined(__CC_ARM)
-#    define UNUSEDFUNCTION __attribute__((unused))
-#  else
-#    define UNUSEDFUNCTION
-#  endif
-#endif
-
-
-/* Helpers for memory alignment */
-#ifndef XALIGNED
-    #if defined(__GNUC__) || defined(__llvm__) || \
-            defined(__IAR_SYSTEMS_ICC__)
-        #define XALIGNED(x) __attribute__ ( (aligned (x)))
-    #elif defined(__KEIL__)
-        #define XALIGNED(x) __align(x)
-    #elif defined(_MSC_VER)
-        /* disable align warning, we want alignment ! */
-        #pragma warning(disable: 4324)
-        #define XALIGNED(x) __declspec (align (x))
-    #else
-        #define XALIGNED(x) /* null expansion */
-    #endif
-#endif
-
-#ifndef XALIGNED_STACK
-    /* Don't enforce stack alignment on IAR */
-    #if defined (__IAR_SYSTEMS_ICC__)
-        #define XALIGNED_STACK(x)
-    #else
-        #define XALIGNED_STACK(x) XALIGNED(x)
-    #endif
-#endif
-
-
 #ifndef WOLFBOOT_FLAGS_INVERT
 #define SECT_FLAG_NEW      0x0F
 #define SECT_FLAG_SWAPPING 0x07
@@ -176,6 +117,12 @@ int wolfBot_get_dts_size(void *dts_addr);
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_tpm
 #endif
 
+/* Validate sector size is larger than image header size */
+#if defined(WOLFBOOT_SECTOR_SIZE) && defined(IMAGE_HEADER_SIZE) && \
+    (WOLFBOOT_SECTOR_SIZE < IMAGE_HEADER_SIZE)
+#error WOLFBOOT_SECTOR_SIZE must be larger than IMAGE_HEADER_SIZE
+#endif
+
 
 #if (defined(WOLFBOOT_ARMORED) && defined(__WOLFBOOT))
 #if !defined(ARCH_ARM) || (!defined(__GNUC__) && \
@@ -208,6 +155,7 @@ struct wolfBoot_image {
     uint32_t not_signature_ok;
     uint32_t canary_FEED89AB;
     uint32_t sha_ok;
+    uint32_t not_ext; /* image is no longer external */
 };
 
 
@@ -821,7 +769,7 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
     if ((mask & (1UL << id)) != (1UL << id)) \
         wolfBoot_panic()
 
-#define VERIFY_VERSION_ALLOWED(fb_ok) do{} while(0)
+#define VERIFY_VERSION_ALLOWED(fb_ok) do{} while(0) /* okay */
 
 #endif
 

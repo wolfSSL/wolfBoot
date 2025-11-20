@@ -104,8 +104,12 @@ CFLAGS+= \
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -Wno-unused -nostartfiles
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -nostartfiles
   CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
+  # Allow unused parameters and functions
+  CFLAGS+=-Wno-unused-parameter -Wno-unused-function
+  # Error on unused variables
+  CFLAGS+=-Wunused-variable
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=wolfboot.map -ffreestanding -nostartfiles
   # Not setting LDFLAGS directly since it is passed to the test-app
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
@@ -402,6 +406,10 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@ARCH_FLASH_OFFSET@/$(ARCH_FLASH_OFFSET)/g" | \
 		sed -e "s/@BOOTLOADER_PARTITION_SIZE@/$(BOOTLOADER_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_ORIGIN@/$(WOLFBOOT_ORIGIN)/g" | \
+		sed -e "s/@WOLFBOOT_KEYVAULT_ADDRESS@/$(WOLFBOOT_KEYVAULT_ADDRESS)/g" | \
+		sed -e "s/@WOLFBOOT_KEYVAULT_SIZE@/$(WOLFBOOT_KEYVAULT_SIZE)/g" | \
+		sed -e "s/@WOLFBOOT_NSC_ADDRESS@/$(WOLFBOOT_NSC_ADDRESS)/g" | \
+		sed -e "s/@WOLFBOOT_NSC_SIZE@/$(WOLFBOOT_NSC_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
@@ -465,7 +473,7 @@ utilsclean: clean
 	$(Q)$(MAKE) -C tools/test-update-server -s clean
 	$(Q)$(MAKE) -C tools/uart-flash-server -s clean
 	$(Q)$(MAKE) -C tools/unit-tests -s clean
-	$(Q)if [ "$(WOLFHSM_CLIENT)" = "1" ]; then $(MAKE) -C lib/wolfHSM/tools/whnvmtool -s clean; fi
+	$(Q)if [ "$(WOLFHSM_CLIENT)" = "1" ]; then $(MAKE) -C $(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool -s clean; fi
 	$(Q)$(MAKE) -C tools/keytools/otp -s clean
 	$(Q)$(MAKE) -C tools/squashelf -s clean
 
@@ -480,6 +488,8 @@ include/target.h: $(TARGET_H_TEMPLATE) FORCE
 	$(Q)cat $(TARGET_H_TEMPLATE) | \
 	sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
 	sed -e "s/@WOLFBOOT_SECTOR_SIZE@/$(WOLFBOOT_SECTOR_SIZE)/g" | \
+	sed -e "s/@WOLFBOOT_NSC_ADDRESS@/$(WOLFBOOT_NSC_ADDRESS)/g" | \
+	sed -e "s/@WOLFBOOT_NSC_SIZE@/$(WOLFBOOT_NSC_SIZE)/g" | \
 	sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
 	sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
 	sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
@@ -531,6 +541,7 @@ cppcheck:
 	cppcheck -f --enable=warning --enable=portability \
 		--suppress="ctunullpointer" --suppress="nullPointer" \
 		--suppress="objectIndex" --suppress="comparePointers" \
+		--check-level=exhaustive \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
 
 otp: tools/keytools/otp/otp-keystore-primer.bin FORCE

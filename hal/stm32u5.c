@@ -471,14 +471,22 @@ void RAMFUNCTION hal_flash_dualbank_swap(void)
 
 static void led_unsecure()
 {
-    uint32_t pin;
-
+#ifdef STM32_DISCOVERY
     /* Enable clock for User LED GPIOs */
     RCC_AHB2ENR1_CLOCK_ER|= GPIOH_AHB2ENR1_CLOCK_ER;
 
     /* Un-secure User LED GPIO pins */
-    GPIOH_SECCFGR&=~(1<<LED_USR_PIN);
-    GPIOH_SECCFGR&=~(1<<LED_BOOT_PIN);
+    GPIOH_SECCFGR &= ~(1 << LED_USR_PIN);
+    GPIOH_SECCFGR &= ~(1 << LED_BOOT_PIN);
+#else
+    /* Enable clock for User LED GPIOs */
+    RCC_AHB2ENR1_CLOCK_ER |= GPIOC_AHB2ENR1_CLOCK_ER;
+    RCC_AHB2ENR1_CLOCK_ER |= GPIOG_AHB2ENR1_CLOCK_ER;
+
+    /* Un-secure User LED GPIO pins */
+    GPIOG_SECCFGR &= ~(1 << LED_USR_PIN);
+    GPIOC_SECCFGR &= ~(1 << LED_BOOT_PIN);
+#endif
 }
 
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
@@ -487,8 +495,6 @@ static void RAMFUNCTION fork_bootloader(void)
 {
     uint8_t *data = (uint8_t *) FLASHMEM_ADDRESS_SPACE;
     uint32_t dst  = FLASH_BANK2_BASE;
-    uint32_t r = 0, w = 0;
-    int i;
 
     /* Return if content already matches */
     if (memcmp(data, (void *)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)
@@ -520,8 +526,9 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
-
+#endif
 #if TZ_SECURE()
     led_unsecure();
 #endif

@@ -124,7 +124,9 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     TASKS_HFCLKSTOP = 1;
+#endif
 }
 
 #endif /* TARGET_nrf52 */

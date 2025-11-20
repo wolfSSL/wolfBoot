@@ -36,7 +36,6 @@
 #define BOARD_BOOTCLOCKFRO96M_CORE_CLOCK 96000000UL
 
 static flash_config_t pflash;
-static int flash_init = 0;
 
 uint32_t SystemCoreClock;
 
@@ -50,8 +49,11 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
         ;
 }
 
+#endif /* __WOLFBOOT */
+
 void hal_init(void)
 {
+#ifdef __WOLFBOOT
     /* Clock setting  */
     BOARD_BootClockFRO96M();
 
@@ -59,13 +61,12 @@ void hal_init(void)
     memset(&pflash, 0, sizeof(pflash));
     /* FLASH driver init */
     FLASH_Init(&pflash);
+#endif /* __WOLFBOOT */
 }
 
 void hal_prepare_boot(void)
 {
 }
-
-#endif /* __WOLFBOOT */
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {

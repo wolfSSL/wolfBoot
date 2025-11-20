@@ -55,6 +55,17 @@ image header size must be supplied as an environment variable. For example:
 IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --sha256 --ecc256 myapp.bin wolfboot_signing_private_key.der 1
 ```
 
+### Setting option bytes automatically
+
+In order to use wolfBoot with an STM32 device, the device's option bytes need
+to be consistent with wolfBoot's configuration. The script at
+[tools/scripts/set-stm32-tz-option-bytes.sh](tools/scripts/set-stm32-tz-option-bytes.sh)
+will attempt to read the wolfBoot `.config` file and automatically calculate
+and set your device's TrustZone-related option bytes according to it, using
+`STM32_Programmer_CLI`, which is part of the
+[STM32CubeProg](https://www.st.com/en/development-tools/stm32cubeprog.html)
+tool.
+
 ### NSC API
 
 wolfBoot provides a few Non-Secure Callable functions to allow a non-secure

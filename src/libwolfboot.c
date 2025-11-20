@@ -154,8 +154,11 @@ static uint32_t wb_reverse_word32(uint32_t x)
 #endif
 #endif
 
-
+#if defined(WOLFBOOT_FIXED_PARTITIONS) || defined(EXT_FLASH) || \
+    defined(NVM_FLASH_WRITEONCE)
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
+#endif
+
 /* Top addresses for FLAGS field
  *  - PART_BOOT_ENDFLAGS = top of flags for BOOT partition
  *  - PART_UPDATE_ENDFLAGS = top of flags for UPDATE_PARTITION
@@ -904,8 +907,8 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 }
 
 #ifdef EXT_FLASH
-static uint8_t hdr_cpy[IMAGE_HEADER_SIZE];
-static uint32_t hdr_cpy_done = 0;
+uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
+uint32_t hdr_cpy_done = 0;
 #endif
 
 /**
@@ -949,6 +952,10 @@ static inline uint16_t im2ns(uint16_t val)
 }
 
 #ifdef DELTA_UPDATES
+
+/* forward declaration */
+static uint8_t* wolfBoot_get_image_from_part(uint8_t part);
+
 /**
  * @brief Get delta update information.
  *
@@ -969,30 +976,8 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
     uint32_t **img_size, uint8_t **base_hash, uint16_t *base_hash_size)
 {
     uint32_t *magic = NULL;
-    uint8_t *image = (uint8_t *)0x00000000;
-    if (part == PART_UPDATE) {
-        if (PARTN_IS_EXT(PART_UPDATE)) {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
-                hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-        }
-    } else if (part == PART_BOOT) {
-        if (PARTN_IS_EXT(PART_BOOT)) {
-    #ifdef EXT_FLASH
-            ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
-                hdr_cpy, IMAGE_HEADER_SIZE);
-            hdr_cpy_done = 1;
-            image = hdr_cpy;
-    #endif
-        } else {
-            image = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-        }
-    }
+    uint8_t *image = wolfBoot_get_image_from_part(part);
+
     /* Don't check image against NULL to allow using address 0x00000000 */
     magic = (uint32_t *)image;
     if (*magic != WOLFBOOT_MAGIC)
@@ -1030,15 +1015,15 @@ static int decrypt_header(uint8_t *src)
 {
     int i;
     uint32_t magic;
-    uint32_t len;
     for (i = 0; i < IMAGE_HEADER_SIZE; i+=ENCRYPT_BLOCK_SIZE) {
         wolfBoot_crypto_set_iv(encrypt_iv_nonce, i / ENCRYPT_BLOCK_SIZE);
         crypto_decrypt(dec_hdr + i, src + i, ENCRYPT_BLOCK_SIZE);
     }
     magic = *((uint32_t*)(dec_hdr));
-    len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
     if (magic != WOLFBOOT_MAGIC)
         return -1;
+    /* Example for extracting the length - not used for now */
+    /* len = *((uint32_t*)(dec_hdr + sizeof(uint32_t))); */
     return 0;
 }
 
@@ -1313,9 +1298,7 @@ static int wolfBoot_update_firmware_version() {
 
 int wolfBoot_dualboot_candidate_addr(void** addr)
 {
-    int fallback_possible = 0;
     uint32_t boot_v, update_v;
-    uint8_t p_state;
     int retval = 0;
 
     /* Find the candidate */
@@ -1332,7 +1315,6 @@ int wolfBoot_dualboot_candidate_addr(void** addr)
         *addr = hal_get_update_address();
     }
     else if ((boot_v > 0) && (update_v > 0)) {
-        fallback_possible = 1;
         if (update_v > boot_v) {
             retval = 1;
             *addr = hal_get_update_address();
@@ -1736,7 +1718,6 @@ int aes_init(void)
 void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
-    uint32_t iv_local_ctr;
     int i;
     XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
 #ifndef BIG_ENDIAN_ORDER
@@ -2004,11 +1985,10 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
  */
 int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 {
-    uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
     uint8_t *row_address = src;
     uint32_t dst_offset = 0, iv_counter = 0;
-    uint32_t magic, len;
+    uint32_t len;
 
     if (!encrypt_initialized) {
         if (crypto_init() < 0) {
@@ -2039,31 +2019,31 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif /* EXT_ENCRYPTED */
 
 #if defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 void wolfBoot_nsc_success(void)
 {
     wolfBoot_success();
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 void wolfBoot_nsc_update_trigger(void)
 {
     wolfBoot_update_trigger();
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 uint32_t wolfBoot_nsc_get_image_version(uint8_t part)
 {
     return wolfBoot_get_image_version(part);
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st)
 {
     return wolfBoot_get_partition_state(part, st);
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
 {
     int ret;
@@ -2079,7 +2059,7 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
     return ret;
 }
 
-__attribute__((cmse_nonsecure_entry))
+CSME_NSE_API
 int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len)
 {
     int ret;
@@ -2088,7 +2068,6 @@ int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len
         return -1;
     if (address + len > WOLFBOOT_PARTITION_SIZE)
         return -1;
-    
     hal_flash_unlock();
     ret = hal_flash_write(address + WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len);
     hal_flash_lock();

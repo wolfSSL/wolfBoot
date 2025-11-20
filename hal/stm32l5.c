@@ -38,7 +38,7 @@ void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
 {
     while ((FLASH_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
-#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if TZ_SECURE()
     while ((FLASH_NS_SR & FLASH_SR_BSY) == FLASH_SR_BSY)
         ;
 #endif
@@ -50,12 +50,12 @@ void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 
     FLASH_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
             FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR
-#if !(defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if !(TZ_SECURE())
             |
             FLASH_SR_OPTWERR
 #endif
             ) ;
-#if (defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U))
+#if TZ_SECURE()
     FLASH_NS_SR |= ( FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
             FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR |
             FLASH_SR_OPTWERR);
@@ -77,7 +77,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     src = (uint32_t *)data;
     dst = (uint32_t *)address;
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
     if (address >= FLASH_BANK2_BASE)
         hal_tz_claim_nonsecure_area(address, len);
     /* Convert into secure address space */
@@ -97,7 +97,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         *cr &= ~FLASH_CR_PG;
         i+=8;
     }
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
     hal_tz_release_nonsecure_area();
 #endif
     return 0;
@@ -170,7 +170,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         }
         else if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
             /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
             return 0;
 #endif
@@ -305,11 +305,9 @@ static void clock_pll_on(int powersave)
     DMB();
 }
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
 static void periph_unsecure()
 {
-    uint32_t pin;
-
     /*Enable clock for User LED GPIOs */
     RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
 
@@ -373,8 +371,6 @@ static void RAMFUNCTION fork_bootloader(void)
 {
     uint8_t *data = (uint8_t *) FLASHMEM_ADDRESS_SPACE;
     uint32_t dst  = FLASH_BANK2_BASE;
-    uint32_t r = 0, w = 0;
-    int i;
 
     /* Return if content already matches */
     if (memcmp(data, (void *)FLASH_BANK2_BASE, BOOTLOADER_SIZE) == 0)
@@ -399,7 +395,7 @@ void hal_init(void)
         fork_bootloader();
 #endif
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#if TZ_SECURE()
     hal_tz_sau_init();
     hal_gtzc_init();
 #endif
@@ -409,8 +405,10 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#endif
+#if TZ_SECURE()
     periph_unsecure();
 #endif
 }

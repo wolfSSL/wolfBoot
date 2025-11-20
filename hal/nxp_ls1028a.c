@@ -537,7 +537,6 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
 {
     uint32_t size = 0;
     uint32_t tx_data = 0;
-    uint32_t size_wm = 0;
     uint32_t loop_cnt = 0;
     uint32_t remaining, rem_size = 0;
     uint32_t i = 0, j = 0;
@@ -839,8 +838,6 @@ void hal_init(void)
 {
     volatile uint32_t counter=0xFFFFul; /* used for delay */
 #ifdef DEBUG_UART
-    uint32_t fw;
-
     uart_init();
     wolfBoot_printf("wolfBoot Init\n");
 #endif

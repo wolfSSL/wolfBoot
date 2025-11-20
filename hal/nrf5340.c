@@ -340,6 +340,14 @@ void ext_flash_unlock(void)
 }
 #endif /* TARGET_nrf5340_net */
 
+static void hal_handle_approtect(void) {
+#ifdef DEBUG_SYMBOLS
+    /* Needed to allow debugger access */
+    CTRLAP_APPROTECT_DISABLE = 0x50FA50FA;
+    CTRLAP_SECUREAPPROTECT_DISABLE = 0x50FA50FA;
+#endif
+}
+
 static void clock_init(void)
 {
 #ifdef TARGET_nrf5340_app
@@ -375,6 +383,8 @@ void sleep_us(uint32_t usec)
     while (RTC_EVENT_CC(USE_RTC, 0) == 0);
     RTC_STOP(USE_RTC) = 1;
 }
+
+#ifdef __WOLFBOOT
 
 #ifdef TARGET_nrf5340_app
 void hal_net_core(int hold) /* 1=hold, 0=release */
@@ -477,7 +487,6 @@ static uint32_t hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
     uint32_t timeout_ms)
 {
     uint32_t status_ret = SHARED_STATUS_UNKNOWN;
-    int ret = 0;
 
     do {
         /* see if status shared already */
@@ -556,7 +565,7 @@ static void hal_net_check_version(void)
 {
     int ret;
     struct wolfBoot_image img;
-    uint32_t timeout, status = 0;
+    uint32_t status = 0;
 
 #ifdef TARGET_nrf5340_app
     /* check the network core version */
@@ -672,34 +681,44 @@ static void hal_net_check_version(void)
     }
     /* proceed to update_flash routines */
 #endif /* TARGET_nrf5340_* */
-exit:
+    (void)status;
     wolfBoot_printf("Status: App %s (ver %d), Net %s (ver %d)\n",
         hal_shm_status_string(shm->core.app.status), shm->core.app.version,
         hal_shm_status_string(shm->core.net.status), shm->core.net.version);
 }
 
+#endif /* __WOLFBOOT */
 
 void hal_init(void)
 {
+#ifdef __WOLFBOOT
 #ifdef DEBUG_UART
     const char* bootStr = "wolfBoot HAL Init (" CORE_STR " core)\n";
+#endif
 #endif
 
     clock_init();
 
+    hal_handle_approtect();
+
 #ifdef DEBUG_UART
     uart_init();
+    #ifdef __WOLFBOOT
     uart_write(bootStr, strlen(bootStr));
+    #endif
 #endif
 
+#ifdef __WOLFBOOT
     hal_shm_init();
 
     /* need early init of external flash to support checking network core */
     spi_flash_probe();
 
     hal_net_check_version();
+#endif
 }
 
+#ifdef __WOLFBOOT
 /* enable write protection for the region of flash specified */
 int hal_flash_protect(uint32_t start, uint32_t len)
 {
@@ -763,5 +782,6 @@ void hal_prepare_boot(void)
 
     hal_shm_cleanup();
 }
+#endif /* __WOLFBOOT */
 
 #endif /* TARGET_* */

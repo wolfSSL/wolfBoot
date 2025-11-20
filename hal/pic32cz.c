@@ -36,8 +36,6 @@
 
 static void pic32_supc_vreg_pll_enable(void)
 {
-    uint32_t reg;
-
     SUPC_VREGCTRL |= SUPC_VREGCTRL_AVREGEN_PLLREG_EN
         << SUPC_VREGCTRL_AVREGEN_SHIFT;
 
@@ -104,5 +102,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RESTORE_CLOCK
     pic32_clock_reset();
+#endif
 }

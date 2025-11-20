@@ -39,7 +39,9 @@ extern void isr_tim2(void);
 extern void isr_usart3(void);
 #endif
 
-#ifdef APP_HAS_SYSTICK
+#ifdef TARGET_va416x0
+extern void SysTick_Handler(void);
+#elif defined(APP_HAS_SYSTICK)
 extern void isr_systick(void);
 #endif
 
@@ -130,14 +132,17 @@ void (* const IV[])(void) =
 	isr_busfault,                // BusFault
 	isr_usagefault,              // UsageFault
 	0,                           // SecureFault
-	0,                          // reserved
-	0,                          // reserved
-	0,                          // reserved
+	0,                           // reserved
+	0,                           // reserved
+	0,                           // reserved
 	isr_empty,                   // SVC
 	isr_empty,                   // DebugMonitor
 	0,                           // reserved
 	isr_empty,                   // PendSV
-#ifdef APP_HAS_SYSTICK
+
+#ifdef TARGET_va416x0
+    SysTick_Handler,             // SysTick
+#elif defined(APP_HAS_SYSTICK)
     isr_systick,                 // SysTick
 #else
 	isr_empty,                   // SysTick

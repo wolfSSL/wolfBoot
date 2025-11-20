@@ -41,6 +41,7 @@
 
 #include "loader.h"
 #include "image.h"
+#include "wolfboot/wolfboot.h"
 #include "hal.h"
 #include "spi_drv.h"
 #include "printf.h"
@@ -875,8 +876,14 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 }
 
 #ifdef EXT_FLASH
+#ifdef UNIT_TEST
 static uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
 static int hdr_cpy_done = 0;
+#else
+/* use from libwolfboot.c */
+extern uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
+extern int hdr_cpy_done;
+#endif
 
 /**
  * @brief Get a copy of the image header.
@@ -1250,8 +1257,8 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
     if (*magic != WOLFBOOT_MAGIC) {
-        wolfBoot_printf("Boot header magic 0x%08x invalid at %p\n",
-            (unsigned int)*magic, image);
+        wolfBoot_printf("Partition %d header magic 0x%08x invalid at %p\n",
+            img->part, (unsigned int)*magic, img->hdr);
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
@@ -1719,8 +1726,8 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
             entry_out_set = 1;
         }
         wolfBoot_printf("ELF: [CHECK] 32-bit, entry=0x%08X, "
-                        "ph_offset=0x%lX, ph_count=%u\n",
-                        eh->entry, (unsigned long)entry_off, entry_count);
+                        "ph_offset=0x%08X, ph_count=%u\n",
+                        (unsigned int)eh->entry, (unsigned int)entry_off, entry_count);
     }
     else { /* 64-bit ELF */
         elf64_header* eh = (elf64_header*)elf_h;
@@ -1733,7 +1740,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         }
         wolfBoot_printf("ELF: [CHECK] 64-bit, entry=0x%08lx, "
                         "ph_offset=0x%08lx, ph_count=%d\n",
-                        eh->entry, (unsigned long)entry_off, entry_count);
+                        (unsigned long)eh->entry, (unsigned long)entry_off, entry_count);
     }
 
     elf_hdr_sz = (size_t)elf_hdr_pht_combined_size(elf_h);
@@ -1963,7 +1970,7 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         load_addr = (uintptr_t)(paddr + BASE_OFF);
         wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
-                        load_addr, offset, filesz);
+                        (unsigned long)load_addr, offset, filesz);
         copy_flash_buffered((uintptr_t)(image + offset), load_addr, filesz,
                             ext_flash, ext_flash);
 
@@ -2141,9 +2148,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      */
     wolfBoot_verify_signature_primary(key_slot, img, stored_signature);
     (void)stored_signature_size;
-    if (img->signature_ok == 1)
+
 #ifdef SIGN_HYBRID
-    {
+    if (img->signature_ok == 1) {
         uint8_t *stored_secondary_signature;
         uint16_t stored_secondary_signature_size;
         /* Invalidate the signature_ok flag */
@@ -2168,9 +2175,10 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             wolfBoot_printf("Done.\n");
         }
     }
-    if (img->signature_ok == 1)
 #endif
+    if (img->signature_ok == 1) {
         return 0;
+    }
     return -2;
 }
 #endif

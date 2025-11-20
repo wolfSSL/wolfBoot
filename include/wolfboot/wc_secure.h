@@ -28,6 +28,14 @@
 
 /* Data types shared between wolfBoot and the non-secure application */
 
+#ifndef CSME_NSE_API
+#  if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#    define CSME_NSE_API __attribute__((cmse_nonsecure_entry))
+#  else
+#    define CSME_NSE_API
+#  endif
+#endif
+
 #ifdef WOLFCRYPT_SECURE_MODE
 struct wcs_sign_call_params
 {
@@ -52,36 +60,35 @@ struct wcs_verify_call_params
 
 #ifdef WOLFBOOT_SECURE_CALLS
 
-
 /* Secure calls prototypes for the non-secure world */
 
 /* RAW file read */
-int __attribute__((cmse_nonsecure_entry)) wcs_slot_read(int slot_id,
+int CSME_NSE_API wcs_slot_read(int slot_id,
         uint8_t *buffer, uint32_t len);
 
 
 
 /* ECC */
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_import_public(int ecc_curve,
+int CSME_NSE_API wcs_ecc_import_public(int ecc_curve,
         uint8_t *pubkey, uint32_t key_size);
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_keygen(uint32_t key_size,
+int CSME_NSE_API wcs_ecc_keygen(uint32_t key_size,
         int ecc_curve);
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecc_getpublic(int slot_id,
+int CSME_NSE_API wcs_ecc_getpublic(int slot_id,
         uint8_t *pubkey, uint32_t *pubkeySz);
 
-int __attribute__((cmse_nonsecure_entry)) wcs_ecdh_shared(int privkey_slot_id,
+int CSME_NSE_API wcs_ecdh_shared(int privkey_slot_id,
         int pubkey_slot_id, uint32_t outlen);
 
 /*  ECC Calls with wrapper for arguments (ABI only allows 4 arguments) */
-int __attribute__((cmse_nonsecure_entry))
+int CSME_NSE_API
     wcs_ecc_sign_call(struct wcs_sign_call_params *p);
-int __attribute__((cmse_nonsecure_entry))
+int CSME_NSE_API
     wcs_ecc_verify_call(struct wcs_verify_call_params *p);
 
 /* RNG */
-int __attribute__((cmse_nonsecure_entry)) wcs_get_random(uint8_t *rand,
+int CSME_NSE_API wcs_get_random(uint8_t *rand,
         uint32_t size);
 
 /* exposed API for sign/verify with all needed arguments */

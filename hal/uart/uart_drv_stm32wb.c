@@ -104,7 +104,6 @@ int uart_rx(uint8_t *c)
 
 int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 {
-    uint32_t reg;
     /* Enable pins and configure for AF7 */
     uart_pins_setup();
 

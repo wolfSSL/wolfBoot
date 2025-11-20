@@ -195,7 +195,6 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    int start = -1, end = -1;
     uint32_t end_address;
     uint32_t p;
     if (len == 0)
@@ -235,6 +234,7 @@ static void clock_pll_on(int powersave)
 
     /* Select clock parameters (CPU Speed = 48MHz) */
     cpu_freq = 48000000;
+    (void)cpu_freq; /* not used */
     flash_waitstates = 1;
 
     flash_set_waitstates(flash_waitstates);
@@ -301,7 +301,9 @@ void RAMFUNCTION hal_prepare_boot(void)
 #ifdef SPI_FLASH
     spi_flash_release();
 #endif
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
+#endif
 #ifdef FLASH_SECURABLE_MEMORY_SUPPORT
     do_secure_boot();
 #endif
