@@ -337,7 +337,9 @@ void hal_tz_sau_init(void)
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
     /* Non-secure: application flash area */
-    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_BOOT_ADDRESS + 2 * WOLFBOOT_PARTITION_SIZE - 1, 0);
+    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + 2 * WOLFBOOT_PARTITION_SIZE - 1,
+            0);
 
     /* Non-secure RAM region in SRAM1/SRAM2 */
     sau_init_region(2, 0x20020000, 0x2003FFFF, 0);
