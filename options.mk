@@ -950,6 +950,7 @@ ifeq ($(WOLFHSM_SERVER),1)
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm_flash.o \
+    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_keyid.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_unit.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server.o \

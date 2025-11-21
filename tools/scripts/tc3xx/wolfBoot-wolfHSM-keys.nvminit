@@ -2,4 +2,5 @@
 #
 # Key format is:
 # key <clientId> <keyId> <access> <flags> <label> <file>
-key 0x1 0xFF 0xFF 0x00 "wolfBoot Pubkey" wolfboot_signing_private_key_pub.der
+# flags: WH_NVM_FLAGS_USAGE_VERIFY=0x100
+key 0x1 0xFF 0xFF 0x100 "wolfBoot Pubkey" wolfboot_signing_private_key_pub.der
