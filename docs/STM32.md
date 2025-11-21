@@ -9,8 +9,8 @@ sudo apt install -y build-essential gcc-arm-none-eabi binutils-arm-none-eabi
 arm-none-eabi-gcc --version   # should print the version
 ```
 
-The device manufacturer toolchain _also_ needs to be installed. For example without the [STM32CubeIDE Software](https://www.st.com/en/development-tools/stm32cubeide.html),
-errors like this will otherwise be encountered:
+A device toolchain _also_ needs to be installed. For example without the appropriate support files,
+errors like this may otherwise be encountered:
 
 ```
         [CC ARM] hal/stm32l4.o
@@ -19,27 +19,52 @@ hal/stm32l4.c:24:10: fatal error: stm32l4xx_hal.h: No such file or directory
       |          ^~~~~~~~~~~~~~~~~
 ```
 
+There are a variety of other sources for device-specific toolchains, for example:
+
+- [arm-gnu-toolchain-downloads](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
+- [STM32CubeIDE Software](https://www.st.com/en/development-tools/stm32cubeide.html)
+- [gnutoolchains.com](https://gnutoolchains.com/)
+- [IAR Embedded Workbench](https://www.iar.com/embedded-development-tools/iar-embedded-workbench)
+- [keil](https://www.keil.com/download/product/)
+- [llvm](https://releases.llvm.org/download.html)
+
+wolfBoot s supported on nearly every development environment.
+
 ## Quick Start
+
+wolfBoot can be used with either `make` or `CMake`.
+
+Be sure to include the submodules when cloning:
 
 ```bash
 git clone https://github.com/wolfssl/wolfBoot.git
 cd wolfBoot
 git submodule update --init
+```
 
+### make
+
+The `make` builds use the `.config` files. See [config/examples](../config/examples)
+
+```
 ## Use make
 # edit your .config or copy from config/examples
 make
+```
 
-## OR ##
 
-# use cmake via wolfbuild.sh script:
+### CMake
+
+```
+## Use CMake
+## See wolfboot_cmake_full_build.sh script:
 
 ./tools/scripts/wolfboot_cmake_full_build.sh --CLEAN
 ./tools/scripts/wolfboot_cmake_full_build.sh --CLEAN  stm32h7
 ./tools/scripts/wolfboot_cmake_full_build.sh --target stm32h7
 ```
 
-### VS Code
+## VS Code
 
 Windows users may need one of these:
 
