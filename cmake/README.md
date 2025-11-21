@@ -1,8 +1,8 @@
-﻿# wolfBoot Cmake
+# wolfBoot CMake
 
 Review the [Keystore Docs](../docs/keystore.md) and [Signing Docs](../docs/Signing.md)
 regarding backup and storage of the generated `src/keystore.c` file. This file
-is excluded from source in `.gitignore`).
+is excluded from source in `.gitignore`.
 
 **Save to a safe place outside of the wolfBoot tree.**
 
@@ -25,7 +25,7 @@ set(FOUND_HAL_BASE false)
 set(USE_DOT_CONFIG false)
 ```
 
-## cmake Directory Overview
+## Relevant CMake Files
 
 - [`WOLFBOOT_ROOT`/CMakeLists.txt](../CMakeLists.txt) - Top-level CMake entry that configures the wolfBoot build.
 Used to initialize the project, include cmake/wolfboot.cmake, set options, and define targets.
@@ -39,6 +39,8 @@ Centralizes toolchain paths, target names, build directories, and key cache vari
 - [`WOLFBOOT_ROOT`/CMakeSettings.json](../CMakeSettings.json) - Visual Studio integration file.
 Maps Visual Studio configurations (Debug, Release) to existing CMake presets.
 Controls IntelliSense, environment variables, and the preset shown in the VS CMake toolbar.
+
+## This `cmake` Directory Overview
 
 - [preset-examples/CMakeUserPresets.json.sample](./preset-examples/CMakeUserPresets.json.sample) - Example local overrides for user-specific paths and options. Copy to `CMakeUserPresets.json` in the `WOLFBOOT_ROOT` directory and customize. Not committed. Copy to `WOLFBOOT_ROOT` and remove the `.sample` suffix.
 
@@ -73,7 +75,8 @@ Controls IntelliSense, environment variables, and the preset shown in the VS CMa
 - [downloads/stm32l4.cmake](./downloads/stm32l4.cmake) - STM32L4 fetch script for HAL and CMSIS.
 
 - [`WOLFBOOT_ROOT`/.vs/VSWorkspaceSettings.json](../.vs/VSWorkspaceSettings.json) - Exclusion directories: Visual Studio tries to be "helpful" and open a solution file. This is undesired when opening a directory as a CMake project.
----
+
+----
 
 ### Build with cmake using `.config` files
 

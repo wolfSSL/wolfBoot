@@ -5,8 +5,8 @@
 # Example for using cmake with .config
 #
 # Reminder for WSL:
-# git update-index --chmod=+x wolfboot_cmake_full_build.sh
-# git commit -m "Make wolfboot_cmake_full_build.sh executable"
+# git update-index --chmod=+x cmake_dot_config.sh
+# git commit -m "Make cmake_dot_config.sh executable"
 # git push
 
 # Specify the executable shell checker you want to use:

@@ -179,7 +179,7 @@ is provided:
     `BASE_SIGNED_IMG.BIN` and the new image signed starting from `IMAGE.BIN`. The
 result is stored in a file ending in `_signed_diff.bin`.
 
-The compression scheme used is Bentley–McIlroy.
+The compression scheme used is Bentley-McIlroy.
 
 Options:
   * `--no-base-sha` : Avoid adding the sha of the base image to the manifest header.
