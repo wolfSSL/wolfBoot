@@ -1,5 +1,10 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>IS_TEST_LIB_APP=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -19,9 +24,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{0E5B9C81-CA2B-47CA-BA83-074078CF3393}</ProjectGuid>
+    <ProjectGuid>{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>wolfBootSignTool</RootNamespace>
+    <RootNamespace>wolfBootTestLib</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -71,22 +76,22 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>sign</TargetName>
+    <TargetName>test-lib</TargetName>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <TargetName>sign</TargetName>
+    <TargetName>test-lib</TargetName>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>sign</TargetName>
+    <TargetName>test-lib</TargetName>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>sign</TargetName>
+    <TargetName>test-lib</TargetName>
     <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -96,7 +101,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;DELTA_UPDATES;WOLFSSL_HAVE_MIN;WOLFSSL_HAVE_MAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -109,8 +114,10 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;DELTA_UPDATES;WOLFSSL_HAVE_MIN;WOLFSSL_HAVE_MAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>__WOLFBOOT;WOLFBOOT_NO_PARTITIONS;WOLFBOOT_HASH_SHA256;WOLFBOOT_SIGN_ECC256;WOLFSSL_USER_SETTINGS;WOLFSSL_HAVE_MIN;WOLFSSL_HAVE_MAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Important: ensure ../../include is listed first to avoice user_settings.h conflict in other directories -->
+      <AdditionalIncludeDirectories>../../include;$(ProjectDir);./;../../lib/wolfssl;../../hal;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -126,7 +133,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;DELTA_UPDATES;WOLFSSL_HAVE_MIN;WOLFSSL_HAVE_MAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -144,7 +151,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WOLFSSL_USER_SETTINGS;DELTA_UPDATES;WOLFSSL_HAVE_MIN;WOLFSSL_HAVE_MAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);../../lib/wolfssl;../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -184,17 +191,35 @@
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_xmss.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_xmss_impl.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wolfmath.c" />
-    <ClCompile Include="..\..\src\delta.c" />
-    
+    <ClCompile Include="..\..\src\image.c" />
+    <ClCompile Include="..\..\src\libwolfboot.c" />
+    <!-- NOTE: Linux apps generate keystore files in [WOLFBOOT_ROOT]/src -->
+    <ClCompile Include="..\..\src\keystore.c" />
+    <ClCompile Include="..\..\src\delta.c" Condition="Exists('..\..\src\delta.c')" />
+
     <!-- The main() app -->
-    <ClCompile Include="sign.c">
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\lib\wolfssl;..\..\include;..\..\include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\lib\wolfssl;..\..\include;.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.;..\..\lib\wolfssl;..\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.;..\..\lib\wolfssl;..\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    <ClCompile Include="..\..\hal\library.c">
+      <ForcedIncludeFiles>$(ProjectDir)..\..\include\user_settings.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="wolfBootTarget.targets" Condition="Exists('wolfBootTarget.targets')" />
+  <Import Project="wolfBootImage.props" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+
+  <!-- Set default debug properties for debug builds: See wolfBootDebug.props -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\IDE\VisualStudio\wolfBootDebug.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\IDE\VisualStudio\wolfBootDebug.props') 
+                    and '$(Configuration)|$(Platform)'=='Debug|x64'" />
+
+  <Import Project="$(MSBuildThisFileDirectory)..\..\IDE\VisualStudio\wolfBootDebug.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\IDE\VisualStudio\wolfBootDebug.props') 
+                    and '$(Configuration)|$(Platform)'=='Debug|x86'" />
+
+<!-- Show debugging params -->
+<Target Name="ShowDebugArgs" BeforeTargets="Build">
+  <Message Importance="High" Text="Args: $(LocalDebuggerCommandArguments)" />
+  <Message Importance="High" Text="WorkDir: $(LocalDebuggerWorkingDirectory)" />
+</Target>
 </Project>

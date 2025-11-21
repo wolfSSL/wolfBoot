@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="UserMacros" Condition="'$(IMAGE_SIGNATURE_SIZE)' == ''">
+    <IMAGE_SIGNATURE_SIZE>4096</IMAGE_SIGNATURE_SIZE>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>
+        %(PreprocessorDefinitions);LMS_IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE);XMSS_IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE)
+      </PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+  <PropertyGroup Label="SignedImage">
+    <SIGNED_IMAGE>$(ProjectDir)..\..\test_v1_signed.bin</SIGNED_IMAGE>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerCommandArguments>$(SIGNED_IMAGE)</LocalDebuggerCommandArguments>
+  </PropertyGroup>
+</Project>

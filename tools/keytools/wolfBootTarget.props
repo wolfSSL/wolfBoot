@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="wolfBootTargetDefaults">
+    <WOLFBOOT_PARTITION_SIZE>0x0040000</WOLFBOOT_PARTITION_SIZE>
+    <WOLFBOOT_SECTOR_SIZE>0x0001000</WOLFBOOT_SECTOR_SIZE>
+    <WOLFBOOT_PARTITION_BOOT_ADDRESS>0x08020000</WOLFBOOT_PARTITION_BOOT_ADDRESS>
+    <WOLFBOOT_PARTITION_UPDATE_ADDRESS>0x08060000</WOLFBOOT_PARTITION_UPDATE_ADDRESS>
+    <WOLFBOOT_PARTITION_SWAP_ADDRESS>0x080A0000</WOLFBOOT_PARTITION_SWAP_ADDRESS>
+    <WOLFBOOT_DTS_BOOT_ADDRESS>0x08020000</WOLFBOOT_DTS_BOOT_ADDRESS>
+    <WOLFBOOT_DTS_UPDATE_ADDRESS>0x08060000</WOLFBOOT_DTS_UPDATE_ADDRESS>
+    <WOLFBOOT_LOAD_ADDRESS>0x24000000</WOLFBOOT_LOAD_ADDRESS>
+    <WOLFBOOT_LOAD_DTS_ADDRESS>0x24000000</WOLFBOOT_LOAD_DTS_ADDRESS>
+  </PropertyGroup>
+  <ItemGroup>
+    <TargetHTemplate Include="include\target.h.in" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetHOut>include\target.h</TargetHOut>
+  </PropertyGroup>
+
+  <Target Name="GenerateTargetH"
+          BeforeTargets="ClCompile"
+          Inputs="@(TargetHTemplate);
+                  $(WOLFBOOT_PARTITION_SIZE);
+                  $(WOLFBOOT_SECTOR_SIZE);
+                  $(WOLFBOOT_PARTITION_BOOT_ADDRESS);
+                  $(WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+                  $(WOLFBOOT_PARTITION_SWAP_ADDRESS);
+                  $(WOLFBOOT_DTS_BOOT_ADDRESS);
+                  $(WOLFBOOT_DTS_UPDATE_ADDRESS);
+                  $(WOLFBOOT_LOAD_ADDRESS);
+                  $(WOLFBOOT_LOAD_DTS_ADDRESS)"
+          Outputs="$(TargetHOut)">
+    <Message Text="Generating $(TargetHOut) from @(TargetHTemplate)" Importance="high" />
+    <MakeDir Directories="include" Condition="!Exists('include')" />
+    <Exec Command="powershell -ExecutionPolicy Bypass -NoProfile -Command ^
+      $in = Get-Content -Raw @(TargetHTemplate); ^
+      $out = $in ^
+        -replace '@WOLFBOOT_PARTITION_SIZE@','$(WOLFBOOT_PARTITION_SIZE)' ^
+        -replace '@WOLFBOOT_SECTOR_SIZE@','$(WOLFBOOT_SECTOR_SIZE)' ^
+        -replace '@WOLFBOOT_PARTITION_BOOT_ADDRESS@','$(WOLFBOOT_PARTITION_BOOT_ADDRESS)' ^
+        -replace '@WOLFBOOT_PARTITION_UPDATE_ADDRESS@','$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)' ^
+        -replace '@WOLFBOOT_PARTITION_SWAP_ADDRESS@','$(WOLFBOOT_PARTITION_SWAP_ADDRESS)' ^
+        -replace '@WOLFBOOT_DTS_BOOT_ADDRESS@','$(WOLFBOOT_DTS_BOOT_ADDRESS)' ^
+        -replace '@WOLFBOOT_DTS_UPDATE_ADDRESS@','$(WOLFBOOT_DTS_UPDATE_ADDRESS)' ^
+        -replace '@WOLFBOOT_LOAD_ADDRESS@','$(WOLFBOOT_LOAD_ADDRESS)' ^
+        -replace '@WOLFBOOT_LOAD_DTS_ADDRESS@','$(WOLFBOOT_LOAD_DTS_ADDRESS)'; ^
+      Set-Content -Path '$(TargetHOut)' -Value $out -NoNewline"
+    />
+  </Target>
+
+</Project>

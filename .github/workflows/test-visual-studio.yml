@@ -1,0 +1,187 @@
+name: wolfBoot Visual Studio
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build:
+    name: Visual Studio Keytools Tests
+    runs-on: windows-latest
+
+    env:
+      CONFIG:   Debug
+      PLATFORM: x64
+      ASYM:     ecc256
+      HASH:     sha256
+
+    steps:
+      # Adds MSBuild to PATH
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Fetch test target.h
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Ensure there's a target.h
+
+          echo Current directory:
+          echo %cd%
+
+          :: echo Copying tools\unit-tests\target.h to src\target.h
+
+          :: copy /Y tools\unit-tests\target.h src\target.h
+
+          echo Copying tools\unit-tests\target.h to include\target.h
+
+          copy /Y tools\unit-tests\target.h include\target.h
+
+      # Step 1 Build keygen, then run it
+      - name: Build KeygenTool keygen.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          echo Current directory:
+          echo %cd%
+
+          pushd tools\keytools\
+
+          msbuild wolfBootKeygenTool.vcxproj   ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Run KeygenTool keygen.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Run keygen.exe
+
+          echo Current directory:
+          echo %cd%
+
+          .\tools\keytools\%PLATFORM%\%CONFIG%\keygen.exe --ecc256 -g wolfboot_signing_private_key.der
+          if errorlevel 1 (
+            echo keygen.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          echo "wolfboot_signing_private_key.der file:"
+          dir wolfboot_signing_private_key.der /s
+
+          echo "keystore.c file:"
+          dir keystore.c /s
+
+      # Step 2 Build signing tool, then run it
+      - name: Build SignTool sign.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          pushd tools\keytools\
+
+          msbuild wolfBootSignTool.vcxproj     ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Create a file to sign
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Create a test.bin file
+
+          echo Creating a new test.bin
+          echo "Test" > test.bin
+
+      - name: Run SignTool sign.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Run sign.exe
+
+          echo Current directory:
+          echo %cd%
+
+          echo Running .\tools\keytools\%PLATFORM%\%CONFIG%\sign.exe  --%ASYM%  --%HASH%  test.bin  wolfboot_signing_private_key.der  1
+
+          .\tools\keytools\%PLATFORM%\%CONFIG%\sign.exe               --%ASYM%  --%HASH%  test.bin  wolfboot_signing_private_key.der  1
+
+          if errorlevel 1 (
+            echo sign.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          echo wolfboot_signing_private_key.der file:
+          dir wolfboot_signing_private_key.der /s
+
+          echo "keystore.c file:"
+          dir keystore.c /s
+
+          echo test.bin file:
+          dir test.bin /s
+
+          echo test_v1_signed.bin file:
+          dir test_v1_signed.bin /s
+
+      # Step 3 Build Test tool, then run it
+      - name: Build Library Test test-lib.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          pushd tools\keytools\
+
+          msbuild wolfBootTestLib.vcxproj      ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Run Library Test test-lib.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Run sign.exe
+
+          echo Current directory:
+          echo %cd%
+
+          :: A missing target.h is a common build failure on GitHub.
+          :: See above where we copy one from [WOLFBOOT_ROOT]\tools\unit-tests\
+          :: echo Where is the target.h?
+          :: dir target.h /s
+
+          dir test_v1_signed.bin /s
+
+          echo Running .\tools\keytools\%PLATFORM%\%CONFIG%\test-lib.exe  .\test_v1_signed.bin
+
+          if errorlevel 1 (
+            echo test-lib.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          .\tools\keytools\%PLATFORM%\%CONFIG%\test-lib.exe               .\test_v1_signed.bin
+
+          echo Done!
