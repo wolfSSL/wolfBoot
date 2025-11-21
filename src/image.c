@@ -486,8 +486,8 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
 #else
     whKeyId hsmKeyId = WH_KEYID_ERASED;
     /* Cache the public key on the server */
-    ret = wh_Client_KeyCache(&hsmClientCtx, 0, NULL, 0, pubkey, pubkey_sz,
-                             &hsmKeyId);
+    ret = wh_Client_KeyCache(&hsmClientCtx, WH_NVM_FLAGS_USAGE_VERIFY, NULL, 0,
+                             pubkey, pubkey_sz, &hsmKeyId);
     if (ret != WH_ERROR_OK) {
         return;
     }
@@ -2102,18 +2102,19 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             "verifying cert chain and caching leaf pubkey (using DMA)\n");
         hsm_ret = wh_Client_CertVerifyDmaAndCacheLeafPubKey(
             &hsmClientCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
-            &g_certLeafKeyId, &cert_verify_result);
+            WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, &cert_verify_result);
 #else
         wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
         hsm_ret = wh_Client_CertVerifyAndCacheLeafPubKey(
             &hsmClientCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
-            &g_certLeafKeyId, &cert_verify_result);
+            WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, &cert_verify_result);
 #endif
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
         wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
         hsm_ret = wh_Server_CertVerify(
             &hsmServerCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
-            WH_CERT_FLAGS_CACHE_LEAF_PUBKEY, &g_certLeafKeyId);
+            WH_CERT_FLAGS_CACHE_LEAF_PUBKEY, WH_NVM_FLAGS_USAGE_VERIFY,
+            &g_certLeafKeyId);
         if (hsm_ret == WH_ERROR_OK) {
             cert_verify_result = 0;
         }
