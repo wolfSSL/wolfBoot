@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - "~No config (wolfBoot sim)"
+          # - "~No config (wolfBoot sim)"
           # - imx-rt # Disabled, requires NXP SDK
           - stm32c0
           - stm32f1

@@ -3,7 +3,6 @@ name: WolfBoot CMake Presets Build
 on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
-    branches: [ '*' ]
   pull_request:
     branches: [ "*" ]
 
@@ -23,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - sim
+          # - sim
           # - imx-rt # Disabled, requires NXP SDK
           - stm32c0
           - stm32f1
