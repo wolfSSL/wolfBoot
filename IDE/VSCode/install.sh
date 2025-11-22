@@ -46,7 +46,8 @@ echo "Starting $0 from $(pwd -P)"
 # End common dir init
 
 pwd
-git clone https://github.com/gojimmypi/wolfBoot.git
+
+git clone https://github.com/master/wolfBoot.git
 cd wolfBoot
 git submodule update --init
 

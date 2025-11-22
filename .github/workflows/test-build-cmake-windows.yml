@@ -4,7 +4,7 @@ on:
   push:
     branches: [ 'master', 'main', 'release/**' ]
   pull_request:
-    branches: [ '*' ]
+    branches: [ "*" ]
 
 permissions:
   contents: read
@@ -20,9 +20,20 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - stm32l4
-          - stm32h7
+          # - imx-rt # Disabled, requires NXP SDK
+          - stm32c0
+          - stm32f1
+          - stm32f4
+          - stm32f7
           - stm32g0
+          - stm32h5
+          - stm32h7
+          - stm32l0
+          - stm32l4
+          - stm32l5
+          - stm32u5
+          - stm32wb
+
         include:
           # Optional per-target cache variables you might want to pass later.
           # Keep empty for now to avoid guessing addresses.

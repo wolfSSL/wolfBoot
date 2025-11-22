@@ -1,4 +1,4 @@
-﻿# Post-Quantum Signatures
+# Post-Quantum Signatures
 
 wolfBoot is continuously adding support for post-quantum (PQ) signature
 algorithms as they mature. At present, support has been added for three NIST

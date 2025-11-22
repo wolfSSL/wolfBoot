@@ -1,4 +1,4 @@
-﻿# VS Code wolfBoot Project
+# VS Code wolfBoot Project
 
 CMake presets are support in VS Code. See also details in the [cmake/README.md](../../cmake/README).
 
@@ -23,6 +23,32 @@ code wolfBoot.code-workspace
 ```
 
 If all of the prerequisites are NOT installed, see the [install.sh](./install.sh) script.
+
+## Windows
+
+Windows users may need one of these:
+
+- [Visual Studio 2022](https://visualstudio.microsoft.com/)
+- [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/). See `C:\Program Files(x86)\Windows kits`.
+
+The MSVC kit may be needed if VS 2022 is not installed.
+
+Select `View` - `Command Palette`, search for CMake: Select a Compiler
+
+See also: CMake: Delete Cache and Reconfigure
+
+### Launch VS Code from VS 2022 Command prompt.
+
+Delete any existing `build` or `build-[target]` directories as needed.
+
+Open a VS 2022 Developer command prompt.
+
+From the command prompt, open the `wolfBoot.code-workspace` VS Code workspace:
+
+```dos
+cd c:\workspace\wolfboot-%USERNAME%
+code ./IDE/VSCode/wolfBoot.code-workspace
+```
 
 -----
 

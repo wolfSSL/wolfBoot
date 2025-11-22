@@ -1,4 +1,4 @@
-﻿## wolfBoot Docs and Platform-Specific Details
+## wolfBoot Docs and Platform-Specific Details
 
 See also: [wolfBoot Product Overview](https://www.wolfssl.com/products/wolfboot/) and [wolfBoot Manual](https://www.wolfssl.com/documentation/manuals/wolfboot/).
 

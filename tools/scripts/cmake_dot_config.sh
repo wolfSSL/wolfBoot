@@ -22,6 +22,16 @@ fi
 
 set -euo pipefail
 
+# Require a target argument, e.g. stm32h7
+TARGET="${1-}"
+if [ -z "$TARGET" ]; then
+    echo "Usage: $0 <wolfboot-target>" >&2
+    echo "Example: $0 stm32h7" >&2
+    exit 1
+fi
+
+BUILD_DIR="build-${TARGET}"
+
 # Begin common dir init, for /tools/scripts
 # Resolve this script's absolute path and its directories
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,6 +59,7 @@ esac
 # Always work from the repo root, regardless of where the script was invoked
 cd -- "$REPO_ROOT_P" || { printf 'Failed to cd to: %s\n' "$REPO_ROOT_P" >&2; exit 1; }
 echo "Starting $0 from $(pwd -P)"
+echo "Using target: $TARGET"
 
 # End common dir init
 
@@ -59,9 +70,9 @@ LOG_FILE="run.log"
 KEYWORD="Config mode: dot"
 echo "Saving output to $LOG_FILE"
 
-echo "Fetch stm32h7 example .config"
+echo "Fetch ${TARGET} example .config"
 
-SRC="./config/examples/stm32h7.config"
+SRC="./config/examples/${TARGET}.config"
 DST="./.config"
 
 # Exit if the .config file already exists (perhaps it is valid? we will delete our copy when done here)
@@ -96,7 +107,7 @@ fi
 
 echo "OK: $DST created and verified."
 
-cp   ./config/examples/stm32h7.config ./.config
+cp   "./config/examples/${TARGET}.config" ./.config
 ls   .config
 
 echo ""
@@ -105,10 +116,10 @@ cat  .config
 echo ""
 
 echo "Clean"
-rm -rf ./build-stm32h7
-cmake -S . -B build-stm32h7 \
-  -DUSE_DOT_CONFIG=ON       \
-  -DWOLFBOOT_TARGET=stm32h7 2>&1 | tee "$LOG_FILE" >/dev/tty
+rm -rf "./${BUILD_DIR}"
+cmake -S . -B "${BUILD_DIR}" \
+  -DUSE_DOT_CONFIG=ON        \
+  -DWOLFBOOT_TARGET="${TARGET}" 2>&1 | tee "$LOG_FILE" >/dev/tty
 
 # Config dot-config mode
 if grep -q -- "$KEYWORD" "$LOG_FILE"; then
@@ -119,7 +130,6 @@ else
 fi
 
 # Sample build
-cmake --build build-stm32h7 -j10
+cmake --build "${BUILD_DIR}" -j10
 
 rm .config
-

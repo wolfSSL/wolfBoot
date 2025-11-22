@@ -272,6 +272,20 @@ endif()
 message(STATUS "Host CC: ${HOST_CC}")
 message(STATUS "Host compiler treated as MSVC: ${HOST_IS_MSVC}")
 
+if(WOLFBOOT_TARGET STREQUAL "imx_rt")
+    # This target depends on the NXP MCUXpresso SDK for EVKB-IMXRT1040.
+    # Without it, the build will fail anyway on missing fsl_* headers.
+    set(IMXRT_SDK_ROOT "" CACHE PATH "Path to MCUXpresso SDK for EVKB-IMXRT1040")
+
+    if(NOT IMXRT_SDK_ROOT OR NOT EXISTS "${IMXRT_SDK_ROOT}")
+        message(FATAL_ERROR
+            "WOLFBOOT_TARGET=imx_rt requires IMXRT_SDK_ROOT to point to a valid "
+            "MCUXpresso SDK for EVKB-IMXRT1040 (fsl_cache.h, etc.). "
+            "You currently do not have this SDK installed."
+        )
+    endif()
+endif()
+
 #---------------------------------------------------------------------------------------------
 # Common includes/defines for host tools
 #---------------------------------------------------------------------------------------------
@@ -365,7 +379,35 @@ if(NOT DEFINED WOLFBOOT_SECTOR_SIZE)
 endif()
 
 if(NOT DEFINED ARM_TARGETS)
-    list(APPEND ARM_TARGETS cypsoc6 imx kinetis lpc54606j512 mcxa mcxw nrf52 nrf52840 nrf5340 nrf5340_net rp2350 sama5d3 same51 stm32c0 stm32f1 stm32f4 stm32f7 stm32g0 stm32h5 stm32h7 stm32l0 stm32l4 stm32l5 stm32u5 stm32wb ti zynqmp)
+    list(APPEND ARM_TARGETS cypsoc6
+                            imx
+                            imx_rt
+                            kinetis
+                            lpc54606j512
+                            mcxa
+                            mcxw
+                            nrf52
+                            nrf52840
+                            nrf5340
+                            nrf5340_net
+                            rp2350
+                            sama5d3
+                            same51
+                            stm32c0
+                            stm32f1
+                            stm32f4
+                            stm32f7
+                            stm32g0
+                            stm32h5
+                            stm32h7
+                            stm32l0
+                            stm32l4
+                            stm32l5
+                            stm32u5
+                            stm32wb
+                            ti
+                            zynqmp
+    )
     set(ARM_TARGETS
         "${ARM_TARGETS}"
         CACHE INTERNAL "")
@@ -380,9 +422,9 @@ endif()
 
 if("${WOLFBOOT_TARGET}" IN_LIST ARM_TARGETS)
     set(ARCH ARM)
-elseif(WOLFBOOT_TARGET STREQUAL "x86_64_efi")
+elseif("${WOLFBOOT_TARGET}" STREQUAL "x86_64_efi")
     set(ARCH x86_64)
-elseif(WOLFBOOT_TARGET STREQUAL "sim")
+elseif("${WOLFBOOT_TARGET}" STREQUAL "sim")
     set(ARCH sim)
 else()
     message(FATAL_ERROR "Unable to configure ARCH for target ${WOLFBOOT_TARGET}")
@@ -549,6 +591,7 @@ set(UPDATE_SOURCES src/update_flash.c)
 
 # Default flash offset
 if(NOT DEFINED ARCH_FLASH_OFFSET)
+    message(STATUS "WARNING: ARCH_FLASH_OFFSET not defined, setting to default 0x0")
     set(ARCH_FLASH_OFFSET 0x0)
 endif()
 
@@ -916,21 +959,29 @@ list(TRANSFORM WOLFBOOT_SOURCES PREPEND ${WOLFBOOT_ROOT}/)
 # Hash settings
 #---------------------------------------------------------------------------------------------
 if(HASH STREQUAL "SHA256")
-    list(APPEND WOLFBOOT_DEFS WOLFBOOT_HASH_SHA256)
+    list(APPEND WOLFBOOT_DEFS  WOLFBOOT_HASH_SHA256)
     list(APPEND SIGN_OPTIONS   WOLFBOOT_HASH_SHA256)
     message(STATUS "Using SHA256 hash")
 endif()
 
 if(HASH STREQUAL "SHA384")
-    list(APPEND WOLFBOOT_DEFS WOLFBOOT_HASH_SHA384)
+    list(APPEND WOLFBOOT_DEFS  WOLFBOOT_HASH_SHA384)
     list(APPEND SIGN_OPTIONS   WOLFBOOT_HASH_SHA384)
-    list(APPEND KEYTOOL_OPTIONS --sha384)
+    # Note: the keygen tool in this tree does not accept a --sha384 CLI flag.
+    # Hash selection is controlled via WOLFBOOT_HASH_SHA384 in the image header,
+    # so do not append a hash option to KEYTOOL_OPTIONS here.
+    # list(APPEND KEYTOOL_OPTIONS --sha384)
+    message(STATUS "Using SHA384 hash")
 endif()
 
 if(HASH STREQUAL "SHA3")
-    list(APPEND WOLFBOOT_DEFS WOLFBOOT_HASH_SHA3_384)
+    list(APPEND WOLFBOOT_DEFS  WOLFBOOT_HASH_SHA3_384)
     list(APPEND SIGN_OPTIONS   WOLFBOOT_HASH_SHA3_384)
-    list(APPEND KEYTOOL_OPTIONS --sha3)
+    # Note: the keygen tool in this tree does not accept a --sha3 CLI flag.
+    # Hash selection is controlled via WOLFBOOT_HASH_SHA3_384 in the image header,
+    # so do not append a hash option to KEYTOOL_OPTIONS here.
+    # list(APPEND KEYTOOL_OPTIONS --sha3)
+    message(STATUS "Using SHA3_384 hash")
 endif()
 
 #---------------------------------------------------------------------------------------------
@@ -1225,26 +1276,26 @@ endif()
 
 add_subdirectory(lib)
 
-    if (TARGET wolfcrypt)
-        set(WOLFSSL_TGT wolfcrypt)
-    elseif (TARGET wolfssl)
-        set(WOLFSSL_TGT wolfssl)
-    else()
-        message(FATAL_ERROR "wolfSSL submodule did not define a 'wolfcrypt' or 'wolfssl' target.")
-    endif()
-    message(STATUS "Using wolfSSL target: ${WOLFSSL_TGT}")
+if(TARGET wolfcrypt)
+    set(WOLFSSL_TGT wolfcrypt)
+elseif(TARGET wolfssl)
+    set(WOLFSSL_TGT wolfssl)
+else()
+    message(FATAL_ERROR "wolfSSL submodule did not define a 'wolfcrypt' or 'wolfssl' target.")
+endif()
+message(STATUS "Using wolfSSL target: ${WOLFSSL_TGT}")
 
 
-	if (TARGET ${WOLFSSL_TGT})
+if(TARGET ${WOLFSSL_TGT})
     target_compile_definitions(${WOLFSSL_TGT} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_compile_options(${WOLFSSL_TGT} PRIVATE
-    $<$<C_COMPILER_ID:MSVC>:/Umin>
-    $<$<C_COMPILER_ID:MSVC>:/Umax>
-    $<$<C_COMPILER_ID:MSVC>:/USIGN>
-    $<$<C_COMPILER_ID:MSVC>:/UHASH>
-    $<$<C_COMPILER_ID:MSVC>:/Zc:preprocessor>
+                            $<$<C_COMPILER_ID:MSVC>:/Umin>
+                            $<$<C_COMPILER_ID:MSVC>:/Umax>
+                            $<$<C_COMPILER_ID:MSVC>:/USIGN>
+                            $<$<C_COMPILER_ID:MSVC>:/UHASH>
+                            $<$<C_COMPILER_ID:MSVC>:/Zc:preprocessor>
     )
-    endif()
+endif() # TARGET ${WOLFSSL_TGT}
 
 if(BUILD_TEST_APPS OR BUILD_IMAGE)
     message(STATUS "Building wolfBoot image")

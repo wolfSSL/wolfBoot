@@ -2,6 +2,8 @@
 
 # wolfboot_cmake_full_build.sh
 #
+#   >>>>> EDIT WITH CAUTION: Used by ./github/workflow tests <<<<<
+#
 #   ./tools/scripts/wolfboot_cmake_full_build.sh --CLEAN  [your target]
 #   ./tools/scripts/wolfboot_cmake_full_build.sh --target [your target]
 #   ./tools/scripts/wolfboot_cmake_full_build.sh --flash  [your target]
@@ -284,6 +286,40 @@ if [ $# -gt 0 ]; then
         fi
         exit "$status"
     fi
+
+    if [ "$THIS_OPERATION" = "--flash-unsigned" ]; then
+        echo "Flash Target=$TARGET"
+        CLI="$(find_stm32_tool STM32_Programmer_CLI)" || { echo "CLI not found"; exit 1; }
+        if [ -f "$CLI" ]; then
+            echo "Found STM32 flasher: $CLI"
+        else
+            echo "CLI=$CLI"
+            echo "STM32_Programmer_CLI.exe not found, exiting"
+            exit 2
+        fi
+
+        # TODO Alternative preset inherited configs may write to build directories other than build-$TARGET.
+        # Currently works only with base_build_presetName preset path
+        APP_BIN="../build-$TARGET/app.bin"
+        echo Checking "APP_BIN=$APP_BIN"
+        if [ ! -f "$APP_BIN" ]; then
+            echo "Missing: $APP_BIN (build first: cmake --build --preset \"$TARGET\")"
+            exit 2
+        fi
+
+        BOOT_ADDR=0x0800A000    # your wolfBoot BOOT address
+        BOOT_ADDR=0x08000000    # your wolfBoot BOOT address
+        echo "BOOT_ADDR=$BOOT_ADDR"
+        # SWD via ST-LINK (Windows handles the USB)
+        "$CLI" -c port=SWD mode=UR freq=400 -w "$APP_BIN" "$BOOT_ADDR" -v -hardRst
+        status=$?
+        if [ "$status" -eq 0 ]; then
+            echo "OK: command succeeded"
+        else
+            echo "Failed: command exited with status $status"
+        fi
+        exit "$status"
+    fi
 fi
 
 if [ "$TARGET" = "" ]; then
@@ -292,6 +328,7 @@ if [ "$TARGET" = "" ]; then
     echo "  $0 --CLEAN  [your target]"
     echo "  $0 --target [your target]"
     echo "  $0 --flash  [your target]"
+    echo "  $0 --flash-unsigned  [your target]"
     echo ""
     cmake -S . -B build --list-presets=configure
     exit 1

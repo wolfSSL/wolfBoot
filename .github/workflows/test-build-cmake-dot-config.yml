@@ -7,8 +7,29 @@ on:
 
 jobs:
   wolfboot_dot_config_test:
+    name: cmake .config test (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # These are exact file names from config/examples (including .config)
+          # - imx-rt1040.config # Disabled, requires NXP SDK
+          - sim.config
+          - stm32c0.config
+          - stm32f1.config
+          - stm32f4-small-blocks-uart-update.config
+          - stm32f7.config
+          - stm32g0.config
+          - stm32h5.config
+          - stm32h7.config
+          - stm32l0.config
+          - stm32l4-cube.config
+          - stm32l5.config
+          - stm32u5.config
+          - stm32wb.config
 
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +81,6 @@ jobs:
             echo "--- apt-mirrors.txt ---"
             cat /etc/apt/apt-mirrors.txt || true
 
-
       - name: Install requirements
         run: |
             # Run system updates and install toolchain
@@ -73,31 +93,59 @@ jobs:
 
             set -euo pipefail
 
-            LOG_FILE="run.log"
+            TARGET="${{ matrix.target }}"
+            TARGET="${TARGET%.config}"
+            TARGET="${TARGET%%-*}"
+
+            BUILD_DIR="build-${TARGET}"
+            LOG_FILE="run-${TARGET}.log"
             KEYWORD="Config mode: dot"
-            echo "Saving output to $LOG_FILE"
 
-            echo "Fetch stm32h7 example .config"
-            cp   ./config/examples/stm32h7.config ./.config
-            ls   .config
-            cat  .config
-            echo ""
+            echo "Target: ${TARGET}"
+            echo "Build dir: ${BUILD_DIR}"
+            echo "Saving output to ${LOG_FILE}"
 
-            echo "Clean"
-            rm -rf ./build-stm32h7
+            CONFIG_SRC="./config/examples/${{ matrix.target }}"
 
-            # Here we should see the .config file values read and displayed:
-            cmake -S . -B build-stm32h7 \
-              -DUSE_DOT_CONFIG=ON       \
-              -DWOLFBOOT_TARGET=stm32h7 2>&1 | tee "$LOG_FILE"
-
-            # Config dot-config mode
-            if grep -q -- "$KEYWORD" "$LOG_FILE"; then
-                echo "Keyword found: $KEYWORD"
-            else
-                echo "Keyword not found: $KEYWORD" >&2
+            echo "Fetch ${TARGET} example .config (source: ${CONFIG_SRC})"
+            if [ ! -f "${CONFIG_SRC}" ]; then
+                echo "Missing config file: ${CONFIG_SRC}" >&2
                 exit 1
             fi
 
-            # Sample build
-            cmake --build build-stm32h7 --parallel 8
+            cp "${CONFIG_SRC}" ./.config
+            ls  .config
+            cat .config
+            echo ""
+
+            echo "Clean"
+            rm -rf "./${BUILD_DIR}"
+
+            # Here we should see the .config file values read and displayed:
+            cmake -S . -B "${BUILD_DIR}" \
+              -DUSE_DOT_CONFIG=ON        \
+              -DWOLFBOOT_TARGET="${TARGET}" 2>&1 | tee "${LOG_FILE}"
+
+            # Config dot-config mode
+            if grep -q -- "${KEYWORD}" "${LOG_FILE}"; then
+                echo "Keyword found: ${KEYWORD}"
+            else
+                echo "Keyword not found: ${KEYWORD}" >&2
+                exit 1
+            fi
+
+            # First: build keygen explicitly and inspect it
+            echo "Building keygen_build for ${TARGET}"
+            cmake --build "${BUILD_DIR}" --parallel 1 --target keygen_build
+
+            if [ -f "${BUILD_DIR}/keygen" ]; then
+                echo "Inspecting keygen:"
+                ls -l "${BUILD_DIR}/keygen"
+                file "${BUILD_DIR}/keygen" || true
+            else
+                echo "keygen not found at ${BUILD_DIR}/keygen"
+            fi
+
+            # Now run the normal build
+            echo "Running full build"
+            cmake --build "${BUILD_DIR}" --parallel 8

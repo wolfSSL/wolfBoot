@@ -2,7 +2,7 @@ name: WolfBoot CMake Presets Build
 
 on:
   push:
-    # TODO: branches: [ 'master', 'main', 'release/**' ]
+    branches: [ 'master', 'main', 'release/**' ]
     branches: [ '*' ]
   pull_request:
     branches: [ "*" ]
@@ -23,9 +23,21 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - stm32l4
-          - stm32h7
+          - sim
+          # - imx-rt # Disabled, requires NXP SDK
+          - stm32c0
+          - stm32f1
+          - stm32f4
+          - stm32f7
           - stm32g0
+          - stm32h5
+          - stm32h7
+          - stm32l0
+          - stm32l4
+          - stm32l5
+          - stm32u5
+          - stm32wb
+
         include:
           # Optional per-target cache variables you might want to pass later.
           # Keep empty for now to avoid guessing addresses.
@@ -48,6 +60,7 @@ jobs:
 
       # ARM GCC toolchain (adds the bin dir to PATH)
       - name: Set up ARM none-eabi GCC 14.x
+        if: matrix.target != 'sim'
         uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
           release: "14.2.Rel1" # <-- use 'release', not 'version'

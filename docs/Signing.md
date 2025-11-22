@@ -12,6 +12,8 @@ These can be built in `tools/keytools` using `make` or from the wolfBoot root us
 
 #### Windows Visual Studio
 
+Project files can be found in [`[WOLFBOOT_ROOT]/IDE/VisualStudio`](../IDE/VisualStudio/README.md).
+
 Use the `wolfBootSignTool.vcxproj` Visual Studio project to build the `sign.exe` and `keygen.exe` tools for use on Windows.
 
 If you see any error about missing `target.h` this is a generated file based on your .config using the make process. It is needed for `WOLFBOOT_SECTOR_SIZE` used in delta updates.
