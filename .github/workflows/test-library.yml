@@ -41,6 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          clean: true
           submodules: true
 
       - name: make clean
@@ -54,10 +55,23 @@ jobs:
           HASH: ${{ matrix.hash }}
           MATH: ${{ matrix.math }}
         run: |
+          # Test various library parameters
+
+          export MAKE_SIGN="${ASYM^^}"
+          export MAKE_HASH="${HASH^^}"
+          export MAKE_MATH='${{ matrix.math }}' # e.g., "SPMATH=1 WOLFBOOT_SMALL_STACK=1"
+          export PRIVATE_KEY="wolfboot_signing_private_key.der"
+
+          echo "This MAKE_SIGN=$MAKE_SIGN"
+          echo "This MAKE_HASH=$MAKE_HASH"
+          echo "This MAKE_MATH=$MAKE_MATH"
+
           # Sample build
           build_once() {
               # Convert asym and hash to upper case, optionally add additional param
-              make -j test-lib SIGN=${ASYM^^} HASH=${HASH^^} ${MATH} "$@"
+              echo "Build test-lib..."
+              echo "make -j1 test-lib SIGN=${MAKE_SIGN} HASH=${MAKE_HASH} ${MATH} \"$@\""
+                    make -j1 test-lib SIGN=${MAKE_SIGN} HASH=${MAKE_HASH} ${MATH}  "$@"
           }
 
           set -euo pipefail
@@ -65,17 +79,65 @@ jobs:
           # Get the reference config
           cp config/examples/library.config .config
 
+          # peek
+          echo "Existing files?"
+          if [ -f "src/keystore.c" ]; then
+            echo "WARNING: Found unexpected src/keystore.c"
+          fi
+          if [ -f "include/target.h" ]; then
+            echo "WARNING: Found unexpected include/target.h"
+          fi
+          if [ -f "keystore.der" ]; then
+            echo "WARNING: Found unexpected keystore.der"
+          fi
+          if [ -f "wolfboot_signing_private_key.der" ]; then
+            echo "WARNING: Found unexpected wolfboot_signing_private_key.der"
+          fi
+          if [ -f "./tools/keytools/keystore.der" ]; then
+            echo "WARNING: Found unexpected ./tools/keytools/keystore.der"
+          fi
+          if [ -f "./tools/keytools/wolfboot_signing_private_key.der" ]; then
+            echo "WARNING: Found unexpected ./tools/keytools/wolfboot_signing_private_key.der"
+          fi
+
           # Keytools
-          make keytools
-          ./tools/keytools/keygen --${ASYM} -g wolfboot_signing_private_key.der
+          echo ""
+          echo "make -j1 keytools SIGN=\"${MAKE_SIGN}\" HASH=\"${MAKE_HASH}\" $MATH"
+                make -j1 keytools SIGN="${MAKE_SIGN}"   HASH="${MAKE_HASH}"   $MATH
+
+          # Generate keys
+          echo ""
+          echo "./tools/keytools/keygen --${ASYM} -g wolfboot_signing_private_key.der"
+                ./tools/keytools/keygen --${ASYM} -g wolfboot_signing_private_key.der
+
+          # Force fresh files
+          # peek
+          echo "Existing files?"
+          if [ -f "src/keystore.c" ]; then
+            echo "Found unexpected src/keystore.c"
+          fi
+          if [ -f "include/target.h" ]; then
+            echo "Found unexpected include/target.h"
+          fi
+          if [ -f "keystore.der" ]; then
+            echo "Found unexpected keystore.der"
+          fi
+          if [ -f "wolfboot_signing_private_key.der" ]; then
+            echo "Found unexpected wolfboot_signing_private_key.der"
+          fi
 
           # Sign
+          echo ""
           echo "Test" > test.bin
-          ./tools/keytools/sign --${ASYM} --${HASH} test.bin wolfboot_signing_private_key.der 1
+          echo "Sign test.bin"
+          echo "./tools/keytools/sign --${ASYM} --${HASH} test.bin wolfboot_signing_private_key.der 1"
+                ./tools/keytools/sign --${ASYM} --${HASH} test.bin wolfboot_signing_private_key.der 1
 
           # First attempt
           if build_once >build.out 2>build.err; then
             echo "Success on first attempt, WOLFBOOT_HUGE_STACK not applied."
+            cat build.out
+            cat build.err
             exit 0
           fi
 
@@ -90,12 +152,16 @@ jobs:
             build_once WOLFBOOT_HUGE_STACK=1
           else
             echo "Build failed for another reason:"
+            cat build.out
             cat build.err
             exit 1
           fi
 
       - name: Run test-lib
         run: |
+          # Check test_v1_signed.bin
+
+          echo "./test-lib test_v1_signed.bin"
           ./test-lib test_v1_signed.bin
           ./test-lib test_v1_signed.bin 2>&1 | grep "Firmware Valid"
 
@@ -103,6 +169,36 @@ jobs:
         run: |
           # Corrupt signed binary
           truncate -s -1 test_v1_signed.bin
-          echo "A" >> test_v1_signed.bin
-          ./test-lib test_v1_signed.bin
-          ./test-lib test_v1_signed.bin 2>&1 | grep "Failure"
+          printf "A" >> test_v1_signed.bin
+
+          # Run once, capture output and status (temporarily disable errexit)
+          set +e
+          output=$(./test-lib test_v1_signed.bin 2>&1)
+          status=$?
+          set -e
+
+          echo "$output"
+
+          # TODO hal/library.c does not currently return an error code during failure
+          # Test only looks for the word "Failure"
+          # See https://github.com/wolfSSL/wolfBoot/pull/625
+
+          # If the tool printed "Failure", treat it as a failure regardless of exit code
+          if echo "$output" | grep -F "Failure" >/dev/null; then
+              status=1
+          fi
+
+          # Must have failed (non-zero exit)
+          if [ "$status" -eq 0 ]; then
+            echo "Expected failure, but exit code was 0"
+            exit 1
+          fi
+
+          # Must include the expected Failure message
+          if ! echo "$output" | grep -F "Failure" >/dev/null; then
+            echo "Expected 'Failure' not found in output"
+            exit 1
+          fi
+
+          echo "Got expected non-zero exit and 'Failure' message."
+
