@@ -36,7 +36,7 @@ message(STATUS "Begin [WOLFBOOT_ROOT]/CmakeLists.txt")
 #---------------------------------------------------------------------------------------------
 # First, ensure no in-source build occurs.
 #---------------------------------------------------------------------------------------------
-if(NOT "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
     message(FATAL_ERROR
             "In-source builds are not allowed for wolfBoot.\
              Run cmake from a separate directory from where CMakeLists.txt lives.\
