@@ -33,6 +33,17 @@
 
 message(STATUS "Begin [WOLFBOOT_ROOT]/CmakeLists.txt")
 
+#---------------------------------------------------------------------------------------------
+# First, ensure no in-source build occurs.
+#---------------------------------------------------------------------------------------------
+if(NOT "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+    message(FATAL_ERROR
+            "In-source builds are not allowed for wolfBoot.\
+             Run cmake from a separate directory from where CMakeLists.txt lives.\
+             Clean up any stray cache or build directories and try again. \
+             See [WOLFBOOT_ROOT]/docs/CMake.md for additional details.")
+endif()
+
 message(STATUS "wolfBoot target: ${WOLFBOOT_TARGET}")
 message(STATUS "CMake version:   ${CMAKE_VERSION}")
 message(STATUS "Generator:       ${CMAKE_GENERATOR}")
@@ -46,14 +57,6 @@ include(cmake/config_defaults.cmake)
 #---------------------------------------------------------------------------------------------
 # Initial environment checks
 #---------------------------------------------------------------------------------------------
-if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
-    message(
-        FATAL_ERROR
-            "In-source builds are not allowed for wolfBoot.\
-     Run cmake from a separate directory from where CMakeLists.txt lives.\
-     NOTE: cmake will now create CMakeCache.txt and CMakeFiles/*.\
-     You must delete them, or cmake will refuse to work.")
-endif()
 
 # This must appear before project(wolfBoot)
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -65,6 +68,7 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
         CACHE FILEPATH "" FORCE)
     endif()
 endif()
+
 
 if(NOT DEFINED PREFERRED_HOST_CC_NAME_LIST OR PREFERRED_HOST_CC_NAME_LIST STREQUAL "")
     # set(PREFERRED_HOST_CC_NAME_LIST gcc clang cl)

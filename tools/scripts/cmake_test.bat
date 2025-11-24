@@ -6,9 +6,104 @@
 :: This test manually sets paths to cmake and include files (also assumes VS 2022 is installed, but can be any suitable path)
 cls
 
-set "Path=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\bin\HostX86\x86;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\VCPackages;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\bin\Roslyn;C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\;C:\Program Files (x86)\HTML Help Workshop;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\FSharp\Tools;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Team Tools\DiagnosticsHub\Collector;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\Microsoft\CodeCoverage.Console;C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\\x86;C:\Program Files (x86)\Windows Kits\10\bin\\x86;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\\MSBuild\Current\Bin\amd64;C:\Windows\Microsoft.NET\Framework\v4.0.30319;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\;C:\Program Files (x86)\VMware\VMware Workstation\bin\;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Git\cmd;C:\SysGCC\esp32-master\tools\riscv32-esp-elf\esp-15.2.0_20250920\riscv32-esp-elf\bin;C:\SysGCC\esp32-master\tools\xtensa-esp-elf\esp-15.2.0_20250920\xtensa-esp-elf\bin;C:\Program Files (x86)\VMware\VMware Workstation\bin\;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files\Git\cmd;C:\Users\gojimmypi\AppData\Local\Microsoft\WindowsApps;C:\Users\gojimmypi\AppData\Local\Programs\Microsoft VS Code\bin;C:\ST\STM32CubeIDE_1.14.1\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.1.100.202311100844\tools\bin;C:\Program Files\Git\usr\bin\;C:\Users\gojimmypi\.dotnet\tools;C:\SysGCC\esp32-master\tools\riscv32-esp-elf\esp-13.2.0_20240530\riscv32-esp-elf\bin;C:\Users\gojimmypi\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe;;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\Linux\bin\ConnectionManagerExe"
-set "INCLUDE=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\ATLMFC\include;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\VS\include;C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt;C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\include\um"
-set "LIB=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\ATLMFC\lib\x86;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\lib\x86;C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\lib\um\x86;C:\Program Files (x86)\Windows Kits\10\lib\10.0.26100.0\ucrt\x86;C:\Program Files (x86)\Windows Kits\10\\lib\10.0.26100.0\\um\x86"
+:: Optionally hard code your paths like this:
+:: set "Path=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\bin\HostX86\x86;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\VCPackages;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\bin\Roslyn;C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\;C:\Program Files (x86)\HTML Help Workshop;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\FSharp\Tools;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Team Tools\DiagnosticsHub\Collector;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\Extensions\Microsoft\CodeCoverage.Console;C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\\x86;C:\Program Files (x86)\Windows Kits\10\bin\\x86;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\\MSBuild\Current\Bin\amd64;C:\Windows\Microsoft.NET\Framework\v4.0.30319;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\;C:\Program Files (x86)\VMware\VMware Workstation\bin\;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Git\cmd;C:\SysGCC\esp32-master\tools\riscv32-esp-elf\esp-15.2.0_20250920\riscv32-esp-elf\bin;C:\SysGCC\esp32-master\tools\xtensa-esp-elf\esp-15.2.0_20250920\xtensa-esp-elf\bin;C:\Program Files (x86)\VMware\VMware Workstation\bin\;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files\Git\cmd;C:\Users\gojimmypi\AppData\Local\Microsoft\WindowsApps;C:\Users\gojimmypi\AppData\Local\Programs\Microsoft VS Code\bin;C:\ST\STM32CubeIDE_1.14.1\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.1.100.202311100844\tools\bin;C:\Program Files\Git\usr\bin\;C:\Users\gojimmypi\.dotnet\tools;C:\SysGCC\esp32-master\tools\riscv32-esp-elf\esp-13.2.0_20240530\riscv32-esp-elf\bin;C:\Users\gojimmypi\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe;;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VC\Linux\bin\ConnectionManagerExe"
+:: set "INCLUDE=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\ATLMFC\include;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\VS\include;C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\um;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\shared;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\winrt;C:\Program Files (x86)\Windows Kits\10\\include\10.0.26100.0\\cppwinrt;C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\include\um"
+:: set "LIB=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\ATLMFC\lib\x86;C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\lib\x86;C:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\lib\um\x86;C:\Program Files (x86)\Windows Kits\10\lib\10.0.26100.0\ucrt\x86;C:\Program Files (x86)\Windows Kits\10\\lib\10.0.26100.0\\um\x86"
+
+@echo off
+setlocal
+
+echo [INFO] Checking Visual Studio / MSVC environment...
+
+REM -------------------------------------------------------------------
+REM 1) Check whether Visual Studio is already on PATH
+REM -------------------------------------------------------------------
+echo %PATH% | findstr /I "Microsoft Visual Studio" >nul
+if errorlevel 1 (
+    echo [WARN] Visual Studio not obviously found in PATH.
+    echo [WARN] This test is expected to run from a Visual Studio Developer Command Prompt.
+) else (
+    echo [INFO] Visual Studio paths detected in PATH.
+)
+
+REM -------------------------------------------------------------------
+REM 2) Check VCToolsInstallDir
+REM -------------------------------------------------------------------
+if "%VCToolsInstallDir%"=="" (
+    echo [WARN] VCToolsInstallDir is not defined.
+    echo [WARN] You may not be running from a proper Developer Command Prompt.
+) else (
+    echo [INFO] VCToolsInstallDir = "%VCToolsInstallDir%"
+)
+
+REM -------------------------------------------------------------------
+REM 3) Check INCLUDE
+REM -------------------------------------------------------------------
+if "%INCLUDE%"=="" goto NO_INCLUDE
+
+echo %INCLUDE% | findstr /I "VC\\Tools\\MSVC\\" >nul
+if errorlevel 1 goto INCLUDE_WARN
+
+echo [INFO] INCLUDE contains VC\Tools\MSVC\ (looks OK).
+goto AFTER_INCLUDE
+
+:NO_INCLUDE
+echo [ERROR] INCLUDE is not defined.
+echo [ERROR] Please run this test from a Visual Studio Developer Command Prompt.
+set VS_ENV_ERROR=1
+goto AFTER_INCLUDE
+
+:INCLUDE_WARN
+echo [WARN] INCLUDE does not contain "VC\Tools\MSVC\".
+echo [WARN] Current INCLUDE is:
+echo   %INCLUDE%
+set VS_ENV_WARN=1
+
+:AFTER_INCLUDE
+
+REM -------------------------------------------------------------------
+REM 4) Check LIB
+REM -------------------------------------------------------------------
+if "%LIB%"=="" goto NO_LIB
+
+echo %LIB% | findstr /I "VC\\Tools\\MSVC\\" >nul
+if errorlevel 1 goto LIB_WARN
+
+echo [INFO] LIB contains VC\Tools\MSVC\ (looks OK).
+goto AFTER_LIB
+
+:NO_LIB
+echo [ERROR] LIB is not defined.
+echo [ERROR] Please run this test from a Visual Studio Developer Command Prompt.
+set VS_ENV_ERROR=1
+goto AFTER_LIB
+
+:LIB_WARN
+echo [WARN] LIB does not contain "VC\Tools\MSVC\".
+echo [WARN] Current LIB is:
+echo   %LIB%
+set VS_ENV_WARN=1
+
+:AFTER_LIB
+
+REM -------------------------------------------------------------------
+REM 5) Decide exit code (for CTest)
+REM -------------------------------------------------------------------
+if defined VS_ENV_ERROR (
+    echo [ERROR] Visual Studio environment is incomplete. Failing test.
+    endlocal & exit /b 1
+)
+
+if defined VS_ENV_WARN (
+    echo [WARN] Visual Studio environment has potential issues, but continuing.
+    endlocal
+)
+
+echo [INFO] Visual Studio environment looks good.
+endlocal
+
+exit /b 0
 
 :: We start in /tools/scripts, but build two directories up: from wolfBoot root
 
@@ -49,6 +144,10 @@ echo Starting %~nx0 from %CD%
 :: End common start directory detection
 
 
+::------------------------------------------------------------------------------------
+:: CMake test
+::------------------------------------------------------------------------------------
+
 :: Is CMake installed?
 where cmake >nul 2>&1
 if errorlevel 1 (
@@ -58,12 +157,11 @@ if errorlevel 1 (
 )
 
 
-
 rmdir /s /q build-stm32l4
 
 cmake --preset stm32l4
 
-
+:: Optional parallel build specification:
 :: cmake --build --preset stm32l4 --parallel 4 -v
 
 cmake --build --preset stm32l4

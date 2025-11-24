@@ -396,6 +396,19 @@ def run_cmake_and_report_unused(preset_name: str, repo_root: Path):
             combined += "\n"
         combined += proc.stderr
 
+    # If CMake failed, show the full output first so the error is visible.
+    if proc.returncode != 0:
+        print("")
+        print("CMake configure for preset '{}' failed with exit code {}.".format(
+            preset_name, proc.returncode
+        ))
+        print("Full CMake output follows:")
+        print("==============================================")
+        print("============= BEGIN CMAKE OUTPUT =============")
+        print(combined)
+        print("============= END CMAKE OUTPUT =============")
+        print("==============================================")
+
     unused = extract_unused_vars(combined)
 
     if unused:

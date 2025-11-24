@@ -39,6 +39,13 @@ make wolfboot_signing_private_key.der SIGN=ED25519
 ./tools/keytools/keygen --ed25519 -g wolfboot_signing_private_key.der
 ```
 
+Note the above example is a basic case where a single key is generated.
+The tool supports multiple keys both with `[-g privkey]` and `[-i pubkey]` parameters.
+
+See the local docs [docs/keystore.md](../../docs/keystore.md)
+and the [wolfBoot Keystore section of the manual](https://www.wolfssl.com/documentation/manuals/wolfboot/appendix04.html)
+for additional details.
+
 ## Debugging and Development
 
 ### `DEBUG_SIGNTOOL`
@@ -48,12 +55,3 @@ Enables additional diagnostic messages that may be useful during development and
 ### `WOLFBOOT_SHOW_INCLUDE`
 
 Enables compile-time verbosity to indicate which `user_settings.h` file is being used.
-
-Unless otherwise specified the `keygen` app will create:
-
-1. `./wolfboot_signing_private_key.der` - the private key used for signing.
-2. `./keystore.der` - the public key.
-3. `src/keystore.c` - the public key, converted to c array.
-
-Common pitfalls: mismatched keystore files in different directories. There should be exactly one
-instance of each of the above files in the build tree.
