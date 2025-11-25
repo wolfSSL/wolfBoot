@@ -807,9 +807,12 @@ int hal_flash_protect(uint32_t start, uint32_t len)
 static void periph_unsecure() {
     /* Unsecure both GPIO ports */
     SPU_PERIPHID_PERM(GPIO_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
-    //SPU_GPIOPORT_PERM(0) = (1 << 29);
     SPU_GPIOPORT_PERM(0) = 0;
     SPU_GPIOPORT_PERM(1) = 0;
+
+    /* Assign LED2 GPIO pin to net core; cannot be done by app because MCUSEL
+     * is only accessible from secure code */
+    GPIO_PIN_CNF(0, 29) = (GPIO_CNF_OUT | GPIO_CNF_MCUSEL(1));
 
     /* Unsecure UARTE0 */
     SPU_PERIPHID_PERM(SERIAL0_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;

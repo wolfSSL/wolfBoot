@@ -47,8 +47,10 @@ void main(void)
     uint32_t app_version;
 
     GPIO_PIN_CNF(port, pin) = GPIO_CNF_OUT;
+#ifndef TZEN
     /* Allow network core access to P0.29 GPIO */
     GPIO_PIN_CNF(0, 29) = (GPIO_CNF_OUT | GPIO_CNF_MCUSEL(1));
+#endif
 
     app_version = wolfBoot_current_firmware_version();
 
