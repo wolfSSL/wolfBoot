@@ -137,10 +137,10 @@ void sleep_us(uint32_t usec);
     #define SPU_FLASHREGION_PERM_LOCK    (1 << 8) /* The content of this register can't be changed until the next reset */
 
     #define SPU_RAMREGION_PERM(n)      (*(volatile uint32_t *)(SPU_BASE + 0x700 + ((n) & 0x3F) * 0x4))
-    #define SPU_RAMREGION_PERM_EXEC    (1 << 0) /* Allow instruction fetches from flash region */
+    #define SPU_RAMREGION_PERM_EXEC    (1 << 0) /* Allow instruction fetches from RAM region */
     #define SPU_RAMREGION_PERM_WRITE   (1 << 1) /* Allow write operation to region */
-    #define SPU_RAMREGION_PERM_READ    (1 << 2) /* Allow read operation from flash region */
-    #define SPU_RAMREGION_PERM_SECATTR (1 << 4) /* Flash region n security attribute is secure */
+    #define SPU_RAMREGION_PERM_READ    (1 << 2) /* Allow read operation from RAM region */
+    #define SPU_RAMREGION_PERM_SECATTR (1 << 4) /* RAM region n security attribute is secure */
     #define SPU_RAMREGION_PERM_LOCK    (1 << 8) /* The content of this register can't be changed until the next reset */
 
     #define SPU_PERIPHID_PERM(n)                      (*(volatile uint32_t *)(SPU_BASE + 0x800 + ((n) & 0xFF) * 0x4))
