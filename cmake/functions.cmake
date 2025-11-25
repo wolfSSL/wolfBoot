@@ -1,4 +1,4 @@
-# functions.cmake
+# wolfboot/cmake/functions.cmake
 #
 # Copyright (C) 2025 wolfSSL Inc.
 #
@@ -17,6 +17,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake, and anything else that wants to detect is loaded
+    if(DEFINED FUNCTIONS_CMAKE_INCLUDED)
+        return()
+    endif()
+    set(FUNCTIONS_CMAKE_INCLUDED TRUE)
+else()
+    include_guard(GLOBAL)
+endif()
 
 function(override_cache VAR VAL)
     get_property(VAR_STRINGS CACHE ${VAR} PROPERTY STRINGS)
@@ -55,3 +66,29 @@ function(add_option NAME HELP_STRING DEFAULT VALUES)
     endif()
 endfunction()
 
+function(print_env VAR)
+    if(DEFINED ENV{${VAR}} AND NOT "$ENV{${VAR}}" STREQUAL "")
+        message(STATUS "${VAR} = $ENV{${VAR}}")
+    else()
+        message(STATUS "${VAR} = (not set)")
+    endif()
+endfunction()
+
+# Sets <var_name> to <value_expr>.
+# If <value_expr> points to an existing directory, prints a STATUS message.
+function(set_and_echo_dir var_name value_expr)
+    set(_val "${value_expr}")
+    # Export to caller's scope
+    set(${var_name} "${_val}" PARENT_SCOPE)
+
+    if(IS_DIRECTORY "${_val}")
+        message(STATUS "-- set ${var_name}; Found directory: ${_val}")
+    else()
+        message(STATUS "-- Warning: set ${var_name}")
+        message(STATUS "-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        message(STATUS "-- Directory not found: ${_val}")
+        message(STATUS "-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    endif()
+endfunction()
+
+set(FUNCTIONS_CMAKE_INCLUDED true)

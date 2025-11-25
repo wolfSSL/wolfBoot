@@ -18,11 +18,21 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED TOOLCHAIN_AARCH64_NONE_ELF_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
 
 set(CMAKE_SYSTEM_NAME Generic)
 
 # There needs to be a default platform or the `project()` command will fail.
 if(NOT DEFINED WOLFBOOT_TARGET)
+    message(STATUS "WOLFBOOT_TARGET not set, defaulting to stm32h7")
     set(WOLFBOOT_TARGET "stm32h7")
 endif()
 
@@ -86,7 +96,7 @@ message(STATUS "Cross-compiling using GNU aarch64-none-elf toolchain")
 
 # Options for DEBUG build
 # -Og   Enables optimizations that do not interfere with debugging.
-# -g    Produce debugging information in the operating system’s native format.
+# -g    Produce debugging information in the operating system's native format.
 set(CMAKE_C_FLAGS_DEBUG         "-Og -g"    CACHE INTERNAL "C Compiler options for debug build type")
 set(CMAKE_CXX_FLAGS_DEBUG       "-Og -g"    CACHE INTERNAL "C++ Compiler options for debug build type")
 set(CMAKE_ASM_FLAGS_DEBUG       "-g"        CACHE INTERNAL "ASM Compiler options for debug build type")
@@ -112,3 +122,5 @@ set(CMAKE_C_FLAGS_MINSIZEREL   "-Os -DNDEBUG -flto -Wl,-flto"     CACHE INTERNAL
 set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -DNDEBUG -flto -Wl,-flto"     CACHE INTERNAL "C++ Compiler options for minimum size release build type")
 set(CMAKE_ASM_FLAGS_MINSIZEREL ""        CACHE INTERNAL "ASM Compiler options for minimum size release build type")
 set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "-flto -Wl,-flto" CACHE INTERNAL "Linker options for minimum size release build type")
+
+set(TOOLCHAIN_AARCH64_NONE_ELF_CMAKE_INCLUDED true)

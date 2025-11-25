@@ -1,6 +1,6 @@
 # wolfBoot
 
-wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/))
+wolfSSL Secure Bootloader ([Home page](https://www.wolfssl.com/products/wolfboot/), [Manual](https://www.wolfssl.com/documentation/manuals/wolfboot/), [wolfBoot-examples](https://github.com/wolfSSL/wolfBoot-examples))
 
 wolfBoot is a portable, OS-agnostic, secure bootloader solution for 32-bit microcontrollers,
 relying on wolfCrypt for firmware authentication, providing firmware update mechanisms.
@@ -38,6 +38,10 @@ The bootloader consists of the following components:
    - A minimalist Hardware Abstraction Layer, with an implementation provided for the supported target, which is in charge for IAP flash access and clock setting on the specific MCU
    - The core bootloader
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
+
+## Requirements
+
+Ensure the proper toolchain is installed. See the [docs](./docs/README.md) for platform-specific details.
 
 ## Integrating wolfBoot in an existing project
 
@@ -119,143 +123,9 @@ cp config/examples/stm32h7.config .config
 make keytools
 make
 ```
+## CMake
 
-### CMake
-
-To build using CMake, create a `build` directory and run `cmake` with the target platform as well as values for the partition
-size and address variables. To build the test-apps, run with `-DBUILD_TEST_APPS=yes`. To use the wolfCrypt-py keytools, run
-with `-DPYTHON_KEYTOOLS=yes`.
-
-For example, to build for the stm32h7 platform:
-```
-$ mkdir build
-$ cd build
-$ cmake -DWOLFBOOT_TARGET=stm32h7 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000 ..
-$ make
-```
-
-The output should look something like:
-```
-Scanning dependencies of target keystore
-[  2%] Building signing tool
-[  4%] Building keygen tool
-[  7%] Generating keystore.c and signing private key
-Keytype: ECC256
-Gen /home/user/wolfBoot/build/wolfboot_signing_private_key.der
-Generating key (type: ECC256)
-Associated key file:   /home/user/wolfBoot/build/wolfboot_signing_private_key.der
-Key type   :           ECC256
-Public key slot:       0
-Done.
-[  7%] Built target keystore
-Scanning dependencies of target public_key
-[  9%] Building C object CMakeFiles/public_key.dir/keystore.c.o
-[ 11%] Linking C static library libpublic_key.a
-[ 14%] Built target public_key
-Scanning dependencies of target wolfboothal
-[ 16%] Building C object CMakeFiles/wolfboothal.dir/hal/stm32h7.c.o
-[ 19%] Linking C static library libwolfboothal.a
-[ 19%] Built target wolfboothal
-Scanning dependencies of target wolfcrypt
-[ 21%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/integer.c.o
-[ 23%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/tfm.c.o
-[ 26%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/ecc.c.o
-[ 28%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/memory.c.o
-[ 30%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/wc_port.c.o
-[ 33%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/wolfmath.c.o
-[ 35%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/hash.c.o
-[ 38%] Building C object lib/CMakeFiles/wolfcrypt.dir/wolfssl/wolfcrypt/src/sha256.c.o
-[ 40%] Linking C static library libwolfcrypt.a
-[ 40%] Built target wolfcrypt
-Scanning dependencies of target wolfboot
-[ 42%] Building C object CMakeFiles/wolfboot.dir/src/libwolfboot.c.o
-[ 45%] Linking C static library libwolfboot.a
-[ 45%] Built target wolfboot
-Scanning dependencies of target image
-[ 47%] Building C object test-app/CMakeFiles/image.dir/app_stm32h7.c.o
-[ 50%] Building C object test-app/CMakeFiles/image.dir/led.c.o
-[ 52%] Building C object test-app/CMakeFiles/image.dir/system.c.o
-[ 54%] Building C object test-app/CMakeFiles/image.dir/timer.c.o
-[ 57%] Building C object test-app/CMakeFiles/image.dir/startup_arm.c.o
-[ 59%] Linking C executable image
-[ 59%] Built target image
-Scanning dependencies of target image_signed
-[ 61%] Generating image.bin
-[ 64%] Signing  image
-wolfBoot KeyTools (Compiled C version)
-wolfBoot version 10C0000
-Update type:          Firmware
-Input image:          /home/user/wolfBoot/build/test-app/image.bin
-Selected cipher:      ECC256
-Selected hash  :      SHA256
-Public key:           /home/user/wolfBoot/build/wolfboot_signing_private_key.der
-Output  image:        /home/user/wolfBoot/build/test-app/image_v1_signed.bin
-Target partition id : 1
-Calculating SHA256 digest...
-Signing the digest...
-Output image(s) successfully created.
-[ 64%] Built target image_signed
-Scanning dependencies of target image_outputs
-[ 66%] Generating image.size
-   text	   data	    bss	    dec	    hex	filename
-   5284	    108	     44	   5436	   153c	/home/user/wolfBoot/build/test-app/image
-[ 69%] Built target image_outputs
-Scanning dependencies of target wolfboot_stm32h7
-[ 71%] Building C object test-app/CMakeFiles/wolfboot_stm32h7.dir/__/src/string.c.o
-[ 73%] Building C object test-app/CMakeFiles/wolfboot_stm32h7.dir/__/src/image.c.o
-[ 76%] Building C object test-app/CMakeFiles/wolfboot_stm32h7.dir/__/src/loader.c.o
-[ 78%] Building C object test-app/CMakeFiles/wolfboot_stm32h7.dir/__/src/boot_arm.c.o
-[ 80%] Building C object test-app/CMakeFiles/wolfboot_stm32h7.dir/__/src/update_flash.c.o
-[ 83%] Linking C executable wolfboot_stm32h7
-[ 83%] Built target wolfboot_stm32h7
-Scanning dependencies of target binAssemble
-[ 85%] Generating bin-assemble tool
-[ 85%] Built target binAssemble
-Scanning dependencies of target image_boot
-[ 88%] Generating wolfboot_stm32h7.bin
-[ 90%] Signing  image
-wolfBoot KeyTools (Compiled C version)
-wolfBoot version 10C0000
-Update type:          Firmware
-Input image:          /home/user/wolfBoot/build/test-app/image.bin
-Selected cipher:      ECC256
-Selected hash  :      SHA256
-Public key:           /home/user/wolfBoot/build/wolfboot_signing_private_key.der
-Output  image:        /home/user/wolfBoot/build/test-app/image_v1_signed.bin
-Target partition id : 1
-Calculating SHA256 digest...
-Signing the digest...
-Output image(s) successfully created.
-[ 92%] Assembling image factory image
-[ 95%] Built target image_boot
-Scanning dependencies of target wolfboot_stm32h7_outputs
-[ 97%] Generating wolfboot_stm32h7.size
-   text	   data	    bss	    dec	    hex	filename
-  42172	      0	     76	  42248	   a508	/home/user/wolfBoot/build/test-app/wolfboot_stm32h7
-[100%] Built target wolfboot_stm32h7_outputs
-```
-
-Signing and hashing algorithms can be specified with `-DSIGN=<alg>` and `-DHASH=<alg>`. To view additional
-options to configuring wolfBoot, add `-LAH` to your cmake command, along with the partition specifications.
-```
-$ cmake -DWOLFBOOT_TARGET=stm32h7 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8020000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_SIZE=0xD0000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x80F0000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81C0000 -LAH ..
-```
-
-##### stm32f4
-```
-$ cmake -DWOLFBOOT_TARGET=stm32f4 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_SECTOR_SIZE=0x20000 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08020000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08040000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x08060000 ..
-```
-
-##### stm32u5
-```
-$ cmake -DWOLFBOOT_TARGET=stm32u5 -DBUILD_TEST_APPS=yes -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08100000 -DWOLFBOOT_SECTOR_SIZE=0x2000 -DWOLFBOOT_PARTITION_SIZE=0x20000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x817F000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x81FE000 -DNO_MPU=yes ..
-```
-
-##### stm32l0
-```
-$ cmake -DWOLFBOOT_TARGET=stm32l0 -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x8000 -DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_PARTITION_SIZE=0x10000 -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x18000 -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x28000 -DNVM_FLASH_WRITEONCE=yes ..
-```
-
+See [docs/CMake](./docs/CMake.md) and [cmake includes](./cmake/README.md).
 
 ## Troubleshooting
 
@@ -296,6 +166,44 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
 The error `Key algorithm mismatch. Remove old keys via 'make keysclean'` indicates the current `.config` `SIGN` algorithm does not match what is in the generated `src/keystore.c` file.
 Use `make keysclean` to delete keys and regenerate.
 
+
+3.  Cannot open compiler generated file ... Permission denied
+
+This may occur due to multiple environments being opened concurrently, or anti-virus software.
+Try manually deleting the respective build directories and/or restarting your IDE.
+
+```text
+sp_c32.c : fatal error C1083: Cannot open compiler generated file: '... sp_c32.obj': Permission denied
+```
+
+4. unresolved external symbol __imp____acrt_iob_fun
+
+```
+unresolved external symbol __imp____acrt_iob_func referenced in function _main
+```
+
+5. expected expression before ';' around WOLFBOOT_PARTITION_BOOT_ADDRESS
+
+Search for `#define WOLFBOOT_PARTITION_BOOT_ADDRESS` with no value.
+Sometimes a failed config will generate a bad file. (typically `target.h`)
+
+Rename the file with a `.bak` extension and let the build process generate a fresh one.
+Consider also deleting the entire build directory.
+
+```
+/src/libwolfboot.c:724:64: error: expected expression before ';' token
+  724 |             address = (uint32_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+```
+
+6. 'stdint.h': No such file or directory
+
+Check the compiler order in `PREFERRED_HOST_CC_NAME_LIST`, See `HOST_CC` in the logs.
+
+For Visual Studio, the developer command prompt will need to be activated.
+
+```
+\wolfBoot\tools\keytools\sign.c(33): fatal error C1083: Cannot open include file: 'stdio.h': No such file or directory
+```
 
 ## Release Notes
 
@@ -690,12 +598,12 @@ Use `make keysclean` to delete keys and regenerate.
     * RP2350 (Raspberry Pi Pico 2, ARM Cortex-M33 with TrustZone)
     * NXP MCXA153
     * NXP MCXW716
-    * STM32F1 series (STM32F103 “Blue Pill” board)
+    * STM32F1 series (STM32F103 "Blue Pill" board)
   * Improvements to supported targets
     * Xilinx UltraScale+ (ZynqMP)
         * Added hardware-accelerated SHA3 hashing via the CSU engine
         * Added support for enabling JTAG at runtime when `CSU_DEBUG` is set
-        * Introduced support for the device’s PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
+        * Introduced support for the device's PUF (Physically Unclonable Function) for unique key generation and secure key storage (requires eFuses)
     * Renesas RX
         * Added option for TSIP hardware crypto engine
     * Infineon TriCore (AURIX TC3xx)
@@ -725,7 +633,7 @@ Use `make keysclean` to delete keys and regenerate.
     * Added support for x509 auth with wolfHSM in server mode
     * Added support for encrypted updates on Renesas RX (also via TSIP)
     * Added support for assembly optimizations for PowerPC 32bit (SHA, AES)
-    * STM32F4: new clock configuration to support all models, added support for STM32F411 
+    * STM32F4: new clock configuration to support all models, added support for STM32F411
   * Bugfixes:
     * Fixed unaligned access in Cortex-A5
     * Fixed compile flags to properly run code from RAM on ARM

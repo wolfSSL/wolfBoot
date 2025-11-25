@@ -1,4 +1,4 @@
-# wolfBoot Setup Instructions
+﻿# wolfBoot Setup Instructions
 
 ## Gathering Sources
 
@@ -40,7 +40,7 @@ wolfBoot
  -> src
    -> image.c (crypto verify/hash)
    -> loader.c (main)
-   -> libwolfboot.c (User application API’s)
+   -> libwolfboot.c (User application API's)
    -> update_*.c (flash/ram wolfBoot_start)
 -> test-app (example applications)
 -> tools
@@ -68,14 +68,14 @@ The signing key used goes into wolfBoot root (example `rsa4096.der`).
 make
 ```
 
-The “make [target]”
+The `make [target]`
 * `keytools`: Build the C version of the key tools
 * `wolfboot.bin`: Build the .elf and .bin version of the bootloader only
 * `test-app/image.bin`: Builds the test application
 * `test-app/image_v1_signed.bin`: Builds the test application signed with version 1
 * `factory.bin`: Builds bootloader and test application signed and appended together
 
-Note: Default is “factory.bin”
+Note: Default is `factory.bin`
 
 
 ## Building with Cross Compile

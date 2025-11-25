@@ -18,6 +18,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+# Ensure this file is only included and initialized once
+if(CMAKE_VERSION VERSION_LESS 3.10)
+    # Fallback path for older CMake
+    if(DEFINED WOLFBOOT_CMAKE_INCLUDED)
+        return()
+    endif()
+else()
+    include_guard(GLOBAL)
+endif()
+
 include(${CMAKE_CURRENT_LIST_DIR}/utils.cmake)
 
 set(VERSION ${WOLFBOOT_VERSION})
@@ -89,29 +99,48 @@ endfunction()
 function(gen_wolfboot_factory_image PLATFORM_NAME TARGET)
     get_filename_component(FILENAME ${TARGET} NAME)
 
-    if(NOT DEFINED ${PLATFORM_NAME}_BOOT_ADDRESS)
-        message(FATAL_ERROR "${PLATFORM_NAME}_BOOT_ADDRESS is not defined")
+    # Resolve BOOT_ADDRESS from either <platform>_BOOT_ADDRESS or WOLFBOOT_PARTITION_BOOT_ADDRESS
+    set(_plat_boot_var "${PLATFORM_NAME}_BOOT_ADDRESS")
+
+    if(DEFINED ${_plat_boot_var} AND NOT "${${_plat_boot_var}}" STREQUAL "")
+        message(STATUS "Found PLATFORM_NAME=${PLATFORM_NAME} for ${_plat_boot_var}")
+        set(BOOT_ADDRESS "${${_plat_boot_var}}")
+    elseif(DEFINED WOLFBOOT_PARTITION_BOOT_ADDRESS AND NOT "${WOLFBOOT_PARTITION_BOOT_ADDRESS}" STREQUAL "")
+        set(BOOT_ADDRESS "${WOLFBOOT_PARTITION_BOOT_ADDRESS}")
+    else()
+        message(FATAL_ERROR "BOOT_ADDRESS not defined. Define ${_plat_boot_var} or WOLFBOOT_PARTITION_BOOT_ADDRESS.")
+    endif()
+    message(STATUS "${_plat_boot_var}=${${_plat_boot_var}}")
+    message(STATUS "WOLFBOOT_PARTITION_BOOT_ADDRESS=${WOLFBOOT_PARTITION_BOOT_ADDRESS}")
+    message(STATUS "Selected BOOT_ADDRESS=${BOOT_ADDRESS}")
+
+    # Additional check for ARCH_FLASH_OFFSET
+    if((NOT DEFINED ARCH_FLASH_OFFSET) OR ("${ARCH_FLASH_OFFSET}" STREQUAL ""))
+        message(FATAL_ERROR "ARCH_FLASH_OFFSET is not defined")
+    endif()
+
+    message(STATUS "ARCH_FLASH_OFFSET=${ARCH_FLASH_OFFSET}")
+    if("${ARCH_FLASH_OFFSET}" STREQUAL "0x0")
+        # See if(ARCH STREQUAL "ARM") cmake section
+        message(STATUS "  -- WARNING: ARCH_FLASH_OFFSET is 0x0")
     endif()
 
     if(NOT DEFINED BINASSEMBLE)
         message(FATAL_ERROR "BINASSEMBLE is not defined")
     endif()
 
-    if(NOT DEFINED ARCH_FLASH_OFFSET)
-        message(FATAL_ERROR "ARCH_FLASH_OFFSET is not defined")
-    endif()
 
     gen_wolfboot_signed_image(${TARGET})
 
-    set(BOOT_ADDRESS ${${PLATFORM_NAME}_BOOT_ADDRESS})
 
     # merge images
     add_custom_command(
         OUTPUT ${FILENAME}_factory.bin
-        DEPENDS $<TARGET_FILE:wolfboot_${PLATFORM_NAME}>.bin ${FILENAME}_v${VERSION}_signed.bin
+        DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/wolfboot_${PLATFORM_NAME}.bin"
+                "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_v${VERSION}_signed.bin"
                 ${WOLFBOOT_SIGNING_PRIVATE_KEY} binAssemble
-        COMMAND ${BINASSEMBLE} ${FILENAME}_factory.bin ${ARCH_FLASH_OFFSET}
-        $<TARGET_FILE:wolfboot_${PLATFORM_NAME}>.bin ${BOOT_ADDRESS} ${TARGET}_v${VERSION}_signed.bin
+        COMMAND ${BINASSEMBLE} "${CMAKE_CURRENT_BINARY_DIR}/${FILENAME}_factory.bin" ${ARCH_FLASH_OFFSET}
+                "${CMAKE_CURRENT_BINARY_DIR}/wolfboot_${PLATFORM_NAME}.bin" ${BOOT_ADDRESS} "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_v${VERSION}_signed.bin"
         COMMENT "Assembling ${FILENAME} factory image")
     list(APPEND BOOTLOADER_OUTPUTS ${FILENAME}_factory.bin)
 
@@ -119,3 +148,5 @@ function(gen_wolfboot_factory_image PLATFORM_NAME TARGET)
 
     multiconfigfileinstall(${BOOTLOADER_OUTPUTS} bin)
 endfunction()
+
+set(WOLFBOOT_CMAKE_INCLUDED true)
