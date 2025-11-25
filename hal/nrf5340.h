@@ -22,6 +22,12 @@
 #ifndef _HAL_NRF5340_H_
 #define _HAL_NRF5340_H_
 
+#if !defined(TARGET_nRF5340_net) && !(defined(TZEN) && defined(NONSECURE_APP))
+#   define TZ_SECURE() (1)
+#else
+#   define TZ_SECURE() (0)
+#endif
+
 /* Build-time gate for secure or non-secure peripherals.
  * At boot-time peripherals are secure */
 #ifdef TARGET_nrf5340_net
@@ -32,10 +38,6 @@
     /* Application core */
     #define TARGET_nrf5340_app
     #define CORE_STR "app"
-    #ifndef TZEN
-        /* at reset/power on wolfBoot is using secure bases */
-        #define TZEN
-    #endif
 #endif
 
 /* Clock */
@@ -77,7 +79,7 @@ void sleep_us(uint32_t usec);
 
 /* Domain Configuration */
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define DCNF_BASE (0x50000000)
     #else
         #define DCNF_BASE (0x40000000)
@@ -97,6 +99,7 @@ void sleep_us(uint32_t usec);
 #ifdef TARGET_nrf5340_app
     /* SPU */
     #define SPU_BASE 0x50003000UL
+
     #define SPU_EXTDOMAIN_PERM(n)   *((volatile uint32_t *)(SPU_BASE + 0x440 + (((n) & 0x0) * 0x4)))
     #define SPU_EXTDOMAIN_PERM_SECATTR_NONSECURE  0
     #define SPU_EXTDOMAIN_PERM_SECATTR_SECURE     (1 << 4)
@@ -104,13 +107,56 @@ void sleep_us(uint32_t usec);
     #define SPU_EXTDOMAIN_PERM_LOCK               (1 << 8)
     #define SPU_EXTDOMAIN_PERM_SECUREMAPPING_MASK (0x3)
 
-    #define SPU_BLOCK_SIZE (16 * 1024)
-    #define SPU_FLASHREGION_PERM(n) *((volatile uint32_t *)(SPU_BASE + 0x600 + (((n) & 0x3F) * 0x4)))
+    #define SPU_GPIOPORT_PERM(n) (*(volatile uint32_t *)(SPU_BASE + 0x4C0 + ((n) & 0x1) * 0x8))
+    #define SPU_GPIOPORT_LOCK(n) (*(volatile uint32_t *)(SPU_BASE + 0x4C4 + ((n) & 0x1) * 0x8))
+
+    #define SPU_FLASH_BLOCK_SIZE (16 * 1024)
+    #define SPU_RAM_BLOCK_SIZE   (8 * 1024)
+
+    #define SPU_FLASHNSC_REGION(n)   (*(volatile uint32_t *)(SPU_BASE + 0x500 + ((n) & 0x1) * 0x8))
+    #define SPU_FLASHNSC_REGION_MASK 0x0000003F
+    #define SPU_FLASHNSC_REGION_LOCK (1 << 8)
+
+    #define SPU_FLASHNSC_SIZE(n)     (*(volatile uint32_t *)(SPU_BASE + 0x504 + ((n) & 0x1) * 0x8))
+    #define SPU_FLASHNSC_SIZE_MASK   0x0000000F
+    #define SPU_FLASHNSC_SIZE_LOCK   (1 << 8)
+
+    #define SPU_RAMNSC_REGION(n)     (*(volatile uint32_t *)(SPU_BASE + 0x540 + ((n) & 0x1) * 0x8))
+    #define SPU_RAMNSC_REGION_MASK   0x0000003F
+    #define SPU_RAMNSC_REGION_LOCK   (1 << 8)
+
+    #define SPU_RAMNSC_SIZE(n)       (*(volatile uint32_t *)(SPU_BASE + 0x544 + ((n) & 0x1) * 0x8))
+    #define SPU_RAMNSC_SIZE_MASK     0x0000000F
+    #define SPU_RAMNSC_SIZE_LOCK     (1 << 8)
+
+    #define SPU_FLASHREGION_PERM(n)      (*(volatile uint32_t *)(SPU_BASE + 0x600 + ((n) & 0x3F) * 0x4))
     #define SPU_FLASHREGION_PERM_EXEC    (1 << 0) /* Allow instruction fetches from flash region */
     #define SPU_FLASHREGION_PERM_WRITE   (1 << 1) /* Allow write operation to region */
     #define SPU_FLASHREGION_PERM_READ    (1 << 2) /* Allow read operation from flash region */
     #define SPU_FLASHREGION_PERM_SECATTR (1 << 4) /* Flash region n security attribute is secure */
     #define SPU_FLASHREGION_PERM_LOCK    (1 << 8) /* The content of this register can't be changed until the next reset */
+
+    #define SPU_RAMREGION_PERM(n)      (*(volatile uint32_t *)(SPU_BASE + 0x700 + ((n) & 0x3F) * 0x4))
+    #define SPU_RAMREGION_PERM_EXEC    (1 << 0) /* Allow instruction fetches from RAM region */
+    #define SPU_RAMREGION_PERM_WRITE   (1 << 1) /* Allow write operation to region */
+    #define SPU_RAMREGION_PERM_READ    (1 << 2) /* Allow read operation from RAM region */
+    #define SPU_RAMREGION_PERM_SECATTR (1 << 4) /* RAM region n security attribute is secure */
+    #define SPU_RAMREGION_PERM_LOCK    (1 << 8) /* The content of this register can't be changed until the next reset */
+
+    #define SPU_PERIPHID_PERM(n)                      (*(volatile uint32_t *)(SPU_BASE + 0x800 + ((n) & 0xFF) * 0x4))
+    #define SPU_PERIPHID_PERM_SECUREMAPPING_MASK      0x00000003
+    #define SPU_PERIPHID_PERM_SECUREMAPPING_NONSECURE (0 << 0)
+    #define SPU_PERIPHID_PERM_SECUREMAPPING_SECURE    (1 << 0)
+    #define SPU_PERIPHID_PERM_SECUREMAPPING_USERSEL   (2 << 0)
+    #define SPU_PERIPHID_PERM_SECUREMAPPING_SPLIT     (3 << 0)
+    #define SPU_PERIPHID_PERM_DMA_MASK                0x0000000C
+    #define SPU_PERIPHID_PERM_DMA_NODMA               (0 << 2)
+    #define SPU_PERIPHID_PERM_DMA_NOSEPATTR           (1 << 2)
+    #define SPU_PERIPHID_PERM_DMA_SEPATTR             (2 << 2)
+    #define SPU_PERIPHID_PERM_SECATTR                 (1 << 4)
+    #define SPU_PERIPHID_PERM_DMASEC                  (1 << 5)
+    #define SPU_PERIPHID_PERM_LOCK                    (1 << 8)
+    #define SPU_PERIPHID_PERM_PRESENT                 (1 << 31)
 #endif
 
 /* UICR */
@@ -130,14 +176,14 @@ void sleep_us(uint32_t usec);
 #else
     #define CTRLAP_BASE (0x41006000)
 #endif
-#define CTRLAP_APPROTECT_LOCK          (*(volatile uint32_t *)(CTRLAP_BASE 0x540))
-#define CTRLAP_APPROTECT_DISABLE       (*(volatile uint32_t *)(CTRLAP_BASE 0x544))
-#define CTRLAP_SECUREAPPROTECT_LOCK    (*(volatile uint32_t *)(CTRLAP_BASE 0x548))
-#define CTRLAP_SECUREAPPROTECT_DISABLE (*(volatile uint32_t *)(CTRLAP_BASE 0x54C))
+#define CTRLAP_APPROTECT_LOCK          (*(volatile uint32_t *)(CTRLAP_BASE + 0x540))
+#define CTRLAP_APPROTECT_DISABLE       (*(volatile uint32_t *)(CTRLAP_BASE + 0x544))
+#define CTRLAP_SECUREAPPROTECT_LOCK    (*(volatile uint32_t *)(CTRLAP_BASE + 0x548))
+#define CTRLAP_SECUREAPPROTECT_DISABLE (*(volatile uint32_t *)(CTRLAP_BASE + 0x54C))
 
 /* Reset */
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define RESET_BASE (0x50005000)
     #else
         #define RESET_BASE (0x40005000)
@@ -158,8 +204,10 @@ void sleep_us(uint32_t usec);
 
 
 /* Non-volatile memory controller */
+#define KMU_NVMC_PERIPHID 57
+
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define NVMC_BASE (0x50039000)
     #else
         #define NVMC_BASE (0x40039000)
@@ -183,7 +231,7 @@ void sleep_us(uint32_t usec);
 
 /* Clock control */
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define CLOCK_BASE  (0x50005000)
     #else
         #define CLOCK_BASE  (0x40005000)
@@ -223,8 +271,10 @@ void sleep_us(uint32_t usec);
 
 
 /* GPIO Port (0-1) */
+#define GPIO_PERIPHID 66
+
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define GPIO_BASE(n) (0x50842500 + (((n) & 0x1) * 0x300))
     #else
         #define GPIO_BASE(n) (0x40842500 + (((n) & 0x1) * 0x300))
@@ -251,8 +301,13 @@ void sleep_us(uint32_t usec);
 #define GPIO_CNF_MCUSEL(n)   (((n) & 0x7) << 28)
 
 /* UART (0-1) */
+#define SERIAL0_PERIPHID 8
+#define SERIAL1_PERIPHID 9
+#define SERIAL2_PERIPHID 11
+#define SERIAL3_PERIPHID 12
+
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define UART_BASE(n) (0x50008000 + (((n) & 0x1) * 0x1000))
     #else
         #define UART_BASE(n) (0x40008000 + (((n) & 0x1) * 0x1000))
@@ -279,7 +334,7 @@ void uart_write_sz(const char* c, unsigned int sz);
 
 /* SPI (0-2) */
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define SPI_BASE(n)  (0x50008000 + (((n) & 0x3) * 0x1000))
     #else
         #define SPI_BASE(n)  (0x40008000 + (((n) & 0x3) * 0x1000))
@@ -316,7 +371,7 @@ void uart_write_sz(const char* c, unsigned int sz);
 
 /* QSPI */
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
         #define QSPI_BASE         (0x5002B000)
     #else
         #define QSPI_BASE         (0x4002B000)
@@ -398,7 +453,7 @@ void uart_write_sz(const char* c, unsigned int sz);
 
 /* interprocessor communication (IPC) peripheral */
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
     #define IPC_BASE      (0x5002A000)
     #else
     #define IPC_BASE      (0x4002A000)
@@ -415,8 +470,11 @@ void uart_write_sz(const char* c, unsigned int sz);
 #define IPC_GPMEM(n)           *((volatile uint32_t *)(IPC_BASE + 0x610 + (((n) & 0x1) * 0x4)))
 
 /* RTC - uses LFCLK - 24-bit counter/compare */
+#define RTC0_PERIPHID 20
+#define RTC1_PERIPHID 21
+
 #ifdef TARGET_nrf5340_app
-    #ifdef TZEN
+    #if TZ_SECURE()
     #define RTC_BASE(n)     ((0x50014000) + (((n) & 0x1) * 0x1000))
     #else
     #define RTC_BASE(n)     ((0x40014000) + (((n) & 0x1) * 0x1000))

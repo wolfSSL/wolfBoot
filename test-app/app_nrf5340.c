@@ -47,8 +47,10 @@ void main(void)
     uint32_t app_version;
 
     GPIO_PIN_CNF(port, pin) = GPIO_CNF_OUT;
+#ifndef TZEN
     /* Allow network core access to P0.29 GPIO */
     GPIO_PIN_CNF(0, 29) = (GPIO_CNF_OUT | GPIO_CNF_MCUSEL(1));
+#endif
 
     app_version = wolfBoot_current_firmware_version();
 
@@ -56,10 +58,15 @@ void main(void)
 
     wolfBoot_printf("========================\n");
     wolfBoot_printf("nRF5340 wolfBoot (app core)\n");
-    wolfBoot_printf("Copyright 2024 wolfSSL Inc\n");
+    wolfBoot_printf("Copyright 2025 wolfSSL Inc\n");
     wolfBoot_printf("GPL v3\n");
     wolfBoot_printf("Version : 0x%lx\n", app_version);
     wolfBoot_printf("Compiled: " __DATE__ ":" __TIME__ "\n");
+#ifdef TZEN
+    wolfBoot_printf("TrustZone enabled: yes\n");
+#else
+    wolfBoot_printf("TrustZone enabled: no\n");
+#endif
     wolfBoot_printf("========================\n");
 
     /* mark boot successful */
