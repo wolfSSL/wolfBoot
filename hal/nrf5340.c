@@ -29,6 +29,8 @@
 #include "printf.h"
 #include "nrf5340.h"
 #include "spi_flash.h"
+#include "hal/armv8m_tz.h"
+#include "target.h"
 
 /* TODO:
  * Key Storage: See 7.1.18.4.2 Key storage:
@@ -133,6 +135,50 @@ static SharedMem_t*  shm = (SharedMem_t*)&shm_shadow;
     #endif
 #endif
 
+#ifdef TZEN
+static void hal_spu_init(void) {
+    uint8_t nsc_size_index;
+    uint8_t region;
+    uint8_t start_region;
+    uint8_t end_region;
+
+    /* Make sure SAU is disabled, configure everything through SPU */
+    SAU_CTRL = SAU_INIT_CTRL_ALLNS;
+
+    /* Flash: Non-Secure Callable */
+    nsc_size_index = (WOLFBOOT_NSC_SIZE > 2048) ? 8 :
+                     (WOLFBOOT_NSC_SIZE > 1024) ? 7 :
+                     (WOLFBOOT_NSC_SIZE > 512)  ? 6 :
+                     (WOLFBOOT_NSC_SIZE > 256)  ? 5 :
+                     (WOLFBOOT_NSC_SIZE > 128)  ? 4 :
+                     (WOLFBOOT_NSC_SIZE > 64)   ? 3 :
+                     (WOLFBOOT_NSC_SIZE > 32)   ? 2 :
+                     (WOLFBOOT_NSC_SIZE > 0)    ? 1 : 0;
+
+    SPU_FLASHNSC_REGION(0) = ((WOLFBOOT_NSC_ADDRESS / SPU_FLASH_BLOCK_SIZE) &
+            SPU_FLASHNSC_REGION_MASK) | SPU_FLASHNSC_REGION_LOCK;
+    SPU_FLASHNSC_SIZE(0) = nsc_size_index | SPU_FLASHNSC_SIZE_LOCK;
+
+    /* Flash: non-secure application area */
+    start_region = WOLFBOOT_PARTITION_BOOT_ADDRESS / SPU_FLASH_BLOCK_SIZE;
+    end_region = (WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) / SPU_FLASH_BLOCK_SIZE;
+
+    for (region = start_region; region < end_region; region++) {
+        SPU_FLASHREGION_PERM(region) = (SPU_FLASHREGION_PERM(region) &
+                ~SPU_FLASHREGION_PERM_SECATTR) | SPU_FLASHREGION_PERM_LOCK;
+    }
+
+    /* RAM: non-secure application area */
+    start_region = 0x20000 / SPU_RAM_BLOCK_SIZE;
+    end_region = 0x24000 / SPU_RAM_BLOCK_SIZE;
+
+    for (region = start_region; region < end_region; region++) {
+        SPU_RAMREGION_PERM(region) = (SPU_RAMREGION_PERM(region) &
+                ~SPU_RAMREGION_PERM_SECATTR) | SPU_RAMREGION_PERM_LOCK;
+    }
+}
+#endif
+
 void uart_init(void)
 {
     /* nRF5340-DK: (P0.20 or P1.01)
@@ -220,8 +266,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                       ((((uint32_t)data) + i) & 0x03) == 0)) {
             src = (uint32_t *)data;
             dst = (uint32_t *)address;
-            /* set both secure and non-secure registers */
+#if TZ_SECURE() || defined(TARGET_nrf5340_net)
             NVMC_CONFIG = NVMC_CONFIG_WEN;
+#endif
             NVMC_CONFIGNS = NVMC_CONFIG_WEN;
             while (NVMC_READY == 0);
             dst[i >> 2] = src[i >> 2];
@@ -234,8 +281,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             dst = (uint32_t *)(address - off);
             val = dst[i >> 2];
             vbytes[off] = data[i];
-            /* set both secure and non-secure registers */
+#if TZ_SECURE() || defined(TARGET_nrf5340_net)
             NVMC_CONFIG = NVMC_CONFIG_WEN;
+#endif
             NVMC_CONFIGNS = NVMC_CONFIG_WEN;
             while (NVMC_READY == 0);
             dst[i >> 2] = val;
@@ -257,7 +305,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     address &= ~(FLASH_PAGE_SIZE-1);
     for (p = address; p <= end; p += FLASH_PAGE_SIZE) {
         /* set both secure and non-secure registers */
+#if TZ_SECURE() || defined(TARGET_nrf5340_net)
         NVMC_CONFIG = NVMC_CONFIG_EEN;
+#endif
         NVMC_CONFIGNS = NVMC_CONFIG_EEN;
         while (NVMC_READY == 0);
         *(volatile uint32_t *)p = 0xFFFFFFFF;
@@ -716,6 +766,10 @@ void hal_init(void)
 
     hal_net_check_version();
 #endif
+
+#ifdef TZEN
+    hal_spu_init();
+#endif
 }
 
 #ifdef __WOLFBOOT
@@ -733,8 +787,8 @@ int hal_flash_protect(uint32_t start, uint32_t len)
     if (start + len > FLASH_SIZE)
         len = FLASH_SIZE - start;
 
-    region = (start / SPU_BLOCK_SIZE);
-    n = (len / SPU_BLOCK_SIZE);
+    region = (start / SPU_FLASH_BLOCK_SIZE);
+    n = (len / SPU_FLASH_BLOCK_SIZE);
 
     for (i = 0; i < n; i++) {
         /* do not allow write to this region and lock till next reset */
@@ -748,6 +802,25 @@ int hal_flash_protect(uint32_t start, uint32_t len)
 #endif
     return 0;
 }
+
+#ifdef TZEN
+static void periph_unsecure() {
+    /* Unsecure both GPIO ports */
+    SPU_PERIPHID_PERM(GPIO_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
+    //SPU_GPIOPORT_PERM(0) = (1 << 29);
+    SPU_GPIOPORT_PERM(0) = 0;
+    SPU_GPIOPORT_PERM(1) = 0;
+
+    /* Unsecure UARTE0 */
+    SPU_PERIPHID_PERM(SERIAL0_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
+
+    /* Unsecure NVMC */
+    SPU_PERIPHID_PERM(KMU_NVMC_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
+
+    /* Unsecure RTC0 */
+    SPU_PERIPHID_PERM(RTC0_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
+}
+#endif
 
 void hal_prepare_boot(void)
 {
@@ -771,16 +844,28 @@ void hal_prepare_boot(void)
     #endif
 
     #if defined(TARGET_nrf5340_app) && defined(NRF_SYNC_CORES)
-        /* if core synchronization enabled,
-         * then wait for update_done or do_boot (5 seconds, 30 for update) */
+        /* If core synchronization enabled,
+         * then wait for update_done or do_boot (5 seconds, 30 for update).
+         * Longer wait in DEBUG mode because the net core boots much
+         * slower. */
         wolfBoot_printf("Waiting for network core...\n");
+#ifndef DEBUG
         (void)hal_shm_status_wait(&shm->core.net,
             (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT),
             doUpdateNet ? 30*1000 : 5*1000);
+#else
+        (void)hal_shm_status_wait(&shm->core.net,
+            (SHARED_STATUS_UPDATE_DONE | SHARED_STATUS_DO_BOOT),
+            doUpdateNet ? 45*1000 : 20*1000);
+#endif
     #endif
     }
 
     hal_shm_cleanup();
+
+#ifdef TZEN
+    periph_unsecure();
+#endif
 }
 #endif /* __WOLFBOOT */
 

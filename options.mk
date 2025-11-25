@@ -596,7 +596,7 @@ endif
 # allow elf inclusion of debug symbols even with optimizations enabled
 # make DEBUG_SYMBOLS=1
 ifeq ($(DEBUG_SYMBOLS),1)
-  CFLAGS+=-g
+  CFLAGS+=-g -DDEBUG_SYMBOLS
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX_TC3)

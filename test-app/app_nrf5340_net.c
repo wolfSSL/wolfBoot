@@ -54,7 +54,7 @@ void main(void)
 
     wolfBoot_printf("========================\n");
     wolfBoot_printf("nRF5340 wolfBoot (net core)\n");
-    wolfBoot_printf("Copyright 2024 wolfSSL Inc\n");
+    wolfBoot_printf("Copyright 2025 wolfSSL Inc\n");
     wolfBoot_printf("GPL v3\n");
     wolfBoot_printf("Version : 0x%lx\n", app_version);
     wolfBoot_printf("Compiled: " __DATE__ ":" __TIME__ "\n");

@@ -57,6 +57,7 @@ while test $# -gt 0; do
       echo "-h, --help           show brief help"
       echo "-c, --clean          cleanup build artifacts"
       echo "-b, --build          build release with symbols"
+      echo "-tz, --trustzone"    use TrustZone configuration
       echo "-d, --debug          build debug"
       echo "-v, --verbose        build verbose"
       echo "--version            use custom version"
@@ -78,6 +79,11 @@ while test $# -gt 0; do
     -b|--build)
       DO_BUILD=1
       echo "Build release with symbols"
+      shift
+      ;;
+    -tz|--trustzone)
+      DO_TRUSTZONE=1
+      echo "Build with TrustZone config"
       shift
       ;;
     -d|--debug)
@@ -167,6 +173,12 @@ fi
 
 if [[ $DO_BUILD == 1 ]]; then
   # Build internal flash images for both cores
+  
+  if [[ $DO_TRUSTZONE == 1 ]]; then
+    config_app=config/examples/nrf5340-tz.config
+  else
+    config_app=config/examples/nrf5340.config
+  fi
 
   # Build net
   cp config/examples/nrf5340_net.config .config
@@ -181,7 +193,7 @@ if [[ $DO_BUILD == 1 ]]; then
   fi
 
   # Build app
-  cp config/examples/nrf5340.config .config
+  cp "$config_app" .config
   make clean
   make $MAKE_ARGS
   cp test-app/image.bin tools/scripts/nrf5340/image_app.bin

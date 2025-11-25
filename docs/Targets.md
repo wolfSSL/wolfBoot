@@ -2425,7 +2425,7 @@ c
 NXP MCXW716 is a Cortex-M33 microcontroller running at 96MHz.
 The support has been tested using FRDM-MCXW716 with the onboard MCU-Link configured in JLink mode.
 
-This requires the MCXW SDK from the NXP MCUXpresso SDK Builder. We tested using [mcux-sdk](https://github.com/nxp-mcuxpresso/mcux-sdk) and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5)`
+This requires the MCXW SDK from the NXP MCUXpresso SDK Builder. We tested using [mcux-sdk](https://github.com/nxp-mcuxpresso/mcux-sdk) and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5)
 placed under "../NXP". Adjust the MCUXPRESSO and MCUXPRESSO_CMSIS variables in your .config file according to your paths.
 
 ### MCX W: Configuring and compiling
@@ -2548,6 +2548,13 @@ Example of flash memory layout and configuration on the nRF52:
 Tested with the Nordic nRF5340-DK. This device has two cores:
 1) Application core: Cortex-M33 at 128MHz, w/TrustZone, 1MB flash, 512KB RAM
 2) Network core: Cortex-M33 at 64MHz, 256KB Flash and 64KB RAM
+
+Three different configurations are available at `config/examples`:
+- `nrf5340.config`: for the app core; does not make use of TrustZone, i.e. it
+  always runs in secure mode.
+- `nrf5340-tz.config`: for the app core; makes use of TrustZone, i.e. boots the
+  application as non-secure code.
+- `nrf5340_net.config`: for the net core.
 
 The DK board has two virtual COM ports. Application core and Network core will each output to different VCOM ports.
 The cores communicate firmware updates using shared memory hosted on application core.

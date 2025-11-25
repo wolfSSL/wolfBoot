@@ -56,10 +56,15 @@ void main(void)
 
     wolfBoot_printf("========================\n");
     wolfBoot_printf("nRF5340 wolfBoot (app core)\n");
-    wolfBoot_printf("Copyright 2024 wolfSSL Inc\n");
+    wolfBoot_printf("Copyright 2025 wolfSSL Inc\n");
     wolfBoot_printf("GPL v3\n");
     wolfBoot_printf("Version : 0x%lx\n", app_version);
     wolfBoot_printf("Compiled: " __DATE__ ":" __TIME__ "\n");
+#ifdef TZEN
+    wolfBoot_printf("TrustZone enabled: yes\n");
+#else
+    wolfBoot_printf("TrustZone enabled: no\n");
+#endif
     wolfBoot_printf("========================\n");
 
     /* mark boot successful */
