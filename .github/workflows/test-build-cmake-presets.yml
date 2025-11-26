@@ -58,13 +58,10 @@ jobs:
       # Currently only supported on Ubuntu
 
       # ARM GCC toolchain (adds the bin dir to PATH)
-      - name: Set up ARM none-eabi GCC 14.x
-        if: matrix.target != 'sim'
-        uses: carlosperate/arm-none-eabi-gcc-action@v1
-        with:
-          release: "14.2.Rel1" # <-- use 'release', not 'version'
-          path-env-var: ARM_NONE_EABI_GCC_PATH
-
+      - name: Set up ARM none-eabi GCC
+        run: |
+          sudo apt update
+          sudo apt install -y gcc-arm-none-eabi
 
       - name: List all environment variables
         run: |
