@@ -646,3 +646,32 @@ For Visual Studio, the developer command prompt will need to be activated.
     * wolfPKCS11: latest (ddeb887)
     * wolfHSM: latest (e0b2019)
 
+### V 2.7.0 - (2025-11-26)
+  * New hardware targets
+    * Vorago VA416x0 (new HAL, linker scripts, test application, and programming helpers)
+    * Nordic nRF5340 TrustZone build and configuration
+  * Improvements to supported targets
+    * TrustZone-M support unified across ARMv8-M targets
+    * TrustZone-M aware dual-bank configuration, increased update/erase reliability and isolation
+    * nRF5340: Added support for TrustZone-M
+    * STM32H5: SPI driver and TPM support with new TrustZone NSC APIs,
+    * Simulator: dual-bank flow and bank-swap test script to validate redundant-slot updates
+    * RP2350: RAM cache for flash writes to improve robustness
+    * Infineon AURIX TC3xx: replaced IDE project with HAL module integration and UART/boot flag handling fixes
+  * New features and improvements
+    * Filesystem-backed partition state access with `library_fs` target and CLI tool for querying or managing boot partitions
+    * libwolfboot: added MTD (Memory Technology Device) backed tracking of update status
+    * CMake: Added presets. Improve support for more reliable out-of-tree builds and list handling. Improve documentation.
+    * Key tools: `keygen --no-overwrite` option, stricter image header/sector size checks, and expanded ML-DSA test configurations
+    * Added `WOLFBOOT_RESTORE_CLOCK` configuration and additional logging/debugging for library filesystem status and keystore handling
+  * Bug fixes
+    * Hardened encrypted and delta update flows (IV reuse prevention, fallback/regression fixes, improved unit coverage)
+    * Fixed SPI flash protocol errors and write verification issues
+    * Corrected STM32 internal flash page erase masks and multiple STM32H5 update path fixes (including dual-bank and TPM builds)
+    * Resolved P1021 stage1 and MMU build issues
+    * cleanup of compiler warnings across targets (STM32WB55 PKA, nRF5340 non-TZ, others)
+  * Updated modules
+    * wolfSSL v5.8.4-stable (59f4fa568)
+    * wolfTPM v2.4.0-594-g6d5df60
+    * wolfPKCS11 v2.0.0-stable-33-g81af264
+    * wolfHSM v1.3.0 (8ac56d7)

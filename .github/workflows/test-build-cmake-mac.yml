@@ -34,6 +34,7 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: "1"    # avoid updating taps during install
       HOMEBREW_NO_ANALYTICS: "1"
       HOMEBREW_CURL_RETRIES: "6"      # ask curl inside brew to retry
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
 
     steps:
       - name: Checkout (with submodules)
@@ -41,34 +42,28 @@ jobs:
         with:
           submodules: true
 
-      - name: Cache Homebrew bottles # downloads (so retries don't redownload)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /Users/runner/Library/Caches/Homebrew
-          key: homebrew-${{ runner.os }}-mac14-cmake-gcc-newlib
-          restore-keys: |
-            homebrew-${{ runner.os }}-
-
       - name: Install toolchain and build tools
         run: |
-          # Install with step throttle to hopefully avoid stuck jobs
-
           set -euxo pipefail
 
-          throttle_delay=5
-          brew update
+          # Keep Homebrew pinned on the runner; only install what we need.
+          brew list cmake >/dev/null 2>&1 || brew install --force-bottle cmake
+          brew list ninja >/dev/null 2>&1 || brew install --force-bottle ninja
 
-          sleep "$throttle_delay"
-          brew install --force-bottle cmake
+          # Fetch ARM GCC directly (avoid Homebrew cask checksum churn)
+          ARM_GCC_VERSION="14.3.rel1"
+          ARM_GCC_BASENAME="arm-gnu-toolchain-${ARM_GCC_VERSION}-darwin-arm64-arm-none-eabi"
+          ARM_GCC_TARBALL="${ARM_GCC_BASENAME}.tar.xz"
+          ARM_GCC_URL="https://developer.arm.com/-/media/Files/downloads/gnu/${ARM_GCC_VERSION}/binrel/${ARM_GCC_TARBALL}"
+          ARM_GCC_DIR="$HOME/.local/arm-gcc"
 
-          sleep "$throttle_delay"
-          brew install --force-bottle ninja
+          rm -rf "${ARM_GCC_DIR}"
+          mkdir -p "${ARM_GCC_DIR}"
 
-          # Use cask to include headers such as <stdlib.h>
-          sleep "$throttle_delay"
-          brew install --cask gcc-arm-embedded
+          curl -L --retry 3 --retry-delay 5 -o "${ARM_GCC_TARBALL}" "${ARM_GCC_URL}"
+          tar -xJf "${ARM_GCC_TARBALL}" -C "${ARM_GCC_DIR}"
+
+          echo "${ARM_GCC_DIR}/${ARM_GCC_BASENAME}/bin" >> "$GITHUB_PATH"
 
       - name: Probe ARM GCC (paths + smoke build)
         run: |
