@@ -8,21 +8,19 @@ on:
 
 jobs:
 
-  # TODO: cypsoc6.config requires cy_device_headers.h
+  # TODO: cypsoc6.config requires cy_device_headers.h and component defines
   # cypsoc6_test:
-  #   uses: ./.github/workflows/test-build.yml
+  #   uses: ./.github/workflows/test-build-psoc6.yml
   #   with:
   #     arch: arm
   #     config-file: ./config/examples/cypsoc6.config
 
-  # TODO: hifive.config requires RISC-V compiler
-  # hifive1_test:
-  #   uses: ./.github/workflows/test-build.yml
-  #   with:
-  #     arch: riscv
-  #     config-file: ./config/examples/hifive.config
-  #
-  #
+  hifive1_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv
+      config-file: ./config/examples/hifive1.config
+
   sama5d3_test:
     uses: ./.github/workflows/test-build.yml
     with:
@@ -92,6 +90,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/imx-rt1064.config
       make-args: PKA=1 NO_ARM_ASM=1
+
+  imx_rt1060_hab_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/imx-rt1060_hab.config
 
   kinetis_k64f_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml
@@ -172,6 +176,20 @@ jobs:
       arch: ppc
       config-file: ./config/examples/nxp-t2080.config
 
+  nxp_ls1028a_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/nxp-ls1028a.config
+      make-args: CROSS_COMPILE=aarch64-linux-gnu-
+
+  nxp_ls1028a_tpm_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/nxp-ls1028a-tpm.config
+      make-args: CROSS_COMPILE=aarch64-linux-gnu-
+
   nxp_mcxa_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml
     with:
@@ -189,6 +207,13 @@ jobs:
     with:
       arch: aarch64
       config-file: ./config/examples/raspi3.config
+      make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
+
+  raspi3_encrypted_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/raspi3-encrypted.config
       make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 
   sim_tfm_smallstack_test:
@@ -375,12 +400,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32l0.config
 
-  # TODO: stm32l4-cube.config requires Cube HAL
-  # stm32l4_cube_test:
-  #   uses: ./.github/workflows/test-build.yml
-  #   with:
-  #     arch: arm
-  #     config-file: ./config/examples/stm32l4-cube.config
+  stm32l4_cube_test:
+    uses: ./.github/workflows/test-build-stm32cube.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32l4-cube.config
+      cube-repo: STMicroelectronics/STM32CubeL4
 
   stm32l5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
@@ -436,12 +461,13 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32wb-delta.config
 
-  # TODO: stm32wb-pka-1mb.config requires STM32 HAL #include "stm32wbxx_hal.h
-  # stm32wb_pka_1mb_test:
-  #   uses: ./.github/workflows/test-build.yml
-  #   with:
-  #     arch: arm
-  #     config-file: ./config/examples/stm32wb-pka-1mb.config
+  stm32wb_pka_1mb_test:
+    uses: ./.github/workflows/test-build-stm32cube.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32wb-pka-1mb.config
+      cube-repo: STMicroelectronics/STM32CubeWB
+      make-args: PKA=1 NO_ARM_ASM=1
 
   stm32wb_tpm_test:
     uses: ./.github/workflows/test-build.yml
@@ -473,7 +499,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32wb.config
 
-  # TODO: ti-tms570lc435.config requires CCS_ROOT
+  # TODO: ti-tms570lc435.config requires F021 Flash API (Windows installer only)
+  # ti_tms570lc435_test:
+  #   uses: ./.github/workflows/test-build-ti-hercules.yml
+  #   with:
+  #     arch: arm
+  #     config-file: ./config/examples/ti-tms570lc435.config
 
   # Cannot run on CI without the SDK (see VORAGO_SDK_DIR)
   # vorago_va416x0_test:
