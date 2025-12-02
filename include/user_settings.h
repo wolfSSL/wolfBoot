@@ -25,6 +25,21 @@
 #ifndef _WOLFBOOT_USER_SETTINGS_H_
 #define _WOLFBOOT_USER_SETTINGS_H_
 
+#if defined(_MSC_VER)
+    /* MSVC and clang-cl both define _MSC_VER */
+    #ifndef WOLFSSL_HAVE_MIN
+        #define WOLFSSL_HAVE_MIN
+    #endif
+    #ifndef WOLFSSL_HAVE_MAX
+        #define WOLFSSL_HAVE_MAX
+    #endif
+
+    /* Really keep Windows headers from redefining min/max */
+    #ifndef NOMINMAX
+        #define NOMINMAX 1
+    #endif
+#endif
+
 #ifdef WOLFBOOT_PKCS11_APP
 # include "test-app/wcs/user_settings.h"
 #else
@@ -330,7 +345,9 @@ extern int tolower(int c);
 
     /* SP Math needs to understand long long */
 #   ifndef ULLONG_MAX
-#       define ULLONG_MAX 18446744073709551615ULL
+#       ifndef _MSC_VER
+#           define ULLONG_MAX 18446744073709551615ULL
+#       endif
 #   endif
 #endif
 

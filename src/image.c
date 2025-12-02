@@ -59,7 +59,11 @@
 #endif
 
 /* Globals */
+#ifdef _MSC_VER
+static XALIGNED(4) uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
+#else
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
+#endif
 
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \

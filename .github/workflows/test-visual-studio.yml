@@ -1,0 +1,406 @@
+name: wolfBoot Visual Studio
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  build:
+    name: Visual Studio Keytools Tests
+    runs-on: windows-latest
+
+    env:
+      CONFIG:      Debug
+      PLATFORM:    x64
+
+      # Note: project-level preprocessors made need to be adjusted when changing.
+      # These are the "--" params, case sensitive:
+      ASYM:        ed25519
+      HASH:        sha256
+
+      # Generated exe files, used for artifacts
+      APP_KEYGEN:  keygen
+      APP_SIGN:    sign
+      APP_TESTLIB: test-lib
+      # OTP Visual Studio not supported at this time
+      OTP_SUPPORTED: 'false'
+      # APP_OTP:     otp-keystore-gen
+      # APP_PRIMER:  otp-keystore-primer
+
+    steps:
+      # Adds MSBuild to PATH
+      - uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Fetch test target.h
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Ensure there's a target.h
+
+          echo Current directory:
+          echo %cd%
+
+          :: # echo Copying tools\unit-tests\target.h to src\target.h
+          :: # copy /Y      tools\unit-tests\target.h    src\target.h
+
+          :: # Note the target.h is typically assembled during the CMake process.
+          :: # configure_file(include/target.h.in ${CMAKE_CURRENT_BINARY_DIR}/target.h @ONLY)
+          ::
+          :: # But we copy the unit-test sample for this workflow
+          echo Copying tools\unit-tests\target.h to include\target.h
+
+          copy /Y tools\unit-tests\target.h include\target.h
+
+      # Step 1 Build keygen, then run it
+      - name: Build KeygenTool keygen.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          echo Current directory:
+          echo %cd%
+
+          pushd IDE\VisualStudio
+
+          msbuild wolfBootKeygenTool.vcxproj   ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Export EFFECTIVE_DEBUG_ARGS to env
+        id: export-keygen-debug-args
+        shell: bash
+        run: |
+          # MSBuid should have written the generated default debug args to a file in wolfBootKeygen.props
+          args_file="IDE/VisualStudio/${CONFIG}/${PLATFORM}/wolfBootKeygenTool/effective-debug-args.txt"
+
+          echo "Checking args file: ${args_file}"
+
+          # 1) File must exist and be non-empty
+          if [ ! -s "$args_file" ]; then
+              echo "WARNING: args file missing or empty: $args_file" >&2
+              exit 0
+          fi
+
+          # 2) Read value and check it is non-empty
+          value="$(cat "$args_file")"
+          if [ -z "$value" ]; then
+              echo "WARNING: args file has no value: $args_file" >&2
+              exit 0
+          fi
+
+          echo "Found debug args: $value"
+
+          # 3) Export to GITHUB_ENV, preserving spaces and quotes
+          {
+            echo "DEBUG_ARGS_MSBUILD<<EOF"
+            printf "%s\n" "$value"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+          # Reminder that the args found are the default, and not matrix values to be tested here
+          echo "Found msbuild debug args DEBUG_ARGS_MSBUILD: $DEBUG_ARGS_MSBUILD"
+
+        env:
+          CONFIG: ${{ env.CONFIG }}
+          PLATFORM: ${{ env.PLATFORM }}
+
+      - name: Run KeygenTool keygen.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: # Run keygen.exe
+
+          echo Current directory:
+          echo %cd%
+
+          echo "Config params used:"
+          echo "HASH=%HASH%" >  .\config_params.txt
+          echo "ASYM=%ASYM%" >> .\config_params.txt
+
+          echo "Calling keygen using --%ASYM%"
+          echo "Running .\IDE\VisualStudio\%PLATFORM%\%CONFIG%\keygen.exe --%ASYM% -g wolfboot_signing_private_key.der"
+                        .\IDE\VisualStudio\%PLATFORM%\%CONFIG%\keygen.exe --%ASYM% -g wolfboot_signing_private_key.der
+
+          if errorlevel 1 (
+            echo keygen.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          echo "wolfboot_signing_private_key.der file:"
+          dir wolfboot_signing_private_key.der /s
+
+          echo "keystore.c file:"
+          dir keystore.c /s
+
+      # Step 2 Build signing tool, then run it
+      - name: Build SignTool sign.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          pushd IDE\VisualStudio
+
+          msbuild wolfBootSignTool.vcxproj     ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Create a file to sign
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Create a test.bin file
+
+          echo Creating a new test.bin
+          echo "Test" > test.bin
+
+      - name: Run SignTool sign.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: Run sign.exe
+
+          echo Current directory:
+          echo %cd%
+
+          echo "Calling sign using --%ASYM% --%HASH%"
+          echo Running .\IDE\VisualStudio\%PLATFORM%\%CONFIG%\sign.exe  --%ASYM%  --%HASH%  test.bin  wolfboot_signing_private_key.der  1
+
+                       .\IDE\VisualStudio\%PLATFORM%\%CONFIG%\sign.exe  --%ASYM%  --%HASH%  test.bin  wolfboot_signing_private_key.der  1
+
+          if errorlevel 1 (
+            echo sign.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          echo wolfboot_signing_private_key.der file:
+          dir wolfboot_signing_private_key.der /s
+
+          echo "keystore.c file:"
+          dir keystore.c /s
+
+          echo test.bin file:
+          dir test.bin /s
+
+          echo test_v1_signed.bin file:
+          dir test_v1_signed.bin /s
+
+      # Step 3 Build Test tool, then run it
+      - name: Build Library Test test-lib.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          pushd IDE\VisualStudio
+
+          msbuild wolfBootTestLib.vcxproj      ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Run Library Test test-lib.exe
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: # Run sign.exe
+
+          @echo on
+          setlocal enableextensions
+
+          echo Current directory:
+          echo %cd%
+
+          :: # Paths
+          set "EXE=IDE\VisualStudio\%PLATFORM%\%CONFIG%\test-lib.exe"
+          set "BIN=test_v1_signed.bin"
+
+          :: # Validate required env vars
+          if "%PLATFORM%"=="" (
+            echo ERROR: PLATFORM is not set.
+            exit /b 1
+          )
+          if "%CONFIG%"=="" (
+            echo ERROR: CONFIG is not set.
+            exit /b 1
+          )
+
+          :: # Show where files are
+          echo Looking for "%BIN%" under "%cd%":
+          dir "%BIN%" /s 2>nul
+
+          rem Existence checks
+          if not exist "%EXE%" (
+            echo ERROR: Missing "%EXE%".
+            echo Tree of tools\keytools:
+            dir tools\keytools /s /b 2>nul
+            exit /b 2
+          )
+          if not exist "%BIN%" (
+            echo ERROR: Missing "%BIN%" in current dir.
+            exit /b 3
+          )
+
+          :: # A missing target.h is a common build failure on GitHub.
+          :: # See above where we copy one from [WOLFBOOT_ROOT]\tools\unit-tests\
+          :: # echo Where is the target.h?
+          :: # dir target.h /s
+
+          echo Running %EXE%"  "%BIN%"
+
+          "%EXE%" "%BIN%"
+          set ERR=%ERRORLEVEL%
+
+          if not "%ERR%"=="0" (
+            echo test-lib.exe failed with ERRORLEVEL %ERR%
+            exit /b %ERR%
+          )
+
+          dir test_v1_signed.bin /s
+
+          echo test-lib.exe completed successfully.
+          endlocal
+
+        # Build the OTP Flash otp-keystore-gen.exe that creates otp.bin
+      - name: Build Flash OTP
+        if: ${{ env.OTP_SUPPORTED == 'true' }}
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: # Begin otp-keystore-gen.exe build from DOS command prompt
+
+          echo Current directory:
+          echo %cd%
+
+          pushd IDE\VisualStudio
+
+          msbuild wolfBootFlashOTP.vcxproj   ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Run Flash OTP otp-keystore-gen.exe
+        if: ${{ env.OTP_SUPPORTED == 'true' }}
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: # Run otp-keystore-gen.exe
+
+          echo Current directory:
+          echo %cd%
+
+          .\IDE\VisualStudio%PLATFORM%\%CONFIG%\otp-keystore-gen.exe
+
+          if errorlevel 1 (
+            echo otp-keystore-gen.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          echo "otp-keystore-gen otp.bin file:"
+          dir otp.bin /s
+
+        # Build the OTP Keystore Primer otp-keystore-primer.exe
+      - name: Build  OTP Keystore Primer
+        if: ${{ env.OTP_SUPPORTED == 'true' }}
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: # Begin otp-keystore-primer.exe build from DOS command prompt
+
+          echo Current directory:
+          echo %cd%
+
+          pushd IDE\VisualStudio
+
+          msbuild wolfBootFlashPrimerOTP.vcxproj   ^
+            /t:Rebuild                         ^
+            /m                                 ^
+            /p:Configuration=%CONFIG%          ^
+            /p:Platform=%PLATFORM%             ^
+            /p:PreferredToolArchitecture=x64   ^
+            /v:m
+
+          popd
+
+      - name: Run Flash OTP otp-keystore-primer.exe
+        if: ${{ env.OTP_SUPPORTED == 'true' }}
+        shell: cmd
+        working-directory: .\
+        run: |
+          :: # Run otp-keystore-primer.exe
+
+          echo Current directory:
+          echo %cd%
+
+          .\IDE\VisualStudio%PLATFORM%\%CONFIG%\otp-keystore-primer.exe
+
+          if errorlevel 1 (
+            echo otp-keystore-primer.exe failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b %ERRORLEVEL%
+          )
+
+          echo Done!
+
+      # Upload binaries if present (non-fatal if none)
+      - name: Upload firmware/artifacts
+        if:   always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfboot-visual-studio-${{ env.CONFIG }}-${{ env.PLATFORM }}
+          path: |
+            # config params used
+            ./config_params.txt
+
+            # copied from tools/unit-tests/target.h
+            ./include/target.h
+
+            # test private key generated
+            ./keystore.der
+            ./wolfboot_signing_private_key.der
+            ./src/keystore.c
+
+            # created executables
+            ./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_KEYGEN  }}.exe
+            ./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_SIGN    }}.exe
+            ./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_TESTLIB }}.exe
+            #./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_OTP     }}.exe
+            #./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_PRIMER  }}.exe
+
+            ./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_KEYGEN  }}-preprocessor-defs.${{ env.CONFIG }}.${{ env.PLATFORM }}.txt
+            ./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_SIGN    }}-preprocessor-defs.${{ env.CONFIG }}.${{ env.PLATFORM }}.txt
+            ./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_TESTLIB }}-preprocessor-defs.${{ env.CONFIG }}.${{ env.PLATFORM }}.txt
+            #./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_OTP     }}-preprocessor-defs.${{ env.CONFIG }}.${{ env.PLATFORM }}.txt
+            #./tools/keytools/${{ env.PLATFORM }}/${{ env.CONFIG }}/${{ env.APP_PRIMER  }}-preprocessor-defs.${{ env.CONFIG }}.${{ env.PLATFORM }}.txt
+
+            # sample files
+            ./test.bin
+            ./test_v1_signed.bin
+            ./otp.bin
+
+          if-no-files-found: warn

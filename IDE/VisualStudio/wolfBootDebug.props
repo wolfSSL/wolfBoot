@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Defaults if not provided elsewhere -->
+  <PropertyGroup Label="UserMacros" Condition="'$(IMAGE_SIGNATURE_SIZE)' == ''">
+    <IMAGE_SIGNATURE_SIZE>4096</IMAGE_SIGNATURE_SIZE>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>
+        %(PreprocessorDefinitions);LMS_IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE);XMSS_IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE)
+      </PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+</Project>

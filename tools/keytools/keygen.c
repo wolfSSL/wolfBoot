@@ -40,10 +40,16 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
-#ifndef _WIN32
+#ifdef _WIN32
+    #define _CRT_SECURE_NO_WARNINGS
+    #define _CRT_NONSTDC_NO_DEPRECATE /* unlink */
+#else
     #include <unistd.h>
 #endif
 
+/* wolfSSL */
+/* Always include wolfcrypt/settings.h before any other wolfSSL file.    */
+/* Reminder: settings.h pulls in user_settings.h; don't include it here. */
 #include <wolfssl/wolfcrypt/settings.h>
 #ifndef NO_RSA
 #include <wolfssl/wolfcrypt/rsa.h>
@@ -173,6 +179,10 @@ const char Store_hdr[] = "\n"
     "#define KEYSTORE_SECTION /* Renesas RX */\n"
     "#elif defined(TARGET_x86_64_efi)\n"
     "#define KEYSTORE_SECTION\n"
+    "#elif defined(_MSC_VER)\n"
+    "/* Create a RW data section named .keystore  ! */\n"
+    "#pragma section(\".keystore\", read, write)\n"
+    "#define KEYSTORE_SECTION __declspec(allocate(\".keystore\"))\n"
     "#else\n"
     "#define KEYSTORE_SECTION __attribute__((section (\".keystore\")))\n"
     "#endif\n\n"
@@ -504,10 +514,10 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     }
     fprintf(fpub, Pubkey_footer);
     fprintf(fpub, Slot_footer);
-    printf("Associated key file:   %s\n", keyfile);
+    printf("Associated key file:  %s\n", keyfile);
     printf("Partition ids mask:   %08x\n", id_mask);
-    printf("Key type   :           %s\n", KName[ktype]);
-    printf("Public key slot:       %u\n", id_slot);
+    printf("Key type:             %s\n", KName[ktype]);
+    printf("Public key slot:      %u\n", id_slot);
     if (noLocalKeys) {
         printf("WARNING: --nolocalkeys flag used, keystore.c public key is zeroed\n");
     }
@@ -1157,7 +1167,8 @@ static void key_gen_check(const char *kfilename)
     f = fopen(kfilename, "rb");
     if (!force && (f != NULL)) {
         if (no_overwrite) {
-            printf("** Warning: key file already exists and will not be overwritten!");
+            printf("** Warning: private key file already exists and will not be overwritten!\n");
+            printf("File: %s\n", kfilename);
         }
         else {
             char reply[40];
@@ -1446,7 +1457,7 @@ int main(int argc, char** argv)
             i++;
             sprintf(pubkeyfile,"%s%s", argv[i], "/keystore.c");
             sprintf(pubkeyimg, "%s%s", argv[i], "/keystore.der");
-            printf("keystore file: %s\n", pubkeyfile);
+            printf("Keystore file: %s\n", pubkeyfile);
             i++;
             continue;
         }

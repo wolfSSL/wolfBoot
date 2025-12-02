@@ -24,6 +24,20 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <io.h>
+#define HAVE_MMAP 0
+#define ftruncate(fd, len) _chsize(fd, len)
+static inline int fp_truncate(FILE* f, long len)
+{
+    int fd;
+    if (f == NULL)
+        return -1;
+    fd = _fileno(f);
+    return _chsize(fd, len);
+}
+#define PRINTF_ENABLED
+#else
 #if 1 /* for desktop testing */
     #define HAVE_UNISTD_H
     #define PRINTF_ENABLED
@@ -36,6 +50,7 @@
     #define exit _exit
 #else
     #define exit(x) while(1);
+#endif
 #endif
 
 #include "image.h"
@@ -83,15 +98,16 @@ void hal_prepare_boot(void)
     return;
 }
 
+
+#ifdef HAVE_UNISTD_H
+    #define BOOT_SUFFIX " (actually exiting)"
+#else
+    #define BOOT_SUFFIX " (actually spin loop)"
+#endif
+
 int do_boot(uint32_t* v)
 {
-    wolfBoot_printf("booting %p"
-#ifdef HAVE_UNISTD_H
-         "(actually exiting)"
-#else
-         "(actually spin loop)"
-#endif
-         "\n", v);
+    wolfBoot_printf("booting %p" BOOT_SUFFIX "\n", v);
     exit(0);
 }
 

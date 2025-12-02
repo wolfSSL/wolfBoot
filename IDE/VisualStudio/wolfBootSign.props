@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+    <!-- Normalize & detect if the user already set debugger args -->
+    <PropertyGroup>
+        <!-- Treat whitespace-only as empty -->
+        <_DbgArgsTrim>$([System.String]::Copy('$(LocalDebuggerCommandArguments)').Trim())</_DbgArgsTrim>
+
+        <!-- Did the user set debug arguments in the project properties -->
+        <_UserSetArgs>false</_UserSetArgs>
+        <_UserSetArgs Condition="'$(_DbgArgsTrim)' != ''">true</_UserSetArgs>
+
+        <!-- Default args only for Debug|x64 (match your original intent) -->
+        <_DefaultArgs></_DefaultArgs>
+
+        <!-- Effective debugger args are either the user-provided args or the SIGNED_IMAGE fallback -->
+        <_DefaultArgs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">--ed25519 --sha256 "$(ProjectDir)test.bin" "$(THIS_KEYSTORE_ROOT)\$(THIS_PRIVATE_KEY_DER)" 1</_DefaultArgs>
+
+        <!-- Effective arguments: user-provided wins; otherwise defaults -->
+        <EFFECTIVE_DEBUG_ARGS Condition="'$(_UserSetArgs)' == 'true'">$(LocalDebuggerCommandArguments)</EFFECTIVE_DEBUG_ARGS>
+        <EFFECTIVE_DEBUG_ARGS Condition="'$(_UserSetArgs)' == 'false'">$(_DefaultArgs)</EFFECTIVE_DEBUG_ARGS>
+
+        <!-- Simple boolean for Debug config (handy for messages/defines if needed) -->
+        <IS_DEBUG_CONFIG>false</IS_DEBUG_CONFIG>
+        <IS_DEBUG_CONFIG Condition="'$(Configuration)' == 'Debug'">true</IS_DEBUG_CONFIG>
+    </PropertyGroup>
+
+    <!-- Print values at build time -->
+    <Target Name="EchoDebuggerParams" BeforeTargets="ClCompile">
+        <Message Importance="high" Text="MSBuild: Configuration=$(Configuration) Platform=$(Platform)"/>
+        <Message Importance="high" Text="MSBuild: UserSetArgs=$(_UserSetArgs)"/>
+        <Message Importance="high" Text="MSBuild: SIGNED_IMAGE=$(SIGNED_IMAGE)"/>
+        <Message Importance="high" Text="MSBuild: Effective Debug Args=$(EFFECTIVE_DEBUG_ARGS)"/>
+        <Message Importance="high" Text="MSBuild: IsDebugConfig=$(IS_DEBUG_CONFIG)"/>
+    </Target>
+
+    <!-- Also pass these into the compiler as defines so C/C++ can print them at compile time -->
+    <ItemDefinitionGroup>
+        <ClCompile>
+            <PreprocessorDefinitions>
+                %(PreprocessorDefinitions);
+                SIGNED_IMAGE_MSBUILD="$(SIGNED_IMAGE)";
+                DEBUG_ARGS_MSBUILD="$(EFFECTIVE_DEBUG_ARGS)";
+                MSBUILD_CFG_DEBUG=$(IS_DEBUG_CONFIG)
+            </PreprocessorDefinitions>
+        </ClCompile>
+    </ItemDefinitionGroup>
+
+    <!-- Assign debugger settings ONLY when user hasn't set them AND we have defaults -->
+    <PropertyGroup Condition="'$(_UserSetArgs)' == 'false' and '$(_DefaultArgs)' != ''">
+        <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+        <LocalDebuggerWorkingDirectory>$(ProjectDir)</LocalDebuggerWorkingDirectory>
+        <LocalDebuggerCommandArguments>$(EFFECTIVE_DEBUG_ARGS)</LocalDebuggerCommandArguments>
+    </PropertyGroup>
+
+    <!-- Echo for sanity during build -->
+    <Target Name="EchoSignDebuggerParams" BeforeTargets="Build">
+        <Message Importance="High" Text="Sign: UserSetArgs=$(_UserSetArgs)" />
+        <Message Importance="High" Text="Sign: Effective Debug Args=$(EFFECTIVE_DEBUG_ARGS)" />
+        <Message Importance="High" Text="Sign: WorkDir=$(LocalDebuggerWorkingDirectory)" />
+        <Message Importance="Low"  Text="Sign: Config=$(Configuration) Platform=$(Platform) IsDebug=$(IS_DEBUG_CONFIG)" />
+    </Target>
+
+</Project>
