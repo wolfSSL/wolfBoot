@@ -17,6 +17,7 @@ SECTIONS
         . = ORIGIN(FLASH) + 0x200;
         _start_vector = .;
         KEEP(*(.isr_vector))
+        *(.keystore*)
         *(.text*)
         *(.rodata*)
         *(.srodata*)
