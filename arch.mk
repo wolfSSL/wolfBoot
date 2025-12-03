@@ -1160,6 +1160,14 @@ ifeq ($(ARCH),sim)
                     $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
 
   endif
+  # wolfHSM NVM image generation support for simulator
+  # User must provide NVM_CONFIG for their specific setup
+  ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
+    WH_NVM_BIN ?= whNvmImage.bin
+    WH_NVM_HEX ?= whNvmImage.hex
+    WH_NVM_PART_SIZE ?= 16384 # must match partition size in hal/sim.c
+    WH_NVM_BASE_ADDRESS ?= 0x0
+  endif
 endif
 
 # Infineon AURIX Tricore
@@ -1201,10 +1209,11 @@ ifeq ($(ARCH), AURIX_TC3)
       WH_NVM_BASE_ADDRESS ?= 0xAFC00000
 
       # Select config file based on certificate chain verification
+      # Use ?= to allow user override via command line (e.g., for offline cert chain)
       ifneq ($(CERT_CHAIN_VERIFY),)
-        NVM_CONFIG = tools/scripts/tc3xx/wolfBoot-wolfHSM-dummy-certchain.nvminit
+        NVM_CONFIG ?= tools/scripts/tc3xx/wolfBoot-wolfHSM-dummy-certchain.nvminit
       else
-        NVM_CONFIG = tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit
+        NVM_CONFIG ?= tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit
       endif
     endif
 
