@@ -8,12 +8,11 @@ on:
 
 jobs:
 
-  # TODO: cypsoc6.config requires cy_device_headers.h and component defines
-  # cypsoc6_test:
-  #   uses: ./.github/workflows/test-build-psoc6.yml
-  #   with:
-  #     arch: arm
-  #     config-file: ./config/examples/cypsoc6.config
+  cypsoc6_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
 
   hifive1_test:
     uses: ./.github/workflows/test-build-riscv.yml

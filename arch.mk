@@ -960,8 +960,8 @@ ifeq ($(TARGET),psoc6)
         $(CYPRESS_PDL)/drivers/source/cy_crypto.o
 
     CFLAGS+=\
-        -I$(CYPRESS_PDL)/drivers/include \
         -I$(CYPRESS_PDL)/devices/include \
+        -I$(CYPRESS_PDL)/drivers/include \
         -I$(CYPRESS_PDL)/cmsis/include \
         -I$(CYPRESS_TARGET_LIB) \
         -I$(CYPRESS_CORE_LIB)/include \
