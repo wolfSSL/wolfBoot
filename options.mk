@@ -992,11 +992,15 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   CFLAGS += -DWOLFBOOT_CERT_CHAIN_VERIFY
   # export the private key in DER format so it can be used with certificates
   KEYGEN_OPTIONS += --der
-  ifneq ($(CERT_CHAIN_GEN),)
-    # Use dummy cert chain file if not provided (needs to be generated when keys are generated)
+
+  # User-provided cert chain takes precedence
+  ifneq ($(USER_CERT_CHAIN),)
+    CERT_CHAIN_FILE = $(USER_CERT_CHAIN)
+  else
+    # Auto-generate dummy cert chain (when USER_CERT_CHAIN not provided)
     CERT_CHAIN_FILE = test-dummy-ca/raw-chain.der
 
-    # Set appropriate cert gen options based on sigalg
+    # Set appropriate cert gen algo based on signature algorithm
     ifeq ($(SIGN),ECC256)
       CERT_CHAIN_GEN_ALGO+=ecc256
     endif
@@ -1005,10 +1009,6 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     endif
     ifeq ($(SIGN),RSA4096)
       CERT_CHAIN_GEN_ALGO+=rsa4096
-    endif
-  else
-    ifeq ($(CERT_CHAIN_FILE),)
-      $(error CERT_CHAIN_FILE must be specified when CERT_CHAIN_VERIFY is enabled and not using CERT_CHAIN_GEN)
     endif
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)

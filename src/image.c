@@ -420,6 +420,8 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
     word32 inOutIdx = 0;
     struct RsaKey rsa;
 
+    (void)inOutIdx;
+
 #if (!defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
      !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)) || \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) &&  \
@@ -500,7 +502,8 @@ static void wolfBoot_verify_signature_rsa(uint8_t key_slot,
     XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
     RSA_VERIFY_FN(ret, wc_RsaSSL_VerifyInline, output, RSA_IMAGE_SIGNATURE_SIZE,
                   &digest_out, &rsa);
-#if !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
     /* evict the key after use, since we aren't using the RSA import API */
     if (WH_ERROR_OK != wh_Client_KeyEvict(&hsmClientCtx, hsmKeyId)) {
         return;

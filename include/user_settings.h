@@ -214,7 +214,9 @@ extern int tolower(int c);
 #   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
 #   define WC_ASN_HASH_SHA256
-#   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
+#   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
+       !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
 #       define WOLFSSL_RSA_PUBLIC_ONLY
@@ -585,6 +587,7 @@ extern int tolower(int c);
 #   define WOLFSSL_USER_IO
 #   define WOLFSSL_SP_MUL_D
 #   define WOLFSSL_PEM_TO_DER
+#   define WOLFSSL_ALLOW_NO_SUITES
 #endif
 
 #ifdef WOLFSSL_STM32_PKA
