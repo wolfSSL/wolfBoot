@@ -43,7 +43,10 @@ jobs:
       - name: Patch cy_syslib.c to declare cy_delay32kMs
         run: |
           # Add extern declaration for cy_delay32kMs directly in cy_syslib.c
-          sed -i '/#include "cy_syslib.h"/a \\\n/* Extern declaration for delay variable */\nextern uint32_t cy_delay32kMs;' lib/psoc6pdl/drivers/source/cy_syslib.c
+          # Find the line with the include and add the extern declaration after it
+          awk '/#include "cy_syslib.h"/ {print; print ""; print "/* Extern declaration for delay variable */"; print "extern uint32_t cy_delay32kMs;"; next} 1' \
+            lib/psoc6pdl/drivers/source/cy_syslib.c > /tmp/cy_syslib_patched.c
+          mv /tmp/cy_syslib_patched.c lib/psoc6pdl/drivers/source/cy_syslib.c
 
       - name: Workaround for sources.list
         run: |
