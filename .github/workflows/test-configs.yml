@@ -534,7 +534,37 @@ jobs:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: host
-      config-file: ./config/examples/sim-wolfHSM-client.config
+      config-file: ./config/examples/sim-wolfHSM-client-ecc.config
+
+  sim_wolfhsm_client_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM-client-mldsa.config
+
+  sim_wolfhsm_client_certchain_ecc_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM-client-certchain-ecc.config
+
+  sim_wolfhsm_client_certchain_rsa4096_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM-client-certchain-rsa4096.config
+
+  sim_wolfhsm_server_certchain_ecc_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM-server-certchain-ecc.config
+
+  sim_wolfhsm_server_certchain_rsa4096_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM-server-certchain-rsa4096.config
 
   rp2350_test:
     uses: ./.github/workflows/test-build-pico-sdk.yml
