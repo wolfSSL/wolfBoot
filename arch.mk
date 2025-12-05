@@ -661,6 +661,9 @@ endif
 
 ifeq ($(TARGET),mcxw)
   CORTEX_M33=1
+  ifneq ($(TZEN),1)
+    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+  endif
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \

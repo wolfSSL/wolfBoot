@@ -201,6 +201,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/mcxw.config
 
+  nxp_mcxw_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw-tz.config
+
   raspi3_test:
     uses: ./.github/workflows/test-build.yml
     with:
