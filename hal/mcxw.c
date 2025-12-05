@@ -37,6 +37,8 @@
 #include "fsl_flash_api.h"
 #include "fsl_ccm32k.h"
 
+#include "hal/armv8m_tz.h"
+
 #define FLASH FMU0
 
 /*!< Core clock frequency: 48000000Hz */
@@ -46,6 +48,41 @@ static uint32_t pflash_sector_size = WOLFBOOT_SECTOR_SIZE;
 
 uint32_t SystemCoreClock;
 
+#ifdef TZEN
+static void hal_sau_init(void)
+{
+    /* Non-secure callable area */
+    sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
+            WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
+
+    /* Non-secure: application flash area */
+    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + 2 * WOLFBOOT_PARTITION_SIZE - 1,
+            0);
+
+    /* ROM bootloader API */
+    sau_init_region(2, 0x14800000, 0x14817FFF, 0);
+
+    /* Non-secure RAM */
+    sau_init_region(3, 0x20010000, 0x20015FFF, 0);
+
+    /* Peripherals */
+    sau_init_region(4, 0x40000000, 0x4007FFFF, 0);
+    sau_init_region(5, 0x48000000, 0x48FFFFFF, 0);
+
+    /* Enable SAU */
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+
+    /* Enable securefault handler */
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+}
+
+static void periph_unsecure(void)
+{
+    GPIOA->PCNS = 0xFFFFFFFF;
+    GPIOA->ICNS = 0xFFFFFFFF;
+}
+#endif
 
 #ifdef __WOLFBOOT
 
@@ -63,7 +100,9 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
 
 void hal_prepare_boot(void)
 {
-
+#ifdef TZEN
+    periph_unsecure();
+#endif
 }
 
 #endif
@@ -80,11 +119,39 @@ void hal_init(void)
     FLASH_Init(&pflash);
     FLASH_GetProperty(&pflash, kFLASH_PropertyPflash0SectorSize,
             &pflash_sector_size);
+
+#if defined(TZEN) && !defined(NONSECURE_APP)
+    hal_sau_init();
+#endif
+}
+
+static void write_flash_qword(uint32_t *dst, const uint32_t *src)
+{
+    /* Wait for non-busy */
+    while (!(FMU0->FSTAT & 0x00000080)) {}
+    /* Clear errors */
+    FMU0->FSTAT = 0x74;
+    /* Set command "program phrase" */
+    FMU0->FCCOB[0] = 0x24;
+    /* Start command */
+    FMU0->FSTAT = 0x80;
+    /* Wait for write enabled */
+    while (!(FMU0->FSTAT & 0x01000000)) {}
+    /* Write the 4 words */
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    dst[3] = src[3];
+    /* Wait for operation ready to execute */
+    while (!(FMU0->FSTAT & 0x80000000)) {}
+    /* Start operation */
+    FMU0->FSTAT = 0x80000000;
+    /* Wait for completion */
+    while (!(FMU0->FSTAT & 0x00000080)) {}
 }
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int ret;
     int w = 0;
     const uint32_t flash_word_size = 16;
     const uint32_t empty_qword[4] = {
@@ -103,33 +170,24 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 ((uint8_t *)aligned_qword)[i] = data[w++];
             }
             if (memcmp(aligned_qword, empty_qword, flash_word_size) != 0) {
-                ret = FLASH_Program(&pflash, FLASH, address_align, aligned_qword,
-                        flash_word_size);
-                if (ret != kStatus_Success)
-                    return -1;
+                write_flash_qword((uint32_t *)address_align, aligned_qword);
             }
             address += i;
             len -= i;
         }
         else {
+            uint32_t i;
             uint32_t len_align = len - (len & 0x0F);
-            if (((uint32_t)data + w) & 0x0F) {
-                uint32_t __attribute__((aligned(16))) aligned_data[4];
-                memcpy(aligned_data, (void*)((uint32_t)data + w), len_align);
-                ret = FLASH_Program(&pflash, FLASH, address, (uint32_t*)data + w,
-                        len_align);
+
+            for (i = 0; i < len_align; i += 16) {
+                write_flash_qword((uint32_t *)(address + i),
+                                  (const uint32_t *)(data + w + i));
             }
-            else
-            {
-                ret = FLASH_Program(&pflash, FLASH, address, (uint32_t*)data + w,
-                        len_align);
-            }
-            if (ret != kStatus_Success)
-                return -1;
             len -= len_align;
             address += len_align;
         }
     }
+
     return 0;
 }
 
@@ -141,23 +199,38 @@ void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
+static void erase_flash_sector(uint32_t *dst) {
+    /* Wait for non-busy */
+    while (!(FMU0->FSTAT & 0x00000080)) {}
+    /* Clear errors */
+    FMU0->FSTAT = 0x74;
+    /* Set command "erase sector" */
+    FMU0->FCCOB[0] = 0x42;
+    /* Start command */
+    FMU0->FSTAT = 0x80;
+    /* Wait for write enabled */
+    while (!(FMU0->FSTAT & 0x01000000)) {}
+    /* Write 4 words to specify sector to erase */
+    dst[0] = 0;
+    dst[1] = 0;
+    dst[2] = 0;
+    dst[3] = 0;
+    /* Wait for operation ready to execute */
+    while (!(FMU0->FSTAT & 0x80000000)) {}
+    /* Start operation */
+    FMU0->FSTAT = 0x80000000;
+    /* Wait for completion */
+    while (!(FMU0->FSTAT & 0x00000080)) {}
+}
+
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    status_t result;
     if (address % pflash_sector_size)
         address -= address % pflash_sector_size;
     while (len > 0) {
-        result = FLASH_Erase(&pflash, FLASH, address, pflash_sector_size,
-                kFLASH_ApiEraseKey);
-        if (kStatus_FLASH_Success != result)
-            return -1;
-
-        /* Verify sector if it's been erased. */
-        result = FLASH_VerifyEraseSector(&pflash, FLASH, address,
-                pflash_sector_size);
-        if (kStatus_FLASH_Success != result)
-            return -1;
-        len -= pflash_sector_size;
+        erase_flash_sector((uint32_t *)address);
+        address += WOLFBOOT_SECTOR_SIZE;
+        len -= WOLFBOOT_SECTOR_SIZE;
     }
     return 0;
 }
