@@ -1,11 +1,31 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.779
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wolfBootSignTool", "wolfBootSignTool.vcxproj", "{0E5B9C81-CA2B-47CA-BA83-074078CF3393}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wolfBootKeygenTool", "wolfBootKeygenTool.vcxproj", "{599F7765-B224-41D4-AA56-597FFA9763BC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+		..\..\.github\workflows\test-visual-studio.yml = ..\..\.github\workflows\test-visual-studio.yml
+		wolfBootDebug.props = wolfBootDebug.props
+		wolfBootImage.props = wolfBootImage.props
+		wolfBootKeygen.props = wolfBootKeygen.props
+		wolfBootSign.props = wolfBootSign.props
+		wolfBootTarget.props = wolfBootTarget.props
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\docs\keystore.md = ..\..\docs\keystore.md
+		..\..\docs\README.md = ..\..\docs\README.md
+		..\..\docs\Signing.md = ..\..\docs\Signing.md
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wolfBootTestLib", "wolfBootTestLib.vcxproj", "{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,9 +51,20 @@ Global
 		{599F7765-B224-41D4-AA56-597FFA9763BC}.Release|x64.Build.0 = Release|x64
 		{599F7765-B224-41D4-AA56-597FFA9763BC}.Release|x86.ActiveCfg = Release|Win32
 		{599F7765-B224-41D4-AA56-597FFA9763BC}.Release|x86.Build.0 = Release|Win32
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Debug|x64.ActiveCfg = Debug|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Debug|x64.Build.0 = Debug|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Debug|x86.ActiveCfg = Debug|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Debug|x86.Build.0 = Debug|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Release|x64.ActiveCfg = Release|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Release|x64.Build.0 = Release|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Release|x86.ActiveCfg = Release|x64
+		{3A6C8B82-0B5E-4B5E-9C9D-5C9F1F9B1D77}.Release|x86.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{02EA681E-C7D8-13C7-8484-4AC65E1B71E8} = {8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {002B85D3-20F7-44FB-BFA5-6B5AC72F499B}
