@@ -1009,6 +1009,8 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     endif
     ifeq ($(SIGN),RSA4096)
       CERT_CHAIN_GEN_ALGO+=rsa4096
+      # Reasonably large default
+      CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
     endif
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)

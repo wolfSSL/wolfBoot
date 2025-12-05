@@ -505,20 +505,20 @@ extern int tolower(int c);
 #   define WOLFSSL_SP_NO_DYN_STACK
 #endif
 
-#if !defined(WOLFBOOT_SMALL_STACK) && !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#   if defined(WOLFSSL_SP_MATH) || defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_SP_NO_MALLOC
-#       define WOLFSSL_SP_NO_DYN_STACK
-#   endif
-#   if !defined(SECURE_PKCS11)
-#       define NO_WOLFSSL_MEMORY
-#       define WOLFSSL_NO_MALLOC
-#   endif
-#else
+#if defined(WOLFBOOT_SMALL_STACK)
 #   if defined(WOLFBOOT_HUGE_STACK)
 #       error "Cannot use SMALL_STACK=1 with HUGE_STACK=1"
 #   endif
 #   define WOLFSSL_SMALL_STACK
+#else
+#   if defined(WOLFSSL_SP_MATH) || defined(WOLFSSL_SP_MATH_ALL)
+#       define WOLFSSL_SP_NO_MALLOC
+#       define WOLFSSL_SP_NO_DYN_STACK
+#   endif
+#   if !defined(SECURE_PKCS11) && !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#       define NO_WOLFSSL_MEMORY
+#       define WOLFSSL_NO_MALLOC
+#   endif
 #endif
 
 

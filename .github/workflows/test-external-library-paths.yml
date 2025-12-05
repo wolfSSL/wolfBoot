@@ -24,7 +24,7 @@ jobs:
             build-tpm-tools: true
 
           - name: "external wolfHSM"
-            config: "config/examples/sim-wolfHSM-client.config"
+            config: "config/examples/sim-wolfHSM-client-ecc.config"
 
           - name: "Unit tests"
             config: ""
