@@ -319,6 +319,9 @@ extern int tolower(int c);
 #       define HAVE___UINT128_T
 #       define WOLFSSL_SP_ARM64_ASM
 #       define SP_WORD_SIZE 64
+#   elif defined(ARCH_RISCV64)
+#       define HAVE___UINT128_T
+#       define SP_WORD_SIZE 64
 #   elif defined(ARCH_x86_64) && !defined(FORCE_32BIT)
 #       define SP_WORD_SIZE 64
 #       ifndef NO_ASM
