@@ -557,6 +557,37 @@ ifeq ($(ARCH),RISCV)
   ARCH_FLASH_OFFSET=0x20010000
 endif
 
+## RISCV64
+ifeq ($(ARCH),RISCV64)
+  CROSS_COMPILE?=riscv64-unknown-elf-
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  UPDATE_OBJS:=src/update_ram.o
+  ARCH_FLAGS=-march=rv64imafdc -mabi=lp64d -mcmodel=medany
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV64
+  CFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=$(ARCH_FLAGS)
+
+  # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,--gc-sections
+
+  OBJS+=src/boot_riscv64_start.o src/boot_riscv64.o src/vector_riscv64.o
+  ARCH_FLASH_OFFSET=0x20220000
+
+  OBJS+=src/fdt.o
+
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o
+  endif
+
+  ifneq ($(NO_ASM),1)
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+  endif
+endif
+
 # powerpc
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-

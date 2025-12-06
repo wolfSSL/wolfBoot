@@ -1,0 +1,21 @@
+#
+# HSS Payload Generator - configuration file for wolfBoot on PolarFire SoC
+#
+
+set-name: 'PolarFire-SoC-HSS::wolfBoot'
+hart-entry-points: {
+  u54_1: '0x80200000',
+  u54_2: '0x80200000',
+  u54_3: '0x80200000',
+  u54_4: '0x80200000'
+}
+payloads:
+  wolfboot.elf: {
+    exec-addr: '0x80200000',
+    owner-hart: u54_1,
+    secondary-hart: u54_2,
+    secondary-hart: u54_3,
+    secondary-hart: u54_4,
+    priv-mode: prv_s,
+    ancilliary-data: hal/mpfs.dtb
+  }

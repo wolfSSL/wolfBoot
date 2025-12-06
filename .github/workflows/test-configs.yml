@@ -201,6 +201,13 @@ jobs:
       arch: arm
       config-file: ./config/examples/mcxw.config
 
+  # TODO: polarfire_mpfs250.config requires PolarFire SoC SDK
+  #polarfire_mpfs250_test:
+  #  uses: ./.github/workflows/test-build-mcux-sdk.yml
+  #  with:
+  #    arch: riscv64
+  #    config-file: ./config/examples/polarfire_mpfs250.config
+
   raspi3_test:
     uses: ./.github/workflows/test-build.yml
     with:
