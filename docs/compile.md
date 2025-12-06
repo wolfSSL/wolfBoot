@@ -355,3 +355,82 @@ Available overrides:
 - `WOLFBOOT_LIB_WOLFTPM`: Path to the [wolfTPM](https://github.com/wolfSSL/wolfTPM) library source code
 - `WOLFBOOT_LIB_WOLFPKCS11`: Path to the [wolfPKCS11](https://github.com/wolfssl/wolfpkcs11) library source code
 - `WOLFBOOT_LIB_WOLFHSM`: Path to the [wolfHSM](https://github.com/wolfSSL/wolfHSM) library source code
+
+## Key Generation and Signing
+
+### Default Key Behavior
+
+When building wolfBoot for the first time, the build system automatically generates the cryptographic keys needed for firmware signing and verification.
+
+- **Private Key**: `wolfboot_signing_private_key.der` - Used to sign firmware images
+- **Keystore**: `src/keystore.c` - Contains the public key embedded in the bootloader
+
+The key algorithm is determined by the `SIGN` variable (e.g., `SIGN=ECC256`, `SIGN=RSA2048`).
+
+For most targets, the makefile also builds the wolfBoot test app and signs it with the aforementioned key.
+
+### User-Provided Keys
+
+Instead of auto-generating keys, you can provide your own pre-existing keys for use with the test app by using the following Makefile variables:
+
+- `USER_PRIVATE_KEY`: Path to your private signing key (DER format)
+- `USER_PUBLIC_KEY`: Path to your public key (DER format)
+
+**Usage:**
+
+```sh
+make USER_PRIVATE_KEY=/path/to/my-signing-key.der \
+     USER_PUBLIC_KEY=/path/to/my-public-key.der
+```
+
+#### Requirements
+
+- Both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` must be provided together. You cannot supply one without the other.
+- Keys must be in DER format appropriate for the selected `SIGN` algorithm
+
+When user-provided keys are specified:
+
+1. The build skips auto-generation of `wolfboot_signing_private_key.der`
+2. The keystore (`src/keystore.c`) is generated from your public key
+3. Your private key is used for all signing operations
+
+The `USER_` variables are meant to simplify the wolfBoot "demo" behavior where wolfBoot boots a simple test app.
+
+### User-Provided Certificate Chain
+
+When using certificate chain verification (`CERT_CHAIN_VERIFY=1`), you can also provide your own certificate chain:
+
+- `USER_CERT_CHAIN`: Path to your certificate chain (DER format, wolfHSM order with leaf last)
+
+**Usage:**
+
+```sh
+make CERT_CHAIN_VERIFY=1 \
+     USER_PRIVATE_KEY=/path/to/leaf-signing-key.der \
+     USER_PUBLIC_KEY=/path/to/leaf-public-key.der \
+     USER_CERT_CHAIN=/path/to/my-cert-chain.der
+```
+
+**Requirements:**
+
+- `USER_CERT_CHAIN` requires both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` to be set
+- The user-supplied private and public keys must correspond to the identity of the leaf certificate in the chain
+
+When `CERT_CHAIN_VERIFY=1` is set without `USER_CERT_CHAIN`, the build system auto-generates a dummy 3-tier certificate hierarchy (root CA, intermediate, and leaf) in the `test-dummy-ca/` directory for testing purposes. This is then used to sign the test app.
+
+### Manual Key Generation
+
+As an alternative to the `USER_*` variables, you can manually fulfill the build dependencies:
+
+1. **Generate or import your keystore manually:**
+   ```sh
+   ./tools/keytools/keygen --ecc256 -i my-public-key.der
+   ```
+   This creates `src/keystore.c` from your public key.
+
+2. **Place your signing key at the expected location:**
+   ```sh
+   cp my-private-key.der wolfboot_signing_private_key.der
+   ```
+
+The build system will detect these existing files and skip auto-generation when make is subsequently invoked. This approach is required when more advanced options like multiple public keys in the keystore are required. In these cases, the keystore generation using the keygen tool and image signing via the sign tool must be performed manually.

@@ -14,14 +14,36 @@ jobs:
     strategy:
       matrix:
         config:
-          - name: "Standard wolfHSM"
-            file: "config/examples/sim-wolfHSM-client.config"
-          - name: "wolfHSM ML-DSA"
+          - name: "wolfHSM client ECC"
+            file: "config/examples/sim-wolfHSM-client-ecc.config"
+            needs_posix_server: true
+            posix_server_nvminit: false
+            needs_nvm_image: false
+          - name: "wolfHSM client ML-DSA"
             file: "config/examples/sim-wolfHSM-client-mldsa.config"
-          - name: "wolfHSM cert chain verify"
-            file: "config/examples/sim-wolfHSM-client-certchain.config"
-          - name: "wolfHSM server cert chain verify"
-            file: "config/examples/sim-wolfHSM-server-certchain.config"
+            needs_posix_server: true
+            posix_server_nvminit: false
+            needs_nvm_image: false
+          - name: "wolfHSM client cert chain verify ECC"
+            file: "config/examples/sim-wolfHSM-client-certchain-ecc.config"
+            needs_posix_server: true
+            posix_server_nvminit: true
+            needs_nvm_image: false
+          - name: "wolfHSM client cert chain verify RSA4096"
+            file: "config/examples/sim-wolfHSM-client-certchain-rsa4096.config"
+            needs_posix_server: true
+            posix_server_nvminit: true
+            needs_nvm_image: false
+          - name: "wolfHSM server cert chain verify ECC"
+            file: "config/examples/sim-wolfHSM-server-certchain-ecc.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
+          - name: "wolfHSM server cert chain verify RSA4096"
+            file: "config/examples/sim-wolfHSM-server-certchain-rsa4096.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
 
       fail-fast: false
 
@@ -98,15 +120,15 @@ jobs:
           make clean && make test-sim-internal-flash-with-update
 
       - name: Build example POSIX TCP server
-        if: matrix.config.name != 'wolfHSM server cert chain verify'
+        if: matrix.config.needs_posix_server
         run: cd lib/wolfHSM/examples/posix/wh_posix_server && make WOLFSSL_DIR=../../../../wolfssl
 
       # Start the server in the background
       - name: Run POSIX TCP server
-        if: matrix.config.name != 'wolfHSM server cert chain verify'
+        if: matrix.config.needs_posix_server
         run: |
           cd lib/wolfHSM/examples/posix/wh_posix_server
-          if [ "${{ matrix.config.name }}" = "wolfHSM cert chain verify" ]; then
+          if [ "${{ matrix.config.posix_server_nvminit }}" = "true" ]; then
             tmpfile=$(mktemp)
             echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
             ./Build/wh_posix_server.elf --type tcp --nvminit $tmpfile &
@@ -120,7 +142,7 @@ jobs:
       # For testing the wolfHSM server cert chain verify feature, we need to create an NVM image containing our root CA that
       # the internal wolfHSM server can load.
       - name: Create NVM image for wolfHSM server cert chain verify
-        if: matrix.config.name == 'wolfHSM server cert chain verify'
+        if: matrix.config.needs_nvm_image
         run: |
           make -C lib/wolfHSM/tools/whnvmtool
           tmpfile=$(mktemp)
@@ -134,6 +156,6 @@ jobs:
 
       # Kill the server if it is still running
       - name: Kill POSIX TCP server
-        if: always() && matrix.config.name != 'wolfHSM server cert chain verify'
+        if: always() && matrix.config.needs_posix_server
         run: |
           kill $TCP_SERVER_PID || true

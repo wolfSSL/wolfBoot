@@ -40,16 +40,61 @@ ifneq ($(TARGET),library)
 	OBJS+=./hal/$(TARGET).o
 endif
 
+# User-provided key configuration
+# - USER_PRIVATE_KEY: Path to user's private key (DER format)
+# - USER_PUBLIC_KEY: Path to user's public key (DER format)
+# - USER_CERT_CHAIN: Path to user's certificate chain (DER format)
+# All must be provided together, or none at all
+
+# Validate USER_PRIVATE_KEY and USER_PUBLIC_KEY are used together
+ifneq ($(USER_PRIVATE_KEY),)
+  ifeq ($(USER_PUBLIC_KEY),)
+    $(error USER_PRIVATE_KEY requires USER_PUBLIC_KEY to also be set)
+  endif
+  ifeq ($(wildcard $(USER_PRIVATE_KEY)),)
+    $(error USER_PRIVATE_KEY file not found: $(USER_PRIVATE_KEY))
+  endif
+endif
+
+ifneq ($(USER_PUBLIC_KEY),)
+  ifeq ($(USER_PRIVATE_KEY),)
+    $(error USER_PUBLIC_KEY requires USER_PRIVATE_KEY to also be set)
+  endif
+  ifeq ($(wildcard $(USER_PUBLIC_KEY)),)
+    $(error USER_PUBLIC_KEY file not found: $(USER_PUBLIC_KEY))
+  endif
+endif
+
+# Validate USER_CERT_CHAIN requires USER_PRIVATE_KEY and USER_PUBLIC_KEY
+ifneq ($(USER_CERT_CHAIN),)
+  ifeq ($(USER_PRIVATE_KEY),)
+    $(error USER_CERT_CHAIN requires USER_PRIVATE_KEY to also be set)
+  endif
+  ifeq ($(USER_PUBLIC_KEY),)
+    $(error USER_CERT_CHAIN requires USER_PUBLIC_KEY to also be set)
+  endif
+  ifeq ($(wildcard $(USER_CERT_CHAIN)),)
+    $(error USER_CERT_CHAIN file not found: $(USER_CERT_CHAIN))
+  endif
+endif
+
 ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
 else
-  # Key selection logic:
-  # - Without CERT_CHAIN_GEN: Single key (wolfboot_signing_private_key.der) signs everything
-  # - With CERT_CHAIN_GEN: Generate cert chain, use leaf key (test-dummy-ca/leaf-prvkey.der) for signing
-  ifneq ($(CERT_CHAIN_GEN),)
-    PRIVATE_KEY=test-dummy-ca/leaf-prvkey.der
+  # Private Key selection logic:
+  # 1. User-provided private keys take precedence (USER_PRIVATE_KEY)
+  # 2. Otherwise, if CERT_CHAIN_VERIFY, use generated dummy cert chain leaf key
+  # 3. Otherwise use standard generated private key
+  ifneq ($(USER_PRIVATE_KEY),)
+    PRIVATE_KEY=$(USER_PRIVATE_KEY)
   else
-    PRIVATE_KEY=wolfboot_signing_private_key.der
+    ifneq ($(CERT_CHAIN_VERIFY),)
+      # Auto-generate cert chain mode - use leaf key
+      PRIVATE_KEY?=test-dummy-ca/leaf-prvkey.der
+    else
+      # No cert chain verification - standard single key mode
+      PRIVATE_KEY?=wolfboot_signing_private_key.der
+    endif
   endif
   ifeq ($(FLASH_OTP_KEYSTORE),1)
     OBJS+=./src/flash_otp_keystore.o
@@ -268,20 +313,30 @@ hal/$(TARGET).o:
 
 keytools_check: keytools
 
-# Generate the initial signing key
-# - Always creates wolfboot_signing_private_key.der
-# - If CERT_CHAIN_GEN is set, also generates cert chain with leaf key
+# Generate the initial signing key (only if not using user-provided keys)
+# - Creates wolfboot_signing_private_key.der when USER_PRIVATE_KEY is not set
+# - If CERT_CHAIN_VERIFY is enabled and USER_CERT_CHAIN not provided, also generates cert chain with leaf key
 wolfboot_signing_private_key.der:
+ifeq ($(USER_PRIVATE_KEY),)
 	$(Q)$(MAKE) keytools_check
 	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g wolfboot_signing_private_key.der) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
-	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(CERT_CHAIN_GEN)" = "") || (tools/scripts/sim-gen-dummy-chain.sh --algo $(CERT_CHAIN_GEN_ALGO) --leaf wolfboot_signing_private_key.der)
+	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(USER_CERT_CHAIN)" != "") || (tools/scripts/sim-gen-dummy-chain.sh --algo $(CERT_CHAIN_GEN_ALGO) --leaf wolfboot_signing_private_key.der)
+else
+	@echo "Using user-provided private key: $(USER_PRIVATE_KEY)"
+endif
 
-# CERT_CHAIN_GEN only: Ensure leaf key exists after cert chain generation
-ifneq ($(CERT_CHAIN_GEN),)
+# Auto-generate cert chain mode: Ensure leaf key exists after cert chain generation
+# Only applies when CERT_CHAIN_VERIFY is enabled and USER_CERT_CHAIN not provided
+# Skip this when using user-provided keys
+ifeq ($(USER_PRIVATE_KEY),)
+ifneq ($(CERT_CHAIN_VERIFY),)
+ifeq ($(USER_CERT_CHAIN),)
 $(PRIVATE_KEY): wolfboot_signing_private_key.der
 	@test -f $(PRIVATE_KEY) || (echo "Error: $(PRIVATE_KEY) not found" && exit 1)
+endif
+endif
 endif
 
 $(SECONDARY_PRIVATE_KEY): $(PRIVATE_KEY) keystore.der
@@ -435,7 +490,15 @@ srec: wolfboot.srec
 	@echo "\t[ELF2SREC] $@"
 	@$(OBJCOPY) -O srec $^ $@
 
+# Keystore generation: use user-provided public key if available
+ifneq ($(USER_PUBLIC_KEY),)
+src/keystore.c: $(USER_PUBLIC_KEY)
+	@echo "Generating keystore from user-provided public key: $(USER_PUBLIC_KEY)"
+	$(Q)$(MAKE) keytools_check
+	$(Q)$(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) --force -i $(USER_PUBLIC_KEY)
+else
 src/keystore.c: $(PRIVATE_KEY)
+endif
 
 flash_keystore: src/flash_otp_keystore.o
 
@@ -479,7 +542,7 @@ utilsclean: clean
 
 keysclean: clean
 	$(Q)rm -f *.pem *.der tags ./src/*_pub_key.c ./src/keystore.c include/target.h
-	$(Q)(test "$(CERT_CHAIN_GEN)" = "") || rm -rf test-dummy-ca || true
+	$(Q)(test "$(CERT_CHAIN_VERIFY)" = "" || test "$(USER_CERT_CHAIN)" != "") || rm -rf test-dummy-ca || true
 
 distclean: clean keysclean utilsclean
 	$(Q)rm -f *.bin *.elf

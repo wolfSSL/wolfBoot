@@ -221,3 +221,13 @@ Returns the permissions mask, as a 32-bit word, for the public key stored in the
 wolfBoot supports certain platforms that contain connected HSMs (Hardware Security Modules) that can provide cryptographic services using keys that are not stored in the device NVM or readable by wolfBoot, for example, wolfHSM. In these scenarios, wolfBoot key tools should be used to generate the keys, which can then be manually loaded into the HSM (see [--exportpubkey](#exporting-the-public-key-to-a-file)). At runtime, wolfBoot will still use the keystore to obtain information about the public keys, specifically the size of the key and the key type, but does not need access to the actual key material.
 
 To support this mode of operation, the `keygen` tool supports the `--nolocalkeys` option, which instructs the tool to generate a keystore entry with a zeroed key material. It still generates the `.der` files for private and public keys, so the wolfBoot key tools can sign images, but the `keystore.c` file that is linked into wolfBoot will contain all zeros in the `pubkey` field. Because the key material isn't present in the keystore, the keypair used to sign the image and stored on the HSM for verification can be updated in the field without needing to rebuild wolfBoot against a new `keystore.c`, as long as the signature algorithm and key size does not change. Most targets that use this option will automatically add it to the key generation options or explicitly mention this step in the build documentation.
+
+## Using User-Provided Keys with the Keystore and Build System
+
+By default, when running `make` for the first time, wolfBoot automatically generates:
+- A signing keypair at `wolfboot_signing_private_key.der`
+- The keystore module at `src/keystore.c` containing the corresponding public key
+
+This default behavior can be overridden using the `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` Makefile variables, allowing you to use externally-managed keys for building the test application and keystore.
+
+See [compile.md](./compile.md#key-generation-and-signing) for more information
