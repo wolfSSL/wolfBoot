@@ -31,6 +31,12 @@ extern "C" {
 
 #include <stdint.h>
 #ifdef __WOLFBOOT
+/* Either hand-craft a device target.h file in [WOLFBOOT_ROOT]/include
+ * or let build process auto-create one from .config file or cmake presets.
+ *
+ * See template: [WOLFBOOT_ROOT]/include/target.h.in
+ * or unit test: [WOLFBOOT_ROOT]/tools/unit-tests/target.h
+ */
 #include "target.h"
 #endif
 #include "wolfboot/version.h"
@@ -93,8 +99,49 @@ extern "C" {
 
 
 #ifndef IMAGE_HEADER_SIZE
-#  define IMAGE_HEADER_SIZE 256
-#endif
+/* Largest cases first */
+#   if defined(WOLFBOOT_SIGN_RSA4096)
+#       define IMAGE_HEADER_SIZE 1024
+
+    /* RSA3072 + strong hash */
+#   elif (defined(WOLFBOOT_SIGN_RSA3072) && \
+          (defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA3_384)))
+#       define IMAGE_HEADER_SIZE 1024
+
+    /* RSA2048 + SHA256 */
+#   elif defined(WOLFBOOT_SIGN_RSA2048) && defined(WOLFBOOT_HASH_SHA256)
+#       define IMAGE_HEADER_SIZE 512
+
+    /* ECC384 requires 512 with SHA256 */
+#   elif defined(WOLFBOOT_SIGN_ECC384) && defined(WOLFBOOT_HASH_SHA256)
+#       define IMAGE_HEADER_SIZE 512
+
+    /* ED25519 + any 384-bit or SHA3 hash */
+#   elif defined(WOLFBOOT_SIGN_ED25519) && \
+        (defined(WOLFBOOT_HASH_SHA384) || \
+         defined(WOLFBOOT_HASH_SHA3)   || \
+         defined(WOLFBOOT_HASH_SHA3_384))
+#       define IMAGE_HEADER_SIZE 256
+
+    /* ECC256 + any 384-bit hash */
+#   elif defined(WOLFBOOT_SIGN_ECC256) && \
+        (defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA3_384))
+#       define IMAGE_HEADER_SIZE 256
+
+    /* Secondary 512-byte fallbacks */
+#   elif defined(WOLFBOOT_SIGN_RSA3072) || \
+          defined(WOLFBOOT_SIGN_ECC521) || \
+          defined(WOLFBOOT_SIGN_ED448)  || \
+          defined(WOLFBOOT_HASH_SHA384) || \
+          defined(WOLFBOOT_HASH_SHA3_384)
+#       define IMAGE_HEADER_SIZE 512
+
+    /* Default header size */
+#   else
+#       define IMAGE_HEADER_SIZE 256
+#   endif
+
+#endif /* IMAGE_HEADER_SIZE */
 #define IMAGE_HEADER_OFFSET (2 * sizeof(uint32_t))
 
 #ifndef FLASHBUFFER_SIZE
@@ -230,6 +277,13 @@ extern "C" {
 
 /* Hashing configuration */
 #if defined(WOLFBOOT_HASH_SHA256)
+#   ifdef WOLFBOOT_HASH_SHA384
+#       error "Found WOLFBOOT_HASH_SHA384 with WOLFBOOT_HASH_SHA256. Pick one"
+#   endif
+#   ifdef WOLFBOOT_HASH_SHA3_384
+#       error "Found WOLFBOOT_HASH_SHA3_384 with WOLFBOOT_HASH_SHA256. Pick one"
+#   endif
+
     #include "wolfssl/wolfcrypt/sha256.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
@@ -245,6 +299,13 @@ extern "C" {
     typedef wc_Sha256 wolfBoot_hash_t;
 #   define HDR_HASH HDR_SHA256
 #elif defined(WOLFBOOT_HASH_SHA384)
+#   ifdef WOLFBOOT_HASH_SHA256
+#       error "Found WOLFBOOT_HASH_SHA256 with WOLFBOOT_HASH_SHA384. Pick one"
+#   endif
+#   ifdef WOLFBOOT_HASH_SHA3_384
+#       error "Found WOLFBOOT_HASH_SHA3_384 with WOLFBOOT_HASH_SHA384. Pick one"
+#   endif
+
     #include "wolfssl/wolfcrypt/sha512.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
@@ -260,6 +321,13 @@ extern "C" {
     typedef wc_Sha384 wolfBoot_hash_t;
 #   define HDR_HASH HDR_SHA384
 #elif defined(WOLFBOOT_HASH_SHA3_384)
+#   ifdef WOLFBOOT_HASH_SHA256
+#       error "Found WOLFBOOT_HASH_SHA256 with WOLFBOOT_HASH_SHA3_384. Pick one"
+#   endif
+#   ifdef WOLFBOOT_HASH_SHA384
+#       error "Found WOLFBOOT_HASH_SHA384 with WOLFBOOT_HASH_SHA3_384. Pick one"
+#   endif
+
     #include "wolfssl/wolfcrypt/sha3.h"
 #   ifndef WOLFBOOT_SHA_BLOCK_SIZE
 #     define WOLFBOOT_SHA_BLOCK_SIZE (256)
