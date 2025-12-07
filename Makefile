@@ -78,6 +78,29 @@ ifneq ($(USER_CERT_CHAIN),)
   endif
 endif
 
+# Validate USER_NVM_INIT if provided
+# - USER_NVM_INIT: Path to user's NVM init file for wolfHSM NVM image generation
+ifneq ($(USER_NVM_INIT),)
+  ifeq ($(wildcard $(USER_NVM_INIT)),)
+    $(error USER_NVM_INIT file not found: $(USER_NVM_INIT))
+  endif
+endif
+
+# Helper variable to detect if user-provided keys are being used
+# This is used to skip auto-generated NVM images when users provide their own keys
+ifneq ($(USER_PRIVATE_KEY),)
+  _USER_PROVIDED_KEYS:=1
+else ifneq ($(USER_PUBLIC_KEY),)
+  _USER_PROVIDED_KEYS:=1
+else ifneq ($(USER_CERT_CHAIN),)
+  _USER_PROVIDED_KEYS:=1
+endif
+
+# USER_NVM_INIT overrides default NVM_CONFIG when provided
+ifneq ($(USER_NVM_INIT),)
+  NVM_CONFIG:=$(USER_NVM_INIT)
+endif
+
 ifeq ($(SIGN),NONE)
   PRIVATE_KEY=
 else
@@ -375,6 +398,13 @@ endif
 ifeq ($(WOLFHSM_SERVER),1)
     _DO_WH_NVMTOOL:=1
 endif
+# Disable NVM image generation if user-provided keys without explicit USER_NVM_INIT
+# (providing USER_NVM_INIT allows users to supply keys and still generate a custom NVM image)
+ifeq ($(_USER_PROVIDED_KEYS),1)
+  ifeq ($(USER_NVM_INIT),)
+    _DO_WH_NVMTOOL:=
+  endif
+endif
 ifeq ($(_DO_WH_NVMTOOL),1)
 whnvmtool:
 	@echo "Building wolfHSM NVM tool"
@@ -418,9 +448,7 @@ internal_flash.dd: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-a
 	$(Q)dd if=/dev/zero bs=1 count=$$(($(WOLFBOOT_SECTOR_SIZE))) > /tmp/swap
 	make assemble_internal_flash.dd
 
-ifeq ($(WOLFHSM_CLIENT),1)
-factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin nvm-image
-else ifeq ($(WOLFHSM_SERVER),1)
+ifeq ($(_DO_WH_NVMTOOL),1)
 factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin nvm-image
 else
 factory.bin: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
