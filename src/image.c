@@ -23,9 +23,6 @@
  * @brief This file contains functions related to image handling and
  * verification.
  */
-#ifndef IMAGE_H_
-#define IMAGE_H_
-
 #ifdef UNIT_TEST
 #include <stdio.h>
 #endif
@@ -2228,5 +2225,3 @@ int keyslot_id_by_sha(const uint8_t *hint)
     return -1;
 }
 #endif /* !WOLFBOOT_NO_SIGN && !WOLFBOOT_RENESAS_SCEPROTECT */
-
-#endif /* IMAGE_H_ */
