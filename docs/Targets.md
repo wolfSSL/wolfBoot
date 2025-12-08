@@ -12,6 +12,7 @@ This README describes configuration of supported targets.
 * [Kontron VX3060-S2](#kontron-vx3060-s2)
 * [Microchip PIC32CK](#microchip-pic32ck)
 * [Microchip PIC32CZ](#microchip-pic32cz)
+* [Microchip PolarFire SoC](#microchip-polarfire-soc)
 * [Microchip SAMA5D3](#microchip-sama5d3)
 * [Microchip SAME51](#microchip-same51)
 * [Nordic nRF52840](#nordic-nrf52840)
@@ -776,6 +777,110 @@ In another terminal:
 riscv64-unknown-elf-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
 add-symbol-file test-app/image.elf 0x20020100
 ```
+
+
+## Microchip PolarFire SoC
+
+The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× E51 monitor core and 4× U54 application cores) and FPGA fabric. Tested with MPFS250.
+
+### Features
+* RISC-V 64-bit architecture (rv64imac)
+* Five-core CPU: 1× E51 monitor + 4× U54 application cores
+* Integrated DDR3/4, LPDDR3/4 controller and PHY
+* PCIe Gen2, USB 2.0, and Gigabit Ethernet interfaces
+* Secure boot capabilities
+* Low power consumption
+* External flash support
+
+### Building PolarFire SoC
+
+All build settings come from .config file. For this platform use `TARGET=mpfs250` and `ARCH=RISCV64`.
+
+See example configuration at `config/examples/polarfire_mpfs250.config`.
+
+```sh
+cp config/examples/polarfire_mpfs250.config .config
+make wolfboot.elf
+```
+
+To assemble this as a flashable image you need the 0x100 byte HART header added:
+
+```sh
+git clone https://github.com/polarfire-soc/hart-software-services.git
+cd hart-software-services
+cd tools/hss-payload-generator
+make
+# install tool
+sudo cp hss-payload-generator /usr/local/bin/
+```
+
+Use this command to assemble a bootable wolfboot image:
+
+```sh
+hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin
+```
+
+Any customizations to the Device Tree can be made in mpfs.dts and it can be recompiled using: `dtc -I dts -O dtb mpfs.dts -o mpfs.dtb`
+
+
+Example one-shot command:
+
+```sh
+cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin && file wolfboot.bin && ls -la wolfboot.bin
+```
+
+### Flashing PolarFire SoC
+
+
+The HSS MMC boot source looks for GPT with GUID "21686148-6449-6E6F-744E-656564454649" or sector "0" if no GPT found. That GUID is the default "BIOS" boot partition.
+
+The resulting image from `hss-payload-generator` can be directly placed into GPT BIOS partition. The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a USB device. You can then use "dd" to copy the boot image to the BOOT partition 2. Example:
+
+```
+sudo dd if=wolfboot.bin of=/dev/sde2 bs=1024
+```
+
+Flashing to eNVM:
+
+The boot rom expects a 0x100 byte secure boot header added. It also requires the .ld is offset by 0x100 to leave room for this. The mpfsBootmodeProgrammer adds 0x100 of meta information for secure boot.
+
+```sh
+$SC_INSTALL_DIR/eclipse/jre/bin/java -jar \
+    $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar \
+    --bootmode 1 --die MPFS250T --package FCVG484 --workdir $PWD wolfboot.elf
+```
+Note: wolfBoot does not support running from eNVM in machine mode yet.
+
+### Debugging PolarFire Soc
+
+Start GDB server:
+
+```sh
+$SC_INSTALL_DIR/openocd/bin/openocd --command "set DEVICE MPFS" --file board/microsemi-riscv.cfg
+```
+
+Start GDB Client: `riscv64-unknown-elf-gdb`
+
+```
+file wolfboot.elf
+tar rem:3333
+add-symbol-file ../hart-software-services/build/hss-l2scratch.elf
+set pagination off
+foc c
+
+set $target_riscv=1
+set mem inaccessible-by-default off
+set architecture riscv:rv64
+#load wolfboot.elf
+#thread apply 2 set $pc=_reset
+#thread apply all set $pc=_start
+```
+
+### PolarFire TODO
+
+1) Add support for full HSS replacement using wolfboot.
+2) Add support for eMMC and QSPI NOR flash
+
 
 
 ## STM32F7

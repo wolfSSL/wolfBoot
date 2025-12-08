@@ -22,7 +22,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#if defined(MMU) && !defined(BUILD_LOADER_STAGE1)
+#if (defined(MMU) || defined(WOLFBOOT_FDT)) && !defined(BUILD_LOADER_STAGE1)
 
 #include "fdt.h"
 #include "hal.h"
@@ -851,4 +851,4 @@ void* fit_load_image(void* fdt, const char* image, int* lenp)
 
 }
 
-#endif /* MMU && !BUILD_LOADER_STAGE1 */
+#endif /* (MMU || WOLFBOOT_FDT) && !BUILD_LOADER_STAGE1 */

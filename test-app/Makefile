@@ -467,6 +467,11 @@ ifeq ($(TARGET),hifive1)
   APP_OBJS+=hifive1_write_page.o
 endif
 
+ifeq ($(TARGET),mpfs250)
+  LSCRIPT_TEMPLATE:=RISCV64-mpfs250.ld
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
+endif
+
 # $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
 
 ifeq ($(TARGET),psoc6)

@@ -1,4 +1,4 @@
-/* gpt.c
+/* disk.c
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *
@@ -20,82 +20,26 @@
  *
  */
 /**
- * @file gpt.c
- * @brief GPT (GUID Partition Table) driver implementation.
+ * @file x86/disk.c
+ * @brief x86 GPT disk driver implementation.
  *
- * This file contains the implementation of the GPT driver used for interacting
- * with GPT partitioned disks. It provides functions for disk initialization,
- * partition reading, and writing.
+ * This file contains the x86-specific GPT disk driver that uses ATA for
+ * disk I/O operations. It uses the generic GPT parsing functions from
+ * src/gpt.c for partition table parsing.
  */
-#ifndef GPT_C
-#define GPT_C
+#ifndef X86_DISK_C
+#define X86_DISK_C
+
 #include <stdint.h>
+#include <string.h>
+#include <gpt.h>
 #include <x86/common.h>
 #include <x86/ahci.h>
 #include <x86/ata.h>
 #include <printf.h>
-#include <string.h>
-#include <inttypes.h>
 
 #define MAX_PARTITIONS 16
 #define MAX_DISKS      4
-#define SECTOR_SIZE    0x200
-#define GPT_OFFSET     0x200
-#define GPT_SIGNATURE  0x5452415020494645ULL /* "EFI PART" */
-
-#define PTYPE_GPT         0xEE
-#define P_ENTRY_START     0x01BE
-#define P_BOOTSIG_OFFSET  0x01FE
-#define GPT_PART_NAME_SIZE (36)
-
-/**
- * @brief This packed structure defines the layout of an MBR partition table entry
- * used to identify GPT partitions.
- */
-struct __attribute__((packed)) mbr_ptable_entry {
-    uint8_t stat;
-    uint8_t chs_first[3];
-    uint8_t ptype;
-    uint8_t chs_last[3];
-    uint32_t lba_first;
-    uint32_t lba_size;
-};
-
-/**
- * @brief Structure representing a GPT (GUID Partition Table) header.
- */
-struct __attribute__((packed)) guid_ptable
-{
-    uint64_t signature;
-    uint32_t revision;
-    uint32_t hdr_size;
-    uint32_t hdr_crc32;
-    uint32_t res0;
-    uint64_t main_lba;
-    uint64_t backup_lba;
-    uint64_t first_usable;
-    uint64_t last_usable;
-    uint64_t disk_guid[2];
-    uint64_t start_array;
-    uint32_t n_part;
-    uint32_t array_sz;
-    uint32_t part_crc;
-    uint8_t  res1[SECTOR_SIZE - 0x5C];
-};
-
-/**
- * @brief This packed structure defines the layout of a GPT partition entry
- * used to describe individual partitions on the disk.
- */
-struct __attribute__((packed)) guid_part_array
-{
-    uint64_t type[2];
-    uint64_t uuid[2];
-    uint64_t first;
-    uint64_t last;
-    uint64_t flags;
-    uint16_t name[GPT_PART_NAME_SIZE];
-};
 
 /**
  * @brief This structure holds information about a disk partition, including
@@ -128,30 +72,6 @@ struct disk_drive {
  */
 static struct disk_drive Drives[MAX_DISKS] = {0};
 
-static int disk_u16_ascii_eq(const uint16_t *utf16, const char *ascii)
-{
-    unsigned int utf16_idx;
-    unsigned int i;
-
-    if (strlen(ascii) > GPT_PART_NAME_SIZE)
-        return 0;
-
-    utf16_idx = 0;
-    /* skip BOM if present */
-    if (utf16[utf16_idx] == 0xfeff)
-        utf16_idx = 1;
-    for (i = 0; i < strlen(ascii); i++, utf16_idx++) {
-        /* non-ascii character*/
-        if (utf16[utf16_idx] != (uint16_t)ascii[i])
-            return 0;
-    }
-
-    if (utf16_idx < GPT_PART_NAME_SIZE && utf16[utf16_idx] != 0x0)
-        return 0;
-
-    return 1;
-}
-
 /**
  * @brief Opens a disk drive and initializes its partitions.
  *
@@ -169,11 +89,9 @@ int disk_open(int drv)
     int r;
     uint32_t i;
     uint32_t n_parts = 0;
-    uint64_t signature = GPT_SIGNATURE;
+    uint32_t gpt_lba = 0;
     struct guid_ptable ptable;
-    struct mbr_ptable_entry pte;
-    uint16_t boot_signature;
-    int gpt_found = 0;
+    uint8_t sector[GPT_SECTOR_SIZE];
 
     if ((drv < 0) || (drv > MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
@@ -181,85 +99,100 @@ int disk_open(int drv)
     }
 
     wolfBoot_printf("Reading MBR...\r\n");
-    for (i = 0; i < 4; i++) {
-        r = ata_drive_read(drv, P_ENTRY_START + 0x10 * i, sizeof(struct mbr_ptable_entry),
-                (void *)&pte);
-        if ((r > 0) && (pte.ptype == PTYPE_GPT)) {
-            wolfBoot_printf("Found GPT PTE at sector %u\r\n", pte.lba_first);
-            gpt_found = 1;
-            break;
-        }
+
+    /* Read MBR sector */
+    r = ata_drive_read(drv, 0, GPT_SECTOR_SIZE, sector);
+    if (r <= 0) {
+        wolfBoot_printf("Failed to read MBR\r\n");
+        return -1;
     }
-    if (!gpt_found) {
+
+    /* Check for protective MBR and get GPT header location */
+    if (gpt_check_mbr_protective(sector, &gpt_lba) != 0) {
         wolfBoot_printf("Cannot find valid partition table entry for GPT\r\n");
         return -1;
     }
-
-
-    r = ata_drive_read(drv, P_BOOTSIG_OFFSET, sizeof(uint16_t), (void *)&boot_signature);
-    if ((r > 0) && (boot_signature == 0xAA55)) {
-        wolfBoot_printf("Found valid boot signature in MBR\r\n");
-    } else {
-        wolfBoot_printf("FATAL: Invalid boot signature in MBR!\r\n");
-        return -1;
-    }
+    wolfBoot_printf("Found GPT PTE at sector %u\r\n", gpt_lba);
+    wolfBoot_printf("Found valid boot signature in MBR\r\n");
 
     Drives[drv].is_open = 1;
     Drives[drv].drv = drv;
     Drives[drv].n_parts = 0;
-    r = ata_drive_read(drv, SECTOR_SIZE * pte.lba_first, SECTOR_SIZE,
-            (void *)&ptable);
-    if (r > 0) {
-        if (ptable.signature == signature) {
-            wolfBoot_printf("Valid GPT partition table\r\n");
-            wolfBoot_printf("Current LBA: 0x%llx \r\n", ptable.main_lba);
-            wolfBoot_printf("Backup LBA: 0x%llx \r\n", ptable.backup_lba);
-            wolfBoot_printf("Max number of partitions: %d\r\n", ptable.n_part);
-            n_parts = ptable.n_part;
-            if (ptable.n_part > MAX_PARTITIONS) {
-                n_parts = MAX_PARTITIONS;
-                wolfBoot_printf("Software limited: only allowing up to %d partitions per disk.\r\n", n_parts);
-            }
-            wolfBoot_printf("Disk size: %d\r\n", (1 + ptable.last_usable - ptable.first_usable) * SECTOR_SIZE);
-        } else {
-            wolfBoot_printf("Invalid partition table\r\n");
-            return -1;
-        }
-    } else {
+
+    /* Read GPT header */
+    r = ata_drive_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
+    if (r <= 0) {
         wolfBoot_printf("ATA: Read failed\r\n");
         return -1;
     }
+
+    /* Parse and validate GPT header */
+    if (gpt_parse_header(sector, &ptable) != 0) {
+        wolfBoot_printf("Invalid partition table\r\n");
+        return -1;
+    }
+
+    wolfBoot_printf("Valid GPT partition table\r\n");
+    wolfBoot_printf("Current LBA: 0x%llx \r\n", ptable.main_lba);
+    wolfBoot_printf("Backup LBA: 0x%llx \r\n", ptable.backup_lba);
+    wolfBoot_printf("Max number of partitions: %d\r\n", ptable.n_part);
+
+    n_parts = ptable.n_part;
+    if (ptable.n_part > MAX_PARTITIONS) {
+        n_parts = MAX_PARTITIONS;
+        wolfBoot_printf("Software limited: only allowing up to %d partitions "
+                        "per disk.\r\n", n_parts);
+    }
+    wolfBoot_printf("Disk size: %d\r\n",
+        (1 + ptable.last_usable - ptable.first_usable) * GPT_SECTOR_SIZE);
+
+    /* Read and parse partition entries */
     for (i = 0; i < n_parts; i++) {
-        struct guid_part_array pa;
-        uint64_t address = ptable.start_array * SECTOR_SIZE +
+        struct gpt_part_info part_info;
+        uint64_t address = ptable.start_array * GPT_SECTOR_SIZE +
             i * ptable.array_sz;
-        r = ata_drive_read(drv, address, ptable.array_sz, (void *)&pa);
-        if (r < 0)
+        uint8_t entry_buf[256]; /* Max partition entry size */
+
+        if (ptable.array_sz > sizeof(entry_buf)) {
+            wolfBoot_printf("Partition entry size too large\r\n");
+            break;
+        }
+
+        r = ata_drive_read(drv, address, ptable.array_sz, entry_buf);
+        if (r < 0) {
             return -1;
-        if (pa.type[0] != 0 || pa.type[1] != 0) {
+        }
+
+        /* Parse partition entry using generic function */
+        if (gpt_parse_partition(entry_buf, ptable.array_sz, &part_info) == 0) {
             uint64_t size;
             uint32_t part_count;
-            if (pa.first > pa.last) {
-                wolfBoot_printf("Bad geometry for partition %d\r\n", i);
-                break;
-            }
-            size = (1 + pa.last - pa.first) * SECTOR_SIZE;
+
+            size = part_info.end - part_info.start + 1;
             part_count = Drives[drv].n_parts;
             Drives[drv].n_parts++;
             Drives[drv].part[part_count].drv = drv;
-            Drives[drv].part[part_count].start = pa.first * SECTOR_SIZE;
-            Drives[drv].part[part_count].end = (pa.last * SECTOR_SIZE - 1);
-            memcpy(&Drives[drv].part[part_count].name, (uint8_t*)&pa.name, sizeof(pa.name));
+            Drives[drv].part[part_count].start = part_info.start;
+            Drives[drv].part[part_count].end = part_info.end;
+            memcpy(&Drives[drv].part[part_count].name, part_info.name,
+                   sizeof(part_info.name));
+
             wolfBoot_printf("disk%d.p%u ", drv, part_count);
-            wolfBoot_printf("(%x_%xh", (uint32_t)(size>>32), (uint32_t)size);
-            wolfBoot_printf("@ %x_%x)\r\n", (uint32_t)((pa.first * SECTOR_SIZE) >> 32),
-                            (uint32_t)((pa.first * SECTOR_SIZE)));
-        } else
+            wolfBoot_printf("(%x_%xh", (uint32_t)(size >> 32), (uint32_t)size);
+            wolfBoot_printf("@ %x_%x)\r\n",
+                            (uint32_t)(part_info.start >> 32),
+                            (uint32_t)(part_info.start));
+        } else {
+            /* Empty partition entry - end of used entries */
             break;
+        }
     }
-    wolfBoot_printf("Total partitions on disk%u: %u\r\n", drv, Drives[drv].n_parts);
+
+    wolfBoot_printf("Total partitions on disk%u: %u\r\n", drv,
+                    Drives[drv].n_parts);
     return Drives[drv].n_parts;
 }
+
 /**
  * @brief Opens a disk partition and returns a pointer to its structure.
  *
@@ -358,6 +291,16 @@ int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
     return ret;
 }
 
+/**
+ * @brief Find a partition by its label.
+ *
+ * Searches for a partition with the specified label on the given drive.
+ *
+ * @param[in] drv The drive number to search (0 to `MAX_DISKS - 1`).
+ * @param[in] label The ASCII label to search for.
+ *
+ * @return The partition number if found, or -1 if not found.
+ */
 int disk_find_partition_by_label(int drv, const char *label)
 {
     struct disk_partition *p;
@@ -371,9 +314,11 @@ int disk_find_partition_by_label(int drv, const char *label)
 
     for (i = 0; i < Drives[drv].n_parts; i++) {
         p = open_part(drv, i);
-        if (disk_u16_ascii_eq(p->name, label) == 1)
+        if (gpt_part_name_eq(p->name, label) == 1)
             return i;
     }
     return -1;
 }
-#endif /* GPT_C */
+
+#endif /* X86_DISK_C */
+
