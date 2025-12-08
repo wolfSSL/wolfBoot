@@ -26,6 +26,7 @@ jobs:
           submodules: true
 
       - uses: actions/checkout@v4
+        if: ${{ inputs.arch == 'riscv' }}
         with:
           repository: sifive/freedom-e-sdk
           path: freedom-e-sdk
@@ -79,12 +80,21 @@ jobs:
       - name: Update repository
         run: sudo apt-get update -o Acquire::Retries=3
 
-      - name: Download and install SiFive RISC-V toolchain
+      - name: Download and install RISC-V toolchain
+        if: ${{ inputs.arch == 'riscv' }}
         run: |
-          # Download SiFive prebuilt toolchain with newlib
-          wget -q https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
-          tar xzf riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
-          echo "$GITHUB_WORKSPACE/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14/bin" >> $GITHUB_PATH
+          # Download latest prebuilt RISC-V toolchains
+          wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv32-elf-ubuntu-24.04-gcc.tar.xz
+          tar -xf riscv32-elf-ubuntu-24.04-gcc.tar.xz
+          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
+
+      - name: Download and install RISC-V toolchain
+        if: ${{ inputs.arch == 'riscv64' }}
+        run: |
+          # Download latest prebuilt RISC-V toolchains
+          wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv64-elf-ubuntu-24.04-gcc.tar.xz
+          tar -xf riscv64-elf-ubuntu-24.04-gcc.tar.xz
+          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
 
       - name: make clean
         run: |
@@ -98,7 +108,12 @@ jobs:
         run: |
           make -C tools/keytools && make -C tools/bin-assemble
 
-      - name: Build wolfboot
+      - name: Build wolfboot (riscv32)
+        if: ${{ inputs.arch == 'riscv' }}
         run: |
-          make FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk CROSS_COMPILE=riscv64-unknown-elf- ${{inputs.make-args}}
+          make CROSS_COMPILE=riscv32-unknown-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
 
+      - name: Build wolfboot (riscv64))
+        if: ${{ inputs.arch == 'riscv64' }}
+        run: |
+          make CROSS_COMPILE=riscv64-unknown-elf- ${{inputs.make-args}}

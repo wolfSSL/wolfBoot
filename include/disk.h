@@ -1,4 +1,4 @@
-/* gpt.h
+/* disk.h
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *
@@ -19,10 +19,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef GPT_H
-#define GPT_H
+#ifndef _WOLFBOOT_DISK_H
+#define _WOLFBOOT_DISK_H
+
+#include <stdint.h>
+
 int disk_open(int drv);
 int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf);
 int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf);
 int disk_find_partition_by_label(int drv, const char *label);
-#endif
+
+#endif /* _WOLFBOOT_DISK_H */
+

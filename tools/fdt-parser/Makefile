@@ -4,7 +4,7 @@
 
 CC=gcc
 CFLAGS=-Wall -g -ggdb
-CFLAGS+=-I../../include -DMMU -DPRINTF_ENABLED
+CFLAGS+=-I../../include -DWOLFBOOT_FDT -DPRINTF_ENABLED
 EXE=fdt-parser
 
 LIBS=

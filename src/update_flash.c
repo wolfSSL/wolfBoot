@@ -42,6 +42,10 @@ int WP11_Library_Init(void);
 #include "encrypt.h"
 #endif /* EXT_ENCRYPTED */
 
+#ifdef MMU
+#error "MMU is not yet supported for update_flash.c, please consider update_ram.c instead"
+#endif
+
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -1275,6 +1279,7 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_server_cleanup();
 #endif
     hal_prepare_boot();
+
     do_boot((void *)boot.fw_base);
 }
 

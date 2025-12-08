@@ -50,7 +50,7 @@ static int check_scatter_format(const unsigned char* ehdr, int is_elf32);
 
 
 
-#if defined(MMU) || defined (WOLFBOOT_FSP) || defined (ARCH_PPC)
+#if defined(MMU) || defined(WOLFBOOT_FSP) || defined(WOLFBOOT_ELF)
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */

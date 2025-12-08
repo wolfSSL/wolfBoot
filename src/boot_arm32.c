@@ -34,7 +34,7 @@ extern unsigned int *END_STACK;
 
 extern void main(void);
 
-void boot_entry_C(void) 
+void boot_entry_C(void)
 {
     register unsigned int *dst;
     /* Initialize the BSS section to 0 */

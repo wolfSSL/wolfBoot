@@ -545,8 +545,10 @@ endif
 ## RISCV
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
-  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -march=rv32imac -mabi=ilp32 -mcmodel=medany -nostartfiles -DARCH_RISCV
-  LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+  ARCH_FLAGS=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV
+  CFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=$(ARCH_FLAGS)
   MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
   # Prune unused functions and data
@@ -555,6 +557,39 @@ ifeq ($(ARCH),RISCV)
 
   OBJS+=src/boot_riscv.o src/vector_riscv.o
   ARCH_FLASH_OFFSET=0x20010000
+endif
+
+## RISCV64
+ifeq ($(ARCH),RISCV64)
+  CROSS_COMPILE?=riscv64-unknown-elf-
+  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-DWOLFBOOT_UPDATE_DISK
+  UPDATE_OBJS:=src/update_disk.o
+  OBJS += src/gpt.o
+  ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV64
+  CFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=$(ARCH_FLAGS)
+
+  # Prune unused functions and data
+  CFLAGS +=-ffunction-sections -fdata-sections
+  LDFLAGS+=-Wl,--gc-sections
+
+  OBJS+=src/boot_riscv64_start.o src/boot_riscv64.o src/vector_riscv64.o
+
+  CFLAGS+=-DWOLFBOOT_FDT
+  OBJS+=src/fdt.o
+
+  ifeq ($(SPMATH),1)
+    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o
+  endif
+
+  ifneq ($(NO_ASM),1)
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+               $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+  endif
 endif
 
 # powerpc
@@ -815,7 +850,7 @@ ifeq ($(TARGET),nxp_t1024)
   ARCH_FLAGS=-mhard-float -mcpu=e5500
   CFLAGS+=$(ARCH_FLAGS)
   BIG_ENDIAN=1
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
   LDFLAGS+=$(ARCH_FLAGS)
@@ -836,7 +871,7 @@ ifeq ($(TARGET),nxp_t2080)
   ARCH_FLAGS=-mhard-float -mcpu=e6500
   CFLAGS+=$(ARCH_FLAGS)
   BIG_ENDIAN=1
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
   LDFLAGS+=$(ARCH_FLAGS)
@@ -1012,6 +1047,8 @@ ifeq ("${FSP}", "1")
   LD_START_GROUP =
   LD_END_GROUP =
   LD := ld
+  # load to address in RAM after wolfBoot (aligned to 16 bytes)
+  CFLAGS+=-DWOLFBOOT_NO_LOAD_ADDRESS
   ifeq ($(filter-out $(STAGE1),1),)
     # building stage1
     ifeq ($(FSP_TGL), 1)
@@ -1079,7 +1116,8 @@ ifeq ("${FSP}", "1")
     CFLAGS+=-DWOLFBOOT_USE_PCI
     OBJS += src/x86/ahci.o
     OBJS += src/x86/ata.o
-    OBJS += src/x86/gpt.o
+    OBJS += src/gpt.o
+    OBJS += src/x86/disk.o
     OBJS += src/x86/mptable.o
     OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o
@@ -1351,7 +1389,7 @@ BOOT_IMG?=test-app/image.bin
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   OBJS+=src/fdt.o
   UPDATE_OBJS:=src/update_ram.o
 else
