@@ -75,17 +75,16 @@ void main(void)
     gpio_portA_init(19);
     gpio_portA_init(20);
 
-    hal_init();
     if (bootVer == 1) {
+        wolfBoot_update_trigger();
         /* Blue LED ON, GPIOA port A pin 20 */
         GPIO_PinWrite(GPIOA, 20, 0);
-        wolfBoot_update_trigger();
     }
     else {
-        /* Green LED ON, GPIOA port A pin 19 */
-        GPIO_PinWrite(GPIOA, 19, 0);
         /* mark boot successful */
         wolfBoot_success();
+        /* Green LED ON, GPIOA port A pin 19 */
+        GPIO_PinWrite(GPIOA, 19, 0);
     }
 
     /* busy wait */

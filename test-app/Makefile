@@ -348,7 +348,12 @@ ifeq ($(TARGET),mcxa)
 endif
 
 ifeq ($(TARGET),mcxw)
-    LSCRIPT_TEMPLATE=ARM-mcxw.ld
+    ifeq ($(TZEN),1)
+      LSCRIPT_TEMPLATE=ARM-mcxw-ns.ld
+      CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
+    else
+      LSCRIPT_TEMPLATE=ARM-mcxw.ld
+    endif
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/spc/fsl_spc.o
