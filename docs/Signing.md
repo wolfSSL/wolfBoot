@@ -128,7 +128,7 @@ wolfBoot also supports verifying firmware images using certificate chains instea
 
 To generate an image for use with this mode, pass the `--cert-chain CERT_CHAIN.der` option to the sign tool, where `CERT_CHAIN.der` is a der encoded certificate chain containing one or more certificates in SSL order (leaf/signer cert last). Note that the sign tool still expects a signing private key to be provided as described above, and assumes that the public key of the signer cert in the chain corresponds to the signing private key.
 
-When building wolfBoot and the test app with the Makefile, certificate chain signing can be configured using the following variables:
+When building wolfBoot and the test app with the Makefile, the `USER_*` variables provide a convenience for using your own locally-managed keys and certificate chain, avoiding manual `keygen -i` and file placement steps:
 
 - `CERT_CHAIN_VERIFY=1`: Enables certificate chain verification mode
 - `USER_PRIVATE_KEY`: Path to your leaf signing key (DER format)
@@ -143,9 +143,12 @@ make CERT_CHAIN_VERIFY=1 \
      USER_PUBLIC_KEY=my-leaf-pubkey.der \
      USER_CERT_CHAIN=my-cert-chain.der
 ```
-Note that it is up to the user to guarantee that `USER_PUBLIC_KEY` and `USER_PRIVATE_KEY` both correspond to the leaf certificate identity in the chain.
 
-If `USER_CERT_CHAIN` is not provided when `CERT_CHAIN_VERIFY=1`, a dummy certificate hierarchy is auto-generated for testing. See the [Compiling wolfBoot](compile.md#key-generation-and-signing) documentation for full details on these options.
+Note that `USER_PUBLIC_KEY` and `USER_PRIVATE_KEY` must correspond to the leaf certificate identity in the chain.
+
+If `USER_CERT_CHAIN` is not provided when `CERT_CHAIN_VERIFY=1`, a dummy certificate hierarchy is auto-generated for testing. See the [Compiling wolfBoot](compile.md#pre-existing-local-keys-for-test-app-builds) documentation for full details on these options.
+
+**Note:** If your private key is managed by a third party and you only have access to the public key, use `keygen -i` to import it instead. See the [Keygen tool](#keygen-tool) section above.
 
 Certificate chain verification of images is currently limited to use in conjunction with wolfHSM. See [wolfHSM.md](wolfHSM.md) for more details.
 

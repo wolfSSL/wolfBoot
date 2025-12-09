@@ -369,9 +369,13 @@ The key algorithm is determined by the `SIGN` variable (e.g., `SIGN=ECC256`, `SI
 
 For most targets, the makefile also builds the wolfBoot test app and signs it with the aforementioned key.
 
-### User-Provided Keys
+### Pre-existing Local Keys for Test App Builds
 
-Instead of auto-generating keys, you can provide your own pre-existing keys for use with the test app by using the following Makefile variables:
+The `USER_*` Makefile variables provide a convenience for building the test app with your own locally-managed keys, avoiding the need to manually run `keygen -i` and place key files before building.
+
+**Note:** If your private key is managed by a third party (e.g., HSM-as-a-service, Azure KeyVault) and you only have access to the public key, use the `keygen -i` option instead. See [Signing.md](Signing.md#keygen-tool) and [Manual Key Management](#manual-key-management) below.
+
+The following variables are available:
 
 - `USER_PRIVATE_KEY`: Path to your private signing key (DER format)
 - `USER_PUBLIC_KEY`: Path to your public key (DER format)
@@ -385,22 +389,22 @@ make USER_PRIVATE_KEY=/path/to/my-signing-key.der \
 
 #### Requirements
 
-- Both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` must be provided together. You cannot supply one without the other.
+- Both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` must be provided together
 - Keys must be in DER format appropriate for the selected `SIGN` algorithm
 
-When user-provided keys are specified:
+When these variables are specified, the build:
 
-1. The build skips auto-generation of `wolfboot_signing_private_key.der`
-2. The keystore (`src/keystore.c`) is generated from your public key
-3. Your private key is used for all signing operations
+1. Skips auto-generation of `wolfboot_signing_private_key.der`
+2. Generates the keystore (`src/keystore.c`) from your public key via `keygen -i`
+3. Uses your private key to sign the test app
 
-The `USER_` variables are meant to simplify the wolfBoot "demo" behavior where wolfBoot boots a simple test app.
+This is primarily useful when you want a single `make` invocation to build wolfBoot and a signed test app using keys you've generated externally. For wolfBoot-only builds (without the test app), the main benefit is automating the `keygen -i` step for simple single-key keystores. If you need multiple keys in the keystore then you must invoke `keygen -i` manually before building wolfBoot.
 
-### User-Provided Certificate Chain
+### Pre-existing Certificate Chain for Test App Builds
 
-When using certificate chain verification (`CERT_CHAIN_VERIFY=1`), you can also provide your own certificate chain:
+When building the test app using certificate chain verification (`CERT_CHAIN_VERIFY=1`), you can provide your own certificate chain:
 
-- `USER_CERT_CHAIN`: Path to your certificate chain (DER format, wolfHSM order with leaf last)
+- `USER_CERT_CHAIN`: Path to your certificate chain (DER format, leaf cert last)
 
 **Usage:**
 
@@ -413,24 +417,38 @@ make CERT_CHAIN_VERIFY=1 \
 
 **Requirements:**
 
-- `USER_CERT_CHAIN` requires both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` to be set
-- The user-supplied private and public keys must correspond to the identity of the leaf certificate in the chain
+- `USER_CERT_CHAIN` requires both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY`
+- The private and public keys must correspond to the leaf certificate identity in the chain
 
-When `CERT_CHAIN_VERIFY=1` is set without `USER_CERT_CHAIN`, the build system auto-generates a dummy 3-tier certificate hierarchy (root CA, intermediate, and leaf) in the `test-dummy-ca/` directory for testing purposes. This is then used to sign the test app.
+When `CERT_CHAIN_VERIFY=1` is set without `USER_CERT_CHAIN`, the build auto-generates a dummy 3-tier certificate hierarchy in `test-dummy-ca/` for testing. This also applies to wolfHSM NVM image generation when applicable.
 
-### Manual Key Generation
+### Manual Key Management
 
-As an alternative to the `USER_*` variables, you can manually fulfill the build dependencies:
+For advanced scenarios (multiple keys, mixed algorithms, partition-restricted keys, or third-party managed private keys), use the `keygen` tool directly instead of the `USER_*` variables.
 
-1. **Generate or import your keystore manually:**
+**Importing a public key (when private key is externally managed):**
+
+```sh
+./tools/keytools/keygen --ecc256 -i my-public-key.der
+```
+
+This creates `src/keystore.c` from your public key. Signing must then be performed in two steps following the steps outlined in [Signing.md](./Signing.md#signing-firmware-with-external-private-key-hsm)
+
+
+**Using locally-managed keys without `USER_XXX` variables:**
+
+1. Import your public key to generate the keystore:
    ```sh
    ./tools/keytools/keygen --ecc256 -i my-public-key.der
    ```
-   This creates `src/keystore.c` from your public key.
 
-2. **Place your signing key at the expected location:**
+2. Place your signing key at the expected location:
    ```sh
    cp my-private-key.der wolfboot_signing_private_key.der
    ```
 
-The build system will detect these existing files and skip auto-generation when make is subsequently invoked. This approach is required when more advanced options like multiple public keys in the keystore are required. In these cases, the keystore generation using the keygen tool and image signing via the sign tool must be performed manually.
+Now the build system detects existing files and skips auto-generation when building wolfBoot and the test app.
+
+**Multiple keys and advanced keystores:**
+
+The `keygen` tool supports multiple `-g` (generate) and `-i` (import) arguments, mixed key algorithms, and partition ID restrictions. See [keystore.md](keystore.md) for full details on keystore capabilities. When using these advanced features, image signing via the `sign` tool must also be performed manually.
