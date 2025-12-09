@@ -99,7 +99,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
     uint32_t *src, *dst;
-    uint32_t dword[2];
+    uint32_t qword[4];
+    uint8_t *qword_bytes = (uint8_t *)qword;
 
     hal_flash_clear_errors(0);
     src = (uint32_t *)data;
@@ -112,21 +113,35 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     }
 #endif
     while (i < len) {
-        dword[0] = src[i >> 2];
-        if (len > i + 1)
-            dword[1] = src[(i >> 2) + 1];
-        else
-            dword[1] = 0xFFFFFFFF;
+        uint32_t cur_addr = (uint32_t)dst + i;
+        uint32_t *dst_aligned = (uint32_t *)(cur_addr & ~0xf);
+        int byte_offset = cur_addr - (uint32_t)dst_aligned;
+        int i_aligned = i - byte_offset;
+        int j;
+        if (byte_offset == 0 && i + 16 <= len) {
+            /* Full aligned 128 bits */
+            for (j = 0; j < 4; j++) {
+                qword[j] = src[(i >> 2) + j];
+            }
+        } else {
+            /* Non-aligned / non-full 128 bits */
+            for (j = 0; j < 16; j++) {
+                if (j < byte_offset || i_aligned + j >= len)
+                    qword_bytes[j] = ((uint8_t *)dst)[i_aligned + j];
+                else
+                    qword_bytes[j] = ((uint8_t *)src)[i_aligned + j];
+            }
+        }
         FLASH_CR |= FLASH_CR_PG;
-        dst[i >> 2] = dword[0];
-        ISB();
-        dst[(i >> 2) + 1] = dword[1];
-        ISB();
+        for (j = 0; j < 4; j++) {
+            dst_aligned[j] = qword[j];
+            ISB();
+        }
         hal_flash_wait_complete(0);
         if ((FLASH_SR & FLASH_SR_EOP) != 0)
             FLASH_SR |= FLASH_SR_EOP;
         FLASH_CR &= ~FLASH_CR_PG;
-        i+=8;
+        i = i_aligned + 16;
         DSB();
     }
 #if (TZ_SECURE())
