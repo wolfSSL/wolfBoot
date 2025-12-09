@@ -222,12 +222,26 @@ wolfBoot supports certain platforms that contain connected HSMs (Hardware Securi
 
 To support this mode of operation, the `keygen` tool supports the `--nolocalkeys` option, which instructs the tool to generate a keystore entry with a zeroed key material. It still generates the `.der` files for private and public keys, so the wolfBoot key tools can sign images, but the `keystore.c` file that is linked into wolfBoot will contain all zeros in the `pubkey` field. Because the key material isn't present in the keystore, the keypair used to sign the image and stored on the HSM for verification can be updated in the field without needing to rebuild wolfBoot against a new `keystore.c`, as long as the signature algorithm and key size does not change. Most targets that use this option will automatically add it to the key generation options or explicitly mention this step in the build documentation.
 
-## Using User-Provided Keys with the Keystore and Build System
+## Build System Integration
 
-By default, when running `make` for the first time, wolfBoot automatically generates:
-- A signing keypair at `wolfboot_signing_private_key.der`
-- The keystore module at `src/keystore.c` containing the corresponding public key
+By default, when running `make` to build the default target (`factory.bin`) for the first time, wolfBoot automatically generates a signing keypair and creates a single-key keystore as a "demonstration". This is distinct from using `keygen` directly with `-g` or `-i` options, which provides full control over keystore creation.
 
-This default behavior can be overridden using the `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` Makefile variables, allowing you to use externally-managed keys for building the test application and keystore.
+### Default `make` Behavior
 
-See [compile.md](./compile.md#key-generation-and-signing) for more information
+Running `make` without creating the expected pre-existing keys automatically:
+- Generates a signing keypair at `wolfboot_signing_private_key.der`
+- Creates the keystore at `src/keystore.c` with the corresponding public key
+
+Note that supplying either of these dependencies manually will cause the build system to skip the generation step
+
+### Pre-existing Local Keys for Test App Builds
+
+The `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY` Makefile variables provide a convenience for building the test app with your own locally-managed keys, avoiding manual `keygen -i` invocation:
+
+```sh
+make USER_PRIVATE_KEY=/path/to/my-key.der USER_PUBLIC_KEY=/path/to/my-pubkey.der
+```
+
+This is primarily useful for test app builds where you wish to use your own PKI as a test. For wolfBoot-only builds, the main benefit is automating the `keygen -i` step for simple single-key keystores.
+
+**Note:** If your private key is managed by a third party (e.g., HSM-as-a-service) and you only have access to the public key, use `keygen -i` directly instead. See [Signing.md](./Signing.md#signing-firmware-with-external-private-key-hsm) and [compile.md](./compile.md#pre-existing-local-keys-for-test-app-builds) for full details regarding this use case.
