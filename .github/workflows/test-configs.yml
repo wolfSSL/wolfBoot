@@ -21,7 +21,7 @@ jobs:
       config-file: ./config/examples/hifive1.config
       # Only building wolfBoot - not test app for now (cross compiler cannot find suitable multilib set for '-march=rv32imafdc_zicsr_zmmul_zaamo_zalrsc_zca_zcd_zcf'/'-mabi=ilp32d')
       # Consider building cached RISCV64 toolchain for this target
-      test-args: wolfboot.bin
+      make-args: wolfboot.bin
 
   sama5d3_test:
     uses: ./.github/workflows/test-build.yml
@@ -217,7 +217,7 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250.config
       # Only building wolfBoot - not test app for now (cross compiler cannot find suitable multilib set for '-march=rv64imafd_zicsr_zmmul_zaamo_zalrsc'/'-mabi=lp64d')
       # Consider building cached RISCV64 toolchain for this target
-      test-args: wolfboot.bin
+      make-args: wolfboot.bin
 
   raspi3_test:
     uses: ./.github/workflows/test-build.yml
