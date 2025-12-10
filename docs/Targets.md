@@ -2438,6 +2438,7 @@ Executing Initialization File: /opt/Freescale/CodeWarrior_PA_10.5.1/PA/PA_Suppor
 thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu, target)
 ```
 
+
 ## NXP MCXA153
 
 NXP MCXA153 is a Cortex-M33 microcontroller running at 96MHz.
