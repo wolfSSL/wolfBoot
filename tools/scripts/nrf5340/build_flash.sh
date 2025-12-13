@@ -54,21 +54,22 @@ while test $# -gt 0; do
       echo "default: build, erase and program"
       echo " "
       echo "options:"
-      echo "-h, --help           show brief help"
-      echo "-c, --clean          cleanup build artifacts"
-      echo "-b, --build          build release with symbols"
-      echo "-tz, --trustzone"    use TrustZone configuration
-      echo "-d, --debug          build debug"
-      echo "-v, --verbose        build verbose"
-      echo "--version            use custom version"
-      echo "-e, --erase          do erase of internal/external flash"
-      echo "-ei, --erase-int     do erase of internal flash"
-      echo "-ee, --erase-ext     do erase of external flash"
-      echo "-p, --program        program images built"
-      echo "-pi, --program-int   program internal image (boot)"
-      echo "-pe, --program-ext   program external image (update)"
-      echo "-u, --update         build update, sign and program external flash"
-      echo "-t, --delta          build update, sign delta and program external flash"
+      echo "-h, --help            show brief help"
+      echo "-c, --clean           cleanup build artifacts"
+      echo "-b, --build           build release with symbols"
+      echo "-tz, --trustzone"     use TrustZone configuration
+      echo "-wtz, --wc-trustzone" use TrustZone + wolfCrypt configuration
+      echo "-d, --debug           build debug"
+      echo "-v, --verbose         build verbose"
+      echo "--version             use custom version"
+      echo "-e, --erase           do erase of internal/external flash"
+      echo "-ei, --erase-int      do erase of internal flash"
+      echo "-ee, --erase-ext      do erase of external flash"
+      echo "-p, --program         program images built"
+      echo "-pi, --program-int    program internal image (boot)"
+      echo "-pe, --program-ext    program external image (update)"
+      echo "-u, --update          build update, sign and program external flash"
+      echo "-t, --delta           build update, sign delta and program external flash"
       exit 0
       ;;
     -c|--clean)
@@ -84,6 +85,11 @@ while test $# -gt 0; do
     -tz|--trustzone)
       DO_TRUSTZONE=1
       echo "Build with TrustZone config"
+      shift
+      ;;
+    -wtz|--wolfcrypt-trustzone)
+      DO_WOLFCRYPT_TRUSTZONE=1
+      echo "Build with TrustZone + wolfCrypt config"
       shift
       ;;
     -d|--debug)
@@ -174,7 +180,9 @@ fi
 if [[ $DO_BUILD == 1 ]]; then
   # Build internal flash images for both cores
   
-  if [[ $DO_TRUSTZONE == 1 ]]; then
+  if [[ $DO_WOLFCRYPT_TRUSTZONE == 1 ]]; then
+    config_app=config/examples/nrf5340-wolfcrypt-tz.config
+  elif [[ $DO_TRUSTZONE == 1 ]]; then
     config_app=config/examples/nrf5340-tz.config
   else
     config_app=config/examples/nrf5340.config

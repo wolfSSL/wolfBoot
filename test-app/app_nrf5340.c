@@ -27,12 +27,42 @@
 #include "hal/nrf5340.h"
 #include "printf.h"
 
+#ifdef WOLFCRYPT_SECURE_MODE
+#include "wcs/user_settings.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
+
 void gpiotoggle(uint32_t port, uint32_t pin)
 {
     uint32_t reg_val = GPIO_OUT(port);
     GPIO_OUTCLR(port) = reg_val & (1 << pin);
     GPIO_OUTSET(port) = (~reg_val) & (1 << pin);
 }
+
+#ifdef WOLFCRYPT_SECURE_MODE
+static int print_random_number(void)
+{
+    WC_RNG rng;
+    int ret;
+    uint32_t rand;
+
+    ret = wc_InitRng(&rng);
+    if (ret != 0) {
+        wolfBoot_printf("Failed to initialize RNG\r\n");
+        return -1;
+    }
+    ret = wc_RNG_GenerateBlock(&rng, (byte *)&rand, sizeof(rand));
+    if (ret != 0) {
+        wolfBoot_printf("Failed to generate random number\r\n");
+        wc_FreeRng(&rng);
+        return -1;
+    }
+    wolfBoot_printf("Today's lucky number: 0x%08lX\r\n", rand);
+    wc_FreeRng(&rng);
+
+    return 0;
+}
+#endif
 
 void main(void)
 {
@@ -64,6 +94,9 @@ void main(void)
     wolfBoot_printf("Compiled: " __DATE__ ":" __TIME__ "\n");
 #ifdef TZEN
     wolfBoot_printf("TrustZone enabled: yes\n");
+#ifdef WOLFCRYPT_SECURE_MODE
+    print_random_number();
+#endif
 #else
     wolfBoot_printf("TrustZone enabled: no\n");
 #endif
