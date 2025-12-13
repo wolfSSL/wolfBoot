@@ -110,6 +110,7 @@ if [ "$ENABLE_TPM" = true ]; then
     killall swtpm || true
     sleep 1
     echo TPM Emulation ON
+    rm -rf /tmp/swtpm || true
     mkdir -p /tmp/swtpm
     swtpm socket --tpm2 --tpmstate dir=/tmp/swtpm \
         --ctrl type=unixio,path=/tmp/swtpm/swtpm-sock --log level=20 &

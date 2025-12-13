@@ -269,7 +269,7 @@ void fespi_init(uint32_t cpu_clock, uint32_t flash_freq)
 static RAMFUNCTION void fespi_swmode(void)
 {
     asm volatile("fence");
-    asm volatile("fence.i");
+
     if (FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL)
         FESPI_REG_FCTRL &= ~FESPI_FCTRL_MODE_SEL;
 }
@@ -280,9 +280,9 @@ static RAMFUNCTION void fespi_hwmode(void)
     if ((FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL) == 0)
         FESPI_REG_FCTRL |= FESPI_FCTRL_MODE_SEL;
     asm volatile("fence");
-    asm volatile("fence.i");
+
     /* Wait two milliseconds for the eSPI device
-     * to reboot into hw-mapped mode and link to the 
+     * to reboot into hw-mapped mode and link to the
      * instruction cache
      */
     for(x = 0; x < CPU_FREQ / 500; x++) {
@@ -457,7 +457,7 @@ void hifive1_init(uint32_t cpu_clock, uint32_t uart_baud)
 
     /* Reconfigure the SPI to maximum frequency */
     fespi_init(cpu_clock, MAX_FLASH_FREQ);
-    
+
     /* Reconfigure the UART */
     uart_init(cpu_clock, uart_baud);
 }
@@ -480,7 +480,7 @@ void hal_prepare_boot(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     uint32_t i, j = 0;
-    uint32_t off, page; 
+    uint32_t off, page;
     const uint8_t *src;
     uint8_t data_copy[FLASH_PAGE_SIZE];
     int swmode = 0;
@@ -575,7 +575,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         address -= FLASH_BASE;
     end = address + len - 1;
 
-    
+
     FESPI_REG_TXMARK = 1;
     fespi_wait_txwm();
     fespi_swmode();

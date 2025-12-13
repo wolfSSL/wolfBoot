@@ -27,9 +27,6 @@
 #ifdef __WOLFBOOT
 #include <printf.h>
 
-
-static void panic(void);
-
 void hal_init(void)
 {
 }
@@ -88,7 +85,3 @@ void *hal_get_dts_update_address(void)
     return 0;
 }
 
-static void panic(void)
-{
-    while(1) {}
-}

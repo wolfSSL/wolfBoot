@@ -85,6 +85,10 @@ static inline void wolfBoot_panic(void)
 static inline void wolfBoot_panic(void)
 {
     wolfBoot_printf("wolfBoot: PANIC!\n");
+#ifdef WOLFBOOT_FSP
+    extern void panic(void);
+    panic();
+#endif
     while(1)
         ;
 }

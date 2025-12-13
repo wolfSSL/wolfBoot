@@ -175,7 +175,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
         } else {
             /* Success - integrity and signature valid */
-        #ifdef WOLFBOOT_LOAD_ADDRESS
+        #if !defined(WOLFBOOT_NO_LOAD_ADDRESS) && defined(WOLFBOOT_LOAD_ADDRESS)
             load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
         #elif !defined(NO_XIP)
             load_address = (uint32_t*)os_image.fw_base;

@@ -209,4 +209,7 @@ void do_boot(const uint32_t *app_offset)
     );
 }
 
-void arch_reboot(void) {}
+void arch_reboot(void)
+{
+
+}
