@@ -162,11 +162,13 @@ extern int tolower(int c);
 #   if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFCRYPT_SECURE_MODE) || \
         defined(WOLFBOOT_SIGN_SECONDARY_ECC256)
 #       define HAVE_ECC256
-#   elif defined(WOLFBOOT_SIGN_ECC384) || \
+#   endif
+#   if defined(WOLFBOOT_SIGN_ECC384) || \
         defined(WOLFBOOT_SIGN_SECONDARY_ECC384)
 #       define HAVE_ECC384
 #       define WOLFSSL_SP_384
-#   elif defined(WOLFBOOT_SIGN_ECC521) || \
+#   endif
+#   if defined(WOLFBOOT_SIGN_ECC521) || \
         defined(WOLFBOOT_SIGN_SECONDARY_ECC521)
 #       define HAVE_ECC521
 #       define WOLFSSL_SP_521
