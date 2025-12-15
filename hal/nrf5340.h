@@ -451,6 +451,38 @@ void uart_write_sz(const char* c, unsigned int sz);
     #undef QSPI_FLASH
 #endif
 
+/* CryptoCell */
+#ifdef TARGET_nrf5340_app
+    #define CRYPTOCELL_BASE   0x50844000
+    #define CRYPTOCELL_ENABLE (*(volatile uint32_t *)(CRYPTOCELL_BASE + 0x500))
+
+    #define FICR_BASE          0x00FF0000
+    #define FICR_TRNG90B_ROSC1 (*(volatile uint32_t *)(FICR_BASE + 0xC10))
+
+    #define CC_RNG_BASE               0x50845000
+    #define CC_RNG_ISR                (*(volatile uint32_t *)(CC_RNG_BASE + 0x104))
+    #define CC_RNG_ICR                (*(volatile uint32_t *)(CC_RNG_BASE + 0x108))
+    #define CC_RNG_TRNG_CONFIG        (*(volatile uint32_t *)(CC_RNG_BASE + 0x10C))
+    #define CC_RNG_TRNG_VALID         (*(volatile uint32_t *)(CC_RNG_BASE + 0x110))
+    #define CC_RNG_EHR_DATA(n)        (*(volatile uint32_t *)(CC_RNG_BASE + 0x114 + (n) * 0x4))
+    #define CC_RNG_EHR_DATA_LEN       6
+    #define CC_RNG_NOISE_SOURCE       (*(volatile uint32_t *)(CC_RNG_BASE + 0x12C))
+    #define CC_RNG_SAMPLE_CNT         (*(volatile uint32_t *)(CC_RNG_BASE + 0x130))
+    #define CC_RNG_AUTOCORR_STATISTIC (*(volatile uint32_t *)(CC_RNG_BASE + 0x134))
+    #define CC_RNG_TRNG_DEBUG         (*(volatile uint32_t *)(CC_RNG_BASE + 0x138))
+    #define CC_RNG_SW_RESET           (*(volatile uint32_t *)(CC_RNG_BASE + 0x140))
+    #define CC_RNG_BUSY               (*(volatile uint32_t *)(CC_RNG_BASE + 0x1B8))
+    #define CC_RNG_TRNG_RESET         (*(volatile uint32_t *)(CC_RNG_BASE + 0x1BC))
+    #define CC_RNG_HW_FLAGS           (*(volatile uint32_t *)(CC_RNG_BASE + 0x1C0))
+    #define CC_RNG_CLK                (*(volatile uint32_t *)(CC_RNG_BASE + 0x1C4))
+    #define CC_RNG_DMA                (*(volatile uint32_t *)(CC_RNG_BASE + 0x1C8))
+    #define CC_RNG_DMA_ROSC_LEN       (*(volatile uint32_t *)(CC_RNG_BASE + 0x1CC))
+    #define CC_RNG_DMA_SRAM_ADDR      (*(volatile uint32_t *)(CC_RNG_BASE + 0x1D0))
+    #define CC_RNG_DMA_SAMPLES_NUM    (*(volatile uint32_t *)(CC_RNG_BASE + 0x1D4))
+    #define CC_RNG_WATCHDOG_VAL       (*(volatile uint32_t *)(CC_RNG_BASE + 0x1D8))
+    #define CC_RNG_DMA_BUSY           (*(volatile uint32_t *)(CC_RNG_BASE + 0x1DC))
+#endif
+
 /* interprocessor communication (IPC) peripheral */
 #ifdef TARGET_nrf5340_app
     #if TZ_SECURE()

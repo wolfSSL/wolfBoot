@@ -136,7 +136,8 @@ static SharedMem_t*  shm = (SharedMem_t*)&shm_shadow;
 #endif
 
 #ifdef TZEN
-static void hal_spu_init(void) {
+static void hal_spu_init(void)
+{
     uint8_t nsc_size_index;
     uint8_t region;
     uint8_t start_region;
@@ -177,6 +178,57 @@ static void hal_spu_init(void) {
                 ~SPU_RAMREGION_PERM_SECATTR) | SPU_RAMREGION_PERM_LOCK;
     }
 }
+
+#ifdef WOLFCRYPT_SECURE_MODE
+static uint32_t cryptocell_enable_prev = 0;
+
+void hal_trng_init(void)
+{
+    cryptocell_enable_prev = CRYPTOCELL_ENABLE;
+    CRYPTOCELL_ENABLE = 1;
+    CC_RNG_CLK = 1;
+    CC_RNG_SW_RESET = 1;
+    
+    do {
+        CC_RNG_CLK = 1;
+        CC_RNG_SAMPLE_CNT = FICR_TRNG90B_ROSC1;
+    } while (CC_RNG_SAMPLE_CNT != FICR_TRNG90B_ROSC1);
+
+    CC_RNG_TRNG_CONFIG = 0;
+    CC_RNG_NOISE_SOURCE = 1;
+}
+
+void hal_trng_fini(void)
+{
+    CC_RNG_NOISE_SOURCE = 0;
+    CC_RNG_CLK = 0;
+    CC_RNG_SW_RESET = 1;
+
+    CRYPTOCELL_ENABLE = cryptocell_enable_prev;
+}
+
+int hal_trng_get_entropy(unsigned char *out, unsigned int len)
+{
+    unsigned int i = 0;
+
+    while (i < len) {
+        uint32_t data[CC_RNG_EHR_DATA_LEN];
+        uint8_t *data_bytes = (uint8_t *)data;
+        unsigned int word, byte;
+
+        while (!((CC_RNG_ISR & 0x01) && (CC_RNG_TRNG_VALID & 0x01))) {}
+
+        for (word = 0; word < CC_RNG_EHR_DATA_LEN; word++) {
+            data[word] = CC_RNG_EHR_DATA(word);
+        }
+        for (byte = 0; byte < 4 * CC_RNG_EHR_DATA_LEN && i < len; byte++) {
+            out[i++] = (unsigned char)data_bytes[byte];
+        }
+    }
+
+    return 0;
+}
+#endif
 #endif
 
 void uart_init(void)
@@ -804,7 +856,8 @@ int hal_flash_protect(uint32_t start, uint32_t len)
 }
 
 #ifdef TZEN
-static void periph_unsecure() {
+static void periph_unsecure()
+{
     /* Unsecure both GPIO ports */
     SPU_PERIPHID_PERM(GPIO_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
     SPU_GPIOPORT_PERM(0) = 0;
