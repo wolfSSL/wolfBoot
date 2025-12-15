@@ -84,7 +84,13 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         while (pos < src->fw_size) {
             uint8_t buffer[FLASHBUFFER_SIZE];
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
+#ifdef ARCH_SIM
+                /* Use ARCH_FLASH_OFFSET for simulator: flash is mmap'd at runtime,
+                 * so the linker symbol _start_text does not point to simulated flash */
+                uintptr_t opos = pos + ARCH_FLASH_OFFSET;
+#else
                 uintptr_t opos = pos + ((uintptr_t)&_start_text);
+#endif
                 ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void*)buffer, FLASHBUFFER_SIZE);
                 hal_flash_write(opos, buffer, FLASHBUFFER_SIZE);
             }
@@ -96,7 +102,13 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
     while (pos < src->fw_size) {
         if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
             uint8_t *orig = (uint8_t*)(src->hdr + src_offset + pos);
+#ifdef ARCH_SIM
+            /* Use ARCH_FLASH_OFFSET for simulator: flash is mmap'd at runtime,
+             * so the linker symbol _start_text does not point to simulated flash */
+            hal_flash_write(pos + ARCH_FLASH_OFFSET, orig, FLASHBUFFER_SIZE);
+#else
             hal_flash_write(pos + (uintptr_t)&_start_text, orig, FLASHBUFFER_SIZE);
+#endif
         }
         pos += FLASHBUFFER_SIZE;
     }

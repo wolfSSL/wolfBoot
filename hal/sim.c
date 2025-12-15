@@ -596,6 +596,11 @@ int wolfBoot_dualboot_candidate(void)
 }
 #endif
 
+void arch_reboot(void)
+{
+    exit(0);
+}
+
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 
 int hal_hsm_init_connect(void)
