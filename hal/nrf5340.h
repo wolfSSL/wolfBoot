@@ -465,6 +465,7 @@ void uart_write_sz(const char* c, unsigned int sz);
     #define CC_RNG_TRNG_CONFIG        (*(volatile uint32_t *)(CC_RNG_BASE + 0x10C))
     #define CC_RNG_TRNG_VALID         (*(volatile uint32_t *)(CC_RNG_BASE + 0x110))
     #define CC_RNG_EHR_DATA(n)        (*(volatile uint32_t *)(CC_RNG_BASE + 0x114 + (n) * 0x4))
+    #define CC_RNG_EHR_DATA_LEN       6
     #define CC_RNG_NOISE_SOURCE       (*(volatile uint32_t *)(CC_RNG_BASE + 0x12C))
     #define CC_RNG_SAMPLE_CNT         (*(volatile uint32_t *)(CC_RNG_BASE + 0x130))
     #define CC_RNG_AUTOCORR_STATISTIC (*(volatile uint32_t *)(CC_RNG_BASE + 0x134))

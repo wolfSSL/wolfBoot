@@ -180,8 +180,11 @@ static void hal_spu_init(void)
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
+static uint32_t cryptocell_enable_prev = 0;
+
 void hal_trng_init(void)
 {
+    cryptocell_enable_prev = CRYPTOCELL_ENABLE;
     CRYPTOCELL_ENABLE = 1;
     CC_RNG_CLK = 1;
     CC_RNG_SW_RESET = 1;
@@ -201,9 +204,7 @@ void hal_trng_fini(void)
     CC_RNG_CLK = 0;
     CC_RNG_SW_RESET = 1;
 
-    /* TODO: it might be a bad idea to disable the whole CryptoCell engine in
-     * case other parts of it are used -- that is not the case right now */
-    CRYPTOCELL_ENABLE = 0;
+    CRYPTOCELL_ENABLE = cryptocell_enable_prev;
 }
 
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
@@ -211,16 +212,16 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
     unsigned int i = 0;
 
     while (i < len) {
-        uint32_t data[6];
+        uint32_t data[CC_RNG_EHR_DATA_LEN];
         uint8_t *data_bytes = (uint8_t *)data;
         unsigned int word, byte;
 
         while (!((CC_RNG_ISR & 0x01) && (CC_RNG_TRNG_VALID & 0x01))) {}
 
-        for (word = 0; word < 6; word++) {
+        for (word = 0; word < CC_RNG_EHR_DATA_LEN; word++) {
             data[word] = CC_RNG_EHR_DATA(word);
         }
-        for (byte = 0; byte < 24 && i < len; byte++) {
+        for (byte = 0; byte < 4 * CC_RNG_EHR_DATA_LEN && i < len; byte++) {
             out[i++] = (unsigned char)data_bytes[byte];
         }
     }
