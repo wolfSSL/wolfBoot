@@ -211,14 +211,16 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
     unsigned int i = 0;
 
     while (i < len) {
-        while (!((CC_RNG_ISR & 0x01) && (CC_RNG_TRNG_VALID & 0x01))) {}
-
         uint32_t data[6];
         uint8_t *data_bytes = (uint8_t *)data;
-        for (unsigned int word = 0; word < 6; word++) {
+        unsigned int word, byte;
+
+        while (!((CC_RNG_ISR & 0x01) && (CC_RNG_TRNG_VALID & 0x01))) {}
+
+        for (word = 0; word < 6; word++) {
             data[word] = CC_RNG_EHR_DATA(word);
         }
-        for (unsigned int byte = 0; byte < 24 && i < len; byte++) {
+        for (byte = 0; byte < 24 && i < len; byte++) {
             out[i++] = (unsigned char)data_bytes[byte];
         }
     }
