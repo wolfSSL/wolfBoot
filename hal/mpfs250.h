@@ -96,6 +96,10 @@
 #define SIE_STIE     (1 << IRQ_S_TIMER)
 #define SIE_SEIE     (1 << IRQ_S_EXT)
 
+#define MCAUSE64_INT   0x8000000000000000LLU
+#define MCAUSE64_CAUSE 0x7FFFFFFFFFFFFFFFLLU
+
+
 
 /* UART */
 #define MSS_UART0_LO_BASE  0x20000000UL
@@ -401,6 +405,7 @@
 #define EMMC_SD_SRS09_DAT2_LVL (1U << 22) /* 22: RO - DAT2 signal level */
 #define EMMC_SD_SRS09_DAT1_LVL (1U << 21) /* 21: RO - DAT1 signal level */
 #define EMMC_SD_SRS09_DAT0_LVL (1U << 20) /* 20: RO - DAT0 signal level */
+#define EMMC_SD_SRS09_DATS_LVL (EMMC_SD_SRS09_DAT0_LVL | EMMC_SD_SRS09_DAT1_LVL | EMMC_SD_SRS09_DAT2_LVL | EMMC_SD_SRS09_DAT3_LVL)
 #define EMMC_SD_SRS09_WPSL     (1U << 19) /* 19: RO - Write Protect Switch Level */
 #define EMMC_SD_SRS09_CDSL     (1U << 18) /* 18: RO - Card Detect Pin Level */
 #define EMMC_SD_SRS09_CSS      (1U << 17) /* 17: RO - Card State Stable */
@@ -462,7 +467,6 @@
 #define EMMC_SD_SRS11_SDCFSL_MASK   (0xFFU << 8)
 #define EMMC_SD_SRS11_SDCFSH_SHIFT  6    /*  7:6: RW - SDCLK Freq Select (upper 2 bits) */
 #define EMMC_SD_SRS11_SDCFSH_MASK   (0x3U << 6)
-#define EMMC_SD_SRS11_SDCFS_MASK    (0xFF00U | 0x00C0U)     /* Full SDCLK Freq Select mask */
 #define EMMC_SD_SRS11_CGS  (1U << 5) /*  5: RW - Clock Generator Select */
 #define EMMC_SD_SRS11_SDCE (1U << 2) /*  2: RW - SD Clock Enable */
 #define EMMC_SD_SRS11_ICS  (1U << 1) /*  1: RO - Internal Clock Stable */
@@ -501,6 +505,7 @@
 
 #define EMMC_SD_SRS13 *((volatile uint32_t*)(EMMC_SD_BASE + 0x234)) /* Error/Normal Status Enable */
 #define EMMC_SD_SRS13_ERSP_SE   (1U << 27) /* 27: RW - Response Error Status Enable (SD mode only) */
+#define EMMC_SD_SRS13_ETUNE_SE  (1U << 26) /* 26: RW - Tuning Error Status Enable (SD mode only) */
 #define EMMC_SD_SRS13_EADMA_SE  (1U << 25) /* 25: RW - ADMA Error Status Enable (SD mode only) */
 #define EMMC_SD_SRS13_EAC_SE    (1U << 24) /* 24: RW - Auto CMD Error Status Enable (SD mode only) */
 #define EMMC_SD_SRS13_ECL_SE    (1U << 23) /* 23: RW - Current Limit Error Status Enable (SD mode only) */
@@ -512,6 +517,10 @@
 #define EMMC_SD_SRS13_ECCRC_SE  (1U << 17) /* 17: RW - Command CRC Error Status Enable (SD mode only) */
 #define EMMC_SD_SRS13_ECT_SE    (1U << 16) /* 16: RW - Command Timeout Error Status Enable (SD mode only) */
 #define EMMC_SD_SRS13_CQINT_SE  (1U << 14) /* 14: RW - Command Queuing Status Enable */
+#define EMMC_SD_SRS13_RTUNE_SE  (1U << 12) /* 12: RW - Retuning event status enable */
+#define EMMC_SD_SRS13_INT_ONC   (1U << 11) /* 11: RW - Interrupt On Line C status enable */
+#define EMMC_SD_SRS13_INT_ONB   (1U << 10) /* 10: RW - Interrupt On Line B status enable */
+#define EMMC_SD_SRS13_INT_ONA   (1U << 9)  /*  9: RW - Interrupt On Line A status enable */
 #define EMMC_SD_SRS13_CINT_SE   (1U << 8)  /*  8: RW - Card Interrupt Status Enable */
 #define EMMC_SD_SRS13_CR_SE     (1U << 7)  /*  7: RW - Card Removal Status Enable */
 #define EMMC_SD_SRS13_CIN_SE    (1U << 6)  /*  6: RW - Card Insertion Status Enable */
@@ -804,7 +813,7 @@
 #define EMMC_SD_BLOCK_SIZE   512U       /* Standard block size */
 
 /* SD Interface Conditions */
-#define IF_COND_27V_33V                 (1u << 8u)
+#define IF_COND_27V_33V        (1U << 8)
 
 /* SD OCR register bits definitions */
 #define SDCARD_REG_OCR_2_7_2_8 (1U << 15)
@@ -830,20 +839,24 @@
 #define MMC_CMD3_SET_REL_ADDR     3    /* MMC: Set relative address */
 #define SD_CMD3_SEND_REL_ADDR     3    /* SD: Get relative address */
 #define MMC_CMD_4_SET_DSR         4
-#define MMC_CMD6_SWITCH           6    /* Switch/set EXT_CSD */
+#define SD_CMD_6_SWITCH_FUNC      6    /* SD: Switch function */
 #define MMC_CMD7_SELECT_CARD      7    /* Select/deselect card */
 #define MMC_CMD8_SEND_EXT_CSD     8    /* MMC: Get EXT_CSD */
 #define SD_CMD8_SEND_IF_COND      8    /* SD: Send interface condition */
 #define MMC_CMD9_SEND_CSD         9    /* Get card-specific data */
+#define SD_CMD11_VOLAGE_SWITCH    11   /* R1 Rsp        */
 #define MMC_CMD12_STOP_TRANS      12   /* Stop transmission */
 #define MMC_CMD13_SEND_STATUS     13   /* Get card status */
 #define MMC_CMD_15_GOTO_INACT_ST  15
+#define SD_CMD_16                 16   /* R1 Rsp        */
 #define MMC_CMD17_READ_SINGLE     17   /* Read single block */
 #define MMC_CMD18_READ_MULTIPLE   18   /* Read multiple blocks */
 #define MMC_CMD24_WRITE_SINGLE    24   /* Write single block */
 #define MMC_CMD25_WRITE_MULTIPLE  25   /* Write multiple blocks */
+
 #define SD_CMD55_APP_CMD          55   /* Prefix for ACMD */
-#define SD_ACMD41_SD_SEND_OP      41   /* SD: Send operating conditions */
+#define SD_ACMD6_SET_BUS_WIDTH    6    /* SD: Set bus width */
+#define SD_ACMD41_SEND_OP_COND    41   /* SD: Send operating conditions */
 #define SD_ACMD51_SEND_SCR        51   /* SD: Get SCR register */
 
 /* Debouncing time for card detect */
@@ -860,15 +873,24 @@
 
 #define MAX_CURRENT_MA 150 /* mA */
 
-#if 0
-EMMC                                                MSSIO_B4
-EMMC_DATA_7_4                                       MSSIO_B4
-EMMC_SD_CLK_SOURCE                                  MSS_PLL
-EMMC_SD_SDIO_FREQ                                   200
-EMMC_SD_SWITCHING                                   ENABLED_SD
-EMMC_SPEED_MODE                                     HIGH_SPEED_200
-#endif
+#define SD_RCA_SHIFT 16
 
+#define SCR_REG_DATA_SIZE 8
+
+/* Switch Function Command Arguments */
+#define SDCARD_SWITCH_FUNC_MODE_SWITCH       (0x1u << 31) /* Set function mode */
+#define SDCARD_SWITCH_FUNC_MODE_CHECK        (0x0u << 31) /* Check mode */
+/* group 1 - function 1 */
+#define SDCARD_SWITCH_ACCESS_MODE_SDR12      0x0U /* Card access mode - SDR12 default */
+#define SDCARD_SWITCH_ACCESS_MODE_SDR25      0x1U /* Card access mode - SDR25 high speed */
+#define SDCARD_SWITCH_ACCESS_MODE_SDR50      0x2U /* Card access mode - SDR50 */
+#define SDCARD_SWITCH_ACCESS_MODE_SDR104     0x3U /* Card access mode - SDR104 */
+#define SDCARD_SWITCH_ACCESS_MODE_DDR50      0x4U /* Card access mode - DDR50 */
+
+#define SDCARD_SWITCH_DRIVER_STRENGTH_TYPE_B 0x0U /* Card driver strength - Type B default */
+#define SDCARD_SWITCH_DRIVER_STRENGTH_TYPE_A 0x1U /* Card driver strength - Type A */
+#define SDCARD_SWITCH_DRIVER_STRENGTH_TYPE_C 0x2U /* Card driver strength - Type C */
+#define SDCARD_SWITCH_DRIVER_STRENGTH_TYPE_D 0x3U /* Card driver strength - Type D */
 
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */

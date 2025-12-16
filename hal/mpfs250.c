@@ -43,6 +43,8 @@
 #include "loader.h"
 #include "disk.h"
 
+#define DEBUG_MMC
+
 /* Placeholder functions - to be implemented */
 void hal_init(void)
 {
@@ -132,6 +134,16 @@ void* hal_get_dts_address(void)
 }
 #endif
 
+
+static uint32_t g_sector_count;
+static uint32_t g_sector_size;
+static uint32_t g_bus_width = 1;
+static uint32_t g_rca = 0; /* SD Card Relative Address */
+
+#ifndef DEFAULT_DELAY
+#define DEFAULT_DELAY 0xFFFF
+#endif
+
 int mmc_set_timeout(uint32_t timeout_us)
 {
     uint32_t reg, i, tcfclk, tcfclk_mhz, tcfclk_khz, timeout_val, dtcv;
@@ -170,17 +182,21 @@ int mmc_set_timeout(uint32_t timeout_us)
         }
         dtcv *= 2;
     }
+    dtcv = i;
 
-    /* set the data timeout counter value */
+    /* set the data timeout counter value - CHECK: 0xc0207 */
     reg = EMMC_SD_SRS11;
     reg &= ~EMMC_SD_SRS11_DTCV_MASK;
-    reg |= (timeout_val << EMMC_SD_SRS11_DTCV_SHIFT) & EMMC_SD_SRS11_DTCV_MASK;
+    reg |= (dtcv << EMMC_SD_SRS11_DTCV_SHIFT) & EMMC_SD_SRS11_DTCV_MASK;
     EMMC_SD_SRS11 = reg;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_set_timeout: dtcv 0x%08X, srs11 0x%08X\n", dtcv, reg);
+#endif
 
     return 0;
 }
 
-#define DEFAULT_DELAY 0x00FFFFFF
 void mmc_delay(uint32_t delay)
 {
     while (delay--) {
@@ -213,15 +229,16 @@ int mmc_set_power(uint32_t voltage)
             reg |= EMMC_SD_SRS10_BP | EMMC_SD_SRS10_BVS_1_8V;
         }
         else if (voltage == EMMC_SD_SRS10_BVS_3_0V && (cap2 & EMMC_SD_SRS16_VS30)) {
-            reg |= EMMC_SD_SRS10_BVS_3_0V;
+            reg |= EMMC_SD_SRS10_BP | EMMC_SD_SRS10_BVS_3_0V;
         }
         else if (voltage == EMMC_SD_SRS10_BVS_3_3V && (cap2 & EMMC_SD_SRS16_VS33)) {
-            reg |= EMMC_SD_SRS10_BVS_3_3V;
+            reg |= EMMC_SD_SRS10_BP | EMMC_SD_SRS10_BVS_3_3V;
         }
         else {
             /* voltage not supported */
             return -1;
         }
+        /* should be - 0xf06 */
         EMMC_SD_SRS10 = reg;
         mmc_delay(DEFAULT_DELAY); /* delay after bus power is applied */
     }
@@ -231,7 +248,13 @@ int mmc_set_power(uint32_t voltage)
 /* returns actual frequency in kHz */
 uint32_t mmc_set_clock(uint32_t clock_khz)
 {
+    static uint32_t last_clock_khz = 0;
     uint32_t reg, base_clk_khz, i, mclk, freq_khz;
+
+    if (last_clock_khz != 0 && last_clock_khz == clock_khz) {
+        /* clock already set */
+        return 0;
+    }
 
     /* disable clock */
     EMMC_SD_SRS11 &= ~EMMC_SD_SRS11_SDCE;
@@ -243,6 +266,7 @@ uint32_t mmc_set_clock(uint32_t clock_khz)
         /* error getting base clock */
         return 0;
     }
+    base_clk_khz *= 1000; /* convert MHz to kHz */
 
     /* select clock frequency */
     reg = EMMC_SD_SRS11;
@@ -254,18 +278,25 @@ uint32_t mmc_set_clock(uint32_t clock_khz)
             break;
         }
     }
-    mclk = ((i / 2) << EMMC_SD_SRS11_SDCFSL_SHIFT);
-    reg |= (mclk & EMMC_SD_SRS11_SDCFSL_MASK) | ((mclk & 0x30000) >> 10);
+    mclk = (i / 2);
+    reg |= ((mclk << EMMC_SD_SRS11_SDCFSL_SHIFT) & EMMC_SD_SRS11_SDCFSL_MASK)  /* lower 8 bits */
+        | ((mclk << EMMC_SD_SRS11_SDCFSH_SHIFT) & EMMC_SD_SRS11_SDCFSH_SHIFT); /* upper 2 bits */
     reg |= EMMC_SD_SRS11_ICE; /* clock enable */
     reg &= ~EMMC_SD_SRS11_CGS; /* select clock */
     EMMC_SD_SRS11 = reg;
     freq_khz = base_clk_khz / i;
 
     /* wait for clock to stabilize */
-    while ((EMMC_SD_SRS11 & EMMC_SD_SRS11_ICE) == 0);
+    while ((EMMC_SD_SRS11 & EMMC_SD_SRS11_ICS) == 0);
 
     /* enable clock */
     EMMC_SD_SRS11 |= EMMC_SD_SRS11_SDCE;
+    last_clock_khz = clock_khz;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_set_clock: clock_khz: %d, freq_khz: %d\n",
+        clock_khz, freq_khz);
+#endif
 
     mmc_delay(DEFAULT_DELAY); /* delay after clock changed */
 
@@ -316,8 +347,10 @@ static uint32_t mmc_get_response_type(uint8_t resp_type)
     return cmd_reg;
 }
 
+#define DEVICE_BUSY 1
 int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
+    int status = 0;
     uint32_t cmd_reg;
     uint32_t cmd_type = EMMC_SD_SRS03_CMD_NORMAL; /* TODO: Add support for suspend and resume */
 
@@ -338,15 +371,22 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
     /* set command argument and command transfer registers */
     EMMC_SD_SRS02 = cmd_arg;
     cmd_reg =
-        ((cmd_index & EMMC_SD_SRS03_CIDX_MASK) << EMMC_SD_SRS03_CIDX_SHIFT) |
-        ((cmd_type & EMMC_SD_SRS03_CT_MASK) << EMMC_SD_SRS03_CT_SHIFT) |
+        ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) & EMMC_SD_SRS03_CIDX_MASK) |
+        ((cmd_type << EMMC_SD_SRS03_CT_SHIFT) & EMMC_SD_SRS03_CT_MASK) |
         mmc_get_response_type(resp_type);
 
     EMMC_SD_SRS03 = cmd_reg;
 
-    if (resp_type != EMMC_SD_RESP_NONE) {
-        /* wait for command complete or error - TODO: Add timeout  */
-        while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_ERR_STAT)) == 0);
+    /* wait for command complete or error - TODO: Add timeout  */
+    while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_EINT)) == 0);
+
+    /* check for device busy */
+    if (resp_type == EMMC_SD_RESP_R1 || resp_type == EMMC_SD_RESP_R1B) {
+        uint32_t resp = EMMC_SD_SRS04;
+        #define CARD_STATUS_READY_FOR_DATA (0x1 << 8)
+        if ((resp & CARD_STATUS_READY_FOR_DATA) == 0) {
+            status = DEVICE_BUSY; /* card is busy */
+        }
     }
 
     /* clear all status interrupts (except current limit, card interrupt/removal/insert) */
@@ -355,11 +395,25 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
                       EMMC_SD_SRS12_CR |
                       EMMC_SD_SRS12_CIN);
 
-    return 0;
+    return status;
+}
+
+/* TODO: Add timeout */
+int mmc_wait_busy(int check_dat0)
+{
+    uint32_t status;
+    if (check_dat0) {
+        /* wait for DATA0 not busy */
+        while ((EMMC_SD_SRS09 & EMMC_SD_SRS09_DAT0_LVL) == 0);
+    }
+    /* wait for CMD13 */
+    while ((status = mmc_send_cmd(MMC_CMD13_SEND_STATUS,
+        (g_rca << SD_RCA_SHIFT), EMMC_SD_RESP_R1)) == DEVICE_BUSY);
+    return status;
 }
 
 /* Set power and send initialization commands */
-/* voltage: 0=off or EMMC_SD_SRS10_BVS_ */
+/* voltage: 0=off or EMMC_SD_SRS10_BVS_[X_X]V */
 int mmc_power_init_seq(uint32_t voltage)
 {
     /* Set power to specified voltage */
@@ -383,11 +437,169 @@ int mmc_card_init(uint32_t acmd41_arg, uint32_t *ocr_reg)
 {
     int status = mmc_send_cmd(SD_CMD55_APP_CMD, 0, EMMC_SD_RESP_R1);
     if (status == 0) {
-        status = mmc_send_cmd(SD_ACMD41_SD_SEND_OP, acmd41_arg,
+        status = mmc_send_cmd(SD_ACMD41_SEND_OP_COND, acmd41_arg,
             EMMC_SD_RESP_R3);
+        if (status == 0) {
+            *ocr_reg = EMMC_SD_SRS04;
+        #ifdef DEBUG_MMC
+            wolfBoot_printf("ocr_reg: 0x%08X\n", *ocr_reg);
+        #endif
+        }
     }
+    return status;
+}
+
+/* MMC_CMD17_READ_SINGLE */
+int mmc_block_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
+    uint32_t sz)
+{
+    int status;
+    uint32_t reg;
+
+    /* wait for idle */
+    status = mmc_wait_busy(0);
+
+    /* reset data and command lines */
+    EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+    mmc_delay(0xFF);
+
+    /* set transfer block count */
+    EMMC_SD_SRS01 = (1 << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
+
+    /* wait for command and data line busy to clear */
+    while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
+
+    EMMC_SD_SRS01 = block_addr; /* cmd argument */
+    /* execute command */
+    EMMC_SD_SRS03 = ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) |
+        EMMC_SD_SRS03_DPS | EMMC_SD_SRS03_DTDS |
+        EMMC_SD_SRS03_BCE | EMMC_SD_SRS03_RECE | EMMC_SD_SRS03_RID |
+        EMMC_SD_SRS03_RECT | EMMC_SD_SRS03_RESP_48 | EMMC_SD_SRS03_CRCCE |
+        EMMC_SD_SRS03_CICE);
+
+    /* wait for buffer read ready */
+    while (((reg = EMMC_SD_SRS12) & (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
+
+    /* read in buffer - read 4 bytes at a time */
+    if (reg & EMMC_SD_SRS12_BRR) {
+        uint32_t i;
+        for (i=0; i<sz; i+=4) {
+            *dst = EMMC_SD_SRS08;
+            dst++;
+        }
+    }
+
+    /* check for any errors */
+    reg = EMMC_SD_SRS12;
+    if (reg & EMMC_SD_SRS12_ERR_STAT) {
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_block_read: error: 0x%08X\n", reg);
+    #endif
+        /* wait for idle */
+        mmc_delay(0xFF);
+        status = mmc_wait_busy(0);
+    }
+
+    return status;
+}
+
+int mmc_set_bus_width(uint32_t bus_width)
+{
+    int status;
+
+    if (bus_width == g_bus_width) {
+        /* nothing to do */
+        return 0;
+    }
+
+    /* set bus width */
+    status = mmc_send_cmd(SD_CMD55_APP_CMD, g_rca << SD_RCA_SHIFT,
+        EMMC_SD_RESP_R1);
     if (status == 0) {
-        *ocr_reg = EMMC_SD_SRS04;
+        uint32_t cmd_arg = (bus_width == 4) ? 2 : 0;
+        status = mmc_send_cmd(SD_ACMD6_SET_BUS_WIDTH, cmd_arg, EMMC_SD_RESP_R1);
+        if (status == 0) {
+            /* change host bus width */
+            if (bus_width == 4) {
+                EMMC_SD_SRS10 |= EMMC_SD_SRS10_DTW;
+            }
+            else {
+                EMMC_SD_SRS10 &= ~EMMC_SD_SRS10_DTW;
+            }
+        }
+    }
+    return status;
+}
+
+static uint32_t get_srs_bits(int from, int count)
+{
+    volatile uint32_t *resp = ((volatile uint32_t*)(EMMC_SD_BASE + 0x210));
+    uint32_t mask, ret;
+    int off, shft;
+
+    from -= 8;
+    mask = (count < 32 ? 1 << count : 0) - 1;
+    off = from / 32;
+    shft = from & 31;
+    ret = resp[off] >> shft;
+    if (from + shft > 32) {
+        ret |= resp[off + 1] <<  (32 - shft) % 32;
+    }
+    return ret & mask;
+}
+
+int mmc_send_switch_function(uint32_t mode, uint32_t function_number, uint32_t group_number)
+{
+    int status;
+    uint32_t timeout = 4; /* up to 5 tries */
+    uint32_t cmd_arg;
+    uint32_t func_status[64/sizeof(uint32_t)]; /* fixed 512 bits */
+    uint8_t* p_func_status = (uint8_t*)func_status;
+
+    if (group_number > 6 || function_number > 15) {
+        return -1; /* Invalid group or function number */
+    }
+
+    cmd_arg = (function_number << ((group_number - 1) * 4));
+    do {
+        /* first run check to see if function is supported */
+        status = mmc_block_read(SD_CMD_6_SWITCH_FUNC,
+            (mode | cmd_arg),
+            func_status, sizeof(func_status));
+        if (status == 0) {
+            /* check if busy */
+            /* data structure version 368:375
+             * (0=supported only, 1=supported and busy) */
+            if (p_func_status[17] == 1) {
+                /* busy status: group 1 272:287 */
+                if ((p_func_status[29 -
+                        ((group_number-1)*2)] & (1 << function_number))) {
+                    continue; /* busy */
+                }
+            }
+
+            /* supported: group 1 415:400 */
+            if ((p_func_status[13 -
+                    ((group_number-1)*2)] & (1 << function_number))) {
+                break; /* supported */
+            }
+            else {
+                return -1; /* not supported */
+            }
+        }
+    } while (status == 0 && --timeout > 0); /* retry until function not busy */
+    return status;
+}
+
+int mmc_set_function(uint32_t function_number, uint32_t group_number)
+{
+    /* send check first */
+    int status = mmc_send_switch_function(SDCARD_SWITCH_FUNC_MODE_CHECK,
+        function_number, group_number);
+    if (status == 0) {
+        /* send switch function */
+        status = mmc_send_switch_function(SDCARD_SWITCH_FUNC_MODE_SWITCH,
+            function_number, group_number);
     }
     return status;
 }
@@ -396,19 +608,22 @@ int mmc_init(void)
 {
     int status = 0;
     uint32_t reg, cap;
-    uint32_t ctrl_volts = EMMC_SD_SRS10_BVS_3_3V; /* default to 3.3v */
-    uint32_t card_volts;
-    int is_xpc, is_si8r;
+    uint32_t ctrl_volts, card_volts;
+    uint32_t irq_restore;
+    int xpc, si8r;
 
     /* Reset the MMC controller */
     SYSREG_SOFT_RESET_CR &= ~SYSREG_SOFT_RESET_CR_MMC;
+    /* Disable the EMMC/SD IRQ */
+
     /* Reset the host controller */
     EMMC_SD_HRS00 |= EMMC_SD_HRS00_SWR;
     /* Bit will clear when reset is done */
     while ((EMMC_SD_HRS00 & EMMC_SD_HRS00_SWR) != 0);
 
     /* Set debounce period to ~15ms (at 200MHz) */
-    EMMC_SD_HRS01 = (EMMC_SD_DEBOUNCE_TIME & EMMC_SD_HRS01_DP_MASK);
+    EMMC_SD_HRS01 = ((EMMC_SD_DEBOUNCE_TIME << EMMC_SD_HRS01_DP_SHIFT) &
+                      EMMC_SD_HRS01_DP_MASK);
 
     /* Select SDCard Mode */
     reg = EMMC_SD_HRS06;
@@ -427,8 +642,19 @@ int mmc_init(void)
         reg |= EMMC_SD_SRS15_HV4E;
         EMMC_SD_SRS15 = reg;
     }
-    /* Set all status enables */
-    EMMC_SD_SRS13 = 0xFFFFFFFF;
+    /* Set all status enables - 0xbff40ff */
+    EMMC_SD_SRS13 = (
+        EMMC_SD_SRS13_ETUNE_SE | EMMC_SD_SRS13_EADMA_SE | EMMC_SD_SRS13_EAC_SE |
+        EMMC_SD_SRS13_ECL_SE | EMMC_SD_SRS13_EDEB_SE |
+        EMMC_SD_SRS13_EDCRC_SE | EMMC_SD_SRS13_EDT_SE |
+        EMMC_SD_SRS13_ECI_SE | EMMC_SD_SRS13_ECEB_SE | EMMC_SD_SRS13_ECCRC_SE |
+        EMMC_SD_SRS13_ECT_SE | EMMC_SD_SRS13_RTUNE_SE |
+        EMMC_SD_SRS13_INT_ONC | EMMC_SD_SRS13_INT_ONB | EMMC_SD_SRS13_INT_ONA |
+        EMMC_SD_SRS13_CR_SE | EMMC_SD_SRS13_CIN_SE |
+        EMMC_SD_SRS13_BRR_SE | EMMC_SD_SRS13_BWR_SE | EMMC_SD_SRS13_DMAINT_SE |
+        EMMC_SD_SRS13_BGE_SE | EMMC_SD_SRS13_TC_SE | EMMC_SD_SRS13_CC_SE |
+        EMMC_SD_SRS13_ERSP_SE | EMMC_SD_SRS13_CQINT_SE
+    );
     /* Clear all signal enables */
     EMMC_SD_SRS14 = 0;
     /* Set initial timeout to 500ms */
@@ -452,32 +678,35 @@ int mmc_init(void)
     }
 
     /* Start in 1-bit bus mode */
-    reg = EMMC_SD_SRS10;
-    reg &= ~EMMC_SD_SRS10_DTW;
-    reg &= ~EMMC_SD_SRS10_EDTW;
-    EMMC_SD_SRS10 = reg;
+    EMMC_SD_SRS10 &= ~(EMMC_SD_SRS10_EDTW | EMMC_SD_SRS10_DTW);
 
     /* Setup 400khz starting clock */
     mmc_set_clock(EMMC_SD_CLK_400KHZ);
 
     /* Set power to 3.3v and send init commands */
+    ctrl_volts = EMMC_SD_SRS10_BVS_3_3V; /* default to 3.3v */
     status = mmc_power_init_seq(ctrl_volts);
     if (status == 0) {
         uint32_t max_ma_3_3v, max_ma_1_8v;
         /* determine host controller capabilities */
         reg = EMMC_SD_SRS18;
-        max_ma_3_3v = (reg & EMMC_SD_SRS18_MC33_MASK) >> EMMC_SD_SRS18_MC33_SHIFT;
-        max_ma_1_8v = (reg & EMMC_SD_SRS18_MC18_MASK) >> EMMC_SD_SRS18_MC18_SHIFT;
-        /* does it support eXtended Power Control (XPC)? */
-        is_xpc = (max_ma_1_8v >= 150) && (max_ma_3_3v >= 150) ? 1 : 0;
-        /* does it support UHS-I (Ultra High Speed Interface) v1.8 signaling? */
-        is_si8r =((EMMC_SD_SRS16 & EMMC_SD_SRS16_VS18) && /* 1.8v supported */
-                  (EMMC_SD_SRS17 & (EMMC_SD_SRS17_DDR50 | /* DDR50, SDR104, SDR50 or supported */
-                          EMMC_SD_SRS17_SDR104 |
-                          EMMC_SD_SRS17_SDR50))) ? 1: 0;
+        max_ma_3_3v = ((reg & EMMC_SD_SRS18_MC33_MASK) >> EMMC_SD_SRS18_MC33_SHIFT) * 4;
+        max_ma_1_8v = ((reg & EMMC_SD_SRS18_MC18_MASK) >> EMMC_SD_SRS18_MC18_SHIFT) * 4;
+        /* does controller support eXtended Power Control (XPC)? */
+        xpc = (max_ma_1_8v >= 150) && (max_ma_3_3v >= 150) ? 1 : 0;
+        /* does controller support UHS-I (Ultra High Speed Interface) v1.8 signaling? */
+        si8r =((EMMC_SD_SRS16 & EMMC_SD_SRS16_VS18) && /* 1.8v supported */
+               (EMMC_SD_SRS17 & (EMMC_SD_SRS17_DDR50 | /* DDR50, SDR104 or SDR50 supported */
+                                 EMMC_SD_SRS17_SDR104 |
+                                 EMMC_SD_SRS17_SDR50))) ? 1: 0;
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_init: xpc:%d, si8r:%d, max_ma (3.3v:%d 1.8v:%d)\n",
+            xpc, si8r, max_ma_3_3v, max_ma_1_8v);
+    #endif
     }
     if (status == 0) {
         reg = 0;
+        /* get operating conditions */
         status = mmc_card_init(0, &reg);
         if (status == 0) {
             /* pick host and card operating voltages */
@@ -503,6 +732,9 @@ int mmc_init(void)
             }
             /* if needed change operating volage and re-init */
             if (ctrl_volts != EMMC_SD_SRS10_BVS_3_3V) {
+            #ifdef DEBUG_MMC
+                wolfBoot_printf("mmc_init: changing operating voltage to 3.0v\n");
+            #endif
                 status = mmc_power_init_seq(ctrl_volts);
             }
         }
@@ -511,19 +743,130 @@ int mmc_init(void)
         /* configure operating conditions */
         uint32_t cmd_arg = SDCARD_ACMD41_HCS;
         cmd_arg |= card_volts;
-        if (is_si8r) {
+        if (si8r) {
             cmd_arg |= SDCARD_REG_OCR_S18RA;
         }
-        if (is_xpc) {
+        if (xpc) {
             cmd_arg |= SDCARD_REG_OCR_XPC;
         }
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_init: sending OCR arg: 0x%08X\n", cmd_arg);
+    #endif
 
         /* retry until OCR ready */
         do {
             status = mmc_card_init(cmd_arg, &reg);
         } while (status == 0 && (reg & SDCARD_REG_OCR_READY) == 0);
+    }
+    if (status == 0) {
+        /* Get card identification */
+        status = mmc_send_cmd(MMC_CMD2_ALL_SEND_CID, 0, EMMC_SD_RESP_R2);
+    }
+    if (status == 0) {
+        /* Set relative address */
+        status = mmc_send_cmd(MMC_CMD3_SET_REL_ADDR, 0, EMMC_SD_RESP_R6);
+    }
+    if (status == 0) {
+        g_rca = ((EMMC_SD_SRS04 >> SD_RCA_SHIFT) & 0xFFFF);
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_init: rca: %d\n", g_rca);
+    #endif
+    }
+    if (status == 0) {
+        /* read CSD register from device */
+        status = mmc_send_cmd(MMC_CMD9_SEND_CSD, g_rca << SD_RCA_SHIFT,
+            EMMC_SD_RESP_R2);
+    }
+    if (status == 0) {
+        /* Get sector size and count */
+        uint32_t csd_struct;
+        uint32_t c_size = 0;
+        #define SECT_SIZE_CSD_MASK   0x03C000
+        #define SECT_SIZE_CSD_SHIFT  14
+        c_size = (EMMC_SD_SRS04 & SECT_SIZE_CSD_MASK) >> SECT_SIZE_CSD_SHIFT;
+        if (c_size < 32) {
+            g_sector_size = (1 << c_size);
+        #ifdef DEBUG_MMC
+            wolfBoot_printf("mmc_init: sector size: %d\n", g_sector_size);
+        #endif
+        }
 
+        csd_struct = get_srs_bits(126,2);
+        switch (csd_struct) {
+            case 0:
+                c_size = get_srs_bits(62, 12);
+                g_sector_count = (c_size + 1) << (get_srs_bits(47, 3) + 2);
+                break;
+            case 1:
+                c_size = get_srs_bits(48, 22);
+                g_sector_count = (c_size + 1) << 10;
+                break;
+            default:
+                /* invalid CSR structure */
+                status = -1;
+                break;
+        }
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_init: sector count: %d\n", g_sector_count);
+    #endif
+    }
+    if (status == 0) {
+        /* select card */
+        status = mmc_send_cmd(MMC_CMD7_SELECT_CARD, g_rca << SD_RCA_SHIFT,
+            EMMC_SD_RESP_R1B);
+        if (status == DEVICE_BUSY) {
+            status = mmc_wait_busy(1);
+        }
+    }
+    if (status == 0) {
+        /* disable card insert interrupt while changing bus width to avoid false triggers */
+        irq_restore = EMMC_SD_SRS13;
+        EMMC_SD_SRS13 = (irq_restore & ~EMMC_SD_SRS13_CINT_SE);
+        mmc_delay(DEFAULT_DELAY);
 
+        status = mmc_set_bus_width(4);
+    }
+    if (status == 0) {
+        /* Get SCR registers - 8 bytes */
+        uint32_t scr_reg[SCR_REG_DATA_SIZE/sizeof(uint32_t)];
+
+        status = mmc_send_cmd(SD_CMD_16, sizeof(scr_reg), EMMC_SD_RESP_R1);
+        if (status == 0) {
+            status = mmc_send_cmd(SD_CMD55_APP_CMD, (g_rca << SD_RCA_SHIFT),
+                EMMC_SD_RESP_R1);
+        }
+        if (status == 0) {
+            status = mmc_block_read(SD_ACMD51_SEND_SCR, 0, scr_reg,
+                sizeof(scr_reg));
+        }
+    }
+    if (status == 0) {
+        /* set UHS mode to SDR25 and driver strength to Type B */
+        uint32_t card_access_mode = SDCARD_SWITCH_ACCESS_MODE_SDR25;
+        status = mmc_set_function(card_access_mode, 1);
+        if (status == 0) {
+            /* set driver strength */
+            reg = EMMC_SD_SRS15;
+            reg &= ~EMMC_SD_SRS15_DSS_MASK;
+            reg |= EMMC_SD_SRS15_DSS_TYPE_B; /* default */
+            EMMC_SD_SRS15 = reg;
+
+            /* eanble high speed */
+            EMMC_SD_SRS10 |= EMMC_SD_SRS10_HSE;
+
+            /* set UHS mode */
+            reg = EMMC_SD_SRS15;
+            reg &= ~EMMC_SD_SRS15_UMS_MASK;
+            reg |= EMMC_SD_SRS15_UMS_SDR25;
+            EMMC_SD_SRS15 = reg;
+        }
+    }
+    if (status == 0) {
+        mmc_set_clock(EMMC_SD_CLK_50MHZ);
+
+        /* TODO: Phy training at SDR25 (50MHz) */
+
+        EMMC_SD_SRS13 = irq_restore; /* re-enable interrupt */
     }
     return status;
 }

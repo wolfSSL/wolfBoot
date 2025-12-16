@@ -876,6 +876,40 @@ set architecture riscv:rv64
 #thread apply all set $pc=_start
 ```
 
+### PolarFire Example Boot Output
+
+```
+disk_open: drv = 0
+mmc_set_timeout: timeout_us: 500000, tcfclk_khz: -824320848 (mhz: 3470646), timeout_val: 500000, dtcv: 15
+mmc_set_clock: clock_khz: 400, freq_khz: 400
+mmc_send_cmd: cmd_index: 0, cmd_arg: 00000000, resp_type: 0
+mmc_send_cmd: cmd_index: 8, cmd_arg: 00000100, resp_type: 9
+mmc_init: xpc:0, si8r:1, max_ma (3.3v:128 1.8v:128)
+mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
+mmc_send_cmd: cmd_index: 41, cmd_arg: 00000000, resp_type: 4
+ocr_reg: 0x40FF8000
+mmc_init: sending OCR arg: 0x41200000
+mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
+mmc_send_cmd: cmd_index: 41, cmd_arg: 41200000, resp_type: 4
+ocr_reg: 0x40FF8000
+mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
+mmc_send_cmd: cmd_index: 41, cmd_arg: 41200000, resp_type: 4
+ocr_reg: 0xC1FF8000
+mmc_send_cmd: cmd_index: 11, cmd_arg: 00000000, resp_type: 1
+mmc_send_cmd: cmd_index: 2, cmd_arg: 00000000, resp_type: 3
+mmc_send_cmd: cmd_index: 3, cmd_arg: 00000000, resp_type: 8
+mmc_init: rca: 43690
+mmc_send_cmd: cmd_index: 9, cmd_arg: AAAA0000, resp_type: 3
+mmc_init: sector size: 512
+mmc_init: sector count: 62333952
+mmc_send_cmd: cmd_index: 7, cmd_arg: AAAA0000, resp_type: 2
+Checking primary OS image in 0,1...
+Checking secondary OS image in 0,2...
+No valid OS image found in either partition 1 or 2
+wolfBoot: PANIC!
+```
+
+
 ### PolarFire TODO
 
 1) Add support for full HSS replacement using wolfboot.
