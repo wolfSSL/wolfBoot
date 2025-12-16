@@ -47,9 +47,15 @@ extern void (* const trap_vector_table[])(void);
 /* reloc_trap_vector is implemented in boot_riscv64_start.S */
 extern void reloc_trap_vector(const uint32_t *address);
 
-unsigned long handle_trap(unsigned long cause, unsigned long epc, unsigned long tval)
+static uint64_t last_cause = 0;
+static uint64_t last_epc = 0;
+static uint64_t last_tval = 0;
+
+unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc, unsigned long tval)
 {
-    /* TODO: Implement trap handling */
+    last_cause = cause;
+    last_epc = epc;
+    last_tval = tval;
     return epc;
 }
 

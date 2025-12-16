@@ -111,7 +111,8 @@ jobs:
       - name: Build wolfboot (riscv32)
         if: ${{ inputs.arch == 'riscv' }}
         run: |
-          make CROSS_COMPILE=riscv32-unknown-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
+          # using riscv64 for now since riscv32 is missing "zicsr" extension
+          make CROSS_COMPILE=riscv64-unknown-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
 
       - name: Build wolfboot (riscv64))
         if: ${{ inputs.arch == 'riscv64' }}
