@@ -879,8 +879,9 @@ set architecture riscv:rv64
 ### PolarFire Example Boot Output
 
 ```
+wolfBoot Version: 2.7.0 (Dec 17 2025 11:59:22)
 disk_open: drv = 0
-mmc_set_timeout: timeout_us: 500000, tcfclk_khz: -824320848 (mhz: 3470646), timeout_val: 500000, dtcv: 15
+mmc_set_timeout: timeout_val 500000 (12)
 mmc_set_clock: clock_khz: 400, freq_khz: 400
 mmc_send_cmd: cmd_index: 0, cmd_arg: 00000000, resp_type: 0
 mmc_send_cmd: cmd_index: 8, cmd_arg: 00000100, resp_type: 9
@@ -895,7 +896,6 @@ ocr_reg: 0x40FF8000
 mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
 mmc_send_cmd: cmd_index: 41, cmd_arg: 41200000, resp_type: 4
 ocr_reg: 0xC1FF8000
-mmc_send_cmd: cmd_index: 11, cmd_arg: 00000000, resp_type: 1
 mmc_send_cmd: cmd_index: 2, cmd_arg: 00000000, resp_type: 3
 mmc_send_cmd: cmd_index: 3, cmd_arg: 00000000, resp_type: 8
 mmc_init: rca: 43690
@@ -903,6 +903,20 @@ mmc_send_cmd: cmd_index: 9, cmd_arg: AAAA0000, resp_type: 3
 mmc_init: sector size: 512
 mmc_init: sector count: 62333952
 mmc_send_cmd: cmd_index: 7, cmd_arg: AAAA0000, resp_type: 2
+mmc_send_cmd: cmd_index: 55, cmd_arg: AAAA0000, resp_type: 1
+mmc_send_cmd: cmd_index: 6, cmd_arg: 00000002, resp_type: 1
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_send_cmd: cmd_index: 16, cmd_arg: 00000008, resp_type: 1
+mmc_send_cmd: cmd_index: 55, cmd_arg: AAAA0000, resp_type: 1
+mmc_block_read: cmd_index: 51, block_addr: 00000000, dst 0x801FFCE0, sz: 8
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_block_read: cmd_index: 6, block_addr: 00000001, dst 0x801FFC48, sz: 64
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_block_read: cmd_index: 6, block_addr: 80000001, dst 0x801FFC48, sz: 64
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_set_clock: clock_khz: 50000, freq_khz: 50000
 Checking primary OS image in 0,1...
 Checking secondary OS image in 0,2...
 No valid OS image found in either partition 1 or 2
