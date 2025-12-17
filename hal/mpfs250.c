@@ -31,7 +31,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include <target.h>
+#include "target.h"
 
 #include "mpfs250.h"
 #include "image.h"
@@ -42,6 +42,7 @@
 #include "printf.h"
 #include "loader.h"
 #include "disk.h"
+#include "gpt.h"
 
 #define DEBUG_MMC
 
@@ -200,6 +201,7 @@ int mmc_set_timeout(uint32_t timeout_us)
     return 0;
 }
 
+/* TODO: Fix with real timer */
 void mmc_delay(uint32_t delay)
 {
     while (delay--) {
@@ -298,7 +300,7 @@ uint32_t mmc_set_clock(uint32_t clock_khz)
     last_clock_khz = clock_khz;
 
 #ifdef DEBUG_MMC
-    wolfBoot_printf("mmc_set_clock: clock_khz: %d, freq_khz: %d\n",
+    wolfBoot_printf("mmc_set_clock: requested khz: %d, actual khz: %d\n",
         clock_khz, freq_khz);
 #endif
 
@@ -453,8 +455,8 @@ int mmc_card_init(uint32_t acmd41_arg, uint32_t *ocr_reg)
     return status;
 }
 
-/* MMC_CMD17_READ_SINGLE */
-int mmc_block_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
+/* MMC_CMD17_READ_SINGLE, MMC_CMD18_READ_MULTIPLE */
+int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     uint32_t sz)
 {
     int status;
@@ -467,11 +469,11 @@ int mmc_block_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
     mmc_delay(0xFF);
 
-    /* set transfer block count */
-    EMMC_SD_SRS01 = (1 << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
-
     /* wait for command and data line busy to clear */
     while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
+
+    /* set transfer block count */
+    EMMC_SD_SRS01 = (1 << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
 
     if (cmd_index == SD_ACMD51_SEND_SCR) {
         status = mmc_send_cmd(SD_CMD_16, sz, EMMC_SD_RESP_R1);
@@ -483,7 +485,7 @@ int mmc_block_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     }
 
 #ifdef DEBUG_MMC
-    wolfBoot_printf("mmc_block_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d\n",
+    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d\n",
         cmd_index, block_addr, dst, sz);
 #endif
 
@@ -513,11 +515,12 @@ int mmc_block_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
         status = mmc_wait_busy(0);
     }
     else {
-    #ifdef DEBUG_MMC
-        wolfBoot_printf("mmc_block_read: error: 0x%08X\n", reg);
-    #endif
-        status = -1;
+        status = -1; /* error */
     }
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_read: status: %d\n", status);
+#endif
 
     return status;
 }
@@ -567,10 +570,13 @@ static uint32_t get_srs_bits(int from, int count)
     return ret & mask;
 }
 
-int mmc_send_switch_function(uint32_t mode, uint32_t function_number, uint32_t group_number)
+/* check or set switch function/group:
+ * returns 0 if supported */
+int mmc_send_switch_function(uint32_t mode, uint32_t function_number,
+    uint32_t group_number)
 {
     int status;
-    uint32_t timeout = 4; /* up to 5 tries */
+    uint32_t timeout = 4;
     uint32_t cmd_arg;
     uint32_t func_status[64/sizeof(uint32_t)]; /* fixed 512 bits */
     uint8_t* p_func_status = (uint8_t*)func_status;
@@ -582,7 +588,7 @@ int mmc_send_switch_function(uint32_t mode, uint32_t function_number, uint32_t g
     cmd_arg = (function_number << ((group_number - 1) * 4));
     do {
         /* first run check to see if function is supported */
-        status = mmc_block_read(SD_CMD_6_SWITCH_FUNC,
+        status = mmc_read(SD_CMD_6_SWITCH_FUNC,
             (mode | cmd_arg),
             func_status, sizeof(func_status));
         if (status == 0) {
@@ -600,11 +606,12 @@ int mmc_send_switch_function(uint32_t mode, uint32_t function_number, uint32_t g
             /* supported: group 1 415:400 */
             if ((p_func_status[13 -
                     ((group_number-1)*2)] & (1 << function_number))) {
-                break; /* supported */
+                status = 0; /* supported */
             }
             else {
-                return -1; /* not supported */
+                status = -1; /* not supported */
             }
+            break;
         }
     } while (status == 0 && --timeout > 0); /* retry until function not busy */
     return status;
@@ -848,7 +855,7 @@ int mmc_init(void)
     if (status == 0) {
         /* Get SCR registers - 8 bytes */
         uint32_t scr_reg[SCR_REG_DATA_SIZE/sizeof(uint32_t)];
-        status = mmc_block_read(SD_ACMD51_SEND_SCR, 0, scr_reg,
+        status = mmc_read(SD_ACMD51_SEND_SCR, 0, scr_reg,
             sizeof(scr_reg));
     }
     if (status == 0) {
@@ -882,37 +889,72 @@ int mmc_init(void)
     return status;
 }
 
-/* TODO: Add support for reading uSD card with GPT (Global Partition Table) */
-/* The partition ID's are determined using BOOT_PART_A and BOOT_PART_B. */
-int disk_open(int drv)
+/* returns number of bytes read on success or negative on error */
+int disk_read(int drv, uint64_t start, uint32_t count, uint32_t *buf)
 {
-    wolfBoot_printf("disk_open: drv = %d\r\n", drv);
-    (void)drv;
-    return mmc_init();
+    int status = 0;
+    uint32_t read_sz, block_addr;
+    uint8_t* p_buf = (uint8_t*)buf;
+    uint32_t tmp_block[EMMC_SD_BLOCK_SIZE/sizeof(uint32_t)];
+    (void)drv; /* only one drive supported */
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("disk_read: drv:%d, start:%llu, count:%d, dst:%p\n",
+        drv, start, count, buf);
+#endif
+
+    while (count > 0) {
+        block_addr = (start / EMMC_SD_BLOCK_SIZE);
+        read_sz = count;
+        if (read_sz < EMMC_SD_BLOCK_SIZE) {
+            /* last partial block read */
+            status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
+                tmp_block, EMMC_SD_BLOCK_SIZE);
+            if (status == 0) {
+                memcpy(p_buf, tmp_block, read_sz);
+                break; /* last partial block read */
+            }
+        }
+        else {
+            /* full block read */
+            read_sz = EMMC_SD_BLOCK_SIZE;
+            status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
+                (uint32_t*)p_buf, read_sz);
+        }
+        if (status != 0) {
+            break;
+        }
+
+        start += read_sz;
+        p_buf += read_sz;
+        count -= read_sz;
+    }
+    return status;
 }
-int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
+
+int disk_write(int drv, uint64_t start, uint32_t count, const uint32_t *buf)
 {
+    /* not supported */
     (void)drv;
-    (void)part;
-    (void)off;
-    (void)sz;
+    (void)start;
+    (void)count;
     (void)buf;
     return 0;
 }
-int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
+
+int disk_init(int drv)
 {
+    int r = mmc_init();
+    if (r != 0) {
+        wolfBoot_printf("Failed to initialize MMC\n");
+    }
     (void)drv;
-    (void)part;
-    (void)off;
-    (void)sz;
-    (void)buf;
-    return 0;
+    return r;
 }
-int disk_find_partition_by_label(int drv, const char *label)
+
+void disk_close(int drv)
 {
     (void)drv;
-    (void)label;
-    return 0;
 }
 
 #ifdef DEBUG_UART

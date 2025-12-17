@@ -81,12 +81,21 @@ jobs:
         run: sudo apt-get update -o Acquire::Retries=3
 
       - name: Download and install RISC-V toolchains
+        if: ${{ inputs.arch == 'riscv' }}
         run: |
+          # Download SiFive prebuilt toolchain with newlib
+          wget -q https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
+          tar xzf riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
+          echo "$GITHUB_WORKSPACE/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14/bin" >> $GITHUB_PATH
+
           # Download latest prebuilt RISC-V toolchains
           #wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv32-elf-ubuntu-24.04-gcc.tar.xz
           #tar -xf riscv32-elf-ubuntu-24.04-gcc.tar.xz
           #echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
 
+      - name: Download and install RISC-V toolchains
+        if: ${{ inputs.arch == 'riscv64' }}
+        run: |
           wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv64-elf-ubuntu-24.04-gcc.tar.xz
           tar -xf riscv64-elf-ubuntu-24.04-gcc.tar.xz
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
@@ -106,7 +115,7 @@ jobs:
       - name: Build wolfboot (riscv32)
         if: ${{ inputs.arch == 'riscv' }}
         run: |
-          # using riscv64 for now since riscv64-unknown-elf- is missing "zicsr" extension
+          # using riscv64 for now since riscv32-unknown-elf- is missing "zicsr" extension
           make CROSS_COMPILE=riscv64-unknown-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
 
       - name: Build wolfboot (riscv64))

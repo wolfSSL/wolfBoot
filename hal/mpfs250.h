@@ -877,6 +877,7 @@
 
 #define SCR_REG_DATA_SIZE 8
 
+
 /* Switch Function Command Arguments */
 #define SDCARD_SWITCH_FUNC_MODE_SWITCH       (0x1u << 31) /* Set function mode */
 #define SDCARD_SWITCH_FUNC_MODE_CHECK        (0x0u << 31) /* Check mode */

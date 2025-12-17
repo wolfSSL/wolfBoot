@@ -563,9 +563,10 @@ endif
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
-  CFLAGS+=-DWOLFBOOT_UPDATE_DISK
+  CFLAGS+=-DWOLFBOOT_UPDATE_DISK -DMAX_DISKS=1
   UPDATE_OBJS:=src/update_disk.o
   OBJS += src/gpt.o
+  OBJS += src/disk.o
   ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV64
   CFLAGS+=$(ARCH_FLAGS)
@@ -1117,7 +1118,7 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/ahci.o
     OBJS += src/x86/ata.o
     OBJS += src/gpt.o
-    OBJS += src/x86/disk.o
+    OBJS += src/disk.o
     OBJS += src/x86/mptable.o
     OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o

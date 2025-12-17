@@ -19,15 +19,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <wolfboot/wolfboot.h>
+#include "wolfboot/wolfboot.h"
 #include <stdint.h>
-#include <uart_drv.h>
-#include <printf.h>
-#include <x86/ahci.h>
-#include <x86/ata.h>
-#include <x86/common.h>
 
 #ifdef __WOLFBOOT
+
+#include "uart_drv.h"
+#include "printf.h"
+#include "loader.h"
+
+#ifdef WOLFBOOT_FSP
+#include "x86/ahci.h"
+#include "x86/ata.h"
+#include "x86/common.h"
+#include "x86/tgl_fsp.h"
+#endif
 
 #if defined(TARGET_kontron_vx3060_s2)
 #define PCI_AHCI_BUS 0
@@ -38,6 +44,45 @@
 #define PCI_AHCI_DEV 31
 #define PCI_AHCI_FUN 2
 #endif
+
+#ifdef WOLFBOOT_FSP
+static uint32_t sata_bar;
+#endif
+
+int disk_init(int drv)
+{
+    int ret = 0;
+#ifdef WOLFBOOT_FSP
+    ret = x86_fsp_tgl_init_sata(&sata_bar);
+    if (ret != 0)
+        wolfBoot_panic();
+#ifdef WOLFBOOT_ATA_DISK_LOCK
+    ret = sata_unlock_disk(drv, 1);
+    if (ret != 0)
+        wolfBoot_panic();
+#endif
+#endif /* WOLFBOOT_FSP */
+    (void)drv;
+    return ret;
+}
+
+void disk_close(int drv)
+{
+#ifdef WOLFBOOT_FSP
+    sata_disable(sata_bar);
+#endif
+    (void)drv;
+}
+
+int disk_read(int drv, uint64_t start, uint32_t count, uint32_t *buf)
+{
+    return ata_drive_read(drv, start, count, (uint8_t*)buf);
+}
+
+int disk_write(int drv, uint64_t start, uint32_t count, const uint32_t *buf)
+{
+    return ata_drive_write(drv, start, count, (const uint8_t*)buf);
+}
 
 /*!
  * \brief Initializes the SATA controller.

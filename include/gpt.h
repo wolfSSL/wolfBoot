@@ -27,13 +27,14 @@
 #include <stdint.h>
 
 /* GPT Constants */
-#define GPT_SECTOR_SIZE        0x200
+#define GPT_SECTOR_SIZE        512 /* 0x200 */
 #define GPT_SIGNATURE          0x5452415020494645ULL /* "EFI PART" */
 #define GPT_PTYPE_PROTECTIVE   0xEE
 #define GPT_PART_NAME_SIZE     36
 #define GPT_MBR_ENTRY_START    0x01BE
 #define GPT_MBR_BOOTSIG_OFFSET 0x01FE
 #define GPT_MBR_BOOTSIG_VALUE  0xAA55
+#define GPT_PART_ENTRY_SIZE    256
 
 /**
  * @brief MBR partition table entry structure.
