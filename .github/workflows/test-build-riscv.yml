@@ -80,18 +80,13 @@ jobs:
       - name: Update repository
         run: sudo apt-get update -o Acquire::Retries=3
 
-      - name: Download and install RISC-V toolchain
-        if: ${{ inputs.arch == 'riscv' }}
+      - name: Download and install RISC-V toolchains
         run: |
           # Download latest prebuilt RISC-V toolchains
-          wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv32-elf-ubuntu-24.04-gcc.tar.xz
-          tar -xf riscv32-elf-ubuntu-24.04-gcc.tar.xz
-          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
+          #wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv32-elf-ubuntu-24.04-gcc.tar.xz
+          #tar -xf riscv32-elf-ubuntu-24.04-gcc.tar.xz
+          #echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
 
-      - name: Download and install RISC-V toolchain
-        if: ${{ inputs.arch == 'riscv64' }}
-        run: |
-          # Download latest prebuilt RISC-V toolchains
           wget -q https://github.com/RISCV-Tools/riscv-gnu-toolchain/releases/latest/download/riscv64-elf-ubuntu-24.04-gcc.tar.xz
           tar -xf riscv64-elf-ubuntu-24.04-gcc.tar.xz
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
@@ -111,7 +106,7 @@ jobs:
       - name: Build wolfboot (riscv32)
         if: ${{ inputs.arch == 'riscv' }}
         run: |
-          # using riscv64 for now since riscv32 is missing "zicsr" extension
+          # using riscv64 for now since riscv64-unknown-elf- is missing "zicsr" extension
           make CROSS_COMPILE=riscv64-unknown-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
 
       - name: Build wolfboot (riscv64))
