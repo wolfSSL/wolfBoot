@@ -99,7 +99,10 @@ extern uint8_t _end_wb[];
  */
 void RAMFUNCTION wolfBoot_start(void)
 {
-    uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
+    uint32_t p_hdr[IMAGE_HEADER_SIZE/sizeof(uint32_t)] XALIGNED_STACK(16);
+#ifdef WOLFBOOT_FSP
+    struct stage2_parameter *stage2_params;
+#endif
     struct wolfBoot_image os_image;
     int pA_ver = 0, pB_ver = 0;
     uint32_t cur_part = 0;
@@ -114,18 +117,10 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     char part_name[4] = {'P', ':', 'X', '\0'};
 
-#ifdef WOLFBOOT_FSP
-    struct stage2_parameter *stage2_params;
-    uint32_t sata_bar;
-    ret = x86_fsp_tgl_init_sata(&sata_bar);
-    if (ret != 0)
+    ret = disk_init(BOOT_DISK);
+    if (ret != 0) {
         wolfBoot_panic();
-#ifdef WOLFBOOT_ATA_DISK_LOCK
-    ret = sata_unlock_disk(BOOT_DISK, 1);
-    if (ret != 0)
-        wolfBoot_panic();
-#endif
-#endif /* WOLFBOOT_FSP */
+    }
 
     if (disk_open(BOOT_DISK) < 0) {
         wolfBoot_printf("Error opening disk %d\r\n", BOOT_DISK);
@@ -134,16 +129,16 @@ void RAMFUNCTION wolfBoot_start(void)
 
     wolfBoot_printf("Checking primary OS image in %d,%d...\r\n", BOOT_DISK,
             BOOT_PART_A);
-    if (disk_read(BOOT_DISK, BOOT_PART_A, 0, IMAGE_HEADER_SIZE, p_hdr)
+    if (disk_part_read(BOOT_DISK, BOOT_PART_A, 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
-        pA_ver = wolfBoot_get_blob_version(p_hdr);
+        pA_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
     }
 
     wolfBoot_printf("Checking secondary OS image in %d,%d...\r\n", BOOT_DISK,
             BOOT_PART_B);
-    if (disk_read(BOOT_DISK, BOOT_PART_B, 0, IMAGE_HEADER_SIZE, p_hdr)
+    if (disk_part_read(BOOT_DISK, BOOT_PART_B, 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
-        pB_ver = wolfBoot_get_blob_version(p_hdr);
+        pB_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
     }
 
     if ((pB_ver == 0) && (pA_ver == 0)) {
@@ -181,7 +176,7 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Attempting boot from %s\r\n", part_name);
 
         /* Fetch header only */
-        if (disk_read(BOOT_DISK, cur_part, 0, IMAGE_HEADER_SIZE, p_hdr)
+        if (disk_part_read(BOOT_DISK, cur_part, 0, IMAGE_HEADER_SIZE, p_hdr)
             != IMAGE_HEADER_SIZE) {
             wolfBoot_printf("Error reading image header from disk: p%d\r\n",
                     cur_part);
@@ -215,8 +210,8 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Loading image from disk...");
         load_off = 0;
         do {
-            ret = disk_read(BOOT_DISK, cur_part, load_off,
-                DISK_BLOCK_SIZE, (uint8_t*)load_address + load_off);
+            ret = disk_part_read(BOOT_DISK, cur_part, load_off,
+                DISK_BLOCK_SIZE, (uint32_t*)(load_address + load_off));
             if (ret < 0)
                 break;
             load_off += ret;
@@ -264,9 +259,7 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
-#ifdef WOLFBOOT_FSP
-    sata_disable(sata_bar);
-#endif
+    disk_close(BOOT_DISK);
 
     wolfBoot_printf("Firmware Valid.\r\n");
 

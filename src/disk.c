@@ -20,51 +20,21 @@
  *
  */
 /**
- * @file x86/disk.c
- * @brief x86 GPT disk driver implementation.
+ * @file disk.c
+ * @brief GPT disk driver implementation.
  *
- * This file contains the x86-specific GPT disk driver that uses ATA for
- * disk I/O operations. It uses the generic GPT parsing functions from
- * src/gpt.c for partition table parsing.
+ * This file contains the GPT disk driver that uses disk I/O operations.
+ * It uses the generic GPT parsing functions from src/gpt.c for partition
+ * table parsing.
  */
-#ifndef X86_DISK_C
-#define X86_DISK_C
+#ifndef _WOLFBOOT_DISK_C_
+#define _WOLFBOOT_DISK_C_
 
 #include <stdint.h>
 #include <string.h>
-#include <gpt.h>
-#include <x86/common.h>
-#include <x86/ahci.h>
-#include <x86/ata.h>
-#include <printf.h>
 
-#define MAX_PARTITIONS 16
-#define MAX_DISKS      4
-
-/**
- * @brief This structure holds information about a disk partition, including
- * the drive it belongs to, partition number, start, and end offsets.
- */
-struct disk_partition
-{
-    int drv;
-    int part_no;
-    uint64_t start;
-    uint64_t end;
-    uint16_t name[GPT_PART_NAME_SIZE];
-};
-
-/**
- * @brief This structure holds information about a disk drive, including its
- * drive number, open status, the number of partitions, and an array of disk
- * partitions.
- */
-struct disk_drive {
-    int drv;
-    int is_open;
-    int n_parts;
-    struct disk_partition part[MAX_PARTITIONS];
-};
+#include "disk.h"
+#include "printf.h"
 
 /**
  * @brief This array holds instances of the `struct disk_drive` representing
@@ -91,7 +61,7 @@ int disk_open(int drv)
     uint32_t n_parts = 0;
     uint32_t gpt_lba = 0;
     struct guid_ptable ptable;
-    uint8_t sector[GPT_SECTOR_SIZE];
+    uint32_t sector[GPT_SECTOR_SIZE/sizeof(uint32_t)];
 
     if ((drv < 0) || (drv > MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
@@ -101,14 +71,14 @@ int disk_open(int drv)
     wolfBoot_printf("Reading MBR...\r\n");
 
     /* Read MBR sector */
-    r = ata_drive_read(drv, 0, GPT_SECTOR_SIZE, sector);
-    if (r <= 0) {
+    r = disk_read(drv, 0, GPT_SECTOR_SIZE, sector);
+    if (r < 0) {
         wolfBoot_printf("Failed to read MBR\r\n");
         return -1;
     }
 
     /* Check for protective MBR and get GPT header location */
-    if (gpt_check_mbr_protective(sector, &gpt_lba) != 0) {
+    if (gpt_check_mbr_protective((uint8_t*)sector, &gpt_lba) != 0) {
         wolfBoot_printf("Cannot find valid partition table entry for GPT\r\n");
         return -1;
     }
@@ -120,14 +90,14 @@ int disk_open(int drv)
     Drives[drv].n_parts = 0;
 
     /* Read GPT header */
-    r = ata_drive_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
-    if (r <= 0) {
-        wolfBoot_printf("ATA: Read failed\r\n");
+    r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
+    if (r < 0) {
+        wolfBoot_printf("Disk read failed\r\n");
         return -1;
     }
 
     /* Parse and validate GPT header */
-    if (gpt_parse_header(sector, &ptable) != 0) {
+    if (gpt_parse_header((uint8_t*)sector, &ptable) != 0) {
         wolfBoot_printf("Invalid partition table\r\n");
         return -1;
     }
@@ -151,20 +121,20 @@ int disk_open(int drv)
         struct gpt_part_info part_info;
         uint64_t address = ptable.start_array * GPT_SECTOR_SIZE +
             i * ptable.array_sz;
-        uint8_t entry_buf[256]; /* Max partition entry size */
+        uint32_t entry_buf[GPT_PART_ENTRY_SIZE/sizeof(uint32_t)]; /* Max partition entry size */
 
         if (ptable.array_sz > sizeof(entry_buf)) {
             wolfBoot_printf("Partition entry size too large\r\n");
             break;
         }
 
-        r = ata_drive_read(drv, address, ptable.array_sz, entry_buf);
+        r = disk_read(drv, address, ptable.array_sz, entry_buf);
         if (r < 0) {
             return -1;
         }
 
         /* Parse partition entry using generic function */
-        if (gpt_parse_partition(entry_buf, ptable.array_sz, &part_info) == 0) {
+        if (gpt_parse_partition((uint8_t*)entry_buf, ptable.array_sz, &part_info) == 0) {
             uint64_t size;
             uint32_t part_count;
 
@@ -198,7 +168,7 @@ int disk_open(int drv)
  *
  * This function opens a disk partition with the specified drive number and
  * partition number and returns a pointer to its disk_partition structure.
- * It is a static helper function used internally by the disk_read and disk_write
+ * It is a static helper function used internally by the disk_part_read and disk_part_write
  * functions to validate the partition before performing read/write operations.
  *
  * @param[in] drv The drive number of the disk containing the partition (0 to `MAX_DISKS - 1`).
@@ -241,21 +211,24 @@ static struct disk_partition *open_part(int drv, int part)
  *
  * @return The number of bytes read into the buffer on success, or -1 if an error occurs.
  */
-int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
+int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint32_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
     int len = sz;
     int ret;
-    if (p == NULL)
+    if (p == NULL) {
         return -1;
-
+    }
     if ((p->end - (p->start + off)) < sz) {
         len = p->end - (p->start + off);
     }
     if (len < 0) {
         return -1;
     }
-    ret = ata_drive_read(drv, p->start + off, len, buf);
+    ret = disk_read(drv, p->start + off, len, buf);
+    if (ret == 0) {
+        ret = len;
+    }
     return ret;
 }
 
@@ -273,21 +246,21 @@ int disk_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
  *
  * @return The number of bytes written to the partition on success, or -1 if an error occurs.
  */
-int disk_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
+int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint32_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
     int len = sz;
     int ret;
-    if (p == NULL)
+    if (p == NULL) {
         return -1;
-
+    }
     if ((p->end - (p->start + off)) < sz) {
         len = p->end - (p->start + off);
     }
     if (len < 0) {
         return -1;
     }
-    ret = ata_drive_write(drv, p->start + off, len, buf);
+    ret = disk_write(drv, p->start + off, len, buf);
     return ret;
 }
 
@@ -306,12 +279,12 @@ int disk_find_partition_by_label(int drv, const char *label)
     struct disk_partition *p;
     int i;
 
-    if ((drv < 0) || (drv > MAX_DISKS))
+    if ((drv < 0) || (drv > MAX_DISKS)) {
         return -1;
-
-    if (Drives[drv].is_open == 0)
+    }
+    if (Drives[drv].is_open == 0) {
         return -1;
-
+    }
     for (i = 0; i < Drives[drv].n_parts; i++) {
         p = open_part(drv, i);
         if (gpt_part_name_eq(p->name, label) == 1)
@@ -320,5 +293,4 @@ int disk_find_partition_by_label(int drv, const char *label)
     return -1;
 }
 
-#endif /* X86_DISK_C */
-
+#endif /* _WOLFBOOT_DISK_C_ */

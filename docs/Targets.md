@@ -799,7 +799,10 @@ All build settings come from .config file. For this platform use `TARGET=mpfs250
 See example configuration at `config/examples/polarfire_mpfs250.config`.
 
 ```sh
+# Setup .config (build settings)
 cp config/examples/polarfire_mpfs250.config .config
+
+# build boot loader
 make wolfboot.elf
 ```
 
@@ -822,11 +825,46 @@ hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin
 
 Any customizations to the Device Tree can be made in mpfs.dts and it can be recompiled using: `dtc -I dts -O dtb mpfs.dts -o mpfs.dtb`
 
-
 Example one-shot command:
 
 ```sh
 cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin && file wolfboot.bin && ls -la wolfboot.bin
+```
+
+#### Build PolarFire test-application, sign it and apply to uSD
+
+```sh
+# make test-app
+make test-app/image.elf
+
+# assemble GPT image
+dd if=/dev/zero of=app.bin bs=1M count=64
+/sbin/fdisk app.bin <<EOF
+g
+n
+1
+
++16M
+n
+
+
++16M
+x
+n
+1
+OFP_A
+n
+2
+OFP_B
+r
+w
+EOF
+
+cp test-app/image.elf image.bin
+tools/keytools/sign $SIGN $HASH image.bin wolfboot_signing_private_key.der 1
+tools/keytools/sign $SIGN $HASH image.bin wolfboot_signing_private_key.der 2
+dd if=image_v1_signed.bin of=app.bin bs=512 seek=2048 conv=notrunc
+dd if=image_v2_signed.bin of=app.bin bs=512 seek=34816 conv=notrunc
 ```
 
 ### Flashing PolarFire SoC
@@ -879,10 +917,9 @@ set architecture riscv:rv64
 ### PolarFire Example Boot Output
 
 ```
-wolfBoot Version: 2.7.0 (Dec 17 2025 11:59:22)
-disk_open: drv = 0
+wolfBoot Version: 2.7.0 (Dec 17 2025 17:03:55)
 mmc_set_timeout: timeout_val 500000 (12)
-mmc_set_clock: clock_khz: 400, freq_khz: 400
+mmc_set_clock: requested khz: 400, actual khz: 400
 mmc_send_cmd: cmd_index: 0, cmd_arg: 00000000, resp_type: 0
 mmc_send_cmd: cmd_index: 8, cmd_arg: 00000100, resp_type: 9
 mmc_init: xpc:0, si8r:1, max_ma (3.3v:128 1.8v:128)
@@ -908,17 +945,79 @@ mmc_send_cmd: cmd_index: 6, cmd_arg: 00000002, resp_type: 1
 mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
 mmc_send_cmd: cmd_index: 16, cmd_arg: 00000008, resp_type: 1
 mmc_send_cmd: cmd_index: 55, cmd_arg: AAAA0000, resp_type: 1
-mmc_block_read: cmd_index: 51, block_addr: 00000000, dst 0x801FFCE0, sz: 8
+mmc_read: cmd_index: 51, block_addr: 00000000, dst 0x801FFCD0, sz: 8
 mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
 mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_block_read: cmd_index: 6, block_addr: 00000001, dst 0x801FFC48, sz: 64
+mmc_read: cmd_index: 6, block_addr: 00000001, dst 0x801FFC38, sz: 64
 mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
 mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_block_read: cmd_index: 6, block_addr: 80000001, dst 0x801FFC48, sz: 64
+mmc_read: cmd_index: 6, block_addr: 80000001, dst 0x801FFC38, sz: 64
 mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_set_clock: clock_khz: 50000, freq_khz: 50000
+mmc_read: status: 0
+mmc_set_clock: requested khz: 50000, actual khz: 50000
+Reading MBR...
+disk_read: drv:0, start:0, count:512, dst:0x801FF918
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000000, dst 0x801FF918, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+Found GPT PTE at sector 1
+Found valid boot signature in MBR
+disk_read: drv:0, start:512, count:512, dst:0x801FF918
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000001, dst 0x801FF918, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+Valid GPT partition table
+Current LBA: 0x1
+Backup LBA: 0x3B723FF
+Max number of partitions: 128
+Software limited: only allowing up to 16 partitions per disk.
+Disk size: 1850178048
+disk_read: drv:0, start:1024, count:128, dst:0x801FF818
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+disk0.p0 (0_3FFFE00h@ 0_400000)
+disk_read: drv:0, start:1152, count:128, dst:0x801FF818
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+disk0.p1 (0_3FFFE00h@ 0_400000)
+disk_read: drv:0, start:1280, count:128, dst:0x801FF818
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+disk0.p2 (0_3FFFE00h@ 0_400000)
+disk_read: drv:0, start:1408, count:128, dst:0x801FF818
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+disk0.p3 (0_3FFFE00h@ 0_400000)
+disk_read: drv:0, start:1536, count:128, dst:0x801FF818
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00000003, dst 0x801FF588, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
+Total partitions on disk0: 4
 Checking primary OS image in 0,1...
+disk_read: drv:0, start:4194304, count:512, dst:0x801FFDA0
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00002000, dst 0x801FFDA0, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
 Checking secondary OS image in 0,2...
+disk_read: drv:0, start:4194304, count:512, dst:0x801FFDA0
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: cmd_index: 17, block_addr: 00002000, dst 0x801FFDA0, sz: 512
+mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
+mmc_read: status: 0
 No valid OS image found in either partition 1 or 2
 wolfBoot: PANIC!
 ```
