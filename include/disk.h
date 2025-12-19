@@ -58,14 +58,14 @@ struct disk_drive {
 
 /* user supplied functions */
 int disk_init(int drv);
-int disk_read(int drv, uint64_t start, uint32_t count, uint32_t *buf);
-int disk_write(int drv, uint64_t start, uint32_t count, const uint32_t *buf);
+int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf);
+int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf);
 void disk_close(int drv);
 
 /* standard functions */
 int disk_open(int drv);
-int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint32_t *buf);
-int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint32_t *buf);
+int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf);
+int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf);
 int disk_find_partition_by_label(int drv, const char *label);
 
 #endif /* _WOLFBOOT_DISK_H */

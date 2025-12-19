@@ -831,63 +831,92 @@ Example one-shot command:
 cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin && file wolfboot.bin && ls -la wolfboot.bin
 ```
 
-#### Build PolarFire test-application, sign it and apply to uSD
-
-```sh
-# make test-app
-make test-app/image.elf
-
-# assemble GPT image
-dd if=/dev/zero of=app.bin bs=1M count=64
-/sbin/fdisk app.bin <<EOF
-g
-n
-1
-
-+16M
-n
-
-
-+16M
-x
-n
-1
-OFP_A
-n
-2
-OFP_B
-r
-w
-EOF
-
-cp test-app/image.elf image.bin
-tools/keytools/sign $SIGN $HASH image.bin wolfboot_signing_private_key.der 1
-tools/keytools/sign $SIGN $HASH image.bin wolfboot_signing_private_key.der 2
-dd if=image_v1_signed.bin of=app.bin bs=512 seek=2048 conv=notrunc
-dd if=image_v2_signed.bin of=app.bin bs=512 seek=34816 conv=notrunc
-```
-
 ### Flashing PolarFire SoC
-
 
 The HSS MMC boot source looks for GPT with GUID "21686148-6449-6E6F-744E-656564454649" or sector "0" if no GPT found. That GUID is the default "BIOS" boot partition.
 
 The resulting image from `hss-payload-generator` can be directly placed into GPT BIOS partition. The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a USB device. You can then use "dd" to copy the boot image to the BOOT partition 2. Example:
 
 ```
-sudo dd if=wolfboot.bin of=/dev/sde2 bs=1024
+sudo dd if=wolfboot.bin of=/dev/sdc2 bs=512
 ```
 
-Flashing to eNVM:
+### PolarFire testing
 
-The boot rom expects a 0x100 byte secure boot header added. It also requires the .ld is offset by 0x100 to leave room for this. The mpfsBootmodeProgrammer adds 0x100 of meta information for secure boot.
+This section describes how to build the test-application, create a custom uSD with required partitions and copying signing test-application to uSD partitions.
+
+To use your own application (Linux FIT Image, ELF, etc) just replace test-app/image.elf with your own filename.
 
 ```sh
-$SC_INSTALL_DIR/eclipse/jre/bin/java -jar \
-    $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar \
-    --bootmode 1 --die MPFS250T --package FCVG484 --workdir $PWD wolfboot.elf
+# make test-app
+make test-app/image.elf
 ```
-Note: wolfBoot does not support running from eNVM in machine mode yet.
+
+```sh
+# Partition uSD card
+sudo fdisk /dev/sdc <<EOF
+g
+n
+1
+
++8M
+
+n
+2
+
++64M
+n
+3
+
++64M
+n
+4
+
+t
+1
+4
+x
+n
+2
+OFP_A
+n
+3
+OFP_B
+r
+p
+w
+EOF
+```
+
+Result should look like:
+
+```
+Disk /dev/sdc: 29.72 GiB, 31914983424 bytes, 62333952 sectors
+Disk model: MassStorageClass
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: 9A5E3FBC-AAB2-483E-941C-7797802BD173
+
+Device      Start      End  Sectors  Size Type
+/dev/sdc1    2048    18431    16384    8M BIOS boot
+/dev/sdc2   18432   149503   131072   64M Linux filesystem
+/dev/sdc3  149504   280575   131072   64M Linux filesystem
+/dev/sdc4  280576 62332927 62052352 29.6G Linux filesystem
+```
+
+```sh
+# Sign image with version 1
+./tools/keytools/sign --ecc384 --sha384 test-app/image.elf wolfboot_signing_private_key.der 1
+# Copy signed image to both OFP partitions
+sudo dd if=image_v1_signed.bin of=/dev/sdc2 bs=512
+sudo dd if=image_v1_signed.bin of=/dev/sdc2 bs=512
+
+# Copy wolfBoot to BIOS boot partition
+sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512
+```
+
 
 ### Debugging PolarFire Soc
 

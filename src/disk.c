@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "wolfboot/wolfboot.h"
 #include "disk.h"
 #include "printf.h"
 
@@ -61,7 +62,7 @@ int disk_open(int drv)
     uint32_t n_parts = 0;
     uint32_t gpt_lba = 0;
     struct guid_ptable ptable;
-    uint32_t sector[GPT_SECTOR_SIZE/sizeof(uint32_t)];
+    uint8_t sector[GPT_SECTOR_SIZE] XALIGNED(4);
 
     if ((drv < 0) || (drv > MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
@@ -119,9 +120,9 @@ int disk_open(int drv)
     /* Read and parse partition entries */
     for (i = 0; i < n_parts; i++) {
         struct gpt_part_info part_info;
-        uint64_t address = ptable.start_array * GPT_SECTOR_SIZE +
-            i * ptable.array_sz;
-        uint32_t entry_buf[GPT_PART_ENTRY_SIZE/sizeof(uint32_t)]; /* Max partition entry size */
+        uint64_t address = (ptable.start_array * GPT_SECTOR_SIZE) +
+            (i * ptable.array_sz);
+        uint8_t entry_buf[GPT_PART_ENTRY_SIZE] XALIGNED(4); /* Max partition entry size */
 
         if (ptable.array_sz > sizeof(entry_buf)) {
             wolfBoot_printf("Partition entry size too large\r\n");
@@ -211,7 +212,7 @@ static struct disk_partition *open_part(int drv, int part)
  *
  * @return The number of bytes read into the buffer on success, or -1 if an error occurs.
  */
-int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint32_t *buf)
+int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
     int len = sz;
@@ -227,7 +228,7 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint32_t *buf)
     }
     ret = disk_read(drv, p->start + off, len, buf);
     if (ret == 0) {
-        ret = len;
+        ret = len; /* success expects to return the number of bytes read */
     }
     return ret;
 }
@@ -246,7 +247,7 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint32_t *buf)
  *
  * @return The number of bytes written to the partition on success, or -1 if an error occurs.
  */
-int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint32_t *buf)
+int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
     int len = sz;
@@ -261,6 +262,9 @@ int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint32_t
         return -1;
     }
     ret = disk_write(drv, p->start + off, len, buf);
+    if (ret == 0) {
+        ret = len; /* success expects to return the number of bytes written */
+    }
     return ret;
 }
 

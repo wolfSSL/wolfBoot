@@ -69,10 +69,10 @@
 #define BOOT_DISK 0
 #endif
 #ifndef BOOT_PART_A
-#define BOOT_PART_A 1
+#define BOOT_PART_A 0
 #endif
 #ifndef BOOT_PART_B
-#define BOOT_PART_B 2
+#define BOOT_PART_B 1
 #endif
 
 #ifndef MAX_FAILURES
@@ -99,7 +99,7 @@ extern uint8_t _end_wb[];
  */
 void RAMFUNCTION wolfBoot_start(void)
 {
-    uint32_t p_hdr[IMAGE_HEADER_SIZE/sizeof(uint32_t)] XALIGNED_STACK(16);
+    uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
 #ifdef WOLFBOOT_FSP
     struct stage2_parameter *stage2_params;
 #endif
@@ -211,7 +211,7 @@ void RAMFUNCTION wolfBoot_start(void)
         load_off = 0;
         do {
             ret = disk_part_read(BOOT_DISK, cur_part, load_off,
-                DISK_BLOCK_SIZE, (uint32_t*)(load_address + load_off));
+                DISK_BLOCK_SIZE, (uint8_t *)(load_address + load_off));
             if (ret < 0)
                 break;
             load_off += ret;
