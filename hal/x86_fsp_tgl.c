@@ -1,4 +1,4 @@
-/* fsp_tgl.c
+/* x86_fsp_tgl.c
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *
@@ -70,18 +70,19 @@ void disk_close(int drv)
 {
 #ifdef WOLFBOOT_FSP
     sata_disable(sata_bar);
+    sata_bar = 0;
 #endif
     (void)drv;
 }
 
-int disk_read(int drv, uint64_t start, uint32_t count, uint32_t *buf)
+int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 {
-    return ata_drive_read(drv, start, count, (uint8_t*)buf);
+    return ata_drive_read(drv, start, count, buf);
 }
 
-int disk_write(int drv, uint64_t start, uint32_t count, const uint32_t *buf)
+int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
 {
-    return ata_drive_write(drv, start, count, (const uint8_t*)buf);
+    return ata_drive_write(drv, start, count, buf);
 }
 
 /*!

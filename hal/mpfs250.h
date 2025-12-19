@@ -836,8 +836,7 @@
 #define MMC_CMD0_GO_IDLE          0    /* Reset card to idle state */
 #define MMC_CMD1_SEND_OP_COND     1    /* MMC: Send operating conditions */
 #define MMC_CMD2_ALL_SEND_CID     2    /* Get card identification */
-#define MMC_CMD3_SET_REL_ADDR     3    /* MMC: Set relative address */
-#define SD_CMD3_SEND_REL_ADDR     3    /* SD: Get relative address */
+#define MMC_CMD3_SET_REL_ADDR     3    /* Set relative address */
 #define MMC_CMD_4_SET_DSR         4
 #define SD_CMD_6_SWITCH_FUNC      6    /* SD: Switch function */
 #define MMC_CMD7_SELECT_CARD      7    /* Select/deselect card */
@@ -873,10 +872,10 @@
 
 #define MAX_CURRENT_MA 150 /* mA */
 
-#define SD_RCA_SHIFT 16
+#define SD_RCA_SHIFT 16 /* relative card address */
+#define SD_RCA_MASK  (0xFFFFU << SD_RCA_SHIFT) /* relative card address mask */
 
 #define SCR_REG_DATA_SIZE 8
-
 
 /* Switch Function Command Arguments */
 #define SDCARD_SWITCH_FUNC_MODE_SWITCH       (0x1u << 31) /* Set function mode */

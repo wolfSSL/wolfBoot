@@ -46,7 +46,6 @@
 
 #define DEBUG_MMC
 
-/* Placeholder functions - to be implemented */
 void hal_init(void)
 {
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
@@ -269,7 +268,7 @@ uint32_t mmc_set_clock(uint32_t clock_khz)
     base_clk_khz = (reg & EMMC_SD_SRS16_BCSDCLK_MASK) >> EMMC_SD_SRS16_BCSDCLK_SHIFT;
     if (base_clk_khz == 0) {
         /* error getting base clock */
-        return 0;
+        return -1;
     }
     base_clk_khz *= 1000; /* convert MHz to kHz */
 
@@ -427,14 +426,13 @@ int mmc_power_init_seq(uint32_t voltage)
     if (status == 0) {
         /* send CMD0 (go idle) to reset card */
         status = mmc_send_cmd(MMC_CMD0_GO_IDLE, 0, EMMC_SD_RESP_NONE);
+    }
+    if (status == 0) {
+        mmc_delay(DEFAULT_DELAY);
 
-        if (status == 0) {
-            mmc_delay(DEFAULT_DELAY);
-
-            /* send the operating conditions command */
-            status = mmc_send_cmd(SD_CMD8_SEND_IF_COND, IF_COND_27V_33V,
-                EMMC_SD_RESP_R7);
-        }
+        /* send the operating conditions command */
+        status = mmc_send_cmd(SD_CMD8_SEND_IF_COND, IF_COND_27V_33V,
+            EMMC_SD_RESP_R7);
     }
     return status;
 }
@@ -553,6 +551,7 @@ int mmc_set_bus_width(uint32_t bus_width)
     return status;
 }
 
+/* helper to get bits from the response registers */
 static uint32_t get_srs_bits(int from, int count)
 {
     volatile uint32_t *resp = ((volatile uint32_t*)(EMMC_SD_BASE + 0x210));
@@ -564,8 +563,8 @@ static uint32_t get_srs_bits(int from, int count)
     off = from / 32;
     shft = from & 31;
     ret = resp[off] >> shft;
-    if (from + shft > 32) {
-        ret |= resp[off + 1] <<  (32 - shft) % 32;
+    if ((from + shft) > 32) {
+        ret |= resp[off + 1] << ((32 - shft) % 32);
     }
     return ret & mask;
 }
@@ -806,34 +805,29 @@ int mmc_init(void)
     if (status == 0) {
         /* Get sector size and count */
         uint32_t csd_struct;
-        uint32_t c_size = 0;
-        #define SECT_SIZE_CSD_MASK   0x03C000
-        #define SECT_SIZE_CSD_SHIFT  14
-        c_size = (EMMC_SD_SRS04 & SECT_SIZE_CSD_MASK) >> SECT_SIZE_CSD_SHIFT;
-        if (c_size < 32) {
-            g_sector_size = (1U << c_size);
-        #ifdef DEBUG_MMC
-            wolfBoot_printf("mmc_init: sector size: %d\n", g_sector_size);
-        #endif
-        }
+        uint32_t bl_len, c_size, c_size_mult;
+        bl_len = get_srs_bits(22, 4);
+        g_sector_size = (1U << bl_len);
 
         csd_struct = get_srs_bits(126, 2);
         switch (csd_struct) {
             case 0:
                 c_size = get_srs_bits(62, 12);
-                g_sector_count = (c_size + 1) << (get_srs_bits(47, 3) + 2);
+                c_size_mult = get_srs_bits(47, 3);
+                g_sector_count = (c_size + 1) << (c_size_mult + 2);
                 break;
             case 1:
                 c_size = get_srs_bits(48, 22);
                 g_sector_count = (c_size + 1) << 10;
                 break;
             default:
-                /* invalid CSR structure */
+                /* invalid CSD structure */
                 status = -1;
                 break;
         }
     #ifdef DEBUG_MMC
-        wolfBoot_printf("mmc_init: sector count: %d\n", g_sector_count);
+        wolfBoot_printf("mmc_init: csd_version: %d, sector: size %d count %d\n",
+            csd_struct, g_sector_size, g_sector_count);
     #endif
     }
     if (status == 0) {
@@ -890,11 +884,10 @@ int mmc_init(void)
 }
 
 /* returns number of bytes read on success or negative on error */
-int disk_read(int drv, uint64_t start, uint32_t count, uint32_t *buf)
+int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 {
     int status = 0;
     uint32_t read_sz, block_addr;
-    uint8_t* p_buf = (uint8_t*)buf;
     uint32_t tmp_block[EMMC_SD_BLOCK_SIZE/sizeof(uint32_t)];
     (void)drv; /* only one drive supported */
 
@@ -906,33 +899,34 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint32_t *buf)
     while (count > 0) {
         block_addr = (start / EMMC_SD_BLOCK_SIZE);
         read_sz = count;
-        if (read_sz < EMMC_SD_BLOCK_SIZE) {
-            /* last partial block read */
+        if (read_sz > EMMC_SD_BLOCK_SIZE) {
+            read_sz = EMMC_SD_BLOCK_SIZE;
+        }
+        if (read_sz < EMMC_SD_BLOCK_SIZE || ((uintptr_t)buf % 4) != 0) {
+            /* partial or unaligned block read */
             status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
                 tmp_block, EMMC_SD_BLOCK_SIZE);
             if (status == 0) {
-                memcpy(p_buf, tmp_block, read_sz);
-                break; /* last partial block read */
+                memcpy(buf, tmp_block, read_sz);
             }
         }
         else {
             /* full block read */
-            read_sz = EMMC_SD_BLOCK_SIZE;
             status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
-                (uint32_t*)p_buf, read_sz);
+                (uint32_t*)buf, read_sz);
         }
         if (status != 0) {
             break;
         }
 
         start += read_sz;
-        p_buf += read_sz;
+        buf += read_sz;
         count -= read_sz;
     }
     return status;
 }
 
-int disk_write(int drv, uint64_t start, uint32_t count, const uint32_t *buf)
+int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
 {
     /* not supported */
     (void)drv;
