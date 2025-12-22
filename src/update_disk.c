@@ -211,7 +211,7 @@ void RAMFUNCTION wolfBoot_start(void)
         load_off = 0;
         do {
             ret = disk_part_read(BOOT_DISK, cur_part, load_off,
-                DISK_BLOCK_SIZE, (uint8_t *)(load_address + load_off));
+                DISK_BLOCK_SIZE, ((uint8_t *)load_address) + load_off);
             if (ret < 0)
                 break;
             load_off += ret;
