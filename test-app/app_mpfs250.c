@@ -30,124 +30,19 @@
 #include "wolfboot/wolfboot.h"
 #include "target.h"
 #include "printf.h"
-#include "keystore.h"
 
 #include "../hal/mpfs250.h"
 
-static uint8_t boot_part_state = IMG_STATE_NEW;
-static uint8_t update_part_state = IMG_STATE_NEW;
-
-const char part_state_names[6][16] = {
-    "NEW",
-    "UPDATING",
-    "FFLAGS",
-    "TESTING",
-    "CONFIRMED",
-    "[Invalid state]"
-};
-
-static const char *part_state_name(uint8_t state)
-{
-    switch(state) {
-        case IMG_STATE_NEW:
-            return part_state_names[0];
-        case IMG_STATE_UPDATING:
-            return part_state_names[1];
-        case IMG_STATE_FINAL_FLAGS:
-            return part_state_names[2];
-        case IMG_STATE_TESTING:
-            return part_state_names[3];
-        case IMG_STATE_SUCCESS:
-            return part_state_names[4];
-        default:
-            return part_state_names[5];
-    }
-}
-
-static int print_info(void)
-{
-    int i, j;
-    uint32_t cur_fw_version, update_fw_version;
-    uint32_t n_keys;
-    uint16_t hdrSz;
-
-    cur_fw_version = wolfBoot_current_firmware_version();
-    update_fw_version = wolfBoot_update_firmware_version();
-
-    wolfBoot_get_partition_state(PART_BOOT, &boot_part_state);
-    wolfBoot_get_partition_state(PART_UPDATE, &update_part_state);
-
-    wolfBoot_printf("\r\n");
-    wolfBoot_printf("System information\r\n");
-    wolfBoot_printf("====================================\r\n");
-    wolfBoot_printf("Firmware version : 0x%lx\r\n", wolfBoot_current_firmware_version());
-    wolfBoot_printf("Current firmware state: %s\r\n", part_state_name(boot_part_state));
-    if (update_fw_version != 0) {
-        if (update_part_state == IMG_STATE_UPDATING)
-            wolfBoot_printf("Candidate firmware version : 0x%lx\r\n", update_fw_version);
-        else
-            wolfBoot_printf("Backup firmware version : 0x%lx\r\n", update_fw_version);
-        wolfBoot_printf("Update state: %s\r\n", part_state_name(update_part_state));
-        if (update_fw_version > cur_fw_version) {
-            wolfBoot_printf("'reboot' to initiate update.\r\n");
-        } else {
-            wolfBoot_printf("Update image older than current.\r\n");
-        }
-    } else {
-        wolfBoot_printf("No image in update partition.\r\n");
-    }
-
-    wolfBoot_printf("\r\n");
-    wolfBoot_printf("Bootloader OTP keystore information\r\n");
-    wolfBoot_printf("====================================\r\n");
-    n_keys = keystore_num_pubkeys();
-    wolfBoot_printf("Number of public keys: %lu\r\n", n_keys);
-    for (i = 0; i < n_keys; i++) {
-        uint32_t size = keystore_get_size(i);
-        uint32_t type = keystore_get_key_type(i);
-        uint32_t mask = keystore_get_mask(i);
-        uint8_t *keybuf = keystore_get_buffer(i);
-
-        wolfBoot_printf("\r\n");
-        wolfBoot_printf("  Public Key #%d: size %lu, type %lx, mask %08lx\r\n", i,
-                size, type, mask);
-        wolfBoot_printf("  ====================================\r\n  ");
-        for (j = 0; j < size; j++) {
-            wolfBoot_printf("%02X ", keybuf[j]);
-            if (j % 16 == 15) {
-                wolfBoot_printf("\r\n  ");
-            }
-        }
-        wolfBoot_printf("\r\n");
-    }
-    return 0;
-}
 
 void main(void)
 {
-    uint32_t app_version;
-
     hal_init();
-
-    app_version = wolfBoot_current_firmware_version();
 
     wolfBoot_printf("========================\r\n");
     wolfBoot_printf("PolarFire SoC MPFS250 wolfBoot demo Application\r\n");
     wolfBoot_printf("Copyright 2025 wolfSSL Inc\r\n");
     wolfBoot_printf("GPL v3\r\n");
-    wolfBoot_printf("Version : 0x%lx\r\n", app_version);
     wolfBoot_printf("========================\r\n");
-
-    print_info();
-
-    if (app_version > 1) {
-        if (boot_part_state == IMG_STATE_TESTING) {
-            wolfBoot_printf("Booting new firmware, marking successful boot\n");
-
-            /* Mark successful boot, so update won't be rolled back */
-            wolfBoot_success();
-        }
-    }
 
     /* TODO: Add application-specific code here */
 

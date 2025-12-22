@@ -136,7 +136,7 @@ int wolfBoot_initialize_encryption(void)
 #undef WOLFBOOT_FIXED_PARTITIONS
 #endif
 
-#ifdef EXT_FLASH
+#if defined(EXT_FLASH) && !defined(WOLFBOOT_NO_PARTITIONS)
 static uint32_t ext_cache;
 #endif
 
@@ -154,8 +154,8 @@ static uint32_t wb_reverse_word32(uint32_t x)
 #endif
 #endif
 
-#if defined(WOLFBOOT_FIXED_PARTITIONS) || defined(EXT_FLASH) || \
-    defined(NVM_FLASH_WRITEONCE)
+#if (defined(WOLFBOOT_FIXED_PARTITIONS) || defined(EXT_FLASH) || \
+    defined(NVM_FLASH_WRITEONCE)) && !defined(WOLFBOOT_NO_PARTITIONS)
 static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #endif
 

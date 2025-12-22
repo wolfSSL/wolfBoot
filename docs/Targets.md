@@ -847,13 +847,9 @@ This section describes how to build the test-application, create a custom uSD wi
 
 To use your own application (Linux FIT Image, ELF, etc) just replace test-app/image.elf with your own filename.
 
-```sh
-# make test-app
-make test-app/image.elf
-```
+1) Partition uSD card (replace /dev/sdc with your actual media, find using `lsblk`):
 
 ```sh
-# Partition uSD card
 sudo fdisk /dev/sdc <<EOF
 g
 n
@@ -906,17 +902,21 @@ Device      Start      End  Sectors  Size Type
 /dev/sdc4  280576 62332927 62052352 29.6G Linux filesystem
 ```
 
+2) Build, Sign and copy images
 ```sh
+# make test-app
+make test-app/image.elf
 # Sign image with version 1
 ./tools/keytools/sign --ecc384 --sha384 test-app/image.elf wolfboot_signing_private_key.der 1
 # Copy signed image to both OFP partitions
 sudo dd if=image_v1_signed.bin of=/dev/sdc2 bs=512
-sudo dd if=image_v1_signed.bin of=/dev/sdc2 bs=512
+sudo dd if=image_v1_signed.bin of=/dev/sdc3 bs=512
 
 # Copy wolfBoot to BIOS boot partition
 sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512
 ```
 
+3) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
 
 ### Debugging PolarFire Soc
 

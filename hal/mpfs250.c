@@ -44,8 +44,6 @@
 #include "disk.h"
 #include "gpt.h"
 
-#define DEBUG_MMC
-
 void hal_init(void)
 {
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
@@ -129,7 +127,7 @@ int ext_flash_erase(uintptr_t address, int len)
 }
 #endif /* EXT_FLASH */
 
-#ifdef MMU
+#if defined(MMU) && !defined(WOLFBOOT_NO_PARTITIONS)
 void* hal_get_dts_address(void)
 {
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
@@ -884,11 +882,13 @@ int mmc_init(void)
 }
 
 /* returns number of bytes read on success or negative on error */
+/* start may not be block aligned and count may not be block multiple */
 int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 {
     int status = 0;
     uint32_t read_sz, block_addr;
     uint32_t tmp_block[EMMC_SD_BLOCK_SIZE/sizeof(uint32_t)];
+    uint32_t start_offset = (start % EMMC_SD_BLOCK_SIZE);
     (void)drv; /* only one drive supported */
 
 #ifdef DEBUG_MMC
@@ -902,16 +902,21 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         if (read_sz > EMMC_SD_BLOCK_SIZE) {
             read_sz = EMMC_SD_BLOCK_SIZE;
         }
-        if (read_sz < EMMC_SD_BLOCK_SIZE || ((uintptr_t)buf % 4) != 0) {
-            /* partial or unaligned block read */
+        if (read_sz < EMMC_SD_BLOCK_SIZE || /* last partial */
+            start_offset != 0 ||            /* start not block aligned */
+            ((uintptr_t)buf % 4) != 0)     /* buf not 4-byte aligned */
+        {
+            /* block read to temporary buffer */
             status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
                 tmp_block, EMMC_SD_BLOCK_SIZE);
             if (status == 0) {
-                memcpy(buf, tmp_block, read_sz);
+                uint8_t* tmp_buf = (uint8_t*)tmp_block;
+                memcpy(buf, tmp_buf + start_offset, read_sz);
+                start_offset = 0;
             }
         }
         else {
-            /* full block read */
+            /* direct full block read */
             status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
                 (uint32_t*)buf, read_sz);
         }
