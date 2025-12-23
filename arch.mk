@@ -1170,6 +1170,8 @@ ifeq ($(ARCH),sim)
     WH_NVM_HEX ?= whNvmImage.hex
     WH_NVM_PART_SIZE ?= 16384 # must match partition size in hal/sim.c
     WH_NVM_BASE_ADDRESS ?= 0x0
+
+    CFLAGS += -DWOLFHSM_CFG_NO_SYS_TIME
   endif
 endif
 
@@ -1198,7 +1200,8 @@ ifeq ($(ARCH), AURIX_TC3)
     # Makefile shennanigans for "if (WOLFHSM_CLIENT==1 || WOLFHSM_SERVER==1)"
     ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
       # Common wolfHSM port files
-      CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port -DWOLFHSM_CFG_DMA
+      CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port -DWOLFHSM_CFG_DMA \
+                -DWOLFHSM_CFG_NO_SYS_TIME
       OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_common.o \
               $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_hsmhost.o
       # General wolfHSM files
