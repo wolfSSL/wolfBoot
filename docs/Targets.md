@@ -799,9 +799,9 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 `hal/mpfs250.ld` - Linker script for the platform
 `hal/mpfs.dts` / `hal/mpfs.dtb` - Device tree source and binary
 `hal/mpfs.yaml` - HSS payload generator configuration
-`hal/mpfs250.its` - For creating new FIT images with Kernel and DTB
+`hal/mpfs250.its` - Example FIT image creation template
 
-### Building PolarFire SoC
+### PolarFire SoC Building wolfBoot
 
 All build settings come from .config file. For this platform use `TARGET=mpfs250` and `ARCH=RISCV64`.
 
@@ -826,6 +826,10 @@ make
 sudo cp hss-payload-generator /usr/local/bin/
 ```
 
+The HSS MMC boot source looks for GPT with GUID "21686148-6449-6E6F-744E-656564454649" or sector "0" if no GPT found. That GUID is the default "BIOS" boot partition.
+
+The resulting image from `hss-payload-generator` can be directly placed into GPT BIOS partition.
+
 Use this command to assemble a bootable wolfboot image:
 
 ```sh
@@ -837,24 +841,20 @@ Any customizations to the Device Tree can be made in mpfs.dts and it can be reco
 Example one-shot command:
 
 ```sh
-cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin && file wolfboot.bin && ls -la wolfboot.bin
+cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin
 ```
 
-### Flashing PolarFire SoC
-
-The HSS MMC boot source looks for GPT with GUID "21686148-6449-6E6F-744E-656564454649" or sector "0" if no GPT found. That GUID is the default "BIOS" boot partition.
-
-The resulting image from `hss-payload-generator` can be directly placed into GPT BIOS partition. The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a USB device. You can then use "dd" to copy the boot image to the BOOT partition 2. Example:
+The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a USB device. You can then use "dd" to copy the boot image to the BOOT partition. Use `lsblk` to locate the boot partition and replace /dev/sdc1 in the example:
 
 ```sh
 sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
 ```
 
+Note:
+
 ### PolarFire testing
 
-This section describes how to build the test-application, create a custom uSD with required partitions and copying signing test-application to uSD partitions.
-
-To use your own application (Linux FIT Image, ELF, etc) just replace test-app/image.elf with your own file (example "fitImage").
+This section describes how to build the test-application, create a custom uSD with required partitions and copying signed test-application to uSD partitions.
 
 1) Partition uSD card (replace /dev/sdc with your actual media, find using `lsblk`):
 
@@ -914,6 +914,7 @@ Device      Start      End  Sectors  Size Type
 ```
 
 2) Build, Sign and copy images
+
 ```sh
 # make test-app
 make test-app/image.elf
@@ -921,45 +922,44 @@ make test-app/image.elf
 # Sign test-app/image with version 1
 ./tools/keytools/sign --ecc384 --sha384 test-app/image.elf wolfboot_signing_private_key.der 1
 sudo dd if=test-app/image_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp test-app/image_v1_signed.bin /dev/sdc2
-
-# OR
-
-# Sign FIT image with version 1
-./tools/keytools/sign --ecc384 --sha384 fitImage wolfboot_signing_private_key.der 1
-sudo dd if=fitImage_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp fitImage_v1_signed.bin /dev/sdc2
-
-# Copy root file system
-sudo fdisk -l mchp-base-image-mpfs-video-kit.rootfs-20250725105640.wic
-sudo dd if=mchp-base-image-mpfs-video-kit.rootfs-20250725105640.wic skip=155648 of=/dev/sdc4 bs=512 count=944898 status=progress
 ```
 
 4) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
 
-### FIT Image Creation (decompress Linux Kernel Image)
+### PolarFire building Yocto-SDK Linux
+
+See:
+* https://github.com/linux4microchip/meta-mchp/blob/scarthgap/meta-mchp-common/README.md
+* https://github.com/linux4microchip/meta-mchp/blob/scarthgap/meta-mchp-polarfire-soc/README.md
+
+Building mchp-base-image Yocto Linux:
 
 ```sh
-$ dumpimage -l fitImage
-$ dumpimage -T flat_dt -p 0 fitImage -o kernel.gz
-Extracted:
- Image 0 (kernel-1)
-  Description:  Linux kernel
-  Created:      Tue Jul 22 03:04:20 2025
-  Type:         Kernel Image
-  Compression:  gzip compressed
-  Data Size:    5831831 Bytes = 5695.15 KiB = 5.56 MiB
-  Architecture: RISC-V
-  OS:           Linux
-  Load Address: 0x80200000
-  Entry Point:  0x80200000
-  Hash algo:    sha256
-  Hash value:   296034c3100d21e6edc417d2406c9d27ec6578fa03c4e333307d0b0b65e0092b
-$ gzip -cdvk kernel.gz > kernel.bin
-$ mkimage -f hal/mpfs250.its fitImageNew
+cd yocto-dev-polarfire/
+export TEMPLATECONF=${TEMPLATECONF:-../meta-mchp/meta-mchp-polarfire-soc/meta-mchp-polarfire-soc-bsp/conf/templates/default}
+source openembedded-core/oe-init-build-env
+# A Microchip base image with standard Linux utilities, as well as some Microchip apps and examples
+MACHINE=mpfs-video-kit bitbake mchp-base-image
+OR
+# A Microchip base image with additional support for software development, including toolchains and debug tools
+MACHINE=mpfs-video-kit bitbake mchp-base-image-sdk
+```
+
+Build images are output to: `./tmp-glibc/deploy/images/mpfs-video-kit/`
+
+#### Building custom FIT image, signing and coping to SDCard
+
+```sh
+# Extract GZIP compressed linux kernel to wolfboot root
+gzip -cdvk ../yocto-dev-polarfire/build/tmp-glibc/work/mpfs_video_kit-oe-linux/linux-mchp/6.12.22+git/build/linux.bin > kernel.bin
+
+# Create custom FIT image
+mkimage -f hal/mpfs250.its fitImage
 FIT description: PolarFire SoC MPFS250T
-Created:         Mon Dec 22 15:29:32 2025
+Created:         Tue Dec 23 11:29:02 2025
  Image 0 (kernel-1)
-  Description:  Kernel Image
-  Created:      Mon Dec 22 15:29:32 2025
+  Description:  Linux Kernel
+  Created:      Tue Dec 23 11:29:02 2025
   Type:         Kernel Image
   Compression:  uncompressed
   Data Size:    19745280 Bytes = 19282.50 KiB = 18.83 MiB
@@ -971,7 +971,7 @@ Created:         Mon Dec 22 15:29:32 2025
   Hash value:   800ce147fa91f367ec620936a59a1035c49971ed4b9080c96bdc547471e80487
  Image 1 (fdt-1)
   Description:  Flattened Device Tree blob
-  Created:      Mon Dec 22 15:29:32 2025
+  Created:      Tue Dec 23 11:29:02 2025
   Type:         Flat Device Tree
   Compression:  uncompressed
   Data Size:    19897 Bytes = 19.43 KiB = 0.02 MiB
@@ -979,16 +979,26 @@ Created:         Mon Dec 22 15:29:32 2025
   Load Address: 0x8a000000
   Hash algo:    sha256
   Hash value:   0b4efca8c0607c9a8f4f9a00ccb7691936e019f3181aab45e6d52dae91975039
- Default Configuration: 'conf@1'
- Configuration 0 (conf@1)
-  Description:  PolarFire SoC MPFS250T
+ Default Configuration: 'conf1'
+ Configuration 0 (conf1)
+  Description:  Linux kernel and FDT blob
   Kernel:       kernel-1
   FDT:          fdt-1
   Hash algo:    sha256
   Hash value:   unavailable
+
+# Sign FIT image with version 1
+./tools/keytools/sign --ecc384 --sha384 fitImage wolfboot_signing_private_key.der 1
+
+# Copy signed FIT image to both OFP A/B partitions
+sudo dd if=fitImage_v1_signed.bin of=/dev/sdc2 bs=512 status=progress && sudo cmp fitImage_v1_signed.bin /dev/sdc2
+sudo dd if=fitImage_v1_signed.bin of=/dev/sdc3 bs=512 status=progress && sudo cmp fitImage_v1_signed.bin /dev/sdc3
+
+# Copy root file system
+sudo dd if=../yocto-dev-polarfire/build/tmp-glibc/deploy/images/mpfs-video-kit/mchp-base-image-sdk-mpfs-video-kit.rootfs.ext4 of=/dev/sdb4 bs=512 status=progress
 ```
 
-### Debugging PolarFire Soc
+### PolarFire Soc Debugging
 
 Start GDB server:
 
@@ -1062,7 +1072,6 @@ Booting at 80200000
 [    0.000000] earlycon: ns16550a0 at MMIO32 0x0000000020100000 (options '115200n8')
 ...
 ```
-
 
 ### PolarFire TODO
 
