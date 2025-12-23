@@ -861,7 +861,7 @@ int mmc_init(void)
             reg |= EMMC_SD_SRS15_DSS_TYPE_B; /* default */
             EMMC_SD_SRS15 = reg;
 
-            /* eanble high speed */
+            /* enable high speed */
             EMMC_SD_SRS10 |= EMMC_SD_SRS10_HSE;
 
             /* set UHS mode */

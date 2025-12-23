@@ -6,7 +6,7 @@
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
  *
  * wolfBoot is distributed in the hope that it will be useful,
@@ -89,7 +89,7 @@ int gdt_update_segments(void)
         "retfq\r\n"
         "seg_cs:\r\n"
         :
-        : "i"(GDT_DS), "i" (GDT_CS_64BIT) 
+        : "i"(GDT_DS), "i" (GDT_CS_64BIT)
         : "rax"
     );
     return 0;

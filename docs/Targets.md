@@ -926,11 +926,12 @@ sudo dd if=test-app/image_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp test-app
 
 4) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
 
-### PolarFire building Yocto-SDK Linux
+### PolarFire Building Yocto-SDK Linux
 
 See:
 * https://github.com/linux4microchip/meta-mchp/blob/scarthgap/meta-mchp-common/README.md
 * https://github.com/linux4microchip/meta-mchp/blob/scarthgap/meta-mchp-polarfire-soc/README.md
+* https://github.com/polarfire-soc/polarfire-soc-documentation/blob/master/reference-designs-fpga-and-development-kits/mpfs-video-kit-embedded-software-user-guide.md
 
 Building mchp-base-image Yocto Linux:
 
@@ -947,7 +948,7 @@ MACHINE=mpfs-video-kit bitbake mchp-base-image-sdk
 
 Build images are output to: `./tmp-glibc/deploy/images/mpfs-video-kit/`
 
-#### Building custom FIT image, signing and coping to SDCard
+#### Custom FIT image, signing and coping to SDCard
 
 ```sh
 # Extract GZIP compressed linux kernel to wolfboot root
