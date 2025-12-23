@@ -57,4 +57,4 @@ SECTIONS
 }
 
 PROVIDE(_start_heap = _end);
-PROVIDE(_end_stack  = ORIGIN(RAM_L2_SCRATCH) + (LENGTH(RAM_L2_SCRATCH)) );
+PROVIDE(_end_stack  = ORIGIN(L2_SCRATCH) + (LENGTH(L2_SCRATCH)) );

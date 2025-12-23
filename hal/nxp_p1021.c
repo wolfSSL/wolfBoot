@@ -1564,7 +1564,7 @@ static void hal_irq_init(void)
     set32(PIC_GCR, PIC_GCR_RST);
     while (get32(PIC_GCR) & PIC_GCR_RST);
 
-    set32(PIC_GCR, PIC_GCR_M); /* eanble mixed-mode */
+    set32(PIC_GCR, PIC_GCR_M); /* enable mixed-mode */
     reg = get32(PIC_GCR); /* read back */
     (void)reg;
 }

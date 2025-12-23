@@ -269,7 +269,7 @@ void fespi_init(uint32_t cpu_clock, uint32_t flash_freq)
 static RAMFUNCTION void fespi_swmode(void)
 {
     asm volatile("fence");
-
+    asm volatile("fence.i");
     if (FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL)
         FESPI_REG_FCTRL &= ~FESPI_FCTRL_MODE_SEL;
 }
@@ -280,7 +280,7 @@ static RAMFUNCTION void fespi_hwmode(void)
     if ((FESPI_REG_FCTRL & FESPI_FCTRL_MODE_SEL) == 0)
         FESPI_REG_FCTRL |= FESPI_FCTRL_MODE_SEL;
     asm volatile("fence");
-
+    asm volatile("fence.i");
     /* Wait two milliseconds for the eSPI device
      * to reboot into hw-mapped mode and link to the
      * instruction cache
@@ -575,12 +575,10 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         address -= FLASH_BASE;
     end = address + len - 1;
 
-
     FESPI_REG_TXMARK = 1;
     fespi_wait_txwm();
     fespi_swmode();
     fespi_wait_flash_busy();
-
 
     for (p = address; p <= end; p += FESPI_FLASH_SECTOR_SIZE) {
         fespi_write_enable();
