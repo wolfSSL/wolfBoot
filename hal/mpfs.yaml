@@ -4,14 +4,13 @@
 
 set-name: 'PolarFire-SoC-HSS::wolfBoot'
 hart-entry-points: {
-  u54_1: '0x80200000',
-  u54_2: '0x80200000',
-  u54_3: '0x80200000',
-  u54_4: '0x80200000'
+  u54_1: '0x80000000',
+  u54_2: '0x80000000',
+  u54_3: '0x80000000',
+  u54_4: '0x80000000'
 }
 payloads:
   wolfboot.elf: {
-    exec-addr: '0x80200000',
     owner-hart: u54_1,
     secondary-hart: u54_2,
     secondary-hart: u54_3,

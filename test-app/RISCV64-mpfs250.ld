@@ -6,6 +6,10 @@
 _Min_Heap_Size  = 0x00002000; /* required amount of heap  */
 _Min_Stack_Size = 0x00002000; /* required amount of stack */
 
+OUTPUT_ARCH( "riscv" )
+
+ENTRY( _reset )
+
 /* Memory areas */
 MEMORY
 {
@@ -24,6 +28,7 @@ SECTIONS
   {
     . = ALIGN(8);
     KEEP(*(.isr_vector)) /* Startup code */
+    _start_vector = .;
     . = ALIGN(8);
   } >IRAM
 
