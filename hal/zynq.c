@@ -200,7 +200,7 @@ typedef struct pmu_aes {
 /* requires PMU built with -DENABLE_EFUSE_ACCESS=1 */
 #define PM_EFUSE_ACCESS    0x35
 typedef struct pmu_efuse {
-    uint64_t src;        /* adress of data buffer */
+    uint64_t src;        /* address of data buffer */
     uint32_t size;       /* size in words */
     uint32_t offset;     /* offset */
     uint32_t flag;       /* 0: to read efuse, 1: to write efuse */

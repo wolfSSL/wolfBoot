@@ -36,6 +36,7 @@
 
 void main(void)
 {
+    uart_init();
     hal_init();
 
     wolfBoot_printf("========================\r\n");

@@ -132,6 +132,10 @@ ifeq ($(ARCH),RISCV)
   APP_OBJS+=startup_riscv.o vector_riscv.o
 endif
 
+ifeq ($(ARCH),RISCV64)
+  APP_OBJS+=startup_riscv.o vector_riscv.o
+endif
+
 ifeq ($(ARCH),ARM)
   APP_OBJS+=startup_arm.o
 endif

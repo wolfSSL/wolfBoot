@@ -792,6 +792,15 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 * Low power consumption
 * External flash support
 
+### PolarFire SoC Files
+
+`hal/mpfs250.c` - Hardware abstraction layer implementation (UART and uSD)
+`hal/mpfs250.h` - Register definitions and hardware interfaces
+`hal/mpfs250.ld` - Linker script for the platform
+`hal/mpfs.dts` / `hal/mpfs.dtb` - Device tree source and binary
+`hal/mpfs.yaml` - HSS payload generator configuration
+`hal/mpfs250.its` - For creating new FIT images with Kernel and DTB
+
 ### Building PolarFire SoC
 
 All build settings come from .config file. For this platform use `TARGET=mpfs250` and `ARCH=RISCV64`.
@@ -837,17 +846,19 @@ The HSS MMC boot source looks for GPT with GUID "21686148-6449-6E6F-744E-6565644
 
 The resulting image from `hss-payload-generator` can be directly placed into GPT BIOS partition. The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a USB device. You can then use "dd" to copy the boot image to the BOOT partition 2. Example:
 
-```
-sudo dd if=wolfboot.bin of=/dev/sdc2 bs=512
+```sh
+sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
 ```
 
 ### PolarFire testing
 
 This section describes how to build the test-application, create a custom uSD with required partitions and copying signing test-application to uSD partitions.
 
-To use your own application (Linux FIT Image, ELF, etc) just replace test-app/image.elf with your own filename.
+To use your own application (Linux FIT Image, ELF, etc) just replace test-app/image.elf with your own file (example "fitImage").
 
 1) Partition uSD card (replace /dev/sdc with your actual media, find using `lsblk`):
+
+Note: adjust +64M for larger OFP A/B
 
 ```sh
 sudo fdisk /dev/sdc <<EOF
@@ -906,17 +917,76 @@ Device      Start      End  Sectors  Size Type
 ```sh
 # make test-app
 make test-app/image.elf
-# Sign image with version 1
-./tools/keytools/sign --ecc384 --sha384 test-app/image.elf wolfboot_signing_private_key.der 1
-# Copy signed image to both OFP partitions
-sudo dd if=image_v1_signed.bin of=/dev/sdc2 bs=512
-sudo dd if=image_v1_signed.bin of=/dev/sdc3 bs=512
 
-# Copy wolfBoot to BIOS boot partition
-sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512
+# Sign test-app/image with version 1
+./tools/keytools/sign --ecc384 --sha384 test-app/image.elf wolfboot_signing_private_key.der 1
+sudo dd if=test-app/image_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp test-app/image_v1_signed.bin /dev/sdc2
+
+# OR
+
+# Sign FIT image with version 1
+./tools/keytools/sign --ecc384 --sha384 fitImage wolfboot_signing_private_key.der 1
+sudo dd if=fitImage_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp fitImage_v1_signed.bin /dev/sdc2
+
+# Copy root file system
+sudo fdisk -l mchp-base-image-mpfs-video-kit.rootfs-20250725105640.wic
+sudo dd if=mchp-base-image-mpfs-video-kit.rootfs-20250725105640.wic skip=155648 of=/dev/sdc4 bs=512 count=944898 status=progress
 ```
 
-3) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
+4) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
+
+### FIT Image Creation (decompress Linux Kernel Image)
+
+```sh
+$ dumpimage -l fitImage
+$ dumpimage -T flat_dt -p 0 fitImage -o kernel.gz
+Extracted:
+ Image 0 (kernel-1)
+  Description:  Linux kernel
+  Created:      Tue Jul 22 03:04:20 2025
+  Type:         Kernel Image
+  Compression:  gzip compressed
+  Data Size:    5831831 Bytes = 5695.15 KiB = 5.56 MiB
+  Architecture: RISC-V
+  OS:           Linux
+  Load Address: 0x80200000
+  Entry Point:  0x80200000
+  Hash algo:    sha256
+  Hash value:   296034c3100d21e6edc417d2406c9d27ec6578fa03c4e333307d0b0b65e0092b
+$ gzip -cdvk kernel.gz > kernel.bin
+$ mkimage -f hal/mpfs250.its fitImageNew
+FIT description: PolarFire SoC MPFS250T
+Created:         Mon Dec 22 15:29:32 2025
+ Image 0 (kernel-1)
+  Description:  Kernel Image
+  Created:      Mon Dec 22 15:29:32 2025
+  Type:         Kernel Image
+  Compression:  uncompressed
+  Data Size:    19745280 Bytes = 19282.50 KiB = 18.83 MiB
+  Architecture: RISC-V
+  OS:           Linux
+  Load Address: 0x80200000
+  Entry Point:  0x80200000
+  Hash algo:    sha256
+  Hash value:   800ce147fa91f367ec620936a59a1035c49971ed4b9080c96bdc547471e80487
+ Image 1 (fdt-1)
+  Description:  Flattened Device Tree blob
+  Created:      Mon Dec 22 15:29:32 2025
+  Type:         Flat Device Tree
+  Compression:  uncompressed
+  Data Size:    19897 Bytes = 19.43 KiB = 0.02 MiB
+  Architecture: RISC-V
+  Load Address: 0x8a000000
+  Hash algo:    sha256
+  Hash value:   0b4efca8c0607c9a8f4f9a00ccb7691936e019f3181aab45e6d52dae91975039
+ Default Configuration: 'conf@1'
+ Configuration 0 (conf@1)
+  Description:  PolarFire SoC MPFS250T
+  Kernel:       kernel-1
+  FDT:          fdt-1
+  Hash algo:    sha256
+  Hash value:   unavailable
+```
 
 ### Debugging PolarFire Soc
 
@@ -946,117 +1016,66 @@ set architecture riscv:rv64
 ### PolarFire Example Boot Output
 
 ```
-wolfBoot Version: 2.7.0 (Dec 17 2025 17:03:55)
-mmc_set_timeout: timeout_val 500000 (12)
-mmc_set_clock: requested khz: 400, actual khz: 400
-mmc_send_cmd: cmd_index: 0, cmd_arg: 00000000, resp_type: 0
-mmc_send_cmd: cmd_index: 8, cmd_arg: 00000100, resp_type: 9
-mmc_init: xpc:0, si8r:1, max_ma (3.3v:128 1.8v:128)
-mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
-mmc_send_cmd: cmd_index: 41, cmd_arg: 00000000, resp_type: 4
-ocr_reg: 0x40FF8000
-mmc_init: sending OCR arg: 0x41200000
-mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
-mmc_send_cmd: cmd_index: 41, cmd_arg: 41200000, resp_type: 4
-ocr_reg: 0x40FF8000
-mmc_send_cmd: cmd_index: 55, cmd_arg: 00000000, resp_type: 1
-mmc_send_cmd: cmd_index: 41, cmd_arg: 41200000, resp_type: 4
-ocr_reg: 0xC1FF8000
-mmc_send_cmd: cmd_index: 2, cmd_arg: 00000000, resp_type: 3
-mmc_send_cmd: cmd_index: 3, cmd_arg: 00000000, resp_type: 8
-mmc_init: rca: 43690
-mmc_send_cmd: cmd_index: 9, cmd_arg: AAAA0000, resp_type: 3
-mmc_init: sector size: 512
-mmc_init: sector count: 62333952
-mmc_send_cmd: cmd_index: 7, cmd_arg: AAAA0000, resp_type: 2
-mmc_send_cmd: cmd_index: 55, cmd_arg: AAAA0000, resp_type: 1
-mmc_send_cmd: cmd_index: 6, cmd_arg: 00000002, resp_type: 1
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_send_cmd: cmd_index: 16, cmd_arg: 00000008, resp_type: 1
-mmc_send_cmd: cmd_index: 55, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 51, block_addr: 00000000, dst 0x801FFCD0, sz: 8
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 6, block_addr: 00000001, dst 0x801FFC38, sz: 64
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 6, block_addr: 80000001, dst 0x801FFC38, sz: 64
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-mmc_set_clock: requested khz: 50000, actual khz: 50000
+wolfBoot Version: 2.7.0 (Dec 22 2025 14:14:37)
 Reading MBR...
-disk_read: drv:0, start:0, count:512, dst:0x801FF918
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000000, dst 0x801FF918, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
 Found GPT PTE at sector 1
 Found valid boot signature in MBR
-disk_read: drv:0, start:512, count:512, dst:0x801FF918
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000001, dst 0x801FF918, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
 Valid GPT partition table
 Current LBA: 0x1
 Backup LBA: 0x3B723FF
 Max number of partitions: 128
 Software limited: only allowing up to 16 partitions per disk.
-Disk size: 1850178048
-disk_read: drv:0, start:1024, count:128, dst:0x801FF818
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-disk0.p0 (0_3FFFE00h@ 0_400000)
-disk_read: drv:0, start:1152, count:128, dst:0x801FF818
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-disk0.p1 (0_3FFFE00h@ 0_400000)
-disk_read: drv:0, start:1280, count:128, dst:0x801FF818
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-disk0.p2 (0_3FFFE00h@ 0_400000)
-disk_read: drv:0, start:1408, count:128, dst:0x801FF818
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000002, dst 0x801FF588, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-disk0.p3 (0_3FFFE00h@ 0_400000)
-disk_read: drv:0, start:1536, count:128, dst:0x801FF818
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00000003, dst 0x801FF588, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
+Disk size: 1849146880
+disk0.p0 (0_7FFE00h@ 0_100000)
+disk0.p1 (0_3FFFE00h@ 0_900000)
+disk0.p2 (0_3FFFE00h@ 0_4900000)
+disk0.p3 (7_65AFFE00h@ 0_8900000)
 Total partitions on disk0: 4
 Checking primary OS image in 0,1...
-disk_read: drv:0, start:4194304, count:512, dst:0x801FFDA0
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00002000, dst 0x801FFDA0, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
 Checking secondary OS image in 0,2...
-disk_read: drv:0, start:4194304, count:512, dst:0x801FFDA0
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: cmd_index: 17, block_addr: 00002000, dst 0x801FFDA0, sz: 512
-mmc_send_cmd: cmd_index: 13, cmd_arg: AAAA0000, resp_type: 1
-mmc_read: status: 0
-No valid OS image found in either partition 1 or 2
-wolfBoot: PANIC!
+Versions, A:1 B:1
+Load address 0x8E000000
+Attempting boot from P:A
+Boot partition: 0x801FFDA0 (sz 19767000, ver 0x1, type 0x601)
+Loading image from disk...done.
+Boot partition: 0x8E000000 (sz 19767000, ver 0x1, type 0x601)
+Checking image integrity...done.
+Verifying image signature...done.
+Firmware Valid.
+Flattened uImage Tree: Version 17, Size 19767000
+Loading Image kernel-1: 0x8E0002C8 -> 0x80200000 (19745280 bytes)
+Image kernel-1: 0x80200000 (19745280 bytes)
+Loading Image fdt-1: 0x8F2D4DCC -> 0x8A000000 (19897 bytes)
+Image fdt-1: 0x8A000000 (19897 bytes)
+Loading DTS: 0x8A000000 -> 0x8A000000 (19897 bytes)
+Loading elf at 0x80200000
+Invalid elf, falling back to raw binary
+Booting at 80200000
+[    0.000000] Linux version 6.12.22-linux4microchip+fpga-2025.07-g032a7095303a (oe-user@oe-host) (riscv64-oe-linux-gcc (GCC) 13.3.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP Tue Jul 22 10:04:20 UTC 2025
+[    0.000000] Machine model: Microchip PolarFire-SoC VIDEO Kit
+[    0.000000] SBI specification v1.0 detected
+[    0.000000] SBI implementation ID=0x8 Version=0x10002
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] SBI SRST extension detected
+[    0.000000] earlycon: ns16550a0 at MMIO32 0x0000000020100000 (options '115200n8')
+...
 ```
 
 
 ### PolarFire TODO
 
-1) Add support for full HSS replacement using wolfboot.
-2) Add support for eMMC and QSPI NOR flash
-
+* Add eMMC/SD features:
+  - Multi-block read (CMD18 support)
+  - DMA read support
+  - Write support
+  - eMMC support (not just SD)
+* Add support for reading serial number and modifying ethernet MAC in device tree
+* Add support for QSPI NOR flash
+* Add support for full HSS replacement using wolfboot
+  - Machine level assembly startup
+  - DDR driver
 
 
 ## STM32F7

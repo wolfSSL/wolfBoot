@@ -226,7 +226,12 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
     if (len < 0) {
         return -1;
     }
+
     ret = disk_read(drv, p->start + off, len, buf);
+#ifdef DEBUG_DISK
+    wolfBoot_printf("disk_part_read: drv: %d, part: %d, off: %llu, sz: %llu, "
+        "buf: %p, ret %d\r\n", drv, part, p->start + off, len, buf, ret);
+#endif
     if (ret == 0) {
         ret = len; /* success expects to return the number of bytes read */
     }
@@ -262,6 +267,10 @@ int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t 
         return -1;
     }
     ret = disk_write(drv, p->start + off, len, buf);
+#ifdef DEBUG_DISK
+    wolfBoot_printf("disk_part_write: drv: %d, part: %d, off: %llu, sz: %llu, "
+        "buf: %p, ret %d\r\n", drv, part, p->start + off, sz, buf, ret);
+#endif
     if (ret == 0) {
         ret = len; /* success expects to return the number of bytes written */
     }

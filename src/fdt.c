@@ -836,7 +836,7 @@ void* fit_load_image(void* fdt, const char* image, int* lenp)
                 image, data, load, len);
             memcpy(load, data, len);
 
-            /* load should always have entry, but if not use load adress */
+            /* load should always have entry, but if not use load address */
             data = (entry != NULL) ? entry : load;
         }
         wolfBoot_printf("Image %s: %p (%d bytes)\n", image, data, len);
