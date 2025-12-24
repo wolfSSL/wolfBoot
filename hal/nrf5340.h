@@ -371,6 +371,8 @@ void uart_write_sz(const char* c, unsigned int sz);
 
 /* QSPI */
 #ifdef TARGET_nrf5340_app
+    #define QSPI_PERIPHID 43
+
     #if TZ_SECURE()
         #define QSPI_BASE         (0x5002B000)
     #else

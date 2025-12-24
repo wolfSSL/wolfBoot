@@ -68,10 +68,11 @@
     #define USE_IPC_RECV  0
 #endif
 
-/* SHM: Shared Memory between network and application cores */
-/* first 64KB (0x10000) is used by wolfBoot and limited in nrf5340.ld */
+/* SHM: Shared Memory between network and application cores.
+ * Reserve most of single-cycle RAM for wolfBoot;
+ * use end of RAM (0x3F800 - 0x7FFFF) as shared memory */
 #ifndef SHARED_MEM_ADDR
-    #define SHARED_MEM_ADDR (0x20000000UL + (64 * 1024))
+    #define SHARED_MEM_ADDR 0x2003F800
 #endif
 
 /* Shared memory states (mask, easier to check) */
@@ -875,13 +876,21 @@ static void periph_unsecure()
 
     /* Unsecure RTC0 */
     SPU_PERIPHID_PERM(RTC0_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
+
+    /* Unsecure QSPI */
+    SPU_PERIPHID_PERM(QSPI_PERIPHID) &= ~SPU_PERIPHID_PERM_SECATTR;
 }
 #endif
 
 void hal_prepare_boot(void)
 {
-    /* Write protect bootloader region of flash */
+    /* Write protect bootloader region of flash.
+     * Not needed in TrustZone configs because the application
+     * runs in non-secure mode and the bootloader partition is marked as
+     * secure. */
+#ifndef TZEN
     hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
+#endif
 
     if (enableShm) {
     #ifdef TARGET_nrf5340_net
