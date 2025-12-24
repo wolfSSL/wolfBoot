@@ -1172,6 +1172,10 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 #endif
 
+#ifdef SECURE_PKCS11
+    WP11_Library_Init();
+#endif
+
     bootRet =   wolfBoot_get_partition_state(PART_BOOT, &bootState);
     updateRet = wolfBoot_get_partition_state(PART_UPDATE, &updateState);
 
@@ -1269,8 +1273,8 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_tpm2_deinit();
 #endif
 
-#ifdef SECURE_PKCS11
-    WP11_Library_Init();
+#ifdef ENCRYPT_PKCS11
+    pkcs11_crypto_deinit();
 #endif
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT

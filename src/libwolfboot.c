@@ -1395,7 +1395,8 @@ void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counte
 {
 #if defined(ENCRYPT_WITH_CHACHA)
     crypto_set_iv((uint8_t *)nonce, iv_counter + encrypt_iv_offset);
-#elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+#elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256) || \
+        defined(ENCRYPT_PKCS11)
     uint8_t local_nonce[ENCRYPT_NONCE_SIZE];
     XMEMCPY(local_nonce, nonce, ENCRYPT_NONCE_SIZE);
     crypto_set_iv(local_nonce, iv_counter + encrypt_iv_offset);
@@ -1423,8 +1424,10 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 #else
     uintptr_t addr, addr_align, addr_off;
     int ret = 0;
-    int sel_sec = 0;
     uint32_t trailer_relative_off = 4;
+#ifdef NVM_FLASH_WRITEONCE
+    int sel_sec = 0;
+#endif
 #if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
     !defined(WOLFBOOT_ENCRYPT_CACHE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
@@ -1532,8 +1535,8 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 #else
     uint8_t *mem = (uint8_t *)(ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS);
-    int sel_sec = 0;
     #ifdef NVM_FLASH_WRITEONCE
+    int sel_sec = 0;
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
     #endif
@@ -1562,9 +1565,8 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
     uint8_t *mem = (uint8_t *)ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    int sel_sec = 0;
 #ifdef NVM_FLASH_WRITEONCE
-    sel_sec = nvm_select_fresh_sector(PART_BOOT);
+    int sel_sec = nvm_select_fresh_sector(PART_BOOT);
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
     XMEMSET(ff, FLASH_BYTE_ERASED, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
@@ -1740,6 +1742,236 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 #endif
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);
     wc_AesSetIV(&aes_dec, (byte *)iv_buf);
+}
+
+#elif defined(ENCRYPT_PKCS11)
+
+static CK_FUNCTION_LIST *pkcs11_function_list;
+static CK_SESSION_HANDLE pkcs11_session;
+static uint8_t pkcs11_pin[] = ENCRYPT_PKCS11_PIN;
+static CK_OBJECT_HANDLE pkcs11_key_handle;
+static int pkcs11_enc_initialized = 0, pkcs11_dec_initialized = 0;
+#if ENCRYPT_PKCS11_MECHANISM == CKM_AES_CTR
+static CK_AES_CTR_PARAMS pkcs11_params;
+#endif
+
+int pkcs11_crypto_init(void)
+{
+    CK_RV ret = 0;
+    uint8_t *key_id;
+    uint8_t *stored_nonce;
+    CK_OBJECT_CLASS class = CKO_SECRET_KEY;
+    CK_ATTRIBUTE search_attr[] = {
+        { CKA_CLASS, &class, sizeof(class) },
+        { CKA_ID, NULL, 0 },
+    };
+    CK_ULONG search_attr_count = sizeof(search_attr) / sizeof(*search_attr);
+    CK_ULONG obj_count;
+    int session_opened = 0, logged_in = 0;
+
+    if (encrypt_initialized)
+        return 0;
+
+    ret = C_GetFunctionList(&pkcs11_function_list);
+
+    if (ret == CKR_OK) {
+
+#if defined(MMU) || defined(UNIT_TEST)
+        key_id = ENCRYPT_KEY;
+#else
+        key_id = (uint8_t*)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            ENCRYPT_TMP_SECRET_OFFSET);
+#endif
+
+#ifdef NVM_FLASH_WRITEONCE
+        key_id -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+#endif
+        stored_nonce = key_id + ENCRYPT_KEY_SIZE;
+
+        search_attr[1].pValue = key_id;
+        search_attr[1].ulValueLen = ENCRYPT_PKCS11_KEY_ID_SIZE;
+
+        /* Ensure TRNG is initialized, in case we're being called early */
+        hal_trng_init();
+
+        ret = pkcs11_function_list->C_Initialize(NULL);
+    }
+
+    if (ret == CKR_OK) {
+        ret = pkcs11_function_list->C_OpenSession(1,
+                CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL, NULL,
+                &pkcs11_session);
+        session_opened = 1;
+    }
+
+    if (ret == CKR_OK) {
+        ret = pkcs11_function_list->C_Login(pkcs11_session, CKU_USER,
+                pkcs11_pin, sizeof(pkcs11_pin) - 1);
+        logged_in = 1;
+    }
+
+    if (ret == CKR_OK) {
+        /* Retrieve AES key by CKA_ID */
+        ret = pkcs11_function_list->C_FindObjectsInit(pkcs11_session,
+                search_attr, search_attr_count);
+    }
+
+    if (ret == CKR_OK) {
+        ret = pkcs11_function_list->C_FindObjects(pkcs11_session,
+                &pkcs11_key_handle, 1, &obj_count);
+    }
+
+    if (ret == CKR_OK && obj_count != 1) {
+        ret = -1;
+    }
+
+    if (ret == CKR_OK) {
+        ret = pkcs11_function_list->C_FindObjectsFinal(pkcs11_session);
+    }
+
+    if (ret == CKR_OK) {
+        XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_PKCS11_NONCE_SIZE);
+        encrypt_initialized = 1;
+    }
+
+    if (ret != CKR_OK) {
+        if (logged_in) {
+            pkcs11_function_list->C_Logout(pkcs11_session);
+        }
+        if (session_opened) {
+            pkcs11_function_list->C_CloseSession(pkcs11_session);
+        }
+    }
+
+    return ret;
+}
+
+void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
+{
+    CK_RV ret;
+    uint8_t buf[ENCRYPT_BLOCK_SIZE];
+    CK_ULONG buf_len = sizeof(buf);
+
+    if (pkcs11_enc_initialized) {
+        ret = pkcs11_function_list->C_EncryptFinal(pkcs11_session, buf,
+                &buf_len);
+        if (ret != CKR_OK) {
+            return;
+        }
+        pkcs11_enc_initialized = 0;
+    }
+    else if (pkcs11_dec_initialized) {
+        ret = pkcs11_function_list->C_DecryptFinal(pkcs11_session, buf,
+                &buf_len);
+        if (ret != CKR_OK) {
+            return;
+        }
+        pkcs11_dec_initialized = 0;
+    }
+
+#if ENCRYPT_PKCS11_MECHANISM == CKM_AES_CTR
+    {
+        uint32_t *cb_words = (uint32_t *)pkcs11_params.cb;
+        int i;
+        XMEMCPY(cb_words, nonce, ENCRYPT_NONCE_SIZE);
+#ifndef BIG_ENDIAN_ORDER
+        for (i = 0; i < 4; i++) {
+            cb_words[i] = wb_reverse_word32(cb_words[i]);
+        }
+#endif
+        cb_words[3] += iv_ctr;
+        if (cb_words[3] < iv_ctr) { /* overflow */
+            for (i = 2; i >= 0; i--) {
+                cb_words[i]++;
+                if (cb_words[i] != 0)
+                    break;
+            }
+        }
+#ifndef BIG_ENDIAN_ORDER
+        for (i = 0; i < 4; i++) {
+            cb_words[i] = wb_reverse_word32(cb_words[i]);
+        }
+#endif
+
+        pkcs11_params.ulCounterBits = 32;
+    }
+#endif /* ENCRYPT_PKCS11_MECHANISM */
+}
+
+int pkcs11_crypto_encrypt(uint8_t *out, uint8_t *in, size_t size)
+{
+    CK_RV ret;
+    CK_ULONG encrypted_len;
+
+    if (pkcs11_dec_initialized)
+        return -1;
+
+    if (!pkcs11_enc_initialized) {
+        CK_MECHANISM mech;
+
+        mech.mechanism = ENCRYPT_PKCS11_MECHANISM;
+        mech.pParameter = &pkcs11_params;
+        mech.ulParameterLen = sizeof(pkcs11_params);
+
+        ret = pkcs11_function_list->C_EncryptInit(pkcs11_session, &mech,
+                pkcs11_key_handle);
+        if (ret != CKR_OK) {
+            return -1;
+        }
+
+        pkcs11_enc_initialized = 1;
+    }
+    
+    encrypted_len = size;
+    ret = pkcs11_function_list->C_EncryptUpdate(pkcs11_session, in, size, out,
+            &encrypted_len);
+    if (ret != CKR_OK) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int pkcs11_crypto_decrypt(uint8_t *out, uint8_t *in, size_t size)
+{
+    CK_RV ret;
+    CK_ULONG decrypted_len;
+
+    if (pkcs11_enc_initialized)
+        return -1;
+
+    if (!pkcs11_dec_initialized) {
+        CK_MECHANISM mech;
+
+        mech.mechanism = ENCRYPT_PKCS11_MECHANISM;
+        mech.pParameter = &pkcs11_params;
+        mech.ulParameterLen = sizeof(pkcs11_params);
+
+        ret = pkcs11_function_list->C_DecryptInit(pkcs11_session, &mech,
+                pkcs11_key_handle);
+        if (ret != CKR_OK) {
+            return -1;
+        }
+
+        pkcs11_dec_initialized = 1;
+    }
+
+    decrypted_len = size;
+    ret = pkcs11_function_list->C_DecryptUpdate(pkcs11_session, in, size, out,
+            &decrypted_len);
+    if (ret != CKR_OK) {
+        return -1;
+    }
+
+    return 0;
+}
+
+void pkcs11_crypto_deinit(void)
+{
+    if (encrypt_initialized) {
+        pkcs11_function_list->C_CloseSession(pkcs11_session);
+        encrypt_initialized = 0;
+    }
 }
 
 #endif

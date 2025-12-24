@@ -353,11 +353,15 @@ extern int tolower(int c);
 #   define WOLFBOOT_SECURE_PKCS11
 #   define WOLFPKCS11_USER_SETTINGS
 #   define WOLFPKCS11_NO_TIME
+#ifndef WOLFSSL_AES_COUNTER
 #   define WOLFSSL_AES_COUNTER
+#endif
+#   define HAVE_AESCTR
+#ifndef WOLFSSL_AES_DIRECT
 #   define WOLFSSL_AES_DIRECT
+#endif
 #   define WOLFSSL_AES_GCM
 #   define GCM_TABLE_4BIT
-#   define ENCRYPT_WITH_AES128
 #   define WOLFSSL_AES_128
 #   define HAVE_SCRYPT
 #   define HAVE_AESGCM
