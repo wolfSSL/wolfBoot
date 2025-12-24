@@ -1766,7 +1766,7 @@ int pkcs11_crypto_init(void)
         { CKA_ID, NULL, 0 },
     };
     CK_ULONG search_attr_count = sizeof(search_attr) / sizeof(*search_attr);
-    CK_ULONG obj_count;
+    CK_ULONG obj_count = 0;
     int session_opened = 0, logged_in = 0;
 
     if (encrypt_initialized)
