@@ -53,11 +53,15 @@ while getopts "d:wpt" opt; do
             ;;
         t)  ENABLE_TPM=true
             ;;
+        c)
+            CLEAR_TPM_NV=true
+            ;;
         *)
             echo "Usage: $0 [-d DEBUG_STAGE1 | DEBUG_STAGE2] [-w] [-p]"
             echo "-p : create /tmp/qemu_mon.in and /tmp/qemu_mon.out pipes for monitor qemu"
             echo "-w : wait for GDB to connect to the QEMU gdb server"
             echo "-t : enable TPM emulation (requires swtpm)"
+            echo "-c : clear TPM NV"
             exit 1
             ;;
     esac
@@ -110,7 +114,9 @@ if [ "$ENABLE_TPM" = true ]; then
     killall swtpm || true
     sleep 1
     echo TPM Emulation ON
-    rm -rf /tmp/swtpm || true
+    if [ "$CLEAR_TPM_NV" = true ]; then
+        rm -rf /tmp/swtpm || true
+    fi
     mkdir -p /tmp/swtpm
     swtpm socket --tpm2 --tpmstate dir=/tmp/swtpm \
         --ctrl type=unixio,path=/tmp/swtpm/swtpm-sock --log level=20 &

@@ -9,7 +9,8 @@ MEMORY
 {
     /* The first 0x100 bytes of eNVM are used for boot ROM secure boot meta information */
     FLASH_ENVM (rx)  : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
-    DDR (rx)         : ORIGIN = 0x80000000, LENGTH = 1028k
+    /* DDR 32-bit cached range is 0x8000_0000 to 0xFFFF_FFFF */
+    DDR (rx)         : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 1028k
     L2_SCRATCH (rwx) : ORIGIN = 0x0A000000, LENGTH = 256k
 }
 

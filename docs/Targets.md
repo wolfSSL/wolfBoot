@@ -797,7 +797,7 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 `hal/mpfs250.c` - Hardware abstraction layer implementation (UART and uSD)
 `hal/mpfs250.h` - Register definitions and hardware interfaces
 `hal/mpfs250.ld` - Linker script for the platform
-`hal/mpfs.dts` / `hal/mpfs.dtb` - Device tree source and binary
+`hal/mpfs.dts` - Device tree source
 `hal/mpfs.yaml` - HSS payload generator configuration
 `hal/mpfs250.its` - Example FIT image creation template
 
@@ -836,12 +836,16 @@ Use this command to assemble a bootable wolfboot image:
 hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin
 ```
 
-Any customizations to the Device Tree can be made in mpfs.dts and it can be recompiled using: `dtc -I dts -O dtb mpfs.dts -o mpfs.dtb`
+You must generated the Device Tree Binary using:
+
+```sh
+dtc -I dts -O dtb hal/mpfs.dts -o hal/mpfs.dtb`
+```
 
 Example one-shot command:
 
 ```sh
-cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin
+cp ./config/examples/polarfire_mpfs250.config .config && make clean && make wolfboot.elf && size wolfboot.elf && dtc -I dts -O dtb hal/mpfs.dts -o hal/mpfs.dtb && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin
 ```
 
 The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a USB device. You can then use "dd" to copy the boot image to the BOOT partition. Use `lsblk` to locate the boot partition and replace /dev/sdc1 in the example:
