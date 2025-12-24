@@ -237,9 +237,9 @@
 #define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
 #define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
 
-#define TZSC_SECCFGR1   *((volatile uint32_t *)(0x50036410))
+#define TZSC_SECCFGR1   *((volatile uint32_t *)(0x50032410))
 #define TZSC_SECCFGR1_USART3SEC (1 << 14) /* USART3 */
-#define TZSC_SECCFGR2   *((volatile uint32_t *)(0x50036414))
+#define TZSC_SECCFGR2   *((volatile uint32_t *)(0x50032414))
 #define TZSC_SECCFGR2_LPUART1SEC (1 << 25) /* LPUART1 */
 
 /* Mapping FLASH_SECCR for bank swapping */
