@@ -144,7 +144,7 @@ static uint32_t g_rca = 0; /* SD Card Relative Address */
 #define DEFAULT_DELAY 0xFFFF
 #endif
 
-int mmc_set_timeout(uint32_t timeout_us)
+static int mmc_set_timeout(uint32_t timeout_us)
 {
     uint32_t reg, i, tcfclk, tcfclk_mhz, tcfclk_khz, timeout_val, dtcv;
 
@@ -198,8 +198,7 @@ int mmc_set_timeout(uint32_t timeout_us)
     return 0;
 }
 
-/* TODO: Fix with real timer */
-void mmc_delay(uint32_t delay)
+static void mmc_delay(uint32_t delay)
 {
     while (delay--) {
         asm volatile("nop");
@@ -212,7 +211,7 @@ void mmc_delay(uint32_t delay)
  *  EMMC_SD_SRS10_BVS_3_0V
  *  EMMC_SD_SRS10_BVS_3_3V
  */
-int mmc_set_power(uint32_t voltage)
+static int mmc_set_power(uint32_t voltage)
 {
     uint32_t reg;
 
@@ -248,7 +247,7 @@ int mmc_set_power(uint32_t voltage)
 }
 
 /* returns actual frequency in kHz */
-uint32_t mmc_set_clock(uint32_t clock_khz)
+static uint32_t mmc_set_clock(uint32_t clock_khz)
 {
     static uint32_t last_clock_khz = 0;
     uint32_t reg, base_clk_khz, i, mclk, freq_khz;
@@ -355,7 +354,7 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
     int status = 0;
     uint32_t cmd_reg;
-    uint32_t cmd_type = EMMC_SD_SRS03_CMD_NORMAL; /* TODO: Add support for suspend and resume */
+    uint32_t cmd_type = EMMC_SD_SRS03_CMD_NORMAL;
 
 #ifdef DEBUG_MMC
     wolfBoot_printf("mmc_send_cmd: cmd_index: %d, cmd_arg: %08X, resp_type: %d\n",
@@ -402,7 +401,7 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 }
 
 /* TODO: Add timeout */
-int mmc_wait_busy(int check_dat0)
+static int mmc_wait_busy(int check_dat0)
 {
     uint32_t status;
     if (check_dat0) {
