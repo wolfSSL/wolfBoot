@@ -936,7 +936,10 @@ See:
 Building mchp-base-image Yocto Linux:
 
 ```sh
-cd yocto-dev-polarfire/
+mkdir ../yocto-dev-polarfire
+cd ../yocto-dev-polarfire
+repo init -u https://github.com/linux4microchip/meta-mchp-manifest.git -b refs/tags/linux4microchip+fpga-2025.10 -m polarfire-soc/default.xml
+repo sync
 export TEMPLATECONF=${TEMPLATECONF:-../meta-mchp/meta-mchp-polarfire-soc/meta-mchp-polarfire-soc-bsp/conf/templates/default}
 source openembedded-core/oe-init-build-env
 # A Microchip base image with standard Linux utilities, as well as some Microchip apps and examples
@@ -1077,7 +1080,7 @@ Booting at 80200000
 ### PolarFire TODO
 
 * Add eMMC/SD features:
-  - Multi-block read (CMD18 support)
+  - Improve mmc_delay and timeout handling
   - DMA read support
   - Write support
   - eMMC support (not just SD)

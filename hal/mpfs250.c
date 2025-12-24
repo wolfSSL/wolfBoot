@@ -456,7 +456,8 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     uint32_t sz)
 {
     int status;
-    uint32_t reg;
+    uint32_t block_count;
+    uint32_t reg, cmd_reg;
 
     /* wait for idle */
     status = mmc_wait_busy(0);
@@ -468,46 +469,66 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     /* wait for command and data line busy to clear */
     while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
 
+    /* get block count (round up) */
+    block_count = (sz + (EMMC_SD_BLOCK_SIZE - 1)) / EMMC_SD_BLOCK_SIZE;
     /* set transfer block count */
-    EMMC_SD_SRS01 = (1 << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
+    EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
+
+    cmd_reg = ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) |
+        EMMC_SD_SRS03_DPS | EMMC_SD_SRS03_DTDS |
+        EMMC_SD_SRS03_BCE | EMMC_SD_SRS03_RECE | EMMC_SD_SRS03_RID |
+        EMMC_SD_SRS03_RESP_48 | EMMC_SD_SRS03_CRCCE | EMMC_SD_SRS03_CICE);
 
     if (cmd_index == SD_ACMD51_SEND_SCR) {
-        status = mmc_send_cmd(SD_CMD_16, sz, EMMC_SD_RESP_R1);
+        status = mmc_send_cmd(SD_CMD16, sz, EMMC_SD_RESP_R1);
         if (status == 0) {
             status = mmc_send_cmd(SD_CMD55_APP_CMD, (g_rca << SD_RCA_SHIFT),
                 EMMC_SD_RESP_R1);
         }
         status = 0; /* ignore error */
     }
+    else if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
+        cmd_reg |= EMMC_SD_SRS03_MSBS; /* enable multi-block select */
+        EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
+            EMMC_SD_BLOCK_SIZE;
+    }
 
 #ifdef DEBUG_MMC
-    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d\n",
-        cmd_index, block_addr, dst, sz);
+    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d (%d blocks)\n",
+        cmd_index, block_addr, dst, sz, block_count);
 #endif
 
     EMMC_SD_SRS02 = block_addr; /* cmd argument */
-    /* execute command */
-    EMMC_SD_SRS03 = ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) |
-        EMMC_SD_SRS03_DPS | EMMC_SD_SRS03_DTDS |
-        EMMC_SD_SRS03_BCE | EMMC_SD_SRS03_RECE | EMMC_SD_SRS03_RID |
-        EMMC_SD_SRS03_RESP_48 | EMMC_SD_SRS03_CRCCE | EMMC_SD_SRS03_CICE);
+    EMMC_SD_SRS03 = cmd_reg; /* execute command */
+    while (sz > 0) {
+        /* wait for buffer read ready */
+        while (((reg = EMMC_SD_SRS12) &
+            (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
 
-    /* wait for buffer read ready */
-    while (((reg = EMMC_SD_SRS12) & (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
-
-    /* read in buffer - read 4 bytes at a time */
-    if (reg & EMMC_SD_SRS12_BRR) {
-        uint32_t i;
-        for (i=0; i<sz; i+=4) {
-            *dst = EMMC_SD_SRS08;
-            dst++;
+        /* read in buffer - read 4 bytes at a time */
+        if (reg & EMMC_SD_SRS12_BRR) {
+            uint32_t i, read_sz = sz;
+            if (read_sz > EMMC_SD_BLOCK_SIZE) {
+                read_sz = EMMC_SD_BLOCK_SIZE;
+            }
+            for (i=0; i<read_sz; i+=4) {
+                *dst = EMMC_SD_SRS08;
+                dst++;
+            }
+            sz -= read_sz;
         }
+    }
+
+    if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
+        /* send CMD12 to stop transfer - ignore response */
+        (void)mmc_send_cmd(MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
+            EMMC_SD_RESP_R1);
     }
 
     /* check for any errors and wait for idle */
     reg = EMMC_SD_SRS12;
     if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) {
-        mmc_delay(0xFF);
+        mmc_delay(0xFFF);
         status = mmc_wait_busy(0);
     }
     else {
@@ -585,7 +606,7 @@ int mmc_send_switch_function(uint32_t mode, uint32_t function_number,
     cmd_arg = (function_number << ((group_number - 1) * 4));
     do {
         /* first run check to see if function is supported */
-        status = mmc_read(SD_CMD_6_SWITCH_FUNC,
+        status = mmc_read(SD_CMD6_SWITCH_FUNC,
             (mode | cmd_arg),
             func_status, sizeof(func_status));
         if (status == 0) {
@@ -904,7 +925,7 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         }
         if (read_sz < EMMC_SD_BLOCK_SIZE || /* last partial */
             start_offset != 0 ||            /* start not block aligned */
-            ((uintptr_t)buf % 4) != 0)     /* buf not 4-byte aligned */
+            ((uintptr_t)buf % 4) != 0)      /* buf not 4-byte aligned */
         {
             /* block read to temporary buffer */
             status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
@@ -916,9 +937,13 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
             }
         }
         else {
-            /* direct full block read */
-            status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
-                (uint32_t*)buf, read_sz);
+            /* direct full block(s) read */
+            uint32_t blocks = (count / EMMC_SD_BLOCK_SIZE);
+            read_sz = (blocks * EMMC_SD_BLOCK_SIZE);
+            status = mmc_read(blocks > 1 ?
+                                MMC_CMD18_READ_MULTIPLE :
+                                MMC_CMD17_READ_SINGLE,
+                block_addr, (uint32_t*)buf, read_sz);
         }
         if (status != 0) {
             break;
