@@ -837,8 +837,8 @@
 #define MMC_CMD1_SEND_OP_COND     1    /* MMC: Send operating conditions */
 #define MMC_CMD2_ALL_SEND_CID     2    /* Get card identification */
 #define MMC_CMD3_SET_REL_ADDR     3    /* Set relative address */
-#define MMC_CMD_4_SET_DSR         4
-#define SD_CMD_6_SWITCH_FUNC      6    /* SD: Switch function */
+#define MMC_CMD4_SET_DSR          4
+#define SD_CMD6_SWITCH_FUNC       6    /* SD: Switch function */
 #define MMC_CMD7_SELECT_CARD      7    /* Select/deselect card */
 #define MMC_CMD8_SEND_EXT_CSD     8    /* MMC: Get EXT_CSD */
 #define SD_CMD8_SEND_IF_COND      8    /* SD: Send interface condition */
@@ -846,8 +846,8 @@
 #define SD_CMD11_VOLAGE_SWITCH    11   /* R1 Rsp        */
 #define MMC_CMD12_STOP_TRANS      12   /* Stop transmission */
 #define MMC_CMD13_SEND_STATUS     13   /* Get card status */
-#define MMC_CMD_15_GOTO_INACT_ST  15
-#define SD_CMD_16                 16   /* R1 Rsp        */
+#define MMC_CMD15_GOTO_INACT_ST   15
+#define SD_CMD16                  16   /* R1 Rsp        */
 #define MMC_CMD17_READ_SINGLE     17   /* Read single block */
 #define MMC_CMD18_READ_MULTIPLE   18   /* Read multiple blocks */
 #define MMC_CMD24_WRITE_SINGLE    24   /* Write single block */

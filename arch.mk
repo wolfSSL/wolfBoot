@@ -586,6 +586,7 @@ ifeq ($(ARCH),RISCV64)
   endif
 
   ifneq ($(NO_ASM),1)
+    CFLAGS+=-DWOLFSSL_RISCV_ASM
     MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
