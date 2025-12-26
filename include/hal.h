@@ -52,6 +52,12 @@ void hal_deinit();
 #endif
 
 void hal_init(void);
+
+#ifdef WOLFBOOT_UPDATE_DISK
+/* Timer functions (platform-specific) */
+uint64_t hal_get_timer_us(void);
+#endif
+
 #ifdef ARCH_64BIT
     typedef uintptr_t haladdr_t; /* 64-bit platforms */
     int hal_flash_write(uintptr_t address, const uint8_t *data, int len);

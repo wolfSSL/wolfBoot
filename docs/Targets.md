@@ -1034,7 +1034,7 @@ set architecture riscv:rv64
 ### PolarFire Example Boot Output
 
 ```
-wolfBoot Version: 2.7.0 (Dec 22 2025 14:14:37)
+wolfBoot Version: 2.7.0 (Dec 29 2025 11:34:01)
 Reading MBR...
 Found GPT PTE at sector 1
 Found valid boot signature in MBR
@@ -1054,19 +1054,18 @@ Checking secondary OS image in 0,2...
 Versions, A:1 B:1
 Load address 0x8E000000
 Attempting boot from P:A
-Boot partition: 0x801FFDA0 (sz 19767000, ver 0x1, type 0x601)
-Loading image from disk...done.
-Boot partition: 0x8E000000 (sz 19767000, ver 0x1, type 0x601)
-Checking image integrity...done.
-Verifying image signature...done.
+Boot partition: 0x801FFD80 (sz 19767004, ver 0x1, type 0x601)
+Loading image from disk...done. (846 ms)
+Boot partition: 0x8E000000 (sz 19767004, ver 0x1, type 0x601)
+Checking image integrity...done. (1507 ms)
+Verifying image signature...done. (68 ms)
 Firmware Valid.
-Flattened uImage Tree: Version 17, Size 19767000
+Flattened uImage Tree: Version 17, Size 19767004
 Loading Image kernel-1: 0x8E0002C8 -> 0x80200000 (19745280 bytes)
 Image kernel-1: 0x80200000 (19745280 bytes)
 Loading Image fdt-1: 0x8F2D4DCC -> 0x8A000000 (19897 bytes)
 Image fdt-1: 0x8A000000 (19897 bytes)
 Loading DTS: 0x8A000000 -> 0x8A000000 (19897 bytes)
-Loading elf at 0x80200000
 Invalid elf, falling back to raw binary
 Booting at 80200000
 [    0.000000] Linux version 6.12.22-linux4microchip+fpga-2025.07-g032a7095303a (oe-user@oe-host) (riscv64-oe-linux-gcc (GCC) 13.3.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP Tue Jul 22 10:04:20 UTC 2025
@@ -1078,14 +1077,13 @@ Booting at 80200000
 [    0.000000] SBI RFENCE extension detected
 [    0.000000] SBI SRST extension detected
 [    0.000000] earlycon: ns16550a0 at MMIO32 0x0000000020100000 (options '115200n8')
+[    0.000000] printk: legacy bootconsole [ns16550a0] enabled
 ...
 ```
 
 ### PolarFire TODO
 
 * Add eMMC/SD features:
-  - Improve mmc_delay and timeout handling
-  - DMA read support
   - Write support
   - eMMC support (not just SD)
 * Add support for reading serial number and modifying ethernet MAC in device tree

@@ -22,6 +22,9 @@
 #ifndef MPFS250_DEF_INCLUDED
 #define MPFS250_DEF_INCLUDED
 
+/* Include generic RISC-V definitions */
+#include "hal/riscv.h"
+
 /* PolarFire SoC MPFS250T board specific configuration */
 
 /* APB/AHB Clock Frequency */
@@ -50,55 +53,6 @@
 #define SYSREG_SOFT_RESET_CR_GPIO2 (1U << 22)
 #define SYSREG_SOFT_RESET_CR_DDRC (1U << 23)
 #define SYSREG_SOFT_RESET_CR_ATHENA (1U << 28) /* Crypto hardware accelerator */
-
-
-/* TODO: Add support for machine mode wolfBoot */
-#if 1
-    #define WOLFBOOT_RISCV_SMODE /* supervisor mode */
-#else
-    #define WOLFBOOT_RISCV_MMODE /* machine mode */
-#endif
-
-/* size of each trap frame register */
-#define REGBYTES (1 << 3)
-
-/* Machine Information Registers */
-#define CSR_MVENDORID    0xF11
-#define CSR_MARCHID      0xF12
-#define CSR_MIMPID       0xF13
-#define CSR_MHARTID      0xF14
-
-/* Initial stack pointer address (stack grows downward from here) */
-#ifdef WOLFBOOT_RISCV_SMODE
-#define WOLFBOOT_STACK_TOP 0x80200000
-#else
-#define WOLFBOOT_STACK_TOP 0x80000000
-#endif
-
-#ifdef WOLFBOOT_RISCV_SMODE
-#define MODE_PREFIX(__suffix)    s##__suffix
-#else
-#define MODE_PREFIX(__suffix)    m##__suffix
-#endif
-
-/* SIE (Interrupt Enable) and SIP (Interrupt Pending) flags */
-#define IRQ_U_SOFT   0
-#define IRQ_S_SOFT   1
-#define IRQ_M_SOFT   3
-#define IRQ_U_TIMER  4
-#define IRQ_S_TIMER  5
-#define IRQ_M_TIMER  7
-#define IRQ_U_EXT    8
-#define IRQ_S_EXT    9
-#define IRQ_M_EXT    11
-#define MIE_MSIE     (1 << IRQ_M_SOFT)
-#define SIE_SSIE     (1 << IRQ_S_SOFT)
-#define SIE_STIE     (1 << IRQ_S_TIMER)
-#define SIE_SEIE     (1 << IRQ_S_EXT)
-
-#define MCAUSE64_INT   0x8000000000000000LLU
-#define MCAUSE64_CAUSE 0x7FFFFFFFFFFFFFFFLLU
-
 
 
 /* UART */
@@ -862,7 +816,7 @@
 #define EMMC_SD_DEBOUNCE_TIME     0x300000U
 
 /* Timeout values */
-#define EMMC_SD_DATA_TIMEOUT_US   500000U  /* 500ms data timeout */
+#define EMMC_SD_DATA_TIMEOUT_US   750000U  /* 750ms data timeout */
 #define EMMC_SD_CMD_TIMEOUT_MS    3000U    /* 3s command timeout */
 
 #define WOLFBOOT_CARDTYPE_SD   1
@@ -895,6 +849,102 @@
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
+
+
+/* ============================================================================
+ * PLIC - Platform-Level Interrupt Controller (SiFive compatible)
+ * Base Address: 0x0c000000, Size: 64MB
+ * ============================================================================ */
+#define PLIC_BASE               0x0C000000UL
+#define PLIC_SIZE               0x04000000UL  /* 64MB */
+
+/* Number of interrupt sources and contexts */
+#define PLIC_NUM_SOURCES        186           /* riscv,ndev = 0xBA = 186 */
+#define PLIC_NUM_HARTS          5             /* 1x E51 + 4x U54 */
+#define PLIC_NUM_CONTEXTS       10            /* 2 contexts per hart (M-mode + S-mode) */
+
+/* MSS Global Interrupt offset - PLIC interrupts 0-12 are local, 13+ are MSS */
+#define OFFSET_TO_MSS_GLOBAL_INTS   13
+
+/* PLIC Interrupt Sources (PLIC IRQ numbers) */
+#define PLIC_INT_MMC_MAIN       88            /* MMC/SD controller main interrupt */
+#define PLIC_INT_MMC_WAKEUP     89            /* MMC/SD controller wakeup interrupt */
+
+/* PLIC Register Layout:
+ * 0x000000: Reserved
+ * 0x000004: Priority for interrupt 1
+ * ...
+ * 0x000FFC: Priority for interrupt 1023
+ * 0x001000: Pending bits for interrupts 0-31
+ * ...
+ * 0x002000: Enable bits for context 0, interrupts 0-31
+ * ...
+ * 0x200000: Priority threshold for context 0
+ * 0x200004: Claim/complete for context 0
+ * 0x201000: Priority threshold for context 1
+ * 0x201004: Claim/complete for context 1
+ * ...
+ */
+
+/* Priority registers: one 32-bit word per interrupt source */
+#define PLIC_PRIORITY_BASE      (PLIC_BASE + 0x000000UL)
+#define PLIC_PRIORITY(irq)      (*((volatile uint32_t*)(PLIC_PRIORITY_BASE + ((irq) * 4))))
+
+/* Pending bits: 32 interrupts per 32-bit word */
+#define PLIC_PENDING_BASE       (PLIC_BASE + 0x001000UL)
+#define PLIC_PENDING(irq)       (*((volatile uint32_t*)(PLIC_PENDING_BASE + (((irq) / 32) * 4))))
+#define PLIC_PENDING_BIT(irq)   (1U << ((irq) % 32))
+
+/* Enable bits: 32 interrupts per 32-bit word, per context
+ * Each context has 0x80 bytes (32 words) for enable bits
+ */
+#define PLIC_ENABLE_BASE        (PLIC_BASE + 0x002000UL)
+#define PLIC_ENABLE_STRIDE      0x80UL
+#define PLIC_ENABLE(ctx, irq)   (*((volatile uint32_t*)(PLIC_ENABLE_BASE + \
+                                    ((ctx) * PLIC_ENABLE_STRIDE) + (((irq) / 32) * 4))))
+#define PLIC_ENABLE_BIT(irq)    (1U << ((irq) % 32))
+
+/* Context registers: threshold and claim/complete, 0x1000 bytes per context */
+#define PLIC_CONTEXT_BASE       (PLIC_BASE + 0x200000UL)
+#define PLIC_CONTEXT_STRIDE     0x1000UL
+#define PLIC_THRESHOLD(ctx)     (*((volatile uint32_t*)(PLIC_CONTEXT_BASE + \
+                                    ((ctx) * PLIC_CONTEXT_STRIDE) + 0x00)))
+#define PLIC_CLAIM(ctx)         (*((volatile uint32_t*)(PLIC_CONTEXT_BASE + \
+                                    ((ctx) * PLIC_CONTEXT_STRIDE) + 0x04)))
+#define PLIC_COMPLETE(ctx)      PLIC_CLAIM(ctx)  /* Same register for claim and complete */
+
+/* PLIC Context IDs for each hart
+ * Hart 0 (E51):  Context 0 = M-mode (no S-mode on E51)
+ * Hart 1 (U54):  Context 1 = M-mode, Context 2 = S-mode
+ * Hart 2 (U54):  Context 3 = M-mode, Context 4 = S-mode
+ * Hart 3 (U54):  Context 5 = M-mode, Context 6 = S-mode
+ * Hart 4 (U54):  Context 7 = M-mode, Context 8 = S-mode
+ */
+#define PLIC_CONTEXT_E51_M      0
+#define PLIC_CONTEXT_U54_1_M    1
+#define PLIC_CONTEXT_U54_1_S    2
+#define PLIC_CONTEXT_U54_2_M    3
+#define PLIC_CONTEXT_U54_2_S    4
+#define PLIC_CONTEXT_U54_3_M    5
+#define PLIC_CONTEXT_U54_3_S    6
+#define PLIC_CONTEXT_U54_4_M    7
+#define PLIC_CONTEXT_U54_4_S    8
+
+/* Helper macro to get S-mode context for a given hart (1-4 for U54 cores) */
+#define PLIC_HART_TO_SMODE_CTX(hart)    (((hart) * 2))
+
+/* PLIC Priority levels (0 = disabled, 1-7 = priority, 7 = highest) */
+#define PLIC_PRIORITY_DISABLED  0
+#define PLIC_PRIORITY_MIN       1
+#define PLIC_PRIORITY_MAX       7
+#define PLIC_PRIORITY_DEFAULT   4
+
+/* MMC Interrupt flags for handler state */
+#define MMC_IRQ_FLAG_NONE       0x00
+#define MMC_IRQ_FLAG_CC         0x01  /* Command Complete */
+#define MMC_IRQ_FLAG_TC         0x02  /* Transfer Complete */
+#define MMC_IRQ_FLAG_DMAINT     0x04  /* DMA Interrupt */
+#define MMC_IRQ_FLAG_ERROR      0x80  /* Error occurred */
 
 
 #endif /* MPFS250_DEF_INCLUDED */

@@ -542,7 +542,7 @@ ifeq ($(ARCH),RENESAS_RX)
 endif
 
 
-## RISCV
+## RISCV (32-bit)
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
   ARCH_FLAGS=-march=rv32imac -mabi=ilp32 -mcmodel=medany
@@ -555,11 +555,12 @@ ifeq ($(ARCH),RISCV)
   CFLAGS +=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
 
-  OBJS+=src/boot_riscv.o src/vector_riscv.o
+  # Unified RISC-V boot code (32/64-bit via __riscv_xlen)
+  OBJS+=src/boot_riscv_start.o src/boot_riscv.o src/vector_riscv.o
   ARCH_FLASH_OFFSET=0x20010000
 endif
 
-## RISCV64
+## RISCV64 (64-bit)
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
@@ -568,7 +569,7 @@ ifeq ($(ARCH),RISCV64)
   OBJS += src/gpt.o
   OBJS += src/disk.o
   ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
-  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV64
+  CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV -DARCH_RISCV64
   CFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=$(ARCH_FLAGS)
 
@@ -576,7 +577,8 @@ ifeq ($(ARCH),RISCV64)
   CFLAGS +=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
 
-  OBJS+=src/boot_riscv64_start.o src/boot_riscv64.o src/vector_riscv64.o
+  # Unified RISC-V boot code (32/64-bit via __riscv_xlen)
+  OBJS+=src/boot_riscv_start.o src/boot_riscv.o src/vector_riscv.o
 
   CFLAGS+=-DWOLFBOOT_FDT
   OBJS+=src/fdt.o
