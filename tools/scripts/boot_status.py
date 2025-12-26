@@ -5,8 +5,8 @@ wolfBoot Utility Tool
 A unified utility for managing wolfBoot images, boot status, and keystores.
 
 Usage:
-    boot_status.py status get <partition> --file <file> --config <config>
-    boot_status.py status set <partition> <value> --file <file> --config <config>
+    boot_status.py status --file <file> --config <config> get <partition>
+    boot_status.py status --file <file> --config <config> set <partition> <value>
     boot_status.py image inspect <image> [--header-size SIZE]
     boot_status.py image verify <image> --pubkey <key> [--alg ALG] [--verify-hash]
     boot_status.py image dump <image> <output> [--header-size SIZE]
@@ -14,8 +14,8 @@ Usage:
 
 Examples:
     # Boot status management
-    boot_status.py status get BOOT --file internal_flash.dd --config .config
-    boot_status.py status set UPDATE SUCCESS --file internal_flash.dd --config .config
+    boot_status.py status --file internal_flash.dd --config .config get BOOT
+    boot_status.py status --file internal_flash.dd --config .config set UPDATE SUCCESS
 
     # Image inspection and verification
     boot_status.py image inspect test_v1_signed.bin
@@ -122,6 +122,7 @@ def read_config(config_path: str) -> dict[str, str]:
 # IMAGE INSPECTION (from image-peek.py)
 # ============================================================================
 
+# TLV type constants for wolfBoot image headers (for documentation/reference)
 TYPE_NAMES = {
     0x0001: "version",
     0x0002: "timestamp",
@@ -135,6 +136,8 @@ def parse_header(data: bytes, header_size: int = 0x100):
     """Parse wolfBoot image header and TLVs."""
     if len(data) < 8:
         raise ValueError("Input too small to contain header")
+    if len(data) < header_size:
+        raise ValueError(f"Input size ({len(data)} bytes) is smaller than specified header_size ({header_size} bytes)")
     magic = data[0:4]
     size_le = struct.unpack("<I", data[4:8])[0]
     off = 8
@@ -166,6 +169,8 @@ def find_tlv(data: bytes, header_size: int, ttype: int):
     Scan the header TLV area and return (value_offset, value_len, tlv_start_offset)
     for the first TLV matching 'ttype'. Returns None if not found.
     """
+    if len(data) < header_size:
+        return None
     off = 8  # skip magic(4) + size(4)
     while off + 4 <= header_size:
         # skip padding bytes 0xFF
@@ -188,7 +193,7 @@ def decode_timestamp(v: bytes):
     """Decode wolfBoot timestamp TLV."""
     ts = struct.unpack("<Q", v)[0]
     try:
-        utc = datetime.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S UTC")
+        utc = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     except Exception:
         utc = "out-of-range"
     return ts, utc
@@ -244,11 +249,17 @@ def verify_signature(pubkey, alg: str, firmware_hash: bytes, signature: bytes):
             return False, f"ECDSA verify error: {e}"
 
     if alg == "ed25519":
+        # NOTE: wolfBoot uses Ed25519 in a non-standard way - it signs the SHA hash digest,
+        # not the full message (see image.c:142). This matches wolfBoot's implementation where
+        # wc_ed25519_verify_msg is called with img->sha_hash (the precomputed digest) as the
+        # "message" parameter. While this differs from standard Ed25519 practice (which hashes
+        # the full message internally), we implement it this way to match wolfBoot's behavior.
         try:
             if not hasattr(pubkey, "verify"):
                 return False, "Public key object is not Ed25519-capable"
+            # Verify the signature over the digest (matching wolfBoot's approach)
             pubkey.verify(signature, firmware_hash)
-            return True, "Signature OK (Ed25519 over stored digest)"
+            return True, "Signature OK (Ed25519 over stored digest - non-standard wolfBoot approach)"
         except Exception as e:
             return False, f"Ed25519 verify error: {e}"
 
@@ -272,11 +283,17 @@ def cmd_image_inspect(args):
 
     version = d.get(0x0001, [(None, None)])[0][1]
     if version is not None:
-        print(f"Version: {struct.unpack('<I', version)[0]}")
+        if len(version) >= 4:
+            print(f"Version: {struct.unpack('<I', version[:4])[0]}")
+        else:
+            print(f"Version TLV too short ({len(version)} bytes), expected at least 4 bytes")
     if 0x0002 in d:
         ts_val = d[0x0002][0][1]
-        ts, utc = decode_timestamp(ts_val)
-        print(f"Timestamp: {ts} ({utc})")
+        if ts_val is not None and len(ts_val) == 8:
+            ts, utc = decode_timestamp(ts_val)
+            print(f"Timestamp: {ts} ({utc})")
+        else:
+            print(f"Timestamp TLV has invalid length: expected 8 bytes, got {0 if ts_val is None else len(ts_val)}")
     hash_bytes = d.get(0x0003, [(None, None)])[0][1]
     if hash_bytes is not None:
         print(f"Hash ({len(hash_bytes)} bytes): {hash_bytes.hex()}")
@@ -285,7 +302,16 @@ def cmd_image_inspect(args):
         print(f"Pubkey hint: {hint}")
     sig = d.get(0x0020, [(None, None)])[0][1]
     if sig is not None:
-        print(f"Signature ({len(sig)} bytes): {sig[:8].hex()}...{sig[-8:].hex()}")
+        sig_len = len(sig)
+        if sig_len >= 16:
+            # Show first and last 8 bytes for typical full-length signatures
+            print(f"Signature ({sig_len} bytes): {sig[:8].hex()}...{sig[-8:].hex()}")
+        elif sig_len > 0:
+            # For short signatures, show the entire value without an ellipsis
+            print(f"Signature ({sig_len} bytes): {sig.hex()}")
+        else:
+            # Explicitly handle empty signatures
+            print("Signature (0 bytes): <empty>")
 
     if len(data) < header_size + size:
         print(f"[WARN] File shorter ({len(data)} bytes) than header+payload ({header_size+size}). Hash/signature verification may fail.")
@@ -353,7 +379,7 @@ def cmd_image_verify(args):
                     if len(sig) == 64 and len(hash_bytes) in (32,48,64):
                         alg = "ecdsa-p256"
                     else:
-                        print(f"[SIG] Cannot infer algorithm (sig={len(sig)} bytes, hash={len(hash_bytes) if hash_bytes else 0})")
+                        print(f"[SIG] Cannot infer algorithm (sig={len(sig)} bytes, hash={len(hash_bytes) if hash_bytes else 0}); defaulting to ecdsa-p256. Specify --alg explicitly for best results.")
                         alg = "ecdsa-p256"
                 ok, msg = verify_signature(pubkey, alg, hash_bytes, sig)
                 print(f"[SIG] {msg} (alg={alg})")
@@ -406,13 +432,10 @@ def cmd_keystore_convert(args):
         #  1) raw X||Y (64/96/132)
         #  2) SEC1 0x04||X||Y (65/97/133)
         #  3) wolfBoot 16+X||Y (80/112/148)
-        data = raw
-        is_sec1 = False
 
         # Case 2: SEC1 uncompressed (leading 0x04, lengths 65/97/133)
         if ln in (65, 97, 133) and raw[0] == 0x04:
             sec1 = raw
-            is_sec1 = True
             xy_len = ln - 1
         # Case 3: wolfBoot container 16+X||Y
         elif ln in (80, 112, 148):
@@ -422,12 +445,10 @@ def cmd_keystore_convert(args):
                 print("ERROR: Unexpected container size after stripping 16 bytes:", len(data), file=sys.stderr)
                 sys.exit(3)
             sec1 = b"\x04" + data
-            is_sec1 = True
             xy_len = len(data)
         # Case 1: raw X||Y
         elif ln in (64, 96, 132):
             sec1 = b"\x04" + raw
-            is_sec1 = True
             xy_len = ln
         else:
             print("ERROR: Unrecognized input size:", ln, file=sys.stderr)
@@ -452,8 +473,11 @@ def cmd_keystore_convert(args):
             crv = ec.SECP256R1()
         elif curve == "p384":
             crv = ec.SECP384R1()
-        else:
+        elif curve == "p521":
             crv = ec.SECP521R1()
+        else:
+            print("ERROR: Unsupported or unknown curve:", curve, file=sys.stderr)
+            sys.exit(4)
 
         try:
             key_obj = ec.EllipticCurvePublicKey.from_encoded_point(crv, sec1)
@@ -479,11 +503,10 @@ def cmd_keystore_convert(args):
 
     # Print SPKI SHA-256 for pubkey-hint comparison
     try:
-        import binascii
         h = hashlib.sha256(der).digest()
         print("Wrote:", out_der)
         print("Wrote:", out_pem)
-        print("SPKI SHA-256 (hex):", binascii.hexlify(h).decode("ascii"))
+        print("SPKI SHA-256 (hex):", h.hex())
     except Exception:
         print("Wrote:", out_der)
         print("Wrote:", out_pem)
