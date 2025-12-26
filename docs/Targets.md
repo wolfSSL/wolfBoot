@@ -2867,11 +2867,14 @@ Tested with the Nordic nRF5340-DK. This device has two cores:
 1) Application core: Cortex-M33 at 128MHz, w/TrustZone, 1MB flash, 512KB RAM
 2) Network core: Cortex-M33 at 64MHz, 256KB Flash and 64KB RAM
 
-Three different configurations are available at `config/examples`:
+Four different configurations are available at `config/examples`:
 - `nrf5340.config`: for the app core; does not make use of TrustZone, i.e. it
   always runs in secure mode.
 - `nrf5340-tz.config`: for the app core; makes use of TrustZone, i.e. boots the
   application as non-secure code.
+- `nrf5340-wolfcrypt-tz.config`: for the app core; same as above, but also
+  includes a non-secure callable (NSC) wolfPKCS11 API to perform crypto
+  operations via wolfCrypt and access a secure keyvault provided by wolfBoot.
 - `nrf5340_net.config`: for the net core.
 
 The DK board has two virtual COM ports. Application core and Network core will each output to different VCOM ports.

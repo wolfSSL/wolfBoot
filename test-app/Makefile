@@ -306,7 +306,11 @@ ifeq ($(QSPI_FLASH),1)
   ifeq ($(ARCH),RENESAS_RX)
     APP_OBJS+=../hal/spi/spi_drv_renesas_rx.o
   else
-    APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o
+    ifeq ($(TZEN),1)
+      APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET)_ns.o
+    else
+      APP_OBJS+=../hal/spi/spi_drv_$(SPI_TARGET).o
+    endif
   endif
 endif
 
@@ -595,6 +599,9 @@ delta-extra-data: image.bin
 
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
+
+../hal/spi/spi_drv_$(SPI_TARGET)_ns.o: ../hal/spi/spi_drv_$(SPI_TARGET).c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/spi/spi_drv_$(SPI_TARGET).c -DNONSECURE_APP
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
