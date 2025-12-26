@@ -63,6 +63,7 @@
 #define REGBYTES (1 << 3)
 
 /* Machine Information Registers */
+#define CSR_TIME         0xC01
 #define CSR_MVENDORID    0xF11
 #define CSR_MARCHID      0xF12
 #define CSR_MIMPID       0xF13
@@ -862,7 +863,7 @@
 #define EMMC_SD_DEBOUNCE_TIME     0x300000U
 
 /* Timeout values */
-#define EMMC_SD_DATA_TIMEOUT_US   500000U  /* 500ms data timeout */
+#define EMMC_SD_DATA_TIMEOUT_US   750000U  /* 750ms data timeout */
 #define EMMC_SD_CMD_TIMEOUT_MS    3000U    /* 3s command timeout */
 
 #define WOLFBOOT_CARDTYPE_SD   1
