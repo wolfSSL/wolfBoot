@@ -116,6 +116,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t dts_size = 0;
 #endif
     char part_name[4] = {'P', ':', 'X', '\0'};
+    uint64_t start_us, elapsed_ms;
 
     ret = disk_init(BOOT_DISK);
     if (ret != 0) {
@@ -208,6 +209,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
         /* Read the image into RAM */
         wolfBoot_printf("Loading image from disk...");
+        start_us = hal_get_timer_us();
         load_off = 0;
         do {
             ret = disk_part_read(BOOT_DISK, cur_part, load_off,
@@ -223,7 +225,8 @@ void RAMFUNCTION wolfBoot_start(void)
             selected ^= 1;
             continue;
         }
-        wolfBoot_printf("done.\r\n");
+        elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
+        wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
 
         memset(&os_image, 0, sizeof(os_image));
         ret = wolfBoot_open_image_address(&os_image, (void*)load_address);
@@ -234,21 +237,25 @@ void RAMFUNCTION wolfBoot_start(void)
         }
 
         wolfBoot_printf("Checking image integrity...");
+        start_us = hal_get_timer_us();
         if (wolfBoot_verify_integrity(&os_image) != 0) {
             wolfBoot_printf("Error validating integrity for %s\r\n", part_name);
             selected ^= 1;
             continue;
         }
-        wolfBoot_printf("done.\r\n");
+        elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
+        wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
 
         wolfBoot_printf("Verifying image signature...");
+        start_us = hal_get_timer_us();
         if (wolfBoot_verify_authenticity(&os_image) != 0) {
             wolfBoot_printf("Error validating authenticity for %s\r\n",
                 part_name);
             selected ^= 1;
             continue;
         } else {
-            wolfBoot_printf("done.\r\n");
+            elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
+            wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
             failures = 0;
             break; /* Success case */
         }

@@ -263,6 +263,37 @@ void delay(int msec)
         io_write8(0x80, 0x41);
 }
 
+/* x86 TSC (Time Stamp Counter) frequency in MHz
+ * Default 2 GHz, can be overridden in target configuration */
+#ifndef X86_TSC_FREQ_MHZ
+#define X86_TSC_FREQ_MHZ 2000
+#endif
+
+/**
+ * @brief Read the x86 Time Stamp Counter (TSC).
+ *
+ * @return The current TSC value as a 64-bit integer.
+ */
+static inline uint64_t rdtsc(void)
+{
+    uint32_t lo, hi;
+    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
+/**
+ * @brief Get the current timer value in microseconds.
+ *
+ * Uses the x86 TSC for timing measurements. The TSC frequency
+ * is configured via X86_TSC_FREQ_MHZ (default 2000 MHz).
+ *
+ * @return The current time in microseconds.
+ */
+uint64_t hal_get_timer_us(void)
+{
+    return rdtsc() / X86_TSC_FREQ_MHZ;
+}
+
 /**
  * @brief Enter an infinite loop, causing a panic state.
  *
@@ -441,9 +472,9 @@ int x86_run_fsp_32bit(void* api, void* arg)
         /* save status */
         "mov %%ebx, %[status]\n"
        :[status]"=m"(status)
-       :[SEG_COMP]"i"(GDT_CS_32BIT_COMPAT), 
+       :[SEG_COMP]"i"(GDT_CS_32BIT_COMPAT),
         [SEG_LONG]"i"(GDT_CS_64BIT),
-        [PG]"i"(CR0_PG_BIT), 
+        [PG]"i"(CR0_PG_BIT),
         [LME]"i"(IA32_EFER_LME),
         [PAE]"i"(CR4_PAE_BIT),
         [api]"r"(api),

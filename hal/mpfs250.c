@@ -134,15 +134,196 @@ void* hal_get_dts_address(void)
 }
 #endif
 
-
 static uint32_t g_sector_count;
 static uint32_t g_sector_size;
 static uint32_t g_bus_width = 1;
 static uint32_t g_rca = 0; /* SD Card Relative Address */
 
-#ifndef DEFAULT_DELAY
-#define DEFAULT_DELAY 0xFFFF
+/* MMC Interrupt state - volatile for interrupt handler access */
+static volatile uint32_t g_mmc_irq_status = 0;
+static volatile int g_mmc_irq_pending = 0;
+
+/* ============================================================================
+ * PLIC - Platform-Level Interrupt Controller Functions
+ * ============================================================================ */
+
+/* Get the current hart ID from the tp register (set during boot) */
+static inline uint32_t plic_get_hart_id(void)
+{
+    uint32_t hart_id;
+    asm volatile("mv %0, tp" : "=r"(hart_id));
+    return hart_id;
+}
+
+/* Get the PLIC context for the current hart in S-mode */
+static inline uint32_t plic_get_context(void)
+{
+    return PLIC_HART_TO_SMODE_CTX(plic_get_hart_id());
+}
+
+/* Set priority for an interrupt source */
+void plic_set_priority(uint32_t irq, uint32_t priority)
+{
+    if (irq > 0 && irq < PLIC_NUM_SOURCES && priority <= PLIC_PRIORITY_MAX) {
+        PLIC_PRIORITY(irq) = priority;
+    }
+}
+
+/* Enable an interrupt for the current hart's context */
+void plic_enable_interrupt(uint32_t irq)
+{
+    uint32_t ctx = plic_get_context();
+    if (irq > 0 && irq < PLIC_NUM_SOURCES) {
+        PLIC_ENABLE(ctx, irq) |= PLIC_ENABLE_BIT(irq);
+    }
+}
+
+/* Disable an interrupt for the current hart's context */
+void plic_disable_interrupt(uint32_t irq)
+{
+    uint32_t ctx = plic_get_context();
+    if (irq > 0 && irq < PLIC_NUM_SOURCES) {
+        PLIC_ENABLE(ctx, irq) &= ~PLIC_ENABLE_BIT(irq);
+    }
+}
+
+/* Set the priority threshold for the current hart's context */
+void plic_set_threshold(uint32_t threshold)
+{
+    uint32_t ctx = plic_get_context();
+    if (threshold <= PLIC_PRIORITY_MAX) {
+        PLIC_THRESHOLD(ctx) = threshold;
+    }
+}
+
+/* Claim the highest priority pending interrupt (returns IRQ number, 0 if none) */
+uint32_t plic_claim(void)
+{
+    uint32_t ctx = plic_get_context();
+    return PLIC_CLAIM(ctx);
+}
+
+/* Signal completion of interrupt handling */
+void plic_complete(uint32_t irq)
+{
+    uint32_t ctx = plic_get_context();
+    PLIC_COMPLETE(ctx) = irq;
+}
+
+/* Initialize PLIC for MMC interrupt handling */
+void plic_init_mmc(void)
+{
+    /* Set priority for MMC main interrupt */
+    plic_set_priority(PLIC_INT_MMC_MAIN, PLIC_PRIORITY_DEFAULT);
+
+    /* Set threshold to 0 (allow all priorities > 0) */
+    plic_set_threshold(0);
+
+    /* Enable MMC interrupt for this hart */
+    plic_enable_interrupt(PLIC_INT_MMC_MAIN);
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("plic_init_mmc: hart %d, context %d, irq %d enabled\n",
+        plic_get_hart_id(), plic_get_context(), PLIC_INT_MMC_MAIN);
 #endif
+}
+
+/* ============================================================================
+ * MMC Interrupt Handler
+ * ============================================================================ */
+
+/* MMC interrupt handler - called from PLIC dispatch */
+void mmc_irq_handler(void)
+{
+    uint32_t status = EMMC_SD_SRS12;
+
+    /* Check for DMA interrupt */
+    if (status & EMMC_SD_SRS12_DMAINT) {
+        g_mmc_irq_status |= MMC_IRQ_FLAG_DMAINT;
+        EMMC_SD_SRS12 = EMMC_SD_SRS12_DMAINT; /* Clear interrupt */
+    }
+
+    /* Check for transfer complete */
+    if (status & EMMC_SD_SRS12_TC) {
+        g_mmc_irq_status |= MMC_IRQ_FLAG_TC;
+        EMMC_SD_SRS12 = EMMC_SD_SRS12_TC; /* Clear interrupt */
+    }
+
+    /* Check for command complete */
+    if (status & EMMC_SD_SRS12_CC) {
+        g_mmc_irq_status |= MMC_IRQ_FLAG_CC;
+        EMMC_SD_SRS12 = EMMC_SD_SRS12_CC; /* Clear interrupt */
+    }
+
+    /* Check for data timeout error */
+    if (status & EMMC_SD_SRS12_EDT) {
+        g_mmc_irq_status |= MMC_IRQ_FLAG_ERROR;
+        EMMC_SD_SRS12 = EMMC_SD_SRS12_EDT; /* Clear interrupt */
+    }
+
+    /* Check for any other errors */
+    if (status & EMMC_SD_SRS12_EINT) {
+        g_mmc_irq_status |= MMC_IRQ_FLAG_ERROR;
+        /* Clear all error status bits */
+        EMMC_SD_SRS12 = (status & EMMC_SD_SRS12_ERR_STAT);
+    }
+
+    /* Signal that interrupt was handled */
+    g_mmc_irq_pending = 1;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_irq_handler: status=0x%08X, flags=0x%02X\n",
+        status, g_mmc_irq_status);
+#endif
+}
+
+/* Enable MMC interrupts for SDMA transfer */
+static void mmc_enable_sdma_interrupts(void)
+{
+    /* Enable signal interrupts for: DMA, Transfer Complete, Command Complete,
+     * Data Timeout Error */
+    uint32_t sig_enable = EMMC_SD_SRS14_DMAINT_IE |
+                          EMMC_SD_SRS14_TC_IE |
+                          EMMC_SD_SRS14_CC_IE |
+                          EMMC_SD_SRS14_EDT_IE;
+    EMMC_SD_SRS14 |= sig_enable;
+
+    /* Clear any pending interrupt state */
+    g_mmc_irq_status = 0;
+    g_mmc_irq_pending = 0;
+}
+
+/* Disable MMC signal interrupts (status enables remain for polling) */
+static void mmc_disable_sdma_interrupts(void)
+{
+    EMMC_SD_SRS14 &= ~(EMMC_SD_SRS14_DMAINT_IE |
+                       EMMC_SD_SRS14_TC_IE |
+                       EMMC_SD_SRS14_CC_IE |
+                       EMMC_SD_SRS14_EDT_IE);
+}
+
+/* Wait for MMC interrupt with timeout */
+static int mmc_wait_irq(uint32_t expected_flags, uint32_t timeout)
+{
+    while (timeout-- > 0) {
+        if (g_mmc_irq_pending) {
+            g_mmc_irq_pending = 0;
+
+            /* Check for error */
+            if (g_mmc_irq_status & MMC_IRQ_FLAG_ERROR) {
+                return -1;
+            }
+
+            /* Check for expected flags */
+            if (g_mmc_irq_status & expected_flags) {
+                return 0;
+            }
+        }
+        /* Brief delay while waiting */
+        asm volatile("nop");
+    }
+    return -1; /* Timeout */
+}
 
 static int mmc_set_timeout(uint32_t timeout_us)
 {
@@ -198,13 +379,6 @@ static int mmc_set_timeout(uint32_t timeout_us)
     return 0;
 }
 
-static void mmc_delay(uint32_t delay)
-{
-    while (delay--) {
-        asm volatile("nop");
-    }
-}
-
 /* voltage values:
  *  0 = off
  *  EMMC_SD_SRS10_BVS_1_8V
@@ -241,7 +415,6 @@ static int mmc_set_power(uint32_t voltage)
         }
         /* should be - 0xf06 */
         EMMC_SD_SRS10 = reg;
-        mmc_delay(DEFAULT_DELAY); /* delay after bus power is applied */
     }
     return 0;
 }
@@ -300,8 +473,6 @@ static uint32_t mmc_set_clock(uint32_t clock_khz)
         clock_khz, freq_khz);
 #endif
 
-    mmc_delay(DEFAULT_DELAY); /* delay after clock changed */
-
     return freq_khz;
 }
 
@@ -349,26 +520,20 @@ static uint32_t mmc_get_response_type(uint8_t resp_type)
     return cmd_reg;
 }
 
-#define DEVICE_BUSY 1
-int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
+static int mmc_send_cmd_internal(uint32_t cmd_type,
+    uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
     int status = 0;
     uint32_t cmd_reg;
-    uint32_t cmd_type = EMMC_SD_SRS03_CMD_NORMAL;
+    uint32_t timeout = 0x000FFFFF;
 
 #ifdef DEBUG_MMC
     wolfBoot_printf("mmc_send_cmd: cmd_index: %d, cmd_arg: %08X, resp_type: %d\n",
         cmd_index, cmd_arg, resp_type);
 #endif
 
-    /* wait for command line to be idle - TODO: Add timeout */
+    /* wait for command line to be idle */
     while ((EMMC_SD_SRS09 & EMMC_SD_SRS09_CICMD) != 0);
-
-    /* clear all status interrupts (except current limit, card interrupt/removal/insert) */
-    EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
-                      EMMC_SD_SRS12_CINT |
-                      EMMC_SD_SRS12_CR |
-                      EMMC_SD_SRS12_CIN);
 
     /* set command argument and command transfer registers */
     EMMC_SD_SRS02 = cmd_arg;
@@ -379,19 +544,41 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 
     EMMC_SD_SRS03 = cmd_reg;
 
-    /* wait for command complete or error - TODO: Add timeout  */
-    while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_EINT)) == 0);
+    /* wait for command complete or error */
+    while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_TC |
+        EMMC_SD_SRS12_EINT)) == 0 && --timeout > 0);
 
-    /* check for device busy */
-    if (resp_type == EMMC_SD_RESP_R1 || resp_type == EMMC_SD_RESP_R1B) {
-        uint32_t resp = EMMC_SD_SRS04;
-        #define CARD_STATUS_READY_FOR_DATA (1U << 8)
-        if ((resp & CARD_STATUS_READY_FOR_DATA) == 0) {
-            status = DEVICE_BUSY; /* card is busy */
+    if (timeout == 0 || (EMMC_SD_SRS12 & EMMC_SD_SRS12_EINT)) {
+        wolfBoot_printf("mmc_send_cmd:%s error SRS12: 0x%08X\n",
+            (timeout == 0) ? " timeout" : "", EMMC_SD_SRS12);
+        status = -1; /* error */
+    }
+
+    EMMC_SD_SRS12 = EMMC_SD_SRS12_CC; /* clear command complete */
+    while ((EMMC_SD_SRS09 & EMMC_SD_SRS09_CICMD) != 0);
+
+    return status;
+}
+
+#define DEVICE_BUSY 1
+int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
+{
+    /* send command */
+    int status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_NORMAL, cmd_index,
+        cmd_arg, resp_type);
+    if (status == 0) {
+        /* check for device busy */
+        if (resp_type == EMMC_SD_RESP_R1 || resp_type == EMMC_SD_RESP_R1B) {
+            uint32_t resp = EMMC_SD_SRS04;
+            #define CARD_STATUS_READY_FOR_DATA (1U << 8)
+            if ((resp & CARD_STATUS_READY_FOR_DATA) == 0) {
+                status = DEVICE_BUSY; /* card is busy */
+            }
         }
     }
 
-    /* clear all status interrupts (except current limit, card interrupt/removal/insert) */
+    /* clear all status interrupts
+    * (except current limit, card interrupt/removal/insert) */
     EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
                       EMMC_SD_SRS12_CINT |
                       EMMC_SD_SRS12_CR |
@@ -425,8 +612,6 @@ int mmc_power_init_seq(uint32_t voltage)
         status = mmc_send_cmd(MMC_CMD0_GO_IDLE, 0, EMMC_SD_RESP_NONE);
     }
     if (status == 0) {
-        mmc_delay(DEFAULT_DELAY);
-
         /* send the operating conditions command */
         status = mmc_send_cmd(SD_CMD8_SEND_IF_COND, IF_COND_27V_33V,
             EMMC_SD_RESP_R7);
@@ -458,18 +643,24 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     uint32_t block_count;
     uint32_t reg, cmd_reg;
 
+    /* get block count (round up) */
+    block_count = (sz + (EMMC_SD_BLOCK_SIZE - 1)) / EMMC_SD_BLOCK_SIZE;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d (%d blocks)\n",
+        cmd_index, block_addr, dst, sz, block_count);
+    wolfBoot_printf("EMMC_SD IN: SRS12: 0x%08X, SRS09: 0x%08X\n", EMMC_SD_SRS12, EMMC_SD_SRS09);
+#endif
+
     /* wait for idle */
     status = mmc_wait_busy(0);
 
     /* reset data and command lines */
     EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
-    mmc_delay(0xFF);
 
     /* wait for command and data line busy to clear */
     while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
 
-    /* get block count (round up) */
-    block_count = (sz + (EMMC_SD_BLOCK_SIZE - 1)) / EMMC_SD_BLOCK_SIZE;
     /* set transfer block count */
     EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
 
@@ -488,55 +679,112 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     }
     else if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
         cmd_reg |= EMMC_SD_SRS03_MSBS; /* enable multi-block select */
-        EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
-            EMMC_SD_BLOCK_SIZE;
-    }
 
-#ifdef DEBUG_MMC
-    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d (%d blocks)\n",
-        cmd_index, block_addr, dst, sz, block_count);
-#endif
+        if (sz >= (512 * 1024)) { /* use DMA */
+            cmd_reg |= EMMC_SD_SRS03_DMAE; /* enable DMA */
 
-    EMMC_SD_SRS02 = block_addr; /* cmd argument */
-    EMMC_SD_SRS03 = cmd_reg; /* execute command */
-    while (sz > 0) {
-        /* wait for buffer read ready */
-        while (((reg = EMMC_SD_SRS12) &
-            (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
+            EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
+                EMMC_SD_SRS01_DMA_BUFF_512KB | EMMC_SD_BLOCK_SIZE;
 
-        /* read in buffer - read 4 bytes at a time */
-        if (reg & EMMC_SD_SRS12_BRR) {
-            uint32_t i, read_sz = sz;
-            if (read_sz > EMMC_SD_BLOCK_SIZE) {
-                read_sz = EMMC_SD_BLOCK_SIZE;
-            }
-            for (i=0; i<read_sz; i+=4) {
-                *dst = EMMC_SD_SRS08;
-                dst++;
-            }
-            sz -= read_sz;
+            /* SDMA mode (for 32-bit transfers) */
+            EMMC_SD_SRS10 |= EMMC_SD_SRS10_DMA_SDMA;
+            EMMC_SD_SRS15 |= EMMC_SD_SRS15_HV4E;
+            EMMC_SD_SRS16 &= ~EMMC_SD_SRS16_A64S;
+            /* set SDMA destination address */
+            EMMC_SD_SRS22 = (uint32_t)(uintptr_t)dst;
+            EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)dst) >> 32);
+
+            /* Enable SDMA interrupts */
+            mmc_enable_sdma_interrupts();
         }
     }
 
-    if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
-        /* send CMD12 to stop transfer - ignore response */
-        (void)mmc_send_cmd(MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
-            EMMC_SD_RESP_R1);
+    EMMC_SD_SRS02 = block_addr; /* cmd argument */
+    EMMC_SD_SRS03 = cmd_reg; /* execute command */
+
+    if (cmd_reg & EMMC_SD_SRS03_DMAE) {
+        while (1) { /* DMA mode with interrupt support */
+            /* Wait for DMA interrupt, transfer complete, or error */
+            status = mmc_wait_irq(MMC_IRQ_FLAG_DMAINT | MMC_IRQ_FLAG_TC,
+                                  0x00FFFFFF);
+            if (status != 0) {
+                /* Timeout or error */
+                wolfBoot_printf("mmc_read: SDMA interrupt timeout/error\n");
+                status = -1; /* error */
+                break;
+            }
+
+            /* Check for transfer complete */
+            if (g_mmc_irq_status & MMC_IRQ_FLAG_TC) {
+                g_mmc_irq_status &= ~MMC_IRQ_FLAG_TC;
+                break; /* Transfer complete */
+            }
+
+            /* Check for DMA boundary interrupt - need to update address */
+            if (g_mmc_irq_status & MMC_IRQ_FLAG_DMAINT) {
+                g_mmc_irq_status &= ~MMC_IRQ_FLAG_DMAINT;
+                /* Read updated DMA address - engine will have incremented */
+                dst = (uint32_t*)(uintptr_t)((((uint64_t)EMMC_SD_SRS23) << 32) |
+                                              EMMC_SD_SRS22);
+                /* Set new DMA address for next boundary */
+                EMMC_SD_SRS22 = (uint32_t)(uintptr_t)dst;
+                EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)dst) >> 32);
+            }
+        }
+
+        /* Disable SDMA interrupts after transfer */
+        mmc_disable_sdma_interrupts();
+    }
+    else {
+        while (sz > 0) { /* blocking mode */
+            /* wait for buffer read ready (or error) */
+            while (((reg = EMMC_SD_SRS12) &
+                (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
+
+            /* read in buffer - read 4 bytes at a time */
+            if (reg & EMMC_SD_SRS12_BRR) {
+                uint32_t i, read_sz = sz;
+                if (read_sz > EMMC_SD_BLOCK_SIZE) {
+                    read_sz = EMMC_SD_BLOCK_SIZE;
+                }
+                for (i=0; i<read_sz; i+=4) {
+                    *dst = EMMC_SD_SRS08;
+                    dst++;
+                }
+                sz -= read_sz;
+            }
+        }
     }
 
-    /* check for any errors and wait for idle */
+    /* check for any errors */
     reg = EMMC_SD_SRS12;
-    if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) {
-        mmc_delay(0xFFF);
+    if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) { /* no errors */
+        /* if multi-block read, send CMD12 to stop transfer */
+        if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
+            (void)mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
+                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
+                EMMC_SD_RESP_R1); /* use R1B for write */
+        }
+
+        /* wait for idle */
         status = mmc_wait_busy(0);
     }
     else {
+        wolfBoot_printf("mmc_read: error SRS12: 0x%08X\n", reg);
         status = -1; /* error */
     }
 
 #ifdef DEBUG_MMC
+    wolfBoot_printf("EMMC_SD OUT: SRS12: 0x%08X, SRS09: 0x%08X\n", EMMC_SD_SRS12, EMMC_SD_SRS09);
     wolfBoot_printf("mmc_read: status: %d\n", status);
 #endif
+
+    /* clear all status interrupts
+     * (except current limit, card interrupt/removal/insert) */
+    EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
+                      EMMC_SD_SRS12_CINT |
+                      EMMC_SD_SRS12_CR |
+                      EMMC_SD_SRS12_CIN);
 
     return status;
 }
@@ -698,8 +946,12 @@ int mmc_init(void)
         EMMC_SD_SRS13_BGE_SE | EMMC_SD_SRS13_TC_SE | EMMC_SD_SRS13_CC_SE |
         EMMC_SD_SRS13_ERSP_SE | EMMC_SD_SRS13_CQINT_SE
     );
-    /* Clear all signal enables */
+    /* Clear all signal enables (will be enabled per-transfer for SDMA) */
     EMMC_SD_SRS14 = 0;
+
+    /* Initialize PLIC for MMC interrupts */
+    plic_init_mmc();
+
     /* Set initial timeout to 500ms */
     status = mmc_set_timeout(EMMC_SD_DATA_TIMEOUT_US);
     if (status != 0) {
@@ -860,7 +1112,6 @@ int mmc_init(void)
         /* disable card insert interrupt while changing bus width to avoid false triggers */
         irq_restore = EMMC_SD_SRS13;
         EMMC_SD_SRS13 = (irq_restore & ~EMMC_SD_SRS13_CINT_SE);
-        mmc_delay(DEFAULT_DELAY);
 
         status = mmc_set_bus_width(4);
     }
