@@ -1,0 +1,246 @@
+/* s32k1xx.h
+ *
+ * Copyright (C) 2025 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ *
+ * Hardware register definitions for NXP S32K1xx (S32K142, S32K144, S32K146, S32K148)
+ */
+
+#ifndef S32K1XX_H
+#define S32K1XX_H
+
+#include <stdint.h>
+
+/*
+ * Clock configuration
+ * S32K142 supports:
+ *   - FIRC: 48 MHz Fast Internal RC
+ *   - SIRC: 8 MHz Slow Internal RC
+ *   - SOSC: 8-40 MHz System Oscillator (external crystal)
+ *   - SPLL: System PLL (up to 160 MHz VCO, /2 for SPLL_CLK)
+ *
+ * Run modes:
+ *   - RUN: Up to 80 MHz core clock (requires SPLL, currently using FIRC at 48 MHz)
+ *   - HSRUN: Up to 112 MHz core clock (requires SOSC + SPLL, not implemented yet)
+ *
+ * Default: RUN mode with FIRC at 48 MHz (no external crystal required)
+ * To enable HSRUN mode (112 MHz), define S32K1XX_CLOCK_HSRUN (requires SOSC + SPLL)
+ */
+
+/* ============== System Control Registers ============== */
+
+/* SCG - System Clock Generator */
+#define SCG_BASE            (0x40064000UL)
+#define SCG_CSR             (*(volatile uint32_t *)(SCG_BASE + 0x010UL)) /* Clock Status Register */
+#define SCG_RCCR            (*(volatile uint32_t *)(SCG_BASE + 0x014UL)) /* Run Clock Control Register */
+#define SCG_VCCR            (*(volatile uint32_t *)(SCG_BASE + 0x018UL)) /* VLPR Clock Control Register */
+#define SCG_HCCR            (*(volatile uint32_t *)(SCG_BASE + 0x01CUL)) /* HSRUN Clock Control Register */
+#define SCG_CLKOUTCNFG      (*(volatile uint32_t *)(SCG_BASE + 0x020UL)) /* Clock Out Configuration */
+
+/* SOSC - System OSC */
+#define SCG_SOSCCSR         (*(volatile uint32_t *)(SCG_BASE + 0x100UL))
+#define SCG_SOSCDIV         (*(volatile uint32_t *)(SCG_BASE + 0x104UL))
+#define SCG_SOSCCFG         (*(volatile uint32_t *)(SCG_BASE + 0x108UL))
+
+/* SIRC - Slow IRC */
+#define SCG_SIRCCSR         (*(volatile uint32_t *)(SCG_BASE + 0x200UL))
+#define SCG_SIRCDIV         (*(volatile uint32_t *)(SCG_BASE + 0x204UL))
+#define SCG_SIRCCFG         (*(volatile uint32_t *)(SCG_BASE + 0x208UL))
+
+/* FIRC - Fast IRC */
+#define SCG_FIRCCSR         (*(volatile uint32_t *)(SCG_BASE + 0x300UL))
+#define SCG_FIRCDIV         (*(volatile uint32_t *)(SCG_BASE + 0x304UL))
+#define SCG_FIRCCFG         (*(volatile uint32_t *)(SCG_BASE + 0x308UL))
+
+/* SPLL - System PLL */
+#define SCG_SPLLCSR         (*(volatile uint32_t *)(SCG_BASE + 0x600UL))
+#define SCG_SPLLDIV         (*(volatile uint32_t *)(SCG_BASE + 0x604UL))
+#define SCG_SPLLCFG         (*(volatile uint32_t *)(SCG_BASE + 0x608UL))
+
+/* SCG CSR fields */
+#define SCG_CSR_SCS_SHIFT       24
+#define SCG_CSR_SCS_MASK        (0xFUL << SCG_CSR_SCS_SHIFT)
+#define SCG_CSR_SCS_FIRC        (3UL << SCG_CSR_SCS_SHIFT)
+#define SCG_CSR_SCS_SPLL        (6UL << SCG_CSR_SCS_SHIFT)
+
+/* SCG xCCR fields */
+#define SCG_xCCR_SCS_SHIFT      24
+#define SCG_xCCR_SCS_FIRC       (3UL << SCG_xCCR_SCS_SHIFT)
+#define SCG_xCCR_SCS_SPLL       (6UL << SCG_xCCR_SCS_SHIFT)
+#define SCG_xCCR_DIVCORE_SHIFT  16
+#define SCG_xCCR_DIVBUS_SHIFT   4
+#define SCG_xCCR_DIVSLOW_SHIFT  0
+
+/* FIRC CSR fields */
+#define SCG_FIRCCSR_FIRCEN      (1UL << 0)
+#define SCG_FIRCCSR_FIRCVLD     (1UL << 24)
+
+/* SPLL CSR fields */
+#define SCG_SPLLCSR_SPLLEN      (1UL << 0)
+#define SCG_SPLLCSR_SPLLVLD     (1UL << 24)
+
+/* SPLL CFG fields */
+#define SCG_SPLLCFG_MULT_SHIFT  16
+#define SCG_SPLLCFG_PREDIV_SHIFT 8
+
+/* SMC - System Mode Controller */
+#define SMC_BASE            (0x4007E000UL)
+#define SMC_PMPROT          (*(volatile uint32_t *)(SMC_BASE + 0x000UL))
+#define SMC_PMCTRL          (*(volatile uint32_t *)(SMC_BASE + 0x004UL))
+#define SMC_PMSTAT          (*(volatile uint32_t *)(SMC_BASE + 0x008UL))
+
+#define SMC_PMPROT_AHSRUN   (1UL << 7)  /* Allow HSRUN */
+#define SMC_PMCTRL_RUNM_SHIFT 5
+#define SMC_PMCTRL_RUNM_RUN   (0UL << SMC_PMCTRL_RUNM_SHIFT)
+#define SMC_PMCTRL_RUNM_HSRUN (3UL << SMC_PMCTRL_RUNM_SHIFT)
+#define SMC_PMSTAT_HSRUN    (0x80UL)
+#define SMC_PMSTAT_RUN      (0x01UL)
+
+/* PCC - Peripheral Clock Controller */
+#define PCC_BASE            (0x40065000UL)
+#define PCC_PORTC           (*(volatile uint32_t *)(PCC_BASE + 0x12CUL))
+#define PCC_LPUART1         (*(volatile uint32_t *)(PCC_BASE + 0x1ACUL))
+#define PCC_FTFC            (*(volatile uint32_t *)(PCC_BASE + 0x0B0UL))
+
+#define PCC_CGC             (1UL << 30)  /* Clock Gate Control */
+#define PCC_PCS_SHIFT       24
+#define PCC_PCS_FIRC        (3UL << PCC_PCS_SHIFT)  /* FIRC 48MHz */
+#define PCC_PCS_SPLLDIV2    (6UL << PCC_PCS_SHIFT)  /* SPLL DIV2 */
+
+/* ============== GPIO / Port Registers ============== */
+
+#define PORTC_BASE          (0x4004B000UL)
+#define PORTC_PCR6          (*(volatile uint32_t *)(PORTC_BASE + 0x018UL))
+#define PORTC_PCR7          (*(volatile uint32_t *)(PORTC_BASE + 0x01CUL))
+
+#define PORT_PCR_MUX_SHIFT  8
+#define PORT_PCR_MUX_ALT2   (2UL << PORT_PCR_MUX_SHIFT)  /* LPUART1 */
+
+/* ============== LPUART Registers ============== */
+
+#define LPUART1_BASE        (0x4006B000UL)
+#define LPUART1_VERID       (*(volatile uint32_t *)(LPUART1_BASE + 0x000UL))
+#define LPUART1_PARAM       (*(volatile uint32_t *)(LPUART1_BASE + 0x004UL))
+#define LPUART1_GLOBAL      (*(volatile uint32_t *)(LPUART1_BASE + 0x008UL))
+#define LPUART1_BAUD        (*(volatile uint32_t *)(LPUART1_BASE + 0x010UL))
+#define LPUART1_STAT        (*(volatile uint32_t *)(LPUART1_BASE + 0x014UL))
+#define LPUART1_CTRL        (*(volatile uint32_t *)(LPUART1_BASE + 0x018UL))
+#define LPUART1_DATA        (*(volatile uint32_t *)(LPUART1_BASE + 0x01CUL))
+
+#define LPUART_BAUD_OSR_SHIFT   24
+#define LPUART_BAUD_SBR_SHIFT   0
+#define LPUART_CTRL_TE          (1UL << 19)  /* Transmitter Enable */
+#define LPUART_CTRL_RE          (1UL << 18)  /* Receiver Enable */
+#define LPUART_STAT_TDRE        (1UL << 23)  /* Transmit Data Register Empty */
+#define LPUART_STAT_TC          (1UL << 22)  /* Transmission Complete */
+
+/* ============== Flash (FTFC) Registers ============== */
+
+#define FTFC_BASE           (0x40020000UL)
+#define FTFC_FSTAT          (*(volatile uint8_t *)(FTFC_BASE + 0x000UL))
+#define FTFC_FCNFG          (*(volatile uint8_t *)(FTFC_BASE + 0x001UL))
+#define FTFC_FSEC           (*(volatile uint8_t *)(FTFC_BASE + 0x002UL))
+#define FTFC_FOPT           (*(volatile uint8_t *)(FTFC_BASE + 0x003UL))
+#define FTFC_FCCOB3         (*(volatile uint8_t *)(FTFC_BASE + 0x004UL))
+#define FTFC_FCCOB2         (*(volatile uint8_t *)(FTFC_BASE + 0x005UL))
+#define FTFC_FCCOB1         (*(volatile uint8_t *)(FTFC_BASE + 0x006UL))
+#define FTFC_FCCOB0         (*(volatile uint8_t *)(FTFC_BASE + 0x007UL))
+#define FTFC_FCCOB7         (*(volatile uint8_t *)(FTFC_BASE + 0x008UL))
+#define FTFC_FCCOB6         (*(volatile uint8_t *)(FTFC_BASE + 0x009UL))
+#define FTFC_FCCOB5         (*(volatile uint8_t *)(FTFC_BASE + 0x00AUL))
+#define FTFC_FCCOB4         (*(volatile uint8_t *)(FTFC_BASE + 0x00BUL))
+#define FTFC_FCCOBB         (*(volatile uint8_t *)(FTFC_BASE + 0x00CUL))
+#define FTFC_FCCOBA         (*(volatile uint8_t *)(FTFC_BASE + 0x00DUL))
+#define FTFC_FCCOB9         (*(volatile uint8_t *)(FTFC_BASE + 0x00EUL))
+#define FTFC_FCCOB8         (*(volatile uint8_t *)(FTFC_BASE + 0x00FUL))
+
+/* FTFC Commands */
+#define FTFC_CMD_PROGRAM_PHRASE     0x07  /* Program 8 bytes (phrase) */
+#define FTFC_CMD_ERASE_SECTOR       0x09  /* Erase flash sector (2KB) */
+#define FTFC_CMD_READ_RESOURCE      0x03  /* Read resource */
+
+/* FTFC_FSTAT bits */
+#define FTFC_FSTAT_CCIF             (1U << 7)  /* Command Complete */
+#define FTFC_FSTAT_RDCOLERR         (1U << 6)  /* Read Collision Error */
+#define FTFC_FSTAT_ACCERR           (1U << 5)  /* Access Error */
+#define FTFC_FSTAT_FPVIOL           (1U << 4)  /* Protection Violation */
+#define FTFC_FSTAT_MGSTAT0          (1U << 0)  /* Command Failure */
+
+/* Flash programming unit: 8 bytes (double-word / phrase) */
+#define FLASH_PHRASE_SIZE           8
+/* Flash sector size: 2KB */
+#define FLASH_SECTOR_SIZE           2048
+
+/* ============== Watchdog (WDOG) Registers ============== */
+/* S32K1xx has a software-controlled watchdog timer */
+
+#define WDOG_BASE               (0x40052000UL)
+#define WDOG_CS                 (*(volatile uint32_t *)(WDOG_BASE + 0x00UL)) /* Control and Status */
+#define WDOG_CNT                (*(volatile uint32_t *)(WDOG_BASE + 0x04UL)) /* Counter */
+#define WDOG_TOVAL              (*(volatile uint32_t *)(WDOG_BASE + 0x08UL)) /* Timeout Value */
+#define WDOG_WIN                (*(volatile uint32_t *)(WDOG_BASE + 0x0CUL)) /* Window */
+
+/* WDOG CS Register Bits */
+#define WDOG_CS_STOP            (1UL << 0)   /* Stop enable */
+#define WDOG_CS_WAIT            (1UL << 1)   /* Wait enable */
+#define WDOG_CS_DBG             (1UL << 2)   /* Debug enable */
+#define WDOG_CS_TST_SHIFT       3
+#define WDOG_CS_TST_MASK        (3UL << WDOG_CS_TST_SHIFT) /* Test mode */
+#define WDOG_CS_UPDATE          (1UL << 5)   /* Allow updates */
+#define WDOG_CS_INT             (1UL << 6)   /* Interrupt enable */
+#define WDOG_CS_EN              (1UL << 7)   /* Watchdog enable */
+#define WDOG_CS_CLK_SHIFT       8
+#define WDOG_CS_CLK_MASK        (3UL << WDOG_CS_CLK_SHIFT) /* Clock source */
+#define WDOG_CS_CLK_BUS         (0UL << WDOG_CS_CLK_SHIFT) /* Bus clock */
+#define WDOG_CS_CLK_LPO         (1UL << WDOG_CS_CLK_SHIFT) /* LPO clock (128kHz) */
+#define WDOG_CS_CLK_SOSC        (2UL << WDOG_CS_CLK_SHIFT) /* SOSC clock */
+#define WDOG_CS_CLK_SIRC        (3UL << WDOG_CS_CLK_SHIFT) /* SIRC clock */
+#define WDOG_CS_RCS             (1UL << 10)  /* Reconfiguration success */
+#define WDOG_CS_ULK             (1UL << 11)  /* Unlock status */
+#define WDOG_CS_PRES            (1UL << 12)  /* Prescaler (256 divider) */
+#define WDOG_CS_CMD32EN         (1UL << 13)  /* 32-bit command support */
+#define WDOG_CS_FLG             (1UL << 14)  /* Interrupt flag */
+#define WDOG_CS_WIN             (1UL << 15)  /* Window mode enable */
+
+/* WDOG Unlock Key - write to CNT register to unlock */
+#define WDOG_CNT_UNLOCK         (0xD928C520UL)
+
+/* WDOG Refresh Keys - write in sequence to CNT register to refresh */
+#define WDOG_CNT_REFRESH_HI     (0xB480UL)
+#define WDOG_CNT_REFRESH_LO     (0xA602UL)
+#define WDOG_CNT_REFRESH        (0xB480A602UL) /* For CMD32EN mode */
+
+/* Default WDOG timeout value (max = 0xFFFF) */
+#define WDOG_TOVAL_DEFAULT      (0xFFFFUL)
+
+/* Watchdog disable configuration:
+ * - EN=0 (disabled), UPDATE=1, CMD32EN=1, CLK=LPO
+ */
+#define WDOG_CS_DISABLE_CFG     (WDOG_CS_UPDATE | WDOG_CS_CMD32EN | WDOG_CS_CLK_LPO)
+
+/* Watchdog enable configuration:
+ * - EN=1, UPDATE=1, CMD32EN=1, CLK=LPO
+ * LPO is 128kHz, with PRES=0 (no 256 divider)
+ * Timeout = TOVAL / 128kHz = TOVAL * 7.8125us
+ * For ~1 second timeout: TOVAL = 128000
+ */
+#define WDOG_CS_ENABLE_CFG      (WDOG_CS_EN | WDOG_CS_UPDATE | WDOG_CS_CMD32EN | \
+                                 WDOG_CS_CLK_LPO)
+
+#endif /* S32K1XX_H */
+
