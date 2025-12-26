@@ -514,6 +514,11 @@ int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
     #define ENCRYPT_BLOCK_SIZE 16
     #define ENCRYPT_KEY_SIZE   32 /* AES256 */
     #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
+#elif defined(ENCRYPT_PKCS11)
+    #define ENCRYPT_BLOCK_SIZE ENCRYPT_PKCS11_BLOCK_SIZE
+    /* In this case, the key ID is stored in flash rather than the key itself */
+    #define ENCRYPT_KEY_SIZE   ENCRYPT_PKCS11_KEY_ID_SIZE
+    #define ENCRYPT_NONCE_SIZE ENCRYPT_PKCS11_NONCE_SIZE
 #else
 #   error "Encryption ON, but no encryption algorithm selected."
 #endif

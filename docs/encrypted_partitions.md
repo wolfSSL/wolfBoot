@@ -73,6 +73,36 @@ To compile wolfBoot with encryption support, use the option `ENCRYPT=1`.
 By default, this also selects `ENCRYPT_WITH_CHACHA=1`. To use AES encryption instead,
 select `ENCRYPT_WITH_AES128=1` or `ENCRYPT_WITH_AES256=1`.
 
+### PKCS#11 backend
+
+On ARM TrustZone configurations with `WOLFCRYPT_TZ_PKCS11` enabled, it is
+possible to use the keyvault provided by wolfBoot to store the encryption key.
+To enable this, use the configuration option `ENCRYPT_PKCS11=1` alongside
+`WOLFCRYPT_TZ=1`, `WOLFCRYPT_TZ_PKCS11=1` and `ENCRYPT=1`, and set
+`ENCRYPT_PKCS11_PIN` to the user PIN for the PKCS#11 vault. This should be set
+in the form of a C string literal, for example
+`ENCRYPT_PKCS11_PIN="\x01\x02\x03\x04"`, and the ending null byte will be
+ignored.
+
+When this is enabled, instead of providing the key to wolfBoot via
+`wolfBoot_set_encrypt_key`, the application should use the PKCS#11 API to store
+it in the keyvault with an appropriate ID (via the `CKA_ID` attribute). This ID
+should then be used as the `key` parameter (in place of the key) when calling
+`wolfBoot_set_encrypt_key`.
+
+The following configuration options are also available:
+
+- `ENCRYPT_PKCS11_KEY_ID_SIZE` (default `4`): this is the size, in bytes, of
+  the key ID.
+- `ENCRYPT_PKCS11_MECHANISM` (default `0x00001086UL`, i.e. AES-CTR): this is
+  the numeric ID of the PKCS#11 mechanism to be used for encryption. Currently
+  only AES-CTR is supported. The list of IDs can be found in the [appendix of
+  the PKCS#11 mechanism specification](https://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/cs01/pkcs11-curr-v2.40-cs01.html#_Toc228894920),
+  while the list of IDs supported by wolfPKCS11 is set in the [pkcs11.h](https://github.com/wolfSSL/wolfPKCS11/blob/master/wolfpkcs11/pkcs11.h)
+  header file.
+- `ENCRYPT_PKCS11_BLOCK_SIZE` (default `16`, for AES-CTR) and
+  `ENCRYPT_PKCS11_NONCE_SIZE` (default `16`, for AES-CTR) should be set in case
+  you set `ENCRYPT_PKCS11_MECHANISM` to something other than the default.
 
 ### Signing and encrypting the update bundle with ChaCha20-256
 

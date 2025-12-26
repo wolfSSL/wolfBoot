@@ -63,6 +63,21 @@ extern Aes aes_dec, aes_enc;
 
 int aes_init(void);
 void aes_set_iv(uint8_t *nonce, uint32_t address);
+
+#elif defined(ENCRYPT_PKCS11)
+#include "wolfboot/wcs_pkcs11.h"
+
+int pkcs11_crypto_init(void);
+void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr);
+int pkcs11_crypto_encrypt(uint8_t *out, uint8_t *in, size_t size);
+int pkcs11_crypto_decrypt(uint8_t *out, uint8_t *in, size_t size);
+void pkcs11_crypto_deinit(void);
+
+#define crypto_init() pkcs11_crypto_init()
+#define crypto_encrypt(eb,b,sz) pkcs11_crypto_encrypt(eb, b, sz)
+#define crypto_decrypt(db,b,sz) pkcs11_crypto_decrypt(db, b, sz)
+#define crypto_set_iv(n,a) pkcs11_crypto_set_iv(n, a)
+
 #endif /* ENCRYPT_WITH_CHACHA */
 
 /* external flash encryption read/write functions */
