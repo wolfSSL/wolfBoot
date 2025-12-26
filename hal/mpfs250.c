@@ -241,7 +241,7 @@ static int mmc_set_power(uint32_t voltage)
         }
         /* should be - 0xf06 */
         EMMC_SD_SRS10 = reg;
-        mmc_delay(DEFAULT_DELAY); /* delay after bus power is applied */
+        //mmc_delay(DEFAULT_DELAY); /* delay after bus power is applied */
     }
     return 0;
 }
@@ -300,7 +300,7 @@ static uint32_t mmc_set_clock(uint32_t clock_khz)
         clock_khz, freq_khz);
 #endif
 
-    mmc_delay(DEFAULT_DELAY); /* delay after clock changed */
+    //mmc_delay(DEFAULT_DELAY); /* delay after clock changed */
 
     return freq_khz;
 }
@@ -349,26 +349,20 @@ static uint32_t mmc_get_response_type(uint8_t resp_type)
     return cmd_reg;
 }
 
-#define DEVICE_BUSY 1
-int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
+static int mmc_send_cmd_internal(uint32_t cmd_type,
+    uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
     int status = 0;
     uint32_t cmd_reg;
-    uint32_t cmd_type = EMMC_SD_SRS03_CMD_NORMAL;
+    uint32_t timeout = 0x000FFFFF;
 
 #ifdef DEBUG_MMC
     wolfBoot_printf("mmc_send_cmd: cmd_index: %d, cmd_arg: %08X, resp_type: %d\n",
         cmd_index, cmd_arg, resp_type);
 #endif
 
-    /* wait for command line to be idle - TODO: Add timeout */
+    /* wait for command line to be idle */
     while ((EMMC_SD_SRS09 & EMMC_SD_SRS09_CICMD) != 0);
-
-    /* clear all status interrupts (except current limit, card interrupt/removal/insert) */
-    EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
-                      EMMC_SD_SRS12_CINT |
-                      EMMC_SD_SRS12_CR |
-                      EMMC_SD_SRS12_CIN);
 
     /* set command argument and command transfer registers */
     EMMC_SD_SRS02 = cmd_arg;
@@ -379,19 +373,41 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 
     EMMC_SD_SRS03 = cmd_reg;
 
-    /* wait for command complete or error - TODO: Add timeout  */
-    while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_EINT)) == 0);
+    /* wait for command complete or error */
+    while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_TC |
+        EMMC_SD_SRS12_EINT)) == 0 && --timeout > 0);
 
-    /* check for device busy */
-    if (resp_type == EMMC_SD_RESP_R1 || resp_type == EMMC_SD_RESP_R1B) {
-        uint32_t resp = EMMC_SD_SRS04;
-        #define CARD_STATUS_READY_FOR_DATA (1U << 8)
-        if ((resp & CARD_STATUS_READY_FOR_DATA) == 0) {
-            status = DEVICE_BUSY; /* card is busy */
+    if (timeout == 0 || (EMMC_SD_SRS12 & EMMC_SD_SRS12_EINT)) {
+        wolfBoot_printf("mmc_send_cmd:%s error SRS12: 0x%08X\n",
+            (timeout == 0) ? " timeout" : "", EMMC_SD_SRS12);
+        status = -1; /* error */
+    }
+
+    EMMC_SD_SRS12 = EMMC_SD_SRS12_CC; /* clear command complete */
+    while ((EMMC_SD_SRS09 & EMMC_SD_SRS09_CICMD) != 0);
+
+    return status;
+}
+
+#define DEVICE_BUSY 1
+int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
+{
+    /* send command */
+    int status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_NORMAL, cmd_index,
+        cmd_arg, resp_type);
+    if (status == 0) {
+        /* check for device busy */
+        if (resp_type == EMMC_SD_RESP_R1 || resp_type == EMMC_SD_RESP_R1B) {
+            uint32_t resp = EMMC_SD_SRS04;
+            #define CARD_STATUS_READY_FOR_DATA (1U << 8)
+            if ((resp & CARD_STATUS_READY_FOR_DATA) == 0) {
+                status = DEVICE_BUSY; /* card is busy */
+            }
         }
     }
 
-    /* clear all status interrupts (except current limit, card interrupt/removal/insert) */
+    /* clear all status interrupts
+    * (except current limit, card interrupt/removal/insert) */
     EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
                       EMMC_SD_SRS12_CINT |
                       EMMC_SD_SRS12_CR |
@@ -425,7 +441,7 @@ int mmc_power_init_seq(uint32_t voltage)
         status = mmc_send_cmd(MMC_CMD0_GO_IDLE, 0, EMMC_SD_RESP_NONE);
     }
     if (status == 0) {
-        mmc_delay(DEFAULT_DELAY);
+        //mmc_delay(DEFAULT_DELAY);
 
         /* send the operating conditions command */
         status = mmc_send_cmd(SD_CMD8_SEND_IF_COND, IF_COND_27V_33V,
@@ -458,6 +474,15 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     uint32_t block_count;
     uint32_t reg, cmd_reg;
 
+    /* get block count (round up) */
+    block_count = (sz + (EMMC_SD_BLOCK_SIZE - 1)) / EMMC_SD_BLOCK_SIZE;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d (%d blocks)\n",
+        cmd_index, block_addr, dst, sz, block_count);
+    wolfBoot_printf("EMMC_SD IN: SRS12: 0x%08X, SRS09: 0x%08X\n", EMMC_SD_SRS12, EMMC_SD_SRS09);
+#endif
+
     /* wait for idle */
     status = mmc_wait_busy(0);
 
@@ -468,8 +493,6 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     /* wait for command and data line busy to clear */
     while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
 
-    /* get block count (round up) */
-    block_count = (sz + (EMMC_SD_BLOCK_SIZE - 1)) / EMMC_SD_BLOCK_SIZE;
     /* set transfer block count */
     EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
 
@@ -488,55 +511,92 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     }
     else if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
         cmd_reg |= EMMC_SD_SRS03_MSBS; /* enable multi-block select */
-        EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
-            EMMC_SD_BLOCK_SIZE;
-    }
+        cmd_reg |= EMMC_SD_SRS03_DMAE; /* enable DMA */
 
-#ifdef DEBUG_MMC
-    wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d (%d blocks)\n",
-        cmd_index, block_addr, dst, sz, block_count);
-#endif
+        EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
+            EMMC_SD_SRS01_DMA_BUFF_512KB;
+
+        /* SDMA mode (for 32-bit transfers) */
+        EMMC_SD_SRS10 |= EMMC_SD_SRS10_DMA_SDMA;
+        EMMC_SD_SRS15 |= EMMC_SD_SRS15_HV4E;
+        EMMC_SD_SRS16 &= ~EMMC_SD_SRS16_A64S;
+        /* set SDMA destination address */
+        EMMC_SD_SRS22 = (uint32_t)(uintptr_t)dst;
+        EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)dst) >> 32);
+    }
 
     EMMC_SD_SRS02 = block_addr; /* cmd argument */
     EMMC_SD_SRS03 = cmd_reg; /* execute command */
-    while (sz > 0) {
-        /* wait for buffer read ready */
-        while (((reg = EMMC_SD_SRS12) &
-            (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
 
-        /* read in buffer - read 4 bytes at a time */
-        if (reg & EMMC_SD_SRS12_BRR) {
-            uint32_t i, read_sz = sz;
-            if (read_sz > EMMC_SD_BLOCK_SIZE) {
-                read_sz = EMMC_SD_BLOCK_SIZE;
+    if (cmd_reg & EMMC_SD_SRS03_DMAE) {
+        while (1) { /* DMA mode */
+            /* wait for DMA interrupt or error */
+            while (((reg = EMMC_SD_SRS12) &
+                    (EMMC_SD_SRS12_DMAINT | EMMC_SD_SRS12_TC | EMMC_SD_SRS12_EINT)) == 0);
+            /* read updated DMA address - engine will increment */
+            dst = (uint32_t*)(uintptr_t)((((uint64_t)EMMC_SD_SRS23) << 32) | EMMC_SD_SRS22);
+            if (reg & EMMC_SD_SRS12_DMAINT) {
+                /* clear interrupt and set new DMA address */
+                EMMC_SD_SRS12 = EMMC_SD_SRS12_DMAINT;
+                EMMC_SD_SRS22 = (uint32_t)(uintptr_t)dst;
+                EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)dst) >> 32);
             }
-            for (i=0; i<read_sz; i+=4) {
-                *dst = EMMC_SD_SRS08;
-                dst++;
+            else {
+                break; /* error or transfer complete */
             }
-            sz -= read_sz;
+        }
+    }
+    else {
+        while (sz > 0) { /* blocking mode */
+            /* wait for buffer read ready (or error) */
+            while (((reg = EMMC_SD_SRS12) &
+                (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
+
+            /* read in buffer - read 4 bytes at a time */
+            if (reg & EMMC_SD_SRS12_BRR) {
+                uint32_t i, read_sz = sz;
+                if (read_sz > EMMC_SD_BLOCK_SIZE) {
+                    read_sz = EMMC_SD_BLOCK_SIZE;
+                }
+                for (i=0; i<read_sz; i+=4) {
+                    *dst = EMMC_SD_SRS08;
+                    dst++;
+                }
+                sz -= read_sz;
+            }
         }
     }
 
-    if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
-        /* send CMD12 to stop transfer - ignore response */
-        (void)mmc_send_cmd(MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
-            EMMC_SD_RESP_R1);
-    }
-
-    /* check for any errors and wait for idle */
+    /* check for any errors */
     reg = EMMC_SD_SRS12;
-    if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) {
-        mmc_delay(0xFFF);
+    if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) { /* no errors */
+        /* if multi-block read, send CMD12 to stop transfer */
+        if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
+            (void)mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
+                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
+                EMMC_SD_RESP_R1); /* use R1B for write */
+        }
+
+        /* wait for idle */
+        mmc_delay(0xFF);
         status = mmc_wait_busy(0);
     }
     else {
+        wolfBoot_printf("mmc_read: error SRS12: 0x%08X\n", reg);
         status = -1; /* error */
     }
 
 #ifdef DEBUG_MMC
+    wolfBoot_printf("EMMC_SD OUT: SRS12: 0x%08X, SRS09: 0x%08X\n", EMMC_SD_SRS12, EMMC_SD_SRS09);
     wolfBoot_printf("mmc_read: status: %d\n", status);
 #endif
+
+    /* clear all status interrupts
+     * (except current limit, card interrupt/removal/insert) */
+    EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
+                      EMMC_SD_SRS12_CINT |
+                      EMMC_SD_SRS12_CR |
+                      EMMC_SD_SRS12_CIN);
 
     return status;
 }
@@ -860,7 +920,7 @@ int mmc_init(void)
         /* disable card insert interrupt while changing bus width to avoid false triggers */
         irq_restore = EMMC_SD_SRS13;
         EMMC_SD_SRS13 = (irq_restore & ~EMMC_SD_SRS13_CINT_SE);
-        mmc_delay(DEFAULT_DELAY);
+        //mmc_delay(DEFAULT_DELAY);
 
         status = mmc_set_bus_width(4);
     }
