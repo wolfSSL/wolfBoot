@@ -804,6 +804,7 @@
 #define SD_CMD16                  16   /* R1 Rsp        */
 #define MMC_CMD17_READ_SINGLE     17   /* Read single block */
 #define MMC_CMD18_READ_MULTIPLE   18   /* Read multiple blocks */
+#define SD_CMD19_SEND_TUNING      19   /* SD: Send 64-byte tuning block */
 #define MMC_CMD24_WRITE_SINGLE    24   /* Write single block */
 #define MMC_CMD25_WRITE_MULTIPLE  25   /* Write multiple blocks */
 

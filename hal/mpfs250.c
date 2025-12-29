@@ -41,8 +41,10 @@
 
 #include "printf.h"
 #include "loader.h"
+#include "hal.h"
 #include "disk.h"
 #include "gpt.h"
+#include "fdt.h"
 
 void hal_init(void)
 {
@@ -51,15 +53,51 @@ void hal_init(void)
 
 }
 
+/* Linux kernel command line arguments */
+#ifndef LINUX_BOOTARGS
+#define LINUX_BOOTARGS \
+    "earlycon root=/dev/mmcblk0p4 rootwait uio_pdrv_genirq.of_id=generic-uio"
+#endif
+
 int hal_dts_fixup(void* dts_addr)
 {
-    /* TODO: Consider FDT fixups:
+    int off, ret;
+    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+
+    /* Verify FDT header */
+    ret = fdt_check_header(dts_addr);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: Invalid header! %d\n", ret);
+        return ret;
+    }
+
+    wolfBoot_printf("FDT: Version %d, Size %d\n",
+        fdt_version(fdt), fdt_totalsize(fdt));
+
+    /* Expand total size to allow adding/modifying properties */
+    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
+
+    /* Find /chosen node */
+    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (off < 0) {
+        /* Create /chosen node if it doesn't exist */
+        off = fdt_add_subnode(fdt, 0, "chosen");
+    }
+
+    if (off >= 0) {
+        /* Set bootargs property */
+        fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    }
+
+    /* TODO: Consider additional FDT fixups:
      * ethernet0: local-mac-address {0x00, 0x04, 0xA3, SERIAL2, SERIAL1, SERIAL0} */
-    (void)dts_addr;
+
     return 0;
 }
 void hal_prepare_boot(void)
 {
+    /* reset the eMMC/SD card? */
+
 
 }
 
@@ -143,22 +181,48 @@ static uint32_t g_rca = 0; /* SD Card Relative Address */
 static volatile uint32_t g_mmc_irq_status = 0;
 static volatile int g_mmc_irq_pending = 0;
 
+/* ==========================================================================
+ * PHY Register Access Functions
+ * ========================================================================== */
+
+/* Write to SD/eMMC PHY register via HRS04 */
+static void mmc_phy_write(uint8_t phy_addr, uint8_t delay_val)
+{
+    uint32_t phycfg;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_phy_write: phyaddr: 0x%08x, delay_value: %d\n",
+        phy_addr, delay_val);
+#endif
+
+    /* Wait for ACK to clear */
+    while ((EMMC_SD_HRS04 & EMMC_SD_HRS04_UIS_ACK) == 0);
+
+    /* Set address and delay value */
+    phycfg = ((uint32_t)phy_addr & EMMC_SD_HRS04_UIS_ADDR_MASK) |
+             ((uint32_t)delay_val << EMMC_SD_HRS04_UIS_WDATA_SHIFT);
+    EMMC_SD_HRS04 = phycfg;
+
+    /* Send write request */
+    EMMC_SD_HRS04 = phycfg | EMMC_SD_HRS04_UIS_WR;
+    /* Wait for ACK */
+    while ((EMMC_SD_HRS04 & EMMC_SD_HRS04_UIS_ACK) == 0);
+
+    /* Clear write request */
+    EMMC_SD_HRS04 = phycfg;
+    EMMC_SD_HRS04 = 0;
+}
+
 /* ============================================================================
  * PLIC - Platform-Level Interrupt Controller Functions
  * ============================================================================ */
 
-/* Get the current hart ID from the tp register (set during boot) */
-static inline uint32_t plic_get_hart_id(void)
-{
-    uint32_t hart_id;
-    asm volatile("mv %0, tp" : "=r"(hart_id));
-    return hart_id;
-}
-
 /* Get the PLIC context for the current hart in S-mode */
+extern unsigned long get_boot_hartid(void);
 static inline uint32_t plic_get_context(void)
 {
-    return PLIC_HART_TO_SMODE_CTX(plic_get_hart_id());
+    uint32_t hart_id = get_boot_hartid();
+    return PLIC_HART_TO_SMODE_CTX(hart_id);
 }
 
 /* Set priority for an interrupt source */
@@ -224,7 +288,7 @@ void plic_init_mmc(void)
 
 #ifdef DEBUG_MMC
     wolfBoot_printf("plic_init_mmc: hart %d, context %d, irq %d enabled\n",
-        plic_get_hart_id(), plic_get_context(), PLIC_INT_MMC_MAIN);
+        get_boot_hartid(), plic_get_context(), PLIC_INT_MMC_MAIN);
 #endif
 }
 
@@ -895,6 +959,201 @@ int mmc_set_function(uint32_t function_number, uint32_t group_number)
     return status;
 }
 
+#ifdef ENABLE_MMC_SD_TUNING
+/* ==========================================================================
+ * SD Tuning Functions (CMD19-based for SDR50/SDR104)
+ * ========================================================================== */
+
+#define EMMC_SD_TUNING_BLOCK_SIZE   64   /* SD tuning block size (bytes) */
+#define EMMC_SD_TUNING_MAX_LOOPS    40   /* Max tuning iterations per spec */
+
+/* Send CMD19 tuning block and read 64 bytes.
+ * Based on HSS read_tune_block() for SD_CMD_19_SEND_TUNING_BLK */
+static int mmc_send_tuning_block(uint32_t *data)
+{
+    uint32_t cmd_reg, srs12;
+    int i;
+
+    /* Wait for idle */
+    while (EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT));
+
+    /* Clear all status interrupts */
+    EMMC_SD_SRS12 = (EMMC_SD_SRS12_NORM_STAT | EMMC_SD_SRS12_ERR_STAT);
+
+    /* Block length = 64, block count = 1 */
+    EMMC_SD_SRS01 = (1 << EMMC_SD_SRS01_BCCT_SHIFT) | EMMC_SD_TUNING_BLOCK_SIZE;
+
+    /* CMD19: Data present, read direction, R1 response */
+    cmd_reg = (SD_CMD19_SEND_TUNING << EMMC_SD_SRS03_CIDX_SHIFT) |
+              EMMC_SD_SRS03_DPS |   /* Data Present */
+              EMMC_SD_SRS03_DTDS |  /* Data Transfer Direction: Read */
+              EMMC_SD_SRS03_BCE |   /* Block Count Enable */
+              EMMC_SD_SRS03_RID |   /* Response Interrupt Disable */
+              EMMC_SD_SRS03_RECE |  /* Response Error Check Enable */
+              EMMC_SD_SRS03_RESP_48 |
+              EMMC_SD_SRS03_CRCCE |
+              EMMC_SD_SRS03_CICE;
+
+    /* Command argument = 0 for CMD19 */
+    EMMC_SD_SRS02 = 0;
+    EMMC_SD_SRS03 = cmd_reg;
+
+    /* Wait for buffer read ready or error */
+    do {
+        srs12 = EMMC_SD_SRS12;
+    } while ((srs12 & (EMMC_SD_SRS12_BRR | EMMC_SD_SRS12_EINT)) == 0);
+
+    /* Read data if buffer ready */
+    if (srs12 & EMMC_SD_SRS12_BRR) {
+        for (i = 0; i < (EMMC_SD_TUNING_BLOCK_SIZE / 4); i++) {
+            data[i] = EMMC_SD_SRS08;
+        }
+    }
+
+    /* Check for errors */
+    srs12 = EMMC_SD_SRS12;
+    EMMC_SD_SRS12 = (EMMC_SD_SRS12_NORM_STAT | EMMC_SD_SRS12_ERR_STAT);
+
+    if (srs12 & EMMC_SD_SRS12_ERR_STAT) {
+        return -1;
+    }
+    return 0;
+}
+
+/* Execute SD tuning procedure using CMD19 and Execute Tuning bit.
+ * Based on HSS sd_tuning() implementation */
+static int mmc_sd_tuning(void)
+{
+    uint32_t reg;
+    uint32_t tuning_data[EMMC_SD_TUNING_BLOCK_SIZE / 4];
+    int count;
+    int status = 0;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_sd_tuning: starting\n");
+#endif
+
+    reg = EMMC_SD_SRS15;
+
+    /* Reset tuning: clear Sampling Clock Select */
+    reg &= ~EMMC_SD_SRS15_SCS;
+    /* Start tuning: set Execute Tuning */
+    reg |= EMMC_SD_SRS15_EXTNG;
+    EMMC_SD_SRS15 = reg;
+
+    /* Tuning loop - send CMD19 up to 40 times */
+    for (count = EMMC_SD_TUNING_MAX_LOOPS; count > 0; count--) {
+        status = mmc_send_tuning_block(tuning_data);
+        if (status != 0) {
+            /* Reset data/cmd lines on failure */
+            EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+            while (EMMC_SD_SRS11 & EMMC_SD_SRS11_RESET_DAT_CMD);
+            break;
+        }
+
+        /* Check if Execute Tuning has cleared (hardware completed) */
+        reg = EMMC_SD_SRS15;
+        if ((reg & EMMC_SD_SRS15_EXTNG) == 0) {
+            break;
+        }
+    }
+
+    /* Check result: Sampling Clock Select should be set on success */
+    reg = EMMC_SD_SRS15;
+    if ((reg & EMMC_SD_SRS15_SCS) == 0) {
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_sd_tuning: FAILED (SCS not set)\n");
+    #endif
+        /* Clear Execute Tuning if still set */
+        if (reg & EMMC_SD_SRS15_EXTNG) {
+            EMMC_SD_SRS15 = reg & ~EMMC_SD_SRS15_EXTNG;
+        }
+        return -1;
+    }
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_sd_tuning: SUCCESS after %d iterations\n",
+        EMMC_SD_TUNING_MAX_LOOPS - count + 1);
+#endif
+    return 0;
+}
+
+/* PHY training - find optimal delay value by testing reads
+ * Based on HSS phy_training_mmc() implementation */
+static int mmc_tune(uint8_t phy_addr, uint32_t clk_khz)
+{
+    int status;
+    uint8_t delay, max_delay;
+    uint8_t pos = 0, length = 0, curr_length = 0;
+    uint32_t tmp_block[EMMC_SD_BLOCK_SIZE / sizeof(uint32_t)];
+
+    /* Calculate max delay based on clock rate (from HSS) */
+    if (clk_khz <= 12500) {
+        max_delay = 20;
+    } else {
+        max_delay = (uint8_t)((200000 / clk_khz) * 2);
+    }
+    if (max_delay > 40) {
+        max_delay = 40;
+    }
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_tune: phy_addr=0x%02x, clk=%d kHz, max_delay=%d\n",
+        phy_addr, clk_khz, max_delay);
+#endif
+
+    /* Test each delay value to find longest valid range */
+    for (delay = 0; delay < max_delay; delay++) {
+        mmc_phy_write(phy_addr, delay);
+
+        /* Try a single block read to test this delay setting */
+        status = mmc_read(MMC_CMD17_READ_SINGLE, 0, tmp_block,
+            EMMC_SD_BLOCK_SIZE);
+        if (status == 0) {
+            curr_length++;
+            if (curr_length > length) {
+                pos = delay - length;
+                length++;
+            }
+        } else {
+            /* Reset data/cmd lines on failure */
+            EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+            while (EMMC_SD_SRS11 & EMMC_SD_SRS11_RESET_DAT_CMD);
+            curr_length = 0;
+        }
+    }
+
+    /* Set optimal delay (middle of longest valid range) */
+    if (length > 0) {
+        uint8_t new_delay = pos + (length / 2);
+        mmc_phy_write(phy_addr, new_delay);
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_tune: PHY delay=%d (range: pos=%d, len=%d)\n",
+            new_delay, pos, length);
+    #endif
+
+        /* For SDR50/SDR104, also run SD tuning (CMD19) if required.
+         * Check SRS17 bit 13 (TSDR50) - Tuning for SDR50 required */
+        if (EMMC_SD_SRS17 & EMMC_SD_SRS17_TSDR50) {
+            status = mmc_sd_tuning();
+            if (status != 0) {
+            #ifdef DEBUG_MMC
+                wolfBoot_printf("mmc_tune: SD tuning failed\n");
+            #endif
+                return status;
+            }
+        }
+
+        return 0;
+    }
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_tune: FAILED - no valid PHY delay found\n");
+#endif
+    return -1;
+}
+#endif /* ENABLE_MMC_SD_TUNING */
+
 int mmc_init(void)
 {
     int status = 0;
@@ -1145,7 +1404,16 @@ int mmc_init(void)
     if (status == 0) {
         mmc_set_clock(EMMC_SD_CLK_50MHZ);
 
-        /* TODO: Phy training at SDR25 (50MHz) */
+#ifdef ENABLE_MMC_SD_TUNING
+        /* PHY training for SDR25 at 50MHz */
+        status = mmc_tune(EMMC_SD_PHY_ADDR_UHSI_SDR25, EMMC_SD_CLK_50MHZ);
+        if (status != 0) {
+        #ifdef DEBUG_MMC
+            wolfBoot_printf("mmc_init: tuning failed, continuing\n");
+        #endif
+            status = 0; /* Don't fail init on tuning failure */
+        }
+#endif
 
         EMMC_SD_SRS13 = irq_restore; /* re-enable interrupt */
     }

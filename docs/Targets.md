@@ -883,6 +883,7 @@ n
 n
 4
 
+
 t
 1
 4
@@ -920,6 +921,9 @@ Device      Start      End  Sectors  Size Type
 2) Build, Sign and copy images
 
 ```sh
+# Copy wolfBoot to "BIOS" partition
+sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
+
 # make test-app
 make test-app/image.elf
 
@@ -930,7 +934,21 @@ sudo dd if=test-app/image_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp test-app
 
 4) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
 
+### PolarFire Building Hart Software Services (HSS)
+
+The Hart Software Services (HSS) is the zero-stage bootloader for the PolarFire SoC. It runs on the E51 monitor core and is responsible for system initialization, hardware configuration, and booting the U54 application cores. The HSS provides essential services including watchdog management, inter-processor communication (IPC), and loading payloads from various boot sources (eMMC, SD card, or SPI flash).
+
+```sh
+git clone https://github.com/polarfire-soc/hart-software-services.git
+cd hart-software-services
+make clean
+make BOARD=mpfs-video-kit
+make BOARD=mpfs-video-kit program
+```
+
 ### PolarFire Building Yocto-SDK Linux
+
+The Yocto Project provides a customizable embedded Linux distribution for PolarFire SoC. Microchip maintains the `meta-mchp` layer with board support packages (BSP), drivers, and example applications for their devices. The build system uses OpenEmbedded and produces bootable images that can be flashed to eMMC or SD card.
 
 See:
 * https://github.com/linux4microchip/meta-mchp/blob/scarthgap/meta-mchp-common/README.md
@@ -958,6 +976,9 @@ Build images are output to: `./tmp-glibc/deploy/images/mpfs-video-kit/`
 #### Custom FIT image, signing and coping to SDCard
 
 ```sh
+# Copy wolfBoot to "BIOS" partition
+sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
+
 # Extract GZIP compressed linux kernel to wolfboot root
 gzip -cdvk ../yocto-dev-polarfire/build/tmp-glibc/work/mpfs_video_kit-oe-linux/linux-mchp/6.12.22+git/build/linux.bin > kernel.bin
 
@@ -1003,7 +1024,7 @@ sudo dd if=fitImage_v1_signed.bin of=/dev/sdc2 bs=512 status=progress && sudo cm
 sudo dd if=fitImage_v1_signed.bin of=/dev/sdc3 bs=512 status=progress && sudo cmp fitImage_v1_signed.bin /dev/sdc3
 
 # Copy root file system
-sudo dd if=../yocto-dev-polarfire/build/tmp-glibc/deploy/images/mpfs-video-kit/mchp-base-image-sdk-mpfs-video-kit.rootfs.ext4 of=/dev/sdb4 bs=512 status=progress
+sudo dd if=../yocto-dev-polarfire/build/tmp-glibc/deploy/images/mpfs-video-kit/mchp-base-image-sdk-mpfs-video-kit.rootfs.ext4 of=/dev/sdc4 bs=4M status=progress
 ```
 
 ### PolarFire Soc Debugging
