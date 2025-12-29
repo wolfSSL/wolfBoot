@@ -47,6 +47,13 @@
 #include "elf.h"
 #endif
 
+/* Disk encryption support for AES-256, AES-128, or ChaCha20 */
+#if defined(ENCRYPT_WITH_AES256) || defined(ENCRYPT_WITH_AES128) || \
+    defined(ENCRYPT_WITH_CHACHA)
+#define DISK_ENCRYPT
+#include "encrypt.h"
+#endif
+
 #include <stdint.h>
 #include <string.h>
 
@@ -83,6 +90,66 @@
 #define DISK_BLOCK_SIZE 512
 #endif
 
+#ifdef DISK_ENCRYPT
+/**
+ * @brief Decrypt an image header in RAM.
+ *
+ * This function decrypts the image header using the configured encryption
+ * algorithm (AES-256/AES-128 CTR mode or ChaCha20).
+ *
+ * @param src Pointer to the encrypted header.
+ * @param dst Pointer to the destination buffer for decrypted header.
+ *
+ * @return 0 if successful, -1 on failure.
+ */
+static int decrypt_header(const uint8_t *src, uint8_t *dst)
+{
+    uint32_t i;
+    uint32_t magic;
+
+    for (i = 0; i < IMAGE_HEADER_SIZE; i += ENCRYPT_BLOCK_SIZE) {
+        wolfBoot_crypto_set_iv(NULL, i / ENCRYPT_BLOCK_SIZE);
+        crypto_decrypt(dst + i, src + i, ENCRYPT_BLOCK_SIZE);
+    }
+    magic = *((uint32_t*)dst);
+    if (magic != WOLFBOOT_MAGIC)
+        return -1;
+    return 0;
+}
+
+/**
+ * @brief Decrypt an image in RAM.
+ *
+ * This function decrypts the full image (header + firmware) using the
+ * configured encryption algorithm. The decryption is done in-place.
+ *
+ * @param data Pointer to the encrypted image data.
+ * @param size Size of the image (header + firmware).
+ *
+ * @return 0 if successful, -1 on failure.
+ */
+static int decrypt_image(uint8_t *data, uint32_t size)
+{
+    uint32_t iv_counter = 0;
+    uint32_t offset = 0;
+    uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+
+    while (offset < size) {
+        uint32_t chunk = size - offset;
+        if (chunk > ENCRYPT_BLOCK_SIZE)
+            chunk = ENCRYPT_BLOCK_SIZE;
+
+        wolfBoot_crypto_set_iv(NULL, iv_counter);
+        crypto_decrypt(dec_block, data + offset, chunk);
+        memcpy(data + offset, dec_block, chunk);
+
+        offset += ENCRYPT_BLOCK_SIZE;
+        iv_counter++;
+    }
+    return 0;
+}
+#endif /* DISK_ENCRYPT */
+
 extern int wolfBoot_get_dts_size(void *dts_addr);
 
 #if defined(WOLFBOOT_NO_LOAD_ADDRESS) || !defined(WOLFBOOT_LOAD_ADDRESS)
@@ -100,6 +167,9 @@ extern uint8_t _end_wb[];
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
+#ifdef DISK_ENCRYPT
+    uint8_t dec_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
+#endif
 #ifdef WOLFBOOT_FSP
     struct stage2_parameter *stage2_params;
 #endif
@@ -118,6 +188,14 @@ void RAMFUNCTION wolfBoot_start(void)
     char part_name[4] = {'P', ':', 'X', '\0'};
     uint64_t start_us, elapsed_ms;
 
+#ifdef DISK_ENCRYPT
+    /* Initialize encryption */
+    if (wolfBoot_initialize_encryption() != 0) {
+        wolfBoot_printf("Error initializing encryption\r\n");
+        wolfBoot_panic();
+    }
+#endif
+
     ret = disk_init(BOOT_DISK);
     if (ret != 0) {
         wolfBoot_panic();
@@ -132,14 +210,26 @@ void RAMFUNCTION wolfBoot_start(void)
             BOOT_PART_A);
     if (disk_part_read(BOOT_DISK, BOOT_PART_A, 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
+#ifdef DISK_ENCRYPT
+        if (decrypt_header(p_hdr, dec_hdr) == 0) {
+            pA_ver = wolfBoot_get_blob_version(dec_hdr);
+        }
+#else
         pA_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
+#endif
     }
 
     wolfBoot_printf("Checking secondary OS image in %d,%d...\r\n", BOOT_DISK,
             BOOT_PART_B);
     if (disk_part_read(BOOT_DISK, BOOT_PART_B, 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
+#ifdef DISK_ENCRYPT
+        if (decrypt_header(p_hdr, dec_hdr) == 0) {
+            pB_ver = wolfBoot_get_blob_version(dec_hdr);
+        }
+#else
         pB_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
+#endif
     }
 
     if ((pB_ver == 0) && (pA_ver == 0)) {
@@ -227,6 +317,21 @@ void RAMFUNCTION wolfBoot_start(void)
         }
         elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
         wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
+
+#ifdef DISK_ENCRYPT
+        /* Decrypt the image in RAM */
+        wolfBoot_printf("Decrypting image...");
+        start_us = hal_get_timer_us();
+        ret = decrypt_image((uint8_t*)load_address,
+                os_image.fw_size + IMAGE_HEADER_SIZE);
+        if (ret != 0) {
+            wolfBoot_printf("Error decrypting image\r\n");
+            selected ^= 1;
+            continue;
+        }
+        elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
+        wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
+#endif
 
         memset(&os_image, 0, sizeof(os_image));
         ret = wolfBoot_open_image_address(&os_image, (void*)load_address);
