@@ -185,7 +185,7 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 
 #if __riscv_xlen == 64
 /* Get the hartid saved by boot_riscv_start.S in the tp register */
-static inline unsigned long get_boot_hartid(void)
+unsigned long get_boot_hartid(void)
 {
     unsigned long hartid;
     asm volatile("mv %0, tp" : "=r"(hartid));
