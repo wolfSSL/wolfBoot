@@ -25,6 +25,9 @@
 
 #include "image.h"
 #include "loader.h"
+#ifdef DEBUG_BOOT
+#include "printf.h"
+#endif
 #include "hal/riscv.h"
 
 #ifdef TARGET_mpfs250
@@ -180,21 +183,92 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 }
 #endif
 
+#if __riscv_xlen == 64
+/* Get the hartid saved by boot_riscv_start.S in the tp register */
+static inline unsigned long get_boot_hartid(void)
+{
+    unsigned long hartid;
+    asm volatile("mv %0, tp" : "=r"(hartid));
+    return hartid;
+}
+#endif
+
 #ifdef MMU
 void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
 void do_boot(const uint32_t *app_offset)
 #endif
 {
+#if __riscv_xlen == 64
+    unsigned long hartid;
+#endif
+#ifdef MMU
+    unsigned long dts_addr;
+#endif
+
 #ifdef MMU
     hal_dts_fixup((uint32_t*)dts_offset);
+    dts_addr = (unsigned long)dts_offset;
+#endif
+
+#if __riscv_xlen == 64
+    /* Get the hartid that was saved by boot_riscv_start.S in tp register.
+     * This is the hartid passed to wolfBoot by the prior boot stage (e.g., HSS).
+     * For MPFS, this should be 1-4 (U54 cores), never 0 (E51 monitor core). */
+    hartid = get_boot_hartid();
+#endif
+
+#ifdef DEBUG_BOOT
+    wolfBoot_printf("do_boot: entry=0x%lx", (unsigned long)app_offset);
+#if __riscv_xlen == 64
+    wolfBoot_printf(", hartid=%lu", hartid);
+#endif
+#ifdef MMU
+    wolfBoot_printf(", dts=0x%lx", dts_addr);
+#endif
+    wolfBoot_printf("\n");
 #endif
 
     /* Relocate trap vector table to application */
     reloc_trap_vector(app_offset);
 
-    /* Jump to application entry point */
-    asm volatile("jr %0":: "r"((uint8_t *)(app_offset)));
+    /*
+     * RISC-V Linux kernel boot requirements (Documentation/arch/riscv/boot.rst):
+     *   a0 = hartid of the current core
+     *   a1 = physical address of the device tree blob (DTB)
+     *   satp = 0 (MMU disabled)
+     *
+     * For SMP systems using ordered booting (preferred), only the boot hart
+     * enters the kernel. Secondary harts are started via SBI HSM extension.
+     */
+
+#if __riscv_xlen == 64
+#ifdef MMU
+    asm volatile(
+    #ifdef WOLFBOOT_RISCV_SMODE
+        "csrw satp, zero\n"
+        "sfence.vma\n"
+    #endif
+        "mv a0, %0\n"
+        "mv a1, %1\n"
+        "jr %2\n"
+        : : "r"(hartid), "r"(dts_addr), "r"(app_offset) : "a0", "a1"
+    );
+#else
+    asm volatile(
+        "mv a0, %0\n"
+        "mv a1, zero\n"
+        "jr %1\n"
+        : : "r"(hartid), "r"(app_offset) : "a0", "a1"
+    );
+#endif
+#else /* RV32 */
+    /* RV32: typically bare-metal without Linux, simpler boot */
+    asm volatile("jr %0" : : "r"(app_offset));
+#endif
+
+    /* Should never reach here */
+    __builtin_unreachable();
 }
 
 void isr_empty(void)
