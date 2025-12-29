@@ -46,17 +46,24 @@
 #include "gpt.h"
 #include "fdt.h"
 
+#ifdef DISK_TEST
+static int disk_test(int drv);
+#endif
+
 void hal_init(void)
 {
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
         LIBWOLFBOOT_VERSION_STRING,__DATE__, __TIME__);
-
 }
 
 /* Linux kernel command line arguments */
 #ifndef LINUX_BOOTARGS
+#ifndef LINUX_BOOTARGS_ROOT
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p4"
+#endif
+
 #define LINUX_BOOTARGS \
-    "earlycon root=/dev/mmcblk0p4 rootwait uio_pdrv_genirq.of_id=generic-uio"
+    "earlycon root="LINUX_BOOTARGS_ROOT" rootwait uio_pdrv_genirq.of_id=generic-uio"
 #endif
 
 int hal_dts_fixup(void* dts_addr)
@@ -713,11 +720,16 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
 #ifdef DEBUG_MMC
     wolfBoot_printf("mmc_read: cmd_index: %d, block_addr: %08X, dst %p, sz: %d (%d blocks)\n",
         cmd_index, block_addr, dst, sz, block_count);
-    wolfBoot_printf("EMMC_SD IN: SRS12: 0x%08X, SRS09: 0x%08X\n", EMMC_SD_SRS12, EMMC_SD_SRS09);
 #endif
 
     /* wait for idle */
     status = mmc_wait_busy(0);
+    if (status != 0) {
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_read: wait busy error\n");
+    #endif
+        return status;
+    }
 
     /* reset data and command lines */
     EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
@@ -839,8 +851,177 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     }
 
 #ifdef DEBUG_MMC
-    wolfBoot_printf("EMMC_SD OUT: SRS12: 0x%08X, SRS09: 0x%08X\n", EMMC_SD_SRS12, EMMC_SD_SRS09);
     wolfBoot_printf("mmc_read: status: %d\n", status);
+#endif
+
+    /* clear all status interrupts
+     * (except current limit, card interrupt/removal/insert) */
+    EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
+                      EMMC_SD_SRS12_CINT |
+                      EMMC_SD_SRS12_CR |
+                      EMMC_SD_SRS12_CIN);
+
+    return status;
+}
+
+/* MMC_CMD24_WRITE_SINGLE, MMC_CMD25_WRITE_MULTIPLE */
+int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
+    uint32_t sz)
+{
+    int status;
+    uint32_t block_count;
+    uint32_t reg, cmd_reg;
+
+    /* get block count (round up) */
+    block_count = (sz + (EMMC_SD_BLOCK_SIZE - 1)) / EMMC_SD_BLOCK_SIZE;
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_write: cmd_index: %d, block_addr: %08X, src %p, sz: %d (%d blocks)\n",
+        cmd_index, block_addr, src, sz, block_count);
+#endif
+
+    /* wait for idle */
+    status = mmc_wait_busy(0);
+    if (status != 0) {
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("mmc_write: wait busy error\n");
+    #endif
+        return status;
+    }
+
+    /* reset data and command lines */
+    EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+
+    /* wait for command and data line busy to clear */
+    while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
+
+    /* set transfer block count */
+    EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
+
+    /* Build command register for write:
+     * - DTDS=0 for write direction (DTDS=1 is read)
+     * - DPS=1 data present
+     * - BCE=1 block count enable
+     * - RECE=1 response error check enable
+     * - RID=1 response interrupt disable
+     */
+    cmd_reg = ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) |
+        EMMC_SD_SRS03_DPS | /* Data present, no DTDS = write direction */
+        EMMC_SD_SRS03_BCE | EMMC_SD_SRS03_RECE | EMMC_SD_SRS03_RID |
+        EMMC_SD_SRS03_RESP_48 | EMMC_SD_SRS03_CRCCE | EMMC_SD_SRS03_CICE);
+
+    if (cmd_index == MMC_CMD25_WRITE_MULTIPLE) {
+        cmd_reg |= EMMC_SD_SRS03_MSBS; /* enable multi-block select */
+
+        if (sz >= (512 * 1024)) { /* use DMA for large transfers */
+            cmd_reg |= EMMC_SD_SRS03_DMAE; /* enable DMA */
+
+            EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
+                EMMC_SD_SRS01_DMA_BUFF_512KB | EMMC_SD_BLOCK_SIZE;
+
+            /* SDMA mode (for 32-bit transfers) */
+            EMMC_SD_SRS10 |= EMMC_SD_SRS10_DMA_SDMA;
+            EMMC_SD_SRS15 |= EMMC_SD_SRS15_HV4E;
+            EMMC_SD_SRS16 &= ~EMMC_SD_SRS16_A64S;
+            /* set SDMA source address */
+            EMMC_SD_SRS22 = (uint32_t)(uintptr_t)src;
+            EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)src) >> 32);
+
+            /* Enable SDMA interrupts */
+            mmc_enable_sdma_interrupts();
+        }
+    }
+
+    /* wait for cmd/data line not busy */
+    while ((EMMC_SD_SRS09 &
+        (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
+
+    EMMC_SD_SRS02 = block_addr; /* cmd argument */
+    EMMC_SD_SRS03 = cmd_reg; /* execute command */
+
+    if (cmd_reg & EMMC_SD_SRS03_DMAE) {
+        while (1) { /* DMA mode with interrupt support */
+            /* Wait for DMA interrupt, transfer complete, or error */
+            status = mmc_wait_irq(MMC_IRQ_FLAG_DMAINT | MMC_IRQ_FLAG_TC,
+                                  0x00FFFFFF);
+            if (status != 0) {
+                /* Timeout or error */
+                wolfBoot_printf("mmc_write: SDMA interrupt timeout/error\n");
+                status = -1; /* error */
+                break;
+            }
+
+            /* Check for transfer complete */
+            if (g_mmc_irq_status & MMC_IRQ_FLAG_TC) {
+                g_mmc_irq_status &= ~MMC_IRQ_FLAG_TC;
+                break; /* Transfer complete */
+            }
+
+            /* Check for DMA boundary interrupt - need to update address */
+            if (g_mmc_irq_status & MMC_IRQ_FLAG_DMAINT) {
+                g_mmc_irq_status &= ~MMC_IRQ_FLAG_DMAINT;
+                /* Read updated DMA address - engine will have incremented */
+                src = (const uint32_t*)(uintptr_t)((((uint64_t)EMMC_SD_SRS23) << 32) |
+                                                    EMMC_SD_SRS22);
+                /* Set new DMA address for next boundary */
+                EMMC_SD_SRS22 = (uint32_t)(uintptr_t)src;
+                EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)src) >> 32);
+            }
+        }
+
+        /* Disable SDMA interrupts after transfer */
+        mmc_disable_sdma_interrupts();
+    }
+    else {
+        while (sz > 0) { /* blocking mode */
+            /* wait for buffer write ready (or error) */
+            while (((reg = EMMC_SD_SRS12) &
+                (EMMC_SD_SRS12_BWR | EMMC_SD_SRS12_EINT)) == 0);
+
+            /* write buffer - write 4 bytes at a time */
+            if (reg & EMMC_SD_SRS12_BWR) {
+                uint32_t i, write_sz = sz;
+                if (write_sz > EMMC_SD_BLOCK_SIZE) {
+                    write_sz = EMMC_SD_BLOCK_SIZE;
+                }
+                for (i=0; i<write_sz; i+=4) {
+                    EMMC_SD_SRS08 = *src;
+                    src++;
+                }
+                sz -= write_sz;
+            }
+
+            /* wait for trasnfer complete (or error) */
+            while (((reg = EMMC_SD_SRS12) &
+                (EMMC_SD_SRS12_TC | EMMC_SD_SRS12_EINT)) == 0);
+        }
+    }
+
+    /* check for any errors */
+    reg = EMMC_SD_SRS12;
+    if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) { /* no errors */
+        /* if multi-block write, send CMD12 to stop transfer */
+        if (cmd_index == MMC_CMD25_WRITE_MULTIPLE) {
+            status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
+                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
+                EMMC_SD_RESP_R1B); /* R1B for write with busy */
+            if (status != 0) {
+                wolfBoot_printf("mmc_write: CMD12 stop transfer error\n");
+            }
+        }
+
+        /* wait for card to finish programming (DAT0 goes high when ready) */
+        if (status == 0) {
+            status = mmc_wait_busy(1);
+        }
+    }
+    else {
+        wolfBoot_printf("mmc_write: error SRS12: 0x%08X\n", reg);
+        status = -1; /* error */
+    }
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("mmc_write: status: %d\n", status);
 #endif
 
     /* clear all status interrupts
@@ -1430,7 +1611,7 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
     uint32_t start_offset = (start % EMMC_SD_BLOCK_SIZE);
     (void)drv; /* only one drive supported */
 
-#ifdef DEBUG_MMC
+#if 1 //def DEBUG_MMC
     wolfBoot_printf("disk_read: drv:%d, start:%llu, count:%d, dst:%p\n",
         drv, start, count, buf);
 #endif
@@ -1476,12 +1657,56 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 
 int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
 {
-    /* not supported */
-    (void)drv;
-    (void)start;
-    (void)count;
-    (void)buf;
-    return 0;
+    int status = 0;
+    uint32_t write_sz, block_addr;
+    uint32_t tmp_block[EMMC_SD_BLOCK_SIZE/sizeof(uint32_t)];
+    uint32_t start_offset = (start % EMMC_SD_BLOCK_SIZE);
+    (void)drv; /* only one drive supported */
+
+#if 1 //def DEBUG_MMC
+    wolfBoot_printf("disk_write: drv:%d, start:%llu, count:%d, src:%p\n",
+        drv, start, count, buf);
+#endif
+
+    while (count > 0) {
+        block_addr = (start / EMMC_SD_BLOCK_SIZE);
+        write_sz = count;
+        if (write_sz > EMMC_SD_BLOCK_SIZE) {
+            write_sz = EMMC_SD_BLOCK_SIZE;
+        }
+        if (write_sz < EMMC_SD_BLOCK_SIZE || /* partial block */
+            start_offset != 0 ||              /* start not block aligned */
+            ((uintptr_t)buf % 4) != 0)        /* buf not 4-byte aligned */
+        {
+            /* read-modify-write for partial block */
+            status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,
+                tmp_block, EMMC_SD_BLOCK_SIZE);
+            if (status == 0) {
+                uint8_t* tmp_buf = (uint8_t*)tmp_block;
+                memcpy(tmp_buf + start_offset, buf, write_sz);
+                status = mmc_write(MMC_CMD24_WRITE_SINGLE, block_addr,
+                    tmp_block, EMMC_SD_BLOCK_SIZE);
+                start_offset = 0;
+            }
+        }
+        else {
+            /* direct full block(s) write */
+            uint32_t blocks = (count / EMMC_SD_BLOCK_SIZE);
+            write_sz = (blocks * EMMC_SD_BLOCK_SIZE);
+            status = mmc_write(blocks > 1 ?
+                                MMC_CMD25_WRITE_MULTIPLE :
+                                MMC_CMD24_WRITE_SINGLE,
+                block_addr, (const uint32_t*)buf, write_sz);
+        }
+        if (status != 0) {
+            break;
+        }
+
+        start += write_sz;
+        buf += write_sz;
+        count -= write_sz;
+    }
+    return status;
 }
 
 int disk_init(int drv)
@@ -1491,6 +1716,9 @@ int disk_init(int drv)
         wolfBoot_printf("Failed to initialize MMC\n");
     }
     (void)drv;
+#ifdef DISK_TEST
+    disk_test(drv);
+#endif
     return r;
 }
 
@@ -1498,6 +1726,103 @@ void disk_close(int drv)
 {
     (void)drv;
 }
+
+#ifdef DISK_TEST
+/* Test block address in update partition */
+#ifndef DISK_TEST_BLOCK_ADDR
+#define DISK_TEST_BLOCK_ADDR    149504
+#endif
+
+/* disk_test: Test read/write functionality at update partition
+ * Tests sizes: 128, 512, 1024, 512KB (524288), 1MB (1048576) bytes
+ * Uses DDR at WOLFBOOT_LOAD_ADDRESS for test buffer
+ * Returns 0 on success, negative on failure */
+static int disk_test(int drv)
+{
+    int status = 0;
+    int test_num = 0;
+    uint32_t i;
+    static const uint32_t test_sizes[] = {
+        128,            /* partial block */
+        512,            /* single block */
+        1024,           /* two blocks */
+        512 * 1024,     /* 512KB - DMA threshold */
+        1024 * 1024     /* 1MB */
+    };
+    /* Use DDR memory at WOLFBOOT_LOAD_ADDRESS for test buffer */
+    uint32_t* tmp_buf32 = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
+    uint8_t* tmp_buf = (uint8_t*)WOLFBOOT_LOAD_ADDRESS;
+
+    wolfBoot_printf("disk_test: Starting tests at block %d (buf @ %p)\n",
+        DISK_TEST_BLOCK_ADDR, tmp_buf);
+
+    for (test_num = 0; test_num < (int)(sizeof(test_sizes)/sizeof(test_sizes[0])); test_num++) {
+        uint32_t test_sz = test_sizes[test_num];
+        uint64_t test_addr = (uint64_t)DISK_TEST_BLOCK_ADDR * EMMC_SD_BLOCK_SIZE;
+        uint32_t blocks_needed = (test_sz + EMMC_SD_BLOCK_SIZE - 1) / EMMC_SD_BLOCK_SIZE;
+
+        wolfBoot_printf("  Test %d: size=%u bytes (%u blocks)... ",
+            test_num + 1, test_sz, blocks_needed);
+
+        /* Fill with test pattern */
+        for (i = 0; i < test_sz / sizeof(uint32_t); i++) {
+            tmp_buf32[i] = (test_num << 24) | i;
+        }
+        /* Handle remaining bytes for non-word-aligned sizes */
+        for (i = (test_sz / sizeof(uint32_t)) * sizeof(uint32_t); i < test_sz; i++) {
+            tmp_buf[i] = (uint8_t)((test_num << 4) | (i & 0x0F));
+        }
+
+        /* Write */
+        status = disk_write(drv, test_addr, test_sz, tmp_buf);
+        if (status != 0) {
+            wolfBoot_printf("FAIL (write error %d)\n", status);
+            continue;
+        }
+
+        /* Clear buffer */
+        memset(tmp_buf, 0, test_sz);
+
+        /* Read back */
+        status = disk_read(drv, test_addr, test_sz, tmp_buf);
+        if (status != 0) {
+            wolfBoot_printf("FAIL (read error %d)\n", status);
+            continue;
+        }
+
+        /* Verify pattern */
+        for (i = 0; i < test_sz / sizeof(uint32_t); i++) {
+            uint32_t expected = (test_num << 24) | i;
+            if (tmp_buf32[i] != expected) {
+                wolfBoot_printf("FAIL (verify @ word %u: got 0x%08X, expected 0x%08X)\n",
+                    i, tmp_buf32[i], expected);
+                status = -1;
+                break;
+            }
+        }
+        /* Verify remaining bytes for non-word-aligned sizes */
+        if (status == 0) {
+            for (i = (test_sz / sizeof(uint32_t)) * sizeof(uint32_t); i < test_sz; i++) {
+                uint8_t expected = (uint8_t)((test_num << 4) | (i & 0x0F));
+                if (tmp_buf[i] != expected) {
+                    wolfBoot_printf("FAIL (verify @ byte %u: got 0x%02X, expected 0x%02X)\n",
+                        i, tmp_buf[i], expected);
+                    status = -1;
+                    break;
+                }
+            }
+        }
+
+        if (status == 0) {
+            wolfBoot_printf("PASS\n");
+        }
+    }
+
+    wolfBoot_printf("disk_test: Complete\n");
+    return status;
+}
+#endif /* DISK_TEST */
+
 
 #ifdef DEBUG_UART
 

@@ -1027,6 +1027,48 @@ sudo dd if=fitImage_v1_signed.bin of=/dev/sdc3 bs=512 status=progress && sudo cm
 sudo dd if=../yocto-dev-polarfire/build/tmp-glibc/deploy/images/mpfs-video-kit/mchp-base-image-sdk-mpfs-video-kit.rootfs.ext4 of=/dev/sdc4 bs=4M status=progress
 ```
 
+### PolarFire SoC Encryption
+
+PolarFire SoC uses MMU mode with disk-based updates. The encryption key is stored in RAM rather than flash.
+
+Enable encryption in your configuration with `ENCRYPT=1` and one of: `ENCRYPT_WITH_AES256=1`, `ENCRYPT_WITH_AES128=1`, or `ENCRYPT_WITH_CHACHA=1`.
+
+| Algorithm | Key Size | Nonce/IV Size |
+|-----------|----------|---------------|
+| ChaCha20  | 32 bytes | 12 bytes      |
+| AES-128   | 16 bytes | 16 bytes      |
+| AES-256   | 32 bytes | 16 bytes      |
+
+The `libwolfboot` API provides the following functions for managing the encryption key:
+
+```c
+int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
+int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
+int wolfBoot_erase_encrypt_key(void);  /* called automatically by wolfBoot_success() */
+```
+
+To sign and encrypt an image, create a key file with the concatenated key and nonce, then use the sign tool:
+
+```sh
+# Create key file (32-byte key + 16-byte IV for AES-256)
+echo -n "0123456789abcdef0123456789abcdef0123456789abcdef" > enc_key.der
+
+# Sign and encrypt
+./tools/keytools/sign --ecc384 --sha384 --aes256 --encrypt enc_key.der \
+    fitImage wolfboot_signing_private_key.der 1
+```
+
+In your application, set the encryption key before triggering an update:
+
+```c
+wolfBoot_set_encrypt_key(enc_key, enc_iv);
+wolfBoot_update_trigger();
+```
+
+During boot, wolfBoot decrypts the image headers from disk to select the best candidate, loads and decrypts the full image to RAM, then verifies integrity and authenticity before booting. On successful boot, `wolfBoot_success()` clears the key from RAM.
+
+See the [Encrypted Partitions](encrypted_partitions.md) documentation for additional details.
+
 ### PolarFire Soc Debugging
 
 Start GDB server:
@@ -1102,10 +1144,59 @@ Booting at 80200000
 ...
 ```
 
+### PolarFire Benchmarks
+
+RISC-V 64-bit U54 (RV64GC1) 625 MHz
+
+```
+------------------------------------------------------------------------------
+ wolfSSL version 5.8.4
+------------------------------------------------------------------------------
+Math:   Multi-Precision: Wolf(SP) word-size=64 bits=3072 sp_int.c
+        Assembly Speedups: RISCVASM ALIGN
+wolfCrypt Benchmark (block bytes 1048576, min 1.0 sec each)
+RNG                          5 MiB took 1.232 seconds,    4.058 MiB/s
+AES-128-CBC-enc             10 MiB took 1.182 seconds,    8.457 MiB/s
+AES-128-CBC-dec             10 MiB took 1.166 seconds,    8.573 MiB/s
+AES-192-CBC-enc             10 MiB took 1.378 seconds,    7.257 MiB/s
+AES-192-CBC-dec             10 MiB took 1.362 seconds,    7.344 MiB/s
+AES-256-CBC-enc             10 MiB took 1.569 seconds,    6.373 MiB/s
+AES-256-CBC-dec             10 MiB took 1.556 seconds,    6.426 MiB/s
+AES-128-GCM-enc             10 MiB took 1.956 seconds,    5.113 MiB/s
+AES-128-GCM-dec             10 MiB took 1.955 seconds,    5.115 MiB/s
+AES-192-GCM-enc              5 MiB took 1.075 seconds,    4.650 MiB/s
+AES-192-GCM-dec              5 MiB took 1.074 seconds,    4.654 MiB/s
+AES-256-GCM-enc              5 MiB took 1.172 seconds,    4.268 MiB/s
+AES-256-GCM-dec              5 MiB took 1.170 seconds,    4.275 MiB/s
+GMAC Table 4-bit            15 MiB took 1.133 seconds,   13.245 MiB/s
+CHACHA                      20 MiB took 1.107 seconds,   18.064 MiB/s
+CHA-POLY                    15 MiB took 1.060 seconds,   14.152 MiB/s
+POLY1305                    75 MiB took 1.044 seconds,   71.812 MiB/s
+SHA                         20 MiB took 1.139 seconds,   17.561 MiB/s
+SHA-256                     10 MiB took 1.069 seconds,    9.350 MiB/s
+SHA-384                     15 MiB took 1.072 seconds,   13.994 MiB/s
+SHA-512                     15 MiB took 1.072 seconds,   13.990 MiB/s
+SHA-512/224                 15 MiB took 1.068 seconds,   14.041 MiB/s
+SHA-512/256                 15 MiB took 1.066 seconds,   14.070 MiB/s
+HMAC-SHA                    20 MiB took 1.140 seconds,   17.542 MiB/s
+HMAC-SHA256                 10 MiB took 1.068 seconds,    9.366 MiB/s
+HMAC-SHA384                 15 MiB took 1.066 seconds,   14.076 MiB/s
+HMAC-SHA512                 15 MiB took 1.066 seconds,   14.077 MiB/s
+PBKDF2                       1 KiB took 1.024 seconds,    1.129 KiB/s
+RSA     2048   public       800 ops took 1.142 sec, avg 1.427 ms,   700.575 ops/sec
+RSA     2048  private       100 ops took 8.450 sec, avg 84.504 ms,    11.834 ops/sec
+DH      2048  key gen        60 ops took 1.010 sec, avg 16.841 ms,    59.379 ops/sec
+DH      2048    agree       100 ops took 3.421 sec, avg 34.211 ms,    29.231 ops/sec
+ECC   [      SECP256R1]   256  key gen       100 ops took 1.304 sec, avg 13.039 ms,    76.691 ops/sec
+ECDHE [      SECP256R1]   256    agree       100 ops took 1.299 sec, avg 12.992 ms,    76.970 ops/sec
+ECDSA [      SECP256R1]   256     sign       100 ops took 1.338 sec, avg 13.383 ms,    74.723 ops/sec
+ECDSA [      SECP256R1]   256   verify       200 ops took 1.846 sec, avg 9.231 ms,   108.333 ops/sec
+Benchmark complete
+```
+
 ### PolarFire TODO
 
 * Add eMMC/SD features:
-  - Write support
   - eMMC support (not just SD)
 * Add support for reading serial number and modifying ethernet MAC in device tree
 * Add support for QSPI NOR flash
