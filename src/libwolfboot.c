@@ -1767,7 +1767,7 @@ int pkcs11_crypto_init(void)
     };
     CK_ULONG search_attr_count = sizeof(search_attr) / sizeof(*search_attr);
     CK_ULONG obj_count = 0;
-    int session_opened = 0, logged_in = 0;
+    int pkcs11_intiialized = 0, session_opened = 0, logged_in = 0;
 
     if (encrypt_initialized)
         return 0;
@@ -1798,19 +1798,22 @@ int pkcs11_crypto_init(void)
     }
 
     if (ret == CKR_OK) {
+        pkcs11_initialized = 1;
+
         ret = pkcs11_function_list->C_OpenSession(1,
                 CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL, NULL,
                 &pkcs11_session);
-        session_opened = 1;
     }
 
     if (ret == CKR_OK) {
+        session_opened = 1;
         ret = pkcs11_function_list->C_Login(pkcs11_session, CKU_USER,
                 pkcs11_pin, sizeof(pkcs11_pin) - 1);
-        logged_in = 1;
     }
 
     if (ret == CKR_OK) {
+        logged_in = 1;
+
         /* Retrieve AES key by CKA_ID */
         ret = pkcs11_function_list->C_FindObjectsInit(pkcs11_session,
                 search_attr, search_attr_count);
@@ -1822,7 +1825,7 @@ int pkcs11_crypto_init(void)
     }
 
     if (ret == CKR_OK && obj_count != 1) {
-        ret = -1;
+        ret = CKR_KEY_HANDLE_INVALID;
     }
 
     if (ret == CKR_OK) {
@@ -1841,6 +1844,9 @@ int pkcs11_crypto_init(void)
         if (session_opened) {
             pkcs11_function_list->C_CloseSession(pkcs11_session);
         }
+        if (pkcs11_initialized) {
+            pkcs11_function_list->C_Finalize(NULL);
+        }
     }
 
     return ret;
@@ -1855,18 +1861,18 @@ void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
     if (pkcs11_enc_initialized) {
         ret = pkcs11_function_list->C_EncryptFinal(pkcs11_session, buf,
                 &buf_len);
+        pkcs11_enc_initialized = 0;
         if (ret != CKR_OK) {
             return;
         }
-        pkcs11_enc_initialized = 0;
     }
     else if (pkcs11_dec_initialized) {
         ret = pkcs11_function_list->C_DecryptFinal(pkcs11_session, buf,
                 &buf_len);
+        pkcs11_dec_initialized = 0;
         if (ret != CKR_OK) {
             return;
         }
-        pkcs11_dec_initialized = 0;
     }
 
 #if ENCRYPT_PKCS11_MECHANISM == CKM_AES_CTR
@@ -1921,7 +1927,7 @@ int pkcs11_crypto_encrypt(uint8_t *out, uint8_t *in, size_t size)
 
         pkcs11_enc_initialized = 1;
     }
-    
+
     encrypted_len = size;
     ret = pkcs11_function_list->C_EncryptUpdate(pkcs11_session, in, size, out,
             &encrypted_len);
