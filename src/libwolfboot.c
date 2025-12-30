@@ -1807,6 +1807,7 @@ int pkcs11_crypto_init(void)
 
     if (ret == CKR_OK) {
         session_opened = 1;
+
         ret = pkcs11_function_list->C_Login(pkcs11_session, CKU_USER,
                 pkcs11_pin, sizeof(pkcs11_pin) - 1);
     }
