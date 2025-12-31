@@ -56,6 +56,89 @@ void hal_init(void)
         LIBWOLFBOOT_VERSION_STRING,__DATE__, __TIME__);
 }
 
+/* ============================================================================
+ * System Controller Mailbox Functions
+ *
+ * The MPFS system controller provides various system services via a mailbox
+ * interface. Commands are sent by writing the opcode to the control register
+ * and responses are read from the mailbox RAM.
+ * ============================================================================ */
+
+/**
+ * mpfs_scb_mailbox_busy - Check if the system controller mailbox is busy
+ *
+ * Returns: non-zero if busy, 0 if ready
+ */
+static int mpfs_scb_mailbox_busy(void)
+{
+    return (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK);
+}
+
+/**
+ * mpfs_read_serial_number - Read the device serial number via system services
+ * @serial: Buffer to store the 16-byte device serial number
+ *
+ * This function sends a serial number request (opcode 0x00) to the system
+ * controller and reads the 16-byte response from the mailbox RAM.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int mpfs_read_serial_number(uint8_t *serial)
+{
+    uint32_t cmd, status;
+    int i, timeout;
+
+    if (serial == NULL) {
+        return -1;
+    }
+
+    /* Check if mailbox is busy */
+    if (mpfs_scb_mailbox_busy()) {
+        wolfBoot_printf("SCB mailbox busy\n");
+        return -2;
+    }
+
+    /* Send serial number request command (opcode 0x00)
+     * Command format: [31:16] = opcode, [0] = request bit */
+    cmd = (SYS_SERV_CMD_SERIAL_NUMBER << SERVICES_CR_COMMAND_SHIFT) |
+          SERVICES_CR_REQ_MASK;
+    SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
+
+    /* Wait for request bit to clear (command accepted) */
+    timeout = 10000;
+    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) && timeout > 0) {
+        timeout--;
+    }
+    if (timeout == 0) {
+        wolfBoot_printf("SCB mailbox request timeout\n");
+        return -3;
+    }
+
+    /* Wait for busy bit to clear (command completed) */
+    timeout = 10000;
+    while (mpfs_scb_mailbox_busy() && timeout > 0) {
+        timeout--;
+    }
+    if (timeout == 0) {
+        wolfBoot_printf("SCB mailbox busy timeout\n");
+        return -4;
+    }
+
+    /* Check status (upper 16 bits of status register) */
+    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
+    if (status != 0) {
+        wolfBoot_printf("SCB mailbox error: 0x%x\n", status);
+        return -5;
+    }
+
+    /* Read serial number from mailbox RAM (16 bytes) */
+    for (i = 0; i < DEVICE_SERIAL_NUMBER_SIZE; i++) {
+        serial[i] = SCBMBOX_BYTE(i);
+    }
+
+    return 0;
+}
+
 /* Linux kernel command line arguments */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
@@ -66,10 +149,17 @@ void hal_init(void)
     "earlycon root="LINUX_BOOTARGS_ROOT" rootwait uio_pdrv_genirq.of_id=generic-uio"
 #endif
 
+/* Microchip OUI (Organizationally Unique Identifier) for MAC address */
+#define MICROCHIP_OUI_0 0x00
+#define MICROCHIP_OUI_1 0x04
+#define MICROCHIP_OUI_2 0xA3
+
 int hal_dts_fixup(void* dts_addr)
 {
     int off, ret;
     struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    uint8_t device_serial_number[DEVICE_SERIAL_NUMBER_SIZE];
+    uint8_t mac_addr[6];
 
     /* Verify FDT header */
     ret = fdt_check_header(dts_addr);
@@ -96,8 +186,68 @@ int hal_dts_fixup(void* dts_addr)
         fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
     }
 
-    /* TODO: Consider additional FDT fixups:
-     * ethernet0: local-mac-address {0x00, 0x04, 0xA3, SERIAL2, SERIAL1, SERIAL0} */
+    /* Read device serial number from system controller */
+    ret = mpfs_read_serial_number(device_serial_number);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: Failed to read serial number (%d)\n", ret);
+        /* Continue without setting MAC addresses */
+        return 0;
+    }
+
+    wolfBoot_printf("FDT: Device serial: %02x%02x%02x%02x-%02x%02x%02x%02x-"
+                    "%02x%02x%02x%02x-%02x%02x%02x%02x\n",
+        device_serial_number[15], device_serial_number[14],
+        device_serial_number[13], device_serial_number[12],
+        device_serial_number[11], device_serial_number[10],
+        device_serial_number[9],  device_serial_number[8],
+        device_serial_number[7],  device_serial_number[6],
+        device_serial_number[5],  device_serial_number[4],
+        device_serial_number[3],  device_serial_number[2],
+        device_serial_number[1],  device_serial_number[0]);
+
+    /* Build MAC address: Microchip OUI + lower 3 bytes of serial number
+     * Format: {0x00, 0x04, 0xA3, serial[2], serial[1], serial[0]} */
+    mac_addr[0] = MICROCHIP_OUI_0;
+    mac_addr[1] = MICROCHIP_OUI_1;
+    mac_addr[2] = MICROCHIP_OUI_2;
+    mac_addr[3] = device_serial_number[2];
+    mac_addr[4] = device_serial_number[1];
+    mac_addr[5] = device_serial_number[0];
+
+    wolfBoot_printf("FDT: MAC0 = %02x:%02x:%02x:%02x:%02x:%02x\n",
+        mac_addr[0], mac_addr[1], mac_addr[2],
+        mac_addr[3], mac_addr[4], mac_addr[5]);
+
+    /* Set local-mac-address for ethernet@20110000 (mac0) */
+    off = fdt_find_node_offset(fdt, -1, "ethernet@20110000");
+    if (off >= 0) {
+        ret = fdt_setprop(fdt, off, "local-mac-address", mac_addr, 6);
+        if (ret != 0) {
+            wolfBoot_printf("FDT: Failed to set mac0 address (%d)\n", ret);
+        }
+    }
+    else {
+        wolfBoot_printf("FDT: ethernet@20110000 not found\n");
+    }
+
+    /* Set local-mac-address for ethernet@20112000 (mac1)
+     * Use MAC address + 1 for the second interface */
+    mac_addr[5] = device_serial_number[0] + 1;
+
+    wolfBoot_printf("FDT: MAC1 = %02x:%02x:%02x:%02x:%02x:%02x\n",
+        mac_addr[0], mac_addr[1], mac_addr[2],
+        mac_addr[3], mac_addr[4], mac_addr[5]);
+
+    off = fdt_find_node_offset(fdt, -1, "ethernet@20112000");
+    if (off >= 0) {
+        ret = fdt_setprop(fdt, off, "local-mac-address", mac_addr, 6);
+        if (ret != 0) {
+            wolfBoot_printf("FDT: Failed to set mac1 address (%d)\n", ret);
+        }
+    }
+    else {
+        wolfBoot_printf("FDT: ethernet@20112000 not found\n");
+    }
 
     return 0;
 }
