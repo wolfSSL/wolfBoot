@@ -499,21 +499,33 @@ int wolfBoot_dualboot_candidate_addr(void**);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 
 
+/* Encryption algorithm constants - always available for tools */
+#define ENCRYPT_BLOCK_SIZE_CHACHA  64
+#define ENCRYPT_BLOCK_SIZE_AES     16
+
+#define ENCRYPT_KEY_SIZE_CHACHA    32  /* ChaCha20 - 256bit */
+#define ENCRYPT_KEY_SIZE_AES128    16  /* AES128 */
+#define ENCRYPT_KEY_SIZE_AES256    32  /* AES256 */
+
+#define ENCRYPT_NONCE_SIZE_CHACHA  12  /* 96 bit */
+#define ENCRYPT_NONCE_SIZE_AES     16  /* AES IV size */
+
+
 #ifdef EXT_ENCRYPTED
-/* Encryption support */
+/* Encryption support - compile-time algorithm selection */
 
 #if defined(ENCRYPT_WITH_CHACHA)
-    #define ENCRYPT_BLOCK_SIZE 64
-    #define ENCRYPT_KEY_SIZE   32 /* Chacha20 - 256bit */
-    #define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+    #define ENCRYPT_BLOCK_SIZE ENCRYPT_BLOCK_SIZE_CHACHA
+    #define ENCRYPT_KEY_SIZE   ENCRYPT_KEY_SIZE_CHACHA
+    #define ENCRYPT_NONCE_SIZE ENCRYPT_NONCE_SIZE_CHACHA
 #elif defined(ENCRYPT_WITH_AES128)
-    #define ENCRYPT_BLOCK_SIZE 16
-    #define ENCRYPT_KEY_SIZE   16 /* AES128  */
-    #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
+    #define ENCRYPT_BLOCK_SIZE ENCRYPT_BLOCK_SIZE_AES
+    #define ENCRYPT_KEY_SIZE   ENCRYPT_KEY_SIZE_AES128
+    #define ENCRYPT_NONCE_SIZE ENCRYPT_NONCE_SIZE_AES
 #elif defined(ENCRYPT_WITH_AES256)
-    #define ENCRYPT_BLOCK_SIZE 16
-    #define ENCRYPT_KEY_SIZE   32 /* AES256 */
-    #define ENCRYPT_NONCE_SIZE 16 /* AES IV size */
+    #define ENCRYPT_BLOCK_SIZE ENCRYPT_BLOCK_SIZE_AES
+    #define ENCRYPT_KEY_SIZE   ENCRYPT_KEY_SIZE_AES256
+    #define ENCRYPT_NONCE_SIZE ENCRYPT_NONCE_SIZE_AES
 #elif defined(ENCRYPT_PKCS11)
     #define ENCRYPT_BLOCK_SIZE ENCRYPT_PKCS11_BLOCK_SIZE
     /* In this case, the key ID is stored in flash rather than the key itself */
