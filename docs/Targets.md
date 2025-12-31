@@ -1193,8 +1193,6 @@ Benchmark complete
 
 ### PolarFire TODO
 
-* Add eMMC/SD features:
-  - eMMC support (not just SD)
 * Add support for reading serial number and modifying ethernet MAC in device tree
 * Add support for QSPI NOR flash
 * Add support for full HSS replacement using wolfboot

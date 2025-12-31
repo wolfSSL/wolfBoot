@@ -28,11 +28,16 @@
 #ifdef DEBUG_BOOT
 #include "printf.h"
 #endif
-#include "hal/riscv.h"
 
+/* Include platform-specific headers (may define PLIC_BASE) */
 #ifdef TARGET_mpfs250
 #include "hal/mpfs250.h"
 #endif
+
+#include "hal/riscv.h"
+
+/* Generic PLIC support is enabled when platform defines PLIC_BASE.
+ * The PLIC header is included by the platform header after defining PLIC_BASE. */
 
 extern void trap_entry(void);
 extern void trap_exit(void);
@@ -67,13 +72,6 @@ extern void main(void);
 /* reloc_trap_vector is implemented in boot_riscv_start.S */
 extern void reloc_trap_vector(const uint32_t *address);
 
-#ifdef TARGET_mpfs250
-/* PLIC functions from mpfs250.c */
-extern uint32_t plic_claim(void);
-extern void plic_complete(uint32_t irq);
-extern void mmc_irq_handler(void);
-#endif
-
 /* ============================================================================
  * Trap Handling
  * ============================================================================ */
@@ -88,29 +86,87 @@ static uint32_t last_epc = 0;
 static uint32_t last_tval = 0;
 #endif
 
-#ifdef TARGET_mpfs250
+#ifdef PLIC_BASE
+/* ============================================================================
+ * PLIC - Platform-Level Interrupt Controller (Generic Implementation)
+ * ============================================================================ */
+
+/* Set priority for an interrupt source */
+void plic_set_priority(uint32_t irq, uint32_t priority)
+{
+    if (irq > 0 && priority <= PLIC_PRIORITY_MAX) {
+#ifdef PLIC_NUM_SOURCES
+        if (irq >= PLIC_NUM_SOURCES)
+            return;
+#endif
+        PLIC_PRIORITY_REG(PLIC_BASE, irq) = priority;
+    }
+}
+
+/* Enable an interrupt for the current hart's context */
+void plic_enable_interrupt(uint32_t irq)
+{
+    uint32_t ctx = plic_get_context();
+    if (irq > 0) {
+#ifdef PLIC_NUM_SOURCES
+        if (irq >= PLIC_NUM_SOURCES)
+            return;
+#endif
+        PLIC_ENABLE_REG(PLIC_BASE, ctx, irq) |= PLIC_ENABLE_BIT(irq);
+    }
+}
+
+/* Disable an interrupt for the current hart's context */
+void plic_disable_interrupt(uint32_t irq)
+{
+    uint32_t ctx = plic_get_context();
+    if (irq > 0) {
+#ifdef PLIC_NUM_SOURCES
+        if (irq >= PLIC_NUM_SOURCES)
+            return;
+#endif
+        PLIC_ENABLE_REG(PLIC_BASE, ctx, irq) &= ~PLIC_ENABLE_BIT(irq);
+    }
+}
+
+/* Set the priority threshold for the current hart's context */
+void plic_set_threshold(uint32_t threshold)
+{
+    uint32_t ctx = plic_get_context();
+    if (threshold <= PLIC_PRIORITY_MAX) {
+        PLIC_THRESHOLD_REG(PLIC_BASE, ctx) = threshold;
+    }
+}
+
+/* Claim the highest priority pending interrupt */
+uint32_t plic_claim(void)
+{
+    uint32_t ctx = plic_get_context();
+    return PLIC_CLAIM_REG(PLIC_BASE, ctx);
+}
+
+/* Signal completion of interrupt handling */
+void plic_complete(uint32_t irq)
+{
+    uint32_t ctx = plic_get_context();
+    PLIC_COMPLETE_REG(PLIC_BASE, ctx) = irq;
+}
+
 /* Handle external interrupts via PLIC */
 static void handle_external_interrupt(void)
 {
     uint32_t irq;
 
-    /* Claim the interrupt from PLIC */
+    /* Claim and dispatch interrupts until none pending */
     while ((irq = plic_claim()) != 0) {
-        /* Dispatch to appropriate handler based on IRQ number */
-        switch (irq) {
-            case PLIC_INT_MMC_MAIN:
-                mmc_irq_handler();
-                break;
-            default:
-                /* Unknown interrupt - just complete it */
-                break;
-        }
+        /* Platform-provided dispatch function */
+        plic_dispatch_irq(irq);
 
         /* Signal completion to PLIC */
         plic_complete(irq);
     }
 }
-#endif
+#endif /* PLIC_BASE */
 
 unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
     unsigned long tval)
@@ -119,7 +175,7 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
     last_epc = epc;
     last_tval = tval;
 
-#ifdef TARGET_mpfs250
+#ifdef PLIC_BASE
     /* Check if this is an interrupt (MSB set) */
     if (cause & MCAUSE_INT) {
         unsigned long exception_code = cause & MCAUSE_CAUSE;

@@ -160,5 +160,114 @@
 #define MCAUSE32_INT   0x80000000UL
 #define MCAUSE32_CAUSE 0x7FFFFFFFUL
 
+/* ============================================================================
+ * PLIC - Platform-Level Interrupt Controller (Generic)
+ * Reference: RISC-V Platform-Level Interrupt Controller Specification v1.0
+ * ============================================================================
+ *
+ * The PLIC is the standard external interrupt controller for RISC-V systems.
+ * It aggregates external interrupt sources and presents them to harts.
+ *
+ * PLIC Memory Map (standard offsets from PLIC_BASE):
+ *   0x000000-0x000FFF: Priority registers (1 word per source, source 0 reserved)
+ *   0x001000-0x001FFF: Pending bits (1 bit per source, packed in 32-bit words)
+ *   0x002000-0x1FFFFF: Enable bits (per context, 1 bit per source, packed)
+ *   0x200000-0x3FFFFF: Context registers (threshold + claim/complete per context)
+ *
+ * Each hart typically has 2 contexts: M-mode and S-mode.
+ *
+ * Platform must define before using PLIC functions:
+ *   PLIC_BASE         - Base address of PLIC registers
+ *   PLIC_NUM_SOURCES  - Number of interrupt sources (optional, for bounds check)
+ * ============================================================================ */
+
+/* PLIC Register Offsets (usable in both C and assembly) */
+#define PLIC_PRIORITY_OFFSET    0x000000UL
+#define PLIC_PENDING_OFFSET     0x001000UL
+#define PLIC_ENABLE_OFFSET      0x002000UL
+#define PLIC_ENABLE_STRIDE      0x80UL
+#define PLIC_CONTEXT_OFFSET     0x200000UL
+#define PLIC_CONTEXT_STRIDE     0x1000UL
+
+/* PLIC Priority Levels (standard values) */
+#define PLIC_PRIORITY_DISABLED  0   /* Priority 0 = interrupt disabled */
+#define PLIC_PRIORITY_MIN       1   /* Minimum active priority */
+#define PLIC_PRIORITY_MAX       7   /* Maximum priority (7 levels typical) */
+#define PLIC_PRIORITY_DEFAULT   4   /* Default/medium priority */
+
+/* ============================================================================
+ * PLIC Register Access Macros (C code only)
+ * ============================================================================ */
+#ifndef __ASSEMBLER__
+
+/* Priority registers: one 32-bit word per interrupt source (source 0 reserved) */
+#define PLIC_PRIORITY_REG(base, irq) \
+    (*((volatile uint32_t*)((base) + PLIC_PRIORITY_OFFSET + ((irq) * 4))))
+
+/* Pending bits: 32 interrupts per 32-bit word */
+#define PLIC_PENDING_REG(base, irq) \
+    (*((volatile uint32_t*)((base) + PLIC_PENDING_OFFSET + (((irq) / 32) * 4))))
+#define PLIC_PENDING_BIT(irq)   (1U << ((irq) % 32))
+
+/* Enable bits: per context, 32 interrupts per 32-bit word
+ * Each context has 0x80 bytes (32 words * 32 bits = 1024 sources max) */
+#define PLIC_ENABLE_REG(base, ctx, irq) \
+    (*((volatile uint32_t*)((base) + PLIC_ENABLE_OFFSET + \
+        ((ctx) * PLIC_ENABLE_STRIDE) + (((irq) / 32) * 4))))
+#define PLIC_ENABLE_BIT(irq)    (1U << ((irq) % 32))
+
+/* Context registers: threshold and claim/complete
+ * Each context has 0x1000 bytes, with threshold at offset 0 and claim at offset 4 */
+#define PLIC_THRESHOLD_REG(base, ctx) \
+    (*((volatile uint32_t*)((base) + PLIC_CONTEXT_OFFSET + \
+        ((ctx) * PLIC_CONTEXT_STRIDE) + 0x00)))
+#define PLIC_CLAIM_REG(base, ctx) \
+    (*((volatile uint32_t*)((base) + PLIC_CONTEXT_OFFSET + \
+        ((ctx) * PLIC_CONTEXT_STRIDE) + 0x04)))
+/* Complete uses the same register as claim (write IRQ number to complete) */
+#define PLIC_COMPLETE_REG(base, ctx) PLIC_CLAIM_REG(base, ctx)
+
+#endif /* !__ASSEMBLER__ */
+
+/* ============================================================================
+ * PLIC Function Declarations (C code only, when PLIC_BASE is defined)
+ *
+ * These functions are implemented in boot_riscv.c when PLIC_BASE is defined.
+ * Platform must provide plic_get_context() to map current hart to PLIC context.
+ * ============================================================================ */
+#if defined(PLIC_BASE) && !defined(__ASSEMBLER__)
+
+#include <stdint.h>
+
+/* Platform-provided: Get PLIC context ID for current hart
+ * Returns the context number (e.g., hart 1 S-mode = context 2) */
+extern uint32_t plic_get_context(void);
+
+/* Set priority for an interrupt source (0 = disabled, 1-7 = priority levels) */
+void plic_set_priority(uint32_t irq, uint32_t priority);
+
+/* Enable an interrupt for the current hart's context */
+void plic_enable_interrupt(uint32_t irq);
+
+/* Disable an interrupt for the current hart's context */
+void plic_disable_interrupt(uint32_t irq);
+
+/* Set the priority threshold for the current hart's context
+ * Interrupts with priority <= threshold are masked */
+void plic_set_threshold(uint32_t threshold);
+
+/* Claim the highest priority pending interrupt
+ * Returns IRQ number, or 0 if no interrupt pending */
+uint32_t plic_claim(void);
+
+/* Signal completion of interrupt handling */
+void plic_complete(uint32_t irq);
+
+/* Platform-provided: Dispatch IRQ to appropriate handler
+ * Called by generic external interrupt handler for each claimed IRQ */
+extern void plic_dispatch_irq(uint32_t irq);
+
+#endif /* PLIC_BASE && !__ASSEMBLER__ */
+
 #endif /* RISCV_H */
 
