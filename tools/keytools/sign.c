@@ -1808,6 +1808,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         fsize = ftell(f);
         fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
 
+        printf("Encrypting %u bytes...\n", fsize);
+
         if (CMD.encrypt == ENC_CHACHA) {
             ChaCha cha;
 #ifndef HAVE_CHACHA
@@ -1845,6 +1847,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
         }
         fclose(fef);
+        printf("Encryption complete.\n");
     }
     printf("Output image(s) successfully created.\n");
     ret = 0;

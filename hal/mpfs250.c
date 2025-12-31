@@ -1605,7 +1605,7 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
     uint32_t start_offset = (start % EMMC_SD_BLOCK_SIZE);
     (void)drv; /* only one drive supported */
 
-#if 1 //def DEBUG_MMC
+#ifdef DEBUG_MMC
     wolfBoot_printf("disk_read: drv:%d, start:%llu, count:%d, dst:%p\n",
         drv, start, count, buf);
 #endif
@@ -1657,7 +1657,7 @@ int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
     uint32_t start_offset = (start % EMMC_SD_BLOCK_SIZE);
     (void)drv; /* only one drive supported */
 
-#if 1 //def DEBUG_MMC
+#ifdef DEBUG_MMC
     wolfBoot_printf("disk_write: drv:%d, start:%llu, count:%d, src:%p\n",
         drv, start, count, buf);
 #endif

@@ -1491,6 +1491,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     return ret;
 #endif
 }
+#ifndef CUSTOM_ENCRYPT_KEY
 /**
  * @brief Set the encryption key.
  *
@@ -1545,7 +1546,8 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 #endif
     return 0;
 }
-#endif
+#endif /* UNIT_TEST */
+
 /**
  * @brief Erase the encryption key.
  *
@@ -1575,6 +1577,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 #endif
     return 0;
 }
+#endif /* !CUSTOM_ENCRYPT_KEY */
 
 #if defined(__WOLFBOOT) || defined(UNIT_TEST)
 
@@ -1585,20 +1588,31 @@ ChaCha chacha;
 
 int RAMFUNCTION chacha_init(void)
 {
-#if defined(MMU) || defined(UNIT_TEST)
-    const uint8_t *key = ENCRYPT_KEY;
+#ifdef CUSTOM_ENCRYPT_KEY
+    uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
+    uint8_t key[ENCRYPT_KEY_SIZE];
 #else
-    const uint8_t *key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
+    const uint8_t* stored_nonce;
+    uint8_t *key;
 #endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
-    const uint8_t* stored_nonce;
 
-#ifdef NVM_FLASH_WRITEONCE
-    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
-#endif
-
+#ifdef CUSTOM_ENCRYPT_KEY
+    int ret = wolfBoot_get_encrypt_key(key, stored_nonce);
+    if (ret != 0)
+        return ret;
+#else
+    #if defined(MMU) || defined(UNIT_TEST)
+        key = ENCRYPT_KEY;
+    #else
+        key = (uint8_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            ENCRYPT_TMP_SECRET_OFFSET);
+    #endif
+    #ifdef NVM_FLASH_WRITEONCE
+        key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+    #endif
     stored_nonce = key + ENCRYPT_KEY_SIZE;
+#endif
 
     XMEMSET(&chacha, 0, sizeof(chacha));
 
@@ -1632,9 +1646,14 @@ Aes aes_dec, aes_enc;
  */
 int aes_init(void)
 {
-    int devId;
+    int devId = INVALID_DEVID;
+#if defined(CUSTOM_ENCRYPT_KEY) && !defined(WOLFBOOT_RENESAS_TSIP)
+    uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
+    uint8_t key[ENCRYPT_KEY_SIZE];
+#else
     uint8_t *stored_nonce;
     uint8_t *key;
+#endif
     uint8_t ff[ENCRYPT_KEY_SIZE];
 
 #ifdef WOLFBOOT_RENESAS_TSIP
@@ -1645,19 +1664,20 @@ int aes_init(void)
     key = enc_key->encrypted_user_key;
     stored_nonce = enc_key->initial_vector;
     wolfCrypt_Init(); /* required to setup the crypto callback defaults */
-#else  /* non TSIP */
-    devId = INVALID_DEVID;
-#if defined(MMU) || defined(UNIT_TEST)
-    key = ENCRYPT_KEY;
+#elif defined(CUSTOM_ENCRYPT_KEY)
+    wolfBoot_get_encrypt_key(key, stored_nonce);
 #else
-    key = (uint8_t*)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
-        ENCRYPT_TMP_SECRET_OFFSET);
-#endif
-#ifdef NVM_FLASH_WRITEONCE
-    key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
-#endif
-    stored_nonce = key + ENCRYPT_KEY_SIZE;
-#endif /* WOLFBOOT_RENESAS_TSIP */
+    #if defined(MMU) || defined(UNIT_TEST)
+        key = ENCRYPT_KEY;
+    #else
+        key = (uint8_t*)(WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            ENCRYPT_TMP_SECRET_OFFSET);
+    #endif
+    #ifdef NVM_FLASH_WRITEONCE
+        key -= WOLFBOOT_SECTOR_SIZE * nvm_select_fresh_sector(PART_BOOT);
+    #endif
+        stored_nonce = key + ENCRYPT_KEY_SIZE;
+#endif /* non TSIP */
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));

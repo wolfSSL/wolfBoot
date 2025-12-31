@@ -563,6 +563,9 @@ ifeq ($(ENCRYPT),1)
       endif
     endif
   endif
+  ifeq ($(CUSTOM_ENCRYPT_KEY),1)
+    CFLAGS+=-D"CUSTOM_ENCRYPT_KEY"
+  endif
 endif
 
 ifeq ($(EXT_FLASH),1)
