@@ -524,6 +524,21 @@ ifeq ($(QSPI_FLASH),1)
   endif
 endif
 
+# SD Card support (Cadence SDHCI controller)
+ifeq ($(DISK_SDCARD),1)
+  CFLAGS+=-D"DISK_SDCARD=1"
+endif
+
+# eMMC support (Cadence SDHCI controller)
+ifeq ($(DISK_EMMC),1)
+  CFLAGS+=-D"DISK_EMMC=1"
+endif
+
+# Add SDHCI driver if SD card or eMMC is enabled (only add once)
+ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+  OBJS+= src/sdhci.o
+endif
+
 ifeq ($(UART_FLASH),1)
   EXT_FLASH=1
 endif
