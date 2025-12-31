@@ -717,6 +717,437 @@ int mmc_card_init(uint32_t acmd41_arg, uint32_t *ocr_reg)
     return status;
 }
 
+#ifndef USE_EMMC
+/* ==========================================================================
+ * SD Card-specific Initialization Functions
+ * ========================================================================== */
+
+/* Forward declarations - defined later in the file */
+static uint32_t get_srs_bits(int from, int count);
+int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst, uint32_t sz);
+int mmc_set_bus_width(uint32_t bus_width);
+int mmc_set_function(uint32_t function_number, uint32_t group_number);
+#ifdef ENABLE_MMC_SD_TUNING
+static int mmc_tune(uint8_t phy_addr, uint32_t clk_khz);
+#endif
+
+/* Full SD card initialization sequence
+ * Returns 0 on success */
+static int sdcard_card_full_init(void)
+{
+    int status = 0;
+    uint32_t reg;
+    uint32_t ctrl_volts, card_volts;
+    uint32_t irq_restore;
+    int xpc, si8r;
+
+    /* Set power to 3.3v and send init commands */
+    ctrl_volts = EMMC_SD_SRS10_BVS_3_3V; /* default to 3.3v */
+    status = mmc_power_init_seq(ctrl_volts);
+    if (status == 0) {
+        uint32_t max_ma_3_3v, max_ma_1_8v;
+        /* determine host controller capabilities */
+        reg = EMMC_SD_SRS18;
+        max_ma_3_3v = ((reg & EMMC_SD_SRS18_MC33_MASK) >> EMMC_SD_SRS18_MC33_SHIFT) * 4;
+        max_ma_1_8v = ((reg & EMMC_SD_SRS18_MC18_MASK) >> EMMC_SD_SRS18_MC18_SHIFT) * 4;
+        /* does controller support eXtended Power Control (XPC)? */
+        xpc = (max_ma_1_8v >= 150) && (max_ma_3_3v >= 150) ? 1 : 0;
+        /* does controller support UHS-I (Ultra High Speed Interface) v1.8 signaling? */
+        si8r = ((EMMC_SD_SRS16 & EMMC_SD_SRS16_VS18) && /* 1.8v supported */
+                (EMMC_SD_SRS17 & (EMMC_SD_SRS17_DDR50 | /* DDR50, SDR104 or SDR50 supported */
+                                  EMMC_SD_SRS17_SDR104 |
+                                  EMMC_SD_SRS17_SDR50))) ? 1 : 0;
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("sdcard_init: xpc:%d, si8r:%d, max_ma (3.3v:%d 1.8v:%d)\n",
+            xpc, si8r, max_ma_3_3v, max_ma_1_8v);
+    #endif
+    }
+
+    if (status == 0) {
+        reg = 0;
+        /* get operating conditions */
+        status = mmc_card_init(0, &reg);
+        if (status == 0) {
+            /* pick host and card operating voltages */
+            if (reg & SDCARD_REG_OCR_3_3_3_4) { /* 3.3v - 3.4v */
+                card_volts = SDCARD_REG_OCR_3_3_3_4;
+            }
+            else if (reg & SDCARD_REG_OCR_3_2_3_3) { /* 3.2v - 3.3v */
+                card_volts = SDCARD_REG_OCR_3_2_3_3;
+            }
+            else if (reg & SDCARD_REG_OCR_3_1_3_2) { /* 3.1v - 3.2v */
+                card_volts = SDCARD_REG_OCR_3_1_3_2;
+            }
+            else if (reg & SDCARD_REG_OCR_3_0_3_1) { /* 3.0v - 3.1v */
+                card_volts = SDCARD_REG_OCR_3_0_3_1;
+                ctrl_volts = EMMC_SD_SRS10_BVS_3_0V;
+            }
+            else if (reg & SDCARD_REG_OCR_2_9_3_0) { /* 2.9v - 3.0v */
+                card_volts = SDCARD_REG_OCR_2_9_3_0;
+                ctrl_volts = EMMC_SD_SRS10_BVS_3_0V;
+            }
+            else { /* default to v3.3 */
+                card_volts = SDCARD_REG_OCR_3_3_3_4;
+            }
+            /* if needed change operating voltage and re-init */
+            if (ctrl_volts != EMMC_SD_SRS10_BVS_3_3V) {
+            #ifdef DEBUG_MMC
+                wolfBoot_printf("sdcard_init: changing operating voltage to 3.0v\n");
+            #endif
+                status = mmc_power_init_seq(ctrl_volts);
+            }
+        }
+    }
+
+    if (status == 0) {
+        /* configure operating conditions */
+        uint32_t cmd_arg = SDCARD_ACMD41_HCS;
+        cmd_arg |= card_volts;
+        if (si8r) {
+            cmd_arg |= SDCARD_REG_OCR_S18RA;
+        }
+        if (xpc) {
+            cmd_arg |= SDCARD_REG_OCR_XPC;
+        }
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("sdcard_init: sending OCR arg: 0x%08X\n", cmd_arg);
+    #endif
+
+        /* retry until OCR ready */
+        do {
+            status = mmc_card_init(cmd_arg, &reg);
+        } while (status == 0 && (reg & SDCARD_REG_OCR_READY) == 0);
+    }
+
+    if (status == 0) {
+        /* Get card identification */
+        status = mmc_send_cmd(MMC_CMD2_ALL_SEND_CID, 0, EMMC_SD_RESP_R2);
+    }
+
+    if (status == 0) {
+        /* Set relative address - SD card assigns its own RCA */
+        status = mmc_send_cmd(MMC_CMD3_SET_REL_ADDR, 0, EMMC_SD_RESP_R6);
+    }
+
+    if (status == 0) {
+        g_rca = ((EMMC_SD_SRS04 >> SD_RCA_SHIFT) & 0xFFFF);
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("sdcard_init: rca: %d\n", g_rca);
+    #endif
+    }
+
+    if (status == 0) {
+        /* read CSD register from device */
+        status = mmc_send_cmd(MMC_CMD9_SEND_CSD, g_rca << SD_RCA_SHIFT,
+            EMMC_SD_RESP_R2);
+    }
+
+    if (status == 0) {
+        /* Get sector size and count */
+        uint32_t csd_struct;
+        uint32_t bl_len, c_size, c_size_mult;
+        bl_len = get_srs_bits(22, 4);
+        g_sector_size = (1U << bl_len);
+
+        csd_struct = get_srs_bits(126, 2);
+        switch (csd_struct) {
+            case 0:
+                c_size = get_srs_bits(62, 12);
+                c_size_mult = get_srs_bits(47, 3);
+                g_sector_count = (c_size + 1) << (c_size_mult + 2);
+                break;
+            case 1:
+                c_size = get_srs_bits(48, 22);
+                g_sector_count = (c_size + 1) << 10;
+                break;
+            default:
+                /* invalid CSD structure */
+                status = -1;
+                break;
+        }
+    #ifdef DEBUG_MMC
+        wolfBoot_printf("sdcard_init: csd_version: %d, sector: size %d count %d\n",
+            csd_struct, g_sector_size, g_sector_count);
+    #endif
+    }
+
+    if (status == 0) {
+        /* select card */
+        status = mmc_send_cmd(MMC_CMD7_SELECT_CARD, g_rca << SD_RCA_SHIFT,
+            EMMC_SD_RESP_R1B);
+        if (status == DEVICE_BUSY) {
+            status = mmc_wait_busy(1);
+        }
+    }
+
+    irq_restore = EMMC_SD_SRS13;
+    if (status == 0) {
+        /* disable card insert interrupt while changing bus width to avoid false triggers */
+        EMMC_SD_SRS13 = (irq_restore & ~EMMC_SD_SRS13_CINT_SE);
+
+        status = mmc_set_bus_width(4);
+    }
+
+    if (status == 0) {
+        /* Get SCR registers - 8 bytes */
+        uint32_t scr_reg[SCR_REG_DATA_SIZE/sizeof(uint32_t)];
+        status = mmc_read(SD_ACMD51_SEND_SCR, 0, scr_reg,
+            sizeof(scr_reg));
+    }
+
+    if (status == 0) {
+        /* set UHS mode to SDR25 and driver strength to Type B */
+        uint32_t card_access_mode = SDCARD_SWITCH_ACCESS_MODE_SDR25;
+        status = mmc_set_function(card_access_mode, 1);
+        if (status == 0) {
+            /* set driver strength */
+            reg = EMMC_SD_SRS15;
+            reg &= ~EMMC_SD_SRS15_DSS_MASK;
+            reg |= EMMC_SD_SRS15_DSS_TYPE_B; /* default */
+            EMMC_SD_SRS15 = reg;
+
+            /* enable high speed */
+            EMMC_SD_SRS10 |= EMMC_SD_SRS10_HSE;
+
+            /* set UHS mode */
+            reg = EMMC_SD_SRS15;
+            reg &= ~EMMC_SD_SRS15_UMS_MASK;
+            reg |= EMMC_SD_SRS15_UMS_SDR25;
+            EMMC_SD_SRS15 = reg;
+        }
+    }
+
+    if (status == 0) {
+        mmc_set_clock(EMMC_SD_CLK_50MHZ);
+
+#ifdef ENABLE_MMC_SD_TUNING
+        /* PHY training for SDR25 at 50MHz */
+        status = mmc_tune(EMMC_SD_PHY_ADDR_UHSI_SDR25, EMMC_SD_CLK_50MHZ);
+        if (status != 0) {
+        #ifdef DEBUG_MMC
+            wolfBoot_printf("sdcard_init: tuning failed, continuing\n");
+        #endif
+            status = 0; /* Don't fail init on tuning failure */
+        }
+#endif
+    }
+
+    EMMC_SD_SRS13 = irq_restore; /* re-enable interrupt */
+
+    return status;
+}
+#endif /* !USE_EMMC */
+
+#ifdef USE_EMMC
+/* ==========================================================================
+ * eMMC-specific Initialization Functions
+ * ========================================================================== */
+
+/* Forward declaration - defined later in the file */
+static uint32_t get_srs_bits(int from, int count);
+
+/* Send CMD1 (SEND_OP_COND) for eMMC and wait for device ready
+ * Returns 0 on success, negative on error */
+static int emmc_send_op_cond(uint32_t ocr_arg, uint32_t *ocr_reg)
+{
+    int status;
+    uint32_t timeout = 1000; /* retry count */
+    uint32_t response;
+
+    /* First CMD1 to query supported voltages */
+    status = mmc_send_cmd(MMC_CMD1_SEND_OP_COND, 0, EMMC_SD_RESP_R3);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: CMD1 query failed\n");
+        return status;
+    }
+
+    /* Get OCR from response */
+    response = EMMC_SD_SRS04;
+#ifdef DEBUG_MMC
+    wolfBoot_printf("eMMC: Initial OCR: 0x%08X\n", response);
+#endif
+
+    /* Loop sending CMD1 with operating conditions until device is ready */
+    do {
+        status = mmc_send_cmd(MMC_CMD1_SEND_OP_COND, ocr_arg, EMMC_SD_RESP_R3);
+        if (status != 0) {
+            wolfBoot_printf("eMMC: CMD1 failed\n");
+            return status;
+        }
+
+        response = EMMC_SD_SRS04;
+
+        /* Check if device is ready (busy bit cleared = ready) */
+        if (response & MMC_OCR_BUSY_BIT) {
+            /* Device is ready */
+            if (ocr_reg != NULL) {
+                *ocr_reg = response;
+            }
+#ifdef DEBUG_MMC
+            wolfBoot_printf("eMMC: Device ready, OCR: 0x%08X\n", response);
+#endif
+            return 0;
+        }
+
+        /* Small delay between retries */
+        for (volatile int i = 0; i < 1000; i++);
+
+    } while (--timeout > 0);
+
+    wolfBoot_printf("eMMC: Timeout waiting for device ready\n");
+    return -1;
+}
+
+/* Set eMMC bus width using CMD6 SWITCH command
+ * width: MMC_EXT_CSD_WIDTH_1BIT, MMC_EXT_CSD_WIDTH_4BIT, or MMC_EXT_CSD_WIDTH_8BIT
+ * Returns 0 on success */
+static int emmc_set_bus_width(uint32_t width)
+{
+    int status;
+    uint32_t cmd_arg;
+
+    /* Build CMD6 argument: Access=Write Byte, Index=183 (BUS_WIDTH), Value=width */
+    cmd_arg = MMC_DW_CSD | (width << 8);
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("eMMC: Setting bus width to %d (CMD6 arg: 0x%08X)\n",
+        (width == MMC_EXT_CSD_WIDTH_4BIT) ? 4 :
+        (width == MMC_EXT_CSD_WIDTH_8BIT) ? 8 : 1, cmd_arg);
+#endif
+
+    /* Send CMD6 SWITCH */
+    status = mmc_send_cmd(MMC_CMD6_SWITCH, cmd_arg, EMMC_SD_RESP_R1B);
+    if (status == DEVICE_BUSY) {
+        status = mmc_wait_busy(1);
+    }
+
+    if (status != 0) {
+        wolfBoot_printf("eMMC: Set bus width failed\n");
+        return status;
+    }
+
+    /* Update host controller bus width */
+    if (width == MMC_EXT_CSD_WIDTH_4BIT || width == MMC_EXT_CSD_WIDTH_4BIT_DDR) {
+        EMMC_SD_SRS10 |= EMMC_SD_SRS10_DTW;
+        EMMC_SD_SRS10 &= ~EMMC_SD_SRS10_EDTW;
+        g_bus_width = 4;
+    }
+    else if (width == MMC_EXT_CSD_WIDTH_8BIT || width == MMC_EXT_CSD_WIDTH_8BIT_DDR) {
+        EMMC_SD_SRS10 |= EMMC_SD_SRS10_EDTW;
+        g_bus_width = 8;
+    }
+    else {
+        EMMC_SD_SRS10 &= ~(EMMC_SD_SRS10_DTW | EMMC_SD_SRS10_EDTW);
+        g_bus_width = 1;
+    }
+
+    return 0;
+}
+
+/* Full eMMC card initialization sequence
+ * Returns 0 on success */
+static int emmc_card_full_init(void)
+{
+    int status;
+    uint32_t ocr_reg;
+
+    /* Send CMD0 (GO_IDLE) to reset eMMC */
+    status = mmc_send_cmd(MMC_CMD0_GO_IDLE, 0, EMMC_SD_RESP_NONE);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: CMD0 failed\n");
+        return status;
+    }
+
+    /* Small delay after reset */
+    for (volatile int i = 0; i < 10000; i++);
+
+    /* Send CMD1 with operating conditions (3.3V, sector mode) */
+    status = emmc_send_op_cond(MMC_DEVICE_3_3V_VOLT_SET, &ocr_reg);
+    if (status != 0) {
+        return status;
+    }
+
+    /* CMD2 - Get CID (card identification) */
+    status = mmc_send_cmd(MMC_CMD2_ALL_SEND_CID, 0, EMMC_SD_RESP_R2);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: CMD2 failed\n");
+        return status;
+    }
+
+    /* CMD3 - Set relative address (host assigns RCA for eMMC) */
+    g_rca = MMC_EMMC_RCA_DEFAULT;
+    status = mmc_send_cmd(MMC_CMD3_SET_REL_ADDR, g_rca << SD_RCA_SHIFT,
+        EMMC_SD_RESP_R1);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: CMD3 failed\n");
+        return status;
+    }
+
+#ifdef DEBUG_MMC
+    wolfBoot_printf("eMMC: RCA set to %d\n", g_rca);
+#endif
+
+    /* CMD9 - Get CSD (card-specific data) */
+    status = mmc_send_cmd(MMC_CMD9_SEND_CSD, g_rca << SD_RCA_SHIFT,
+        EMMC_SD_RESP_R2);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: CMD9 failed\n");
+        return status;
+    }
+
+    /* Parse CSD to get sector size/count */
+    {
+        uint32_t csd_struct, c_size;
+        uint32_t bl_len = get_srs_bits(22, 4);
+        g_sector_size = (1U << bl_len);
+
+        csd_struct = get_srs_bits(126, 2);
+        /* eMMC typically uses CSD version 3 (EXT_CSD) with fixed 512-byte sectors */
+        if (csd_struct >= 2) {
+            /* For eMMC, actual capacity is in EXT_CSD, use default for now */
+            g_sector_size = 512;
+            g_sector_count = 0; /* Will be read from EXT_CSD if needed */
+        }
+        else {
+            /* Legacy CSD parsing */
+            c_size = get_srs_bits(48, 22);
+            g_sector_count = (c_size + 1) << 10;
+        }
+
+#ifdef DEBUG_MMC
+        wolfBoot_printf("eMMC: CSD version %d, sector size %d\n",
+            csd_struct, g_sector_size);
+#endif
+    }
+
+    /* CMD7 - Select card */
+    status = mmc_send_cmd(MMC_CMD7_SELECT_CARD, g_rca << SD_RCA_SHIFT,
+        EMMC_SD_RESP_R1B);
+    if (status == DEVICE_BUSY) {
+        status = mmc_wait_busy(1);
+    }
+    if (status != 0) {
+        wolfBoot_printf("eMMC: CMD7 failed\n");
+        return status;
+    }
+
+    /* Set bus width to 4-bit */
+    status = emmc_set_bus_width(MMC_EXT_CSD_WIDTH_4BIT);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: Set bus width failed, continuing with 1-bit\n");
+        /* Non-fatal, continue with 1-bit */
+    }
+
+    /* Set clock to 25MHz for legacy mode */
+    mmc_set_clock(EMMC_SD_CLK_25MHZ);
+
+    /* Enable high speed if desired (optional for legacy mode) */
+    EMMC_SD_SRS10 |= EMMC_SD_SRS10_HSE;
+
+    return 0;
+}
+#endif /* USE_EMMC */
+
 /* MMC_CMD17_READ_SINGLE, MMC_CMD18_READ_MULTIPLE */
 int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     uint32_t sz)
@@ -1330,9 +1761,6 @@ int mmc_init(void)
 {
     int status = 0;
     uint32_t reg, cap;
-    uint32_t ctrl_volts, card_volts;
-    uint32_t irq_restore;
-    int xpc, si8r;
 
     /* Reset the MMC controller */
     SYSREG_SOFT_RESET_CR &= ~SYSREG_SOFT_RESET_CR_MMC;
@@ -1347,10 +1775,14 @@ int mmc_init(void)
     EMMC_SD_HRS01 = ((EMMC_SD_DEBOUNCE_TIME << EMMC_SD_HRS01_DP_SHIFT) &
                       EMMC_SD_HRS01_DP_MASK);
 
-    /* Select SDCard Mode */
+    /* Select card mode */
     reg = EMMC_SD_HRS06;
     reg &= ~EMMC_SD_HRS06_EMM_MASK;
-    reg |= EMMC_SD_HRS06_MODE_SD;
+#ifdef USE_EMMC
+    reg |= EMMC_SD_HRS06_MODE_LEGACY;  /* eMMC Legacy mode */
+#else
+    reg |= EMMC_SD_HRS06_MODE_SD;      /* SD card mode */
+#endif
     EMMC_SD_HRS06 = reg;
 
     /* Clear error/interrupt status */
@@ -1397,11 +1829,14 @@ int mmc_init(void)
         /* card not inserted or not stable */
         return -1;
     }
-    /* NOTE: if using eMMC mode skip this check */
+#ifndef USE_EMMC
+    /* For SD card: check if card is inserted
+     * (eMMC is soldered on board, skip this check) */
     if ((reg & EMMC_SD_SRS09_CI) == 0) {
         /* card not inserted */
         return -1;
     }
+#endif
 
     /* Start in 1-bit bus mode */
     EMMC_SD_SRS10 &= ~(EMMC_SD_SRS10_EDTW | EMMC_SD_SRS10_DTW);
@@ -1409,185 +1844,40 @@ int mmc_init(void)
     /* Setup 400khz starting clock */
     mmc_set_clock(EMMC_SD_CLK_400KHZ);
 
-    /* Set power to 3.3v and send init commands */
-    ctrl_volts = EMMC_SD_SRS10_BVS_3_3V; /* default to 3.3v */
-    status = mmc_power_init_seq(ctrl_volts);
-    if (status == 0) {
-        uint32_t max_ma_3_3v, max_ma_1_8v;
-        /* determine host controller capabilities */
-        reg = EMMC_SD_SRS18;
-        max_ma_3_3v = ((reg & EMMC_SD_SRS18_MC33_MASK) >> EMMC_SD_SRS18_MC33_SHIFT) * 4;
-        max_ma_1_8v = ((reg & EMMC_SD_SRS18_MC18_MASK) >> EMMC_SD_SRS18_MC18_SHIFT) * 4;
-        /* does controller support eXtended Power Control (XPC)? */
-        xpc = (max_ma_1_8v >= 150) && (max_ma_3_3v >= 150) ? 1 : 0;
-        /* does controller support UHS-I (Ultra High Speed Interface) v1.8 signaling? */
-        si8r =((EMMC_SD_SRS16 & EMMC_SD_SRS16_VS18) && /* 1.8v supported */
-               (EMMC_SD_SRS17 & (EMMC_SD_SRS17_DDR50 | /* DDR50, SDR104 or SDR50 supported */
-                                 EMMC_SD_SRS17_SDR104 |
-                                 EMMC_SD_SRS17_SDR50))) ? 1: 0;
-    #ifdef DEBUG_MMC
-        wolfBoot_printf("mmc_init: xpc:%d, si8r:%d, max_ma (3.3v:%d 1.8v:%d)\n",
-            xpc, si8r, max_ma_3_3v, max_ma_1_8v);
-    #endif
-    }
-    if (status == 0) {
-        reg = 0;
-        /* get operating conditions */
-        status = mmc_card_init(0, &reg);
-        if (status == 0) {
-            /* pick host and card operating voltages */
-            if (reg & SDCARD_REG_OCR_3_3_3_4) { /* 3.3v - 3.4v */
-                card_volts = SDCARD_REG_OCR_3_3_3_4;
-            }
-            else if (reg & SDCARD_REG_OCR_3_2_3_3) { /* 3.2v - 3.3v */
-                card_volts = SDCARD_REG_OCR_3_2_3_3;
-            }
-            else if (reg & SDCARD_REG_OCR_3_1_3_2) { /* 3.1v - 3.2v */
-                card_volts = SDCARD_REG_OCR_3_1_3_2;
-            }
-            else if (reg & SDCARD_REG_OCR_3_0_3_1) { /* 3.0v - 3.1v */
-                card_volts = SDCARD_REG_OCR_3_0_3_1;
-                ctrl_volts = EMMC_SD_SRS10_BVS_3_0V;
-            }
-            else if (reg & SDCARD_REG_OCR_2_9_3_0) { /* 2.9v - 3.0v */
-                card_volts = SDCARD_REG_OCR_2_9_3_0;
-                ctrl_volts = EMMC_SD_SRS10_BVS_3_0V;
-            }
-            else { /* default to v3.3 */
-                card_volts = SDCARD_REG_OCR_3_3_3_4;
-            }
-            /* if needed change operating volage and re-init */
-            if (ctrl_volts != EMMC_SD_SRS10_BVS_3_3V) {
-            #ifdef DEBUG_MMC
-                wolfBoot_printf("mmc_init: changing operating voltage to 3.0v\n");
-            #endif
-                status = mmc_power_init_seq(ctrl_volts);
-            }
-        }
-    }
-    if (status == 0) {
-        /* configure operating conditions */
-        uint32_t cmd_arg = SDCARD_ACMD41_HCS;
-        cmd_arg |= card_volts;
-        if (si8r) {
-            cmd_arg |= SDCARD_REG_OCR_S18RA;
-        }
-        if (xpc) {
-            cmd_arg |= SDCARD_REG_OCR_XPC;
-        }
-    #ifdef DEBUG_MMC
-        wolfBoot_printf("mmc_init: sending OCR arg: 0x%08X\n", cmd_arg);
-    #endif
+#ifdef USE_EMMC
+    /* =========================================================================
+     * eMMC Initialization Path
+     * ========================================================================= */
 
-        /* retry until OCR ready */
-        do {
-            status = mmc_card_init(cmd_arg, &reg);
-        } while (status == 0 && (reg & SDCARD_REG_OCR_READY) == 0);
+    /* Set power to 3.3v */
+    status = mmc_set_power(EMMC_SD_SRS10_BVS_3_3V);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: Failed to set power\n");
+        return status;
     }
-    if (status == 0) {
-        /* Get card identification */
-        status = mmc_send_cmd(MMC_CMD2_ALL_SEND_CID, 0, EMMC_SD_RESP_R2);
-    }
-    if (status == 0) {
-        /* Set relative address */
-        status = mmc_send_cmd(MMC_CMD3_SET_REL_ADDR, 0, EMMC_SD_RESP_R6);
-    }
-    if (status == 0) {
-        g_rca = ((EMMC_SD_SRS04 >> SD_RCA_SHIFT) & 0xFFFF);
-    #ifdef DEBUG_MMC
-        wolfBoot_printf("mmc_init: rca: %d\n", g_rca);
-    #endif
-    }
-    if (status == 0) {
-        /* read CSD register from device */
-        status = mmc_send_cmd(MMC_CMD9_SEND_CSD, g_rca << SD_RCA_SHIFT,
-            EMMC_SD_RESP_R2);
-    }
-    if (status == 0) {
-        /* Get sector size and count */
-        uint32_t csd_struct;
-        uint32_t bl_len, c_size, c_size_mult;
-        bl_len = get_srs_bits(22, 4);
-        g_sector_size = (1U << bl_len);
 
-        csd_struct = get_srs_bits(126, 2);
-        switch (csd_struct) {
-            case 0:
-                c_size = get_srs_bits(62, 12);
-                c_size_mult = get_srs_bits(47, 3);
-                g_sector_count = (c_size + 1) << (c_size_mult + 2);
-                break;
-            case 1:
-                c_size = get_srs_bits(48, 22);
-                g_sector_count = (c_size + 1) << 10;
-                break;
-            default:
-                /* invalid CSD structure */
-                status = -1;
-                break;
-        }
-    #ifdef DEBUG_MMC
-        wolfBoot_printf("mmc_init: csd_version: %d, sector: size %d count %d\n",
-            csd_struct, g_sector_size, g_sector_count);
-    #endif
+    /* Run full eMMC card initialization */
+    status = emmc_card_full_init();
+    if (status != 0) {
+        wolfBoot_printf("eMMC: Card initialization failed\n");
+        return status;
     }
-    if (status == 0) {
-        /* select card */
-        status = mmc_send_cmd(MMC_CMD7_SELECT_CARD, g_rca << SD_RCA_SHIFT,
-            EMMC_SD_RESP_R1B);
-        if (status == DEVICE_BUSY) {
-            status = mmc_wait_busy(1);
-        }
-    }
-    irq_restore = EMMC_SD_SRS13;
-    if (status == 0) {
-        /* disable card insert interrupt while changing bus width to avoid false triggers */
-        EMMC_SD_SRS13 = (irq_restore & ~EMMC_SD_SRS13_CINT_SE);
 
-        status = mmc_set_bus_width(4);
-    }
-    if (status == 0) {
-        /* Get SCR registers - 8 bytes */
-        uint32_t scr_reg[SCR_REG_DATA_SIZE/sizeof(uint32_t)];
-        status = mmc_read(SD_ACMD51_SEND_SCR, 0, scr_reg,
-            sizeof(scr_reg));
-    }
-    if (status == 0) {
-        /* set UHS mode to SDR25 and driver strength to Type B */
-        uint32_t card_access_mode = SDCARD_SWITCH_ACCESS_MODE_SDR25;
-        status = mmc_set_function(card_access_mode, 1);
-        if (status == 0) {
-            /* set driver strength */
-            reg = EMMC_SD_SRS15;
-            reg &= ~EMMC_SD_SRS15_DSS_MASK;
-            reg |= EMMC_SD_SRS15_DSS_TYPE_B; /* default */
-            EMMC_SD_SRS15 = reg;
+#else /* USE_SDCARD */
+    /* =========================================================================
+     * SD Card Initialization Path
+     * ========================================================================= */
 
-            /* enable high speed */
-            EMMC_SD_SRS10 |= EMMC_SD_SRS10_HSE;
-
-            /* set UHS mode */
-            reg = EMMC_SD_SRS15;
-            reg &= ~EMMC_SD_SRS15_UMS_MASK;
-            reg |= EMMC_SD_SRS15_UMS_SDR25;
-            EMMC_SD_SRS15 = reg;
-        }
+    /* Run full SD card initialization */
+    status = sdcard_card_full_init();
+    if (status != 0) {
+        wolfBoot_printf("SD Card: Card initialization failed\n");
+        return status;
     }
-    if (status == 0) {
-        mmc_set_clock(EMMC_SD_CLK_50MHZ);
 
-#ifdef ENABLE_MMC_SD_TUNING
-        /* PHY training for SDR25 at 50MHz */
-        status = mmc_tune(EMMC_SD_PHY_ADDR_UHSI_SDR25, EMMC_SD_CLK_50MHZ);
-        if (status != 0) {
-        #ifdef DEBUG_MMC
-            wolfBoot_printf("mmc_init: tuning failed, continuing\n");
-        #endif
-            status = 0; /* Don't fail init on tuning failure */
-        }
-#endif
-    }
-    EMMC_SD_SRS13 = irq_restore; /* re-enable interrupt */
+#endif /* USE_EMMC */
+
+    /* Common finalization for both eMMC and SD */
     if (status == 0) {
         /* Set data timeout to 3000ms */
         status = mmc_set_timeout(EMMC_SD_DATA_TIMEOUT_US);
