@@ -826,7 +826,7 @@
 
 /* Build-time card type selection
  * Define USE_EMMC in your config to use eMMC instead of SD card (default)
- * Example: CFLAGS += -DUSE_EMMC
+ * Example: CFLAGS_EXTRA += -DUSE_EMMC
  */
 #ifdef USE_EMMC
 #define WOLFBOOT_CARDTYPE WOLFBOOT_CARDTYPE_EMMC
