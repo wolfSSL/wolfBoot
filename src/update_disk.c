@@ -52,6 +52,9 @@
     defined(ENCRYPT_WITH_CHACHA)
 #define DISK_ENCRYPT
 #include "encrypt.h"
+
+/* Module-level storage for encryption nonce */
+static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #endif
 
 #include <stdint.h>
@@ -91,6 +94,92 @@
 #endif
 
 #ifdef DISK_ENCRYPT
+
+/* Module-level storage for encryption key */
+static uint8_t disk_encrypt_key[ENCRYPT_KEY_SIZE];
+
+/**
+ * @brief Get the version from an already-decrypted header.
+ *
+ * This function extracts the version from a decrypted header blob
+ * without calling wolfBoot_get_blob_version, which might try to
+ * decrypt again if EXT_ENCRYPTED && MMU is defined.
+ *
+ * @param hdr Pointer to the decrypted header.
+ *
+ * @return The version number, or 0 if not found.
+ */
+static uint32_t get_decrypted_blob_version(uint8_t *hdr)
+{
+    uint32_t *magic = (uint32_t *)hdr;
+    uint16_t tlv_type, tlv_len;
+    uint8_t *p = hdr + IMAGE_HEADER_OFFSET;
+    uint8_t *max_p = hdr + IMAGE_HEADER_SIZE;
+
+    if (*magic != WOLFBOOT_MAGIC)
+        return 0;
+
+    /* Search for version TLV */
+    while (p + 4 < max_p) {
+        tlv_type = *((uint16_t*)p);
+        tlv_len = *((uint16_t*)(p + 2));
+
+        if (tlv_type == 0 || tlv_type == 0xFFFF)
+            break;
+
+        /* Skip padding bytes */
+        if ((p[0] == 0xFF) || ((((uintptr_t)p) & 0x01) != 0)) {
+            p++;
+            continue;
+        }
+
+        if (tlv_type == HDR_VERSION && tlv_len == 4) {
+            uint32_t ver = *((uint32_t*)(p + 4));
+            return ver;
+        }
+
+        p += 4 + tlv_len;
+    }
+    return 0;
+}
+
+/**
+ * @brief Set up decryption context with IV at specified block offset.
+ *
+ * This function sets up the AES/ChaCha context with the IV positioned
+ * at the specified block offset. It matches how sign.c sets up encryption.
+ *
+ * @param block_offset Block offset for IV counter (0 = start of image).
+ */
+static void disk_crypto_set_iv(uint32_t block_offset)
+{
+#if defined(ENCRYPT_WITH_CHACHA)
+    wc_Chacha_SetIV(&chacha, disk_encrypt_nonce, block_offset);
+#elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    /* For AES CTR, we need to construct the IV with the counter.
+     * The sign tool uses the IV directly without byte-reversal,
+     * so we must match that behavior here. */
+    uint8_t iv[ENCRYPT_BLOCK_SIZE];
+    uint32_t ctr;
+
+    /* Copy nonce/IV (first 12 bytes for CTR nonce, last 4 for counter) */
+    memcpy(iv, disk_encrypt_nonce, ENCRYPT_NONCE_SIZE);
+
+    /* Add block offset to the counter portion (last 4 bytes, big-endian) */
+    /* The IV from sign.c is already in the correct format, we just need
+     * to add the block offset to the counter portion */
+    ctr = ((uint32_t)iv[12] << 24) | ((uint32_t)iv[13] << 16) |
+          ((uint32_t)iv[14] << 8) | (uint32_t)iv[15];
+    ctr += block_offset;
+    iv[12] = (uint8_t)(ctr >> 24);
+    iv[13] = (uint8_t)(ctr >> 16);
+    iv[14] = (uint8_t)(ctr >> 8);
+    iv[15] = (uint8_t)(ctr);
+
+    wc_AesSetIV(&aes_dec, iv);
+#endif
+}
+
 /**
  * @brief Decrypt an image header in RAM.
  *
@@ -104,13 +193,14 @@
  */
 static int decrypt_header(const uint8_t *src, uint8_t *dst)
 {
-    uint32_t i;
     uint32_t magic;
 
-    for (i = 0; i < IMAGE_HEADER_SIZE; i += ENCRYPT_BLOCK_SIZE) {
-        wolfBoot_crypto_set_iv(NULL, i / ENCRYPT_BLOCK_SIZE);
-        crypto_decrypt(dst + i, src + i, ENCRYPT_BLOCK_SIZE);
-    }
+    /* Reset IV to start of image (block 0) */
+    disk_crypto_set_iv(0);
+
+    /* Decrypt header - CTR mode handles counter increment internally */
+    crypto_decrypt(dst, src, IMAGE_HEADER_SIZE);
+
     magic = *((uint32_t*)dst);
     if (magic != WOLFBOOT_MAGIC)
         return -1;
@@ -130,22 +220,12 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
  */
 static int decrypt_image(uint8_t *data, uint32_t size)
 {
-    uint32_t iv_counter = 0;
-    uint32_t offset = 0;
-    uint8_t dec_block[ENCRYPT_BLOCK_SIZE];
+    /* Reset IV to start of image (block 0) */
+    disk_crypto_set_iv(0);
 
-    while (offset < size) {
-        uint32_t chunk = size - offset;
-        if (chunk > ENCRYPT_BLOCK_SIZE)
-            chunk = ENCRYPT_BLOCK_SIZE;
+    /* Decrypt entire image - CTR mode handles counter increment internally */
+    crypto_decrypt(data, data, size);
 
-        wolfBoot_crypto_set_iv(NULL, iv_counter);
-        crypto_decrypt(dec_block, data + offset, chunk);
-        memcpy(data + offset, dec_block, chunk);
-
-        offset += ENCRYPT_BLOCK_SIZE;
-        iv_counter++;
-    }
     return 0;
 }
 #endif /* DISK_ENCRYPT */
@@ -189,11 +269,17 @@ void RAMFUNCTION wolfBoot_start(void)
     uint64_t start_us, elapsed_ms;
 
 #ifdef DISK_ENCRYPT
-    /* Initialize encryption */
+    /* Initialize encryption - this sets up the cipher with key from storage */
     if (wolfBoot_initialize_encryption() != 0) {
         wolfBoot_printf("Error initializing encryption\r\n");
         wolfBoot_panic();
     }
+    /* Retrieve encryption key and nonce for disk decryption */
+    if (wolfBoot_get_encrypt_key(disk_encrypt_key, disk_encrypt_nonce) != 0) {
+        wolfBoot_printf("Error getting encryption key\r\n");
+        wolfBoot_panic();
+    }
+    wolfBoot_printf("Disk encryption enabled\r\n");
 #endif
 
     ret = disk_init(BOOT_DISK);
@@ -212,7 +298,9 @@ void RAMFUNCTION wolfBoot_start(void)
             == IMAGE_HEADER_SIZE) {
 #ifdef DISK_ENCRYPT
         if (decrypt_header(p_hdr, dec_hdr) == 0) {
-            pA_ver = wolfBoot_get_blob_version(dec_hdr);
+            /* Use local version parser to avoid double-decryption issue
+             * when EXT_ENCRYPTED && MMU is also defined */
+            pA_ver = get_decrypted_blob_version(dec_hdr);
         }
 #else
         pA_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
@@ -225,7 +313,9 @@ void RAMFUNCTION wolfBoot_start(void)
             == IMAGE_HEADER_SIZE) {
 #ifdef DISK_ENCRYPT
         if (decrypt_header(p_hdr, dec_hdr) == 0) {
-            pB_ver = wolfBoot_get_blob_version(dec_hdr);
+            /* Use local version parser to avoid double-decryption issue
+             * when EXT_ENCRYPTED && MMU is also defined */
+            pB_ver = get_decrypted_blob_version(dec_hdr);
         }
 #else
         pB_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
@@ -275,8 +365,19 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
 
+#ifdef DISK_ENCRYPT
+        /* Decrypt header to parse image size */
+        if (decrypt_header(p_hdr, dec_hdr) != 0) {
+            wolfBoot_printf("Error decrypting header for %s\r\n", part_name);
+            selected ^= 1;
+            continue;
+        }
+        memset(&os_image, 0, sizeof(os_image));
+        ret = wolfBoot_open_image_address(&os_image, (void*)dec_hdr);
+#else
         memset(&os_image, 0, sizeof(os_image));
         ret = wolfBoot_open_image_address(&os_image, (void*)p_hdr);
+#endif
         if (ret < 0) {
             wolfBoot_printf("Error parsing loaded image\r\n");
             selected ^= 1;

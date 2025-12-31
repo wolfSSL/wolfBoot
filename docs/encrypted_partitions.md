@@ -36,6 +36,55 @@ wolfBoot upon next boot.
 Aside from setting the temporary key, the update mechanism remains the same for distributing, uploading and
 installing firmware updates through wolfBoot.
 
+### Custom encryption key storage
+
+You can use the `CUSTOM_ENCRYPT_KEY` option to implement your own functions for:
+`wolfBoot_get_encrypt_key`, `wolfBoot_set_encrypt_key` and
+`wolfBoot_erase_encrypt_key`.
+
+To enable:
+
+1) Add `CUSTOM_ENCRYPT_KEY=1` to your `.config`
+2) Add your own .c file using `OBJS_EXTRA`. For example, for your own
+   `src/custom_encrypt_key.c` add this to your `.config`:
+   `OBJS_EXTRA=src/custom_encrypt_key.o`
+
+Your custom implementation must provide these functions:
+
+```c
+int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
+int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
+int wolfBoot_erase_encrypt_key(void);
+```
+
+Example custom function for testing:
+
+```c
+#include "wolfboot/wolfboot.h"
+#include "image.h"
+
+int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce)
+{
+    int i;
+    /* Test key: "0123456789abcdef0123456789abcdef" (32 bytes for AES-256) */
+    const char test_key[] = "0123456789abcdef0123456789abcdef";
+    /* Test nonce: "0123456789abcdef" (16 bytes) */
+    const char test_nonce[] = "0123456789abcdef";
+
+    for (i = 0; i < ENCRYPT_KEY_SIZE && i < (int)sizeof(test_key); i++) {
+        key[i] = (uint8_t)test_key[i];
+    }
+    for (i = 0; i < ENCRYPT_NONCE_SIZE && i < (int)sizeof(test_nonce); i++) {
+        nonce[i] = (uint8_t)test_nonce[i];
+    }
+    return 0;
+}
+```
+
+Note: On platforms that use the src/update_disk.c loader it only reads from a
+GPT partition and with ENCRYPT=1 it only needs `wolfBoot_get_encrypt_key` implemented.
+
+
 ### Libwolfboot API
 
 The API to communicate with the bootloader from the application is expanded when this feature is enabled,

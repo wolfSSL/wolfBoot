@@ -1047,23 +1047,20 @@ int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);  /* called automatically by wolfBoot_success() */
 ```
 
+To use your own implementation for getting the encryption key use `CUSTOM_ENCRYPT_KEY` and `OBJS_EXTRA=src/my_custom_encrypt_key.o`. Then provide your own implementation of `int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);`
+
 To sign and encrypt an image, create a key file with the concatenated key and nonce, then use the sign tool:
 
 ```sh
-# Create key file (32-byte key + 16-byte IV for AES-256)
-echo -n "0123456789abcdef0123456789abcdef0123456789abcdef" > enc_key.der
+# Create key file (32-byte key + 16-byte nonce for AES-256)
+printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 
 # Sign and encrypt
-./tools/keytools/sign --ecc384 --sha384 --aes256 --encrypt enc_key.der \
+./tools/keytools/sign --ecc384 --sha384 --aes256 --encrypt /tmp/enc_key.der \
     fitImage wolfboot_signing_private_key.der 1
 ```
 
-In your application, set the encryption key before triggering an update:
-
-```c
-wolfBoot_set_encrypt_key(enc_key, enc_iv);
-wolfBoot_update_trigger();
-```
+The result is `fitImage_v1_signed_and_encrypted.bin`, which gets placed into your OFP_A or OFP_B partitions.
 
 During boot, wolfBoot decrypts the image headers from disk to select the best candidate, loads and decrypts the full image to RAM, then verifies integrity and authenticity before booting. On successful boot, `wolfBoot_success()` clears the key from RAM.
 
