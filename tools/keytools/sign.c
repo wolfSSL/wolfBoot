@@ -206,9 +206,10 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define ENC_AES128 2
 #define ENC_AES256 3
 
-#define ENC_BLOCK_SIZE 16
-#define ENC_MAX_KEY_SZ 32
-#define ENC_MAX_IV_SZ  16
+/* Use algorithm-specific constants from wolfboot.h */
+#define ENC_MAX_BLOCK_SZ ENCRYPT_BLOCK_SIZE_CHACHA  /* 64 - largest block size */
+#define ENC_MAX_KEY_SZ   ENCRYPT_KEY_SIZE_AES256    /* 32 */
+#define ENC_MAX_IV_SZ    ENCRYPT_NONCE_SIZE_AES     /* 16 */
 
 static void header_append_u32(uint8_t* header, uint32_t* idx, uint32_t tmp32)
 {
@@ -1761,21 +1762,24 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
     if ((CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
         uint8_t key[ENC_MAX_KEY_SZ], iv[ENC_MAX_IV_SZ];
-        uint8_t enc_buf[ENC_BLOCK_SIZE];
-        int ivSz, keySz;
+        uint8_t enc_buf[ENC_MAX_BLOCK_SZ];
+        int ivSz, keySz, encBlockSz;
         uint32_t fsize = 0;
         switch (CMD.encrypt) {
             case ENC_CHACHA:
-                ivSz = CHACHA_IV_BYTES;
-                keySz = CHACHA_MAX_KEY_SZ;
+                ivSz = ENCRYPT_NONCE_SIZE_CHACHA;
+                keySz = ENCRYPT_KEY_SIZE_CHACHA;
+                encBlockSz = ENCRYPT_BLOCK_SIZE_CHACHA;
                 break;
             case ENC_AES128:
-                ivSz = 16;
-                keySz = 16;
+                ivSz = ENCRYPT_NONCE_SIZE_AES;
+                keySz = ENCRYPT_KEY_SIZE_AES128;
+                encBlockSz = ENCRYPT_BLOCK_SIZE_AES;
                 break;
             case ENC_AES256:
-                ivSz = 16;
-                keySz = 32;
+                ivSz = ENCRYPT_NONCE_SIZE_AES;
+                keySz = ENCRYPT_KEY_SIZE_AES256;
+                encBlockSz = ENCRYPT_BLOCK_SIZE_AES;
                 break;
             default:
                 printf("No valid encryption mode selected\n");
@@ -1817,9 +1821,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 #endif
             wc_Chacha_SetKey(&cha, key, sizeof(key));
             wc_Chacha_SetIV(&cha, iv, 0);
-            for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
+            for (pos = 0; pos < fsize; pos += encBlockSz) {
                 int fread_retval;
-                fread_retval = (int)fread(buf, 1, ENC_BLOCK_SIZE, f);
+                fread_retval = (int)fread(buf, 1, encBlockSz, f);
                 if ((fread_retval == 0) && feof(f)) {
                     break;
                 }
@@ -1830,14 +1834,14 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             Aes aes_e;
             wc_AesInit(&aes_e, NULL, 0);
             wc_AesSetKeyDirect(&aes_e, key, keySz, iv, AES_ENCRYPTION);
-            for (pos = 0; pos < fsize; pos += ENC_BLOCK_SIZE) {
+            for (pos = 0; pos < fsize; pos += encBlockSz) {
                 int fread_retval;
-                fread_retval = (int)fread(buf, 1, ENC_BLOCK_SIZE, f);
+                fread_retval = (int)fread(buf, 1, encBlockSz, f);
                 if ((fread_retval == 0) && feof(f)) {
                     break;
                 }
                 /* Pad with FF if input is too short */
-                while((fread_retval % ENC_BLOCK_SIZE) != 0) {
+                while((fread_retval % encBlockSz) != 0) {
                     buf[fread_retval++] = 0xFF;
                 }
                 wc_AesCtrEncrypt(&aes_e, enc_buf, buf, fread_retval);
