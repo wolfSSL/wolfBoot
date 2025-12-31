@@ -297,3 +297,6 @@ language.settings.xml
 .cproject
 .project
 .settings/
+
+# PolarFire SoC Device Tree Binary
+hal/mpfs.dtb

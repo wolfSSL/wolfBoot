@@ -1273,9 +1273,24 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) { /* no errors */
         /* if multi-block read, send CMD12 to stop transfer */
         if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
-            (void)mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
-                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
-                EMMC_SD_RESP_R1);
+            /* Clear transfer complete before CMD12 */
+            EMMC_SD_SRS12 = EMMC_SD_SRS12_TC;
+
+            /* CMD12 argument: SD uses RCA, eMMC uses stuff bits */
+#ifdef USE_EMMC
+            status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
+                MMC_CMD12_STOP_TRANS, 0, EMMC_SD_RESP_R1B);
+#else
+            status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
+                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT), EMMC_SD_RESP_R1B);
+#endif
+            if (status != 0) {
+                wolfBoot_printf("mmc_read: CMD12 stop transfer error\n");
+                /* Reset data/cmd lines to recover from error */
+                EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+                while (EMMC_SD_SRS11 & EMMC_SD_SRS11_RESET_DAT_CMD);
+                return -1;
+            }
         }
 
         /* wait for idle */
@@ -1283,6 +1298,9 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     }
     else {
         wolfBoot_printf("mmc_read: error SRS12: 0x%08X\n", reg);
+        /* Reset data/cmd lines to recover from error */
+        EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+        while (EMMC_SD_SRS11 & EMMC_SD_SRS11_RESET_DAT_CMD);
         status = -1; /* error */
     }
 
@@ -1425,12 +1443,23 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
     if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) { /* no errors */
         /* if multi-block write, send CMD12 to stop transfer */
         if (cmd_index == MMC_CMD25_WRITE_MULTIPLE) {
-            /* CMD12 requires CMD_ABORT type per SD spec */
+            /* Clear transfer complete before CMD12 */
+            EMMC_SD_SRS12 = EMMC_SD_SRS12_TC;
+
+            /* CMD12 argument: SD uses RCA, eMMC uses stuff bits */
+#ifdef USE_EMMC
             status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
-                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
-                EMMC_SD_RESP_R1B);
+                MMC_CMD12_STOP_TRANS, 0, EMMC_SD_RESP_R1B);
+#else
+            status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
+                MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT), EMMC_SD_RESP_R1B);
+#endif
             if (status != 0) {
                 wolfBoot_printf("mmc_write: CMD12 stop transfer error\n");
+                /* Reset data/cmd lines to recover from error */
+                EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+                while (EMMC_SD_SRS11 & EMMC_SD_SRS11_RESET_DAT_CMD);
+                return -1;
             }
         }
 
@@ -1439,6 +1468,9 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
     }
     else {
         wolfBoot_printf("mmc_write: error SRS12: 0x%08X\n", reg);
+        /* Reset data/cmd lines to recover from error */
+        EMMC_SD_SRS11 |= EMMC_SD_SRS11_RESET_DAT_CMD;
+        while (EMMC_SD_SRS11 & EMMC_SD_SRS11_RESET_DAT_CMD);
         status = -1; /* error */
     }
 
