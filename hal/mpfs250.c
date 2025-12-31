@@ -310,6 +310,14 @@ void mmc_irq_handler(void)
 
     /* Check for DMA interrupt */
     if (status & EMMC_SD_SRS12_DMAINT) {
+        /* Read updated DMA address - engine will increment block */
+        uint32_t* addr = (uint32_t*)(uintptr_t)((((uint64_t)EMMC_SD_SRS23) << 32) |
+                                                            EMMC_SD_SRS22);
+        /* Set new DMA address for next boundary */
+        EMMC_SD_SRS22 = (uint32_t)(uintptr_t)addr;
+        EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)addr) >> 32);
+        /* triggers next DMA block on write of top bit */
+
         g_mmc_irq_status |= MMC_IRQ_FLAG_DMAINT;
         EMMC_SD_SRS12 = EMMC_SD_SRS12_DMAINT; /* Clear interrupt */
     }
@@ -390,7 +398,6 @@ static int mmc_wait_irq(uint32_t expected_flags, uint32_t timeout)
                 return 0;
             }
         }
-        /* Brief delay while waiting */
         asm volatile("nop");
     }
     return -1; /* Timeout */
@@ -591,6 +598,7 @@ static uint32_t mmc_get_response_type(uint8_t resp_type)
     return cmd_reg;
 }
 
+#define DEVICE_BUSY 1
 static int mmc_send_cmd_internal(uint32_t cmd_type,
     uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
@@ -619,24 +627,18 @@ static int mmc_send_cmd_internal(uint32_t cmd_type,
     while ((EMMC_SD_SRS12 & (EMMC_SD_SRS12_CC | EMMC_SD_SRS12_TC |
         EMMC_SD_SRS12_EINT)) == 0 && --timeout > 0);
 
-    if (timeout == 0 || (EMMC_SD_SRS12 & EMMC_SD_SRS12_EINT)) {
-        wolfBoot_printf("mmc_send_cmd:%s error SRS12: 0x%08X\n",
-            (timeout == 0) ? " timeout" : "", EMMC_SD_SRS12);
+    if (timeout == 0) {
+        wolfBoot_printf("mmc_send_cmd: timeout waiting for command complete\n");
+        status = -1; /* error */
+    }
+    else if (EMMC_SD_SRS12 & EMMC_SD_SRS12_EINT) {
+        wolfBoot_printf("mmc_send_cmd: error SRS12: 0x%08X\n", EMMC_SD_SRS12);
         status = -1; /* error */
     }
 
     EMMC_SD_SRS12 = EMMC_SD_SRS12_CC; /* clear command complete */
     while ((EMMC_SD_SRS09 & EMMC_SD_SRS09_CICMD) != 0);
 
-    return status;
-}
-
-#define DEVICE_BUSY 1
-int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
-{
-    /* send command */
-    int status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_NORMAL, cmd_index,
-        cmd_arg, resp_type);
     if (status == 0) {
         /* check for device busy */
         if (resp_type == EMMC_SD_RESP_R1 || resp_type == EMMC_SD_RESP_R1B) {
@@ -648,8 +650,17 @@ int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
         }
     }
 
+    return status;
+}
+
+int mmc_send_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
+{
+    /* send command */
+    int status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_NORMAL, cmd_index,
+        cmd_arg, resp_type);
+
     /* clear all status interrupts
-    * (except current limit, card interrupt/removal/insert) */
+     * (except current limit, card interrupt/removal/insert) */
     EMMC_SD_SRS12 = ~(EMMC_SD_SRS12_ECL |
                       EMMC_SD_SRS12_CINT |
                       EMMC_SD_SRS12_CR |
@@ -737,7 +748,7 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
     /* wait for command and data line busy to clear */
     while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
 
-    /* set transfer block count */
+    /* set transfer block count and block size */
     EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
 
     cmd_reg = ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) |
@@ -762,16 +773,18 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
             EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
                 EMMC_SD_SRS01_DMA_BUFF_512KB | EMMC_SD_BLOCK_SIZE;
 
-            /* SDMA mode (for 32-bit transfers) */
+            /* SDMA mode */
             EMMC_SD_SRS10 |= EMMC_SD_SRS10_DMA_SDMA;
-            EMMC_SD_SRS15 |= EMMC_SD_SRS15_HV4E;
-            EMMC_SD_SRS16 &= ~EMMC_SD_SRS16_A64S;
             /* set SDMA destination address */
             EMMC_SD_SRS22 = (uint32_t)(uintptr_t)dst;
             EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)dst) >> 32);
 
             /* Enable SDMA interrupts */
             mmc_enable_sdma_interrupts();
+        }
+        else {
+            EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
+                EMMC_SD_BLOCK_SIZE;
         }
     }
 
@@ -780,9 +793,8 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
 
     if (cmd_reg & EMMC_SD_SRS03_DMAE) {
         while (1) { /* DMA mode with interrupt support */
-            /* Wait for DMA interrupt, transfer complete, or error */
-            status = mmc_wait_irq(MMC_IRQ_FLAG_DMAINT | MMC_IRQ_FLAG_TC,
-                                  0x00FFFFFF);
+            /* Wait for transfer complete or error */
+            status = mmc_wait_irq(MMC_IRQ_FLAG_TC, 0x00FFFFFF);
             if (status != 0) {
                 /* Timeout or error */
                 wolfBoot_printf("mmc_read: SDMA interrupt timeout/error\n");
@@ -794,17 +806,6 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
             if (g_mmc_irq_status & MMC_IRQ_FLAG_TC) {
                 g_mmc_irq_status &= ~MMC_IRQ_FLAG_TC;
                 break; /* Transfer complete */
-            }
-
-            /* Check for DMA boundary interrupt - need to update address */
-            if (g_mmc_irq_status & MMC_IRQ_FLAG_DMAINT) {
-                g_mmc_irq_status &= ~MMC_IRQ_FLAG_DMAINT;
-                /* Read updated DMA address - engine will have incremented */
-                dst = (uint32_t*)(uintptr_t)((((uint64_t)EMMC_SD_SRS23) << 32) |
-                                              EMMC_SD_SRS22);
-                /* Set new DMA address for next boundary */
-                EMMC_SD_SRS22 = (uint32_t)(uintptr_t)dst;
-                EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)dst) >> 32);
             }
         }
 
@@ -829,6 +830,10 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
                 }
                 sz -= read_sz;
             }
+
+            if (reg & EMMC_SD_SRS12_EINT) {
+                break; /* error */
+            }
         }
     }
 
@@ -839,7 +844,7 @@ int mmc_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst,
         if (cmd_index == MMC_CMD18_READ_MULTIPLE) {
             (void)mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
                 MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
-                EMMC_SD_RESP_R1); /* use R1B for write */
+                EMMC_SD_RESP_R1);
         }
 
         /* wait for idle */
@@ -895,20 +900,15 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
     /* wait for command and data line busy to clear */
     while ((EMMC_SD_SRS09 & (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
 
-    /* set transfer block count */
+    /* set transfer block count and block size */
     EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) | sz;
 
-    /* Build command register for write:
-     * - DTDS=0 for write direction (DTDS=1 is read)
-     * - DPS=1 data present
-     * - BCE=1 block count enable
-     * - RECE=1 response error check enable
-     * - RID=1 response interrupt disable
-     */
+    /* Build command register for write */
     cmd_reg = ((cmd_index << EMMC_SD_SRS03_CIDX_SHIFT) |
         EMMC_SD_SRS03_DPS | /* Data present, no DTDS = write direction */
         EMMC_SD_SRS03_BCE | EMMC_SD_SRS03_RECE | EMMC_SD_SRS03_RID |
-        EMMC_SD_SRS03_RESP_48 | EMMC_SD_SRS03_CRCCE | EMMC_SD_SRS03_CICE);
+        EMMC_SD_SRS03_RESP_48 | EMMC_SD_SRS03_CRCCE | EMMC_SD_SRS03_CICE
+    );
 
     if (cmd_index == MMC_CMD25_WRITE_MULTIPLE) {
         cmd_reg |= EMMC_SD_SRS03_MSBS; /* enable multi-block select */
@@ -930,20 +930,20 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
             /* Enable SDMA interrupts */
             mmc_enable_sdma_interrupts();
         }
+        else {
+            /* set transfer block count and block size */
+            EMMC_SD_SRS01 = (block_count << EMMC_SD_SRS01_BCCT_SHIFT) |
+                EMMC_SD_BLOCK_SIZE;
+        }
     }
-
-    /* wait for cmd/data line not busy */
-    while ((EMMC_SD_SRS09 &
-        (EMMC_SD_SRS09_CICMD | EMMC_SD_SRS09_CIDAT)) != 0);
 
     EMMC_SD_SRS02 = block_addr; /* cmd argument */
     EMMC_SD_SRS03 = cmd_reg; /* execute command */
 
     if (cmd_reg & EMMC_SD_SRS03_DMAE) {
         while (1) { /* DMA mode with interrupt support */
-            /* Wait for DMA interrupt, transfer complete, or error */
-            status = mmc_wait_irq(MMC_IRQ_FLAG_DMAINT | MMC_IRQ_FLAG_TC,
-                                  0x00FFFFFF);
+            /* Wait for transfer complete or error */
+            status = mmc_wait_irq(MMC_IRQ_FLAG_TC, 0x00FFFFFF);
             if (status != 0) {
                 /* Timeout or error */
                 wolfBoot_printf("mmc_write: SDMA interrupt timeout/error\n");
@@ -955,17 +955,6 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
             if (g_mmc_irq_status & MMC_IRQ_FLAG_TC) {
                 g_mmc_irq_status &= ~MMC_IRQ_FLAG_TC;
                 break; /* Transfer complete */
-            }
-
-            /* Check for DMA boundary interrupt - need to update address */
-            if (g_mmc_irq_status & MMC_IRQ_FLAG_DMAINT) {
-                g_mmc_irq_status &= ~MMC_IRQ_FLAG_DMAINT;
-                /* Read updated DMA address - engine will have incremented */
-                src = (const uint32_t*)(uintptr_t)((((uint64_t)EMMC_SD_SRS23) << 32) |
-                                                    EMMC_SD_SRS22);
-                /* Set new DMA address for next boundary */
-                EMMC_SD_SRS22 = (uint32_t)(uintptr_t)src;
-                EMMC_SD_SRS23 = (uint32_t)(((uint64_t)(uintptr_t)src) >> 32);
             }
         }
 
@@ -990,11 +979,14 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
                 }
                 sz -= write_sz;
             }
-
-            /* wait for trasnfer complete (or error) */
-            while (((reg = EMMC_SD_SRS12) &
-                (EMMC_SD_SRS12_TC | EMMC_SD_SRS12_EINT)) == 0);
+            if (reg & EMMC_SD_SRS12_EINT) {
+                break; /* error */
+            }
         }
+
+        /* wait for transfer complete (or error) BEFORE checking status */
+        while (((reg = EMMC_SD_SRS12) &
+            (EMMC_SD_SRS12_TC | EMMC_SD_SRS12_EINT)) == 0);
     }
 
     /* check for any errors */
@@ -1002,18 +994,17 @@ int mmc_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src,
     if ((reg & EMMC_SD_SRS12_ERR_STAT) == 0) { /* no errors */
         /* if multi-block write, send CMD12 to stop transfer */
         if (cmd_index == MMC_CMD25_WRITE_MULTIPLE) {
+            /* CMD12 requires CMD_ABORT type per SD spec */
             status = mmc_send_cmd_internal(EMMC_SD_SRS03_CMD_ABORT,
                 MMC_CMD12_STOP_TRANS, (g_rca << SD_RCA_SHIFT),
-                EMMC_SD_RESP_R1B); /* R1B for write with busy */
+                EMMC_SD_RESP_R1B);
             if (status != 0) {
                 wolfBoot_printf("mmc_write: CMD12 stop transfer error\n");
             }
         }
 
-        /* wait for card to finish programming (DAT0 goes high when ready) */
-        if (status == 0) {
-            status = mmc_wait_busy(1);
-        }
+        /* wait for idle */
+        status = mmc_wait_busy(0);
     }
     else {
         wolfBoot_printf("mmc_write: error SRS12: 0x%08X\n", reg);
@@ -1393,7 +1384,7 @@ int mmc_init(void)
     plic_init_mmc();
 
     /* Set initial timeout to 500ms */
-    status = mmc_set_timeout(EMMC_SD_DATA_TIMEOUT_US);
+    status = mmc_set_timeout(EMMC_SD_INIT_TIMEOUT_US);
     if (status != 0) {
         return status;
     }
@@ -1548,9 +1539,9 @@ int mmc_init(void)
             status = mmc_wait_busy(1);
         }
     }
+    irq_restore = EMMC_SD_SRS13;
     if (status == 0) {
         /* disable card insert interrupt while changing bus width to avoid false triggers */
-        irq_restore = EMMC_SD_SRS13;
         EMMC_SD_SRS13 = (irq_restore & ~EMMC_SD_SRS13_CINT_SE);
 
         status = mmc_set_bus_width(4);
@@ -1595,8 +1586,11 @@ int mmc_init(void)
             status = 0; /* Don't fail init on tuning failure */
         }
 #endif
-
-        EMMC_SD_SRS13 = irq_restore; /* re-enable interrupt */
+    }
+    EMMC_SD_SRS13 = irq_restore; /* re-enable interrupt */
+    if (status == 0) {
+        /* Set data timeout to 3000ms */
+        status = mmc_set_timeout(EMMC_SD_DATA_TIMEOUT_US);
     }
     return status;
 }
@@ -1675,8 +1669,8 @@ int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
             write_sz = EMMC_SD_BLOCK_SIZE;
         }
         if (write_sz < EMMC_SD_BLOCK_SIZE || /* partial block */
-            start_offset != 0 ||              /* start not block aligned */
-            ((uintptr_t)buf % 4) != 0)        /* buf not 4-byte aligned */
+            start_offset != 0 ||             /* start not block aligned */
+            ((uintptr_t)buf % 4) != 0)       /* buf not 4-byte aligned */
         {
             /* read-modify-write for partial block */
             status = mmc_read(MMC_CMD17_READ_SINGLE, block_addr,

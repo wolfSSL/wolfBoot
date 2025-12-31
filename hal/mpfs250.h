@@ -817,8 +817,8 @@
 #define EMMC_SD_DEBOUNCE_TIME     0x300000U
 
 /* Timeout values */
-#define EMMC_SD_DATA_TIMEOUT_US   750000U  /* 750ms data timeout */
-#define EMMC_SD_CMD_TIMEOUT_MS    3000U    /* 3s command timeout */
+#define EMMC_SD_INIT_TIMEOUT_US   (500U * 1000U)  /* 500ms init timeout */
+#define EMMC_SD_DATA_TIMEOUT_US   (3000U * 1000U) /* 3000ms data timeout */
 
 #define WOLFBOOT_CARDTYPE_SD   1
 #define WOLFBOOT_CARDTYPE_EMMC 2
