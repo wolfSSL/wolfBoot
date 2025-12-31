@@ -820,12 +820,52 @@
 #define EMMC_SD_INIT_TIMEOUT_US   (500U * 1000U)  /* 500ms init timeout */
 #define EMMC_SD_DATA_TIMEOUT_US   (3000U * 1000U) /* 3000ms data timeout */
 
+/* Card type definitions */
 #define WOLFBOOT_CARDTYPE_SD   1
 #define WOLFBOOT_CARDTYPE_EMMC 2
 
+/* Build-time card type selection
+ * Define USE_EMMC in your config to use eMMC instead of SD card (default)
+ * Example: CFLAGS += -DUSE_EMMC
+ */
+#ifdef USE_EMMC
+#define WOLFBOOT_CARDTYPE WOLFBOOT_CARDTYPE_EMMC
+#else
 #define WOLFBOOT_CARDTYPE WOLFBOOT_CARDTYPE_SD
+#endif
 
 #define MAX_CURRENT_MA 150 /* mA */
+
+/* ----------------------------------------------------------------------------
+ * eMMC-specific Constants (for CMD1 and CMD6 SWITCH)
+ * ---------------------------------------------------------------------------- */
+
+/* CMD1 SEND_OP_COND argument values */
+#define MMC_DEVICE_3_3V_VOLT_SET  0x40300000U  /* 3.3V, sector addressing mode */
+#define MMC_DEVICE_1_8V_VOLT_SET  0x40000080U  /* 1.8V, sector addressing mode */
+#define MMC_OCR_BUSY_BIT          0x80000000U  /* Device ready/busy bit */
+#define MMC_OCR_SECTOR_MODE       0x40000000U  /* Sector addressing mode bit */
+
+/* CMD6 SWITCH command - EXT_CSD access for bus width */
+#define MMC_CMD6_SWITCH           6
+#define MMC_DW_CSD                0x03B70000U  /* Access byte 183 (BUS_WIDTH) in EXT_CSD */
+#define MMC_HS_TIMING             0x03B90000U  /* Access byte 185 (HS_TIMING) in EXT_CSD */
+
+/* eMMC data bus width values for CMD6 SWITCH (byte value << 8) */
+#define MMC_EXT_CSD_WIDTH_1BIT    0x00U
+#define MMC_EXT_CSD_WIDTH_4BIT    0x01U
+#define MMC_EXT_CSD_WIDTH_8BIT    0x02U
+#define MMC_EXT_CSD_WIDTH_4BIT_DDR 0x05U
+#define MMC_EXT_CSD_WIDTH_8BIT_DDR 0x06U
+
+/* eMMC HS_TIMING values */
+#define MMC_HS_TIMING_LEGACY      0x00U
+#define MMC_HS_TIMING_HS          0x01U
+#define MMC_HS_TIMING_HS200       0x02U
+#define MMC_HS_TIMING_HS400       0x03U
+
+/* eMMC default RCA (host-assigned, typically 1) */
+#define MMC_EMMC_RCA_DEFAULT      0x0001U
 
 #define SD_RCA_SHIFT 16 /* relative card address */
 #define SD_RCA_MASK  (0xFFFFU << SD_RCA_SHIFT) /* relative card address mask */
