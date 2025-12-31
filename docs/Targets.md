@@ -1094,7 +1094,8 @@ set architecture riscv:rv64
 ### PolarFire Example Boot Output
 
 ```
-wolfBoot Version: 2.7.0 (Dec 29 2025 11:34:01)
+wolfBoot Version: 2.7.0 (Dec 31 2025 15:33:35)
+Disk encryption enabled
 Reading MBR...
 Found GPT PTE at sector 1
 Found valid boot signature in MBR
@@ -1111,12 +1112,13 @@ disk0.p3 (7_65AFFE00h@ 0_8900000)
 Total partitions on disk0: 4
 Checking primary OS image in 0,1...
 Checking secondary OS image in 0,2...
-Versions, A:1 B:1
+Versions, A:1 B:0
 Load address 0x8E000000
 Attempting boot from P:A
-Boot partition: 0x801FFD80 (sz 19767004, ver 0x1, type 0x601)
-Loading image from disk...done. (846 ms)
-Boot partition: 0x8E000000 (sz 19767004, ver 0x1, type 0x601)
+Boot partition: 0x801FFD90 (sz 19767004, ver 0x0, type 0x0)
+Loading image from disk...done. (877 ms)
+Decrypting image...done. (2894 ms)
+Boot partition: 0x8E000000 (sz 19767004, ver 0x0, type 0x0)
 Checking image integrity...done. (1507 ms)
 Verifying image signature...done. (68 ms)
 Firmware Valid.
@@ -1128,6 +1130,11 @@ Image fdt-1: 0x8A000000 (19897 bytes)
 Loading DTS: 0x8A000000 -> 0x8A000000 (19897 bytes)
 Invalid elf, falling back to raw binary
 Booting at 80200000
+FDT: Version 17, Size 19897
+FDT: Set chosen (13840), bootargs=earlycon root=/dev/mmcblk0p4 rootwait uio_pdrv_genirq.of_id=generic-uio
+FDT: Device serial: 219A437C-6AE1F1C2-8EDC4324-685B2288
+FDT: MAC0 = 00:04:A3:5B:22:88
+FDT: MAC1 = 00:04:A3:5B:22:89
 [    0.000000] Linux version 6.12.22-linux4microchip+fpga-2025.07-g032a7095303a (oe-user@oe-host) (riscv64-oe-linux-gcc (GCC) 13.3.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP Tue Jul 22 10:04:20 UTC 2025
 [    0.000000] Machine model: Microchip PolarFire-SoC VIDEO Kit
 [    0.000000] SBI specification v1.0 detected
@@ -1193,7 +1200,6 @@ Benchmark complete
 
 ### PolarFire TODO
 
-* Add support for reading serial number and modifying ethernet MAC in device tree
 * Add support for QSPI NOR flash
 * Add support for full HSS replacement using wolfboot
   - Machine level assembly startup

@@ -131,6 +131,39 @@
  * ============================================================================ */
 #define EMMC_SD_BASE 0x20008000UL
 
+/* ============================================================================
+ * System Controller Mailbox
+ * Control Base: 0x37020000
+ * Mailbox RAM:  0x37020800
+ *
+ * Used for system services like reading the device serial number.
+ * ============================================================================ */
+#define SCBCTRL_BASE       0x37020000UL
+#define SCBMBOX_BASE       0x37020800UL
+
+/* System Services Control and Status Register offsets (from SCBCTRL_BASE) */
+#define SERVICES_CR_OFFSET 0x50u
+#define SERVICES_SR_OFFSET 0x54u
+
+/* Control Register bits */
+#define SERVICES_CR_REQ_MASK      0x01u
+#define SERVICES_CR_COMMAND_SHIFT 16
+
+/* Status Register bits */
+#define SERVICES_SR_BUSY_MASK     0x02u
+#define SERVICES_SR_STATUS_SHIFT  16
+
+/* System Service command opcodes */
+#define SYS_SERV_CMD_SERIAL_NUMBER 0x00u
+
+/* Device serial number size in bytes */
+#define DEVICE_SERIAL_NUMBER_SIZE 16
+
+/* System Controller register access */
+#define SCBCTRL_REG(off) (*((volatile uint32_t*)(SCBCTRL_BASE + (off))))
+#define SCBMBOX_REG(off) (*((volatile uint32_t*)(SCBMBOX_BASE + (off))))
+#define SCBMBOX_BYTE(off) (*((volatile uint8_t*)(SCBMBOX_BASE + (off))))
+
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
