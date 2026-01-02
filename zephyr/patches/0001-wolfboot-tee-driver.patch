@@ -1,0 +1,21 @@
+diff --git a/drivers/tee/CMakeLists.txt b/drivers/tee/CMakeLists.txt
+index aaf8924b096..15ca3a06782 100644
+--- a/drivers/tee/CMakeLists.txt
++++ b/drivers/tee/CMakeLists.txt
+@@ -3,4 +3,5 @@
+ add_subdirectory_ifdef(CONFIG_OPTEE optee)
++add_subdirectory_ifdef(CONFIG_WOLFBOOT_TEE wolfboot)
+ 
+ if(CONFIG_TEE)
+ zephyr_library()
+diff --git a/drivers/tee/Kconfig b/drivers/tee/Kconfig
+index dd5acce4e00..24447494d01 100644
+--- a/drivers/tee/Kconfig
++++ b/drivers/tee/Kconfig
+@@ -14,5 +14,6 @@ module-str = tee
+ comment "Device Drivers"
+ 
+ source "drivers/tee/optee/Kconfig"
++source "drivers/tee/wolfboot/Kconfig"
+ 
+ endif # TEE

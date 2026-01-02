@@ -1,0 +1,20 @@
+diff --git a/dts/bindings/vendor-prefixes.txt b/dts/bindings/vendor-prefixes.txt
+index a81e9000b8a..c36bbcd36e5 100644
+--- a/dts/bindings/vendor-prefixes.txt
++++ b/dts/bindings/vendor-prefixes.txt
+@@ -166,7 +166,6 @@ csq	Shenzen Chuangsiqi Technology Co.,Ltd.
+ ct	CTHINGS.CO
+ cubietech	Cubietech, Ltd.
+ cypress	Cypress Semiconductor Corporation
+-cytron	Cytron Technologies
+ cznic	CZ.NIC, z.s.p.o.
+ dallas	Maxim Integrated Products (formerly Dallas Semiconductor)
+ dataimage	DataImage, Inc.
+@@ -770,6 +769,7 @@ wits	Shenzhen Merrii Technology Co., Ltd. (WITS)
+ witte	Witte Technology
+ wiznet	WIZnet Co., Ltd.
+ wlf	Wolfson Microelectronics
++wolfssl	wolfSSL Inc.
+ wm	Wondermedia Technologies, Inc.
+ wnc	Wistron NeWeb Corporation
+ wobo	Wobo

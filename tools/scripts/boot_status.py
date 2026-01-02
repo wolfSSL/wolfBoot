@@ -205,6 +205,46 @@ def hash_name_for_len(n: int):
     if n == 64: return "sha512"
     return None
 
+def resolve_header_size(args) -> int:
+    """Resolve header size from args or optional .config."""
+    if args.header_size is not None:
+        return args.header_size
+    if getattr(args, "config", None):
+        cfg = read_config(args.config)
+        if "IMAGE_HEADER_SIZE" in cfg:
+            try:
+                return int(cfg["IMAGE_HEADER_SIZE"], 0)
+            except ValueError:
+                pass
+    return 0x100
+
+def auto_detect_header_size_for_hash(data: bytes) -> int | None:
+    """Try common header sizes and return the one that verifies the hash."""
+    for header_size in (0x100, 0x200, 0x400, 0x800, 0x1000, 0x2000):
+        if len(data) < header_size + 8:
+            continue
+        try:
+            hdr = parse_header(data, header_size=header_size)
+        except Exception:
+            continue
+        sha_info = find_tlv(data, header_size, 0x0003)
+        if sha_info is None:
+            continue
+        sha_val_off, sha_len, sha_tlv_hdr = sha_info
+        hash_bytes = data[sha_val_off:sha_val_off + sha_len]
+        header_prefix_end = sha_tlv_hdr
+        header_prefix = data[0:header_prefix_end]
+        payload = data[header_size: header_size + hdr["size"]]
+        hname = hash_name_for_len(sha_len)
+        if not hname:
+            continue
+        h = hashlib.new(hname)
+        h.update(header_prefix)
+        h.update(payload)
+        if h.digest() == hash_bytes:
+            return header_size
+    return None
+
 def try_load_public_key(pubkey_path: Path):
     """Load a public key from PEM or DER format."""
     try:
@@ -273,7 +313,8 @@ def cmd_image_inspect(args):
         sys.exit(1)
 
     data = img_path.read_bytes()
-    hdr = parse_header(data, header_size=args.header_size)
+    header_size = resolve_header_size(args)
+    hdr = parse_header(data, header_size=header_size)
     magic = hdr["magic"]; size = hdr["size"]; header_size = hdr["header_size"]; tlist = hdr["tlvs"]
     d = tlv_dict(tlist)
 
@@ -324,13 +365,20 @@ def cmd_image_verify(args):
         sys.exit(1)
 
     data = img_path.read_bytes()
-    hdr = parse_header(data, header_size=args.header_size)
+    header_size = resolve_header_size(args)
+    if args.header_size is None and args.verify_hash and not getattr(args, "config", None):
+        auto_size = auto_detect_header_size_for_hash(data)
+        if auto_size is not None:
+            header_size = auto_size
+            print(f"[HASH] Auto-detected header size: 0x{header_size:x}")
+    hdr = parse_header(data, header_size=header_size)
     magic = hdr["magic"]; size = hdr["size"]; header_size = hdr["header_size"]; tlist = hdr["tlvs"]
     d = tlv_dict(tlist)
 
     # Show basic info
     print(f"Magic: {magic.decode('ascii', 'replace')} (raw: {magic.hex()})")
     print(f"Payload size: {size} (0x{size:08X})")
+    print(f"Header size: {header_size} (0x{header_size:X})")
 
     hash_bytes = d.get(0x0003, [(None, None)])[0][1]
     sig = d.get(0x0020, [(None, None)])[0][1]
@@ -392,7 +440,8 @@ def cmd_image_dump(args):
         sys.exit(1)
 
     data = img_path.read_bytes()
-    hdr = parse_header(data, header_size=args.header_size)
+    header_size = resolve_header_size(args)
+    hdr = parse_header(data, header_size=header_size)
     size = hdr["size"]
     header_size = hdr["header_size"]
 
@@ -552,14 +601,16 @@ def main():
     # image inspect
     img_inspect = image_subparsers.add_parser("inspect", help="Inspect image header and metadata")
     img_inspect.add_argument("image", help="Signed image file")
-    img_inspect.add_argument("--header-size", type=lambda x: int(x, 0), default=0x100,
-                             help="Header size (default 0x100)")
+    img_inspect.add_argument("--header-size", type=lambda x: int(x, 0), default=None,
+                             help="Header size (default 0x100 if not provided)")
+    img_inspect.add_argument("--config", help="Path to wolfBoot .config (for IMAGE_HEADER_SIZE)")
 
     # image verify
     img_verify = image_subparsers.add_parser("verify", help="Verify image hash and signature")
     img_verify.add_argument("image", help="Signed image file")
-    img_verify.add_argument("--header-size", type=lambda x: int(x, 0), default=0x100,
-                            help="Header size (default 0x100)")
+    img_verify.add_argument("--header-size", type=lambda x: int(x, 0), default=None,
+                            help="Header size (default 0x100 if not provided)")
+    img_verify.add_argument("--config", help="Path to wolfBoot .config (for IMAGE_HEADER_SIZE)")
     img_verify.add_argument("--pubkey", metavar="KEY", help="Public key file (PEM/DER) for signature verification")
     img_verify.add_argument("--alg", choices=["ecdsa-p256", "ed25519"], help="Signature algorithm (auto-detect if omitted)")
     img_verify.add_argument("--verify-hash", action="store_true", help="Verify payload hash")
@@ -568,8 +619,9 @@ def main():
     img_dump = image_subparsers.add_parser("dump", help="Dump payload to file")
     img_dump.add_argument("image", help="Signed image file")
     img_dump.add_argument("output", help="Output file for payload")
-    img_dump.add_argument("--header-size", type=lambda x: int(x, 0), default=0x100,
-                          help="Header size (default 0x100)")
+    img_dump.add_argument("--header-size", type=lambda x: int(x, 0), default=None,
+                          help="Header size (default 0x100 if not provided)")
+    img_dump.add_argument("--config", help="Path to wolfBoot .config (for IMAGE_HEADER_SIZE)")
 
     # ========================================================================
     # KEYSTORE SUBCOMMAND

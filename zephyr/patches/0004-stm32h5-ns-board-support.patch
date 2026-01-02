@@ -1,0 +1,79 @@
+diff --git a/boards/st/nucleo_h563zi/Kconfig.defconfig b/boards/st/nucleo_h563zi/Kconfig.defconfig
+index e14e20d30a4..824a007d004 100644
+--- a/boards/st/nucleo_h563zi/Kconfig.defconfig
++++ b/boards/st/nucleo_h563zi/Kconfig.defconfig
+@@ -8,4 +8,7 @@ if BOARD_NUCLEO_H563ZI
+ configdefault NET_L2_ETHERNET
+ 	default y
+ 
++config BUILD_OUTPUT_ADJUST_LMA
++	default "0x400" if TRUSTED_EXECUTION_NONSECURE
++
+ endif # BOARD_NUCLEO_H563ZI
+diff --git a/boards/st/nucleo_h563zi/board.yml b/boards/st/nucleo_h563zi/board.yml
+index fec89e6d37b..b0814b9397b 100644
+--- a/boards/st/nucleo_h563zi/board.yml
++++ b/boards/st/nucleo_h563zi/board.yml
+@@ -4,3 +4,5 @@ board:
+   vendor: st
+   socs:
+     - name: stm32h563xx
++      variants:
++        - name: ns
+diff --git a/boards/st/stm32h573i_dk/Kconfig.defconfig b/boards/st/stm32h573i_dk/Kconfig.defconfig
+index b24ccf7f106..f0a1fbfea3f 100644
+--- a/boards/st/stm32h573i_dk/Kconfig.defconfig
++++ b/boards/st/stm32h573i_dk/Kconfig.defconfig
+@@ -13,6 +13,9 @@ configdefault NET_L2_ETHERNET
+ configdefault SDMMC_STM32_CLOCK_CHECK
+ 	default n
+ 
++config BUILD_OUTPUT_ADJUST_LMA
++	default "0x400" if TRUSTED_EXECUTION_NONSECURE
++
+ if DISPLAY
+ 
+ choice ST7789V_PIXEL_FORMAT
+diff --git a/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns.dts b/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns.dts
+index 46357c2e2d5..66583781c3c 100644
+--- a/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns.dts
++++ b/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns.dts
+@@ -16,12 +16,13 @@
+ 		zephyr,flash = &flash0;
+ 		zephyr,flash-controller = &flash;
+ 		zephyr,code-partition = &slot0_ns_partition;
++		zephyr,sram = &sram3;
+ 	};
+ };
+ 
+-/* Last 64kB of SRAM1 are owned by TF-M */
++/* Use SRAM3 for non-secure, keep SRAM1/2 secure */
+ &sram1 {
+-	reg = <0x20000000 DT_SIZE_K(256 - 64)>;
++	status = "disabled";
+ };
+ 
+ /* SRAM2 is owned by TF-M */
+@@ -29,6 +30,10 @@
+ 	status = "disabled";
+ };
+ 
++&sram3 {
++	reg = <0x20050000 DT_SIZE_K(256)>;
++};
++
+ &flash0 {
+ 	partitions {
+ 		compatible = "fixed-partitions";
+diff --git a/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns_defconfig b/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns_defconfig
+index ecccf647305..0d19316aaf5 100644
+--- a/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns_defconfig
++++ b/boards/st/stm32h573i_dk/stm32h573i_dk_stm32h573xx_ns_defconfig
+@@ -22,3 +22,7 @@ CONFIG_GPIO=y
+ CONFIG_TRUSTED_EXECUTION_NONSECURE=y
+ CONFIG_RUNTIME_NMI=y
+ CONFIG_TFM_MCUBOOT_SIGNATURE_TYPE="RSA-3072"
++
++# Use SRAM3 as non-secure RAM (aligned with wolfBoot TZ layout)
++CONFIG_SRAM_BASE_ADDRESS=0x20050000
++CONFIG_SRAM_SIZE=256

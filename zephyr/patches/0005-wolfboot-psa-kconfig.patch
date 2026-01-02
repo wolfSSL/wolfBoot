@@ -1,0 +1,26 @@
+diff --git a/modules/mbedtls/Kconfig.mbedtls b/modules/mbedtls/Kconfig.mbedtls
+index c8065fa758a..ab68e1fc398 100644
+--- a/modules/mbedtls/Kconfig.mbedtls
++++ b/modules/mbedtls/Kconfig.mbedtls
+@@ -595,7 +595,7 @@ config MBEDTLS_USE_PSA_CRYPTO
+ config MBEDTLS_PSA_CRYPTO_CLIENT
+ 	bool
+ 	default y
+-	depends on BUILD_WITH_TFM || MBEDTLS_PSA_CRYPTO_C
++	depends on BUILD_WITH_TFM || MBEDTLS_PSA_CRYPTO_C || WOLFBOOT_TEE
+ 	select PSA_CRYPTO_CLIENT
+ 
+ config MBEDTLS_LMS_C
+diff --git a/soc/st/stm32/Kconfig.defconfig b/soc/st/stm32/Kconfig.defconfig
+index e1e234b2465..77d27eb1b56 100644
+--- a/soc/st/stm32/Kconfig.defconfig
++++ b/soc/st/stm32/Kconfig.defconfig
+@@ -97,7 +97,7 @@ config USE_DT_CODE_PARTITION
+ 	default y if TRUSTED_EXECUTION_NONSECURE
+ 
+ config BUILD_WITH_TFM
+-	default y if TRUSTED_EXECUTION_NONSECURE
++	default y if TRUSTED_EXECUTION_NONSECURE && TFM_BOARD != ""
+ 
+ config FLASH_BASE_ADDRESS
+ 	default $(dt_node_reg_addr_hex,$(DT_CHOSEN_FLASH_PARENT),1) \
