@@ -875,7 +875,7 @@ static int RAMFUNCTION hal_flash_init(void)
         g_bootloaderTree = (bootloader_api_entry_t *)*(uint32_t *)0x0020001c;
     #ifdef USE_GET_CONFIG
         memset(&flexspi_cfg_option, 0, sizeof(flexspi_cfg_option));
-        flexspi_cfg_option.option0.U = 0xC0000007; /* QuadSPI-NOR, f = default */
+        flexspi_cfg_option.option0.U = 0xC0000000 | CONFIG_SERIAL_CLK_FREQ; /* QuadSPI-NOR */
         /**
          * Disable interrupts before accessing flash when using XIP
          * (note 4 p.279 in i.MX RT1060 Processor Reference Manual, Rev. 3, 07/2021)
