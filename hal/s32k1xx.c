@@ -129,6 +129,45 @@ static void watchdog_refresh(void)
 
 /* ============== Clock Configuration ============== */
 
+/* SIRC - Slow Internal RC (8 MHz) register fields */
+#define SCG_SIRCCSR_SIRCEN      (1UL << 0)
+#define SCG_SIRCCSR_SIRCVLD     (1UL << 24)
+#define SCG_xCCR_SCS_SIRC       (2UL << SCG_xCCR_SCS_SHIFT)
+#define SCG_CSR_SCS_SIRC        (2UL << SCG_CSR_SCS_SHIFT)
+
+#ifdef WOLFBOOT_RESTORE_CLOCK
+/* Restore clock to safe default (SIRC 8 MHz) before booting application.
+ * This allows the application to configure clocks from a known state.
+ */
+static void clock_restore_sirc(void)
+{
+    /* Enable SIRC (8 MHz) if not already enabled */
+    SCG_SIRCDIV = (1UL << 8) | (1UL << 0);  /* SIRCDIV1=/1, SIRCDIV2=/1 */
+    SCG_SIRCCFG = 0;  /* Range 0: 2 MHz (default) - actually S32K uses 8MHz SIRC */
+    SCG_SIRCCSR = SCG_SIRCCSR_SIRCEN;
+
+    /* Wait for SIRC valid */
+    while (!(SCG_SIRCCSR & SCG_SIRCCSR_SIRCVLD)) {}
+
+    /* Switch to SIRC as system clock
+     * SCS = SIRC (2)
+     * DIVCORE = /1 (8 MHz)
+     * DIVBUS = /1 (8 MHz)
+     * DIVSLOW = /1 (8 MHz)
+     */
+    SCG_RCCR = SCG_xCCR_SCS_SIRC |
+               (0UL << SCG_xCCR_DIVCORE_SHIFT) |
+               (0UL << SCG_xCCR_DIVBUS_SHIFT) |
+               (0UL << SCG_xCCR_DIVSLOW_SHIFT);
+
+    /* Wait for clock switch */
+    while ((SCG_CSR & SCG_CSR_SCS_MASK) != SCG_CSR_SCS_SIRC) {}
+
+    /* Disable FIRC to save power (application can re-enable if needed) */
+    SCG_FIRCCSR &= ~SCG_FIRCCSR_FIRCEN;
+}
+#endif /* WOLFBOOT_RESTORE_CLOCK */
+
 static void clock_init_firc(void)
 {
     /* Enable FIRC (48 MHz) */
@@ -425,8 +464,48 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    /* Nothing special needed before jumping to app */
+#ifdef DEBUG_UART
+    /* Wait for any pending UART transmission to complete */
+    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+#endif
+
+#ifdef WOLFBOOT_RESTORE_CLOCK
+    /* Restore clock to SIRC (8 MHz) before booting application.
+     * This gives the application a known clock state to start from.
+     */
+    clock_restore_sirc();
+#endif
+
+    /* Re-enable watchdog before booting application.
+     * The watchdog is enabled by default after reset, so the application
+     * may expect it to be running. Use a generous timeout to give the
+     * application time to reconfigure or disable the watchdog.
+     */
+#ifndef WOLFBOOT_DISABLE_WATCHDOG_ON_BOOT
+    {
+        /* Unlock watchdog */
+        WDOG_CNT = WDOG_CNT_UNLOCK;
+        while (!(WDOG_CS & WDOG_CS_ULK)) {}
+
+        /* Enable watchdog with ~2 second timeout (256k ticks at 128kHz LPO)
+         * Application should either service or reconfigure the watchdog
+         */
+        WDOG_TOVAL = 0xFFFF;  /* Max timeout ~512ms without prescaler */
+        WDOG_CS = WDOG_CS_EN | WDOG_CS_UPDATE | WDOG_CS_CMD32EN |
+                  WDOG_CS_CLK_LPO | WDOG_CS_PRES;  /* With prescaler: ~131 sec */
+
+        /* Wait for reconfiguration to complete */
+        while (!(WDOG_CS & WDOG_CS_RCS)) {}
+    }
+#endif
 }
+
+/* Flash Configuration Field (FCF) region - MUST NOT be modified at runtime!
+ * Writing incorrect values here can permanently lock the device.
+ * Address range: 0x400 - 0x40F (16 bytes)
+ */
+#define FCF_START_ADDR  0x400
+#define FCF_END_ADDR    0x410
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
@@ -436,6 +515,36 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     const uint8_t empty_phrase[FLASH_PHRASE_SIZE] = {
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
     };
+
+    /* CRITICAL: Protect the Flash Configuration Field (FCF) region.
+     * Writing incorrect values to 0x400-0x40F can permanently lock the device!
+     * The FCF is programmed once in the flash_config section and should never
+     * be modified at runtime.
+     */
+    if ((address < FCF_END_ADDR) && ((address + len) > FCF_START_ADDR)) {
+        /* Requested write overlaps with FCF region - this is dangerous!
+         * Skip the FCF portion to prevent device locking.
+         */
+        if (address < FCF_START_ADDR) {
+            /* Write portion before FCF */
+            int pre_fcf_len = FCF_START_ADDR - address;
+            ret = hal_flash_write(address, data, pre_fcf_len);
+            if (ret != 0) return ret;
+            address = FCF_END_ADDR;
+            data += pre_fcf_len + (FCF_END_ADDR - FCF_START_ADDR);
+            len -= pre_fcf_len + (FCF_END_ADDR - FCF_START_ADDR);
+        } else if (address >= FCF_START_ADDR && address < FCF_END_ADDR) {
+            /* Skip entirely within FCF region */
+            int skip = FCF_END_ADDR - address;
+            if (skip >= len) {
+                return 0;  /* Entire write is within FCF - skip it */
+            }
+            address = FCF_END_ADDR;
+            data += skip;
+            len -= skip;
+        }
+        if (len <= 0) return 0;
+    }
 
     while (len > 0) {
         /* Handle unaligned start or partial phrase */

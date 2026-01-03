@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Start PEMicro GDB Server",
+            "label": "Start PEMicro GDB Server Only",
             "type": "shell",
             "command": "${env:HOME}/.local/pemicro/pegdbserver_console",
             "args": [
@@ -12,6 +12,76 @@
                 "-port=USB1",
                 "-serverport=7224",
                 "-speed=5000"
+            ],
+            "options": {
+                "env": {
+                    "LD_LIBRARY_PATH": "${env:HOME}/.local/pemicro/gdi:${env:HOME}/.local/pemicro/gdi/P&E:${env:LD_LIBRARY_PATH}"
+                },
+                "cwd": "${env:HOME}/.local/pemicro"
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^ERROR:(.*)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^P&E GDB Server",
+                    "endsPattern": "^All Servers Running"
+                }
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true
+            }
+        },
+        {
+            "label": "Mass Erase Only",
+            "type": "shell",
+            "command": "${env:HOME}/.local/pemicro/pegdbserver_console",
+            "args": [
+                "-startserver",
+                "-device=NXP_S32K1xx_S32K142F256M15",
+                "-interface=OPENSDA",
+                "-port=USB1",
+                "-speed=1000",
+                "-forcemasserase",
+                "-attachonly",
+                "-singlesession"
+            ],
+            "options": {
+                "env": {
+                    "LD_LIBRARY_PATH": "${env:HOME}/.local/pemicro/gdi:${env:HOME}/.local/pemicro/gdi/P&E:${env:LD_LIBRARY_PATH}"
+                },
+                "cwd": "${env:HOME}/.local/pemicro"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true
+            }
+        },
+        {
+            "label": "Start PEMicro GDB Server (Recovery Mode)",
+            "type": "shell",
+            "command": "${env:HOME}/.local/pemicro/pegdbserver_console",
+            "args": [
+                "-startserver",
+                "-device=NXP_S32K1xx_S32K142F256M15",
+                "-interface=OPENSDA",
+                "-port=USB1",
+                "-serverport=7224",
+                "-speed=1000",
+                "-attachonly"
             ],
             "options": {
                 "env": {
@@ -66,12 +136,57 @@
             }
         },
         {
+            "label": "Create Factory ELF",
+            "type": "shell",
+            "command": "/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi-objcopy",
+            "args": [
+                "-I", "binary",
+                "-O", "elf32-littlearm",
+                "-B", "arm",
+                "factory.bin",
+                "factory.elf"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Start PEMicro GDB Server",
+            "dependsOn": [
+                "Create Factory ELF",
+                "Start PEMicro GDB Server Only"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
             "label": "Start GDB Server and UART",
             "dependsOn": [
-                "Start PEMicro GDB Server",
+                "Create Factory ELF",
+                "Start PEMicro GDB Server Only",
                 "Start UART Monitor"
             ],
-            "dependsOrder": "parallel",
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Start GDB Server Recovery",
+            "dependsOn": [
+                "Create Factory ELF",
+                "Start PEMicro GDB Server (Recovery Mode)"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Start GDB Server Recovery and UART",
+            "dependsOn": [
+                "Create Factory ELF",
+                "Start PEMicro GDB Server (Recovery Mode)",
+                "Start UART Monitor"
+            ],
+            "dependsOrder": "sequence",
             "problemMatcher": []
         },
         {
@@ -121,4 +236,3 @@
         }
     ]
 }
-

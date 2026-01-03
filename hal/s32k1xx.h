@@ -183,8 +183,41 @@
 
 /* Flash programming unit: 8 bytes (double-word / phrase) */
 #define FLASH_PHRASE_SIZE           8
-/* Flash sector size: 2KB */
+
+/* Flash sector size: 2KB for all S32K1xx variants */
 #define FLASH_SECTOR_SIZE           2048
+
+/* ============== S32K1xx Variant Flash Sizes ============== */
+/* Define the appropriate variant or use automatic detection based on WOLFBOOT config
+ *
+ * S32K142: 256KB Flash (0x00000 - 0x3FFFF), 32KB SRAM
+ * S32K144: 512KB Flash (0x00000 - 0x7FFFF), 64KB SRAM
+ * S32K146: 1MB Flash   (0x00000 - 0xFFFFF), 128KB SRAM
+ * S32K148: 2MB Flash   (0x00000 - 0x1FFFFF), 256KB SRAM
+ *
+ * All variants have 2KB sector size and 8-byte phrase programming.
+ * The main difference is the flash size and partition layout.
+ */
+#if defined(S32K148)
+    #define FLASH_SIZE              (2048 * 1024)   /* 2MB */
+    #define SRAM_SIZE               (256 * 1024)    /* 256KB */
+#elif defined(S32K146)
+    #define FLASH_SIZE              (1024 * 1024)   /* 1MB */
+    #define SRAM_SIZE               (128 * 1024)    /* 128KB */
+#elif defined(S32K144)
+    #define FLASH_SIZE              (512 * 1024)    /* 512KB */
+    #define SRAM_SIZE               (64 * 1024)     /* 64KB */
+#else /* S32K142 (default) */
+    #define FLASH_SIZE              (256 * 1024)    /* 256KB */
+    #define SRAM_SIZE               (32 * 1024)     /* 32KB */
+#endif
+
+/* Flash base address */
+#define FLASH_BASE_ADDR             0x00000000
+
+/* SRAM base address (all S32K1xx variants) */
+#define SRAM_BASE_ADDR              0x1FFF8000  /* Lower SRAM */
+#define SRAM_UPPER_ADDR             0x20000000  /* Upper SRAM */
 
 /* ============== Watchdog (WDOG) Registers ============== */
 /* S32K1xx has a software-controlled watchdog timer */

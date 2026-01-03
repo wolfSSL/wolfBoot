@@ -22,8 +22,9 @@
             ],
             "postLaunchCommands": [
                 "monitor reset halt",
-                "load",
-                "monitor programbin test-app/image_v1_signed.bin 0xc000"
+                "load factory.elf",
+                "add-symbol-file test-app/image.elf",
+                "monitor reset halt"
             ]
         },
         {
@@ -47,8 +48,59 @@
             ],
             "postLaunchCommands": [
                 "monitor reset halt",
-                "load",
-                "monitor programbin test-app/image_v1_signed.bin 0xc000"
+                "load factory.elf",
+                "add-symbol-file test-app/image.elf",
+                "monitor reset halt"
+            ]
+        },
+        {
+            "name": "Recovery: Flash and Debug wolfBoot",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/wolfboot.elf",
+            "servertype": "external",
+            "gdbTarget": "127.0.0.1:7224",
+            "device": "S32K142",
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "raw",
+            "svdFile": "",
+            "gdbPath": "${workspaceFolder}/.vscode/arm-gdb-wrapper.sh",
+            "toolchainPath": "/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi/bin",
+            "toolchainPrefix": "arm-none-eabi",
+            "preLaunchTask": "Start GDB Server Recovery",
+            "preLaunchCommands": [
+                "set mem inaccessible-by-default off"
+            ],
+            "postLaunchCommands": [
+                "load factory.elf",
+                "add-symbol-file test-app/image.elf",
+                "monitor reset halt"
+            ]
+        },
+        {
+            "name": "Recovery: Flash and Debug wolfBoot (with UART)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/wolfboot.elf",
+            "servertype": "external",
+            "gdbTarget": "127.0.0.1:7224",
+            "device": "S32K142",
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "raw",
+            "svdFile": "",
+            "gdbPath": "${workspaceFolder}/.vscode/arm-gdb-wrapper.sh",
+            "toolchainPath": "/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi/bin",
+            "toolchainPrefix": "arm-none-eabi",
+            "preLaunchTask": "Start GDB Server Recovery and UART",
+            "preLaunchCommands": [
+                "set mem inaccessible-by-default off"
+            ],
+            "postLaunchCommands": [
+                "load factory.elf",
+                "add-symbol-file test-app/image.elf",
+                "monitor reset halt"
             ]
         },
         {
@@ -71,7 +123,7 @@
             ],
             "postLaunchCommands": [
                 "monitor reset halt",
-                "load",
+                "load factory.elf",
                 "monitor reset run",
                 "quit"
             ]
