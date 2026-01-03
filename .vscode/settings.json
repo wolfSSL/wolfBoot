@@ -1,0 +1,5 @@
+{
+    "cortex-debug.gdbPath": "${workspaceFolder}/.vscode/arm-gdb-wrapper.sh",
+    "cortex-debug.armToolchainPath": "/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi/bin",
+    "cortex-debug.showDevDebugOutput": "raw"
+}

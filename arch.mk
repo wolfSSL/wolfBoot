@@ -625,6 +625,14 @@ ifeq ($(ARCH),PPC)
   endif
 endif
 
+# NXP S32K1xx (S32K142, S32K144, S32K146, S32K148)
+# Bare-metal implementation, no SDK required
+ifeq ($(TARGET),s32k1xx)
+  ARCH_FLASH_OFFSET=0x00000000
+  CFLAGS+=-DCPU_S32K142
+  # S32K1xx is Cortex-M4 by default (handled by default case in arch.mk)
+endif
+
 ifeq ($(TARGET),kinetis)
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \

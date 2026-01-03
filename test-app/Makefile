@@ -348,6 +348,10 @@ ifeq ($(TARGET),mcxa)
     LDFLAGS+=--specs=nosys.specs
 endif
 
+ifeq ($(TARGET),s32k1xx)
+    LSCRIPT_TEMPLATE=ARM-s32k1xx.ld
+endif
+
 ifeq ($(TARGET),mcxw)
     ifeq ($(TZEN),1)
       LSCRIPT_TEMPLATE=ARM-mcxw-ns.ld

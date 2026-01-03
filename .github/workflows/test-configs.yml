@@ -216,6 +216,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/mcxw-tz.config
 
+  nxp_s32k142_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nxp-s32k142.config
+
   microchip_mpfs250_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:
