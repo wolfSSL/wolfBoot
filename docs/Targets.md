@@ -23,6 +23,7 @@ This README describes configuration of supported targets.
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP MCXW716](#nxp-mcxw716)
+* [NXP S32K1XX](#nxp-s32k1xx)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -2827,6 +2828,163 @@ b main
 mon reset
 c
 ```
+
+
+## NXP S32K1XX
+
+The NXP S32K1xx family (S32K142, S32K144, S32K146, S32K148) are automotive-grade
+Cortex-M4F microcontrollers. wolfBoot support has been tested on the S32K142 with
+256KB Flash and 32KB SRAM.
+
+**Key Features:**
+- ARM Cortex-M4F core at up to 112 MHz (HSRUN mode) or 80 MHz (RUN mode)
+- Flash sector size: 2KB (4KB when flash is over 256KB)
+- 8-byte (phrase) flash programming unit
+- Bare-metal implementation (no SDK required)
+- LPUART debug output support
+
+### NXP S32K1XX: Memory Layout
+
+The default memory layout for S32K142 (256KB Flash):
+
+| Region | Address Range | Size |
+|--------|---------------|------|
+| Bootloader | 0x00000000 - 0x0000BFFF | 48 KB |
+| Boot Partition | 0x0000C000 - 0x00024FFF | 100 KB |
+| Update Partition | 0x00025000 - 0x0003DFFF | 100 KB |
+| Swap Sector | 0x0003E000 - 0x0003E7FF | 2 KB |
+
+### NXP S32K1XX: Configuration
+
+Example configuration file: [/config/examples/nxp-s32k142.config](/config/examples/nxp-s32k142.config)
+
+```sh
+# Copy configuration
+cp config/examples/nxp-s32k142.config .config
+
+# Build wolfBoot
+make clean
+make
+
+# Build test application
+make test-app/image.bin
+```
+
+
+### NXP S32K1XX: Configuration Options
+
+The following build options are available for the S32K1xx HAL:
+
+| Option | Description |
+|--------|-------------|
+| `WOLFBOOT_RESTORE_CLOCK` | Restore clock to SIRC (8 MHz) before booting application. Recommended for applications that configure their own clocks. |
+| `WOLFBOOT_DISABLE_WATCHDOG_ON_BOOT` | Keep watchdog disabled when jumping to application. By default, the watchdog is re-enabled before boot since it is enabled out of reset. |
+| `WATCHDOG` | Enable watchdog during wolfBoot operation. Recommended for production. |
+| `WATCHDOG_TIMEOUT_MS` | Watchdog timeout in milliseconds when `WATCHDOG` is enabled (default: 1000ms). |
+| `S32K1XX_CLOCK_HSRUN` | Enable HSRUN mode (112 MHz). Requires external crystal and SPLL (not fully implemented). |
+| `DEBUG_UART` | Enable LPUART1 debug output. |
+| `S32K144`, `S32K146`, `S32K148` | Select variant (default is S32K142). Affects flash/SRAM size definitions. |
+
+**IMPORTANT:** Flash sector size depends on the S32K variant:
+- **S32K142** (256KB Flash): 2KB sectors (`WOLFBOOT_SECTOR_SIZE=0x800`)
+- **S32K144/S32K146/S32K148** (512KB+ Flash): 4KB sectors (`WOLFBOOT_SECTOR_SIZE=0x1000`)
+
+### NXP S32K1XX: Debug UART
+
+Debug output uses LPUART1 on pins:
+- **TX**: PTC7
+- **RX**: PTC6
+
+Baud rate: 115200, 8N1
+
+Enable with `DEBUG_UART=1` in your configuration.
+
+### NXP S32K1XX: Programming and Debugging
+
+The S32K1xx can be programmed and debugged using various tools. The recommended approach uses PEMicro debug probes (commonly found on S32K EVB boards).
+
+**Using PEMicro (recommended for S32K EVB boards):**
+
+1. Install PEMicro GDB Server from [pemicro.com](https://www.pemicro.com/products/product_viewDetails.cfm?product_id=15320167)
+
+2. Start PEMicro GDB Server:
+```sh
+pegdbserver_console -device=NXP_S32K1xx_S32K142 -startserver -serverport=7224
+```
+
+3. In another terminal, connect with GDB and flash:
+```sh
+arm-none-eabi-gdb wolfboot.elf
+target remote :7224
+monitor reset halt
+load
+# Flash the signed application to boot partition
+monitor programbin test-app/image_v1_signed.bin 0xc000
+monitor reset run
+```
+
+### NXP S32K1XX: Debugging Tips
+
+When debugging with GDB:
+```sh
+arm-none-eabi-gdb
+target remote :7224
+add-symbol-file wolfboot.elf 0x0
+add-symbol-file test-app/image.elf 0xC100
+set mem inaccessible-by-default off
+monitor reset halt
+b main
+c
+```
+
+For UART debug output, connect a USB-to-serial adapter to LPUART1 pins (PTC6=RX, PTC7=TX) and open a terminal at 115200 baud.
+
+### NXP S32K1XX: Flash Configuration Field (FCF)
+
+The bootloader includes the Flash Configuration Field (FCF) at address 0x400-0x40F with the following settings:
+- Flash security: Unsecured
+- Flash protection: All regions unprotected
+- Backdoor key access: Enabled
+
+**CRITICAL WARNING:** The FCF region at 0x400-0x40F controls device security settings. Writing incorrect values can **permanently lock the device**, making it irrecoverable. The wolfBoot HAL includes protection to prevent accidental writes to this region.
+
+### NXP S32K1XX: Recovering a Locked/Unresponsive Device
+
+If your S32K device becomes locked or unresponsive (e.g., stuck in reset with D1 LED illuminated on S32K-EVB boards), try these recovery procedures:
+
+**Symptoms of a locked device:**
+- Debugger cannot connect ("Soft reset failed", "Failed to enter debug mode")
+- Device stuck in reset (D1 LED constantly on for S32K-EVB)
+- J-Link reports "Readout protection is set" at address 0x400-0x40F
+
+**Recovery Option 1: PEMicro Force Mass Erase**
+
+```sh
+pegdbserver_console -device=NXP_S32K1xx_S32K142 -interface=OPENSDA -port=USB1 -forcemasserase -singlesession
+```
+
+After mass erase completes, power cycle the board before attempting to reconnect.
+
+**Recovery Option 2: J-Link Unlock**
+
+```sh
+JLinkExe -if swd -Device S32K142
+unlock Kinetis
+erase
+r
+q
+```
+
+Then power cycle the board.
+
+### NXP S32K1XX: TODO / Future Enhancements
+
+The following features are planned or available for contribution:
+
+- [ ] **SPLL + SOSC support**: Add external crystal oscillator and SPLL configuration for true 112 MHz operation in HSRUN mode
+- [ ] **Hardware crypto acceleration**: Integrate CSEc (Cryptographic Services Engine) for hardware-accelerated crypto operations
+- [ ] **FlexNVM/EEPROM support**: Add support for FlexNVM partitioning and EEPROM emulation
+- [ ] **CAN/LIN bootloader**: Add firmware update over CAN or LIN bus for automotive applications
 
 
 ## TI Hercules TMS570LC435
