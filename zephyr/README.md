@@ -29,11 +29,7 @@ From the Zephyr base (`zephyrproject/zephyr`), apply the patches in order:
 ```sh
 cd /path/to/your/workspace/zephyrproject/zephyr
 
-git apply /path/to/your/workspace/wolfboot/zephyr/patches/0001-wolfboot-tee-driver.patch
-git apply /path/to/your/workspace/wolfboot/zephyr/patches/0002-wolfboot-tee-dt-binding.patch
-git apply /path/to/your/workspace/wolfboot/zephyr/patches/0003-wolfboot-sample.patch
-git apply /path/to/your/workspace/wolfboot/zephyr/patches/0004-stm32h5-ns-board-support.patch
-git apply /path/to/your/workspace/wolfboot/zephyr/patches/0005-wolfboot-psa-kconfig.patch
+git apply /path/to/your/workspace/wolfboot/zephyr/patches/*.patch
 ```
 
 These patches add:
