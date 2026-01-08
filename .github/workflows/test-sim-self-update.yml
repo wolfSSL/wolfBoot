@@ -61,7 +61,13 @@ jobs:
             echo "--- apt-mirrors.txt ---"
             cat /etc/apt/apt-mirrors.txt || true
 
-      - name: Run self-update test
+      - name: Run self-update test (internal flash)
         run: |
           cp config/examples/sim-self-update.config .config
           make test-sim-self-update
+
+      - name: Run self-update test (external flash)
+        run: |
+          make clean
+          cp config/examples/sim-self-update-ext.config .config
+          make test-sim-self-update-ext
