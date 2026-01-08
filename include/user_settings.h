@@ -367,6 +367,32 @@ extern int tolower(int c);
 #   define HAVE_AESGCM
 #   define HAVE_PKCS8
 #endif
+
+#if defined(WOLFCRYPT_TZ_PSA)
+#   define WOLFSSL_AES_COUNTER
+#   define WOLFSSL_AES_GCM
+#   define HAVE_AESGCM
+#   define HAVE_AESCCM
+#   define HAVE_AES_ECB
+#   define WOLFSSL_AES_CFB
+#   define WOLFSSL_AES_OFB
+#   define WOLFSSL_DES3
+#   define WOLFSSL_DES_ECB
+#   define HAVE_CHACHA
+#   define HAVE_POLY1305
+#   define WOLFSSL_CMAC
+#   define WOLFSSL_ECDSA_DETERMINISTIC_K
+#   define WOLFSSL_HAVE_PRF
+#   define HAVE_HKDF
+#   define HAVE_PBKDF2
+#   define HAVE_PWDBASED
+#   define WOLFSSL_KEY_GEN
+#   define WC_RSA_PSS
+#   define WOLFSSL_PSS_SALT_LEN_DISCOVER
+#   define WOLFSSL_RSA_OAEP
+#   define HAVE_ECC_KEY_EXPORT
+#   define HAVE_ECC_KEY_IMPORT
+#endif
 /* PKCS11 for wolfBoot is always static */
 #define HAVE_PKCS11_STATIC
 
@@ -502,6 +528,12 @@ extern int tolower(int c);
 #define NO_CRYPT_TEST
 #define NO_CRYPT_BENCHMARK
 
+#if defined(WOLFCRYPT_TZ_PSA)
+#undef NO_CMAC
+#undef NO_DES3
+#undef NO_KDF
+#endif
+
 #ifdef __QNX__
 #   define WOLFSSL_HAVE_MIN
 #   define WOLFSSL_HAVE_MAX
@@ -524,7 +556,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_MALLOC
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
-#   if !defined(SECURE_PKCS11) && !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#   if !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
+       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 #       define NO_WOLFSSL_MEMORY
 #       define WOLFSSL_NO_MALLOC
 #   endif

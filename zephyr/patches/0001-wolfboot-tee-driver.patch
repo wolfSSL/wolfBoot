@@ -1,0 +1,378 @@
+diff --git a/drivers/tee/CMakeLists.txt b/drivers/tee/CMakeLists.txt
+index aaf8924b096..15ca3a06782 100644
+--- a/drivers/tee/CMakeLists.txt
++++ b/drivers/tee/CMakeLists.txt
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ 
+ add_subdirectory_ifdef(CONFIG_OPTEE optee)
++add_subdirectory_ifdef(CONFIG_WOLFBOOT_TEE wolfboot)
+ 
+ if(CONFIG_TEE)
+ zephyr_library()
+diff --git a/drivers/tee/Kconfig b/drivers/tee/Kconfig
+index dd5acce4e00..24447494d01 100644
+--- a/drivers/tee/Kconfig
++++ b/drivers/tee/Kconfig
+@@ -14,5 +14,6 @@ module-str = tee
+ comment "Device Drivers"
+ 
+ source "drivers/tee/optee/Kconfig"
++source "drivers/tee/wolfboot/Kconfig"
+ 
+ endif # TEE
+diff --git a/drivers/tee/wolfboot/CMakeLists.txt b/drivers/tee/wolfboot/CMakeLists.txt
+new file mode 100644
+index 00000000000..812499ea603
+--- /dev/null
++++ b/drivers/tee/wolfboot/CMakeLists.txt
+@@ -0,0 +1,9 @@
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++zephyr_library()
++zephyr_library_sources_ifdef(CONFIG_WOLFBOOT_TEE wolfboot.c)
++
++if(CONFIG_WOLFBOOT_TEE)
++  set_target_properties(zephyr_property_target PROPERTIES SIGNING_SCRIPT
++    ${CMAKE_CURRENT_LIST_DIR}/wolfboot_sign.cmake)
++endif()
+diff --git a/drivers/tee/wolfboot/Kconfig b/drivers/tee/wolfboot/Kconfig
+new file mode 100644
+index 00000000000..d32faaf8e9b
+--- /dev/null
++++ b/drivers/tee/wolfboot/Kconfig
+@@ -0,0 +1,9 @@
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++config WOLFBOOT_TEE
++	bool "wolfBoot TEE driver"
++	depends on TEE
++	select PSA_CRYPTO_CLIENT
++	select WOLFBOOT
++	help
++	  Enable the wolfBoot TEE driver and PSA CMSE glue.
+diff --git a/drivers/tee/wolfboot/wolfboot.c b/drivers/tee/wolfboot/wolfboot.c
+new file mode 100644
+index 00000000000..ae69692422c
+--- /dev/null
++++ b/drivers/tee/wolfboot/wolfboot.c
+@@ -0,0 +1,41 @@
++/* SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial */
++
++#include <errno.h>
++#include <zephyr/device.h>
++#include <zephyr/drivers/tee.h>
++
++#define DT_DRV_COMPAT wolfboot_tee
++
++#define TEE_IMPL_ID_WOLFBOOT 0x57424F4F /* "WBOO" */
++
++static int wolfboot_get_version(const struct device *dev, struct tee_version_info *info)
++{
++	ARG_UNUSED(dev);
++
++	if (!info) {
++		return -EINVAL;
++	}
++
++	info->impl_id = TEE_IMPL_ID_WOLFBOOT;
++	info->impl_caps = 0;
++	info->gen_caps = TEE_GEN_CAP_GP;
++
++	return 0;
++}
++
++static const struct tee_driver_api wolfboot_tee_api = {
++	.get_version = wolfboot_get_version,
++};
++
++static int wolfboot_tee_init(const struct device *dev)
++{
++	ARG_UNUSED(dev);
++	return 0;
++}
++
++#define WOLFBOOT_TEE_INIT(inst)                                               \
++	DEVICE_DT_INST_DEFINE(inst, wolfboot_tee_init, NULL, NULL, NULL,      \
++			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, \
++			      &wolfboot_tee_api);
++
++DT_INST_FOREACH_STATUS_OKAY(WOLFBOOT_TEE_INIT)
+diff --git a/drivers/tee/wolfboot/wolfboot_config.py b/drivers/tee/wolfboot/wolfboot_config.py
+new file mode 100644
+index 00000000000..b5110089d78
+--- /dev/null
++++ b/drivers/tee/wolfboot/wolfboot_config.py
+@@ -0,0 +1,69 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++"""Import select values from a wolfBoot .config file."""
++
++from __future__ import annotations
++
++import argparse
++import re
++from pathlib import Path
++
++
++_CONFIG_RE = re.compile(r"^([A-Za-z0-9_]+)\??=\s*(.+)$")
++
++
++def _parse_value(raw: str) -> int:
++    val = raw.strip()
++    if val.lower().startswith("0x"):
++        return int(val, 16)
++    return int(val, 10)
++
++
++def parse_config(path: Path) -> dict[str, str]:
++    data: dict[str, str] = {}
++    for line in path.read_text(encoding="utf-8").splitlines():
++        line = line.strip()
++        if not line or line.startswith("#"):
++            continue
++        match = _CONFIG_RE.match(line)
++        if not match:
++            continue
++        key, value = match.group(1), match.group(2)
++        data[key] = value.strip()
++    return data
++
++
++def emit_conf(path: Path, header_size: int) -> None:
++    content = f"CONFIG_ROM_START_OFFSET=0x{header_size:x}\n"
++    path.write_text(content, encoding="utf-8")
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--config", required=True, type=Path)
++    parser.add_argument("--emit-conf", type=Path)
++    parser.add_argument("--print-header-size", action="store_true")
++    args = parser.parse_args()
++
++    cfg_path: Path = args.config
++    if not cfg_path.exists():
++        raise SystemExit(f"wolfBoot config not found: {cfg_path}")
++
++    cfg = parse_config(cfg_path)
++    if "IMAGE_HEADER_SIZE" not in cfg:
++        raise SystemExit("IMAGE_HEADER_SIZE not found in wolfBoot config")
++
++    header_size = _parse_value(cfg["IMAGE_HEADER_SIZE"])
++
++    if args.emit_conf:
++        emit_conf(args.emit_conf, header_size)
++
++    if args.print_header_size:
++        print(header_size)
++
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/drivers/tee/wolfboot/wolfboot_sign.cmake b/drivers/tee/wolfboot/wolfboot_sign.cmake
+new file mode 100644
+index 00000000000..c5f0017cbea
+--- /dev/null
++++ b/drivers/tee/wolfboot/wolfboot_sign.cmake
+@@ -0,0 +1,164 @@
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++function(wolfboot_parse_version version_string out_var)
++  if(version_string STREQUAL "")
++    set(${out_var} 0 PARENT_SCOPE)
++    return()
++  endif()
++
++  string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _match "${version_string}")
++  if(NOT _match STREQUAL "")
++    string(REGEX REPLACE "^([0-9]+)\\.([0-9]+)\\.([0-9]+).*" "\\1;\\2;\\3" _parts "${version_string}")
++    list(GET _parts 0 _maj)
++    list(GET _parts 1 _min)
++    list(GET _parts 2 _pat)
++    math(EXPR _ver "${_maj} * 10000 + ${_min} * 100 + ${_pat}")
++    set(${out_var} ${_ver} PARENT_SCOPE)
++    return()
++  endif()
++
++  set(${out_var} 0 PARENT_SCOPE)
++endfunction()
++
++function(zephyr_wolfboot_tasks)
++  if(NOT DEFINED WOLFBOOT_MODULE_DIR AND DEFINED ZEPHYR_WOLFBOOT_MODULE_DIR)
++    set(WOLFBOOT_MODULE_DIR ${ZEPHYR_WOLFBOOT_MODULE_DIR})
++  endif()
++
++  if(NOT CONFIG_BUILD_OUTPUT_BIN)
++    message(FATAL_ERROR "Can't sign images for wolfBoot: CONFIG_BUILD_OUTPUT_BIN is required.")
++  endif()
++
++  set(keyfile "${CONFIG_WOLFBOOT_SIGNATURE_KEY_FILE}")
++  if("${keyfile}" STREQUAL "")
++    set(keyfile "${CONFIG_MCUBOOT_SIGNATURE_KEY_FILE}")
++  endif()
++
++  if("${keyfile}" STREQUAL "")
++    message(WARNING "No signing key configured; wolfBoot signing skipped.")
++    return()
++  endif()
++
++  if(NOT IS_ABSOLUTE "${keyfile}")
++    if(EXISTS "${APPLICATION_CONFIG_DIR}/${keyfile}")
++      set(keyfile "${APPLICATION_CONFIG_DIR}/${keyfile}")
++    elseif(DEFINED WEST_TOPDIR AND EXISTS "${WEST_TOPDIR}/${keyfile}")
++      set(keyfile "${WEST_TOPDIR}/${keyfile}")
++    elseif(DEFINED WOLFBOOT_MODULE_DIR AND EXISTS "${WOLFBOOT_MODULE_DIR}/${keyfile}")
++      set(keyfile "${WOLFBOOT_MODULE_DIR}/${keyfile}")
++    endif()
++  endif()
++
++  if(NOT EXISTS "${keyfile}")
++    message(FATAL_ERROR "Can't sign images for wolfBoot: can't find key ${keyfile}")
++  endif()
++  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${keyfile})
++
++  if("${CONFIG_WOLFBOOT_SIGN_TOOL}" STREQUAL "")
++    if(DEFINED WOLFBOOT_MODULE_DIR)
++      set(sign_tool "${WOLFBOOT_MODULE_DIR}/tools/keytools/sign")
++    else()
++      message(FATAL_ERROR "Can't sign images for wolfBoot: WOLFBOOT_MODULE_DIR not set.")
++    endif()
++  else()
++    set(sign_tool "${CONFIG_WOLFBOOT_SIGN_TOOL}")
++  endif()
++
++  if(NOT IS_ABSOLUTE "${sign_tool}")
++    if(DEFINED WOLFBOOT_MODULE_DIR AND EXISTS "${WOLFBOOT_MODULE_DIR}/${sign_tool}")
++      set(sign_tool "${WOLFBOOT_MODULE_DIR}/${sign_tool}")
++    elseif(DEFINED WEST_TOPDIR AND EXISTS "${WEST_TOPDIR}/${sign_tool}")
++      set(sign_tool "${WEST_TOPDIR}/${sign_tool}")
++    endif()
++  endif()
++
++  if(NOT EXISTS "${sign_tool}")
++    message(FATAL_ERROR "Can't sign images for wolfBoot: can't find sign tool ${sign_tool}")
++  endif()
++
++  set(wolfboot_header_size "")
++  if(DEFINED WOLFBOOT_MODULE_DIR)
++    set(wolfboot_config "${WOLFBOOT_MODULE_DIR}/.config")
++    if(EXISTS "${wolfboot_config}")
++      set(wolfboot_cfg_tool
++          "${CMAKE_CURRENT_LIST_DIR}/wolfboot_config.py")
++      execute_process(
++        COMMAND ${PYTHON_EXECUTABLE} ${wolfboot_cfg_tool}
++                --config ${wolfboot_config}
++                --emit-conf ${ZEPHYR_BINARY_DIR}/wolfboot.conf
++                --print-header-size
++        OUTPUT_VARIABLE wolfboot_header_size
++        OUTPUT_STRIP_TRAILING_WHITESPACE
++        RESULT_VARIABLE wolfboot_cfg_result
++      )
++      if(NOT wolfboot_cfg_result EQUAL 0)
++        message(FATAL_ERROR "Failed to parse wolfBoot config at ${wolfboot_config}")
++      endif()
++      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
++                   ${wolfboot_config})
++      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
++                   ${wolfboot_cfg_tool})
++    else()
++      message(WARNING "wolfBoot config not found at ${wolfboot_config}; using Zephyr defaults.")
++    endif()
++  endif()
++
++  set(ver_int "${CONFIG_WOLFBOOT_SIGN_VERSION}")
++  if("${ver_int}" STREQUAL "1" AND NOT "${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}" STREQUAL "")
++    wolfboot_parse_version("${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}" ver_int)
++    if(ver_int EQUAL 0)
++      set(ver_int "${CONFIG_WOLFBOOT_SIGN_VERSION}")
++    endif()
++  endif()
++
++  set(output ${ZEPHYR_BINARY_DIR}/${KERNEL_NAME})
++  set(signed_bin ${output}.signed.bin)
++  set(signed_hex ${output}.signed.hex)
++  set(payload_bin ${output}.payload.bin)
++  set(sign_input ${output}.bin)
++  set(signed_base ${output})
++  set(sign_input ${output}.bin)
++
++  set(sign_args "--${CONFIG_WOLFBOOT_SIGN_ALG}" "--${CONFIG_WOLFBOOT_SIGN_HASH}")
++
++  set(sign_env_cmd ${CMAKE_COMMAND} -E env)
++  if(NOT "${wolfboot_header_size}" STREQUAL "")
++    list(APPEND sign_env_cmd IMAGE_HEADER_SIZE=${wolfboot_header_size})
++  endif()
++
++  if(DEFINED CONFIG_ROM_START_OFFSET AND NOT "${CONFIG_ROM_START_OFFSET}" STREQUAL "0")
++    set(strip_tool "${CMAKE_CURRENT_LIST_DIR}/wolfboot_strip.py")
++    set(sign_input ${payload_bin})
++    set(signed_base ${output}.payload)
++    set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
++                 COMMAND ${PYTHON_EXECUTABLE} ${strip_tool}
++                         --input ${output}.bin
++                         --output ${payload_bin}
++                         --strip ${CONFIG_ROM_START_OFFSET})
++    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
++                 ${strip_tool})
++  endif()
++
++  set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
++               COMMAND ${sign_env_cmd} ${sign_tool} ${sign_args}
++                       ${sign_input} ${keyfile} ${ver_int}
++               COMMAND ${CMAKE_COMMAND} -E copy
++                       ${signed_base}_v${ver_int}_signed.bin ${signed_bin})
++
++  if(CONFIG_BUILD_OUTPUT_BIN)
++    set(BYPRODUCT_KERNEL_SIGNED_BIN_NAME "${signed_bin}"
++        CACHE FILEPATH "Signed kernel bin file" FORCE)
++    set_property(GLOBAL APPEND PROPERTY extra_post_build_byproducts ${signed_bin})
++  endif()
++
++  if(CONFIG_BUILD_OUTPUT_HEX)
++    set(BYPRODUCT_KERNEL_SIGNED_HEX_NAME "${signed_hex}"
++        CACHE FILEPATH "Signed kernel hex file" FORCE)
++    set_property(GLOBAL APPEND PROPERTY extra_post_build_commands
++                 COMMAND ${CMAKE_OBJCOPY} -I binary -O ihex
++                         ${signed_bin} ${signed_hex})
++    set_property(GLOBAL APPEND PROPERTY extra_post_build_byproducts ${signed_hex})
++  endif()
++endfunction()
++
++zephyr_wolfboot_tasks()
+diff --git a/drivers/tee/wolfboot/wolfboot_strip.py b/drivers/tee/wolfboot/wolfboot_strip.py
+new file mode 100644
+index 00000000000..6411412767c
+--- /dev/null
++++ b/drivers/tee/wolfboot/wolfboot_strip.py
+@@ -0,0 +1,27 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++"""Strip a fixed number of bytes from the start of a binary image."""
++
++from __future__ import annotations
++
++import argparse
++from pathlib import Path
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--input", required=True, type=Path)
++    parser.add_argument("--output", required=True, type=Path)
++    parser.add_argument("--strip", required=True, type=lambda x: int(x, 0))
++    args = parser.parse_args()
++
++    data = args.input.read_bytes()
++    if args.strip < 0 or args.strip > len(data):
++        raise SystemExit(f"strip size {args.strip} exceeds input size {len(data)}")
++    args.output.write_bytes(data[args.strip:])
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())

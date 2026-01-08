@@ -354,6 +354,7 @@ Available overrides:
 - `WOLFBOOT_LIB_WOLFSSL`: Path to the [wolfSSL](https://github.com/wolfSSL/wolfssl) library source code
 - `WOLFBOOT_LIB_WOLFTPM`: Path to the [wolfTPM](https://github.com/wolfSSL/wolfTPM) library source code
 - `WOLFBOOT_LIB_WOLFPKCS11`: Path to the [wolfPKCS11](https://github.com/wolfssl/wolfpkcs11) library source code
+- `WOLFBOOT_LIB_WOLFPSA`: Path to the wolfPSA library source code
 - `WOLFBOOT_LIB_WOLFHSM`: Path to the [wolfHSM](https://github.com/wolfSSL/wolfHSM) library source code
 
 ## Key Generation and Signing

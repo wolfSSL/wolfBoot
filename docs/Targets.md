@@ -208,7 +208,7 @@ SECWM2_STRT=0x1  SECWM2_END=0x0   No page of internal Flash Bank2 set as secure,
 This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
 that can be accessed via PKCS11 interface by non-secure applications.
 
-This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
+This option can be enabled with `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1` or `WOLFCRYPT_TZ_PSA=1`
 options in your configuration. This enables a PKCS11 accessible from NS domain via
 non-secure callables (NSC).
 
@@ -349,7 +349,7 @@ SECWM2_STRT=0x1  SECWM2_END=0x0   No page of internal Flash Bank2 set as secure,
 This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
 that can be accessed via PKCS11 interface by non-secure applications.
 
-This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
+This option can be enabled with `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1` or `WOLFCRYPT_TZ_PSA=1`
 options in your configuration. This enables a PKCS11 accessible from NS domain via
 non-secure callables (NSC).
 
@@ -1337,6 +1337,7 @@ SRAM memories into two parts:
 
 The example configuration for this scenario is available in [/config/examples/stm32h5.config](/config/examples/stm32h5.config).
 
+
 #### How to use it
 
 - set the option bytes to enable trustzone:
@@ -1372,7 +1373,7 @@ STM32_Programmer_CLI -c port=swd -d update.bin 0x0C100000
 This is similar to Scenario 1, but also includes wolfCrypt in secure mode, and
 that can be accessed via PKCS11 interface by non-secure applications.
 
-This option can be enabled with the `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1`
+This option can be enabled with `WOLFCRYPT_TZ=1` and `WOLFCRYPT_TZ_PKCS11=1` or `WOLFCRYPT_TZ_PSA=1`
 options in your configuration. This enables a PKCS11 accessible from NS domain via
 non-secure callables (NSC).
 
@@ -1423,6 +1424,11 @@ STM32_Programmer_CLI -c port=swd -d test-app/image_v3_signed.bin 0x08160000
 
 Reboot the board to initiate an update via DUALBANK hw-assisted swap.
 Any version except the first one will also turn on the orange LED.
+
+### Scenario 4: Replace TF-M with wolfBoot in Zephyr
+
+For a full Zephyr integration walkthrough (build + flash), see:
+[/zephyr/README.md](/zephyr/README.md)
 
 ### STM32H5 Debugging
 

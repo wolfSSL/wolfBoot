@@ -682,6 +682,12 @@ ifeq ($(WOLFBOOT_HUGE_STACK),1)
 endif
 
 ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
+  ifeq ($(WOLFCRYPT_TZ_PSA),1)
+    $(error WOLFCRYPT_TZ_PKCS11 and WOLFCRYPT_TZ_PSA are mutually exclusive)
+  endif
+endif
+
+ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DSECURE_PKCS11
   CFLAGS+=-DWOLFSSL_PKCS11_RW_TOKENS
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
@@ -702,6 +708,51 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
         $(WOLFBOOT_LIB_WOLFPKCS11)/src/wolfpkcs11.o
   STACK_USAGE=16688
   ifeq ($(ENCRYPT_WITH_AES128)$(ENCRYPT_WITH_AES256),)
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+  endif
+  ifeq ($(findstring RSA,$(SIGN)),)
+  ifeq ($(findstring RSA,$(SIGN_SECONDARY)),)
+      WOLFCRYPT_OBJS+=$(RSA_OBJS)
+  endif
+  endif
+  ifeq ($(findstring ECC,$(SIGN)),)
+  ifeq ($(findstring ECC,$(SIGN_SECONDARY)),)
+      WOLFCRYPT_OBJS+=$(ECC_OBJS)
+  endif
+  endif
+  ifeq ($(findstring ECC,$(SIGN)),)
+  ifeq ($(findstring ECC,$(SIGN_SECONDARY)),)
+  ifeq ($(findstring RSA,$(SIGN)),)
+  ifeq ($(findstring RSA,$(SIGN_SECONDARY)),)
+	  WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  endif
+  endif
+  endif
+endif
+
+ifeq ($(WOLFCRYPT_TZ_PSA),1)
+  CFLAGS+=-DWOLFCRYPT_TZ_PSA
+  CFLAGS+=-DWOLFSSL_PSA_ENGINE
+  CFLAGS+=-DWOLFPSA_CUSTOM_STORE
+  WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)
+  WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa
+  LDFLAGS+=--specs=nano.specs
+  WOLFCRYPT_OBJS+=src/psa_store.o
+  WOLFCRYPT_OBJS+=src/arm_tee_psa_veneer.o
+  WOLFCRYPT_OBJS+=src/arm_tee_psa_ipc.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o
+  ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+  endif
+  WOLFPSA_SRCS := $(filter-out $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_posix.c, \
+    $(wildcard $(WOLFBOOT_LIB_WOLFPSA)/src/*.c))
+  WOLFPSA_OBJS := $(patsubst %.c,%.o,$(WOLFPSA_SRCS))
+  WOLFCRYPT_OBJS+=$(WOLFPSA_OBJS)
+  STACK_USAGE=16688
+  ifneq ($(ENCRYPT),1)
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
   endif
   ifeq ($(findstring RSA,$(SIGN)),)
@@ -762,11 +813,13 @@ ifeq ($(WOLFTPM),1)
     endif
   endif
   ifneq ($(WOLFCRYPT_TZ_PKCS11),1)
+  ifneq ($(WOLFCRYPT_TZ_PSA),1)
     ifneq ($(ENCRYPT),1)
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
     endif
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+  endif
   endif
   ifeq ($(DEBUG),1)
     CFLAGS+=-DWOLFBOOT_DEBUG_TPM=1

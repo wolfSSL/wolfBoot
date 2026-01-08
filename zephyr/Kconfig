@@ -1,0 +1,54 @@
+# Kconfig
+#
+# Copyright (C) 2026 wolfSSL Inc.
+#
+# This file is part of wolfBoot.
+#
+# wolfBoot is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+
+menuconfig WOLFBOOT
+	bool "wolfBoot integration"
+	help
+	  Enable wolfBoot integration helpers (PSA CMSE client glue, signing).
+
+if WOLFBOOT
+
+config WOLFBOOT_SIGN_TOOL
+	string "Path to wolfBoot signing tool"
+	default ""
+	help
+	  Optional override for the wolfBoot signing tool path. If empty, the
+	  integration uses wolfBoot's tools/keytools/sign (C tool).
+
+config WOLFBOOT_SIGNATURE_KEY_FILE
+	string "wolfBoot signing key file"
+	default ""
+	help
+	  Signing key used by the wolfBoot signing tool. If empty, the integration
+	  falls back to CONFIG_MCUBOOT_SIGNATURE_KEY_FILE.
+
+config WOLFBOOT_SIGN_ALG
+	string "wolfBoot signing algorithm"
+	default "ecc256"
+	help
+	  Signing algorithm passed to wolfBoot sign tool. Supported values depend
+	  on wolfBoot (e.g. ecc256, ecc384, ed25519, rsa2048).
+
+config WOLFBOOT_SIGN_HASH
+	string "wolfBoot signing hash"
+	default "sha256"
+	help
+	  Hash algorithm passed to wolfBoot sign tool (e.g. sha256, sha384, sha3).
+
+config WOLFBOOT_SIGN_VERSION
+	int "wolfBoot image version"
+	default 1
+	help
+	  Integer version passed to wolfBoot sign tool. If left at the default,
+	  the integration will attempt to derive a version from
+	  CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION when possible.
+
+endif # WOLFBOOT

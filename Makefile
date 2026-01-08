@@ -140,18 +140,21 @@ endif
 WOLFBOOT_LIB_WOLFSSL?=lib/wolfssl
 WOLFBOOT_LIB_WOLFTPM?=lib/wolfTPM
 WOLFBOOT_LIB_WOLFPKCS11?=lib/wolfPKCS11
+WOLFBOOT_LIB_WOLFPSA?=lib/wolfPSA
 WOLFBOOT_LIB_WOLFHSM?=lib/wolfHSM
 
 # Convert to absolute paths using abspath function
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
+WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
 
 # Export variables so they are available to sub-makefiles
 export WOLFBOOT_LIB_WOLFSSL
 export WOLFBOOT_LIB_WOLFTPM
 export WOLFBOOT_LIB_WOLFPKCS11
+export WOLFBOOT_LIB_WOLFPSA
 export WOLFBOOT_LIB_WOLFHSM
 
 ## Architecture/CPU configuration
@@ -169,6 +172,7 @@ CFLAGS+= \
   -Wno-array-bounds \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS"
+CFLAGS+=$(WOLFPSA_CFLAGS)
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)

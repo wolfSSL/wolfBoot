@@ -1,0 +1,2153 @@
+diff --git a/samples/wolfboot_integration/psa_crypto/app.overlay b/samples/wolfboot_integration/psa_crypto/app.overlay
+new file mode 100644
+index 00000000000..1329dd33c4d
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/app.overlay
+@@ -0,0 +1,10 @@
++/*
++ * SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++ */
++
++/ {
++	wolfboot_tee: wolfboot_tee {
++		compatible = "wolfssl,tee";
++		status = "okay";
++	};
++};
+diff --git a/samples/wolfboot_integration/psa_crypto/boards/max32657evkit_max32657_ns.conf b/samples/wolfboot_integration/psa_crypto/boards/max32657evkit_max32657_ns.conf
+new file mode 100644
+index 00000000000..85ae2978c4c
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/boards/max32657evkit_max32657_ns.conf
+@@ -0,0 +1,3 @@
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++#
++# Board-specific wolfBoot settings can be added here if needed.
+diff --git a/samples/wolfboot_integration/psa_crypto/boards/nrf9160dk_nrf9160_ns.overlay b/samples/wolfboot_integration/psa_crypto/boards/nrf9160dk_nrf9160_ns.overlay
+new file mode 100644
+index 00000000000..f1cc3115fe8
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/boards/nrf9160dk_nrf9160_ns.overlay
+@@ -0,0 +1,5 @@
++/*
++ * SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++ */
++
++/* Board-specific wolfBoot overrides can be added here if needed. */
+diff --git a/samples/wolfboot_integration/psa_crypto/CMakeLists.txt b/samples/wolfboot_integration/psa_crypto/CMakeLists.txt
+new file mode 100644
+index 00000000000..41f26064a0b
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/CMakeLists.txt
+@@ -0,0 +1,83 @@
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++cmake_minimum_required(VERSION 3.20.0)
++
++if(DEFINED ZEPHYR_EXTRA_MODULES)
++  foreach(extra_module ${ZEPHYR_EXTRA_MODULES})
++    if(EXISTS "${extra_module}/.config")
++      set(WOLFBOOT_MODULE_DIR "${extra_module}")
++      break()
++    endif()
++  endforeach()
++endif()
++
++if(DEFINED WOLFBOOT_MODULE_DIR AND EXISTS "${WOLFBOOT_MODULE_DIR}/.config")
++  if(DEFINED WEST_PYTHON)
++    set(WOLFBOOT_PYTHON "${WEST_PYTHON}")
++    set(Python3_EXECUTABLE "${WOLFBOOT_PYTHON}" CACHE FILEPATH "" FORCE)
++  elseif(DEFINED ZEPHYR_PYTHON)
++    set(WOLFBOOT_PYTHON "${ZEPHYR_PYTHON}")
++    set(Python3_EXECUTABLE "${WOLFBOOT_PYTHON}" CACHE FILEPATH "" FORCE)
++  elseif(DEFINED ENV{WEST_PYTHON})
++    set(WOLFBOOT_PYTHON "$ENV{WEST_PYTHON}")
++    set(Python3_EXECUTABLE "${WOLFBOOT_PYTHON}" CACHE FILEPATH "" FORCE)
++  elseif(DEFINED ENV{ZEPHYR_PYTHON})
++    set(WOLFBOOT_PYTHON "$ENV{ZEPHYR_PYTHON}")
++    set(Python3_EXECUTABLE "${WOLFBOOT_PYTHON}" CACHE FILEPATH "" FORCE)
++  else()
++    find_package(Python3 REQUIRED COMPONENTS Interpreter)
++    set(WOLFBOOT_PYTHON "${Python3_EXECUTABLE}")
++  endif()
++  get_filename_component(wolfboot_cfg_tool
++                         "${CMAKE_CURRENT_LIST_DIR}/../../../drivers/tee/wolfboot/wolfboot_config.py"
++                         REALPATH)
++  set(wolfboot_conf "${CMAKE_BINARY_DIR}/wolfboot.conf")
++  execute_process(
++    COMMAND ${WOLFBOOT_PYTHON} ${wolfboot_cfg_tool}
++            --config ${WOLFBOOT_MODULE_DIR}/.config
++            --emit-conf ${wolfboot_conf}
++    RESULT_VARIABLE wolfboot_cfg_result
++  )
++  if(NOT wolfboot_cfg_result EQUAL 0)
++    message(FATAL_ERROR "Failed to parse wolfBoot config at ${WOLFBOOT_MODULE_DIR}/.config")
++  endif()
++  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
++               ${WOLFBOOT_MODULE_DIR}/.config ${wolfboot_cfg_tool})
++  if(DEFINED EXTRA_CONF_FILE AND NOT "${EXTRA_CONF_FILE}" STREQUAL "")
++    set(EXTRA_CONF_FILE "${EXTRA_CONF_FILE};${wolfboot_conf}" CACHE STRING "" FORCE)
++  else()
++    set(EXTRA_CONF_FILE "${wolfboot_conf}" CACHE STRING "" FORCE)
++  endif()
++endif()
++
++find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
++
++project(wolfboot_psa_crypto)
++
++# Source files in this sample
++target_sources(app PRIVATE src/main.c)
++target_sources(app PRIVATE src/psa_attestation.c)
++target_sources(app PRIVATE src/psa_crypto.c)
++target_sources(app PRIVATE src/shell.c)
++target_sources(app PRIVATE src/util_app_cfg.c)
++target_sources(app PRIVATE src/util_app_log.c)
++target_sources(app PRIVATE src/util_sformat.c)
++
++if(DEFINED ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR)
++  target_include_directories(app PRIVATE
++    ${ZEPHYR_TRUSTED_FIRMWARE_M_MODULE_DIR}/interface/include
++  )
++endif()
++
++if(DEFINED ZEPHYR_EXTRA_MODULES)
++  foreach(extra_module ${ZEPHYR_EXTRA_MODULES})
++    if(EXISTS "${extra_module}/zephyr/include/psa/initial_attestation.h")
++      target_include_directories(app PRIVATE
++        ${extra_module}/zephyr/include
++      )
++      break()
++    endif()
++  endforeach()
++endif()
++
++zephyr_include_directories(${APPLICATION_SOURCE_DIR}/src/configs)
+diff --git a/samples/wolfboot_integration/psa_crypto/Kconfig b/samples/wolfboot_integration/psa_crypto/Kconfig
+new file mode 100644
+index 00000000000..c9035821c22
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/Kconfig
+@@ -0,0 +1,49 @@
++# Private config options for PSA Crypto application
++
++# Copyright (c) 2023 Linaro
++# SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++
++mainmenu "wolfBoot PSA Crypto sample application"
++
++menu "Application configuration"
++
++module = PSA
++module-str = psa
++source "subsys/logging/Kconfig.template.log_config"
++
++endmenu
++
++config PSA_SHELL
++	bool "The 'psa' shell command"
++	depends on SHELL
++	help
++	  Enabling this option will make the 'psa' shell command available.
++
++config PSA_IMPORT_KEY
++	bool "Support for importing private key data"
++	help
++	  Enable support for importing a pre-generated or randomly generated
++	  private key using PSA APIs and PRIVATE_KEY_STATIC or
++	  PRIVATE_KEY_RANDOM.
++
++choice
++	prompt "Private Key"
++	default PRIVATE_KEY_RANDOM
++
++config PRIVATE_KEY_STATIC
++	bool "Static"
++	depends on PSA_IMPORT_KEY
++	help
++	  A static key value will be used for the elliptic curve 'secp256r1'
++	  private key.
++
++config PRIVATE_KEY_RANDOM
++	bool "Random"
++	depends on PSA_IMPORT_KEY
++	help
++	  A randomly generated value will be used for the elliptic curve
++	  'secp256r1' private key.
++
++endchoice
++
++source "Kconfig.zephyr"
+diff --git a/samples/wolfboot_integration/psa_crypto/prj.conf b/samples/wolfboot_integration/psa_crypto/prj.conf
+new file mode 100644
+index 00000000000..93bab465806
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/prj.conf
+@@ -0,0 +1,64 @@
++CONFIG_LOG=y
++CONFIG_LOG_RUNTIME_FILTERING=y
++CONFIG_LOG_BUFFER_SIZE=2048
++CONFIG_LOG_PROCESS_TRIGGER_THRESHOLD=0
++CONFIG_LOG_DEFAULT_LEVEL=3
++CONFIG_NO_OPTIMIZATIONS=y
++CONFIG_BUILD_OUTPUT_BIN=y
++CONFIG_FPU=n
++
++
++#CONFIG_SHELL=n
++#CONFIG_SHELL_HISTORY=y
++#CONFIG_SHELL_VT100_COLORS=y
++#CONFIG_SHELL_CMDS=n
++#CONFIG_PSA_SHELL=y
++
++CONFIG_TEE=y
++CONFIG_WOLFBOOT_TEE=y
++CONFIG_BUILD_WITH_TFM=n
++CONFIG_PSA_CRYPTO_PROVIDER_CUSTOM=y
++
++# The Zephyr CMSIS emulation assumes that ticks are ms, currently
++CONFIG_SYS_CLOCK_TICKS_PER_SEC=1000
++
++CONFIG_MAIN_STACK_SIZE=8192
++CONFIG_HEAP_MEM_POOL_SIZE=4096
++
++# Mbed TLS
++CONFIG_MBEDTLS=y
++CONFIG_MBEDTLS_BUILTIN=y
++CONFIG_MBEDTLS_ENABLE_HEAP=y
++CONFIG_MBEDTLS_HEAP_SIZE=32768
++CONFIG_MBEDTLS_USER_CONFIG_ENABLE=y
++CONFIG_MBEDTLS_USER_CONFIG_FILE="config_mbedtls.h"
++CONFIG_MBEDTLS_USE_PSA_CRYPTO=y
++
++# Added because build was failing
++# Needed for PK + PSA and CSR/write paths
++CONFIG_MBEDTLS_ASN1_PARSE_C=y
++
++CONFIG_PSA_CRYPTO=y
++CONFIG_PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY=y
++CONFIG_PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT=y
++CONFIG_PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_EXPORT=y
++CONFIG_PSA_WANT_ECC_SECP_R1_256=y
++CONFIG_PSA_WANT_ALG_ECDSA=y
++CONFIG_PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY=n
++CONFIG_PSA_WANT_KEY_TYPE_RSA_KEY_PAIR_IMPORT=n
++CONFIG_PSA_WANT_KEY_TYPE_RSA_KEY_PAIR_EXPORT=n
++CONFIG_PSA_WANT_ALG_RSA_PKCS1V15_SIGN=n
++CONFIG_PSA_WANT_ALG_RSA_PSS=y
++CONFIG_PSA_WANT_ALG_SHA_256=y
++CONFIG_MBEDTLS_PK_WRITE_C=y
++CONFIG_MBEDTLS_KEY_EXCHANGE_RSA_ENABLED=n
++
++# JSON
++CONFIG_JSON_LIBRARY=y
++
++CONFIG_WOLFBOOT_SIGN_ALG="ecc256"
++CONFIG_WOLFBOOT_SIGN_HASH="sha256"
++CONFIG_WOLFBOOT_SIGN_VERSION=1
++CONFIG_WOLFBOOT_SIGNATURE_KEY_FILE="wolfboot_signing_private_key.der"
++
++CONFIG_REQUIRES_FULL_LIBC=y
+diff --git a/samples/wolfboot_integration/psa_crypto/README.rst b/samples/wolfboot_integration/psa_crypto/README.rst
+new file mode 100644
+index 00000000000..684430b717a
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/README.rst
+@@ -0,0 +1,73 @@
++.. zephyr:code-sample:: wolfboot_psa_crypto
++   :name: wolfBoot PSA crypto
++
++   Use the PSA Crypto API for cryptography and device certificate signing requests via wolfBoot CMSE gateways.
++
++Overview
++********
++This wolfBoot integration example demonstrates how to use the PSA crypto API in
++Zephyr for cryptography and device certificate signing request. The secure
++processing environment is provided by wolfBoot + wolfPSA, with Zephyr running
++in the non-secure processing environment. PSA calls are routed through CMSE
++gateways compatible with the TF-M client API.
++
++Key Files
++*********
++
++``psa_crypto.c``
++================
++
++Demonstrates hash, sign/verify workflow:
++
++- Generate/import a persistent key: secp256r1 (usage: ecdsa-with-SHA256)
++- Display the public key based on the private key data above
++- Calculate the SHA256 hash of a payload
++- Sign the hash with the persistent key
++- Verify the signature using the public key
++- Destroy the key
++
++Also demonstrates device certificate signing request (CSR) workflow:
++
++- Generate/import a persistent key: secp256r1 (usage: ecdsa-with-SHA256)
++- Set subject name in device CSR
++- Generate device CSR in PEM format
++- Encode device CSR as JSON
++
++Importing/generating the persistent key is based on config option
++``PSA_IMPORT_KEY``. When ``PSA_IMPORT_KEY`` is enabled,
++the key data can be static if ``PRIVATE_KEY_STATIC`` is set or key data
++is generated using ``psa_generate_random`` if ``PRIVATE_KEY_RANDOM``
++is set.
++
++``psa_attestation.c``
++=====================
++
++Demonstrates how to request an initial attestation token (IAT) from the secure
++processing environment if supported by wolfBoot.
++
++Building and Running
++********************
++
++This project outputs startup status and info to the console. Build it for a
++non-secure target and make sure wolfBoot is available as an extra module.
++
++Using ``west`` with ZEPHYR_EXTRA_MODULES:
++
++.. code-block:: bash
++
++   cd <ZEPHYR_ROOT>
++   west build -p -b <board>/ns samples/wolfboot_integration/psa_crypto \
++     -- -DZEPHYR_EXTRA_MODULES=<WORKSPACE_ROOT>/wolfboot
++
++The non-secure application expects CMSE gateways exported by the secure image.
++Build and flash the wolfBoot secure image for your target before running this
++sample.
++
++Signing
++=======
++
++When ``CONFIG_WOLFBOOT_TEE`` is enabled, Zephyr's signing step uses wolfBoot's
++sign tool (C implementation). Configure the signing key with
++``CONFIG_WOLFBOOT_SIGNATURE_KEY_FILE`` (or reuse
++``CONFIG_MCUBOOT_SIGNATURE_KEY_FILE``) and set algorithm/hash via
++``CONFIG_WOLFBOOT_SIGN_ALG`` and ``CONFIG_WOLFBOOT_SIGN_HASH``.
+diff --git a/samples/wolfboot_integration/psa_crypto/sample.yaml b/samples/wolfboot_integration/psa_crypto/sample.yaml
+new file mode 100644
+index 00000000000..874fa555f80
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/sample.yaml
+@@ -0,0 +1,35 @@
++sample:
++  description: PSA crypto example using wolfBoot CMSE gateways for PSA calls.
++  name: wolfBoot PSA crypto example
++tests:
++  sample.wolfboot_psa_crypto:
++    tags:
++      - introduction
++      - wolfboot
++      - crypto
++      - csr
++    platform_allow:
++      - mps2/an521/cpu0/ns
++      - v2m_musca_s1/musca_s1/ns
++      - nrf5340dk/nrf5340/cpuapp/ns
++      - nrf9160dk/nrf9160/ns
++      - stm32l562e_dk/stm32l562xx/ns
++      - bl5340_dvk/nrf5340/cpuapp/ns
++      - max32657evkit/max32657/ns
++      - stm32h573i_dk/stm32h573xx/ns
++    integration_platforms:
++      - mps2/an521/cpu0/ns
++    harness: console
++    harness_config:
++      type: multi_line
++      regex:
++        - "System IAT size is: (.*)"
++        - "Requesting IAT with (.*) byte challenge."
++        - "IAT data received: (.*)"
++        - "Retrieving public key for key #1"
++        - "Signature verified"
++        - "Destroyed persistent key #1"
++        - "Generating 256 bytes of random data."
++        - "Create device Certificate Signing Request completed"
++        - "BEGIN CERTIFICATE REQUEST"
++        - "END CERTIFICATE REQUEST"
+diff --git a/samples/wolfboot_integration/psa_crypto/src/configs/config_mbedtls.h b/samples/wolfboot_integration/psa_crypto/src/configs/config_mbedtls.h
+new file mode 100644
+index 00000000000..17f1abfe7e5
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/configs/config_mbedtls.h
+@@ -0,0 +1,17 @@
++/*
++ * Copyright (c) 2023 Linaro Limited
++ *
++ * SPDX-License-Identifier: GPL-3.0 OR LicenceRef-wolfssl.com-Commercial
++ */
++
++#define MBEDTLS_X509_CSR_WRITE_C
++#define MBEDTLS_X509_CREATE_C
++#define MBEDTLS_PEM_WRITE_C
++#define MBEDTLS_BASE64_C
++
++#define MBEDTLS_ASN1_WRITE_C
++#define MBEDTLS_OID_C
++#define MBEDTLS_PK_PARSE_C
++#define MBEDTLS_ASN1_PARSE_C
++
++#define MCUBOOT_LOG_LEVEL 0
+diff --git a/samples/wolfboot_integration/psa_crypto/src/configs/config_tfm.h b/samples/wolfboot_integration/psa_crypto/src/configs/config_tfm.h
+new file mode 100644
+index 00000000000..38b24d6e78c
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/configs/config_tfm.h
+@@ -0,0 +1,10 @@
++/*
++ * Copyright (c) 2024 Nordic Semiconductor
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* In TF-M the default value of CRYPTO_ENGINE_BUF_SIZE is 0x2080.
++ * It causes insufficient memory failure while verifying signature.
++ */
++#define CRYPTO_ENGINE_BUF_SIZE 0x2400
+diff --git a/samples/wolfboot_integration/psa_crypto/src/main.c b/samples/wolfboot_integration/psa_crypto/src/main.c
+new file mode 100644
+index 00000000000..1fd0888d8ce
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/main.c
+@@ -0,0 +1,50 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <zephyr/kernel.h>
++#include <zephyr/logging/log_ctrl.h>
++#include <zephyr/logging/log.h>
++
++#include "tfm_ns_interface.h"
++#include "psa_attestation.h"
++#include "psa_crypto.h"
++#include "util_app_cfg.h"
++#include "util_app_log.h"
++#include "util_sformat.h"
++
++/** Declare a reference to the application logging interface. */
++LOG_MODULE_DECLARE(app, CONFIG_LOG_DEFAULT_LEVEL);
++
++/* Create an instance of the system config struct for the application. */
++static struct cfg_data cfg;
++
++int main(void)
++{
++	/* Initialise the logger subsys and dump the current buffer. */
++	log_init();
++
++	/* Load app config struct from secure storage (create if missing). */
++	if (cfg_load_data(&cfg)) {
++		LOG_ERR("Error loading/generating app config data in SS.");
++	}
++
++	/* Get the entity attestation token (requires ~1kB stack memory!). */
++	att_test();
++
++	/* Crypto tests */
++	crp_test();
++	crp_test_rng();
++
++	/* Generate Certificate Signing Request using Mbed TLS */
++	crp_generate_csr();
++
++	/* Dump any queued log messages, and wait for system events. */
++	al_dump_log();
++
++	LOG_INF("Done.");
++
++	return 0;
++}
+diff --git a/samples/wolfboot_integration/psa_crypto/src/psa_attestation.c b/samples/wolfboot_integration/psa_crypto/src/psa_attestation.c
+new file mode 100644
+index 00000000000..0bc40ded4ec
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/psa_attestation.c
+@@ -0,0 +1,144 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <zephyr/kernel.h>
++#include <stdio.h>
++#include <zephyr/logging/log.h>
++
++#include "psa/initial_attestation.h"
++#include "psa_attestation.h"
++#include "util_app_log.h"
++#include "util_sformat.h"
++
++LOG_MODULE_DECLARE(app, CONFIG_LOG_DEFAULT_LEVEL);
++
++psa_status_t att_get_pub_key(void)
++{
++	psa_status_t err = PSA_SUCCESS;
++
++	/* TODO: How to retrieve this?!? */
++
++	/* Log any eventual errors via app_log */
++	return err ? al_psa_status(err, __func__) : err;
++}
++
++psa_status_t att_get_iat(uint8_t *ch_buffer, uint32_t ch_sz,
++			 uint8_t *token_buffer, uint32_t *token_sz)
++{
++	psa_status_t err = PSA_SUCCESS;
++	uint32_t sys_token_sz;
++	size_t token_buf_size = ATT_MAX_TOKEN_SIZE;
++
++
++	/* Call with bigger challenge object than allowed */
++
++	/*
++	 * First determine how large the token is on this system.
++	 * We don't need to compare with the size of ATT_MAX_TOKEN_SIZE here
++	 * since a check will be made in 'psa_initial_attest_get_token' and the
++	 * error return code will indicate a mismatch.
++	 */
++	switch (ch_sz) {
++	case 32:
++		err = psa_initial_attest_get_token(
++			ch_buffer,
++			PSA_INITIAL_ATTEST_CHALLENGE_SIZE_32,
++			token_buffer,
++			token_buf_size,
++			&sys_token_sz);
++		break;
++	case 48:
++		err = psa_initial_attest_get_token(
++			ch_buffer,
++			PSA_INITIAL_ATTEST_CHALLENGE_SIZE_48,
++			token_buffer,
++			token_buf_size,
++			&sys_token_sz);
++		break;
++	case 64:
++		err = psa_initial_attest_get_token(
++			ch_buffer,
++			PSA_INITIAL_ATTEST_CHALLENGE_SIZE_64,
++			token_buffer,
++			token_buf_size,
++			&sys_token_sz);
++		break;
++	default:
++		err = -EINVAL;
++		break;
++	}
++	if (err) {
++		goto err;
++	}
++
++	LOG_INF("att: System IAT size is: %u bytes.", sys_token_sz);
++
++	/* Request the initial attestation token w/the challenge data. */
++	LOG_INF("att: Requesting IAT with %u byte challenge.", ch_sz);
++	err = psa_initial_attest_get_token(
++		ch_buffer,      /* Challenge/nonce input buffer. */
++		ch_sz,          /* Challenge size (32, 48 or 64). */
++		token_buffer,   /* Token output buffer. */
++		token_buf_size,
++		token_sz        /* Post exec output token size. */
++		);
++	LOG_INF("att: IAT data received: %u bytes.", *token_sz);
++
++err:
++	/* Log any eventual errors via app_log */
++	return err ? al_psa_status(err, __func__) : err;
++}
++
++psa_status_t att_test(void)
++{
++	psa_status_t err = PSA_SUCCESS;
++
++	/* 64-byte nonce/challenge, encrypted using the default public key;
++	 *
++	 * 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
++	 * 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
++	 * 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
++	 * 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
++	 */
++	uint32_t nonce_sz = 64;
++	uint8_t nonce_buf[ATT_MAX_TOKEN_SIZE] = {
++		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
++		0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
++		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
++		0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
++		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
++		0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
++		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
++		0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
++		0
++	};
++
++	/* IAT response buffer. */
++	uint32_t iat_sz = ATT_MAX_TOKEN_SIZE;
++	uint8_t iat_buf[ATT_MAX_TOKEN_SIZE] = { 0 };
++
++	/* String format output config. */
++	struct sf_hex_tbl_fmt fmt = {
++		.ascii = true,
++		.addr_label = true,
++		.addr = 0
++	};
++
++	/* Request the IAT from the initial attestation service. */
++	err = att_get_iat(nonce_buf, nonce_sz, iat_buf, &iat_sz);
++	if (err) {
++		goto err;
++	}
++
++	/* Display queued log messages before dumping the IAT. */
++	al_dump_log();
++
++	/* Dump the IAT for debug purposes. */
++	sf_hex_tabulate_16(&fmt, iat_buf, (size_t)iat_sz);
++
++err:
++	return err;
++}
+diff --git a/samples/wolfboot_integration/psa_crypto/src/psa_attestation.h b/samples/wolfboot_integration/psa_crypto/src/psa_attestation.h
+new file mode 100644
+index 00000000000..1164dda8ad4
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/psa_attestation.h
+@@ -0,0 +1,65 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <stdarg.h>
++
++#include "psa/error.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/** Maximum buffer size for an initial attestation token instance. */
++#define ATT_MAX_TOKEN_SIZE (0x240)
++
++/**
++ * @brief Gets the public key portion of the attestation service's securely
++ *        stored key pair. This public key can be provided to external
++ *        verification services for device verification purposes.
++ *
++ * @return Returns error code as specified in \ref psa_status_t
++ */
++psa_status_t att_get_pub_key(void);
++
++/**
++ * @brief Gets an initial attestation token (IAT) from the TF-M secure
++ *        processing environment (SPE). This data will be provided in CBOR
++ *        format and is encrypted using the private key held on the SPE.
++ *
++ * The initial attestation token (IAT) is composed of a series of 'claims' or
++ * data points used to uniquely identify this device to an external
++ * verification entity (the IAT consumer).
++ *
++ * The generated IAT should be cryptographically verifiable by the IAT consumer.
++ *
++ * For details on IAT see https://tools.ietf.org/html/draft-mandyam-eat-01
++ *
++ * @param ch_buffer     Pointer to the buffer containing the nonce or
++ *                      challenge data to be validated with the private key.
++ * @param ch_sz         The number of bytes in the challenge. 32, 48 or 64.
++ * @param token_buffer  Pointer to the buffer where the IAT will be written.
++ *                      Must be equal in size to the system IAT output, which
++ *                      can be determined via a call to
++ *                      'psa_initial_attest_get_token_size'.
++ * @param token_sz      Pointer to the size of token_buffer, this value will be
++ *                      updated in this function to contain the number of bytes
++ *                      actually retrieved during the IAT request.
++ *
++ * @return Returns error code as specified in \ref psa_status_t
++ */
++psa_status_t att_get_iat(uint8_t *ch_buffer, uint32_t ch_sz,
++			 uint8_t *token_buffer, uint32_t *token_sz);
++
++/**
++ * @brief TODO!
++ *
++ * @return Returns error code as specified in \ref psa_status_t
++ */
++psa_status_t att_test(void);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/samples/wolfboot_integration/psa_crypto/src/psa_crypto.c b/samples/wolfboot_integration/psa_crypto/src/psa_crypto.c
+new file mode 100644
+index 00000000000..6a934c1c15e
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/psa_crypto.c
+@@ -0,0 +1,871 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <stdio.h>
++
++#include <zephyr/kernel.h>
++#include <zephyr/logging/log_ctrl.h>
++#include <zephyr/logging/log.h>
++#include <zephyr/data/json.h>
++
++#include "mbedtls/pk.h"
++#include "mbedtls/x509.h"
++#include "mbedtls/x509_csr.h"
++
++#include "psa_crypto.h"
++#include "util_app_log.h"
++#include "util_sformat.h"
++
++/** Declare a reference to the application logging interface. */
++LOG_MODULE_DECLARE(app, CONFIG_LOG_DEFAULT_LEVEL);
++
++/* Formatting details for displaying hex dumps. */
++struct sf_hex_tbl_fmt crp_fmt = {
++	.ascii = true,
++	.addr_label = true,
++	.addr = 0
++};
++
++struct csr_json_struct {
++	const char *CSR;
++};
++
++static const struct json_obj_descr csr_json_descr[] = {
++	JSON_OBJ_DESCR_PRIM(struct csr_json_struct, CSR, JSON_TOK_STRING)
++};
++
++/**
++ * @brief Extracts the public key from the specified persistent key id.
++ *
++ * @param key_id        The permanent identifier for the generated key.
++ * @param key           Pointer to the buffer where the public key data
++ *                      will be written.
++ * @param key_buf_size  Size of key buffer in bytes.
++ * @param key_len       Number of bytes written into key by this function.
++ */
++static psa_status_t crp_get_pub_key(psa_key_id_t key_id,
++				    uint8_t *key, size_t key_buf_size,
++				    size_t *key_len)
++{
++	psa_status_t status;
++	psa_key_handle_t key_handle;
++
++	LOG_INF("Retrieving public key for key #%d", key_id);
++	al_dump_log();
++
++	/* Now try to re-open the persisted key based on the key ID. */
++	status = al_psa_status(
++		psa_open_key(key_id, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to open persistent key #%d", key_id);
++		goto err;
++	}
++
++	/* Export the persistent key's public key part. */
++	status = al_psa_status(
++		psa_export_public_key(key_handle, key, key_buf_size, key_len),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to export public key.");
++		goto err;
++	}
++
++	/* Display the binary key data for debug purposes. */
++	sf_hex_tabulate_16(&crp_fmt, key, *key_len);
++
++	/* Close the key to free up the volatile slot. */
++	status = al_psa_status(
++		psa_close_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to close persistent key.");
++		goto err;
++	}
++
++	return status;
++err:
++	al_dump_log();
++	return status;
++}
++
++#if CONFIG_PSA_IMPORT_KEY
++/**
++ * @brief Stores a new persistent secp256r1 key (usage: ecdsa-with-SHA256)
++ *        in ITS, associating it with the specified unique key identifier.
++ *
++ * This function will store a new persistent secp256r1 key in internal trusted
++ * storage. Cryptographic operations can then be performed using the key
++ * identifier (key_id) associated with this persistent key. Only the 32-byte
++ * private key needs to be supplied, the public key can be derived using
++ * the supplied private key value.
++ *
++ * @param key_id        The permament identifier for the generated key.
++ * @param key_usage     The usage policy for the key.
++ * @param key_data      Pointer to the 32-byte private key data.
++ */
++static psa_status_t crp_imp_key_secp256r1(psa_key_id_t key_id,
++					  psa_key_usage_t key_usage,
++					  uint8_t *key_data)
++{
++	psa_status_t status = PSA_SUCCESS;
++	psa_key_attributes_t key_attributes = PSA_KEY_ATTRIBUTES_INIT;
++	psa_key_type_t key_type =
++		PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
++	psa_algorithm_t alg = PSA_ALG_ECDSA(PSA_ALG_SHA_256);
++	psa_key_handle_t key_handle;
++	size_t key_len = 32;
++	size_t data_len;
++	uint8_t data_out[65] = { 0 }; /* ECDSA public key = 65 bytes. */
++	int comp_result;
++
++	LOG_INF("Persisting SECP256R1 key as #%d", (uint32_t)key_id);
++	al_dump_log();
++
++	/* Setup the key's attributes before the creation request. */
++	psa_set_key_id(&key_attributes, key_id);
++	psa_set_key_usage_flags(&key_attributes, key_usage);
++	psa_set_key_lifetime(&key_attributes, PSA_KEY_LIFETIME_PERSISTENT);
++	psa_set_key_algorithm(&key_attributes, alg);
++	psa_set_key_type(&key_attributes, key_type);
++
++	/* Import the private key, creating the persistent key on success */
++	status = al_psa_status(
++		psa_import_key(&key_attributes, key_data, key_len, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to import key.");
++		goto err;
++	}
++
++	/* Close the key to free up the volatile slot. */
++	status = al_psa_status(
++		psa_close_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to close persistent key.");
++		goto err;
++	}
++
++	/* Try to retrieve the public key. */
++	status = crp_get_pub_key(key_id, data_out, sizeof(data_out), &data_len);
++
++	/* Export the private key if usage includes PSA_KEY_USAGE_EXPORT. */
++	if (key_usage & PSA_KEY_USAGE_EXPORT) {
++		/* Re-open the persisted key based on the key ID. */
++		status = al_psa_status(
++			psa_open_key(key_id, &key_handle),
++			__func__);
++		if (status != PSA_SUCCESS) {
++			LOG_ERR("Failed to open persistent key #%d", key_id);
++			goto err;
++		}
++
++		/* Read the original (private) key data back. */
++		status = al_psa_status(
++			psa_export_key(key_handle, data_out,
++				       sizeof(data_out), &data_len),
++			__func__);
++		if (status != PSA_SUCCESS) {
++			LOG_ERR("Failed to export key.");
++			goto err;
++		}
++
++		/* Check key len. */
++		if (data_len != key_len) {
++			LOG_ERR("Unexpected number of bytes in exported key.");
++			goto err;
++		}
++
++		/* Verify that the exported private key matches input data. */
++		comp_result = memcmp(data_out, key_data, key_len);
++		if (comp_result != 0) {
++			LOG_ERR("Imported/exported private key mismatch.");
++			goto err;
++		}
++
++		/* Display the private key. */
++		LOG_INF("Private key data:");
++		al_dump_log();
++		sf_hex_tabulate_16(&crp_fmt, data_out, data_len);
++
++		/* Close the key to free up the volatile slot. */
++		status = al_psa_status(
++			psa_close_key(key_handle),
++			__func__);
++		if (status != PSA_SUCCESS) {
++			LOG_ERR("Failed to close persistent key.");
++			goto err;
++		}
++	}
++
++	return status;
++err:
++	al_dump_log();
++	return status;
++}
++
++#else /* !CONFIG_PSA_IMPORT_KEY */
++/**
++ * @brief Generates a new permanent, persistent prime256v1 (ecdsa-with-SHA256)
++ *        key in ITS, associating it with the specified unique key identifier.
++ *
++ * This function will generate a new permanent prime256v1 key in internal trusted
++ * storage. Cryptographic operations can then be performed using the key
++ * identifier (key_id) associated with this persistent key.
++ *
++ * @param key_id        The permanent identifier for the generated key.
++ * @param key_usage     The usage policy for the key.
++ */
++static psa_status_t crp_gen_key_secp256r1(psa_key_id_t key_id,
++					  psa_key_usage_t key_usage)
++{
++	psa_status_t status = PSA_SUCCESS;
++	psa_key_attributes_t key_attributes = PSA_KEY_ATTRIBUTES_INIT;
++	psa_key_type_t key_type =
++		PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
++	psa_algorithm_t alg = PSA_ALG_ECDSA(PSA_ALG_SHA_256);
++	psa_key_handle_t key_handle;
++	size_t key_len = 32;
++	size_t data_len;
++	uint8_t data_out[65] = { 0 }; /* ECDSA public key = 65 bytes. */
++
++	LOG_INF("Persisting SECP256R1 key as #%d", (uint32_t)key_id);
++	al_dump_log();
++
++	/* Setup the key's attributes before the creation request. */
++	psa_set_key_id(&key_attributes, key_id);
++	psa_set_key_usage_flags(&key_attributes, key_usage);
++	psa_set_key_lifetime(&key_attributes, PSA_KEY_LIFETIME_PERSISTENT);
++	psa_set_key_algorithm(&key_attributes, alg);
++	psa_set_key_type(&key_attributes, key_type);
++	psa_set_key_bits(&key_attributes, 256);
++
++	/* Generate the private key, creating the persistent key on success */
++	status = al_psa_status(
++		psa_generate_key(&key_attributes, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to generate key.");
++		goto err;
++	}
++
++	/* Close the key to free up the volatile slot. */
++	status = al_psa_status(
++		psa_close_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to close persistent key.");
++		goto err;
++	}
++
++	/* Try to retrieve the public key. */
++	status = crp_get_pub_key(key_id, data_out, sizeof(data_out), &data_len);
++
++	/* Export the private key if usage includes PSA_KEY_USAGE_EXPORT. */
++	if (key_usage & PSA_KEY_USAGE_EXPORT) {
++		/* Re-open the persisted key based on the key ID. */
++		status = al_psa_status(
++			psa_open_key(key_id, &key_handle),
++			__func__);
++		if (status != PSA_SUCCESS) {
++			LOG_ERR("Failed to open persistent key #%d", key_id);
++			goto err;
++		}
++
++		/* Read the original (private) key data back. */
++		status = al_psa_status(
++			psa_export_key(key_handle, data_out,
++				       sizeof(data_out), &data_len),
++			__func__);
++		if (status != PSA_SUCCESS) {
++			LOG_ERR("Failed to export key.");
++			goto err;
++		}
++
++		/* Check key len. */
++		if (data_len != key_len) {
++			LOG_ERR("Unexpected number of bytes in exported key.");
++			goto err;
++		}
++
++		/* Display the private key. */
++		LOG_INF("Private key data:");
++		al_dump_log();
++
++		sf_hex_tabulate_16(&crp_fmt, data_out, data_len);
++
++		/* Close the key to free up the volatile slot. */
++		status = al_psa_status(
++			psa_close_key(key_handle),
++			__func__);
++		if (status != PSA_SUCCESS) {
++			LOG_ERR("Failed to close persistent key.");
++			goto err;
++		}
++	}
++
++	return status;
++err:
++	al_dump_log();
++	return status;
++}
++#endif /* CONFIG_PSA_IMPORT_KEY */
++
++/**
++ * @brief PSA Random number generator wrapper for Mbed TLS
++ */
++static int psa_rng_for_mbedtls(void *p_rng,
++			       unsigned char *output, size_t output_len)
++{
++	(void)p_rng;
++
++	return psa_generate_random(output, output_len);
++}
++
++/**
++ * @brief Generates device certificate signing request (CSR) using Mbed TLS
++ * X.509 and TF-M crypto service.
++ */
++void crp_generate_csr(void)
++{
++	psa_status_t status;
++	psa_key_id_t key_slot = 1;
++	psa_key_handle_t key_handle;
++
++	unsigned char output_buf[1024];
++	unsigned char json_encoded_buf[1024];
++
++	mbedtls_pk_context pk_key_container;
++	mbedtls_x509write_csr req;
++
++	struct csr_json_struct csr_json = {
++		.CSR = output_buf
++	};
++
++	/* Initialize Mbed TLS structures. */
++	mbedtls_x509write_csr_init(&req);
++	mbedtls_pk_init(&pk_key_container);
++	memset(output_buf, 0, sizeof(output_buf));
++
++	/* Initialize crypto API. */
++	LOG_INF("Initialising PSA crypto");
++	al_dump_log();
++
++	status = al_psa_status(psa_crypto_init(), __func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Crypto init failed.");
++		goto err;
++	}
++
++	LOG_INF("PSA crypto init completed");
++	al_dump_log();
++
++	/* prime256v1 (ecdsa-with-SHA256) private key. */
++#if CONFIG_PSA_IMPORT_KEY
++#if CONFIG_PRIVATE_KEY_STATIC
++	/* This value is based on the private key in user.pem,
++	 * which can be viewed viw the following command:
++	 *
++	 *   $ openssl ec -in user.pem -text -noout
++	 */
++	uint8_t priv_key_data[32] = {
++		0x14, 0xbc, 0xb9, 0x53, 0xa4, 0xee, 0xed, 0x50,
++		0x09, 0x36, 0x92, 0x07, 0x1d, 0xdb, 0x24, 0x2c,
++		0xef, 0xf9, 0x57, 0x92, 0x40, 0x4f, 0x49, 0xaa,
++		0xd0, 0x7c, 0x5b, 0x3f, 0x26, 0xa7, 0x80, 0x48
++	};
++#else /* !CONFIG_PRIVATE_KEY_STATIC */
++	/* Randomly generate the private key. */
++	uint8_t priv_key_data[32] = { 0 };
++
++	LOG_INF("Generate rnadom data for private key");
++	al_dump_log();
++
++	psa_generate_random(priv_key_data, sizeof(priv_key_data));
++	LOG_INF("Random data generation for private key completed");
++	al_dump_log();
++
++#endif /* CONFIG_PRIVATE_KEY_STATIC */
++
++	/* Generate persistent prime256v1 (ecdsa-with-SHA256) key w/ID #1. */
++	/* PSA_KEY_USAGE_EXPORT can be added for debug purposes. */
++	status = al_psa_status(
++		crp_imp_key_secp256r1(key_slot,
++				      PSA_KEY_USAGE_SIGN_HASH |
++				      PSA_KEY_USAGE_VERIFY_HASH,
++				      priv_key_data),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to create persistent key #%d", key_slot);
++		goto err;
++	}
++#else /* !CONFIG_PSA_IMPORT_KEY */
++
++	/* NOTE: The certificate signing request (CSR) can be generated using
++	 * openssl by using following commands:
++	 *
++	 * Generate a new key:
++	 *
++	 *   $ openssl ecparam -name secp256k1 -genkey -out USER.key
++	 *
++	 * Generate a certificate signing request, containing the user public key
++	 * and required details to be inserted into the user certificate.
++	 * openssl req -new -key USER.key -out USER.csr \
++	 *   -subj "/O=Linaro/CN=$(uuidgen | tr '[:upper:]' '[:lower:]')"
++	 *
++	 */
++
++	/* Generate persistent prime256v1 (ecdsa-with-SHA256) key w/ID #1. */
++	/* PSA_KEY_USAGE_EXPORT can be added for debug purposes. */
++	status = al_psa_status(
++		crp_gen_key_secp256r1(key_slot,
++				      PSA_KEY_USAGE_SIGN_HASH |
++				      PSA_KEY_USAGE_VERIFY_HASH),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to create persistent key #%d", key_slot);
++		goto err;
++	}
++#endif /* CONFIG_PSA_IMPORT_KEY */
++
++	status = al_psa_status(
++		psa_open_key(key_slot, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to open persistent key #%d", key_slot);
++		goto err;
++	}
++
++	psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
++
++	psa_get_key_attributes(key_handle, &attributes);
++	mbedtls_x509write_csr_set_md_alg(&req, MBEDTLS_MD_SHA256);
++
++	LOG_INF("Adding subject name to CSR");
++	al_dump_log();
++
++	status = mbedtls_x509write_csr_set_subject_name(&req, "O=Linaro,CN=Device Certificate");
++	if (status != 0) {
++		LOG_ERR("failed! mbedtls_x509write_csr_set_subject_name returned %d", status);
++		goto err;
++	}
++
++	LOG_INF("Adding subject name to CSR completed");
++	al_dump_log();
++
++	LOG_INF("Adding EC key to PK container");
++	al_dump_log();
++
++	status = mbedtls_pk_setup_opaque(&pk_key_container, key_handle);
++	if (status != 0) {
++		LOG_ERR("failed! mbedtls_pk_setup_opaque returned -0x%04x", (unsigned int) -status);
++		goto err;
++	}
++
++	LOG_INF("Adding EC key to PK container completed");
++	al_dump_log();
++
++	mbedtls_x509write_csr_set_key(&req, &pk_key_container);
++
++	LOG_INF("Create device Certificate Signing Request");
++	al_dump_log();
++
++	status = mbedtls_x509write_csr_pem(&req, output_buf, sizeof(output_buf),
++					   psa_rng_for_mbedtls, NULL);
++	if (status < 0) {
++		LOG_ERR("failed! mbedtls_x509write_csr_pem returned -0x%04x",
++			(unsigned int) -status);
++		goto err;
++	}
++
++	LOG_INF("Create device Certificate Signing Request completed");
++	al_dump_log();
++
++	LOG_INF("Certificate Signing Request:\n");
++	al_dump_log();
++
++	printf("%s\n", output_buf);
++
++	/*
++	 * 1.3. Encoding CSR as JSON
++	 */
++	LOG_INF("Encoding CSR as json");
++	al_dump_log();
++
++	status = json_obj_encode_buf(csr_json_descr, ARRAY_SIZE(csr_json_descr),
++				     &csr_json, json_encoded_buf, sizeof(json_encoded_buf));
++
++	if (status != 0) {
++		LOG_ERR("failed! json_obj_encode_buf returned 0x%04x", status);
++		goto err;
++	}
++
++	LOG_INF("Encoding CSR as json completed");
++	al_dump_log();
++
++	LOG_INF("Certificate Signing Request in JSON:\n");
++	al_dump_log();
++
++	printf("%s\n\n", json_encoded_buf);
++
++	/* Close the key to free up the volatile slot. */
++	status = al_psa_status(
++		psa_close_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to close persistent key.");
++		goto err;
++	}
++
++err:
++	al_dump_log();
++	mbedtls_x509write_csr_free(&req);
++	mbedtls_pk_free(&pk_key_container);
++}
++
++/**
++ * @brief Calculates the SHA256 hash for the supplied message.
++ *
++ * @param msg           Pointer to the buffer to read when generating the hash.
++ * @param msg_len       Number of bytes in msg.
++ * @param hash          Pointer to the buffer where the hash should be written.
++ * @param hash_buf_size Size of hash in bytes.
++ * @param hash_len      Placeholder for the number of hash bytes written.
++ */
++static psa_status_t crp_hash_payload(uint8_t *msg, size_t msg_len,
++				     uint8_t *hash, size_t hash_buf_size,
++				     size_t *hash_len)
++{
++	psa_status_t status;
++	psa_hash_operation_t hash_handle = psa_hash_operation_init();
++	psa_algorithm_t alg = PSA_ALG_SHA_256;
++
++	LOG_INF("Calculating SHA-256 hash of value");
++	al_dump_log();
++
++	/* Display the input message */
++	sf_hex_tabulate_16(&crp_fmt, msg, msg_len);
++
++	/* Setup the hash object. */
++	status = al_psa_status(psa_hash_setup(&hash_handle, alg),
++			       __func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to setup hash op.");
++		goto err;
++	}
++
++	/* Update object with all the message chunks. */
++	/* For the moment, the message is passed in a single operation, */
++	/* but this can be broken up in chunks for larger messages. */
++	status = al_psa_status(psa_hash_update(&hash_handle, msg, msg_len),
++			       __func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to update hash.");
++		goto err;
++	}
++
++	/* Finalize the hash calculation. */
++	status = al_psa_status(psa_hash_finish(&hash_handle,
++					       hash, hash_buf_size, hash_len),
++			       __func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to finalize hash op.");
++		goto err;
++	}
++
++	/* Display the SHA-256 hash for debug purposes */
++	sf_hex_tabulate_16(&crp_fmt, hash, (size_t)(PSA_HASH_MAX_SIZE));
++
++	return status;
++err:
++	psa_hash_abort(&hash_handle);
++	al_dump_log();
++	return status;
++}
++
++/**
++ * @brief Signs the supplied hash using the specified persistent key.
++ *
++ * @param key_id        The identifier of the key to use when signing.
++ * @param hash          Pointer to the buffer where the hash should be written.
++ * @param hash_buf_size Size of hash in bytes.
++ * @param sig           Pointer to the buffer to read when generating the sig.
++ * @param sig_buf_size  Size of sig buffer in bytes.
++ * @param sig_len       Number of bytes written to sig.
++ */
++static psa_status_t crp_sign_hash(psa_key_id_t key_id,
++				  uint8_t *hash, size_t hash_buf_size,
++				  uint8_t *sig, size_t sig_buf_size,
++				  size_t *sig_len)
++{
++	psa_status_t status;
++	psa_key_handle_t key_handle;
++
++	LOG_INF("Signing SHA-256 hash");
++	al_dump_log();
++
++	/* Try to open the persisted key based on the key ID. */
++	status = al_psa_status(
++		psa_open_key(key_id, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to open persistent key #%d", key_id);
++		goto err;
++	}
++
++	/* Sign using psa_sign_hash. */
++	status = al_psa_status(
++		psa_sign_hash(key_handle,
++			      PSA_ALG_ECDSA(PSA_ALG_SHA_256),
++			      hash, hash_buf_size,
++			      sig, sig_buf_size, sig_len),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to sign hash w/persistent key #%d", key_id);
++		goto err;
++	}
++
++	/* Display the ECDSA signature for debug purposes */
++	sf_hex_tabulate_16(&crp_fmt, sig, *sig_len);
++
++	/* You can test this same operation with openssl as follows:
++	 *
++	 * $ openssl dgst -sha256 -sign
++	 */
++
++	/* Close the key to free up the volatile slot. */
++	status = al_psa_status(
++		psa_close_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to close persistent key.");
++		goto err;
++	}
++
++	return status;
++err:
++	al_dump_log();
++	return status;
++}
++
++/**
++ * @brief Verifies the hash signature using the public key associated
++ *        with key_id.
++ *
++ * @param key_id        The identifier for the persistent key.
++ * @param hash          Pointer to the hash data to verify.
++ * @param hash_len      Size of the hash buffer in bytes.
++ * @param sig           Pointer to the signature buffer.
++ * @param sig_len       Size of the signature buffer in bytes.
++ */
++static psa_status_t crp_verify_sign(psa_key_id_t key_id,
++				    uint8_t *hash, size_t hash_len,
++				    uint8_t *sig, size_t sig_len)
++{
++	psa_status_t status;
++	psa_key_handle_t key_handle;
++
++	LOG_INF("Verifying signature for SHA-256 hash");
++	al_dump_log();
++
++	/* Try to open the persisted key based on the key ID. */
++	status = al_psa_status(
++		psa_open_key(key_id, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to open persistent key #%d", key_id);
++		goto err;
++	}
++
++	/* Verify the hash signature. */
++	status = al_psa_status(
++		psa_verify_hash(key_handle,
++				PSA_ALG_ECDSA(PSA_ALG_SHA_256),
++				hash, hash_len,
++				sig, sig_len),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Signature verification failed!");
++		goto err;
++	}
++
++	LOG_INF("Signature verified.");
++	al_dump_log();
++
++	/* Close the key to free up the volatile slot. */
++	status = al_psa_status(
++		psa_close_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to close persistent key.");
++		goto err;
++	}
++
++	return status;
++err:
++	al_dump_log();
++	return status;
++}
++
++/**
++ * @brief Destroys the specified persistent key.
++ *
++ * @param key_id        The identifier for the persistent key.
++ */
++static psa_status_t crp_dest_key(psa_key_id_t key_id)
++{
++	psa_status_t status;
++	psa_key_handle_t key_handle;
++
++	/* Try to open the persisted key based on the key ID. */
++	status = al_psa_status(
++		psa_open_key(key_id, &key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to open persistent key #%d", key_id);
++		goto err;
++	}
++
++	/* Destroy the persistent key */
++	status = al_psa_status(
++		psa_destroy_key(key_handle),
++		__func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Failed to destroy a persistent key");
++		goto err;
++	}
++
++	LOG_INF("Destroyed persistent key #%d", (uint32_t)key_id);
++	al_dump_log();
++
++	return status;
++err:
++	al_dump_log();
++	return status;
++}
++
++void crp_test(void)
++{
++	psa_status_t status;
++	uint8_t msg[] = "Please hash and sign this message.";
++	uint8_t hash[PSA_HASH_MAX_SIZE] = { 0 };
++	size_t hash_len;
++	uint8_t sig[PSA_VENDOR_ECDSA_SIGNATURE_MAX_SIZE] = { 0 };
++	size_t sig_len;
++
++	/* secp256r1 private key. */
++#if CONFIG_PSA_IMPORT_KEY
++#if CONFIG_PRIVATE_KEY_STATIC
++	/* This value is based on the private key in user.pem,
++	 * which can be viewed viw the following command:
++	 *
++	 *   $ openssl ec -in user.pem -text -noout
++	 */
++	uint8_t priv_key_data[32] = {
++		0x14, 0xbc, 0xb9, 0x53, 0xa4, 0xee, 0xed, 0x50,
++		0x09, 0x36, 0x92, 0x07, 0x1d, 0xdb, 0x24, 0x2c,
++		0xef, 0xf9, 0x57, 0x92, 0x40, 0x4f, 0x49, 0xaa,
++		0xd0, 0x7c, 0x5b, 0x3f, 0x26, 0xa7, 0x80, 0x48
++	};
++#else /* !CONFIG_PRIVATE_KEY_STATIC */
++	/* Randomly generate the private key. */
++	uint8_t priv_key_data[32] = { 0 };
++
++	psa_generate_random(priv_key_data, sizeof(priv_key_data));
++#endif  /* CONFIG_PRIVATE_KEY_STATIC */
++#endif  /* CONFIG_PSA_IMPORT_KEY */
++
++	/* Initialize crypto API. */
++	status = al_psa_status(psa_crypto_init(), __func__);
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Crypto init failed.");
++		return;
++	}
++
++	/* NOTE: The same key generation, SHA256 hash, sign, and verify
++	 * operations performed in this file can be also performed with
++	 * openssl using the commands described below.
++	 *
++	 * Generate a new key:
++	 *
++	 *   The curve `prime256v1` is same as `secp256r1` in OpenSSL
++	 *   (https://github.com/openssl/openssl/blob/master/apps/ecparam.c#L216)
++	 *   $ openssl ecparam -name prime256v1 -genkey -out user.pem
++	 *
++	 * Display the public and private keys in hexadecimal format:
++	 *
++	 *   $ openssl ec -in user.pem -text -noout
++	 *
++	 * Update the private key value in priv_key_data with the hexadecimal
++	 * values from "priv:" to be able to compare the PSA API and openssl
++	 * output.
++	 *
++	 * Generate a PEM file with the public key (which will be used to
++	 * verify any data signed with the private key):
++	 *
++	 *   $ openssl ec -in user.pem -pubout -out user_pub.pem
++	 *
++	 * Hash the message with SHA256, and sign it with the private key:
++	 *
++	 *   $ echo "Please hash and sign this message." > message.txt
++	 *   $ openssl dgst -sha256 -sign user.pem message.txt > signature.der
++	 *
++	 * Verify the signature using the public key and message file:
++	 *
++	 *   $ openssl dgst -sha256 -verify user_pub.pem \
++	 *     -signature signature.der message.txt
++	 *
++	 * If everything ws OK you should see "Verified OK".
++	 */
++
++	/* Generate persistent secp256r1 key w/ID #1. */
++	/* PSA_KEY_USAGE_EXPORT can be added for debug purposes. */
++#if CONFIG_PSA_IMPORT_KEY
++	status = crp_imp_key_secp256r1(1,
++				       PSA_KEY_USAGE_SIGN_HASH |
++				       PSA_KEY_USAGE_VERIFY_HASH,
++				       priv_key_data);
++#else /* !CONFIG_PSA_IMPORT_KEY */
++	status = crp_gen_key_secp256r1(1,
++				       PSA_KEY_USAGE_SIGN_HASH |
++				       PSA_KEY_USAGE_VERIFY_HASH);
++#endif
++
++	/* Hash some data with the key using SHA256. */
++	status = crp_hash_payload(msg, strlen(msg),
++				  hash, sizeof(hash), &hash_len);
++
++	/* Sign the hash using key #1. */
++	status = crp_sign_hash(1,
++			       hash, hash_len,
++			       sig, sizeof(sig), &sig_len);
++
++	/* Verify the hash signature using the public key. */
++	status = crp_verify_sign(1, hash, hash_len, sig, sig_len);
++
++	/* Destroy the key. */
++	status = crp_dest_key(1);
++}
++
++/**
++ * @brief Generates random values using the TF-M crypto service.
++ */
++void crp_test_rng(void)
++{
++	psa_status_t status;
++	uint8_t outbuf[256] = { 0 };
++	struct sf_hex_tbl_fmt fmt = {
++		.ascii = true,
++		.addr_label = true,
++		.addr = 0
++	};
++
++	status = al_psa_status(psa_generate_random(outbuf, 256), __func__);
++	LOG_INF("Generating 256 bytes of random data.");
++	al_dump_log();
++	sf_hex_tabulate_16(&fmt, outbuf, 256);
++}
+diff --git a/samples/wolfboot_integration/psa_crypto/src/psa_crypto.h b/samples/wolfboot_integration/psa_crypto/src/psa_crypto.h
+new file mode 100644
+index 00000000000..1998e9ceec1
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/psa_crypto.h
+@@ -0,0 +1,34 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <zephyr/kernel.h>
++
++#include "psa/crypto.h"
++#include "psa/error.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief Generates random values using the TF-M crypto service.
++ */
++void crp_test_rng(void);
++
++/**
++ * @brief Runs a series of PSA Cryptography API test functions.
++ */
++void crp_test(void);
++
++/**
++ * @brief Generates device certificate signing request (CSR) using Mbed TLS
++ * X.509 and TF-M crypto service.
++ */
++void crp_generate_csr(void);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/samples/wolfboot_integration/psa_crypto/src/shell.c b/samples/wolfboot_integration/psa_crypto/src/shell.c
+new file mode 100644
+index 00000000000..62b39451abe
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/shell.c
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <stdlib.h>
++#include <ctype.h>
++#include <zephyr/shell/shell.h>
++
++#if CONFIG_PSA_SHELL
++
++static int
++psa_shell_invalid_arg(const struct shell *sh, char *arg_name)
++{
++	shell_print(sh, "Error: invalid argument \"%s\"\n", arg_name);
++
++	return -EINVAL;
++}
++
++static int
++psa_shell_cmd_version(const struct shell *sh, size_t argc, char **argv)
++{
++	shell_print(sh, "%s", "0.0.0");
++
++	return 0;
++}
++
++/* Subcommand array for "psa" (level 1). */
++SHELL_STATIC_SUBCMD_SET_CREATE(sub_psa,
++	/* 'version' command handler. */
++	SHELL_CMD(version, NULL, "app version", psa_shell_cmd_version),
++	/* Array terminator. */
++	SHELL_SUBCMD_SET_END
++);
++
++/* Root command "psa" (level 0). */
++SHELL_CMD_REGISTER(psa, &sub_psa, "PSA commands", NULL);
++
++#endif
+diff --git a/samples/wolfboot_integration/psa_crypto/src/util_app_cfg.c b/samples/wolfboot_integration/psa_crypto/src/util_app_cfg.c
+new file mode 100644
+index 00000000000..fdec12f9aaa
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/util_app_cfg.c
+@@ -0,0 +1,76 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <string.h>
++#include <zephyr/logging/log.h>
++
++#include "psa/error.h"
++#include "psa/protected_storage.h"
++#include "util_app_cfg.h"
++#include "util_app_log.h"
++
++/** The 64-bit UID associated with the config record in secure storage. */
++static psa_storage_uid_t cfg_data_uid = 0x0000000055CFDA7A;
++
++LOG_MODULE_DECLARE(app, CONFIG_LOG_DEFAULT_LEVEL);
++
++/**
++ * @brief Default config settings. These settings will be used when a new
++ *        config record is created, or when the config record is reset.
++ */
++static struct cfg_data cfg_data_dflt = {
++	.magic = 0x55CFDA7A,
++	.version = 1,
++	.scratch = { 0 }
++};
++
++psa_status_t cfg_create_data(void)
++{
++	psa_status_t status;
++
++	LOG_INF("app_cfg: Creating new config file with UID 0x%llX",
++		(uint64_t)cfg_data_uid);
++
++	/*
++	 * psa_ps_create can also be used here, which enables to the use of
++	 * the psa_ps_set_extended function, but this requires us to set a
++	 * maximum file size for resource allocation. Since the upper limit
++	 * isn't known at present, we opt here for the simpler psa_ps_set
++	 * call which also creates the secure storage record if necessary,
++	 * but precludes the use of psa_ps_set_extended.
++	 */
++	status = psa_ps_set(cfg_data_uid, sizeof(cfg_data_dflt),
++			    (void *)&cfg_data_dflt, 0);
++	if (status) {
++		goto err;
++	}
++
++err:
++	return (status ? al_psa_status(status, __func__) : status);
++}
++
++psa_status_t cfg_load_data(struct cfg_data *p_cfg_data)
++{
++	psa_status_t status;
++	struct psa_storage_info_t p_info;
++
++	memset(&p_info, 0, sizeof(p_info));
++
++	/* Check if the config record exists, if not create it. */
++	status = psa_ps_get_info(cfg_data_uid, &p_info);
++	if (status == PSA_ERROR_DOES_NOT_EXIST) {
++		/* Create a new config file. */
++		status = cfg_create_data();
++		/* Copy default values to the cfg_data placeholder. */
++		memcpy(p_cfg_data, &cfg_data_dflt, sizeof(cfg_data_dflt));
++	}
++	if (status) {
++		goto err;
++	}
++
++err:
++	return (status ? al_psa_status(status, __func__) : status);
++}
+diff --git a/samples/wolfboot_integration/psa_crypto/src/util_app_cfg.h b/samples/wolfboot_integration/psa_crypto/src/util_app_cfg.h
+new file mode 100644
+index 00000000000..2b3e312b264
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/util_app_cfg.h
+@@ -0,0 +1,63 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <zephyr/kernel.h>
++
++#include "psa/error.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief The struct used to persist config data to secure storage.
++ *
++ * The first 6 bytes of this struct should remain consistent in any future
++ * firmware updates, since they can be used to identify to layout of the rest
++ * of the struct in cases where config data version management becomes
++ * a necessity.
++ */
++struct cfg_data {
++	/**
++	 * @brief Magic number for config data payloads (0x55CFDA7A).
++	 */
++	uint32_t magic;
++
++	/**
++	 * @brief The version number for the stored config record.
++	 *
++	 * This number should be incremented any time the config_data struct
++	 * definition changes to allow version management of config data at
++	 * the application level.
++	 */
++	uint16_t version;
++
++	/** @brief 256-byte debug scratch area. */
++	uint8_t scratch[256];
++};
++
++/**
++ * @brief Creates a new config record in secure storage.
++ *
++ * @return #PSA_SUCCESS on success, otherwise a appropriate psa_status_t code.
++ */
++psa_status_t cfg_create_data(void);
++
++/**
++ * @brief Attempts to load the config record from secure storage. If the
++ *        record is not found in secure storage, a new record will be created
++ *        using default config settings.
++ *
++ * @param p_cfg_data Pointer to the cfg_data struct where the config data
++ *        should be assigned once loaded.
++ *
++ * @return #PSA_SUCCESS on success, otherwise a appropriate psa_status_t code.
++ */
++psa_status_t cfg_load_data(struct cfg_data *p_cfg_data);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/samples/wolfboot_integration/psa_crypto/src/util_app_log.c b/samples/wolfboot_integration/psa_crypto/src/util_app_log.c
+new file mode 100644
+index 00000000000..52f766c81cc
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/util_app_log.c
+@@ -0,0 +1,110 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++#include <zephyr/kernel.h>
++#include <zephyr/logging/log_ctrl.h>
++#include <zephyr/logging/log.h>
++
++#include "psa/crypto.h"
++#include "util_app_log.h"
++
++LOG_MODULE_REGISTER(app, CONFIG_LOG_DEFAULT_LEVEL);
++
++psa_status_t al_psa_status(psa_status_t status, const char *func_name)
++{
++	switch (status) {
++	case PSA_SUCCESS:
++		break;
++
++	/* Generic PSA errors (psa/error.h). */
++	case PSA_ERROR_PROGRAMMER_ERROR:
++		LOG_ERR("Programmer error");
++		break;
++	case PSA_ERROR_CONNECTION_REFUSED:
++		LOG_ERR("Connection refused");
++		break;
++	case PSA_ERROR_CONNECTION_BUSY:
++		LOG_ERR("Connection busy");
++		break;
++	case PSA_ERROR_GENERIC_ERROR:
++		LOG_ERR("Generic error");
++		break;
++	case PSA_ERROR_NOT_PERMITTED:
++		LOG_ERR("Not permitted");
++		break;
++	case PSA_ERROR_NOT_SUPPORTED:
++		LOG_ERR("Unsupported operation");
++		break;
++	case PSA_ERROR_INVALID_ARGUMENT:
++		LOG_ERR("Invalid argument");
++		break;
++	case PSA_ERROR_INVALID_HANDLE:
++		LOG_ERR("Invalid handle");
++		break;
++	case PSA_ERROR_BAD_STATE:
++		LOG_ERR("Bad state");
++		break;
++	case PSA_ERROR_BUFFER_TOO_SMALL:
++		LOG_ERR("Buffer too small");
++		break;
++	case PSA_ERROR_ALREADY_EXISTS:
++		LOG_ERR("Already exists");
++		break;
++	case PSA_ERROR_DOES_NOT_EXIST:
++		LOG_ERR("Does not exist");
++		break;
++	case PSA_ERROR_INSUFFICIENT_MEMORY:
++		LOG_ERR("Insufficient memory");
++		break;
++	case PSA_ERROR_INSUFFICIENT_STORAGE:
++		LOG_ERR("Insufficient storage");
++		break;
++	case PSA_ERROR_INSUFFICIENT_DATA:
++		LOG_ERR("Insufficient memory data");
++		break;
++	case PSA_ERROR_SERVICE_FAILURE:
++		LOG_ERR("Service failure");
++		break;
++	case PSA_ERROR_COMMUNICATION_FAILURE:
++		LOG_ERR("Communication failure");
++		break;
++	case PSA_ERROR_STORAGE_FAILURE:
++		LOG_ERR("Storage failure");
++		break;
++	case PSA_ERROR_HARDWARE_FAILURE:
++		LOG_ERR("Hardware failure");
++		break;
++	case PSA_ERROR_INVALID_SIGNATURE:
++		LOG_ERR("Invalid signature");
++		break;
++
++	/* PSA crypto errors (psa/crypto_values.h). */
++	case PSA_ERROR_INSUFFICIENT_ENTROPY:
++		LOG_ERR("CRYPTO: Insufficient entropy");
++		break;
++	case PSA_ERROR_CORRUPTION_DETECTED:
++		LOG_ERR("CRYPTO: Tampering detected");
++		break;
++
++	/* Catch-all error handler. */
++	default:
++		LOG_ERR("Unhandled status response: %d", status);
++		break;
++	}
++
++	/* Display the calling function name for debug purposes. */
++	if (status != PSA_SUCCESS) {
++		LOG_ERR("Function: '%s'", func_name);
++	}
++
++	return status;
++}
++
++void al_dump_log(void)
++{
++	while (log_process()) {
++
++	}
++}
+diff --git a/samples/wolfboot_integration/psa_crypto/src/util_app_log.h b/samples/wolfboot_integration/psa_crypto/src/util_app_log.h
+new file mode 100644
+index 00000000000..af935163e08
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/util_app_log.h
+@@ -0,0 +1,35 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <stdarg.h>
++
++#include "psa/error.h"
++#include "psa/initial_attestation.h"
++#include "psa/protected_storage.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief Logs PSA response messages other than PSA_SUCCESS for debugging
++ *        purposes.
++ *
++ * @param status        The psa_status_t value to log.
++ * @param func_name     The name of the function that made this function call.
++ *
++ * @return Returns the psa_status_t value passed into the function.
++ */
++psa_status_t al_psa_status(psa_status_t status, const char *func_name);
++
++/**
++ * @brief Calls 'log_process' in Zephyr to dump any queued log messages.
++ */
++void al_dump_log(void);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/samples/wolfboot_integration/psa_crypto/src/util_sformat.c b/samples/wolfboot_integration/psa_crypto/src/util_sformat.c
+new file mode 100644
+index 00000000000..bd46aec54fc
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/util_sformat.c
+@@ -0,0 +1,115 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <ctype.h>
++#include <stdio.h>
++#include "util_sformat.h"
++
++static void sf_hex_ascii(unsigned char *data, size_t len, unsigned char nonvis)
++{
++	uint32_t idx;
++
++	/* Render printable characters. */
++	idx = 0;
++	while (len) {
++		printf("%c", isprint(data[idx]) ? data[idx] : nonvis);
++		idx++;
++		len--;
++	}
++}
++
++void sf_hex_tabulate_16(struct sf_hex_tbl_fmt *fmt, unsigned char *data,
++			size_t len)
++{
++	uint32_t idx;
++	uint32_t cpos;     /* Current position. */
++	uint32_t ca;       /* Current address. */
++	uint32_t ea;       /* End address. */
++
++	if (!len) {
++		return;
++	}
++
++	/* Set the end address (since we modify len in the write loop). */
++	ea = fmt->addr + len;
++
++	/* Check if we need to render the top address bar. */
++	if (fmt->addr_label) {
++		/* Render the top address bar. */
++		printf("\n");
++		printf("          ");
++		printf("0  1  2  3  4  5  6  7  8  9  ");
++		printf("A  B  C  D  E  F\n");
++		printf("%08X ", fmt->addr - (fmt->addr % 16));
++	}
++
++	/* Insert offset padding for first row if necessary. */
++	cpos = fmt->addr % 16;
++	if (cpos != 0) {
++		for (idx = 0; idx < cpos; idx++) {
++			printf("   ");
++		}
++	}
++
++	/* Print data row by row. */
++	idx = 0;
++	ca = fmt->addr;
++	while (len) {
++		/* Print the current value. */
++		printf("%02X ", data[idx++]);
++		cpos++;
++		ca++;
++
++		/* Wrap around to the next line if necessary. */
++		if (cpos == 16 || ca == ea) {
++			/* Render ASCII equiv at end of row if requested. */
++			if (fmt->ascii) {
++				if (ca == ea) {
++					/* Handle last/single row. */
++					if (ca % 16) {
++						/* PARTIAL row (< 16 vals). */
++						printf("%.*s",
++						       (16 - ca % 16) * 3,
++						       "                "
++						       "                "
++						       "                ");
++						sf_hex_ascii(
++							&data[idx - (ca % 16)],
++							ca - fmt->addr < 16 ?
++							idx % 16 : ca % 16,
++							'.');
++					} else {
++						/* FULL row. */
++						sf_hex_ascii(
++							&data[idx - 16],
++							16, '.');
++					}
++				} else if (ca < fmt->addr + 15) {
++					/* Handle first row. */
++					printf("%.*s", fmt->addr % 16,
++					       "                ");
++					sf_hex_ascii(data,
++						     16 - fmt->addr % 16, '.');
++				} else {
++					/* Full row. */
++					sf_hex_ascii(&data[idx - 16], 16, '.');
++				}
++			}
++
++			/* Wrap around if this isn't the last row. */
++			printf("\n");
++			if (ca != ea) {
++				/* Render the next base row addr. */
++				if (fmt->addr_label) {
++					printf("%08X ", ca);
++				}
++			}
++			cpos = 0;
++		}
++		len--;
++	}
++	printf("\n");
++}
+diff --git a/samples/wolfboot_integration/psa_crypto/src/util_sformat.h b/samples/wolfboot_integration/psa_crypto/src/util_sformat.h
+new file mode 100644
+index 00000000000..b76d2aa5b91
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/src/util_sformat.h
+@@ -0,0 +1,45 @@
++/*
++ * Copyright (c) 2019,2020 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#ifndef _SFORMAT_H_
++#define _SFORMAT_H_
++
++#include <stdint.h>
++#include <zephyr/kernel.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief Indicates how hex data should be rendered in tabular format.
++ */
++struct sf_hex_tbl_fmt {
++	/** Whether or not to render ASCII equivalents. */
++	uint8_t ascii : 1;
++	/** Whether or not to add address labels to the output. */
++	uint8_t addr_label : 1;
++	/** The starting value for the address labels. */
++	uint32_t addr;
++} __packed;
++
++/**
++ * @brief Prints a 16-value wide tabular rendering of 8-bit hex data, with
++ *        optional ascii equivalents and address labels.
++ *
++ * @param fmt   Pointer to thee sf_hex_tbl_fmt struct indicating how the
++ *              table should be rendered.
++ * @param data  Pointer to the data to render.
++ * @param len   The number of bytes to render from data.
++ */
++void sf_hex_tabulate_16(struct sf_hex_tbl_fmt *fmt, unsigned char *data,
++			size_t len);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _SFORMAT_H_ */
+diff --git a/samples/wolfboot_integration/psa_crypto/user.pem b/samples/wolfboot_integration/psa_crypto/user.pem
+new file mode 100644
+index 00000000000..9be207fb091
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/user.pem
+@@ -0,0 +1,8 @@
++-----BEGIN EC PARAMETERS-----
++BggqhkjOPQMBBw==
++-----END EC PARAMETERS-----
++-----BEGIN EC PRIVATE KEY-----
++MHcCAQEEIBS8uVOk7u1QCTaSBx3bJCzv+VeSQE9JqtB8Wz8mp4BIoAoGCCqGSM49
++AwEHoUQDQgAER+qu2dZtLh1lBfUE/swhmb5eWlZrTx4MQ+Jbzht9BtezceIKPEft
++hJ9lDtv5PdIHu4Gmc+Y7FpUZrAECyxz1NQ==
++-----END EC PRIVATE KEY-----
+diff --git a/samples/wolfboot_integration/psa_crypto/user_pub.pem b/samples/wolfboot_integration/psa_crypto/user_pub.pem
+new file mode 100644
+index 00000000000..e37f7142a5f
+--- /dev/null
++++ b/samples/wolfboot_integration/psa_crypto/user_pub.pem
+@@ -0,0 +1,4 @@
++-----BEGIN PUBLIC KEY-----
++MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAER+qu2dZtLh1lBfUE/swhmb5eWlZr
++Tx4MQ+Jbzht9BtezceIKPEfthJ9lDtv5PdIHu4Gmc+Y7FpUZrAECyxz1NQ==
++-----END PUBLIC KEY-----
