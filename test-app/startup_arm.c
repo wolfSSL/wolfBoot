@@ -91,26 +91,26 @@ void isr_reset(void) {
 void isr_fault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 
 }
 
 void isr_memfault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 }
 
 void isr_busfault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 }
 
 void isr_usagefault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 }
 
 

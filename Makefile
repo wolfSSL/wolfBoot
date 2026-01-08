@@ -458,6 +458,10 @@ endif
 		$(WOLFBOOT_ORIGIN) wolfboot.bin \
 		$(WOLFBOOT_PARTITION_BOOT_ADDRESS) test-app/image_v1_signed.bin
 
+factory.srec: factory.bin
+	@echo "\t[BIN2SREC] $@"
+	$(Q)$(OBJCOPY) -I binary -O srec --change-addresses=$(WOLFBOOT_ORIGIN) $< $@
+
 factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] $@"
 	$(Q)$(BINASSEMBLE) $@ \
@@ -509,6 +513,7 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 
 hex: wolfboot.hex
 srec: wolfboot.srec
+factory-srec: factory.srec
 
 %.hex:%.elf
 	@echo "\t[ELF2HEX] $@"
@@ -541,7 +546,7 @@ clean:
 	$(Q)rm -f src/wc_secure_calls.o
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/*.o
-	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex
+	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex wolfboot.srec factory.srec
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)rm -f $(OBJS)
 	$(Q)rm -f tools/keytools/otp/otp-keystore-gen

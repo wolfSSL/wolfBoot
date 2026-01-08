@@ -2,12 +2,18 @@
  * Linker script for wolfBoot test application on NXP S32K1xx
  *
  * Application runs from boot partition after wolfBoot header
+ *
+ * S32K142 SRAM Layout (32KB total, split across two regions):
+ *   SRAM_L: 0x1FFFC000 - 0x1FFFFFFF (16 KB) - Lower SRAM
+ *   SRAM_U: 0x20000000 - 0x20002FFF (12 KB) - Upper SRAM
+ *
+ * Using upper SRAM for application data/bss/stack
  */
 
 MEMORY
 {
     FLASH (rx)  : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
-    RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 0x7000  /* 28KB upper SRAM */
+    RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 0x3000  /* 12KB upper SRAM */
 }
 
 SECTIONS

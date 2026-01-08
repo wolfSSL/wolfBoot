@@ -38,6 +38,7 @@
 *.rom
 *.bin
 *.efi
+*.srec
 
 # Debug files
 *.dSYM/

@@ -73,6 +73,7 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 
 ifeq ($(DEBUG_UART),1)
+    CFLAGS+=-DDEBUG_UART
     APP_OBJS+=../src/string.o
 endif
 
@@ -350,6 +351,10 @@ endif
 
 ifeq ($(TARGET),s32k1xx)
     LSCRIPT_TEMPLATE=ARM-s32k1xx.ld
+    APP_OBJS+=../src/keystore.o
+    CFLAGS+=-DAPP_HAS_SYSTICK
+    # To allow RAMCODE to be support in test-app
+    CFLAGS+=-D__WOLFBOOT
 endif
 
 ifeq ($(TARGET),mcxw)

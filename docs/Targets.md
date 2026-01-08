@@ -2914,7 +2914,7 @@ pegdbserver_console -device=NXP_S32K1xx_S32K142 -startserver -serverport=7224
 
 3. In another terminal, connect with GDB and flash:
 ```sh
-arm-none-eabi-gdb wolfboot.elf
+arm-none-eabi-gdb --nx wolfboot.elf
 target remote :7224
 monitor reset halt
 load

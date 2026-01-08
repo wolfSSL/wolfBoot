@@ -339,6 +339,55 @@ void uart_write(const char* buf, unsigned int sz)
     while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
 }
 
+/* Read a single character from UART (non-blocking)
+ * Returns: 1 if character read, 0 if no data available, -1 on error
+ */
+int uart_read(char* c)
+{
+    uint32_t stat = LPUART1_STAT;
+
+    /* Clear any error flags */
+    if (stat & (LPUART_STAT_OR | LPUART_STAT_NF | LPUART_STAT_FE | LPUART_STAT_PF)) {
+        LPUART1_STAT = stat;  /* Write 1 to clear flags */
+        return -1;
+    }
+
+    /* Check if data available */
+    if (stat & LPUART_STAT_RDRF) {
+        *c = (char)(LPUART1_DATA & 0xFF);
+        return 1;
+    }
+
+    return 0;  /* No data available */
+}
+
+/* Blocking read with timeout (in ms)
+ * Returns: number of characters read, or -1 on error/timeout
+ */
+int uart_read_timeout(char* buf, int len, uint32_t timeout_ms)
+{
+    int count = 0;
+    int ret;
+
+    /* Simple polling - timeout not implemented in HAL (no systick access) */
+    (void)timeout_ms;
+
+    while (count < len) {
+        ret = uart_read(&buf[count]);
+        if (ret > 0) {
+            count++;
+        } else if (ret < 0) {
+            return -1;  /* Error */
+        }
+        /* If no timeout support, just return what we have */
+        if (ret == 0 && count > 0) {
+            break;
+        }
+    }
+
+    return count;
+}
+
 #endif /* DEBUG_UART */
 
 /* ============== Flash Functions ============== */
@@ -404,9 +453,28 @@ static int RAMFUNCTION flash_program_phrase(uint32_t address, const uint8_t *dat
 
 static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
 {
+    uint32_t primask;
+
+#ifdef DEBUG_FLASH
+    /* Debug: Print flash status before erase */
+    uart_write("  FSTAT=", 8);
+    {
+        uint8_t fstat = FTFC_FSTAT;
+        char hex[3];
+        hex[0] = "0123456789ABCDEF"[(fstat >> 4) & 0xF];
+        hex[1] = "0123456789ABCDEF"[fstat & 0xF];
+        hex[2] = ' ';
+        uart_write(hex, 3);
+    }
+#endif
+
     /* Wait for previous command to complete */
     flash_wait_complete();
     flash_clear_errors();
+
+#ifdef DEBUG_FLASH
+    uart_write("rdy ", 4);
+#endif
 
     /* Set up Erase Sector command (0x09) */
     FTFC_FCCOB0 = FTFC_CMD_ERASE_SECTOR;
@@ -414,13 +482,35 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
     FTFC_FCCOB2 = (uint8_t)(address >> 8);
     FTFC_FCCOB3 = (uint8_t)(address);
 
+#ifdef DEBUG_FLASH
+    uart_write("cmd ", 4);
+#endif
+
     /* Launch command */
     DSB();
     ISB();
+
+#ifdef DEBUG_FLASH
+    uart_write("go\n", 3);
+    /* Wait for UART to transmit before flash operation */
+    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+#endif
+
+    /* Disable interrupts during flash operation to prevent code fetch from flash */
+    __asm__ volatile ("mrs %0, primask\n\t"
+                      "cpsid i" : "=r" (primask) :: "memory");
+
     FTFC_FSTAT = FTFC_FSTAT_CCIF;
 
     /* Wait for completion */
     flash_wait_complete();
+
+    /* Re-enable interrupts */
+    __asm__ volatile ("msr primask, %0" :: "r" (primask) : "memory");
+
+#ifdef DEBUG_FLASH
+    uart_write("done\n", 5);
+#endif
 
 #ifdef WATCHDOG
     /* Refresh watchdog after potentially long flash operation */
@@ -454,10 +544,6 @@ void hal_init(void)
 #endif
 
 #ifdef WATCHDOG
-    /* Re-enable watchdog with configured timeout */
-#ifndef WATCHDOG_TIMEOUT_MS
-#define WATCHDOG_TIMEOUT_MS 1000  /* Default 1 second timeout */
-#endif
     watchdog_enable(WATCHDOG_TIMEOUT_MS);
 #endif
 }
@@ -499,13 +585,6 @@ void hal_prepare_boot(void)
     }
 #endif
 }
-
-/* Flash Configuration Field (FCF) region - MUST NOT be modified at runtime!
- * Writing incorrect values here can permanently lock the device.
- * Address range: 0x400 - 0x40F (16 bytes)
- */
-#define FCF_START_ADDR  0x400
-#define FCF_END_ADDR    0x410
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
@@ -622,7 +701,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    /* Flash is always accessible on S32K1xx after reset */
+    /* Ensure flash controller clock is enabled */
+    PCC_FTFC |= PCC_CGC;
+
+    /* Clear any pending errors */
+    if (FTFC_FSTAT & (FTFC_FSTAT_ACCERR | FTFC_FSTAT_FPVIOL)) {
+        FTFC_FSTAT = FTFC_FSTAT_ACCERR | FTFC_FSTAT_FPVIOL;
+    }
 }
 
 void RAMFUNCTION hal_flash_lock(void)

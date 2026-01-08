@@ -42,6 +42,38 @@
  * To enable HSRUN mode (112 MHz), define S32K1XX_CLOCK_HSRUN (requires SOSC + SPLL)
  */
 
+/* ============== ARM Cortex-M4 System Registers ============== */
+
+/* System Control Block (SCB) */
+#define SCB_BASE            (0xE000ED00UL)
+#define SCB_CPUID           (*(volatile uint32_t *)(SCB_BASE + 0x00UL))
+#define SCB_ICSR            (*(volatile uint32_t *)(SCB_BASE + 0x04UL))
+#define SCB_VTOR            (*(volatile uint32_t *)(SCB_BASE + 0x08UL))
+#define SCB_AIRCR           (*(volatile uint32_t *)(SCB_BASE + 0x0CUL))
+#define SCB_SCR             (*(volatile uint32_t *)(SCB_BASE + 0x10UL))
+#define SCB_CCR             (*(volatile uint32_t *)(SCB_BASE + 0x14UL))
+
+/* AIRCR - Application Interrupt and Reset Control Register */
+#define AIRCR_VECTKEY       (0x05FAUL << 16)
+#define AIRCR_SYSRESETREQ   (1UL << 2)
+
+/* SysTick Timer */
+#define SYST_BASE           (0xE000E010UL)
+#define SYST_CSR            (*(volatile uint32_t *)(SYST_BASE + 0x00UL))
+#define SYST_RVR            (*(volatile uint32_t *)(SYST_BASE + 0x04UL))
+#define SYST_CVR            (*(volatile uint32_t *)(SYST_BASE + 0x08UL))
+#define SYST_CALIB          (*(volatile uint32_t *)(SYST_BASE + 0x0CUL))
+
+#define SYST_CSR_ENABLE     (1UL << 0)
+#define SYST_CSR_TICKINT    (1UL << 1)
+#define SYST_CSR_CLKSOURCE  (1UL << 2)
+#define SYST_CSR_COUNTFLAG  (1UL << 16)
+
+/* Clock speed (FIRC = 48 MHz) */
+#ifndef CLOCK_SPEED
+#define CLOCK_SPEED         48000000UL
+#endif
+
 /* ============== System Control Registers ============== */
 
 /* SCG - System Clock Generator */
@@ -124,12 +156,39 @@
 
 /* ============== GPIO / Port Registers ============== */
 
+/* PCC for GPIO ports */
+#define PCC_PORTD           (*(volatile uint32_t *)(PCC_BASE + 0x130UL))
+
+/* Port C - UART pins */
 #define PORTC_BASE          (0x4004B000UL)
 #define PORTC_PCR6          (*(volatile uint32_t *)(PORTC_BASE + 0x018UL))
 #define PORTC_PCR7          (*(volatile uint32_t *)(PORTC_BASE + 0x01CUL))
 
+/* Port D - LED pins on S32K142EVB */
+#define PORTD_BASE          (0x4004C000UL)
+#define PORTD_PCR(n)        (*(volatile uint32_t *)(PORTD_BASE + ((n) * 4)))
+#define PORTD_PCR0          (*(volatile uint32_t *)(PORTD_BASE + 0x000UL))  /* Blue LED */
+#define PORTD_PCR15         (*(volatile uint32_t *)(PORTD_BASE + 0x03CUL))  /* Red LED */
+#define PORTD_PCR16         (*(volatile uint32_t *)(PORTD_BASE + 0x040UL))  /* Green LED */
+
+/* GPIO D registers */
+#define GPIOD_BASE          (0x400FF0C0UL)
+#define GPIOD_PDOR          (*(volatile uint32_t *)(GPIOD_BASE + 0x00UL))  /* Data Output */
+#define GPIOD_PSOR          (*(volatile uint32_t *)(GPIOD_BASE + 0x04UL))  /* Set Output */
+#define GPIOD_PCOR          (*(volatile uint32_t *)(GPIOD_BASE + 0x08UL))  /* Clear Output */
+#define GPIOD_PTOR          (*(volatile uint32_t *)(GPIOD_BASE + 0x0CUL))  /* Toggle Output */
+#define GPIOD_PDIR          (*(volatile uint32_t *)(GPIOD_BASE + 0x10UL))  /* Data Input */
+#define GPIOD_PDDR          (*(volatile uint32_t *)(GPIOD_BASE + 0x14UL))  /* Data Direction */
+
+/* Port Control Register fields */
 #define PORT_PCR_MUX_SHIFT  8
+#define PORT_PCR_MUX_GPIO   (1UL << PORT_PCR_MUX_SHIFT)  /* GPIO mode */
 #define PORT_PCR_MUX_ALT2   (2UL << PORT_PCR_MUX_SHIFT)  /* LPUART1 */
+
+/* S32K142EVB LED pins (accent RGB LED accent accent accent accent LED accent accent accent-low accent LED) */
+#define LED_PIN_BLUE        0   /* PTD0 - Blue LED (active low) */
+#define LED_PIN_RED         15  /* PTD15 - Red LED (active low) */
+#define LED_PIN_GREEN       16  /* PTD16 - Green LED (active low) */
 
 /* ============== LPUART Registers ============== */
 
@@ -146,8 +205,14 @@
 #define LPUART_BAUD_SBR_SHIFT   0
 #define LPUART_CTRL_TE          (1UL << 19)  /* Transmitter Enable */
 #define LPUART_CTRL_RE          (1UL << 18)  /* Receiver Enable */
+#define LPUART_CTRL_RIE         (1UL << 21)  /* Receiver Interrupt Enable */
 #define LPUART_STAT_TDRE        (1UL << 23)  /* Transmit Data Register Empty */
 #define LPUART_STAT_TC          (1UL << 22)  /* Transmission Complete */
+#define LPUART_STAT_RDRF        (1UL << 21)  /* Receive Data Register Full */
+#define LPUART_STAT_OR          (1UL << 19)  /* Overrun Flag */
+#define LPUART_STAT_NF          (1UL << 18)  /* Noise Flag */
+#define LPUART_STAT_FE          (1UL << 17)  /* Framing Error */
+#define LPUART_STAT_PF          (1UL << 16)  /* Parity Error */
 
 /* ============== Flash (FTFC) Registers ============== */
 
@@ -219,6 +284,13 @@
 /* Flash base address */
 #define FLASH_BASE_ADDR             0x00000000
 
+/* Flash Configuration Field (FCF) region - MUST NOT be modified at runtime!
+ * Writing incorrect values here can permanently lock the device.
+ * Address range: 0x400 - 0x40F (16 bytes)
+ */
+#define FCF_START_ADDR  0x400
+#define FCF_END_ADDR    0x410
+
 /* SRAM base address (all S32K1xx variants) */
 #define SRAM_BASE_ADDR              0x1FFF8000  /* Lower SRAM */
 #define SRAM_UPPER_ADDR             0x20000000  /* Upper SRAM */
@@ -278,6 +350,12 @@
  */
 #define WDOG_CS_ENABLE_CFG      (WDOG_CS_EN | WDOG_CS_UPDATE | WDOG_CS_CMD32EN | \
                                  WDOG_CS_CLK_LPO)
+
+
+/* Default 1 second timeout */
+#ifndef WATCHDOG_TIMEOUT_MS
+#define WATCHDOG_TIMEOUT_MS 1000
+#endif
 
 #endif /* S32K1XX_H */
 
