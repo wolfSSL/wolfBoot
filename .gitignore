@@ -91,6 +91,9 @@ tools/delta/bmpatch
 # otp-keystore-gen binary
 tools/keytools/otp/otp-keystore-gen
 
+# test-server binary
+test-app/emu-test-apps/*/test-update-server
+
 # Vim swap files
 .*.swp
 

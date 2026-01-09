@@ -340,6 +340,9 @@ hal/$(TARGET).o:
 
 keytools_check: keytools
 
+test-emu:
+	$(MAKE) -C test-app/emu-test-apps WOLFBOOT_ROOT="$(CURDIR)" test-emu
+
 # Generate the initial signing key (only if not using user-provided keys)
 # - Creates wolfboot_signing_private_key.der when USER_PRIVATE_KEY is not set
 # - If CERT_CHAIN_VERIFY is enabled and USER_CERT_CHAIN not provided, also generates cert chain with leaf key
