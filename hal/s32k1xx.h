@@ -145,8 +145,12 @@
 
 /* PCC - Peripheral Clock Controller */
 #define PCC_BASE            (0x40065000UL)
+#define PCC_PORTA           (*(volatile uint32_t *)(PCC_BASE + 0x124UL))
+#define PCC_PORTB           (*(volatile uint32_t *)(PCC_BASE + 0x128UL))
 #define PCC_PORTC           (*(volatile uint32_t *)(PCC_BASE + 0x12CUL))
+#define PCC_LPUART0         (*(volatile uint32_t *)(PCC_BASE + 0x1A8UL))
 #define PCC_LPUART1         (*(volatile uint32_t *)(PCC_BASE + 0x1ACUL))
+#define PCC_LPUART2         (*(volatile uint32_t *)(PCC_BASE + 0x1B0UL))
 #define PCC_FTFC            (*(volatile uint32_t *)(PCC_BASE + 0x0B0UL))
 
 #define PCC_CGC             (1UL << 30)  /* Clock Gate Control */
@@ -158,18 +162,42 @@
 
 /* PCC for GPIO ports */
 #define PCC_PORTD           (*(volatile uint32_t *)(PCC_BASE + 0x130UL))
+#define PCC_PORTE           (*(volatile uint32_t *)(PCC_BASE + 0x134UL))
 
-/* Port C - UART pins */
+/* Port A - LPUART0/LPUART2 alternate pins */
+#define PORTA_BASE          (0x40049000UL)
+#define PORTA_PCR(n)        (*(volatile uint32_t *)(PORTA_BASE + ((n) * 4)))
+#define PORTA_PCR2          (*(volatile uint32_t *)(PORTA_BASE + 0x008UL))  /* LPUART0_RX (ALT6) */
+#define PORTA_PCR3          (*(volatile uint32_t *)(PORTA_BASE + 0x00CUL))  /* LPUART0_TX (ALT6) */
+#define PORTA_PCR8          (*(volatile uint32_t *)(PORTA_BASE + 0x020UL))  /* LPUART2_RX (ALT6) */
+#define PORTA_PCR9          (*(volatile uint32_t *)(PORTA_BASE + 0x024UL))  /* LPUART2_TX (ALT6) */
+
+/* Port B - LPUART0/LPUART1 alternate pins */
+#define PORTB_BASE          (0x4004A000UL)
+#define PORTB_PCR(n)        (*(volatile uint32_t *)(PORTB_BASE + ((n) * 4)))
+#define PORTB_PCR0          (*(volatile uint32_t *)(PORTB_BASE + 0x000UL))  /* LPUART0_RX (ALT2) */
+#define PORTB_PCR1          (*(volatile uint32_t *)(PORTB_BASE + 0x004UL))  /* LPUART0_TX (ALT2) */
+
+/* Port C - LPUART1/LPUART2 pins */
 #define PORTC_BASE          (0x4004B000UL)
-#define PORTC_PCR6          (*(volatile uint32_t *)(PORTC_BASE + 0x018UL))
-#define PORTC_PCR7          (*(volatile uint32_t *)(PORTC_BASE + 0x01CUL))
+#define PORTC_PCR(n)        (*(volatile uint32_t *)(PORTC_BASE + ((n) * 4)))
+#define PORTC_PCR6          (*(volatile uint32_t *)(PORTC_BASE + 0x018UL))  /* LPUART1_RX (ALT2) */
+#define PORTC_PCR7          (*(volatile uint32_t *)(PORTC_BASE + 0x01CUL))  /* LPUART1_TX (ALT2) */
+#define PORTC_PCR8          (*(volatile uint32_t *)(PORTC_BASE + 0x020UL))  /* LPUART1_RX (ALT2) alt */
+#define PORTC_PCR9          (*(volatile uint32_t *)(PORTC_BASE + 0x024UL))  /* LPUART1_TX (ALT2) alt */
 
-/* Port D - LED pins on S32K142EVB */
+/* Port D - LED pins on S32K142EVB, LPUART2 alternate pins */
 #define PORTD_BASE          (0x4004C000UL)
 #define PORTD_PCR(n)        (*(volatile uint32_t *)(PORTD_BASE + ((n) * 4)))
 #define PORTD_PCR0          (*(volatile uint32_t *)(PORTD_BASE + 0x000UL))  /* Blue LED */
+#define PORTD_PCR6          (*(volatile uint32_t *)(PORTD_BASE + 0x018UL))  /* LPUART2_RX (ALT2) */
+#define PORTD_PCR7          (*(volatile uint32_t *)(PORTD_BASE + 0x01CUL))  /* LPUART2_TX (ALT2) */
 #define PORTD_PCR15         (*(volatile uint32_t *)(PORTD_BASE + 0x03CUL))  /* Red LED */
 #define PORTD_PCR16         (*(volatile uint32_t *)(PORTD_BASE + 0x040UL))  /* Green LED */
+
+/* Port E - additional peripheral pins */
+#define PORTE_BASE          (0x4004D000UL)
+#define PORTE_PCR(n)        (*(volatile uint32_t *)(PORTE_BASE + ((n) * 4)))
 
 /* GPIO D registers */
 #define GPIOD_BASE          (0x400FF0C0UL)
@@ -182,8 +210,14 @@
 
 /* Port Control Register fields */
 #define PORT_PCR_MUX_SHIFT  8
+#define PORT_PCR_MUX_MASK   (7UL << PORT_PCR_MUX_SHIFT)
 #define PORT_PCR_MUX_GPIO   (1UL << PORT_PCR_MUX_SHIFT)  /* GPIO mode */
-#define PORT_PCR_MUX_ALT2   (2UL << PORT_PCR_MUX_SHIFT)  /* LPUART1 */
+#define PORT_PCR_MUX_ALT2   (2UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 2 */
+#define PORT_PCR_MUX_ALT3   (3UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 3 */
+#define PORT_PCR_MUX_ALT4   (4UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 4 */
+#define PORT_PCR_MUX_ALT5   (5UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 5 */
+#define PORT_PCR_MUX_ALT6   (6UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 6 */
+#define PORT_PCR_MUX_ALT7   (7UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 7 */
 
 /* S32K142EVB LED pins (accent RGB LED accent accent accent accent LED accent accent accent-low accent LED) */
 #define LED_PIN_BLUE        0   /* PTD0 - Blue LED (active low) */
@@ -192,15 +226,48 @@
 
 /* ============== LPUART Registers ============== */
 
+/* LPUART base addresses */
+#define LPUART0_BASE        (0x4006A000UL)
 #define LPUART1_BASE        (0x4006B000UL)
-#define LPUART1_VERID       (*(volatile uint32_t *)(LPUART1_BASE + 0x000UL))
-#define LPUART1_PARAM       (*(volatile uint32_t *)(LPUART1_BASE + 0x004UL))
-#define LPUART1_GLOBAL      (*(volatile uint32_t *)(LPUART1_BASE + 0x008UL))
-#define LPUART1_BAUD        (*(volatile uint32_t *)(LPUART1_BASE + 0x010UL))
-#define LPUART1_STAT        (*(volatile uint32_t *)(LPUART1_BASE + 0x014UL))
-#define LPUART1_CTRL        (*(volatile uint32_t *)(LPUART1_BASE + 0x018UL))
-#define LPUART1_DATA        (*(volatile uint32_t *)(LPUART1_BASE + 0x01CUL))
+#define LPUART2_BASE        (0x4006C000UL)
 
+/* LPUART register offsets */
+#define LPUART_VERID_OFF    0x000UL
+#define LPUART_PARAM_OFF    0x004UL
+#define LPUART_GLOBAL_OFF   0x008UL
+#define LPUART_BAUD_OFF     0x010UL
+#define LPUART_STAT_OFF     0x014UL
+#define LPUART_CTRL_OFF     0x018UL
+#define LPUART_DATA_OFF     0x01CUL
+
+/* LPUART0 registers */
+#define LPUART0_VERID       (*(volatile uint32_t *)(LPUART0_BASE + LPUART_VERID_OFF))
+#define LPUART0_PARAM       (*(volatile uint32_t *)(LPUART0_BASE + LPUART_PARAM_OFF))
+#define LPUART0_GLOBAL      (*(volatile uint32_t *)(LPUART0_BASE + LPUART_GLOBAL_OFF))
+#define LPUART0_BAUD        (*(volatile uint32_t *)(LPUART0_BASE + LPUART_BAUD_OFF))
+#define LPUART0_STAT        (*(volatile uint32_t *)(LPUART0_BASE + LPUART_STAT_OFF))
+#define LPUART0_CTRL        (*(volatile uint32_t *)(LPUART0_BASE + LPUART_CTRL_OFF))
+#define LPUART0_DATA        (*(volatile uint32_t *)(LPUART0_BASE + LPUART_DATA_OFF))
+
+/* LPUART1 registers */
+#define LPUART1_VERID       (*(volatile uint32_t *)(LPUART1_BASE + LPUART_VERID_OFF))
+#define LPUART1_PARAM       (*(volatile uint32_t *)(LPUART1_BASE + LPUART_PARAM_OFF))
+#define LPUART1_GLOBAL      (*(volatile uint32_t *)(LPUART1_BASE + LPUART_GLOBAL_OFF))
+#define LPUART1_BAUD        (*(volatile uint32_t *)(LPUART1_BASE + LPUART_BAUD_OFF))
+#define LPUART1_STAT        (*(volatile uint32_t *)(LPUART1_BASE + LPUART_STAT_OFF))
+#define LPUART1_CTRL        (*(volatile uint32_t *)(LPUART1_BASE + LPUART_CTRL_OFF))
+#define LPUART1_DATA        (*(volatile uint32_t *)(LPUART1_BASE + LPUART_DATA_OFF))
+
+/* LPUART2 registers */
+#define LPUART2_VERID       (*(volatile uint32_t *)(LPUART2_BASE + LPUART_VERID_OFF))
+#define LPUART2_PARAM       (*(volatile uint32_t *)(LPUART2_BASE + LPUART_PARAM_OFF))
+#define LPUART2_GLOBAL      (*(volatile uint32_t *)(LPUART2_BASE + LPUART_GLOBAL_OFF))
+#define LPUART2_BAUD        (*(volatile uint32_t *)(LPUART2_BASE + LPUART_BAUD_OFF))
+#define LPUART2_STAT        (*(volatile uint32_t *)(LPUART2_BASE + LPUART_STAT_OFF))
+#define LPUART2_CTRL        (*(volatile uint32_t *)(LPUART2_BASE + LPUART_CTRL_OFF))
+#define LPUART2_DATA        (*(volatile uint32_t *)(LPUART2_BASE + LPUART_DATA_OFF))
+
+/* LPUART register field definitions */
 #define LPUART_BAUD_OSR_SHIFT   24
 #define LPUART_BAUD_SBR_SHIFT   0
 #define LPUART_CTRL_TE          (1UL << 19)  /* Transmitter Enable */
@@ -213,6 +280,169 @@
 #define LPUART_STAT_NF          (1UL << 18)  /* Noise Flag */
 #define LPUART_STAT_FE          (1UL << 17)  /* Framing Error */
 #define LPUART_STAT_PF          (1UL << 16)  /* Parity Error */
+
+/* ============== LPUART Build-Time Configuration ============== */
+/*
+ * Select LPUART instance and pins at build time using these defines:
+ *
+ *   DEBUG_UART_NUM: LPUART instance (0, 1, or 2). Default: 1
+ *
+ *   DEBUG_UART_TX_PORT: Port for TX pin (S32K_PORT_A/B/C/D/E). Default depends on LPUART
+ *   DEBUG_UART_TX_PIN:  Pin number for TX. Default depends on LPUART
+ *   DEBUG_UART_TX_MUX:  Pin mux function. Default: PORT_PCR_MUX_ALT2
+ *
+ *   DEBUG_UART_RX_PORT: Port for RX pin (S32K_PORT_A/B/C/D/E). Default depends on LPUART
+ *   DEBUG_UART_RX_PIN:  Pin number for RX. Default depends on LPUART
+ *   DEBUG_UART_RX_MUX:  Pin mux function. Default: PORT_PCR_MUX_ALT2
+ *
+ * Example pin mappings for S32K1xx:
+ *
+ *   LPUART0:
+ *     - PTB0 (RX, ALT2), PTB1 (TX, ALT2)  - Default
+ *     - PTA2 (RX, ALT6), PTA3 (TX, ALT6)
+ *
+ *   LPUART1:
+ *     - PTC6 (RX, ALT2), PTC7 (TX, ALT2)  - Default (S32K142EVB OpenSDA)
+ *     - PTC8 (RX, ALT2), PTC9 (TX, ALT2)
+ *
+ *   LPUART2:
+ *     - PTA8 (RX, ALT6), PTA9 (TX, ALT6)
+ *     - PTD6 (RX, ALT2), PTD7 (TX, ALT2)  - Default
+ *
+ * Usage in .config file:
+ *   CFLAGS_EXTRA+=-DDEBUG_UART_NUM=0
+ *   CFLAGS_EXTRA+=-DDEBUG_UART_TX_PORT=S32K_PORT_B -DDEBUG_UART_TX_PIN=1
+ *   CFLAGS_EXTRA+=-DDEBUG_UART_RX_PORT=S32K_PORT_B -DDEBUG_UART_RX_PIN=0
+ */
+
+/* Default LPUART instance */
+#ifndef DEBUG_UART_NUM
+#define DEBUG_UART_NUM  1
+#endif
+
+/* Map to selected LPUART registers based on DEBUG_UART_NUM */
+#if DEBUG_UART_NUM == 0
+    #define LPUART_BAUD     LPUART0_BAUD
+    #define LPUART_STAT     LPUART0_STAT
+    #define LPUART_CTRL     LPUART0_CTRL
+    #define LPUART_DATA     LPUART0_DATA
+    #define PCC_LPUART      PCC_LPUART0
+#elif DEBUG_UART_NUM == 2
+    #define LPUART_BAUD     LPUART2_BAUD
+    #define LPUART_STAT     LPUART2_STAT
+    #define LPUART_CTRL     LPUART2_CTRL
+    #define LPUART_DATA     LPUART2_DATA
+    #define PCC_LPUART      PCC_LPUART2
+#else /* DEBUG_UART_NUM == 1 (default) */
+    #define LPUART_BAUD     LPUART1_BAUD
+    #define LPUART_STAT     LPUART1_STAT
+    #define LPUART_CTRL     LPUART1_CTRL
+    #define LPUART_DATA     LPUART1_DATA
+    #define PCC_LPUART      PCC_LPUART1
+#endif
+
+/* Port identifier values for preprocessor comparisons */
+#define S32K_PORT_A     0
+#define S32K_PORT_B     1
+#define S32K_PORT_C     2
+#define S32K_PORT_D     3
+#define S32K_PORT_E     4
+
+/* Default pin configuration based on selected LPUART */
+#if DEBUG_UART_NUM == 0
+    /* LPUART0 defaults: PTB0 (RX), PTB1 (TX) */
+    #ifndef DEBUG_UART_TX_PORT
+    #define DEBUG_UART_TX_PORT  S32K_PORT_B
+    #endif
+    #ifndef DEBUG_UART_TX_PIN
+    #define DEBUG_UART_TX_PIN   1
+    #endif
+    #ifndef DEBUG_UART_RX_PORT
+    #define DEBUG_UART_RX_PORT  S32K_PORT_B
+    #endif
+    #ifndef DEBUG_UART_RX_PIN
+    #define DEBUG_UART_RX_PIN   0
+    #endif
+#elif DEBUG_UART_NUM == 2
+    /* LPUART2 defaults: PTD6 (RX), PTD7 (TX) */
+    #ifndef DEBUG_UART_TX_PORT
+    #define DEBUG_UART_TX_PORT  S32K_PORT_D
+    #endif
+    #ifndef DEBUG_UART_TX_PIN
+    #define DEBUG_UART_TX_PIN   7
+    #endif
+    #ifndef DEBUG_UART_RX_PORT
+    #define DEBUG_UART_RX_PORT  S32K_PORT_D
+    #endif
+    #ifndef DEBUG_UART_RX_PIN
+    #define DEBUG_UART_RX_PIN   6
+    #endif
+#else /* DEBUG_UART_NUM == 1 (default) */
+    /* LPUART1 defaults: PTC6 (RX), PTC7 (TX) - S32K142EVB OpenSDA */
+    #ifndef DEBUG_UART_TX_PORT
+    #define DEBUG_UART_TX_PORT  S32K_PORT_C
+    #endif
+    #ifndef DEBUG_UART_TX_PIN
+    #define DEBUG_UART_TX_PIN   7
+    #endif
+    #ifndef DEBUG_UART_RX_PORT
+    #define DEBUG_UART_RX_PORT  S32K_PORT_C
+    #endif
+    #ifndef DEBUG_UART_RX_PIN
+    #define DEBUG_UART_RX_PIN   6
+    #endif
+#endif
+
+/* Default pin mux - ALT2 for most LPUART pins */
+#ifndef DEBUG_UART_TX_MUX
+#define DEBUG_UART_TX_MUX   PORT_PCR_MUX_ALT2
+#endif
+#ifndef DEBUG_UART_RX_MUX
+#define DEBUG_UART_RX_MUX   PORT_PCR_MUX_ALT2
+#endif
+
+/* Map TX port/pin to PCR register and PCC */
+#if DEBUG_UART_TX_PORT == S32K_PORT_A
+    #define DEBUG_UART_TX_PCC_PORT  PCC_PORTA
+    #define DEBUG_UART_TX_PCR       PORTA_PCR(DEBUG_UART_TX_PIN)
+#elif DEBUG_UART_TX_PORT == S32K_PORT_B
+    #define DEBUG_UART_TX_PCC_PORT  PCC_PORTB
+    #define DEBUG_UART_TX_PCR       PORTB_PCR(DEBUG_UART_TX_PIN)
+#elif DEBUG_UART_TX_PORT == S32K_PORT_D
+    #define DEBUG_UART_TX_PCC_PORT  PCC_PORTD
+    #define DEBUG_UART_TX_PCR       PORTD_PCR(DEBUG_UART_TX_PIN)
+#elif DEBUG_UART_TX_PORT == S32K_PORT_E
+    #define DEBUG_UART_TX_PCC_PORT  PCC_PORTE
+    #define DEBUG_UART_TX_PCR       PORTE_PCR(DEBUG_UART_TX_PIN)
+#else /* S32K_PORT_C (default) */
+    #define DEBUG_UART_TX_PCC_PORT  PCC_PORTC
+    #define DEBUG_UART_TX_PCR       PORTC_PCR(DEBUG_UART_TX_PIN)
+#endif
+
+/* Map RX port/pin to PCR register and PCC */
+#if DEBUG_UART_RX_PORT == S32K_PORT_A
+    #define DEBUG_UART_RX_PCC_PORT  PCC_PORTA
+    #define DEBUG_UART_RX_PCR       PORTA_PCR(DEBUG_UART_RX_PIN)
+#elif DEBUG_UART_RX_PORT == S32K_PORT_B
+    #define DEBUG_UART_RX_PCC_PORT  PCC_PORTB
+    #define DEBUG_UART_RX_PCR       PORTB_PCR(DEBUG_UART_RX_PIN)
+#elif DEBUG_UART_RX_PORT == S32K_PORT_D
+    #define DEBUG_UART_RX_PCC_PORT  PCC_PORTD
+    #define DEBUG_UART_RX_PCR       PORTD_PCR(DEBUG_UART_RX_PIN)
+#elif DEBUG_UART_RX_PORT == S32K_PORT_E
+    #define DEBUG_UART_RX_PCC_PORT  PCC_PORTE
+    #define DEBUG_UART_RX_PCR       PORTE_PCR(DEBUG_UART_RX_PIN)
+#else /* S32K_PORT_C (default) */
+    #define DEBUG_UART_RX_PCC_PORT  PCC_PORTC
+    #define DEBUG_UART_RX_PCR       PORTC_PCR(DEBUG_UART_RX_PIN)
+#endif
+
+/* Check if TX and RX use the same port (for clock enable optimization) */
+#if DEBUG_UART_TX_PORT == DEBUG_UART_RX_PORT
+    #define DEBUG_UART_SAME_PORT    1
+#else
+    #define DEBUG_UART_SAME_PORT    0
+#endif
 
 /* ============== Flash (FTFC) Registers ============== */
 
@@ -356,6 +586,25 @@
 #ifndef WATCHDOG_TIMEOUT_MS
 #define WATCHDOG_TIMEOUT_MS 1000
 #endif
+
+/* ============== UART Function Declarations ============== */
+/* These functions are implemented in hal/s32k1xx.c when DEBUG_UART is defined.
+ * They use the LPUART instance and pins configured by the DEBUG_UART_* macros.
+ */
+
+#ifdef DEBUG_UART
+/* Initialize the UART with configured LPUART and pins */
+void uart_init(void);
+
+/* Write data to UART (blocking, with automatic LF -> CRLF conversion) */
+void uart_write(const char* buf, unsigned int sz);
+
+/* Read a single character from UART (non-blocking)
+ * Returns: 1 if character read, 0 if no data available, -1 on error
+ */
+int uart_read(char* c);
+
+#endif /* DEBUG_UART */
 
 #endif /* S32K1XX_H */
 

@@ -353,8 +353,7 @@ ifeq ($(TARGET),s32k1xx)
     LSCRIPT_TEMPLATE=ARM-s32k1xx.ld
     APP_OBJS+=../src/keystore.o
     CFLAGS+=-DAPP_HAS_SYSTICK
-    # To allow RAMCODE to be support in test-app
-    CFLAGS+=-D__WOLFBOOT
+    CFLAGS+=-DRAM_CODE -DDEBUG_UART
 endif
 
 ifeq ($(TARGET),mcxw)

@@ -40,10 +40,11 @@ extern void isr_usart3(void);
 #endif
 
 #ifdef TARGET_va416x0
-extern void SysTick_Handler(void);
-#elif defined(APP_HAS_SYSTICK)
-extern void isr_systick(void);
+#define isr_systick SysTick_Handler
+#elif !defined(APP_HAS_SYSTICK)
+#define isr_systick isr_empty
 #endif
+extern void isr_systick(void);
 
 #ifndef STACK_PAINTING
 #define STACK_PAINTING 0
@@ -119,8 +120,6 @@ void isr_empty(void)
 
 }
 
-
-
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
@@ -139,14 +138,7 @@ void (* const IV[])(void) =
 	isr_empty,                   // DebugMonitor
 	0,                           // reserved
 	isr_empty,                   // PendSV
-
-#ifdef TARGET_va416x0
-    SysTick_Handler,             // SysTick
-#elif defined(APP_HAS_SYSTICK)
     isr_systick,                 // SysTick
-#else
-	isr_empty,                   // SysTick
-#endif
 
 /* Device specific IRQs for LM3S */
 

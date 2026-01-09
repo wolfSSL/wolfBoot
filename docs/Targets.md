@@ -2856,10 +2856,14 @@ The default memory layout for S32K142 (256KB Flash):
 
 ### NXP S32K1XX: Configuration
 
-Example configuration file: [/config/examples/nxp-s32k142.config](/config/examples/nxp-s32k142.config)
+Example configuration files:
+- [/config/examples/nxp-s32k142.config](/config/examples/nxp-s32k142.config) - S32K142 (256KB Flash, 32KB SRAM)
+- [/config/examples/nxp-s32k144.config](/config/examples/nxp-s32k144.config) - S32K144 (512KB Flash, 64KB SRAM)
+- [/config/examples/nxp-s32k146.config](/config/examples/nxp-s32k146.config) - S32K146 (1MB Flash, 128KB SRAM)
+- [/config/examples/nxp-s32k148.config](/config/examples/nxp-s32k148.config) - S32K148 (2MB Flash, 256KB SRAM)
 
 ```sh
-# Copy configuration
+# Copy configuration (example for S32K142)
 cp config/examples/nxp-s32k142.config .config
 
 # Build wolfBoot
@@ -2869,7 +2873,6 @@ make
 # Build test application
 make test-app/image.bin
 ```
-
 
 ### NXP S32K1XX: Configuration Options
 
@@ -2890,6 +2893,8 @@ The following build options are available for the S32K1xx HAL:
 - **S32K144/S32K146/S32K148** (512KB+ Flash): 4KB sectors (`WOLFBOOT_SECTOR_SIZE=0x1000`)
 
 ### NXP S32K1XX: Debug UART
+
+For UART debug output, connect a USB-to-serial adapter to LPUART1 pins (PTC6=RX, PTC7=TX) and open a terminal at 115200 baud.
 
 Debug output uses LPUART1 on pins:
 - **TX**: PTC7
@@ -2918,26 +2923,83 @@ arm-none-eabi-gdb --nx wolfboot.elf
 target remote :7224
 monitor reset halt
 load
-# Flash the signed application to boot partition
-monitor programbin test-app/image_v1_signed.bin 0xc000
 monitor reset run
 ```
 
-### NXP S32K1XX: Debugging Tips
+### NXP S32K1XX: USB Mass Storage Programming
 
-When debugging with GDB:
+The S32K EVB boards include an OpenSDA debugger that exposes a USB mass storage interface for easy programming. Simply copy the `.srec` file to the mounted USB drive.
+
+**Steps:**
+
+1. Connect the S32K EVB board via USB (OpenSDA port)
+2. The board will mount as a USB drive (e.g., `S32K142EVB`)
+3. Build the factory image:
+
 ```sh
-arm-none-eabi-gdb
-target remote :7224
-add-symbol-file wolfboot.elf 0x0
-add-symbol-file test-app/image.elf 0xC100
-set mem inaccessible-by-default off
-monitor reset halt
-b main
-c
+make factory.srec
 ```
 
-For UART debug output, connect a USB-to-serial adapter to LPUART1 pins (PTC6=RX, PTC7=TX) and open a terminal at 115200 baud.
+4. Copy the `.srec` file to the mounted drive:
+
+```sh
+cp factory.srec /media/<user>/S32K142EVB/
+```
+
+The board will automatically program the flash and reset.
+
+### NXP S32K1XX: Test Application
+
+The S32K1xx test application (`test-app/app_s32k1xx.c`) provides a feature-rich demo application for testing wolfBoot functionality.
+
+**Features:**
+- **LED Indicators**: Green LED for firmware v1, Blue LED for firmware v2+
+- **Interactive Console**: UART-based command interface
+- **XMODEM Firmware Update**: Upload new firmware images via XMODEM protocol
+- **Partition Information**: Display boot/update partition status and versions
+- **Keystore Display**: Show public key information from the bootloader
+
+**Console Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `help` or `?` | Show available commands |
+| `info` | Display system and partition information |
+| `success` | Mark current firmware as successful (wolfBoot_success) |
+| `update` | Trigger firmware update (wolfBoot_update_trigger) |
+| `reset` | Perform software reset |
+| `xmodem` | Receive firmware image via XMODEM protocol |
+
+**UART Configuration:**
+- LPUART1: PTC7 (TX), PTC6 (RX)
+- Baud rate: 115200, 8N1
+
+**Example Output:**
+
+```
+========================================
+S32K1xx wolfBoot Test Application
+Copyright 2025 wolfSSL Inc.
+========================================
+Firmware Version: 1
+
+=== Partition Information ===
+Boot Partition:
+  Address: 0x0000C000
+  Version: 1
+  State:   SUCCESS
+Update Partition:
+  Address: 0x00025000
+  Version: 0
+  State:   SUCCESS
+Swap Partition:
+  Address: 0x0003E000
+  Size:    2048 bytes
+
+Type 'help' for available commands.
+
+cmd>
+```
 
 ### NXP S32K1XX: Flash Configuration Field (FCF)
 

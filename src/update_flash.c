@@ -1279,11 +1279,6 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_server_cleanup();
 #endif
 
-    /* Debug: Print boot address and vector table info */
-    wolfBoot_printf("do_boot: fw_base = 0x%lx\n", (uint32_t)boot.fw_base);
-    wolfBoot_printf("do_boot: stack = 0x%lx, reset = 0x%lx\n",
-        *((uint32_t*)boot.fw_base), *((uint32_t*)boot.fw_base + 1));
-
     hal_prepare_boot();
 
     do_boot((void *)boot.fw_base);

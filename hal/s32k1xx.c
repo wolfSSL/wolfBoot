@@ -26,6 +26,7 @@
 #include <string.h>
 #include "image.h"
 #include "hal.h"
+#include "printf.h"
 
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
@@ -181,55 +182,14 @@ static void clock_init_firc(void)
 
 static void clock_init_spll(void)
 {
-    /* Disable SPLL before configuration */
+    /* S32K1xx SPLL requires SOSC as source (FIRC cannot be used directly).
+     * For 112 MHz with 8 MHz SOSC: PREDIV=0, MULT=28 -> VCO=224 MHz, SPLL=112 MHz
+     * VCO range: 180-320 MHz, SPLL_CLK = VCO / 2
+     *
+     * Currently using FIRC 48 MHz directly. TODO: Add SOSC + SPLL for 112 MHz.
+     */
     SCG_SPLLCSR &= ~SCG_SPLLCSR_SPLLEN;
-
-    /* Configure SPLL:
-     * Using FIRC (48 MHz) as source
-     * For 112 MHz: PREDIV=0 (/1), MULT=12 (x28)
-     *   VCO = 48 MHz * 28 = 1344 MHz (wait, that's too high)
-     *
-     * Actually S32K uses SOSC as SPLL source typically.
-     * With FIRC we need different approach.
-     *
-     * For HSRUN at 112 MHz from FIRC:
-     *   Use FIRC directly for core at 48 MHz in RUN mode
-     *   Then switch to SPLL for HSRUN
-     *
-     * SPLL: VCO range is 180-320 MHz
-     *   SPLL_CLK = VCO / 2
-     *
-     * If using 8 MHz SOSC: PREDIV=0, MULT=28 -> VCO=224 MHz, SPLL_CLK=112 MHz
-     *
-     * For this bare-metal impl, we'll use FIRC at 48 MHz as a safe default,
-     * and configure SPLL with SOSC if available.
-     *
-     * For simplicity: Use FIRC 48MHz with appropriate dividers.
-     * HSRUN mode allows higher frequencies but requires SPLL.
-     */
-
-    /* SPLL dividers */
     SCG_SPLLDIV = (2UL << 8) | (4UL << 0);  /* SPLLDIV1=/2, SPLLDIV2=/4 */
-
-    /* SPLL configuration: MULT and PREDIV
-     * PREDIV: 0-7 -> divide by 1-8
-     * MULT: 0-31 -> multiply by 16-47
-     * VCO = (FIRC/PREDIV) * MULT, must be 180-320 MHz
-     * SPLL_CLK = VCO / 2
-     *
-     * For 112 MHz with 48 MHz FIRC:
-     *   Need VCO = 224 MHz
-     *   48 / 1 * 28 = 1344 MHz (too high, FIRC can't be SPLL source directly)
-     *
-     * S32K1xx SPLL source is SOSC only. For bare-metal without crystal,
-     * we run from FIRC at 48 MHz maximum.
-     *
-     * If SOSC 8 MHz is available:
-     *   8 / 1 * 28 = 224 MHz VCO, 112 MHz SPLL_CLK
-     */
-
-    /* For now, skip SPLL and use FIRC directly */
-    /* TODO: Add SOSC + SPLL support for true 112 MHz operation */
 }
 
 static void clock_init(void)
@@ -288,19 +248,21 @@ void uart_init(void)
     uint32_t osr = 16;  /* Oversampling ratio */
     uint32_t uart_clock = 48000000UL;  /* FIRC 48 MHz */
 
-    /* Enable clock to PORTC */
-    PCC_PORTC |= PCC_CGC;
-
-    /* Configure pins for LPUART1:
-     * PTC6 = LPUART1_RX (ALT2)
-     * PTC7 = LPUART1_TX (ALT2)
+    /* Enable clock to TX and RX port(s)
+     * Note: If TX and RX use different ports, both need clock enabled
      */
-    PORTC_PCR6 = PORT_PCR_MUX_ALT2;
-    PORTC_PCR7 = PORT_PCR_MUX_ALT2;
+    DEBUG_UART_TX_PCC_PORT |= PCC_CGC;
+#if !DEBUG_UART_SAME_PORT
+    DEBUG_UART_RX_PCC_PORT |= PCC_CGC;
+#endif
 
-    /* Enable clock to LPUART1, source = FIRC (48 MHz) */
-    PCC_LPUART1 = 0;  /* Disable before changing source */
-    PCC_LPUART1 = PCC_PCS_FIRC | PCC_CGC;
+    /* Configure pins for selected LPUART */
+    DEBUG_UART_RX_PCR = DEBUG_UART_RX_MUX;
+    DEBUG_UART_TX_PCR = DEBUG_UART_TX_MUX;
+
+    /* Enable clock to selected LPUART, source = FIRC (48 MHz) */
+    PCC_LPUART = 0;  /* Disable before changing source */
+    PCC_LPUART = PCC_PCS_FIRC | PCC_CGC;
 
     /* Calculate baud rate:
      * SBR = UART_CLK / (BAUD * OSR)
@@ -308,14 +270,14 @@ void uart_init(void)
     sbr = uart_clock / (UART_BAUDRATE * osr);
 
     /* Disable TX/RX before configuration */
-    LPUART1_CTRL = 0;
+    LPUART_CTRL = 0;
 
     /* Configure baud rate */
-    LPUART1_BAUD = ((osr - 1) << LPUART_BAUD_OSR_SHIFT) |
-                   (sbr << LPUART_BAUD_SBR_SHIFT);
+    LPUART_BAUD = ((osr - 1) << LPUART_BAUD_OSR_SHIFT) |
+                  (sbr << LPUART_BAUD_SBR_SHIFT);
 
     /* Enable transmitter and receiver */
-    LPUART1_CTRL = LPUART_CTRL_TE | LPUART_CTRL_RE;
+    LPUART_CTRL = LPUART_CTRL_TE | LPUART_CTRL_RE;
 }
 
 void uart_write(const char* buf, unsigned int sz)
@@ -326,17 +288,17 @@ void uart_write(const char* buf, unsigned int sz)
         /* Handle newline -> CRLF conversion */
         if (buf[i] == '\n') {
             /* Wait for transmit buffer empty */
-            while (!(LPUART1_STAT & LPUART_STAT_TDRE)) {}
-            LPUART1_DATA = '\r';
+            while (!(LPUART_STAT & LPUART_STAT_TDRE)) {}
+            LPUART_DATA = '\r';
         }
 
         /* Wait for transmit buffer empty */
-        while (!(LPUART1_STAT & LPUART_STAT_TDRE)) {}
-        LPUART1_DATA = buf[i];
+        while (!(LPUART_STAT & LPUART_STAT_TDRE)) {}
+        LPUART_DATA = buf[i];
     }
 
     /* Wait for transmission complete */
-    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+    while (!(LPUART_STAT & LPUART_STAT_TC)) {}
 }
 
 /* Read a single character from UART (non-blocking)
@@ -344,48 +306,21 @@ void uart_write(const char* buf, unsigned int sz)
  */
 int uart_read(char* c)
 {
-    uint32_t stat = LPUART1_STAT;
+    uint32_t stat = LPUART_STAT;
 
     /* Clear any error flags */
     if (stat & (LPUART_STAT_OR | LPUART_STAT_NF | LPUART_STAT_FE | LPUART_STAT_PF)) {
-        LPUART1_STAT = stat;  /* Write 1 to clear flags */
+        LPUART_STAT = stat;  /* Write 1 to clear flags */
         return -1;
     }
 
     /* Check if data available */
     if (stat & LPUART_STAT_RDRF) {
-        *c = (char)(LPUART1_DATA & 0xFF);
+        *c = (char)(LPUART_DATA & 0xFF);
         return 1;
     }
 
     return 0;  /* No data available */
-}
-
-/* Blocking read with timeout (in ms)
- * Returns: number of characters read, or -1 on error/timeout
- */
-int uart_read_timeout(char* buf, int len, uint32_t timeout_ms)
-{
-    int count = 0;
-    int ret;
-
-    /* Simple polling - timeout not implemented in HAL (no systick access) */
-    (void)timeout_ms;
-
-    while (count < len) {
-        ret = uart_read(&buf[count]);
-        if (ret > 0) {
-            count++;
-        } else if (ret < 0) {
-            return -1;  /* Error */
-        }
-        /* If no timeout support, just return what we have */
-        if (ret == 0 && count > 0) {
-            break;
-        }
-    }
-
-    return count;
 }
 
 #endif /* DEBUG_UART */
@@ -455,26 +390,9 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
 {
     uint32_t primask;
 
-#ifdef DEBUG_FLASH
-    /* Debug: Print flash status before erase */
-    uart_write("  FSTAT=", 8);
-    {
-        uint8_t fstat = FTFC_FSTAT;
-        char hex[3];
-        hex[0] = "0123456789ABCDEF"[(fstat >> 4) & 0xF];
-        hex[1] = "0123456789ABCDEF"[fstat & 0xF];
-        hex[2] = ' ';
-        uart_write(hex, 3);
-    }
-#endif
-
     /* Wait for previous command to complete */
     flash_wait_complete();
     flash_clear_errors();
-
-#ifdef DEBUG_FLASH
-    uart_write("rdy ", 4);
-#endif
 
     /* Set up Erase Sector command (0x09) */
     FTFC_FCCOB0 = FTFC_CMD_ERASE_SECTOR;
@@ -482,19 +400,9 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
     FTFC_FCCOB2 = (uint8_t)(address >> 8);
     FTFC_FCCOB3 = (uint8_t)(address);
 
-#ifdef DEBUG_FLASH
-    uart_write("cmd ", 4);
-#endif
-
     /* Launch command */
     DSB();
     ISB();
-
-#ifdef DEBUG_FLASH
-    uart_write("go\n", 3);
-    /* Wait for UART to transmit before flash operation */
-    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
-#endif
 
     /* Disable interrupts during flash operation to prevent code fetch from flash */
     __asm__ volatile ("mrs %0, primask\n\t"
@@ -508,10 +416,6 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
     /* Re-enable interrupts */
     __asm__ volatile ("msr primask, %0" :: "r" (primask) : "memory");
 
-#ifdef DEBUG_FLASH
-    uart_write("done\n", 5);
-#endif
-
 #ifdef WATCHDOG
     /* Refresh watchdog after potentially long flash operation */
     watchdog_refresh();
@@ -524,6 +428,7 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
 
     return 0;
 }
+
 
 /* ============== HAL Interface Functions ============== */
 
@@ -540,7 +445,11 @@ void hal_init(void)
 
 #ifdef DEBUG_UART
     uart_init();
-    uart_write("wolfBoot HAL Init\n", 18);
+
+#ifdef __WOLFBOOT
+    wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
+        LIBWOLFBOOT_VERSION_STRING, __DATE__, __TIME__);
+#endif
 #endif
 
 #ifdef WATCHDOG
@@ -552,7 +461,7 @@ void hal_prepare_boot(void)
 {
 #ifdef DEBUG_UART
     /* Wait for any pending UART transmission to complete */
-    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+    while (!(LPUART_STAT & LPUART_STAT_TC)) {}
 #endif
 
 #ifdef WOLFBOOT_RESTORE_CLOCK
