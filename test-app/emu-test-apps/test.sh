@@ -237,11 +237,11 @@ for i in 1 2; do
   log "Scenario B: reboot run $i: BKPT 0x4A hit"
 done
 
-log "Scenario C: update to v3 then fallback (no wolfBoot_success)"
+log "Scenario C: update from v1 to v3, then fallback (no wolfBoot_success is called)"
 reset_factory_image
 run_update_scenario "scenario_c_update" "$UPDATE_IMAGE_V3" 3
 
-log "Scenario C: reboot into v3 (expect BKPT 0x4B, no success call)"
+log "Scenario C: first boot after update: reboot into v3 (expect BKPT 0x4B, no success call)"
 run_log_v3="$EMU_PATH/reboot_v3.log"
 $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
   --boot-offset="$IMAGE_HEADER_SIZE" --timeout 2 --expect-bkpt=0x4b \
@@ -249,7 +249,7 @@ $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
 grep -q "\\[EXPECT BKPT\\] Success" "$run_log_v3" || die "reboot v3 run: expected BKPT 0x4B"
 log "Scenario C: reboot v3: BKPT 0x4B hit"
 
-log "Scenario C: reboot after fallback (expect v1)"
+log "Scenario C: second reboot, expect v1 after fallback"
 run_log_fallback="$EMU_PATH/reboot_fallback_v1.log"
 set +e
 $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
