@@ -240,6 +240,58 @@ test-sim-rollback-flash: wolfboot.elf test-sim-internal-flash-with-update FORCE
 	$(Q)(test `./wolfboot.elf success get_version` -eq 1)
 	$(Q)(test `./wolfboot.elf get_version` -eq 1)
 
+# Test bootloader self-update mechanism using simulator. Since simulator memmaps runtime addresses
+# the best we can do is ensure the self-update copies the intact self-update image to the expected location
+test-sim-self-update: wolfboot.bin FORCE
+	@echo "=== Simulator Self-Update Test ==="
+	@# Create dummy payload (0xAA pattern) and sign as wolfBoot update v2
+	$(Q)dd if=/dev/zero bs=$$(wc -c < wolfboot.bin | awk '{print $$1}') count=1 2>/dev/null | tr '\000' '\252' > dummy_update.bin
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update dummy_update.bin $(PRIVATE_KEY) 2
+	@# Create update partition with signed update and "pBOOT" trailer. Necessary since there is no running
+	@# app to trigger an initial update
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
+	$(Q)dd if=dummy_update_v2_signed.bin of=update_part.dd bs=1 conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_SIZE) - 5)) conv=notrunc
+	@# Create erased boot and swap partitions
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > erased_sec.dd
+	@# Assemble flash: wolfboot.bin at 0, empty boot partition, update partition, swap
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) boot_part.dd \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS) - $(ARCH_FLASH_OFFSET))) update_part.dd \
+		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS) - $(ARCH_FLASH_OFFSET))) erased_sec.dd
+	@# Run simulator - self-update runs before app boot, writes dummy to offset 0, then reboots
+	$(Q)./wolfboot.elf get_version || true
+	@# Verify dummy payload was written to bootloader region, indicating the self update swapped images as expected
+	$(Q)cmp -n $$(wc -c < dummy_update.bin | awk '{print $$1}') dummy_update.bin internal_flash.dd && echo "=== Self-update test PASSED ==="
+
+# Test bootloader self-update mechanism with external flash
+test-sim-self-update-ext: wolfboot.bin FORCE
+	@echo "=== Simulator Self-Update Test (External Flash) ==="
+	@# Create dummy payload (0xAA pattern) and sign as wolfBoot update v2
+	$(Q)dd if=/dev/zero bs=$$(wc -c < wolfboot.bin | awk '{print $$1}') count=1 2>/dev/null | tr '\000' '\252' > dummy_update.bin
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update dummy_update.bin $(PRIVATE_KEY) 2
+	@# Create update partition with signed update and "pBOOT" trailer
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
+	$(Q)dd if=dummy_update_v2_signed.bin of=update_part.dd bs=1 conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_SIZE) - 5)) conv=notrunc
+	@# Create erased boot and swap partitions
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > erased_sec.dd
+	@# Assemble internal flash: wolfboot.bin at 0, empty boot partition
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) boot_part.dd
+	@# Assemble external flash: update partition, swap sector
+	$(Q)$(BINASSEMBLE) external_flash.dd \
+		0 update_part.dd \
+		$(WOLFBOOT_PARTITION_SIZE) erased_sec.dd
+	@# Run simulator - self-update reads from external, writes to internal at offset 0
+	$(Q)./wolfboot.elf get_version || true
+	@# Verify dummy payload was written to bootloader region
+	$(Q)cmp -n $$(wc -c < dummy_update.bin | awk '{print $$1}') dummy_update.bin internal_flash.dd && echo "=== Self-update test (External Flash) PASSED ==="
+
 test-self-update: FORCE
 	@mv $(PRIVATE_KEY) private_key.old
 	@make clean factory.bin RAM_CODE=1 WOLFBOOT_VERSION=1 SIGN=$(SIGN)
