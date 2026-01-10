@@ -28,6 +28,13 @@
 #include "hal.h"
 #include "printf.h"
 
+/* Override RAMFUNCTION for test-app: when RAM_CODE is set but not __WOLFBOOT,
+ * we still need flash functions to run from RAM for self-programming. */
+#if defined(RAM_CODE) && !defined(__WOLFBOOT)
+    #undef RAMFUNCTION
+    #define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#endif
+
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
 #define DSB() __asm__ volatile ("dsb")
@@ -280,43 +287,47 @@ void uart_init(void)
     LPUART_CTRL = LPUART_CTRL_TE | LPUART_CTRL_RE;
 }
 
+/* Transmit a single byte (raw, no conversion) - RAMFUNCTION for use during flash ops */
+void RAMFUNCTION uart_tx(uint8_t byte)
+{
+    while (!(LPUART1_STAT & LPUART_STAT_TDRE)) {}
+    LPUART1_DATA = byte;
+    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+}
+
+/* Used for sending ASCII and CRLF conversions */
 void uart_write(const char* buf, unsigned int sz)
 {
     unsigned int i;
-
     for (i = 0; i < sz; i++) {
         /* Handle newline -> CRLF conversion */
         if (buf[i] == '\n') {
-            /* Wait for transmit buffer empty */
-            while (!(LPUART_STAT & LPUART_STAT_TDRE)) {}
-            LPUART_DATA = '\r';
+            uart_tx('\r');
         }
-
-        /* Wait for transmit buffer empty */
-        while (!(LPUART_STAT & LPUART_STAT_TDRE)) {}
-        LPUART_DATA = buf[i];
+        uart_tx(buf[i]);
     }
 
     /* Wait for transmission complete */
     while (!(LPUART_STAT & LPUART_STAT_TC)) {}
 }
 
-/* Read a single character from UART (non-blocking)
- * Returns: 1 if character read, 0 if no data available, -1 on error
- */
-int uart_read(char* c)
-{
-    uint32_t stat = LPUART_STAT;
 
-    /* Clear any error flags */
+
+/* Read a single character from UART (non-blocking) - RAMFUNCTION for use during flash ops
+ * Returns: 1 if character read, 0 if no data available
+ */
+int RAMFUNCTION uart_read(char* c)
+{
+    uint32_t stat = LPUART1_STAT;
+
+    /* Clear any error flags first */
     if (stat & (LPUART_STAT_OR | LPUART_STAT_NF | LPUART_STAT_FE | LPUART_STAT_PF)) {
-        LPUART_STAT = stat;  /* Write 1 to clear flags */
-        return -1;
+        LPUART1_STAT = stat;  /* Write 1 to clear flags */
     }
 
-    /* Check if data available */
+    /* Check if data available - read even if there was an error */
     if (stat & LPUART_STAT_RDRF) {
-        *c = (char)(LPUART_DATA & 0xFF);
+        *c = (char)(LPUART1_DATA & 0xFF);
         return 1;
     }
 

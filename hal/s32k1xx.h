@@ -74,6 +74,29 @@
 #define CLOCK_SPEED         48000000UL
 #endif
 
+/* ============== NVIC - Nested Vectored Interrupt Controller ============== */
+#define NVIC_BASE           (0xE000E100UL)
+#define NVIC_ISER(n)        (*(volatile uint32_t *)(NVIC_BASE + 0x000UL + 4*(n)))  /* Interrupt Set Enable */
+#define NVIC_ICER(n)        (*(volatile uint32_t *)(NVIC_BASE + 0x080UL + 4*(n)))  /* Interrupt Clear Enable */
+#define NVIC_ISPR(n)        (*(volatile uint32_t *)(NVIC_BASE + 0x100UL + 4*(n)))  /* Interrupt Set Pending */
+#define NVIC_ICPR(n)        (*(volatile uint32_t *)(NVIC_BASE + 0x180UL + 4*(n)))  /* Interrupt Clear Pending */
+#define NVIC_IPR(n)         (*(volatile uint32_t *)(NVIC_BASE + 0x300UL + 4*(n)))  /* Interrupt Priority */
+
+/* S32K142 LPUART IRQ numbers */
+#define LPUART0_IRQn        31
+#define LPUART1_IRQn        33
+#define LPUART2_IRQn        35
+
+/* NVIC helper macros */
+#define NVIC_EnableIRQ(irq)     NVIC_ISER((irq) >> 5) = (1UL << ((irq) & 0x1F))
+#define NVIC_DisableIRQ(irq)    NVIC_ICER((irq) >> 5) = (1UL << ((irq) & 0x1F))
+#define NVIC_SetPriority(irq, prio)  \
+    do { \
+        uint32_t _idx = (irq) >> 2; \
+        uint32_t _shift = (((irq) & 0x3) << 3) + 4; \
+        NVIC_IPR(_idx) = (NVIC_IPR(_idx) & ~(0xFUL << _shift)) | (((prio) & 0xF) << _shift); \
+    } while(0)
+
 /* ============== System Control Registers ============== */
 
 /* SCG - System Clock Generator */
