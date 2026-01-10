@@ -472,6 +472,9 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("cpsid i");
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
+    /* Memory barriers to ensure VTOR is updated before continuing */
+    asm volatile("dsb");
+    asm volatile("isb");
 #   endif
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
@@ -479,6 +482,8 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 
     /* Update stack pointer */
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
+    /* Barrier to ensure MSP update is complete */
+    asm volatile("isb");
 #   ifndef NO_VTOR
     asm volatile("cpsie i");
 #   endif
