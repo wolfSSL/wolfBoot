@@ -88,10 +88,14 @@ static uint32_t emu_current_version(void)
 {
     uintptr_t addr = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
 
+#ifdef WOLFCRYPT_SECURE_MODE
+    return wolfBoot_nsc_current_firmware_version();
+#else
     if (addr == 0u) {
         return emu_get_blob_version_addr(0u);
     }
     return wolfBoot_get_blob_version((uint8_t *)addr);
+#endif
 }
 
 void emu_uart_putc(char c)
@@ -153,7 +157,9 @@ static void wait_for_update(uint32_t version)
 
     memset(page, 0xFF, PAGESIZE);
 
+#ifndef WOLFCRYPT_SECURE_MODE
     hal_flash_unlock();
+#endif
 
     emu_uart_write(START);
     for (i = 3; i >= 0; i--) {
@@ -209,23 +215,47 @@ static void wait_for_update(uint32_t version)
             page_idx += psize;
             if ((page_idx == PAGESIZE) || (next_seq + (uint32_t)psize >= tot_len)) {
                 uint32_t dst = (WOLFBOOT_PARTITION_UPDATE_ADDRESS + recv_seq + (uint32_t)psize) - (uint32_t)page_idx;
+                uint32_t dst_off = (recv_seq + (uint32_t)psize) - (uint32_t)page_idx;
+#ifdef WOLFCRYPT_SECURE_MODE
+                if ((dst_off % WOLFBOOT_SECTOR_SIZE) == 0u) {
+                    wolfBoot_nsc_erase_update(dst_off, WOLFBOOT_SECTOR_SIZE);
+                }
+                wolfBoot_nsc_write_update(dst_off, page, PAGESIZE);
+#else
                 if ((dst % WOLFBOOT_SECTOR_SIZE) == 0u) {
                     hal_flash_erase(dst, WOLFBOOT_SECTOR_SIZE);
                 }
                 hal_flash_write(dst, page, PAGESIZE);
+#endif
                 memset(page, 0xFF, PAGESIZE);
             }
             next_seq += (uint32_t)psize;
         }
         ack(next_seq);
         if (next_seq >= tot_len) {
+            uint32_t update_ver;
+#ifdef WOLFCRYPT_SECURE_MODE
+            update_ver = wolfBoot_nsc_update_firmware_version();
+#else
+            update_ver = wolfBoot_get_blob_version((uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+#endif
+            if (update_ver == 7u) {
+                __asm volatile("bkpt #0x4D");
+                break;
+            }
+#ifdef WOLFCRYPT_SECURE_MODE
+            wolfBoot_nsc_update_trigger();
+#else
             wolfBoot_update_trigger();
+#endif
             __asm volatile("bkpt #0x47");
             break;
         }
     }
 
+#ifndef WOLFCRYPT_SECURE_MODE
     hal_flash_lock();
+#endif
 
     while (1) {
         __asm volatile("wfi");
@@ -242,7 +272,11 @@ int main(void)
     printf("get_version=%lu\n", (unsigned long)version);
 
     if (version == 4u) {
+#ifdef WOLFCRYPT_SECURE_MODE
+        wolfBoot_nsc_success();
+#else
         wolfBoot_success();
+#endif
         __asm volatile("bkpt #0x4A");
         while (1) {
             __asm volatile("wfi");
@@ -255,7 +289,11 @@ int main(void)
         }
     }
     if (version == 8u) {
+#ifdef WOLFCRYPT_SECURE_MODE
+        wolfBoot_nsc_success();
+#else
         wolfBoot_success();
+#endif
         __asm volatile("bkpt #0x4E");
         while (1) {
             __asm volatile("wfi");
