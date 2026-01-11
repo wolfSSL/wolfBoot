@@ -91,10 +91,41 @@ if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
   fi
 fi
 
-BOOT_OFFSET=$((BOOT_ADDR - ARCH_OFFSET))
-UPDATE_OFFSET=$((UPDATE_ADDR - ARCH_OFFSET))
+normalize_flash_addr() {
+  local addr="$1"
+  if [[ "$ARCH_OFFSET" == "0x08000000" ]]; then
+    if (( addr >= 0x0c000000 && addr < 0x10000000 )); then
+      addr=$((addr - 0x04000000))
+    fi
+  fi
+  echo "$addr"
+}
+
+BOOT_ADDR_NORM="$(normalize_flash_addr "$BOOT_ADDR")"
+UPDATE_ADDR_NORM="$(normalize_flash_addr "$UPDATE_ADDR")"
+
+BOOT_OFFSET=$((BOOT_ADDR_NORM - ARCH_OFFSET))
+UPDATE_OFFSET=$((UPDATE_ADDR_NORM - ARCH_OFFSET))
 BOOT_OFFSET_HEX=$(printf "0x%x" "$BOOT_OFFSET")
 UPDATE_OFFSET_HEX=$(printf "0x%x" "$UPDATE_OFFSET")
+
+get_check_config_val() {
+  local key="$1"
+  local val
+  make -C "$WOLFBOOT_ROOT/tools/check_config" check_config RAM_CODE=0 >/dev/null
+  val="$("$WOLFBOOT_ROOT/tools/check_config/check_config" | grep -m1 "^${key}" | sed 's/.*: *//')"
+  [[ -n "$val" ]] || die "missing ${key} from tools/check_config output"
+  echo "0x$val"
+}
+
+BOOT_FLAGS_ADDR="$(get_check_config_val PART_BOOT_ENDFLAGS)"
+UPDATE_FLAGS_ADDR="$(get_check_config_val PART_UPDATE_ENDFLAGS)"
+BOOT_FLAGS_ADDR_NORM="$(normalize_flash_addr "$BOOT_FLAGS_ADDR")"
+UPDATE_FLAGS_ADDR_NORM="$(normalize_flash_addr "$UPDATE_FLAGS_ADDR")"
+BOOT_FLAGS_OFFSET=$((BOOT_FLAGS_ADDR_NORM - ARCH_OFFSET))
+UPDATE_FLAGS_OFFSET=$((UPDATE_FLAGS_ADDR_NORM - ARCH_OFFSET))
+BOOT_FLAGS_OFFSET_HEX=$(printf "0x%x" "$BOOT_FLAGS_OFFSET")
+UPDATE_FLAGS_OFFSET_HEX=$(printf "0x%x" "$UPDATE_FLAGS_OFFSET")
 
 M33MU_TZ_ARGS=(--no-tz)
 if [[ "${TZEN}" == "1" ]]; then
@@ -105,6 +136,17 @@ STDBUF=""
 if command -v stdbuf >/dev/null 2>&1; then
   STDBUF="stdbuf -o0 -e0"
 fi
+
+SCENARIOS_RAW="${SCENARIOS:-}"
+SCENARIOS_UP="$(echo "$SCENARIOS_RAW" | tr '[:lower:]' '[:upper:]' | tr -d ' ' | sed -e 's/,,*/,/g' -e 's/^,//' -e 's/,$//')"
+
+want_scenario() {
+  local s="$1"
+  if [[ -z "$SCENARIOS_UP" ]]; then
+    return 0
+  fi
+  echo "$SCENARIOS_UP" | grep -Eq "(^|,)$s(,|$)"
+}
 
 EMU_PATH="$EMU_APPS/$EMU_DIR"
 WOLFBOOT_BIN="$WOLFBOOT_ROOT/wolfboot.bin"
@@ -203,12 +245,11 @@ assemble_factory() {
 
 print_partition_flags() {
   local label="$1"
-  python3 - "$FACTORY_FLASH" "$BOOT_ADDR" "$UPDATE_ADDR" "$PART_SIZE" "$SECTOR_SIZE" <<'PY' | sed "s/^/==> ${label}: /"
+  python3 - "$FACTORY_FLASH" "$BOOT_FLAGS_OFFSET_HEX" "$UPDATE_FLAGS_OFFSET_HEX" "$SECTOR_SIZE" <<'PY' | sed "s/^/==> ${label}: /"
 import sys
-path, boot_s, update_s, size_s, sect_s = sys.argv[1:6]
+path, boot_s, update_s, sect_s = sys.argv[1:5]
 boot = int(boot_s, 0)
 update = int(update_s, 0)
-size = int(size_s, 0)
 sect = int(sect_s, 0)
 
 def decode(state):
@@ -224,14 +265,14 @@ def decode(state):
         return "SUCCESS(0x00)"
     return f"0x{state:02x}"
 
-def read_state(addr):
+def read_state(endflags):
     try:
         with open(path, "rb") as f:
-            f.seek(addr + size - 4)
+            f.seek(endflags - 4)
             magic = f.read(4)
             if magic != b"BOOT":
                 return None
-            f.seek(addr + size - 5)
+            f.seek(endflags - 5)
             b = f.read(1)
             if not b:
                 return None
@@ -239,14 +280,14 @@ def read_state(addr):
     except Exception:
         return None
 
-def read_state_alt(addr):
+def read_state_alt(endflags):
     try:
         with open(path, "rb") as f:
-            f.seek(addr + size - sect - 4)
+            f.seek(endflags - sect - 4)
             magic = f.read(4)
             if magic != b"BOOT":
                 return None
-            f.seek(addr + size - sect - 5)
+            f.seek(endflags - sect - 5)
             b = f.read(1)
             if not b:
                 return None
@@ -392,83 +433,93 @@ make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=4 IMAGE_HEADE
 make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=7 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
 make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=8 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
 
-assemble_factory
+if want_scenario "A"; then
+  assemble_factory
 
-log "Scenario A: factory boot"
-print_partition_flags "Scenario A: flags before factory run"
-log "factory run: boot image v1, expect UART get_version=1"
-set +e
-$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
-  --timeout "$BOOT_TIMEOUT" --quit-on-faults \
-  "$FACTORY_FLASH" >"$EMU_PATH/factory.log" 2>&1
-factory_rc=$?
-set -e
-if ! grep -q "get_version=1" "$EMU_PATH/factory.log"; then
-  tail -n 80 "$EMU_PATH/factory.log" | sed 's/^/  | /'
-  die "factory run: expected get_version=1"
-fi
-if [[ $factory_rc -ne 0 && $factory_rc -ne 127 ]]; then
-  die "factory run: m33mu exited with $factory_rc"
-fi
-log "factory run: ok (version=1)"
-
-log "Scenario A: receive v7 update without trigger (expect BKPT 0x4D, stay on v1)"
-assemble_factory
-run_update_scenario "scenario_a_update_v7" "$UPDATE_IMAGE_V7" 7 0x4d
-print_partition_versions "Scenario A: v7 update stored, version remains 1"
-
-log "Scenario B: successful update from v1 to v4"
-assemble_factory
-print_partition_flags "Scenario B: flags before update"
-run_update_scenario "scenario_b_update" "$UPDATE_IMAGE_V4" 4 0x47
-
-for i in 1 2; do
-  run_log="$EMU_PATH/reboot_v4_${i}.log"
-  log "Scenario B: reboot run $i: boot updated image v4, expect BKPT 0x4A (success)"
+  log "Scenario A: factory boot"
+  print_partition_flags "Scenario A: flags before factory run"
+  log "factory run: boot image v1, expect UART get_version=1"
+  set +e
   $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
-    --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4a --quit-on-faults \
-    "$FACTORY_FLASH" >"$run_log" 2>&1 || die "reboot v4 run $i: m33mu failed"
-  grep -q "\\[EXPECT BKPT\\] Success" "$run_log" || die "reboot v4 run $i: expected BKPT 0x4A"
-  log "Scenario B: reboot run $i: BKPT 0x4A hit"
- done
+    --timeout "$BOOT_TIMEOUT" --quit-on-faults \
+    "$FACTORY_FLASH" >"$EMU_PATH/factory.log" 2>&1
+  factory_rc=$?
+  set -e
+  if ! grep -q "get_version=1" "$EMU_PATH/factory.log"; then
+    tail -n 80 "$EMU_PATH/factory.log" | sed 's/^/  | /'
+    die "factory run: expected get_version=1"
+  fi
+  if [[ $factory_rc -ne 0 && $factory_rc -ne 127 ]]; then
+    die "factory run: m33mu exited with $factory_rc"
+  fi
+  log "factory run: ok (version=1)"
 
-log "Scenario C: update from v1 to v3, then fallback (no wolfBoot_success is called)"
-assemble_factory
-print_partition_flags "Scenario C: flags before update"
-run_update_scenario "scenario_c_update" "$UPDATE_IMAGE_V3" 3 0x47
-
-log "Scenario C: first boot after update: reboot into v3 (expect BKPT 0x4B, no success call)"
-run_log_v3="$EMU_PATH/reboot_v3.log"
-print_partition_flags "Scenario C: flags before v3 reboot"
-$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
-  --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4b --persist --quit-on-faults \
-  "$FACTORY_FLASH" >"$run_log_v3" 2>&1 || die "reboot v3 run: m33mu failed"
-grep -q "\\[EXPECT BKPT\\] Success" "$run_log_v3" || die "reboot v3 run: expected BKPT 0x4B"
-log "Scenario C: reboot v3: BKPT 0x4B hit"
-print_partition_flags "Scenario C: flags after v3 reboot"
-
-log "Scenario C: second reboot, expect v1 after fallback"
-run_log_fallback="$EMU_PATH/reboot_fallback_v1.log"
-set +e
-$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
-  --timeout "$UPDATE_TIMEOUT" --persist --quit-on-faults \
-  "$FACTORY_FLASH" >"$run_log_fallback" 2>&1
-fallback_rc=$?
-set -e
-print_partition_flags "Scenario C: flags after fallback run"
-print_partition_versions "Scenario C: versions after fallback run"
-if ! grep -q "get_version=1" "$run_log_fallback"; then
-  tail -n 80 "$run_log_fallback" | sed 's/^/  | /'
-  die "fallback run: expected get_version=1"
+  log "Scenario A: receive v7 update without trigger (expect BKPT 0x4D, stay on v1)"
+  assemble_factory
+  run_update_scenario "scenario_a_update_v7" "$UPDATE_IMAGE_V7" 7 0x4d
+  print_partition_versions "Scenario A: v7 update stored, version remains 1"
 fi
-if [[ $fallback_rc -ne 0 && $fallback_rc -ne 127 ]]; then
-  die "fallback run: m33mu exited with $fallback_rc"
-fi
-log "Scenario C: fallback ok (version=1)"
 
-if [[ "$RAM_CODE" == "1" ]]; then
-  log "Scenario S: self-update enabled (RAM_CODE=1)"
-  log "Scenario S: not enabled in this script yet"
+if want_scenario "B"; then
+  log "Scenario B: successful update from v1 to v4"
+  assemble_factory
+  print_partition_flags "Scenario B: flags before update"
+  run_update_scenario "scenario_b_update" "$UPDATE_IMAGE_V4" 4 0x47
+
+  for i in 1 2; do
+    run_log="$EMU_PATH/reboot_v4_${i}.log"
+    log "Scenario B: reboot run $i: boot updated image v4, expect BKPT 0x4A (success)"
+    $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+      --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4a --quit-on-faults \
+      "$FACTORY_FLASH" >"$run_log" 2>&1 || die "reboot v4 run $i: m33mu failed"
+    grep -q "\\[EXPECT BKPT\\] Success" "$run_log" || die "reboot v4 run $i: expected BKPT 0x4A"
+    log "Scenario B: reboot run $i: BKPT 0x4A hit"
+   done
+fi
+
+if want_scenario "C"; then
+  log "Scenario C: update from v1 to v3, then fallback (no wolfBoot_success is called)"
+  assemble_factory
+  print_partition_flags "Scenario C: flags before update"
+  run_update_scenario "scenario_c_update" "$UPDATE_IMAGE_V3" 3 0x47
+
+  log "Scenario C: first boot after update: reboot into v3 (expect BKPT 0x4B, no success call)"
+  run_log_v3="$EMU_PATH/reboot_v3.log"
+  print_partition_flags "Scenario C: flags before v3 reboot"
+  $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+    --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4b --persist --quit-on-faults \
+    "$FACTORY_FLASH" >"$run_log_v3" 2>&1 || die "reboot v3 run: m33mu failed"
+  grep -q "\\[EXPECT BKPT\\] Success" "$run_log_v3" || die "reboot v3 run: expected BKPT 0x4B"
+  log "Scenario C: reboot v3: BKPT 0x4B hit"
+  print_partition_flags "Scenario C: flags after v3 reboot"
+
+  log "Scenario C: second reboot, expect v1 after fallback"
+  run_log_fallback="$EMU_PATH/reboot_fallback_v1.log"
+  set +e
+  $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+    --timeout "$UPDATE_TIMEOUT" --persist --quit-on-faults \
+    "$FACTORY_FLASH" >"$run_log_fallback" 2>&1
+  fallback_rc=$?
+  set -e
+  print_partition_flags "Scenario C: flags after fallback run"
+  print_partition_versions "Scenario C: versions after fallback run"
+  if ! grep -q "get_version=1" "$run_log_fallback"; then
+    tail -n 80 "$run_log_fallback" | sed 's/^/  | /'
+    die "fallback run: expected get_version=1"
+  fi
+  if [[ $fallback_rc -ne 0 && $fallback_rc -ne 127 ]]; then
+    die "fallback run: m33mu exited with $fallback_rc"
+  fi
+  log "Scenario C: fallback ok (version=1)"
+fi
+
+if want_scenario "S"; then
+  if [[ "$RAM_CODE" == "1" ]]; then
+    log "Scenario S: self-update enabled (RAM_CODE=1)"
+    log "Scenario S: not enabled in this script yet"
+  else
+    log "Scenario S: RAM_CODE disabled, skipping"
+  fi
 fi
 
 log "ok: $TARGET emu tests passed"
