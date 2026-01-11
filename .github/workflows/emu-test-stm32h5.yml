@@ -13,12 +13,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure stm32h5 (TZ) and build wolfboot
-        working-directory: wolfboot
         run: |
           cp config/examples/stm32h5-tz.config .config
           make wolfboot.bin
 
       - name: Run emu test (stm32h5)
-        working-directory: wolfboot/test-app/emu-test-apps
+        working-directory: test-app/emu-test-apps
         run: |
           SCENARIOS=C ./test.sh
