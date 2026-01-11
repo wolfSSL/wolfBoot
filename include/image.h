@@ -419,14 +419,26 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne nope"); \
-    asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
-    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("mvn r3, r2":::"r3"); \
+    asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("bne nope"); \
+    asm volatile("mvn r3, r2":::"r3"); \
+    asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne nope"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("bne nope"); \
+    asm volatile("mvn r3, r2":::"r3"); \
+    asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne nope"); \
+    asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("bne nope"); \
+    asm volatile("mvn r3, r2":::"r3"); \
+    asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("bne nope"); \
     /* Confirm that the signature is OK */ \
     wolfBoot_image_confirm_signature_ok(img); \
@@ -460,14 +472,26 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "ldr r2, [%0]\n" \
             "cmp r2, #1\n" \
             "bne 1f\n" \
-            "ldr r2, [%0]\n" \
-            "cmp r2, #1\n" \
+            "mvn r3, r2\n" \
+            "cmp r3, #0xFFFFFFFE\n" \
             "bne 1f\n" \
             "ldr r2, [%0]\n" \
             "cmp r2, #1\n" \
             "bne 1f\n" \
+            "mvn r3, r2\n" \
+            "cmp r3, #0xFFFFFFFE\n" \
+            "bne 1f\n" \
             "ldr r2, [%0]\n" \
             "cmp r2, #1\n" \
+            "bne 1f\n" \
+            "mvn r3, r2\n" \
+            "cmp r3, #0xFFFFFFFE\n" \
+            "bne 1f\n" \
+            "ldr r2, [%0]\n" \
+            "cmp r2, #1\n" \
+            "bne 1f\n" \
+            "mvn r3, r2\n" \
+            "cmp r3, #0xFFFFFFFE\n" \
             "bne 1f\n" \
             /* Load 'img' into r0 (first argument to the function) */ \
             "mov r0, %1\n" \
@@ -480,7 +504,7 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "2:\n" \
             : /* No output operands */ \
             : "r"(p_res), "r"(img), "r"(confirm_func) /* Input operands */ \
-            : "r0", "r2", "lr" /* Clobbered registers */ \
+            : "r0", "r2", "r3", "lr" /* Clobbered registers */ \
         ); \
     } while (0)
 #endif
@@ -507,93 +531,94 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
 #if defined(__GNUC__)
 
 #define VERIFY_VERSION_ALLOWED(fb_ok) \
-    /* Stash the registry values */ \
-    asm volatile("push {r4, r5, r6, r7}"); \
-    /* Redundant initialization with 'failure' values */ \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r4, #1":::"r4"); \
-    asm volatile("mov r5, #0":::"r5"); \
-    asm volatile("mov r6, #2":::"r6"); \
-    asm volatile("mov r7, #0":::"r7"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r4, #1":::"r4"); \
-    asm volatile("mov r5, #0":::"r5"); \
-    asm volatile("mov r6, #2":::"r6"); \
-    asm volatile("mov r7, #0":::"r7"); \
-    /* Read the fb_ok flag, jump to end_check  \
-     * if proven fb_ok == 1 */ \
-    asm volatile("mov r0, %0" ::"r"(fb_ok):"r0"); \
-    asm volatile("cmp r0, #1":::"cc"); \
-    asm volatile("bne do_check"); \
-    asm volatile("cmp r0, #1":::"cc"); \
-    asm volatile("bne do_check"); \
-    asm volatile("cmp r0, #1":::"cc"); \
-    asm volatile("bne do_check"); \
-    asm volatile("b end_check"); \
-    /* Do the actual version check: */ \
-    asm volatile("do_check:"); \
-    /* Read update versions to reg r5 and r7 */ \
-    asm volatile("mov r0, #1":::"r0"); \
-    asm volatile("mov r0, #1":::"r0"); \
-    asm volatile("mov r0, #1":::"r0"); \
-    asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r5, r0":::"r5"); \
-    asm volatile("mov r5, r0":::"r5"); \
-    asm volatile("mov r5, r0":::"r5"); \
-    asm volatile("mov r0, #1":::"r0"); \
-    asm volatile("mov r0, #1":::"r0"); \
-    asm volatile("mov r0, #1":::"r0"); \
-    asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r7, r0":::"r7"); \
-    asm volatile("mov r7, r0":::"r7"); \
-    asm volatile("mov r7, r0":::"r7"); \
-    /* Compare r5 and r7, if not equal, something went very wrong, */ \
-    asm volatile("cmp r5, r7":::"cc"); \
-    asm volatile("bne ."); \
-    asm volatile("cmp r5, r7":::"cc"); \
-    asm volatile("bne .-4"); \
-    asm volatile("cmp r5, r7":::"cc"); \
-    asm volatile("bne .-8"); \
-    asm volatile("cmp r5, r7":::"cc"); \
-    asm volatile("bne .-12"); \
-    /* Read current versions to reg r4 and r6 */ \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r4, r0":::"r4"); \
-    asm volatile("mov r4, r0":::"r4"); \
-    asm volatile("mov r4, r0":::"r4"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("bl wolfBoot_get_image_version"); \
-    asm volatile("mov r6, r0":::"r6"); \
-    asm volatile("mov r6, r0":::"r6"); \
-    asm volatile("mov r6, r0":::"r6"); \
-    asm volatile("cmp r4, r6":::"cc"); \
-    asm volatile("bne ."); \
-    asm volatile("cmp r4, r6":::"cc"); \
-    asm volatile("bne .-4"); \
-    asm volatile("cmp r4, r6":::"cc"); \
-    asm volatile("bne .-8"); \
-    asm volatile("cmp r4, r6":::"cc"); \
-    asm volatile("bne .-12"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    asm volatile("mov r0, #0":::"r0"); \
-    /* Compare the two versions in registries */ \
-    asm volatile("cmp r4, r5":::"cc"); \
-    asm volatile("bge ."); \
-    asm volatile("cmp r6, r7":::"cc"); \
-    asm volatile("bge .-4"); \
-    asm volatile("cmp r4, r5":::"cc"); \
-    asm volatile("bge .-8"); \
-    asm volatile("cmp r6, r7":::"cc"); \
-    asm volatile("bge .-12"); \
-    asm volatile("end_check:"); \
-    /* Restore previously saved registry values */ \
-    asm volatile("pop {r4, r5, r6, r7}":::"r4", "r5", "r6", "r7")
+    asm volatile( \
+        "push {r4, r5, r6, r7}\n" \
+        "mov r0, #0\n" \
+        "mov r4, #1\n" \
+        "mov r5, #0\n" \
+        "mov r6, #2\n" \
+        "mov r7, #0\n" \
+        "mov r0, #0\n" \
+        "mov r4, #1\n" \
+        "mov r5, #0\n" \
+        "mov r6, #2\n" \
+        "mov r7, #0\n" \
+        "mov r0, %0\n" \
+        "mov r4, %0\n" \
+        "cmp r0, #1\n" \
+        "bne do_check\n" \
+        "cmp r4, #1\n" \
+        "bne do_check\n" \
+        "cmp r0, r4\n" \
+        "bne do_check\n" \
+        "cmp r0, #1\n" \
+        "bne do_check\n" \
+        "b end_check\n" \
+        "do_check:\n" \
+        "mov r0, #1\n" \
+        "mov r0, #1\n" \
+        "mov r0, #1\n" \
+        "bl wolfBoot_get_image_version\n" \
+        "mov r5, r0\n" \
+        "mov r5, r0\n" \
+        "mov r5, r0\n" \
+        "mov r0, #1\n" \
+        "mov r0, #1\n" \
+        "mov r0, #1\n" \
+        "bl wolfBoot_get_image_version\n" \
+        "mov r7, r0\n" \
+        "mov r7, r0\n" \
+        "mov r7, r0\n" \
+        "cmp r5, r7\n" \
+        "bne ver_panic\n" \
+        "cmp r5, r7\n" \
+        "bne ver_panic\n" \
+        "cmp r5, r7\n" \
+        "bne ver_panic\n" \
+        "cmp r5, r7\n" \
+        "bne ver_panic\n" \
+        "mov r0, #0\n" \
+        "mov r0, #0\n" \
+        "mov r0, #0\n" \
+        "bl wolfBoot_get_image_version\n" \
+        "mov r4, r0\n" \
+        "mov r4, r0\n" \
+        "mov r4, r0\n" \
+        "mov r0, #0\n" \
+        "mov r0, #0\n" \
+        "mov r0, #0\n" \
+        "bl wolfBoot_get_image_version\n" \
+        "mov r6, r0\n" \
+        "mov r6, r0\n" \
+        "mov r6, r0\n" \
+        "cmp r4, r6\n" \
+        "bne ver_panic\n" \
+        "cmp r4, r6\n" \
+        "bne ver_panic\n" \
+        "cmp r4, r6\n" \
+        "bne ver_panic\n" \
+        "cmp r4, r6\n" \
+        "bne ver_panic\n" \
+        "mov r0, #0\n" \
+        "mov r0, #0\n" \
+        "mov r0, #0\n" \
+        "cmp r4, r5\n" \
+        "bhs ver_panic\n" \
+        "cmp r6, r7\n" \
+        "bhs ver_panic\n" \
+        "cmp r4, r5\n" \
+        "bhs ver_panic\n" \
+        "cmp r6, r7\n" \
+        "bhs ver_panic\n" \
+        "b end_check\n" \
+        "ver_panic:\n" \
+        "b .\n" \
+        "end_check:\n" \
+        "pop {r4, r5, r6, r7}\n" \
+        : \
+        : "r"(fb_ok) \
+        : "r0", "r4", "r5", "r6", "r7", "lr", "cc", "memory" \
+    )
 
 #elif defined(__ICCARM__) && defined(__IAR_SYSTEMS_ICC__)
 
@@ -612,9 +637,24 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "mov r6, #2\n" \
             "mov r7, #0\n" \
             "mov r0, %0\n" \
+            "mov r4, %0\n" \
+            "cmp r0, #0\n" \
+            "beq 4f\n" \
+            "cmp r0, #1\n" \
+            "beq 4f\n" \
+            "bkpt 0xE1\n" \
+            "4:\n" \
+            "cmp r4, #0\n" \
+            "beq 5f\n" \
+            "cmp r4, #1\n" \
+            "beq 5f\n" \
+            "bkpt 0xE1\n" \
+            "5:\n" \
             "cmp r0, #1\n" \
             "bne 1f\n" \
-            "cmp r0, #1\n" \
+            "cmp r4, #1\n" \
+            "bne 1f\n" \
+            "cmp r0, r4\n" \
             "bne 1f\n" \
             "cmp r0, #1\n" \
             "bne 1f\n" \
@@ -635,13 +675,13 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "mov r7, r0\n" \
             "mov r7, r0\n" \
             "cmp r5, r7\n" \
-            "bne .\n" \
+            "bne 3f\n" \
             "cmp r5, r7\n" \
-            "bne .-4\n" \
+            "bne 3f\n" \
             "cmp r5, r7\n" \
-            "bne .-8\n" \
+            "bne 3f\n" \
             "cmp r5, r7\n" \
-            "bne .-12\n" \
+            "bne 3f\n" \
             "mov r0, #0\n" \
             "mov r0, #0\n" \
             "mov r0, #0\n" \
@@ -657,24 +697,27 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "mov r6, r0\n" \
             "mov r6, r0\n" \
             "cmp r4, r6\n" \
-            "bne .\n" \
+            "bne 3f\n" \
             "cmp r4, r6\n" \
-            "bne .-4\n" \
+            "bne 3f\n" \
             "cmp r4, r6\n" \
-            "bne .-8\n" \
+            "bne 3f\n" \
             "cmp r4, r6\n" \
-            "bne .-12\n" \
+            "bne 3f\n" \
             "mov r0, #0\n" \
             "mov r0, #0\n" \
             "mov r0, #0\n" \
             "cmp r4, r5\n" \
-            "bge .\n" \
+            "bhs 3f\n" \
             "cmp r6, r7\n" \
-            "bge .-4\n" \
+            "bhs 3f\n" \
             "cmp r4, r5\n" \
-            "bge .-8\n" \
+            "bhs 3f\n" \
             "cmp r6, r7\n" \
-            "bge .-12\n" \
+            "bhs 3f\n" \
+            "b 2f\n" \
+            "3:\n" \
+            "b .\n" \
             "2:\n" \
             "pop {r4, r5, r6, r7}\n" \
             : /* No output operands */ \

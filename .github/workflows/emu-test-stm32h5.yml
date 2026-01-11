@@ -1,0 +1,28 @@
+name: emu-test-stm32h5
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  emu-test-stm32h5:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/danielinux/m33mu-ci:testing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init --single-branch
+
+      - name: Configure stm32h5 (TZ) and build wolfboot
+        run: |
+          cp config/examples/stm32h5-tz.config .config
+          make wolfboot.bin
+
+      - name: Run emu test (stm32h5)
+        working-directory: test-app/emu-test-apps
+        run: |
+          SCENARIOS=C ./test.sh
