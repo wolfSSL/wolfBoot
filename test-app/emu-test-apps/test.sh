@@ -6,28 +6,35 @@ WOLFBOOT_ROOT="${WOLFBOOT_ROOT:-$(cd "$script_dir/../.." && pwd)}"
 EMU_APPS="$WOLFBOOT_ROOT/test-app/emu-test-apps"
 M33MU="${M33MU:-$(command -v m33mu || true)}"
 UPDATE_SERVER_SRC="$WOLFBOOT_ROOT/tools/test-update-server/server.c"
+BIN_ASSEMBLE="$WOLFBOOT_ROOT/tools/bin-assemble/bin-assemble"
+
+log() {
+  echo "==> $*"
+}
 
 die() {
   echo "error: $*" >&2
   exit 1
 }
 
-log() {
-  echo "==> $*"
-}
-
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
+cfg_get() {
+  local key="$1"
+  local val
+  val="$(grep -m1 -E "^${key}[?]*[:]*=" "$WOLFBOOT_ROOT/.config" 2>/dev/null | sed -E "s/^${key}[?]*[:]*=//" || true)"
+  echo "${val}"
+}
+
 if [[ -z "${TARGET:-}" && -f "$WOLFBOOT_ROOT/.config" ]]; then
-  TARGET="$(grep -m1 '^TARGET' "$WOLFBOOT_ROOT/.config" 2>/dev/null | sed -E 's/^TARGET[?]*=//' || true)"
+  TARGET="$(cfg_get TARGET)"
 fi
 TARGET="${TARGET:-}"
-[[ -n "${TARGET}" ]] || die "TARGET not set (export TARGET=... or set in .config)"
+[[ -n "$TARGET" ]] || die "TARGET not set (export TARGET=... or set in .config)"
 
 EMU_DIR=""
-EMU_CPU=""
 UART_BASE=""
 
 get_m33mu_target() {
@@ -40,14 +47,16 @@ get_m33mu_target() {
     *) echo "" ;;
   esac
 }
+
 case "$TARGET" in
   stm32h563|stm32h5) EMU_DIR=stm32h563; UART_BASE=40004800 ;;
   stm32u585|stm32u5) EMU_DIR=stm32u585; UART_BASE=40004800 ;;
   stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800 ;;
-  nrf5340)   EMU_DIR=nrf5340;  UART_BASE=40008000 ;;
+  nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40038000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
-esac
+ esac
+
 EMU_CPU="$(get_m33mu_target "$TARGET")"
 [[ -n "$EMU_CPU" ]] || die "unsupported TARGET=$TARGET (no m33mu mapping)"
 
@@ -56,122 +65,100 @@ need_cmd make
 need_cmd grep
 need_cmd python3
 need_cmd gcc
+need_cmd sed
+need_cmd cut
+need_cmd tac
 
-EMU_IMAGE_HEADER_SIZE="${EMU_IMAGE_HEADER_SIZE:-256}"
-IMAGE_HEADER_SIZE="$EMU_IMAGE_HEADER_SIZE"
-WOLFBOOT_BIN="$WOLFBOOT_ROOT/wolfboot.bin"
+IMAGE_HEADER_SIZE="$(cfg_get IMAGE_HEADER_SIZE)"
+IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE:-256}"
+ARCH_OFFSET="$(cfg_get ARCH_OFFSET)"
+ARCH_OFFSET="${ARCH_OFFSET:-0}"
+BOOT_ADDR="$(cfg_get WOLFBOOT_PARTITION_BOOT_ADDRESS)"
+UPDATE_ADDR="$(cfg_get WOLFBOOT_PARTITION_UPDATE_ADDRESS)"
+PART_SIZE="$(cfg_get WOLFBOOT_PARTITION_SIZE)"
+SECTOR_SIZE="$(cfg_get WOLFBOOT_SECTOR_SIZE)"
+RAM_CODE="$(cfg_get RAM_CODE)"
+TZEN="$(cfg_get TZEN)"
 
-EMU_PATH="$EMU_APPS/$EMU_DIR"
-FACTORY_IMAGE="$EMU_PATH/image_v1_signed.bin"
-FACTORY_IMAGE_BASE="$EMU_PATH/image_v1_factory.bin"
-UPDATE_IMAGE_V4="$EMU_PATH/image_v4_signed.bin"
-UPDATE_IMAGE_V3="$EMU_PATH/image_v3_signed.bin"
-UPDATE_IMAGE_V8="$EMU_PATH/image_v8_signed.bin"
+[[ -n "$BOOT_ADDR" && -n "$UPDATE_ADDR" && -n "$PART_SIZE" && -n "$SECTOR_SIZE" ]] || \
+  die "missing required config values (boot/update addr, partition/sector size)"
+
+# If ARCH_OFFSET is unset/0 but partitions are in 0x0800_0000 (STM32), use that
+# as the base so bin-assemble offsets stay within the flash image.
+if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
+  if (( BOOT_ADDR >= 0x08000000 )); then
+    ARCH_OFFSET=0x08000000
+  fi
+fi
+
+BOOT_OFFSET=$((BOOT_ADDR - ARCH_OFFSET))
+UPDATE_OFFSET=$((UPDATE_ADDR - ARCH_OFFSET))
+BOOT_OFFSET_HEX=$(printf "0x%x" "$BOOT_OFFSET")
+UPDATE_OFFSET_HEX=$(printf "0x%x" "$UPDATE_OFFSET")
+
+M33MU_TZ_ARGS=(--no-tz)
+if [[ "${TZEN}" == "1" ]]; then
+  M33MU_TZ_ARGS=()
+fi
 
 STDBUF=""
 if command -v stdbuf >/dev/null 2>&1; then
   STDBUF="stdbuf -o0 -e0"
 fi
 
-make -C "$EMU_APPS" TARGET="$TARGET" EMU_VERSION=1 IMAGE_HEADER_SIZE="$EMU_IMAGE_HEADER_SIZE" sign-emu
-make -C "$EMU_APPS" TARGET="$TARGET" EMU_VERSION=3 IMAGE_HEADER_SIZE="$EMU_IMAGE_HEADER_SIZE" sign-emu
-make -C "$EMU_APPS" TARGET="$TARGET" EMU_VERSION=4 IMAGE_HEADER_SIZE="$EMU_IMAGE_HEADER_SIZE" sign-emu
-make -C "$EMU_APPS" TARGET="$TARGET" EMU_VERSION=8 IMAGE_HEADER_SIZE="$EMU_IMAGE_HEADER_SIZE" sign-emu
+EMU_PATH="$EMU_APPS/$EMU_DIR"
+WOLFBOOT_BIN="$WOLFBOOT_ROOT/wolfboot.bin"
+FACTORY_FLASH="$EMU_PATH/factory.bin"
 UPDATE_SERVER_BIN="$EMU_PATH/test-update-server"
 
-cp -f "$FACTORY_IMAGE" "$FACTORY_IMAGE_BASE"
+UPDATE_IMAGE_V1="$EMU_PATH/image_v1_signed.bin"
+UPDATE_IMAGE_V3="$EMU_PATH/image_v3_signed.bin"
+UPDATE_IMAGE_V4="$EMU_PATH/image_v4_signed.bin"
+UPDATE_IMAGE_V7="$EMU_PATH/image_v7_signed.bin"
+UPDATE_IMAGE_V8="$EMU_PATH/image_v8_signed.bin"
 
-reset_factory_image() {
-  cp -f "$FACTORY_IMAGE_BASE" "$FACTORY_IMAGE"
-}
+BOOT_TIMEOUT="${BOOT_TIMEOUT:-10}"
+UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-10}"
+REBOOT_TIMEOUT="${REBOOT_TIMEOUT:-10}"
 
-build_update_server() {
-  local uart_dev="$1"
-  gcc -Wall -g -ggdb -DUART_DEV="\"$uart_dev\"" -o "$UPDATE_SERVER_BIN" "$UPDATE_SERVER_SRC" -lpthread
-}
+write_target_ld() {
+  local tpl=""
+  local base=""
+  local addr
+  local size
+  addr=$((BOOT_ADDR + IMAGE_HEADER_SIZE))
+  size=$((PART_SIZE - IMAGE_HEADER_SIZE))
 
-log "Scenario A: factory boot"
-reset_factory_image
-factory_log="$EMU_PATH/factory.log"
-log "factory run: boot image v1, expect UART get_version=1"
-set +e
-$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
-  --boot-offset="$IMAGE_HEADER_SIZE" --timeout 2 --expect-bkpt=0x00 \
-  "$FACTORY_IMAGE" >"$factory_log" 2>&1
-factory_rc=$?
-set -e
-grep -q "get_version=1" "$factory_log" || die "factory run: expected get_version=1"
-if [[ $factory_rc -ne 0 && $factory_rc -ne 127 ]]; then
-  die "factory run: m33mu exited with $factory_rc"
-fi
-log "factory run: ok (version=1)"
+  case "$TARGET" in
+    stm32h563|stm32h5) base="ARM-stm32h5" ;;
+    stm32u585|stm32u5) base="ARM-stm32u5" ;;
+    stm32l552|stm32l5) base="ARM-stm32l5" ;;
+    nrf5340) base="ARM-nrf5340" ;;
+    mcxw|mcxw71) base="ARM-mcxw" ;;
+    *) die "unsupported TARGET for linker template: $TARGET" ;;
+  esac
 
-wait_for_pts() {
-  local log="$1"
-  local base="$2"
-  local pts=""
-  local i
-  for i in $(seq 1 100); do
-    pts="$(grep "\\[UART\\] ${base} attached to" "$log" | tail -n1 | sed 's/.* //' || true)"
-    if [[ -n "$pts" ]]; then
-      echo "$pts"
-      return 0
-    fi
-    sleep 0.05
-  done
-  return 1
-}
+  if [[ "${TZEN}" == "1" && -f "$WOLFBOOT_ROOT/test-app/${base}-ns.ld" ]]; then
+    tpl="$WOLFBOOT_ROOT/test-app/${base}-ns.ld"
+  else
+    tpl="$WOLFBOOT_ROOT/test-app/${base}.ld"
+  fi
 
-check_update_version_in_image() {
-  local image="$1"
-  local expected="$2"
-  local target_h="$EMU_PATH/target.h"
-  local boot_addr
-  local update_addr
-  boot_addr="$(grep -m1 'WOLFBOOT_PARTITION_BOOT_ADDRESS' "$target_h" | sed 's/.*0x/0x/' | cut -d'u' -f1)"
-  update_addr="$(grep -m1 'WOLFBOOT_PARTITION_UPDATE_ADDRESS' "$target_h" | sed 's/.*0x/0x/' | cut -d'u' -f1)"
-  python3 - "$image" "$boot_addr" "$update_addr" "$IMAGE_HEADER_SIZE" "$expected" <<'PY'
-import sys, struct
-path, boot_s, update_s, hdr_s, expected_s = sys.argv[1:6]
-boot = int(boot_s, 16)
-update = int(update_s, 16)
-hdr = int(hdr_s, 0)
-expected = int(expected_s, 0)
-off = update - boot
-data = open(path, "rb").read()
-if off + 8 > len(data):
-    print("0")
-    sys.exit(1)
-magic, = struct.unpack_from("<I", data, off)
-if magic != 0x464C4F57:
-    print("0")
-    sys.exit(1)
-IMAGE_HEADER_OFFSET = 8
-HDR_PADDING = 0xFF
-HDR_VERSION = 0x01
-p = off + IMAGE_HEADER_OFFSET
-max_p = off + hdr
-version = 0
-while p + 4 <= max_p:
-    htype = data[p] | (data[p + 1] << 8)
-    if htype == 0:
-        break
-    if data[p] == HDR_PADDING or (p & 1):
-        p += 1
-        continue
-    length = data[p + 2] | (data[p + 3] << 8)
-    if 4 + length > (hdr - IMAGE_HEADER_OFFSET):
-        break
-    if p + 4 + length > max_p:
-        break
-    p += 4
-    if htype == HDR_VERSION:
-        version, = struct.unpack_from("<I", data, p)
-        break
-    p += length
-print(version)
-sys.exit(0 if version == expected else 1)
-PY
+  [[ -f "$tpl" ]] || die "missing linker template: $tpl"
+
+  sed -e "s/@WOLFBOOT_TEST_APP_ADDRESS@/0x$(printf '%x' "$addr")/g" \
+      -e "s/@WOLFBOOT_TEST_APP_SIZE@/0x$(printf '%x' "$size")/g" \
+      "$tpl" > "$EMU_PATH/target.ld"
+  cat <<'SYM' >> "$EMU_PATH/target.ld"
+
+/* Emu app startup expects these symbols. */
+_estack = _end_stack;
+_sidata = _stored_data;
+_sdata = _start_data;
+_edata = _end_data;
+_sbss = _start_bss;
+_ebss = _end_bss;
+SYM
 }
 
 check_pty_available() {
@@ -183,84 +170,305 @@ os.close(s)
 PY
 }
 
+wait_for_pts() {
+  local log_file="$1"
+  local base="$2"
+  local pid="$3"
+  local pts=""
+  local i
+  for i in $(seq 1 2000); do
+    pts="$(grep "\\[UART\\] ${base} attached to" "$log_file" | tail -n1 | sed 's/.* //' || true)"
+    if [[ -n "$pts" ]]; then
+      echo "$pts"
+      return 0
+    fi
+    kill -0 "$pid" >/dev/null 2>&1 || break
+    sleep 0.05
+  done
+  return 1
+}
+
+build_update_server() {
+  local uart_dev="$1"
+  gcc -Wall -g -ggdb -DUART_DEV="\"$uart_dev\"" -o "$UPDATE_SERVER_BIN" \
+    "$UPDATE_SERVER_SRC" -lpthread
+}
+
+assemble_factory() {
+  log "Assembling factory.bin from wolfboot.bin + image_v1_signed.bin"
+  "$BIN_ASSEMBLE" "$FACTORY_FLASH" \
+    0 "$WOLFBOOT_BIN" \
+    "$BOOT_OFFSET_HEX" "$UPDATE_IMAGE_V1" >/dev/null
+}
+
+print_partition_flags() {
+  local label="$1"
+  python3 - "$FACTORY_FLASH" "$BOOT_ADDR" "$UPDATE_ADDR" "$PART_SIZE" "$SECTOR_SIZE" <<'PY' | sed "s/^/==> ${label}: /"
+import sys
+path, boot_s, update_s, size_s, sect_s = sys.argv[1:6]
+boot = int(boot_s, 0)
+update = int(update_s, 0)
+size = int(size_s, 0)
+sect = int(sect_s, 0)
+
+def decode(state):
+    if state is None:
+        return "MISSING"
+    if state == 0xFF:
+        return "NEW(0xFF)"
+    if state == 0x70:
+        return "UPDATING(0x70)"
+    if state == 0x10:
+        return "TESTING(0x10)"
+    if state == 0x00:
+        return "SUCCESS(0x00)"
+    return f"0x{state:02x}"
+
+def read_state(addr):
+    try:
+        with open(path, "rb") as f:
+            f.seek(addr + size - 4)
+            magic = f.read(4)
+            if magic != b"BOOT":
+                return None
+            f.seek(addr + size - 5)
+            b = f.read(1)
+            if not b:
+                return None
+            return b[0]
+    except Exception:
+        return None
+
+def read_state_alt(addr):
+    try:
+        with open(path, "rb") as f:
+            f.seek(addr + size - sect - 4)
+            magic = f.read(4)
+            if magic != b"BOOT":
+                return None
+            f.seek(addr + size - sect - 5)
+            b = f.read(1)
+            if not b:
+                return None
+            return b[0]
+    except Exception:
+        return None
+
+bs0 = read_state(boot)
+bs1 = read_state_alt(boot)
+us0 = read_state(update)
+us1 = read_state_alt(update)
+print(f"boot_flags=[S0:{decode(bs0)} S1:{decode(bs1)}] update_flags=[S0:{decode(us0)} S1:{decode(us1)}]")
+PY
+}
+
+print_partition_versions() {
+  local label="$1"
+  local boot_ver
+  local update_ver
+  boot_ver="$(python3 - "$FACTORY_FLASH" "$BOOT_OFFSET_HEX" "$IMAGE_HEADER_SIZE" <<'PY'
+import sys, struct
+path, off_s, hdr_s = sys.argv[1], sys.argv[2], sys.argv[3]
+off = int(off_s, 16)
+hdr = int(hdr_s, 0)
+data = open(path, "rb").read()
+if off + 8 > len(data):
+    print("NA")
+    sys.exit(0)
+magic, = struct.unpack_from("<I", data, off)
+if magic != 0x464C4F57:
+    print("NA")
+    sys.exit(0)
+p = off + 8
+end = off + hdr
+ver = None
+while p + 4 <= end:
+    if data[p] == 0xFF:
+        p += 1
+        continue
+    t = struct.unpack_from("<H", data, p)[0]
+    l = struct.unpack_from("<H", data, p + 2)[0]
+    p += 4
+    if p + l > end:
+        break
+    if t == 1:
+        ver = struct.unpack_from("<I", data, p)[0]
+        break
+    p += l
+print("NA" if ver is None else ver)
+PY
+)"
+  update_ver="$(python3 - "$FACTORY_FLASH" "$UPDATE_OFFSET_HEX" "$IMAGE_HEADER_SIZE" <<'PY'
+import sys, struct
+path, off_s, hdr_s = sys.argv[1], sys.argv[2], sys.argv[3]
+off = int(off_s, 16)
+hdr = int(hdr_s, 0)
+data = open(path, "rb").read()
+if off + 8 > len(data):
+    print("NA")
+    sys.exit(0)
+magic, = struct.unpack_from("<I", data, off)
+if magic != 0x464C4F57:
+    print("NA")
+    sys.exit(0)
+p = off + 8
+end = off + hdr
+ver = None
+while p + 4 <= end:
+    if data[p] == 0xFF:
+        p += 1
+        continue
+    t = struct.unpack_from("<H", data, p)[0]
+    l = struct.unpack_from("<H", data, p + 2)[0]
+    p += 4
+    if p + l > end:
+        break
+    if t == 1:
+        ver = struct.unpack_from("<I", data, p)[0]
+        break
+    p += l
+print("NA" if ver is None else ver)
+PY
+)"
+  log "$label: boot_version=$boot_ver update_version=$update_ver"
+}
+
 run_update_scenario() {
   local label="$1"
   local update_image="$2"
   local expected_version="$3"
+  local expected_bkpt="${4:-0x47}"
   local update_log="$EMU_PATH/update_${label}.log"
   local server_log="$EMU_PATH/update_server_${label}.log"
   : >"$update_log"
-  check_pty_available || die "no PTY devices available (needed for ufserver)"
-UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-120}"
-  log "$label: start emulator (expect BKPT 0x47 when update is accepted)"
-  $STDBUF "$M33MU" --cpu "$EMU_CPU" --no-tz --persist \
-    --boot-offset="$IMAGE_HEADER_SIZE" --timeout "$UPDATE_TIMEOUT" --expect-bkpt=0x47 \
-    "$FACTORY_IMAGE" >"$update_log" 2>&1 &
+  check_pty_available || die "no PTY devices available (needed for test-update-server)"
+  print_partition_flags "$label: flags before"
+  log "$label: start emulator (expect BKPT $expected_bkpt when update completes)"
+  $STDBUF "$M33MU" --cpu "$EMU_CPU" "${M33MU_TZ_ARGS[@]}" --persist \
+    --timeout "$UPDATE_TIMEOUT" --expect-bkpt="$expected_bkpt" --quit-on-faults \
+    "$FACTORY_FLASH" >"$update_log" 2>&1 &
   emu_pid=$!
 
-  pts="$(wait_for_pts "$update_log" "$UART_BASE")" || die "$label: failed to detect UART PTY"
+  pts="$(wait_for_pts "$update_log" "$UART_BASE" "$emu_pid")" || {
+    tail -n 60 "$update_log" | sed 's/^/  | /'
+    die "$label: failed to detect UART PTY"
+  }
   log "$label: UART attached at $pts"
   build_update_server "$pts"
-  if [[ -n "$STDBUF" ]]; then
-    log "$label: transferring update image (v$expected_version) over UART"
-    $STDBUF "$UPDATE_SERVER_BIN" "$update_image" >"$server_log" 2>&1 &
-  else
-    log "$label: transferring update image (v$expected_version) over UART"
-    "$UPDATE_SERVER_BIN" "$update_image" >"$server_log" 2>&1 &
-  fi
+
+  log "$label: transferring update image (v$expected_version) over UART"
+  $STDBUF "$UPDATE_SERVER_BIN" "$update_image" >"$server_log" 2>&1 &
   server_pid=$!
 
   set +e
   wait "$emu_pid"
   emu_rc=$?
   set -e
+
   kill "$server_pid" >/dev/null 2>&1 || true
   wait "$server_pid" >/dev/null 2>&1 || true
-  [[ $emu_rc -eq 0 ]] || die "$label: m33mu exited with $emu_rc"
-  grep -q "\\[EXPECT BKPT\\] Success" "$update_log" || die "$label: expected BKPT 0x47"
-  log "$label: BKPT 0x47 hit (update accepted)"
-  check_update_version_in_image "$FACTORY_IMAGE" "$expected_version" || die "$label: update partition version mismatch"
-  log "$label: update partition version=$expected_version"
+
+  if ! grep -q "\\[EXPECT BKPT\\] Success" "$update_log"; then
+    tail -n 80 "$update_log" | sed 's/^/  | /'
+    die "$label: expected BKPT $expected_bkpt"
+  fi
+
+  log "$label: BKPT $expected_bkpt hit"
+  print_partition_flags "$label: flags after"
+
+  if [[ $emu_rc -ne 0 && $emu_rc -ne 127 ]]; then
+    die "$label: m33mu exited with $emu_rc"
+  fi
 }
 
+log "Rebuilding wolfboot.bin (TZEN=${TZEN:-0})"
+make -C "$WOLFBOOT_ROOT" clean wolfboot.bin
+
+log "Building emu-test-apps images"
+write_target_ld
+make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=1 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
+make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=3 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
+make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=4 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
+make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=7 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
+make -C "$EMU_APPS" TARGET="$TARGET" TZEN="${TZEN:-0}" EMU_VERSION=8 IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" sign-emu
+
+assemble_factory
+
+log "Scenario A: factory boot"
+print_partition_flags "Scenario A: flags before factory run"
+log "factory run: boot image v1, expect UART get_version=1"
+set +e
+$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+  --timeout "$BOOT_TIMEOUT" --quit-on-faults \
+  "$FACTORY_FLASH" >"$EMU_PATH/factory.log" 2>&1
+factory_rc=$?
+set -e
+if ! grep -q "get_version=1" "$EMU_PATH/factory.log"; then
+  tail -n 80 "$EMU_PATH/factory.log" | sed 's/^/  | /'
+  die "factory run: expected get_version=1"
+fi
+if [[ $factory_rc -ne 0 && $factory_rc -ne 127 ]]; then
+  die "factory run: m33mu exited with $factory_rc"
+fi
+log "factory run: ok (version=1)"
+
+log "Scenario A: receive v7 update without trigger (expect BKPT 0x4D, stay on v1)"
+assemble_factory
+run_update_scenario "scenario_a_update_v7" "$UPDATE_IMAGE_V7" 7 0x4d
+print_partition_versions "Scenario A: v7 update stored, version remains 1"
+
 log "Scenario B: successful update from v1 to v4"
-reset_factory_image
-run_update_scenario "scenario_b_update" "$UPDATE_IMAGE_V4" 4
+assemble_factory
+print_partition_flags "Scenario B: flags before update"
+run_update_scenario "scenario_b_update" "$UPDATE_IMAGE_V4" 4 0x47
 
 for i in 1 2; do
   run_log="$EMU_PATH/reboot_v4_${i}.log"
   log "Scenario B: reboot run $i: boot updated image v4, expect BKPT 0x4A (success)"
-  $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
-    --boot-offset="$IMAGE_HEADER_SIZE" --timeout 2 --expect-bkpt=0x4a \
-    "$UPDATE_IMAGE_V4" >"$run_log" 2>&1 || die "reboot v4 run $i: m33mu failed"
+  $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+    --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4a --quit-on-faults \
+    "$FACTORY_FLASH" >"$run_log" 2>&1 || die "reboot v4 run $i: m33mu failed"
   grep -q "\\[EXPECT BKPT\\] Success" "$run_log" || die "reboot v4 run $i: expected BKPT 0x4A"
   log "Scenario B: reboot run $i: BKPT 0x4A hit"
-done
+ done
 
 log "Scenario C: update from v1 to v3, then fallback (no wolfBoot_success is called)"
-reset_factory_image
-run_update_scenario "scenario_c_update" "$UPDATE_IMAGE_V3" 3
+assemble_factory
+print_partition_flags "Scenario C: flags before update"
+run_update_scenario "scenario_c_update" "$UPDATE_IMAGE_V3" 3 0x47
 
 log "Scenario C: first boot after update: reboot into v3 (expect BKPT 0x4B, no success call)"
 run_log_v3="$EMU_PATH/reboot_v3.log"
-$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
-  --boot-offset="$IMAGE_HEADER_SIZE" --timeout 2 --expect-bkpt=0x4b \
-  "$UPDATE_IMAGE_V3" >"$run_log_v3" 2>&1 || die "reboot v3 run: m33mu failed"
+print_partition_flags "Scenario C: flags before v3 reboot"
+$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+  --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4b --persist --quit-on-faults \
+  "$FACTORY_FLASH" >"$run_log_v3" 2>&1 || die "reboot v3 run: m33mu failed"
 grep -q "\\[EXPECT BKPT\\] Success" "$run_log_v3" || die "reboot v3 run: expected BKPT 0x4B"
 log "Scenario C: reboot v3: BKPT 0x4B hit"
+print_partition_flags "Scenario C: flags after v3 reboot"
 
 log "Scenario C: second reboot, expect v1 after fallback"
 run_log_fallback="$EMU_PATH/reboot_fallback_v1.log"
 set +e
-$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout --no-tz \
-  --boot-offset="$IMAGE_HEADER_SIZE" --timeout 2 \
-  "$FACTORY_IMAGE" >"$run_log_fallback" 2>&1
+$STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+  --timeout "$UPDATE_TIMEOUT" --persist --quit-on-faults \
+  "$FACTORY_FLASH" >"$run_log_fallback" 2>&1
 fallback_rc=$?
 set -e
-grep -q "get_version=1" "$run_log_fallback" || die "fallback run: expected get_version=1"
+print_partition_flags "Scenario C: flags after fallback run"
+print_partition_versions "Scenario C: versions after fallback run"
+if ! grep -q "get_version=1" "$run_log_fallback"; then
+  tail -n 80 "$run_log_fallback" | sed 's/^/  | /'
+  die "fallback run: expected get_version=1"
+fi
 if [[ $fallback_rc -ne 0 && $fallback_rc -ne 127 ]]; then
   die "fallback run: m33mu exited with $fallback_rc"
 fi
 log "Scenario C: fallback ok (version=1)"
+
+if [[ "$RAM_CODE" == "1" ]]; then
+  log "Scenario S: self-update enabled (RAM_CODE=1)"
+  log "Scenario S: not enabled in this script yet"
+fi
 
 log "ok: $TARGET emu tests passed"

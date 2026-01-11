@@ -3,6 +3,10 @@
 #include "target.h"
 #include "hal.h"
 
+#ifndef EMU_FLASH_SECTOR_SIZE
+#define EMU_FLASH_SECTOR_SIZE WOLFBOOT_SECTOR_SIZE
+#endif
+
 #if defined(EMU_STM32)
 #define FLASH_BASE        0x40022000u
 #define FLASH_NSKEYR      (*(volatile uint32_t *)(FLASH_BASE + 0x004u))

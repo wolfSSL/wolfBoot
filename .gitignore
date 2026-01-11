@@ -45,6 +45,7 @@
 *.idb
 *.pdb
 *.gdb
+*.log
 
 # automatically generated keys
 *.der
