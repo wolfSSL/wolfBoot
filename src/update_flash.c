@@ -802,6 +802,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         {
             uint32_t fb_ok = (fallback_allowed == 1);
             VERIFY_VERSION_ALLOWED(fb_ok);
+            (void)fb_ok;
         }
         if ((fallback_allowed == 0) && (cur_ver >= upd_ver)) {
             wolfBoot_printf("Update version not allowed\n");
