@@ -13,7 +13,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Init submodules
-        run: git submodule update --init --single-branch
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init --single-branch
 
       - name: Configure stm32h5 (TZ) and build wolfboot
         run: |
