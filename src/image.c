@@ -803,6 +803,26 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
                                  img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
                                  &verify_res);
 
+    #ifdef WOLFBOOT_ARMORED
+        if (ret == 0) {
+            uint32_t v = (uint32_t)verify_res;
+            uint32_t v_inv = ~v;
+            if ((v == 1U) && (v_inv == 0xFFFFFFFEU) &&
+                (v == (uint32_t)verify_res) &&
+                (v_inv == ~(uint32_t)verify_res)) {
+                wolfBoot_printf("info: wc_MlDsaKey_Verify returned OK\n");
+                wolfBoot_image_confirm_signature_ok(img);
+            }
+            else {
+                wolfBoot_printf("error: wc_MlDsaKey_Verify returned: ret=%d, "
+                                "res=%d\n", ret, verify_res);
+            }
+        }
+        else {
+            wolfBoot_printf("error: wc_MlDsaKey_Verify returned: ret=%d, "
+                            "res=%d\n", ret, verify_res);
+        }
+    #else
         if (ret == 0 && verify_res == 1) {
             wolfBoot_printf("info: wc_MlDsaKey_Verify returned OK\n");
             wolfBoot_image_confirm_signature_ok(img);
@@ -811,6 +831,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
             wolfBoot_printf("error: wc_MlDsaKey_Verify returned: ret=%d, "
                             "res=%d\n", ret, verify_res);
         }
+    #endif
     }
 
     wc_MlDsaKey_Free(&ml_dsa);
@@ -2150,8 +2171,15 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     wolfBoot_verify_signature_primary(key_slot, img, stored_signature);
     (void)stored_signature_size;
 
+#ifdef WOLFBOOT_ARMORED
+#define SIG_OK(imgp) (((imgp)->signature_ok == 1) && \
+                      ((imgp)->not_signature_ok == ~(uint32_t)1))
+#else
+#define SIG_OK(imgp) ((imgp)->signature_ok == 1)
+#endif
+
 #ifdef SIGN_HYBRID
-    if (img->signature_ok == 1) {
+    if (SIG_OK(img)) {
         uint8_t *stored_secondary_signature;
         uint16_t stored_secondary_signature_size;
         /* Invalidate the signature_ok flag */
@@ -2177,10 +2205,18 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         }
     }
 #endif
-    if (img->signature_ok == 1) {
+#ifdef WOLFBOOT_ARMORED
+    if (SIG_OK(img)) {
         return 0;
     }
     return -2;
+#else
+    if (SIG_OK(img)) {
+        return 0;
+    }
+    return -2;
+#endif
+#undef SIG_OK
 }
 #endif
 
