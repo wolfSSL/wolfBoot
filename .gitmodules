@@ -12,4 +12,4 @@
 	url = https://github.com/wolfssl/wolfhsm.git
 [submodule "lib/wolfPSA"]
 	path = lib/wolfPSA
-	url = git@github.com:wolfSSL/wolfPSA.git
+	url = https://github.com/wolfSSL/wolfPSA.git
