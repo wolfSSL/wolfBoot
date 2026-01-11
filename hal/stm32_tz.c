@@ -301,11 +301,18 @@ void hal_tz_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Secure: application flash area (first bank) */
-    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, FLASH_BANK2_BASE - 1, 0);
+    /* Non-secure flash alias (entire NS flash window) */
+    sau_init_region(1, 0x08000000, FLASH_TOP, 0);
 
-    /* Secure: application flash area (second bank) */
-    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, FLASH_TOP, 0);
+    /* Secure: update partition in secure alias (use matching FLASH_TOP base) */
+    uint32_t flash_top_secure = FLASH_TOP;
+    if ((WOLFBOOT_PARTITION_UPDATE_ADDRESS & 0xFF000000u) !=
+        (FLASH_TOP & 0xFF000000u)) {
+        flash_top_secure =
+            (WOLFBOOT_PARTITION_UPDATE_ADDRESS & 0xFF000000u) |
+            (FLASH_TOP & 0x00FFFFFFu);
+    }
+    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, flash_top_secure, 1);
 
     /* Secure RAM regions in SRAM1/SRAM2 */
     sau_init_region(3, 0x30000000, 0x3004FFFF, 1);
@@ -435,4 +442,3 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len)
 }
 
 #endif
-
