@@ -799,11 +799,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             cur_ver, upd_ver);
 
 #ifndef ALLOW_DOWNGRADE
-        if (fallback_allowed != 0) {
-            /* Fallback path skips redundant version checks. */
-        } else if (cur_ver < upd_ver) {
-            VERIFY_VERSION_ALLOWED(fallback_allowed);
-        } else {
+        {
+            uint32_t fb_ok = (fallback_allowed == 1);
+            VERIFY_VERSION_ALLOWED(fb_ok);
+        }
+        if ((fallback_allowed == 0) && (cur_ver >= upd_ver)) {
             wolfBoot_printf("Update version not allowed\n");
             return -1;
         }
