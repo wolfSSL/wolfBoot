@@ -12,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Init submodules
+        run: git submodule update --init --single-branch
+
       - name: Configure stm32h5 (TZ) and build wolfboot
         run: |
           cp config/examples/stm32h5-tz.config .config
