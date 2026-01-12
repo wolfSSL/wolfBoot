@@ -1334,6 +1334,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     (void)hal_hsm_server_cleanup();
 #endif
+
     hal_prepare_boot();
 
     do_boot((void *)boot.fw_base);
