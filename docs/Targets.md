@@ -23,6 +23,7 @@ This README describes configuration of supported targets.
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP MCXW716](#nxp-mcxw716)
+* [NXP S32K1XX](#nxp-s32k1xx)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -2944,6 +2945,278 @@ b main
 mon reset
 c
 ```
+
+
+## NXP S32K1XX
+
+The NXP S32K1xx family (S32K142, S32K144, S32K146, S32K148) are automotive-grade
+Cortex-M4F microcontrollers. wolfBoot support has been tested on the S32K142 with
+256KB Flash and 32KB SRAM.
+
+**Key Features:**
+- ARM Cortex-M4F core at up to 112 MHz (HSRUN mode) or 80 MHz (RUN mode)
+- Flash sector size: 2KB (4KB when flash is over 256KB)
+- 8-byte (phrase) flash programming unit
+- Bare-metal implementation (no SDK required)
+- LPUART debug output support
+
+### NXP S32K1XX: Memory Layout
+
+The default memory layout for S32K142 (256KB Flash):
+
+| Region | Address Range | Size |
+|--------|---------------|------|
+| Bootloader | 0x00000000 - 0x0000BFFF | 48 KB |
+| Boot Partition | 0x0000C000 - 0x00024FFF | 100 KB |
+| Update Partition | 0x00025000 - 0x0003DFFF | 100 KB |
+| Swap Sector | 0x0003E000 - 0x0003E7FF | 2 KB |
+
+### NXP S32K1XX: Configuration
+
+Example configuration files:
+- [/config/examples/nxp-s32k142.config](/config/examples/nxp-s32k142.config) - S32K142 (256KB Flash, 32KB SRAM)
+- [/config/examples/nxp-s32k144.config](/config/examples/nxp-s32k144.config) - S32K144 (512KB Flash, 64KB SRAM)
+- [/config/examples/nxp-s32k146.config](/config/examples/nxp-s32k146.config) - S32K146 (1MB Flash, 128KB SRAM)
+- [/config/examples/nxp-s32k148.config](/config/examples/nxp-s32k148.config) - S32K148 (2MB Flash, 256KB SRAM)
+
+```sh
+# Copy configuration (example for S32K142)
+cp config/examples/nxp-s32k142.config .config
+
+# Build wolfBoot
+make clean
+make
+
+# Build test application
+make test-app/image.bin
+```
+
+### NXP S32K1XX: Configuration Options
+
+The following build options are available for the S32K1xx HAL:
+
+| Option | Description |
+|--------|-------------|
+| `NVM_FLASH_WRITEONCE` | **Required for S32K1xx.** Flash can only be written once between erases. Enables proper sector swap trailer management. |
+| `RAM_CODE` | **Required for S32K1xx.** Run flash operations from RAM (no read-while-write on same block). |
+| `WOLFBOOT_RESTORE_CLOCK` | Restore clock to SIRC (8 MHz) before booting application. Recommended for applications that configure their own clocks. |
+| `WOLFBOOT_DISABLE_WATCHDOG_ON_BOOT` | Keep watchdog disabled when jumping to application. By default, the watchdog is re-enabled before boot since it is enabled out of reset. |
+| `WATCHDOG` | Enable watchdog during wolfBoot operation. Recommended for production. |
+| `WATCHDOG_TIMEOUT_MS` | Watchdog timeout in milliseconds when `WATCHDOG` is enabled (default: 1000ms). |
+| `S32K1XX_CLOCK_HSRUN` | Enable HSRUN mode (112 MHz). Requires external crystal and SPLL (not fully implemented). |
+| `DEBUG_UART` | Enable LPUART1 debug output. |
+| `DEBUG_HARDFAULT` | Enable detailed hard fault debugging output. |
+| `S32K144`, `S32K146`, `S32K148` | Select variant (default is S32K142). Affects flash/SRAM size definitions. |
+
+**IMPORTANT:** Flash sector size depends on the S32K variant:
+- **S32K142** (256KB Flash): 2KB sectors (`WOLFBOOT_SECTOR_SIZE=0x800`)
+- **S32K144/S32K146/S32K148** (512KB+ Flash): 4KB sectors (`WOLFBOOT_SECTOR_SIZE=0x1000`)
+
+### NXP S32K1XX: Debug UART
+
+For UART debug output, connect a USB-to-serial adapter to LPUART1 pins (PTC6=RX, PTC7=TX) and open a terminal at 115200 baud.
+
+Debug output uses LPUART1 on pins:
+- **TX**: PTC7
+- **RX**: PTC6
+
+Baud rate: 115200, 8N1
+
+Enable with `DEBUG_UART=1` in your configuration.
+
+### NXP S32K1XX: Programming and Debugging
+
+The S32K1xx can be programmed and debugged using various tools. The recommended approach uses PEMicro debug probes (commonly found on S32K EVB boards).
+
+**Using PEMicro (recommended for S32K EVB boards):**
+
+1. Install PEMicro GDB Server from [pemicro.com](https://www.pemicro.com/products/product_viewDetails.cfm?product_id=15320167)
+
+2. Start PEMicro GDB Server:
+```sh
+pegdbserver_console -device=NXP_S32K1xx_S32K142 -startserver -serverport=7224
+```
+
+3. In another terminal, connect with GDB and flash:
+```sh
+arm-none-eabi-gdb --nx wolfboot.elf
+target remote :7224
+monitor reset halt
+load
+monitor reset run
+```
+
+### NXP S32K1XX: USB Mass Storage Programming
+
+The S32K EVB boards include an OpenSDA debugger that exposes a USB mass storage interface for easy programming. Simply copy the `.srec` file to the mounted USB drive.
+
+**Steps:**
+
+1. Connect the S32K EVB board via USB (OpenSDA port)
+2. The board will mount as a USB drive (e.g., `S32K142EVB`)
+3. Build the factory image:
+
+```sh
+make factory.srec
+```
+
+4. Copy the `.srec` file to the mounted drive:
+
+```sh
+cp factory.srec /media/<user>/S32K142EVB/
+```
+
+The board will automatically program the flash and reset.
+
+### NXP S32K1XX: Flash Script
+
+A convenience script is provided for building and flashing S32K142:
+
+```sh
+./tools/scripts/nxp-s32k142-flash.sh [OPTIONS]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| (none) | Build and flash `factory.srec` (v1 only) |
+| `--test-update` | Build with v2 in update partition (use `trigger` command to start update) |
+| `--update` | Build with v2 and auto-trigger (starts update on boot) |
+| `--skip-build` | Skip build, use existing `.srec` file |
+| `--skip-flash` | Skip flashing (just build) |
+| `--skip-uart` | Skip UART monitoring |
+| `--uart-only` | Only monitor UART (no build/flash) |
+| `--interactive` | Keep UART open until Ctrl+C |
+| `--timeout SECS` | UART capture duration (default: 5s) |
+
+**Examples:**
+
+```sh
+# Build and flash factory image, monitor UART for 5 seconds
+./tools/scripts/nxp-s32k142-flash.sh
+
+# Build with v2 update, flash, and stay on UART
+./tools/scripts/nxp-s32k142-flash.sh --test-update --interactive
+
+# Just monitor UART
+./tools/scripts/nxp-s32k142-flash.sh --uart-only --interactive
+```
+
+### NXP S32K1XX: Test Application
+
+The S32K1xx test application (`test-app/app_s32k1xx.c`) provides a feature-rich demo application for testing wolfBoot functionality.
+
+**Features:**
+- **LED Indicators**: Green LED for firmware v1, Blue LED for firmware v2+
+- **Interactive Console**: UART-based command interface
+- **XMODEM Firmware Update**: Upload new firmware images via XMODEM protocol
+- **Partition Information**: Display boot/update partition status and versions
+- **Keystore Display**: Show public key information from the bootloader
+
+**Console Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `help` | Show available commands |
+| `info` | Display partition and keystore information |
+| `status` | Show partition versions and states |
+| `success` | Mark current firmware as successful (wolfBoot_success) |
+| `trigger` | Set update flag if update image is in flash |
+| `update` | Receive firmware via XMODEM and trigger update |
+| `timestamp` | Show current system time (ms) |
+| `reboot` | Perform software reset |
+
+**UART Configuration:**
+- LPUART1: PTC7 (TX), PTC6 (RX)
+- Baud rate: 115200, 8N1
+
+**Example Output:**
+
+```
+========================================
+S32K1xx wolfBoot Test Application
+Copyright 2025 wolfSSL Inc.
+========================================
+Firmware Version: 1
+
+=== Partition Information ===
+Boot Partition @ 0xC000:
+  Version: 1
+  State: SUCCESS (0x00)
+Update Partition @ 0x25000:
+  Version: 0 (empty)
+  State: (no trailer)
+
+=== Keystore Information ===
+Number of keys: 1
+Key 0: ECDSA P-256 (secp256r1), SHA-256
+
+Type 'help' for available commands.
+
+cmd>
+```
+
+**Testing Firmware Update:**
+
+1. Flash with v2 image: `./tools/scripts/nxp-s32k142-flash.sh --test-update`
+2. Connect to UART: `picocom -b 115200 /dev/ttyACM1`
+3. Run `status` to verify v1 in boot, v2 in update
+4. Run `trigger` to set update flag
+5. Run `reboot` to start update
+6. After reboot, LED changes from Green (v1) to Blue (v2)
+7. Run `success` to mark v2 as good
+
+### NXP S32K1XX: Flash Configuration Field (FCF)
+
+The bootloader includes the Flash Configuration Field (FCF) at address 0x400-0x40F with the following settings:
+- Flash security: Unsecured
+- Flash protection: All regions unprotected
+- Backdoor key access: Enabled
+
+**CRITICAL WARNING:** The FCF region at 0x400-0x40F controls device security settings. Writing incorrect values can **permanently lock the device**, making it irrecoverable. The wolfBoot HAL includes protection to prevent accidental writes to this region.
+
+### NXP S32K1XX: Recovering a Locked/Unresponsive Device
+
+If your S32K device becomes locked or unresponsive (e.g., stuck in reset with D1 LED illuminated on S32K-EVB boards), try these recovery procedures:
+
+**Symptoms of a locked device:**
+- Debugger cannot connect ("Soft reset failed", "Failed to enter debug mode")
+- Device stuck in reset (D1 LED constantly on for S32K-EVB)
+- J-Link reports "Readout protection is set" at address 0x400-0x40F
+
+**Recovery Option 1: PEMicro Force Mass Erase**
+
+```sh
+pegdbserver_console -device=NXP_S32K1xx_S32K142 -interface=OPENSDA -port=USB1 -forcemasserase -singlesession
+```
+
+After mass erase completes, power cycle the board before attempting to reconnect.
+
+**Recovery Option 2: J-Link Unlock**
+
+```sh
+JLinkExe -if swd -Device S32K142
+unlock Kinetis
+erase
+r
+q
+```
+
+Then power cycle the board.
+
+### NXP S32K1XX: TODO / Future Enhancements
+
+The following features are planned or available for contribution:
+
+- [x] **Sector swap update**: Full firmware update with sector swapping (completed)
+- [x] **Interactive test application**: Console with status, trigger, success commands (completed)
+- [x] **Flash automation script**: `tools/scripts/nxp-s32k142-flash.sh` (completed)
+- [ ] **XMODEM improvements**: ISR-based UART RX for reliable high-speed transfers
+- [ ] **SPLL + SOSC support**: Add external crystal oscillator and SPLL configuration for true 112 MHz operation in HSRUN mode
+- [ ] **Hardware crypto acceleration**: Integrate CSEc (Cryptographic Services Engine) for hardware-accelerated crypto operations
+- [ ] **FlexNVM/EEPROM support**: Add support for FlexNVM partitioning and EEPROM emulation
+- [ ] **CAN/LIN bootloader**: Add firmware update over CAN or LIN bus for automotive applications
 
 
 ## TI Hercules TMS570LC435

@@ -41,7 +41,6 @@ int hal_flash_test(void)
 {
     int ret = 0;
     uint32_t i;
-    uint8_t* pagePtr = (uint8_t*)TEST_ADDRESS;
     static uint8_t pageData[TEST_SZ];
 
     wolfBoot_printf("Internal flash test at 0x%x\n", TEST_ADDRESS);

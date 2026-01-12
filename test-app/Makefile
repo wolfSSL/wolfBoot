@@ -73,6 +73,7 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 
 ifeq ($(DEBUG_UART),1)
+    CFLAGS+=-DDEBUG_UART
     APP_OBJS+=../src/string.o
 endif
 
@@ -346,6 +347,13 @@ ifeq ($(TARGET),mcxa)
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o
     LDFLAGS+=--specs=nosys.specs
+endif
+
+ifeq ($(TARGET),s32k1xx)
+    LSCRIPT_TEMPLATE=ARM-s32k1xx.ld
+    APP_OBJS+=../src/keystore.o
+    CFLAGS+=-DAPP_HAS_SYSTICK
+    CFLAGS+=-DRAM_CODE -DDEBUG_UART
 endif
 
 ifeq ($(TARGET),mcxw)

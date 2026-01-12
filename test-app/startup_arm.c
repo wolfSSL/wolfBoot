@@ -39,11 +39,16 @@ extern void isr_tim2(void);
 extern void isr_usart3(void);
 #endif
 
-#ifdef TARGET_va416x0
-extern void SysTick_Handler(void);
-#elif defined(APP_HAS_SYSTICK)
-extern void isr_systick(void);
+#ifdef TARGET_s32k1xx
+extern void isr_lpuart1(void);
 #endif
+
+#ifdef TARGET_va416x0
+#define isr_systick SysTick_Handler
+#elif !defined(APP_HAS_SYSTICK)
+#define isr_systick isr_empty
+#endif
+extern void isr_systick(void);
 
 #ifndef STACK_PAINTING
 #define STACK_PAINTING 0
@@ -91,26 +96,26 @@ void isr_reset(void) {
 void isr_fault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 
 }
 
 void isr_memfault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 }
 
 void isr_busfault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 }
 
 void isr_usagefault(void)
 {
     /* Panic. */
-    while(1) ;;
+    while(1) ;
 }
 
 
@@ -118,8 +123,6 @@ void isr_empty(void)
 {
 
 }
-
-
 
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
@@ -139,14 +142,7 @@ void (* const IV[])(void) =
 	isr_empty,                   // DebugMonitor
 	0,                           // reserved
 	isr_empty,                   // PendSV
-
-#ifdef TARGET_va416x0
-    SysTick_Handler,             // SysTick
-#elif defined(APP_HAS_SYSTICK)
     isr_systick,                 // SysTick
-#else
-	isr_empty,                   // SysTick
-#endif
 
 /* Device specific IRQs for LM3S */
 
@@ -437,6 +433,97 @@ void (* const IV[])(void) =
     isr_empty, //   LPTIM4_IRQHandler
     isr_empty, //   LPTIM5_IRQHandler
     isr_empty, //   LPTIM6_IRQHandler
+
+#elif defined(TARGET_s32k1xx) /* For NXP S32K1xx */
+    isr_empty,              // DMA0 0
+    isr_empty,              // DMA1 1
+    isr_empty,              // DMA2 2
+    isr_empty,              // DMA3 3
+    isr_empty,              // DMA4 4
+    isr_empty,              // DMA5 5
+    isr_empty,              // DMA6 6
+    isr_empty,              // DMA7 7
+    isr_empty,              // DMA8 8
+    isr_empty,              // DMA9 9
+    isr_empty,              // DMA10 10
+    isr_empty,              // DMA11 11
+    isr_empty,              // DMA12 12
+    isr_empty,              // DMA13 13
+    isr_empty,              // DMA14 14
+    isr_empty,              // DMA15 15
+    isr_empty,              // DMA_Error 16
+    isr_empty,              // MCM 17
+    isr_empty,              // FTFC 18
+    isr_empty,              // Read_Collision 19
+    isr_empty,              // LVD_LVW 20
+    isr_empty,              // FTFC_Fault 21
+    isr_empty,              // WDOG_EWM 22
+    isr_empty,              // RCM 23
+    isr_empty,              // LPI2C0_Master 24
+    isr_empty,              // LPI2C0_Slave 25
+    isr_empty,              // LPSPI0 26
+    isr_empty,              // LPSPI1 27
+    isr_empty,              // LPSPI2 28
+    isr_empty,              // Reserved29 29
+    isr_empty,              // Reserved30 30
+    isr_empty,              // LPUART0_RxTx 31
+    isr_empty,              // Reserved32 32
+    isr_lpuart1,            // LPUART1_RxTx 33
+    isr_empty,              // Reserved34 34
+    isr_empty,              // LPUART2_RxTx 35
+    isr_empty,              // Reserved36 36
+    isr_empty,              // Reserved37 37
+    isr_empty,              // ADC0 38
+    isr_empty,              // ADC1 39
+    isr_empty,              // CMP0 40
+    isr_empty,              // Reserved41 41
+    isr_empty,              // Reserved42 42
+    isr_empty,              // ERM_single 43
+    isr_empty,              // ERM_double 44
+    isr_empty,              // RTC 45
+    isr_empty,              // RTC_Seconds 46
+    isr_empty,              // LPIT0_Ch0 47
+    isr_empty,              // LPIT0_Ch1 48
+    isr_empty,              // LPIT0_Ch2 49
+    isr_empty,              // LPIT0_Ch3 50
+    isr_empty,              // PDB0 51
+    isr_empty,              // Reserved52 52
+    isr_empty,              // Reserved53 53
+    isr_empty,              // Reserved54 54
+    isr_empty,              // Reserved55 55
+    isr_empty,              // SCG 56
+    isr_empty,              // LPTMR0 57
+    isr_empty,              // PORTA 58
+    isr_empty,              // PORTB 59
+    isr_empty,              // PORTC 60
+    isr_empty,              // PORTD 61
+    isr_empty,              // PORTE 62
+    isr_empty,              // Reserved63 63
+    isr_empty,              // PDB1 64
+    isr_empty,              // FLEXIO 65
+    isr_empty,              // CAN0_ORed 66
+    isr_empty,              // CAN0_Error 67
+    isr_empty,              // CAN0_Wake_Up 68
+    isr_empty,              // CAN0_MB0_15 69
+    isr_empty,              // CAN0_MB16_31 70
+    isr_empty,              // FTM0_Ch0_Ch1 71
+    isr_empty,              // FTM0_Ch2_Ch3 72
+    isr_empty,              // FTM0_Ch4_Ch5 73
+    isr_empty,              // FTM0_Ch6_Ch7 74
+    isr_empty,              // FTM0_Fault 75
+    isr_empty,              // FTM0_Ovf_Reload 76
+    isr_empty,              // FTM1_Ch0_Ch1 77
+    isr_empty,              // FTM1_Ch2_Ch3 78
+    isr_empty,              // FTM1_Ch4_Ch5 79
+    isr_empty,              // FTM1_Ch6_Ch7 80
+    isr_empty,              // FTM1_Fault 81
+    isr_empty,              // FTM1_Ovf_Reload 82
+    isr_empty,              // FTM2_Ch0_Ch1 83
+    isr_empty,              // FTM2_Ch2_Ch3 84
+    isr_empty,              // FTM2_Ch4_Ch5 85
+    isr_empty,              // FTM2_Ch6_Ch7 86
+    isr_empty,              // FTM2_Fault 87
+    isr_empty,              // FTM2_Ovf_Reload 88
 
 #elif defined(STM32) /* For STM32 */
     isr_empty,              // NVIC_WWDG_IRQ 0
