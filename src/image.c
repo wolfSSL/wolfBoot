@@ -2205,17 +2205,10 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         }
     }
 #endif
-#ifdef WOLFBOOT_ARMORED
     if (SIG_OK(img)) {
         return 0;
     }
     return -2;
-#else
-    if (SIG_OK(img)) {
-        return 0;
-    }
-    return -2;
-#endif
 #undef SIG_OK
 }
 #endif
