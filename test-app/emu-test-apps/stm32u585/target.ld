@@ -1,64 +1,61 @@
-/* Minimal linker script for STM32U585 memory map */
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000100, LENGTH = 0x001FFF00
-    RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 0x000C0000
+    FLASH (rx) : ORIGIN = 0x8040100, LENGTH = 0x1f700
+    RAM (rwx) : ORIGIN = 0x20020000, LENGTH = 128K
 }
-
-_estack = ORIGIN(RAM) + LENGTH(RAM);
-_sidata = LOADADDR(.data);
 
 SECTIONS
 {
-    .isr_vector :
-    {
-        KEEP(*(.isr_vector))
-    } > FLASH
-
     .text :
     {
+        _start_text = .;
+        . = ALIGN(8);
+        KEEP(*(.isr_vector))
+        . = ALIGN(8);
+        *(.init)
+        *(.fini)
         *(.text*)
         *(.rodata*)
-        *(.ARM.extab* .gnu.linkonce.armextab.*)
-        *(.ARM.exidx* .gnu.linkonce.armexidx.*)
-        *(.glue_7)
-        *(.glue_7t)
-        *(.eh_frame)
+        . = ALIGN(8);
+        _end_text = .;
     } > FLASH
 
-    .preinit_array :
+    .edidx :
     {
-        __preinit_array_start = .;
-        KEEP(*(.preinit_array*))
-        __preinit_array_end = .;
+        . = ALIGN(4);
+        *(.ARM.exidx*)
     } > FLASH
 
-    .init_array :
-    {
-        __init_array_start = .;
-        KEEP(*(.init_array*))
-        __init_array_end = .;
-    } > FLASH
+    _stored_data = .;
 
-    .fini_array :
+    .data : AT (_stored_data)
     {
-        __fini_array_start = .;
-        KEEP(*(.fini_array*))
-        __fini_array_end = .;
-    } > FLASH
+        _start_data = .;
+        KEEP(*(.data*))
+        . = ALIGN(8);
+        KEEP(*(.ramcode))
+        . = ALIGN(8);
+        _end_data = .;
+    } > RAM
 
-    .data :
+    .bss :
     {
-        _sdata = .;
-        *(.data*)
-        _edata = .;
-    } > RAM AT > FLASH
-
-    .bss (NOLOAD) :
-    {
-        _sbss = .;
+        _start_bss = .;
         *(.bss*)
         *(COMMON)
-        _ebss = .;
+        . = ALIGN(8);
+        _end_bss = .;
+        _end = .;
     } > RAM
 }
+
+PROVIDE(_start_heap = _end);
+PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));
+
+/* Emu app startup expects these symbols. */
+_estack = _end_stack;
+_sidata = _stored_data;
+_sdata = _start_data;
+_edata = _end_data;
+_sbss = _start_bss;
+_ebss = _end_bss;
