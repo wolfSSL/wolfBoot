@@ -245,6 +245,10 @@ ifeq ($(TARGET),nrf5340_net)
   LSCRIPT_TEMPLATE=ARM-nrf5340_net.ld
 endif
 
+ifeq ($(TARGET),nrf54lm20)
+  APP_OBJS+=../hal/nrf54lm20_dk.o
+endif
+
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_TEMPLATE=ARM-r5be.ld
   # Override linker flags
