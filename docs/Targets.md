@@ -1363,6 +1363,108 @@ ML-DSA    87   verify       200 ops took 1.077 sec, avg 5.385 ms,   185.704 ops/
 Benchmark complete
 ```
 
+### PolarFire Machine Mode (M-Mode) Support
+
+wolfBoot supports running directly in Machine Mode (M-mode) on PolarFire SoC, replacing the Hart Software Services (HSS) as the first-stage bootloader. This provides a smaller, more secure boot solution with full control over all hardware initialization.
+
+#### M-Mode Features
+
+* Runs on E51 monitor core (hart 0) directly from eNVM
+* Executes from L2 Scratchpad SRAM for performance
+* Wakes and manages all four U54 application cores
+* Per-hart UART output (each U54 uses its own MMUART)
+* M-mode to S-mode transition for booting Linux
+* Supports loading Linux kernel from eMMC or SD card
+
+#### M-Mode Files
+
+| File | Description |
+|------|-------------|
+| `config/examples/polarfire_mpfs250-m.config` | M-mode configuration |
+| `hal/mpfs250-m.ld` | M-mode linker script (eNVM + L2 SRAM) |
+| `src/update_mmode.c` | M-mode boot stub (bring-up) |
+| `src/boot_riscv_start.S` | M-mode assembly startup |
+
+#### Building for M-Mode
+
+```sh
+# Copy M-mode configuration
+cp config/examples/polarfire_mpfs250-m.config .config
+
+# Build wolfBoot
+make clean
+make wolfboot.elf
+```
+
+#### Flashing via JTAG (Bootmode 1)
+
+M-mode wolfBoot is programmed directly to eNVM using the Microchip mpfsBootmodeProgrammer tool. This requires SoftConsole with the `SC_INSTALL_DIR` environment variable set.
+
+```sh
+# Set SoftConsole installation directory
+export SC_INSTALL_DIR=/opt/Microchip/SoftConsole-v2022.2-RISC-V-747
+
+# Flash wolfboot.elf to eNVM
+$SC_INSTALL_DIR/eclipse/jre/bin/java -jar \
+    $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar \
+    --bootmode 1 --die MPFS250T --package FCG1152 --workdir $PWD wolfboot.elf
+```
+
+#### M-Mode Boot Flow
+
+1. **eNVM Reset Vector** (0x20220100): CPU starts here, copies code to L2 SRAM
+2. **L2 SRAM Execution** (0x0A000000): Main wolfBoot code runs from SRAM
+3. **Hardware Init**: L2 cache, clocks, DDR controller (when implemented)
+4. **Hart Wake-Up**: E51 sends IPIs to wake U54 cores
+5. **Application Load**: Load kernel/DTB from eMMC or SD card to DDR
+6. **M-to-S Transition**: Configure PMP, delegate traps, MRET to S-mode
+
+#### M-Mode UART Mapping
+
+| Hart | Core | MMUART | USB Device |
+|------|------|--------|------------|
+| 0 | E51 | MMUART0 | /dev/ttyUSB0 |
+| 1 | U54_1 | MMUART1 | /dev/ttyUSB1 |
+| 2 | U54_2 | MMUART2 | N/A |
+| 3 | U54_3 | MMUART3 | N/A |
+| 4 | U54_4 | MMUART4 | N/A |
+
+#### M-Mode Progress
+
+**Completed:**
+- L2 cache controller configuration
+- NWC clock initialization
+- Secondary hart (U54) wake-up via IPI
+- M-mode to S-mode transition framework
+- Per-hart UART for debug output
+
+**In Progress:**
+- DDR controller initialization (requires porting ~6500 lines from MPFS HAL)
+
+**TODO:**
+- Full DDR training sequence (port mss_ddr.c from mpfs_hal)
+- Application loading from eMMC/SD card
+- Full Linux boot with DTB
+
+#### DDR Initialization Status
+
+The MPFS250T DDR controller requires a complex training sequence to initialize
+LPDDR4 memory. The training process includes:
+
+1. PVT (Process/Voltage/Temperature) calibration
+2. VREF calibration
+3. Write leveling
+4. Read gate training
+5. DQ/DQS eye training
+
+The full DDR driver is located in the MPFS HAL at:
+`platform/mpfs_hal/common/nwc/mss_ddr.c` (~272KB, 6500+ lines)
+
+**Options for DDR support:**
+1. **Port MPFS HAL DDR driver** - Import mss_ddr.c and dependencies
+2. **Use HSS for DDR init** - Boot HSS first, then chainload wolfBoot
+3. **FPGA fabric DDR** - Some Libero designs train DDR in fabric
+
 ### PolarFire TODO
 
 * Add support for full HSS replacement using wolfboot
