@@ -95,9 +95,7 @@ static int is_range_nonsecure(uint32_t address, int len)
 void hal_tz_claim_nonsecure_area(uint32_t address, int len)
 {
     int page_n, reg_idx;
-    uint32_t reg;
     uint32_t end = address + len;
-    uint32_t start_address = address;
     uint32_t start_page_n;
     uint32_t bank = 0;
     int pos;
@@ -124,39 +122,14 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         hal_flash_wait_complete(bank);
         hal_flash_clear_errors(bank);
         if (bank == 0)
-            FLASH_SECBB1[reg_idx] |= ( 1 << pos);
+            FLASH_SECBB1[reg_idx] |= (1u << pos);
         else
-            FLASH_SECBB2[reg_idx] |= ( 1 << pos);
+            FLASH_SECBB2[reg_idx] |= (1u << pos);
         ISB();
         hal_flash_wait_complete(bank);
         address += FLASH_PAGE_SIZE;
         page_n++;
     }
-    address = start_address;
-    page_n = start_page_n;
-    while (address < end) {
-        /* Erase claimed non-secure page, in secure mode */
-#ifndef TARGET_stm32h5
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
-        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
-#else
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_BKSEL));
-        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bank << 31));
-#endif
-
-        DMB();
-        ISB();
-        FLASH_CR |= FLASH_CR_STRT;
-        ISB();
-        hal_flash_wait_complete(bank);
-        address += FLASH_PAGE_SIZE;
-        page_n++;
-    }
-#ifndef TARGET_stm32h5
-    FLASH_CR &= ~FLASH_CR_PER ;
-#else
-    FLASH_CR &= ~FLASH_CR_SER ;
-#endif
 }
 #else
 #define claim_nonsecure_area(...) do{}while(0)
@@ -317,8 +290,8 @@ void hal_tz_sau_init(void)
     /* Secure RAM regions in SRAM1/SRAM2 */
     sau_init_region(3, 0x30000000, 0x3004FFFF, 1);
 
-    /* Non-secure RAM region in SRAM3 */
-    sau_init_region(4, 0x20050000, 0x2008FFFF, 0);
+    /* Non-secure RAM region in SRAM1/SRAM2 (STM32L5x2: 0x2000_0000..0x2003_FFFF) */
+    sau_init_region(4, 0x20000000, 0x2003FFFF, 0);
 
     /* Non-secure: internal peripherals */
     sau_init_region(5, 0x40000000, 0x4FFFFFFF, 0);
@@ -378,6 +351,12 @@ void hal_tz_sau_init(void)
 #define TRNG_CR_CONFIG1_SHIFT (20)
 #define TRNG_CR_CONDRST (1 << 30)
 
+__attribute__((noinline)) static void RAMFUNCTION trng_trace_step(uint32_t step)
+{
+    (void)step;
+    __asm volatile("" : : "r"(step) : "memory");
+}
+
 
 static void hsi48_on(void)
 {
@@ -396,8 +375,11 @@ static void hsi48_on(void)
 void hal_trng_init(void)
 {
     uint32_t reg_val;
+    trng_trace_step(1);
     hsi48_on();
+    trng_trace_step(2);
     RCC_AHB2_CLOCK_ER |= TRNG_AHB2_CLOCK_ER;
+    trng_trace_step(3);
 
     reg_val = TRNG_CR;
     reg_val &= ~(0x1F << TRNG_CR_CONFIG1_SHIFT);
@@ -411,11 +393,15 @@ void hal_trng_init(void)
     reg_val |= 0x06 << TRNG_CR_CLKDIV_SHIFT;
 #endif
     TRNG_CR = TRNG_CR_CONDRST | reg_val;
+    trng_trace_step(4);
     while ((TRNG_CR & TRNG_CR_CONDRST) == 0)
         ;
+    trng_trace_step(5);
     TRNG_CR = reg_val | TRNG_CR_RNGEN;
+    trng_trace_step(6);
     while ((TRNG_SR & TRNG_SR_DRDY) == 0)
         ;
+    trng_trace_step(7);
 }
 
 /* Never used (RNG keeps running when in secure-mode) */
