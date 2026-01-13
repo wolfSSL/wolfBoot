@@ -8,7 +8,7 @@ jobs:
   trustzone-emulator-tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/danielinux/m33mu-ci:1.0
+      image: ghcr.io/danielinux/m33mu-ci:1.1
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +25,7 @@ jobs:
       - name: Run emu test (stm32h5)
         working-directory: test-app/emu-test-apps
         run: |
-          SCENARIOS=C ./test.sh
+          ./test.sh
 
       - name: Clean and build stm32u5 (TZ + wolfcrypt)
         run: |
@@ -37,3 +37,14 @@ jobs:
         working-directory: test-app/emu-test-apps
         run: |
           TARGET=stm32u5 ./test.sh
+
+      - name: Clean and build stm32l5 (TZ + wolfcrypt)
+        run: |
+          make clean distclean
+          cp config/examples/stm32l5-wolfcrypt-tz.config .config
+          make wolfboot.bin
+
+      - name: Run emu test (stm32u5)
+        working-directory: test-app/emu-test-apps
+        run: |
+          TARGET=stm32l5 ./test.sh
