@@ -1,13 +1,14 @@
 CC=arm-none-eabi-gcc
 OBJCOPY ?= arm-none-eabi-objcopy
 
-CFLAGS := -mcpu=cortex-m33 -mthumb -mcmse -Os -ffreestanding -fdata-sections -ffunction-sections -g -ggdb
+CFLAGS := -mcpu=cortex-m33 -mthumb -Os -ffreestanding -fdata-sections -ffunction-sections -g -ggdb
 CFLAGS += -I. -I../common -I../../../include -DEMU_STM32
 CFLAGS += -DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 LDFLAGS := -nostdlib -T target.ld -Wl,-gc-sections
 LDLIBS := -Wl,--start-group -lc -lm -lgcc -lnosys -Wl,--end-group
 NSC_OBJ :=
 ifeq ($(TZEN),1)
+  CFLAGS += -DNONSECURE_APP
   CFLAGS += -DWOLFCRYPT_SECURE_MODE
   NSC_OBJ := ../../../src/wc_secure_calls.o
 endif
