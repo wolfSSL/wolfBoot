@@ -563,11 +563,27 @@ endif
 ## RISCV64 (64-bit)
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
+
+  # M-mode vs S-mode configuration
+  ifeq ($(RISCV_MMODE),1)
+    # Machine Mode: Running directly from eNVM/L2 SRAM
+    # Boots from SD card after initializing DDR
+    CFLAGS+=-DWOLFBOOT_RISCV_MMODE
+    # Use M-mode specific linker script
+    LSCRIPT_IN:=hal/$(TARGET)-m.ld
+  else
+    # Supervisor Mode (default): Running under HSS with DDR available
+  endif
+
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
   CFLAGS+=-DWOLFBOOT_UPDATE_DISK -DMAX_DISKS=1
+
+  # Disk boot support
   UPDATE_OBJS:=src/update_disk.o
   OBJS += src/gpt.o
   OBJS += src/disk.o
+  # Note: sdhci.o is added by options.mk when DISK_SDCARD=1
+
   ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV -DARCH_RISCV64
   CFLAGS+=$(ARCH_FLAGS)
@@ -580,6 +596,7 @@ ifeq ($(ARCH),RISCV64)
   # Unified RISC-V boot code (32/64-bit via __riscv_xlen)
   OBJS+=src/boot_riscv_start.o src/boot_riscv.o src/vector_riscv.o
 
+  # FDT support required
   CFLAGS+=-DWOLFBOOT_FDT
   OBJS+=src/fdt.o
 
