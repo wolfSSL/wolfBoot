@@ -613,6 +613,10 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
         "b end_check\n" \
         "ver_panic:\n" \
         "b .\n" \
+        "b .\n" \
+        "b .\n" \
+        "b .\n" \
+        "b .\n" \
         "end_check:\n" \
         "pop {r4, r5, r6, r7}\n" \
         : \
@@ -639,16 +643,20 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "mov r0, %0\n" \
             "mov r4, %0\n" \
             "cmp r0, #0\n" \
+            "bne 6f\n" \
             "beq 4f\n" \
+            "6:\n" \
             "cmp r0, #1\n" \
+            "bne 4f\n" \
             "beq 4f\n" \
-            "bkpt 0xE1\n" \
             "4:\n" \
             "cmp r4, #0\n" \
+            "bne 7f\n" \
             "beq 5f\n" \
+            "7:\n" \
             "cmp r4, #1\n" \
+            "bne 5f\n" \
             "beq 5f\n" \
-            "bkpt 0xE1\n" \
             "5:\n" \
             "cmp r0, #1\n" \
             "bne 1f\n" \
@@ -717,6 +725,10 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
             "bhs 3f\n" \
             "b 2f\n" \
             "3:\n" \
+            "b .\n" \
+            "b .\n" \
+            "b .\n" \
+            "b .\n" \
             "b .\n" \
             "2:\n" \
             "pop {r4, r5, r6, r7}\n" \

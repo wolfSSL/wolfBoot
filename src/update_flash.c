@@ -687,7 +687,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
     int fallback_image = 0;
 #ifndef DISABLE_BACKUP
-    int rollback = 0;
+    int rollback_needed = 0;
     int bootStateRet = -1;
     uint8_t bootState = 0;
 #endif
@@ -757,7 +757,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     bootStateRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
     if ((bootStateRet == 0) && (bootState == IMG_STATE_TESTING) &&
         (fallback_allowed != 0) && (cur_ver >= upd_ver)) {
-        rollback = 1;
+        rollback_needed = 1;
     }
 #endif
 
@@ -987,7 +987,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * wolfBoot_start */
     wolfBoot_swap_and_final_erase(0);
 #ifndef DISABLE_BACKUP
-    if (rollback) {
+    if (rollback_needed) {
         hal_flash_unlock();
 #ifdef EXT_FLASH
         ext_flash_unlock();
