@@ -268,39 +268,24 @@ void hal_gtzc_init(void)
 
 void hal_tz_sau_init(void)
 {
-    /* SAU is set up before staging. Set up all areas as secure. */
+    /* SAU is set up before staging. Define non-secure windows only. */
 
     /* Non-secure callable: NSC functions area */
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure flash alias (entire NS flash window) */
-    sau_init_region(1, 0x08000000, FLASH_TOP, 0);
-
-    /* Secure: update partition in secure alias (use matching FLASH_TOP base) */
-    uint32_t flash_top_secure = FLASH_TOP;
-    if ((WOLFBOOT_PARTITION_UPDATE_ADDRESS & 0xFF000000u) !=
-        (FLASH_TOP & 0xFF000000u)) {
-        flash_top_secure =
-            (WOLFBOOT_PARTITION_UPDATE_ADDRESS & 0xFF000000u) |
-            (FLASH_TOP & 0x00FFFFFFu);
-    }
-    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, flash_top_secure, 1);
-
-    /* Secure RAM regions in SRAM1/SRAM2 */
-    sau_init_region(3, 0x30000000, 0x3004FFFF, 1);
+    /* Non-secure flash alias (boot partition only) */
+    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
 
     /* Non-secure RAM region in SRAM1/SRAM2 (STM32L5x2: 0x2000_0000..0x2003_FFFF) */
-    sau_init_region(4, 0x20000000, 0x2003FFFF, 0);
+    sau_init_region(2, 0x20000000, 0x2003FFFF, 0);
 
     /* Non-secure: internal peripherals */
-    sau_init_region(5, 0x40000000, 0x4FFFFFFF, 0);
-
-    /* Secure mapped peripherals */
-    sau_init_region(6, 0x50000000, 0x5FFFFFFF, 1);
+    sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
 
     /* Set as non-secure: OTP + RO area */
-    sau_init_region(7, 0x08FFF000, 0x08FFFFFF, 0);
+    sau_init_region(4, 0x08FFF000, 0x08FFFFFF, 0);
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;
@@ -316,9 +301,9 @@ void hal_tz_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure: application flash area */
+    /* Non-secure: application flash area (boot partition only) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
-            WOLFBOOT_PARTITION_BOOT_ADDRESS + 2 * WOLFBOOT_PARTITION_SIZE - 1,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1,
             0);
 
     /* Non-secure RAM region in SRAM1/SRAM2 */
