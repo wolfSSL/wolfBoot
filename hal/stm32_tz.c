@@ -278,8 +278,8 @@ void hal_tz_sau_init(void)
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
             WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
 
-    /* Non-secure RAM region in SRAM1/SRAM2 (STM32L5x2: 0x2000_0000..0x2003_FFFF) */
-    sau_init_region(2, 0x20000000, 0x2003FFFF, 0);
+    /* Non-secure RAM region */
+    sau_init_region(2, 0x20050000, 0x2008FFFF, 0);
 
     /* Non-secure: internal peripherals */
     sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
