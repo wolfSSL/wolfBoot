@@ -456,8 +456,12 @@ void hal_init(void)
     uart_init();
 
 #ifdef __WOLFBOOT
+#ifdef WOLFBOOT_REPRODUCIBLE_BUILD
+    wolfBoot_printf("wolfBoot Version: %s\n", LIBWOLFBOOT_VERSION_STRING);
+#else
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
-        LIBWOLFBOOT_VERSION_STRING, __DATE__, __TIME__);
+        LIBWOLFBOOT_VERSION_STRING,__DATE__, __TIME__);
+#endif
 #endif
 #endif
 

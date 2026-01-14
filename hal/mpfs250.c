@@ -52,8 +52,14 @@
 
 void hal_init(void)
 {
+#if defined(DEBUG_UART) && defined(__WOLFBOOT)
+#ifdef WOLFBOOT_REPRODUCIBLE_BUILD
+    wolfBoot_printf("wolfBoot Version: %s\n", LIBWOLFBOOT_VERSION_STRING);
+#else
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
         LIBWOLFBOOT_VERSION_STRING,__DATE__, __TIME__);
+#endif
+#endif
 }
 
 /* ============================================================================
