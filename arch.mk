@@ -78,23 +78,34 @@ ifeq ($(ARCH),AARCH64)
       HASH_HAL=1
       CFLAGS+=-DWOLFBOOT_ZYNQMP_CSU
     endif
-  else
-    ifeq ($(TARGET),nxp_ls1028a)
-      ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
-      CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
+  endif
 
-      CFLAGS +=-ffunction-sections -fdata-sections
-      LDFLAGS+=-Wl,--gc-sections
+  ifeq ($(TARGET),versal)
+    # AMD Versal ACAP (VMK180) - Dual Cortex-A72
+    ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
+    CFLAGS+=-DWOLFBOOT_DUALBOOT
+    # Support detection and skip of U-Boot legacy header
+    CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+  endif
 
-      ifeq ($(DEBUG_UART),0)
-        CFLAGS+=-fno-builtin-printf
-      endif
+  ifeq ($(TARGET),nxp_ls1028a)
+    ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
 
-      SPI_TARGET=nxp
-    else
-      # By default disable ARM ASM for other targets
-      NO_ARM_ASM?=1
+    CFLAGS +=-ffunction-sections -fdata-sections
+    LDFLAGS+=-Wl,--gc-sections
+
+    ifeq ($(DEBUG_UART),0)
+      CFLAGS+=-fno-builtin-printf
     endif
+
+    SPI_TARGET=nxp
+  endif
+
+  # Default ARM ASM setting for unrecognized AARCH64 targets
+  ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
+    NO_ARM_ASM?=1
   endif
 
   ifeq ($(SPMATH),1)

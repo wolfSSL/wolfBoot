@@ -49,6 +49,7 @@ This README describes configuration of supported targets.
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Vorago VA416x0](#vorago-va416x0)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Versal Gen 1 VMK180](#versal-gen-1-vmk180)
 
 ## STM32F4
 
@@ -1858,6 +1859,123 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 #### Signing Zynq
 
 `tools/keytools/sign --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin wolfboot_signing_private_key.der 1`
+
+
+## Versal Gen 1 VMK180
+
+AMD Versal Prime VM1802 ACAP - Dual ARM Cortex-A72 (VMK180 Evaluation Board)
+
+wolfBoot replaces U-Boot in the Versal boot flow:
+```
+PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
+```
+
+wolfBoot runs from DDR at address `0x8000000` at EL2 (non-secure). All clock, MIO, and DDR initialization is handled by PLM/PSM before wolfBoot starts.
+
+See example configuration file at `config/examples/versal_vmk180.config`.
+
+### Prerequisites
+
+1. **Xilinx Vitis 2024.1 or 2024.2** (required for bootgen - 2025.1 or later has QSPI boot issues)
+   - Set `VITIS_PATH` environment variable: `export VITIS_PATH=/opt/Xilinx/Vitis/2024.1`
+
+2. **Toolchain**
+   - ARM GCC toolchain: `aarch64-none-elf-gcc`
+
+
+### Configuration Options
+
+Key configuration options in `config/examples/versal_vmk180.config`:
+
+- `ARCH=AARCH64` - ARM 64-bit architecture
+- `TARGET=versal` - Versal platform target
+- `WOLFBOOT_ORIGIN=0x8000000` - Entry point in DDR
+- `WOLFBOOT_SECTOR_SIZE=0x20000` - QSPI flash sector size (128KB)
+- `WOLFBOOT_PARTITION_SIZE=0x2C00000` - Application partition size (44MB)
+- `EXT_FLASH=1` - External flash support
+- `ELF=1` - ELF loading support
+
+### Memory Layout
+
+| Partition   | Size   | Address | Description |
+|-------------|--------|---------|-------------|
+| Bootloader  | -      | 0x8000000 | wolfBoot in DDR (loaded by BL31) |
+| Primary     | 44MB   | 0x800000 | Boot partition in QSPI |
+| Update      | 44MB   | 0x3400000 | Update partition in QSPI |
+| Swap        | -      | 0x6000000 | Swap area in QSPI |
+
+### Debugging
+
+For debugging with OCRAM (OCM), set `WOLFBOOT_ORIGIN=0xFFFC0000` in the config file. Versal Gen 1 OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`.
+
+### Building wolfBoot
+
+Build wolfBoot from the wolfBoot root directory:
+
+```sh
+cp config/examples/versal_vmk180.config .config
+make clean
+make
+```
+
+### Building BOOT.BIN
+
+If you don't already have prebuilt firmware, clone the Xilinx prebuilt firmware repository:
+
+```sh
+git clone --branch xlnx_rel_v2024.1 https://github.com/Xilinx/soc-prebuilt-firmware.git
+export PREBUILT_DIR=$(pwd)/../soc-prebuilt-firmware/vmk180-versal
+```
+
+Copy the required files into wolfboot root directory:
+
+```sh
+cp ${PREBUILT_DIR}/project_1.pdi .
+cp ${PREBUILT_DIR}/plm.elf .
+cp ${PREBUILT_DIR}/psmfw.elf .
+cp ${PREBUILT_DIR}/bl31.elf .
+cp ${PREBUILT_DIR}/system-default.dtb .
+```
+
+Source the Vitis environment and generate BOOT.BIN using bootgen:
+
+```sh
+source ${VITIS_PATH}/settings64.sh
+bootgen -arch versal -image ./tools/scripts/vmk180/boot_wolfboot.bif -w -o BOOT.BIN
+```
+
+The BIF file (`boot_wolfboot.bif`) references files using relative paths in the same directory. After successful generation, `BOOT.BIN` will be created in `tools/scripts/vmk180/`.
+
+### Flashing QSPI
+
+Flash `BOOT.BIN` to QSPI flash using one of the following methods:
+
+- **Vitis**: Use the Hardware Manager to program the QSPI flash via JTAG. Load `BOOT.BIN` and program to QSPI32 flash memory.
+
+- **Lauterbach**: Use Trace32 to program QSPI flash via JTAG. Load `BOOT.BIN` and write to QSPI flash memory addresses.
+
+- **U-Boot via SD Card**: Boot from SD card with U-Boot, then use TFTP to download `BOOT.BIN` and program QSPI flash:
+  ```sh
+  tftp ${loadaddr} BOOT.BIN
+  sf probe 0 0 0
+  sf erase 0 +${filesize}
+  sf write ${loadaddr} 0 ${filesize}
+  ```
+
+### Example Boot Output
+
+```
+========================================
+wolfBoot Secure Boot - AMD Versal
+========================================
+Current EL: 2
+Timer Freq: 99999904 Hz
+ext_flash_read: STUB
+ext_flash_read: STUB
+Versions: Boot 0, Update 0
+No valid image found!
+wolfBoot: PANIC!
+```
 
 
 ## Cypress PSoC-6
