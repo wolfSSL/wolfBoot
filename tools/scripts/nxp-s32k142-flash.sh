@@ -40,16 +40,19 @@ UART_ONLY=0
 INTERACTIVE=0
 BUILD_UPDATE=0
 TEST_UPDATE=0
+TEST_SELFUPDATE=0
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --test-update   Build test-update.srec with v2 image in update partition"
-    echo "                  (no trigger - use test-app 'trigger' command to start update)"
-    echo "  --update        Build update.srec with v2 image + trigger magic"
-    echo "                  (auto-starts update on boot - may cause issues)"
-    echo "  --skip-build    Skip the build step (use existing .srec)"
+    echo "  --test-update      Build test-update.srec with v2 image in update partition"
+    echo "                     (no trigger - use test-app 'trigger' command to start update)"
+    echo "  --test-selfupdate  Build test-selfupdate.srec with bootloader v1 + v2 bootloader update"
+    echo "                     (tests bootloader self-update - requires RAM_CODE=1)"
+    echo "  --update           Build update.srec with v2 image + trigger magic"
+    echo "                     (auto-starts update on boot - may cause issues)"
+    echo "  --skip-build       Skip the build step (use existing .srec)"
     echo "  --skip-flash    Skip flashing (just monitor UART)"
     echo "  --skip-uart     Skip UART monitoring (just build and flash)"
     echo "  --uart-only     Only monitor UART (same as --skip-build --skip-flash)"
@@ -63,6 +66,7 @@ usage() {
     echo "Examples:"
     echo "  $0                      # Build and flash factory.srec (v1 only)"
     echo "  $0 --test-update        # Build with v2 in update partition, use 'trigger' cmd"
+    echo "  $0 --test-selfupdate    # Build with bootloader v2 update, tests self-update"
     echo "  $0 --skip-uart          # Flash without UART monitoring"
     echo "  $0 --uart-only          # Just monitor UART"
     exit 0
@@ -78,6 +82,11 @@ while [[ $# -gt 0 ]]; do
         --update)
             BUILD_UPDATE=1
             SREC_FILE="update.srec"
+            shift
+            ;;
+        --test-selfupdate)
+            TEST_SELFUPDATE=1
+            SREC_FILE="test-selfupdate.srec"
             shift
             ;;
         --skip-build)
@@ -139,6 +148,39 @@ trap cleanup EXIT
 
 echo -e "${GREEN}=== NXP S32K142 Flash and Monitor Script ===${NC}"
 
+# Function to parse SIGN and HASH from .config file
+parse_config_signing() {
+    local config_file="$1"
+    if [ ! -f "$config_file" ]; then
+        echo -e "${RED}Error: Config file not found: ${config_file}${NC}"
+        exit 1
+    fi
+
+    # Extract SIGN value (e.g., SIGN?=ECC256 -> ECC256)
+    SIGN_VALUE=$(grep -E "^SIGN" "$config_file" | head -1 | sed -E 's/^SIGN\??=//' | tr -d '[:space:]')
+    # Extract HASH value (e.g., HASH?=SHA256 -> SHA256)
+    HASH_VALUE=$(grep -E "^HASH" "$config_file" | head -1 | sed -E 's/^HASH\??=//' | tr -d '[:space:]')
+
+    if [ -z "$SIGN_VALUE" ]; then
+        echo -e "${RED}Error: SIGN not found in config file${NC}"
+        exit 1
+    fi
+    if [ -z "$HASH_VALUE" ]; then
+        echo -e "${RED}Error: HASH not found in config file${NC}"
+        exit 1
+    fi
+
+    # Convert SIGN to lowercase flag format
+    SIGN_FLAG=$(echo "$SIGN_VALUE" | tr '[:upper:]' '[:lower:]')
+    SIGN_FLAG="--${SIGN_FLAG}"
+
+    # Convert HASH to lowercase flag format
+    HASH_FLAG=$(echo "$HASH_VALUE" | tr '[:upper:]' '[:lower:]')
+    HASH_FLAG="--${HASH_FLAG}"
+
+    echo -e "${CYAN}Using signing: ${SIGN_VALUE} / ${HASH_VALUE}${NC}"
+}
+
 # Change to wolfboot root directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WOLFBOOT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -156,9 +198,113 @@ if [ $SKIP_BUILD -eq 0 ]; then
     cp "${CONFIG_FILE}" .config
     echo "Copied ${CONFIG_FILE} to .config"
 
+    # Parse signing configuration from .config
+    parse_config_signing .config
+
     # Step 2: Build
     echo ""
-    if [ $TEST_UPDATE -eq 1 ]; then
+    if [ $TEST_SELFUPDATE -eq 1 ]; then
+        echo -e "${GREEN}[2/4] Building test-selfupdate.srec (bootloader v1 + v2 bootloader update)...${NC}"
+        echo -e "${CYAN}NOTE: This tests bootloader self-update functionality${NC}"
+
+        # Step 2a: Build bootloader v1
+        echo ""
+        echo -e "${CYAN}Building bootloader v1...${NC}"
+        make clean
+        make wolfboot.bin RAM_CODE=1 WOLFBOOT_VERSION=1
+        if [ ! -f "wolfboot.bin" ]; then
+            echo -e "${RED}Error: Failed to build wolfboot.bin v1${NC}"
+            exit 1
+        fi
+        cp wolfboot.bin wolfboot_v1.bin
+        echo -e "${GREEN}Bootloader v1 built successfully${NC}"
+
+        # Build factory.srec to get the v1 application image
+        echo ""
+        echo -e "${CYAN}Building factory image with v1 application...${NC}"
+        make factory.srec
+        if [ ! -f "factory.srec" ]; then
+            echo -e "${RED}Error: Failed to build factory.srec${NC}"
+            exit 1
+        fi
+        if [ ! -f "test-app/image_v1_signed.bin" ]; then
+            echo -e "${RED}Error: test-app/image_v1_signed.bin not found${NC}"
+            exit 1
+        fi
+        # Preserve v1 application image before clean (copy outside test-app to survive clean)
+        cp test-app/image_v1_signed.bin image_v1_signed_backup.bin
+        echo -e "${GREEN}Preserved v1 application image${NC}"
+
+        # Step 2b: Build bootloader v2
+        echo ""
+        echo -e "${CYAN}Building bootloader v2...${NC}"
+        make clean
+        make wolfboot.bin RAM_CODE=1 WOLFBOOT_VERSION=2
+        if [ ! -f "wolfboot.bin" ]; then
+            echo -e "${RED}Error: Failed to build wolfboot.bin v2${NC}"
+            exit 1
+        fi
+
+        # Step 2c: Sign bootloader v2 with --wolfboot-update flag
+        echo ""
+        echo -e "${CYAN}Signing bootloader v2 with --wolfboot-update flag...${NC}"
+        # Ensure sign tool is built
+        if [ ! -f "tools/keytools/sign" ]; then
+            echo -e "${YELLOW}Building sign tool...${NC}"
+            make -C tools/keytools
+        fi
+        # Check if key exists
+        if [ ! -f "wolfboot_signing_private_key.der" ]; then
+            echo -e "${RED}Error: wolfboot_signing_private_key.der not found${NC}"
+            echo "Please generate keys first with: make keys"
+            exit 1
+        fi
+
+        # Sign with --wolfboot-update flag (version 2) using config values
+        ./tools/keytools/sign ${SIGN_FLAG} ${HASH_FLAG} --wolfboot-update wolfboot.bin wolfboot_signing_private_key.der 2
+        if [ ! -f "wolfboot_v2_signed.bin" ]; then
+            echo -e "${RED}Error: Failed to sign bootloader v2${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}Bootloader v2 signed successfully${NC}"
+
+        # Step 2e: Assemble test-selfupdate.bin
+        echo ""
+        echo -e "${CYAN}Assembling test-selfupdate.bin...${NC}"
+        echo "  wolfboot_v1.bin        @ 0x0 (bootloader v1)"
+        echo "  image_v1_signed.bin   @ ${WOLFBOOT_PARTITION_BOOT_ADDRESS} (boot partition)"
+        echo "  wolfboot_v2_signed.bin @ ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} (update partition)"
+
+        # Ensure bin-assemble tool is built
+        if [ ! -f "tools/bin-assemble/bin-assemble" ]; then
+            echo -e "${YELLOW}Building bin-assemble tool...${NC}"
+            make -C tools/bin-assemble
+        fi
+
+        ./tools/bin-assemble/bin-assemble \
+            test-selfupdate.bin \
+            0x0                             wolfboot_v1.bin \
+            ${WOLFBOOT_PARTITION_BOOT_ADDRESS}   image_v1_signed_backup.bin \
+            ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} wolfboot_v2_signed.bin
+
+        if [ ! -f "test-selfupdate.bin" ]; then
+            echo -e "${RED}Error: Failed to assemble test-selfupdate.bin${NC}"
+            exit 1
+        fi
+
+        # Step 2f: Convert to SREC
+        echo ""
+        echo -e "${CYAN}Converting to test-selfupdate.srec...${NC}"
+        arm-none-eabi-objcopy -I binary -O srec --srec-forceS3 test-selfupdate.bin test-selfupdate.srec
+
+        # Cleanup temp files
+        rm -f trigger_magic.bin
+        rm -f wolfboot_v1.bin
+        rm -f image_v1_signed_backup.bin
+
+        echo -e "${GREEN}Build successful: test-selfupdate.srec${NC}"
+
+    elif [ $TEST_UPDATE -eq 1 ]; then
         echo -e "${GREEN}[2/4] Building test-update.srec (v1 boot + v2 update, no trigger)...${NC}"
         make clean
         make factory.srec
@@ -167,7 +313,7 @@ if [ $SKIP_BUILD -eq 0 ]; then
         echo ""
         echo -e "${CYAN}Signing test-app with version 2...${NC}"
         cp test-app/image_v1_signed.bin test-app/image_v1_signed_backup.bin
-        ./tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
+        ./tools/keytools/sign ${SIGN_FLAG} ${HASH_FLAG} test-app/image.bin wolfboot_signing_private_key.der 2
 
         echo -e "${CYAN}Assembling test-update.bin...${NC}"
         echo "  wolfboot.bin          @ 0x0"
@@ -206,7 +352,7 @@ if [ $SKIP_BUILD -eq 0 ]; then
         echo ""
         echo -e "${CYAN}Signing test-app with version 2...${NC}"
         cp test-app/image_v1_signed.bin test-app/image_v1_signed_backup.bin
-        ./tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
+        ./tools/keytools/sign ${SIGN_FLAG} ${HASH_FLAG} test-app/image.bin wolfboot_signing_private_key.der 2
         # Sign tool outputs to image_v2_signed.bin directly
 
         # Create trigger magic: 'p' (IMG_STATE_UPDATING = 0x70) + "BOOT"
