@@ -291,12 +291,167 @@
 
 
 /* ============================================================================
- * OSPI (Octal SPI) Flash Controller
+ * QSPI (Quad SPI) Flash Controller - GQSPI
  * ============================================================================
- * Versal uses OSPI instead of QSPI (though QSPI mode is supported)
- * Stub definitions - to be implemented
+ * Versal QSPI is similar to ZynqMP but at different base address.
+ * VMK180 uses dual parallel MT25QU01GBBB (128MB each, 256MB total)
  */
-#define VERSAL_OSPI_BASE        0xF1010000UL
+#define VERSAL_QSPI_BASE        0xF1030000UL
+
+/* QSPI Enable Register (at base, not +0x100) */
+#define QSPI_EN_REG             (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x14)))
+
+/* GQSPI Registers (at offset 0x100 from QSPI base) */
+#define GQSPI_CFG               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x100)))
+#define GQSPI_ISR               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x104)))
+#define GQSPI_IER               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x108)))
+#define GQSPI_IDR               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x10C)))
+#define GQSPI_IMR               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x110)))
+#define GQSPI_EN                (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x114)))
+#define GQSPI_TXD               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x11C)))
+#define GQSPI_RXD               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x120)))
+#define GQSPI_TX_THRESH         (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x128)))
+#define GQSPI_RX_THRESH         (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x12C)))
+#define GQSPI_GPIO              (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x130)))
+#define GQSPI_LPBK_DLY_ADJ      (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x138)))
+#define GQSPI_GEN_FIFO          (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x140)))
+#define GQSPI_SEL               (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x144)))
+#define GQSPI_FIFO_CTRL         (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x14C)))
+#define GQSPI_GF_THRESH         (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x150)))
+#define GQSPI_POLL_CFG          (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x154)))
+#define GQSPI_P_TIMEOUT         (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x158)))
+#define GQSPI_XFER_STS          (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x15C)))
+#define GQSPI_DATA_DLY_ADJ      (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x1F8)))
+#define GQSPI_MOD_ID            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x1FC)))
+
+/* DMA Registers (at offset 0x800 from QSPI base) */
+#define GQSPIDMA_DST            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x800)))
+#define GQSPIDMA_SIZE           (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x804)))
+#define GQSPIDMA_STS            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x808)))
+#define GQSPIDMA_CTRL           (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x80C)))
+#define GQSPIDMA_ISR            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x814)))
+#define GQSPIDMA_IER            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x818)))
+#define GQSPIDMA_IDR            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x81C)))
+#define GQSPIDMA_IMR            (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x820)))
+#define GQSPIDMA_CTRL2          (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x824)))
+#define GQSPIDMA_DST_MSB        (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x828)))
+
+/* Tap Delay Bypass Register - Versal specific location */
+#define IOU_TAPDLY_BYPASS       (*((volatile uint32_t*)(VERSAL_QSPI_BASE + 0x03C)))
+#define IOU_TAPDLY_BYPASS_LQSPI_RX  (1UL << 2)
+
+/* GQSPI_CFG: Configuration register bits */
+#define GQSPI_CFG_CLK_POL           (1UL << 1)
+#define GQSPI_CFG_CLK_PH            (1UL << 2)
+#define GQSPI_CFG_BAUD_RATE_DIV_MASK (7UL << 3)
+#define GQSPI_CFG_BAUD_RATE_DIV(d)  (((d) << 3) & GQSPI_CFG_BAUD_RATE_DIV_MASK)
+#define GQSPI_CFG_WP_HOLD           (1UL << 19)
+#define GQSPI_CFG_EN_POLL_TIMEOUT   (1UL << 20)
+#define GQSPI_CFG_ENDIAN            (1UL << 26)
+#define GQSPI_CFG_START_GEN_FIFO    (1UL << 28)
+#define GQSPI_CFG_GEN_FIFO_START_MODE (1UL << 29)
+#define GQSPI_CFG_MODE_EN_MASK      (3UL << 30)
+#define GQSPI_CFG_MODE_EN_IO        (0UL << 30)
+#define GQSPI_CFG_MODE_EN_DMA       (2UL << 30)
+
+/* GQSPI_ISR/IER/IDR: Interrupt bits */
+#define GQSPI_IXR_POLL_TIME_EXPIRE  (1UL << 1)
+#define GQSPI_IXR_TX_FIFO_NOT_FULL  (1UL << 2)
+#define GQSPI_IXR_TX_FIFO_FULL      (1UL << 3)
+#define GQSPI_IXR_RX_FIFO_NOT_EMPTY (1UL << 4)
+#define GQSPI_IXR_RX_FIFO_FULL      (1UL << 5)
+#define GQSPI_IXR_GEN_FIFO_EMPTY    (1UL << 7)
+#define GQSPI_IXR_TX_FIFO_EMPTY     (1UL << 8)
+#define GQSPI_IXR_GEN_FIFO_NOT_FULL (1UL << 9)
+#define GQSPI_IXR_GEN_FIFO_FULL     (1UL << 10)
+#define GQSPI_IXR_RX_FIFO_EMPTY     (1UL << 11)
+#define GQSPI_IXR_ALL_MASK          0x0FBEU
+#define GQSPI_ISR_WR_TO_CLR_MASK    0x02U
+
+/* GenFIFO Entry bits */
+#define GQSPI_GEN_FIFO_IMM_MASK     0xFFU
+#define GQSPI_GEN_FIFO_IMM(x)       ((x) & GQSPI_GEN_FIFO_IMM_MASK)
+#define GQSPI_GEN_FIFO_DATA_XFER    (1UL << 8)
+#define GQSPI_GEN_FIFO_EXP          (1UL << 9)
+#define GQSPI_GEN_FIFO_MODE_SPI     (1UL << 10)
+#define GQSPI_GEN_FIFO_MODE_DSPI    (2UL << 10)
+#define GQSPI_GEN_FIFO_MODE_QSPI    (3UL << 10)
+#define GQSPI_GEN_FIFO_MODE_MASK    (3UL << 10)
+#define GQSPI_GEN_FIFO_CS_LOWER     (1UL << 12)
+#define GQSPI_GEN_FIFO_CS_UPPER     (1UL << 13)
+#define GQSPI_GEN_FIFO_CS_MASK      (3UL << 12)
+#define GQSPI_GEN_FIFO_CS_BOTH      (3UL << 12)
+#define GQSPI_GEN_FIFO_BUS_LOW      (1UL << 14)
+#define GQSPI_GEN_FIFO_BUS_UP       (1UL << 15)
+#define GQSPI_GEN_FIFO_BUS_BOTH     (3UL << 14)
+#define GQSPI_GEN_FIFO_BUS_MASK     (3UL << 14)
+#define GQSPI_GEN_FIFO_TX           (1UL << 16)
+#define GQSPI_GEN_FIFO_RX           (1UL << 17)
+#define GQSPI_GEN_FIFO_STRIPE       (1UL << 18)
+#define GQSPI_GEN_FIFO_POLL         (1UL << 19)
+
+/* DMA Control bits */
+#define GQSPIDMA_CTRL_DEF           0x403FFA00UL
+#define GQSPIDMA_CTRL2_DEF          0x081BFFF8UL
+#define GQSPIDMA_CTRL_ENDIANNESS    (1UL << 23)
+
+/* DMA Status bits */
+#define GQSPIDMA_STS_BUSY           (1UL << 0)
+#define GQSPIDMA_STS_WTC            (7UL << 13)
+
+/* DMA Interrupt bits */
+#define GQSPIDMA_ISR_DONE           (1UL << 1)
+#define GQSPIDMA_ISR_ALL_MASK       0xFEU
+
+/* FIFO Control bits */
+#define GQSPI_FIFO_CTRL_RST_GEN     (1UL << 0)
+#define GQSPI_FIFO_CTRL_RST_TX      (1UL << 1)
+#define GQSPI_FIFO_CTRL_RST_RX      (1UL << 2)
+
+/* QSPI Select */
+#define GQSPI_SEL_GQSPI             (1UL << 0)
+
+/* Flash Commands */
+#define FLASH_CMD_READ_ID           0x9F
+#define FLASH_CMD_READ_STATUS       0x05
+#define FLASH_CMD_READ_FLAG_STATUS  0x70
+#define FLASH_CMD_WRITE_ENABLE      0x06
+#define FLASH_CMD_WRITE_DISABLE     0x04
+#define FLASH_CMD_READ              0x03
+#define FLASH_CMD_FAST_READ         0x0B
+#define FLASH_CMD_QUAD_READ         0x6B
+#define FLASH_CMD_READ_4B           0x13
+#define FLASH_CMD_FAST_READ_4B      0x0C
+#define FLASH_CMD_QUAD_READ_4B      0x6C
+#define FLASH_CMD_PAGE_PROG         0x02
+#define FLASH_CMD_PAGE_PROG_4B      0x12
+#define FLASH_CMD_SECTOR_ERASE      0xD8
+#define FLASH_CMD_SECTOR_ERASE_4B   0xDC
+#define FLASH_CMD_ENTER_4B_MODE     0xB7
+#define FLASH_CMD_EXIT_4B_MODE      0xE9
+
+/* Flash Status Register bits */
+#define FLASH_SR_WIP                (1UL << 0)  /* Write In Progress */
+#define FLASH_SR_WEL                (1UL << 1)  /* Write Enable Latch */
+#define FLASH_FSR_READY             (1UL << 7)  /* Flag Status Ready */
+
+/* Flash Configuration for MT25QU01GBBB */
+#define FLASH_JEDEC_MICRON          0x20
+#define FLASH_JEDEC_MT25QU01G       0x20BB21
+#define FLASH_PAGE_SIZE             256
+#define FLASH_SECTOR_SIZE           0x10000  /* 64KB */
+#define FLASH_DEVICE_SIZE           0x8000000 /* 128MB per chip */
+
+/* QSPI Timing */
+#define GQSPI_CLK_DIV               2  /* Divide by 8 (300MHz / 8 = 37.5MHz) */
+#define GQSPI_DUMMY_CLOCKS          8
+#define GQSPI_TIMEOUT_TRIES         100000
+#define GQSPIDMA_TIMEOUT_TRIES      100000000
+#define GQSPI_FLASH_READY_TRIES     1000000  /* Erase can take seconds */
+
+/* QSPI DMA alignment */
+#define GQSPI_DMA_ALIGN             32
+#define XALIGNED(x) __attribute__((aligned(x)))
 
 
 /* ============================================================================
