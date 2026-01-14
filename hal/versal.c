@@ -260,6 +260,709 @@ void hal_delay_us(uint32_t us)
 
 
 /* ============================================================================
+ * QSPI Flash Driver
+ * ============================================================================
+ * Bare-metal QSPI driver for Versal VMK180
+ * Dual parallel MT25QU01GBBB (128MB each, 256MB total)
+ */
+
+#ifdef EXT_FLASH
+
+/* Debug logging for QSPI driver */
+#ifdef DEBUG_QSPI
+    #define QSPI_DEBUG_PRINTF(...) wolfBoot_printf(__VA_ARGS__)
+#else
+    #define QSPI_DEBUG_PRINTF(...) do {} while(0)
+#endif
+
+/* QSPI device structure */
+typedef struct {
+    uint32_t mode;   /* GQSPI_GEN_FIFO_MODE_SPI/DSPI/QSPI */
+    uint32_t bus;    /* GQSPI_GEN_FIFO_BUS_LOW/UP/BOTH */
+    uint32_t cs;     /* GQSPI_GEN_FIFO_CS_LOWER/UPPER/BOTH */
+    uint32_t stripe; /* 0 or GQSPI_GEN_FIFO_STRIPE for dual parallel */
+} QspiDev_t;
+
+static QspiDev_t qspiDev;
+static int qspi_initialized = 0;
+
+/* Forward declarations */
+static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
+                         uint8_t *rxData, uint32_t rxLen, uint32_t dummyClocks);
+static int qspi_wait_ready(QspiDev_t *dev);
+
+/* Wait for GenFIFO empty (all entries processed) with timeout */
+static int qspi_wait_genfifo_empty(void)
+{
+    uint32_t timeout = GQSPI_TIMEOUT_TRIES;
+    uint32_t isr;
+
+    isr = GQSPI_ISR;
+    while (!(isr & GQSPI_IXR_GEN_FIFO_EMPTY) && --timeout) {
+        isr = GQSPI_ISR;
+    }
+    if (timeout == 0) {
+        QSPI_DEBUG_PRINTF("QSPI: GenFIFO empty timeout\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* Wait for TX FIFO empty with timeout */
+static int qspi_wait_tx_empty(void)
+{
+    uint32_t timeout = GQSPI_TIMEOUT_TRIES;
+    while (!(GQSPI_ISR & GQSPI_IXR_TX_FIFO_EMPTY) && --timeout)
+        ;
+    if (timeout == 0) {
+        QSPI_DEBUG_PRINTF("QSPI: TX empty timeout\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* Write to GenFIFO (without triggering - batch mode) */
+static int qspi_gen_fifo_push(uint32_t entry)
+{
+    uint32_t timeout = GQSPI_TIMEOUT_TRIES;
+    uint32_t isr;
+
+    /* Wait for GenFIFO not full */
+    isr = GQSPI_ISR;
+    while (!(isr & GQSPI_IXR_GEN_FIFO_NOT_FULL) && --timeout) {
+        isr = GQSPI_ISR;
+    }
+    if (timeout == 0) {
+        QSPI_DEBUG_PRINTF("QSPI: GenFIFO full timeout\n");
+        return -1;
+    }
+
+    /* Write the entry to GenFIFO */
+    GQSPI_GEN_FIFO = entry;
+
+    return 0;
+}
+
+/* Trigger GenFIFO processing and wait for completion */
+static int qspi_gen_fifo_start_and_wait(void)
+{
+    uint32_t cfg;
+    uint32_t timeout = GQSPI_TIMEOUT_TRIES;
+    uint32_t isr;
+
+    dsb();  /* Ensure all writes complete */
+
+    /* Trigger GenFIFO processing by setting START_GEN_FIFO */
+    cfg = GQSPI_CFG;
+    cfg |= GQSPI_CFG_START_GEN_FIFO;
+    GQSPI_CFG = cfg;
+    dsb();
+
+    /* Wait for GenFIFO to empty (all entries processed) */
+    isr = GQSPI_ISR;
+    while (!(isr & GQSPI_IXR_GEN_FIFO_EMPTY) && --timeout) {
+        isr = GQSPI_ISR;
+    }
+    if (timeout == 0) {
+        QSPI_DEBUG_PRINTF("QSPI: GenFIFO start timeout\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* Legacy wrapper for compatibility */
+static int qspi_gen_fifo_write(uint32_t entry)
+{
+    int ret = qspi_gen_fifo_push(entry);
+    if (ret == 0) {
+        ret = qspi_gen_fifo_start_and_wait();
+    }
+    return ret;
+}
+
+/* Chip select control */
+static int qspi_cs(QspiDev_t *dev, int assert)
+{
+    uint32_t entry;
+
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) | GQSPI_GEN_FIFO_MODE_SPI;
+    if (assert) {
+        entry |= (dev->cs & GQSPI_GEN_FIFO_CS_MASK);
+    }
+    /* Idle clocks for CS setup/hold */
+    entry |= GQSPI_GEN_FIFO_IMM(2);
+
+    return qspi_gen_fifo_write(entry);
+}
+
+/* TX via FIFO (polling mode) */
+static int qspi_fifo_tx(const uint8_t *data, uint32_t len)
+{
+    uint32_t tmp32;
+    uint32_t timeout;
+
+    while (len > 0) {
+        /* Wait for TX FIFO not full */
+        timeout = GQSPI_TIMEOUT_TRIES;
+        while ((GQSPI_ISR & GQSPI_IXR_TX_FIFO_FULL) && --timeout)
+            ;
+        if (timeout == 0) {
+            QSPI_DEBUG_PRINTF("QSPI: TX FIFO full timeout\n");
+            return -1;
+        }
+
+        if (len >= 4) {
+            tmp32 = *((uint32_t*)data);
+            GQSPI_TXD = tmp32;
+            data += 4;
+            len -= 4;
+        } else {
+            tmp32 = 0;
+            memcpy(&tmp32, data, len);
+            GQSPI_TXD = tmp32;
+            len = 0;
+        }
+    }
+    return 0;
+}
+
+/* RX via FIFO (polling mode) */
+static int qspi_fifo_rx(uint8_t *data, uint32_t len)
+{
+    uint32_t tmp32;
+    uint32_t timeout;
+
+    while (len > 0) {
+        /* Wait for RX FIFO not empty */
+        timeout = GQSPI_TIMEOUT_TRIES;
+        while (!(GQSPI_ISR & GQSPI_IXR_RX_FIFO_NOT_EMPTY) && --timeout)
+            ;
+        if (timeout == 0) {
+            QSPI_DEBUG_PRINTF("QSPI: RX FIFO empty timeout\n");
+            return -1;
+        }
+
+        tmp32 = GQSPI_RXD;
+        if (len >= 4) {
+            *((uint32_t*)data) = tmp32;
+            data += 4;
+            len -= 4;
+        } else {
+            memcpy(data, &tmp32, len);
+            len = 0;
+        }
+    }
+    return 0;
+}
+
+/* Core QSPI transfer function using GenFIFO */
+static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
+                         uint8_t *rxData, uint32_t rxLen, uint32_t dummyClocks)
+{
+    int ret = 0;
+    uint32_t entry;
+    uint32_t i;
+
+    /* Enable GQSPI controller */
+    GQSPI_EN = 1;
+    dsb();
+
+    /* Base entry: bus + CS + SPI mode */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+            (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+            GQSPI_GEN_FIFO_MODE_SPI;
+
+    /* === CS Assert + TX Phase (batch all entries, then trigger) === */
+
+    /* CS assertion entry - just set CS with some idle clocks */
+    ret = qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+
+    /* TX Phase - send command bytes via immediate data */
+    for (i = 0; i < txLen && ret == 0; i++) {
+        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX |
+                           GQSPI_GEN_FIFO_IMM(txData[i]);
+        ret = qspi_gen_fifo_push(txEntry);
+    }
+
+    /* Trigger and wait for TX to complete */
+    if (ret == 0) {
+        ret = qspi_gen_fifo_start_and_wait();
+    }
+
+    /* Dummy clocks phase (for fast read commands) */
+    if (ret == 0 && dummyClocks > 0) {
+        ret = qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(dummyClocks));
+        if (ret == 0) {
+            ret = qspi_gen_fifo_start_and_wait();
+        }
+    }
+
+    /* === RX Phase === */
+    if (dev->stripe) {
+        /* Striped mode: IMM(1) reads 1 byte from each flash = 2 bytes total */
+        for (i = 0; i < rxLen && ret == 0; i += 2) {
+            uint32_t rxEntry = entry | GQSPI_GEN_FIFO_RX |
+                               GQSPI_GEN_FIFO_DATA_XFER |
+                               GQSPI_GEN_FIFO_STRIPE |
+                               GQSPI_GEN_FIFO_IMM(1);
+
+            ret = qspi_gen_fifo_push(rxEntry);
+            if (ret == 0) {
+                ret = qspi_gen_fifo_start_and_wait();
+            }
+            if (ret == 0) {
+                /* Read 2 bytes (one from each flash, interleaved) */
+                ret = qspi_fifo_rx(&rxData[i], 2);
+            }
+        }
+    } else {
+        /* Single flash: read 1 byte at a time */
+        for (i = 0; i < rxLen && ret == 0; i++) {
+            uint32_t rxEntry = entry | GQSPI_GEN_FIFO_RX |
+                               GQSPI_GEN_FIFO_DATA_XFER |
+                               GQSPI_GEN_FIFO_IMM(1);
+
+            ret = qspi_gen_fifo_push(rxEntry);
+            if (ret == 0) {
+                ret = qspi_gen_fifo_start_and_wait();
+            }
+            if (ret == 0) {
+                ret = qspi_fifo_rx(&rxData[i], 1);
+            }
+        }
+    }
+
+    /* === CS Deassert === */
+    /* Remove CS bits from entry for deassert */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) | GQSPI_GEN_FIFO_MODE_SPI;
+    qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+    qspi_gen_fifo_start_and_wait();
+
+    /* Disable controller */
+    GQSPI_EN = 0;
+    dsb();
+
+    return ret;
+}
+
+/* Write page data to flash (for page programming) */
+static int qspi_write_page(QspiDev_t *dev, const uint8_t *cmd, uint32_t cmdLen,
+                           const uint8_t *data, uint32_t dataLen)
+{
+    int ret = 0;
+    uint32_t entry;
+    uint32_t i;
+
+    /* Enable GQSPI controller */
+    GQSPI_EN = 1;
+    dsb();
+
+    /* Base entry: bus + CS + SPI mode (page program uses SPI mode) */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+            (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+            GQSPI_GEN_FIFO_MODE_SPI;
+
+    /* CS assertion */
+    ret = qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+
+    /* TX Phase - send command bytes (includes address) via immediate mode */
+    for (i = 0; i < cmdLen && ret == 0; i++) {
+        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX |
+                           GQSPI_GEN_FIFO_IMM(cmd[i]);
+        ret = qspi_gen_fifo_push(txEntry);
+    }
+
+    /* Trigger and wait for command to complete */
+    if (ret == 0) {
+        ret = qspi_gen_fifo_start_and_wait();
+    }
+
+    /* TX Phase - send data via TX FIFO (not immediate mode) */
+    if (ret == 0 && dataLen > 0) {
+        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX | GQSPI_GEN_FIFO_DATA_XFER;
+
+        /* Note: stripe mode is handled externally by de-interleaving data
+         * and writing to each flash separately */
+        while (dataLen > 0 && ret == 0) {
+            uint32_t chunkLen = (dataLen > 255) ? 255 : dataLen;
+            uint32_t chunkEntry = txEntry | GQSPI_GEN_FIFO_IMM(chunkLen);
+
+            ret = qspi_gen_fifo_push(chunkEntry);
+            if (ret != 0) break;
+
+            /* Start GenFIFO processing so it drains TX FIFO as we fill it */
+            GQSPI_CFG |= GQSPI_CFG_START_GEN_FIFO;
+            dsb();
+
+            /* Push data to TX FIFO */
+            ret = qspi_fifo_tx(data, chunkLen);
+            if (ret != 0) break;
+
+            /* Wait for GenFIFO to complete */
+            ret = qspi_wait_genfifo_empty();
+
+            data += chunkLen;
+            dataLen -= chunkLen;
+        }
+    }
+
+    /* CS Deassert */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) | GQSPI_GEN_FIFO_MODE_SPI;
+    qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+    qspi_gen_fifo_start_and_wait();
+
+    /* Disable controller */
+    GQSPI_EN = 0;
+    dsb();
+
+    return ret;
+}
+
+/* Read flash ID */
+static int qspi_read_id(QspiDev_t *dev, uint8_t *id, uint32_t len)
+{
+    uint8_t cmd[1];
+    int ret;
+
+    cmd[0] = FLASH_CMD_READ_ID;
+    ret = qspi_transfer(dev, cmd, 1, id, len, 0);
+
+    return ret;
+}
+
+/* Read flash status register */
+static int qspi_read_status(QspiDev_t *dev, uint8_t *status)
+{
+    uint8_t cmd[1];
+    uint8_t data[4];  /* Space for 2 bytes from each chip */
+    int ret;
+    QspiDev_t tmpDev;
+
+    /* For dual parallel, read status from each chip separately */
+    if (dev->stripe) {
+        /* Read from lower chip */
+        tmpDev = *dev;
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
+        tmpDev.stripe = 0;
+        cmd[0] = FLASH_CMD_READ_STATUS;
+        ret = qspi_transfer(&tmpDev, cmd, 1, &data[0], 1, 0);
+        if (ret != 0) return ret;
+
+        /* Read from upper chip */
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+        ret = qspi_transfer(&tmpDev, cmd, 1, &data[1], 1, 0);
+        if (ret != 0) return ret;
+
+        /* AND the status from both chips */
+        *status = data[0] & data[1];
+        return 0;
+    }
+
+    cmd[0] = FLASH_CMD_READ_STATUS;
+    ret = qspi_transfer(dev, cmd, 1, data, 1, 0);
+    if (ret == 0) {
+        *status = data[0];
+    }
+    return ret;
+}
+
+/* Read flash flag status register */
+static int qspi_read_flag_status(QspiDev_t *dev, uint8_t *status)
+{
+    uint8_t cmd[1];
+    uint8_t data[4];
+    int ret;
+    QspiDev_t tmpDev;
+
+    /* For dual parallel, read status from each chip separately */
+    if (dev->stripe) {
+        /* Read from lower chip */
+        tmpDev = *dev;
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
+        tmpDev.stripe = 0;
+        cmd[0] = FLASH_CMD_READ_FLAG_STATUS;
+        ret = qspi_transfer(&tmpDev, cmd, 1, &data[0], 1, 0);
+        if (ret != 0) return ret;
+
+        /* Read from upper chip */
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+        ret = qspi_transfer(&tmpDev, cmd, 1, &data[1], 1, 0);
+        if (ret != 0) return ret;
+
+        /* AND the status from both chips */
+        *status = data[0] & data[1];
+        return 0;
+    }
+
+    cmd[0] = FLASH_CMD_READ_FLAG_STATUS;
+    ret = qspi_transfer(dev, cmd, 1, data, 1, 0);
+    if (ret == 0) {
+        *status = data[0];
+    }
+    return ret;
+}
+
+/* Wait for flash ready (not busy) */
+static int qspi_wait_ready(QspiDev_t *dev)
+{
+    uint8_t status = 0;
+    uint32_t timeout = GQSPI_FLASH_READY_TRIES;
+    int ret;
+
+    while (timeout-- > 0) {
+        ret = qspi_read_flag_status(dev, &status);
+        if (ret == 0 && (status & FLASH_FSR_READY)) {
+            return 0;
+        }
+    }
+    QSPI_DEBUG_PRINTF("QSPI: Flash ready timeout\n");
+    return -1;
+}
+
+/* Write Enable */
+static int qspi_write_enable(QspiDev_t *dev)
+{
+    uint8_t cmd[1];
+    uint8_t status = 0;
+    int ret;
+    uint32_t timeout = GQSPI_FLASH_READY_TRIES;
+    QspiDev_t tmpDev;
+
+    cmd[0] = FLASH_CMD_WRITE_ENABLE;
+
+    /* For dual parallel, send write enable to both chips separately */
+    if (dev->stripe) {
+        /* Send to lower chip */
+        tmpDev = *dev;
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
+        tmpDev.stripe = 0;
+        ret = qspi_transfer(&tmpDev, cmd, 1, NULL, 0, 0);
+        if (ret != 0) return ret;
+
+        /* Send to upper chip */
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+        ret = qspi_transfer(&tmpDev, cmd, 1, NULL, 0, 0);
+        if (ret != 0) return ret;
+    } else {
+        ret = qspi_transfer(dev, cmd, 1, NULL, 0, 0);
+        if (ret != 0) return ret;
+    }
+
+    /* Wait for WEL bit to be set */
+    while (timeout-- > 0) {
+        ret = qspi_read_status(dev, &status);
+        if (ret == 0 && (status & FLASH_SR_WEL)) {
+            return 0;
+        }
+    }
+    QSPI_DEBUG_PRINTF("QSPI: Write enable timeout\n");
+    return -1;
+}
+
+/* Write Disable */
+static int qspi_write_disable(QspiDev_t *dev)
+{
+    uint8_t cmd[1];
+
+    cmd[0] = FLASH_CMD_WRITE_DISABLE;
+    return qspi_transfer(dev, cmd, 1, NULL, 0, 0);
+}
+
+/* Enter 4-byte address mode */
+static int qspi_enter_4byte_addr(QspiDev_t *dev)
+{
+    uint8_t cmd[1];
+    int ret;
+
+    qspi_wait_ready(dev);
+    ret = qspi_write_enable(dev);
+    if (ret != 0) return ret;
+
+    cmd[0] = FLASH_CMD_ENTER_4B_MODE;
+    ret = qspi_transfer(dev, cmd, 1, NULL, 0, 0);
+    QSPI_DEBUG_PRINTF("QSPI: Enter 4-byte mode: ret=%d\n", ret);
+
+    if (ret == 0) {
+        ret = qspi_wait_ready(dev);
+    }
+    qspi_write_disable(dev);
+    return ret;
+}
+
+#ifdef TEST_EXT_FLASH
+#ifndef TEST_EXT_ADDRESS
+#define TEST_EXT_ADDRESS 0x2800000 /* 40MB */
+#endif
+
+static int test_ext_flash(QspiDev_t* dev)
+{
+    int ret;
+    uint32_t i;
+    uint8_t pageData[FLASH_PAGE_SIZE * 4];
+
+    (void)dev;
+    wolfBoot_printf("Testing ext flash at 0x%x...\n", TEST_EXT_ADDRESS);
+
+#ifndef TEST_FLASH_READONLY
+    /* Erase sector */
+    ret = ext_flash_erase(TEST_EXT_ADDRESS, FLASH_SECTOR_SIZE);
+    wolfBoot_printf("Erase Sector: Ret %d\n", ret);
+
+    /* Write Pages */
+    for (i = 0; i < sizeof(pageData); i++) {
+        pageData[i] = (i & 0xff);
+    }
+    ret = ext_flash_write(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
+    wolfBoot_printf("Write Page: Ret %d\n", ret);
+#endif /* !TEST_FLASH_READONLY */
+
+    /* Read page */
+    memset(pageData, 0, sizeof(pageData));
+    ret = ext_flash_read(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
+    wolfBoot_printf("Read Page: Ret %d\n", ret);
+    if (ret != 0) {
+        wolfBoot_printf("Flash read failed!\n");
+        return ret;
+    }
+
+    /* Print first 32 bytes of data */
+    wolfBoot_printf("Data: ");
+    for (i = 0; i < 32 && i < sizeof(pageData); i++) {
+        wolfBoot_printf("%02x ", pageData[i]);
+    }
+    wolfBoot_printf("...\n");
+
+#ifndef TEST_FLASH_READONLY
+    wolfBoot_printf("Checking pattern...\n");
+    /* Check data */
+    for (i = 0; i < sizeof(pageData); i++) {
+        if (pageData[i] != (i & 0xff)) {
+            wolfBoot_printf("Check Data @ %d failed: got 0x%02x, expected 0x%02x\n",
+                           i, pageData[i], (i & 0xff));
+            return -1;
+        }
+    }
+    wolfBoot_printf("Flash Test Passed!\n");
+#else
+    wolfBoot_printf("Flash Read Test Complete (readonly mode)\n");
+#endif
+
+    return ret;
+}
+#endif /* TEST_EXT_FLASH */
+
+/* Initialize QSPI controller */
+static void qspi_init(void)
+{
+    uint32_t cfg;
+    uint8_t id[4];
+    int ret;
+
+    QSPI_DEBUG_PRINTF("QSPI: Initializing (base=0x%lx)...\n",
+                      (unsigned long)VERSAL_QSPI_BASE);
+
+    /* Read initial state left by PLM */
+    cfg = GQSPI_CFG;
+    QSPI_DEBUG_PRINTF("QSPI: PLM state - CFG=0x%08x ISR=0x%08x\n",
+                      cfg, GQSPI_ISR);
+
+    /* Disable controller during reconfiguration */
+    GQSPI_EN = 0;
+    dsb();
+
+    /* Select GQSPI mode (not linear LQSPI) */
+    GQSPI_SEL = GQSPI_SEL_GQSPI;
+    dsb();
+
+    /* Don't reset FIFOs - just drain any stale data by reading RXD */
+    while (GQSPI_ISR & GQSPI_IXR_RX_FIFO_NOT_EMPTY) {
+        (void)GQSPI_RXD;  /* Discard any stale RX data */
+    }
+
+    /* Clear all interrupt status bits */
+    GQSPI_ISR = GQSPI_IXR_ALL_MASK;
+    dsb();
+
+    /* Preserve PLM's CFG but switch to IO mode for our transfers
+     * PLM: 0xA0080010 = DMA mode | manual start | WP_HOLD | CLK_POL
+     * Key: Keep manual start mode (bit 29) and clock settings */
+    cfg = (cfg & ~GQSPI_CFG_MODE_EN_MASK);  /* Clear mode bits */
+    cfg |= GQSPI_CFG_MODE_EN_IO;            /* Set IO mode */
+    GQSPI_CFG = cfg;
+    dsb();
+
+    /* Set thresholds */
+    GQSPI_TX_THRESH = 1;
+    GQSPI_RX_THRESH = 1;
+    GQSPI_GF_THRESH = 16;
+
+    QSPI_DEBUG_PRINTF("QSPI: After config - CFG=0x%08x\n", GQSPI_CFG);
+
+    /* Configure device for single flash (lower) first */
+    qspiDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
+    qspiDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
+    qspiDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
+    qspiDev.stripe = 0;
+
+    memset(id, 0, sizeof(id));
+    ret = qspi_read_id(&qspiDev, id, 3);
+    wolfBoot_printf("QSPI: Lower ID: %02x %02x %02x\n", id[0], id[1], id[2]);
+
+    /* Enter 4-byte address mode for lower flash */
+    ret = qspi_enter_4byte_addr(&qspiDev);
+    if (ret != 0) {
+        QSPI_DEBUG_PRINTF("QSPI: 4-byte mode failed (lower)\n");
+    }
+
+    /* Read ID from upper flash */
+    qspiDev.bus = GQSPI_GEN_FIFO_BUS_UP;
+    qspiDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+
+    memset(id, 0, sizeof(id));
+    ret = qspi_read_id(&qspiDev, id, 3);
+    wolfBoot_printf("QSPI: Upper ID: %02x %02x %02x\n", id[0], id[1], id[2]);
+
+    /* Enter 4-byte address mode for upper flash */
+    ret = qspi_enter_4byte_addr(&qspiDev);
+    if (ret != 0) {
+        QSPI_DEBUG_PRINTF("QSPI: 4-byte mode failed (upper)\n");
+    }
+
+    /* Configure for dual parallel operation */
+    qspiDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
+    qspiDev.bus = GQSPI_GEN_FIFO_BUS_BOTH;
+    qspiDev.cs = GQSPI_GEN_FIFO_CS_BOTH;
+    qspiDev.stripe = GQSPI_GEN_FIFO_STRIPE;
+
+    /* QSPI bare-metal driver */
+    wolfBoot_printf("QSPI Init: Ref=%dMHz, Div=%d, Bus=%d, IO=%s\n",
+        GQSPI_CLK_REF/1000000,
+        (2 << GQSPI_CLK_DIV),
+        (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)),
+    #ifdef GQSPI_MODE_IO
+        "Poll"
+    #else
+        "DMA"
+    #endif
+    );
+
+    qspi_initialized = 1;
+
+#ifdef TEST_EXT_FLASH
+    test_ext_flash(&qspiDev);
+#endif
+}
+
+#endif /* EXT_FLASH */
+
+
+/* ============================================================================
  * HAL Public Interface
  * ============================================================================
  */
@@ -279,7 +982,9 @@ void hal_init(void)
     wolfBoot_printf("Current EL: %d\n", current_el());
     wolfBoot_printf("Timer Freq: %lu Hz\n", (unsigned long)timer_get_freq());
 
-    /* TODO: Initialize flash controller (OSPI/SD) */
+#ifdef EXT_FLASH
+    qspi_init();
+#endif
 }
 
 void hal_prepare_boot(void)
@@ -373,7 +1078,7 @@ int RAMFUNCTION hal_flash_erase(uintptr_t address, int len)
 
 
 /* ============================================================================
- * External Flash Support (STUBS)
+ * External Flash Interface
  * ============================================================================
  */
 
@@ -381,41 +1086,249 @@ int RAMFUNCTION hal_flash_erase(uintptr_t address, int len)
 
 void ext_flash_lock(void)
 {
-    /* Stub */
+    /* No-op - flash protection handled elsewhere */
 }
 
 void ext_flash_unlock(void)
 {
-    /* Stub */
+    /* No-op - flash protection handled elsewhere */
+}
+
+/* Write to a single flash chip - used for dual parallel writes */
+static int ext_flash_write_chip(uintptr_t addr, const uint8_t *data, int len,
+                                 uint32_t bus, uint32_t cs)
+{
+    int ret = 0;
+    uint8_t cmd[5];
+    uint32_t xferSz, page, pages;
+    QspiDev_t tmpDev;
+
+    tmpDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
+    tmpDev.bus = bus;
+    tmpDev.cs = cs;
+    tmpDev.stripe = 0;
+
+    /* Write by page */
+    pages = ((len + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE);
+    for (page = 0; page < pages && ret == 0; page++) {
+        ret = qspi_write_enable(&tmpDev);
+        if (ret != 0) break;
+
+        xferSz = len;
+        if (xferSz > FLASH_PAGE_SIZE)
+            xferSz = FLASH_PAGE_SIZE;
+
+        /* Page Program with 4-byte address */
+        cmd[0] = FLASH_CMD_PAGE_PROG_4B;
+        cmd[1] = ((addr + page * FLASH_PAGE_SIZE) >> 24) & 0xFF;
+        cmd[2] = ((addr + page * FLASH_PAGE_SIZE) >> 16) & 0xFF;
+        cmd[3] = ((addr + page * FLASH_PAGE_SIZE) >> 8) & 0xFF;
+        cmd[4] = (addr + page * FLASH_PAGE_SIZE) & 0xFF;
+
+        /* Send command + data */
+        ret = qspi_write_page(&tmpDev, cmd, 5,
+                              data + (page * FLASH_PAGE_SIZE), xferSz);
+        if (ret != 0) break;
+
+        ret = qspi_wait_ready(&tmpDev);
+        qspi_write_disable(&tmpDev);
+        len -= xferSz;
+    }
+
+    return ret;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    (void)address;
-    (void)data;
-    (void)len;
+    int ret = 0;
+    uint8_t cmd[5];
+    uint32_t xferSz, page, pages;
+    uintptr_t addr;
+    uint32_t i;
 
-    wolfBoot_printf("ext_flash_write: STUB\n");
-    return -1;
+    if (!qspi_initialized) {
+        return -1;
+    }
+
+    if (qspiDev.stripe) {
+        /* For dual parallel: split data and write to each flash separately */
+        uint8_t *lower_data = NULL;
+        uint8_t *upper_data = NULL;
+        uint32_t half_len = (len + 1) / 2;
+        uintptr_t flash_addr = address / 2;
+
+        /* Allocate temp buffers for split data */
+        /* Note: For production, would use static buffer or stack */
+        static uint8_t lower_buf[FLASH_PAGE_SIZE * 4];
+        static uint8_t upper_buf[FLASH_PAGE_SIZE * 4];
+
+        if (len > (int)sizeof(lower_buf) * 2) {
+            QSPI_DEBUG_PRINTF("ext_flash_write: len too large\n");
+            return -1;
+        }
+
+        lower_data = lower_buf;
+        upper_data = upper_buf;
+
+        /* De-interleave data: even bytes to lower, odd bytes to upper */
+        for (i = 0; i < (uint32_t)len; i++) {
+            if (i & 1) {
+                upper_data[i / 2] = data[i];
+            } else {
+                lower_data[i / 2] = data[i];
+            }
+        }
+
+        /* Write to lower flash */
+        ret = ext_flash_write_chip(flash_addr, lower_data, half_len,
+                                   GQSPI_GEN_FIFO_BUS_LOW, GQSPI_GEN_FIFO_CS_LOWER);
+        if (ret != 0) return ret;
+
+        /* Write to upper flash */
+        ret = ext_flash_write_chip(flash_addr, upper_data, half_len,
+                                   GQSPI_GEN_FIFO_BUS_UP, GQSPI_GEN_FIFO_CS_UPPER);
+        return ret;
+    }
+
+    /* Single flash write */
+    pages = ((len + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE);
+    for (page = 0; page < pages && ret == 0; page++) {
+        ret = qspi_write_enable(&qspiDev);
+        if (ret != 0) break;
+
+        xferSz = len;
+        if (xferSz > FLASH_PAGE_SIZE)
+            xferSz = FLASH_PAGE_SIZE;
+
+        addr = address + (page * FLASH_PAGE_SIZE);
+
+        /* Page Program with 4-byte address */
+        cmd[0] = FLASH_CMD_PAGE_PROG_4B;
+        cmd[1] = (addr >> 24) & 0xFF;
+        cmd[2] = (addr >> 16) & 0xFF;
+        cmd[3] = (addr >> 8) & 0xFF;
+        cmd[4] = addr & 0xFF;
+
+        /* Send command + data */
+        ret = qspi_write_page(&qspiDev, cmd, 5,
+                              data + (page * FLASH_PAGE_SIZE), xferSz);
+        if (ret != 0) break;
+
+        ret = qspi_wait_ready(&qspiDev);
+        qspi_write_disable(&qspiDev);
+        len -= xferSz;
+    }
+
+    return ret;
 }
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
-    (void)address;
-    (void)data;
-    (void)len;
+    uint8_t cmd[5];
+    int ret;
+    uintptr_t addr = address;
+    uint32_t i;
 
-    wolfBoot_printf("ext_flash_read: STUB\n");
-    return -1;
+    if (!qspi_initialized) {
+        return -1;
+    }
+
+    if (qspiDev.stripe) {
+        /* For dual parallel: read from each chip separately and interleave */
+        static uint8_t lower_buf[FLASH_PAGE_SIZE * 4];
+        static uint8_t upper_buf[FLASH_PAGE_SIZE * 4];
+        uint32_t half_len = (len + 1) / 2;
+        QspiDev_t tmpDev;
+
+        if (len > (int)sizeof(lower_buf) * 2) {
+            return -1;
+        }
+
+        addr = address / 2;  /* Flash address for each chip */
+
+        cmd[0] = FLASH_CMD_READ_4B;
+        cmd[1] = (addr >> 24) & 0xFF;
+        cmd[2] = (addr >> 16) & 0xFF;
+        cmd[3] = (addr >> 8) & 0xFF;
+        cmd[4] = addr & 0xFF;
+
+        /* Read from lower chip */
+        tmpDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
+        tmpDev.stripe = 0;
+        ret = qspi_transfer(&tmpDev, cmd, 5, lower_buf, half_len, 0);
+        if (ret != 0) return ret;
+
+        /* Read from upper chip */
+        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
+        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+        ret = qspi_transfer(&tmpDev, cmd, 5, upper_buf, half_len, 0);
+        if (ret != 0) return ret;
+
+        /* Interleave: even positions from lower, odd positions from upper */
+        for (i = 0; i < (uint32_t)len; i++) {
+            if (i & 1) {
+                data[i] = upper_buf[i / 2];
+            } else {
+                data[i] = lower_buf[i / 2];
+            }
+        }
+        return 0;
+    }
+
+    /* Single flash read */
+    cmd[0] = FLASH_CMD_READ_4B;
+    cmd[1] = (addr >> 24) & 0xFF;
+    cmd[2] = (addr >> 16) & 0xFF;
+    cmd[3] = (addr >> 8) & 0xFF;
+    cmd[4] = addr & 0xFF;
+
+    ret = qspi_transfer(&qspiDev, cmd, 5, data, len, 0);
+
+    return ret;
 }
 
 int ext_flash_erase(uintptr_t address, int len)
 {
-    (void)address;
-    (void)len;
+    int ret = 0;
+    uint8_t cmd[5];
+    uintptr_t addr;
 
-    wolfBoot_printf("ext_flash_erase: STUB\n");
-    return -1;
+    if (!qspi_initialized) {
+        return -1;
+    }
+
+    while (len > 0 && ret == 0) {
+        addr = address;
+        if (qspiDev.stripe) {
+            /* For dual parallel the address divide by 2 */
+            addr /= 2;
+        }
+
+        ret = qspi_write_enable(&qspiDev);
+        if (ret != 0) break;
+
+        /* Sector Erase with 4-byte address */
+        cmd[0] = FLASH_CMD_SECTOR_ERASE_4B;
+        cmd[1] = (addr >> 24) & 0xFF;
+        cmd[2] = (addr >> 16) & 0xFF;
+        cmd[3] = (addr >> 8) & 0xFF;
+        cmd[4] = addr & 0xFF;
+
+        ret = qspi_transfer(&qspiDev, cmd, 5, NULL, 0, 0);
+        QSPI_DEBUG_PRINTF("ext_flash_erase: addr=0x%lx\n", (unsigned long)address);
+
+        if (ret == 0) {
+            ret = qspi_wait_ready(&qspiDev);
+        }
+        qspi_write_disable(&qspiDev);
+
+        address += FLASH_SECTOR_SIZE;
+        len -= FLASH_SECTOR_SIZE;
+    }
+
+    return ret;
 }
 
 #endif /* EXT_FLASH */
