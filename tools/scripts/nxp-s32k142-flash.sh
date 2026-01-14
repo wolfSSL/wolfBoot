@@ -15,7 +15,7 @@ set -e
 # Configuration
 CONFIG_FILE="./config/examples/nxp-s32k142.config"
 MOUNT_PATH="/media/davidgarske/S32K142EVB"
-UART_DEV="/dev/ttyACM1"
+UART_DEV="/dev/ttyACM0"
 UART_BAUD=115200
 SREC_FILE="factory.srec"
 UART_TIMEOUT=5  # Default 5 seconds capture
