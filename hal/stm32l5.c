@@ -25,6 +25,7 @@
 
 #include "hal.h"
 #include "hal/stm32l5.h"
+#include "printf.h"
 
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
@@ -146,11 +147,17 @@ void RAMFUNCTION hal_flash_opt_lock(void)
         FLASH_CR |= FLASH_CR_OPTLOCK;
 }
 
-
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end_address;
     uint32_t p;
+
+    if (address < WOLFBOOT_PARTITION_BOOT_ADDRESS) {
+        wolfBoot_printf("hal_flash_erase: addr=0x%08x len=%d (below boot)\n",
+            address, len);
+    } else {
+        wolfBoot_printf("hal_flash_erase: addr=0x%08x len=%d\n", address, len);
+    }
 
     hal_flash_clear_errors(0);
     if (len == 0)
@@ -170,10 +177,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         }
         else if(p >= (FLASH_BANK2_BASE) && (p <= (FLASH_TOP) ))
         {
-#if TZ_SECURE()
-            /* When in secure mode, skip erasing non-secure pages: will be erased upon claim */
-            return 0;
-#endif
             bker = FLASH_CR_BKER;
             base = FLASH_BANK2_BASE;
         } else {
@@ -412,4 +415,3 @@ void hal_prepare_boot(void)
     periph_unsecure();
 #endif
 }
-

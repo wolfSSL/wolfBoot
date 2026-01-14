@@ -686,6 +686,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     int inverse = 0;
 #endif
     int fallback_image = 0;
+#ifndef DISABLE_BACKUP
+    int rollback_needed = 0;
+    int bootStateRet = -1;
+    uint8_t bootState = 0;
+#endif
 #if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
@@ -748,6 +753,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     cur_ver = wolfBoot_current_firmware_version();
     upd_ver = wolfBoot_update_firmware_version();
+#ifndef DISABLE_BACKUP
+    bootStateRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
+    if ((bootStateRet == 0) && (bootState == IMG_STATE_TESTING) &&
+        (fallback_allowed != 0) && (cur_ver >= upd_ver)) {
+        rollback_needed = 1;
+    }
+#endif
 
     wolfBoot_get_update_sector_flag(0, &flag);
     /* Check the first sector to detect interrupted update */
@@ -787,11 +799,12 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             cur_ver, upd_ver);
 
 #ifndef ALLOW_DOWNGRADE
-        if ( ((fallback_allowed==1) &&
-                    (~(uint32_t)fallback_allowed == 0xFFFFFFFE)) ||
-                (cur_ver < upd_ver) ) {
-            VERIFY_VERSION_ALLOWED(fallback_allowed);
-        } else {
+        {
+            uint32_t fb_ok = (fallback_allowed == 1);
+            VERIFY_VERSION_ALLOWED(fb_ok);
+            (void)fb_ok;
+        }
+        if ((fallback_allowed == 0) && (cur_ver >= upd_ver)) {
             wolfBoot_printf("Update version not allowed\n");
             return -1;
         }
@@ -973,6 +986,19 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start */
     wolfBoot_swap_and_final_erase(0);
+#ifndef DISABLE_BACKUP
+    if (rollback_needed) {
+        hal_flash_unlock();
+#ifdef EXT_FLASH
+        ext_flash_unlock();
+#endif
+        wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+    }
+#endif
 #else
     /* Mark boot partition as TESTING - this tells bootloader to fallback if update fails */
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
@@ -1201,13 +1227,27 @@ void RAMFUNCTION wolfBoot_start(void)
 #if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     /* resume the final erase in case the power failed before it finished */
     resumedFinalErase = wolfBoot_swap_and_final_erase(1);
-    if (resumedFinalErase != 0)
+    if ((resumedFinalErase != 0) ||
+        ((bootRet == 0) && (bootState == IMG_STATE_TESTING)))
 #endif
     {
         /* Check if the BOOT partition is still in TESTING,
          * to trigger fallback.
          */
         if ((bootRet == 0) && (bootState == IMG_STATE_TESTING)) {
+            if (updateRet != 0) {
+                hal_flash_unlock();
+#ifdef EXT_FLASH
+                ext_flash_unlock();
+#endif
+                wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+#ifdef EXT_FLASH
+                ext_flash_lock();
+#endif
+                hal_flash_lock();
+                updateRet = 0;
+                updateState = IMG_STATE_UPDATING;
+            }
             wolfBoot_update(1);
         }
 

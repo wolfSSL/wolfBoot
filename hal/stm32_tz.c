@@ -95,9 +95,7 @@ static int is_range_nonsecure(uint32_t address, int len)
 void hal_tz_claim_nonsecure_area(uint32_t address, int len)
 {
     int page_n, reg_idx;
-    uint32_t reg;
     uint32_t end = address + len;
-    uint32_t start_address = address;
     uint32_t start_page_n;
     uint32_t bank = 0;
     int pos;
@@ -124,39 +122,14 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len)
         hal_flash_wait_complete(bank);
         hal_flash_clear_errors(bank);
         if (bank == 0)
-            FLASH_SECBB1[reg_idx] |= ( 1 << pos);
+            FLASH_SECBB1[reg_idx] |= (1u << pos);
         else
-            FLASH_SECBB2[reg_idx] |= ( 1 << pos);
+            FLASH_SECBB2[reg_idx] |= (1u << pos);
         ISB();
         hal_flash_wait_complete(bank);
         address += FLASH_PAGE_SIZE;
         page_n++;
     }
-    address = start_address;
-    page_n = start_page_n;
-    while (address < end) {
-        /* Erase claimed non-secure page, in secure mode */
-#ifndef TARGET_stm32h5
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER | FLASH_CR_BKER | FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_MER2));
-        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER);
-#else
-        reg = FLASH_CR & (~((FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | FLASH_CR_BER | FLASH_CR_PG | FLASH_CR_MER | FLASH_CR_BKSEL));
-        FLASH_CR = reg | ((page_n << FLASH_CR_PNB_SHIFT) | FLASH_CR_SER | (bank << 31));
-#endif
-
-        DMB();
-        ISB();
-        FLASH_CR |= FLASH_CR_STRT;
-        ISB();
-        hal_flash_wait_complete(bank);
-        address += FLASH_PAGE_SIZE;
-        page_n++;
-    }
-#ifndef TARGET_stm32h5
-    FLASH_CR &= ~FLASH_CR_PER ;
-#else
-    FLASH_CR &= ~FLASH_CR_SER ;
-#endif
 }
 #else
 #define claim_nonsecure_area(...) do{}while(0)
@@ -295,32 +268,24 @@ void hal_gtzc_init(void)
 
 void hal_tz_sau_init(void)
 {
-    /* SAU is set up before staging. Set up all areas as secure. */
+    /* SAU is set up before staging. Define non-secure windows only. */
 
     /* Non-secure callable: NSC functions area */
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Secure: application flash area (first bank) */
-    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS, FLASH_BANK2_BASE - 1, 0);
+    /* Non-secure flash alias (boot partition only) */
+    sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
 
-    /* Secure: application flash area (second bank) */
-    sau_init_region(2, WOLFBOOT_PARTITION_UPDATE_ADDRESS, FLASH_TOP, 0);
-
-    /* Secure RAM regions in SRAM1/SRAM2 */
-    sau_init_region(3, 0x30000000, 0x3004FFFF, 1);
-
-    /* Non-secure RAM region in SRAM3 */
-    sau_init_region(4, 0x20050000, 0x2008FFFF, 0);
+    /* Non-secure RAM region */
+    sau_init_region(2, 0x20050000, 0x2008FFFF, 0);
 
     /* Non-secure: internal peripherals */
-    sau_init_region(5, 0x40000000, 0x4FFFFFFF, 0);
-
-    /* Secure mapped peripherals */
-    sau_init_region(6, 0x50000000, 0x5FFFFFFF, 1);
+    sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
 
     /* Set as non-secure: OTP + RO area */
-    sau_init_region(7, 0x08FFF000, 0x08FFFFFF, 0);
+    sau_init_region(4, 0x08FFF000, 0x08FFFFFF, 0);
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;
@@ -336,9 +301,9 @@ void hal_tz_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure: application flash area */
+    /* Non-secure: application flash area (boot partition only) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
-            WOLFBOOT_PARTITION_BOOT_ADDRESS + 2 * WOLFBOOT_PARTITION_SIZE - 1,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1,
             0);
 
     /* Non-secure RAM region in SRAM1/SRAM2 */
@@ -370,7 +335,6 @@ void hal_tz_sau_init(void)
 #define TRNG_CR_CLKDIV_SHIFT (16)
 #define TRNG_CR_CONFIG1_SHIFT (20)
 #define TRNG_CR_CONDRST (1 << 30)
-
 
 static void hsi48_on(void)
 {
@@ -435,4 +399,3 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len)
 }
 
 #endif
-
