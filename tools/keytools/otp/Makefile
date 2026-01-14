@@ -7,14 +7,26 @@ ifeq ($(V),0)
   Q=@
 endif
 
+WOLFBOOT_LIB_WOLFSSL?=../../../lib/wolfssl
+
 TARGET?=none
 ARCH?=ARM
 CROSS_COMPILE?=arm-none-eabi-
 CFLAGS+=-O0 -ggdb
-CFLAGS+=-I. -I../../../ -I../../../include
+CFLAGS+=-I. -I../../../ -I../../../include -I../../../lib/wolfssl
 CFLAGS+=-I./wcs
-CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER
+CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER -DWOLFSSL_USER_SETTINGS
 PRI_KS_OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
+
+ifeq ($(HASH),SHA256)
+    PRI_KS_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o
+endif
+ifeq ($(HASH),SHA384)
+    PRI_KS_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+endif
+ifeq ($(HASH),SHA3)
+    PRI_KS_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+endif
 LSCRIPT=target.ld
 LDFLAGS+=$(CFLAGS) -T$(LSCRIPT) -lc -Wl,-Map=otp-keystore-primer.map
 
