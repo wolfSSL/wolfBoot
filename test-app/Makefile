@@ -181,7 +181,9 @@ ifeq ($(TZEN),1)
     endif
     WOLFCRYPT_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
         $(WOLFSSL_LOCAL_OBJDIR)/%, $(WOLFCRYPT_APP_OBJS))
-    APP_OBJS+=$(sort $(WOLFCRYPT_APP_OBJS))
+    ifneq ($(WOLFCRYPT_TZ_PKCS11),1)
+        APP_OBJS+=$(sort $(WOLFCRYPT_APP_OBJS))
+    endif
 else
     APP_OBJS+=../hal/$(TARGET).o
 endif
