@@ -258,6 +258,7 @@ size_t strlen(const char *s)
 #endif
 
 #if  !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
+/* some of the hal_flash_ functions need this during updates */
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;
