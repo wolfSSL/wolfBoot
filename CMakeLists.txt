@@ -555,6 +555,7 @@ set(WOLFBOOT_SOURCES "include/loader.h"
                      "include/image.h"
                      "src/string.c"
                      "src/image.c"
+                     "src/dice/dice.c"
                      "src/loader.c")
 
 # build bin-assemble tool Windows

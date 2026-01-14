@@ -34,6 +34,7 @@ OBJS:= \
 	./src/string.o \
 	./src/image.o \
 	./src/libwolfboot.o \
+	./src/dice/dice.o \
 	./hal/hal.o
 
 ifneq ($(TARGET),library)

@@ -31,6 +31,10 @@ ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
   endif
 endif
 
+ifeq ($(WOLFBOOT_ATTESTATION_IAK),1)
+  CFLAGS+=-D"WOLFBOOT_ATTESTATION_IAK"
+endif
+
 ## Sealing a secret into the TPM
 ifeq ($(WOLFBOOT_TPM_SEAL),1)
   WOLFTPM:=1
@@ -763,6 +767,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/des3.o
   ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   endif
