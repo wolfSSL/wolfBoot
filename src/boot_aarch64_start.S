@@ -681,10 +681,19 @@ MMUTableL2:
 .set    SECT, SECT+0x200000
 .endr
 
+#ifdef TARGET_versal
+/* Versal: LPD/PMC peripherals at 0xF0000000 - 0xF7FFFFFF (includes QSPI @ 0xF1030000) */
+.rept   0x040                  /* 0xF000_0000 - 0xF7FF_FFFF */
+.8byte  SECT + Device          /* 128MB LPD peripherals (QSPI, I2C, etc) */
+.set    SECT, SECT+0x200000
+.endr
+#else
+/* ZynqMP: This region is reserved */
 .rept   0x040                  /* 0xF000_0000 - 0xF7FF_FFFF */
 .8byte  SECT + reserved        /* 128MB Reserved */
 .set    SECT, SECT+0x200000
 .endr
+#endif
 
 .rept   0x8                    /* 0xF800_0000 - 0xF8FF_FFFF */
 .8byte  SECT + Device          /* 16MB coresight */
