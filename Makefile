@@ -36,7 +36,7 @@ OBJS:= \
 	./src/libwolfboot.o \
 	./hal/hal.o
 
-ifeq ($(WOLFCRYPT_TZ),1)
+ifeq ($(WOLFBOOT_TZ_PSA),1)
 OBJS+=./src/dice/dice.o
 endif
 
