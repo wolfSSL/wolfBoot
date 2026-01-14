@@ -40,6 +40,22 @@
 #define DSB() __asm__ volatile ("dsb")
 #define ISB() __asm__ volatile ("isb")
 
+/* PRIMASK helpers for critical sections */
+#define __get_PRIMASK() ({ \
+    uint32_t primask; \
+    __asm__ volatile ("mrs %0, primask" : "=r" (primask)); \
+    primask; \
+})
+
+#define __set_PRIMASK(primask) \
+    __asm__ volatile ("msr primask, %0" :: "r" (primask) : "memory")
+
+#define __disable_irq() \
+    __asm__ volatile ("cpsid i" ::: "memory")
+
+#define __enable_irq() \
+    __asm__ volatile ("cpsie i" ::: "memory")
+
 #include "s32k1xx.h"
 
 /* ============== Flash Configuration Field (FCF) ============== */
@@ -125,14 +141,6 @@ static void watchdog_enable(uint32_t timeout_ms)
     while (!(WDOG_CS & WDOG_CS_RCS)) {}
 }
 
-/* Refresh (kick) the watchdog to prevent reset
- * Must be called periodically before timeout expires
- */
-static void watchdog_refresh(void)
-{
-    /* For CMD32EN mode, write refresh key as 32-bit value */
-    WDOG_CNT = WDOG_CNT_REFRESH;
-}
 #endif /* WATCHDOG */
 
 /* ============== Clock Configuration ============== */
@@ -352,13 +360,18 @@ static void RAMFUNCTION flash_clear_errors(void)
 
 static int RAMFUNCTION flash_program_phrase(uint32_t address, const uint8_t *data)
 {
+    /* Skip if phrase is all 0xFF (erased) */
+    if (data[0] == 0xFF && data[1] == 0xFF && data[2] == 0xFF && data[3] == 0xFF &&
+        data[4] == 0xFF && data[5] == 0xFF && data[6] == 0xFF && data[7] == 0xFF) {
+        return 0;
+    }
+
     /* Wait for previous command to complete */
     flash_wait_complete();
     flash_clear_errors();
 
-    /* Set up Program Phrase command (0x07)
-     * Programs 8 bytes at the specified address
-     */
+    /* Set up Program Phrase command (0x07) */
+    /* Programs 8 bytes at the specified address */
     FTFC_FCCOB0 = FTFC_CMD_PROGRAM_PHRASE;
     FTFC_FCCOB1 = (uint8_t)(address >> 16);
     FTFC_FCCOB2 = (uint8_t)(address >> 8);
@@ -384,7 +397,7 @@ static int RAMFUNCTION flash_program_phrase(uint32_t address, const uint8_t *dat
 
 #ifdef WATCHDOG
     /* Refresh watchdog after flash operation */
-    watchdog_refresh();
+    WDOG_CNT = WDOG_CNT_REFRESH;
 #endif
 
     /* Check for errors */
@@ -414,8 +427,8 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
     ISB();
 
     /* Disable interrupts during flash operation to prevent code fetch from flash */
-    __asm__ volatile ("mrs %0, primask\n\t"
-                      "cpsid i" : "=r" (primask) :: "memory");
+    primask = __get_PRIMASK();
+    __disable_irq();
 
     FTFC_FSTAT = FTFC_FSTAT_CCIF;
 
@@ -423,11 +436,11 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
     flash_wait_complete();
 
     /* Re-enable interrupts */
-    __asm__ volatile ("msr primask, %0" :: "r" (primask) : "memory");
+    __set_PRIMASK(primask);
 
 #ifdef WATCHDOG
     /* Refresh watchdog after potentially long flash operation */
-    watchdog_refresh();
+    WDOG_CNT = WDOG_CNT_REFRESH;
 #endif
 
     /* Check for errors */
@@ -437,7 +450,6 @@ static int RAMFUNCTION flash_erase_sector_internal(uint32_t address)
 
     return 0;
 }
-
 
 /* ============== HAL Interface Functions ============== */
 
@@ -510,92 +522,40 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    int ret = 0;
-    int i = 0;
+    int ret, i = 0;
     uint8_t phrase_buf[FLASH_PHRASE_SIZE];
-    const uint8_t empty_phrase[FLASH_PHRASE_SIZE] = {
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-    };
-
-    /* CRITICAL: Protect the Flash Configuration Field (FCF) region.
-     * Writing incorrect values to 0x400-0x40F can permanently lock the device!
-     * The FCF is programmed once in the flash_config section and should never
-     * be modified at runtime.
-     */
-    if ((address < FCF_END_ADDR) && ((address + len) > FCF_START_ADDR)) {
-        /* Requested write overlaps with FCF region - this is dangerous!
-         * Skip the FCF portion to prevent device locking.
-         */
-        if (address < FCF_START_ADDR) {
-            /* Write portion before FCF */
-            int pre_fcf_len = FCF_START_ADDR - address;
-            ret = hal_flash_write(address, data, pre_fcf_len);
-            if (ret != 0) return ret;
-            address = FCF_END_ADDR;
-            data += pre_fcf_len + (FCF_END_ADDR - FCF_START_ADDR);
-            len -= pre_fcf_len + (FCF_END_ADDR - FCF_START_ADDR);
-        } else if (address >= FCF_START_ADDR && address < FCF_END_ADDR) {
-            /* Skip entirely within FCF region */
-            int skip = FCF_END_ADDR - address;
-            if (skip >= len) {
-                return 0;  /* Entire write is within FCF - skip it */
-            }
-            address = FCF_END_ADDR;
-            data += skip;
-            len -= skip;
-        }
-        if (len <= 0) return 0;
-    }
 
     while (len > 0) {
-        /* Handle unaligned start or partial phrase */
         if ((len < FLASH_PHRASE_SIZE) || (address & (FLASH_PHRASE_SIZE - 1))) {
+            /* Handle unaligned start or partial phrase */
             uint32_t aligned_addr = address & ~(FLASH_PHRASE_SIZE - 1);
             uint32_t offset = address - aligned_addr;
-            int bytes_to_copy;
-
-            /* Read current phrase data */
-            memcpy(phrase_buf, (void*)aligned_addr, FLASH_PHRASE_SIZE);
-
-            /* Calculate bytes to copy */
-            bytes_to_copy = FLASH_PHRASE_SIZE - offset;
-            if (bytes_to_copy > len) {
+            int bytes_to_copy = FLASH_PHRASE_SIZE - offset;
+            if (bytes_to_copy > len)
                 bytes_to_copy = len;
-            }
 
-            /* Merge new data */
+            memcpy(phrase_buf, (void*)aligned_addr, FLASH_PHRASE_SIZE);
             memcpy(phrase_buf + offset, data + i, bytes_to_copy);
 
-            /* Only program if not all 0xFF */
-            if (memcmp(phrase_buf, empty_phrase, FLASH_PHRASE_SIZE) != 0) {
-                ret = flash_program_phrase(aligned_addr, phrase_buf);
-                if (ret != 0) {
-                    return ret;
-                }
-            }
+            ret = flash_program_phrase(aligned_addr, phrase_buf);
+            if (ret != 0)
+                return ret;
 
             address += bytes_to_copy;
             i += bytes_to_copy;
             len -= bytes_to_copy;
-        }
-        else {
+        } else {
             /* Program full phrases */
             while (len >= FLASH_PHRASE_SIZE) {
-                /* Only program if not all 0xFF */
-                if (memcmp(data + i, empty_phrase, FLASH_PHRASE_SIZE) != 0) {
-                    ret = flash_program_phrase(address, data + i);
-                    if (ret != 0) {
-                        return ret;
-                    }
-                }
-
+                ret = flash_program_phrase(address, data + i);
+                if (ret != 0)
+                    return ret;
                 address += FLASH_PHRASE_SIZE;
                 i += FLASH_PHRASE_SIZE;
                 len -= FLASH_PHRASE_SIZE;
             }
         }
     }
-
     return 0;
 }
 

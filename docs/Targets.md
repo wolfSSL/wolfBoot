@@ -3031,10 +3031,11 @@ The S32K1xx can be programmed and debugged using various tools. The recommended 
 **Using PEMicro (recommended for S32K EVB boards):**
 
 1. Install PEMicro GDB Server from [pemicro.com](https://www.pemicro.com/products/product_viewDetails.cfm?product_id=15320167)
+Linux: `~/.local/pemicro/`
 
 2. Start PEMicro GDB Server:
 ```sh
-pegdbserver_console -device=NXP_S32K1xx_S32K142 -startserver -serverport=7224
+pegdbserver_console -device=NXP_S32K1xx_S32K142F256M15 -startserver -interface=OPENSDA -port=USB1 -serverport=7224 -speed=5000
 ```
 
 3. In another terminal, connect with GDB and flash:
@@ -3067,41 +3068,6 @@ cp factory.srec /media/<user>/S32K142EVB/
 ```
 
 The board will automatically program the flash and reset.
-
-### NXP S32K1XX: Flash Script
-
-A convenience script is provided for building and flashing S32K142:
-
-```sh
-./tools/scripts/nxp-s32k142-flash.sh [OPTIONS]
-```
-
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| (none) | Build and flash `factory.srec` (v1 only) |
-| `--test-update` | Build with v2 in update partition (use `trigger` command to start update) |
-| `--update` | Build with v2 and auto-trigger (starts update on boot) |
-| `--skip-build` | Skip build, use existing `.srec` file |
-| `--skip-flash` | Skip flashing (just build) |
-| `--skip-uart` | Skip UART monitoring |
-| `--uart-only` | Only monitor UART (no build/flash) |
-| `--interactive` | Keep UART open until Ctrl+C |
-| `--timeout SECS` | UART capture duration (default: 5s) |
-
-**Examples:**
-
-```sh
-# Build and flash factory image, monitor UART for 5 seconds
-./tools/scripts/nxp-s32k142-flash.sh
-
-# Build with v2 update, flash, and stay on UART
-./tools/scripts/nxp-s32k142-flash.sh --test-update --interactive
-
-# Just monitor UART
-./tools/scripts/nxp-s32k142-flash.sh --uart-only --interactive
-```
 
 ### NXP S32K1XX: Test Application
 
@@ -3141,77 +3107,38 @@ Copyright 2025 wolfSSL Inc.
 Firmware Version: 1
 
 === Partition Information ===
-Boot Partition @ 0xC000:
+Boot Partition:
+  Address: 0x0000C000
   Version: 1
-  State: SUCCESS (0x00)
-Update Partition @ 0x25000:
-  Version: 0 (empty)
-  State: (no trailer)
+  State:   SUCCESS
+Update Partition:
+  Address: 0x00025000
+  Version: 0
+  State:   SUCCESS
+Swap Partition:
+  Address: 0x0003E000
+  Size:    2048 bytes
 
 === Keystore Information ===
-Number of keys: 1
-Key 0: ECDSA P-256 (secp256r1), SHA-256
+Number of public keys: 1
+Hash: SHA-256
+
+Key #0:
+  Algorithm: ECDSA P-256 (secp256r1)
+  Size:      64 bytes
+  Data:
+        9a 33 e0 18 24 4b a7 29 51 90 15 f0 74 6e e4 a6
+        bf 2d 00 47 32 1f 32 5a d6 9a 30 32 d1 c3 30 3f
+        0a e3 1b 0d 0f 98 b2 e6 5c eb 42 1c 64 2b 32 db
+        a4 48 75 5b e3 49 94 45 12 64 e3 57 b4 5b 81 73
 
 Type 'help' for available commands.
 
 cmd>
 ```
 
-**Testing Firmware Update:**
+### NXP S32K1XX: TODO
 
-1. Flash with v2 image: `./tools/scripts/nxp-s32k142-flash.sh --test-update`
-2. Connect to UART: `picocom -b 115200 /dev/ttyACM1`
-3. Run `status` to verify v1 in boot, v2 in update
-4. Run `trigger` to set update flag
-5. Run `reboot` to start update
-6. After reboot, LED changes from Green (v1) to Blue (v2)
-7. Run `success` to mark v2 as good
-
-### NXP S32K1XX: Flash Configuration Field (FCF)
-
-The bootloader includes the Flash Configuration Field (FCF) at address 0x400-0x40F with the following settings:
-- Flash security: Unsecured
-- Flash protection: All regions unprotected
-- Backdoor key access: Enabled
-
-**CRITICAL WARNING:** The FCF region at 0x400-0x40F controls device security settings. Writing incorrect values can **permanently lock the device**, making it irrecoverable. The wolfBoot HAL includes protection to prevent accidental writes to this region.
-
-### NXP S32K1XX: Recovering a Locked/Unresponsive Device
-
-If your S32K device becomes locked or unresponsive (e.g., stuck in reset with D1 LED illuminated on S32K-EVB boards), try these recovery procedures:
-
-**Symptoms of a locked device:**
-- Debugger cannot connect ("Soft reset failed", "Failed to enter debug mode")
-- Device stuck in reset (D1 LED constantly on for S32K-EVB)
-- J-Link reports "Readout protection is set" at address 0x400-0x40F
-
-**Recovery Option 1: PEMicro Force Mass Erase**
-
-```sh
-pegdbserver_console -device=NXP_S32K1xx_S32K142 -interface=OPENSDA -port=USB1 -forcemasserase -singlesession
-```
-
-After mass erase completes, power cycle the board before attempting to reconnect.
-
-**Recovery Option 2: J-Link Unlock**
-
-```sh
-JLinkExe -if swd -Device S32K142
-unlock Kinetis
-erase
-r
-q
-```
-
-Then power cycle the board.
-
-### NXP S32K1XX: TODO / Future Enhancements
-
-The following features are planned or available for contribution:
-
-- [x] **Sector swap update**: Full firmware update with sector swapping (completed)
-- [x] **Interactive test application**: Console with status, trigger, success commands (completed)
-- [x] **Flash automation script**: `tools/scripts/nxp-s32k142-flash.sh` (completed)
 - [ ] **XMODEM improvements**: ISR-based UART RX for reliable high-speed transfers
 - [ ] **SPLL + SOSC support**: Add external crystal oscillator and SPLL configuration for true 112 MHz operation in HSRUN mode
 - [ ] **Hardware crypto acceleration**: Integrate CSEc (Cryptographic Services Engine) for hardware-accelerated crypto operations
