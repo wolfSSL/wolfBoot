@@ -26,6 +26,10 @@
 #include "hal/zynq.h"
 #endif
 
+#ifdef TARGET_versal
+#include "hal/versal.h"
+#endif
+
 #ifdef TARGET_nxp_ls1028a
 #include "hal/nxp_ls1028a.h"
 #endif
@@ -78,10 +82,16 @@
 .set L1Table,     MMUTableL1
 .set L2Table,     MMUTableL2
 .set vector_base, _vector_table
-.set rvbar_base,  0xFD5C0040
 
-# Cortex-A53 timestamp clock frequency
+#ifdef TARGET_versal
+/* Versal: RVBAR is handled by PLM, not accessible from APU in JTAG mode */
+/* Cortex-A72 timestamp clock frequency (from Versal HW) */
+.set counterfreq, 100000000
+#else
+.set rvbar_base,  0xFD5C0040
+/* Cortex-A53 timestamp clock frequency */
 .set counterfreq, 99990005
+#endif
 
 .set MODE_EL1,    0x5
 .set DAIF_BIT,    0x1C0
@@ -142,6 +152,9 @@ InitEL3:
     msr    VBAR_EL3,x1
 
     /* Set reset vector address */
+    /* Note: On Versal, RVBAR is handled by PLM and APU_DUAL_CSR is not
+     * accessible in JTAG boot mode. Skip RVBAR write for Versal. */
+#if !defined(SKIP_RVBAR) || SKIP_RVBAR == 0
     /* Get the cpu ID */
     mrs    x0, MPIDR_EL1
     and    x0, x0, #0xFF
@@ -153,6 +166,7 @@ InitEL3:
     add    w2, w2, w0
     /* store vector base address to RVBAR */
     str    x1, [x2]
+#endif
 
     /* Define stack pointer for current exception level */
     ldr    x2,=EL3_stack
@@ -210,6 +224,7 @@ InitEL3:
     dsb    sy
     isb
 
+#ifndef NO_MMU
     ldr    x1, =L0Table           /* Get address of level 0 for TTBR0_EL3 */
     msr    TTBR0_EL3, x1          /* Set TTBR0_EL3 */
 
@@ -227,14 +242,21 @@ InitEL3:
 
     /**********************************************
     * Set up TCR_EL3
-    * Physical Address Size PS =  010 -> 40bits 1TB
     * Granual Size TG0 = 00 -> 4KB
-    * size offset of the memory region T0SZ = 24 -> (region size 2^(64-24) = 2^40)
     ***************************************************/
+#ifdef TARGET_versal
+    /* Versal: Physical Address Size PS = 100 -> 44bits 16TB
+     *         T0SZ = 20 -> (region size 2^(64-20) = 2^44) */
+    ldr    x1,=0x80843514
+#else
+    /* ZynqMP: Physical Address Size PS = 010 -> 40bits 1TB
+     *         T0SZ = 24 -> (region size 2^(64-24) = 2^40) */
     ldr    x1,=0x80823518
+#endif
 
     msr    TCR_EL3, x1
     isb
+#endif /* !NO_MMU */
 
     /* Enable SError Exception for asynchronous abort */
     mrs    x1,DAIF
@@ -243,10 +265,14 @@ InitEL3:
 
     /* Configure SCTLR_EL3 */
     mov    x1, #0                 /* Most of the SCTLR_EL3 bits are unknown at reset */
+#ifndef NO_MMU
     orr    x1, x1, #(1 << 12)     /* Enable I cache */
     orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
     orr    x1, x1, #(1 << 2)      /* Enable caches */
     orr    x1, x1, #(1 << 0)      /* Enable MMU */
+#else
+    orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
+#endif
     msr    SCTLR_EL3, x1
     dsb    sy
     isb
@@ -280,6 +306,7 @@ InitEL2:
     dsb    sy
     isb
 
+#ifndef NO_MMU
     ldr    x1, =L0Table           /* Get address of level 0 for TTBR0_EL2 */
     msr    TTBR0_EL2, x1          /* Set TTBR0_EL2 */
 
@@ -297,21 +324,32 @@ InitEL2:
 
     /**********************************************
     * Set up TCR_EL2
-    * Physical Address Size PS =  010 -> 40bits 1TB
     * Granual Size TG0 = 00 -> 4KB
-    * size offset of the memory region T0SZ = 24 -> (region size 2^(64-24) = 2^40)
     ***************************************************/
+#ifdef TARGET_versal
+    /* Versal: Physical Address Size PS = 100 -> 44bits 16TB
+     *         T0SZ = 20 -> (region size 2^(64-20) = 2^44) */
+    ldr    x1,=0x80843514
+#else
+    /* ZynqMP: Physical Address Size PS = 010 -> 40bits 1TB
+     *         T0SZ = 24 -> (region size 2^(64-24) = 2^40) */
     ldr    x1,=0x80823518
+#endif
 
     msr    TCR_EL2, x1
     isb
 
-    /* Enable ICache */
+    /* Configure SCTLR_EL2 */
     mrs    x1, SCTLR_EL2
     orr    x1, x1, #(1 << 12)     /* Enable ICache */
     orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
     orr    x1, x1, #(1 << 2)      /* Enable DCaches */
     orr    x1, x1, #(1 << 0)      /* Enable MMU */
+#else
+    /* Configure SCTLR_EL2 - no MMU/cache */
+    mov    x1, #0
+    orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
+#endif
     msr    SCTLR_EL2, x1
     dsb    sy
     isb
@@ -364,6 +402,7 @@ InitEL1:
     dsb    sy
     isb
 
+#ifndef NO_MMU
     ldr    x1, =L0Table           /* Get address of level 0 for TTBR0_EL1 */
     msr    TTBR0_EL1, x1          /* Set TTBR0_EL1 */
 
@@ -381,28 +420,37 @@ InitEL1:
 
     /**********************************************
     * Set up TCR_EL1
-    * Physical Address Size PS =  010 -> 44bits 16TB
     * Granual Size TG0 = 00 -> 4KB
-    * size offset of the memory region T0SZ = 24 -> (region size 2^(64-24) = 2^40)
     ***************************************************/
+#ifdef TARGET_versal
+    /* Versal: Physical Address Size PS = 100 -> 44bits 16TB
+     *         T0SZ = 20 -> (region size 2^(64-20) = 2^44) */
+    ldr    x1,=0x485800514
+#else
+    /* ZynqMP: Physical Address Size PS = 010 -> 40bits 1TB
+     *         T0SZ = 24 -> (region size 2^(64-24) = 2^40) */
     ldr    x1,=0x285800518
+#endif
 
     msr    TCR_EL1, x1
     isb
+#endif /* !NO_MMU */
 
     /* Enable SError Exception for asynchronous abort */
     mrs    x1,DAIF
     bic    x1,x1,#(0x1<<8)
     msr    DAIF,x1
 
-    /* Enable MMU */
+    /* Configure SCTLR_EL1 */
     mov    x1,#0x0
     orr    x1, x1, #(1 << 18)     /* Set WFE non trapping */
     orr    x1, x1, #(1 << 17)     /* Set WFI non trapping */
     orr    x1, x1, #(1 << 5)      /* Set CP15 barrier enabled */
-    orr    x1, x1, #(1 << 12)     /* Set I bit */
-    orr    x1, x1, #(1 << 2)      /* Set C bit */
-    orr    x1, x1, #(1 << 0)      /* Set M bit */
+#ifndef NO_MMU
+    orr    x1, x1, #(1 << 12)     /* Set I bit (ICache) */
+    orr    x1, x1, #(1 << 2)      /* Set C bit (DCache) */
+    orr    x1, x1, #(1 << 0)      /* Set M bit (MMU) */
+#endif
     msr    SCTLR_EL1, x1
     isb
 
@@ -840,6 +888,8 @@ SynchronousInterruptHandler:
 /* Check if the Synchronous abort is occurred due to floating point access. */
 #if defined(EL3_SECURE) && EL3_SECURE == 1
     mrs    x0, ESR_EL3
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, ESR_EL2
 #else
     mrs    x0, ESR_EL1
 #endif
@@ -857,6 +907,10 @@ SynchronousInterruptHandler:
     mrs    x1,CPTR_EL3
     bic    x1, x1, #(0x1<<10)
     msr    CPTR_EL3, x1
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x1,CPTR_EL2
+    orr    x1, x1, #(0x3 << 20)   /* Clear TFP bit to enable FP/SIMD */
+    msr    CPTR_EL2, x1
 #else
     mrs    x1,CPACR_EL1
     orr    x1, x1, #(0x1<<20)
@@ -898,6 +952,10 @@ IRQInterruptHandler:
     mrs    x0, CPTR_EL3
     mrs    x1, ELR_EL3
     mrs    x2, SPSR_EL3
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    mrs    x1, ELR_EL2
+    mrs    x2, SPSR_EL2
 #else
     mrs    x0, CPACR_EL1
     mrs    x1, ELR_EL1
@@ -911,6 +969,10 @@ IRQInterruptHandler:
     mrs    x1,CPTR_EL3
     orr    x1, x1, #(0x1<<10)
     msr    CPTR_EL3, x1
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x1,CPTR_EL2
+    bic    x1, x1, #(0x3<<20)    /* Set TFP bits to trap FP/SIMD */
+    msr    CPTR_EL2, x1
 #else
     mrs    x1,CPACR_EL1
     bic    x1, x1, #(0x1<<20)
@@ -928,6 +990,10 @@ IRQInterruptHandler:
     mrs    x0, CPTR_EL3
     ands   x0, x0, #(0x1<<10)
     bne    RestorePrevState
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    ands   x0, x0, #(0x3<<20)
+    bne    RestorePrevState
 #else
     mrs    x0,CPACR_EL1
     ands   x0, x0, #(0x1<<20)
@@ -944,6 +1010,10 @@ RestorePrevState:
     msr    CPTR_EL3, x0
     msr    ELR_EL3, x1
     msr    SPSR_EL3, x2
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    msr    CPTR_EL2, x0
+    msr    ELR_EL2, x1
+    msr    SPSR_EL2, x2
 #else
     msr    CPACR_EL1, x0
     msr    ELR_EL1, x1
@@ -960,6 +1030,10 @@ FIQInterruptHandler:
     mrs    x0, CPTR_EL3
     mrs    x1, ELR_EL3
     mrs    x2, SPSR_EL3
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    mrs    x1, ELR_EL2
+    mrs    x2, SPSR_EL2
 #else
     mrs    x0, CPACR_EL1
     mrs    x1, ELR_EL1
@@ -973,6 +1047,10 @@ FIQInterruptHandler:
     mrs    x1,CPTR_EL3
     orr    x1, x1, #(0x1<<10)
     msr    CPTR_EL3, x1
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x1,CPTR_EL2
+    bic    x1, x1, #(0x3<<20)
+    msr    CPTR_EL2, x1
 #else
     mrs    x1,CPACR_EL1
     bic    x1, x1, #(0x1<<20)
@@ -989,6 +1067,10 @@ FIQInterruptHandler:
     mrs    x0, CPTR_EL3
     ands   x0, x0, #(0x1<<10)
     bne    RestorePrevStatefiq
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    ands   x0, x0, #(0x3<<20)
+    bne    RestorePrevStatefiq
 #else
     mrs    x0,CPACR_EL1
     ands   x0, x0, #(0x1<<20)
@@ -1001,10 +1083,14 @@ FIQInterruptHandler:
 RestorePrevStatefiq:
     ldr    x2,[sp],0x10
     ldp    x0, x1, [sp],0x10
- #ifdef EL3_SECURE
+#if defined(EL3_SECURE) && EL3_SECURE == 1
     msr    CPTR_EL3, x0
     msr    ELR_EL3, x1
     msr    SPSR_EL3, x2
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    msr    CPTR_EL2, x0
+    msr    ELR_EL2, x1
+    msr    SPSR_EL2, x2
 #else
     msr    CPACR_EL1, x0
     msr    ELR_EL1, x1
