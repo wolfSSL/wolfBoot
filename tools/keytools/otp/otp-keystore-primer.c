@@ -35,8 +35,11 @@ void main(void)
     int i;
     struct wolfBoot_otp_hdr hdr;
     uint32_t tot_len;
+    uint8_t uds[OTP_UDS_LEN];
+    uint32_t wp_len;
 
     hal_init();
+    hal_trng_init();
 
     memcpy(hdr.keystore_hdr_magic, KEYSTORE_HDR_MAGIC, 8);
     hdr.item_count = n_keys;
@@ -60,12 +63,29 @@ void main(void)
     }
 
     tot_len = OTP_HDR_SIZE + n_keys * SIZEOF_KEYSTORE_SLOT;
+    if (tot_len > OTP_UDS_OFFSET) {
+        /* Not enough room for UDS without overlapping keystore. */
+        while (1)
+            ;
+    }
+
+    if (hal_trng_get_entropy(uds, sizeof(uds)) != 0) {
+        while (1)
+            ;
+    }
+    hal_flash_otp_write(FLASH_OTP_BASE + OTP_UDS_OFFSET,
+                        (uint16_t *)uds, sizeof(uds));
 
 #ifdef ENABLE_OTP_WP
-    /* Protect the OTP area just written */
-    hal_flash_otp_set_readonly(FLASH_OTP_BASE, tot_len);
+    /* Protect the OTP areas just written (keystore + UDS) */
+    wp_len = OTP_UDS_OFFSET + OTP_UDS_LEN;
+    if (wp_len < tot_len) {
+        wp_len = tot_len;
+    }
+    hal_flash_otp_set_readonly(FLASH_OTP_BASE, wp_len);
 #endif
     (void)tot_len;
+    (void)wp_len;
 
     /* Done! */
     while(1)

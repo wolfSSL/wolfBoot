@@ -20,8 +20,17 @@
  */
 
 #include <stdint.h>
+#include <stddef.h>
 #include <image.h>
 #include <string.h>
+
+#if defined(WOLFBOOT_HASH_SHA256)
+#include <wolfssl/wolfcrypt/sha256.h>
+#elif defined(WOLFBOOT_HASH_SHA384)
+#include <wolfssl/wolfcrypt/sha512.h>
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+#include <wolfssl/wolfcrypt/sha3.h>
+#endif
 
 #include "hal.h"
 #include "hal/stm32l5.h"
@@ -100,6 +109,90 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #if TZ_SECURE()
     hal_tz_release_nonsecure_area();
 #endif
+    return 0;
+}
+
+#define STM32L5_UID_BASE 0x1FFF7590u
+#define STM32L5_UID0 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x0))
+#define STM32L5_UID1 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x4))
+#define STM32L5_UID2 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x8))
+
+static int uds_from_uid(uint8_t *out, size_t out_len)
+{
+    uint8_t uid[12];
+#if defined(WOLFBOOT_HASH_SHA256)
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    wc_Sha256 hash;
+#elif defined(WOLFBOOT_HASH_SHA384)
+    uint8_t digest[SHA384_DIGEST_SIZE];
+    wc_Sha384 hash;
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    uint8_t digest[SHA3_384_DIGEST_SIZE];
+    wc_Sha3 hash;
+#endif
+    size_t copy_len = 0;
+
+    if (out == NULL || out_len == 0) {
+        return -1;
+    }
+
+    uid[0] = (uint8_t)(STM32L5_UID0 >> 0);
+    uid[1] = (uint8_t)(STM32L5_UID0 >> 8);
+    uid[2] = (uint8_t)(STM32L5_UID0 >> 16);
+    uid[3] = (uint8_t)(STM32L5_UID0 >> 24);
+    uid[4] = (uint8_t)(STM32L5_UID1 >> 0);
+    uid[5] = (uint8_t)(STM32L5_UID1 >> 8);
+    uid[6] = (uint8_t)(STM32L5_UID1 >> 16);
+    uid[7] = (uint8_t)(STM32L5_UID1 >> 24);
+    uid[8] = (uint8_t)(STM32L5_UID2 >> 0);
+    uid[9] = (uint8_t)(STM32L5_UID2 >> 8);
+    uid[10] = (uint8_t)(STM32L5_UID2 >> 16);
+    uid[11] = (uint8_t)(STM32L5_UID2 >> 24);
+
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_InitSha256(&hash);
+    wc_Sha256Update(&hash, uid, sizeof(uid));
+    wc_Sha256Final(&hash, digest);
+    copy_len = sizeof(digest);
+#elif defined(WOLFBOOT_HASH_SHA384)
+    wc_InitSha384(&hash);
+    wc_Sha384Update(&hash, uid, sizeof(uid));
+    wc_Sha384Final(&hash, digest);
+    copy_len = sizeof(digest);
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
+    wc_Sha3_384_Update(&hash, uid, sizeof(uid));
+    wc_Sha3_384_Final(&hash, digest);
+    copy_len = sizeof(digest);
+#endif
+
+    if (copy_len > out_len) {
+        copy_len = out_len;
+    }
+    memcpy(out, digest, copy_len);
+    return 0;
+}
+
+int hal_uds_derive_key(uint8_t *out, size_t out_len)
+{
+    if (out == NULL || out_len == 0) {
+        return -1;
+    }
+
+#ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
+    return uds_from_uid(out, out_len);
+#else
+    return -1;
+#endif
+}
+
+int hal_attestation_get_lifecycle(uint32_t *lifecycle)
+{
+    if (lifecycle == NULL) {
+        return -1;
+    }
+
+    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
     return 0;
 }
 
