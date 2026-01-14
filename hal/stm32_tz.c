@@ -336,13 +336,6 @@ void hal_tz_sau_init(void)
 #define TRNG_CR_CONFIG1_SHIFT (20)
 #define TRNG_CR_CONDRST (1 << 30)
 
-__attribute__((noinline)) static void RAMFUNCTION trng_trace_step(uint32_t step)
-{
-    (void)step;
-    __asm volatile("" : : "r"(step) : "memory");
-}
-
-
 static void hsi48_on(void)
 {
 
@@ -360,11 +353,8 @@ static void hsi48_on(void)
 void hal_trng_init(void)
 {
     uint32_t reg_val;
-    trng_trace_step(1);
     hsi48_on();
-    trng_trace_step(2);
     RCC_AHB2_CLOCK_ER |= TRNG_AHB2_CLOCK_ER;
-    trng_trace_step(3);
 
     reg_val = TRNG_CR;
     reg_val &= ~(0x1F << TRNG_CR_CONFIG1_SHIFT);
@@ -378,15 +368,11 @@ void hal_trng_init(void)
     reg_val |= 0x06 << TRNG_CR_CLKDIV_SHIFT;
 #endif
     TRNG_CR = TRNG_CR_CONDRST | reg_val;
-    trng_trace_step(4);
     while ((TRNG_CR & TRNG_CR_CONDRST) == 0)
         ;
-    trng_trace_step(5);
     TRNG_CR = reg_val | TRNG_CR_RNGEN;
-    trng_trace_step(6);
     while ((TRNG_SR & TRNG_SR_DRDY) == 0)
         ;
-    trng_trace_step(7);
 }
 
 /* Never used (RNG keeps running when in secure-mode) */
