@@ -34,8 +34,11 @@ OBJS:= \
 	./src/string.o \
 	./src/image.o \
 	./src/libwolfboot.o \
-	./src/dice/dice.o \
 	./hal/hal.o
+
+ifeq ($(WOLFCRYPT_TZ),1)
+OBJS+=./src/dice/dice.o
+endif
 
 ifneq ($(TARGET),library)
 	OBJS+=./hal/$(TARGET).o
