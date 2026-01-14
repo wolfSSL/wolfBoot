@@ -646,6 +646,9 @@ ifeq ($(TARGET),aurix_tc3xx)
   endif
 endif
 
+# Capture final flags for locally built wolfSSL objects.
+WOLFSSL_CFLAGS:=$(CFLAGS)
+
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
@@ -725,7 +728,7 @@ delta-extra-data: image.bin
 $(WOLFSSL_LOCAL_OBJDIR)/%.o: %.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)mkdir -p $(dir $@)
-	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+	$(Q)$(CC) $(WOLFSSL_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
