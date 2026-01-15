@@ -129,17 +129,15 @@ int main(int argc, char** argv)
     struct stat   st;
     union usb_ack ack;
     struct termios tty;
-    {
-        struct sigaction sa;
-        sigset_t mask;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = alarm_handler;
-        sigemptyset(&sa.sa_mask);
-        (void)sigaction(SIGALRM, &sa, NULL);
-        sigemptyset(&mask);
-        sigaddset(&mask, SIGALRM);
-        (void)sigprocmask(SIG_UNBLOCK, &mask, NULL);
-    }
+    struct sigaction sa;
+    sigset_t mask;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = alarm_handler;
+    sigemptyset(&sa.sa_mask);
+    (void)sigaction(SIGALRM, &sa, NULL);
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGALRM);
+    (void)sigprocmask(SIG_UNBLOCK, &mask, NULL);
 
     if (argc != 2) {
         printf("Usage: %s firmware_filename\n", argv[0]);
