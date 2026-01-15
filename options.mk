@@ -1145,3 +1145,7 @@ endif
 ifeq ($(TZEN),1)
   CFLAGS+=-DTZEN
 endif
+
+ifeq ($(SUPPORT_DEV_BOARD),1)
+	CFLAGS += -DSUPPORT_DEV_BOARD=1
+endif
