@@ -380,6 +380,33 @@ static int qspi_gen_fifo_write(uint32_t entry)
     return ret;
 }
 
+/* Calculate EXP mode for large transfers (returns actual transfer size)
+ * For transfers > 255 bytes, use exponent mode where IMM = power of 2
+ * Pattern from zynq.c qspi_calc_exp() */
+static uint32_t qspi_calc_exp(uint32_t xferSz, uint32_t *reg_genfifo)
+{
+    uint32_t expval;
+
+    *reg_genfifo &= ~(GQSPI_GEN_FIFO_IMM_MASK | GQSPI_GEN_FIFO_EXP);
+
+    if (xferSz > GQSPI_GEN_FIFO_IMM_MASK) {
+        /* Use exponent mode (max is 2^28 for DMA) */
+        for (expval = 28; expval >= 8; expval--) {
+            /* Find highest power of 2 that fits */
+            if (xferSz >= (1UL << expval)) {
+                *reg_genfifo |= GQSPI_GEN_FIFO_EXP;
+                *reg_genfifo |= GQSPI_GEN_FIFO_IMM(expval);
+                xferSz = (1UL << expval);
+                break;
+            }
+        }
+    } else {
+        /* Use immediate length mode */
+        *reg_genfifo |= GQSPI_GEN_FIFO_IMM(xferSz);
+    }
+    return xferSz;
+}
+
 /* Chip select control */
 static int qspi_cs(QspiDev_t *dev, int assert)
 {
@@ -394,6 +421,41 @@ static int qspi_cs(QspiDev_t *dev, int assert)
 
     return qspi_gen_fifo_write(entry);
 }
+
+/* DMA temporary buffer for unaligned transfers (DMA is default, IO is optional) */
+#ifndef GQSPI_MODE_IO
+static uint8_t XALIGNED(GQSPI_DMA_ALIGN) dma_tmpbuf[GQSPI_DMA_TMPSZ];
+
+/* Flush data cache for DMA coherency */
+static void flush_dcache_range(uintptr_t start, uintptr_t end)
+{
+    /* ARM64: Clean and invalidate by virtual address to PoC */
+    uintptr_t addr;
+    for (addr = (start & ~(GQSPI_DMA_ALIGN - 1)); addr < end;
+         addr += GQSPI_DMA_ALIGN) {
+        __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
+    }
+    __asm__ volatile("dsb sy" : : : "memory");
+}
+
+/* Wait for DMA completion */
+static int qspi_dma_wait(void)
+{
+    uint32_t timeout = GQSPIDMA_TIMEOUT_TRIES;
+
+    while (!(GQSPIDMA_ISR & GQSPIDMA_ISR_DONE) && --timeout)
+        ;
+
+    if (timeout == 0) {
+        QSPI_DEBUG_PRINTF("QSPI: DMA timeout\n");
+        return -1;
+    }
+
+    /* Clear DMA done interrupt */
+    GQSPIDMA_ISR = GQSPIDMA_ISR_DONE;
+    return 0;
+}
+#endif /* !GQSPI_MODE_IO */
 
 /* TX via FIFO (polling mode) */
 static int qspi_fifo_tx(const uint8_t *data, uint32_t len)
@@ -545,6 +607,223 @@ static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
     return ret;
 }
 
+/* QSPI Read transfer - uses Quad mode (4-bit) for data phase
+ * Command and address are sent in SPI mode, data received in QSPI mode */
+static int qspi_transfer_qread(QspiDev_t *dev, const uint8_t *cmd, uint32_t cmdLen,
+                               uint8_t *rxData, uint32_t rxLen, uint32_t dummyClocks)
+{
+    int ret = 0;
+    uint32_t entry, rxEntry;
+    uint32_t i;
+
+    /* Enable GQSPI controller */
+    GQSPI_EN = 1;
+    dsb();
+
+    /* Base entry for command phase: bus + CS + SPI mode */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+            (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+            GQSPI_GEN_FIFO_MODE_SPI;
+
+    /* CS assertion */
+    ret = qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+
+    /* TX Phase - send command + address bytes in SPI mode */
+    for (i = 0; i < cmdLen && ret == 0; i++) {
+        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX |
+                           GQSPI_GEN_FIFO_IMM(cmd[i]);
+        ret = qspi_gen_fifo_push(txEntry);
+    }
+
+    /* Trigger and wait for TX to complete */
+    if (ret == 0) {
+        ret = qspi_gen_fifo_start_and_wait();
+    }
+
+    /* Dummy clocks phase (required for Fast/Quad Read)
+     * Send dummy clocks: DATA_XFER with no TX or RX, IMM = clock count */
+    if (ret == 0 && dummyClocks > 0) {
+        uint32_t dummyEntry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+                              (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+                              GQSPI_QSPI_MODE |
+                              GQSPI_GEN_FIFO_DATA_XFER |
+                              GQSPI_GEN_FIFO_IMM(dummyClocks);
+        ret = qspi_gen_fifo_push(dummyEntry);
+        if (ret == 0) {
+            ret = qspi_gen_fifo_start_and_wait();
+        }
+    }
+
+    /* RX Phase - receive data in QSPI mode (4-bit)
+     * Use EXP mode for large transfers (pattern from zynq.c) */
+    rxEntry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+              (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+              GQSPI_QSPI_MODE |
+              GQSPI_GEN_FIFO_RX |
+              GQSPI_GEN_FIFO_DATA_XFER |
+              (dev->stripe & GQSPI_GEN_FIFO_STRIPE);
+
+    {
+        uint32_t remaining = rxLen;
+        uint32_t offset = 0;
+        uint32_t xferSz;
+
+        while (ret == 0 && remaining > 0) {
+            xferSz = qspi_calc_exp(remaining, &rxEntry);
+            ret = qspi_gen_fifo_push(rxEntry);
+            if (ret == 0) {
+                ret = qspi_gen_fifo_start_and_wait();
+            }
+            if (ret == 0) {
+                ret = qspi_fifo_rx(&rxData[offset], xferSz);
+            }
+            offset += xferSz;
+            remaining -= xferSz;
+        }
+    }
+
+    /* CS Deassert */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) | GQSPI_GEN_FIFO_MODE_SPI;
+    qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+    qspi_gen_fifo_start_and_wait();
+
+    /* Disable controller */
+    GQSPI_EN = 0;
+    dsb();
+
+    return ret;
+}
+
+#ifndef GQSPI_MODE_IO
+/* DMA-enabled QSPI Read transfer
+ * Uses DMA for RX phase for better performance on large reads */
+static int qspi_transfer_qread_dma(QspiDev_t *dev, const uint8_t *cmd, uint32_t cmdLen,
+                                   uint8_t *rxData, uint32_t rxLen, uint32_t dummyClocks)
+{
+    int ret = 0;
+    uint32_t entry, rxEntry;
+    uint32_t i;
+    uint8_t *dmaPtr;
+    uint32_t dmaLen;
+    int useTemp = 0;
+
+    /* Enable GQSPI controller in DMA mode */
+    GQSPI_CFG = (GQSPI_CFG & ~GQSPI_CFG_MODE_EN_MASK) | GQSPI_CFG_MODE_EN_DMA;
+    GQSPI_EN = 1;
+    dsb();
+
+    /* Base entry for command phase: bus + CS + SPI mode */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+            (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+            GQSPI_GEN_FIFO_MODE_SPI;
+
+    /* CS assertion */
+    ret = qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+
+    /* TX Phase - send command + address bytes in SPI mode */
+    for (i = 0; i < cmdLen && ret == 0; i++) {
+        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX |
+                           GQSPI_GEN_FIFO_IMM(cmd[i]);
+        ret = qspi_gen_fifo_push(txEntry);
+    }
+
+    /* Trigger and wait for TX to complete */
+    if (ret == 0) {
+        ret = qspi_gen_fifo_start_and_wait();
+    }
+
+    /* Dummy clocks phase */
+    if (ret == 0 && dummyClocks > 0) {
+        uint32_t dummyEntry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+                              (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+                              GQSPI_QSPI_MODE |
+                              GQSPI_GEN_FIFO_DATA_XFER |
+                              GQSPI_GEN_FIFO_IMM(dummyClocks);
+        ret = qspi_gen_fifo_push(dummyEntry);
+        if (ret == 0) {
+            ret = qspi_gen_fifo_start_and_wait();
+        }
+    }
+
+    /* DMA RX Phase */
+    if (ret == 0 && rxLen > 0) {
+        uint32_t remaining = rxLen;
+        uint32_t xferSz;
+
+        /* Check alignment - DMA requires cache-line aligned buffer */
+        if (((uintptr_t)rxData & (GQSPI_DMA_ALIGN - 1)) || (rxLen & 3)) {
+            /* Use temp buffer for unaligned data */
+            dmaPtr = dma_tmpbuf;
+            dmaLen = (rxLen + GQSPI_DMA_ALIGN - 1) & ~(GQSPI_DMA_ALIGN - 1);
+            if (dmaLen > sizeof(dma_tmpbuf)) {
+                dmaLen = sizeof(dma_tmpbuf);
+            }
+            useTemp = 1;
+        } else {
+            dmaPtr = rxData;
+            dmaLen = rxLen;
+        }
+
+        /* Setup DMA destination */
+        GQSPIDMA_DST = ((uintptr_t)dmaPtr & 0xFFFFFFFFUL);
+        GQSPIDMA_DST_MSB = ((uintptr_t)dmaPtr >> 32);
+        GQSPIDMA_SIZE = dmaLen;
+
+        /* Enable DMA done interrupt */
+        GQSPIDMA_IER = GQSPIDMA_ISR_DONE;
+
+        /* Flush dcache for DMA coherency */
+        flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
+
+        /* Setup GenFIFO for RX with DMA - use EXP mode for large transfers */
+        rxEntry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) |
+                  (dev->cs & GQSPI_GEN_FIFO_CS_MASK) |
+                  GQSPI_QSPI_MODE |
+                  GQSPI_GEN_FIFO_RX |
+                  GQSPI_GEN_FIFO_DATA_XFER |
+                  (dev->stripe & GQSPI_GEN_FIFO_STRIPE);
+
+        /* Use qspi_calc_exp for large transfers (pattern from zynq.c) */
+        while (ret == 0 && remaining > 0) {
+            xferSz = qspi_calc_exp(remaining, &rxEntry);
+            ret = qspi_gen_fifo_push(rxEntry);
+            remaining -= xferSz;
+        }
+
+        /* Trigger GenFIFO */
+        if (ret == 0) {
+            GQSPI_CFG |= GQSPI_CFG_START_GEN_FIFO;
+            dsb();
+        }
+
+        /* Wait for DMA completion */
+        if (ret == 0) {
+            ret = qspi_dma_wait();
+        }
+
+        /* Invalidate cache after DMA */
+        flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
+
+        /* Copy from temp buffer if needed */
+        if (ret == 0 && useTemp) {
+            memcpy(rxData, dmaPtr, rxLen);
+        }
+    }
+
+    /* CS Deassert */
+    entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) | GQSPI_GEN_FIFO_MODE_SPI;
+    qspi_gen_fifo_push(entry | GQSPI_GEN_FIFO_IMM(1));
+    qspi_gen_fifo_start_and_wait();
+
+    /* Switch back to IO mode and disable controller */
+    GQSPI_CFG = (GQSPI_CFG & ~GQSPI_CFG_MODE_EN_MASK) | GQSPI_CFG_MODE_EN_IO;
+    GQSPI_EN = 0;
+    dsb();
+
+    return ret;
+}
+#endif /* !GQSPI_MODE_IO */
+
 /* Write page data to flash (for page programming) */
 static int qspi_write_page(QspiDev_t *dev, const uint8_t *cmd, uint32_t cmdLen,
                            const uint8_t *data, uint32_t dataLen)
@@ -579,10 +858,9 @@ static int qspi_write_page(QspiDev_t *dev, const uint8_t *cmd, uint32_t cmdLen,
 
     /* TX Phase - send data via TX FIFO (not immediate mode) */
     if (ret == 0 && dataLen > 0) {
-        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX | GQSPI_GEN_FIFO_DATA_XFER;
+        uint32_t txEntry = entry | GQSPI_GEN_FIFO_TX | GQSPI_GEN_FIFO_DATA_XFER |
+                           (dev->stripe & GQSPI_GEN_FIFO_STRIPE);
 
-        /* Note: stripe mode is handled externally by de-interleaving data
-         * and writing to each flash separately */
         while (dataLen > 0 && ret == 0) {
             uint32_t chunkLen = (dataLen > 255) ? 255 : dataLen;
             uint32_t chunkEntry = txEntry | GQSPI_GEN_FIFO_IMM(chunkLen);
@@ -774,6 +1052,7 @@ static int qspi_write_disable(QspiDev_t *dev)
     return qspi_transfer(dev, cmd, 1, NULL, 0, 0);
 }
 
+#if GQPI_USE_4BYTE_ADDR == 1
 /* Enter 4-byte address mode */
 static int qspi_enter_4byte_addr(QspiDev_t *dev)
 {
@@ -794,6 +1073,27 @@ static int qspi_enter_4byte_addr(QspiDev_t *dev)
     qspi_write_disable(dev);
     return ret;
 }
+
+/* Exit 4-byte address mode */
+static int qspi_exit_4byte_addr(QspiDev_t *dev)
+{
+    uint8_t cmd[1];
+    int ret;
+
+    ret = qspi_write_enable(dev);
+    if (ret != 0) return ret;
+
+    cmd[0] = FLASH_CMD_EXIT_4B_MODE;
+    ret = qspi_transfer(dev, cmd, 1, NULL, 0, 0);
+    QSPI_DEBUG_PRINTF("QSPI: Exit 4-byte mode: ret=%d\n", ret);
+
+    if (ret == 0) {
+        ret = qspi_wait_ready(dev);
+    }
+    qspi_write_disable(dev);
+    return ret;
+}
+#endif
 
 #ifdef TEST_EXT_FLASH
 #ifndef TEST_EXT_ADDRESS
@@ -914,12 +1214,15 @@ static void qspi_init(void)
     ret = qspi_read_id(&qspiDev, id, 3);
     wolfBoot_printf("QSPI: Lower ID: %02x %02x %02x\n", id[0], id[1], id[2]);
 
+#if GQPI_USE_4BYTE_ADDR == 1
     /* Enter 4-byte address mode for lower flash */
     ret = qspi_enter_4byte_addr(&qspiDev);
     if (ret != 0) {
         QSPI_DEBUG_PRINTF("QSPI: 4-byte mode failed (lower)\n");
     }
+#endif
 
+#if GQPI_USE_DUAL_PARALLEL == 1
     /* Read ID from upper flash */
     qspiDev.bus = GQSPI_GEN_FIFO_BUS_UP;
     qspiDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
@@ -928,23 +1231,32 @@ static void qspi_init(void)
     ret = qspi_read_id(&qspiDev, id, 3);
     wolfBoot_printf("QSPI: Upper ID: %02x %02x %02x\n", id[0], id[1], id[2]);
 
+#if GQPI_USE_4BYTE_ADDR == 1
     /* Enter 4-byte address mode for upper flash */
     ret = qspi_enter_4byte_addr(&qspiDev);
     if (ret != 0) {
         QSPI_DEBUG_PRINTF("QSPI: 4-byte mode failed (upper)\n");
     }
+#endif
 
     /* Configure for dual parallel operation */
     qspiDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
     qspiDev.bus = GQSPI_GEN_FIFO_BUS_BOTH;
     qspiDev.cs = GQSPI_GEN_FIFO_CS_BOTH;
     qspiDev.stripe = GQSPI_GEN_FIFO_STRIPE;
+#endif
 
-    /* QSPI bare-metal driver */
-    wolfBoot_printf("QSPI Init: Ref=%dMHz, Div=%d, Bus=%d, IO=%s\n",
-        GQSPI_CLK_REF/1000000,
-        (2 << GQSPI_CLK_DIV),
-        (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)),
+    /* QSPI bare-metal driver info */
+    wolfBoot_printf("QSPI: %dMHz, %s mode, %s\n",
+        (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) / 1000000,
+    #if GQSPI_QSPI_MODE == GQSPI_GEN_FIFO_MODE_QSPI
+        "Quad"
+    #elif GQSPI_QSPI_MODE == GQSPI_GEN_FIFO_MODE_DSPI
+        "Dual"
+    #else
+        "SPI"
+    #endif
+        ,
     #ifdef GQSPI_MODE_IO
         "Poll"
     #else
@@ -989,6 +1301,11 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#if defined(EXT_FLASH) && GQPI_USE_4BYTE_ADDR == 1
+    /* Exit 4-byte address mode before handing off to application */
+    qspi_exit_4byte_addr(&qspiDev);
+#endif
+
     /* Flush any pending UART output (with timeout) */
 #ifdef DEBUG_UART
     {
@@ -1094,103 +1411,18 @@ void ext_flash_unlock(void)
     /* No-op - flash protection handled elsewhere */
 }
 
-/* Write to a single flash chip - used for dual parallel writes */
-static int ext_flash_write_chip(uintptr_t addr, const uint8_t *data, int len,
-                                 uint32_t bus, uint32_t cs)
-{
-    int ret = 0;
-    uint8_t cmd[5];
-    uint32_t xferSz, page, pages;
-    QspiDev_t tmpDev;
-
-    tmpDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
-    tmpDev.bus = bus;
-    tmpDev.cs = cs;
-    tmpDev.stripe = 0;
-
-    /* Write by page */
-    pages = ((len + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE);
-    for (page = 0; page < pages && ret == 0; page++) {
-        ret = qspi_write_enable(&tmpDev);
-        if (ret != 0) break;
-
-        xferSz = len;
-        if (xferSz > FLASH_PAGE_SIZE)
-            xferSz = FLASH_PAGE_SIZE;
-
-        /* Page Program with 4-byte address */
-        cmd[0] = FLASH_CMD_PAGE_PROG_4B;
-        cmd[1] = ((addr + page * FLASH_PAGE_SIZE) >> 24) & 0xFF;
-        cmd[2] = ((addr + page * FLASH_PAGE_SIZE) >> 16) & 0xFF;
-        cmd[3] = ((addr + page * FLASH_PAGE_SIZE) >> 8) & 0xFF;
-        cmd[4] = (addr + page * FLASH_PAGE_SIZE) & 0xFF;
-
-        /* Send command + data */
-        ret = qspi_write_page(&tmpDev, cmd, 5,
-                              data + (page * FLASH_PAGE_SIZE), xferSz);
-        if (ret != 0) break;
-
-        ret = qspi_wait_ready(&tmpDev);
-        qspi_write_disable(&tmpDev);
-        len -= xferSz;
-    }
-
-    return ret;
-}
-
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int ret = 0;
     uint8_t cmd[5];
     uint32_t xferSz, page, pages;
     uintptr_t addr;
-    uint32_t i;
 
     if (!qspi_initialized) {
         return -1;
     }
 
-    if (qspiDev.stripe) {
-        /* For dual parallel: split data and write to each flash separately */
-        uint8_t *lower_data = NULL;
-        uint8_t *upper_data = NULL;
-        uint32_t half_len = (len + 1) / 2;
-        uintptr_t flash_addr = address / 2;
-
-        /* Allocate temp buffers for split data */
-        /* Note: For production, would use static buffer or stack */
-        static uint8_t lower_buf[FLASH_PAGE_SIZE * 4];
-        static uint8_t upper_buf[FLASH_PAGE_SIZE * 4];
-
-        if (len > (int)sizeof(lower_buf) * 2) {
-            QSPI_DEBUG_PRINTF("ext_flash_write: len too large\n");
-            return -1;
-        }
-
-        lower_data = lower_buf;
-        upper_data = upper_buf;
-
-        /* De-interleave data: even bytes to lower, odd bytes to upper */
-        for (i = 0; i < (uint32_t)len; i++) {
-            if (i & 1) {
-                upper_data[i / 2] = data[i];
-            } else {
-                lower_data[i / 2] = data[i];
-            }
-        }
-
-        /* Write to lower flash */
-        ret = ext_flash_write_chip(flash_addr, lower_data, half_len,
-                                   GQSPI_GEN_FIFO_BUS_LOW, GQSPI_GEN_FIFO_CS_LOWER);
-        if (ret != 0) return ret;
-
-        /* Write to upper flash */
-        ret = ext_flash_write_chip(flash_addr, upper_data, half_len,
-                                   GQSPI_GEN_FIFO_BUS_UP, GQSPI_GEN_FIFO_CS_UPPER);
-        return ret;
-    }
-
-    /* Single flash write */
+    /* Write by page */
     pages = ((len + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE);
     for (page = 0; page < pages && ret == 0; page++) {
         ret = qspi_write_enable(&qspiDev);
@@ -1201,6 +1433,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
             xferSz = FLASH_PAGE_SIZE;
 
         addr = address + (page * FLASH_PAGE_SIZE);
+        if (qspiDev.stripe) {
+            /* For dual parallel the address is divided by 2 */
+            addr /= 2;
+        }
 
         /* Page Program with 4-byte address */
         cmd[0] = FLASH_CMD_PAGE_PROG_4B;
@@ -1209,9 +1445,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         cmd[3] = (addr >> 8) & 0xFF;
         cmd[4] = addr & 0xFF;
 
-        /* Send command + data */
+        /* Send command + data - hardware handles striping */
         ret = qspi_write_page(&qspiDev, cmd, 5,
                               data + (page * FLASH_PAGE_SIZE), xferSz);
+        QSPI_DEBUG_PRINTF("Flash Page %d Write: Ret %d\n", page, ret);
         if (ret != 0) break;
 
         ret = qspi_wait_ready(&qspiDev);
@@ -1227,64 +1464,29 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     uint8_t cmd[5];
     int ret;
     uintptr_t addr = address;
-    uint32_t i;
 
     if (!qspi_initialized) {
         return -1;
     }
 
     if (qspiDev.stripe) {
-        /* For dual parallel: read from each chip separately and interleave */
-        static uint8_t lower_buf[FLASH_PAGE_SIZE * 4];
-        static uint8_t upper_buf[FLASH_PAGE_SIZE * 4];
-        uint32_t half_len = (len + 1) / 2;
-        QspiDev_t tmpDev;
-
-        if (len > (int)sizeof(lower_buf) * 2) {
-            return -1;
-        }
-
-        addr = address / 2;  /* Flash address for each chip */
-
-        cmd[0] = FLASH_CMD_READ_4B;
-        cmd[1] = (addr >> 24) & 0xFF;
-        cmd[2] = (addr >> 16) & 0xFF;
-        cmd[3] = (addr >> 8) & 0xFF;
-        cmd[4] = addr & 0xFF;
-
-        /* Read from lower chip */
-        tmpDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
-        tmpDev.stripe = 0;
-        ret = qspi_transfer(&tmpDev, cmd, 5, lower_buf, half_len, 0);
-        if (ret != 0) return ret;
-
-        /* Read from upper chip */
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
-        ret = qspi_transfer(&tmpDev, cmd, 5, upper_buf, half_len, 0);
-        if (ret != 0) return ret;
-
-        /* Interleave: even positions from lower, odd positions from upper */
-        for (i = 0; i < (uint32_t)len; i++) {
-            if (i & 1) {
-                data[i] = upper_buf[i / 2];
-            } else {
-                data[i] = lower_buf[i / 2];
-            }
-        }
-        return 0;
+        /* For dual parallel the address is divided by 2 */
+        addr /= 2;
     }
 
-    /* Single flash read */
-    cmd[0] = FLASH_CMD_READ_4B;
+    /* Use Quad Read command (0x6C) with 4-byte address */
+    cmd[0] = FLASH_CMD_QUAD_READ_4B;
     cmd[1] = (addr >> 24) & 0xFF;
     cmd[2] = (addr >> 16) & 0xFF;
     cmd[3] = (addr >> 8) & 0xFF;
     cmd[4] = addr & 0xFF;
 
-    ret = qspi_transfer(&qspiDev, cmd, 5, data, len, 0);
+    /* Hardware handles striping via GQSPI_GEN_FIFO_STRIPE flag */
+#ifdef GQSPI_MODE_IO
+    ret = qspi_transfer_qread(&qspiDev, cmd, 5, data, len, GQSPI_DUMMY_READ);
+#else
+    ret = qspi_transfer_qread_dma(&qspiDev, cmd, 5, data, len, GQSPI_DUMMY_READ);
+#endif
 
     return ret;
 }
