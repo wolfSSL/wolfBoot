@@ -442,15 +442,38 @@
 #define FLASH_SECTOR_SIZE           0x10000  /* 64KB */
 #define FLASH_DEVICE_SIZE           0x8000000 /* 128MB per chip */
 
-/* QSPI Timing */
-#define GQSPI_CLK_DIV               2  /* Divide by 8 (300MHz / 8 = 37.5MHz) */
-#define GQSPI_DUMMY_CLOCKS          8
+/* QSPI Configuration (bare-metal driver) */
+#ifndef GQSPI_CLK_REF
+    #define GQSPI_CLK_REF           300000000  /* 300 MHz */
+#endif
+#ifndef GQSPI_CLK_DIV
+    #define GQSPI_CLK_DIV           1  /* Divide by 4 (300MHz / 4 = 75MHz) */
+#endif
+#define GQSPI_CS_ASSERT_CLOCKS      5  /* CS Setup Time (tCSS) */
+#define GQSPI_CS_DEASSERT_CLOCKS    4  /* CS Hold Time */
+#define GQSPI_FIFO_WORD_SZ          4
+#define GQSPI_DMA_ALIGN             64 /* L1 cache size */
+#ifndef GQSPI_DMA_TMPSZ
+    #define GQSPI_DMA_TMPSZ         4096
+#endif
 #define GQSPI_TIMEOUT_TRIES         100000
 #define GQSPIDMA_TIMEOUT_TRIES      100000000
 #define GQSPI_FLASH_READY_TRIES     1000000  /* Erase can take seconds */
 
-/* QSPI DMA alignment */
-#define GQSPI_DMA_ALIGN             32
+/* QSPI Mode Configuration */
+#ifndef GQSPI_QSPI_MODE
+    #define GQSPI_QSPI_MODE         GQSPI_GEN_FIFO_MODE_QSPI  /* 4-bit data */
+#endif
+#ifndef GQPI_USE_DUAL_PARALLEL
+    #define GQPI_USE_DUAL_PARALLEL  1  /* 0=single, 1=dual parallel (striped) */
+#endif
+#ifndef GQPI_USE_4BYTE_ADDR
+    #define GQPI_USE_4BYTE_ADDR     1  /* 0=3-byte addr, 1=4-byte addr */
+#endif
+#ifndef GQSPI_DUMMY_READ
+    #define GQSPI_DUMMY_READ        8  /* Dummy clocks for Fast/Quad Read */
+#endif
+
 #define XALIGNED(x) __attribute__((aligned(x)))
 
 
