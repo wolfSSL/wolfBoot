@@ -25,7 +25,6 @@
 
 #include "hal.h"
 #include "hal/stm32l5.h"
-#include "printf.h"
 
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
@@ -151,13 +150,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end_address;
     uint32_t p;
-
-    if (address < WOLFBOOT_PARTITION_BOOT_ADDRESS) {
-        wolfBoot_printf("hal_flash_erase: addr=0x%08x len=%d (below boot)\n",
-            address, len);
-    } else {
-        wolfBoot_printf("hal_flash_erase: addr=0x%08x len=%d\n", address, len);
-    }
 
     hal_flash_clear_errors(0);
     if (len == 0)

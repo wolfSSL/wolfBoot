@@ -29,7 +29,7 @@
     #include "hal/stm32u5.h"
 #endif
 
-#ifdef TARGET_stm32h5
+#if defined(TARGET_stm32h5)
     #include "hal/stm32h5.h"
 #endif
 
@@ -223,6 +223,38 @@ void hal_gtzc_init(void)
     for (i = 0; i < 20; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0x0);
     }
+}
+
+#elif defined(TARGET_stm32u5)
+
+#define GTZC_MPCBB1_S_BASE        (0x50032C00)
+#define GTZC_MPCBB1_S_VCTR_BASE   (GTZC_MPCBB1_S_BASE + 0x100)
+
+#define GTZC_MPCBB2_S_BASE        (0x50033000)
+#define GTZC_MPCBB2_S_VCTR_BASE   (GTZC_MPCBB2_S_BASE + 0x100)
+
+#define SET_GTZC_MPCBBx_S_VCTR(bank,n,val) \
+    (*((volatile uint32_t *)(GTZC_MPCBB##bank##_S_VCTR_BASE ) + n ))= val
+
+void hal_gtzc_init(void)
+{
+   int i;
+   /* One bit in the bitmask: 512B (STM32U5) */
+
+   /* Configure SRAM1 lower 128 KB as secure (0x20000000 - 0x2001FFFF). */
+   for (i = 0; i < 8; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
+   }
+
+   /* Configure SRAM1 upper 128 KB as non-secure (0x20020000 - 0x2003FFFF). */
+   for (i = 8; i < 16; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(1, i, 0x0);
+   }
+
+   /* Configure SRAM2 as non-secure (0x20030000 - 0x2003FFFF). */
+   for (i = 0; i < 4; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(2, i, 0x0);
+   }
 }
 
 #else

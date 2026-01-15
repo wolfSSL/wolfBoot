@@ -489,6 +489,35 @@ static void led_unsecure()
 #endif
 }
 
+#if TZ_SECURE()
+#define TZSC1_BASE 0x50032400u
+#define TZSC_SECCFGR1 (*(volatile uint32_t *)(TZSC1_BASE + 0x10u))
+#define TZSC_SECCFGR1_USART3SEC (1u << 10)
+
+static void periph_unsecure(void)
+{
+    volatile uint32_t reg;
+
+    /* Enable clock for GPIO D (USART3 pins PD8/PD9) */
+    RCC_AHB2ENR1_CLOCK_ER |= GPIOD_AHB2ENR1_CLOCK_ER;
+
+    /* Enable clock for USART3 */
+    RCC_APB1LENR |= (1u << 18);
+
+    /* Unsecure USART3 pins (PD8 TX, PD9 RX) */
+    GPIOD_SECCFGR &= ~(1u << 8);
+    GPIOD_SECCFGR &= ~(1u << 9);
+
+    /* Unsecure USART3 peripheral in GTZC TZSC */
+    reg = TZSC_SECCFGR1;
+    if (reg & TZSC_SECCFGR1_USART3SEC) {
+        reg &= ~TZSC_SECCFGR1_USART3SEC;
+        DMB();
+        TZSC_SECCFGR1 = reg;
+    }
+}
+#endif
+
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
 static uint8_t bootloader_copy_mem[BOOTLOADER_SIZE];
 static void RAMFUNCTION fork_bootloader(void)
@@ -530,6 +559,7 @@ void hal_prepare_boot(void)
     clock_pll_off();
 #endif
 #if TZ_SECURE()
+    periph_unsecure();
     led_unsecure();
 #endif
 }
