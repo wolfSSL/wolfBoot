@@ -52,3 +52,4 @@ SECTIONS
 PROVIDE(_start_heap = _end);
 PROVIDE(_heap_size = 4K);
 PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));
+PROVIDE(end = _end);

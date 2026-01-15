@@ -36,6 +36,10 @@ OBJS:= \
 	./src/libwolfboot.o \
 	./hal/hal.o
 
+ifeq ($(WOLFBOOT_TZ_PSA),1)
+OBJS+=./src/dice/dice.o
+endif
+
 ifneq ($(TARGET),library)
 	OBJS+=./hal/$(TARGET).o
 endif
