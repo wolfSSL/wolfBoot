@@ -22,9 +22,23 @@
  * Target: VMK180 Evaluation Board (VM1802 Versal Prime)
  *
  * Features:
- *   - UART driver (Cadence UART)
+ *   - UART driver (Cadence UART / ARM PL011)
  *   - ARM Generic Timer
- *   - Flash stubs (OSPI/SD to be implemented)
+ *   - QSPI flash driver (GQSPI - dual parallel MT25QU01GBBB)
+ *
+ * QSPI Driver Notes:
+ *   This driver is a port of the ZynqMP GQSPI driver (hal/zynq.c) with the
+ *   following Versal-specific adaptations:
+ *
+ *   1. Different base address (0xF1030000 vs 0xFF0F0000)
+ *   2. Tap delay bypass register is in QSPI block (not IOU_SLCR)
+ *   3. Preserves PLM's QSPI configuration instead of full reset
+ *   4. UART init skips MIO/clock setup when EL2 (PLM already did it)
+ *
+ *   The register layout, GenFIFO format, and DMA interface are identical
+ *   to ZynqMP since both use the same Xilinx GQSPI IP block.
+ *
+ *   See hal/versal.h for detailed comparison with ZynqMP.
  */
 
 #ifdef TARGET_versal
@@ -260,10 +274,31 @@ void hal_delay_us(uint32_t us)
 
 
 /* ============================================================================
- * QSPI Flash Driver
+ * QSPI Flash Driver (GQSPI)
  * ============================================================================
- * Bare-metal QSPI driver for Versal VMK180
- * Dual parallel MT25QU01GBBB (128MB each, 256MB total)
+ * Bare-metal QSPI driver for Versal VMK180.
+ * Hardware: Dual parallel MT25QU01GBBB (128MB each, 256MB total).
+ *
+ * This driver is adapted from the ZynqMP GQSPI driver (hal/zynq.c).
+ * Both platforms use the same Xilinx GQSPI IP block with identical:
+ *   - Register offsets (GQSPI at +0x100, DMA at +0x800 from base)
+ *   - GenFIFO entry format (command, address, data, stripe bits)
+ *   - Interrupt status bits and DMA interface
+ *
+ * Versal-specific differences from ZynqMP:
+ *   - Base address: 0xF1030000 (vs 0xFF0F0000 on ZynqMP)
+ *   - Tap delay register: In QSPI block (vs IOU_SLCR on ZynqMP)
+ *   - Initialization: Preserves PLM config (vs full reset on ZynqMP)
+ *
+ * Supported modes (same as ZynqMP):
+ *   - DMA mode (default) or IO polling mode (GQSPI_MODE_IO)
+ *   - Quad SPI (4-bit), Dual SPI (2-bit), or Standard SPI (1-bit)
+ *   - 4-byte addressing for flash >16MB (GQPI_USE_4BYTE_ADDR)
+ *   - Dual parallel with hardware striping (GQPI_USE_DUAL_PARALLEL)
+ *   - EXP (exponent) length mode for large transfers
+ *
+ * Clock: 300MHz ref / (2 << DIV) = 75MHz default (DIV=1)
+ *        MT25QU01GBBB supports up to 133MHz for Quad Output Read.
  */
 
 #ifdef EXT_FLASH

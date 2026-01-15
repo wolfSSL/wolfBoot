@@ -293,8 +293,38 @@
 /* ============================================================================
  * QSPI (Quad SPI) Flash Controller - GQSPI
  * ============================================================================
- * Versal QSPI is similar to ZynqMP but at different base address.
- * VMK180 uses dual parallel MT25QU01GBBB (128MB each, 256MB total)
+ * The Versal GQSPI controller is derived from the ZynqMP GQSPI IP block.
+ * VMK180 uses dual parallel MT25QU01GBBB (128MB each, 256MB total).
+ *
+ * Key differences from ZynqMP (see hal/zynq.c for comparison):
+ *
+ * 1. BASE ADDRESS:
+ *    - ZynqMP: 0xFF0F0000
+ *    - Versal: 0xF1030000
+ *
+ * 2. TAP DELAY BYPASS REGISTER:
+ *    - ZynqMP: Located in IOU_SLCR block at 0xFF180390
+ *    - Versal: Integrated in QSPI block at BASE + 0x03C
+ *
+ * 3. INITIALIZATION:
+ *    - ZynqMP: Full init including FIFO reset and loopback delay tuning
+ *    - Versal: Preserves PLM configuration, only drains RX FIFO
+ *              (PLM already configured clocks, MIO, and controller)
+ *
+ * 4. CLOCK CONFIGURATION:
+ *    - Both use same divisor formula: QSPI_CLK = REF_CLK / (2 << DIV)
+ *    - Default: 300MHz ref, DIV=1 -> 75MHz (within MT25QU01G 133MHz spec)
+ *
+ * 5. REGISTER LAYOUT:
+ *    - Identical offsets from base (+0x100 for GQSPI, +0x800 for DMA)
+ *    - Same GenFIFO format, interrupt bits, and DMA interface
+ *
+ * 6. BUILD OPTIONS (same as ZynqMP):
+ *    - GQSPI_MODE_IO: Use polling instead of DMA (DMA is default)
+ *    - GQPI_USE_DUAL_PARALLEL: Enable dual parallel flash striping
+ *    - GQPI_USE_4BYTE_ADDR: Enable 4-byte addressing for >16MB flash
+ *    - GQSPI_CLK_DIV: Clock divider (0-7)
+ *    - DEBUG_QSPI: Enable verbose debug logging
  */
 #define VERSAL_QSPI_BASE        0xF1030000UL
 
