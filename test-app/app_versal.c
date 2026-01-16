@@ -22,74 +22,37 @@
  */
 
 #include <stdint.h>
+
+#include "hal.h"
+#include "hal/versal.h"
 #include "wolfboot/wolfboot.h"
-
-/* UART registers for PL011 UART (Versal uses PL011, NOT Cadence UART)
- * Register layout from hal/versal.h:
- * - Data Register (DR): offset 0x00
- * - Flag Register (FR): offset 0x18
- * - Control Register (CR): offset 0x30
- */
-#define VERSAL_UART0_BASE       0xFF000000UL
-#define UART_DR_OFFSET          0x00    /* Data Register (TX/RX) */
-#define UART_FR_OFFSET          0x18    /* Flag Register */
-#define UART_FR_TXFF            (1UL << 5)  /* TX FIFO full */
-#define UART_FR_TXFE            (1UL << 7)  /* TX FIFO empty */
-
-#define UART_DR     (*((volatile uint32_t*)(VERSAL_UART0_BASE + UART_DR_OFFSET)))
-#define UART_FR     (*((volatile uint32_t*)(VERSAL_UART0_BASE + UART_FR_OFFSET)))
-
-/* Get current exception level */
-static uint32_t get_current_el(void)
-{
-    uint64_t current_el;
-    __asm__ volatile("mrs %0, CurrentEL" : "=r" (current_el));
-    return (uint32_t)((current_el >> 2) & 0x3);
-}
-
-static void uart_tx(uint8_t c)
-{
-    /* Wait while TX FIFO is full */
-    while (UART_FR & UART_FR_TXFF)
-        ;
-    UART_DR = c;
-}
-
-static void uart_print(const char *s)
-{
-    while (*s) {
-        if (*s == '\n')
-            uart_tx('\r');
-        uart_tx((uint8_t)*s++);
-    }
-}
+#include "printf.h"
 
 void main(void)
 {
-    uint32_t el = get_current_el();
+    uint32_t boot_version, update_version;
 
-    uart_print("\n\n");
-    uart_print("===========================================\n");
-    uart_print(" wolfBoot Test Application - AMD Versal\n");
-    uart_print("===========================================\n\n");
+    /* Initialize HAL (UART, etc.) */
+    hal_init();
 
-    /* Print current exception level */
-    uart_print("Current EL: ");
-    uart_tx('0' + el);
-    uart_print("\n");
+    /* Get versions from both partitions */
+    boot_version = wolfBoot_get_image_version(PART_BOOT);
+    update_version = wolfBoot_get_image_version(PART_UPDATE);
 
-    uart_print("Application running successfully!\n");
+    wolfBoot_printf("\n\n");
+    wolfBoot_printf("===========================================\n");
+    wolfBoot_printf(" wolfBoot Test Application - AMD Versal\n");
+    wolfBoot_printf("===========================================\n\n");
 
-    uart_print("\nEntering idle loop...\n");
+    /* Print firmware versions */
+    wolfBoot_printf("Boot Partition Version: %d (0x%08x)\n", boot_version, boot_version);
+    wolfBoot_printf("Update Partition Version: %d (0x%08x)\n", update_version, update_version);
 
-    /* Wait for transmit to complete (TX FIFO empty) */
-    while (!(UART_FR & UART_FR_TXFE))
-        ;
+    wolfBoot_printf("Application running successfully!\n");
+    wolfBoot_printf("\nEntering idle loop...\n");
 
     /* Idle loop */
     while (1) {
         __asm__ volatile("wfi");
     }
 }
-
-

@@ -1291,11 +1291,12 @@ int wolfBoot_dualboot_candidate(void)
 }
 #else
 
-static int wolfBoot_current_firmware_version()
+static int wolfBoot_current_firmware_version(void)
 {
     return wolfBoot_get_blob_version(hal_get_primary_address());
 }
-static int wolfBoot_update_firmware_version() {
+static int wolfBoot_update_firmware_version(void)
+{
     return wolfBoot_get_blob_version(hal_get_update_address());
 }
 
