@@ -1981,7 +1981,7 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 
 ## Versal Gen 1 VMK180
 
-AMD Versal Prime VM1802 ACAP - Dual ARM Cortex-A72 (VMK180 Evaluation Board)
+AMD Versal Prime Series VMK180 Evaluation Kit - Versal Prime XCVM1802-2MSEVSVA2197 Adaptive SoC - Dual ARM Cortex-A72
 
 wolfBoot replaces U-Boot in the Versal boot flow:
 ```
@@ -2080,6 +2080,29 @@ Flash `BOOT.BIN` to QSPI flash using one of the following methods:
   sf write ${loadaddr} 0 ${filesize}
   ```
 
+### QSPI Flash
+
+VMK180 uses dual parallel MT25QU01GBBB flash (128MB each, 256MB total). The QSPI driver supports:
+- DMA mode (default) or IO polling mode (`GQSPI_MODE_IO`)
+- Quad SPI (4-bit) for faster reads
+- 4-byte addressing for full flash access
+- Hardware striping for dual parallel operation
+- 75MHz default clock (configurable via `GQSPI_CLK_DIV`)
+
+### Building and Signing Test Application
+
+```sh
+# Build and sign the test application
+make test-app/image.bin
+make test-app/image_v1_signed.bin
+```
+
+The signed test application will be at `test-app/image_v1_signed.bin`.
+
+### Flashing Test Application
+
+After flashing `BOOT.BIN` to QSPI offset 0x0, flash the signed test app to the boot partition at offset `0x800000` using your preferred method.
+
 ### Example Boot Output
 
 ```
@@ -2088,11 +2111,30 @@ wolfBoot Secure Boot - AMD Versal
 ========================================
 Current EL: 2
 Timer Freq: 99999904 Hz
-ext_flash_read: STUB
-ext_flash_read: STUB
-Versions: Boot 0, Update 0
-No valid image found!
-wolfBoot: PANIC!
+QSPI: Lower ID: 20 BB 21
+QSPI: Upper ID: 20 BB 21
+QSPI: 75MHz, Quad mode, DMA
+Versions: Boot 1, Update 0
+Trying Boot partition at 0x800000
+Loading header 512 bytes from 0x800000 to 0xFFFFE00
+Loading image 664 bytes from 0x800200 to 0x10000000...done
+Boot partition: 0xFFFFE00 (sz 664, ver 0x1, type 0x601)
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
+Firmware Valid
+Loading elf at 0x10000000
+Invalid elf, falling back to raw binary
+Loading DTB (size 24894) from 0x1000 to RAM at 0x1000
+Booting at 0x10000000
+
+===========================================
+ wolfBoot Test Application - AMD Versal
+===========================================
+
+Application running successfully!
+
+Entering idle loop...
 ```
 
 

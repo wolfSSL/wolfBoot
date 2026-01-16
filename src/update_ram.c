@@ -29,6 +29,7 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
+
 #ifdef WOLFBOOT_TPM
 #include "tpm.h"
 #endif
@@ -41,6 +42,19 @@ extern int wolfBoot_get_dts_size(void *dts_addr);
 
 extern uint32_t kernel_load_addr;
 extern uint32_t dts_load_addr;
+
+#ifdef BOOT_BENCHMARK
+    /* Timing variable for benchmarking - placed at function scope */
+    static uint64_t _boot_bench_start;
+    #define BENCHMARK_START() _boot_bench_start = hal_get_timer_us()
+    #define BENCHMARK_END(msg) do { \
+        uint64_t _elapsed_ms = (hal_get_timer_us() - _boot_bench_start) / 1000;\
+        wolfBoot_printf(msg " (%lu ms)\n", (unsigned long)_elapsed_ms); \
+    } while(0)
+#else
+    #define BENCHMARK_START() do {} while(0)
+    #define BENCHMARK_END(msg) wolfBoot_printf(msg "\n")
+#endif
 
 #if ((defined(EXT_FLASH) && defined(NO_XIP)) || \
     (defined(EXT_ENCRYPTED) && defined(MMU))) && \
@@ -82,8 +96,9 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     img_size = wolfBoot_image_size((uint8_t*)dst);
 
     /* Read the entire image into RAM */
-    wolfBoot_printf("Loading image %d bytes from %p to %p\n",
+    wolfBoot_printf("Loading image %d bytes from %p to %p...",
         img_size, src + IMAGE_HEADER_SIZE, dst + IMAGE_HEADER_SIZE);
+    BENCHMARK_START();
 #if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src + IMAGE_HEADER_SIZE,
                                     dst + IMAGE_HEADER_SIZE, img_size);
@@ -94,6 +109,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 #else
     memcpy(dst + IMAGE_HEADER_SIZE, src + IMAGE_HEADER_SIZE, img_size);
 #endif
+    BENCHMARK_END("done");
 
     /* mark image as no longer external */
     img->not_ext = 1;
@@ -168,12 +184,31 @@ void RAMFUNCTION wolfBoot_start(void)
     #else
         ret = wolfBoot_open_image(&os_image, active);
     #endif
-        if ( (ret < 0) ||
-            ((ret = wolfBoot_verify_integrity(&os_image) < 0)) ||
-            ((ret = wolfBoot_verify_authenticity(&os_image)) < 0)) {
+        if (ret < 0) {
             goto backup_on_failure;
+        }
 
-        } else {
+        /* Verify image integrity (hash check) */
+        wolfBoot_printf("Checking integrity...");
+        BENCHMARK_START();
+        ret = wolfBoot_verify_integrity(&os_image);
+        if (ret < 0) {
+            wolfBoot_printf("FAILED\n");
+            goto backup_on_failure;
+        }
+        BENCHMARK_END("done");
+
+        /* Verify image authenticity (signature check) */
+        wolfBoot_printf("Verifying signature...");
+        BENCHMARK_START();
+        ret = wolfBoot_verify_authenticity(&os_image);
+        if (ret < 0) {
+            wolfBoot_printf("FAILED\n");
+            goto backup_on_failure;
+        }
+        BENCHMARK_END("done");
+
+        {
             /* Success - integrity and signature valid */
         #if !defined(WOLFBOOT_NO_LOAD_ADDRESS) && defined(WOLFBOOT_LOAD_ADDRESS)
             load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;

@@ -37,12 +37,113 @@ extern unsigned int _end_data;
 extern void main(void);
 extern void gicv2_init_secure(void);
 
+/* SKIP_GIC_INIT - Skip GIC initialization before booting app
+ * This is needed for:
+ * - Versal: Uses GICv3, not GICv2. BL31 handles GIC setup.
+ * - Systems where another bootloader stage handles GIC init
+ * NO_QNX also implies SKIP_GIC_INIT for backwards compatibility
+ */
+#if defined(NO_QNX) && !defined(SKIP_GIC_INIT)
+#define SKIP_GIC_INIT
+#endif
+
 unsigned int current_el(void)
 {
     unsigned long el;
     asm volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
     return (unsigned int)((el >> 2) & 0x3U);
 }
+
+#if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+/**
+ * @brief Transition from EL2 to EL1 and jump to application
+ *
+ * This function configures the necessary system registers for EL1 operation
+ * and performs an exception return (ERET) to drop from EL2 to EL1.
+ *
+ * Based on ARM Architecture Reference Manual and U-Boot implementation.
+ *
+ * @param entry_point Address to jump to in EL1
+ * @param dts_addr Device tree address (passed in x0 to application)
+ */
+static void RAMFUNCTION el2_to_el1_boot(uintptr_t entry_point, uintptr_t dts_addr)
+{
+    /* 1. Configure timer access for EL1 */
+    asm volatile(
+        "mrs x0, cnthctl_el2\n\t"
+        "orr x0, x0, #3\n\t"      /* EL1PCEN | EL1PCTEN - enable EL1 timer access */
+        "msr cnthctl_el2, x0\n\t"
+        "msr cntvoff_el2, xzr"    /* Clear virtual timer offset */
+        ::: "x0"
+    );
+
+    /* 2. Configure virtual processor ID */
+    asm volatile(
+        "mrs x0, midr_el1\n\t"
+        "msr vpidr_el2, x0\n\t"
+        "mrs x0, mpidr_el1\n\t"
+        "msr vmpidr_el2, x0"
+        ::: "x0"
+    );
+
+    /* 3. Disable coprocessor traps to EL2 */
+    asm volatile(
+        "mov x0, #0x33ff\n\t"     /* CPTR_EL2: RES1 bits, no traps */
+        "msr cptr_el2, x0\n\t"
+        "msr hstr_el2, xzr\n\t"   /* No traps to EL2 on system registers */
+        "mov x0, #(3 << 20)\n\t"  /* CPACR_EL1: Full FP/SIMD access */
+        "msr cpacr_el1, x0"
+        ::: "x0"
+    );
+
+    /* 4. Initialize SCTLR_EL1 with safe defaults (RES1 bits, MMU/cache off) */
+    asm volatile(
+        "ldr x0, =0x30d00800\n\t" /* RES1 bits: 29,28,23,22,20,11 */
+        "msr sctlr_el1, x0"
+        ::: "x0"
+    );
+
+    /* 5. Migrate stack pointer and vector base to EL1 */
+    asm volatile(
+        "mov x0, sp\n\t"
+        "msr sp_el1, x0\n\t"
+        "mrs x0, vbar_el2\n\t"
+        "msr vbar_el1, x0"
+        ::: "x0"
+    );
+
+    /* 6. Configure HCR_EL2 - EL1 is AArch64, no hypervisor calls */
+    asm volatile(
+        "mov x0, #(1 << 31)\n\t"  /* RW: EL1 is AArch64 */
+        "orr x0, x0, #(1 << 29)\n\t" /* HCD: Disable HVC instruction */
+        "msr hcr_el2, x0"
+        ::: "x0"
+    );
+
+    /* 7. Set up SPSR_EL2 for return to EL1h with all interrupts masked */
+    asm volatile(
+        "mov x0, #0x3c4\n\t"      /* DAIF masked (0xF<<6) + M[4:0]=0b00100 (EL1h) */
+        "msr spsr_el2, x0"
+        ::: "x0"
+    );
+
+    /* 8. Set exception return address and DTB pointer, then ERET */
+    asm volatile(
+        "msr elr_el2, %0\n\t"     /* Entry point in ELR_EL2 */
+        "mov x0, %1\n\t"          /* DTB address in x0 (first arg) */
+        "mov x1, xzr\n\t"         /* Zero remaining argument registers */
+        "mov x2, xzr\n\t"
+        "mov x3, xzr\n\t"
+        "eret"
+        :
+        : "r"(entry_point), "r"(dts_addr)
+        : "x0", "x1", "x2", "x3"
+    );
+
+    /* Should never reach here */
+    __builtin_unreachable();
+}
+#endif /* BOOT_EL1 && EL2_HYPERVISOR */
 
 void boot_entry_C(void)
 {
@@ -101,6 +202,32 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     hal_dts_fixup((uint32_t*)dts_offset);
 #endif
 
+#ifndef SKIP_GIC_INIT
+    /* Initialize GICv2 for Kernel (ZynqMP and similar platforms)
+     * Skip this for:
+     * - Versal (uses GICv3, handled by BL31)
+     * - Platforms where BL31 or another stage handles GIC
+     */
+    gicv2_init_secure();
+#endif
+
+#if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    /* Transition from EL2 to EL1 before jumping to application.
+     * This is needed when:
+     * - Application expects to run at EL1 (e.g., Linux kernel)
+     * - wolfBoot runs at EL2 (hypervisor mode)
+     */
+    {
+    #ifdef MMU
+        uintptr_t dts = (uintptr_t)dts_offset;
+    #else
+        uintptr_t dts = 0;
+    #endif
+        el2_to_el1_boot((uintptr_t)app_offset, dts);
+    }
+#else
+    /* Stay at current EL (EL2 or EL3) and jump directly to application */
+
     /* Set application address via x4 */
     asm volatile("mov x4, %0" : : "r"(app_offset));
 
@@ -109,11 +236,6 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("mov x5, %0" : : "r"(dts_offset));
 #else
     asm volatile("mov x5, xzr");
-#endif
-
-#ifndef NO_QNX
-    /* Initialize GICv2 for Kernel */
-    gicv2_init_secure();
 #endif
 
     /* Zero registers x1, x2, x3 */
@@ -126,6 +248,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 
     /* Unconditionally jump to app_entry at x4 */
     asm volatile("br x4");
+#endif /* BOOT_EL1 */
 }
 
 #ifdef RAM_CODE

@@ -133,6 +133,10 @@ ifeq ($(ARCH),RISCV)
   APP_OBJS+=startup_riscv.o vector_riscv.o
 endif
 
+ifeq ($(ARCH),AARCH64)
+  APP_OBJS:=boot_arm64_start.o $(APP_OBJS)
+endif
+
 ifeq ($(ARCH),RISCV64)
   APP_OBJS+=startup_riscv.o vector_riscv.o
 endif
@@ -505,6 +509,15 @@ endif
 
 ifeq ($(TARGET),nxp_ls1028a)
   LSCRIPT_TEMPLATE:=AARCH64-ls1028a.ld
+endif
+
+ifeq ($(TARGET),versal)
+  LSCRIPT_TEMPLATE:=AARCH64.ld
+  LDFLAGS+=-nostdlib
+endif
+
+ifeq ($(TARGET),zynq)
+  LSCRIPT_TEMPLATE:=AARCH64.ld
 endif
 
 ifeq ($(TARGET),pic32ck)

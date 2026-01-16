@@ -604,6 +604,15 @@ endif
 ifeq ($(NO_QNX),1)
   CFLAGS+=-D"NO_QNX"
 endif
+ifeq ($(SKIP_GIC_INIT),1)
+  CFLAGS+=-D"SKIP_GIC_INIT"
+endif
+ifeq ($(BOOT_EL1),1)
+  CFLAGS+=-D"BOOT_EL1"
+endif
+ifeq ($(BOOT_BENCHMARK),1)
+  CFLAGS+=-D"BOOT_BENCHMARK"
+endif
 
 ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+= -D"ALLOW_DOWNGRADE"
