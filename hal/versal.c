@@ -272,6 +272,21 @@ void hal_delay_us(uint32_t us)
         ;
 }
 
+/**
+ * Get current time in microseconds (for benchmarking)
+ */
+uint64_t hal_get_timer_us(void)
+{
+    uint64_t cntpct = timer_get_count();
+    uint64_t cntfrq = timer_get_freq();
+
+    if (cntfrq == 0)
+        cntfrq = TIMER_CLK_FREQ;
+
+    /* Convert to microseconds: (count * 1000000) / freq */
+    return (cntpct * 1000000ULL) / cntfrq;
+}
+
 
 /* ============================================================================
  * QSPI Flash Driver (GQSPI)
@@ -473,7 +488,9 @@ static void flush_dcache_range(uintptr_t start, uintptr_t end)
     __asm__ volatile("dsb sy" : : : "memory");
 }
 
-/* Wait for DMA completion */
+/* Wait for DMA completion
+ * Returns: 0 on success, -1 on timeout
+ */
 static int qspi_dma_wait(void)
 {
     uint32_t timeout = GQSPIDMA_TIMEOUT_TRIES;
@@ -483,6 +500,8 @@ static int qspi_dma_wait(void)
 
     if (timeout == 0) {
         QSPI_DEBUG_PRINTF("QSPI: DMA timeout\n");
+        /* Clear any pending interrupts */
+        GQSPIDMA_ISR = GQSPIDMA_ISR_ALL_MASK;
         return -1;
     }
 
@@ -782,10 +801,12 @@ static int qspi_transfer_qread_dma(QspiDev_t *dev, const uint8_t *cmd, uint32_t 
 
     /* DMA RX Phase */
     if (ret == 0 && rxLen > 0) {
-        uint32_t remaining = rxLen;
+        uint32_t remaining;
         uint32_t xferSz;
 
-        /* Check alignment - DMA requires cache-line aligned buffer */
+        /* Check alignment - DMA requires cache-line aligned buffer.
+         * If unaligned or not a multiple of 4 bytes, use temp buffer.
+         * CRITICAL: GenFIFO transfer size must match DMA size! */
         if (((uintptr_t)rxData & (GQSPI_DMA_ALIGN - 1)) || (rxLen & 3)) {
             /* Use temp buffer for unaligned data */
             dmaPtr = dma_tmpbuf;
@@ -798,6 +819,9 @@ static int qspi_transfer_qread_dma(QspiDev_t *dev, const uint8_t *cmd, uint32_t 
             dmaPtr = rxData;
             dmaLen = rxLen;
         }
+
+        /* GenFIFO must request the same number of bytes as DMA expects */
+        remaining = dmaLen;
 
         /* Setup DMA destination */
         GQSPIDMA_DST = ((uintptr_t)dmaPtr & 0xFFFFFFFFUL);
@@ -839,7 +863,7 @@ static int qspi_transfer_qread_dma(QspiDev_t *dev, const uint8_t *cmd, uint32_t 
         /* Invalidate cache after DMA */
         flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
 
-        /* Copy from temp buffer if needed */
+        /* Copy from temp buffer if needed (only copy requested bytes) */
         if (ret == 0 && useTemp) {
             memcpy(rxData, dmaPtr, rxLen);
         }
@@ -1224,11 +1248,12 @@ static void qspi_init(void)
     GQSPI_ISR = GQSPI_IXR_ALL_MASK;
     dsb();
 
-    /* Preserve PLM's CFG but switch to IO mode for our transfers
+    /* Preserve PLM's CFG but set IO mode for initial commands (ID read, etc.)
      * PLM: 0xA0080010 = DMA mode | manual start | WP_HOLD | CLK_POL
-     * Key: Keep manual start mode (bit 29) and clock settings */
+     * Key: Keep manual start mode (bit 29) and clock settings
+     * Note: qspi_transfer_qread_dma() will switch to DMA mode for reads */
     cfg = (cfg & ~GQSPI_CFG_MODE_EN_MASK);  /* Clear mode bits */
-    cfg |= GQSPI_CFG_MODE_EN_IO;            /* Set IO mode */
+    cfg |= GQSPI_CFG_MODE_EN_IO;            /* Set IO mode for init */
     GQSPI_CFG = cfg;
     dsb();
 
@@ -1236,6 +1261,18 @@ static void qspi_init(void)
     GQSPI_TX_THRESH = 1;
     GQSPI_RX_THRESH = 1;
     GQSPI_GF_THRESH = 16;
+
+#ifndef GQSPI_MODE_IO
+    /* Initialize DMA controller - this was missing compared to zynq.c!
+     * Without this, DMA transfers can hang or timeout because the DMA
+     * controller is in an undefined state after PLM handoff.
+     */
+    GQSPIDMA_CTRL = GQSPIDMA_CTRL_DEF;
+    GQSPIDMA_CTRL2 = GQSPIDMA_CTRL2_DEF;
+    GQSPIDMA_ISR = GQSPIDMA_ISR_ALL_MASK;  /* Clear all pending interrupts */
+    GQSPIDMA_IER = GQSPIDMA_ISR_ALL_MASK;  /* Enable all interrupts */
+    dsb();
+#endif
 
     QSPI_DEBUG_PRINTF("QSPI: After config - CFG=0x%08x\n", GQSPI_CFG);
 
@@ -1353,9 +1390,35 @@ void hal_prepare_boot(void)
     }
 #endif
 
-    /* Memory barriers before jumping to application */
-    dsb();
-    isb();
+    /* Clean and invalidate caches for the loaded application.
+     * The application was written to RAM via D-cache, but the CPU will
+     * fetch instructions via I-cache from main memory. We must:
+     * 1. Clean D-cache (flush dirty data to memory)
+     * 2. Invalidate I-cache (ensure fresh instruction fetch)
+     */
+
+    /* Clean entire D-cache to Point of Coherency */
+    __asm__ volatile("dsb sy");
+
+    /* Clean D-cache for application region (0x10000000, 1MB should be enough) */
+    {
+        uintptr_t addr;
+        uintptr_t end = 0x10000000 + (1 * 1024 * 1024);
+        for (addr = 0x10000000; addr < end; addr += 64) {
+            /* DC CVAC - Clean data cache line by VA to PoC */
+            __asm__ volatile("dc cvac, %0" : : "r"(addr));
+        }
+    }
+
+    /* Data synchronization barrier - ensure clean completes */
+    __asm__ volatile("dsb sy");
+
+    /* Invalidate instruction cache to ensure fresh code is fetched */
+    __asm__ volatile("ic iallu");
+
+    /* Ensure cache invalidation completes before jumping */
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
 }
 
 #ifdef MMU
@@ -1504,9 +1567,14 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         return -1;
     }
 
+    QSPI_DEBUG_PRINTF("ext_flash_read: addr=0x%lx len=%d\n",
+                      (unsigned long)address, len);
+
     if (qspiDev.stripe) {
         /* For dual parallel the address is divided by 2 */
         addr /= 2;
+        QSPI_DEBUG_PRINTF("  stripe mode: flash_addr=0x%lx\n",
+                          (unsigned long)addr);
     }
 
     /* Use Quad Read command (0x6C) with 4-byte address */
@@ -1523,7 +1591,22 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     ret = qspi_transfer_qread_dma(&qspiDev, cmd, 5, data, len, GQSPI_DUMMY_READ);
 #endif
 
-    return ret;
+    /* On DMA timeout, fill buffer with 0xFF to simulate unwritten flash.
+     * This handles reads to partition trailer areas that haven't been written.
+     * wolfBoot will see 0xFF (not magic) and handle appropriately. */
+    if (ret != 0) {
+        memset(data, 0xFF, len);
+    }
+
+    QSPI_DEBUG_PRINTF("ext_flash_read: ret=%d data[0-7]=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                      ret,
+                      len > 0 ? data[0] : 0, len > 1 ? data[1] : 0,
+                      len > 2 ? data[2] : 0, len > 3 ? data[3] : 0,
+                      len > 4 ? data[4] : 0, len > 5 ? data[5] : 0,
+                      len > 6 ? data[6] : 0, len > 7 ? data[7] : 0);
+
+    /* Return bytes read on success (like zynq.c) */
+    return (ret == 0) ? len : ret;
 }
 
 int ext_flash_erase(uintptr_t address, int len)
