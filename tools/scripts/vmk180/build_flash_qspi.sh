@@ -2,7 +2,8 @@
 # Build, flash QSPI, and boot VMK180 - all in one script
 #
 # Usage:
-#   ./build_flash_qspi.sh              # Full build, flash, and boot
+#   ./build_flash_qspi.sh              # Full build, flash, and boot wolfBoot
+#   ./build_flash_qspi.sh --test-app   # Full build + flash test app to boot partition
 #   ./build_flash_qspi.sh --boot-sdcard # Test SD card boot mode only
 #   ./build_flash_qspi.sh --boot-qspi   # Test QSPI boot mode only
 #
@@ -234,15 +235,31 @@ test_boot() {
 }
 
 # Check for test modes
+FLASH_TEST_APP=false
 case "${1:-}" in
     test-boot|--boot-sdcard) test_boot boot_sdcard "boot-sdcard" ;;
     --boot-qspi) test_boot boot_qspi "boot-qspi" ;;
+    --test-app) FLASH_TEST_APP=true ;;
 esac
 
 # Build wolfBoot
 log_info "Building wolfBoot..."
 cp config/examples/versal_vmk180.config .config
 make clean && make
+
+# Build test app if requested
+if [ "$FLASH_TEST_APP" = "true" ]; then
+    log_info "Building and signing test application..."
+    make test-app/image.bin
+    make test-app/image_v1_signed.bin
+
+    testapp_size=$(stat -c%s "test-app/image_v1_signed.bin")
+    log_info "Test app size: $testapp_size bytes"
+
+    # Copy test app to TFTP directory
+    cp test-app/image_v1_signed.bin "${TFTP_DIR}/"
+    log_ok "Test app copied to TFTP: ${TFTP_DIR}/image_v1_signed.bin"
+fi
 
 # Generate BOOT.BIN
 log_info "Generating BOOT.BIN..."
@@ -275,6 +292,14 @@ filesize=$(stat -c%s "${TFTP_DIR}/BOOT.BIN")
 filesize_hex=$(printf "0x%x" $filesize)
 log_info "BOOT.BIN size: $filesize bytes"
 
+# Get test app size if flashing it
+testapp_size_hex="0x0"
+if [ "$FLASH_TEST_APP" = "true" ]; then
+    testapp_size=$(stat -c%s "${TFTP_DIR}/image_v1_signed.bin")
+    testapp_size_hex=$(printf "0x%x" $testapp_size)
+    log_info "Test app size: $testapp_size bytes"
+fi
+
 # Flash QSPI via U-Boot TFTP
 log_info "Flashing QSPI..."
 boot_sdcard
@@ -283,6 +308,8 @@ expect <<EXPECT_EOF
 set timeout 90
 set pty "$UART_PTY"
 set filesize_hex "$filesize_hex"
+set testapp_size_hex "$testapp_size_hex"
+set flash_test_app "$FLASH_TEST_APP"
 set board_ip "$BOARD_IP"
 set server_ip "$SERVER_IP"
 
@@ -421,11 +448,45 @@ expect {
 }
 set timeout 90
 
-puts "QSPI flash and verification complete!"
+puts "BOOT.BIN flash and verification complete!"
+
+# Flash test app if requested
+if { \$flash_test_app eq "true" } {
+    puts ""
+    puts "=== Flashing test app to boot partition at 0x800000 ==="
+
+    puts "Downloading test app via TFTP..."
+    send "tftpboot 0x10000000 image_v1_signed.bin\r"
+    expect {
+        "Bytes transferred" { puts "TFTP download successful" }
+        "Error" { puts "TFTP download failed"; exit 1 }
+        timeout { puts "TFTP timeout"; exit 1 }
+    }
+    expect "Versal>"
+
+    puts "Erasing boot partition at 0x800000 (128KB sector)..."
+    send "sf erase 0x800000 0x20000\r"
+    expect {
+        "Versal>" { puts "Erase complete" }
+        timeout { puts "Erase timeout"; exit 1 }
+    }
+
+    puts "Writing test app to 0x800000..."
+    send "sf write 0x10000000 0x800000 \$testapp_size_hex\r"
+    expect {
+        "Versal>" { puts "Write complete" }
+        timeout { puts "Write timeout"; exit 1 }
+    }
+
+    puts "Test app flashed to boot partition!"
+}
+
+puts ""
+puts "All flash operations complete!"
 close
 EXPECT_EOF
 
-log_ok "Flash and verification complete!"
+log_ok "Flash operations complete!"
 
 # Restart continuous UART logging after expect exits
 log_info "Restarting continuous UART logging..."

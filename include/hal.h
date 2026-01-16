@@ -53,8 +53,8 @@ void hal_deinit();
 
 void hal_init(void);
 
-#ifdef WOLFBOOT_UPDATE_DISK
-/* Timer functions (platform-specific) */
+/* Timer functions (platform-specific, used for benchmarking) */
+#if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
 uint64_t hal_get_timer_us(void);
 #endif
 

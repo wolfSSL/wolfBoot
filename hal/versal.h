@@ -61,6 +61,21 @@
 
 #endif /* USE_BUILTIN_STARTUP */
 
+/* ============================================================================
+ * Versal-specific Boot Defaults
+ * ============================================================================
+ * SKIP_GIC_INIT: Versal uses GICv3 (not GICv2 like ZynqMP).
+ *                BL31 handles GIC initialization, so skip gicv2_init_secure().
+ * BOOT_EL1:      wolfBoot runs at EL2, but applications (Linux, test-app)
+ *                expect EL1. Transition from EL2 to EL1 before jumping to app.
+ */
+#ifndef SKIP_GIC_INIT
+#define SKIP_GIC_INIT 1
+#endif
+#ifndef BOOT_EL1
+#define BOOT_EL1 1
+#endif
+
 
 /* ============================================================================
  * Memory Map
