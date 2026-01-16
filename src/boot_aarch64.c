@@ -25,6 +25,11 @@
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
 
+/* Include platform-specific header for EL configuration defines */
+#ifdef TARGET_versal
+#include "hal/versal.h"
+#endif
+
 /* Linker exported variables */
 extern unsigned int __bss_start__;
 extern unsigned int __bss_end__;
@@ -47,12 +52,15 @@ extern void gicv2_init_secure(void);
 #define SKIP_GIC_INIT
 #endif
 
+#ifndef TARGET_versal
+/* current_el() is defined in hal/versal.h for Versal */
 unsigned int current_el(void)
 {
     unsigned long el;
     asm volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
     return (unsigned int)((el >> 2) & 0x3U);
 }
+#endif
 
 #if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
 /**
@@ -66,83 +74,7 @@ unsigned int current_el(void)
  * @param entry_point Address to jump to in EL1
  * @param dts_addr Device tree address (passed in x0 to application)
  */
-static void RAMFUNCTION el2_to_el1_boot(uintptr_t entry_point, uintptr_t dts_addr)
-{
-    /* 1. Configure timer access for EL1 */
-    asm volatile(
-        "mrs x0, cnthctl_el2\n\t"
-        "orr x0, x0, #3\n\t"      /* EL1PCEN | EL1PCTEN - enable EL1 timer access */
-        "msr cnthctl_el2, x0\n\t"
-        "msr cntvoff_el2, xzr"    /* Clear virtual timer offset */
-        ::: "x0"
-    );
-
-    /* 2. Configure virtual processor ID */
-    asm volatile(
-        "mrs x0, midr_el1\n\t"
-        "msr vpidr_el2, x0\n\t"
-        "mrs x0, mpidr_el1\n\t"
-        "msr vmpidr_el2, x0"
-        ::: "x0"
-    );
-
-    /* 3. Disable coprocessor traps to EL2 */
-    asm volatile(
-        "mov x0, #0x33ff\n\t"     /* CPTR_EL2: RES1 bits, no traps */
-        "msr cptr_el2, x0\n\t"
-        "msr hstr_el2, xzr\n\t"   /* No traps to EL2 on system registers */
-        "mov x0, #(3 << 20)\n\t"  /* CPACR_EL1: Full FP/SIMD access */
-        "msr cpacr_el1, x0"
-        ::: "x0"
-    );
-
-    /* 4. Initialize SCTLR_EL1 with safe defaults (RES1 bits, MMU/cache off) */
-    asm volatile(
-        "ldr x0, =0x30d00800\n\t" /* RES1 bits: 29,28,23,22,20,11 */
-        "msr sctlr_el1, x0"
-        ::: "x0"
-    );
-
-    /* 5. Migrate stack pointer and vector base to EL1 */
-    asm volatile(
-        "mov x0, sp\n\t"
-        "msr sp_el1, x0\n\t"
-        "mrs x0, vbar_el2\n\t"
-        "msr vbar_el1, x0"
-        ::: "x0"
-    );
-
-    /* 6. Configure HCR_EL2 - EL1 is AArch64, no hypervisor calls */
-    asm volatile(
-        "mov x0, #(1 << 31)\n\t"  /* RW: EL1 is AArch64 */
-        "orr x0, x0, #(1 << 29)\n\t" /* HCD: Disable HVC instruction */
-        "msr hcr_el2, x0"
-        ::: "x0"
-    );
-
-    /* 7. Set up SPSR_EL2 for return to EL1h with all interrupts masked */
-    asm volatile(
-        "mov x0, #0x3c4\n\t"      /* DAIF masked (0xF<<6) + M[4:0]=0b00100 (EL1h) */
-        "msr spsr_el2, x0"
-        ::: "x0"
-    );
-
-    /* 8. Set exception return address and DTB pointer, then ERET */
-    asm volatile(
-        "msr elr_el2, %0\n\t"     /* Entry point in ELR_EL2 */
-        "mov x0, %1\n\t"          /* DTB address in x0 (first arg) */
-        "mov x1, xzr\n\t"         /* Zero remaining argument registers */
-        "mov x2, xzr\n\t"
-        "mov x3, xzr\n\t"
-        "eret"
-        :
-        : "r"(entry_point), "r"(dts_addr)
-        : "x0", "x1", "x2", "x3"
-    );
-
-    /* Should never reach here */
-    __builtin_unreachable();
-}
+extern void el2_to_el1_boot(uintptr_t entry_point, uintptr_t dts_addr);
 #endif /* BOOT_EL1 && EL2_HYPERVISOR */
 
 void boot_entry_C(void)

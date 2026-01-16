@@ -198,8 +198,11 @@ InitEL3:
     orr    w1, w1, #(1 << 1)   /* Set IRQ bit (IRQs routed to EL3) */
     msr    SCR_EL3, x1
 
-    /* Configure cpu auxiliary control register EL1 */
-    ldr    x0,=0x80CA000          /* L1 Data prefetch control - 5, Enable device split throttle, 2 independent data prefetch streams */
+    /* Configure CPUACTLR_EL1 - read-modify-write to preserve BL31 workarounds:
+     * 859971, 1319367, CVE-2017-5715, CVE-2018-3639, CVE-2022-23960 */
+    mrs    x0, S3_1_C15_C2_0      /* Read current CPUACTLR_EL1 */
+    ldr    x1,=0x80CA000          /* L1 Data prefetch control - 5, Enable device split throttle, 2 independent data prefetch streams */
+    orr    x0, x0, x1              /* Merge with existing value */
 #if defined(CONFIG_ARM_ERRATA_855873) && CONFIG_ARM_ERRATA_855873
     /* Set ENDCCASCI bit in CPUACTLR_EL1 register, to execute data
      * cache clean operations as data cache clean and invalidate
@@ -1230,5 +1233,102 @@ gicv2_init_secure:
     str    w0, [x1, #4]           /* GICC_PMR */
 1:
     ret
+
+#if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+/*
+ * Transition from EL2 to EL1 and jump to application
+ *
+ * Parameters:
+ *   x0: entry_point - Address to jump to in EL1
+ *   x1: dts_addr - Device tree address (passed in x0 to application)
+ *
+ * This function configures the necessary system registers for EL1 operation
+ * and performs an exception return (ERET) to drop from EL2 to EL1.
+ *
+ * Based on ARM Architecture Reference Manual and U-Boot implementation.
+ */
+.global el2_to_el1_boot
+el2_to_el1_boot:
+    /* Save parameters - x0=entry_point, x1=dts_addr */
+    mov    x19, x0                /* Save entry_point in x19 */
+    mov    x20, x1                /* Save dts_addr in x20 */
+
+    /* 1. Configure timer access for EL1 */
+    mrs    x0, CNTHCTL_EL2
+    orr    x0, x0, #3             /* EL1PCEN | EL1PCTEN - enable EL1 timer access */
+    msr    CNTHCTL_EL2, x0
+    msr    CNTVOFF_EL2, xzr       /* Clear virtual timer offset */
+
+    /* 2. Configure virtual processor ID */
+    mrs    x0, MIDR_EL1
+    msr    VPIDR_EL2, x0
+    mrs    x0, MPIDR_EL1
+    msr    VMPIDR_EL2, x0
+
+    /* 3. Disable coprocessor traps to EL2 */
+    mov    x0, #0x33ff            /* CPTR_EL2: RES1 bits, no traps */
+    msr    CPTR_EL2, x0
+    msr    HSTR_EL2, xzr          /* No traps to EL2 on system registers */
+    mov    x0, #(3 << 20)         /* CPACR_EL1: Full FP/SIMD access */
+    msr    CPACR_EL1, x0
+
+    /* 4. Initialize SCTLR_EL1 with safe defaults (RES1 bits, MMU/cache off) */
+    /* RES1 bits: 29,28,23,22,20,11 = 0x30d00800 */
+    movz   x0, #0x800
+    movk   x0, #0x30d0, lsl #16
+    msr    SCTLR_EL1, x0
+
+    /* 5. Migrate stack pointer and vector base to EL1 */
+    /* SP_EL1 must be 16-byte aligned per ARM spec */
+    mov    x0, sp
+    bic    x0, x0, #0xF            /* Ensure 16-byte alignment */
+    msr    SP_EL1, x0
+    mrs    x0, VBAR_EL2
+    msr    VBAR_EL1, x0
+    dsb    sy                     /* Ensure SP_EL1 and VBAR_EL1 writes complete */
+    isb                            /* Ensure writes take effect */
+
+    /* 6. Configure HCR_EL2 - EL1 is AArch64, no hypervisor calls */
+    /* Check if PAuth (Pointer Authentication) is supported */
+    mrs    x0, ID_AA64ISAR1_EL1   /* Read ISA feature register */
+    mov    x1, #(0xF << 28)       /* GPI mask */
+    orr    x1, x1, #(0xF << 24)   /* GPA mask */
+    orr    x1, x1, #(0xF << 8)    /* API mask */
+    orr    x1, x1, #(0xF << 4)    /* APA mask */
+    tst    x0, x1                 /* Test if PAuth supported (Z=1 if not supported) */
+    mov    x0, #(1 << 31)         /* RW: EL1 is AArch64 */
+    orr    x0, x0, #(1 << 29)     /* HCD: Disable HVC instruction */
+    mov    x1, x0                 /* Copy base value */
+    orr    x1, x1, #(1 << 41)     /* API: Trap PAuth instructions */
+    orr    x1, x1, #(1 << 40)     /* APK: Trap PAuth key access */
+    csel   x0, x0, x1, eq         /* If PAuth not supported (eq), use x0 (base), else x1 (with traps) */
+    msr    HCR_EL2, x0
+    dsb    sy                     /* Ensure HCR_EL2 write completes */
+    isb                            /* Ensure HCR_EL2 takes effect */
+
+    /* 7. Set up SPSR_EL2 for return to EL1h with all interrupts masked */
+    /* M[3:0] = 0101 = EL1h (EL1 with SP_EL1) - NOT 0100 which is EL1t! */
+    /* M[4] = 0 = AArch64 mode (bit 4 must be 0 for AArch64, 1 for AArch32) */
+    /* DAIF = 0xF = all interrupts masked */
+    /* Value: 0x3C5 = (0xF << 6) | 0x5 */
+    movz   x0, #0x3C5             /* DAIF=0xF (bits 9:6), M[3:0]=0x5 (EL1h) */
+    msr    SPSR_EL2, x0
+    dsb    sy                     /* Ensure SPSR_EL2 write completes */
+    isb                            /* Ensure SPSR_EL2 takes effect */
+
+    /* 8. Set exception return address and DTB pointer, then ERET */
+    /* Critical: All register writes must complete before eret */
+    msr    ELR_EL2, x19           /* Entry point in ELR_EL2 */
+    mov    x0, x20                 /* DTB address in x0 (first arg) */
+    mov    x1, xzr                 /* Zero remaining argument registers */
+    mov    x2, xzr
+    mov    x3, xzr
+    dsb    sy                     /* Ensure all writes complete */
+    isb                            /* Ensure all effects are visible */
+    eret                           /* Exception return to EL1 */
+
+    /* Should never reach here */
+    b      .
+#endif /* BOOT_EL1 && EL2_HYPERVISOR */
 
 .end
