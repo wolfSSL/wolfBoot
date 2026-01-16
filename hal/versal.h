@@ -59,6 +59,14 @@
 /* ARM Errata */
 #define CONFIG_ARM_ERRATA_855873 1
 
+/* BL31-applied errata/CVEs (preserve when modifying CPUACTLR):
+ * - Erratum 859971
+ * - Erratum 1319367
+ * - CVE-2017-5715 (Spectre V2)
+ * - CVE-2018-3639 (SSB)
+ * - CVE-2022-23960
+ */
+
 #endif /* USE_BUILTIN_STARTUP */
 
 /* ============================================================================
@@ -519,7 +527,9 @@
     #define GQSPI_DUMMY_READ        8  /* Dummy clocks for Fast/Quad Read */
 #endif
 
+#ifndef XALIGNED
 #define XALIGNED(x) __attribute__((aligned(x)))
+#endif
 
 
 /* ============================================================================
