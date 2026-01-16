@@ -41,6 +41,7 @@
 #include "hal.h"
 #include "spi_flash.h"
 #include "printf.h"
+
 #include "wolfboot/wolfboot.h"
 #include "disk.h"
 #ifdef WOLFBOOT_ELF
@@ -93,10 +94,63 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #define DISK_BLOCK_SIZE 512
 #endif
 
+#ifdef DEBUG_UART
+/**
+ * Print the signing algorithm and hash algorithm used in this build
+ */
+static inline void print_signing_hash_info(void)
+{
+    const char *alg_name = "Unknown";
+    const char *hash_name = "Unknown";
+
+    #ifdef WOLFBOOT_SIGN_ED25519
+        alg_name = "ED25519";
+    #elif defined(WOLFBOOT_SIGN_ED448)
+        alg_name = "ED448";
+    #elif defined(WOLFBOOT_SIGN_ECC256)
+        alg_name = "ECC256";
+    #elif defined(WOLFBOOT_SIGN_ECC384)
+        alg_name = "ECC384";
+    #elif defined(WOLFBOOT_SIGN_ECC521)
+        alg_name = "ECC521";
+    #elif defined(WOLFBOOT_SIGN_RSA2048)
+        alg_name = "RSA2048";
+    #elif defined(WOLFBOOT_SIGN_RSA3072)
+        alg_name = "RSA3072";
+    #elif defined(WOLFBOOT_SIGN_RSA4096)
+        alg_name = "RSA4096";
+    #elif defined(WOLFBOOT_SIGN_LMS)
+        alg_name = "LMS";
+    #elif defined(WOLFBOOT_SIGN_XMSS)
+        alg_name = "XMSS";
+    #elif defined(WOLFBOOT_SIGN_ML_DSA)
+        alg_name = "ML-DSA";
+    #endif
+
+    #ifdef WOLFBOOT_HASH_SHA256
+        hash_name = "SHA256";
+    #elif defined(WOLFBOOT_HASH_SHA384)
+        hash_name = "SHA384";
+    #elif defined(WOLFBOOT_HASH_SHA512)
+        hash_name = "SHA512";
+    #elif defined(WOLFBOOT_HASH_SHA3_384)
+        hash_name = "SHA3-384";
+    #endif
+
+    wolfBoot_printf("Signing algorithm: %s, Hash algorithm: %s\n", alg_name, hash_name);
+}
+#endif /* DEBUG_UART */
+
 #ifdef DISK_ENCRYPT
 
 /* Module-level storage for encryption key */
 static uint8_t disk_encrypt_key[ENCRYPT_KEY_SIZE];
+
+/* AES context for disk encryption/decryption */
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+static Aes disk_aes_dec;
+static int disk_aes_initialized = 0;
+#endif
 
 /**
  * @brief Get the version from an already-decrypted header.
@@ -151,32 +205,39 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
  *
  * @param block_offset Block offset for IV counter (0 = start of image).
  */
+static int disk_crypto_init(void)
+{
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    if (disk_aes_initialized)
+        return 0;
+
+    wc_AesInit(&disk_aes_dec, NULL, INVALID_DEVID);
+    /* Set key with IV directly - matches sign.c behavior.
+     * sign.c reads the IV from the key file and passes it directly to
+     * wc_AesSetKeyDirect. The IV is already in the correct format (16 bytes).
+     * wc_AesCtrEncrypt will handle counter increment internally. */
+    wc_AesSetKeyDirect(&disk_aes_dec, disk_encrypt_key, ENCRYPT_KEY_SIZE,
+                       disk_encrypt_nonce, AES_ENCRYPTION);
+    disk_aes_initialized = 1;
+    return 0;
+#elif defined(ENCRYPT_WITH_CHACHA)
+    /* ChaCha initialization handled elsewhere */
+    return 0;
+#else
+    return -1;
+#endif
+}
+
 static void disk_crypto_set_iv(uint32_t block_offset)
 {
 #if defined(ENCRYPT_WITH_CHACHA)
     wc_Chacha_SetIV(&chacha, disk_encrypt_nonce, block_offset);
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
-    /* For AES CTR, we need to construct the IV with the counter.
-     * The sign tool uses the IV directly without byte-reversal,
-     * so we must match that behavior here. */
-    uint8_t iv[ENCRYPT_BLOCK_SIZE];
-    uint32_t ctr;
-
-    /* Copy nonce/IV (first 12 bytes for CTR nonce, last 4 for counter) */
-    memcpy(iv, disk_encrypt_nonce, ENCRYPT_NONCE_SIZE);
-
-    /* Add block offset to the counter portion (last 4 bytes, big-endian) */
-    /* The IV from sign.c is already in the correct format, we just need
-     * to add the block offset to the counter portion */
-    ctr = ((uint32_t)iv[12] << 24) | ((uint32_t)iv[13] << 16) |
-          ((uint32_t)iv[14] << 8) | (uint32_t)iv[15];
-    ctr += block_offset;
-    iv[12] = (uint8_t)(ctr >> 24);
-    iv[13] = (uint8_t)(ctr >> 16);
-    iv[14] = (uint8_t)(ctr >> 8);
-    iv[15] = (uint8_t)(ctr);
-
-    wc_AesSetIV(&aes_dec, iv);
+    /* For AES CTR mode, we don't need to reset the IV here.
+     * The IV was already set in disk_crypto_init() via wc_AesSetKeyDirect.
+     * wc_AesCtrEncrypt handles counter increment internally.
+     * This function is kept for compatibility but does nothing for AES. */
+    (void)block_offset;
 #endif
 }
 
@@ -195,11 +256,27 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
 {
     uint32_t magic;
 
-    /* Reset IV to start of image (block 0) */
+    /* Reset AES context for header decryption.
+     * Each partition's header is encrypted starting from counter 0,
+     * so we need to reset the context before each header decryption. */
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    /* Reinitialize AES context to reset counter to IV from key file */
+    wc_AesInit(&disk_aes_dec, NULL, INVALID_DEVID);
+    wc_AesSetKeyDirect(&disk_aes_dec, disk_encrypt_key, ENCRYPT_KEY_SIZE,
+                       disk_encrypt_nonce, AES_ENCRYPTION);
+#elif defined(ENCRYPT_WITH_CHACHA)
+    /* Initialize disk crypto if not already done */
+    if (disk_crypto_init() != 0)
+        return -1;
     disk_crypto_set_iv(0);
+#endif
 
     /* Decrypt header - CTR mode handles counter increment internally */
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    wc_AesCtrEncrypt(&disk_aes_dec, dst, src, IMAGE_HEADER_SIZE);
+#elif defined(ENCRYPT_WITH_CHACHA)
     crypto_decrypt(dst, src, IMAGE_HEADER_SIZE);
+#endif
 
     magic = *((uint32_t*)dst);
     if (magic != WOLFBOOT_MAGIC)
@@ -220,11 +297,37 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
  */
 static int decrypt_image(uint8_t *data, uint32_t size)
 {
-    /* Reset IV to start of image (block 0) */
-    disk_crypto_set_iv(0);
+    uint32_t firmware_size = size - IMAGE_HEADER_SIZE;
 
-    /* Decrypt entire image - CTR mode handles counter increment internally */
+    /* Reset AES context for full image decryption.
+     * sign.c encrypts the entire file (header + firmware) as one continuous stream
+     * starting from counter 0. We need to decrypt the header first to advance
+     * the counter, then decrypt the firmware. */
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    /* Reinitialize AES context to reset counter to IV from key file */
+    wc_AesInit(&disk_aes_dec, NULL, INVALID_DEVID);
+    wc_AesSetKeyDirect(&disk_aes_dec, disk_encrypt_key, ENCRYPT_KEY_SIZE,
+                       disk_encrypt_nonce, AES_ENCRYPTION);
+#elif defined(ENCRYPT_WITH_CHACHA)
+    /* Initialize disk crypto if not already done */
+    if (disk_crypto_init() != 0)
+        return -1;
+    disk_crypto_set_iv(0);
+#endif
+
+    /* Decrypt header first to advance counter (even though we already have it decrypted,
+     * we need to advance the counter to the correct position for firmware) */
+#if defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
+    /* Decrypt header to advance counter - we'll overwrite with correct decrypted header later */
+    wc_AesCtrEncrypt(&disk_aes_dec, data, data, IMAGE_HEADER_SIZE);
+
+    /* Now decrypt firmware starting from where counter left off */
+    wc_AesCtrEncrypt(&disk_aes_dec, data + IMAGE_HEADER_SIZE,
+                     data + IMAGE_HEADER_SIZE, firmware_size);
+#elif defined(ENCRYPT_WITH_CHACHA)
+    /* Decrypt entire image */
     crypto_decrypt(data, data, size);
+#endif
 
     return 0;
 }
@@ -291,6 +394,11 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Error opening disk %d\r\n", BOOT_DISK);
         wolfBoot_panic();
     }
+
+#ifdef DEBUG_UART
+    /* Print signing and hash algorithm before loading from disk */
+    print_signing_hash_info();
+#endif
 
     wolfBoot_printf("Checking primary OS image in %d,%d...\r\n", BOOT_DISK,
             BOOT_PART_A);
