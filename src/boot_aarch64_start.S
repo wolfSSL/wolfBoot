@@ -26,6 +26,10 @@
 #include "hal/zynq.h"
 #endif
 
+#ifdef TARGET_versal
+#include "hal/versal.h"
+#endif
+
 #ifdef TARGET_nxp_ls1028a
 #include "hal/nxp_ls1028a.h"
 #endif
@@ -78,10 +82,16 @@
 .set L1Table,     MMUTableL1
 .set L2Table,     MMUTableL2
 .set vector_base, _vector_table
-.set rvbar_base,  0xFD5C0040
 
-# Cortex-A53 timestamp clock frequency
+#ifdef TARGET_versal
+/* Versal: RVBAR is handled by PLM, not accessible from APU in JTAG mode */
+/* Cortex-A72 timestamp clock frequency (from Versal HW) */
+.set counterfreq, 100000000
+#else
+.set rvbar_base,  0xFD5C0040
+/* Cortex-A53 timestamp clock frequency */
 .set counterfreq, 99990005
+#endif
 
 .set MODE_EL1,    0x5
 .set DAIF_BIT,    0x1C0
@@ -142,6 +152,9 @@ InitEL3:
     msr    VBAR_EL3,x1
 
     /* Set reset vector address */
+    /* Note: On Versal, RVBAR is handled by PLM and APU_DUAL_CSR is not
+     * accessible in JTAG boot mode. Skip RVBAR write for Versal. */
+#if !defined(SKIP_RVBAR) || SKIP_RVBAR == 0
     /* Get the cpu ID */
     mrs    x0, MPIDR_EL1
     and    x0, x0, #0xFF
@@ -153,6 +166,7 @@ InitEL3:
     add    w2, w2, w0
     /* store vector base address to RVBAR */
     str    x1, [x2]
+#endif
 
     /* Define stack pointer for current exception level */
     ldr    x2,=EL3_stack
@@ -184,8 +198,11 @@ InitEL3:
     orr    w1, w1, #(1 << 1)   /* Set IRQ bit (IRQs routed to EL3) */
     msr    SCR_EL3, x1
 
-    /* Configure cpu auxiliary control register EL1 */
-    ldr    x0,=0x80CA000          /* L1 Data prefetch control - 5, Enable device split throttle, 2 independent data prefetch streams */
+    /* Configure CPUACTLR_EL1 - read-modify-write to preserve BL31 workarounds:
+     * 859971, 1319367, CVE-2017-5715, CVE-2018-3639, CVE-2022-23960 */
+    mrs    x0, S3_1_C15_C2_0      /* Read current CPUACTLR_EL1 */
+    ldr    x1,=0x80CA000          /* L1 Data prefetch control - 5, Enable device split throttle, 2 independent data prefetch streams */
+    orr    x0, x0, x1              /* Merge with existing value */
 #if defined(CONFIG_ARM_ERRATA_855873) && CONFIG_ARM_ERRATA_855873
     /* Set ENDCCASCI bit in CPUACTLR_EL1 register, to execute data
      * cache clean operations as data cache clean and invalidate
@@ -210,6 +227,7 @@ InitEL3:
     dsb    sy
     isb
 
+#ifndef NO_MMU
     ldr    x1, =L0Table           /* Get address of level 0 for TTBR0_EL3 */
     msr    TTBR0_EL3, x1          /* Set TTBR0_EL3 */
 
@@ -227,14 +245,21 @@ InitEL3:
 
     /**********************************************
     * Set up TCR_EL3
-    * Physical Address Size PS =  010 -> 40bits 1TB
     * Granual Size TG0 = 00 -> 4KB
-    * size offset of the memory region T0SZ = 24 -> (region size 2^(64-24) = 2^40)
     ***************************************************/
+#ifdef TARGET_versal
+    /* Versal: Physical Address Size PS = 100 -> 44bits 16TB
+     *         T0SZ = 20 -> (region size 2^(64-20) = 2^44) */
+    ldr    x1,=0x80843514
+#else
+    /* ZynqMP: Physical Address Size PS = 010 -> 40bits 1TB
+     *         T0SZ = 24 -> (region size 2^(64-24) = 2^40) */
     ldr    x1,=0x80823518
+#endif
 
     msr    TCR_EL3, x1
     isb
+#endif /* !NO_MMU */
 
     /* Enable SError Exception for asynchronous abort */
     mrs    x1,DAIF
@@ -243,10 +268,14 @@ InitEL3:
 
     /* Configure SCTLR_EL3 */
     mov    x1, #0                 /* Most of the SCTLR_EL3 bits are unknown at reset */
+#ifndef NO_MMU
     orr    x1, x1, #(1 << 12)     /* Enable I cache */
     orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
     orr    x1, x1, #(1 << 2)      /* Enable caches */
     orr    x1, x1, #(1 << 0)      /* Enable MMU */
+#else
+    orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
+#endif
     msr    SCTLR_EL3, x1
     dsb    sy
     isb
@@ -280,6 +309,7 @@ InitEL2:
     dsb    sy
     isb
 
+#ifndef NO_MMU
     ldr    x1, =L0Table           /* Get address of level 0 for TTBR0_EL2 */
     msr    TTBR0_EL2, x1          /* Set TTBR0_EL2 */
 
@@ -297,21 +327,32 @@ InitEL2:
 
     /**********************************************
     * Set up TCR_EL2
-    * Physical Address Size PS =  010 -> 40bits 1TB
     * Granual Size TG0 = 00 -> 4KB
-    * size offset of the memory region T0SZ = 24 -> (region size 2^(64-24) = 2^40)
     ***************************************************/
+#ifdef TARGET_versal
+    /* Versal: Physical Address Size PS = 100 -> 44bits 16TB
+     *         T0SZ = 20 -> (region size 2^(64-20) = 2^44) */
+    ldr    x1,=0x80843514
+#else
+    /* ZynqMP: Physical Address Size PS = 010 -> 40bits 1TB
+     *         T0SZ = 24 -> (region size 2^(64-24) = 2^40) */
     ldr    x1,=0x80823518
+#endif
 
     msr    TCR_EL2, x1
     isb
 
-    /* Enable ICache */
+    /* Configure SCTLR_EL2 */
     mrs    x1, SCTLR_EL2
     orr    x1, x1, #(1 << 12)     /* Enable ICache */
     orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
     orr    x1, x1, #(1 << 2)      /* Enable DCaches */
     orr    x1, x1, #(1 << 0)      /* Enable MMU */
+#else
+    /* Configure SCTLR_EL2 - no MMU/cache */
+    mov    x1, #0
+    orr    x1, x1, #(1 << 3)      /* Enable SP alignment check */
+#endif
     msr    SCTLR_EL2, x1
     dsb    sy
     isb
@@ -364,6 +405,7 @@ InitEL1:
     dsb    sy
     isb
 
+#ifndef NO_MMU
     ldr    x1, =L0Table           /* Get address of level 0 for TTBR0_EL1 */
     msr    TTBR0_EL1, x1          /* Set TTBR0_EL1 */
 
@@ -381,28 +423,37 @@ InitEL1:
 
     /**********************************************
     * Set up TCR_EL1
-    * Physical Address Size PS =  010 -> 44bits 16TB
     * Granual Size TG0 = 00 -> 4KB
-    * size offset of the memory region T0SZ = 24 -> (region size 2^(64-24) = 2^40)
     ***************************************************/
+#ifdef TARGET_versal
+    /* Versal: Physical Address Size PS = 100 -> 44bits 16TB
+     *         T0SZ = 20 -> (region size 2^(64-20) = 2^44) */
+    ldr    x1,=0x485800514
+#else
+    /* ZynqMP: Physical Address Size PS = 010 -> 40bits 1TB
+     *         T0SZ = 24 -> (region size 2^(64-24) = 2^40) */
     ldr    x1,=0x285800518
+#endif
 
     msr    TCR_EL1, x1
     isb
+#endif /* !NO_MMU */
 
     /* Enable SError Exception for asynchronous abort */
     mrs    x1,DAIF
     bic    x1,x1,#(0x1<<8)
     msr    DAIF,x1
 
-    /* Enable MMU */
+    /* Configure SCTLR_EL1 */
     mov    x1,#0x0
     orr    x1, x1, #(1 << 18)     /* Set WFE non trapping */
     orr    x1, x1, #(1 << 17)     /* Set WFI non trapping */
     orr    x1, x1, #(1 << 5)      /* Set CP15 barrier enabled */
-    orr    x1, x1, #(1 << 12)     /* Set I bit */
-    orr    x1, x1, #(1 << 2)      /* Set C bit */
-    orr    x1, x1, #(1 << 0)      /* Set M bit */
+#ifndef NO_MMU
+    orr    x1, x1, #(1 << 12)     /* Set I bit (ICache) */
+    orr    x1, x1, #(1 << 2)      /* Set C bit (DCache) */
+    orr    x1, x1, #(1 << 0)      /* Set M bit (MMU) */
+#endif
     msr    SCTLR_EL1, x1
     isb
 
@@ -633,10 +684,19 @@ MMUTableL2:
 .set    SECT, SECT+0x200000
 .endr
 
+#ifdef TARGET_versal
+/* Versal: LPD/PMC peripherals at 0xF0000000 - 0xF7FFFFFF (includes QSPI @ 0xF1030000) */
+.rept   0x040                  /* 0xF000_0000 - 0xF7FF_FFFF */
+.8byte  SECT + Device          /* 128MB LPD peripherals (QSPI, I2C, etc) */
+.set    SECT, SECT+0x200000
+.endr
+#else
+/* ZynqMP: This region is reserved */
 .rept   0x040                  /* 0xF000_0000 - 0xF7FF_FFFF */
 .8byte  SECT + reserved        /* 128MB Reserved */
 .set    SECT, SECT+0x200000
 .endr
+#endif
 
 .rept   0x8                    /* 0xF800_0000 - 0xF8FF_FFFF */
 .8byte  SECT + Device          /* 16MB coresight */
@@ -840,6 +900,8 @@ SynchronousInterruptHandler:
 /* Check if the Synchronous abort is occurred due to floating point access. */
 #if defined(EL3_SECURE) && EL3_SECURE == 1
     mrs    x0, ESR_EL3
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, ESR_EL2
 #else
     mrs    x0, ESR_EL1
 #endif
@@ -857,6 +919,10 @@ SynchronousInterruptHandler:
     mrs    x1,CPTR_EL3
     bic    x1, x1, #(0x1<<10)
     msr    CPTR_EL3, x1
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x1,CPTR_EL2
+    orr    x1, x1, #(0x3 << 20)   /* Clear TFP bit to enable FP/SIMD */
+    msr    CPTR_EL2, x1
 #else
     mrs    x1,CPACR_EL1
     orr    x1, x1, #(0x1<<20)
@@ -898,6 +964,10 @@ IRQInterruptHandler:
     mrs    x0, CPTR_EL3
     mrs    x1, ELR_EL3
     mrs    x2, SPSR_EL3
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    mrs    x1, ELR_EL2
+    mrs    x2, SPSR_EL2
 #else
     mrs    x0, CPACR_EL1
     mrs    x1, ELR_EL1
@@ -911,6 +981,10 @@ IRQInterruptHandler:
     mrs    x1,CPTR_EL3
     orr    x1, x1, #(0x1<<10)
     msr    CPTR_EL3, x1
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x1,CPTR_EL2
+    bic    x1, x1, #(0x3<<20)    /* Set TFP bits to trap FP/SIMD */
+    msr    CPTR_EL2, x1
 #else
     mrs    x1,CPACR_EL1
     bic    x1, x1, #(0x1<<20)
@@ -928,6 +1002,10 @@ IRQInterruptHandler:
     mrs    x0, CPTR_EL3
     ands   x0, x0, #(0x1<<10)
     bne    RestorePrevState
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    ands   x0, x0, #(0x3<<20)
+    bne    RestorePrevState
 #else
     mrs    x0,CPACR_EL1
     ands   x0, x0, #(0x1<<20)
@@ -944,6 +1022,10 @@ RestorePrevState:
     msr    CPTR_EL3, x0
     msr    ELR_EL3, x1
     msr    SPSR_EL3, x2
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    msr    CPTR_EL2, x0
+    msr    ELR_EL2, x1
+    msr    SPSR_EL2, x2
 #else
     msr    CPACR_EL1, x0
     msr    ELR_EL1, x1
@@ -960,6 +1042,10 @@ FIQInterruptHandler:
     mrs    x0, CPTR_EL3
     mrs    x1, ELR_EL3
     mrs    x2, SPSR_EL3
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    mrs    x1, ELR_EL2
+    mrs    x2, SPSR_EL2
 #else
     mrs    x0, CPACR_EL1
     mrs    x1, ELR_EL1
@@ -973,6 +1059,10 @@ FIQInterruptHandler:
     mrs    x1,CPTR_EL3
     orr    x1, x1, #(0x1<<10)
     msr    CPTR_EL3, x1
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x1,CPTR_EL2
+    bic    x1, x1, #(0x3<<20)
+    msr    CPTR_EL2, x1
 #else
     mrs    x1,CPACR_EL1
     bic    x1, x1, #(0x1<<20)
@@ -989,6 +1079,10 @@ FIQInterruptHandler:
     mrs    x0, CPTR_EL3
     ands   x0, x0, #(0x1<<10)
     bne    RestorePrevStatefiq
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    mrs    x0, CPTR_EL2
+    ands   x0, x0, #(0x3<<20)
+    bne    RestorePrevStatefiq
 #else
     mrs    x0,CPACR_EL1
     ands   x0, x0, #(0x1<<20)
@@ -1001,10 +1095,14 @@ FIQInterruptHandler:
 RestorePrevStatefiq:
     ldr    x2,[sp],0x10
     ldp    x0, x1, [sp],0x10
- #ifdef EL3_SECURE
+#if defined(EL3_SECURE) && EL3_SECURE == 1
     msr    CPTR_EL3, x0
     msr    ELR_EL3, x1
     msr    SPSR_EL3, x2
+#elif defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    msr    CPTR_EL2, x0
+    msr    ELR_EL2, x1
+    msr    SPSR_EL2, x2
 #else
     msr    CPACR_EL1, x0
     msr    ELR_EL1, x1
@@ -1135,5 +1233,102 @@ gicv2_init_secure:
     str    w0, [x1, #4]           /* GICC_PMR */
 1:
     ret
+
+#if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+/*
+ * Transition from EL2 to EL1 and jump to application
+ *
+ * Parameters:
+ *   x0: entry_point - Address to jump to in EL1
+ *   x1: dts_addr - Device tree address (passed in x0 to application)
+ *
+ * This function configures the necessary system registers for EL1 operation
+ * and performs an exception return (ERET) to drop from EL2 to EL1.
+ *
+ * Based on ARM Architecture Reference Manual and U-Boot implementation.
+ */
+.global el2_to_el1_boot
+el2_to_el1_boot:
+    /* Save parameters - x0=entry_point, x1=dts_addr */
+    mov    x19, x0                /* Save entry_point in x19 */
+    mov    x20, x1                /* Save dts_addr in x20 */
+
+    /* 1. Configure timer access for EL1 */
+    mrs    x0, CNTHCTL_EL2
+    orr    x0, x0, #3             /* EL1PCEN | EL1PCTEN - enable EL1 timer access */
+    msr    CNTHCTL_EL2, x0
+    msr    CNTVOFF_EL2, xzr       /* Clear virtual timer offset */
+
+    /* 2. Configure virtual processor ID */
+    mrs    x0, MIDR_EL1
+    msr    VPIDR_EL2, x0
+    mrs    x0, MPIDR_EL1
+    msr    VMPIDR_EL2, x0
+
+    /* 3. Disable coprocessor traps to EL2 */
+    mov    x0, #0x33ff            /* CPTR_EL2: RES1 bits, no traps */
+    msr    CPTR_EL2, x0
+    msr    HSTR_EL2, xzr          /* No traps to EL2 on system registers */
+    mov    x0, #(3 << 20)         /* CPACR_EL1: Full FP/SIMD access */
+    msr    CPACR_EL1, x0
+
+    /* 4. Initialize SCTLR_EL1 with safe defaults (RES1 bits, MMU/cache off) */
+    /* RES1 bits: 29,28,23,22,20,11 = 0x30d00800 */
+    movz   x0, #0x800
+    movk   x0, #0x30d0, lsl #16
+    msr    SCTLR_EL1, x0
+
+    /* 5. Migrate stack pointer and vector base to EL1 */
+    /* SP_EL1 must be 16-byte aligned per ARM spec */
+    mov    x0, sp
+    bic    x0, x0, #0xF            /* Ensure 16-byte alignment */
+    msr    SP_EL1, x0
+    mrs    x0, VBAR_EL2
+    msr    VBAR_EL1, x0
+    dsb    sy                     /* Ensure SP_EL1 and VBAR_EL1 writes complete */
+    isb                            /* Ensure writes take effect */
+
+    /* 6. Configure HCR_EL2 - EL1 is AArch64, no hypervisor calls */
+    /* Check if PAuth (Pointer Authentication) is supported */
+    mrs    x0, ID_AA64ISAR1_EL1   /* Read ISA feature register */
+    mov    x1, #(0xF << 28)       /* GPI mask */
+    orr    x1, x1, #(0xF << 24)   /* GPA mask */
+    orr    x1, x1, #(0xF << 8)    /* API mask */
+    orr    x1, x1, #(0xF << 4)    /* APA mask */
+    tst    x0, x1                 /* Test if PAuth supported (Z=1 if not supported) */
+    mov    x0, #(1 << 31)         /* RW: EL1 is AArch64 */
+    orr    x0, x0, #(1 << 29)     /* HCD: Disable HVC instruction */
+    mov    x1, x0                 /* Copy base value */
+    orr    x1, x1, #(1 << 41)     /* API: Trap PAuth instructions */
+    orr    x1, x1, #(1 << 40)     /* APK: Trap PAuth key access */
+    csel   x0, x0, x1, eq         /* If PAuth not supported (eq), use x0 (base), else x1 (with traps) */
+    msr    HCR_EL2, x0
+    dsb    sy                     /* Ensure HCR_EL2 write completes */
+    isb                            /* Ensure HCR_EL2 takes effect */
+
+    /* 7. Set up SPSR_EL2 for return to EL1h with all interrupts masked */
+    /* M[3:0] = 0101 = EL1h (EL1 with SP_EL1) - NOT 0100 which is EL1t! */
+    /* M[4] = 0 = AArch64 mode (bit 4 must be 0 for AArch64, 1 for AArch32) */
+    /* DAIF = 0xF = all interrupts masked */
+    /* Value: 0x3C5 = (0xF << 6) | 0x5 */
+    movz   x0, #0x3C5             /* DAIF=0xF (bits 9:6), M[3:0]=0x5 (EL1h) */
+    msr    SPSR_EL2, x0
+    dsb    sy                     /* Ensure SPSR_EL2 write completes */
+    isb                            /* Ensure SPSR_EL2 takes effect */
+
+    /* 8. Set exception return address and DTB pointer, then ERET */
+    /* Critical: All register writes must complete before eret */
+    msr    ELR_EL2, x19           /* Entry point in ELR_EL2 */
+    mov    x0, x20                 /* DTB address in x0 (first arg) */
+    mov    x1, xzr                 /* Zero remaining argument registers */
+    mov    x2, xzr
+    mov    x3, xzr
+    dsb    sy                     /* Ensure all writes complete */
+    isb                            /* Ensure all effects are visible */
+    eret                           /* Exception return to EL1 */
+
+    /* Should never reach here */
+    b      .
+#endif /* BOOT_EL1 && EL2_HYPERVISOR */
 
 .end

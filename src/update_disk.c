@@ -266,7 +266,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t dts_size = 0;
 #endif
     char part_name[4] = {'P', ':', 'X', '\0'};
-    uint64_t start_us, elapsed_ms;
+    BENCHMARK_DECLARE();
 
 #ifdef DISK_ENCRYPT
     /* Initialize encryption - this sets up the cipher with key from storage */
@@ -400,7 +400,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
         /* Read the image into RAM */
         wolfBoot_printf("Loading image from disk...");
-        start_us = hal_get_timer_us();
+        BENCHMARK_START();
         load_off = 0;
         do {
             ret = disk_part_read(BOOT_DISK, cur_part, load_off,
@@ -416,13 +416,12 @@ void RAMFUNCTION wolfBoot_start(void)
             selected ^= 1;
             continue;
         }
-        elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
-        wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
+        BENCHMARK_END("done");
 
 #ifdef DISK_ENCRYPT
         /* Decrypt the image in RAM */
         wolfBoot_printf("Decrypting image...");
-        start_us = hal_get_timer_us();
+        BENCHMARK_START();
         ret = decrypt_image((uint8_t*)load_address,
                 os_image.fw_size + IMAGE_HEADER_SIZE);
         if (ret != 0) {
@@ -430,8 +429,7 @@ void RAMFUNCTION wolfBoot_start(void)
             selected ^= 1;
             continue;
         }
-        elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
-        wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
+        BENCHMARK_END("done");
 #endif
 
         memset(&os_image, 0, sizeof(os_image));
@@ -443,25 +441,23 @@ void RAMFUNCTION wolfBoot_start(void)
         }
 
         wolfBoot_printf("Checking image integrity...");
-        start_us = hal_get_timer_us();
+        BENCHMARK_START();
         if (wolfBoot_verify_integrity(&os_image) != 0) {
             wolfBoot_printf("Error validating integrity for %s\r\n", part_name);
             selected ^= 1;
             continue;
         }
-        elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
-        wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
+        BENCHMARK_END("done");
 
         wolfBoot_printf("Verifying image signature...");
-        start_us = hal_get_timer_us();
+        BENCHMARK_START();
         if (wolfBoot_verify_authenticity(&os_image) != 0) {
             wolfBoot_printf("Error validating authenticity for %s\r\n",
                 part_name);
             selected ^= 1;
             continue;
         } else {
-            elapsed_ms = (hal_get_timer_us() - start_us) / 1000;
-            wolfBoot_printf("done. (%lu ms)\r\n", (unsigned long)elapsed_ms);
+            BENCHMARK_END("done");
             failures = 0;
             break; /* Success case */
         }

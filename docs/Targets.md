@@ -48,6 +48,7 @@ This README describes configuration of supported targets.
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Vorago VA416x0](#vorago-va416x0)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Versal Gen 1 VMK180](#versal-gen-1-vmk180)
 
 ## STM32F4
 
@@ -1857,6 +1858,184 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 #### Signing Zynq
 
 `tools/keytools/sign --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin wolfboot_signing_private_key.der 1`
+
+
+## Versal Gen 1 VMK180
+
+AMD Versal Prime Series VMK180 Evaluation Kit - Versal Prime XCVM1802-2MSEVSVA2197 Adaptive SoC - Dual ARM Cortex-A72
+
+wolfBoot replaces U-Boot in the Versal boot flow:
+```
+PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
+```
+
+wolfBoot runs from DDR at address `0x8000000` at EL2 (non-secure). All clock, MIO, and DDR initialization is handled by PLM/PSM before wolfBoot starts.
+
+See example configuration file at `config/examples/versal_vmk180.config`.
+
+### Prerequisites
+
+1. **Xilinx Vitis 2024.1 or 2024.2** (required for bootgen - 2025.1 or later has QSPI boot issues)
+   - Set `VITIS_PATH` environment variable: `export VITIS_PATH=/opt/Xilinx/Vitis/2024.1`
+
+2. **Toolchain**
+   - ARM GCC toolchain: `aarch64-none-elf-gcc`
+
+
+### Configuration Options
+
+Key configuration options in `config/examples/versal_vmk180.config`:
+
+- `ARCH=AARCH64` - ARM 64-bit architecture
+- `TARGET=versal` - Versal platform target
+- `WOLFBOOT_ORIGIN=0x8000000` - Entry point in DDR
+- `WOLFBOOT_SECTOR_SIZE=0x20000` - QSPI flash sector size (128KB)
+- `WOLFBOOT_PARTITION_SIZE=0x2C00000` - Application partition size (44MB)
+- `EXT_FLASH=1` - External flash support
+- `ELF=1` - ELF loading support
+
+### Memory Layout
+
+| Partition   | Size   | Address | Description |
+|-------------|--------|---------|-------------|
+| Bootloader  | -      | 0x8000000 | wolfBoot in DDR (loaded by BL31) |
+| Primary     | 44MB   | 0x800000 | Boot partition in QSPI |
+| Update      | 44MB   | 0x3400000 | Update partition in QSPI |
+| Swap        | -      | 0x6000000 | Swap area in QSPI |
+
+### Debugging
+
+For debugging with OCRAM (OCM), set `WOLFBOOT_ORIGIN=0xFFFC0000` in the config file. Versal Gen 1 OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`.
+
+### Building wolfBoot
+
+Build wolfBoot from the wolfBoot root directory:
+
+```sh
+cp config/examples/versal_vmk180.config .config
+make clean
+make
+```
+
+### Building BOOT.BIN
+
+If you don't already have prebuilt firmware, clone the Xilinx prebuilt firmware repository:
+
+```sh
+git clone --branch xlnx_rel_v2024.2 https://github.com/Xilinx/soc-prebuilt-firmware.git
+export PREBUILT_DIR=$(pwd)/../soc-prebuilt-firmware/vmk180-versal
+```
+
+Copy the required files into wolfboot root directory:
+
+```sh
+cp ${PREBUILT_DIR}/project_1.pdi .
+cp ${PREBUILT_DIR}/plm.elf .
+cp ${PREBUILT_DIR}/psmfw.elf .
+cp ${PREBUILT_DIR}/bl31.elf .
+cp ${PREBUILT_DIR}/system-default.dtb .
+```
+
+Source the Vitis environment and generate BOOT.BIN using bootgen:
+
+```sh
+source ${VITIS_PATH}/settings64.sh
+bootgen -arch versal -image ./tools/scripts/vmk180/boot_wolfboot.bif -w -o BOOT.BIN
+```
+
+The BIF file (`boot_wolfboot.bif`) references files using relative paths in the same directory. After successful generation, `BOOT.BIN` will be created in `tools/scripts/vmk180/`.
+
+### Flashing QSPI
+
+Flash `BOOT.BIN` to QSPI flash using your preferred method. For example:
+
+- **Vitis**: Use the Hardware Manager to program the QSPI flash via JTAG. Load `BOOT.BIN` and program to QSPI32 flash memory.
+
+- **Lauterbach**: Use Trace32 to program QSPI flash via JTAG. Load `BOOT.BIN` and write to QSPI flash memory addresses.
+
+- **U-Boot via SD Card**: Boot from SD card with U-Boot, then use TFTP to download `BOOT.BIN` and program QSPI flash:
+  ```sh
+  tftp ${loadaddr} BOOT.BIN
+  sf probe 0 0 0
+  sf erase 0 +${filesize}
+  sf write ${loadaddr} 0 ${filesize}
+  ```
+
+### QSPI Flash
+
+VMK180 uses dual parallel MT25QU01GBBB flash (128MB each, 256MB total). The QSPI driver supports:
+- DMA mode (default) or IO polling mode (`GQSPI_MODE_IO`)
+- Quad SPI (4-bit) for faster reads
+- 4-byte addressing for full flash access
+- Hardware striping for dual parallel operation
+- 75MHz default clock (configurable via `GQSPI_CLK_DIV`)
+
+### Building and Signing Test Application
+
+```sh
+# Build and sign the test application
+make test-app/image_v1_signed.bin
+```
+
+The signed test application will be at `test-app/image_v1_signed.bin`.
+
+**Test Application Details:**
+- Uses generic `boot_arm64_start.S` startup code (shared with other AArch64 platforms)
+- Uses generic `AARCH64.ld` linker script with `@WOLFBOOT_LOAD_ADDRESS@` placeholder
+- Displays current exception level (EL) and firmware version
+- Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
+
+### Firmware Update Testing
+
+wolfBoot supports firmware updates using the UPDATE partition. The bootloader automatically selects the image with the higher version number from either the BOOT or UPDATE partition.
+
+**Partition Layout:**
+- BOOT partition: `0x800000`
+- UPDATE partition: `0x3400000`
+- For RAM-based boot (Versal), images are loaded to `WOLFBOOT_LOAD_ADDRESS` (`0x10000000`)
+
+**Update Behavior:**
+- wolfBoot checks both BOOT and UPDATE partitions on boot
+- Selects the partition with the higher version number
+- Falls back to the other partition if verification fails
+- The test application displays the firmware version it was signed with
+
+To test firmware updates, build and sign the test application with different version numbers, then flash them to the appropriate partitions using your preferred method.
+
+### Example Boot Output
+
+```
+========================================
+wolfBoot Secure Boot - AMD Versal
+========================================
+Current EL: 2
+Timer Freq: 99999904 Hz
+QSPI: Lower ID: 20 BB 21
+QSPI: Upper ID: 20 BB 21
+QSPI: 75MHz, Quad mode, DMA
+Versions: Boot 1, Update 0
+Trying Boot partition at 0x800000
+Loading header 512 bytes from 0x800000 to 0xFFFFE00
+Loading image 664 bytes from 0x800200 to 0x10000000...done
+Boot partition: 0xFFFFE00 (sz 664, ver 0x1, type 0x601)
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
+Firmware Valid
+Loading elf at 0x10000000
+Invalid elf, falling back to raw binary
+Loading DTB (size 24894) from 0x1000 to RAM at 0x1000
+Booting at 0x10000000
+
+===========================================
+ wolfBoot Test Application - AMD Versal
+===========================================
+Current EL: 1
+Firmware Version: 2 (0x00000002)
+Application running successfully!
+
+Entering idle loop...
+```
 
 
 ## Cypress PSoC-6

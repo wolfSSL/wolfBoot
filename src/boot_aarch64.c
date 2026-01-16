@@ -25,6 +25,11 @@
 #include "loader.h"
 #include "wolfboot/wolfboot.h"
 
+/* Include platform-specific header for EL configuration defines */
+#ifdef TARGET_versal
+#include "hal/versal.h"
+#endif
+
 /* Linker exported variables */
 extern unsigned int __bss_start__;
 extern unsigned int __bss_end__;
@@ -37,12 +42,40 @@ extern unsigned int _end_data;
 extern void main(void);
 extern void gicv2_init_secure(void);
 
+/* SKIP_GIC_INIT - Skip GIC initialization before booting app
+ * This is needed for:
+ * - Versal: Uses GICv3, not GICv2. BL31 handles GIC setup.
+ * - Systems where another bootloader stage handles GIC init
+ * NO_QNX also implies SKIP_GIC_INIT for backwards compatibility
+ */
+#if defined(NO_QNX) && !defined(SKIP_GIC_INIT)
+#define SKIP_GIC_INIT
+#endif
+
+#ifndef TARGET_versal
+/* current_el() is defined in hal/versal.h for Versal */
 unsigned int current_el(void)
 {
     unsigned long el;
     asm volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
     return (unsigned int)((el >> 2) & 0x3U);
 }
+#endif
+
+#if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+/**
+ * @brief Transition from EL2 to EL1 and jump to application
+ *
+ * This function configures the necessary system registers for EL1 operation
+ * and performs an exception return (ERET) to drop from EL2 to EL1.
+ *
+ * Based on ARM Architecture Reference Manual and U-Boot implementation.
+ *
+ * @param entry_point Address to jump to in EL1
+ * @param dts_addr Device tree address (passed in x0 to application)
+ */
+extern void el2_to_el1_boot(uintptr_t entry_point, uintptr_t dts_addr);
+#endif /* BOOT_EL1 && EL2_HYPERVISOR */
 
 void boot_entry_C(void)
 {
@@ -101,6 +134,32 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     hal_dts_fixup((uint32_t*)dts_offset);
 #endif
 
+#ifndef SKIP_GIC_INIT
+    /* Initialize GICv2 for Kernel (ZynqMP and similar platforms)
+     * Skip this for:
+     * - Versal (uses GICv3, handled by BL31)
+     * - Platforms where BL31 or another stage handles GIC
+     */
+    gicv2_init_secure();
+#endif
+
+#if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    /* Transition from EL2 to EL1 before jumping to application.
+     * This is needed when:
+     * - Application expects to run at EL1 (e.g., Linux kernel)
+     * - wolfBoot runs at EL2 (hypervisor mode)
+     */
+    {
+    #ifdef MMU
+        uintptr_t dts = (uintptr_t)dts_offset;
+    #else
+        uintptr_t dts = 0;
+    #endif
+        el2_to_el1_boot((uintptr_t)app_offset, dts);
+    }
+#else
+    /* Stay at current EL (EL2 or EL3) and jump directly to application */
+
     /* Set application address via x4 */
     asm volatile("mov x4, %0" : : "r"(app_offset));
 
@@ -109,11 +168,6 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("mov x5, %0" : : "r"(dts_offset));
 #else
     asm volatile("mov x5, xzr");
-#endif
-
-#ifndef NO_QNX
-    /* Initialize GICv2 for Kernel */
-    gicv2_init_secure();
 #endif
 
     /* Zero registers x1, x2, x3 */
@@ -126,6 +180,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 
     /* Unconditionally jump to app_entry at x4 */
     asm volatile("br x4");
+#endif /* BOOT_EL1 */
 }
 
 #ifdef RAM_CODE

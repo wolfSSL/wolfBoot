@@ -53,9 +53,26 @@ void hal_deinit();
 
 void hal_init(void);
 
-#ifdef WOLFBOOT_UPDATE_DISK
-/* Timer functions (platform-specific) */
+/* Timer functions (platform-specific, used for benchmarking) */
+#if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
 uint64_t hal_get_timer_us(void);
+#endif
+
+/* Boot benchmarking macros
+ * Usage: Declare BENCHMARK_DECLARE() at function scope,
+ *        then use BENCHMARK_START() and BENCHMARK_END(msg) to measure time.
+ */
+#ifdef BOOT_BENCHMARK
+    #define BENCHMARK_DECLARE() uint64_t _boot_bench_start
+    #define BENCHMARK_START() (_boot_bench_start = hal_get_timer_us())
+    #define BENCHMARK_END(msg) do { \
+        uint64_t _elapsed_ms = (hal_get_timer_us() - _boot_bench_start) / 1000; \
+        wolfBoot_printf(msg " (%lu ms)\r\n", (unsigned long)_elapsed_ms); \
+    } while(0)
+#else
+    #define BENCHMARK_DECLARE() do {} while(0)
+    #define BENCHMARK_START() do {} while(0)
+    #define BENCHMARK_END(msg) wolfBoot_printf(msg "\r\n")
 #endif
 
 #ifdef ARCH_64BIT

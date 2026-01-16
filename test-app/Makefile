@@ -132,6 +132,13 @@ ifeq ($(ARCH),RISCV)
   APP_OBJS+=startup_riscv.o vector_riscv.o
 endif
 
+ifeq ($(ARCH),AARCH64)
+  APP_OBJS:=boot_arm64_start.o $(APP_OBJS)
+  # Prevent inclusion of standard C runtime startup files that conflict with boot_arm64_start.S
+  # Use -Wl, prefix to pass flags directly to linker when GCC is used as linker driver
+  LDFLAGS+=-nostartfiles -nostdlib -nodefaultlibs -Wl,--entry=_start
+endif
+
 ifeq ($(ARCH),RISCV64)
   APP_OBJS+=startup_riscv.o vector_riscv.o
 endif
@@ -283,6 +290,9 @@ endif
 
 ifeq ($(EXT_FLASH),1)
   CFLAGS+=-D"EXT_FLASH=1" -D"PART_UPDATE_EXT=1"
+  ifeq ($(NO_XIP),1)
+    CFLAGS+=-D"PART_BOOT_EXT=1"
+  endif
 endif
 
 ifeq ($(SPI_FLASH),1)
@@ -495,8 +505,16 @@ ifeq ($(TARGET),x86_fsp_qemu)
   LDFLAGS=
 endif
 
-ifeq ($(TARGET),nxp_ls1028a)
-  LSCRIPT_TEMPLATE:=AARCH64-ls1028a.ld
+ifeq ($(TARGET),versal)
+  LSCRIPT_TEMPLATE:=AARCH64.ld
+  LDFLAGS+=-nostdlib
+  # Enable DEBUG_UART for test-app to use wolfBoot_printf and hal functions
+  DEBUG_UART:=1
+  CFLAGS+=-DDEBUG_UART
+endif
+
+ifeq ($(TARGET),zynq)
+  LSCRIPT_TEMPLATE:=AARCH64.ld
 endif
 
 ifeq ($(TARGET),pic32ck)
