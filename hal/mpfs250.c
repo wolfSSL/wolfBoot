@@ -54,6 +54,19 @@ void hal_init(void)
 {
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
         LIBWOLFBOOT_VERSION_STRING,__DATE__, __TIME__);
+
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+    /* Initialize SDHCI for SDCard or eMMC */
+    if (sdhci_init() != 0) {
+        wolfBoot_printf("SDHCI initialization failed\n");
+    } else {
+#ifdef DISK_EMMC
+        wolfBoot_printf("eMMC initialized successfully\n");
+#else
+        wolfBoot_printf("SDCard initialized successfully\n");
+#endif
+    }
+#endif
 }
 
 /* ============================================================================

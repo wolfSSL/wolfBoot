@@ -409,6 +409,7 @@ ifeq ($(SIGN),ML_DSA)
   KEYGEN_OPTIONS+=--ml_dsa
   SIGN_OPTIONS+=--ml_dsa
   WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" $(ML_DSA_EXTRA)
   ifneq ($(HASH),SHA3)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
@@ -417,7 +418,7 @@ ifeq ($(SIGN),ML_DSA)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     $(error WOLFBOOT_SMALL_STACK with ML-DSA not supported yet)
   else
-    STACK_USAGE=19544
+    STACK_USAGE=25000
   endif
 endif
 

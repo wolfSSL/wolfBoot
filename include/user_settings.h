@@ -296,6 +296,7 @@ extern int tolower(int c);
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
 #   define WOLFSSL_SHAKE128
+#   define WOLFSSL_SP_NO_DYN_STACK
 #endif /* WOLFBOOT_SIGN_ML_DSA || WOLFBOOT_SIGN_SECONDARY_ML_DSA */
 
 #ifdef WOLFBOOT_HASH_SHA3_384

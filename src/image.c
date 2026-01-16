@@ -697,6 +697,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     int       verify_res = 0;
 
     wolfBoot_printf("info: ML-DSA wolfBoot_verify_signature\n");
+    wolfBoot_printf("info: using ML-DSA parameters: %d\n", ML_DSA_LEVEL);
 
 #if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
     (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
@@ -726,6 +727,11 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         if (ret != 0) {
             wolfBoot_printf("error: wc_MlDsaKey_SetParams(%d)" \
                             " returned %d\n", ML_DSA_LEVEL, ret);
+        } else {
+            ret = wc_MlDsaKey_GetSigLen(&ml_dsa, &sig_len);
+            if (ret == 0 && sig_len > 0) {
+                wolfBoot_printf("info: ML-DSA signature size: %d\n", sig_len);
+            }
         }
     }
 
@@ -766,6 +772,9 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
                    "max %d\n", pub_len, KEYSTORE_PUBKEY_SIZE);
             ret = -1;
         }
+        else {
+            wolfBoot_printf("info: ml-dsa pub len: %d\n", pub_len);
+        }
     }
 
     if (ret == 0) {
@@ -784,7 +793,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         ret = wc_MlDsaKey_GetSigLen(&ml_dsa, &sig_len);
 
         if (ret != 0 || sig_len <= 0) {
-            wolfBoot_printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
+            wolfBoot_printf("error: wc_MlDsaKey_GetSigLen returned %d\n", ret);
             ret = -1;
         }
         else if (sig_len != ML_DSA_IMAGE_SIGNATURE_SIZE) {
@@ -795,13 +804,15 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     }
 
     if (ret == 0) {
-        wolfBoot_printf("info: using ML-DSA security level: %d\n",
-                        ML_DSA_LEVEL);
-
-        /* Finally verify signagure. */
-        ret = wc_MlDsaKey_Verify(&ml_dsa, sig, ML_DSA_IMAGE_SIGNATURE_SIZE,
-                                 img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
-                                 &verify_res);
+        if (img->sha_hash == NULL) {
+            wolfBoot_printf("error: Image hash not available\n");
+            ret = -1;
+        } else {
+            /* Finally verify signagure. */
+            ret = wc_MlDsaKey_Verify(&ml_dsa, sig, ML_DSA_IMAGE_SIGNATURE_SIZE,
+                                     img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
+                                     &verify_res);
+        }
 
     #ifdef WOLFBOOT_ARMORED
         if (ret == 0) {
@@ -958,13 +969,17 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
     uint16_t stored_sha_len;
     uint8_t *p;
     int blksz;
+    uint32_t header_bytes_hashed = 0;
     if (!img)
         return -1;
 
     p = get_img_hdr(img);
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
-    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE) {
+        wolfBoot_printf("error: header_sha256: stored_sha_len=%d, expected=%d\n",
+                        stored_sha_len, WOLFBOOT_SHA_DIGEST_SIZE);
         return -1;
+    }
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)wc_InitSha256_ex(sha256_ctx, NULL, hsmDevIdHash);
 #else
@@ -976,6 +991,7 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
         if (end_sha - p < blksz)
             blksz = end_sha - p;
         wc_Sha256Update(sha256_ctx, p, blksz);
+        header_bytes_hashed += blksz;
         p += blksz;
     }
     return 0;
@@ -999,8 +1015,11 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
         return -1;
     do {
         p = get_sha_block(img, position);
-        if (p == NULL)
+        if (p == NULL) {
+            wolfBoot_printf("error: image_sha256: get_sha_block returned NULL at position %lu\n",
+                            (unsigned long)position);
             break;
+        }
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (position + blksz > img->fw_size)
             blksz = img->fw_size - position;
@@ -1448,13 +1467,23 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
     uint16_t stored_sha_len;
+
+
     stored_sha_len = get_header(img, WOLFBOOT_SHA_HDR, &stored_sha);
-    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
+    if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE) {
+        wolfBoot_printf("error: stored SHA length mismatch: got %d, expected %d\n",
+                        stored_sha_len, WOLFBOOT_SHA_DIGEST_SIZE);
         return -1;
-    if (image_hash(img, digest) != 0)
+    }
+
+    if (image_hash(img, digest) != 0) {
+        wolfBoot_printf("error: failed to calculate image hash\n");
         return -1;
-    if (memcmp(digest, stored_sha, stored_sha_len) != 0)
+    }
+    if (memcmp(digest, stored_sha, stored_sha_len) != 0) {
+        wolfBoot_printf("error: Image hash mismatch - integrity check failed\n");
         return -1;
+    }
     img->sha_ok = 1;
     img->sha_hash = stored_sha;
     return 0;
