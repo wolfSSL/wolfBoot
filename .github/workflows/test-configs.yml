@@ -572,6 +572,12 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/zynqmp.config
 
+  versal_vmk180_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180.config
+
   sim_wolfhsm_test:
     uses: ./.github/workflows/test-build.yml
     with:

@@ -1923,7 +1923,7 @@ make
 If you don't already have prebuilt firmware, clone the Xilinx prebuilt firmware repository:
 
 ```sh
-git clone --branch xlnx_rel_v2024.1 https://github.com/Xilinx/soc-prebuilt-firmware.git
+git clone --branch xlnx_rel_v2024.2 https://github.com/Xilinx/soc-prebuilt-firmware.git
 export PREBUILT_DIR=$(pwd)/../soc-prebuilt-firmware/vmk180-versal
 ```
 
@@ -1948,7 +1948,7 @@ The BIF file (`boot_wolfboot.bif`) references files using relative paths in the 
 
 ### Flashing QSPI
 
-Flash `BOOT.BIN` to QSPI flash using one of the following methods:
+Flash `BOOT.BIN` to QSPI flash using your preferred method. For example:
 
 - **Vitis**: Use the Hardware Manager to program the QSPI flash via JTAG. Load `BOOT.BIN` and program to QSPI32 flash memory.
 
@@ -1975,15 +1975,33 @@ VMK180 uses dual parallel MT25QU01GBBB flash (128MB each, 256MB total). The QSPI
 
 ```sh
 # Build and sign the test application
-make test-app/image.bin
 make test-app/image_v1_signed.bin
 ```
 
 The signed test application will be at `test-app/image_v1_signed.bin`.
 
-### Flashing Test Application
+**Test Application Details:**
+- Uses generic `boot_arm64_start.S` startup code (shared with other AArch64 platforms)
+- Uses generic `AARCH64.ld` linker script with `@WOLFBOOT_LOAD_ADDRESS@` placeholder
+- Displays current exception level (EL) and firmware version
+- Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
 
-After flashing `BOOT.BIN` to QSPI offset 0x0, flash the signed test app to the boot partition at offset `0x800000` using your preferred method.
+### Firmware Update Testing
+
+wolfBoot supports firmware updates using the UPDATE partition. The bootloader automatically selects the image with the higher version number from either the BOOT or UPDATE partition.
+
+**Partition Layout:**
+- BOOT partition: `0x800000`
+- UPDATE partition: `0x3400000`
+- For RAM-based boot (Versal), images are loaded to `WOLFBOOT_LOAD_ADDRESS` (`0x10000000`)
+
+**Update Behavior:**
+- wolfBoot checks both BOOT and UPDATE partitions on boot
+- Selects the partition with the higher version number
+- Falls back to the other partition if verification fails
+- The test application displays the firmware version it was signed with
+
+To test firmware updates, build and sign the test application with different version numbers, then flash them to the appropriate partitions using your preferred method.
 
 ### Example Boot Output
 
@@ -2013,7 +2031,8 @@ Booting at 0x10000000
 ===========================================
  wolfBoot Test Application - AMD Versal
 ===========================================
-
+Current EL: 1
+Firmware Version: 2 (0x00000002)
 Application running successfully!
 
 Entering idle loop...

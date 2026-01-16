@@ -65,3 +65,16 @@ _start:
     b 5b
 
 .size _start, . - _start
+
+/* Provide _exit stub for bare-metal builds (required by some standard library code) */
+.section .text, "ax"
+.global _exit
+.type _exit, @function
+
+_exit:
+    /* Loop forever - bare-metal applications don't exit */
+6:
+    wfi
+    b 6b
+
+.size _exit, . - _exit
