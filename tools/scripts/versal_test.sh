@@ -2,15 +2,16 @@
 # Build, flash QSPI, and boot VMK180 - all in one script
 #
 # Usage:
-#   ./build_flash_qspi.sh              # Full build, flash, and boot wolfBoot
-#   ./build_flash_qspi.sh --test-app   # Full build + flash test app to boot partition
-#   ./build_flash_qspi.sh --boot-sdcard # Test SD card boot mode only
-#   ./build_flash_qspi.sh --boot-qspi   # Test QSPI boot mode only
+#   ./versal_test.sh               # Full build, flash, and boot wolfBoot
+#   ./versal_test.sh --test-app    # Full build + flash test app to boot partition
+#   ./versal_test.sh --test-update # Full build + flash test app v2 to update partition
+#   ./versal_test.sh --boot-sdcard # Test SD card boot mode only
+#   ./versal_test.sh --boot-qspi   # Test QSPI boot mode only
 #
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WOLFBOOT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+WOLFBOOT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$WOLFBOOT_ROOT"
 
 # Config
@@ -19,7 +20,7 @@ UART_BAUD="${UART_BAUD:-115200}"
 SERVER_IP="${SERVER_IP:-10.0.4.24}"
 BOARD_IP="${BOARD_IP:-10.0.4.90}"
 TFTP_DIR="${TFTP_DIR:-/srv/tftp}"
-VITIS_PATH="${VITIS_PATH:-/opt/Xilinx/Vitis/2024.1}"
+VITIS_PATH="${VITIS_PATH:-/opt/Xilinx/Vitis/2024.2}"
 RELAY_PORT="${RELAY_PORT:-/dev/ttyACM2}"
 UART_LOG="${UART_LOG:-${WOLFBOOT_ROOT}/uart_log.txt}"
 
@@ -36,6 +37,89 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 for cmd in expect socat; do
     command -v "$cmd" &>/dev/null || { log_error "$cmd not found - install with: sudo apt install $cmd"; exit 1; }
 done
+
+# Load configuration from .config file
+# Parses Makefile-style .config and sets global variables
+# Handles both KEY=VALUE and KEY?=VALUE syntax (for ?=, only sets if not already set)
+# Since .config uses Makefile syntax, we parse it directly rather than using make
+load_config() {
+    local config_file="${1:-.config}"
+
+    [ ! -f "$config_file" ] && { log_error "Config file not found: $config_file"; return 1; }
+
+    # Extract variables from .config file
+    # Pattern: KEY?=VALUE or KEY=VALUE (ignores comments and blank lines)
+    while IFS= read -r line; do
+        # Skip comments and blank lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+
+        # Extract key, conditional flag, and value
+        # Match: optional whitespace, key, optional ?, =, optional whitespace, value
+        if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*(\?)?=[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local conditional="${BASH_REMATCH[2]}"  # "?" if present
+            local value="${BASH_REMATCH[3]}"
+
+            # Remove surrounding quotes if present
+            value="${value#\"}"
+            value="${value%\"}"
+
+            # Strip trailing whitespace from value
+            value="${value%"${value##*[![:space:]]}"}"
+
+            # For ?= syntax, only set if variable is not already set
+            if [ -n "$conditional" ]; then
+                # Check if variable is already set using indirect reference
+                # ${!key} expands to the value of the variable named by $key
+                if [ -z "${!key:-}" ]; then
+                    # Variable not set, assign it using declare
+                    declare -g "${key}=${value}"
+                fi
+            else
+                # Always set for = syntax
+                declare -g "${key}=${value}"
+            fi
+        fi
+    done < <(grep -E '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*(\?)?=' "$config_file" 2>/dev/null || true)
+
+    # Export all config variables as globals
+    export IMAGE_HEADER_SIZE SIGN HASH SECONDARY_SIGN_OPTIONS SECONDARY_PRIVATE_KEY
+
+    # Calculate IMAGE_SIGNATURE_SIZE based on SIGN algorithm
+    case "${SIGN:-}" in
+        ECC256) IMAGE_SIGNATURE_SIZE=64 ;;
+        ECC384) IMAGE_SIGNATURE_SIZE=96 ;;
+        ECC521) IMAGE_SIGNATURE_SIZE=132 ;;
+        ED25519) IMAGE_SIGNATURE_SIZE=64 ;;
+        ED448) IMAGE_SIGNATURE_SIZE=114 ;;
+        RSA2048) IMAGE_SIGNATURE_SIZE=256 ;;
+        RSA3072) IMAGE_SIGNATURE_SIZE=384 ;;
+        RSA4096) IMAGE_SIGNATURE_SIZE=512 ;;
+        *) IMAGE_SIGNATURE_SIZE=96 ;; # Default to ECC384
+    esac
+    export IMAGE_SIGNATURE_SIZE
+
+    # Build SIGN_OPTIONS from SIGN and HASH
+    SIGN_OPTIONS=""
+    case "${SIGN:-}" in
+        ECC256) SIGN_OPTIONS="--ecc256" ;;
+        ECC384) SIGN_OPTIONS="--ecc384" ;;
+        ECC521) SIGN_OPTIONS="--ecc521" ;;
+        ED25519) SIGN_OPTIONS="--ed25519" ;;
+        ED448) SIGN_OPTIONS="--ed448" ;;
+        RSA2048) SIGN_OPTIONS="--rsa2048" ;;
+        RSA3072) SIGN_OPTIONS="--rsa3072" ;;
+        RSA4096) SIGN_OPTIONS="--rsa4096" ;;
+    esac
+
+    case "${HASH:-}" in
+        SHA256) SIGN_OPTIONS="$SIGN_OPTIONS --sha256" ;;
+        SHA384) SIGN_OPTIONS="$SIGN_OPTIONS --sha384" ;;
+        SHA3) SIGN_OPTIONS="$SIGN_OPTIONS --sha3" ;;
+    esac
+    export SIGN_OPTIONS
+}
 
 # Initialize UART capture variables
 UART_PIDS=()
@@ -236,10 +320,12 @@ test_boot() {
 
 # Check for test modes
 FLASH_TEST_APP=false
+FLASH_UPDATE_APP=false
 case "${1:-}" in
     test-boot|--boot-sdcard) test_boot boot_sdcard "boot-sdcard" ;;
     --boot-qspi) test_boot boot_qspi "boot-qspi" ;;
     --test-app) FLASH_TEST_APP=true ;;
+    --test-update) FLASH_TEST_APP=true; FLASH_UPDATE_APP=true ;;
 esac
 
 # Build wolfBoot
@@ -249,16 +335,63 @@ make clean && make
 
 # Build test app if requested
 if [ "$FLASH_TEST_APP" = "true" ]; then
-    log_info "Building and signing test application..."
-    make test-app/image.bin
-    make test-app/image_v1_signed.bin
+    if [ "$FLASH_UPDATE_APP" = "true" ]; then
+        log_info "Building and signing test application version 2..."
+        make test-app/image.bin
 
-    testapp_size=$(stat -c%s "test-app/image_v1_signed.bin")
-    log_info "Test app size: $testapp_size bytes"
+        # Sign as version 2 for update testing
+        # Load all config values from .config file
+        load_config .config
 
-    # Copy test app to TFTP directory
-    cp test-app/image_v1_signed.bin "${TFTP_DIR}/"
-    log_ok "Test app copied to TFTP: ${TFTP_DIR}/image_v1_signed.bin"
+        IMAGE_TRAILER_SIZE=0  # Usually 0 unless delta updates are used
+        PRIVATE_KEY="${PRIVATE_KEY:-wolfboot_signing_private_key.der}"
+
+        BOOT_IMG="test-app/image.bin"
+
+        # Build sign command with environment variables
+        # The sign tool needs IMAGE_HEADER_SIZE and IMAGE_SIGNATURE_SIZE as environment variables
+        export IMAGE_HEADER_SIZE IMAGE_SIGNATURE_SIZE IMAGE_TRAILER_SIZE
+
+        log_info "Signing test app as version 2..."
+        log_info "  IMAGE_HEADER_SIZE=$IMAGE_HEADER_SIZE"
+        log_info "  IMAGE_SIGNATURE_SIZE=$IMAGE_SIGNATURE_SIZE"
+        log_info "  SIGN=$SIGN"
+        log_info "  HASH=$HASH"
+        log_info "  SIGN_OPTIONS=$SIGN_OPTIONS"
+        log_info "  PRIVATE_KEY=$PRIVATE_KEY"
+
+        # Sign the image as version 2
+        if [ "$SIGN" != "NONE" ] && [ -n "$SECONDARY_PRIVATE_KEY" ]; then
+            ./tools/keytools/sign $SIGN_OPTIONS $SECONDARY_SIGN_OPTIONS "$BOOT_IMG" "$PRIVATE_KEY" "$SECONDARY_PRIVATE_KEY" 2 || {
+                log_error "Signing failed with secondary key"
+                exit 1
+            }
+        elif [ "$SIGN" != "NONE" ]; then
+            ./tools/keytools/sign $SIGN_OPTIONS "$BOOT_IMG" "$PRIVATE_KEY" 2 || {
+                log_error "Signing failed"
+                exit 1
+            }
+        else
+            ./tools/keytools/sign $SIGN_OPTIONS "$BOOT_IMG" 2 || {
+                log_error "Signing failed (SIGN=NONE)"
+                exit 1
+            }
+        fi
+
+        testapp_size=$(stat -c%s "test-app/image_v2_signed.bin")
+        log_info "Test app v2 size: $testapp_size bytes"
+        cp test-app/image_v2_signed.bin "${TFTP_DIR}/"
+        log_ok "Test app v2 copied to TFTP: ${TFTP_DIR}/image_v2_signed.bin"
+    else
+        log_info "Building and signing test application version 1..."
+        make test-app/image.bin
+        make test-app/image_v1_signed.bin
+
+        testapp_size=$(stat -c%s "test-app/image_v1_signed.bin")
+        log_info "Test app size: $testapp_size bytes"
+        cp test-app/image_v1_signed.bin "${TFTP_DIR}/"
+        log_ok "Test app copied to TFTP: ${TFTP_DIR}/image_v1_signed.bin"
+    fi
 fi
 
 # Generate BOOT.BIN
@@ -271,7 +404,7 @@ export PREBUILT_DIR="${WOLFBOOT_ROOT}/../soc-prebuilt-firmware/vmk180-versal"
 log_info "Copying prebuilt firmware files..."
 [ ! -d "${PREBUILT_DIR}" ] && {
     log_error "Prebuilt firmware directory not found: ${PREBUILT_DIR}"
-    log_info "Clone with: git clone --branch xlnx_rel_v2024.1 https://github.com/Xilinx/soc-prebuilt-firmware.git"
+    log_info "Clone with: git clone --branch xlnx_rel_v2024.2 https://github.com/Xilinx/soc-prebuilt-firmware.git"
     exit 1
 }
 
@@ -283,7 +416,7 @@ cp "${PREBUILT_DIR}/system-default.dtb" .
 
 # Generate BOOT.BIN from wolfBoot root directory
 source "${VITIS_PATH}/settings64.sh"
-bootgen -arch versal -image ./tools/scripts/vmk180/boot_wolfboot.bif -w -o BOOT.BIN
+bootgen -arch versal -image ./tools/scripts/versal_boot.bif -w -o BOOT.BIN
 
 # Copy BOOT.BIN to TFTP directory
 cp BOOT.BIN "${TFTP_DIR}/"
@@ -295,9 +428,15 @@ log_info "BOOT.BIN size: $filesize bytes"
 # Get test app size if flashing it
 testapp_size_hex="0x0"
 if [ "$FLASH_TEST_APP" = "true" ]; then
-    testapp_size=$(stat -c%s "${TFTP_DIR}/image_v1_signed.bin")
-    testapp_size_hex=$(printf "0x%x" $testapp_size)
-    log_info "Test app size: $testapp_size bytes"
+    if [ "$FLASH_UPDATE_APP" = "true" ]; then
+        testapp_size=$(stat -c%s "${TFTP_DIR}/image_v2_signed.bin")
+        testapp_size_hex=$(printf "0x%x" $testapp_size)
+        log_info "Test app v2 size: $testapp_size bytes"
+    else
+        testapp_size=$(stat -c%s "${TFTP_DIR}/image_v1_signed.bin")
+        testapp_size_hex=$(printf "0x%x" $testapp_size)
+        log_info "Test app size: $testapp_size bytes"
+    fi
 fi
 
 # Flash QSPI via U-Boot TFTP
@@ -310,6 +449,7 @@ set pty "$UART_PTY"
 set filesize_hex "$filesize_hex"
 set testapp_size_hex "$testapp_size_hex"
 set flash_test_app "$FLASH_TEST_APP"
+set flash_update_app "$FLASH_UPDATE_APP"
 set board_ip "$BOARD_IP"
 set server_ip "$SERVER_IP"
 
@@ -452,33 +592,70 @@ puts "BOOT.BIN flash and verification complete!"
 
 # Flash test app if requested
 if { \$flash_test_app eq "true" } {
-    puts ""
-    puts "=== Flashing test app to boot partition at 0x800000 ==="
+    if { \$flash_update_app eq "true" } {
+        puts ""
+        puts "=== Flashing test app v2 to UPDATE partition at 0x3400000 ==="
 
-    puts "Downloading test app via TFTP..."
-    send "tftpboot 0x10000000 image_v1_signed.bin\r"
-    expect {
-        "Bytes transferred" { puts "TFTP download successful" }
-        "Error" { puts "TFTP download failed"; exit 1 }
-        timeout { puts "TFTP timeout"; exit 1 }
+        puts "Downloading test app v2 via TFTP..."
+        send "tftpboot 0x10000000 image_v2_signed.bin\r"
+        expect {
+            "Bytes transferred" { puts "TFTP download successful" }
+            "Error" { puts "TFTP download failed"; exit 1 }
+            timeout { puts "TFTP timeout"; exit 1 }
+        }
+        expect "Versal>"
+
+        puts "Erasing UPDATE partition at 0x3400000 (128KB sector)..."
+        send "sf erase 0x3400000 0x20000\r"
+        expect {
+            "Versal>" { puts "Erase complete" }
+            timeout { puts "Erase timeout"; exit 1 }
+        }
+
+        puts "Writing test app v2 to 0x3400000..."
+        send "sf write 0x10000000 0x3400000 \$testapp_size_hex\r"
+        expect {
+            "Versal>" { puts "Write complete" }
+            timeout { puts "Write timeout"; exit 1 }
+        }
+
+        puts "Test app v2 flashed to UPDATE partition!"
+    } else {
+        puts ""
+        puts "=== Flashing test app to boot partition at 0x800000 ==="
+
+        puts "Downloading test app via TFTP..."
+        send "tftpboot 0x10000000 image_v1_signed.bin\r"
+        expect {
+            "Bytes transferred" { puts "TFTP download successful" }
+            "Error" { puts "TFTP download failed"; exit 1 }
+            timeout { puts "TFTP timeout"; exit 1 }
+        }
+        expect "Versal>"
+
+        puts "Erasing boot partition at 0x800000 (128KB sector)..."
+        send "sf erase 0x800000 0x20000\r"
+        expect {
+            "Versal>" { puts "Erase complete" }
+            timeout { puts "Erase timeout"; exit 1 }
+        }
+
+        puts "Erasing update partition at 0x3400000 (128KB sector)..."
+        send "sf erase 0x3400000 0x20000\r"
+        expect {
+            "Versal>" { puts "Erase complete" }
+            timeout { puts "Erase timeout"; exit 1 }
+        }
+
+        puts "Writing test app to 0x800000..."
+        send "sf write 0x10000000 0x800000 \$testapp_size_hex\r"
+        expect {
+            "Versal>" { puts "Write complete" }
+            timeout { puts "Write timeout"; exit 1 }
+        }
+
+        puts "Test app flashed to boot partition!"
     }
-    expect "Versal>"
-
-    puts "Erasing boot partition at 0x800000 (128KB sector)..."
-    send "sf erase 0x800000 0x20000\r"
-    expect {
-        "Versal>" { puts "Erase complete" }
-        timeout { puts "Erase timeout"; exit 1 }
-    }
-
-    puts "Writing test app to 0x800000..."
-    send "sf write 0x10000000 0x800000 \$testapp_size_hex\r"
-    expect {
-        "Versal>" { puts "Write complete" }
-        timeout { puts "Write timeout"; exit 1 }
-    }
-
-    puts "Test app flashed to boot partition!"
 }
 
 puts ""

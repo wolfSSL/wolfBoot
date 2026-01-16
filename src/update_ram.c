@@ -43,19 +43,6 @@ extern int wolfBoot_get_dts_size(void *dts_addr);
 extern uint32_t kernel_load_addr;
 extern uint32_t dts_load_addr;
 
-#ifdef BOOT_BENCHMARK
-    /* Timing variable for benchmarking - placed at function scope */
-    static uint64_t _boot_bench_start;
-    #define BENCHMARK_START() _boot_bench_start = hal_get_timer_us()
-    #define BENCHMARK_END(msg) do { \
-        uint64_t _elapsed_ms = (hal_get_timer_us() - _boot_bench_start) / 1000;\
-        wolfBoot_printf(msg " (%lu ms)\n", (unsigned long)_elapsed_ms); \
-    } while(0)
-#else
-    #define BENCHMARK_START() do {} while(0)
-    #define BENCHMARK_END(msg) wolfBoot_printf(msg "\n")
-#endif
-
 #if ((defined(EXT_FLASH) && defined(NO_XIP)) || \
     (defined(EXT_ENCRYPTED) && defined(MMU))) && \
     !defined(WOLFBOOT_NO_RAMBOOT)
@@ -71,6 +58,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
     int ret;
     uint32_t img_size;
+    BENCHMARK_DECLARE();
 
     /* read header into RAM */
     wolfBoot_printf("Loading header %d bytes from %p to %p\n",
@@ -122,6 +110,7 @@ void RAMFUNCTION wolfBoot_start(void)
 {
     int active = -1, ret = 0;
     struct wolfBoot_image os_image;
+    BENCHMARK_DECLARE();
 #ifdef WOLFBOOT_UBOOT_LEGACY
     uint8_t *image_ptr;
 #endif
