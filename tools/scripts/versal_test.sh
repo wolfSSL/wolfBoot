@@ -331,7 +331,10 @@ esac
 # Build wolfBoot
 log_info "Building wolfBoot..."
 cp config/examples/versal_vmk180.config .config
-make clean && make
+
+make clean
+make || { log_error "Failed to build wolfBoot"; exit 1; }
+[ ! -f "wolfboot.elf" ] && { log_error "wolfboot.elf not found after build"; exit 1; }
 
 # Build test app if requested
 if [ "$FLASH_TEST_APP" = "true" ]; then
@@ -396,6 +399,7 @@ fi
 
 # Generate BOOT.BIN
 log_info "Generating BOOT.BIN..."
+[ ! -f "wolfboot.elf" ] && { log_error "wolfboot.elf not found - cannot generate BOOT.BIN"; exit 1; }
 
 # Set PREBUILT_DIR (relative to wolfBoot root)
 export PREBUILT_DIR="${WOLFBOOT_ROOT}/../soc-prebuilt-firmware/vmk180-versal"
@@ -414,16 +418,12 @@ cp "${PREBUILT_DIR}/psmfw.elf" .
 cp "${PREBUILT_DIR}/bl31.elf" .
 cp "${PREBUILT_DIR}/system-default.dtb" .
 
-# Generate BOOT.BIN from wolfBoot root directory
 source "${VITIS_PATH}/settings64.sh"
-bootgen -arch versal -image ./tools/scripts/versal_boot.bif -w -o BOOT.BIN
-
-# Copy BOOT.BIN to TFTP directory
-cp BOOT.BIN "${TFTP_DIR}/"
-
+rm -f BOOT.BIN
+bootgen -arch versal -image ./tools/scripts/versal_boot.bif -w -o BOOT.BIN || { log_error "bootgen failed"; exit 1; }
+cp BOOT.BIN "${TFTP_DIR}/" || { log_error "Failed to copy BOOT.BIN to TFTP directory"; exit 1; }
 filesize=$(stat -c%s "${TFTP_DIR}/BOOT.BIN")
 filesize_hex=$(printf "0x%x" $filesize)
-log_info "BOOT.BIN size: $filesize bytes"
 
 # Get test app size if flashing it
 testapp_size_hex="0x0"

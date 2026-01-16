@@ -1208,14 +1208,12 @@ void hal_init(void)
         "========================================\n";
 #endif
 
-#ifdef DEBUG_UART
     uart_init();
 
 #ifdef __WOLFBOOT
     wolfBoot_printf("%s", banner);
-#endif
     wolfBoot_printf("Current EL: %d\n", current_el());
-#endif /* DEBUG_UART */
+#endif
 
 #ifdef EXT_FLASH
     qspi_init();
