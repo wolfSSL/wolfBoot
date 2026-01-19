@@ -119,6 +119,8 @@
 
 #define RCC_AHB3ENR             (*(volatile uint32_t *)(RCC_BASE + 0x94)) /* RM0456 - Table 108 */
 #define RCC_AHB3ENR_GTZC2EN     (1 << 12)
+
+#define RCC_APB1ENR             (*(volatile uint32_t *)(RCC_BASE + 0x9C)) /* RM0456 - Table 108 */
 #define RCC_AHB3ENR_PWREN       (1 << 2)
 
 #define RCC_ICSCR1             (*(volatile uint32_t *)(RCC_BASE + 0x08))
@@ -249,10 +251,12 @@
 
 /* GPIO*/
 #define GPIOC_BASE 0x52020800
+#define GPIOD_BASE 0x52020C00
 #define GPIOG_BASE 0x52021800
 #define GPIOH_BASE 0x52021C00
 
 #define GPIOC_SECCFGR (*(volatile uint32_t *)(GPIOC_BASE + 0x30))
+#define GPIOD_SECCFGR (*(volatile uint32_t *)(GPIOD_BASE + 0x30))
 #define GPIOG_SECCFGR (*(volatile uint32_t *)(GPIOG_BASE + 0x30))
 #define GPIOH_SECCFGR (*(volatile uint32_t *)(GPIOH_BASE + 0x30))
 
@@ -266,6 +270,7 @@
 
 #define RCC_AHB2ENR1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x8C ))
 #define GPIOC_AHB2ENR1_CLOCK_ER (1 << 2)
+#define GPIOD_AHB2ENR1_CLOCK_ER (1 << 3)
 #define GPIOG_AHB2ENR1_CLOCK_ER (1 << 6)
 #define GPIOH_AHB2ENR1_CLOCK_ER (1 << 7)
 #define TRNG_AHB2_CLOCK_ER      (1 << 18)

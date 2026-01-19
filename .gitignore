@@ -45,6 +45,7 @@
 *.idb
 *.pdb
 *.gdb
+*.log
 
 # automatically generated keys
 *.der
@@ -90,6 +91,9 @@ tools/delta/bmpatch
 
 # otp-keystore-gen binary
 tools/keytools/otp/otp-keystore-gen
+
+# test-server binary
+test-app/emu-test-apps/*/test-update-server
 
 # Vim swap files
 .*.swp
@@ -300,3 +304,6 @@ language.settings.xml
 
 # PolarFire SoC Device Tree Binary
 hal/mpfs.dtb
+
+# Emulator test: generated linker scripts
+test-app/emu-test-apps/*/target.ld
