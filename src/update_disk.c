@@ -263,7 +263,9 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t load_off;
 #ifdef MMU
     uint8_t *dts_addr = NULL;
+    #ifdef WOLFBOOT_FDT
     uint32_t dts_size = 0;
+    #endif
 #endif
     char part_name[4] = {'P', ':', 'X', '\0'};
     uint64_t start_us, elapsed_ms;
