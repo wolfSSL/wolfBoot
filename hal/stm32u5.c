@@ -502,7 +502,7 @@ static void periph_unsecure(void)
     RCC_AHB2ENR1_CLOCK_ER |= GPIOD_AHB2ENR1_CLOCK_ER;
 
     /* Enable clock for USART3 */
-    RCC_APB1LENR |= (1u << 18);
+    RCC_APB1ENR |= (1u << 18);
 
     /* Unsecure USART3 pins (PD8 TX, PD9 RX) */
     GPIOD_SECCFGR &= ~(1u << 8);

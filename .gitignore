@@ -304,3 +304,6 @@ language.settings.xml
 
 # PolarFire SoC Device Tree Binary
 hal/mpfs.dtb
+
+# Emulator test: generated linker scripts
+test-app/emu-test-apps/*/target.ld

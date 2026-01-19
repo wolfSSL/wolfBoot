@@ -120,7 +120,7 @@
 #define RCC_AHB3ENR             (*(volatile uint32_t *)(RCC_BASE + 0x94)) /* RM0456 - Table 108 */
 #define RCC_AHB3ENR_GTZC2EN     (1 << 12)
 
-#define RCC_APB1LENR            (*(volatile uint32_t *)(RCC_BASE + 0x9C)) /* RM0456 - Table 108 */
+#define RCC_APB1ENR             (*(volatile uint32_t *)(RCC_BASE + 0x9C)) /* RM0456 - Table 108 */
 #define RCC_AHB3ENR_PWREN       (1 << 2)
 
 #define RCC_ICSCR1             (*(volatile uint32_t *)(RCC_BASE + 0x08))
