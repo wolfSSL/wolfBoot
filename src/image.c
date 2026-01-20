@@ -696,7 +696,8 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     int       sig_len = 0;
     int       verify_res = 0;
 
-    wolfBoot_printf("info: ML-DSA wolfBoot_verify_signature\n");
+    wolfBoot_printf("info: ML-DSA %d verify_signature: pubkey %d, sig %d\n",
+        ML_DSA_LEVEL, KEYSTORE_PUBKEY_SIZE, ML_DSA_IMAGE_SIGNATURE_SIZE);
 
 #if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
     (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
@@ -784,7 +785,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         ret = wc_MlDsaKey_GetSigLen(&ml_dsa, &sig_len);
 
         if (ret != 0 || sig_len <= 0) {
-            wolfBoot_printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
+            wolfBoot_printf("error: wc_MlDsaKey_GetSigLen returned %d\n", ret);
             ret = -1;
         }
         else if (sig_len != ML_DSA_IMAGE_SIGNATURE_SIZE) {
@@ -798,7 +799,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         wolfBoot_printf("info: using ML-DSA security level: %d\n",
                         ML_DSA_LEVEL);
 
-        /* Finally verify signagure. */
+        /* Finally verify signature. */
         ret = wc_MlDsaKey_Verify(&ml_dsa, sig, ML_DSA_IMAGE_SIGNATURE_SIZE,
                                  img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
                                  &verify_res);

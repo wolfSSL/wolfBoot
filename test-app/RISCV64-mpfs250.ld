@@ -67,8 +67,9 @@ SECTIONS
   } >LSRAM AT> IRAM
 
   /* Uninitialized data section */
+  /* Mark as NOLOAD so it's not included in binary (zero-initialized at runtime) */
   . = ALIGN(8);
-  .bss :
+  .bss (NOLOAD) :
   {
     /* This is used by the startup in order to initialize the .bss section */
     _start_bss = .;     /* define a global symbol at bss start */
@@ -83,7 +84,8 @@ SECTIONS
   } >LSRAM
 
   /* User_heap_stack section, used to check that there is enough RAM left */
-  ._user_heap_stack :
+  /* Mark as NOLOAD so it's not included in binary (zero-initialized at runtime) */
+  ._user_heap_stack (NOLOAD) :
   {
     . = ALIGN(8);
     PROVIDE ( end = . );
