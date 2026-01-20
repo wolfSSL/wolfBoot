@@ -62,7 +62,7 @@
 
 #include <stddef.h> /* for size_t */
 
-#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
+#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(MMU))
 #include "encrypt.h"
 static int encrypt_initialized = 0;
 
@@ -1376,7 +1376,7 @@ int wolfBoot_fallback_is_possible(void)
 static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
 #endif
 
-#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST))
+#if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(MMU))
 int RAMFUNCTION wolfBoot_enable_fallback_iv(int enable)
 {
     int prev = 0;
@@ -1408,7 +1408,7 @@ void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counte
     /* Fallback IV offset is single-use; clear it once applied. */
     encrypt_iv_offset = 0;
 }
-#endif /* EXT_ENCRYPTED && (__WOLFBOOT || UNIT_TEST) */
+#endif /* EXT_ENCRYPTED && (__WOLFBOOT || UNIT_TEST || MMU) */
 
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {

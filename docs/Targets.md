@@ -1048,7 +1048,29 @@ int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);  /* called automatically by wolfBoot_success() */
 ```
 
-To use your own implementation for getting the encryption key use `CUSTOM_ENCRYPT_KEY` and `OBJS_EXTRA=src/my_custom_encrypt_key.o`. Then provide your own implementation of `int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);`
+To use your own implementation for getting the encryption key use `CUSTOM_ENCRYPT_KEY` and `OBJS_EXTRA=src/my_custom_encrypt_key.o`.
+Then provide your own implementation of `int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);`
+
+Example:
+
+```c
+int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce)
+{
+    int i;
+    /* Test key: "0123456789abcdef0123456789abcdef" (32 bytes for AES-256) */
+    const char test_key[] = "0123456789abcdef0123456789abcdef";
+    /* Test nonce: "0123456789abcdef" (16 bytes) */
+    const char test_nonce[] = "0123456789abcdef";
+
+    for (i = 0; i < ENCRYPT_KEY_SIZE && i < (int)sizeof(test_key); i++) {
+        key[i] = (uint8_t)test_key[i];
+    }
+    for (i = 0; i < ENCRYPT_NONCE_SIZE && i < (int)sizeof(test_nonce); i++) {
+        nonce[i] = (uint8_t)test_nonce[i];
+    }
+    return 0;
+}
+```
 
 To sign and encrypt an image, create a key file with the concatenated key and nonce, then use the sign tool:
 
@@ -1063,9 +1085,73 @@ printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 
 The result is `fitImage_v1_signed_and_encrypted.bin`, which gets placed into your OFP_A or OFP_B partitions.
 
+```sh
+sudo dd if=fitImage_v1_signed_and_encrypted.bin of=/dev/sdc2 bs=512 status=progress && sudo cmp fitImage_v1_signed_and_encrypted.bin /dev/sdc2
+sudo dd if=fitImage_v1_signed_and_encrypted.bin of=/dev/sdc3 bs=512 status=progress && sudo cmp fitImage_v1_signed_and_encrypted.bin /dev/sdc3
+```
+
 During boot, wolfBoot decrypts the image headers from disk to select the best candidate, loads and decrypts the full image to RAM, then verifies integrity and authenticity before booting. On successful boot, `wolfBoot_success()` clears the key from RAM.
 
 See the [Encrypted Partitions](encrypted_partitions.md) documentation for additional details.
+
+### PolarFire SoC with PQC (ML-DSA)
+
+#### Configuration
+
+Update your `.config` file with the following ML-DSA settings:
+
+```makefile
+# ML-DSA 87 (Category 5)
+SIGN=ML_DSA
+HASH=SHA256
+ML_DSA_LEVEL=5
+IMAGE_SIGNATURE_SIZE=4627
+IMAGE_HEADER_SIZE=12288
+WOLFBOOT_SECTOR_SIZE?=0x4000
+```
+
+**Important:**
+- The `sign` tool requires `IMAGE_HEADER_SIZE` to be set as an environment variable, even if it's already configured in `.config`. This is because the sign tool reads the environment variable separately to determine the header size for padding. Without this, the sign tool may use a smaller default header size, causing a mismatch with wolfBoot's expected header size.
+- The `WOLFBOOT_SECTOR_SIZE` must be larger than the `IMAGE_HEADER_SIZE`/
+
+#### Signing and Encryption
+
+```sh
+# Sign and Encrypt with PQ ML-DSA 5 (87)
+# NOTE: IMAGE_HEADER_SIZE must match the value in .config
+IMAGE_HEADER_SIZE=12288 ML_DSA_LEVEL=5 ./tools/keytools/sign --ml_dsa --sha256 --aes256 --encrypt /tmp/enc_key.der \
+    fitImage wolfboot_signing_private_key.der 1
+```
+
+**ML-DSA Parameter Reference:**
+
+| ML_DSA_LEVEL | Security Category | Signature Size | Private Key | Public Key | Recommended IMAGE_HEADER_SIZE |
+|--------------|-------------------|----------------|-------------|------------|------------------------------ |
+| 2            | Category 2        | 2420           | 2560        | 1312       | 8192                          |
+| 3            | Category 3        | 3309           | 4032        | 1952       | 8192                          |
+| 5            | Category 5        | 4627           | 4896        | 2592       | 12288                         |
+
+For other ML-DSA levels, adjust `ML_DSA_LEVEL`, `IMAGE_SIGNATURE_SIZE`, and `IMAGE_HEADER_SIZE` accordingly in both `.config` and the signing command.
+
+### PolarFire Performance Comparison
+
+#### Binary Size Comparison
+
+The following table compares wolfBoot binary sizes for different signature algorithms on PolarFire SoC (MPFS250):
+
+| Algorithm | Hash   | Text    | Data | BSS     | Total   | Binary Size |
+|-----------|--------|---------|------|---------|---------|-------------|
+| ECC384    | SHA384 | 67.1 KB | 8 B  | 3.0 KB  | 70.2 KB | 68 KB       |
+| ML-DSA 87 | SHA256 | 63.9 KB | 0 B  | 14.5 KB | 78.4 KB | 64 KB       |
+
+#### Boot Time Comparison
+
+Boot time measurements on PolarFire SoC (RISC-V 64-bit U54 @ 625 MHz) for a 19MB encrypted FIT image:
+
+| Algorithm   | Hash    | Load Time | Decrypt Time | Integrity Check | Signature Verify | Total Boot Time |
+|-------------|---------|-----------|--------------|-----------------|------------------|-----------------|
+| ECC384      | SHA384  | ~800 ms   | ~2900 ms     | ~1500 ms        | ~70 ms           | ~5.3 seconds    |
+| ML-DSA 87   | SHA256  | ~835 ms   | ~2900 ms     | ~2100 ms        | ~22 ms           | ~5.9 seconds    |
 
 ### PolarFire Soc Debugging
 
@@ -1154,48 +1240,80 @@ FDT: MAC1 = 00:04:A3:5B:22:89
 RISC-V 64-bit U54 (RV64GC1) 625 MHz
 
 ```
+./configure --enable-riscv-asm --enable-dilithium --enable-mlkem --enable-sp=yes
+make
+./wolfcrypt/benchmark/benchmark
 ------------------------------------------------------------------------------
  wolfSSL version 5.8.4
 ------------------------------------------------------------------------------
 Math:   Multi-Precision: Wolf(SP) word-size=64 bits=3072 sp_int.c
+        Single Precision: ecc 256 rsa/dh 2048 3072 sp_c64.c
         Assembly Speedups: RISCVASM ALIGN
 wolfCrypt Benchmark (block bytes 1048576, min 1.0 sec each)
-RNG                          5 MiB took 1.232 seconds,    4.058 MiB/s
-AES-128-CBC-enc             10 MiB took 1.182 seconds,    8.457 MiB/s
-AES-128-CBC-dec             10 MiB took 1.166 seconds,    8.573 MiB/s
-AES-192-CBC-enc             10 MiB took 1.378 seconds,    7.257 MiB/s
-AES-192-CBC-dec             10 MiB took 1.362 seconds,    7.344 MiB/s
-AES-256-CBC-enc             10 MiB took 1.569 seconds,    6.373 MiB/s
-AES-256-CBC-dec             10 MiB took 1.556 seconds,    6.426 MiB/s
-AES-128-GCM-enc             10 MiB took 1.956 seconds,    5.113 MiB/s
-AES-128-GCM-dec             10 MiB took 1.955 seconds,    5.115 MiB/s
-AES-192-GCM-enc              5 MiB took 1.075 seconds,    4.650 MiB/s
-AES-192-GCM-dec              5 MiB took 1.074 seconds,    4.654 MiB/s
-AES-256-GCM-enc              5 MiB took 1.172 seconds,    4.268 MiB/s
-AES-256-GCM-dec              5 MiB took 1.170 seconds,    4.275 MiB/s
-GMAC Table 4-bit            15 MiB took 1.133 seconds,   13.245 MiB/s
-CHACHA                      20 MiB took 1.107 seconds,   18.064 MiB/s
-CHA-POLY                    15 MiB took 1.060 seconds,   14.152 MiB/s
-POLY1305                    75 MiB took 1.044 seconds,   71.812 MiB/s
-SHA                         20 MiB took 1.139 seconds,   17.561 MiB/s
-SHA-256                     10 MiB took 1.069 seconds,    9.350 MiB/s
-SHA-384                     15 MiB took 1.072 seconds,   13.994 MiB/s
-SHA-512                     15 MiB took 1.072 seconds,   13.990 MiB/s
-SHA-512/224                 15 MiB took 1.068 seconds,   14.041 MiB/s
-SHA-512/256                 15 MiB took 1.066 seconds,   14.070 MiB/s
-HMAC-SHA                    20 MiB took 1.140 seconds,   17.542 MiB/s
-HMAC-SHA256                 10 MiB took 1.068 seconds,    9.366 MiB/s
-HMAC-SHA384                 15 MiB took 1.066 seconds,   14.076 MiB/s
-HMAC-SHA512                 15 MiB took 1.066 seconds,   14.077 MiB/s
-PBKDF2                       1 KiB took 1.024 seconds,    1.129 KiB/s
-RSA     2048   public       800 ops took 1.142 sec, avg 1.427 ms,   700.575 ops/sec
-RSA     2048  private       100 ops took 8.450 sec, avg 84.504 ms,    11.834 ops/sec
-DH      2048  key gen        60 ops took 1.010 sec, avg 16.841 ms,    59.379 ops/sec
-DH      2048    agree       100 ops took 3.421 sec, avg 34.211 ms,    29.231 ops/sec
-ECC   [      SECP256R1]   256  key gen       100 ops took 1.304 sec, avg 13.039 ms,    76.691 ops/sec
-ECDHE [      SECP256R1]   256    agree       100 ops took 1.299 sec, avg 12.992 ms,    76.970 ops/sec
-ECDSA [      SECP256R1]   256     sign       100 ops took 1.338 sec, avg 13.383 ms,    74.723 ops/sec
-ECDSA [      SECP256R1]   256   verify       200 ops took 1.846 sec, avg 9.231 ms,   108.333 ops/sec
+RNG                          5 MiB took 1.225 seconds,    4.081 MiB/s
+AES-128-CBC-enc             10 MiB took 1.179 seconds,    8.478 MiB/s
+AES-128-CBC-dec             10 MiB took 1.164 seconds,    8.589 MiB/s
+AES-192-CBC-enc             10 MiB took 1.373 seconds,    7.281 MiB/s
+AES-192-CBC-dec             10 MiB took 1.360 seconds,    7.354 MiB/s
+AES-256-CBC-enc             10 MiB took 1.565 seconds,    6.389 MiB/s
+AES-256-CBC-dec             10 MiB took 1.550 seconds,    6.451 MiB/s
+AES-128-GCM-enc             10 MiB took 1.940 seconds,    5.156 MiB/s
+AES-128-GCM-dec             10 MiB took 1.938 seconds,    5.159 MiB/s
+AES-192-GCM-enc              5 MiB took 1.068 seconds,    4.680 MiB/s
+AES-192-GCM-dec              5 MiB took 1.066 seconds,    4.689 MiB/s
+AES-256-GCM-enc              5 MiB took 1.163 seconds,    4.298 MiB/s
+AES-256-GCM-dec              5 MiB took 1.163 seconds,    4.301 MiB/s
+GMAC Table 4-bit            15 MiB took 1.106 seconds,   13.566 MiB/s
+CHACHA                      20 MiB took 1.107 seconds,   18.068 MiB/s
+CHA-POLY                    15 MiB took 1.058 seconds,   14.178 MiB/s
+POLY1305                    75 MiB took 1.036 seconds,   72.387 MiB/s
+SHA                         20 MiB took 1.141 seconds,   17.535 MiB/s
+SHA-256                     10 MiB took 1.071 seconds,    9.336 MiB/s
+SHA-384                     15 MiB took 1.066 seconds,   14.068 MiB/s
+SHA-512                     15 MiB took 1.066 seconds,   14.070 MiB/s
+SHA-512/224                 15 MiB took 1.067 seconds,   14.060 MiB/s
+SHA-512/256                 15 MiB took 1.070 seconds,   14.023 MiB/s
+SHA3-224                    15 MiB took 1.328 seconds,   11.292 MiB/s
+SHA3-256                    15 MiB took 1.398 seconds,   10.731 MiB/s
+SHA3-384                    10 MiB took 1.206 seconds,    8.291 MiB/s
+SHA3-512                    10 MiB took 1.729 seconds,    5.785 MiB/s
+SHAKE128                    15 MiB took 1.142 seconds,   13.135 MiB/s
+SHAKE256                    15 MiB took 1.402 seconds,   10.699 MiB/s
+HMAC-SHA                    20 MiB took 1.145 seconds,   17.470 MiB/s
+HMAC-SHA256                 10 MiB took 1.074 seconds,    9.310 MiB/s
+HMAC-SHA384                 15 MiB took 1.076 seconds,   13.944 MiB/s
+HMAC-SHA512                 15 MiB took 1.069 seconds,   14.036 MiB/s
+PBKDF2                       1 KiB took 1.023 seconds,    1.130 KiB/s
+RSA     2048   public      1000 ops took 1.087 sec, avg 1.087 ms,   920.244 ops/sec
+RSA     2048  private       100 ops took 5.410 sec, avg 54.100 ms,    18.484 ops/sec
+DH      2048  key gen        48 ops took 1.004 sec, avg 20.920 ms,    47.801 ops/sec
+DH      2048    agree       100 ops took 2.087 sec, avg 20.873 ms,    47.909 ops/sec
+ECC   [      SECP256R1]   256  key gen       800 ops took 1.100 sec, avg 1.375 ms,   727.248 ops/sec
+ECDHE [      SECP256R1]   256    agree       300 ops took 1.041 sec, avg 3.470 ms,   288.152 ops/sec
+ECDSA [      SECP256R1]   256     sign       600 ops took 1.144 sec, avg 1.907 ms,   524.370 ops/sec
+ECDSA [      SECP256R1]   256   verify       300 ops took 1.173 sec, avg 3.909 ms,   255.844 ops/sec
+ECC   [      SECP384R1]   384  key gen       100 ops took 3.887 sec, avg 38.867 ms,    25.729 ops/sec
+ECDHE [      SECP384R1]   384    agree       100 ops took 3.883 sec, avg 38.827 ms,    25.755 ops/sec
+ECDSA [      SECP384R1]   384     sign       100 ops took 3.948 sec, avg 39.485 ms,    25.326 ops/sec
+ECDSA [      SECP384R1]   384   verify       100 ops took 2.619 sec, avg 26.190 ms,    38.183 ops/sec
+ML-KEM 512    128  key gen      2000 ops took 1.021 sec, avg 0.511 ms,  1958.111 ops/sec
+ML-KEM 512    128    encap      1700 ops took 1.006 sec, avg 0.592 ms,  1690.275 ops/sec
+ML-KEM 512    128    decap      1300 ops took 1.075 sec, avg 0.827 ms,  1209.214 ops/sec
+ML-KEM 768    192  key gen      1200 ops took 1.035 sec, avg 0.863 ms,  1158.970 ops/sec
+ML-KEM 768    192    encap      1100 ops took 1.092 sec, avg 0.993 ms,  1006.925 ops/sec
+ML-KEM 768    192    decap       800 ops took 1.055 sec, avg 1.319 ms,   758.026 ops/sec
+ML-KEM 1024   256  key gen       800 ops took 1.124 sec, avg 1.405 ms,   711.862 ops/sec
+ML-KEM 1024   256    encap       700 ops took 1.090 sec, avg 1.557 ms,   642.343 ops/sec
+ML-KEM 1024   256    decap       600 ops took 1.181 sec, avg 1.968 ms,   508.073 ops/sec
+ML-DSA    44  key gen       600 ops took 1.107 sec, avg 1.844 ms,   542.217 ops/sec
+ML-DSA    44     sign       200 ops took 1.144 sec, avg 5.719 ms,   174.842 ops/sec
+ML-DSA    44   verify       600 ops took 1.146 sec, avg 1.910 ms,   523.569 ops/sec
+ML-DSA    65  key gen       400 ops took 1.267 sec, avg 3.167 ms,   315.744 ops/sec
+ML-DSA    65     sign       200 ops took 1.687 sec, avg 8.436 ms,   118.543 ops/sec
+ML-DSA    65   verify       400 ops took 1.272 sec, avg 3.180 ms,   314.428 ops/sec
+ML-DSA    87  key gen       200 ops took 1.066 sec, avg 5.331 ms,   187.588 ops/sec
+ML-DSA    87     sign       100 ops took 1.162 sec, avg 11.617 ms,    86.084 ops/sec
+ML-DSA    87   verify       200 ops took 1.077 sec, avg 5.385 ms,   185.704 ops/sec
 Benchmark complete
 ```
 

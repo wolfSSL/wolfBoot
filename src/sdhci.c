@@ -1328,8 +1328,10 @@ int sdhci_init(void)
     reg &= ~SDHCI_HRS06_EMM_MASK;
 #ifdef DISK_EMMC
     reg |= SDHCI_HRS06_MODE_LEGACY;  /* eMMC Legacy mode */
+    wolfBoot_printf("SDHCI: eMMC mode\n");
 #else
     reg |= SDHCI_HRS06_MODE_SD;      /* SD card mode */
+    wolfBoot_printf("SDHCI: SDCard mode\n");
 #endif
     SDHCI_REG_SET(SDHCI_HRS06, reg);
 
