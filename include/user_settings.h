@@ -223,6 +223,7 @@ extern int tolower(int c);
 #       define WOLFSSL_RSA_VERIFY_ONLY
 #       define WOLFSSL_RSA_PUBLIC_ONLY
 #       define WC_NO_RSA_OAEP
+#       define NO_RSA_BOUNDS_CHECK
 #   endif
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_HAVE_SP_RSA
