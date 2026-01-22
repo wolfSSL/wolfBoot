@@ -372,6 +372,26 @@ ifeq ($(TARGET),mcxw)
     LDFLAGS+=--specs=nosys.specs
 endif
 
+ifeq ($(TARGET),mcxn)
+    ifeq ($(TZEN),1)
+      LSCRIPT_TEMPLATE=ARM-mcxn-ns.ld
+      CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
+    else
+      LSCRIPT_TEMPLATE=ARM-mcxn.ld
+    endif
+    APP_OBJS+=\
+      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
+      $(MCUXPRESSO)/drivers/gpio/fsl_gpio.o \
+      $(MCUXPRESSO)/drivers/lpflexcomm/fsl_lpflexcomm.o \
+      $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/romapi/flash/src/fsl_flash.o
+    ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
+      LDFLAGS+=--specs=nosys.specs
+    endif
+endif
+
 ifeq ($(TARGET),imx_rt)
   LDFLAGS+=\
     -mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections \

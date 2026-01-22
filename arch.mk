@@ -339,7 +339,7 @@ else
       ifeq ($(WOLFCRYPT_TZ),1)
         CORTEXM_ARM_EXTRA_OBJS=
         CORTEXM_ARM_EXTRA_CFLAGS=
-        SECURE_OBJS+=./src/wc_callable.o
+        SECURE_OBJS+=./src/wc_callable.o $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
         CFLAGS+=-DWOLFCRYPT_SECURE_MODE
         SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
       endif
@@ -730,6 +730,43 @@ ifeq ($(TARGET),mcxw)
 	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o \
       $(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+endif
+
+ifeq ($(TARGET),mcxn)
+  CORTEX_M33=1
+  ifneq ($(TZEN),1)
+    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+  endif
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO_DRIVERS)/drivers/romapi/flash \
+      -I$(MCUXPRESSO_DRIVERS)/../periph \
+      -I$(MCUXPRESSO) \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/gpio \
+      -I$(MCUXPRESSO)/drivers/port \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO)/drivers/lpflexcomm \
+      -I$(MCUXPRESSO)/drivers/lpuart \
+      -I$(MCUXPRESSO_PROJECT_TEMPLATE) \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  CFLAGS+=-Wno-old-style-declaration
+  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33 -U__ARM_FEATURE_DSP
+  LDFLAGS+=-mcpu=cortex-m33
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/romapi/flash/src/fsl_flash.o
+
+  ifeq ($(DEBUG_UART),1)
+    OBJS+=\
+      $(MCUXPRESSO)/drivers/lpflexcomm/fsl_lpflexcomm.o \
+      $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
+  endif
 endif
 
 ifeq ($(TARGET),nrf5340)

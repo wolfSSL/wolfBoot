@@ -390,6 +390,7 @@ if(NOT DEFINED ARM_TARGETS)
                             lpc54606j512
                             mcxa
                             mcxw
+                            mcxn
                             nrf52
                             nrf52840
                             nrf5340
