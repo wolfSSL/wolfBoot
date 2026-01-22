@@ -1,4 +1,4 @@
-name: Wolfboot Reusable Build Workflow for MCUXpresso SDK
+name: Wolfboot Reusable Build Workflow for west-based MCUXpresso SDK
 
 on:
 
