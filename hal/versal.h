@@ -59,12 +59,14 @@
 /* ARM Errata */
 #define CONFIG_ARM_ERRATA_855873 1
 
-/* BL31-applied errata/CVEs (preserve when modifying CPUACTLR):
+/* BL31-applied errata/CVEs:
+ * ARM Trusted Firmware (BL31) applies these CPU workarounds at EL3:
  * - Erratum 859971
  * - Erratum 1319367
  * - CVE-2017-5715 (Spectre V2)
  * - CVE-2018-3639 (SSB)
  * - CVE-2022-23960
+ * Note: Do not modify CPUACTLR_EL1 in application code without preserving these.
  */
 
 #endif /* USE_BUILTIN_STARTUP */
@@ -495,12 +497,19 @@
 #define FLASH_SECTOR_SIZE           0x10000  /* 64KB */
 #define FLASH_DEVICE_SIZE           0x8000000 /* 128MB per chip */
 
+/* Total flash size depends on single vs dual parallel configuration */
+#if GQPI_USE_DUAL_PARALLEL == 1
+#define FLASH_TOTAL_SIZE            (FLASH_DEVICE_SIZE * 2)  /* 256MB total */
+#else
+#define FLASH_TOTAL_SIZE            FLASH_DEVICE_SIZE         /* 128MB total */
+#endif
+
 /* QSPI Configuration (bare-metal driver) */
 #ifndef GQSPI_CLK_REF
     #define GQSPI_CLK_REF           300000000  /* 300 MHz */
 #endif
 #ifndef GQSPI_CLK_DIV
-    #define GQSPI_CLK_DIV           1  /* Divide by 4 (300MHz / 4 = 75MHz) */
+    #define GQSPI_CLK_DIV           1  /* Formula: 300MHz / (2 << 1) = 75MHz */
 #endif
 #define GQSPI_CS_ASSERT_CLOCKS      5  /* CS Setup Time (tCSS) */
 #define GQSPI_CS_DEASSERT_CLOCKS    4  /* CS Hold Time */

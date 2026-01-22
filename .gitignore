@@ -308,3 +308,16 @@ hal/mpfs.dtb
 
 # Emulator test: generated linker scripts
 test-app/emu-test-apps/*/target.ld
+
+# AMD/Xilinx Versal test artifacts
+uart_log*.txt
+build_test*.log
+optional_data.txt
+wolfboot_output_*.log
+BOOT.BIN
+Image
+fitImage
+image.ub
+*.pdi
+system-default.dtb
+test_output/

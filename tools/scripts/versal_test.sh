@@ -21,7 +21,7 @@ SERVER_IP="${SERVER_IP:-10.0.4.24}"
 BOARD_IP="${BOARD_IP:-10.0.4.90}"
 TFTP_DIR="${TFTP_DIR:-/srv/tftp}"
 VITIS_PATH="${VITIS_PATH:-/opt/Xilinx/Vitis/2024.2}"
-RELAY_PORT="${RELAY_PORT:-/dev/ttyACM2}"
+RELAY_PORT="${RELAY_PORT:-/dev/ttyACM1}"
 UART_LOG="${UART_LOG:-${WOLFBOOT_ROOT}/uart_log.txt}"
 LINUX_IMAGES_DIR="${LINUX_IMAGES_DIR:-}"
 
@@ -107,7 +107,9 @@ relay_set_mode() {
 
     log_info "Setting relay pattern: $pattern"
     for i in 0 1 2 3; do
-        local bit="${pattern:$i:1}" relay_num=$((i + 1)) state=$([ "$bit" = "1" ] && echo 1 || echo 0)
+        local bit="${pattern:$i:1}"
+        local relay_num=$((i + 1))
+        local state=$([ "$bit" = "1" ] && echo 1 || echo 0)
         local checksum=$(( (0xA0 + relay_num + state) & 0xFF ))
         echo "  Relay $relay_num: $( [ $state -eq 1 ] && echo ON || echo OFF ) (pattern[$i]=$bit) -> [0xA0, $relay_num, $state, 0x$(printf "%02x" $checksum)]"
         printf "%b" "\x$(printf "%02x" 0xA0)\x$(printf "%02x" $relay_num)\x$(printf "%02x" $state)\x$(printf "%02x" $checksum)" >&3
@@ -118,13 +120,17 @@ relay_set_mode() {
 
 boot_sdcard() {
     log_info "Booting from SD card..."
-    relay_set_mode "1000" && sleep 0.1 && relay_set_mode "1000" && sleep 0.2 && relay_set_mode "0000" && sleep 0.1
+    # Set boot mode pins for SD boot (MODE3:0 = 0b1110 = 0xE)
+    # Hold reset for 1 second to ensure clean reset
+    relay_set_mode "1000" && sleep 0.2 && relay_set_mode "1000" && sleep 1.0 && relay_set_mode "0000" && sleep 0.5
     log_ok "SD card boot mode set, reset released"
 }
 
 boot_qspi() {
     log_info "Booting from QSPI..."
-    relay_set_mode "1000" && sleep 0.1 && relay_set_mode "1011" && sleep 0.2 && relay_set_mode "0011" && sleep 0.1
+    # Set boot mode pins for QSPI boot (MODE3:0 = 0b0011 = 0x3)
+    # Hold reset for 1 second to ensure clean reset
+    relay_set_mode "1000" && sleep 0.2 && relay_set_mode "1011" && sleep 1.0 && relay_set_mode "0011" && sleep 0.5
     log_ok "QSPI boot mode set, reset released"
 }
 
@@ -211,21 +217,21 @@ stty raw < \$pty
 log_user 0
 log_file -a \"$UART_LOG\"
 
-puts \"Waiting for autoboot prompt...\"
+send_user \"Waiting for autoboot prompt...\\n\"
 expect {
-    \"Hit any key to stop autoboot\" { puts \"Autoboot prompt detected, sending Enter...\"; send \"\\r\" }
-    \"Versal>\" { puts \"U-Boot prompt found\" }
-    timeout { puts \"Timeout waiting for U-Boot prompt\"; exit 1 }
+    \"Hit any key to stop autoboot\" { send_user \"Autoboot prompt detected, sending Enter...\\n\"; send \"\\r\" }
+    \"Versal>\" { send_user \"U-Boot prompt found\\n\" }
+    timeout { send_user \"Timeout waiting for U-Boot prompt\\n\"; exit 1 }
 }
 expect \"Versal>\"
-puts \"At U-Boot prompt, configuring network...\"
+send_user \"At U-Boot prompt, configuring network...\\n\"
 sleep 0.5
 
 send \"setenv ipaddr \$board_ip\\r\"; expect \"Versal>\"
 send \"setenv serverip \$server_ip\\r\"; expect \"Versal>\"
 send \"setenv netmask 255.255.255.0\\r\"; expect \"Versal>\"
 
-puts \"Probing SPI flash...\"
+send_user \"Probing SPI flash...\\n\"
 send \"sf probe 0\\r\"; expect \"Versal>\"
 "
     # Add flash operations for each file
@@ -234,20 +240,26 @@ send \"sf probe 0\\r\"; expect \"Versal>\"
         local size=$(stat -c%s "${TFTP_DIR}/${file}")
         local size_hex=$(printf "0x%x" $size)
         expect_script+="
-puts \"Downloading ${file} via TFTP...\"
+send_user \"Downloading ${file} via TFTP...\\n\"
 send \"tftpboot 0x10000000 ${file}\\r\"
-expect { \"Bytes transferred\" { puts \"TFTP download successful\" } \"Error\" { puts \"TFTP download failed\"; exit 1 } timeout { puts \"TFTP timeout\"; exit 1 } }
-expect \"Versal>\"
+expect {
+    -re \"Bytes transferred.*Versal>\" { send_user \"TFTP download successful\\n\" }
+    \"Error\" { send_user \"TFTP download failed\\n\"; exit 1 }
+    timeout { send_user \"TFTP timeout\\n\"; exit 1 }
+}
 
-puts \"Erasing and writing ${file} to flash at ${addr}...\"
+send_user \"Erasing and writing ${file} to flash at ${addr}...\\n\"
 send \"sf update 0x10000000 ${addr} ${size_hex}\\r\"
-expect { -re \".*Versal>\" { puts \"${file} flash complete\" } timeout { puts \"Flash timeout\"; exit 1 } }
+expect {
+    -re \"Versal>\" { send_user \"${file} flash complete\\n\" }
+    timeout { send_user \"Flash timeout\\n\"; exit 1 }
+}
 "
     done
 
     expect_script+="
-puts \"\"
-puts \"All flash operations complete!\"
+send_user \"\\n\"
+send_user \"All flash operations complete!\\n\"
 close
 "
     boot_sdcard
@@ -290,6 +302,7 @@ Options:
   --linux-uboot       Build BOOT.BIN with U-Boot and flash Linux FIT image
   --boot-sdcard       Test SD card boot mode only (no build/flash)
   --boot-qspi         Test QSPI boot mode only (no build/flash)
+  --skipuart          Skip UART capture (use with --boot-sdcard/--boot-qspi)
   -h, --help          Show this help message
 
 Environment Variables:
@@ -299,21 +312,46 @@ Environment Variables:
   TFTP_DIR            TFTP directory path (default: /srv/tftp)
   VITIS_PATH          Xilinx Vitis installation path (default: /opt/Xilinx/Vitis/2024.2)
   LINUX_IMAGES_DIR    Path to PetaLinux images directory (for --linux and --linux-uboot)
+
+Examples:
+  $0 --boot-sdcard --skipuart    # Reset to SD boot without UART capture
+  $0 --boot-qspi --skipuart      # Reset to QSPI boot without UART capture
 EOF
 }
+
+# Check for --skipuart flag before starting UART capture
+SKIP_UART=false
+for arg in "$@"; do
+    case "$arg" in
+        --skipuart) SKIP_UART=true ;;
+    esac
+done
 
 # Check for help option before starting UART capture
 case "${1:-}" in -h|--help) show_help; exit 0 ;; esac
 
-# Start UART capture immediately
-log_info "Starting UART capture..."
-start_uart_capture || { log_error "Failed to start UART capture"; exit 1; }
-log_info "UART capture active, PIDs: ${UART_PIDS[*]}"
+# Start UART capture immediately (unless --skipuart specified)
+if [ "$SKIP_UART" = "false" ]; then
+    log_info "Starting UART capture..."
+    start_uart_capture || { log_error "Failed to start UART capture"; exit 1; }
+    log_info "UART capture active, PIDs: ${UART_PIDS[*]}"
+else
+    log_info "Skipping UART capture (--skipuart specified)"
+fi
 
 # Test boot helper
 test_boot() {
     local boot_func=$1 mode_name=$2
     log_info "=== Testing $mode_name relay sequence ==="
+
+    # If UART capture is skipped, just run relay and exit
+    if [ "$SKIP_UART" = "true" ]; then
+        $boot_func || { log_error "$mode_name failed"; exit 1; }
+        log_ok "Board reset to $mode_name mode"
+        log_info "Monitor console manually: picocom -b 115200 $UART_PORT"
+        exit 0
+    fi
+
     [ ${#UART_PIDS[@]} -eq 0 ] && { log_error "UART capture not running!"; exit 1; }
     [ -z "$UART_PTY" ] || [ ! -e "$UART_PTY" ] && { log_error "UART PTY not available: $UART_PTY"; exit 1; }
 

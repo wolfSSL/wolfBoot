@@ -22,7 +22,7 @@
  * Target: VMK180 Evaluation Board (VM1802 Versal Prime)
  *
  * Features:
- *   - UART driver (Cadence UART / ARM PL011)
+ *   - UART driver (ARM PL011 UART / UARTPSV)
  *   - ARM Generic Timer
  *   - QSPI flash driver (GQSPI - dual parallel MT25QU01GBBB)
  *
@@ -590,6 +590,29 @@ static int qspi_fifo_rx(uint8_t *data, uint32_t len)
     return 0;
 }
 
+/* RX using FIFO polling (IO mode) - helper to avoid code duplication */
+static int qspi_rx_io_mode(uint8_t *rxData, uint32_t rxLen, uint32_t *rxEntry)
+{
+    int ret = 0;
+    uint32_t remaining = rxLen;
+    uint32_t offset = 0;
+    uint32_t xferSz;
+
+    while (ret == 0 && remaining > 0) {
+        xferSz = qspi_calc_exp(remaining, rxEntry);
+        ret = qspi_gen_fifo_push(*rxEntry);
+        if (ret == 0) {
+            ret = qspi_gen_fifo_start_and_wait();
+        }
+        if (ret == 0) {
+            ret = qspi_fifo_rx(&rxData[offset], xferSz);
+        }
+        offset += xferSz;
+        remaining -= xferSz;
+    }
+    return ret;
+}
+
 /* Core QSPI transfer function using GenFIFO */
 static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
                          uint8_t *rxData, uint32_t rxLen, uint32_t dummyClocks,
@@ -601,11 +624,11 @@ static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
     uint32_t chunkLen;
     uint32_t txEntry, chunkEntry;
     const uint8_t *writePtr;
-    uint32_t remaining, offset, xferSz;
+    uint32_t remaining, xferSz;
     uint32_t rxEntry;
 
     /* Enable GQSPI controller */
-    /* Set DMA mode only for Quad reads (when dummyClocks > 0) and not in IO mode */
+    /* Set DMA mode for fast/quad reads (indicated by dummyClocks > 0) unless IO mode forced */
     if (dummyClocks > 0 && rxLen > 0) {
 #ifndef GQSPI_MODE_IO
         GQSPI_CFG = (GQSPI_CFG & ~GQSPI_CFG_MODE_EN_MASK) | GQSPI_CFG_MODE_EN_DMA;
@@ -704,9 +727,14 @@ static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
                 if (((uintptr_t)rxData & (GQSPI_DMA_ALIGN - 1)) || (rxLen & 3)) {
                     /* Use temp buffer for unaligned data */
                     dmaPtr = dma_tmpbuf;
-                    dmaLen = (rxLen + GQSPI_DMA_ALIGN - 1) & ~(GQSPI_DMA_ALIGN - 1);
-                    if (dmaLen > sizeof(dma_tmpbuf)) {
+                    /* Bounds check before alignment to prevent integer overflow */
+                    if (rxLen > sizeof(dma_tmpbuf)) {
                         dmaLen = sizeof(dma_tmpbuf);
+                    } else {
+                        dmaLen = (rxLen + GQSPI_DMA_ALIGN - 1) & ~(GQSPI_DMA_ALIGN - 1);
+                        if (dmaLen > sizeof(dma_tmpbuf)) {
+                            dmaLen = sizeof(dma_tmpbuf);
+                        }
                     }
                     useTemp = 1;
                 } else {
@@ -755,37 +783,11 @@ static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
                 }
             } else {
                 /* IO mode: Use FIFO polling (fallback when DMA mode not enabled) */
-                remaining = rxLen;
-                offset = 0;
-                while (ret == 0 && remaining > 0) {
-                    xferSz = qspi_calc_exp(remaining, &rxEntry);
-                    ret = qspi_gen_fifo_push(rxEntry);
-                    if (ret == 0) {
-                        ret = qspi_gen_fifo_start_and_wait();
-                    }
-                    if (ret == 0) {
-                        ret = qspi_fifo_rx(&rxData[offset], xferSz);
-                    }
-                    offset += xferSz;
-                    remaining -= xferSz;
-                }
+                ret = qspi_rx_io_mode(rxData, rxLen, &rxEntry);
             }
 #else /* GQSPI_MODE_IO */
             /* IO mode: Use FIFO polling */
-            remaining = rxLen;
-            offset = 0;
-            while (ret == 0 && remaining > 0) {
-                xferSz = qspi_calc_exp(remaining, &rxEntry);
-                ret = qspi_gen_fifo_push(rxEntry);
-                if (ret == 0) {
-                    ret = qspi_gen_fifo_start_and_wait();
-                }
-                if (ret == 0) {
-                    ret = qspi_fifo_rx(&rxData[offset], xferSz);
-                }
-                offset += xferSz;
-                remaining -= xferSz;
-            }
+            ret = qspi_rx_io_mode(rxData, rxLen, &rxEntry);
 #endif /* !GQSPI_MODE_IO */
         } else {
             /* SPI mode for simple reads */
@@ -837,29 +839,30 @@ static int qspi_read_id(QspiDev_t *dev, uint8_t *id, uint32_t len)
     return ret;
 }
 
-/* Read flash status register */
-static int qspi_read_status(QspiDev_t *dev, uint8_t *status)
+/* Generic flash register read helper (handles dual parallel) */
+static int qspi_read_register(QspiDev_t *dev, uint8_t cmd, uint8_t *status)
 {
-    uint8_t cmd[1];
+    uint8_t cmdByte[1];
     uint8_t data[4];  /* Space for 2 bytes from each chip */
     int ret;
     QspiDev_t tmpDev;
 
-    /* For dual parallel, read status from each chip separately */
+    cmdByte[0] = cmd;
+
+    /* For dual parallel, read from each chip separately and AND the results */
     if (dev->stripe) {
         /* Read from lower chip */
         tmpDev = *dev;
         tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
         tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
         tmpDev.stripe = 0;
-        cmd[0] = FLASH_CMD_READ_STATUS;
-        ret = qspi_transfer(&tmpDev, cmd, 1, &data[0], 1, 0, NULL, 0);
+        ret = qspi_transfer(&tmpDev, cmdByte, 1, &data[0], 1, 0, NULL, 0);
         if (ret != 0) return ret;
 
         /* Read from upper chip */
         tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
         tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
-        ret = qspi_transfer(&tmpDev, cmd, 1, &data[1], 1, 0, NULL, 0);
+        ret = qspi_transfer(&tmpDev, cmdByte, 1, &data[1], 1, 0, NULL, 0);
         if (ret != 0) return ret;
 
         /* AND the status from both chips */
@@ -867,46 +870,8 @@ static int qspi_read_status(QspiDev_t *dev, uint8_t *status)
         return 0;
     }
 
-    cmd[0] = FLASH_CMD_READ_STATUS;
-    ret = qspi_transfer(dev, cmd, 1, data, 1, 0, NULL, 0);
-    if (ret == 0) {
-        *status = data[0];
-    }
-    return ret;
-}
-
-/* Read flash flag status register */
-static int qspi_read_flag_status(QspiDev_t *dev, uint8_t *status)
-{
-    uint8_t cmd[1];
-    uint8_t data[4];
-    int ret;
-    QspiDev_t tmpDev;
-
-    /* For dual parallel, read status from each chip separately */
-    if (dev->stripe) {
-        /* Read from lower chip */
-        tmpDev = *dev;
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
-        tmpDev.stripe = 0;
-        cmd[0] = FLASH_CMD_READ_FLAG_STATUS;
-        ret = qspi_transfer(&tmpDev, cmd, 1, &data[0], 1, 0, NULL, 0);
-        if (ret != 0) return ret;
-
-        /* Read from upper chip */
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
-        ret = qspi_transfer(&tmpDev, cmd, 1, &data[1], 1, 0, NULL, 0);
-        if (ret != 0) return ret;
-
-        /* AND the status from both chips */
-        *status = data[0] & data[1];
-        return 0;
-    }
-
-    cmd[0] = FLASH_CMD_READ_FLAG_STATUS;
-    ret = qspi_transfer(dev, cmd, 1, data, 1, 0, NULL, 0);
+    /* Single chip mode */
+    ret = qspi_transfer(dev, cmdByte, 1, data, 1, 0, NULL, 0);
     if (ret == 0) {
         *status = data[0];
     }
@@ -921,9 +886,13 @@ static int qspi_wait_ready(QspiDev_t *dev)
     int ret;
 
     while (timeout-- > 0) {
-        ret = qspi_read_flag_status(dev, &status);
+        ret = qspi_read_register(dev, FLASH_CMD_READ_FLAG_STATUS, &status);
         if (ret == 0 && (status & FLASH_FSR_READY)) {
             return 0;
+        }
+        /* Add small delay every 100 polls to reduce bus traffic during erase/write ops */
+        if ((timeout % 100) == 0) {
+            hal_delay_us(10);
         }
     }
     QSPI_DEBUG_PRINTF("QSPI: Flash ready timeout\n");
@@ -963,7 +932,7 @@ static int qspi_write_enable(QspiDev_t *dev)
 
     /* Wait for WEL bit to be set */
     while (timeout-- > 0) {
-        ret = qspi_read_status(dev, &status);
+        ret = qspi_read_register(dev, FLASH_CMD_READ_STATUS, &status);
         if (ret == 0 && (status & FLASH_SR_WEL)) {
             return 0;
         }
@@ -1446,6 +1415,13 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         return -1;
     }
 
+    /* Validate flash address bounds */
+    if (address >= FLASH_TOTAL_SIZE || (address + len) > FLASH_TOTAL_SIZE) {
+        QSPI_DEBUG_PRINTF("ext_flash_write: address 0x%lx+%d exceeds flash size\n",
+                          (unsigned long)address, len);
+        return -1;
+    }
+
     QSPI_DEBUG_PRINTF("ext_flash_write: addr=0x%lx, len=%d\n",
                       (unsigned long)address, len);
 
@@ -1496,6 +1472,13 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         return -1;
     }
 
+    /* Validate flash address bounds */
+    if (address >= FLASH_TOTAL_SIZE || (address + len) > FLASH_TOTAL_SIZE) {
+        QSPI_DEBUG_PRINTF("ext_flash_read: address 0x%lx+%d exceeds flash size\n",
+                          (unsigned long)address, len);
+        return -1;
+    }
+
     QSPI_DEBUG_PRINTF("ext_flash_read: addr=0x%lx len=%d\n",
                       (unsigned long)address, len);
 
@@ -1529,6 +1512,13 @@ int ext_flash_erase(uintptr_t address, int len)
     uintptr_t addr;
 
     if (!qspi_initialized) {
+        return -1;
+    }
+
+    /* Validate flash address bounds */
+    if (address >= FLASH_TOTAL_SIZE || (address + len) > FLASH_TOTAL_SIZE) {
+        QSPI_DEBUG_PRINTF("ext_flash_erase: address 0x%lx+%d exceeds flash size\n",
+                          (unsigned long)address, len);
         return -1;
     }
 
