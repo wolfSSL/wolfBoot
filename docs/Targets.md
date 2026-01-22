@@ -4705,7 +4705,7 @@ The default build uses DEBUG_UART=1 to generate logging on the UART.
 
 ```sh
 cp config/examples/vorago_va416x0.config .config
-make VORAGO_SDK_DIR=$PWD../VA416xx_SDK/
+make VORAGO_SDK_DIR=$PWD/../VA416xx_SDK/
         [CC ARM] src/string.o
         [CC ARM] src/image.o
         [CC ARM] src/libwolfboot.o
@@ -4850,6 +4850,7 @@ echo -n "pBOOT" > trigger_magic.bin
         0x3F7FB trigger_magic.bin
 
 # Use JLink to load
+#JLinkExe -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
 device VA416XX
 si 1
 speed 2000

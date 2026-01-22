@@ -237,6 +237,15 @@ hal_status_t FRAM_Write(uint8_t spiBank, uint32_t addr, uint8_t *buf,
     hal_status_t status = hal_status_ok;
     uint8_t spiData[4];
 
+    /* Validate input parameters */
+    if (buf == NULL || len == 0) {
+        return hal_status_badParam;
+    }
+    /* Bounds check: ensure write doesn't exceed FRAM size */
+    if (addr >= FRAM_SIZE || (addr + len) > FRAM_SIZE) {
+        return hal_status_badParam;
+    }
+
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("fram write: addr 0x%x, dst 0x%x, len %d\n",
         addr, buf, len);
@@ -258,6 +267,15 @@ hal_status_t FRAM_Read(uint8_t spiBank, uint32_t addr, uint8_t *buf,
     uint32_t len)
 {
     uint8_t spiData[4];
+
+    /* Validate input parameters */
+    if (buf == NULL || len == 0) {
+        return hal_status_badParam;
+    }
+    /* Bounds check: ensure read doesn't exceed FRAM size */
+    if (addr >= FRAM_SIZE || (addr + len) > FRAM_SIZE) {
+        return hal_status_badParam;
+    }
 
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("fram read: addr 0x%x, dst 0x%x, len %d\n",
@@ -290,7 +308,7 @@ hal_status_t FRAM_Erase(uint8_t spiBank, uint32_t addr, uint32_t len)
     memset(data, FRAM_ERASE_VALUE, sizeof(data));
 
     while (len > 0) {
-        int erase_len = (len > (int)sizeof(data)) ? (int)sizeof(data) : len;
+        uint32_t erase_len = (len > sizeof(data)) ? sizeof(data) : len;
         status = FRAM_Write(ROM_SPI_BANK, addr, data, erase_len);
         if (status != hal_status_ok) {
             return -(int)status; /* convert to negative error code */
@@ -333,14 +351,14 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 #ifdef EXT_FLASH
 void ext_flash_lock(void)
 {
-    /* Enable writes to code memory space */
-    VOR_SYSCONFIG->ROM_PROT |= SYSCONFIG_ROM_PROT_WREN_Msk;
+    /* Disable writes to code memory space */
+    VOR_SYSCONFIG->ROM_PROT &= ~SYSCONFIG_ROM_PROT_WREN_Msk;
 }
 
 void ext_flash_unlock(void)
 {
-    /* Disable writes to code memory space */
-    VOR_SYSCONFIG->ROM_PROT &= ~SYSCONFIG_ROM_PROT_WREN_Msk;
+    /* Enable writes to code memory space */
+    VOR_SYSCONFIG->ROM_PROT |= SYSCONFIG_ROM_PROT_WREN_Msk;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
@@ -480,12 +498,12 @@ void hal_init(void)
     }
 
     /* Disable Watchdog - should be already disabled out of reset */
-    VOR_WATCH_DOG->WDOGLOCK    = 0x1ACCE551;
+    VOR_WATCH_DOG->WDOGLOCK    = WATCHDOG_UNLOCK_KEY;
     VOR_WATCH_DOG->WDOGCONTROL = 0x0;
     NVIC_ClearPendingIRQ(WATCHDOG_IRQn);
 
     /* set FPU CP10 and CP11 Full Access */
-    SCB->CPACR |= ((0x3 << 20)|(0x3 << 22));
+    SCB->CPACR |= (CPACR_CP10_FULL_ACCESS | CPACR_CP11_FULL_ACCESS);
 
     /* Init EDAC */
     ConfigEdac(WOLFBOOT_EDAC_RAM_SCRUB, WOLFBOOT_EDAC_ROM_SCRUB);

@@ -20,8 +20,8 @@
  */
 
 
-#ifndef VA416X0_DEF_INCLUDED
-#define VA416X0_DEF_INCLUDED
+#ifndef WOLFBOOT_HAL_VA416X0_H
+#define WOLFBOOT_HAL_VA416X0_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -108,4 +108,12 @@
 #endif
 
 
-#endif /* VA416X0_DEF_INCLUDED */
+/* Watchdog unlock key - required to modify watchdog registers */
+#define WATCHDOG_UNLOCK_KEY         0x1ACCE551
+
+/* FPU Coprocessor Access Control - enable CP10 and CP11 full access */
+#define CPACR_CP10_FULL_ACCESS      (0x3 << 20)
+#define CPACR_CP11_FULL_ACCESS      (0x3 << 22)
+
+
+#endif /* WOLFBOOT_HAL_VA416X0_H */
