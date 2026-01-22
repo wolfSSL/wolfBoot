@@ -50,9 +50,27 @@
 #include "hal/versal.h"
 #include "image.h"
 #include "printf.h"
+#include "fdt.h"
 
 #ifndef ARCH_AARCH64
 #   error "wolfBoot versal HAL: wrong architecture. Please compile with ARCH=AARCH64."
+#endif
+
+/* ============================================================================
+ * Linux Boot Arguments
+ * ============================================================================
+ * DTB fixup for kernel command line. Override LINUX_BOOTARGS or
+ * LINUX_BOOTARGS_ROOT in your config to customize.
+ */
+
+/* Linux kernel command line arguments */
+#ifndef LINUX_BOOTARGS
+#ifndef LINUX_BOOTARGS_ROOT
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p2"
+#endif
+
+#define LINUX_BOOTARGS \
+    "earlycon root=" LINUX_BOOTARGS_ROOT " rootwait"
 #endif
 
 
@@ -1297,6 +1315,54 @@ void* hal_get_dts_update_address(void)
     return NULL;
 #endif
 }
+
+#ifdef __WOLFBOOT
+/**
+ * Fixup Device Tree before booting Linux
+ *
+ * This function modifies the DTB to set bootargs for the kernel.
+ * Called from do_boot() before jumping to the kernel.
+ *
+ * @param dts_addr: Pointer to the device tree blob in memory
+ * @return: 0 on success, negative error code on failure
+ */
+int hal_dts_fixup(void* dts_addr)
+{
+    int off, ret;
+    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+
+    /* Verify FDT header */
+    ret = fdt_check_header(dts_addr);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: Invalid header! %d\n", ret);
+        return ret;
+    }
+
+    wolfBoot_printf("FDT: Version %d, Size %d\n",
+        fdt_version(fdt), fdt_totalsize(fdt));
+
+    /* Expand total size to allow adding/modifying properties */
+    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
+
+    /* Find /chosen node */
+    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (off < 0) {
+        /* Create /chosen node if it doesn't exist */
+        off = fdt_add_subnode(fdt, 0, "chosen");
+    }
+
+    if (off >= 0) {
+        /* Set bootargs property */
+        wolfBoot_printf("FDT: Setting bootargs: %s\n", LINUX_BOOTARGS);
+        fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    } else {
+        wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
+        return off;
+    }
+
+    return 0;
+}
+#endif /* __WOLFBOOT */
 #endif /* MMU */
 
 #ifdef WOLFBOOT_DUALBOOT
