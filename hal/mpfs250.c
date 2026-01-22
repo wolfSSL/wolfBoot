@@ -290,20 +290,26 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 }
 
 #ifdef EXT_FLASH
-/* External flash support */
+/* External flash support
+ *
+ * Note: These are intentional stubs. PolarFire SoC MPFS250 uses eMMC/SD card
+ * for firmware storage and updates, not external SPI/QSPI flash. The EXT_FLASH
+ * define may be set in some configurations, but actual storage operations are
+ * handled by the SDHCI driver and disk partition layer.
+ */
 void ext_flash_lock(void)
 {
-    /* TODO: Lock external flash */
+    /* Stub: not used - eMMC/SD controller handles access control */
 }
 
 void ext_flash_unlock(void)
 {
-    /* TODO: Unlock external flash */
+    /* Stub: not used - eMMC/SD controller handles access control */
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    /* TODO: Write to external flash */
+    /* Stub: not used - updates written via SDHCI/GPT partitions */
     (void)address;
     (void)data;
     (void)len;
@@ -312,7 +318,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
-    /* TODO: Read from external flash */
+    /* Stub: not used - firmware loaded via SDHCI/GPT partitions */
     (void)address;
     (void)data;
     (void)len;
@@ -321,7 +327,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 int ext_flash_erase(uintptr_t address, int len)
 {
-    /* TODO: Erase external flash sectors */
+    /* Stub: not used - eMMC/SD uses block-level operations */
     (void)address;
     (void)len;
     return 0;
