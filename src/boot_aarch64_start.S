@@ -198,8 +198,10 @@ InitEL3:
     orr    w1, w1, #(1 << 1)   /* Set IRQ bit (IRQs routed to EL3) */
     msr    SCR_EL3, x1
 
-    /* Configure CPUACTLR_EL1 - read-modify-write to preserve BL31 workarounds:
-     * 859971, 1319367, CVE-2017-5715, CVE-2018-3639, CVE-2022-23960 */
+    /* Configure CPUACTLR_EL1 - CPU auxiliary control register
+     * Read-modify-write to preserve any pre-configured bits and add prefetch settings.
+     * Note: On Versal, BL31 will later apply additional errata workarounds after EL3 init:
+     *       859971, 1319367, CVE-2017-5715, CVE-2018-3639, CVE-2022-23960 */
     mrs    x0, S3_1_C15_C2_0      /* Read current CPUACTLR_EL1 */
     ldr    x1,=0x80CA000          /* L1 Data prefetch control - 5, Enable device split throttle, 2 independent data prefetch streams */
     orr    x0, x0, x1              /* Merge with existing value */
